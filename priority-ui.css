@@ -26,7 +26,8 @@
   --chart-marker-shadow: rgba(0, 0, 0, 0.22);
   --chart-marker-shadow-inutile: rgba(0, 0, 0, 0.14);
   --chart-marker-core: #ffffff;
-  --chart-marker-core-inutile: #FFFFFF;
+  --chart-marker-core-inutile: #ffffff;
+  --chart-marker-stroke-inutile: #9B9890;
   --heat-accent-fallback: #085041;
   --heat-dot-fallback: #9B9890;
   --blocked-accent: #6B0F0F;
@@ -71,6 +72,7 @@ html[data-color-mode="dark"] {
   --chart-marker-shadow-inutile: rgba(0, 0, 0, 0.3);
   --chart-marker-core: #ffffff;
   --chart-marker-core-inutile: #ffffff;
+  --chart-marker-stroke-inutile: #738496;
   --heat-accent-fallback: #4bce97;
   --heat-dot-fallback: #ffffff;
   --blocked-accent: #8B0000;
@@ -730,7 +732,7 @@ body.help-modal-open {
   position: relative;
   background: color-mix(in srgb, var(--card-tier-tint) var(--card-panel-tint-mix, 20%), var(--surface-2));
   border-radius: var(--radius);
-  padding: 11px 12px 12px;
+  padding: 52px 12px 12px;
   margin-top: 0;
   overflow: hidden;
   transition: background 0.25s ease;
@@ -999,7 +1001,7 @@ body.help-modal-open {
   max-width: 220px;
   aspect-ratio: 300 / 248;
   touch-action: none;
-  overflow: hidden;
+  overflow: visible;
   border-radius: 10px;
 }
 
@@ -1055,12 +1057,15 @@ body.help-modal-open {
   height: calc(100% * 198 / 248);
   border-radius: 4px;
   pointer-events: none;
+  z-index: 1;
 }
 
 .calc-rsm-svg {
   display: block;
   width: 100%;
   height: 100%;
+  position: relative;
+  z-index: 2;
 }
 
 .calc-rsm-frame {
@@ -1139,33 +1144,20 @@ body.help-modal-open {
   pointer-events: none;
 }
 
-.calc-rsm-marker-glow {
-  fill-opacity: 0.24;
-  filter: url(#calc-rsm-glow);
-  cursor: grab;
-  pointer-events: none;
-}
-
-html[data-color-mode="dark"] .calc-rsm-marker-glow {
-  fill-opacity: 0.38;
-}
-
 .calc-rsm-marker-core {
   fill: var(--chart-marker-core);
+  stroke-linejoin: round;
   paint-order: stroke fill;
   vector-effect: non-scaling-stroke;
-  filter:
-    drop-shadow(0 1px 2px rgba(0, 0, 0, 0.32))
-    drop-shadow(0 0 1px rgba(0, 0, 0, 0.18));
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
   cursor: grab;
   pointer-events: none;
 }
 
 html[data-color-mode="dark"] .calc-rsm-marker-core {
   filter:
-    drop-shadow(0 0 3px rgba(255, 255, 255, 0.55))
-    drop-shadow(0 0 1px rgba(255, 255, 255, 0.85))
-    drop-shadow(0 1px 4px rgba(0, 0, 0, 0.65));
+    drop-shadow(0 0 2px rgba(255, 255, 255, 0.45))
+    drop-shadow(0 2px 5px rgba(0, 0, 0, 0.55));
 }
 
 .calc-rsm-marker-hit {
@@ -1186,17 +1178,18 @@ html[data-color-mode="dark"] .calc-rsm-marker-core {
   pointer-events: none;
 }
 
+.calc-rsm-marker-crosshair {
+  pointer-events: none;
+}
+
 .calc-rsm-marker.is-inutile .calc-rsm-marker-shadow {
   fill: var(--chart-marker-shadow-inutile);
 }
 
-.calc-rsm-marker.is-inutile .calc-rsm-marker-glow {
-  fill-opacity: 0.16;
-}
-
 .calc-rsm-marker.is-inutile .calc-rsm-marker-core {
   fill: var(--chart-marker-core-inutile);
-  opacity: 0.92;
+  stroke: var(--chart-marker-stroke-inutile);
+  opacity: 1;
 }
 
 .calc-zone-legend {

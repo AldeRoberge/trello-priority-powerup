@@ -56,6 +56,12 @@
   }
 
   function initPowerUp() {
+    if (!PriorityTrello.isTrelloApiConfigured()) {
+      console.error(
+        'Priority: Trello API key missing — copy trello-api-config-template.js to trello-api-config.js and set appKey — card cover colors will not sync to the board'
+      );
+    }
+
     function openPriorityPopup(t) {
       // Popup width is fixed (narrow) by Trello; modal gives a comfortable editor width.
       return t.modal({

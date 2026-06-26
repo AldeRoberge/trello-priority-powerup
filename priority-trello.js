@@ -364,7 +364,7 @@
   async function ensureRestApiAuthorized(t) {
     if (!isTrelloApiConfigured()) {
       coverSyncError(
-        'Trello API key missing — set appKey in trello-api-config.js (trello.com/power-ups/admin → API Key)'
+        'Trello API key missing — copy trello-api-config-template.js to trello-api-config.js and set appKey (trello.com/power-ups/admin → API Key)'
       );
       return null;
     }
@@ -435,7 +435,7 @@
   async function syncCardCover(t, previous, normalized) {
     if (!isTrelloApiConfigured()) {
       coverSyncError(
-        'skipped — configure trello-api-config.js appKey to sync card cover colors on the board'
+        'skipped — copy trello-api-config-template.js to trello-api-config.js and set appKey to sync card cover colors on the board'
       );
       return;
     }

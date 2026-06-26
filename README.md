@@ -29,6 +29,7 @@ Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques
 | `priority-ui.js` | Formule de score, composants UI (`PriorityUI`) |
 | `priority-ui.css` | Styles de l'éditeur de priorité |
 | `priority-trello.js` | Pont Trello (stockage, badges, affichage) |
+| `trello-api-config-template.js` | Modèle pour la clé API Trello (couleurs de couverture de carte) |
 | `version.js` | Affichage de la version / date de build |
 | `trello-theme.css` | Styles communs des pages Power-Up |
 | `build-info.json` | Horodatage du dernier déploiement |
@@ -73,6 +74,14 @@ node sandbox\verify-version.js
 ### Bac à sable UI
 
 Ouvrir `sandbox/priority-variants.html` dans le navigateur (double-clic ou serveur statique local). Détails dans [sandbox/README.md](sandbox/README.md).
+
+### Clé API Trello (couleurs de carte)
+
+La synchronisation des couleurs de couverture de carte sur le tableau nécessite la clé API de votre Power-Up. Le fichier `trello-api-config.js` contient cette clé et **n'est pas versionné** (voir `.gitignore`).
+
+1. Copier `trello-api-config-template.js` vers `trello-api-config.js`
+2. Aller sur [trello.com/power-ups/admin](https://trello.com/power-ups/admin) → votre Power-Up → onglet **API Key**
+3. Coller la clé dans `appKey` (laisser vide pour désactiver la synchro des couvertures ; les badges restent actifs)
 
 ### Horodatage de build (local)
 

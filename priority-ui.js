@@ -1628,12 +1628,10 @@
     blabel.textContent = 'Optionnel';
     badge.appendChild(bnum);
     badge.appendChild(blabel);
-    panel.appendChild(badge);
 
     var tierDesc = document.createElement('p');
     tierDesc.className = 'heat-tier-desc';
     tierDesc.hidden = true;
-    panel.appendChild(tierDesc);
 
     var top = document.createElement('div');
     top.className = 'heat-top';
@@ -1641,7 +1639,10 @@
     topLabel.className = 'heat-top-label';
     topLabel.textContent = 'Priorité d\'exécution';
     top.appendChild(topLabel);
+
     panel.appendChild(top);
+    panel.appendChild(tierDesc);
+    panel.appendChild(badge);
 
     var segsWrap = document.createElement('div');
     segsWrap.className = 'heat-segs';
@@ -1736,11 +1737,10 @@
     var CONTOUR_RES = 40;
     var SURFACE_ALPHA = 0.78;
     var TIER_THRESHOLDS = [1.4, 2.9, 4.3, 5.8, 7.2, 8.6];
-    var MARKER_CORE_R = 7;
-    var MARKER_STROKE_W = 2;
-    var MARKER_GLOW_R = 12;
-    var MARKER_SHADOW_R = 8.5;
-    var MARKER_HIT_R = 18;
+    var MARKER_CORE_R = 8;
+    var MARKER_STROKE_W = 3;
+    var MARKER_SHADOW_R = 9;
+    var MARKER_HIT_R = 20;
 
     var SCORE_COLOR_STOPS = [
       { s: 0, r: 155, g: 152, b: 144 },
@@ -2004,19 +2004,24 @@
     axesG.appendChild(labelI);
     svg.appendChild(axesG);
 
-    var markerG = svgEl('g', { class: 'calc-rsm-marker', 'clip-path': 'url(#calc-rsm-plot-clip)' });
+    var markerCrossG = svgEl('g', {
+      class: 'calc-rsm-marker-crosshair',
+      'clip-path': 'url(#calc-rsm-plot-clip)'
+    });
     var crossH = lineEl(0, 0, 0, 0, 'calc-rsm-crosshair calc-rsm-crosshair-h');
     var crossV = lineEl(0, 0, 0, 0, 'calc-rsm-crosshair calc-rsm-crosshair-v');
+    markerCrossG.appendChild(crossH);
+    markerCrossG.appendChild(crossV);
+
+    var markerG = svgEl('g', { class: 'calc-rsm-marker' });
     var markerShadow = svgEl('circle', { class: 'calc-rsm-marker-shadow' });
-    var markerGlow = svgEl('circle', { class: 'calc-rsm-marker-glow' });
     var markerCore = svgEl('circle', { class: 'calc-rsm-marker-core' });
     var markerHit = svgEl('circle', { class: 'calc-rsm-marker-hit' });
-    markerG.appendChild(crossH);
-    markerG.appendChild(crossV);
     markerG.appendChild(markerShadow);
-    markerG.appendChild(markerGlow);
     markerG.appendChild(markerCore);
     markerG.appendChild(markerHit);
+
+    svg.appendChild(markerCrossG);
     svg.appendChild(markerG);
 
     var easeCol = document.createElement('div');
@@ -2209,16 +2214,13 @@
       markerShadow.setAttribute('cy', String(cy + 0.75));
       markerShadow.setAttribute('r', String(MARKER_SHADOW_R));
 
-      markerGlow.setAttribute('cx', String(cx));
-      markerGlow.setAttribute('cy', String(cy));
-      markerGlow.setAttribute('r', String(MARKER_GLOW_R));
-      markerGlow.setAttribute('fill', d.seg);
-
       markerCore.setAttribute('cx', String(cx));
       markerCore.setAttribute('cy', String(cy));
       markerCore.setAttribute('r', String(MARKER_CORE_R));
       markerCore.setAttribute('fill', readCssVar('--chart-marker-core', '#FFFFFF'));
-      markerCore.setAttribute('stroke', d.seg);
+      markerCore.setAttribute('stroke', d.inutile
+        ? readCssVar('--chart-marker-stroke-inutile', '#9B9890')
+        : d.seg);
       markerCore.setAttribute('stroke-width', String(MARKER_STROKE_W));
 
       markerHit.setAttribute('cx', String(cx));
