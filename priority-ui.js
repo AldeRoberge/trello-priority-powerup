@@ -409,7 +409,7 @@
     Secondaire: 'T\u00e2che secondaire',
     Optionnel: 'T\u00e2che optionnelle',
     Inutile: 'T\u00e2che inutile',
-    'Bloqu\u00e9': 'T\u00e2che bloqu\u00e9'
+    'Bloqu\u00e9': 'T\u00e2che bloqu\u00e9e'
   };
 
   function taskBadgeLabel(display) {

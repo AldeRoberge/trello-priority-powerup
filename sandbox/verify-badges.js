@@ -30,7 +30,7 @@ check(
 );
 check(
   'complete urgent badge',
-  PT.formatBadgeText(urgentDisplay, true) === '\u2713 Completed'
+  PT.formatBadgeText(urgentDisplay, true) === '\u2713 Compl\u00e9t\u00e9 (T\u00e2che urgente)'
 );
 check(
   'complete urgent badge color',
@@ -49,6 +49,10 @@ check(
   PT.isCardMarkedComplete({ get: function () {} }) === false
 );
 check(
+  'chain with badges stub is not complete',
+  PT.isCardMarkedComplete({ get: function () {}, badges: { dueComplete: true } }) === false
+);
+check(
   'dueComplete true',
   PT.isCardMarkedComplete({ dueComplete: true }) === true
 );
@@ -65,8 +69,8 @@ check(
   PT.formatBadgeText(blockedDisplay, false) === sandbox.PriorityUI.formatBlockedBadgeText(blockedDisplay.blockedReason)
 );
 check(
-  'blocked complete shows simple Completed',
-  PT.formatBadgeText(blockedDisplay, true) === '\u2713 Completed'
+  'blocked complete uses Complété wrapper',
+  PT.formatBadgeText(blockedDisplay, true) === '\u2713 Compl\u00e9t\u00e9 (T\u00e2che bloqu\u00e9 \u2014 En attente d\'une approbation)'
 );
 check(
   'blocked complete badge color',
@@ -74,3 +78,4 @@ check(
 );
 
 console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll badge checks passed');
+process.exit(bad ? 1 : 0);

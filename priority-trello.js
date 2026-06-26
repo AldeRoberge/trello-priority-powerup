@@ -167,41 +167,58 @@
       return PriorityUI.taskBadgeLabel(display);
     }
     var tierKey = String(display.tierLabel || display.label || '');
-    if (tierKey === 'Important') return 'T\u00e2che importante';
+    if (tierKey === 'Important') return 'T\u00e2che Importante';
     return tierKey ? 'T\u00e2che ' + tierKey.toLowerCase() : '';
   }
 
-  var COMPLETED_BADGE_LABEL = 'Completed';
-
-  // Unresolved t.card() chain objects are truthy — never treat them as completion.
+  // Any t.card().get() chain object exposes .get — truthy, not completion data.
   function isPowerUpRequestChain(value) {
-    return !!(
-      value &&
-      typeof value === 'object' &&
-      typeof value.get === 'function' &&
-      value.dueComplete === undefined &&
-      !value.badges
-    );
+    return !!(value && typeof value === 'object' && typeof value.get === 'function');
   }
 
   function isCardMarkedComplete(card) {
-    if (!card || typeof card !== 'object') return false;
+    if (card === true) return true;
+    if (card === false || card == null) return false;
+    if (typeof card !== 'object') return false;
     if (isPowerUpRequestChain(card)) return false;
     if (card.dueComplete === true) return true;
     if (card.dueComplete === false) return false;
-    if (card.badges && card.badges.dueComplete === true) return true;
+    if (card.badges && typeof card.badges === 'object' && !isPowerUpRequestChain(card.badges)) {
+      if (card.badges.dueComplete === true) return true;
+      if (card.badges.dueComplete === false) return false;
+    }
     return false;
+  }
+
+  function cardFieldPromise(t, field) {
+    return new Promise(function (resolve, reject) {
+      t.card(field).get(field).then(resolve, reject);
+    });
+  }
+
+  function formatCompletedBadgeLabel(taskLabel) {
+    return 'Compl\u00e9t\u00e9 (' + taskLabel + ')';
+  }
+
+  function completedBadgeTaskLabel(display) {
+    if (display.blocked) {
+      var blockedText = (typeof PriorityUI !== 'undefined' && PriorityUI.formatBlockedBadgeText)
+        ? PriorityUI.formatBlockedBadgeText(display.blockedReason || '')
+        : BADGE_DOT_BLOCKED + ' T\u00e2che bloqu\u00e9e';
+      return blockedText.slice(BADGE_DOT_BLOCKED.length).trim();
+    }
+    return incompleteBadgeLabel(display);
   }
 
   function formatBadgeText(display, completed) {
     if (!display) return '';
     if (completed) {
-      return BADGE_DOT_COMPLETE + ' ' + COMPLETED_BADGE_LABEL;
+      return BADGE_DOT_COMPLETE + ' ' + formatCompletedBadgeLabel(completedBadgeTaskLabel(display));
     }
     if (display.blocked) {
       var blockedText = (typeof PriorityUI !== 'undefined' && PriorityUI.formatBlockedBadgeText)
         ? PriorityUI.formatBlockedBadgeText(display.blockedReason || '')
-        : BADGE_DOT_BLOCKED + ' T\u00e2che bloqu\u00e9';
+        : BADGE_DOT_BLOCKED + ' T\u00e2che bloqu\u00e9e';
       return blockedText;
     }
     return tierBadgeDot(display, false) + ' ' + incompleteBadgeLabel(display);
@@ -231,22 +248,26 @@
 
   async function getCardDueComplete(t) {
     try {
-      // Use .then() — documented Trello pattern. Bare await t.card(field) can leave an
-      // unresolved chain object, which is truthy and made every badge show ✓ via !!.
-      var card = await new Promise(function (resolve, reject) {
-        t.card('dueComplete', 'badges').then(resolve, reject);
-      });
-      if (isCardMarkedComplete(card)) return true;
-      if (isPowerUpRequestChain(card)) {
-        var dueComplete = await new Promise(function (resolve, reject) {
-          t.card('dueComplete').get('dueComplete').then(resolve, reject);
-        });
-        if (dueComplete === true) return true;
-        if (dueComplete === false) return false;
-        var badges = await new Promise(function (resolve, reject) {
-          t.card('badges').get('badges').then(resolve, reject);
-        });
-        return !!(badges && badges.dueComplete === true);
+      // Documented pattern: t.card(field).get(field).then(value) — resolves the scalar/object.
+      // Never bare await t.card(...) (returns chain) or !!chain (always truthy → every ✓).
+      var dueComplete = await cardFieldPromise(t, 'dueComplete');
+      if (dueComplete === true) return true;
+      if (dueComplete === false) return false;
+      if (isPowerUpRequestChain(dueComplete)) {
+        dueComplete = null;
+      } else if (typeof dueComplete === 'object' && dueComplete !== null) {
+        var fromObject = isCardMarkedComplete(dueComplete);
+        if (fromObject) return true;
+        if (dueComplete.dueComplete === false || (dueComplete.badges && dueComplete.badges.dueComplete === false)) {
+          return false;
+        }
+      }
+
+      var badges = await cardFieldPromise(t, 'badges');
+      if (isPowerUpRequestChain(badges)) return false;
+      if (badges && typeof badges === 'object') {
+        if (badges.dueComplete === true) return true;
+        if (badges.dueComplete === false) return false;
       }
       return false;
     } catch (err) {
