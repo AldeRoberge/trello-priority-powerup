@@ -573,3 +573,34 @@ body {
 #matrixPanel[hidden] {
   display: none;
 }
+
+/* Priority popup — sandbox UI embedded in Trello iframe */
+body.tp-page--priority {
+  background: var(--tp-bg);
+  min-height: auto;
+  color: var(--tp-text);
+}
+
+.tp-page--priority {
+  padding: 8px 10px 10px;
+}
+
+.tp-page--priority .compare-grid {
+  display: block;
+}
+
+.tp-page--priority .variant-card {
+  max-width: none;
+  margin: 0;
+  box-shadow: none;
+  border: none;
+  background: transparent;
+}
+
+.tp-page--priority .variant-fields-collapse {
+  margin-top: 4px;
+}
+
+.tp-page--priority .help-modal-root {
+  z-index: 100;
+}

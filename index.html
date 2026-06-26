@@ -6,7 +6,9 @@
   <title>Power-Up Priorités des cartes</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./version.js"></script>
-  <script src="./priority-templates.js"></script>
+  <script src="./priority-matrix.js"></script>
+  <script src="./priority-ui.js"></script>
+  <script src="./priority-trello.js"></script>
   <link rel="stylesheet" href="./trello-theme.css" />
 </head>
 <body>
@@ -31,8 +33,6 @@
     initLanding();
   }
 
-  // ── Landing page (direct browser visit) ─────────────────────────────────
-
   function renderVersion(builtAt) {
     document.getElementById('versionRelative').textContent = BuildVersion.updatedLabel(builtAt);
     document.getElementById('versionUtc').textContent = BuildVersion.formatUtc(builtAt);
@@ -53,67 +53,30 @@
     setInterval(() => renderVersion(builtAt), 30_000);
   }
 
-  // ── Trello Power-Up connector (hidden iframe) ───────────────────────────
-
   function initPowerUp() {
-    async function getPriorities(t) {
-      const stored = await t.get('board', 'shared', 'priorities');
-      return stored || DEFAULT_PRIORITIES;
-    }
-
     function openPriorityPopup(t) {
       return t.popup({
         title: 'Définir la priorité',
         url: './popup.html',
-        height: 320,
+        height: 580,
       });
-    }
-
-    function priorityDotIcon(hex) {
-      const safe = /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : '#718096';
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10">`
-        + `<circle cx="5" cy="5" r="4.5" fill="${safe}"/></svg>`;
-      return `data:image/svg+xml,${encodeURIComponent(svg)}`;
-    }
-
-    function priorityBadgeColor(hex) {
-      const map = {
-        '#E53E3E': 'red',    '#C53030': 'red',
-        '#DD6B20': 'orange', '#C05621': 'orange',
-        '#D69E2E': 'yellow', '#B7791F': 'yellow',
-        '#38A169': 'green',  '#276749': 'green',
-        '#3182CE': 'blue',   '#2B6CB0': 'blue',
-        '#805AD5': 'purple', '#6B46C1': 'purple',
-        '#D53F8C': 'pink',   '#B83280': 'pink',
-        '#0BC5EA': 'sky',    '#00B5D8': 'sky',
-        '#68D391': 'lime',
-        '#718096': 'light-gray',
-      };
-      return map[hex] || 'light-gray';
-    }
-
-    async function getCardPriority(t) {
-      const priorityId = await t.get('card', 'shared', 'priority');
-      if (priorityId == null || priorityId === '') return null;
-      const priorities = await getPriorities(t);
-      return priorities.find(x => x.id == priorityId) || null;
     }
 
     TrelloPowerUp.initialize({
 
       'card-badges': async function(t) {
-        const p = await getCardPriority(t);
-        if (!p) return [];
+        const display = await PriorityTrello.getCardDisplay(t);
+        if (!display) return [];
         return [{
-          icon: priorityDotIcon(p.color),
-          text: p.label,
+          icon: PriorityTrello.tierDotIcon(display.seg),
+          text: PriorityTrello.formatBadgeText(display),
           monochrome: false,
         }];
       },
 
       'card-detail-badges': async function(t) {
-        const p = await getCardPriority(t);
-        if (!p) {
+        const display = await PriorityTrello.getCardDisplay(t);
+        if (!display) {
           return [{
             text: 'Définir la priorité',
             color: 'green',
@@ -121,8 +84,8 @@
           }];
         }
         return [{
-          text: p.label,
-          color: priorityBadgeColor(p.color),
+          text: PriorityTrello.formatBadgeText(display),
+          color: PriorityTrello.tierDetailBadgeColor(display),
           callback: openPriorityPopup,
         }];
       },

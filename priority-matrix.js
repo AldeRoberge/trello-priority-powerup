@@ -247,14 +247,14 @@
     {
       id: 'paperasse',
       label: 'Paperasse',
-      description: 'Facile mais peu glamour, deadline qui approche. Mode flux : fait, validé, on passe à la suite.',
+      description: 'Facile mais peu glamour, deadline qui approche. Mode cadence : fait, validé, on passe à la suite.',
       priority: 77,
       when: { ease: ['high', 'veryHigh'], impact: ['veryLow', 'low'], urgency: ['mid', 'high'] }
     },
     {
       id: 'fausse-priorite',
       label: 'Urgence modérée',
-      description: 'Deadline serrée, retour modeste, effort non négligeable. Traiter l\'essentiel puis repasser à des sujets à plus fort levier.',
+      description: 'Deadline serrée, retour modeste, effort notable. Traiter l\'essentiel puis repasser à des sujets à plus fort levier.',
       priority: 76,
       when: { ease: ['low', 'mid'], impact: ['low', 'mid'], urgency: ['high', 'veryHigh'] }
     },

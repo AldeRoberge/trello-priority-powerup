@@ -1,6 +1,6 @@
 /**
- * Sandbox UI + scoring for the priority formula prototype.
- * Loaded via <script> in sandbox HTML — exposes window.PriorityUI (no module bundler).
+ * Priority UI + scoring for the Card Priorities Power-Up.
+ * Loaded via <script> — exposes window.PriorityUI (no module bundler).
  *
  * Table of contents
  * ─────────────────
@@ -69,7 +69,7 @@
         'Rien ne dépend de cette tâche. Aucune dépendance directe et le travail de l\'équipe avance sans ralentissement.',
         'Quelqu\'un attend, mais peut continuer autrement. Le blocage est léger et les dépendances restent contournables.',
         'Bloque une tâche ou un collègue. Une dépendance directe empêche l\'avancement d\'un travail en cours.',
-        'Bloque le travail de l\'équipe ou une livraison. Les dépendances sont multiples et l\'ensemble du flux ralentit.'
+        'Bloque le travail de l\'équipe ou une livraison. Les dépendances sont multiples et l\'avancement global ralentit.'
       ],
       popup: {
         subtitle: 'Est-ce que quelque chose cesse de fonctionner si ce n\'est pas fait?',
@@ -1384,9 +1384,7 @@
     var segLabels = document.createElement('div');
     segLabels.className = 'heat-seg-labels';
     segLabels.innerHTML = HEAT_SEGMENTS.map(function (s) {
-      return '<span class="heat-seg-label-item">' +
-        priorityLabelHtmlFor(s.label, priorityIconIdForLabel(s.label), 11) +
-        '</span>';
+      return '<span>' + s.label + '</span>';
     }).join('');
     panel.appendChild(segLabels);
 
@@ -2145,11 +2143,17 @@
     variantConfig.dimensions.forEach(function (dim) {
       defaultState[dim.key] = defaults[dim.key] != null ? defaults[dim.key] : dim.value;
     });
-    state = loadSliderValues(defaultState, variantConfig.dimensions);
+    state = typeof variantConfig.loadState === 'function'
+      ? variantConfig.loadState(defaultState)
+      : loadSliderValues(defaultState, variantConfig.dimensions);
 
     function persistSliderState() {
       syncStateFromFields();
-      saveSliderValues(state);
+      if (typeof variantConfig.onStateChange === 'function') {
+        variantConfig.onStateChange(state);
+      } else {
+        saveSliderValues(state);
+      }
     }
 
     function syncStateFromFields() {

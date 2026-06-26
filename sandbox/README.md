@@ -14,9 +14,9 @@ Ouvrir les fichiers directement dans le navigateur — pas de build ni de serveu
 ### Ordre de chargement des scripts (`priority-variants.html`)
 
 1. `../priority-matrix.js` → expose `window.PriorityMatrix`
-2. `priority-shared.js` → expose `window.PriorityUI` (utilise `PriorityMatrix` si présent)
+2. `../priority-ui.js` → expose `window.PriorityUI` (utilise `PriorityMatrix` si présent)
 
-Styles : `priority-shared.css`
+Styles : `../priority-ui.css`
 
 ## Fichiers partagés du bac à sable
 
@@ -32,7 +32,7 @@ Styles : `priority-shared.css`
 | `verify-presets.js` | Windows `cscript` | `npm run verify:presets` ou `cscript //nologo sandbox\verify-presets.js` |
 | `verify-matrix.js` | Node.js | `npm run verify:matrix` ou `node sandbox/verify-matrix.js` |
 
-- **verify-presets** : formule baseline, paliers (`TIERS`), presets `HEAT_SEGMENTS`. La logique est **dupliquée** volontairement (exécutable sans navigateur ni DOM) — doit rester alignée avec `priority-shared.js` (section « Scoring »).
+- **verify-presets** : formule baseline, paliers (`TIERS`), presets `HEAT_SEGMENTS`. La logique est **dupliquée** volontairement (exécutable sans navigateur ni DOM) — doit rester alignée avec `priority-ui.js` (section « Scoring »).
 - **verify-matrix** : charge `priority-matrix.js` via `vm` et valide les règles de libellés, overrides et mode désactivé.
 
 Code de sortie `0` = succès, `1` = échec.

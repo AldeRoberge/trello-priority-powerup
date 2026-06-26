@@ -6,33 +6,11 @@
   <title>Paramètres de priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./version.js"></script>
-  <script src="./priority-templates.js"></script>
+  <script src="./priority-export.js"></script>
   <script src="./priority-matrix.js"></script>
   <link rel="stylesheet" href="./trello-theme.css" />
 </head>
 <body class="tp-page">
-  <div class="tp-scheme-bar">
-    <span class="tp-scheme-label">Schéma actif</span>
-    <strong class="tp-scheme-name" id="activeScheme">—</strong>
-  </div>
-
-  <h3 class="tp-heading">Appliquer un modèle</h3>
-  <div class="tp-template-bar">
-    <select class="tp-input tp-select" id="templateSelect" aria-label="Modèle de priorité"></select>
-    <button class="tp-btn tp-btn--secondary" type="button" id="applyTemplateBtn">Appliquer</button>
-  </div>
-
-  <div class="tp-warning" id="overrideWarning" hidden>
-    <p class="tp-warning-text">Cela remplacera vos libellés actuels.</p>
-    <div class="tp-warning-actions">
-      <button class="tp-btn tp-btn--primary" type="button" id="confirmOverrideBtn">Confirmer</button>
-      <button class="tp-btn tp-btn--secondary" type="button" id="cancelOverrideBtn">Annuler</button>
-    </div>
-  </div>
-
-  <h3 class="tp-heading">Niveaux de priorité</h3>
-  <div id="rows"></div>
-
   <h3 class="tp-heading">Libellés nuancés (matrice)</h3>
   <p class="tp-matrix-hint">Combine urgence, impact et facilité pour des libellés contextuels (ex. « Opportunité massive », « Victoire rapide »). Désactivé : retour aux paliers simples (Critique, Urgent…).</p>
   <label class="tp-toggle">
@@ -56,8 +34,15 @@
     <input type="file" id="importFile" accept="application/json,.json" hidden />
   </div>
 
+  <div class="tp-warning" id="overrideWarning" hidden>
+    <p class="tp-warning-text">Cela remplacera vos libellés actuels.</p>
+    <div class="tp-warning-actions">
+      <button class="tp-btn tp-btn--primary" type="button" id="confirmOverrideBtn">Confirmer</button>
+      <button class="tp-btn tp-btn--secondary" type="button" id="cancelOverrideBtn">Annuler</button>
+    </div>
+  </div>
+
   <div class="tp-actions">
-    <button class="tp-btn tp-btn--secondary" type="button" id="resetBtn">Réinitialiser</button>
     <button class="tp-btn tp-btn--primary" type="button" id="saveBtn">Enregistrer</button>
   </div>
   <div class="tp-toast" id="toast">Enregistré</div>
@@ -67,8 +52,6 @@
 
   <script>
     const t = TrelloPowerUp.iframe();
-    let priorities = [];
-    let activeScheme = CUSTOM_SCHEME_ID;
     let matrixLabelSettings = PriorityMatrix.normalizeSettings(null);
     let pendingOverride = null;
     let buildStampTimer;
@@ -90,33 +73,6 @@
       }
     }
 
-    function schemeDisplayName(schemeId) {
-      if (schemeId === CUSTOM_SCHEME_ID) return 'Personnalisé';
-      return getSchemeDisplayName(schemeId);
-    }
-
-    function updateSchemeDisplay() {
-      document.getElementById('activeScheme').textContent = schemeDisplayName(activeScheme);
-    }
-
-    function markCustom() {
-      if (activeScheme !== CUSTOM_SCHEME_ID) {
-        activeScheme = CUSTOM_SCHEME_ID;
-        updateSchemeDisplay();
-      }
-    }
-
-    function populateTemplateSelect() {
-      const select = document.getElementById('templateSelect');
-      select.innerHTML = '';
-      PRIORITY_TEMPLATES.forEach(template => {
-        const option = document.createElement('option');
-        option.value = template.id;
-        option.textContent = template.name;
-        select.appendChild(option);
-      });
-    }
-
     function escapeAttr(str) {
       return str
         .replace(/&/g, '&amp;')
@@ -129,8 +85,7 @@
     }
 
     function syncMatrixOverride(ruleId, labelVal, descVal) {
-      const defaults = PriorityMatrix.RULES;
-      const def = defaults.find(r => r.id === ruleId);
+      const def = PriorityMatrix.RULES.find(r => r.id === ruleId);
       if (!def) return;
 
       const override = {};
@@ -183,51 +138,6 @@
       renderMatrixRows();
     }
 
-    function renderRows(data) {
-      const container = document.getElementById('rows');
-      container.innerHTML = '';
-      data.forEach((p, i) => {
-        const row = document.createElement('div');
-        row.className = 'tp-row';
-        row.innerHTML = `
-          <div class="tp-num-badge" style="background:${p.color}" data-badge="${i}">P${p.id}</div>
-          <input class="tp-input" type="text" value="${escapeAttr(p.label)}" data-label="${i}" maxlength="40" />
-          <div class="tp-color-swatch">
-            <div class="tp-color-preview" style="background:${p.color}" data-preview="${i}"></div>
-            <input type="color" value="${p.color}" data-color="${i}" />
-          </div>
-        `;
-        container.appendChild(row);
-      });
-
-      container.querySelectorAll('input[type="color"]').forEach(input => {
-        input.addEventListener('input', e => {
-          const idx = +e.target.dataset.color;
-          const hex = e.target.value;
-          priorities[idx].color = hex;
-          container.querySelector(`[data-preview="${idx}"]`).style.background = hex;
-          container.querySelector(`[data-badge="${idx}"]`).style.background = hex;
-          markCustom();
-        });
-      });
-
-      container.querySelectorAll('.tp-input').forEach(input => {
-        input.addEventListener('input', e => {
-          const idx = +e.target.dataset.label;
-          priorities[idx].label = e.target.value;
-          markCustom();
-        });
-      });
-    }
-
-    function applyPriorities(nextPriorities, schemeId) {
-      priorities = clonePriorities(nextPriorities);
-      activeScheme = schemeId;
-      updateSchemeDisplay();
-      renderRows(priorities);
-      hideOverrideWarning();
-    }
-
     function showOverrideWarning(action) {
       pendingOverride = action;
       document.getElementById('overrideWarning').hidden = false;
@@ -253,35 +163,10 @@
     }
 
     async function load() {
-      const [storedPriorities, storedScheme, storedMatrix] = await Promise.all([
-        t.get('board', 'shared', 'priorities'),
-        t.get('board', 'shared', 'priorityScheme'),
-        t.get('board', 'shared', 'matrixLabelSettings'),
-      ]);
-
-      priorities = storedPriorities
-        ? clonePriorities(storedPriorities)
-        : clonePriorities(DEFAULT_PRIORITIES);
-
-      activeScheme = storedScheme || detectScheme(priorities);
+      const storedMatrix = await t.get('board', 'shared', 'matrixLabelSettings');
       applyMatrixSettings(storedMatrix);
-
-      populateTemplateSelect();
-      updateSchemeDisplay();
-      renderRows(priorities);
       loadBuildInfo();
     }
-
-    document.getElementById('applyTemplateBtn').addEventListener('click', () => {
-      const templateId = document.getElementById('templateSelect').value;
-      const template = getTemplateById(templateId);
-      if (!template) return;
-      showOverrideWarning(() => applyPriorities(template.priorities, template.id));
-    });
-
-    document.getElementById('resetBtn').addEventListener('click', () => {
-      showOverrideWarning(() => applyPriorities(DEFAULT_PRIORITIES, CUSTOM_SCHEME_ID));
-    });
 
     document.getElementById('matrixEnabledToggle').addEventListener('change', e => {
       matrixLabelSettings.enabled = e.target.checked;
@@ -297,37 +182,29 @@
 
     document.getElementById('confirmOverrideBtn').addEventListener('click', () => {
       if (pendingOverride) pendingOverride();
+      hideOverrideWarning();
     });
 
     document.getElementById('cancelOverrideBtn').addEventListener('click', hideOverrideWarning);
 
     document.getElementById('saveBtn').addEventListener('click', async () => {
-      const err = validatePriorities(priorities);
-      if (err) {
-        showError(err);
-        return;
-      }
       const matrixErr = PriorityMatrix.validateSettings(matrixLabelSettings);
       if (matrixErr) {
         showError(matrixErr);
         return;
       }
       matrixLabelSettings = PriorityMatrix.normalizeSettings(matrixLabelSettings);
-      await Promise.all([
-        t.set('board', 'shared', 'priorities', priorities),
-        t.set('board', 'shared', 'priorityScheme', activeScheme),
-        t.set('board', 'shared', 'matrixLabelSettings', matrixLabelSettings),
-      ]);
+      await t.set('board', 'shared', 'matrixLabelSettings', matrixLabelSettings);
       showSavedToast();
     });
 
     document.getElementById('exportBtn').addEventListener('click', () => {
-      const payload = buildExportPayload(priorities, activeScheme, matrixLabelSettings);
+      const payload = buildMatrixExportPayload(matrixLabelSettings);
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'card-priorities-theme.json';
+      link.download = 'card-priorities-matrix.json';
       link.click();
       URL.revokeObjectURL(url);
     });
@@ -349,18 +226,13 @@
         return;
       }
 
-      const result = parseImportFile(text);
+      const result = parseMatrixImportFile(text);
       if (result.error) {
         showError(result.error);
         return;
       }
 
-      showOverrideWarning(() => {
-        applyPriorities(result.priorities, result.schemeId);
-        if (result.matrixLabelSettings != null) {
-          applyMatrixSettings(result.matrixLabelSettings);
-        }
-      });
+      showOverrideWarning(() => applyMatrixSettings(result.matrixLabelSettings));
     });
 
     document.getElementById('showGuide').addEventListener('click', () => {

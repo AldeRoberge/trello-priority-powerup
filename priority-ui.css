@@ -596,24 +596,6 @@ input.field-range:active::-webkit-slider-thumb {
   line-height: 1.2;
 }
 
-.heat-seg-label-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-
-.heat-seg-label-item .priority-icon {
-  flex-shrink: 0;
-  color: var(--text-muted);
-  opacity: 0.85;
-}
-
-.heat-seg-label-item .priority-label {
-  display: block;
-  line-height: 1.15;
-}
-
 /* ── Calc graph panel ── */
 .calc-graph-toggle {
   display: flex;

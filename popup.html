@@ -5,50 +5,64 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Définir la priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
-  <script src="./priority-templates.js"></script>
+  <script src="./priority-matrix.js"></script>
+  <script src="./priority-ui.js"></script>
+  <script src="./priority-trello.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./trello-theme.css" />
+  <link rel="stylesheet" href="./priority-ui.css" />
 </head>
-<body class="tp-page">
-  <div class="tp-list" id="priorityList">
-    <p class="tp-muted">Chargement…</p>
-  </div>
+<body class="tp-page tp-page--priority">
+  <div class="compare-grid" id="priorityMount"></div>
   <button class="tp-btn--ghost" id="clearBtn" type="button">Effacer la priorité</button>
 
   <script>
     const t = TrelloPowerUp.iframe();
+    const mountEl = document.getElementById('priorityMount');
+    let variant = null;
+    let saveTimer = null;
+    let matrixSettings = PriorityMatrix.normalizeSettings(null);
 
-    async function render() {
-      const [priorities, currentPriority] = await Promise.all([
-        t.get('board', 'shared', 'priorities').then(p => p || DEFAULT_PRIORITIES),
-        t.get('card', 'shared', 'priority'),
+    function scheduleSave(state) {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(async () => {
+        await PriorityTrello.saveCardInputs(t, state);
+      }, 250);
+    }
+
+    async function init() {
+      const [inputs, settings] = await Promise.all([
+        PriorityTrello.getCardInputs(t),
+        PriorityTrello.getMatrixLabelSettings(t),
       ]);
 
-      const list = document.getElementById('priorityList');
-      list.innerHTML = '';
+      matrixSettings = settings;
+      PriorityUI.setMatrixSettings(matrixSettings);
 
-      priorities.forEach(p => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'tp-list-item' + (currentPriority == p.id ? ' is-active' : '');
-        btn.innerHTML = `
-          <span class="tp-dot" style="background:${p.color};"></span>
-          <span>${p.label}</span>
-          <span class="tp-meta">P${p.id}</span>
-        `;
-        btn.addEventListener('click', async () => {
-          await t.set('card', 'shared', 'priority', p.id);
-          t.closePopup();
-        });
-        list.appendChild(btn);
+      variant = PriorityUI.mountVariant(mountEl, {
+        id: 'card',
+        formula: 'baseline',
+        defaults: inputs || PriorityTrello.DEFAULT_INPUTS,
+        dimensions: PriorityTrello.PRIORITY_DIMENSIONS,
+        loadState: function (defaults) {
+          return inputs ? Object.assign({}, inputs) : Object.assign({}, defaults);
+        },
+        onStateChange: scheduleSave,
       });
+
+      t.sizeTo(document.body);
     }
 
     document.getElementById('clearBtn').addEventListener('click', async () => {
-      await t.remove('card', 'shared', 'priority');
+      clearTimeout(saveTimer);
+      await PriorityTrello.clearCardPriority(t);
       t.closePopup();
     });
 
-    render();
+    const resizeObserver = new ResizeObserver(() => t.sizeTo(document.body));
+    resizeObserver.observe(document.body);
+
+    init();
   </script>
 </body>
 </html>
