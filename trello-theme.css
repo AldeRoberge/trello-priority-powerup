@@ -402,23 +402,6 @@ html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
   color: var(--tp-text-muted);
 }
 
-.tp-landing-note {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--tp-border);
-  font-size: 12px;
-  color: var(--tp-text-muted);
-  line-height: 1.5;
-}
-
-.tp-landing-note code {
-  font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", monospace;
-  font-size: 11px;
-  background: var(--tp-surface-subtle);
-  padding: 1px 4px;
-  border-radius: 3px;
-}
-
 /* Priority editor — modal iframe (see index.html openPriorityPopup) */
 html[data-color-mode]:has(body.tp-page--priority) {
   height: 100%;

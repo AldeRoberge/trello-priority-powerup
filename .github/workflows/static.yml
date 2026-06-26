@@ -1,3 +1,7 @@
+# Deploy via GitHub Actions (upload-pages-artifact + deploy-pages).
+# In repo Settings → Pages → Build and deployment, set Source to
+# "GitHub Actions" — not "Deploy from a branch". Branch-based Pages
+# also runs the built-in pages-build-deployment workflow on every push.
 name: Deploy static content to Pages
 
 on:
