@@ -10,7 +10,7 @@ Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques
 
 - **Trois axes** (urgence 0–4, impact 0–4, effort 1–5) avec barre de chaleur et curseurs
 - **Score et palier** calculés par formule baseline (0–10)
-- **Badges** sur les cartes en vue tableau (`score · palier`, ex. `7.9 · Urgent`)
+- **Badges colorés** sur les cartes en vue tableau (`score · palier`, ex. `7.9 · Urgent`) — pastille colorée selon le palier
 - **Popup « Définir la priorité »** : 3 curseurs + barre de chaleur dans le détail de carte
 - **Paramètres du tableau** : courte description, horodatage de build et lien vers le guide de configuration
 - **Horodatage de build** affiché sur la page d'accueil du connecteur (`build-info.json`, horodaté à chaque déploiement CI dans l'artifact publié)

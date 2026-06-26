@@ -317,7 +317,7 @@
     });
   }
 
-  // Defer t.get/set/getRestApi until Trello finishes the iframe handshake.
+  // Defer t.get/set until Trello finishes the iframe handshake.
   // Residual feature-gate noise in power-up.min.js is Trello-internal (see README).
   function runWhenIframeReady(t, fn) {
     var started = false;
