@@ -85,6 +85,18 @@ function clonePriorities(priorities) {
   return JSON.parse(JSON.stringify(priorities));
 }
 
+function cloneMatrixLabelSettings(settings) {
+  if (!settings || typeof settings !== 'object') {
+    return { enabled: true, overrides: {} };
+  }
+  return {
+    enabled: settings.enabled !== false,
+    overrides: settings.overrides && typeof settings.overrides === 'object'
+      ? JSON.parse(JSON.stringify(settings.overrides))
+      : {},
+  };
+}
+
 function getTemplateById(id) {
   return PRIORITY_TEMPLATES.find(t => t.id === id) || null;
 }
@@ -143,15 +155,31 @@ function validateImportData(data) {
   if (data.template != null && typeof data.template !== 'string') {
     return 'Le champ modèle doit être une chaîne de caractères lorsqu\'il est fourni.';
   }
+  if (data.matrixLabelSettings != null) {
+    if (typeof data.matrixLabelSettings !== 'object') {
+      return 'Le champ matrixLabelSettings doit être un objet.';
+    }
+    if (data.matrixLabelSettings.enabled != null && typeof data.matrixLabelSettings.enabled !== 'boolean') {
+      return 'Le champ enabled de matrixLabelSettings doit être un booléen.';
+    }
+    const overrides = data.matrixLabelSettings.overrides;
+    if (overrides != null && (typeof overrides !== 'object' || Array.isArray(overrides))) {
+      return 'Le champ overrides de matrixLabelSettings doit être un objet.';
+    }
+  }
   return null;
 }
 
-function buildExportPayload(priorities, schemeId) {
-  return {
+function buildExportPayload(priorities, schemeId, matrixLabelSettings) {
+  const payload = {
     version: EXPORT_VERSION,
     template: schemeId || detectScheme(priorities),
     priorities: clonePriorities(priorities),
   };
+  if (matrixLabelSettings != null) {
+    payload.matrixLabelSettings = cloneMatrixLabelSettings(matrixLabelSettings);
+  }
+  return payload;
 }
 
 function parseImportFile(text) {
@@ -166,8 +194,12 @@ function parseImportFile(text) {
   const schemeId = data.template === CUSTOM_SCHEME_ID || getTemplateById(data.template)
     ? data.template
     : detectScheme(data.priorities);
-  return {
+  const result = {
     priorities: clonePriorities(data.priorities),
     schemeId,
   };
+  if (data.matrixLabelSettings != null) {
+    result.matrixLabelSettings = cloneMatrixLabelSettings(data.matrixLabelSettings);
+  }
+  return result;
 }

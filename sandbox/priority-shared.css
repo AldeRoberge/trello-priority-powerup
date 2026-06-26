@@ -141,37 +141,6 @@ body {
   margin-bottom: 2px;
 }
 
-.field-head-start {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  text-align: left;
-  border-radius: 4px;
-  transition: opacity .12s;
-}
-
-.field-head-start:hover .field-lbl {
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.field-head-start:hover {
-  opacity: 0.85;
-}
-
-.field-head-start:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px rgba(0, 0, 0, 0.15);
-}
-
 .field-lbl {
   font-size: 13px;
   font-weight: 600;
@@ -199,9 +168,23 @@ body {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
+  font-style: italic;
+}
+
+.field-question::before {
+  content: '«\00a0';
+  font-style: normal;
+}
+
+.field-question::after {
+  content: '\00a0»';
+  font-style: normal;
 }
 
 .field-val {
+  margin: 0;
+  border: none;
+  font: inherit;
   font-size: 10.5px;
   font-weight: 500;
   color: var(--text-secondary);
@@ -214,6 +197,19 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 50%;
+  cursor: pointer;
+  transition: opacity .12s;
+}
+
+.field-val:hover {
+  opacity: 0.85;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.field-val:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px rgba(0, 0, 0, 0.15);
 }
 
 .field-slider {
@@ -326,34 +322,40 @@ input.field-range:active::-webkit-slider-thumb {
 }
 
 .help-modal-title {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   margin-bottom: 2px;
   padding-right: 28px;
   letter-spacing: -0.01em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.help-modal-title .ti {
+  font-size: 17px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 .help-modal-quote {
   font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   line-height: 1.45;
   margin: 0 0 12px;
-  padding: 10px 28px 10px 14px;
-  border-left: 3px solid color-mix(in srgb, var(--border) 70%, var(--text-muted));
-  background: var(--surface-1);
-  border-radius: 0 8px 8px 0;
+  padding: 8px 10px;
+  background: var(--surface-0);
+  border-radius: 6px;
   font-style: italic;
 }
 
 .help-modal-quote::before {
   content: '«\00a0';
-  color: var(--text-muted);
   font-style: normal;
 }
 
 .help-modal-quote::after {
   content: '\00a0»';
-  color: var(--text-muted);
   font-style: normal;
 }
 
@@ -420,22 +422,19 @@ input.field-range:active::-webkit-slider-thumb {
 }
 
 .help-modal-levels li.is-current {
-  background: var(--surface-1);
-  border-radius: 6px;
-  margin-left: -8px;
-  margin-right: -8px;
+  background: color-mix(in srgb, var(--text-primary) 4%, var(--surface-2));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 90%, var(--text-muted));
+}
+
+.help-modal-levels li.is-current:not(.is-selectable) {
+  border-radius: 8px;
+  margin: 0 -8px;
   padding-left: 8px;
   padding-right: 8px;
-  box-shadow: inset 3px 0 0 #0C66E4;
 }
 
 .help-modal-levels li.is-current.is-selectable:hover {
-  background: color-mix(in srgb, #0C66E4 8%, var(--surface-1));
-}
-
-.help-modal-levels li.is-current .help-modal-level-label {
-  font-weight: 700;
-  color: #0C66E4;
+  background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-2));
 }
 
 /* ── Heatbar panel ── */

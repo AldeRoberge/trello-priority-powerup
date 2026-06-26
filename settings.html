@@ -7,6 +7,7 @@
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./version.js"></script>
   <script src="./priority-templates.js"></script>
+  <script src="./priority-matrix.js"></script>
   <link rel="stylesheet" href="./trello-theme.css" />
 </head>
 <body class="tp-page">
@@ -32,6 +33,22 @@
   <h3 class="tp-heading">Niveaux de priorité</h3>
   <div id="rows"></div>
 
+  <h3 class="tp-heading">Libellés nuancés (matrice)</h3>
+  <p class="tp-matrix-hint">Combine urgence, impact et facilité pour des libellés contextuels (ex. « Opportunité massive », « Sale job »). Désactivé : retour aux paliers simples (Critique, Urgent…).</p>
+  <label class="tp-toggle">
+    <input type="checkbox" id="matrixEnabledToggle" checked />
+    <span class="tp-toggle-track" aria-hidden="true"></span>
+    <span class="tp-toggle-label">Activer les libellés nuancés</span>
+  </label>
+  <div id="matrixPanel">
+    <div class="tp-matrix-head" aria-hidden="true">
+      <span>Libellé</span>
+      <span>Description</span>
+    </div>
+    <div id="matrixRows"></div>
+    <button class="tp-btn tp-btn--secondary tp-matrix-reset" type="button" id="resetMatrixBtn">Réinitialiser les libellés de la matrice</button>
+  </div>
+
   <h3 class="tp-heading">Importer / exporter</h3>
   <div class="tp-io-bar">
     <button class="tp-btn tp-btn--secondary" type="button" id="exportBtn">Exporter JSON</button>
@@ -52,6 +69,7 @@
     const t = TrelloPowerUp.iframe();
     let priorities = [];
     let activeScheme = CUSTOM_SCHEME_ID;
+    let matrixLabelSettings = PriorityMatrix.normalizeSettings(null);
     let pendingOverride = null;
     let buildStampTimer;
 
@@ -104,6 +122,65 @@
         .replace(/&/g, '&amp;')
         .replace(/"/g, '&quot;')
         .replace(/</g, '&lt;');
+    }
+
+    function updateMatrixPanelVisibility() {
+      document.getElementById('matrixPanel').hidden = !matrixLabelSettings.enabled;
+    }
+
+    function syncMatrixOverride(ruleId, labelVal, descVal) {
+      const defaults = PriorityMatrix.RULES;
+      const def = defaults.find(r => r.id === ruleId);
+      if (!def) return;
+
+      const override = {};
+      if (labelVal.trim() !== def.label) override.label = labelVal.trim();
+      if (descVal.trim() !== def.description) override.description = descVal.trim();
+
+      if (Object.keys(override).length) {
+        matrixLabelSettings.overrides[ruleId] = override;
+      } else {
+        delete matrixLabelSettings.overrides[ruleId];
+      }
+    }
+
+    function renderMatrixRows() {
+      const container = document.getElementById('matrixRows');
+      container.innerHTML = '';
+      const rules = PriorityMatrix.getEffectiveRules(matrixLabelSettings);
+
+      rules.forEach(rule => {
+        const row = document.createElement('div');
+        row.className = 'tp-matrix-row';
+        row.innerHTML = `
+          <input class="tp-input" type="text" value="${escapeAttr(rule.label)}" data-matrix-label="${rule.id}" maxlength="${PriorityMatrix.LABEL_MAX_LENGTH}" />
+          <input class="tp-input tp-input--desc" type="text" value="${escapeAttr(rule.description)}" data-matrix-desc="${rule.id}" maxlength="${PriorityMatrix.DESCRIPTION_MAX_LENGTH}" />
+        `;
+        container.appendChild(row);
+      });
+
+      container.querySelectorAll('[data-matrix-label]').forEach(input => {
+        input.addEventListener('input', e => {
+          const ruleId = e.target.dataset.matrixLabel;
+          const descInput = container.querySelector(`[data-matrix-desc="${ruleId}"]`);
+          syncMatrixOverride(ruleId, e.target.value, descInput ? descInput.value : '');
+        });
+      });
+
+      container.querySelectorAll('[data-matrix-desc]').forEach(input => {
+        input.addEventListener('input', e => {
+          const ruleId = e.target.dataset.matrixDesc;
+          const labelInput = container.querySelector(`[data-matrix-label="${ruleId}"]`);
+          syncMatrixOverride(ruleId, labelInput ? labelInput.value : '', e.target.value);
+        });
+      });
+    }
+
+    function applyMatrixSettings(nextSettings) {
+      matrixLabelSettings = PriorityMatrix.normalizeSettings(nextSettings);
+      document.getElementById('matrixEnabledToggle').checked = matrixLabelSettings.enabled;
+      updateMatrixPanelVisibility();
+      renderMatrixRows();
     }
 
     function renderRows(data) {
@@ -176,9 +253,10 @@
     }
 
     async function load() {
-      const [storedPriorities, storedScheme] = await Promise.all([
+      const [storedPriorities, storedScheme, storedMatrix] = await Promise.all([
         t.get('board', 'shared', 'priorities'),
         t.get('board', 'shared', 'priorityScheme'),
+        t.get('board', 'shared', 'matrixLabelSettings'),
       ]);
 
       priorities = storedPriorities
@@ -186,6 +264,7 @@
         : clonePriorities(DEFAULT_PRIORITIES);
 
       activeScheme = storedScheme || detectScheme(priorities);
+      applyMatrixSettings(storedMatrix);
 
       populateTemplateSelect();
       updateSchemeDisplay();
@@ -204,6 +283,18 @@
       showOverrideWarning(() => applyPriorities(DEFAULT_PRIORITIES, CUSTOM_SCHEME_ID));
     });
 
+    document.getElementById('matrixEnabledToggle').addEventListener('change', e => {
+      matrixLabelSettings.enabled = e.target.checked;
+      updateMatrixPanelVisibility();
+    });
+
+    document.getElementById('resetMatrixBtn').addEventListener('click', () => {
+      showOverrideWarning(() => {
+        matrixLabelSettings.overrides = {};
+        renderMatrixRows();
+      });
+    });
+
     document.getElementById('confirmOverrideBtn').addEventListener('click', () => {
       if (pendingOverride) pendingOverride();
     });
@@ -216,15 +307,22 @@
         showError(err);
         return;
       }
+      const matrixErr = PriorityMatrix.validateSettings(matrixLabelSettings);
+      if (matrixErr) {
+        showError(matrixErr);
+        return;
+      }
+      matrixLabelSettings = PriorityMatrix.normalizeSettings(matrixLabelSettings);
       await Promise.all([
         t.set('board', 'shared', 'priorities', priorities),
         t.set('board', 'shared', 'priorityScheme', activeScheme),
+        t.set('board', 'shared', 'matrixLabelSettings', matrixLabelSettings),
       ]);
       showSavedToast();
     });
 
     document.getElementById('exportBtn').addEventListener('click', () => {
-      const payload = buildExportPayload(priorities, activeScheme);
+      const payload = buildExportPayload(priorities, activeScheme, matrixLabelSettings);
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -257,7 +355,12 @@
         return;
       }
 
-      showOverrideWarning(() => applyPriorities(result.priorities, result.schemeId));
+      showOverrideWarning(() => {
+        applyPriorities(result.priorities, result.schemeId);
+        if (result.matrixLabelSettings != null) {
+          applyMatrixSettings(result.matrixLabelSettings);
+        }
+      });
     });
 
     document.getElementById('showGuide').addEventListener('click', () => {

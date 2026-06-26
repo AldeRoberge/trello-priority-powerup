@@ -51,13 +51,13 @@
       ],
       popup: {
         subtitle: 'Est-ce que quelque chose cesse de fonctionner si ce n\'est pas fait?',
-        intro: 'Le blocage mesure dans quelle mesure le travail de l\'équipe ralentit ou s\'arrête tant que la tâche n\'est pas faite — les dépendances directes, les collègues en attente et les livraisons retenues.',
+        intro: 'Le blocage mesure dans quelle mesure le travail de l\'équipe ralentit ou s\'arrête tant que la tâche n\'est pas faite. Les dépendances directes, les collègues en attente et les livraisons retenues.',
         guidance: 'Demandez-vous qui est bloqué, quelles tâches en dépendent et si l\'équipe peut avancer autrement en attendant.'
       }
     },
     impact: {
       emoji: ['❌', '🙂', '👍', '⭐', '🚀'],
-      short: ['Aucun', 'Faible', 'Utile', 'Important', 'Impact majeur'],
+      short: ['Aucune', 'Faible', 'Utile', 'Importante', 'Impact majeure'],
       detail: [
         'Peu ou pas de bénéfice visible. L\'effort ne crée quasi aucune valeur, portée ni opportunité pour l\'équipe.',
         'Gain marginal avec peu de visibilité. Petite amélioration qui ne change que marginalement la valeur ou la portée des résultats.',
@@ -67,15 +67,15 @@
       ],
       popup: {
         subtitle: 'Pourquoi vaut-il la peine de le faire?',
-        intro: 'L\'impact mesure la valeur, l\'importance et la portée d\'une tâche — les bénéfices concrets qu\'elle apporte, sa visibilité, les opportunités qu\'elle ouvre et le nombre de personnes ou de tâches qu\'elle débloque.',
+        intro: 'L\'impact mesure la valeur, l\'importance et la portée d\'une tâche. Les bénéfices concrets qu\'elle apporte, sa visibilité, les opportunités qu\'elle ouvre et le nombre de personnes ou de tâches qu\'elle débloque.',
         guidance: 'Demandez-vous si le résultat sera visible, utile à l\'équipe ou au produit, et si d\'autres travaux en dépendent.'
       },
       affirmations: [
-        'Aucun gain visible. L\'effort ne vaut presque rien.',
+        'Aucune. L\'effort ne vaut presque rien.',
         'Gain marginal. Petite amélioration, peu visible.',
         'Utile. Amélioration nette pour l\'équipe ou le produit.',
-        'Important. Objectif clé, livrable visible.',
-        'Impact majeur. Forte valeur, large portée. D\'autres tâches en dépendent.'
+        'Importante. Objectif clé, livrable visible.',
+        'Impact majeure. Forte valeur, large portée. D\'autres tâches en dépendent.'
       ]
     },
     ease: {
@@ -105,7 +105,7 @@
     },
     urgency: {
       emoji: ['💤', '📅', '⏳', '🚨', '🔥'],
-      short: ['Calme', 'Bientôt', 'Cette semaine', 'Urgent', 'Critique'],
+      short: ['Aucune', 'Bientôt', 'Délai proche', 'Urgent', 'Critique'],
       detail: [
         'Aucune échéance ni attente pressante. Repousser n\'entraîne ni blocage ni dépendance critique.',
         'Échéance souple dans un délai confortable. Peu de pression temporelle, aucun blocage immédiat.',
@@ -121,7 +121,7 @@
       affirmations: [
         'Aucune pression. Pas d\'échéance, personne n\'attend.',
         'Peut attendre. Échéance souple, rien ne bloque.',
-        'Cette semaine. Délai proche ou quelques tâches en dépendent.',
+        'Délai proche. Quelques tâches en dépendent.',
         'Sous 48 h ou blocage notable. L\'équipe ralentit si on attend.',
         'Maintenant. En retard ou tout le travail de l\'équipe en dépend.'
       ]
@@ -142,6 +142,14 @@
     impact: 'Pourquoi vaut-il la peine de le faire?',
     ease: 'À quel point est-ce difficile?',
     urgency: 'Quand faut-il le faire?'
+  };
+
+  var PROPERTY_ICONS = {
+    time: 'ti-clock',
+    blocking: 'ti-barrier-block',
+    impact: 'ti-target-arrow',
+    ease: 'ti-gauge',
+    urgency: 'ti-flame'
   };
 
   var TIERS = [
@@ -216,6 +224,7 @@
 
   var SLIDER_STEP = 0.05;
   var SLIDER_ANIM_MS = 350;
+  var SLIDER_STORAGE_KEY = 'trello-priority-powerup/slider-values';
   var INUTILE_EPS = 0.05;
   var INUTILE_LABEL = 'Inutile';
   var INUTILE_STYLES = {
@@ -233,12 +242,39 @@
     return U < INUTILE_EPS && I < INUTILE_EPS && F <= 1 + INUTILE_EPS;
   }
 
-  function resolveDisplay(result, inputs) {
+  var matrixSettings = null;
+
+  function setMatrixSettings(settings) {
+    matrixSettings = settings;
+  }
+
+  function getMatrixSettings() {
+    return matrixSettings;
+  }
+
+  function resolveMatrixLabel(inputs, tier, score, labelSettings) {
+    var Matrix = typeof PriorityMatrix !== 'undefined' ? PriorityMatrix : null;
+    if (!Matrix) return null;
+    var settings = labelSettings != null ? labelSettings : matrixSettings;
+    var ctx = Matrix.buildResolveContext(settings, tier, score);
+    return Matrix.resolveLabel(inputs, ctx);
+  }
+
+  function resolveDisplay(result, inputs, labelSettings) {
     if (!isInutile(inputs)) {
+      var settings = labelSettings != null ? labelSettings : matrixSettings;
+      var matrix = resolveMatrixLabel(inputs, result.tier, result.score, settings);
+      var matrixEnabled = !settings || settings.enabled !== false;
       return {
         inutile: false,
         score: result.score,
-        label: result.tier.label,
+        label: matrix ? matrix.label : result.tier.label,
+        description: matrix ? matrix.description : (result.tier.description || ''),
+        tierLabel: result.tier.label,
+        matrixRuleId: matrix ? matrix.ruleId : null,
+        matrixLevels: matrix ? matrix.levels : null,
+        matrixEnabled: matrixEnabled,
+        matrixDisabled: matrix ? !!matrix.matrixDisabled : !matrixEnabled,
         fill: result.tier.fill,
         text: result.tier.text,
         seg: result.tier.seg,
@@ -250,6 +286,10 @@
       inutile: true,
       score: 0,
       label: INUTILE_LABEL,
+      description: INUTILE_STYLES.description || '',
+      tierLabel: INUTILE_LABEL,
+      matrixRuleId: null,
+      matrixLevels: null,
       fill: INUTILE_STYLES.fill,
       text: INUTILE_STYLES.text,
       seg: INUTILE_STYLES.seg,
@@ -649,29 +689,49 @@
     return score > best.score;
   }
 
-  function heatPresetForTarget(targetP) {
+  var HEAT_TARGET_EPS = 0.05;
+
+  function heatSegmentForTarget(targetP) {
     for (var k = 0; k < HEAT_SEGMENTS.length; k++) {
       var seg = HEAT_SEGMENTS[k];
-      if (Math.abs(seg.target - targetP) < 0.05 && seg.preset) {
-        return seg.preset;
-      }
+      if (Math.abs(seg.target - targetP) < HEAT_TARGET_EPS) return seg;
     }
     return null;
   }
 
+  function heatPresetForTarget(targetP) {
+    var seg = heatSegmentForTarget(targetP);
+    return seg && seg.preset ? seg.preset : null;
+  }
+
+  function pickOverrideDelta(current, next) {
+    var delta = {};
+    ['urgency', 'impact', 'ease'].forEach(function (key) {
+      var cur = current[key] != null ? current[key] : 0;
+      var nxt = next[key] != null ? next[key] : cur;
+      if (Math.abs(cur - nxt) >= 1e-9) delta[key] = nxt;
+    });
+    return delta;
+  }
+
   function overrideBaseline(targetP, inputs) {
-    var preset = heatPresetForTarget(targetP);
-    if (preset) {
-      return { urgency: preset.urgency, impact: preset.impact, ease: preset.ease };
+    var curU = inputs.urgency != null ? inputs.urgency : 0;
+    var curI = inputs.impact != null ? inputs.impact : 0;
+    var curF = inputs.ease != null ? inputs.ease : 5;
+    var curScore = baselineScore(curU, curI, curF);
+    var targetSeg = heatSegmentForTarget(targetP);
+    var sameTier = targetSeg && tierFor(curScore).i === targetSeg.i;
+
+    if (sameTier && Math.abs(curScore - targetP) < HEAT_TARGET_EPS) {
+      return { urgency: curU, impact: curI, ease: curF };
     }
 
-    var curU = inputs.urgency;
-    var curI = inputs.impact;
-    var curF = inputs.ease;
+    var fMin = sameTier ? curF : 1;
+    var fMax = sameTier ? curF : 5;
     var best = null;
     for (var u = 0; u <= 4; u++) {
       for (var i = 0; i <= 4; i++) {
-        for (var f = 1; f <= 5; f++) {
+        for (var f = fMin; f <= fMax; f++) {
           var score = baselineScore(u, i, f);
           if (!betterBaselineOverride(score, u, i, f, best, targetP, curU, curI, curF)) continue;
           best = { score: score, urgency: u, impact: i, ease: f };
@@ -800,7 +860,14 @@
       onSelect: config.onSelect || null
     };
 
-    root.querySelector('.help-modal-title').textContent = title;
+    var titleEl = root.querySelector('.help-modal-title');
+    var icon = config.icon || PROPERTY_ICONS[wordsKey] || 'ti-adjustments';
+    titleEl.textContent = '';
+    var iconEl = document.createElement('i');
+    iconEl.className = 'ti ' + icon;
+    iconEl.setAttribute('aria-hidden', 'true');
+    titleEl.appendChild(iconEl);
+    titleEl.appendChild(document.createTextNode(' ' + title));
 
     var popup = entry.popup || {};
     var quoteEl = root.querySelector('.help-modal-quote');
@@ -883,20 +950,13 @@
     var head = document.createElement('div');
     head.className = 'field-head';
 
-    var headStart = document.createElement('button');
-    headStart.type = 'button';
-    headStart.className = 'field-head-start';
-    headStart.setAttribute('aria-label', 'Informations sur ' + label);
-    if (KEYWORDS[wordsKey]) {
-      headStart.title = KEYWORDS[wordsKey];
-    }
-
     var lbl = document.createElement('span');
     lbl.className = 'field-lbl';
     lbl.innerHTML = '<i class="ti ' + icon + '"></i> ' + label;
 
     function openFieldHelp() {
       openHelpModal(wordsKey, label, {
+        icon: icon,
         min: min,
         max: max,
         currentValue: getValue(),
@@ -907,21 +967,21 @@
       });
     }
 
-    headStart.addEventListener('click', openFieldHelp);
-    headStart.addEventListener('keydown', function (e) {
+    var val = document.createElement('button');
+    val.type = 'button';
+    val.className = 'field-val';
+    val.setAttribute('aria-label', 'Informations sur ' + label);
+    val.title = wordFor(wordsKey, snappedLevel(value, min, max));
+
+    val.addEventListener('click', openFieldHelp);
+    val.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         openFieldHelp();
       }
     });
 
-    headStart.appendChild(lbl);
-
-    var val = document.createElement('span');
-    val.className = 'field-val';
-    val.title = wordFor(wordsKey, snappedLevel(value, min, max));
-
-    head.appendChild(headStart);
+    head.appendChild(lbl);
     head.appendChild(val);
     field.appendChild(head);
 
@@ -1038,7 +1098,7 @@
       s.setAttribute('role', 'button');
       s.setAttribute('tabindex', '0');
       s.setAttribute('aria-label', seg.label);
-      if (seg.description) s.title = seg.label + ' — ' + seg.description;
+      if (seg.description) s.title = seg.label + '. ' + seg.description;
       s.addEventListener('click', function () {
         onSegmentClick(+s.dataset.target);
       });
@@ -1063,6 +1123,7 @@
     el.appendChild(panel);
 
     function tierDescription(display) {
+      if (display.description) return display.description;
       if (display.inutile) return INUTILE_STYLES.description || '';
       if (display.tierI == null) return '';
       for (var k = 0; k < TIERS.length; k++) {
@@ -1226,7 +1287,7 @@
     var rsmWrap = document.createElement('div');
     rsmWrap.className = 'calc-rsm-wrap';
     rsmWrap.setAttribute('role', 'img');
-    rsmWrap.setAttribute('aria-label', 'Graphique de priorité — urgence et impact');
+    rsmWrap.setAttribute('aria-label', 'Graphique de priorité. Urgence et impact');
 
     var rsmRow = document.createElement('div');
     rsmRow.className = 'calc-rsm-row';
@@ -1765,6 +1826,31 @@
     };
   }
 
+  function loadSliderValues(defaults, dimensions) {
+    var merged = Object.assign({}, defaults);
+    try {
+      if (typeof localStorage === 'undefined') return merged;
+      var raw = localStorage.getItem(SLIDER_STORAGE_KEY);
+      if (!raw) return merged;
+      var stored = JSON.parse(raw);
+      if (!stored || typeof stored !== 'object') return merged;
+      dimensions.forEach(function (dim) {
+        var v = stored[dim.key];
+        if (typeof v === 'number' && isFinite(v)) {
+          merged[dim.key] = clamp(v, dim.min, dim.max);
+        }
+      });
+    } catch (e) { /* ignore corrupt storage */ }
+    return merged;
+  }
+
+  function saveSliderValues(state) {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.setItem(SLIDER_STORAGE_KEY, JSON.stringify(state));
+    } catch (e) { /* ignore quota / private mode */ }
+  }
+
   function mountVariant(containerEl, variantConfig) {
     var formulaKey = variantConfig.formula || 'baseline';
     var formulaDef = FORMULAS[formulaKey] || FORMULAS.baseline;
@@ -1783,9 +1869,16 @@
     var showCalcGraph = formulaKey === 'baseline';
     var sliderAnimFrame = null;
 
+    var defaultState = {};
     variantConfig.dimensions.forEach(function (dim) {
-      state[dim.key] = defaults[dim.key] != null ? defaults[dim.key] : dim.value;
+      defaultState[dim.key] = defaults[dim.key] != null ? defaults[dim.key] : dim.value;
     });
+    state = loadSliderValues(defaultState, variantConfig.dimensions);
+
+    function persistSliderState() {
+      syncStateFromFields();
+      saveSliderValues(state);
+    }
 
     function syncStateFromFields() {
       Object.keys(fields).forEach(function (key) {
@@ -1816,6 +1909,7 @@
           if (fields[key]) fields[key].setValue(targets[key]);
         });
         repaint();
+        persistSliderState();
         return;
       }
 
@@ -1839,6 +1933,7 @@
             if (fields[key]) fields[key].setValue(targets[key]);
           });
           repaint();
+          persistSliderState();
         }
       }
       sliderAnimFrame = requestAnimationFrame(step);
@@ -1859,7 +1954,10 @@
       el: card,
       onSegmentClick: function (targetP) {
         syncStateFromFields();
-        animateFieldsTo(overrideFn(targetP, state));
+        var next = overrideFn(targetP, state);
+        var delta = pickOverrideDelta(state, next);
+        if (!Object.keys(delta).length) return;
+        animateFieldsTo(delta);
       }
     });
 
@@ -1893,6 +1991,7 @@
         onChange: function () {
           cancelSliderAnim();
           repaint();
+          persistSliderState();
         }
       });
     });
@@ -1904,6 +2003,7 @@
         onChange: function () {
           cancelSliderAnim();
           repaint();
+          persistSliderState();
         }
       });
     }
@@ -1923,6 +2023,7 @@
           if (fields[key]) fields[key].setValue(next[key]);
         });
         repaint();
+        persistSliderState();
       },
       repaint: repaint
     };
@@ -1980,11 +2081,17 @@
     tierFor: tierFor,
     isInutile: isInutile,
     resolveDisplay: resolveDisplay,
+    setMatrixSettings: setMatrixSettings,
+    setLabelSettings: setMatrixSettings,
+    getMatrixSettings: getMatrixSettings,
+    getLabelSettings: getMatrixSettings,
+    resolveMatrixLabel: resolveMatrixLabel,
     INUTILE_EPS: INUTILE_EPS,
     INUTILE_LABEL: INUTILE_LABEL,
     INUTILE_STYLES: INUTILE_STYLES,
     wordFor: wordFor,
-    affirmationFor: affirmationFor
+    affirmationFor: affirmationFor,
+    Matrix: typeof PriorityMatrix !== 'undefined' ? PriorityMatrix : null
   };
 
   global.PriorityUI = PriorityUI;
