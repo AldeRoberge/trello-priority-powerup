@@ -179,6 +179,21 @@
     return 'light-gray';
   }
 
+  // Trello card cover colors (PUT /cards/{id}/cover value.color).
+  function tierCoverColor(display) {
+    if (!display) return null;
+    if (display.blocked) return BLOCKED_COVER_COLOR;
+    if (display.inutile) return null;
+    var i = display.tierI;
+    if (i === 0) return 'red';
+    if (i === 1 || i === 2) return 'orange';
+    if (i === 3) return 'green';
+    if (i === 4) return 'sky';
+    if (i === 5) return 'blue';
+    if (i === 6) return 'black';
+    return null;
+  }
+
   function buildCardFaceBadge(display) {
     if (!display) return null;
     return {
@@ -273,15 +288,36 @@
     };
   }
 
-  function buildBlockedCover(currentCover) {
+  function coverHasImage(cover) {
+    if (!cover || typeof cover !== 'object') return false;
+    return !!(cover.idAttachment || cover.idUploadedBackground);
+  }
+
+  function buildColorCover(currentCover, color) {
     var base = serializeCover(currentCover);
     return {
-      color: BLOCKED_COVER_COLOR,
+      color: color,
       idAttachment: null,
       idUploadedBackground: null,
       size: base.size,
       brightness: base.brightness,
     };
+  }
+
+  async function ensurePriorityCoverSnapshot(t) {
+    var snapshot = await t.get('card', 'shared', PRIORITY_COVER_SNAPSHOT_KEY);
+    if (!snapshot) {
+      var currentCover = await t.card('cover');
+      await t.set('card', 'shared', PRIORITY_COVER_SNAPSHOT_KEY, serializeCover(currentCover));
+    }
+  }
+
+  async function ensureBlockedCoverSnapshot(t) {
+    var snapshot = await t.get('card', 'shared', BLOCKED_COVER_SNAPSHOT_KEY);
+    if (!snapshot) {
+      var currentCover = await t.card('cover');
+      await t.set('card', 'shared', BLOCKED_COVER_SNAPSHOT_KEY, serializeCover(currentCover));
+    }
   }
 
   async function getAuthorizedRestClient(t) {
@@ -337,23 +373,37 @@
     }
   }
 
-  async function syncBlockedCardCover(t, wasBlocked, isBlocked) {
+  async function applyTierCover(client, t, display) {
+    var color = tierCoverColor(display);
+    if (!color) return;
+
+    var currentCover = await t.card('cover');
+    await ensurePriorityCoverSnapshot(t);
+    if (coverHasImage(currentCover)) return;
+
+    await updateCardCover(client, t, buildColorCover(currentCover, color));
+  }
+
+  async function syncCardCover(t, previous, normalized) {
     if (!canWriteCard(t)) return;
 
     var client = await getAuthorizedRestClient(t);
-    if (!client && isBlocked) {
+    if (!client) {
       client = await ensureRestApiAuthorized(t);
     }
     if (!client) return;
 
+    var settings = await getMatrixSettings(t);
+    PriorityUI.setMatrixSettings(settings);
+    var display = computeDisplay(normalized, settings);
+    var wasBlocked = !!(previous && previous.enAttente);
+    var isBlocked = !!normalized.enAttente;
+
     if (isBlocked) {
-      var snapshot = await t.get('card', 'shared', BLOCKED_COVER_SNAPSHOT_KEY);
-      if (!snapshot) {
-        var currentCover = await t.card('cover');
-        await t.set('card', 'shared', BLOCKED_COVER_SNAPSHOT_KEY, serializeCover(currentCover));
-      }
+      await ensurePriorityCoverSnapshot(t);
+      await ensureBlockedCoverSnapshot(t);
       var coverNow = await t.card('cover');
-      await updateCardCover(client, t, buildBlockedCover(coverNow));
+      await updateCardCover(client, t, buildColorCover(coverNow, BLOCKED_COVER_COLOR));
       return;
     }
 
@@ -362,21 +412,38 @@
       if (savedCover) {
         await updateCardCover(client, t, savedCover);
         await t.remove('card', 'shared', BLOCKED_COVER_SNAPSHOT_KEY);
+      } else {
+        await applyTierCover(client, t, display);
       }
+      return;
     }
+
+    await applyTierCover(client, t, display);
+  }
+
+  async function restorePriorityCover(t) {
+    if (!canWriteCard(t)) return;
+
+    var client = await getAuthorizedRestClient(t);
+    if (!client) return;
+
+    var savedCover = await t.get('card', 'shared', PRIORITY_COVER_SNAPSHOT_KEY);
+    if (savedCover) {
+      await updateCardCover(client, t, savedCover);
+      await t.remove('card', 'shared', PRIORITY_COVER_SNAPSHOT_KEY);
+    }
+    await t.remove('card', 'shared', BLOCKED_COVER_SNAPSHOT_KEY);
   }
 
   async function saveCardInputs(t, inputs) {
     var normalized = normalizeInputs(inputs);
     if (!normalized) return;
     var previous = await getCardInputs(t);
-    var wasBlocked = !!(previous && previous.enAttente);
-    var isBlocked = !!normalized.enAttente;
     await t.set('card', 'shared', CARD_PRIORITY_KEY, normalized);
     try {
-      await syncBlockedCardCover(t, wasBlocked, isBlocked);
+      await syncCardCover(t, previous, normalized);
     } catch (err) {
-      console.error('Priority blocked cover sync failed', err);
+      console.error('Priority card cover sync failed', err);
     }
   }
 
@@ -394,13 +461,16 @@
     formatBadgeText: formatBadgeText,
     tierBadgeDot: tierBadgeDot,
     tierDetailBadgeColor: tierDetailBadgeColor,
+    tierCoverColor: tierCoverColor,
     buildCardFaceBadge: buildCardFaceBadge,
     cardFaceBadges: cardFaceBadges,
     cardDetailBadges: cardDetailBadges,
     saveCardInputs: saveCardInputs,
     ensureRestApiAuthorized: ensureRestApiAuthorized,
-    syncBlockedCardCover: syncBlockedCardCover,
+    syncCardCover: syncCardCover,
+    restorePriorityCover: restorePriorityCover,
     BLOCKED_COVER_SNAPSHOT_KEY: BLOCKED_COVER_SNAPSHOT_KEY,
+    PRIORITY_COVER_SNAPSHOT_KEY: PRIORITY_COVER_SNAPSHOT_KEY,
     BADGE_REFRESH_SEC: BADGE_REFRESH_SEC,
     BADGE_DOT_BLOCKED: BADGE_DOT_BLOCKED,
   };

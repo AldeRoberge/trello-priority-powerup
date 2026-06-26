@@ -67,6 +67,8 @@
         saveState(variant.getState());
       }
 
+      PriorityTrello.ensureRestApiAuthorized(t).catch(function () {});
+
       var blockedCheckbox = mountEl.querySelector('.en-attente-checkbox');
       if (blockedCheckbox) {
         blockedCheckbox.addEventListener('change', function () {
