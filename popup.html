@@ -45,13 +45,19 @@
         onStateChange: scheduleSave,
       });
 
+      const fieldsCollapse = mountEl.querySelector('.variant-fields-collapse');
+      if (fieldsCollapse) {
+        fieldsCollapse.addEventListener('toggle', () => t.sizeTo('.tp-page--priority'));
+      }
+
+      await t.sizeTo('.tp-page--priority');
       window.scrollTo(0, 0);
     }
 
     document.getElementById('clearBtn').addEventListener('click', async () => {
       clearTimeout(saveTimer);
       await PriorityTrello.clearCardPriority(t);
-      t.closeModal();
+      t.closePopup();
     });
 
     init().catch(function (err) {
