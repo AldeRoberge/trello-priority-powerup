@@ -82,6 +82,12 @@ La synchronisation des couleurs de couverture de carte sur le tableau nécessite
 1. Copier `trello-api-config-template.js` vers `trello-api-config.js`
 2. Aller sur [trello.com/power-ups/admin](https://trello.com/power-ups/admin) → votre Power-Up → onglet **API Key**
 3. Coller la clé dans `appKey` (laisser vide pour désactiver la synchro des couvertures ; les badges restent actifs)
+4. Dans le même onglet **API Key**, section **Allowed origins**, ajouter l’URL exacte du connecteur :
+   - GitHub Pages (ce dépôt) : `https://alderoberge.github.io/trello-priority-powerup/index.html`
+   - Développement local (serveur HTTP sur un port fixe) : `http://localhost:8080` (adapter le port)
+   - **Ne pas** utiliser `*` — Trello le refuse pour OAuth
+
+Sans origine autorisée, l’édition de priorité fonctionne (badges, stockage carte), mais l’OAuth pour les couleurs de couverture affiche *Invalid return_url* lors de la première modification qui déclenche la synchro.
 
 En **production (GitHub Pages)**, la clé n'est pas versionnée : le workflow CI génère `trello-api-config.js` à partir du secret **`TRELLO_API_KEY`** (voir [Déploiement](#déploiement-github-pages)).
 
@@ -108,10 +114,49 @@ Dépannage (déploiement bloqué, source Pages) : [.github/DEPLOYMENT.md](.githu
 
 ### Enregistrer le Power-Up
 
-1. [trello.com/power-ups/admin](https://trello.com/power-ups/admin) → **Create new Power-Up**
-2. **Iframe connector URL** : `https://VOTRE-SITE/index.html`
-3. Capacités : `card-badges`, `card-detail-badges`, `board-buttons` (ne pas activer `card-buttons` — non utilisé par ce Power-Up)
-4. Ajouter le Power-Up à un tableau via le menu Power-Ups
+1. [trello.com/power-ups/admin](https://trello.com/power-ups/admin) → **Create new Power-Up** (ou ouvrir le Power-Up existant)
+2. **Iframe connector URL** (onglet principal du Power-Up) :
+   `https://VOTRE-UTILISATEUR.github.io/trello-priority-powerup/index.html`
+3. Onglet **API Key** → **Allowed origins** : `https://VOTRE-UTILISATEUR.github.io/trello-priority-powerup/index.html` (voir [Configuration OAuth REST API](#configuration-oauth-rest-api-couleurs-de-couverture))
+4. Capacités : `card-badges`, `card-detail-badges`, `board-buttons` (ne pas activer `card-buttons` — non utilisé par ce Power-Up)
+5. Ajouter le Power-Up à un tableau via le menu Power-Ups
+
+### Configuration OAuth REST API (couleurs de couverture)
+
+La synchro des couleurs de couverture utilise `client.authorize()` de Trello. Sans configuration correcte, vous verrez :
+
+> Invalid return_url. The return URL should match the application's allowed origins.
+
+**Checklist admin (dans le même Power-Up que l’Iframe connector URL) :**
+
+| Étape | Où | Valeur exacte |
+|-------|-----|---------------|
+| 1. Iframe connector URL | Onglet principal du Power-Up | `https://alderoberge.github.io/trello-priority-powerup/index.html` |
+| 2. API Key | Onglet **API Key** → copier la clé | Doit être **identique** à `appKey` dans `trello-api-config.js` (local) ou au secret GitHub **`TRELLO_API_KEY`** (production) |
+| 3. Allowed origins | [trello.com/power-ups/admin](https://trello.com/power-ups/admin) → Power-Up → onglet **API Key** → **Allowed origins** | Ajouter **`https://alderoberge.github.io/trello-priority-powerup/index.html`** (URL complète du connecteur — confirmée pour OAuth/popup) |
+| 4. Vérifier la clé déployée | GitHub → Settings → Secrets → `TRELLO_API_KEY` | Même clé que l’onglet API Key du Power-Up ci-dessus — une clé d’un autre Power-Up provoque l’erreur `Invalid return_url` même si les origines sont correctes ailleurs |
+| 5. Redéployer | Push sur `main` ou relancer le workflow Pages | Le site doit servir la dernière version de `priority-trello.js` |
+
+**Iframe connector URL et Allowed origins**
+
+- **Iframe connector URL** : URL complète de `index.html` — c’est la page où Trello charge le connecteur Power-Up.
+- **Allowed origins** : entrée admin pour autoriser le **retour OAuth** (`return_url`). Pour ce déploiement GitHub Pages, utiliser la même URL complète que l’Iframe connector : `https://alderoberge.github.io/trello-priority-powerup/index.html`.
+- Ce Power-Up force `return_url` vers **`index.html`** (le connecteur), pas `popup.html`.
+
+**Comportement OAuth dans ce Power-Up**
+
+- L’ouverture du popup **ne déclenche plus** OAuth — les curseurs et badges fonctionnent via le stockage Power-Up (`t.set`), sans REST API.
+- OAuth n’est demandé que lors d’un **changement utilisateur** (curseur, case « en attente ») qui nécessite une synchro de couverture, via `promptOAuth: true` — pas à l’ouverture ni à la fermeture du popup.
+- `client.authorize()` reçoit `return_url: …/index.html` (connecteur), pas `popup.html`.
+- Si l’erreur cite encore `popup.html` dans `return_url`, le site GitHub Pages n’a pas encore la version corrigée de `priority-trello.js` — redéployer.
+
+**Dépannage `Invalid return_url`**
+
+1. Confirmer que **`TRELLO_API_KEY`** (GitHub) = clé API du Power-Up dont l’Iframe connector URL pointe vers ce dépôt.
+2. Dans **Allowed origins** ([trello.com/power-ups/admin](https://trello.com/power-ups/admin) → Power-Up → **API Key**), entrer `https://alderoberge.github.io/trello-priority-powerup/index.html` — la même URL que l’Iframe connector URL.
+3. Si aucune origine n’est enregistrée, **aucun** `return_url` ne fonctionne (comportement Trello).
+4. Après modification des origines, réessayer depuis Trello (pas besoin de redéployer le site pour ce seul changement admin).
+5. En local : ajouter `http://localhost:PORT` comme origine autorisée si vous testez avec un serveur local.
 
 ---
 

@@ -331,6 +331,12 @@
     }
   }
 
+  // OAuth return_url must match an API-key allowed origin (trello.com/power-ups/admin → API Key).
+  // Use the connector page — not popup.html — so Trello signing hashes on modal URLs are avoided.
+  function oauthReturnUrl() {
+    return pageUrl('./index.html');
+  }
+
   function whenDomReady() {
     return new Promise(function (resolve) {
       if (typeof document === 'undefined' || document.readyState !== 'loading') {
@@ -461,7 +467,8 @@
     try {
       var client = await t.getRestApi();
       if (await client.isAuthorized()) return client;
-      await client.authorize({ scope: 'read,write' });
+      var returnUrl = oauthReturnUrl();
+      await client.authorize({ scope: 'read,write', return_url: returnUrl });
       if (!(await client.isAuthorized())) {
         coverSyncError('OAuth authorization was not granted');
         return null;
@@ -522,7 +529,16 @@
     await updateCardCover(client, t, buildColorCover(currentCover, color));
   }
 
-  async function syncCardCover(t, previous, normalized) {
+  function coverSyncWouldApply(previous, normalized, settings) {
+    var display = computeDisplay(normalized, settings);
+    var wasBlocked = !!(previous && previous.enAttente);
+    var isBlocked = !!normalized.enAttente;
+    if (isBlocked || wasBlocked) return true;
+    return !!tierCoverColor(display);
+  }
+
+  async function syncCardCover(t, previous, normalized, options) {
+    options = options || {};
     if (!isTrelloApiConfigured()) {
       coverSyncError(
         'skipped — copy trello-api-config-template.js to trello-api-config.js and set appKey to sync card cover colors on the board'
@@ -534,16 +550,22 @@
       return;
     }
 
-    var client = await getAuthorizedRestClient(t);
-    if (!client) {
-      client = await ensureRestApiAuthorized(t);
-    }
-    if (!client) {
-      coverSyncError('skipped — Trello REST API not authorized (OAuth required)');
+    var settings = await getMatrixSettings(t);
+    if (!coverSyncWouldApply(previous, normalized, settings)) {
       return;
     }
 
-    var settings = await getMatrixSettings(t);
+    var client = await getAuthorizedRestClient(t);
+    if (!client && options.promptOAuth) {
+      client = await ensureRestApiAuthorized(t);
+    }
+    if (!client) {
+      if (options.promptOAuth) {
+        coverSyncError('skipped — Trello REST API not authorized (OAuth required)');
+      }
+      return;
+    }
+
     PriorityUI.setMatrixSettings(settings);
     var display = computeDisplay(normalized, settings);
     var wasBlocked = !!(previous && previous.enAttente);
@@ -585,13 +607,14 @@
     await t.remove('card', 'shared', BLOCKED_COVER_SNAPSHOT_KEY);
   }
 
-  async function saveCardInputs(t, inputs) {
+  async function saveCardInputs(t, inputs, options) {
     var normalized = normalizeInputs(inputs);
     if (!normalized) return;
     var previous = await getCardInputs(t);
     await t.set('card', 'shared', CARD_PRIORITY_KEY, normalized);
+    if (options && options.syncCover === false) return;
     try {
-      await syncCardCover(t, previous, normalized);
+      await syncCardCover(t, previous, normalized, options);
     } catch (err) {
       console.error('Priority card cover sync failed', err);
     }
@@ -624,7 +647,9 @@
     createIframeClient: createIframeClient,
     createIframeClientDeferred: createIframeClientDeferred,
     runWhenIframeReady: runWhenIframeReady,
+    getAuthorizedRestClient: getAuthorizedRestClient,
     ensureRestApiAuthorized: ensureRestApiAuthorized,
+    oauthReturnUrl: oauthReturnUrl,
     syncCardCover: syncCardCover,
     serializeCover: serializeCover,
     coverHasImage: coverHasImage,

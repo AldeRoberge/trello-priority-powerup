@@ -30,11 +30,11 @@
     let latestState = null;
     let saveChain = Promise.resolve();
 
-    function saveState(state) {
+    function saveState(state, saveOptions) {
       latestState = state;
       saveChain = saveChain
         .then(function () {
-          return PriorityTrello.saveCardInputs(t, state);
+          return PriorityTrello.saveCardInputs(t, state, saveOptions);
         })
         .catch(function (err) {
           console.error('Priority save failed', err);
@@ -47,28 +47,17 @@
       if (banner) banner.hidden = false;
     }
 
-    async function ensureCoverApiReady() {
+    async function init() {
       if (!PriorityTrello.isTrelloApiConfigured()) {
         showApiConfigBanner();
-        return null;
       }
-      try {
-        return await PriorityTrello.ensureRestApiAuthorized(t);
-      } catch (err) {
-        console.error('Priority OAuth failed', err);
-        return null;
-      }
-    }
 
-    async function init() {
       const inputs = await PriorityTrello.getCardInputs(t);
       const matrixSettings = await PriorityTrello.getMatrixSettings(t);
       PriorityUI.setMatrixSettings(matrixSettings);
 
       const hasSavedPriority = !!inputs;
       const initialDefaults = hasSavedPriority ? inputs : PriorityTrello.IMPORTANT_INPUTS;
-
-      await ensureCoverApiReady();
 
       variant = PriorityUI.mountVariant(mountEl, {
         id: 'card',
@@ -78,26 +67,13 @@
         loadState: function (defaults) {
           return Object.assign({}, defaults);
         },
-        onStateChange: saveState,
+        onStateChange: function (state) {
+          saveState(state, { promptOAuth: true });
+        },
       });
 
       if (!hasSavedPriority) {
-        await saveState(variant.getState());
-      }
-
-      var blockedCheckbox = mountEl.querySelector('.en-attente-checkbox');
-      if (blockedCheckbox) {
-        blockedCheckbox.addEventListener('change', function () {
-          ensureCoverApiReady()
-            .then(function (client) {
-              if (client && latestState) {
-                return PriorityTrello.saveCardInputs(t, latestState);
-              }
-            })
-            .catch(function (err) {
-              console.error('Priority blocked cover sync failed', err);
-            });
-        });
+        await saveState(variant.getState(), { promptOAuth: false });
       }
 
       window.scrollTo(0, 0);
@@ -108,7 +84,7 @@
 
     window.addEventListener('pagehide', function () {
       if (latestState) {
-        saveState(latestState);
+        saveState(latestState, { promptOAuth: false });
       }
     });
 
