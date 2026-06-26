@@ -467,7 +467,7 @@ body.tp-page--priority {
   width: 100%;
   min-width: 0;
   margin: 0;
-  padding: 0.625rem 0 0.875rem;
+  padding: 0.625rem 12px 0.875rem;
   box-shadow: none;
   overflow-x: hidden;
 }

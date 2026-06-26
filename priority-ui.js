@@ -1230,14 +1230,16 @@
   function openCriteriaWizard(dimensions, hooks) {
     hooks = hooks || {};
     if (!dimensions || !dimensions.length) return;
+    var initialStep = hooks.initialStep != null ? hooks.initialStep : 0;
+    initialStep = clamp(initialStep, 0, dimensions.length - 1);
     wizardContext = {
       dimensions: dimensions,
-      step: 0,
+      step: initialStep,
       getValue: hooks.getValue || function () { return 0; },
       setValue: hooks.setValue || function () {},
       onComplete: hooks.onComplete || null
     };
-    showWizardStep(0);
+    showWizardStep(initialStep);
   }
 
   // ── 9. Form controls (field, heat panel, calc graph) ────────────────────
@@ -1273,6 +1275,15 @@
     }
 
     function openFieldHelp() {
+      var wiz = config.wizard;
+      if (wiz && wiz.dimensions && wiz.dimensions.length > 1) {
+        openCriteriaWizard(wiz.dimensions, {
+          initialStep: wiz.step != null ? wiz.step : 0,
+          getValue: wiz.getValue,
+          setValue: wiz.setValue
+        });
+        return;
+      }
       openHelpModal(wordsKey, label, {
         icon: icon,
         min: min,
@@ -1595,10 +1606,6 @@
     var panel = document.createElement('div');
     panel.className = 'calc-graph-panel';
 
-    var heading = document.createElement('div');
-    heading.className = 'calc-graph-heading';
-    heading.textContent = 'Graphique';
-
     var body = document.createElement('div');
     body.className = 'calc-graph-body';
 
@@ -1818,7 +1825,6 @@
     graphSection.appendChild(rsmWrap);
     body.appendChild(graphSection);
 
-    panel.appendChild(heading);
     panel.appendChild(body);
     el.appendChild(panel);
 
@@ -2350,7 +2356,20 @@
     fieldsSection.appendChild(fieldsWrap);
     card.appendChild(fieldsSection);
 
-    variantConfig.dimensions.forEach(function (dim) {
+    var wizardHooks = {
+      getValue: function (key) {
+        return fields[key] ? fields[key].getValue() : state[key];
+      },
+      setValue: function (key, level) {
+        if (fields[key]) fields[key].setValue(level);
+        state[key] = level;
+        cancelSliderAnim();
+        repaint();
+        persistSliderState();
+      }
+    };
+
+    variantConfig.dimensions.forEach(function (dim, dimIndex) {
       fields[dim.key] = createField({
         el: fieldsWrap,
         id: variantConfig.id + '-' + dim.key,
@@ -2364,6 +2383,12 @@
           cancelSliderAnim();
           repaint();
           persistSliderState();
+        },
+        wizard: {
+          dimensions: variantConfig.dimensions,
+          step: dimIndex,
+          getValue: wizardHooks.getValue,
+          setValue: wizardHooks.setValue
         }
       });
     });
@@ -2373,18 +2398,7 @@
       configBtn.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        openCriteriaWizard(variantConfig.dimensions, {
-          getValue: function (key) {
-            return fields[key] ? fields[key].getValue() : state[key];
-          },
-          setValue: function (key, level) {
-            if (fields[key]) fields[key].setValue(level);
-            state[key] = level;
-            cancelSliderAnim();
-            repaint();
-            persistSliderState();
-          }
-        });
+        openCriteriaWizard(variantConfig.dimensions, wizardHooks);
       });
     }
 
