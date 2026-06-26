@@ -30,17 +30,6 @@
       });
     }
 
-    function resizePopup() {
-      t.sizeTo('.tp-page--priority');
-    }
-
-    function bindResizeHooks() {
-      var fieldsCollapse = mountEl.querySelector('.variant-fields-collapse');
-      if (fieldsCollapse) {
-        fieldsCollapse.addEventListener('toggle', resizePopup);
-      }
-    }
-
     async function init() {
       const inputs = await PriorityTrello.getCardInputs(t);
 
@@ -55,9 +44,7 @@
         onStateChange: saveState,
       });
 
-      bindResizeHooks();
       window.scrollTo(0, 0);
-      resizePopup();
     }
 
     window.addEventListener('pagehide', function () {

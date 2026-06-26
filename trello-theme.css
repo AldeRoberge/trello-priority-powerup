@@ -420,11 +420,18 @@ html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
 }
 
 /* Priority editor — modal iframe (see index.html openPriorityPopup) */
+html[data-color-mode]:has(body.tp-page--priority) {
+  height: 100%;
+  overflow: hidden;
+}
+
 body.tp-page--priority {
   background: var(--tp-bg);
-  min-height: auto;
+  height: 100%;
+  min-height: 0;
   color: var(--tp-text);
   overflow-x: hidden;
+  overflow-y: auto;
   font-size: 15px;
 }
 
@@ -434,7 +441,7 @@ body.tp-page--priority {
   max-width: 880px;
   min-height: auto;
   margin: 0 auto;
-  padding: 20px 28px 28px;
+  padding: 0;
 }
 
 .tp-page--priority .compare-page {
