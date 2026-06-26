@@ -148,7 +148,9 @@
   };
   var BADGE_DOT_INUTILE = '\u00B7'; // · inutile
   var BADGE_DOT_BLOCKED = '\u2298'; // ⊘ blocked / en attente
+  var BADGE_BLOCKED_BOARD_MARK = '\u00B7\u00B7'; // ·· dotted pair — board badge text only (no custom CSS)
   var BADGE_DOT_COMPLETE = '\u2713'; // ✓ card marked complete in Trello
+  var BLOCKED_BOARD_BADGE_ICON = './badges/blocked.svg';
 
   function tierBadgeDot(display, completed) {
     if (completed) return BADGE_DOT_COMPLETE;
@@ -200,12 +202,20 @@
     return 'Compl\u00e9t\u00e9 (' + taskLabel + ')';
   }
 
+  function blockedBoardBadgeLabel(reason) {
+    var label = 'T\u00e2che bloqu\u00e9e';
+    if (reason) return label + ' \u2014 ' + reason;
+    return label;
+  }
+
+  function formatBlockedBoardBadgeText(reason) {
+    var trimmed = typeof reason === 'string' ? reason.trim() : '';
+    return BADGE_DOT_BLOCKED + ' ' + BADGE_BLOCKED_BOARD_MARK + ' ' + blockedBoardBadgeLabel(trimmed);
+  }
+
   function completedBadgeTaskLabel(display) {
     if (display.blocked) {
-      var blockedText = (typeof PriorityUI !== 'undefined' && PriorityUI.formatBlockedBadgeText)
-        ? PriorityUI.formatBlockedBadgeText(display.blockedReason || '')
-        : BADGE_DOT_BLOCKED + ' T\u00e2che bloqu\u00e9e';
-      return blockedText.slice(BADGE_DOT_BLOCKED.length).trim();
+      return blockedBoardBadgeLabel(display.blockedReason || '');
     }
     return incompleteBadgeLabel(display);
   }
@@ -216,18 +226,15 @@
       return BADGE_DOT_COMPLETE + ' ' + formatCompletedBadgeLabel(completedBadgeTaskLabel(display));
     }
     if (display.blocked) {
-      var blockedText = (typeof PriorityUI !== 'undefined' && PriorityUI.formatBlockedBadgeText)
-        ? PriorityUI.formatBlockedBadgeText(display.blockedReason || '')
-        : BADGE_DOT_BLOCKED + ' T\u00e2che bloqu\u00e9e';
-      return blockedText;
+      return formatBlockedBoardBadgeText(display.blockedReason || '');
     }
     return tierBadgeDot(display, false) + ' ' + incompleteBadgeLabel(display);
   }
 
   function tierDetailBadgeColor(display) {
     if (!display) return 'light-gray';
-    // Trello card badges only accept named colors (red, orange, …), not hex.
-    // pink — distinct from Critique tier (red); Trello badges only accept named colors
+    // Trello card badges only accept named colors (red, orange, …), not hex or CSS.
+    // pink — reddish wash distinct from Critique (red); pairs with dotted blocked icon + ⊘ ·· text
     if (display.blocked) return 'pink';
     if (display.inutile) return 'light-gray';
     var i = display.tierI;
@@ -241,10 +248,15 @@
 
   function buildCardFaceBadge(display, completed) {
     if (!display) return null;
-    return {
+    var badge = {
       text: formatBadgeText(display, completed),
       color: completed ? 'green' : tierDetailBadgeColor(display),
     };
+    if (display.blocked && !completed) {
+      badge.icon = pageUrl(BLOCKED_BOARD_BADGE_ICON);
+      badge.monochrome = false;
+    }
+    return badge;
   }
 
   async function getCardDueComplete(t) {
@@ -421,6 +433,7 @@
     getCardDueComplete: getCardDueComplete,
     getBadgeData: getBadgeData,
     formatBadgeText: formatBadgeText,
+    formatBlockedBoardBadgeText: formatBlockedBoardBadgeText,
     incompleteBadgeLabel: incompleteBadgeLabel,
     isCardMarkedComplete: isCardMarkedComplete,
     tierBadgeDot: tierBadgeDot,

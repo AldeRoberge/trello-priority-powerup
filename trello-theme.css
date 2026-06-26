@@ -460,7 +460,7 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .variant-card.is-blocked {
-  border: 2px dotted var(--blocked-border);
+  border: 2px solid var(--blocked-border);
 }
 
 .tp-page--priority .heat-blocked-warning {

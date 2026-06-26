@@ -152,7 +152,7 @@ body {
 
 .variant-card.is-blocked {
   background: color-mix(in srgb, var(--card-tier-tint) var(--card-tier-tint-mix), var(--blocked-fill));
-  border: 2px dotted var(--blocked-border);
+  border: 2px solid var(--blocked-border);
 }
 
 .variant-fields {
@@ -213,7 +213,7 @@ body {
 .field--en-attente:has(.en-attente-checkbox:checked) {
   background: var(--blocked-fill);
   border-color: var(--blocked-border);
-  border-style: dotted;
+  border-style: solid;
   padding: 10px 12px;
 }
 
@@ -758,8 +758,6 @@ body.help-modal-open {
 .heat-panel.is-blocked {
   background: color-mix(in srgb, var(--card-tier-tint) var(--card-panel-tint-mix, 20%), var(--blocked-fill));
   box-shadow: inset 0 0 0 2px var(--blocked-border);
-  outline: 2px dotted var(--blocked-border);
-  outline-offset: -4px;
 }
 
 .heat-blocked-warning {
@@ -778,7 +776,7 @@ body.help-modal-open {
   letter-spacing: -0.01em;
   color: var(--blocked-text);
   background: var(--blocked-fill);
-  border: 2px dotted var(--blocked-border);
+  border: 2px solid var(--blocked-border);
   pointer-events: none;
 }
 
@@ -862,8 +860,6 @@ body.help-modal-open {
 .heat-badge.is-blocked {
   background: var(--heat-fill, var(--blocked-fill));
   box-shadow: inset 0 0 0 2px var(--blocked-border);
-  outline: 2px dotted var(--blocked-border);
-  outline-offset: -3px;
 }
 
 .heat-badge.is-blocked .heat-tier-dot {

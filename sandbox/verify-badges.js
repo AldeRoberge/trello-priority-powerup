@@ -66,11 +66,21 @@ check(
 );
 check(
   'blocked incomplete badge',
-  PT.formatBadgeText(blockedDisplay, false) === sandbox.PriorityUI.formatBlockedBadgeText(blockedDisplay.blockedReason)
+  PT.formatBadgeText(blockedDisplay, false) ===
+    PT.formatBlockedBoardBadgeText(blockedDisplay.blockedReason)
+);
+check(
+  'blocked board badge has icon',
+  PT.buildCardFaceBadge(blockedDisplay, false).icon != null &&
+    PT.buildCardFaceBadge(blockedDisplay, false).monochrome === false
+);
+check(
+  'blocked complete badge has no icon',
+  PT.buildCardFaceBadge(blockedDisplay, true).icon == null
 );
 check(
   'blocked complete uses Complété wrapper',
-  PT.formatBadgeText(blockedDisplay, true) === '\u2713 Compl\u00e9t\u00e9 (T\u00e2che bloqu\u00e9 \u2014 En attente d\'une approbation)'
+  PT.formatBadgeText(blockedDisplay, true) === '\u2713 Compl\u00e9t\u00e9 (T\u00e2che bloqu\u00e9e \u2014 En attente d\'une approbation)'
 );
 check(
   'blocked complete badge color',
