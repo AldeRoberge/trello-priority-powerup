@@ -64,14 +64,14 @@
     },
     {
       id: 'dirty-job',
-      label: 'Sale job',
+      label: 'Tâche ingrate',
       description: 'Urgent mais peu utile et pénible. À traiter vite pour débloquer, sans sur-investir.',
       priority: 99,
       when: { ease: ['veryLow', 'low'], impact: ['veryLow', 'low'], urgency: ['high', 'veryHigh'] }
     },
     {
       id: 'quick-win',
-      label: 'Quick win',
+      label: 'Victoire rapide',
       description: 'Peu d\'effort pour un gain net. Idéal à glisser entre deux tâches lourdes.',
       priority: 90,
       when: { ease: ['high', 'veryHigh'], impact: ['mid', 'high', 'veryHigh'], urgency: ['veryLow', 'low', 'mid'] }
@@ -120,7 +120,7 @@
     },
     {
       id: 'micro-opportunite',
-      label: 'Micro-opportunité',
+      label: 'Petite opportunité',
       description: 'Presque sans effort, impact limité mais net positif. À saisir quand il reste dix minutes.',
       priority: 89,
       when: { ease: ['veryHigh'], impact: ['low', 'mid'], urgency: ['veryLow', 'low', 'mid'] }
@@ -147,18 +147,53 @@
       when: { ease: ['mid', 'high'], impact: ['high', 'veryHigh'], urgency: ['veryLow', 'low', 'mid'] }
     },
     {
-      id: 'piege-a-temps',
-      label: 'Piège à temps',
-      description: 'Semble prioritaire, coûte cher pour un gain moyen. Cadrer le scope ou renégocier la deadline.',
-      priority: 83,
-      when: { ease: ['veryLow', 'low'], impact: ['mid'], urgency: ['high', 'veryHigh'] }
-    },
-    {
       id: 'travail-de-fond',
       label: 'Travail de fond',
-      description: 'Refactors, dette d\'organisation ou stabilisation technique. Effort lourd, impact moyen à fort, sans échéance proche.',
+      description: 'Refactors, dette d\'organisation ou stabilisation technique. Effort lourd, impact moyen à fort.',
       priority: 82,
-      when: { ease: ['veryLow', 'low'], impact: ['mid', 'high'], urgency: ['veryLow', 'low', 'mid'] }
+      when: { ease: ['veryLow', 'low'], impact: ['mid', 'high'], urgency: ['veryLow', 'low', 'mid', 'high', 'veryHigh'] }
+    },
+    {
+      id: 'sans-urgence-retour',
+      label: 'Sans urgence ni retour',
+      description: 'Effort disproportionné pour une valeur quasi nulle et aucune pression. Remettre en attente jusqu\'à ce qu\'un levier change.',
+      priority: 83,
+      when: { ease: ['veryLow'], impact: ['veryLow'], urgency: ['veryLow'] }
+    },
+    {
+      id: 'remettre-en-rayon',
+      label: 'À remettre en rayon',
+      description: 'Pas le moment : faible retour, zéro deadline, coût élevé. Garder visible mais ne pas lancer.',
+      priority: 83,
+      when: { ease: ['veryLow'], impact: ['low'], urgency: ['veryLow'] }
+    },
+    {
+      id: 'attente-contexte',
+      label: 'En attente de contexte',
+      description: 'Impact modeste qui ne justifie pas l\'investissement actuel. Repousser jusqu\'à un changement de contexte ou de priorité.',
+      priority: 83,
+      when: { ease: ['veryLow'], impact: ['mid'], urgency: ['veryLow'] }
+    },
+    {
+      id: 'bruit-fond-lourd',
+      label: 'Bruit de fond lourd',
+      description: 'Chantier pénible à faible retour, sans échéance. Laisser dormir plutôt que mobiliser l\'équipe.',
+      priority: 83,
+      when: { ease: ['veryLow'], impact: ['veryLow'], urgency: ['low'] }
+    },
+    {
+      id: 'effort-peu-retour',
+      label: 'Gros effort, peu de retour',
+      description: 'Coût élevé pour un bénéfice limité et sans urgence. À remettre en rayon jusqu\'à une meilleure fenêtre.',
+      priority: 83,
+      when: { ease: ['veryLow'], impact: ['low'], urgency: ['low'] }
+    },
+    {
+      id: 'projet-sommeil',
+      label: 'Projet en sommeil',
+      description: 'Volume important, impact moyen mais aucune pression. Mettre en pause et revisiter quand les conditions auront changé.',
+      priority: 83,
+      when: { ease: ['veryLow'], impact: ['mid'], urgency: ['low'] }
     },
     {
       id: 'fondation',

@@ -1,0 +1,11 @@
+{
+  "name": "trello-priority-powerup",
+  "private": true,
+  "description": "Trello Power-Up — priorités de cartes avec badges, modèles et matrice de libellés",
+  "scripts": {
+    "verify:presets": "cscript //nologo sandbox/verify-presets.js",
+    "verify:matrix": "node sandbox/verify-matrix.js",
+    "verify": "npm run verify:presets && npm run verify:matrix",
+    "stamp:build": "node scripts/stamp-build.js"
+  }
+}

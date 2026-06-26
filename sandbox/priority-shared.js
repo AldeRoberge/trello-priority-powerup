@@ -1,5 +1,25 @@
+/**
+ * Sandbox UI + scoring for the priority formula prototype.
+ * Loaded via <script> in sandbox HTML — exposes window.PriorityUI (no module bundler).
+ *
+ * Table of contents
+ * ─────────────────
+ *  1. Formula weights & constants
+ *  2. Labels, keywords, tiers & heat presets
+ *  3. Icon registry (level + priority SVG)
+ *  4. Matrix label bridge (PriorityMatrix)
+ *  5. Math helpers & tier styling
+ *  6. Scoring formulas (baseline, Eisenhower, WSJF, value/effort)
+ *  7. Formatters & heat-preset override solvers
+ *  8. Help modal
+ *  9. Form controls (field, heat panel, calc graph / RSM)
+ * 10. Variant mount & slider persistence
+ * 11. PriorityUI public API
+ */
 (function (global) {
   'use strict';
+
+  // ── 1. Formula weights & constants ─────────────────────────────────────
 
   var WT = 1.2;
   var WB = 0.8;
@@ -23,9 +43,11 @@
   var WSJF_SCALE = 10 / 6;
   var VALUE_EFFORT_SCALE = 2.5;
 
+  // ── 2. Labels, keywords, tiers & heat presets ───────────────────────────
+
   var LABELS = {
     time: {
-      emoji: ['💤', '📅', '⏳', '🚨', '🔥'],
+      icon: ['time-0', 'time-1', 'time-2', 'time-3', 'time-4'],
       short: ['Aucune échéance', 'Flexible', 'Cette semaine', 'Sous 48 h', 'Maintenant'],
       detail: [
         'Pas de date limite dans le calendrier. Personne n\'attend, le délai n\'est pas contraint et le risque de retard est nul.',
@@ -41,8 +63,8 @@
       }
     },
     blocking: {
-      emoji: ['❌', '🔗', '⚠️', '🧱'],
-      short: ['Rien', 'Mineur', 'Bloque une tâche', 'Bloque l\'équipe'],
+      icon: ['block-0', 'block-1', 'block-2', 'block-3'],
+      short: ['Rien', 'Blocage léger', 'Bloque une tâche', 'Bloque l\'équipe'],
       detail: [
         'Rien ne dépend de cette tâche. Aucune dépendance directe et le travail de l\'équipe avance sans ralentissement.',
         'Quelqu\'un attend, mais peut continuer autrement. Le blocage est léger et les dépendances restent contournables.',
@@ -56,8 +78,8 @@
       }
     },
     impact: {
-      emoji: ['❌', '🙂', '👍', '⭐', '🚀'],
-      short: ['Aucune', 'Faible', 'Utile', 'Importante', 'Impact majeure'],
+      icon: ['impact-0', 'impact-1', 'impact-2', 'impact-3', 'impact-4'],
+      short: ['Aucune', 'Faible', 'Utile', 'Importante', 'Impact majeur'],
       detail: [
         'Peu ou pas de bénéfice visible. L\'effort ne crée quasi aucune valeur, portée ni opportunité pour l\'équipe.',
         'Gain marginal avec peu de visibilité. Petite amélioration qui ne change que marginalement la valeur ou la portée des résultats.',
@@ -75,12 +97,12 @@
         'Gain marginal. Petite amélioration, peu visible.',
         'Utile. Amélioration nette pour l\'équipe ou le produit.',
         'Importante. Objectif clé, livrable visible.',
-        'Impact majeure. Forte valeur, large portée. D\'autres tâches en dépendent.'
+        'Impact majeur. Forte valeur, large portée. D\'autres tâches en dépendent.'
       ]
     },
     ease: {
-      emoji: ['', '🏗', '🔧', '🧠', '👍', '⚡'],
-      short: ['', 'Très élevé', 'Élevé', 'Modéré', 'Faible', 'Minimal'],
+      icon: ['', 'ease-1', 'ease-2', 'ease-3', 'ease-4', 'ease-5'],
+      short: ['', 'Très difficile', 'Difficile', 'Moyen', 'Facile', 'Super facile'],
       detail: [
         '',
         'Projet lourd avec complexité élevée. Coordonner demande beaucoup de ressources et de temps ; faible confiance, faible réversibilité.',
@@ -96,15 +118,15 @@
       },
       affirmations: [
         '',
-        'Très élevé. Projet lourd, coordination intense, risque important.',
-        'Élevé. Travail conséquent, dépendances multiples.',
-        'Modéré. Complexité maîtrisée, exécution standard.',
-        'Faible. Rapide à faire, peu de friction.',
-        'Minimal. Quasi immédiat, faible risque, facile à annuler.'
+        'Très difficile. Projet lourd, coordination intense, risque important.',
+        'Difficile. Travail conséquent, dépendances multiples.',
+        'Moyen. Complexité maîtrisée, exécution standard.',
+        'Facile. Rapide à faire, peu de friction.',
+        'Super facile. Quasi immédiat, faible risque, facile à annuler.'
       ]
     },
     urgency: {
-      emoji: ['💤', '📅', '⏳', '🚨', '🔥'],
+      icon: ['urgency-0', 'urgency-1', 'urgency-2', 'urgency-3', 'urgency-4'],
       short: ['Aucune', 'Bientôt', 'Délai proche', 'Urgent', 'Critique'],
       detail: [
         'Aucune échéance ni attente pressante. Repousser n\'entraîne ni blocage ni dépendance critique.',
@@ -127,6 +149,232 @@
       ]
     }
   };
+
+  // ── 3. Icon registry (level + priority SVG) ─────────────────────────────
+
+  var ICON_S = 'stroke="currentColor" fill="none" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"';
+
+  function batterySvg(fillPct, extra) {
+    var h = 10 * fillPct;
+    var y = 12 - h;
+    var fill = h > 0
+      ? '<rect x="6.5" y="' + y + '" width="3" height="' + h + '" rx="0.3" fill="currentColor" stroke="none"/>'
+      : '';
+    return '<rect x="5.5" y="3" width="5" height="10" rx="0.8" ' + ICON_S + '/>' +
+      '<rect x="7" y="1.5" width="2" height="1.5" rx="0.4" fill="currentColor" stroke="none"/>' +
+      fill + (extra || '');
+  }
+
+  var LEVEL_ICON_SVG = {
+  /* Time — calendar / deadline progression */
+    'time-0': '<rect x="3" y="4" width="10" height="9" rx="1" ' + ICON_S + '/>' +
+      '<path d="M3 7h10M6 2v2M10 2v2M8 9.5l-1.5 1.5M8 9.5l1.5 1.5" ' + ICON_S + '/>',
+    'time-1': '<rect x="3" y="4" width="10" height="9" rx="1" ' + ICON_S + '/>' +
+      '<path d="M3 7h10M6 2v2M10 2v2M5.5 10.5h5" ' + ICON_S + ' stroke-dasharray="1.5 1.5"/>',
+    'time-2': '<path d="M5 2.5v2.5l2.5 1.5v5.5M11 2.5v2.5l-2.5 1.5v5.5M5 5h6M6.5 11.5h3" ' + ICON_S + '/>',
+    'time-3': '<circle cx="8" cy="8.5" r="5" ' + ICON_S + '/>' +
+      '<path d="M8 8.5V5.5M8 8.5l2.5 1.5" ' + ICON_S + '/>' +
+      '<path d="M11.5 3.5l.8.8M13 8h1" ' + ICON_S + ' stroke-width="1"/>',
+    'time-4': '<path d="M8 13.5c2-2.5 3.5-4.5 3.5-6.5a3.5 3.5 0 1 0-7 0c0 2 1.5 4 3.5 6.5z" ' + ICON_S + '/>' +
+      '<path d="M8 10v-1.5M6.5 8.5h3" ' + ICON_S + ' stroke-width="1"/>',
+  /* Urgency — pressure / tempo escalation */
+    'urgency-0': '<path d="M4.5 10.5c.8-.8 1.2-1.5 1.2-2.2M7 8.5c.6-.5 1-1 1-1.5M9.5 7c.4-.3.7-.7.7-1" ' + ICON_S + '/>' +
+      '<circle cx="8" cy="11.5" r="2.5" ' + ICON_S + '/>',
+    'urgency-1': '<rect x="3" y="4" width="10" height="9" rx="1" ' + ICON_S + '/>' +
+      '<path d="M3 7h10M6 2v2M10 2v2" ' + ICON_S + '/>' +
+      '<path d="M5.5 10h5" ' + ICON_S + ' stroke-dasharray="2 1.5"/>',
+    'urgency-2': '<path d="M5.5 2.5v2.2l2.5 1.4v6.4M10.5 2.5v2.2l-2.5 1.4v6.4" ' + ICON_S + '/>' +
+      '<path d="M5.5 5h5" ' + ICON_S + '/>',
+    'urgency-3': '<path d="M8 2.5v1.5M8 12v1M4.2 4.2l1 1M11.8 4.2l-1 1M2.5 8h1.5M12 8h1.5" ' + ICON_S + ' stroke-width="1"/>' +
+      '<circle cx="8" cy="8.5" r="3.5" ' + ICON_S + '/>' +
+      '<path d="M8 6.5v2.5l1.8 1" ' + ICON_S + '/>',
+    'urgency-4': '<path d="M8 13.5c2-2.5 3.5-4.5 3.5-6.5a3.5 3.5 0 1 0-7 0c0 2 1.5 4 3.5 6.5z" ' + ICON_S + '/>' +
+      '<path d="M8 2v1M5 3.5l.7.7M11 3.5l-.7.7" ' + ICON_S + ' stroke-width="1"/>',
+  /* Blocking — dependency / obstruction */
+    'block-0': '<circle cx="8" cy="8" r="5.5" ' + ICON_S + '/>' +
+      '<path d="M5.5 8.2l1.8 1.8 3.5-3.8" ' + ICON_S + '/>',
+    'block-1': '<path d="M5.5 6.5a2 2 0 0 1 2.8-2.8l4.2 4.2a2 2 0 0 1-2.8 2.8zM10.5 9.5a2 2 0 0 1-2.8 2.8L3.5 8.1a2 2 0 0 1 2.8-2.8z" ' + ICON_S + '/>',
+    'block-2': '<path d="M4 12.5h8l-1-3H5l-1 3zM6 9.5V6.5h4v3" ' + ICON_S + '/>' +
+      '<path d="M8 3.5v1.5" ' + ICON_S + '/>',
+    'block-3': '<rect x="3" y="5" width="4" height="2.5" rx="0.3" ' + ICON_S + '/>' +
+      '<rect x="9" y="5" width="4" height="2.5" rx="0.3" ' + ICON_S + '/>' +
+      '<rect x="5.5" y="8.5" width="5" height="2.5" rx="0.3" ' + ICON_S + '/>' +
+      '<rect x="3" y="12" width="4" height="2.5" rx="0.3" ' + ICON_S + '/>' +
+      '<rect x="9" y="12" width="4" height="2.5" rx="0.3" ' + ICON_S + '/>',
+  /* Impact — value / reach */
+    'impact-0': '<circle cx="8" cy="8" r="5.5" ' + ICON_S + '/>' +
+      '<path d="M5 8h6" ' + ICON_S + '/>',
+    'impact-1': '<path d="M8 12V8M8 8L6 6M8 8l2-2" ' + ICON_S + '/>' +
+      '<circle cx="8" cy="13" r="0.8" fill="currentColor" stroke="none"/>',
+    'impact-2': '<path d="M3.5 11.5l3-3.5 2.5 2 3.5-4.5" ' + ICON_S + '/>' +
+      '<path d="M10 6h2.5v2.5" ' + ICON_S + '/>',
+    'impact-3': '<path d="M8 2.5l1.2 3.7h3.8l-3.1 2.2 1.2 3.7L8 9.9l-3.1 2.2 1.2-3.7-3.1-2.2h3.8z" ' + ICON_S + '/>',
+    'impact-4': '<circle cx="8" cy="8" r="5.5" ' + ICON_S + '/>' +
+      '<ellipse cx="8" cy="8" rx="2.5" ry="5.5" ' + ICON_S + '/>' +
+      '<path d="M2.5 8h11M3.8 5h8.4M3.8 11h8.4" ' + ICON_S + ' stroke-width="1"/>',
+  /* Ease — effort via battery charge (low = hard, full = easy) */
+    'ease-1': batterySvg(0, '<path d="M12.5 5.5v5M11 7h3M11 9h3" ' + ICON_S + ' stroke-width="1"/>'),
+    'ease-2': batterySvg(0.25),
+    'ease-3': batterySvg(0.5),
+    'ease-4': batterySvg(0.75),
+    'ease-5': batterySvg(1, '<path d="M10.5 6.5l-2 2.5h1.5l-1 2.5 2.5-3H11l1.5-2z" fill="currentColor" stroke="none"/>')
+  };
+
+  var PRIORITY_ICON_SVG = {
+  /* Score tiers */
+    'tier:critique': '<path d="M8 2.5l5.5 9.5H2.5L8 2.5z" ' + ICON_S + '/>' +
+      '<path d="M8 6.5v2.5M8 10.5h.01" ' + ICON_S + ' stroke-width="1.5"/>',
+    'tier:urgent': '<path d="M8 13.5c2-2.5 3.5-4.5 3.5-6.5a3.5 3.5 0 1 0-7 0c0 2 1.5 4 3.5 6.5z" ' + ICON_S + '/>' +
+      '<path d="M8 2v1M5 3.5l.7.7M11 3.5l-.7.7" ' + ICON_S + ' stroke-width="1"/>',
+    'tier:prioritaire': '<path d="M5 2.5v11M5 2.5l6 3.5-6 3.5" ' + ICON_S + '/>',
+    'tier:important': '<path d="M8 2.5l1.2 3.7h3.8l-3.1 2.2 1.2 3.7L8 9.9l-3.1 2.2 1.2-3.7-3.1-2.2h3.8z" ' + ICON_S + '/>',
+    'tier:flexible': '<path d="M3 8c1.5-2 3-2 4.5 0s3 2 4.5 0" ' + ICON_S + '/>' +
+      '<path d="M3 11c1.5-2 3-2 4.5 0s3 2 4.5 0" ' + ICON_S + ' stroke-dasharray="2 2"/>',
+    'tier:secondaire': '<path d="M4 8h8M4 10.5h5" ' + ICON_S + '/>' +
+      '<path d="M11.5 10.5l1.5 1.5M11.5 10.5l1.5-1.5" ' + ICON_S + ' stroke-width="1"/>',
+    'tier:optionnel': '<circle cx="8" cy="8" r="5" ' + ICON_S + ' stroke-dasharray="2.5 2"/>',
+    inutile: '<circle cx="8" cy="8" r="5.5" ' + ICON_S + '/>' +
+      '<path d="M5 5l6 6M11 5l-6 6" ' + ICON_S + '/>',
+    unclassified: '<circle cx="8" cy="8" r="5.5" ' + ICON_S + '/>' +
+      '<path d="M8 5.5v3.5M8 10.5h.01" ' + ICON_S + ' stroke-width="1.5"/>',
+  /* Matrix rules */
+    'massive-opportunity': '<path d="M8 12V5M8 5l-2.5 2.5M8 5l2.5 2.5" ' + ICON_S + '/>' +
+      '<path d="M4 13h8" ' + ICON_S + '/>' +
+      '<path d="M5.5 3.5l1 1M10.5 3.5l-1 1" ' + ICON_S + ' stroke-width="1"/>',
+    'dirty-job': '<path d="M4.5 11.5h7l-1.2-3.5H5.7L4.5 11.5z" ' + ICON_S + '/>' +
+      '<path d="M6.5 8V6a1.5 1.5 0 0 1 3 0v2" ' + ICON_S + '/>' +
+      '<path d="M5 13.5c.5.5 1.2.5 1.5 0s1-.5 1.5 0 1.5 1.5 1.5 0" ' + ICON_S + ' stroke-width="1"/>',
+    'quick-win': '<path d="M5.5 9.5l2 2 4-4.5" ' + ICON_S + '/>' +
+      '<path d="M8 2.5v2M6 4.5h4" ' + ICON_S + ' stroke-width="1"/>',
+    'fire-drill': '<path d="M8 13c1.5-2 2.5-3.5 2.5-5a2.5 2.5 0 1 0-5 0c0 1.5 1 3 2.5 5z" ' + ICON_S + '/>' +
+      '<path d="M4 12.5c.5-.8 1-1.2 1.5-1M11 12.5c-.5-.8-1-1.2-1.5-1" ' + ICON_S + ' stroke-width="1"/>',
+    'strategic-bet': '<rect x="4" y="4" width="8" height="8" rx="1.2" ' + ICON_S + '/>' +
+      '<circle cx="6" cy="6" r="0.7" fill="currentColor" stroke="none"/>' +
+      '<circle cx="10" cy="6" r="0.7" fill="currentColor" stroke="none"/>' +
+      '<circle cx="8" cy="10" r="0.7" fill="currentColor" stroke="none"/>',
+    'critical-path': '<path d="M4.5 8a2 2 0 0 1 2.8-2.8l2.2 2.2a2 2 0 0 1-2.8 2.8L4.5 8z" ' + ICON_S + '/>' +
+      '<path d="M9.5 8a2 2 0 0 1 2.8-2.8l1.2 1.2" ' + ICON_S + '/>' +
+      '<path d="M6.5 8a2 2 0 0 1-2.8 2.8L2.5 11" ' + ICON_S + '/>',
+    maintenance: '<path d="M10.5 5.5a3.5 3.5 0 1 0-4.2 4.2L4 12l1.8-2.3a3.5 3.5 0 0 0 4.7-4.2z" ' + ICON_S + '/>',
+    noise: '<path d="M4 6.5c1.5 1.5 1.5 3.5 0 5M6.5 5c2.5 2.5 2.5 5.5 0 8M9 3.5c3.5 3.5 3.5 7.5 0 11" ' + ICON_S + '/>' +
+      '<path d="M12 6l-1.5 1.5M12 10l-1.5-1.5" ' + ICON_S + ' stroke-width="1"/>',
+    'backlog-filler': '<rect x="4" y="4" width="8" height="8" rx="1" ' + ICON_S + ' stroke-dasharray="2 2"/>' +
+      '<path d="M6 8h4M6 10h2.5" ' + ICON_S + ' stroke-width="1"/>',
+    'micro-opportunite': '<path d="M8 3l.8 2.2h2.2l-1.8 1.3.7 2.2L8 7.5 6.3 8.7l.7-2.2L5.2 5.2h2.2L8 3z" ' + ICON_S + ' stroke-width="1"/>',
+    'coup-de-pouce': '<path d="M5.5 8.5c1-1.5 2.5-2 4-1.5 1 .4 1.8 1.5 1.8 2.8 0 1.5-1.2 2.7-2.7 2.7H7.5" ' + ICON_S + '/>' +
+      '<path d="M7 11.5V9.5M7 9.5l-1.5-1M7 9.5l1-1" ' + ICON_S + '/>',
+    accelerateur: '<path d="M4 10l4-6 4 6H4z" ' + ICON_S + '/>' +
+      '<path d="M8 4v2M6 8h4" ' + ICON_S + ' stroke-width="1"/>',
+    'effet-levier': '<path d="M3.5 11.5h9" ' + ICON_S + '/>' +
+      '<path d="M8 11.5V6.5" ' + ICON_S + '/>' +
+      '<path d="M5.5 6.5h5" ' + ICON_S + '/>' +
+      '<circle cx="8" cy="6.5" r="1" ' + ICON_S + '/>',
+    'piege-a-temps': '<circle cx="8" cy="9" r="4.5" ' + ICON_S + '/>' +
+      '<path d="M8 6.5V9l1.8 1" ' + ICON_S + '/>' +
+      '<path d="M6 3.5l1 1M10 3.5l-1 1" ' + ICON_S + ' stroke-width="1"/>' +
+      '<path d="M4.5 4.5l1.2 1.2M11.5 4.5l-1.2 1.2" ' + ICON_S + ' stroke-width="1"/>',
+    'sans-urgence-retour': '<circle cx="8" cy="8" r="5" ' + ICON_S + ' stroke-dasharray="2 2"/>' +
+      '<path d="M8 5.5v4M6 9.5h4" ' + ICON_S + ' stroke-width="1"/>',
+    'remettre-en-rayon': '<path d="M3.5 5.5h9v2H3.5zM4 7.5v4.5h8V7.5" ' + ICON_S + '/>' +
+      '<path d="M6 10h4" ' + ICON_S + ' stroke-width="1"/>',
+    'attente-contexte': '<circle cx="8" cy="8.5" r="4" ' + ICON_S + '/>' +
+      '<path d="M8 6.5v2.5M6.5 8.5h3" ' + ICON_S + ' stroke-width="1.5"/>',
+    'bruit-fond-lourd': '<path d="M4 8c1-1.5 2-1.5 3 0s2 1.5 3 0" ' + ICON_S + ' stroke-dasharray="1.5 1.5"/>' +
+      '<path d="M4 10.5c1-1.5 2-1.5 3 0s2 1.5 3 0" ' + ICON_S + ' stroke-dasharray="1.5 1.5"/>' +
+      '<path d="M12 6v6M13.5 7.5v3" ' + ICON_S + ' stroke-width="1"/>',
+    'effort-peu-retour': '<path d="M4 11.5h8" ' + ICON_S + '/>' +
+      '<path d="M5.5 11.5V7l2.5-2 2.5 2v4.5" ' + ICON_S + '/>' +
+      '<path d="M6 11.5h4" ' + ICON_S + ' stroke-width="1"/>',
+    'projet-sommeil': '<path d="M4.5 10.5a4 4 0 0 1 7 0" ' + ICON_S + '/>' +
+      '<path d="M6.5 8.5h.01M9.5 7.5h.01M11 9h.01" ' + ICON_S + ' stroke-width="1.5"/>',
+    'travail-de-fond': '<path d="M4 12h8M5 9.5h6M6 7h4M7 4.5h2" ' + ICON_S + '/>',
+    fondation: '<rect x="3.5" y="10" width="9" height="2.5" rx="0.3" ' + ICON_S + '/>' +
+      '<rect x="5" y="7" width="6" height="2.5" rx="0.3" ' + ICON_S + '/>' +
+      '<rect x="6.5" y="4" width="3" height="2.5" rx="0.3" ' + ICON_S + '/>',
+    'derapage-cache': '<path d="M3.5 11.5c2-1.5 4-1.5 6 0s4 1.5 6 0" ' + ICON_S + '/>' +
+      '<path d="M8 3.5l1 2.5h2.5l-2 1.8.8 2.5L8 8.8l-2.3 1.5.8-2.5-2-1.8H7L8 3.5z" ' + ICON_S + ' stroke-width="1"/>',
+    'sprint-tactique': '<path d="M4 12c2-2.5 4-3.5 6.5-2.5M10.5 9.5l1.5-1.5v3" ' + ICON_S + '/>' +
+      '<circle cx="5" cy="11" r="1.2" ' + ICON_S + '/>',
+    'pare-feu': '<path d="M8 2.5c-2 2.5-3.5 4.5-3.5 6.5a3.5 3.5 0 0 0 7 0c0-2-1.5-4-3.5-6.5z" ' + ICON_S + '/>' +
+      '<path d="M8 9.5v-2" ' + ICON_S + ' stroke-width="1"/>',
+    paperasse: '<path d="M5 3.5h4l2 2v8.5H5V3.5z" ' + ICON_S + '/>' +
+      '<path d="M9 3.5V6h2M7 8h3M7 10h3" ' + ICON_S + ' stroke-width="1"/>',
+    'fausse-priorite': '<path d="M8 2.5l1.2 3.7h3.8l-3.1 2.2 1.2 3.7L8 9.9l-3.1 2.2 1.2-3.7-3.1-2.2h3.8z" ' + ICON_S + ' stroke-dasharray="2 2"/>' +
+      '<path d="M4 4l8 8" ' + ICON_S + ' stroke-width="1"/>',
+    'sable-mouvant': '<path d="M3 12.5c2-.8 4-.8 6 0s4 .8 6 0" ' + ICON_S + '/>' +
+      '<path d="M8 5.5v3M6.5 8.5h3" ' + ICON_S + '/>' +
+      '<path d="M7 11.5l1 1.5 1-1.5" ' + ICON_S + ' stroke-width="1"/>',
+    marathon: '<path d="M3.5 8.5c2-1 4-1 6 0s4 1 6 0" ' + ICON_S + ' stroke-dasharray="2 2"/>' +
+      '<circle cx="12.5" cy="8.5" r="1" ' + ICON_S + '/>' +
+      '<path d="M4 11.5h8" ' + ICON_S + ' stroke-width="1"/>',
+    'routine-utile': '<path d="M8 4.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7z" ' + ICON_S + '/>' +
+      '<path d="M8 6v2.5l1.8 1" ' + ICON_S + '/>',
+    'piste-exploratoire': '<circle cx="8" cy="8" r="5" ' + ICON_S + '/>' +
+      '<path d="M8 4.5l2 4.5-2 1-2-1 2-4.5z" ' + ICON_S + '/>' +
+      '<circle cx="8" cy="8" r="0.8" fill="currentColor" stroke="none"/>',
+    'zone-grise': '<circle cx="8" cy="8" r="5.5" ' + ICON_S + '/>' +
+      '<path d="M8 3v10" ' + ICON_S + ' stroke-dasharray="1.5 1.5"/>'
+  };
+
+  var TIER_LABEL_TO_ICON = {
+    Critique: 'tier:critique',
+    Urgent: 'tier:urgent',
+    Prioritaire: 'tier:prioritaire',
+    Important: 'tier:important',
+    Flexible: 'tier:flexible',
+    Secondaire: 'tier:secondaire',
+    Optionnel: 'tier:optionnel',
+    Inutile: 'inutile'
+  };
+
+  function levelIconSvg(id) {
+    if (!id) return '';
+    var inner = LEVEL_ICON_SVG[id];
+    if (!inner) return '';
+    return '<svg class="level-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
+      inner + '</svg>';
+  }
+
+  function priorityIconSvg(id, size) {
+    if (!id) return '';
+    var inner = PRIORITY_ICON_SVG[id];
+    if (!inner) return '';
+    var px = size != null ? size : 14;
+    return '<svg class="priority-icon level-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="' + px + '" height="' + px + '" aria-hidden="true" focusable="false">' +
+      inner + '</svg>';
+  }
+
+  function priorityIconIdForDisplay(display) {
+    if (!display) return 'unclassified';
+    if (display.inutile) return 'inutile';
+    if (display.matrixRuleId) return display.matrixRuleId;
+    if (display.tierLabel && TIER_LABEL_TO_ICON[display.tierLabel]) {
+      return TIER_LABEL_TO_ICON[display.tierLabel];
+    }
+    return 'unclassified';
+  }
+
+  function priorityIconIdForLabel(label) {
+    if (!label) return 'unclassified';
+    if (TIER_LABEL_TO_ICON[label]) return TIER_LABEL_TO_ICON[label];
+    return 'unclassified';
+  }
+
+  function priorityLabelHtmlFor(label, iconId, iconSize) {
+    if (!label) return '';
+    var id = iconId != null ? iconId : priorityIconIdForLabel(label);
+    var icon = priorityIconSvg(id, iconSize);
+    if (!icon) return escapeHtml(label);
+    return icon + '<span class="priority-label">' + escapeHtml(label) + '</span>';
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
 
   var KEYWORDS = {
     time: 'Cadre temporel : échéance, délai, calendrier et risque de retard.',
@@ -235,6 +483,8 @@
     description: 'Sans valeur ni urgence. Trop complexe ou impossible à réaliser.'
   };
 
+  // ── 4. Matrix label bridge (PriorityMatrix) ─────────────────────────────
+
   function isInutile(inputs) {
     var U = inputs.urgency != null ? inputs.urgency : 0;
     var I = inputs.impact != null ? inputs.impact : 0;
@@ -327,6 +577,8 @@
     }
   };
 
+  // ── 5. Math helpers & tier styling ──────────────────────────────────────
+
   function clamp(v, a, b) {
     return Math.max(a, Math.min(b, v));
   }
@@ -381,10 +633,10 @@
 
   function labelEntry(key, value) {
     var entry = LABELS[key];
-    if (!entry) return { short: String(value), detail: '' };
+    if (!entry) return { short: String(value), detail: '', icon: '' };
     var idx = key === 'ease' ? value : value;
     return {
-      emoji: entry.emoji[idx] || '',
+      icon: entry.icon ? (entry.icon[idx] || '') : '',
       short: entry.short[idx] || String(value),
       detail: entry.detail[idx] || ''
     };
@@ -392,8 +644,15 @@
 
   function wordFor(key, value) {
     var e = labelEntry(key, value);
-    if (!e.short) return String(value);
-    return e.emoji ? e.emoji + ' ' + e.short : e.short;
+    return e.short || String(value);
+  }
+
+  function wordHtmlFor(key, value) {
+    var e = labelEntry(key, value);
+    if (!e.short) return escapeHtml(String(value));
+    var icon = levelIconSvg(e.icon);
+    if (!icon) return escapeHtml(e.short);
+    return icon + '<span class="level-label">' + escapeHtml(e.short) + '</span>';
   }
 
   function affirmationFor(key, value) {
@@ -401,6 +660,8 @@
     if (!entry || !entry.affirmations) return '';
     return entry.affirmations[value] || '';
   }
+
+  // ── 6. Scoring formulas ─────────────────────────────────────────────────
 
   function mergePressure(T, B) {
     return clamp(WT * T + WB * B, 0, PRESSURE_MAX);
@@ -626,6 +887,8 @@
     };
   }
 
+  // ── 7. Formatters & heat-preset override solvers ────────────────────────
+
   function formatScore(score) {
     return Math.abs(score - Math.round(score)) < 0.01
       ? String(Math.round(score))
@@ -722,7 +985,7 @@
     var targetSeg = heatSegmentForTarget(targetP);
     var sameTier = targetSeg && tierFor(curScore).i === targetSeg.i;
 
-    if (sameTier && Math.abs(curScore - targetP) < HEAT_TARGET_EPS) {
+    if (sameTier) {
       return { urgency: curU, impact: curI, ease: curF };
     }
 
@@ -798,6 +1061,8 @@
     var nF = clamp(Math.round(6 - clamp(tJob, 1, 5)), 1, 5);
     return { urgency: nU, impact: nI, ease: nF };
   }
+
+  // ── 8. Help modal ───────────────────────────────────────────────────────
 
   var modalRoot = null;
   var modalContext = null;
@@ -896,8 +1161,9 @@
       var li = document.createElement('li');
       li.dataset.level = String(i);
       li.innerHTML =
-        '<span class="help-modal-level-label">' + entry.short[i] + '</span>' +
-        '<span class="help-modal-level-text">' + entry.detail[i] + '</span>';
+        '<span class="help-modal-level-label">' + levelIconSvg(entry.icon[i]) +
+        '<span>' + escapeHtml(entry.short[i]) + '</span></span>' +
+        '<span class="help-modal-level-text">' + escapeHtml(entry.detail[i]) + '</span>';
       if (selectable) {
         li.className = 'is-selectable';
         li.setAttribute('role', 'button');
@@ -931,6 +1197,8 @@
     if (modalRoot) modalRoot.classList.remove('open');
     modalContext = null;
   }
+
+  // ── 9. Form controls (field, heat panel, calc graph) ────────────────────
 
   function createField(config) {
     var el = config.el;
@@ -1018,7 +1286,7 @@
       v = clamp(v, min, max);
       var idx = snappedLevel(v, min, max);
       var text = wordFor(wordsKey, idx);
-      val.textContent = text;
+      val.innerHTML = wordHtmlFor(wordsKey, idx);
       val.title = text;
       inputEl.value = String(v);
       if (affirmEl && LABELS[wordsKey] && LABELS[wordsKey].affirmations) {
@@ -1116,7 +1384,9 @@
     var segLabels = document.createElement('div');
     segLabels.className = 'heat-seg-labels';
     segLabels.innerHTML = HEAT_SEGMENTS.map(function (s) {
-      return '<span>' + s.label + '</span>';
+      return '<span class="heat-seg-label-item">' +
+        priorityLabelHtmlFor(s.label, priorityIconIdForLabel(s.label), 11) +
+        '</span>';
     }).join('');
     panel.appendChild(segLabels);
 
@@ -1136,7 +1406,7 @@
       var d = display || resolveDisplay(result, {});
       bnumVal.textContent = formatScore(d.score);
       dot.style.background = d.seg;
-      blabel.textContent = d.label;
+      blabel.innerHTML = priorityLabelHtmlFor(d.label, priorityIconIdForDisplay(d));
       badge.style.background = d.fill;
       bnum.style.color = d.text;
       blabel.style.color = d.text;
@@ -1826,6 +2096,8 @@
     };
   }
 
+  // ── 10. Variant mount & slider persistence ──────────────────────────────
+
   function loadSliderValues(defaults, dimensions) {
     var merged = Object.assign({}, defaults);
     try {
@@ -1954,6 +2226,16 @@
       el: card,
       onSegmentClick: function (targetP) {
         syncStateFromFields();
+        var clickedSeg = heatSegmentForTarget(targetP);
+        var display = resolveDisplay(calcFn(state), state);
+        if (
+          clickedSeg &&
+          !display.inutile &&
+          display.tierI != null &&
+          display.tierI === clickedSeg.i
+        ) {
+          return;
+        }
         var next = overrideFn(targetP, state);
         var delta = pickOverrideDelta(state, next);
         if (!Object.keys(delta).length) return;
@@ -2029,6 +2311,8 @@
     };
   }
 
+  // ── 11. PriorityUI public API ───────────────────────────────────────────
+
   var PriorityUI = {
     WEIGHTS: { time: WT, blocking: WB, impact: WI, ease: WI_EASE },
     PRESSURE_MAX: PRESSURE_MAX,
@@ -2090,6 +2374,14 @@
     INUTILE_LABEL: INUTILE_LABEL,
     INUTILE_STYLES: INUTILE_STYLES,
     wordFor: wordFor,
+    wordHtmlFor: wordHtmlFor,
+    levelIconSvg: levelIconSvg,
+    priorityIconSvg: priorityIconSvg,
+    priorityIconIdForDisplay: priorityIconIdForDisplay,
+    priorityIconIdForLabel: priorityIconIdForLabel,
+    priorityLabelHtmlFor: priorityLabelHtmlFor,
+    PRIORITY_ICON_SVG: PRIORITY_ICON_SVG,
+    TIER_LABEL_TO_ICON: TIER_LABEL_TO_ICON,
     affirmationFor: affirmationFor,
     Matrix: typeof PriorityMatrix !== 'undefined' ? PriorityMatrix : null
   };

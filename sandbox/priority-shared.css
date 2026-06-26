@@ -71,7 +71,7 @@ body {
   border: none;
   background: transparent;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
@@ -142,7 +142,7 @@ body {
 }
 
 .field-lbl {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
   display: inline-flex;
@@ -159,7 +159,7 @@ body {
 }
 
 .field-question {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--text-muted);
   line-height: 1.45;
   margin-bottom: 6px;
@@ -171,21 +171,11 @@ body {
   font-style: italic;
 }
 
-.field-question::before {
-  content: '«\00a0';
-  font-style: normal;
-}
-
-.field-question::after {
-  content: '\00a0»';
-  font-style: normal;
-}
-
 .field-val {
   margin: 0;
   border: none;
   font: inherit;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
   background: var(--surface-1);
@@ -199,6 +189,22 @@ body {
   max-width: 50%;
   cursor: pointer;
   transition: opacity .12s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.level-icon {
+  display: block;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.level-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .field-val:hover {
@@ -339,7 +345,7 @@ input.field-range:active::-webkit-slider-thumb {
 }
 
 .help-modal-quote {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-muted);
   line-height: 1.45;
   margin: 0 0 12px;
@@ -360,7 +366,7 @@ input.field-range:active::-webkit-slider-thumb {
 }
 
 .help-modal-body {
-  font-size: 12.5px;
+  font-size: 14px;
   color: var(--text-secondary);
   line-height: 1.55;
   margin-bottom: 14px;
@@ -382,7 +388,7 @@ input.field-range:active::-webkit-slider-thumb {
   grid-template-columns: 7.5rem 1fr;
   gap: 10px;
   align-items: baseline;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
   padding: 7px 0;
   border-bottom: 0.5px solid color-mix(in srgb, var(--border) 70%, transparent);
@@ -414,7 +420,14 @@ input.field-range:active::-webkit-slider-thumb {
 .help-modal-level-label {
   color: var(--text-primary);
   font-weight: 600;
-  font-size: 12px;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.help-modal-level-label .level-icon {
+  color: var(--text-secondary);
 }
 
 .help-modal-level-text {
@@ -464,7 +477,7 @@ input.field-range:active::-webkit-slider-thumb {
 }
 
 .heat-top-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
 }
@@ -494,12 +507,26 @@ input.field-range:active::-webkit-slider-thumb {
 .heat-badge-label {
   display: flex;
   align-items: center;
+  gap: 6px;
   grid-column: 2;
   grid-row: 1;
   font-size: 15px;
   font-weight: 600;
   line-height: 1;
   color: #085041;
+}
+
+.heat-badge-label .priority-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.heat-badge-label .priority-icon {
+  flex-shrink: 0;
+  color: currentColor;
+  opacity: 0.92;
 }
 
 .heat-badge.is-inutile .heat-badge-num,
@@ -515,7 +542,7 @@ input.field-range:active::-webkit-slider-thumb {
   grid-column: 1 / -1;
   grid-row: 2;
   margin: 0;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.45;
   min-height: calc(1.45em * 3);
   opacity: 0.72;
@@ -559,7 +586,7 @@ input.field-range:active::-webkit-slider-thumb {
   justify-content: space-between;
   gap: 2px;
   margin-top: 5px;
-  font-size: 8.5px;
+  font-size: 11px;
   color: var(--text-muted);
 }
 
@@ -567,6 +594,24 @@ input.field-range:active::-webkit-slider-thumb {
   flex: 1;
   text-align: center;
   line-height: 1.2;
+}
+
+.heat-seg-label-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.heat-seg-label-item .priority-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+.heat-seg-label-item .priority-label {
+  display: block;
+  line-height: 1.15;
 }
 
 /* ── Calc graph panel ── */
@@ -580,7 +625,7 @@ input.field-range:active::-webkit-slider-thumb {
   border: none;
   background: transparent;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
@@ -628,7 +673,7 @@ input.field-range:active::-webkit-slider-thumb {
 }
 
 .calc-graph-heading {
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
   letter-spacing: 0.02em;
@@ -682,7 +727,7 @@ input.field-range:active::-webkit-slider-thumb {
 }
 
 .calc-rsm-ease-label {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1;
   color: var(--text-muted);
@@ -778,14 +823,14 @@ input.field-range:active::-webkit-slider-thumb {
 }
 
 .calc-rsm-tick-label {
-  font-size: 11px;
+  font-size: 12px;
   fill: var(--text-muted);
   font-family: inherit;
   pointer-events: none;
 }
 
 .calc-rsm-axis-label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   font-family: inherit;
   fill: var(--text-muted);
@@ -865,7 +910,7 @@ input.field-range:active::-webkit-slider-thumb {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 9px;
+  font-size: 11px;
   color: var(--text-muted);
   cursor: default;
 }

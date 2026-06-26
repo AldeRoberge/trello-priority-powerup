@@ -1,3 +1,4 @@
+<!-- PROTOTYPE OBSOLÈTE — voir priority-variants.html et sandbox/README.md -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -57,7 +58,7 @@
   }
 
   .row-lbl {
-    font-size: 13.5px;
+    font-size: 14.5px;
     font-weight: 600;
     color: var(--text-primary);
     display: inline-flex;
@@ -69,13 +70,13 @@
   .row-lbl .ti { font-size: 15px; color: var(--text-secondary); }
 
   .row-hint {
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 400;
     color: var(--text-muted);
   }
 
   .row-val {
-    font-size: 11.5px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--text-secondary);
     background: var(--surface-1);
@@ -88,7 +89,7 @@
   }
 
   .row-desc {
-    font-size: 11px;
+    font-size: 13px;
     color: var(--text-muted);
     line-height: 1.45;
     margin: 0 0 10px;
@@ -155,7 +156,7 @@
     display: flex;
     justify-content: space-between;
     margin-top: 6px;
-    font-size: 10.5px;
+    font-size: 12px;
     color: var(--text-muted);
   }
 
@@ -178,7 +179,7 @@
   }
 
   .heat-top-label {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--text-secondary);
   }
@@ -203,7 +204,7 @@
   }
 
   #badge-label {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     color: #085041;
   }
@@ -235,7 +236,7 @@
     justify-content: space-between;
     gap: 2px;
     margin-top: 5px;
-    font-size: 9px;
+    font-size: 11px;
     color: var(--text-muted);
   }
 
@@ -254,7 +255,7 @@
 
   #formula {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text-muted);
     line-height: 1.55;
   }
@@ -300,10 +301,10 @@
     <div class="row">
       <div class="row-head">
         <span class="row-lbl"><i class="ti ti-gauge"></i> Effort</span>
-        <span class="row-val" id="effort-word">🧠 Modéré</span>
+        <span class="row-val" id="effort-word">🧠 Moyen</span>
       </div>
       <input type="range" id="effort" min="1" max="5" step="1" value="3">
-      <div class="ends"><span>🏗 Très élevé</span><span>⚡ Minimal</span></div>
+      <div class="ends"><span>🏗 Très difficile</span><span>⚡ Super facile</span></div>
     </div>
 
     <hr class="divider">
@@ -375,15 +376,15 @@
     '🙂 Faible. Amélioration mineure.',
     '👍 Utile. Amélioration notable.',
     '⭐ Élevée. Résultat important.',
-    '🚀 Critique. Impact majeure sur revenus, utilisateurs ou réputation.'
+    '🚀 Critique. Impact majeur sur revenus, utilisateurs ou réputation.'
   ];
   var FW = [
     '',
-    '🏗 Très élevé (grand projet)',
-    '🔧 Élevé (plusieurs jours / coordination)',
-    '🧠 Modéré (demi-journée)',
-    '👍 Faible (moins d\'une heure)',
-    '⚡ Minimal (quelques minutes)'
+    '🏗 Très difficile (grand projet)',
+    '🔧 Difficile (plusieurs jours / coordination)',
+    '🧠 Moyen (demi-journée)',
+    '👍 Facile (moins d\'une heure)',
+    '⚡ Super facile (quelques minutes)'
   ];
 
   var WT = 1.2, WB = 0.8, WI = 0.8;

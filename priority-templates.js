@@ -1,4 +1,5 @@
-/* Shared priority defaults and preset templates for the Card Priorities Power-Up */
+/* Shared priority defaults, preset templates, and import/export for the Card Priorities Power-Up.
+ * Loaded via <script> in index.html, popup.html, and settings.html — attaches globals (no bundler). */
 
 const DEFAULT_PRIORITIES = [
   { id: 1, label: 'Urgent', color: '#E53E3E' },

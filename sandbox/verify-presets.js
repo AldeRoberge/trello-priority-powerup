@@ -1,4 +1,5 @@
-// Baseline formula verification — run: cscript //nologo verify-presets.js
+// Baseline formula verification — run: cscript //nologo sandbox/verify-presets.js
+// Keep in sync with sandbox/priority-shared.js (sections 1 & 6: weights + scoring).
 var WT = 1.2, WB = 0.8, WI = 0.95, WI_EASE = 1.15, GAMMA_EASE = 0.6, EASE_SCALE = 1.0;
 var IMPACT_EXP = 0.85, DAMPEN_MAX = 0.55, DAMPEN_POWER = 1.5, DAMPEN_EASE_ATTENUATION = 0.85;
 var EASE_MUL_DAMPEN_THRESHOLD = 0.5, EASE_MUL_LO = 0.75, EASE_MUL_HI = 1.25, HARD_PENALTY_FLOOR = 0.88;
