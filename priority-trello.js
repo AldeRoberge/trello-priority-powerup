@@ -4,6 +4,7 @@
 
   var CARD_PRIORITY_KEY = 'cardPriority';
   var LEGACY_PRIORITY_KEY = 'priority';
+  var MATRIX_SETTINGS_KEY = 'matrixLabelSettings';
   var DEFAULT_INPUTS = { urgency: 2, impact: 2, ease: 3 };
 
   var LEGACY_ID_TO_INPUTS = {
@@ -79,15 +80,26 @@
     return null;
   }
 
-  function computeDisplay(inputs) {
+  async function getMatrixSettings(t) {
+    var stored = await t.get('board', 'shared', MATRIX_SETTINGS_KEY);
+    if (typeof PriorityMatrix !== 'undefined' && PriorityMatrix.normalizeSettings) {
+      return PriorityMatrix.normalizeSettings(stored);
+    }
+    if (stored && typeof stored === 'object') return stored;
+    return { enabled: true, overrides: {} };
+  }
+
+  function computeDisplay(inputs, labelSettings) {
     var result = PriorityUI.calc.baseline(inputs);
-    return PriorityUI.resolveDisplay(result, inputs);
+    return PriorityUI.resolveDisplay(result, inputs, labelSettings);
   }
 
   async function getCardDisplay(t) {
     var inputs = await getCardInputs(t);
     if (!inputs) return null;
-    return computeDisplay(inputs);
+    var settings = await getMatrixSettings(t);
+    PriorityUI.setMatrixSettings(settings);
+    return computeDisplay(inputs, settings);
   }
 
   // Tier-indexed badge dots (largest = highest priority). Unicode only — Trello badge text.
@@ -159,10 +171,12 @@
 
   global.PriorityTrello = {
     CARD_PRIORITY_KEY: CARD_PRIORITY_KEY,
+    MATRIX_SETTINGS_KEY: MATRIX_SETTINGS_KEY,
     DEFAULT_INPUTS: DEFAULT_INPUTS,
     PRIORITY_DIMENSIONS: PRIORITY_DIMENSIONS,
     normalizeInputs: normalizeInputs,
     getCardInputs: getCardInputs,
+    getMatrixSettings: getMatrixSettings,
     computeDisplay: computeDisplay,
     getCardDisplay: getCardDisplay,
     formatBadgeText: formatBadgeText,

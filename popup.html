@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./trello-theme.css" />
   <link rel="stylesheet" href="./priority-ui.css" />
+  <script src="./priority-matrix.js"></script>
   <script src="./priority-ui.js"></script>
   <script src="./priority-trello.js"></script>
 </head>
@@ -32,6 +33,8 @@
 
     async function init() {
       const inputs = await PriorityTrello.getCardInputs(t);
+      const matrixSettings = await PriorityTrello.getMatrixSettings(t);
+      PriorityUI.setMatrixSettings(matrixSettings);
 
       variant = PriorityUI.mountVariant(mountEl, {
         id: 'card',

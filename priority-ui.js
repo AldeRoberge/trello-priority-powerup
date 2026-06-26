@@ -7,7 +7,7 @@
  *  1. Formula weights & constants
  *  2. Labels, keywords, tiers & heat presets
  *  3. Icon registry (property level SVG)
- *  4. Display resolution (tier labels)
+ *  4. Matrix label bridge (PriorityMatrix)
  *  5. Math helpers & tier styling
  *  6. Scoring formulas (baseline, Eisenhower, WSJF, value/effort)
  *  7. Formatters & heat-preset override solvers
@@ -48,18 +48,18 @@
   var LABELS = {
     time: {
       icon: ['time-0', 'time-1', 'time-2', 'time-3', 'time-4'],
-      short: ['Aucune échéance', 'Flexible', 'Cette semaine', 'Sous 48 h', 'Maintenant'],
+      short: ['Aucune pression', 'Flexible', 'Modérée', 'Élevée', 'Critique'],
       detail: [
-        'Pas de date limite dans le calendrier. Personne n\'attend, le délai n\'est pas contraint et le risque de retard est nul.',
-        'Peut attendre quelques semaines sans conséquence. L\'échéance reste souple et le calendrier de l\'équipe n\'est pas affecté.',
-        'À traiter d\'ici la fin de la semaine. L\'échéance est proche et le délai devient une contrainte réelle dans le planning.',
-        'Échéance sous 48 h. Le délai est très court, une action rapide est requise pour éviter un retard visible.',
-        'En retard ou bloque le travail en cours. La pression du calendrier est maximale et chaque heure compte.'
+        'Aucune contrainte ni dépendance critique. Repousser n\'entraîne ni blocage ni impact notable sur l\'équipe.',
+        'Peut être repoussée sans conséquence. Peu de pression, le planning de l\'équipe n\'est pas affecté.',
+        'Priorité modérée dans le backlog. Les dépendances commencent à peser sur le planning.',
+        'Pression forte : action requise pour éviter un blocage visible dans la chaîne de travail.',
+        'Bloque le travail en cours ou crée des dépendances critiques. La pression est maximale.'
       ],
       popup: {
-        subtitle: 'Quand faut-il le faire?',
-        intro: 'L\'échéance fixe le cadre temporel d\'une tâche : la date limite, le délai acceptable, sa place dans le calendrier et le risque de retard si elle glisse.',
-        guidance: 'Regardez la date butoir réelle, le délai que l\'équipe peut tolérer et ce qui se passe si la tâche n\'est pas traitée à temps.'
+        subtitle: 'Quelle pression pèse sur cette tâche?',
+        intro: 'La pression relative mesure combien une tâche pèse sur le planning : blocages provoqués, dépendances en jeu et risque si elle glisse.',
+        guidance: 'Regardez ce qui bloque si la tâche n\'est pas faite et les conséquences concrètes d\'un report.'
       }
     },
     blocking: {
@@ -67,14 +67,14 @@
       short: ['Rien', 'Blocage léger', 'Bloque une tâche', 'Bloque l\'équipe'],
       detail: [
         'Rien ne dépend de cette tâche. Aucune dépendance directe et le travail de l\'équipe avance sans ralentissement.',
-        'Quelqu\'un attend, mais peut continuer autrement. Le blocage est léger et les dépendances restent contournables.',
+        'Un collègue est ralenti, mais peut contourner. Le blocage est léger et les dépendances restent contournables.',
         'Bloque une tâche ou un collègue. Une dépendance directe empêche l\'avancement d\'un travail en cours.',
         'Bloque le travail de l\'équipe ou une livraison. Les dépendances sont multiples et l\'avancement global ralentit.'
       ],
       popup: {
         subtitle: 'Est-ce que quelque chose cesse de fonctionner si ce n\'est pas fait?',
-        intro: 'Le blocage mesure dans quelle mesure le travail de l\'équipe ralentit ou s\'arrête tant que la tâche n\'est pas faite. Les dépendances directes, les collègues en attente et les livraisons retenues.',
-        guidance: 'Demandez-vous qui est bloqué, quelles tâches en dépendent et si l\'équipe peut avancer autrement en attendant.'
+        intro: 'Le blocage mesure dans quelle mesure le travail de l\'équipe ralentit ou s\'arrête tant que la tâche n\'est pas faite. Les dépendances directes, les collègues bloqués et les livraisons retenues.',
+        guidance: 'Demandez-vous qui est bloqué, quelles tâches en dépendent et si l\'équipe peut avancer autrement sans elle.'
       }
     },
     impact: {
@@ -105,16 +105,16 @@
       short: ['', 'Très difficile', 'Difficile', 'Moyen', 'Facile', 'Super facile'],
       detail: [
         '',
-        'Projet lourd avec complexité élevée. Coordonner demande beaucoup de ressources et de temps ; faible confiance, faible réversibilité.',
+        'Projet lourd avec complexité élevée. Coordonner demande beaucoup de ressources ; faible confiance, faible réversibilité.',
         'Effort conséquent avec plusieurs dépendances. Coût et difficulté notables, risque modéré à l\'exécution.',
-        'Complexité maîtrisée, exécution standard. Temps et ressources raisonnables, difficulté absorbable par l\'équipe.',
+        'Complexité maîtrisée, exécution standard. Ressources raisonnables, difficulté absorbable par l\'équipe.',
         'Peu de friction, rapide à réaliser. Faible coût, bonne confiance dans l\'exécution, facilement réversible.',
-        'Quasi immédiat. Très peu de ressources, complexité minimale, risque faible et annulation aisée.'
+        'Quasi sans friction. Très peu de ressources, complexité minimale, risque faible et annulation aisée.'
       ],
       popup: {
         subtitle: 'À quel point est-ce difficile?',
-        intro: 'La facilité d\'exécution reflète le temps, la complexité, le coût, l\'incertitude et le niveau de confiance dont vous disposez. Une tâche simple demande peu de ressources, s\'exécute vite et reste facilement réversible ; une tâche difficile exige plus de coordination, multiplie les risques et coûte cher à corriger.',
-        guidance: 'Estimez le temps nécessaire, la difficulté technique, les ressources mobilisées et la facilité à revenir en arrière si besoin.'
+        intro: 'La facilité d\'exécution reflète la complexité, le coût, l\'incertitude et le niveau de confiance dont vous disposez. Une tâche simple demande peu de ressources et reste facilement réversible ; une tâche difficile exige plus de coordination, multiplie les risques et coûte cher à corriger.',
+        guidance: 'Estimez la difficulté technique, les ressources mobilisées et la facilité à revenir en arrière si besoin.'
       },
       affirmations: [
         '',
@@ -122,30 +122,30 @@
         'Difficile. Travail conséquent, dépendances multiples.',
         'Moyen. Complexité maîtrisée, exécution standard.',
         'Facile. Rapide à faire, peu de friction.',
-        'Super facile. Quasi immédiat, faible risque, facile à annuler.'
+        'Super facile. Très peu d\'effort, faible risque, facile à annuler.'
       ]
     },
     urgency: {
       icon: ['urgency-0', 'urgency-1', 'urgency-2', 'urgency-3', 'urgency-4'],
-      short: ['Aucune', 'Bientôt', 'Délai proche', 'Urgent', 'Critique'],
+      short: ['Aucune', 'Faible', 'Modérée', 'Élevée', 'Critique'],
       detail: [
-        'Aucune échéance ni attente pressante. Repousser n\'entraîne ni blocage ni dépendance critique.',
-        'Échéance souple dans un délai confortable. Peu de pression temporelle, aucun blocage immédiat.',
-        'Délai proche ou quelques tâches en dépendent. La pression monte et les dépendances commencent à se faire sentir.',
-        'Échéance imminente ou blocage notable. L\'équipe ralentit ; le risque de repousser devient significatif.',
-        'À faire maintenant. En retard ou bloque l\'ensemble du travail ; forte pression temporelle, dépendances multiples.'
+        'Aucune pression ni dépendance critique. Repousser n\'entraîne ni blocage ni impact notable.',
+        'Pression légère, peu de dépendances. Rien ne bloque pour l\'instant.',
+        'Pression montante ou quelques tâches en dépendent. Les dépendances commencent à se faire sentir.',
+        'Pression forte ou blocage notable. L\'équipe ralentit ; le risque de repousser devient significatif.',
+        'Priorité absolue. Bloque l\'ensemble du travail ; forte pression, dépendances multiples.'
       ],
       popup: {
-        subtitle: 'Quand faut-il le faire?',
-        intro: 'L\'urgence capture la pression temporelle et les conséquences d\'attendre : l\'échéance, le délai acceptable, les blocages provoqués et les dépendances qui s\'accumulent si la tâche est repoussée.',
-        guidance: 'Regardez le délai réel, ce qui bloque si vous attendez et les conséquences concrètes d\'un report.'
+        subtitle: 'Quel niveau d\'urgence?',
+        intro: 'L\'urgence capture la pression et les conséquences d\'un report : blocages provoqués et dépendances qui s\'accumulent si la tâche est repoussée.',
+        guidance: 'Regardez ce qui bloque si vous reportez et les conséquences concrètes d\'un changement de priorité.'
       },
       affirmations: [
-        'Aucune pression. Pas d\'échéance, personne n\'attend.',
-        'Peut attendre. Échéance souple, rien ne bloque.',
-        'Délai proche. Quelques tâches en dépendent.',
-        'Sous 48 h ou blocage notable. L\'équipe ralentit si on attend.',
-        'Maintenant. En retard ou tout le travail de l\'équipe en dépend.'
+        'Aucune pression. Rien ne bloque, aucune dépendance critique.',
+        'Pression légère. Peu de dépendances, rien ne bloque.',
+        'Pression modérée. Quelques tâches en dépendent.',
+        'Pression forte ou blocage notable. L\'équipe ralentit si on reporte.',
+        'Critique. Bloque tout le travail de l\'équipe ou une livraison clé.'
       ]
     }
   };
@@ -237,19 +237,19 @@
   }
 
   var KEYWORDS = {
-    time: 'Cadre temporel : échéance, délai, calendrier et risque de retard.',
+    time: 'Pression relative : blocages, dépendances et risque si repoussée.',
     blocking: 'Effet sur l\'équipe : blocages, dépendances et ralentissement du travail.',
     impact: 'Valeur apportée : importance, portée, bénéfices, visibilité et opportunités débloquées.',
-    ease: 'Coût d\'exécution : temps, complexité, ressources, difficulté, confiance et réversibilité.',
-    urgency: 'Pression temporelle : échéance, délai, blocages, dépendances et risque si repoussé.'
+    ease: 'Coût d\'exécution : complexité, ressources, difficulté, confiance et réversibilité.',
+    urgency: 'Niveau d\'urgence : blocages, dépendances et risque si repoussée.'
   };
 
   var QUESTIONS = {
-    time: 'Quand faut-il le faire?',
+    time: 'Quelle pression pèse sur cette tâche?',
     blocking: 'Est-ce que quelque chose cesse de fonctionner si ce n\'est pas fait?',
     impact: 'Pourquoi vaut-il la peine de le faire?',
     ease: 'À quel point est-ce difficile?',
-    urgency: 'Quand faut-il le faire?'
+    urgency: 'Quel niveau d\'urgence?'
   };
 
   var PROPERTY_ICONS = {
@@ -263,27 +263,27 @@
   var TIERS = [
     {
       min: 8.6, label: 'Critique', fill: '#FCEBEB', text: '#791F1F', seg: '#E24B4A', i: 0,
-      description: 'Tâche à réaliser immédiatement. Impact direct sur l\'objectif, impossible de délayer sans conséquences majeures.'
+      description: 'Tâche prioritaire absolue. Impact direct sur l\'objectif, impossible de repousser sans conséquences majeures.'
     },
     {
       min: 7.2, label: 'Urgent', fill: '#FAECE7', text: '#712B13', seg: '#D85A30', i: 1,
-      description: 'Tâche pressante, priorité absolue. Action rapide sous forte contrainte de temps.'
+      description: 'Tâche pressante, priorité absolue. Action rapide sous forte pression.'
     },
     {
       min: 5.8, label: 'Prioritaire', fill: '#FAEEDA', text: '#633806', seg: '#BA7517', i: 2,
-      description: 'Attention prioritaire. Délai court, à traiter rapidement dans la file.'
+      description: 'Attention prioritaire. À traiter en tête de file.'
     },
     {
       min: 4.3, label: 'Important', fill: '#E8F5E0', text: '#2D5A1E', seg: '#6EAD3A', i: 3,
-      description: 'Planifiée. À exécuter prochainement avec engagement clair.'
+      description: 'Planifiée. À exécuter avec engagement clair dans le backlog.'
     },
     {
       min: 2.9, label: 'Flexible', fill: '#E1F5EE', text: '#085041', seg: '#3BA99C', i: 4,
-      description: 'Sans échéance fixe. À traiter selon l\'opportunité, peut glisser.'
+      description: 'Sans urgence ni blocage. À traiter selon l\'opportunité, peut glisser.'
     },
     {
       min: 1.4, label: 'Secondaire', fill: '#E6F1FB', text: '#0C447C', seg: '#5A9FD4', i: 5,
-      description: 'Utile mais non essentielle. À envisager plus tard selon la disponibilité.'
+      description: 'Utile mais non essentielle. À envisager quand la bande passante le permet.'
     },
     {
       min: 0, label: 'Optionnel', fill: '#F1EFE8', text: '#444441', seg: '#9B9890', i: 6,
@@ -388,7 +388,7 @@
     return { fill: light.fill, text: light.text, seg: light.seg, tint: light.fill };
   }
 
-  // ── 4. Display resolution (tier labels) ─────────────────────────────────
+  // ── 4. Matrix label bridge (PriorityMatrix) ─────────────────────────────
 
   function isInutile(inputs) {
     var U = inputs.urgency != null ? inputs.urgency : 0;
@@ -397,14 +397,39 @@
     return U < INUTILE_EPS && I < INUTILE_EPS && F <= 1 + INUTILE_EPS;
   }
 
-  function resolveDisplay(result, inputs) {
+  var matrixSettings = null;
+
+  function setMatrixSettings(settings) {
+    matrixSettings = settings;
+  }
+
+  function getMatrixSettings() {
+    return matrixSettings;
+  }
+
+  function resolveMatrixLabel(inputs, tier, score, labelSettings) {
+    var Matrix = typeof PriorityMatrix !== 'undefined' ? PriorityMatrix : null;
+    if (!Matrix) return null;
+    var settings = labelSettings != null ? labelSettings : matrixSettings;
+    var ctx = Matrix.buildResolveContext(settings, tier, score);
+    return Matrix.resolveLabel(inputs, ctx);
+  }
+
+  function resolveDisplay(result, inputs, labelSettings) {
     if (!isInutile(inputs)) {
+      var settings = labelSettings != null ? labelSettings : matrixSettings;
+      var matrix = resolveMatrixLabel(inputs, result.tier, result.score, settings);
+      var matrixEnabled = !settings || settings.enabled !== false;
       return {
         inutile: false,
         score: result.score,
-        label: result.tier.label,
-        description: result.tier.description || '',
+        label: matrix ? matrix.label : result.tier.label,
+        description: matrix ? matrix.description : (result.tier.description || ''),
         tierLabel: result.tier.label,
+        matrixRuleId: matrix ? matrix.ruleId : null,
+        matrixLevels: matrix ? matrix.levels : null,
+        matrixEnabled: matrixEnabled,
+        matrixDisabled: matrix ? !!matrix.matrixDisabled : !matrixEnabled,
         fill: result.tier.fill,
         text: result.tier.text,
         seg: result.tier.seg,
@@ -418,6 +443,8 @@
       label: INUTILE_LABEL,
       description: INUTILE_STYLES.description || '',
       tierLabel: INUTILE_LABEL,
+      matrixRuleId: null,
+      matrixLevels: null,
       fill: INUTILE_STYLES.fill,
       text: INUTILE_STYLES.text,
       seg: INUTILE_STYLES.seg,
@@ -814,7 +841,7 @@
 
   function formatWSJF(terms, score) {
     return (
-      'Coût du retard ÷ taille → ' + terms.pressure.toFixed(1) + ' ÷ ' + terms.jobSize.toFixed(0) +
+      'Pression ÷ taille → ' + terms.pressure.toFixed(1) + ' ÷ ' + terms.jobSize.toFixed(0) +
       ' × ' + WSJF_SCALE.toFixed(2) +
       '   =   ' + formatScore(score)
     );
@@ -1136,6 +1163,11 @@
 
     paintHelpModalLevels();
     paintHelpModalFooter(config.wizard || null);
+
+    var modalEl = root.querySelector('.help-modal');
+    if (modalEl) {
+      modalEl.classList.toggle('help-modal--wizard', !!(config.wizard && config.wizard.total > 1));
+    }
 
     root.classList.add('open');
     document.body.classList.add('help-modal-open');
@@ -1542,17 +1574,12 @@
     var panel = document.createElement('div');
     panel.className = 'calc-graph-panel';
 
-    var toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = 'calc-graph-toggle';
-    toggle.setAttribute('aria-expanded', 'false');
-    toggle.innerHTML =
-      '<span class="calc-graph-toggle-label">Graphique</span>' +
-      '<span class="calc-graph-chevron" aria-hidden="true"></span>';
+    var heading = document.createElement('div');
+    heading.className = 'calc-graph-heading';
+    heading.textContent = 'Graphique';
 
     var body = document.createElement('div');
     body.className = 'calc-graph-body';
-    body.hidden = true;
 
     var graphSection = document.createElement('div');
     graphSection.className = 'calc-graph-section calc-rsm-section';
@@ -1770,27 +1797,11 @@
     graphSection.appendChild(rsmWrap);
     body.appendChild(graphSection);
 
-    panel.appendChild(toggle);
+    panel.appendChild(heading);
     panel.appendChild(body);
     el.appendChild(panel);
 
     var surfaceCtx = surfaceCanvas.getContext('2d', { alpha: true });
-
-    toggle.addEventListener('click', function () {
-      var open = toggle.getAttribute('aria-expanded') === 'true';
-      toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
-      body.hidden = open;
-      panel.classList.toggle('open', !open);
-      if (!open && lastScene.result) {
-        requestAnimationFrame(function () {
-          paint(lastScene.result, {
-            urgency: lastScene.U,
-            impact: lastScene.I,
-            ease: lastScene.F
-          }, lastScene.display);
-        });
-      }
-    });
 
     function clientToPlotClamped(clientX, clientY) {
       var rect = plotHit.getBoundingClientRect();
@@ -2265,27 +2276,25 @@
       }
     });
 
-    var fieldsCollapse = document.createElement('details');
-    fieldsCollapse.className = 'variant-fields-collapse';
-    fieldsCollapse.open = true;
+    var fieldsSection = document.createElement('div');
+    fieldsSection.className = 'variant-fields-section';
 
-    var fieldsSummary = document.createElement('summary');
-    fieldsSummary.className = 'variant-fields-toggle';
-    fieldsSummary.innerHTML =
-      '<span class="variant-fields-toggle-left">' +
-        '<span class="variant-fields-toggle-label">Critères</span>' +
+    var fieldsHeader = document.createElement('div');
+    fieldsHeader.className = 'variant-fields-header';
+    fieldsHeader.innerHTML =
+      '<span class="variant-fields-header-left">' +
+        '<span class="variant-fields-header-label">Critères</span>' +
         '<button type="button" class="variant-fields-config" aria-label="Configurer les critères" title="Configurer les critères">' +
           '<i class="ti ti-settings" aria-hidden="true"></i>' +
         '</button>' +
-      '</span>' +
-      '<span class="variant-fields-chevron" aria-hidden="true"></span>';
+      '</span>';
 
     var fieldsWrap = document.createElement('div');
     fieldsWrap.className = 'variant-fields';
 
-    fieldsCollapse.appendChild(fieldsSummary);
-    fieldsCollapse.appendChild(fieldsWrap);
-    card.appendChild(fieldsCollapse);
+    fieldsSection.appendChild(fieldsHeader);
+    fieldsSection.appendChild(fieldsWrap);
+    card.appendChild(fieldsSection);
 
     variantConfig.dimensions.forEach(function (dim) {
       fields[dim.key] = createField({
@@ -2426,6 +2435,9 @@
     tierFor: tierFor,
     isInutile: isInutile,
     resolveDisplay: resolveDisplay,
+    setMatrixSettings: setMatrixSettings,
+    getMatrixSettings: getMatrixSettings,
+    resolveMatrixLabel: resolveMatrixLabel,
     INUTILE_EPS: INUTILE_EPS,
     INUTILE_LABEL: INUTILE_LABEL,
     INUTILE_STYLES: INUTILE_STYLES,

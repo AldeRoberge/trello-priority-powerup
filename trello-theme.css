@@ -477,6 +477,7 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .heat-badge {
+  margin: -14px -12px 12px;
   padding: 12px 16px;
   grid-template-columns: auto minmax(min-content, 1fr);
 }

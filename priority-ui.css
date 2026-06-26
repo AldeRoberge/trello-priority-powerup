@@ -648,6 +648,7 @@ body.help-modal-open {
   border-radius: var(--radius);
   padding: 11px 12px 12px;
   margin-top: 0;
+  overflow: hidden;
   transition: background 0.25s ease;
 }
 
@@ -658,10 +659,10 @@ body.help-modal-open {
   align-items: center;
   column-gap: 8px;
   row-gap: 4px;
-  border-radius: 10px;
+  border-radius: 0 0 var(--radius) var(--radius);
   padding: 7px 11px;
   background: var(--heat-fill, transparent);
-  margin-bottom: 12px;
+  margin: -11px -12px 12px;
 }
 
 .heat-top {

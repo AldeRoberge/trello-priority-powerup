@@ -57,43 +57,50 @@
   var DEFAULT_RULES = [
     {
       id: 'massive-opportunity',
-      label: 'OpportunitÃ© massive',
+      label: 'Opportunité massive',
       description: 'Impact majeur, facile Ã  exÃ©cuter et sous forte pression. Ã€ saisir tout de suite.',
       priority: 100,
       when: { ease: ['high', 'veryHigh'], impact: ['high', 'veryHigh'], urgency: ['high', 'veryHigh'] }
     },
     {
       id: 'dirty-job',
-      label: 'Sale job',
-      description: 'Urgent mais peu utile et pÃ©nible. Ã€ traiter vite pour dÃ©bloquer, sans sur-investir.',
+      label: 'Corvée express',
+      description: 'Urgent mais secondaire et un peu ingrat. À boucler vite pour dégager la suite, sans viser la perfection.',
       priority: 99,
-      when: { ease: ['veryLow', 'low'], impact: ['veryLow', 'low'], urgency: ['high', 'veryHigh'] }
+      when: { ease: ['veryLow', 'low'], impact: ['veryLow'], urgency: ['high', 'veryHigh'] }
+    },
+    {
+      id: 'effort-disproportionne',
+      label: 'Corvée ciblée',
+      description: 'Urgent et un peu laborieux pour un retour modeste. Fixer un plafond d\'effort et viser l\'essentiel.',
+      priority: 98,
+      when: { ease: ['veryLow', 'low'], impact: ['low'], urgency: ['high', 'veryHigh'] }
     },
     {
       id: 'quick-win',
-      label: 'Quick win',
+      label: 'Victoire rapide',
       description: 'Peu d\'effort pour un gain net. IdÃ©al Ã  glisser entre deux tÃ¢ches lourdes.',
       priority: 90,
       when: { ease: ['high', 'veryHigh'], impact: ['mid', 'high', 'veryHigh'], urgency: ['veryLow', 'low', 'mid'] }
     },
     {
       id: 'fire-drill',
-      label: 'Feu de paille',
+      label: 'Priorité passagère',
       description: 'Pression Ã©levÃ©e sur un sujet Ã  faible valeur. Contenir sans s\'y perdre.',
       priority: 88,
       when: { ease: ['mid', 'high', 'veryHigh'], impact: ['veryLow', 'low'], urgency: ['high', 'veryHigh'] }
     },
     {
       id: 'strategic-bet',
-      label: 'Pari stratÃ©gique',
-      description: 'Fort impact mais effort massif. Planifier et protÃ©ger du bruit urgent.',
+      label: 'Pari stratégique',
+      description: 'Fort impact, effort conséquent, calendrier souple. À planifier et protéger des urgences du jour.',
       priority: 85,
       when: { ease: ['veryLow', 'low'], impact: ['high', 'veryHigh'], urgency: ['veryLow', 'low', 'mid'] }
     },
     {
       id: 'critical-path',
       label: 'Chemin critique',
-      description: 'Gros enjeu, difficile et sous pression. PrioritÃ© absolue malgrÃ© le coÃ»t.',
+      description: 'Gros enjeu, réellement exigeant, sous pression. Priorité haute : ça vaut le coup de s\'y consacrer.',
       priority: 84,
       when: { ease: ['veryLow', 'low'], impact: ['high', 'veryHigh'], urgency: ['high', 'veryHigh'] }
     },
@@ -106,35 +113,35 @@
     },
     {
       id: 'noise',
-      label: 'Bruit',
+      label: 'Faible priorité',
       description: 'Peu de valeur, peu urgent, effort modÃ©rÃ©. Candidat Ã  repousser ou Ã©carter.',
       priority: 65,
       when: { ease: ['low', 'mid'], impact: ['veryLow', 'low'], urgency: ['veryLow', 'low'] }
     },
     {
       id: 'backlog-filler',
-      label: 'Remplissage',
-      description: 'Sans pression ni impact notable. Ne pas laisser occuper l\'attention.',
+      label: 'Bonus backlog',
+      description: 'Sans pression ni impact notable. À garder en bas de pile, sans y investir trop d\'attention.',
       priority: 60,
       when: { impact: ['veryLow'], urgency: ['veryLow', 'low'] }
     },
     {
       id: 'micro-opportunite',
-      label: 'Micro-opportunitÃ©',
-      description: 'Presque sans effort, impact limitÃ© mais net positif. Ã€ saisir quand il reste dix minutes.',
+      label: 'Petite opportunité',
+      description: 'Presque sans effort, impact limitÃ© mais net positif. Ã€ saisir entre deux chantiers plus lourds.',
       priority: 89,
       when: { ease: ['veryHigh'], impact: ['low', 'mid'], urgency: ['veryLow', 'low', 'mid'] }
     },
     {
       id: 'coup-de-pouce',
       label: 'Coup de pouce',
-      description: 'Impact moyen mais deadline serrÃ©e, exÃ©cution facile. DÃ©bloque la suite sans y passer la journÃ©e.',
+      description: 'Impact moyen, urgence rÃ©elle, exÃ©cution facile. DÃ©bloque la suite sans mobilisation lourde.',
       priority: 87,
       when: { ease: ['high', 'veryHigh'], impact: ['mid'], urgency: ['high', 'veryHigh'] }
     },
     {
       id: 'accelerateur',
-      label: 'AccÃ©lÃ©rateur',
+      label: 'Accélérateur',
       description: 'Gros enjeu, urgence rÃ©elle, difficultÃ© modÃ©rÃ©e. Pas trivial, mais Ã  pousser maintenant.',
       priority: 86,
       when: { ease: ['mid', 'high'], impact: ['high', 'veryHigh'], urgency: ['high', 'veryHigh'] }
@@ -142,16 +149,23 @@
     {
       id: 'effet-levier',
       label: 'Effet de levier',
-      description: 'Fort impact pour un effort raisonnable, sans urgence immÃ©diate. Ã€ planifier avant que la fenÃªtre ne se ferme.',
+      description: 'Fort impact pour un effort raisonnable, sans urgence immÃ©diate. Ã€ planifier tant que la prioritÃ© le permet.',
       priority: 83,
       when: { ease: ['mid', 'high'], impact: ['high', 'veryHigh'], urgency: ['veryLow', 'low', 'mid'] }
     },
     {
-      id: 'piege-a-temps',
+      id: 'deadline-exigeante',
       label: 'PiÃ¨ge Ã  temps',
       description: 'Semble prioritaire, coÃ»te cher pour un gain moyen. Cadrer le scope ou renÃ©gocier la deadline.',
       priority: 83,
       when: { ease: ['veryLow', 'low'], impact: ['mid'], urgency: ['high', 'veryHigh'] }
+    },
+    {
+      id: 'pression-moderee',
+      label: 'Pression modérée',
+      description: 'Enjeu moyen, rythme soutenu, urgence réelle. Prioriser la clôture, la perfection peut attendre.',
+      priority: 81,
+      when: { ease: ['mid'], impact: ['mid'], urgency: ['high', 'veryHigh'] }
     },
     {
       id: 'travail-de-fond',
@@ -163,14 +177,14 @@
     {
       id: 'fondation',
       label: 'Fondation',
-      description: 'Travail structurant, effort soutenu, impact rÃ©el mais calendrier souple. Pose les bases des prochains gains.',
+      description: 'Travail structurant, effort soutenu, impact rÃ©el mais sans urgence immÃ©diate. Pose les bases des prochains gains.',
       priority: 81,
       when: { ease: ['low', 'mid'], impact: ['high', 'veryHigh'], urgency: ['veryLow', 'low'] }
     },
     {
       id: 'derapage-cache',
-      label: 'DÃ©rapage cachÃ©',
-      description: 'Fort impact annoncÃ©, urgence qui monte, effort encore gÃ©rable. Surveiller avant que Ã§a bascule en chemin critique.',
+      label: 'Point d\'attention',
+      description: 'Fort impact, urgence qui monte, effort encore gérable. Un coup d\'œil régulier évite la course de dernière minute.',
       priority: 80,
       when: { ease: ['mid'], impact: ['high', 'veryHigh'], urgency: ['mid'] }
     },
@@ -183,28 +197,28 @@
     },
     {
       id: 'pare-feu',
-      label: 'Pare-feu',
-      description: 'ProtÃ¨ge un enjeu important avant qu\'il ne devienne urgent. Investissement prÃ©ventif, pas rÃ©actif.',
+      label: 'Bouclier préventif',
+      description: 'Protège un enjeu important avant qu\'il ne devienne urgent. Mise en place proactive, pas réactive.',
       priority: 79,
       when: { ease: ['mid', 'high'], impact: ['high', 'veryHigh'], urgency: ['veryLow', 'low'] }
     },
     {
       id: 'paperasse',
       label: 'Paperasse',
-      description: 'Facile mais peu gratifiant, deadline qui approche. Ã€ traiter en mode traitement de flux, pas en mode perfection.',
+      description: 'Facile mais peu gratifiant, urgence rÃ©elle. Ã€ traiter en mode traitement de flux, pas en mode perfection.',
       priority: 77,
       when: { ease: ['high', 'veryHigh'], impact: ['veryLow', 'low'], urgency: ['mid', 'high'] }
     },
     {
       id: 'fausse-priorite',
-      label: 'Fausse prioritÃ©',
-      description: 'Bruit urgent, retour modeste, effort non nÃ©gligeable. Traiter le minimum viable puis sortir.',
+      label: 'Urgence modérée',
+      description: 'Deadline serrée, retour modeste, effort non négligeable. Traiter l\'essentiel puis repasser à des sujets à plus fort levier.',
       priority: 76,
       when: { ease: ['low', 'mid'], impact: ['low', 'mid'], urgency: ['high', 'veryHigh'] }
     },
     {
       id: 'sable-mouvant',
-      label: 'Sable mouvant',
+      label: 'Effort dense',
       description: 'PÃ©nible, peu utile, urgence moyenne. Classique gouffre Ã  temps si on n\'impose pas une limite.',
       priority: 75,
       when: { ease: ['veryLow', 'low'], impact: ['veryLow', 'low'], urgency: ['mid'] }
@@ -227,13 +241,13 @@
       id: 'piste-exploratoire',
       label: 'Piste exploratoire',
       description: 'Impact et effort moyens, aucune urgence. Utile pour tester une direction sans engagement lourd.',
-      priority: 68,
+      priority: 71,
       when: { ease: ['mid'], impact: ['mid'], urgency: ['veryLow', 'low'] }
     },
     {
       id: 'zone-grise',
-      label: 'Zone grise',
-      description: 'Ni critique ni nÃ©gligeable sur les trois axes. Demande un arbitrage explicite avant d\'y investir.',
+      label: 'À arbitrer',
+      description: 'Ni prioritaire ni secondaire sur les trois axes. À repositionner selon le reste du backlog : avancer, repousser ou simplifier.',
       priority: 67,
       when: { ease: ['mid'], impact: ['mid'], urgency: ['mid'] }
     }
