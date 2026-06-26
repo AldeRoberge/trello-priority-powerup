@@ -630,17 +630,9 @@
 
   function affirmationDisplayText(key, value) {
     var affirmText = affirmationFor(key, value);
-    if (affirmText) {
-      var short = wordFor(key, value);
-      if (short && affirmText.indexOf(short + '. ') === 0) {
-        return affirmText.slice(short.length + 2);
-      }
-      return affirmText;
-    }
+    if (affirmText) return affirmText;
     var entry = labelEntry(key, value);
-    if (entry.detail) {
-      return entry.short ? entry.short + '. ' + entry.detail : entry.detail;
-    }
+    if (entry.detail) return entry.detail;
     return entry.short || '';
   }
 
@@ -1186,17 +1178,18 @@
     var end = entry.short.length - 1;
     var selectable = typeof modalContext.onSelect === 'function';
     for (var i = start; i <= end; i++) {
-      if (!entry.detail[i]) continue;
+      var rowText = affirmationDisplayText(wordsKey, i);
+      if (!rowText && !entry.detail[i]) continue;
       var li = document.createElement('li');
       li.dataset.level = String(i);
       if (selectable) {
         li.className = 'is-selectable-row';
         var textEl = document.createElement('span');
         textEl.className = 'help-modal-level-text is-selectable';
-        textEl.textContent = entry.detail[i];
+        textEl.textContent = rowText;
         textEl.setAttribute('role', 'button');
         textEl.setAttribute('tabindex', '0');
-        textEl.setAttribute('aria-label', entry.detail[i]);
+        textEl.setAttribute('aria-label', rowText);
         li.appendChild(textEl);
         (function (level, target) {
           function selectLevel() {
