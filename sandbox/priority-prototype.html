@@ -280,7 +280,7 @@
     <div class="row">
       <div class="row-head">
         <span class="row-lbl"><i class="ti ti-barrier-block"></i> Blocage</span>
-        <span class="row-val" id="blocking-word">🔗 Dépendance mineure (quelqu'un attend, mais peut continuer)</span>
+        <span class="row-val" id="blocking-word">🔗 Dépendance mineure (collègue ralenti, peut contourner)</span>
       </div>
       <blockquote class="row-desc">Est-ce que quelque chose cesse de fonctionner si ce n'est pas fait?</blockquote>
       <input type="range" id="blocking" min="0" max="3" step="1" value="1">
@@ -323,19 +323,19 @@
 
       <div class="segs">
         <div class="seg" data-i="6" data-target="0.7" style="--c:#9B9890;" role="button" tabindex="0" aria-label="Optionnel" title="Optionnel. Facultative, sans conséquence si ignorée. Peut être écartée de la file."></div>
-        <div class="seg" data-i="5" data-target="2.1" style="--c:#5A9FD4;" role="button" tabindex="0" aria-label="Secondaire" title="Secondaire. Utile mais non essentielle. À envisager plus tard selon la disponibilité."></div>
-        <div class="seg" data-i="4" data-target="3.6" style="--c:#3BA99C;" role="button" tabindex="0" aria-label="Flexible" title="Flexible. Sans échéance fixe. À traiter selon l'opportunité, peut glisser."></div>
-        <div class="seg" data-i="3" data-target="5.0" style="--c:#6EAD3A;" role="button" tabindex="0" aria-label="Important" title="Important. Planifiée. À exécuter prochainement avec engagement clair."></div>
-        <div class="seg" data-i="2" data-target="6.5" style="--c:#BA7517;" role="button" tabindex="0" aria-label="Prioritaire" title="Prioritaire. Attention prioritaire. Délai court, à traiter rapidement dans la file."></div>
-        <div class="seg" data-i="1" data-target="7.9" style="--c:#D85A30;" role="button" tabindex="0" aria-label="Urgent" title="Urgent. Tâche pressante, priorité absolue. Action rapide sous forte contrainte de temps."></div>
-        <div class="seg" data-i="0" data-target="9.3" style="--c:#E24B4A;" role="button" tabindex="0" aria-label="Critique" title="Critique. Tâche à réaliser immédiatement. Impact direct sur l'objectif, impossible de délayer sans conséquences majeures."></div>
+        <div class="seg" data-i="5" data-target="2.1" style="--c:#5A9FD4;" role="button" tabindex="0" aria-label="Secondaire" title="Secondaire. Utile mais non essentielle. À envisager quand la bande passante le permet."></div>
+        <div class="seg" data-i="4" data-target="3.6" style="--c:#3BA99C;" role="button" tabindex="0" aria-label="Flexible" title="Flexible. Sans urgence ni blocage. À traiter selon l'opportunité, peut glisser."></div>
+        <div class="seg" data-i="3" data-target="5.0" style="--c:#6EAD3A;" role="button" tabindex="0" aria-label="Important" title="Important. Planifiée. À exécuter avec engagement clair dans le backlog."></div>
+        <div class="seg" data-i="2" data-target="6.5" style="--c:#BA7517;" role="button" tabindex="0" aria-label="Prioritaire" title="Prioritaire. Attention prioritaire. À traiter en tête de file."></div>
+        <div class="seg" data-i="1" data-target="7.9" style="--c:#D85A30;" role="button" tabindex="0" aria-label="Urgent" title="Urgent. Tâche pressante, priorité absolue. Action rapide sous forte pression."></div>
+        <div class="seg" data-i="0" data-target="9.3" style="--c:#E24B4A;" role="button" tabindex="0" aria-label="Critique" title="Critique. Tâche prioritaire absolue. Impact direct sur l'objectif, impossible de repousser sans conséquences majeures."></div>
       </div>
       <div class="seg-labels">
         <span>Optionnel</span><span>Secondaire</span><span>Flexible</span><span>Important</span><span>Prioritaire</span><span>Urgent</span><span>Critique</span>
       </div>
 
       <div class="formula-wrap">
-        <div id="formula">Pression temporelle ×1.2 → 2.4 · Blocage ×0.8 → 0.8 · Impact×Effort÷5 ×0.8 → 0.5 = 3.7</div>
+        <div id="formula">Pression ×1.2 → 2.4 · Blocage ×0.8 → 0.8 · Impact×Effort÷5 ×0.8 → 0.5 = 3.7</div>
       </div>
     </div>
 
@@ -359,15 +359,15 @@
       segs         = [].slice.call(document.querySelectorAll('.seg'));
 
   var TW = [
-    '💤 Aucune échéance',
-    '📅 Flexible (bientôt)',
-    '⏳ Cette semaine',
-    '🚨 Sous 48 h',
-    '🔥 Maintenant / en retard'
+    '💤 Aucune pression',
+    '📅 Flexible',
+    '⏳ Modérée',
+    '🚨 Élevée',
+    '🔥 Critique'
   ];
   var BW = [
     '❌ Rien ne dépend de cela',
-    '🔗 Dépendance mineure. Quelqu\'un attend, mais peut continuer.',
+    '🔗 Dépendance mineure. Collègue ralenti, peut contourner.',
     '⚠️ Bloque une tâche ou un collègue',
     '🧱 Bloque le travail de l\'équipe ou une livraison'
   ];
@@ -381,10 +381,10 @@
   var FW = [
     '',
     '🏗 Très difficile (grand projet)',
-    '🔧 Difficile (plusieurs jours / coordination)',
-    '🧠 Moyen (demi-journée)',
-    '👍 Facile (moins d\'une heure)',
-    '⚡ Super facile (quelques minutes)'
+    '🔧 Difficile (coordination lourde)',
+    '🧠 Moyen (effort standard)',
+    '👍 Facile (peu de friction)',
+    '⚡ Super facile (quasi sans effort)'
   ];
 
   var WT = 1.2, WB = 0.8, WI = 0.8;
@@ -413,7 +413,7 @@
     bnum.style.color   = t.text;
     blabel.style.color = t.text;
     formula.textContent =
-      'Pression temporelle ×'+WT+' → '+timeTerm.toFixed(1)+
+      'Pression ×'+WT+' → '+timeTerm.toFixed(1)+
       '   ·   Blocage ×'+WB+' → '+blockTerm.toFixed(1)+
       '   ·   Impact×Effort÷5 ×'+WI+' → '+impTerm.toFixed(1)+
       '   =   '+p.toFixed(1);

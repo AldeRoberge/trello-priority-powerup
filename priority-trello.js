@@ -90,8 +90,13 @@
   }
 
   function computeDisplay(inputs, labelSettings) {
-    var result = PriorityUI.calc.baseline(inputs);
-    return PriorityUI.resolveDisplay(result, inputs, labelSettings);
+    try {
+      var result = PriorityUI.calc.baseline(inputs);
+      return PriorityUI.resolveDisplay(result, inputs, labelSettings);
+    } catch (err) {
+      console.error('PriorityTrello.computeDisplay failed', err);
+      return null;
+    }
   }
 
   async function getCardDisplay(t) {
@@ -154,7 +159,8 @@
         if (!display) return [];
         return [buildCardFaceBadge(display)];
       })
-      .catch(function () {
+      .catch(function (err) {
+        console.error('Priority card-badges failed', err);
         return [];
       });
   }

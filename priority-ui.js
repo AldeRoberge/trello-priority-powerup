@@ -1314,11 +1314,13 @@
     inputEl.max = String(max);
     inputEl.step = String(SLIDER_STEP);
     inputEl.value = String(value);
-    inputEl.addEventListener('input', function () {
+    function handleRangeInput() {
       var v = +inputEl.value;
       updateDisplay(v);
       onChange(v);
-    });
+    }
+    inputEl.addEventListener('input', handleRangeInput);
+    inputEl.addEventListener('change', handleRangeInput);
 
     sliderWrap.appendChild(inputEl);
     field.appendChild(sliderWrap);
@@ -1398,6 +1400,19 @@
     segsWrap.className = 'heat-segs';
     var segs = [];
 
+    function bindSegmentTarget(el, seg) {
+      function activate() {
+        onSegmentClick(seg.target);
+      }
+      el.addEventListener('click', activate);
+      el.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          activate();
+        }
+      });
+    }
+
     HEAT_SEGMENTS.forEach(function (seg) {
       var s = document.createElement('div');
       s.className = 'heat-seg';
@@ -1408,15 +1423,7 @@
       s.setAttribute('tabindex', '0');
       s.setAttribute('aria-label', seg.label);
       if (seg.description) s.title = seg.label + '. ' + seg.description;
-      s.addEventListener('click', function () {
-        onSegmentClick(+s.dataset.target);
-      });
-      s.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onSegmentClick(+s.dataset.target);
-        }
-      });
+      bindSegmentTarget(s, seg);
       segsWrap.appendChild(s);
       segs.push(s);
     });
@@ -1424,9 +1431,16 @@
 
     var segLabels = document.createElement('div');
     segLabels.className = 'heat-seg-labels';
-    segLabels.innerHTML = HEAT_SEGMENTS.map(function (s) {
-      return '<span>' + s.label + '</span>';
-    }).join('');
+    HEAT_SEGMENTS.forEach(function (seg) {
+      var label = document.createElement('span');
+      label.textContent = seg.label;
+      label.setAttribute('role', 'button');
+      label.setAttribute('tabindex', '0');
+      label.setAttribute('aria-label', seg.label);
+      if (seg.description) label.title = seg.label + '. ' + seg.description;
+      bindSegmentTarget(label, seg);
+      segLabels.appendChild(label);
+    });
     panel.appendChild(segLabels);
 
     el.appendChild(panel);
@@ -2077,9 +2091,11 @@
       endUIDrag(e, markerHit);
     });
 
-    easeSlider.addEventListener('input', function () {
+    function handleEaseInput() {
       applyEase(+easeSlider.value);
-    });
+    }
+    easeSlider.addEventListener('input', handleEaseInput);
+    easeSlider.addEventListener('change', handleEaseInput);
 
     function paint(result, inputs, display) {
       var terms = result.terms || {};
@@ -2152,7 +2168,32 @@
     } catch (e) { /* ignore quota / private mode */ }
   }
 
+  function mountVariantFailedStub(containerEl, variantConfig, err) {
+    var variantId = (variantConfig && variantConfig.id) || 'unknown';
+    var formulaKey = (variantConfig && variantConfig.formula) || 'baseline';
+    console.error('PriorityUI.mountVariant failed', {
+      id: variantId,
+      formula: formulaKey,
+      error: err
+    });
+    if (containerEl) {
+      containerEl.replaceChildren();
+      var notice = document.createElement('p');
+      notice.className = 'variant-mount-error';
+      notice.textContent = 'Une partie de l\u2019\u00e9diteur n\u2019a pas pu se charger.';
+      containerEl.appendChild(notice);
+    }
+    return {
+      card: null,
+      getState: function () { return {}; },
+      setState: function () {},
+      repaint: function () {}
+    };
+  }
+
   function mountVariant(containerEl, variantConfig) {
+    var variantId = variantConfig.id || 'unknown';
+    try {
     var formulaKey = variantConfig.formula || 'baseline';
     var formulaDef = FORMULAS[formulaKey] || FORMULAS.baseline;
     var calcFn = formulaDef.calc;
@@ -2252,14 +2293,18 @@
     }
 
     function repaint() {
-      syncStateFromFields();
-      var result = calcFn(state);
-      var display = resolveDisplay(result, state);
-      applyCardTierTint(card, display.cardTier);
-      card.classList.toggle('is-inutile', display.inutile);
-      card.dataset.tier = display.label;
-      heat.paint(result, display);
-      if (calcGraph) calcGraph.paint(result, state, display);
+      try {
+        syncStateFromFields();
+        var result = calcFn(state);
+        var display = resolveDisplay(result, state);
+        applyCardTierTint(card, display.cardTier);
+        card.classList.toggle('is-inutile', display.inutile);
+        card.dataset.tier = display.label;
+        heat.paint(result, display);
+        if (calcGraph) calcGraph.paint(result, state, display);
+      } catch (err) {
+        console.error('PriorityUI.mountVariant repaint failed', { id: variantId, error: err });
+      }
     }
 
     heat = createHeatPanel({
@@ -2276,7 +2321,9 @@
         ) {
           return;
         }
-        var next = overrideFn(targetP, state);
+        var next = (clickedSeg && clickedSeg.preset)
+          ? Object.assign({}, state, clickedSeg.preset)
+          : overrideFn(targetP, state);
         var delta = pickOverrideDelta(state, next);
         if (!Object.keys(delta).length) return;
         animateFieldsTo(delta);
@@ -2342,15 +2389,19 @@
     }
 
     if (showCalcGraph) {
-      calcGraph = createCalcGraphPanel({
-        el: fieldsSection,
-        fields: fields,
-        onChange: function () {
-          cancelSliderAnim();
-          repaint();
-          persistSliderState();
-        }
-      });
+      try {
+        calcGraph = createCalcGraphPanel({
+          el: fieldsSection,
+          fields: fields,
+          onChange: function () {
+            cancelSliderAnim();
+            repaint();
+            persistSliderState();
+          }
+        });
+      } catch (err) {
+        console.error('PriorityUI.createCalcGraphPanel failed', { id: variantId, error: err });
+      }
     }
 
     containerEl.appendChild(card);
@@ -2382,6 +2433,9 @@
       },
       repaint: repaint
     };
+    } catch (err) {
+      return mountVariantFailedStub(containerEl, variantConfig, err);
+    }
   }
 
   // ── 11. PriorityUI public API ───────────────────────────────────────────

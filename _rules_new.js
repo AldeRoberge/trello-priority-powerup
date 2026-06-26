@@ -2,7 +2,7 @@
     {
       id: 'massive-opportunity',
       label: 'OpportunitÃ© massive',
-      description: 'Impact majeur, facile Ã  lancer, deadline serrÃ©e. Le moment idÃ©al pour agir.',
+      description: 'Impact majeur, facile Ã  lancer, forte urgence. Le moment idÃ©al pour agir.',
       priority: 100,
       when: { ease: ['high', 'veryHigh'], impact: ['high', 'veryHigh'], urgency: ['high', 'veryHigh'] }
     },
@@ -37,7 +37,7 @@
     {
       id: 'strategic-bet',
       label: 'Pari stratÃ©gique',
-      description: 'Fort impact, effort consÃ©quent, calendrier souple. Ã€ planifier et protÃ©ger des urgences du jour.',
+      description: 'Fort impact, effort consÃ©quent, sans urgence immÃ©diate. Ã€ planifier et protÃ©ger des urgences.',
       priority: 85,
       when: { ease: ['veryLow', 'low'], impact: ['high', 'veryHigh'], urgency: ['veryLow', 'low', 'mid'] }
     },
@@ -72,14 +72,14 @@
     {
       id: 'micro-opportunite',
       label: 'Petite opportunitÃ©',
-      description: 'Presque sans effort, impact modeste mais net positif. Ã€ saisir quand il reste dix minutes.',
+      description: 'Presque sans effort, impact modeste mais net positif. Ã€ saisir entre deux chantiers plus lourds.',
       priority: 89,
       when: { ease: ['veryHigh'], impact: ['low', 'mid'], urgency: ['veryLow', 'low', 'mid'] }
     },
     {
       id: 'coup-de-pouce',
       label: 'Coup de pouce',
-      description: 'Impact moyen, deadline serrÃ©e, exÃ©cution facile. DÃ©bloque la suite sans y passer la journÃ©e.',
+      description: 'Impact moyen, urgence rÃ©elle, exÃ©cution facile. DÃ©bloque la suite sans mobilisation lourde.',
       priority: 87,
       when: { ease: ['high', 'veryHigh'], impact: ['mid'], urgency: ['high', 'veryHigh'] }
     },
@@ -107,14 +107,14 @@
     {
       id: 'sans-urgence-retour',
       label: 'En veille',
-      description: 'Effort Ã©levÃ© pour une valeur limitÃ©e, sans deadline. Patienter jusqu\'Ã  ce qu\'un levier change.',
+      description: 'Effort Ã©levÃ© pour une valeur limitÃ©e, sans urgence. Repousser jusqu\'Ã  ce qu\'un levier change.',
       priority: 83,
       when: { ease: ['veryLow'], impact: ['veryLow'], urgency: ['veryLow'] }
     },
     {
       id: 'remettre-en-rayon',
       label: 'Pour plus tard',
-      description: 'Pas le bon timing : retour modeste, zÃ©ro Ã©chÃ©ance, coÃ»t Ã©levÃ©. Garder visible sans lancer tout de suite.',
+      description: 'Retour modeste, sans urgence, coÃ»t Ã©levÃ©. Garder visible sans lancer tout de suite.',
       priority: 83,
       when: { ease: ['veryLow'], impact: ['low'], urgency: ['veryLow'] }
     },
@@ -149,28 +149,28 @@
     {
       id: 'fondation',
       label: 'Fondation',
-      description: 'Travail structurant, effort soutenu, impact rÃ©el avec calendrier souple. Pose les bases des prochains gains.',
+      description: 'Travail structurant, effort soutenu, impact rÃ©el sans urgence immÃ©diate. Pose les bases des prochains gains.',
       priority: 84,
       when: { ease: ['low', 'mid'], impact: ['high', 'veryHigh'], urgency: ['veryLow'] }
     },
     {
       id: 'derapage-cache',
       label: 'Point d\'attention',
-      description: 'Fort impact, urgence qui monte, effort encore gÃ©rable. Un coup d\'Å“il rÃ©gulier Ã©vite la course de derniÃ¨re minute.',
+      description: 'Fort impact, urgence qui monte, effort encore gÃ©rable. Un suivi rÃ©gulier Ã©vite un basculement en chemin critique.',
       priority: 80,
       when: { ease: ['mid'], impact: ['high', 'veryHigh'], urgency: ['mid'] }
     },
     {
       id: 'deadline-exigeante',
       label: 'Ã‰chÃ©ance serrÃ©e',
-      description: 'Enjeu moyen, effort soutenu, deadline proche. ProtÃ©ger le scope et livrer l\'essentiel avec sÃ©rÃ©nitÃ©.',
+      description: 'Enjeu moyen, effort soutenu, urgence rÃ©elle. ProtÃ©ger le scope et livrer l\'essentiel avec sÃ©rÃ©nitÃ©.',
       priority: 83,
       when: { ease: ['veryLow', 'low'], impact: ['mid'], urgency: ['high', 'veryHigh'] }
     },
     {
       id: 'pression-moderee',
       label: 'Pression modÃ©rÃ©e',
-      description: 'Enjeu moyen, rythme soutenu, urgence rÃ©elle. Prioriser la clÃ´ture, la perfection peut attendre.',
+      description: 'Enjeu moyen, rythme soutenu, urgence rÃ©elle. Prioriser la clÃ´ture, sans viser la perfection.',
       priority: 81,
       when: { ease: ['mid'], impact: ['mid'], urgency: ['high', 'veryHigh'] }
     },
@@ -191,14 +191,14 @@
     {
       id: 'paperasse',
       label: 'Paperasse',
-      description: 'Facile mais peu glamour, deadline qui approche. Mode flux : fait, validÃ©, on passe Ã  la suite.',
+      description: 'Facile mais peu glamour, urgence rÃ©elle. Mode flux : fait, validÃ©, on passe Ã  la suite.',
       priority: 77,
       when: { ease: ['high', 'veryHigh'], impact: ['veryLow', 'low'], urgency: ['mid', 'high'] }
     },
     {
       id: 'fausse-priorite',
       label: 'Urgence modÃ©rÃ©e',
-      description: 'Deadline serrÃ©e, retour modeste, effort non nÃ©gligeable. Traiter l\'essentiel puis repasser Ã  des sujets Ã  plus fort levier.',
+      description: 'Urgence Ã©levÃ©e, retour modeste, effort non nÃ©gligeable. Traiter l\'essentiel puis repasser Ã  des sujets Ã  plus fort levier.',
       priority: 76,
       when: { ease: ['low', 'mid'], impact: ['low', 'mid'], urgency: ['high', 'veryHigh'] }
     },
@@ -212,7 +212,7 @@
     {
       id: 'marathon',
       label: 'Marathon',
-      description: 'Long et exigeant, valeur moyenne, pas de deadline proche. Ã€ Ã©taler sereinement, pas Ã  forcer d\'un bloc.',
+      description: 'Long et exigeant, valeur moyenne, sans urgence. Ã€ Ã©taler sereinement, pas Ã  forcer d\'un bloc.',
       priority: 74,
       when: { ease: ['veryLow', 'low'], impact: ['mid'], urgency: ['veryLow', 'low'] }
     },

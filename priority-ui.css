@@ -759,6 +759,17 @@ body.help-modal-open {
   flex: 1;
   text-align: center;
   line-height: 1.2;
+  cursor: pointer;
+  border-radius: 3px;
+  outline: none;
+}
+
+.heat-seg-labels span:hover {
+  color: var(--text-secondary);
+}
+
+.heat-seg-labels span:focus-visible {
+  box-shadow: 0 0 0 2px var(--surface-1), 0 0 0 4px var(--focus-ring-strong);
 }
 
 /* ── Calc graph panel ── */
