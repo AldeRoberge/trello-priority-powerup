@@ -1,6 +1,6 @@
-# Deploy via GitHub Actions (upload-pages-artifact + deploy-pages).
-# In repo Settings → Pages → Build and deployment, set Source to
-# "GitHub Actions" — not "Deploy from a branch". Branch-based Pages
+﻿# Deploy via GitHub Actions (upload-pages-artifact + deploy-pages).
+# In repo Settings â†’ Pages â†’ Build and deployment, set Source to
+# "GitHub Actions" â€” not "Deploy from a branch". Branch-based Pages
 # also runs the built-in pages-build-deployment workflow on every push.
 name: Deploy static content to Pages
 
@@ -17,16 +17,15 @@ permissions:
   pages: write
   id-token: write
 
-# Pages allows one in-flight deployment per site. cancel-in-progress: true only
-# stops the Actions job; the Pages deployment keeps settling and the next run
-# fails with "in progress deployment". Queue runs instead (GitHub starter default).
+# One Pages deployment at a time; cancel superseded Actions runs (after Source = GitHub Actions only).
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
