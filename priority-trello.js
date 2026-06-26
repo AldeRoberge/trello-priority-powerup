@@ -5,6 +5,7 @@
   var CARD_PRIORITY_KEY = 'cardPriority';
   var LEGACY_PRIORITY_KEY = 'priority';
   var MATRIX_SETTINGS_KEY = 'matrixLabelSettings';
+  var CARD_BADGE_REFRESH_SEC = 10;
 
   var DEFAULT_INPUTS = { urgency: 2, impact: 2, ease: 3 };
 
@@ -121,6 +122,40 @@
     return 'data:image/svg+xml,' + encodeURIComponent(svg);
   }
 
+  function buildCardFaceBadge(display) {
+    if (!display) return null;
+    return {
+      icon: tierDotIcon(display.seg),
+      text: formatBadgeText(display),
+      color: tierDetailBadgeColor(display),
+      monochrome: false,
+      refresh: CARD_BADGE_REFRESH_SEC,
+    };
+  }
+
+  function cardFaceBadges(t) {
+    return getCardDisplay(t).then(function (display) {
+      var badge = buildCardFaceBadge(display);
+      if (!badge) return [];
+      var staticBadge = Object.assign({}, badge);
+      delete staticBadge.refresh;
+      return [staticBadge];
+    });
+  }
+
+  function cardFaceBadgesCapability(t) {
+    return [{
+      dynamic: function () {
+        return getCardDisplay(t).then(function (display) {
+          if (!display) {
+            return { refresh: CARD_BADGE_REFRESH_SEC };
+          }
+          return buildCardFaceBadge(display);
+        });
+      },
+    }];
+  }
+
   async function saveCardInputs(t, inputs) {
     var normalized = normalizeInputs(inputs);
     if (!normalized) return;
@@ -139,6 +174,7 @@
   global.PriorityTrello = {
     CARD_PRIORITY_KEY: CARD_PRIORITY_KEY,
     MATRIX_SETTINGS_KEY: MATRIX_SETTINGS_KEY,
+    CARD_BADGE_REFRESH_SEC: CARD_BADGE_REFRESH_SEC,
     DEFAULT_INPUTS: DEFAULT_INPUTS,
     PRIORITY_DIMENSIONS: PRIORITY_DIMENSIONS,
     normalizeInputs: normalizeInputs,
@@ -149,6 +185,9 @@
     formatBadgeText: formatBadgeText,
     tierDetailBadgeColor: tierDetailBadgeColor,
     tierDotIcon: tierDotIcon,
+    buildCardFaceBadge: buildCardFaceBadge,
+    cardFaceBadges: cardFaceBadges,
+    cardFaceBadgesCapability: cardFaceBadgesCapability,
     saveCardInputs: saveCardInputs,
     clearCardPriority: clearCardPriority,
   };

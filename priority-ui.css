@@ -11,6 +11,55 @@
   --radius:      8px;
   --font-sans:   -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono:   "SF Mono", "Fira Code", ui-monospace, monospace;
+  --focus-ring:  rgba(0, 0, 0, 0.12);
+  --focus-ring-strong: rgba(0, 0, 0, 0.15);
+  --modal-backdrop: rgba(26, 25, 23, 0.35);
+  --modal-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 16px rgba(0, 0, 0, 0.04);
+  --slider-thumb-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  --slider-focus-ring: 0 0 0 3px rgba(0, 0, 0, 0.12);
+  --chart-grid-stroke: rgba(0, 0, 0, 0.05);
+  --chart-crosshair-stroke: rgba(26, 25, 23, 0.35);
+  --chart-marker-shadow: rgba(0, 0, 0, 0.22);
+  --chart-marker-shadow-inutile: rgba(0, 0, 0, 0.14);
+  --chart-marker-core-inutile: #FFFFFF;
+  --heat-accent-fallback: #085041;
+  --heat-dot-fallback: #9B9890;
+}
+
+/* Trello iframe — light/dark via html[data-color-mode] (see trello-theme.css) */
+html[data-color-mode="light"] {
+  --surface-0: transparent;
+  --surface-1: #f1f2f4;
+  --surface-2: #ffffff;
+  --border: #091e4224;
+  --text-primary: #172b4d;
+  --text-secondary: #44546f;
+  --text-muted: #626f86;
+}
+
+html[data-color-mode="dark"] {
+  --surface-0: transparent;
+  --surface-1: #282e33;
+  --surface-2: #22272b;
+  --border: #a6c5e75c;
+  --text-primary: #b6c2cf;
+  --text-secondary: #9fadbc;
+  --text-muted: #8c9bab;
+  --focus-ring: rgba(166, 197, 231, 0.4);
+  --focus-ring-strong: rgba(166, 197, 231, 0.5);
+  --modal-backdrop: rgba(0, 0, 0, 0.55);
+  --modal-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --card-shadow: none;
+  --slider-thumb-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  --slider-focus-ring: 0 0 0 3px rgba(166, 197, 231, 0.35);
+  --chart-grid-stroke: rgba(255, 255, 255, 0.06);
+  --chart-crosshair-stroke: rgba(182, 194, 207, 0.35);
+  --chart-marker-shadow: rgba(0, 0, 0, 0.45);
+  --chart-marker-shadow-inutile: rgba(0, 0, 0, 0.3);
+  --chart-marker-core-inutile: #b6c2cf;
+  --heat-accent-fallback: #4bce97;
+  --heat-dot-fallback: #8c9bab;
 }
 
 body {
@@ -45,7 +94,7 @@ body {
   border: 0.5px solid color-mix(in srgb, var(--card-tier-border) var(--card-tier-border-mix), var(--border));
   border-radius: 14px;
   padding: 1.125rem 1.125rem 1.25rem;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.04);
+  box-shadow: var(--card-shadow);
   min-width: 0;
   transition: background 0.25s ease, border-color 0.25s ease;
 }
@@ -115,7 +164,7 @@ body {
 
 .variant-fields-config:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px rgba(0,0,0,0.12);
+  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--focus-ring);
 }
 
 .variant-fields-toggle::-webkit-details-marker {
@@ -133,7 +182,7 @@ body {
 
 .variant-fields-toggle:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px rgba(0,0,0,0.12);
+  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--focus-ring);
 }
 
 .variant-fields-chevron {
@@ -252,7 +301,7 @@ body {
 
 .field-val:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--focus-ring-strong);
 }
 
 .field-slider {
@@ -281,7 +330,7 @@ input.field-range::-webkit-slider-thumb {
   border-radius: 50%;
   background: var(--surface-2);
   border: 1.5px solid var(--border);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  box-shadow: var(--slider-thumb-shadow);
   transition: box-shadow .12s, transform .1s;
 }
 
@@ -292,13 +341,13 @@ input.field-range::-moz-range-thumb {
   border-radius: 50%;
   background: var(--surface-2);
   border: 1.5px solid var(--border);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  box-shadow: var(--slider-thumb-shadow);
   cursor: pointer;
 }
 
 input[type="range"]:focus-visible::-webkit-slider-thumb,
 input.field-range:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px rgba(0,0,0,0.12);
+  box-shadow: var(--slider-focus-ring);
 }
 
 input[type="range"]:active::-webkit-slider-thumb,
@@ -328,7 +377,7 @@ input.field-range:active::-webkit-slider-thumb {
 .help-modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(26, 25, 23, 0.35);
+  background: var(--modal-backdrop);
 }
 
 .help-modal {
@@ -339,7 +388,7 @@ input.field-range:active::-webkit-slider-thumb {
   padding: 1.375rem 1.5rem 1.25rem;
   max-width: 420px;
   width: 100%;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  box-shadow: var(--modal-shadow);
   max-height: 80vh;
   overflow-y: auto;
 }
@@ -481,7 +530,7 @@ input.field-range:active::-webkit-slider-thumb {
 .help-modal-nav:focus-visible,
 .help-modal-close--bottom:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px rgba(0,0,0,0.12);
+  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--focus-ring);
 }
 
 .help-modal-step {
@@ -522,7 +571,7 @@ input.field-range:active::-webkit-slider-thumb {
 
 .help-modal-levels li.is-selectable:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px rgba(0,0,0,0.12);
+  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--focus-ring);
 }
 
 .help-modal-level-label {
@@ -599,7 +648,7 @@ input.field-range:active::-webkit-slider-thumb {
   font-size: 24px;
   font-weight: 500;
   line-height: 1;
-  color: #085041;
+  color: var(--heat-accent-fallback);
   letter-spacing: -0.02em;
 }
 
@@ -609,7 +658,7 @@ input.field-range:active::-webkit-slider-thumb {
   border-radius: 50%;
   flex-shrink: 0;
   align-self: center;
-  background: #9B9890;
+  background: var(--heat-dot-fallback);
 }
 
 .heat-badge-label {
@@ -621,7 +670,7 @@ input.field-range:active::-webkit-slider-thumb {
   font-size: 15px;
   font-weight: 600;
   line-height: 1;
-  color: #085041;
+  color: var(--heat-accent-fallback);
 }
 
 .heat-badge-label .priority-label {
@@ -731,7 +780,7 @@ input.field-range:active::-webkit-slider-thumb {
 
 .calc-graph-toggle:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px rgba(0,0,0,0.12);
+  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--focus-ring);
 }
 
 .calc-graph-chevron {
@@ -877,7 +926,7 @@ input.field-range:active::-webkit-slider-thumb {
 }
 
 .calc-rsm-grid-line {
-  stroke: rgba(0, 0, 0, 0.05);
+  stroke: var(--chart-grid-stroke);
   stroke-width: 0.5;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
@@ -928,14 +977,14 @@ input.field-range:active::-webkit-slider-thumb {
 }
 
 .calc-rsm-crosshair {
-  stroke: rgba(26, 25, 23, 0.35);
+  stroke: var(--chart-crosshair-stroke);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
 }
 
 .calc-rsm-marker-shadow {
-  fill: rgba(0, 0, 0, 0.22);
+  fill: var(--chart-marker-shadow);
   filter: blur(2.5px);
   pointer-events: none;
 }
@@ -976,7 +1025,7 @@ input.field-range:active::-webkit-slider-thumb {
 }
 
 .calc-rsm-marker.is-inutile .calc-rsm-marker-shadow {
-  fill: rgba(0, 0, 0, 0.14);
+  fill: var(--chart-marker-shadow-inutile);
 }
 
 .calc-rsm-marker.is-inutile .calc-rsm-marker-glow {
@@ -984,7 +1033,7 @@ input.field-range:active::-webkit-slider-thumb {
 }
 
 .calc-rsm-marker.is-inutile .calc-rsm-marker-core {
-  fill: #FFFFFF;
+  fill: var(--chart-marker-core-inutile);
   opacity: 0.92;
 }
 

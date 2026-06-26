@@ -64,14 +64,8 @@
 
     TrelloPowerUp.initialize({
 
-      'card-badges': async function(t) {
-        const display = await PriorityTrello.getCardDisplay(t);
-        if (!display) return [];
-        return [{
-          icon: PriorityTrello.tierDotIcon(display.seg),
-          text: PriorityTrello.formatBadgeText(display),
-          monochrome: false,
-        }];
+      'card-badges': function(t) {
+        return PriorityTrello.cardFaceBadgesCapability(t);
       },
 
       'card-detail-badges': async function(t) {
