@@ -6,9 +6,7 @@ This repo publishes static files from the repository root via **GitHub Actions**
 
 1. Open **Settings → Pages → Build and deployment**.
 2. Set **Source** to **GitHub Actions** (not **Deploy from a branch**).
-3. Open **Settings → Secrets and variables → Actions** and add:
-   - **`TRELLO_API_KEY`** — your Power-Up API key (same value as local `appKey` in `trello-api-config.js`). The deploy workflow runs `scripts/write-trello-api-config.js` to create the gitignored config file on the runner before upload. If the secret is missing, deploy still succeeds but card cover color sync is disabled on the live site.
-4. If **Deploy from a branch** stays enabled, GitHub also runs the built-in **`pages build and deployment`** workflow on every push. That competes with this workflow for the single Pages deployment slot and produces errors such as:
+3. If **Deploy from a branch** stays enabled, GitHub also runs the built-in **`pages build and deployment`** workflow on every push. That competes with this workflow for the single Pages deployment slot and produces errors such as:
 
    `Deployment request failed ... due to in progress deployment`
 
@@ -51,5 +49,4 @@ After Pages source is **GitHub Actions** and no deployment is in progress:
 
 - **Concurrency** (`group: pages`, `cancel-in-progress: false`): runs queue so an in-flight Pages deployment can finish.
 - **`build-info.json`** is stamped on the runner before `upload-pages-artifact`; it is **not** committed back to the repo (avoids extra pushes and races with `pages-build-deployment`).
-- **`trello-api-config.js`** is generated on the runner from **`TRELLO_API_KEY`** before upload; it is gitignored and never committed.
 - **`scripts/wait-pages-deployment-slot.sh`** polls the Pages deployments API before `deploy-pages`; failed deploys retry once after another wait.
