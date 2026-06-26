@@ -227,7 +227,8 @@
   function tierDetailBadgeColor(display) {
     if (!display) return 'light-gray';
     // Trello card badges only accept named colors (red, orange, …), not hex.
-    if (display.blocked) return 'red';
+    // pink — distinct from Critique tier (red); Trello badges only accept named colors
+    if (display.blocked) return 'pink';
     if (display.inutile) return 'light-gray';
     var i = display.tierI;
     if (i === 0) return 'red';

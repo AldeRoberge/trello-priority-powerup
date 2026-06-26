@@ -385,18 +385,18 @@
   }
   var BLOCKED_STYLES = {
     label: BLOCKED_LABEL,
-    fill: '#F3E4E4',
+    fill: '#D4A5A5',
     text: '#4A0808',
-    seg: '#6B0F0F',
-    tint: '#6B0F0F',
+    seg: '#8B0000',
+    tint: '#5C1818',
     description: BLOCKED_DESCRIPTION
   };
   var BLOCKED_STYLES_DARK = {
     label: BLOCKED_LABEL,
-    fill: '#2D0F0F',
+    fill: '#3A1515',
     text: '#ffffff',
-    seg: '#8B0000',
-    tint: '#4A1212',
+    seg: '#C05050',
+    tint: '#4A1818',
     description: BLOCKED_DESCRIPTION
   };
 
@@ -1718,10 +1718,17 @@
 
     function paint(result, display) {
       var d = display || resolveDisplay(result, {});
-      var v = tierVisuals(d.inutile ? { inutile: true, label: INUTILE_LABEL } : { i: d.tierI, label: d.label });
+      var visualSource = d.blocked
+        ? { blocked: true, label: BLOCKED_LABEL }
+        : (d.inutile ? { inutile: true, label: INUTILE_LABEL } : { i: d.tierI, label: d.label });
+      var v = tierVisuals(visualSource);
       bnumVal.textContent = formatScore(d.score);
-      dot.classList.remove('is-blocked');
-      dot.style.background = v.seg;
+      dot.classList.toggle('is-blocked', !!d.blocked);
+      if (d.blocked) {
+        dot.style.removeProperty('background');
+      } else {
+        dot.style.background = v.seg;
+      }
       blabel.textContent = classicTierLabel(d);
       badge.style.setProperty('--heat-fill', v.fill);
       badge.style.setProperty('--heat-text', v.text);
@@ -1730,9 +1737,9 @@
       bnum.style.removeProperty('color');
       blabel.style.removeProperty('color');
       badge.classList.toggle('is-inutile', !!d.inutile);
-      badge.classList.remove('is-blocked');
+      badge.classList.toggle('is-blocked', !!d.blocked);
       panel.classList.toggle('is-inutile', !!d.inutile);
-      panel.classList.remove('is-blocked');
+      panel.classList.toggle('is-blocked', !!d.blocked);
       panel.classList.toggle('has-blocked-warning', !!d.blocked);
       blockedWarning.hidden = !d.blocked;
       paintTierDescription(tierDesc, d);
@@ -2564,7 +2571,11 @@
         syncStateFromFields();
         var result = calcFn(state);
         var display = resolveDisplay(result, state);
-        applyCardTierTint(card, display.cardTier);
+        var cardTier = display.cardTier;
+        if (display.blocked) {
+          cardTier = Object.assign({}, cardTier, { blocked: true });
+        }
+        applyCardTierTint(card, cardTier);
         card.classList.toggle('is-inutile', !!display.inutile);
         card.classList.toggle('is-blocked', !!display.blocked);
         card.dataset.tier = display.label;

@@ -30,9 +30,10 @@
   --chart-marker-stroke-inutile: #9B9890;
   --heat-accent-fallback: #085041;
   --heat-dot-fallback: #9B9890;
-  --blocked-accent: #6B0F0F;
+  --blocked-accent: #8B0000;
   --blocked-text: #4A0808;
-  --blocked-fill: #F3E4E4;
+  --blocked-fill: #D4A5A5;
+  --blocked-border: #8B0000;
   --surface-hover: #F7F6F3;
 }
 
@@ -75,9 +76,10 @@ html[data-color-mode="dark"] {
   --chart-marker-stroke-inutile: #738496;
   --heat-accent-fallback: #4bce97;
   --heat-dot-fallback: #ffffff;
-  --blocked-accent: #8B0000;
+  --blocked-accent: #C05050;
   --blocked-text: #ffffff;
-  --blocked-fill: #2D0F0F;
+  --blocked-fill: #3A1515;
+  --blocked-border: #C05050;
   --surface-hover: #a6c5e71f;
 }
 
@@ -148,6 +150,11 @@ body {
   transition: background 0.25s ease, border-color 0.25s ease;
 }
 
+.variant-card.is-blocked {
+  background: color-mix(in srgb, var(--card-tier-tint) var(--card-tier-tint-mix), var(--blocked-fill));
+  border: 2px dotted var(--blocked-border);
+}
+
 .variant-fields {
   margin-top: 0;
   padding-left: 12px;
@@ -198,6 +205,16 @@ body {
 
 .field--en-attente {
   margin-bottom: 0;
+  border: 2px solid transparent;
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.field--en-attente:has(.en-attente-checkbox:checked) {
+  background: var(--blocked-fill);
+  border-color: var(--blocked-border);
+  border-style: dotted;
 }
 
 .en-attente-label {
@@ -738,6 +755,13 @@ body.help-modal-open {
   transition: background 0.25s ease;
 }
 
+.heat-panel.is-blocked {
+  background: color-mix(in srgb, var(--card-tier-tint) var(--card-panel-tint-mix, 20%), var(--blocked-fill));
+  box-shadow: inset 0 0 0 2px var(--blocked-border);
+  outline: 2px dotted var(--blocked-border);
+  outline-offset: -4px;
+}
+
 .heat-blocked-warning {
   position: absolute;
   top: 10px;
@@ -754,7 +778,7 @@ body.help-modal-open {
   letter-spacing: -0.01em;
   color: var(--blocked-text);
   background: var(--blocked-fill);
-  border: 1px solid color-mix(in srgb, var(--blocked-accent) 40%, transparent);
+  border: 2px dotted var(--blocked-border);
   pointer-events: none;
 }
 
@@ -837,6 +861,9 @@ body.help-modal-open {
 
 .heat-badge.is-blocked {
   background: var(--heat-fill, var(--blocked-fill));
+  box-shadow: inset 0 0 0 2px var(--blocked-border);
+  outline: 2px dotted var(--blocked-border);
+  outline-offset: -3px;
 }
 
 .heat-badge.is-blocked .heat-tier-dot {

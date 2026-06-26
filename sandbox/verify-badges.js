@@ -76,6 +76,10 @@ check(
   'blocked complete badge color',
   PT.buildCardFaceBadge(blockedDisplay, true).color === 'green'
 );
+check(
+  'blocked incomplete badge color',
+  PT.buildCardFaceBadge(blockedDisplay, false).color === 'pink'
+);
 
 console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll badge checks passed');
 process.exit(bad ? 1 : 0);
