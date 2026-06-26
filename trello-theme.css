@@ -529,21 +529,19 @@ body.tp-page--priority {
   margin-bottom: 14px;
 }
 
-.tp-page--priority .field-head {
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 2px 6px;
+.tp-page--priority .field-side {
+  width: 36%;
+  min-width: 92px;
+  max-width: 148px;
 }
 
-.tp-page--priority .field-lbl {
-  flex: 1 1 auto;
-  min-width: 0;
+.tp-page--priority .field-content {
+  gap: 5px;
 }
 
 .tp-page--priority .field-val {
   max-width: none;
-  flex: 0 1 auto;
-  margin-left: auto;
+  align-self: flex-start;
   white-space: normal;
   overflow: visible;
   text-overflow: unset;
@@ -639,14 +637,18 @@ html[data-color-mode="dark"] .tp-page--priority {
     grid-row: 3;
   }
 
-  .tp-page--priority .field-head {
+  .tp-page--priority .field {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
+    gap: 6px;
+  }
+
+  .tp-page--priority .field-side {
+    width: auto;
+    max-width: none;
+    padding-top: 0;
   }
 
   .tp-page--priority .field-val {
-    margin-left: 0;
     align-self: stretch;
   }
 

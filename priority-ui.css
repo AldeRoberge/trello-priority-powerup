@@ -208,6 +208,9 @@ body {
 
 /* ── Compact field ── */
 .field {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   margin: 0 0 14px;
 }
 
@@ -215,12 +218,20 @@ body {
   margin-bottom: 0;
 }
 
-.field-head {
+.field-side {
+  flex: 0 0 auto;
+  width: 34%;
+  min-width: 88px;
+  max-width: 132px;
+  padding-top: 2px;
+}
+
+.field-content {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .field-lbl {
@@ -229,11 +240,11 @@ body {
   color: var(--text-primary);
   display: inline-flex;
   align-items: flex-start;
+  flex-wrap: wrap;
   gap: 5px;
   letter-spacing: -0.01em;
   line-height: 1.45;
   min-width: 0;
-  flex: 1 1 auto;
 }
 
 .field-lbl .ti {
@@ -264,7 +275,7 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 50%;
+  max-width: 100%;
   cursor: pointer;
   transition: opacity .12s;
   display: inline-flex;

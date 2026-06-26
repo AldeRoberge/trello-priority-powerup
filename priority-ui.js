@@ -1259,8 +1259,8 @@
     field.className = 'field';
     field.dataset.fieldId = id;
 
-    var head = document.createElement('div');
-    head.className = 'field-head';
+    var side = document.createElement('div');
+    side.className = 'field-side';
 
     var lbl = document.createElement('span');
     lbl.className = 'field-lbl';
@@ -1310,9 +1310,10 @@
       }
     });
 
-    head.appendChild(lbl);
-    head.appendChild(val);
-    field.appendChild(head);
+    side.appendChild(lbl);
+
+    var content = document.createElement('div');
+    content.className = 'field-content';
 
     var sliderWrap = document.createElement('div');
     sliderWrap.className = 'field-slider';
@@ -1334,7 +1335,10 @@
     inputEl.addEventListener('change', handleRangeInput);
 
     sliderWrap.appendChild(inputEl);
-    field.appendChild(sliderWrap);
+    content.appendChild(val);
+    content.appendChild(sliderWrap);
+    field.appendChild(side);
+    field.appendChild(content);
 
     el.appendChild(field);
 
