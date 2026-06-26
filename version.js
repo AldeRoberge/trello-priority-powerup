@@ -1,32 +1,32 @@
 (function (global) {
-  const SMALL_NUMBERS = [
-    'zero', 'one', 'two', 'three', 'four', 'five',
-    'six', 'seven', 'eight', 'nine', 'ten',
-  ];
-
-  const SINGULAR_PHRASES = {
-    hour: 'an hour',
-    minute: 'a minute',
-    second: 'a second',
-    day: 'a day',
-    week: 'a week',
-    month: 'a month',
-    year: 'a year',
+  const SINGULAR_UNITS = {
+    second: 'une seconde',
+    minute: 'une minute',
+    hour: 'une heure',
+    day: 'un jour',
+    week: 'une semaine',
+    month: 'un mois',
+    year: 'une année',
   };
 
-  function toWords(n) {
-    n = Math.abs(Math.round(n));
-    return n <= 10 ? SMALL_NUMBERS[n] : String(n);
-  }
+  const PLURAL_UNITS = {
+    second: 'secondes',
+    minute: 'minutes',
+    hour: 'heures',
+    day: 'jours',
+    week: 'semaines',
+    month: 'mois',
+    year: 'années',
+  };
 
   function unitPhrase(n, unit) {
-    if (n === 1) return SINGULAR_PHRASES[unit] || `one ${unit}`;
-    return `${toWords(n)} ${unit}s`;
+    if (n === 1) return SINGULAR_UNITS[unit] || `un ${unit}`;
+    return `${n} ${PLURAL_UNITS[unit] || `${unit}s`}`;
   }
 
   function formatUtc(iso) {
     const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return 'invalid timestamp';
+    if (Number.isNaN(d.getTime())) return 'horodatage invalide';
     const pad = (v) => String(v).padStart(2, '0');
     return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} `
       + `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} UTC`;
@@ -34,19 +34,16 @@
 
   function relativeAgo(iso) {
     const then = new Date(iso).getTime();
-    if (Number.isNaN(then)) return 'at an unknown time';
+    if (Number.isNaN(then)) return 'à une date inconnue';
 
-    // Positive elapsed = built in the past (UTC-safe; both sides are epoch ms)
     let elapsedSec = Math.round((Date.now() - then) / 1000);
 
-    // Small future skew (viewer clock slightly behind CI) → just now
     if (elapsedSec < 0) {
-      if (elapsedSec > -90) return 'just now';
-      // Larger mismatch: still show "ago" — deploy stamps should never be future
+      if (elapsedSec > -90) return 'à l\'instant';
       elapsedSec = Math.abs(elapsedSec);
     }
 
-    if (elapsedSec < 45) return 'just now';
+    if (elapsedSec < 45) return 'à l\'instant';
 
     const tiers = [
       ['year', 31536000],
@@ -61,15 +58,16 @@
     for (const [unit, size] of tiers) {
       const count = Math.floor(elapsedSec / size);
       if (count >= 1) {
-        return `${unitPhrase(count, unit)} ago`;
+        return `il y a ${unitPhrase(count, unit)}`;
       }
     }
 
-    return 'just now';
+    return 'à l\'instant';
   }
 
   function updatedLabel(iso) {
-    return `Updated ${relativeAgo(iso)}`;
+    const ago = relativeAgo(iso);
+    return ago === 'à l\'instant' ? 'Mis à jour à l\'instant' : `Mis à jour ${ago}`;
   }
 
   async function fetchBuiltAt(url) {

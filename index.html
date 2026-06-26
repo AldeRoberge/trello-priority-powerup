@@ -1,22 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Card Priorities Power-Up</title>
+  <title>Power-Up Priorités des cartes</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./version.js"></script>
+  <script src="./priority-templates.js"></script>
   <link rel="stylesheet" href="./trello-theme.css" />
 </head>
 <body>
   <div id="landing" class="tp-landing" hidden>
     <div class="tp-landing-card">
-      <h1 class="tp-title">Card Priorities</h1>
-      <p class="tp-subtitle">Trello Power-Up</p>
-      <p class="tp-version-label">Deployed version</p>
-      <p class="tp-version-relative" id="versionRelative">Loading…</p>
+      <h1 class="tp-title">Priorités des cartes</h1>
+      <p class="tp-subtitle">Power-Up Trello</p>
+      <p class="tp-version-label">Version déployée</p>
+      <p class="tp-version-relative" id="versionRelative">Chargement…</p>
       <p class="tp-version-utc" id="versionUtc"></p>
-      <p class="tp-landing-note">Timestamp is stamped automatically on every push to <code>main</code>.</p>
+      <p class="tp-landing-note">L'horodatage est appliqué automatiquement à chaque envoi sur <code>main</code>.</p>
     </div>
   </div>
 
@@ -43,7 +44,7 @@
     try {
       builtAt = await BuildVersion.fetchBuiltAt('./build-info.json');
     } catch {
-      document.getElementById('versionRelative').textContent = 'Build info unavailable';
+      document.getElementById('versionRelative').textContent = 'Informations de build indisponibles';
       document.getElementById('versionUtc').textContent = '';
       return;
     }
@@ -55,14 +56,6 @@
   // ── Trello Power-Up connector (hidden iframe) ───────────────────────────
 
   function initPowerUp() {
-    const DEFAULT_PRIORITIES = [
-      { id: 1, label: 'Urgent', color: '#E53E3E' },
-      { id: 2, label: 'High',   color: '#DD6B20' },
-      { id: 3, label: 'Medium', color: '#D69E2E' },
-      { id: 4, label: 'Low',    color: '#38A169' },
-      { id: 5, label: 'None',   color: '#718096' },
-    ];
-
     async function getPriorities(t) {
       const stored = await t.get('board', 'shared', 'priorities');
       return stored || DEFAULT_PRIORITIES;
@@ -70,7 +63,7 @@
 
     function openPriorityPopup(t) {
       return t.popup({
-        title: 'Set Priority',
+        title: 'Définir la priorité',
         url: './popup.html',
         height: 320,
       });
@@ -83,13 +76,17 @@
       return `data:image/svg+xml,${encodeURIComponent(svg)}`;
     }
 
+    async function getCardPriority(t) {
+      const priorityId = await t.get('card', 'shared', 'priority');
+      if (priorityId == null || priorityId === '') return null;
+      const priorities = await getPriorities(t);
+      return priorities.find(x => x.id == priorityId) || null;
+    }
+
     TrelloPowerUp.initialize({
 
       'card-badges': async function(t) {
-        const priorityId = await t.get('card', 'shared', 'priority');
-        if (!priorityId) return [];
-        const priorities = await getPriorities(t);
-        const p = priorities.find(x => x.id === priorityId);
+        const p = await getCardPriority(t);
         if (!p) return [];
         return [{
           icon: priorityDotIcon(p.color),
@@ -99,8 +96,17 @@
       },
 
       'card-detail-badges': async function(t) {
+        const p = await getCardPriority(t);
+        if (!p) {
+          return [{
+            text: 'Définir la priorité',
+            color: 'green',
+            callback: openPriorityPopup,
+          }];
+        }
         return [{
-          text: 'Set Priority',
+          icon: priorityDotIcon(p.color),
+          text: p.label,
           color: 'green',
           callback: openPriorityPopup,
         }];
@@ -108,7 +114,7 @@
 
       'on-enable': function(t) {
         return t.modal({
-          title: 'Card Priorities',
+          title: 'Priorités des cartes',
           url: './welcome.html',
           height: 420,
           fullscreen: false,
@@ -119,12 +125,12 @@
       'board-buttons': function(t) {
         return [{
           icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/settings.svg',
-          text: 'Priority Settings',
+          text: 'Paramètres de priorité',
           callback: function(t) {
             return t.popup({
-              title: 'Priority Settings',
+              title: 'Paramètres de priorité',
               url: './settings.html',
-              height: 420,
+              height: 560,
             });
           },
         }];

@@ -1,35 +1,58 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Priority Settings</title>
+  <title>Paramètres de priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./version.js"></script>
+  <script src="./priority-templates.js"></script>
   <link rel="stylesheet" href="./trello-theme.css" />
 </head>
 <body class="tp-page">
-  <h3 class="tp-heading">Customise priority levels</h3>
-  <div id="rows"></div>
-  <div class="tp-actions">
-    <button class="tp-btn tp-btn--secondary" type="button" id="resetBtn">Reset defaults</button>
-    <button class="tp-btn tp-btn--primary" type="button" id="saveBtn">Save</button>
+  <div class="tp-scheme-bar">
+    <span class="tp-scheme-label">Schéma actif</span>
+    <strong class="tp-scheme-name" id="activeScheme">—</strong>
   </div>
-  <div class="tp-toast" id="toast">Saved</div>
-  <div class="tp-build-info" id="buildInfo">Build: loading…</div>
-  <button type="button" class="tp-link" id="showGuide">View setup guide</button>
+
+  <h3 class="tp-heading">Appliquer un modèle</h3>
+  <div class="tp-template-bar">
+    <select class="tp-input tp-select" id="templateSelect" aria-label="Modèle de priorité"></select>
+    <button class="tp-btn tp-btn--secondary" type="button" id="applyTemplateBtn">Appliquer</button>
+  </div>
+
+  <div class="tp-warning" id="overrideWarning" hidden>
+    <p class="tp-warning-text">Cela remplacera vos libellés actuels.</p>
+    <div class="tp-warning-actions">
+      <button class="tp-btn tp-btn--primary" type="button" id="confirmOverrideBtn">Confirmer</button>
+      <button class="tp-btn tp-btn--secondary" type="button" id="cancelOverrideBtn">Annuler</button>
+    </div>
+  </div>
+
+  <h3 class="tp-heading">Niveaux de priorité</h3>
+  <div id="rows"></div>
+
+  <h3 class="tp-heading">Importer / exporter</h3>
+  <div class="tp-io-bar">
+    <button class="tp-btn tp-btn--secondary" type="button" id="exportBtn">Exporter JSON</button>
+    <button class="tp-btn tp-btn--secondary" type="button" id="importBtn">Importer JSON</button>
+    <input type="file" id="importFile" accept="application/json,.json" hidden />
+  </div>
+
+  <div class="tp-actions">
+    <button class="tp-btn tp-btn--secondary" type="button" id="resetBtn">Réinitialiser</button>
+    <button class="tp-btn tp-btn--primary" type="button" id="saveBtn">Enregistrer</button>
+  </div>
+  <div class="tp-toast" id="toast">Enregistré</div>
+  <div class="tp-error" id="errorToast" hidden></div>
+  <div class="tp-build-info" id="buildInfo">Build : chargement…</div>
+  <button type="button" class="tp-link" id="showGuide">Voir le guide de configuration</button>
 
   <script>
-    const DEFAULT_PRIORITIES = [
-      { id: 1, label: 'Urgent', color: '#E53E3E' },
-      { id: 2, label: 'High',   color: '#DD6B20' },
-      { id: 3, label: 'Medium', color: '#D69E2E' },
-      { id: 4, label: 'Low',    color: '#38A169' },
-      { id: 5, label: 'None',   color: '#718096' },
-    ];
-
     const t = TrelloPowerUp.iframe();
     let priorities = [];
+    let activeScheme = CUSTOM_SCHEME_ID;
+    let pendingOverride = null;
     let buildStampTimer;
 
     function renderBuildInfo(builtAt) {
@@ -45,8 +68,42 @@
         clearInterval(buildStampTimer);
         buildStampTimer = setInterval(() => renderBuildInfo(builtAt), 30_000);
       } catch {
-        el.textContent = 'Build: unavailable';
+        el.textContent = 'Build : indisponible';
       }
+    }
+
+    function schemeDisplayName(schemeId) {
+      if (schemeId === CUSTOM_SCHEME_ID) return 'Personnalisé';
+      return getSchemeDisplayName(schemeId);
+    }
+
+    function updateSchemeDisplay() {
+      document.getElementById('activeScheme').textContent = schemeDisplayName(activeScheme);
+    }
+
+    function markCustom() {
+      if (activeScheme !== CUSTOM_SCHEME_ID) {
+        activeScheme = CUSTOM_SCHEME_ID;
+        updateSchemeDisplay();
+      }
+    }
+
+    function populateTemplateSelect() {
+      const select = document.getElementById('templateSelect');
+      select.innerHTML = '';
+      PRIORITY_TEMPLATES.forEach(template => {
+        const option = document.createElement('option');
+        option.value = template.id;
+        option.textContent = template.name;
+        select.appendChild(option);
+      });
+    }
+
+    function escapeAttr(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;');
     }
 
     function renderRows(data) {
@@ -57,7 +114,7 @@
         row.className = 'tp-row';
         row.innerHTML = `
           <div class="tp-num-badge" style="background:${p.color}" data-badge="${i}">P${p.id}</div>
-          <input class="tp-input" type="text" value="${p.label}" data-label="${i}" maxlength="20" />
+          <input class="tp-input" type="text" value="${escapeAttr(p.label)}" data-label="${i}" maxlength="40" />
           <div class="tp-color-swatch">
             <div class="tp-color-preview" style="background:${p.color}" data-preview="${i}"></div>
             <input type="color" value="${p.color}" data-color="${i}" />
@@ -73,6 +130,7 @@
           priorities[idx].color = hex;
           container.querySelector(`[data-preview="${idx}"]`).style.background = hex;
           container.querySelector(`[data-badge="${idx}"]`).style.background = hex;
+          markCustom();
         });
       });
 
@@ -80,31 +138,131 @@
         input.addEventListener('input', e => {
           const idx = +e.target.dataset.label;
           priorities[idx].label = e.target.value;
+          markCustom();
         });
       });
     }
 
+    function applyPriorities(nextPriorities, schemeId) {
+      priorities = clonePriorities(nextPriorities);
+      activeScheme = schemeId;
+      updateSchemeDisplay();
+      renderRows(priorities);
+      hideOverrideWarning();
+    }
+
+    function showOverrideWarning(action) {
+      pendingOverride = action;
+      document.getElementById('overrideWarning').hidden = false;
+    }
+
+    function hideOverrideWarning() {
+      pendingOverride = null;
+      document.getElementById('overrideWarning').hidden = true;
+    }
+
+    function showError(message) {
+      const el = document.getElementById('errorToast');
+      el.textContent = message;
+      el.hidden = false;
+      clearTimeout(showError._timer);
+      showError._timer = setTimeout(() => { el.hidden = true; }, 4000);
+    }
+
+    function showSavedToast() {
+      const toast = document.getElementById('toast');
+      toast.classList.add('is-visible');
+      setTimeout(() => toast.classList.remove('is-visible'), 2000);
+    }
+
     async function load() {
-      priorities = await t.get('board', 'shared', 'priorities') || JSON.parse(JSON.stringify(DEFAULT_PRIORITIES));
+      const [storedPriorities, storedScheme] = await Promise.all([
+        t.get('board', 'shared', 'priorities'),
+        t.get('board', 'shared', 'priorityScheme'),
+      ]);
+
+      priorities = storedPriorities
+        ? clonePriorities(storedPriorities)
+        : clonePriorities(DEFAULT_PRIORITIES);
+
+      activeScheme = storedScheme || detectScheme(priorities);
+
+      populateTemplateSelect();
+      updateSchemeDisplay();
       renderRows(priorities);
       loadBuildInfo();
     }
 
-    document.getElementById('saveBtn').addEventListener('click', async () => {
-      await t.set('board', 'shared', 'priorities', priorities);
-      const toast = document.getElementById('toast');
-      toast.classList.add('is-visible');
-      setTimeout(() => toast.classList.remove('is-visible'), 2000);
+    document.getElementById('applyTemplateBtn').addEventListener('click', () => {
+      const templateId = document.getElementById('templateSelect').value;
+      const template = getTemplateById(templateId);
+      if (!template) return;
+      showOverrideWarning(() => applyPriorities(template.priorities, template.id));
     });
 
     document.getElementById('resetBtn').addEventListener('click', () => {
-      priorities = JSON.parse(JSON.stringify(DEFAULT_PRIORITIES));
-      renderRows(priorities);
+      showOverrideWarning(() => applyPriorities(DEFAULT_PRIORITIES, CUSTOM_SCHEME_ID));
+    });
+
+    document.getElementById('confirmOverrideBtn').addEventListener('click', () => {
+      if (pendingOverride) pendingOverride();
+    });
+
+    document.getElementById('cancelOverrideBtn').addEventListener('click', hideOverrideWarning);
+
+    document.getElementById('saveBtn').addEventListener('click', async () => {
+      const err = validatePriorities(priorities);
+      if (err) {
+        showError(err);
+        return;
+      }
+      await Promise.all([
+        t.set('board', 'shared', 'priorities', priorities),
+        t.set('board', 'shared', 'priorityScheme', activeScheme),
+      ]);
+      showSavedToast();
+    });
+
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const payload = buildExportPayload(priorities, activeScheme);
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'card-priorities-theme.json';
+      link.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('importBtn').addEventListener('click', () => {
+      document.getElementById('importFile').click();
+    });
+
+    document.getElementById('importFile').addEventListener('change', async e => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+
+      let text;
+      try {
+        text = await file.text();
+      } catch {
+        showError('Impossible de lire le fichier sélectionné.');
+        return;
+      }
+
+      const result = parseImportFile(text);
+      if (result.error) {
+        showError(result.error);
+        return;
+      }
+
+      showOverrideWarning(() => applyPriorities(result.priorities, result.schemeId));
     });
 
     document.getElementById('showGuide').addEventListener('click', () => {
       t.modal({
-        title: 'Card Priorities',
+        title: 'Priorités des cartes',
         url: './welcome.html',
         height: 420,
         fullscreen: false,
