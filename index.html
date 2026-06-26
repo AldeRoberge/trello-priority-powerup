@@ -76,6 +76,22 @@
       return `data:image/svg+xml,${encodeURIComponent(svg)}`;
     }
 
+    function priorityBadgeColor(hex) {
+      const map = {
+        '#E53E3E': 'red',    '#C53030': 'red',
+        '#DD6B20': 'orange', '#C05621': 'orange',
+        '#D69E2E': 'yellow', '#B7791F': 'yellow',
+        '#38A169': 'green',  '#276749': 'green',
+        '#3182CE': 'blue',   '#2B6CB0': 'blue',
+        '#805AD5': 'purple', '#6B46C1': 'purple',
+        '#D53F8C': 'pink',   '#B83280': 'pink',
+        '#0BC5EA': 'sky',    '#00B5D8': 'sky',
+        '#68D391': 'lime',
+        '#718096': 'light-gray',
+      };
+      return map[hex] || 'light-gray';
+    }
+
     async function getCardPriority(t) {
       const priorityId = await t.get('card', 'shared', 'priority');
       if (priorityId == null || priorityId === '') return null;
@@ -105,9 +121,8 @@
           }];
         }
         return [{
-          icon: priorityDotIcon(p.color),
           text: p.label,
-          color: 'green',
+          color: priorityBadgeColor(p.color),
           callback: openPriorityPopup,
         }];
       },

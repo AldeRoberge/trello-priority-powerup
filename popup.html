@@ -29,7 +29,7 @@
       priorities.forEach(p => {
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'tp-list-item' + (currentPriority === p.id ? ' is-active' : '');
+        btn.className = 'tp-list-item' + (currentPriority == p.id ? ' is-active' : '');
         btn.innerHTML = `
           <span class="tp-dot" style="background:${p.color};"></span>
           <span>${p.label}</span>
