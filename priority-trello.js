@@ -66,12 +66,6 @@
     };
   }
 
-  function formatScore(score) {
-    return Math.abs(score - Math.round(score)) < 0.01
-      ? String(Math.round(score))
-      : score.toFixed(1);
-  }
-
   async function getCardInputs(t) {
     var stored = await t.get('card', 'shared', CARD_PRIORITY_KEY);
     var normalized = normalizeInputs(stored);
@@ -96,9 +90,11 @@
     return computeDisplay(inputs);
   }
 
+  var BADGE_DOT = '\u25CF';
+
   function formatBadgeText(display) {
     if (!display) return '';
-    return formatScore(display.score) + ' · ' + display.label;
+    return BADGE_DOT + ' ' + display.label;
   }
 
   function tierDetailBadgeColor(display) {
@@ -110,13 +106,6 @@
     if (i === 4) return 'sky';
     if (i === 5) return 'blue';
     return 'light-gray';
-  }
-
-  function tierDotIcon(hex) {
-    var safe = /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : '#9B9890';
-    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10">'
-      + '<circle cx="5" cy="5" r="4.5" fill="' + safe + '"/></svg>';
-    return 'data:image/svg+xml,' + encodeURIComponent(svg);
   }
 
   function buildCardFaceBadge(display) {
@@ -163,7 +152,6 @@
     getCardDisplay: getCardDisplay,
     formatBadgeText: formatBadgeText,
     tierDetailBadgeColor: tierDetailBadgeColor,
-    tierDotIcon: tierDotIcon,
     buildCardFaceBadge: buildCardFaceBadge,
     cardFaceBadges: cardFaceBadges,
     saveCardInputs: saveCardInputs,

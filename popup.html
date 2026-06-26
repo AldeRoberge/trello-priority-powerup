@@ -40,6 +40,17 @@
       saveTimer = setTimeout(flushSave, 250);
     }
 
+    function resizePopup() {
+      t.sizeTo('.tp-page--priority');
+    }
+
+    function bindResizeHooks() {
+      var fieldsCollapse = mountEl.querySelector('.variant-fields-collapse');
+      if (fieldsCollapse) {
+        fieldsCollapse.addEventListener('toggle', resizePopup);
+      }
+    }
+
     async function init() {
       const inputs = await PriorityTrello.getCardInputs(t);
 
@@ -54,7 +65,9 @@
         onStateChange: scheduleSave,
       });
 
+      bindResizeHooks();
       window.scrollTo(0, 0);
+      resizePopup();
     }
 
     window.addEventListener('pagehide', function () {
@@ -65,7 +78,7 @@
       clearTimeout(saveTimer);
       pendingState = null;
       await PriorityTrello.clearCardPriority(t);
-      t.closeModal();
+      t.closePopup();
     });
 
     init().catch(function (err) {

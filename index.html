@@ -54,29 +54,17 @@
 
   function initPowerUp() {
     function openPriorityPopup(t) {
-      return t.modal({
+      return t.popup({
         title: 'Définir la priorité',
         url: './popup.html',
         height: 520,
-        fullscreen: true,
-        accentColor: '#0C66E4',
       });
     }
 
     TrelloPowerUp.initialize({
 
       'card-badges': function (t) {
-        return PriorityTrello.getCardDisplay(t)
-          .then(function (display) {
-            if (!display) return [];
-            return [{
-              text: PriorityTrello.formatBadgeText(display),
-              color: PriorityTrello.tierDetailBadgeColor(display),
-            }];
-          })
-          .catch(function () {
-            return [];
-          });
+        return PriorityTrello.cardFaceBadges(t);
       },
 
       'card-detail-badges': async function(t) {
@@ -88,9 +76,10 @@
             callback: openPriorityPopup,
           }];
         }
+        const badge = PriorityTrello.buildCardFaceBadge(display);
         return [{
-          text: PriorityTrello.formatBadgeText(display),
-          color: PriorityTrello.tierDetailBadgeColor(display),
+          text: badge.text,
+          color: badge.color,
           callback: openPriorityPopup,
         }];
       },
