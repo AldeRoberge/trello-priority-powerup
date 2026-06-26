@@ -2272,8 +2272,8 @@
       ? variantConfig.loadState(defaultState)
       : loadSliderValues(defaultState, variantConfig.dimensions);
 
-    function persistSliderState() {
-      syncStateFromFields();
+    function persistSliderState(skipFieldSync) {
+      if (!skipFieldSync) syncStateFromFields();
       if (typeof variantConfig.onStateChange === 'function') {
         variantConfig.onStateChange(state);
       } else {
@@ -2319,7 +2319,7 @@
       keys.forEach(function (key) {
         state[key] = targets[key];
       });
-      persistSliderState();
+      persistSliderState(true);
 
       var startTime = null;
       function step(ts) {
