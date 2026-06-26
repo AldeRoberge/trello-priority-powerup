@@ -364,10 +364,15 @@
     description: INUTILE_STYLES.description
   };
 
-  var BLOCKED_LABEL = 'Blocked';
-  var BLOCKED_DISPLAY = '\uD83D\uDEAB ' + BLOCKED_LABEL;
+  var BLOCKED_SYMBOL = '\u2298'; // ⊘
+  var BLOCKED_LABEL = 'Bloqu\u00e9';
+  var BLOCKED_DISPLAY = BLOCKED_SYMBOL + ' ' + BLOCKED_LABEL;
   var BLOCKED_DESCRIPTION =
-    'T\u00e2che bloqu\u00e9 en attente de quelqu\'un, d\'une autre t\u00e2che, d\'un approbation, de mat\u00e9riel, etc.';
+    'T\u00e2che bloqu\u00e9e en attente de quelqu\'un, d\'une autre t\u00e2che, d\'un approbation, de mat\u00e9riel, etc.';
+
+  function formatBlockedBadgeText() {
+    return BLOCKED_DISPLAY;
+  }
 
   function isDarkTheme() {
     return document.documentElement.getAttribute('data-color-mode') === 'dark';
@@ -428,7 +433,6 @@
     if (!display || !isEnAttente(inputs)) return display;
     return Object.assign({}, display, {
       blocked: true,
-      label: BLOCKED_DISPLAY,
       description: BLOCKED_DESCRIPTION
     });
   }
@@ -481,7 +485,7 @@
 
   function classicTierLabel(display) {
     if (!display) return '';
-    if (display.blocked) return BLOCKED_LABEL;
+    if (display.blocked) return formatBlockedBadgeText();
     return display.tierLabel || display.label || '';
   }
 
@@ -512,6 +516,12 @@
       var inutileDesc = INUTILE_STYLES.description || '';
       el.textContent = inutileDesc;
       el.hidden = !inutileDesc;
+      return;
+    }
+    if (display.blocked) {
+      el.textContent = BLOCKED_DESCRIPTION;
+      el.hidden = !BLOCKED_DESCRIPTION;
+      el.style.removeProperty('color');
       return;
     }
     if (display.matrixLabel) {
@@ -1607,7 +1617,7 @@
       } else {
         dot.style.background = v.seg;
       }
-      blabel.textContent = d.blocked ? BLOCKED_DISPLAY : classicTierLabel(d);
+      blabel.textContent = classicTierLabel(d);
       badge.style.setProperty('--heat-fill', v.fill);
       badge.style.setProperty('--heat-text', v.text);
       panel.style.setProperty('--heat-text', v.text);
@@ -2649,9 +2659,11 @@
     INUTILE_EPS: INUTILE_EPS,
     INUTILE_LABEL: INUTILE_LABEL,
     INUTILE_STYLES: INUTILE_STYLES,
+    BLOCKED_SYMBOL: BLOCKED_SYMBOL,
     BLOCKED_LABEL: BLOCKED_LABEL,
     BLOCKED_DISPLAY: BLOCKED_DISPLAY,
     BLOCKED_DESCRIPTION: BLOCKED_DESCRIPTION,
+    formatBlockedBadgeText: formatBlockedBadgeText,
     wordFor: wordFor,
     wordHtmlFor: wordHtmlFor,
     levelIconSvg: levelIconSvg,

@@ -243,11 +243,6 @@
   async function saveCardInputs(t, inputs) {
     var normalized = normalizeInputs(inputs);
     if (!normalized) return;
-    if (inputs && inputs.enAttente === true) {
-      normalized.enAttente = true;
-    } else {
-      delete normalized.enAttente;
-    }
     await t.set('card', 'shared', CARD_PRIORITY_KEY, normalized);
   }
 
