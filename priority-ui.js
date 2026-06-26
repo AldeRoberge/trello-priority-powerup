@@ -997,11 +997,15 @@
     modalRoot.innerHTML =
       '<div class="help-modal-backdrop" data-close></div>' +
       '<div class="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-modal-title">' +
-        '<button type="button" class="help-modal-close help-modal-close--top" aria-label="Fermer">&times;</button>' +
-        '<h3 class="help-modal-title" id="help-modal-title"></h3>' +
-        '<blockquote class="help-modal-quote" hidden></blockquote>' +
-        '<ol class="help-modal-levels"></ol>' +
-        '<div class="help-modal-body"></div>' +
+        '<header class="help-modal-header">' +
+          '<button type="button" class="help-modal-close help-modal-close--top" aria-label="Fermer">&times;</button>' +
+          '<h3 class="help-modal-title" id="help-modal-title"></h3>' +
+          '<blockquote class="help-modal-quote" hidden></blockquote>' +
+        '</header>' +
+        '<div class="help-modal-content">' +
+          '<ol class="help-modal-levels"></ol>' +
+          '<div class="help-modal-body"></div>' +
+        '</div>' +
         '<footer class="help-modal-footer">' +
           '<div class="help-modal-wizard-nav" hidden>' +
             '<button type="button" class="help-modal-nav help-modal-prev">Précédent</button>' +
@@ -1025,14 +1029,14 @@
 
   function scrollHelpModalLevelIntoView(listItem) {
     if (!listItem || !modalRoot) return;
-    var modal = modalRoot.querySelector('.help-modal');
-    if (!modal) return;
-    var modalRect = modal.getBoundingClientRect();
+    var content = modalRoot.querySelector('.help-modal-content');
+    if (!content) return;
+    var contentRect = content.getBoundingClientRect();
     var elRect = listItem.getBoundingClientRect();
-    if (elRect.top < modalRect.top) {
-      modal.scrollTop -= modalRect.top - elRect.top;
-    } else if (elRect.bottom > modalRect.bottom) {
-      modal.scrollTop += elRect.bottom - modalRect.bottom;
+    if (elRect.top < contentRect.top) {
+      content.scrollTop -= contentRect.top - elRect.top;
+    } else if (elRect.bottom > contentRect.bottom) {
+      content.scrollTop += elRect.bottom - contentRect.bottom;
     }
   }
 
@@ -1168,6 +1172,9 @@
     if (modalEl) {
       modalEl.classList.toggle('help-modal--wizard', !!(config.wizard && config.wizard.total > 1));
     }
+
+    var contentEl = root.querySelector('.help-modal-content');
+    if (contentEl) contentEl.scrollTop = 0;
 
     root.classList.add('open');
     document.body.classList.add('help-modal-open');
@@ -2314,7 +2321,7 @@
       });
     });
 
-    var configBtn = fieldsSummary.querySelector('.variant-fields-config');
+    var configBtn = fieldsHeader.querySelector('.variant-fields-config');
     if (configBtn) {
       configBtn.addEventListener('click', function (e) {
         e.preventDefault();
@@ -2329,9 +2336,6 @@
             cancelSliderAnim();
             repaint();
             persistSliderState();
-          },
-          onComplete: function () {
-            fieldsCollapse.open = true;
           }
         });
       });
@@ -2339,7 +2343,7 @@
 
     if (showCalcGraph) {
       calcGraph = createCalcGraphPanel({
-        el: fieldsCollapse,
+        el: fieldsSection,
         fields: fields,
         onChange: function () {
           cancelSliderAnim();

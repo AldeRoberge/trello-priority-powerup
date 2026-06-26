@@ -138,36 +138,33 @@ body {
   padding-right: 12px;
 }
 
-/* ── Collapsible slider fields ── */
-.variant-fields-collapse {
+/* ── Criteria fields section ── */
+.variant-fields-section {
   margin-top: 14px;
 }
 
-.variant-fields-toggle {
+.variant-fields-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
   gap: 8px;
-  padding: 8px 14px;
-  border: none;
-  background: transparent;
+  padding: 8px 14px 4px;
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
-  cursor: pointer;
-  text-align: left;
-  border-radius: 6px;
-  list-style: none;
-  transition: color .1s, background .1s;
 }
 
-.variant-fields-toggle-left {
+.variant-fields-header-left {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+
+.variant-fields-header-label {
+  font-weight: 500;
 }
 
 .variant-fields-config {
@@ -200,45 +197,11 @@ body {
   box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--focus-ring);
 }
 
-.variant-fields-toggle::-webkit-details-marker {
-  display: none;
-}
-
-.variant-fields-toggle::marker {
-  content: '';
-}
-
-.variant-fields-toggle:hover {
-  color: var(--text-primary);
-  background: var(--surface-1);
-}
-
-.variant-fields-toggle:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--focus-ring);
-}
-
-.variant-fields-chevron {
-  width: 8px;
-  height: 8px;
-  border-right: 1.5px solid var(--text-muted);
-  border-bottom: 1.5px solid var(--text-muted);
-  transform: rotate(45deg);
-  transition: transform .15s;
-  flex-shrink: 0;
-  margin-right: 4px;
-}
-
-.variant-fields-collapse[open] > .variant-fields-toggle .variant-fields-chevron {
-  transform: rotate(-135deg);
-  margin-top: 4px;
-}
-
-.variant-fields-collapse[open] > .variant-fields {
+.variant-fields-section > .variant-fields {
   padding-top: 4px;
 }
 
-.variant-fields-collapse > .calc-graph-panel {
+.variant-fields-section > .calc-graph-panel {
   margin-top: 10px;
   padding: 10px 12px 2px;
 }
@@ -416,16 +379,36 @@ body.help-modal-open {
 
 .help-modal {
   position: relative;
+  display: flex;
+  flex-direction: column;
   background: var(--surface-2);
   border: 0.5px solid var(--border);
   border-radius: 12px;
-  padding: 1.375rem 1.5rem 1.25rem;
   max-width: 420px;
   width: 100%;
-  box-shadow: var(--modal-shadow);
   max-height: 80vh;
-  overflow-y: auto;
+  overflow: hidden;
+  box-shadow: var(--modal-shadow);
   color: var(--text-primary);
+}
+
+.help-modal-header {
+  position: relative;
+  flex-shrink: 0;
+  padding: 1.375rem 1.5rem 0;
+}
+
+.help-modal-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 1.5rem;
+}
+
+.help-modal.help-modal--wizard {
+  max-width: 560px;
+  max-height: 88vh;
+  min-height: 420px;
 }
 
 .help-modal-close {
@@ -525,8 +508,9 @@ body.help-modal-open {
 }
 
 .help-modal-footer {
-  margin-top: 16px;
-  padding-top: 14px;
+  flex-shrink: 0;
+  margin-top: 0;
+  padding: 14px 1.5rem 1.25rem;
   border-top: 0.5px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -778,49 +762,8 @@ body.help-modal-open {
 }
 
 /* ── Calc graph panel ── */
-.calc-graph-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  gap: 8px;
-  padding: 8px 14px;
-  border: none;
-  background: transparent;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  cursor: pointer;
-  text-align: left;
-  border-radius: 6px;
-  transition: color .1s, background .1s;
-}
-
-.calc-graph-toggle:hover {
-  color: var(--text-primary);
-  background: var(--surface-1);
-}
-
-.calc-graph-toggle:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--focus-ring);
-}
-
-.calc-graph-chevron {
-  width: 8px;
-  height: 8px;
-  border-right: 1.5px solid var(--text-muted);
-  border-bottom: 1.5px solid var(--text-muted);
-  transform: rotate(45deg);
-  transition: transform .15s;
-  flex-shrink: 0;
-  margin-right: 4px;
-}
-
-.calc-graph-panel.open .calc-graph-chevron {
-  transform: rotate(-135deg);
-  margin-top: 4px;
+.calc-graph-panel {
+  padding-top: 2px;
 }
 
 .calc-graph-body {
@@ -842,6 +785,7 @@ body.help-modal-open {
   letter-spacing: 0.02em;
   text-transform: uppercase;
   margin-bottom: 8px;
+  padding: 0 14px;
 }
 
 /* ── Response surface (RSM) priority chart ── */
@@ -862,7 +806,7 @@ body.help-modal-open {
   align-items: stretch;
   gap: 6px;
   width: 100%;
-  max-width: 340px;
+  max-width: 260px;
   margin: 0 auto;
 }
 
@@ -870,7 +814,7 @@ body.help-modal-open {
   position: relative;
   flex: 1 1 auto;
   min-width: 0;
-  max-width: 300px;
+  max-width: 220px;
   aspect-ratio: 300 / 248;
   touch-action: none;
   overflow: hidden;

@@ -93,7 +93,7 @@
     {
       id: 'strategic-bet',
       label: 'Pari stratégique',
-      description: 'Fort impact, effort conséquent, calendrier souple. À planifier et protéger des urgences du jour.',
+      description: 'Fort impact, effort conséquent, sans urgence immédiate. À planifier et protéger des urgences.',
       priority: 85,
       when: { ease: ['veryLow', 'low'], impact: ['high', 'veryHigh'], urgency: ['veryLow', 'low', 'mid'] }
     },
@@ -155,24 +155,66 @@
     },
     {
       id: 'deadline-exigeante',
-      label: 'PiÃ¨ge Ã  temps',
-      description: 'Semble prioritaire, coÃ»te cher pour un gain moyen. Cadrer le scope ou renÃ©gocier la deadline.',
+      label: 'Sous pression',
+      description: 'Enjeu moyen, effort soutenu, urgence réelle. Protéger le scope et livrer l\'essentiel avec sérénité.',
       priority: 83,
       when: { ease: ['veryLow', 'low'], impact: ['mid'], urgency: ['high', 'veryHigh'] }
     },
     {
       id: 'pression-moderee',
       label: 'Pression modérée',
-      description: 'Enjeu moyen, rythme soutenu, urgence réelle. Prioriser la clôture, la perfection peut attendre.',
+      description: 'Enjeu moyen, rythme soutenu, urgence réelle. Prioriser la clôture, sans viser la perfection.',
       priority: 81,
       when: { ease: ['mid'], impact: ['mid'], urgency: ['high', 'veryHigh'] }
     },
     {
       id: 'travail-de-fond',
       label: 'Travail de fond',
-      description: 'Refactors, dette d\'organisation ou stabilisation technique. Effort lourd, impact moyen Ã  fort, sans Ã©chÃ©ance proche.',
+      description: 'Refactors, dette d\'organisation ou stabilisation technique. Effort lourd, impact moyen Ã  fort, sans urgence.',
       priority: 82,
-      when: { ease: ['veryLow', 'low'], impact: ['mid', 'high'], urgency: ['veryLow', 'low', 'mid'] }
+      when: { ease: ['veryLow', 'low'], impact: ['mid', 'high'], urgency: ['veryLow', 'low', 'mid', 'high', 'veryHigh'] }
+    },
+    {
+      id: 'sans-urgence-retour',
+      label: 'En veille',
+      description: 'Effort élevé pour une valeur limitée, sans urgence. Repousser jusqu\'à ce qu\'un levier change.',
+      priority: 83,
+      when: { ease: ['veryLow'], impact: ['veryLow'], urgency: ['veryLow'] }
+    },
+    {
+      id: 'remettre-en-rayon',
+      label: 'Pour plus tard',
+      description: 'Retour modeste, sans urgence, coût élevé. Garder visible sans lancer tout de suite.',
+      priority: 83,
+      when: { ease: ['veryLow'], impact: ['low'], urgency: ['veryLow'] }
+    },
+    {
+      id: 'attente-contexte',
+      label: 'Contexte manquant',
+      description: 'Impact modeste pour l\'investissement demandé. Repousser jusqu\'à un changement de contexte ou de priorité.',
+      priority: 83,
+      when: { ease: ['veryLow'], impact: ['mid'], urgency: ['veryLow'] }
+    },
+    {
+      id: 'bruit-fond-lourd',
+      label: 'Chantier en veille',
+      description: 'Sujet exigeant à retour limité, sans échéance. Laisser dormir plutôt que mobiliser l\'équipe maintenant.',
+      priority: 83,
+      when: { ease: ['veryLow'], impact: ['veryLow'], urgency: ['low'] }
+    },
+    {
+      id: 'effort-peu-retour',
+      label: 'Investissement lourd',
+      description: 'Coût élevé pour un bénéfice modeste, sans urgence. À revisiter quand une meilleure fenêtre s\'ouvrira.',
+      priority: 83,
+      when: { ease: ['veryLow'], impact: ['low'], urgency: ['low'] }
+    },
+    {
+      id: 'projet-sommeil',
+      label: 'Projet en pause',
+      description: 'Volume important, impact moyen, aucune pression. Mettre en pause et revisiter quand les conditions auront changé.',
+      priority: 83,
+      when: { ease: ['veryLow'], impact: ['mid'], urgency: ['low'] }
     },
     {
       id: 'fondation',
@@ -184,7 +226,7 @@
     {
       id: 'derapage-cache',
       label: 'Point d\'attention',
-      description: 'Fort impact, urgence qui monte, effort encore gérable. Un coup d\'œil régulier évite la course de dernière minute.',
+      description: 'Fort impact, urgence qui monte, effort encore gérable. Un suivi régulier évite un basculement en chemin critique.',
       priority: 80,
       when: { ease: ['mid'], impact: ['high', 'veryHigh'], urgency: ['mid'] }
     },
@@ -212,7 +254,7 @@
     {
       id: 'fausse-priorite',
       label: 'Urgence modérée',
-      description: 'Deadline serrée, retour modeste, effort non négligeable. Traiter l\'essentiel puis repasser à des sujets à plus fort levier.',
+      description: 'Urgence élevée, retour modeste, effort non négligeable. Traiter l\'essentiel puis repasser à des sujets à plus fort levier.',
       priority: 76,
       when: { ease: ['low', 'mid'], impact: ['low', 'mid'], urgency: ['high', 'veryHigh'] }
     },
@@ -226,7 +268,7 @@
     {
       id: 'marathon',
       label: 'Marathon',
-      description: 'Long et exigeant, valeur moyenne, pas de deadline proche. Ã€ Ã©taler, pas Ã  forcer d\'un bloc.',
+      description: 'Long et exigeant, valeur moyenne, sans urgence. Ã€ Ã©taler, pas Ã  forcer d\'un bloc.',
       priority: 74,
       when: { ease: ['veryLow', 'low'], impact: ['mid'], urgency: ['veryLow', 'low'] }
     },

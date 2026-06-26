@@ -28,7 +28,7 @@ check('Victoire rapide', { ease: 5, impact: 3, urgency: 1 }, 'Victoire rapide');
 check('Chemin critique', { ease: 1, impact: 4, urgency: 4 }, 'Chemin critique');
 
 console.log('\n=== New matrix rules ===');
-check('Accélérateur', { ease: 3.5, impact: 4, urgency: 4 }, 'Accélérateur');
+check('Accélérateur', { ease: 3, impact: 4, urgency: 4 }, 'Accélérateur');
 check('Coup de pouce', { ease: 5, impact: 2, urgency: 4 }, 'Coup de pouce');
 check('À arbitrer', { ease: 3, impact: 2, urgency: 2 }, 'À arbitrer');
 check('Piste exploratoire', { ease: 3, impact: 2, urgency: 1 }, 'Piste exploratoire');
