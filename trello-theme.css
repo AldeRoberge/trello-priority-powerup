@@ -530,6 +530,21 @@ body.tp-page--priority {
   margin-bottom: 10px;
 }
 
+.tp-api-banner {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--tp-border-strong);
+  background: var(--tp-surface-subtle);
+  color: var(--tp-danger-text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.tp-api-banner code {
+  font-size: 12px;
+}
+
 .tp-page--priority .variant-blocked-section {
   margin-top: 12px;
   padding: 12px 10px 0;
