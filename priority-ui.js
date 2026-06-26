@@ -353,6 +353,17 @@
     }
   ];
 
+  // Dark-mode tier fills/tints — muted surfaces with light accent text (Trello dark palette).
+  var TIERS_DARK = [
+    { i: 0, fill: '#3d2220', text: '#fd9891', seg: '#e2483d', tint: '#4a2320' },
+    { i: 1, fill: '#3d2718', text: '#fea362', seg: '#f8692a', tint: '#4a2d15' },
+    { i: 2, fill: '#3d3012', text: '#f5cd47', seg: '#cf9f02', tint: '#4a3810' },
+    { i: 3, fill: '#263920', text: '#94c748', seg: '#6aad34', tint: '#2a4018' },
+    { i: 4, fill: '#1e3330', text: '#79f2c5', seg: '#37b4a0', tint: '#1a3835' },
+    { i: 5, fill: '#1a2a3d', text: '#85b8ff', seg: '#519fe8', tint: '#182638' },
+    { i: 6, fill: '#282e33', text: '#9fadbc', seg: '#8c9bab', tint: '#282e33' }
+  ];
+
   var HEAT_SEGMENTS = [
     {
       i: 6, target: 0.7, color: '#9B9890', label: 'Optionnel', description: TIERS[6].description,
@@ -402,8 +413,42 @@
     fill: '#F1EFE8',
     text: '#9B9890',
     seg: '#9B9890',
+    tint: '#F1EFE8',
     description: 'Sans valeur ni urgence. Trop complexe ou impossible à réaliser.'
   };
+
+  var INUTILE_STYLES_DARK = {
+    label: INUTILE_LABEL,
+    fill: '#282e33',
+    text: '#8c9bab',
+    seg: '#6b7785',
+    tint: '#282e33',
+    description: INUTILE_STYLES.description
+  };
+
+  function isDarkTheme() {
+    return document.documentElement.getAttribute('data-color-mode') === 'dark';
+  }
+
+  function readCssVar(name, fallback) {
+    var value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return value || fallback || '';
+  }
+
+  function tierVisuals(source) {
+    var inutile = source && (source.inutile || source.label === INUTILE_LABEL);
+    if (inutile) {
+      var idle = isDarkTheme() ? INUTILE_STYLES_DARK : INUTILE_STYLES;
+      return { fill: idle.fill, text: idle.text, seg: idle.seg, tint: idle.tint };
+    }
+    var i = source && source.i != null ? source.i : 6;
+    if (isDarkTheme()) {
+      var dark = TIERS_DARK[i] || TIERS_DARK[6];
+      return { fill: dark.fill, text: dark.text, seg: dark.seg, tint: dark.tint };
+    }
+    var light = TIERS[i] || TIERS[6];
+    return { fill: light.fill, text: light.text, seg: light.seg, tint: light.fill };
+  }
 
   // ── 4. Display resolution (tier labels) ─────────────────────────────────
 
@@ -509,11 +554,28 @@
     inutile: { bg: 8, border: 22, panel: 82 } // Inutile — muted gray matching badge
   };
 
-  function applyCardTierTint(cardEl, tier) {
+  var TIER_SURFACE_MIX_DARK = {
+    0: { bg: 32, border: 42, panel: 24 },
+    1: { bg: 30, border: 40, panel: 22 },
+    2: { bg: 26, border: 36, panel: 18 },
+    3: { bg: 22, border: 32, panel: 14 },
+    4: { bg: 18, border: 28, panel: 12 },
+    5: { bg: 14, border: 24, panel: 10 },
+    6: { bg: 8, border: 18, panel: 8 },
+    inutile: { bg: 8, border: 20, panel: 12 }
+  };
+
+  function surfaceMixFor(tier) {
     var mixKey = tier.inutile ? 'inutile' : tier.i;
-    var mix = TIER_SURFACE_MIX[mixKey] || TIER_SURFACE_MIX[6];
-    cardEl.style.setProperty('--card-tier-tint', tier.fill);
-    cardEl.style.setProperty('--card-tier-border', tier.seg);
+    var table = isDarkTheme() ? TIER_SURFACE_MIX_DARK : TIER_SURFACE_MIX;
+    return table[mixKey] || table[6];
+  }
+
+  function applyCardTierTint(cardEl, tier) {
+    var visuals = tierVisuals(tier);
+    var mix = surfaceMixFor(tier);
+    cardEl.style.setProperty('--card-tier-tint', visuals.tint);
+    cardEl.style.setProperty('--card-tier-border', visuals.seg);
     cardEl.style.setProperty('--card-tier-tint-mix', mix.bg + '%');
     cardEl.style.setProperty('--card-tier-border-mix', mix.border + '%');
     cardEl.style.setProperty('--card-panel-tint-mix', mix.panel + '%');
@@ -521,7 +583,7 @@
 
     var panel = cardEl.querySelector('.heat-panel');
     if (panel) {
-      panel.style.setProperty('--card-tier-tint', tier.fill);
+      panel.style.setProperty('--card-tier-tint', visuals.tint);
       panel.style.setProperty('--card-panel-tint-mix', mix.panel + '%');
     }
   }
@@ -1390,18 +1452,21 @@
 
     function paint(result, display) {
       var d = display || resolveDisplay(result, {});
+      var v = tierVisuals(d.inutile ? { inutile: true, label: INUTILE_LABEL } : { i: d.tierI, label: d.label });
       bnumVal.textContent = formatScore(d.score);
-      dot.style.background = d.seg;
+      dot.style.background = v.seg;
       blabel.innerHTML = priorityLabelHtmlFor(d.label, priorityIconIdForDisplay(d));
-      badge.style.background = d.fill;
-      bnum.style.color = d.text;
-      blabel.style.color = d.text;
+      badge.style.setProperty('--heat-fill', v.fill);
+      badge.style.setProperty('--heat-text', v.text);
+      badge.style.removeProperty('background');
+      bnum.style.removeProperty('color');
+      blabel.style.removeProperty('color');
       badge.classList.toggle('is-inutile', d.inutile);
       panel.classList.toggle('is-inutile', d.inutile);
       var desc = tierDescription(d);
       tierDesc.textContent = desc;
       tierDesc.hidden = !desc;
-      tierDesc.style.color = desc ? d.text : '';
+      tierDesc.style.removeProperty('color');
       segs.forEach(function (s) {
         s.classList.toggle('on', !d.inutile && d.tierI != null && +s.dataset.i === d.tierI);
       });
@@ -1587,9 +1652,16 @@
       x2: '100%',
       y2: '100%'
     });
-    glassGrad.appendChild(svgEl('stop', { offset: '0%', 'stop-color': '#FFFFFF', 'stop-opacity': '0.55' }));
-    glassGrad.appendChild(svgEl('stop', { offset: '100%', 'stop-color': '#EFEDE8', 'stop-opacity': '0.25' }));
+    var glassStop0 = svgEl('stop', { offset: '0%', 'stop-color': readCssVar('--surface-2', '#FFFFFF'), 'stop-opacity': '0.55' });
+    var glassStop1 = svgEl('stop', { offset: '100%', 'stop-color': readCssVar('--surface-1', '#EFEDE8'), 'stop-opacity': '0.25' });
+    glassGrad.appendChild(glassStop0);
+    glassGrad.appendChild(glassStop1);
     defs.appendChild(glassGrad);
+
+    function updateChartTheme() {
+      glassStop0.setAttribute('stop-color', readCssVar('--surface-2', '#FFFFFF'));
+      glassStop1.setAttribute('stop-color', readCssVar('--surface-1', '#EFEDE8'));
+    }
 
     var plotClip = svgEl('clipPath', { id: 'calc-rsm-plot-clip' });
     plotClip.appendChild(svgEl('rect', {
@@ -1926,7 +1998,7 @@
       markerCore.setAttribute('cx', String(cx));
       markerCore.setAttribute('cy', String(cy));
       markerCore.setAttribute('r', String(MARKER_CORE_R));
-      markerCore.setAttribute('fill', '#FFFFFF');
+      markerCore.setAttribute('fill', readCssVar('--surface-2', '#FFFFFF'));
       markerCore.setAttribute('stroke', d.seg);
       markerCore.setAttribute('stroke-width', String(MARKER_STROKE_W));
 
@@ -2078,7 +2150,8 @@
 
     return {
       el: panel,
-      paint: paint
+      paint: paint,
+      updateTheme: updateChartTheme
     };
   }
 
@@ -2311,6 +2384,16 @@
     }
 
     containerEl.appendChild(card);
+
+    var themeObserver = new MutationObserver(function () {
+      repaint();
+      if (calcGraph && calcGraph.updateTheme) calcGraph.updateTheme();
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-color-mode']
+    });
+
     repaint();
 
     return {

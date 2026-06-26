@@ -5,11 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Définir la priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
-  <script src="./priority-ui.js"></script>
-  <script src="./priority-trello.js"></script>
+  <script>window.__trelloIframe = TrelloPowerUp.iframe();</script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./trello-theme.css" />
   <link rel="stylesheet" href="./priority-ui.css" />
+  <script src="./priority-ui.js"></script>
+  <script src="./priority-trello.js"></script>
 </head>
 <body class="tp-page tp-page--priority">
   <div class="compare-page">
@@ -18,7 +19,7 @@
   <button class="tp-btn--ghost" id="clearBtn" type="button">Effacer la priorité</button>
 
   <script>
-    const t = TrelloPowerUp.iframe();
+    const t = window.__trelloIframe || TrelloPowerUp.iframe();
     const mountEl = document.getElementById('priorityMount');
     let variant = null;
     let saveTimer = null;

@@ -629,7 +629,7 @@ input.field-range:active::-webkit-slider-thumb {
   row-gap: 4px;
   border-radius: 10px;
   padding: 7px 11px;
-  background: transparent;
+  background: var(--heat-fill, transparent);
   margin-bottom: 12px;
 }
 
@@ -652,7 +652,7 @@ input.field-range:active::-webkit-slider-thumb {
   font-size: 24px;
   font-weight: 500;
   line-height: 1;
-  color: var(--heat-accent-fallback);
+  color: var(--heat-text, var(--heat-accent-fallback));
   letter-spacing: -0.02em;
 }
 
@@ -674,7 +674,7 @@ input.field-range:active::-webkit-slider-thumb {
   font-size: 15px;
   font-weight: 600;
   line-height: 1;
-  color: var(--heat-accent-fallback);
+  color: var(--heat-text, var(--heat-accent-fallback));
 }
 
 .heat-badge-label .priority-label {
@@ -706,6 +706,7 @@ input.field-range:active::-webkit-slider-thumb {
   font-size: 13px;
   line-height: 1.45;
   min-height: calc(1.45em * 3);
+  color: var(--heat-text, var(--text-secondary));
   opacity: 0.72;
 }
 

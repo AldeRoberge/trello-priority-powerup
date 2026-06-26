@@ -171,6 +171,9 @@
     formatBadgeText: formatBadgeText,
     tierDetailBadgeColor: tierDetailBadgeColor,
     tierDotIcon: tierDotIcon,
+    buildCardFaceBadge: buildCardFaceBadge,
+    cardFaceBadges: cardFaceBadges,
+    cardFaceBadgesCapability: cardFaceBadgesCapability,
     saveCardInputs: saveCardInputs,
     clearCardPriority: clearCardPriority,
   };

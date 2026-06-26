@@ -1,6 +1,7 @@
 /* Trello Power-Up theme — light/dark via html[data-color-mode] */
 
 html[data-color-mode="light"] {
+  color-scheme: light;
   --tp-bg: transparent;
   --tp-surface: #ffffff;
   --tp-surface-subtle: #f1f2f4;
@@ -23,6 +24,7 @@ html[data-color-mode="light"] {
 }
 
 html[data-color-mode="dark"] {
+  color-scheme: dark;
   --tp-bg: transparent;
   --tp-surface: #22272b;
   --tp-surface-subtle: #282e33;
@@ -79,6 +81,15 @@ body {
 
 .tp-page { padding: 12px; }
 .tp-page--roomy { padding: 16px; }
+
+/* Trello popup/modal chrome already insets content — drop redundant horizontal padding */
+html[data-color-mode] .tp-page:not(.tp-page--priority) {
+  padding: 8px 0 12px;
+}
+
+html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
+  padding: 12px 0 16px;
+}
 
 .tp-heading {
   font-size: 11px;
@@ -417,7 +428,7 @@ body.tp-page--priority {
 }
 
 .tp-page--priority {
-  padding: 8px 10px 10px;
+  padding: 6px 0 8px;
 }
 
 .tp-page--priority .compare-page {
@@ -433,17 +444,55 @@ body.tp-page--priority {
 .tp-page--priority .variant-card {
   max-width: none;
   margin: 0;
+  padding: 0.5rem 0 0.75rem;
   box-shadow: none;
   border: none;
   background: transparent;
+}
+
+.tp-page--priority .heat-panel {
+  padding: 10px 0 12px;
+}
+
+.tp-page--priority .heat-badge {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.tp-page--priority .variant-fields {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.tp-page--priority .variant-fields-toggle,
+.tp-page--priority .calc-graph-toggle {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.tp-page--priority .variant-fields-collapse > .calc-graph-panel {
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .tp-page--priority .variant-fields-collapse {
   margin-top: 4px;
 }
 
+.tp-page--priority > .tp-btn--ghost {
+  padding-left: 0;
+  padding-right: 0;
+}
+
 .tp-page--priority .help-modal-root {
   z-index: 1000;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.tp-page--priority .help-modal {
+  padding-left: 0;
+  padding-right: 0;
 }
 
 /* Bridge priority-ui tokens to Trello theme inside the popup */

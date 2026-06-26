@@ -1,6 +1,6 @@
 # Bac à sable — priorité et formule
 
-Prototypes et vérifications pour l'UI de scoring et la matrice de libellés. **Ces fichiers ne sont pas servis en production** ; ils ne doivent pas être référencés par les pages Power-Up à la racine.
+Prototypes et vérifications pour l'UI de scoring (curseurs, barre de chaleur, paliers). **Ces fichiers ne sont pas servis en production** ; ils ne doivent pas être référencés par les pages Power-Up à la racine.
 
 ## Pages HTML
 
@@ -13,8 +13,7 @@ Ouvrir les fichiers directement dans le navigateur — pas de build ni de serveu
 
 ### Ordre de chargement des scripts (`priority-variants.html`)
 
-1. `../priority-matrix.js` → expose `window.PriorityMatrix`
-2. `../priority-ui.js` → expose `window.PriorityUI` (utilise `PriorityMatrix` si présent)
+1. `../priority-ui.js` → expose `window.PriorityUI`
 
 Styles : `../priority-ui.css`
 
@@ -22,7 +21,7 @@ Styles : `../priority-ui.css`
 
 | Fichier | Rôle |
 |---------|------|
-| `../priority-ui.js` | Formules de score, libellés FR, icônes SVG, composants UI (`mountVariant`, modale d'aide, graphique RSM). |
+| `../priority-ui.js` | Formules de score, libellés de palier FR, icônes SVG, composants UI (`mountVariant`, modale d'aide, graphique RSM). |
 | `../priority-ui.css` | Styles de l'éditeur de priorité (partagés avec la production). |
 
 ## Scripts de vérification
@@ -30,10 +29,10 @@ Styles : `../priority-ui.css`
 | Script | Runtime | Commande |
 |--------|---------|----------|
 | `verify-presets.js` | Windows `cscript` | `npm run verify:presets` ou `cscript //nologo sandbox\verify-presets.js` |
-| `verify-matrix.js` | Node.js | `npm run verify:matrix` ou `node sandbox/verify-matrix.js` |
+| `verify-version.js` | Node.js | `npm run verify:version` ou `node sandbox/verify-version.js` |
 
 - **verify-presets** : formule baseline, paliers (`TIERS`), presets `HEAT_SEGMENTS`. La logique est **dupliquée** volontairement (exécutable sans navigateur ni DOM) — doit rester alignée avec `priority-ui.js` (section « Scoring »).
-- **verify-matrix** : charge `priority-matrix.js` via `vm` et valide les règles de libellés, overrides et mode désactivé.
+- **verify-version** : formatage et résolution de l'horodatage de build (`version.js`, `build-info.json`).
 
 Code de sortie `0` = succès, `1` = échec.
 
