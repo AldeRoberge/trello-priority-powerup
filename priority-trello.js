@@ -162,25 +162,16 @@
     return '\u25CF';
   }
 
-  function tierLabelForCompleteBadge(display) {
-    if (typeof PriorityUI !== 'undefined' && PriorityUI.classicTierLabel) {
-      return PriorityUI.classicTierLabel(display);
-    }
-    return display.tierLabel || display.label || '';
-  }
-
   function incompleteBadgeLabel(display) {
     if (typeof PriorityUI !== 'undefined' && PriorityUI.taskBadgeLabel) {
       return PriorityUI.taskBadgeLabel(display);
     }
     var tierKey = String(display.tierLabel || display.label || '');
-    if (tierKey === 'Important') return 'T\u00e2che Importante';
+    if (tierKey === 'Important') return 'T\u00e2che importante';
     return tierKey ? 'T\u00e2che ' + tierKey.toLowerCase() : '';
   }
 
-  function formatCompletedBadgeLabel(detail) {
-    return 'Compl\u00e9t\u00e9 (' + detail + ')';
-  }
+  var COMPLETED_BADGE_LABEL = 'Completed';
 
   // Unresolved t.card() chain objects are truthy — never treat them as completion.
   function isPowerUpRequestChain(value) {
@@ -204,18 +195,14 @@
 
   function formatBadgeText(display, completed) {
     if (!display) return '';
+    if (completed) {
+      return BADGE_DOT_COMPLETE + ' ' + COMPLETED_BADGE_LABEL;
+    }
     if (display.blocked) {
       var blockedText = (typeof PriorityUI !== 'undefined' && PriorityUI.formatBlockedBadgeText)
         ? PriorityUI.formatBlockedBadgeText(display.blockedReason || '')
         : BADGE_DOT_BLOCKED + ' T\u00e2che bloqu\u00e9';
-      if (completed) {
-        var blockedDetail = blockedText.slice(BADGE_DOT_BLOCKED.length).trim();
-        return BADGE_DOT_COMPLETE + ' ' + formatCompletedBadgeLabel(blockedDetail);
-      }
       return blockedText;
-    }
-    if (completed) {
-      return BADGE_DOT_COMPLETE + ' ' + formatCompletedBadgeLabel(tierLabelForCompleteBadge(display));
     }
     return tierBadgeDot(display, false) + ' ' + incompleteBadgeLabel(display);
   }
@@ -238,7 +225,7 @@
     if (!display) return null;
     return {
       text: formatBadgeText(display, completed),
-      color: tierDetailBadgeColor(display),
+      color: completed ? 'green' : tierDetailBadgeColor(display),
     };
   }
 
@@ -412,7 +399,6 @@
     getCardDueComplete: getCardDueComplete,
     getBadgeData: getBadgeData,
     formatBadgeText: formatBadgeText,
-    tierLabelForCompleteBadge: tierLabelForCompleteBadge,
     incompleteBadgeLabel: incompleteBadgeLabel,
     isCardMarkedComplete: isCardMarkedComplete,
     tierBadgeDot: tierBadgeDot,

@@ -30,7 +30,11 @@ check(
 );
 check(
   'complete urgent badge',
-  PT.formatBadgeText(urgentDisplay, true) === '\u2713 Compl\u00e9t\u00e9 (Urgent)'
+  PT.formatBadgeText(urgentDisplay, true) === '\u2713 Completed'
+);
+check(
+  'complete urgent badge color',
+  PT.buildCardFaceBadge(urgentDisplay, true).color === 'green'
 );
 check(
   'incomplete dot not checkmark',
@@ -57,8 +61,16 @@ check(
   PT.isCardMarkedComplete({ badges: { dueComplete: true } }) === true
 );
 check(
-  'blocked complete uses Complété wrapper',
-  PT.formatBadgeText(blockedDisplay, true).indexOf('\u2713 Compl\u00e9t\u00e9 (') === 0
+  'blocked incomplete badge',
+  PT.formatBadgeText(blockedDisplay, false) === sandbox.PriorityUI.formatBlockedBadgeText(blockedDisplay.blockedReason)
+);
+check(
+  'blocked complete shows simple Completed',
+  PT.formatBadgeText(blockedDisplay, true) === '\u2713 Completed'
+);
+check(
+  'blocked complete badge color',
+  PT.buildCardFaceBadge(blockedDisplay, true).color === 'green'
 );
 
 console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll badge checks passed');

@@ -404,7 +404,7 @@
     Critique: 'T\u00e2che critique',
     Urgent: 'T\u00e2che urgente',
     Prioritaire: 'T\u00e2che prioritaire',
-    Important: 'T\u00e2che Importante',
+    Important: 'T\u00e2che importante',
     Flexible: 'T\u00e2che flexible',
     Secondaire: 'T\u00e2che secondaire',
     Optionnel: 'T\u00e2che optionnelle',
@@ -418,7 +418,7 @@
     var tier = classicTierLabel(display);
     if (TASK_BADGE_LABELS[tier]) return TASK_BADGE_LABELS[tier];
     if (!tier) return '';
-    if (tier === 'Important') return 'T\u00e2che Importante';
+    if (tier === 'Important') return 'T\u00e2che importante';
     return 'T\u00e2che ' + tier.charAt(0).toLowerCase() + tier.slice(1);
   }
 
