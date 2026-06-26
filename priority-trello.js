@@ -84,7 +84,18 @@
       impact: Math.max(0, Math.min(4, impact)),
       ease: Math.max(1, Math.min(5, ease)),
     };
-    if (raw.enAttente === true) normalized.enAttente = true;
+    if (raw.enAttente === true) {
+      normalized.enAttente = true;
+      var reason = typeof raw.blockedReason === 'string' ? raw.blockedReason.trim() : '';
+      if (
+        reason &&
+        typeof PriorityUI !== 'undefined' &&
+        PriorityUI.isValidBlockedReason &&
+        PriorityUI.isValidBlockedReason(reason)
+      ) {
+        normalized.blockedReason = reason;
+      }
+    }
     return normalized;
   }
 
@@ -156,7 +167,7 @@
     if (!display) return '';
     if (display.blocked) {
       return (typeof PriorityUI !== 'undefined' && PriorityUI.formatBlockedBadgeText)
-        ? PriorityUI.formatBlockedBadgeText()
+        ? PriorityUI.formatBlockedBadgeText(display.blockedReason || '')
         : BADGE_DOT_BLOCKED + ' Bloqu\u00e9';
     }
     var label = (typeof PriorityUI !== 'undefined' && PriorityUI.classicTierLabel)

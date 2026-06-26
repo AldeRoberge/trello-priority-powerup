@@ -367,8 +367,22 @@
   var BLOCKED_SYMBOL = '\u2298'; // ⊘
   var BLOCKED_LABEL = 'Bloqu\u00e9';
   var BLOCKED_DISPLAY = BLOCKED_SYMBOL + ' ' + BLOCKED_LABEL;
+  var BLOCKED_REASON_PLACEHOLDER = 'Pr\u00e9ciser le blocage\u2026';
+  var BLOCKED_REASON_OPTIONS = [
+    'En attente d\'une r\u00e9ponse',
+    'En attente de budget',
+    'En attente d\'une approbation',
+    'En attente de mat\u00e9riel',
+    'En attente d\'une autre t\u00e2che',
+    'En attente de quelqu\'un',
+    'Autre'
+  ];
   var BLOCKED_DESCRIPTION =
     'T\u00e2che bloqu\u00e9e en attente de quelqu\'un, d\'une autre t\u00e2che, d\'un approbation, de mat\u00e9riel, etc.';
+
+  function isValidBlockedReason(reason) {
+    return !!reason && BLOCKED_REASON_OPTIONS.indexOf(reason) !== -1;
+  }
   var BLOCKED_STYLES = {
     label: BLOCKED_LABEL,
     fill: '#F3E4E4',
@@ -386,7 +400,8 @@
     description: BLOCKED_DESCRIPTION
   };
 
-  function formatBlockedBadgeText() {
+  function formatBlockedBadgeText(reason) {
+    if (reason) return BLOCKED_DISPLAY + ' \u2014 ' + reason;
     return BLOCKED_DISPLAY;
   }
 
@@ -451,9 +466,10 @@
 
   function withBlockedDisplay(display, inputs) {
     if (!display || !isEnAttente(inputs)) return display;
+    var reason = inputs.blockedReason || '';
     return Object.assign({}, display, {
       blocked: true,
-      description: BLOCKED_DESCRIPTION
+      blockedReason: reason
     });
   }
 
@@ -505,12 +521,10 @@
 
   function classicTierLabel(display) {
     if (!display) return '';
-    if (display.blocked) return BLOCKED_LABEL;
     return display.tierLabel || display.label || '';
   }
 
   function tierDescriptionBody(display) {
-    if (display.blocked) return BLOCKED_DESCRIPTION;
     if (display.inutile) return INUTILE_STYLES.description || '';
     if (display.description) return display.description;
     if (display.tierI == null) return '';
@@ -524,12 +538,6 @@
     if (!display) {
       el.textContent = '';
       el.hidden = true;
-      return;
-    }
-    if (display.blocked) {
-      el.textContent = BLOCKED_DESCRIPTION;
-      el.hidden = !BLOCKED_DESCRIPTION;
-      el.style.removeProperty('color');
       return;
     }
     if (display.inutile) {
@@ -1517,24 +1525,73 @@
     label.appendChild(input);
     label.appendChild(textWrap);
     field.appendChild(label);
+
+    var reasonWrap = document.createElement('div');
+    reasonWrap.className = 'blocked-reason-wrap';
+
+    var reasonSelect = document.createElement('select');
+    reasonSelect.className = 'blocked-reason-select';
+    reasonSelect.setAttribute('aria-label', 'Motif du blocage');
+
+    var placeholderOpt = document.createElement('option');
+    placeholderOpt.value = '';
+    placeholderOpt.textContent = BLOCKED_REASON_PLACEHOLDER;
+    reasonSelect.appendChild(placeholderOpt);
+
+    BLOCKED_REASON_OPTIONS.forEach(function (optionLabel) {
+      var option = document.createElement('option');
+      option.value = optionLabel;
+      option.textContent = optionLabel;
+      reasonSelect.appendChild(option);
+    });
+
+    reasonWrap.appendChild(reasonSelect);
+    field.appendChild(reasonWrap);
     el.appendChild(field);
+
+    function updateReasonVisibility() {
+      var on = input.checked;
+      reasonWrap.hidden = !on;
+      reasonSelect.disabled = !on;
+    }
 
     function setValue(value) {
       input.checked = !!value;
+      updateReasonVisibility();
     }
 
     function getValue() {
       return input.checked;
     }
 
+    function setBlockedReason(value) {
+      reasonSelect.value = isValidBlockedReason(value) ? value : '';
+    }
+
+    function getBlockedReason() {
+      if (!input.checked) return '';
+      var value = reasonSelect.value || '';
+      return isValidBlockedReason(value) ? value : '';
+    }
+
+    setBlockedReason(config.blockedReason);
+    updateReasonVisibility();
+
     input.addEventListener('change', function () {
+      updateReasonVisibility();
+      onChange(getValue());
+    });
+
+    reasonSelect.addEventListener('change', function () {
       onChange(getValue());
     });
 
     return {
       el: field,
       getValue: getValue,
-      setValue: setValue
+      setValue: setValue,
+      getBlockedReason: getBlockedReason,
+      setBlockedReason: setBlockedReason
     };
   }
 
@@ -1544,6 +1601,14 @@
 
     var panel = document.createElement('div');
     panel.className = 'heat-panel';
+
+    var blockedWarning = document.createElement('span');
+    blockedWarning.className = 'heat-blocked-warning';
+    blockedWarning.textContent = BLOCKED_DISPLAY;
+    blockedWarning.title = 'Cette t\u00e2che est bloqu\u00e9e';
+    blockedWarning.setAttribute('aria-label', 'Cette t\u00e2che est bloqu\u00e9e');
+    blockedWarning.hidden = true;
+    panel.appendChild(blockedWarning);
 
     var badge = document.createElement('div');
     badge.className = 'heat-badge';
@@ -1629,16 +1694,10 @@
 
     function paint(result, display) {
       var d = display || resolveDisplay(result, {});
-      var v = d.blocked
-        ? tierVisuals({ blocked: true, label: BLOCKED_LABEL })
-        : tierVisuals(d.inutile ? { inutile: true, label: INUTILE_LABEL } : { i: d.tierI, label: d.label });
+      var v = tierVisuals(d.inutile ? { inutile: true, label: INUTILE_LABEL } : { i: d.tierI, label: d.label });
       bnumVal.textContent = formatScore(d.score);
-      dot.classList.toggle('is-blocked', !!d.blocked);
-      if (d.blocked) {
-        dot.style.removeProperty('background');
-      } else {
-        dot.style.background = v.seg;
-      }
+      dot.classList.remove('is-blocked');
+      dot.style.background = v.seg;
       blabel.textContent = classicTierLabel(d);
       badge.style.setProperty('--heat-fill', v.fill);
       badge.style.setProperty('--heat-text', v.text);
@@ -1646,10 +1705,11 @@
       badge.style.removeProperty('background');
       bnum.style.removeProperty('color');
       blabel.style.removeProperty('color');
-      badge.classList.toggle('is-inutile', d.inutile && !d.blocked);
-      badge.classList.toggle('is-blocked', !!d.blocked);
-      panel.classList.toggle('is-inutile', d.inutile && !d.blocked);
-      panel.classList.toggle('is-blocked', !!d.blocked);
+      badge.classList.toggle('is-inutile', !!d.inutile);
+      badge.classList.remove('is-blocked');
+      panel.classList.toggle('is-inutile', !!d.inutile);
+      panel.classList.remove('is-blocked');
+      blockedWarning.hidden = !d.blocked;
       paintTierDescription(tierDesc, d);
       segs.forEach(function (s) {
         s.classList.toggle('on', !d.inutile && d.tierI != null && +s.dataset.i === d.tierI);
@@ -2394,6 +2454,7 @@
       ? variantConfig.loadState(defaultState)
       : loadSliderValues(defaultState, variantConfig.dimensions);
     state.enAttente = !!(state.enAttente || defaults.enAttente);
+    state.blockedReason = state.blockedReason || defaults.blockedReason || '';
 
     function persistSliderState(skipFieldSync) {
       if (!skipFieldSync) syncStateFromFields();
@@ -2408,7 +2469,10 @@
       Object.keys(fields).forEach(function (key) {
         state[key] = fields[key].getValue();
       });
-      if (enAttenteField) state.enAttente = enAttenteField.getValue();
+      if (enAttenteField) {
+        state.enAttente = enAttenteField.getValue();
+        state.blockedReason = enAttenteField.getBlockedReason();
+      }
     }
 
     function cancelSliderAnim() {
@@ -2579,6 +2643,7 @@
     enAttenteField = createEnAttenteField({
       el: blockedSection,
       value: state.enAttente,
+      blockedReason: state.blockedReason,
       onChange: function () {
         cancelSliderAnim();
         repaint();
@@ -2612,6 +2677,9 @@
         });
         if (next.enAttente != null && enAttenteField) {
           enAttenteField.setValue(next.enAttente);
+        }
+        if (next.blockedReason != null && enAttenteField) {
+          enAttenteField.setBlockedReason(next.blockedReason);
         }
         repaint();
         persistSliderState();
@@ -2691,6 +2759,9 @@
     BLOCKED_LABEL: BLOCKED_LABEL,
     BLOCKED_DISPLAY: BLOCKED_DISPLAY,
     BLOCKED_DESCRIPTION: BLOCKED_DESCRIPTION,
+    BLOCKED_REASON_PLACEHOLDER: BLOCKED_REASON_PLACEHOLDER,
+    BLOCKED_REASON_OPTIONS: BLOCKED_REASON_OPTIONS,
+    isValidBlockedReason: isValidBlockedReason,
     formatBlockedBadgeText: formatBlockedBadgeText,
     wordFor: wordFor,
     wordHtmlFor: wordHtmlFor,

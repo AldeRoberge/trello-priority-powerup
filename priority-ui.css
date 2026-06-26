@@ -237,6 +237,53 @@ body {
   line-height: 1.45;
 }
 
+.blocked-reason-wrap {
+  margin-top: 10px;
+  padding-left: 26px;
+}
+
+.blocked-reason-wrap[hidden] {
+  display: none;
+}
+
+.blocked-reason-select {
+  width: 100%;
+  padding: 6px 28px 6px 8px;
+  border: 2px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23626f86' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  transition: border-color 0.1s ease, background-color 0.1s ease;
+}
+
+.blocked-reason-select:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+}
+
+.blocked-reason-select:focus-visible {
+  outline: none;
+  border-color: var(--focus-ring-strong);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.blocked-reason-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.blocked-reason-select option {
+  color: var(--text-primary);
+  background: var(--surface-2);
+}
+
 .en-attente-label:has(.en-attente-checkbox:focus-visible) {
   border-radius: 6px;
   box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--focus-ring-strong);

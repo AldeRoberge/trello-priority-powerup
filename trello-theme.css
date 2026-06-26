@@ -528,6 +528,12 @@ body.tp-page--priority {
   margin-bottom: 0;
 }
 
+.tp-page--priority .blocked-reason-select {
+  font-size: 14px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
 .tp-page--priority .en-attente-title {
   font-size: 15px;
 }
