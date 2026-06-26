@@ -100,8 +100,8 @@
   function tierDetailBadgeColor(display) {
     if (!display || display.inutile) return 'light-gray';
     var i = display.tierI;
-    if (i === 0 || i === 1) return 'red';
-    if (i === 2) return 'orange';
+    if (i === 0) return 'red';
+    if (i === 1 || i === 2) return 'orange';
     if (i === 3) return 'green';
     if (i === 4) return 'sky';
     if (i === 5) return 'blue';

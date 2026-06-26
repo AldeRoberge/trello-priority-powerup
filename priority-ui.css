@@ -86,7 +86,7 @@ html[data-color-mode="dark"] .calc-rsm-marker.is-inutile .calc-rsm-marker-core {
   opacity: 1;
 }
 
-html[data-color-mode="dark"] .field-question,
+html[data-color-mode="dark"] .field-lbl-affirm,
 html[data-color-mode="dark"] .help-modal-body {
   color: var(--text-secondary);
 }
@@ -254,10 +254,10 @@ body {
 
 .field-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 2px;
+  margin-bottom: 8px;
 }
 
 .field-lbl {
@@ -265,28 +265,25 @@ body {
   font-weight: 600;
   color: var(--text-primary);
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 5px;
   letter-spacing: -0.01em;
+  line-height: 1.45;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .field-lbl .ti {
   font-size: 16px;
   color: var(--text-secondary);
   flex-shrink: 0;
+  margin-top: 1px;
 }
 
-.field-question {
+.field-lbl-affirm {
   font-size: 13px;
+  font-weight: 400;
   color: var(--text-muted);
-  line-height: 1.45;
-  margin-bottom: 6px;
-  min-height: calc(1em * 1.45 * 2);
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
   font-style: italic;
 }
 

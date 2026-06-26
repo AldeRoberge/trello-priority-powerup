@@ -498,9 +498,8 @@ body.tp-page--priority {
   font-size: 17px;
 }
 
-.tp-page--priority .field-question {
+.tp-page--priority .field-lbl-affirm {
   font-size: 14px;
-  margin-bottom: 8px;
 }
 
 .tp-page--priority .field-val {

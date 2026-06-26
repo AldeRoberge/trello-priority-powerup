@@ -483,7 +483,7 @@
   // Per-tier surface mix (% of tier color into neutral base).
   var TIER_SURFACE_MIX = {
     0: { bg: 42, border: 50, panel: 44 }, // Critique — strong red wash
-    1: { bg: 40, border: 48, panel: 40 }, // Urgent — red
+    1: { bg: 40, border: 48, panel: 40 }, // Urgent — orange
     2: { bg: 34, border: 44, panel: 28 }, // Prioritaire — amber
     3: { bg: 28, border: 38, panel: 22 }, // Important — green
     4: { bg: 22, border: 32, panel: 18 }, // Flexible — teal
@@ -1223,7 +1223,15 @@
 
     var lbl = document.createElement('span');
     lbl.className = 'field-lbl';
-    lbl.innerHTML = '<i class="ti ' + icon + '"></i> ' + label;
+    var hasAffirmations = !!(LABELS[wordsKey] && LABELS[wordsKey].affirmations);
+
+    function renderLbl(affirmText) {
+      var html = '<i class="ti ' + icon + '"></i> ' + label;
+      if (affirmText) {
+        html += ' <span class="field-lbl-affirm">' + affirmText + '</span>';
+      }
+      lbl.innerHTML = html;
+    }
 
     function openFieldHelp() {
       openHelpModal(wordsKey, label, {
@@ -1256,13 +1264,6 @@
     head.appendChild(val);
     field.appendChild(head);
 
-    var affirmEl = null;
-    if (LABELS[wordsKey] && LABELS[wordsKey].affirmations) {
-      affirmEl = document.createElement('p');
-      affirmEl.className = 'field-question';
-      field.appendChild(affirmEl);
-    }
-
     var sliderWrap = document.createElement('div');
     sliderWrap.className = 'field-slider';
 
@@ -1292,8 +1293,8 @@
       val.innerHTML = wordHtmlFor(wordsKey, idx);
       val.title = text;
       inputEl.value = String(v);
-      if (affirmEl && LABELS[wordsKey] && LABELS[wordsKey].affirmations) {
-        affirmEl.textContent = affirmationFor(wordsKey, idx);
+      if (hasAffirmations) {
+        renderLbl(affirmationFor(wordsKey, idx));
       }
     }
 
