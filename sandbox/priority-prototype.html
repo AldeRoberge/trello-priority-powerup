@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Priorité</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --surface-0:   #F7F6F3;
+    --surface-1:   #EFEDE8;
+    --surface-2:   #FFFFFF;
+    --border:      rgba(0,0,0,0.08);
+    --text-primary:   #1A1917;
+    --text-secondary: #6B6860;
+    --text-muted:     #A09D97;
+    --radius:      8px;
+    --font-sans:   -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono:   "SF Mono", "Fira Code", ui-monospace, monospace;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--surface-0);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+  }
+
+  .card-wrap {
+    width: 100%;
+    max-width: 420px;
+  }
+
+  .card {
+    background: var(--surface-2);
+    border: 0.5px solid var(--border);
+    border-radius: 14px;
+    padding: 1.375rem 1.375rem 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.04);
+  }
+
+  /* ── Rows ── */
+  .row { margin: 0 0 18px; }
+  .row:last-of-type { margin-bottom: 0; }
+
+  .row-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .row-lbl {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    letter-spacing: -0.01em;
+  }
+
+  .row-lbl .ti { font-size: 15px; color: var(--text-secondary); }
+
+  .row-hint {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--text-muted);
+  }
+
+  .row-val {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--surface-1);
+    border-radius: 6px;
+    padding: 4px 12px;
+    text-align: right;
+    flex-shrink: 0;
+    max-width: 65%;
+    line-height: 1.35;
+  }
+
+  .row-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.45;
+    margin-bottom: 10px;
+  }
+
+  /* ── Range inputs ── */
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--surface-1);
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: 1.5px solid var(--border);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+    transition: box-shadow .12s, transform .1s;
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: 1.5px solid var(--border);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+    cursor: pointer;
+  }
+
+  input[type="range"]:focus-visible::-webkit-slider-thumb {
+    box-shadow: 0 0 0 3px rgba(0,0,0,0.12);
+  }
+
+  input[type="range"]:active::-webkit-slider-thumb {
+    transform: scale(1.15);
+  }
+
+  .ends {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+    font-size: 10.5px;
+    color: var(--text-muted);
+  }
+
+  /* ── Divider ── */
+  .divider {
+    border: none;
+    border-top: 0.5px solid var(--border);
+    margin: 20px 0 18px;
+  }
+
+  /* ── Heatbar panel ── */
+  .heat-panel {
+    background: var(--surface-1);
+    border-radius: var(--radius);
+    padding: 12px 13px 13px;
+  }
+
+  .heat-top {
+    margin-bottom: 10px;
+  }
+
+  .heat-top-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  /* ── Badge ── */
+  #badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 10px;
+    padding: 8px 12px;
+    background: #E1F5EE;
+    margin-bottom: 14px;
+  }
+
+  #badge-num {
+    font-size: 26px;
+    font-weight: 500;
+    line-height: 1;
+    color: #085041;
+    letter-spacing: -0.02em;
+  }
+
+  #badge-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #085041;
+  }
+
+  /* ── Segments ── */
+  .segs {
+    display: flex;
+    gap: 3px;
+  }
+
+  .seg {
+    height: 14px;
+    flex: 1;
+    border-radius: 3px;
+    background: var(--c);
+    opacity: 0.28;
+    transition: opacity .12s;
+    cursor: pointer;
+    outline: none;
+  }
+
+  .seg:hover { opacity: 0.55; }
+  .seg.on { opacity: 1; }
+  .seg.on:hover { opacity: 1; }
+  .seg:focus-visible { box-shadow: 0 0 0 2px var(--surface-1), 0 0 0 4px var(--c); }
+
+  .seg-labels {
+    display: flex;
+    justify-content: space-between;
+    gap: 2px;
+    margin-top: 5px;
+    font-size: 9px;
+    color: var(--text-muted);
+  }
+
+  .seg-labels span {
+    flex: 1;
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  /* ── Formula ── */
+  .formula-wrap {
+    border-top: 0.5px solid var(--border);
+    margin-top: 12px;
+    padding-top: 10px;
+  }
+
+  #formula {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    line-height: 1.55;
+  }
+</style>
+</head>
+<body>
+
+<div class="card-wrap">
+  <div class="card">
+
+    <!-- Pression temporelle -->
+    <div class="row">
+      <div class="row-head">
+        <span class="row-lbl"><i class="ti ti-clock"></i> Pression temporelle</span>
+        <span class="row-val" id="time-word">⏳ Cette semaine</span>
+      </div>
+      <p class="row-desc">Quand cela doit-il être fait ?</p>
+      <input type="range" id="time-pressure" min="0" max="4" step="1" value="2">
+      <div class="ends"><span>💤 Aucune échéance</span><span>🔥 Maintenant / en retard</span></div>
+    </div>
+
+    <!-- Blocage -->
+    <div class="row">
+      <div class="row-head">
+        <span class="row-lbl"><i class="ti ti-barrier-block"></i> Blocage</span>
+        <span class="row-val" id="blocking-word">🔗 Dépendance mineure (quelqu'un attend, mais peut continuer)</span>
+      </div>
+      <p class="row-desc">Est-ce que quelque chose cesse de fonctionner si ce n'est pas fait ?</p>
+      <input type="range" id="blocking" min="0" max="3" step="1" value="1">
+      <div class="ends"><span>❌ Rien</span><span>🧱 Équipe ou livraison</span></div>
+    </div>
+
+    <!-- Impact -->
+    <div class="row">
+      <div class="row-head">
+        <span class="row-lbl"><i class="ti ti-target-arrow"></i> Impact</span>
+        <span class="row-val" id="impact-word">👍 Utile / amélioration notable</span>
+      </div>
+      <p class="row-desc">Quel est le bénéfice si cela est fait ?</p>
+      <input type="range" id="impact" min="0" max="4" step="1" value="2">
+      <div class="ends"><span>❌ Négligeable</span><span>🚀 Critique</span></div>
+    </div>
+
+    <!-- Facilité -->
+    <div class="row">
+      <div class="row-head">
+        <span class="row-lbl"><i class="ti ti-gauge"></i> Facilité <span class="row-hint">(facilité d'exécution)</span></span>
+        <span class="row-val" id="facilite-word">🧠 Modéré (demi-journée)</span>
+      </div>
+      <p class="row-desc">Quelle est la facilité d'exécution ?</p>
+      <input type="range" id="facilite" min="1" max="5" step="1" value="3">
+      <div class="ends"><span>🏗 Énorme</span><span>⚡ Trivial</span></div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- Heatbar panel -->
+    <div class="heat-panel">
+
+      <div id="badge">
+        <div id="badge-num">3.7</div>
+        <div id="badge-label">Flexible</div>
+      </div>
+
+      <div class="heat-top">
+        <span class="heat-top-label">Priorité d'exécution</span>
+      </div>
+
+      <div class="segs">
+        <div class="seg" data-i="6" data-target="0.7" style="--c:#9B9890;" role="button" tabindex="0" aria-label="Optionnel" title="Optionnel — Tâche secondaire, facultative, pouvant être ignorée ou mise de côté sans conséquence, voire non retenue ou écartée"></div>
+        <div class="seg" data-i="5" data-target="2.1" style="--c:#5A9FD4;" role="button" tabindex="0" aria-label="Secondaire" title="Secondaire — Tâche recommandée mais non essentielle, à envisager si possible un jour, orientée à long terme ou à surveiller selon la disponibilité, peut être réalisée plus tard"></div>
+        <div class="seg" data-i="4" data-target="3.6" style="--c:#3BA99C;" role="button" tabindex="0" aria-label="Flexible" title="Flexible — Tâche adaptable, sans échéance fixe, à traiter selon l'opportunité, dépendante du contexte et des ressources disponibles, peut être repoussée plus tard"></div>
+        <div class="seg" data-i="3" data-target="5.0" style="--c:#6EAD3A;" role="button" tabindex="0" aria-label="Important" title="Important — Tâche planifiée et structurée, programmée dans le flux de travail, à prévoir et exécuter prochainement avec engagement clair"></div>
+        <div class="seg" data-i="2" data-target="6.5" style="--c:#BA7517;" role="button" tabindex="0" aria-label="Prioritaire" title="Prioritaire — Tâche à forte attention, à réaliser rapidement avec délai court, nécessitant un traitement en priorité dans la file d'exécution"></div>
+        <div class="seg" data-i="1" data-target="7.9" style="--c:#D85A30;" role="button" tabindex="0" aria-label="Urgent" title="Urgent — Tâche pressante, à exécuter en priorité absolue, nécessitant une action rapide avec forte contrainte de temps"></div>
+        <div class="seg" data-i="0" data-target="9.3" style="--c:#E24B4A;" role="button" tabindex="0" aria-label="Critique" title="Critique — Tâche bloquante, à réaliser immédiatement, impact direct sur le système ou l'objectif, impossible à différer sans conséquence majeure"></div>
+      </div>
+      <div class="seg-labels">
+        <span>Optionnel</span><span>Secondaire</span><span>Flexible</span><span>Important</span><span>Prioritaire</span><span>Urgent</span><span>Critique</span>
+      </div>
+
+      <div class="formula-wrap">
+        <div id="formula">Pression temporelle ×1.2 → 2.4 · Blocage ×0.8 → 0.8 · Impact×Facilité÷5 ×0.8 → 0.5 = 3.7</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  var timePressure = document.getElementById('time-pressure'),
+      blocking     = document.getElementById('blocking'),
+      impact       = document.getElementById('impact'),
+      facilite     = document.getElementById('facilite'),
+      badge        = document.getElementById('badge'),
+      bnum         = document.getElementById('badge-num'),
+      blabel       = document.getElementById('badge-label'),
+      formula      = document.getElementById('formula'),
+      tWord        = document.getElementById('time-word'),
+      bWord        = document.getElementById('blocking-word'),
+      iWord        = document.getElementById('impact-word'),
+      fWord        = document.getElementById('facilite-word'),
+      segs         = [].slice.call(document.querySelectorAll('.seg'));
+
+  var TW = [
+    '💤 Aucune échéance',
+    '📅 Flexible (bientôt)',
+    '⏳ Cette semaine',
+    '🚨 Sous 48 h',
+    '🔥 Maintenant / en retard'
+  ];
+  var BW = [
+    '❌ Rien ne dépend de cela',
+    '🔗 Dépendance mineure (quelqu\'un attend, mais peut continuer)',
+    '⚠️ Bloque une tâche ou un collègue',
+    '🧱 Bloque le travail de l\'équipe ou une livraison'
+  ];
+  var IW = [
+    '❌ Aucun / négligeable',
+    '🙂 Faible / amélioration mineure',
+    '👍 Utile / amélioration notable',
+    '⭐ Élevé / résultat important',
+    '🚀 Critique / impact majeur (revenus, utilisateurs, réputation)'
+  ];
+  var FW = [
+    '',
+    '🏗 Énorme (grand projet)',
+    '🔧 Lourd (plusieurs jours / coordination)',
+    '🧠 Modéré (demi-journée)',
+    '👍 Facile (moins d\'une heure)',
+    '⚡ Trivial (quelques minutes)'
+  ];
+
+  var WT = 1.2, WB = 0.8, WI = 0.8;
+
+  var TIERS = [
+    {min:8.6, label:'Critique',    fill:'#FCEBEB', text:'#791F1F', i:0},
+    {min:7.2, label:'Urgent',      fill:'#FAECE7', text:'#712B13', i:1},
+    {min:5.8, label:'Prioritaire', fill:'#FAEEDA', text:'#633806', i:2},
+    {min:4.3, label:'Important',   fill:'#E8F5E0', text:'#2D5A1E', i:3},
+    {min:2.9, label:'Flexible',    fill:'#E1F5EE', text:'#085041', i:4},
+    {min:1.4, label:'Secondaire',  fill:'#E6F1FB', text:'#0C447C', i:5},
+    {min:0,   label:'Optionnel',   fill:'#F1EFE8', text:'#444441', i:6}
+  ];
+
+  function tierFor(p){ for(var k=0;k<TIERS.length;k++){ if(p>=TIERS[k].min) return TIERS[k]; } return TIERS[TIERS.length-1]; }
+  function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+
+  function paint(){
+    var T=+timePressure.value, B=+blocking.value, I=+impact.value, F=+facilite.value;
+    var timeTerm=T*WT, blockTerm=B*WB, impTerm=WI*I*F/5;
+    var p=clamp(timeTerm+blockTerm+impTerm,0,10);
+    var t=tierFor(p);
+    bnum.textContent  = p.toFixed(1);
+    blabel.textContent= t.label;
+    badge.style.background = t.fill;
+    bnum.style.color   = t.text;
+    blabel.style.color = t.text;
+    formula.textContent =
+      'Pression temporelle ×'+WT+' → '+timeTerm.toFixed(1)+
+      '   ·   Blocage ×'+WB+' → '+blockTerm.toFixed(1)+
+      '   ·   Impact×Facilité÷5 ×'+WI+' → '+impTerm.toFixed(1)+
+      '   =   '+p.toFixed(1);
+    tWord.textContent = TW[T];
+    bWord.textContent = BW[B];
+    iWord.textContent = IW[I];
+    fWord.textContent = FW[F];
+    segs.forEach(function(s){ s.classList.toggle('on', +s.dataset.i === t.i); });
+  }
+
+  function override(P){
+    var T=+timePressure.value, B=+blocking.value, I=+impact.value, F=+facilite.value;
+    var curTime=T*WT, curBlock=B*WB, curImp=WI*I*F/5;
+    var curTotal=curTime+curBlock+curImp;
+    var tTime, tBlock, tImp;
+    if(curTotal>0.001){
+      var r=P/curTotal;
+      tTime=curTime*r; tBlock=curBlock*r; tImp=curImp*r;
+    } else {
+      tTime=P*0.35; tBlock=P*0.25; tImp=P*0.40;
+    }
+    var nT=clamp(Math.round(tTime/WT),0,4);
+    var nB=clamp(Math.round(tBlock/WB),0,3);
+    var nF=F, needI=tImp*5/(WI*nF);
+    if(needI>4){ nF=clamp(Math.round(tImp*5/(WI*4)),1,5); needI=tImp*5/(WI*nF); }
+    var nI=clamp(Math.round(needI),0,4);
+    timePressure.value=nT; blocking.value=nB; impact.value=nI; facilite.value=nF;
+    paint();
+  }
+
+  [timePressure,blocking,impact,facilite].forEach(function(el){ el.addEventListener('input',paint); });
+
+  segs.forEach(function(s){
+    s.addEventListener('click',function(){ override(+s.dataset.target); });
+    s.addEventListener('keydown',function(e){
+      if(e.key==='Enter'||e.key===' '){ e.preventDefault(); override(+s.dataset.target); }
+    });
+  });
+
+  paint();
+})();
+</script>
+</body>
+</html>

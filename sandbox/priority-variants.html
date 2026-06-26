@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Priorité</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="priority-shared.css">
+</head>
+<body>
+
+<div class="compare-page">
+  <div class="compare-grid" id="variants"></div>
+</div>
+
+<script src="priority-shared.js"></script>
+<script>
+(function () {
+  var grid = document.getElementById('variants');
+  var defaults3D = { urgency: 2, impact: 2, ease: 3 };
+
+  var dimensions = [
+    {
+      key: 'urgency',
+      label: 'Urgence',
+      icon: 'ti-flame',
+      wordsKey: 'urgency',
+      min: 0,
+      max: 4,
+      value: 2
+    },
+    {
+      key: 'impact',
+      label: 'Impact',
+      icon: 'ti-target-arrow',
+      wordsKey: 'impact',
+      min: 0,
+      max: 4,
+      value: 2
+    },
+    {
+      key: 'ease',
+      label: 'Facilité',
+      icon: 'ti-gauge',
+      wordsKey: 'ease',
+      min: 1,
+      max: 5,
+      value: 3
+    }
+  ];
+
+  PriorityUI.mountVariant(grid, {
+    id: 'A',
+    formula: 'baseline',
+    defaults: defaults3D,
+    dimensions: dimensions
+  });
+})();
+</script>
+</body>
+</html>
