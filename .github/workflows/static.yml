@@ -34,11 +34,6 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Generate Trello API config
-        env:
-          TRELLO_API_KEY: ${{ secrets.TRELLO_API_KEY }}
-        run: node scripts/write-trello-api-config.js
-
       - name: Write build timestamp
         run: node scripts/stamp-build.js
 

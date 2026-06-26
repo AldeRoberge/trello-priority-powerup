@@ -6,7 +6,6 @@
   <title>Priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./version.js"></script>
-  <script src="./trello-api-config.js"></script>
   <script src="./priority-matrix.js"></script>
   <script src="./priority-ui.js"></script>
   <script src="./priority-trello.js"></script>
@@ -56,12 +55,6 @@
   }
 
   function initPowerUp() {
-    if (!PriorityTrello.isTrelloApiConfigured()) {
-      console.error(
-        'Priority: Trello API key missing — copy trello-api-config-template.js to trello-api-config.js and set appKey — card cover colors will not sync to the board'
-      );
-    }
-
     function openPriorityPopup(t) {
       // Popup width is fixed (narrow) by Trello; modal gives a comfortable editor width.
       // Use pageUrl (absolute, unsigned) — t.modal signs once; t.signUrl() double-signs.
@@ -114,7 +107,7 @@
         }];
       },
 
-    }, PriorityTrello.isTrelloApiConfigured() ? PriorityTrello.getIframeInitOptions() : undefined);
+    });
   }
 </script>
 </body>

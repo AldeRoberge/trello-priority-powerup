@@ -7,7 +7,6 @@
     "verify:presets": "cscript //nologo sandbox/verify-presets.js",
     "verify:version": "node sandbox/verify-version.js",
     "verify": "npm run verify:presets && npm run verify:matrix && npm run verify:version",
-    "stamp:build": "node scripts/stamp-build.js",
-    "config:ci": "node scripts/write-trello-api-config.js"
+    "stamp:build": "node scripts/stamp-build.js"
   }
 }

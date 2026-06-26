@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Définir la priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
-  <script src="./trello-api-config.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./trello-theme.css" />
   <link rel="stylesheet" href="./priority-ui.css" />
@@ -14,11 +13,6 @@
   <script src="./priority-trello.js"></script>
 </head>
 <body class="tp-page tp-page--priority">
-  <div id="apiConfigBanner" class="tp-api-banner" hidden role="alert">
-    Couleurs de carte désactivées&nbsp;: copiez <code>trello-api-config-template.js</code> vers
-    <code>trello-api-config.js</code>, puis ajoutez votre clé API Trello
-    (trello.com/power-ups/admin → votre Power-Up → API Key).
-  </div>
   <div class="compare-page">
     <div class="compare-grid" id="priorityMount"></div>
   </div>
@@ -30,11 +24,11 @@
     let latestState = null;
     let saveChain = Promise.resolve();
 
-    function saveState(state, saveOptions) {
+    function saveState(state) {
       latestState = state;
       saveChain = saveChain
         .then(function () {
-          return PriorityTrello.saveCardInputs(t, state, saveOptions);
+          return PriorityTrello.saveCardInputs(t, state);
         })
         .catch(function (err) {
           console.error('Priority save failed', err);
@@ -42,16 +36,7 @@
       return saveChain;
     }
 
-    function showApiConfigBanner() {
-      var banner = document.getElementById('apiConfigBanner');
-      if (banner) banner.hidden = false;
-    }
-
     async function init() {
-      if (!PriorityTrello.isTrelloApiConfigured()) {
-        showApiConfigBanner();
-      }
-
       const inputs = await PriorityTrello.getCardInputs(t);
       const matrixSettings = await PriorityTrello.getMatrixSettings(t);
       PriorityUI.setMatrixSettings(matrixSettings);
@@ -68,12 +53,12 @@
           return Object.assign({}, defaults);
         },
         onStateChange: function (state) {
-          saveState(state, { promptOAuth: true });
+          saveState(state);
         },
       });
 
       if (!hasSavedPriority) {
-        await saveState(variant.getState(), { promptOAuth: false });
+        await saveState(variant.getState());
       }
 
       window.scrollTo(0, 0);
@@ -84,7 +69,7 @@
 
     window.addEventListener('pagehide', function () {
       if (latestState) {
-        saveState(latestState, { promptOAuth: false });
+        saveState(latestState);
       }
     });
 
