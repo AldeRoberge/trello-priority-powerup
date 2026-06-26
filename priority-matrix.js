@@ -58,7 +58,7 @@
     {
       id: 'massive-opportunity',
       label: 'Opportunité massive',
-      description: 'Impact majeur, facile Ã  exÃ©cuter et sous forte pression. Ã€ saisir tout de suite.',
+      description: 'Impact majeur, facile à exécuter et sous forte pression. À saisir tout de suite.',
       priority: 100,
       when: { ease: ['high', 'veryHigh'], impact: ['high', 'veryHigh'], urgency: ['high', 'veryHigh'] }
     },
@@ -79,14 +79,14 @@
     {
       id: 'quick-win',
       label: 'Victoire rapide',
-      description: 'Peu d\'effort pour un gain net. IdÃ©al Ã  glisser entre deux tÃ¢ches lourdes.',
+      description: 'Peu d\'effort pour un gain net. Idéal à glisser entre deux tâches lourdes.',
       priority: 90,
       when: { ease: ['high', 'veryHigh'], impact: ['mid', 'high', 'veryHigh'], urgency: ['veryLow', 'low', 'mid'] }
     },
     {
       id: 'fire-drill',
       label: 'Priorité passagère',
-      description: 'Pression Ã©levÃ©e sur un sujet Ã  faible valeur. Contenir sans s\'y perdre.',
+      description: 'Pression élevée sur un sujet à faible valeur. Contenir sans s\'y perdre.',
       priority: 88,
       when: { ease: ['mid', 'high', 'veryHigh'], impact: ['veryLow', 'low'], urgency: ['high', 'veryHigh'] }
     },
@@ -107,14 +107,14 @@
     {
       id: 'maintenance',
       label: 'Entretien',
-      description: 'Utile mais sans urgence ni enjeu majeur. Ã€ caler quand la bande passante le permet.',
+      description: 'Utile mais sans urgence ni enjeu majeur. À caler quand la bande passante le permet.',
       priority: 70,
       when: { ease: ['mid', 'high'], impact: ['low', 'mid'], urgency: ['veryLow', 'low'] }
     },
     {
       id: 'noise',
       label: 'Faible priorité',
-      description: 'Peu de valeur, peu urgent, effort modÃ©rÃ©. Candidat Ã  repousser ou Ã©carter.',
+      description: 'Peu de valeur, peu urgent, effort modéré. Candidat à repousser ou écarter.',
       priority: 65,
       when: { ease: ['low', 'mid'], impact: ['veryLow', 'low'], urgency: ['veryLow', 'low'] }
     },
@@ -128,28 +128,28 @@
     {
       id: 'micro-opportunite',
       label: 'Petite opportunité',
-      description: 'Presque sans effort, impact limitÃ© mais net positif. Ã€ saisir entre deux chantiers plus lourds.',
+      description: 'Presque sans effort, impact limité mais net positif. À saisir entre deux chantiers plus lourds.',
       priority: 89,
       when: { ease: ['veryHigh'], impact: ['low', 'mid'], urgency: ['veryLow', 'low', 'mid'] }
     },
     {
       id: 'coup-de-pouce',
       label: 'Coup de pouce',
-      description: 'Impact moyen, urgence rÃ©elle, exÃ©cution facile. DÃ©bloque la suite sans mobilisation lourde.',
+      description: 'Impact moyen, urgence réelle, exécution facile. Débloque la suite sans mobilisation lourde.',
       priority: 87,
       when: { ease: ['high', 'veryHigh'], impact: ['mid'], urgency: ['high', 'veryHigh'] }
     },
     {
       id: 'accelerateur',
       label: 'Accélérateur',
-      description: 'Gros enjeu, urgence rÃ©elle, difficultÃ© modÃ©rÃ©e. Pas trivial, mais Ã  pousser maintenant.',
+      description: 'Gros enjeu, urgence réelle, difficulté modérée. Pas trivial, mais à pousser maintenant.',
       priority: 86,
       when: { ease: ['mid', 'high'], impact: ['high', 'veryHigh'], urgency: ['high', 'veryHigh'] }
     },
     {
       id: 'effet-levier',
       label: 'Effet de levier',
-      description: 'Fort impact pour un effort raisonnable, sans urgence immÃ©diate. Ã€ planifier tant que la prioritÃ© le permet.',
+      description: 'Fort impact pour un effort raisonnable, sans urgence immédiate. À planifier tant que la priorité le permet.',
       priority: 83,
       when: { ease: ['mid', 'high'], impact: ['high', 'veryHigh'], urgency: ['veryLow', 'low', 'mid'] }
     },
@@ -170,7 +170,7 @@
     {
       id: 'travail-de-fond',
       label: 'Travail de fond',
-      description: 'Refactors, dette d\'organisation ou stabilisation technique. Effort lourd, impact moyen Ã  fort, sans urgence.',
+      description: 'Refactors, dette d\'organisation ou stabilisation technique. Effort lourd, impact moyen à fort, sans urgence.',
       priority: 82,
       when: { ease: ['veryLow', 'low'], impact: ['mid', 'high'], urgency: ['veryLow', 'low', 'mid', 'high', 'veryHigh'] }
     },
@@ -219,7 +219,7 @@
     {
       id: 'fondation',
       label: 'Fondation',
-      description: 'Travail structurant, effort soutenu, impact rÃ©el mais sans urgence immÃ©diate. Pose les bases des prochains gains.',
+      description: 'Travail structurant, effort soutenu, impact réel mais sans urgence immédiate. Pose les bases des prochains gains.',
       priority: 81,
       when: { ease: ['low', 'mid'], impact: ['high', 'veryHigh'], urgency: ['veryLow', 'low'] }
     },
@@ -233,7 +233,7 @@
     {
       id: 'sprint-tactique',
       label: 'Sprint tactique',
-      description: 'Sujet moyen sous pression, effort modÃ©rÃ©. Ã€ boucler proprement sans le transformer en chantier.',
+      description: 'Sujet moyen sous pression, effort modéré. À boucler proprement sans le transformer en chantier.',
       priority: 80,
       when: { ease: ['low', 'mid'], impact: ['mid', 'high'], urgency: ['high', 'veryHigh'] }
     },
@@ -247,7 +247,7 @@
     {
       id: 'paperasse',
       label: 'Paperasse',
-      description: 'Facile mais peu gratifiant, urgence rÃ©elle. Ã€ traiter en mode traitement de flux, pas en mode perfection.',
+      description: 'Facile mais peu gratifiant, urgence réelle. À traiter en mode traitement de flux, pas en mode perfection.',
       priority: 77,
       when: { ease: ['high', 'veryHigh'], impact: ['veryLow', 'low'], urgency: ['mid', 'high'] }
     },
@@ -261,21 +261,21 @@
     {
       id: 'sable-mouvant',
       label: 'Effort dense',
-      description: 'PÃ©nible, peu utile, urgence moyenne. Classique gouffre Ã  d\'effort si on n\'impose pas une limite.',
+      description: 'Pénible, peu utile, urgence moyenne. Classique gouffre à d\'effort si on n\'impose pas une limite.',
       priority: 75,
       when: { ease: ['veryLow', 'low'], impact: ['veryLow', 'low'], urgency: ['mid'] }
     },
     {
       id: 'marathon',
       label: 'Marathon',
-      description: 'Long et exigeant, valeur moyenne, sans urgence. Ã€ Ã©taler, pas Ã  forcer d\'un bloc.',
+      description: 'Long et exigeant, valeur moyenne, sans urgence. À étaler, pas à forcer d\'un bloc.',
       priority: 74,
       when: { ease: ['veryLow', 'low'], impact: ['mid'], urgency: ['veryLow', 'low'] }
     },
     {
       id: 'routine-utile',
       label: 'Routine utile',
-      description: 'Peu d\'effort, valeur modeste mais rÃ©elle, sans pression. Bon crÃ©neau entre deux urgences.',
+      description: 'Peu d\'effort, valeur modeste mais réelle, sans pression. Bon créneau entre deux urgences.',
       priority: 72,
       when: { ease: ['high', 'veryHigh'], impact: ['low', 'mid'], urgency: ['veryLow', 'low'] }
     },
@@ -433,16 +433,16 @@
     for (var i = 0; i < ids.length; i++) {
       var id = ids[i];
       var rule = getDefaultRule(id);
-      if (!rule) return 'RÃ¨gle de matrice inconnue : ' + id + '.';
+      if (!rule) return 'Règle de matrice inconnue : ' + id + '.';
       var entry = settings.overrides[id];
       if (entry.label != null) {
-        if (!entry.label.trim()) return 'Le libellÃ© de Â« ' + rule.label + ' Â» ne peut pas Ãªtre vide.';
+        if (!entry.label.trim()) return 'Le libellé de « ' + rule.label + ' » ne peut pas être vide.';
         if (entry.label.length > LABEL_MAX_LENGTH) {
-          return 'Le libellÃ© de Â« ' + rule.label + ' Â» est trop long (' + LABEL_MAX_LENGTH + ' caractÃ¨res maximum).';
+          return 'Le libellé de « ' + rule.label + ' » est trop long (' + LABEL_MAX_LENGTH + ' caractères maximum).';
         }
       }
       if (entry.description != null && entry.description.length > DESCRIPTION_MAX_LENGTH) {
-        return 'La description de Â« ' + rule.label + ' Â» est trop longue (' + DESCRIPTION_MAX_LENGTH + ' caractÃ¨res maximum).';
+        return 'La description de « ' + rule.label + ' » est trop longue (' + DESCRIPTION_MAX_LENGTH + ' caractères maximum).';
       }
     }
     return null;
@@ -571,7 +571,7 @@
       fallbackLabel = ctx.tier.label;
       fallbackDescription = ctx.tier.description || fallbackDescription;
     }
-    if (fallbackLabel == null) fallbackLabel = 'Non classÃ©';
+    if (fallbackLabel == null) fallbackLabel = 'Non classé';
 
     return {
       label: fallbackLabel,
