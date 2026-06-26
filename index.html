@@ -71,6 +71,12 @@
         return PriorityTrello.cardFaceBadges(t);
       },
 
+      // card-buttons is not used (priority is opened via card-detail-badges).
+      // Return [] so Trello does not error if the capability was enabled in admin.
+      'card-buttons': function () {
+        return [];
+      },
+
       'card-detail-badges': async function(t) {
         try {
           const display = await PriorityTrello.getCardDisplay(t);

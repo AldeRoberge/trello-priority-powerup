@@ -94,7 +94,7 @@ En production, le workflow `.github/workflows/stamp-build.yml` met à jour `buil
 
 1. [trello.com/power-ups/admin](https://trello.com/power-ups/admin) → **Create new Power-Up**
 2. **Iframe connector URL** : `https://VOTRE-SITE/index.html`
-3. Capacités : `card-badges`, `card-detail-badges`, `card-buttons`, `board-buttons`
+3. Capacités : `card-badges`, `card-detail-badges`, `board-buttons` (ne pas activer `card-buttons` — non utilisé par ce Power-Up)
 4. Ajouter le Power-Up à un tableau via le menu Power-Ups
 
 ---
