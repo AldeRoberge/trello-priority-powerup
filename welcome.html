@@ -5,114 +5,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Welcome</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      background: #1a1a2e;
-      color: #e8e8f0;
-      padding: 20px 22px;
-      line-height: 1.5;
-    }
-
-    h1 {
-      font-size: 20px;
-      font-weight: 700;
-      margin-bottom: 6px;
-    }
-
-    .subtitle {
-      font-size: 13px;
-      color: rgba(255,255,255,0.5);
-      margin-bottom: 20px;
-    }
-
-    .steps {
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      margin-bottom: 22px;
-    }
-
-    .step {
-      display: flex;
-      gap: 12px;
-      align-items: flex-start;
-    }
-
-    .step-num {
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      background: rgba(79, 110, 247, 0.25);
-      color: #8fa3ff;
-      font-size: 12px;
-      font-weight: 700;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      margin-top: 1px;
-    }
-
-    .step-body strong {
-      display: block;
-      font-size: 14px;
-      margin-bottom: 2px;
-    }
-
-    .step-body p {
-      font-size: 13px;
-      color: rgba(255,255,255,0.6);
-    }
-
-    .btn-start {
-      width: 100%;
-      padding: 11px;
-      border: none;
-      border-radius: 8px;
-      background: #4F6EF7;
-      color: #fff;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: opacity 0.15s, transform 0.1s;
-    }
-
-    .btn-start:hover { opacity: 0.9; }
-    .btn-start:active { transform: scale(0.98); }
-  </style>
+  <link rel="stylesheet" href="./trello-theme.css" />
 </head>
-<body>
-  <h1>Card Priorities</h1>
-  <p class="subtitle">Add colour-coded priority levels to your cards.</p>
+<body class="tp-page tp-page--roomy">
+  <h1 class="tp-title">Card Priorities</h1>
+  <p class="tp-subtitle">Add colour-coded priority levels to your cards.</p>
 
-  <div class="steps">
-    <div class="step">
-      <div class="step-num">1</div>
-      <div class="step-body">
+  <div class="tp-steps">
+    <div class="tp-step">
+      <div class="tp-step-num">1</div>
+      <div class="tp-step-body">
         <strong>Set a priority</strong>
-        <p>Open any card and click the <strong>Priority</strong> badge to pick a level (P1–P5).</p>
+        <p>Open any card and click <strong>Set Priority</strong> to pick a level (P1–P5).</p>
       </div>
     </div>
-    <div class="step">
-      <div class="step-num">2</div>
-      <div class="step-body">
+    <div class="tp-step">
+      <div class="tp-step-num">2</div>
+      <div class="tp-step-body">
         <strong>See it on the board</strong>
         <p>Priority badges appear on card faces so you can scan urgency at a glance.</p>
       </div>
     </div>
-    <div class="step">
-      <div class="step-num">3</div>
-      <div class="step-body">
+    <div class="tp-step">
+      <div class="tp-step-num">3</div>
+      <div class="tp-step-body">
         <strong>Customise levels</strong>
         <p>Use <strong>Priority Settings</strong> in the board menu to rename labels and change colours.</p>
       </div>
     </div>
   </div>
 
-  <button class="btn-start" id="startBtn">Get started</button>
+  <button class="tp-btn tp-btn--primary" type="button" id="startBtn" style="width:100%">Get started</button>
 
   <script>
     const t = TrelloPowerUp.iframe();

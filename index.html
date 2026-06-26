@@ -6,80 +6,17 @@
   <title>Card Priorities Power-Up</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./version.js"></script>
-  <style>
-    #landing {
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      background: #1a1a2e;
-      color: #e8e8f0;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
-
-    .landing-card {
-      max-width: 420px;
-      width: 100%;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 14px;
-      padding: 28px 30px;
-      text-align: center;
-    }
-
-    .landing-card h1 {
-      font-size: 22px;
-      font-weight: 700;
-      margin-bottom: 6px;
-    }
-
-    .landing-card .tagline {
-      font-size: 13px;
-      color: rgba(255,255,255,0.45);
-      margin-bottom: 24px;
-    }
-
-    .version-label {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: rgba(255,255,255,0.35);
-      margin-bottom: 8px;
-    }
-
-    .version-relative {
-      font-size: 20px;
-      font-weight: 600;
-      color: #8fa3ff;
-      margin-bottom: 10px;
-    }
-
-    .version-utc {
-      font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
-      font-size: 12px;
-      color: rgba(255,255,255,0.4);
-    }
-
-    .landing-card .note {
-      margin-top: 22px;
-      padding-top: 18px;
-      border-top: 1px solid rgba(255,255,255,0.08);
-      font-size: 12px;
-      color: rgba(255,255,255,0.35);
-      line-height: 1.5;
-    }
-  </style>
+  <link rel="stylesheet" href="./trello-theme.css" />
 </head>
 <body>
-  <div id="landing" hidden>
-    <div class="landing-card">
-      <h1>Card Priorities</h1>
-      <p class="tagline">Trello Power-Up</p>
-      <p class="version-label">Deployed version</p>
-      <p class="version-relative" id="versionRelative">Loading…</p>
-      <p class="version-utc" id="versionUtc"></p>
-      <p class="note">Timestamp is stamped automatically on every push to <code>main</code>.</p>
+  <div id="landing" class="tp-landing" hidden>
+    <div class="tp-landing-card">
+      <h1 class="tp-title">Card Priorities</h1>
+      <p class="tp-subtitle">Trello Power-Up</p>
+      <p class="tp-version-label">Deployed version</p>
+      <p class="tp-version-relative" id="versionRelative">Loading…</p>
+      <p class="tp-version-utc" id="versionUtc"></p>
+      <p class="tp-landing-note">Timestamp is stamped automatically on every push to <code>main</code>.</p>
     </div>
   </div>
 
@@ -139,6 +76,13 @@
       });
     }
 
+    function priorityDotIcon(hex) {
+      const safe = /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : '#718096';
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10">`
+        + `<circle cx="5" cy="5" r="4.5" fill="${safe}"/></svg>`;
+      return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+    }
+
     TrelloPowerUp.initialize({
 
       'card-badges': async function(t) {
@@ -148,32 +92,16 @@
         const p = priorities.find(x => x.id === priorityId);
         if (!p) return [];
         return [{
+          icon: priorityDotIcon(p.color),
           text: p.label,
-          color: priorityBadgeColor(p.color),
+          monochrome: false,
         }];
       },
 
       'card-detail-badges': async function(t) {
-        const [priorityId, priorities] = await Promise.all([
-          t.get('card', 'shared', 'priority'),
-          getPriorities(t),
-        ]);
-
-        if (priorityId) {
-          const p = priorities.find(x => x.id === priorityId);
-          if (p) {
-            return [{
-              title: 'Priority',
-              text: `${p.id}. ${p.label}`,
-              color: priorityBadgeColor(p.color),
-              callback: openPriorityPopup,
-            }];
-          }
-        }
-
         return [{
-          text: 'Priority',
-          color: 'light-gray',
+          text: 'Set Priority',
+          color: 'green',
           callback: openPriorityPopup,
         }];
       },
@@ -184,7 +112,7 @@
           url: './welcome.html',
           height: 420,
           fullscreen: false,
-          accentColor: '#4F6EF7',
+          accentColor: '#0C66E4',
         });
       },
 
@@ -203,21 +131,6 @@
       },
 
     });
-  }
-
-  function priorityBadgeColor(hex) {
-    const map = {
-      '#E53E3E': 'red',    '#C53030': 'red',
-      '#DD6B20': 'orange', '#C05621': 'orange',
-      '#D69E2E': 'yellow', '#B7791F': 'yellow',
-      '#38A169': 'green',  '#276749': 'green',
-      '#3182CE': 'blue',   '#2B6CB0': 'blue',
-      '#805AD5': 'purple', '#6B46C1': 'purple',
-      '#D53F8C': 'pink',   '#B83280': 'pink',
-      '#0BC5EA': 'sky',    '#00B5D8': 'sky',
-      '#68D391': 'lime',
-    };
-    return map[hex] || 'default';
   }
 </script>
 </body>
