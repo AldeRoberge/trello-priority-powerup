@@ -144,6 +144,15 @@
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
+
+    .build-info {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      font-size: 11px;
+      color: rgba(255,255,255,0.35);
+      font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
+    }
   </style>
 </head>
 <body>
@@ -154,6 +163,7 @@
     <button class="btn btn-save" id="saveBtn">Save changes</button>
   </div>
   <div class="toast" id="toast">✓ Saved!</div>
+  <div class="build-info" id="buildInfo">Build: loading…</div>
 
   <script>
     const DEFAULT_PRIORITIES = [
@@ -204,9 +214,27 @@
       });
     }
 
+    async function loadBuildInfo() {
+      const el = document.getElementById('buildInfo');
+      try {
+        const res = await fetch('./build-info.json', { cache: 'no-store' });
+        if (!res.ok) throw new Error('not found');
+        const { builtAt } = await res.json();
+        const formatted = new Date(builtAt).toLocaleString(undefined, {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+          timeZoneName: 'short',
+        });
+        el.textContent = `Build: ${formatted}`;
+      } catch {
+        el.textContent = 'Build: unknown';
+      }
+    }
+
     async function load() {
       priorities = await t.get('board', 'shared', 'priorities') || JSON.parse(JSON.stringify(DEFAULT_PRIORITIES));
       renderRows(priorities);
+      loadBuildInfo();
     }
 
     document.getElementById('saveBtn').addEventListener('click', async () => {
