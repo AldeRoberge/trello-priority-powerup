@@ -276,6 +276,21 @@
     return typeof global.TrelloApiConfig !== 'undefined' ? global.TrelloApiConfig : null;
   }
 
+  function isTrelloApiConfigured() {
+    var config = trelloApiConfig();
+    if (!config || typeof config.appKey !== 'string') return false;
+    var key = config.appKey.trim();
+    return key.length > 0 && key !== 'YOUR_TRELLO_APP_KEY';
+  }
+
+  function coverSyncError(message, detail) {
+    if (detail !== undefined) {
+      console.error('Priority card cover: ' + message, detail);
+    } else {
+      console.error('Priority card cover: ' + message);
+    }
+  }
+
   function canWriteCard(t) {
     return typeof t.memberCanWriteToModel === 'function' && t.memberCanWriteToModel('card');
   }
@@ -293,7 +308,9 @@
     return {
       color: cover.color || null,
       idAttachment: cover.idAttachment || null,
-      idUploadedBackground: cover.idUploadedBackground || null,
+      idUploadedBackground: typeof cover.idUploadedBackground === 'string'
+        ? cover.idUploadedBackground
+        : null,
       size: cover.size || 'normal',
       brightness: cover.brightness || 'light',
     };
@@ -301,7 +318,8 @@
 
   function coverHasImage(cover) {
     if (!cover || typeof cover !== 'object') return false;
-    return !!(cover.idAttachment || cover.idUploadedBackground);
+    if (cover.idAttachment) return true;
+    return typeof cover.idUploadedBackground === 'string' && cover.idUploadedBackground.length > 0;
   }
 
   function buildColorCover(currentCover, color) {
@@ -332,28 +350,35 @@
   }
 
   async function getAuthorizedRestClient(t) {
-    var config = trelloApiConfig();
-    if (!config || !config.appKey) return null;
+    if (!isTrelloApiConfigured()) return null;
     try {
       var client = await t.getRestApi();
       if (!(await client.isAuthorized())) return null;
       return client;
     } catch (err) {
-      console.warn('Priority blocked cover: REST client unavailable', err);
+      coverSyncError('REST client unavailable', err);
       return null;
     }
   }
 
   async function ensureRestApiAuthorized(t) {
-    var config = trelloApiConfig();
-    if (!config || !config.appKey) return null;
+    if (!isTrelloApiConfigured()) {
+      coverSyncError(
+        'Trello API key missing — set appKey in trello-api-config.js (trello.com/power-ups/admin → API Key)'
+      );
+      return null;
+    }
     try {
       var client = await t.getRestApi();
       if (await client.isAuthorized()) return client;
       await client.authorize({ scope: 'read,write' });
+      if (!(await client.isAuthorized())) {
+        coverSyncError('OAuth authorization was not granted');
+        return null;
+      }
       return client;
     } catch (err) {
-      console.warn('Priority blocked cover: authorization failed', err);
+      coverSyncError('OAuth authorization failed', err);
       return null;
     }
   }
@@ -361,27 +386,39 @@
   async function updateCardCover(client, t, coverValue) {
     var config = trelloApiConfig();
     var token = await client.getToken();
-    if (!token || !config || !config.appKey) return;
+    if (!token) {
+      coverSyncError('REST token missing after authorization');
+      return false;
+    }
+    if (!isTrelloApiConfigured()) {
+      coverSyncError('Trello API key missing — cannot update card cover');
+      return false;
+    }
 
     var ctx = t.getContext();
     var cardId = ctx && ctx.card;
-    if (!cardId) return;
+    if (!cardId) {
+      coverSyncError('card id missing from Power-Up context');
+      return false;
+    }
 
-    var res = await fetch('https://api.trello.com/1/cards/' + cardId + '/cover', {
+    var url = 'https://api.trello.com/1/cards/' + encodeURIComponent(cardId) + '/cover'
+      + '?key=' + encodeURIComponent(config.appKey.trim())
+      + '&token=' + encodeURIComponent(token);
+
+    var res = await fetch(url, {
       method: 'PUT',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        key: config.appKey,
-        token: token,
-        value: coverValue,
-      }),
+      body: JSON.stringify({ value: coverValue }),
     });
     if (!res.ok) {
-      console.error('Priority blocked cover update failed', res.status, await res.text());
+      coverSyncError('cover update failed (' + res.status + ')', await res.text());
+      return false;
     }
+    return true;
   }
 
   async function applyTierCover(client, t, display) {
@@ -396,13 +433,25 @@
   }
 
   async function syncCardCover(t, previous, normalized) {
-    if (!canWriteCard(t)) return;
+    if (!isTrelloApiConfigured()) {
+      coverSyncError(
+        'skipped — configure trello-api-config.js appKey to sync card cover colors on the board'
+      );
+      return;
+    }
+    if (!canWriteCard(t)) {
+      coverSyncError('skipped — member cannot edit this card');
+      return;
+    }
 
     var client = await getAuthorizedRestClient(t);
     if (!client) {
       client = await ensureRestApiAuthorized(t);
     }
-    if (!client) return;
+    if (!client) {
+      coverSyncError('skipped — Trello REST API not authorized (OAuth required)');
+      return;
+    }
 
     var settings = await getMatrixSettings(t);
     PriorityUI.setMatrixSettings(settings);
@@ -477,8 +526,12 @@
     cardFaceBadges: cardFaceBadges,
     cardDetailBadges: cardDetailBadges,
     saveCardInputs: saveCardInputs,
+    isTrelloApiConfigured: isTrelloApiConfigured,
     ensureRestApiAuthorized: ensureRestApiAuthorized,
     syncCardCover: syncCardCover,
+    serializeCover: serializeCover,
+    coverHasImage: coverHasImage,
+    buildColorCover: buildColorCover,
     restorePriorityCover: restorePriorityCover,
     BLOCKED_COVER_SNAPSHOT_KEY: BLOCKED_COVER_SNAPSHOT_KEY,
     PRIORITY_COVER_SNAPSHOT_KEY: PRIORITY_COVER_SNAPSHOT_KEY,

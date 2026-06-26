@@ -21,6 +21,10 @@
   <script src="./priority-trello.js"></script>
 </head>
 <body class="tp-page tp-page--priority">
+  <div id="apiConfigBanner" class="tp-api-banner" hidden role="alert">
+    Couleurs de carte désactivées&nbsp;: ajoutez votre clé API Trello dans <code>trello-api-config.js</code>
+    (trello.com/power-ups/admin → votre Power-Up → API Key).
+  </div>
   <div class="compare-page">
     <div class="compare-grid" id="priorityMount"></div>
   </div>
@@ -44,6 +48,24 @@
       return saveChain;
     }
 
+    function showApiConfigBanner() {
+      var banner = document.getElementById('apiConfigBanner');
+      if (banner) banner.hidden = false;
+    }
+
+    async function ensureCoverApiReady() {
+      if (!PriorityTrello.isTrelloApiConfigured()) {
+        showApiConfigBanner();
+        return null;
+      }
+      try {
+        return await PriorityTrello.ensureRestApiAuthorized(t);
+      } catch (err) {
+        console.error('Priority OAuth failed', err);
+        return null;
+      }
+    }
+
     async function init() {
       const inputs = await PriorityTrello.getCardInputs(t);
       const matrixSettings = await PriorityTrello.getMatrixSettings(t);
@@ -51,6 +73,8 @@
 
       const hasSavedPriority = !!inputs;
       const initialDefaults = hasSavedPriority ? inputs : PriorityTrello.IMPORTANT_INPUTS;
+
+      await ensureCoverApiReady();
 
       variant = PriorityUI.mountVariant(mountEl, {
         id: 'card',
@@ -64,21 +88,21 @@
       });
 
       if (!hasSavedPriority) {
-        saveState(variant.getState());
+        await saveState(variant.getState());
       }
-
-      PriorityTrello.ensureRestApiAuthorized(t).catch(function () {});
 
       var blockedCheckbox = mountEl.querySelector('.en-attente-checkbox');
       if (blockedCheckbox) {
         blockedCheckbox.addEventListener('change', function () {
-          PriorityTrello.ensureRestApiAuthorized(t)
+          ensureCoverApiReady()
             .then(function (client) {
               if (client && latestState) {
                 return PriorityTrello.saveCardInputs(t, latestState);
               }
             })
-            .catch(function () {});
+            .catch(function (err) {
+              console.error('Priority blocked cover sync failed', err);
+            });
         });
       }
 

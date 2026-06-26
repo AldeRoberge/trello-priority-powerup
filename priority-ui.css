@@ -727,12 +727,41 @@ body.help-modal-open {
 
 /* ── Heatbar panel ── */
 .heat-panel {
+  position: relative;
   background: color-mix(in srgb, var(--card-tier-tint) var(--card-panel-tint-mix, 20%), var(--surface-2));
   border-radius: var(--radius);
   padding: 11px 12px 12px;
   margin-top: 0;
   overflow: hidden;
   transition: background 0.25s ease;
+}
+
+.heat-blocked-warning {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--blocked-text);
+  background: var(--blocked-fill);
+  border: 1px solid color-mix(in srgb, var(--blocked-accent) 40%, transparent);
+  pointer-events: none;
+}
+
+.heat-blocked-warning[hidden] {
+  display: none;
+}
+
+.heat-panel.has-blocked-warning .heat-badge {
+  padding-right: 92px;
 }
 
 .heat-badge {

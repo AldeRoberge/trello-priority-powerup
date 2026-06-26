@@ -459,6 +459,17 @@ body.tp-page--priority {
   padding: 14px 12px 16px;
 }
 
+.tp-page--priority .heat-blocked-warning {
+  top: 12px;
+  right: 14px;
+  font-size: 12px;
+  padding: 4px 9px;
+}
+
+.tp-page--priority .heat-panel.has-blocked-warning .heat-badge {
+  padding-right: 100px;
+}
+
 .tp-page--priority .heat-badge {
   margin: -14px -12px 0;
   padding: 12px 16px;

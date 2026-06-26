@@ -1709,6 +1709,7 @@
       badge.classList.remove('is-blocked');
       panel.classList.toggle('is-inutile', !!d.inutile);
       panel.classList.remove('is-blocked');
+      panel.classList.toggle('has-blocked-warning', !!d.blocked);
       blockedWarning.hidden = !d.blocked;
       paintTierDescription(tierDesc, d);
       segs.forEach(function (s) {
