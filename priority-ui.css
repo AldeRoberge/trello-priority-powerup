@@ -732,7 +732,7 @@ body.help-modal-open {
   position: relative;
   background: color-mix(in srgb, var(--card-tier-tint) var(--card-panel-tint-mix, 20%), var(--surface-2));
   border-radius: var(--radius);
-  padding: 52px 12px 12px;
+  padding: 54px 12px 12px;
   margin-top: 0;
   overflow: hidden;
   transition: background 0.25s ease;
@@ -763,18 +763,24 @@ body.help-modal-open {
 }
 
 .heat-panel.has-blocked-warning .heat-badge {
-  padding-right: 92px;
+  max-width: calc(100% - 108px);
 }
 
 .heat-badge {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  z-index: 1;
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
   column-gap: 8px;
-  border-radius: 0 0 var(--radius) var(--radius);
+  width: max-content;
+  max-width: calc(100% - 24px);
+  border-radius: var(--radius);
   padding: 7px 11px;
   background: var(--heat-fill, transparent);
-  margin: -11px -12px 0;
+  margin: 0;
 }
 
 .heat-top {

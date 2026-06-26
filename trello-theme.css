@@ -456,7 +456,7 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .heat-panel {
-  padding: 14px 12px 16px;
+  padding: 66px 12px 16px;
 }
 
 .tp-page--priority .heat-blocked-warning {
@@ -467,11 +467,13 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .heat-panel.has-blocked-warning .heat-badge {
-  padding-right: 100px;
+  max-width: calc(100% - 116px);
 }
 
 .tp-page--priority .heat-badge {
-  margin: -14px -12px 0;
+  top: 12px;
+  left: 14px;
+  margin: 0;
   padding: 12px 16px;
   grid-template-columns: auto minmax(min-content, 1fr);
 }
