@@ -1260,21 +1260,22 @@
     field.className = 'field';
     field.dataset.fieldId = id;
 
-    var side = document.createElement('div');
-    side.className = 'field-side';
-
-    var lbl = document.createElement('span');
+    var lbl = document.createElement('div');
     lbl.className = 'field-lbl';
-    var hasAffirmations = !!(LABELS[wordsKey] && LABELS[wordsKey].affirmations);
 
     var lblIcon = document.createElement('i');
     lblIcon.className = 'ti ' + icon;
-    var lblText = document.createTextNode(' ' + label + ' ');
+    lblIcon.setAttribute('aria-hidden', 'true');
+    var lblText = document.createTextNode(' ' + label);
 
-    var affirmBtn = document.createElement('button');
-    affirmBtn.type = 'button';
-    affirmBtn.className = 'field-lbl-affirm';
-    affirmBtn.setAttribute('aria-label', 'Informations sur ' + label);
+    var descBtn = document.createElement('button');
+    descBtn.type = 'button';
+    descBtn.className = 'field-desc';
+    descBtn.setAttribute('aria-label', 'Choisir le niveau de ' + label);
+
+    var valEl = document.createElement('div');
+    valEl.className = 'field-val';
+    valEl.setAttribute('aria-hidden', 'true');
 
     function openFieldHelp() {
       var wiz = config.wizard;
@@ -1298,8 +1299,8 @@
       });
     }
 
-    affirmBtn.addEventListener('click', openFieldHelp);
-    affirmBtn.addEventListener('keydown', function (e) {
+    descBtn.addEventListener('click', openFieldHelp);
+    descBtn.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         openFieldHelp();
@@ -1308,11 +1309,6 @@
 
     lbl.appendChild(lblIcon);
     lbl.appendChild(lblText);
-    lbl.appendChild(affirmBtn);
-    side.appendChild(lbl);
-
-    var content = document.createElement('div');
-    content.className = 'field-content';
 
     var sliderWrap = document.createElement('div');
     sliderWrap.className = 'field-slider';
@@ -1325,6 +1321,7 @@
     inputEl.max = String(max);
     inputEl.step = String(SLIDER_STEP);
     inputEl.value = String(value);
+    inputEl.setAttribute('aria-label', label);
     function handleRangeInput() {
       var v = +inputEl.value;
       updateDisplay(v);
@@ -1334,20 +1331,35 @@
     inputEl.addEventListener('change', handleRangeInput);
 
     sliderWrap.appendChild(inputEl);
-    content.appendChild(sliderWrap);
-    field.appendChild(side);
-    field.appendChild(content);
+    field.appendChild(lbl);
+    field.appendChild(descBtn);
+    field.appendChild(valEl);
+    field.appendChild(sliderWrap);
 
     el.appendChild(field);
+
+    function descriptionForLevel(idx) {
+      var affirmText = affirmationFor(wordsKey, idx);
+      if (affirmText) return affirmText;
+      var entry = labelEntry(wordsKey, idx);
+      if (entry.detail) {
+        return entry.short ? entry.short + '. ' + entry.detail : entry.detail;
+      }
+      return entry.short || '';
+    }
 
     function updateDisplay(v) {
       v = clamp(v, min, max);
       var idx = snappedLevel(v, min, max);
-      var text = wordFor(wordsKey, idx);
-      var affirmText = hasAffirmations ? affirmationFor(wordsKey, idx) : '';
-      affirmBtn.innerHTML = affirmText || wordHtmlFor(wordsKey, idx);
-      affirmBtn.title = text;
-      affirmBtn.hidden = !affirmBtn.innerHTML;
+      var shortLabel = wordFor(wordsKey, idx);
+      var descText = descriptionForLevel(idx);
+      descBtn.textContent = descText;
+      descBtn.hidden = !descText;
+      descBtn.setAttribute('aria-label', descText
+        ? 'Choisir le niveau de ' + label + '. Actuellement : ' + shortLabel
+        : 'Choisir le niveau de ' + label);
+      valEl.textContent = shortLabel;
+      valEl.hidden = !shortLabel;
       inputEl.value = String(v);
     }
 
