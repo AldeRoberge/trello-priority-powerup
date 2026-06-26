@@ -42,16 +42,23 @@
       const matrixSettings = await PriorityTrello.getMatrixSettings(t);
       PriorityUI.setMatrixSettings(matrixSettings);
 
+      const hasSavedPriority = !!inputs;
+      const initialDefaults = hasSavedPriority ? inputs : PriorityTrello.IMPORTANT_INPUTS;
+
       variant = PriorityUI.mountVariant(mountEl, {
         id: 'card',
         formula: 'baseline',
-        defaults: inputs || PriorityTrello.DEFAULT_INPUTS,
+        defaults: initialDefaults,
         dimensions: PriorityTrello.PRIORITY_DIMENSIONS,
         loadState: function (defaults) {
-          return inputs ? Object.assign({}, inputs) : Object.assign({}, defaults);
+          return Object.assign({}, defaults);
         },
         onStateChange: saveState,
       });
+
+      if (!hasSavedPriority) {
+        saveState(variant.getState());
+      }
 
       window.scrollTo(0, 0);
     }

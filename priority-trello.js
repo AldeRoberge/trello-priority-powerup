@@ -7,7 +7,21 @@
   var MATRIX_SETTINGS_KEY = 'matrixLabelSettings';
   // Trello minimum for dynamic badge polling (card-badges / card-detail-badges).
   var BADGE_REFRESH_SEC = 10;
-  var DEFAULT_INPUTS = { urgency: 2, impact: 2, ease: 3 };
+
+  function importantInputs() {
+    var segments = typeof PriorityUI !== 'undefined' && PriorityUI.HEAT_SEGMENTS;
+    if (segments) {
+      for (var i = 0; i < segments.length; i++) {
+        if (segments[i].label === 'Important' && segments[i].preset) {
+          return Object.assign({}, segments[i].preset);
+        }
+      }
+    }
+    return { urgency: 2, impact: 2, ease: 3 };
+  }
+
+  var IMPORTANT_INPUTS = importantInputs();
+  var DEFAULT_INPUTS = IMPORTANT_INPUTS;
 
   var LEGACY_ID_TO_INPUTS = {
     1: { urgency: 4, impact: 4, ease: 5 },
@@ -226,6 +240,7 @@
   global.PriorityTrello = {
     CARD_PRIORITY_KEY: CARD_PRIORITY_KEY,
     MATRIX_SETTINGS_KEY: MATRIX_SETTINGS_KEY,
+    IMPORTANT_INPUTS: IMPORTANT_INPUTS,
     DEFAULT_INPUTS: DEFAULT_INPUTS,
     PRIORITY_DIMENSIONS: PRIORITY_DIMENSIONS,
     normalizeInputs: normalizeInputs,
