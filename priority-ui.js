@@ -2202,6 +2202,13 @@
         return;
       }
 
+      // Persist target values before the visual animation so a fast modal close
+      // cannot skip the Trello save while sliders are still animating.
+      keys.forEach(function (key) {
+        state[key] = targets[key];
+      });
+      persistSliderState();
+
       var startTime = null;
       function step(ts) {
         if (startTime == null) startTime = ts;
@@ -2218,11 +2225,9 @@
         } else {
           sliderAnimFrame = null;
           keys.forEach(function (key) {
-            state[key] = targets[key];
             if (fields[key]) fields[key].setValue(targets[key]);
           });
           repaint();
-          persistSliderState();
         }
       }
       sliderAnimFrame = requestAnimationFrame(step);

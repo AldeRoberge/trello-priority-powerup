@@ -419,7 +419,7 @@ html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
   border-radius: 3px;
 }
 
-/* Priority editor — card-detail modal iframe (see index.html openPriorityPopup) */
+/* Priority editor — modal iframe (see index.html openPriorityPopup) */
 body.tp-page--priority {
   background: var(--tp-bg);
   min-height: auto;
@@ -431,13 +431,14 @@ body.tp-page--priority {
 .tp-page--priority {
   box-sizing: border-box;
   width: 100%;
-  max-width: 680px;
+  max-width: 880px;
   min-height: auto;
   margin: 0 auto;
-  padding: 20px 24px 28px;
+  padding: 20px 28px 28px;
 }
 
 .tp-page--priority .compare-page {
+  /* priority-ui.css sets .compare-page { max-width: 420px } — override for editor shell */
   max-width: none;
   width: 100%;
   margin: 0;
@@ -571,6 +572,14 @@ body.tp-page--priority {
   margin-top: 2px;
 }
 
+.tp-page--priority .calc-rsm-row {
+  max-width: none;
+}
+
+.tp-page--priority .calc-rsm-chart {
+  max-width: none;
+}
+
 .tp-page--priority .help-modal-root {
   z-index: 1000;
   padding: 1.25rem 16px;
@@ -579,6 +588,7 @@ body.tp-page--priority {
 .tp-page--priority .help-modal {
   padding-left: 1.25rem;
   padding-right: 1.25rem;
+  max-width: 560px;
 }
 
 /* Bridge priority-ui tokens to Trello theme inside the popup */
@@ -594,8 +604,8 @@ html[data-color-mode="dark"] .tp-page--priority {
   --surface-hover: var(--tp-surface-hover);
 }
 
-/* Tight popup width — stack label rows, shrink sliders not text */
-@container priority-popup (max-width: 340px) {
+/* Very narrow iframe only — stack label rows (modal/popup shell is wider than 340px) */
+@container priority-popup (max-width: 300px) {
   .tp-page--priority .heat-badge {
     grid-template-columns: 1fr;
     row-gap: 4px;

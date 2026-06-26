@@ -21,22 +21,13 @@
     const t = window.__trelloIframe || TrelloPowerUp.iframe();
     const mountEl = document.getElementById('priorityMount');
     let variant = null;
-    let saveTimer = null;
-    let pendingState = null;
+    let latestState = null;
 
-    async function flushSave() {
-      if (!pendingState) return;
-      var state = pendingState;
-      pendingState = null;
-      clearTimeout(saveTimer);
-      saveTimer = null;
-      await PriorityTrello.saveCardInputs(t, state);
-    }
-
-    function scheduleSave(state) {
-      pendingState = state;
-      clearTimeout(saveTimer);
-      saveTimer = setTimeout(flushSave, 250);
+    function saveState(state) {
+      latestState = state;
+      PriorityTrello.saveCardInputs(t, state).catch(function (err) {
+        console.error('Priority save failed', err);
+      });
     }
 
     function resizePopup() {
@@ -61,7 +52,7 @@
         loadState: function (defaults) {
           return inputs ? Object.assign({}, inputs) : Object.assign({}, defaults);
         },
-        onStateChange: scheduleSave,
+        onStateChange: saveState,
       });
 
       bindResizeHooks();
@@ -70,7 +61,7 @@
     }
 
     window.addEventListener('pagehide', function () {
-      if (pendingState) flushSave();
+      if (latestState) saveState(latestState);
     });
 
     init().catch(function (err) {
