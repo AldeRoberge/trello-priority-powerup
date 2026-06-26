@@ -21,6 +21,14 @@
     return stored || DEFAULT_PRIORITIES;
   }
 
+  function openPriorityPopup(t) {
+    return t.popup({
+      title: 'Set Priority',
+      url: './popup.html',
+      height: 320,
+    });
+  }
+
   TrelloPowerUp.initialize({
 
     // ── Card Badges (visible on card face in board view) ──────────────────
@@ -36,32 +44,29 @@
       }];
     },
 
-    // ── Card Detail Badges (visible when card is opened) ──────────────────
+    // ── Card Detail Badges (clickable Priority action on the card back) ─
     'card-detail-badges': async function(t) {
-      const priorityId = await t.get('card', 'shared', 'priority');
-      if (!priorityId) return [];
-      const priorities = await getPriorities(t);
-      const p = priorities.find(x => x.id === priorityId);
-      if (!p) return [];
-      return [{
-        title: 'Priority',
-        text: `${p.id}. ${p.label}`,
-        color: priorityBadgeColor(p.color),
-      }];
-    },
+      const [priorityId, priorities] = await Promise.all([
+        t.get('card', 'shared', 'priority'),
+        getPriorities(t),
+      ]);
 
-    // ── Card Buttons (appear inside the card back panel) ──────────────────
-    'card-buttons': function(t) {
+      if (priorityId) {
+        const p = priorities.find(x => x.id === priorityId);
+        if (p) {
+          return [{
+            title: 'Priority',
+            text: `${p.id}. ${p.label}`,
+            color: priorityBadgeColor(p.color),
+            callback: openPriorityPopup,
+          }];
+        }
+      }
+
       return [{
-        icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/flag.svg',
-        text: 'Set Priority',
-        callback: function(t) {
-          return t.popup({
-            title: 'Set Priority',
-            url: './popup.html',
-            height: 320,
-          });
-        },
+        text: 'Priority',
+        color: 'light-gray',
+        callback: openPriorityPopup,
       }];
     },
 
