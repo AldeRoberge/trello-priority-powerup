@@ -23,12 +23,18 @@
     const mountEl = document.getElementById('priorityMount');
     let variant = null;
     let latestState = null;
+    let saveChain = Promise.resolve();
 
     function saveState(state) {
       latestState = state;
-      PriorityTrello.saveCardInputs(t, state).catch(function (err) {
-        console.error('Priority save failed', err);
-      });
+      saveChain = saveChain
+        .then(function () {
+          return PriorityTrello.saveCardInputs(t, state);
+        })
+        .catch(function (err) {
+          console.error('Priority save failed', err);
+        });
+      return saveChain;
     }
 
     async function init() {
@@ -51,7 +57,9 @@
     }
 
     window.addEventListener('pagehide', function () {
-      if (latestState) saveState(latestState);
+      if (latestState) {
+        saveState(latestState);
+      }
     });
 
     init().catch(function (err) {

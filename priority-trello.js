@@ -5,6 +5,8 @@
   var CARD_PRIORITY_KEY = 'cardPriority';
   var LEGACY_PRIORITY_KEY = 'priority';
   var MATRIX_SETTINGS_KEY = 'matrixLabelSettings';
+  // Trello minimum for dynamic badge polling (card-badges / card-detail-badges).
+  var BADGE_REFRESH_SEC = 10;
   var DEFAULT_INPUTS = { urgency: 2, impact: 2, ease: 3 };
 
   var LEGACY_ID_TO_INPUTS = {
@@ -153,11 +155,27 @@
     };
   }
 
+  function withBadgeRefresh(badge) {
+    if (!badge) return { refresh: BADGE_REFRESH_SEC };
+    return Object.assign({ refresh: BADGE_REFRESH_SEC }, badge);
+  }
+
+  function dynamicCardFaceBadge(t) {
+    return {
+      dynamic: function () {
+        return getCardDisplay(t).then(function (display) {
+          if (!display) return { refresh: BADGE_REFRESH_SEC };
+          return withBadgeRefresh(buildCardFaceBadge(display));
+        });
+      },
+    };
+  }
+
   function cardFaceBadges(t) {
     return getCardDisplay(t)
       .then(function (display) {
         if (!display) return [];
-        return [buildCardFaceBadge(display)];
+        return [dynamicCardFaceBadge(t)];
       })
       .catch(function (err) {
         console.error('Priority card-badges failed', err);
@@ -165,14 +183,41 @@
       });
   }
 
+  function cardDetailBadges(t, openCallback) {
+    return [{
+      dynamic: function () {
+        return getCardDisplay(t)
+          .then(function (display) {
+            if (!display) {
+              return withBadgeRefresh({
+                text: 'Définir la priorité',
+                color: 'green',
+                callback: openCallback,
+              });
+            }
+            var badge = buildCardFaceBadge(display);
+            return withBadgeRefresh({
+              text: badge.text,
+              color: badge.color,
+              callback: openCallback,
+            });
+          })
+          .catch(function (err) {
+            console.error('Priority card-detail-badges dynamic failed', err);
+            return withBadgeRefresh({
+              text: 'Définir la priorité',
+              color: 'green',
+              callback: openCallback,
+            });
+          });
+      },
+    }];
+  }
+
   async function saveCardInputs(t, inputs) {
     var normalized = normalizeInputs(inputs);
     if (!normalized) return;
     await t.set('card', 'shared', CARD_PRIORITY_KEY, normalized);
-    var legacyId = await t.get('card', 'shared', LEGACY_PRIORITY_KEY);
-    if (legacyId != null && legacyId !== '') {
-      await t.remove('card', 'shared', LEGACY_PRIORITY_KEY);
-    }
   }
 
   global.PriorityTrello = {
@@ -190,6 +235,8 @@
     tierDetailBadgeColor: tierDetailBadgeColor,
     buildCardFaceBadge: buildCardFaceBadge,
     cardFaceBadges: cardFaceBadges,
+    cardDetailBadges: cardDetailBadges,
     saveCardInputs: saveCardInputs,
+    BADGE_REFRESH_SEC: BADGE_REFRESH_SEC,
   };
 })(typeof window !== 'undefined' ? window : this);

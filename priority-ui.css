@@ -25,6 +25,7 @@
   --chart-crosshair-stroke: rgba(26, 25, 23, 0.35);
   --chart-marker-shadow: rgba(0, 0, 0, 0.22);
   --chart-marker-shadow-inutile: rgba(0, 0, 0, 0.14);
+  --chart-marker-core: #ffffff;
   --chart-marker-core-inutile: #FFFFFF;
   --heat-accent-fallback: #085041;
   --heat-dot-fallback: #9B9890;
@@ -65,6 +66,7 @@ html[data-color-mode="dark"] {
   --chart-crosshair-stroke: rgba(182, 194, 207, 0.35);
   --chart-marker-shadow: rgba(0, 0, 0, 0.45);
   --chart-marker-shadow-inutile: rgba(0, 0, 0, 0.3);
+  --chart-marker-core: #ffffff;
   --chart-marker-core-inutile: #ffffff;
   --heat-accent-fallback: #4bce97;
   --heat-dot-fallback: #ffffff;
@@ -141,60 +143,6 @@ body {
 /* ── Criteria fields section ── */
 .variant-fields-section {
   margin-top: 14px;
-}
-
-.variant-fields-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  gap: 8px;
-  padding: 8px 14px 4px;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.variant-fields-header-left {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.variant-fields-header-label {
-  font-weight: 500;
-}
-
-.variant-fields-config {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  border-radius: 5px;
-  color: var(--text-muted);
-  cursor: pointer;
-  flex-shrink: 0;
-  line-height: 1;
-}
-
-.variant-fields-config .ti {
-  font-size: 15px;
-}
-
-.variant-fields-config:hover {
-  color: var(--text-primary);
-  background: var(--surface-1);
-}
-
-.variant-fields-config:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--focus-ring);
 }
 
 .variant-fields-section > .variant-fields {
@@ -662,7 +610,7 @@ body.help-modal-open {
   gap: 6px;
   grid-column: 2;
   grid-row: 1;
-  font-size: 15px;
+  font-size: 19px;
   font-weight: 600;
   line-height: 1;
   color: var(--heat-text, var(--heat-accent-fallback));
@@ -948,7 +896,12 @@ body.help-modal-open {
   pointer-events: none;
 }
 
+html[data-color-mode="dark"] .calc-rsm-marker-glow {
+  fill-opacity: 0.38;
+}
+
 .calc-rsm-marker-core {
+  fill: var(--chart-marker-core);
   paint-order: stroke fill;
   vector-effect: non-scaling-stroke;
   filter:
@@ -956,6 +909,13 @@ body.help-modal-open {
     drop-shadow(0 0 1px rgba(0, 0, 0, 0.18));
   cursor: grab;
   pointer-events: none;
+}
+
+html[data-color-mode="dark"] .calc-rsm-marker-core {
+  filter:
+    drop-shadow(0 0 3px rgba(255, 255, 255, 0.55))
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.85))
+    drop-shadow(0 1px 4px rgba(0, 0, 0, 0.65));
 }
 
 .calc-rsm-marker-hit {

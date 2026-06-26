@@ -77,30 +77,8 @@
         return [];
       },
 
-      'card-detail-badges': async function(t) {
-        try {
-          const display = await PriorityTrello.getCardDisplay(t);
-          if (!display) {
-            return [{
-              text: 'Définir la priorité',
-              color: 'green',
-              callback: openPriorityPopup,
-            }];
-          }
-          const badge = PriorityTrello.buildCardFaceBadge(display);
-          return [{
-            text: badge.text,
-            color: badge.color,
-            callback: openPriorityPopup,
-          }];
-        } catch (err) {
-          console.error('Priority card-detail-badges failed', err);
-          return [{
-            text: 'Définir la priorité',
-            color: 'green',
-            callback: openPriorityPopup,
-          }];
-        }
+      'card-detail-badges': function (t) {
+        return PriorityTrello.cardDetailBadges(t, openPriorityPopup);
       },
 
       'on-enable': function(t) {

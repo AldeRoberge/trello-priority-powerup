@@ -491,7 +491,7 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .heat-badge-label {
-  font-size: 16px;
+  font-size: 20px;
 }
 
 .tp-page--priority .heat-tier-desc {
@@ -538,15 +538,6 @@ body.tp-page--priority {
 
 .tp-page--priority .field-slider {
   margin-top: 4px;
-}
-
-.tp-page--priority .variant-fields-header {
-  font-size: 14px;
-  padding: 10px 4px 4px;
-}
-
-.tp-page--priority .variant-fields-header-left {
-  min-width: 0;
 }
 
 .tp-page--priority .variant-fields-section {
@@ -621,11 +612,6 @@ html[data-color-mode="dark"] .tp-page--priority {
   .tp-page--priority .field {
     flex-direction: column;
     gap: 6px;
-  }
-
-  .tp-page--priority .variant-fields-header {
-    padding-top: 4px;
-    padding-bottom: 4px;
   }
 
   .tp-page--priority .heat-seg-labels {

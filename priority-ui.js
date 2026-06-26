@@ -2007,7 +2007,7 @@
       markerCore.setAttribute('cx', String(cx));
       markerCore.setAttribute('cy', String(cy));
       markerCore.setAttribute('r', String(MARKER_CORE_R));
-      markerCore.setAttribute('fill', readCssVar('--surface-2', '#FFFFFF'));
+      markerCore.setAttribute('fill', readCssVar('--chart-marker-core', '#FFFFFF'));
       markerCore.setAttribute('stroke', d.seg);
       markerCore.setAttribute('stroke-width', String(MARKER_STROKE_W));
 
@@ -2358,20 +2358,9 @@
     var fieldsSection = document.createElement('div');
     fieldsSection.className = 'variant-fields-section';
 
-    var fieldsHeader = document.createElement('div');
-    fieldsHeader.className = 'variant-fields-header';
-    fieldsHeader.innerHTML =
-      '<span class="variant-fields-header-left">' +
-        '<span class="variant-fields-header-label">Critères</span>' +
-        '<button type="button" class="variant-fields-config" aria-label="Configurer les critères" title="Configurer les critères">' +
-          '<i class="ti ti-settings" aria-hidden="true"></i>' +
-        '</button>' +
-      '</span>';
-
     var fieldsWrap = document.createElement('div');
     fieldsWrap.className = 'variant-fields';
 
-    fieldsSection.appendChild(fieldsHeader);
     fieldsSection.appendChild(fieldsWrap);
     card.appendChild(fieldsSection);
 
@@ -2411,15 +2400,6 @@
         }
       });
     });
-
-    var configBtn = fieldsHeader.querySelector('.variant-fields-config');
-    if (configBtn) {
-      configBtn.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        openCriteriaWizard(variantConfig.dimensions, wizardHooks);
-      });
-    }
 
     if (showCalcGraph) {
       try {
