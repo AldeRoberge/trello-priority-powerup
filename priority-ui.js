@@ -1,5 +1,5 @@
 /**
- * Priority UI + scoring for the Card Priorities Power-Up.
+ * Priority UI + scoring for the Priorité Power-Up.
  * Loaded via <script> — exposes window.PriorityUI (no module bundler).
  *
  * Table of contents

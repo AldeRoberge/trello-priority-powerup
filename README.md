@@ -1,4 +1,4 @@
-# Priorités des cartes — Power-Up Trello
+# Priorité — Power-Up Trello
 
 Power-Up Trello pour évaluer chaque carte selon **l'urgence**, **l'impact** et **l'effort** : score 0–10, palier (Critique → Optionnel) et badges colorés sur le tableau.
 

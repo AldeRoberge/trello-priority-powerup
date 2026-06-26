@@ -1,7 +1,7 @@
 {
   "name": "trello-priority-powerup",
   "private": true,
-  "description": "Trello Power-Up — scoring urgence/impact/effort avec badges et libellés de palier",
+  "description": "Priorité — Power-Up Trello pour scoring urgence/impact/effort avec badges et libellés de palier",
   "scripts": {
     "verify:presets": "cscript //nologo sandbox/verify-presets.js",
     "verify:version": "node sandbox/verify-version.js",
