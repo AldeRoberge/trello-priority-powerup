@@ -1267,13 +1267,14 @@
     lbl.className = 'field-lbl';
     var hasAffirmations = !!(LABELS[wordsKey] && LABELS[wordsKey].affirmations);
 
-    function renderLbl(affirmText) {
-      var html = '<i class="ti ' + icon + '"></i> ' + label;
-      if (affirmText) {
-        html += ' <span class="field-lbl-affirm">' + affirmText + '</span>';
-      }
-      lbl.innerHTML = html;
-    }
+    var lblIcon = document.createElement('i');
+    lblIcon.className = 'ti ' + icon;
+    var lblText = document.createTextNode(' ' + label + ' ');
+
+    var affirmBtn = document.createElement('button');
+    affirmBtn.type = 'button';
+    affirmBtn.className = 'field-lbl-affirm';
+    affirmBtn.setAttribute('aria-label', 'Informations sur ' + label);
 
     function openFieldHelp() {
       var wiz = config.wizard;
@@ -1297,20 +1298,17 @@
       });
     }
 
-    var val = document.createElement('button');
-    val.type = 'button';
-    val.className = 'field-val';
-    val.setAttribute('aria-label', 'Informations sur ' + label);
-    val.title = wordFor(wordsKey, snappedLevel(value, min, max));
-
-    val.addEventListener('click', openFieldHelp);
-    val.addEventListener('keydown', function (e) {
+    affirmBtn.addEventListener('click', openFieldHelp);
+    affirmBtn.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         openFieldHelp();
       }
     });
 
+    lbl.appendChild(lblIcon);
+    lbl.appendChild(lblText);
+    lbl.appendChild(affirmBtn);
     side.appendChild(lbl);
 
     var content = document.createElement('div');
@@ -1336,7 +1334,6 @@
     inputEl.addEventListener('change', handleRangeInput);
 
     sliderWrap.appendChild(inputEl);
-    content.appendChild(val);
     content.appendChild(sliderWrap);
     field.appendChild(side);
     field.appendChild(content);
@@ -1347,10 +1344,11 @@
       v = clamp(v, min, max);
       var idx = snappedLevel(v, min, max);
       var text = wordFor(wordsKey, idx);
-      val.innerHTML = wordHtmlFor(wordsKey, idx);
-      val.title = text;
+      var affirmText = hasAffirmations ? affirmationFor(wordsKey, idx) : '';
+      affirmBtn.innerHTML = affirmText || wordHtmlFor(wordsKey, idx);
+      affirmBtn.title = text;
+      affirmBtn.hidden = !affirmBtn.innerHTML;
       inputEl.value = String(v);
-      renderLbl(hasAffirmations ? affirmationFor(wordsKey, idx) : '');
     }
 
     function setValue(v) {
