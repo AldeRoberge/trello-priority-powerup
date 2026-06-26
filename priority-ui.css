@@ -650,14 +650,12 @@ body.help-modal-open {
 .heat-badge {
   display: grid;
   grid-template-columns: auto 1fr;
-  grid-template-rows: auto auto;
   align-items: center;
   column-gap: 8px;
-  row-gap: 4px;
   border-radius: 0 0 var(--radius) var(--radius);
   padding: 7px 11px;
   background: var(--heat-fill, transparent);
-  margin: -11px -12px 12px;
+  margin: -11px -12px 0;
 }
 
 .heat-top {
@@ -714,9 +712,7 @@ body.help-modal-open {
 }
 
 .heat-tier-desc {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  margin: 0;
+  margin: 8px 0 12px;
   font-size: 13px;
   line-height: 1.45;
   min-height: calc(1.45em * 3);

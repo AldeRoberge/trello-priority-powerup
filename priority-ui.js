@@ -423,9 +423,10 @@
       return {
         inutile: false,
         score: result.score,
-        label: matrix ? matrix.label : result.tier.label,
-        description: matrix ? matrix.description : (result.tier.description || ''),
+        label: result.tier.label,
         tierLabel: result.tier.label,
+        matrixLabel: matrix && matrix.fromMatrix ? matrix.label : null,
+        description: matrix ? matrix.description : (result.tier.description || ''),
         matrixRuleId: matrix ? matrix.ruleId : null,
         matrixLevels: matrix ? matrix.levels : null,
         matrixEnabled: matrixEnabled,
@@ -1395,13 +1396,12 @@
     blabel.textContent = 'Optionnel';
     badge.appendChild(bnum);
     badge.appendChild(blabel);
+    panel.appendChild(badge);
 
     var tierDesc = document.createElement('p');
     tierDesc.className = 'heat-tier-desc';
     tierDesc.hidden = true;
-    badge.appendChild(tierDesc);
-
-    panel.appendChild(badge);
+    panel.appendChild(tierDesc);
 
     var top = document.createElement('div');
     top.className = 'heat-top';
@@ -1461,8 +1461,12 @@
     el.appendChild(panel);
 
     function tierDescription(display) {
-      if (display.description) return display.description;
       if (display.inutile) return INUTILE_STYLES.description || '';
+      if (display.matrixLabel) {
+        var matrixDesc = display.description || '';
+        return matrixDesc ? display.matrixLabel + '. ' + matrixDesc : display.matrixLabel;
+      }
+      if (display.description) return display.description;
       if (display.tierI == null) return '';
       for (var k = 0; k < TIERS.length; k++) {
         if (TIERS[k].i === display.tierI) return TIERS[k].description || '';
@@ -1475,9 +1479,10 @@
       var v = tierVisuals(d.inutile ? { inutile: true, label: INUTILE_LABEL } : { i: d.tierI, label: d.label });
       bnumVal.textContent = formatScore(d.score);
       dot.style.background = v.seg;
-      blabel.textContent = d.label;
+      blabel.textContent = d.tierLabel || d.label;
       badge.style.setProperty('--heat-fill', v.fill);
       badge.style.setProperty('--heat-text', v.text);
+      panel.style.setProperty('--heat-text', v.text);
       badge.style.removeProperty('background');
       bnum.style.removeProperty('color');
       blabel.style.removeProperty('color');

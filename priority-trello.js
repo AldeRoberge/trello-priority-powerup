@@ -131,7 +131,7 @@
 
   function formatBadgeText(display) {
     if (!display) return '';
-    return tierBadgeDot(display) + ' ' + display.label;
+    return tierBadgeDot(display) + ' ' + (display.tierLabel || display.label);
   }
 
   function tierDetailBadgeColor(display) {

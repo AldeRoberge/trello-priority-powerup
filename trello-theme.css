@@ -477,9 +477,13 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .heat-badge {
-  margin: -14px -12px 12px;
+  margin: -14px -12px 0;
   padding: 12px 16px;
   grid-template-columns: auto minmax(min-content, 1fr);
+}
+
+.tp-page--priority .heat-tier-desc {
+  margin: 10px 0 14px;
 }
 
 .tp-page--priority .heat-top-label {
@@ -630,11 +634,6 @@ html[data-color-mode="dark"] .tp-page--priority {
   .tp-page--priority .heat-badge-label {
     grid-column: 1;
     grid-row: 2;
-  }
-
-  .tp-page--priority .heat-tier-desc {
-    grid-column: 1;
-    grid-row: 3;
   }
 
   .tp-page--priority .field {
