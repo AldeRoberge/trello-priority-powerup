@@ -511,7 +511,11 @@ body.tp-page--priority {
   font-size: 17px;
 }
 
-.tp-page--priority .field-lbl-affirm {
+.tp-page--priority .field-desc {
+  font-size: 14px;
+}
+
+.tp-page--priority .field-val {
   font-size: 14px;
 }
 
@@ -528,14 +532,12 @@ body.tp-page--priority {
   margin-bottom: 14px;
 }
 
-.tp-page--priority .field-side {
-  width: 36%;
-  min-width: 92px;
-  max-width: 148px;
+.tp-page--priority .field {
+  gap: 5px;
 }
 
-.tp-page--priority .field-content {
-  gap: 5px;
+.tp-page--priority .field-slider {
+  margin-top: 4px;
 }
 
 .tp-page--priority .variant-fields-header {
@@ -619,12 +621,6 @@ html[data-color-mode="dark"] .tp-page--priority {
   .tp-page--priority .field {
     flex-direction: column;
     gap: 6px;
-  }
-
-  .tp-page--priority .field-side {
-    width: auto;
-    max-width: none;
-    padding-top: 0;
   }
 
   .tp-page--priority .variant-fields-header {
