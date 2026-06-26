@@ -198,7 +198,7 @@
     {
       id: 'bruit-fond-lourd',
       label: 'Chantier en veille',
-      description: 'Sujet exigeant à retour limité, sans échéance. Laisser dormir plutôt que mobiliser l\'équipe maintenant.',
+      description: 'Sujet exigeant à retour limité, sans urgence. Laisser dormir plutôt que mobiliser l\'équipe maintenant.',
       priority: 83,
       when: { ease: ['veryLow'], impact: ['veryLow'], urgency: ['low'] }
     },
