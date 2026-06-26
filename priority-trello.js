@@ -76,11 +76,13 @@
     var impact = asNumber(raw.impact);
     var ease = asNumber(raw.ease);
     if (!isFinite(urgency) || !isFinite(impact) || !isFinite(ease)) return null;
-    return {
+    var normalized = {
       urgency: Math.max(0, Math.min(4, urgency)),
       impact: Math.max(0, Math.min(4, impact)),
       ease: Math.max(1, Math.min(5, ease)),
     };
+    if (raw.enAttente === true) normalized.enAttente = true;
+    return normalized;
   }
 
   async function getCardInputs(t) {
@@ -134,9 +136,11 @@
     6: '\u00B7', // · Optionnel
   };
   var BADGE_DOT_INUTILE = '\u00B7'; // · inutile
+  var BADGE_DOT_BLOCKED = '\u2298'; // ⊘ blocked / en attente
 
   function tierBadgeDot(display) {
     if (!display) return '\u25CF';
+    if (display.blocked) return BADGE_DOT_BLOCKED;
     if (display.inutile) return BADGE_DOT_INUTILE;
     var i = display.tierI;
     if (i != null && Object.prototype.hasOwnProperty.call(BADGE_DOTS_BY_TIER, i)) {
@@ -147,6 +151,9 @@
 
   function formatBadgeText(display) {
     if (!display) return '';
+    if (display.blocked && typeof PriorityUI !== 'undefined' && PriorityUI.BLOCKED_DISPLAY) {
+      return PriorityUI.BLOCKED_DISPLAY;
+    }
     var label = (typeof PriorityUI !== 'undefined' && PriorityUI.classicTierLabel)
       ? PriorityUI.classicTierLabel(display)
       : (display.tierLabel || display.label);
@@ -154,7 +161,9 @@
   }
 
   function tierDetailBadgeColor(display) {
-    if (!display || display.inutile) return 'light-gray';
+    if (!display) return 'light-gray';
+    if (display.blocked) return 'pink';
+    if (display.inutile) return 'light-gray';
     var i = display.tierI;
     if (i === 0) return 'red';
     if (i === 1 || i === 2) return 'orange';
@@ -234,6 +243,11 @@
   async function saveCardInputs(t, inputs) {
     var normalized = normalizeInputs(inputs);
     if (!normalized) return;
+    if (inputs && inputs.enAttente === true) {
+      normalized.enAttente = true;
+    } else {
+      delete normalized.enAttente;
+    }
     await t.set('card', 'shared', CARD_PRIORITY_KEY, normalized);
   }
 
@@ -256,5 +270,6 @@
     cardDetailBadges: cardDetailBadges,
     saveCardInputs: saveCardInputs,
     BADGE_REFRESH_SEC: BADGE_REFRESH_SEC,
+    BADGE_DOT_BLOCKED: BADGE_DOT_BLOCKED,
   };
 })(typeof window !== 'undefined' ? window : this);

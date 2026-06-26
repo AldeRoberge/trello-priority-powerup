@@ -420,12 +420,26 @@
     return Matrix.resolveLabel(inputs, ctx);
   }
 
+  function isEnAttente(inputs) {
+    return !!(inputs && inputs.enAttente);
+  }
+
+  function withBlockedDisplay(display, inputs) {
+    if (!display || !isEnAttente(inputs)) return display;
+    return Object.assign({}, display, {
+      blocked: true,
+      label: BLOCKED_DISPLAY,
+      description: BLOCKED_DESCRIPTION
+    });
+  }
+
   function resolveDisplay(result, inputs, labelSettings) {
-    if (!isInutile(inputs)) {
+    var inputsSafe = inputs || {};
+    if (!isInutile(inputsSafe)) {
       var settings = labelSettings != null ? labelSettings : matrixSettings;
-      var matrix = resolveMatrixLabel(inputs, result.tier, result.score, settings);
+      var matrix = resolveMatrixLabel(inputsSafe, result.tier, result.score, settings);
       var matrixEnabled = !settings || settings.enabled !== false;
-      return {
+      return withBlockedDisplay({
         inutile: false,
         score: result.score,
         label: result.tier.label,
@@ -441,9 +455,9 @@
         seg: result.tier.seg,
         tierI: result.tier.i,
         cardTier: result.tier
-      };
+      }, inputsSafe);
     }
-    return {
+    return withBlockedDisplay({
       inutile: true,
       score: 0,
       label: INUTILE_LABEL,
@@ -462,15 +476,17 @@
         fill: INUTILE_STYLES.fill,
         seg: INUTILE_STYLES.seg
       }
-    };
+    }, inputsSafe);
   }
 
   function classicTierLabel(display) {
     if (!display) return '';
+    if (display.blocked) return BLOCKED_LABEL;
     return display.tierLabel || display.label || '';
   }
 
   function tierDescriptionBody(display) {
+    if (display.blocked) return BLOCKED_DESCRIPTION;
     if (display.inutile) return INUTILE_STYLES.description || '';
     if (display.description) return display.description;
     if (display.tierI == null) return '';
@@ -484,6 +500,12 @@
     if (!display) {
       el.textContent = '';
       el.hidden = true;
+      return;
+    }
+    if (display.blocked) {
+      el.textContent = BLOCKED_DESCRIPTION;
+      el.hidden = !BLOCKED_DESCRIPTION;
+      el.style.removeProperty('color');
       return;
     }
     if (display.inutile) {
@@ -1431,6 +1453,61 @@
     };
   }
 
+  function createEnAttenteField(config) {
+    var el = config.el;
+    var checked = !!config.value;
+    var onChange = config.onChange || function () {};
+
+    var field = document.createElement('div');
+    field.className = 'field field--en-attente';
+
+    var label = document.createElement('label');
+    label.className = 'en-attente-label';
+
+    var input = document.createElement('input');
+    input.type = 'checkbox';
+    input.className = 'en-attente-checkbox';
+    input.checked = checked;
+    input.setAttribute('aria-describedby', 'en-attente-desc');
+
+    var textWrap = document.createElement('span');
+    textWrap.className = 'en-attente-text';
+
+    var title = document.createElement('span');
+    title.className = 'en-attente-title';
+    title.textContent = 'En attente';
+
+    var desc = document.createElement('span');
+    desc.className = 'en-attente-desc';
+    desc.id = 'en-attente-desc';
+    desc.textContent = BLOCKED_DESCRIPTION;
+
+    textWrap.appendChild(title);
+    textWrap.appendChild(desc);
+    label.appendChild(input);
+    label.appendChild(textWrap);
+    field.appendChild(label);
+    el.appendChild(field);
+
+    function setValue(value) {
+      input.checked = !!value;
+    }
+
+    function getValue() {
+      return input.checked;
+    }
+
+    input.addEventListener('change', function () {
+      onChange(getValue());
+    });
+
+    return {
+      el: field,
+      getValue: getValue,
+      setValue: setValue
+    };
+  }
+
   function createHeatPanel(config) {
     var el = config.el;
     var onSegmentClick = config.onSegmentClick || function () {};
@@ -1524,16 +1601,23 @@
       var d = display || resolveDisplay(result, {});
       var v = tierVisuals(d.inutile ? { inutile: true, label: INUTILE_LABEL } : { i: d.tierI, label: d.label });
       bnumVal.textContent = formatScore(d.score);
-      dot.style.background = v.seg;
-      blabel.textContent = classicTierLabel(d);
+      dot.classList.toggle('is-blocked', !!d.blocked);
+      if (d.blocked) {
+        dot.style.removeProperty('background');
+      } else {
+        dot.style.background = v.seg;
+      }
+      blabel.textContent = d.blocked ? BLOCKED_DISPLAY : classicTierLabel(d);
       badge.style.setProperty('--heat-fill', v.fill);
       badge.style.setProperty('--heat-text', v.text);
       panel.style.setProperty('--heat-text', v.text);
       badge.style.removeProperty('background');
       bnum.style.removeProperty('color');
       blabel.style.removeProperty('color');
-      badge.classList.toggle('is-inutile', d.inutile);
-      panel.classList.toggle('is-inutile', d.inutile);
+      badge.classList.toggle('is-inutile', d.inutile && !d.blocked);
+      badge.classList.toggle('is-blocked', !!d.blocked);
+      panel.classList.toggle('is-inutile', d.inutile && !d.blocked);
+      panel.classList.toggle('is-blocked', !!d.blocked);
       paintTierDescription(tierDesc, d);
       segs.forEach(function (s) {
         s.classList.toggle('on', !d.inutile && d.tierI != null && +s.dataset.i === d.tierI);
@@ -2264,6 +2348,7 @@
     var defaults = variantConfig.defaults || {};
     var fields = {};
     var state = {};
+    var enAttenteField;
     var heat;
     var calcGraph;
     var showCalcGraph = formulaKey === 'baseline';
@@ -2276,6 +2361,7 @@
     state = typeof variantConfig.loadState === 'function'
       ? variantConfig.loadState(defaultState)
       : loadSliderValues(defaultState, variantConfig.dimensions);
+    state.enAttente = !!(state.enAttente || defaults.enAttente);
 
     function persistSliderState(skipFieldSync) {
       if (!skipFieldSync) syncStateFromFields();
@@ -2290,6 +2376,7 @@
       Object.keys(fields).forEach(function (key) {
         state[key] = fields[key].getValue();
       });
+      if (enAttenteField) state.enAttente = enAttenteField.getValue();
     }
 
     function cancelSliderAnim() {
@@ -2357,7 +2444,8 @@
         var display = resolveDisplay(result, state);
         applyCardTierTint(card, display.cardTier);
         card.classList.toggle('is-inutile', display.inutile);
-        card.dataset.tier = display.label;
+        card.classList.toggle('is-blocked', !!display.blocked);
+        card.dataset.tier = display.blocked ? BLOCKED_LABEL : display.label;
         heat.paint(result, display);
         if (calcGraph) calcGraph.paint(result, state, display);
       } catch (err) {
@@ -2396,6 +2484,16 @@
 
     fieldsSection.appendChild(fieldsWrap);
     card.appendChild(fieldsSection);
+
+    enAttenteField = createEnAttenteField({
+      el: fieldsWrap,
+      value: state.enAttente,
+      onChange: function () {
+        cancelSliderAnim();
+        repaint();
+        persistSliderState();
+      }
+    });
 
     var wizardHooks = {
       getValue: function (key) {
@@ -2474,6 +2572,9 @@
           state[key] = next[key];
           if (fields[key]) fields[key].setValue(next[key]);
         });
+        if (next.enAttente != null && enAttenteField) {
+          enAttenteField.setValue(next.enAttente);
+        }
         repaint();
         persistSliderState();
       },
@@ -2533,11 +2634,13 @@
     closeHelpModal: closeHelpModal,
     openCriteriaWizard: openCriteriaWizard,
     createField: createField,
+    createEnAttenteField: createEnAttenteField,
     createHeatPanel: createHeatPanel,
     createCalcGraphPanel: createCalcGraphPanel,
     mountVariant: mountVariant,
     tierFor: tierFor,
     isInutile: isInutile,
+    isEnAttente: isEnAttente,
     resolveDisplay: resolveDisplay,
     classicTierLabel: classicTierLabel,
     setMatrixSettings: setMatrixSettings,
@@ -2546,6 +2649,9 @@
     INUTILE_EPS: INUTILE_EPS,
     INUTILE_LABEL: INUTILE_LABEL,
     INUTILE_STYLES: INUTILE_STYLES,
+    BLOCKED_LABEL: BLOCKED_LABEL,
+    BLOCKED_DISPLAY: BLOCKED_DISPLAY,
+    BLOCKED_DESCRIPTION: BLOCKED_DESCRIPTION,
     wordFor: wordFor,
     wordHtmlFor: wordHtmlFor,
     levelIconSvg: levelIconSvg,
