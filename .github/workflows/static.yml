@@ -1,34 +1,32 @@
-﻿# Deploy via GitHub Actions (upload-pages-artifact + deploy-pages).
-# In repo Settings â†’ Pages â†’ Build and deployment, set Source to
-# "GitHub Actions" â€” not "Deploy from a branch". Branch-based Pages
+# Deploy via GitHub Actions (upload-pages-artifact + deploy-pages).
+# In repo Settings → Pages → Build and deployment, set Source to
+# "GitHub Actions" — not "Deploy from a branch". Branch-based Pages
 # also runs the built-in pages-build-deployment workflow on every push.
 name: Deploy static content to Pages
 
 on:
   push:
     branches: [main]
-    # Stamp commits only touch build-info.json; ignore so they do not start a second deploy.
-    paths-ignore:
-      - build-info.json
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
-# One Pages deployment at a time; cancel superseded Actions runs (after Source = GitHub Actions only).
+# Pages allows one in-flight deployment per site. cancel-in-progress: true only
+# stops the Actions job; the Pages deployment keeps settling and the next run
+# fails with "in progress deployment". Queue runs instead (GitHub starter default).
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment_retry.outputs.page_url != '' && steps.deployment_retry.outputs.page_url || steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
 
@@ -39,17 +37,35 @@ jobs:
       - name: Write build timestamp
         run: node scripts/stamp-build.js
 
-      - name: Persist build timestamp in repo
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "chore: stamp build [skip ci]"
-          file_pattern: build-info.json
-
       - uses: actions/configure-pages@v6
 
       - uses: actions/upload-pages-artifact@v4
         with:
           path: '.'
 
-      - id: deployment
-        uses: actions/deploy-pages@v5
+      - name: Wait for Pages deployment slot
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash scripts/wait-pages-deployment-slot.sh
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+
+      - name: Wait for Pages deployment slot (retry)
+        if: steps.deployment.outcome != 'success'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash scripts/wait-pages-deployment-slot.sh
+
+      - name: Deploy to GitHub Pages (retry)
+        id: deployment_retry
+        if: steps.deployment.outcome != 'success'
+        uses: actions/deploy-pages@v4
+
+      - name: Require successful deploy
+        if: steps.deployment.outcome != 'success' && steps.deployment_retry.outcome != 'success'
+        run: |
+          echo "Pages deploy failed after retry."
+          exit 1
