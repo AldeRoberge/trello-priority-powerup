@@ -151,8 +151,10 @@
 
   function formatBadgeText(display) {
     if (!display) return '';
-    if (display.blocked && typeof PriorityUI !== 'undefined' && PriorityUI.BLOCKED_DISPLAY) {
-      return PriorityUI.BLOCKED_DISPLAY;
+    if (display.blocked) {
+      return (typeof PriorityUI !== 'undefined' && PriorityUI.formatBlockedBadgeText)
+        ? PriorityUI.formatBlockedBadgeText()
+        : BADGE_DOT_BLOCKED + ' Bloqu\u00e9';
     }
     var label = (typeof PriorityUI !== 'undefined' && PriorityUI.classicTierLabel)
       ? PriorityUI.classicTierLabel(display)
@@ -162,7 +164,7 @@
 
   function tierDetailBadgeColor(display) {
     if (!display) return 'light-gray';
-    if (display.blocked) return 'pink';
+    if (display.blocked) return 'red';
     if (display.inutile) return 'light-gray';
     var i = display.tierI;
     if (i === 0) return 'red';

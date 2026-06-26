@@ -518,12 +518,6 @@
       el.hidden = !inutileDesc;
       return;
     }
-    if (display.blocked) {
-      el.textContent = BLOCKED_DESCRIPTION;
-      el.hidden = !BLOCKED_DESCRIPTION;
-      el.style.removeProperty('color');
-      return;
-    }
     if (display.matrixLabel) {
       var matrixDesc = display.description || '';
       var html = '<span class="heat-tier-desc-subtitle">' + escapeHtml(display.matrixLabel) + '</span>';
