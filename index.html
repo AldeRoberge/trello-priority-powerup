@@ -54,10 +54,12 @@
 
   function initPowerUp() {
     function openPriorityPopup(t) {
-      return t.popup({
+      return t.modal({
         title: 'Définir la priorité',
         url: './popup.html',
-        height: 480,
+        height: 520,
+        fullscreen: false,
+        accentColor: '#0C66E4',
       });
     }
 

@@ -82,10 +82,6 @@ html[data-color-mode="dark"] .heat-badge.is-inutile .heat-tier-desc {
   opacity: 1;
 }
 
-html[data-color-mode="dark"] .heat-badge-label .priority-icon {
-  opacity: 1;
-}
-
 html[data-color-mode="dark"] .calc-rsm-marker.is-inutile .calc-rsm-marker-core {
   opacity: 1;
 }
@@ -714,19 +710,6 @@ body.help-modal-open {
   font-weight: 600;
   line-height: 1;
   color: var(--heat-text, var(--heat-accent-fallback));
-}
-
-.heat-badge-label .priority-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
-.heat-badge-label .priority-icon {
-  flex-shrink: 0;
-  color: currentColor;
-  opacity: 0.92;
 }
 
 .heat-badge.is-inutile .heat-badge-num,

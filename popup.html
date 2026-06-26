@@ -57,7 +57,7 @@
     document.getElementById('clearBtn').addEventListener('click', async () => {
       clearTimeout(saveTimer);
       await PriorityTrello.clearCardPriority(t);
-      t.closePopup();
+      t.closeModal();
     });
 
     init().catch(function (err) {

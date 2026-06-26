@@ -419,7 +419,7 @@ html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
   border-radius: 3px;
 }
 
-/* Priority editor — card-detail popup iframe (see index.html openPriorityPopup) */
+/* Priority editor — card-detail modal iframe (see index.html openPriorityPopup) */
 body.tp-page--priority {
   background: var(--tp-bg);
   min-height: auto;
@@ -433,14 +433,14 @@ body.tp-page--priority {
   width: 100%;
   max-width: 100%;
   min-height: auto;
-  padding: 12px 0 16px;
+  padding: 20px 24px 28px;
 }
 
 .tp-page--priority .compare-page {
-  max-width: none;
+  max-width: 480px;
   width: 100%;
-  margin: 0;
-  padding: 0;
+  margin: 0 auto;
+  padding: 4px 0 8px;
   overflow-x: hidden;
   container-type: inline-size;
   container-name: priority-popup;
@@ -458,7 +458,7 @@ body.tp-page--priority {
   width: 100%;
   min-width: 0;
   margin: 0;
-  padding: 0.375rem 0 0.625rem;
+  padding: 0.625rem 0 0.875rem;
   box-shadow: none;
   border: none;
   background: transparent;
@@ -466,11 +466,11 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .heat-panel {
-  padding: 10px 0 12px;
+  padding: 14px 12px 16px;
 }
 
 .tp-page--priority .heat-badge {
-  padding: 10px 12px;
+  padding: 12px 16px;
   grid-template-columns: auto minmax(min-content, 1fr);
 }
 
@@ -514,20 +514,13 @@ body.tp-page--priority {
   font-size: 14px;
 }
 
-.tp-page--priority .heat-badge-label .priority-label {
-  white-space: normal;
-  overflow: visible;
-  text-overflow: unset;
-  min-width: 0;
-}
-
 .tp-page--priority .heat-badge-label {
   flex-wrap: wrap;
 }
 
 .tp-page--priority .variant-fields {
-  padding-left: 2px;
-  padding-right: 2px;
+  padding-left: 10px;
+  padding-right: 10px;
 }
 
 .tp-page--priority .field {
@@ -563,7 +556,7 @@ body.tp-page--priority {
 
 .tp-page--priority .variant-fields-toggle,
 .tp-page--priority .calc-graph-toggle {
-  padding: 8px 0;
+  padding: 10px 4px;
   max-width: 100%;
 }
 
@@ -581,19 +574,19 @@ body.tp-page--priority {
 }
 
 .tp-page--priority > .tp-btn--ghost {
-  margin-top: 10px;
-  padding: 8px 0;
+  margin-top: 12px;
+  padding: 10px 8px;
   font-size: 14px;
 }
 
 .tp-page--priority .help-modal-root {
   z-index: 1000;
-  padding: 1.25rem 0;
+  padding: 1.25rem 16px;
 }
 
 .tp-page--priority .help-modal {
-  padding-left: 0;
-  padding-right: 0;
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
 }
 
 /* Bridge priority-ui tokens to Trello theme inside the popup */

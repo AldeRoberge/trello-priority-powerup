@@ -6,7 +6,7 @@
  * ─────────────────
  *  1. Formula weights & constants
  *  2. Labels, keywords, tiers & heat presets
- *  3. Icon registry (level + priority SVG)
+ *  3. Icon registry (property level SVG)
  *  4. Display resolution (tier labels)
  *  5. Math helpers & tier styling
  *  6. Scoring formulas (baseline, Eisenhower, WSJF, value/effort)
@@ -150,7 +150,7 @@
     }
   };
 
-  // ── 3. Icon registry (level + priority SVG) ─────────────────────────────
+  // ── 3. Icon registry (property level SVG) ─────────────────────────────
 
   var ICON_S = 'stroke="currentColor" fill="none" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"';
 
@@ -220,74 +220,12 @@
     'ease-5': batterySvg(1, '<path d="M10.5 6.5l-2 2.5h1.5l-1 2.5 2.5-3H11l1.5-2z" fill="currentColor" stroke="none"/>')
   };
 
-  var PRIORITY_ICON_SVG = {
-  /* Score tiers */
-    'tier:critique': '<path d="M8 2.5l5.5 9.5H2.5L8 2.5z" ' + ICON_S + '/>' +
-      '<path d="M8 6.5v2.5M8 10.5h.01" ' + ICON_S + ' stroke-width="1.5"/>',
-    'tier:urgent': '<path d="M8 13.5c2-2.5 3.5-4.5 3.5-6.5a3.5 3.5 0 1 0-7 0c0 2 1.5 4 3.5 6.5z" ' + ICON_S + '/>' +
-      '<path d="M8 2v1M5 3.5l.7.7M11 3.5l-.7.7" ' + ICON_S + ' stroke-width="1"/>',
-    'tier:prioritaire': '<path d="M5 2.5v11M5 2.5l6 3.5-6 3.5" ' + ICON_S + '/>',
-    'tier:important': '<path d="M8 2.5l1.2 3.7h3.8l-3.1 2.2 1.2 3.7L8 9.9l-3.1 2.2 1.2-3.7-3.1-2.2h3.8z" ' + ICON_S + '/>',
-    'tier:flexible': '<path d="M3 8c1.5-2 3-2 4.5 0s3 2 4.5 0" ' + ICON_S + '/>' +
-      '<path d="M3 11c1.5-2 3-2 4.5 0s3 2 4.5 0" ' + ICON_S + ' stroke-dasharray="2 2"/>',
-    'tier:secondaire': '<path d="M4 8h8M4 10.5h5" ' + ICON_S + '/>' +
-      '<path d="M11.5 10.5l1.5 1.5M11.5 10.5l1.5-1.5" ' + ICON_S + ' stroke-width="1"/>',
-    'tier:optionnel': '<circle cx="8" cy="8" r="5" ' + ICON_S + ' stroke-dasharray="2.5 2"/>',
-    inutile: '<circle cx="8" cy="8" r="5.5" ' + ICON_S + '/>' +
-      '<path d="M5 5l6 6M11 5l-6 6" ' + ICON_S + '/>',
-    unclassified: '<circle cx="8" cy="8" r="5.5" ' + ICON_S + '/>' +
-      '<path d="M8 5.5v3.5M8 10.5h.01" ' + ICON_S + ' stroke-width="1.5"/>',
-  };
-
-  var TIER_LABEL_TO_ICON = {
-    Critique: 'tier:critique',
-    Urgent: 'tier:urgent',
-    Prioritaire: 'tier:prioritaire',
-    Important: 'tier:important',
-    Flexible: 'tier:flexible',
-    Secondaire: 'tier:secondaire',
-    Optionnel: 'tier:optionnel',
-    Inutile: 'inutile'
-  };
-
   function levelIconSvg(id) {
     if (!id) return '';
     var inner = LEVEL_ICON_SVG[id];
     if (!inner) return '';
     return '<svg class="level-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
       inner + '</svg>';
-  }
-
-  function priorityIconSvg(id, size) {
-    if (!id) return '';
-    var inner = PRIORITY_ICON_SVG[id];
-    if (!inner) return '';
-    var px = size != null ? size : 14;
-    return '<svg class="priority-icon level-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="' + px + '" height="' + px + '" aria-hidden="true" focusable="false">' +
-      inner + '</svg>';
-  }
-
-  function priorityIconIdForDisplay(display) {
-    if (!display) return 'unclassified';
-    if (display.inutile) return 'inutile';
-    if (display.tierLabel && TIER_LABEL_TO_ICON[display.tierLabel]) {
-      return TIER_LABEL_TO_ICON[display.tierLabel];
-    }
-    return 'unclassified';
-  }
-
-  function priorityIconIdForLabel(label) {
-    if (!label) return 'unclassified';
-    if (TIER_LABEL_TO_ICON[label]) return TIER_LABEL_TO_ICON[label];
-    return 'unclassified';
-  }
-
-  function priorityLabelHtmlFor(label, iconId, iconSize) {
-    if (!label) return '';
-    var id = iconId != null ? iconId : priorityIconIdForLabel(label);
-    var icon = priorityIconSvg(id, iconSize);
-    if (!icon) return escapeHtml(label);
-    return icon + '<span class="priority-label">' + escapeHtml(label) + '</span>';
   }
 
   function escapeHtml(s) {
@@ -337,7 +275,7 @@
     },
     {
       min: 4.3, label: 'Important', fill: '#E8F5E0', text: '#2D5A1E', seg: '#6EAD3A', i: 3,
-      description: 'Planifiée au planning. À exécuter prochainement avec engagement clair.'
+      description: 'Planifiée. À exécuter prochainement avec engagement clair.'
     },
     {
       min: 2.9, label: 'Flexible', fill: '#E1F5EE', text: '#085041', seg: '#3BA99C', i: 4,
@@ -1470,7 +1408,7 @@
       var v = tierVisuals(d.inutile ? { inutile: true, label: INUTILE_LABEL } : { i: d.tierI, label: d.label });
       bnumVal.textContent = formatScore(d.score);
       dot.style.background = v.seg;
-      blabel.innerHTML = priorityLabelHtmlFor(d.label, priorityIconIdForDisplay(d));
+      blabel.textContent = d.label;
       badge.style.setProperty('--heat-fill', v.fill);
       badge.style.setProperty('--heat-text', v.text);
       badge.style.removeProperty('background');
@@ -2490,12 +2428,6 @@
     wordFor: wordFor,
     wordHtmlFor: wordHtmlFor,
     levelIconSvg: levelIconSvg,
-    priorityIconSvg: priorityIconSvg,
-    priorityIconIdForDisplay: priorityIconIdForDisplay,
-    priorityIconIdForLabel: priorityIconIdForLabel,
-    priorityLabelHtmlFor: priorityLabelHtmlFor,
-    PRIORITY_ICON_SVG: PRIORITY_ICON_SVG,
-    TIER_LABEL_TO_ICON: TIER_LABEL_TO_ICON,
     affirmationFor: affirmationFor
   };
 
