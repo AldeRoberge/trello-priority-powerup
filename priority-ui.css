@@ -29,6 +29,9 @@
   --chart-marker-core-inutile: #FFFFFF;
   --heat-accent-fallback: #085041;
   --heat-dot-fallback: #9B9890;
+  --blocked-accent: #6B0F0F;
+  --blocked-text: #4A0808;
+  --blocked-fill: #F3E4E4;
   --surface-hover: #F7F6F3;
 }
 
@@ -70,6 +73,9 @@ html[data-color-mode="dark"] {
   --chart-marker-core-inutile: #ffffff;
   --heat-accent-fallback: #4bce97;
   --heat-dot-fallback: #ffffff;
+  --blocked-accent: #8B0000;
+  --blocked-text: #ffffff;
+  --blocked-fill: #2D0F0F;
   --surface-hover: #a6c5e71f;
 }
 
@@ -81,6 +87,12 @@ html[data-color-mode="dark"] .heat-tier-desc {
 html[data-color-mode="dark"] .heat-badge.is-inutile .heat-badge-num,
 html[data-color-mode="dark"] .heat-badge.is-inutile .heat-badge-label,
 html[data-color-mode="dark"] .heat-badge.is-inutile .heat-tier-desc {
+  opacity: 1;
+}
+
+html[data-color-mode="dark"] .heat-badge.is-blocked .heat-badge-num,
+html[data-color-mode="dark"] .heat-badge.is-blocked .heat-badge-label,
+html[data-color-mode="dark"] .heat-badge.is-blocked .heat-tier-desc {
   opacity: 1;
 }
 
@@ -694,6 +706,7 @@ body.help-modal-open {
   border: 1.75px solid currentColor;
   box-sizing: border-box;
   position: relative;
+  color: var(--heat-text, var(--blocked-accent));
 }
 
 .heat-tier-dot.is-blocked::after {
@@ -708,8 +721,21 @@ body.help-modal-open {
   border-radius: 1px;
 }
 
+.heat-badge.is-blocked {
+  background: var(--heat-fill, var(--blocked-fill));
+}
+
 .heat-badge.is-blocked .heat-tier-dot {
-  color: var(--heat-text, var(--heat-accent-fallback));
+  color: var(--heat-text, var(--blocked-accent));
+}
+
+.heat-badge.is-blocked .heat-badge-num,
+.heat-badge.is-blocked .heat-badge-label {
+  color: var(--heat-text, var(--blocked-text));
+}
+
+.heat-badge.is-blocked .heat-tier-desc {
+  color: var(--heat-text, var(--blocked-text));
 }
 
 .heat-badge-label {

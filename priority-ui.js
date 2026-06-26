@@ -369,6 +369,22 @@
   var BLOCKED_DISPLAY = BLOCKED_SYMBOL + ' ' + BLOCKED_LABEL;
   var BLOCKED_DESCRIPTION =
     'T\u00e2che bloqu\u00e9e en attente de quelqu\'un, d\'une autre t\u00e2che, d\'un approbation, de mat\u00e9riel, etc.';
+  var BLOCKED_STYLES = {
+    label: BLOCKED_LABEL,
+    fill: '#F3E4E4',
+    text: '#4A0808',
+    seg: '#6B0F0F',
+    tint: '#6B0F0F',
+    description: BLOCKED_DESCRIPTION
+  };
+  var BLOCKED_STYLES_DARK = {
+    label: BLOCKED_LABEL,
+    fill: '#2D0F0F',
+    text: '#ffffff',
+    seg: '#8B0000',
+    tint: '#4A1212',
+    description: BLOCKED_DESCRIPTION
+  };
 
   function formatBlockedBadgeText() {
     return BLOCKED_DISPLAY;
@@ -384,6 +400,10 @@
   }
 
   function tierVisuals(source) {
+    if (source && (source.blocked || source.label === BLOCKED_LABEL)) {
+      var blocked = isDarkTheme() ? BLOCKED_STYLES_DARK : BLOCKED_STYLES;
+      return { fill: blocked.fill, text: blocked.text, seg: blocked.seg, tint: blocked.tint };
+    }
     var inutile = source && (source.inutile || source.label === INUTILE_LABEL);
     if (inutile) {
       var idle = isDarkTheme() ? INUTILE_STYLES_DARK : INUTILE_STYLES;
@@ -485,7 +505,7 @@
 
   function classicTierLabel(display) {
     if (!display) return '';
-    if (display.blocked) return formatBlockedBadgeText();
+    if (display.blocked) return BLOCKED_LABEL;
     return display.tierLabel || display.label || '';
   }
 
@@ -592,7 +612,8 @@
     4: { bg: 22, border: 32, panel: 18 }, // Flexible — teal
     5: { bg: 14, border: 26, panel: 14 }, // Secondaire — blue
     6: { bg: 6, border: 20, panel: 8 },   // Optionnel — near neutral
-    inutile: { bg: 8, border: 22, panel: 82 } // Inutile — muted gray matching badge
+    inutile: { bg: 8, border: 22, panel: 82 }, // Inutile — muted gray matching badge
+    blocked: { bg: 44, border: 52, panel: 46 } // Bloqué — deep crimson wash
   };
 
   var TIER_SURFACE_MIX_DARK = {
@@ -603,11 +624,12 @@
     4: { bg: 18, border: 28, panel: 12 },
     5: { bg: 14, border: 24, panel: 10 },
     6: { bg: 8, border: 18, panel: 8 },
-    inutile: { bg: 8, border: 20, panel: 12 }
+    inutile: { bg: 8, border: 20, panel: 12 },
+    blocked: { bg: 36, border: 46, panel: 32 }
   };
 
   function surfaceMixFor(tier) {
-    var mixKey = tier.inutile ? 'inutile' : tier.i;
+    var mixKey = tier.blocked ? 'blocked' : (tier.inutile ? 'inutile' : tier.i);
     var table = isDarkTheme() ? TIER_SURFACE_MIX_DARK : TIER_SURFACE_MIX;
     return table[mixKey] || table[6];
   }
@@ -1603,7 +1625,9 @@
 
     function paint(result, display) {
       var d = display || resolveDisplay(result, {});
-      var v = tierVisuals(d.inutile ? { inutile: true, label: INUTILE_LABEL } : { i: d.tierI, label: d.label });
+      var v = d.blocked
+        ? tierVisuals({ blocked: true, label: BLOCKED_LABEL })
+        : tierVisuals(d.inutile ? { inutile: true, label: INUTILE_LABEL } : { i: d.tierI, label: d.label });
       bnumVal.textContent = formatScore(d.score);
       dot.classList.toggle('is-blocked', !!d.blocked);
       if (d.blocked) {
@@ -2446,8 +2470,10 @@
         syncStateFromFields();
         var result = calcFn(state);
         var display = resolveDisplay(result, state);
-        applyCardTierTint(card, display.cardTier);
-        card.classList.toggle('is-inutile', display.inutile);
+        applyCardTierTint(card, display.blocked
+          ? { blocked: true, label: BLOCKED_LABEL }
+          : display.cardTier);
+        card.classList.toggle('is-inutile', display.inutile && !display.blocked);
         card.classList.toggle('is-blocked', !!display.blocked);
         card.dataset.tier = display.blocked ? BLOCKED_LABEL : display.label;
         heat.paint(result, display);

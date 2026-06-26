@@ -164,6 +164,7 @@
 
   function tierDetailBadgeColor(display) {
     if (!display) return 'light-gray';
+    // Trello card badges only accept named colors (red, orange, …), not hex.
     if (display.blocked) return 'red';
     if (display.inutile) return 'light-gray';
     var i = display.tierI;
