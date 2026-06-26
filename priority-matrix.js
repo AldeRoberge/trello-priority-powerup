@@ -155,7 +155,7 @@
     },
     {
       id: 'deadline-exigeante',
-      label: 'Sous pression',
+      label: 'Échéance serrée',
       description: 'Enjeu moyen, effort soutenu, urgence réelle. Protéger le scope et livrer l\'essentiel avec sérénité.',
       priority: 83,
       when: { ease: ['veryLow', 'low'], impact: ['mid'], urgency: ['high', 'veryHigh'] }
@@ -261,7 +261,7 @@
     {
       id: 'sable-mouvant',
       label: 'Effort dense',
-      description: 'PÃ©nible, peu utile, urgence moyenne. Classique gouffre Ã  temps si on n\'impose pas une limite.',
+      description: 'PÃ©nible, peu utile, urgence moyenne. Classique gouffre Ã  d\'effort si on n\'impose pas une limite.',
       priority: 75,
       when: { ease: ['veryLow', 'low'], impact: ['veryLow', 'low'], urgency: ['mid'] }
     },
