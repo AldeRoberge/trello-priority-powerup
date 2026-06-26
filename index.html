@@ -65,8 +65,18 @@
 
     TrelloPowerUp.initialize({
 
-      'card-badges': function(t) {
-        return PriorityTrello.cardFaceBadges(t);
+      'card-badges': function (t) {
+        return PriorityTrello.getCardDisplay(t)
+          .then(function (display) {
+            if (!display) return [];
+            return [{
+              text: PriorityTrello.formatBadgeText(display),
+              color: PriorityTrello.tierDetailBadgeColor(display),
+            }];
+          })
+          .catch(function () {
+            return [];
+          });
       },
 
       'card-detail-badges': async function(t) {

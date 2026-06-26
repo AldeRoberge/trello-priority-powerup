@@ -44,15 +44,25 @@
     },
   ];
 
+  function asNumber(value) {
+    if (typeof value === 'number' && isFinite(value)) return value;
+    if (typeof value === 'string' && value !== '') {
+      var parsed = Number(value);
+      if (isFinite(parsed)) return parsed;
+    }
+    return NaN;
+  }
+
   function normalizeInputs(raw) {
     if (!raw || typeof raw !== 'object') return null;
-    if (typeof raw.urgency !== 'number' || typeof raw.impact !== 'number' || typeof raw.ease !== 'number') {
-      return null;
-    }
+    var urgency = asNumber(raw.urgency);
+    var impact = asNumber(raw.impact);
+    var ease = asNumber(raw.ease);
+    if (!isFinite(urgency) || !isFinite(impact) || !isFinite(ease)) return null;
     return {
-      urgency: Math.max(0, Math.min(4, raw.urgency)),
-      impact: Math.max(0, Math.min(4, raw.impact)),
-      ease: Math.max(1, Math.min(5, raw.ease)),
+      urgency: Math.max(0, Math.min(4, urgency)),
+      impact: Math.max(0, Math.min(4, impact)),
+      ease: Math.max(1, Math.min(5, ease)),
     };
   }
 
@@ -112,18 +122,20 @@
   function buildCardFaceBadge(display) {
     if (!display) return null;
     return {
-      icon: tierDotIcon(display.seg),
       text: formatBadgeText(display),
       color: tierDetailBadgeColor(display),
-      monochrome: false,
     };
   }
 
   function cardFaceBadges(t) {
-    return getCardDisplay(t).then(function (display) {
-      var badge = buildCardFaceBadge(display);
-      return badge ? [badge] : [];
-    });
+    return getCardDisplay(t)
+      .then(function (display) {
+        if (!display) return [];
+        return [buildCardFaceBadge(display)];
+      })
+      .catch(function () {
+        return [];
+      });
   }
 
   async function saveCardInputs(t, inputs) {

@@ -23,12 +23,21 @@
     const mountEl = document.getElementById('priorityMount');
     let variant = null;
     let saveTimer = null;
+    let pendingState = null;
+
+    async function flushSave() {
+      if (!pendingState) return;
+      var state = pendingState;
+      pendingState = null;
+      clearTimeout(saveTimer);
+      saveTimer = null;
+      await PriorityTrello.saveCardInputs(t, state);
+    }
 
     function scheduleSave(state) {
+      pendingState = state;
       clearTimeout(saveTimer);
-      saveTimer = setTimeout(async () => {
-        await PriorityTrello.saveCardInputs(t, state);
-      }, 250);
+      saveTimer = setTimeout(flushSave, 250);
     }
 
     async function init() {
@@ -45,17 +54,16 @@
         onStateChange: scheduleSave,
       });
 
-      const fieldsCollapse = mountEl.querySelector('.variant-fields-collapse');
-      if (fieldsCollapse) {
-        fieldsCollapse.addEventListener('toggle', () => t.sizeTo('.tp-page--priority'));
-      }
-
-      await t.sizeTo('.tp-page--priority');
       window.scrollTo(0, 0);
     }
 
+    window.addEventListener('pagehide', function () {
+      if (pendingState) flushSave();
+    });
+
     document.getElementById('clearBtn').addEventListener('click', async () => {
       clearTimeout(saveTimer);
+      pendingState = null;
       await PriorityTrello.clearCardPriority(t);
       t.closeModal();
     });
