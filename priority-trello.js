@@ -331,12 +331,29 @@
     }
   }
 
+  function whenDomReady() {
+    return new Promise(function (resolve) {
+      if (typeof document === 'undefined' || document.readyState !== 'loading') {
+        resolve();
+        return;
+      }
+      document.addEventListener('DOMContentLoaded', resolve, { once: true });
+    });
+  }
+
   function createIframeClient() {
     if (typeof global.TrelloPowerUp === 'undefined') {
       throw new Error('TrelloPowerUp is not loaded');
     }
     var opts = getIframeInitOptions();
     return opts ? global.TrelloPowerUp.iframe(opts) : global.TrelloPowerUp.iframe();
+  }
+
+  // Call after DOM is ready so TrelloPowerUp.iframe() theme init finds document.body.
+  function createIframeClientDeferred() {
+    return whenDomReady().then(function () {
+      return createIframeClient();
+    });
   }
 
   // Defer t.get/set/getRestApi until Trello finishes the iframe handshake.
@@ -605,6 +622,7 @@
     getIframeInitOptions: getIframeInitOptions,
     pageUrl: pageUrl,
     createIframeClient: createIframeClient,
+    createIframeClientDeferred: createIframeClientDeferred,
     runWhenIframeReady: runWhenIframeReady,
     ensureRestApiAuthorized: ensureRestApiAuthorized,
     syncCardCover: syncCardCover,

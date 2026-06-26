@@ -24,7 +24,7 @@
   </div>
 
   <script>
-    const t = PriorityTrello.createIframeClient();
+    PriorityTrello.createIframeClientDeferred().then(function (t) {
     const mountEl = document.getElementById('priorityMount');
     let variant = null;
     let latestState = null;
@@ -114,6 +114,9 @@
 
     PriorityTrello.runWhenIframeReady(t, init).catch(function (err) {
       console.error('Priority popup init failed', err);
+    });
+    }).catch(function (err) {
+      console.error('Priority popup iframe init failed', err);
     });
   </script>
 </body>

@@ -8,7 +8,6 @@
   <script src="./trello-api-config.js"></script>
   <script src="./priority-trello.js"></script>
   <script src="./version.js"></script>
-  <script>window.__trelloIframe = PriorityTrello.createIframeClient();</script>
   <link rel="stylesheet" href="./trello-theme.css" />
 </head>
 <body class="tp-page">
@@ -19,7 +18,7 @@
   <button type="button" class="tp-link" id="showGuide">Voir le guide de configuration</button>
 
   <script>
-    const t = window.__trelloIframe;
+    PriorityTrello.createIframeClientDeferred().then(function (t) {
     let buildStampTimer;
 
     function renderBuildInfo(builtAt) {
@@ -53,6 +52,9 @@
     });
 
     PriorityTrello.runWhenIframeReady(t, loadBuildInfo);
+    }).catch(function (err) {
+      console.error('Priority settings iframe init failed', err);
+    });
   </script>
 </body>
 </html>
