@@ -579,10 +579,17 @@ body.tp-page--priority {
   background: var(--tp-bg);
   min-height: auto;
   color: var(--tp-text);
+  overflow: visible;
 }
 
 .tp-page--priority {
   padding: 8px 10px 10px;
+}
+
+.tp-page--priority .compare-page {
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
 
 .tp-page--priority .compare-grid {
@@ -602,5 +609,5 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .help-modal-root {
-  z-index: 100;
+  z-index: 1000;
 }

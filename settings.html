@@ -64,7 +64,10 @@
     async function loadBuildInfo() {
       const el = document.getElementById('buildInfo');
       try {
-        const builtAt = await BuildVersion.fetchBuiltAt(t.signUrl('./build-info.json'));
+        const builtAt = await BuildVersion.fetchBuiltAt(
+          t.signUrl('./build-info.json'),
+          t.signUrl('./index.html'),
+        );
         renderBuildInfo(builtAt);
         clearInterval(buildStampTimer);
         buildStampTimer = setInterval(() => renderBuildInfo(builtAt), 30_000);

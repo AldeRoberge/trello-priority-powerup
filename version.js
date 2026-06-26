@@ -70,17 +70,51 @@
     return ago === 'à l\'instant' ? 'Mis à jour à l\'instant' : `Mis à jour ${ago}`;
   }
 
-  async function fetchBuiltAt(url) {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) throw new Error('build info not found');
-    const { builtAt } = await res.json();
-    return builtAt;
+  function parseTimestampMs(value) {
+    if (value == null || value === '') return NaN;
+    const ms = new Date(value).getTime();
+    return Number.isNaN(ms) ? NaN : ms;
+  }
+
+  function lastModifiedMs(response) {
+    const header = response.headers && response.headers.get('Last-Modified');
+    if (!header) return NaN;
+    return parseTimestampMs(header);
+  }
+
+  async function headLastModified(url) {
+    try {
+      const res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+      if (!res.ok) return NaN;
+      return lastModifiedMs(res);
+    } catch {
+      return NaN;
+    }
+  }
+
+  function resolveBuiltAt(builtAtIso, ...otherMs) {
+    const candidates = [parseTimestampMs(builtAtIso), ...otherMs]
+      .filter((ms) => !Number.isNaN(ms));
+    if (!candidates.length) throw new Error('build info not found');
+    return new Date(Math.max(...candidates)).toISOString();
+  }
+
+  async function fetchBuiltAt(url, probeUrl) {
+    const [buildRes, probeMs] = await Promise.all([
+      fetch(url, { cache: 'no-store' }),
+      probeUrl ? headLastModified(probeUrl) : Promise.resolve(NaN),
+    ]);
+    if (!buildRes.ok) throw new Error('build info not found');
+    const { builtAt } = await buildRes.json();
+    return resolveBuiltAt(builtAt, lastModifiedMs(buildRes), probeMs);
   }
 
   global.BuildVersion = {
     formatUtc,
     relativeAgo,
     updatedLabel,
+    parseTimestampMs,
+    resolveBuiltAt,
     fetchBuiltAt,
   };
 })(window);

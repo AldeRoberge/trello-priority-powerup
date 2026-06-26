@@ -42,7 +42,7 @@
     let builtAt;
 
     try {
-      builtAt = await BuildVersion.fetchBuiltAt('./build-info.json');
+      builtAt = await BuildVersion.fetchBuiltAt('./build-info.json', './index.html');
     } catch {
       document.getElementById('versionRelative').textContent = 'Informations de build indisponibles';
       document.getElementById('versionUtc').textContent = '';
@@ -58,7 +58,7 @@
       return t.popup({
         title: 'Définir la priorité',
         url: './popup.html',
-        height: 580,
+        height: 640,
       });
     }
 

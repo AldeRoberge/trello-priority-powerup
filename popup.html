@@ -13,7 +13,9 @@
   <link rel="stylesheet" href="./priority-ui.css" />
 </head>
 <body class="tp-page tp-page--priority">
-  <div class="compare-grid" id="priorityMount"></div>
+  <div class="compare-page">
+    <div class="compare-grid" id="priorityMount"></div>
+  </div>
   <button class="tp-btn--ghost" id="clearBtn" type="button">Effacer la priorité</button>
 
   <script>
@@ -21,6 +23,7 @@
     const mountEl = document.getElementById('priorityMount');
     let variant = null;
     let saveTimer = null;
+    let resizeObserver = null;
     let matrixSettings = PriorityMatrix.normalizeSettings(null);
 
     function scheduleSave(state) {
@@ -28,6 +31,16 @@
       saveTimer = setTimeout(async () => {
         await PriorityTrello.saveCardInputs(t, state);
       }, 250);
+    }
+
+    function sizePopup() {
+      t.sizeTo(document.body);
+    }
+
+    function startResizeObserver() {
+      if (resizeObserver) return;
+      resizeObserver = new ResizeObserver(() => sizePopup());
+      resizeObserver.observe(document.body);
     }
 
     async function init() {
@@ -50,7 +63,9 @@
         onStateChange: scheduleSave,
       });
 
-      t.sizeTo(document.body);
+      startResizeObserver();
+      sizePopup();
+      requestAnimationFrame(sizePopup);
     }
 
     document.getElementById('clearBtn').addEventListener('click', async () => {
@@ -59,10 +74,12 @@
       t.closePopup();
     });
 
-    const resizeObserver = new ResizeObserver(() => t.sizeTo(document.body));
-    resizeObserver.observe(document.body);
-
-    init();
+    init().catch(function (err) {
+      console.error('Priority popup init failed', err);
+      mountEl.textContent = 'Impossible de charger l\'éditeur de priorité.';
+      startResizeObserver();
+      sizePopup();
+    });
   </script>
 </body>
 </html>
