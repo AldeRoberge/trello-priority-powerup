@@ -431,7 +431,7 @@ body.tp-page--priority {
 .tp-page--priority {
   box-sizing: border-box;
   width: 100%;
-  max-width: 560px;
+  max-width: 680px;
   min-height: auto;
   margin: 0 auto;
   padding: 20px 24px 28px;
@@ -570,12 +570,6 @@ body.tp-page--priority {
 
 .tp-page--priority .variant-fields-collapse {
   margin-top: 2px;
-}
-
-.tp-page--priority > .tp-btn--ghost {
-  margin-top: 12px;
-  padding: 10px 8px;
-  font-size: 14px;
 }
 
 .tp-page--priority .help-modal-root {

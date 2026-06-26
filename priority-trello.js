@@ -137,11 +137,6 @@
     }
   }
 
-  async function clearCardPriority(t) {
-    await t.remove('card', 'shared', CARD_PRIORITY_KEY);
-    await t.remove('card', 'shared', LEGACY_PRIORITY_KEY);
-  }
-
   global.PriorityTrello = {
     CARD_PRIORITY_KEY: CARD_PRIORITY_KEY,
     DEFAULT_INPUTS: DEFAULT_INPUTS,
@@ -155,6 +150,5 @@
     buildCardFaceBadge: buildCardFaceBadge,
     cardFaceBadges: cardFaceBadges,
     saveCardInputs: saveCardInputs,
-    clearCardPriority: clearCardPriority,
   };
 })(typeof window !== 'undefined' ? window : this);

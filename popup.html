@@ -16,7 +16,6 @@
   <div class="compare-page">
     <div class="compare-grid" id="priorityMount"></div>
   </div>
-  <button class="tp-btn--ghost" id="clearBtn" type="button">Effacer la priorité</button>
 
   <script>
     const t = window.__trelloIframe || TrelloPowerUp.iframe();
@@ -72,13 +71,6 @@
 
     window.addEventListener('pagehide', function () {
       if (pendingState) flushSave();
-    });
-
-    document.getElementById('clearBtn').addEventListener('click', async () => {
-      clearTimeout(saveTimer);
-      pendingState = null;
-      await PriorityTrello.clearCardPriority(t);
-      t.closePopup();
     });
 
     init().catch(function (err) {
