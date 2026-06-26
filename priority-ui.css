@@ -45,9 +45,9 @@ html[data-color-mode="dark"] {
   --surface-1: #282e33;
   --surface-2: #22272b;
   --border: #a6c5e75c;
-  --text-primary: #b6c2cf;
-  --text-secondary: #9fadbc;
-  --text-muted: #8c9bab;
+  --text-primary: #c7d1db;
+  --text-secondary: #b6c2cf;
+  --text-muted: #9fadbc;
   --focus-ring: rgba(166, 197, 231, 0.4);
   --focus-ring-strong: rgba(166, 197, 231, 0.5);
   --modal-backdrop: rgba(0, 0, 0, 0.55);
@@ -59,10 +59,29 @@ html[data-color-mode="dark"] {
   --chart-crosshair-stroke: rgba(182, 194, 207, 0.35);
   --chart-marker-shadow: rgba(0, 0, 0, 0.45);
   --chart-marker-shadow-inutile: rgba(0, 0, 0, 0.3);
-  --chart-marker-core-inutile: #b6c2cf;
+  --chart-marker-core-inutile: #c7d1db;
   --heat-accent-fallback: #4bce97;
-  --heat-dot-fallback: #8c9bab;
+  --heat-dot-fallback: #9fadbc;
   --surface-hover: #a6c5e71f;
+}
+
+/* Dark mode — lift text that stacks opacity or sits on muted surfaces */
+html[data-color-mode="dark"] .heat-tier-desc {
+  opacity: 0.9;
+}
+
+html[data-color-mode="dark"] .heat-badge.is-inutile .heat-badge-num,
+html[data-color-mode="dark"] .heat-badge.is-inutile .heat-badge-label {
+  opacity: 0.94;
+}
+
+html[data-color-mode="dark"] .field-question,
+html[data-color-mode="dark"] .help-modal-body {
+  color: var(--text-secondary);
+}
+
+html[data-color-mode="dark"] .help-modal-step {
+  color: var(--text-secondary);
 }
 
 body {
@@ -356,6 +375,11 @@ input.field-range:focus-visible::-webkit-slider-thumb {
 input[type="range"]:active::-webkit-slider-thumb,
 input.field-range:active::-webkit-slider-thumb {
   transform: scale(1.12);
+}
+
+/* Prevent iframe document scroll while help modal is open (avoids Trello popup repositioning) */
+body.help-modal-open {
+  overflow: hidden;
 }
 
 /* ── Help modal ── */

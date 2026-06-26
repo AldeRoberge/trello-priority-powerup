@@ -33,6 +33,8 @@
     }
 
     function sizePopup() {
+      // Keep iframe at scroll origin so Trello popup sizing/position stays stable.
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
       t.sizeTo(document.body);
     }
 

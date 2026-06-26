@@ -30,9 +30,9 @@ html[data-color-mode="dark"] {
   --tp-surface-subtle: #282e33;
   --tp-surface-hover: #a6c5e71f;
   --tp-surface-active: #a6c5e733;
-  --tp-text: #b6c2cf;
-  --tp-text-subtle: #9fadbc;
-  --tp-text-muted: #8c9bab;
+  --tp-text: #c7d1db;
+  --tp-text-subtle: #b6c2cf;
+  --tp-text-muted: #9fadbc;
   --tp-border: #a6c5e75c;
   --tp-border-strong: #a6c5e799;
   --tp-primary: #579dff;
@@ -428,13 +428,15 @@ body.tp-page--priority {
 }
 
 .tp-page--priority {
-  padding: 6px 0 8px;
+  padding: 2px 0 4px;
 }
 
 .tp-page--priority .compare-page {
   max-width: none;
   margin: 0;
   padding: 0;
+  container-type: inline-size;
+  container-name: priority-popup;
 }
 
 .tp-page--priority .compare-grid {
@@ -444,19 +446,30 @@ body.tp-page--priority {
 .tp-page--priority .variant-card {
   max-width: none;
   margin: 0;
-  padding: 0.5rem 0 0.75rem;
+  padding: 0.125rem 0 0.375rem;
   box-shadow: none;
   border: none;
   background: transparent;
 }
 
 .tp-page--priority .heat-panel {
-  padding: 10px 0 12px;
+  padding: 4px 0 6px;
 }
 
 .tp-page--priority .heat-badge {
-  padding-left: 0;
-  padding-right: 0;
+  padding: 4px 0 6px;
+  grid-template-columns: auto minmax(min-content, 1fr);
+}
+
+.tp-page--priority .heat-badge-label .priority-label {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  min-width: min-content;
+}
+
+.tp-page--priority .heat-badge-label {
+  flex-wrap: wrap;
 }
 
 .tp-page--priority .variant-fields {

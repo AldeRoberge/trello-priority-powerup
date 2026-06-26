@@ -361,7 +361,7 @@
     { i: 3, fill: '#263920', text: '#94c748', seg: '#6aad34', tint: '#2a4018' },
     { i: 4, fill: '#1e3330', text: '#79f2c5', seg: '#37b4a0', tint: '#1a3835' },
     { i: 5, fill: '#1a2a3d', text: '#85b8ff', seg: '#519fe8', tint: '#182638' },
-    { i: 6, fill: '#282e33', text: '#9fadbc', seg: '#8c9bab', tint: '#282e33' }
+    { i: 6, fill: '#323940', text: '#c7d1db', seg: '#9fadbc', tint: '#323940' }
   ];
 
   var HEAT_SEGMENTS = [
@@ -419,10 +419,10 @@
 
   var INUTILE_STYLES_DARK = {
     label: INUTILE_LABEL,
-    fill: '#282e33',
-    text: '#8c9bab',
-    seg: '#6b7785',
-    tint: '#282e33',
+    fill: '#323940',
+    text: '#b6c2cf',
+    seg: '#8c9bab',
+    tint: '#323940',
     description: INUTILE_STYLES.description
   };
 
@@ -1058,6 +1058,19 @@
     return modalRoot;
   }
 
+  function scrollHelpModalLevelIntoView(listItem) {
+    if (!listItem || !modalRoot) return;
+    var modal = modalRoot.querySelector('.help-modal');
+    if (!modal) return;
+    var modalRect = modal.getBoundingClientRect();
+    var elRect = listItem.getBoundingClientRect();
+    if (elRect.top < modalRect.top) {
+      modal.scrollTop -= modalRect.top - elRect.top;
+    } else if (elRect.bottom > modalRect.bottom) {
+      modal.scrollTop += elRect.bottom - modalRect.bottom;
+    }
+  }
+
   function paintHelpModalLevels() {
     if (!modalRoot || !modalContext) return;
     var list = modalRoot.querySelector('ol.help-modal-levels');
@@ -1073,7 +1086,7 @@
       if (isCurrent) currentEl = li;
     });
     if (currentEl) {
-      currentEl.scrollIntoView({ block: 'nearest' });
+      scrollHelpModalLevelIntoView(currentEl);
     }
   }
 
@@ -1187,6 +1200,7 @@
     paintHelpModalFooter(config.wizard || null);
 
     root.classList.add('open');
+    document.body.classList.add('help-modal-open');
     var focusTarget = config.wizard
       ? root.querySelector('.help-modal-next')
       : root.querySelector('.help-modal-close--bottom');
@@ -1195,6 +1209,7 @@
 
   function closeHelpModal() {
     if (modalRoot) modalRoot.classList.remove('open');
+    document.body.classList.remove('help-modal-open');
     modalContext = null;
     wizardContext = null;
   }
