@@ -16,6 +16,9 @@
   --modal-backdrop: rgba(26, 25, 23, 0.35);
   --modal-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
   --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 16px rgba(0, 0, 0, 0.04);
+  --slider-track: var(--surface-1);
+  --slider-thumb-bg: var(--surface-2);
+  --slider-thumb-border: var(--border);
   --slider-thumb-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
   --slider-focus-ring: 0 0 0 3px rgba(0, 0, 0, 0.12);
   --chart-grid-stroke: rgba(0, 0, 0, 0.05);
@@ -45,34 +48,46 @@ html[data-color-mode="dark"] {
   --surface-1: #282e33;
   --surface-2: #22272b;
   --border: #a6c5e75c;
-  --text-primary: #c7d1db;
-  --text-secondary: #b6c2cf;
-  --text-muted: #9fadbc;
+  --text-primary: #ffffff;
+  --text-secondary: #ffffff;
+  --text-muted: #ffffff;
   --focus-ring: rgba(166, 197, 231, 0.4);
   --focus-ring-strong: rgba(166, 197, 231, 0.5);
   --modal-backdrop: rgba(0, 0, 0, 0.55);
   --modal-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
   --card-shadow: none;
+  --slider-track: #596773;
+  --slider-thumb-bg: #ffffff;
+  --slider-thumb-border: #738496;
   --slider-thumb-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
   --slider-focus-ring: 0 0 0 3px rgba(166, 197, 231, 0.35);
   --chart-grid-stroke: rgba(255, 255, 255, 0.06);
   --chart-crosshair-stroke: rgba(182, 194, 207, 0.35);
   --chart-marker-shadow: rgba(0, 0, 0, 0.45);
   --chart-marker-shadow-inutile: rgba(0, 0, 0, 0.3);
-  --chart-marker-core-inutile: #c7d1db;
+  --chart-marker-core-inutile: #ffffff;
   --heat-accent-fallback: #4bce97;
-  --heat-dot-fallback: #9fadbc;
+  --heat-dot-fallback: #ffffff;
   --surface-hover: #a6c5e71f;
 }
 
-/* Dark mode — lift text that stacks opacity or sits on muted surfaces */
+/* Dark mode — prevent opacity stacking from dimming white text */
 html[data-color-mode="dark"] .heat-tier-desc {
-  opacity: 0.9;
+  opacity: 1;
 }
 
 html[data-color-mode="dark"] .heat-badge.is-inutile .heat-badge-num,
-html[data-color-mode="dark"] .heat-badge.is-inutile .heat-badge-label {
-  opacity: 0.94;
+html[data-color-mode="dark"] .heat-badge.is-inutile .heat-badge-label,
+html[data-color-mode="dark"] .heat-badge.is-inutile .heat-tier-desc {
+  opacity: 1;
+}
+
+html[data-color-mode="dark"] .heat-badge-label .priority-icon {
+  opacity: 1;
+}
+
+html[data-color-mode="dark"] .calc-rsm-marker.is-inutile .calc-rsm-marker-core {
+  opacity: 1;
 }
 
 html[data-color-mode="dark"] .field-question,
@@ -338,7 +353,7 @@ input.field-range {
   width: 100%;
   height: 4px;
   border-radius: 2px;
-  background: var(--surface-1);
+  background: var(--slider-track);
   outline: none;
   cursor: pointer;
 }
@@ -350,8 +365,8 @@ input.field-range::-webkit-slider-thumb {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: var(--surface-2);
-  border: 1.5px solid var(--border);
+  background: var(--slider-thumb-bg);
+  border: 1.5px solid var(--slider-thumb-border);
   box-shadow: var(--slider-thumb-shadow);
   transition: box-shadow .12s, transform .1s;
 }
@@ -361,8 +376,8 @@ input.field-range::-moz-range-thumb {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: var(--surface-2);
-  border: 1.5px solid var(--border);
+  background: var(--slider-thumb-bg);
+  border: 1.5px solid var(--slider-thumb-border);
   box-shadow: var(--slider-thumb-shadow);
   cursor: pointer;
 }

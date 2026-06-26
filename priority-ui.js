@@ -353,15 +353,15 @@
     }
   ];
 
-  // Dark-mode tier fills/tints — muted surfaces with light accent text (Trello dark palette).
+  // Dark-mode tier fills/tints — muted surfaces with white text for readability.
   var TIERS_DARK = [
-    { i: 0, fill: '#3d2220', text: '#fd9891', seg: '#e2483d', tint: '#4a2320' },
-    { i: 1, fill: '#3d2718', text: '#fea362', seg: '#f8692a', tint: '#4a2d15' },
-    { i: 2, fill: '#3d3012', text: '#f5cd47', seg: '#cf9f02', tint: '#4a3810' },
-    { i: 3, fill: '#263920', text: '#94c748', seg: '#6aad34', tint: '#2a4018' },
-    { i: 4, fill: '#1e3330', text: '#79f2c5', seg: '#37b4a0', tint: '#1a3835' },
-    { i: 5, fill: '#1a2a3d', text: '#85b8ff', seg: '#519fe8', tint: '#182638' },
-    { i: 6, fill: '#323940', text: '#c7d1db', seg: '#9fadbc', tint: '#323940' }
+    { i: 0, fill: '#3d2220', text: '#ffffff', seg: '#e2483d', tint: '#4a2320' },
+    { i: 1, fill: '#3d2718', text: '#ffffff', seg: '#f8692a', tint: '#4a2d15' },
+    { i: 2, fill: '#3d3012', text: '#ffffff', seg: '#cf9f02', tint: '#4a3810' },
+    { i: 3, fill: '#263920', text: '#ffffff', seg: '#6aad34', tint: '#2a4018' },
+    { i: 4, fill: '#1e3330', text: '#ffffff', seg: '#37b4a0', tint: '#1a3835' },
+    { i: 5, fill: '#1a2a3d', text: '#ffffff', seg: '#519fe8', tint: '#182638' },
+    { i: 6, fill: '#323940', text: '#ffffff', seg: '#9fadbc', tint: '#323940' }
   ];
 
   var HEAT_SEGMENTS = [
@@ -420,7 +420,7 @@
   var INUTILE_STYLES_DARK = {
     label: INUTILE_LABEL,
     fill: '#323940',
-    text: '#b6c2cf',
+    text: '#ffffff',
     seg: '#8c9bab',
     tint: '#323940',
     description: INUTILE_STYLES.description
