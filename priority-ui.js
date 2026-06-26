@@ -1501,7 +1501,7 @@
 
     var title = document.createElement('span');
     title.className = 'en-attente-title';
-    title.textContent = 'En attente';
+    title.textContent = BLOCKED_LABEL;
 
     var desc = document.createElement('span');
     desc.className = 'en-attente-desc';
@@ -2515,16 +2515,6 @@
     fieldsSection.appendChild(fieldsWrap);
     card.appendChild(fieldsSection);
 
-    enAttenteField = createEnAttenteField({
-      el: fieldsWrap,
-      value: state.enAttente,
-      onChange: function () {
-        cancelSliderAnim();
-        repaint();
-        persistSliderState();
-      }
-    });
-
     var wizardHooks = {
       getValue: function (key) {
         return fields[key] ? fields[key].getValue() : state[key];
@@ -2577,6 +2567,20 @@
         console.error('PriorityUI.createCalcGraphPanel failed', { id: variantId, error: err });
       }
     }
+
+    var blockedSection = document.createElement('div');
+    blockedSection.className = 'variant-blocked-section';
+    card.appendChild(blockedSection);
+
+    enAttenteField = createEnAttenteField({
+      el: blockedSection,
+      value: state.enAttente,
+      onChange: function () {
+        cancelSliderAnim();
+        repaint();
+        persistSliderState();
+      }
+    });
 
     containerEl.appendChild(card);
 

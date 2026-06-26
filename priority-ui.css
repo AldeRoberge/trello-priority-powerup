@@ -166,6 +166,13 @@ body {
   padding: 10px 12px 2px;
 }
 
+/* ── Blocked checkbox section ── */
+.variant-blocked-section {
+  margin-top: 14px;
+  padding: 14px 12px 0;
+  border-top: 0.5px solid var(--border);
+}
+
 /* ── Compact field ── */
 .field {
   display: flex;
@@ -180,9 +187,7 @@ body {
 }
 
 .field--en-attente {
-  margin-bottom: 18px;
-  padding-bottom: 16px;
-  border-bottom: 0.5px solid var(--border);
+  margin-bottom: 0;
 }
 
 .en-attente-label {
