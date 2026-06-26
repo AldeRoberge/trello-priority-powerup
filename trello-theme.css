@@ -431,15 +431,16 @@ body.tp-page--priority {
 .tp-page--priority {
   box-sizing: border-box;
   width: 100%;
-  max-width: 100%;
+  max-width: 560px;
   min-height: auto;
+  margin: 0 auto;
   padding: 20px 24px 28px;
 }
 
 .tp-page--priority .compare-page {
-  max-width: 480px;
+  max-width: none;
   width: 100%;
-  margin: 0 auto;
+  margin: 0;
   padding: 4px 0 8px;
   overflow-x: hidden;
   container-type: inline-size;
@@ -460,8 +461,6 @@ body.tp-page--priority {
   margin: 0;
   padding: 0.625rem 0 0.875rem;
   box-shadow: none;
-  border: none;
-  background: transparent;
   overflow-x: hidden;
 }
 
