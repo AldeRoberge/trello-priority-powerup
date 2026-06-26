@@ -1066,6 +1066,7 @@
 
   var modalRoot = null;
   var modalContext = null;
+  var wizardContext = null;
 
   function ensureModalRoot() {
     if (modalRoot) return modalRoot;
@@ -1074,16 +1075,26 @@
     modalRoot.innerHTML =
       '<div class="help-modal-backdrop" data-close></div>' +
       '<div class="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-modal-title">' +
-        '<button type="button" class="help-modal-close" aria-label="Fermer">&times;</button>' +
+        '<button type="button" class="help-modal-close help-modal-close--top" aria-label="Fermer">&times;</button>' +
         '<h3 class="help-modal-title" id="help-modal-title"></h3>' +
         '<blockquote class="help-modal-quote" hidden></blockquote>' +
-        '<div class="help-modal-body"></div>' +
         '<ol class="help-modal-levels"></ol>' +
+        '<div class="help-modal-body"></div>' +
+        '<footer class="help-modal-footer">' +
+          '<div class="help-modal-wizard-nav" hidden>' +
+            '<button type="button" class="help-modal-nav help-modal-prev">Précédent</button>' +
+            '<span class="help-modal-step" aria-live="polite"></span>' +
+            '<button type="button" class="help-modal-nav help-modal-next">Suivant</button>' +
+          '</div>' +
+          '<button type="button" class="help-modal-close help-modal-close--bottom">Fermer</button>' +
+        '</footer>' +
       '</div>';
     document.body.appendChild(modalRoot);
 
     modalRoot.querySelector('.help-modal-backdrop').addEventListener('click', closeHelpModal);
-    modalRoot.querySelector('.help-modal-close').addEventListener('click', closeHelpModal);
+    modalRoot.querySelectorAll('.help-modal-close').forEach(function (btn) {
+      btn.addEventListener('click', closeHelpModal);
+    });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && modalRoot.classList.contains('open')) closeHelpModal();
     });
@@ -1106,6 +1117,33 @@
     });
     if (currentEl) {
       currentEl.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function paintHelpModalFooter(wizard) {
+    if (!modalRoot) return;
+    var wizardNav = modalRoot.querySelector('.help-modal-wizard-nav');
+    var prevBtn = modalRoot.querySelector('.help-modal-prev');
+    var nextBtn = modalRoot.querySelector('.help-modal-next');
+    var stepEl = modalRoot.querySelector('.help-modal-step');
+    if (!wizardNav || !prevBtn || !nextBtn || !stepEl) return;
+
+    if (wizard && wizard.total > 1) {
+      wizardNav.hidden = false;
+      prevBtn.disabled = wizard.step <= 0;
+      var isLast = wizard.step >= wizard.total - 1;
+      nextBtn.textContent = isLast ? 'Terminer' : 'Suivant';
+      stepEl.textContent = (wizard.step + 1) + ' / ' + wizard.total;
+      prevBtn.onclick = function () {
+        if (wizard.onPrev) wizard.onPrev();
+      };
+      nextBtn.onclick = function () {
+        if (wizard.onNext) wizard.onNext();
+      };
+    } else {
+      wizardNav.hidden = true;
+      prevBtn.onclick = null;
+      nextBtn.onclick = null;
     }
   }
 
@@ -1143,15 +1181,6 @@
     quoteEl.textContent = quote;
     quoteEl.hidden = !quote;
 
-    body.innerHTML = '';
-    [popup.intro, popup.guidance].forEach(function (text) {
-      if (!text) return;
-      var p = document.createElement('p');
-      p.textContent = text;
-      body.appendChild(p);
-    });
-    body.hidden = body.childNodes.length === 0;
-
     list.innerHTML = '';
     var start = wordsKey === 'ease' ? 1 : 0;
     var end = entry.short.length - 1;
@@ -1187,15 +1216,79 @@
       list.appendChild(li);
     }
     list.hidden = list.childNodes.length === 0;
+
+    body.innerHTML = '';
+    [popup.intro, popup.guidance].forEach(function (text) {
+      if (!text) return;
+      var p = document.createElement('p');
+      p.textContent = text;
+      body.appendChild(p);
+    });
+    body.hidden = body.childNodes.length === 0;
+
     paintHelpModalLevels();
+    paintHelpModalFooter(config.wizard || null);
 
     root.classList.add('open');
-    root.querySelector('.help-modal-close').focus();
+    var focusTarget = config.wizard
+      ? root.querySelector('.help-modal-next')
+      : root.querySelector('.help-modal-close--bottom');
+    if (focusTarget) focusTarget.focus();
   }
 
   function closeHelpModal() {
     if (modalRoot) modalRoot.classList.remove('open');
     modalContext = null;
+    wizardContext = null;
+  }
+
+  function showWizardStep(step) {
+    if (!wizardContext) return;
+    var dims = wizardContext.dimensions;
+    if (!dims.length) return;
+    step = clamp(step, 0, dims.length - 1);
+    wizardContext.step = step;
+    var dim = dims[step];
+    var wordsKey = dim.wordsKey || dim.key;
+
+    openHelpModal(wordsKey, dim.label, {
+      icon: dim.icon,
+      min: dim.min,
+      max: dim.max,
+      currentValue: wizardContext.getValue(dim.key),
+      onSelect: function (level) {
+        wizardContext.setValue(dim.key, level);
+      },
+      wizard: {
+        step: step,
+        total: dims.length,
+        onPrev: function () {
+          showWizardStep(step - 1);
+        },
+        onNext: function () {
+          if (step < dims.length - 1) {
+            showWizardStep(step + 1);
+          } else {
+            var onComplete = wizardContext.onComplete;
+            closeHelpModal();
+            if (onComplete) onComplete();
+          }
+        }
+      }
+    });
+  }
+
+  function openCriteriaWizard(dimensions, hooks) {
+    hooks = hooks || {};
+    if (!dimensions || !dimensions.length) return;
+    wizardContext = {
+      dimensions: dimensions,
+      step: 0,
+      getValue: hooks.getValue || function () { return 0; },
+      setValue: hooks.setValue || function () {},
+      onComplete: hooks.onComplete || null
+    };
+    showWizardStep(0);
   }
 
   // ── 9. Form controls (field, heat panel, calc graph) ────────────────────
@@ -2254,7 +2347,12 @@
     var fieldsSummary = document.createElement('summary');
     fieldsSummary.className = 'variant-fields-toggle';
     fieldsSummary.innerHTML =
-      '<span class="variant-fields-toggle-label">Critères</span>' +
+      '<span class="variant-fields-toggle-left">' +
+        '<span class="variant-fields-toggle-label">Critères</span>' +
+        '<button type="button" class="variant-fields-config" aria-label="Configurer les critères" title="Configurer les critères">' +
+          '<i class="ti ti-settings" aria-hidden="true"></i>' +
+        '</button>' +
+      '</span>' +
       '<span class="variant-fields-chevron" aria-hidden="true"></span>';
 
     var fieldsWrap = document.createElement('div');
@@ -2281,6 +2379,29 @@
         }
       });
     });
+
+    var configBtn = fieldsSummary.querySelector('.variant-fields-config');
+    if (configBtn) {
+      configBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openCriteriaWizard(variantConfig.dimensions, {
+          getValue: function (key) {
+            return fields[key] ? fields[key].getValue() : state[key];
+          },
+          setValue: function (key, level) {
+            if (fields[key]) fields[key].setValue(level);
+            state[key] = level;
+            cancelSliderAnim();
+            repaint();
+            persistSliderState();
+          },
+          onComplete: function () {
+            fieldsCollapse.open = true;
+          }
+        });
+      });
+    }
 
     if (showCalcGraph) {
       calcGraph = createCalcGraphPanel({
@@ -2362,6 +2483,7 @@
     },
     openHelpModal: openHelpModal,
     closeHelpModal: closeHelpModal,
+    openCriteriaWizard: openCriteriaWizard,
     createField: createField,
     createHeatPanel: createHeatPanel,
     createCalcGraphPanel: createCalcGraphPanel,

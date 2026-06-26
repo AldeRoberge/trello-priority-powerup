@@ -1,6 +1,6 @@
 # Priorités des cartes — Power-Up Trello
 
-Power-Up Trello pour définir des niveaux de priorité (P1–P5) sur chaque carte : badges colorés, popup de sélection, paramètres par tableau, modèles de libellés et matrice de libellés contextuels.
+Power-Up Trello pour évaluer chaque carte selon **l'urgence**, **l'impact** et **l'effort** : score 0–10, palier (Critique → Optionnel), badges colorés et libellés contextuels optionnels via une matrice.
 
 Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques servis depuis la racine du dépôt (ex. GitHub Pages).
 
@@ -8,11 +8,14 @@ Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques
 
 ## Fonctionnalités
 
-- **5 niveaux de priorité** (P1–P5), couleur et libellé personnalisables
-- **Badges** sur les cartes en vue tableau
+- **Trois axes** (urgence 0–4, impact 0–4, effort 1–5) avec barre de chaleur et curseurs
+- **Score et palier** calculés par formule baseline (0–10)
+- **Matrice de libellés** optionnelle (ex. « Victoire rapide », « Chemin critique »)
+- **Badges** sur les cartes en vue tableau (`score · libellé`)
 - **Popup « Définir la priorité »** dans le détail de carte
-- **Paramètres du tableau** : modèles (français, anglais, MoSCoW, etc.), import/export JSON, matrice de libellés
-- **Horodatage de build** affiché sur la page d’accueil du connecteur (`build-info.json`, mis à jour par CI sur `main`)
+- **Paramètres du tableau** : activer/désactiver la matrice, renommer les règles, import/export JSON v2
+- **Horodatage de build** affiché sur la page d'accueil du connecteur (`build-info.json`, mis à jour par CI sur `main`)
+- **Compatibilité** : les anciennes priorités P1–P5 sont lues pour l'affichage jusqu'à la prochaine sauvegarde
 
 ---
 
@@ -20,12 +23,15 @@ Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques
 
 | Chemin | Rôle |
 |--------|------|
-| `index.html` | Connecteur Power-Up (iframe Trello + page d’accueil hors iframe) |
-| `popup.html` | Sélecteur de priorité dans une carte |
-| `settings.html` | Paramètres du tableau (modèles, couleurs, matrice) |
-| `welcome.html` | Modal d’accueil à l’activation du Power-Up |
-| `priority-templates.js` | Priorités par défaut, modèles, validation et import/export |
-| `priority-matrix.js` | Règles de libellés contextuels (urgence × impact × facilité) — **production** |
+| `index.html` | Connecteur Power-Up (iframe Trello + page d'accueil hors iframe) |
+| `popup.html` | Éditeur de priorité (3 curseurs + barre de chaleur) |
+| `settings.html` | Paramètres du tableau (matrice de libellés) |
+| `welcome.html` | Modal d'accueil à l'activation du Power-Up |
+| `priority-ui.js` | Formule de score, composants UI (`PriorityUI`) |
+| `priority-ui.css` | Styles de l'éditeur de priorité |
+| `priority-trello.js` | Pont Trello (stockage, badges, affichage) |
+| `priority-matrix.js` | Règles de libellés contextuels (urgence × impact × facilité) |
+| `priority-export.js` | Import/export JSON v2 des paramètres de matrice |
 | `version.js` | Affichage de la version / date de build |
 | `trello-theme.css` | Styles communs des pages Power-Up |
 | `build-info.json` | Horodatage du dernier déploiement |
@@ -34,8 +40,8 @@ Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques
 
 ### Production vs bac à sable
 
-- **Production** : tout fichier à la racine référencé par `index.html`, `popup.html` ou `settings.html`. C’est ce qui doit être hébergé pour Trello.
-- **Bac à sable** (`sandbox/`) : pages ouvertes localement dans le navigateur pour itérer sur la formule de score et l’UI compacte. Charge `../priority-matrix.js` + `priority-shared.js` via balises `<script>` — pas de bundler.
+- **Production** : tout fichier à la racine référencé par `index.html`, `popup.html` ou `settings.html`. C'est ce qui doit être hébergé pour Trello.
+- **Bac à sable** (`sandbox/`) : pages ouvertes localement pour itérer sur la formule et l'UI. Charge `../priority-matrix.js` + `../priority-ui.js` — pas de bundler.
 
 ---
 
@@ -101,12 +107,12 @@ En production, le workflow `.github/workflows/stamp-build.yml` met à jour `buil
 ### Définir une priorité
 
 1. Ouvrir une carte → **Définir la priorité**
-2. Choisir un niveau — le badge apparaît sur la carte
+2. Ajuster les curseurs ou toucher un palier sur la barre de chaleur — le badge apparaît sur la carte
 
-### Personnaliser libellés et couleurs
+### Personnaliser les libellés contextuels
 
 1. **Paramètres de priorité** (bouton du tableau)
-2. Modifier les libellés / couleurs ou appliquer un modèle → **Enregistrer**
+2. Activer la matrice, renommer les règles ou importer/exporter un JSON v2 → **Enregistrer**
 
 ### Effacer une priorité
 
@@ -114,15 +120,12 @@ Popup **Définir la priorité** → **Effacer la priorité**
 
 ---
 
-## Priorités par défaut
+## Stockage Trello
 
-| # | Libellé | Couleur |
-|---|---------|---------|
-| P1 | Urgent | `#E53E3E` |
-| P2 | Haute | `#DD6B20` |
-| P3 | Moyenne | `#D69E2E` |
-| P4 | Basse | `#38A169` |
-| P5 | Aucune | `#718096` |
+| Portée | Clé | Contenu |
+|--------|-----|---------|
+| Carte (`shared`) | `cardPriority` | `{ urgency, impact, ease }` |
+| Tableau (`shared`) | `matrixLabelSettings` | matrice activée + overrides de libellés |
 
 ---
 
