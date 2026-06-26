@@ -459,6 +459,10 @@ body.tp-page--priority {
   padding: 66px 12px 16px;
 }
 
+.tp-page--priority .variant-card.is-blocked {
+  border: 2px dotted var(--blocked-border);
+}
+
 .tp-page--priority .heat-blocked-warning {
   top: 12px;
   right: 14px;
