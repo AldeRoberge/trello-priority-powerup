@@ -12,6 +12,7 @@
   <script src="./priority-matrix.js"></script>
   <script src="./priority-ui.js"></script>
   <script src="./priority-trello.js"></script>
+  <script>window.__trelloIframe = PriorityTrello.createIframeClient();</script>
 </head>
 <body class="tp-page tp-page--priority">
   <div id="apiConfigBanner" class="tp-api-banner" hidden role="alert">
@@ -24,7 +25,7 @@
   </div>
 
   <script>
-    const t = PriorityTrello.createIframeClient();
+    const t = window.__trelloIframe;
     const mountEl = document.getElementById('priorityMount');
     let variant = null;
     let latestState = null;

@@ -151,8 +151,10 @@
   };
   var BADGE_DOT_INUTILE = '\u00B7'; // · inutile
   var BADGE_DOT_BLOCKED = '\u2298'; // ⊘ blocked / en attente
+  var BADGE_DOT_COMPLETE = '\u2713'; // ✓ card marked complete in Trello
 
-  function tierBadgeDot(display) {
+  function tierBadgeDot(display, completed) {
+    if (completed) return BADGE_DOT_COMPLETE;
     if (!display) return '\u25CF';
     if (display.blocked) return BADGE_DOT_BLOCKED;
     if (display.inutile) return BADGE_DOT_INUTILE;
@@ -163,17 +165,21 @@
     return '\u25CF';
   }
 
-  function formatBadgeText(display) {
+  function formatBadgeText(display, completed) {
     if (!display) return '';
     if (display.blocked) {
-      return (typeof PriorityUI !== 'undefined' && PriorityUI.formatBlockedBadgeText)
+      var blockedText = (typeof PriorityUI !== 'undefined' && PriorityUI.formatBlockedBadgeText)
         ? PriorityUI.formatBlockedBadgeText(display.blockedReason || '')
         : BADGE_DOT_BLOCKED + ' Bloqu\u00e9';
+      if (completed) {
+        return BADGE_DOT_COMPLETE + blockedText.slice(BADGE_DOT_BLOCKED.length);
+      }
+      return blockedText;
     }
     var label = (typeof PriorityUI !== 'undefined' && PriorityUI.classicTierLabel)
       ? PriorityUI.classicTierLabel(display)
       : (display.tierLabel || display.label);
-    return tierBadgeDot(display) + ' ' + label;
+    return tierBadgeDot(display, completed) + ' ' + label;
   }
 
   function tierDetailBadgeColor(display) {
@@ -205,12 +211,26 @@
     return null;
   }
 
-  function buildCardFaceBadge(display) {
+  function buildCardFaceBadge(display, completed) {
     if (!display) return null;
     return {
-      text: formatBadgeText(display),
+      text: formatBadgeText(display, completed),
       color: tierDetailBadgeColor(display),
     };
+  }
+
+  async function getCardDueComplete(t) {
+    try {
+      return await t.card('dueComplete');
+    } catch (err) {
+      console.error('Priority card dueComplete failed', err);
+      return false;
+    }
+  }
+
+  async function getBadgeData(t) {
+    var results = await Promise.all([getCardDisplay(t), getCardDueComplete(t)]);
+    return { display: results[0], completed: !!results[1] };
   }
 
   function withBadgeRefresh(badge) {
@@ -221,9 +241,9 @@
   function dynamicCardFaceBadge(t) {
     return {
       dynamic: function () {
-        return getCardDisplay(t).then(function (display) {
-          if (!display) return { refresh: BADGE_REFRESH_SEC };
-          return withBadgeRefresh(buildCardFaceBadge(display));
+        return getBadgeData(t).then(function (data) {
+          if (!data.display) return { refresh: BADGE_REFRESH_SEC };
+          return withBadgeRefresh(buildCardFaceBadge(data.display, data.completed));
         });
       },
     };
@@ -244,16 +264,16 @@
   function cardDetailBadges(t, openCallback) {
     return [{
       dynamic: function () {
-        return getCardDisplay(t)
-          .then(function (display) {
-            if (!display) {
+        return getBadgeData(t)
+          .then(function (data) {
+            if (!data.display) {
               return withBadgeRefresh({
                 text: 'Définir la priorité',
                 color: 'green',
                 callback: openCallback,
               });
             }
-            var badge = buildCardFaceBadge(display);
+            var badge = buildCardFaceBadge(data.display, data.completed);
             return withBadgeRefresh({
               text: badge.text,
               color: badge.color,
@@ -300,7 +320,8 @@
     return opts ? global.TrelloPowerUp.iframe(opts) : global.TrelloPowerUp.iframe();
   }
 
-  // Trello API calls must run after the iframe client is ready (t.render).
+  // Defer t.get/set/getRestApi until Trello finishes the iframe handshake.
+  // Residual feature-gate noise in power-up.min.js is Trello-internal (see README).
   function runWhenIframeReady(t, fn) {
     var started = false;
     return new Promise(function (resolve, reject) {
@@ -551,6 +572,8 @@
     getMatrixSettings: getMatrixSettings,
     computeDisplay: computeDisplay,
     getCardDisplay: getCardDisplay,
+    getCardDueComplete: getCardDueComplete,
+    getBadgeData: getBadgeData,
     formatBadgeText: formatBadgeText,
     tierBadgeDot: tierBadgeDot,
     tierDetailBadgeColor: tierDetailBadgeColor,
@@ -573,5 +596,6 @@
     PRIORITY_COVER_SNAPSHOT_KEY: PRIORITY_COVER_SNAPSHOT_KEY,
     BADGE_REFRESH_SEC: BADGE_REFRESH_SEC,
     BADGE_DOT_BLOCKED: BADGE_DOT_BLOCKED,
+    BADGE_DOT_COMPLETE: BADGE_DOT_COMPLETE,
   };
 })(typeof window !== 'undefined' ? window : this);

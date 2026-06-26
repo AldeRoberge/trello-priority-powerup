@@ -8,6 +8,7 @@
   <script src="./trello-api-config.js"></script>
   <script src="./priority-trello.js"></script>
   <script src="./version.js"></script>
+  <script>window.__trelloIframe = PriorityTrello.createIframeClient();</script>
   <link rel="stylesheet" href="./trello-theme.css" />
 </head>
 <body class="tp-page">
@@ -18,7 +19,7 @@
   <button type="button" class="tp-link" id="showGuide">Voir le guide de configuration</button>
 
   <script>
-    const t = PriorityTrello.createIframeClient();
+    const t = window.__trelloIframe;
     let buildStampTimer;
 
     function renderBuildInfo(builtAt) {
@@ -44,7 +45,7 @@
     document.getElementById('showGuide').addEventListener('click', () => {
       t.modal({
         title: 'Priorité',
-        url: './welcome.html',
+        url: t.signUrl('./welcome.html'),
         height: 420,
         fullscreen: false,
         accentColor: '#22272B',

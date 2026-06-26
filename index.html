@@ -66,7 +66,7 @@
       // Popup width is fixed (narrow) by Trello; modal gives a comfortable editor width.
       return t.modal({
         title: 'Définir la priorité',
-        url: './popup.html',
+        url: t.signUrl('./popup.html'),
         height: 960,
         fullscreen: false,
         accentColor: '#22272B',
@@ -92,7 +92,7 @@
       'on-enable': function(t) {
         return t.modal({
           title: 'Priorité',
-          url: './welcome.html',
+          url: t.signUrl('./welcome.html'),
           height: 420,
           fullscreen: false,
           accentColor: '#22272B',
@@ -106,7 +106,7 @@
           callback: function(t) {
             return t.popup({
               title: 'Paramètres de priorité',
-              url: './settings.html',
+              url: t.signUrl('./settings.html'),
               height: 280,
             });
           },

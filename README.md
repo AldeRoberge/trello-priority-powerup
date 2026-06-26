@@ -130,6 +130,17 @@ Dépannage (déploiement bloqué, source Pages) : [.github/DEPLOYMENT.md](.githu
 
 Popup **Définir la priorité** → **Effacer la priorité**
 
+### Messages console sur Trello.com
+
+Certaines erreurs affichées dans la console du navigateur proviennent de **Trello** (application principale ou SDK `power-up.min.js`), pas de ce Power-Up :
+
+| Message | Origine |
+|---------|---------|
+| `get-paint-metrics.js` — « Deprecated API for given entry type » | Métriques de rendu internes à Trello (React). Sans impact sur le Power-Up. |
+| `platform-dst-motion-theme-default` — « Client must be initialized… » | Contrôle interne du thème / feature gate Atlassian. Souvent bénin si badges et popup fonctionnent. |
+
+Les pages iframe de ce Power-Up initialisent le client dans le `<head>`, reportent les appels API via `t.render()` (`runWhenIframeReady`), et signent les URL modales avec `t.signUrl()`.
+
 ---
 
 ## Stockage Trello
