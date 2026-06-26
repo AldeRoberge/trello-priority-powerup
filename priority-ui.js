@@ -418,6 +418,7 @@
     var tier = classicTierLabel(display);
     if (TASK_BADGE_LABELS[tier]) return TASK_BADGE_LABELS[tier];
     if (!tier) return '';
+    if (tier === 'Important') return 'T\u00e2che Importante';
     return 'T\u00e2che ' + tier.charAt(0).toLowerCase() + tier.slice(1);
   }
 

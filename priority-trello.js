@@ -173,9 +173,15 @@
       }
       return blockedText;
     }
+    var tierKey = String(display.tierLabel || display.label || '');
     var label = (typeof PriorityUI !== 'undefined' && PriorityUI.taskBadgeLabel)
       ? PriorityUI.taskBadgeLabel(display)
-      : 'T\u00e2che ' + String(display.tierLabel || display.label || '').toLowerCase();
+      : (tierKey === 'Important'
+        ? 'T\u00e2che Importante'
+        : 'T\u00e2che ' + tierKey.toLowerCase());
+    if (completed) {
+      label = 'Compl\u00e9t\u00e9 (' + label + ')';
+    }
     return tierBadgeDot(display, completed) + ' ' + label;
   }
 
