@@ -90,7 +90,7 @@
     return computeDisplay(inputs);
   }
 
-  var BADGE_DOT = '\u25CF';
+  var BADGE_DOT = '\u2B24';
 
   function formatBadgeText(display) {
     if (!display) return '';
