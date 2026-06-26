@@ -33,7 +33,7 @@ Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques
 | `version.js` | Affichage de la version / date de build |
 | `trello-theme.css` | Styles communs des pages Power-Up |
 | `build-info.json` | Horodatage du dernier déploiement |
-| `scripts/` | Utilitaires Node (`stamp-build.js`, `render-icon.js`) |
+| `scripts/` | Utilitaires Node (`stamp-build.js`, `write-trello-api-config.js`, `render-icon.js`) |
 | `sandbox/` | Prototypes UI et scripts de vérification — **non déployés** (voir `sandbox/README.md`) |
 
 ### Production vs bac à sable
@@ -83,6 +83,8 @@ La synchronisation des couleurs de couverture de carte sur le tableau nécessite
 2. Aller sur [trello.com/power-ups/admin](https://trello.com/power-ups/admin) → votre Power-Up → onglet **API Key**
 3. Coller la clé dans `appKey` (laisser vide pour désactiver la synchro des couvertures ; les badges restent actifs)
 
+En **production (GitHub Pages)**, la clé n'est pas versionnée : le workflow CI génère `trello-api-config.js` à partir du secret **`TRELLO_API_KEY`** (voir [Déploiement](#déploiement-github-pages)).
+
 ### Horodatage de build (local)
 
 ```bash
@@ -97,8 +99,10 @@ En production, le workflow `.github/workflows/static.yml` horodate `build-info.j
 
 1. Créer un dépôt **public** et pousser la branche `main` (racine du site = racine du dépôt).
 2. **Settings → Pages → Build and deployment** → **Source** : **GitHub Actions** (obligatoire — **pas** « Deploy from a branch »). Tant que la source reste une branche, GitHub lance aussi `pages-build-deployment` à chaque push, ce qui entre en conflit avec ce workflow.
-3. Le workflow horodate `build-info.json` sur le runner et publie la racine via `upload-pages-artifact` / `deploy-pages` (aucun push depuis la CI).
-4. URL du site : `https://VOTRE-UTILISATEUR.github.io/trello-priority-powerup/`
+3. **Settings → Secrets and variables → Actions → New repository secret** :
+   - **`TRELLO_API_KEY`** — clé API du Power-Up (même valeur que `appKey` en local ; [trello.com/power-ups/admin](https://trello.com/power-ups/admin) → Power-Up → **API Key**). Sans ce secret, le déploiement réussit mais la synchro des couleurs de couverture reste désactivée sur le site publié.
+4. Le workflow génère `trello-api-config.js` sur le runner, horodate `build-info.json`, puis publie la racine via `upload-pages-artifact` / `deploy-pages` (aucun push depuis la CI).
+5. URL du site : `https://VOTRE-UTILISATEUR.github.io/trello-priority-powerup/`
 
 Dépannage (déploiement bloqué, source Pages) : [.github/DEPLOYMENT.md](.github/DEPLOYMENT.md).
 

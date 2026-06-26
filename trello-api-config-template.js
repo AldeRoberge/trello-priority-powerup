@@ -3,6 +3,8 @@
  * 2. Go to https://trello.com/power-ups/admin
  * 3. Open your Power-Up → API Key tab → copy the key
  * 4. Paste it below (leave empty to disable cover sync; badges still work)
+ *
+ * Production (GitHub Pages): set repository secret TRELLO_API_KEY — CI generates trello-api-config.js at deploy time.
  */
 (function (global) {
   'use strict';
