@@ -154,11 +154,11 @@ body {
 
 /* ── Criteria fields section ── */
 .variant-fields-section {
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
 .variant-fields-section > .variant-fields {
-  padding-top: 4px;
+  padding-top: 2px;
 }
 
 .variant-fields-section > .calc-graph-panel {
@@ -178,8 +178,16 @@ body {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 4px;
-  margin: 0 0 16px;
+  gap: 2px;
+  margin: 0 0 10px;
+}
+
+.field-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px 10px;
+  min-width: 0;
 }
 
 .field:last-child {
@@ -242,7 +250,8 @@ body {
   align-items: center;
   gap: 5px;
   letter-spacing: -0.01em;
-  line-height: 1.45;
+  line-height: 1.35;
+  flex: 0 0 auto;
   min-width: 0;
 }
 
@@ -257,16 +266,32 @@ body {
   border: none;
   padding: 0;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 400;
   color: var(--text-muted);
   background: none;
-  text-align: left;
+  text-align: right;
   cursor: pointer;
   transition: opacity .12s;
   display: block;
-  line-height: 1.45;
+  line-height: 1.35;
   white-space: normal;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 68%;
+}
+
+@media (max-width: 320px) {
+  .field-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+  }
+
+  .field-desc {
+    max-width: none;
+    text-align: left;
+  }
 }
 
 .field-desc:hover {

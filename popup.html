@@ -5,7 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Définir la priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
-  <script>window.__trelloIframe = TrelloPowerUp.iframe();</script>
+  <script src="./trello-api-config.js"></script>
+  <script>
+    window.__trelloIframe = TrelloPowerUp.iframe(
+      TrelloApiConfig.appKey
+        ? { appKey: TrelloApiConfig.appKey, appName: TrelloApiConfig.appName }
+        : undefined
+    );
+  </script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./trello-theme.css" />
   <link rel="stylesheet" href="./priority-ui.css" />
@@ -58,6 +65,19 @@
 
       if (!hasSavedPriority) {
         saveState(variant.getState());
+      }
+
+      var blockedCheckbox = mountEl.querySelector('.en-attente-checkbox');
+      if (blockedCheckbox) {
+        blockedCheckbox.addEventListener('change', function () {
+          PriorityTrello.ensureRestApiAuthorized(t)
+            .then(function (client) {
+              if (client && latestState) {
+                return PriorityTrello.saveCardInputs(t, latestState);
+              }
+            })
+            .catch(function () {});
+        });
       }
 
       window.scrollTo(0, 0);

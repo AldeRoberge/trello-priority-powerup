@@ -5,6 +5,9 @@
   var CARD_PRIORITY_KEY = 'cardPriority';
   var LEGACY_PRIORITY_KEY = 'priority';
   var MATRIX_SETTINGS_KEY = 'matrixLabelSettings';
+  var BLOCKED_COVER_SNAPSHOT_KEY = 'blockedCoverSnapshot';
+  var PRIORITY_COVER_SNAPSHOT_KEY = 'priorityCoverSnapshot';
+  var BLOCKED_COVER_COLOR = 'red';
   // Trello minimum for dynamic badge polling (card-badges / card-detail-badges).
   var BADGE_REFRESH_SEC = 10;
 
@@ -243,10 +246,138 @@
     }];
   }
 
+  function trelloApiConfig() {
+    return typeof global.TrelloApiConfig !== 'undefined' ? global.TrelloApiConfig : null;
+  }
+
+  function canWriteCard(t) {
+    return typeof t.memberCanWriteToModel === 'function' && t.memberCanWriteToModel('card');
+  }
+
+  function serializeCover(cover) {
+    if (!cover || typeof cover !== 'object') {
+      return {
+        color: null,
+        idAttachment: null,
+        idUploadedBackground: null,
+        size: 'normal',
+        brightness: 'light',
+      };
+    }
+    return {
+      color: cover.color || null,
+      idAttachment: cover.idAttachment || null,
+      idUploadedBackground: cover.idUploadedBackground || null,
+      size: cover.size || 'normal',
+      brightness: cover.brightness || 'light',
+    };
+  }
+
+  function buildBlockedCover(currentCover) {
+    var base = serializeCover(currentCover);
+    return {
+      color: BLOCKED_COVER_COLOR,
+      idAttachment: null,
+      idUploadedBackground: null,
+      size: base.size,
+      brightness: base.brightness,
+    };
+  }
+
+  async function getAuthorizedRestClient(t) {
+    var config = trelloApiConfig();
+    if (!config || !config.appKey) return null;
+    try {
+      var client = await t.getRestApi();
+      if (!(await client.isAuthorized())) return null;
+      return client;
+    } catch (err) {
+      console.warn('Priority blocked cover: REST client unavailable', err);
+      return null;
+    }
+  }
+
+  async function ensureRestApiAuthorized(t) {
+    var config = trelloApiConfig();
+    if (!config || !config.appKey) return null;
+    try {
+      var client = await t.getRestApi();
+      if (await client.isAuthorized()) return client;
+      await client.authorize({ scope: 'read,write' });
+      return client;
+    } catch (err) {
+      console.warn('Priority blocked cover: authorization failed', err);
+      return null;
+    }
+  }
+
+  async function updateCardCover(client, t, coverValue) {
+    var config = trelloApiConfig();
+    var token = await client.getToken();
+    if (!token || !config || !config.appKey) return;
+
+    var ctx = t.getContext();
+    var cardId = ctx && ctx.card;
+    if (!cardId) return;
+
+    var res = await fetch('https://api.trello.com/1/cards/' + cardId + '/cover', {
+      method: 'PUT',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        key: config.appKey,
+        token: token,
+        value: coverValue,
+      }),
+    });
+    if (!res.ok) {
+      console.error('Priority blocked cover update failed', res.status, await res.text());
+    }
+  }
+
+  async function syncBlockedCardCover(t, wasBlocked, isBlocked) {
+    if (!canWriteCard(t)) return;
+
+    var client = await getAuthorizedRestClient(t);
+    if (!client && isBlocked) {
+      client = await ensureRestApiAuthorized(t);
+    }
+    if (!client) return;
+
+    if (isBlocked) {
+      var snapshot = await t.get('card', 'shared', BLOCKED_COVER_SNAPSHOT_KEY);
+      if (!snapshot) {
+        var currentCover = await t.card('cover');
+        await t.set('card', 'shared', BLOCKED_COVER_SNAPSHOT_KEY, serializeCover(currentCover));
+      }
+      var coverNow = await t.card('cover');
+      await updateCardCover(client, t, buildBlockedCover(coverNow));
+      return;
+    }
+
+    if (wasBlocked) {
+      var savedCover = await t.get('card', 'shared', BLOCKED_COVER_SNAPSHOT_KEY);
+      if (savedCover) {
+        await updateCardCover(client, t, savedCover);
+        await t.remove('card', 'shared', BLOCKED_COVER_SNAPSHOT_KEY);
+      }
+    }
+  }
+
   async function saveCardInputs(t, inputs) {
     var normalized = normalizeInputs(inputs);
     if (!normalized) return;
+    var previous = await getCardInputs(t);
+    var wasBlocked = !!(previous && previous.enAttente);
+    var isBlocked = !!normalized.enAttente;
     await t.set('card', 'shared', CARD_PRIORITY_KEY, normalized);
+    try {
+      await syncBlockedCardCover(t, wasBlocked, isBlocked);
+    } catch (err) {
+      console.error('Priority blocked cover sync failed', err);
+    }
   }
 
   global.PriorityTrello = {
@@ -267,6 +398,9 @@
     cardFaceBadges: cardFaceBadges,
     cardDetailBadges: cardDetailBadges,
     saveCardInputs: saveCardInputs,
+    ensureRestApiAuthorized: ensureRestApiAuthorized,
+    syncBlockedCardCover: syncBlockedCardCover,
+    BLOCKED_COVER_SNAPSHOT_KEY: BLOCKED_COVER_SNAPSHOT_KEY,
     BADGE_REFRESH_SEC: BADGE_REFRESH_SEC,
     BADGE_DOT_BLOCKED: BADGE_DOT_BLOCKED,
   };

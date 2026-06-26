@@ -495,7 +495,11 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .field-desc {
-  font-size: 14px;
+  font-size: 13px;
+}
+
+.tp-page--priority .field-head {
+  gap: 4px 12px;
 }
 
 .tp-page--priority .field-val {
@@ -512,7 +516,7 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .field {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .tp-page--priority .variant-blocked-section {
@@ -533,11 +537,11 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .field {
-  gap: 5px;
+  gap: 3px;
 }
 
 .tp-page--priority .field-slider {
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .tp-page--priority .variant-fields-section {
