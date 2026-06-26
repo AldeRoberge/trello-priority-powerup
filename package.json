@@ -5,7 +5,8 @@
   "scripts": {
     "verify:presets": "cscript //nologo sandbox/verify-presets.js",
     "verify:matrix": "node sandbox/verify-matrix.js",
-    "verify": "npm run verify:presets && npm run verify:matrix",
+    "verify:version": "node sandbox/verify-version.js",
+    "verify": "npm run verify:presets && npm run verify:matrix && npm run verify:version",
     "stamp:build": "node scripts/stamp-build.js"
   }
 }
