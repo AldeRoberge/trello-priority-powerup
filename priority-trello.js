@@ -167,15 +167,15 @@
     if (display.blocked) {
       var blockedText = (typeof PriorityUI !== 'undefined' && PriorityUI.formatBlockedBadgeText)
         ? PriorityUI.formatBlockedBadgeText(display.blockedReason || '')
-        : BADGE_DOT_BLOCKED + ' Bloqu\u00e9';
+        : BADGE_DOT_BLOCKED + ' T\u00e2che bloqu\u00e9';
       if (completed) {
         return BADGE_DOT_COMPLETE + blockedText.slice(BADGE_DOT_BLOCKED.length);
       }
       return blockedText;
     }
-    var label = (typeof PriorityUI !== 'undefined' && PriorityUI.classicTierLabel)
-      ? PriorityUI.classicTierLabel(display)
-      : (display.tierLabel || display.label);
+    var label = (typeof PriorityUI !== 'undefined' && PriorityUI.taskBadgeLabel)
+      ? PriorityUI.taskBadgeLabel(display)
+      : 'T\u00e2che ' + String(display.tierLabel || display.label || '').toLowerCase();
     return tierBadgeDot(display, completed) + ' ' + label;
   }
 

@@ -400,9 +400,31 @@
     description: BLOCKED_DESCRIPTION
   };
 
+  var TASK_BADGE_LABELS = {
+    Critique: 'T\u00e2che critique',
+    Urgent: 'T\u00e2che urgente',
+    Prioritaire: 'T\u00e2che prioritaire',
+    Important: 'T\u00e2che Importante',
+    Flexible: 'T\u00e2che flexible',
+    Secondaire: 'T\u00e2che secondaire',
+    Optionnel: 'T\u00e2che optionnelle',
+    Inutile: 'T\u00e2che inutile',
+    'Bloqu\u00e9': 'T\u00e2che bloqu\u00e9'
+  };
+
+  function taskBadgeLabel(display) {
+    if (!display) return '';
+    if (display.blocked) return TASK_BADGE_LABELS[BLOCKED_LABEL];
+    var tier = classicTierLabel(display);
+    if (TASK_BADGE_LABELS[tier]) return TASK_BADGE_LABELS[tier];
+    if (!tier) return '';
+    return 'T\u00e2che ' + tier.charAt(0).toLowerCase() + tier.slice(1);
+  }
+
   function formatBlockedBadgeText(reason) {
-    if (reason) return BLOCKED_DISPLAY + ' \u2014 ' + reason;
-    return BLOCKED_DISPLAY;
+    var label = TASK_BADGE_LABELS[BLOCKED_LABEL];
+    if (reason) return BLOCKED_SYMBOL + ' ' + label + ' \u2014 ' + reason;
+    return BLOCKED_SYMBOL + ' ' + label;
   }
 
   function isDarkTheme() {
@@ -2750,6 +2772,7 @@
     isEnAttente: isEnAttente,
     resolveDisplay: resolveDisplay,
     classicTierLabel: classicTierLabel,
+    taskBadgeLabel: taskBadgeLabel,
     setMatrixSettings: setMatrixSettings,
     getMatrixSettings: getMatrixSettings,
     resolveMatrixLabel: resolveMatrixLabel,
