@@ -283,6 +283,39 @@
     return key.length > 0 && key !== 'YOUR_TRELLO_APP_KEY';
   }
 
+  function getIframeInitOptions() {
+    if (!isTrelloApiConfigured()) return undefined;
+    var config = trelloApiConfig();
+    return {
+      appKey: config.appKey.trim(),
+      appName: config.appName || 'Trello Priority Powerup',
+    };
+  }
+
+  function createIframeClient() {
+    if (typeof global.TrelloPowerUp === 'undefined') {
+      throw new Error('TrelloPowerUp is not loaded');
+    }
+    var opts = getIframeInitOptions();
+    return opts ? global.TrelloPowerUp.iframe(opts) : global.TrelloPowerUp.iframe();
+  }
+
+  // Trello API calls must run after the iframe client is ready (t.render).
+  function runWhenIframeReady(t, fn) {
+    var started = false;
+    return new Promise(function (resolve, reject) {
+      if (!t || typeof t.render !== 'function') {
+        Promise.resolve().then(fn).then(resolve, reject);
+        return;
+      }
+      t.render(function () {
+        if (started) return;
+        started = true;
+        Promise.resolve().then(fn).then(resolve, reject);
+      });
+    });
+  }
+
   function coverSyncError(message, detail) {
     if (detail !== undefined) {
       console.error('Priority card cover: ' + message, detail);
@@ -527,6 +560,9 @@
     cardDetailBadges: cardDetailBadges,
     saveCardInputs: saveCardInputs,
     isTrelloApiConfigured: isTrelloApiConfigured,
+    getIframeInitOptions: getIframeInitOptions,
+    createIframeClient: createIframeClient,
+    runWhenIframeReady: runWhenIframeReady,
     ensureRestApiAuthorized: ensureRestApiAuthorized,
     syncCardCover: syncCardCover,
     serializeCover: serializeCover,

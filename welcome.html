@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Bienvenue</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
-  <script>window.__trelloIframe = TrelloPowerUp.iframe();</script>
+  <script src="./trello-api-config.js"></script>
+  <script src="./priority-trello.js"></script>
   <link rel="stylesheet" href="./trello-theme.css" />
 </head>
 <body class="tp-page tp-page--roomy">
@@ -39,7 +40,7 @@
   <button class="tp-btn tp-btn--primary" type="button" id="startBtn" style="width:100%">Commencer</button>
 
   <script>
-    const t = window.__trelloIframe || TrelloPowerUp.iframe();
+    const t = PriorityTrello.createIframeClient();
     document.getElementById('startBtn').addEventListener('click', () => t.closeModal());
   </script>
 </body>

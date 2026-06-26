@@ -6,13 +6,6 @@
   <title>Définir la priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./trello-api-config.js"></script>
-  <script>
-    window.__trelloIframe = TrelloPowerUp.iframe(
-      TrelloApiConfig.appKey
-        ? { appKey: TrelloApiConfig.appKey, appName: TrelloApiConfig.appName }
-        : undefined
-    );
-  </script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./trello-theme.css" />
   <link rel="stylesheet" href="./priority-ui.css" />
@@ -31,7 +24,7 @@
   </div>
 
   <script>
-    const t = window.__trelloIframe || TrelloPowerUp.iframe();
+    const t = PriorityTrello.createIframeClient();
     const mountEl = document.getElementById('priorityMount');
     let variant = null;
     let latestState = null;
@@ -108,6 +101,9 @@
       }
 
       window.scrollTo(0, 0);
+      if (typeof t.sizeTo === 'function') {
+        return t.sizeTo(document.body);
+      }
     }
 
     window.addEventListener('pagehide', function () {
@@ -116,7 +112,7 @@
       }
     });
 
-    init().catch(function (err) {
+    PriorityTrello.runWhenIframeReady(t, init).catch(function (err) {
       console.error('Priority popup init failed', err);
     });
   </script>
