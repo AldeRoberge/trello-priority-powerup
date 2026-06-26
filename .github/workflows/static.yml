@@ -7,6 +7,9 @@ name: Deploy static content to Pages
 on:
   push:
     branches: [main]
+    # Stamp commits only touch build-info.json; ignore so they do not start a second deploy.
+    paths-ignore:
+      - build-info.json
   workflow_dispatch:
 
 permissions:
@@ -14,11 +17,12 @@ permissions:
   pages: write
   id-token: write
 
-# GitHub Pages allows only one active deployment; cancel superseded runs
-# so a newer push is not blocked by an in-progress or stuck deployment.
+# Pages allows one in-flight deployment per site. cancel-in-progress: true only
+# stops the Actions job; the Pages deployment keeps settling and the next run
+# fails with "in progress deployment". Queue runs instead (GitHub starter default).
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
