@@ -364,6 +364,11 @@
     description: INUTILE_STYLES.description
   };
 
+  var BLOCKED_LABEL = 'Blocked';
+  var BLOCKED_DISPLAY = '\uD83D\uDEAB ' + BLOCKED_LABEL;
+  var BLOCKED_DESCRIPTION =
+    'T\u00e2che bloqu\u00e9 en attente de quelqu\'un, d\'une autre t\u00e2che, d\'un approbation, de mat\u00e9riel, etc.';
+
   function isDarkTheme() {
     return document.documentElement.getAttribute('data-color-mode') === 'dark';
   }
