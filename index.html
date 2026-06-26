@@ -3,93 +3,209 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Priority Power-Up</title>
+  <title>Card Priorities Power-Up</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./version.js"></script>
+  <style>
+    #landing {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #1a1a2e;
+      color: #e8e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .landing-card {
+      max-width: 420px;
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 14px;
+      padding: 28px 30px;
+      text-align: center;
+    }
+
+    .landing-card h1 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .landing-card .tagline {
+      font-size: 13px;
+      color: rgba(255,255,255,0.45);
+      margin-bottom: 24px;
+    }
+
+    .version-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: rgba(255,255,255,0.35);
+      margin-bottom: 8px;
+    }
+
+    .version-relative {
+      font-size: 20px;
+      font-weight: 600;
+      color: #8fa3ff;
+      margin-bottom: 10px;
+    }
+
+    .version-utc {
+      font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
+      font-size: 12px;
+      color: rgba(255,255,255,0.4);
+    }
+
+    .landing-card .note {
+      margin-top: 22px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      font-size: 12px;
+      color: rgba(255,255,255,0.35);
+      line-height: 1.5;
+    }
+  </style>
 </head>
 <body>
-<script>
-  const DEFAULT_PRIORITIES = [
-    { id: 1, label: 'Urgent', color: '#E53E3E' },
-    { id: 2, label: 'High',   color: '#DD6B20' },
-    { id: 3, label: 'Medium', color: '#D69E2E' },
-    { id: 4, label: 'Low',    color: '#38A169' },
-    { id: 5, label: 'None',   color: '#718096' },
-  ];
+  <div id="landing" hidden>
+    <div class="landing-card">
+      <h1>Card Priorities</h1>
+      <p class="tagline">Trello Power-Up</p>
+      <p class="version-label">Deployed version</p>
+      <p class="version-relative" id="versionRelative">Loading…</p>
+      <p class="version-utc" id="versionUtc"></p>
+      <p class="note">Timestamp is stamped automatically on every push to <code>main</code>.</p>
+    </div>
+  </div>
 
-  async function getPriorities(t) {
-    const stored = await t.get('board', 'shared', 'priorities');
-    return stored || DEFAULT_PRIORITIES;
+<script>
+  const IN_TRELLO = window.self !== window.top;
+
+  if (IN_TRELLO) {
+    initPowerUp();
+  } else {
+    document.getElementById('landing').hidden = false;
+    initLanding();
   }
 
-  function openPriorityPopup(t) {
-    return t.popup({
-      title: 'Set Priority',
-      url: './popup.html',
-      height: 320,
+  // ── Landing page (direct browser visit) ─────────────────────────────────
+
+  function renderVersion(builtAt) {
+    document.getElementById('versionRelative').textContent = BuildVersion.updatedLabel(builtAt);
+    document.getElementById('versionUtc').textContent = BuildVersion.formatUtc(builtAt);
+  }
+
+  async function initLanding() {
+    let builtAt;
+
+    try {
+      builtAt = await BuildVersion.fetchBuiltAt('./build-info.json');
+    } catch {
+      document.getElementById('versionRelative').textContent = 'Build info unavailable';
+      document.getElementById('versionUtc').textContent = '';
+      return;
+    }
+
+    renderVersion(builtAt);
+    setInterval(() => renderVersion(builtAt), 30_000);
+  }
+
+  // ── Trello Power-Up connector (hidden iframe) ───────────────────────────
+
+  function initPowerUp() {
+    const DEFAULT_PRIORITIES = [
+      { id: 1, label: 'Urgent', color: '#E53E3E' },
+      { id: 2, label: 'High',   color: '#DD6B20' },
+      { id: 3, label: 'Medium', color: '#D69E2E' },
+      { id: 4, label: 'Low',    color: '#38A169' },
+      { id: 5, label: 'None',   color: '#718096' },
+    ];
+
+    async function getPriorities(t) {
+      const stored = await t.get('board', 'shared', 'priorities');
+      return stored || DEFAULT_PRIORITIES;
+    }
+
+    function openPriorityPopup(t) {
+      return t.popup({
+        title: 'Set Priority',
+        url: './popup.html',
+        height: 320,
+      });
+    }
+
+    TrelloPowerUp.initialize({
+
+      'card-badges': async function(t) {
+        const priorityId = await t.get('card', 'shared', 'priority');
+        if (!priorityId) return [];
+        const priorities = await getPriorities(t);
+        const p = priorities.find(x => x.id === priorityId);
+        if (!p) return [];
+        return [{
+          text: p.label,
+          color: priorityBadgeColor(p.color),
+        }];
+      },
+
+      'card-detail-badges': async function(t) {
+        const [priorityId, priorities] = await Promise.all([
+          t.get('card', 'shared', 'priority'),
+          getPriorities(t),
+        ]);
+
+        if (priorityId) {
+          const p = priorities.find(x => x.id === priorityId);
+          if (p) {
+            return [{
+              title: 'Priority',
+              text: `${p.id}. ${p.label}`,
+              color: priorityBadgeColor(p.color),
+              callback: openPriorityPopup,
+            }];
+          }
+        }
+
+        return [{
+          text: 'Priority',
+          color: 'light-gray',
+          callback: openPriorityPopup,
+        }];
+      },
+
+      'on-enable': function(t) {
+        return t.modal({
+          title: 'Card Priorities',
+          url: './welcome.html',
+          height: 420,
+          fullscreen: false,
+          accentColor: '#4F6EF7',
+        });
+      },
+
+      'board-buttons': function(t) {
+        return [{
+          icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/settings.svg',
+          text: 'Priority Settings',
+          callback: function(t) {
+            return t.popup({
+              title: 'Priority Settings',
+              url: './settings.html',
+              height: 420,
+            });
+          },
+        }];
+      },
+
     });
   }
 
-  TrelloPowerUp.initialize({
-
-    // ── Card Badges (visible on card face in board view) ──────────────────
-    'card-badges': async function(t) {
-      const priorityId = await t.get('card', 'shared', 'priority');
-      if (!priorityId) return [];
-      const priorities = await getPriorities(t);
-      const p = priorities.find(x => x.id === priorityId);
-      if (!p) return [];
-      return [{
-        text: p.label,
-        color: priorityBadgeColor(p.color),
-      }];
-    },
-
-    // ── Card Detail Badges (clickable Priority action on the card back) ─
-    'card-detail-badges': async function(t) {
-      const [priorityId, priorities] = await Promise.all([
-        t.get('card', 'shared', 'priority'),
-        getPriorities(t),
-      ]);
-
-      if (priorityId) {
-        const p = priorities.find(x => x.id === priorityId);
-        if (p) {
-          return [{
-            title: 'Priority',
-            text: `${p.id}. ${p.label}`,
-            color: priorityBadgeColor(p.color),
-            callback: openPriorityPopup,
-          }];
-        }
-      }
-
-      return [{
-        text: 'Priority',
-        color: 'light-gray',
-        callback: openPriorityPopup,
-      }];
-    },
-
-    // ── Board Buttons (top-right of the board) ────────────────────────────
-    'board-buttons': function(t) {
-      return [{
-        icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/settings.svg',
-        text: 'Priority Settings',
-        callback: function(t) {
-          return t.popup({
-            title: 'Priority Settings',
-            url: './settings.html',
-            height: 420,
-          });
-        },
-      }];
-    },
-
-  });
-
-  // Map hex color → Trello badge color name (closest match)
   function priorityBadgeColor(hex) {
-    // Trello supports: 'red','orange','yellow','green','blue','purple','pink','sky','lime','light-gray','business-class','default','null'
     const map = {
       '#E53E3E': 'red',    '#C53030': 'red',
       '#DD6B20': 'orange', '#C05621': 'orange',

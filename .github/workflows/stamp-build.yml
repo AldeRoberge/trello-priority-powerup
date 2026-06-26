@@ -1,0 +1,23 @@
+name: Stamp build
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  stamp:
+    if: ${{ !contains(github.event.head_commit.message, 'chore: stamp build') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write build timestamp
+        run: |
+          printf '{\n  "builtAt": "%s"\n}\n' "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" > build-info.json
+
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: stamp build"
+          file_pattern: build-info.json

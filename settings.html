@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Priority Settings</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./version.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -153,6 +154,21 @@
       color: rgba(255,255,255,0.35);
       font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
     }
+
+    .guide-link {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 0;
+      border: none;
+      background: none;
+      color: rgba(143, 163, 255, 0.85);
+      font-size: 12px;
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .guide-link:hover { color: #a8b8ff; }
   </style>
 </head>
 <body>
@@ -164,6 +180,7 @@
   </div>
   <div class="toast" id="toast">✓ Saved!</div>
   <div class="build-info" id="buildInfo">Build: loading…</div>
+  <button type="button" class="guide-link" id="showGuide">View setup guide</button>
 
   <script>
     const DEFAULT_PRIORITIES = [
@@ -176,6 +193,24 @@
 
     const t = TrelloPowerUp.iframe();
     let priorities = [];
+    let buildStampTimer;
+
+    function renderBuildInfo(builtAt) {
+      const el = document.getElementById('buildInfo');
+      el.textContent = `${BuildVersion.updatedLabel(builtAt)} · ${BuildVersion.formatUtc(builtAt)}`;
+    }
+
+    async function loadBuildInfo() {
+      const el = document.getElementById('buildInfo');
+      try {
+        const builtAt = await BuildVersion.fetchBuiltAt(t.signUrl('./build-info.json'));
+        renderBuildInfo(builtAt);
+        clearInterval(buildStampTimer);
+        buildStampTimer = setInterval(() => renderBuildInfo(builtAt), 30_000);
+      } catch {
+        el.textContent = 'Build: unavailable';
+      }
+    }
 
     function renderRows(data) {
       const container = document.getElementById('rows');
@@ -214,23 +249,6 @@
       });
     }
 
-    async function loadBuildInfo() {
-      const el = document.getElementById('buildInfo');
-      try {
-        const res = await fetch('./build-info.json', { cache: 'no-store' });
-        if (!res.ok) throw new Error('not found');
-        const { builtAt } = await res.json();
-        const formatted = new Date(builtAt).toLocaleString(undefined, {
-          dateStyle: 'medium',
-          timeStyle: 'short',
-          timeZoneName: 'short',
-        });
-        el.textContent = `Build: ${formatted}`;
-      } catch {
-        el.textContent = 'Build: unknown';
-      }
-    }
-
     async function load() {
       priorities = await t.get('board', 'shared', 'priorities') || JSON.parse(JSON.stringify(DEFAULT_PRIORITIES));
       renderRows(priorities);
@@ -247,6 +265,16 @@
     document.getElementById('resetBtn').addEventListener('click', () => {
       priorities = JSON.parse(JSON.stringify(DEFAULT_PRIORITIES));
       renderRows(priorities);
+    });
+
+    document.getElementById('showGuide').addEventListener('click', () => {
+      t.modal({
+        title: 'Card Priorities',
+        url: './welcome.html',
+        height: 420,
+        fullscreen: false,
+        accentColor: '#4F6EF7',
+      });
     });
 
     load();
