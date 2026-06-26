@@ -91,7 +91,22 @@
     font-size: 11px;
     color: var(--text-muted);
     line-height: 1.45;
-    margin-bottom: 10px;
+    margin: 0 0 10px;
+    padding: 8px 10px 8px 12px;
+    border-left: 3px solid color-mix(in srgb, var(--border) 70%, var(--text-muted));
+    background: var(--surface-1);
+    border-radius: 0 6px 6px 0;
+    font-style: italic;
+  }
+
+  .row-desc::before {
+    content: '«\00a0';
+    font-style: normal;
+  }
+
+  .row-desc::after {
+    content: '\00a0»';
+    font-style: normal;
   }
 
   /* ── Range inputs ── */
@@ -256,7 +271,6 @@
         <span class="row-lbl"><i class="ti ti-clock"></i> Pression temporelle</span>
         <span class="row-val" id="time-word">⏳ Cette semaine</span>
       </div>
-      <p class="row-desc">Quand cela doit-il être fait ?</p>
       <input type="range" id="time-pressure" min="0" max="4" step="1" value="2">
       <div class="ends"><span>💤 Aucune échéance</span><span>🔥 Maintenant / en retard</span></div>
     </div>
@@ -267,7 +281,7 @@
         <span class="row-lbl"><i class="ti ti-barrier-block"></i> Blocage</span>
         <span class="row-val" id="blocking-word">🔗 Dépendance mineure (quelqu'un attend, mais peut continuer)</span>
       </div>
-      <p class="row-desc">Est-ce que quelque chose cesse de fonctionner si ce n'est pas fait ?</p>
+      <blockquote class="row-desc">Est-ce que quelque chose cesse de fonctionner si ce n'est pas fait?</blockquote>
       <input type="range" id="blocking" min="0" max="3" step="1" value="1">
       <div class="ends"><span>❌ Rien</span><span>🧱 Équipe ou livraison</span></div>
     </div>
@@ -278,20 +292,18 @@
         <span class="row-lbl"><i class="ti ti-target-arrow"></i> Impact</span>
         <span class="row-val" id="impact-word">👍 Utile / amélioration notable</span>
       </div>
-      <p class="row-desc">Quel est le bénéfice si cela est fait ?</p>
       <input type="range" id="impact" min="0" max="4" step="1" value="2">
       <div class="ends"><span>❌ Négligeable</span><span>🚀 Critique</span></div>
     </div>
 
-    <!-- Facilité -->
+    <!-- Effort -->
     <div class="row">
       <div class="row-head">
-        <span class="row-lbl"><i class="ti ti-gauge"></i> Facilité <span class="row-hint">(facilité d'exécution)</span></span>
-        <span class="row-val" id="facilite-word">🧠 Modéré (demi-journée)</span>
+        <span class="row-lbl"><i class="ti ti-gauge"></i> Effort</span>
+        <span class="row-val" id="effort-word">🧠 Modéré</span>
       </div>
-      <p class="row-desc">Quelle est la facilité d'exécution ?</p>
-      <input type="range" id="facilite" min="1" max="5" step="1" value="3">
-      <div class="ends"><span>🏗 Énorme</span><span>⚡ Trivial</span></div>
+      <input type="range" id="effort" min="1" max="5" step="1" value="3">
+      <div class="ends"><span>🏗 Très élevé</span><span>⚡ Minimal</span></div>
     </div>
 
     <hr class="divider">
@@ -309,20 +321,20 @@
       </div>
 
       <div class="segs">
-        <div class="seg" data-i="6" data-target="0.7" style="--c:#9B9890;" role="button" tabindex="0" aria-label="Optionnel" title="Optionnel — Tâche secondaire, facultative, pouvant être ignorée ou mise de côté sans conséquence, voire non retenue ou écartée"></div>
-        <div class="seg" data-i="5" data-target="2.1" style="--c:#5A9FD4;" role="button" tabindex="0" aria-label="Secondaire" title="Secondaire — Tâche recommandée mais non essentielle, à envisager si possible un jour, orientée à long terme ou à surveiller selon la disponibilité, peut être réalisée plus tard"></div>
-        <div class="seg" data-i="4" data-target="3.6" style="--c:#3BA99C;" role="button" tabindex="0" aria-label="Flexible" title="Flexible — Tâche adaptable, sans échéance fixe, à traiter selon l'opportunité, dépendante du contexte et des ressources disponibles, peut être repoussée plus tard"></div>
-        <div class="seg" data-i="3" data-target="5.0" style="--c:#6EAD3A;" role="button" tabindex="0" aria-label="Important" title="Important — Tâche planifiée et structurée, programmée dans le flux de travail, à prévoir et exécuter prochainement avec engagement clair"></div>
-        <div class="seg" data-i="2" data-target="6.5" style="--c:#BA7517;" role="button" tabindex="0" aria-label="Prioritaire" title="Prioritaire — Tâche à forte attention, à réaliser rapidement avec délai court, nécessitant un traitement en priorité dans la file d'exécution"></div>
-        <div class="seg" data-i="1" data-target="7.9" style="--c:#D85A30;" role="button" tabindex="0" aria-label="Urgent" title="Urgent — Tâche pressante, à exécuter en priorité absolue, nécessitant une action rapide avec forte contrainte de temps"></div>
-        <div class="seg" data-i="0" data-target="9.3" style="--c:#E24B4A;" role="button" tabindex="0" aria-label="Critique" title="Critique — Tâche bloquante, à réaliser immédiatement, impact direct sur le système ou l'objectif, impossible à différer sans conséquence majeure"></div>
+        <div class="seg" data-i="6" data-target="0.7" style="--c:#9B9890;" role="button" tabindex="0" aria-label="Optionnel" title="Optionnel — Facultative, sans conséquence si ignorée. Peut être écartée de la file."></div>
+        <div class="seg" data-i="5" data-target="2.1" style="--c:#5A9FD4;" role="button" tabindex="0" aria-label="Secondaire" title="Secondaire — Utile mais non essentielle. À envisager plus tard selon la disponibilité."></div>
+        <div class="seg" data-i="4" data-target="3.6" style="--c:#3BA99C;" role="button" tabindex="0" aria-label="Flexible" title="Flexible — Sans échéance fixe. À traiter selon l'opportunité, peut glisser."></div>
+        <div class="seg" data-i="3" data-target="5.0" style="--c:#6EAD3A;" role="button" tabindex="0" aria-label="Important" title="Important — Planifiée au planning. À exécuter prochainement avec engagement clair."></div>
+        <div class="seg" data-i="2" data-target="6.5" style="--c:#BA7517;" role="button" tabindex="0" aria-label="Prioritaire" title="Prioritaire — Attention prioritaire. Délai court, à traiter rapidement dans la file."></div>
+        <div class="seg" data-i="1" data-target="7.9" style="--c:#D85A30;" role="button" tabindex="0" aria-label="Urgent" title="Urgent — Tâche pressante, priorité absolue. Action rapide sous forte contrainte de temps."></div>
+        <div class="seg" data-i="0" data-target="9.3" style="--c:#E24B4A;" role="button" tabindex="0" aria-label="Critique" title="Critique — Tâche à réaliser immédiatement. Impact direct sur l'objectif, impossible de délayer sans conséquences majeures."></div>
       </div>
       <div class="seg-labels">
         <span>Optionnel</span><span>Secondaire</span><span>Flexible</span><span>Important</span><span>Prioritaire</span><span>Urgent</span><span>Critique</span>
       </div>
 
       <div class="formula-wrap">
-        <div id="formula">Pression temporelle ×1.2 → 2.4 · Blocage ×0.8 → 0.8 · Impact×Facilité÷5 ×0.8 → 0.5 = 3.7</div>
+        <div id="formula">Pression temporelle ×1.2 → 2.4 · Blocage ×0.8 → 0.8 · Impact×Effort÷5 ×0.8 → 0.5 = 3.7</div>
       </div>
     </div>
 
@@ -334,7 +346,7 @@
   var timePressure = document.getElementById('time-pressure'),
       blocking     = document.getElementById('blocking'),
       impact       = document.getElementById('impact'),
-      facilite     = document.getElementById('facilite'),
+      effort       = document.getElementById('effort'),
       badge        = document.getElementById('badge'),
       bnum         = document.getElementById('badge-num'),
       blabel       = document.getElementById('badge-label'),
@@ -342,7 +354,7 @@
       tWord        = document.getElementById('time-word'),
       bWord        = document.getElementById('blocking-word'),
       iWord        = document.getElementById('impact-word'),
-      fWord        = document.getElementById('facilite-word'),
+      fWord        = document.getElementById('effort-word'),
       segs         = [].slice.call(document.querySelectorAll('.seg'));
 
   var TW = [
@@ -354,24 +366,24 @@
   ];
   var BW = [
     '❌ Rien ne dépend de cela',
-    '🔗 Dépendance mineure (quelqu\'un attend, mais peut continuer)',
+    '🔗 Dépendance mineure. Quelqu\'un attend, mais peut continuer.',
     '⚠️ Bloque une tâche ou un collègue',
     '🧱 Bloque le travail de l\'équipe ou une livraison'
   ];
   var IW = [
     '❌ Aucun / négligeable',
-    '🙂 Faible / amélioration mineure',
-    '👍 Utile / amélioration notable',
-    '⭐ Élevé / résultat important',
-    '🚀 Critique / impact majeur (revenus, utilisateurs, réputation)'
+    '🙂 Faible. Amélioration mineure.',
+    '👍 Utile. Amélioration notable.',
+    '⭐ Élevé. Résultat important.',
+    '🚀 Critique. Impact majeur sur revenus, utilisateurs ou réputation.'
   ];
   var FW = [
     '',
-    '🏗 Énorme (grand projet)',
-    '🔧 Lourd (plusieurs jours / coordination)',
+    '🏗 Très élevé (grand projet)',
+    '🔧 Élevé (plusieurs jours / coordination)',
     '🧠 Modéré (demi-journée)',
-    '👍 Facile (moins d\'une heure)',
-    '⚡ Trivial (quelques minutes)'
+    '👍 Faible (moins d\'une heure)',
+    '⚡ Minimal (quelques minutes)'
   ];
 
   var WT = 1.2, WB = 0.8, WI = 0.8;
@@ -390,7 +402,7 @@
   function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
 
   function paint(){
-    var T=+timePressure.value, B=+blocking.value, I=+impact.value, F=+facilite.value;
+    var T=+timePressure.value, B=+blocking.value, I=+impact.value, F=+effort.value;
     var timeTerm=T*WT, blockTerm=B*WB, impTerm=WI*I*F/5;
     var p=clamp(timeTerm+blockTerm+impTerm,0,10);
     var t=tierFor(p);
@@ -402,7 +414,7 @@
     formula.textContent =
       'Pression temporelle ×'+WT+' → '+timeTerm.toFixed(1)+
       '   ·   Blocage ×'+WB+' → '+blockTerm.toFixed(1)+
-      '   ·   Impact×Facilité÷5 ×'+WI+' → '+impTerm.toFixed(1)+
+      '   ·   Impact×Effort÷5 ×'+WI+' → '+impTerm.toFixed(1)+
       '   =   '+p.toFixed(1);
     tWord.textContent = TW[T];
     bWord.textContent = BW[B];
@@ -412,7 +424,7 @@
   }
 
   function override(P){
-    var T=+timePressure.value, B=+blocking.value, I=+impact.value, F=+facilite.value;
+    var T=+timePressure.value, B=+blocking.value, I=+impact.value, F=+effort.value;
     var curTime=T*WT, curBlock=B*WB, curImp=WI*I*F/5;
     var curTotal=curTime+curBlock+curImp;
     var tTime, tBlock, tImp;
@@ -427,11 +439,11 @@
     var nF=F, needI=tImp*5/(WI*nF);
     if(needI>4){ nF=clamp(Math.round(tImp*5/(WI*4)),1,5); needI=tImp*5/(WI*nF); }
     var nI=clamp(Math.round(needI),0,4);
-    timePressure.value=nT; blocking.value=nB; impact.value=nI; facilite.value=nF;
+    timePressure.value=nT; blocking.value=nB; impact.value=nI; effort.value=nF;
     paint();
   }
 
-  [timePressure,blocking,impact,facilite].forEach(function(el){ el.addEventListener('input',paint); });
+  [timePressure,blocking,impact,effort].forEach(function(el){ el.addEventListener('input',paint); });
 
   segs.forEach(function(s){
     s.addEventListener('click',function(){ override(+s.dataset.target); });

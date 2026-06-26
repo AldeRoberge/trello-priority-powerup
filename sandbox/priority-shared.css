@@ -297,8 +297,8 @@ input.field-range:active::-webkit-slider-thumb {
   background: var(--surface-2);
   border: 0.5px solid var(--border);
   border-radius: 12px;
-  padding: 1.25rem 1.375rem 1.125rem;
-  max-width: 400px;
+  padding: 1.375rem 1.5rem 1.25rem;
+  max-width: 420px;
   width: 100%;
   box-shadow: 0 8px 32px rgba(0,0,0,0.12);
   max-height: 80vh;
@@ -328,37 +328,114 @@ input.field-range:active::-webkit-slider-thumb {
 .help-modal-title {
   font-size: 15px;
   font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
   padding-right: 28px;
+  letter-spacing: -0.01em;
 }
 
-.help-modal-keywords {
-  font-size: 12px;
-  color: var(--text-muted);
+.help-modal-quote {
+  font-size: 13px;
+  color: var(--text-secondary);
   line-height: 1.45;
-  margin-bottom: 12px;
+  margin: 0 0 12px;
+  padding: 10px 28px 10px 14px;
+  border-left: 3px solid color-mix(in srgb, var(--border) 70%, var(--text-muted));
+  background: var(--surface-1);
+  border-radius: 0 8px 8px 0;
   font-style: italic;
+}
+
+.help-modal-quote::before {
+  content: '«\00a0';
+  color: var(--text-muted);
+  font-style: normal;
+}
+
+.help-modal-quote::after {
+  content: '\00a0»';
+  color: var(--text-muted);
+  font-style: normal;
+}
+
+.help-modal-body {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin-bottom: 14px;
+}
+
+.help-modal-body p + p {
+  margin-top: 8px;
 }
 
 .help-modal-levels {
   list-style: none;
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.5;
+  counter-reset: help-level;
+  border-top: 0.5px solid var(--border);
+  padding-top: 12px;
 }
 
 .help-modal-levels li {
-  margin-bottom: 8px;
-  padding-left: 0;
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 7px 0;
+  border-bottom: 0.5px solid color-mix(in srgb, var(--border) 70%, transparent);
 }
 
 .help-modal-levels li:last-child {
-  margin-bottom: 0;
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
-.help-modal-levels strong {
+.help-modal-levels li.is-selectable {
+  cursor: pointer;
+  margin: 0 -8px;
+  padding-left: 8px;
+  padding-right: 8px;
+  border-radius: 8px;
+  transition: background .1s;
+}
+
+.help-modal-levels li.is-selectable:hover {
+  background: var(--surface-1);
+}
+
+.help-modal-levels li.is-selectable:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px rgba(0,0,0,0.12);
+}
+
+.help-modal-level-label {
   color: var(--text-primary);
   font-weight: 600;
+  font-size: 12px;
+}
+
+.help-modal-level-text {
+  color: var(--text-secondary);
+}
+
+.help-modal-levels li.is-current {
+  background: var(--surface-1);
+  border-radius: 6px;
+  margin-left: -8px;
+  margin-right: -8px;
+  padding-left: 8px;
+  padding-right: 8px;
+  box-shadow: inset 3px 0 0 #0C66E4;
+}
+
+.help-modal-levels li.is-current.is-selectable:hover {
+  background: color-mix(in srgb, #0C66E4 8%, var(--surface-1));
+}
+
+.help-modal-levels li.is-current .help-modal-level-label {
+  font-weight: 700;
+  color: #0C66E4;
 }
 
 /* ── Heatbar panel ── */
@@ -589,6 +666,8 @@ input.field-range:active::-webkit-slider-thumb {
   max-width: 300px;
   aspect-ratio: 300 / 248;
   touch-action: none;
+  overflow: hidden;
+  border-radius: 10px;
 }
 
 .calc-rsm-ease-col {
@@ -637,10 +716,10 @@ input.field-range:active::-webkit-slider-thumb {
 
 .calc-rsm-surface {
   position: absolute;
-  left: 12.67%;
-  top: 5.65%;
-  width: 82.67%;
-  height: 79.84%;
+  left: calc(100% * 38 / 300);
+  top: calc(100% * 14 / 248);
+  width: calc(100% * 248 / 300);
+  height: calc(100% * 198 / 248);
   border-radius: 4px;
   pointer-events: none;
 }
@@ -659,8 +738,7 @@ input.field-range:active::-webkit-slider-thumb {
 
 .calc-rsm-plot-bg {
   fill: transparent;
-  stroke: var(--border);
-  stroke-width: 0.5;
+  stroke: none;
   pointer-events: none;
 }
 

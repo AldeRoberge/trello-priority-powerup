@@ -20,9 +20,18 @@ function urgencyLevelToPressure(level) {
 function curveImpact(I) { return Math.pow(I / 4, IMPACT_EXP) * 4; }
 function dampenCurve(U, I) { return Math.pow((U / 4) * (I / 4), DAMPEN_POWER) * DAMPEN_MAX; }
 function effectiveEaseF(U, I, F) { return (U >= 3 && I >= 3) ? Math.max(F, EASE_FLOOR) : F; }
+function urgencyBoostRamp(U) {
+  if (U <= URGENCY_BOOST_MIN_U - 1) return 0;
+  if (U >= URGENCY_BOOST_MIN_U) return 1;
+  var t = U - (URGENCY_BOOST_MIN_U - 1);
+  return t * t * (3 - 2 * t);
+}
 function urgencyBoost(U, I, dampen) {
-  if (U < URGENCY_BOOST_MIN_U) return 0;
-  return URGENCY_BOOST_MAX * Math.pow(U / 4, 2) * (1 - dampen) * Math.max(0, 1 - I / 4);
+  var ramp = urgencyBoostRamp(U);
+  if (ramp <= 0) return 0;
+  var impactFactor = Math.max(0, 1 - I / 4);
+  if (impactFactor <= 0) return 0;
+  return URGENCY_BOOST_MAX * Math.pow(U / 4, 2) * (1 - dampen) * impactFactor * ramp;
 }
 function calcBaselineTermsRaw(U, I, F) {
   var pressure = urgencyLevelToPressure(U);
@@ -45,8 +54,10 @@ function calcBaselineTermsRaw(U, I, F) {
   var easeMul = 1;
   if (dampen < EASE_MUL_DAMPEN_THRESHOLD) {
     easeMul = lerp(EASE_MUL_LO, EASE_MUL_HI, (F - 1) / 4);
-    if (U >= 3) core = pressure + impactCore * easeMul;
-    else core = core * easeMul;
+    var impactOnlyBlend = urgencyBoostRamp(U);
+    var wholeCore = (pressure + impactCore) * easeMul;
+    var impactOnlyCore = pressure + impactCore * easeMul;
+    core = lerp(wholeCore, impactOnlyCore, impactOnlyBlend);
   }
   return { rawScore: core + easeTerm + urgencyBoost(U, I, dampen), dampen: dampen, easeMul: easeMul, hardFactor: hardFactor };
 }

@@ -28,134 +28,150 @@
       emoji: ['💤', '📅', '⏳', '🚨', '🔥'],
       short: ['Aucune échéance', 'Flexible', 'Cette semaine', 'Sous 48 h', 'Maintenant'],
       detail: [
-        'Aucune date limite ni attente particulière.',
-        'Peut attendre quelques semaines sans conséquence.',
-        'À traiter d\'ici la fin de la semaine.',
-        'Échéance imminente, sous 48 heures.',
-        'En retard ou bloquant le travail en cours.'
-      ]
+        'Pas de date limite dans le calendrier. Personne n\'attend, le délai n\'est pas contraint et le risque de retard est nul.',
+        'Peut attendre quelques semaines sans conséquence. L\'échéance reste souple et le calendrier de l\'équipe n\'est pas affecté.',
+        'À traiter d\'ici la fin de la semaine. L\'échéance est proche et le délai devient une contrainte réelle dans le planning.',
+        'Échéance sous 48 h. Le délai est très court, une action rapide est requise pour éviter un retard visible.',
+        'En retard ou bloque le travail en cours. La pression du calendrier est maximale et chaque heure compte.'
+      ],
+      popup: {
+        subtitle: 'Quand faut-il le faire?',
+        intro: 'L\'échéance fixe le cadre temporel d\'une tâche : la date limite, le délai acceptable, sa place dans le calendrier et le risque de retard si elle glisse.',
+        guidance: 'Regardez la date butoir réelle, le délai que l\'équipe peut tolérer et ce qui se passe si la tâche n\'est pas traitée à temps.'
+      }
     },
     blocking: {
       emoji: ['❌', '🔗', '⚠️', '🧱'],
       short: ['Rien', 'Mineur', 'Bloque une tâche', 'Bloque l\'équipe'],
       detail: [
-        'Rien ne dépend de cette tâche.',
-        'Quelqu\'un attend, mais peut continuer autrement.',
-        'Bloque une tâche ou un collègue.',
-        'Bloque le travail de l\'équipe ou une livraison.'
-      ]
+        'Rien ne dépend de cette tâche. Aucune dépendance directe et le travail de l\'équipe avance sans ralentissement.',
+        'Quelqu\'un attend, mais peut continuer autrement. Le blocage est léger et les dépendances restent contournables.',
+        'Bloque une tâche ou un collègue. Une dépendance directe empêche l\'avancement d\'un travail en cours.',
+        'Bloque le travail de l\'équipe ou une livraison. Les dépendances sont multiples et l\'ensemble du flux ralentit.'
+      ],
+      popup: {
+        subtitle: 'Est-ce que quelque chose cesse de fonctionner si ce n\'est pas fait?',
+        intro: 'Le blocage mesure dans quelle mesure le travail de l\'équipe ralentit ou s\'arrête tant que la tâche n\'est pas faite — les dépendances directes, les collègues en attente et les livraisons retenues.',
+        guidance: 'Demandez-vous qui est bloqué, quelles tâches en dépendent et si l\'équipe peut avancer autrement en attendant.'
+      }
     },
     impact: {
       emoji: ['❌', '🙂', '👍', '⭐', '🚀'],
       short: ['Aucun', 'Faible', 'Utile', 'Important', 'Impact majeur'],
       detail: [
-        'Aucun bénéfice visible ou négligeable.',
-        'Petite amélioration, peu de visibilité.',
-        'Amélioration notable pour l\'équipe ou le produit.',
-        'Résultat important : objectif clé ou livrable majeur.',
-        'Impact majeur : visibilité, portée, valeur et avantage en jeu.'
+        'Peu ou pas de bénéfice visible. L\'effort ne crée quasi aucune valeur, portée ni opportunité pour l\'équipe.',
+        'Gain marginal avec peu de visibilité. Petite amélioration qui ne change que marginalement la valeur ou la portée des résultats.',
+        'Amélioration nette pour l\'équipe ou le produit. Valeur concrète, bénéfices perceptibles et quelques opportunités débloquées.',
+        'Objectif clé ou livrable majeur. Forte valeur, impact visible et portée significative sur les priorités en cours.',
+        'Valeur exceptionnelle et large portée. Débloque de nombreuses tâches ou personnes ; opportunité stratégique que l\'équipe ressent immédiatement.'
       ],
-      popupLines: [
-        'Une tâche à fort impact a des bénéfices et des résultats concrets, visibles et utiles pour tout le monde.'
-      ],
+      popup: {
+        subtitle: 'Pourquoi vaut-il la peine de le faire?',
+        intro: 'L\'impact mesure la valeur, l\'importance et la portée d\'une tâche — les bénéfices concrets qu\'elle apporte, sa visibilité, les opportunités qu\'elle ouvre et le nombre de personnes ou de tâches qu\'elle débloque.',
+        guidance: 'Demandez-vous si le résultat sera visible, utile à l\'équipe ou au produit, et si d\'autres travaux en dépendent.'
+      },
       affirmations: [
-        'Aucun bénéfice visible, l\'effort ne produit aucun résultat utile.',
-        'Bénéfice faible, amélioration marginale pour l\'équipe et le produit.',
-        'Amélioration nette pour le produit ou le quotidien de l\'équipe.',
-        'Enjeu important, objectif clé ou livrable visible pour tous.',
-        'Impact majeur sur la visibilité, la portée et la valeur du travail.'
+        'Aucun gain visible. L\'effort ne vaut presque rien.',
+        'Gain marginal. Petite amélioration, peu visible.',
+        'Utile. Amélioration nette pour l\'équipe ou le produit.',
+        'Important. Objectif clé, livrable visible.',
+        'Impact majeur. Forte valeur, large portée. D\'autres tâches en dépendent.'
       ]
     },
     ease: {
       emoji: ['', '🏗', '🔧', '🧠', '👍', '⚡'],
-      short: ['', 'Énorme', 'Lourd', 'Modéré', 'Rapide', 'Facile'],
+      short: ['', 'Très élevé', 'Élevé', 'Modéré', 'Faible', 'Minimal'],
       detail: [
         '',
-        'Grand projet, forte coordination, risque élevé d\'erreurs ou d\'effets graves.',
-        'Travail conséquent, dépendances multiples, risque modéré à gérer.',
-        'Effort modéré, complexité limitée, exécution standard à faible risque.',
-        'Exécution rapide, peu de friction, faible risque.',
-        'Très facile, quasi automatique, risque négligeable.'
+        'Projet lourd avec complexité élevée. Coordonner demande beaucoup de ressources et de temps ; faible confiance, faible réversibilité.',
+        'Effort conséquent avec plusieurs dépendances. Coût et difficulté notables, risque modéré à l\'exécution.',
+        'Complexité maîtrisée, exécution standard. Temps et ressources raisonnables, difficulté absorbable par l\'équipe.',
+        'Peu de friction, rapide à réaliser. Faible coût, bonne confiance dans l\'exécution, facilement réversible.',
+        'Quasi immédiat. Très peu de ressources, complexité minimale, risque faible et annulation aisée.'
       ],
-      popupLines: [
-        'Une tâche facile s\'exécute vite et simplement, avec peu de coordination ; un effort élevé demande beaucoup de ressources et multiplie les risques d\'exécution, de coordination et d\'erreurs.'
-      ],
+      popup: {
+        subtitle: 'À quel point est-ce difficile?',
+        intro: 'La facilité d\'exécution reflète le temps, la complexité, le coût, l\'incertitude et le niveau de confiance dont vous disposez. Une tâche simple demande peu de ressources, s\'exécute vite et reste facilement réversible ; une tâche difficile exige plus de coordination, multiplie les risques et coûte cher à corriger.',
+        guidance: 'Estimez le temps nécessaire, la difficulté technique, les ressources mobilisées et la facilité à revenir en arrière si besoin.'
+      },
       affirmations: [
         '',
-        'Projet majeur, coordination massive, fort risque d\'erreurs ou d\'effets graves si mal géré.',
-        'Travail lourd, effort soutenu, plusieurs dépendances et risque notable si mal coordonné.',
-        'Effort modéré, complexité limitée, exécution standard avec risque maîtrisé.',
-        'Exécution rapide, peu de friction, effort minimal et faible risque.',
-        'Très facile à exécuter, quasi immédiat, sans complication ni risque notable.'
+        'Très élevé. Projet lourd, coordination intense, risque important.',
+        'Élevé. Travail conséquent, dépendances multiples.',
+        'Modéré. Complexité maîtrisée, exécution standard.',
+        'Faible. Rapide à faire, peu de friction.',
+        'Minimal. Quasi immédiat, faible risque, facile à annuler.'
       ]
     },
     urgency: {
       emoji: ['💤', '📅', '⏳', '🚨', '🔥'],
       short: ['Calme', 'Bientôt', 'Cette semaine', 'Urgent', 'Critique'],
       detail: [
-        'Aucune pression, ni échéance ni blocage.',
-        'Échéance lointaine, rien n\'est bloqué.',
-        'Cette semaine ou dépendance légère.',
-        'Sous 48 h ou blocage notable pour l\'équipe.',
-        'Maintenant, en retard ou tout le travail de l\'équipe est bloqué.'
+        'Aucune échéance ni attente pressante. Repousser n\'entraîne ni blocage ni dépendance critique.',
+        'Échéance souple dans un délai confortable. Peu de pression temporelle, aucun blocage immédiat.',
+        'Délai proche ou quelques tâches en dépendent. La pression monte et les dépendances commencent à se faire sentir.',
+        'Échéance imminente ou blocage notable. L\'équipe ralentit ; le risque de repousser devient significatif.',
+        'À faire maintenant. En retard ou bloque l\'ensemble du travail ; forte pression temporelle, dépendances multiples.'
       ],
-      popupLines: [
-        'Une tâche urgente peut avoir un court délai, voire être en retard, et avoir plusieurs personnes et tâches qui dépendent de sa résolution.'
-      ],
+      popup: {
+        subtitle: 'Quand faut-il le faire?',
+        intro: 'L\'urgence capture la pression temporelle et les conséquences d\'attendre : l\'échéance, le délai acceptable, les blocages provoqués et les dépendances qui s\'accumulent si la tâche est repoussée.',
+        guidance: 'Regardez le délai réel, ce qui bloque si vous attendez et les conséquences concrètes d\'un report.'
+      },
       affirmations: [
-        'Aucune échéance, personne n\'attend, rien ne bloque.',
-        'Échéance lointaine, aucune pression et aucun blocage.',
-        'Échéance à traiter prochainement, d\'autres tâches en dépendent.',
-        'Échéance imminente, le travail de l\'équipe est freiné.',
-        'Priorité absolue, l\'équipe est bloquée et plusieurs tâches critiques en dépendent.'
+        'Aucune pression. Pas d\'échéance, personne n\'attend.',
+        'Peut attendre. Échéance souple, rien ne bloque.',
+        'Cette semaine. Délai proche ou quelques tâches en dépendent.',
+        'Sous 48 h ou blocage notable. L\'équipe ralentit si on attend.',
+        'Maintenant. En retard ou tout le travail de l\'équipe en dépend.'
       ]
     }
   };
 
   var KEYWORDS = {
-    time: 'Échéance, délai, calendrier, retard, deadline',
-    blocking: 'Bloque d\'autres tâches, ralentit le travail de l\'équipe, dépendance, attente, goulot',
-    impact: 'Bénéfices, visibilité, portée, valeur, avantage, gain',
-    ease: 'Ressources, temps, argent, complexité, difficulté, énergie, coordination',
-    urgency: 'Échéance, délai, blocage, dépendance, pression, travail de l\'équipe ralenti'
+    time: 'Cadre temporel : échéance, délai, calendrier et risque de retard.',
+    blocking: 'Effet sur l\'équipe : blocages, dépendances et ralentissement du travail.',
+    impact: 'Valeur apportée : importance, portée, bénéfices, visibilité et opportunités débloquées.',
+    ease: 'Coût d\'exécution : temps, complexité, ressources, difficulté, confiance et réversibilité.',
+    urgency: 'Pression temporelle : échéance, délai, blocages, dépendances et risque si repoussé.'
   };
 
   var QUESTIONS = {
-    time: 'Quand cela doit-il être fait ?',
-    blocking: 'Est-ce que quelque chose cesse de fonctionner si ce n\'est pas fait ?',
-    impact: 'Quel est le bénéfice si cela est fait ?',
-    ease: 'Quelle est la facilité d\'exécution ?',
-    urgency: 'Quand cela doit-il être fait, et combien cela bloque-t-il ?'
+    time: 'Quand faut-il le faire?',
+    blocking: 'Est-ce que quelque chose cesse de fonctionner si ce n\'est pas fait?',
+    impact: 'Pourquoi vaut-il la peine de le faire?',
+    ease: 'À quel point est-ce difficile?',
+    urgency: 'Quand faut-il le faire?'
   };
 
   var TIERS = [
     {
       min: 8.6, label: 'Critique', fill: '#FCEBEB', text: '#791F1F', seg: '#E24B4A', i: 0,
-      description: 'Tâche bloquante, à réaliser immédiatement, impact direct sur le système ou l\'objectif, impossible à différer sans conséquence majeure'
+      description: 'Tâche à réaliser immédiatement. Impact direct sur l\'objectif, impossible de délayer sans conséquences majeures.'
     },
     {
       min: 7.2, label: 'Urgent', fill: '#FAECE7', text: '#712B13', seg: '#D85A30', i: 1,
-      description: 'Tâche pressante, à exécuter en priorité absolue, nécessitant une action rapide avec forte contrainte de temps'
+      description: 'Tâche pressante, priorité absolue. Action rapide sous forte contrainte de temps.'
     },
     {
       min: 5.8, label: 'Prioritaire', fill: '#FAEEDA', text: '#633806', seg: '#BA7517', i: 2,
-      description: 'Tâche à forte attention, à réaliser rapidement avec délai court, nécessitant un traitement en priorité dans la file d\'exécution'
+      description: 'Attention prioritaire. Délai court, à traiter rapidement dans la file.'
     },
     {
       min: 4.3, label: 'Important', fill: '#E8F5E0', text: '#2D5A1E', seg: '#6EAD3A', i: 3,
-      description: 'Tâche planifiée et structurée, programmée dans le flux de travail, à prévoir et exécuter prochainement avec engagement clair'
+      description: 'Planifiée au planning. À exécuter prochainement avec engagement clair.'
     },
     {
       min: 2.9, label: 'Flexible', fill: '#E1F5EE', text: '#085041', seg: '#3BA99C', i: 4,
-      description: 'Tâche adaptable, sans échéance fixe, à traiter selon l\'opportunité, dépendante du contexte et des ressources disponibles, peut glisser dans le temps'
+      description: 'Sans échéance fixe. À traiter selon l\'opportunité, peut glisser.'
     },
     {
       min: 1.4, label: 'Secondaire', fill: '#E6F1FB', text: '#0C447C', seg: '#5A9FD4', i: 5,
-      description: 'Tâche recommandée mais non essentielle, à envisager si possible un jour, orientée à long terme ou à surveiller selon la disponibilité, peut être réalisée plus tard'
+      description: 'Utile mais non essentielle. À envisager plus tard selon la disponibilité.'
     },
     {
       min: 0, label: 'Optionnel', fill: '#F1EFE8', text: '#444441', seg: '#9B9890', i: 6,
-      description: 'Tâche secondaire, facultative, pouvant être ignorée ou mise de côté sans conséquence, voire non retenue ou écartée du flux de travail'
+      description: 'Facultative, sans conséquence si ignorée. Peut être écartée de la file.'
     }
   ];
 
@@ -199,6 +215,7 @@
   ];
 
   var SLIDER_STEP = 0.05;
+  var SLIDER_ANIM_MS = 350;
   var INUTILE_EPS = 0.05;
   var INUTILE_LABEL = 'Inutile';
   var INUTILE_STYLES = {
@@ -206,7 +223,7 @@
     fill: '#F1EFE8',
     text: '#9B9890',
     seg: '#9B9890',
-    description: 'Tâche sans valeur ni urgence, trop complexe ou impossible à réaliser.'
+    description: 'Sans valeur ni urgence. Trop complexe ou impossible à réaliser.'
   };
 
   function isInutile(inputs) {
@@ -276,6 +293,10 @@
 
   function lerp(a, b, t) {
     return a + (b - a) * t;
+  }
+
+  function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
   }
 
   function snappedLevel(value, min, max) {
@@ -378,7 +399,7 @@
     return Math.pow(I / 4, IMPACT_EXP) * 4;
   }
 
-  // Facilité dampening: rises with U×I; capped below 1 so ease still contributes at max U+I.
+  // Effort dampening: rises with U×I; capped below 1 so ease still contributes at max U+I.
   function dampenCurve(U, I) {
     var ui = (U / 4) * (I / 4);
     return Math.pow(ui, DAMPEN_POWER) * DAMPEN_MAX;
@@ -389,17 +410,28 @@
     return F;
   }
 
+  // Smooth ramp U=3→4 so boost has no step at max urgency (graph + score).
+  function urgencyBoostRamp(U) {
+    if (U <= URGENCY_BOOST_MIN_U - 1) return 0;
+    if (U >= URGENCY_BOOST_MIN_U) return 1;
+    var t = U - (URGENCY_BOOST_MIN_U - 1);
+    return t * t * (3 - 2 * t);
+  }
+
   // Low-impact urgency floor: max U with little I still reaches Urgent tier.
   function urgencyBoost(U, I, dampen) {
-    if (U < URGENCY_BOOST_MIN_U) return 0;
-    return URGENCY_BOOST_MAX * Math.pow(U / 4, 2) * (1 - dampen) * Math.max(0, 1 - I / 4);
+    var ramp = urgencyBoostRamp(U);
+    if (ramp <= 0) return 0;
+    var impactFactor = Math.max(0, 1 - I / 4);
+    if (impactFactor <= 0) return 0;
+    return URGENCY_BOOST_MAX * Math.pow(U / 4, 2) * (1 - dampen) * impactFactor * ramp;
   }
 
   // Baseline score (0–10):
-  //   core         = pressure + impactCore×easeMul (easeMul on impact only when U≥3)
+  //   core         = lerp((pressure+impactCore)×easeMul, pressure+impactCore×easeMul, ramp(U)), ramp smooth U=3→4
   //   pressure     = urgencyLevelToPressure(U)           — fused time+blocking (0–6)
   //   impactCore   = WI × curveImpact(I) × hardFactor  — hardFactor attenuated when U≥3
-  //   urgencyBoost = URGENCY_BOOST_MAX×(U/4)²×(1−dampen)×max(0,1−I/4) when U≥4
+  //   urgencyBoost = URGENCY_BOOST_MAX×(U/4)²×(1−dampen)×max(0,1−I/4)×ramp(U), ramp smooth U=3→4
   //   easeTerm     = easeWeight × (I/4 + EASE_BASE) × (F/5)^γ × EASE_SCALE
   //   easeWeight   = WI_EASE × (1 − dampen × 0.85)      — full ease weight when not urgent
   //   easeMul      = lerp(0.75, 1.25, (F−1)/4)         — boosts easy tasks at moderate U+I
@@ -431,8 +463,10 @@
     var easeMul = 1;
     if (dampen < EASE_MUL_DAMPEN_THRESHOLD) {
       easeMul = lerp(EASE_MUL_LO, EASE_MUL_HI, (F - 1) / 4);
-      if (U >= 3) core = pressure + impactCore * easeMul;
-      else core = core * easeMul;
+      var impactOnlyBlend = urgencyBoostRamp(U);
+      var wholeCore = (pressure + impactCore) * easeMul;
+      var impactOnlyCore = pressure + impactCore * easeMul;
+      core = lerp(wholeCore, impactOnlyCore, impactOnlyBlend);
     }
 
     var rawScore = core + easeTerm + urgencyBoost(U, I, dampen);
@@ -566,7 +600,7 @@
     return (
       'Pression d\'urgence → ' + terms.pressure.toFixed(1) +
       '   ·   Impact → ' + terms.impactCore.toFixed(1) +
-      '   ·   Facilité → ' + terms.easeTerm.toFixed(1) +
+      '   ·   Effort → ' + terms.easeTerm.toFixed(1) +
       ' (attén. ' + dampPct + ' %, F eff. ' + terms.effectiveF.toFixed(1) + easeMulNote + ')' +
       '   =   ' + formatScore(score)
     );
@@ -706,6 +740,7 @@
   }
 
   var modalRoot = null;
+  var modalContext = null;
 
   function ensureModalRoot() {
     if (modalRoot) return modalRoot;
@@ -716,9 +751,9 @@
       '<div class="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-modal-title">' +
         '<button type="button" class="help-modal-close" aria-label="Fermer">&times;</button>' +
         '<h3 class="help-modal-title" id="help-modal-title"></h3>' +
-        '<div class="help-modal-body help-modal-levels"></div>' +
-        '<p class="help-modal-keywords" hidden></p>' +
-        '<ul class="help-modal-levels" hidden></ul>' +
+        '<blockquote class="help-modal-quote" hidden></blockquote>' +
+        '<div class="help-modal-body"></div>' +
+        '<ol class="help-modal-levels"></ol>' +
       '</div>';
     document.body.appendChild(modalRoot);
 
@@ -730,42 +765,96 @@
     return modalRoot;
   }
 
-  function openHelpModal(wordsKey, title) {
+  function paintHelpModalLevels() {
+    if (!modalRoot || !modalContext) return;
+    var list = modalRoot.querySelector('ol.help-modal-levels');
+    if (!list) return;
+
+    var current = snappedLevel(modalContext.currentValue, modalContext.min, modalContext.max);
+    var currentEl = null;
+    list.querySelectorAll('li').forEach(function (li) {
+      var level = +li.dataset.level;
+      var isCurrent = level === current;
+      li.classList.toggle('is-current', isCurrent);
+      li.setAttribute('aria-current', isCurrent ? 'true' : 'false');
+      if (isCurrent) currentEl = li;
+    });
+    if (currentEl) {
+      currentEl.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function openHelpModal(wordsKey, title, config) {
+    config = config || {};
     var root = ensureModalRoot();
     var entry = LABELS[wordsKey];
     if (!entry) return;
 
+    var min = config.min != null ? config.min : 0;
+    var max = config.max != null ? config.max : 4;
+    modalContext = {
+      wordsKey: wordsKey,
+      min: min,
+      max: max,
+      currentValue: config.currentValue != null ? config.currentValue : min,
+      onSelect: config.onSelect || null
+    };
+
     root.querySelector('.help-modal-title').textContent = title;
 
+    var popup = entry.popup || {};
+    var quoteEl = root.querySelector('.help-modal-quote');
     var body = root.querySelector('.help-modal-body');
-    var kw = root.querySelector('.help-modal-keywords');
-    var list = root.querySelector('ul.help-modal-levels');
-    body.innerHTML = '';
-    kw.hidden = true;
-    list.hidden = true;
+    var list = root.querySelector('ol.help-modal-levels');
 
-    if (entry.popupLines && entry.popupLines.length) {
-      entry.popupLines.forEach(function (line) {
-        var p = document.createElement('p');
-        p.textContent = line;
-        body.appendChild(p);
-      });
-      body.hidden = false;
-    } else {
-      body.hidden = true;
-      kw.textContent = KEYWORDS[wordsKey] || '';
-      kw.hidden = !KEYWORDS[wordsKey];
-      list.innerHTML = '';
-      var start = wordsKey === 'ease' ? 1 : 0;
-      var end = entry.short.length - 1;
-      for (var i = start; i <= end; i++) {
-        if (!entry.detail[i]) continue;
-        var li = document.createElement('li');
-        li.innerHTML = '<strong>' + wordFor(wordsKey, i) + '</strong> : ' + entry.detail[i];
-        list.appendChild(li);
+    var quote = popup.subtitle || QUESTIONS[wordsKey] || '';
+    quoteEl.textContent = quote;
+    quoteEl.hidden = !quote;
+
+    body.innerHTML = '';
+    [popup.intro, popup.guidance].forEach(function (text) {
+      if (!text) return;
+      var p = document.createElement('p');
+      p.textContent = text;
+      body.appendChild(p);
+    });
+    body.hidden = body.childNodes.length === 0;
+
+    list.innerHTML = '';
+    var start = wordsKey === 'ease' ? 1 : 0;
+    var end = entry.short.length - 1;
+    var selectable = typeof modalContext.onSelect === 'function';
+    for (var i = start; i <= end; i++) {
+      if (!entry.detail[i]) continue;
+      var li = document.createElement('li');
+      li.dataset.level = String(i);
+      li.innerHTML =
+        '<span class="help-modal-level-label">' + entry.short[i] + '</span>' +
+        '<span class="help-modal-level-text">' + entry.detail[i] + '</span>';
+      if (selectable) {
+        li.className = 'is-selectable';
+        li.setAttribute('role', 'button');
+        li.setAttribute('tabindex', '0');
+        li.setAttribute('aria-label', entry.short[i]);
+        (function (level) {
+          function selectLevel() {
+            modalContext.currentValue = level;
+            modalContext.onSelect(level);
+            paintHelpModalLevels();
+          }
+          li.addEventListener('click', selectLevel);
+          li.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              selectLevel();
+            }
+          });
+        })(i);
       }
-      list.hidden = false;
+      list.appendChild(li);
     }
+    list.hidden = list.childNodes.length === 0;
+    paintHelpModalLevels();
 
     root.classList.add('open');
     root.querySelector('.help-modal-close').focus();
@@ -773,6 +862,7 @@
 
   function closeHelpModal() {
     if (modalRoot) modalRoot.classList.remove('open');
+    modalContext = null;
   }
 
   function createField(config) {
@@ -797,13 +887,24 @@
     headStart.type = 'button';
     headStart.className = 'field-head-start';
     headStart.setAttribute('aria-label', 'Informations sur ' + label);
+    if (KEYWORDS[wordsKey]) {
+      headStart.title = KEYWORDS[wordsKey];
+    }
 
     var lbl = document.createElement('span');
     lbl.className = 'field-lbl';
     lbl.innerHTML = '<i class="ti ' + icon + '"></i> ' + label;
 
     function openFieldHelp() {
-      openHelpModal(wordsKey, label);
+      openHelpModal(wordsKey, label, {
+        min: min,
+        max: max,
+        currentValue: getValue(),
+        onSelect: function (level) {
+          setValue(level);
+          onChange(level);
+        }
+      });
     }
 
     headStart.addEventListener('click', openFieldHelp);
@@ -829,14 +930,6 @@
       affirmEl = document.createElement('p');
       affirmEl.className = 'field-question';
       field.appendChild(affirmEl);
-    } else {
-      var fallback = config.question != null ? config.question : QUESTIONS[wordsKey];
-      if (fallback) {
-        affirmEl = document.createElement('p');
-        affirmEl.className = 'field-question';
-        affirmEl.textContent = fallback;
-        field.appendChild(affirmEl);
-      }
     }
 
     var sliderWrap = document.createElement('div');
@@ -1029,13 +1122,17 @@
       { s: 4.3, r: 110, g: 173, b: 58 },
       { s: 5.8, r: 186, g: 117, b: 23 },
       { s: 7.2, r: 216, g: 90, b: 48 },
-      { s: 8.6, r: 226, g: 75, b: 74 },
-      { s: 10, r: 226, g: 75, b: 74 }
+      { s: 8.6, r: 228, g: 82, b: 80 },
+      { s: 9.3, r: 226, g: 75, b: 74 },
+      { s: 10, r: 168, g: 42, b: 40 }
     ];
 
     var lastScene = { U: 0, I: 0, F: 0, result: null, display: null };
     var draggingMarker = false;
     var dragPointerId = null;
+    var dragVisual = { u: null, i: null };
+    var dragMoveRaf = null;
+    var pendingDragPt = null;
 
     function snapAxis(v, min, max) {
       return clamp(Math.round(v / SLIDER_STEP) * SLIDER_STEP, min, max);
@@ -1129,7 +1226,7 @@
     var rsmWrap = document.createElement('div');
     rsmWrap.className = 'calc-rsm-wrap';
     rsmWrap.setAttribute('role', 'img');
-    rsmWrap.setAttribute('aria-label', 'Surface de réponse de priorité — urgence et impact');
+    rsmWrap.setAttribute('aria-label', 'Graphique de priorité — urgence et impact');
 
     var rsmRow = document.createElement('div');
     rsmRow.className = 'calc-rsm-row';
@@ -1147,7 +1244,7 @@
       'aria-labelledby': 'calc-rsm-desc'
     });
     var descId = svgEl('desc', { id: 'calc-rsm-desc' });
-    descId.textContent = 'Score en fonction de l\'urgence et de l\'impact pour une facilité fixe';
+    descId.textContent = 'Score selon l\'urgence et l\'impact, pour un niveau d\'effort fixe';
     svg.appendChild(descId);
 
     var defs = svgEl('defs');
@@ -1266,6 +1363,7 @@
     labelU.setAttribute('y', String(SVG_H - 5));
     labelU.setAttribute('text-anchor', 'middle');
     labelU.textContent = 'Urgence';
+    labelU.setAttribute('title', KEYWORDS.urgency);
 
     var labelIY = MARGIN.top + PLOT_H * 0.5;
     var labelIX = plotX(0) - 22;
@@ -1275,6 +1373,7 @@
     labelI.setAttribute('y', String(labelIY));
     labelI.setAttribute('text-anchor', 'middle');
     labelI.textContent = 'Impact';
+    labelI.setAttribute('title', KEYWORDS.impact);
 
     axesG.appendChild(labelU);
     axesG.appendChild(labelI);
@@ -1297,6 +1396,7 @@
 
     var easeCol = document.createElement('div');
     easeCol.className = 'calc-rsm-ease-col';
+    easeCol.title = KEYWORDS.ease;
 
     var easeLabelTop = document.createElement('span');
     easeLabelTop.className = 'calc-rsm-ease-label calc-rsm-ease-label-top';
@@ -1309,7 +1409,8 @@
     easeSlider.max = '5';
     easeSlider.step = String(SLIDER_STEP);
     easeSlider.value = '3';
-    easeSlider.setAttribute('aria-label', 'Facilité');
+    easeSlider.setAttribute('aria-label', 'Effort');
+    easeSlider.title = KEYWORDS.ease;
 
     var easeLabelBottom = document.createElement('span');
     easeLabelBottom.className = 'calc-rsm-ease-label calc-rsm-ease-label-bottom';
@@ -1365,24 +1466,27 @@
     }
 
     function resizeSurfaceCanvas() {
-      var rect = plotHit.getBoundingClientRect();
-      var cssW = Math.max(1, Math.round(rect.width));
-      var cssH = Math.max(1, Math.round(rect.height));
-      if (rect.width < 1 || rect.height < 1) {
-        cssW = Math.round(PLOT_W);
-        cssH = Math.round(PLOT_H);
+      var chartRect = chart.getBoundingClientRect();
+      if (chartRect.width < 1 || chartRect.height < 1) {
+        return null;
+      }
+      // CSS percentages align with SVG viewBox; read rendered size for bitmap dims.
+      var canvasRect = surfaceCanvas.getBoundingClientRect();
+      var cssW = Math.max(1, Math.ceil(canvasRect.width));
+      var cssH = Math.max(1, Math.ceil(canvasRect.height));
+      if (cssW < 1 || cssH < 1) {
+        return null;
       }
       var dpr = window.devicePixelRatio || 1;
       surfaceCanvas.width = Math.round(cssW * dpr);
       surfaceCanvas.height = Math.round(cssH * dpr);
-      surfaceCanvas.style.width = cssW + 'px';
-      surfaceCanvas.style.height = cssH + 'px';
       surfaceCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
       return { w: cssW, h: cssH };
     }
 
     function paintSurface(F) {
       var size = resizeSurfaceCanvas();
+      if (!size) return;
       var w = size.w;
       var h = size.h;
       var img = surfaceCtx.createImageData(w, h);
@@ -1521,6 +1625,33 @@
       );
     }
 
+    function cancelDragMoveRaf() {
+      if (dragMoveRaf != null) {
+        cancelAnimationFrame(dragMoveRaf);
+        dragMoveRaf = null;
+      }
+      pendingDragPt = null;
+    }
+
+    function scheduleDragApply(pt) {
+      pendingDragPt = pt;
+      if (dragMoveRaf != null) return;
+      dragMoveRaf = requestAnimationFrame(function () {
+        dragMoveRaf = null;
+        var p = pendingDragPt;
+        pendingDragPt = null;
+        if (!p || !draggingMarker) return;
+        applyUrgencyImpact(p.u, p.i);
+      });
+    }
+
+    function updateDragMarkerVisual() {
+      if (!draggingMarker || dragVisual.u == null || dragVisual.i == null || !lastScene.display) {
+        return;
+      }
+      paintMarker(dragVisual.u, dragVisual.i, lastScene.display);
+    }
+
     function startUIDrag(e, captureEl) {
       if (e.button !== 0) return;
       draggingMarker = true;
@@ -1530,25 +1661,37 @@
       captureEl.setPointerCapture(e.pointerId);
       e.preventDefault();
       var pt = clientToPlotClamped(e.clientX, e.clientY);
-      if (pt) applyUrgencyImpact(pt.u, pt.i);
+      if (!pt) return;
+      dragVisual.u = clamp(pt.u, 0, 4);
+      dragVisual.i = clamp(pt.i, 0, 4);
+      applyUrgencyImpact(pt.u, pt.i);
     }
 
     function moveUIDrag(e) {
       if (!draggingMarker || e.pointerId !== dragPointerId) return;
       var pt = clientToPlotClamped(e.clientX, e.clientY);
       if (!pt) return;
-      applyUrgencyImpact(pt.u, pt.i);
+      dragVisual.u = clamp(pt.u, 0, 4);
+      dragVisual.i = clamp(pt.i, 0, 4);
+      updateDragMarkerVisual();
+      scheduleDragApply(pt);
     }
 
     function endUIDrag(e, captureEl) {
       if (!draggingMarker || e.pointerId !== dragPointerId) return;
+      cancelDragMoveRaf();
       draggingMarker = false;
       dragPointerId = null;
+      dragVisual.u = null;
+      dragVisual.i = null;
       markerG.classList.remove('is-dragging');
       chart.classList.remove('is-dragging-marker');
       try {
         captureEl.releasePointerCapture(e.pointerId);
       } catch (err) { /* noop */ }
+      var pt = clientToPlotClamped(e.clientX, e.clientY);
+      if (pt) applyUrgencyImpact(pt.u, pt.i);
+      else onInputsChange();
     }
 
     plotHit.addEventListener('pointerdown', function (e) {
@@ -1592,9 +1735,18 @@
       lastScene.result = result;
       lastScene.display = d;
 
-      paintSurface(F);
-      paintContours(F);
-      paintMarker(U, I, d);
+      var markerU = U;
+      var markerI = I;
+      if (draggingMarker && dragVisual.u != null && dragVisual.i != null) {
+        markerU = dragVisual.u;
+        markerI = dragVisual.i;
+      }
+
+      if (!draggingMarker) {
+        paintSurface(F);
+        paintContours(F);
+      }
+      paintMarker(markerU, markerI, d);
 
       var fStr = String(F);
       if (document.activeElement !== easeSlider && easeSlider.value !== fStr) {
@@ -1602,9 +1754,9 @@
       }
 
       descId.textContent =
-        'Surface pour une facilité de ' + formatEase(F) +
-        ', tâche à urgence ' + U.toFixed(2) + ', impact ' + I.toFixed(2) +
-        ', score ' + formatScore(d.score) + ', palier ' + d.label;
+        'Priorité selon urgence ' + U.toFixed(2) + ' et impact ' + I.toFixed(2) +
+        ', effort ' + formatEase(F) + '/5' +
+        ' — score ' + formatScore(d.score) + ', palier ' + d.label;
     }
 
     return {
@@ -1629,6 +1781,7 @@
     var heat;
     var calcGraph;
     var showCalcGraph = formulaKey === 'baseline';
+    var sliderAnimFrame = null;
 
     variantConfig.dimensions.forEach(function (dim) {
       state[dim.key] = defaults[dim.key] != null ? defaults[dim.key] : dim.value;
@@ -1638,6 +1791,57 @@
       Object.keys(fields).forEach(function (key) {
         state[key] = fields[key].getValue();
       });
+    }
+
+    function cancelSliderAnim() {
+      if (sliderAnimFrame != null) {
+        cancelAnimationFrame(sliderAnimFrame);
+        sliderAnimFrame = null;
+      }
+    }
+
+    function animateFieldsTo(targets) {
+      cancelSliderAnim();
+      var from = {};
+      var keys = Object.keys(targets);
+      keys.forEach(function (key) {
+        from[key] = fields[key] ? fields[key].getValue() : (state[key] != null ? state[key] : targets[key]);
+      });
+      var allSame = keys.every(function (key) {
+        return Math.abs(from[key] - targets[key]) < 1e-9;
+      });
+      if (allSame) {
+        keys.forEach(function (key) {
+          state[key] = targets[key];
+          if (fields[key]) fields[key].setValue(targets[key]);
+        });
+        repaint();
+        return;
+      }
+
+      var startTime = null;
+      function step(ts) {
+        if (startTime == null) startTime = ts;
+        var t = Math.min(1, (ts - startTime) / SLIDER_ANIM_MS);
+        var eased = easeOutCubic(t);
+        keys.forEach(function (key) {
+          if (fields[key]) {
+            fields[key].updateDisplay(lerp(from[key], targets[key], eased));
+          }
+        });
+        repaint();
+        if (t < 1) {
+          sliderAnimFrame = requestAnimationFrame(step);
+        } else {
+          sliderAnimFrame = null;
+          keys.forEach(function (key) {
+            state[key] = targets[key];
+            if (fields[key]) fields[key].setValue(targets[key]);
+          });
+          repaint();
+        }
+      }
+      sliderAnimFrame = requestAnimationFrame(step);
     }
 
     function repaint() {
@@ -1655,12 +1859,7 @@
       el: card,
       onSegmentClick: function (targetP) {
         syncStateFromFields();
-        var next = overrideFn(targetP, state);
-        Object.keys(next).forEach(function (key) {
-          state[key] = next[key];
-          if (fields[key]) fields[key].setValue(next[key]);
-        });
-        repaint();
+        animateFieldsTo(overrideFn(targetP, state));
       }
     });
 
@@ -1691,7 +1890,10 @@
         min: dim.min,
         max: dim.max,
         value: state[dim.key],
-        onChange: repaint
+        onChange: function () {
+          cancelSliderAnim();
+          repaint();
+        }
       });
     });
 
@@ -1699,7 +1901,10 @@
       calcGraph = createCalcGraphPanel({
         el: fieldsCollapse,
         fields: fields,
-        onChange: repaint
+        onChange: function () {
+          cancelSliderAnim();
+          repaint();
+        }
       });
     }
 
