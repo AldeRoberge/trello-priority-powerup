@@ -80,15 +80,16 @@ Ouvrir `sandbox/priority-variants.html` dans le navigateur (double-clic ou serve
 npm run stamp:build
 ```
 
-En production, le workflow `.github/workflows/static.yml` met à jour `build-info.json` et déploie le site à chaque push sur `main`.
+En production, le workflow `.github/workflows/static.yml` horodate `build-info.json` sur le runner (sans commit dans le dépôt) et déploie le site à chaque push sur `main`.
 
 ---
 
 ## Déploiement (GitHub Pages)
 
 1. Créer un dépôt **public** et pousser la branche `main` (racine du site = racine du dépôt).
-2. **Settings → Pages → Build and deployment** → **Source** : **GitHub Actions** (pas « Deploy from a branch »). Le workflow `.github/workflows/static.yml` horodate `build-info.json`, publie la racine du dépôt et commit le timestamp (`[skip ci]`).
-3. URL du site : `https://VOTRE-UTILISATEUR.github.io/trello-priority-powerup/`
+2. **Settings → Pages → Build and deployment** → **Source** : **GitHub Actions** (obligatoire — **pas** « Deploy from a branch »). Tant que la source reste une branche, GitHub lance aussi `pages-build-deployment` à chaque push, ce qui entre en conflit avec ce workflow.
+3. Le workflow horodate `build-info.json` sur le runner et publie la racine via `upload-pages-artifact` / `deploy-pages` (aucun push depuis la CI).
+4. URL du site : `https://VOTRE-UTILISATEUR.github.io/trello-priority-powerup/`
 
 Dépannage (déploiement bloqué, source Pages) : [.github/DEPLOYMENT.md](.github/DEPLOYMENT.md).
 
