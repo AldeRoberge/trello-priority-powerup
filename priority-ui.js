@@ -1293,9 +1293,7 @@
       val.innerHTML = wordHtmlFor(wordsKey, idx);
       val.title = text;
       inputEl.value = String(v);
-      if (hasAffirmations) {
-        renderLbl(affirmationFor(wordsKey, idx));
-      }
+      renderLbl(hasAffirmations ? affirmationFor(wordsKey, idx) : '');
     }
 
     function setValue(v) {
