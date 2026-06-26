@@ -312,6 +312,25 @@
     };
   }
 
+  // Resolve a connector-relative path to an absolute URL for t.modal / t.popup.
+  // Do not pre-sign — Trello signs modal/popup iframe URLs once. t.signUrl() here
+  // double-signs and triggers "url that already has a hash" warnings.
+  function pageUrl(relativePath) {
+    var path = relativePath || '';
+    if (
+      typeof global.TrelloPowerUp !== 'undefined' &&
+      global.TrelloPowerUp.util &&
+      typeof global.TrelloPowerUp.util.relativeUrl === 'function'
+    ) {
+      return global.TrelloPowerUp.util.relativeUrl(path);
+    }
+    try {
+      return new URL(path, global.location.href).href.split('#')[0];
+    } catch (err) {
+      return path;
+    }
+  }
+
   function createIframeClient() {
     if (typeof global.TrelloPowerUp === 'undefined') {
       throw new Error('TrelloPowerUp is not loaded');
@@ -584,6 +603,7 @@
     saveCardInputs: saveCardInputs,
     isTrelloApiConfigured: isTrelloApiConfigured,
     getIframeInitOptions: getIframeInitOptions,
+    pageUrl: pageUrl,
     createIframeClient: createIframeClient,
     runWhenIframeReady: runWhenIframeReady,
     ensureRestApiAuthorized: ensureRestApiAuthorized,

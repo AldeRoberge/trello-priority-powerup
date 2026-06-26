@@ -139,7 +139,7 @@ Certaines erreurs affichées dans la console du navigateur proviennent de **Trel
 | `get-paint-metrics.js` — « Deprecated API for given entry type » | Métriques de rendu internes à Trello (React). Sans impact sur le Power-Up. |
 | `platform-dst-motion-theme-default` — « Client must be initialized… » | Contrôle interne du thème / feature gate Atlassian. Souvent bénin si badges et popup fonctionnent. |
 
-Les pages iframe de ce Power-Up initialisent le client dans le `<head>`, reportent les appels API via `t.render()` (`runWhenIframeReady`), et signent les URL modales avec `t.signUrl()`.
+Les pages iframe reportent les appels API via `t.render()` (`runWhenIframeReady`). Les URL passées à `t.modal()` / `t.popup()` sont résolues en absolu via `PriorityTrello.pageUrl()` (sans `t.signUrl()`, qui provoque un double-signalement). `t.signUrl()` reste réservé aux requêtes `fetch` (ex. `build-info.json` dans les paramètres).
 
 ---
 
