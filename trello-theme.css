@@ -441,7 +441,7 @@ body.tp-page--priority {
   max-width: none;
   width: 100%;
   margin: 0;
-  padding: 4px 0 8px;
+  padding: 4px 12px 8px;
   overflow-x: hidden;
   container-type: inline-size;
   container-name: priority-popup;
