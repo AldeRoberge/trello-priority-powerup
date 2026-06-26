@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Définir la priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
-  <script src="./priority-matrix.js"></script>
   <script src="./priority-ui.js"></script>
   <script src="./priority-trello.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
@@ -24,22 +23,10 @@
     let variant = null;
     let saveTimer = null;
     let resizeObserver = null;
-    let matrixSettings = PriorityMatrix.normalizeSettings(null);
-    let pendingSave = false;
-
-    async function flushSave() {
-      clearTimeout(saveTimer);
-      saveTimer = null;
-      if (!pendingSave || !variant) return;
-      pendingSave = false;
-      await PriorityTrello.saveCardInputs(t, variant.getState());
-    }
 
     function scheduleSave(state) {
-      pendingSave = true;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(async () => {
-        pendingSave = false;
         await PriorityTrello.saveCardInputs(t, state);
       }, 250);
     }
@@ -55,13 +42,7 @@
     }
 
     async function init() {
-      const [inputs, settings] = await Promise.all([
-        PriorityTrello.getCardInputs(t),
-        PriorityTrello.getMatrixLabelSettings(t),
-      ]);
-
-      matrixSettings = settings;
-      PriorityUI.setMatrixSettings(matrixSettings);
+      const inputs = await PriorityTrello.getCardInputs(t);
 
       variant = PriorityUI.mountVariant(mountEl, {
         id: 'card',
@@ -81,13 +62,8 @@
 
     document.getElementById('clearBtn').addEventListener('click', async () => {
       clearTimeout(saveTimer);
-      pendingSave = false;
       await PriorityTrello.clearCardPriority(t);
       t.closePopup();
-    });
-
-    window.addEventListener('pagehide', () => {
-      flushSave();
     });
 
     init().catch(function (err) {

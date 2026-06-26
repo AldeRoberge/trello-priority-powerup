@@ -1,12 +1,11 @@
 {
   "name": "trello-priority-powerup",
   "private": true,
-  "description": "Trello Power-Up — scoring urgence/impact/effort avec badges et matrice de libellés",
+  "description": "Trello Power-Up — scoring urgence/impact/effort avec badges et libellés de palier",
   "scripts": {
     "verify:presets": "cscript //nologo sandbox/verify-presets.js",
-    "verify:matrix": "node sandbox/verify-matrix.js",
     "verify:version": "node sandbox/verify-version.js",
-    "verify": "npm run verify:presets && npm run verify:matrix && npm run verify:version",
+    "verify": "npm run verify:presets && npm run verify:version",
     "stamp:build": "node scripts/stamp-build.js"
   }
 }

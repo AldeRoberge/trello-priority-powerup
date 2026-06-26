@@ -25,6 +25,7 @@
   --chart-marker-core-inutile: #FFFFFF;
   --heat-accent-fallback: #085041;
   --heat-dot-fallback: #9B9890;
+  --surface-hover: #F7F6F3;
 }
 
 /* Trello iframe — light/dark via html[data-color-mode] (see trello-theme.css) */
@@ -36,6 +37,7 @@ html[data-color-mode="light"] {
   --text-primary: #172b4d;
   --text-secondary: #44546f;
   --text-muted: #626f86;
+  --surface-hover: #091e420f;
 }
 
 html[data-color-mode="dark"] {
@@ -60,6 +62,7 @@ html[data-color-mode="dark"] {
   --chart-marker-core-inutile: #b6c2cf;
   --heat-accent-fallback: #4bce97;
   --heat-dot-fallback: #8c9bab;
+  --surface-hover: #a6c5e71f;
 }
 
 body {
@@ -391,6 +394,7 @@ input.field-range:active::-webkit-slider-thumb {
   box-shadow: var(--modal-shadow);
   max-height: 80vh;
   overflow-y: auto;
+  color: var(--text-primary);
 }
 
 .help-modal-close {
@@ -413,7 +417,7 @@ input.field-range:active::-webkit-slider-thumb {
 }
 
 .help-modal-close--top:hover {
-  background: var(--surface-0);
+  background: var(--surface-hover);
 }
 
 .help-modal-close--bottom {
@@ -426,7 +430,7 @@ input.field-range:active::-webkit-slider-thumb {
 }
 
 .help-modal-close--bottom:hover {
-  background: var(--surface-0);
+  background: var(--surface-hover);
 }
 
 .help-modal-title {
@@ -519,7 +523,7 @@ input.field-range:active::-webkit-slider-thumb {
 }
 
 .help-modal-nav:hover:not(:disabled) {
-  background: var(--surface-0);
+  background: var(--surface-hover);
 }
 
 .help-modal-nav:disabled {

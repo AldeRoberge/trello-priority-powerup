@@ -13,7 +13,6 @@
   <div class="compare-grid" id="variants"></div>
 </div>
 
-<script src="../priority-matrix.js"></script>
 <script src="../priority-ui.js"></script>
 <script>
 (function () {
@@ -56,11 +55,6 @@
     defaults: defaults3D,
     dimensions: dimensions
   });
-
-  if (PriorityMatrix.loadLabelSettings && PriorityUI.setMatrixSettings) {
-    var labelCfg = PriorityMatrix.loadLabelSettings();
-    PriorityUI.setMatrixSettings(PriorityMatrix.serializeLabelSettings(labelCfg));
-  }
 })();
 </script>
 </body>

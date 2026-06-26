@@ -1,10 +1,9 @@
-/* Trello Power-Up bridge — card priority storage, badges, and matrix settings. */
+/* Trello Power-Up bridge — card priority storage and badges. */
 (function (global) {
   'use strict';
 
   var CARD_PRIORITY_KEY = 'cardPriority';
   var LEGACY_PRIORITY_KEY = 'priority';
-  var MATRIX_SETTINGS_KEY = 'matrixLabelSettings';
   var CARD_BADGE_REFRESH_SEC = 10;
 
   var DEFAULT_INPUTS = { urgency: 2, impact: 2, ease: 3 };
@@ -65,11 +64,6 @@
       : score.toFixed(1);
   }
 
-  async function getMatrixLabelSettings(t) {
-    var stored = await t.get('board', 'shared', MATRIX_SETTINGS_KEY);
-    return PriorityMatrix.normalizeSettings(stored);
-  }
-
   async function getCardInputs(t) {
     var stored = await t.get('card', 'shared', CARD_PRIORITY_KEY);
     var normalized = normalizeInputs(stored);
@@ -83,20 +77,15 @@
     return null;
   }
 
-  function computeDisplay(inputs, matrixSettings) {
-    var settings = matrixSettings || PriorityMatrix.normalizeSettings(null);
-    if (typeof PriorityUI !== 'undefined' && PriorityUI.setMatrixSettings) {
-      PriorityUI.setMatrixSettings(settings);
-    }
+  function computeDisplay(inputs) {
     var result = PriorityUI.calc.baseline(inputs);
-    return PriorityUI.resolveDisplay(result, inputs, settings);
+    return PriorityUI.resolveDisplay(result, inputs);
   }
 
   async function getCardDisplay(t) {
     var inputs = await getCardInputs(t);
     if (!inputs) return null;
-    var matrixSettings = await getMatrixLabelSettings(t);
-    return computeDisplay(inputs, matrixSettings);
+    return computeDisplay(inputs);
   }
 
   function formatBadgeText(display) {
@@ -173,21 +162,15 @@
 
   global.PriorityTrello = {
     CARD_PRIORITY_KEY: CARD_PRIORITY_KEY,
-    MATRIX_SETTINGS_KEY: MATRIX_SETTINGS_KEY,
-    CARD_BADGE_REFRESH_SEC: CARD_BADGE_REFRESH_SEC,
     DEFAULT_INPUTS: DEFAULT_INPUTS,
     PRIORITY_DIMENSIONS: PRIORITY_DIMENSIONS,
     normalizeInputs: normalizeInputs,
-    getMatrixLabelSettings: getMatrixLabelSettings,
     getCardInputs: getCardInputs,
     computeDisplay: computeDisplay,
     getCardDisplay: getCardDisplay,
     formatBadgeText: formatBadgeText,
     tierDetailBadgeColor: tierDetailBadgeColor,
     tierDotIcon: tierDotIcon,
-    buildCardFaceBadge: buildCardFaceBadge,
-    cardFaceBadges: cardFaceBadges,
-    cardFaceBadgesCapability: cardFaceBadgesCapability,
     saveCardInputs: saveCardInputs,
     clearCardPriority: clearCardPriority,
   };

@@ -7,7 +7,7 @@
  *  1. Formula weights & constants
  *  2. Labels, keywords, tiers & heat presets
  *  3. Icon registry (level + priority SVG)
- *  4. Matrix label bridge (PriorityMatrix)
+ *  4. Display resolution (tier labels)
  *  5. Math helpers & tier styling
  *  6. Scoring formulas (baseline, Eisenhower, WSJF, value/effort)
  *  7. Formatters & heat-preset override solvers
@@ -237,83 +237,6 @@
       '<path d="M5 5l6 6M11 5l-6 6" ' + ICON_S + '/>',
     unclassified: '<circle cx="8" cy="8" r="5.5" ' + ICON_S + '/>' +
       '<path d="M8 5.5v3.5M8 10.5h.01" ' + ICON_S + ' stroke-width="1.5"/>',
-  /* Matrix rules */
-    'massive-opportunity': '<path d="M8 12V5M8 5l-2.5 2.5M8 5l2.5 2.5" ' + ICON_S + '/>' +
-      '<path d="M4 13h8" ' + ICON_S + '/>' +
-      '<path d="M5.5 3.5l1 1M10.5 3.5l-1 1" ' + ICON_S + ' stroke-width="1"/>',
-    'dirty-job': '<path d="M4.5 11.5h7l-1.2-3.5H5.7L4.5 11.5z" ' + ICON_S + '/>' +
-      '<path d="M6.5 8V6a1.5 1.5 0 0 1 3 0v2" ' + ICON_S + '/>' +
-      '<path d="M5 13.5c.5.5 1.2.5 1.5 0s1-.5 1.5 0 1.5 1.5 1.5 0" ' + ICON_S + ' stroke-width="1"/>',
-    'quick-win': '<path d="M5.5 9.5l2 2 4-4.5" ' + ICON_S + '/>' +
-      '<path d="M8 2.5v2M6 4.5h4" ' + ICON_S + ' stroke-width="1"/>',
-    'fire-drill': '<path d="M8 13c1.5-2 2.5-3.5 2.5-5a2.5 2.5 0 1 0-5 0c0 1.5 1 3 2.5 5z" ' + ICON_S + '/>' +
-      '<path d="M4 12.5c.5-.8 1-1.2 1.5-1M11 12.5c-.5-.8-1-1.2-1.5-1" ' + ICON_S + ' stroke-width="1"/>',
-    'strategic-bet': '<rect x="4" y="4" width="8" height="8" rx="1.2" ' + ICON_S + '/>' +
-      '<circle cx="6" cy="6" r="0.7" fill="currentColor" stroke="none"/>' +
-      '<circle cx="10" cy="6" r="0.7" fill="currentColor" stroke="none"/>' +
-      '<circle cx="8" cy="10" r="0.7" fill="currentColor" stroke="none"/>',
-    'critical-path': '<path d="M4.5 8a2 2 0 0 1 2.8-2.8l2.2 2.2a2 2 0 0 1-2.8 2.8L4.5 8z" ' + ICON_S + '/>' +
-      '<path d="M9.5 8a2 2 0 0 1 2.8-2.8l1.2 1.2" ' + ICON_S + '/>' +
-      '<path d="M6.5 8a2 2 0 0 1-2.8 2.8L2.5 11" ' + ICON_S + '/>',
-    maintenance: '<path d="M10.5 5.5a3.5 3.5 0 1 0-4.2 4.2L4 12l1.8-2.3a3.5 3.5 0 0 0 4.7-4.2z" ' + ICON_S + '/>',
-    noise: '<path d="M4 6.5c1.5 1.5 1.5 3.5 0 5M6.5 5c2.5 2.5 2.5 5.5 0 8M9 3.5c3.5 3.5 3.5 7.5 0 11" ' + ICON_S + '/>' +
-      '<path d="M12 6l-1.5 1.5M12 10l-1.5-1.5" ' + ICON_S + ' stroke-width="1"/>',
-    'backlog-filler': '<rect x="4" y="4" width="8" height="8" rx="1" ' + ICON_S + ' stroke-dasharray="2 2"/>' +
-      '<path d="M6 8h4M6 10h2.5" ' + ICON_S + ' stroke-width="1"/>',
-    'micro-opportunite': '<path d="M8 3l.8 2.2h2.2l-1.8 1.3.7 2.2L8 7.5 6.3 8.7l.7-2.2L5.2 5.2h2.2L8 3z" ' + ICON_S + ' stroke-width="1"/>',
-    'coup-de-pouce': '<path d="M5.5 8.5c1-1.5 2.5-2 4-1.5 1 .4 1.8 1.5 1.8 2.8 0 1.5-1.2 2.7-2.7 2.7H7.5" ' + ICON_S + '/>' +
-      '<path d="M7 11.5V9.5M7 9.5l-1.5-1M7 9.5l1-1" ' + ICON_S + '/>',
-    accelerateur: '<path d="M4 10l4-6 4 6H4z" ' + ICON_S + '/>' +
-      '<path d="M8 4v2M6 8h4" ' + ICON_S + ' stroke-width="1"/>',
-    'effet-levier': '<path d="M3.5 11.5h9" ' + ICON_S + '/>' +
-      '<path d="M8 11.5V6.5" ' + ICON_S + '/>' +
-      '<path d="M5.5 6.5h5" ' + ICON_S + '/>' +
-      '<circle cx="8" cy="6.5" r="1" ' + ICON_S + '/>',
-    'piege-a-temps': '<circle cx="8" cy="9" r="4.5" ' + ICON_S + '/>' +
-      '<path d="M8 6.5V9l1.8 1" ' + ICON_S + '/>' +
-      '<path d="M6 3.5l1 1M10 3.5l-1 1" ' + ICON_S + ' stroke-width="1"/>' +
-      '<path d="M4.5 4.5l1.2 1.2M11.5 4.5l-1.2 1.2" ' + ICON_S + ' stroke-width="1"/>',
-    'sans-urgence-retour': '<circle cx="8" cy="8" r="5" ' + ICON_S + ' stroke-dasharray="2 2"/>' +
-      '<path d="M8 5.5v4M6 9.5h4" ' + ICON_S + ' stroke-width="1"/>',
-    'remettre-en-rayon': '<path d="M3.5 5.5h9v2H3.5zM4 7.5v4.5h8V7.5" ' + ICON_S + '/>' +
-      '<path d="M6 10h4" ' + ICON_S + ' stroke-width="1"/>',
-    'attente-contexte': '<circle cx="8" cy="8.5" r="4" ' + ICON_S + '/>' +
-      '<path d="M8 6.5v2.5M6.5 8.5h3" ' + ICON_S + ' stroke-width="1.5"/>',
-    'bruit-fond-lourd': '<path d="M4 8c1-1.5 2-1.5 3 0s2 1.5 3 0" ' + ICON_S + ' stroke-dasharray="1.5 1.5"/>' +
-      '<path d="M4 10.5c1-1.5 2-1.5 3 0s2 1.5 3 0" ' + ICON_S + ' stroke-dasharray="1.5 1.5"/>' +
-      '<path d="M12 6v6M13.5 7.5v3" ' + ICON_S + ' stroke-width="1"/>',
-    'effort-peu-retour': '<path d="M4 11.5h8" ' + ICON_S + '/>' +
-      '<path d="M5.5 11.5V7l2.5-2 2.5 2v4.5" ' + ICON_S + '/>' +
-      '<path d="M6 11.5h4" ' + ICON_S + ' stroke-width="1"/>',
-    'projet-sommeil': '<path d="M4.5 10.5a4 4 0 0 1 7 0" ' + ICON_S + '/>' +
-      '<path d="M6.5 8.5h.01M9.5 7.5h.01M11 9h.01" ' + ICON_S + ' stroke-width="1.5"/>',
-    'travail-de-fond': '<path d="M4 12h8M5 9.5h6M6 7h4M7 4.5h2" ' + ICON_S + '/>',
-    fondation: '<rect x="3.5" y="10" width="9" height="2.5" rx="0.3" ' + ICON_S + '/>' +
-      '<rect x="5" y="7" width="6" height="2.5" rx="0.3" ' + ICON_S + '/>' +
-      '<rect x="6.5" y="4" width="3" height="2.5" rx="0.3" ' + ICON_S + '/>',
-    'derapage-cache': '<path d="M3.5 11.5c2-1.5 4-1.5 6 0s4 1.5 6 0" ' + ICON_S + '/>' +
-      '<path d="M8 3.5l1 2.5h2.5l-2 1.8.8 2.5L8 8.8l-2.3 1.5.8-2.5-2-1.8H7L8 3.5z" ' + ICON_S + ' stroke-width="1"/>',
-    'sprint-tactique': '<path d="M4 12c2-2.5 4-3.5 6.5-2.5M10.5 9.5l1.5-1.5v3" ' + ICON_S + '/>' +
-      '<circle cx="5" cy="11" r="1.2" ' + ICON_S + '/>',
-    'pare-feu': '<path d="M8 2.5c-2 2.5-3.5 4.5-3.5 6.5a3.5 3.5 0 0 0 7 0c0-2-1.5-4-3.5-6.5z" ' + ICON_S + '/>' +
-      '<path d="M8 9.5v-2" ' + ICON_S + ' stroke-width="1"/>',
-    paperasse: '<path d="M5 3.5h4l2 2v8.5H5V3.5z" ' + ICON_S + '/>' +
-      '<path d="M9 3.5V6h2M7 8h3M7 10h3" ' + ICON_S + ' stroke-width="1"/>',
-    'fausse-priorite': '<path d="M8 2.5l1.2 3.7h3.8l-3.1 2.2 1.2 3.7L8 9.9l-3.1 2.2 1.2-3.7-3.1-2.2h3.8z" ' + ICON_S + ' stroke-dasharray="2 2"/>' +
-      '<path d="M4 4l8 8" ' + ICON_S + ' stroke-width="1"/>',
-    'sable-mouvant': '<path d="M3 12.5c2-.8 4-.8 6 0s4 .8 6 0" ' + ICON_S + '/>' +
-      '<path d="M8 5.5v3M6.5 8.5h3" ' + ICON_S + '/>' +
-      '<path d="M7 11.5l1 1.5 1-1.5" ' + ICON_S + ' stroke-width="1"/>',
-    marathon: '<path d="M3.5 8.5c2-1 4-1 6 0s4 1 6 0" ' + ICON_S + ' stroke-dasharray="2 2"/>' +
-      '<circle cx="12.5" cy="8.5" r="1" ' + ICON_S + '/>' +
-      '<path d="M4 11.5h8" ' + ICON_S + ' stroke-width="1"/>',
-    'routine-utile': '<path d="M8 4.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7z" ' + ICON_S + '/>' +
-      '<path d="M8 6v2.5l1.8 1" ' + ICON_S + '/>',
-    'piste-exploratoire': '<circle cx="8" cy="8" r="5" ' + ICON_S + '/>' +
-      '<path d="M8 4.5l2 4.5-2 1-2-1 2-4.5z" ' + ICON_S + '/>' +
-      '<circle cx="8" cy="8" r="0.8" fill="currentColor" stroke="none"/>',
-    'zone-grise': '<circle cx="8" cy="8" r="5.5" ' + ICON_S + '/>' +
-      '<path d="M8 3v10" ' + ICON_S + ' stroke-dasharray="1.5 1.5"/>'
   };
 
   var TIER_LABEL_TO_ICON = {
@@ -347,7 +270,6 @@
   function priorityIconIdForDisplay(display) {
     if (!display) return 'unclassified';
     if (display.inutile) return 'inutile';
-    if (display.matrixRuleId) return display.matrixRuleId;
     if (display.tierLabel && TIER_LABEL_TO_ICON[display.tierLabel]) {
       return TIER_LABEL_TO_ICON[display.tierLabel];
     }
@@ -483,7 +405,7 @@
     description: 'Sans valeur ni urgence. Trop complexe ou impossible à réaliser.'
   };
 
-  // ── 4. Matrix label bridge (PriorityMatrix) ─────────────────────────────
+  // ── 4. Display resolution (tier labels) ─────────────────────────────────
 
   function isInutile(inputs) {
     var U = inputs.urgency != null ? inputs.urgency : 0;
@@ -492,39 +414,14 @@
     return U < INUTILE_EPS && I < INUTILE_EPS && F <= 1 + INUTILE_EPS;
   }
 
-  var matrixSettings = null;
-
-  function setMatrixSettings(settings) {
-    matrixSettings = settings;
-  }
-
-  function getMatrixSettings() {
-    return matrixSettings;
-  }
-
-  function resolveMatrixLabel(inputs, tier, score, labelSettings) {
-    var Matrix = typeof PriorityMatrix !== 'undefined' ? PriorityMatrix : null;
-    if (!Matrix) return null;
-    var settings = labelSettings != null ? labelSettings : matrixSettings;
-    var ctx = Matrix.buildResolveContext(settings, tier, score);
-    return Matrix.resolveLabel(inputs, ctx);
-  }
-
-  function resolveDisplay(result, inputs, labelSettings) {
+  function resolveDisplay(result, inputs) {
     if (!isInutile(inputs)) {
-      var settings = labelSettings != null ? labelSettings : matrixSettings;
-      var matrix = resolveMatrixLabel(inputs, result.tier, result.score, settings);
-      var matrixEnabled = !settings || settings.enabled !== false;
       return {
         inutile: false,
         score: result.score,
-        label: matrix ? matrix.label : result.tier.label,
-        description: matrix ? matrix.description : (result.tier.description || ''),
+        label: result.tier.label,
+        description: result.tier.description || '',
         tierLabel: result.tier.label,
-        matrixRuleId: matrix ? matrix.ruleId : null,
-        matrixLevels: matrix ? matrix.levels : null,
-        matrixEnabled: matrixEnabled,
-        matrixDisabled: matrix ? !!matrix.matrixDisabled : !matrixEnabled,
         fill: result.tier.fill,
         text: result.tier.text,
         seg: result.tier.seg,
@@ -538,8 +435,6 @@
       label: INUTILE_LABEL,
       description: INUTILE_STYLES.description || '',
       tierLabel: INUTILE_LABEL,
-      matrixRuleId: null,
-      matrixLevels: null,
       fill: INUTILE_STYLES.fill,
       text: INUTILE_STYLES.text,
       seg: INUTILE_STYLES.seg,
@@ -2491,11 +2386,6 @@
     tierFor: tierFor,
     isInutile: isInutile,
     resolveDisplay: resolveDisplay,
-    setMatrixSettings: setMatrixSettings,
-    setLabelSettings: setMatrixSettings,
-    getMatrixSettings: getMatrixSettings,
-    getLabelSettings: getMatrixSettings,
-    resolveMatrixLabel: resolveMatrixLabel,
     INUTILE_EPS: INUTILE_EPS,
     INUTILE_LABEL: INUTILE_LABEL,
     INUTILE_STYLES: INUTILE_STYLES,
@@ -2508,8 +2398,7 @@
     priorityLabelHtmlFor: priorityLabelHtmlFor,
     PRIORITY_ICON_SVG: PRIORITY_ICON_SVG,
     TIER_LABEL_TO_ICON: TIER_LABEL_TO_ICON,
-    affirmationFor: affirmationFor,
-    Matrix: typeof PriorityMatrix !== 'undefined' ? PriorityMatrix : null
+    affirmationFor: affirmationFor
   };
 
   global.PriorityUI = PriorityUI;
