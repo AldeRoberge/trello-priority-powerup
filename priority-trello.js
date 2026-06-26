@@ -162,6 +162,46 @@
     return '\u25CF';
   }
 
+  function tierLabelForCompleteBadge(display) {
+    if (typeof PriorityUI !== 'undefined' && PriorityUI.classicTierLabel) {
+      return PriorityUI.classicTierLabel(display);
+    }
+    return display.tierLabel || display.label || '';
+  }
+
+  function incompleteBadgeLabel(display) {
+    if (typeof PriorityUI !== 'undefined' && PriorityUI.taskBadgeLabel) {
+      return PriorityUI.taskBadgeLabel(display);
+    }
+    var tierKey = String(display.tierLabel || display.label || '');
+    if (tierKey === 'Important') return 'T\u00e2che Importante';
+    return tierKey ? 'T\u00e2che ' + tierKey.toLowerCase() : '';
+  }
+
+  function formatCompletedBadgeLabel(detail) {
+    return 'Compl\u00e9t\u00e9 (' + detail + ')';
+  }
+
+  // Unresolved t.card() chain objects are truthy — never treat them as completion.
+  function isPowerUpRequestChain(value) {
+    return !!(
+      value &&
+      typeof value === 'object' &&
+      typeof value.get === 'function' &&
+      value.dueComplete === undefined &&
+      !value.badges
+    );
+  }
+
+  function isCardMarkedComplete(card) {
+    if (!card || typeof card !== 'object') return false;
+    if (isPowerUpRequestChain(card)) return false;
+    if (card.dueComplete === true) return true;
+    if (card.dueComplete === false) return false;
+    if (card.badges && card.badges.dueComplete === true) return true;
+    return false;
+  }
+
   function formatBadgeText(display, completed) {
     if (!display) return '';
     if (display.blocked) {
@@ -169,20 +209,15 @@
         ? PriorityUI.formatBlockedBadgeText(display.blockedReason || '')
         : BADGE_DOT_BLOCKED + ' T\u00e2che bloqu\u00e9';
       if (completed) {
-        return BADGE_DOT_COMPLETE + blockedText.slice(BADGE_DOT_BLOCKED.length);
+        var blockedDetail = blockedText.slice(BADGE_DOT_BLOCKED.length).trim();
+        return BADGE_DOT_COMPLETE + ' ' + formatCompletedBadgeLabel(blockedDetail);
       }
       return blockedText;
     }
-    var tierKey = String(display.tierLabel || display.label || '');
-    var label = (typeof PriorityUI !== 'undefined' && PriorityUI.taskBadgeLabel)
-      ? PriorityUI.taskBadgeLabel(display)
-      : (tierKey === 'Important'
-        ? 'T\u00e2che Importante'
-        : 'T\u00e2che ' + tierKey.toLowerCase());
     if (completed) {
-      label = 'Compl\u00e9t\u00e9 (' + label + ')';
+      return BADGE_DOT_COMPLETE + ' ' + formatCompletedBadgeLabel(tierLabelForCompleteBadge(display));
     }
-    return tierBadgeDot(display, completed) + ' ' + label;
+    return tierBadgeDot(display, false) + ' ' + incompleteBadgeLabel(display);
   }
 
   function tierDetailBadgeColor(display) {
@@ -209,9 +244,24 @@
 
   async function getCardDueComplete(t) {
     try {
-      // t.card('field') returns a request chain; .get('field') resolves the value.
-      var dueComplete = await t.card('dueComplete').get('dueComplete');
-      return dueComplete === true;
+      // Use .then() — documented Trello pattern. Bare await t.card(field) can leave an
+      // unresolved chain object, which is truthy and made every badge show ✓ via !!.
+      var card = await new Promise(function (resolve, reject) {
+        t.card('dueComplete', 'badges').then(resolve, reject);
+      });
+      if (isCardMarkedComplete(card)) return true;
+      if (isPowerUpRequestChain(card)) {
+        var dueComplete = await new Promise(function (resolve, reject) {
+          t.card('dueComplete').get('dueComplete').then(resolve, reject);
+        });
+        if (dueComplete === true) return true;
+        if (dueComplete === false) return false;
+        var badges = await new Promise(function (resolve, reject) {
+          t.card('badges').get('badges').then(resolve, reject);
+        });
+        return !!(badges && badges.dueComplete === true);
+      }
+      return false;
     } catch (err) {
       console.error('Priority card dueComplete failed', err);
       return false;
@@ -220,7 +270,7 @@
 
   async function getBadgeData(t) {
     var results = await Promise.all([getCardDisplay(t), getCardDueComplete(t)]);
-    return { display: results[0], completed: !!results[1] };
+    return { display: results[0], completed: results[1] === true };
   }
 
   function withBadgeRefresh(badge) {
@@ -362,6 +412,9 @@
     getCardDueComplete: getCardDueComplete,
     getBadgeData: getBadgeData,
     formatBadgeText: formatBadgeText,
+    tierLabelForCompleteBadge: tierLabelForCompleteBadge,
+    incompleteBadgeLabel: incompleteBadgeLabel,
+    isCardMarkedComplete: isCardMarkedComplete,
     tierBadgeDot: tierBadgeDot,
     tierDetailBadgeColor: tierDetailBadgeColor,
     buildCardFaceBadge: buildCardFaceBadge,
