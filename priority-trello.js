@@ -133,7 +133,10 @@
 
   function formatBadgeText(display) {
     if (!display) return '';
-    return tierBadgeDot(display) + ' ' + (display.tierLabel || display.label);
+    var label = (typeof PriorityUI !== 'undefined' && PriorityUI.classicTierLabel)
+      ? PriorityUI.classicTierLabel(display)
+      : (display.tierLabel || display.label);
+    return tierBadgeDot(display) + ' ' + label;
   }
 
   function tierDetailBadgeColor(display) {

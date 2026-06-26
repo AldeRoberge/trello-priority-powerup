@@ -500,6 +500,41 @@ body.help-modal-open {
   padding-bottom: 0;
 }
 
+.help-modal-levels li.is-selectable-row {
+  grid-template-columns: 1fr;
+}
+
+.help-modal-levels li.is-selectable-row.is-current {
+  background: none;
+  box-shadow: none;
+}
+
+.help-modal-level-text.is-selectable {
+  cursor: pointer;
+  margin: 0 -8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  transition: background .1s;
+}
+
+.help-modal-level-text.is-selectable:hover {
+  background: var(--surface-1);
+}
+
+.help-modal-level-text.is-selectable:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--focus-ring);
+}
+
+.help-modal-levels li.is-selectable-row.is-current .help-modal-level-text.is-selectable {
+  background: color-mix(in srgb, var(--text-primary) 4%, var(--surface-2));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 90%, var(--text-muted));
+}
+
+.help-modal-levels li.is-selectable-row.is-current .help-modal-level-text.is-selectable:hover {
+  background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-2));
+}
+
 .help-modal-levels li.is-selectable {
   cursor: pointer;
   margin: 0 -8px;
@@ -632,6 +667,16 @@ body.help-modal-open {
   min-height: calc(1.45em * 3);
   color: var(--heat-text, var(--text-secondary));
   opacity: 0.72;
+}
+
+.heat-tier-desc-subtitle {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+
+.heat-tier-desc-body {
+  display: block;
 }
 
 .heat-panel.is-inutile .heat-seg {

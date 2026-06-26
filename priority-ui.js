@@ -460,6 +460,50 @@
     };
   }
 
+  function classicTierLabel(display) {
+    if (!display) return '';
+    return display.tierLabel || display.label || '';
+  }
+
+  function tierDescriptionBody(display) {
+    if (display.inutile) return INUTILE_STYLES.description || '';
+    if (display.description) return display.description;
+    if (display.tierI == null) return '';
+    for (var k = 0; k < TIERS.length; k++) {
+      if (TIERS[k].i === display.tierI) return TIERS[k].description || '';
+    }
+    return '';
+  }
+
+  function paintTierDescription(el, display) {
+    if (!display) {
+      el.textContent = '';
+      el.hidden = true;
+      return;
+    }
+    if (display.inutile) {
+      var inutileDesc = INUTILE_STYLES.description || '';
+      el.textContent = inutileDesc;
+      el.hidden = !inutileDesc;
+      return;
+    }
+    if (display.matrixLabel) {
+      var matrixDesc = display.description || '';
+      var html = '<span class="heat-tier-desc-subtitle">' + escapeHtml(display.matrixLabel) + '</span>';
+      if (matrixDesc) {
+        html += '<span class="heat-tier-desc-body">' + escapeHtml(matrixDesc) + '</span>';
+      }
+      el.innerHTML = html;
+      el.hidden = false;
+      el.style.removeProperty('color');
+      return;
+    }
+    var desc = tierDescriptionBody(display);
+    el.textContent = desc;
+    el.hidden = !desc;
+    el.style.removeProperty('color');
+  }
+
   var FORMULAS = {
     baseline: {
       calc: calcBaseline,
@@ -582,6 +626,22 @@
     var entry = LABELS[key];
     if (!entry || !entry.affirmations) return '';
     return entry.affirmations[value] || '';
+  }
+
+  function affirmationDisplayText(key, value) {
+    var affirmText = affirmationFor(key, value);
+    if (affirmText) {
+      var short = wordFor(key, value);
+      if (short && affirmText.indexOf(short + '. ') === 0) {
+        return affirmText.slice(short.length + 2);
+      }
+      return affirmText;
+    }
+    var entry = labelEntry(key, value);
+    if (entry.detail) {
+      return entry.short ? entry.short + '. ' + entry.detail : entry.detail;
+    }
+    return entry.short || '';
   }
 
   // ── 6. Scoring formulas ─────────────────────────────────────────────────
@@ -1129,29 +1189,34 @@
       if (!entry.detail[i]) continue;
       var li = document.createElement('li');
       li.dataset.level = String(i);
-      li.innerHTML =
-        '<span class="help-modal-level-label">' + levelIconSvg(entry.icon[i]) +
-        '<span>' + escapeHtml(entry.short[i]) + '</span></span>' +
-        '<span class="help-modal-level-text">' + escapeHtml(entry.detail[i]) + '</span>';
       if (selectable) {
-        li.className = 'is-selectable';
-        li.setAttribute('role', 'button');
-        li.setAttribute('tabindex', '0');
-        li.setAttribute('aria-label', entry.short[i]);
-        (function (level) {
+        li.className = 'is-selectable-row';
+        var textEl = document.createElement('span');
+        textEl.className = 'help-modal-level-text is-selectable';
+        textEl.textContent = entry.detail[i];
+        textEl.setAttribute('role', 'button');
+        textEl.setAttribute('tabindex', '0');
+        textEl.setAttribute('aria-label', entry.detail[i]);
+        li.appendChild(textEl);
+        (function (level, target) {
           function selectLevel() {
             modalContext.currentValue = level;
             modalContext.onSelect(level);
             paintHelpModalLevels();
           }
-          li.addEventListener('click', selectLevel);
-          li.addEventListener('keydown', function (e) {
+          target.addEventListener('click', selectLevel);
+          target.addEventListener('keydown', function (e) {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
               selectLevel();
             }
           });
-        })(i);
+        })(i, textEl);
+      } else {
+        li.innerHTML =
+          '<span class="help-modal-level-label">' + levelIconSvg(entry.icon[i]) +
+          '<span>' + escapeHtml(entry.short[i]) + '</span></span>' +
+          '<span class="help-modal-level-text">' + escapeHtml(entry.detail[i]) + '</span>';
       }
       list.appendChild(li);
     }
@@ -1273,10 +1338,6 @@
     descBtn.className = 'field-desc';
     descBtn.setAttribute('aria-label', 'Choisir le niveau de ' + label);
 
-    var valEl = document.createElement('div');
-    valEl.className = 'field-val';
-    valEl.setAttribute('aria-hidden', 'true');
-
     function openFieldHelp() {
       var wiz = config.wizard;
       if (wiz && wiz.dimensions && wiz.dimensions.length > 1) {
@@ -1333,19 +1394,12 @@
     sliderWrap.appendChild(inputEl);
     field.appendChild(lbl);
     field.appendChild(descBtn);
-    field.appendChild(valEl);
     field.appendChild(sliderWrap);
 
     el.appendChild(field);
 
     function descriptionForLevel(idx) {
-      var affirmText = affirmationFor(wordsKey, idx);
-      if (affirmText) return affirmText;
-      var entry = labelEntry(wordsKey, idx);
-      if (entry.detail) {
-        return entry.short ? entry.short + '. ' + entry.detail : entry.detail;
-      }
-      return entry.short || '';
+      return affirmationDisplayText(wordsKey, idx);
     }
 
     function updateDisplay(v) {
@@ -1358,8 +1412,6 @@
       descBtn.setAttribute('aria-label', descText
         ? 'Choisir le niveau de ' + label + '. Actuellement : ' + shortLabel
         : 'Choisir le niveau de ' + label);
-      valEl.textContent = shortLabel;
-      valEl.hidden = !shortLabel;
       inputEl.value = String(v);
     }
 
@@ -1470,26 +1522,12 @@
 
     el.appendChild(panel);
 
-    function tierDescription(display) {
-      if (display.inutile) return INUTILE_STYLES.description || '';
-      if (display.matrixLabel) {
-        var matrixDesc = display.description || '';
-        return matrixDesc ? display.matrixLabel + '. ' + matrixDesc : display.matrixLabel;
-      }
-      if (display.description) return display.description;
-      if (display.tierI == null) return '';
-      for (var k = 0; k < TIERS.length; k++) {
-        if (TIERS[k].i === display.tierI) return TIERS[k].description || '';
-      }
-      return '';
-    }
-
     function paint(result, display) {
       var d = display || resolveDisplay(result, {});
       var v = tierVisuals(d.inutile ? { inutile: true, label: INUTILE_LABEL } : { i: d.tierI, label: d.label });
       bnumVal.textContent = formatScore(d.score);
       dot.style.background = v.seg;
-      blabel.textContent = d.tierLabel || d.label;
+      blabel.textContent = classicTierLabel(d);
       badge.style.setProperty('--heat-fill', v.fill);
       badge.style.setProperty('--heat-text', v.text);
       panel.style.setProperty('--heat-text', v.text);
@@ -1498,10 +1536,7 @@
       blabel.style.removeProperty('color');
       badge.classList.toggle('is-inutile', d.inutile);
       panel.classList.toggle('is-inutile', d.inutile);
-      var desc = tierDescription(d);
-      tierDesc.textContent = desc;
-      tierDesc.hidden = !desc;
-      tierDesc.style.removeProperty('color');
+      paintTierDescription(tierDesc, d);
       segs.forEach(function (s) {
         s.classList.toggle('on', !d.inutile && d.tierI != null && +s.dataset.i === d.tierI);
       });
@@ -2506,6 +2541,7 @@
     tierFor: tierFor,
     isInutile: isInutile,
     resolveDisplay: resolveDisplay,
+    classicTierLabel: classicTierLabel,
     setMatrixSettings: setMatrixSettings,
     getMatrixSettings: getMatrixSettings,
     resolveMatrixLabel: resolveMatrixLabel,
@@ -2515,7 +2551,8 @@
     wordFor: wordFor,
     wordHtmlFor: wordHtmlFor,
     levelIconSvg: levelIconSvg,
-    affirmationFor: affirmationFor
+    affirmationFor: affirmationFor,
+    affirmationDisplayText: affirmationDisplayText
   };
 
   global.PriorityUI = PriorityUI;
