@@ -203,7 +203,9 @@
 
   async function getCardDueComplete(t) {
     try {
-      return await t.card('dueComplete');
+      // t.card('field') returns a request chain; .get('field') resolves the value.
+      var dueComplete = await t.card('dueComplete').get('dueComplete');
+      return dueComplete === true;
     } catch (err) {
       console.error('Priority card dueComplete failed', err);
       return false;
