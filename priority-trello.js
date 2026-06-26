@@ -4,8 +4,6 @@
 
   var CARD_PRIORITY_KEY = 'cardPriority';
   var LEGACY_PRIORITY_KEY = 'priority';
-  var CARD_BADGE_REFRESH_SEC = 10;
-
   var DEFAULT_INPUTS = { urgency: 2, impact: 2, ease: 3 };
 
   var LEGACY_ID_TO_INPUTS = {
@@ -118,31 +116,14 @@
       text: formatBadgeText(display),
       color: tierDetailBadgeColor(display),
       monochrome: false,
-      refresh: CARD_BADGE_REFRESH_SEC,
     };
   }
 
   function cardFaceBadges(t) {
     return getCardDisplay(t).then(function (display) {
       var badge = buildCardFaceBadge(display);
-      if (!badge) return [];
-      var staticBadge = Object.assign({}, badge);
-      delete staticBadge.refresh;
-      return [staticBadge];
+      return badge ? [badge] : [];
     });
-  }
-
-  function cardFaceBadgesCapability(t) {
-    return [{
-      dynamic: function () {
-        return getCardDisplay(t).then(function (display) {
-          if (!display) {
-            return { refresh: CARD_BADGE_REFRESH_SEC };
-          }
-          return buildCardFaceBadge(display);
-        });
-      },
-    }];
   }
 
   async function saveCardInputs(t, inputs) {
@@ -173,7 +154,6 @@
     tierDotIcon: tierDotIcon,
     buildCardFaceBadge: buildCardFaceBadge,
     cardFaceBadges: cardFaceBadges,
-    cardFaceBadgesCapability: cardFaceBadgesCapability,
     saveCardInputs: saveCardInputs,
     clearCardPriority: clearCardPriority,
   };
