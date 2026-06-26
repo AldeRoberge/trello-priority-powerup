@@ -2538,12 +2538,10 @@
         syncStateFromFields();
         var result = calcFn(state);
         var display = resolveDisplay(result, state);
-        applyCardTierTint(card, display.blocked
-          ? { blocked: true, label: BLOCKED_LABEL }
-          : display.cardTier);
-        card.classList.toggle('is-inutile', display.inutile && !display.blocked);
+        applyCardTierTint(card, display.cardTier);
+        card.classList.toggle('is-inutile', !!display.inutile);
         card.classList.toggle('is-blocked', !!display.blocked);
-        card.dataset.tier = display.blocked ? BLOCKED_LABEL : display.label;
+        card.dataset.tier = display.label;
         heat.paint(result, display);
         if (calcGraph) calcGraph.paint(result, state, display);
       } catch (err) {
