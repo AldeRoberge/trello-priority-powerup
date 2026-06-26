@@ -23,7 +23,12 @@ function check(name, inputs, expectedLabel, ctx) {
 
 console.log('=== Matrix examples ===');
 check('Opportunité massive', { ease: 5, impact: 4, urgency: 4 }, 'Opportunité massive');
-check('Tâche ingrate', { ease: 1, impact: 0, urgency: 4 }, 'Tâche ingrate');
+check('Corvée express (dirty-job)', { ease: 1, impact: 0, urgency: 4 }, 'Corvée express');
+check('Corvée ciblée', { ease: 1, impact: 1.5, urgency: 4 }, 'Corvée ciblée');
+check('Pression modérée (urg high, impact mid, ease mid)', { ease: 3, impact: 2, urgency: 4 }, 'Pression modérée');
+check('Pression modérée (urg veryHigh)', { ease: 3, impact: 2.5, urgency: 3.5 }, 'Pression modérée');
+check('Échéance serrée (urg mid impact, low ease)', { ease: 2, impact: 2, urgency: 4 }, 'Échéance serrée');
+check('not Corvée urgente when impact mid', { ease: 3, impact: 2, urgency: 4 }, 'Pression modérée');
 check('Victoire rapide', { ease: 5, impact: 3, urgency: 1 }, 'Victoire rapide');
 check('Chemin critique', { ease: 1, impact: 4, urgency: 4 }, 'Chemin critique');
 
@@ -33,7 +38,7 @@ check('Coup de pouce', { ease: 5, impact: 2, urgency: 4 }, 'Coup de pouce');
 check('Zone grise', { ease: 3, impact: 2, urgency: 2 }, 'Zone grise');
 check('Piste exploratoire', { ease: 3, impact: 2, urgency: 1 }, 'Piste exploratoire');
 check('Travail de fond', { ease: 2, impact: 2.5, urgency: 1 }, 'Travail de fond');
-check('Travail de fond (ex-Piège à temps)', { ease: 1, impact: 2, urgency: 4 }, 'Travail de fond');
+check('Deadline exigeante (ex-Piège à temps)', { ease: 1, impact: 2, urgency: 4 }, 'Deadline exigeante');
 
 console.log('\n=== Shelf zone (low urgency, low-mid impact, very high effort) ===');
 check('Projet en sommeil', { ease: 1, impact: 2, urgency: 1 }, 'Projet en sommeil');
@@ -42,7 +47,7 @@ check('En attente de contexte', { ease: 1, impact: 2.5, urgency: 0.5 }, 'En atte
 check('À remettre en rayon', { ease: 1, impact: 1.5, urgency: 0.5 }, 'À remettre en rayon');
 check('Sans urgence ni retour', { ease: 1, impact: 0.5, urgency: 0.5 }, 'Sans urgence ni retour');
 check('Bruit de fond lourd', { ease: 1, impact: 0.5, urgency: 1.2 }, 'Bruit de fond lourd');
-check('Travail de fond not shelf', { ease: 2, impact: 3, urgency: 1 }, 'Travail de fond');
+check('Travail de fond not shelf', { ease: 2, impact: 3, urgency: 1 }, 'Pari stratégique');
 check('Effet de levier', { ease: 3, impact: 4, urgency: 1 }, 'Effet de levier');
 check('Fondation', { ease: 2.5, impact: 4, urgency: 0.5 }, 'Fondation');
 
