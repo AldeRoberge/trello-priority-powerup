@@ -20,7 +20,6 @@
 
       <p class="tp-version-relative" id="versionRelative">Chargement…</p>
       <p class="tp-version-utc" id="versionUtc"></p>
-      <p class="tp-landing-note">L'horodatage est appliqué automatiquement à chaque envoi sur <code>main</code>.</p>
     </div>
   </div>
 
@@ -33,7 +32,7 @@
     document.getElementById('landing').hidden = false;
     initLanding();
   }
-  
+  I think its because each push creates two runs : 
 
   function renderVersion(builtAt) {
     document.getElementById('versionRelative').textContent = BuildVersion.updatedLabel(builtAt);
