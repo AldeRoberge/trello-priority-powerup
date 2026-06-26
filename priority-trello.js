@@ -90,11 +90,31 @@
     return computeDisplay(inputs);
   }
 
-  var BADGE_DOT = '\u25CF';
+  // Tier-indexed badge dots (largest = highest priority). Unicode only — Trello badge text.
+  var BADGE_DOTS_BY_TIER = {
+    0: '\u2B24', // ⬤ Critique
+    1: '\u2B24', // ⬤ Urgent (largest)
+    2: '\u25CF', // ● Prioritaire
+    3: '\u2022', // • Important (middle)
+    4: '\u00B7', // · Flexible
+    5: '\u00B7', // · Secondaire
+    6: '\u00B7', // · Optionnel
+  };
+  var BADGE_DOT_INUTILE = '\u00B7'; // · inutile
+
+  function tierBadgeDot(display) {
+    if (!display) return '\u25CF';
+    if (display.inutile) return BADGE_DOT_INUTILE;
+    var i = display.tierI;
+    if (i != null && Object.prototype.hasOwnProperty.call(BADGE_DOTS_BY_TIER, i)) {
+      return BADGE_DOTS_BY_TIER[i];
+    }
+    return '\u25CF';
+  }
 
   function formatBadgeText(display) {
     if (!display) return '';
-    return BADGE_DOT + ' ' + display.label;
+    return tierBadgeDot(display) + ' ' + display.label;
   }
 
   function tierDetailBadgeColor(display) {
@@ -146,6 +166,7 @@
     computeDisplay: computeDisplay,
     getCardDisplay: getCardDisplay,
     formatBadgeText: formatBadgeText,
+    tierBadgeDot: tierBadgeDot,
     tierDetailBadgeColor: tierDetailBadgeColor,
     buildCardFaceBadge: buildCardFaceBadge,
     cardFaceBadges: cardFaceBadges,
