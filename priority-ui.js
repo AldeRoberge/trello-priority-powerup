@@ -302,6 +302,93 @@
     { i: 6, fill: '#323940', text: '#ffffff', seg: '#9fadbc', tint: '#323940' }
   ];
 
+  var TIER_LABEL_SHORT = {
+    Critique: 'Crit',
+    Urgent: 'Urg',
+    Prioritaire: 'Prio',
+    Important: 'Imp',
+    Flexible: 'Flex',
+    Secondaire: 'Sec',
+    Optionnel: 'Opt'
+  };
+
+  function shortTierLabel(label) {
+    if (!label) return '';
+    if (Object.prototype.hasOwnProperty.call(TIER_LABEL_SHORT, label)) {
+      return TIER_LABEL_SHORT[label];
+    }
+    return label;
+  }
+
+  function tierLabelForSpace(label, useShort) {
+    if (!label) return '';
+    return useShort ? shortTierLabel(label) : label;
+  }
+
+  function elementLabelOverflows(el) {
+    return el.scrollWidth > el.clientWidth + 1;
+  }
+
+  function createResponsiveTierLabelGroup(config) {
+    var container = config.container;
+    var targets = config.targets || [];
+    var useShort = false;
+
+    function applyMode(short) {
+      useShort = short;
+      if (container) container.classList.toggle('is-short', short);
+      for (var i = 0; i < targets.length; i++) {
+        var t = targets[i];
+        var full = typeof t.getFullLabel === 'function' ? t.getFullLabel() : t.fullLabel;
+        var text = tierLabelForSpace(full, short);
+        if (t.el.textContent !== text) t.el.textContent = text;
+        if (t.ariaWhenShort) {
+          if (short && full) t.el.setAttribute('aria-label', full);
+          else t.el.removeAttribute('aria-label');
+        }
+      }
+    }
+
+    function measureNeedsShort() {
+      applyMode(false);
+      for (var i = 0; i < targets.length; i++) {
+        if (elementLabelOverflows(targets[i].el)) return true;
+      }
+      if (container && elementLabelOverflows(container)) return true;
+      return false;
+    }
+
+    function sync() {
+      applyMode(measureNeedsShort());
+    }
+
+    var ro;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(function () {
+        sync();
+      });
+      if (container) ro.observe(container);
+      for (var j = 0; j < targets.length; j++) ro.observe(targets[j].el);
+    } else if (typeof window !== 'undefined' && window.matchMedia) {
+      var mq = window.matchMedia('(max-width: 360px)');
+      function mqSync() {
+        applyMode(mq.matches);
+      }
+      if (mq.addEventListener) mq.addEventListener('change', mqSync);
+      else mq.addListener(mqSync);
+      mqSync();
+    } else {
+      sync();
+    }
+
+    return {
+      refresh: sync,
+      isShort: function () { return useShort; },
+      labelFor: function (full) { return tierLabelForSpace(full, useShort); },
+      disconnect: function () { if (ro) ro.disconnect(); }
+    };
+  }
+
   var HEAT_SEGMENTS = [
     {
       i: 6, target: 0.7, color: '#9B9890', label: 'Optionnel', description: TIERS[6].description,
@@ -1708,6 +1795,7 @@
 
     var segLabels = document.createElement('div');
     segLabels.className = 'heat-seg-labels';
+    var segLabelTargets = [];
     HEAT_SEGMENTS.forEach(function (seg) {
       var label = document.createElement('span');
       label.textContent = seg.label;
@@ -1717,8 +1805,23 @@
       if (seg.description) label.title = seg.label + '. ' + seg.description;
       bindSegmentTarget(label, seg);
       segLabels.appendChild(label);
+      segLabelTargets.push({ el: label, fullLabel: seg.label });
     });
     panel.appendChild(segLabels);
+
+    var currentBadgeTierLabel = 'Optionnel';
+    var segLabelResponsive = createResponsiveTierLabelGroup({
+      container: segLabels,
+      targets: segLabelTargets
+    });
+    var badgeLabelResponsive = createResponsiveTierLabelGroup({
+      container: badge,
+      targets: [{
+        el: blabel,
+        getFullLabel: function () { return currentBadgeTierLabel; },
+        ariaWhenShort: true
+      }]
+    });
 
     el.appendChild(panel);
 
@@ -1735,7 +1838,7 @@
       } else {
         dot.style.background = v.seg;
       }
-      blabel.textContent = classicTierLabel(d);
+      currentBadgeTierLabel = classicTierLabel(d);
       badge.style.setProperty('--heat-fill', v.fill);
       badge.style.setProperty('--heat-text', v.text);
       panel.style.setProperty('--heat-text', v.text);
@@ -1752,6 +1855,8 @@
       segs.forEach(function (s) {
         s.classList.toggle('on', !d.inutile && d.tierI != null && +s.dataset.i === d.tierI);
       });
+      badgeLabelResponsive.refresh();
+      segLabelResponsive.refresh();
     }
 
     return {
@@ -2741,8 +2846,11 @@
     KEYWORDS: KEYWORDS,
     QUESTIONS: QUESTIONS,
     TIERS: TIERS,
+    TIER_LABEL_SHORT: TIER_LABEL_SHORT,
     TIER_SURFACE_MIX: TIER_SURFACE_MIX,
     HEAT_SEGMENTS: HEAT_SEGMENTS,
+    shortTierLabel: shortTierLabel,
+    tierLabelForSpace: tierLabelForSpace,
     FORMULAS: FORMULAS,
     calc: {
       baseline: calcBaseline,

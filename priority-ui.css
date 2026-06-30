@@ -155,7 +155,6 @@ body {
 
 .variant-card.is-blocked {
   background: color-mix(in srgb, var(--card-tier-tint) var(--card-tier-tint-mix), var(--blocked-fill));
-  border: 2px solid var(--blocked-border);
 }
 
 .variant-fields {
@@ -208,15 +207,12 @@ body {
 
 .field--en-attente {
   margin-bottom: 0;
-  border: 2px solid transparent;
   border-radius: var(--radius);
-  transition: background 0.2s ease, border-color 0.2s ease;
+  transition: background 0.2s ease;
 }
 
 .field--en-attente:has(.en-attente-checkbox:checked) {
   background: var(--blocked-fill);
-  border-color: var(--blocked-border);
-  border-style: solid;
   padding: 10px 12px;
 }
 
@@ -773,7 +769,6 @@ body.help-modal-open {
 
 .heat-panel.is-blocked {
   background: color-mix(in srgb, var(--card-tier-tint) var(--card-panel-tint-mix, 20%), var(--blocked-fill));
-  box-shadow: inset 0 0 0 2px var(--blocked-border);
 }
 
 .heat-blocked-warning {
@@ -792,7 +787,6 @@ body.help-modal-open {
   letter-spacing: -0.01em;
   color: var(--blocked-text);
   background: var(--blocked-fill);
-  border: 2px solid var(--blocked-border);
   pointer-events: none;
 }
 
@@ -875,7 +869,6 @@ body.help-modal-open {
 
 .heat-badge.is-blocked {
   background: var(--heat-fill, var(--blocked-fill));
-  box-shadow: inset 0 0 0 2px var(--blocked-border);
 }
 
 .heat-badge.is-blocked .heat-tier-dot {
@@ -901,6 +894,9 @@ body.help-modal-open {
   font-weight: 600;
   line-height: 1;
   color: var(--heat-text, var(--heat-accent-fallback));
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .heat-badge.is-inutile .heat-badge-num,
@@ -975,8 +971,11 @@ body.help-modal-open {
 
 .heat-seg-labels span {
   flex: 1;
+  min-width: 0;
   text-align: center;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
   cursor: pointer;
   border-radius: 3px;
   outline: none;

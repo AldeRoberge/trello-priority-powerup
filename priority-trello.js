@@ -7,6 +7,8 @@
   var MATRIX_SETTINGS_KEY = 'matrixLabelSettings';
   // Trello minimum for dynamic badge polling (card-badges / card-detail-badges).
   var BADGE_REFRESH_SEC = 10;
+  // Label above the card-back badge; without this Trello shows the Power-Up admin name.
+  var CARD_DETAIL_BADGE_TITLE = 'Priorité';
 
   function importantInputs() {
     var segments = typeof PriorityUI !== 'undefined' && PriorityUI.HEAT_SEGMENTS;
@@ -332,6 +334,7 @@
           .then(function (data) {
             if (!data.display) {
               return withBadgeRefresh({
+                title: CARD_DETAIL_BADGE_TITLE,
                 text: 'Définir la priorité',
                 color: 'green',
                 callback: openCallback,
@@ -339,6 +342,7 @@
             }
             var badge = buildCardFaceBadge(data.display, data.completed);
             return withBadgeRefresh({
+              title: CARD_DETAIL_BADGE_TITLE,
               text: badge.text,
               color: badge.color,
               callback: openCallback,
@@ -347,6 +351,7 @@
           .catch(function (err) {
             console.error('Priority card-detail-badges dynamic failed', err);
             return withBadgeRefresh({
+              title: CARD_DETAIL_BADGE_TITLE,
               text: 'Définir la priorité',
               color: 'green',
               callback: openCallback,
