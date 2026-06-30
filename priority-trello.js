@@ -261,14 +261,16 @@
   function tierDetailBadgeColor(display) {
     if (!display) return 'light-gray';
     // Trello card badges only accept named colors (red, orange, …), not hex or CSS.
+    // Map each tier to the closest named color matching heat-bar seg tints in priority-ui.js TIERS.
     if (display.inutile) return 'light-gray';
     var i = display.tierI;
-    if (i === 0) return 'red';
-    if (i === 1 || i === 2) return 'orange';
-    if (i === 3) return 'green';
-    if (i === 4) return 'sky';
-    if (i === 5) return 'blue';
-    return 'light-gray';
+    if (i === 0) return 'red';       // Critique — #E24B4A
+    if (i === 1) return 'orange';    // Urgent — #D85A30
+    if (i === 2) return 'yellow';    // Prioritaire — #BA7517 amber (was orange, indistinguishable from Urgent)
+    if (i === 3) return 'green';     // Important — #6EAD3A
+    if (i === 4) return 'sky';       // Flexible — #3BA99C teal
+    if (i === 5) return 'blue';      // Secondaire — #5A9FD4
+    return 'light-gray';             // Optionnel — neutral gray
   }
 
   function buildCardFaceBadge(display, completed) {

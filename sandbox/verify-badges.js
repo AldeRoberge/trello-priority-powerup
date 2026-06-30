@@ -22,6 +22,7 @@ function check(name, ok) {
 }
 
 var urgentDisplay = { tierLabel: 'Urgent', label: 'Urgent', tierI: 1 };
+var prioritaireDisplay = { tierLabel: 'Prioritaire', label: 'Prioritaire', tierI: 2 };
 var blockedDisplay = { blocked: true, blockedReason: 'En attente d\'une approbation', tierI: 1, tierLabel: 'Urgent' };
 var critiqueBlockedDisplay = {
   blocked: true,
@@ -41,6 +42,19 @@ check(
 check(
   'complete urgent badge color',
   PT.buildCardFaceBadge(urgentDisplay, true).color === 'green'
+);
+check(
+  'incomplete urgent badge color',
+  PT.buildCardFaceBadge(urgentDisplay, false).color === 'orange'
+);
+check(
+  'incomplete prioritaire badge color',
+  PT.buildCardFaceBadge(prioritaireDisplay, false).color === 'yellow'
+);
+check(
+  'urgent and prioritaire badge colors differ',
+  PT.buildCardFaceBadge(urgentDisplay, false).color !==
+    PT.buildCardFaceBadge(prioritaireDisplay, false).color
 );
 check(
   'incomplete dot not checkmark',
