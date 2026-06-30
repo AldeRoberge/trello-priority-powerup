@@ -15,6 +15,7 @@ Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques
 - **Paramètres du tableau** : courte description, horodatage de build et lien vers le guide de configuration
 - **Horodatage de build** affiché sur la page d'accueil du connecteur (`build-info.json`, horodaté à chaque déploiement CI dans l'artifact publié)
 - **Compatibilité** : les anciennes priorités P1–P5 sont lues pour l'affichage jusqu'à la prochaine sauvegarde
+- **Tri par colonne** : menu `…` d'une liste → **Trier par…** → **Priorité** (Critique en haut, cartes sans priorité en bas)
 
 ---
 
@@ -84,6 +85,8 @@ Les Power-Ups **ne peuvent pas** modifier le fond d'une carte en vue tableau. Tr
 
 Ce Power-Up affiche la priorité via des **badges colorés** (`score · palier`). Pour un fond de carte entièrement coloré, il faudrait une extension navigateur qui modifie le DOM/CSS de Trello — ce n'est pas possible dans le modèle iframe Power-Up.
 
+La synchronisation des **couvertures** de carte (bandeau coloré via REST API) n'est **pas** implémentée dans ce dépôt. Le fichier `trello-api-config.js` conserve une clé API à titre documentaire ; le connecteur n'utilise que `t.get` / `t.set` (données partagées Power-Up).
+
 ### Horodatage de build (local)
 
 ```bash
@@ -108,7 +111,7 @@ Dépannage (déploiement bloqué, source Pages) : [.github/DEPLOYMENT.md](.githu
 1. [trello.com/power-ups/admin](https://trello.com/power-ups/admin) → **Create new Power-Up** (ou ouvrir le Power-Up existant)
 2. **Iframe connector URL** (onglet principal du Power-Up) :
    `https://VOTRE-UTILISATEUR.github.io/trello-priority-powerup/index.html`
-3. Capacités : `card-badges`, `card-detail-badges`, `board-buttons` (ne pas activer `card-buttons` — non utilisé par ce Power-Up)
+3. Capacités : `card-badges`, `card-detail-badges`, `board-buttons`, `list-sorters` (ne pas activer `card-buttons` — non utilisé par ce Power-Up)
 4. Ajouter le Power-Up à un tableau via le menu Power-Ups
 
 ---
@@ -127,6 +130,16 @@ Dépannage (déploiement bloqué, source Pages) : [.github/DEPLOYMENT.md](.githu
 ### Effacer une priorité
 
 Popup **Définir la priorité** → **Effacer la priorité**
+
+### Trier une colonne par priorité
+
+1. Sur le tableau, ouvrir le menu `…` de la liste (colonne)
+2. Choisir **Trier par…** → **Priorité**
+3. Les cartes sont réordonnées : Critique → Urgent → … → Optionnel → Inutile ; les cartes sans priorité passent en bas
+
+Les cartes **en attente** (bloquées) sont classées selon leur palier sous-jacent (score et palier calculés), pas selon l'état bloqué.
+
+Le tri utilise la capacité native `list-sorters` de Trello (`sortedIds`) — **aucun appel REST ni OAuth** n'est requis. Seules les données `t.get` / `t.set` du Power-Up sont lues.
 
 ### Messages console sur Trello.com
 

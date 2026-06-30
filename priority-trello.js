@@ -427,6 +427,66 @@
     await t.set('card', 'shared', CARD_PRIORITY_KEY, normalized);
   }
 
+  async function getCardInputsById(t, cardId) {
+    var stored = await t.get(cardId, 'shared', CARD_PRIORITY_KEY);
+    var normalized = normalizeInputs(stored);
+    if (normalized) return normalized;
+
+    var legacyId = await t.get(cardId, 'shared', LEGACY_PRIORITY_KEY);
+    if (legacyId != null && legacyId !== '') {
+      var mapped = LEGACY_ID_TO_INPUTS[+legacyId];
+      if (mapped) return Object.assign({}, mapped);
+    }
+    return null;
+  }
+
+  // Lower tier rank = higher priority (Critique=0 … Optionnel=6, Inutile=7, none=100).
+  var SORT_TIER_INUTILE = 7;
+  var SORT_TIER_NONE = 100;
+
+  function prioritySortRank(display) {
+    if (!display) return { tier: SORT_TIER_NONE, score: -1 };
+    if (display.inutile) return { tier: SORT_TIER_INUTILE, score: 0 };
+    var tier = display.tierI != null ? display.tierI : SORT_TIER_INUTILE;
+    return { tier: tier, score: display.score || 0 };
+  }
+
+  function comparePriorityDisplays(displayA, displayB) {
+    var rankA = prioritySortRank(displayA);
+    var rankB = prioritySortRank(displayB);
+    if (rankA.tier !== rankB.tier) return rankA.tier - rankB.tier;
+    if (rankA.score !== rankB.score) return rankB.score - rankA.score;
+    return 0;
+  }
+
+  async function sortListCardsByPriority(t, cards) {
+    if (!cards || !cards.length) return { sortedIds: [] };
+
+    var settings = await getMatrixSettings(t);
+    var entries = await Promise.all(
+      cards.map(async function (card) {
+        var inputs = await getCardInputsById(t, card.id);
+        var display = inputs ? computeDisplay(inputs, settings) : null;
+        return { id: card.id, display: display };
+      })
+    );
+
+    entries.sort(function (a, b) {
+      return comparePriorityDisplays(a.display, b.display);
+    });
+
+    return { sortedIds: entries.map(function (entry) { return entry.id; }) };
+  }
+
+  function listPrioritySorters(t) {
+    return [{
+      text: 'Priorité',
+      callback: function (ctx, opts) {
+        return sortListCardsByPriority(ctx, opts.cards);
+      },
+    }];
+  }
+
   global.PriorityTrello = {
     CARD_PRIORITY_KEY: CARD_PRIORITY_KEY,
     MATRIX_SETTINGS_KEY: MATRIX_SETTINGS_KEY,
@@ -450,6 +510,11 @@
     cardFaceBadges: cardFaceBadges,
     cardDetailBadges: cardDetailBadges,
     saveCardInputs: saveCardInputs,
+    getCardInputsById: getCardInputsById,
+    prioritySortRank: prioritySortRank,
+    comparePriorityDisplays: comparePriorityDisplays,
+    sortListCardsByPriority: sortListCardsByPriority,
+    listPrioritySorters: listPrioritySorters,
     pageUrl: pageUrl,
     createIframeClient: createIframeClient,
     createIframeClientDeferred: createIframeClientDeferred,
