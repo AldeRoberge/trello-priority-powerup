@@ -37,7 +37,7 @@
     }
 
     async function init() {
-      const inputs = await PriorityTrello.getCardInputs(t);
+      const inputs = await PriorityTrello.clearBlockedIfComplete(t);
       const matrixSettings = await PriorityTrello.getMatrixSettings(t);
       PriorityUI.setMatrixSettings(matrixSettings);
 

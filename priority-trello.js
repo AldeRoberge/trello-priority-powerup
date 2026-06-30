@@ -98,6 +98,29 @@
     return normalized;
   }
 
+  function clearBlockedFromInputs(inputs) {
+    if (!inputs || !inputs.enAttente) return inputs;
+    return {
+      urgency: inputs.urgency,
+      impact: inputs.impact,
+      ease: inputs.ease,
+    };
+  }
+
+  async function clearBlockedIfComplete(t, inputs, completed) {
+    if (completed === undefined) {
+      var dueResults = await Promise.all([getCardInputs(t), getCardDueComplete(t)]);
+      inputs = dueResults[0];
+      completed = dueResults[1] === true;
+    } else if (inputs === undefined) {
+      inputs = await getCardInputs(t);
+    }
+    if (!completed || !inputs || !inputs.enAttente) return inputs;
+    var cleared = clearBlockedFromInputs(inputs);
+    await t.set('card', 'shared', CARD_PRIORITY_KEY, cleared);
+    return cleared;
+  }
+
   async function getCardInputs(t) {
     var stored = await t.get('card', 'shared', CARD_PRIORITY_KEY);
     var normalized = normalizeInputs(stored);
@@ -221,9 +244,6 @@
   }
 
   function completedBadgeTaskLabel(display) {
-    if (display.blocked) {
-      return blockedBoardBadgeLabel(display);
-    }
     return incompleteBadgeLabel(display);
   }
 
@@ -295,8 +315,16 @@
   }
 
   async function getBadgeData(t) {
-    var results = await Promise.all([getCardDisplay(t), getCardDueComplete(t)]);
-    return { display: results[0], completed: results[1] === true };
+    var results = await Promise.all([getCardInputs(t), getCardDueComplete(t)]);
+    var completed = results[1] === true;
+    var inputs = await clearBlockedIfComplete(t, results[0], completed);
+    var display = null;
+    if (inputs) {
+      var settings = await getMatrixSettings(t);
+      PriorityUI.setMatrixSettings(settings);
+      display = computeDisplay(inputs, settings);
+    }
+    return { display: display, completed: completed };
   }
 
   function withBadgeRefresh(badge) {
@@ -494,6 +522,8 @@
     DEFAULT_INPUTS: DEFAULT_INPUTS,
     PRIORITY_DIMENSIONS: PRIORITY_DIMENSIONS,
     normalizeInputs: normalizeInputs,
+    clearBlockedFromInputs: clearBlockedFromInputs,
+    clearBlockedIfComplete: clearBlockedIfComplete,
     getCardInputs: getCardInputs,
     getMatrixSettings: getMatrixSettings,
     computeDisplay: computeDisplay,

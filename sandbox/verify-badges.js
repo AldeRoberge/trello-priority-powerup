@@ -90,9 +90,35 @@ check(
   PT.buildCardFaceBadge(blockedDisplay, true).icon == null
 );
 check(
-  'blocked complete uses Complété wrapper',
+  'blocked complete uses Complété wrapper without blocked label',
   PT.formatBadgeText(blockedDisplay, true) ===
-    '\u2713 Compl\u00e9t\u00e9 (T\u00e2che urgente bloqu\u00e9e \u2014 En attente d\'une approbation)'
+    '\u2713 Compl\u00e9t\u00e9 (T\u00e2che urgente)'
+);
+check(
+  'clearBlockedFromInputs strips blocked fields',
+  (function () {
+    var cleared = PT.clearBlockedFromInputs({
+      urgency: 1,
+      impact: 2,
+      ease: 3,
+      enAttente: true,
+      blockedReason: 'En attente d\'une approbation',
+    });
+    return (
+      cleared.urgency === 1 &&
+      cleared.impact === 2 &&
+      cleared.ease === 3 &&
+      cleared.enAttente == null &&
+      cleared.blockedReason == null
+    );
+  })()
+);
+check(
+  'clearBlockedFromInputs unchanged when not blocked',
+  (function () {
+    var inputs = { urgency: 2, impact: 2, ease: 3 };
+    return PT.clearBlockedFromInputs(inputs) === inputs;
+  })()
 );
 check(
   'blocked complete badge color',
