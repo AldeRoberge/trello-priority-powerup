@@ -412,9 +412,21 @@
     'Bloqu\u00e9': 'T\u00e2che bloqu\u00e9e'
   };
 
+  function blockedTaskBadgeLabel(display) {
+    if (!display) return TASK_BADGE_LABELS[BLOCKED_LABEL];
+    var tier = classicTierLabel(display);
+    var base = TASK_BADGE_LABELS[tier];
+    if (!base && tier) {
+      if (tier === 'Important') base = 'T\u00e2che importante';
+      else base = 'T\u00e2che ' + tier.charAt(0).toLowerCase() + tier.slice(1);
+    }
+    if (base) return base + ' bloqu\u00e9e';
+    return TASK_BADGE_LABELS[BLOCKED_LABEL];
+  }
+
   function taskBadgeLabel(display) {
     if (!display) return '';
-    if (display.blocked) return TASK_BADGE_LABELS[BLOCKED_LABEL];
+    if (display.blocked) return blockedTaskBadgeLabel(display);
     var tier = classicTierLabel(display);
     if (TASK_BADGE_LABELS[tier]) return TASK_BADGE_LABELS[tier];
     if (!tier) return '';
@@ -422,8 +434,8 @@
     return 'T\u00e2che ' + tier.charAt(0).toLowerCase() + tier.slice(1);
   }
 
-  function formatBlockedBadgeText(reason) {
-    var label = TASK_BADGE_LABELS[BLOCKED_LABEL];
+  function formatBlockedBadgeText(display, reason) {
+    var label = blockedTaskBadgeLabel(display);
     if (reason) return BLOCKED_SYMBOL + ' ' + label + ' \u2014 ' + reason;
     return BLOCKED_SYMBOL + ' ' + label;
   }
@@ -1489,7 +1501,9 @@
       var shortLabel = wordFor(wordsKey, idx);
       var descText = descriptionForLevel(idx);
       descBtn.textContent = descText;
-      descBtn.hidden = !descText;
+      descBtn.classList.toggle('is-empty', !descText);
+      descBtn.setAttribute('aria-hidden', descText ? 'false' : 'true');
+      descBtn.tabIndex = descText ? 0 : -1;
       descBtn.setAttribute('aria-label', descText
         ? 'Choisir le niveau de ' + label + '. Actuellement : ' + shortLabel
         : 'Choisir le niveau de ' + label);
@@ -1656,14 +1670,6 @@
     tierDesc.className = 'heat-tier-desc';
     tierDesc.hidden = true;
 
-    var top = document.createElement('div');
-    top.className = 'heat-top';
-    var topLabel = document.createElement('span');
-    topLabel.className = 'heat-top-label';
-    topLabel.textContent = 'Priorité d\'exécution';
-    top.appendChild(topLabel);
-
-    panel.appendChild(top);
     panel.appendChild(tierDesc);
     panel.appendChild(badge);
 
@@ -2785,6 +2791,7 @@
     resolveDisplay: resolveDisplay,
     classicTierLabel: classicTierLabel,
     taskBadgeLabel: taskBadgeLabel,
+    blockedTaskBadgeLabel: blockedTaskBadgeLabel,
     setMatrixSettings: setMatrixSettings,
     getMatrixSettings: getMatrixSettings,
     resolveMatrixLabel: resolveMatrixLabel,

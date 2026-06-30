@@ -23,6 +23,12 @@ function check(name, ok) {
 
 var urgentDisplay = { tierLabel: 'Urgent', label: 'Urgent', tierI: 1 };
 var blockedDisplay = { blocked: true, blockedReason: 'En attente d\'une approbation', tierI: 1, tierLabel: 'Urgent' };
+var critiqueBlockedDisplay = {
+  blocked: true,
+  blockedReason: 'En attente d\'une r\u00e9ponse',
+  tierI: 0,
+  tierLabel: 'Critique'
+};
 
 check(
   'incomplete urgent badge',
@@ -67,7 +73,12 @@ check(
 check(
   'blocked incomplete badge',
   PT.formatBadgeText(blockedDisplay, false) ===
-    PT.formatBlockedBoardBadgeText(blockedDisplay.blockedReason)
+    '\u2298 T\u00e2che urgente bloqu\u00e9e \u2014 En attente d\'une approbation'
+);
+check(
+  'critique blocked incomplete badge',
+  PT.formatBadgeText(critiqueBlockedDisplay, false) ===
+    '\u2298 T\u00e2che critique bloqu\u00e9e \u2014 En attente d\'une r\u00e9ponse'
 );
 check(
   'blocked board badge has icon',
@@ -80,15 +91,24 @@ check(
 );
 check(
   'blocked complete uses Complété wrapper',
-  PT.formatBadgeText(blockedDisplay, true) === '\u2713 Compl\u00e9t\u00e9 (T\u00e2che bloqu\u00e9e \u2014 En attente d\'une approbation)'
+  PT.formatBadgeText(blockedDisplay, true) ===
+    '\u2713 Compl\u00e9t\u00e9 (T\u00e2che urgente bloqu\u00e9e \u2014 En attente d\'une approbation)'
 );
 check(
   'blocked complete badge color',
   PT.buildCardFaceBadge(blockedDisplay, true).color === 'green'
 );
 check(
-  'blocked incomplete badge color',
-  PT.buildCardFaceBadge(blockedDisplay, false).color === 'pink'
+  'blocked incomplete badge color matches tier',
+  PT.buildCardFaceBadge(blockedDisplay, false).color === 'orange'
+);
+check(
+  'critique blocked incomplete badge color',
+  PT.buildCardFaceBadge(critiqueBlockedDisplay, false).color === 'red'
+);
+check(
+  'blocked dot is circle-slash only',
+  PT.tierBadgeDot(blockedDisplay, false) === '\u2298'
 );
 
 console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll badge checks passed');

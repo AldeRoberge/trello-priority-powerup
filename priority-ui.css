@@ -104,9 +104,12 @@ html[data-color-mode="dark"] .calc-rsm-marker.is-inutile .calc-rsm-marker-core {
   opacity: 1;
 }
 
-html[data-color-mode="dark"] .field-desc,
 html[data-color-mode="dark"] .help-modal-body {
   color: var(--text-secondary);
+}
+
+html[data-color-mode="dark"] .field-desc {
+  color: #9fadbc;
 }
 
 html[data-color-mode="dark"] .help-modal-step {
@@ -334,17 +337,30 @@ body {
   font: inherit;
   font-size: 12px;
   font-weight: 400;
-  color: var(--text-muted);
+  color: #94908A;
   background: none;
   text-align: right;
   cursor: pointer;
   transition: opacity .12s;
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
   line-height: 1.35;
+  min-height: calc(1.35em * 3);
   white-space: normal;
   flex: 1 1 0;
   min-width: 0;
   max-width: 68%;
+}
+
+.field-desc.is-empty {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+html[data-color-mode="light"] .field-desc {
+  color: #576474;
 }
 
 @media (max-width: 320px) {
