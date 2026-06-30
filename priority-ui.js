@@ -499,6 +499,26 @@
     'Bloqu\u00e9': 'T\u00e2che bloqu\u00e9e'
   };
 
+  // Trello card badges accept named colors only — aligned with TIERS[].seg tints.
+  var TIER_TRELLO_BADGE_COLORS = {
+    0: 'red',       // Critique
+    1: 'orange',    // Urgent
+    2: 'yellow',    // Prioritaire
+    3: 'green',     // Important
+    4: 'sky',       // Flexible
+    5: 'blue',      // Secondaire
+    6: 'light-gray' // Optionnel
+  };
+
+  function tierTrelloBadgeColor(display) {
+    if (!display || display.inutile) return 'light-gray';
+    var i = display.tierI;
+    if (i != null && Object.prototype.hasOwnProperty.call(TIER_TRELLO_BADGE_COLORS, i)) {
+      return TIER_TRELLO_BADGE_COLORS[i];
+    }
+    return 'light-gray';
+  }
+
   function blockedTaskBadgeLabel(display) {
     if (!display) return TASK_BADGE_LABELS[BLOCKED_LABEL];
     var tier = classicTierLabel(display);
@@ -2900,6 +2920,8 @@
     classicTierLabel: classicTierLabel,
     taskBadgeLabel: taskBadgeLabel,
     blockedTaskBadgeLabel: blockedTaskBadgeLabel,
+    tierTrelloBadgeColor: tierTrelloBadgeColor,
+    TIER_TRELLO_BADGE_COLORS: TIER_TRELLO_BADGE_COLORS,
     setMatrixSettings: setMatrixSettings,
     getMatrixSettings: getMatrixSettings,
     resolveMatrixLabel: resolveMatrixLabel,
