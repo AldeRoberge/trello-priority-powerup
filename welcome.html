@@ -39,15 +39,13 @@
   <button class="tp-btn tp-btn--primary" type="button" id="startBtn" style="width:100%">Commencer</button>
 
   <script>
-    PriorityTrello.createIframeClientDeferred().then(function (t) {
+    PriorityTrello.initIframePage(function (t) {
     document.getElementById('startBtn').addEventListener('click', () => t.closeModal());
-    PriorityTrello.runWhenIframeReady(t, function () {
-      if (typeof t.sizeTo === 'function') {
-        return t.sizeTo(document.body);
-      }
-    });
+    if (typeof t.sizeTo === 'function') {
+      return t.sizeTo(document.body);
+    }
     }).catch(function (err) {
-      console.error('Priority welcome iframe init failed', err);
+      console.error('Priority welcome init failed', err);
     });
   </script>
 </body>

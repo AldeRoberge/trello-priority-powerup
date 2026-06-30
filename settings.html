@@ -17,7 +17,7 @@
   <button type="button" class="tp-link" id="showGuide">Voir le guide de configuration</button>
 
   <script>
-    PriorityTrello.createIframeClientDeferred().then(function (t) {
+    PriorityTrello.initIframePage(function (t) {
     let buildStampTimer;
 
     function renderBuildInfo(builtAt) {
@@ -50,9 +50,9 @@
       });
     });
 
-    PriorityTrello.runWhenIframeReady(t, loadBuildInfo);
+    return loadBuildInfo();
     }).catch(function (err) {
-      console.error('Priority settings iframe init failed', err);
+      console.error('Priority settings init failed', err);
     });
   </script>
 </body>

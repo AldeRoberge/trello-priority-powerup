@@ -121,17 +121,21 @@
     return cleared;
   }
 
-  async function getCardInputs(t) {
-    var stored = await t.get('card', 'shared', CARD_PRIORITY_KEY);
+  async function readStoredCardInputs(t, scope) {
+    var stored = await t.get(scope, 'shared', CARD_PRIORITY_KEY);
     var normalized = normalizeInputs(stored);
     if (normalized) return normalized;
 
-    var legacyId = await t.get('card', 'shared', LEGACY_PRIORITY_KEY);
+    var legacyId = await t.get(scope, 'shared', LEGACY_PRIORITY_KEY);
     if (legacyId != null && legacyId !== '') {
       var mapped = LEGACY_ID_TO_INPUTS[+legacyId];
       if (mapped) return Object.assign({}, mapped);
     }
     return null;
+  }
+
+  async function getCardInputs(t) {
+    return readStoredCardInputs(t, 'card');
   }
 
   async function getMatrixSettings(t) {
@@ -226,31 +230,23 @@
     return 'Compl\u00e9t\u00e9 (' + taskLabel + ')';
   }
 
-  function blockedBoardBadgeLabel(display) {
-    var label;
-    if (typeof PriorityUI !== 'undefined' && PriorityUI.blockedTaskBadgeLabel) {
-      label = PriorityUI.blockedTaskBadgeLabel(display);
-    } else {
-      var tierKey = String(display.tierLabel || display.label || '');
-      label = tierKey ? 'T\u00e2che ' + tierKey.toLowerCase() + ' bloqu\u00e9e' : 'T\u00e2che bloqu\u00e9e';
-    }
-    var trimmed = typeof display.blockedReason === 'string' ? display.blockedReason.trim() : '';
-    if (trimmed) return label + ' \u2014 ' + trimmed;
-    return label;
-  }
-
   function formatBlockedBoardBadgeText(display) {
-    return BADGE_DOT_BLOCKED + ' ' + blockedBoardBadgeLabel(display || {});
-  }
-
-  function completedBadgeTaskLabel(display) {
-    return incompleteBadgeLabel(display);
+    var d = display || {};
+    if (typeof PriorityUI !== 'undefined' && PriorityUI.formatBlockedBadgeText) {
+      var reason = typeof d.blockedReason === 'string' ? d.blockedReason.trim() : '';
+      return PriorityUI.formatBlockedBadgeText(d, reason || undefined);
+    }
+    var tierKey = String(d.tierLabel || d.label || '');
+    var label = tierKey ? 'T\u00e2che ' + tierKey.toLowerCase() + ' bloqu\u00e9e' : 'T\u00e2che bloqu\u00e9e';
+    var trimmed = typeof d.blockedReason === 'string' ? d.blockedReason.trim() : '';
+    if (trimmed) label += ' \u2014 ' + trimmed;
+    return BADGE_DOT_BLOCKED + ' ' + label;
   }
 
   function formatBadgeText(display, completed) {
     if (!display) return '';
     if (completed) {
-      return BADGE_DOT_COMPLETE + ' ' + formatCompletedBadgeLabel(completedBadgeTaskLabel(display));
+      return BADGE_DOT_COMPLETE + ' ' + formatCompletedBadgeLabel(incompleteBadgeLabel(display));
     }
     if (display.blocked) {
       return formatBlockedBoardBadgeText(display);
@@ -259,18 +255,19 @@
   }
 
   function tierDetailBadgeColor(display) {
+    if (typeof PriorityUI !== 'undefined' && PriorityUI.tierTrelloBadgeColor) {
+      return PriorityUI.tierTrelloBadgeColor(display);
+    }
     if (!display) return 'light-gray';
-    // Trello card badges only accept named colors (red, orange, …), not hex or CSS.
-    // Map each tier to the closest named color matching heat-bar seg tints in priority-ui.js TIERS.
     if (display.inutile) return 'light-gray';
     var i = display.tierI;
-    if (i === 0) return 'red';       // Critique — #E24B4A
-    if (i === 1) return 'orange';    // Urgent — #D85A30
-    if (i === 2) return 'yellow';    // Prioritaire — #BA7517 amber (was orange, indistinguishable from Urgent)
-    if (i === 3) return 'green';     // Important — #6EAD3A
-    if (i === 4) return 'sky';       // Flexible — #3BA99C teal
-    if (i === 5) return 'blue';      // Secondaire — #5A9FD4
-    return 'light-gray';             // Optionnel — neutral gray
+    if (i === 0) return 'red';
+    if (i === 1) return 'orange';
+    if (i === 2) return 'yellow';
+    if (i === 3) return 'green';
+    if (i === 4) return 'sky';
+    if (i === 5) return 'blue';
+    return 'light-gray';
   }
 
   function buildCardFaceBadge(display, completed) {
@@ -451,6 +448,15 @@
     });
   }
 
+  // Shared iframe bootstrap: DOM-ready client + post-handshake callback.
+  function initIframePage(onReady) {
+    return createIframeClientDeferred().then(function (t) {
+      return runWhenIframeReady(t, function () {
+        return onReady(t);
+      });
+    });
+  }
+
   async function saveCardInputs(t, inputs) {
     var normalized = normalizeInputs(inputs);
     if (!normalized) return;
@@ -458,16 +464,7 @@
   }
 
   async function getCardInputsById(t, cardId) {
-    var stored = await t.get(cardId, 'shared', CARD_PRIORITY_KEY);
-    var normalized = normalizeInputs(stored);
-    if (normalized) return normalized;
-
-    var legacyId = await t.get(cardId, 'shared', LEGACY_PRIORITY_KEY);
-    if (legacyId != null && legacyId !== '') {
-      var mapped = LEGACY_ID_TO_INPUTS[+legacyId];
-      if (mapped) return Object.assign({}, mapped);
-    }
-    return null;
+    return readStoredCardInputs(t, cardId);
   }
 
   // Lower tier rank = higher priority (Critique=0 … Optionnel=6, Inutile=7, none=100).
@@ -550,6 +547,7 @@
     pageUrl: pageUrl,
     createIframeClient: createIframeClient,
     createIframeClientDeferred: createIframeClientDeferred,
+    initIframePage: initIframePage,
     runWhenIframeReady: runWhenIframeReady,
     BADGE_REFRESH_SEC: BADGE_REFRESH_SEC,
     BADGE_DOT_BLOCKED: BADGE_DOT_BLOCKED,
