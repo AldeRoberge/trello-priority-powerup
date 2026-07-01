@@ -100,17 +100,16 @@ check(
 check(
   'blocked incomplete badge',
   PT.formatBadgeText(blockedDisplay, false) ===
-    '\u2298 T\u00e2che urgente bloqu\u00e9e \u2014 En attente d\'une approbation'
+    'T\u00e2che urgente (bloqu\u00e9e) \u2014 En attente d\'une approbation'
 );
 check(
   'critique blocked incomplete badge',
   PT.formatBadgeText(critiqueBlockedDisplay, false) ===
-    '\u2298 T\u00e2che critique bloqu\u00e9e \u2014 En attente d\'une r\u00e9ponse'
+    'T\u00e2che critique (bloqu\u00e9e) \u2014 En attente d\'une r\u00e9ponse'
 );
 check(
-  'blocked board badge has icon',
-  PT.buildCardFaceBadge(blockedDisplay, false).icon != null &&
-    PT.buildCardFaceBadge(blockedDisplay, false).monochrome === false
+  'blocked board badge has no icon',
+  PT.buildCardFaceBadge(blockedDisplay, false).icon == null
 );
 check(
   'blocked complete badge has no icon',

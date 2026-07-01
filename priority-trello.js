@@ -9,7 +9,6 @@
   var BADGE_REFRESH_SEC = 10;
   // Label above the card-back badge; without this Trello shows the Power-Up admin name.
   var CARD_DETAIL_BADGE_TITLE = 'Priorité';
-  var BLOCKED_BOARD_BADGE_ICON = './badges/blocked.svg';
   // Lower tier rank = higher priority (Critique=0 … Optionnel=6, Inutile=7, none=100).
   var SORT_TIER_INUTILE = 7;
   var SORT_TIER_NONE = 100;
@@ -226,11 +225,10 @@
       return PriorityUI.formatBlockedBadgeText(d, reason || undefined);
     }
     var tierKey = String(d.tierLabel || d.label || '');
-    var label = tierKey ? 'T\u00e2che ' + tierKey.toLowerCase() + ' bloqu\u00e9e' : 'T\u00e2che bloqu\u00e9e';
+    var label = tierKey ? 'T\u00e2che ' + tierKey.toLowerCase() + ' (bloqu\u00e9e)' : 'T\u00e2che (bloqu\u00e9e)';
     var trimmed = typeof d.blockedReason === 'string' ? d.blockedReason.trim() : '';
     if (trimmed) label += ' \u2014 ' + trimmed;
-    var blockedDot = (typeof PriorityUI !== 'undefined' && PriorityUI.BLOCKED_SYMBOL) || '\u2298';
-    return blockedDot + ' ' + label;
+    return label;
   }
 
   function formatBadgeText(display, completed) {
@@ -253,15 +251,10 @@
 
   function buildCardFaceBadge(display, completed) {
     if (!display) return null;
-    var badge = {
+    return {
       text: formatBadgeText(display, completed),
       color: completed ? 'green' : tierDetailBadgeColor(display),
     };
-    if (display.blocked && !completed) {
-      badge.icon = pageUrl(BLOCKED_BOARD_BADGE_ICON);
-      badge.monochrome = false;
-    }
-    return badge;
   }
 
   async function getCardDueComplete(t) {

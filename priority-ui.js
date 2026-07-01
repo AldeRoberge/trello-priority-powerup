@@ -496,7 +496,7 @@
     Secondaire: 'T\u00e2che secondaire',
     Optionnel: 'T\u00e2che optionnelle',
     Inutile: 'T\u00e2che inutile',
-    'Bloqu\u00e9': 'T\u00e2che bloqu\u00e9e'
+    'Bloqu\u00e9': 'T\u00e2che (bloqu\u00e9e)'
   };
 
   // Trello card badges accept named colors only — aligned with TIERS[].seg tints.
@@ -552,7 +552,7 @@
       if (tier === 'Important') base = 'T\u00e2che importante';
       else base = 'T\u00e2che ' + tier.charAt(0).toLowerCase() + tier.slice(1);
     }
-    if (base) return base + ' bloqu\u00e9e';
+    if (base) return base + ' (bloqu\u00e9e)';
     return TASK_BADGE_LABELS[BLOCKED_LABEL];
   }
 
@@ -568,8 +568,8 @@
 
   function formatBlockedBadgeText(display, reason) {
     var label = blockedTaskBadgeLabel(display);
-    if (reason) return BLOCKED_SYMBOL + ' ' + label + ' \u2014 ' + reason;
-    return BLOCKED_SYMBOL + ' ' + label;
+    if (reason) return label + ' \u2014 ' + reason;
+    return label;
   }
 
   function isDarkTheme() {
