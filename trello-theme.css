@@ -428,16 +428,19 @@ body.tp-page--priority {
 }
 
 .tp-priority-card-header {
+  flex-shrink: 0;
   text-align: center;
-  padding: 10px 12px 4px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--tp-border);
 }
 
 .tp-priority-card-name {
   margin: 0;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.4;
   color: var(--tp-text);
+  word-break: break-word;
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -446,6 +449,7 @@ body.tp-page--priority {
 
 .tp-priority-card-name.is-loading {
   font-weight: 400;
+  font-size: 15px;
   color: var(--tp-text-muted);
 }
 
@@ -540,7 +544,7 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .field-head {
-  gap: 4px 12px;
+  gap: 6px 10px;
 }
 
 .tp-page--priority .field-val {
@@ -599,11 +603,7 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .field {
-  gap: 3px;
-}
-
-.tp-page--priority .field-slider {
-  margin-top: 2px;
+  gap: 4px;
 }
 
 .tp-page--priority .variant-fields-section {

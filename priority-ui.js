@@ -1704,11 +1704,6 @@
     lbl.appendChild(lblIcon);
     lbl.appendChild(lblText);
 
-    var fieldHead = document.createElement('div');
-    fieldHead.className = 'field-head';
-    fieldHead.appendChild(lbl);
-    fieldHead.appendChild(descBtn);
-
     var sliderWrap = document.createElement('div');
     sliderWrap.className = 'field-slider';
 
@@ -1730,8 +1725,14 @@
     inputEl.addEventListener('change', handleRangeInput);
 
     sliderWrap.appendChild(inputEl);
+
+    var fieldHead = document.createElement('div');
+    fieldHead.className = 'field-head';
+    fieldHead.appendChild(lbl);
+    fieldHead.appendChild(sliderWrap);
+
     field.appendChild(fieldHead);
-    field.appendChild(sliderWrap);
+    field.appendChild(descBtn);
 
     el.appendChild(field);
 

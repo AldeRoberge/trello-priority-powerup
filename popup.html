@@ -39,14 +39,23 @@
       return saveChain;
     }
 
+    function resizePopup() {
+      if (typeof t.sizeTo === 'function') {
+        t.sizeTo(document.body);
+      }
+    }
+
     function setCardNameLabel(name) {
       var el = document.getElementById('cardName');
-      el.textContent = name || 'Carte';
+      var label = name || 'Carte';
+      el.textContent = label;
+      el.title = name ? name : '';
       el.classList.remove('is-loading');
+      resizePopup();
     }
 
     async function init() {
-      PriorityTrello.getCardName(t).then(setCardNameLabel, function () {
+      var cardNamePromise = PriorityTrello.getCardName(t).then(setCardNameLabel, function () {
         setCardNameLabel(null);
       });
 
@@ -74,10 +83,9 @@
         await saveState(variant.getState());
       }
 
+      await cardNamePromise;
       window.scrollTo(0, 0);
-      if (typeof t.sizeTo === 'function') {
-        return t.sizeTo(document.body);
-      }
+      resizePopup();
     }
 
     window.addEventListener('pagehide', function () {

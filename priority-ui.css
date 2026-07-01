@@ -189,15 +189,14 @@ body {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 2px;
+  gap: 4px;
   margin: 0 0 10px;
 }
 
 .field-head {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 6px 10px;
+  align-items: center;
+  gap: 8px 12px;
   min-width: 0;
 }
 
@@ -335,41 +334,28 @@ body {
   font-weight: 400;
   color: #94908A;
   background: none;
-  text-align: right;
+  text-align: left;
   cursor: pointer;
   transition: opacity .12s;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   overflow: hidden;
   line-height: 1.35;
-  min-height: calc(1.35em * 3);
+  min-height: calc(1.35em * 2);
   white-space: normal;
-  flex: 1 1 0;
+  width: 100%;
   min-width: 0;
-  max-width: 68%;
 }
 
 .field-desc.is-empty {
   visibility: hidden;
   pointer-events: none;
+  min-height: 0;
 }
 
 html[data-color-mode="light"] .field-desc {
   color: #576474;
-}
-
-@media (max-width: 320px) {
-  .field-head {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 2px;
-  }
-
-  .field-desc {
-    max-width: none;
-    text-align: left;
-  }
 }
 
 .field-desc:hover {
@@ -392,7 +378,8 @@ html[data-color-mode="light"] .field-desc {
 }
 
 .field-slider {
-  width: 100%;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 /* ── Range inputs ── */

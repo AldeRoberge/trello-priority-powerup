@@ -260,7 +260,11 @@
   async function getCardName(t) {
     try {
       var name = await cardFieldPromise(t, 'name');
+      if (isPowerUpRequestChain(name)) return null;
       if (typeof name === 'string' && name.trim()) return name.trim();
+      if (name && typeof name === 'object' && typeof name.name === 'string' && name.name.trim()) {
+        return name.name.trim();
+      }
       return null;
     } catch (err) {
       console.error('Priority card name failed', err);
