@@ -640,19 +640,6 @@ body.tp-page--priority {
   margin-top: 2px;
 }
 
-.tp-page--priority .variant-graphs-row > .calc-graph-panel {
-  padding-left: 0;
-  padding-right: 0;
-}
-
-.tp-page--priority .variant-graphs-row .calc-rsm-row {
-  max-width: none;
-}
-
-.tp-page--priority .variant-graphs-row .calc-rsm-chart {
-  max-width: none;
-}
-
 .tp-page--priority .help-modal-root {
   z-index: 1000;
   padding: 1.25rem 16px;

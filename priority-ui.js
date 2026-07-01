@@ -609,6 +609,26 @@
     return 9;
   }
 
+  // Help-modal level dots: low index → small, high index → large.
+  var HELP_LEVEL_DOT_MIN = 5;
+  var HELP_LEVEL_DOT_MAX = 12;
+
+  function helpLevelDotSizePx(level, rangeStart, rangeEnd) {
+    if (rangeEnd <= rangeStart) {
+      return (HELP_LEVEL_DOT_MIN + HELP_LEVEL_DOT_MAX) / 2;
+    }
+    var t = clamp((level - rangeStart) / (rangeEnd - rangeStart), 0, 1);
+    return HELP_LEVEL_DOT_MIN + t * (HELP_LEVEL_DOT_MAX - HELP_LEVEL_DOT_MIN);
+  }
+
+  function createHelpLevelDot(level, rangeStart, rangeEnd) {
+    var dot = document.createElement('span');
+    dot.className = 'help-modal-level-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    dot.style.setProperty('--help-level-dot-size', helpLevelDotSizePx(level, rangeStart, rangeEnd).toFixed(2) + 'px');
+    return dot;
+  }
+
   function tierBadgeDotChar(display, completed) {
     if (completed) return BADGE_DOT_COMPLETE;
     if (!display) return '\u25CF';
@@ -1840,6 +1860,7 @@
       if (!rowText && !entry.detail[i]) continue;
       var li = document.createElement('li');
       li.dataset.level = String(i);
+      li.appendChild(createHelpLevelDot(i, start, end));
       if (selectable) {
         li.className = 'is-selectable-row';
         var textEl = document.createElement('span');
@@ -1864,10 +1885,12 @@
           });
         })(i, textEl);
       } else {
-        li.innerHTML =
-          '<span class="help-modal-level-label">' + levelIconSvg(entry.icon[i]) +
-          '<span>' + escapeHtml(entry.short[i]) + '</span></span>' +
+        var content = document.createElement('span');
+        content.className = 'help-modal-level-content';
+        content.innerHTML =
+          '<span class="help-modal-level-label">' + escapeHtml(entry.short[i]) + '</span>' +
           '<span class="help-modal-level-text">' + escapeHtml(entry.detail[i]) + '</span>';
+        li.appendChild(content);
       }
       list.appendChild(li);
     }
@@ -2539,150 +2562,6 @@
           b.setAttribute('aria-checked', b.dataset.formula === currentKey ? 'true' : 'false');
         });
       }
-    };
-  }
-
-  function createEisenhowerMatrixPanel(config) {
-    var el = config.el;
-    var onQuadrantClick = config.onQuadrantClick || function () {};
-
-    var panel = document.createElement('div');
-    panel.className = 'calc-graph-panel eisenhower-panel';
-
-    var body = document.createElement('div');
-    body.className = 'calc-graph-body';
-
-    var graphSection = document.createElement('div');
-    graphSection.className = 'calc-graph-section eisenhower-graph-section';
-
-    var heading = document.createElement('div');
-    heading.className = 'calc-graph-heading';
-    heading.textContent = 'Matrice Eisenhower';
-    graphSection.appendChild(heading);
-
-    var matrixWrap = document.createElement('div');
-    matrixWrap.className = 'eisenhower-matrix-wrap';
-    matrixWrap.setAttribute('role', 'img');
-    matrixWrap.setAttribute('aria-label', 'Matrice Eisenhower. Urgence et impact');
-
-    var colLabels = document.createElement('div');
-    colLabels.className = 'eisenhower-col-labels';
-    colLabels.setAttribute('aria-hidden', 'true');
-    colLabels.innerHTML =
-      '<span></span>' +
-      '<span>Important</span>' +
-      '<span>Peu important</span>';
-    matrixWrap.appendChild(colLabels);
-
-    var chart = document.createElement('div');
-    chart.className = 'eisenhower-chart';
-
-    var grid = document.createElement('div');
-    grid.className = 'eisenhower-grid';
-    grid.setAttribute('role', 'group');
-    grid.setAttribute('aria-label', 'Quadrants Eisenhower');
-
-    var cellEls = {};
-    var rowLabels = ['Urgent', 'Pas urgent'];
-    var cellOrder = [
-      ['do', 'delegate'],
-      ['schedule', 'delete']
-    ];
-
-    cellOrder.forEach(function (row, rowIndex) {
-      var rowEl = document.createElement('div');
-      rowEl.className = 'eisenhower-row';
-
-      var rowLabel = document.createElement('span');
-      rowLabel.className = 'eisenhower-row-label';
-      rowLabel.textContent = rowLabels[rowIndex];
-      rowEl.appendChild(rowLabel);
-
-      row.forEach(function (quadrantId) {
-        var quadrant = eisenhowerQuadrantById(quadrantId);
-        if (!quadrant) return;
-        var qScore = quadrant.score != null ? quadrant.score : 5;
-        var qRgb = scoreToRgb(qScore);
-        var cell = document.createElement('button');
-        cell.type = 'button';
-        cell.className = 'eisenhower-cell';
-        cell.dataset.quadrant = quadrant.id;
-        cell.style.setProperty('--eq-color', 'rgb(' + qRgb.r + ', ' + qRgb.g + ', ' + qRgb.b + ')');
-        cell.style.setProperty('--eq-bg', scoreToRgba(qScore, SCORE_SURFACE_ALPHA));
-        cell.setAttribute('aria-label', quadrant.label + '. ' + quadrant.description);
-        cell.title = quadrant.description;
-
-        var cellLabel = document.createElement('span');
-        cellLabel.className = 'eisenhower-cell-label';
-        cellLabel.textContent = quadrant.label;
-        cell.appendChild(cellLabel);
-
-        var marker = document.createElement('span');
-        marker.className = 'eisenhower-marker';
-        marker.setAttribute('aria-hidden', 'true');
-        cell.appendChild(marker);
-
-        cell.addEventListener('click', function () {
-          onQuadrantClick(quadrant);
-        });
-
-        rowEl.appendChild(cell);
-        cellEls[quadrant.id] = { el: cell, marker: marker, score: qScore };
-      });
-
-      grid.appendChild(rowEl);
-    });
-
-    chart.appendChild(grid);
-    matrixWrap.appendChild(chart);
-
-    var axisLabelU = document.createElement('div');
-    axisLabelU.className = 'eisenhower-axis-label eisenhower-axis-label-x';
-    axisLabelU.textContent = 'Urgence';
-    matrixWrap.appendChild(axisLabelU);
-
-    graphSection.appendChild(matrixWrap);
-
-    var footnote = document.createElement('p');
-    footnote.className = 'eisenhower-footnote';
-    footnote.textContent =
-      'Seuils : urgence \u2265 ' + EISENHOWER_URGENCY_THRESHOLD + ', impact \u2265 ' + EISENHOWER_IMPACT_THRESHOLD + '.';
-    graphSection.appendChild(footnote);
-
-    body.appendChild(graphSection);
-    panel.appendChild(body);
-    el.appendChild(panel);
-
-    function paint(result, state) {
-      var U = state.urgency != null ? state.urgency : 0;
-      var I = state.impact != null ? state.impact : 0;
-      var quadrant = result && result.eisenhower
-        ? result.eisenhower
-        : eisenhowerQuadrantFor(U, I);
-      var activeId = quadrant ? quadrant.id : null;
-      var markerRgb = scoreToRgb(baselineScore(U, I, state.ease != null ? state.ease : 3));
-
-      Object.keys(cellEls).forEach(function (id) {
-        var cell = cellEls[id];
-        var isActive = id === activeId;
-        cell.el.classList.toggle('is-active', isActive);
-        cell.el.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-        if (isActive) {
-          var uNorm = clamp(U / 4, 0, 1);
-          var iNorm = clamp(I / 4, 0, 1);
-          cell.marker.style.left = (10 + iNorm * 80) + '%';
-          cell.marker.style.top = (10 + (1 - uNorm) * 80) + '%';
-          cell.marker.style.background = 'rgb(' + markerRgb.r + ', ' + markerRgb.g + ', ' + markerRgb.b + ')';
-          cell.marker.hidden = false;
-        } else {
-          cell.marker.hidden = true;
-        }
-      });
-    }
-
-    return {
-      el: panel,
-      paint: paint
     };
   }
 
@@ -3400,7 +3279,6 @@
     var enAttenteField;
     var heat;
     var calcGraph;
-    var eisenhowerMatrix;
     var formulaSwitcher;
     var sliderAnimFrame = null;
 
@@ -3527,7 +3405,6 @@
         card.dataset.tier = display.label;
         heat.paint(result, display);
         if (calcGraph) calcGraph.paint(result, state, display);
-        if (eisenhowerMatrix) eisenhowerMatrix.paint(result, state);
       } catch (err) {
         console.error('PriorityUI.mountVariant repaint failed', { id: variantId, error: err });
       }
@@ -3637,13 +3514,9 @@
       });
     });
 
-    var graphsRow = document.createElement('div');
-    graphsRow.className = 'variant-graphs-row';
-    fieldsSection.appendChild(graphsRow);
-
     try {
       calcGraph = createCalcGraphPanel({
-        el: graphsRow,
+        el: fieldsSection,
         fields: fields,
         onChange: function () {
           cancelSliderAnim();
@@ -3653,21 +3526,6 @@
       });
     } catch (err) {
       console.error('PriorityUI.createCalcGraphPanel failed', { id: variantId, error: err });
-    }
-
-    try {
-      eisenhowerMatrix = createEisenhowerMatrixPanel({
-        el: graphsRow,
-        onQuadrantClick: function (quadrant) {
-          if (!quadrant || !quadrant.preset) return;
-          animateFieldsTo({
-            urgency: quadrant.preset.urgency,
-            impact: quadrant.preset.impact
-          });
-        }
-      });
-    } catch (err) {
-      console.error('PriorityUI.createEisenhowerMatrixPanel failed', { id: variantId, error: err });
     }
 
     var blockedSection = document.createElement('div');
@@ -3801,7 +3659,6 @@
     createEnAttenteField: createEnAttenteField,
     createHeatPanel: createHeatPanel,
     createCalcGraphPanel: createCalcGraphPanel,
-    createEisenhowerMatrixPanel: createEisenhowerMatrixPanel,
     createFormulaSwitcher: createFormulaSwitcher,
     mountVariant: mountVariant,
     tierFor: tierFor,
