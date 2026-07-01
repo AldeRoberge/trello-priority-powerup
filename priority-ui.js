@@ -2276,6 +2276,34 @@
     scoreInfoWrap.appendChild(scoreInfoBtn);
     scoreInfoWrap.appendChild(scoreTooltip);
 
+    function isScoreTooltipVisible() {
+      return scoreInfoWrap.classList.contains('is-open')
+        || scoreInfoWrap.matches(':hover')
+        || scoreInfoWrap.contains(document.activeElement);
+    }
+
+    function positionScoreTooltip() {
+      var anchor = scoreInfoBtn.getBoundingClientRect();
+      var gap = 6;
+      var margin = 8;
+      var tipW = scoreTooltip.offsetWidth;
+      var tipH = scoreTooltip.offsetHeight;
+      var top = anchor.bottom + gap;
+      var left = anchor.right - tipW;
+
+      if (top + tipH > window.innerHeight - margin && anchor.top - gap - tipH >= margin) {
+        top = anchor.top - gap - tipH;
+      }
+      left = Math.max(margin, Math.min(left, window.innerWidth - tipW - margin));
+
+      scoreTooltip.style.left = left + 'px';
+      scoreTooltip.style.top = top + 'px';
+    }
+
+    function repositionScoreTooltipIfVisible() {
+      if (isScoreTooltipVisible()) positionScoreTooltip();
+    }
+
     function closeScoreTooltip() {
       scoreInfoWrap.classList.remove('is-open');
       scoreInfoBtn.setAttribute('aria-expanded', 'false');
@@ -2284,6 +2312,7 @@
     function openScoreTooltip() {
       scoreInfoWrap.classList.add('is-open');
       scoreInfoBtn.setAttribute('aria-expanded', 'true');
+      positionScoreTooltip();
     }
 
     function toggleScoreTooltip() {
@@ -2302,6 +2331,12 @@
         scoreInfoBtn.blur();
       }
     });
+
+    scoreInfoWrap.addEventListener('mouseenter', positionScoreTooltip);
+    scoreInfoWrap.addEventListener('focusin', positionScoreTooltip);
+
+    window.addEventListener('resize', repositionScoreTooltipIfVisible);
+    document.addEventListener('scroll', repositionScoreTooltipIfVisible, true);
 
     document.addEventListener('click', function (e) {
       if (!scoreInfoWrap.contains(e.target)) closeScoreTooltip();
@@ -2398,11 +2433,12 @@
       }
       var breakdown = formatScoreBreakdown(formulaKey, result);
       renderScoreBreakdownTooltip(breakdown, scoreTooltip);
-      scoreInfoBtn.title = breakdown.text;
+      scoreInfoBtn.removeAttribute('title');
       scoreInfoBtn.setAttribute(
         'aria-label',
         breakdown.short + '. ' + breakdown.lines.join('. ')
       );
+      repositionScoreTooltipIfVisible();
     }
 
     function paint(result, display) {

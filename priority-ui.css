@@ -1221,7 +1221,7 @@ body.help-modal-open {
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
-  cursor: help;
+  cursor: pointer;
   opacity: 0.62;
   transition: opacity 0.12s, background 0.12s;
 }
@@ -1238,10 +1238,10 @@ body.help-modal-open {
 }
 
 .heat-score-tooltip {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 12;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 200;
   min-width: 220px;
   max-width: min(300px, 78vw);
   padding: 10px 12px;
