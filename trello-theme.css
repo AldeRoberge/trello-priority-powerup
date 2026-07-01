@@ -640,22 +640,17 @@ body.tp-page--priority {
   margin-top: 2px;
 }
 
-.tp-page--priority .variant-fields-section > .calc-graph-panel {
+.tp-page--priority .variant-graphs-row > .calc-graph-panel {
   padding-left: 0;
   padding-right: 0;
 }
 
-.tp-page--priority .variant-fields-section > .eisenhower-panel {
-  padding-left: 0;
-  padding-right: 0;
+.tp-page--priority .variant-graphs-row .calc-rsm-row {
+  max-width: none;
 }
 
-.tp-page--priority .calc-rsm-row {
-  max-width: 260px;
-}
-
-.tp-page--priority .calc-rsm-chart {
-  max-width: 220px;
+.tp-page--priority .variant-graphs-row .calc-rsm-chart {
+  max-width: none;
 }
 
 .tp-page--priority .help-modal-root {

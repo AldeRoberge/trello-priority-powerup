@@ -2509,8 +2509,6 @@
   function createEisenhowerMatrixPanel(config) {
     var el = config.el;
     var onQuadrantClick = config.onQuadrantClick || function () {};
-    var getFormulaKey = config.getFormulaKey || function () { return 'baseline'; };
-    var onFormulaChange = config.onFormulaChange || function () {};
 
     var panel = document.createElement('div');
     panel.className = 'calc-graph-panel eisenhower-panel';
@@ -2521,48 +2519,27 @@
     var graphSection = document.createElement('div');
     graphSection.className = 'calc-graph-section eisenhower-graph-section';
 
-    var headingRow = document.createElement('div');
-    headingRow.className = 'eisenhower-heading-row';
-
     var heading = document.createElement('div');
-    heading.className = 'calc-graph-heading eisenhower-heading';
+    heading.className = 'calc-graph-heading';
     heading.textContent = 'Matrice Eisenhower';
-
-    var scoreToggle = document.createElement('button');
-    scoreToggle.type = 'button';
-    scoreToggle.className = 'eisenhower-score-toggle';
-    scoreToggle.textContent = 'Score actif';
-    scoreToggle.title = 'Utiliser la matrice Eisenhower pour le score et le badge';
-    scoreToggle.setAttribute('aria-pressed', 'false');
-
-    function syncScoreToggle() {
-      var active = getFormulaKey() === 'eisenhower';
-      scoreToggle.classList.toggle('is-active', active);
-      scoreToggle.setAttribute('aria-pressed', active ? 'true' : 'false');
-      scoreToggle.textContent = active ? 'Score actif' : 'Utiliser';
-    }
-
-    scoreToggle.addEventListener('click', function () {
-      var nextKey = getFormulaKey() === 'eisenhower' ? 'baseline' : 'eisenhower';
-      onFormulaChange(nextKey);
-      syncScoreToggle();
-    });
-
-    headingRow.appendChild(heading);
-    headingRow.appendChild(scoreToggle);
-    graphSection.appendChild(headingRow);
-    syncScoreToggle();
+    graphSection.appendChild(heading);
 
     var matrixWrap = document.createElement('div');
     matrixWrap.className = 'eisenhower-matrix-wrap';
+    matrixWrap.setAttribute('role', 'img');
+    matrixWrap.setAttribute('aria-label', 'Matrice Eisenhower. Urgence et impact');
 
     var colLabels = document.createElement('div');
     colLabels.className = 'eisenhower-col-labels';
+    colLabels.setAttribute('aria-hidden', 'true');
     colLabels.innerHTML =
       '<span></span>' +
       '<span>Important</span>' +
       '<span>Peu important</span>';
     matrixWrap.appendChild(colLabels);
+
+    var chart = document.createElement('div');
+    chart.className = 'eisenhower-chart';
 
     var grid = document.createElement('div');
     grid.className = 'eisenhower-grid';
@@ -2588,11 +2565,14 @@
       row.forEach(function (quadrantId) {
         var quadrant = eisenhowerQuadrantById(quadrantId);
         if (!quadrant) return;
+        var qScore = quadrant.score != null ? quadrant.score : 5;
+        var qRgb = scoreToRgb(qScore);
         var cell = document.createElement('button');
         cell.type = 'button';
         cell.className = 'eisenhower-cell';
         cell.dataset.quadrant = quadrant.id;
-        cell.style.setProperty('--eq-color', quadrant.seg);
+        cell.style.setProperty('--eq-color', 'rgb(' + qRgb.r + ', ' + qRgb.g + ', ' + qRgb.b + ')');
+        cell.style.setProperty('--eq-bg', scoreToRgba(qScore, SCORE_SURFACE_ALPHA));
         cell.setAttribute('aria-label', quadrant.label + '. ' + quadrant.description);
         cell.title = quadrant.description;
 
@@ -2611,13 +2591,20 @@
         });
 
         rowEl.appendChild(cell);
-        cellEls[quadrant.id] = { el: cell, marker: marker };
+        cellEls[quadrant.id] = { el: cell, marker: marker, score: qScore };
       });
 
       grid.appendChild(rowEl);
     });
 
-    matrixWrap.appendChild(grid);
+    chart.appendChild(grid);
+    matrixWrap.appendChild(chart);
+
+    var axisLabelU = document.createElement('div');
+    axisLabelU.className = 'eisenhower-axis-label eisenhower-axis-label-x';
+    axisLabelU.textContent = 'Urgence';
+    matrixWrap.appendChild(axisLabelU);
+
     graphSection.appendChild(matrixWrap);
 
     var footnote = document.createElement('p');
@@ -2637,6 +2624,7 @@
         ? result.eisenhower
         : eisenhowerQuadrantFor(U, I);
       var activeId = quadrant ? quadrant.id : null;
+      var markerRgb = scoreToRgb(baselineScore(U, I, state.ease != null ? state.ease : 3));
 
       Object.keys(cellEls).forEach(function (id) {
         var cell = cellEls[id];
@@ -2648,6 +2636,7 @@
           var iNorm = clamp(I / 4, 0, 1);
           cell.marker.style.left = (10 + iNorm * 80) + '%';
           cell.marker.style.top = (10 + (1 - uNorm) * 80) + '%';
+          cell.marker.style.background = 'rgb(' + markerRgb.r + ', ' + markerRgb.g + ', ' + markerRgb.b + ')';
           cell.marker.hidden = false;
         } else {
           cell.marker.hidden = true;
@@ -2657,8 +2646,7 @@
 
     return {
       el: panel,
-      paint: paint,
-      setFormulaActive: syncScoreToggle
+      paint: paint
     };
   }
 
@@ -2673,24 +2661,11 @@
     var PLOT_W = SVG_W - MARGIN.left - MARGIN.right;
     var PLOT_H = SVG_H - MARGIN.top - MARGIN.bottom;
     var CONTOUR_RES = 40;
-    var SURFACE_ALPHA = 0.78;
     var TIER_THRESHOLDS = [1.4, 2.9, 4.3, 5.8, 7.2, 8.6];
     var MARKER_CORE_R = 8;
     var MARKER_STROKE_W = 3;
     var MARKER_SHADOW_R = 9;
     var MARKER_HIT_R = 20;
-
-    var SCORE_COLOR_STOPS = [
-      { s: 0, r: 155, g: 152, b: 144 },
-      { s: 1.4, r: 90, g: 159, b: 212 },
-      { s: 2.9, r: 59, g: 169, b: 156 },
-      { s: 4.3, r: 110, g: 173, b: 58 },
-      { s: 5.8, r: 186, g: 117, b: 23 },
-      { s: 7.2, r: 216, g: 90, b: 48 },
-      { s: 8.6, r: 228, g: 82, b: 80 },
-      { s: 9.3, r: 226, g: 75, b: 74 },
-      { s: 10, r: 168, g: 42, b: 40 }
-    ];
 
     var lastScene = { U: 0, I: 0, F: 0, result: null, display: null };
     var draggingMarker = false;
@@ -2749,27 +2724,6 @@
       return Math.abs(F - Math.round(F)) < 0.01 ? String(Math.round(F)) : F.toFixed(2);
     }
 
-    function scoreToRgb(score) {
-      score = Math.max(0, Math.min(10, score));
-      var hi = SCORE_COLOR_STOPS.length - 1;
-      for (var k = 0; k < SCORE_COLOR_STOPS.length - 1; k++) {
-        if (score <= SCORE_COLOR_STOPS[k + 1].s) {
-          hi = k + 1;
-          break;
-        }
-      }
-      var lo = hi - 1;
-      var a = SCORE_COLOR_STOPS[lo];
-      var b = SCORE_COLOR_STOPS[hi];
-      var span = b.s - a.s;
-      var t = span > 1e-9 ? (score - a.s) / span : 0;
-      return {
-        r: Math.round(a.r + (b.r - a.r) * t),
-        g: Math.round(a.g + (b.g - a.g) * t),
-        b: Math.round(a.b + (b.b - a.b) * t)
-      };
-    }
-
     var panel = document.createElement('div');
     panel.className = 'calc-graph-panel';
 
@@ -2778,6 +2732,11 @@
 
     var graphSection = document.createElement('div');
     graphSection.className = 'calc-graph-section calc-rsm-section';
+
+    var graphHeading = document.createElement('div');
+    graphHeading.className = 'calc-graph-heading';
+    graphHeading.textContent = 'Score composite';
+    graphSection.appendChild(graphHeading);
 
     var rsmWrap = document.createElement('div');
     rsmWrap.className = 'calc-rsm-wrap';
@@ -3053,7 +3012,7 @@
           data[px] = rgb.r;
           data[px + 1] = rgb.g;
           data[px + 2] = rgb.b;
-          data[px + 3] = Math.round(SURFACE_ALPHA * 255);
+          data[px + 3] = Math.round(SCORE_SURFACE_ALPHA * 255);
         }
       }
       surfaceCtx.putImageData(img, 0, 0);
@@ -3419,9 +3378,6 @@
         heat.setFormulaKey(formulaKey);
         heat.setHideSegments(formulaKey === 'eisenhower');
       }
-      if (eisenhowerMatrix && eisenhowerMatrix.setFormulaActive) {
-        eisenhowerMatrix.setFormulaActive();
-      }
     }
 
     function persistFormulaChange(nextKey) {
@@ -3645,9 +3601,13 @@
       });
     });
 
+    var graphsRow = document.createElement('div');
+    graphsRow.className = 'variant-graphs-row';
+    fieldsSection.appendChild(graphsRow);
+
     try {
       calcGraph = createCalcGraphPanel({
-        el: fieldsSection,
+        el: graphsRow,
         fields: fields,
         onChange: function () {
           cancelSliderAnim();
@@ -3661,9 +3621,7 @@
 
     try {
       eisenhowerMatrix = createEisenhowerMatrixPanel({
-        el: fieldsSection,
-        getFormulaKey: function () { return formulaKey; },
-        onFormulaChange: persistFormulaChange,
+        el: graphsRow,
         onQuadrantClick: function (quadrant) {
           if (!quadrant || !quadrant.preset) return;
           animateFieldsTo({
@@ -3717,9 +3675,6 @@
       setFormulaKey: function (key) {
         applyFormulaMode(key);
         if (formulaSwitcher) formulaSwitcher.setFormulaKey(key);
-        if (eisenhowerMatrix && eisenhowerMatrix.setFormulaActive) {
-          eisenhowerMatrix.setFormulaActive();
-        }
         saveStoredFormulaKey(key);
         repaint();
       },
