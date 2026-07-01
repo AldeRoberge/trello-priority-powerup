@@ -14,9 +14,6 @@
   <script src="./priority-trello.js"></script>
 </head>
 <body class="tp-page tp-page--priority">
-  <header class="tp-priority-card-header">
-    <p class="tp-priority-card-name is-loading" id="cardName" aria-live="polite">Chargement…</p>
-  </header>
   <div class="compare-page">
     <div class="compare-grid" id="priorityMount"></div>
   </div>
@@ -58,20 +55,6 @@
     }
 
     async function init() {
-      if (typeof t.arg === 'function') {
-        var argName = t.arg('cardName');
-        if (argName) setCardNameLabel(argName);
-      }
-
-      var cardNameEl = document.getElementById('cardName');
-      var cardNamePromise = PriorityTrello.getCardName(t).then(function (resolved) {
-        if (resolved) setCardNameLabel(resolved);
-      }, function () {
-        if (cardNameEl && cardNameEl.classList.contains('is-loading')) {
-          setCardNameLabel(null);
-        }
-      });
-
       const inputs = await PriorityTrello.clearBlockedIfComplete(t);
       await PriorityTrello.ensureBoardPriorityContext(t);
       const boardFormula = PriorityTrello.getCachedBoardFormulaKey
@@ -83,6 +66,7 @@
 
       variant = PriorityUI.mountVariant(mountEl, {
         id: 'card',
+        showCardHeader: true,
         formula: boardFormula,
         defaults: initialDefaults,
         dimensions: PriorityTrello.PRIORITY_DIMENSIONS,
@@ -97,6 +81,20 @@
             console.error('Priority formula save failed', err);
           });
         },
+      });
+
+      if (typeof t.arg === 'function') {
+        var argName = t.arg('cardName');
+        if (argName) setCardNameLabel(argName);
+      }
+
+      var cardNameEl = document.getElementById('cardName');
+      var cardNamePromise = PriorityTrello.getCardName(t).then(function (resolved) {
+        if (resolved) setCardNameLabel(resolved);
+      }, function () {
+        if (cardNameEl && cardNameEl.classList.contains('is-loading')) {
+          setCardNameLabel(null);
+        }
       });
 
       if (!hasSavedPriority) {

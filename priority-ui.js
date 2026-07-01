@@ -1313,66 +1313,205 @@
     return Math.abs(n - Math.round(n)) < 0.01 ? String(Math.round(n)) : n.toFixed(1);
   }
 
-  function breakdownFromLines(lines, shortLabel) {
+  function breakdownRowTerm(label, level, value, detail, textValue) {
     return {
+      kind: 'term',
+      label: label,
+      level: level,
+      value: value,
+      detail: detail || null,
+      textValue: !!textValue
+    };
+  }
+
+  function breakdownRowSub(text) {
+    return { kind: 'sub', text: text };
+  }
+
+  function breakdownRowInfo(label, value) {
+    return { kind: 'info', label: label, value: value };
+  }
+
+  function breakdownRowTotal(score) {
+    return { kind: 'total', value: formatScore(score) };
+  }
+
+  function breakdownRowToLine(row) {
+    if (row.kind === 'term') {
+      var line = row.label + ' (' + row.level + ')';
+      if (row.detail) line += ' \u2192 ' + row.detail + ' ' + row.value;
+      else line += ' \u2192 ' + row.value;
+      return line;
+    }
+    if (row.kind === 'sub') return row.text;
+    if (row.kind === 'info') return row.label + ' : ' + row.value;
+    if (row.kind === 'total') return '= ' + row.value + ' / 10';
+    return '';
+  }
+
+  function breakdownFromRows(rows, shortLabel) {
+    var lines = rows.map(breakdownRowToLine).filter(Boolean);
+    return {
+      rows: rows,
       lines: lines,
       text: lines.join('\n'),
       short: shortLabel || 'D\u00e9tail du score'
     };
   }
 
+  function renderScoreBreakdownTooltip(breakdown, container) {
+    container.replaceChildren();
+    var wrap = document.createElement('div');
+    wrap.className = 'heat-score-tooltip-rows';
+
+    breakdown.rows.forEach(function (row) {
+      if (row.kind === 'term') {
+        var term = document.createElement('div');
+        term.className = 'heat-score-tooltip-term';
+
+        var main = document.createElement('div');
+        main.className = 'heat-score-tooltip-term-main';
+        var label = document.createElement('span');
+        label.className = 'heat-score-tooltip-label';
+        label.textContent = row.label;
+        var level = document.createElement('span');
+        level.className = 'heat-score-tooltip-level';
+        level.textContent = row.level;
+        main.appendChild(label);
+        main.appendChild(level);
+
+        var contrib = document.createElement('div');
+        contrib.className = 'heat-score-tooltip-term-contrib';
+        if (row.detail) {
+          var detail = document.createElement('span');
+          detail.className = 'heat-score-tooltip-detail';
+          detail.textContent = row.detail;
+          contrib.appendChild(detail);
+        }
+        var value = document.createElement('span');
+        value.className = row.textValue
+          ? 'heat-score-tooltip-status'
+          : 'heat-score-tooltip-value';
+        value.textContent = row.value;
+        contrib.appendChild(value);
+
+        term.appendChild(main);
+        term.appendChild(contrib);
+        wrap.appendChild(term);
+        return;
+      }
+
+      if (row.kind === 'sub') {
+        var sub = document.createElement('div');
+        sub.className = 'heat-score-tooltip-sub';
+        sub.textContent = row.text;
+        wrap.appendChild(sub);
+        return;
+      }
+
+      if (row.kind === 'info') {
+        var info = document.createElement('div');
+        info.className = 'heat-score-tooltip-info';
+        var infoLabel = document.createElement('span');
+        infoLabel.className = 'heat-score-tooltip-info-label';
+        infoLabel.textContent = row.label;
+        var infoValue = document.createElement('span');
+        infoValue.className = 'heat-score-tooltip-info-value';
+        infoValue.textContent = row.value;
+        info.appendChild(infoLabel);
+        info.appendChild(infoValue);
+        wrap.appendChild(info);
+        return;
+      }
+
+      if (row.kind === 'total') {
+        var total = document.createElement('div');
+        total.className = 'heat-score-tooltip-total';
+        var totalValue = document.createElement('span');
+        totalValue.className = 'heat-score-tooltip-total-value';
+        totalValue.textContent = row.value;
+        var totalMax = document.createElement('span');
+        totalMax.className = 'heat-score-tooltip-total-max';
+        totalMax.textContent = '/ 10';
+        total.appendChild(totalValue);
+        total.appendChild(totalMax);
+        wrap.appendChild(total);
+      }
+    });
+
+    container.appendChild(wrap);
+  }
+
   function formatBaselineBreakdown(result) {
     var t = result.terms;
-    var lines = [
-      'Urgence (' + formatSliderLevel(t.U) + ') \u2192 pression ' + t.pressure.toFixed(1),
-      'Impact (' + formatSliderLevel(t.I) + ') \u2192 ' + t.impactCore.toFixed(1)
+    var rows = [
+      breakdownRowTerm('Urgence', formatSliderLevel(t.U), t.pressure.toFixed(1), 'Pression'),
+      breakdownRowTerm('Impact', formatSliderLevel(t.I), t.impactCore.toFixed(1))
     ];
     if (t.hardFactor != null && t.hardFactor < 0.999) {
-      lines[1] += ' (p\u00e9nalit\u00e9 effort \u00d7' + t.hardFactor.toFixed(2) + ')';
+      rows.push(breakdownRowSub('P\u00e9nalit\u00e9 effort \u00d7' + t.hardFactor.toFixed(2)));
     }
-    var effortLine = 'Facilité (' + formatSliderLevel(t.F) + ') \u2192 ' + t.easeTerm.toFixed(1);
+    rows.push(breakdownRowTerm('Facilit\u00e9', formatSliderLevel(t.F), t.easeTerm.toFixed(1)));
     if (t.dampen > 0.01) {
-      effortLine += ' (att\u00e9n. ' + (t.dampen * 100).toFixed(0) + ' %)';
+      rows.push(breakdownRowSub('Att\u00e9nuation ' + (t.dampen * 100).toFixed(0) + ' %'));
     }
     if (t.easeMul != null && Math.abs(t.easeMul - 1) > 0.01) {
-      effortLine += ' (\u00d7' + t.easeMul.toFixed(2) + ' noyau)';
+      rows.push(breakdownRowSub('Multiplicateur noyau \u00d7' + t.easeMul.toFixed(2)));
     }
-    lines.push(effortLine);
-    lines.push('= ' + formatScore(result.score) + ' / 10');
-    return breakdownFromLines(lines, 'Comment ce score est calcul\u00e9');
+    rows.push(breakdownRowTotal(result.score));
+    return breakdownFromRows(rows, 'Comment ce score est calcul\u00e9');
   }
 
   function formatEisenhowerBreakdown(result) {
     var t = result.terms;
     var quadrant = result.eisenhower || eisenhowerQuadrantById(t.quadrantId);
-    var lines = [
-      'Urgence (' + formatSliderLevel(t.U) + ') \u2192 ' + (t.urgent ? 'urgent' : 'pas urgent') +
-        ' (seuil \u2265 ' + EISENHOWER_URGENCY_THRESHOLD + ')',
-      'Impact (' + formatSliderLevel(t.I) + ') \u2192 ' + (t.important ? 'important' : 'peu important') +
-        ' (seuil \u2265 ' + EISENHOWER_IMPACT_THRESHOLD + ')',
-      'Quadrant : ' + (quadrant ? quadrant.label : ''),
-      '= ' + formatScore(result.score) + ' / 10'
-    ];
-    return breakdownFromLines(lines, 'Matrice Eisenhower');
+    return breakdownFromRows([
+      breakdownRowTerm(
+        'Urgence',
+        formatSliderLevel(t.U),
+        t.urgent ? 'Urgent' : 'Pas urgent',
+        null,
+        true
+      ),
+      breakdownRowSub('Seuil urgent \u2265 ' + EISENHOWER_URGENCY_THRESHOLD),
+      breakdownRowTerm(
+        'Impact',
+        formatSliderLevel(t.I),
+        t.important ? 'Important' : 'Peu important',
+        null,
+        true
+      ),
+      breakdownRowSub('Seuil important \u2265 ' + EISENHOWER_IMPACT_THRESHOLD),
+      breakdownRowInfo('Quadrant', quadrant ? quadrant.label : ''),
+      breakdownRowTotal(result.score)
+    ], 'Matrice Eisenhower');
   }
 
   function formatWSJFBreakdown(result) {
     var t = result.terms;
-    return breakdownFromLines([
-      'Urgence (' + formatSliderLevel(t.U) + ') \u2192 pression ' + t.pressure.toFixed(1),
-      'Facilité (' + formatSliderLevel(t.F) + ') \u2192 taille ' + t.jobSize.toFixed(0),
-      'Pression \u00f7 taille \u00d7 ' + WSJF_SCALE.toFixed(2),
-      '= ' + formatScore(result.score) + ' / 10'
+    return breakdownFromRows([
+      breakdownRowTerm('Urgence', formatSliderLevel(t.U), t.pressure.toFixed(1), 'Pression'),
+      breakdownRowTerm('Facilit\u00e9', formatSliderLevel(t.F), t.jobSize.toFixed(0), 'Taille'),
+      breakdownRowInfo(
+        'Calcul',
+        t.pressure.toFixed(1) + ' \u00f7 ' + t.jobSize.toFixed(0) + ' \u00d7 ' + WSJF_SCALE.toFixed(2)
+      ),
+      breakdownRowTotal(result.score)
     ]);
   }
 
   function formatValueEffortBreakdown(result) {
     var t = result.terms;
-    return breakdownFromLines([
-      'Impact (' + formatSliderLevel(t.I) + ') \u00d7 Urgence (' + formatSliderLevel(t.U) + ')',
-      'Facilité (' + formatSliderLevel(t.F) + ') \u2192 taille ' + t.jobSize.toFixed(0),
-      '(Impact \u00d7 Urgence\u00f76) \u00f7 facilit\u00e9 \u00d7 ' + VALUE_EFFORT_SCALE,
-      '= ' + formatScore(result.score) + ' / 10'
+    return breakdownFromRows([
+      breakdownRowInfo('Impact', formatSliderLevel(t.I)),
+      breakdownRowInfo('Urgence', formatSliderLevel(t.U)),
+      breakdownRowTerm('Facilit\u00e9', formatSliderLevel(t.F), t.jobSize.toFixed(0), 'Taille'),
+      breakdownRowInfo(
+        'Calcul',
+        '(' + t.I + ' \u00d7 ' + t.urgencyNorm.toFixed(2) + ') \u00f7 ' + t.jobSize.toFixed(0) +
+          ' \u00d7 ' + VALUE_EFFORT_SCALE
+      ),
+      breakdownRowTotal(result.score)
     ]);
   }
 
@@ -2213,13 +2352,7 @@
         return;
       }
       var breakdown = formatScoreBreakdown(formulaKey, result);
-      scoreTooltip.replaceChildren();
-      breakdown.lines.forEach(function (line) {
-        var row = document.createElement('div');
-        row.className = 'heat-score-tooltip-line';
-        row.textContent = line;
-        scoreTooltip.appendChild(row);
-      });
+      renderScoreBreakdownTooltip(breakdown, scoreTooltip);
       scoreInfoBtn.title = breakdown.text;
       scoreInfoBtn.setAttribute(
         'aria-label',
@@ -2331,14 +2464,49 @@
   function createEisenhowerMatrixPanel(config) {
     var el = config.el;
     var onQuadrantClick = config.onQuadrantClick || function () {};
+    var getFormulaKey = config.getFormulaKey || function () { return 'baseline'; };
+    var onFormulaChange = config.onFormulaChange || function () {};
 
     var panel = document.createElement('div');
-    panel.className = 'eisenhower-panel';
+    panel.className = 'calc-graph-panel eisenhower-panel';
+
+    var body = document.createElement('div');
+    body.className = 'calc-graph-body';
+
+    var graphSection = document.createElement('div');
+    graphSection.className = 'calc-graph-section eisenhower-graph-section';
+
+    var headingRow = document.createElement('div');
+    headingRow.className = 'eisenhower-heading-row';
 
     var heading = document.createElement('div');
-    heading.className = 'eisenhower-heading';
+    heading.className = 'calc-graph-heading eisenhower-heading';
     heading.textContent = 'Matrice Eisenhower';
-    panel.appendChild(heading);
+
+    var scoreToggle = document.createElement('button');
+    scoreToggle.type = 'button';
+    scoreToggle.className = 'eisenhower-score-toggle';
+    scoreToggle.textContent = 'Score actif';
+    scoreToggle.title = 'Utiliser la matrice Eisenhower pour le score et le badge';
+    scoreToggle.setAttribute('aria-pressed', 'false');
+
+    function syncScoreToggle() {
+      var active = getFormulaKey() === 'eisenhower';
+      scoreToggle.classList.toggle('is-active', active);
+      scoreToggle.setAttribute('aria-pressed', active ? 'true' : 'false');
+      scoreToggle.textContent = active ? 'Score actif' : 'Utiliser';
+    }
+
+    scoreToggle.addEventListener('click', function () {
+      var nextKey = getFormulaKey() === 'eisenhower' ? 'baseline' : 'eisenhower';
+      onFormulaChange(nextKey);
+      syncScoreToggle();
+    });
+
+    headingRow.appendChild(heading);
+    headingRow.appendChild(scoreToggle);
+    graphSection.appendChild(headingRow);
+    syncScoreToggle();
 
     var matrixWrap = document.createElement('div');
     matrixWrap.className = 'eisenhower-matrix-wrap';
@@ -2405,14 +2573,16 @@
     });
 
     matrixWrap.appendChild(grid);
-    panel.appendChild(matrixWrap);
+    graphSection.appendChild(matrixWrap);
 
     var footnote = document.createElement('p');
     footnote.className = 'eisenhower-footnote';
     footnote.textContent =
       'Seuils : urgence \u2265 ' + EISENHOWER_URGENCY_THRESHOLD + ', impact \u2265 ' + EISENHOWER_IMPACT_THRESHOLD + '.';
-    panel.appendChild(footnote);
+    graphSection.appendChild(footnote);
 
+    body.appendChild(graphSection);
+    panel.appendChild(body);
     el.appendChild(panel);
 
     function paint(result, state) {
@@ -2442,7 +2612,8 @@
 
     return {
       el: panel,
-      paint: paint
+      paint: paint,
+      setFormulaActive: syncScoreToggle
     };
   }
 
@@ -3203,10 +3374,18 @@
         heat.setFormulaKey(formulaKey);
         heat.setHideSegments(formulaKey === 'eisenhower');
       }
-      if (calcGraph && calcGraph.el) calcGraph.el.hidden = formulaKey !== 'baseline';
-      if (eisenhowerMatrix && eisenhowerMatrix.el) {
-        eisenhowerMatrix.el.hidden = formulaKey !== 'eisenhower';
+      if (eisenhowerMatrix && eisenhowerMatrix.setFormulaActive) {
+        eisenhowerMatrix.setFormulaActive();
       }
+    }
+
+    function persistFormulaChange(nextKey) {
+      applyFormulaMode(nextKey);
+      saveStoredFormulaKey(nextKey);
+      if (typeof variantConfig.onFormulaChange === 'function') {
+        variantConfig.onFormulaChange(nextKey);
+      }
+      repaint();
     }
 
     var defaultState = {};
@@ -3329,19 +3508,24 @@
       persistSliderState();
     }
 
-    if (variantConfig.showFormulaSwitcher !== false) {
+    if (variantConfig.showFormulaSwitcher === true) {
       formulaSwitcher = createFormulaSwitcher({
         el: card,
         formulaKey: formulaKey,
-        onChange: function (nextKey) {
-          applyFormulaMode(nextKey);
-          saveStoredFormulaKey(nextKey);
-          if (typeof variantConfig.onFormulaChange === 'function') {
-            variantConfig.onFormulaChange(nextKey);
-          }
-          repaint();
-        }
+        onChange: persistFormulaChange
       });
+    }
+
+    if (variantConfig.showCardHeader === true) {
+      var cardHeader = document.createElement('header');
+      cardHeader.className = 'tp-priority-card-header';
+      var cardNameLabel = document.createElement('p');
+      cardNameLabel.className = 'tp-priority-card-name is-loading';
+      cardNameLabel.id = 'cardName';
+      cardNameLabel.setAttribute('aria-live', 'polite');
+      cardNameLabel.textContent = 'Chargement\u2026';
+      cardHeader.appendChild(cardNameLabel);
+      card.appendChild(cardHeader);
     }
 
     heat = createHeatPanel({
@@ -3426,7 +3610,6 @@
           persistSliderState();
         }
       });
-      calcGraph.el.hidden = formulaKey !== 'baseline';
     } catch (err) {
       console.error('PriorityUI.createCalcGraphPanel failed', { id: variantId, error: err });
     }
@@ -3434,6 +3617,8 @@
     try {
       eisenhowerMatrix = createEisenhowerMatrixPanel({
         el: fieldsSection,
+        getFormulaKey: function () { return formulaKey; },
+        onFormulaChange: persistFormulaChange,
         onQuadrantClick: function (quadrant) {
           if (!quadrant || !quadrant.preset) return;
           animateFieldsTo({
@@ -3442,7 +3627,6 @@
           });
         }
       });
-      eisenhowerMatrix.el.hidden = formulaKey !== 'eisenhower';
     } catch (err) {
       console.error('PriorityUI.createEisenhowerMatrixPanel failed', { id: variantId, error: err });
     }
@@ -3488,6 +3672,9 @@
       setFormulaKey: function (key) {
         applyFormulaMode(key);
         if (formulaSwitcher) formulaSwitcher.setFormulaKey(key);
+        if (eisenhowerMatrix && eisenhowerMatrix.setFormulaActive) {
+          eisenhowerMatrix.setFormulaActive();
+        }
         saveStoredFormulaKey(key);
         repaint();
       },

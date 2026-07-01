@@ -21,6 +21,21 @@ function check(name, ok) {
   console.log((ok ? 'OK' : 'FAIL') + ' ' + name);
 }
 
+[
+  'initIframePage',
+  'saveCardInputs',
+  'getCardName',
+  'clearBlockedIfComplete',
+  'ensureBoardPriorityContext',
+  'getCachedBoardFormulaKey',
+  'getBoardFormula',
+  'saveBoardFormula',
+].forEach(function (name) {
+  check('popup export ' + name, typeof PT[name] === 'function');
+});
+check('popup export IMPORTANT_INPUTS', PT.IMPORTANT_INPUTS && typeof PT.IMPORTANT_INPUTS === 'object');
+check('popup export PRIORITY_DIMENSIONS', Array.isArray(PT.PRIORITY_DIMENSIONS));
+
 var urgentDisplay = { tierLabel: 'Urgent', label: 'Urgent', tierI: 1 };
 var prioritaireDisplay = { tierLabel: 'Prioritaire', label: 'Prioritaire', tierI: 2 };
 var importantDisplay = { tierLabel: 'Important', label: 'Important', tierI: 3 };
