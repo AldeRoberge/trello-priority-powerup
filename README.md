@@ -106,19 +106,37 @@ En production, le workflow `.github/workflows/static.yml` horodate `build-info.j
 
 Dépannage (déploiement bloqué, source Pages) : [.github/DEPLOYMENT.md](.github/DEPLOYMENT.md).
 
-### Enregistrer le Power-Up
+### Configuration admin Trello
 
-1. [trello.com/power-ups/admin](https://trello.com/power-ups/admin) → **Create new Power-Up** (ou ouvrir le Power-Up existant)
-2. **Iframe connector URL** (onglet principal du Power-Up) :
-   `https://VOTRE-UTILISATEUR.github.io/trello-priority-powerup/index.html`
-3. **Capabilities** (onglet *Capabilities* / *Capacités*) — activer exactement :
-   - `card-badges`
-   - `card-detail-badges`
-   - `board-buttons`
-   - `list-sorters` *(requis pour **Trier par… → Priorité** sur une colonne)*
-   - `on-enable` *(modal d'accueil à l'activation)*
-   - Ne **pas** activer `card-buttons` (non utilisé ; le connecteur renvoie `[]` si activé par erreur)
-4. Enregistrer le Power-Up, attendre la fin du déploiement GitHub Pages, puis **retirer et réajouter** le Power-Up sur chaque tableau concerné (Trello ne recharge pas toujours les nouvelles capacités sur un tableau déjà ouvert)
+Après le déploiement GitHub Pages, enregistrez ou mettez à jour le Power-Up sur [trello.com/power-ups/admin](https://trello.com/power-ups/admin).
+
+#### Étapes
+
+1. **Create new Power-Up** (ou ouvrir le Power-Up existant).
+2. Onglet **Basic information** / informations principales :
+   - **Iframe connector URL** : `https://VOTRE-UTILISATEUR.github.io/trello-priority-powerup/index.html`  
+     Doit pointer vers `index.html` à la racine du site déployé (connecteur chargé par Trello dans une iframe).
+3. Onglet **Capabilities** / **Capacités** — cocher **uniquement** les cinq capacités listées ci-dessous (tableau).  
+   Ne **pas** activer `card-buttons` ni d'autres capacités non implémentées dans `index.html`.
+4. Onglet **API Key** — **Allowed origins** : *non requis* pour ce Power-Up (pas de `t.authorize`, pas d'appels REST/OAuth ; seulement `t.get` / `t.set` et `t.signUrl` pour des fichiers statiques du même site).
+5. Enregistrer, attendre la fin du déploiement GitHub Pages si l'URL du connecteur vient de changer.
+6. Sur chaque tableau : **retirer et réajouter** le Power-Up (Trello ne recharge pas toujours les capacités sur un tableau déjà ouvert).
+
+Le connecteur enregistre six clés dans `TrelloPowerUp.initialize()` ; cinq doivent être **activées** dans l'admin, une doit rester **désactivée** :
+
+| Capacité | Admin | Rôle dans ce Power-Up | Page / UI |
+|----------|:-----:|----------------------|-----------|
+| `card-badges` | **Oui** | Badge dynamique sur la **face** de la carte (pastille de palier + libellé, ex. tâche Critique ou complétée) ; rafraîchissement ~10 s | — |
+| `card-detail-badges` | **Oui** | Badge **Priorité** au dos de la carte ; clic ouvre le modal d'édition | `popup.html` (modal « Définir la priorité ») |
+| `board-buttons` | **Oui** | Bouton de tableau **Paramètres de priorité** | `settings.html` (popup) |
+| `list-sorters` | **Oui** | Entrée **Priorité** dans le menu `…` d'une liste → **Trier par…** (Critique en haut, sans priorité en bas) | — |
+| `on-enable` | **Oui** | Modal d'accueil à l'**activation** du Power-Up sur un tableau | `welcome.html` |
+| `card-buttons` | **Non** | Non utilisé — la priorité s'ouvre via `card-detail-badges`, pas un bouton sur la face de carte. Le connecteur renvoie `[]` si la capacité est cochée par erreur (évite une erreur Trello) | — |
+
+**À activer (5)** : `card-badges`, `card-detail-badges`, `board-buttons`, `list-sorters`, `on-enable`.  
+**À ne pas activer** : `card-buttons` (et toute autre capacité absente du tableau ci-dessus).
+
+Dépannage tri / capacités : voir [Trier une colonne par priorité](#trier-une-colonne-par-priorité) et [« Priorité » n'apparaît pas dans *Trier par…*](#priorité-napparaît-pas-dans-trier-par).
 
 ---
 

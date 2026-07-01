@@ -237,7 +237,7 @@
       return tierBadgeDot(display, true) + ' ' + formatCompletedBadgeLabel(incompleteBadgeLabel(display));
     }
     if (display.blocked) {
-      return formatBlockedBoardBadgeText(display);
+      return tierBadgeDot(display, false) + ' ' + formatBlockedBoardBadgeText(display);
     }
     return tierBadgeDot(display, false) + ' ' + incompleteBadgeLabel(display);
   }
