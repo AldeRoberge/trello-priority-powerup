@@ -901,6 +901,108 @@ body.help-modal-open {
   overflow: hidden;
 }
 
+.heat-badge-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.heat-badge-meta .heat-badge-label {
+  grid-column: auto;
+  grid-row: auto;
+  flex: 1 1 auto;
+}
+
+.heat-score-info-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.heat-score-info-wrap[hidden] {
+  display: none;
+}
+
+.heat-score-info {
+  margin: 0;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: help;
+  opacity: 0.62;
+  transition: opacity 0.12s, background 0.12s;
+}
+
+.heat-score-info:hover,
+.heat-score-info:focus-visible {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.heat-score-info:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--surface-2, #fff), 0 0 0 4px var(--focus-ring-strong, #0c66e4);
+}
+
+.heat-score-tooltip {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 12;
+  min-width: 200px;
+  max-width: min(280px, 72vw);
+  padding: 8px 10px;
+  border-radius: var(--radius, 8px);
+  border: 1px solid var(--border, #dfe1e6);
+  background: var(--surface-1, #fff);
+  color: var(--text-primary, #172b4d);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  white-space: normal;
+  text-align: left;
+  box-shadow: 0 4px 16px rgba(9, 30, 66, 0.18);
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s, visibility 0.12s;
+}
+
+.heat-score-tooltip-line + .heat-score-tooltip-line {
+  margin-top: 2px;
+}
+
+.heat-score-tooltip-line:last-child {
+  margin-top: 4px;
+  font-weight: 600;
+}
+
+.heat-score-info-wrap:hover .heat-score-tooltip,
+.heat-score-info-wrap:focus-within .heat-score-tooltip,
+.heat-score-info-wrap.is-open .heat-score-tooltip {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+html[data-color-mode="dark"] .heat-score-tooltip {
+  background: var(--surface-2, #22272b);
+  border-color: var(--border, #3d474f);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
 .heat-badge.is-inutile .heat-badge-num,
 .heat-badge.is-inutile .heat-badge-label {
   opacity: 0.82;

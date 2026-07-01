@@ -1172,6 +1172,82 @@
     );
   }
 
+  function formatSliderLevel(n) {
+    return Math.abs(n - Math.round(n)) < 0.01 ? String(Math.round(n)) : n.toFixed(1);
+  }
+
+  function breakdownFromLines(lines, shortLabel) {
+    return {
+      lines: lines,
+      text: lines.join('\n'),
+      short: shortLabel || 'D\u00e9tail du score'
+    };
+  }
+
+  function formatBaselineBreakdown(result) {
+    var t = result.terms;
+    var lines = [
+      'Urgence (' + formatSliderLevel(t.U) + ') \u2192 pression ' + t.pressure.toFixed(1),
+      'Impact (' + formatSliderLevel(t.I) + ') \u2192 ' + t.impactCore.toFixed(1)
+    ];
+    if (t.hardFactor != null && t.hardFactor < 0.999) {
+      lines[1] += ' (p\u00e9nalit\u00e9 effort \u00d7' + t.hardFactor.toFixed(2) + ')';
+    }
+    var effortLine = 'Effort (' + formatSliderLevel(t.F) + ') \u2192 ' + t.easeTerm.toFixed(1);
+    if (t.dampen > 0.01) {
+      effortLine += ' (att\u00e9n. ' + (t.dampen * 100).toFixed(0) + ' %)';
+    }
+    if (t.easeMul != null && Math.abs(t.easeMul - 1) > 0.01) {
+      effortLine += ' (\u00d7' + t.easeMul.toFixed(2) + ' noyau)';
+    }
+    lines.push(effortLine);
+    lines.push('= ' + formatScore(result.score) + ' / 10');
+    return breakdownFromLines(lines, 'Comment ce score est calcul\u00e9');
+  }
+
+  function formatEisenhowerBreakdown(result) {
+    var t = result.terms;
+    return breakdownFromLines([
+      'Urgence (' + formatSliderLevel(t.U) + ') \u2192 ' + t.urgencyNorm.toFixed(2),
+      'Impact (' + formatSliderLevel(t.I) + ') \u2192 ' + t.importance.toFixed(2),
+      '(Urgence\u00f76) \u00d7 (0,5+Impact\u00f74) \u00d7 10',
+      '= ' + formatScore(result.score) + ' / 10'
+    ]);
+  }
+
+  function formatWSJFBreakdown(result) {
+    var t = result.terms;
+    return breakdownFromLines([
+      'Urgence (' + formatSliderLevel(t.U) + ') \u2192 pression ' + t.pressure.toFixed(1),
+      'Effort (' + formatSliderLevel(t.F) + ') \u2192 taille ' + t.jobSize.toFixed(0),
+      'Pression \u00f7 taille \u00d7 ' + WSJF_SCALE.toFixed(2),
+      '= ' + formatScore(result.score) + ' / 10'
+    ]);
+  }
+
+  function formatValueEffortBreakdown(result) {
+    var t = result.terms;
+    return breakdownFromLines([
+      'Impact (' + formatSliderLevel(t.I) + ') \u00d7 Urgence (' + formatSliderLevel(t.U) + ')',
+      'Effort (' + formatSliderLevel(t.F) + ') \u2192 taille ' + t.jobSize.toFixed(0),
+      '(Impact \u00d7 Urgence\u00f76) \u00f7 effort \u00d7 ' + VALUE_EFFORT_SCALE,
+      '= ' + formatScore(result.score) + ' / 10'
+    ]);
+  }
+
+  var SCORE_BREAKDOWNS = {
+    baseline: formatBaselineBreakdown,
+    eisenhower: formatEisenhowerBreakdown,
+    wsjf: formatWSJFBreakdown,
+    valueEffort: formatValueEffortBreakdown,
+    threeD: formatBaselineBreakdown
+  };
+
+  function formatScoreBreakdown(formulaKey, result) {
+    var fn = SCORE_BREAKDOWNS[formulaKey] || formatBaselineBreakdown;
+    return fn(result);
+  }
+
   function baselineScore(U, I, F) {
     return calcBaselineTerms(U, I, F).score;
   }
@@ -1803,6 +1879,8 @@
   function createHeatPanel(config) {
     var el = config.el;
     var onSegmentClick = config.onSegmentClick || function () {};
+    var formulaKey = config.formulaKey || 'baseline';
+    var tooltipId = 'heat-score-tip-' + Math.random().toString(36).slice(2, 9);
 
     var panel = document.createElement('div');
     panel.className = 'heat-panel';
@@ -1828,11 +1906,67 @@
     bnumVal.textContent = '0';
     bnum.appendChild(dot);
     bnum.appendChild(bnumVal);
+    var badgeMeta = document.createElement('div');
+    badgeMeta.className = 'heat-badge-meta';
+
     var blabel = document.createElement('div');
     blabel.className = 'heat-badge-label';
     blabel.textContent = 'Optionnel';
+
+    var scoreInfoWrap = document.createElement('span');
+    scoreInfoWrap.className = 'heat-score-info-wrap';
+
+    var scoreInfoBtn = document.createElement('button');
+    scoreInfoBtn.type = 'button';
+    scoreInfoBtn.className = 'heat-score-info';
+    scoreInfoBtn.textContent = '?';
+    scoreInfoBtn.setAttribute('aria-label', 'Comment ce score est calcul\u00e9');
+    scoreInfoBtn.setAttribute('aria-expanded', 'false');
+    scoreInfoBtn.setAttribute('aria-controls', tooltipId);
+
+    var scoreTooltip = document.createElement('div');
+    scoreTooltip.id = tooltipId;
+    scoreTooltip.className = 'heat-score-tooltip';
+    scoreTooltip.setAttribute('role', 'tooltip');
+
+    scoreInfoWrap.appendChild(scoreInfoBtn);
+    scoreInfoWrap.appendChild(scoreTooltip);
+
+    function closeScoreTooltip() {
+      scoreInfoWrap.classList.remove('is-open');
+      scoreInfoBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    function openScoreTooltip() {
+      scoreInfoWrap.classList.add('is-open');
+      scoreInfoBtn.setAttribute('aria-expanded', 'true');
+    }
+
+    function toggleScoreTooltip() {
+      if (scoreInfoWrap.classList.contains('is-open')) closeScoreTooltip();
+      else openScoreTooltip();
+    }
+
+    scoreInfoBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      toggleScoreTooltip();
+    });
+
+    scoreInfoBtn.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        closeScoreTooltip();
+        scoreInfoBtn.blur();
+      }
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!scoreInfoWrap.contains(e.target)) closeScoreTooltip();
+    });
+
+    badgeMeta.appendChild(blabel);
+    badgeMeta.appendChild(scoreInfoWrap);
     badge.appendChild(bnum);
-    badge.appendChild(blabel);
+    badge.appendChild(badgeMeta);
 
     var tierDesc = document.createElement('p');
     tierDesc.className = 'heat-tier-desc';
@@ -1906,6 +2040,28 @@
 
     el.appendChild(panel);
 
+    function updateScoreTooltip(result, display) {
+      var hide = !result || !result.terms || !!display.inutile || !!display.blocked;
+      scoreInfoWrap.hidden = hide;
+      if (hide) {
+        closeScoreTooltip();
+        return;
+      }
+      var breakdown = formatScoreBreakdown(formulaKey, result);
+      scoreTooltip.replaceChildren();
+      breakdown.lines.forEach(function (line) {
+        var row = document.createElement('div');
+        row.className = 'heat-score-tooltip-line';
+        row.textContent = line;
+        scoreTooltip.appendChild(row);
+      });
+      scoreInfoBtn.title = breakdown.text;
+      scoreInfoBtn.setAttribute(
+        'aria-label',
+        breakdown.short + '. ' + breakdown.lines.join('. ')
+      );
+    }
+
     function paint(result, display) {
       var d = display || resolveDisplay(result, {});
       var visualSource = d.blocked
@@ -1937,6 +2093,7 @@
       segs.forEach(function (s) {
         s.classList.toggle('on', !d.inutile && d.tierI != null && +s.dataset.i === d.tierI);
       });
+      updateScoreTooltip(result, d);
       badgeLabelResponsive.refresh();
       segLabelResponsive.refresh();
     }
@@ -2781,6 +2938,7 @@
 
     heat = createHeatPanel({
       el: card,
+      formulaKey: formulaKey,
       onSegmentClick: function (targetP) {
         syncStateFromFields();
         var clickedSeg = heatSegmentForTarget(targetP);
@@ -2958,7 +3116,8 @@
       eisenhower: formatEisenhower,
       wsjf: formatWSJF,
       valueEffort: formatValueEffort,
-      threeD: formatBaseline
+      threeD: formatBaseline,
+      scoreBreakdown: formatScoreBreakdown
     },
     override: {
       baseline: overrideBaseline,
