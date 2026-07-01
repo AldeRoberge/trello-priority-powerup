@@ -3,10 +3,11 @@
   "private": true,
   "description": "Priorité — Power-Up Trello pour scoring urgence/impact/effort avec badges et libellés de palier",
   "scripts": {
+    "verify:badges": "node sandbox/verify-badges.js",
     "verify:matrix": "node sandbox/verify-matrix.js",
     "verify:presets": "cscript //nologo sandbox/verify-presets.js",
     "verify:version": "node sandbox/verify-version.js",
-    "verify": "npm run verify:presets && npm run verify:matrix && npm run verify:version",
+    "verify": "npm run verify:presets && npm run verify:matrix && npm run verify:version && npm run verify:badges",
     "stamp:build": "node scripts/stamp-build.js"
   }
 }

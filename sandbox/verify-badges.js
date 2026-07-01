@@ -23,6 +23,7 @@ function check(name, ok) {
 
 var urgentDisplay = { tierLabel: 'Urgent', label: 'Urgent', tierI: 1 };
 var prioritaireDisplay = { tierLabel: 'Prioritaire', label: 'Prioritaire', tierI: 2 };
+var importantDisplay = { tierLabel: 'Important', label: 'Important', tierI: 3 };
 var blockedDisplay = { blocked: true, blockedReason: 'En attente d\'une approbation', tierI: 1, tierLabel: 'Urgent' };
 var critiqueBlockedDisplay = {
   blocked: true,
@@ -50,6 +51,18 @@ check(
 check(
   'incomplete prioritaire badge color',
   PT.buildCardFaceBadge(prioritaireDisplay, false).color === 'yellow'
+);
+check(
+  'incomplete important badge color is not green',
+  PT.buildCardFaceBadge(importantDisplay, false).color !== 'green'
+);
+check(
+  'incomplete important badge color',
+  PT.buildCardFaceBadge(importantDisplay, false).color === 'lime'
+);
+check(
+  'complete important badge color',
+  PT.buildCardFaceBadge(importantDisplay, true).color === 'green'
 );
 check(
   'urgent and prioritaire badge colors differ',
@@ -149,6 +162,50 @@ check(
 check(
   'blocked dot is circle-slash only',
   PT.tierBadgeDot(blockedDisplay, false) === '\u2298'
+);
+
+var critiqueDisplay = { tierI: 0, score: 9.5, label: 'Critique' };
+var optionnelDisplay = { tierI: 6, score: 1.2, label: 'Optionnel' };
+var inutileDisplay = { inutile: true, tierI: null, score: 0, label: 'Inutile' };
+var noPriorityDisplay = null;
+var urgentHigh = { tierI: 1, score: 8.0, label: 'Urgent' };
+var urgentLow = { tierI: 1, score: 6.0, label: 'Urgent' };
+
+check(
+  'sort critique before urgent',
+  PT.comparePriorityDisplays(critiqueDisplay, urgentDisplay) < 0
+);
+check(
+  'sort urgent before prioritaire',
+  PT.comparePriorityDisplays(urgentDisplay, prioritaireDisplay) < 0
+);
+check(
+  'sort optionnel before inutile',
+  PT.comparePriorityDisplays(optionnelDisplay, inutileDisplay) < 0
+);
+check(
+  'sort inutile before unprioritized',
+  PT.comparePriorityDisplays(inutileDisplay, noPriorityDisplay) < 0
+);
+check(
+  'sort unprioritized last',
+  PT.prioritySortRank(noPriorityDisplay).tier === 100
+);
+check(
+  'blocked card sorts by underlying tier (urgent before prioritaire)',
+  PT.comparePriorityDisplays(blockedDisplay, prioritaireDisplay) < 0
+);
+check(
+  'blocked critique sorts before blocked urgent',
+  PT.comparePriorityDisplays(critiqueBlockedDisplay, blockedDisplay) < 0
+);
+check(
+  'same tier sorts higher score first',
+  PT.comparePriorityDisplays(urgentHigh, urgentLow) < 0
+);
+check(
+  'list sorter label is Priorité',
+  PT.listPrioritySorters({}).length === 1 && PT.listPrioritySorters({})[0].text === 'Priorit\u00e9'
 );
 
 console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll badge checks passed');

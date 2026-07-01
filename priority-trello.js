@@ -9,6 +9,10 @@
   var BADGE_REFRESH_SEC = 10;
   // Label above the card-back badge; without this Trello shows the Power-Up admin name.
   var CARD_DETAIL_BADGE_TITLE = 'Priorité';
+  var BLOCKED_BOARD_BADGE_ICON = './badges/blocked.svg';
+  // Lower tier rank = higher priority (Critique=0 … Optionnel=6, Inutile=7, none=100).
+  var SORT_TIER_INUTILE = 7;
+  var SORT_TIER_NONE = 100;
 
   function importantInputs() {
     var segments = typeof PriorityUI !== 'undefined' && PriorityUI.HEAT_SEGMENTS;
@@ -165,30 +169,15 @@
     return computeDisplay(inputs, settings);
   }
 
-  // Tier-indexed badge dots (largest = highest priority). Unicode only — Trello badge text.
-  var BADGE_DOTS_BY_TIER = {
-    0: '\u2B24', // ⬤ Critique
-    1: '\u2B24', // ⬤ Urgent (largest)
-    2: '\u25CF', // ● Prioritaire
-    3: '\u2022', // • Important (middle)
-    4: '\u00B7', // · Flexible
-    5: '\u00B7', // · Secondaire
-    6: '\u00B7', // · Optionnel
-  };
-  var BADGE_DOT_INUTILE = '\u00B7'; // · inutile
-  var BADGE_DOT_BLOCKED = '\u2298'; // ⊘ blocked / en attente
-  var BADGE_DOT_COMPLETE = '\u2713'; // ✓ card marked complete in Trello
-  var BLOCKED_BOARD_BADGE_ICON = './badges/blocked.svg';
-
+  // Tier-indexed badge dots delegate to PriorityUI tier metadata.
   function tierBadgeDot(display, completed) {
-    if (completed) return BADGE_DOT_COMPLETE;
-    if (!display) return '\u25CF';
-    if (display.blocked) return BADGE_DOT_BLOCKED;
-    if (display.inutile) return BADGE_DOT_INUTILE;
-    var i = display.tierI;
-    if (i != null && Object.prototype.hasOwnProperty.call(BADGE_DOTS_BY_TIER, i)) {
-      return BADGE_DOTS_BY_TIER[i];
+    if (typeof PriorityUI !== 'undefined' && PriorityUI.tierBadgeDotChar) {
+      return PriorityUI.tierBadgeDotChar(display, completed);
     }
+    if (completed) return '\u2713';
+    if (!display) return '\u25CF';
+    if (display.blocked) return '\u2298';
+    if (display.inutile) return '\u00B7';
     return '\u25CF';
   }
 
@@ -197,7 +186,7 @@
       return PriorityUI.taskBadgeLabel(display);
     }
     var tierKey = String(display.tierLabel || display.label || '');
-    if (tierKey === 'Important') return 'T\u00e2che Importante';
+    if (tierKey === 'Important') return 'T\u00e2che importante';
     return tierKey ? 'T\u00e2che ' + tierKey.toLowerCase() : '';
   }
 
@@ -240,13 +229,14 @@
     var label = tierKey ? 'T\u00e2che ' + tierKey.toLowerCase() + ' bloqu\u00e9e' : 'T\u00e2che bloqu\u00e9e';
     var trimmed = typeof d.blockedReason === 'string' ? d.blockedReason.trim() : '';
     if (trimmed) label += ' \u2014 ' + trimmed;
-    return BADGE_DOT_BLOCKED + ' ' + label;
+    var blockedDot = (typeof PriorityUI !== 'undefined' && PriorityUI.BLOCKED_SYMBOL) || '\u2298';
+    return blockedDot + ' ' + label;
   }
 
   function formatBadgeText(display, completed) {
     if (!display) return '';
     if (completed) {
-      return BADGE_DOT_COMPLETE + ' ' + formatCompletedBadgeLabel(incompleteBadgeLabel(display));
+      return tierBadgeDot(display, true) + ' ' + formatCompletedBadgeLabel(incompleteBadgeLabel(display));
     }
     if (display.blocked) {
       return formatBlockedBoardBadgeText(display);
@@ -258,15 +248,6 @@
     if (typeof PriorityUI !== 'undefined' && PriorityUI.tierTrelloBadgeColor) {
       return PriorityUI.tierTrelloBadgeColor(display);
     }
-    if (!display) return 'light-gray';
-    if (display.inutile) return 'light-gray';
-    var i = display.tierI;
-    if (i === 0) return 'red';
-    if (i === 1) return 'orange';
-    if (i === 2) return 'yellow';
-    if (i === 3) return 'green';
-    if (i === 4) return 'sky';
-    if (i === 5) return 'blue';
     return 'light-gray';
   }
 
@@ -467,9 +448,7 @@
     return readStoredCardInputs(t, cardId);
   }
 
-  // Lower tier rank = higher priority (Critique=0 … Optionnel=6, Inutile=7, none=100).
-  var SORT_TIER_INUTILE = 7;
-  var SORT_TIER_NONE = 100;
+  // ── List-sorters (native Trello sortedIds) ──────────────────────────────
 
   function prioritySortRank(display) {
     if (!display) return { tier: SORT_TIER_NONE, score: -1 };
@@ -550,7 +529,5 @@
     initIframePage: initIframePage,
     runWhenIframeReady: runWhenIframeReady,
     BADGE_REFRESH_SEC: BADGE_REFRESH_SEC,
-    BADGE_DOT_BLOCKED: BADGE_DOT_BLOCKED,
-    BADGE_DOT_COMPLETE: BADGE_DOT_COMPLETE,
   };
 })(typeof window !== 'undefined' ? window : this);

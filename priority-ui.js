@@ -504,11 +504,36 @@
     0: 'red',       // Critique
     1: 'orange',    // Urgent
     2: 'yellow',    // Prioritaire
-    3: 'green',     // Important
+    3: 'lime',      // Important (green reserved for completed badge)
     4: 'sky',       // Flexible
     5: 'blue',      // Secondaire
     6: 'light-gray' // Optionnel
   };
+
+  // Unicode dots for Trello badge text (largest = highest priority).
+  var TIER_BADGE_DOTS = {
+    0: '\u2B24', // ⬤ Critique
+    1: '\u2B24', // ⬤ Urgent
+    2: '\u25CF', // ● Prioritaire
+    3: '\u2022', // • Important
+    4: '\u00B7', // · Flexible
+    5: '\u00B7', // · Secondaire
+    6: '\u00B7', // · Optionnel
+  };
+  var BADGE_DOT_INUTILE = '\u00B7';
+  var BADGE_DOT_COMPLETE = '\u2713';
+
+  function tierBadgeDotChar(display, completed) {
+    if (completed) return BADGE_DOT_COMPLETE;
+    if (!display) return '\u25CF';
+    if (display.blocked) return BLOCKED_SYMBOL;
+    if (display.inutile) return BADGE_DOT_INUTILE;
+    var i = display.tierI;
+    if (i != null && Object.prototype.hasOwnProperty.call(TIER_BADGE_DOTS, i)) {
+      return TIER_BADGE_DOTS[i];
+    }
+    return '\u25CF';
+  }
 
   function tierTrelloBadgeColor(display) {
     if (!display || display.inutile) return 'light-gray';
@@ -758,7 +783,7 @@
     0: { bg: 42, border: 50, panel: 44 }, // Critique — strong red wash
     1: { bg: 40, border: 48, panel: 40 }, // Urgent — orange
     2: { bg: 34, border: 44, panel: 28 }, // Prioritaire — amber
-    3: { bg: 28, border: 38, panel: 22 }, // Important — green
+    3: { bg: 28, border: 38, panel: 22 }, // Important — heat bar seg (#6EAD3A)
     4: { bg: 22, border: 32, panel: 18 }, // Flexible — teal
     5: { bg: 14, border: 26, panel: 14 }, // Secondaire — blue
     6: { bg: 6, border: 20, panel: 8 },   // Optionnel — near neutral
@@ -2921,7 +2946,11 @@
     taskBadgeLabel: taskBadgeLabel,
     blockedTaskBadgeLabel: blockedTaskBadgeLabel,
     tierTrelloBadgeColor: tierTrelloBadgeColor,
+    tierBadgeDotChar: tierBadgeDotChar,
     TIER_TRELLO_BADGE_COLORS: TIER_TRELLO_BADGE_COLORS,
+    TIER_BADGE_DOTS: TIER_BADGE_DOTS,
+    BADGE_DOT_COMPLETE: BADGE_DOT_COMPLETE,
+    BADGE_DOT_INUTILE: BADGE_DOT_INUTILE,
     setMatrixSettings: setMatrixSettings,
     getMatrixSettings: getMatrixSettings,
     resolveMatrixLabel: resolveMatrixLabel,

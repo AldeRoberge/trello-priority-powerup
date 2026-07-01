@@ -85,7 +85,7 @@ Les Power-Ups **ne peuvent pas** modifier le fond d'une carte en vue tableau. Tr
 
 Ce Power-Up affiche la priorité via des **badges colorés** (`score · palier`). Pour un fond de carte entièrement coloré, il faudrait une extension navigateur qui modifie le DOM/CSS de Trello — ce n'est pas possible dans le modèle iframe Power-Up.
 
-La synchronisation des **couvertures** de carte (bandeau coloré via REST API) n'est **pas** implémentée dans ce dépôt. Le fichier `trello-api-config.js` conserve une clé API à titre documentaire ; le connecteur n'utilise que `t.get` / `t.set` (données partagées Power-Up).
+La synchronisation des **couvertures** de carte (bandeau coloré via REST API) n'est **pas** implémentée dans ce dépôt. Le connecteur n'utilise que `t.get` / `t.set` (données partagées Power-Up).
 
 ### Horodatage de build (local)
 
@@ -111,8 +111,14 @@ Dépannage (déploiement bloqué, source Pages) : [.github/DEPLOYMENT.md](.githu
 1. [trello.com/power-ups/admin](https://trello.com/power-ups/admin) → **Create new Power-Up** (ou ouvrir le Power-Up existant)
 2. **Iframe connector URL** (onglet principal du Power-Up) :
    `https://VOTRE-UTILISATEUR.github.io/trello-priority-powerup/index.html`
-3. Capacités : `card-badges`, `card-detail-badges`, `board-buttons`, `list-sorters` (ne pas activer `card-buttons` — non utilisé par ce Power-Up)
-4. Ajouter le Power-Up à un tableau via le menu Power-Ups
+3. **Capabilities** (onglet *Capabilities* / *Capacités*) — activer exactement :
+   - `card-badges`
+   - `card-detail-badges`
+   - `board-buttons`
+   - `list-sorters` *(requis pour **Trier par… → Priorité** sur une colonne)*
+   - `on-enable` *(modal d'accueil à l'activation)*
+   - Ne **pas** activer `card-buttons` (non utilisé ; le connecteur renvoie `[]` si activé par erreur)
+4. Enregistrer le Power-Up, attendre la fin du déploiement GitHub Pages, puis **retirer et réajouter** le Power-Up sur chaque tableau concerné (Trello ne recharge pas toujours les nouvelles capacités sur un tableau déjà ouvert)
 
 ---
 
@@ -140,6 +146,17 @@ Popup **Définir la priorité** → **Effacer la priorité**
 Les cartes **en attente** (bloquées) sont classées selon leur palier sous-jacent (score et palier calculés), pas selon l'état bloqué.
 
 Le tri utilise la capacité native `list-sorters` de Trello (`sortedIds`) — **aucun appel REST ni OAuth** n'est requis. Seules les données `t.get` / `t.set` du Power-Up sont lues.
+
+#### « Priorité » n'apparaît pas dans *Trier par…*
+
+1. Vérifier que `list-sorters` est coché dans [trello.com/power-ups/admin](https://trello.com/power-ups/admin) pour ce Power-Up
+2. Vérifier que l'URL du connecteur pointe vers la version déployée (`index.html` à jour)
+3. Retirer le Power-Up du tableau, rafraîchir la page, le réactiver
+4. Ouvrir le menu `…` de la **liste** (pas du tableau) → **Trier par…** — l'entrée **Priorité** est fournie par ce Power-Up
+
+**Alternative** si le tri natif reste indisponible (capacité non activée, cache Trello, etc.) : réordonner les cartes **manuellement** en vous aidant des badges de priorité sur chaque carte (Critique en haut → sans priorité en bas). Aucun autre mécanisme de tri automatique n'est possible sans `list-sorters` ni API REST/OAuth.
+
+Signature du callback (SDK actuel) : `callback(t, opts)` avec `opts.cards` (tableau des cartes de la liste) ; retour `{ sortedIds: [id, …] }` (Promise acceptée).
 
 ### Messages console sur Trello.com
 
