@@ -573,7 +573,7 @@ body.tp-page--priority {
   font-size: 13px;
 }
 
-.tp-page--priority .field-head {
+.tp-page--priority .variant-fields .field-head {
   gap: 6px 10px;
 }
 
@@ -713,6 +713,11 @@ html[data-color-mode="dark"] .tp-page--priority {
   .tp-page--priority .field {
     flex-direction: column;
     gap: 6px;
+  }
+
+  .tp-page--priority .variant-fields .field-head {
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+    gap: 6px 8px;
   }
 
   .tp-page--priority .heat-seg-labels {
