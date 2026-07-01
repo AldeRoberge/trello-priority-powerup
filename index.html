@@ -56,12 +56,16 @@
   }
 
   function initPowerUp() {
-    function openPriorityPopup(t) {
+    async function openPriorityPopup(t) {
       // Popup width is fixed (narrow) by Trello; modal gives a comfortable editor width.
       // Use pageUrl (absolute, unsigned) — t.modal signs once; t.signUrl() double-signs.
+      // Pass card name via args so the iframe can show it immediately (reliable card context).
+      var card = await t.card('name');
+      var cardName = card && typeof card.name === 'string' ? card.name : '';
       return t.modal({
         title: 'Définir la priorité',
         url: PriorityTrello.pageUrl('./popup.html'),
+        args: { cardName: cardName },
         height: 960,
         fullscreen: false,
         accentColor: '#22272B',

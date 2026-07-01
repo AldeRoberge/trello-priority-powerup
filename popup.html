@@ -48,16 +48,28 @@
 
     function setCardNameLabel(name) {
       var el = document.getElementById('cardName');
+      if (!el) return;
       var label = name || 'Carte';
       el.textContent = label;
       el.title = name ? name : '';
       el.classList.remove('is-loading');
+      el.removeAttribute('hidden');
       resizePopup();
     }
 
     async function init() {
-      var cardNamePromise = PriorityTrello.getCardName(t).then(setCardNameLabel, function () {
-        setCardNameLabel(null);
+      if (typeof t.arg === 'function') {
+        var argName = t.arg('cardName');
+        if (argName) setCardNameLabel(argName);
+      }
+
+      var cardNameEl = document.getElementById('cardName');
+      var cardNamePromise = PriorityTrello.getCardName(t).then(function (resolved) {
+        if (resolved) setCardNameLabel(resolved);
+      }, function () {
+        if (cardNameEl && cardNameEl.classList.contains('is-loading')) {
+          setCardNameLabel(null);
+        }
       });
 
       const inputs = await PriorityTrello.clearBlockedIfComplete(t);

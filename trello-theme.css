@@ -454,14 +454,19 @@ body.tp-page--priority {
 
 .tp-priority-card-header {
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
   text-align: center;
   padding: 14px 16px 12px;
   border-bottom: 1px solid var(--tp-border);
+  background: var(--tp-surface-subtle);
 }
 
 .tp-priority-card-name {
   margin: 0;
-  font-size: 17px;
+  min-height: 1.4em;
+  font-size: 18px;
   font-weight: 600;
   line-height: 1.4;
   color: var(--tp-text);
@@ -470,6 +475,7 @@ body.tp-page--priority {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .tp-priority-card-name.is-loading {

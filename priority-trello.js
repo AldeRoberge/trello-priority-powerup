@@ -257,13 +257,45 @@
     };
   }
 
+  function parseCardNameValue(value) {
+    if (value == null || value === '') return null;
+    if (typeof value === 'string') {
+      var trimmed = value.trim();
+      return trimmed || null;
+    }
+    if (typeof value === 'object' && !isPowerUpRequestChain(value)) {
+      if (typeof value.name === 'string') {
+        var fromName = value.name.trim();
+        if (fromName) return fromName;
+      }
+    }
+    return null;
+  }
+
+  function cardDataPromise(t) {
+    var fields = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function (resolve, reject) {
+      t.card.apply(t, fields).then(resolve, reject);
+    });
+  }
+
   async function getCardName(t) {
+    if (typeof t.arg === 'function') {
+      var fromArg = parseCardNameValue(t.arg('cardName'));
+      if (fromArg) return fromArg;
+    }
+
     try {
-      var name = await cardFieldPromise(t, 'name');
-      if (isPowerUpRequestChain(name)) return null;
-      if (typeof name === 'string' && name.trim()) return name.trim();
-      if (name && typeof name === 'object' && typeof name.name === 'string' && name.name.trim()) {
-        return name.name.trim();
+      // Documented API: t.card('name').then(card => card.name) — not .get('name'),
+      // which often returns the unresolved chain (has .get → isPowerUpRequestChain).
+      var card = await cardDataPromise(t, 'name');
+      var name = parseCardNameValue(card);
+      if (name) return name;
+
+      var scalar = await cardFieldPromise(t, 'name');
+      if (!isPowerUpRequestChain(scalar)) {
+        name = parseCardNameValue(scalar);
+        if (name) return name;
       }
       return null;
     } catch (err) {
