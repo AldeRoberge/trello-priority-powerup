@@ -524,7 +524,7 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .heat-panel.has-blocked-warning .heat-badge {
-  max-width: calc(100% - 116px);
+  max-width: calc(100% - 132px);
 }
 
 .tp-page--priority .heat-badge {

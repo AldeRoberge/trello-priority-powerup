@@ -297,10 +297,10 @@
       <div class="ends"><span>❌ Négligeable</span><span>🚀 Critique</span></div>
     </div>
 
-    <!-- Effort -->
+    <!-- Facilité -->
     <div class="row">
       <div class="row-head">
-        <span class="row-lbl"><i class="ti ti-gauge"></i> Effort</span>
+        <span class="row-lbl"><i class="ti ti-gauge"></i> Facilité</span>
         <span class="row-val" id="effort-word">🧠 Moyen</span>
       </div>
       <input type="range" id="effort" min="1" max="5" step="1" value="3">
@@ -331,7 +331,7 @@
       </div>
 
       <div class="formula-wrap">
-        <div id="formula">Pression ×1.2 → 2.4 · Blocage ×0.8 → 0.8 · Impact×Effort÷5 ×0.8 → 0.5 = 3.7</div>
+        <div id="formula">Pression ×1.2 → 2.4 · Blocage ×0.8 → 0.8 · Impact×Facilité÷5 ×0.8 → 0.5 = 3.7</div>
       </div>
     </div>
 
@@ -411,7 +411,7 @@
     formula.textContent =
       'Pression ×'+WT+' → '+timeTerm.toFixed(1)+
       '   ·   Blocage ×'+WB+' → '+blockTerm.toFixed(1)+
-      '   ·   Impact×Effort÷5 ×'+WI+' → '+impTerm.toFixed(1)+
+      '   ·   Impact×Facilité÷5 ×'+WI+' → '+impTerm.toFixed(1)+
       '   =   '+p.toFixed(1);
     tWord.textContent = TW[T];
     bWord.textContent = BW[B];

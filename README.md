@@ -1,6 +1,6 @@
 # Priorité — Power-Up Trello
 
-Power-Up Trello pour évaluer chaque carte selon **l'urgence**, **l'impact** et **l'effort** : score 0–10, palier (Critique → Optionnel) et badges colorés sur le tableau.
+Power-Up Trello pour évaluer chaque carte selon **l'urgence**, **l'impact** et **la facilité** : score 0–10, palier (Critique → Optionnel) et badges colorés sur le tableau.
 
 Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques servis depuis la racine du dépôt (ex. GitHub Pages).
 
@@ -8,7 +8,7 @@ Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques
 
 ## Fonctionnalités
 
-- **Trois axes** (urgence 0–4, impact 0–4, effort 1–5) avec barre de chaleur et curseurs
+- **Trois axes** (urgence 0–4, impact 0–4, facilité 1–5) avec barre de chaleur et curseurs
 - **Score et palier** calculés par formule baseline (0–10)
 - **Badges colorés** sur les cartes en vue tableau (`score · palier`, ex. `7.9 · Urgent`) — pastille colorée selon le palier
 - **Popup « Définir la priorité »** : 3 curseurs + barre de chaleur dans le détail de carte

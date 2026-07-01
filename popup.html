@@ -73,15 +73,17 @@
       });
 
       const inputs = await PriorityTrello.clearBlockedIfComplete(t);
-      const matrixSettings = await PriorityTrello.getMatrixSettings(t);
-      PriorityUI.setMatrixSettings(matrixSettings);
+      await PriorityTrello.ensureBoardPriorityContext(t);
+      const boardFormula = PriorityTrello.getCachedBoardFormulaKey
+        ? PriorityTrello.getCachedBoardFormulaKey()
+        : await PriorityTrello.getBoardFormula(t);
 
       const hasSavedPriority = !!inputs;
       const initialDefaults = hasSavedPriority ? inputs : PriorityTrello.IMPORTANT_INPUTS;
 
       variant = PriorityUI.mountVariant(mountEl, {
         id: 'card',
-        formula: 'baseline',
+        formula: boardFormula,
         defaults: initialDefaults,
         dimensions: PriorityTrello.PRIORITY_DIMENSIONS,
         loadState: function (defaults) {
@@ -89,6 +91,11 @@
         },
         onStateChange: function (state) {
           saveState(state);
+        },
+        onFormulaChange: function (formulaKey) {
+          PriorityTrello.saveBoardFormula(t, formulaKey).catch(function (err) {
+            console.error('Priority formula save failed', err);
+          });
         },
       });
 

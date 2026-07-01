@@ -177,6 +177,166 @@ body {
   padding: 10px 12px 2px;
 }
 
+.variant-fields-section > .eisenhower-panel {
+  margin-top: 10px;
+  padding: 10px 12px 2px;
+}
+
+/* ── Formula switcher ── */
+.formula-switcher {
+  display: flex;
+  gap: 6px;
+  margin: 0 12px 12px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--surface-1);
+  border: 0.5px solid var(--border);
+}
+
+.formula-switcher-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.formula-switcher-btn:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.formula-switcher-btn.is-active {
+  color: var(--text-primary);
+  background: var(--surface-2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.formula-switcher-btn:focus-visible {
+  outline: 2px solid var(--focus-ring-strong);
+  outline-offset: 1px;
+}
+
+/* ── Eisenhower matrix ── */
+.eisenhower-panel {
+  margin-bottom: 8px;
+}
+
+.eisenhower-heading {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  padding: 0 2px;
+}
+
+.eisenhower-matrix-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.eisenhower-col-labels {
+  display: grid;
+  grid-template-columns: 72px 1fr 1fr;
+  gap: 6px;
+  padding: 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.eisenhower-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.eisenhower-row {
+  display: grid;
+  grid-template-columns: 72px 1fr 1fr;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.eisenhower-row-label {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.eisenhower-cell {
+  position: relative;
+  min-height: 64px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-1);
+  padding: 8px;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.eisenhower-cell:hover {
+  border-color: color-mix(in srgb, var(--eq-color) 55%, var(--border));
+  background: color-mix(in srgb, var(--eq-color) 8%, var(--surface-1));
+}
+
+.eisenhower-cell.is-active {
+  border-color: var(--eq-color);
+  background: color-mix(in srgb, var(--eq-color) 14%, var(--surface-2));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--eq-color) 25%, transparent);
+}
+
+.eisenhower-cell-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.eisenhower-marker {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--eq-color);
+  border: 2px solid var(--surface-2);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+
+.eisenhower-footnote {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.35;
+  padding: 0 2px;
+}
+
+.eisenhower-cell:focus-visible {
+  outline: 2px solid var(--focus-ring-strong);
+  outline-offset: 1px;
+}
+
 /* ── Blocked checkbox section ── */
 .variant-blocked-section {
   margin-top: 14px;
@@ -765,8 +925,8 @@ body.help-modal-open {
   z-index: 1;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
+  gap: 2px;
+  padding: 3px 4px 3px 8px;
   border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
@@ -774,7 +934,42 @@ body.help-modal-open {
   letter-spacing: -0.01em;
   color: var(--blocked-text);
   background: var(--blocked-fill);
-  pointer-events: none;
+}
+
+.heat-blocked-warning-label {
+  white-space: nowrap;
+}
+
+.heat-blocked-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.72;
+  flex-shrink: 0;
+}
+
+.heat-blocked-dismiss:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--blocked-text) 14%, transparent);
+}
+
+.heat-blocked-dismiss:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--blocked-accent);
+  outline-offset: 1px;
 }
 
 .heat-blocked-warning[hidden] {
@@ -782,7 +977,7 @@ body.help-modal-open {
 }
 
 .heat-panel.has-blocked-warning .heat-badge {
-  max-width: calc(100% - 108px);
+  max-width: calc(100% - 124px);
 }
 
 .heat-badge {

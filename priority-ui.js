@@ -42,6 +42,9 @@
   var PRESSURE_MAX = 6;
   var WSJF_SCALE = 10 / 6;
   var VALUE_EFFORT_SCALE = 2.5;
+  var EISENHOWER_URGENCY_THRESHOLD = 2;
+  var EISENHOWER_IMPACT_THRESHOLD = 2;
+  var FORMULA_STORAGE_KEY = 'trello-priority-powerup/formula';
 
   // ── 2. Labels, keywords, tiers & heat presets ───────────────────────────
 
@@ -499,6 +502,13 @@
     'Bloqu\u00e9': 'T\u00e2che (bloqu\u00e9e)'
   };
 
+  var EISENHOWER_BADGE_LABELS = {
+    Faire: '\u00c0 faire maintenant',
+    Planifier: '\u00c0 planifier',
+    'D\u00e9l\u00e9guer': '\u00c0 d\u00e9l\u00e9guer',
+    '\u00c9liminer': '\u00c0 \u00e9liminer'
+  };
+
   // Trello card badges accept named colors only — aligned with TIERS[].seg tints.
   var TIER_TRELLO_BADGE_COLORS = {
     0: 'red',       // Critique
@@ -595,6 +605,9 @@
   function taskBadgeLabel(display) {
     if (!display) return '';
     if (display.blocked) return blockedTaskBadgeLabel(display);
+    if (display.eisenhowerLabel && EISENHOWER_BADGE_LABELS[display.eisenhowerLabel]) {
+      return EISENHOWER_BADGE_LABELS[display.eisenhowerLabel];
+    }
     var tier = classicTierLabel(display);
     if (TASK_BADGE_LABELS[tier]) return TASK_BADGE_LABELS[tier];
     if (!tier) return '';
@@ -679,6 +692,28 @@
   function resolveDisplay(result, inputs, labelSettings) {
     var inputsSafe = inputs || {};
     if (!isInutile(inputsSafe)) {
+      if (result && result.eisenhower) {
+        var eq = result.eisenhower;
+        return withBlockedDisplay({
+          inutile: false,
+          score: result.score,
+          label: result.tier.label,
+          tierLabel: eq.label,
+          matrixLabel: eq.label,
+          description: eq.description || '',
+          eisenhowerLabel: eq.label,
+          eisenhowerQuadrant: eq.id,
+          matrixRuleId: null,
+          matrixLevels: null,
+          matrixEnabled: false,
+          matrixDisabled: false,
+          fill: eq.fill || result.tier.fill,
+          text: eq.text || result.tier.text,
+          seg: eq.seg || result.tier.seg,
+          tierI: result.tier.i,
+          cardTier: result.tier
+        }, inputsSafe);
+      }
       var settings = labelSettings != null ? labelSettings : matrixSettings;
       var matrix = resolveMatrixLabel(inputsSafe, result.tier, result.score, settings);
       var matrixEnabled = !settings || settings.enabled !== false;
@@ -765,6 +800,70 @@
     el.hidden = !desc;
     el.style.removeProperty('color');
   }
+
+  var FORMULA_OPTIONS = [
+    {
+      key: 'baseline',
+      label: 'Score composite',
+      description: 'Urgence, impact et facilité fusionnés en un score 0–10 et un palier.'
+    },
+    {
+      key: 'eisenhower',
+      label: 'Matrice Eisenhower',
+      description: 'Urgence × importance — quatre quadrants : Faire, Planifier, Déléguer, Éliminer.'
+    }
+  ];
+
+  var EISENHOWER_QUADRANTS = [
+    {
+      id: 'do',
+      label: 'Faire',
+      description: 'Urgent et important. À traiter en priorité absolue, sans report.',
+      score: 9.0,
+      urgent: true,
+      important: true,
+      fill: '#FAECE7',
+      text: '#712B13',
+      seg: '#D85A30',
+      preset: { urgency: 3, impact: 3 }
+    },
+    {
+      id: 'schedule',
+      label: 'Planifier',
+      description: 'Important mais pas urgent. À caler dans le backlog avec une date ou un créneau dédié.',
+      score: 6.5,
+      urgent: false,
+      important: true,
+      fill: '#FAEEDA',
+      text: '#633806',
+      seg: '#BA7517',
+      preset: { urgency: 1, impact: 3 }
+    },
+    {
+      id: 'delegate',
+      label: 'Déléguer',
+      description: 'Urgent mais peu important. À confier ou traiter au minimum viable.',
+      score: 4.0,
+      urgent: true,
+      important: false,
+      fill: '#E8F5E0',
+      text: '#2D5A1E',
+      seg: '#6EAD3A',
+      preset: { urgency: 3, impact: 1 }
+    },
+    {
+      id: 'delete',
+      label: 'Éliminer',
+      description: 'Ni urgent ni important. Candidat à écarter, repousser sans limite ou supprimer.',
+      score: 1.5,
+      urgent: false,
+      important: false,
+      fill: '#E6F1FB',
+      text: '#0C447C',
+      seg: '#5A9FD4',
+      preset: { urgency: 1, impact: 1 }
+    }
+  ];
 
   var FORMULAS = {
     baseline: {
@@ -1096,13 +1195,48 @@
     };
   }
 
+  function isEisenhowerUrgent(U) {
+    return U >= EISENHOWER_URGENCY_THRESHOLD;
+  }
+
+  function isEisenhowerImportant(I) {
+    return I >= EISENHOWER_IMPACT_THRESHOLD;
+  }
+
+  function eisenhowerQuadrantFor(U, I) {
+    var urgent = isEisenhowerUrgent(U);
+    var important = isEisenhowerImportant(I);
+    if (urgent && important) return EISENHOWER_QUADRANTS[0];
+    if (!urgent && important) return EISENHOWER_QUADRANTS[1];
+    if (urgent && !important) return EISENHOWER_QUADRANTS[2];
+    return EISENHOWER_QUADRANTS[3];
+  }
+
+  function eisenhowerQuadrantById(id) {
+    for (var i = 0; i < EISENHOWER_QUADRANTS.length; i++) {
+      if (EISENHOWER_QUADRANTS[i].id === id) return EISENHOWER_QUADRANTS[i];
+    }
+    return null;
+  }
+
   function calcEisenhower(inputs) {
     var d = readInputs(inputs);
-    var p = clamp(d.urgencyNorm * d.importance * 10, 0, 10);
+    var quadrant = eisenhowerQuadrantFor(d.U, d.I);
     return {
-      score: p,
-      terms: { pressure: d.pressure, importance: d.importance, urgencyNorm: d.urgencyNorm, U: d.U, I: d.I, F: d.F },
-      tier: tierFor(p)
+      score: quadrant.score,
+      terms: {
+        pressure: d.pressure,
+        importance: d.importance,
+        urgencyNorm: d.urgencyNorm,
+        urgent: isEisenhowerUrgent(d.U),
+        important: isEisenhowerImportant(d.I),
+        quadrantId: quadrant.id,
+        U: d.U,
+        I: d.I,
+        F: d.F
+      },
+      eisenhower: quadrant,
+      tier: tierFor(quadrant.score)
     };
   }
 
@@ -1142,16 +1276,19 @@
     return (
       'Pression d\'urgence → ' + terms.pressure.toFixed(1) +
       '   ·   Impact → ' + terms.impactCore.toFixed(1) +
-      '   ·   Effort → ' + terms.easeTerm.toFixed(1) +
+      '   ·   Facilité → ' + terms.easeTerm.toFixed(1) +
       ' (attén. ' + dampPct + ' %, F eff. ' + terms.effectiveF.toFixed(1) + easeMulNote + ')' +
       '   =   ' + formatScore(score)
     );
   }
 
   function formatEisenhower(terms, score) {
+    var quadrant = eisenhowerQuadrantById(terms.quadrantId);
+    var label = quadrant ? quadrant.label : 'Quadrant';
     return (
-      '(Urgence÷6) × (0.5+Impact÷4) × 10 → ' +
-      terms.urgencyNorm.toFixed(2) + ' × ' + terms.importance.toFixed(2) + ' × 10' +
+      'Urgence ' + (terms.urgent ? 'oui' : 'non') +
+      ' · Impact ' + (terms.important ? 'important' : 'secondaire') +
+      ' → ' + label +
       '   =   ' + formatScore(score)
     );
   }
@@ -1166,7 +1303,7 @@
 
   function formatValueEffort(terms, score) {
     return (
-      '(Impact × Urgence÷6) ÷ effort → (' + terms.I + ' × ' + terms.urgencyNorm.toFixed(2) + ') ÷ ' + terms.jobSize.toFixed(0) +
+      '(Impact × Urgence÷6) ÷ facilité → (' + terms.I + ' × ' + terms.urgencyNorm.toFixed(2) + ') ÷ ' + terms.jobSize.toFixed(0) +
       ' × ' + VALUE_EFFORT_SCALE +
       '   =   ' + formatScore(score)
     );
@@ -1193,7 +1330,7 @@
     if (t.hardFactor != null && t.hardFactor < 0.999) {
       lines[1] += ' (p\u00e9nalit\u00e9 effort \u00d7' + t.hardFactor.toFixed(2) + ')';
     }
-    var effortLine = 'Effort (' + formatSliderLevel(t.F) + ') \u2192 ' + t.easeTerm.toFixed(1);
+    var effortLine = 'Facilité (' + formatSliderLevel(t.F) + ') \u2192 ' + t.easeTerm.toFixed(1);
     if (t.dampen > 0.01) {
       effortLine += ' (att\u00e9n. ' + (t.dampen * 100).toFixed(0) + ' %)';
     }
@@ -1207,19 +1344,23 @@
 
   function formatEisenhowerBreakdown(result) {
     var t = result.terms;
-    return breakdownFromLines([
-      'Urgence (' + formatSliderLevel(t.U) + ') \u2192 ' + t.urgencyNorm.toFixed(2),
-      'Impact (' + formatSliderLevel(t.I) + ') \u2192 ' + t.importance.toFixed(2),
-      '(Urgence\u00f76) \u00d7 (0,5+Impact\u00f74) \u00d7 10',
+    var quadrant = result.eisenhower || eisenhowerQuadrantById(t.quadrantId);
+    var lines = [
+      'Urgence (' + formatSliderLevel(t.U) + ') \u2192 ' + (t.urgent ? 'urgent' : 'pas urgent') +
+        ' (seuil \u2265 ' + EISENHOWER_URGENCY_THRESHOLD + ')',
+      'Impact (' + formatSliderLevel(t.I) + ') \u2192 ' + (t.important ? 'important' : 'peu important') +
+        ' (seuil \u2265 ' + EISENHOWER_IMPACT_THRESHOLD + ')',
+      'Quadrant : ' + (quadrant ? quadrant.label : ''),
       '= ' + formatScore(result.score) + ' / 10'
-    ]);
+    ];
+    return breakdownFromLines(lines, 'Matrice Eisenhower');
   }
 
   function formatWSJFBreakdown(result) {
     var t = result.terms;
     return breakdownFromLines([
       'Urgence (' + formatSliderLevel(t.U) + ') \u2192 pression ' + t.pressure.toFixed(1),
-      'Effort (' + formatSliderLevel(t.F) + ') \u2192 taille ' + t.jobSize.toFixed(0),
+      'Facilité (' + formatSliderLevel(t.F) + ') \u2192 taille ' + t.jobSize.toFixed(0),
       'Pression \u00f7 taille \u00d7 ' + WSJF_SCALE.toFixed(2),
       '= ' + formatScore(result.score) + ' / 10'
     ]);
@@ -1229,8 +1370,8 @@
     var t = result.terms;
     return breakdownFromLines([
       'Impact (' + formatSliderLevel(t.I) + ') \u00d7 Urgence (' + formatSliderLevel(t.U) + ')',
-      'Effort (' + formatSliderLevel(t.F) + ') \u2192 taille ' + t.jobSize.toFixed(0),
-      '(Impact \u00d7 Urgence\u00f76) \u00f7 effort \u00d7 ' + VALUE_EFFORT_SCALE,
+      'Facilité (' + formatSliderLevel(t.F) + ') \u2192 taille ' + t.jobSize.toFixed(0),
+      '(Impact \u00d7 Urgence\u00f76) \u00f7 facilit\u00e9 \u00d7 ' + VALUE_EFFORT_SCALE,
       '= ' + formatScore(result.score) + ' / 10'
     ]);
   }
@@ -1320,24 +1461,22 @@
   }
 
   function overrideEisenhower(targetP, inputs) {
-    var d = readInputs(inputs);
-    var curUrg = d.urgencyNorm;
-    var curImp = d.importance;
-    var curScore = curUrg * curImp * 10;
-    var tUrg, tImp;
-    if (curScore > 0.001) {
-      var r = targetP / curScore;
-      tUrg = curUrg * r;
-      tImp = curImp * r;
-    } else {
-      tUrg = Math.sqrt(targetP / 10) * 0.5;
-      tImp = Math.sqrt(targetP / 10) * 0.5 + 0.5;
+    var best = null;
+    var bestDist = Infinity;
+    for (var i = 0; i < EISENHOWER_QUADRANTS.length; i++) {
+      var q = EISENHOWER_QUADRANTS[i];
+      var dist = Math.abs(q.score - targetP);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = q;
+      }
     }
-    tUrg = clamp(tUrg, 0, 1);
-    tImp = clamp(tImp, 0.5, 1.5);
-    var nU = pressureToUrgencyLevel(tUrg * PRESSURE_MAX);
-    var nI = clamp(Math.round((tImp - 0.5) * 4), 0, 4);
-    return { urgency: nU, impact: nI, ease: inputs.ease };
+    if (!best) return { urgency: inputs.urgency, impact: inputs.impact, ease: inputs.ease };
+    return {
+      urgency: best.preset.urgency,
+      impact: best.preset.impact,
+      ease: inputs.ease != null ? inputs.ease : 3
+    };
   }
 
   function overrideWSJF(targetP, inputs) {
@@ -1881,17 +2020,37 @@
     var el = config.el;
     var onSegmentClick = config.onSegmentClick || function () {};
     var formulaKey = config.formulaKey || 'baseline';
+    var hideSegments = !!config.hideSegments;
     var tooltipId = 'heat-score-tip-' + Math.random().toString(36).slice(2, 9);
 
     var panel = document.createElement('div');
     panel.className = 'heat-panel';
 
-    var blockedWarning = document.createElement('span');
+    var blockedWarning = document.createElement('div');
     blockedWarning.className = 'heat-blocked-warning';
-    blockedWarning.textContent = BLOCKED_DISPLAY;
-    blockedWarning.title = 'Cette t\u00e2che est bloqu\u00e9e';
-    blockedWarning.setAttribute('aria-label', 'Cette t\u00e2che est bloqu\u00e9e');
     blockedWarning.hidden = true;
+    blockedWarning.setAttribute('role', 'status');
+
+    var blockedWarningLabel = document.createElement('span');
+    blockedWarningLabel.className = 'heat-blocked-warning-label';
+    blockedWarningLabel.textContent = BLOCKED_DISPLAY;
+    blockedWarningLabel.title = 'Cette t\u00e2che est bloqu\u00e9e';
+    blockedWarning.appendChild(blockedWarningLabel);
+
+    var blockedDismiss = document.createElement('button');
+    blockedDismiss.type = 'button';
+    blockedDismiss.className = 'heat-blocked-dismiss';
+    blockedDismiss.textContent = '\u00D7';
+    blockedDismiss.title = 'Retirer le blocage';
+    blockedDismiss.setAttribute('aria-label', 'Retirer le blocage');
+    blockedDismiss.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof config.onUnblock === 'function') {
+        config.onUnblock();
+      }
+    });
+    blockedWarning.appendChild(blockedDismiss);
     panel.appendChild(blockedWarning);
 
     var badge = document.createElement('div');
@@ -2025,6 +2184,11 @@
     });
     panel.appendChild(segLabels);
 
+    if (hideSegments) {
+      segsWrap.hidden = true;
+      segLabels.hidden = true;
+    }
+
     var currentBadgeTierLabel = 'Optionnel';
     var segLabelResponsive = createResponsiveTierLabelGroup({
       container: segLabels,
@@ -2077,7 +2241,7 @@
       } else {
         dot.style.background = v.seg;
       }
-      currentBadgeTierLabel = classicTierLabel(d);
+      currentBadgeTierLabel = d.eisenhowerLabel || classicTierLabel(d);
       badge.style.setProperty('--heat-fill', v.fill);
       badge.style.setProperty('--heat-text', v.text);
       panel.style.setProperty('--heat-text', v.text);
@@ -2097,6 +2261,183 @@
       updateScoreTooltip(result, d);
       badgeLabelResponsive.refresh();
       segLabelResponsive.refresh();
+    }
+
+    return {
+      el: panel,
+      paint: paint,
+      setFormulaKey: function (key) {
+        formulaKey = key || 'baseline';
+      },
+      setHideSegments: function (hide) {
+        hideSegments = !!hide;
+        segsWrap.hidden = hideSegments;
+        segLabels.hidden = hideSegments;
+      }
+    };
+  }
+
+  function createFormulaSwitcher(config) {
+    var el = config.el;
+    var initialKey = config.formulaKey || 'baseline';
+    var onChange = config.onChange || function () {};
+
+    var wrap = document.createElement('div');
+    wrap.className = 'formula-switcher';
+    wrap.setAttribute('role', 'radiogroup');
+    wrap.setAttribute('aria-label', 'Formule de priorité');
+
+    var currentKey = initialKey;
+    var buttons = [];
+
+    FORMULA_OPTIONS.forEach(function (option) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'formula-switcher-btn';
+      btn.dataset.formula = option.key;
+      btn.textContent = option.label;
+      btn.title = option.description || option.label;
+      btn.setAttribute('role', 'radio');
+      btn.setAttribute('aria-checked', option.key === currentKey ? 'true' : 'false');
+      btn.addEventListener('click', function () {
+        if (currentKey === option.key) return;
+        currentKey = option.key;
+        buttons.forEach(function (b) {
+          b.classList.toggle('is-active', b.dataset.formula === currentKey);
+          b.setAttribute('aria-checked', b.dataset.formula === currentKey ? 'true' : 'false');
+        });
+        onChange(currentKey);
+      });
+      if (option.key === currentKey) btn.classList.add('is-active');
+      wrap.appendChild(btn);
+      buttons.push(btn);
+    });
+
+    el.appendChild(wrap);
+
+    return {
+      el: wrap,
+      getFormulaKey: function () { return currentKey; },
+      setFormulaKey: function (key) {
+        currentKey = key || 'baseline';
+        buttons.forEach(function (b) {
+          b.classList.toggle('is-active', b.dataset.formula === currentKey);
+          b.setAttribute('aria-checked', b.dataset.formula === currentKey ? 'true' : 'false');
+        });
+      }
+    };
+  }
+
+  function createEisenhowerMatrixPanel(config) {
+    var el = config.el;
+    var onQuadrantClick = config.onQuadrantClick || function () {};
+
+    var panel = document.createElement('div');
+    panel.className = 'eisenhower-panel';
+
+    var heading = document.createElement('div');
+    heading.className = 'eisenhower-heading';
+    heading.textContent = 'Matrice Eisenhower';
+    panel.appendChild(heading);
+
+    var matrixWrap = document.createElement('div');
+    matrixWrap.className = 'eisenhower-matrix-wrap';
+
+    var colLabels = document.createElement('div');
+    colLabels.className = 'eisenhower-col-labels';
+    colLabels.innerHTML =
+      '<span></span>' +
+      '<span>Important</span>' +
+      '<span>Peu important</span>';
+    matrixWrap.appendChild(colLabels);
+
+    var grid = document.createElement('div');
+    grid.className = 'eisenhower-grid';
+    grid.setAttribute('role', 'group');
+    grid.setAttribute('aria-label', 'Quadrants Eisenhower');
+
+    var cellEls = {};
+    var rowLabels = ['Urgent', 'Pas urgent'];
+    var cellOrder = [
+      ['do', 'delegate'],
+      ['schedule', 'delete']
+    ];
+
+    cellOrder.forEach(function (row, rowIndex) {
+      var rowEl = document.createElement('div');
+      rowEl.className = 'eisenhower-row';
+
+      var rowLabel = document.createElement('span');
+      rowLabel.className = 'eisenhower-row-label';
+      rowLabel.textContent = rowLabels[rowIndex];
+      rowEl.appendChild(rowLabel);
+
+      row.forEach(function (quadrantId) {
+        var quadrant = eisenhowerQuadrantById(quadrantId);
+        if (!quadrant) return;
+        var cell = document.createElement('button');
+        cell.type = 'button';
+        cell.className = 'eisenhower-cell';
+        cell.dataset.quadrant = quadrant.id;
+        cell.style.setProperty('--eq-color', quadrant.seg);
+        cell.setAttribute('aria-label', quadrant.label + '. ' + quadrant.description);
+        cell.title = quadrant.description;
+
+        var cellLabel = document.createElement('span');
+        cellLabel.className = 'eisenhower-cell-label';
+        cellLabel.textContent = quadrant.label;
+        cell.appendChild(cellLabel);
+
+        var marker = document.createElement('span');
+        marker.className = 'eisenhower-marker';
+        marker.setAttribute('aria-hidden', 'true');
+        cell.appendChild(marker);
+
+        cell.addEventListener('click', function () {
+          onQuadrantClick(quadrant);
+        });
+
+        rowEl.appendChild(cell);
+        cellEls[quadrant.id] = { el: cell, marker: marker };
+      });
+
+      grid.appendChild(rowEl);
+    });
+
+    matrixWrap.appendChild(grid);
+    panel.appendChild(matrixWrap);
+
+    var footnote = document.createElement('p');
+    footnote.className = 'eisenhower-footnote';
+    footnote.textContent =
+      'Seuils : urgence \u2265 ' + EISENHOWER_URGENCY_THRESHOLD + ', impact \u2265 ' + EISENHOWER_IMPACT_THRESHOLD + '.';
+    panel.appendChild(footnote);
+
+    el.appendChild(panel);
+
+    function paint(result, state) {
+      var U = state.urgency != null ? state.urgency : 0;
+      var I = state.impact != null ? state.impact : 0;
+      var quadrant = result && result.eisenhower
+        ? result.eisenhower
+        : eisenhowerQuadrantFor(U, I);
+      var activeId = quadrant ? quadrant.id : null;
+
+      Object.keys(cellEls).forEach(function (id) {
+        var cell = cellEls[id];
+        var isActive = id === activeId;
+        cell.el.classList.toggle('is-active', isActive);
+        cell.el.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        if (isActive) {
+          var uNorm = clamp(U / 4, 0, 1);
+          var iNorm = clamp(I / 4, 0, 1);
+          cell.marker.style.left = (10 + iNorm * 80) + '%';
+          cell.marker.style.top = (10 + (1 - uNorm) * 80) + '%';
+          cell.marker.hidden = false;
+        } else {
+          cell.marker.hidden = true;
+        }
+      });
     }
 
     return {
@@ -2243,7 +2584,7 @@
       'aria-labelledby': 'calc-rsm-desc'
     });
     var descId = svgEl('desc', { id: 'calc-rsm-desc' });
-    descId.textContent = 'Score selon l\'urgence et l\'impact, pour un niveau d\'effort fixe';
+    descId.textContent = 'Score selon l\'urgence et l\'impact, pour un niveau de facilité fixe';
     svg.appendChild(descId);
 
     var defs = svgEl('defs');
@@ -2420,7 +2761,7 @@
     easeSlider.max = '5';
     easeSlider.step = String(SLIDER_STEP);
     easeSlider.value = '3';
-    easeSlider.setAttribute('aria-label', 'Effort');
+    easeSlider.setAttribute('aria-label', 'Facilité');
     easeSlider.title = KEYWORDS.ease;
 
     var easeLabelBottom = document.createElement('span');
@@ -2748,7 +3089,7 @@
 
       descId.textContent =
         'Priorité selon urgence ' + U.toFixed(2) + ' et impact ' + I.toFixed(2) +
-        ', effort ' + formatEase(F) + '/5' +
+        ', facilité ' + formatEase(F) + '/5' +
         ' — score ' + formatScore(d.score) + ', palier ' + d.label;
     }
 
@@ -2760,6 +3101,27 @@
   }
 
   // ── 10. Variant mount & slider persistence ──────────────────────────────
+
+  function normalizeFormulaKey(key) {
+    return FORMULAS[key] ? key : 'baseline';
+  }
+
+  function loadStoredFormulaKey() {
+    try {
+      if (typeof localStorage === 'undefined') return null;
+      var raw = localStorage.getItem(FORMULA_STORAGE_KEY);
+      if (!raw) return null;
+      return FORMULAS[raw] ? raw : null;
+    } catch (e) { return null; }
+  }
+
+  function saveStoredFormulaKey(key) {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      if (!FORMULAS[key]) return;
+      localStorage.setItem(FORMULA_STORAGE_KEY, key);
+    } catch (e) { /* ignore quota / private mode */ }
+  }
 
   function loadSliderValues(defaults, dimensions) {
     var merged = Object.assign({}, defaults);
@@ -2812,7 +3174,7 @@
   function mountVariant(containerEl, variantConfig) {
     var variantId = variantConfig.id || 'unknown';
     try {
-    var formulaKey = variantConfig.formula || 'baseline';
+    var formulaKey = variantConfig.formula || loadStoredFormulaKey() || 'baseline';
     var formulaDef = FORMULAS[formulaKey] || FORMULAS.baseline;
     var calcFn = formulaDef.calc;
     var overrideFn = formulaDef.override;
@@ -2827,8 +3189,25 @@
     var enAttenteField;
     var heat;
     var calcGraph;
-    var showCalcGraph = formulaKey === 'baseline';
+    var eisenhowerMatrix;
+    var formulaSwitcher;
     var sliderAnimFrame = null;
+
+    function applyFormulaMode(key) {
+      formulaKey = key || 'baseline';
+      formulaDef = FORMULAS[formulaKey] || FORMULAS.baseline;
+      calcFn = formulaDef.calc;
+      overrideFn = formulaDef.override;
+      card.dataset.formula = formulaKey;
+      if (heat) {
+        heat.setFormulaKey(formulaKey);
+        heat.setHideSegments(formulaKey === 'eisenhower');
+      }
+      if (calcGraph && calcGraph.el) calcGraph.el.hidden = formulaKey !== 'baseline';
+      if (eisenhowerMatrix && eisenhowerMatrix.el) {
+        eisenhowerMatrix.el.hidden = formulaKey !== 'eisenhower';
+      }
+    }
 
     var defaultState = {};
     variantConfig.dimensions.forEach(function (dim) {
@@ -2932,14 +3311,44 @@
         card.dataset.tier = display.label;
         heat.paint(result, display);
         if (calcGraph) calcGraph.paint(result, state, display);
+        if (eisenhowerMatrix) eisenhowerMatrix.paint(result, state);
       } catch (err) {
         console.error('PriorityUI.mountVariant repaint failed', { id: variantId, error: err });
       }
     }
 
+    function unblockTask() {
+      if (enAttenteField) {
+        enAttenteField.setValue(false);
+        enAttenteField.setBlockedReason('');
+      }
+      state.enAttente = false;
+      state.blockedReason = '';
+      cancelSliderAnim();
+      repaint();
+      persistSliderState();
+    }
+
+    if (variantConfig.showFormulaSwitcher !== false) {
+      formulaSwitcher = createFormulaSwitcher({
+        el: card,
+        formulaKey: formulaKey,
+        onChange: function (nextKey) {
+          applyFormulaMode(nextKey);
+          saveStoredFormulaKey(nextKey);
+          if (typeof variantConfig.onFormulaChange === 'function') {
+            variantConfig.onFormulaChange(nextKey);
+          }
+          repaint();
+        }
+      });
+    }
+
     heat = createHeatPanel({
       el: card,
       formulaKey: formulaKey,
+      hideSegments: formulaKey === 'eisenhower',
+      onUnblock: unblockTask,
       onSegmentClick: function (targetP) {
         syncStateFromFields();
         var clickedSeg = heatSegmentForTarget(targetP);
@@ -3007,20 +3416,35 @@
       });
     });
 
-    if (showCalcGraph) {
-      try {
-        calcGraph = createCalcGraphPanel({
-          el: fieldsSection,
-          fields: fields,
-          onChange: function () {
-            cancelSliderAnim();
-            repaint();
-            persistSliderState();
-          }
-        });
-      } catch (err) {
-        console.error('PriorityUI.createCalcGraphPanel failed', { id: variantId, error: err });
-      }
+    try {
+      calcGraph = createCalcGraphPanel({
+        el: fieldsSection,
+        fields: fields,
+        onChange: function () {
+          cancelSliderAnim();
+          repaint();
+          persistSliderState();
+        }
+      });
+      calcGraph.el.hidden = formulaKey !== 'baseline';
+    } catch (err) {
+      console.error('PriorityUI.createCalcGraphPanel failed', { id: variantId, error: err });
+    }
+
+    try {
+      eisenhowerMatrix = createEisenhowerMatrixPanel({
+        el: fieldsSection,
+        onQuadrantClick: function (quadrant) {
+          if (!quadrant || !quadrant.preset) return;
+          animateFieldsTo({
+            urgency: quadrant.preset.urgency,
+            impact: quadrant.preset.impact
+          });
+        }
+      });
+      eisenhowerMatrix.el.hidden = formulaKey !== 'eisenhower';
+    } catch (err) {
+      console.error('PriorityUI.createEisenhowerMatrixPanel failed', { id: variantId, error: err });
     }
 
     var blockedSection = document.createElement('div');
@@ -3049,6 +3473,7 @@
       attributeFilter: ['data-color-mode']
     });
 
+    applyFormulaMode(formulaKey);
     repaint();
 
     return {
@@ -3056,6 +3481,15 @@
       getState: function () {
         syncStateFromFields();
         return Object.assign({}, state);
+      },
+      getFormulaKey: function () {
+        return formulaKey;
+      },
+      setFormulaKey: function (key) {
+        applyFormulaMode(key);
+        if (formulaSwitcher) formulaSwitcher.setFormulaKey(key);
+        saveStoredFormulaKey(key);
+        repaint();
       },
       setState: function (next) {
         Object.keys(next).forEach(function (key) {
@@ -3093,6 +3527,16 @@
     shortTierLabel: shortTierLabel,
     tierLabelForSpace: tierLabelForSpace,
     FORMULAS: FORMULAS,
+    FORMULA_OPTIONS: FORMULA_OPTIONS,
+    EISENHOWER_QUADRANTS: EISENHOWER_QUADRANTS,
+    EISENHOWER_URGENCY_THRESHOLD: EISENHOWER_URGENCY_THRESHOLD,
+    EISENHOWER_IMPACT_THRESHOLD: EISENHOWER_IMPACT_THRESHOLD,
+    normalizeFormulaKey: normalizeFormulaKey,
+    loadStoredFormulaKey: loadStoredFormulaKey,
+    saveStoredFormulaKey: saveStoredFormulaKey,
+    eisenhowerQuadrantFor: eisenhowerQuadrantFor,
+    isEisenhowerUrgent: isEisenhowerUrgent,
+    isEisenhowerImportant: isEisenhowerImportant,
     calc: {
       baseline: calcBaseline,
       eisenhower: calcEisenhower,
@@ -3134,6 +3578,8 @@
     createEnAttenteField: createEnAttenteField,
     createHeatPanel: createHeatPanel,
     createCalcGraphPanel: createCalcGraphPanel,
+    createEisenhowerMatrixPanel: createEisenhowerMatrixPanel,
+    createFormulaSwitcher: createFormulaSwitcher,
     mountVariant: mountVariant,
     tierFor: tierFor,
     isInutile: isInutile,

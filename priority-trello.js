@@ -5,6 +5,8 @@
   var CARD_PRIORITY_KEY = 'cardPriority';
   var LEGACY_PRIORITY_KEY = 'priority';
   var MATRIX_SETTINGS_KEY = 'matrixLabelSettings';
+  var FORMULA_SETTINGS_KEY = 'priorityFormula';
+  var boardFormulaKey = 'baseline';
   // Trello minimum for dynamic badge polling (card-badges / card-detail-badges).
   var BADGE_REFRESH_SEC = 10;
   // Label above the card-back badge; without this Trello shows the Power-Up admin name.
@@ -57,7 +59,7 @@
     },
     {
       key: 'ease',
-      label: 'Effort',
+      label: 'Facilité',
       icon: 'ti-gauge',
       wordsKey: 'ease',
       min: 1,
@@ -150,9 +152,41 @@
     return { enabled: true, overrides: {} };
   }
 
-  function computeDisplay(inputs, labelSettings) {
+  async function getBoardFormula(t) {
+    if (typeof PriorityUI === 'undefined') return 'baseline';
     try {
-      var result = PriorityUI.calc.baseline(inputs);
+      var stored = await t.get('board', 'shared', FORMULA_SETTINGS_KEY);
+      if (typeof stored === 'string') {
+        boardFormulaKey = PriorityUI.normalizeFormulaKey(stored);
+      } else if (stored && typeof stored === 'object' && stored.formula) {
+        boardFormulaKey = PriorityUI.normalizeFormulaKey(stored.formula);
+      }
+    } catch (err) {
+      console.error('Priority board formula load failed', err);
+    }
+    return boardFormulaKey;
+  }
+
+  async function saveBoardFormula(t, formulaKey) {
+    if (typeof PriorityUI === 'undefined') return 'baseline';
+    var key = PriorityUI.normalizeFormulaKey(formulaKey);
+    boardFormulaKey = key;
+    await t.set('board', 'shared', FORMULA_SETTINGS_KEY, key);
+    return key;
+  }
+
+  async function ensureBoardPriorityContext(t) {
+    var settings = await getMatrixSettings(t);
+    PriorityUI.setMatrixSettings(settings);
+    await getBoardFormula(t);
+    return settings;
+  }
+
+  function computeDisplay(inputs, labelSettings, formulaKey) {
+    try {
+      var key = formulaKey || boardFormulaKey || 'baseline';
+      var calcFn = PriorityUI.calc[key] || PriorityUI.calc.baseline;
+      var result = calcFn(inputs);
       return PriorityUI.resolveDisplay(result, inputs, labelSettings);
     } catch (err) {
       console.error('PriorityTrello.computeDisplay failed', err);
@@ -163,8 +197,7 @@
   async function getCardDisplay(t) {
     var inputs = await getCardInputs(t);
     if (!inputs) return null;
-    var settings = await getMatrixSettings(t);
-    PriorityUI.setMatrixSettings(settings);
+    var settings = await ensureBoardPriorityContext(t);
     return computeDisplay(inputs, settings);
   }
 
@@ -340,8 +373,7 @@
     var inputs = await clearBlockedIfComplete(t, results[0], completed);
     var display = null;
     if (inputs) {
-      var settings = await getMatrixSettings(t);
-      PriorityUI.setMatrixSettings(settings);
+      var settings = await ensureBoardPriorityContext(t);
       display = computeDisplay(inputs, settings);
     }
     return { display: display, completed: completed };
@@ -524,7 +556,7 @@
   async function sortListCardsByPriority(t, cards) {
     if (!cards || !cards.length) return { sortedIds: [] };
 
-    var settings = await getMatrixSettings(t);
+    var settings = await ensureBoardPriorityContext(t);
     var entries = await Promise.all(
       cards.map(async function (card) {
         var inputs = await getCardInputsById(t, card.id);
@@ -703,7 +735,7 @@
     var ids = await readCardIdAndListId(t);
     if (!ids) return { moved: false, reason: 'no-card-context' };
 
-    var settings = await getMatrixSettings(t);
+    var settings = await ensureBoardPriorityContext(t);
     var entries = await buildListPriorityEntries(t, ids.listId, settings);
     if (entries.length < 2) return { moved: false, reason: 'single-card-list' };
 
@@ -758,9 +790,14 @@
     return api.authorize({ scope: 'read,write', expiration: 'never' });
   }
 
+  function getCachedBoardFormulaKey() {
+    return boardFormulaKey || 'baseline';
+  }
+
   global.PriorityTrello = {
     CARD_PRIORITY_KEY: CARD_PRIORITY_KEY,
     MATRIX_SETTINGS_KEY: MATRIX_SETTINGS_KEY,
+    FORMULA_SETTINGS_KEY: FORMULA_SETTINGS_KEY,
     IMPORTANT_INPUTS: IMPORTANT_INPUTS,
     DEFAULT_INPUTS: DEFAULT_INPUTS,
     PRIORITY_DIMENSIONS: PRIORITY_DIMENSIONS,
@@ -769,6 +806,10 @@
     clearBlockedIfComplete: clearBlockedIfComplete,
     getCardInputs: getCardInputs,
     getMatrixSettings: getMatrixSettings,
+    getBoardFormula: getBoardFormula,
+    getCachedBoardFormulaKey: getCachedBoardFormulaKey,
+    saveBoardFormula: saveBoardFormula,
+    ensureBoardPriorityContext: ensureBoardPriorityContext,
     computeDisplay: computeDisplay,
     getCardDisplay: getCardDisplay,
     getCardName: getCardName,
