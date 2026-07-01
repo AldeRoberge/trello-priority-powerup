@@ -392,6 +392,46 @@
     };
   }
 
+  var SCORE_COLOR_STOPS = [
+    { s: 0, r: 155, g: 152, b: 144 },
+    { s: 1.4, r: 90, g: 159, b: 212 },
+    { s: 2.9, r: 59, g: 169, b: 156 },
+    { s: 4.3, r: 110, g: 173, b: 58 },
+    { s: 5.8, r: 186, g: 117, b: 23 },
+    { s: 7.2, r: 216, g: 90, b: 48 },
+    { s: 8.6, r: 228, g: 82, b: 80 },
+    { s: 9.3, r: 226, g: 75, b: 74 },
+    { s: 10, r: 168, g: 42, b: 40 }
+  ];
+
+  var SCORE_SURFACE_ALPHA = 0.78;
+
+  function scoreToRgb(score) {
+    score = Math.max(0, Math.min(10, score));
+    var hi = SCORE_COLOR_STOPS.length - 1;
+    for (var k = 0; k < SCORE_COLOR_STOPS.length - 1; k++) {
+      if (score <= SCORE_COLOR_STOPS[k + 1].s) {
+        hi = k + 1;
+        break;
+      }
+    }
+    var lo = hi - 1;
+    var a = SCORE_COLOR_STOPS[lo];
+    var b = SCORE_COLOR_STOPS[hi];
+    var span = b.s - a.s;
+    var t = span > 1e-9 ? (score - a.s) / span : 0;
+    return {
+      r: Math.round(a.r + (b.r - a.r) * t),
+      g: Math.round(a.g + (b.g - a.g) * t),
+      b: Math.round(a.b + (b.b - a.b) * t)
+    };
+  }
+
+  function scoreToRgba(score, alpha) {
+    var rgb = scoreToRgb(score);
+    return 'rgba(' + rgb.r + ', ' + rgb.g + ', ' + rgb.b + ', ' + alpha + ')';
+  }
+
   var HEAT_SEGMENTS = [
     {
       i: 6, target: 0.7, color: '#9B9890', label: 'Optionnel', description: TIERS[6].description,

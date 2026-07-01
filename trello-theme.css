@@ -455,26 +455,19 @@ body.tp-page--priority {
 .tp-priority-card-header {
   flex-shrink: 0;
   text-align: center;
-  padding: 14px 16px 12px;
-  border-bottom: 1px solid var(--tp-border);
-  background: var(--tp-surface-subtle);
+  padding: 0 0 10px;
 }
 
 .tp-page--priority .variant-card > .tp-priority-card-header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  margin: -0.625rem -12px 0;
-  padding: 12px 16px 10px;
-  border-radius: 14px 14px 0 0;
+  padding: 0 0 8px;
 }
 
 .tp-priority-card-name {
   margin: 0;
   min-height: 1.4em;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.35;
   color: var(--tp-text);
   word-break: break-word;
   overflow: hidden;
@@ -486,7 +479,7 @@ body.tp-page--priority {
 
 .tp-priority-card-name.is-loading {
   font-weight: 400;
-  font-size: 15px;
+  font-size: 14px;
   color: var(--tp-text-muted);
 }
 
