@@ -523,6 +523,42 @@
   var BADGE_DOT_INUTILE = '\u00B7';
   var BADGE_DOT_COMPLETE = '\u2713';
 
+  // Heat-badge dot diameter (px): low score → small, high score → large.
+  var HEAT_TIER_DOT_MIN = 5;
+  var HEAT_TIER_DOT_MAX = 14;
+  var HEAT_TIER_DOT_SCORE_MAX = 10;
+  var HEAT_TIER_DOT_SIZES = {
+    0: 14, // Critique
+    1: 12, // Urgent
+    2: 10, // Prioritaire
+    3: 9,  // Important
+    4: 7,  // Flexible
+    5: 6,  // Secondaire
+    6: 5   // Optionnel
+  };
+
+  function heatTierDotSizePx(display) {
+    if (!display) return 9;
+    if (display.inutile) return HEAT_TIER_DOT_MIN;
+    if (display.blocked) {
+      var blockedI = display.tierI;
+      if (blockedI != null && Object.prototype.hasOwnProperty.call(HEAT_TIER_DOT_SIZES, blockedI)) {
+        return HEAT_TIER_DOT_SIZES[blockedI];
+      }
+      return 10;
+    }
+    var score = display.score;
+    if (typeof score === 'number' && isFinite(score)) {
+      var t = clamp(score / HEAT_TIER_DOT_SCORE_MAX, 0, 1);
+      return HEAT_TIER_DOT_MIN + t * (HEAT_TIER_DOT_MAX - HEAT_TIER_DOT_MIN);
+    }
+    var tierI = display.tierI;
+    if (tierI != null && Object.prototype.hasOwnProperty.call(HEAT_TIER_DOT_SIZES, tierI)) {
+      return HEAT_TIER_DOT_SIZES[tierI];
+    }
+    return 9;
+  }
+
   function tierBadgeDotChar(display, completed) {
     if (completed) return BADGE_DOT_COMPLETE;
     if (!display) return '\u25CF';
@@ -1878,6 +1914,7 @@
       var v = tierVisuals(visualSource);
       bnumVal.textContent = formatScore(d.score);
       dot.classList.toggle('is-blocked', !!d.blocked);
+      dot.style.setProperty('--heat-tier-dot-size', heatTierDotSizePx(d).toFixed(2) + 'px');
       if (d.blocked) {
         dot.style.removeProperty('background');
       } else {
@@ -2947,6 +2984,8 @@
     blockedTaskBadgeLabel: blockedTaskBadgeLabel,
     tierTrelloBadgeColor: tierTrelloBadgeColor,
     tierBadgeDotChar: tierBadgeDotChar,
+    heatTierDotSizePx: heatTierDotSizePx,
+    HEAT_TIER_DOT_SIZES: HEAT_TIER_DOT_SIZES,
     TIER_TRELLO_BADGE_COLORS: TIER_TRELLO_BADGE_COLORS,
     TIER_BADGE_DOTS: TIER_BADGE_DOTS,
     BADGE_DOT_COMPLETE: BADGE_DOT_COMPLETE,

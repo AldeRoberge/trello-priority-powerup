@@ -839,17 +839,19 @@ body.help-modal-open {
 }
 
 .heat-tier-dot {
-  width: 11px;
-  height: 11px;
+  --heat-tier-dot-size: 11px;
+  width: var(--heat-tier-dot-size);
+  height: var(--heat-tier-dot-size);
   border-radius: 50%;
   flex-shrink: 0;
   align-self: center;
   background: var(--heat-dot-fallback);
+  transition: width 0.25s ease, height 0.25s ease;
 }
 
 .heat-tier-dot.is-blocked {
   background: transparent;
-  border: 1.75px solid currentColor;
+  border: calc(var(--heat-tier-dot-size) * 0.159) solid currentColor;
   box-sizing: border-box;
   position: relative;
   color: var(--heat-text, var(--blocked-accent));
@@ -860,8 +862,8 @@ body.help-modal-open {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 13px;
-  height: 1.75px;
+  width: calc(var(--heat-tier-dot-size) * 1.182);
+  height: calc(var(--heat-tier-dot-size) * 0.159);
   background: currentColor;
   transform: translate(-50%, -50%) rotate(-45deg);
   border-radius: 1px;

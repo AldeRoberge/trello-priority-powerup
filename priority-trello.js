@@ -257,6 +257,17 @@
     };
   }
 
+  async function getCardName(t) {
+    try {
+      var name = await cardFieldPromise(t, 'name');
+      if (typeof name === 'string' && name.trim()) return name.trim();
+      return null;
+    } catch (err) {
+      console.error('Priority card name failed', err);
+      return null;
+    }
+  }
+
   async function getCardDueComplete(t) {
     try {
       // Documented pattern: t.card(field).get(field).then(value) — resolves the scalar/object.
@@ -499,6 +510,7 @@
     getMatrixSettings: getMatrixSettings,
     computeDisplay: computeDisplay,
     getCardDisplay: getCardDisplay,
+    getCardName: getCardName,
     getCardDueComplete: getCardDueComplete,
     getBadgeData: getBadgeData,
     formatBadgeText: formatBadgeText,

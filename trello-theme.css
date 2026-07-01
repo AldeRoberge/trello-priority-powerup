@@ -427,6 +427,28 @@ body.tp-page--priority {
   padding: 0;
 }
 
+.tp-priority-card-header {
+  text-align: center;
+  padding: 10px 12px 4px;
+}
+
+.tp-priority-card-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--tp-text);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.tp-priority-card-name.is-loading {
+  font-weight: 400;
+  color: var(--tp-text-muted);
+}
+
 .tp-page--priority .compare-page {
   /* priority-ui.css sets .compare-page { max-width: 420px } — override for editor shell */
   max-width: none;

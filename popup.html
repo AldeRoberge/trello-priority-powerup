@@ -13,6 +13,9 @@
   <script src="./priority-trello.js"></script>
 </head>
 <body class="tp-page tp-page--priority">
+  <header class="tp-priority-card-header">
+    <p class="tp-priority-card-name is-loading" id="cardName" aria-live="polite">Chargement…</p>
+  </header>
   <div class="compare-page">
     <div class="compare-grid" id="priorityMount"></div>
   </div>
@@ -36,7 +39,17 @@
       return saveChain;
     }
 
+    function setCardNameLabel(name) {
+      var el = document.getElementById('cardName');
+      el.textContent = name || 'Carte';
+      el.classList.remove('is-loading');
+    }
+
     async function init() {
+      PriorityTrello.getCardName(t).then(setCardNameLabel, function () {
+        setCardNameLabel(null);
+      });
+
       const inputs = await PriorityTrello.clearBlockedIfComplete(t);
       const matrixSettings = await PriorityTrello.getMatrixSettings(t);
       PriorityUI.setMatrixSettings(matrixSettings);
