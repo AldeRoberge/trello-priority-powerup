@@ -576,7 +576,7 @@ body.tp-page--priority {
   font-size: 17px;
 }
 
-.tp-page--priority .field-desc {
+.tp-page--priority .field-lbl-tooltip {
   font-size: 13px;
 }
 

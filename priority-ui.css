@@ -108,8 +108,8 @@ html[data-color-mode="dark"] .help-modal-body {
   color: var(--text-secondary);
 }
 
-html[data-color-mode="dark"] .field-desc {
-  color: #9fadbc;
+html[data-color-mode="dark"] .field-lbl-tooltip {
+  color: var(--text-secondary);
 }
 
 html[data-color-mode="dark"] .help-modal-step {
@@ -512,17 +512,47 @@ body {
   box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--focus-ring-strong);
 }
 
+.field-lbl-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
 .field-lbl {
+  margin: 0;
+  border: none;
+  padding: 0;
+  font: inherit;
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+  background: none;
   display: flex;
   align-items: center;
   gap: 5px;
   letter-spacing: -0.01em;
   line-height: 1.35;
-  flex: 0 0 auto;
   min-width: 0;
+  cursor: pointer;
+  text-align: left;
+  transition: opacity .12s;
+}
+
+.field-lbl:hover,
+.field-lbl:focus-visible {
+  opacity: 0.92;
+}
+
+.field-lbl:hover .field-lbl-text,
+.field-lbl:focus-visible .field-lbl-text {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.field-lbl:focus-visible {
+  outline: none;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--focus-ring-strong);
 }
 
 .field-lbl .ti {
@@ -531,49 +561,50 @@ body {
   flex-shrink: 0;
 }
 
-.field-desc {
-  margin: 0;
-  border: none;
-  padding: 0;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 400;
-  color: #94908A;
-  background: none;
-  text-align: left;
-  cursor: pointer;
-  transition: opacity .12s;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  line-height: 1.35;
-  min-height: calc(1.35em * 2);
-  white-space: normal;
-  width: 100%;
+.field-lbl-text {
   min-width: 0;
 }
 
-.field-desc.is-empty {
+.field-lbl-tooltip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 12;
+  min-width: 180px;
+  max-width: min(280px, 78vw);
+  padding: 8px 10px;
+  border-radius: var(--radius, 8px);
+  border: 1px solid var(--border, #dfe1e6);
+  background: var(--surface-1, #fff);
+  color: #94908A;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.35;
+  white-space: normal;
+  text-align: left;
+  box-shadow: 0 4px 16px rgba(9, 30, 66, 0.18);
   visibility: hidden;
+  opacity: 0;
   pointer-events: none;
-  min-height: 0;
+  transition: opacity 0.12s, visibility 0.12s;
 }
 
-html[data-color-mode="light"] .field-desc {
+html[data-color-mode="light"] .field-lbl-tooltip {
   color: #576474;
 }
 
-.field-desc:hover {
-  opacity: 0.85;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+html[data-color-mode="dark"] .field-lbl-tooltip {
+  color: #9fadbc;
 }
 
-.field-desc:focus-visible {
-  outline: none;
-  border-radius: 4px;
-  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--focus-ring-strong);
+.field-lbl-wrap:hover .field-lbl-tooltip,
+.field-lbl-wrap:focus-within .field-lbl-tooltip {
+  visibility: visible;
+  opacity: 1;
+}
+
+.field-lbl-wrap.is-empty-tip .field-lbl-tooltip {
+  display: none;
 }
 
 .field-val {

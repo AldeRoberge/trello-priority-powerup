@@ -1936,18 +1936,29 @@
     field.className = 'field';
     field.dataset.fieldId = id;
 
-    var lbl = document.createElement('div');
-    lbl.className = 'field-lbl';
+    var lblWrap = document.createElement('span');
+    lblWrap.className = 'field-lbl-wrap';
+
+    var tooltipId = id + '-tip';
+
+    var lblBtn = document.createElement('button');
+    lblBtn.type = 'button';
+    lblBtn.className = 'field-lbl';
+    lblBtn.setAttribute('aria-label', 'Choisir le niveau de ' + label);
+    lblBtn.setAttribute('aria-describedby', tooltipId);
 
     var lblIcon = document.createElement('i');
     lblIcon.className = 'ti ' + icon;
     lblIcon.setAttribute('aria-hidden', 'true');
-    var lblText = document.createTextNode(' ' + label);
 
-    var descBtn = document.createElement('button');
-    descBtn.type = 'button';
-    descBtn.className = 'field-desc';
-    descBtn.setAttribute('aria-label', 'Choisir le niveau de ' + label);
+    var lblText = document.createElement('span');
+    lblText.className = 'field-lbl-text';
+    lblText.textContent = label;
+
+    var lblTooltip = document.createElement('div');
+    lblTooltip.id = tooltipId;
+    lblTooltip.className = 'field-lbl-tooltip';
+    lblTooltip.setAttribute('role', 'tooltip');
 
     function openFieldHelp() {
       var wiz = config.wizard;
@@ -1971,16 +1982,12 @@
       });
     }
 
-    descBtn.addEventListener('click', openFieldHelp);
-    descBtn.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        openFieldHelp();
-      }
-    });
+    lblBtn.addEventListener('click', openFieldHelp);
 
-    lbl.appendChild(lblIcon);
-    lbl.appendChild(lblText);
+    lblBtn.appendChild(lblIcon);
+    lblBtn.appendChild(lblText);
+    lblWrap.appendChild(lblBtn);
+    lblWrap.appendChild(lblTooltip);
 
     var sliderWrap = document.createElement('div');
     sliderWrap.className = 'field-slider';
@@ -2006,11 +2013,10 @@
 
     var fieldHead = document.createElement('div');
     fieldHead.className = 'field-head';
-    fieldHead.appendChild(lbl);
+    fieldHead.appendChild(lblWrap);
     fieldHead.appendChild(sliderWrap);
 
     field.appendChild(fieldHead);
-    field.appendChild(descBtn);
 
     el.appendChild(field);
 
@@ -2023,11 +2029,10 @@
       var idx = snappedLevel(v, min, max);
       var shortLabel = wordFor(wordsKey, idx);
       var descText = descriptionForLevel(idx);
-      descBtn.textContent = descText;
-      descBtn.classList.toggle('is-empty', !descText);
-      descBtn.setAttribute('aria-hidden', descText ? 'false' : 'true');
-      descBtn.tabIndex = descText ? 0 : -1;
-      descBtn.setAttribute('aria-label', descText
+      lblTooltip.textContent = descText;
+      lblBtn.title = descText || '';
+      lblWrap.classList.toggle('is-empty-tip', !descText);
+      lblBtn.setAttribute('aria-label', descText
         ? 'Choisir le niveau de ' + label + '. Actuellement : ' + shortLabel
         : 'Choisir le niveau de ' + label);
       inputEl.value = String(v);
