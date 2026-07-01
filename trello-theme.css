@@ -286,6 +286,31 @@ html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
 
 .tp-link:hover { text-decoration: underline; }
 
+.tp-auto-sort {
+  margin: 12px 0 4px;
+}
+
+.tp-auto-sort-status {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--tp-text-muted, #5e6c84);
+}
+
+.tp-button {
+  display: inline-block;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 3px;
+  background: var(--tp-link);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.tp-button:hover { filter: brightness(1.05); }
+
 .tp-toast {
   position: fixed;
   bottom: 12px;

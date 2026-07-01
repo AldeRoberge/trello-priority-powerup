@@ -406,10 +406,23 @@
     });
   }
 
+  function restClientOptions() {
+    var cfg = global.PriorityRestConfig;
+    if (!cfg || !cfg.appKey) return null;
+    var opts = {
+      appKey: cfg.appKey,
+      appName: cfg.appName || 'Priorité',
+    };
+    if (cfg.appAuthor) opts.appAuthor = cfg.appAuthor;
+    return opts;
+  }
+
   function createIframeClient() {
     if (typeof global.TrelloPowerUp === 'undefined') {
       throw new Error('TrelloPowerUp is not loaded');
     }
+    var restOpts = restClientOptions();
+    if (restOpts) return global.TrelloPowerUp.iframe(restOpts);
     return global.TrelloPowerUp.iframe();
   }
 
@@ -446,10 +459,13 @@
     });
   }
 
-  async function saveCardInputs(t, inputs) {
+  async function saveCardInputs(t, inputs, options) {
     var normalized = normalizeInputs(inputs);
     if (!normalized) return;
     await t.set('card', 'shared', CARD_PRIORITY_KEY, normalized);
+    if (!options || options.autoSort !== false) {
+      scheduleAutoSortCard(t);
+    }
   }
 
   async function getCardInputsById(t, cardId) {
@@ -501,6 +517,215 @@
     }];
   }
 
+  // ── Auto-sort (REST PUT /cards/{id} pos) ─────────────────────────────────
+
+  var autoSortDebounceByClient = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+  var autoSortDebounceFallback = null;
+
+  function autoSortDebounceMs() {
+    var cfg = global.PriorityRestConfig;
+    var ms = cfg && cfg.autoSortDebounceMs;
+    return typeof ms === 'number' && ms >= 0 ? ms : 400;
+  }
+
+  function getAutoSortDebounceState(t) {
+    if (autoSortDebounceByClient) {
+      var state = autoSortDebounceByClient.get(t);
+      if (!state) {
+        state = { timer: null, chain: Promise.resolve() };
+        autoSortDebounceByClient.set(t, state);
+      }
+      return state;
+    }
+    if (!autoSortDebounceFallback) {
+      autoSortDebounceFallback = { timer: null, chain: Promise.resolve() };
+    }
+    return autoSortDebounceFallback;
+  }
+
+  function comparePriorityEntries(entryA, entryB) {
+    var cmp = comparePriorityDisplays(entryA.display, entryB.display);
+    if (cmp !== 0) return cmp;
+    return (entryA.pos || 0) - (entryB.pos || 0);
+  }
+
+  function sortEntriesByPriority(entries) {
+    return entries.slice().sort(comparePriorityEntries);
+  }
+
+  function indexByPos(entries) {
+    var byPos = entries.slice().sort(function (a, b) {
+      return (a.pos || 0) - (b.pos || 0);
+    });
+    var indexById = {};
+    for (var i = 0; i < byPos.length; i++) {
+      indexById[byPos[i].id] = i;
+    }
+    return indexById;
+  }
+
+  // Returns null when the card is already at the correct rank; otherwise { pos }.
+  function computeCardMovePosition(entries, cardId) {
+    if (!entries || entries.length < 2 || !cardId) return null;
+
+    var byPriority = sortEntriesByPriority(entries);
+    var targetIdx = -1;
+    for (var i = 0; i < byPriority.length; i++) {
+      if (byPriority[i].id === cardId) {
+        targetIdx = i;
+        break;
+      }
+    }
+    if (targetIdx < 0) return null;
+
+    var posIndex = indexByPos(entries);
+    if (posIndex[cardId] === targetIdx) return null;
+
+    var above = targetIdx > 0 ? byPriority[targetIdx - 1] : null;
+    var below = targetIdx < byPriority.length - 1 ? byPriority[targetIdx + 1] : null;
+
+    if (!above) return { pos: 'top' };
+    if (!below) return { pos: 'bottom' };
+
+    var posAbove = above.pos;
+    var posBelow = below.pos;
+    if (typeof posAbove !== 'number' || typeof posBelow !== 'number' || posAbove >= posBelow) {
+      return { pos: 'bottom' };
+    }
+    return { pos: (posAbove + posBelow) / 2 };
+  }
+
+  async function readCardIdAndListId(t) {
+    var results = await Promise.all([
+      cardFieldPromise(t, 'id'),
+      cardFieldPromise(t, 'idList'),
+    ]);
+    var cardId = results[0];
+    var listId = results[1];
+    if (isPowerUpRequestChain(cardId) || isPowerUpRequestChain(listId)) return null;
+    if (typeof cardId === 'object' && cardId) cardId = cardId.id;
+    if (typeof listId === 'object' && listId) listId = listId.idList || listId.id;
+    if (!cardId || !listId) return null;
+    return { cardId: String(cardId), listId: String(listId) };
+  }
+
+  async function buildListPriorityEntries(t, listId, settings) {
+    var cards = await t.cards('id', 'idList', 'pos');
+    if (!Array.isArray(cards)) return [];
+
+    var inList = cards.filter(function (card) {
+      return card && String(card.idList) === String(listId);
+    });
+    if (!inList.length) return [];
+
+    return Promise.all(
+      inList.map(async function (card) {
+        var inputs = await getCardInputsById(t, card.id);
+        var display = inputs ? computeDisplay(inputs, settings) : null;
+        return {
+          id: String(card.id),
+          pos: typeof card.pos === 'number' ? card.pos : Number(card.pos) || 0,
+          display: display,
+        };
+      })
+    );
+  }
+
+  async function restPutCard(t, cardId, body) {
+    var cfg = restClientOptions();
+    if (!cfg) return { ok: false, reason: 'no-app-key' };
+
+    var api = await t.getRestApi();
+    var authorized = await api.isAuthorized();
+    if (!authorized) return { ok: false, reason: 'not-authorized' };
+
+    var token = await api.getToken();
+    if (!token) return { ok: false, reason: 'no-token' };
+
+    var url =
+      'https://api.trello.com/1/cards/' + encodeURIComponent(cardId) +
+      '?key=' + encodeURIComponent(cfg.appKey) +
+      '&token=' + encodeURIComponent(token);
+
+    var response = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      var detail = '';
+      try {
+        detail = await response.text();
+      } catch (readErr) {
+        detail = readErr && readErr.message ? readErr.message : '';
+      }
+      throw new Error('Trello REST PUT /cards/' + cardId + ' failed: ' + response.status + (detail ? ' ' + detail : ''));
+    }
+    return { ok: true };
+  }
+
+  async function autoSortCardInList(t) {
+    if (!restClientOptions()) return { moved: false, reason: 'no-app-key' };
+
+    var ids = await readCardIdAndListId(t);
+    if (!ids) return { moved: false, reason: 'no-card-context' };
+
+    var settings = await getMatrixSettings(t);
+    var entries = await buildListPriorityEntries(t, ids.listId, settings);
+    if (entries.length < 2) return { moved: false, reason: 'single-card-list' };
+
+    var move = computeCardMovePosition(entries, ids.cardId);
+    if (!move) return { moved: false, reason: 'already-sorted' };
+
+    await restPutCard(t, ids.cardId, { pos: move.pos });
+    return { moved: true, pos: move.pos };
+  }
+
+  function scheduleAutoSortCard(t) {
+    if (!restClientOptions()) return Promise.resolve({ moved: false, reason: 'no-app-key' });
+
+    var state = getAutoSortDebounceState(t);
+    if (state.timer) clearTimeout(state.timer);
+
+    state.chain = state.chain
+      .catch(function () { /* keep chain alive after a failed sort */ })
+      .then(function () {
+        return new Promise(function (resolve) {
+          state.timer = setTimeout(resolve, autoSortDebounceMs());
+        });
+      })
+      .then(function () {
+        state.timer = null;
+        return autoSortCardInList(t);
+      })
+      .catch(function (err) {
+        console.error('Priority auto-sort failed', err);
+        return { moved: false, reason: 'error' };
+      });
+
+    return state.chain;
+  }
+
+  async function isRestAuthorized(t) {
+    if (!restClientOptions()) return false;
+    try {
+      var api = await t.getRestApi();
+      return api.isAuthorized();
+    } catch (err) {
+      console.error('Priority REST auth check failed', err);
+      return false;
+    }
+  }
+
+  async function authorizeRestForAutoSort(t) {
+    if (!restClientOptions()) {
+      throw new Error('REST appKey is not configured');
+    }
+    var api = await t.getRestApi();
+    return api.authorize({ scope: 'read,write', expiration: 'never' });
+  }
+
   global.PriorityTrello = {
     CARD_PRIORITY_KEY: CARD_PRIORITY_KEY,
     MATRIX_SETTINGS_KEY: MATRIX_SETTINGS_KEY,
@@ -532,6 +757,13 @@
     comparePriorityDisplays: comparePriorityDisplays,
     sortListCardsByPriority: sortListCardsByPriority,
     listPrioritySorters: listPrioritySorters,
+    comparePriorityEntries: comparePriorityEntries,
+    computeCardMovePosition: computeCardMovePosition,
+    autoSortCardInList: autoSortCardInList,
+    scheduleAutoSortCard: scheduleAutoSortCard,
+    isRestAuthorized: isRestAuthorized,
+    authorizeRestForAutoSort: authorizeRestForAutoSort,
+    restClientOptions: restClientOptions,
     pageUrl: pageUrl,
     createIframeClient: createIframeClient,
     createIframeClientDeferred: createIframeClientDeferred,

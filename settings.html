@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Paramètres de priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./rest-config.js"></script>
   <script src="./priority-trello.js"></script>
   <script src="./version.js"></script>
   <link rel="stylesheet" href="./trello-theme.css" />
@@ -14,6 +15,10 @@
   <p class="tp-subtitle">Évaluez chaque carte selon l'urgence, l'impact et l'effort pour obtenir un score et un libellé de palier (Critique, Urgent, Prioritaire…).</p>
 
   <div class="tp-build-info" id="buildInfo">Build : chargement…</div>
+  <div class="tp-auto-sort" id="autoSortSection" hidden>
+    <p class="tp-auto-sort-status" id="autoSortStatus"></p>
+    <button type="button" class="tp-button" id="authorizeAutoSort" hidden>Autoriser le tri automatique</button>
+  </div>
   <button type="button" class="tp-link" id="showGuide">Voir le guide de configuration</button>
 
   <script>
@@ -40,6 +45,33 @@
       }
     }
 
+    async function refreshAutoSortUi() {
+      var section = document.getElementById('autoSortSection');
+      var statusEl = document.getElementById('autoSortStatus');
+      var authBtn = document.getElementById('authorizeAutoSort');
+      if (!PriorityTrello.restClientOptions || !PriorityTrello.restClientOptions()) {
+        section.hidden = true;
+        return;
+      }
+      section.hidden = false;
+      var authorized = await PriorityTrello.isRestAuthorized(t);
+      if (authorized) {
+        statusEl.textContent = 'Tri automatique : activé (la carte se réordonne dans sa liste après chaque changement de priorité).';
+        authBtn.hidden = true;
+      } else {
+        statusEl.textContent = 'Tri automatique : autorisation requise (portée lecture + écriture, une fois par membre).';
+        authBtn.hidden = false;
+      }
+    }
+
+    document.getElementById('authorizeAutoSort').addEventListener('click', function () {
+      PriorityTrello.authorizeRestForAutoSort(t)
+        .then(function () { return refreshAutoSortUi(); })
+        .catch(function (err) {
+          console.error('Priority REST authorize failed', err);
+        });
+    });
+
     document.getElementById('showGuide').addEventListener('click', () => {
       t.modal({
         title: 'Priorité',
@@ -50,7 +82,7 @@
       });
     });
 
-    return loadBuildInfo();
+    return Promise.all([loadBuildInfo(), refreshAutoSortUi()]);
     }).catch(function (err) {
       console.error('Priority settings init failed', err);
     });

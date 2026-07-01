@@ -16,6 +16,7 @@ Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques
 - **Horodatage de build** affiché sur la page d'accueil du connecteur (`build-info.json`, horodaté à chaque déploiement CI dans l'artifact publié)
 - **Compatibilité** : les anciennes priorités P1–P5 sont lues pour l'affichage jusqu'à la prochaine sauvegarde
 - **Tri par colonne** : menu `…` d'une liste → **Trier par…** → **Priorité** (Critique en haut, cartes sans priorité en bas)
+- **Tri automatique** (optionnel) : après chaque changement de priorité, la carte se réordonne dans sa liste (nécessite clé API + autorisation OAuth ; voir ci-dessous)
 
 ---
 
@@ -29,7 +30,8 @@ Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques
 | `welcome.html` | Modal d'accueil à l'activation du Power-Up |
 | `priority-ui.js` | Formule de score, composants UI (`PriorityUI`) |
 | `priority-ui.css` | Styles de l'éditeur de priorité |
-| `priority-trello.js` | Pont Trello (stockage, badges, affichage) |
+| `priority-trello.js` | Pont Trello (stockage, badges, affichage, tri) |
+| `rest-config.js` | Clé API Power-Up pour le tri automatique (REST) |
 | `version.js` | Affichage de la version / date de build |
 | `trello-theme.css` | Styles communs des pages Power-Up |
 | `build-info.json` | Horodatage du dernier déploiement |
@@ -118,7 +120,7 @@ Après le déploiement GitHub Pages, enregistrez ou mettez à jour le Power-Up s
      Doit pointer vers `index.html` à la racine du site déployé (connecteur chargé par Trello dans une iframe).
 3. Onglet **Capabilities** / **Capacités** — cocher **uniquement** les cinq capacités listées ci-dessous (tableau).  
    Ne **pas** activer `card-buttons` ni d'autres capacités non implémentées dans `index.html`.
-4. Onglet **API Key** — **Allowed origins** : *non requis* pour ce Power-Up (pas de `t.authorize`, pas d'appels REST/OAuth ; seulement `t.get` / `t.set` et `t.signUrl` pour des fichiers statiques du même site).
+4. Onglet **API Key** — générer une clé et la copier dans `rest-config.js` (`appKey`) pour activer le **tri automatique** (voir [Tri automatique](#tri-automatique)). **Allowed origins** : *non requis* pour les pages statiques du Power-Up ; l'OAuth REST utilise le flux intégré Trello.
 5. Enregistrer, attendre la fin du déploiement GitHub Pages si l'URL du connecteur vient de changer.
 6. Sur chaque tableau : **retirer et réajouter** le Power-Up (Trello ne recharge pas toujours les capacités sur un tableau déjà ouvert).
 
@@ -172,9 +174,39 @@ Le tri utilise la capacité native `list-sorters` de Trello (`sortedIds`) — **
 3. Retirer le Power-Up du tableau, rafraîchir la page, le réactiver
 4. Ouvrir le menu `…` de la **liste** (pas du tableau) → **Trier par…** — l'entrée **Priorité** est fournie par ce Power-Up
 
-**Alternative** si le tri natif reste indisponible (capacité non activée, cache Trello, etc.) : réordonner les cartes **manuellement** en vous aidant des badges de priorité sur chaque carte (Critique en haut → sans priorité en bas). Aucun autre mécanisme de tri automatique n'est possible sans `list-sorters` ni API REST/OAuth.
+**Alternative** si le tri natif reste indisponible (capacité non activée, cache Trello, etc.) : réordonner les cartes **manuellement** en vous aidant des badges de priorité sur chaque carte (Critique en haut → sans priorité en bas), ou activer le [tri automatique](#tri-automatique) si la clé API et l'autorisation OAuth sont configurées.
 
 Signature du callback (SDK actuel) : `callback(t, opts)` avec `opts.cards` (tableau des cartes de la liste) ; retour `{ sortedIds: [id, …] }` (Promise acceptée).
+
+### Tri automatique
+
+Lorsqu'un membre modifie la priorité d'une carte (curseurs, palier, état bloqué, etc.), le Power-Up peut **réordonner uniquement cette carte** dans sa liste via l'API REST Trello (`PUT /1/cards/{id}` avec `pos`). Le reste du tableau n'est pas re-trié.
+
+**Règles** (identiques au tri manuel *Priorité*) :
+
+1. Palier le plus élevé en haut : Critique → Urgent → Prioritaire → … → Optionnel → Inutile
+2. À palier égal : score plus élevé en haut
+3. Cartes **bloquées** : classées selon le palier sous-jacent (pas selon l'état bloqué)
+4. Cartes **sans priorité** : en bas de la liste
+5. À priorité égale : l'ordre actuel dans la liste est conservé (tri stable)
+
+**Prérequis admin / déploiement**
+
+| Élément | Requis pour le tri auto |
+|---------|-------------------------|
+| Capacités `card-detail-badges`, etc. | Oui (comme aujourd'hui) |
+| `list-sorters` | Non (tri manuel reste indépendant) |
+| `rest-config.js` → `appKey` | Oui — clé API de [trello.com/power-ups/admin](https://trello.com/power-ups/admin) |
+| `index.html` → `TrelloPowerUp.initialize(…, { appKey, appName })` | Oui (automatique si `appKey` est renseigné) |
+| Autorisation OAuth membre (`read,write`) | Oui — une fois par membre via **Paramètres de priorité** → **Autoriser le tri automatique** |
+
+**Limitations**
+
+- Pas de `t.moveCard` dans le SDK Power-Up : seul `PUT /cards/{id}` avec `pos` (`top`, `bottom` ou valeur numérique) est utilisé.
+- Sans `appKey` ou sans autorisation OAuth, la priorité est enregistrée normalement mais **aucun déplacement** n'est effectué (le tri manuel *Trier par… → Priorité* reste disponible).
+- Le tri ne s'applique qu'à la **liste courante** de la carte ; les autres listes ne bougent pas.
+- Les curseurs déclenchent une sauvegarde immédiate ; le déplacement est **débouncé** (400 ms par défaut, `autoSortDebounceMs` dans `rest-config.js`).
+- Nécessite la portée REST **écriture** (`write`) pour modifier la position des cartes.
 
 ### Messages console sur Trello.com
 

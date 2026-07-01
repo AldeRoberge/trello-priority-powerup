@@ -212,5 +212,40 @@ check(
   PT.listPrioritySorters({}).length === 1 && PT.listPrioritySorters({})[0].text === 'Priorit\u00e9'
 );
 
+var listEntries = [
+  { id: 'c1', pos: 16384, display: critiqueDisplay },
+  { id: 'c2', pos: 32768, display: urgentDisplay },
+  { id: 'c3', pos: 49152, display: prioritaireDisplay },
+];
+check(
+  'compute move: no move when list already matches priority',
+  PT.computeCardMovePosition(listEntries, 'c2') === null
+);
+var wrongOrderEntries = [
+  { id: 'c1', pos: 16384, display: critiqueDisplay },
+  { id: 'c3', pos: 32768, display: prioritaireDisplay },
+  { id: 'c2', pos: 49152, display: urgentDisplay },
+];
+check(
+  'compute move: prioritaire down when above urgent',
+  JSON.stringify(PT.computeCardMovePosition(wrongOrderEntries, 'c3')) === JSON.stringify({ pos: 'bottom' })
+);
+var mixedEntries = [
+  { id: 'a', pos: 1000, display: critiqueDisplay },
+  { id: 'c', pos: 2000, display: prioritaireDisplay },
+  { id: 'b', pos: 3000, display: urgentDisplay },
+];
+check(
+  'compute move: urgent up when currently below prioritaire',
+  JSON.stringify(PT.computeCardMovePosition(mixedEntries, 'b')) === JSON.stringify({ pos: 1500 })
+);
+check(
+  'compute move: unprioritized card sorts to bottom',
+  JSON.stringify(PT.computeCardMovePosition([
+    { id: 'x', pos: 2000, display: critiqueDisplay },
+    { id: 'y', pos: 1000, display: null },
+  ], 'y')) === JSON.stringify({ pos: 'bottom' })
+);
+
 console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll badge checks passed');
 process.exit(bad ? 1 : 0);
