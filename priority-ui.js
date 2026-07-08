@@ -269,47 +269,169 @@
     urgency: 'ti-flame'
   };
 
-  var TIERS = [
+  // Single-hue blue intensity palette (low → high priority).
+  var PRIORITY_BLUE_STOPS = ['#E6F1FB', '#B5D4F4', '#85B7EB', '#378ADD', '#0C447C'];
+  var PRIORITY_TEXT_ON_LIGHT = '#0C447C';
+  var PRIORITY_TEXT_ON_DARK = '#ffffff';
+
+  function priorityParseHex(hex) {
+    var h = String(hex).replace('#', '');
+    return {
+      r: parseInt(h.slice(0, 2), 16),
+      g: parseInt(h.slice(2, 4), 16),
+      b: parseInt(h.slice(4, 6), 16)
+    };
+  }
+
+  function priorityRgbToHex(rgb) {
+    function byte(n) {
+      var s = Math.max(0, Math.min(255, Math.round(n))).toString(16);
+      return s.length < 2 ? '0' + s : s;
+    }
+    return '#' + byte(rgb.r) + byte(rgb.g) + byte(rgb.b);
+  }
+
+  function priorityLerpRgb(a, b, t) {
+    return {
+      r: a.r + (b.r - a.r) * t,
+      g: a.g + (b.g - a.g) * t,
+      b: a.b + (b.b - a.b) * t
+    };
+  }
+
+  function priorityStopTForScore(score) {
+    return Math.max(0, Math.min(PRIORITY_BLUE_STOPS.length - 1,
+      (score / 10) * (PRIORITY_BLUE_STOPS.length - 1)));
+  }
+
+  function priorityStopTForTierIndex(tierI) {
+    return Math.max(0, Math.min(PRIORITY_BLUE_STOPS.length - 1,
+      ((6 - tierI) / 6) * (PRIORITY_BLUE_STOPS.length - 1)));
+  }
+
+  function priorityRgbAtStopT(stopT) {
+    var maxIdx = PRIORITY_BLUE_STOPS.length - 1;
+    stopT = Math.max(0, Math.min(maxIdx, stopT));
+    var lo = Math.floor(stopT);
+    var hi = Math.min(lo + 1, maxIdx);
+    var t = stopT - lo;
+    return priorityLerpRgb(
+      priorityParseHex(PRIORITY_BLUE_STOPS[lo]),
+      priorityParseHex(PRIORITY_BLUE_STOPS[hi]),
+      t
+    );
+  }
+
+  function priorityHexAtStopT(stopT) {
+    return priorityRgbToHex(priorityRgbAtStopT(stopT));
+  }
+
+  function priorityFillAtStopT(stopT) {
+    return priorityRgbToHex(priorityLerpRgb(priorityRgbAtStopT(stopT), { r: 255, g: 255, b: 255 }, 0.88));
+  }
+
+  function priorityRelativeLuminance(rgb) {
+    function chan(c) {
+      c /= 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    }
+    return 0.2126 * chan(rgb.r) + 0.7152 * chan(rgb.g) + 0.0722 * chan(rgb.b);
+  }
+
+  function priorityTextForFillHex(fillHex) {
+    return priorityRelativeLuminance(priorityParseHex(fillHex)) > 0.72
+      ? PRIORITY_TEXT_ON_LIGHT
+      : PRIORITY_TEXT_ON_DARK;
+  }
+
+  function priorityTierLightStyles(tierI) {
+    var stopT = priorityStopTForTierIndex(tierI);
+    var fill = priorityFillAtStopT(stopT);
+    return {
+      seg: priorityHexAtStopT(stopT),
+      fill: fill,
+      text: priorityTextForFillHex(fill)
+    };
+  }
+
+  function priorityTierDarkStyles(tierI) {
+    var stopT = priorityStopTForTierIndex(tierI);
+    var segRgb = priorityRgbAtStopT(stopT);
+    var seg = priorityRgbToHex(priorityLerpRgb(segRgb, { r: 255, g: 255, b: 255 }, 0.28));
+    var base = { r: 26, g: 37, b: 51 };
+    return {
+      seg: seg,
+      fill: priorityRgbToHex(priorityLerpRgb(base, segRgb, 0.38)),
+      text: PRIORITY_TEXT_ON_DARK,
+      tint: priorityRgbToHex(priorityLerpRgb({ r: 20, g: 32, b: 48 }, segRgb, 0.42))
+    };
+  }
+
+  function priorityStylesForScore(score) {
+    var stopT = priorityStopTForScore(score);
+    var fill = priorityFillAtStopT(stopT);
+    return {
+      seg: priorityHexAtStopT(stopT),
+      fill: fill,
+      text: priorityTextForFillHex(fill)
+    };
+  }
+
+  var TIER_DEFS = [
     {
-      min: 8.6, label: 'Critique', fill: '#FCEBEB', text: '#791F1F', seg: '#E24B4A', i: 0,
+      min: 8.6, label: 'Critique', i: 0,
       description: 'Tâche prioritaire absolue. Impact direct sur l\'objectif, impossible de repousser sans conséquences majeures.'
     },
     {
-      min: 7.2, label: 'Urgent', fill: '#FAECE7', text: '#712B13', seg: '#D85A30', i: 1,
+      min: 7.2, label: 'Urgent', i: 1,
       description: 'Tâche pressante, priorité absolue. Action rapide sous forte pression.'
     },
     {
-      min: 5.8, label: 'Prioritaire', fill: '#FAEEDA', text: '#633806', seg: '#BA7517', i: 2,
+      min: 5.8, label: 'Prioritaire', i: 2,
       description: 'Attention prioritaire. À traiter en tête de file.'
     },
     {
-      min: 4.3, label: 'Important', fill: '#E8F5E0', text: '#2D5A1E', seg: '#6EAD3A', i: 3,
+      min: 4.3, label: 'Important', i: 3,
       description: 'Planifiée. À exécuter avec engagement clair dans le backlog.'
     },
     {
-      min: 2.9, label: 'Flexible', fill: '#E1F5EE', text: '#085041', seg: '#3BA99C', i: 4,
+      min: 2.9, label: 'Flexible', i: 4,
       description: 'Sans urgence ni blocage. À traiter selon l\'opportunité, peut glisser.'
     },
     {
-      min: 1.4, label: 'Secondaire', fill: '#E6F1FB', text: '#0C447C', seg: '#5A9FD4', i: 5,
+      min: 1.4, label: 'Secondaire', i: 5,
       description: 'Utile mais non essentielle. À envisager quand la bande passante le permet.'
     },
     {
-      min: 0, label: 'Optionnel', fill: '#F1EFE8', text: '#444441', seg: '#9B9890', i: 6,
+      min: 0, label: 'Optionnel', i: 6,
       description: 'Facultative, sans conséquence si ignorée. Peut être écartée de la file.'
     }
   ];
 
-  // Dark-mode tier fills/tints — muted surfaces with white text for readability.
-  var TIERS_DARK = [
-    { i: 0, fill: '#3d2220', text: '#ffffff', seg: '#e2483d', tint: '#4a2320' },
-    { i: 1, fill: '#3d2718', text: '#ffffff', seg: '#f8692a', tint: '#4a2d15' },
-    { i: 2, fill: '#3d3012', text: '#ffffff', seg: '#cf9f02', tint: '#4a3810' },
-    { i: 3, fill: '#263920', text: '#ffffff', seg: '#6aad34', tint: '#2a4018' },
-    { i: 4, fill: '#1e3330', text: '#ffffff', seg: '#37b4a0', tint: '#1a3835' },
-    { i: 5, fill: '#1a2a3d', text: '#ffffff', seg: '#519fe8', tint: '#182638' },
-    { i: 6, fill: '#323940', text: '#ffffff', seg: '#9fadbc', tint: '#323940' }
-  ];
+  var TIERS = TIER_DEFS.map(function (def) {
+    var styles = priorityTierLightStyles(def.i);
+    return {
+      min: def.min,
+      label: def.label,
+      i: def.i,
+      description: def.description,
+      fill: styles.fill,
+      text: styles.text,
+      seg: styles.seg
+    };
+  });
+
+  // Dark-mode tier fills/tints — muted blue surfaces with white text for readability.
+  var TIERS_DARK = TIER_DEFS.map(function (def) {
+    var styles = priorityTierDarkStyles(def.i);
+    return {
+      i: def.i,
+      fill: styles.fill,
+      text: styles.text,
+      seg: styles.seg,
+      tint: styles.tint
+    };
+  });
 
   var TIER_LABEL_SHORT = {
     Critique: 'Crit',
@@ -398,17 +520,13 @@
     };
   }
 
-  var SCORE_COLOR_STOPS = [
-    { s: 0, r: 155, g: 152, b: 144 },
-    { s: 1.4, r: 90, g: 159, b: 212 },
-    { s: 2.9, r: 59, g: 169, b: 156 },
-    { s: 4.3, r: 110, g: 173, b: 58 },
-    { s: 5.8, r: 186, g: 117, b: 23 },
-    { s: 7.2, r: 216, g: 90, b: 48 },
-    { s: 8.6, r: 228, g: 82, b: 80 },
-    { s: 9.3, r: 226, g: 75, b: 74 },
-    { s: 10, r: 168, g: 42, b: 40 }
-  ];
+  var SCORE_COLOR_STOPS = (function () {
+    var scores = [0, 1.4, 2.9, 4.3, 5.8, 7.2, 8.6, 9.3, 10];
+    return scores.map(function (s) {
+      var rgb = priorityRgbAtStopT(priorityStopTForScore(s));
+      return { s: s, r: rgb.r, g: rgb.g, b: rgb.b };
+    });
+  })();
 
   var SCORE_SURFACE_ALPHA = 0.78;
 
@@ -440,31 +558,31 @@
 
   var HEAT_SEGMENTS = [
     {
-      i: 6, target: 0.7, color: '#9B9890', label: 'Optionnel', description: TIERS[6].description,
+      i: 6, target: 0.7, color: TIERS[6].seg, label: 'Optionnel', description: TIERS[6].description,
       preset: { urgency: 0, impact: 0, ease: 2 }
     },
     {
-      i: 5, target: 2.1, color: '#5A9FD4', label: 'Secondaire', description: TIERS[5].description,
+      i: 5, target: 2.1, color: TIERS[5].seg, label: 'Secondaire', description: TIERS[5].description,
       preset: { urgency: 1, impact: 1, ease: 2 }
     },
     {
-      i: 4, target: 3.6, color: '#3BA99C', label: 'Flexible', description: TIERS[4].description,
+      i: 4, target: 3.6, color: TIERS[4].seg, label: 'Flexible', description: TIERS[4].description,
       preset: { urgency: 1, impact: 2, ease: 3 }
     },
     {
-      i: 3, target: 5.0, color: '#6EAD3A', label: 'Important', description: TIERS[3].description,
+      i: 3, target: 5.0, color: TIERS[3].seg, label: 'Important', description: TIERS[3].description,
       preset: { urgency: 2, impact: 2, ease: 3 }
     },
     {
-      i: 2, target: 6.5, color: '#BA7517', label: 'Prioritaire', description: TIERS[2].description,
+      i: 2, target: 6.5, color: TIERS[2].seg, label: 'Prioritaire', description: TIERS[2].description,
       preset: { urgency: 2, impact: 3, ease: 3 }
     },
     {
-      i: 1, target: 7.9, color: '#D85A30', label: 'Urgent', description: TIERS[1].description,
+      i: 1, target: 7.9, color: TIERS[1].seg, label: 'Urgent', description: TIERS[1].description,
       preset: { urgency: 3, impact: 3, ease: 2 }
     },
     {
-      i: 0, target: 9.3, color: '#E24B4A', label: 'Critique', description: TIERS[0].description,
+      i: 0, target: 9.3, color: TIERS[0].seg, label: 'Critique', description: TIERS[0].description,
       preset: { urgency: 4, impact: 4, ease: 5 }
     }
   ];
@@ -555,15 +673,15 @@
     '\u00c9liminer': '\u00c0 \u00e9liminer'
   };
 
-  // Trello card badges accept named colors only — aligned with TIERS[].seg tints.
+  // Trello card badges accept named colors only — blue intensity (high → low).
   var TIER_TRELLO_BADGE_COLORS = {
-    0: 'red',       // Critique
-    1: 'orange',    // Urgent
-    2: 'yellow',    // Prioritaire
-    3: 'lime',      // Important (green reserved for completed badge)
-    4: 'sky',       // Flexible
-    5: 'blue',      // Secondaire
-    6: 'light-gray' // Optionnel
+    0: 'blue',        // Critique
+    1: 'blue',        // Urgent
+    2: 'sky',         // Prioritaire
+    3: 'sky',         // Important
+    4: 'sky',         // Flexible
+    5: 'light-gray',  // Secondaire
+    6: 'light-gray'   // Optionnel
   };
 
   // Unicode dots for Trello badge text (largest = highest priority).
@@ -880,56 +998,61 @@
     }
   ];
 
-  var EISENHOWER_QUADRANTS = [
-    {
-      id: 'do',
-      label: 'Faire',
-      description: 'Urgent et important. À traiter en priorité absolue, sans report.',
-      score: 9.0,
-      urgent: true,
-      important: true,
-      fill: '#FAECE7',
-      text: '#712B13',
-      seg: '#D85A30',
-      preset: { urgency: 3, impact: 3 }
-    },
-    {
-      id: 'schedule',
-      label: 'Planifier',
-      description: 'Important mais pas urgent. À caler dans le backlog avec une date ou un créneau dédié.',
-      score: 6.5,
-      urgent: false,
-      important: true,
-      fill: '#FAEEDA',
-      text: '#633806',
-      seg: '#BA7517',
-      preset: { urgency: 1, impact: 3 }
-    },
-    {
-      id: 'delegate',
-      label: 'Déléguer',
-      description: 'Urgent mais peu important. À confier ou traiter au minimum viable.',
-      score: 4.0,
-      urgent: true,
-      important: false,
-      fill: '#E8F5E0',
-      text: '#2D5A1E',
-      seg: '#6EAD3A',
-      preset: { urgency: 3, impact: 1 }
-    },
-    {
-      id: 'delete',
-      label: 'Éliminer',
-      description: 'Ni urgent ni important. Candidat à écarter, repousser sans limite ou supprimer.',
-      score: 1.5,
-      urgent: false,
-      important: false,
-      fill: '#E6F1FB',
-      text: '#0C447C',
-      seg: '#5A9FD4',
-      preset: { urgency: 1, impact: 1 }
-    }
-  ];
+  var EISENHOWER_QUADRANTS = (function () {
+    var defs = [
+      {
+        id: 'do',
+        label: 'Faire',
+        description: 'Urgent et important. À traiter en priorité absolue, sans report.',
+        score: 9.0,
+        urgent: true,
+        important: true,
+        preset: { urgency: 3, impact: 3 }
+      },
+      {
+        id: 'schedule',
+        label: 'Planifier',
+        description: 'Important mais pas urgent. À caler dans le backlog avec une date ou un créneau dédié.',
+        score: 6.5,
+        urgent: false,
+        important: true,
+        preset: { urgency: 1, impact: 3 }
+      },
+      {
+        id: 'delegate',
+        label: 'Déléguer',
+        description: 'Urgent mais peu important. À confier ou traiter au minimum viable.',
+        score: 4.0,
+        urgent: true,
+        important: false,
+        preset: { urgency: 3, impact: 1 }
+      },
+      {
+        id: 'delete',
+        label: 'Éliminer',
+        description: 'Ni urgent ni important. Candidat à écarter, repousser sans limite ou supprimer.',
+        score: 1.5,
+        urgent: false,
+        important: false,
+        preset: { urgency: 1, impact: 1 }
+      }
+    ];
+    return defs.map(function (def) {
+      var styles = priorityStylesForScore(def.score);
+      return {
+        id: def.id,
+        label: def.label,
+        description: def.description,
+        score: def.score,
+        urgent: def.urgent,
+        important: def.important,
+        preset: def.preset,
+        fill: styles.fill,
+        text: styles.text,
+        seg: styles.seg
+      };
+    });
+  })();
 
   var FORMULAS = {
     baseline: {
@@ -981,13 +1104,13 @@
 
   // Per-tier surface mix (% of tier color into neutral base).
   var TIER_SURFACE_MIX = {
-    0: { bg: 42, border: 50, panel: 44 }, // Critique — strong red wash
-    1: { bg: 40, border: 48, panel: 40 }, // Urgent — orange
-    2: { bg: 34, border: 44, panel: 28 }, // Prioritaire — amber
-    3: { bg: 28, border: 38, panel: 22 }, // Important — heat bar seg (#6EAD3A)
-    4: { bg: 22, border: 32, panel: 18 }, // Flexible — teal
-    5: { bg: 14, border: 26, panel: 14 }, // Secondaire — blue
-    6: { bg: 6, border: 20, panel: 8 },   // Optionnel — near neutral
+    0: { bg: 42, border: 50, panel: 44 }, // Critique — deepest blue
+    1: { bg: 40, border: 48, panel: 40 }, // Urgent
+    2: { bg: 34, border: 44, panel: 28 }, // Prioritaire
+    3: { bg: 28, border: 38, panel: 22 }, // Important
+    4: { bg: 22, border: 32, panel: 18 }, // Flexible
+    5: { bg: 14, border: 26, panel: 14 }, // Secondaire
+    6: { bg: 6, border: 20, panel: 8 },   // Optionnel — lightest blue
     inutile: { bg: 8, border: 22, panel: 82 }, // Inutile — muted gray matching badge
     blocked: { bg: 44, border: 52, panel: 46 } // Bloqué — deep crimson wash
   };
@@ -3602,6 +3725,7 @@
     KEYWORDS: KEYWORDS,
     QUESTIONS: QUESTIONS,
     TIERS: TIERS,
+    PRIORITY_BLUE_STOPS: PRIORITY_BLUE_STOPS,
     TIER_LABEL_SHORT: TIER_LABEL_SHORT,
     TIER_SURFACE_MIX: TIER_SURFACE_MIX,
     HEAT_SEGMENTS: HEAT_SEGMENTS,

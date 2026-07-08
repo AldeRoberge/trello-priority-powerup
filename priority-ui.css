@@ -28,8 +28,8 @@
   --chart-marker-core: #ffffff;
   --chart-marker-core-inutile: #ffffff;
   --chart-marker-stroke-inutile: #9B9890;
-  --heat-accent-fallback: #085041;
-  --heat-dot-fallback: #9B9890;
+  --heat-accent-fallback: #0C447C;
+  --heat-dot-fallback: #378ADD;
   --blocked-accent: #8B0000;
   --blocked-text: #4A0808;
   --blocked-fill: #D4A5A5;
@@ -74,8 +74,8 @@ html[data-color-mode="dark"] {
   --chart-marker-core: #ffffff;
   --chart-marker-core-inutile: #ffffff;
   --chart-marker-stroke-inutile: #738496;
-  --heat-accent-fallback: #4bce97;
-  --heat-dot-fallback: #ffffff;
+  --heat-accent-fallback: #85B7EB;
+  --heat-dot-fallback: #85B7EB;
   --blocked-accent: #C05050;
   --blocked-text: #ffffff;
   --blocked-fill: #3A1515;
