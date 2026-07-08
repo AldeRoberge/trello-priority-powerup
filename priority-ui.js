@@ -91,7 +91,7 @@
         'Valeur exceptionnelle et large portée. Débloque de nombreuses tâches ou personnes ; opportunité stratégique que l\'équipe ressent immédiatement.'
       ],
       popup: {
-        subtitle: 'Pourquoi vaut-il la peine de le faire?',
+        subtitle: 'À quel point est-il important de faire cette tâche?',
         intro: 'L\'impact mesure la valeur, l\'importance et la portée d\'une tâche. Les bénéfices concrets qu\'elle apporte, sa visibilité, les opportunités qu\'elle ouvre et le nombre de personnes ou de tâches qu\'elle débloque.',
         guidance: 'Demandez-vous si le résultat sera visible, utile à l\'équipe ou au produit, et si d\'autres travaux en dépendent.'
       },
@@ -115,7 +115,7 @@
         'Quasi sans friction. Très peu de ressources, complexité minimale, risque faible et annulation aisée.'
       ],
       popup: {
-        subtitle: 'À quel point est-ce difficile?',
+        subtitle: 'À quel point est-il facile de faire cette tâche?',
         intro: 'La facilité d\'exécution reflète la complexité, le coût, l\'incertitude et le niveau de confiance dont vous disposez. Une tâche simple demande peu de ressources et reste facilement réversible ; une tâche difficile exige plus de coordination, multiplie les risques et coûte cher à corriger.',
         guidance: 'Estimez la difficulté technique, les ressources mobilisées et la facilité à revenir en arrière si besoin.'
       },
@@ -139,7 +139,7 @@
         'Priorité absolue. Bloque l\'ensemble du travail ; forte pression, dépendances multiples.'
       ],
       popup: {
-        subtitle: 'Quel niveau d\'urgence?',
+        subtitle: 'À quel point est-ce urgent de faire cette tâche?',
         intro: 'L\'urgence capture la pression et les conséquences d\'un report : blocages provoqués et dépendances qui s\'accumulent si la tâche est repoussée.',
         guidance: 'Regardez ce qui bloque si vous reportez et les conséquences concrètes d\'un changement de priorité.'
       },
@@ -250,10 +250,16 @@
   var QUESTIONS = {
     time: 'Quelle pression pèse sur cette tâche?',
     blocking: 'Est-ce que quelque chose cesse de fonctionner si ce n\'est pas fait?',
-    impact: 'Pourquoi vaut-il la peine de le faire?',
-    ease: 'À quel point est-ce difficile?',
-    urgency: 'Quel niveau d\'urgence?'
+    impact: 'À quel point est-il important de faire cette tâche?',
+    ease: 'À quel point est-il facile de faire cette tâche?',
+    urgency: 'À quel point est-ce urgent de faire cette tâche?'
   };
+
+  function dimensionQuestion(key) {
+    var entry = LABELS[key];
+    if (entry && entry.popup && entry.popup.subtitle) return entry.popup.subtitle;
+    return QUESTIONS[key] || '';
+  }
 
   var PROPERTY_ICONS = {
     time: 'ti-clock',
@@ -539,7 +545,7 @@
     Secondaire: 'T\u00e2che secondaire',
     Optionnel: 'T\u00e2che optionnelle',
     Inutile: 'T\u00e2che inutile',
-    'Bloqu\u00e9': 'T\u00e2che (bloqu\u00e9e)'
+    'Bloqu\u00e9': 'T\u00e2che'
   };
 
   var EISENHOWER_BADGE_LABELS = {
@@ -658,7 +664,7 @@
       if (tier === 'Important') base = 'T\u00e2che importante';
       else base = 'T\u00e2che ' + tier.charAt(0).toLowerCase() + tier.slice(1);
     }
-    if (base) return base + ' (bloqu\u00e9e)';
+    if (base) return base;
     return TASK_BADGE_LABELS[BLOCKED_LABEL];
   }
 
@@ -677,8 +683,8 @@
 
   function formatBlockedBadgeText(display, reason) {
     var label = blockedTaskBadgeLabel(display);
-    if (reason) return label + ' \u2014 ' + reason;
-    return label;
+    var suffix = reason || BLOCKED_LABEL;
+    return label + ' (' + suffix + ')';
   }
 
   function isDarkTheme() {
@@ -1738,12 +1744,11 @@
           '<div class="help-modal-body"></div>' +
         '</div>' +
         '<footer class="help-modal-footer">' +
-          '<div class="help-modal-wizard-nav" hidden>' +
-            '<button type="button" class="help-modal-nav help-modal-prev">Précédent</button>' +
-            '<span class="help-modal-step" aria-live="polite"></span>' +
-            '<button type="button" class="help-modal-nav help-modal-next">Suivant</button>' +
+          '<div class="help-modal-wizard-nav">' +
+            '<button type="button" class="help-modal-nav help-modal-prev" hidden>Précédent</button>' +
+            '<button type="button" class="help-modal-close help-modal-close--bottom">Fermer</button>' +
+            '<button type="button" class="help-modal-nav help-modal-next" hidden>Suivant</button>' +
           '</div>' +
-          '<button type="button" class="help-modal-close help-modal-close--bottom">Fermer</button>' +
         '</footer>' +
       '</div>';
     document.body.appendChild(modalRoot);
@@ -1792,18 +1797,16 @@
 
   function paintHelpModalFooter(wizard) {
     if (!modalRoot) return;
-    var wizardNav = modalRoot.querySelector('.help-modal-wizard-nav');
     var prevBtn = modalRoot.querySelector('.help-modal-prev');
     var nextBtn = modalRoot.querySelector('.help-modal-next');
-    var stepEl = modalRoot.querySelector('.help-modal-step');
-    if (!wizardNav || !prevBtn || !nextBtn || !stepEl) return;
+    if (!prevBtn || !nextBtn) return;
 
     if (wizard && wizard.total > 1) {
-      wizardNav.hidden = false;
+      prevBtn.hidden = false;
+      nextBtn.hidden = false;
       prevBtn.disabled = wizard.step <= 0;
       var isLast = wizard.step >= wizard.total - 1;
       nextBtn.textContent = isLast ? 'Terminer' : 'Suivant';
-      stepEl.textContent = (wizard.step + 1) + ' / ' + wizard.total;
       prevBtn.onclick = function () {
         if (wizard.onPrev) wizard.onPrev();
       };
@@ -1811,7 +1814,8 @@
         if (wizard.onNext) wizard.onNext();
       };
     } else {
-      wizardNav.hidden = true;
+      prevBtn.hidden = true;
+      nextBtn.hidden = true;
       prevBtn.onclick = null;
       nextBtn.onclick = null;
     }
@@ -2083,19 +2087,15 @@
 
     el.appendChild(field);
 
-    function descriptionForLevel(idx) {
-      return affirmationDisplayText(wordsKey, idx);
-    }
-
     function updateDisplay(v) {
       v = clamp(v, min, max);
       var idx = snappedLevel(v, min, max);
       var shortLabel = wordFor(wordsKey, idx);
-      var descText = descriptionForLevel(idx);
-      lblTooltip.textContent = descText;
-      lblBtn.title = descText || '';
-      lblWrap.classList.toggle('is-empty-tip', !descText);
-      lblBtn.setAttribute('aria-label', descText
+      var questionText = dimensionQuestion(wordsKey);
+      lblTooltip.textContent = questionText;
+      lblBtn.removeAttribute('title');
+      lblWrap.classList.toggle('is-empty-tip', !questionText);
+      lblBtn.setAttribute('aria-label', shortLabel
         ? 'Choisir le niveau de ' + label + '. Actuellement : ' + shortLabel
         : 'Choisir le niveau de ' + label);
       inputEl.value = String(v);

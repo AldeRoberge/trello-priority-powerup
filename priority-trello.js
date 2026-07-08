@@ -258,10 +258,10 @@
       return PriorityUI.formatBlockedBadgeText(d, reason || undefined);
     }
     var tierKey = String(d.tierLabel || d.label || '');
-    var label = tierKey ? 'T\u00e2che ' + tierKey.toLowerCase() + ' (bloqu\u00e9e)' : 'T\u00e2che (bloqu\u00e9e)';
+    var label = tierKey ? 'T\u00e2che ' + tierKey.toLowerCase() : 'T\u00e2che';
     var trimmed = typeof d.blockedReason === 'string' ? d.blockedReason.trim() : '';
-    if (trimmed) label += ' \u2014 ' + trimmed;
-    return label;
+    var suffix = trimmed || 'Bloqu\u00e9';
+    return label + ' (' + suffix + ')';
   }
 
   function formatBadgeText(display, completed) {
