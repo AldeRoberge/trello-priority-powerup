@@ -693,8 +693,6 @@
     } catch (e) { /* ignore quota / private mode */ }
   }
 
-  applyColorScheme(DEFAULT_COLOR_SCHEME_KEY);
-
   var TIER_LABEL_SHORT = {
     Critique: 'Crit',
     Urgent: 'Urg',
@@ -4050,6 +4048,12 @@
     affirmationFor: affirmationFor,
     affirmationDisplayText: affirmationDisplayText
   };
+
+  try {
+    applyColorScheme(DEFAULT_COLOR_SCHEME_KEY);
+  } catch (bootstrapErr) {
+    console.error('PriorityUI color scheme bootstrap failed', bootstrapErr);
+  }
 
   global.PriorityUI = PriorityUI;
 })(typeof window !== 'undefined' ? window : this);
