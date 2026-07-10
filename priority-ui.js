@@ -3231,28 +3231,54 @@
       };
     }
 
-    function resizeSurfaceCanvas() {
+    function plotAreaMetrics() {
+      void chart.offsetWidth;
       var chartRect = chart.getBoundingClientRect();
-      if (chartRect.width < 1 || chartRect.height < 1) {
+      var chartW = chartRect.width || chart.offsetWidth;
+      var chartH = chartRect.height || chart.offsetHeight;
+      if (chartW < 1 || chartH < 1) {
         return null;
       }
-      // CSS percentages align with SVG viewBox; read rendered size for bitmap dims.
-      var canvasRect = surfaceCanvas.getBoundingClientRect();
-      var cssW = Math.max(1, Math.ceil(canvasRect.width));
-      var cssH = Math.max(1, Math.ceil(canvasRect.height));
-      if (cssW < 1 || cssH < 1) {
+      var scaleX = chartW / SVG_W;
+      var scaleY = chartH / SVG_H;
+      var plotW = PLOT_W * scaleX;
+      var plotH = PLOT_H * scaleY;
+      return {
+        left: MARGIN.left * scaleX,
+        top: MARGIN.top * scaleY,
+        plotW: plotW,
+        plotH: plotH,
+        cssW: Math.max(1, Math.ceil(plotW)),
+        cssH: Math.max(1, Math.ceil(plotH))
+      };
+    }
+
+    function resizeSurfaceCanvas() {
+      var metrics = plotAreaMetrics();
+      if (!metrics) {
         return null;
       }
+      surfaceCanvas.style.left = metrics.left + 'px';
+      surfaceCanvas.style.top = metrics.top + 'px';
+      surfaceCanvas.style.width = metrics.cssW + 'px';
+      surfaceCanvas.style.height = metrics.cssH + 'px';
       var dpr = window.devicePixelRatio || 1;
-      surfaceCanvas.width = Math.round(cssW * dpr);
-      surfaceCanvas.height = Math.round(cssH * dpr);
+      surfaceCanvas.width = Math.round(metrics.cssW * dpr);
+      surfaceCanvas.height = Math.round(metrics.cssH * dpr);
+      // Setting canvas bitmap dims can reset layout size in some engines.
+      surfaceCanvas.style.width = metrics.cssW + 'px';
+      surfaceCanvas.style.height = metrics.cssH + 'px';
       surfaceCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      return { w: cssW, h: cssH };
+      return { w: metrics.cssW, h: metrics.cssH };
     }
 
     function paintSurface(F) {
       var size = resizeSurfaceCanvas();
-      if (!size) return;
+      if (!size) {
+        surfaceCanvas.style.visibility = 'hidden';
+        return false;
+      }
+      surfaceCanvas.style.visibility = 'visible';
       var w = size.w;
       var h = size.h;
       var img = surfaceCtx.createImageData(w, h);
@@ -3272,6 +3298,7 @@
         }
       }
       surfaceCtx.putImageData(img, 0, 0);
+      return true;
     }
 
     function lerpPlot(a, b, t) {
@@ -3487,6 +3514,35 @@
     easeSlider.addEventListener('input', handleEaseInput);
     easeSlider.addEventListener('change', handleEaseInput);
 
+    var chartResizeObserver;
+    var layoutSurfaceRaf = null;
+
+    function scheduleLayoutSurfacePaint() {
+      if (layoutSurfaceRaf != null) {
+        cancelAnimationFrame(layoutSurfaceRaf);
+      }
+      layoutSurfaceRaf = requestAnimationFrame(function () {
+        layoutSurfaceRaf = requestAnimationFrame(function () {
+          layoutSurfaceRaf = null;
+          repaintSurfaceFromLayout();
+        });
+      });
+    }
+
+    function repaintSurfaceFromLayout() {
+      if (!lastScene.result || draggingMarker) return;
+      paintSurface(lastScene.F);
+    }
+
+    if (typeof ResizeObserver !== 'undefined') {
+      chartResizeObserver = new ResizeObserver(function () {
+        repaintSurfaceFromLayout();
+      });
+      chartResizeObserver.observe(chart);
+    } else if (typeof window !== 'undefined') {
+      window.addEventListener('resize', repaintSurfaceFromLayout);
+    }
+
     function paint(result, inputs, display) {
       var terms = result.terms || {};
       var U = terms.U != null ? terms.U : inputs.urgency;
@@ -3508,8 +3564,9 @@
       }
 
       if (!draggingMarker) {
-        paintSurface(F);
         paintContours(F);
+        paintSurface(F);
+        scheduleLayoutSurfacePaint();
       }
       paintMarker(markerU, markerI, d);
 
@@ -3527,7 +3584,14 @@
     return {
       el: panel,
       paint: paint,
-      updateTheme: updateChartTheme
+      updateTheme: updateChartTheme,
+      disconnect: function () {
+        if (chartResizeObserver) chartResizeObserver.disconnect();
+        if (layoutSurfaceRaf != null) {
+          cancelAnimationFrame(layoutSurfaceRaf);
+          layoutSurfaceRaf = null;
+        }
+      }
     };
   }
 

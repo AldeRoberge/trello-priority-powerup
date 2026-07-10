@@ -1365,23 +1365,21 @@ html[data-color-mode="dark"] .heat-score-tooltip {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  width: 100%;
 }
 
 .calc-rsm-row {
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px;
   align-items: stretch;
   gap: 6px;
   width: 100%;
-  max-width: 260px;
-  margin: 0 auto;
 }
 
 .calc-rsm-chart {
   position: relative;
-  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
-  max-width: 220px;
   aspect-ratio: 300 / 248;
   touch-action: none;
   overflow: visible;
@@ -1389,14 +1387,13 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 }
 
 .calc-rsm-ease-col {
-  flex: 0 0 26px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: stretch;
+  min-height: 0;
+  height: 100%;
   gap: 4px;
-  padding-top: 14px;
-  padding-bottom: 36px;
   box-sizing: border-box;
 }
 
@@ -1406,12 +1403,21 @@ html[data-color-mode="dark"] .heat-score-tooltip {
   line-height: 1;
   color: var(--text-muted);
   user-select: none;
+  flex-shrink: 0;
+}
+
+.calc-rsm-ease-label-top {
+  flex: 0 0 5.645%;
+}
+
+.calc-rsm-ease-label-bottom {
+  flex: 0 0 14.516%;
 }
 
 .calc-rsm-ease-range {
-  flex: 1;
+  flex: 1 1 auto;
   width: 18px;
-  min-height: 72px;
+  min-height: 0;
   margin: 0;
   padding: 0;
   writing-mode: vertical-lr;
@@ -1434,10 +1440,6 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 
 .calc-rsm-surface {
   position: absolute;
-  left: calc(100% * 38 / 300);
-  top: calc(100% * 14 / 248);
-  width: calc(100% * 248 / 300);
-  height: calc(100% * 198 / 248);
   border-radius: 4px;
   pointer-events: none;
   z-index: 1;
