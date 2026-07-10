@@ -783,6 +783,32 @@ body.tp-page--completion {
   padding: 4px 12px 12px;
 }
 
+/* Bridge priority-ui slider tokens inside completion popup */
+html[data-color-mode="light"] .tp-page--completion,
+html[data-color-mode="dark"] .tp-page--completion {
+  --surface-0: var(--tp-bg);
+  --surface-1: var(--tp-surface-subtle);
+  --surface-2: var(--tp-surface);
+  --border: var(--tp-border);
+  --text-primary: var(--tp-text);
+  --text-secondary: var(--tp-text-subtle);
+  --text-muted: var(--tp-text-muted);
+  --surface-hover: var(--tp-surface-hover);
+  --slider-track: var(--tp-surface-subtle);
+  --slider-thumb-bg: var(--tp-surface);
+  --slider-thumb-border: var(--tp-border-strong);
+  --slider-thumb-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  --slider-focus-ring: 0 0 0 3px rgba(12, 102, 228, 0.25);
+}
+
+html[data-color-mode="dark"] .tp-page--completion {
+  --slider-track: #596773;
+  --slider-thumb-bg: #ffffff;
+  --slider-thumb-border: #738496;
+  --slider-thumb-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  --slider-focus-ring: 0 0 0 3px rgba(166, 197, 231, 0.35);
+}
+
 .tp-page--completion .tp-priority-card-header {
   padding: 0 0 10px;
 }
@@ -857,10 +883,48 @@ body.tp-page--completion {
 }
 
 .tp-completion-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 3px;
+  background: var(--tp-surface-subtle);
+  box-shadow: inset 0 0 0 1px var(--tp-border);
+}
+
+.tp-completion-item-main {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr) 108px 28px;
   align-items: center;
   gap: 6px;
+}
+
+.tp-completion-item-slider-row,
+.tp-completion-field-head {
+  display: grid;
+  grid-template-columns: 4.75rem minmax(0, 1fr) 3rem;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.tp-completion-master-slider {
+  margin-top: 10px;
+}
+
+.tp-completion-field-lbl {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tp-text-muted);
+  white-space: nowrap;
+}
+
+.tp-completion-field-val,
+.tp-completion-item-val {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--tp-text);
+  text-align: right;
 }
 
 .tp-completion-item.is-done .tp-completion-text {
@@ -930,13 +994,19 @@ body.tp-page--completion {
 }
 
 @media (max-width: 400px) {
-  .tp-completion-item {
+  .tp-completion-item-main {
     grid-template-columns: 28px minmax(0, 1fr) 28px;
     grid-template-rows: auto auto;
   }
 
   .tp-completion-diff {
     grid-column: 2 / 4;
+  }
+
+  .tp-completion-item-slider-row,
+  .tp-completion-field-head {
+    grid-template-columns: 4rem minmax(0, 1fr) 2.5rem;
+    gap: 6px 8px;
   }
 }
 

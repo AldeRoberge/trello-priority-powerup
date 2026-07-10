@@ -24,7 +24,11 @@ function check(name, ok) {
 [
   'normalizeCompletionData',
   'computeWeightedProgress',
+  'applyMasterProgress',
   'difficultyWeight',
+  'clampProgress',
+  'itemProgress',
+  'syncDoneFromProgress',
   'getCardCompletion',
   'saveCardCompletion',
   'formatFaceBadgeText',
@@ -41,26 +45,79 @@ check('difficulty weight easy', CT.difficultyWeight(0) === 1);
 check('difficulty weight hard', CT.difficultyWeight(4) === 5);
 check('difficulty weight default invalid', CT.difficultyWeight('x') === 3);
 
+// Legacy migration: done boolean → progress
+var migrated = CT.normalizeItem({ id: 'a', text: 'Done', done: true, difficulty: 0 });
+check('migrate done true to progress 100', migrated.progress === 100 && migrated.done === true);
+var notDone = CT.normalizeItem({ id: 'b', text: 'Open', done: false, difficulty: 0 });
+check('migrate done false to progress 0', notDone.progress === 0 && notDone.done === false);
+
 var items = [
   { id: 'a', text: 'Easy', done: true, difficulty: 0 },
   { id: 'b', text: 'Hard', done: false, difficulty: 4 },
 ];
 var progress = CT.computeWeightedProgress(items);
-check('weighted percent 17', progress.percent === 17);
+check('weighted percent 17 (legacy done)', progress.percent === 17);
 check('done count 1', progress.doneCount === 1);
 check('total count 2', progress.totalCount === 2);
 check('done weight 1', progress.doneWeight === 1);
 check('total weight 6', progress.totalWeight === 6);
 
-var allDone = CT.computeWeightedProgress([
-  { id: 'a', text: 'A', done: true, difficulty: 2 },
-  { id: 'b', text: 'B', done: true, difficulty: 3 },
+// Partial progress per item
+var partial = CT.computeWeightedProgress([
+  { id: 'a', text: 'Half easy', progress: 50, difficulty: 0 },
+  { id: 'b', text: 'Full hard', progress: 100, difficulty: 4 },
 ]);
-check('100 percent when all done', allDone.percent === 100);
+check('partial weighted percent 92', partial.percent === 92);
+check('partial done count 1', partial.doneCount === 1);
+check('partial done weight 5.5', partial.doneWeight === 5.5);
+
+var mid = CT.computeWeightedProgress([
+  { id: 'a', text: 'A', progress: 50, difficulty: 2 },
+  { id: 'b', text: 'B', progress: 50, difficulty: 2 },
+]);
+check('equal partial items 50%', mid.percent === 50);
+
+var allDone = CT.computeWeightedProgress([
+  { id: 'a', text: 'A', progress: 100, difficulty: 2 },
+  { id: 'b', text: 'B', progress: 100, difficulty: 3 },
+]);
+check('100 percent when all at 100', allDone.percent === 100);
 
 var empty = CT.computeWeightedProgress([]);
 check('empty has no items', empty.hasItems === false && empty.percent === 0);
 
+// Master slider proportional scaling
+var base = [
+  { id: 'a', text: 'A', progress: 25, difficulty: 2 },
+  { id: 'b', text: 'B', progress: 25, difficulty: 2 },
+];
+var scaled = CT.applyMasterProgress(base, 50);
+var scaledProgress = CT.computeWeightedProgress(scaled);
+check('master slider reaches 50%', scaledProgress.percent === 50);
+check('master slider doubles each item', scaled[0].progress === 50 && scaled[1].progress === 50);
+
+var fromZero = CT.applyMasterProgress(
+  [
+    { id: 'a', text: 'A', progress: 0, difficulty: 1 },
+    { id: 'b', text: 'B', progress: 0, difficulty: 3 },
+  ],
+  60
+);
+check('master from zero sets uniform 60%', fromZero[0].progress === 60 && fromZero[1].progress === 60);
+
+var toComplete = CT.applyMasterProgress(
+  [
+    { id: 'a', text: 'A', progress: 30, difficulty: 1 },
+    { id: 'b', text: 'B', progress: 70, difficulty: 1 },
+  ],
+  100
+);
+check('master to 100 completes all', toComplete.every(function (i) { return i.progress === 100 && i.done; }));
+
+check(
+  'face badge hidden at 0%',
+  CT.buildCardFaceBadge({ hasItems: true, percent: 0 }) === null
+);
 check(
   'face badge text incomplete',
   CT.formatFaceBadgeText({ hasItems: true, percent: 45 }) === '45\u00a0%'
@@ -83,12 +140,25 @@ check(
   CT.buildCardFaceBadge({ hasItems: true, percent: 100 }).color === 'green'
 );
 check(
+  'face badge color partial sky',
+  CT.buildCardFaceBadge({ hasItems: true, percent: 25 }).color === 'sky'
+);
+check(
   'normalize strips empty text',
   CT.normalizeCompletionData({ items: [{ id: 'x', text: '  ', done: false, difficulty: 1 }] }).items.length === 0
 );
 check(
   'normalize clamps difficulty',
   CT.normalizeItem({ id: 'x', text: 'ok', done: false, difficulty: 99 }).difficulty === 4
+);
+check(
+  'normalize clamps progress',
+  CT.normalizeItem({ id: 'x', text: 'ok', progress: 150, difficulty: 1 }).progress === 100
+);
+check(
+  'normalize syncs done from progress',
+  CT.normalizeItem({ id: 'x', text: 'ok', progress: 80, difficulty: 1 }).done === false &&
+    CT.normalizeItem({ id: 'y', text: 'ok', progress: 100, difficulty: 1 }).done === true
 );
 check(
   'normalize clamps negative difficulty',
@@ -126,10 +196,6 @@ check(
 check(
   'normalize non-array items',
   CT.normalizeCompletionData({ items: 'nope' }).items.length === 0
-);
-check(
-  'normalize rejects non-boolean done',
-  CT.normalizeItem({ id: 'x', text: 'ok', done: 1, difficulty: 1 }).done === false
 );
 
 console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll completion checks passed');

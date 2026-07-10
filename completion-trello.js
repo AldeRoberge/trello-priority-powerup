@@ -14,6 +14,8 @@
   var DIFFICULTY_MIN = 0;
   var DIFFICULTY_MAX = 4;
   var ITEM_TEXT_MAX = 500;
+  var PROGRESS_MIN = 0;
+  var PROGRESS_MAX = 100;
 
   var DIFFICULTY_LEVELS = [
     { value: 0, label: 'Facile', short: 'F' },
@@ -39,6 +41,26 @@
     return NaN;
   }
 
+  function clampProgress(value) {
+    var p = asNumber(value);
+    if (!isFinite(p)) return 0;
+    return Math.max(PROGRESS_MIN, Math.min(PROGRESS_MAX, Math.round(p)));
+  }
+
+  function itemProgress(item) {
+    if (!item || typeof item !== 'object') return 0;
+    if (typeof item.progress === 'number' && isFinite(item.progress)) {
+      return clampProgress(item.progress);
+    }
+    return item.done === true ? PROGRESS_MAX : PROGRESS_MIN;
+  }
+
+  function syncDoneFromProgress(item) {
+    item.progress = clampProgress(item.progress);
+    item.done = item.progress >= PROGRESS_MAX;
+    return item;
+  }
+
   function generateId() {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
       return crypto.randomUUID();
@@ -54,12 +76,20 @@
     var difficulty = asNumber(raw.difficulty);
     if (!isFinite(difficulty)) difficulty = 2;
     difficulty = Math.max(DIFFICULTY_MIN, Math.min(DIFFICULTY_MAX, Math.round(difficulty)));
-    return {
+
+    var progress = asNumber(raw.progress);
+    if (!isFinite(progress)) {
+      progress = raw.done === true ? PROGRESS_MAX : PROGRESS_MIN;
+    }
+    progress = clampProgress(progress);
+
+    return syncDoneFromProgress({
       id: typeof raw.id === 'string' && raw.id ? raw.id : generateId(),
       text: text,
-      done: raw.done === true,
+      done: progress >= PROGRESS_MAX,
       difficulty: difficulty,
-    };
+      progress: progress,
+    });
   }
 
   function normalizeCompletionData(raw) {
@@ -77,6 +107,7 @@
     return { items: normalized };
   }
 
+  // Weighted total: sum(weight * progress/100) / sum(weight) * 100
   function computeWeightedProgress(items) {
     if (!items || !items.length) {
       return {
@@ -88,26 +119,78 @@
         hasItems: false,
       };
     }
-    var doneWeight = 0;
+    var weightedSum = 0;
     var totalWeight = 0;
     var doneCount = 0;
     for (var i = 0; i < items.length; i++) {
       var w = difficultyWeight(items[i].difficulty);
+      var p = itemProgress(items[i]);
       totalWeight += w;
-      if (items[i].done) {
-        doneWeight += w;
-        doneCount++;
-      }
+      weightedSum += w * (p / PROGRESS_MAX);
+      if (p >= PROGRESS_MAX) doneCount++;
     }
-    var percent = totalWeight > 0 ? Math.round((doneWeight / totalWeight) * 100) : 0;
+    var percent = totalWeight > 0 ? Math.round((weightedSum / totalWeight) * 100) : 0;
     return {
       percent: percent,
       doneCount: doneCount,
       totalCount: items.length,
-      doneWeight: doneWeight,
+      doneWeight: Math.round(weightedSum * 10) / 10,
       totalWeight: totalWeight,
       hasItems: true,
     };
+  }
+
+  /**
+   * Master slider: proportionally scale each item's progress so the weighted
+   * average approaches targetPercent. Items at 0% when current is 0 are set
+   * uniformly to the target. Caps at 100% per item; done syncs from progress.
+   */
+  function applyMasterProgress(items, targetPercent) {
+    if (!items || !items.length) return [];
+    var target = clampProgress(targetPercent);
+    var working = items.map(function (item) {
+      return syncDoneFromProgress({
+        id: item.id,
+        text: item.text,
+        difficulty: item.difficulty,
+        progress: itemProgress(item),
+        done: item.done === true,
+      });
+    });
+
+    if (target === PROGRESS_MAX) {
+      working.forEach(function (item) {
+        item.progress = PROGRESS_MAX;
+        syncDoneFromProgress(item);
+      });
+      return working;
+    }
+    if (target === PROGRESS_MIN) {
+      working.forEach(function (item) {
+        item.progress = PROGRESS_MIN;
+        syncDoneFromProgress(item);
+      });
+      return working;
+    }
+
+    var current = computeWeightedProgress(working).percent;
+    if (current === target) return working;
+
+    if (current === 0) {
+      working.forEach(function (item) {
+        item.progress = target;
+        syncDoneFromProgress(item);
+      });
+      return working;
+    }
+
+    var scale = target / current;
+    working.forEach(function (item) {
+      item.progress = clampProgress(item.progress * scale);
+      syncDoneFromProgress(item);
+    });
+
+    return working;
   }
 
   async function getCardCompletion(t) {
@@ -122,7 +205,7 @@
   }
 
   function formatFaceBadgeText(progress) {
-    if (!progress || !progress.hasItems) return '';
+    if (!progress || !progress.hasItems || progress.percent <= 0) return '';
     if (progress.percent === 100) {
       return '\u2713 ' + progress.percent + '\u00a0%';
     }
@@ -137,7 +220,7 @@
   }
 
   function buildCardFaceBadge(progress) {
-    if (!progress || !progress.hasItems) return null;
+    if (!progress || !progress.hasItems || progress.percent <= 0) return null;
     return {
       text: formatFaceBadgeText(progress),
       color: faceBadgeColor(progress),
@@ -164,7 +247,9 @@
     return {
       dynamic: function () {
         return getBadgeData(t).then(function (result) {
-          if (!result.progress.hasItems) return { refresh: BADGE_REFRESH_SEC };
+          if (!result.progress.hasItems || result.progress.percent <= 0) {
+            return { refresh: BADGE_REFRESH_SEC };
+          }
           return withBadgeRefresh(buildCardFaceBadge(result.progress));
         });
       },
@@ -175,7 +260,7 @@
     return getCardCompletion(t)
       .then(function (data) {
         var progress = computeWeightedProgress(data.items);
-        if (!progress.hasItems) return [];
+        if (!progress.hasItems || progress.percent <= 0) return [];
         return [dynamicCardFaceBadge(t)];
       })
       .catch(function (err) {
@@ -260,12 +345,18 @@
     ITEM_TEXT_MAX: ITEM_TEXT_MAX,
     DIFFICULTY_MIN: DIFFICULTY_MIN,
     DIFFICULTY_MAX: DIFFICULTY_MAX,
+    PROGRESS_MIN: PROGRESS_MIN,
+    PROGRESS_MAX: PROGRESS_MAX,
     DIFFICULTY_LEVELS: DIFFICULTY_LEVELS,
     difficultyWeight: difficultyWeight,
+    clampProgress: clampProgress,
+    itemProgress: itemProgress,
+    syncDoneFromProgress: syncDoneFromProgress,
     generateId: generateId,
     normalizeItem: normalizeItem,
     normalizeCompletionData: normalizeCompletionData,
     computeWeightedProgress: computeWeightedProgress,
+    applyMasterProgress: applyMasterProgress,
     getCardCompletion: getCardCompletion,
     saveCardCompletion: saveCardCompletion,
     formatFaceBadgeText: formatFaceBadgeText,
