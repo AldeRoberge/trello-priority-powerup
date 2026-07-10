@@ -90,6 +90,47 @@ check(
   'normalize clamps difficulty',
   CT.normalizeItem({ id: 'x', text: 'ok', done: false, difficulty: 99 }).difficulty === 4
 );
+check(
+  'normalize clamps negative difficulty',
+  CT.normalizeItem({ id: 'x', text: 'ok', done: false, difficulty: -3 }).difficulty === 0
+);
+check(
+  'normalize truncates long text',
+  CT.normalizeItem({ id: 'x', text: 'a'.repeat(600), done: false, difficulty: 1 }).text.length ===
+    CT.ITEM_TEXT_MAX
+);
+check(
+  'normalize drops duplicate ids',
+  CT.normalizeCompletionData({
+    items: [
+      { id: 'dup', text: 'First', done: false, difficulty: 1 },
+      { id: 'dup', text: 'Second', done: true, difficulty: 2 },
+      { id: 'other', text: 'Other', done: false, difficulty: 0 },
+    ],
+  }).items.length === 2
+);
+check(
+  'normalize duplicate keeps first',
+  CT.normalizeCompletionData({
+    items: [
+      { id: 'dup', text: 'First', done: false, difficulty: 1 },
+      { id: 'dup', text: 'Second', done: true, difficulty: 2 },
+    ],
+  }).items[0].text === 'First'
+);
+check(
+  'normalize malformed root',
+  CT.normalizeCompletionData(null).items.length === 0 &&
+    CT.normalizeCompletionData('bad').items.length === 0
+);
+check(
+  'normalize non-array items',
+  CT.normalizeCompletionData({ items: 'nope' }).items.length === 0
+);
+check(
+  'normalize rejects non-boolean done',
+  CT.normalizeItem({ id: 'x', text: 'ok', done: 1, difficulty: 1 }).done === false
+);
 
 console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll completion checks passed');
 process.exit(bad ? 1 : 0);

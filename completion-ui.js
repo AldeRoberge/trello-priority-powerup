@@ -2,7 +2,9 @@
 (function (global) {
   'use strict';
 
-  var CT = global.CompletionTrello;
+  function getCompletionTrello() {
+    return global.CompletionTrello;
+  }
 
   function escapeHtml(text) {
     return String(text)
@@ -12,7 +14,7 @@
       .replace(/"/g, '&quot;');
   }
 
-  function difficultyOptionsHtml(selected) {
+  function difficultyOptionsHtml(selected, CT) {
     var levels = CT && CT.DIFFICULTY_LEVELS ? CT.DIFFICULTY_LEVELS : [];
     return levels
       .map(function (level) {
@@ -32,6 +34,10 @@
 
   function mountCompletionUI(containerEl, options) {
     if (!containerEl) throw new Error('mountCompletionUI: container required');
+    var CT = getCompletionTrello();
+    if (!CT || typeof CT.normalizeCompletionData !== 'function') {
+      throw new Error('CompletionTrello must be loaded before CompletionUI');
+    }
     options = options || {};
 
     var data = CT.normalizeCompletionData(options.data || { items: [] });
@@ -91,7 +97,18 @@
     var addBtn = containerEl.querySelector('#completionAddBtn');
 
     function emitChange() {
-      onChange(CT.normalizeCompletionData(data));
+      var prevIds = data.items.map(function (item) {
+        return item.id;
+      }).join('\0');
+      data = CT.normalizeCompletionData(data);
+      var nextIds = data.items.map(function (item) {
+        return item.id;
+      }).join('\0');
+      if (prevIds !== nextIds) {
+        renderList();
+      }
+      updateProgressUi();
+      onChange(data);
     }
 
     function updateProgressUi() {
@@ -126,7 +143,6 @@
       checkbox.addEventListener('change', function () {
         item.done = checkbox.checked;
         li.classList.toggle('is-done', item.done);
-        updateProgressUi();
         emitChange();
       });
 
@@ -149,7 +165,6 @@
 
       diffSelect.addEventListener('change', function () {
         item.difficulty = Number(diffSelect.value);
-        updateProgressUi();
         emitChange();
       });
 
@@ -182,7 +197,7 @@
       diffSelect.className = 'tp-input tp-completion-diff';
       diffSelect.setAttribute('aria-label', 'Difficult\u00e9');
       diffSelect.title = 'Difficult\u00e9';
-      diffSelect.innerHTML = difficultyOptionsHtml(item.difficulty);
+      diffSelect.innerHTML = difficultyOptionsHtml(item.difficulty, CT);
 
       var deleteBtn = document.createElement('button');
       deleteBtn.type = 'button';

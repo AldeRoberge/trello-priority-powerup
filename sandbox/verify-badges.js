@@ -27,9 +27,12 @@ function check(name, ok) {
   'getCardName',
   'clearBlockedIfComplete',
   'ensureBoardPriorityContext',
+  'preloadBoardPriorityContext',
   'getCachedBoardFormulaKey',
   'getBoardFormula',
   'saveBoardFormula',
+  'getBoardColorScheme',
+  'saveBoardColorScheme',
 ].forEach(function (name) {
   check('popup export ' + name, typeof PT[name] === 'function');
 });
@@ -47,6 +50,15 @@ var critiqueBlockedDisplay = {
   tierLabel: 'Critique'
 };
 
+var PU = sandbox.PriorityUI;
+var TRELLO_BADGE_NAMES = ['blue', 'green', 'orange', 'red', 'yellow', 'purple', 'pink', 'sky', 'lime', 'light-gray'];
+
+function isTrelloBadgeColor(name) {
+  return TRELLO_BADGE_NAMES.indexOf(name) >= 0;
+}
+
+PU.applyColorScheme('blue');
+
 check(
   'incomplete urgent badge',
   PT.formatBadgeText(urgentDisplay, false) === '\u2B24 T\u00e2che urgente'
@@ -60,20 +72,20 @@ check(
   PT.buildCardFaceBadge(urgentDisplay, true).color === 'green'
 );
 check(
-  'incomplete urgent badge color',
-  PT.buildCardFaceBadge(urgentDisplay, false).color === 'orange'
+  'incomplete urgent badge color is valid',
+  isTrelloBadgeColor(PT.buildCardFaceBadge(urgentDisplay, false).color)
 );
 check(
-  'incomplete prioritaire badge color',
-  PT.buildCardFaceBadge(prioritaireDisplay, false).color === 'yellow'
+  'incomplete prioritaire badge color is valid',
+  isTrelloBadgeColor(PT.buildCardFaceBadge(prioritaireDisplay, false).color)
 );
 check(
   'incomplete important badge color is not green',
   PT.buildCardFaceBadge(importantDisplay, false).color !== 'green'
 );
 check(
-  'incomplete important badge color',
-  PT.buildCardFaceBadge(importantDisplay, false).color === 'lime'
+  'incomplete important badge color is valid',
+  isTrelloBadgeColor(PT.buildCardFaceBadge(importantDisplay, false).color)
 );
 check(
   'complete important badge color',
@@ -83,6 +95,21 @@ check(
   'urgent and prioritaire badge colors differ',
   PT.buildCardFaceBadge(urgentDisplay, false).color !==
     PT.buildCardFaceBadge(prioritaireDisplay, false).color
+);
+check(
+  'scheme change updates trello badge mapping',
+  (function () {
+    var blueUrgent = PU.tierTrelloBadgeColor(urgentDisplay);
+    PU.applyColorScheme('amber');
+    var amberUrgent = PU.tierTrelloBadgeColor(urgentDisplay);
+    PU.applyColorScheme('blue');
+    return blueUrgent !== amberUrgent;
+  })()
+);
+check(
+  'scheme badge preview samples',
+  PU.schemeBadgePreviewSamples().length === 3 &&
+    PU.schemeBadgePreviewSamples()[1].label === 'T\u00e2che prioritaire'
 );
 check(
   'incomplete dot not checkmark',
@@ -172,11 +199,11 @@ check(
 );
 check(
   'blocked incomplete badge color matches tier',
-  PT.buildCardFaceBadge(blockedDisplay, false).color === 'orange'
+  PT.buildCardFaceBadge(blockedDisplay, false).color === PU.tierTrelloBadgeColor(blockedDisplay)
 );
 check(
-  'critique blocked incomplete badge color',
-  PT.buildCardFaceBadge(critiqueBlockedDisplay, false).color === 'red'
+  'critique blocked incomplete badge color matches tier',
+  PT.buildCardFaceBadge(critiqueBlockedDisplay, false).color === PU.tierTrelloBadgeColor(critiqueBlockedDisplay)
 );
 check(
   'blocked dot is circle-slash only',

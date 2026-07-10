@@ -57,6 +57,14 @@
   }
 
   function initPowerUp() {
+    function withBoardContext(capabilityFn) {
+      return function (t, opts) {
+        return PriorityTrello.preloadBoardPriorityContext(t).then(function () {
+          return capabilityFn(t, opts);
+        });
+      };
+    }
+
     async function openPriorityPopup(t) {
       // Popup width is fixed (narrow) by Trello; modal gives a comfortable editor width.
       // Use pageUrl (absolute, unsigned) — t.modal signs once; t.signUrl() double-signs.
@@ -88,14 +96,14 @@
 
     TrelloPowerUp.initialize({
 
-      'card-badges': function (t) {
+      'card-badges': withBoardContext(function (t) {
         return Promise.all([
           PriorityTrello.cardFaceBadges(t),
           CompletionTrello.cardFaceBadges(t),
         ]).then(function (results) {
           return results[0].concat(results[1]);
         });
-      },
+      }),
 
       // card-buttons is not used (priority is opened via card-detail-badges).
       // Return [] so Trello does not error if the capability was enabled in admin.
@@ -103,26 +111,28 @@
         return [];
       },
 
-      'card-detail-badges': function (t) {
+      'card-detail-badges': withBoardContext(function (t) {
         return Promise.all([
           PriorityTrello.cardDetailBadges(t, openPriorityPopup),
           CompletionTrello.cardDetailBadges(t, openCompletionPopup),
         ]).then(function (results) {
           return results[0].concat(results[1]);
         });
-      },
+      }),
 
       'on-enable': function(t) {
-        return t.modal({
-          title: 'Priorité',
-          url: PriorityTrello.pageUrl('./welcome.html'),
-          height: 420,
-          fullscreen: false,
-          accentColor: '#22272B',
+        return PriorityTrello.preloadBoardPriorityContext(t).then(function () {
+          return t.modal({
+            title: 'Priorité',
+            url: PriorityTrello.pageUrl('./welcome.html'),
+            height: 420,
+            fullscreen: false,
+            accentColor: '#22272B',
+          });
         });
       },
 
-      'board-buttons': function(t) {
+      'board-buttons': withBoardContext(function(t) {
         return [{
           icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/settings.svg',
           text: 'Paramètres de priorité',
@@ -130,15 +140,15 @@
             return t.popup({
               title: 'Paramètres de priorité',
               url: PriorityTrello.pageUrl('./settings.html'),
-              height: 280,
+              height: 360,
             });
           },
         }];
-      },
+      }),
 
-      'list-sorters': function (t) {
+      'list-sorters': withBoardContext(function (t) {
         return PriorityTrello.listPrioritySorters(t);
-      },
+      }),
 
     }, (function () {
       var restOpts = PriorityTrello.restClientOptions && PriorityTrello.restClientOptions();

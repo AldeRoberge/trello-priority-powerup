@@ -25,6 +25,16 @@
     let latestState = null;
     let saveChain = Promise.resolve();
 
+    t.render(function () {
+      PriorityTrello.getBoardColorScheme(t)
+        .then(function () {
+          if (variant && typeof variant.repaint === 'function') variant.repaint();
+        })
+        .catch(function (err) {
+          console.error('Priority popup color scheme refresh failed', err);
+        });
+    });
+
     function saveState(state) {
       latestState = state;
       saveChain = saveChain

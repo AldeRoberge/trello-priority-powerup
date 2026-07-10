@@ -13,6 +13,7 @@
   // Weight = difficulty + 1 → range 1–5 (easy tasks count less toward total work).
   var DIFFICULTY_MIN = 0;
   var DIFFICULTY_MAX = 4;
+  var ITEM_TEXT_MAX = 500;
 
   var DIFFICULTY_LEVELS = [
     { value: 0, label: 'Facile', short: 'F' },
@@ -49,6 +50,7 @@
     if (!raw || typeof raw !== 'object') return null;
     var text = typeof raw.text === 'string' ? raw.text.trim() : '';
     if (!text) return null;
+    if (text.length > ITEM_TEXT_MAX) text = text.slice(0, ITEM_TEXT_MAX);
     var difficulty = asNumber(raw.difficulty);
     if (!isFinite(difficulty)) difficulty = 2;
     difficulty = Math.max(DIFFICULTY_MIN, Math.min(DIFFICULTY_MAX, Math.round(difficulty)));
@@ -64,9 +66,13 @@
     if (!raw || typeof raw !== 'object') return { items: [] };
     var items = Array.isArray(raw.items) ? raw.items : [];
     var normalized = [];
+    var seenIds = Object.create(null);
     for (var i = 0; i < items.length; i++) {
       var item = normalizeItem(items[i]);
-      if (item) normalized.push(item);
+      if (!item) continue;
+      if (seenIds[item.id]) continue;
+      seenIds[item.id] = true;
+      normalized.push(item);
     }
     return { items: normalized };
   }
@@ -251,6 +257,7 @@
 
   global.CompletionTrello = {
     CARD_COMPLETION_KEY: CARD_COMPLETION_KEY,
+    ITEM_TEXT_MAX: ITEM_TEXT_MAX,
     DIFFICULTY_MIN: DIFFICULTY_MIN,
     DIFFICULTY_MAX: DIFFICULTY_MAX,
     DIFFICULTY_LEVELS: DIFFICULTY_LEVELS,

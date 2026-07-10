@@ -271,38 +271,122 @@
     urgency: 'ti-flame'
   };
 
-  // Named color schemes — each uses 5 stops (low → high intensity) for 7 priority tiers.
+  // Perceptual color helpers (OKLab / OKLCH) for scheme ramps and badge matching.
+  function srgbToLinear(c) {
+    c /= 255;
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  }
+
+  function linearToSrgb(c) {
+    var v = c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+    return Math.max(0, Math.min(1, v));
+  }
+
+  function rgbToOklab(rgb) {
+    var r = srgbToLinear(rgb.r);
+    var g = srgbToLinear(rgb.g);
+    var b = srgbToLinear(rgb.b);
+    var l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+    var m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+    var s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+    var l_ = Math.cbrt(l);
+    var m_ = Math.cbrt(m);
+    var s_ = Math.cbrt(s);
+    return {
+      L: 0.2104542553 * l_ + 0.7936177750 * m_ - 0.0040720468 * s_,
+      a: 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
+      b: 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_
+    };
+  }
+
+  function oklabToRgb(oklab) {
+    var l_ = oklab.L + 0.3963377774 * oklab.a + 0.2158037573 * oklab.b;
+    var m_ = oklab.L - 0.1055613458 * oklab.a - 0.0638541728 * oklab.b;
+    var s_ = oklab.L - 0.0894841775 * oklab.a - 1.2914855480 * oklab.b;
+    var l = l_ * l_ * l_;
+    var m = m_ * m_ * m_;
+    var s = s_ * s_ * s_;
+    var r = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+    var g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+    var b = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+    return {
+      r: Math.round(linearToSrgb(r) * 255),
+      g: Math.round(linearToSrgb(g) * 255),
+      b: Math.round(linearToSrgb(b) * 255)
+    };
+  }
+
+  function oklchToOklab(L, C, H) {
+    var hr = H * Math.PI / 180;
+    return { L: L, a: C * Math.cos(hr), b: C * Math.sin(hr) };
+  }
+
+  function oklchStopsToOklab(oklchStops) {
+    return oklchStops.map(function (stop) {
+      return oklchToOklab(stop[0], stop[1], stop[2]);
+    });
+  }
+
+  function oklchStopsToHex(oklchStops) {
+    return oklchStopsToOklab(oklchStops).map(function (lab) {
+      return priorityRgbToHex(oklabToRgb(lab));
+    });
+  }
+
+  function lerpOklab(a, b, t) {
+    return {
+      L: a.L + (b.L - a.L) * t,
+      a: a.a + (b.a - a.a) * t,
+      b: a.b + (b.b - a.b) * t
+    };
+  }
+
+  function oklabDistance(a, b) {
+    var dL = a.L - b.L;
+    var da = a.a - b.a;
+    var db = a.b - b.b;
+    return dL * dL + da * da + db * db;
+  }
+
+  function schemeTextOnLight(stops) {
+    var darkest = stops[stops.length - 1];
+    return priorityRelativeLuminance(priorityParseHex(darkest)) > 0.45 ? '#172B4D' : darkest;
+  }
+
+  function buildColorScheme(key, label, oklchStops) {
+    var stops = oklchStopsToHex(oklchStops);
+    return {
+      key: key,
+      label: label,
+      oklchStops: oklchStops,
+      oklabStops: oklchStopsToOklab(oklchStops),
+      stops: stops,
+      textOnLight: schemeTextOnLight(stops)
+    };
+  }
+
+  // Five hand-tuned OKLCH ramps (light → dark): luminance steps + chroma curve per character.
   var COLOR_SCHEMES = {
-    blue: {
-      key: 'blue',
-      label: 'Bleu',
-      stops: ['#E6F1FB', '#B5D4F4', '#85B7EB', '#378ADD', '#0C447C'],
-      textOnLight: '#0C447C'
-    },
-    green: {
-      key: 'green',
-      label: 'Vert',
-      stops: ['#E8F5EC', '#B8E0C8', '#6DBF8A', '#2D8A4E', '#1A4D2E'],
-      textOnLight: '#1A4D2E'
-    },
-    purple: {
-      key: 'purple',
-      label: 'Violet',
-      stops: ['#F0EBF8', '#D4C4EB', '#A78BDA', '#7C3AED', '#4C1D95'],
-      textOnLight: '#4C1D95'
-    },
-    amber: {
-      key: 'amber',
-      label: 'Ambre',
-      stops: ['#FFF8E6', '#FFE4A8', '#F5C842', '#E09B00', '#8B5A00'],
-      textOnLight: '#8B5A00'
-    },
-    teal: {
-      key: 'teal',
-      label: 'Sarcelle',
-      stops: ['#E6F7F5', '#B3E8E0', '#5CC4B8', '#0D9488', '#134E4A'],
-      textOnLight: '#134E4A'
-    }
+    blue: buildColorScheme('blue', 'Bleu', [
+      [0.965, 0.018, 240], [0.910, 0.048, 241], [0.835, 0.082, 243],
+      [0.700, 0.125, 246], [0.480, 0.115, 248]
+    ]),
+    green: buildColorScheme('green', 'Vert', [
+      [0.965, 0.022, 145], [0.915, 0.055, 146], [0.845, 0.095, 147],
+      [0.710, 0.130, 148], [0.500, 0.115, 150]
+    ]),
+    purple: buildColorScheme('purple', 'Violet', [
+      [0.965, 0.020, 302], [0.905, 0.058, 300], [0.830, 0.105, 298],
+      [0.690, 0.155, 295], [0.480, 0.140, 292]
+    ]),
+    amber: buildColorScheme('amber', 'Ambre', [
+      [0.975, 0.028, 92], [0.930, 0.070, 78], [0.870, 0.115, 68],
+      [0.750, 0.145, 58], [0.560, 0.130, 52]
+    ]),
+    teal: buildColorScheme('teal', 'Sarcelle', [
+      [0.965, 0.020, 195], [0.915, 0.050, 196], [0.845, 0.088, 198],
+      [0.720, 0.120, 200], [0.520, 0.105, 202]
+    ])
   };
 
   var COLOR_SCHEME_OPTIONS = ['blue', 'green', 'purple', 'amber', 'teal'].map(function (key) {
@@ -311,10 +395,26 @@
 
   var activeColorSchemeKey = DEFAULT_COLOR_SCHEME_KEY;
   var activeColorStops = COLOR_SCHEMES.blue.stops.slice();
+  var activeOklabStops = COLOR_SCHEMES.blue.oklabStops.slice();
   var activeTextOnLight = COLOR_SCHEMES.blue.textOnLight;
   var PRIORITY_TEXT_ON_DARK = '#ffffff';
   // Backward-compatible alias for the default blue palette.
   var PRIORITY_BLUE_STOPS = COLOR_SCHEMES.blue.stops;
+
+  // Trello card badges accept named colors only — map tier seg colors to the nearest.
+  var TRELLO_BADGE_COLOR_HEX = {
+    blue: '#0079BF',
+    green: '#61BD4F',
+    orange: '#FF9F1A',
+    red: '#EB5A46',
+    yellow: '#F2D600',
+    purple: '#C377E0',
+    pink: '#FF78CB',
+    sky: '#00C2E0',
+    lime: '#51E898',
+    'light-gray': '#B3BAC5'
+  };
+  var TRELLO_BADGE_COLOR_NAMES = Object.keys(TRELLO_BADGE_COLOR_HEX);
 
   function priorityParseHex(hex) {
     var h = String(hex).replace('#', '');
@@ -352,16 +452,12 @@
   }
 
   function priorityRgbAtStopT(stopT) {
-    var maxIdx = activeColorStops.length - 1;
+    var maxIdx = activeOklabStops.length - 1;
     stopT = Math.max(0, Math.min(maxIdx, stopT));
     var lo = Math.floor(stopT);
     var hi = Math.min(lo + 1, maxIdx);
     var t = stopT - lo;
-    return priorityLerpRgb(
-      priorityParseHex(activeColorStops[lo]),
-      priorityParseHex(activeColorStops[hi]),
-      t
-    );
+    return oklabToRgb(lerpOklab(activeOklabStops[lo], activeOklabStops[hi], t));
   }
 
   function priorityHexAtStopT(stopT) {
@@ -521,6 +617,7 @@
     rebuildTiersFromScheme();
     rebuildHeatSegments();
     rebuildScoreColorStops();
+    rebuildTrelloBadgeColors();
   }
 
   function normalizeColorSchemeKey(key) {
@@ -532,6 +629,7 @@
     var scheme = COLOR_SCHEMES[key];
     activeColorSchemeKey = key;
     activeColorStops = scheme.stops.slice();
+    activeOklabStops = scheme.oklabStops.slice();
     activeTextOnLight = scheme.textOnLight;
     rebuildColorDerivedState();
     return key;
@@ -761,16 +859,42 @@
     '\u00c9liminer': '\u00c0 \u00e9liminer'
   };
 
-  // Trello card badges accept named colors only — blue intensity (high → low).
+  // Trello card badges accept named colors only — rebuilt from active scheme tier seg colors.
   var TIER_TRELLO_BADGE_COLORS = {
-    0: 'blue',        // Critique
-    1: 'blue',        // Urgent
-    2: 'sky',         // Prioritaire
-    3: 'sky',         // Important
-    4: 'sky',         // Flexible
-    5: 'light-gray',  // Secondaire
-    6: 'light-gray'   // Optionnel
+    0: 'blue',
+    1: 'blue',
+    2: 'sky',
+    3: 'sky',
+    4: 'sky',
+    5: 'light-gray',
+    6: 'light-gray'
   };
+
+  function nearestTrelloBadgeColorName(segHex, avoidName) {
+    var target = rgbToOklab(priorityParseHex(segHex));
+    var ranked = TRELLO_BADGE_COLOR_NAMES.map(function (name) {
+      return {
+        name: name,
+        dist: oklabDistance(target, rgbToOklab(priorityParseHex(TRELLO_BADGE_COLOR_HEX[name])))
+      };
+    }).sort(function (a, b) {
+      return a.dist - b.dist;
+    });
+    for (var i = 0; i < ranked.length; i++) {
+      if (!avoidName || ranked[i].name !== avoidName) return ranked[i].name;
+    }
+    return ranked[0].name;
+  }
+
+  function rebuildTrelloBadgeColors() {
+    for (var i = 0; i <= 4; i++) {
+      var tier = TIERS[i];
+      var avoid = i > 0 ? TIER_TRELLO_BADGE_COLORS[i - 1] : null;
+      TIER_TRELLO_BADGE_COLORS[i] = nearestTrelloBadgeColorName(tier && tier.seg ? tier.seg : activeColorStops[0], avoid);
+    }
+    TIER_TRELLO_BADGE_COLORS[5] = 'light-gray';
+    TIER_TRELLO_BADGE_COLORS[6] = 'light-gray';
+  }
 
   // Unicode dots for Trello badge text (largest = highest priority).
   var TIER_BADGE_DOTS = {
@@ -851,6 +975,14 @@
       return TIER_BADGE_DOTS[i];
     }
     return '\u25CF';
+  }
+
+  function schemeBadgePreviewSamples() {
+    return [
+      { tierI: 0, label: TASK_BADGE_LABELS.Critique, color: TIER_TRELLO_BADGE_COLORS[0] },
+      { tierI: 2, label: TASK_BADGE_LABELS.Prioritaire, color: TIER_TRELLO_BADGE_COLORS[2] },
+      { tierI: 6, label: TASK_BADGE_LABELS.Optionnel, color: TIER_TRELLO_BADGE_COLORS[6] }
+    ];
   }
 
   function tierTrelloBadgeColor(display) {
@@ -3889,6 +4021,8 @@
     taskBadgeLabel: taskBadgeLabel,
     blockedTaskBadgeLabel: blockedTaskBadgeLabel,
     tierTrelloBadgeColor: tierTrelloBadgeColor,
+    schemeBadgePreviewSamples: schemeBadgePreviewSamples,
+    rebuildTrelloBadgeColors: rebuildTrelloBadgeColors,
     tierBadgeDotChar: tierBadgeDotChar,
     heatTierDotSizePx: heatTierDotSizePx,
     HEAT_TIER_DOT_SIZES: HEAT_TIER_DOT_SIZES,

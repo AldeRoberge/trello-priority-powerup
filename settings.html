@@ -19,6 +19,10 @@
     <h4 class="tp-heading" id="colorSchemeHeading">Schéma de couleurs</h4>
     <p class="tp-color-scheme-hint">Palette des paliers de priorité affichés sur le tableau.</p>
     <div class="tp-color-scheme-list" id="colorSchemeList" role="radiogroup" aria-label="Schéma de couleurs"></div>
+    <div class="tp-badge-preview" id="badgePreviewSection" aria-labelledby="badgePreviewHeading">
+      <p class="tp-color-scheme-hint" id="badgePreviewHeading">Aperçu des badges sur les cartes</p>
+      <div class="tp-badge-preview-list" id="badgePreviewList"></div>
+    </div>
   </section>
 
   <div class="tp-build-info" id="buildInfo">Build : chargement…</div>
@@ -58,6 +62,19 @@
       }).join('');
     }
 
+    function renderBadgePreview() {
+      var listEl = document.getElementById('badgePreviewList');
+      if (!listEl || typeof PriorityUI === 'undefined') return;
+      listEl.replaceChildren();
+      PriorityUI.schemeBadgePreviewSamples().forEach(function (sample) {
+        var chip = document.createElement('span');
+        chip.className = 'tp-badge-preview-chip';
+        chip.dataset.trelloColor = sample.color;
+        chip.textContent = '\u25CF ' + sample.label;
+        listEl.appendChild(chip);
+      });
+    }
+
     function setActiveColorSchemeUi(activeKey) {
       var buttons = document.querySelectorAll('.tp-color-scheme-option');
       buttons.forEach(function (btn) {
@@ -65,6 +82,7 @@
         btn.classList.toggle('is-active', selected);
         btn.setAttribute('aria-checked', selected ? 'true' : 'false');
       });
+      renderBadgePreview();
     }
 
     async function initColorSchemePicker() {
@@ -89,6 +107,8 @@
           '</span>';
         btn.addEventListener('click', function () {
           if (btn.classList.contains('is-active')) return;
+          PriorityUI.applyColorScheme(option.key);
+          renderBadgePreview();
           PriorityTrello.saveBoardColorScheme(t, option.key)
             .then(function (savedKey) {
               setActiveColorSchemeUi(savedKey);

@@ -378,6 +378,38 @@ html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
   border: 1px solid var(--tp-border-strong);
 }
 
+.tp-badge-preview {
+  margin-top: 12px;
+}
+
+.tp-badge-preview-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tp-badge-preview-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.tp-badge-preview-chip[data-trello-color="blue"] { background: #0079BF; }
+.tp-badge-preview-chip[data-trello-color="green"] { background: #61BD4F; }
+.tp-badge-preview-chip[data-trello-color="orange"] { background: #FF9F1A; }
+.tp-badge-preview-chip[data-trello-color="red"] { background: #EB5A46; }
+.tp-badge-preview-chip[data-trello-color="yellow"] { background: #B58900; color: #172B4D; }
+.tp-badge-preview-chip[data-trello-color="purple"] { background: #C377E0; }
+.tp-badge-preview-chip[data-trello-color="pink"] { background: #FF78CB; color: #172B4D; }
+.tp-badge-preview-chip[data-trello-color="sky"] { background: #00C2E0; color: #172B4D; }
+.tp-badge-preview-chip[data-trello-color="lime"] { background: #51E898; color: #172B4D; }
+.tp-badge-preview-chip[data-trello-color="light-gray"] { background: #B3BAC5; color: #172B4D; }
+
 .tp-toast {
   position: fixed;
   bottom: 12px;
@@ -749,6 +781,14 @@ body.tp-page--completion {
   max-width: 520px;
   margin: 0 auto;
   padding: 4px 12px 12px;
+}
+
+.tp-page--completion .tp-priority-card-header {
+  padding: 0 0 10px;
+}
+
+.tp-page--completion .tp-heading {
+  margin-bottom: 8px;
 }
 
 .tp-completion-progress {

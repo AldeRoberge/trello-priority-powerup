@@ -7,6 +7,7 @@
   var MATRIX_SETTINGS_KEY = 'matrixLabelSettings';
   var FORMULA_SETTINGS_KEY = 'priorityFormula';
   var COLOR_SCHEME_SETTINGS_KEY = 'priorityColorScheme';
+  var COLOR_SCHEME_REV_KEY = 'priorityColorSchemeRev';
   var boardFormulaKey = 'baseline';
   var boardColorSchemeKey = 'blue';
   // Trello minimum for dynamic badge polling (card-badges / card-detail-badges).
@@ -202,7 +203,12 @@
     PriorityUI.applyColorScheme(key);
     PriorityUI.saveStoredColorSchemeKey(key);
     await t.set('board', 'shared', COLOR_SCHEME_SETTINGS_KEY, key);
+    await t.set('board', 'shared', COLOR_SCHEME_REV_KEY, Date.now());
     return key;
+  }
+
+  async function preloadBoardPriorityContext(t) {
+    return ensureBoardPriorityContext(t);
   }
 
   function getCachedBoardColorSchemeKey() {
@@ -403,7 +409,11 @@
   }
 
   async function getBadgeData(t) {
-    var results = await Promise.all([getCardInputs(t), getCardDueComplete(t)]);
+    var results = await Promise.all([
+      getCardInputs(t),
+      getCardDueComplete(t),
+      t.get('board', 'shared', COLOR_SCHEME_REV_KEY).catch(function () { return null; }),
+    ]);
     var completed = results[1] === true;
     var inputs = await clearBlockedIfComplete(t, results[0], completed);
     var display = null;
@@ -834,6 +844,7 @@
     MATRIX_SETTINGS_KEY: MATRIX_SETTINGS_KEY,
     FORMULA_SETTINGS_KEY: FORMULA_SETTINGS_KEY,
     COLOR_SCHEME_SETTINGS_KEY: COLOR_SCHEME_SETTINGS_KEY,
+    COLOR_SCHEME_REV_KEY: COLOR_SCHEME_REV_KEY,
     IMPORTANT_INPUTS: IMPORTANT_INPUTS,
     DEFAULT_INPUTS: DEFAULT_INPUTS,
     PRIORITY_DIMENSIONS: PRIORITY_DIMENSIONS,
@@ -848,6 +859,7 @@
     getBoardColorScheme: getBoardColorScheme,
     getCachedBoardColorSchemeKey: getCachedBoardColorSchemeKey,
     saveBoardColorScheme: saveBoardColorScheme,
+    preloadBoardPriorityContext: preloadBoardPriorityContext,
     ensureBoardPriorityContext: ensureBoardPriorityContext,
     computeDisplay: computeDisplay,
     getCardDisplay: getCardDisplay,
