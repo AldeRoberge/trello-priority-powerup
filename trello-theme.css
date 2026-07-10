@@ -742,6 +742,164 @@ html[data-color-mode="dark"] .tp-page--priority {
   --surface-hover: var(--tp-surface-hover);
 }
 
+/* Completion editor — modal iframe */
+body.tp-page--completion {
+  background: var(--tp-bg);
+  color: var(--tp-text);
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 4px 12px 12px;
+}
+
+.tp-completion-progress {
+  margin-bottom: 16px;
+}
+
+.tp-completion-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.tp-completion-progress-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--tp-text-muted);
+}
+
+.tp-completion-percent {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--tp-text);
+  line-height: 1;
+}
+
+.tp-completion-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--tp-surface-subtle);
+  box-shadow: inset 0 0 0 1px var(--tp-border);
+  overflow: hidden;
+}
+
+.tp-completion-bar-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 4px;
+  background: var(--tp-primary);
+  transition: width 0.2s ease;
+}
+
+.tp-completion-bar.is-complete .tp-completion-bar-fill {
+  background: var(--tp-success);
+}
+
+.tp-completion-meta {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--tp-text-muted);
+}
+
+.tp-completion-list-section {
+  margin-bottom: 12px;
+}
+
+.tp-completion-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tp-completion-item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 108px 28px;
+  align-items: center;
+  gap: 6px;
+}
+
+.tp-completion-item.is-done .tp-completion-text {
+  text-decoration: line-through;
+  color: var(--tp-text-muted);
+}
+
+.tp-completion-check-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tp-completion-check {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--tp-primary);
+}
+
+.tp-completion-text {
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 14px;
+}
+
+.tp-completion-diff {
+  padding: 5px 4px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.tp-completion-delete {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tp-completion-delete:hover {
+  background: var(--tp-surface-hover);
+  color: var(--tp-danger-text);
+}
+
+.tp-completion-empty {
+  padding: 8px 0;
+  font-size: 13px;
+  color: var(--tp-text-muted);
+}
+
+.tp-completion-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.tp-completion-add-btn {
+  flex: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 400px) {
+  .tp-completion-item {
+    grid-template-columns: 28px minmax(0, 1fr) 28px;
+    grid-template-rows: auto auto;
+  }
+
+  .tp-completion-diff {
+    grid-column: 2 / 4;
+  }
+}
+
 /* Very narrow iframe only — stack label rows (modal/popup shell is wider than 340px) */
 @container priority-popup (max-width: 300px) {
   .tp-page--priority .heat-badge {
