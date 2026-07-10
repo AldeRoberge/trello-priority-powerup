@@ -3242,22 +3242,19 @@
     function plotAreaMetrics() {
       void chart.offsetWidth;
       var chartRect = chart.getBoundingClientRect();
-      var chartW = chartRect.width || chart.offsetWidth;
-      var chartH = chartRect.height || chart.offsetHeight;
-      if (chartW < 1 || chartH < 1) {
+      var plotRect = plotHit.getBoundingClientRect();
+      if (chartRect.width < 1 || chartRect.height < 1 || plotRect.width < 1 || plotRect.height < 1) {
         return null;
       }
-      var scaleX = chartW / SVG_W;
-      var scaleY = chartH / SVG_H;
-      var plotW = PLOT_W * scaleX;
-      var plotH = PLOT_H * scaleY;
+      var cssW = plotRect.width;
+      var cssH = plotRect.height;
+      var scaleX = cssW / PLOT_W;
       return {
-        left: MARGIN.left * scaleX,
-        top: MARGIN.top * scaleY,
-        plotW: plotW,
-        plotH: plotH,
-        cssW: Math.max(1, Math.ceil(plotW)),
-        cssH: Math.max(1, Math.ceil(plotH))
+        left: plotRect.left - chartRect.left,
+        top: plotRect.top - chartRect.top,
+        cssW: cssW,
+        cssH: cssH,
+        radius: Math.max(1, 4 * scaleX)
       };
     }
 
@@ -3266,18 +3263,25 @@
       if (!metrics) {
         return null;
       }
+      var cssW = metrics.cssW;
+      var cssH = metrics.cssH;
+      var dpr = window.devicePixelRatio || 1;
+      var bmpW = Math.max(1, Math.round(cssW * dpr));
+      var bmpH = Math.max(1, Math.round(cssH * dpr));
       surfaceCanvas.style.left = metrics.left + 'px';
       surfaceCanvas.style.top = metrics.top + 'px';
-      surfaceCanvas.style.width = metrics.cssW + 'px';
-      surfaceCanvas.style.height = metrics.cssH + 'px';
-      var dpr = window.devicePixelRatio || 1;
-      surfaceCanvas.width = Math.round(metrics.cssW * dpr);
-      surfaceCanvas.height = Math.round(metrics.cssH * dpr);
+      surfaceCanvas.style.width = cssW + 'px';
+      surfaceCanvas.style.height = cssH + 'px';
+      surfaceCanvas.style.borderRadius = metrics.radius + 'px';
+      surfaceCanvas.width = bmpW;
+      surfaceCanvas.height = bmpH;
       // Setting canvas bitmap dims can reset layout size in some engines.
-      surfaceCanvas.style.width = metrics.cssW + 'px';
-      surfaceCanvas.style.height = metrics.cssH + 'px';
-      surfaceCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      return { w: metrics.cssW, h: metrics.cssH };
+      surfaceCanvas.style.width = cssW + 'px';
+      surfaceCanvas.style.height = cssH + 'px';
+      surfaceCanvas.style.borderRadius = metrics.radius + 'px';
+      // putImageData ignores the context transform — paint at device-pixel size directly.
+      surfaceCtx.setTransform(1, 0, 0, 1, 0, 0);
+      return { w: bmpW, h: bmpH };
     }
 
     function paintSurface(F) {

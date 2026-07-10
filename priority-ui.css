@@ -1477,9 +1477,9 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 
 .calc-rsm-surface {
   position: absolute;
-  border-radius: 4px;
   pointer-events: none;
   z-index: 1;
+  overflow: hidden;
 }
 
 .calc-rsm-svg {
