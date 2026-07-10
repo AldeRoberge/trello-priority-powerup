@@ -217,7 +217,9 @@
 
   async function ensureBoardPriorityContext(t) {
     var settings = await getMatrixSettings(t);
-    PriorityUI.setMatrixSettings(settings);
+    if (typeof PriorityUI !== 'undefined' && PriorityUI.setMatrixSettings) {
+      PriorityUI.setMatrixSettings(settings);
+    }
     await getBoardFormula(t);
     await getBoardColorScheme(t);
     return settings;

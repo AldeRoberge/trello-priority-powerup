@@ -6,11 +6,12 @@
   <title>Paramètres de priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./rest-config.js"></script>
+  <script src="./version.js"></script>
+  <script src="./priority-matrix.js"></script>
   <script src="./priority-ui.js"></script>
   <script src="./priority-trello.js"></script>
   <script src="./completion-ui.js"></script>
   <script src="./completion-trello.js"></script>
-  <script src="./version.js"></script>
   <link rel="stylesheet" href="./trello-theme.css" />
 </head>
 <body class="tp-page">
@@ -94,12 +95,17 @@
     }
 
     function renderCompletionSchemeSwatches(scheme) {
+      if (!scheme || !scheme.stops || !scheme.stops.length) return '';
+      var gradientCss =
+        typeof CompletionUI !== 'undefined' && CompletionUI.schemeGradientCss
+          ? CompletionUI.schemeGradientCss(scheme.key)
+          : 'linear-gradient(90deg,' + scheme.stops[0] + ',' + scheme.stops[scheme.stops.length - 1] + ')';
       return (
         '<span class="tp-color-scheme-swatch tp-color-scheme-swatch--start" style="background:' +
         scheme.stops[0] +
         '"></span>' +
         '<span class="tp-color-scheme-swatch tp-color-scheme-swatch--gradient" style="background:' +
-        CompletionUI.schemeGradientCss(scheme.key) +
+        gradientCss +
         '"></span>' +
         '<span class="tp-color-scheme-swatch tp-color-scheme-swatch--end" style="background:' +
         scheme.stops[scheme.stops.length - 1] +
@@ -116,15 +122,31 @@
       });
     }
 
-    async function initCompletionSchemePicker() {
-      var listEl = document.getElementById('completionSchemeList');
-      if (!listEl || typeof CompletionUI === 'undefined') return;
+    function resizeSettingsPopup() {
+      if (typeof t.sizeTo === 'function') {
+        t.sizeTo(document.body);
+      }
+    }
 
+    async function initCompletionSchemePicker() {
+      var section = document.getElementById('completionSchemeSection');
+      var listEl = document.getElementById('completionSchemeList');
+      if (
+        !listEl ||
+        typeof CompletionUI === 'undefined' ||
+        typeof CompletionTrello === 'undefined'
+      ) {
+        if (section) section.hidden = true;
+        return;
+      }
+
+      try {
       var activeKey = await CompletionTrello.getBoardCompletionColorScheme(t);
       listEl.replaceChildren();
 
       CompletionUI.COMPLETION_SCHEME_OPTIONS.forEach(function (option) {
         var scheme = CompletionUI.COMPLETION_COLOR_SCHEMES[option.key];
+        if (!scheme) return;
         var btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'tp-color-scheme-option tp-completion-scheme-option';
@@ -151,6 +173,10 @@
       });
 
       setActiveCompletionSchemeUi(activeKey);
+      } catch (err) {
+        console.error('Completion scheme picker init failed', err);
+        if (section) section.hidden = true;
+      }
     }
 
     async function initColorSchemePicker() {
@@ -228,12 +254,14 @@
       });
     });
 
-    return Promise.all([
+    return Promise.allSettled([
       loadBuildInfo(),
       initColorSchemePicker(),
       initCompletionSchemePicker(),
       refreshAutoSortUi(),
-    ]);
+    ]).then(function () {
+      resizeSettingsPopup();
+    });
     }).catch(function (err) {
       console.error('Priority settings init failed', err);
     });

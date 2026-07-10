@@ -60,10 +60,19 @@
   function initPowerUp() {
     function withBoardContext(capabilityFn) {
       return function (t, opts) {
-        return Promise.all([
-          PriorityTrello.preloadBoardPriorityContext(t),
-          CompletionTrello.preloadBoardCompletionContext(t),
-        ]).then(function () {
+        var preloads = [
+          PriorityTrello.preloadBoardPriorityContext(t).catch(function (err) {
+            console.error('Priority board context preload failed', err);
+          }),
+        ];
+        if (typeof CompletionTrello !== 'undefined' && CompletionTrello.preloadBoardCompletionContext) {
+          preloads.push(
+            CompletionTrello.preloadBoardCompletionContext(t).catch(function (err) {
+              console.error('Completion board context preload failed', err);
+            })
+          );
+        }
+        return Promise.all(preloads).then(function () {
           return capabilityFn(t, opts);
         });
       };
@@ -136,7 +145,8 @@
         });
       },
 
-      'board-buttons': withBoardContext(function(t) {
+      // Settings popup loads board context itself — do not gate the menu item on preload.
+      'board-buttons': function(t) {
         return [{
           icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/settings.svg',
           text: 'Paramètres de priorité',
@@ -144,11 +154,11 @@
             return t.popup({
               title: 'Paramètres de priorité',
               url: PriorityTrello.pageUrl('./settings.html'),
-              height: 480,
+              height: 580,
             });
           },
         }];
-      }),
+      },
 
       'list-sorters': withBoardContext(function (t) {
         return PriorityTrello.listPrioritySorters(t);
