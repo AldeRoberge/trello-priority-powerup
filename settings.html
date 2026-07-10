@@ -6,6 +6,7 @@
   <title>Paramètres de priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./rest-config.js"></script>
+  <script src="./priority-ui.js"></script>
   <script src="./priority-trello.js"></script>
   <script src="./version.js"></script>
   <link rel="stylesheet" href="./trello-theme.css" />
@@ -13,6 +14,12 @@
 <body class="tp-page">
   <h3 class="tp-heading">Priorité</h3>
   <p class="tp-subtitle">Évaluez chaque carte selon l'urgence, l'impact et la facilité pour obtenir un score et un libellé de palier (Critique, Urgent, Prioritaire…).</p>
+
+  <section class="tp-color-scheme" id="colorSchemeSection" aria-labelledby="colorSchemeHeading">
+    <h4 class="tp-heading" id="colorSchemeHeading">Schéma de couleurs</h4>
+    <p class="tp-color-scheme-hint">Palette des paliers de priorité affichés sur le tableau.</p>
+    <div class="tp-color-scheme-list" id="colorSchemeList" role="radiogroup" aria-label="Schéma de couleurs"></div>
+  </section>
 
   <div class="tp-build-info" id="buildInfo">Build : chargement…</div>
   <div class="tp-auto-sort" id="autoSortSection" hidden>
@@ -43,6 +50,57 @@
       } catch {
         el.textContent = 'Build : indisponible';
       }
+    }
+
+    function renderColorSchemeSwatches(stops) {
+      return stops.map(function (color) {
+        return '<span class="tp-color-scheme-swatch" style="background:' + color + '"></span>';
+      }).join('');
+    }
+
+    function setActiveColorSchemeUi(activeKey) {
+      var buttons = document.querySelectorAll('.tp-color-scheme-option');
+      buttons.forEach(function (btn) {
+        var selected = btn.dataset.scheme === activeKey;
+        btn.classList.toggle('is-active', selected);
+        btn.setAttribute('aria-checked', selected ? 'true' : 'false');
+      });
+    }
+
+    async function initColorSchemePicker() {
+      var listEl = document.getElementById('colorSchemeList');
+      if (!listEl || typeof PriorityUI === 'undefined') return;
+
+      var activeKey = await PriorityTrello.getBoardColorScheme(t);
+      listEl.replaceChildren();
+
+      PriorityUI.COLOR_SCHEME_OPTIONS.forEach(function (option) {
+        var scheme = PriorityUI.COLOR_SCHEMES[option.key];
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tp-color-scheme-option';
+        btn.dataset.scheme = option.key;
+        btn.setAttribute('role', 'radio');
+        btn.setAttribute('aria-checked', option.key === activeKey ? 'true' : 'false');
+        btn.innerHTML =
+          '<span class="tp-color-scheme-label">' + option.label + '</span>' +
+          '<span class="tp-color-scheme-swatches" aria-hidden="true">' +
+          renderColorSchemeSwatches(scheme.stops) +
+          '</span>';
+        btn.addEventListener('click', function () {
+          if (btn.classList.contains('is-active')) return;
+          PriorityTrello.saveBoardColorScheme(t, option.key)
+            .then(function (savedKey) {
+              setActiveColorSchemeUi(savedKey);
+            })
+            .catch(function (err) {
+              console.error('Priority color scheme save failed', err);
+            });
+        });
+        listEl.appendChild(btn);
+      });
+
+      setActiveColorSchemeUi(activeKey);
     }
 
     async function refreshAutoSortUi() {
@@ -82,7 +140,7 @@
       });
     });
 
-    return Promise.all([loadBuildInfo(), refreshAutoSortUi()]);
+    return Promise.all([loadBuildInfo(), initColorSchemePicker(), refreshAutoSortUi()]);
     }).catch(function (err) {
       console.error('Priority settings init failed', err);
     });

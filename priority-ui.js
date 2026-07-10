@@ -45,6 +45,8 @@
   var EISENHOWER_URGENCY_THRESHOLD = 2;
   var EISENHOWER_IMPACT_THRESHOLD = 2;
   var FORMULA_STORAGE_KEY = 'trello-priority-powerup/formula';
+  var COLOR_SCHEME_STORAGE_KEY = 'trello-priority-powerup/color-scheme';
+  var DEFAULT_COLOR_SCHEME_KEY = 'blue';
 
   // ── 2. Labels, keywords, tiers & heat presets ───────────────────────────
 
@@ -269,10 +271,50 @@
     urgency: 'ti-flame'
   };
 
-  // Single-hue blue intensity palette (low → high priority).
-  var PRIORITY_BLUE_STOPS = ['#E6F1FB', '#B5D4F4', '#85B7EB', '#378ADD', '#0C447C'];
-  var PRIORITY_TEXT_ON_LIGHT = '#0C447C';
+  // Named color schemes — each uses 5 stops (low → high intensity) for 7 priority tiers.
+  var COLOR_SCHEMES = {
+    blue: {
+      key: 'blue',
+      label: 'Bleu',
+      stops: ['#E6F1FB', '#B5D4F4', '#85B7EB', '#378ADD', '#0C447C'],
+      textOnLight: '#0C447C'
+    },
+    green: {
+      key: 'green',
+      label: 'Vert',
+      stops: ['#E8F5EC', '#B8E0C8', '#6DBF8A', '#2D8A4E', '#1A4D2E'],
+      textOnLight: '#1A4D2E'
+    },
+    purple: {
+      key: 'purple',
+      label: 'Violet',
+      stops: ['#F0EBF8', '#D4C4EB', '#A78BDA', '#7C3AED', '#4C1D95'],
+      textOnLight: '#4C1D95'
+    },
+    amber: {
+      key: 'amber',
+      label: 'Ambre',
+      stops: ['#FFF8E6', '#FFE4A8', '#F5C842', '#E09B00', '#8B5A00'],
+      textOnLight: '#8B5A00'
+    },
+    teal: {
+      key: 'teal',
+      label: 'Sarcelle',
+      stops: ['#E6F7F5', '#B3E8E0', '#5CC4B8', '#0D9488', '#134E4A'],
+      textOnLight: '#134E4A'
+    }
+  };
+
+  var COLOR_SCHEME_OPTIONS = ['blue', 'green', 'purple', 'amber', 'teal'].map(function (key) {
+    return { key: key, label: COLOR_SCHEMES[key].label };
+  });
+
+  var activeColorSchemeKey = DEFAULT_COLOR_SCHEME_KEY;
+  var activeColorStops = COLOR_SCHEMES.blue.stops.slice();
+  var activeTextOnLight = COLOR_SCHEMES.blue.textOnLight;
   var PRIORITY_TEXT_ON_DARK = '#ffffff';
+  // Backward-compatible alias for the default blue palette.
+  var PRIORITY_BLUE_STOPS = COLOR_SCHEMES.blue.stops;
 
   function priorityParseHex(hex) {
     var h = String(hex).replace('#', '');
@@ -300,24 +342,24 @@
   }
 
   function priorityStopTForScore(score) {
-    return Math.max(0, Math.min(PRIORITY_BLUE_STOPS.length - 1,
-      (score / 10) * (PRIORITY_BLUE_STOPS.length - 1)));
+    return Math.max(0, Math.min(activeColorStops.length - 1,
+      (score / 10) * (activeColorStops.length - 1)));
   }
 
   function priorityStopTForTierIndex(tierI) {
-    return Math.max(0, Math.min(PRIORITY_BLUE_STOPS.length - 1,
-      ((6 - tierI) / 6) * (PRIORITY_BLUE_STOPS.length - 1)));
+    return Math.max(0, Math.min(activeColorStops.length - 1,
+      ((6 - tierI) / 6) * (activeColorStops.length - 1)));
   }
 
   function priorityRgbAtStopT(stopT) {
-    var maxIdx = PRIORITY_BLUE_STOPS.length - 1;
+    var maxIdx = activeColorStops.length - 1;
     stopT = Math.max(0, Math.min(maxIdx, stopT));
     var lo = Math.floor(stopT);
     var hi = Math.min(lo + 1, maxIdx);
     var t = stopT - lo;
     return priorityLerpRgb(
-      priorityParseHex(PRIORITY_BLUE_STOPS[lo]),
-      priorityParseHex(PRIORITY_BLUE_STOPS[hi]),
+      priorityParseHex(activeColorStops[lo]),
+      priorityParseHex(activeColorStops[hi]),
       t
     );
   }
@@ -340,7 +382,7 @@
 
   function priorityTextForFillHex(fillHex) {
     return priorityRelativeLuminance(priorityParseHex(fillHex)) > 0.72
-      ? PRIORITY_TEXT_ON_LIGHT
+      ? activeTextOnLight
       : PRIORITY_TEXT_ON_DARK;
   }
 
@@ -408,30 +450,115 @@
     }
   ];
 
-  var TIERS = TIER_DEFS.map(function (def) {
-    var styles = priorityTierLightStyles(def.i);
-    return {
-      min: def.min,
-      label: def.label,
-      i: def.i,
-      description: def.description,
-      fill: styles.fill,
-      text: styles.text,
-      seg: styles.seg
-    };
-  });
+  var TIERS = [];
+  var TIERS_DARK = [];
 
-  // Dark-mode tier fills/tints — muted blue surfaces with white text for readability.
-  var TIERS_DARK = TIER_DEFS.map(function (def) {
-    var styles = priorityTierDarkStyles(def.i);
-    return {
-      i: def.i,
-      fill: styles.fill,
-      text: styles.text,
-      seg: styles.seg,
-      tint: styles.tint
-    };
-  });
+  function rebuildTiersFromScheme() {
+    TIERS.length = 0;
+    TIERS_DARK.length = 0;
+    TIER_DEFS.forEach(function (def) {
+      var styles = priorityTierLightStyles(def.i);
+      TIERS.push({
+        min: def.min,
+        label: def.label,
+        i: def.i,
+        description: def.description,
+        fill: styles.fill,
+        text: styles.text,
+        seg: styles.seg
+      });
+      var darkStyles = priorityTierDarkStyles(def.i);
+      TIERS_DARK.push({
+        i: def.i,
+        fill: darkStyles.fill,
+        text: darkStyles.text,
+        seg: darkStyles.seg,
+        tint: darkStyles.tint
+      });
+    });
+  }
+
+  var HEAT_SEGMENT_DEFS = [
+    { i: 6, target: 0.7, preset: { urgency: 0, impact: 0, ease: 2 } },
+    { i: 5, target: 2.1, preset: { urgency: 1, impact: 1, ease: 2 } },
+    { i: 4, target: 3.6, preset: { urgency: 1, impact: 2, ease: 3 } },
+    { i: 3, target: 5.0, preset: { urgency: 2, impact: 2, ease: 3 } },
+    { i: 2, target: 6.5, preset: { urgency: 2, impact: 3, ease: 3 } },
+    { i: 1, target: 7.9, preset: { urgency: 3, impact: 3, ease: 2 } },
+    { i: 0, target: 9.3, preset: { urgency: 4, impact: 4, ease: 5 } }
+  ];
+
+  var HEAT_SEGMENTS = [];
+
+  function rebuildHeatSegments() {
+    HEAT_SEGMENTS.length = 0;
+    HEAT_SEGMENT_DEFS.forEach(function (def) {
+      var tierDef = TIER_DEFS[def.i];
+      var tier = TIERS[def.i] || TIERS[6];
+      HEAT_SEGMENTS.push({
+        i: def.i,
+        target: def.target,
+        color: tier.seg,
+        label: tierDef.label,
+        description: tierDef.description,
+        preset: def.preset
+      });
+    });
+  }
+
+  var SCORE_COLOR_STOPS = [];
+
+  function rebuildScoreColorStops() {
+    var scores = [0, 1.4, 2.9, 4.3, 5.8, 7.2, 8.6, 9.3, 10];
+    SCORE_COLOR_STOPS.length = 0;
+    scores.forEach(function (s) {
+      var rgb = priorityRgbAtStopT(priorityStopTForScore(s));
+      SCORE_COLOR_STOPS.push({ s: s, r: rgb.r, g: rgb.g, b: rgb.b });
+    });
+  }
+
+  function rebuildColorDerivedState() {
+    rebuildTiersFromScheme();
+    rebuildHeatSegments();
+    rebuildScoreColorStops();
+  }
+
+  function normalizeColorSchemeKey(key) {
+    return COLOR_SCHEMES[key] ? key : DEFAULT_COLOR_SCHEME_KEY;
+  }
+
+  function applyColorScheme(schemeKey) {
+    var key = normalizeColorSchemeKey(schemeKey);
+    var scheme = COLOR_SCHEMES[key];
+    activeColorSchemeKey = key;
+    activeColorStops = scheme.stops.slice();
+    activeTextOnLight = scheme.textOnLight;
+    rebuildColorDerivedState();
+    return key;
+  }
+
+  function getActiveColorSchemeKey() {
+    return activeColorSchemeKey;
+  }
+
+  function loadStoredColorSchemeKey() {
+    try {
+      if (typeof localStorage === 'undefined') return null;
+      var raw = localStorage.getItem(COLOR_SCHEME_STORAGE_KEY);
+      if (!raw) return null;
+      return COLOR_SCHEMES[raw] ? raw : null;
+    } catch (e) { return null; }
+  }
+
+  function saveStoredColorSchemeKey(key) {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      if (!COLOR_SCHEMES[key]) return;
+      localStorage.setItem(COLOR_SCHEME_STORAGE_KEY, key);
+    } catch (e) { /* ignore quota / private mode */ }
+  }
+
+  applyColorScheme(DEFAULT_COLOR_SCHEME_KEY);
 
   var TIER_LABEL_SHORT = {
     Critique: 'Crit',
@@ -520,16 +647,6 @@
     };
   }
 
-  var SCORE_COLOR_STOPS = (function () {
-    var scores = [0, 1.4, 2.9, 4.3, 5.8, 7.2, 8.6, 9.3, 10];
-    return scores.map(function (s) {
-      var rgb = priorityRgbAtStopT(priorityStopTForScore(s));
-      return { s: s, r: rgb.r, g: rgb.g, b: rgb.b };
-    });
-  })();
-
-  var SCORE_SURFACE_ALPHA = 0.78;
-
   function scoreToRgb(score) {
     score = Math.max(0, Math.min(10, score));
     var hi = SCORE_COLOR_STOPS.length - 1;
@@ -556,36 +673,7 @@
     return 'rgba(' + rgb.r + ', ' + rgb.g + ', ' + rgb.b + ', ' + alpha + ')';
   }
 
-  var HEAT_SEGMENTS = [
-    {
-      i: 6, target: 0.7, color: TIERS[6].seg, label: 'Optionnel', description: TIERS[6].description,
-      preset: { urgency: 0, impact: 0, ease: 2 }
-    },
-    {
-      i: 5, target: 2.1, color: TIERS[5].seg, label: 'Secondaire', description: TIERS[5].description,
-      preset: { urgency: 1, impact: 1, ease: 2 }
-    },
-    {
-      i: 4, target: 3.6, color: TIERS[4].seg, label: 'Flexible', description: TIERS[4].description,
-      preset: { urgency: 1, impact: 2, ease: 3 }
-    },
-    {
-      i: 3, target: 5.0, color: TIERS[3].seg, label: 'Important', description: TIERS[3].description,
-      preset: { urgency: 2, impact: 2, ease: 3 }
-    },
-    {
-      i: 2, target: 6.5, color: TIERS[2].seg, label: 'Prioritaire', description: TIERS[2].description,
-      preset: { urgency: 2, impact: 3, ease: 3 }
-    },
-    {
-      i: 1, target: 7.9, color: TIERS[1].seg, label: 'Urgent', description: TIERS[1].description,
-      preset: { urgency: 3, impact: 3, ease: 2 }
-    },
-    {
-      i: 0, target: 9.3, color: TIERS[0].seg, label: 'Critique', description: TIERS[0].description,
-      preset: { urgency: 4, impact: 4, ease: 5 }
-    }
-  ];
+  var SCORE_SURFACE_ALPHA = 0.78;
 
   var URGENCY_TO_TB = [
     { T: 0, B: 0 },
@@ -3726,6 +3814,14 @@
     QUESTIONS: QUESTIONS,
     TIERS: TIERS,
     PRIORITY_BLUE_STOPS: PRIORITY_BLUE_STOPS,
+    COLOR_SCHEMES: COLOR_SCHEMES,
+    COLOR_SCHEME_OPTIONS: COLOR_SCHEME_OPTIONS,
+    DEFAULT_COLOR_SCHEME_KEY: DEFAULT_COLOR_SCHEME_KEY,
+    normalizeColorSchemeKey: normalizeColorSchemeKey,
+    applyColorScheme: applyColorScheme,
+    getActiveColorSchemeKey: getActiveColorSchemeKey,
+    loadStoredColorSchemeKey: loadStoredColorSchemeKey,
+    saveStoredColorSchemeKey: saveStoredColorSchemeKey,
     TIER_LABEL_SHORT: TIER_LABEL_SHORT,
     TIER_SURFACE_MIX: TIER_SURFACE_MIX,
     HEAT_SEGMENTS: HEAT_SEGMENTS,

@@ -6,7 +6,9 @@
   var LEGACY_PRIORITY_KEY = 'priority';
   var MATRIX_SETTINGS_KEY = 'matrixLabelSettings';
   var FORMULA_SETTINGS_KEY = 'priorityFormula';
+  var COLOR_SCHEME_SETTINGS_KEY = 'priorityColorScheme';
   var boardFormulaKey = 'baseline';
+  var boardColorSchemeKey = 'blue';
   // Trello minimum for dynamic badge polling (card-badges / card-detail-badges).
   var BADGE_REFRESH_SEC = 10;
   // Label above the card-back badge; without this Trello shows the Power-Up admin name.
@@ -175,10 +177,43 @@
     return key;
   }
 
+  async function getBoardColorScheme(t) {
+    if (typeof PriorityUI === 'undefined') return 'blue';
+    try {
+      var stored = await t.get('board', 'shared', COLOR_SCHEME_SETTINGS_KEY);
+      if (typeof stored === 'string') {
+        boardColorSchemeKey = PriorityUI.normalizeColorSchemeKey(stored);
+        PriorityUI.applyColorScheme(boardColorSchemeKey);
+        return boardColorSchemeKey;
+      }
+    } catch (err) {
+      console.error('Priority board color scheme load failed', err);
+    }
+    var fromLocal = PriorityUI.loadStoredColorSchemeKey();
+    boardColorSchemeKey = fromLocal || PriorityUI.DEFAULT_COLOR_SCHEME_KEY || 'blue';
+    PriorityUI.applyColorScheme(boardColorSchemeKey);
+    return boardColorSchemeKey;
+  }
+
+  async function saveBoardColorScheme(t, schemeKey) {
+    if (typeof PriorityUI === 'undefined') return 'blue';
+    var key = PriorityUI.normalizeColorSchemeKey(schemeKey);
+    boardColorSchemeKey = key;
+    PriorityUI.applyColorScheme(key);
+    PriorityUI.saveStoredColorSchemeKey(key);
+    await t.set('board', 'shared', COLOR_SCHEME_SETTINGS_KEY, key);
+    return key;
+  }
+
+  function getCachedBoardColorSchemeKey() {
+    return boardColorSchemeKey || 'blue';
+  }
+
   async function ensureBoardPriorityContext(t) {
     var settings = await getMatrixSettings(t);
     PriorityUI.setMatrixSettings(settings);
     await getBoardFormula(t);
+    await getBoardColorScheme(t);
     return settings;
   }
 
@@ -798,6 +833,7 @@
     CARD_PRIORITY_KEY: CARD_PRIORITY_KEY,
     MATRIX_SETTINGS_KEY: MATRIX_SETTINGS_KEY,
     FORMULA_SETTINGS_KEY: FORMULA_SETTINGS_KEY,
+    COLOR_SCHEME_SETTINGS_KEY: COLOR_SCHEME_SETTINGS_KEY,
     IMPORTANT_INPUTS: IMPORTANT_INPUTS,
     DEFAULT_INPUTS: DEFAULT_INPUTS,
     PRIORITY_DIMENSIONS: PRIORITY_DIMENSIONS,
@@ -809,6 +845,9 @@
     getBoardFormula: getBoardFormula,
     getCachedBoardFormulaKey: getCachedBoardFormulaKey,
     saveBoardFormula: saveBoardFormula,
+    getBoardColorScheme: getBoardColorScheme,
+    getCachedBoardColorSchemeKey: getCachedBoardColorSchemeKey,
+    saveBoardColorScheme: saveBoardColorScheme,
     ensureBoardPriorityContext: ensureBoardPriorityContext,
     computeDisplay: computeDisplay,
     getCardDisplay: getCardDisplay,
