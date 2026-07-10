@@ -860,20 +860,29 @@
   }
   var BLOCKED_STYLES = {
     label: BLOCKED_LABEL,
-    fill: '#D4A5A5',
-    text: '#4A0808',
-    seg: '#8B0000',
-    tint: '#5C1818',
+    fill: '#FCE8E8',
+    text: '#5D1A1A',
+    seg: '#AE2E24',
+    tint: '#C9372C',
     description: BLOCKED_DESCRIPTION
   };
   var BLOCKED_STYLES_DARK = {
     label: BLOCKED_LABEL,
-    fill: '#3A1515',
-    text: '#ffffff',
-    seg: '#C05050',
-    tint: '#4A1818',
+    fill: '#3D1F1F',
+    text: '#FFECEB',
+    seg: '#F87171',
+    tint: '#5C2020',
     description: BLOCKED_DESCRIPTION
   };
+
+  function blockedThemeVisuals() {
+    return {
+      fill: readCssVar('--blocked-fill', BLOCKED_STYLES.fill),
+      text: readCssVar('--blocked-text', BLOCKED_STYLES.text),
+      seg: readCssVar('--blocked-accent', BLOCKED_STYLES.seg),
+      tint: readCssVar('--blocked-border', BLOCKED_STYLES.tint)
+    };
+  }
 
   var TASK_BADGE_LABELS = {
     Critique: 'T\u00e2che critique',
@@ -1034,8 +1043,7 @@
 
   function tierVisuals(source) {
     if (source && (source.blocked || source.label === BLOCKED_LABEL)) {
-      var blocked = isDarkTheme() ? BLOCKED_STYLES_DARK : BLOCKED_STYLES;
-      return { fill: blocked.fill, text: blocked.text, seg: blocked.seg, tint: blocked.tint };
+      return blockedThemeVisuals();
     }
     var inutile = source && (source.inutile || source.label === INUTILE_LABEL);
     if (inutile) {
