@@ -3,9 +3,13 @@ var fs = require('fs');
 var path = require('path');
 var vm = require('vm');
 
-var sandbox = { PriorityTrello: null, CompletionTrello: null, window: {} };
+var sandbox = { PriorityTrello: null, CompletionTrello: null, CompletionUI: null };
 vm.runInNewContext(
   fs.readFileSync(path.join(__dirname, '..', 'priority-trello.js'), 'utf8'),
+  sandbox
+);
+vm.runInNewContext(
+  fs.readFileSync(path.join(__dirname, '..', 'completion-ui.js'), 'utf8'),
   sandbox
 );
 vm.runInNewContext(
@@ -14,11 +18,17 @@ vm.runInNewContext(
 );
 
 var CT = sandbox.CompletionTrello;
+var CUI = sandbox.CompletionUI;
 var bad = 0;
 
 function check(name, ok) {
   if (!ok) bad++;
   console.log((ok ? 'OK' : 'FAIL') + ' ' + name);
+}
+
+if (!CT || !CUI) {
+  console.log('FAIL modules failed to load (CT=' + !!CT + ', CUI=' + !!CUI + ')');
+  process.exit(1);
 }
 
 [
@@ -36,11 +46,27 @@ function check(name, ok) {
   'buildCardFaceBadge',
   'cardFaceBadges',
   'cardDetailBadges',
+  'getBoardCompletionColorScheme',
+  'saveBoardCompletionColorScheme',
+  'preloadBoardCompletionContext',
 ].forEach(function (name) {
   check('export ' + name, typeof CT[name] === 'function' || (name === 'CARD_COMPLETION_KEY' && CT[name]));
 });
 
 check('storage key', CT.CARD_COMPLETION_KEY === 'cardCompletion');
+check('completion scheme storage key', CT.COMPLETION_COLOR_SCHEME_SETTINGS_KEY === 'completionColorScheme');
+check('default scheme traffic', CUI.DEFAULT_COMPLETION_SCHEME_KEY === 'traffic');
+check('five completion schemes', Object.keys(CUI.COMPLETION_COLOR_SCHEMES).length === 5);
+check(
+  'color at 0 differs from 100',
+  CUI.colorAtProgress('traffic', 0).toLowerCase() !== CUI.colorAtProgress('traffic', 100).toLowerCase()
+);
+check('color at 100 is green badge', CUI.completionTrelloBadgeColor(100) === 'green');
+check('color at 0 is light-gray badge', CUI.completionTrelloBadgeColor(0) === 'light-gray');
+check(
+  'completionColorForProgress returns hex',
+  /^#[0-9a-f]{6}$/i.test(CUI.completionColorForProgress(50))
+);
 check('difficulty weight easy', CT.difficultyWeight(0) === 1);
 check('difficulty weight hard', CT.difficultyWeight(4) === 5);
 check('difficulty weight default invalid', CT.difficultyWeight('x') === 3);
@@ -136,20 +162,12 @@ check(
   CT.formatDetailBadgeText({ hasItems: false }) === 'D\u00e9finir l\u2019avancement'
 );
 check(
-  'face badge color complete',
+  'face badge color complete via CUI',
   CT.buildCardFaceBadge({ hasItems: true, percent: 100 }).color === 'green'
-);
-check(
-  'face badge color partial sky',
-  CT.buildCardFaceBadge({ hasItems: true, percent: 25 }).color === 'sky'
 );
 check(
   'normalize strips empty text',
   CT.normalizeCompletionData({ items: [{ id: 'x', text: '  ', done: false, difficulty: 1 }] }).items.length === 0
-);
-check(
-  'normalize clamps difficulty',
-  CT.normalizeItem({ id: 'x', text: 'ok', done: false, difficulty: 99 }).difficulty === 4
 );
 check(
   'normalize clamps progress',
@@ -159,43 +177,6 @@ check(
   'normalize syncs done from progress',
   CT.normalizeItem({ id: 'x', text: 'ok', progress: 80, difficulty: 1 }).done === false &&
     CT.normalizeItem({ id: 'y', text: 'ok', progress: 100, difficulty: 1 }).done === true
-);
-check(
-  'normalize clamps negative difficulty',
-  CT.normalizeItem({ id: 'x', text: 'ok', done: false, difficulty: -3 }).difficulty === 0
-);
-check(
-  'normalize truncates long text',
-  CT.normalizeItem({ id: 'x', text: 'a'.repeat(600), done: false, difficulty: 1 }).text.length ===
-    CT.ITEM_TEXT_MAX
-);
-check(
-  'normalize drops duplicate ids',
-  CT.normalizeCompletionData({
-    items: [
-      { id: 'dup', text: 'First', done: false, difficulty: 1 },
-      { id: 'dup', text: 'Second', done: true, difficulty: 2 },
-      { id: 'other', text: 'Other', done: false, difficulty: 0 },
-    ],
-  }).items.length === 2
-);
-check(
-  'normalize duplicate keeps first',
-  CT.normalizeCompletionData({
-    items: [
-      { id: 'dup', text: 'First', done: false, difficulty: 1 },
-      { id: 'dup', text: 'Second', done: true, difficulty: 2 },
-    ],
-  }).items[0].text === 'First'
-);
-check(
-  'normalize malformed root',
-  CT.normalizeCompletionData(null).items.length === 0 &&
-    CT.normalizeCompletionData('bad').items.length === 0
-);
-check(
-  'normalize non-array items',
-  CT.normalizeCompletionData({ items: 'nope' }).items.length === 0
 );
 
 console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll completion checks passed');

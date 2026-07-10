@@ -3,7 +3,10 @@
   'use strict';
 
   var CARD_COMPLETION_KEY = 'cardCompletion';
+  var COMPLETION_COLOR_SCHEME_SETTINGS_KEY = 'completionColorScheme';
+  var COMPLETION_COLOR_SCHEME_REV_KEY = 'completionColorSchemeRev';
   var CARD_DETAIL_BADGE_TITLE = 'Avancement';
+  var boardCompletionColorSchemeKey = 'traffic';
   var BADGE_REFRESH_SEC =
     global.PriorityTrello && global.PriorityTrello.BADGE_REFRESH_SEC
       ? global.PriorityTrello.BADGE_REFRESH_SEC
@@ -214,9 +217,49 @@
 
   function faceBadgeColor(progress) {
     if (!progress || !progress.hasItems) return 'light-gray';
+    if (typeof global.CompletionUI !== 'undefined' && global.CompletionUI.completionTrelloBadgeColor) {
+      return global.CompletionUI.completionTrelloBadgeColor(progress.percent);
+    }
     if (progress.percent === 100) return 'green';
     if (progress.percent >= 50) return 'blue';
     return 'sky';
+  }
+
+  async function getBoardCompletionColorScheme(t) {
+    if (typeof global.CompletionUI === 'undefined') return 'traffic';
+    try {
+      var stored = await t.get('board', 'shared', COMPLETION_COLOR_SCHEME_SETTINGS_KEY);
+      if (typeof stored === 'string') {
+        boardCompletionColorSchemeKey = global.CompletionUI.normalizeCompletionSchemeKey(stored);
+        global.CompletionUI.applyCompletionColorScheme(boardCompletionColorSchemeKey);
+        return boardCompletionColorSchemeKey;
+      }
+    } catch (err) {
+      console.error('Completion board color scheme load failed', err);
+    }
+    var fromLocal = global.CompletionUI.loadStoredCompletionSchemeKey();
+    boardCompletionColorSchemeKey = fromLocal || global.CompletionUI.DEFAULT_COMPLETION_SCHEME_KEY || 'traffic';
+    global.CompletionUI.applyCompletionColorScheme(boardCompletionColorSchemeKey);
+    return boardCompletionColorSchemeKey;
+  }
+
+  async function saveBoardCompletionColorScheme(t, schemeKey) {
+    if (typeof global.CompletionUI === 'undefined') return 'traffic';
+    var key = global.CompletionUI.normalizeCompletionSchemeKey(schemeKey);
+    boardCompletionColorSchemeKey = key;
+    global.CompletionUI.applyCompletionColorScheme(key);
+    global.CompletionUI.saveStoredCompletionSchemeKey(key);
+    await t.set('board', 'shared', COMPLETION_COLOR_SCHEME_SETTINGS_KEY, key);
+    await t.set('board', 'shared', COMPLETION_COLOR_SCHEME_REV_KEY, Date.now());
+    return key;
+  }
+
+  async function preloadBoardCompletionContext(t) {
+    return getBoardCompletionColorScheme(t);
+  }
+
+  function getCachedBoardCompletionColorSchemeKey() {
+    return boardCompletionColorSchemeKey || 'traffic';
   }
 
   function buildCardFaceBadge(progress) {
@@ -238,7 +281,12 @@
   }
 
   async function getBadgeData(t) {
-    var data = await getCardCompletion(t);
+    var results = await Promise.all([
+      getCardCompletion(t),
+      t.get('board', 'shared', COMPLETION_COLOR_SCHEME_REV_KEY).catch(function () { return null; }),
+    ]);
+    var data = results[0];
+    await getBoardCompletionColorScheme(t);
     var progress = computeWeightedProgress(data.items);
     return { data: data, progress: progress };
   }
@@ -342,6 +390,8 @@
 
   global.CompletionTrello = {
     CARD_COMPLETION_KEY: CARD_COMPLETION_KEY,
+    COMPLETION_COLOR_SCHEME_SETTINGS_KEY: COMPLETION_COLOR_SCHEME_SETTINGS_KEY,
+    COMPLETION_COLOR_SCHEME_REV_KEY: COMPLETION_COLOR_SCHEME_REV_KEY,
     ITEM_TEXT_MAX: ITEM_TEXT_MAX,
     DIFFICULTY_MIN: DIFFICULTY_MIN,
     DIFFICULTY_MAX: DIFFICULTY_MAX,
@@ -359,6 +409,10 @@
     applyMasterProgress: applyMasterProgress,
     getCardCompletion: getCardCompletion,
     saveCardCompletion: saveCardCompletion,
+    getBoardCompletionColorScheme: getBoardCompletionColorScheme,
+    saveBoardCompletionColorScheme: saveBoardCompletionColorScheme,
+    preloadBoardCompletionContext: preloadBoardCompletionContext,
+    getCachedBoardCompletionColorSchemeKey: getCachedBoardCompletionColorSchemeKey,
     formatFaceBadgeText: formatFaceBadgeText,
     formatDetailBadgeText: formatDetailBadgeText,
     buildCardFaceBadge: buildCardFaceBadge,

@@ -9,8 +9,8 @@
   <link rel="stylesheet" href="./priority-ui.css" />
   <script src="./rest-config.js"></script>
   <script src="./priority-trello.js"></script>
-  <script src="./completion-trello.js"></script>
   <script src="./completion-ui.js"></script>
+  <script src="./completion-trello.js"></script>
 </head>
 <body class="tp-page tp-page--completion">
   <div id="completionMount"></div>
@@ -41,6 +41,7 @@
       }
 
       async function init() {
+        await CompletionTrello.getBoardCompletionColorScheme(t);
         var stored = await CompletionTrello.getCardCompletion(t);
 
         ui = CompletionUI.mountCompletionUI(mountEl, {

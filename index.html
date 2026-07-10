@@ -10,6 +10,7 @@
   <script src="./priority-matrix.js"></script>
   <script src="./priority-ui.js"></script>
   <script src="./priority-trello.js"></script>
+  <script src="./completion-ui.js"></script>
   <script src="./completion-trello.js"></script>
   <link rel="stylesheet" href="./trello-theme.css" />
 </head>
@@ -59,7 +60,10 @@
   function initPowerUp() {
     function withBoardContext(capabilityFn) {
       return function (t, opts) {
-        return PriorityTrello.preloadBoardPriorityContext(t).then(function () {
+        return Promise.all([
+          PriorityTrello.preloadBoardPriorityContext(t),
+          CompletionTrello.preloadBoardCompletionContext(t),
+        ]).then(function () {
           return capabilityFn(t, opts);
         });
       };
@@ -140,7 +144,7 @@
             return t.popup({
               title: 'Paramètres de priorité',
               url: PriorityTrello.pageUrl('./settings.html'),
-              height: 360,
+              height: 480,
             });
           },
         }];

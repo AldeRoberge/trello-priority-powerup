@@ -389,7 +389,7 @@
       function (v) {
         masterDragging = true;
         data.items = CT.applyMasterProgress(data.items, v);
-        renderList();
+        syncItemSlidersFromData();
         updateProgressUi({ skipMasterSync: true });
         onChange(CT.normalizeCompletionData(data));
       },
@@ -426,6 +426,31 @@
     var percentEl = containerEl.querySelector('#completionPercent');
     var addInput = containerEl.querySelector('#completionAddInput');
     var addBtn = containerEl.querySelector('#completionAddBtn');
+
+    function syncItemSlidersFromData() {
+      data.items.forEach(function (item) {
+        var li = listEl.querySelector('[data-id="' + item.id + '"]');
+        if (!li) return;
+        var p = CT.itemProgress(item);
+        var slider = li.querySelector('.tp-completion-item-slider');
+        var valEl = li.querySelector('.tp-completion-item-val');
+        var checkbox = li.querySelector('.tp-completion-check');
+        var itemBarFill = li.querySelector('.tp-completion-item-bar-fill');
+        var itemBar = li.querySelector('.tp-completion-item-bar');
+        if (slider) {
+          slider.value = String(p);
+          slider.style.setProperty('--completion-accent', completionColorForProgress(p));
+        }
+        if (valEl) valEl.textContent = p + '\u00a0%';
+        if (checkbox) checkbox.checked = item.done;
+        if (itemBarFill) {
+          itemBarFill.style.width = p + '%';
+          applyProgressColor(itemBarFill, p);
+        }
+        if (itemBar) itemBar.setAttribute('aria-valuenow', String(p));
+        li.classList.toggle('is-done', item.done);
+      });
+    }
 
     function emitChange() {
       var prevIds = data.items.map(function (item) {
@@ -504,6 +529,8 @@
           itemBarFill.style.width = p + '%';
           applyProgressColor(itemBarFill, p);
         }
+        var itemBar = li.querySelector('.tp-completion-item-bar');
+        if (itemBar) itemBar.setAttribute('aria-valuenow', String(p));
         if (itemSlider) itemSlider.style.setProperty('--completion-accent', completionColorForProgress(p));
       }
 

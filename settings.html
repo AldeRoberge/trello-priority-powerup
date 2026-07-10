@@ -8,6 +8,8 @@
   <script src="./rest-config.js"></script>
   <script src="./priority-ui.js"></script>
   <script src="./priority-trello.js"></script>
+  <script src="./completion-ui.js"></script>
+  <script src="./completion-trello.js"></script>
   <script src="./version.js"></script>
   <link rel="stylesheet" href="./trello-theme.css" />
 </head>
@@ -23,6 +25,12 @@
       <p class="tp-color-scheme-hint" id="badgePreviewHeading">Aperçu des badges sur les cartes</p>
       <div class="tp-badge-preview-list" id="badgePreviewList"></div>
     </div>
+  </section>
+
+  <section class="tp-color-scheme" id="completionSchemeSection" aria-labelledby="completionSchemeHeading">
+    <h4 class="tp-heading" id="completionSchemeHeading">Schéma d'avancement</h4>
+    <p class="tp-color-scheme-hint">Couleur de la barre de progression et des badges d'avancement (0&nbsp;% → 100&nbsp;%).</p>
+    <div class="tp-color-scheme-list" id="completionSchemeList" role="radiogroup" aria-label="Schéma d'avancement"></div>
   </section>
 
   <div class="tp-build-info" id="buildInfo">Build : chargement…</div>
@@ -83,6 +91,66 @@
         btn.setAttribute('aria-checked', selected ? 'true' : 'false');
       });
       renderBadgePreview();
+    }
+
+    function renderCompletionSchemeSwatches(scheme) {
+      return (
+        '<span class="tp-color-scheme-swatch tp-color-scheme-swatch--start" style="background:' +
+        scheme.stops[0] +
+        '"></span>' +
+        '<span class="tp-color-scheme-swatch tp-color-scheme-swatch--gradient" style="background:' +
+        CompletionUI.schemeGradientCss(scheme.key) +
+        '"></span>' +
+        '<span class="tp-color-scheme-swatch tp-color-scheme-swatch--end" style="background:' +
+        scheme.stops[scheme.stops.length - 1] +
+        '"></span>'
+      );
+    }
+
+    function setActiveCompletionSchemeUi(activeKey) {
+      var buttons = document.querySelectorAll('.tp-completion-scheme-option');
+      buttons.forEach(function (btn) {
+        var selected = btn.dataset.scheme === activeKey;
+        btn.classList.toggle('is-active', selected);
+        btn.setAttribute('aria-checked', selected ? 'true' : 'false');
+      });
+    }
+
+    async function initCompletionSchemePicker() {
+      var listEl = document.getElementById('completionSchemeList');
+      if (!listEl || typeof CompletionUI === 'undefined') return;
+
+      var activeKey = await CompletionTrello.getBoardCompletionColorScheme(t);
+      listEl.replaceChildren();
+
+      CompletionUI.COMPLETION_SCHEME_OPTIONS.forEach(function (option) {
+        var scheme = CompletionUI.COMPLETION_COLOR_SCHEMES[option.key];
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tp-color-scheme-option tp-completion-scheme-option';
+        btn.dataset.scheme = option.key;
+        btn.setAttribute('role', 'radio');
+        btn.setAttribute('aria-checked', option.key === activeKey ? 'true' : 'false');
+        btn.innerHTML =
+          '<span class="tp-color-scheme-label">' + option.label + '</span>' +
+          '<span class="tp-color-scheme-swatches" aria-hidden="true">' +
+          renderCompletionSchemeSwatches(scheme) +
+          '</span>';
+        btn.addEventListener('click', function () {
+          if (btn.classList.contains('is-active')) return;
+          CompletionUI.applyCompletionColorScheme(option.key);
+          CompletionTrello.saveBoardCompletionColorScheme(t, option.key)
+            .then(function (savedKey) {
+              setActiveCompletionSchemeUi(savedKey);
+            })
+            .catch(function (err) {
+              console.error('Completion color scheme save failed', err);
+            });
+        });
+        listEl.appendChild(btn);
+      });
+
+      setActiveCompletionSchemeUi(activeKey);
     }
 
     async function initColorSchemePicker() {
@@ -160,7 +228,12 @@
       });
     });
 
-    return Promise.all([loadBuildInfo(), initColorSchemePicker(), refreshAutoSortUi()]);
+    return Promise.all([
+      loadBuildInfo(),
+      initColorSchemePicker(),
+      initCompletionSchemePicker(),
+      refreshAutoSortUi(),
+    ]);
     }).catch(function (err) {
       console.error('Priority settings init failed', err);
     });
