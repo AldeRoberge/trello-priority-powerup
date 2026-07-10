@@ -98,7 +98,7 @@
       var card = await t.card('name');
       var cardName = card && typeof card.name === 'string' ? card.name : '';
       return t.modal({
-        title: 'Définir l\u2019avancement',
+        title: 'Définir le progr\u00e8s',
         url: CompletionTrello.pageUrl('./completion.html'),
         args: { cardName: cardName },
         height: 720,
