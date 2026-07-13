@@ -3998,6 +3998,10 @@
 
     clockFace.addEventListener('pointerdown', function (event) {
       if (event.button != null && event.button !== 0) return;
+      if (event.target && event.target.closest &&
+          event.target.closest('.due-date-time-clock-num')) {
+        return;
+      }
       dialDragging = true;
       clockFace.classList.add('is-dragging');
       if (clockFace.setPointerCapture) {

@@ -594,7 +594,7 @@ body {
   width: 100%;
   max-width: 292px;
   margin-top: 8px;
-  padding: 12px 10px 10px;
+  padding: 12px 10px 12px;
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--surface-2);
@@ -978,84 +978,6 @@ html[data-color-mode="dark"] .due-date-time-clock {
 .due-date-time-chip.is-selected:hover {
   background: color-mix(in srgb, var(--due-accent) 88%, #000);
   border-color: color-mix(in srgb, var(--due-accent) 88%, #000);
-}
-
-.due-date-time-custom {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.due-date-time-select {
-  appearance: none;
-  -webkit-appearance: none;
-  min-width: 0;
-  flex: 1;
-  height: 36px;
-  padding: 0 28px 0 10px;
-  border: 1.5px solid var(--border);
-  border-radius: 10px;
-  background:
-    var(--surface-1, var(--surface-2))
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23626f86' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")
-    no-repeat right 10px center;
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease,
-    background-color 0.15s ease;
-}
-
-.due-date-time-select:hover {
-  border-color: color-mix(in srgb, var(--due-accent) 35%, var(--border));
-}
-
-.due-date-time-select:focus-visible {
-  outline: none;
-  border-color: var(--due-accent);
-  box-shadow: 0 0 0 3px var(--due-accent-soft);
-}
-
-html[data-color-mode="dark"] .due-date-time-select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-}
-
-.due-date-time-colon {
-  flex-shrink: 0;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-muted);
-  line-height: 1;
-}
-
-.due-date-time-apply {
-  flex-shrink: 0;
-  height: 36px;
-  padding: 0 14px;
-  border: none;
-  border-radius: 999px;
-  background: var(--due-accent);
-  color: var(--due-accent-text);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background-color 0.12s ease, box-shadow 0.12s ease;
-}
-
-.due-date-time-apply:hover {
-  background: color-mix(in srgb, var(--due-accent) 88%, #000);
-}
-
-.due-date-time-apply:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--due-accent);
 }
 
 .due-date-popover {
