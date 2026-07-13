@@ -119,9 +119,10 @@
       if (!progress) return '';
       if (progress.hasItems) {
         var remaining = progress.totalCount - progress.doneCount;
-        if (remaining <= 0) return 'Aucune restante';
-        if (remaining === 1) return '1 restante';
-        return remaining + ' restantes';
+        var counts = ' (' + progress.doneCount + '/' + progress.totalCount + ')';
+        if (remaining <= 0) return 'Aucune restante' + counts;
+        if (remaining === 1) return '1 restante' + counts;
+        return remaining + ' restantes' + counts;
       }
       // Card-level progress only (no subtasks): keep percent.
       if (progress.percent <= 0) return '';
