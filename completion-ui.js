@@ -527,6 +527,9 @@
     var progressPanel = document.createElement('div');
     progressPanel.className = 'tp-completion-progress-panel';
 
+    var progressHead = document.createElement('div');
+    progressHead.className = 'tp-completion-progress-head';
+
     var progressHero = document.createElement('div');
     progressHero.className = 'tp-completion-progress-hero';
     progressHero.innerHTML =
@@ -535,7 +538,20 @@
       progressEncouragementText(0) +
       '</p>';
 
-    progressPanel.appendChild(progressHero);
+    var completeAllBtn = document.createElement('button');
+    completeAllBtn.type = 'button';
+    completeAllBtn.className = 'tp-completion-complete-all';
+    completeAllBtn.id = 'completionCompleteAll';
+    completeAllBtn.textContent = 'Tout compl\u00e9ter';
+    completeAllBtn.setAttribute(
+      'aria-label',
+      'Marquer toutes les sous-t\u00e2ches comme termin\u00e9es'
+    );
+    completeAllBtn.hidden = true;
+
+    progressHead.appendChild(progressHero);
+    progressHead.appendChild(completeAllBtn);
+    progressPanel.appendChild(progressHead);
 
     var masterSlider = createProgressSlider(
       'Ajuster le progr\u00e8s',
@@ -744,6 +760,31 @@
       onChange(data);
     }
 
+    function syncCompleteAllButton(progress) {
+      var hasProgress = progress.percent > 0;
+      var fullyComplete =
+        progress.percent >= 100 || isAllCompleteProgress(progress);
+      // Match `.has-progress`; hide once everything is already complete.
+      completeAllBtn.hidden = !hasProgress || fullyComplete;
+      completeAllBtn.disabled = fullyComplete;
+    }
+
+    function completeAllTasks() {
+      var progress = CT.computeCardProgress(data);
+      if (progress.percent <= 0 || progress.percent >= 100 || isAllCompleteProgress(progress)) {
+        return;
+      }
+      if (data.items.length) {
+        data.items = CT.applyMasterProgress(data.items, 100);
+      } else {
+        data.progress = 100;
+      }
+      emitChange();
+      onResize();
+    }
+
+    completeAllBtn.addEventListener('click', completeAllTasks);
+
     function updateProgressUi(opts) {
       opts = opts || {};
       var progress = CT.computeCardProgress(data);
@@ -761,6 +802,7 @@
       );
       progressPanel.classList.toggle('is-complete', progress.percent === 100);
       progressPanel.classList.toggle('has-progress', progress.percent > 0);
+      syncCompleteAllButton(progress);
       if (!opts.skipMasterSync && !masterDragging) {
         masterSlider.setValue(progress.percent);
       } else {

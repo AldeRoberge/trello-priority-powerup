@@ -1163,7 +1163,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 
 .tp-completion-progress-head {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   margin: 0;
@@ -1177,11 +1177,50 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   color: var(--tp-text-muted);
 }
 
+.tp-completion-complete-all {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tp-completion-complete-all:hover {
+  background: color-mix(in srgb, var(--completion-hero-accent) 14%, transparent);
+  color: var(--tp-text);
+}
+
+.tp-completion-complete-all:focus {
+  outline: none;
+}
+
+.tp-completion-complete-all:focus-visible {
+  box-shadow: 0 0 0 2px var(--tp-surface), 0 0 0 4px var(--tp-focus, #0c66e4);
+}
+
+.tp-completion-complete-all:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.tp-completion-complete-all[hidden] {
+  display: none;
+}
+
 .tp-completion-progress-hero {
   display: flex;
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .tp-completion-percent {

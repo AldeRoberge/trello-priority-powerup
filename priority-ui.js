@@ -1493,7 +1493,6 @@
   var DUE_DATE_TIME_LABEL = 'Heure';
   var DUE_DATE_TIME_PLACEHOLDER = 'Choisir une heure';
   var DUE_DATE_TIME_CLEAR_LABEL = 'Effacer l\'heure';
-  var DUE_DATE_TIME_NO_TIME_LABEL = 'Pas d\'heure';
   var DUE_DATE_TIME_PICKER_LABEL = 'Choix de l\'heure';
   var DUE_DATE_TIME_SUGGESTIONS_LABEL = 'Suggestions';
   var DUE_DATE_QUICK_SUGGESTIONS_LABEL = 'Suggestions de date';
@@ -4693,6 +4692,27 @@
     timePopover.setAttribute('aria-modal', 'false');
     timePopover.setAttribute('aria-label', DUE_DATE_TIME_PICKER_LABEL);
 
+    var timeChrome = document.createElement('div');
+    timeChrome.className = 'due-date-time-chrome';
+
+    var timeTrashBtn = document.createElement('button');
+    timeTrashBtn.type = 'button';
+    timeTrashBtn.className = 'due-date-time-chrome-btn due-date-time-chrome-btn--trash';
+    timeTrashBtn.setAttribute('aria-label', DUE_DATE_TIME_CLEAR_LABEL);
+    timeTrashBtn.title = DUE_DATE_TIME_CLEAR_LABEL;
+    timeTrashBtn.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
+
+    var timeDismissBtn = document.createElement('button');
+    timeDismissBtn.type = 'button';
+    timeDismissBtn.className = 'due-date-time-chrome-btn due-date-time-chrome-btn--close';
+    timeDismissBtn.setAttribute('aria-label', DUE_DATE_CLOSE_LABEL);
+    timeDismissBtn.title = DUE_DATE_CLOSE_LABEL;
+    timeDismissBtn.innerHTML = '<i class="ti ti-x" aria-hidden="true"></i>';
+
+    timeChrome.appendChild(timeTrashBtn);
+    timeChrome.appendChild(timeDismissBtn);
+    timePopover.appendChild(timeChrome);
+
     var timePeriodsSection = document.createElement('div');
     timePeriodsSection.className = 'due-date-time-section';
 
@@ -4831,27 +4851,6 @@
     timeDialSection.appendChild(timeDialHeader);
     timeDialSection.appendChild(clockFace);
     timePopover.appendChild(timeDialSection);
-
-    var timeFooter = document.createElement('div');
-    timeFooter.className = 'due-date-footer due-date-time-footer';
-
-    var noTimeBtn = document.createElement('button');
-    noTimeBtn.type = 'button';
-    noTimeBtn.className = 'due-date-today due-date-time-no-time';
-    noTimeBtn.textContent = DUE_DATE_TIME_NO_TIME_LABEL;
-    noTimeBtn.setAttribute('aria-label', DUE_DATE_TIME_NO_TIME_LABEL);
-    noTimeBtn.title = DUE_DATE_TIME_NO_TIME_LABEL;
-
-    var timeCloseBtn = document.createElement('button');
-    timeCloseBtn.type = 'button';
-    timeCloseBtn.className = 'due-date-close';
-    timeCloseBtn.textContent = DUE_DATE_CLOSE_LABEL;
-    timeCloseBtn.setAttribute('aria-label', DUE_DATE_CLOSE_LABEL);
-    timeCloseBtn.title = DUE_DATE_CLOSE_LABEL;
-
-    timeFooter.appendChild(noTimeBtn);
-    timeFooter.appendChild(timeCloseBtn);
-    timePopover.appendChild(timeFooter);
 
     var popover = document.createElement('div');
     popover.className = 'due-date-popover';
@@ -5592,14 +5591,14 @@
       timeTrigger.focus();
     });
 
-    noTimeBtn.addEventListener('click', function () {
+    timeTrashBtn.addEventListener('click', function () {
       if (!enabled) return;
       currentTime = '';
       emitChange();
-      closeTimePicker(true);
+      if (timeOpen) syncTimePickerSelection();
     });
 
-    timeCloseBtn.addEventListener('click', function () {
+    timeDismissBtn.addEventListener('click', function () {
       closeTimePicker(true);
     });
 

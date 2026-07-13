@@ -811,10 +811,40 @@ body {
   gap: 12px;
 }
 
-.due-date-time-footer {
-  margin-top: 0;
-  padding-top: 4px;
+.due-date-time-chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   width: 100%;
+  margin: -2px 0 0;
+}
+
+.due-date-time-chrome-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.due-date-time-chrome-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.due-date-time-chrome-btn:focus-visible {
+  outline: 2px solid var(--due-accent);
+  outline-offset: 1px;
 }
 
 .due-date-time-dial-header {
