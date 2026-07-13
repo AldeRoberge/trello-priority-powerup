@@ -970,7 +970,37 @@
   var DUE_DATE_CALENDAR_LABEL = 'Calendrier d\'\u00e9ch\u00e9ance';
   var DUE_DATE_TIME_LABEL = 'Heure';
   var DUE_DATE_TIME_HINT = 'Optionnelle';
+  var DUE_DATE_TIME_PLACEHOLDER = 'Choisir une heure';
   var DUE_DATE_TIME_CLEAR_LABEL = 'Effacer l\'heure';
+  var DUE_DATE_TIME_PICKER_LABEL = 'Choix de l\'heure';
+  var DUE_DATE_TIME_SUGGESTIONS_LABEL = 'Suggestions';
+  var DUE_DATE_TIME_COMMON_LABEL = 'Heures courantes';
+  var DUE_DATE_TIME_CUSTOM_LABEL = 'Personnaliser';
+  var DUE_DATE_TIME_HOURS_ARIA = 'Heures';
+  var DUE_DATE_TIME_MINUTES_ARIA = 'Minutes';
+  var DUE_DATE_TIME_PERIODS = [
+    { id: 'matin', label: 'Matin', time: '09:00' },
+    { id: 'midi', label: 'Midi', time: '12:00' },
+    { id: 'apres-midi', label: 'Apr\u00e8s-midi', time: '14:00' },
+    { id: 'soir', label: 'Soir', time: '18:00' }
+  ];
+  var DUE_DATE_TIME_COMMON = [
+    '08:00',
+    '09:00',
+    '10:00',
+    '11:00',
+    '12:00',
+    '13:00',
+    '14:00',
+    '15:00',
+    '16:00',
+    '17:00',
+    '18:00',
+    '19:00',
+    '20:00',
+    '21:00'
+  ];
+  var DUE_DATE_TIME_MINUTE_STEPS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
   var DUE_DATE_MONTH_NAMES = [
     'janvier',
     'f\u00e9vrier',
@@ -2979,6 +3009,7 @@
     var currentTime = current ? normalizeDueTime(initialTime) : '';
     var enabled = !!current;
     var open = false;
+    var timeOpen = false;
     var viewYear;
     var viewMonth;
     var focusIso = current || toIsoDate(startOfLocalDay(new Date()));
