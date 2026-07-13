@@ -416,6 +416,54 @@
   };
   var TRELLO_BADGE_COLOR_NAMES = Object.keys(TRELLO_BADGE_COLOR_HEX);
 
+  // Trello card badges accept named colors only — rebuilt from active scheme tier seg colors.
+  var TIER_TRELLO_BADGE_COLORS = {
+    0: 'blue',
+    1: 'blue',
+    2: 'sky',
+    3: 'sky',
+    4: 'sky',
+    5: 'light-gray',
+    6: 'light-gray'
+  };
+
+  function nearestTrelloBadgeColorName(segHex, avoidName) {
+    var target = rgbToOklab(priorityParseHex(segHex));
+    var ranked = TRELLO_BADGE_COLOR_NAMES.map(function (name) {
+      return {
+        name: name,
+        dist: oklabDistance(target, rgbToOklab(priorityParseHex(TRELLO_BADGE_COLOR_HEX[name])))
+      };
+    }).sort(function (a, b) {
+      return a.dist - b.dist;
+    });
+    for (var i = 0; i < ranked.length; i++) {
+      if (!avoidName || ranked[i].name !== avoidName) return ranked[i].name;
+    }
+    return ranked[0].name;
+  }
+
+  function rebuildTrelloBadgeColors() {
+    if (!TIER_TRELLO_BADGE_COLORS || typeof TIER_TRELLO_BADGE_COLORS !== 'object') {
+      TIER_TRELLO_BADGE_COLORS = {
+        0: 'blue',
+        1: 'blue',
+        2: 'sky',
+        3: 'sky',
+        4: 'sky',
+        5: 'light-gray',
+        6: 'light-gray'
+      };
+    }
+    for (var i = 0; i <= 4; i++) {
+      var tier = TIERS[i];
+      var avoid = i > 0 ? TIER_TRELLO_BADGE_COLORS[i - 1] : null;
+      TIER_TRELLO_BADGE_COLORS[i] = nearestTrelloBadgeColorName(tier && tier.seg ? tier.seg : activeColorStops[0], avoid);
+    }
+    TIER_TRELLO_BADGE_COLORS[5] = 'light-gray';
+    TIER_TRELLO_BADGE_COLORS[6] = 'light-gray';
+  }
+
   function priorityParseHex(hex) {
     var h = String(hex).replace('#', '');
     return {
@@ -617,7 +665,11 @@
     rebuildTiersFromScheme();
     rebuildHeatSegments();
     rebuildScoreColorStops();
-    rebuildTrelloBadgeColors();
+    try {
+      rebuildTrelloBadgeColors();
+    } catch (e) {
+      console.error('PriorityUI: rebuildTrelloBadgeColors failed', e);
+    }
   }
 
   function normalizeColorSchemeKey(key) {
@@ -656,7 +708,11 @@
     } catch (e) { /* ignore quota / private mode */ }
   }
 
-  applyColorScheme(DEFAULT_COLOR_SCHEME_KEY);
+  try {
+    applyColorScheme(DEFAULT_COLOR_SCHEME_KEY);
+  } catch (e) {
+    console.error('PriorityUI: initial color scheme failed', e);
+  }
 
   var TIER_LABEL_SHORT = {
     Critique: 'Crit',
@@ -858,43 +914,6 @@
     'D\u00e9l\u00e9guer': '\u00c0 d\u00e9l\u00e9guer',
     '\u00c9liminer': '\u00c0 \u00e9liminer'
   };
-
-  // Trello card badges accept named colors only — rebuilt from active scheme tier seg colors.
-  var TIER_TRELLO_BADGE_COLORS = {
-    0: 'blue',
-    1: 'blue',
-    2: 'sky',
-    3: 'sky',
-    4: 'sky',
-    5: 'light-gray',
-    6: 'light-gray'
-  };
-
-  function nearestTrelloBadgeColorName(segHex, avoidName) {
-    var target = rgbToOklab(priorityParseHex(segHex));
-    var ranked = TRELLO_BADGE_COLOR_NAMES.map(function (name) {
-      return {
-        name: name,
-        dist: oklabDistance(target, rgbToOklab(priorityParseHex(TRELLO_BADGE_COLOR_HEX[name])))
-      };
-    }).sort(function (a, b) {
-      return a.dist - b.dist;
-    });
-    for (var i = 0; i < ranked.length; i++) {
-      if (!avoidName || ranked[i].name !== avoidName) return ranked[i].name;
-    }
-    return ranked[0].name;
-  }
-
-  function rebuildTrelloBadgeColors() {
-    for (var i = 0; i <= 4; i++) {
-      var tier = TIERS[i];
-      var avoid = i > 0 ? TIER_TRELLO_BADGE_COLORS[i - 1] : null;
-      TIER_TRELLO_BADGE_COLORS[i] = nearestTrelloBadgeColorName(tier && tier.seg ? tier.seg : activeColorStops[0], avoid);
-    }
-    TIER_TRELLO_BADGE_COLORS[5] = 'light-gray';
-    TIER_TRELLO_BADGE_COLORS[6] = 'light-gray';
-  }
 
   // Unicode dots for Trello badge text (largest = highest priority).
   var TIER_BADGE_DOTS = {
