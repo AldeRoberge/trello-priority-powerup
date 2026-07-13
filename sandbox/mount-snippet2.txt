@@ -1,0 +1,200 @@
+        repaint();
+        if (t < 1) {
+          sliderAnimFrame = requestAnimationFrame(step);
+        } else {
+          sliderAnimFrame = null;
+          keys.forEach(function (key) {
+            if (fields[key]) fields[key].setValue(targets[key]);
+          });
+          repaint();
+        }
+      }
+      sliderAnimFrame = requestAnimationFrame(step);
+    }
+
+    function repaint() {
+      try {
+        syncStateFromFields();
+        var result = calcFn(state);
+        var display = resolveDisplay(result, state);
+        var cardTier = display.cardTier;
+        if (display.blocked) {
+          cardTier = Object.assign({}, cardTier, { blocked: true });
+        }
+        applyCardTierTint(card, cardTier);
+        card.classList.toggle('is-inutile', !!display.inutile);
+        card.classList.toggle('is-blocked', !!display.blocked);
+        card.dataset.tier = display.label;
+        heat.paint(result, display);
+        if (calcGraph) calcGraph.paint(result, state, display);
+      } catch (err) {
+        console.error('PriorityUI.mountVariant repaint failed', { id: variantId, error: err });
+      }
+    }
+
+    function unblockTask() {
+      if (enAttenteField) {
+        enAttenteField.setValue(false);
+        enAttenteField.setBlockedReason('');
+      }
+      state.enAttente = false;
+      state.blockedReason = '';
+      cancelSliderAnim();
+      repaint();
+      persistSliderState();
+    }
+
+    if (variantConfig.showFormulaSwitcher === true) {
+      formulaSwitcher = createFormulaSwitcher({
+        el: card,
+        formulaKey: formulaKey,
+        onChange: persistFormulaChange
+      });
+    }
+
+    if (variantConfig.showCardHeader === true) {
+      var cardHeader = document.createElement('header');
+      cardHeader.className = 'tp-priority-card-header';
+      var cardNameLabel = document.createElement('p');
+      cardNameLabel.className = 'tp-priority-card-name is-loading';
+      cardNameLabel.id = 'cardName';
+      cardNameLabel.setAttribute('aria-live', 'polite');
+      cardNameLabel.textContent = 'Chargement\u2026';
+      cardHeader.appendChild(cardNameLabel);
+      card.appendChild(cardHeader);
+    }
+
+    heat = createHeatPanel({
+      el: card,
+      formulaKey: formulaKey,
+      hideSegments: formulaKey === 'eisenhower',
+      onUnblock: unblockTask,
+      onSegmentClick: function (targetP) {
+        syncStateFromFields();
+        var clickedSeg = heatSegmentForTarget(targetP);
+        var display = resolveDisplay(calcFn(state), state);
+        if (
+          clickedSeg &&
+          !display.inutile &&
+          display.tierI != null &&
+          display.tierI === clickedSeg.i
+        ) {
+          return;
+        }
+        var next = (clickedSeg && clickedSeg.preset)
+          ? Object.assign({}, state, clickedSeg.preset)
+          : overrideFn(targetP, state);
+        var delta = pickOverrideDelta(state, next);
+        if (!Object.keys(delta).length) return;
+        animateFieldsTo(delta);
+      }
+    });
+
+    var fieldsSection = document.createElement('div');
+    fieldsSection.className = 'variant-fields-section';
+
+    var fieldsWrap = document.createElement('div');
+    fieldsWrap.className = 'variant-fields';
+
+    fieldsSection.appendChild(fieldsWrap);
+    card.appendChild(fieldsSection);
+
+    var wizardHooks = {
+      getValue: function (key) {
+        return fields[key] ? fields[key].getValue() : state[key];
+      },
+      setValue: function (key, level) {
+        if (fields[key]) fields[key].setValue(level);
+        state[key] = level;
+        cancelSliderAnim();
+        repaint();
+        persistSliderState();
+      }
+    };
+
+    variantConfig.dimensions.forEach(function (dim, dimIndex) {
+      fields[dim.key] = createField({
+        el: fieldsWrap,
+        id: variantConfig.id + '-' + dim.key,
+        label: dim.label,
+        icon: dim.icon,
+        wordsKey: dim.wordsKey || dim.key,
+        min: dim.min,
+        max: dim.max,
+        value: state[dim.key],
+        onChange: function () {
+          cancelSliderAnim();
+          repaint();
+          persistSliderState();
+        },
+        wizard: {
+          dimensions: variantConfig.dimensions,
+          step: dimIndex,
+          getValue: wizardHooks.getValue,
+          setValue: wizardHooks.setValue
+        }
+      });
+    });
+
+    try {
+      calcGraph = createCalcGraphPanel({
+        el: fieldsSection,
+        fields: fields,
+        onChange: function () {
+          cancelSliderAnim();
+          repaint();
+          persistSliderState();
+        },
+        onToggle: function () {
+          if (typeof variantConfig.onLayoutChange === 'function') {
+            variantConfig.onLayoutChange();
+          }
+        }
+      });
+    } catch (err) {
+      console.error('PriorityUI.createCalcGraphPanel failed', { id: variantId, error: err });
+    }
+
+    var blockedSection = document.createElement('div');
+    blockedSection.className = 'variant-blocked-section';
+    card.appendChild(blockedSection);
+
+    enAttenteField = createEnAttenteField({
+      el: blockedSection,
+      value: state.enAttente,
+      blockedReason: state.blockedReason,
+      onChange: function () {
+        cancelSliderAnim();
+        repaint();
+        persistSliderState();
+      }
+    });
+
+    var dueSection = document.createElement('div');
+    dueSection.className = 'variant-due-section';
+    card.appendChild(dueSection);
+
+    dueDateField = createDueDateField({
+      el: dueSection,
+      value: state.dueDate,
+      onChange: function () {
+        cancelSliderAnim();
+        repaint();
+        persistSliderState();
+      }
+    });
+
+    containerEl.appendChild(card);
+
+    var themeObserver = new MutationObserver(function () {
+      repaint();
+      if (calcGraph && calcGraph.updateTheme) calcGraph.updateTheme();
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-color-mode']
+    });
+
+    applyFormulaMode(formulaKey);
+    repaint();
+

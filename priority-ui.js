@@ -47,6 +47,24 @@
   var FORMULA_STORAGE_KEY = 'trello-priority-powerup/formula';
   var COLOR_SCHEME_STORAGE_KEY = 'trello-priority-powerup/color-scheme';
   var DEFAULT_COLOR_SCHEME_KEY = 'blue';
+  var SCORE_MAX = 10;
+  // Urgency / impact axis max (ease uses 1..5).
+  var AXIS_UI_MAX = 4;
+  // Tier indices — keep in sync with TIER_DEFS order (Critique → Optionnelle).
+  var TIER_I = {
+    CRITIQUE: 0,
+    URGENTE: 1,
+    PRIORITAIRE: 2,
+    IMPORTANTE: 3,
+    FLEXIBLE: 4,
+    SECONDAIRE: 5,
+    OPTIONNELLE: 6
+  };
+  var TIER_I_MAX = TIER_I.OPTIONNELLE;
+  // Tiers 0..FLEXIBLE map to scheme-nearest Trello badge colors; lower tiers stay muted.
+  var TIER_I_SCHEME_MAPPED_MAX = TIER_I.FLEXIBLE;
+  var TRELLO_BADGE_COLOR_MUTED = 'light-gray';
+  var TRELLO_BADGE_COLOR_COMPLETE = 'green';
 
   // ── 2. Labels, keywords, tiers & heat presets ───────────────────────────
 
@@ -411,21 +429,24 @@
     purple: '#C377E0',
     pink: '#FF78CB',
     sky: '#00C2E0',
-    lime: '#51E898',
-    'light-gray': '#B3BAC5'
+    lime: '#51E898'
   };
+  TRELLO_BADGE_COLOR_HEX[TRELLO_BADGE_COLOR_MUTED] = '#B3BAC5';
   var TRELLO_BADGE_COLOR_NAMES = Object.keys(TRELLO_BADGE_COLOR_HEX);
 
-  // Trello card badges accept named colors only — rebuilt from active scheme tier seg colors.
-  var TIER_TRELLO_BADGE_COLORS = {
-    0: 'blue',
-    1: 'blue',
-    2: 'sky',
-    3: 'sky',
-    4: 'sky',
-    5: 'light-gray',
-    6: 'light-gray'
-  };
+  // Default blue-scheme mapping; rebuilt by rebuildTrelloBadgeColors() after tiers exist.
+  function defaultTierTrelloBadgeColors() {
+    return {
+      0: 'blue',
+      1: 'blue',
+      2: 'sky',
+      3: 'sky',
+      4: 'sky',
+      5: TRELLO_BADGE_COLOR_MUTED,
+      6: TRELLO_BADGE_COLOR_MUTED
+    };
+  }
+  var TIER_TRELLO_BADGE_COLORS = defaultTierTrelloBadgeColors();
 
   function nearestTrelloBadgeColorName(segHex, avoidName) {
     var target = rgbToOklab(priorityParseHex(segHex));
@@ -445,23 +466,19 @@
 
   function rebuildTrelloBadgeColors() {
     if (!TIER_TRELLO_BADGE_COLORS || typeof TIER_TRELLO_BADGE_COLORS !== 'object') {
-      TIER_TRELLO_BADGE_COLORS = {
-        0: 'blue',
-        1: 'blue',
-        2: 'sky',
-        3: 'sky',
-        4: 'sky',
-        5: 'light-gray',
-        6: 'light-gray'
-      };
+      TIER_TRELLO_BADGE_COLORS = defaultTierTrelloBadgeColors();
     }
-    for (var i = 0; i <= 4; i++) {
+    for (var i = 0; i <= TIER_I_SCHEME_MAPPED_MAX; i++) {
       var tier = TIERS[i];
       var avoid = i > 0 ? TIER_TRELLO_BADGE_COLORS[i - 1] : null;
-      TIER_TRELLO_BADGE_COLORS[i] = nearestTrelloBadgeColorName(tier && tier.seg ? tier.seg : activeColorStops[0], avoid);
+      TIER_TRELLO_BADGE_COLORS[i] = nearestTrelloBadgeColorName(
+        tier && tier.seg ? tier.seg : activeColorStops[0],
+        avoid
+      );
     }
-    TIER_TRELLO_BADGE_COLORS[5] = 'light-gray';
-    TIER_TRELLO_BADGE_COLORS[6] = 'light-gray';
+    for (var j = TIER_I_SCHEME_MAPPED_MAX + 1; j <= TIER_I_MAX; j++) {
+      TIER_TRELLO_BADGE_COLORS[j] = TRELLO_BADGE_COLOR_MUTED;
+    }
   }
 
   function priorityParseHex(hex) {
@@ -491,12 +508,12 @@
 
   function priorityStopTForScore(score) {
     return Math.max(0, Math.min(activeColorStops.length - 1,
-      (score / 10) * (activeColorStops.length - 1)));
+      (score / SCORE_MAX) * (activeColorStops.length - 1)));
   }
 
   function priorityStopTForTierIndex(tierI) {
     return Math.max(0, Math.min(activeColorStops.length - 1,
-      ((6 - tierI) / 6) * (activeColorStops.length - 1)));
+      ((TIER_I_MAX - tierI) / TIER_I_MAX) * (activeColorStops.length - 1)));
   }
 
   function priorityRgbAtStopT(stopT) {
@@ -565,31 +582,31 @@
 
   var TIER_DEFS = [
     {
-      min: 8.6, label: 'Critique', i: 0,
+      min: 8.6, label: 'Critique', i: TIER_I.CRITIQUE,
       description: 'Tâche prioritaire absolue. Impact direct sur l\'objectif, impossible de repousser sans conséquences majeures.'
     },
     {
-      min: 7.2, label: 'Urgente', i: 1,
+      min: 7.2, label: 'Urgente', i: TIER_I.URGENTE,
       description: 'Tâche pressante, priorité absolue. Action rapide sous forte pression.'
     },
     {
-      min: 5.8, label: 'Prioritaire', i: 2,
+      min: 5.8, label: 'Prioritaire', i: TIER_I.PRIORITAIRE,
       description: 'Attention prioritaire. À traiter en tête de file.'
     },
     {
-      min: 4.3, label: 'Importante', i: 3,
+      min: 4.3, label: 'Importante', i: TIER_I.IMPORTANTE,
       description: 'Planifiée. À exécuter avec engagement clair dans le backlog.'
     },
     {
-      min: 2.9, label: 'Flexible', i: 4,
+      min: 2.9, label: 'Flexible', i: TIER_I.FLEXIBLE,
       description: 'Sans urgence ni blocage. À traiter selon l\'opportunité, peut glisser.'
     },
     {
-      min: 1.4, label: 'Secondaire', i: 5,
+      min: 1.4, label: 'Secondaire', i: TIER_I.SECONDAIRE,
       description: 'Utile mais non essentielle. À envisager quand la bande passante le permet.'
     },
     {
-      min: 0, label: 'Optionnelle', i: 6,
+      min: 0, label: 'Optionnelle', i: TIER_I.OPTIONNELLE,
       description: 'Facultative, sans conséquence si ignorée. Peut être écartée de la file.'
     }
   ];
@@ -623,13 +640,13 @@
   }
 
   var HEAT_SEGMENT_DEFS = [
-    { i: 6, target: 0.7, preset: { urgency: 0, impact: 0, ease: 2 } },
-    { i: 5, target: 2.1, preset: { urgency: 1, impact: 1, ease: 2 } },
-    { i: 4, target: 3.6, preset: { urgency: 1, impact: 2, ease: 3 } },
-    { i: 3, target: 5.0, preset: { urgency: 2, impact: 2, ease: 3 } },
-    { i: 2, target: 6.5, preset: { urgency: 2, impact: 3, ease: 3 } },
-    { i: 1, target: 7.9, preset: { urgency: 3, impact: 3, ease: 2 } },
-    { i: 0, target: 9.3, preset: { urgency: 4, impact: 4, ease: 5 } }
+    { i: TIER_I.OPTIONNELLE, target: 0.7, preset: { urgency: 0, impact: 0, ease: 2 } },
+    { i: TIER_I.SECONDAIRE, target: 2.1, preset: { urgency: 1, impact: 1, ease: 2 } },
+    { i: TIER_I.FLEXIBLE, target: 3.6, preset: { urgency: 1, impact: 2, ease: 3 } },
+    { i: TIER_I.IMPORTANTE, target: 5.0, preset: { urgency: 2, impact: 2, ease: 3 } },
+    { i: TIER_I.PRIORITAIRE, target: 6.5, preset: { urgency: 2, impact: 3, ease: 3 } },
+    { i: TIER_I.URGENTE, target: 7.9, preset: { urgency: 3, impact: 3, ease: 2 } },
+    { i: TIER_I.CRITIQUE, target: 9.3, preset: { urgency: 4, impact: 4, ease: 5 } }
   ];
 
   var HEAT_SEGMENTS = [];
@@ -638,7 +655,7 @@
     HEAT_SEGMENTS.length = 0;
     HEAT_SEGMENT_DEFS.forEach(function (def) {
       var tierDef = TIER_DEFS[def.i];
-      var tier = TIERS[def.i] || TIERS[6];
+      var tier = TIERS[def.i] || TIERS[TIER_I_MAX];
       HEAT_SEGMENTS.push({
         i: def.i,
         target: def.target,
@@ -652,50 +669,27 @@
 
   var SCORE_COLOR_STOPS = [];
 
+  function scoreColorStopValues() {
+    var scores = [0];
+    for (var i = TIER_DEFS.length - 1; i >= 0; i--) {
+      if (TIER_DEFS[i].min > 0) scores.push(TIER_DEFS[i].min);
+    }
+    for (var h = 0; h < HEAT_SEGMENT_DEFS.length; h++) {
+      if (HEAT_SEGMENT_DEFS[h].i === TIER_I.CRITIQUE) {
+        scores.push(HEAT_SEGMENT_DEFS[h].target);
+        break;
+      }
+    }
+    scores.push(SCORE_MAX);
+    return scores;
+  }
+
   function rebuildScoreColorStops() {
-    var scores = [0, 1.4, 2.9, 4.3, 5.8, 7.2, 8.6, 9.3, 10];
     SCORE_COLOR_STOPS.length = 0;
-    scores.forEach(function (s) {
+    scoreColorStopValues().forEach(function (s) {
       var rgb = priorityRgbAtStopT(priorityStopTForScore(s));
       SCORE_COLOR_STOPS.push({ s: s, r: rgb.r, g: rgb.g, b: rgb.b });
     });
-  }
-
-  // Trello card badges accept named colors only — rebuilt from active scheme tier seg colors.
-  var TIER_TRELLO_BADGE_COLORS = {
-    0: 'blue',
-    1: 'blue',
-    2: 'sky',
-    3: 'sky',
-    4: 'sky',
-    5: 'light-gray',
-    6: 'light-gray'
-  };
-
-  function nearestTrelloBadgeColorName(segHex, avoidName) {
-    var target = rgbToOklab(priorityParseHex(segHex));
-    var ranked = TRELLO_BADGE_COLOR_NAMES.map(function (name) {
-      return {
-        name: name,
-        dist: oklabDistance(target, rgbToOklab(priorityParseHex(TRELLO_BADGE_COLOR_HEX[name])))
-      };
-    }).sort(function (a, b) {
-      return a.dist - b.dist;
-    });
-    for (var i = 0; i < ranked.length; i++) {
-      if (!avoidName || ranked[i].name !== avoidName) return ranked[i].name;
-    }
-    return ranked[0].name;
-  }
-
-  function rebuildTrelloBadgeColors() {
-    for (var i = 0; i <= 4; i++) {
-      var tier = TIERS[i];
-      var avoid = i > 0 ? TIER_TRELLO_BADGE_COLORS[i - 1] : null;
-      TIER_TRELLO_BADGE_COLORS[i] = nearestTrelloBadgeColorName(tier && tier.seg ? tier.seg : activeColorStops[0], avoid);
-    }
-    TIER_TRELLO_BADGE_COLORS[5] = 'light-gray';
-    TIER_TRELLO_BADGE_COLORS[6] = 'light-gray';
   }
 
   function rebuildColorDerivedState() {
@@ -768,6 +762,14 @@
     if (!label) return '';
     if (Object.prototype.hasOwnProperty.call(TIER_LABEL_SHORT, label)) {
       return TIER_LABEL_SHORT[label];
+    }
+    // Keep countdown / parenthetical suffix when shortening (e.g. heat badge preview).
+    var suffixMatch = /^(.+?)(\s*\([^)]*\))$/.exec(label);
+    if (
+      suffixMatch &&
+      Object.prototype.hasOwnProperty.call(TIER_LABEL_SHORT, suffixMatch[1])
+    ) {
+      return TIER_LABEL_SHORT[suffixMatch[1]] + suffixMatch[2];
     }
     return label;
   }
@@ -924,7 +926,50 @@
   var DUE_DATE_DESCRIPTION =
     'Date optionnelle affich\u00e9e en compte \u00e0 rebours sur la carte (surtout pour les priorit\u00e9s hautes).';
   var DUE_DATE_CLEAR_LABEL = 'Effacer la date';
+  var DUE_DATE_PLACEHOLDER = 'Choisir une date';
+  var DUE_DATE_TODAY_LABEL = 'Aujourd\'hui';
+  var DUE_DATE_PREV_MONTH = 'Mois pr\u00e9c\u00e9dent';
+  var DUE_DATE_NEXT_MONTH = 'Mois suivant';
+  var DUE_DATE_CALENDAR_LABEL = 'Calendrier d\'\u00e9ch\u00e9ance';
+  var DUE_DATE_MONTH_NAMES = [
+    'janvier',
+    'f\u00e9vrier',
+    'mars',
+    'avril',
+    'mai',
+    'juin',
+    'juillet',
+    'ao\u00fbt',
+    'septembre',
+    'octobre',
+    'novembre',
+    'd\u00e9cembre'
+  ];
+  var DUE_DATE_WEEKDAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+  var DUE_DATE_WEEKDAY_NAMES = [
+    'lundi',
+    'mardi',
+    'mercredi',
+    'jeudi',
+    'vendredi',
+    'samedi',
+    'dimanche'
+  ];
   var MS_PER_DAY = 86400000;
+  var COUNTDOWN_DAYS_PER_WEEK = 7;
+  var COUNTDOWN_WEEK_THRESHOLD_DAYS = 30;
+  var COUNTDOWN_YEAR_THRESHOLD_DAYS = 365;
+  var DAYS_PER_MONTH_AVG = 30.44;
+  var DAYS_PER_YEAR_AVG = 365.25;
+
+  function pad2(n) {
+    return n < 10 ? '0' + n : String(n);
+  }
+
+  function toIsoDate(date) {
+    if (!date || isNaN(date.getTime())) return '';
+    return date.getFullYear() + '-' + pad2(date.getMonth() + 1) + '-' + pad2(date.getDate());
+  }
 
   function normalizeDueDate(value) {
     if (value == null || value === '') return '';
@@ -957,6 +1002,33 @@
     return new Date(+parts[0], +parts[1] - 1, +parts[2]);
   }
 
+  function formatDueDateDisplay(iso) {
+    var date = dueDateToLocalDate(iso);
+    if (!date) return '';
+    try {
+      return date.toLocaleDateString('fr-FR', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      });
+    } catch (err) {
+      return (
+        DUE_DATE_WEEKDAY_NAMES[(date.getDay() + 6) % 7] +
+        ' ' +
+        date.getDate() +
+        ' ' +
+        DUE_DATE_MONTH_NAMES[date.getMonth()] +
+        ' ' +
+        date.getFullYear()
+      );
+    }
+  }
+
+  function mondayOffset(date) {
+    return (date.getDay() + 6) % 7;
+  }
+
   function daysUntilDue(iso, now) {
     var due = dueDateToLocalDate(iso);
     if (!due) return NaN;
@@ -970,21 +1042,21 @@
     if (days < 0) {
       var late = -days;
       if (late === 1) return 'en retard de 1 jour';
-      if (late < 7) return 'en retard de ' + late + ' jours';
+      if (late < COUNTDOWN_DAYS_PER_WEEK) return 'en retard de ' + late + ' jours';
       return 'en retard';
     }
     if (days === 0) return 'aujourd\'hui';
     if (days === 1) return '1 jour restant';
-    if (days < 7) return days + ' jours restants';
-    if (days < 30) {
-      var weeks = Math.max(1, Math.round(days / 7));
+    if (days < COUNTDOWN_DAYS_PER_WEEK) return days + ' jours restants';
+    if (days < COUNTDOWN_WEEK_THRESHOLD_DAYS) {
+      var weeks = Math.max(1, Math.round(days / COUNTDOWN_DAYS_PER_WEEK));
       return weeks === 1 ? '1 semaine restante' : weeks + ' semaines restantes';
     }
-    if (days < 365) {
-      var months = Math.max(1, Math.round(days / 30.44));
+    if (days < COUNTDOWN_YEAR_THRESHOLD_DAYS) {
+      var months = Math.max(1, Math.round(days / DAYS_PER_MONTH_AVG));
       return months === 1 ? '1 mois restant' : months + ' mois restants';
     }
-    var years = Math.max(1, Math.round(days / 365.25));
+    var years = Math.max(1, Math.round(days / DAYS_PER_YEAR_AVG));
     return years === 1 ? '1 an restant' : years + ' ans restants';
   }
 
@@ -1055,6 +1127,21 @@
     'Bloqu\u00e9': 'T\u00e2che'
   };
 
+  var COMPLETED_BADGE_PREFIX = 'Compl\u00e9t\u00e9';
+  var DEFINE_PRIORITY_LABEL = 'D\u00e9finir la priorit\u00e9';
+
+  function taskBadgeLabelForTierKey(tier) {
+    if (!tier) return '';
+    if (Object.prototype.hasOwnProperty.call(TASK_BADGE_LABELS, tier)) {
+      return TASK_BADGE_LABELS[tier];
+    }
+    return 'T\u00e2che ' + tier.charAt(0).toLowerCase() + tier.slice(1);
+  }
+
+  function formatCompletedBadgeLabel(taskLabel) {
+    return COMPLETED_BADGE_PREFIX + ' (' + taskLabel + ')';
+  }
+
   var EISENHOWER_BADGE_LABELS = {
     Faire: '\u00c0 faire maintenant',
     Planifier: '\u00c0 planifier',
@@ -1063,14 +1150,15 @@
   };
 
   // Unicode dots for Trello badge text (largest = highest priority).
+  var BADGE_DOT_DEFAULT = '\u25CF'; // ●
   var TIER_BADGE_DOTS = {
     0: '\u2B24', // ⬤ Critique
     1: '\u2B24', // ⬤ Urgente
-    2: '\u25CF', // ● Prioritaire
+    2: BADGE_DOT_DEFAULT, // ● Prioritaire
     3: '\u2022', // • Importante
     4: '\u00B7', // · Flexible
     5: '\u00B7', // · Secondaire
-    6: '\u00B7', // · Optionnelle
+    6: '\u00B7' // · Optionnelle
   };
   var BADGE_DOT_INUTILE = '\u00B7';
   var BADGE_DOT_COMPLETE = '\u2713';
@@ -1078,7 +1166,9 @@
   // Heat-badge dot diameter (px): low score → small, high score → large.
   var HEAT_TIER_DOT_MIN = 5;
   var HEAT_TIER_DOT_MAX = 14;
-  var HEAT_TIER_DOT_SCORE_MAX = 10;
+  var HEAT_TIER_DOT_SCORE_MAX = SCORE_MAX;
+  var HEAT_TIER_DOT_FALLBACK = 9;
+  var HEAT_TIER_DOT_BLOCKED_FALLBACK = 10;
   var HEAT_TIER_DOT_SIZES = {
     0: 14, // Critique
     1: 12, // Urgente
@@ -1090,14 +1180,14 @@
   };
 
   function heatTierDotSizePx(display) {
-    if (!display) return 9;
+    if (!display) return HEAT_TIER_DOT_FALLBACK;
     if (display.inutile) return HEAT_TIER_DOT_MIN;
     if (display.blocked) {
       var blockedI = display.tierI;
       if (blockedI != null && Object.prototype.hasOwnProperty.call(HEAT_TIER_DOT_SIZES, blockedI)) {
         return HEAT_TIER_DOT_SIZES[blockedI];
       }
-      return 10;
+      return HEAT_TIER_DOT_BLOCKED_FALLBACK;
     }
     var score = display.score;
     if (typeof score === 'number' && isFinite(score)) {
@@ -1108,7 +1198,7 @@
     if (tierI != null && Object.prototype.hasOwnProperty.call(HEAT_TIER_DOT_SIZES, tierI)) {
       return HEAT_TIER_DOT_SIZES[tierI];
     }
-    return 9;
+    return HEAT_TIER_DOT_FALLBACK;
   }
 
   // Help-modal level dots: low index → small, high index → large.
@@ -1133,27 +1223,27 @@
 
   function tierBadgeDotChar(display, completed) {
     if (completed) return BADGE_DOT_COMPLETE;
-    if (!display) return '\u25CF';
+    if (!display) return BADGE_DOT_DEFAULT;
     if (display.blocked) return BLOCKED_SYMBOL;
     if (display.inutile) return BADGE_DOT_INUTILE;
     var i = display.tierI;
     if (i != null && Object.prototype.hasOwnProperty.call(TIER_BADGE_DOTS, i)) {
       return TIER_BADGE_DOTS[i];
     }
-    return '\u25CF';
+    return BADGE_DOT_DEFAULT;
   }
 
   function schemeBadgePreviewSamples() {
     var samples = [];
     for (var i = 0; i < TIER_DEFS.length; i++) {
       var def = TIER_DEFS[i];
-      var label = TASK_BADGE_LABELS[def.label] || ('T\u00e2che ' + def.label);
+      var label = taskBadgeLabelForTierKey(def.label);
       var color = Object.prototype.hasOwnProperty.call(TIER_TRELLO_BADGE_COLORS, def.i)
         ? TIER_TRELLO_BADGE_COLORS[def.i]
-        : 'light-gray';
+        : TRELLO_BADGE_COLOR_MUTED;
       var dot = Object.prototype.hasOwnProperty.call(TIER_BADGE_DOTS, def.i)
         ? TIER_BADGE_DOTS[def.i]
-        : '\u25CF';
+        : BADGE_DOT_DEFAULT;
       samples.push({
         tierI: def.i,
         label: label,
@@ -1166,22 +1256,17 @@
   }
 
   function tierTrelloBadgeColor(display) {
-    if (!display || display.inutile) return 'light-gray';
+    if (!display || display.inutile) return TRELLO_BADGE_COLOR_MUTED;
     var i = display.tierI;
     if (i != null && Object.prototype.hasOwnProperty.call(TIER_TRELLO_BADGE_COLORS, i)) {
       return TIER_TRELLO_BADGE_COLORS[i];
     }
-    return 'light-gray';
+    return TRELLO_BADGE_COLOR_MUTED;
   }
 
   function blockedTaskBadgeLabel(display) {
     if (!display) return TASK_BADGE_LABELS[BLOCKED_LABEL];
-    var tier = classicTierLabel(display);
-    var base = TASK_BADGE_LABELS[tier];
-    if (!base && tier) {
-      if (tier === 'Importante' || tier === 'Important') base = 'T\u00e2che importante';
-      else base = 'T\u00e2che ' + tier.charAt(0).toLowerCase() + tier.slice(1);
-    }
+    var base = taskBadgeLabelForTierKey(classicTierLabel(display));
     if (base) return base;
     return TASK_BADGE_LABELS[BLOCKED_LABEL];
   }
@@ -1192,11 +1277,7 @@
     if (display.eisenhowerLabel && EISENHOWER_BADGE_LABELS[display.eisenhowerLabel]) {
       return EISENHOWER_BADGE_LABELS[display.eisenhowerLabel];
     }
-    var tier = classicTierLabel(display);
-    if (TASK_BADGE_LABELS[tier]) return TASK_BADGE_LABELS[tier];
-    if (!tier) return '';
-    if (tier === 'Importante' || tier === 'Important') return 'T\u00e2che importante';
-    return 'T\u00e2che ' + tier.charAt(0).toLowerCase() + tier.slice(1);
+    return taskBadgeLabelForTierKey(classicTierLabel(display));
   }
 
   function formatBlockedBadgeText(display, reason) {
@@ -1233,12 +1314,12 @@
       var idle = isDarkTheme() ? INUTILE_STYLES_DARK : INUTILE_STYLES;
       return { fill: idle.fill, text: idle.text, seg: idle.seg, tint: idle.tint };
     }
-    var i = source && source.i != null ? source.i : 6;
+    var i = source && source.i != null ? source.i : TIER_I_MAX;
     if (isDarkTheme()) {
-      var dark = TIERS_DARK[i] || TIERS_DARK[6];
+      var dark = TIERS_DARK[i] || TIERS_DARK[TIER_I_MAX];
       return { fill: dark.fill, text: dark.text, seg: dark.seg, tint: dark.tint };
     }
-    var light = TIERS[i] || TIERS[6];
+    var light = TIERS[i] || TIERS[TIER_I_MAX];
     return { fill: light.fill, text: light.text, seg: light.seg, tint: light.fill };
   }
 
@@ -1543,7 +1624,7 @@
   function surfaceMixFor(tier) {
     var mixKey = tier.blocked ? 'blocked' : (tier.inutile ? 'inutile' : tier.i);
     var table = isDarkTheme() ? TIER_SURFACE_MIX_DARK : TIER_SURFACE_MIX;
-    return table[mixKey] || table[6];
+    return table[mixKey] || table[TIER_I_MAX];
   }
 
   function applyCardTierTint(cardEl, tier) {
@@ -2189,8 +2270,8 @@
     var fMin = sameTier ? curF : 1;
     var fMax = sameTier ? curF : 5;
     var best = null;
-    for (var u = 0; u <= 4; u++) {
-      for (var i = 0; i <= 4; i++) {
+    for (var u = 0; u <= AXIS_UI_MAX; u++) {
+      for (var i = 0; i <= AXIS_UI_MAX; i++) {
         for (var f = fMin; f <= fMax; f++) {
           var score = baselineScore(u, i, f);
           if (!betterBaselineOverride(score, u, i, f, best, targetP, curU, curI, curF)) continue;
@@ -2762,7 +2843,23 @@
   function createDueDateField(config) {
     var el = config.el;
     var onChange = config.onChange || function () {};
+    var onLayoutChange = config.onLayoutChange || function () {};
     var current = normalizeDueDate(config.value);
+    var open = false;
+    var viewYear;
+    var viewMonth;
+    var focusIso = current || toIsoDate(startOfLocalDay(new Date()));
+    var docListenersBound = false;
+    var uid = 'due-cal-' + Math.random().toString(36).slice(2, 9);
+
+    function syncViewFromValue(iso) {
+      var date = dueDateToLocalDate(iso) || startOfLocalDay(new Date());
+      viewYear = date.getFullYear();
+      viewMonth = date.getMonth();
+      focusIso = toIsoDate(date);
+    }
+
+    syncViewFromValue(current);
 
     var field = document.createElement('div');
     field.className = 'field field--due-date';
@@ -2775,10 +2872,12 @@
 
     var title = document.createElement('div');
     title.className = 'due-date-title';
+    title.id = uid + '-label';
     title.textContent = DUE_DATE_LABEL;
 
     var desc = document.createElement('div');
     desc.className = 'due-date-desc';
+    desc.id = uid + '-desc';
     desc.textContent = DUE_DATE_DESCRIPTION;
 
     textWrap.appendChild(title);
@@ -2789,11 +2888,29 @@
     var controls = document.createElement('div');
     controls.className = 'due-date-controls';
 
-    var input = document.createElement('input');
-    input.type = 'date';
-    input.className = 'due-date-input';
-    input.setAttribute('aria-label', DUE_DATE_LABEL);
-    if (current) input.value = current;
+    var trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'due-date-trigger';
+    trigger.setAttribute('aria-haspopup', 'dialog');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.setAttribute('aria-controls', uid + '-popover');
+    trigger.setAttribute('aria-labelledby', uid + '-label');
+    trigger.setAttribute('aria-describedby', uid + '-desc');
+
+    var triggerIcon = document.createElement('i');
+    triggerIcon.className = 'ti ti-calendar due-date-trigger-icon';
+    triggerIcon.setAttribute('aria-hidden', 'true');
+
+    var triggerValue = document.createElement('span');
+    triggerValue.className = 'due-date-trigger-value';
+
+    var triggerChevron = document.createElement('i');
+    triggerChevron.className = 'ti ti-chevron-down due-date-trigger-chevron';
+    triggerChevron.setAttribute('aria-hidden', 'true');
+
+    trigger.appendChild(triggerIcon);
+    trigger.appendChild(triggerValue);
+    trigger.appendChild(triggerChevron);
 
     var clearBtn = document.createElement('button');
     clearBtn.type = 'button';
@@ -2802,9 +2919,72 @@
     clearBtn.title = DUE_DATE_CLEAR_LABEL;
     clearBtn.setAttribute('aria-label', DUE_DATE_CLEAR_LABEL);
 
-    controls.appendChild(input);
+    controls.appendChild(trigger);
     controls.appendChild(clearBtn);
     field.appendChild(controls);
+
+    var popover = document.createElement('div');
+    popover.className = 'due-date-popover';
+    popover.id = uid + '-popover';
+    popover.hidden = true;
+    popover.setAttribute('role', 'dialog');
+    popover.setAttribute('aria-modal', 'false');
+    popover.setAttribute('aria-label', DUE_DATE_CALENDAR_LABEL);
+
+    var nav = document.createElement('div');
+    nav.className = 'due-date-nav';
+
+    var prevBtn = document.createElement('button');
+    prevBtn.type = 'button';
+    prevBtn.className = 'due-date-nav-btn';
+    prevBtn.setAttribute('aria-label', DUE_DATE_PREV_MONTH);
+    prevBtn.innerHTML = '<i class="ti ti-chevron-left" aria-hidden="true"></i>';
+
+    var monthLabel = document.createElement('div');
+    monthLabel.className = 'due-date-month-label';
+    monthLabel.id = uid + '-month';
+    monthLabel.setAttribute('aria-live', 'polite');
+
+    var nextBtn = document.createElement('button');
+    nextBtn.type = 'button';
+    nextBtn.className = 'due-date-nav-btn';
+    nextBtn.setAttribute('aria-label', DUE_DATE_NEXT_MONTH);
+    nextBtn.innerHTML = '<i class="ti ti-chevron-right" aria-hidden="true"></i>';
+
+    nav.appendChild(prevBtn);
+    nav.appendChild(monthLabel);
+    nav.appendChild(nextBtn);
+    popover.appendChild(nav);
+
+    var weekdays = document.createElement('div');
+    weekdays.className = 'due-date-weekdays';
+    weekdays.setAttribute('aria-hidden', 'true');
+    DUE_DATE_WEEKDAYS.forEach(function (label, index) {
+      var cell = document.createElement('span');
+      cell.className = 'due-date-weekday';
+      cell.textContent = label;
+      cell.title = DUE_DATE_WEEKDAY_NAMES[index];
+      weekdays.appendChild(cell);
+    });
+    popover.appendChild(weekdays);
+
+    var grid = document.createElement('div');
+    grid.className = 'due-date-grid';
+    grid.setAttribute('role', 'grid');
+    grid.setAttribute('aria-labelledby', uid + '-month');
+    popover.appendChild(grid);
+
+    var footer = document.createElement('div');
+    footer.className = 'due-date-footer';
+
+    var todayBtn = document.createElement('button');
+    todayBtn.type = 'button';
+    todayBtn.className = 'due-date-today';
+    todayBtn.textContent = DUE_DATE_TODAY_LABEL;
+
+    footer.appendChild(todayBtn);
+    popover.appendChild(footer);
+    field.appendChild(popover);
 
     var countdown = document.createElement('div');
     countdown.className = 'due-date-countdown';
@@ -2813,24 +2993,44 @@
 
     el.appendChild(field);
 
+    function notifyLayout() {
+      requestAnimationFrame(function () {
+        onLayoutChange();
+      });
+    }
+
+    function refreshTrigger() {
+      var display = formatDueDateDisplay(current);
+      if (display) {
+        triggerValue.textContent = display;
+        triggerValue.classList.remove('is-placeholder');
+        trigger.classList.add('has-value');
+      } else {
+        triggerValue.textContent = DUE_DATE_PLACEHOLDER;
+        triggerValue.classList.add('is-placeholder');
+        trigger.classList.remove('has-value');
+      }
+    }
+
     function refreshCountdown() {
-      var value = normalizeDueDate(input.value);
-      if (!value) {
+      if (!current) {
         countdown.textContent = '';
         countdown.hidden = true;
         countdown.classList.remove('is-past');
         clearBtn.hidden = true;
         field.classList.remove('has-due-date', 'is-past');
+        refreshTrigger();
         return;
       }
-      var text = formatDueCountdown(value);
-      var past = daysUntilDue(value) < 0;
+      var text = formatDueCountdown(current);
+      var past = daysUntilDue(current) < 0;
       countdown.textContent = text;
       countdown.hidden = !text;
       countdown.classList.toggle('is-past', past);
       clearBtn.hidden = false;
       field.classList.add('has-due-date');
       field.classList.toggle('is-past', past);
+      refreshTrigger();
     }
 
     function emitChange() {
@@ -2839,22 +3039,234 @@
     }
 
     function getValue() {
-      return normalizeDueDate(input.value);
+      return current;
     }
 
     function setValue(value) {
-      var next = normalizeDueDate(value);
-      input.value = next || '';
+      current = normalizeDueDate(value);
+      if (current) {
+        syncViewFromValue(current);
+      } else {
+        syncViewFromValue('');
+      }
+      if (open) renderCalendar();
       refreshCountdown();
     }
 
-    clearBtn.addEventListener('click', function () {
-      input.value = '';
+    function shiftMonth(delta) {
+      var next = new Date(viewYear, viewMonth + delta, 1);
+      viewYear = next.getFullYear();
+      viewMonth = next.getMonth();
+      var daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+      var focusDay = dueDateToLocalDate(focusIso);
+      var day = focusDay ? Math.min(focusDay.getDate(), daysInMonth) : 1;
+      focusIso = toIsoDate(new Date(viewYear, viewMonth, day));
+      renderCalendar(true);
+    }
+
+    function selectIso(iso, closeAfter) {
+      var next = normalizeDueDate(iso);
+      if (!next) return;
+      current = next;
+      focusIso = next;
+      syncViewFromValue(next);
       emitChange();
+      if (closeAfter !== false) closeCalendar(true);
+      else renderCalendar();
+    }
+
+    function focusDayButton(iso) {
+      var btn = grid.querySelector('[data-iso="' + iso + '"]');
+      if (btn) btn.focus();
+    }
+
+    function renderCalendar(keepFocus) {
+      var monthName = DUE_DATE_MONTH_NAMES[viewMonth];
+      monthLabel.textContent =
+        monthName.charAt(0).toUpperCase() + monthName.slice(1) + ' ' + viewYear;
+
+      var first = new Date(viewYear, viewMonth, 1);
+      var startOffset = mondayOffset(first);
+      var gridStart = new Date(viewYear, viewMonth, 1 - startOffset);
+      var todayIso = toIsoDate(startOfLocalDay(new Date()));
+
+      grid.textContent = '';
+      var row = null;
+      for (var i = 0; i < 42; i++) {
+        if (i % 7 === 0) {
+          row = document.createElement('div');
+          row.className = 'due-date-row';
+          row.setAttribute('role', 'row');
+          grid.appendChild(row);
+        }
+        var cellDate = new Date(
+          gridStart.getFullYear(),
+          gridStart.getMonth(),
+          gridStart.getDate() + i
+        );
+        var iso = toIsoDate(cellDate);
+        var inMonth = cellDate.getMonth() === viewMonth;
+        var isToday = iso === todayIso;
+        var isSelected = !!current && iso === current;
+        var isFocused = iso === focusIso;
+
+        var cell = document.createElement('div');
+        cell.className = 'due-date-cell';
+        cell.setAttribute('role', 'gridcell');
+
+        var dayBtn = document.createElement('button');
+        dayBtn.type = 'button';
+        dayBtn.className = 'due-date-day';
+        dayBtn.dataset.iso = iso;
+        dayBtn.textContent = String(cellDate.getDate());
+        dayBtn.setAttribute(
+          'aria-label',
+          DUE_DATE_WEEKDAY_NAMES[mondayOffset(cellDate)] +
+            ' ' +
+            cellDate.getDate() +
+            ' ' +
+            DUE_DATE_MONTH_NAMES[cellDate.getMonth()] +
+            ' ' +
+            cellDate.getFullYear()
+        );
+        dayBtn.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+        dayBtn.tabIndex = isFocused ? 0 : -1;
+
+        if (!inMonth) dayBtn.classList.add('is-outside');
+        if (isToday) dayBtn.classList.add('is-today');
+        if (isSelected) dayBtn.classList.add('is-selected');
+
+        dayBtn.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          selectIso(ev.currentTarget.dataset.iso, true);
+        });
+
+        cell.appendChild(dayBtn);
+        row.appendChild(cell);
+      }
+
+      if (keepFocus) focusDayButton(focusIso);
+    }
+
+    function onDocPointerDown(ev) {
+      if (!open) return;
+      if (field.contains(ev.target)) return;
+      closeCalendar(true);
+    }
+
+    function onDocKeyDown(ev) {
+      if (!open) return;
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        closeCalendar(true);
+        return;
+      }
+      if (!grid.contains(document.activeElement) && document.activeElement !== todayBtn) {
+        return;
+      }
+      var focusDate = dueDateToLocalDate(focusIso) || startOfLocalDay(new Date());
+      var nextDate = null;
+      if (ev.key === 'ArrowLeft') {
+        nextDate = new Date(focusDate.getFullYear(), focusDate.getMonth(), focusDate.getDate() - 1);
+      } else if (ev.key === 'ArrowRight') {
+        nextDate = new Date(focusDate.getFullYear(), focusDate.getMonth(), focusDate.getDate() + 1);
+      } else if (ev.key === 'ArrowUp') {
+        nextDate = new Date(focusDate.getFullYear(), focusDate.getMonth(), focusDate.getDate() - 7);
+      } else if (ev.key === 'ArrowDown') {
+        nextDate = new Date(focusDate.getFullYear(), focusDate.getMonth(), focusDate.getDate() + 7);
+      } else if (ev.key === 'Home') {
+        nextDate = new Date(viewYear, viewMonth, 1);
+      } else if (ev.key === 'End') {
+        nextDate = new Date(viewYear, viewMonth + 1, 0);
+      } else if (ev.key === 'PageUp') {
+        ev.preventDefault();
+        shiftMonth(ev.shiftKey ? -12 : -1);
+        return;
+      } else if (ev.key === 'PageDown') {
+        ev.preventDefault();
+        shiftMonth(ev.shiftKey ? 12 : 1);
+        return;
+      } else if (ev.key === 'Enter' || ev.key === ' ') {
+        if (document.activeElement && document.activeElement.dataset && document.activeElement.dataset.iso) {
+          ev.preventDefault();
+          selectIso(document.activeElement.dataset.iso, true);
+        }
+        return;
+      }
+      if (!nextDate) return;
+      ev.preventDefault();
+      focusIso = toIsoDate(nextDate);
+      if (nextDate.getMonth() !== viewMonth || nextDate.getFullYear() !== viewYear) {
+        viewYear = nextDate.getFullYear();
+        viewMonth = nextDate.getMonth();
+      }
+      renderCalendar(true);
+    }
+
+    function bindDocListeners() {
+      if (docListenersBound) return;
+      document.addEventListener('mousedown', onDocPointerDown, true);
+      document.addEventListener('keydown', onDocKeyDown, true);
+      docListenersBound = true;
+    }
+
+    function unbindDocListeners() {
+      if (!docListenersBound) return;
+      document.removeEventListener('mousedown', onDocPointerDown, true);
+      document.removeEventListener('keydown', onDocKeyDown, true);
+      docListenersBound = false;
+    }
+
+    function openCalendar() {
+      if (open) return;
+      open = true;
+      if (current) syncViewFromValue(current);
+      else {
+        syncViewFromValue('');
+        focusIso = toIsoDate(startOfLocalDay(new Date()));
+      }
+      popover.hidden = false;
+      field.classList.add('is-open');
+      trigger.setAttribute('aria-expanded', 'true');
+      renderCalendar(true);
+      bindDocListeners();
+      notifyLayout();
+    }
+
+    function closeCalendar(restoreFocus) {
+      if (!open) return;
+      open = false;
+      popover.hidden = true;
+      field.classList.remove('is-open');
+      trigger.setAttribute('aria-expanded', 'false');
+      unbindDocListeners();
+      if (restoreFocus) trigger.focus();
+      notifyLayout();
+    }
+
+    trigger.addEventListener('click', function () {
+      if (open) closeCalendar(false);
+      else openCalendar();
     });
 
-    input.addEventListener('change', emitChange);
-    input.addEventListener('input', emitChange);
+    clearBtn.addEventListener('click', function () {
+      current = '';
+      closeCalendar(false);
+      emitChange();
+      trigger.focus();
+    });
+
+    prevBtn.addEventListener('click', function () {
+      shiftMonth(-1);
+    });
+
+    nextBtn.addEventListener('click', function () {
+      shiftMonth(1);
+    });
+
+    todayBtn.addEventListener('click', function () {
+      selectIso(toIsoDate(startOfLocalDay(new Date())), true);
+    });
 
     refreshCountdown();
 
@@ -3215,17 +3627,21 @@
     var fields = config.fields || null;
     var onInputsChange = config.onChange || function () {};
     var SVG_NS = 'http://www.w3.org/2000/svg';
-    var SVG_W = 210;
-    var SVG_H = 168;
-    var MARGIN = { top: 10, right: 8, bottom: 26, left: 28 };
+    var onToggle = config.onToggle || function () {};
+    var SVG_W = 260;
+    var SVG_H = 208;
+    var MARGIN = { top: 8, right: 6, bottom: 22, left: 24 };
     var PLOT_W = SVG_W - MARGIN.left - MARGIN.right;
     var PLOT_H = SVG_H - MARGIN.top - MARGIN.bottom;
     var CONTOUR_RES = 40;
-    var TIER_THRESHOLDS = [1.4, 2.9, 4.3, 5.8, 7.2, 8.6];
-    var MARKER_CORE_R = 6;
-    var MARKER_STROKE_W = 2.5;
-    var MARKER_SHADOW_R = 7;
-    var MARKER_HIT_R = 16;
+    var TIER_THRESHOLDS = [];
+    for (var ti = TIER_DEFS.length - 1; ti >= 0; ti--) {
+      if (TIER_DEFS[ti].min > 0) TIER_THRESHOLDS.push(TIER_DEFS[ti].min);
+    }
+    var MARKER_CORE_R = 5;
+    var MARKER_STROKE_W = 2;
+    var MARKER_SHADOW_R = 6;
+    var MARKER_HIT_R = 14;
 
     var lastScene = { U: 0, I: 0, F: 0, result: null, display: null };
     var draggingMarker = false;
@@ -3239,8 +3655,8 @@
     }
 
     function applyUrgencyImpact(u, i) {
-      u = snapAxis(u, 0, 4);
-      i = snapAxis(i, 0, 4);
+      u = snapAxis(u, 0, AXIS_UI_MAX);
+      i = snapAxis(i, 0, AXIS_UI_MAX);
       if (fields && fields.urgency) fields.urgency.updateDisplay(u);
       if (fields && fields.impact) fields.impact.updateDisplay(i);
       onInputsChange();
@@ -3273,11 +3689,11 @@
     }
 
     function plotX(u) {
-      return MARGIN.left + (u / 4) * PLOT_W;
+      return MARGIN.left + (u / AXIS_UI_MAX) * PLOT_W;
     }
 
     function plotY(i) {
-      return MARGIN.top + (1 - i / 4) * PLOT_H;
+      return MARGIN.top + (1 - i / AXIS_UI_MAX) * PLOT_H;
     }
 
     function formatEase(F) {
@@ -3298,9 +3714,10 @@
     toggleLabel.className = 'calc-graph-toggle-label';
     toggleLabel.textContent = 'Graphique';
 
-    var toggleIcon = document.createElement('i');
-    toggleIcon.className = 'ti ti-chevron-down';
+    var toggleIcon = document.createElement('span');
+    toggleIcon.className = 'calc-graph-toggle-chevron';
     toggleIcon.setAttribute('aria-hidden', 'true');
+    toggleIcon.textContent = '▸';
 
     toggle.appendChild(toggleLabel);
     toggle.appendChild(toggleIcon);
@@ -3531,22 +3948,12 @@
     graphSection.appendChild(rsmWrap);
     body.appendChild(graphSection);
 
+    // Collapsed by default: only the toggle is in the DOM so the chart cannot
+    // take layout space or remain visible if CSS/hidden is overridden.
     panel.appendChild(toggle);
-    panel.appendChild(body);
     el.appendChild(panel);
 
     var graphCollapsed = true;
-    function setGraphCollapsed(collapsed) {
-      graphCollapsed = !!collapsed;
-      panel.classList.toggle('is-collapsed', graphCollapsed);
-      body.hidden = graphCollapsed;
-      toggle.setAttribute('aria-expanded', graphCollapsed ? 'false' : 'true');
-      if (!graphCollapsed) scheduleLayoutSurfacePaint();
-    }
-    toggle.addEventListener('click', function () {
-      setGraphCollapsed(!graphCollapsed);
-    });
-
     var surfaceCtx = surfaceCanvas.getContext('2d', { alpha: true });
 
     function clientToPlotClamped(clientX, clientY) {
@@ -3558,8 +3965,8 @@
 
     function plotCoordsFromLocal(x, y, w, h) {
       return {
-        u: (x / w) * 4,
-        i: (1 - y / h) * 4
+        u: (x / w) * AXIS_UI_MAX,
+        i: (1 - y / h) * AXIS_UI_MAX
       };
     }
 
@@ -3899,7 +4306,7 @@
         markerI = dragVisual.i;
       }
 
-      if (!draggingMarker) {
+      if (!graphCollapsed && !draggingMarker) {
         paintContours(F);
         paintSurface(F);
         scheduleLayoutSurfacePaint();
@@ -3917,10 +4324,39 @@
         ' — score ' + formatScore(d.score) + ', palier ' + d.label;
     }
 
+    function setGraphCollapsed(collapsed) {
+      graphCollapsed = !!collapsed;
+      panel.classList.toggle('is-collapsed', graphCollapsed);
+      body.hidden = graphCollapsed;
+      toggle.setAttribute('aria-expanded', graphCollapsed ? 'false' : 'true');
+      toggleIcon.textContent = graphCollapsed ? '▸' : '▾';
+
+      if (graphCollapsed) {
+        if (body.parentNode) panel.removeChild(body);
+      } else {
+        if (!body.parentNode) panel.appendChild(body);
+        if (lastScene.result) {
+          paint(lastScene.result, {
+            urgency: lastScene.U,
+            impact: lastScene.I,
+            ease: lastScene.F
+          }, lastScene.display);
+        } else {
+          scheduleLayoutSurfacePaint();
+        }
+      }
+      onToggle(!graphCollapsed);
+    }
+
+    toggle.addEventListener('click', function () {
+      setGraphCollapsed(!graphCollapsed);
+    });
+
     return {
       el: panel,
       paint: paint,
       updateTheme: updateChartTheme,
+      setCollapsed: setGraphCollapsed,
       disconnect: function () {
         if (chartResizeObserver) chartResizeObserver.disconnect();
         if (layoutSurfaceRaf != null) {
@@ -4268,6 +4704,11 @@
           cancelSliderAnim();
           repaint();
           persistSliderState();
+        },
+        onToggle: function () {
+          if (typeof variantConfig.onLayoutChange === 'function') {
+            variantConfig.onLayoutChange();
+          }
         }
       });
     } catch (err) {
@@ -4361,10 +4802,20 @@
   var PriorityUI = {
     WEIGHTS: { time: WT, blocking: WB, impact: WI, ease: WI_EASE },
     PRESSURE_MAX: PRESSURE_MAX,
+    SCORE_MAX: SCORE_MAX,
+    AXIS_UI_MAX: AXIS_UI_MAX,
+    TIER_I: TIER_I,
+    TIER_I_MAX: TIER_I_MAX,
+    TIER_I_SCHEME_MAPPED_MAX: TIER_I_SCHEME_MAPPED_MAX,
+    TRELLO_BADGE_COLOR_MUTED: TRELLO_BADGE_COLOR_MUTED,
+    TRELLO_BADGE_COLOR_COMPLETE: TRELLO_BADGE_COLOR_COMPLETE,
+    TRELLO_BADGE_COLOR_HEX: TRELLO_BADGE_COLOR_HEX,
+    TRELLO_BADGE_COLOR_NAMES: TRELLO_BADGE_COLOR_NAMES,
     LABELS: LABELS,
     KEYWORDS: KEYWORDS,
     QUESTIONS: QUESTIONS,
     TIERS: TIERS,
+    TIER_DEFS: TIER_DEFS,
     PRIORITY_BLUE_STOPS: PRIORITY_BLUE_STOPS,
     COLOR_SCHEMES: COLOR_SCHEMES,
     COLOR_SCHEME_OPTIONS: COLOR_SCHEME_OPTIONS,
@@ -4439,8 +4890,13 @@
     isEnAttente: isEnAttente,
     resolveDisplay: resolveDisplay,
     classicTierLabel: classicTierLabel,
+    TASK_BADGE_LABELS: TASK_BADGE_LABELS,
     taskBadgeLabel: taskBadgeLabel,
+    taskBadgeLabelForTierKey: taskBadgeLabelForTierKey,
     blockedTaskBadgeLabel: blockedTaskBadgeLabel,
+    formatCompletedBadgeLabel: formatCompletedBadgeLabel,
+    COMPLETED_BADGE_PREFIX: COMPLETED_BADGE_PREFIX,
+    DEFINE_PRIORITY_LABEL: DEFINE_PRIORITY_LABEL,
     tierTrelloBadgeColor: tierTrelloBadgeColor,
     schemeBadgePreviewSamples: schemeBadgePreviewSamples,
     rebuildTrelloBadgeColors: rebuildTrelloBadgeColors,
@@ -4449,6 +4905,7 @@
     HEAT_TIER_DOT_SIZES: HEAT_TIER_DOT_SIZES,
     TIER_TRELLO_BADGE_COLORS: TIER_TRELLO_BADGE_COLORS,
     TIER_BADGE_DOTS: TIER_BADGE_DOTS,
+    BADGE_DOT_DEFAULT: BADGE_DOT_DEFAULT,
     BADGE_DOT_COMPLETE: BADGE_DOT_COMPLETE,
     BADGE_DOT_INUTILE: BADGE_DOT_INUTILE,
     setMatrixSettings: setMatrixSettings,
@@ -4465,6 +4922,12 @@
     BLOCKED_REASON_OPTIONS: BLOCKED_REASON_OPTIONS,
     isValidBlockedReason: isValidBlockedReason,
     formatBlockedBadgeText: formatBlockedBadgeText,
+    MS_PER_DAY: MS_PER_DAY,
+    COUNTDOWN_DAYS_PER_WEEK: COUNTDOWN_DAYS_PER_WEEK,
+    COUNTDOWN_WEEK_THRESHOLD_DAYS: COUNTDOWN_WEEK_THRESHOLD_DAYS,
+    COUNTDOWN_YEAR_THRESHOLD_DAYS: COUNTDOWN_YEAR_THRESHOLD_DAYS,
+    DAYS_PER_MONTH_AVG: DAYS_PER_MONTH_AVG,
+    DAYS_PER_YEAR_AVG: DAYS_PER_YEAR_AVG,
     normalizeDueDate: normalizeDueDate,
     daysUntilDue: daysUntilDue,
     formatDueCountdown: formatDueCountdown,

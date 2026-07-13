@@ -110,27 +110,59 @@
     };
   }
 
-  // Five OKLCH ramps: warm/red at 0 % → green at 100 %.
+  // Named OKLCH stops [L, C, H] for progress ramps (0 % → 100 %).
+  // Shared anchors keep schemes coherent: cool gray → blue mid → green complete.
+  var PROGRESS_OKLCH = {
+    GRAY: [0.720, 0.014, 250],
+    GRAY_SOFT: [0.740, 0.010, 250],
+    GRAY_BLUE: [0.680, 0.045, 248],
+    BLUE: [0.600, 0.130, 245],
+    BLUE_DEEP: [0.560, 0.140, 250],
+    BLUE_SKY: [0.680, 0.100, 230],
+    TEAL: [0.640, 0.110, 195],
+    MINT: [0.700, 0.100, 170],
+    BLUE_GREEN: [0.640, 0.120, 175],
+    GREEN_SOFT: [0.660, 0.130, 155],
+    GREEN: [0.600, 0.170, 145],
+    GREEN_MUTED: [0.580, 0.120, 145]
+  };
+
+  // Five OKLCH ramps: gray (low) → blue (mid) → green (complete). No warm/red start.
   var COMPLETION_COLOR_SCHEMES = {
-    traffic: buildCompletionScheme('traffic', 'Trafic', [
-      [0.520, 0.220, 25], [0.620, 0.190, 42], [0.820, 0.160, 92],
-      [0.760, 0.130, 142], [0.600, 0.170, 145]
+    traffic: buildCompletionScheme('traffic', 'Classique', [
+      PROGRESS_OKLCH.GRAY,
+      PROGRESS_OKLCH.GRAY_BLUE,
+      PROGRESS_OKLCH.BLUE,
+      PROGRESS_OKLCH.BLUE_GREEN,
+      PROGRESS_OKLCH.GREEN
     ]),
     mint: buildCompletionScheme('mint', 'Menthe fraîche', [
-      [0.520, 0.210, 18], [0.600, 0.170, 55], [0.720, 0.120, 95],
-      [0.780, 0.110, 160], [0.620, 0.150, 155]
+      PROGRESS_OKLCH.GRAY_SOFT,
+      PROGRESS_OKLCH.GRAY_BLUE,
+      PROGRESS_OKLCH.TEAL,
+      PROGRESS_OKLCH.MINT,
+      PROGRESS_OKLCH.GREEN_SOFT
     ]),
     ocean: buildCompletionScheme('ocean', 'Océan', [
-      [0.500, 0.215, 22], [0.580, 0.180, 38], [0.660, 0.140, 205],
-      [0.720, 0.120, 195], [0.600, 0.165, 150]
+      PROGRESS_OKLCH.GRAY,
+      PROGRESS_OKLCH.BLUE_DEEP,
+      PROGRESS_OKLCH.BLUE,
+      PROGRESS_OKLCH.TEAL,
+      PROGRESS_OKLCH.GREEN
     ]),
-    sunset: buildCompletionScheme('sunset', 'Coucher de soleil', [
-      [0.450, 0.225, 18], [0.580, 0.200, 35], [0.760, 0.160, 72],
-      [0.780, 0.140, 125], [0.600, 0.170, 145]
+    sunset: buildCompletionScheme('sunset', 'Horizon', [
+      PROGRESS_OKLCH.GRAY_SOFT,
+      PROGRESS_OKLCH.BLUE_SKY,
+      PROGRESS_OKLCH.BLUE,
+      PROGRESS_OKLCH.MINT,
+      PROGRESS_OKLCH.GREEN
     ]),
     monochrome: buildCompletionScheme('monochrome', 'Monochrome', [
-      [0.450, 0.085, 25], [0.550, 0.065, 45], [0.650, 0.050, 75],
-      [0.720, 0.085, 130], [0.580, 0.140, 145]
+      PROGRESS_OKLCH.GRAY_SOFT,
+      [0.660, 0.025, 248],
+      [0.600, 0.055, 245],
+      [0.620, 0.070, 180],
+      PROGRESS_OKLCH.GREEN_MUTED
     ])
   };
 
@@ -240,7 +272,7 @@
 
   function schemeGradientCss(schemeKey) {
     var scheme = COMPLETION_COLOR_SCHEMES[normalizeCompletionSchemeKey(schemeKey)];
-    return 'linear-gradient(90deg,' + scheme.stops[0] + ',' + scheme.stops[scheme.stops.length - 1] + ')';
+    return 'linear-gradient(90deg,' + scheme.stops.join(',') + ')';
   }
 
   applyCompletionColorScheme(DEFAULT_COMPLETION_SCHEME_KEY);
@@ -394,21 +426,26 @@
 
     var progressSection = document.createElement('section');
     progressSection.className = 'tp-completion-progress';
-    progressSection.setAttribute('aria-label', 'Progrès');
+    progressSection.setAttribute('aria-label', 'Progr\u00e8s');
+
+    var progressPanel = document.createElement('div');
+    progressPanel.className = 'tp-completion-progress-panel';
 
     var progressHead = document.createElement('div');
     progressHead.className = 'tp-completion-progress-head';
     progressHead.innerHTML =
-      '<span class="tp-completion-progress-label">Progrès global</span>' +
-      '<span class="tp-completion-percent" id="completionPercent">0\u00a0%</span>';
-    progressSection.appendChild(progressHead);
+      '<span class="tp-completion-progress-label">Progr\u00e8s global</span>';
 
-    var encouragementEl = document.createElement('p');
-    encouragementEl.className = 'tp-completion-encouragement';
-    encouragementEl.id = 'completionEncouragement';
-    encouragementEl.setAttribute('aria-live', 'polite');
-    encouragementEl.textContent = progressEncouragementText(0);
-    progressSection.appendChild(encouragementEl);
+    var progressHero = document.createElement('div');
+    progressHero.className = 'tp-completion-progress-hero';
+    progressHero.innerHTML =
+      '<span class="tp-completion-percent" id="completionPercent">0\u00a0%</span>' +
+      '<p class="tp-completion-encouragement" id="completionEncouragement" aria-live="polite">' +
+      progressEncouragementText(0) +
+      '</p>';
+
+    progressPanel.appendChild(progressHead);
+    progressPanel.appendChild(progressHero);
 
     var masterSlider = createProgressSlider(
       'Ajuster le progr\u00e8s',
@@ -427,19 +464,23 @@
       'completionMasterSlider'
     );
     masterSlider.el.classList.add('tp-completion-master-slider');
-    progressSection.appendChild(masterSlider.el);
+    progressPanel.appendChild(masterSlider.el);
 
     var metaEl = document.createElement('p');
     metaEl.className = 'tp-completion-meta';
     metaEl.id = 'completionMeta';
-    progressSection.appendChild(metaEl);
+    progressPanel.appendChild(metaEl);
 
+    progressSection.appendChild(progressPanel);
     containerEl.appendChild(progressSection);
 
     var listSection = document.createElement('section');
     listSection.className = 'tp-completion-list-section';
     listSection.innerHTML =
+      '<div class="tp-completion-list-head">' +
       '<h3 class="tp-heading">Sous-t\u00e2ches</h3>' +
+      '<p class="tp-completion-list-hint">Pond\u00e9r\u00e9es par difficult\u00e9</p>' +
+      '</div>' +
       '<ul class="tp-completion-list" id="completionList" aria-label="Sous-t\u00e2ches"></ul>';
     containerEl.appendChild(listSection);
 
@@ -455,6 +496,7 @@
 
     var listEl = containerEl.querySelector('#completionList');
     var percentEl = containerEl.querySelector('#completionPercent');
+    var encouragementEl = containerEl.querySelector('#completionEncouragement');
     var addInput = containerEl.querySelector('#completionAddInput');
     var addBtn = containerEl.querySelector('#completionAddBtn');
 
@@ -494,15 +536,20 @@
     function updateProgressUi(opts) {
       opts = opts || {};
       var progress = CT.computeCardProgress(data);
+      var accent = progress.percent > 0
+        ? completionColorForProgress(progress.percent)
+        : '';
       percentEl.textContent = progress.percent + '\u00a0%';
-      percentEl.style.color = progress.percent > 0
-        ? completionColorForProgress(progress.percent)
-        : '';
+      percentEl.style.color = accent;
       encouragementEl.textContent = progressEncouragementText(progress.percent);
-      encouragementEl.style.color = progress.percent > 0
-        ? completionColorForProgress(progress.percent)
-        : '';
+      encouragementEl.style.color = accent;
       encouragementEl.classList.toggle('is-complete', progress.percent === 100);
+      progressPanel.style.setProperty(
+        '--completion-hero-accent',
+        accent || 'var(--tp-border-strong)'
+      );
+      progressPanel.classList.toggle('is-complete', progress.percent === 100);
+      progressPanel.classList.toggle('has-progress', progress.percent > 0);
       if (!opts.skipMasterSync && !masterDragging) {
         masterSlider.setValue(progress.percent);
       } else {
@@ -676,6 +723,16 @@
 
     function renderList() {
       listEl.replaceChildren();
+      listSection.classList.toggle('is-empty', !data.items.length);
+      if (!data.items.length) {
+        var empty = document.createElement('li');
+        empty.className = 'tp-completion-empty';
+        empty.setAttribute('aria-live', 'polite');
+        empty.textContent =
+          'Aucune sous-t\u00e2che pour l\u2019instant. Ajustez le progr\u00e8s global ci-dessus, ou ajoutez des \u00e9tapes ci-dessous.';
+        listEl.appendChild(empty);
+        return;
+      }
       data.items.forEach(function (item) {
         listEl.appendChild(renderItem(item));
       });
@@ -759,6 +816,7 @@
   }
 
   global.CompletionUI = {
+    PROGRESS_OKLCH: PROGRESS_OKLCH,
     COMPLETION_COLOR_SCHEMES: COMPLETION_COLOR_SCHEMES,
     COMPLETION_SCHEME_OPTIONS: COMPLETION_SCHEME_OPTIONS,
     DEFAULT_COMPLETION_SCHEME_KEY: DEFAULT_COMPLETION_SCHEME_KEY,

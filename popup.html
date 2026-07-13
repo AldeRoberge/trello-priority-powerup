@@ -6,11 +6,11 @@
   <title>Définir la priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <link rel="stylesheet" href="./trello-theme.css" />
-  <link rel="stylesheet" href="./priority-ui.css" />
+  <link rel="stylesheet" href="./trello-theme.css?v=graph-size-1" />
+  <link rel="stylesheet" href="./priority-ui.css?v=graph-size-1" />
   <script src="./rest-config.js"></script>
-  <script src="./priority-matrix.js"></script>
-  <script src="./priority-ui.js"></script>
+  <script src="./priority-matrix.js?v=graph-size-1"></script>
+  <script src="./priority-ui.js?v=graph-size-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
@@ -93,6 +93,9 @@
         },
         onStateChange: function (state) {
           saveState(state);
+        },
+        onLayoutChange: function () {
+          resizePopup();
         },
         onFormulaChange: function (formulaKey) {
           PriorityTrello.saveBoardFormula(t, formulaKey).catch(function (err) {

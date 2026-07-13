@@ -9,7 +9,7 @@
   var COLOR_SCHEME_SETTINGS_KEY = 'priorityColorScheme';
   var COLOR_SCHEME_REV_KEY = 'priorityColorSchemeRev';
   var boardFormulaKey = 'baseline';
-  var boardColorSchemeKey = 'blue';
+  var boardColorSchemeKey = null;
   // Trello minimum for dynamic badge polling (card-badges / card-detail-badges).
   var BADGE_REFRESH_SEC = 10;
   // Label above the card-back badge; without this Trello shows the Power-Up admin name.
@@ -22,12 +22,34 @@
     return global.PriorityUI || null;
   }
 
+  function defaultColorSchemeKey() {
+    var PU = priorityUI();
+    return (PU && PU.DEFAULT_COLOR_SCHEME_KEY) || 'blue';
+  }
+
+  function trelloBadgeMuted() {
+    var PU = priorityUI();
+    return (PU && PU.TRELLO_BADGE_COLOR_MUTED) || 'light-gray';
+  }
+
+  function trelloBadgeComplete() {
+    var PU = priorityUI();
+    return (PU && PU.TRELLO_BADGE_COLOR_COMPLETE) || 'green';
+  }
+
+  function importanteTierIndex() {
+    var PU = priorityUI();
+    if (PU && PU.TIER_I && PU.TIER_I.IMPORTANTE != null) return PU.TIER_I.IMPORTANTE;
+    return 3;
+  }
+
   function importantInputs() {
     var PU = priorityUI();
     var segments = PU && PU.HEAT_SEGMENTS;
+    var targetI = importanteTierIndex();
     if (segments) {
       for (var i = 0; i < segments.length; i++) {
-        if ((segments[i].label === 'Importante' || segments[i].label === 'Important') && segments[i].preset) {
+        if (segments[i].i === targetI && segments[i].preset) {
           return Object.assign({}, segments[i].preset);
         }
       }
@@ -196,7 +218,7 @@
 
   async function getBoardColorScheme(t) {
     var PU = priorityUI();
-    if (!PU) return 'blue';
+    if (!PU) return defaultColorSchemeKey();
     try {
       var stored = await t.get('board', 'shared', COLOR_SCHEME_SETTINGS_KEY);
       if (typeof stored === 'string') {
@@ -208,14 +230,14 @@
       console.error('Priority board color scheme load failed', err);
     }
     var fromLocal = PU.loadStoredColorSchemeKey();
-    boardColorSchemeKey = fromLocal || PU.DEFAULT_COLOR_SCHEME_KEY || 'blue';
+    boardColorSchemeKey = fromLocal || PU.DEFAULT_COLOR_SCHEME_KEY || defaultColorSchemeKey();
     PU.applyColorScheme(boardColorSchemeKey);
     return boardColorSchemeKey;
   }
 
   async function saveBoardColorScheme(t, schemeKey) {
     var PU = priorityUI();
-    if (!PU) return 'blue';
+    if (!PU) return defaultColorSchemeKey();
     var key = PU.normalizeColorSchemeKey(schemeKey);
     boardColorSchemeKey = key;
     PU.applyColorScheme(key);
@@ -230,7 +252,7 @@
   }
 
   function getCachedBoardColorSchemeKey() {
-    return boardColorSchemeKey || 'blue';
+    return boardColorSchemeKey || defaultColorSchemeKey();
   }
 
   async function ensureBoardPriorityContext(t) {
@@ -271,11 +293,11 @@
     if (PU && PU.tierBadgeDotChar) {
       return PU.tierBadgeDotChar(display, completed);
     }
-    if (completed) return '\u2713';
-    if (!display) return '\u25CF';
-    if (display.blocked) return '\u2298';
-    if (display.inutile) return '\u00B7';
-    return '\u25CF';
+    if (completed) return (PU && PU.BADGE_DOT_COMPLETE) || '\u2713';
+    if (!display) return (PU && PU.BADGE_DOT_DEFAULT) || '\u25CF';
+    if (display.blocked) return (PU && PU.BLOCKED_SYMBOL) || '\u2298';
+    if (display.inutile) return (PU && PU.BADGE_DOT_INUTILE) || '\u00B7';
+    return (PU && PU.BADGE_DOT_DEFAULT) || '\u25CF';
   }
 
   function incompleteBadgeLabel(display) {
@@ -283,9 +305,11 @@
     if (PU && PU.taskBadgeLabel) {
       return PU.taskBadgeLabel(display);
     }
+    if (PU && PU.taskBadgeLabelForTierKey) {
+      return PU.taskBadgeLabelForTierKey(String(display.tierLabel || display.label || ''));
+    }
     var tierKey = String(display.tierLabel || display.label || '');
-    if (tierKey === 'Importante' || tierKey === 'Important') return 'T\u00e2che importante';
-    return tierKey ? 'T\u00e2che ' + tierKey.toLowerCase() : '';
+    return tierKey ? 'T\u00e2che ' + tierKey.charAt(0).toLowerCase() + tierKey.slice(1) : '';
   }
 
   // Any t.card().get() chain object exposes .get — truthy, not completion data.
@@ -314,7 +338,12 @@
   }
 
   function formatCompletedBadgeLabel(taskLabel) {
-    return 'Compl\u00e9t\u00e9 (' + taskLabel + ')';
+    var PU = priorityUI();
+    if (PU && PU.formatCompletedBadgeLabel) {
+      return PU.formatCompletedBadgeLabel(taskLabel);
+    }
+    var prefix = (PU && PU.COMPLETED_BADGE_PREFIX) || 'Compl\u00e9t\u00e9';
+    return prefix + ' (' + taskLabel + ')';
   }
 
   function formatBlockedBoardBadgeText(display) {
@@ -324,10 +353,9 @@
       var reason = typeof d.blockedReason === 'string' ? d.blockedReason.trim() : '';
       return PU.formatBlockedBadgeText(d, reason || undefined);
     }
-    var tierKey = String(d.tierLabel || d.label || '');
-    var label = tierKey ? 'T\u00e2che ' + tierKey.toLowerCase() : 'T\u00e2che';
+    var label = incompleteBadgeLabel(d) || 'T\u00e2che';
     var trimmed = typeof d.blockedReason === 'string' ? d.blockedReason.trim() : '';
-    var suffix = trimmed || 'Bloqu\u00e9';
+    var suffix = trimmed || ((PU && PU.BLOCKED_LABEL) || 'Bloqu\u00e9');
     return label + ' (' + suffix + ')';
   }
 
@@ -351,15 +379,20 @@
     if (PU && PU.tierTrelloBadgeColor) {
       return PU.tierTrelloBadgeColor(display);
     }
-    return 'light-gray';
+    return trelloBadgeMuted();
   }
 
   function buildCardFaceBadge(display, completed) {
     if (!display) return null;
     return {
       text: formatBadgeText(display, completed),
-      color: completed ? 'green' : tierDetailBadgeColor(display),
+      color: completed ? trelloBadgeComplete() : tierDetailBadgeColor(display),
     };
+  }
+
+  function definePriorityLabel() {
+    var PU = priorityUI();
+    return (PU && PU.DEFINE_PRIORITY_LABEL) || 'D\u00e9finir la priorit\u00e9';
   }
 
   function parseCardNameValue(value) {
@@ -491,8 +524,8 @@
             if (!data.display) {
               return withBadgeRefresh({
                 title: CARD_DETAIL_BADGE_TITLE,
-                text: 'Définir la priorité',
-                color: 'green',
+                text: definePriorityLabel(),
+                color: trelloBadgeComplete(),
                 callback: openCallback,
               });
             }
@@ -508,8 +541,8 @@
             console.error('Priority card-detail-badges dynamic failed', err);
             return withBadgeRefresh({
               title: CARD_DETAIL_BADGE_TITLE,
-              text: 'Définir la priorité',
-              color: 'green',
+              text: definePriorityLabel(),
+              color: trelloBadgeComplete(),
               callback: openCallback,
             });
           });

@@ -52,7 +52,10 @@ var critiqueBlockedDisplay = {
   tierLabel: 'Critique'
 };
 
-var TRELLO_BADGE_NAMES = ['blue', 'green', 'orange', 'red', 'yellow', 'purple', 'pink', 'sky', 'lime', 'light-gray'];
+var TRELLO_BADGE_NAMES = PU.TRELLO_BADGE_COLOR_NAMES || [
+  'blue', 'green', 'orange', 'red', 'yellow', 'purple', 'pink', 'sky', 'lime', 'light-gray'
+];
+var BADGE_COLOR_COMPLETE = PU.TRELLO_BADGE_COLOR_COMPLETE || 'green';
 
 function isTrelloBadgeColor(name) {
   return TRELLO_BADGE_NAMES.indexOf(name) >= 0;
@@ -70,7 +73,7 @@ check(
 );
 check(
   'complete urgent badge color',
-  PT.buildCardFaceBadge(urgentDisplay, true).color === 'green'
+  PT.buildCardFaceBadge(urgentDisplay, true).color === BADGE_COLOR_COMPLETE
 );
 check(
   'incomplete urgent badge color is valid',
@@ -82,7 +85,7 @@ check(
 );
 check(
   'incomplete important badge color is not green',
-  PT.buildCardFaceBadge(importantDisplay, false).color !== 'green'
+  PT.buildCardFaceBadge(importantDisplay, false).color !== BADGE_COLOR_COMPLETE
 );
 check(
   'incomplete important badge color is valid',
@@ -90,7 +93,7 @@ check(
 );
 check(
   'complete important badge color',
-  PT.buildCardFaceBadge(importantDisplay, true).color === 'green'
+  PT.buildCardFaceBadge(importantDisplay, true).color === BADGE_COLOR_COMPLETE
 );
 check(
   'urgent and prioritaire badge colors differ',
@@ -112,10 +115,10 @@ check(
   (function () {
     var samples = PU.schemeBadgePreviewSamples();
     if (!Array.isArray(samples) || samples.length !== PU.TIERS.length) return false;
-    if (samples[0].label !== 'T\u00e2che critique') return false;
-    if (samples[1].label !== 'T\u00e2che urgente') return false;
-    if (samples[3].label !== 'T\u00e2che importante') return false;
-    if (samples[6].label !== 'T\u00e2che optionnelle') return false;
+    if (samples[PU.TIER_I.CRITIQUE].label !== PU.TASK_BADGE_LABELS.Critique) return false;
+    if (samples[PU.TIER_I.URGENTE].label !== PU.TASK_BADGE_LABELS.Urgente) return false;
+    if (samples[PU.TIER_I.IMPORTANTE].label !== PU.TASK_BADGE_LABELS.Importante) return false;
+    if (samples[PU.TIER_I.OPTIONNELLE].label !== PU.TASK_BADGE_LABELS.Optionnelle) return false;
     return samples.every(function (sample) {
       return (
         typeof sample.tierI === 'number' &&
@@ -240,7 +243,7 @@ check(
 );
 check(
   'blocked complete badge color',
-  PT.buildCardFaceBadge(blockedDisplay, true).color === 'green'
+  PT.buildCardFaceBadge(blockedDisplay, true).color === BADGE_COLOR_COMPLETE
 );
 check(
   'blocked incomplete badge color matches tier',
@@ -423,6 +426,31 @@ check(
     return (
       display.dueDate === due &&
       display.dueCountdown === PU.formatDueCountdown(due)
+    );
+  })()
+);
+check(
+  'shortTierLabel keeps countdown suffix',
+  PU.shortTierLabel('Urgente (3 jours restants)') === 'Urg (3 jours restants)'
+);
+check(
+  'blocked badge ignores due countdown in board text',
+  (function () {
+    var text = PT.formatBadgeText(
+      {
+        tierLabel: 'Urgente',
+        label: 'Urgente',
+        tierI: 1,
+        blocked: true,
+        blockedReason: 'En attente d\'une autre t\u00e2che',
+        dueDate: addDaysIso('2026-07-13', 3),
+        dueCountdown: '3 jours restants',
+      },
+      false
+    );
+    return (
+      text.indexOf('3 jours restants') === -1 &&
+      text.indexOf('En attente d\'une autre t\u00e2che') !== -1
     );
   })()
 );

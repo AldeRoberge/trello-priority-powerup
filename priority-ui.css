@@ -1179,16 +1179,17 @@ body.help-modal-open {
 .heat-badge-label {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   grid-column: 2;
   grid-row: 1;
   font-size: 19px;
   font-weight: 600;
-  line-height: 1;
+  line-height: 1.15;
   color: var(--heat-text, var(--heat-accent-fallback));
   min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
+  white-space: normal;
+  overflow: visible;
 }
 
 .heat-badge-meta {
@@ -1492,7 +1493,7 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 
 /* ── Calc graph panel ── */
 .calc-graph-panel {
-  padding-top: 2px;
+  padding-top: 4px;
 }
 
 .calc-graph-toggle {
@@ -1502,25 +1503,24 @@ html[data-color-mode="dark"] .heat-score-tooltip {
   gap: 8px;
   width: 100%;
   margin: 0;
-  padding: 6px 14px;
-  border: none;
-  border-radius: var(--radius);
-  background: transparent;
+  padding: 8px 12px;
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--text-secondary);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
   cursor: pointer;
   text-align: left;
-  transition: background 0.12s, color 0.12s;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 
 .calc-graph-toggle:hover,
 .calc-graph-toggle:focus-visible {
-  color: var(--text-primary);
   background: var(--surface-hover);
+  border-color: color-mix(in srgb, var(--text-primary) 18%, var(--border));
 }
 
 .calc-graph-toggle:focus-visible {
@@ -1532,27 +1532,34 @@ html[data-color-mode="dark"] .heat-score-tooltip {
   min-width: 0;
 }
 
-.calc-graph-toggle .ti {
-  font-size: 14px;
+.calc-graph-toggle-chevron {
+  flex-shrink: 0;
+  font-size: 12px;
   line-height: 1;
   color: var(--text-muted);
-  transition: transform 0.15s ease;
+  transition: transform 0.12s ease;
 }
 
-.calc-graph-panel:not(.is-collapsed) .calc-graph-toggle .ti {
-  transform: rotate(180deg);
+.calc-graph-panel:not(.is-collapsed) .calc-graph-toggle-chevron {
+  transform: none;
 }
 
 .calc-graph-body {
-  padding: 2px 0 2px;
+  padding: 8px 0 2px;
 }
 
 .calc-graph-panel.is-collapsed .calc-graph-body {
-  display: none;
+  display: none !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 .calc-graph-section {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .calc-graph-section:last-child {
@@ -1561,22 +1568,22 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 
 /* ── Response surface (RSM) priority chart ── */
 .calc-rsm-section {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .calc-rsm-wrap {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  width: 100%;
-  max-width: 200px;
-  margin: 0 14px;
+  gap: 2px;
+  width: 260px;
+  max-width: 260px;
+  margin: 0 auto;
 }
 
 .calc-rsm-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 22px;
+  grid-template-columns: minmax(0, 1fr) 18px;
   align-items: stretch;
   gap: 4px;
   width: 100%;
@@ -1586,10 +1593,10 @@ html[data-color-mode="dark"] .heat-score-tooltip {
   position: relative;
   width: 100%;
   min-width: 0;
-  aspect-ratio: 210 / 168;
+  aspect-ratio: 260 / 208;
   touch-action: none;
   overflow: visible;
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .calc-rsm-ease-col {
@@ -1604,7 +1611,7 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 }
 
 .calc-rsm-ease-label {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 500;
   line-height: 1;
   color: var(--text-muted);
@@ -1613,16 +1620,16 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 }
 
 .calc-rsm-ease-label-top {
-  flex: 0 0 5.952%;
+  flex: 0 0 6.25%;
 }
 
 .calc-rsm-ease-label-bottom {
-  flex: 0 0 15.476%;
+  flex: 0 0 17.1875%;
 }
 
 .calc-rsm-ease-range {
   flex: 1 1 auto;
-  width: 16px;
+  width: 14px;
   min-height: 0;
   margin: 0;
   padding: 0;
@@ -1708,14 +1715,14 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 }
 
 .calc-rsm-tick-label {
-  font-size: 10px;
+  font-size: 9px;
   fill: var(--text-muted);
   font-family: inherit;
   pointer-events: none;
 }
 
 .calc-rsm-axis-label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   font-family: inherit;
   fill: var(--text-muted);

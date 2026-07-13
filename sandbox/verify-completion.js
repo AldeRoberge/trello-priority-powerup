@@ -58,6 +58,7 @@ check('storage key', CT.CARD_COMPLETION_KEY === 'cardCompletion');
 check('completion scheme storage key', CT.COMPLETION_COLOR_SCHEME_SETTINGS_KEY === 'completionColorScheme');
 check('default scheme traffic', CUI.DEFAULT_COMPLETION_SCHEME_KEY === 'traffic');
 check('five completion schemes', Object.keys(CUI.COMPLETION_COLOR_SCHEMES).length === 5);
+check('progress oklch anchors exported', !!CUI.PROGRESS_OKLCH && !!CUI.PROGRESS_OKLCH.GRAY && !!CUI.PROGRESS_OKLCH.BLUE && !!CUI.PROGRESS_OKLCH.GREEN);
 check(
   'color at 0 differs from 100',
   CUI.colorAtProgress('traffic', 0).toLowerCase() !== CUI.colorAtProgress('traffic', 100).toLowerCase()
@@ -67,6 +68,29 @@ check('color at 0 is light-gray badge', CUI.completionTrelloBadgeColor(0) === 'l
 check(
   'completionColorForProgress returns hex',
   /^#[0-9a-f]{6}$/i.test(CUI.completionColorForProgress(50))
+);
+
+// Gray → blue → green ramp (no warm/red start)
+function hexToRgb(hex) {
+  var h = String(hex).replace('#', '');
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16),
+  };
+}
+var c0 = hexToRgb(CUI.colorAtProgress('traffic', 0));
+var c50 = hexToRgb(CUI.colorAtProgress('traffic', 50));
+var c100 = hexToRgb(CUI.colorAtProgress('traffic', 100));
+check(
+  'ramp 0% is cool gray (not red)',
+  c0.r <= c0.g + 12 && c0.b >= c0.r - 8 && (Math.max(c0.r, c0.g, c0.b) - Math.min(c0.r, c0.g, c0.b)) < 80
+);
+check('ramp 50% leans blue', c50.b > c50.r && c50.b >= c50.g);
+check('ramp 100% leans green', c100.g > c100.r && c100.g >= c100.b);
+check(
+  'scheme gradient includes mid stop',
+  (CUI.schemeGradientCss('traffic').match(/#/g) || []).length >= 3
 );
 check('difficulty weight easy', CT.difficultyWeight(0) === 1);
 check('difficulty weight hard', CT.difficultyWeight(4) === 5);
