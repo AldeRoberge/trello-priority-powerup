@@ -12,28 +12,9 @@
       ? global.PriorityTrello.BADGE_REFRESH_SEC
       : 10;
 
-  // Difficulty 0–4 (Facile → Très difficile), aligned with priority sliders.
-  // Weight = difficulty + 1 → range 1–5 (easy tasks count less toward total work).
-  var DIFFICULTY_MIN = 0;
-  var DIFFICULTY_MAX = 4;
   var ITEM_TEXT_MAX = 500;
   var PROGRESS_MIN = 0;
   var PROGRESS_MAX = 100;
-
-  var DIFFICULTY_LEVELS = [
-    { value: 0, label: 'Facile', short: 'F' },
-    { value: 1, label: 'Assez facile', short: 'AF' },
-    { value: 2, label: 'Moyen', short: 'M' },
-    { value: 3, label: 'Difficile', short: 'D' },
-    { value: 4, label: 'Très difficile', short: 'TD' },
-  ];
-
-  function difficultyWeight(difficulty) {
-    var d = asNumber(difficulty);
-    if (!isFinite(d)) d = 2;
-    d = Math.max(DIFFICULTY_MIN, Math.min(DIFFICULTY_MAX, Math.round(d)));
-    return d + 1;
-  }
 
   function asNumber(value) {
     if (typeof value === 'number' && isFinite(value)) return value;
@@ -76,9 +57,7 @@
     var text = typeof raw.text === 'string' ? raw.text.trim() : '';
     if (!text) return null;
     if (text.length > ITEM_TEXT_MAX) text = text.slice(0, ITEM_TEXT_MAX);
-    var difficulty = asNumber(raw.difficulty);
-    if (!isFinite(difficulty)) difficulty = 2;
-    difficulty = Math.max(DIFFICULTY_MIN, Math.min(DIFFICULTY_MAX, Math.round(difficulty)));
+    // Legacy `difficulty` fields are ignored (equal-weight progress).
 
     var progress = asNumber(raw.progress);
     if (!isFinite(progress)) {
@@ -90,7 +69,6 @@
       id: typeof raw.id === 'string' && raw.id ? raw.id : generateId(),
       text: text,
       done: progress >= PROGRESS_MAX,
-      difficulty: difficulty,
       progress: progress,
     });
   }
@@ -114,7 +92,7 @@
     return out;
   }
 
-  // Weighted total: sum(weight * progress/100) / sum(weight) * 100
+  // Equal-weight average of item progress percentages.
   function computeWeightedProgress(items) {
     if (!items || !items.length) {
       return {
@@ -126,22 +104,20 @@
         hasItems: false,
       };
     }
-    var weightedSum = 0;
-    var totalWeight = 0;
+    var progressSum = 0;
     var doneCount = 0;
     for (var i = 0; i < items.length; i++) {
-      var w = difficultyWeight(items[i].difficulty);
       var p = itemProgress(items[i]);
-      totalWeight += w;
-      weightedSum += w * (p / PROGRESS_MAX);
+      progressSum += p / PROGRESS_MAX;
       if (p >= PROGRESS_MAX) doneCount++;
     }
-    var percent = totalWeight > 0 ? Math.round((weightedSum / totalWeight) * 100) : 0;
+    var totalWeight = items.length;
+    var percent = Math.round((progressSum / totalWeight) * 100);
     return {
       percent: percent,
       doneCount: doneCount,
       totalCount: items.length,
-      doneWeight: Math.round(weightedSum * 10) / 10,
+      doneWeight: Math.round(progressSum * 10) / 10,
       totalWeight: totalWeight,
       hasItems: true,
     };
@@ -161,8 +137,8 @@
   }
 
   /**
-   * Master slider: proportionally scale each item's progress so the weighted
-   * average approaches targetPercent. Items at 0% when current is 0 are set
+   * Master slider: proportionally scale each item's progress so the average
+   * approaches targetPercent. Items at 0% when current is 0 are set
    * uniformly to the target. Caps at 100% per item; done syncs from progress.
    */
   function applyMasterProgress(items, targetPercent) {
@@ -172,7 +148,6 @@
       return syncDoneFromProgress({
         id: item.id,
         text: item.text,
-        difficulty: item.difficulty,
         progress: itemProgress(item),
         done: item.done === true,
       });
@@ -417,12 +392,8 @@
     COMPLETION_COLOR_SCHEME_SETTINGS_KEY: COMPLETION_COLOR_SCHEME_SETTINGS_KEY,
     COMPLETION_COLOR_SCHEME_REV_KEY: COMPLETION_COLOR_SCHEME_REV_KEY,
     ITEM_TEXT_MAX: ITEM_TEXT_MAX,
-    DIFFICULTY_MIN: DIFFICULTY_MIN,
-    DIFFICULTY_MAX: DIFFICULTY_MAX,
     PROGRESS_MIN: PROGRESS_MIN,
     PROGRESS_MAX: PROGRESS_MAX,
-    DIFFICULTY_LEVELS: DIFFICULTY_LEVELS,
-    difficultyWeight: difficultyWeight,
     clampProgress: clampProgress,
     itemProgress: itemProgress,
     syncDoneFromProgress: syncDoneFromProgress,

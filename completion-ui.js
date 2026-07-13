@@ -1,4 +1,4 @@
-/* Completion popup UI — subtask list, difficulty, weighted progress sliders. */
+/* Completion popup UI — subtask list and progress sliders. */
 (function (global) {
   'use strict';
 
@@ -294,24 +294,6 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
-  }
-
-  function difficultyOptionsHtml(selected, CT) {
-    var levels = CT && CT.DIFFICULTY_LEVELS ? CT.DIFFICULTY_LEVELS : [];
-    return levels
-      .map(function (level) {
-        var sel = level.value === selected ? ' selected' : '';
-        return (
-          '<option value="' +
-          level.value +
-          '"' +
-          sel +
-          '>' +
-          escapeHtml(level.label) +
-          '</option>'
-        );
-      })
-      .join('');
   }
 
   var COMPLETION_ENCOURAGEMENT_TIERS = [
