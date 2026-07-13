@@ -1204,6 +1204,17 @@
     return upper === first ? text : upper + text.slice(1);
   }
 
+  /** French compact clock for collapsed section summaries (e.g. "9 h", "14 h 30"). */
+  function formatDueTimeCompactFr(time) {
+    var normalized = normalizeDueTime(time);
+    if (!normalized) return '';
+    var parts = normalized.split(':');
+    var hours = +parts[0];
+    var minutes = +parts[1];
+    if (minutes === 0) return String(hours) + ' h';
+    return String(hours) + ' h ' + pad2(minutes);
+  }
+
   /** Compact header summary when an enabled due-date section is collapsed. */
   function formatDueDateCompactSummary(iso, time, now) {
     var normalized = normalizeDueDate(iso);
@@ -1214,8 +1225,8 @@
     else if (days === 1) dayPart = 'Demain';
     else if (days === -1) dayPart = 'Hier';
     else dayPart = capitalizeCountdownPhrase(formatDueCountdownDays(days));
-    var dueTime = normalizeDueTime(time);
-    return dueTime ? dayPart + ' \u00b7 ' + dueTime : dayPart;
+    var dueTime = formatDueTimeCompactFr(time);
+    return dueTime ? dayPart + ' \u00e0 ' + dueTime : dayPart;
   }
 
   function formatDueCountdownDays(days) {
@@ -3224,7 +3235,7 @@
         'aria-label',
         expanded ? chrome.collapseLabel : chrome.expandLabel
       );
-      var text = enabled && !expanded ? (getSummary() || '') : '';
+      var text = enabled ? (getSummary() || '') : '';
       chrome.summary.textContent = text;
       chrome.summary.hidden = !text;
       chrome.summary.setAttribute('aria-hidden', text ? 'false' : 'true');
@@ -3264,14 +3275,16 @@
     }
 
     function refreshSummary() {
-      if (!(enabled && !expanded)) {
+      if (!enabled) {
         chrome.summary.hidden = true;
         chrome.summary.textContent = '';
+        chrome.summary.setAttribute('aria-hidden', 'true');
         return;
       }
       var text = getSummary() || '';
       chrome.summary.textContent = text;
       chrome.summary.hidden = !text;
+      chrome.summary.setAttribute('aria-hidden', text ? 'false' : 'true');
     }
 
     function focusControlAtPoint(clientX, clientY) {
@@ -3388,7 +3401,8 @@
       enabled: checked,
       expanded: checked,
       getSummary: function () {
-        return readReason() || BLOCKED_LABEL;
+        var reason = readReason() || BLOCKED_LABEL;
+        return capitalizeCountdownPhrase(reason) + '...';
       },
       onLayoutChange: onLayoutChange,
       onEnableChange: function () {
@@ -5335,7 +5349,6 @@
     el.appendChild(panel);
 
     var graphCollapsed = true;
-    var graphEnabled = false;
     var graphCollapse = null;
     var surfaceCtx = surfaceCanvas.getContext('2d', { alpha: true });
 
@@ -5712,16 +5725,11 @@
       graphCollapse.setExpanded(!collapsed);
     }
 
-    function setGraphEnabled(nextEnabled, options) {
-      if (!graphCollapse) return;
-      graphCollapse.setEnabled(!!nextEnabled, options || { expand: !!nextEnabled });
-    }
-
     function syncGraphVisibility() {
       if (!graphCollapse) return;
       graphCollapsed = !graphCollapse.isExpanded();
       panel.classList.toggle('is-collapsed', graphCollapsed);
-      panel.classList.toggle('is-enabled', graphEnabled);
+      panel.classList.toggle('is-enabled', true);
       if (!graphCollapsed && lastScene.result) {
         paint(lastScene.result, {
           urgency: lastScene.U,
@@ -5738,7 +5746,8 @@
       field: panel,
       body: body,
       chrome: chrome,
-      enabled: false,
+      alwaysEnabled: true,
+      enabled: true,
       expanded: false,
       getSummary: function () {
         if (!lastScene.display) return '';
@@ -5746,13 +5755,8 @@
       },
       onLayoutChange: function () {
         syncGraphVisibility();
-      },
-      onEnableChange: function (on) {
-        graphEnabled = on;
-        syncGraphVisibility();
       }
     });
-    graphEnabled = graphCollapse.isEnabled();
     graphCollapsed = !graphCollapse.isExpanded();
 
     return {
@@ -5760,8 +5764,8 @@
       paint: paint,
       updateTheme: updateChartTheme,
       setCollapsed: setGraphCollapsed,
-      setEnabled: setGraphEnabled,
-      isEnabled: function () { return !!(graphCollapse && graphCollapse.isEnabled()); },
+      setEnabled: function () { /* Graphique is always enabled */ },
+      isEnabled: function () { return true; },
       isExpanded: function () { return !!(graphCollapse && graphCollapse.isExpanded()); },
       disconnect: function () {
         if (chartResizeObserver) chartResizeObserver.disconnect();
@@ -6207,14 +6211,17 @@
       console.error('PriorityUI.createCalcGraphPanel failed', { id: variantId, error: err });
     }
 
-    var blockedSection = document.createElement('div');
-    blockedSection.className = 'variant-blocked-section';
-    card.appendChild(blockedSection);
+    var dueSection = document.createElement('div');
+    dueSection.className = 'variant-due-section';
+    card.appendChild(dueSection);
 
-    enAttenteField = createEnAttenteField({
-      el: blockedSection,
-      value: state.enAttente,
-      blockedReason: state.blockedReason,
+    dueDateField = createDueDateField({
+      el: dueSection,
+      value: {
+        dueDate: state.dueDate,
+        dueTime: state.dueTime,
+        dueEnabled: state.dueEnabled !== false && !!state.dueDate
+      },
       onChange: function () {
         cancelSliderAnim();
         repaint();
@@ -6227,17 +6234,14 @@
       }
     });
 
-    var dueSection = document.createElement('div');
-    dueSection.className = 'variant-due-section';
-    card.appendChild(dueSection);
+    var blockedSection = document.createElement('div');
+    blockedSection.className = 'variant-blocked-section';
+    card.appendChild(blockedSection);
 
-    dueDateField = createDueDateField({
-      el: dueSection,
-      value: {
-        dueDate: state.dueDate,
-        dueTime: state.dueTime,
-        dueEnabled: state.dueEnabled !== false && !!state.dueDate
-      },
+    enAttenteField = createEnAttenteField({
+      el: blockedSection,
+      value: state.enAttente,
+      blockedReason: state.blockedReason,
       onChange: function () {
         cancelSliderAnim();
         repaint();

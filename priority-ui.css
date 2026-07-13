@@ -283,6 +283,26 @@ body {
   cursor: pointer;
 }
 
+.section-leading-icon {
+  display: inline-flex;
+  align-items: flex-start;
+  flex: 0 0 auto;
+  margin: 1px 0 0;
+  color: var(--text-muted);
+  pointer-events: none;
+  user-select: none;
+}
+
+.section-leading-icon-glyph {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.field--graphique .section-leading-icon {
+  color: var(--text-primary);
+  opacity: 0.72;
+}
+
 .section-collapse-btn {
   flex: 1 1 auto;
   min-width: 0;
@@ -339,6 +359,13 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+
+/* Expanded: keep summary readable but quieter than collapsed */
+.field:not(.is-collapsed) .section-toggle-summary {
+  color: var(--text-muted);
+  opacity: 0.55;
 }
 
 .section-collapse-chevron {
