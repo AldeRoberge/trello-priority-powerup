@@ -147,7 +147,7 @@
       if (!progress) return '';
       if (progress.hasItems) {
         var remaining = progress.totalCount - progress.doneCount;
-        if (remaining <= 0) return 'Aucune tâche restante';
+        if (remaining <= 0) return 'Complété';
         if (remaining === 1) return 'Une tâche restante';
         if (remaining === 2) return 'Deux tâches restantes';
         return remaining + ' tâches restantes';
