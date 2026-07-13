@@ -1229,7 +1229,21 @@
     else if (days === -1) dayPart = 'Hier';
     else dayPart = capitalizeCountdownPhrase(formatDueCountdownDays(days));
     var dueTime = formatDueTimeCompactFr(time);
-    return dueTime ? dayPart + ' \u00e0 ' + dueTime : dayPart;
+    var remaining = formatDueCountdown(normalized, now, time);
+    // Overdue: relative lateness only — no redundant clock ("… à 13 h").
+    if (remaining && remaining.indexOf('En retard') === 0) return remaining;
+    if (dayPart.indexOf('En retard') === 0) return dayPart;
+    var compact = dueTime ? dayPart + ' \u00e0 ' + dueTime : dayPart;
+    // Day-scale remaining already matches dayPart (e.g. "Demain"). Append only
+    // when a clock time yields finer relative text ("16 h restantes").
+    if (!remaining || remaining === dayPart) return compact;
+    if (dueTime) {
+      var ms = msUntilDue(normalized, time, now);
+      if (isFinite(ms) && Math.abs(ms) < MS_PER_DAY) {
+        return compact + ' \u00b7 ' + remaining;
+      }
+    }
+    return compact;
   }
 
   function formatDueCountdownDays(days) {
@@ -3608,9 +3622,6 @@
     body.appendChild(countdown);
     body.appendChild(pickers);
 
-    /* Alias used by refresh helpers that previously keyed off the stacked time row. */
-    var timeRow = pickers;
-
     var timePopover = document.createElement('div');
     timePopover.className = 'due-date-time-popover';
     timePopover.id = uid + '-time-popover';
@@ -4131,8 +4142,9 @@
       }
       var text = formatDueCountdown(current, null, currentTime);
       var past = isDuePast(current, currentTime);
+      // Remaining text lives in `.section-toggle-summary`; keep this node for a11y only.
       countdown.textContent = text;
-      countdown.hidden = !text;
+      countdown.hidden = true;
       countdown.classList.toggle('is-past', past);
       clearBtn.hidden = false;
       field.classList.add('has-due-date');

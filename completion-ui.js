@@ -557,6 +557,22 @@
       return containerEl.querySelector('.tp-completion-item[data-id="' + id + '"]');
     }
 
+    function focusItemTextInput(id) {
+      var row = findItemRow(id);
+      if (!row) return;
+      var input = row.querySelector('.tp-completion-text');
+      if (!input) return;
+      input.focus();
+      var len = String(input.value || '').length;
+      if (typeof input.setSelectionRange === 'function') {
+        try {
+          input.setSelectionRange(len, len);
+        } catch (err) {
+          /* ignore — some input types reject selection */
+        }
+      }
+    }
+
     function syncCheckButton(btn, done) {
       if (!btn) return;
       btn.classList.toggle('is-checked', done);
@@ -645,6 +661,9 @@
         renderList();
       }
       updateProgressUi();
+      if (opts.focusTextItemId) {
+        focusItemTextInput(opts.focusTextItemId);
+      }
       onChange(data);
     }
 
@@ -789,6 +808,9 @@
         emitChange({
           animateItemId: item.id,
           flipWasDone: wasDone,
+          // Keep caret in the name field after checkbox toggle re-render
+          // (including when completed-item progress UI is hidden).
+          focusTextItemId: item.id,
         });
         onResize();
       });
@@ -811,6 +833,8 @@
           emitChange({
             animateItemId: item.id,
             flipWasDone: wasDone,
+            // Done flip hides per-row progress; keep caret on the name field.
+            focusTextItemId: item.id,
           });
         } else {
           renderList();
@@ -825,7 +849,11 @@
           return;
         }
         item.text = trimmed;
-        emitChange();
+        // Persist without re-rendering so a following checkbox click (complete
+        // while editing) is not destroyed by replacing the row DOM.
+        data = CT.normalizeCompletionData(data);
+        updateProgressUi();
+        onChange(data);
       });
 
       textInput.addEventListener('keydown', function (e) {
