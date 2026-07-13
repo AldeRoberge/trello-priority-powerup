@@ -919,13 +919,71 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   margin-bottom: 0;
 }
 
-.tp-page--priority .progress-section-panel {
+.tp-page--priority .variant-progress-section {
   margin-top: 10px;
   padding: 0 10px 8px;
 }
 
+.tp-page--priority .field--progress {
+  margin-bottom: 0;
+  padding: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background 0.2s ease, border-color 0.2s ease, padding 0.2s ease;
+}
+
+.tp-page--priority .field--progress.is-enabled {
+  padding: 10px 12px;
+  background: var(--surface-2, var(--tp-surface-subtle));
+  border-color: var(--border, var(--tp-border));
+}
+
+.tp-page--priority .progress-enable-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tp-page--priority .progress-enable-checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  flex-shrink: 0;
+  accent-color: var(--tp-primary, #0c66e4);
+  cursor: pointer;
+}
+
+.tp-page--priority .progress-enable-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.tp-page--priority .progress-enable-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary, var(--tp-text));
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+}
+
+.tp-page--priority .progress-enable-label:has(.progress-enable-checkbox:focus-visible) {
+  outline: none;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px var(--surface-2, var(--tp-surface)), 0 0 0 4px var(--tp-primary, #0c66e4);
+}
+
 .tp-page--priority .progress-section-body {
   padding-top: 10px;
+  padding-left: 26px;
+}
+
+.tp-page--priority .progress-section-body[hidden] {
+  display: none;
 }
 
 .tp-completion-progress {
@@ -1369,7 +1427,7 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked {
 }
 
 .tp-completion-add {
-  margin-top: -2px;
+  margin-top: 0;
 }
 
 .tp-completion-add-row {

@@ -123,7 +123,7 @@
     MINT: [0.700, 0.100, 170],
     BLUE_GREEN: [0.640, 0.120, 175],
     GREEN_SOFT: [0.660, 0.130, 155],
-    GREEN: [0.600, 0.170, 145],
+    GREEN: [0.580, 0.195, 145],
     GREEN_MUTED: [0.580, 0.120, 145]
   };
 
@@ -194,8 +194,12 @@
   function progressStopT(percent, oklabStops) {
     var stops = oklabStops || activeOklabStops;
     var maxIdx = stops.length - 1;
-    var pct = Math.max(0, Math.min(100, percent));
-    return (pct / 100) * maxIdx;
+    var pct = Math.max(0, Math.min(100, Number(percent) || 0));
+    if (maxIdx <= 0) return 0;
+    // Reserve the final stop for a hard 100% punch — map 0–99 onto
+    // stops[0]…stops[maxIdx - 1] so 99% ≠ almost-green.
+    if (pct >= 100) return maxIdx;
+    return (pct / 99) * (maxIdx - 1);
   }
 
   function rgbAtProgress(percent, schemeKey) {
@@ -215,6 +219,9 @@
   }
 
   function completionColorForProgress(percent) {
+    if (percentIsComplete(percent)) {
+      return colorAtProgress(activeCompletionSchemeKey, 100);
+    }
     return colorAtProgress(activeCompletionSchemeKey, percent);
   }
 
@@ -495,6 +502,16 @@
     progressSection.appendChild(progressPanel);
     containerEl.appendChild(progressSection);
 
+    var addSection = document.createElement('section');
+    addSection.className = 'tp-completion-add';
+    addSection.innerHTML =
+      '<div class="tp-completion-add-row">' +
+      '<input type="text" class="tp-input tp-completion-add-input" id="completionAddInput" ' +
+      'placeholder="Ajouter une sous-t\u00e2che\u2026" maxlength="500" autocomplete="off" />' +
+      '<button type="button" class="tp-btn tp-btn--primary tp-completion-add-btn" id="completionAddBtn">Ajouter</button>' +
+      '</div>';
+    containerEl.appendChild(addSection);
+
     var listSection = document.createElement('section');
     listSection.className = 'tp-completion-list-section';
     listSection.innerHTML =
@@ -515,16 +532,6 @@
       '<ul class="tp-completion-list tp-completion-done-list" id="completionDoneList" ' +
       'aria-label="T\u00e2ches termin\u00e9es" hidden></ul>';
     containerEl.appendChild(doneSection);
-
-    var addSection = document.createElement('section');
-    addSection.className = 'tp-completion-add';
-    addSection.innerHTML =
-      '<div class="tp-completion-add-row">' +
-      '<input type="text" class="tp-input tp-completion-add-input" id="completionAddInput" ' +
-      'placeholder="Ajouter une sous-t\u00e2che\u2026" maxlength="500" autocomplete="off" />' +
-      '<button type="button" class="tp-btn tp-btn--primary tp-completion-add-btn" id="completionAddBtn">Ajouter</button>' +
-      '</div>';
-    containerEl.appendChild(addSection);
 
     var listEl = containerEl.querySelector('#completionList');
     var doneListEl = containerEl.querySelector('#completionDoneList');

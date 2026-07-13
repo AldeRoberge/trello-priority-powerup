@@ -63,6 +63,14 @@ check(
   'color at 0 differs from 100',
   CUI.colorAtProgress('traffic', 0).toLowerCase() !== CUI.colorAtProgress('traffic', 100).toLowerCase()
 );
+check(
+  'color at 99 differs from 100 (hard complete snap)',
+  CUI.colorAtProgress('traffic', 99).toLowerCase() !== CUI.colorAtProgress('traffic', 100).toLowerCase()
+);
+check(
+  'completionColorForProgress snaps hard at 100',
+  CUI.completionColorForProgress(99).toLowerCase() !== CUI.completionColorForProgress(100).toLowerCase()
+);
 check('color at 100 is green badge', CUI.completionTrelloBadgeColor(100) === 'green');
 check('color at 0 is light-gray badge', CUI.completionTrelloBadgeColor(0) === 'light-gray');
 check(
