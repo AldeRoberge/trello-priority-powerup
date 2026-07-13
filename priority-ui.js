@@ -1049,10 +1049,11 @@
   var BLOCKED_REASON_CLEAR_LABEL = 'Effacer le motif';
   var BLOCKED_REASON_WAITING_OTHER_TASK = 'En attente d\'une autre t\u00e2che';
   var BLOCKED_LINK_TYPE_SUBTASK = 'subtask';
-  var BLOCKED_SUBTASK_PICKER_LABEL = 'Sous-t\u00e2che bloquante';
+  var BLOCKED_SUBTASK_PICKER_LABEL = 'T\u00e2ches bloquantes';
   var BLOCKED_SUBTASK_EMPTY = 'Aucune sous-t\u00e2che';
-  var BLOCKED_SUBTASK_CLEAR_LABEL = 'Retirer le lien vers la sous-t\u00e2che';
-  var BLOCKED_SUBTASK_FALLBACK_LABEL = 'Sous-t\u00e2che';
+  var BLOCKED_SUBTASK_CLEAR_LABEL = 'Retirer le lien vers la t\u00e2che';
+  var BLOCKED_SUBTASK_FALLBACK_LABEL = 'T\u00e2che inconnue';
+  var BLOCKED_WAITING_ON_PREFIX = 'En attente de';
   var BLOCKED_REASON_FREQ_STORAGE_KEY = 'trello-priority-powerup/blocked-reason-freq';
   var BLOCKED_REASON_EMPTY_SUGGESTION_CAP = 10;
   /** Core presets shown in the empty-state suggestion set (with frequent reasons). */
@@ -1221,9 +1222,8 @@
 
   /**
    * Build ranked suggestion labels.
-   * - Empty input + no selections: top frequent ∪ core presets (capped).
-   * - Empty input + selections: none (caller hides the list).
-   * - Typing: dictionary ∪ frequent customs matching substring.
+   * - Empty input: top frequent ∪ core presets (capped), excluding selected.
+   * - Typing: dictionary ∪ frequent customs matching substring, excluding selected.
    */
   function rankBlockedReasonSuggestions(options) {
     var query = options && options.query != null
@@ -1235,7 +1235,6 @@
       var sk = blockedReasonStorageKey(selected[s]);
       if (sk) selectedKeys[sk] = true;
     }
-    if (!query && selected.length >= 1) return [];
 
     var freqMap = options && options.freqMap ? options.freqMap : loadBlockedReasonFreq();
     var pool = Object.create(null);
@@ -1305,7 +1304,7 @@
     for (var i = 0; i < list.length; i++) {
       var reason = normalizeBlockedReason(list[i]);
       if (!reason) continue;
-      var key = reason.toLocaleLowerCase('fr-FR');
+      var key = blockedReasonStorageKey(reason);
       if (seen[key]) continue;
       seen[key] = true;
       out.push(reason);
@@ -1323,17 +1322,83 @@
       return false;
     }
     if (reasonOrReasons && typeof reasonOrReasons === 'object') {
+      if (
+        Array.isArray(reasonOrReasons.blockedLinks) &&
+        reasonOrReasons.blockedLinks.length > 0
+      ) {
+        return true;
+      }
+      if (normalizeBlockedLink(reasonOrReasons.blockedLink)) return true;
       return isBlockedWaitingOtherTask(normalizeBlockedReasons(reasonOrReasons));
     }
     return normalizeBlockedReason(reasonOrReasons) === BLOCKED_REASON_WAITING_OTHER_TASK;
   }
 
   /**
+   * Chip / badge label for a waiting-on-task link: `En attente de (TASK_NAME)`.
+   */
+  function formatBlockedWaitingOnLabel(taskName) {
+    var name =
+      typeof taskName === 'string' && taskName.trim()
+        ? taskName.trim()
+        : BLOCKED_SUBTASK_FALLBACK_LABEL;
+    return BLOCKED_WAITING_ON_PREFIX + ' (' + name + ')';
+  }
+
+  function resolveBlockedLinkLabel(link, items) {
+    if (!link) return BLOCKED_SUBTASK_FALLBACK_LABEL;
+    var item = findSubtaskById(items || [], link.id);
+    if (item && item.text) return String(item.text).trim() || BLOCKED_SUBTASK_FALLBACK_LABEL;
+    if (typeof link.label === 'string' && link.label.trim()) return link.label.trim();
+    return BLOCKED_SUBTASK_FALLBACK_LABEL;
+  }
+
+  /**
+   * Expand reasons for display: replace the generic waiting-other reason with
+   * one label per linked task (`En attente de (Name)`), using stored labels
+   * when live subtask text is unavailable.
+   */
+  function expandBlockedReasonsForDisplay(reasons, links, items) {
+    var list = normalizeBlockedReasons(reasons);
+    var linkList = normalizeBlockedLinks(links);
+    var out = [];
+    var waitingExpanded = false;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] === BLOCKED_REASON_WAITING_OTHER_TASK) {
+        waitingExpanded = true;
+        if (linkList.length) {
+          for (var j = 0; j < linkList.length; j++) {
+            out.push(
+              formatBlockedWaitingOnLabel(resolveBlockedLinkLabel(linkList[j], items))
+            );
+          }
+        } else {
+          out.push(BLOCKED_REASON_WAITING_OTHER_TASK);
+        }
+      } else {
+        out.push(list[i]);
+      }
+    }
+    if (!waitingExpanded && linkList.length) {
+      for (var k = 0; k < linkList.length; k++) {
+        out.push(
+          formatBlockedWaitingOnLabel(resolveBlockedLinkLabel(linkList[k], items))
+        );
+      }
+    }
+    return out;
+  }
+
+  /**
    * Elegant French summary for badges / collapsed section.
    * One reason as-is; several as comma-separated when short, else « first +N ».
+   * Pass `links` (and optional `items`) to expand waiting-on-task chips with names.
    */
   function formatBlockedReasonsSummary(reasons, options) {
-    var list = normalizeBlockedReasons(reasons);
+    var list =
+      options && (options.links != null || options.items != null)
+        ? expandBlockedReasonsForDisplay(reasons, options.links, options.items)
+        : normalizeBlockedReasons(reasons);
     var emptyLabel =
       options && options.empty != null ? options.empty : BLOCKED_LABEL;
     if (!list.length) return emptyLabel;
@@ -1344,24 +1409,62 @@
     return list[0] + ' +' + (list.length - 1);
   }
 
-  /** Normalize shared-storage blocked link (`{ type: 'subtask', id }`). */
+  /** Normalize one blocked link (`{ type: 'subtask', id, label? }`). */
   function normalizeBlockedLink(raw) {
     if (!raw || typeof raw !== 'object') return null;
     if (raw.type !== BLOCKED_LINK_TYPE_SUBTASK) return null;
     var id = typeof raw.id === 'string' ? raw.id.trim() : '';
     if (!id) return null;
-    return { type: BLOCKED_LINK_TYPE_SUBTASK, id: id };
+    var out = { type: BLOCKED_LINK_TYPE_SUBTASK, id: id };
+    if (typeof raw.label === 'string' && raw.label.trim()) {
+      out.label = raw.label.trim();
+    }
+    return out;
   }
 
-  function blockedLinkFromRaw(raw) {
-    if (!raw || typeof raw !== 'object') return null;
-    var link = normalizeBlockedLink(raw.blockedLink);
-    if (link) return link;
-    if (typeof raw.blockedSubtaskId === 'string') {
-      var id = raw.blockedSubtaskId.trim();
-      if (id) return { type: BLOCKED_LINK_TYPE_SUBTASK, id: id };
+  /**
+   * Normalize multi waiting-on links to a de-duplicated `{ type, id, label? }[]`.
+   * Accepts an array, a single link, or an inputs object with
+   * `blockedLinks` (preferred), legacy `blockedLink`, or `blockedSubtaskId`.
+   */
+  function normalizeBlockedLinks(raw) {
+    var list = [];
+    if (Array.isArray(raw)) {
+      list = raw;
+    } else if (raw && typeof raw === 'object') {
+      if (Array.isArray(raw.blockedLinks)) {
+        list = raw.blockedLinks;
+      } else if (raw.blockedLink != null || raw.type === BLOCKED_LINK_TYPE_SUBTASK) {
+        var single =
+          raw.type === BLOCKED_LINK_TYPE_SUBTASK
+            ? normalizeBlockedLink(raw)
+            : normalizeBlockedLink(raw.blockedLink);
+        if (single) list = [single];
+      }
+      if (!list.length && typeof raw.blockedSubtaskId === 'string') {
+        var legacyId = raw.blockedSubtaskId.trim();
+        if (legacyId) list = [{ type: BLOCKED_LINK_TYPE_SUBTASK, id: legacyId }];
+      }
     }
-    return null;
+    var out = [];
+    var seen = Object.create(null);
+    for (var i = 0; i < list.length; i++) {
+      var link = normalizeBlockedLink(list[i]);
+      if (!link || seen[link.id]) continue;
+      seen[link.id] = true;
+      out.push(link);
+    }
+    return out;
+  }
+
+  function blockedLinksFromRaw(raw) {
+    return normalizeBlockedLinks(raw);
+  }
+
+  /** @deprecated Prefer blockedLinksFromRaw / normalizeBlockedLinks. */
+  function blockedLinkFromRaw(raw) {
+    var links = normalizeBlockedLinks(raw);
+    return links.length ? links[0] : null;
   }
 
   function findSubtaskById(items, id) {
@@ -1943,9 +2046,18 @@
     if (reason != null && reason !== '') {
       suffix = typeof reason === 'string'
         ? reason
-        : formatBlockedReasonsSummary(reason, { empty: BLOCKED_LABEL });
-    } else if (display && display.blockedReasons && display.blockedReasons.length) {
-      suffix = formatBlockedReasonsSummary(display.blockedReasons, { empty: BLOCKED_LABEL });
+        : formatBlockedReasonsSummary(reason, {
+            empty: BLOCKED_LABEL,
+            links: display && display.blockedLinks
+          });
+    } else if (display && (display.blockedReasons || display.blockedLinks)) {
+      suffix = formatBlockedReasonsSummary(
+        display.blockedReasons != null ? display.blockedReasons : display.blockedReason,
+        {
+          empty: BLOCKED_LABEL,
+          links: display.blockedLinks
+        }
+      );
     } else if (display && display.blockedReason) {
       suffix = display.blockedReason;
     } else {
@@ -2031,9 +2143,14 @@
     };
     // Legacy single-string field: first selected reason (badge helpers prefer blockedReasons).
     if (reasons.length) next.blockedReason = reasons[0];
-    var link = normalizeBlockedLink(inputs.blockedLink);
-    if (link && isBlockedWaitingOtherTask(reasons)) {
-      next.blockedLink = link;
+    var links = normalizeBlockedLinks(inputs);
+    if (
+      links.length &&
+      (isBlockedWaitingOtherTask(reasons) || links.length > 0)
+    ) {
+      next.blockedLinks = links;
+      // Soft back-compat for older readers expecting a single link.
+      next.blockedLink = links[0];
     }
     return Object.assign({}, display, next);
   }
@@ -3939,7 +4056,7 @@
     }
 
     function reasonKey(reason) {
-      return normalizeBlockedReason(reason).toLocaleLowerCase('fr-FR');
+      return blockedReasonStorageKey(reason);
     }
 
     function hasReason(reason) {
@@ -7475,12 +7592,17 @@
     BLOCKED_REASON_SUGGESTIONS_LABEL: BLOCKED_REASON_SUGGESTIONS_LABEL,
     BLOCKED_REASON_CLEAR_LABEL: BLOCKED_REASON_CLEAR_LABEL,
     BLOCKED_REASON_OPTIONS: BLOCKED_REASON_OPTIONS,
+    BLOCKED_REASON_CORE_PRESETS: BLOCKED_REASON_CORE_PRESETS,
+    BLOCKED_REASON_FREQ_STORAGE_KEY: BLOCKED_REASON_FREQ_STORAGE_KEY,
+    BLOCKED_REASON_EMPTY_SUGGESTION_CAP: BLOCKED_REASON_EMPTY_SUGGESTION_CAP,
     BLOCKED_REASON_WAITING_OTHER_TASK: BLOCKED_REASON_WAITING_OTHER_TASK,
     BLOCKED_LINK_TYPE_SUBTASK: BLOCKED_LINK_TYPE_SUBTASK,
     isValidBlockedReason: isValidBlockedReason,
     normalizeBlockedReason: normalizeBlockedReason,
     normalizeBlockedReasons: normalizeBlockedReasons,
     formatBlockedReasonsSummary: formatBlockedReasonsSummary,
+    rankBlockedReasonSuggestions: rankBlockedReasonSuggestions,
+    bumpBlockedReasonFreq: bumpBlockedReasonFreq,
     isBlockedWaitingOtherTask: isBlockedWaitingOtherTask,
     normalizeBlockedLink: normalizeBlockedLink,
     formatBlockedBadgeText: formatBlockedBadgeText,

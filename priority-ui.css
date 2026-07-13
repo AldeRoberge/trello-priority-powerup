@@ -470,15 +470,14 @@ body {
 
 .field--priority {
   margin-bottom: 0;
-  padding: 0;
+  padding: 12px;
   border-radius: var(--radius);
   background: transparent;
   border: none;
-  transition: background 0.2s ease, padding 0.2s ease;
+  transition: background 0.2s ease;
 }
 
 .field--priority.is-enabled {
-  padding: 12px;
   background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
 }
 
@@ -513,15 +512,14 @@ body {
   --due-accent-text: var(--tp-primary-text, #ffffff);
   --due-accent-soft: color-mix(in srgb, var(--due-accent) 14%, transparent);
   margin-bottom: 0;
-  padding: 0;
+  padding: 12px;
   border-radius: var(--radius);
   background: transparent;
   border: none;
-  transition: background 0.2s ease, padding 0.2s ease;
+  transition: background 0.2s ease;
 }
 
 .field--due-date.is-enabled {
-  padding: 12px;
   background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
 }
 
@@ -1435,14 +1433,15 @@ html[data-color-mode="dark"] .due-date-time-clock {
 
 .field--en-attente {
   margin-bottom: 0;
+  padding: 12px;
   border-radius: var(--radius);
+  background: transparent;
   border: none;
-  transition: background 0.2s ease, padding 0.2s ease;
+  transition: background 0.2s ease;
 }
 
 .field--en-attente.is-enabled {
   background: var(--blocked-fill);
-  padding: 12px;
 }
 
 .field--en-attente.is-enabled .en-attente-title,

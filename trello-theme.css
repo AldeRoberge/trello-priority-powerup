@@ -756,13 +756,13 @@ body.tp-page--priority {
 
 .tp-page--priority .field--due-date {
   margin-bottom: 0;
+  padding: 12px;
   border: none;
 }
 
 .tp-page--priority .field--due-date.is-enabled,
 .tp-page--priority .field--due-date.has-due-date,
 .tp-page--priority .field--due-date.is-open {
-  padding: 12px;
   border: none;
   background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
 }
@@ -934,10 +934,10 @@ body.tp-page--priority {
 
 .tp-page--priority .field--priority {
   border: none;
+  padding: 12px;
 }
 
 .tp-page--priority .field--priority.is-enabled {
-  padding: 12px;
   border: none;
   background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
 }
@@ -1069,18 +1069,17 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   padding: 0 8px 8px;
 }
 
-/* Soft enable shell — tint only, no gray cage (heat-panel vibe) */
+/* Soft enable shell — tint only, stable box (heat-panel vibe) */
 .tp-page--priority .field--progress {
   margin-bottom: 0;
-  padding: 0;
+  padding: 12px;
   border: none;
   border-radius: var(--radius, 8px);
   background: transparent;
-  transition: background 0.2s ease, padding 0.2s ease;
+  transition: background 0.2s ease;
 }
 
 .tp-page--priority .field--progress.is-enabled {
-  padding: 12px;
   background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
 }
 
@@ -1819,14 +1818,15 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   position: absolute;
   left: 0;
   top: 0;
-  width: 6px;
-  height: 6px;
-  margin: -3px 0 0 -3px;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
   border-radius: 50%;
   background: var(--spark-color, #22a06b);
   box-shadow:
-    0 0 6px color-mix(in srgb, var(--spark-color, #22a06b) 70%, transparent),
-    0 0 1px rgba(255, 255, 255, 0.85);
+    0 0 10px color-mix(in srgb, var(--spark-color, #22a06b) 90%, transparent),
+    0 0 18px color-mix(in srgb, var(--spark-color, #22a06b) 55%, transparent),
+    0 0 2px rgba(255, 255, 255, 0.95);
   opacity: 0;
   transform: rotate(var(--spark-angle, 0deg)) translateY(0) scale(0.4);
   animation: tp-firework-spark 1.15s cubic-bezier(0.16, 0.84, 0.28, 1) forwards;
@@ -1838,11 +1838,11 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   position: absolute;
   left: 0;
   top: 0;
-  width: 10px;
-  height: 10px;
-  margin: -5px 0 0 -5px;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
   border-radius: 50%;
-  background: radial-gradient(circle, #fff 0%, color-mix(in srgb, #4bce97 70%, transparent) 45%, transparent 70%);
+  background: radial-gradient(circle, #fff 0%, color-mix(in srgb, #4bce97 85%, transparent) 45%, transparent 70%);
   opacity: 0;
   animation: tp-firework-flash 0.55s ease-out forwards;
   animation-delay: var(--burst-delay, 0s);
@@ -1850,8 +1850,8 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
 
 @keyframes tp-firework-flash {
   0% { opacity: 0; transform: scale(0.2); }
-  35% { opacity: 0.95; transform: scale(1.15); }
-  100% { opacity: 0; transform: scale(1.8); }
+  35% { opacity: 1; transform: scale(1.35); }
+  100% { opacity: 0; transform: scale(2.2); }
 }
 
 @keyframes tp-firework-spark {
