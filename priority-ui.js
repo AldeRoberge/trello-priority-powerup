@@ -969,7 +969,6 @@
   var DUE_DATE_NEXT_MONTH = 'Mois suivant';
   var DUE_DATE_CALENDAR_LABEL = 'Calendrier d\'\u00e9ch\u00e9ance';
   var DUE_DATE_TIME_LABEL = 'Heure';
-  var DUE_DATE_TIME_HINT = 'Optionnelle';
   var DUE_DATE_TIME_PLACEHOLDER = 'Choisir une heure';
   var DUE_DATE_TIME_CLEAR_LABEL = 'Effacer l\'heure';
   var DUE_DATE_TIME_PICKER_LABEL = 'Choix de l\'heure';
@@ -3989,8 +3988,11 @@
     tierDesc.className = 'heat-tier-desc';
     tierDesc.hidden = true;
 
-    panel.appendChild(tierDesc);
-    panel.appendChild(badge);
+    var heatHead = document.createElement('div');
+    heatHead.className = 'heat-head';
+    heatHead.appendChild(badge);
+    heatHead.appendChild(tierDesc);
+    panel.appendChild(heatHead);
 
     var segsWrap = document.createElement('div');
     segsWrap.className = 'heat-segs';

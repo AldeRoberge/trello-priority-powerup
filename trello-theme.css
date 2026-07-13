@@ -623,30 +623,33 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .heat-panel {
-  padding: 66px 12px 16px;
+  padding: 14px 12px 16px;
 }
 
 .tp-page--priority .heat-blocked-warning {
-  top: 12px;
+  top: 14px;
   right: 14px;
   font-size: 12px;
   padding: 4px 9px;
 }
 
-.tp-page--priority .heat-panel.has-blocked-warning .heat-badge {
-  max-width: calc(100% - 132px);
+.tp-page--priority .heat-panel.has-blocked-warning .heat-head {
+  padding-right: 126px;
+}
+
+.tp-page--priority .heat-head {
+  margin-bottom: 14px;
+  gap: 10px;
 }
 
 .tp-page--priority .heat-badge {
-  top: 12px;
-  left: 14px;
   margin: 0;
   padding: 12px 16px;
   grid-template-columns: auto minmax(min-content, 1fr);
 }
 
 .tp-page--priority .heat-tier-desc {
-  margin: 10px 0 14px;
+  margin: 0;
 }
 
 .tp-page--priority .heat-top-label {
@@ -1263,8 +1266,8 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   padding: 0;
   border: 1.5px solid color-mix(in srgb, var(--tp-border-strong) 80%, var(--tp-text-muted));
   border-radius: 50%;
-  background: var(--tp-surface);
-  color: color-mix(in srgb, var(--tp-text-muted) 40%, transparent);
+  background: transparent;
+  color: transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1279,8 +1282,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 
 .tp-completion-check:hover {
   border-color: var(--completion-check-green);
-  color: var(--completion-check-green);
-  background: color-mix(in srgb, var(--completion-check-green) 8%, var(--tp-surface));
+  background: color-mix(in srgb, var(--completion-check-green) 8%, transparent);
 }
 
 .tp-completion-check:focus-visible {
@@ -1308,6 +1310,12 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 .tp-completion-check-icon {
   display: block;
   flex: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.tp-completion-check.is-checked .tp-completion-check-icon {
+  opacity: 1;
 }
 
 .tp-completion-done-section {
@@ -1400,11 +1408,26 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 
 html[data-color-mode="dark"] .tp-completion-check {
   --completion-check-green: #4bce97;
-  background: color-mix(in srgb, var(--tp-surface) 70%, transparent);
+  border-color: color-mix(in srgb, var(--tp-border-strong) 70%, var(--tp-text-muted));
+  background: transparent;
+  color: transparent;
 }
 
-html[data-color-mode="dark"] .tp-completion-check.is-checked {
-  color: #1c3329;
+html[data-color-mode="dark"] .tp-completion-check:hover {
+  border-color: var(--completion-check-green);
+  background: color-mix(in srgb, var(--completion-check-green) 12%, transparent);
+}
+
+html[data-color-mode="dark"] .tp-completion-check.is-checked,
+html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
+  background: var(--completion-check-green);
+  border-color: var(--completion-check-green);
+  color: #fff;
+}
+
+html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
+  background: color-mix(in srgb, var(--completion-check-green) 88%, #fff);
+  border-color: color-mix(in srgb, var(--completion-check-green) 88%, #fff);
 }
 
 .tp-completion-text {

@@ -1622,9 +1622,11 @@ body.help-modal-open {
 /* ── Heatbar panel ── */
 .heat-panel {
   position: relative;
+  container-type: inline-size;
+  container-name: heat-panel;
   background: color-mix(in srgb, var(--card-tier-tint) var(--card-panel-tint-mix, 20%), var(--surface-2));
   border-radius: var(--radius);
-  padding: 54px 12px 12px;
+  padding: 12px;
   margin-top: 0;
   overflow: hidden;
   transition: background 0.25s ease;
@@ -1694,25 +1696,48 @@ body.help-modal-open {
   display: none;
 }
 
-.heat-panel.has-blocked-warning .heat-badge {
-  max-width: calc(100% - 124px);
+.heat-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 12px;
+  min-width: 0;
+}
+
+.heat-panel.has-blocked-warning .heat-head {
+  padding-right: 118px;
 }
 
 .heat-badge {
-  position: absolute;
-  top: 10px;
-  left: 12px;
+  position: relative;
   z-index: 1;
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
   column-gap: 8px;
+  flex: 0 0 auto;
   width: max-content;
-  max-width: calc(100% - 24px);
+  max-width: 100%;
   border-radius: var(--radius);
   padding: 7px 11px;
   background: var(--heat-fill, transparent);
   margin: 0;
+}
+
+@container heat-panel (min-width: 520px) {
+  .heat-head {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px 16px;
+  }
+
+  .heat-tier-desc {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    margin: 0;
+  }
 }
 
 .heat-top {
@@ -2033,7 +2058,8 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 }
 
 .heat-tier-desc {
-  margin: 8px 0 12px;
+  margin: 0;
+  width: 100%;
   font-size: 13px;
   line-height: 1.45;
   min-height: calc(1.45em * 3);
