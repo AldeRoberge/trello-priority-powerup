@@ -48,6 +48,8 @@ html[data-color-mode="light"] {
   --text-secondary: #44546f;
   --text-muted: #626f86;
   --surface-hover: #091e420f;
+  --due-accent: #0c66e4;
+  --due-accent-text: #ffffff;
   --blocked-accent: #AE2E24;
   --blocked-text: #5D1A1A;
   --blocked-muted-text: #6E2424;
@@ -63,6 +65,8 @@ html[data-color-mode="dark"] {
   --text-primary: #ffffff;
   --text-secondary: #ffffff;
   --text-muted: #ffffff;
+  --due-accent: #579dff;
+  --due-accent-text: #1d2125;
   --focus-ring: rgba(166, 197, 231, 0.4);
   --focus-ring-strong: rgba(166, 197, 231, 0.5);
   --modal-backdrop: rgba(0, 0, 0, 0.55);
@@ -258,6 +262,9 @@ body {
 }
 
 .field--due-date {
+  --due-accent: var(--tp-primary, #0c66e4);
+  --due-accent-text: var(--tp-primary-text, #ffffff);
+  --due-accent-soft: color-mix(in srgb, var(--due-accent) 14%, transparent);
   margin-bottom: 0;
   padding: 10px 12px;
   border-radius: var(--radius);
@@ -274,6 +281,11 @@ body {
 .field--due-date.is-past {
   background: color-mix(in srgb, var(--blocked-fill) 55%, var(--surface-2));
   border-color: color-mix(in srgb, var(--blocked-border) 35%, var(--border));
+}
+
+.field--due-date.is-open {
+  background: var(--surface-2);
+  border-color: var(--border);
 }
 
 .due-date-head {
@@ -308,42 +320,91 @@ body {
   gap: 8px;
 }
 
-.due-date-input {
+.due-date-trigger {
   flex: 1;
   min-width: 0;
-  padding: 6px 8px;
-  border: 2px solid var(--border);
-  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
   background: var(--surface-1, var(--surface-2));
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: 13px;
-  line-height: 1.45;
-  color-scheme: light dark;
-  transition: border-color 0.1s ease, background-color 0.1s ease;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
-.due-date-input:hover {
-  background-color: var(--surface-hover);
+.due-date-trigger:hover {
+  background: var(--surface-hover);
+  border-color: color-mix(in srgb, var(--due-accent) 35%, var(--border));
 }
 
-.due-date-input:focus-visible {
+.due-date-trigger:focus-visible {
   outline: none;
-  border-color: var(--focus-ring-strong, var(--text-primary));
+  border-color: var(--due-accent);
+  box-shadow: 0 0 0 3px var(--due-accent-soft);
+}
+
+.field--due-date.is-open .due-date-trigger {
+  border-color: var(--due-accent);
+  box-shadow: 0 0 0 3px var(--due-accent-soft);
+}
+
+.due-date-trigger-icon,
+.due-date-trigger-chevron {
+  flex-shrink: 0;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--due-accent);
+}
+
+.due-date-trigger-chevron {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 14px;
+  transition: transform 0.18s ease;
+}
+
+.field--due-date.is-open .due-date-trigger-chevron {
+  transform: rotate(180deg);
+}
+
+.due-date-trigger-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.due-date-trigger-value.is-placeholder {
+  font-weight: 400;
+  color: var(--text-muted);
 }
 
 .due-date-clear {
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: none;
-  border-radius: 3px;
+  border-radius: 999px;
   background: transparent;
   color: var(--text-muted);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
+  transition: color 0.12s ease, background-color 0.12s ease;
 }
 
 .due-date-clear:hover {
@@ -352,12 +413,188 @@ body {
 }
 
 .due-date-clear:focus-visible {
-  outline: 2px solid var(--focus-ring-strong, var(--text-primary));
+  outline: 2px solid var(--due-accent);
   outline-offset: 1px;
 }
 
 .due-date-clear[hidden] {
   display: none;
+}
+
+.due-date-popover {
+  margin-top: 10px;
+  padding: 12px 10px 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-2);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--text-primary) 6%, transparent),
+    0 8px 24px color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+.due-date-popover[hidden] {
+  display: none;
+}
+
+.due-date-nav {
+  display: grid;
+  grid-template-columns: 36px 1fr 36px;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.due-date-month-label {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+  text-transform: capitalize;
+}
+
+.due-date-nav-btn {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.due-date-nav-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.due-date-nav-btn:focus-visible {
+  outline: 2px solid var(--due-accent);
+  outline-offset: 1px;
+}
+
+.due-date-weekdays,
+.due-date-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.due-date-weekdays {
+  margin-bottom: 4px;
+}
+
+.due-date-weekday {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.due-date-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.due-date-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+}
+
+.due-date-day {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.due-date-day:hover {
+  background: var(--surface-hover);
+}
+
+.due-date-day:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--due-accent);
+}
+
+.due-date-day.is-outside {
+  color: var(--text-muted);
+  font-weight: 400;
+  opacity: 0.72;
+}
+
+.due-date-day.is-today:not(.is-selected) {
+  color: var(--due-accent);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1.5px var(--due-accent);
+}
+
+.due-date-day.is-today:not(.is-selected):hover {
+  background: var(--due-accent-soft);
+}
+
+.due-date-day.is-selected {
+  background: var(--due-accent);
+  color: var(--due-accent-text);
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.due-date-day.is-selected:hover {
+  background: color-mix(in srgb, var(--due-accent) 88%, #000);
+}
+
+.due-date-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.due-date-today {
+  border: none;
+  border-radius: 999px;
+  padding: 7px 14px;
+  background: transparent;
+  color: var(--due-accent);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.due-date-today:hover {
+  background: var(--due-accent-soft);
+}
+
+.due-date-today:focus-visible {
+  outline: 2px solid var(--due-accent);
+  outline-offset: 1px;
 }
 
 .due-date-countdown {

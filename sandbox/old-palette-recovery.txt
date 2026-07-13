@@ -1,0 +1,223 @@
+﻿old-palette-recovery.txt
+========================
+Recovered from git history in trello-priority-powerup
+Date of search: 2026-07-13
+
+-------------------------------------------------------------------------------
+1) git log --oneline -50 -- priority-ui.js
+-------------------------------------------------------------------------------
+f189f7e fixes
+758eb2e fixes
+57e0a69 Merge branch 'main' of https://github.com/AldeRoberge/trello-priority-powerup
+b8a5538 fixes
+ea5f6a6 fixes
+b116915 priority uis
+d486714 fixes
+bb0bfda fixes
+2c90025 fixes
+df48cde fixes
+05c0f40 fixes
+126a8e5 FIXES
+d7213c6 added color schemes
+4044ae3 fixes
+b134fa4 fixes
+7e7cc48 Fixes
+6d7a700 fixes
+96fdafe fix
+14d74eb fixes
+d8c3c28 fixes
+91d9d75 fix
+6846a58 fixes
+d065f6b fixes
+32eec02 fixes
+f96a716 fixes
+9ba44d7 fix
+e17ebae fixes
+cdc7dc5 Update priority-ui.js
+f97b544 fixes
+9a03953 Fixes
+bfb1762 fixes
+599f134 fix
+1d05d0d fix spelling
+f020f9a fixes
+0d01c0c fix
+57a23a8 fixes
+6c6184f fixes
+bb14c96 Update priority-ui.js
+b43adfb fixes
+7a5fd24 colors
+d9ad45f fixes
+705d64a fix
+eb4971d f
+8d003b3 csss
+48c3693 blocked
+d73f170 bloqued
+cbfb387 Update priority-ui.js
+421642b fix
+8527bd0 fix
+5c5e676 fixes
+
+-------------------------------------------------------------------------------
+2) git log -S "PRIORITY_BLUE_STOPS" --oneline -- priority-ui.js
+-------------------------------------------------------------------------------
+d7213c6 added color schemes
+4044ae3 fixes
+
+Full hashes:
+  4044ae3a649ce4096b36236929fea0b094d19c90  2026-07-08 11:08:57 -0400  fixes
+  d7213c6cba25fcdc6088fb3b67781073b3fa6b6d  2026-07-10 09:07:43 -0400  added color schemes
+
+-------------------------------------------------------------------------------
+3) git log -S "COLOR_SCHEMES" --oneline -- priority-ui.js
+-------------------------------------------------------------------------------
+126a8e5 FIXES
+d7213c6 added color schemes
+
+Full hashes:
+  d7213c6cba25fcdc6088fb3b67781073b3fa6b6d  introduced COLOR_SCHEMES (Bleu/Vert/Violet/Ambre/Sarcelle)
+  126a8e57306df370321e3b60c6d7b53c4942171d  rewrote COLOR_SCHEMES to OKLCH-built schemes
+
+-------------------------------------------------------------------------------
+4) Commits: multi-scheme vs older single blue palette
+-------------------------------------------------------------------------------
+COMMITS OF INTEREST (chronological):
+
+A) b134fa49b3cd6f0e8c0f7e16d91192dc30e8ba3c  (4044ae3^)
+   - LAST multi-hue / per-tier color era (NOT a single blue 5-stop ramp)
+   - TIERS had hardcoded fill/text/seg per tier (red-orange-amber-green-teal-blue-gray)
+
+B) 4044ae3a649ce4096b36236929fea0b094d19c90  "fixes"  (2026-07-08)
+   - INTRODUCED single-hue PRIORITY_BLUE_STOPS (the "old blue palette")
+   - Replaced multi-hue TIERS colors with intensity derived from the blue stops
+   - Remapped TIER_TRELLO_BADGE_COLORS from rainbow named colors - blue intensity mapping
+
+C) d7213c6cba25fcdc6088fb3b67781073b3fa6b6d  "added color schemes"  (2026-07-10)
+   - INTRODUCED multi-scheme COLOR_SCHEMES proliferation:
+     Bleu / Vert / Violet / Ambre / Sarcelle
+   - Blue scheme stops === exact PRIORITY_BLUE_STOPS from 4044ae3
+   - PRIORITY_BLUE_STOPS became an alias: COLOR_SCHEMES.blue.stops
+
+D) 126a8e57306df370321e3b60c6d7b53c4942171d  "FIXES"  (2026-07-10)
+   - Replaced hardcoded hex COLOR_SCHEMES with OKLCH buildColorScheme(...)
+   - Added TRELLO_BADGE_COLOR_HEX including blue: '#0079BF' (Trello named-color reference,
+     NOT the priority UI 5-stop palette)
+
+Parent of d7213c6 is 4044ae3 (single-blue era immediately precedes multi-scheme).
+
+-------------------------------------------------------------------------------
+5) Exact old PRIORITY_BLUE_STOPS (single-blue era: 4044ae3 .. before d7213c6 schemes,
+   and still the blue scheme hexes at d7213c6)
+-------------------------------------------------------------------------------
+Source: git show 4044ae3:priority-ui.js
+Also present unchanged as COLOR_SCHEMES.blue.stops at d7213c6.
+
+  var PRIORITY_BLUE_STOPS = ['#E6F1FB', '#B5D4F4', '#85B7EB', '#378ADD', '#0C447C'];
+  var PRIORITY_TEXT_ON_LIGHT = '#0C447C';
+  var PRIORITY_TEXT_ON_DARK = '#ffffff';
+
+Stops (low - high intensity):
+  1. #E6F1FB
+  2. #B5D4F4
+  3. #85B7EB
+  4. #378ADD
+  5. #0C447C
+
+Comment in 4044ae3: "Single-hue blue intensity palette (low - high priority)."
+
+-------------------------------------------------------------------------------
+6) Exact old TIER_TRELLO_BADGE_COLORS (single-blue era: 4044ae3 / d7213c6)
+-------------------------------------------------------------------------------
+Source: git show 4044ae3:priority-ui.js (same at d7213c6 before OKLCH nearest-color rebuild)
+
+  var TIER_TRELLO_BADGE_COLORS = {
+    0: 'blue',        // Critique
+    1: 'blue',        // Urgent
+    2: 'sky',         // Prioritaire
+    3: 'sky',         // Important
+    4: 'sky',         // Flexible
+    5: 'light-gray',  // Secondaire
+    6: 'light-gray'   // Optionnel
+  };
+
+EVEN OLDER mapping (pre-4044ae3, multi-hue era at b134fa4 / 4044ae3^):
+
+  var TIER_TRELLO_BADGE_COLORS = {
+    0: 'red',       // Critique
+    1: 'orange',    // Urgent
+    2: 'yellow',    // Prioritaire
+    3: 'lime',      // Important (green reserved for completed badge)
+    4: 'sky',       // Flexible
+    5: 'blue',      // Secondaire
+    6: 'light-gray' // Optionnel
+  };
+
+-------------------------------------------------------------------------------
+7) git stash list
+-------------------------------------------------------------------------------
+(empty - no stashes)
+
+-------------------------------------------------------------------------------
+8) #0079BF and Atlassian-style blue searches
+-------------------------------------------------------------------------------
+git log -S "#0079BF" --oneline --all:
+  69291f1 fixes
+  126a8e5 FIXES
+  23694dc fix
+  1d05d0d fix spelling
+
+#0079BF usage: Trello named badge color hex map (TRELLO_BADGE_COLOR_HEX.blue = '#0079BF'),
+NOT used as a PRIORITY_BLUE_STOPS stop.
+
+Atlassian-style 5-stop blues searched across history:
+  #DEEBFF, #B3D4FF, #4C9AFF, #0052CC, #0747A6
+  - NO matches in git history for these hex values.
+
+The recovered "old" priority blue ramp is the softer / deeper set above
+(#E6F1FB - #0C447C), not the classic Atlassian blues.
+
+-------------------------------------------------------------------------------
+9) Pre-blue multi-hue TIERS palette (4044ae3^ / b134fa4) - for context
+-------------------------------------------------------------------------------
+Light-mode hardcoded tier colors BEFORE single blue:
+
+  Critique:    fill #FCEBEB  text #791F1F  seg #E24B4A
+  Urgent:      fill #FAECE7  text #712B13  seg #D85A30
+  Prioritaire: fill #FAEEDA  text #633806  seg #BA7517
+  Important:   fill #E8F5E0  text #2D5A1E  seg #6EAD3A
+  Flexible:    fill #E1F5EE  text #085041  seg #3BA99C
+  Secondaire:  fill #E6F1FB  text #0C447C  seg #5A9FD4
+  Optionnel:   fill #F1EFE8  text #444441  seg #9B9890
+
+-------------------------------------------------------------------------------
+10) COLOR_SCHEMES hex values at introduction (d7213c6)
+-------------------------------------------------------------------------------
+  blue (Bleu):     ['#E6F1FB', '#B5D4F4', '#85B7EB', '#378ADD', '#0C447C']  textOnLight #0C447C
+  green (Vert):    ['#E8F5EC', '#B8E0C8', '#6DBF8A', '#2D8A4E', '#1A4D2E']  textOnLight #1A4D2E
+  purple (Violet): ['#F0EBF8', '#D4C4EB', '#A78BDA', '#7C3AED', '#4C1D95']  textOnLight #4C1D95
+  amber (Ambre):   ['#FFF8E6', '#FFE4A8', '#F5C842', '#E09B00', '#8B5A00']  textOnLight #8B5A00
+  teal (Sarcelle): ['#E6F7F5', '#B3E8E0', '#5CC4B8', '#0D9488', '#134E4A']  textOnLight #134E4A
+
+After 126a8e5 these hardcoded hex arrays were replaced by OKLCH triples, e.g. blue:
+  [[0.965, 0.018, 240], [0.910, 0.048, 241], [0.835, 0.082, 243],
+   [0.700, 0.125, 246], [0.480, 0.115, 248]]
+  (hex then computed at runtime via buildColorScheme)
+
+-------------------------------------------------------------------------------
+11) Recovery verdict
+-------------------------------------------------------------------------------
+To restore the OLD single blue priority palette (pre-Bleu/Vert/Violet/Ambre/Sarcelle
+proliferation UI, i.e. the palette introduced in 4044ae3 and reused as Bleu in d7213c6):
+
+  PRIORITY_BLUE_STOPS = ['#E6F1FB', '#B5D4F4', '#85B7EB', '#378ADD', '#0C447C']
+  PRIORITY_TEXT_ON_LIGHT = '#0C447C'
+  PRIORITY_TEXT_ON_DARK = '#ffffff'
+
+  TIER_TRELLO_BADGE_COLORS =
+    { 0:'blue', 1:'blue', 2:'sky', 3:'sky', 4:'sky', 5:'light-gray', 6:'light-gray' }
+
+Best checkout refs for inspection:
+  git show 4044ae3:priority-ui.js
+  git show d7213c6^:priority-ui.js   # same as 4044ae3 for these constants
+  git show d7213c6:priority-ui.js    # first multi-scheme commit (blue stops identical)
+
+No stash recovery available. No Atlassian #DEEBFF/#4C9AFF-style array found in history.

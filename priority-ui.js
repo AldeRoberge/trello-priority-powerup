@@ -4741,6 +4741,11 @@
         cancelSliderAnim();
         repaint();
         persistSliderState();
+      },
+      onLayoutChange: function () {
+        if (typeof variantConfig.onLayoutChange === 'function') {
+          variantConfig.onLayoutChange();
+        }
       }
     });
 

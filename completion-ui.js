@@ -484,6 +484,19 @@
       '<ul class="tp-completion-list" id="completionList" aria-label="Sous-t\u00e2ches"></ul>';
     containerEl.appendChild(listSection);
 
+    var doneSection = document.createElement('section');
+    doneSection.className = 'tp-completion-done-section';
+    doneSection.hidden = true;
+    doneSection.innerHTML =
+      '<button type="button" class="tp-completion-done-toggle" id="completionDoneToggle" ' +
+      'aria-expanded="false" aria-controls="completionDoneList">' +
+      '<span class="tp-completion-done-toggle-label" id="completionDoneLabel">Termin\u00e9es (0)</span>' +
+      '<span class="tp-completion-done-chevron" aria-hidden="true"></span>' +
+      '</button>' +
+      '<ul class="tp-completion-list tp-completion-done-list" id="completionDoneList" ' +
+      'aria-label="T\u00e2ches termin\u00e9es" hidden></ul>';
+    containerEl.appendChild(doneSection);
+
     var addSection = document.createElement('section');
     addSection.className = 'tp-completion-add';
     addSection.innerHTML =
@@ -495,27 +508,60 @@
     containerEl.appendChild(addSection);
 
     var listEl = containerEl.querySelector('#completionList');
+    var doneListEl = containerEl.querySelector('#completionDoneList');
+    var doneToggle = containerEl.querySelector('#completionDoneToggle');
+    var doneLabel = containerEl.querySelector('#completionDoneLabel');
     var percentEl = containerEl.querySelector('#completionPercent');
     var encouragementEl = containerEl.querySelector('#completionEncouragement');
     var addInput = containerEl.querySelector('#completionAddInput');
     var addBtn = containerEl.querySelector('#completionAddBtn');
+    var doneSectionExpanded = false;
+
+    var CHECK_ICON_SVG =
+      '<svg class="tp-completion-check-icon" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">' +
+      '<path fill="currentColor" d="M6.4 11.6 3.2 8.4l1.2-1.2 2 2 5.2-5.2 1.2 1.2z"/>' +
+      '</svg>';
+
+    function findItemRow(id) {
+      return containerEl.querySelector('.tp-completion-item[data-id="' + id + '"]');
+    }
+
+    function syncCheckButton(btn, done) {
+      if (!btn) return;
+      btn.classList.toggle('is-checked', done);
+      btn.setAttribute('aria-pressed', done ? 'true' : 'false');
+      btn.setAttribute(
+        'aria-label',
+        done ? 'Marquer comme non termin\u00e9' : 'Marquer comme termin\u00e9 (100\u00a0%)'
+      );
+    }
 
     function syncItemSlidersFromData() {
       data.items.forEach(function (item) {
-        var li = listEl.querySelector('[data-id="' + item.id + '"]');
+        var li = findItemRow(item.id);
         if (!li) return;
         var p = CT.itemProgress(item);
         var slider = li.querySelector('.tp-completion-item-slider');
         var valEl = li.querySelector('.tp-completion-item-val');
-        var checkbox = li.querySelector('.tp-completion-check');
+        var checkBtn = li.querySelector('.tp-completion-check');
         if (slider) {
           slider.value = String(p);
           applySliderProgressTrack(slider, p);
         }
         if (valEl) valEl.textContent = p + '\u00a0%';
-        if (checkbox) checkbox.checked = item.done;
+        syncCheckButton(checkBtn, item.done);
         li.classList.toggle('is-done', item.done);
       });
+    }
+
+    function updateDoneSectionUi(doneCount) {
+      var hasDone = doneCount > 0;
+      doneSection.hidden = !hasDone;
+      doneLabel.textContent =
+        'Termin\u00e9es (' + doneCount + ')';
+      doneToggle.setAttribute('aria-expanded', doneSectionExpanded ? 'true' : 'false');
+      doneListEl.hidden = !doneSectionExpanded;
+      doneSection.classList.toggle('is-expanded', doneSectionExpanded);
     }
 
     function emitChange() {

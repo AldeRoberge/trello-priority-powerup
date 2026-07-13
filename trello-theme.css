@@ -747,10 +747,18 @@ body.tp-page--priority {
   font-size: 13px;
 }
 
-.tp-page--priority .due-date-input {
+.tp-page--priority .due-date-trigger {
   font-size: 14px;
-  padding-top: 7px;
-  padding-bottom: 7px;
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+
+.tp-page--priority .due-date-month-label {
+  font-size: 15px;
+}
+
+.tp-page--priority .due-date-day {
+  font-size: 14px;
 }
 
 .tp-page--priority .blocked-reason-select {
@@ -822,6 +830,8 @@ html[data-color-mode="dark"] .tp-page--priority {
   --text-secondary: var(--tp-text-subtle);
   --text-muted: var(--tp-text-muted);
   --surface-hover: var(--tp-surface-hover);
+  --due-accent: var(--tp-primary);
+  --due-accent-text: var(--tp-primary-text);
 }
 
 /* Completion editor — modal iframe */
