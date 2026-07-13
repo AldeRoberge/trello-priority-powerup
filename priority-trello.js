@@ -122,21 +122,49 @@
       normalized.priorityEnabled = false;
     }
 
-    // Keep blockedReason even when off so re-enable restores the draft.
-    var reason = typeof raw.blockedReason === 'string' ? raw.blockedReason.trim() : '';
+    // Keep blockedReasons even when off so re-enable restores the draft.
     var PU = priorityUI();
-    if (reason && PU && PU.isValidBlockedReason && PU.isValidBlockedReason(reason)) {
-      normalized.blockedReason = reason;
+    var reasons =
+      PU && PU.normalizeBlockedReasons
+        ? PU.normalizeBlockedReasons(raw)
+        : (function () {
+            if (Array.isArray(raw.blockedReasons)) {
+              return raw.blockedReasons
+                .map(function (r) {
+                  return typeof r === 'string' ? r.trim() : '';
+                })
+                .filter(Boolean);
+            }
+            if (typeof raw.blockedReason === 'string') {
+              var legacy = raw.blockedReason.trim();
+              return legacy ? [legacy] : [];
+            }
+            return [];
+          })();
+    if (reasons.length) {
+      var validReasons = [];
+      for (var ri = 0; ri < reasons.length; ri++) {
+        var reason = reasons[ri];
+        if (
+          !PU ||
+          !PU.isValidBlockedReason ||
+          PU.isValidBlockedReason(reason)
+        ) {
+          validReasons.push(reason);
+        }
+      }
+      if (validReasons.length) normalized.blockedReasons = validReasons;
+      reasons = validReasons;
     }
     if (raw.enAttente === true) {
       normalized.enAttente = true;
     }
     // Link to a completion subtask when waiting on another task.
     var waitingOther =
-      reason &&
+      reasons.length > 0 &&
       PU &&
-      PU.BLOCKED_REASON_WAITING_OTHER_TASK &&
-      reason === PU.BLOCKED_REASON_WAITING_OTHER_TASK;
+      PU.isBlockedWaitingOtherTask &&
+      PU.isBlockedWaitingOtherTask(reasons);
     if (waitingOther) {
       var link =
         PU.normalizeBlockedLink
@@ -174,7 +202,11 @@
   }
 
   function clearBlockedFromInputs(inputs) {
-    if (!inputs || (!inputs.enAttente && !inputs.blockedReason && !inputs.blockedLink)) {
+    var hasReasons =
+      inputs &&
+      ((Array.isArray(inputs.blockedReasons) && inputs.blockedReasons.length > 0) ||
+        (typeof inputs.blockedReason === 'string' && inputs.blockedReason));
+    if (!inputs || (!inputs.enAttente && !hasReasons && !inputs.blockedLink)) {
       return inputs;
     }
     var cleared = {
@@ -392,11 +424,27 @@
     var d = display || {};
     var PU = priorityUI();
     if (PU && PU.formatBlockedBadgeText) {
-      var reason = typeof d.blockedReason === 'string' ? d.blockedReason.trim() : '';
-      return PU.formatBlockedBadgeText(d, reason || undefined);
+      var summary =
+        PU.formatBlockedReasonsSummary
+          ? PU.formatBlockedReasonsSummary(
+              d.blockedReasons != null ? d.blockedReasons : d.blockedReason,
+              { empty: '' }
+            )
+          : typeof d.blockedReason === 'string'
+            ? d.blockedReason.trim()
+            : '';
+      return PU.formatBlockedBadgeText(d, summary || undefined);
     }
     var label = incompleteBadgeLabel(d) || 'T\u00e2che';
-    var trimmed = typeof d.blockedReason === 'string' ? d.blockedReason.trim() : '';
+    var trimmed =
+      PU && PU.formatBlockedReasonsSummary
+        ? PU.formatBlockedReasonsSummary(
+            d.blockedReasons != null ? d.blockedReasons : d.blockedReason,
+            { empty: '' }
+          )
+        : typeof d.blockedReason === 'string'
+          ? d.blockedReason.trim()
+          : '';
     var suffix = trimmed || ((PU && PU.BLOCKED_LABEL) || 'Bloqu\u00e9');
     return label + ' (' + suffix + ')';
   }

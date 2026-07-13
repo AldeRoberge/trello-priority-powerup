@@ -437,6 +437,19 @@ body {
   display: block;
 }
 
+/* Progress at 100%: do not let catcher / checkbox re-enable due or blocked */
+.field.is-enable-locked .section-enable-catcher {
+  display: none !important;
+  pointer-events: none;
+}
+
+.field.is-enable-locked .section-enable-checkbox,
+.field.is-enable-locked .due-date-checkbox,
+.field.is-enable-locked .en-attente-checkbox {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 /* Disabled-but-expanded: preview content, not interactive */
 .field:not(.is-enabled) .section-toggle-body {
   opacity: 0.48;
@@ -1460,6 +1473,13 @@ html[data-color-mode="dark"] .due-date-time-clock {
 
 .blocked-reason-wrap[hidden] {
   display: none;
+}
+
+.blocked-reason-selected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: flex-start;
 }
 
 .blocked-reason-selected[hidden] {

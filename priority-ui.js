@@ -47,7 +47,7 @@
   var FORMULA_STORAGE_KEY = 'trello-priority-powerup/formula';
   var COLOR_SCHEME_STORAGE_KEY = 'trello-priority-powerup/color-scheme';
   var SECTION_COLLAPSE_STORAGE_KEY = 'trello-priority-powerup/section-collapse';
-  var SECTION_COLLAPSE_KEYS = ['priority', 'graph', 'due', 'progress', 'blocked'];
+  var SECTION_COLLAPSE_KEYS = ['priority', 'graph', 'progress', 'due', 'blocked'];
   var DEFAULT_COLOR_SCHEME_KEY = 'blue';
   var SCORE_MAX = 10;
   // Urgency / impact axis max (ease uses 1..5).
@@ -1053,13 +1053,88 @@
   var BLOCKED_SUBTASK_EMPTY = 'Aucune sous-t\u00e2che';
   var BLOCKED_SUBTASK_CLEAR_LABEL = 'Retirer le lien vers la sous-t\u00e2che';
   var BLOCKED_SUBTASK_FALLBACK_LABEL = 'Sous-t\u00e2che';
-  var BLOCKED_REASON_OPTIONS = [
+  var BLOCKED_REASON_FREQ_STORAGE_KEY = 'trello-priority-powerup/blocked-reason-freq';
+  var BLOCKED_REASON_EMPTY_SUGGESTION_CAP = 10;
+  /** Core presets shown in the empty-state suggestion set (with frequent reasons). */
+  var BLOCKED_REASON_CORE_PRESETS = [
     'En attente d\'une r\u00e9ponse',
     'En attente de budget',
     'En attente d\'une approbation',
     'En attente de mat\u00e9riel',
     BLOCKED_REASON_WAITING_OTHER_TASK,
     'En attente de quelqu\'un',
+    'Autre'
+  ];
+  /** Full French workplace blocker dictionary (includes core presets). */
+  var BLOCKED_REASON_OPTIONS = [
+    'En attente d\'une r\u00e9ponse',
+    'En attente d\'un retour client',
+    'En attente d\'un retour interne',
+    'En attente d\'informations',
+    'En attente de pr\u00e9cisions',
+    'En attente d\'une clarification',
+    'En attente d\'un email',
+    'En attente d\'une r\u00e9union',
+    'En attente de feedback',
+    'En attente de budget',
+    'En attente de devis',
+    'En attente de validation budg\u00e9taire',
+    'Budget insuffisant',
+    'En attente de commande',
+    'En attente d\'une approbation',
+    'En attente de validation',
+    'En attente de signature',
+    'En attente de d\u00e9cision',
+    'En attente de validation manager',
+    'En attente de validation juridique',
+    'En attente de validation RH',
+    'En attente de validation s\u00e9curit\u00e9',
+    'En attente du client',
+    'En attente de brief client',
+    'En attente de contenus client',
+    'Client indisponible',
+    'En attente de mat\u00e9riel',
+    BLOCKED_REASON_WAITING_OTHER_TASK,
+    'En attente de quelqu\'un',
+    'En attente d\'un livrable',
+    'En attente d\'un fournisseur',
+    'En attente d\'un partenaire',
+    'D\u00e9pendance externe',
+    'D\u00e9pendance technique',
+    'Probl\u00e8me technique',
+    'Incident en cours',
+    'En attente de correctif',
+    'Environnement indisponible',
+    'En attente d\'acc\u00e8s technique',
+    'En attente d\'infrastructure',
+    'En attente d\'acc\u00e8s',
+    'Droits manquants',
+    'Compte non provisionn\u00e9',
+    'Identifiants manquants',
+    'Acc\u00e8s r\u00e9seau / VPN',
+    'En attente de revue de code',
+    'En attente de relecture',
+    'En attente de QA',
+    'En attente de tests',
+    'En attente d\'UAT',
+    'En attente de d\u00e9ploiement',
+    'Fen\u00eatre de d\u00e9ploiement',
+    'En attente de mise en production',
+    'Freeze de release',
+    'En attente RH',
+    'En attente juridique',
+    'En attente de conformit\u00e9',
+    'En attente de contrat',
+    'En attente de NDA',
+    'Manque de ressources',
+    'Charge trop \u00e9lev\u00e9e',
+    'Priorit\u00e9 conflictuelle',
+    'En attente de design',
+    'En attente de maquette',
+    'En attente de documentation',
+    'Donn\u00e9es manquantes',
+    'En attente de migration',
+    'Bloqu\u00e9 par un tiers',
     'Autre'
   ];
   var BLOCKED_DESCRIPTION =
@@ -1076,8 +1151,197 @@
     return trimmed || '';
   }
 
-  function isBlockedWaitingOtherTask(reason) {
-    return normalizeBlockedReason(reason) === BLOCKED_REASON_WAITING_OTHER_TASK;
+  function blockedReasonStorageKey(reason) {
+    return normalizeBlockedReason(reason).toLocaleLowerCase('fr-FR');
+  }
+
+  function loadBlockedReasonFreq() {
+    try {
+      if (typeof localStorage === 'undefined') return {};
+      var raw = localStorage.getItem(BLOCKED_REASON_FREQ_STORAGE_KEY);
+      if (!raw) return {};
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+      var out = Object.create(null);
+      Object.keys(parsed).forEach(function (key) {
+        var count = parsed[key];
+        if (typeof count !== 'number' || !(count > 0) || !isFinite(count)) return;
+        var label = normalizeBlockedReason(key);
+        if (!label) return;
+        out[blockedReasonStorageKey(label)] = {
+          label: label,
+          count: Math.floor(count)
+        };
+      });
+      return out;
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function saveBlockedReasonFreq(map) {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      var payload = {};
+      Object.keys(map || {}).forEach(function (key) {
+        var entry = map[key];
+        if (!entry || !entry.label || !(entry.count > 0)) return;
+        payload[entry.label] = entry.count;
+      });
+      localStorage.setItem(BLOCKED_REASON_FREQ_STORAGE_KEY, JSON.stringify(payload));
+    } catch (err) {
+      /* ignore quota / private mode */
+    }
+  }
+
+  function bumpBlockedReasonFreq(reason) {
+    var label = normalizeBlockedReason(reason);
+    if (!label) return;
+    var key = blockedReasonStorageKey(label);
+    var map = loadBlockedReasonFreq();
+    var prev = map[key];
+    map[key] = {
+      label: prev && prev.label ? prev.label : label,
+      count: (prev && prev.count ? prev.count : 0) + 1
+    };
+    saveBlockedReasonFreq(map);
+  }
+
+  function blockedReasonFreqCount(reason, freqMap) {
+    var entry = freqMap && freqMap[blockedReasonStorageKey(reason)];
+    return entry && entry.count > 0 ? entry.count : 0;
+  }
+
+  function compareBlockedReasonSuggestions(a, b, freqMap) {
+    var fa = blockedReasonFreqCount(a, freqMap);
+    var fb = blockedReasonFreqCount(b, freqMap);
+    if (fb !== fa) return fb - fa;
+    return String(a).localeCompare(String(b), 'fr-FR', { sensitivity: 'base' });
+  }
+
+  /**
+   * Build ranked suggestion labels.
+   * - Empty input + no selections: top frequent ∪ core presets (capped).
+   * - Empty input + selections: none (caller hides the list).
+   * - Typing: dictionary ∪ frequent customs matching substring.
+   */
+  function rankBlockedReasonSuggestions(options) {
+    var query = options && options.query != null
+      ? String(options.query).trim().toLocaleLowerCase('fr-FR')
+      : '';
+    var selectedKeys = Object.create(null);
+    var selected = (options && options.selected) || [];
+    for (var s = 0; s < selected.length; s++) {
+      var sk = blockedReasonStorageKey(selected[s]);
+      if (sk) selectedKeys[sk] = true;
+    }
+    if (!query && selected.length >= 1) return [];
+
+    var freqMap = options && options.freqMap ? options.freqMap : loadBlockedReasonFreq();
+    var pool = Object.create(null);
+    var labels = [];
+
+    function consider(label) {
+      var normalized = normalizeBlockedReason(label);
+      if (!normalized) return;
+      var key = blockedReasonStorageKey(normalized);
+      if (selectedKeys[key] || pool[key]) return;
+      if (query && normalized.toLocaleLowerCase('fr-FR').indexOf(query) === -1) return;
+      pool[key] = true;
+      labels.push(normalized);
+    }
+
+    if (!query) {
+      Object.keys(freqMap).forEach(function (key) {
+        var entry = freqMap[key];
+        if (entry && entry.label) consider(entry.label);
+      });
+      for (var i = 0; i < BLOCKED_REASON_CORE_PRESETS.length; i++) {
+        consider(BLOCKED_REASON_CORE_PRESETS[i]);
+      }
+    } else {
+      for (var d = 0; d < BLOCKED_REASON_OPTIONS.length; d++) {
+        consider(BLOCKED_REASON_OPTIONS[d]);
+      }
+      Object.keys(freqMap).forEach(function (key) {
+        var entry = freqMap[key];
+        if (entry && entry.label) consider(entry.label);
+      });
+    }
+
+    labels.sort(function (a, b) {
+      return compareBlockedReasonSuggestions(a, b, freqMap);
+    });
+
+    if (!query) {
+      var cap = options && options.cap != null
+        ? options.cap
+        : BLOCKED_REASON_EMPTY_SUGGESTION_CAP;
+      if (labels.length > cap) labels = labels.slice(0, cap);
+    }
+    return labels;
+  }
+
+  /**
+   * Normalize selected Bloqué reasons to a de-duplicated string[].
+   * Accepts string[], a single string, or an inputs object with
+   * `blockedReasons` (preferred) and/or legacy `blockedReason`.
+   */
+  function normalizeBlockedReasons(raw) {
+    var list = [];
+    if (Array.isArray(raw)) {
+      list = raw;
+    } else if (typeof raw === 'string') {
+      list = [raw];
+    } else if (raw && typeof raw === 'object') {
+      if (Array.isArray(raw.blockedReasons)) {
+        list = raw.blockedReasons;
+      } else if (typeof raw.blockedReason === 'string' && raw.blockedReason.trim()) {
+        list = [raw.blockedReason];
+      }
+    }
+    var out = [];
+    var seen = Object.create(null);
+    for (var i = 0; i < list.length; i++) {
+      var reason = normalizeBlockedReason(list[i]);
+      if (!reason) continue;
+      var key = reason.toLocaleLowerCase('fr-FR');
+      if (seen[key]) continue;
+      seen[key] = true;
+      out.push(reason);
+    }
+    return out;
+  }
+
+  function isBlockedWaitingOtherTask(reasonOrReasons) {
+    if (Array.isArray(reasonOrReasons)) {
+      for (var i = 0; i < reasonOrReasons.length; i++) {
+        if (normalizeBlockedReason(reasonOrReasons[i]) === BLOCKED_REASON_WAITING_OTHER_TASK) {
+          return true;
+        }
+      }
+      return false;
+    }
+    if (reasonOrReasons && typeof reasonOrReasons === 'object') {
+      return isBlockedWaitingOtherTask(normalizeBlockedReasons(reasonOrReasons));
+    }
+    return normalizeBlockedReason(reasonOrReasons) === BLOCKED_REASON_WAITING_OTHER_TASK;
+  }
+
+  /**
+   * Elegant French summary for badges / collapsed section.
+   * One reason as-is; several as comma-separated when short, else « first +N ».
+   */
+  function formatBlockedReasonsSummary(reasons, options) {
+    var list = normalizeBlockedReasons(reasons);
+    var emptyLabel =
+      options && options.empty != null ? options.empty : BLOCKED_LABEL;
+    if (!list.length) return emptyLabel;
+    if (list.length === 1) return list[0];
+    var maxLen = options && options.maxLength != null ? options.maxLength : 42;
+    var comma = list.join(', ');
+    if (comma.length <= maxLen) return comma;
+    return list[0] + ' +' + (list.length - 1);
   }
 
   /** Normalize shared-storage blocked link (`{ type: 'subtask', id }`). */
@@ -1338,7 +1602,7 @@
   /** Compact header summary when an enabled due-date section is collapsed. */
   function formatDueDateCompactSummary(iso, time, now) {
     var normalized = normalizeDueDate(iso);
-    if (!normalized) return '\u00ab Pas de date d\'\u00e9ch\u00e9ance \u00bb';
+    if (!normalized) return 'Pas de date d\'\u00e9ch\u00e9ance';
     var days = daysUntilDue(normalized, now);
     var dayPart;
     if (days === 0) dayPart = 'Aujourd\'hui';
@@ -1675,7 +1939,18 @@
 
   function formatBlockedBadgeText(display, reason) {
     var label = blockedTaskBadgeLabel(display);
-    var suffix = reason || BLOCKED_LABEL;
+    var suffix;
+    if (reason != null && reason !== '') {
+      suffix = typeof reason === 'string'
+        ? reason
+        : formatBlockedReasonsSummary(reason, { empty: BLOCKED_LABEL });
+    } else if (display && display.blockedReasons && display.blockedReasons.length) {
+      suffix = formatBlockedReasonsSummary(display.blockedReasons, { empty: BLOCKED_LABEL });
+    } else if (display && display.blockedReason) {
+      suffix = display.blockedReason;
+    } else {
+      suffix = BLOCKED_LABEL;
+    }
     return label + ' (' + suffix + ')';
   }
 
@@ -1749,13 +2024,15 @@
 
   function withBlockedDisplay(display, inputs) {
     if (!display || !isEnAttente(inputs)) return display;
-    var reason = inputs.blockedReason || '';
+    var reasons = normalizeBlockedReasons(inputs);
     var next = {
       blocked: true,
-      blockedReason: reason
+      blockedReasons: reasons
     };
+    // Legacy single-string field: first selected reason (badge helpers prefer blockedReasons).
+    if (reasons.length) next.blockedReason = reasons[0];
     var link = normalizeBlockedLink(inputs.blockedLink);
-    if (link && isBlockedWaitingOtherTask(reason)) {
+    if (link && isBlockedWaitingOtherTask(reasons)) {
       next.blockedLink = link;
     }
     return Object.assign({}, display, next);
@@ -3323,6 +3600,7 @@
     var alwaysEnabled = !!config.alwaysEnabled;
     var enabled = alwaysEnabled ? true : !!config.enabled;
     var expanded = config.expanded != null ? !!config.expanded : (!!enabled && !alwaysEnabled);
+    var enableAllowed = config.enableAllowed !== false;
     var onEnableChange = config.onEnableChange || function () {};
     var onExpandChange = config.onExpandChange || null;
     var onLayoutChange = config.onLayoutChange || function () {};
@@ -3330,6 +3608,7 @@
     var onBeforeDisable = config.onBeforeDisable || null;
     var onAfterEnable = config.onAfterEnable || null;
     var activateHint = 'Activer pour modifier';
+    var lockedHint = 'Indisponible tant que le progr\u00e8s est \u00e0 100\u00a0%';
 
     function notifyExpandChange(options) {
       if (typeof onExpandChange !== 'function') return;
@@ -3361,18 +3640,31 @@
 
     function syncUi(shouldNotifyLayout) {
       var wasHidden = !!body.hidden;
-      if (chrome.checkbox) chrome.checkbox.checked = enabled;
+      if (chrome.checkbox) {
+        chrome.checkbox.checked = enabled;
+        chrome.checkbox.disabled = alwaysEnabled ? false : !enableAllowed;
+        if (!enableAllowed) {
+          chrome.checkbox.title = lockedHint;
+          chrome.checkbox.setAttribute('aria-disabled', 'true');
+        } else {
+          chrome.checkbox.removeAttribute('title');
+          chrome.checkbox.removeAttribute('aria-disabled');
+        }
+      }
       field.classList.toggle('is-enabled', enabled);
       field.classList.toggle('is-collapsed', !expanded);
+      field.classList.toggle('is-enable-locked', !alwaysEnabled && !enableAllowed);
       body.hidden = !expanded;
       if (shell) shell.hidden = !expanded;
       try {
         body.inert = !enabled;
       } catch (e) { /* ignore */ }
       if (catcher) {
-        var showCatcher = !alwaysEnabled && !enabled && expanded;
+        var showCatcher = !alwaysEnabled && !enabled && expanded && enableAllowed;
         catcher.hidden = !showCatcher;
         catcher.setAttribute('aria-hidden', showCatcher ? 'false' : 'true');
+        catcher.title = enableAllowed ? activateHint : lockedHint;
+        catcher.setAttribute('aria-label', enableAllowed ? activateHint : lockedHint);
       }
       chrome.collapseBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
       chrome.collapseBtn.setAttribute(
@@ -3409,6 +3701,11 @@
         return;
       }
       var on = !!next;
+      // Progress-complete lock: keep data, block re-enable via checkbox / catcher.
+      if (on && !enableAllowed && !options.force) {
+        if (chrome.checkbox) chrome.checkbox.checked = enabled;
+        return;
+      }
       var changed = on !== enabled;
       var wasExpanded = expanded;
       enabled = on;
@@ -3422,6 +3719,25 @@
       syncUi(options.notifyLayout !== false);
       if (changed) onEnableChange(enabled, options);
       if (wasExpanded !== expanded) notifyExpandChange(options);
+    }
+
+    function setEnableAllowed(allowed, options) {
+      options = options || {};
+      if (alwaysEnabled) return;
+      var next = allowed !== false;
+      if (next === enableAllowed) {
+        syncUi(false);
+        return;
+      }
+      enableAllowed = next;
+      if (!enableAllowed && enabled) {
+        setEnabled(false, {
+          notifyLayout: options.notifyLayout,
+          expand: options.expand != null ? options.expand : expanded
+        });
+        return;
+      }
+      syncUi(options.notifyLayout !== false);
     }
 
     function refreshSummary() {
@@ -3454,9 +3770,17 @@
       chrome.checkbox.addEventListener('click', function (event) {
         // Keep enable clicks from bubbling into any header handlers.
         event.stopPropagation();
+        if (!enableAllowed) {
+          event.preventDefault();
+          chrome.checkbox.checked = enabled;
+        }
       });
 
       chrome.checkbox.addEventListener('change', function () {
+        if (!enableAllowed) {
+          chrome.checkbox.checked = enabled;
+          return;
+        }
         setEnabled(chrome.checkbox.checked);
       });
     }
@@ -3469,7 +3793,7 @@
 
     if (catcher) {
       catcher.addEventListener('click', function (event) {
-        if (enabled) return;
+        if (enabled || !enableAllowed) return;
         event.preventDefault();
         event.stopPropagation();
         var x = event.clientX;
@@ -3486,6 +3810,8 @@
     return {
       setEnabled: setEnabled,
       setExpanded: setExpanded,
+      setEnableAllowed: setEnableAllowed,
+      isEnableAllowed: function () { return enableAllowed; },
       isEnabled: function () { return enabled; },
       isExpanded: function () { return expanded; },
       refreshSummary: refreshSummary,
@@ -3501,11 +3827,12 @@
     var getSubtasks =
       typeof config.getSubtasks === 'function' ? config.getSubtasks : function () { return []; };
     var bodyId = 'blocked-section-body-' + Math.random().toString(36).slice(2, 9);
-    var currentReason = normalizeBlockedReason(config.blockedReason);
-    var currentLink = isBlockedWaitingOtherTask(currentReason)
+    var currentReasons = normalizeBlockedReasons(
+      config.blockedReasons != null ? config.blockedReasons : config
+    );
+    var currentLink = isBlockedWaitingOtherTask(currentReasons)
       ? normalizeBlockedLink(config.blockedLink)
       : null;
-    var suggestionButtons = [];
 
     var field = document.createElement('div');
     field.className = 'field field--en-attente';
@@ -3527,23 +3854,7 @@
 
     var selectedWrap = document.createElement('div');
     selectedWrap.className = 'blocked-reason-selected';
-    selectedWrap.hidden = !currentReason;
-
-    var selectedChip = document.createElement('span');
-    selectedChip.className = 'blocked-reason-chip';
-
-    var selectedText = document.createElement('span');
-    selectedText.className = 'blocked-reason-chip-text';
-
-    var clearBtn = document.createElement('button');
-    clearBtn.type = 'button';
-    clearBtn.className = 'blocked-reason-chip-clear';
-    clearBtn.setAttribute('aria-label', BLOCKED_REASON_CLEAR_LABEL);
-    clearBtn.textContent = '\u00d7';
-
-    selectedChip.appendChild(selectedText);
-    selectedChip.appendChild(clearBtn);
-    selectedWrap.appendChild(selectedChip);
+    selectedWrap.hidden = !currentReasons.length;
 
     var subtaskWrap = document.createElement('div');
     subtaskWrap.className = 'blocked-subtask-wrap';
@@ -3609,23 +3920,6 @@
     suggestionsList.className = 'blocked-reason-suggestions-list';
     suggestionsList.setAttribute('role', 'list');
 
-    BLOCKED_REASON_OPTIONS.forEach(function (optionLabel) {
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'blocked-reason-suggestion';
-      btn.setAttribute('role', 'listitem');
-      btn.textContent = optionLabel;
-      btn.dataset.reason = optionLabel;
-      btn.addEventListener('click', function () {
-        commitReason(optionLabel);
-        reasonInput.value = '';
-        refreshSuggestions();
-        reasonInput.focus();
-      });
-      suggestionButtons.push(btn);
-      suggestionsList.appendChild(btn);
-    });
-
     suggestions.appendChild(suggestionsLabel);
     suggestions.appendChild(suggestionsList);
 
@@ -3636,12 +3930,25 @@
     field.appendChild(reasonWrap);
     el.appendChild(field);
 
-    function readReason() {
-      return currentReason;
+    function readReasons() {
+      return currentReasons.slice();
     }
 
     function readLink() {
       return currentLink;
+    }
+
+    function reasonKey(reason) {
+      return normalizeBlockedReason(reason).toLocaleLowerCase('fr-FR');
+    }
+
+    function hasReason(reason) {
+      var key = reasonKey(reason);
+      if (!key) return false;
+      for (var i = 0; i < currentReasons.length; i++) {
+        if (reasonKey(currentReasons[i]) === key) return true;
+      }
+      return false;
     }
 
     function linkedSubtaskLabel() {
@@ -3670,17 +3977,23 @@
       onLayoutChange();
     }
 
-    function commitReason(value) {
+    function syncLinkWithReasons() {
+      if (!isBlockedWaitingOtherTask(currentReasons)) {
+        currentLink = null;
+      }
+    }
+
+    function addReason(value, options) {
       var next = normalizeBlockedReason(value);
-      if (next === currentReason) {
+      var trackFreq = !(options && options.trackFreq === false);
+      if (!next || hasReason(next)) {
         refreshSelected();
+        refreshSuggestions();
         refreshSubtaskUi();
         return;
       }
-      currentReason = next;
-      if (!isBlockedWaitingOtherTask(currentReason)) {
-        currentLink = null;
-      }
+      if (trackFreq) bumpBlockedReasonFreq(next);
+      currentReasons = currentReasons.concat([next]);
       refreshSelected();
       refreshSuggestions();
       refreshSubtaskUi();
@@ -3688,32 +4001,98 @@
       onLayoutChange();
     }
 
+    function removeReason(value) {
+      var key = reasonKey(value);
+      if (!key) return;
+      var next = [];
+      for (var i = 0; i < currentReasons.length; i++) {
+        if (reasonKey(currentReasons[i]) !== key) next.push(currentReasons[i]);
+      }
+      if (next.length === currentReasons.length) return;
+      currentReasons = next;
+      syncLinkWithReasons();
+      refreshSelected();
+      refreshSuggestions();
+      refreshSubtaskUi();
+      notifyReasonChange();
+      onLayoutChange();
+    }
+
+    function setReasons(value) {
+      currentReasons = normalizeBlockedReasons(value);
+      syncLinkWithReasons();
+      refreshSelected();
+      refreshSuggestions();
+      refreshSubtaskUi();
+      collapse.refreshSummary();
+    }
+
     function refreshSelected() {
-      var hasReason = !!currentReason;
+      while (selectedWrap.firstChild) selectedWrap.removeChild(selectedWrap.firstChild);
+      var hasReason = currentReasons.length > 0;
       selectedWrap.hidden = !hasReason;
-      selectedText.textContent = currentReason;
       field.classList.toggle('has-blocked-reason', hasReason);
+      for (var i = 0; i < currentReasons.length; i++) {
+        (function (reason) {
+          var chip = document.createElement('span');
+          chip.className = 'blocked-reason-chip';
+
+          var text = document.createElement('span');
+          text.className = 'blocked-reason-chip-text';
+          text.textContent = reason;
+          text.title = reason;
+
+          var clearBtn = document.createElement('button');
+          clearBtn.type = 'button';
+          clearBtn.className = 'blocked-reason-chip-clear';
+          clearBtn.setAttribute('aria-label', BLOCKED_REASON_CLEAR_LABEL + ' : ' + reason);
+          clearBtn.textContent = '\u00d7';
+          clearBtn.addEventListener('click', function () {
+            removeReason(reason);
+            reasonInput.focus();
+          });
+
+          chip.appendChild(text);
+          chip.appendChild(clearBtn);
+          selectedWrap.appendChild(chip);
+        })(currentReasons[i]);
+      }
     }
 
     function refreshSuggestions() {
-      var query = (reasonInput.value || '').trim().toLocaleLowerCase('fr-FR');
-      var visibleCount = 0;
-      for (var i = 0; i < suggestionButtons.length; i++) {
-        var btn = suggestionButtons[i];
-        var label = btn.dataset.reason || '';
-        var matchesQuery = !query || label.toLocaleLowerCase('fr-FR').indexOf(query) !== -1;
-        var isCurrent = !!currentReason && label === currentReason;
-        var show = matchesQuery && !isCurrent;
-        btn.hidden = !show;
-        if (show) visibleCount += 1;
+      var query = (reasonInput.value || '').trim();
+      var ranked = rankBlockedReasonSuggestions({
+        query: query,
+        selected: currentReasons,
+        cap: BLOCKED_REASON_EMPTY_SUGGESTION_CAP
+      });
+      while (suggestionsList.firstChild) {
+        suggestionsList.removeChild(suggestionsList.firstChild);
+      }
+      for (var i = 0; i < ranked.length; i++) {
+        (function (optionLabel) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'blocked-reason-suggestion';
+          btn.setAttribute('role', 'listitem');
+          btn.textContent = optionLabel;
+          btn.dataset.reason = optionLabel;
+          btn.addEventListener('click', function () {
+            addReason(optionLabel);
+            reasonInput.value = '';
+            refreshSuggestions();
+            reasonInput.focus();
+          });
+          suggestionsList.appendChild(btn);
+        })(ranked[i]);
       }
       var wasHidden = suggestions.hidden;
-      suggestions.hidden = visibleCount === 0;
+      suggestions.hidden = ranked.length === 0;
       if (wasHidden !== suggestions.hidden) onLayoutChange();
     }
 
     function refreshSubtaskUi() {
-      var waiting = isBlockedWaitingOtherTask(currentReason);
+      var waiting = isBlockedWaitingOtherTask(currentReasons);
       var wasHidden = subtaskWrap.hidden;
       subtaskWrap.hidden = !waiting;
       if (!waiting) {
@@ -3766,7 +4145,7 @@
       if (wasHidden !== subtaskWrap.hidden) onLayoutChange();
     }
 
-    // Keep blockedReason when disabling — only enAttente (enabled) drives badges.
+    // Keep blockedReasons when disabling — only enAttente (enabled) drives badges.
     var collapse = bindCollapsibleEnable({
       field: field,
       body: reasonWrap,
@@ -3774,9 +4153,10 @@
       enabled: checked,
       expanded: config.expanded != null ? !!config.expanded : checked,
       getSummary: function () {
-        var reason = readReason() || BLOCKED_LABEL;
-        var summary = capitalizeCountdownPhrase(reason);
-        if (isBlockedWaitingOtherTask(reason) && currentLink) {
+        var summary = capitalizeCountdownPhrase(
+          formatBlockedReasonsSummary(currentReasons, { empty: BLOCKED_LABEL })
+        );
+        if (isBlockedWaitingOtherTask(currentReasons) && currentLink) {
           var linkLabel = linkedSubtaskLabel();
           if (linkLabel) summary += ' \u2014 ' + linkLabel;
         }
@@ -3797,22 +4177,30 @@
       return collapse.isEnabled();
     }
 
+    function setBlockedReasons(value) {
+      setReasons(value);
+    }
+
+    function getBlockedReasons() {
+      // Always return draft reasons so disable does not wipe persistence.
+      return readReasons();
+    }
+
+    // Legacy single-reason accessors (first reason / replace-all).
     function setBlockedReason(value) {
-      currentReason = normalizeBlockedReason(value);
-      if (!isBlockedWaitingOtherTask(currentReason)) currentLink = null;
-      refreshSelected();
-      refreshSuggestions();
-      refreshSubtaskUi();
-      collapse.refreshSummary();
+      if (value == null || value === '') {
+        setReasons([]);
+        return;
+      }
+      setReasons([value]);
     }
 
     function getBlockedReason() {
-      // Always return draft reason so disable does not wipe persistence.
-      return readReason();
+      return currentReasons.length ? currentReasons[0] : '';
     }
 
     function setBlockedLink(value) {
-      currentLink = isBlockedWaitingOtherTask(currentReason)
+      currentLink = isBlockedWaitingOtherTask(currentReasons)
         ? normalizeBlockedLink(value)
         : null;
       refreshSubtaskUi();
@@ -3820,18 +4208,13 @@
     }
 
     function getBlockedLink() {
-      return isBlockedWaitingOtherTask(currentReason) ? readLink() : null;
+      return isBlockedWaitingOtherTask(currentReasons) ? readLink() : null;
     }
 
     function refreshSubtasks() {
       refreshSubtaskUi();
       collapse.refreshSummary();
     }
-
-    clearBtn.addEventListener('click', function () {
-      commitReason('');
-      reasonInput.focus();
-    });
 
     subtaskClearBtn.addEventListener('click', function () {
       commitLink(null);
@@ -3846,23 +4229,33 @@
       event.preventDefault();
       var typed = normalizeBlockedReason(reasonInput.value);
       if (!typed) return;
-      commitReason(typed);
+      addReason(typed);
       reasonInput.value = '';
       refreshSuggestions();
     });
 
-    setBlockedReason(config.blockedReason);
+    setBlockedReasons(
+      config.blockedReasons != null ? config.blockedReasons : config.blockedReason
+    );
     if (config.blockedLink) setBlockedLink(config.blockedLink);
 
     return {
       el: field,
       getValue: getValue,
       setValue: setValue,
+      getBlockedReasons: getBlockedReasons,
+      setBlockedReasons: setBlockedReasons,
       getBlockedReason: getBlockedReason,
       setBlockedReason: setBlockedReason,
       getBlockedLink: getBlockedLink,
       setBlockedLink: setBlockedLink,
       refreshSubtasks: refreshSubtasks,
+      setEnabled: function (next) {
+        setValue(next);
+      },
+      setEnableAllowed: collapse.setEnableAllowed,
+      isEnableAllowed: collapse.isEnableAllowed,
+      isEnabled: collapse.isEnabled,
       setExpanded: collapse.setExpanded,
       isExpanded: collapse.isExpanded
     };
@@ -5153,6 +5546,8 @@
       getValues: getValues,
       setValue: setValue,
       setEnabled: setEnabled,
+      setEnableAllowed: collapseApi.setEnableAllowed,
+      isEnableAllowed: collapseApi.isEnableAllowed,
       setExpanded: collapseApi.setExpanded,
       isEnabled: collapseApi.isEnabled,
       isExpanded: collapseApi.isExpanded
@@ -6432,8 +6827,13 @@
       ? variantConfig.loadState(defaultState)
       : loadSliderValues(defaultState, variantConfig.dimensions);
     state.enAttente = !!(state.enAttente || defaults.enAttente);
-    state.blockedReason = state.blockedReason || defaults.blockedReason || '';
-    state.blockedLink = isBlockedWaitingOtherTask(state.blockedReason)
+    state.blockedReasons = normalizeBlockedReasons(
+      state.blockedReasons != null || state.blockedReason != null
+        ? state
+        : defaults
+    );
+    delete state.blockedReason;
+    state.blockedLink = isBlockedWaitingOtherTask(state.blockedReasons)
       ? normalizeBlockedLink(state.blockedLink || defaults.blockedLink)
       : null;
     state.dueDate = normalizeDueDate(state.dueDate || defaults.dueDate || '');
@@ -6473,7 +6873,10 @@
       }
       if (enAttenteField) {
         state.enAttente = enAttenteField.getValue();
-        state.blockedReason = enAttenteField.getBlockedReason();
+        state.blockedReasons = enAttenteField.getBlockedReasons
+          ? enAttenteField.getBlockedReasons()
+          : normalizeBlockedReasons(enAttenteField.getBlockedReason());
+        delete state.blockedReason;
         state.blockedLink = enAttenteField.getBlockedLink
           ? enAttenteField.getBlockedLink()
           : null;
@@ -6580,11 +6983,16 @@
     function unblockTask() {
       if (enAttenteField) {
         enAttenteField.setValue(false);
-        enAttenteField.setBlockedReason('');
+        if (enAttenteField.setBlockedReasons) {
+          enAttenteField.setBlockedReasons([]);
+        } else {
+          enAttenteField.setBlockedReason('');
+        }
         if (enAttenteField.setBlockedLink) enAttenteField.setBlockedLink(null);
       }
       state.enAttente = false;
-      state.blockedReason = '';
+      state.blockedReasons = [];
+      delete state.blockedReason;
       state.blockedLink = null;
       cancelSliderAnim();
       repaint();
@@ -6789,7 +7197,7 @@
     enAttenteField = createEnAttenteField({
       el: blockedSection,
       value: state.enAttente,
-      blockedReason: state.blockedReason,
+      blockedReasons: state.blockedReasons,
       blockedLink: state.blockedLink,
       getSubtasks: function () {
         return typeof variantConfig.getBlockedSubtasks === 'function'
@@ -6824,6 +7232,45 @@
     applyFormulaMode(formulaKey);
     repaint();
 
+    var progressCompleteLock = false;
+    var savedDueEnabledBeforeLock = null;
+    var savedBlockedEnabledBeforeLock = null;
+
+    function setProgressCompleteLock(locked) {
+      locked = !!locked;
+      if (locked === progressCompleteLock) return;
+      progressCompleteLock = locked;
+      if (locked) {
+        savedDueEnabledBeforeLock = dueDateField && dueDateField.isEnabled
+          ? !!dueDateField.isEnabled()
+          : !!state.dueEnabled;
+        savedBlockedEnabledBeforeLock = enAttenteField
+          ? !!enAttenteField.getValue()
+          : !!state.enAttente;
+        if (dueDateField && dueDateField.setEnableAllowed) {
+          dueDateField.setEnableAllowed(false);
+        }
+        if (enAttenteField) {
+          // Align with clearBlockedIfComplete / Done celebration: drop blocked when complete.
+          if (enAttenteField.getValue()) enAttenteField.setValue(false);
+          if (enAttenteField.setEnableAllowed) enAttenteField.setEnableAllowed(false);
+        }
+      } else {
+        if (dueDateField && dueDateField.setEnableAllowed) {
+          dueDateField.setEnableAllowed(true);
+          if (savedDueEnabledBeforeLock && dueDateField.setEnabled) {
+            dueDateField.setEnabled(true);
+          }
+        }
+        if (enAttenteField && enAttenteField.setEnableAllowed) {
+          enAttenteField.setEnableAllowed(true);
+          if (savedBlockedEnabledBeforeLock) enAttenteField.setValue(true);
+        }
+        savedDueEnabledBeforeLock = null;
+        savedBlockedEnabledBeforeLock = null;
+      }
+    }
+
     return {
       card: card,
       getState: function () {
@@ -6854,8 +7301,21 @@
         if (next.enAttente != null && enAttenteField) {
           enAttenteField.setValue(next.enAttente);
         }
-        if (next.blockedReason != null && enAttenteField) {
-          enAttenteField.setBlockedReason(next.blockedReason);
+        if (
+          (next.blockedReasons != null || next.blockedReason != null) &&
+          enAttenteField
+        ) {
+          if (enAttenteField.setBlockedReasons) {
+            enAttenteField.setBlockedReasons(
+              next.blockedReasons != null ? next.blockedReasons : next.blockedReason
+            );
+          } else {
+            enAttenteField.setBlockedReason(
+              next.blockedReason != null
+                ? next.blockedReason
+                : (next.blockedReasons && next.blockedReasons[0]) || ''
+            );
+          }
         }
         if (next.blockedLink !== undefined && enAttenteField && enAttenteField.setBlockedLink) {
           enAttenteField.setBlockedLink(next.blockedLink);
@@ -6874,6 +7334,10 @@
         if (enAttenteField && enAttenteField.refreshSubtasks) {
           enAttenteField.refreshSubtasks();
         }
+      },
+      setProgressCompleteLock: setProgressCompleteLock,
+      isProgressCompleteLock: function () {
+        return progressCompleteLock;
       },
       repaint: repaint
     };
@@ -7015,6 +7479,8 @@
     BLOCKED_LINK_TYPE_SUBTASK: BLOCKED_LINK_TYPE_SUBTASK,
     isValidBlockedReason: isValidBlockedReason,
     normalizeBlockedReason: normalizeBlockedReason,
+    normalizeBlockedReasons: normalizeBlockedReasons,
+    formatBlockedReasonsSummary: formatBlockedReasonsSummary,
     isBlockedWaitingOtherTask: isBlockedWaitingOtherTask,
     normalizeBlockedLink: normalizeBlockedLink,
     formatBlockedBadgeText: formatBlockedBadgeText,

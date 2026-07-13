@@ -7,10 +7,10 @@
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./trello-theme.css?v=all-complete-1" />
-  <link rel="stylesheet" href="./priority-ui.css?v=all-complete-1" />
+  <link rel="stylesheet" href="./priority-ui.css?v=progress-lock-1" />
   <script src="./rest-config.js"></script>
   <script src="./priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./priority-ui.js?v=section-collapse-1"></script>
+  <script src="./priority-ui.js?v=progress-lock-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
@@ -157,6 +157,17 @@
       return progress.percent + '\u00a0%';
     }
 
+    function progressIsFullyComplete(data) {
+      if (!data || typeof CompletionTrello === 'undefined') return false;
+      var progress = CompletionTrello.computeCardProgress(data);
+      return !!(progress && progress.percent >= 100);
+    }
+
+    function syncDueBlockedForProgress(data) {
+      if (!variant || typeof variant.setProgressCompleteLock !== 'function') return;
+      variant.setProgressCompleteLock(progressIsFullyComplete(data));
+    }
+
     function setProgressEnabled(enabled, options) {
       options = options || {};
       if (progressCollapse) {
@@ -201,11 +212,17 @@
 
       progressField.appendChild(progressBody);
       progressPanel.appendChild(progressField);
-      var blockedSection = cardEl.querySelector('.variant-blocked-section');
-      if (blockedSection) {
-        cardEl.insertBefore(progressPanel, blockedSection);
+      // Order: Priorité → Graphique → Progrès → Échéance → Bloqué
+      var dueSection = cardEl.querySelector('.variant-due-section');
+      if (dueSection) {
+        cardEl.insertBefore(progressPanel, dueSection);
       } else {
-        cardEl.appendChild(progressPanel);
+        var blockedSection = cardEl.querySelector('.variant-blocked-section');
+        if (blockedSection) {
+          cardEl.insertBefore(progressPanel, blockedSection);
+        } else {
+          cardEl.appendChild(progressPanel);
+        }
       }
 
       progressCollapse = PriorityUI.bindCollapsibleEnable({
@@ -250,19 +267,33 @@
               saveCompletion(data);
               if (progressCollapse) progressCollapse.refreshSummary();
               syncBlockedSubtasks();
+              syncDueBlockedForProgress(data);
             },
-            onAllCompleteChange: function (_allComplete, meta) {
+            onAllCompleteChange: function (allComplete, meta) {
               var live =
                 (completionUi && typeof completionUi.getData === 'function' && completionUi.getData()) ||
                 (meta && meta.data) ||
                 latestCompletion;
-              syncDueCompleteFromProgress(live);
+              syncDueBlockedForProgress(live);
+              var syncPromise = syncDueCompleteFromProgress(live);
+              if (
+                allComplete &&
+                syncPromise &&
+                typeof PriorityTrello.clearBlockedIfComplete === 'function'
+              ) {
+                syncPromise.then(function () {
+                  return PriorityTrello.clearBlockedIfComplete(t);
+                }).catch(function (err) {
+                  console.error('clearBlockedIfComplete after Done failed', err);
+                });
+              }
             },
             onResize: function () {
               resizePopup();
             },
           });
           latestCompletion = completionUi.getData();
+          syncDueBlockedForProgress(latestCompletion);
           // Initial paint may already be all-complete — sync Done without fireworks.
           syncDueCompleteFromProgress(latestCompletion);
           // Enable when deep-linked, stored flag on, or saved progress exists (back-compat).

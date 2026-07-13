@@ -262,14 +262,15 @@ check(
       impact: 2,
       ease: 3,
       enAttente: true,
-      blockedReason: 'En attente d\'une approbation',
+      blockedReasons: ['En attente d\'une approbation'],
     });
     return (
       cleared.urgency === 1 &&
       cleared.impact === 2 &&
       cleared.ease === 3 &&
       cleared.enAttente == null &&
-      cleared.blockedReason == null
+      cleared.blockedReason == null &&
+      cleared.blockedReasons == null
     );
   })()
 );
@@ -281,13 +282,13 @@ check(
       impact: 2,
       ease: 3,
       enAttente: true,
-      blockedReason: 'En attente d\'une approbation',
+      blockedReasons: ['En attente d\'une approbation'],
       dueDate: '2026-07-20',
     });
     return (
       cleared.dueDate === '2026-07-20' &&
       cleared.enAttente == null &&
-      cleared.blockedReason == null
+      cleared.blockedReasons == null
     );
   })()
 );
@@ -592,14 +593,62 @@ check(
       impact: 2,
       ease: 3,
       enAttente: true,
-      blockedReason: 'En attente d\'une autre t\u00e2che',
+      blockedReasons: ['En attente d\'une autre t\u00e2che'],
       blockedLink: { type: 'subtask', id: 'sub-1' }
     });
     return (
       normalized &&
       normalized.blockedLink &&
       normalized.blockedLink.type === 'subtask' &&
-      normalized.blockedLink.id === 'sub-1'
+      normalized.blockedLink.id === 'sub-1' &&
+      Array.isArray(normalized.blockedReasons) &&
+      normalized.blockedReasons[0] === 'En attente d\'une autre t\u00e2che' &&
+      normalized.blockedReason == null
+    );
+  })()
+);
+check(
+  'normalizeInputs migrates legacy blockedReason string',
+  (function () {
+    var normalized = PT.normalizeInputs({
+      urgency: 2,
+      impact: 2,
+      ease: 3,
+      enAttente: true,
+      blockedReason: 'En attente de budget'
+    });
+    return (
+      normalized &&
+      Array.isArray(normalized.blockedReasons) &&
+      normalized.blockedReasons.length === 1 &&
+      normalized.blockedReasons[0] === 'En attente de budget' &&
+      normalized.blockedReason == null
+    );
+  })()
+);
+check(
+  'normalizeInputs keeps multiple blockedReasons without duplicates',
+  (function () {
+    var normalized = PT.normalizeInputs({
+      urgency: 2,
+      impact: 2,
+      ease: 3,
+      enAttente: true,
+      blockedReasons: [
+        'En attente de budget',
+        'En attente d\'une autre t\u00e2che',
+        'En attente de budget'
+      ],
+      blockedLink: { type: 'subtask', id: 'sub-9' }
+    });
+    return (
+      normalized &&
+      normalized.blockedReasons &&
+      normalized.blockedReasons.length === 2 &&
+      normalized.blockedReasons[0] === 'En attente de budget' &&
+      normalized.blockedReasons[1] === 'En attente d\'une autre t\u00e2che' &&
+      normalized.blockedLink &&
+      normalized.blockedLink.id === 'sub-9'
     );
   })()
 );
@@ -610,7 +659,7 @@ check(
       urgency: 2,
       impact: 2,
       ease: 3,
-      blockedReason: 'En attente de budget',
+      blockedReasons: ['En attente de budget'],
       blockedLink: { type: 'subtask', id: 'sub-1' }
     });
     return normalized && normalized.blockedLink == null;
@@ -623,7 +672,7 @@ check(
       urgency: 2,
       impact: 2,
       ease: 3,
-      blockedReason: 'En attente d\'une autre t\u00e2che',
+      blockedReasons: ['En attente d\'une autre t\u00e2che'],
       blockedSubtaskId: 'sub-2'
     });
     return (
@@ -642,13 +691,37 @@ check(
       impact: 2,
       ease: 3,
       enAttente: true,
-      blockedReason: 'En attente d\'une autre t\u00e2che',
+      blockedReasons: ['En attente d\'une autre t\u00e2che'],
       blockedLink: { type: 'subtask', id: 'sub-1' }
     });
     return (
       cleared.enAttente == null &&
       cleared.blockedReason == null &&
+      cleared.blockedReasons == null &&
       cleared.blockedLink == null
+    );
+  })()
+);
+check(
+  'formatBlockedReasonsSummary uses comma or +N',
+  (function () {
+    var one = PU.formatBlockedReasonsSummary(['En attente de budget']);
+    var two = PU.formatBlockedReasonsSummary([
+      'Budget',
+      'Approbation'
+    ]);
+    var many = PU.formatBlockedReasonsSummary(
+      [
+        'En attente d\'une r\u00e9ponse tr\u00e8s longue',
+        'En attente de budget',
+        'En attente d\'une approbation'
+      ],
+      { maxLength: 20 }
+    );
+    return (
+      one === 'En attente de budget' &&
+      two === 'Budget, Approbation' &&
+      many === 'En attente d\'une r\u00e9ponse tr\u00e8s longue +2'
     );
   })()
 );
@@ -815,7 +888,7 @@ check(
         label: 'Urgente',
         tierI: 1,
         blocked: true,
-        blockedReason: 'En attente d\'une autre t\u00e2che',
+        blockedReasons: ['En attente d\'une autre t\u00e2che'],
         dueDate: addDaysIso('2026-07-13', 3),
         dueCountdown: '3 jours restants',
       },
@@ -824,6 +897,25 @@ check(
     return (
       text.indexOf('3 jours restants') === -1 &&
       text.indexOf('En attente d\'une autre t\u00e2che') !== -1
+    );
+  })()
+);
+check(
+  'blocked badge summarizes multiple reasons',
+  (function () {
+    var text = PT.formatBadgeText(
+      {
+        tierLabel: 'Urgente',
+        label: 'Urgente',
+        tierI: 1,
+        blocked: true,
+        blockedReasons: ['Budget', 'Approbation', 'Mat\u00e9riel'],
+      },
+      false
+    );
+    return (
+      text.indexOf('Budget') !== -1 &&
+      (text.indexOf('+2') !== -1 || text.indexOf('Approbation') !== -1)
     );
   })()
 );
