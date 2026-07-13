@@ -288,14 +288,6 @@
     return global.CompletionTrello;
   }
 
-  function escapeHtml(text) {
-    return String(text)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
   var COMPLETION_ENCOURAGEMENT_TIERS = [
     { max: 0, text: 'En attente' },
     { max: 10, text: 'Amorc\u00e9e' },
