@@ -1026,6 +1026,7 @@
   var DUE_DATE_CLEAR_LABEL = 'Effacer l\'\u00e9ch\u00e9ance';
   var DUE_DATE_PLACEHOLDER = 'Choisir une date';
   var DUE_DATE_TODAY_LABEL = 'Aujourd\'hui';
+  var DUE_DATE_CLOSE_LABEL = 'Fermer';
   var DUE_DATE_PREV_MONTH = 'Mois pr\u00e9c\u00e9dent';
   var DUE_DATE_NEXT_MONTH = 'Mois suivant';
   var DUE_DATE_CALENDAR_LABEL = 'Calendrier d\'\u00e9ch\u00e9ance';
@@ -3159,6 +3160,29 @@
     var getSummary = config.getSummary || function () { return ''; };
     var onBeforeDisable = config.onBeforeDisable || null;
     var onAfterEnable = config.onAfterEnable || null;
+    var activateHint = 'Activer pour modifier';
+
+    // Catcher sits above the inert preview body so clicks can enable the section.
+    var shell = body.parentNode && body.parentNode.classList.contains('section-toggle-shell')
+      ? body.parentNode
+      : null;
+    if (!shell && body.parentNode) {
+      shell = document.createElement('div');
+      shell.className = 'section-toggle-shell';
+      body.parentNode.insertBefore(shell, body);
+      shell.appendChild(body);
+    }
+
+    var catcher = shell ? shell.querySelector('.section-enable-catcher') : null;
+    if (shell && !catcher) {
+      catcher = document.createElement('button');
+      catcher.type = 'button';
+      catcher.className = 'section-enable-catcher';
+      catcher.tabIndex = -1;
+      catcher.setAttribute('aria-label', activateHint);
+      catcher.title = activateHint;
+      shell.appendChild(catcher);
+    }
 
     function syncUi(shouldNotifyLayout) {
       var wasHidden = !!body.hidden;
@@ -3166,9 +3190,15 @@
       field.classList.toggle('is-enabled', enabled);
       field.classList.toggle('is-collapsed', !expanded);
       body.hidden = !expanded;
+      if (shell) shell.hidden = !expanded;
       try {
         body.inert = !enabled;
       } catch (e) { /* ignore */ }
+      if (catcher) {
+        var showCatcher = !enabled && expanded;
+        catcher.hidden = !showCatcher;
+        catcher.setAttribute('aria-hidden', showCatcher ? 'false' : 'true');
+      }
       chrome.collapseBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
       chrome.collapseBtn.setAttribute(
         'aria-label',
@@ -3216,6 +3246,19 @@
       chrome.summary.hidden = !text;
     }
 
+    function focusControlAtPoint(clientX, clientY) {
+      var hit = document.elementFromPoint(clientX, clientY);
+      if (!hit || !body.contains(hit)) return;
+      var focusable = typeof hit.closest === 'function'
+        ? hit.closest('button, input:not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"])')
+        : null;
+      var target = focusable && body.contains(focusable) ? focusable : hit;
+      if (!target || typeof target.focus !== 'function' || target.disabled) return;
+      try {
+        target.focus();
+      } catch (err) { /* ignore */ }
+    }
+
     chrome.checkbox.addEventListener('click', function (event) {
       // Keep enable clicks from bubbling into any header handlers.
       event.stopPropagation();
@@ -3230,6 +3273,20 @@
       event.stopPropagation();
       setExpanded(!expanded);
     });
+
+    if (catcher) {
+      catcher.addEventListener('click', function (event) {
+        if (enabled) return;
+        event.preventDefault();
+        event.stopPropagation();
+        var x = event.clientX;
+        var y = event.clientY;
+        setEnabled(true);
+        requestAnimationFrame(function () {
+          focusControlAtPoint(x, y);
+        });
+      });
+    }
 
     syncUi(false);
 
@@ -3711,7 +3768,15 @@
     todayBtn.className = 'due-date-today';
     todayBtn.textContent = DUE_DATE_TODAY_LABEL;
 
+    var closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'due-date-close';
+    closeBtn.textContent = DUE_DATE_CLOSE_LABEL;
+    closeBtn.setAttribute('aria-label', DUE_DATE_CLOSE_LABEL);
+    closeBtn.title = DUE_DATE_CLOSE_LABEL;
+
     footer.appendChild(todayBtn);
+    footer.appendChild(closeBtn);
     popover.appendChild(footer);
 
     /* Calendar anchors under the date trigger; time picker under the time row. */
@@ -4199,6 +4264,7 @@
         }
       }
       if (!open) return;
+      if (document.activeElement === closeBtn) return;
       if (!grid.contains(document.activeElement) && document.activeElement !== todayBtn) {
         return;
       }
@@ -4492,6 +4558,10 @@
 
     todayBtn.addEventListener('click', function () {
       selectIso(toIsoDate(startOfLocalDay(new Date())), true);
+    });
+
+    closeBtn.addEventListener('click', function () {
+      closeCalendar(true);
     });
 
     collapseApi = bindCollapsibleEnable({

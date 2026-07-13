@@ -294,7 +294,7 @@
     { max: 25, text: 'D\u00e9but\u00e9' },
     { max: 50, text: 'En cours' },
     { max: 75, text: 'Bon progr\u00e8s' },
-    { max: 90, text: 'Super avanc\u00e9' },
+    { max: 90, text: 'Bien avanc\u00e9' },
     { max: 99, text: 'Bient\u00f4t termin\u00e9' },
     { max: 100, text: 'Termin\u00e9' },
   ];
@@ -549,7 +549,7 @@
       '<path fill="currentColor" d="M13.2 4.3 6.5 11 2.8 7.3l1.1-1.1 2.6 2.6 5.6-5.6z"/>' +
       '</svg>';
     var TRASH_ICON_SVG =
-      '<svg class="tp-completion-delete-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
+      '<svg class="tp-completion-delete-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">' +
       '<path fill="currentColor" d="M6 2.25A.75.75 0 0 1 6.75 1.5h2.5a.75.75 0 0 1 .75.75V3.5h3.25a.75.75 0 0 1 0 1.5h-.46l-.54 8.05A1.75 1.75 0 0 1 10.51 14.5H5.49a1.75 1.75 0 0 1-1.74-1.45L3.21 5H2.75a.75.75 0 0 1 0-1.5H6V2.25zM7.5 3.5h1V3h-1v.5zM4.72 5l.52 7.8a.25.25 0 0 0 .25.2h5.02a.25.25 0 0 0 .25-.2L11.28 5H4.72zM6.5 6.75a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5a.75.75 0 0 1 .75-.75zm3 0a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5a.75.75 0 0 1 .75-.75z"/>' +
       '</svg>';
 

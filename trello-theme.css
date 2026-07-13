@@ -552,6 +552,9 @@ body.tp-page--priority {
   overflow-x: hidden;
   overflow-y: auto;
   font-size: 15px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
 }
 
 .tp-page--priority {
@@ -566,7 +569,7 @@ body.tp-page--priority {
 .tp-priority-card-header {
   flex-shrink: 0;
   text-align: center;
-  padding: 0 0 10px;
+  padding: 0 0 12px;
 }
 
 .tp-page--priority .variant-card > .tp-priority-card-header {
@@ -576,8 +579,8 @@ body.tp-page--priority {
 .tp-priority-card-name {
   margin: 0;
   min-height: 1.4em;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 500;
   line-height: 1.35;
   color: var(--tp-text);
   word-break: break-word;
@@ -590,7 +593,7 @@ body.tp-page--priority {
 
 .tp-priority-card-name.is-loading {
   font-weight: 400;
-  font-size: 14px;
+  font-size: 15px;
   color: var(--tp-text-muted);
 }
 
@@ -599,7 +602,7 @@ body.tp-page--priority {
   max-width: none;
   width: 100%;
   margin: 0;
-  padding: 4px 12px 8px;
+  padding: 4px 12px 12px;
   overflow-x: hidden;
   container-type: inline-size;
   container-name: priority-popup;
@@ -617,20 +620,25 @@ body.tp-page--priority {
   width: 100%;
   min-width: 0;
   margin: 0;
-  padding: 0.625rem 12px 0.875rem;
+  padding: 0.5rem 4px 0.75rem;
   box-shadow: none;
+  border: none;
   overflow-x: hidden;
 }
 
+/* Soft surface language — heat, fields, blocked, due, graph share tint shells */
 .tp-page--priority .heat-panel {
-  padding: 14px 12px 16px;
+  padding: 16px;
+  border-radius: 12px;
 }
 
 .tp-page--priority .heat-blocked-warning {
   top: 14px;
   right: 14px;
   font-size: 12px;
-  padding: 4px 9px;
+  font-weight: 500;
+  padding: 4px 8px 4px 10px;
+  border: none;
 }
 
 .tp-page--priority .heat-panel.has-blocked-warning .heat-head {
@@ -638,91 +646,103 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .heat-head {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   gap: 10px;
 }
 
 .tp-page--priority .heat-badge {
   margin: 0;
   padding: 12px 16px;
+  border-radius: 12px;
   grid-template-columns: auto minmax(min-content, 1fr);
+  box-shadow: none;
 }
 
 .tp-page--priority .heat-tier-desc {
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 400;
 }
 
 .tp-page--priority .heat-top-label {
   font-size: 14px;
+  font-weight: 500;
+}
+
+.tp-page--priority .heat-badge-num {
+  font-size: 30px;
+  font-weight: 500;
 }
 
 .tp-page--priority .heat-badge-label {
-  font-size: 20px;
+  font-size: 21px;
+  font-weight: 500;
+  flex-wrap: wrap;
 }
 
 .tp-page--priority .heat-score-info {
   width: 20px;
   height: 20px;
   font-size: 12px;
+  font-weight: 500;
 }
 
 .tp-page--priority .heat-seg-labels {
   font-size: 12px;
-  margin-top: 6px;
+  margin-top: 8px;
 }
 
 .tp-page--priority .field-lbl {
   font-size: 15px;
+  font-weight: 500;
 }
 
 .tp-page--priority .field-lbl .ti {
-  font-size: 17px;
+  font-size: 18px;
 }
 
 .tp-page--priority .field-lbl-tooltip {
   font-size: 13px;
+  border: none;
 }
 
 .tp-page--priority .variant-fields .field-head {
-  gap: 6px 10px;
+  gap: 8px 12px;
 }
 
 .tp-page--priority .field-val {
   font-size: 14px;
-}
-
-.tp-page--priority .heat-badge-label {
-  flex-wrap: wrap;
+  font-weight: 500;
 }
 
 .tp-page--priority .variant-fields {
-  padding-left: 10px;
-  padding-right: 10px;
+  padding-left: 8px;
+  padding-right: 8px;
 }
 
 .tp-page--priority .field {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+  gap: 8px;
 }
 
 .tp-api-banner {
   margin: 0 0 12px;
   padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--tp-border-strong);
+  border-radius: 10px;
+  border: none;
   background: var(--tp-surface-subtle);
   color: var(--tp-danger-text);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.45;
 }
 
 .tp-api-banner code {
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .tp-page--priority .variant-blocked-section {
   margin-top: 12px;
-  padding: 12px 10px 0;
+  padding: 0 8px;
 }
 
 .tp-page--priority .variant-blocked-section > .field--en-attente {
@@ -730,43 +750,73 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .variant-due-section {
-  margin-top: 10px;
-  padding: 0 10px 4px;
+  margin-top: 12px;
+  padding: 0 8px 4px;
 }
 
 .tp-page--priority .field--due-date {
   margin-bottom: 0;
+  border: none;
+}
+
+.tp-page--priority .field--due-date.is-enabled,
+.tp-page--priority .field--due-date.has-due-date,
+.tp-page--priority .field--due-date.is-open {
+  padding: 12px;
+  border: none;
+  background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
 }
 
 .tp-page--priority .due-date-title {
   font-size: 15px;
+  font-weight: 500;
 }
 
-.tp-page--priority .due-date-desc,
+.tp-page--priority .due-date-desc {
+  font-size: 14px;
+  font-weight: 400;
+}
+
 .tp-page--priority .due-date-countdown {
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 500;
+  border: none;
 }
 
 .tp-page--priority .due-date-body {
   padding-left: 26px;
 }
 
-.tp-page--priority .due-date-trigger {
-  font-size: 14px;
-  padding-top: 9px;
-  padding-bottom: 9px;
+.tp-page--priority .due-date-trigger,
+.tp-page--priority .due-date-time-trigger {
+  font-size: 15px;
+  font-weight: 400;
+  border: none;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.tp-page--priority .due-date-trigger-icon,
+.tp-page--priority .due-date-trigger-chevron,
+.tp-page--priority .due-date-time-icon,
+.tp-page--priority .due-date-time-chevron {
+  font-size: 18px;
 }
 
 .tp-page--priority .due-date-time-title {
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .tp-page--priority .due-date-time-value {
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
 }
 
-.tp-page--priority .due-date-time-popover {
+.tp-page--priority .due-date-time-popover,
+.tp-page--priority .due-date-popover {
   max-width: 292px;
+  border: none;
 }
 
 .tp-page--priority .due-date-time-chip--period {
@@ -774,67 +824,84 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .due-date-time-chip-label {
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .tp-page--priority .due-date-time-select {
   font-size: 14px;
 }
 
-.tp-page--priority .due-date-popover {
-  max-width: 292px;
-}
-
 .tp-page--priority .due-date-month-label {
   font-size: 15px;
+  font-weight: 500;
 }
 
 .tp-page--priority .due-date-day {
   font-size: 14px;
+  font-weight: 500;
 }
 
 .tp-page--priority .blocked-reason-select {
-  font-size: 14px;
-  padding-top: 7px;
-  padding-bottom: 7px;
+  font-size: 15px;
+  font-weight: 400;
+  border: none;
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
-.tp-page--priority .en-attente-title {
+.tp-page--priority .en-attente-title,
+.tp-page--priority .section-enable-title,
+.tp-page--priority .priority-enable-title {
   font-size: 15px;
+  font-weight: 500;
 }
 
 .tp-page--priority .en-attente-desc {
   font-size: 14px;
+  font-weight: 400;
 }
 
-.tp-page--priority .field {
-  gap: 4px;
+.tp-page--priority .section-enable-checkbox,
+.tp-page--priority .due-date-checkbox,
+.tp-page--priority .en-attente-checkbox {
+  width: 18px;
+  height: 18px;
 }
 
 .tp-page--priority .variant-fields-section {
-  margin-top: 2px;
-}
-
-.tp-page--priority .calc-graph-panel {
   margin-top: 8px;
 }
 
+.tp-page--priority .calc-graph-panel {
+  margin-top: 12px;
+  border: none;
+}
+
+.tp-page--priority .calc-graph-panel.is-enabled {
+  padding: 12px;
+  border: none;
+  background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
+}
+
 .tp-page--priority .variant-priority-section {
-  margin-top: 4px;
-  padding: 0 10px;
+  margin-top: 8px;
+  padding: 0 8px;
+}
+
+.tp-page--priority .field--priority {
+  border: none;
 }
 
 .tp-page--priority .field--priority.is-enabled {
-  padding: 10px 12px;
-}
-
-.tp-page--priority .priority-enable-title,
-.tp-page--priority .section-enable-title {
-  font-size: 15px;
+  padding: 12px;
+  border: none;
+  background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
 }
 
 .tp-page--priority .section-toggle-summary {
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 400;
 }
 
 .tp-page--priority .calc-rsm-wrap {
@@ -849,6 +916,7 @@ body.tp-page--priority {
 
 .tp-page--priority .help-modal {
   max-width: 560px;
+  border: none;
 }
 
 .tp-page--priority .help-modal-header,
@@ -862,6 +930,15 @@ body.tp-page--priority {
   max-width: 680px;
   max-height: 92vh;
   min-height: 480px;
+}
+
+.tp-page--priority .help-modal-title {
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.tp-page--priority .help-modal-body {
+  font-size: 15px;
 }
 
 /* Bridge priority-ui tokens to Trello theme inside the popup */
@@ -945,8 +1022,8 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-page--priority .variant-progress-section {
-  margin-top: 10px;
-  padding: 0 10px 8px;
+  margin-top: 12px;
+  padding: 0 8px 8px;
 }
 
 /* Soft enable shell — tint only, no gray cage (heat-panel vibe) */
@@ -960,17 +1037,19 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-page--priority .field--progress.is-enabled {
-  padding: 12px 14px;
+  padding: 12px;
   background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
 }
 
 .tp-page--priority .progress-enable-checkbox {
+  width: 18px;
+  height: 18px;
   accent-color: var(--tp-primary, #0c66e4);
 }
 
 .tp-page--priority .progress-enable-title {
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-primary, var(--tp-text));
   line-height: 1.45;
   letter-spacing: -0.01em;
@@ -1036,8 +1115,8 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-completion-progress-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--tp-text-muted);
@@ -1052,7 +1131,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 
 .tp-completion-percent {
   font-size: 34px;
-  font-weight: 700;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   color: var(--tp-text);
   line-height: 1;
@@ -1061,15 +1140,15 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 
 .tp-completion-encouragement {
   margin: 0;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 500;
   line-height: 1.3;
   color: var(--tp-text-muted);
   transition: color 0.2s ease;
 }
 
 .tp-completion-encouragement.is-complete {
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .tp-completion-list-section {
@@ -1154,7 +1233,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 
 .tp-completion-item-main {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 28px;
+  grid-template-columns: 28px minmax(0, 1fr) 32px;
   align-items: center;
   gap: 6px;
 }
@@ -1278,16 +1357,16 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-completion-field-lbl {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--tp-text-muted);
   white-space: nowrap;
 }
 
 .tp-completion-field-val,
 .tp-completion-item-val {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   color: var(--tp-text);
   text-align: right;
@@ -1296,6 +1375,11 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 .tp-completion-item.is-done .tp-completion-text {
   text-decoration: line-through;
   color: var(--tp-text-muted);
+}
+
+/* Completed items are always 100% — hide redundant per-row progress UI. */
+.tp-completion-item.is-done .tp-completion-item-slider-row {
+  display: none;
 }
 
 .tp-completion-check-wrap {
@@ -1394,8 +1478,8 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   border-radius: var(--completion-control-radius, 8px);
   color: var(--tp-text-subtle);
   font: inherit;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
   user-select: none;
   transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
@@ -1515,8 +1599,8 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: none;
   border-radius: var(--completion-control-radius, 8px);
@@ -1560,6 +1644,26 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
 .tp-completion-add-input {
   padding: 8px 12px;
   font-size: 14px;
+  /* Distinct from transparent page bg — soft fill + light edge, not a heavy cage */
+  border-color: var(--tp-border);
+  background: var(--tp-surface-subtle, var(--surface-1));
+  box-shadow: inset 0 1px 1px color-mix(in srgb, var(--tp-text) 5%, transparent);
+}
+
+.tp-completion-add-input::placeholder {
+  color: var(--tp-text-muted);
+  opacity: 1;
+}
+
+.tp-completion-add-input:hover {
+  background: color-mix(in srgb, var(--tp-surface-subtle) 75%, var(--tp-surface, var(--tp-input-bg)));
+  border-color: var(--tp-border-strong);
+}
+
+.tp-completion-add-input:focus,
+.tp-completion-add-input:focus-visible {
+  border-color: color-mix(in srgb, var(--tp-primary) 55%, transparent);
+  background: var(--tp-surface, var(--tp-input-bg));
 }
 
 .tp-completion-add-btn {
@@ -1590,7 +1694,7 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   }
 
   .tp-completion-item-main {
-    grid-template-columns: 28px minmax(0, 1fr) 28px;
+    grid-template-columns: 28px minmax(0, 1fr) 32px;
   }
 
   .tp-completion-item-slider-row,

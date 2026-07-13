@@ -237,7 +237,7 @@ check('encouragement amorcee', CUI.progressEncouragementText(8) === 'Amorc\u00e9
 check('encouragement debut', CUI.progressEncouragementText(20) === 'D\u00e9but\u00e9');
 check('encouragement en cours', CUI.progressEncouragementText(40) === 'En cours');
 check('encouragement bon progres', CUI.progressEncouragementText(60) === 'Bon progr\u00e8s');
-check('encouragement super avance', CUI.progressEncouragementText(85) === 'Super avanc\u00e9');
+check('encouragement bien avance', CUI.progressEncouragementText(85) === 'Bien avanc\u00e9');
 check('encouragement bientot termine', CUI.progressEncouragementText(95) === 'Bient\u00f4t termin\u00e9');
 check('encouragement termine', CUI.progressEncouragementText(100) === 'Termin\u00e9');
 

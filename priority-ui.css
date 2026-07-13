@@ -19,7 +19,7 @@
   --slider-track: var(--surface-1);
   --slider-thumb-bg: var(--surface-2);
   --slider-thumb-border: var(--border);
-  --slider-thumb-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  --slider-thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   --slider-focus-ring: 0 0 0 3px rgba(0, 0, 0, 0.12);
   --chart-grid-stroke: rgba(0, 0, 0, 0.05);
   --chart-crosshair-stroke: rgba(26, 25, 23, 0.35);
@@ -143,6 +143,9 @@ body {
   background: var(--surface-0);
   min-height: 100vh;
   color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.45;
 }
 
 /* ── Variant page ── */
@@ -188,7 +191,7 @@ body {
 
 /* ── Criteria fields section ── */
 .variant-fields-section {
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 .variant-fields-section > .variant-fields {
@@ -360,6 +363,40 @@ body {
   display: none !important;
 }
 
+.section-toggle-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.section-toggle-shell[hidden] {
+  display: none !important;
+}
+
+/* Transparent hit target over disabled preview — enables the section on click */
+.section-enable-catcher {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.section-enable-catcher[hidden] {
+  display: none !important;
+}
+
+.field:not(.is-enabled):not(.is-collapsed) .section-enable-catcher {
+  display: block;
+}
+
 /* Disabled-but-expanded: preview content, not interactive */
 .field:not(.is-enabled) .section-toggle-body {
   opacity: 0.48;
@@ -408,7 +445,7 @@ body {
 
 /* ── Blocked checkbox section ── */
 .variant-blocked-section {
-  margin-top: 16px;
+  margin-top: 12px;
   padding: 0 12px;
 }
 
@@ -1269,7 +1306,9 @@ html[data-color-mode="dark"] .due-date-time-clock {
 
 .due-date-footer {
   display: flex;
-  justify-content: center;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-top: 8px;
   padding-top: 8px;
   border-top: none;
@@ -1293,6 +1332,29 @@ html[data-color-mode="dark"] .due-date-time-clock {
 }
 
 .due-date-today:focus-visible {
+  outline: 2px solid var(--due-accent);
+  outline-offset: 1px;
+}
+
+.due-date-close {
+  border: none;
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.due-date-close:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.due-date-close:focus-visible {
   outline: 2px solid var(--due-accent);
   outline-offset: 1px;
 }
@@ -1324,8 +1386,8 @@ html[data-color-mode="dark"] .due-date-time-clock {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 4px;
-  margin: 0 0 10px;
+  gap: 8px;
+  margin: 0 0 12px;
 }
 
 .field-head {
