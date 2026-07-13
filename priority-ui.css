@@ -1725,7 +1725,7 @@ body.help-modal-open {
   margin: 0;
 }
 
-@container heat-panel (min-width: 520px) {
+@container heat-panel (min-width: 480px) {
   .heat-head {
     flex-direction: row;
     align-items: center;

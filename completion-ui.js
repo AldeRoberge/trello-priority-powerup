@@ -458,11 +458,6 @@
     var progressPanel = document.createElement('div');
     progressPanel.className = 'tp-completion-progress-panel';
 
-    var progressHead = document.createElement('div');
-    progressHead.className = 'tp-completion-progress-head';
-    progressHead.innerHTML =
-      '<span class="tp-completion-progress-label">Progr\u00e8s global</span>';
-
     var progressHero = document.createElement('div');
     progressHero.className = 'tp-completion-progress-hero';
     progressHero.innerHTML =
@@ -471,7 +466,6 @@
       progressEncouragementText(0) +
       '</p>';
 
-    progressPanel.appendChild(progressHead);
     progressPanel.appendChild(progressHero);
 
     var masterSlider = createProgressSlider(
@@ -515,9 +509,6 @@
     var listSection = document.createElement('section');
     listSection.className = 'tp-completion-list-section';
     listSection.innerHTML =
-      '<div class="tp-completion-list-head">' +
-      '<h3 class="tp-heading">Sous-t\u00e2ches</h3>' +
-      '</div>' +
       '<ul class="tp-completion-list" id="completionList" aria-label="Sous-t\u00e2ches"></ul>';
     containerEl.appendChild(listSection);
 
@@ -545,7 +536,7 @@
 
     var CHECK_ICON_SVG =
       '<svg class="tp-completion-check-icon" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">' +
-      '<path fill="currentColor" d="M6.4 11.6 3.2 8.4l1.2-1.2 2 2 5.2-5.2 1.2 1.2z"/>' +
+      '<path fill="currentColor" d="M13.2 4.3 6.5 11 2.8 7.3l1.1-1.1 2.6 2.6 5.6-5.6z"/>' +
       '</svg>';
 
     function findItemRow(id) {
