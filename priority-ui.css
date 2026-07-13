@@ -266,11 +266,17 @@ body {
   --due-accent-text: var(--tp-primary-text, #ffffff);
   --due-accent-soft: color-mix(in srgb, var(--due-accent) 14%, transparent);
   margin-bottom: 0;
-  padding: 10px 12px;
+  padding: 0;
   border-radius: var(--radius);
   background: transparent;
   border: 1px solid transparent;
-  transition: background 0.2s ease, border-color 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, padding 0.2s ease;
+}
+
+.field--due-date.is-enabled {
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-color: var(--border);
 }
 
 .field--due-date.has-due-date {
@@ -288,8 +294,21 @@ body {
   border-color: var(--border);
 }
 
-.due-date-head {
-  margin-bottom: 8px;
+.due-date-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.due-date-checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  flex-shrink: 0;
+  accent-color: var(--due-accent);
+  cursor: pointer;
 }
 
 .due-date-text {
@@ -312,6 +331,20 @@ body {
   font-weight: 400;
   color: var(--text-muted);
   line-height: 1.45;
+}
+
+.due-date-label:has(.due-date-checkbox:focus-visible) {
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--due-accent);
+}
+
+.due-date-body {
+  margin-top: 10px;
+  padding-left: 26px;
+}
+
+.due-date-body[hidden] {
+  display: none;
 }
 
 .due-date-controls {

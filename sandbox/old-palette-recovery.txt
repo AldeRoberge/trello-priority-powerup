@@ -1,4 +1,4 @@
-﻿old-palette-recovery.txt
+old-palette-recovery.txt
 ========================
 Recovered from git history in trello-priority-powerup
 Date of search: 2026-07-13
@@ -84,12 +84,12 @@ COMMITS OF INTEREST (chronological):
 
 A) b134fa49b3cd6f0e8c0f7e16d91192dc30e8ba3c  (4044ae3^)
    - LAST multi-hue / per-tier color era (NOT a single blue 5-stop ramp)
-   - TIERS had hardcoded fill/text/seg per tier (red-orange-amber-green-teal-blue-gray)
+   - TIERS had hardcoded fill/text/seg per tier (red/orange/amber/green/teal/blue/gray)
 
 B) 4044ae3a649ce4096b36236929fea0b094d19c90  "fixes"  (2026-07-08)
    - INTRODUCED single-hue PRIORITY_BLUE_STOPS (the "old blue palette")
    - Replaced multi-hue TIERS colors with intensity derived from the blue stops
-   - Remapped TIER_TRELLO_BADGE_COLORS from rainbow named colors - blue intensity mapping
+   - Remapped TIER_TRELLO_BADGE_COLORS from rainbow named colors to blue intensity mapping
 
 C) d7213c6cba25fcdc6088fb3b67781073b3fa6b6d  "added color schemes"  (2026-07-10)
    - INTRODUCED multi-scheme COLOR_SCHEMES proliferation:
@@ -115,14 +115,14 @@ Also present unchanged as COLOR_SCHEMES.blue.stops at d7213c6.
   var PRIORITY_TEXT_ON_LIGHT = '#0C447C';
   var PRIORITY_TEXT_ON_DARK = '#ffffff';
 
-Stops (low - high intensity):
+Stops (low -> high intensity):
   1. #E6F1FB
   2. #B5D4F4
   3. #85B7EB
   4. #378ADD
   5. #0C447C
 
-Comment in 4044ae3: "Single-hue blue intensity palette (low - high priority)."
+Comment in 4044ae3: "Single-hue blue intensity palette (low -> high priority)."
 
 -------------------------------------------------------------------------------
 6) Exact old TIER_TRELLO_BADGE_COLORS (single-blue era: 4044ae3 / d7213c6)
@@ -154,7 +154,7 @@ EVEN OLDER mapping (pre-4044ae3, multi-hue era at b134fa4 / 4044ae3^):
 -------------------------------------------------------------------------------
 7) git stash list
 -------------------------------------------------------------------------------
-(empty - no stashes)
+(empty -- no stashes)
 
 -------------------------------------------------------------------------------
 8) #0079BF and Atlassian-style blue searches
@@ -170,13 +170,13 @@ NOT used as a PRIORITY_BLUE_STOPS stop.
 
 Atlassian-style 5-stop blues searched across history:
   #DEEBFF, #B3D4FF, #4C9AFF, #0052CC, #0747A6
-  - NO matches in git history for these hex values.
+  -> NO matches in git history for these hex values.
 
 The recovered "old" priority blue ramp is the softer / deeper set above
-(#E6F1FB - #0C447C), not the classic Atlassian blues.
+(#E6F1FB ... #0C447C), not the classic Atlassian blues.
 
 -------------------------------------------------------------------------------
-9) Pre-blue multi-hue TIERS palette (4044ae3^ / b134fa4) - for context
+9) Pre-blue multi-hue TIERS palette (4044ae3^ / b134fa4) -- for context
 -------------------------------------------------------------------------------
 Light-mode hardcoded tier colors BEFORE single blue:
 

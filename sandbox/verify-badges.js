@@ -64,6 +64,30 @@ function isTrelloBadgeColor(name) {
 PU.applyColorScheme('blue');
 
 check(
+  'exactly two color schemes',
+  Object.keys(PU.COLOR_SCHEMES).length === 2 &&
+    PU.COLOR_SCHEME_OPTIONS.length === 2 &&
+    !!PU.COLOR_SCHEMES.blue &&
+    !!PU.COLOR_SCHEMES.fire
+);
+check('default scheme is classique blue', PU.DEFAULT_COLOR_SCHEME_KEY === 'blue');
+check(
+  'classic stops restored',
+  PU.PRIORITY_BLUE_STOPS.join(',') ===
+    ['#E6F1FB', '#B5D4F4', '#85B7EB', '#378ADD', '#0C447C'].join(',')
+);
+check(
+  'unknown scheme key falls back to classic',
+  PU.normalizeColorSchemeKey('amber') === 'blue' &&
+    PU.normalizeColorSchemeKey('teal') === 'blue' &&
+    PU.normalizeColorSchemeKey('green') === 'blue'
+);
+check(
+  'french scheme labels',
+  PU.COLOR_SCHEMES.blue.label === 'Classique' && PU.COLOR_SCHEMES.fire.label === 'Feu'
+);
+
+check(
   'incomplete urgent badge',
   PT.formatBadgeText(urgentDisplay, false) === '\u2B24 T\u00e2che urgente'
 );
@@ -104,10 +128,10 @@ check(
   'scheme change updates trello badge mapping',
   (function () {
     var blueUrgent = PU.tierTrelloBadgeColor(urgentDisplay);
-    PU.applyColorScheme('amber');
-    var amberUrgent = PU.tierTrelloBadgeColor(urgentDisplay);
+    PU.applyColorScheme('fire');
+    var fireUrgent = PU.tierTrelloBadgeColor(urgentDisplay);
     PU.applyColorScheme('blue');
-    return blueUrgent !== amberUrgent;
+    return blueUrgent !== fireUrgent;
   })()
 );
 check(
@@ -135,10 +159,43 @@ check(
   (function () {
     PU.applyColorScheme('blue');
     var blueColors = PU.schemeBadgePreviewSamples().map(function (s) { return s.color; }).join(',');
-    PU.applyColorScheme('amber');
-    var amberColors = PU.schemeBadgePreviewSamples().map(function (s) { return s.color; }).join(',');
+    PU.applyColorScheme('fire');
+    var fireColors = PU.schemeBadgePreviewSamples().map(function (s) { return s.color; }).join(',');
     PU.applyColorScheme('blue');
-    return blueColors !== amberColors && amberColors.split(',').every(isTrelloBadgeColor);
+    return blueColors !== fireColors && fireColors.split(',').every(isTrelloBadgeColor);
+  })()
+);
+check(
+  'classic badge map matches restored palette',
+  (function () {
+    PU.applyColorScheme('blue');
+    var samples = PU.schemeBadgePreviewSamples();
+    return (
+      samples[0].color === 'blue' &&
+      samples[1].color === 'blue' &&
+      samples[2].color === 'sky' &&
+      samples[3].color === 'sky' &&
+      samples[4].color === 'sky' &&
+      samples[5].color === 'light-gray' &&
+      samples[6].color === 'light-gray'
+    );
+  })()
+);
+check(
+  'fire badge map is warm mono',
+  (function () {
+    PU.applyColorScheme('fire');
+    var samples = PU.schemeBadgePreviewSamples();
+    PU.applyColorScheme('blue');
+    return (
+      samples[0].color === 'red' &&
+      samples[1].color === 'orange' &&
+      samples[2].color === 'yellow' &&
+      samples[3].color === 'yellow' &&
+      samples[4].color === 'light-gray' &&
+      samples[5].color === 'light-gray' &&
+      samples[6].color === 'light-gray'
+    );
   })()
 );
 check(
@@ -404,6 +461,25 @@ check(
       dueDate: '2026-07-16',
     });
     return normalized && normalized.dueDate === '2026-07-16';
+  })()
+);
+check(
+  'normalizeInputs omits empty dueDate (toggle off)',
+  (function () {
+    var normalized = PT.normalizeInputs({
+      urgency: 3,
+      impact: 3,
+      ease: 2,
+      dueDate: '',
+    });
+    return normalized && normalized.dueDate == null;
+  })()
+);
+check(
+  'withDueDateDisplay skips countdown without dueDate',
+  (function () {
+    var display = PU.withDueDateDisplay({ label: 'Urgente', tierI: 1 }, { dueDate: '' });
+    return display && display.dueCountdown == null && display.dueDate == null;
   })()
 );
 check(

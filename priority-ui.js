@@ -61,7 +61,7 @@
     OPTIONNELLE: 6
   };
   var TIER_I_MAX = TIER_I.OPTIONNELLE;
-  // Tiers 0..FLEXIBLE map to scheme-nearest Trello badge colors; lower tiers stay muted.
+  // Tiers 0..FLEXIBLE use scheme badge colors; Secondaire/Optionnelle stay muted.
   var TIER_I_SCHEME_MAPPED_MAX = TIER_I.FLEXIBLE;
   var TRELLO_BADGE_COLOR_MUTED = 'light-gray';
   var TRELLO_BADGE_COLOR_COMPLETE = 'green';
@@ -371,7 +371,7 @@
     return priorityRelativeLuminance(priorityParseHex(darkest)) > 0.45 ? '#172B4D' : darkest;
   }
 
-  function buildColorScheme(key, label, oklchStops) {
+  function buildColorScheme(key, label, oklchStops, badgeColors) {
     var stops = oklchStopsToHex(oklchStops);
     return {
       key: key,
@@ -379,35 +379,69 @@
       oklchStops: oklchStops,
       oklabStops: oklchStopsToOklab(oklchStops),
       stops: stops,
-      textOnLight: schemeTextOnLight(stops)
+      textOnLight: schemeTextOnLight(stops),
+      badgeColors: badgeColors || null
     };
   }
 
-  // Five hand-tuned OKLCH ramps (light → dark): luminance steps + chroma curve per character.
-  var COLOR_SCHEMES = {
-    blue: buildColorScheme('blue', 'Bleu', [
-      [0.965, 0.018, 240], [0.910, 0.048, 241], [0.835, 0.082, 243],
-      [0.700, 0.125, 246], [0.480, 0.115, 248]
-    ]),
-    green: buildColorScheme('green', 'Vert', [
-      [0.965, 0.022, 145], [0.915, 0.055, 146], [0.845, 0.095, 147],
-      [0.710, 0.130, 148], [0.500, 0.115, 150]
-    ]),
-    purple: buildColorScheme('purple', 'Violet', [
-      [0.965, 0.020, 302], [0.905, 0.058, 300], [0.830, 0.105, 298],
-      [0.690, 0.155, 295], [0.480, 0.140, 292]
-    ]),
-    amber: buildColorScheme('amber', 'Ambre', [
-      [0.975, 0.028, 92], [0.930, 0.070, 78], [0.870, 0.115, 68],
-      [0.750, 0.145, 58], [0.560, 0.130, 52]
-    ]),
-    teal: buildColorScheme('teal', 'Sarcelle', [
-      [0.965, 0.020, 195], [0.915, 0.050, 196], [0.845, 0.088, 198],
-      [0.720, 0.120, 200], [0.520, 0.105, 202]
-    ])
+  // Exact hex ramps (low → high priority). Classic restored from 4044ae3 / pre-multi-scheme era.
+  function buildColorSchemeFromHex(key, label, hexStops, textOnLight, badgeColors) {
+    var stops = hexStops.slice();
+    var oklabStops = stops.map(function (hex) {
+      return rgbToOklab(priorityParseHex(hex));
+    });
+    return {
+      key: key,
+      label: label,
+      oklchStops: null,
+      oklabStops: oklabStops,
+      stops: stops,
+      textOnLight: textOnLight || schemeTextOnLight(stops),
+      badgeColors: badgeColors || null
+    };
+  }
+
+  // Classic blue intensity map (tiers 0..6) — restored from single-palette era.
+  var CLASSIC_TIER_TRELLO_BADGE_COLORS = {
+    0: 'blue',
+    1: 'blue',
+    2: 'sky',
+    3: 'sky',
+    4: 'sky',
+    5: TRELLO_BADGE_COLOR_MUTED,
+    6: TRELLO_BADGE_COLOR_MUTED
   };
 
-  var COLOR_SCHEME_OPTIONS = ['blue', 'green', 'purple', 'amber', 'teal'].map(function (key) {
+  // Feu: gray → orange → red; maps cleanly onto Trello named badge colors.
+  var FIRE_TIER_TRELLO_BADGE_COLORS = {
+    0: 'red',
+    1: 'orange',
+    2: 'yellow',
+    3: 'yellow',
+    4: TRELLO_BADGE_COLOR_MUTED,
+    5: TRELLO_BADGE_COLOR_MUTED,
+    6: TRELLO_BADGE_COLOR_MUTED
+  };
+
+  // Exactly two schemes: Classique (default) + Feu.
+  var COLOR_SCHEMES = {
+    blue: buildColorSchemeFromHex(
+      'blue',
+      'Classique',
+      ['#E6F1FB', '#B5D4F4', '#85B7EB', '#378ADD', '#0C447C'],
+      '#0C447C',
+      CLASSIC_TIER_TRELLO_BADGE_COLORS
+    ),
+    fire: buildColorSchemeFromHex(
+      'fire',
+      'Feu',
+      ['#F0EEE9', '#C9B8A6', '#E8A04A', '#E07030', '#C23B2A'],
+      '#C23B2A',
+      FIRE_TIER_TRELLO_BADGE_COLORS
+    )
+  };
+
+  var COLOR_SCHEME_OPTIONS = ['blue', 'fire'].map(function (key) {
     return { key: key, label: COLOR_SCHEMES[key].label };
   });
 
@@ -416,7 +450,7 @@
   var activeOklabStops = COLOR_SCHEMES.blue.oklabStops.slice();
   var activeTextOnLight = COLOR_SCHEMES.blue.textOnLight;
   var PRIORITY_TEXT_ON_DARK = '#ffffff';
-  // Backward-compatible alias for the default blue palette.
+  // Backward-compatible alias for the default classic palette.
   var PRIORITY_BLUE_STOPS = COLOR_SCHEMES.blue.stops;
 
   // Trello card badges accept named colors only — map tier seg colors to the nearest.
@@ -434,17 +468,8 @@
   TRELLO_BADGE_COLOR_HEX[TRELLO_BADGE_COLOR_MUTED] = '#B3BAC5';
   var TRELLO_BADGE_COLOR_NAMES = Object.keys(TRELLO_BADGE_COLOR_HEX);
 
-  // Default blue-scheme mapping; rebuilt by rebuildTrelloBadgeColors() after tiers exist.
   function defaultTierTrelloBadgeColors() {
-    return {
-      0: 'blue',
-      1: 'blue',
-      2: 'sky',
-      3: 'sky',
-      4: 'sky',
-      5: TRELLO_BADGE_COLOR_MUTED,
-      6: TRELLO_BADGE_COLOR_MUTED
-    };
+    return Object.assign({}, CLASSIC_TIER_TRELLO_BADGE_COLORS);
   }
   var TIER_TRELLO_BADGE_COLORS = defaultTierTrelloBadgeColors();
 
@@ -464,7 +489,20 @@
     return ranked[0].name;
   }
 
+  function copyTierBadgeColors(source) {
+    var out = {};
+    for (var i = 0; i <= TIER_I_MAX; i++) {
+      out[i] = source[i] || TRELLO_BADGE_COLOR_MUTED;
+    }
+    return out;
+  }
+
   function rebuildTrelloBadgeColors() {
+    var scheme = COLOR_SCHEMES[activeColorSchemeKey];
+    if (scheme && scheme.badgeColors) {
+      TIER_TRELLO_BADGE_COLORS = copyTierBadgeColors(scheme.badgeColors);
+      return;
+    }
     if (!TIER_TRELLO_BADGE_COLORS || typeof TIER_TRELLO_BADGE_COLORS !== 'object') {
       TIER_TRELLO_BADGE_COLORS = defaultTierTrelloBadgeColors();
     }
@@ -704,6 +742,7 @@
   }
 
   function normalizeColorSchemeKey(key) {
+    // Unknown / retired keys (vert, violet, amber, teal, …) fall back to Classique.
     return COLOR_SCHEMES[key] ? key : DEFAULT_COLOR_SCHEME_KEY;
   }
 
@@ -727,7 +766,7 @@
       if (typeof localStorage === 'undefined') return null;
       var raw = localStorage.getItem(COLOR_SCHEME_STORAGE_KEY);
       if (!raw) return null;
-      return COLOR_SCHEMES[raw] ? raw : null;
+      return normalizeColorSchemeKey(raw);
     } catch (e) { return null; }
   }
 
@@ -2845,6 +2884,7 @@
     var onChange = config.onChange || function () {};
     var onLayoutChange = config.onLayoutChange || function () {};
     var current = normalizeDueDate(config.value);
+    var enabled = !!current;
     var open = false;
     var viewYear;
     var viewMonth;
@@ -2864,26 +2904,36 @@
     var field = document.createElement('div');
     field.className = 'field field--due-date';
 
-    var head = document.createElement('div');
-    head.className = 'due-date-head';
+    var label = document.createElement('label');
+    label.className = 'due-date-label';
 
-    var textWrap = document.createElement('div');
+    var toggle = document.createElement('input');
+    toggle.type = 'checkbox';
+    toggle.className = 'due-date-checkbox';
+    toggle.checked = enabled;
+    toggle.setAttribute('aria-describedby', uid + '-desc');
+
+    var textWrap = document.createElement('span');
     textWrap.className = 'due-date-text';
 
-    var title = document.createElement('div');
+    var title = document.createElement('span');
     title.className = 'due-date-title';
     title.id = uid + '-label';
     title.textContent = DUE_DATE_LABEL;
 
-    var desc = document.createElement('div');
+    var desc = document.createElement('span');
     desc.className = 'due-date-desc';
     desc.id = uid + '-desc';
     desc.textContent = DUE_DATE_DESCRIPTION;
 
     textWrap.appendChild(title);
     textWrap.appendChild(desc);
-    head.appendChild(textWrap);
-    field.appendChild(head);
+    label.appendChild(toggle);
+    label.appendChild(textWrap);
+    field.appendChild(label);
+
+    var body = document.createElement('div');
+    body.className = 'due-date-body';
 
     var controls = document.createElement('div');
     controls.className = 'due-date-controls';
@@ -2921,7 +2971,7 @@
 
     controls.appendChild(trigger);
     controls.appendChild(clearBtn);
-    field.appendChild(controls);
+    body.appendChild(controls);
 
     var popover = document.createElement('div');
     popover.className = 'due-date-popover';
@@ -2959,10 +3009,10 @@
     var weekdays = document.createElement('div');
     weekdays.className = 'due-date-weekdays';
     weekdays.setAttribute('aria-hidden', 'true');
-    DUE_DATE_WEEKDAYS.forEach(function (label, index) {
+    DUE_DATE_WEEKDAYS.forEach(function (labelText, index) {
       var cell = document.createElement('span');
       cell.className = 'due-date-weekday';
-      cell.textContent = label;
+      cell.textContent = labelText;
       cell.title = DUE_DATE_WEEKDAY_NAMES[index];
       weekdays.appendChild(cell);
     });
@@ -2984,13 +3034,14 @@
 
     footer.appendChild(todayBtn);
     popover.appendChild(footer);
-    field.appendChild(popover);
+    body.appendChild(popover);
 
     var countdown = document.createElement('div');
     countdown.className = 'due-date-countdown';
     countdown.setAttribute('aria-live', 'polite');
-    field.appendChild(countdown);
+    body.appendChild(countdown);
 
+    field.appendChild(body);
     el.appendChild(field);
 
     function notifyLayout() {
@@ -3013,7 +3064,7 @@
     }
 
     function refreshCountdown() {
-      if (!current) {
+      if (!enabled || !current) {
         countdown.textContent = '';
         countdown.hidden = true;
         countdown.classList.remove('is-past');
@@ -3033,24 +3084,58 @@
       refreshTrigger();
     }
 
+    function updateVisibility(shouldNotifyLayout) {
+      var wasHidden = body.hidden;
+      body.hidden = !enabled;
+      toggle.checked = enabled;
+      field.classList.toggle('is-enabled', enabled);
+      if (!enabled) {
+        field.classList.remove('is-open', 'has-due-date', 'is-past');
+      }
+      refreshCountdown();
+      if (shouldNotifyLayout !== false && wasHidden !== body.hidden) {
+        notifyLayout();
+      }
+    }
+
     function emitChange() {
       refreshCountdown();
       onChange(getValue());
     }
 
     function getValue() {
-      return current;
+      return enabled ? current : '';
     }
 
     function setValue(value) {
       current = normalizeDueDate(value);
+      enabled = !!current;
       if (current) {
         syncViewFromValue(current);
       } else {
         syncViewFromValue('');
+        closeCalendar(false);
       }
-      if (open) renderCalendar();
-      refreshCountdown();
+      if (open && enabled) renderCalendar();
+      updateVisibility(false);
+    }
+
+    function setEnabled(nextEnabled) {
+      var on = !!nextEnabled;
+      if (on === enabled) {
+        updateVisibility();
+        return;
+      }
+      enabled = on;
+      if (!enabled) {
+        current = '';
+        closeCalendar(false);
+        syncViewFromValue('');
+        updateVisibility();
+        emitChange();
+        return;
+      }
+      updateVisibility();
     }
 
     function shiftMonth(delta) {
@@ -3065,6 +3150,7 @@
     }
 
     function selectIso(iso, closeAfter) {
+      if (!enabled) return;
       var next = normalizeDueDate(iso);
       if (!next) return;
       current = next;
@@ -3218,7 +3304,7 @@
     }
 
     function openCalendar() {
-      if (open) return;
+      if (!enabled || open) return;
       open = true;
       if (current) syncViewFromValue(current);
       else {
@@ -3240,18 +3326,25 @@
       field.classList.remove('is-open');
       trigger.setAttribute('aria-expanded', 'false');
       unbindDocListeners();
-      if (restoreFocus) trigger.focus();
+      if (restoreFocus && enabled) trigger.focus();
       notifyLayout();
     }
 
+    toggle.addEventListener('change', function () {
+      setEnabled(toggle.checked);
+    });
+
     trigger.addEventListener('click', function () {
+      if (!enabled) return;
       if (open) closeCalendar(false);
       else openCalendar();
     });
 
     clearBtn.addEventListener('click', function () {
+      if (!enabled) return;
       current = '';
       closeCalendar(false);
+      syncViewFromValue('');
       emitChange();
       trigger.focus();
     });
@@ -3268,7 +3361,7 @@
       selectIso(toIsoDate(startOfLocalDay(new Date())), true);
     });
 
-    refreshCountdown();
+    updateVisibility(false);
 
     return {
       el: field,

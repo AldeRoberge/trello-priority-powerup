@@ -464,6 +464,12 @@
       'completionMasterSlider'
     );
     masterSlider.el.classList.add('tp-completion-master-slider');
+    masterSlider.input.addEventListener('change', function () {
+      if (data.items.length) {
+        renderList();
+        onResize();
+      }
+    });
     progressPanel.appendChild(masterSlider.el);
 
     var metaEl = document.createElement('p');
@@ -565,16 +571,8 @@
     }
 
     function emitChange() {
-      var prevIds = data.items.map(function (item) {
-        return item.id;
-      }).join('\0');
       data = CT.normalizeCompletionData(data);
-      var nextIds = data.items.map(function (item) {
-        return item.id;
-      }).join('\0');
-      if (prevIds !== nextIds) {
-        renderList();
-      }
+      renderList();
       updateProgressUi();
       onChange(data);
     }
@@ -629,7 +627,7 @@
     }
 
     function bindItemRow(li, item) {
-      var checkbox = li.querySelector('.tp-completion-check');
+      var checkBtn = li.querySelector('.tp-completion-check');
       var textInput = li.querySelector('.tp-completion-text');
       var diffSelect = li.querySelector('.tp-completion-diff');
       var deleteBtn = li.querySelector('.tp-completion-delete');
@@ -638,22 +636,22 @@
       function syncItemProgressUi() {
         var p = CT.itemProgress(item);
         if (itemSlider) applySliderProgressTrack(itemSlider, p);
+        syncCheckButton(checkBtn, item.done);
+        li.classList.toggle('is-done', item.done);
       }
 
-      checkbox.addEventListener('change', function () {
-        setItemProgress(item, checkbox.checked ? 100 : 0);
-        li.classList.toggle('is-done', item.done);
+      checkBtn.addEventListener('click', function () {
+        setItemProgress(item, item.done ? 0 : 100);
         itemSlider.value = String(item.progress);
         itemValEl.textContent = item.progress + '\u00a0%';
         syncItemProgressUi();
         emitChange();
+        onResize();
       });
 
       function handleItemSlider() {
         var v = Number(itemSlider.value);
         setItemProgress(item, v);
-        checkbox.checked = item.done;
-        li.classList.toggle('is-done', item.done);
         itemValEl.textContent = v + '\u00a0%';
         syncItemProgressUi();
         updateProgressUi();
@@ -661,7 +659,11 @@
       }
 
       itemSlider.addEventListener('input', handleItemSlider);
-      itemSlider.addEventListener('change', handleItemSlider);
+      itemSlider.addEventListener('change', function () {
+        handleItemSlider();
+        renderList();
+        onResize();
+      });
 
       textInput.addEventListener('change', function () {
         var trimmed = textInput.value.trim();
@@ -700,14 +702,14 @@
       var mainRow = document.createElement('div');
       mainRow.className = 'tp-completion-item-main';
 
-      var checkWrap = document.createElement('label');
+      var checkWrap = document.createElement('div');
       checkWrap.className = 'tp-completion-check-wrap';
-      var checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.className = 'tp-completion-check';
-      checkbox.checked = item.done;
-      checkbox.setAttribute('aria-label', 'Marquer comme termin\u00e9 (100\u00a0%)');
-      checkWrap.appendChild(checkbox);
+      var checkBtn = document.createElement('button');
+      checkBtn.type = 'button';
+      checkBtn.className = 'tp-completion-check' + (item.done ? ' is-checked' : '');
+      checkBtn.innerHTML = CHECK_ICON_SVG;
+      syncCheckButton(checkBtn, item.done);
+      checkWrap.appendChild(checkBtn);
 
       var textInput = document.createElement('input');
       textInput.type = 'text';
@@ -738,7 +740,7 @@
 
       var sliderLbl = document.createElement('span');
       sliderLbl.className = 'tp-completion-field-lbl';
-      sliderLbl.textContent = 'Progrès';
+      sliderLbl.textContent = 'Progr\u00e8s';
 
       var sliderWrap = document.createElement('div');
       sliderWrap.className = 'field-slider';
@@ -769,8 +771,11 @@
 
     function renderList() {
       listEl.replaceChildren();
+      doneListEl.replaceChildren();
       listSection.classList.toggle('is-empty', !data.items.length);
+
       if (!data.items.length) {
+        updateDoneSectionUi(0);
         var empty = document.createElement('li');
         empty.className = 'tp-completion-empty';
         empty.setAttribute('aria-live', 'polite');
@@ -779,10 +784,32 @@
         listEl.appendChild(empty);
         return;
       }
+
+      var activeItems = [];
+      var doneItems = [];
       data.items.forEach(function (item) {
+        if (item.done) doneItems.push(item);
+        else activeItems.push(item);
+      });
+
+      activeItems.forEach(function (item) {
         listEl.appendChild(renderItem(item));
       });
+      doneItems.forEach(function (item) {
+        doneListEl.appendChild(renderItem(item));
+      });
+      updateDoneSectionUi(doneItems.length);
     }
+
+    doneToggle.addEventListener('click', function () {
+      doneSectionExpanded = !doneSectionExpanded;
+      updateDoneSectionUi(
+        data.items.filter(function (item) {
+          return item.done;
+        }).length
+      );
+      onResize();
+    });
 
     function removeItem(id) {
       var nextItems = data.items.filter(function (item) {
@@ -792,8 +819,6 @@
         data.progress = CT.computeCardProgress(data).percent;
       }
       data.items = nextItems;
-      renderList();
-      updateProgressUi();
       emitChange();
       onResize();
     }
@@ -811,8 +836,6 @@
       });
       if (!item) return false;
       data.items.push(item);
-      renderList();
-      updateProgressUi();
       emitChange();
       onResize();
       return true;
