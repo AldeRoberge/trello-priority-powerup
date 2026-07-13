@@ -108,7 +108,7 @@ html[data-color-mode="dark"] .heat-badge.is-inutile .heat-tier-desc {
 html[data-color-mode="dark"] .heat-badge.is-blocked,
 html[data-color-mode="dark"] .heat-badge.is-overdue {
   background: color-mix(in srgb, var(--heat-fill, var(--blocked-fill)) 72%, var(--surface-2));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--blocked-border) 36%, transparent);
+  box-shadow: none;
 }
 
 html[data-color-mode="dark"] .heat-badge.is-blocked .heat-badge-num,
@@ -167,12 +167,12 @@ body {
   --card-tier-border-mix: 20%;
   --card-panel-tint-mix: 8%;
   background: color-mix(in srgb, var(--card-tier-tint) var(--card-tier-tint-mix), var(--surface-2));
-  border: 0.5px solid color-mix(in srgb, var(--card-tier-border) var(--card-tier-border-mix), var(--border));
+  border: none;
   border-radius: 14px;
   padding: 1.125rem 1.125rem 1.25rem;
-  box-shadow: var(--card-shadow);
+  box-shadow: none;
   min-width: 0;
-  transition: background 0.25s ease, border-color 0.25s ease;
+  transition: background 0.25s ease;
 }
 
 .variant-card.is-blocked,
@@ -219,7 +219,7 @@ body {
   padding: 4px;
   border-radius: 10px;
   background: var(--surface-1);
-  border: 0.5px solid var(--border);
+  border: none;
 }
 
 .formula-switcher-btn {
@@ -229,13 +229,13 @@ body {
   border-radius: 8px;
   padding: 8px 10px;
   font: inherit;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1.2;
   color: var(--text-secondary);
   background: transparent;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .formula-switcher-btn:hover {
@@ -246,7 +246,7 @@ body {
 .formula-switcher-btn.is-active {
   color: var(--text-primary);
   background: var(--surface-2);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: none;
 }
 
 .formula-switcher-btn:focus-visible {
@@ -254,7 +254,9 @@ body {
   outline-offset: 1px;
 }
 
-/* ── Shared section enable + collapse chrome ── */
+/* ── Shared section enable + collapse chrome ──
+   Checkbox = enable/disable feature
+   Rest of header (title + summary + chevron) = expand/collapse body */
 .section-toggle-head {
   display: flex;
   align-items: flex-start;
@@ -262,33 +264,60 @@ body {
 }
 
 .section-enable-label {
-  display: flex;
+  display: inline-flex;
   align-items: flex-start;
-  gap: 10px;
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 0 0 auto;
+  margin: 0;
   cursor: pointer;
   user-select: none;
 }
 
 .section-enable-checkbox {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   margin: 2px 0 0;
   flex-shrink: 0;
   cursor: pointer;
 }
 
+.section-collapse-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: -4px -6px;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.section-collapse-btn:hover {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+
+.section-collapse-btn:focus-visible {
+  outline: 2px solid var(--focus-ring-strong, #0c66e4);
+  outline-offset: 1px;
+}
+
 .section-enable-text {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
+  flex: 0 1 auto;
 }
 
 .section-enable-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 500;
   color: var(--text-primary);
   line-height: 1.45;
   letter-spacing: -0.01em;
@@ -299,8 +328,8 @@ body {
   min-width: 0;
   max-width: 46%;
   margin-top: 2px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 400;
   color: var(--text-muted);
   line-height: 1.35;
   text-align: right;
@@ -309,40 +338,21 @@ body {
   white-space: nowrap;
 }
 
-.section-collapse-btn {
+.section-collapse-chevron {
   flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin-top: -2px;
-  padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
+  margin-left: auto;
+  margin-top: 1px;
+  font-size: 18px;
+  line-height: 1;
   color: var(--text-muted);
-  cursor: pointer;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition: transform 0.18s ease, color 0.12s ease;
 }
 
-.section-collapse-btn:hover {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+.section-collapse-btn:hover .section-collapse-chevron {
   color: var(--text-primary);
 }
 
-.section-collapse-btn:focus-visible {
-  outline: 2px solid var(--focus-ring-strong, #0c66e4);
-  outline-offset: 1px;
-}
-
-.section-collapse-chevron {
-  font-size: 16px;
-  line-height: 1;
-  transition: transform 0.18s ease;
-}
-
-.field.is-enabled:not(.is-collapsed) .section-collapse-chevron {
+.field:not(.is-collapsed) .section-collapse-chevron {
   transform: rotate(180deg);
 }
 
@@ -350,9 +360,21 @@ body {
   display: none !important;
 }
 
+/* Disabled-but-expanded: preview content, not interactive */
+.field:not(.is-enabled) .section-toggle-body {
+  opacity: 0.48;
+  filter: grayscale(0.25);
+  pointer-events: none;
+  user-select: none;
+}
+
+.field:not(.is-enabled) .section-enable-title {
+  color: var(--text-muted);
+}
+
 /* ── Priority section ── */
 .variant-priority-section {
-  margin-top: 4px;
+  margin-top: 8px;
   padding: 0 12px;
 }
 
@@ -361,14 +383,13 @@ body {
   padding: 0;
   border-radius: var(--radius);
   background: transparent;
-  border: 1px solid transparent;
-  transition: background 0.2s ease, border-color 0.2s ease, padding 0.2s ease;
+  border: none;
+  transition: background 0.2s ease, padding 0.2s ease;
 }
 
 .field--priority.is-enabled {
-  padding: 10px 12px;
-  background: var(--surface-2);
-  border-color: var(--border);
+  padding: 12px;
+  background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
 }
 
 .priority-section-body {
@@ -387,14 +408,13 @@ body {
 
 /* ── Blocked checkbox section ── */
 .variant-blocked-section {
-  margin-top: 14px;
-  padding: 14px 12px 0;
-  border-top: 0.5px solid var(--border);
+  margin-top: 16px;
+  padding: 0 12px;
 }
 
 /* ── Due date section ── */
 .variant-due-section {
-  margin-top: 10px;
+  margin-top: 12px;
   padding: 0 12px 4px;
 }
 
@@ -406,29 +426,25 @@ body {
   padding: 0;
   border-radius: var(--radius);
   background: transparent;
-  border: 1px solid transparent;
-  transition: background 0.2s ease, border-color 0.2s ease, padding 0.2s ease;
+  border: none;
+  transition: background 0.2s ease, padding 0.2s ease;
 }
 
 .field--due-date.is-enabled {
-  padding: 10px 12px;
-  background: var(--surface-2);
-  border-color: var(--border);
+  padding: 12px;
+  background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
 }
 
 .field--due-date.has-due-date {
-  background: var(--surface-2);
-  border-color: var(--border);
+  background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
 }
 
 .field--due-date.is-past {
   background: color-mix(in srgb, var(--blocked-fill) 55%, var(--surface-2));
-  border-color: color-mix(in srgb, var(--blocked-border) 35%, var(--border));
 }
 
 .field--due-date.is-open {
-  background: var(--surface-2);
-  border-color: var(--border);
+  background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
 }
 
 .due-date-label {
@@ -440,8 +456,8 @@ body {
 }
 
 .due-date-checkbox {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   margin: 2px 0 0;
   flex-shrink: 0;
   accent-color: var(--due-accent);
@@ -451,20 +467,20 @@ body {
 .due-date-text {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
 }
 
 .due-date-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 500;
   color: var(--text-primary);
   line-height: 1.45;
   letter-spacing: -0.01em;
 }
 
 .due-date-desc {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
   color: var(--text-muted);
   line-height: 1.45;
@@ -496,42 +512,38 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
-  border: 1.5px solid var(--border);
+  padding: 10px 12px;
+  border: none;
   border-radius: 10px;
-  background: var(--surface-1, var(--surface-2));
+  background: color-mix(in srgb, var(--surface-1, var(--surface-2)) 85%, var(--surface-2));
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.35;
   text-align: left;
   cursor: pointer;
   transition:
-    border-color 0.15s ease,
     background-color 0.15s ease,
     box-shadow 0.15s ease;
 }
 
 .due-date-trigger:hover {
   background: var(--surface-hover);
-  border-color: color-mix(in srgb, var(--due-accent) 35%, var(--border));
 }
 
 .due-date-trigger:focus-visible {
   outline: none;
-  border-color: var(--due-accent);
   box-shadow: 0 0 0 3px var(--due-accent-soft);
 }
 
 .field--due-date.is-open .due-date-trigger {
-  border-color: var(--due-accent);
   box-shadow: 0 0 0 3px var(--due-accent-soft);
 }
 
 .due-date-trigger-icon,
 .due-date-trigger-chevron {
   flex-shrink: 0;
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1;
   color: var(--due-accent);
 }
@@ -539,7 +551,7 @@ body {
 .due-date-trigger-chevron {
   margin-left: auto;
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: 16px;
   transition: transform 0.18s ease;
 }
 
@@ -553,7 +565,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.01em;
 }
 
@@ -608,45 +620,40 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
-  border: 1.5px solid var(--border);
+  padding: 10px 12px;
+  border: none;
   border-radius: 10px;
-  background: var(--surface-1, var(--surface-2));
+  background: color-mix(in srgb, var(--surface-1, var(--surface-2)) 85%, var(--surface-2));
   color: var(--text-primary);
   font-family: var(--font-sans);
   text-align: left;
   cursor: pointer;
   transition:
-    border-color 0.15s ease,
     background-color 0.15s ease,
     box-shadow 0.15s ease;
 }
 
 .due-date-time-trigger:hover {
   background: var(--surface-hover);
-  border-color: color-mix(in srgb, var(--due-accent) 35%, var(--border));
 }
 
 .due-date-time-trigger:focus-visible {
   outline: none;
-  border-color: var(--due-accent);
   box-shadow: 0 0 0 3px var(--due-accent-soft);
 }
 
 .due-date-time-row.has-time .due-date-time-trigger {
-  border-color: color-mix(in srgb, var(--due-accent) 28%, var(--border));
-  background: color-mix(in srgb, var(--due-accent) 6%, var(--surface-1, var(--surface-2)));
+  background: color-mix(in srgb, var(--due-accent) 8%, var(--surface-1, var(--surface-2)));
 }
 
 .field--due-date.is-time-open .due-date-time-trigger {
-  border-color: var(--due-accent);
   box-shadow: 0 0 0 3px var(--due-accent-soft);
 }
 
 .due-date-time-icon,
 .due-date-time-chevron {
   flex-shrink: 0;
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1;
   color: var(--due-accent);
 }
@@ -654,7 +661,7 @@ body {
 .due-date-time-chevron {
   margin-left: auto;
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: 16px;
   transition: transform 0.18s ease;
 }
 
@@ -671,23 +678,23 @@ body {
 }
 
 .due-date-time-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   color: var(--text-primary);
   line-height: 1.25;
   letter-spacing: -0.01em;
 }
 
 .due-date-time-value {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   color: var(--due-accent);
   line-height: 1.2;
 }
 
 .due-date-time-value.is-placeholder {
-  font-weight: 500;
+  font-weight: 400;
   color: var(--text-muted);
 }
 
@@ -725,13 +732,11 @@ body {
   width: 100%;
   max-width: 292px;
   margin-top: 8px;
-  padding: 12px 10px 12px;
-  border: 1px solid var(--border);
+  padding: 12px;
+  border: none;
   border-radius: 14px;
   background: var(--surface-2);
-  box-shadow:
-    0 1px 2px color-mix(in srgb, var(--text-primary) 6%, transparent),
-    0 8px 24px color-mix(in srgb, var(--text-primary) 8%, transparent);
+  box-shadow: var(--modal-shadow);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -748,19 +753,19 @@ body {
 }
 
 .due-date-time-section-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--text-muted);
   line-height: 1.2;
 }
 
 .due-date-time-section--dial {
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  border-top: none;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .due-date-time-dial-header {
@@ -786,7 +791,7 @@ body {
   color: var(--text-muted);
   font-family: var(--font-sans);
   font-size: 28px;
-  font-weight: 700;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   line-height: 1;
   letter-spacing: -0.03em;
@@ -822,7 +827,7 @@ body {
 
 .due-date-time-digital-colon {
   font-size: 26px;
-  font-weight: 700;
+  font-weight: 500;
   color: var(--text-muted);
   line-height: 1;
   padding: 0 1px;
@@ -831,23 +836,24 @@ body {
 .due-date-time-meridiem {
   display: inline-flex;
   flex-direction: column;
-  border: 1.5px solid var(--border);
+  border: none;
   border-radius: 10px;
   overflow: hidden;
   flex-shrink: 0;
+  background: var(--surface-1, var(--surface-2));
 }
 
 .due-date-time-meridiem-btn {
   appearance: none;
   border: none;
-  background: var(--surface-1, var(--surface-2));
+  background: transparent;
   color: var(--text-muted);
   font-family: var(--font-sans);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 500;
   letter-spacing: 0.04em;
   line-height: 1;
-  padding: 7px 10px;
+  padding: 8px 10px;
   cursor: pointer;
   transition:
     background-color 0.12s ease,
@@ -855,7 +861,7 @@ body {
 }
 
 .due-date-time-meridiem-btn + .due-date-time-meridiem-btn {
-  border-top: 1px solid var(--border);
+  border-top: none;
 }
 
 .due-date-time-meridiem-btn:hover {
@@ -957,7 +963,7 @@ body {
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: 15px;
-  font-weight: 650;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   line-height: 34px;
   text-align: center;
@@ -988,7 +994,7 @@ body {
 .due-date-time-clock-num.is-selected {
   color: var(--due-accent-text);
   background: transparent;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .due-date-time-clock-num:focus-visible {
@@ -1014,19 +1020,18 @@ html[data-color-mode="dark"] .due-date-time-clock {
 
 .due-date-time-chip {
   appearance: none;
-  border: 1.5px solid var(--border);
+  border: none;
   border-radius: 999px;
-  background: var(--surface-1, var(--surface-2));
+  background: color-mix(in srgb, var(--surface-1, var(--surface-2)) 90%, var(--surface-2));
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
   cursor: pointer;
   transition:
     background-color 0.12s ease,
-    border-color 0.12s ease,
     color 0.12s ease,
     box-shadow 0.12s ease;
 }
@@ -1063,15 +1068,15 @@ html[data-color-mode="dark"] .due-date-time-clock {
 }
 
 .due-date-time-chip-label {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--text-primary);
   line-height: 1.15;
 }
 
 .due-date-time-chip--period .due-date-time-chip-label {
-  font-size: 13.5px;
+  font-size: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1079,8 +1084,8 @@ html[data-color-mode="dark"] .due-date-time-clock {
 }
 
 .due-date-time-chip-time {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
   line-height: 1.15;
@@ -1093,18 +1098,15 @@ html[data-color-mode="dark"] .due-date-time-clock {
 
 .due-date-time-chip:hover {
   background: var(--surface-hover);
-  border-color: color-mix(in srgb, var(--due-accent) 40%, var(--border));
 }
 
 .due-date-time-chip:focus-visible {
   outline: none;
-  border-color: var(--due-accent);
   box-shadow: 0 0 0 3px var(--due-accent-soft);
 }
 
 .due-date-time-chip.is-selected {
   background: var(--due-accent);
-  border-color: var(--due-accent);
   color: var(--due-accent-text);
   box-shadow: none;
 }
@@ -1117,7 +1119,6 @@ html[data-color-mode="dark"] .due-date-time-clock {
 
 .due-date-time-chip.is-selected:hover {
   background: color-mix(in srgb, var(--due-accent) 88%, #000);
-  border-color: color-mix(in srgb, var(--due-accent) 88%, #000);
 }
 
 .due-date-popover {
@@ -1125,13 +1126,11 @@ html[data-color-mode="dark"] .due-date-time-clock {
   width: 100%;
   max-width: 292px;
   margin-top: 10px;
-  padding: 12px 10px 10px;
-  border: 1px solid var(--border);
+  padding: 12px;
+  border: none;
   border-radius: 14px;
   background: var(--surface-2);
-  box-shadow:
-    0 1px 2px color-mix(in srgb, var(--text-primary) 6%, transparent),
-    0 8px 24px color-mix(in srgb, var(--text-primary) 8%, transparent);
+  box-shadow: var(--modal-shadow);
 }
 
 .due-date-popover[hidden] {
@@ -1148,8 +1147,8 @@ html[data-color-mode="dark"] .due-date-time-clock {
 
 .due-date-month-label {
   text-align: center;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 500;
   color: var(--text-primary);
   letter-spacing: -0.015em;
   line-height: 1.3;
@@ -1198,8 +1197,8 @@ html[data-color-mode="dark"] .due-date-time-clock {
   align-items: center;
   justify-content: center;
   height: 28px;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
   letter-spacing: 0.02em;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -1251,7 +1250,7 @@ html[data-color-mode="dark"] .due-date-time-clock {
 
 .due-date-day.is-today:not(.is-selected) {
   color: var(--due-accent);
-  font-weight: 700;
+  font-weight: 500;
   box-shadow: inset 0 0 0 1.5px var(--due-accent);
 }
 
@@ -1262,7 +1261,7 @@ html[data-color-mode="dark"] .due-date-time-clock {
 .due-date-day.is-selected {
   background: var(--due-accent);
   color: var(--due-accent-text);
-  font-weight: 700;
+  font-weight: 500;
   box-shadow: none;
 }
 
@@ -1274,19 +1273,19 @@ html[data-color-mode="dark"] .due-date-time-clock {
   display: flex;
   justify-content: center;
   margin-top: 8px;
-  padding-top: 6px;
-  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  border-top: none;
 }
 
 .due-date-today {
   border: none;
   border-radius: 999px;
-  padding: 7px 14px;
+  padding: 8px 14px;
   background: transparent;
   color: var(--due-accent);
   font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
   transition: background-color 0.12s ease;
 }
@@ -1301,13 +1300,13 @@ html[data-color-mode="dark"] .due-date-time-clock {
 }
 
 .due-date-countdown {
-  margin: 0 0 10px;
-  padding: 8px 10px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
   border-radius: 10px;
   background: color-mix(in srgb, var(--due-accent) 10%, var(--surface-1, var(--surface-2)));
-  border: 1px solid color-mix(in srgb, var(--due-accent) 22%, var(--border));
+  border: none;
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--text-primary);
   line-height: 1.35;
@@ -1316,7 +1315,6 @@ html[data-color-mode="dark"] .due-date-time-clock {
 .due-date-countdown.is-past {
   color: var(--blocked-text);
   background: color-mix(in srgb, var(--blocked-text) 10%, var(--surface-1, var(--surface-2)));
-  border-color: color-mix(in srgb, var(--blocked-text) 28%, var(--border));
 }
 
 .due-date-countdown[hidden] {
@@ -1346,12 +1344,13 @@ html[data-color-mode="dark"] .due-date-time-clock {
 .field--en-attente {
   margin-bottom: 0;
   border-radius: var(--radius);
+  border: none;
   transition: background 0.2s ease, padding 0.2s ease;
 }
 
 .field--en-attente.is-enabled {
   background: var(--blocked-fill);
-  padding: 10px 12px;
+  padding: 12px;
 }
 
 .field--en-attente.is-enabled .en-attente-title,
@@ -1374,14 +1373,14 @@ html[data-color-mode="dark"] .due-date-time-clock {
 }
 
 .en-attente-desc {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
   color: var(--text-muted);
   line-height: 1.45;
 }
 
 .blocked-reason-wrap {
-  margin-top: 10px;
+  margin-top: 12px;
   padding-left: 26px;
 }
 
@@ -1391,20 +1390,21 @@ html[data-color-mode="dark"] .due-date-time-clock {
 
 .blocked-reason-select {
   width: 100%;
-  padding: 6px 28px 6px 8px;
-  border: 2px solid var(--border);
-  border-radius: 3px;
-  background: var(--surface-2);
+  padding: 8px 32px 8px 12px;
+  border: none;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-2) 82%, transparent);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 400;
   line-height: 1.45;
   cursor: pointer;
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23626f86' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 8px center;
-  transition: border-color 0.1s ease, background-color 0.1s ease;
+  background-position: right 12px center;
+  transition: background-color 0.1s ease, box-shadow 0.1s ease;
 }
 
 .blocked-reason-select:hover:not(:disabled) {
@@ -1413,7 +1413,6 @@ html[data-color-mode="dark"] .due-date-time-clock {
 
 .blocked-reason-select:focus-visible {
   outline: none;
-  border-color: var(--focus-ring-strong);
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
@@ -1443,13 +1442,13 @@ html[data-color-mode="dark"] .due-date-time-clock {
   border: none;
   padding: 0;
   font: inherit;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 500;
   color: var(--text-primary);
   background: none;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
   letter-spacing: -0.01em;
   line-height: 1.35;
   min-width: 0;
@@ -1476,7 +1475,7 @@ html[data-color-mode="dark"] .due-date-time-clock {
 }
 
 .field-lbl .ti {
-  font-size: 16px;
+  font-size: 18px;
   color: var(--text-secondary);
   flex-shrink: 0;
 }
@@ -1492,17 +1491,17 @@ html[data-color-mode="dark"] .due-date-time-clock {
   z-index: 12;
   min-width: 180px;
   max-width: min(280px, 78vw);
-  padding: 8px 10px;
-  border-radius: var(--radius, 8px);
-  border: 1px solid var(--border, #dfe1e6);
-  background: var(--surface-1, #fff);
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: none;
+  background: var(--surface-2, #fff);
   color: #94908A;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
-  line-height: 1.35;
+  line-height: 1.4;
   white-space: normal;
   text-align: left;
-  box-shadow: 0 4px 16px rgba(9, 30, 66, 0.18);
+  box-shadow: var(--modal-shadow);
   visibility: hidden;
   opacity: 0;
   pointer-events: none;
@@ -1528,8 +1527,8 @@ html[data-color-mode="dark"] .field-lbl-tooltip {
 }
 
 .field-val {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   color: var(--text-primary);
   line-height: 1.35;
 }
@@ -1560,7 +1559,7 @@ input.field-range::-webkit-slider-thumb {
   height: 18px;
   border-radius: 50%;
   background: var(--slider-thumb-bg);
-  border: 1.5px solid var(--slider-thumb-border);
+  border: 1px solid var(--slider-thumb-border);
   box-shadow: var(--slider-thumb-shadow);
   transition: box-shadow .12s, transform .1s;
 }
@@ -1571,7 +1570,7 @@ input.field-range::-moz-range-thumb {
   height: 18px;
   border-radius: 50%;
   background: var(--slider-thumb-bg);
-  border: 1.5px solid var(--slider-thumb-border);
+  border: 1px solid var(--slider-thumb-border);
   box-shadow: var(--slider-thumb-shadow);
   cursor: pointer;
 }
@@ -1621,8 +1620,8 @@ body.help-modal-open {
   display: flex;
   flex-direction: column;
   background: var(--surface-2);
-  border: 0.5px solid var(--border);
-  border-radius: 12px;
+  border: none;
+  border-radius: 14px;
   max-width: 420px;
   width: 100%;
   max-height: 80vh;
@@ -1689,28 +1688,28 @@ body.help-modal-open {
 }
 
 .help-modal-title {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 500;
   margin-bottom: 2px;
   padding-right: 28px;
   letter-spacing: -0.01em;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .help-modal-title .ti {
-  font-size: 17px;
+  font-size: 20px;
   color: var(--text-secondary);
   flex-shrink: 0;
 }
 
 .help-modal-quote {
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 500;
   color: var(--text-primary);
   line-height: 1.35;
-  margin: 6px 0 16px;
+  margin: 8px 0 16px;
   padding: 0;
   background: none;
   border-radius: 0;
@@ -1720,22 +1719,22 @@ body.help-modal-open {
 
 .help-modal-quote::before {
   content: '«\00a0';
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .help-modal-quote::after {
   content: '\00a0»';
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .help-modal-body {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--text-secondary);
   line-height: 1.55;
-  margin-top: 14px;
+  margin-top: 16px;
   margin-bottom: 0;
-  padding-top: 14px;
-  border-top: 0.5px solid var(--border);
+  padding-top: 16px;
+  border-top: none;
 }
 
 .help-modal-body p + p {
@@ -1752,8 +1751,8 @@ body.help-modal-open {
 .help-modal-footer {
   flex-shrink: 0;
   margin-top: 0;
-  padding: 14px 1.5rem 1.25rem;
-  border-top: 0.5px solid var(--border);
+  padding: 16px 1.5rem 1.25rem;
+  border-top: none;
 }
 
 .help-modal-wizard-nav {
@@ -1805,10 +1804,10 @@ body.help-modal-open {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  font-size: 13px;
-  line-height: 1.35;
-  padding: 3px 0;
-  border-bottom: 0.5px solid color-mix(in srgb, var(--border) 70%, transparent);
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 6px 0;
+  border-bottom: none;
 }
 
 .help-modal-levels li:last-child {
@@ -1866,7 +1865,7 @@ body.help-modal-open {
 
 .help-modal-levels li.is-selectable-row.is-current .help-modal-level-text.is-selectable {
   background: color-mix(in srgb, var(--text-primary) 4%, var(--surface-2));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 90%, var(--text-muted));
+  box-shadow: none;
 }
 
 .help-modal-levels li.is-selectable-row.is-current .help-modal-level-text.is-selectable:hover {
@@ -1893,8 +1892,8 @@ body.help-modal-open {
 
 .help-modal-level-label {
   color: var(--text-primary);
-  font-weight: 600;
-  font-size: 13px;
+  font-weight: 500;
+  font-size: 14px;
   display: inline;
 }
 
@@ -1911,7 +1910,7 @@ body.help-modal-open {
 
 .help-modal-levels li.is-current {
   background: color-mix(in srgb, var(--text-primary) 4%, var(--surface-2));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 90%, var(--text-muted));
+  box-shadow: none;
 }
 
 .help-modal-levels li.is-current:not(.is-selectable) {
@@ -2515,10 +2514,6 @@ html[data-color-mode="dark"] .heat-score-tooltip {
   padding: 8px 0 2px;
 }
 
-.calc-graph-panel.is-collapsed .calc-graph-body,
-.calc-graph-panel:not(.is-enabled) .calc-graph-body {
-  display: none !important;
-}
 
 .calc-graph-section {
   margin-bottom: 6px;

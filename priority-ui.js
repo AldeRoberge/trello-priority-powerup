@@ -1948,12 +1948,28 @@
   };
 
   function surfaceMixFor(tier) {
+    tier = tier || {};
     var mixKey = tier.blocked ? 'blocked' : (tier.inutile ? 'inutile' : tier.i);
     var table = isDarkTheme() ? TIER_SURFACE_MIX_DARK : TIER_SURFACE_MIX;
     return table[mixKey] || table[TIER_I_MAX];
   }
 
+  function clearCardTierTint(cardEl) {
+    if (!cardEl) return;
+    cardEl.style.removeProperty('--card-tier-tint');
+    cardEl.style.removeProperty('--card-tier-border');
+    cardEl.style.removeProperty('--card-tier-tint-mix');
+    cardEl.style.removeProperty('--card-tier-border-mix');
+    cardEl.style.removeProperty('--card-panel-tint-mix');
+    var panel = cardEl.querySelector('.heat-panel');
+    if (panel) {
+      panel.style.removeProperty('--card-tier-tint');
+      panel.style.removeProperty('--card-panel-tint-mix');
+    }
+  }
+
   function applyCardTierTint(cardEl, tier) {
+    tier = tier || {};
     var visuals = tierVisuals(tier);
     var mix = surfaceMixFor(tier);
     cardEl.style.setProperty('--card-tier-tint', visuals.tint);
@@ -1961,7 +1977,7 @@
     cardEl.style.setProperty('--card-tier-tint-mix', mix.bg + '%');
     cardEl.style.setProperty('--card-tier-border-mix', mix.border + '%');
     cardEl.style.setProperty('--card-panel-tint-mix', mix.panel + '%');
-    cardEl.dataset.tier = tier.label;
+    cardEl.dataset.tier = tier.label || '';
 
     var panel = cardEl.querySelector('.heat-panel');
     if (panel) {
@@ -3068,19 +3084,32 @@
     var checkboxClass = config.checkboxClass || '';
     var labelClass = config.labelClass || '';
     var titleClass = config.titleClass || '';
+    var enableLabel = config.enableLabel || ('Activer ' + titleText);
     var collapseLabel = config.collapseLabel || ('Replier ' + titleText);
     var expandLabel = config.expandLabel || ('D\u00e9velopper ' + titleText);
 
     var head = document.createElement('div');
     head.className = 'section-toggle-head';
 
+    // Checkbox alone enables/disables — title is not part of the label,
+    // so clicking the heading collapses instead of toggling the feature.
     var label = document.createElement('label');
     label.className = ('section-enable-label ' + labelClass).trim();
 
     var checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.className = ('section-enable-checkbox ' + checkboxClass).trim();
+    checkbox.setAttribute('aria-label', enableLabel);
     if (bodyId) checkbox.setAttribute('aria-controls', bodyId);
+
+    label.appendChild(checkbox);
+
+    var collapseBtn = document.createElement('button');
+    collapseBtn.type = 'button';
+    collapseBtn.className = 'section-collapse-btn';
+    if (bodyId) collapseBtn.setAttribute('aria-controls', bodyId);
+    collapseBtn.setAttribute('aria-expanded', 'false');
+    collapseBtn.setAttribute('aria-label', expandLabel);
 
     var textWrap = document.createElement('span');
     textWrap.className = 'section-enable-text';
@@ -3088,30 +3117,22 @@
     var title = document.createElement('span');
     title.className = ('section-enable-title ' + titleClass).trim();
     title.textContent = titleText;
-
     textWrap.appendChild(title);
-    label.appendChild(checkbox);
-    label.appendChild(textWrap);
 
     var summary = document.createElement('span');
     summary.className = 'section-toggle-summary';
     summary.hidden = true;
-
-    var collapseBtn = document.createElement('button');
-    collapseBtn.type = 'button';
-    collapseBtn.className = 'section-collapse-btn';
-    collapseBtn.hidden = true;
-    if (bodyId) collapseBtn.setAttribute('aria-controls', bodyId);
-    collapseBtn.setAttribute('aria-expanded', 'false');
-    collapseBtn.setAttribute('aria-label', expandLabel);
+    summary.setAttribute('aria-hidden', 'true');
 
     var chevron = document.createElement('i');
     chevron.className = 'ti ti-chevron-down section-collapse-chevron';
     chevron.setAttribute('aria-hidden', 'true');
+
+    collapseBtn.appendChild(textWrap);
+    collapseBtn.appendChild(summary);
     collapseBtn.appendChild(chevron);
 
     head.appendChild(label);
-    head.appendChild(summary);
     head.appendChild(collapseBtn);
 
     return {
@@ -3122,7 +3143,8 @@
       summary: summary,
       collapseBtn: collapseBtn,
       collapseLabel: collapseLabel,
-      expandLabel: expandLabel
+      expandLabel: expandLabel,
+      enableLabel: enableLabel
     };
   }
 
@@ -3131,7 +3153,7 @@
     var body = config.body;
     var chrome = config.chrome;
     var enabled = !!config.enabled;
-    var expanded = enabled && config.expanded !== false;
+    var expanded = config.expanded != null ? !!config.expanded : !!enabled;
     var onEnableChange = config.onEnableChange || function () {};
     var onLayoutChange = config.onLayoutChange || function () {};
     var getSummary = config.getSummary || function () { return ''; };
@@ -3142,10 +3164,11 @@
       var wasHidden = !!body.hidden;
       chrome.checkbox.checked = enabled;
       field.classList.toggle('is-enabled', enabled);
-      field.classList.toggle('is-collapsed', enabled && !expanded);
-      var showBody = enabled && expanded;
-      body.hidden = !showBody;
-      chrome.collapseBtn.hidden = !enabled;
+      field.classList.toggle('is-collapsed', !expanded);
+      body.hidden = !expanded;
+      try {
+        body.inert = !enabled;
+      } catch (e) { /* ignore */ }
       chrome.collapseBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
       chrome.collapseBtn.setAttribute(
         'aria-label',
@@ -3161,7 +3184,6 @@
 
     function setExpanded(next, options) {
       options = options || {};
-      if (!enabled) return;
       expanded = !!next;
       syncUi(options.notifyLayout !== false);
     }
@@ -3172,10 +3194,10 @@
       var changed = on !== enabled;
       enabled = on;
       if (enabled) {
-        if (changed || options.expand) expanded = options.expand !== false;
+        if (changed || options.expand != null) expanded = options.expand !== false;
         if (changed && typeof onAfterEnable === 'function') onAfterEnable(options);
       } else {
-        expanded = false;
+        if (options.expand != null) expanded = !!options.expand;
         if (changed && typeof onBeforeDisable === 'function') onBeforeDisable(options);
       }
       syncUi(options.notifyLayout !== false);
@@ -3193,6 +3215,11 @@
       chrome.summary.hidden = !text;
     }
 
+    chrome.checkbox.addEventListener('click', function (event) {
+      // Keep enable clicks from bubbling into any header handlers.
+      event.stopPropagation();
+    });
+
     chrome.checkbox.addEventListener('change', function () {
       setEnabled(chrome.checkbox.checked);
     });
@@ -3200,7 +3227,6 @@
     chrome.collapseBtn.addEventListener('click', function (event) {
       event.preventDefault();
       event.stopPropagation();
-      if (!enabled) return;
       setExpanded(!expanded);
     });
 
@@ -5580,7 +5606,7 @@
     }
 
     function setGraphCollapsed(collapsed) {
-      if (!graphCollapse || !graphEnabled) return;
+      if (!graphCollapse) return;
       graphCollapse.setExpanded(!collapsed);
     }
 
@@ -5591,7 +5617,7 @@
 
     function syncGraphVisibility() {
       if (!graphCollapse) return;
-      graphCollapsed = !(graphEnabled && graphCollapse.isExpanded());
+      graphCollapsed = !graphCollapse.isExpanded();
       panel.classList.toggle('is-collapsed', graphCollapsed);
       panel.classList.toggle('is-enabled', graphEnabled);
       if (!graphCollapsed && lastScene.result) {
@@ -5625,7 +5651,7 @@
       }
     });
     graphEnabled = graphCollapse.isEnabled();
-    graphCollapsed = !(graphEnabled && graphCollapse.isExpanded());
+    graphCollapsed = !graphCollapse.isExpanded();
 
     return {
       el: panel,
@@ -5882,17 +5908,21 @@
         if (priorityCollapse) priorityCollapse.refreshSummary();
         var cardTier = display.cardTier;
         if (display.blocked || display.duePast) {
-          cardTier = Object.assign({}, cardTier, { blocked: true });
+          cardTier = Object.assign({}, cardTier || {}, { blocked: true });
         }
+        // Priority-off + not blocked/overdue: drop classes AND clear red/tier CSS vars.
+        // Leaving --card-tier-tint at the blocked crimson value kept a red wash
+        // even after is-blocked was removed (Bloqué toggle off).
         if (state.priorityEnabled === false && !display.blocked && !display.duePast) {
           card.classList.remove('is-inutile', 'is-blocked', 'is-overdue');
           card.dataset.tier = '';
+          clearCardTierTint(card);
         } else {
           applyCardTierTint(card, cardTier);
           card.classList.toggle('is-inutile', !!display.inutile);
           card.classList.toggle('is-blocked', !!display.blocked);
           card.classList.toggle('is-overdue', !!display.duePast);
-          card.dataset.tier = display.label;
+          card.dataset.tier = display.label || '';
         }
         if (heat) heat.paint(result, display);
         if (calcGraph) calcGraph.paint(result, state, display);
