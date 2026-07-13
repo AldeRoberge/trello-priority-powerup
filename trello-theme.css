@@ -1084,6 +1084,20 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
 }
 
+/* All subtasks done — green tint (mirror blocked/overdue red shell). */
+.tp-page--priority .variant-progress-section.is-progress-complete > .field--progress.is-enabled {
+  background: var(--progress-complete-fill, #DFFCF0);
+}
+
+.tp-page--priority .variant-progress-section.is-progress-complete .progress-enable-title,
+.tp-page--priority .variant-progress-section.is-progress-complete .section-enable-title {
+  color: var(--progress-complete-text, #164B35);
+}
+
+.tp-page--priority .variant-progress-section.is-progress-complete .section-toggle-summary {
+  color: var(--progress-complete-muted-text, #216E4E);
+}
+
 .tp-page--priority .progress-enable-checkbox {
   width: 18px;
   height: 18px;
@@ -1781,5 +1795,84 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   .tp-page--priority .heat-seg-labels {
     font-size: 11px;
     gap: 2px;
+  }
+}
+
+/* All-subtasks-complete fireworks overlay (brief edge-triggered celebration). */
+.tp-completion-fireworks {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.tp-completion-firework-burst {
+  position: absolute;
+  left: var(--burst-x, 50%);
+  top: var(--burst-y, 40%);
+  width: 0;
+  height: 0;
+}
+
+.tp-completion-firework-spark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: var(--spark-color, #22a06b);
+  box-shadow:
+    0 0 6px color-mix(in srgb, var(--spark-color, #22a06b) 70%, transparent),
+    0 0 1px rgba(255, 255, 255, 0.85);
+  opacity: 0;
+  transform: rotate(var(--spark-angle, 0deg)) translateY(0) scale(0.4);
+  animation: tp-firework-spark 1.15s cubic-bezier(0.16, 0.84, 0.28, 1) forwards;
+  animation-delay: var(--spark-delay, 0s);
+}
+
+.tp-completion-firework-burst::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, color-mix(in srgb, #4bce97 70%, transparent) 45%, transparent 70%);
+  opacity: 0;
+  animation: tp-firework-flash 0.55s ease-out forwards;
+  animation-delay: var(--burst-delay, 0s);
+}
+
+@keyframes tp-firework-flash {
+  0% { opacity: 0; transform: scale(0.2); }
+  35% { opacity: 0.95; transform: scale(1.15); }
+  100% { opacity: 0; transform: scale(1.8); }
+}
+
+@keyframes tp-firework-spark {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--spark-angle, 0deg)) translateY(0) scale(0.35);
+  }
+  12% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--spark-angle, 0deg)) translateY(calc(var(--spark-dist, 48px) * -1)) scale(0.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tp-completion-fireworks {
+    display: none;
   }
 }

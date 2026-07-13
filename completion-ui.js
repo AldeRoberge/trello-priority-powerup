@@ -494,9 +494,15 @@
     var data = CT.normalizeCompletionData(options.data || { items: [] });
     var onChange = typeof options.onChange === 'function' ? options.onChange : function () {};
     var onResize = typeof options.onResize === 'function' ? options.onResize : function () {};
+    var onAllCompleteChange =
+      typeof options.onAllCompleteChange === 'function' ? options.onAllCompleteChange : null;
+    var progressShellEl = options.shellEl || null;
+    var celebrateRootEl = options.celebrateRoot || null;
     var showCardHeader = options.showCardHeader !== false;
     var masterDragging = false;
     var flipAnimToken = 0;
+    // null = not yet painted — avoid fireworks on initial mount when already complete.
+    var lastAllComplete = null;
 
     containerEl.innerHTML = '';
     containerEl.className = 'tp-completion';
@@ -770,6 +776,37 @@
         Number(masterSlider.input.value) >= 100
       );
       masterDragging = false;
+      syncAllCompleteSideEffects(progress);
+    }
+
+    function syncAllCompleteSideEffects(progress) {
+      var allComplete = isAllCompleteProgress(progress);
+      if (progressShellEl) {
+        progressShellEl.classList.toggle('is-progress-complete', allComplete);
+      }
+      containerEl.classList.toggle('is-all-complete', allComplete);
+
+      var edgeIntoComplete = lastAllComplete === false && allComplete;
+      if (edgeIntoComplete) {
+        playAllCompleteCelebration(celebrateRootEl || document.body);
+      } else if (!allComplete) {
+        clearAllCompleteCelebration(celebrateRootEl || document.body);
+      }
+
+      if (lastAllComplete !== allComplete) {
+        lastAllComplete = allComplete;
+        if (onAllCompleteChange) {
+          try {
+            onAllCompleteChange(allComplete, {
+              justCompleted: edgeIntoComplete,
+              progress: progress,
+              data: CT.normalizeCompletionData(data),
+            });
+          } catch (err) {
+            console.error('Completion onAllCompleteChange failed', err);
+          }
+        }
+      }
     }
 
     function clearFlipStyles(el) {
@@ -1186,6 +1223,8 @@
     completionTrelloBadgeColor: completionTrelloBadgeColor,
     schemeGradientCss: schemeGradientCss,
     progressEncouragementText: progressEncouragementText,
+    playAllCompleteCelebration: playAllCompleteCelebration,
+    clearAllCompleteCelebration: clearAllCompleteCelebration,
     mountCompletionUI: mountCompletionUI,
   };
 })(typeof window !== 'undefined' ? window : this);

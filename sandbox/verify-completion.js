@@ -31,10 +31,16 @@ if (!CT || !CUI) {
   process.exit(1);
 }
 
+var PT = sandbox.PriorityTrello;
+check('PriorityTrello.setCardDueComplete export', !!(PT && typeof PT.setCardDueComplete === 'function'));
+check('PriorityTrello.getCardDueComplete export', !!(PT && typeof PT.getCardDueComplete === 'function'));
+
 [
   'normalizeCompletionData',
   'computeWeightedProgress',
   'computeCardProgress',
+  'isAllSubtasksComplete',
+  'syncCardDueCompleteFromProgress',
   'applyMasterProgress',
   'clampProgress',
   'itemProgress',
@@ -144,6 +150,37 @@ check('100 percent when all at 100', allDone.percent === 100);
 
 var empty = CT.computeWeightedProgress([]);
 check('empty has no items', empty.hasItems === false && empty.percent === 0);
+
+check(
+  'isAllSubtasksComplete false when empty',
+  CT.isAllSubtasksComplete({ items: [] }) === false
+);
+check(
+  'isAllSubtasksComplete false for card-only 100%',
+  CT.isAllSubtasksComplete({ items: [], progress: 100 }) === false
+);
+check(
+  'isAllSubtasksComplete false when some open',
+  CT.isAllSubtasksComplete({
+    items: [
+      { id: 'a', text: 'A', progress: 100 },
+      { id: 'b', text: 'B', progress: 50 },
+    ],
+  }) === false
+);
+check(
+  'isAllSubtasksComplete true when remaining 0',
+  CT.isAllSubtasksComplete({
+    items: [
+      { id: 'a', text: 'A', progress: 100 },
+      { id: 'b', text: 'B', done: true },
+    ],
+  }) === true
+);
+check('syncCardDueCompleteFromProgress export', typeof CT.syncCardDueCompleteFromProgress === 'function');
+check('completion marked due key', CT.COMPLETION_MARKED_DUE_COMPLETE_KEY === 'completionMarkedDueComplete');
+check('playAllCompleteCelebration export', typeof CUI.playAllCompleteCelebration === 'function');
+check('clearAllCompleteCelebration export', typeof CUI.clearAllCompleteCelebration === 'function');
 
 var cardOnly = CT.computeCardProgress({ items: [], progress: 45 });
 check('card progress without items', cardOnly.hasItems === false && cardOnly.percent === 45);

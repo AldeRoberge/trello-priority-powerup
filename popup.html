@@ -6,8 +6,8 @@
   <title>Définir la priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <link rel="stylesheet" href="./trello-theme.css?v=section-collapse-1" />
-  <link rel="stylesheet" href="./priority-ui.css?v=section-collapse-1" />
+  <link rel="stylesheet" href="./trello-theme.css?v=all-complete-1" />
+  <link rel="stylesheet" href="./priority-ui.css?v=all-complete-1" />
   <script src="./rest-config.js"></script>
   <script src="./priority-matrix.js?v=due-time-picker-1"></script>
   <script src="./priority-ui.js?v=section-collapse-1"></script>
@@ -16,9 +16,9 @@
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
     }
   </script>
-  <script src="./priority-trello.js?v=section-chrome-1"></script>
-  <script src="./completion-ui.js?v=section-chrome-1"></script>
-  <script src="./completion-trello.js?v=section-chrome-1"></script>
+  <script src="./priority-trello.js?v=all-complete-1"></script>
+  <script src="./completion-ui.js?v=all-complete-1"></script>
+  <script src="./completion-trello.js?v=all-complete-1"></script>
 </head>
 <body class="tp-page tp-page--priority">
   <div class="compare-page">
@@ -41,6 +41,7 @@
     let progressBody = null;
     let progressCollapse = null;
     let progressSummaryEl = null;
+    let dueCompleteSyncChain = Promise.resolve();
 
     t.render(function () {
       PriorityTrello.getBoardColorScheme(t)
@@ -87,6 +88,18 @@
           console.error('Completion save failed', err);
         });
       return completionSaveChain;
+    }
+
+    function syncDueCompleteFromProgress(data) {
+      if (!CompletionTrello.syncCardDueCompleteFromProgress) return;
+      dueCompleteSyncChain = dueCompleteSyncChain
+        .then(function () {
+          return CompletionTrello.syncCardDueCompleteFromProgress(t, data);
+        })
+        .catch(function (err) {
+          console.error('Completion dueComplete sync failed', err);
+        });
+      return dueCompleteSyncChain;
     }
 
     function resizePopup() {
@@ -231,16 +244,27 @@
           completionUi = CompletionUI.mountCompletionUI(completionMount, {
             data: stored,
             showCardHeader: false,
+            shellEl: progressPanel,
+            celebrateRoot: document.body,
             onChange: function (data) {
               saveCompletion(data);
               if (progressCollapse) progressCollapse.refreshSummary();
               syncBlockedSubtasks();
+            },
+            onAllCompleteChange: function (_allComplete, meta) {
+              var live =
+                (completionUi && typeof completionUi.getData === 'function' && completionUi.getData()) ||
+                (meta && meta.data) ||
+                latestCompletion;
+              syncDueCompleteFromProgress(live);
             },
             onResize: function () {
               resizePopup();
             },
           });
           latestCompletion = completionUi.getData();
+          // Initial paint may already be all-complete — sync Done without fireworks.
+          syncDueCompleteFromProgress(latestCompletion);
           // Enable when deep-linked, stored flag on, or saved progress exists (back-compat).
           var shouldEnable =
             !!initiallyOpen ||
