@@ -3085,6 +3085,8 @@
     var checkboxClass = config.checkboxClass || '';
     var labelClass = config.labelClass || '';
     var titleClass = config.titleClass || '';
+    var leadingIcon = config.leadingIcon || '';
+    var hideEnable = !!config.hideEnable || !!leadingIcon;
     var enableLabel = config.enableLabel || ('Activer ' + titleText);
     var collapseLabel = config.collapseLabel || ('Replier ' + titleText);
     var expandLabel = config.expandLabel || ('D\u00e9velopper ' + titleText);
@@ -3092,18 +3094,35 @@
     var head = document.createElement('div');
     head.className = 'section-toggle-head';
 
-    // Checkbox alone enables/disables — title is not part of the label,
-    // so clicking the heading collapses instead of toggling the feature.
-    var label = document.createElement('label');
-    label.className = ('section-enable-label ' + labelClass).trim();
+    var label = null;
+    var checkbox = null;
+    var leadingIconEl = null;
 
-    var checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.className = ('section-enable-checkbox ' + checkboxClass).trim();
-    checkbox.setAttribute('aria-label', enableLabel);
-    if (bodyId) checkbox.setAttribute('aria-controls', bodyId);
+    if (!hideEnable) {
+      // Checkbox alone enables/disables — title is not part of the label,
+      // so clicking the heading collapses instead of toggling the feature.
+      label = document.createElement('label');
+      label.className = ('section-enable-label ' + labelClass).trim();
 
-    label.appendChild(checkbox);
+      checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = ('section-enable-checkbox ' + checkboxClass).trim();
+      checkbox.setAttribute('aria-label', enableLabel);
+      if (bodyId) checkbox.setAttribute('aria-controls', bodyId);
+
+      label.appendChild(checkbox);
+      head.appendChild(label);
+    } else if (leadingIcon) {
+      // Decorative icon in place of the enable checkbox (always-on sections).
+      leadingIconEl = document.createElement('span');
+      leadingIconEl.className = ('section-leading-icon ' + labelClass).trim();
+      leadingIconEl.setAttribute('aria-hidden', 'true');
+
+      var iconGlyph = document.createElement('i');
+      iconGlyph.className = ('ti ' + leadingIcon + ' section-leading-icon-glyph').trim();
+      leadingIconEl.appendChild(iconGlyph);
+      head.appendChild(leadingIconEl);
+    }
 
     var collapseBtn = document.createElement('button');
     collapseBtn.type = 'button';
@@ -3133,13 +3152,13 @@
     collapseBtn.appendChild(summary);
     collapseBtn.appendChild(chevron);
 
-    head.appendChild(label);
     head.appendChild(collapseBtn);
 
     return {
       head: head,
       label: label,
       checkbox: checkbox,
+      leadingIcon: leadingIconEl,
       title: title,
       summary: summary,
       collapseBtn: collapseBtn,
@@ -3153,8 +3172,9 @@
     var field = config.field;
     var body = config.body;
     var chrome = config.chrome;
-    var enabled = !!config.enabled;
-    var expanded = config.expanded != null ? !!config.expanded : !!enabled;
+    var alwaysEnabled = !!config.alwaysEnabled;
+    var enabled = alwaysEnabled ? true : !!config.enabled;
+    var expanded = config.expanded != null ? !!config.expanded : (!!enabled && !alwaysEnabled);
     var onEnableChange = config.onEnableChange || function () {};
     var onLayoutChange = config.onLayoutChange || function () {};
     var getSummary = config.getSummary || function () { return ''; };
@@ -3174,7 +3194,7 @@
     }
 
     var catcher = shell ? shell.querySelector('.section-enable-catcher') : null;
-    if (shell && !catcher) {
+    if (shell && !catcher && !alwaysEnabled) {
       catcher = document.createElement('button');
       catcher.type = 'button';
       catcher.className = 'section-enable-catcher';
@@ -3186,7 +3206,7 @@
 
     function syncUi(shouldNotifyLayout) {
       var wasHidden = !!body.hidden;
-      chrome.checkbox.checked = enabled;
+      if (chrome.checkbox) chrome.checkbox.checked = enabled;
       field.classList.toggle('is-enabled', enabled);
       field.classList.toggle('is-collapsed', !expanded);
       body.hidden = !expanded;
@@ -3195,7 +3215,7 @@
         body.inert = !enabled;
       } catch (e) { /* ignore */ }
       if (catcher) {
-        var showCatcher = !enabled && expanded;
+        var showCatcher = !alwaysEnabled && !enabled && expanded;
         catcher.hidden = !showCatcher;
         catcher.setAttribute('aria-hidden', showCatcher ? 'false' : 'true');
       }
@@ -3221,6 +3241,14 @@
 
     function setEnabled(next, options) {
       options = options || {};
+      if (alwaysEnabled) {
+        // Always-on sections ignore enable/disable; expand may still be controlled.
+        if (options.expand != null) {
+          expanded = !!options.expand;
+          syncUi(options.notifyLayout !== false);
+        }
+        return;
+      }
       var on = !!next;
       var changed = on !== enabled;
       enabled = on;
@@ -3259,14 +3287,16 @@
       } catch (err) { /* ignore */ }
     }
 
-    chrome.checkbox.addEventListener('click', function (event) {
-      // Keep enable clicks from bubbling into any header handlers.
-      event.stopPropagation();
-    });
+    if (chrome.checkbox) {
+      chrome.checkbox.addEventListener('click', function (event) {
+        // Keep enable clicks from bubbling into any header handlers.
+        event.stopPropagation();
+      });
 
-    chrome.checkbox.addEventListener('change', function () {
-      setEnabled(chrome.checkbox.checked);
-    });
+      chrome.checkbox.addEventListener('change', function () {
+        setEnabled(chrome.checkbox.checked);
+      });
+    }
 
     chrome.collapseBtn.addEventListener('click', function (event) {
       event.preventDefault();
@@ -5067,8 +5097,9 @@
     var chrome = createCollapsibleEnableChrome({
       title: 'Graphique',
       bodyId: bodyId,
-      checkboxClass: 'graphique-enable-checkbox',
-      labelClass: 'graphique-enable-label',
+      hideEnable: true,
+      leadingIcon: 'ti-chart-area',
+      labelClass: 'graphique-leading-icon',
       titleClass: 'graphique-enable-title',
       collapseLabel: 'Replier Graphique',
       expandLabel: 'D\u00e9velopper Graphique'
