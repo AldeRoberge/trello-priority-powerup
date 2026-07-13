@@ -1951,7 +1951,6 @@
   var HEAT_TIER_DOT_MAX = 14;
   var HEAT_TIER_DOT_SCORE_MAX = SCORE_MAX;
   var HEAT_TIER_DOT_FALLBACK = 9;
-  var HEAT_TIER_DOT_BLOCKED_FALLBACK = 10;
   var HEAT_TIER_DOT_SIZES = {
     0: 14, // Critique
     1: 12, // Urgente
@@ -1965,13 +1964,6 @@
   function heatTierDotSizePx(display) {
     if (!display) return HEAT_TIER_DOT_FALLBACK;
     if (display.inutile) return HEAT_TIER_DOT_MIN;
-    if (display.blocked) {
-      var blockedI = display.tierI;
-      if (blockedI != null && Object.prototype.hasOwnProperty.call(HEAT_TIER_DOT_SIZES, blockedI)) {
-        return HEAT_TIER_DOT_SIZES[blockedI];
-      }
-      return HEAT_TIER_DOT_BLOCKED_FALLBACK;
-    }
     var score = display.score;
     if (typeof score === 'number' && isFinite(score)) {
       var t = clamp(score / HEAT_TIER_DOT_SCORE_MAX, 0, 1);
@@ -6044,10 +6036,10 @@
 
     function paint(result, display) {
       var d = display || resolveDisplay(result, {});
-      // Overdue red lives on Échéance only — Progress keeps normal / blocked badge styling.
-      var visualSource = d.blocked
-        ? { blocked: true, label: BLOCKED_LABEL }
-        : (d.inutile ? { inutile: true, label: INUTILE_LABEL } : { i: d.tierI, label: d.label });
+      // Heat-badge keeps priority / inutile colors. Blocked crimson is section-scoped (Bloqué).
+      var visualSource = d.inutile
+        ? { inutile: true, label: INUTILE_LABEL }
+        : { i: d.tierI, label: d.label };
       var v = tierVisuals(visualSource);
       var nextLabel = d.eisenhowerLabel || classicTierLabel(d);
       if (d.dueCountdown && !d.blocked) {
@@ -6057,7 +6049,6 @@
       var labelChanged = nextLabel !== lastPaintLabel;
       var descChanged = nextDescKey !== lastDescKey;
       var layoutSensitive = labelChanged || descChanged
-        || badge.classList.contains('is-blocked') !== !!d.blocked
         || badge.classList.contains('is-overdue')
         || panel.classList.contains('is-overdue')
         || panel.classList.contains('has-blocked-warning') !== !!d.blocked;
@@ -6069,13 +6060,10 @@
       }
 
       bnumVal.textContent = formatScore(d.score);
-      dot.classList.toggle('is-blocked', !!d.blocked);
+      // Do not paint the heat-badge dot as a blocked glyph — warn chip + Bloqué section carry that state.
+      dot.classList.remove('is-blocked');
       dot.style.setProperty('--heat-tier-dot-size', heatTierDotSizePx(d).toFixed(2) + 'px');
-      if (d.blocked) {
-        dot.style.removeProperty('background');
-      } else {
-        dot.style.background = v.seg;
-      }
+      dot.style.background = v.seg;
       currentBadgeTierLabel = nextLabel;
       badge.style.setProperty('--heat-fill', v.fill);
       badge.style.setProperty('--heat-text', v.text);
@@ -6084,10 +6072,9 @@
       bnum.style.removeProperty('color');
       blabel.style.removeProperty('color');
       badge.classList.toggle('is-inutile', !!d.inutile);
-      badge.classList.toggle('is-blocked', !!d.blocked);
-      badge.classList.remove('is-overdue');
+      badge.classList.remove('is-blocked', 'is-overdue');
       panel.classList.toggle('is-inutile', !!d.inutile);
-      // No panel crimson wash for blocked/overdue — section shells carry red.
+      // No panel / heat-badge crimson wash for blocked/overdue — section shells carry red.
       panel.classList.remove('is-blocked', 'is-overdue');
       panel.classList.toggle('has-blocked-warning', !!d.blocked);
       blockedWarning.hidden = !d.blocked;

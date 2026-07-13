@@ -120,22 +120,17 @@ html[data-color-mode="dark"] .heat-badge.is-inutile .heat-tier-desc {
   opacity: 1;
 }
 
-html[data-color-mode="dark"] .heat-badge.is-blocked,
 html[data-color-mode="dark"] .heat-badge.is-overdue {
   background: color-mix(in srgb, var(--heat-fill, var(--blocked-fill)) 72%, var(--surface-2));
   box-shadow: none;
 }
 
-html[data-color-mode="dark"] .heat-badge.is-blocked .heat-badge-num,
-html[data-color-mode="dark"] .heat-badge.is-blocked .heat-badge-label,
-html[data-color-mode="dark"] .heat-badge.is-blocked .heat-tier-desc,
 html[data-color-mode="dark"] .heat-badge.is-overdue .heat-badge-num,
 html[data-color-mode="dark"] .heat-badge.is-overdue .heat-badge-label,
 html[data-color-mode="dark"] .heat-badge.is-overdue .heat-tier-desc {
   opacity: 1;
 }
 
-html[data-color-mode="dark"] .heat-panel.is-blocked .heat-tier-desc,
 html[data-color-mode="dark"] .heat-panel.is-overdue .heat-tier-desc {
   color: var(--blocked-muted-text);
   opacity: 1;
@@ -375,10 +370,9 @@ body {
   transition: opacity 0.12s ease, color 0.12s ease;
 }
 
-/* Expanded: keep summary readable but quieter than collapsed */
+/* Expanded: body content replaces the header summary */
 .field:not(.is-collapsed) .section-toggle-summary {
-  color: var(--text-muted);
-  opacity: 0.55;
+  display: none;
 }
 
 .section-collapse-chevron {
@@ -2177,7 +2171,6 @@ body.help-modal-open {
   transition: background 0.25s ease;
 }
 
-.heat-panel.is-blocked,
 .heat-panel.is-overdue {
   background: color-mix(in srgb, var(--card-tier-tint) var(--card-panel-tint-mix, 20%), var(--blocked-fill));
 }
@@ -2335,50 +2328,24 @@ body.help-modal-open {
   transition: width 0.25s ease, height 0.25s ease;
 }
 
-.heat-tier-dot.is-blocked {
-  background: transparent;
-  border: calc(var(--heat-tier-dot-size) * 0.159) solid currentColor;
-  box-sizing: border-box;
-  position: relative;
-  color: var(--heat-text, var(--blocked-accent));
-}
-
-.heat-tier-dot.is-blocked::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: calc(var(--heat-tier-dot-size) * 1.182);
-  height: calc(var(--heat-tier-dot-size) * 0.159);
-  background: currentColor;
-  transform: translate(-50%, -50%) rotate(-45deg);
-  border-radius: 1px;
-}
-
-.heat-badge.is-blocked,
 .heat-badge.is-overdue {
   background: color-mix(in srgb, var(--heat-fill, var(--blocked-fill)) 42%, var(--surface-2));
   box-shadow: none;
 }
 
-.heat-badge.is-blocked .heat-tier-dot,
 .heat-badge.is-overdue .heat-tier-dot {
   color: var(--heat-text, var(--blocked-accent));
 }
 
-.heat-badge.is-blocked .heat-badge-num,
-.heat-badge.is-blocked .heat-badge-label,
 .heat-badge.is-overdue .heat-badge-num,
 .heat-badge.is-overdue .heat-badge-label {
   color: var(--heat-text, var(--blocked-text));
 }
 
-.heat-badge.is-blocked .heat-tier-desc,
 .heat-badge.is-overdue .heat-tier-desc {
   color: var(--heat-text, var(--blocked-text));
 }
 
-.heat-panel.is-blocked .heat-tier-desc,
 .heat-panel.is-overdue .heat-tier-desc {
   color: var(--blocked-muted-text);
   opacity: 1;

@@ -542,11 +542,12 @@
     completeAllBtn.type = 'button';
     completeAllBtn.className = 'tp-completion-complete-all';
     completeAllBtn.id = 'completionCompleteAll';
-    completeAllBtn.textContent = 'Tout compl\u00e9ter';
+    completeAllBtn.innerHTML = '<i class="ti ti-checks" aria-hidden="true"></i>';
     completeAllBtn.setAttribute(
       'aria-label',
       'Marquer toutes les sous-t\u00e2ches comme termin\u00e9es'
     );
+    completeAllBtn.title = 'Tout compl\u00e9ter';
     completeAllBtn.hidden = true;
 
     progressHead.appendChild(progressHero);
