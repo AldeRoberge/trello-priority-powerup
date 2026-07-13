@@ -661,6 +661,43 @@
     });
   }
 
+  // Trello card badges accept named colors only — rebuilt from active scheme tier seg colors.
+  var TIER_TRELLO_BADGE_COLORS = {
+    0: 'blue',
+    1: 'blue',
+    2: 'sky',
+    3: 'sky',
+    4: 'sky',
+    5: 'light-gray',
+    6: 'light-gray'
+  };
+
+  function nearestTrelloBadgeColorName(segHex, avoidName) {
+    var target = rgbToOklab(priorityParseHex(segHex));
+    var ranked = TRELLO_BADGE_COLOR_NAMES.map(function (name) {
+      return {
+        name: name,
+        dist: oklabDistance(target, rgbToOklab(priorityParseHex(TRELLO_BADGE_COLOR_HEX[name])))
+      };
+    }).sort(function (a, b) {
+      return a.dist - b.dist;
+    });
+    for (var i = 0; i < ranked.length; i++) {
+      if (!avoidName || ranked[i].name !== avoidName) return ranked[i].name;
+    }
+    return ranked[0].name;
+  }
+
+  function rebuildTrelloBadgeColors() {
+    for (var i = 0; i <= 4; i++) {
+      var tier = TIERS[i];
+      var avoid = i > 0 ? TIER_TRELLO_BADGE_COLORS[i - 1] : null;
+      TIER_TRELLO_BADGE_COLORS[i] = nearestTrelloBadgeColorName(tier && tier.seg ? tier.seg : activeColorStops[0], avoid);
+    }
+    TIER_TRELLO_BADGE_COLORS[5] = 'light-gray';
+    TIER_TRELLO_BADGE_COLORS[6] = 'light-gray';
+  }
+
   function rebuildColorDerivedState() {
     rebuildTiersFromScheme();
     rebuildHeatSegments();
@@ -881,20 +918,29 @@
   }
   var BLOCKED_STYLES = {
     label: BLOCKED_LABEL,
-    fill: '#D4A5A5',
-    text: '#4A0808',
-    seg: '#8B0000',
-    tint: '#5C1818',
+    fill: '#FCE8E8',
+    text: '#5D1A1A',
+    seg: '#AE2E24',
+    tint: '#C9372C',
     description: BLOCKED_DESCRIPTION
   };
   var BLOCKED_STYLES_DARK = {
     label: BLOCKED_LABEL,
-    fill: '#3A1515',
-    text: '#ffffff',
-    seg: '#C05050',
-    tint: '#4A1818',
+    fill: '#3D1F1F',
+    text: '#FFECEB',
+    seg: '#F87171',
+    tint: '#5C2020',
     description: BLOCKED_DESCRIPTION
   };
+
+  function blockedThemeVisuals() {
+    return {
+      fill: readCssVar('--blocked-fill', BLOCKED_STYLES.fill),
+      text: readCssVar('--blocked-text', BLOCKED_STYLES.text),
+      seg: readCssVar('--blocked-accent', BLOCKED_STYLES.seg),
+      tint: readCssVar('--blocked-border', BLOCKED_STYLES.tint)
+    };
+  }
 
   var TASK_BADGE_LABELS = {
     Critique: 'T\u00e2che critique',
@@ -1055,8 +1101,7 @@
 
   function tierVisuals(source) {
     if (source && (source.blocked || source.label === BLOCKED_LABEL)) {
-      var blocked = isDarkTheme() ? BLOCKED_STYLES_DARK : BLOCKED_STYLES;
-      return { fill: blocked.fill, text: blocked.text, seg: blocked.seg, tint: blocked.tint };
+      return blockedThemeVisuals();
     }
     var inutile = source && (source.inutile || source.label === INUTILE_LABEL);
     if (inutile) {
@@ -3252,28 +3297,58 @@
       };
     }
 
-    function resizeSurfaceCanvas() {
+    function plotAreaMetrics() {
+      void chart.offsetWidth;
       var chartRect = chart.getBoundingClientRect();
-      if (chartRect.width < 1 || chartRect.height < 1) {
+      var plotRect = plotHit.getBoundingClientRect();
+      if (chartRect.width < 1 || chartRect.height < 1 || plotRect.width < 1 || plotRect.height < 1) {
         return null;
       }
-      // CSS percentages align with SVG viewBox; read rendered size for bitmap dims.
-      var canvasRect = surfaceCanvas.getBoundingClientRect();
-      var cssW = Math.max(1, Math.ceil(canvasRect.width));
-      var cssH = Math.max(1, Math.ceil(canvasRect.height));
-      if (cssW < 1 || cssH < 1) {
+      var cssW = plotRect.width;
+      var cssH = plotRect.height;
+      var scaleX = cssW / PLOT_W;
+      return {
+        left: plotRect.left - chartRect.left,
+        top: plotRect.top - chartRect.top,
+        cssW: cssW,
+        cssH: cssH,
+        radius: Math.max(1, 4 * scaleX)
+      };
+    }
+
+    function resizeSurfaceCanvas() {
+      var metrics = plotAreaMetrics();
+      if (!metrics) {
         return null;
       }
+      var cssW = metrics.cssW;
+      var cssH = metrics.cssH;
       var dpr = window.devicePixelRatio || 1;
-      surfaceCanvas.width = Math.round(cssW * dpr);
-      surfaceCanvas.height = Math.round(cssH * dpr);
-      surfaceCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      return { w: cssW, h: cssH };
+      var bmpW = Math.max(1, Math.round(cssW * dpr));
+      var bmpH = Math.max(1, Math.round(cssH * dpr));
+      surfaceCanvas.style.left = metrics.left + 'px';
+      surfaceCanvas.style.top = metrics.top + 'px';
+      surfaceCanvas.style.width = cssW + 'px';
+      surfaceCanvas.style.height = cssH + 'px';
+      surfaceCanvas.style.borderRadius = metrics.radius + 'px';
+      surfaceCanvas.width = bmpW;
+      surfaceCanvas.height = bmpH;
+      // Setting canvas bitmap dims can reset layout size in some engines.
+      surfaceCanvas.style.width = cssW + 'px';
+      surfaceCanvas.style.height = cssH + 'px';
+      surfaceCanvas.style.borderRadius = metrics.radius + 'px';
+      // putImageData ignores the context transform — paint at device-pixel size directly.
+      surfaceCtx.setTransform(1, 0, 0, 1, 0, 0);
+      return { w: bmpW, h: bmpH };
     }
 
     function paintSurface(F) {
       var size = resizeSurfaceCanvas();
-      if (!size) return;
+      if (!size) {
+        surfaceCanvas.style.visibility = 'hidden';
+        return false;
+      }
+      surfaceCanvas.style.visibility = 'visible';
       var w = size.w;
       var h = size.h;
       var img = surfaceCtx.createImageData(w, h);
@@ -3293,6 +3368,7 @@
         }
       }
       surfaceCtx.putImageData(img, 0, 0);
+      return true;
     }
 
     function lerpPlot(a, b, t) {
@@ -3508,6 +3584,35 @@
     easeSlider.addEventListener('input', handleEaseInput);
     easeSlider.addEventListener('change', handleEaseInput);
 
+    var chartResizeObserver;
+    var layoutSurfaceRaf = null;
+
+    function scheduleLayoutSurfacePaint() {
+      if (layoutSurfaceRaf != null) {
+        cancelAnimationFrame(layoutSurfaceRaf);
+      }
+      layoutSurfaceRaf = requestAnimationFrame(function () {
+        layoutSurfaceRaf = requestAnimationFrame(function () {
+          layoutSurfaceRaf = null;
+          repaintSurfaceFromLayout();
+        });
+      });
+    }
+
+    function repaintSurfaceFromLayout() {
+      if (!lastScene.result || draggingMarker) return;
+      paintSurface(lastScene.F);
+    }
+
+    if (typeof ResizeObserver !== 'undefined') {
+      chartResizeObserver = new ResizeObserver(function () {
+        repaintSurfaceFromLayout();
+      });
+      chartResizeObserver.observe(chart);
+    } else if (typeof window !== 'undefined') {
+      window.addEventListener('resize', repaintSurfaceFromLayout);
+    }
+
     function paint(result, inputs, display) {
       var terms = result.terms || {};
       var U = terms.U != null ? terms.U : inputs.urgency;
@@ -3529,8 +3634,9 @@
       }
 
       if (!draggingMarker) {
-        paintSurface(F);
         paintContours(F);
+        paintSurface(F);
+        scheduleLayoutSurfacePaint();
       }
       paintMarker(markerU, markerI, d);
 
@@ -3548,7 +3654,14 @@
     return {
       el: panel,
       paint: paint,
-      updateTheme: updateChartTheme
+      updateTheme: updateChartTheme,
+      disconnect: function () {
+        if (chartResizeObserver) chartResizeObserver.disconnect();
+        if (layoutSurfaceRaf != null) {
+          cancelAnimationFrame(layoutSurfaceRaf);
+          layoutSurfaceRaf = null;
+        }
+      }
     };
   }
 
@@ -4069,6 +4182,12 @@
     affirmationFor: affirmationFor,
     affirmationDisplayText: affirmationDisplayText
   };
+
+  try {
+    applyColorScheme(DEFAULT_COLOR_SCHEME_KEY);
+  } catch (bootstrapErr) {
+    console.error('PriorityUI color scheme bootstrap failed', bootstrapErr);
+  }
 
   global.PriorityUI = PriorityUI;
 })(typeof window !== 'undefined' ? window : this);

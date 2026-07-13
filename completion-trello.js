@@ -5,7 +5,7 @@
   var CARD_COMPLETION_KEY = 'cardCompletion';
   var COMPLETION_COLOR_SCHEME_SETTINGS_KEY = 'completionColorScheme';
   var COMPLETION_COLOR_SCHEME_REV_KEY = 'completionColorSchemeRev';
-  var CARD_DETAIL_BADGE_TITLE = 'Avancement';
+  var CARD_DETAIL_BADGE_TITLE = 'Progrès';
   var boardCompletionColorSchemeKey = 'traffic';
   var BADGE_REFRESH_SEC =
     global.PriorityTrello && global.PriorityTrello.BADGE_REFRESH_SEC
@@ -271,7 +271,7 @@
   }
 
   function formatDetailBadgeText(progress) {
-    if (!progress || !progress.hasItems) return 'D\u00e9finir l\u2019avancement';
+    if (!progress || !progress.hasItems) return 'D\u00e9finir le progr\u00e8s';
     return progress.percent + '\u00a0% (' + progress.doneCount + '/' + progress.totalCount + ')';
   }
 
@@ -326,7 +326,7 @@
             if (!progress.hasItems) {
               return withBadgeRefresh({
                 title: CARD_DETAIL_BADGE_TITLE,
-                text: 'D\u00e9finir l\u2019avancement',
+                text: 'D\u00e9finir le progr\u00e8s',
                 color: 'blue',
                 callback: openCallback,
               });
@@ -342,7 +342,7 @@
             console.error('Completion card-detail-badges dynamic failed', err);
             return withBadgeRefresh({
               title: CARD_DETAIL_BADGE_TITLE,
-              text: 'D\u00e9finir l\u2019avancement',
+              text: 'D\u00e9finir le progr\u00e8s',
               color: 'blue',
               callback: openCallback,
             });

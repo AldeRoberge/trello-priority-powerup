@@ -159,7 +159,7 @@ check(
 );
 check(
   'detail badge empty',
-  CT.formatDetailBadgeText({ hasItems: false }) === 'D\u00e9finir l\u2019avancement'
+  CT.formatDetailBadgeText({ hasItems: false }) === 'D\u00e9finir le progr\u00e8s'
 );
 check(
   'face badge color complete via CUI',

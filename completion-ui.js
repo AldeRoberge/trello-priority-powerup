@@ -362,12 +362,12 @@
 
     var progressSection = document.createElement('section');
     progressSection.className = 'tp-completion-progress';
-    progressSection.setAttribute('aria-label', 'Avancement');
+    progressSection.setAttribute('aria-label', 'Progrès');
 
     var progressHead = document.createElement('div');
     progressHead.className = 'tp-completion-progress-head';
     progressHead.innerHTML =
-      '<span class="tp-completion-progress-label">Avancement global</span>' +
+      '<span class="tp-completion-progress-label">Progrès global</span>' +
       '<span class="tp-completion-percent" id="completionPercent">0\u00a0%</span>';
     progressSection.appendChild(progressHead);
 
@@ -384,7 +384,7 @@
     progressSection.appendChild(barEl);
 
     var masterSlider = createProgressSlider(
-      'Ajuster l\u2019avancement',
+      'Ajuster le progr\u00e8s',
       0,
       function (v) {
         masterDragging = true;
@@ -492,7 +492,7 @@
 
       if (!progress.hasItems) {
         metaEl.textContent =
-          'Aucune sous-t\u00e2che \u2014 ajoutez des \u00e9l\u00e9ments pour suivre l\u2019avancement.';
+          'Aucune sous-t\u00e2che \u2014 ajoutez des \u00e9l\u00e9ments pour suivre le progr\u00e8s.';
         masterSlider.input.disabled = true;
       } else {
         masterSlider.input.disabled = false;
@@ -632,7 +632,7 @@
 
       var sliderLbl = document.createElement('span');
       sliderLbl.className = 'tp-completion-field-lbl';
-      sliderLbl.textContent = 'Avancement';
+      sliderLbl.textContent = 'Progrès';
 
       var sliderWrap = document.createElement('div');
       sliderWrap.className = 'field-slider';
@@ -644,7 +644,7 @@
       itemSlider.max = '100';
       itemSlider.step = '1';
       itemSlider.value = String(CT.itemProgress(item));
-      itemSlider.setAttribute('aria-label', 'Avancement de la sous-t\u00e2che');
+      itemSlider.setAttribute('aria-label', 'Progr\u00e8s de la sous-t\u00e2che');
 
       var itemValEl = document.createElement('span');
       itemValEl.className = 'tp-completion-item-val tp-completion-field-val';

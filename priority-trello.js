@@ -227,6 +227,7 @@
 
   function computeDisplay(inputs, labelSettings, formulaKey) {
     try {
+      if (typeof PriorityUI === 'undefined') return null;
       var key = formulaKey || boardFormulaKey || 'baseline';
       var calcFn = PriorityUI.calc[key] || PriorityUI.calc.baseline;
       var result = calcFn(inputs);
