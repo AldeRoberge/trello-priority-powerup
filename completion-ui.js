@@ -275,6 +275,37 @@
       .join('');
   }
 
+  var COMPLETION_ENCOURAGEMENT_TIERS = [
+    { max: 0, text: 'En attente' },
+    { max: 10, text: 'Amorc\u00e9e' },
+    { max: 25, text: 'D\u00e9but\u00e9' },
+    { max: 50, text: 'En cours' },
+    { max: 75, text: 'Bon progr\u00e8s' },
+    { max: 90, text: 'Super avanc\u00e9' },
+    { max: 99, text: 'Bient\u00f4t termin\u00e9' },
+    { max: 100, text: 'Termin\u00e9' },
+  ];
+
+  function progressEncouragementText(percent) {
+    var p = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+    for (var i = 0; i < COMPLETION_ENCOURAGEMENT_TIERS.length; i++) {
+      if (p <= COMPLETION_ENCOURAGEMENT_TIERS[i].max) {
+        return COMPLETION_ENCOURAGEMENT_TIERS[i].text;
+      }
+    }
+    return COMPLETION_ENCOURAGEMENT_TIERS[COMPLETION_ENCOURAGEMENT_TIERS.length - 1].text;
+  }
+
+  function applySliderProgressTrack(input, percent) {
+    if (!input) return;
+    var p = Math.max(0, Math.min(100, Number(percent) || 0));
+    var color = completionColorForProgress(p);
+    input.style.setProperty('--completion-pct', p + '%');
+    input.style.setProperty('--completion-fill', color);
+    input.style.setProperty('--completion-accent', color);
+    input.classList.toggle('is-complete', p >= 100);
+  }
+
   function createProgressSlider(label, value, onInput, id) {
     var field = document.createElement('div');
     field.className = 'tp-completion-field';
@@ -291,7 +322,7 @@
 
     var input = document.createElement('input');
     input.type = 'range';
-    input.className = 'field-range';
+    input.className = 'field-range tp-completion-progress-slider';
     input.min = '0';
     input.max = '100';
     input.step = '1';
@@ -305,6 +336,7 @@
 
     function updateVal(v) {
       valEl.textContent = v + '\u00a0%';
+      applySliderProgressTrack(input, v);
     }
 
     function handleInput() {
@@ -371,25 +403,24 @@
       '<span class="tp-completion-percent" id="completionPercent">0\u00a0%</span>';
     progressSection.appendChild(progressHead);
 
-    var barEl = document.createElement('div');
-    barEl.className = 'tp-completion-bar';
-    barEl.setAttribute('role', 'progressbar');
-    barEl.setAttribute('aria-valuemin', '0');
-    barEl.setAttribute('aria-valuemax', '100');
-    barEl.setAttribute('aria-valuenow', '0');
-    var barFillEl = document.createElement('div');
-    barFillEl.className = 'tp-completion-bar-fill';
-    barFillEl.id = 'completionBarFill';
-    barEl.appendChild(barFillEl);
-    progressSection.appendChild(barEl);
+    var encouragementEl = document.createElement('p');
+    encouragementEl.className = 'tp-completion-encouragement';
+    encouragementEl.id = 'completionEncouragement';
+    encouragementEl.setAttribute('aria-live', 'polite');
+    encouragementEl.textContent = progressEncouragementText(0);
+    progressSection.appendChild(encouragementEl);
 
     var masterSlider = createProgressSlider(
       'Ajuster le progr\u00e8s',
       0,
       function (v) {
         masterDragging = true;
-        data.items = CT.applyMasterProgress(data.items, v);
-        syncItemSlidersFromData();
+        if (data.items.length) {
+          data.items = CT.applyMasterProgress(data.items, v);
+          syncItemSlidersFromData();
+        } else {
+          data.progress = v;
+        }
         updateProgressUi({ skipMasterSync: true });
         onChange(CT.normalizeCompletionData(data));
       },
@@ -435,19 +466,12 @@
         var slider = li.querySelector('.tp-completion-item-slider');
         var valEl = li.querySelector('.tp-completion-item-val');
         var checkbox = li.querySelector('.tp-completion-check');
-        var itemBarFill = li.querySelector('.tp-completion-item-bar-fill');
-        var itemBar = li.querySelector('.tp-completion-item-bar');
         if (slider) {
           slider.value = String(p);
-          slider.style.setProperty('--completion-accent', completionColorForProgress(p));
+          applySliderProgressTrack(slider, p);
         }
         if (valEl) valEl.textContent = p + '\u00a0%';
         if (checkbox) checkbox.checked = item.done;
-        if (itemBarFill) {
-          itemBarFill.style.width = p + '%';
-          applyProgressColor(itemBarFill, p);
-        }
-        if (itemBar) itemBar.setAttribute('aria-valuenow', String(p));
         li.classList.toggle('is-done', item.done);
       });
     }
@@ -467,35 +491,32 @@
       onChange(data);
     }
 
-    function applyProgressColor(el, percent) {
-      if (!el) return;
-      var color = completionColorForProgress(percent);
-      el.style.background = color;
-    }
-
     function updateProgressUi(opts) {
       opts = opts || {};
-      var progress = CT.computeWeightedProgress(data.items);
+      var progress = CT.computeCardProgress(data);
       percentEl.textContent = progress.percent + '\u00a0%';
-      barEl.setAttribute('aria-valuenow', String(progress.percent));
-      barFillEl.style.width = progress.percent + '%';
-      applyProgressColor(barFillEl, progress.percent);
-      percentEl.style.color = progress.hasItems && progress.percent > 0
+      percentEl.style.color = progress.percent > 0
         ? completionColorForProgress(progress.percent)
         : '';
-      barEl.classList.toggle('is-complete', progress.percent === 100 && progress.hasItems);
-
+      encouragementEl.textContent = progressEncouragementText(progress.percent);
+      encouragementEl.style.color = progress.percent > 0
+        ? completionColorForProgress(progress.percent)
+        : '';
+      encouragementEl.classList.toggle('is-complete', progress.percent === 100);
       if (!opts.skipMasterSync && !masterDragging) {
         masterSlider.setValue(progress.percent);
+      } else {
+        applySliderProgressTrack(masterSlider.input, progress.percent);
       }
+      masterSlider.input.classList.toggle(
+        'is-complete',
+        progress.percent === 100
+      );
       masterDragging = false;
 
       if (!progress.hasItems) {
-        metaEl.textContent =
-          'Aucune sous-t\u00e2che \u2014 ajoutez des \u00e9l\u00e9ments pour suivre le progr\u00e8s.';
-        masterSlider.input.disabled = true;
+        metaEl.textContent = '';
       } else {
-        masterSlider.input.disabled = false;
         metaEl.textContent =
           progress.doneCount +
           ' sur ' +
@@ -521,17 +542,9 @@
       var deleteBtn = li.querySelector('.tp-completion-delete');
       var itemSlider = li.querySelector('.tp-completion-item-slider');
       var itemValEl = li.querySelector('.tp-completion-item-val');
-      var itemBarFill = li.querySelector('.tp-completion-item-bar-fill');
-
       function syncItemProgressUi() {
         var p = CT.itemProgress(item);
-        if (itemBarFill) {
-          itemBarFill.style.width = p + '%';
-          applyProgressColor(itemBarFill, p);
-        }
-        var itemBar = li.querySelector('.tp-completion-item-bar');
-        if (itemBar) itemBar.setAttribute('aria-valuenow', String(p));
-        if (itemSlider) itemSlider.style.setProperty('--completion-accent', completionColorForProgress(p));
+        if (itemSlider) applySliderProgressTrack(itemSlider, p);
       }
 
       checkbox.addEventListener('change', function () {
@@ -655,17 +668,6 @@
       sliderRow.appendChild(sliderWrap);
       sliderRow.appendChild(itemValEl);
 
-      var itemBar = document.createElement('div');
-      itemBar.className = 'tp-completion-item-bar';
-      itemBar.setAttribute('role', 'progressbar');
-      itemBar.setAttribute('aria-valuemin', '0');
-      itemBar.setAttribute('aria-valuemax', '100');
-      itemBar.setAttribute('aria-valuenow', String(CT.itemProgress(item)));
-      var itemBarFill = document.createElement('div');
-      itemBarFill.className = 'tp-completion-item-bar-fill';
-      itemBar.appendChild(itemBarFill);
-      sliderRow.appendChild(itemBar);
-
       li.appendChild(mainRow);
       li.appendChild(sliderRow);
       bindItemRow(li, item);
@@ -674,22 +676,19 @@
 
     function renderList() {
       listEl.replaceChildren();
-      if (!data.items.length) {
-        var empty = document.createElement('li');
-        empty.className = 'tp-completion-empty';
-        empty.textContent = 'Aucune sous-t\u00e2che pour l\u2019instant.';
-        listEl.appendChild(empty);
-        return;
-      }
       data.items.forEach(function (item) {
         listEl.appendChild(renderItem(item));
       });
     }
 
     function removeItem(id) {
-      data.items = data.items.filter(function (item) {
+      var nextItems = data.items.filter(function (item) {
         return item.id !== id;
       });
+      if (!nextItems.length && data.items.length) {
+        data.progress = CT.computeCardProgress(data).percent;
+      }
+      data.items = nextItems;
       renderList();
       updateProgressUi();
       emitChange();
@@ -699,10 +698,12 @@
     function addItem(text, difficulty) {
       var trimmed = (text || '').trim();
       if (!trimmed) return false;
+      var hadNoItems = !data.items.length;
+      var cardProgress = hadNoItems ? CT.computeCardProgress(data).percent : 0;
       var item = CT.normalizeItem({
         id: CT.generateId(),
         text: trimmed,
-        progress: 0,
+        progress: hadNoItems && cardProgress > 0 ? cardProgress : 0,
         difficulty: difficulty != null ? difficulty : 2,
       });
       if (!item) return false;
@@ -770,6 +771,7 @@
     completionColorForProgress: completionColorForProgress,
     completionTrelloBadgeColor: completionTrelloBadgeColor,
     schemeGradientCss: schemeGradientCss,
+    progressEncouragementText: progressEncouragementText,
     mountCompletionUI: mountCompletionUI,
   };
 })(typeof window !== 'undefined' ? window : this);

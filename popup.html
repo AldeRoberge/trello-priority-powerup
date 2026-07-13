@@ -11,6 +11,11 @@
   <script src="./rest-config.js"></script>
   <script src="./priority-matrix.js"></script>
   <script src="./priority-ui.js"></script>
+  <script>
+    if (!window.PriorityUI) {
+      console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
+    }
+  </script>
   <script src="./priority-trello.js"></script>
 </head>
 <body class="tp-page tp-page--priority">
@@ -65,6 +70,9 @@
     }
 
     async function init() {
+      if (!window.PriorityUI) {
+        throw new Error('PriorityUI is not available — priority-ui.js failed to load or initialize');
+      }
       const inputs = await PriorityTrello.clearBlockedIfComplete(t);
       await PriorityTrello.ensureBoardPriorityContext(t);
       const boardFormula = PriorityTrello.getCachedBoardFormulaKey

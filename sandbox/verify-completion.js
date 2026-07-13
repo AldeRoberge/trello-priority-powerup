@@ -34,6 +34,7 @@ if (!CT || !CUI) {
 [
   'normalizeCompletionData',
   'computeWeightedProgress',
+  'computeCardProgress',
   'applyMasterProgress',
   'difficultyWeight',
   'clampProgress',
@@ -112,6 +113,25 @@ check('100 percent when all at 100', allDone.percent === 100);
 var empty = CT.computeWeightedProgress([]);
 check('empty has no items', empty.hasItems === false && empty.percent === 0);
 
+var cardOnly = CT.computeCardProgress({ items: [], progress: 45 });
+check('card progress without items', cardOnly.hasItems === false && cardOnly.percent === 45);
+check(
+  'detail badge card-only progress',
+  CT.formatDetailBadgeText(cardOnly) === '45\u00a0%'
+);
+check(
+  'face badge card-only progress',
+  CT.buildCardFaceBadge(cardOnly).text === '45\u00a0%'
+);
+
+var normalizedCard = CT.normalizeCompletionData({ items: [], progress: 72 });
+check('normalize stores card progress', normalizedCard.progress === 72 && normalizedCard.items.length === 0);
+check(
+  'normalize drops card progress when items exist',
+  CT.normalizeCompletionData({ items: [{ id: 'a', text: 'A', progress: 50, difficulty: 1 }], progress: 72 }).progress ===
+    undefined
+);
+
 // Master slider proportional scaling
 var base = [
   { id: 'a', text: 'A', progress: 25, difficulty: 2 },
@@ -178,6 +198,15 @@ check(
   CT.normalizeItem({ id: 'x', text: 'ok', progress: 80, difficulty: 1 }).done === false &&
     CT.normalizeItem({ id: 'y', text: 'ok', progress: 100, difficulty: 1 }).done === true
 );
+
+check('encouragement at 0', CUI.progressEncouragementText(0) === 'En attente');
+check('encouragement amorcee', CUI.progressEncouragementText(8) === 'Amorc\u00e9e');
+check('encouragement debut', CUI.progressEncouragementText(20) === 'D\u00e9but\u00e9');
+check('encouragement en cours', CUI.progressEncouragementText(40) === 'En cours');
+check('encouragement bon progres', CUI.progressEncouragementText(60) === 'Bon progr\u00e8s');
+check('encouragement super avance', CUI.progressEncouragementText(85) === 'Super avanc\u00e9');
+check('encouragement bientot termine', CUI.progressEncouragementText(95) === 'Bient\u00f4t termin\u00e9');
+check('encouragement termine', CUI.progressEncouragementText(100) === 'Termin\u00e9');
 
 console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll completion checks passed');
 process.exit(bad ? 1 : 0);

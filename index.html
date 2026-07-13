@@ -9,6 +9,11 @@
   <script src="./version.js"></script>
   <script src="./priority-matrix.js"></script>
   <script src="./priority-ui.js"></script>
+  <script>
+    if (!window.PriorityUI) {
+      console.error('Priority connector: priority-ui.js did not expose window.PriorityUI');
+    }
+  </script>
   <script src="./priority-trello.js"></script>
   <script src="./completion-ui.js"></script>
   <script src="./completion-trello.js"></script>

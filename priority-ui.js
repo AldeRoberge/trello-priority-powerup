@@ -1037,8 +1037,18 @@
   }
 
   function readCssVar(name, fallback) {
-    var value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    return value || fallback || '';
+    try {
+      if (typeof document === 'undefined' || !document.documentElement) {
+        return fallback || '';
+      }
+      if (typeof getComputedStyle !== 'function') {
+        return fallback || '';
+      }
+      var value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      return value || fallback || '';
+    } catch (e) {
+      return fallback || '';
+    }
   }
 
   function tierVisuals(source) {
@@ -4125,11 +4135,11 @@
     affirmationDisplayText: affirmationDisplayText
   };
 
+  global.PriorityUI = PriorityUI;
+
   try {
     applyColorScheme(DEFAULT_COLOR_SCHEME_KEY);
   } catch (bootstrapErr) {
     console.error('PriorityUI color scheme bootstrap failed', bootstrapErr);
   }
-
-  global.PriorityUI = PriorityUI;
 })(typeof window !== 'undefined' ? window : this);

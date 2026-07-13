@@ -18,8 +18,13 @@
   var SORT_TIER_INUTILE = 7;
   var SORT_TIER_NONE = 100;
 
+  function priorityUI() {
+    return global.PriorityUI || null;
+  }
+
   function importantInputs() {
-    var segments = typeof PriorityUI !== 'undefined' && PriorityUI.HEAT_SEGMENTS;
+    var PU = priorityUI();
+    var segments = PU && PU.HEAT_SEGMENTS;
     if (segments) {
       for (var i = 0; i < segments.length; i++) {
         if (segments[i].label === 'Important' && segments[i].preset) {
@@ -94,12 +99,8 @@
     if (raw.enAttente === true) {
       normalized.enAttente = true;
       var reason = typeof raw.blockedReason === 'string' ? raw.blockedReason.trim() : '';
-      if (
-        reason &&
-        typeof PriorityUI !== 'undefined' &&
-        PriorityUI.isValidBlockedReason &&
-        PriorityUI.isValidBlockedReason(reason)
-      ) {
+      var PU = priorityUI();
+      if (reason && PU && PU.isValidBlockedReason && PU.isValidBlockedReason(reason)) {
         normalized.blockedReason = reason;
       }
     }
@@ -156,13 +157,14 @@
   }
 
   async function getBoardFormula(t) {
-    if (typeof PriorityUI === 'undefined') return 'baseline';
+    var PU = priorityUI();
+    if (!PU) return 'baseline';
     try {
       var stored = await t.get('board', 'shared', FORMULA_SETTINGS_KEY);
       if (typeof stored === 'string') {
-        boardFormulaKey = PriorityUI.normalizeFormulaKey(stored);
+        boardFormulaKey = PU.normalizeFormulaKey(stored);
       } else if (stored && typeof stored === 'object' && stored.formula) {
-        boardFormulaKey = PriorityUI.normalizeFormulaKey(stored.formula);
+        boardFormulaKey = PU.normalizeFormulaKey(stored.formula);
       }
     } catch (err) {
       console.error('Priority board formula load failed', err);
@@ -171,37 +173,40 @@
   }
 
   async function saveBoardFormula(t, formulaKey) {
-    if (typeof PriorityUI === 'undefined') return 'baseline';
-    var key = PriorityUI.normalizeFormulaKey(formulaKey);
+    var PU = priorityUI();
+    if (!PU) return 'baseline';
+    var key = PU.normalizeFormulaKey(formulaKey);
     boardFormulaKey = key;
     await t.set('board', 'shared', FORMULA_SETTINGS_KEY, key);
     return key;
   }
 
   async function getBoardColorScheme(t) {
-    if (typeof PriorityUI === 'undefined') return 'blue';
+    var PU = priorityUI();
+    if (!PU) return 'blue';
     try {
       var stored = await t.get('board', 'shared', COLOR_SCHEME_SETTINGS_KEY);
       if (typeof stored === 'string') {
-        boardColorSchemeKey = PriorityUI.normalizeColorSchemeKey(stored);
-        PriorityUI.applyColorScheme(boardColorSchemeKey);
+        boardColorSchemeKey = PU.normalizeColorSchemeKey(stored);
+        PU.applyColorScheme(boardColorSchemeKey);
         return boardColorSchemeKey;
       }
     } catch (err) {
       console.error('Priority board color scheme load failed', err);
     }
-    var fromLocal = PriorityUI.loadStoredColorSchemeKey();
-    boardColorSchemeKey = fromLocal || PriorityUI.DEFAULT_COLOR_SCHEME_KEY || 'blue';
-    PriorityUI.applyColorScheme(boardColorSchemeKey);
+    var fromLocal = PU.loadStoredColorSchemeKey();
+    boardColorSchemeKey = fromLocal || PU.DEFAULT_COLOR_SCHEME_KEY || 'blue';
+    PU.applyColorScheme(boardColorSchemeKey);
     return boardColorSchemeKey;
   }
 
   async function saveBoardColorScheme(t, schemeKey) {
-    if (typeof PriorityUI === 'undefined') return 'blue';
-    var key = PriorityUI.normalizeColorSchemeKey(schemeKey);
+    var PU = priorityUI();
+    if (!PU) return 'blue';
+    var key = PU.normalizeColorSchemeKey(schemeKey);
     boardColorSchemeKey = key;
-    PriorityUI.applyColorScheme(key);
-    PriorityUI.saveStoredColorSchemeKey(key);
+    PU.applyColorScheme(key);
+    PU.saveStoredColorSchemeKey(key);
     await t.set('board', 'shared', COLOR_SCHEME_SETTINGS_KEY, key);
     await t.set('board', 'shared', COLOR_SCHEME_REV_KEY, Date.now());
     return key;
@@ -217,8 +222,9 @@
 
   async function ensureBoardPriorityContext(t) {
     var settings = await getMatrixSettings(t);
-    if (typeof PriorityUI !== 'undefined' && PriorityUI.setMatrixSettings) {
-      PriorityUI.setMatrixSettings(settings);
+    var PU = priorityUI();
+    if (PU && PU.setMatrixSettings) {
+      PU.setMatrixSettings(settings);
     }
     await getBoardFormula(t);
     await getBoardColorScheme(t);
@@ -227,11 +233,12 @@
 
   function computeDisplay(inputs, labelSettings, formulaKey) {
     try {
-      if (typeof PriorityUI === 'undefined') return null;
+      var PU = priorityUI();
+      if (!PU || !PU.calc) return null;
       var key = formulaKey || boardFormulaKey || 'baseline';
-      var calcFn = PriorityUI.calc[key] || PriorityUI.calc.baseline;
+      var calcFn = PU.calc[key] || PU.calc.baseline;
       var result = calcFn(inputs);
-      return PriorityUI.resolveDisplay(result, inputs, labelSettings);
+      return PU.resolveDisplay(result, inputs, labelSettings);
     } catch (err) {
       console.error('PriorityTrello.computeDisplay failed', err);
       return null;
@@ -247,8 +254,9 @@
 
   // Tier-indexed badge dots delegate to PriorityUI tier metadata.
   function tierBadgeDot(display, completed) {
-    if (typeof PriorityUI !== 'undefined' && PriorityUI.tierBadgeDotChar) {
-      return PriorityUI.tierBadgeDotChar(display, completed);
+    var PU = priorityUI();
+    if (PU && PU.tierBadgeDotChar) {
+      return PU.tierBadgeDotChar(display, completed);
     }
     if (completed) return '\u2713';
     if (!display) return '\u25CF';
@@ -258,8 +266,9 @@
   }
 
   function incompleteBadgeLabel(display) {
-    if (typeof PriorityUI !== 'undefined' && PriorityUI.taskBadgeLabel) {
-      return PriorityUI.taskBadgeLabel(display);
+    var PU = priorityUI();
+    if (PU && PU.taskBadgeLabel) {
+      return PU.taskBadgeLabel(display);
     }
     var tierKey = String(display.tierLabel || display.label || '');
     if (tierKey === 'Important') return 'T\u00e2che importante';
@@ -297,9 +306,10 @@
 
   function formatBlockedBoardBadgeText(display) {
     var d = display || {};
-    if (typeof PriorityUI !== 'undefined' && PriorityUI.formatBlockedBadgeText) {
+    var PU = priorityUI();
+    if (PU && PU.formatBlockedBadgeText) {
       var reason = typeof d.blockedReason === 'string' ? d.blockedReason.trim() : '';
-      return PriorityUI.formatBlockedBadgeText(d, reason || undefined);
+      return PU.formatBlockedBadgeText(d, reason || undefined);
     }
     var tierKey = String(d.tierLabel || d.label || '');
     var label = tierKey ? 'T\u00e2che ' + tierKey.toLowerCase() : 'T\u00e2che';
@@ -320,8 +330,9 @@
   }
 
   function tierDetailBadgeColor(display) {
-    if (typeof PriorityUI !== 'undefined' && PriorityUI.tierTrelloBadgeColor) {
-      return PriorityUI.tierTrelloBadgeColor(display);
+    var PU = priorityUI();
+    if (PU && PU.tierTrelloBadgeColor) {
+      return PU.tierTrelloBadgeColor(display);
     }
     return 'light-gray';
   }

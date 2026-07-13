@@ -107,7 +107,8 @@
       seenIds[item.id] = true;
       normalized.push(item);
     }
-    return { items: normalized };
+    if (normalized.length) return { items: normalized };
+    return { items: [], progress: clampProgress(raw.progress) };
   }
 
   // Weighted total: sum(weight * progress/100) / sum(weight) * 100
@@ -140,6 +141,19 @@
       doneWeight: Math.round(weightedSum * 10) / 10,
       totalWeight: totalWeight,
       hasItems: true,
+    };
+  }
+
+  function computeCardProgress(data) {
+    var normalized = normalizeCompletionData(data);
+    if (normalized.items.length) return computeWeightedProgress(normalized.items);
+    return {
+      percent: clampProgress(normalized.progress),
+      doneCount: 0,
+      totalCount: 0,
+      doneWeight: 0,
+      totalWeight: 0,
+      hasItems: false,
     };
   }
 
@@ -208,7 +222,7 @@
   }
 
   function formatFaceBadgeText(progress) {
-    if (!progress || !progress.hasItems || progress.percent <= 0) return '';
+    if (!progress || progress.percent <= 0) return '';
     if (progress.percent === 100) {
       return '\u2713 ' + progress.percent + '\u00a0%';
     }
@@ -216,7 +230,7 @@
   }
 
   function faceBadgeColor(progress) {
-    if (!progress || !progress.hasItems) return 'light-gray';
+    if (!progress || progress.percent <= 0) return 'light-gray';
     if (typeof global.CompletionUI !== 'undefined' && global.CompletionUI.completionTrelloBadgeColor) {
       return global.CompletionUI.completionTrelloBadgeColor(progress.percent);
     }
@@ -263,7 +277,7 @@
   }
 
   function buildCardFaceBadge(progress) {
-    if (!progress || !progress.hasItems || progress.percent <= 0) return null;
+    if (!progress || progress.percent <= 0) return null;
     return {
       text: formatFaceBadgeText(progress),
       color: faceBadgeColor(progress),
@@ -271,7 +285,10 @@
   }
 
   function formatDetailBadgeText(progress) {
-    if (!progress || !progress.hasItems) return 'D\u00e9finir le progr\u00e8s';
+    if (!progress) return 'D\u00e9finir le progr\u00e8s';
+    if (!progress.hasItems) {
+      return progress.percent > 0 ? progress.percent + '\u00a0%' : 'D\u00e9finir le progr\u00e8s';
+    }
     return progress.percent + '\u00a0% (' + progress.doneCount + '/' + progress.totalCount + ')';
   }
 
@@ -287,7 +304,7 @@
     ]);
     var data = results[0];
     await getBoardCompletionColorScheme(t);
-    var progress = computeWeightedProgress(data.items);
+    var progress = computeCardProgress(data);
     return { data: data, progress: progress };
   }
 
@@ -295,7 +312,7 @@
     return {
       dynamic: function () {
         return getBadgeData(t).then(function (result) {
-          if (!result.progress.hasItems || result.progress.percent <= 0) {
+          if (result.progress.percent <= 0) {
             return { refresh: BADGE_REFRESH_SEC };
           }
           return withBadgeRefresh(buildCardFaceBadge(result.progress));
@@ -307,8 +324,8 @@
   function cardFaceBadges(t) {
     return getCardCompletion(t)
       .then(function (data) {
-        var progress = computeWeightedProgress(data.items);
-        if (!progress.hasItems || progress.percent <= 0) return [];
+        var progress = computeCardProgress(data);
+        if (progress.percent <= 0) return [];
         return [dynamicCardFaceBadge(t)];
       })
       .catch(function (err) {
@@ -323,18 +340,10 @@
         return getBadgeData(t)
           .then(function (result) {
             var progress = result.progress;
-            if (!progress.hasItems) {
-              return withBadgeRefresh({
-                title: CARD_DETAIL_BADGE_TITLE,
-                text: 'D\u00e9finir le progr\u00e8s',
-                color: 'blue',
-                callback: openCallback,
-              });
-            }
             return withBadgeRefresh({
               title: CARD_DETAIL_BADGE_TITLE,
               text: formatDetailBadgeText(progress),
-              color: faceBadgeColor(progress),
+              color: progress.percent > 0 ? faceBadgeColor(progress) : 'blue',
               callback: openCallback,
             });
           })
@@ -406,6 +415,7 @@
     normalizeItem: normalizeItem,
     normalizeCompletionData: normalizeCompletionData,
     computeWeightedProgress: computeWeightedProgress,
+    computeCardProgress: computeCardProgress,
     applyMasterProgress: applyMasterProgress,
     getCardCompletion: getCardCompletion,
     saveCardCompletion: saveCardCompletion,
