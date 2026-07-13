@@ -1223,6 +1223,28 @@
     return pad2(hours) + ':' + pad2(minutes);
   }
 
+  /** Resolve a quick-date chip id to `{ iso, time }` (local calendar). */
+  function resolveDueDateQuickSuggestion(id) {
+    if (!id || typeof id !== 'string') return null;
+    var today = startOfLocalDay(new Date());
+    var date;
+    var time = '';
+    if (id === 'demain-matin') {
+      date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+      time = '09:00';
+    } else if (id === 'lundi-prochain') {
+      // JS getDay(): Sun=0 … Sat=6. Want next Monday (1).
+      var dow = today.getDay();
+      var daysUntilMonday = dow === 0 ? 1 : (8 - dow);
+      date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + daysUntilMonday);
+    } else if (id === 'dans-deux-semaines') {
+      date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14);
+    } else {
+      return null;
+    }
+    return { iso: toIsoDate(date), time: time };
+  }
+
   function startOfLocalDay(date) {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate());
   }
@@ -6989,8 +7011,12 @@
     BLOCKED_REASON_SUGGESTIONS_LABEL: BLOCKED_REASON_SUGGESTIONS_LABEL,
     BLOCKED_REASON_CLEAR_LABEL: BLOCKED_REASON_CLEAR_LABEL,
     BLOCKED_REASON_OPTIONS: BLOCKED_REASON_OPTIONS,
+    BLOCKED_REASON_WAITING_OTHER_TASK: BLOCKED_REASON_WAITING_OTHER_TASK,
+    BLOCKED_LINK_TYPE_SUBTASK: BLOCKED_LINK_TYPE_SUBTASK,
     isValidBlockedReason: isValidBlockedReason,
     normalizeBlockedReason: normalizeBlockedReason,
+    isBlockedWaitingOtherTask: isBlockedWaitingOtherTask,
+    normalizeBlockedLink: normalizeBlockedLink,
     formatBlockedBadgeText: formatBlockedBadgeText,
     MS_PER_DAY: MS_PER_DAY,
     MS_PER_HOUR: MS_PER_HOUR,
