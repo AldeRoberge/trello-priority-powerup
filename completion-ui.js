@@ -548,6 +548,10 @@
       '<svg class="tp-completion-check-icon" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">' +
       '<path fill="currentColor" d="M13.2 4.3 6.5 11 2.8 7.3l1.1-1.1 2.6 2.6 5.6-5.6z"/>' +
       '</svg>';
+    var TRASH_ICON_SVG =
+      '<svg class="tp-completion-delete-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
+      '<path fill="currentColor" d="M6 2.25A.75.75 0 0 1 6.75 1.5h2.5a.75.75 0 0 1 .75.75V3.5h3.25a.75.75 0 0 1 0 1.5h-.46l-.54 8.05A1.75 1.75 0 0 1 10.51 14.5H5.49a1.75 1.75 0 0 1-1.74-1.45L3.21 5H2.75a.75.75 0 0 1 0-1.5H6V2.25zM7.5 3.5h1V3h-1v.5zM4.72 5l.52 7.8a.25.25 0 0 0 .25.2h5.02a.25.25 0 0 0 .25-.2L11.28 5H4.72zM6.5 6.75a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5a.75.75 0 0 1 .75-.75zm3 0a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5a.75.75 0 0 1 .75-.75z"/>' +
+      '</svg>';
 
     function findItemRow(id) {
       return containerEl.querySelector('.tp-completion-item[data-id="' + id + '"]');
@@ -766,7 +770,6 @@
     function bindItemRow(li, item) {
       var checkBtn = li.querySelector('.tp-completion-check');
       var textInput = li.querySelector('.tp-completion-text');
-      var diffSelect = li.querySelector('.tp-completion-diff');
       var deleteBtn = li.querySelector('.tp-completion-delete');
       var itemSlider = li.querySelector('.tp-completion-item-slider');
       var itemValEl = li.querySelector('.tp-completion-item-val');
@@ -832,11 +835,6 @@
         }
       });
 
-      diffSelect.addEventListener('change', function () {
-        item.difficulty = Number(diffSelect.value);
-        emitChange();
-      });
-
       deleteBtn.addEventListener('click', function () {
         removeItem(item.id);
       });
@@ -867,22 +865,15 @@
       textInput.value = item.text;
       textInput.setAttribute('aria-label', 'Texte de la sous-t\u00e2che');
 
-      var diffSelect = document.createElement('select');
-      diffSelect.className = 'tp-input tp-completion-diff';
-      diffSelect.setAttribute('aria-label', 'Difficult\u00e9');
-      diffSelect.title = 'Difficult\u00e9';
-      diffSelect.innerHTML = difficultyOptionsHtml(item.difficulty, CT);
-
       var deleteBtn = document.createElement('button');
       deleteBtn.type = 'button';
       deleteBtn.className = 'tp-completion-delete';
       deleteBtn.setAttribute('aria-label', 'Supprimer');
       deleteBtn.title = 'Supprimer';
-      deleteBtn.textContent = '\u00d7';
+      deleteBtn.innerHTML = TRASH_ICON_SVG;
 
       mainRow.appendChild(checkWrap);
       mainRow.appendChild(textInput);
-      mainRow.appendChild(diffSelect);
       mainRow.appendChild(deleteBtn);
 
       var sliderRow = document.createElement('div');
@@ -1016,7 +1007,7 @@
       onResize();
     }
 
-    function addItem(text, difficulty) {
+    function addItem(text) {
       var trimmed = (text || '').trim();
       if (!trimmed) return false;
       var hadNoItems = !data.items.length;
@@ -1025,7 +1016,6 @@
         id: CT.generateId(),
         text: trimmed,
         progress: hadNoItems && cardProgress > 0 ? cardProgress : 0,
-        difficulty: difficulty != null ? difficulty : 2,
       });
       if (!item) return false;
       data.items.push(item);
@@ -1035,7 +1025,7 @@
     }
 
     function addFromInput() {
-      var ok = addItem(addInput.value, 2);
+      var ok = addItem(addInput.value);
       if (ok) {
         addInput.value = '';
         addInput.focus();

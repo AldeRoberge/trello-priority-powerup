@@ -1,4 +1,4 @@
-// Completion weighted progress verification — run: node sandbox/verify-completion.js
+// Completion progress verification — run: node sandbox/verify-completion.js
 var fs = require('fs');
 var path = require('path');
 var vm = require('vm');
@@ -36,7 +36,6 @@ if (!CT || !CUI) {
   'computeWeightedProgress',
   'computeCardProgress',
   'applyMasterProgress',
-  'difficultyWeight',
   'clampProgress',
   'itemProgress',
   'syncDoneFromProgress',
@@ -54,6 +53,8 @@ if (!CT || !CUI) {
   check('export ' + name, typeof CT[name] === 'function' || (name === 'CARD_COMPLETION_KEY' && CT[name]));
 });
 
+check('no difficultyWeight export', typeof CT.difficultyWeight !== 'function');
+check('no DIFFICULTY_LEVELS export', !CT.DIFFICULTY_LEVELS);
 check('storage key', CT.CARD_COMPLETION_KEY === 'cardCompletion');
 check('completion scheme storage key', CT.COMPLETION_COLOR_SCHEME_SETTINGS_KEY === 'completionColorScheme');
 check('default scheme traffic', CUI.DEFAULT_COMPLETION_SCHEME_KEY === 'traffic');
@@ -100,35 +101,34 @@ check(
   'scheme gradient includes mid stop',
   (CUI.schemeGradientCss('traffic').match(/#/g) || []).length >= 3
 );
-check('difficulty weight easy', CT.difficultyWeight(0) === 1);
-check('difficulty weight hard', CT.difficultyWeight(4) === 5);
-check('difficulty weight default invalid', CT.difficultyWeight('x') === 3);
 
-// Legacy migration: done boolean → progress
+// Legacy migration: done boolean → progress; difficulty ignored
 var migrated = CT.normalizeItem({ id: 'a', text: 'Done', done: true, difficulty: 0 });
 check('migrate done true to progress 100', migrated.progress === 100 && migrated.done === true);
-var notDone = CT.normalizeItem({ id: 'b', text: 'Open', done: false, difficulty: 0 });
+check('normalize strips legacy difficulty', migrated.difficulty === undefined);
+var notDone = CT.normalizeItem({ id: 'b', text: 'Open', done: false, difficulty: 4 });
 check('migrate done false to progress 0', notDone.progress === 0 && notDone.done === false);
+check('normalize ignores hard difficulty', notDone.difficulty === undefined);
 
 var items = [
   { id: 'a', text: 'Easy', done: true, difficulty: 0 },
   { id: 'b', text: 'Hard', done: false, difficulty: 4 },
 ];
 var progress = CT.computeWeightedProgress(items);
-check('weighted percent 17 (legacy done)', progress.percent === 17);
+check('equal-weight percent 50 (legacy done)', progress.percent === 50);
 check('done count 1', progress.doneCount === 1);
 check('total count 2', progress.totalCount === 2);
 check('done weight 1', progress.doneWeight === 1);
-check('total weight 6', progress.totalWeight === 6);
+check('total weight 2', progress.totalWeight === 2);
 
-// Partial progress per item
+// Partial progress per item (legacy difficulty must not skew)
 var partial = CT.computeWeightedProgress([
   { id: 'a', text: 'Half easy', progress: 50, difficulty: 0 },
   { id: 'b', text: 'Full hard', progress: 100, difficulty: 4 },
 ]);
-check('partial weighted percent 92', partial.percent === 92);
+check('partial equal-weight percent 75', partial.percent === 75);
 check('partial done count 1', partial.doneCount === 1);
-check('partial done weight 5.5', partial.doneWeight === 5.5);
+check('partial done weight 1.5', partial.doneWeight === 1.5);
 
 var mid = CT.computeWeightedProgress([
   { id: 'a', text: 'A', progress: 50, difficulty: 2 },
@@ -173,6 +173,7 @@ var scaled = CT.applyMasterProgress(base, 50);
 var scaledProgress = CT.computeWeightedProgress(scaled);
 check('master slider reaches 50%', scaledProgress.percent === 50);
 check('master slider doubles each item', scaled[0].progress === 50 && scaled[1].progress === 50);
+check('master strips difficulty', scaled[0].difficulty === undefined && scaled[1].difficulty === undefined);
 
 var fromZero = CT.applyMasterProgress(
   [

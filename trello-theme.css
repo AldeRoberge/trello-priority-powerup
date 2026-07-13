@@ -1154,7 +1154,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 
 .tp-completion-item-main {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 108px 28px;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
   align-items: center;
   gap: 6px;
 }
@@ -1476,8 +1476,7 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
 /* Soft inputs inside completion — kill 2px gray cages from .tp-input */
 .tp-completion .tp-input,
 .tp-completion-add-input,
-.tp-completion-text,
-.tp-completion-diff {
+.tp-completion-text {
   border: 1.5px solid transparent;
   border-radius: var(--completion-control-radius, 8px);
   background: color-mix(in srgb, var(--tp-surface-subtle) 85%, var(--tp-input-bg, var(--tp-surface)));
@@ -1486,23 +1485,20 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
 
 .tp-completion .tp-input:hover,
 .tp-completion-add-input:hover,
-.tp-completion-text:hover,
-.tp-completion-diff:hover {
+.tp-completion-text:hover {
   background: var(--tp-surface-hover, var(--tp-surface-subtle));
 }
 
 .tp-completion .tp-input:focus,
 .tp-completion-add-input:focus,
-.tp-completion-text:focus,
-.tp-completion-diff:focus {
+.tp-completion-text:focus {
   outline: none;
   border-color: transparent;
 }
 
 .tp-completion .tp-input:focus-visible,
 .tp-completion-add-input:focus-visible,
-.tp-completion-text:focus-visible,
-.tp-completion-diff:focus-visible {
+.tp-completion-text:focus-visible {
   outline: none;
   border-color: color-mix(in srgb, var(--tp-primary) 55%, transparent);
   background: var(--tp-surface, var(--tp-input-bg));
@@ -1515,13 +1511,10 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   font-size: 14px;
 }
 
-.tp-completion-diff {
-  padding: 6px 8px;
-  font-size: 12px;
-  min-width: 0;
-}
-
 .tp-completion-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 28px;
   height: 28px;
   padding: 0;
@@ -1529,10 +1522,14 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   border-radius: var(--completion-control-radius, 8px);
   background: transparent;
   color: var(--tp-text-muted);
-  font-size: 18px;
   line-height: 1;
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
+}
+
+.tp-completion-delete-icon {
+  display: block;
+  flex-shrink: 0;
 }
 
 .tp-completion-delete:hover {
@@ -1594,11 +1591,6 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
 
   .tp-completion-item-main {
     grid-template-columns: 28px minmax(0, 1fr) 28px;
-    grid-template-rows: auto auto;
-  }
-
-  .tp-completion-diff {
-    grid-column: 2 / 4;
   }
 
   .tp-completion-item-slider-row,
