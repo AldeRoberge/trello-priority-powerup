@@ -14,7 +14,7 @@
   var BADGE_REFRESH_SEC = 10;
   // Label above the card-back badge; without this Trello shows the Power-Up admin name.
   var CARD_DETAIL_BADGE_TITLE = 'Priorité';
-  // Lower tier rank = higher priority (Critique=0 … Optionnel=6, Inutile=7, none=100).
+  // Lower tier rank = higher priority (Critique=0 … Optionnelle=6, Inutile=7, none=100).
   var SORT_TIER_INUTILE = 7;
   var SORT_TIER_NONE = 100;
 
@@ -27,7 +27,7 @@
     var segments = PU && PU.HEAT_SEGMENTS;
     if (segments) {
       for (var i = 0; i < segments.length; i++) {
-        if (segments[i].label === 'Important' && segments[i].preset) {
+        if ((segments[i].label === 'Importante' || segments[i].label === 'Important') && segments[i].preset) {
           return Object.assign({}, segments[i].preset);
         }
       }
@@ -104,16 +104,29 @@
         normalized.blockedReason = reason;
       }
     }
+    var dueDate = '';
+    if (typeof raw.dueDate === 'string') {
+      var PUDue = priorityUI();
+      dueDate = PUDue && PUDue.normalizeDueDate
+        ? PUDue.normalizeDueDate(raw.dueDate)
+        : raw.dueDate.trim();
+      if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) dueDate = '';
+    }
+    if (dueDate) normalized.dueDate = dueDate;
     return normalized;
   }
 
   function clearBlockedFromInputs(inputs) {
     if (!inputs || !inputs.enAttente) return inputs;
-    return {
+    var cleared = {
       urgency: inputs.urgency,
       impact: inputs.impact,
       ease: inputs.ease,
     };
+    if (typeof inputs.dueDate === 'string' && inputs.dueDate) {
+      cleared.dueDate = inputs.dueDate;
+    }
+    return cleared;
   }
 
   async function clearBlockedIfComplete(t, inputs, completed) {
@@ -271,7 +284,7 @@
       return PU.taskBadgeLabel(display);
     }
     var tierKey = String(display.tierLabel || display.label || '');
-    if (tierKey === 'Important') return 'T\u00e2che importante';
+    if (tierKey === 'Importante' || tierKey === 'Important') return 'T\u00e2che importante';
     return tierKey ? 'T\u00e2che ' + tierKey.toLowerCase() : '';
   }
 
@@ -325,6 +338,10 @@
     }
     if (display.blocked) {
       return tierBadgeDot(display, false) + ' ' + formatBlockedBoardBadgeText(display);
+    }
+    var PU = priorityUI();
+    if (PU && PU.formatDueBadgeText && display.dueCountdown) {
+      return tierBadgeDot(display, false) + ' ' + PU.formatDueBadgeText(display);
     }
     return tierBadgeDot(display, false) + ' ' + incompleteBadgeLabel(display);
   }

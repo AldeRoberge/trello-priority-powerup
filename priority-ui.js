@@ -569,7 +569,7 @@
       description: 'Tâche prioritaire absolue. Impact direct sur l\'objectif, impossible de repousser sans conséquences majeures.'
     },
     {
-      min: 7.2, label: 'Urgent', i: 1,
+      min: 7.2, label: 'Urgente', i: 1,
       description: 'Tâche pressante, priorité absolue. Action rapide sous forte pression.'
     },
     {
@@ -577,7 +577,7 @@
       description: 'Attention prioritaire. À traiter en tête de file.'
     },
     {
-      min: 4.3, label: 'Important', i: 3,
+      min: 4.3, label: 'Importante', i: 3,
       description: 'Planifiée. À exécuter avec engagement clair dans le backlog.'
     },
     {
@@ -589,7 +589,7 @@
       description: 'Utile mais non essentielle. À envisager quand la bande passante le permet.'
     },
     {
-      min: 0, label: 'Optionnel', i: 6,
+      min: 0, label: 'Optionnelle', i: 6,
       description: 'Facultative, sans conséquence si ignorée. Peut être écartée de la file.'
     }
   ];
@@ -753,11 +753,14 @@
 
   var TIER_LABEL_SHORT = {
     Critique: 'Crit',
+    Urgente: 'Urg',
     Urgent: 'Urg',
     Prioritaire: 'Prio',
+    Importante: 'Imp',
     Important: 'Imp',
     Flexible: 'Flex',
     Secondaire: 'Sec',
+    Optionnelle: 'Opt',
     Optionnel: 'Opt'
   };
 
@@ -916,6 +919,101 @@
   function isValidBlockedReason(reason) {
     return !!reason && BLOCKED_REASON_OPTIONS.indexOf(reason) !== -1;
   }
+
+  var DUE_DATE_LABEL = '\u00c9ch\u00e9ance';
+  var DUE_DATE_DESCRIPTION =
+    'Date optionnelle affich\u00e9e en compte \u00e0 rebours sur la carte (surtout pour les priorit\u00e9s hautes).';
+  var DUE_DATE_CLEAR_LABEL = 'Effacer la date';
+  var MS_PER_DAY = 86400000;
+
+  function normalizeDueDate(value) {
+    if (value == null || value === '') return '';
+    if (typeof value !== 'string') return '';
+    var trimmed = value.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return '';
+    var parts = trimmed.split('-');
+    var year = +parts[0];
+    var month = +parts[1];
+    var day = +parts[2];
+    var date = new Date(year, month - 1, day);
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      return '';
+    }
+    return trimmed;
+  }
+
+  function startOfLocalDay(date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
+
+  function dueDateToLocalDate(iso) {
+    var normalized = normalizeDueDate(iso);
+    if (!normalized) return null;
+    var parts = normalized.split('-');
+    return new Date(+parts[0], +parts[1] - 1, +parts[2]);
+  }
+
+  function daysUntilDue(iso, now) {
+    var due = dueDateToLocalDate(iso);
+    if (!due) return NaN;
+    var today = startOfLocalDay(now || new Date());
+    return Math.round((startOfLocalDay(due).getTime() - today.getTime()) / MS_PER_DAY);
+  }
+
+  function formatDueCountdown(iso, now) {
+    var days = daysUntilDue(iso, now);
+    if (!isFinite(days)) return '';
+    if (days < 0) {
+      var late = -days;
+      if (late === 1) return 'en retard de 1 jour';
+      if (late < 7) return 'en retard de ' + late + ' jours';
+      return 'en retard';
+    }
+    if (days === 0) return 'aujourd\'hui';
+    if (days === 1) return '1 jour restant';
+    if (days < 7) return days + ' jours restants';
+    if (days < 30) {
+      var weeks = Math.max(1, Math.round(days / 7));
+      return weeks === 1 ? '1 semaine restante' : weeks + ' semaines restantes';
+    }
+    if (days < 365) {
+      var months = Math.max(1, Math.round(days / 30.44));
+      return months === 1 ? '1 mois restant' : months + ' mois restants';
+    }
+    var years = Math.max(1, Math.round(days / 365.25));
+    return years === 1 ? '1 an restant' : years + ' ans restants';
+  }
+
+  function dueBadgeSuffix(display) {
+    if (!display) return '';
+    if (typeof display.dueCountdown === 'string' && display.dueCountdown) {
+      return display.dueCountdown;
+    }
+    return '';
+  }
+
+  function formatDueBadgeText(display) {
+    var label = taskBadgeLabel(display);
+    var suffix = dueBadgeSuffix(display);
+    if (!label) return suffix || '';
+    if (!suffix) return label;
+    return label + ' (' + suffix + ')';
+  }
+
+  function withDueDateDisplay(display, inputs) {
+    if (!display) return display;
+    var dueDate = normalizeDueDate(inputs && inputs.dueDate);
+    if (!dueDate) return display;
+    return Object.assign({}, display, {
+      dueDate: dueDate,
+      dueCountdown: formatDueCountdown(dueDate),
+      duePast: daysUntilDue(dueDate) < 0
+    });
+  }
   var BLOCKED_STYLES = {
     label: BLOCKED_LABEL,
     fill: '#FCE8E8',
@@ -944,11 +1042,14 @@
 
   var TASK_BADGE_LABELS = {
     Critique: 'T\u00e2che critique',
+    Urgente: 'T\u00e2che urgente',
     Urgent: 'T\u00e2che urgente',
     Prioritaire: 'T\u00e2che prioritaire',
+    Importante: 'T\u00e2che importante',
     Important: 'T\u00e2che importante',
     Flexible: 'T\u00e2che flexible',
     Secondaire: 'T\u00e2che secondaire',
+    Optionnelle: 'T\u00e2che optionnelle',
     Optionnel: 'T\u00e2che optionnelle',
     Inutile: 'T\u00e2che inutile',
     'Bloqu\u00e9': 'T\u00e2che'
@@ -964,12 +1065,12 @@
   // Unicode dots for Trello badge text (largest = highest priority).
   var TIER_BADGE_DOTS = {
     0: '\u2B24', // ⬤ Critique
-    1: '\u2B24', // ⬤ Urgent
+    1: '\u2B24', // ⬤ Urgente
     2: '\u25CF', // ● Prioritaire
-    3: '\u2022', // • Important
+    3: '\u2022', // • Importante
     4: '\u00B7', // · Flexible
     5: '\u00B7', // · Secondaire
-    6: '\u00B7', // · Optionnel
+    6: '\u00B7', // · Optionnelle
   };
   var BADGE_DOT_INUTILE = '\u00B7';
   var BADGE_DOT_COMPLETE = '\u2713';
@@ -980,12 +1081,12 @@
   var HEAT_TIER_DOT_SCORE_MAX = 10;
   var HEAT_TIER_DOT_SIZES = {
     0: 14, // Critique
-    1: 12, // Urgent
+    1: 12, // Urgente
     2: 10, // Prioritaire
-    3: 9,  // Important
+    3: 9,  // Importante
     4: 7,  // Flexible
     5: 6,  // Secondaire
-    6: 5   // Optionnel
+    6: 5   // Optionnelle
   };
 
   function heatTierDotSizePx(display) {
@@ -1043,11 +1144,25 @@
   }
 
   function schemeBadgePreviewSamples() {
-    return [
-      { tierI: 0, label: TASK_BADGE_LABELS.Critique, color: TIER_TRELLO_BADGE_COLORS[0] },
-      { tierI: 2, label: TASK_BADGE_LABELS.Prioritaire, color: TIER_TRELLO_BADGE_COLORS[2] },
-      { tierI: 6, label: TASK_BADGE_LABELS.Optionnel, color: TIER_TRELLO_BADGE_COLORS[6] }
-    ];
+    var samples = [];
+    for (var i = 0; i < TIER_DEFS.length; i++) {
+      var def = TIER_DEFS[i];
+      var label = TASK_BADGE_LABELS[def.label] || ('T\u00e2che ' + def.label);
+      var color = Object.prototype.hasOwnProperty.call(TIER_TRELLO_BADGE_COLORS, def.i)
+        ? TIER_TRELLO_BADGE_COLORS[def.i]
+        : 'light-gray';
+      var dot = Object.prototype.hasOwnProperty.call(TIER_BADGE_DOTS, def.i)
+        ? TIER_BADGE_DOTS[def.i]
+        : '\u25CF';
+      samples.push({
+        tierI: def.i,
+        label: label,
+        color: color,
+        dot: dot,
+        text: dot + ' ' + label
+      });
+    }
+    return samples;
   }
 
   function tierTrelloBadgeColor(display) {
@@ -1064,7 +1179,7 @@
     var tier = classicTierLabel(display);
     var base = TASK_BADGE_LABELS[tier];
     if (!base && tier) {
-      if (tier === 'Important') base = 'T\u00e2che importante';
+      if (tier === 'Importante' || tier === 'Important') base = 'T\u00e2che importante';
       else base = 'T\u00e2che ' + tier.charAt(0).toLowerCase() + tier.slice(1);
     }
     if (base) return base;
@@ -1080,7 +1195,7 @@
     var tier = classicTierLabel(display);
     if (TASK_BADGE_LABELS[tier]) return TASK_BADGE_LABELS[tier];
     if (!tier) return '';
-    if (tier === 'Important') return 'T\u00e2che importante';
+    if (tier === 'Importante' || tier === 'Important') return 'T\u00e2che importante';
     return 'T\u00e2che ' + tier.charAt(0).toLowerCase() + tier.slice(1);
   }
 
@@ -1167,12 +1282,16 @@
     });
   }
 
+  function withDisplayExtras(display, inputs) {
+    return withDueDateDisplay(withBlockedDisplay(display, inputs), inputs);
+  }
+
   function resolveDisplay(result, inputs, labelSettings) {
     var inputsSafe = inputs || {};
     if (!isInutile(inputsSafe)) {
       if (result && result.eisenhower) {
         var eq = result.eisenhower;
-        return withBlockedDisplay({
+        return withDisplayExtras({
           inutile: false,
           score: result.score,
           label: result.tier.label,
@@ -1195,7 +1314,7 @@
       var settings = labelSettings != null ? labelSettings : matrixSettings;
       var matrix = resolveMatrixLabel(inputsSafe, result.tier, result.score, settings);
       var matrixEnabled = !settings || settings.enabled !== false;
-      return withBlockedDisplay({
+      return withDisplayExtras({
         inutile: false,
         score: result.score,
         label: result.tier.label,
@@ -1213,7 +1332,7 @@
         cardTier: result.tier
       }, inputsSafe);
     }
-    return withBlockedDisplay({
+    return withDisplayExtras({
       inutile: true,
       score: 0,
       label: INUTILE_LABEL,
@@ -1399,12 +1518,12 @@
   // Per-tier surface mix (% of tier color into neutral base).
   var TIER_SURFACE_MIX = {
     0: { bg: 42, border: 50, panel: 44 }, // Critique — deepest blue
-    1: { bg: 40, border: 48, panel: 40 }, // Urgent
+    1: { bg: 40, border: 48, panel: 40 }, // Urgente
     2: { bg: 34, border: 44, panel: 28 }, // Prioritaire
-    3: { bg: 28, border: 38, panel: 22 }, // Important
+    3: { bg: 28, border: 38, panel: 22 }, // Importante
     4: { bg: 22, border: 32, panel: 18 }, // Flexible
     5: { bg: 14, border: 26, panel: 14 }, // Secondaire
-    6: { bg: 6, border: 20, panel: 8 },   // Optionnel — lightest blue
+    6: { bg: 6, border: 20, panel: 8 },   // Optionnelle — lightest blue
     inutile: { bg: 8, border: 22, panel: 82 }, // Inutile — muted gray matching badge
     blocked: { bg: 44, border: 52, panel: 46 } // Bloqué — deep crimson wash
   };
@@ -1540,7 +1659,7 @@
     return t * t * (3 - 2 * t);
   }
 
-  // Low-impact urgency floor: max U with little I still reaches Urgent tier.
+  // Low-impact urgency floor: max U with little I still reaches Urgente tier.
   function urgencyBoost(U, I, dampen) {
     var ramp = urgencyBoostRamp(U);
     if (ramp <= 0) return 0;
@@ -2640,6 +2759,112 @@
     };
   }
 
+  function createDueDateField(config) {
+    var el = config.el;
+    var onChange = config.onChange || function () {};
+    var current = normalizeDueDate(config.value);
+
+    var field = document.createElement('div');
+    field.className = 'field field--due-date';
+
+    var head = document.createElement('div');
+    head.className = 'due-date-head';
+
+    var textWrap = document.createElement('div');
+    textWrap.className = 'due-date-text';
+
+    var title = document.createElement('div');
+    title.className = 'due-date-title';
+    title.textContent = DUE_DATE_LABEL;
+
+    var desc = document.createElement('div');
+    desc.className = 'due-date-desc';
+    desc.textContent = DUE_DATE_DESCRIPTION;
+
+    textWrap.appendChild(title);
+    textWrap.appendChild(desc);
+    head.appendChild(textWrap);
+    field.appendChild(head);
+
+    var controls = document.createElement('div');
+    controls.className = 'due-date-controls';
+
+    var input = document.createElement('input');
+    input.type = 'date';
+    input.className = 'due-date-input';
+    input.setAttribute('aria-label', DUE_DATE_LABEL);
+    if (current) input.value = current;
+
+    var clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'due-date-clear';
+    clearBtn.textContent = '\u00d7';
+    clearBtn.title = DUE_DATE_CLEAR_LABEL;
+    clearBtn.setAttribute('aria-label', DUE_DATE_CLEAR_LABEL);
+
+    controls.appendChild(input);
+    controls.appendChild(clearBtn);
+    field.appendChild(controls);
+
+    var countdown = document.createElement('div');
+    countdown.className = 'due-date-countdown';
+    countdown.setAttribute('aria-live', 'polite');
+    field.appendChild(countdown);
+
+    el.appendChild(field);
+
+    function refreshCountdown() {
+      var value = normalizeDueDate(input.value);
+      if (!value) {
+        countdown.textContent = '';
+        countdown.hidden = true;
+        countdown.classList.remove('is-past');
+        clearBtn.hidden = true;
+        field.classList.remove('has-due-date', 'is-past');
+        return;
+      }
+      var text = formatDueCountdown(value);
+      var past = daysUntilDue(value) < 0;
+      countdown.textContent = text;
+      countdown.hidden = !text;
+      countdown.classList.toggle('is-past', past);
+      clearBtn.hidden = false;
+      field.classList.add('has-due-date');
+      field.classList.toggle('is-past', past);
+    }
+
+    function emitChange() {
+      refreshCountdown();
+      onChange(getValue());
+    }
+
+    function getValue() {
+      return normalizeDueDate(input.value);
+    }
+
+    function setValue(value) {
+      var next = normalizeDueDate(value);
+      input.value = next || '';
+      refreshCountdown();
+    }
+
+    clearBtn.addEventListener('click', function () {
+      input.value = '';
+      emitChange();
+    });
+
+    input.addEventListener('change', emitChange);
+    input.addEventListener('input', emitChange);
+
+    refreshCountdown();
+
+    return {
+      el: field,
+      getValue: getValue,
+      setValue: setValue
+    };
+  }
+
   function createHeatPanel(config) {
     var el = config.el;
     var onSegmentClick = config.onSegmentClick || function () {};
@@ -2695,7 +2920,7 @@
 
     var blabel = document.createElement('div');
     blabel.className = 'heat-badge-label';
-    blabel.textContent = 'Optionnel';
+    blabel.textContent = 'Optionnelle';
 
     var scoreInfoWrap = document.createElement('span');
     scoreInfoWrap.className = 'heat-score-info-wrap';
@@ -2848,7 +3073,7 @@
       segLabels.hidden = true;
     }
 
-    var currentBadgeTierLabel = 'Optionnel';
+    var currentBadgeTierLabel = 'Optionnelle';
     var segLabelResponsive = createResponsiveTierLabelGroup({
       container: segLabels,
       targets: segLabelTargets
@@ -2896,6 +3121,9 @@
         dot.style.background = v.seg;
       }
       currentBadgeTierLabel = d.eisenhowerLabel || classicTierLabel(d);
+      if (d.dueCountdown && !d.blocked) {
+        currentBadgeTierLabel += ' (' + d.dueCountdown + ')';
+      }
       badge.style.setProperty('--heat-fill', v.fill);
       badge.style.setProperty('--heat-text', v.text);
       panel.style.setProperty('--heat-text', v.text);
@@ -2987,17 +3215,17 @@
     var fields = config.fields || null;
     var onInputsChange = config.onChange || function () {};
     var SVG_NS = 'http://www.w3.org/2000/svg';
-    var SVG_W = 300;
-    var SVG_H = 248;
-    var MARGIN = { top: 14, right: 14, bottom: 36, left: 38 };
+    var SVG_W = 210;
+    var SVG_H = 168;
+    var MARGIN = { top: 10, right: 8, bottom: 26, left: 28 };
     var PLOT_W = SVG_W - MARGIN.left - MARGIN.right;
     var PLOT_H = SVG_H - MARGIN.top - MARGIN.bottom;
     var CONTOUR_RES = 40;
     var TIER_THRESHOLDS = [1.4, 2.9, 4.3, 5.8, 7.2, 8.6];
-    var MARKER_CORE_R = 8;
-    var MARKER_STROKE_W = 3;
-    var MARKER_SHADOW_R = 9;
-    var MARKER_HIT_R = 20;
+    var MARKER_CORE_R = 6;
+    var MARKER_STROKE_W = 2.5;
+    var MARKER_SHADOW_R = 7;
+    var MARKER_HIT_R = 16;
 
     var lastScene = { U: 0, I: 0, F: 0, result: null, display: null };
     var draggingMarker = false;
@@ -3057,18 +3285,33 @@
     }
 
     var panel = document.createElement('div');
-    panel.className = 'calc-graph-panel';
+    panel.className = 'calc-graph-panel is-collapsed';
+
+    var toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'calc-graph-toggle';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-controls', 'calc-graph-body');
+    toggle.title = 'Afficher ou masquer le graphique de priorité';
+
+    var toggleLabel = document.createElement('span');
+    toggleLabel.className = 'calc-graph-toggle-label';
+    toggleLabel.textContent = 'Graphique';
+
+    var toggleIcon = document.createElement('i');
+    toggleIcon.className = 'ti ti-chevron-down';
+    toggleIcon.setAttribute('aria-hidden', 'true');
+
+    toggle.appendChild(toggleLabel);
+    toggle.appendChild(toggleIcon);
 
     var body = document.createElement('div');
     body.className = 'calc-graph-body';
+    body.id = 'calc-graph-body';
+    body.hidden = true;
 
     var graphSection = document.createElement('div');
     graphSection.className = 'calc-graph-section calc-rsm-section';
-
-    var graphHeading = document.createElement('div');
-    graphHeading.className = 'calc-graph-heading';
-    graphHeading.textContent = 'Score composite';
-    graphSection.appendChild(graphHeading);
 
     var rsmWrap = document.createElement('div');
     rsmWrap.className = 'calc-rsm-wrap';
@@ -3141,11 +3384,11 @@
 
     var frame = svgEl('rect', {
       class: 'calc-rsm-frame',
-      x: '8',
-      y: '8',
-      width: String(SVG_W - 16),
-      height: String(SVG_H - 16),
-      rx: '10'
+      x: '5',
+      y: '5',
+      width: String(SVG_W - 10),
+      height: String(SVG_H - 10),
+      rx: '8'
     });
     svg.appendChild(frame);
 
@@ -3194,17 +3437,17 @@
 
     var ticksG = svgEl('g', { class: 'calc-rsm-ticks', 'aria-hidden': 'true' });
     for (g = 0; g <= 4; g++) {
-      ticksG.appendChild(lineEl(plotX(g), plotY(0), plotX(g), plotY(0) + 4, 'calc-rsm-tick'));
+      ticksG.appendChild(lineEl(plotX(g), plotY(0), plotX(g), plotY(0) + 3, 'calc-rsm-tick'));
       var tickLabelX = svgEl('text', { class: 'calc-rsm-tick-label' });
       tickLabelX.setAttribute('x', String(plotX(g)));
-      tickLabelX.setAttribute('y', String(plotY(0) + 17));
+      tickLabelX.setAttribute('y', String(plotY(0) + 13));
       tickLabelX.setAttribute('text-anchor', 'middle');
       tickLabelX.textContent = String(g);
       ticksG.appendChild(tickLabelX);
 
-      ticksG.appendChild(lineEl(plotX(0) - 4, plotY(g), plotX(0), plotY(g), 'calc-rsm-tick'));
+      ticksG.appendChild(lineEl(plotX(0) - 3, plotY(g), plotX(0), plotY(g), 'calc-rsm-tick'));
       var tickLabelY = svgEl('text', { class: 'calc-rsm-tick-label' });
-      tickLabelY.setAttribute('x', String(plotX(0) - 10));
+      tickLabelY.setAttribute('x', String(plotX(0) - 7));
       tickLabelY.setAttribute('y', String(plotY(g) + 3));
       tickLabelY.setAttribute('text-anchor', 'end');
       tickLabelY.textContent = String(g);
@@ -3214,13 +3457,13 @@
 
     var labelU = svgEl('text', { class: 'calc-rsm-axis-label calc-rsm-axis-label-x' });
     labelU.setAttribute('x', String(MARGIN.left + PLOT_W * 0.5));
-    labelU.setAttribute('y', String(SVG_H - 5));
+    labelU.setAttribute('y', String(SVG_H - 4));
     labelU.setAttribute('text-anchor', 'middle');
     labelU.textContent = 'Urgence';
     labelU.setAttribute('title', KEYWORDS.urgency);
 
     var labelIY = MARGIN.top + PLOT_H * 0.5;
-    var labelIX = plotX(0) - 22;
+    var labelIX = plotX(0) - 16;
     var labelI = svgEl('text', { class: 'calc-rsm-axis-label calc-rsm-axis-label-y' });
     labelI.setAttribute('transform', 'rotate(-90 ' + labelIX + ' ' + labelIY + ')');
     labelI.setAttribute('x', String(labelIX));
@@ -3288,8 +3531,21 @@
     graphSection.appendChild(rsmWrap);
     body.appendChild(graphSection);
 
+    panel.appendChild(toggle);
     panel.appendChild(body);
     el.appendChild(panel);
+
+    var graphCollapsed = true;
+    function setGraphCollapsed(collapsed) {
+      graphCollapsed = !!collapsed;
+      panel.classList.toggle('is-collapsed', graphCollapsed);
+      body.hidden = graphCollapsed;
+      toggle.setAttribute('aria-expanded', graphCollapsed ? 'false' : 'true');
+      if (!graphCollapsed) scheduleLayoutSurfacePaint();
+    }
+    toggle.addEventListener('click', function () {
+      setGraphCollapsed(!graphCollapsed);
+    });
 
     var surfaceCtx = surfaceCanvas.getContext('2d', { alpha: true });
 
@@ -3459,7 +3715,7 @@
       var d = display;
       var cx = plotX(U);
       var cy = plotY(I);
-      var span = 10;
+      var span = 7;
 
       crossH.setAttribute('x1', String(cx - span));
       crossH.setAttribute('y1', String(cy));
@@ -3762,6 +4018,7 @@
     var fields = {};
     var state = {};
     var enAttenteField;
+    var dueDateField;
     var heat;
     var calcGraph;
     var formulaSwitcher;
@@ -3797,6 +4054,7 @@
       : loadSliderValues(defaultState, variantConfig.dimensions);
     state.enAttente = !!(state.enAttente || defaults.enAttente);
     state.blockedReason = state.blockedReason || defaults.blockedReason || '';
+    state.dueDate = normalizeDueDate(state.dueDate || defaults.dueDate || '');
 
     function persistSliderState(skipFieldSync) {
       if (!skipFieldSync) syncStateFromFields();
@@ -3814,6 +4072,9 @@
       if (enAttenteField) {
         state.enAttente = enAttenteField.getValue();
         state.blockedReason = enAttenteField.getBlockedReason();
+      }
+      if (dueDateField) {
+        state.dueDate = dueDateField.getValue();
       }
     }
 
@@ -4028,6 +4289,20 @@
       }
     });
 
+    var dueSection = document.createElement('div');
+    dueSection.className = 'variant-due-section';
+    card.appendChild(dueSection);
+
+    dueDateField = createDueDateField({
+      el: dueSection,
+      value: state.dueDate,
+      onChange: function () {
+        cancelSliderAnim();
+        repaint();
+        persistSliderState();
+      }
+    });
+
     containerEl.appendChild(card);
 
     var themeObserver = new MutationObserver(function () {
@@ -4067,6 +4342,9 @@
         }
         if (next.blockedReason != null && enAttenteField) {
           enAttenteField.setBlockedReason(next.blockedReason);
+        }
+        if (next.dueDate != null && dueDateField) {
+          dueDateField.setValue(next.dueDate);
         }
         repaint();
         persistSliderState();
@@ -4151,6 +4429,7 @@
     openCriteriaWizard: openCriteriaWizard,
     createField: createField,
     createEnAttenteField: createEnAttenteField,
+    createDueDateField: createDueDateField,
     createHeatPanel: createHeatPanel,
     createCalcGraphPanel: createCalcGraphPanel,
     createFormulaSwitcher: createFormulaSwitcher,
@@ -4186,6 +4465,11 @@
     BLOCKED_REASON_OPTIONS: BLOCKED_REASON_OPTIONS,
     isValidBlockedReason: isValidBlockedReason,
     formatBlockedBadgeText: formatBlockedBadgeText,
+    normalizeDueDate: normalizeDueDate,
+    daysUntilDue: daysUntilDue,
+    formatDueCountdown: formatDueCountdown,
+    formatDueBadgeText: formatDueBadgeText,
+    dueBadgeSuffix: dueBadgeSuffix,
     wordFor: wordFor,
     wordHtmlFor: wordHtmlFor,
     levelIconSvg: levelIconSvg,

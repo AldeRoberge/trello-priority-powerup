@@ -12,7 +12,7 @@ vm.runInNewContext(
 var PriorityMatrix = sandbox.PriorityMatrix;
 
 var bad = 0;
-var tier = { label: 'Important', description: 'tier desc' };
+var tier = { label: 'Importante', description: 'tier desc' };
 
 function check(name, inputs, expectedLabel, ctx) {
   var r = PriorityMatrix.resolveLabel(inputs, ctx || { tier: tier });

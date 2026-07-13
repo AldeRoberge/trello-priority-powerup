@@ -16,7 +16,7 @@
 </head>
 <body class="tp-page">
   <h3 class="tp-heading">Priorité</h3>
-  <p class="tp-subtitle">Évaluez chaque carte selon l'urgence, l'impact et la facilité pour obtenir un score et un libellé de palier (Critique, Urgent, Prioritaire…).</p>
+  <p class="tp-subtitle">Évaluez chaque carte selon l'urgence, l'impact et la facilité pour obtenir un score et un libellé de palier (Critique, Urgente, Prioritaire…).</p>
 
   <section class="tp-color-scheme" id="colorSchemeSection" aria-labelledby="colorSchemeHeading">
     <h4 class="tp-heading" id="colorSchemeHeading">Schéma de couleurs</h4>
@@ -79,9 +79,10 @@
         var chip = document.createElement('span');
         chip.className = 'tp-badge-preview-chip';
         chip.dataset.trelloColor = sample.color;
-        chip.textContent = '\u25CF ' + sample.label;
+        chip.textContent = sample.text || ((sample.dot || '\u25CF') + ' ' + sample.label);
         listEl.appendChild(chip);
       });
+      resizeSettingsPopup();
     }
 
     function setActiveColorSchemeUi(activeKey) {

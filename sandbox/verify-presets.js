@@ -6,8 +6,8 @@ var EASE_MUL_DAMPEN_THRESHOLD = 0.5, EASE_MUL_LO = 0.75, EASE_MUL_HI = 1.25, HAR
 var EASE_FLOOR = 2.5, EASE_BASE = 0.25, URGENCY_BOOST_MAX = 2.2, URGENCY_BOOST_MIN_U = 4;
 var URGENCY_TO_TB = [{ T: 0, B: 0 }, { T: 1, B: 0 }, { T: 2, B: 1 }, { T: 3, B: 2 }, { T: 4, B: 3 }];
 var TIERS = [
-  { min: 8.6, label: 'Critique' }, { min: 7.2, label: 'Urgent' }, { min: 5.8, label: 'Prioritaire' },
-  { min: 4.3, label: 'Important' }, { min: 2.9, label: 'Flexible' }, { min: 1.4, label: 'Secondaire' }, { min: 0, label: 'Optionnel' }
+  { min: 8.6, label: 'Critique' }, { min: 7.2, label: 'Urgente' }, { min: 5.8, label: 'Prioritaire' },
+  { min: 4.3, label: 'Importante' }, { min: 2.9, label: 'Flexible' }, { min: 1.4, label: 'Secondaire' }, { min: 0, label: 'Optionnelle' }
 ];
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 function lerp(a, b, t) { return a + (b - a) * t; }
@@ -73,7 +73,7 @@ var urgentLow = baselineScore(4, 0, 1);
 var urgentLow1 = baselineScore(4, 1, 1);
 WScript.Echo('U=4 I=0 F=1 -> ' + urgentLow.toFixed(2) + ' (' + tierFor(urgentLow).label + ')');
 WScript.Echo('U=4 I=1 F=1 -> ' + urgentLow1.toFixed(2) + ' (' + tierFor(urgentLow1).label + ')');
-if (urgentLow < 7.2) { bad++; WScript.Echo('FAIL: U=4 I=0 F=1 should be Urgent (>=7.2)'); } else { WScript.Echo('OK: max urgency low impact hard is Urgent'); }
+if (urgentLow < 7.2) { bad++; WScript.Echo('FAIL: U=4 I=0 F=1 should be Urgente (>=7.2)'); } else { WScript.Echo('OK: max urgency low impact hard is Urgente'); }
 
 WScript.Echo('');
 WScript.Echo('=== User test cases ===');
@@ -98,8 +98,8 @@ if (allMin >= 1.4) { bad++; WScript.Echo('FAIL: All min should be low'); } else 
 WScript.Echo('');
 WScript.Echo('=== HEAT_SEGMENTS presets ===');
 var PRESETS = [
-  ['Optionnel', 0, 0, 2, 0.7], ['Secondaire', 1, 1, 2, 2.1], ['Flexible', 1, 2, 3, 3.6],
-  ['Important', 2, 2, 3, 5.0], ['Prioritaire', 2, 3, 3, 6.5], ['Urgent', 3, 3, 2, 7.9], ['Critique', 4, 4, 5, 9.3]
+  ['Optionnelle', 0, 0, 2, 0.7], ['Secondaire', 1, 1, 2, 2.1], ['Flexible', 1, 2, 3, 3.6],
+  ['Importante', 2, 2, 3, 5.0], ['Prioritaire', 2, 3, 3, 6.5], ['Urgente', 3, 3, 2, 7.9], ['Critique', 4, 4, 5, 9.3]
 ];
 for (var n = 0; n < PRESETS.length; n++) {
   var p = PRESETS[n];

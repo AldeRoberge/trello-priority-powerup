@@ -13,7 +13,9 @@ vm.runInNewContext(
   sandbox
 );
 
-var PT = sandbox.PriorityTrello;
+// Scripts attach to window when present in the VM context.
+var PT = sandbox.PriorityTrello || (sandbox.window && sandbox.window.PriorityTrello);
+var PU = sandbox.PriorityUI || (sandbox.window && sandbox.window.PriorityUI);
 var bad = 0;
 
 function check(name, ok) {
@@ -39,10 +41,10 @@ function check(name, ok) {
 check('popup export IMPORTANT_INPUTS', PT.IMPORTANT_INPUTS && typeof PT.IMPORTANT_INPUTS === 'object');
 check('popup export PRIORITY_DIMENSIONS', Array.isArray(PT.PRIORITY_DIMENSIONS));
 
-var urgentDisplay = { tierLabel: 'Urgent', label: 'Urgent', tierI: 1 };
+var urgentDisplay = { tierLabel: 'Urgente', label: 'Urgente', tierI: 1 };
 var prioritaireDisplay = { tierLabel: 'Prioritaire', label: 'Prioritaire', tierI: 2 };
-var importantDisplay = { tierLabel: 'Important', label: 'Important', tierI: 3 };
-var blockedDisplay = { blocked: true, blockedReason: 'En attente d\'une approbation', tierI: 1, tierLabel: 'Urgent' };
+var importantDisplay = { tierLabel: 'Importante', label: 'Importante', tierI: 3 };
+var blockedDisplay = { blocked: true, blockedReason: 'En attente d\'une approbation', tierI: 1, tierLabel: 'Urgente' };
 var critiqueBlockedDisplay = {
   blocked: true,
   blockedReason: 'En attente d\'une r\u00e9ponse',
@@ -50,7 +52,6 @@ var critiqueBlockedDisplay = {
   tierLabel: 'Critique'
 };
 
-var PU = sandbox.PriorityUI;
 var TRELLO_BADGE_NAMES = ['blue', 'green', 'orange', 'red', 'yellow', 'purple', 'pink', 'sky', 'lime', 'light-gray'];
 
 function isTrelloBadgeColor(name) {
@@ -108,8 +109,34 @@ check(
 );
 check(
   'scheme badge preview samples',
-  PU.schemeBadgePreviewSamples().length === 3 &&
-    PU.schemeBadgePreviewSamples()[1].label === 'T\u00e2che prioritaire'
+  (function () {
+    var samples = PU.schemeBadgePreviewSamples();
+    if (!Array.isArray(samples) || samples.length !== PU.TIERS.length) return false;
+    if (samples[0].label !== 'T\u00e2che critique') return false;
+    if (samples[1].label !== 'T\u00e2che urgente') return false;
+    if (samples[3].label !== 'T\u00e2che importante') return false;
+    if (samples[6].label !== 'T\u00e2che optionnelle') return false;
+    return samples.every(function (sample) {
+      return (
+        typeof sample.tierI === 'number' &&
+        isTrelloBadgeColor(sample.color) &&
+        typeof sample.label === 'string' &&
+        typeof sample.text === 'string' &&
+        sample.text.indexOf(sample.label) !== -1
+      );
+    });
+  })()
+);
+check(
+  'scheme badge preview follows color scheme',
+  (function () {
+    PU.applyColorScheme('blue');
+    var blueColors = PU.schemeBadgePreviewSamples().map(function (s) { return s.color; }).join(',');
+    PU.applyColorScheme('amber');
+    var amberColors = PU.schemeBadgePreviewSamples().map(function (s) { return s.color; }).join(',');
+    PU.applyColorScheme('blue');
+    return blueColors !== amberColors && amberColors.split(',').every(isTrelloBadgeColor);
+  })()
 );
 check(
   'incomplete dot not checkmark',
@@ -151,7 +178,7 @@ check(
 );
 check(
   'blocked incomplete badge without reason',
-  PT.formatBadgeText({ blocked: true, tierI: 1, tierLabel: 'Urgent' }, false) ===
+  PT.formatBadgeText({ blocked: true, tierI: 1, tierLabel: 'Urgente' }, false) ===
     '\u2298 T\u00e2che urgente (Bloqu\u00e9)'
 );
 check(
@@ -187,6 +214,24 @@ check(
   })()
 );
 check(
+  'clearBlockedFromInputs preserves dueDate',
+  (function () {
+    var cleared = PT.clearBlockedFromInputs({
+      urgency: 1,
+      impact: 2,
+      ease: 3,
+      enAttente: true,
+      blockedReason: 'En attente d\'une approbation',
+      dueDate: '2026-07-20',
+    });
+    return (
+      cleared.dueDate === '2026-07-20' &&
+      cleared.enAttente == null &&
+      cleared.blockedReason == null
+    );
+  })()
+);
+check(
   'clearBlockedFromInputs unchanged when not blocked',
   (function () {
     var inputs = { urgency: 2, impact: 2, ease: 3 };
@@ -211,11 +256,11 @@ check(
 );
 
 var critiqueDisplay = { tierI: 0, score: 9.5, label: 'Critique' };
-var optionnelDisplay = { tierI: 6, score: 1.2, label: 'Optionnel' };
+var optionnelDisplay = { tierI: 6, score: 1.2, label: 'Optionnelle' };
 var inutileDisplay = { inutile: true, tierI: null, score: 0, label: 'Inutile' };
 var noPriorityDisplay = null;
-var urgentHigh = { tierI: 1, score: 8.0, label: 'Urgent' };
-var urgentLow = { tierI: 1, score: 6.0, label: 'Urgent' };
+var urgentHigh = { tierI: 1, score: 8.0, label: 'Urgente' };
+var urgentLow = { tierI: 1, score: 6.0, label: 'Urgente' };
 
 check(
   'sort critique before urgent',
@@ -287,6 +332,99 @@ check(
     { id: 'x', pos: 2000, display: critiqueDisplay },
     { id: 'y', pos: 1000, display: null },
   ], 'y')) === JSON.stringify({ pos: 'bottom' })
+);
+
+function addDaysIso(baseIso, deltaDays) {
+  var parts = baseIso.split('-').map(Number);
+  var d = new Date(parts[0], parts[1] - 1, parts[2] + deltaDays);
+  var y = d.getFullYear();
+  var m = String(d.getMonth() + 1);
+  var day = String(d.getDate());
+  if (m.length < 2) m = '0' + m;
+  if (day.length < 2) day = '0' + day;
+  return y + '-' + m + '-' + day;
+}
+
+var nowFixed = new Date(2026, 6, 13); // 2026-07-13
+check(
+  'normalizeDueDate accepts ISO date',
+  PU.normalizeDueDate('2026-07-16') === '2026-07-16'
+);
+check(
+  'normalizeDueDate rejects invalid date',
+  PU.normalizeDueDate('2026-02-31') === ''
+);
+check(
+  'countdown today',
+  PU.formatDueCountdown('2026-07-13', nowFixed) === 'aujourd\'hui'
+);
+check(
+  'countdown 1 day',
+  PU.formatDueCountdown(addDaysIso('2026-07-13', 1), nowFixed) === '1 jour restant'
+);
+check(
+  'countdown 3 days',
+  PU.formatDueCountdown(addDaysIso('2026-07-13', 3), nowFixed) === '3 jours restants'
+);
+check(
+  'countdown 2 weeks',
+  PU.formatDueCountdown(addDaysIso('2026-07-13', 14), nowFixed) === '2 semaines restantes'
+);
+check(
+  'countdown 2 months',
+  PU.formatDueCountdown(addDaysIso('2026-07-13', 61), nowFixed) === '2 mois restants'
+);
+check(
+  'countdown overdue',
+  PU.formatDueCountdown(addDaysIso('2026-07-13', -2), nowFixed) === 'en retard de 2 jours'
+);
+check(
+  'due badge text includes countdown',
+  PT.formatBadgeText(
+    {
+      tierLabel: 'Urgente',
+      label: 'Urgente',
+      tierI: 1,
+      dueDate: addDaysIso('2026-07-13', 3),
+      dueCountdown: '3 jours restants',
+    },
+    false
+  ) === '\u2B24 T\u00e2che urgente (3 jours restants)'
+);
+check(
+  'normalizeInputs keeps dueDate',
+  (function () {
+    var normalized = PT.normalizeInputs({
+      urgency: 3,
+      impact: 3,
+      ease: 2,
+      dueDate: '2026-07-16',
+    });
+    return normalized && normalized.dueDate === '2026-07-16';
+  })()
+);
+check(
+  'resolveDisplay attaches dueCountdown',
+  (function () {
+    var today = new Date();
+    var y = today.getFullYear();
+    var m = String(today.getMonth() + 1);
+    if (m.length < 2) m = '0' + m;
+    var day = String(today.getDate());
+    if (day.length < 2) day = '0' + day;
+    var due = addDaysIso(y + '-' + m + '-' + day, 3);
+    var result = PU.calc.baseline({ urgency: 3, impact: 3, ease: 2 });
+    var display = PU.resolveDisplay(result, {
+      urgency: 3,
+      impact: 3,
+      ease: 2,
+      dueDate: due,
+    });
+    return (
+      display.dueDate === due &&
+      display.dueCountdown === PU.formatDueCountdown(due)
+    );
+  })()
 );
 
 console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll badge checks passed');

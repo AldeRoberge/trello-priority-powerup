@@ -251,6 +251,131 @@ body {
   border-top: 0.5px solid var(--border);
 }
 
+/* ── Due date section ── */
+.variant-due-section {
+  margin-top: 10px;
+  padding: 0 12px 4px;
+}
+
+.field--due-date {
+  margin-bottom: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.field--due-date.has-due-date {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+.field--due-date.is-past {
+  background: color-mix(in srgb, var(--blocked-fill) 55%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--blocked-border) 35%, var(--border));
+}
+
+.due-date-head {
+  margin-bottom: 8px;
+}
+
+.due-date-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.due-date-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+}
+
+.due-date-desc {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.due-date-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.due-date-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 2px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface-1, var(--surface-2));
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  color-scheme: light dark;
+  transition: border-color 0.1s ease, background-color 0.1s ease;
+}
+
+.due-date-input:hover {
+  background-color: var(--surface-hover);
+}
+
+.due-date-input:focus-visible {
+  outline: none;
+  border-color: var(--focus-ring-strong, var(--text-primary));
+}
+
+.due-date-clear {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.due-date-clear:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+
+.due-date-clear:focus-visible {
+  outline: 2px solid var(--focus-ring-strong, var(--text-primary));
+  outline-offset: 1px;
+}
+
+.due-date-clear[hidden] {
+  display: none;
+}
+
+.due-date-countdown {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.due-date-countdown.is-past {
+  color: var(--blocked-text);
+}
+
+.due-date-countdown[hidden] {
+  display: none;
+}
+
 /* ── Compact field ── */
 .field {
   display: flex;
@@ -1370,46 +1495,90 @@ html[data-color-mode="dark"] .heat-score-tooltip {
   padding-top: 2px;
 }
 
+.calc-graph-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 6px 14px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+
+.calc-graph-toggle:hover,
+.calc-graph-toggle:focus-visible {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.calc-graph-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--focus-ring-strong);
+}
+
+.calc-graph-toggle-label {
+  min-width: 0;
+}
+
+.calc-graph-toggle .ti {
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+
+.calc-graph-panel:not(.is-collapsed) .calc-graph-toggle .ti {
+  transform: rotate(180deg);
+}
+
 .calc-graph-body {
-  padding: 4px 0 2px;
+  padding: 2px 0 2px;
+}
+
+.calc-graph-panel.is-collapsed .calc-graph-body {
+  display: none;
 }
 
 .calc-graph-section {
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 
 .calc-graph-section:last-child {
   margin-bottom: 0;
 }
 
-.calc-graph-heading {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  margin-bottom: 8px;
-  padding: 0 14px;
-}
-
 /* ── Response surface (RSM) priority chart ── */
 .calc-rsm-section {
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 .calc-rsm-wrap {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
+  max-width: 200px;
+  margin: 0 14px;
 }
 
 .calc-rsm-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 26px;
+  grid-template-columns: minmax(0, 1fr) 22px;
   align-items: stretch;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
 }
 
@@ -1417,10 +1586,10 @@ html[data-color-mode="dark"] .heat-score-tooltip {
   position: relative;
   width: 100%;
   min-width: 0;
-  aspect-ratio: 300 / 248;
+  aspect-ratio: 210 / 168;
   touch-action: none;
   overflow: visible;
-  border-radius: 10px;
+  border-radius: 8px;
 }
 
 .calc-rsm-ease-col {
@@ -1430,12 +1599,12 @@ html[data-color-mode="dark"] .heat-score-tooltip {
   justify-content: stretch;
   min-height: 0;
   height: 100%;
-  gap: 4px;
+  gap: 2px;
   box-sizing: border-box;
 }
 
 .calc-rsm-ease-label {
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 500;
   line-height: 1;
   color: var(--text-muted);
@@ -1444,16 +1613,16 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 }
 
 .calc-rsm-ease-label-top {
-  flex: 0 0 5.645%;
+  flex: 0 0 5.952%;
 }
 
 .calc-rsm-ease-label-bottom {
-  flex: 0 0 14.516%;
+  flex: 0 0 15.476%;
 }
 
 .calc-rsm-ease-range {
   flex: 1 1 auto;
-  width: 18px;
+  width: 16px;
   min-height: 0;
   margin: 0;
   padding: 0;
@@ -1539,14 +1708,14 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 }
 
 .calc-rsm-tick-label {
-  font-size: 12px;
+  font-size: 10px;
   fill: var(--text-muted);
   font-family: inherit;
   pointer-events: none;
 }
 
 .calc-rsm-axis-label {
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 600;
   font-family: inherit;
   fill: var(--text-muted);

@@ -395,6 +395,7 @@ html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  margin-top: 4px;
 }
 
 .tp-badge-preview-chip {
