@@ -141,7 +141,7 @@
       PROGRESS_OKLCH.GRAY_BLUE,
       PROGRESS_OKLCH.TEAL,
       PROGRESS_OKLCH.MINT,
-      PROGRESS_OKLCH.GREEN_SOFT
+      PROGRESS_OKLCH.GREEN
     ]),
     ocean: buildCompletionScheme('ocean', 'Océan', [
       PROGRESS_OKLCH.GRAY,

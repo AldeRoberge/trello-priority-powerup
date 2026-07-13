@@ -582,6 +582,79 @@ check(
   })()
 );
 check(
+  'withDueDateDisplay marks past dueDate as duePast',
+  (function () {
+    var today = new Date();
+    var y = today.getFullYear();
+    var m = String(today.getMonth() + 1);
+    if (m.length < 2) m = '0' + m;
+    var day = String(today.getDate());
+    if (day.length < 2) day = '0' + day;
+    var display = PU.withDueDateDisplay(
+      { label: 'Urgente', tierI: 1 },
+      { dueDate: addDaysIso(y + '-' + m + '-' + day, -2) }
+    );
+    return display && display.duePast === true && !display.blocked;
+  })()
+);
+check(
+  'withDueDateDisplay duePast false when dueDate in future',
+  (function () {
+    var today = new Date();
+    var y = today.getFullYear();
+    var m = String(today.getMonth() + 1);
+    if (m.length < 2) m = '0' + m;
+    var day = String(today.getDate());
+    if (day.length < 2) day = '0' + day;
+    var display = PU.withDueDateDisplay(
+      { label: 'Urgente', tierI: 1 },
+      { dueDate: addDaysIso(y + '-' + m + '-' + day, 5) }
+    );
+    return display && display.duePast === false;
+  })()
+);
+check(
+  'withDueDateDisplay duePast when dueTime already passed today',
+  (function () {
+    var now = new Date();
+    var y = now.getFullYear();
+    var m = String(now.getMonth() + 1);
+    if (m.length < 2) m = '0' + m;
+    var day = String(now.getDate());
+    if (day.length < 2) day = '0' + day;
+    var past = new Date(now.getTime() - 90 * 60000);
+    var hh = String(past.getHours());
+    if (hh.length < 2) hh = '0' + hh;
+    var mm = String(past.getMinutes());
+    if (mm.length < 2) mm = '0' + mm;
+    var display = PU.withDueDateDisplay(
+      { label: 'Urgente', tierI: 1 },
+      { dueDate: y + '-' + m + '-' + day, dueTime: hh + ':' + mm }
+    );
+    return display && display.duePast === true;
+  })()
+);
+check(
+  'resolveDisplay sets duePast without requiring blocked',
+  (function () {
+    var today = new Date();
+    var y = today.getFullYear();
+    var m = String(today.getMonth() + 1);
+    if (m.length < 2) m = '0' + m;
+    var day = String(today.getDate());
+    if (day.length < 2) day = '0' + day;
+    var result = PU.calc.baseline({ urgency: 3, impact: 3, ease: 2 });
+    var display = PU.resolveDisplay(result, {
+      urgency: 3,
+      impact: 3,
+      ease: 2,
+      dueDate: addDaysIso(y + '-' + m + '-' + day, -1),
+      enAttente: false,
+    });
+    return display.duePast === true && !display.blocked;
+  })()
+);
+check(
   'resolveDisplay attaches dueCountdown',
   (function () {
     var today = new Date();

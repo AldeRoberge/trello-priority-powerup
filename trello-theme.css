@@ -761,13 +761,24 @@ body.tp-page--priority {
   font-size: 13px;
 }
 
-.tp-page--priority .due-date-time-hint {
-  font-size: 11px;
+.tp-page--priority .due-date-time-value {
+  font-size: 12px;
 }
 
-.tp-page--priority .due-date-time-input {
+.tp-page--priority .due-date-time-popover {
+  max-width: 292px;
+}
+
+.tp-page--priority .due-date-time-chip--period {
+  min-height: 54px;
+}
+
+.tp-page--priority .due-date-time-chip-label {
   font-size: 13px;
-  width: 7.75rem;
+}
+
+.tp-page--priority .due-date-time-select {
+  font-size: 14px;
 }
 
 .tp-page--priority .due-date-popover {

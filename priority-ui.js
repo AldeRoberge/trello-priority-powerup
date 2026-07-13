@@ -3094,36 +3094,38 @@
     timeRow.className = 'due-date-time-row';
     timeRow.hidden = true;
 
-    var timeLabel = document.createElement('label');
-    timeLabel.className = 'due-date-time-label';
-    timeLabel.htmlFor = uid + '-time';
+    var timeTrigger = document.createElement('button');
+    timeTrigger.type = 'button';
+    timeTrigger.className = 'due-date-time-trigger';
+    timeTrigger.setAttribute('aria-haspopup', 'dialog');
+    timeTrigger.setAttribute('aria-expanded', 'false');
+    timeTrigger.setAttribute('aria-controls', uid + '-time-popover');
+    timeTrigger.setAttribute('aria-label', DUE_DATE_TIME_LABEL);
 
     var timeIcon = document.createElement('i');
     timeIcon.className = 'ti ti-clock due-date-time-icon';
     timeIcon.setAttribute('aria-hidden', 'true');
 
-    var timeText = document.createElement('span');
-    timeText.className = 'due-date-time-text';
+    var timeTriggerText = document.createElement('span');
+    timeTriggerText.className = 'due-date-time-trigger-text';
 
     var timeTitle = document.createElement('span');
     timeTitle.className = 'due-date-time-title';
     timeTitle.textContent = DUE_DATE_TIME_LABEL;
 
-    var timeHint = document.createElement('span');
-    timeHint.className = 'due-date-time-hint';
-    timeHint.textContent = DUE_DATE_TIME_HINT;
+    var timeValue = document.createElement('span');
+    timeValue.className = 'due-date-time-value';
 
-    timeText.appendChild(timeTitle);
-    timeText.appendChild(timeHint);
-    timeLabel.appendChild(timeIcon);
-    timeLabel.appendChild(timeText);
+    timeTriggerText.appendChild(timeTitle);
+    timeTriggerText.appendChild(timeValue);
 
-    var timeInput = document.createElement('input');
-    timeInput.type = 'time';
-    timeInput.className = 'due-date-time-input';
-    timeInput.id = uid + '-time';
-    timeInput.setAttribute('aria-label', DUE_DATE_TIME_LABEL);
-    timeInput.value = currentTime || '';
+    var timeChevron = document.createElement('i');
+    timeChevron.className = 'ti ti-chevron-down due-date-time-chevron';
+    timeChevron.setAttribute('aria-hidden', 'true');
+
+    timeTrigger.appendChild(timeIcon);
+    timeTrigger.appendChild(timeTriggerText);
+    timeTrigger.appendChild(timeChevron);
 
     var timeClearBtn = document.createElement('button');
     timeClearBtn.type = 'button';
@@ -3133,10 +3135,140 @@
     timeClearBtn.setAttribute('aria-label', DUE_DATE_TIME_CLEAR_LABEL);
     timeClearBtn.hidden = !currentTime;
 
-    timeRow.appendChild(timeLabel);
-    timeRow.appendChild(timeInput);
+    timeRow.appendChild(timeTrigger);
     timeRow.appendChild(timeClearBtn);
+
+    var timePopover = document.createElement('div');
+    timePopover.className = 'due-date-time-popover';
+    timePopover.id = uid + '-time-popover';
+    timePopover.hidden = true;
+    timePopover.setAttribute('role', 'dialog');
+    timePopover.setAttribute('aria-modal', 'false');
+    timePopover.setAttribute('aria-label', DUE_DATE_TIME_PICKER_LABEL);
+
+    var timePeriodsSection = document.createElement('div');
+    timePeriodsSection.className = 'due-date-time-section';
+
+    var timePeriodsLabel = document.createElement('div');
+    timePeriodsLabel.className = 'due-date-time-section-label';
+    timePeriodsLabel.id = uid + '-time-periods';
+    timePeriodsLabel.textContent = DUE_DATE_TIME_SUGGESTIONS_LABEL;
+
+    var timePeriods = document.createElement('div');
+    timePeriods.className = 'due-date-time-chips due-date-time-chips--periods';
+    timePeriods.setAttribute('role', 'group');
+    timePeriods.setAttribute('aria-labelledby', uid + '-time-periods');
+
+    DUE_DATE_TIME_PERIODS.forEach(function (period) {
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'due-date-time-chip due-date-time-chip--period';
+      chip.dataset.time = period.time;
+      chip.dataset.period = period.id;
+      chip.setAttribute('aria-pressed', 'false');
+      var chipLabel = document.createElement('span');
+      chipLabel.className = 'due-date-time-chip-label';
+      chipLabel.textContent = period.label;
+      var chipTime = document.createElement('span');
+      chipTime.className = 'due-date-time-chip-time';
+      chipTime.textContent = period.time;
+      chip.appendChild(chipLabel);
+      chip.appendChild(chipTime);
+      chip.addEventListener('click', function () {
+        selectTime(period.time, true);
+      });
+      timePeriods.appendChild(chip);
+    });
+
+    timePeriodsSection.appendChild(timePeriodsLabel);
+    timePeriodsSection.appendChild(timePeriods);
+    timePopover.appendChild(timePeriodsSection);
+
+    var timeCommonSection = document.createElement('div');
+    timeCommonSection.className = 'due-date-time-section';
+
+    var timeCommonLabel = document.createElement('div');
+    timeCommonLabel.className = 'due-date-time-section-label';
+    timeCommonLabel.id = uid + '-time-common';
+    timeCommonLabel.textContent = DUE_DATE_TIME_COMMON_LABEL;
+
+    var timeCommon = document.createElement('div');
+    timeCommon.className = 'due-date-time-chips due-date-time-chips--common';
+    timeCommon.setAttribute('role', 'listbox');
+    timeCommon.setAttribute('aria-labelledby', uid + '-time-common');
+
+    DUE_DATE_TIME_COMMON.forEach(function (time) {
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'due-date-time-chip due-date-time-chip--common';
+      chip.dataset.time = time;
+      chip.setAttribute('role', 'option');
+      chip.setAttribute('aria-selected', 'false');
+      chip.textContent = time;
+      chip.addEventListener('click', function () {
+        selectTime(time, true);
+      });
+      timeCommon.appendChild(chip);
+    });
+
+    timeCommonSection.appendChild(timeCommonLabel);
+    timeCommonSection.appendChild(timeCommon);
+    timePopover.appendChild(timeCommonSection);
+
+    var timeCustomSection = document.createElement('div');
+    timeCustomSection.className = 'due-date-time-section due-date-time-section--custom';
+
+    var timeCustomLabel = document.createElement('div');
+    timeCustomLabel.className = 'due-date-time-section-label';
+    timeCustomLabel.id = uid + '-time-custom';
+    timeCustomLabel.textContent = DUE_DATE_TIME_CUSTOM_LABEL;
+
+    var timeCustomRow = document.createElement('div');
+    timeCustomRow.className = 'due-date-time-custom';
+    timeCustomRow.setAttribute('role', 'group');
+    timeCustomRow.setAttribute('aria-labelledby', uid + '-time-custom');
+
+    var hourSelect = document.createElement('select');
+    hourSelect.className = 'due-date-time-select due-date-time-select--hour';
+    hourSelect.setAttribute('aria-label', DUE_DATE_TIME_HOURS_ARIA);
+    for (var h = 0; h < 24; h++) {
+      var hourOpt = document.createElement('option');
+      hourOpt.value = pad2(h);
+      hourOpt.textContent = pad2(h);
+      hourSelect.appendChild(hourOpt);
+    }
+
+    var timeColon = document.createElement('span');
+    timeColon.className = 'due-date-time-colon';
+    timeColon.textContent = ':';
+    timeColon.setAttribute('aria-hidden', 'true');
+
+    var minuteSelect = document.createElement('select');
+    minuteSelect.className = 'due-date-time-select due-date-time-select--minute';
+    minuteSelect.setAttribute('aria-label', DUE_DATE_TIME_MINUTES_ARIA);
+    DUE_DATE_TIME_MINUTE_STEPS.forEach(function (m) {
+      var minuteOpt = document.createElement('option');
+      minuteOpt.value = pad2(m);
+      minuteOpt.textContent = pad2(m);
+      minuteSelect.appendChild(minuteOpt);
+    });
+
+    var timeApplyBtn = document.createElement('button');
+    timeApplyBtn.type = 'button';
+    timeApplyBtn.className = 'due-date-time-apply';
+    timeApplyBtn.textContent = 'OK';
+    timeApplyBtn.setAttribute('aria-label', 'Appliquer l\'heure personnalis\u00e9e');
+
+    timeCustomRow.appendChild(hourSelect);
+    timeCustomRow.appendChild(timeColon);
+    timeCustomRow.appendChild(minuteSelect);
+    timeCustomRow.appendChild(timeApplyBtn);
+    timeCustomSection.appendChild(timeCustomLabel);
+    timeCustomSection.appendChild(timeCustomRow);
+    timePopover.appendChild(timeCustomSection);
+
     body.appendChild(timeRow);
+    body.appendChild(timePopover);
 
     var popover = document.createElement('div');
     popover.className = 'due-date-popover';
@@ -3218,9 +3350,77 @@
     function refreshTimeRow() {
       var show = enabled && !!current;
       timeRow.hidden = !show;
-      timeInput.value = currentTime || '';
+      if (!show && timeOpen) closeTimePicker(false);
       timeClearBtn.hidden = !currentTime;
       timeRow.classList.toggle('has-time', !!currentTime);
+      field.classList.toggle('is-time-open', timeOpen);
+      timeTrigger.setAttribute('aria-expanded', timeOpen ? 'true' : 'false');
+      if (currentTime) {
+        timeValue.textContent = currentTime;
+        timeValue.classList.remove('is-placeholder');
+        timeTrigger.classList.add('has-value');
+      } else {
+        timeValue.textContent = DUE_DATE_TIME_PLACEHOLDER;
+        timeValue.classList.add('is-placeholder');
+        timeTrigger.classList.remove('has-value');
+      }
+      if (timeOpen) syncTimePickerSelection();
+    }
+
+    function ensureMinuteOption(minutes) {
+      var value = pad2(minutes);
+      var existing = minuteSelect.querySelector('option[value="' + value + '"]');
+      if (existing) return value;
+      var opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = value;
+      var inserted = false;
+      for (var i = 0; i < minuteSelect.options.length; i++) {
+        if (+minuteSelect.options[i].value > minutes) {
+          minuteSelect.insertBefore(opt, minuteSelect.options[i]);
+          inserted = true;
+          break;
+        }
+      }
+      if (!inserted) minuteSelect.appendChild(opt);
+      return value;
+    }
+
+    function syncTimePickerSelection() {
+      var parts = currentTime ? currentTime.split(':') : null;
+      var hours = parts ? parts[0] : '09';
+      var minutes = parts ? +parts[1] : 0;
+      hourSelect.value = hours;
+      minuteSelect.value = ensureMinuteOption(minutes);
+
+      var periodChips = timePeriods.querySelectorAll('[data-time]');
+      for (var p = 0; p < periodChips.length; p++) {
+        var periodSelected = !!currentTime && periodChips[p].dataset.time === currentTime;
+        periodChips[p].classList.toggle('is-selected', periodSelected);
+        periodChips[p].setAttribute('aria-pressed', periodSelected ? 'true' : 'false');
+      }
+
+      var commonChips = timeCommon.querySelectorAll('[data-time]');
+      for (var c = 0; c < commonChips.length; c++) {
+        var commonSelected = !!currentTime && commonChips[c].dataset.time === currentTime;
+        commonChips[c].classList.toggle('is-selected', commonSelected);
+        commonChips[c].setAttribute('aria-selected', commonSelected ? 'true' : 'false');
+      }
+    }
+
+    function selectTime(hhmm, closeAfter) {
+      if (!enabled || !current) return;
+      var next = normalizeDueTime(hhmm);
+      currentTime = next || '';
+      emitChange();
+      if (closeAfter !== false) closeTimePicker(true);
+      else syncTimePickerSelection();
+    }
+
+    function applyCustomTime(closeAfter) {
+      var next = normalizeDueTime(hourSelect.value + ':' + minuteSelect.value);
+      if (!next) return;
+      selectTime(next, closeAfter !== false);
     }
 
     function refreshTrigger() {
@@ -3265,7 +3465,7 @@
       toggle.checked = enabled;
       field.classList.toggle('is-enabled', enabled);
       if (!enabled) {
-        field.classList.remove('is-open', 'has-due-date', 'is-past');
+        field.classList.remove('is-open', 'is-time-open', 'has-due-date', 'is-past');
       }
       refreshCountdown();
       if (shouldNotifyLayout !== false && wasHidden !== body.hidden) {
@@ -3306,6 +3506,7 @@
       } else {
         syncViewFromValue('');
         closeCalendar(false);
+        closeTimePicker(false);
       }
       if (open && enabled) renderCalendar();
       updateVisibility(false);
@@ -3322,6 +3523,7 @@
         current = '';
         currentTime = '';
         closeCalendar(false);
+        closeTimePicker(false);
         syncViewFromValue('');
         updateVisibility();
         emitChange();
@@ -3349,8 +3551,13 @@
       focusIso = next;
       syncViewFromValue(next);
       emitChange();
-      if (closeAfter !== false) closeCalendar(true);
-      else renderCalendar();
+      if (closeAfter !== false) {
+        closeCalendar(false);
+        if (!currentTime) openTimePicker();
+        else if (enabled) trigger.focus();
+      } else {
+        renderCalendar();
+      }
     }
 
     function focusDayButton(iso) {
@@ -3427,18 +3634,26 @@
     }
 
     function onDocPointerDown(ev) {
-      if (!open) return;
+      if (!open && !timeOpen) return;
       if (field.contains(ev.target)) return;
-      closeCalendar(true);
+      if (open) closeCalendar(true);
+      if (timeOpen) closeTimePicker(true);
     }
 
     function onDocKeyDown(ev) {
-      if (!open) return;
       if (ev.key === 'Escape') {
-        ev.preventDefault();
-        closeCalendar(true);
-        return;
+        if (timeOpen) {
+          ev.preventDefault();
+          closeTimePicker(true);
+          return;
+        }
+        if (open) {
+          ev.preventDefault();
+          closeCalendar(true);
+          return;
+        }
       }
+      if (!open) return;
       if (!grid.contains(document.activeElement) && document.activeElement !== todayBtn) {
         return;
       }
@@ -3489,14 +3704,16 @@
     }
 
     function unbindDocListeners() {
-      if (!docListenersBound) return;
-      document.removeEventListener('mousedown', onDocPointerDown, true);
-      document.removeEventListener('keydown', onDocKeyDown, true);
-      docListenersBound = false;
+      if (docListenersBound && !open && !timeOpen) {
+        document.removeEventListener('mousedown', onDocPointerDown, true);
+        document.removeEventListener('keydown', onDocKeyDown, true);
+        docListenersBound = false;
+      }
     }
 
     function openCalendar() {
       if (!enabled || open) return;
+      closeTimePicker(false);
       open = true;
       if (current) syncViewFromValue(current);
       else {
@@ -3522,6 +3739,36 @@
       notifyLayout();
     }
 
+    function openTimePicker() {
+      if (!enabled || !current || timeOpen) return;
+      closeCalendar(false);
+      timeOpen = true;
+      timePopover.hidden = false;
+      field.classList.add('is-time-open');
+      timeTrigger.setAttribute('aria-expanded', 'true');
+      syncTimePickerSelection();
+      bindDocListeners();
+      notifyLayout();
+      requestAnimationFrame(function () {
+        var selected =
+          timePopover.querySelector('.due-date-time-chip.is-selected') ||
+          timePopover.querySelector('.due-date-time-chip--period');
+        if (selected) selected.focus();
+        else hourSelect.focus();
+      });
+    }
+
+    function closeTimePicker(restoreFocus) {
+      if (!timeOpen) return;
+      timeOpen = false;
+      timePopover.hidden = true;
+      field.classList.remove('is-time-open');
+      timeTrigger.setAttribute('aria-expanded', 'false');
+      unbindDocListeners();
+      if (restoreFocus && enabled && current) timeTrigger.focus();
+      notifyLayout();
+    }
+
     toggle.addEventListener('change', function () {
       setEnabled(toggle.checked);
     });
@@ -3537,32 +3784,36 @@
       current = '';
       currentTime = '';
       closeCalendar(false);
+      closeTimePicker(false);
       syncViewFromValue('');
       emitChange();
       trigger.focus();
     });
 
-    timeInput.addEventListener('change', function () {
+    timeTrigger.addEventListener('click', function () {
       if (!enabled || !current) return;
-      currentTime = normalizeDueTime(timeInput.value);
-      timeInput.value = currentTime || '';
-      emitChange();
-    });
-
-    timeInput.addEventListener('input', function () {
-      if (!enabled || !current) return;
-      var next = normalizeDueTime(timeInput.value);
-      if (next === currentTime) return;
-      currentTime = next;
-      emitChange();
+      if (timeOpen) closeTimePicker(false);
+      else openTimePicker();
     });
 
     timeClearBtn.addEventListener('click', function () {
       if (!enabled || !current || !currentTime) return;
       currentTime = '';
-      timeInput.value = '';
       emitChange();
-      timeInput.focus();
+      if (timeOpen) syncTimePickerSelection();
+      timeTrigger.focus();
+    });
+
+    hourSelect.addEventListener('change', function () {
+      applyCustomTime(false);
+    });
+
+    minuteSelect.addEventListener('change', function () {
+      applyCustomTime(false);
+    });
+
+    timeApplyBtn.addEventListener('click', function () {
+      applyCustomTime(true);
     });
 
     prevBtn.addEventListener('click', function () {
@@ -3830,8 +4081,9 @@
 
     function paint(result, display) {
       var d = display || resolveDisplay(result, {});
-      var visualSource = d.blocked
-        ? { blocked: true, label: BLOCKED_LABEL }
+      var overdue = !!d.duePast;
+      var visualSource = d.blocked || overdue
+        ? { blocked: true, label: d.blocked ? BLOCKED_LABEL : d.label }
         : (d.inutile ? { inutile: true, label: INUTILE_LABEL } : { i: d.tierI, label: d.label });
       var v = tierVisuals(visualSource);
       bnumVal.textContent = formatScore(d.score);
@@ -3854,8 +4106,10 @@
       blabel.style.removeProperty('color');
       badge.classList.toggle('is-inutile', !!d.inutile);
       badge.classList.toggle('is-blocked', !!d.blocked);
+      badge.classList.toggle('is-overdue', overdue);
       panel.classList.toggle('is-inutile', !!d.inutile);
       panel.classList.toggle('is-blocked', !!d.blocked);
+      panel.classList.toggle('is-overdue', overdue);
       panel.classList.toggle('has-blocked-warning', !!d.blocked);
       blockedWarning.hidden = !d.blocked;
       paintTierDescription(tierDesc, d);
@@ -4893,12 +5147,13 @@
         var result = calcFn(state);
         var display = resolveDisplay(result, state);
         var cardTier = display.cardTier;
-        if (display.blocked) {
+        if (display.blocked || display.duePast) {
           cardTier = Object.assign({}, cardTier, { blocked: true });
         }
         applyCardTierTint(card, cardTier);
         card.classList.toggle('is-inutile', !!display.inutile);
         card.classList.toggle('is-blocked', !!display.blocked);
+        card.classList.toggle('is-overdue', !!display.duePast);
         card.dataset.tier = display.label;
         heat.paint(result, display);
         if (calcGraph) calcGraph.paint(result, state, display);
