@@ -873,7 +873,7 @@ body.tp-page--completion {
   max-width: 520px;
   margin: 0 auto;
   padding: 4px 12px 14px;
-  --completion-radius: 8px;
+  --completion-radius: 10px;
   --completion-track-master: 8px;
   --completion-track-item: 4px;
   --completion-thumb-master: 18px;
@@ -896,9 +896,10 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   --slider-track: var(--tp-surface-subtle);
   --slider-thumb-bg: var(--tp-surface);
   --slider-thumb-border: var(--tp-border-strong);
-  --slider-thumb-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
-  --slider-focus-ring: 0 0 0 3px rgba(12, 102, 228, 0.25);
-  --completion-radius: 8px;
+  --slider-thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  --slider-focus-ring: 0 0 0 3px rgba(12, 102, 228, 0.28);
+  --completion-radius: 10px;
+  --completion-control-radius: 8px;
   --completion-track-master: 8px;
   --completion-track-item: 4px;
   --completion-thumb-master: 18px;
@@ -918,7 +919,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 .tp-page--priority .tp-completion {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .tp-page--completion .tp-priority-card-header {
@@ -935,19 +936,19 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   padding: 0 10px 8px;
 }
 
+/* Soft enable shell — tint only, no gray cage (heat-panel vibe) */
 .tp-page--priority .field--progress {
   margin-bottom: 0;
   padding: 0;
-  border-radius: var(--radius);
+  border: none;
+  border-radius: var(--radius, 8px);
   background: transparent;
-  border: 1px solid transparent;
-  transition: background 0.2s ease, border-color 0.2s ease, padding 0.2s ease;
+  transition: background 0.2s ease, padding 0.2s ease;
 }
 
 .tp-page--priority .field--progress.is-enabled {
-  padding: 10px 12px;
-  background: var(--surface-2, var(--tp-surface-subtle));
-  border-color: var(--border, var(--tp-border));
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
 }
 
 .tp-page--priority .progress-enable-label {
@@ -956,6 +957,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   gap: 10px;
   cursor: pointer;
   user-select: none;
+  border-radius: 6px;
 }
 
 .tp-page--priority .progress-enable-checkbox {
@@ -984,12 +986,11 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 
 .tp-page--priority .progress-enable-label:has(.progress-enable-checkbox:focus-visible) {
   outline: none;
-  border-radius: 4px;
   box-shadow: 0 0 0 2px var(--surface-2, var(--tp-surface)), 0 0 0 4px var(--tp-primary, #0c66e4);
 }
 
 .tp-page--priority .progress-section-body {
-  padding-top: 10px;
+  padding-top: 12px;
   padding-left: 26px;
 }
 
@@ -1001,26 +1002,26 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   margin: 0;
 }
 
+/* Hero — soft accent wash, no outline (matches heat-panel language) */
 .tp-completion-progress-panel {
   --completion-hero-accent: var(--tp-border-strong);
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px 14px 12px;
-  border-radius: var(--completion-radius, 8px);
+  gap: 12px;
+  padding: 16px 16px 14px;
+  border-radius: var(--completion-radius, 10px);
   background: color-mix(
     in srgb,
-    var(--completion-hero-accent) 10%,
+    var(--completion-hero-accent) 12%,
     var(--tp-surface-subtle)
   );
-  box-shadow: inset 0 0 0 1px var(--tp-border);
-  transition: background 0.2s ease;
+  transition: background 0.22s ease;
 }
 
 .tp-completion-progress-panel.has-progress {
   background: color-mix(
     in srgb,
-    var(--completion-hero-accent) 14%,
+    var(--completion-hero-accent) 18%,
     var(--tp-surface)
   );
 }
@@ -1028,7 +1029,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 .tp-completion-progress-panel.is-complete {
   background: color-mix(
     in srgb,
-    var(--completion-hero-accent) 18%,
+    var(--completion-hero-accent) 22%,
     var(--tp-surface)
   );
 }
@@ -1057,17 +1058,17 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-completion-percent {
-  font-size: 32px;
+  font-size: 34px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--tp-text);
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
 }
 
 .tp-completion-encouragement {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.3;
   color: var(--tp-text-muted);
@@ -1082,7 +1083,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .tp-completion-list-head {
@@ -1096,17 +1097,22 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 2px;
 }
 
+/* Subtask rows — soft pads / separators, no boxed borders */
 .tp-completion-item {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px;
-  border-radius: var(--completion-radius, 8px);
-  background: var(--tp-surface-subtle);
-  box-shadow: inset 0 0 0 1px var(--tp-border);
+  padding: 10px 10px;
+  border-radius: var(--completion-radius, 10px);
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.tp-completion-item:hover {
+  background: color-mix(in srgb, var(--tp-surface-subtle) 88%, transparent);
 }
 
 .tp-completion-item.is-flipping {
@@ -1145,7 +1151,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 
 .tp-completion-progress-slider,
 .tp-completion-item-slider {
-  --completion-track: color-mix(in srgb, var(--tp-border) 55%, var(--tp-surface));
+  --completion-track: color-mix(in srgb, var(--tp-border) 40%, var(--tp-surface-subtle));
   --completion-track-h: var(--completion-track-master, 8px);
   --completion-thumb-size: var(--completion-thumb-master, 18px);
   accent-color: var(--completion-accent, var(--tp-primary));
@@ -1163,6 +1169,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 .tp-completion-item-slider::-webkit-slider-runnable-track {
   height: var(--completion-track-h);
   border-radius: calc(var(--completion-track-h) / 2);
+  /* No background transition — animating the gradient stop lag the thumb while dragging. */
   background: linear-gradient(
     to right,
     var(--completion-fill, var(--tp-primary)) 0%,
@@ -1170,8 +1177,6 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
     var(--completion-track) var(--completion-pct, 0%),
     var(--completion-track) 100%
   );
-  box-shadow: inset 0 0 0 1px var(--tp-border);
-  transition: background 0.2s ease;
 }
 
 .tp-completion-progress-slider::-webkit-slider-thumb,
@@ -1187,20 +1192,28 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   box-shadow: var(--slider-thumb-shadow);
 }
 
+.tp-completion-progress-slider:focus {
+  outline: none;
+}
+
+.tp-completion-progress-slider:focus-visible::-webkit-slider-thumb,
+.tp-completion-item-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: var(--slider-thumb-shadow), var(--slider-focus-ring);
+}
+
 .tp-completion-progress-slider::-moz-range-track,
 .tp-completion-item-slider::-moz-range-track {
   height: var(--completion-track-h);
   border-radius: calc(var(--completion-track-h) / 2);
   background: var(--completion-track);
-  box-shadow: inset 0 0 0 1px var(--tp-border);
 }
 
 .tp-completion-progress-slider::-moz-range-progress,
 .tp-completion-item-slider::-moz-range-progress {
   height: var(--completion-track-h);
   border-radius: calc(var(--completion-track-h) / 2) 0 0 calc(var(--completion-track-h) / 2);
+  /* Instant fill/color so ramp + 100% snap stay locked to the handle. */
   background: var(--completion-fill, var(--tp-primary));
-  transition: background 0.2s ease;
 }
 
 .tp-completion-progress-slider::-moz-range-thumb,
@@ -1212,6 +1225,11 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   border: 1.5px solid var(--completion-fill, var(--slider-thumb-border));
   box-shadow: var(--slider-thumb-shadow);
   cursor: pointer;
+}
+
+.tp-completion-progress-slider:focus-visible::-moz-range-thumb,
+.tp-completion-item-slider:focus-visible::-moz-range-thumb {
+  box-shadow: var(--slider-thumb-shadow), var(--slider-focus-ring);
 }
 
 .tp-completion-master-slider {
@@ -1261,7 +1279,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   width: var(--completion-check-size);
   height: var(--completion-check-size);
   padding: 0;
-  border: 1.5px solid color-mix(in srgb, var(--tp-border-strong) 80%, var(--tp-text-muted));
+  border: 1.5px solid color-mix(in srgb, var(--tp-border-strong) 55%, var(--tp-text-muted));
   border-radius: 50%;
   background: transparent;
   color: transparent;
@@ -1282,9 +1300,13 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   background: color-mix(in srgb, var(--completion-check-green) 8%, transparent);
 }
 
+.tp-completion-check:focus {
+  outline: none;
+}
+
 .tp-completion-check:focus-visible {
   outline: none;
-  box-shadow: var(--slider-focus-ring, 0 0 0 3px rgba(12, 102, 228, 0.25));
+  box-shadow: var(--slider-focus-ring, 0 0 0 3px rgba(12, 102, 228, 0.28));
 }
 
 .tp-completion-check.is-checked {
@@ -1319,25 +1341,27 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  padding-top: 2px;
   transition: opacity 0.2s ease;
 }
 
 .tp-completion-done-section.is-empty {
-  opacity: 0.55;
+  opacity: 0.5;
 }
 
 .tp-completion-done-section.is-empty .tp-completion-done-toggle {
   color: var(--tp-text-muted);
-  background: color-mix(in srgb, var(--tp-surface-subtle) 70%, var(--tp-bg));
+  background: transparent;
   cursor: default;
   pointer-events: none;
 }
 
 .tp-completion-done-section.is-empty .tp-completion-done-chevron {
-  opacity: 0.45;
+  opacity: 0.4;
 }
 
+/* Terminées — ghost disclosure, no boxed chrome */
 .tp-completion-done-toggle {
   display: flex;
   align-items: center;
@@ -1347,9 +1371,8 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   margin: 0;
   padding: 8px 10px;
   border: none;
-  border-radius: var(--completion-radius, 8px);
-  background: var(--tp-surface-subtle);
-  box-shadow: inset 0 0 0 1px var(--tp-border);
+  border-radius: var(--completion-control-radius, 8px);
+  background: transparent;
   color: var(--tp-text-subtle);
   font: inherit;
   font-size: 13px;
@@ -1364,15 +1387,17 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-completion-done-toggle:hover:not(:disabled) {
-  background: var(--tp-surface-hover);
+  background: color-mix(in srgb, var(--tp-surface-subtle) 90%, transparent);
   color: var(--tp-text);
+}
+
+.tp-completion-done-toggle:focus {
+  outline: none;
 }
 
 .tp-completion-done-toggle:focus-visible {
   outline: none;
-  box-shadow:
-    inset 0 0 0 1px var(--tp-border),
-    var(--slider-focus-ring, 0 0 0 3px rgba(12, 102, 228, 0.25));
+  box-shadow: var(--slider-focus-ring, 0 0 0 3px rgba(12, 102, 228, 0.28));
 }
 
 .tp-completion-done-toggle-label {
@@ -1387,7 +1412,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   border-bottom: 2px solid currentColor;
   transform: rotate(45deg);
   transition: transform 0.15s ease;
-  opacity: 0.7;
+  opacity: 0.65;
 }
 
 .tp-completion-done-section.is-expanded .tp-completion-done-chevron {
@@ -1409,12 +1434,12 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-completion-done-list .tp-completion-item {
-  opacity: 0.92;
+  opacity: 0.88;
 }
 
 html[data-color-mode="dark"] .tp-completion-check {
   --completion-check-green: #4bce97;
-  border-color: color-mix(in srgb, var(--tp-border-strong) 70%, var(--tp-text-muted));
+  border-color: color-mix(in srgb, var(--tp-border-strong) 55%, var(--tp-text-muted));
   background: transparent;
   color: transparent;
 }
@@ -1436,14 +1461,50 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   border-color: color-mix(in srgb, var(--completion-check-green) 88%, #fff);
 }
 
+/* Soft inputs inside completion — kill 2px gray cages from .tp-input */
+.tp-completion .tp-input,
+.tp-completion-add-input,
+.tp-completion-text,
+.tp-completion-diff {
+  border: 1.5px solid transparent;
+  border-radius: var(--completion-control-radius, 8px);
+  background: color-mix(in srgb, var(--tp-surface-subtle) 85%, var(--tp-input-bg, var(--tp-surface)));
+  transition: background 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.tp-completion .tp-input:hover,
+.tp-completion-add-input:hover,
+.tp-completion-text:hover,
+.tp-completion-diff:hover {
+  background: var(--tp-surface-hover, var(--tp-surface-subtle));
+}
+
+.tp-completion .tp-input:focus,
+.tp-completion-add-input:focus,
+.tp-completion-text:focus,
+.tp-completion-diff:focus {
+  outline: none;
+  border-color: transparent;
+}
+
+.tp-completion .tp-input:focus-visible,
+.tp-completion-add-input:focus-visible,
+.tp-completion-text:focus-visible,
+.tp-completion-diff:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--tp-primary) 55%, transparent);
+  background: var(--tp-surface, var(--tp-input-bg));
+  box-shadow: var(--slider-focus-ring, 0 0 0 3px rgba(12, 102, 228, 0.28));
+}
+
 .tp-completion-text {
   min-width: 0;
-  padding: 5px 8px;
+  padding: 6px 10px;
   font-size: 14px;
 }
 
 .tp-completion-diff {
-  padding: 5px 4px;
+  padding: 6px 8px;
   font-size: 12px;
   min-width: 0;
 }
@@ -1453,17 +1514,27 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   height: 28px;
   padding: 0;
   border: none;
-  border-radius: 3px;
+  border-radius: var(--completion-control-radius, 8px);
   background: transparent;
   color: var(--tp-text-muted);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 
 .tp-completion-delete:hover {
-  background: var(--tp-surface-hover);
+  background: color-mix(in srgb, var(--tp-danger-text, #ae2e24) 10%, transparent);
   color: var(--tp-danger-text);
+}
+
+.tp-completion-delete:focus {
+  outline: none;
+}
+
+.tp-completion-delete:focus-visible {
+  outline: none;
+  box-shadow: var(--slider-focus-ring, 0 0 0 3px rgba(12, 102, 228, 0.28));
 }
 
 .tp-completion-add {
@@ -1477,9 +1548,25 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   align-items: center;
 }
 
+.tp-completion-add-input {
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
 .tp-completion-add-btn {
   flex: none;
   white-space: nowrap;
+  border-radius: var(--completion-control-radius, 8px);
+  padding: 8px 14px;
+}
+
+.tp-completion-add-btn:focus {
+  outline: none;
+}
+
+.tp-completion-add-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--slider-focus-ring, 0 0 0 3px rgba(12, 102, 228, 0.28));
 }
 
 @media (max-width: 400px) {

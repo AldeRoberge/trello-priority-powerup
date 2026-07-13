@@ -251,6 +251,31 @@
       inner + '</svg>';
   }
 
+  /* Due-time period suggestions — sun / peak / cloud-sun / moon */
+  var DUE_TIME_PERIOD_ICON_SVG = {
+    matin:
+      '<circle cx="8" cy="8" r="2.6" ' + ICON_S + '/>' +
+      '<path d="M8 2.4v1.4M8 12.2v1.4M2.4 8h1.4M12.2 8h1.4M4 4l1 1M11 11l1 1M4 12l1-1M11 5l1-1" ' +
+        ICON_S + ' stroke-width="1"/>',
+    midi:
+      '<circle cx="8" cy="8" r="3.1" ' + ICON_S + '/>' +
+      '<path d="M8 1.6v1.5M8 12.9v1.5M1.6 8h1.5M12.9 8h1.5M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M3.5 12.5l1.1-1.1M11.4 4.6l1.1-1.1" ' +
+        ICON_S + ' stroke-width="1"/>',
+    'apres-midi':
+      '<circle cx="5.6" cy="5.6" r="2.2" ' + ICON_S + '/>' +
+      '<path d="M5.6 2.1v1M2.1 5.6h1M3.3 3.3l.7.7M7.9 3.3l-.7.7" ' + ICON_S + ' stroke-width="1"/>' +
+      '<path d="M4.8 12h6.2a2 2 0 0 0 .15-3.95 2.7 2.7 0 0 0-5.05-.95A2.15 2.15 0 0 0 4.8 12z" ' + ICON_S + '/>',
+    soir:
+      '<path d="M10.2 3A5.4 5.4 0 1 0 13 11.2 4.15 4.15 0 1 1 10.2 3z" ' + ICON_S + '/>'
+  };
+
+  function dueTimePeriodIconSvg(id) {
+    var inner = DUE_TIME_PERIOD_ICON_SVG[id];
+    if (!inner) return '';
+    return '<svg class="due-date-time-period-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">' +
+      inner + '</svg>';
+  }
+
   function escapeHtml(s) {
     return String(s)
       .replace(/&/g, '&amp;')
@@ -973,33 +998,24 @@
   var DUE_DATE_TIME_CLEAR_LABEL = 'Effacer l\'heure';
   var DUE_DATE_TIME_PICKER_LABEL = 'Choix de l\'heure';
   var DUE_DATE_TIME_SUGGESTIONS_LABEL = 'Suggestions';
-  var DUE_DATE_TIME_COMMON_LABEL = 'Heures courantes';
-  var DUE_DATE_TIME_CUSTOM_LABEL = 'Personnaliser';
+  var DUE_DATE_TIME_DIAL_LABEL = 'Horloge';
   var DUE_DATE_TIME_HOURS_ARIA = 'Heures';
   var DUE_DATE_TIME_MINUTES_ARIA = 'Minutes';
+  var DUE_DATE_TIME_AM_LABEL = 'AM';
+  var DUE_DATE_TIME_PM_LABEL = 'PM';
+  var DUE_DATE_TIME_MERIDIEM_ARIA = 'Matin ou apr\u00e8s-midi';
+  var DUE_DATE_TIME_DEFAULT = '08:00';
   var DUE_DATE_TIME_PERIODS = [
     { id: 'matin', label: 'Matin', time: '09:00' },
     { id: 'midi', label: 'Midi', time: '12:00' },
     { id: 'apres-midi', label: 'Apr\u00e8s-midi', time: '14:00' },
     { id: 'soir', label: 'Soir', time: '18:00' }
   ];
-  var DUE_DATE_TIME_COMMON = [
-    '08:00',
-    '09:00',
-    '10:00',
-    '11:00',
-    '12:00',
-    '13:00',
-    '14:00',
-    '15:00',
-    '16:00',
-    '17:00',
-    '18:00',
-    '19:00',
-    '20:00',
-    '21:00'
-  ];
   var DUE_DATE_TIME_MINUTE_STEPS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+  var DUE_DATE_TIME_CLOCK_SIZE = 212;
+  var DUE_DATE_TIME_CLOCK_INNER_R = 54;
+  var DUE_DATE_TIME_CLOCK_OUTER_R = 88;
+  var DUE_DATE_TIME_CLOCK_MINUTE_R = 78;
   var DUE_DATE_MONTH_NAMES = [
     'janvier',
     'f\u00e9vrier',
@@ -1157,7 +1173,22 @@
       var late = -days;
       if (late === 1) return 'en retard de 1 jour';
       if (late < COUNTDOWN_DAYS_PER_WEEK) return 'en retard de ' + late + ' jours';
-      return 'en retard';
+      if (late < COUNTDOWN_WEEK_THRESHOLD_DAYS) {
+        var lateWeeks = Math.max(1, Math.round(late / COUNTDOWN_DAYS_PER_WEEK));
+        return lateWeeks === 1
+          ? 'en retard de 1 semaine'
+          : 'en retard de ' + lateWeeks + ' semaines';
+      }
+      if (late < COUNTDOWN_YEAR_THRESHOLD_DAYS) {
+        var lateMonths = Math.max(1, Math.round(late / DAYS_PER_MONTH_AVG));
+        return lateMonths === 1
+          ? 'en retard de 1 mois'
+          : 'en retard de ' + lateMonths + ' mois';
+      }
+      var lateYears = Math.max(1, Math.round(late / DAYS_PER_YEAR_AVG));
+      return lateYears === 1
+        ? 'en retard de 1 an'
+        : 'en retard de ' + lateYears + ' ans';
     }
     if (days === 0) return 'aujourd\'hui';
     if (days === 1) return 'demain';
@@ -1187,7 +1218,7 @@
     var phrase;
 
     if (abs < MS_PER_MINUTE / 2) {
-      phrase = past ? 'en retard' : 'maintenant';
+      phrase = past ? 'en retard de 1 min' : 'maintenant';
     } else {
       var minutes = Math.max(1, Math.round(abs / MS_PER_MINUTE));
       if (minutes < 60) {
@@ -3087,6 +3118,14 @@
 
     controls.appendChild(trigger);
     controls.appendChild(clearBtn);
+
+    var countdown = document.createElement('div');
+    countdown.className = 'due-date-countdown';
+    countdown.id = uid + '-desc';
+    countdown.setAttribute('aria-live', 'polite');
+    countdown.hidden = true;
+
+    body.appendChild(countdown);
     body.appendChild(controls);
 
     var timeRow = document.createElement('div');
@@ -3165,16 +3204,22 @@
       chip.dataset.time = period.time;
       chip.dataset.period = period.id;
       chip.setAttribute('aria-pressed', 'false');
+      chip.setAttribute('aria-label', period.label + ', ' + period.time);
+      chip.innerHTML = dueTimePeriodIconSvg(period.id);
+      var chipBody = document.createElement('span');
+      chipBody.className = 'due-date-time-chip-body';
       var chipLabel = document.createElement('span');
       chipLabel.className = 'due-date-time-chip-label';
       chipLabel.textContent = period.label;
       var chipTime = document.createElement('span');
       chipTime.className = 'due-date-time-chip-time';
       chipTime.textContent = period.time;
-      chip.appendChild(chipLabel);
-      chip.appendChild(chipTime);
+      chipBody.appendChild(chipLabel);
+      chipBody.appendChild(chipTime);
+      chip.appendChild(chipBody);
       chip.addEventListener('click', function () {
-        selectTime(period.time, true);
+        selectTime(period.time, false);
+        setDialMode('minute');
       });
       timePeriods.appendChild(chip);
     });
@@ -3183,91 +3228,96 @@
     timePeriodsSection.appendChild(timePeriods);
     timePopover.appendChild(timePeriodsSection);
 
-    var timeCommonSection = document.createElement('div');
-    timeCommonSection.className = 'due-date-time-section';
+    var dialMode = 'hour';
+    var dialHour = 8;
+    var dialMinute = 0;
+    var dialDragging = false;
 
-    var timeCommonLabel = document.createElement('div');
-    timeCommonLabel.className = 'due-date-time-section-label';
-    timeCommonLabel.id = uid + '-time-common';
-    timeCommonLabel.textContent = DUE_DATE_TIME_COMMON_LABEL;
+    var timeDialSection = document.createElement('div');
+    timeDialSection.className = 'due-date-time-section due-date-time-section--dial';
 
-    var timeCommon = document.createElement('div');
-    timeCommon.className = 'due-date-time-chips due-date-time-chips--common';
-    timeCommon.setAttribute('role', 'listbox');
-    timeCommon.setAttribute('aria-labelledby', uid + '-time-common');
+    var timeDialHeader = document.createElement('div');
+    timeDialHeader.className = 'due-date-time-dial-header';
 
-    DUE_DATE_TIME_COMMON.forEach(function (time) {
-      var chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'due-date-time-chip due-date-time-chip--common';
-      chip.dataset.time = time;
-      chip.setAttribute('role', 'option');
-      chip.setAttribute('aria-selected', 'false');
-      chip.textContent = time;
-      chip.addEventListener('click', function () {
-        selectTime(time, true);
-      });
-      timeCommon.appendChild(chip);
-    });
+    var digitalGroup = document.createElement('div');
+    digitalGroup.className = 'due-date-time-digital';
+    digitalGroup.setAttribute('role', 'group');
+    digitalGroup.setAttribute('aria-label', DUE_DATE_TIME_DIAL_LABEL);
 
-    timeCommonSection.appendChild(timeCommonLabel);
-    timeCommonSection.appendChild(timeCommon);
-    timePopover.appendChild(timeCommonSection);
+    var digitalHourBtn = document.createElement('button');
+    digitalHourBtn.type = 'button';
+    digitalHourBtn.className = 'due-date-time-digital-part due-date-time-digital-part--hour is-active';
+    digitalHourBtn.setAttribute('aria-label', DUE_DATE_TIME_HOURS_ARIA);
+    digitalHourBtn.setAttribute('aria-pressed', 'true');
 
-    var timeCustomSection = document.createElement('div');
-    timeCustomSection.className = 'due-date-time-section due-date-time-section--custom';
+    var digitalColon = document.createElement('span');
+    digitalColon.className = 'due-date-time-digital-colon';
+    digitalColon.textContent = ':';
+    digitalColon.setAttribute('aria-hidden', 'true');
 
-    var timeCustomLabel = document.createElement('div');
-    timeCustomLabel.className = 'due-date-time-section-label';
-    timeCustomLabel.id = uid + '-time-custom';
-    timeCustomLabel.textContent = DUE_DATE_TIME_CUSTOM_LABEL;
+    var digitalMinuteBtn = document.createElement('button');
+    digitalMinuteBtn.type = 'button';
+    digitalMinuteBtn.className = 'due-date-time-digital-part due-date-time-digital-part--minute';
+    digitalMinuteBtn.setAttribute('aria-label', DUE_DATE_TIME_MINUTES_ARIA);
+    digitalMinuteBtn.setAttribute('aria-pressed', 'false');
 
-    var timeCustomRow = document.createElement('div');
-    timeCustomRow.className = 'due-date-time-custom';
-    timeCustomRow.setAttribute('role', 'group');
-    timeCustomRow.setAttribute('aria-labelledby', uid + '-time-custom');
+    digitalGroup.appendChild(digitalHourBtn);
+    digitalGroup.appendChild(digitalColon);
+    digitalGroup.appendChild(digitalMinuteBtn);
 
-    var hourSelect = document.createElement('select');
-    hourSelect.className = 'due-date-time-select due-date-time-select--hour';
-    hourSelect.setAttribute('aria-label', DUE_DATE_TIME_HOURS_ARIA);
-    for (var h = 0; h < 24; h++) {
-      var hourOpt = document.createElement('option');
-      hourOpt.value = pad2(h);
-      hourOpt.textContent = pad2(h);
-      hourSelect.appendChild(hourOpt);
-    }
+    var meridiemGroup = document.createElement('div');
+    meridiemGroup.className = 'due-date-time-meridiem';
+    meridiemGroup.setAttribute('role', 'group');
+    meridiemGroup.setAttribute('aria-label', DUE_DATE_TIME_MERIDIEM_ARIA);
 
-    var timeColon = document.createElement('span');
-    timeColon.className = 'due-date-time-colon';
-    timeColon.textContent = ':';
-    timeColon.setAttribute('aria-hidden', 'true');
+    var amBtn = document.createElement('button');
+    amBtn.type = 'button';
+    amBtn.className = 'due-date-time-meridiem-btn';
+    amBtn.dataset.meridiem = 'am';
+    amBtn.textContent = DUE_DATE_TIME_AM_LABEL;
+    amBtn.setAttribute('aria-pressed', 'false');
 
-    var minuteSelect = document.createElement('select');
-    minuteSelect.className = 'due-date-time-select due-date-time-select--minute';
-    minuteSelect.setAttribute('aria-label', DUE_DATE_TIME_MINUTES_ARIA);
-    DUE_DATE_TIME_MINUTE_STEPS.forEach(function (m) {
-      var minuteOpt = document.createElement('option');
-      minuteOpt.value = pad2(m);
-      minuteOpt.textContent = pad2(m);
-      minuteSelect.appendChild(minuteOpt);
-    });
+    var pmBtn = document.createElement('button');
+    pmBtn.type = 'button';
+    pmBtn.className = 'due-date-time-meridiem-btn';
+    pmBtn.dataset.meridiem = 'pm';
+    pmBtn.textContent = DUE_DATE_TIME_PM_LABEL;
+    pmBtn.setAttribute('aria-pressed', 'false');
 
-    var timeApplyBtn = document.createElement('button');
-    timeApplyBtn.type = 'button';
-    timeApplyBtn.className = 'due-date-time-apply';
-    timeApplyBtn.textContent = 'OK';
-    timeApplyBtn.setAttribute('aria-label', 'Appliquer l\'heure personnalis\u00e9e');
+    meridiemGroup.appendChild(amBtn);
+    meridiemGroup.appendChild(pmBtn);
+    timeDialHeader.appendChild(digitalGroup);
+    timeDialHeader.appendChild(meridiemGroup);
 
-    timeCustomRow.appendChild(hourSelect);
-    timeCustomRow.appendChild(timeColon);
-    timeCustomRow.appendChild(minuteSelect);
-    timeCustomRow.appendChild(timeApplyBtn);
-    timeCustomSection.appendChild(timeCustomLabel);
-    timeCustomSection.appendChild(timeCustomRow);
-    timePopover.appendChild(timeCustomSection);
+    var clockFace = document.createElement('div');
+    clockFace.className = 'due-date-time-clock';
+    clockFace.setAttribute('role', 'slider');
+    clockFace.setAttribute('aria-label', DUE_DATE_TIME_DIAL_LABEL);
+    clockFace.setAttribute('tabindex', '0');
+    clockFace.style.width = DUE_DATE_TIME_CLOCK_SIZE + 'px';
+    clockFace.style.height = DUE_DATE_TIME_CLOCK_SIZE + 'px';
 
-    body.appendChild(timeRow);
-    body.appendChild(timePopover);
+    var clockHand = document.createElement('div');
+    clockHand.className = 'due-date-time-clock-hand';
+    clockHand.setAttribute('aria-hidden', 'true');
+    var clockThumb = document.createElement('div');
+    clockThumb.className = 'due-date-time-clock-thumb';
+    clockHand.appendChild(clockThumb);
+
+    var clockCenter = document.createElement('div');
+    clockCenter.className = 'due-date-time-clock-center';
+    clockCenter.setAttribute('aria-hidden', 'true');
+
+    var clockNums = document.createElement('div');
+    clockNums.className = 'due-date-time-clock-nums';
+
+    clockFace.appendChild(clockHand);
+    clockFace.appendChild(clockCenter);
+    clockFace.appendChild(clockNums);
+
+    timeDialSection.appendChild(timeDialHeader);
+    timeDialSection.appendChild(clockFace);
+    timePopover.appendChild(timeDialSection);
 
     var popover = document.createElement('div');
     popover.className = 'due-date-popover';
@@ -3330,12 +3380,11 @@
 
     footer.appendChild(todayBtn);
     popover.appendChild(footer);
-    body.appendChild(popover);
 
-    var countdown = document.createElement('div');
-    countdown.className = 'due-date-countdown';
-    countdown.setAttribute('aria-live', 'polite');
-    body.appendChild(countdown);
+    /* Calendar anchors under the date trigger; time picker under the time row. */
+    body.appendChild(popover);
+    body.appendChild(timeRow);
+    body.appendChild(timePopover);
 
     field.appendChild(body);
     el.appendChild(field);
@@ -3366,31 +3415,161 @@
       if (timeOpen) syncTimePickerSelection();
     }
 
-    function ensureMinuteOption(minutes) {
-      var value = pad2(minutes);
-      var existing = minuteSelect.querySelector('option[value="' + value + '"]');
-      if (existing) return value;
-      var opt = document.createElement('option');
-      opt.value = value;
-      opt.textContent = value;
-      var inserted = false;
-      for (var i = 0; i < minuteSelect.options.length; i++) {
-        if (+minuteSelect.options[i].value > minutes) {
-          minuteSelect.insertBefore(opt, minuteSelect.options[i]);
-          inserted = true;
-          break;
+    function parseDialTime(hhmm) {
+      var normalized = normalizeDueTime(hhmm) || DUE_DATE_TIME_DEFAULT;
+      var parts = normalized.split(':');
+      return { hour: +parts[0], minute: +parts[1] };
+    }
+
+    function dialHhmm() {
+      return pad2(dialHour) + ':' + pad2(dialMinute);
+    }
+
+    function setDialMode(mode) {
+      dialMode = mode === 'minute' ? 'minute' : 'hour';
+      digitalHourBtn.classList.toggle('is-active', dialMode === 'hour');
+      digitalMinuteBtn.classList.toggle('is-active', dialMode === 'minute');
+      digitalHourBtn.setAttribute('aria-pressed', dialMode === 'hour' ? 'true' : 'false');
+      digitalMinuteBtn.setAttribute('aria-pressed', dialMode === 'minute' ? 'true' : 'false');
+      clockFace.dataset.mode = dialMode;
+      renderClockFace();
+    }
+
+    function setMeridiem(nextPm) {
+      var isPm = dialHour >= 12;
+      if (nextPm === isPm) return;
+      dialHour = nextPm ? (dialHour % 12) + 12 : dialHour % 12;
+      commitDialTime(false);
+    }
+
+    function commitDialTime(closeAfter) {
+      selectTime(dialHhmm(), closeAfter === true);
+    }
+
+    function clockAngleDeg(value, max) {
+      return (value / max) * 360;
+    }
+
+    function renderClockFace() {
+      clockNums.textContent = '';
+      var cx = DUE_DATE_TIME_CLOCK_SIZE / 2;
+      var selected = dialMode === 'hour' ? dialHour : dialMinute;
+      var angle;
+      var radius;
+
+      if (dialMode === 'hour') {
+        for (var h = 0; h < 24; h++) {
+          var hourBtn = document.createElement('button');
+          hourBtn.type = 'button';
+          hourBtn.className = 'due-date-time-clock-num' +
+            (h >= 12 ? ' due-date-time-clock-num--outer' : ' due-date-time-clock-num--inner');
+          hourBtn.textContent = pad2(h);
+          hourBtn.dataset.value = String(h);
+          hourBtn.setAttribute('aria-label', pad2(h) + ' h');
+          if (h === dialHour) hourBtn.classList.add('is-selected');
+          var hourAngle = clockAngleDeg(h % 12, 12);
+          var hourRadius = h >= 12 ? DUE_DATE_TIME_CLOCK_OUTER_R : DUE_DATE_TIME_CLOCK_INNER_R;
+          hourBtn.style.left = cx + 'px';
+          hourBtn.style.top = cx + 'px';
+          hourBtn.style.transform =
+            'rotate(' + hourAngle + 'deg) translateY(-' + hourRadius + 'px) rotate(-' + hourAngle + 'deg)';
+          hourBtn.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            dialHour = +this.dataset.value;
+            commitDialTime(false);
+            setDialMode('minute');
+          });
+          clockNums.appendChild(hourBtn);
         }
+        angle = clockAngleDeg(dialHour % 12, 12);
+        radius = dialHour >= 12 ? DUE_DATE_TIME_CLOCK_OUTER_R : DUE_DATE_TIME_CLOCK_INNER_R;
+      } else {
+        DUE_DATE_TIME_MINUTE_STEPS.forEach(function (m) {
+          var minuteBtn = document.createElement('button');
+          minuteBtn.type = 'button';
+          minuteBtn.className = 'due-date-time-clock-num due-date-time-clock-num--minute';
+          minuteBtn.textContent = pad2(m);
+          minuteBtn.dataset.value = String(m);
+          minuteBtn.setAttribute('aria-label', pad2(m) + ' min');
+          if (m === dialMinute) minuteBtn.classList.add('is-selected');
+          var minuteAngle = clockAngleDeg(m, 60);
+          minuteBtn.style.left = cx + 'px';
+          minuteBtn.style.top = cx + 'px';
+          minuteBtn.style.transform =
+            'rotate(' + minuteAngle + 'deg) translateY(-' + DUE_DATE_TIME_CLOCK_MINUTE_R +
+            'px) rotate(-' + minuteAngle + 'deg)';
+          minuteBtn.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            dialMinute = +this.dataset.value;
+            commitDialTime(false);
+          });
+          clockNums.appendChild(minuteBtn);
+        });
+        angle = clockAngleDeg(dialMinute, 60);
+        radius = DUE_DATE_TIME_CLOCK_MINUTE_R;
       }
-      if (!inserted) minuteSelect.appendChild(opt);
-      return value;
+
+      clockHand.style.transform = 'rotate(' + angle + 'deg)';
+      clockHand.style.setProperty('--hand-length', radius + 'px');
+      clockFace.setAttribute('aria-valuenow', String(selected));
+      clockFace.setAttribute(
+        'aria-valuetext',
+        dialMode === 'hour' ? pad2(dialHour) + ' heures' : pad2(dialMinute) + ' minutes'
+      );
+
+      digitalHourBtn.textContent = pad2(dialHour);
+      digitalMinuteBtn.textContent = pad2(dialMinute);
+
+      var isPm = dialHour >= 12;
+      amBtn.classList.toggle('is-selected', !isPm);
+      pmBtn.classList.toggle('is-selected', isPm);
+      amBtn.setAttribute('aria-pressed', !isPm ? 'true' : 'false');
+      pmBtn.setAttribute('aria-pressed', isPm ? 'true' : 'false');
+    }
+
+    function valueFromClockPointer(clientX, clientY) {
+      var rect = clockFace.getBoundingClientRect();
+      var cx = rect.left + rect.width / 2;
+      var cy = rect.top + rect.height / 2;
+      var dx = clientX - cx;
+      var dy = clientY - cy;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      var deg = (Math.atan2(dx, -dy) * 180) / Math.PI;
+      if (deg < 0) deg += 360;
+
+      if (dialMode === 'hour') {
+        var slot = Math.round(deg / 30) % 12;
+        var mid = (DUE_DATE_TIME_CLOCK_INNER_R + DUE_DATE_TIME_CLOCK_OUTER_R) / 2;
+        var scale = rect.width / DUE_DATE_TIME_CLOCK_SIZE;
+        var useOuter = dist > mid * scale;
+        return useOuter ? (slot === 0 ? 12 : slot + 12) : slot;
+      }
+
+      var minute = Math.round(deg / 30) * 5;
+      if (minute >= 60) minute = 0;
+      return minute;
+    }
+
+    function applyPointerToDial(clientX, clientY, advanceOnHour) {
+      var next = valueFromClockPointer(clientX, clientY);
+      if (dialMode === 'hour') {
+        if (next === dialHour) return;
+        dialHour = next;
+        commitDialTime(false);
+        if (advanceOnHour) setDialMode('minute');
+        else renderClockFace();
+      } else {
+        if (next === dialMinute) return;
+        dialMinute = next;
+        commitDialTime(false);
+      }
     }
 
     function syncTimePickerSelection() {
-      var parts = currentTime ? currentTime.split(':') : null;
-      var hours = parts ? parts[0] : '09';
-      var minutes = parts ? +parts[1] : 0;
-      hourSelect.value = hours;
-      minuteSelect.value = ensureMinuteOption(minutes);
+      var parsed = parseDialTime(currentTime || DUE_DATE_TIME_DEFAULT);
+      dialHour = parsed.hour;
+      dialMinute = parsed.minute;
+      renderClockFace();
 
       var periodChips = timePeriods.querySelectorAll('[data-time]');
       for (var p = 0; p < periodChips.length; p++) {
@@ -3398,28 +3577,20 @@
         periodChips[p].classList.toggle('is-selected', periodSelected);
         periodChips[p].setAttribute('aria-pressed', periodSelected ? 'true' : 'false');
       }
-
-      var commonChips = timeCommon.querySelectorAll('[data-time]');
-      for (var c = 0; c < commonChips.length; c++) {
-        var commonSelected = !!currentTime && commonChips[c].dataset.time === currentTime;
-        commonChips[c].classList.toggle('is-selected', commonSelected);
-        commonChips[c].setAttribute('aria-selected', commonSelected ? 'true' : 'false');
-      }
     }
 
     function selectTime(hhmm, closeAfter) {
       if (!enabled || !current) return;
       var next = normalizeDueTime(hhmm);
       currentTime = next || '';
+      if (next) {
+        var parsed = parseDialTime(next);
+        dialHour = parsed.hour;
+        dialMinute = parsed.minute;
+      }
       emitChange();
       if (closeAfter !== false) closeTimePicker(true);
       else syncTimePickerSelection();
-    }
-
-    function applyCustomTime(closeAfter) {
-      var next = normalizeDueTime(hourSelect.value + ':' + minuteSelect.value);
-      if (!next) return;
-      selectTime(next, closeAfter !== false);
     }
 
     function refreshTrigger() {
@@ -3529,6 +3700,7 @@
         return;
       }
       updateVisibility();
+      openCalendar();
     }
 
     function shiftMonth(delta) {
@@ -3546,13 +3718,18 @@
       if (!enabled) return;
       var next = normalizeDueDate(iso);
       if (!next) return;
+      var appliedDefaultTime = false;
+      if (!currentTime) {
+        currentTime = DUE_DATE_TIME_DEFAULT;
+        appliedDefaultTime = true;
+      }
       current = next;
       focusIso = next;
       syncViewFromValue(next);
       emitChange();
       if (closeAfter !== false) {
         closeCalendar(false);
-        if (!currentTime) openTimePicker();
+        if (appliedDefaultTime) openTimePicker();
         else if (enabled) trigger.focus();
       } else {
         renderCalendar();
@@ -3745,15 +3922,15 @@
       timePopover.hidden = false;
       field.classList.add('is-time-open');
       timeTrigger.setAttribute('aria-expanded', 'true');
+      setDialMode('hour');
       syncTimePickerSelection();
       bindDocListeners();
       notifyLayout();
       requestAnimationFrame(function () {
         var selected =
           timePopover.querySelector('.due-date-time-chip.is-selected') ||
-          timePopover.querySelector('.due-date-time-chip--period');
+          digitalHourBtn;
         if (selected) selected.focus();
-        else hourSelect.focus();
       });
     }
 
@@ -3803,16 +3980,64 @@
       timeTrigger.focus();
     });
 
-    hourSelect.addEventListener('change', function () {
-      applyCustomTime(false);
+    digitalHourBtn.addEventListener('click', function () {
+      setDialMode('hour');
     });
 
-    minuteSelect.addEventListener('change', function () {
-      applyCustomTime(false);
+    digitalMinuteBtn.addEventListener('click', function () {
+      setDialMode('minute');
     });
 
-    timeApplyBtn.addEventListener('click', function () {
-      applyCustomTime(true);
+    amBtn.addEventListener('click', function () {
+      setMeridiem(false);
+    });
+
+    pmBtn.addEventListener('click', function () {
+      setMeridiem(true);
+    });
+
+    clockFace.addEventListener('pointerdown', function (event) {
+      if (event.button != null && event.button !== 0) return;
+      dialDragging = true;
+      clockFace.classList.add('is-dragging');
+      if (clockFace.setPointerCapture) {
+        try { clockFace.setPointerCapture(event.pointerId); } catch (err) { /* ignore */ }
+      }
+      applyPointerToDial(event.clientX, event.clientY, false);
+      event.preventDefault();
+    });
+
+    clockFace.addEventListener('pointermove', function (event) {
+      if (!dialDragging) return;
+      applyPointerToDial(event.clientX, event.clientY, false);
+    });
+
+    function endClockDrag(event) {
+      if (!dialDragging) return;
+      dialDragging = false;
+      clockFace.classList.remove('is-dragging');
+      if (event && dialMode === 'hour') setDialMode('minute');
+    }
+
+    clockFace.addEventListener('pointerup', endClockDrag);
+    clockFace.addEventListener('pointercancel', endClockDrag);
+
+    clockFace.addEventListener('keydown', function (event) {
+      var step = event.shiftKey ? 5 : 1;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (dialMode === 'hour') dialHour = (dialHour + 1) % 24;
+        else dialMinute = (dialMinute + step) % 60;
+        commitDialTime(false);
+      } else if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+        event.preventDefault();
+        if (dialMode === 'hour') dialHour = (dialHour + 23) % 24;
+        else dialMinute = (dialMinute + 60 - step) % 60;
+        commitDialTime(false);
+      } else if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        setDialMode(dialMode === 'hour' ? 'minute' : 'hour');
+      }
     });
 
     prevBtn.addEventListener('click', function () {
@@ -5510,6 +5735,7 @@
     COUNTDOWN_YEAR_THRESHOLD_DAYS: COUNTDOWN_YEAR_THRESHOLD_DAYS,
     DAYS_PER_MONTH_AVG: DAYS_PER_MONTH_AVG,
     DAYS_PER_YEAR_AVG: DAYS_PER_YEAR_AVG,
+    DUE_DATE_TIME_DEFAULT: DUE_DATE_TIME_DEFAULT,
     normalizeDueDate: normalizeDueDate,
     normalizeDueTime: normalizeDueTime,
     daysUntilDue: daysUntilDue,

@@ -618,11 +618,16 @@
       if (!opts.skipMasterSync && !masterDragging) {
         masterSlider.setValue(progress.percent);
       } else {
-        applySliderProgressTrack(masterSlider.input, progress.percent);
+        // Keep fill locked to the handle while dragging. Weighted average after
+        // applyMasterProgress can round/clamp away from the pointer value.
+        applySliderProgressTrack(
+          masterSlider.input,
+          Number(masterSlider.input.value)
+        );
       }
       masterSlider.input.classList.toggle(
         'is-complete',
-        progress.percent === 100
+        Number(masterSlider.input.value) >= 100
       );
       masterDragging = false;
     }

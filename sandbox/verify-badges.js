@@ -439,6 +439,11 @@ check(
   PU.normalizeDueTime('24:00') === '' && PU.normalizeDueTime('12:60') === ''
 );
 check(
+  'default due time is 08:00',
+  PU.DUE_DATE_TIME_DEFAULT === '08:00' &&
+    PU.normalizeDueTime(PU.DUE_DATE_TIME_DEFAULT) === '08:00'
+);
+check(
   'countdown today',
   PU.formatDueCountdown('2026-07-13', nowFixed) === 'Aujourd\'hui'
 );
@@ -463,6 +468,22 @@ check(
   PU.formatDueCountdown(addDaysIso('2026-07-13', -2), nowFixed) === 'En retard de 2 jours'
 );
 check(
+  'countdown overdue 1 day',
+  PU.formatDueCountdown(addDaysIso('2026-07-13', -1), nowFixed) === 'En retard de 1 jour'
+);
+check(
+  'countdown overdue 2 weeks',
+  PU.formatDueCountdown(addDaysIso('2026-07-13', -14), nowFixed) === 'En retard de 2 semaines'
+);
+check(
+  'countdown overdue 2 months',
+  PU.formatDueCountdown(addDaysIso('2026-07-13', -61), nowFixed) === 'En retard de 2 mois'
+);
+check(
+  'countdown overdue 1 year',
+  PU.formatDueCountdown(addDaysIso('2026-07-13', -365), nowFixed) === 'En retard de 1 an'
+);
+check(
   'countdown with time in minutes',
   PU.formatDueCountdown('2026-07-13', nowAfternoon, '14:45') === '45 min restantes'
 );
@@ -477,6 +498,11 @@ check(
 check(
   'countdown with time overdue hours',
   PU.formatDueCountdown('2026-07-13', nowAfternoon, '11:00') === 'En retard de 3 h'
+);
+check(
+  'countdown with time overdue weeks scales',
+  PU.formatDueCountdown(addDaysIso('2026-07-13', -14), nowAfternoon, '09:00') ===
+    'En retard de 2 semaines'
 );
 check(
   'countdown with time far stays day-granular',
