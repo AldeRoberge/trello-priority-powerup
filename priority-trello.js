@@ -159,22 +159,54 @@
     if (raw.enAttente === true) {
       normalized.enAttente = true;
     }
-    // Link to a completion subtask when waiting on another task.
+    // Links to completion subtasks when waiting on other tasks (multi).
+    var links =
+      PU && PU.normalizeBlockedLinks
+        ? PU.normalizeBlockedLinks(raw)
+        : (function () {
+            if (Array.isArray(raw.blockedLinks)) return raw.blockedLinks;
+            if (raw.blockedLink && typeof raw.blockedLink === 'object') {
+              return [raw.blockedLink];
+            }
+            if (typeof raw.blockedSubtaskId === 'string' && raw.blockedSubtaskId.trim()) {
+              return [{ type: 'subtask', id: raw.blockedSubtaskId.trim() }];
+            }
+            return [];
+          })();
     var waitingOther =
-      reasons.length > 0 &&
-      PU &&
-      PU.isBlockedWaitingOtherTask &&
-      PU.isBlockedWaitingOtherTask(reasons);
-    if (waitingOther) {
-      var link =
-        PU.normalizeBlockedLink
-          ? PU.normalizeBlockedLink(raw.blockedLink)
-          : null;
-      if (!link && typeof raw.blockedSubtaskId === 'string') {
-        var subId = raw.blockedSubtaskId.trim();
-        if (subId) link = { type: 'subtask', id: subId };
+      (reasons.length > 0 &&
+        PU &&
+        PU.isBlockedWaitingOtherTask &&
+        PU.isBlockedWaitingOtherTask(reasons)) ||
+      links.length > 0;
+    if (waitingOther && links.length) {
+      var validLinks = [];
+      var seenLinkIds = Object.create(null);
+      for (var li = 0; li < links.length; li++) {
+        var link =
+          PU && PU.normalizeBlockedLink
+            ? PU.normalizeBlockedLink(links[li])
+            : links[li] && links[li].type === 'subtask' && links[li].id
+              ? { type: 'subtask', id: String(links[li].id).trim() }
+              : null;
+        if (!link || seenLinkIds[link.id]) continue;
+        seenLinkIds[link.id] = true;
+        validLinks.push(link);
       }
-      if (link) normalized.blockedLink = link;
+      if (validLinks.length) {
+        normalized.blockedLinks = validLinks;
+        // Soft back-compat for older readers.
+        normalized.blockedLink = validLinks[0];
+        if (
+          PU &&
+          PU.isBlockedWaitingOtherTask &&
+          !PU.isBlockedWaitingOtherTask(reasons) &&
+          PU.BLOCKED_REASON_WAITING_OTHER_TASK
+        ) {
+          reasons = reasons.concat([PU.BLOCKED_REASON_WAITING_OTHER_TASK]);
+          normalized.blockedReasons = reasons;
+        }
+      }
     }
 
     var dueDate = '';
@@ -206,7 +238,11 @@
       inputs &&
       ((Array.isArray(inputs.blockedReasons) && inputs.blockedReasons.length > 0) ||
         (typeof inputs.blockedReason === 'string' && inputs.blockedReason));
-    if (!inputs || (!inputs.enAttente && !hasReasons && !inputs.blockedLink)) {
+    var hasLinks =
+      inputs &&
+      ((Array.isArray(inputs.blockedLinks) && inputs.blockedLinks.length > 0) ||
+        inputs.blockedLink);
+    if (!inputs || (!inputs.enAttente && !hasReasons && !hasLinks)) {
       return inputs;
     }
     var cleared = {
@@ -428,7 +464,7 @@
         PU.formatBlockedReasonsSummary
           ? PU.formatBlockedReasonsSummary(
               d.blockedReasons != null ? d.blockedReasons : d.blockedReason,
-              { empty: '' }
+              { empty: '', links: d.blockedLinks || d.blockedLink }
             )
           : typeof d.blockedReason === 'string'
             ? d.blockedReason.trim()
@@ -440,7 +476,7 @@
       PU && PU.formatBlockedReasonsSummary
         ? PU.formatBlockedReasonsSummary(
             d.blockedReasons != null ? d.blockedReasons : d.blockedReason,
-            { empty: '' }
+            { empty: '', links: d.blockedLinks || d.blockedLink }
           )
         : typeof d.blockedReason === 'string'
           ? d.blockedReason.trim()

@@ -586,7 +586,7 @@ check(
   })()
 );
 check(
-  'normalizeInputs keeps blockedLink for waiting-other-task',
+  'normalizeInputs migrates legacy blockedLink to blockedLinks',
   (function () {
     var normalized = PT.normalizeInputs({
       urgency: 2,
@@ -598,8 +598,11 @@ check(
     });
     return (
       normalized &&
+      Array.isArray(normalized.blockedLinks) &&
+      normalized.blockedLinks.length === 1 &&
+      normalized.blockedLinks[0].type === 'subtask' &&
+      normalized.blockedLinks[0].id === 'sub-1' &&
       normalized.blockedLink &&
-      normalized.blockedLink.type === 'subtask' &&
       normalized.blockedLink.id === 'sub-1' &&
       Array.isArray(normalized.blockedReasons) &&
       normalized.blockedReasons[0] === 'En attente d\'une autre t\u00e2che' &&
@@ -627,7 +630,7 @@ check(
   })()
 );
 check(
-  'normalizeInputs keeps multiple blockedReasons without duplicates',
+  'normalizeInputs keeps multiple blockedReasons and blockedLinks',
   (function () {
     var normalized = PT.normalizeInputs({
       urgency: 2,
@@ -639,7 +642,11 @@ check(
         'En attente d\'une autre t\u00e2che',
         'En attente de budget'
       ],
-      blockedLink: { type: 'subtask', id: 'sub-9' }
+      blockedLinks: [
+        { type: 'subtask', id: 'sub-9' },
+        { type: 'subtask', id: 'sub-9' },
+        { type: 'subtask', id: 'sub-10', label: 'Livrer le brief' }
+      ]
     });
     return (
       normalized &&
@@ -647,13 +654,18 @@ check(
       normalized.blockedReasons.length === 2 &&
       normalized.blockedReasons[0] === 'En attente de budget' &&
       normalized.blockedReasons[1] === 'En attente d\'une autre t\u00e2che' &&
+      normalized.blockedLinks &&
+      normalized.blockedLinks.length === 2 &&
+      normalized.blockedLinks[0].id === 'sub-9' &&
+      normalized.blockedLinks[1].id === 'sub-10' &&
+      normalized.blockedLinks[1].label === 'Livrer le brief' &&
       normalized.blockedLink &&
       normalized.blockedLink.id === 'sub-9'
     );
   })()
 );
 check(
-  'normalizeInputs drops blockedLink for other reasons',
+  'normalizeInputs keeps links and injects waiting-other reason',
   (function () {
     var normalized = PT.normalizeInputs({
       urgency: 2,
@@ -662,7 +674,13 @@ check(
       blockedReasons: ['En attente de budget'],
       blockedLink: { type: 'subtask', id: 'sub-1' }
     });
-    return normalized && normalized.blockedLink == null;
+    return (
+      normalized &&
+      Array.isArray(normalized.blockedLinks) &&
+      normalized.blockedLinks[0].id === 'sub-1' &&
+      normalized.blockedReasons &&
+      normalized.blockedReasons.indexOf('En attente d\'une autre t\u00e2che') !== -1
+    );
   })()
 );
 check(
@@ -677,14 +695,16 @@ check(
     });
     return (
       normalized &&
+      normalized.blockedLinks &&
+      normalized.blockedLinks[0].type === 'subtask' &&
+      normalized.blockedLinks[0].id === 'sub-2' &&
       normalized.blockedLink &&
-      normalized.blockedLink.type === 'subtask' &&
       normalized.blockedLink.id === 'sub-2'
     );
   })()
 );
 check(
-  'clearBlockedFromInputs strips blockedLink',
+  'clearBlockedFromInputs strips blockedLinks',
   (function () {
     var cleared = PT.clearBlockedFromInputs({
       urgency: 2,
@@ -692,13 +712,55 @@ check(
       ease: 3,
       enAttente: true,
       blockedReasons: ['En attente d\'une autre t\u00e2che'],
+      blockedLinks: [{ type: 'subtask', id: 'sub-1' }],
       blockedLink: { type: 'subtask', id: 'sub-1' }
     });
     return (
       cleared.enAttente == null &&
       cleared.blockedReason == null &&
       cleared.blockedReasons == null &&
-      cleared.blockedLink == null
+      cleared.blockedLink == null &&
+      cleared.blockedLinks == null
+    );
+  })()
+);
+check(
+  'formatBlockedWaitingOnLabel wraps task name',
+  (function () {
+    return (
+      PU.formatBlockedWaitingOnLabel('Brief client') ===
+        'En attente de (Brief client)' &&
+      PU.formatBlockedWaitingOnLabel('') === 'En attente de (T\u00e2che inconnue)'
+    );
+  })()
+);
+check(
+  'formatBlockedReasonsSummary expands waiting links with labels',
+  (function () {
+    var summary = PU.formatBlockedReasonsSummary(
+      ['En attente d\'une autre t\u00e2che', 'Budget'],
+      {
+        links: [{ type: 'subtask', id: 'a', label: 'QA' }],
+        maxLength: 80
+      }
+    );
+    return (
+      summary.indexOf('En attente de (QA)') !== -1 &&
+      summary.indexOf('Budget') !== -1 &&
+      summary.indexOf('En attente d\'une autre t\u00e2che') === -1
+    );
+  })()
+);
+check(
+  'normalizeBlockedLinks migrates single blockedLink',
+  (function () {
+    var links = PU.normalizeBlockedLinks({
+      blockedLink: { type: 'subtask', id: 'x1', label: 'Alpha' }
+    });
+    return (
+      links.length === 1 &&
+      links[0].id === 'x1' &&
+      links[0].label === 'Alpha'
     );
   })()
 );

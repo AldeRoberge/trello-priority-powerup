@@ -1489,7 +1489,7 @@ html[data-color-mode="dark"] .due-date-time-clock {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  max-width: 100%;
+  max-width: min(100%, 280px);
   padding: 5px 6px 5px 10px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--blocked-accent) 16%, var(--surface-2));
@@ -1503,9 +1503,14 @@ html[data-color-mode="dark"] .due-date-time-clock {
 
 .blocked-reason-chip-text {
   min-width: 0;
+  max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.blocked-reason-chip.blocked-subtask-chip {
+  max-width: min(100%, 320px);
 }
 
 .blocked-reason-chip-clear {
@@ -1626,7 +1631,6 @@ html[data-color-mode="dark"] .due-date-time-clock {
 }
 
 .blocked-subtask-wrap[hidden],
-.blocked-subtask-selected[hidden],
 .blocked-subtask-picker[hidden],
 .blocked-subtask-empty[hidden],
 .blocked-subtask-list[hidden] {

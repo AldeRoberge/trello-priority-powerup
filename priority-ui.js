@@ -3947,9 +3947,18 @@
     var currentReasons = normalizeBlockedReasons(
       config.blockedReasons != null ? config.blockedReasons : config
     );
-    var currentLink = isBlockedWaitingOtherTask(currentReasons)
-      ? normalizeBlockedLink(config.blockedLink)
-      : null;
+    var currentLinks =
+      isBlockedWaitingOtherTask(currentReasons) ||
+      (config.blockedLinks && config.blockedLinks.length) ||
+      config.blockedLink
+        ? normalizeBlockedLinks(
+            config.blockedLinks != null
+              ? config.blockedLinks
+              : config.blockedLink != null
+                ? config
+                : []
+          )
+        : [];
 
     var field = document.createElement('div');
     field.className = 'field field--en-attente';
@@ -3971,31 +3980,11 @@
 
     var selectedWrap = document.createElement('div');
     selectedWrap.className = 'blocked-reason-selected';
-    selectedWrap.hidden = !currentReasons.length;
+    selectedWrap.hidden = !(currentReasons.length || currentLinks.length);
 
     var subtaskWrap = document.createElement('div');
     subtaskWrap.className = 'blocked-subtask-wrap';
     subtaskWrap.hidden = true;
-
-    var subtaskSelectedWrap = document.createElement('div');
-    subtaskSelectedWrap.className = 'blocked-subtask-selected';
-    subtaskSelectedWrap.hidden = true;
-
-    var subtaskChip = document.createElement('span');
-    subtaskChip.className = 'blocked-reason-chip blocked-subtask-chip';
-
-    var subtaskTextEl = document.createElement('span');
-    subtaskTextEl.className = 'blocked-reason-chip-text';
-
-    var subtaskClearBtn = document.createElement('button');
-    subtaskClearBtn.type = 'button';
-    subtaskClearBtn.className = 'blocked-reason-chip-clear';
-    subtaskClearBtn.setAttribute('aria-label', BLOCKED_SUBTASK_CLEAR_LABEL);
-    subtaskClearBtn.textContent = '\u00d7';
-
-    subtaskChip.appendChild(subtaskTextEl);
-    subtaskChip.appendChild(subtaskClearBtn);
-    subtaskSelectedWrap.appendChild(subtaskChip);
 
     var subtaskPicker = document.createElement('div');
     subtaskPicker.className = 'blocked-subtask-picker';
@@ -4015,7 +4004,6 @@
     subtaskPicker.appendChild(subtaskPickerLabel);
     subtaskPicker.appendChild(subtaskEmpty);
     subtaskPicker.appendChild(subtaskList);
-    subtaskWrap.appendChild(subtaskSelectedWrap);
     subtaskWrap.appendChild(subtaskPicker);
 
     var reasonInput = document.createElement('input');
@@ -4051,8 +4039,8 @@
       return currentReasons.slice();
     }
 
-    function readLink() {
-      return currentLink;
+    function readLinks() {
+      return currentLinks.slice();
     }
 
     function reasonKey(reason) {
@@ -4068,11 +4056,16 @@
       return false;
     }
 
-    function linkedSubtaskLabel() {
-      if (!currentLink) return '';
-      var item = findSubtaskById(getSubtasks() || [], currentLink.id);
-      if (item && item.text) return item.text;
-      return BLOCKED_SUBTASK_FALLBACK_LABEL;
+    function hasLinkId(id) {
+      if (!id) return false;
+      for (var i = 0; i < currentLinks.length; i++) {
+        if (currentLinks[i] && currentLinks[i].id === id) return true;
+      }
+      return false;
+    }
+
+    function isWaitingOnTasks() {
+      return isBlockedWaitingOtherTask(currentReasons) || currentLinks.length > 0;
     }
 
     function notifyReasonChange() {
@@ -4080,23 +4073,59 @@
       onChange(getValue());
     }
 
-    function commitLink(nextLink) {
+    function ensureWaitingReason(options) {
+      if (!hasReason(BLOCKED_REASON_WAITING_OTHER_TASK)) {
+        if (!(options && options.trackFreq === false)) {
+          bumpBlockedReasonFreq(BLOCKED_REASON_WAITING_OTHER_TASK);
+        }
+        currentReasons = currentReasons.concat([BLOCKED_REASON_WAITING_OTHER_TASK]);
+      }
+    }
+
+    function addLink(nextLink) {
+      var items = getSubtasks() || [];
       var next = normalizeBlockedLink(nextLink);
-      var prevId = currentLink && currentLink.id;
-      var nextId = next && next.id;
-      if (prevId === nextId) {
+      if (!next) return;
+      if (hasLinkId(next.id)) {
+        refreshSelected();
         refreshSubtaskUi();
         return;
       }
-      currentLink = next;
+      var item = findSubtaskById(items, next.id);
+      if (item && item.text && !next.label) {
+        next = Object.assign({}, next, { label: String(item.text).trim() });
+      }
+      ensureWaitingReason();
+      currentLinks = currentLinks.concat([next]);
+      refreshSelected();
+      refreshSuggestions();
       refreshSubtaskUi();
       notifyReasonChange();
       onLayoutChange();
     }
 
-    function syncLinkWithReasons() {
-      if (!isBlockedWaitingOtherTask(currentReasons)) {
-        currentLink = null;
+    function removeLink(id) {
+      if (!id) return;
+      var next = [];
+      for (var i = 0; i < currentLinks.length; i++) {
+        if (currentLinks[i].id !== id) next.push(currentLinks[i]);
+      }
+      if (next.length === currentLinks.length) return;
+      currentLinks = next;
+      refreshSelected();
+      refreshSuggestions();
+      refreshSubtaskUi();
+      notifyReasonChange();
+      onLayoutChange();
+    }
+
+    function syncLinksWithReasons() {
+      if (!isBlockedWaitingOtherTask(currentReasons) && currentLinks.length) {
+        // Keep links only while the waiting-other reason (or residual links) applies.
+        // Links alone still count as waiting; clearing the reason clears links.
+        if (!hasReason(BLOCKED_REASON_WAITING_OTHER_TASK)) {
+          currentLinks = [];
+        }
       }
     }
 
@@ -4127,7 +4156,9 @@
       }
       if (next.length === currentReasons.length) return;
       currentReasons = next;
-      syncLinkWithReasons();
+      if (!isBlockedWaitingOtherTask(currentReasons)) {
+        currentLinks = [];
+      }
       refreshSelected();
       refreshSuggestions();
       refreshSubtaskUi();
@@ -4137,7 +4168,7 @@
 
     function setReasons(value) {
       currentReasons = normalizeBlockedReasons(value);
-      syncLinkWithReasons();
+      syncLinksWithReasons();
       refreshSelected();
       refreshSuggestions();
       refreshSubtaskUi();
@@ -4146,11 +4177,19 @@
 
     function refreshSelected() {
       while (selectedWrap.firstChild) selectedWrap.removeChild(selectedWrap.firstChild);
-      var hasReason = currentReasons.length > 0;
-      selectedWrap.hidden = !hasReason;
-      field.classList.toggle('has-blocked-reason', hasReason);
+      var items = getSubtasks() || [];
+      var hasAny = false;
+
       for (var i = 0; i < currentReasons.length; i++) {
         (function (reason) {
+          // When linked tasks exist, their named chips replace the generic waiting reason.
+          if (
+            reason === BLOCKED_REASON_WAITING_OTHER_TASK &&
+            currentLinks.length > 0
+          ) {
+            return;
+          }
+          hasAny = true;
           var chip = document.createElement('span');
           chip.className = 'blocked-reason-chip';
 
@@ -4174,6 +4213,40 @@
           selectedWrap.appendChild(chip);
         })(currentReasons[i]);
       }
+
+      for (var li = 0; li < currentLinks.length; li++) {
+        (function (link) {
+          hasAny = true;
+          var taskName = resolveBlockedLinkLabel(link, items);
+          var chipLabel = formatBlockedWaitingOnLabel(taskName);
+          var chip = document.createElement('span');
+          chip.className = 'blocked-reason-chip blocked-subtask-chip';
+          chip.dataset.subtaskId = link.id;
+
+          var text = document.createElement('span');
+          text.className = 'blocked-reason-chip-text';
+          text.textContent = chipLabel;
+          text.title = chipLabel;
+
+          var clearBtn = document.createElement('button');
+          clearBtn.type = 'button';
+          clearBtn.className = 'blocked-reason-chip-clear';
+          clearBtn.setAttribute('aria-label', BLOCKED_SUBTASK_CLEAR_LABEL + ' : ' + taskName);
+          clearBtn.textContent = '\u00d7';
+          clearBtn.addEventListener('click', function () {
+            removeLink(link.id);
+            reasonInput.focus();
+          });
+
+          chip.appendChild(text);
+          chip.appendChild(clearBtn);
+          selectedWrap.appendChild(chip);
+        })(currentLinks[li]);
+      }
+
+      selectedWrap.hidden = !hasAny;
+      field.classList.toggle('has-blocked-reason', hasAny);
+      field.classList.toggle('has-blocked-subtask-link', currentLinks.length > 0);
     }
 
     function refreshSuggestions() {
@@ -4209,11 +4282,10 @@
     }
 
     function refreshSubtaskUi() {
-      var waiting = isBlockedWaitingOtherTask(currentReasons);
+      var waiting = isWaitingOnTasks();
       var wasHidden = subtaskWrap.hidden;
       subtaskWrap.hidden = !waiting;
       if (!waiting) {
-        subtaskSelectedWrap.hidden = true;
         subtaskPicker.hidden = true;
         field.classList.remove('has-blocked-subtask-link');
         if (wasHidden !== subtaskWrap.hidden) onLayoutChange();
@@ -4221,22 +4293,14 @@
       }
 
       var items = getSubtasks() || [];
-      var linkedItem = currentLink ? findSubtaskById(items, currentLink.id) : null;
-      var hasLink = !!currentLink;
-      subtaskSelectedWrap.hidden = !hasLink;
-      if (hasLink) {
-        subtaskTextEl.textContent = linkedItem && linkedItem.text
-          ? linkedItem.text
-          : BLOCKED_SUBTASK_FALLBACK_LABEL;
-      }
-      field.classList.toggle('has-blocked-subtask-link', hasLink);
+      field.classList.toggle('has-blocked-subtask-link', currentLinks.length > 0);
 
       while (subtaskList.firstChild) subtaskList.removeChild(subtaskList.firstChild);
       var visibleCount = 0;
       for (var i = 0; i < items.length; i++) {
         var item = items[i];
         if (!item || !item.id || !item.text) continue;
-        if (currentLink && item.id === currentLink.id) continue;
+        if (hasLinkId(item.id)) continue;
         var opt = document.createElement('button');
         opt.type = 'button';
         opt.className = 'blocked-reason-suggestion blocked-subtask-option';
@@ -4244,11 +4308,15 @@
         opt.textContent = item.text;
         opt.dataset.subtaskId = item.id;
         opt.title = item.text;
-        (function (subtaskId) {
+        (function (subtaskId, subtaskText) {
           opt.addEventListener('click', function () {
-            commitLink({ type: BLOCKED_LINK_TYPE_SUBTASK, id: subtaskId });
+            addLink({
+              type: BLOCKED_LINK_TYPE_SUBTASK,
+              id: subtaskId,
+              label: subtaskText
+            });
           });
-        })(item.id);
+        })(item.id, item.text);
         subtaskList.appendChild(opt);
         visibleCount += 1;
       }
@@ -4256,8 +4324,8 @@
       var empty = items.length === 0;
       subtaskEmpty.hidden = !empty;
       subtaskList.hidden = empty || visibleCount === 0;
-      subtaskPicker.hidden = hasLink && visibleCount === 0 && !empty;
-      if (empty) subtaskPicker.hidden = false;
+      // Keep picker open for multi-select while waiting and options (or empty state) remain.
+      subtaskPicker.hidden = !empty && visibleCount === 0;
 
       if (wasHidden !== subtaskWrap.hidden) onLayoutChange();
     }
@@ -4271,12 +4339,12 @@
       expanded: config.expanded != null ? !!config.expanded : checked,
       getSummary: function () {
         var summary = capitalizeCountdownPhrase(
-          formatBlockedReasonsSummary(currentReasons, { empty: BLOCKED_LABEL })
+          formatBlockedReasonsSummary(currentReasons, {
+            empty: BLOCKED_LABEL,
+            links: currentLinks,
+            items: getSubtasks() || []
+          })
         );
-        if (isBlockedWaitingOtherTask(currentReasons) && currentLink) {
-          var linkLabel = linkedSubtaskLabel();
-          if (linkLabel) summary += ' \u2014 ' + linkLabel;
-        }
         return summary + '\u2026';
       },
       onLayoutChange: onLayoutChange,
@@ -4316,26 +4384,56 @@
       return currentReasons.length ? currentReasons[0] : '';
     }
 
-    function setBlockedLink(value) {
-      currentLink = isBlockedWaitingOtherTask(currentReasons)
-        ? normalizeBlockedLink(value)
-        : null;
+    function setBlockedLinks(value) {
+      currentLinks = isWaitingOnTasks() || (Array.isArray(value) && value.length)
+        ? normalizeBlockedLinks(value)
+        : [];
+      if (currentLinks.length) ensureWaitingReason({ trackFreq: false });
+      if (!isBlockedWaitingOtherTask(currentReasons)) currentLinks = [];
+      refreshSelected();
+      refreshSuggestions();
       refreshSubtaskUi();
       collapse.refreshSummary();
+    }
+
+    function getBlockedLinks() {
+      return isWaitingOnTasks() ? readLinks() : [];
+    }
+
+    // Legacy single-link accessors (first link / replace-all).
+    function setBlockedLink(value) {
+      if (value == null) {
+        setBlockedLinks([]);
+        return;
+      }
+      setBlockedLinks([value]);
     }
 
     function getBlockedLink() {
-      return isBlockedWaitingOtherTask(currentReasons) ? readLink() : null;
+      var links = getBlockedLinks();
+      return links.length ? links[0] : null;
     }
 
     function refreshSubtasks() {
+      // Refresh stored labels from live subtask text when available.
+      var items = getSubtasks() || [];
+      var refreshed = [];
+      for (var i = 0; i < currentLinks.length; i++) {
+        var link = currentLinks[i];
+        var item = findSubtaskById(items, link.id);
+        if (item && item.text) {
+          refreshed.push(
+            Object.assign({}, link, { label: String(item.text).trim() })
+          );
+        } else {
+          refreshed.push(link);
+        }
+      }
+      currentLinks = refreshed;
+      refreshSelected();
       refreshSubtaskUi();
       collapse.refreshSummary();
     }
-
-    subtaskClearBtn.addEventListener('click', function () {
-      commitLink(null);
-    });
 
     reasonInput.addEventListener('input', function () {
       refreshSuggestions();
@@ -4354,7 +4452,11 @@
     setBlockedReasons(
       config.blockedReasons != null ? config.blockedReasons : config.blockedReason
     );
-    if (config.blockedLink) setBlockedLink(config.blockedLink);
+    if (config.blockedLinks != null) {
+      setBlockedLinks(config.blockedLinks);
+    } else if (config.blockedLink) {
+      setBlockedLink(config.blockedLink);
+    }
 
     return {
       el: field,
@@ -4364,6 +4466,8 @@
       setBlockedReasons: setBlockedReasons,
       getBlockedReason: getBlockedReason,
       setBlockedReason: setBlockedReason,
+      getBlockedLinks: getBlockedLinks,
+      setBlockedLinks: setBlockedLinks,
       getBlockedLink: getBlockedLink,
       setBlockedLink: setBlockedLink,
       refreshSubtasks: refreshSubtasks,
@@ -6950,9 +7054,19 @@
         : defaults
     );
     delete state.blockedReason;
-    state.blockedLink = isBlockedWaitingOtherTask(state.blockedReasons)
-      ? normalizeBlockedLink(state.blockedLink || defaults.blockedLink)
-      : null;
+    state.blockedLinks = normalizeBlockedLinks(
+      state.blockedLinks != null || state.blockedLink != null
+        ? state
+        : defaults
+    );
+    if (!isBlockedWaitingOtherTask(state.blockedReasons) && !state.blockedLinks.length) {
+      state.blockedLinks = [];
+    } else if (state.blockedLinks.length && !isBlockedWaitingOtherTask(state.blockedReasons)) {
+      state.blockedReasons = normalizeBlockedReasons(
+        state.blockedReasons.concat([BLOCKED_REASON_WAITING_OTHER_TASK])
+      );
+    }
+    delete state.blockedLink;
     state.dueDate = normalizeDueDate(state.dueDate || defaults.dueDate || '');
     state.dueTime = state.dueDate
       ? normalizeDueTime(state.dueTime || defaults.dueTime || '')
@@ -6994,9 +7108,12 @@
           ? enAttenteField.getBlockedReasons()
           : normalizeBlockedReasons(enAttenteField.getBlockedReason());
         delete state.blockedReason;
-        state.blockedLink = enAttenteField.getBlockedLink
-          ? enAttenteField.getBlockedLink()
-          : null;
+        state.blockedLinks = enAttenteField.getBlockedLinks
+          ? enAttenteField.getBlockedLinks()
+          : normalizeBlockedLinks(
+              enAttenteField.getBlockedLink ? enAttenteField.getBlockedLink() : null
+            );
+        delete state.blockedLink;
       }
       if (dueDateField) {
         var dueValues = dueDateField.getValues();
@@ -7105,12 +7222,17 @@
         } else {
           enAttenteField.setBlockedReason('');
         }
-        if (enAttenteField.setBlockedLink) enAttenteField.setBlockedLink(null);
+        if (enAttenteField.setBlockedLinks) {
+          enAttenteField.setBlockedLinks([]);
+        } else if (enAttenteField.setBlockedLink) {
+          enAttenteField.setBlockedLink(null);
+        }
       }
       state.enAttente = false;
       state.blockedReasons = [];
       delete state.blockedReason;
-      state.blockedLink = null;
+      state.blockedLinks = [];
+      delete state.blockedLink;
       cancelSliderAnim();
       repaint();
       persistSliderState();
@@ -7315,7 +7437,7 @@
       el: blockedSection,
       value: state.enAttente,
       blockedReasons: state.blockedReasons,
-      blockedLink: state.blockedLink,
+      blockedLinks: state.blockedLinks,
       getSubtasks: function () {
         return typeof variantConfig.getBlockedSubtasks === 'function'
           ? variantConfig.getBlockedSubtasks() || []
@@ -7434,8 +7556,25 @@
             );
           }
         }
-        if (next.blockedLink !== undefined && enAttenteField && enAttenteField.setBlockedLink) {
-          enAttenteField.setBlockedLink(next.blockedLink);
+        if (
+          (next.blockedLinks !== undefined || next.blockedLink !== undefined) &&
+          enAttenteField
+        ) {
+          if (enAttenteField.setBlockedLinks) {
+            enAttenteField.setBlockedLinks(
+              next.blockedLinks != null
+                ? next.blockedLinks
+                : next.blockedLink != null
+                  ? [next.blockedLink]
+                  : []
+            );
+          } else if (enAttenteField.setBlockedLink) {
+            enAttenteField.setBlockedLink(
+              next.blockedLinks && next.blockedLinks[0]
+                ? next.blockedLinks[0]
+                : next.blockedLink
+            );
+          }
         }
         if ((next.dueDate != null || next.dueTime != null || next.dueEnabled != null) && dueDateField) {
           dueDateField.setValue({
@@ -7597,14 +7736,19 @@
     BLOCKED_REASON_EMPTY_SUGGESTION_CAP: BLOCKED_REASON_EMPTY_SUGGESTION_CAP,
     BLOCKED_REASON_WAITING_OTHER_TASK: BLOCKED_REASON_WAITING_OTHER_TASK,
     BLOCKED_LINK_TYPE_SUBTASK: BLOCKED_LINK_TYPE_SUBTASK,
+    BLOCKED_SUBTASK_FALLBACK_LABEL: BLOCKED_SUBTASK_FALLBACK_LABEL,
+    BLOCKED_WAITING_ON_PREFIX: BLOCKED_WAITING_ON_PREFIX,
     isValidBlockedReason: isValidBlockedReason,
     normalizeBlockedReason: normalizeBlockedReason,
     normalizeBlockedReasons: normalizeBlockedReasons,
     formatBlockedReasonsSummary: formatBlockedReasonsSummary,
+    formatBlockedWaitingOnLabel: formatBlockedWaitingOnLabel,
+    expandBlockedReasonsForDisplay: expandBlockedReasonsForDisplay,
     rankBlockedReasonSuggestions: rankBlockedReasonSuggestions,
     bumpBlockedReasonFreq: bumpBlockedReasonFreq,
     isBlockedWaitingOtherTask: isBlockedWaitingOtherTask,
     normalizeBlockedLink: normalizeBlockedLink,
+    normalizeBlockedLinks: normalizeBlockedLinks,
     formatBlockedBadgeText: formatBlockedBadgeText,
     MS_PER_DAY: MS_PER_DAY,
     MS_PER_HOUR: MS_PER_HOUR,
