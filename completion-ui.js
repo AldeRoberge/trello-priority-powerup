@@ -396,6 +396,77 @@
     }
   }
 
+  var FIREWORKS_ID = 'tp-completion-fireworks';
+  var FIREWORKS_MS = 1700;
+  var FIREWORKS_BURST_COUNT = 3;
+  var FIREWORKS_SPARKS_PER_BURST = 10;
+  var FIREWORK_COLORS = ['#22a06b', '#4bce97', '#f5cd47', '#ff8f73', '#579dff', '#fff'];
+
+  function clearAllCompleteCelebration(rootEl) {
+    try {
+      var root = rootEl || (typeof document !== 'undefined' ? document.body : null);
+      if (!root) return;
+      var existing = root.querySelector ? root.querySelector('#' + FIREWORKS_ID) : null;
+      if (!existing && typeof document !== 'undefined') {
+        existing = document.getElementById(FIREWORKS_ID);
+      }
+      if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+    } catch (e) { /* ignore */ }
+  }
+
+  function playAllCompleteCelebration(rootEl) {
+    if (prefersReducedMotion()) return;
+    if (typeof document === 'undefined') return;
+    var root = rootEl || document.body;
+    if (!root || !root.appendChild) return;
+    clearAllCompleteCelebration(root);
+
+    var overlay = document.createElement('div');
+    overlay.id = FIREWORKS_ID;
+    overlay.className = 'tp-completion-fireworks';
+    overlay.setAttribute('aria-hidden', 'true');
+
+    for (var b = 0; b < FIREWORKS_BURST_COUNT; b++) {
+      var burst = document.createElement('div');
+      burst.className = 'tp-completion-firework-burst';
+      burst.style.setProperty('--burst-x', (18 + b * 32 + (b === 1 ? 6 : 0)) + '%');
+      burst.style.setProperty('--burst-y', (22 + (b % 2) * 28) + '%');
+      burst.style.setProperty('--burst-delay', (b * 0.18) + 's');
+
+      for (var s = 0; s < FIREWORKS_SPARKS_PER_BURST; s++) {
+        var spark = document.createElement('span');
+        spark.className = 'tp-completion-firework-spark';
+        var angle = (360 / FIREWORKS_SPARKS_PER_BURST) * s + (b * 11);
+        spark.style.setProperty('--spark-angle', angle + 'deg');
+        spark.style.setProperty(
+          '--spark-dist',
+          (42 + ((s + b) % 4) * 14) + 'px'
+        );
+        spark.style.setProperty(
+          '--spark-color',
+          FIREWORK_COLORS[(s + b) % FIREWORK_COLORS.length]
+        );
+        spark.style.setProperty('--spark-delay', (b * 0.18 + s * 0.012) + 's');
+        burst.appendChild(spark);
+      }
+      overlay.appendChild(burst);
+    }
+
+    root.appendChild(overlay);
+    setTimeout(function () {
+      clearAllCompleteCelebration(root);
+    }, FIREWORKS_MS + 200);
+  }
+
+  function isAllCompleteProgress(progress) {
+    return !!(
+      progress &&
+      progress.hasItems &&
+      progress.totalCount > 0 &&
+      progress.doneCount >= progress.totalCount
+    );
+  }
+
   function loadShowDonePreference() {
     try {
       if (typeof sessionStorage === 'undefined') return false;
