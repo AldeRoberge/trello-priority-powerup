@@ -292,6 +292,21 @@ check(
   })()
 );
 check(
+  'clearBlockedFromInputs preserves dueDate and dueTime',
+  (function () {
+    var cleared = PT.clearBlockedFromInputs({
+      urgency: 1,
+      impact: 2,
+      ease: 3,
+      enAttente: true,
+      blockedReason: 'En attente d\'une approbation',
+      dueDate: '2026-07-20',
+      dueTime: '14:30',
+    });
+    return cleared.dueDate === '2026-07-20' && cleared.dueTime === '14:30';
+  })()
+);
+check(
   'clearBlockedFromInputs unchanged when not blocked',
   (function () {
     var inputs = { urgency: 2, impact: 2, ease: 3 };
@@ -405,7 +420,8 @@ function addDaysIso(baseIso, deltaDays) {
   return y + '-' + m + '-' + day;
 }
 
-var nowFixed = new Date(2026, 6, 13); // 2026-07-13
+var nowFixed = new Date(2026, 6, 13); // 2026-07-13 midnight
+var nowAfternoon = new Date(2026, 6, 13, 14, 0, 0); // 2026-07-13 14:00
 check(
   'normalizeDueDate accepts ISO date',
   PU.normalizeDueDate('2026-07-16') === '2026-07-16'
@@ -413,6 +429,14 @@ check(
 check(
   'normalizeDueDate rejects invalid date',
   PU.normalizeDueDate('2026-02-31') === ''
+);
+check(
+  'normalizeDueTime accepts HH:mm',
+  PU.normalizeDueTime('9:05') === '09:05' && PU.normalizeDueTime('14:30') === '14:30'
+);
+check(
+  'normalizeDueTime rejects invalid time',
+  PU.normalizeDueTime('24:00') === '' && PU.normalizeDueTime('12:60') === ''
 );
 check(
   'countdown today',
@@ -439,6 +463,31 @@ check(
   PU.formatDueCountdown(addDaysIso('2026-07-13', -2), nowFixed) === 'en retard de 2 jours'
 );
 check(
+  'countdown with time in minutes',
+  PU.formatDueCountdown('2026-07-13', nowAfternoon, '14:45') === '45 min restantes'
+);
+check(
+  'countdown with time in hours',
+  PU.formatDueCountdown('2026-07-13', nowAfternoon, '17:00') === '3 h restantes'
+);
+check(
+  'countdown with time overdue minutes',
+  PU.formatDueCountdown('2026-07-13', nowAfternoon, '13:40') === 'en retard de 20 min'
+);
+check(
+  'countdown with time overdue hours',
+  PU.formatDueCountdown('2026-07-13', nowAfternoon, '11:00') === 'en retard de 3 h'
+);
+check(
+  'countdown with time far stays day-granular',
+  PU.formatDueCountdown(addDaysIso('2026-07-13', 3), nowAfternoon, '09:00') ===
+    '3 jours restants'
+);
+check(
+  'date-only ignores dueTime absence (midnight day granularity)',
+  PU.formatDueCountdown('2026-07-13', nowAfternoon) === 'aujourd\'hui'
+);
+check(
   'due badge text includes countdown',
   PT.formatBadgeText(
     {
@@ -460,7 +509,36 @@ check(
       ease: 2,
       dueDate: '2026-07-16',
     });
-    return normalized && normalized.dueDate === '2026-07-16';
+    return normalized && normalized.dueDate === '2026-07-16' && normalized.dueTime == null;
+  })()
+);
+check(
+  'normalizeInputs keeps dueDate and dueTime',
+  (function () {
+    var normalized = PT.normalizeInputs({
+      urgency: 3,
+      impact: 3,
+      ease: 2,
+      dueDate: '2026-07-16',
+      dueTime: '14:30',
+    });
+    return (
+      normalized &&
+      normalized.dueDate === '2026-07-16' &&
+      normalized.dueTime === '14:30'
+    );
+  })()
+);
+check(
+  'normalizeInputs omits dueTime without dueDate',
+  (function () {
+    var normalized = PT.normalizeInputs({
+      urgency: 3,
+      impact: 3,
+      ease: 2,
+      dueTime: '14:30',
+    });
+    return normalized && normalized.dueDate == null && normalized.dueTime == null;
   })()
 );
 check(
@@ -471,8 +549,13 @@ check(
       impact: 3,
       ease: 2,
       dueDate: '',
+      dueTime: '14:30',
     });
-    return normalized && normalized.dueDate == null;
+    return (
+      normalized &&
+      normalized.dueDate == null &&
+      normalized.dueTime == null
+    );
   })()
 );
 check(
@@ -480,6 +563,22 @@ check(
   (function () {
     var display = PU.withDueDateDisplay({ label: 'Urgente', tierI: 1 }, { dueDate: '' });
     return display && display.dueCountdown == null && display.dueDate == null;
+  })()
+);
+check(
+  'withDueDateDisplay attaches dueTime when set',
+  (function () {
+    var display = PU.withDueDateDisplay(
+      { label: 'Urgente', tierI: 1 },
+      { dueDate: '2026-07-16', dueTime: '14:30' }
+    );
+    return (
+      display &&
+      display.dueDate === '2026-07-16' &&
+      display.dueTime === '14:30' &&
+      typeof display.dueCountdown === 'string' &&
+      display.dueCountdown.length > 0
+    );
   })()
 );
 check(
@@ -502,6 +601,37 @@ check(
     return (
       display.dueDate === due &&
       display.dueCountdown === PU.formatDueCountdown(due)
+    );
+  })()
+);
+check(
+  'resolveDisplay attaches dueCountdown with time',
+  (function () {
+    var now = new Date();
+    var in45 = new Date(now.getTime() + 45 * 60000);
+    var y = in45.getFullYear();
+    var m = String(in45.getMonth() + 1);
+    if (m.length < 2) m = '0' + m;
+    var day = String(in45.getDate());
+    if (day.length < 2) day = '0' + day;
+    var hh = String(in45.getHours());
+    if (hh.length < 2) hh = '0' + hh;
+    var mm = String(in45.getMinutes());
+    if (mm.length < 2) mm = '0' + mm;
+    var due = y + '-' + m + '-' + day;
+    var time = hh + ':' + mm;
+    var result = PU.calc.baseline({ urgency: 3, impact: 3, ease: 2 });
+    var display = PU.resolveDisplay(result, {
+      urgency: 3,
+      impact: 3,
+      ease: 2,
+      dueDate: due,
+      dueTime: time,
+    });
+    return (
+      display.dueDate === due &&
+      display.dueTime === time &&
+      display.dueCountdown === PU.formatDueCountdown(due, null, time)
     );
   })()
 );

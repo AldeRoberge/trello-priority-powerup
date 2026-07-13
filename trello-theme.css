@@ -757,6 +757,19 @@ body.tp-page--priority {
   padding-bottom: 9px;
 }
 
+.tp-page--priority .due-date-time-title {
+  font-size: 13px;
+}
+
+.tp-page--priority .due-date-time-hint {
+  font-size: 11px;
+}
+
+.tp-page--priority .due-date-time-input {
+  font-size: 13px;
+  width: 7.75rem;
+}
+
 .tp-page--priority .due-date-month-label {
   font-size: 15px;
 }

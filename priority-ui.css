@@ -454,6 +454,129 @@ body {
   display: none;
 }
 
+.due-date-time-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-1, var(--surface-2));
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.due-date-time-row[hidden] {
+  display: none;
+}
+
+.due-date-time-row.has-time {
+  border-color: color-mix(in srgb, var(--due-accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--due-accent) 6%, var(--surface-1, var(--surface-2)));
+}
+
+.due-date-time-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  cursor: pointer;
+}
+
+.due-date-time-icon {
+  flex-shrink: 0;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--due-accent);
+}
+
+.due-date-time-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.due-date-time-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.due-date-time-hint {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.2;
+}
+
+.due-date-time-input {
+  flex-shrink: 0;
+  width: 7.5rem;
+  max-width: 42%;
+  padding: 6px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  color-scheme: light dark;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.due-date-time-input:hover {
+  border-color: color-mix(in srgb, var(--due-accent) 35%, var(--border));
+}
+
+.due-date-time-input:focus-visible {
+  outline: none;
+  border-color: var(--due-accent);
+  box-shadow: 0 0 0 3px var(--due-accent-soft);
+}
+
+.due-date-time-clear {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.12s ease, background-color 0.12s ease;
+}
+
+.due-date-time-clear:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+
+.due-date-time-clear:focus-visible {
+  outline: 2px solid var(--due-accent);
+  outline-offset: 1px;
+}
+
+.due-date-time-clear[hidden] {
+  display: none;
+}
+
 .due-date-popover {
   margin-top: 10px;
   padding: 12px 10px 10px;

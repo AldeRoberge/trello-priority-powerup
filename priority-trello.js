@@ -134,7 +134,17 @@
         : raw.dueDate.trim();
       if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) dueDate = '';
     }
-    if (dueDate) normalized.dueDate = dueDate;
+    if (dueDate) {
+      normalized.dueDate = dueDate;
+      if (typeof raw.dueTime === 'string') {
+        var PUTime = priorityUI();
+        var dueTime = PUTime && PUTime.normalizeDueTime
+          ? PUTime.normalizeDueTime(raw.dueTime)
+          : raw.dueTime.trim();
+        if (dueTime && !/^\d{2}:\d{2}$/.test(dueTime)) dueTime = '';
+        if (dueTime) normalized.dueTime = dueTime;
+      }
+    }
     return normalized;
   }
 
@@ -147,6 +157,9 @@
     };
     if (typeof inputs.dueDate === 'string' && inputs.dueDate) {
       cleared.dueDate = inputs.dueDate;
+      if (typeof inputs.dueTime === 'string' && inputs.dueTime) {
+        cleared.dueTime = inputs.dueTime;
+      }
     }
     return cleared;
   }

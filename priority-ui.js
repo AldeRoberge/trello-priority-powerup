@@ -963,13 +963,16 @@
 
   var DUE_DATE_LABEL = '\u00c9ch\u00e9ance';
   var DUE_DATE_DESCRIPTION =
-    'Date optionnelle affich\u00e9e en compte \u00e0 rebours sur la carte (surtout pour les priorit\u00e9s hautes).';
-  var DUE_DATE_CLEAR_LABEL = 'Effacer la date';
+    'Date et heure optionnelles affich\u00e9es en compte \u00e0 rebours sur la carte (surtout pour les priorit\u00e9s hautes).';
+  var DUE_DATE_CLEAR_LABEL = 'Effacer l\'\u00e9ch\u00e9ance';
   var DUE_DATE_PLACEHOLDER = 'Choisir une date';
   var DUE_DATE_TODAY_LABEL = 'Aujourd\'hui';
   var DUE_DATE_PREV_MONTH = 'Mois pr\u00e9c\u00e9dent';
   var DUE_DATE_NEXT_MONTH = 'Mois suivant';
   var DUE_DATE_CALENDAR_LABEL = 'Calendrier d\'\u00e9ch\u00e9ance';
+  var DUE_DATE_TIME_LABEL = 'Heure';
+  var DUE_DATE_TIME_HINT = 'Optionnelle';
+  var DUE_DATE_TIME_CLEAR_LABEL = 'Effacer l\'heure';
   var DUE_DATE_MONTH_NAMES = [
     'janvier',
     'f\u00e9vrier',
@@ -995,6 +998,8 @@
     'dimanche'
   ];
   var MS_PER_DAY = 86400000;
+  var MS_PER_HOUR = 3600000;
+  var MS_PER_MINUTE = 60000;
   var COUNTDOWN_DAYS_PER_WEEK = 7;
   var COUNTDOWN_WEEK_THRESHOLD_DAYS = 30;
   var COUNTDOWN_YEAR_THRESHOLD_DAYS = 365;
@@ -1030,6 +1035,18 @@
     return trimmed;
   }
 
+  function normalizeDueTime(value) {
+    if (value == null || value === '') return '';
+    if (typeof value !== 'string') return '';
+    var trimmed = value.trim();
+    var match = /^(\d{1,2}):(\d{2})$/.exec(trimmed);
+    if (!match) return '';
+    var hours = +match[1];
+    var minutes = +match[2];
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return '';
+    return pad2(hours) + ':' + pad2(minutes);
+  }
+
   function startOfLocalDay(date) {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate());
   }
@@ -1041,27 +1058,41 @@
     return new Date(+parts[0], +parts[1] - 1, +parts[2]);
   }
 
-  function formatDueDateDisplay(iso) {
+  function dueInstant(iso, time) {
+    var date = dueDateToLocalDate(iso);
+    if (!date) return null;
+    var normalizedTime = normalizeDueTime(time);
+    if (normalizedTime) {
+      var parts = normalizedTime.split(':');
+      date.setHours(+parts[0], +parts[1], 0, 0);
+    }
+    return date;
+  }
+
+  function formatDueDateDisplay(iso, time) {
     var date = dueDateToLocalDate(iso);
     if (!date) return '';
+    var dateText;
     try {
-      return date.toLocaleDateString('fr-FR', {
+      dateText = date.toLocaleDateString('fr-FR', {
         weekday: 'short',
         day: 'numeric',
         month: 'short',
         year: 'numeric'
       });
     } catch (err) {
-      return (
+      dateText =
         DUE_DATE_WEEKDAY_NAMES[(date.getDay() + 6) % 7] +
         ' ' +
         date.getDate() +
         ' ' +
         DUE_DATE_MONTH_NAMES[date.getMonth()] +
         ' ' +
-        date.getFullYear()
-      );
+        date.getFullYear();
     }
+    var normalizedTime = normalizeDueTime(time);
+    if (!normalizedTime) return dateText;
+    return dateText + ' \u00b7 ' + normalizedTime;
   }
 
   function mondayOffset(date) {
@@ -1075,8 +1106,18 @@
     return Math.round((startOfLocalDay(due).getTime() - today.getTime()) / MS_PER_DAY);
   }
 
-  function formatDueCountdown(iso, now) {
-    var days = daysUntilDue(iso, now);
+  function msUntilDue(iso, time, now) {
+    var due = dueInstant(iso, time);
+    if (!due) return NaN;
+    return due.getTime() - (now || new Date()).getTime();
+  }
+
+  function isDuePast(iso, time, now) {
+    if (normalizeDueTime(time)) return msUntilDue(iso, time, now) < 0;
+    return daysUntilDue(iso, now) < 0;
+  }
+
+  function formatDueCountdownDays(days) {
     if (!isFinite(days)) return '';
     if (days < 0) {
       var late = -days;
@@ -1099,6 +1140,40 @@
     return years === 1 ? '1 an restant' : years + ' ans restants';
   }
 
+  function formatDueCountdown(iso, now, time) {
+    var dueTime = normalizeDueTime(time);
+    if (!dueTime) return formatDueCountdownDays(daysUntilDue(iso, now));
+
+    var ms = msUntilDue(iso, dueTime, now);
+    if (!isFinite(ms)) return '';
+    var abs = Math.abs(ms);
+    var past = ms < 0;
+
+    if (abs < MS_PER_MINUTE / 2) {
+      return past ? 'en retard' : 'maintenant';
+    }
+
+    var minutes = Math.max(1, Math.round(abs / MS_PER_MINUTE));
+    if (minutes < 60) {
+      if (past) {
+        return minutes === 1 ? 'en retard de 1 min' : 'en retard de ' + minutes + ' min';
+      }
+      return minutes === 1 ? '1 min restante' : minutes + ' min restantes';
+    }
+
+    var hours = Math.max(1, Math.round(abs / MS_PER_HOUR));
+    if (hours < 24) {
+      if (past) {
+        return hours === 1 ? 'en retard de 1 h' : 'en retard de ' + hours + ' h';
+      }
+      return hours === 1 ? '1 h restante' : hours + ' h restantes';
+    }
+
+    var days = Math.max(1, Math.round(abs / MS_PER_DAY));
+    if (past) days = -days;
+    return formatDueCountdownDays(days);
+  }
+
   function dueBadgeSuffix(display) {
     if (!display) return '';
     if (typeof display.dueCountdown === 'string' && display.dueCountdown) {
@@ -1119,11 +1194,14 @@
     if (!display) return display;
     var dueDate = normalizeDueDate(inputs && inputs.dueDate);
     if (!dueDate) return display;
-    return Object.assign({}, display, {
+    var dueTime = normalizeDueTime(inputs && inputs.dueTime);
+    var next = {
       dueDate: dueDate,
-      dueCountdown: formatDueCountdown(dueDate),
-      duePast: daysUntilDue(dueDate) < 0
-    });
+      dueCountdown: formatDueCountdown(dueDate, null, dueTime),
+      duePast: isDuePast(dueDate, dueTime)
+    };
+    if (dueTime) next.dueTime = dueTime;
+    return Object.assign({}, display, next);
   }
   var BLOCKED_STYLES = {
     label: BLOCKED_LABEL,
@@ -2883,7 +2961,17 @@
     var el = config.el;
     var onChange = config.onChange || function () {};
     var onLayoutChange = config.onLayoutChange || function () {};
-    var current = normalizeDueDate(config.value);
+    var initialValue = config.value;
+    var initialDate =
+      initialValue && typeof initialValue === 'object'
+        ? initialValue.dueDate
+        : initialValue;
+    var initialTime =
+      initialValue && typeof initialValue === 'object'
+        ? initialValue.dueTime
+        : config.time;
+    var current = normalizeDueDate(initialDate);
+    var currentTime = current ? normalizeDueTime(initialTime) : '';
     var enabled = !!current;
     var open = false;
     var viewYear;
@@ -2973,6 +3061,54 @@
     controls.appendChild(clearBtn);
     body.appendChild(controls);
 
+    var timeRow = document.createElement('div');
+    timeRow.className = 'due-date-time-row';
+    timeRow.hidden = true;
+
+    var timeLabel = document.createElement('label');
+    timeLabel.className = 'due-date-time-label';
+    timeLabel.htmlFor = uid + '-time';
+
+    var timeIcon = document.createElement('i');
+    timeIcon.className = 'ti ti-clock due-date-time-icon';
+    timeIcon.setAttribute('aria-hidden', 'true');
+
+    var timeText = document.createElement('span');
+    timeText.className = 'due-date-time-text';
+
+    var timeTitle = document.createElement('span');
+    timeTitle.className = 'due-date-time-title';
+    timeTitle.textContent = DUE_DATE_TIME_LABEL;
+
+    var timeHint = document.createElement('span');
+    timeHint.className = 'due-date-time-hint';
+    timeHint.textContent = DUE_DATE_TIME_HINT;
+
+    timeText.appendChild(timeTitle);
+    timeText.appendChild(timeHint);
+    timeLabel.appendChild(timeIcon);
+    timeLabel.appendChild(timeText);
+
+    var timeInput = document.createElement('input');
+    timeInput.type = 'time';
+    timeInput.className = 'due-date-time-input';
+    timeInput.id = uid + '-time';
+    timeInput.setAttribute('aria-label', DUE_DATE_TIME_LABEL);
+    timeInput.value = currentTime || '';
+
+    var timeClearBtn = document.createElement('button');
+    timeClearBtn.type = 'button';
+    timeClearBtn.className = 'due-date-time-clear';
+    timeClearBtn.textContent = '\u00d7';
+    timeClearBtn.title = DUE_DATE_TIME_CLEAR_LABEL;
+    timeClearBtn.setAttribute('aria-label', DUE_DATE_TIME_CLEAR_LABEL);
+    timeClearBtn.hidden = !currentTime;
+
+    timeRow.appendChild(timeLabel);
+    timeRow.appendChild(timeInput);
+    timeRow.appendChild(timeClearBtn);
+    body.appendChild(timeRow);
+
     var popover = document.createElement('div');
     popover.className = 'due-date-popover';
     popover.id = uid + '-popover';
@@ -3050,8 +3186,16 @@
       });
     }
 
+    function refreshTimeRow() {
+      var show = enabled && !!current;
+      timeRow.hidden = !show;
+      timeInput.value = currentTime || '';
+      timeClearBtn.hidden = !currentTime;
+      timeRow.classList.toggle('has-time', !!currentTime);
+    }
+
     function refreshTrigger() {
-      var display = formatDueDateDisplay(current);
+      var display = formatDueDateDisplay(current, currentTime);
       if (display) {
         triggerValue.textContent = display;
         triggerValue.classList.remove('is-placeholder');
@@ -3070,17 +3214,19 @@
         countdown.classList.remove('is-past');
         clearBtn.hidden = true;
         field.classList.remove('has-due-date', 'is-past');
+        refreshTimeRow();
         refreshTrigger();
         return;
       }
-      var text = formatDueCountdown(current);
-      var past = daysUntilDue(current) < 0;
+      var text = formatDueCountdown(current, null, currentTime);
+      var past = isDuePast(current, currentTime);
       countdown.textContent = text;
       countdown.hidden = !text;
       countdown.classList.toggle('is-past', past);
       clearBtn.hidden = false;
       field.classList.add('has-due-date');
       field.classList.toggle('is-past', past);
+      refreshTimeRow();
       refreshTrigger();
     }
 
@@ -3100,15 +3246,31 @@
 
     function emitChange() {
       refreshCountdown();
-      onChange(getValue());
+      onChange(getValues());
+    }
+
+    function getValues() {
+      if (!enabled || !current) {
+        return { dueDate: '', dueTime: '' };
+      }
+      return {
+        dueDate: current,
+        dueTime: currentTime || ''
+      };
     }
 
     function getValue() {
-      return enabled ? current : '';
+      return getValues().dueDate;
     }
 
     function setValue(value) {
-      current = normalizeDueDate(value);
+      if (value && typeof value === 'object') {
+        current = normalizeDueDate(value.dueDate);
+        currentTime = current ? normalizeDueTime(value.dueTime) : '';
+      } else {
+        current = normalizeDueDate(value);
+        if (!current) currentTime = '';
+      }
       enabled = !!current;
       if (current) {
         syncViewFromValue(current);
@@ -3129,6 +3291,7 @@
       enabled = on;
       if (!enabled) {
         current = '';
+        currentTime = '';
         closeCalendar(false);
         syncViewFromValue('');
         updateVisibility();
@@ -3343,10 +3506,34 @@
     clearBtn.addEventListener('click', function () {
       if (!enabled) return;
       current = '';
+      currentTime = '';
       closeCalendar(false);
       syncViewFromValue('');
       emitChange();
       trigger.focus();
+    });
+
+    timeInput.addEventListener('change', function () {
+      if (!enabled || !current) return;
+      currentTime = normalizeDueTime(timeInput.value);
+      timeInput.value = currentTime || '';
+      emitChange();
+    });
+
+    timeInput.addEventListener('input', function () {
+      if (!enabled || !current) return;
+      var next = normalizeDueTime(timeInput.value);
+      if (next === currentTime) return;
+      currentTime = next;
+      emitChange();
+    });
+
+    timeClearBtn.addEventListener('click', function () {
+      if (!enabled || !current || !currentTime) return;
+      currentTime = '';
+      timeInput.value = '';
+      emitChange();
+      timeInput.focus();
     });
 
     prevBtn.addEventListener('click', function () {
@@ -3366,6 +3553,7 @@
     return {
       el: field,
       getValue: getValue,
+      getValues: getValues,
       setValue: setValue
     };
   }
@@ -4584,6 +4772,9 @@
     state.enAttente = !!(state.enAttente || defaults.enAttente);
     state.blockedReason = state.blockedReason || defaults.blockedReason || '';
     state.dueDate = normalizeDueDate(state.dueDate || defaults.dueDate || '');
+    state.dueTime = state.dueDate
+      ? normalizeDueTime(state.dueTime || defaults.dueTime || '')
+      : '';
 
     function persistSliderState(skipFieldSync) {
       if (!skipFieldSync) syncStateFromFields();
@@ -4603,7 +4794,9 @@
         state.blockedReason = enAttenteField.getBlockedReason();
       }
       if (dueDateField) {
-        state.dueDate = dueDateField.getValue();
+        var dueValues = dueDateField.getValues();
+        state.dueDate = dueValues.dueDate;
+        state.dueTime = dueValues.dueTime;
       }
     }
 
@@ -4829,7 +5022,7 @@
 
     dueDateField = createDueDateField({
       el: dueSection,
-      value: state.dueDate,
+      value: { dueDate: state.dueDate, dueTime: state.dueTime },
       onChange: function () {
         cancelSliderAnim();
         repaint();
@@ -4882,8 +5075,11 @@
         if (next.blockedReason != null && enAttenteField) {
           enAttenteField.setBlockedReason(next.blockedReason);
         }
-        if (next.dueDate != null && dueDateField) {
-          dueDateField.setValue(next.dueDate);
+        if ((next.dueDate != null || next.dueTime != null) && dueDateField) {
+          dueDateField.setValue({
+            dueDate: next.dueDate != null ? next.dueDate : state.dueDate,
+            dueTime: next.dueTime != null ? next.dueTime : state.dueTime
+          });
         }
         repaint();
         persistSliderState();
@@ -5021,16 +5217,23 @@
     isValidBlockedReason: isValidBlockedReason,
     formatBlockedBadgeText: formatBlockedBadgeText,
     MS_PER_DAY: MS_PER_DAY,
+    MS_PER_HOUR: MS_PER_HOUR,
+    MS_PER_MINUTE: MS_PER_MINUTE,
     COUNTDOWN_DAYS_PER_WEEK: COUNTDOWN_DAYS_PER_WEEK,
     COUNTDOWN_WEEK_THRESHOLD_DAYS: COUNTDOWN_WEEK_THRESHOLD_DAYS,
     COUNTDOWN_YEAR_THRESHOLD_DAYS: COUNTDOWN_YEAR_THRESHOLD_DAYS,
     DAYS_PER_MONTH_AVG: DAYS_PER_MONTH_AVG,
     DAYS_PER_YEAR_AVG: DAYS_PER_YEAR_AVG,
     normalizeDueDate: normalizeDueDate,
+    normalizeDueTime: normalizeDueTime,
     daysUntilDue: daysUntilDue,
+    msUntilDue: msUntilDue,
+    isDuePast: isDuePast,
     formatDueCountdown: formatDueCountdown,
+    formatDueDateDisplay: formatDueDateDisplay,
     formatDueBadgeText: formatDueBadgeText,
     dueBadgeSuffix: dueBadgeSuffix,
+    withDueDateDisplay: withDueDateDisplay,
     wordFor: wordFor,
     wordHtmlFor: wordHtmlFor,
     levelIconSvg: levelIconSvg,
