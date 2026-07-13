@@ -118,14 +118,20 @@
       impact: Math.max(0, Math.min(4, impact)),
       ease: Math.max(1, Math.min(5, ease)),
     };
+    if (raw.priorityEnabled === false) {
+      normalized.priorityEnabled = false;
+    }
+
+    // Keep blockedReason even when off so re-enable restores the draft.
+    var reason = typeof raw.blockedReason === 'string' ? raw.blockedReason.trim() : '';
+    var PU = priorityUI();
+    if (reason && PU && PU.isValidBlockedReason && PU.isValidBlockedReason(reason)) {
+      normalized.blockedReason = reason;
+    }
     if (raw.enAttente === true) {
       normalized.enAttente = true;
-      var reason = typeof raw.blockedReason === 'string' ? raw.blockedReason.trim() : '';
-      var PU = priorityUI();
-      if (reason && PU && PU.isValidBlockedReason && PU.isValidBlockedReason(reason)) {
-        normalized.blockedReason = reason;
-      }
     }
+
     var dueDate = '';
     if (typeof raw.dueDate === 'string') {
       var PUDue = priorityUI();
@@ -144,22 +150,26 @@
         if (dueTime && !/^\d{2}:\d{2}$/.test(dueTime)) dueTime = '';
         if (dueTime) normalized.dueTime = dueTime;
       }
+      // Back-compat: missing dueEnabled + dueDate ⇒ enabled.
+      if (raw.dueEnabled === false) normalized.dueEnabled = false;
     }
     return normalized;
   }
 
   function clearBlockedFromInputs(inputs) {
-    if (!inputs || !inputs.enAttente) return inputs;
+    if (!inputs || (!inputs.enAttente && !inputs.blockedReason)) return inputs;
     var cleared = {
       urgency: inputs.urgency,
       impact: inputs.impact,
       ease: inputs.ease,
     };
+    if (inputs.priorityEnabled === false) cleared.priorityEnabled = false;
     if (typeof inputs.dueDate === 'string' && inputs.dueDate) {
       cleared.dueDate = inputs.dueDate;
       if (typeof inputs.dueTime === 'string' && inputs.dueTime) {
         cleared.dueTime = inputs.dueTime;
       }
+      if (inputs.dueEnabled === false) cleared.dueEnabled = false;
     }
     return cleared;
   }
@@ -381,6 +391,12 @@
       return tierBadgeDot(display, false) + ' ' + formatBlockedBoardBadgeText(display);
     }
     var PU = priorityUI();
+    if (display.priorityEnabled === false) {
+      if (PU && display.dueCountdown) {
+        return tierBadgeDot(display, false) + ' ' + display.dueCountdown;
+      }
+      return '';
+    }
     if (PU && PU.formatDueBadgeText && display.dueCountdown) {
       return tierBadgeDot(display, false) + ' ' + PU.formatDueBadgeText(display);
     }
@@ -511,7 +527,9 @@
       dynamic: function () {
         return getBadgeData(t).then(function (data) {
           if (!data.display) return { refresh: BADGE_REFRESH_SEC };
-          return withBadgeRefresh(buildCardFaceBadge(data.display, data.completed));
+          var badge = buildCardFaceBadge(data.display, data.completed);
+          if (!badge || !badge.text) return { refresh: BADGE_REFRESH_SEC };
+          return withBadgeRefresh(badge);
         });
       },
     };
@@ -521,6 +539,16 @@
     return getCardDisplay(t)
       .then(function (display) {
         if (!display) return [];
+        if (
+          display.priorityEnabled === false &&
+          !display.blocked &&
+          !display.dueCountdown
+        ) {
+          return [];
+        }
+        if (display.priorityEnabled === false && !display.blocked && !formatBadgeText(display, false)) {
+          return [];
+        }
         return [dynamicCardFaceBadge(t)];
       })
       .catch(function (err) {
@@ -534,7 +562,14 @@
       dynamic: function () {
         return getBadgeData(t)
           .then(function (data) {
-            if (!data.display) {
+            if (
+              !data.display ||
+              (
+                data.display.priorityEnabled === false &&
+                !data.display.blocked &&
+                !data.display.dueCountdown
+              )
+            ) {
               return withBadgeRefresh({
                 title: CARD_DETAIL_BADGE_TITLE,
                 text: definePriorityLabel(),
@@ -543,6 +578,14 @@
               });
             }
             var badge = buildCardFaceBadge(data.display, data.completed);
+            if (!badge || !badge.text) {
+              return withBadgeRefresh({
+                title: CARD_DETAIL_BADGE_TITLE,
+                text: definePriorityLabel(),
+                color: trelloBadgeComplete(),
+                callback: openCallback,
+              });
+            }
             return withBadgeRefresh({
               title: CARD_DETAIL_BADGE_TITLE,
               text: badge.text,
@@ -662,6 +705,9 @@
 
   function prioritySortRank(display) {
     if (!display) return { tier: SORT_TIER_NONE, score: -1 };
+    if (display.priorityEnabled === false && !display.blocked) {
+      return { tier: SORT_TIER_NONE, score: -1 };
+    }
     if (display.inutile) return { tier: SORT_TIER_INUTILE, score: 0 };
     var tier = display.tierI != null ? display.tierI : SORT_TIER_INUTILE;
     return { tier: tier, score: display.score || 0 };

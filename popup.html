@@ -6,19 +6,19 @@
   <title>Définir la priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <link rel="stylesheet" href="./trello-theme.css?v=progress-minimal-1" />
-  <link rel="stylesheet" href="./priority-ui.css?v=due-time-dial-1" />
+  <link rel="stylesheet" href="./trello-theme.css?v=section-chrome-1" />
+  <link rel="stylesheet" href="./priority-ui.css?v=section-chrome-1" />
   <script src="./rest-config.js"></script>
   <script src="./priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./priority-ui.js?v=due-time-dial-1"></script>
+  <script src="./priority-ui.js?v=section-chrome-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
     }
   </script>
-  <script src="./priority-trello.js"></script>
-  <script src="./completion-ui.js?v=progress-embed-2"></script>
-  <script src="./completion-trello.js?v=progress-embed-2"></script>
+  <script src="./priority-trello.js?v=section-chrome-1"></script>
+  <script src="./completion-ui.js?v=section-chrome-1"></script>
+  <script src="./completion-trello.js?v=section-chrome-1"></script>
 </head>
 <body class="tp-page tp-page--priority">
   <div class="compare-page">
@@ -35,10 +35,12 @@
     let saveChain = Promise.resolve();
     let completionSaveChain = Promise.resolve();
     let progressEnabled = false;
+    let progressExpanded = false;
     let progressPanel = null;
     let progressField = null;
     let progressBody = null;
-    let progressToggle = null;
+    let progressCollapse = null;
+    let progressSummaryEl = null;
 
     t.render(function () {
       PriorityTrello.getBoardColorScheme(t)
@@ -68,11 +70,18 @@
       return saveChain;
     }
 
+    function withProgressEnabledFlag(data, enabled) {
+      var next = Object.assign({}, data || {});
+      if (enabled === false) next.progressEnabled = false;
+      else delete next.progressEnabled;
+      return next;
+    }
+
     function saveCompletion(data) {
-      latestCompletion = data;
+      latestCompletion = withProgressEnabledFlag(data, progressEnabled);
       completionSaveChain = completionSaveChain
         .then(function () {
-          return CompletionTrello.saveCardCompletion(t, data);
+          return CompletionTrello.saveCardCompletion(t, latestCompletion);
         })
         .catch(function (err) {
           console.error('Completion save failed', err);
@@ -104,29 +113,24 @@
       return (normalized.progress || 0) > 0;
     }
 
+    function progressSummaryText() {
+      if (!completionUi || typeof completionUi.getData !== 'function') return '';
+      var progress = CompletionTrello.computeCardProgress(completionUi.getData());
+      if (!progress || progress.percent <= 0) return '';
+      return progress.percent + '\u00a0%';
+    }
+
     function setProgressEnabled(enabled, options) {
       options = options || {};
+      if (progressCollapse) {
+        progressCollapse.setEnabled(!!enabled, {
+          expand: options.expand !== false && !!enabled,
+          focusAdd: options.focusAdd
+        });
+        return;
+      }
       progressEnabled = !!enabled;
-      if (!progressField || !progressBody || !progressToggle) return;
-
-      progressToggle.checked = progressEnabled;
-      progressField.classList.toggle('is-enabled', progressEnabled);
-      progressBody.hidden = !progressEnabled;
-      progressToggle.setAttribute('aria-expanded', progressEnabled ? 'true' : 'false');
-
-      if (progressEnabled) {
-        if (!progressBody.parentNode) progressField.appendChild(progressBody);
-      } else if (progressBody.parentNode) {
-        progressField.removeChild(progressBody);
-      }
-
-      resizePopup();
-
-      if (progressEnabled && options.focusAdd && completionUi && typeof completionUi.focusAddInput === 'function') {
-        setTimeout(function () {
-          try { completionUi.focusAddInput(); } catch (e) { /* ignore */ }
-        }, 0);
-      }
+      progressExpanded = !!enabled;
     }
 
     function mountProgressSection(cardEl, initiallyOpen) {
@@ -136,28 +140,20 @@
       progressField = document.createElement('div');
       progressField.className = 'field field--progress';
 
-      var label = document.createElement('label');
-      label.className = 'progress-enable-label';
-
-      progressToggle = document.createElement('input');
-      progressToggle.type = 'checkbox';
-      progressToggle.className = 'progress-enable-checkbox';
-      progressToggle.setAttribute('aria-controls', 'progress-section-body');
-      progressToggle.setAttribute('aria-expanded', 'false');
-
-      var textWrap = document.createElement('span');
-      textWrap.className = 'progress-enable-text';
-
-      var title = document.createElement('span');
-      title.className = 'progress-enable-title';
-      title.textContent = 'Progr\u00e8s';
-
-      textWrap.appendChild(title);
-      label.appendChild(progressToggle);
-      label.appendChild(textWrap);
+      var chrome = PriorityUI.createCollapsibleEnableChrome({
+        title: 'Progr\u00e8s',
+        bodyId: 'progress-section-body',
+        checkboxClass: 'progress-enable-checkbox',
+        labelClass: 'progress-enable-label',
+        titleClass: 'progress-enable-title',
+        collapseLabel: 'Replier Progr\u00e8s',
+        expandLabel: 'D\u00e9velopper Progr\u00e8s'
+      });
+      progressField.appendChild(chrome.head);
+      progressSummaryEl = chrome.summary;
 
       progressBody = document.createElement('div');
-      progressBody.className = 'progress-section-body';
+      progressBody.className = 'progress-section-body section-toggle-body';
       progressBody.id = 'progress-section-body';
       progressBody.hidden = true;
 
@@ -165,12 +161,31 @@
       completionMount.id = 'completionMount';
       progressBody.appendChild(completionMount);
 
-      progressField.appendChild(label);
+      progressField.appendChild(progressBody);
       progressPanel.appendChild(progressField);
       cardEl.appendChild(progressPanel);
 
-      progressToggle.addEventListener('change', function () {
-        setProgressEnabled(progressToggle.checked, { focusAdd: progressToggle.checked });
+      progressCollapse = PriorityUI.bindCollapsibleEnable({
+        field: progressField,
+        body: progressBody,
+        chrome: chrome,
+        enabled: false,
+        expanded: false,
+        getSummary: progressSummaryText,
+        onLayoutChange: resizePopup,
+        onEnableChange: function (on, opts) {
+          progressEnabled = on;
+          progressExpanded = on && progressCollapse.isExpanded();
+          if (latestCompletion || completionUi) {
+            var data = completionUi ? completionUi.getData() : latestCompletion;
+            saveCompletion(data);
+          }
+          if (on && opts && opts.focusAdd && completionUi && typeof completionUi.focusAddInput === 'function') {
+            setTimeout(function () {
+              try { completionUi.focusAddInput(); } catch (e) { /* ignore */ }
+            }, 0);
+          }
+        }
       });
 
       return CompletionTrello.getBoardCompletionColorScheme(t)
@@ -178,21 +193,28 @@
           return CompletionTrello.getCardCompletion(t);
         })
         .then(function (stored) {
+          var storedEnabled = !(stored && stored.progressEnabled === false);
           completionUi = CompletionUI.mountCompletionUI(completionMount, {
             data: stored,
             showCardHeader: false,
             onChange: function (data) {
               saveCompletion(data);
+              if (progressCollapse) progressCollapse.refreshSummary();
             },
             onResize: function () {
               resizePopup();
             },
           });
           latestCompletion = completionUi.getData();
-          // Open when deep-linked, or when saved progress/subtasks already exist.
-          // Unchecking only hides the editor — data (and badges) stay until edited away.
-          var shouldEnable = !!initiallyOpen || completionHasActivity(latestCompletion);
-          setProgressEnabled(shouldEnable, { focusAdd: !!initiallyOpen });
+          // Enable when deep-linked, stored flag on, or saved progress exists (back-compat).
+          var shouldEnable =
+            !!initiallyOpen ||
+            (storedEnabled && completionHasActivity(latestCompletion)) ||
+            (stored && stored.progressEnabled === true);
+          setProgressEnabled(shouldEnable, {
+            focusAdd: !!initiallyOpen,
+            expand: !!initiallyOpen || shouldEnable
+          });
           if (initiallyOpen) {
             setTimeout(function () {
               try {
@@ -218,9 +240,6 @@
         ? PriorityTrello.getCachedBoardFormulaKey()
         : await PriorityTrello.getBoardFormula(t);
 
-      const hasSavedPriority = !!inputs;
-      const initialDefaults = hasSavedPriority ? inputs : PriorityTrello.IMPORTANT_INPUTS;
-
       var openSection = null;
       var argName = null;
       if (typeof t.arg === 'function') {
@@ -228,6 +247,13 @@
         argName = t.arg('cardName');
       }
       var focusProgress = openSection === 'progress';
+
+      const hasSavedPriority = !!inputs;
+      const initialDefaults = hasSavedPriority
+        ? inputs
+        : Object.assign({}, PriorityTrello.IMPORTANT_INPUTS, {
+            priorityEnabled: !focusProgress
+          });
 
       variant = PriorityUI.mountVariant(mountEl, {
         id: 'card',
@@ -261,7 +287,8 @@
         }
       });
 
-      if (!hasSavedPriority) {
+      // Don't auto-seed cardPriority when opened only for progress on an unset card.
+      if (!hasSavedPriority && !focusProgress) {
         await saveState(variant.getState());
       }
 

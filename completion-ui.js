@@ -407,6 +407,8 @@
 
   var FLIP_MS = 380;
   var FLIP_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
+  var SHOW_DONE_STORAGE_KEY = 'trello-priority-powerup/completion-show-done';
+  var FILTER_THRESHOLD = 5;
 
   function prefersReducedMotion() {
     try {
@@ -418,6 +420,22 @@
     } catch (e) {
       return false;
     }
+  }
+
+  function loadShowDonePreference() {
+    try {
+      if (typeof sessionStorage === 'undefined') return false;
+      return sessionStorage.getItem(SHOW_DONE_STORAGE_KEY) === '1';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function saveShowDonePreference(show) {
+    try {
+      if (typeof sessionStorage === 'undefined') return;
+      sessionStorage.setItem(SHOW_DONE_STORAGE_KEY, show ? '1' : '0');
+    } catch (e) { /* ignore quota / private mode */ }
   }
 
   function mountCompletionUI(containerEl, options) {
@@ -509,30 +527,48 @@
     var listSection = document.createElement('section');
     listSection.className = 'tp-completion-list-section';
     listSection.innerHTML =
-      '<ul class="tp-completion-list" id="completionList" aria-label="Sous-t\u00e2ches"></ul>';
+      '<div class="tp-completion-tools" id="completionTools" hidden>' +
+      '<input type="search" class="tp-input tp-completion-search" id="completionSearch" ' +
+      'placeholder="Rechercher une sous-t\u00e2che\u2026" maxlength="200" autocomplete="off" ' +
+      'aria-label="Rechercher une sous-t\u00e2che" />' +
+      '<select class="tp-input tp-completion-filter" id="completionFilter" aria-label="Filtrer les sous-t\u00e2ches">' +
+      '<option value="all">Toutes</option>' +
+      '<option value="active">En cours</option>' +
+      '<option value="done">Termin\u00e9es</option>' +
+      '</select>' +
+      '</div>' +
+      '<ul class="tp-completion-list" id="completionList" aria-label="Sous-t\u00e2ches"></ul>' +
+      '<p class="tp-completion-filter-empty" id="completionFilterEmpty" hidden>' +
+      'Aucune sous-t\u00e2che ne correspond.</p>';
     containerEl.appendChild(listSection);
 
     var doneSection = document.createElement('section');
     doneSection.className = 'tp-completion-done-section is-empty';
     doneSection.innerHTML =
-      '<button type="button" class="tp-completion-done-toggle" id="completionDoneToggle" ' +
-      'aria-expanded="false" aria-controls="completionDoneList" disabled>' +
-      '<span class="tp-completion-done-toggle-label" id="completionDoneLabel">Termin\u00e9es (0)</span>' +
-      '<span class="tp-completion-done-chevron" aria-hidden="true"></span>' +
-      '</button>' +
+      '<label class="tp-completion-show-done" id="completionShowDoneLabel">' +
+      '<input type="checkbox" class="tp-completion-show-done-checkbox" id="completionShowDone" />' +
+      '<span class="tp-completion-show-done-text">Afficher les t\u00e2ches termin\u00e9es</span>' +
+      '</label>' +
       '<ul class="tp-completion-list tp-completion-done-list" id="completionDoneList" ' +
       'aria-label="T\u00e2ches termin\u00e9es" hidden></ul>';
     containerEl.appendChild(doneSection);
 
     var listEl = containerEl.querySelector('#completionList');
     var doneListEl = containerEl.querySelector('#completionDoneList');
-    var doneToggle = containerEl.querySelector('#completionDoneToggle');
-    var doneLabel = containerEl.querySelector('#completionDoneLabel');
+    var toolsEl = containerEl.querySelector('#completionTools');
+    var searchInput = containerEl.querySelector('#completionSearch');
+    var filterSelect = containerEl.querySelector('#completionFilter');
+    var filterEmptyEl = containerEl.querySelector('#completionFilterEmpty');
+    var showDoneCheckbox = containerEl.querySelector('#completionShowDone');
+    var showDoneLabel = containerEl.querySelector('#completionShowDoneLabel');
     var percentEl = containerEl.querySelector('#completionPercent');
     var encouragementEl = containerEl.querySelector('#completionEncouragement');
     var addInput = containerEl.querySelector('#completionAddInput');
     var addBtn = containerEl.querySelector('#completionAddBtn');
-    var doneSectionExpanded = false;
+    var showCompleted = loadShowDonePreference();
+    var searchQuery = '';
+    var statusFilter = 'all';
+    showDoneCheckbox.checked = showCompleted;
 
     var CHECK_ICON_SVG =
       '<svg class="tp-completion-check-icon" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">' +
@@ -571,19 +607,55 @@
       });
     }
 
+    function itemMatchesQuery(item) {
+      if (!searchQuery) return true;
+      return String(item.text || '')
+        .toLowerCase()
+        .indexOf(searchQuery) !== -1;
+    }
+
+    function toolsVisible() {
+      return data.items.length > FILTER_THRESHOLD;
+    }
+
+    function effectiveStatusFilter() {
+      return toolsVisible() ? statusFilter : 'all';
+    }
+
+    function shouldShowDoneList(doneCount) {
+      if (doneCount <= 0) return false;
+      var filter = effectiveStatusFilter();
+      if (filter === 'active') return false;
+      if (filter === 'done') return true;
+      return showCompleted;
+    }
+
+    function shouldShowActiveList() {
+      return effectiveStatusFilter() !== 'done';
+    }
+
     function updateDoneSectionUi(doneCount) {
       var hasDone = doneCount > 0;
-      if (!hasDone) doneSectionExpanded = false;
-      doneLabel.textContent =
-        'Termin\u00e9es (' + doneCount + ')';
+      var showList = shouldShowDoneList(doneCount);
       doneSection.classList.toggle('is-empty', !hasDone);
-      doneSection.classList.toggle('is-expanded', hasDone && doneSectionExpanded);
-      doneToggle.disabled = !hasDone;
-      doneToggle.setAttribute(
-        'aria-expanded',
-        hasDone && doneSectionExpanded ? 'true' : 'false'
-      );
-      doneListEl.hidden = !(hasDone && doneSectionExpanded);
+      doneSection.classList.toggle('is-showing', showList);
+      showDoneLabel.hidden = !hasDone;
+      showDoneCheckbox.disabled = !hasDone;
+      showDoneCheckbox.checked = showCompleted;
+      doneListEl.hidden = !showList;
+    }
+
+    function updateToolsUi() {
+      var show = toolsVisible();
+      toolsEl.hidden = !show;
+      if (!show) {
+        if (searchQuery || statusFilter !== 'all') {
+          searchQuery = '';
+          statusFilter = 'all';
+          searchInput.value = '';
+          filterSelect.value = 'all';
+        }
+      }
     }
 
     function emitChange(opts) {
@@ -688,9 +760,13 @@
     function renderListWithFlip(itemId, wasDone) {
       var firstRect = captureItemRect(itemId);
       var becomingDone = !wasDone;
+      var doneCount = data.items.filter(function (item) {
+        return item.done;
+      }).length;
 
-      if (becomingDone && firstRect && !prefersReducedMotion()) {
-        doneSectionExpanded = true;
+      // Skip FLIP when the completed list is hidden (item simply leaves the active list).
+      if (becomingDone && !shouldShowDoneList(doneCount)) {
+        firstRect = null;
       }
 
       renderList();
@@ -873,8 +949,10 @@
       listEl.replaceChildren();
       doneListEl.replaceChildren();
       listSection.classList.toggle('is-empty', !data.items.length);
+      updateToolsUi();
 
       if (!data.items.length) {
+        filterEmptyEl.hidden = true;
         updateDoneSectionUi(0);
         return;
       }
@@ -882,27 +960,73 @@
       var activeItems = [];
       var doneItems = [];
       data.items.forEach(function (item) {
+        if (!itemMatchesQuery(item)) return;
         if (item.done) doneItems.push(item);
         else activeItems.push(item);
       });
 
-      activeItems.forEach(function (item) {
-        listEl.appendChild(renderItem(item));
-      });
-      doneItems.forEach(function (item) {
-        doneListEl.appendChild(renderItem(item));
-      });
-      updateDoneSectionUi(doneItems.length);
-    }
+      var showActive = shouldShowActiveList();
+      var showDone = shouldShowDoneList(
+        data.items.filter(function (item) {
+          return item.done;
+        }).length
+      );
 
-    doneToggle.addEventListener('click', function () {
-      if (doneToggle.disabled) return;
-      doneSectionExpanded = !doneSectionExpanded;
+      if (showActive) {
+        activeItems.forEach(function (item) {
+          listEl.appendChild(renderItem(item));
+        });
+      }
+      if (showDone) {
+        doneItems.forEach(function (item) {
+          doneListEl.appendChild(renderItem(item));
+        });
+      }
+
+      var visibleCount =
+        (showActive ? activeItems.length : 0) +
+        (showDone ? doneItems.length : 0);
+      var filtering =
+        toolsVisible() &&
+        (!!searchQuery || effectiveStatusFilter() !== 'all');
+      var emptyVisible = filtering && visibleCount === 0 && data.items.length > 0;
+      filterEmptyEl.hidden = !emptyVisible;
+      if (emptyVisible) {
+        var hiddenDoneMatches =
+          !showDone && doneItems.length > 0 && showActive && !!searchQuery;
+        filterEmptyEl.textContent = hiddenDoneMatches
+          ? 'Des t\u00e2ches termin\u00e9es correspondent \u2014 activez \u00ab Afficher les t\u00e2ches termin\u00e9es \u00bb.'
+          : 'Aucune sous-t\u00e2che ne correspond.';
+      }
+
       updateDoneSectionUi(
         data.items.filter(function (item) {
           return item.done;
         }).length
       );
+    }
+
+    showDoneCheckbox.addEventListener('change', function () {
+      showCompleted = !!showDoneCheckbox.checked;
+      saveShowDonePreference(showCompleted);
+      renderList();
+      onResize();
+    });
+
+    searchInput.addEventListener('input', function () {
+      searchQuery = String(searchInput.value || '')
+        .trim()
+        .toLowerCase();
+      renderList();
+      onResize();
+    });
+
+    filterSelect.addEventListener('change', function () {
+      statusFilter = filterSelect.value || 'all';
+      if (statusFilter !== 'all' && statusFilter !== 'active' && statusFilter !== 'done') {
+        statusFilter = 'all';
+      }
+      renderList();
       onResize();
     });
 

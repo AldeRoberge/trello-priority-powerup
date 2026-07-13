@@ -107,8 +107,11 @@
       seenIds[item.id] = true;
       normalized.push(item);
     }
-    if (normalized.length) return { items: normalized };
-    return { items: [], progress: clampProgress(raw.progress) };
+    var out;
+    if (normalized.length) out = { items: normalized };
+    else out = { items: [], progress: clampProgress(raw.progress) };
+    if (raw.progressEnabled === false) out.progressEnabled = false;
+    return out;
   }
 
   // Weighted total: sum(weight * progress/100) / sum(weight) * 100
@@ -312,6 +315,9 @@
     return {
       dynamic: function () {
         return getBadgeData(t).then(function (result) {
+          if (result.data && result.data.progressEnabled === false) {
+            return { refresh: BADGE_REFRESH_SEC };
+          }
           if (result.progress.percent <= 0) {
             return { refresh: BADGE_REFRESH_SEC };
           }
@@ -324,6 +330,7 @@
   function cardFaceBadges(t) {
     return getCardCompletion(t)
       .then(function (data) {
+        if (data && data.progressEnabled === false) return [];
         var progress = computeCardProgress(data);
         if (progress.percent <= 0) return [];
         return [dynamicCardFaceBadge(t)];
@@ -339,6 +346,14 @@
       dynamic: function () {
         return getBadgeData(t)
           .then(function (result) {
+            if (result.data && result.data.progressEnabled === false) {
+              return withBadgeRefresh({
+                title: CARD_DETAIL_BADGE_TITLE,
+                text: 'D\u00e9finir le progr\u00e8s',
+                color: 'blue',
+                callback: openCallback,
+              });
+            }
             var progress = result.progress;
             return withBadgeRefresh({
               title: CARD_DETAIL_BADGE_TITLE,

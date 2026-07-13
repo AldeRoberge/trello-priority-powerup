@@ -843,14 +843,19 @@
     return useShort ? shortTierLabel(label) : label;
   }
 
-  function elementLabelOverflows(el) {
-    return el.scrollWidth > el.clientWidth + 1;
+  function elementLabelOverflows(el, slackPx) {
+    var slack = slackPx || 0;
+    return el.scrollWidth > el.clientWidth + 1 + slack;
   }
 
   function createResponsiveTierLabelGroup(config) {
     var container = config.container;
     var targets = config.targets || [];
     var useShort = false;
+    var hysteresisPx = config.hysteresisPx != null ? config.hysteresisPx : 12;
+    var debounceMs = config.debounceMs != null ? config.debounceMs : 120;
+    var debounceTimer = null;
+    var roSuspended = false;
 
     function applyMode(short) {
       useShort = short;
@@ -867,23 +872,49 @@
       }
     }
 
-    function measureNeedsShort() {
-      applyMode(false);
+    function anyTargetOverflows(slackPx) {
       for (var i = 0; i < targets.length; i++) {
-        if (elementLabelOverflows(targets[i].el)) return true;
+        if (elementLabelOverflows(targets[i].el, slackPx)) return true;
       }
-      if (container && elementLabelOverflows(container)) return true;
+      if (container && elementLabelOverflows(container, slackPx)) return true;
       return false;
     }
 
-    function sync() {
-      applyMode(measureNeedsShort());
+    // Remeasure short/long with hysteresis so paint + ResizeObserver do not thrash
+    // near the overflow boundary while sliders drag.
+    function measureAndApply() {
+      if (useShort) {
+        applyMode(false);
+        if (anyTargetOverflows(hysteresisPx)) applyMode(true);
+      } else {
+        applyMode(false);
+        if (anyTargetOverflows(0)) applyMode(true);
+      }
+    }
+
+    function syncNow() {
+      measureAndApply();
+    }
+
+    function scheduleSync() {
+      if (debounceTimer != null) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(function () {
+        debounceTimer = null;
+        measureAndApply();
+      }, debounceMs);
+    }
+
+    // Keep current short/long mode; only refresh strings. Defers mode flips.
+    function refreshLabels() {
+      applyMode(useShort);
+      scheduleSync();
     }
 
     var ro;
     if (typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(function () {
-        sync();
+        if (roSuspended) return;
+        scheduleSync();
       });
       if (container) ro.observe(container);
       for (var j = 0; j < targets.length; j++) ro.observe(targets[j].el);
@@ -896,14 +927,19 @@
       else mq.addListener(mqSync);
       mqSync();
     } else {
-      sync();
+      syncNow();
     }
 
     return {
-      refresh: sync,
+      refresh: refreshLabels,
+      refreshNow: syncNow,
       isShort: function () { return useShort; },
       labelFor: function (full) { return tierLabelForSpace(full, useShort); },
-      disconnect: function () { if (ro) ro.disconnect(); }
+      setSuspended: function (suspended) { roSuspended = !!suspended; },
+      disconnect: function () {
+        if (debounceTimer != null) clearTimeout(debounceTimer);
+        if (ro) ro.disconnect();
+      }
     };
   }
 
@@ -1167,6 +1203,20 @@
     return upper === first ? text : upper + text.slice(1);
   }
 
+  /** Compact header summary when an enabled due-date section is collapsed. */
+  function formatDueDateCompactSummary(iso, time, now) {
+    var normalized = normalizeDueDate(iso);
+    if (!normalized) return '';
+    var days = daysUntilDue(normalized, now);
+    var dayPart;
+    if (days === 0) dayPart = 'Aujourd\'hui';
+    else if (days === 1) dayPart = 'Demain';
+    else if (days === -1) dayPart = 'Hier';
+    else dayPart = capitalizeCountdownPhrase(formatDueCountdownDays(days));
+    var dueTime = normalizeDueTime(time);
+    return dueTime ? dayPart + ' \u00b7 ' + dueTime : dayPart;
+  }
+
   function formatDueCountdownDays(days) {
     if (!isFinite(days)) return '';
     if (days < 0) {
@@ -1262,8 +1312,16 @@
     return label + ' (' + suffix + ')';
   }
 
+  function isDueEnabled(inputs) {
+    if (!inputs) return false;
+    if (inputs.dueEnabled === false) return false;
+    return !!normalizeDueDate(inputs.dueDate);
+  }
+
   function withDueDateDisplay(display, inputs) {
     if (!display) return display;
+    // Disabled checkbox keeps dueDate stored but skips badge/overdue effects.
+    if (inputs && inputs.dueEnabled === false) return display;
     var dueDate = normalizeDueDate(inputs && inputs.dueDate);
     if (!dueDate) return display;
     var dueTime = normalizeDueTime(inputs && inputs.dueTime);
@@ -1553,7 +1611,12 @@
   }
 
   function withDisplayExtras(display, inputs) {
-    return withDueDateDisplay(withBlockedDisplay(display, inputs), inputs);
+    var next = withDueDateDisplay(withBlockedDisplay(display, inputs), inputs);
+    if (!next) return next;
+    if (inputs && inputs.priorityEnabled === false) {
+      return Object.assign({}, next, { priorityEnabled: false });
+    }
+    return next;
   }
 
   function resolveDisplay(result, inputs, labelSettings) {
@@ -1639,6 +1702,15 @@
     return '';
   }
 
+  function tierDescriptionContentKey(display) {
+    if (!display) return '';
+    if (display.inutile) return 'inutile:' + (INUTILE_STYLES.description || '');
+    if (display.matrixLabel) {
+      return 'matrix:' + display.matrixLabel + '\n' + (display.description || '');
+    }
+    return 'tier:' + tierDescriptionBody(display);
+  }
+
   function paintTierDescription(el, display) {
     if (!display) {
       el.textContent = '';
@@ -1666,6 +1738,71 @@
     el.textContent = desc;
     el.hidden = !desc;
     el.style.removeProperty('color');
+  }
+
+  function flashHeatTextEnter(el) {
+    if (!el) return;
+    el.classList.remove('heat-text-enter');
+    // Force restart of the enter animation when tier copy swaps.
+    void el.offsetWidth;
+    el.classList.add('heat-text-enter');
+  }
+
+  function captureHeatLayoutRects(nodes) {
+    var out = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (!el || el.hidden) {
+        out.push(null);
+        continue;
+      }
+      out.push(el.getBoundingClientRect());
+    }
+    return out;
+  }
+
+  function playHeatLayoutFlip(nodes, firstRects) {
+    if (!firstRects) return;
+    if (typeof window !== 'undefined' && window.matchMedia &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return;
+    }
+    var lastRects = captureHeatLayoutRects(nodes);
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      var first = firstRects[i];
+      var last = lastRects[i];
+      if (!el || !first || !last) continue;
+      var dx = first.left - last.left;
+      var dy = first.top - last.top;
+      var sw = last.width > 0.5 ? first.width / last.width : 1;
+      var sh = last.height > 0.5 ? first.height / last.height : 1;
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5 && Math.abs(sw - 1) < 0.02 && Math.abs(sh - 1) < 0.02) {
+        continue;
+      }
+      // Avoid extreme scale noise while still easing row/stack and head size shifts.
+      sw = Math.max(0.85, Math.min(1.18, sw));
+      sh = Math.max(0.85, Math.min(1.18, sh));
+      el.classList.add('heat-flip-active');
+      el.style.transition = 'none';
+      el.style.transformOrigin = 'left top';
+      el.style.transform = 'translate(' + dx.toFixed(2) + 'px,' + dy.toFixed(2) + 'px) scale(' +
+        sw.toFixed(4) + ',' + sh.toFixed(4) + ')';
+      (function (node) {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            node.style.transition = '';
+            node.style.transform = '';
+            var clearFlip = function () {
+              node.classList.remove('heat-flip-active');
+              node.removeEventListener('transitionend', clearFlip);
+            };
+            node.addEventListener('transitionend', clearFlip);
+            setTimeout(clearFlip, 280);
+          });
+        });
+      })(el);
+    }
   }
 
   var FORMULA_OPTIONS = [
@@ -2925,36 +3062,184 @@
     };
   }
 
+  function createCollapsibleEnableChrome(config) {
+    var titleText = config.title || '';
+    var bodyId = config.bodyId || '';
+    var checkboxClass = config.checkboxClass || '';
+    var labelClass = config.labelClass || '';
+    var titleClass = config.titleClass || '';
+    var collapseLabel = config.collapseLabel || ('Replier ' + titleText);
+    var expandLabel = config.expandLabel || ('D\u00e9velopper ' + titleText);
+
+    var head = document.createElement('div');
+    head.className = 'section-toggle-head';
+
+    var label = document.createElement('label');
+    label.className = ('section-enable-label ' + labelClass).trim();
+
+    var checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = ('section-enable-checkbox ' + checkboxClass).trim();
+    if (bodyId) checkbox.setAttribute('aria-controls', bodyId);
+
+    var textWrap = document.createElement('span');
+    textWrap.className = 'section-enable-text';
+
+    var title = document.createElement('span');
+    title.className = ('section-enable-title ' + titleClass).trim();
+    title.textContent = titleText;
+
+    textWrap.appendChild(title);
+    label.appendChild(checkbox);
+    label.appendChild(textWrap);
+
+    var summary = document.createElement('span');
+    summary.className = 'section-toggle-summary';
+    summary.hidden = true;
+
+    var collapseBtn = document.createElement('button');
+    collapseBtn.type = 'button';
+    collapseBtn.className = 'section-collapse-btn';
+    collapseBtn.hidden = true;
+    if (bodyId) collapseBtn.setAttribute('aria-controls', bodyId);
+    collapseBtn.setAttribute('aria-expanded', 'false');
+    collapseBtn.setAttribute('aria-label', expandLabel);
+
+    var chevron = document.createElement('i');
+    chevron.className = 'ti ti-chevron-down section-collapse-chevron';
+    chevron.setAttribute('aria-hidden', 'true');
+    collapseBtn.appendChild(chevron);
+
+    head.appendChild(label);
+    head.appendChild(summary);
+    head.appendChild(collapseBtn);
+
+    return {
+      head: head,
+      label: label,
+      checkbox: checkbox,
+      title: title,
+      summary: summary,
+      collapseBtn: collapseBtn,
+      collapseLabel: collapseLabel,
+      expandLabel: expandLabel
+    };
+  }
+
+  function bindCollapsibleEnable(config) {
+    var field = config.field;
+    var body = config.body;
+    var chrome = config.chrome;
+    var enabled = !!config.enabled;
+    var expanded = enabled && config.expanded !== false;
+    var onEnableChange = config.onEnableChange || function () {};
+    var onLayoutChange = config.onLayoutChange || function () {};
+    var getSummary = config.getSummary || function () { return ''; };
+    var onBeforeDisable = config.onBeforeDisable || null;
+    var onAfterEnable = config.onAfterEnable || null;
+
+    function syncUi(shouldNotifyLayout) {
+      var wasHidden = !!body.hidden;
+      chrome.checkbox.checked = enabled;
+      field.classList.toggle('is-enabled', enabled);
+      field.classList.toggle('is-collapsed', enabled && !expanded);
+      var showBody = enabled && expanded;
+      body.hidden = !showBody;
+      chrome.collapseBtn.hidden = !enabled;
+      chrome.collapseBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      chrome.collapseBtn.setAttribute(
+        'aria-label',
+        expanded ? chrome.collapseLabel : chrome.expandLabel
+      );
+      var text = enabled && !expanded ? (getSummary() || '') : '';
+      chrome.summary.textContent = text;
+      chrome.summary.hidden = !text;
+      if (shouldNotifyLayout !== false && wasHidden !== !!body.hidden) {
+        onLayoutChange();
+      }
+    }
+
+    function setExpanded(next, options) {
+      options = options || {};
+      if (!enabled) return;
+      expanded = !!next;
+      syncUi(options.notifyLayout !== false);
+    }
+
+    function setEnabled(next, options) {
+      options = options || {};
+      var on = !!next;
+      var changed = on !== enabled;
+      enabled = on;
+      if (enabled) {
+        if (changed || options.expand) expanded = options.expand !== false;
+        if (changed && typeof onAfterEnable === 'function') onAfterEnable(options);
+      } else {
+        expanded = false;
+        if (changed && typeof onBeforeDisable === 'function') onBeforeDisable(options);
+      }
+      syncUi(options.notifyLayout !== false);
+      if (changed) onEnableChange(enabled, options);
+    }
+
+    function refreshSummary() {
+      if (!(enabled && !expanded)) {
+        chrome.summary.hidden = true;
+        chrome.summary.textContent = '';
+        return;
+      }
+      var text = getSummary() || '';
+      chrome.summary.textContent = text;
+      chrome.summary.hidden = !text;
+    }
+
+    chrome.checkbox.addEventListener('change', function () {
+      setEnabled(chrome.checkbox.checked);
+    });
+
+    chrome.collapseBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!enabled) return;
+      setExpanded(!expanded);
+    });
+
+    syncUi(false);
+
+    return {
+      setEnabled: setEnabled,
+      setExpanded: setExpanded,
+      isEnabled: function () { return enabled; },
+      isExpanded: function () { return expanded; },
+      refreshSummary: refreshSummary,
+      syncUi: syncUi
+    };
+  }
+
   function createEnAttenteField(config) {
     var el = config.el;
     var checked = !!config.value;
     var onChange = config.onChange || function () {};
+    var onLayoutChange = config.onLayoutChange || function () {};
+    var bodyId = 'blocked-section-body-' + Math.random().toString(36).slice(2, 9);
 
     var field = document.createElement('div');
     field.className = 'field field--en-attente';
 
-    var label = document.createElement('label');
-    label.className = 'en-attente-label';
-
-    var input = document.createElement('input');
-    input.type = 'checkbox';
-    input.className = 'en-attente-checkbox';
-    input.checked = checked;
-
-    var textWrap = document.createElement('span');
-    textWrap.className = 'en-attente-text';
-
-    var title = document.createElement('span');
-    title.className = 'en-attente-title';
-    title.textContent = BLOCKED_LABEL;
-
-    textWrap.appendChild(title);
-    label.appendChild(input);
-    label.appendChild(textWrap);
-    field.appendChild(label);
+    var chrome = createCollapsibleEnableChrome({
+      title: BLOCKED_LABEL,
+      bodyId: bodyId,
+      checkboxClass: 'en-attente-checkbox',
+      labelClass: 'en-attente-label',
+      titleClass: 'en-attente-title',
+      collapseLabel: 'Replier Bloqu\u00e9',
+      expandLabel: 'D\u00e9velopper Bloqu\u00e9'
+    });
+    field.appendChild(chrome.head);
 
     var reasonWrap = document.createElement('div');
-    reasonWrap.className = 'blocked-reason-wrap';
+    reasonWrap.className = 'blocked-reason-wrap section-toggle-body';
+    reasonWrap.id = bodyId;
 
     var reasonSelect = document.createElement('select');
     reasonSelect.className = 'blocked-reason-select';
@@ -2976,40 +3261,49 @@
     field.appendChild(reasonWrap);
     el.appendChild(field);
 
-    function updateReasonVisibility() {
-      var on = input.checked;
-      reasonWrap.hidden = !on;
-      reasonSelect.disabled = !on;
-    }
-
-    function setValue(value) {
-      input.checked = !!value;
-      updateReasonVisibility();
-    }
-
-    function getValue() {
-      return input.checked;
-    }
-
-    function setBlockedReason(value) {
-      reasonSelect.value = isValidBlockedReason(value) ? value : '';
-    }
-
-    function getBlockedReason() {
-      if (!input.checked) return '';
+    function readReason() {
       var value = reasonSelect.value || '';
       return isValidBlockedReason(value) ? value : '';
     }
 
-    setBlockedReason(config.blockedReason);
-    updateReasonVisibility();
-
-    input.addEventListener('change', function () {
-      updateReasonVisibility();
-      onChange(getValue());
+    // Keep blockedReason when disabling — only enAttente (enabled) drives badges.
+    var collapse = bindCollapsibleEnable({
+      field: field,
+      body: reasonWrap,
+      chrome: chrome,
+      enabled: checked,
+      expanded: checked,
+      getSummary: function () {
+        return readReason() || BLOCKED_LABEL;
+      },
+      onLayoutChange: onLayoutChange,
+      onEnableChange: function () {
+        onChange(collapse.isEnabled());
+      }
     });
 
+    function setValue(value) {
+      collapse.setEnabled(!!value, { notifyLayout: false, expand: !!value });
+    }
+
+    function getValue() {
+      return collapse.isEnabled();
+    }
+
+    function setBlockedReason(value) {
+      reasonSelect.value = isValidBlockedReason(value) ? value : '';
+      collapse.refreshSummary();
+    }
+
+    function getBlockedReason() {
+      // Always return draft reason so disable does not wipe persistence.
+      return readReason();
+    }
+
+    setBlockedReason(config.blockedReason);
+
     reasonSelect.addEventListener('change', function () {
+      collapse.refreshSummary();
       onChange(getValue());
     });
 
@@ -3018,7 +3312,9 @@
       getValue: getValue,
       setValue: setValue,
       getBlockedReason: getBlockedReason,
-      setBlockedReason: setBlockedReason
+      setBlockedReason: setBlockedReason,
+      setExpanded: collapse.setExpanded,
+      isExpanded: collapse.isExpanded
     };
   }
 
@@ -3037,7 +3333,13 @@
         : config.time;
     var current = normalizeDueDate(initialDate);
     var currentTime = current ? normalizeDueTime(initialTime) : '';
-    var enabled = !!current;
+    var initialEnabled =
+      initialValue && typeof initialValue === 'object' && initialValue.dueEnabled != null
+        ? !!initialValue.dueEnabled && !!current
+        : config.enabled != null
+          ? !!config.enabled
+          : !!current;
+    var enabled = initialEnabled;
     var open = false;
     var timeOpen = false;
     var viewYear;
@@ -3045,6 +3347,8 @@
     var focusIso = current || toIsoDate(startOfLocalDay(new Date()));
     var docListenersBound = false;
     var uid = 'due-cal-' + Math.random().toString(36).slice(2, 9);
+    var bodyId = uid + '-body';
+    var collapseApi = null;
 
     function syncViewFromValue(iso) {
       var date = dueDateToLocalDate(iso) || startOfLocalDay(new Date());
@@ -3058,29 +3362,21 @@
     var field = document.createElement('div');
     field.className = 'field field--due-date';
 
-    var label = document.createElement('label');
-    label.className = 'due-date-label';
-
-    var toggle = document.createElement('input');
-    toggle.type = 'checkbox';
-    toggle.className = 'due-date-checkbox';
-    toggle.checked = enabled;
-
-    var textWrap = document.createElement('span');
-    textWrap.className = 'due-date-text';
-
-    var title = document.createElement('span');
-    title.className = 'due-date-title';
-    title.id = uid + '-label';
-    title.textContent = DUE_DATE_LABEL;
-
-    textWrap.appendChild(title);
-    label.appendChild(toggle);
-    label.appendChild(textWrap);
-    field.appendChild(label);
+    var chrome = createCollapsibleEnableChrome({
+      title: DUE_DATE_LABEL,
+      bodyId: bodyId,
+      checkboxClass: 'due-date-checkbox',
+      labelClass: 'due-date-label',
+      titleClass: 'due-date-title',
+      collapseLabel: 'Replier \u00c9ch\u00e9ance',
+      expandLabel: 'D\u00e9velopper \u00c9ch\u00e9ance'
+    });
+    chrome.title.id = uid + '-label';
+    field.appendChild(chrome.head);
 
     var body = document.createElement('div');
-    body.className = 'due-date-body';
+    body.className = 'due-date-body section-toggle-body';
+    body.id = bodyId;
 
     var controls = document.createElement('div');
     controls.className = 'due-date-controls';
@@ -3607,7 +3903,7 @@
     }
 
     function refreshCountdown() {
-      if (!enabled || !current) {
+      if (!current) {
         countdown.textContent = '';
         countdown.hidden = true;
         countdown.classList.remove('is-past');
@@ -3615,6 +3911,18 @@
         field.classList.remove('has-due-date', 'is-past');
         refreshTimeRow();
         refreshTrigger();
+        if (collapseApi) collapseApi.refreshSummary();
+        return;
+      }
+      refreshTrigger();
+      refreshTimeRow();
+      if (!enabled) {
+        countdown.textContent = '';
+        countdown.hidden = true;
+        countdown.classList.remove('is-past');
+        clearBtn.hidden = true;
+        field.classList.remove('has-due-date', 'is-past');
+        if (collapseApi) collapseApi.refreshSummary();
         return;
       }
       var text = formatDueCountdown(current, null, currentTime);
@@ -3625,22 +3933,7 @@
       clearBtn.hidden = false;
       field.classList.add('has-due-date');
       field.classList.toggle('is-past', past);
-      refreshTimeRow();
-      refreshTrigger();
-    }
-
-    function updateVisibility(shouldNotifyLayout) {
-      var wasHidden = body.hidden;
-      body.hidden = !enabled;
-      toggle.checked = enabled;
-      field.classList.toggle('is-enabled', enabled);
-      if (!enabled) {
-        field.classList.remove('is-open', 'is-time-open', 'has-due-date', 'is-past');
-      }
-      refreshCountdown();
-      if (shouldNotifyLayout !== false && wasHidden !== body.hidden) {
-        notifyLayout();
-      }
+      if (collapseApi) collapseApi.refreshSummary();
     }
 
     function emitChange() {
@@ -3649,28 +3942,29 @@
     }
 
     function getValues() {
-      if (!enabled || !current) {
-        return { dueDate: '', dueTime: '' };
-      }
+      // Keep date/time even when disabled so re-enable restores them.
       return {
-        dueDate: current,
-        dueTime: currentTime || ''
+        dueDate: current || '',
+        dueTime: current ? (currentTime || '') : '',
+        dueEnabled: enabled
       };
     }
 
     function getValue() {
-      return getValues().dueDate;
+      return enabled ? (current || '') : '';
     }
 
     function setValue(value) {
       if (value && typeof value === 'object') {
         current = normalizeDueDate(value.dueDate);
         currentTime = current ? normalizeDueTime(value.dueTime) : '';
+        if (value.dueEnabled != null) enabled = !!value.dueEnabled;
+        else enabled = !!current;
       } else {
         current = normalizeDueDate(value);
         if (!current) currentTime = '';
+        enabled = !!current;
       }
-      enabled = !!current;
       if (current) {
         syncViewFromValue(current);
       } else {
@@ -3678,29 +3972,24 @@
         closeCalendar(false);
         closeTimePicker(false);
       }
+      if (collapseApi) {
+        collapseApi.setEnabled(enabled, {
+          notifyLayout: false,
+          expand: enabled
+        });
+      }
       if (open && enabled) renderCalendar();
-      updateVisibility(false);
+      refreshCountdown();
     }
 
     function setEnabled(nextEnabled) {
-      var on = !!nextEnabled;
-      if (on === enabled) {
-        updateVisibility();
+      if (collapseApi) {
+        collapseApi.setEnabled(!!nextEnabled, { expand: !!nextEnabled });
         return;
       }
-      enabled = on;
-      if (!enabled) {
-        current = '';
-        currentTime = '';
-        closeCalendar(false);
-        closeTimePicker(false);
-        syncViewFromValue('');
-        updateVisibility();
-        emitChange();
-        return;
-      }
-      updateVisibility();
-      openCalendar();
+      enabled = !!nextEnabled;
+      refreshCountdown();
+      emitChange();
     }
 
     function shiftMonth(delta) {
@@ -3945,10 +4234,6 @@
       notifyLayout();
     }
 
-    toggle.addEventListener('change', function () {
-      setEnabled(toggle.checked);
-    });
-
     trigger.addEventListener('click', function () {
       if (!enabled) return;
       if (open) closeCalendar(false);
@@ -4056,13 +4341,41 @@
       selectIso(toIsoDate(startOfLocalDay(new Date())), true);
     });
 
-    updateVisibility(false);
+    collapseApi = bindCollapsibleEnable({
+      field: field,
+      body: body,
+      chrome: chrome,
+      enabled: enabled,
+      expanded: enabled,
+      getSummary: function () {
+        return current ? formatDueDateCompactSummary(current, currentTime) : '';
+      },
+      onLayoutChange: notifyLayout,
+      onBeforeDisable: function () {
+        closeCalendar(false);
+        closeTimePicker(false);
+        field.classList.remove('is-open', 'is-time-open', 'has-due-date', 'is-past');
+      },
+      onAfterEnable: function () {
+        if (!current) openCalendar();
+      },
+      onEnableChange: function (on) {
+        enabled = on;
+        refreshCountdown();
+        emitChange();
+      }
+    });
+    refreshCountdown();
 
     return {
       el: field,
       getValue: getValue,
       getValues: getValues,
-      setValue: setValue
+      setValue: setValue,
+      setEnabled: setEnabled,
+      setExpanded: collapseApi.setExpanded,
+      isEnabled: collapseApi.isEnabled,
+      isExpanded: collapseApi.isExpanded
     };
   }
 
@@ -4278,6 +4591,9 @@
     }
 
     var currentBadgeTierLabel = 'Optionnelle';
+    var lastDescKey = '';
+    var lastPaintLabel = currentBadgeTierLabel;
+    var heatFlipNodes = [badge, tierDesc];
     var segLabelResponsive = createResponsiveTierLabelGroup({
       container: segLabels,
       targets: segLabelTargets
@@ -4317,6 +4633,24 @@
         ? { blocked: true, label: d.blocked ? BLOCKED_LABEL : d.label }
         : (d.inutile ? { inutile: true, label: INUTILE_LABEL } : { i: d.tierI, label: d.label });
       var v = tierVisuals(visualSource);
+      var nextLabel = d.eisenhowerLabel || classicTierLabel(d);
+      if (d.dueCountdown && !d.blocked) {
+        nextLabel += ' (' + d.dueCountdown + ')';
+      }
+      var nextDescKey = tierDescriptionContentKey(d);
+      var labelChanged = nextLabel !== lastPaintLabel;
+      var descChanged = nextDescKey !== lastDescKey;
+      var layoutSensitive = labelChanged || descChanged
+        || badge.classList.contains('is-blocked') !== !!d.blocked
+        || badge.classList.contains('is-overdue') !== overdue
+        || panel.classList.contains('has-blocked-warning') !== !!d.blocked;
+
+      var firstRects = layoutSensitive ? captureHeatLayoutRects(heatFlipNodes) : null;
+      if (layoutSensitive) {
+        badgeLabelResponsive.setSuspended(true);
+        segLabelResponsive.setSuspended(true);
+      }
+
       bnumVal.textContent = formatScore(d.score);
       dot.classList.toggle('is-blocked', !!d.blocked);
       dot.style.setProperty('--heat-tier-dot-size', heatTierDotSizePx(d).toFixed(2) + 'px');
@@ -4325,10 +4659,7 @@
       } else {
         dot.style.background = v.seg;
       }
-      currentBadgeTierLabel = d.eisenhowerLabel || classicTierLabel(d);
-      if (d.dueCountdown && !d.blocked) {
-        currentBadgeTierLabel += ' (' + d.dueCountdown + ')';
-      }
+      currentBadgeTierLabel = nextLabel;
       badge.style.setProperty('--heat-fill', v.fill);
       badge.style.setProperty('--heat-text', v.text);
       panel.style.setProperty('--heat-text', v.text);
@@ -4344,12 +4675,23 @@
       panel.classList.toggle('has-blocked-warning', !!d.blocked);
       blockedWarning.hidden = !d.blocked;
       paintTierDescription(tierDesc, d);
+      if (labelChanged) flashHeatTextEnter(blabel);
+      if (descChanged) flashHeatTextEnter(tierDesc);
+      lastPaintLabel = nextLabel;
+      lastDescKey = nextDescKey;
       segs.forEach(function (s) {
         s.classList.toggle('on', !d.inutile && d.tierI != null && +s.dataset.i === d.tierI);
       });
       updateScoreTooltip(result, d);
+      // Refresh label strings in the current short/long mode; mode flips are debounced.
       badgeLabelResponsive.refresh();
       segLabelResponsive.refresh();
+
+      if (layoutSensitive) {
+        playHeatLayoutFlip(heatFlipNodes, firstRects);
+        badgeLabelResponsive.setSuspended(false);
+        segLabelResponsive.setSuspended(false);
+      }
     }
 
     return {
@@ -4496,30 +4838,23 @@
     }
 
     var panel = document.createElement('div');
-    panel.className = 'calc-graph-panel is-collapsed';
+    panel.className = 'calc-graph-panel field field--graphique';
 
-    var toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = 'calc-graph-toggle';
-    toggle.setAttribute('aria-expanded', 'false');
-    toggle.setAttribute('aria-controls', 'calc-graph-body');
-    toggle.title = 'Afficher ou masquer le graphique de priorité';
-
-    var toggleLabel = document.createElement('span');
-    toggleLabel.className = 'calc-graph-toggle-label';
-    toggleLabel.textContent = 'Graphique';
-
-    var toggleIcon = document.createElement('span');
-    toggleIcon.className = 'calc-graph-toggle-chevron';
-    toggleIcon.setAttribute('aria-hidden', 'true');
-    toggleIcon.textContent = '▸';
-
-    toggle.appendChild(toggleLabel);
-    toggle.appendChild(toggleIcon);
+    var bodyId = 'calc-graph-body-' + Math.random().toString(36).slice(2, 9);
+    var chrome = createCollapsibleEnableChrome({
+      title: 'Graphique',
+      bodyId: bodyId,
+      checkboxClass: 'graphique-enable-checkbox',
+      labelClass: 'graphique-enable-label',
+      titleClass: 'graphique-enable-title',
+      collapseLabel: 'Replier Graphique',
+      expandLabel: 'D\u00e9velopper Graphique'
+    });
+    panel.appendChild(chrome.head);
 
     var body = document.createElement('div');
-    body.className = 'calc-graph-body';
-    body.id = 'calc-graph-body';
+    body.className = 'calc-graph-body section-toggle-body';
+    body.id = bodyId;
     body.hidden = true;
 
     var graphSection = document.createElement('div');
@@ -4742,13 +5077,12 @@
 
     graphSection.appendChild(rsmWrap);
     body.appendChild(graphSection);
-
-    // Collapsed by default: only the toggle is in the DOM so the chart cannot
-    // take layout space or remain visible if CSS/hidden is overridden.
-    panel.appendChild(toggle);
+    panel.appendChild(body);
     el.appendChild(panel);
 
     var graphCollapsed = true;
+    var graphEnabled = false;
+    var graphCollapse = null;
     var surfaceCtx = surfaceCanvas.getContext('2d', { alpha: true });
 
     function clientToPlotClamped(clientX, clientY) {
@@ -5120,38 +5454,61 @@
     }
 
     function setGraphCollapsed(collapsed) {
-      graphCollapsed = !!collapsed;
-      panel.classList.toggle('is-collapsed', graphCollapsed);
-      body.hidden = graphCollapsed;
-      toggle.setAttribute('aria-expanded', graphCollapsed ? 'false' : 'true');
-      toggleIcon.textContent = graphCollapsed ? '▸' : '▾';
+      if (!graphCollapse || !graphEnabled) return;
+      graphCollapse.setExpanded(!collapsed);
+    }
 
-      if (graphCollapsed) {
-        if (body.parentNode) panel.removeChild(body);
-      } else {
-        if (!body.parentNode) panel.appendChild(body);
-        if (lastScene.result) {
-          paint(lastScene.result, {
-            urgency: lastScene.U,
-            impact: lastScene.I,
-            ease: lastScene.F
-          }, lastScene.display);
-        } else {
-          scheduleLayoutSurfacePaint();
-        }
+    function setGraphEnabled(nextEnabled, options) {
+      if (!graphCollapse) return;
+      graphCollapse.setEnabled(!!nextEnabled, options || { expand: !!nextEnabled });
+    }
+
+    function syncGraphVisibility() {
+      if (!graphCollapse) return;
+      graphCollapsed = !(graphEnabled && graphCollapse.isExpanded());
+      panel.classList.toggle('is-collapsed', graphCollapsed);
+      panel.classList.toggle('is-enabled', graphEnabled);
+      if (!graphCollapsed && lastScene.result) {
+        paint(lastScene.result, {
+          urgency: lastScene.U,
+          impact: lastScene.I,
+          ease: lastScene.F
+        }, lastScene.display);
+      } else if (!graphCollapsed) {
+        scheduleLayoutSurfacePaint();
       }
       onToggle(!graphCollapsed);
     }
 
-    toggle.addEventListener('click', function () {
-      setGraphCollapsed(!graphCollapsed);
+    graphCollapse = bindCollapsibleEnable({
+      field: panel,
+      body: body,
+      chrome: chrome,
+      enabled: false,
+      expanded: false,
+      getSummary: function () {
+        if (!lastScene.display) return '';
+        return lastScene.display.label || '';
+      },
+      onLayoutChange: function () {
+        syncGraphVisibility();
+      },
+      onEnableChange: function (on) {
+        graphEnabled = on;
+        syncGraphVisibility();
+      }
     });
+    graphEnabled = graphCollapse.isEnabled();
+    graphCollapsed = !(graphEnabled && graphCollapse.isExpanded());
 
     return {
       el: panel,
       paint: paint,
       updateTheme: updateChartTheme,
       setCollapsed: setGraphCollapsed,
+      setEnabled: setGraphEnabled,
+      isEnabled: function () { return !!(graphCollapse && graphCollapse.isEnabled()); },
+      isExpanded: function () { return !!(graphCollapse && graphCollapse.isExpanded()); },
       disconnect: function () {
         if (chartResizeObserver) chartResizeObserver.disconnect();
         if (layoutSurfaceRaf != null) {
@@ -5289,6 +5646,20 @@
     state.dueTime = state.dueDate
       ? normalizeDueTime(state.dueTime || defaults.dueTime || '')
       : '';
+    if (defaults.dueEnabled === false || state.dueEnabled === false) {
+      state.dueEnabled = false;
+    } else {
+      state.dueEnabled = state.dueDate ? true : (defaults.dueEnabled !== false);
+      if (!state.dueDate) state.dueEnabled = false;
+    }
+    if (defaults.priorityEnabled === false || state.priorityEnabled === false) {
+      state.priorityEnabled = false;
+    } else {
+      state.priorityEnabled = true;
+    }
+
+    var priorityCollapse = null;
+    var lastPrioritySummary = '';
 
     function persistSliderState(skipFieldSync) {
       if (!skipFieldSync) syncStateFromFields();
@@ -5303,6 +5674,9 @@
       Object.keys(fields).forEach(function (key) {
         state[key] = fields[key].getValue();
       });
+      if (priorityCollapse) {
+        state.priorityEnabled = priorityCollapse.isEnabled();
+      }
       if (enAttenteField) {
         state.enAttente = enAttenteField.getValue();
         state.blockedReason = enAttenteField.getBlockedReason();
@@ -5311,6 +5685,7 @@
         var dueValues = dueDateField.getValues();
         state.dueDate = dueValues.dueDate;
         state.dueTime = dueValues.dueTime;
+        state.dueEnabled = !!dueValues.dueEnabled;
       }
     }
 
@@ -5377,16 +5752,23 @@
         syncStateFromFields();
         var result = calcFn(state);
         var display = resolveDisplay(result, state);
+        lastPrioritySummary = display && display.label ? display.label : '';
+        if (priorityCollapse) priorityCollapse.refreshSummary();
         var cardTier = display.cardTier;
         if (display.blocked || display.duePast) {
           cardTier = Object.assign({}, cardTier, { blocked: true });
         }
-        applyCardTierTint(card, cardTier);
-        card.classList.toggle('is-inutile', !!display.inutile);
-        card.classList.toggle('is-blocked', !!display.blocked);
-        card.classList.toggle('is-overdue', !!display.duePast);
-        card.dataset.tier = display.label;
-        heat.paint(result, display);
+        if (state.priorityEnabled === false && !display.blocked && !display.duePast) {
+          card.classList.remove('is-inutile', 'is-blocked', 'is-overdue');
+          card.dataset.tier = '';
+        } else {
+          applyCardTierTint(card, cardTier);
+          card.classList.toggle('is-inutile', !!display.inutile);
+          card.classList.toggle('is-blocked', !!display.blocked);
+          card.classList.toggle('is-overdue', !!display.duePast);
+          card.dataset.tier = display.label;
+        }
+        if (heat) heat.paint(result, display);
         if (calcGraph) calcGraph.paint(result, state, display);
       } catch (err) {
         console.error('PriorityUI.mountVariant repaint failed', { id: variantId, error: err });
@@ -5425,12 +5807,35 @@
       card.appendChild(cardHeader);
     }
 
+    var prioritySection = document.createElement('div');
+    prioritySection.className = 'variant-priority-section';
+
+    var priorityField = document.createElement('div');
+    priorityField.className = 'field field--priority';
+
+    var priorityBodyId = 'priority-section-body-' + Math.random().toString(36).slice(2, 9);
+    var priorityChrome = createCollapsibleEnableChrome({
+      title: 'Priorit\u00e9',
+      bodyId: priorityBodyId,
+      checkboxClass: 'priority-enable-checkbox',
+      labelClass: 'priority-enable-label',
+      titleClass: 'priority-enable-title',
+      collapseLabel: 'Replier Priorit\u00e9',
+      expandLabel: 'D\u00e9velopper Priorit\u00e9'
+    });
+    priorityField.appendChild(priorityChrome.head);
+
+    var priorityBody = document.createElement('div');
+    priorityBody.className = 'priority-section-body section-toggle-body';
+    priorityBody.id = priorityBodyId;
+
     heat = createHeatPanel({
-      el: card,
+      el: priorityBody,
       formulaKey: formulaKey,
       hideSegments: formulaKey === 'eisenhower',
       onUnblock: unblockTask,
       onSegmentClick: function (targetP) {
+        if (state.priorityEnabled === false) return;
         syncStateFromFields();
         var clickedSeg = heatSegmentForTarget(targetP);
         var display = resolveDisplay(calcFn(state), state);
@@ -5458,7 +5863,35 @@
     fieldsWrap.className = 'variant-fields';
 
     fieldsSection.appendChild(fieldsWrap);
-    card.appendChild(fieldsSection);
+    priorityBody.appendChild(fieldsSection);
+    priorityField.appendChild(priorityBody);
+    prioritySection.appendChild(priorityField);
+    card.appendChild(prioritySection);
+
+    priorityCollapse = bindCollapsibleEnable({
+      field: priorityField,
+      body: priorityBody,
+      chrome: priorityChrome,
+      enabled: state.priorityEnabled !== false,
+      expanded: state.priorityEnabled !== false,
+      getSummary: function () {
+        return lastPrioritySummary || '';
+      },
+      onLayoutChange: function () {
+        if (typeof variantConfig.onLayoutChange === 'function') {
+          variantConfig.onLayoutChange();
+        }
+      },
+      onEnableChange: function (on) {
+        state.priorityEnabled = on;
+        cancelSliderAnim();
+        persistSliderState(true);
+        repaint();
+        if (typeof variantConfig.onLayoutChange === 'function') {
+          variantConfig.onLayoutChange();
+        }
+      }
+    });
 
     var wizardHooks = {
       getValue: function (key) {
@@ -5528,6 +5961,11 @@
         cancelSliderAnim();
         repaint();
         persistSliderState();
+      },
+      onLayoutChange: function () {
+        if (typeof variantConfig.onLayoutChange === 'function') {
+          variantConfig.onLayoutChange();
+        }
       }
     });
 
@@ -5537,7 +5975,11 @@
 
     dueDateField = createDueDateField({
       el: dueSection,
-      value: { dueDate: state.dueDate, dueTime: state.dueTime },
+      value: {
+        dueDate: state.dueDate,
+        dueTime: state.dueTime,
+        dueEnabled: state.dueEnabled !== false && !!state.dueDate
+      },
       onChange: function () {
         cancelSliderAnim();
         repaint();
@@ -5584,16 +6026,24 @@
           state[key] = next[key];
           if (fields[key]) fields[key].setValue(next[key]);
         });
+        if (next.priorityEnabled != null && priorityCollapse) {
+          priorityCollapse.setEnabled(!!next.priorityEnabled, {
+            notifyLayout: false,
+            expand: !!next.priorityEnabled
+          });
+          state.priorityEnabled = !!next.priorityEnabled;
+        }
         if (next.enAttente != null && enAttenteField) {
           enAttenteField.setValue(next.enAttente);
         }
         if (next.blockedReason != null && enAttenteField) {
           enAttenteField.setBlockedReason(next.blockedReason);
         }
-        if ((next.dueDate != null || next.dueTime != null) && dueDateField) {
+        if ((next.dueDate != null || next.dueTime != null || next.dueEnabled != null) && dueDateField) {
           dueDateField.setValue({
             dueDate: next.dueDate != null ? next.dueDate : state.dueDate,
-            dueTime: next.dueTime != null ? next.dueTime : state.dueTime
+            dueTime: next.dueTime != null ? next.dueTime : state.dueTime,
+            dueEnabled: next.dueEnabled != null ? next.dueEnabled : state.dueEnabled
           });
         }
         repaint();
@@ -5747,9 +6197,13 @@
     isDuePast: isDuePast,
     formatDueCountdown: formatDueCountdown,
     formatDueDateDisplay: formatDueDateDisplay,
+    formatDueDateCompactSummary: formatDueDateCompactSummary,
     formatDueBadgeText: formatDueBadgeText,
     dueBadgeSuffix: dueBadgeSuffix,
+    isDueEnabled: isDueEnabled,
     withDueDateDisplay: withDueDateDisplay,
+    createCollapsibleEnableChrome: createCollapsibleEnableChrome,
+    bindCollapsibleEnable: bindCollapsibleEnable,
     wordFor: wordFor,
     wordHtmlFor: wordHtmlFor,
     levelIconSvg: levelIconSvg,
