@@ -1030,6 +1030,7 @@
   var DUE_DATE_PREV_MONTH = 'Mois pr\u00e9c\u00e9dent';
   var DUE_DATE_NEXT_MONTH = 'Mois suivant';
   var DUE_DATE_CALENDAR_LABEL = 'Calendrier d\'\u00e9ch\u00e9ance';
+  var DUE_DATE_BOX_LABEL = 'Calendrier';
   var DUE_DATE_TIME_LABEL = 'Heure';
   var DUE_DATE_TIME_PLACEHOLDER = 'Choisir une heure';
   var DUE_DATE_TIME_CLEAR_LABEL = 'Effacer l\'heure';
@@ -1149,27 +1150,29 @@
     return date;
   }
 
-  function formatDueDateDisplay(iso, time) {
+  function formatDueDateBoxDisplay(iso) {
     var date = dueDateToLocalDate(iso);
     if (!date) return '';
-    var dateText;
     try {
-      dateText = date.toLocaleDateString('fr-FR', {
-        weekday: 'short',
+      return date.toLocaleDateString('fr-FR', {
         day: 'numeric',
         month: 'short',
         year: 'numeric'
       });
     } catch (err) {
-      dateText =
-        DUE_DATE_WEEKDAY_NAMES[(date.getDay() + 6) % 7] +
-        ' ' +
+      return (
         date.getDate() +
         ' ' +
         DUE_DATE_MONTH_NAMES[date.getMonth()] +
         ' ' +
-        date.getFullYear();
+        date.getFullYear()
+      );
     }
+  }
+
+  function formatDueDateDisplay(iso, time) {
+    var dateText = formatDueDateBoxDisplay(iso);
+    if (!dateText) return '';
     var normalizedTime = normalizeDueTime(time);
     if (!normalizedTime) return dateText;
     return dateText + ' \u00b7 ' + normalizedTime;
@@ -3506,8 +3509,17 @@
     body.className = 'due-date-body section-toggle-body';
     body.id = bodyId;
 
-    var controls = document.createElement('div');
-    controls.className = 'due-date-controls';
+    var countdown = document.createElement('div');
+    countdown.className = 'due-date-countdown';
+    countdown.id = uid + '-desc';
+    countdown.setAttribute('aria-live', 'polite');
+    countdown.hidden = true;
+
+    var pickers = document.createElement('div');
+    pickers.className = 'due-date-pickers';
+
+    var datePicker = document.createElement('div');
+    datePicker.className = 'due-date-picker due-date-picker--calendar';
 
     var trigger = document.createElement('button');
     trigger.type = 'button';
@@ -3522,16 +3534,21 @@
     triggerIcon.className = 'ti ti-calendar due-date-trigger-icon';
     triggerIcon.setAttribute('aria-hidden', 'true');
 
+    var triggerText = document.createElement('span');
+    triggerText.className = 'due-date-trigger-text';
+
+    var triggerTitle = document.createElement('span');
+    triggerTitle.className = 'due-date-trigger-title';
+    triggerTitle.textContent = DUE_DATE_BOX_LABEL;
+
     var triggerValue = document.createElement('span');
     triggerValue.className = 'due-date-trigger-value';
 
-    var triggerChevron = document.createElement('i');
-    triggerChevron.className = 'ti ti-chevron-down due-date-trigger-chevron';
-    triggerChevron.setAttribute('aria-hidden', 'true');
+    triggerText.appendChild(triggerTitle);
+    triggerText.appendChild(triggerValue);
 
     trigger.appendChild(triggerIcon);
-    trigger.appendChild(triggerValue);
-    trigger.appendChild(triggerChevron);
+    trigger.appendChild(triggerText);
 
     var clearBtn = document.createElement('button');
     clearBtn.type = 'button';
@@ -3540,21 +3557,11 @@
     clearBtn.title = DUE_DATE_CLEAR_LABEL;
     clearBtn.setAttribute('aria-label', DUE_DATE_CLEAR_LABEL);
 
-    controls.appendChild(trigger);
-    controls.appendChild(clearBtn);
+    datePicker.appendChild(trigger);
+    datePicker.appendChild(clearBtn);
 
-    var countdown = document.createElement('div');
-    countdown.className = 'due-date-countdown';
-    countdown.id = uid + '-desc';
-    countdown.setAttribute('aria-live', 'polite');
-    countdown.hidden = true;
-
-    body.appendChild(countdown);
-    body.appendChild(controls);
-
-    var timeRow = document.createElement('div');
-    timeRow.className = 'due-date-time-row';
-    timeRow.hidden = true;
+    var timePicker = document.createElement('div');
+    timePicker.className = 'due-date-picker due-date-picker--time';
 
     var timeTrigger = document.createElement('button');
     timeTrigger.type = 'button';
@@ -3581,13 +3588,8 @@
     timeTriggerText.appendChild(timeTitle);
     timeTriggerText.appendChild(timeValue);
 
-    var timeChevron = document.createElement('i');
-    timeChevron.className = 'ti ti-chevron-down due-date-time-chevron';
-    timeChevron.setAttribute('aria-hidden', 'true');
-
     timeTrigger.appendChild(timeIcon);
     timeTrigger.appendChild(timeTriggerText);
-    timeTrigger.appendChild(timeChevron);
 
     var timeClearBtn = document.createElement('button');
     timeClearBtn.type = 'button';
@@ -3597,8 +3599,17 @@
     timeClearBtn.setAttribute('aria-label', DUE_DATE_TIME_CLEAR_LABEL);
     timeClearBtn.hidden = !currentTime;
 
-    timeRow.appendChild(timeTrigger);
-    timeRow.appendChild(timeClearBtn);
+    timePicker.appendChild(timeTrigger);
+    timePicker.appendChild(timeClearBtn);
+
+    pickers.appendChild(datePicker);
+    pickers.appendChild(timePicker);
+
+    body.appendChild(countdown);
+    body.appendChild(pickers);
+
+    /* Alias used by refresh helpers that previously keyed off the stacked time row. */
+    var timeRow = pickers;
 
     var timePopover = document.createElement('div');
     timePopover.className = 'due-date-time-popover';
@@ -3823,9 +3834,8 @@
     footer.appendChild(closeBtn);
     popover.appendChild(footer);
 
-    /* Calendar anchors under the date trigger; time picker under the time row. */
+    /* Popovers stack under the dual Calendar / Time picker row. */
     body.appendChild(popover);
-    body.appendChild(timeRow);
     body.appendChild(timePopover);
 
     field.appendChild(body);
@@ -3838,11 +3848,14 @@
     }
 
     function refreshTimeRow() {
-      var show = enabled && !!current;
-      timeRow.hidden = !show;
-      if (!show && timeOpen) closeTimePicker(false);
+      var hasDate = enabled && !!current;
+      if (!hasDate && timeOpen) closeTimePicker(false);
       timeClearBtn.hidden = !currentTime;
-      timeRow.classList.toggle('has-time', !!currentTime);
+      pickers.classList.toggle('has-time', !!currentTime);
+      pickers.classList.toggle('has-date', !!current);
+      timePicker.classList.toggle('is-disabled', !hasDate);
+      timeTrigger.disabled = !hasDate;
+      timeTrigger.setAttribute('aria-disabled', hasDate ? 'false' : 'true');
       field.classList.toggle('is-time-open', timeOpen);
       timeTrigger.setAttribute('aria-expanded', timeOpen ? 'true' : 'false');
       if (currentTime) {
@@ -4079,15 +4092,17 @@
     }
 
     function refreshTrigger() {
-      var display = formatDueDateDisplay(current, currentTime);
+      var display = formatDueDateBoxDisplay(current);
       if (display) {
         triggerValue.textContent = display;
         triggerValue.classList.remove('is-placeholder');
         trigger.classList.add('has-value');
+        datePicker.classList.add('has-value');
       } else {
         triggerValue.textContent = DUE_DATE_PLACEHOLDER;
         triggerValue.classList.add('is-placeholder');
         trigger.classList.remove('has-value');
+        datePicker.classList.remove('has-value');
       }
     }
 
