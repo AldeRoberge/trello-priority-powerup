@@ -440,11 +440,11 @@ check(
 );
 check(
   'countdown today',
-  PU.formatDueCountdown('2026-07-13', nowFixed) === 'aujourd\'hui'
+  PU.formatDueCountdown('2026-07-13', nowFixed) === 'Aujourd\'hui'
 );
 check(
   'countdown 1 day',
-  PU.formatDueCountdown(addDaysIso('2026-07-13', 1), nowFixed) === '1 jour restant'
+  PU.formatDueCountdown(addDaysIso('2026-07-13', 1), nowFixed) === 'Demain'
 );
 check(
   'countdown 3 days',
@@ -460,7 +460,7 @@ check(
 );
 check(
   'countdown overdue',
-  PU.formatDueCountdown(addDaysIso('2026-07-13', -2), nowFixed) === 'en retard de 2 jours'
+  PU.formatDueCountdown(addDaysIso('2026-07-13', -2), nowFixed) === 'En retard de 2 jours'
 );
 check(
   'countdown with time in minutes',
@@ -472,11 +472,11 @@ check(
 );
 check(
   'countdown with time overdue minutes',
-  PU.formatDueCountdown('2026-07-13', nowAfternoon, '13:40') === 'en retard de 20 min'
+  PU.formatDueCountdown('2026-07-13', nowAfternoon, '13:40') === 'En retard de 20 min'
 );
 check(
   'countdown with time overdue hours',
-  PU.formatDueCountdown('2026-07-13', nowAfternoon, '11:00') === 'en retard de 3 h'
+  PU.formatDueCountdown('2026-07-13', nowAfternoon, '11:00') === 'En retard de 3 h'
 );
 check(
   'countdown with time far stays day-granular',
@@ -485,7 +485,7 @@ check(
 );
 check(
   'date-only ignores dueTime absence (midnight day granularity)',
-  PU.formatDueCountdown('2026-07-13', nowAfternoon) === 'aujourd\'hui'
+  PU.formatDueCountdown('2026-07-13', nowAfternoon) === 'Aujourd\'hui'
 );
 check(
   'due badge text includes countdown',

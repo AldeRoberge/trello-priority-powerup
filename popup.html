@@ -6,17 +6,19 @@
   <title>Définir la priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <link rel="stylesheet" href="./trello-theme.css?v=due-date-toggle-1" />
-  <link rel="stylesheet" href="./priority-ui.css?v=due-date-toggle-1" />
+  <link rel="stylesheet" href="./trello-theme.css?v=progress-embed-1" />
+  <link rel="stylesheet" href="./priority-ui.css?v=progress-embed-1" />
   <script src="./rest-config.js"></script>
-  <script src="./priority-matrix.js?v=due-date-toggle-1"></script>
-  <script src="./priority-ui.js?v=due-date-toggle-1"></script>
+  <script src="./priority-matrix.js?v=progress-embed-1"></script>
+  <script src="./priority-ui.js?v=progress-embed-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
     }
   </script>
   <script src="./priority-trello.js"></script>
+  <script src="./completion-ui.js?v=progress-embed-1"></script>
+  <script src="./completion-trello.js?v=progress-embed-1"></script>
 </head>
 <body class="tp-page tp-page--priority">
   <div class="compare-page">
@@ -27,8 +29,16 @@
     PriorityTrello.initIframePage(function (t) {
     const mountEl = document.getElementById('priorityMount');
     let variant = null;
+    let completionUi = null;
     let latestState = null;
+    let latestCompletion = null;
     let saveChain = Promise.resolve();
+    let completionSaveChain = Promise.resolve();
+    let progressCollapsed = true;
+    let progressPanel = null;
+    let progressBody = null;
+    let progressToggle = null;
+    let progressToggleIcon = null;
 
     t.render(function () {
       PriorityTrello.getBoardColorScheme(t)
@@ -38,6 +48,12 @@
         .catch(function (err) {
           console.error('Priority popup color scheme refresh failed', err);
         });
+
+      if (typeof CompletionTrello !== 'undefined' && CompletionTrello.getBoardCompletionColorScheme) {
+        CompletionTrello.getBoardCompletionColorScheme(t).catch(function (err) {
+          console.error('Completion color scheme refresh failed', err);
+        });
+      }
     });
 
     function saveState(state) {
@@ -50,6 +66,18 @@
           console.error('Priority save failed', err);
         });
       return saveChain;
+    }
+
+    function saveCompletion(data) {
+      latestCompletion = data;
+      completionSaveChain = completionSaveChain
+        .then(function () {
+          return CompletionTrello.saveCardCompletion(t, data);
+        })
+        .catch(function (err) {
+          console.error('Completion save failed', err);
+        });
+      return completionSaveChain;
     }
 
     function resizePopup() {
@@ -69,10 +97,107 @@
       resizePopup();
     }
 
+    function setProgressCollapsed(collapsed) {
+      progressCollapsed = !!collapsed;
+      if (!progressPanel || !progressBody || !progressToggle) return;
+
+      progressPanel.classList.toggle('is-collapsed', progressCollapsed);
+      progressBody.hidden = progressCollapsed;
+      progressToggle.setAttribute('aria-expanded', progressCollapsed ? 'false' : 'true');
+      if (progressToggleIcon) {
+        progressToggleIcon.textContent = progressCollapsed ? '▸' : '▾';
+      }
+
+      if (progressCollapsed) {
+        if (progressBody.parentNode) progressPanel.removeChild(progressBody);
+      } else {
+        if (!progressBody.parentNode) progressPanel.appendChild(progressBody);
+      }
+      resizePopup();
+    }
+
+    function mountProgressSection(cardEl, initiallyOpen) {
+      progressPanel = document.createElement('div');
+      progressPanel.className = 'calc-graph-panel progress-section-panel is-collapsed';
+
+      progressToggle = document.createElement('button');
+      progressToggle.type = 'button';
+      progressToggle.className = 'calc-graph-toggle';
+      progressToggle.setAttribute('aria-expanded', 'false');
+      progressToggle.setAttribute('aria-controls', 'progress-section-body');
+      progressToggle.title = 'Afficher ou masquer le progr\u00e8s';
+
+      var toggleLabel = document.createElement('span');
+      toggleLabel.className = 'calc-graph-toggle-label';
+      toggleLabel.textContent = 'Progr\u00e8s';
+
+      progressToggleIcon = document.createElement('span');
+      progressToggleIcon.className = 'calc-graph-toggle-chevron';
+      progressToggleIcon.setAttribute('aria-hidden', 'true');
+      progressToggleIcon.textContent = '▸';
+
+      progressToggle.appendChild(toggleLabel);
+      progressToggle.appendChild(progressToggleIcon);
+
+      progressBody = document.createElement('div');
+      progressBody.className = 'calc-graph-body progress-section-body';
+      progressBody.id = 'progress-section-body';
+      progressBody.hidden = true;
+
+      var completionMount = document.createElement('div');
+      completionMount.id = 'completionMount';
+      progressBody.appendChild(completionMount);
+
+      progressPanel.appendChild(progressToggle);
+      cardEl.appendChild(progressPanel);
+
+      progressToggle.addEventListener('click', function () {
+        setProgressCollapsed(!progressCollapsed);
+        if (!progressCollapsed && completionUi && typeof completionUi.focusAddInput === 'function') {
+          // Defer focus until layout/sizeTo settle.
+          setTimeout(function () {
+            try { completionUi.focusAddInput(); } catch (e) { /* ignore */ }
+          }, 0);
+        }
+      });
+
+      return CompletionTrello.getBoardCompletionColorScheme(t)
+        .then(function () {
+          return CompletionTrello.getCardCompletion(t);
+        })
+        .then(function (stored) {
+          completionUi = CompletionUI.mountCompletionUI(completionMount, {
+            data: stored,
+            showCardHeader: false,
+            onChange: function (data) {
+              saveCompletion(data);
+            },
+            onResize: function () {
+              resizePopup();
+            },
+          });
+          latestCompletion = completionUi.getData();
+          setProgressCollapsed(!initiallyOpen);
+          if (initiallyOpen) {
+            setTimeout(function () {
+              try {
+                progressPanel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                completionUi.focusAddInput();
+              } catch (e) { /* ignore */ }
+              resizePopup();
+            }, 0);
+          }
+        });
+    }
+
     async function init() {
       if (!window.PriorityUI) {
         throw new Error('PriorityUI is not available — priority-ui.js failed to load or initialize');
       }
+      if (!window.CompletionUI || !window.CompletionTrello) {
+        throw new Error('CompletionUI / CompletionTrello must be available in the priority popup');
+      }
+
       const inputs = await PriorityTrello.clearBlockedIfComplete(t);
       await PriorityTrello.ensureBoardPriorityContext(t);
       const boardFormula = PriorityTrello.getCachedBoardFormulaKey
@@ -81,6 +206,14 @@
 
       const hasSavedPriority = !!inputs;
       const initialDefaults = hasSavedPriority ? inputs : PriorityTrello.IMPORTANT_INPUTS;
+
+      var openSection = null;
+      var argName = null;
+      if (typeof t.arg === 'function') {
+        openSection = t.arg('openSection');
+        argName = t.arg('cardName');
+      }
+      var focusProgress = openSection === 'progress';
 
       variant = PriorityUI.mountVariant(mountEl, {
         id: 'card',
@@ -104,11 +237,7 @@
         },
       });
 
-      if (typeof t.arg === 'function') {
-        var argName = t.arg('cardName');
-        if (argName) setCardNameLabel(argName);
-      }
-
+      if (argName) setCardNameLabel(argName);
       var cardNameEl = document.getElementById('cardName');
       var cardNamePromise = PriorityTrello.getCardName(t).then(function (resolved) {
         if (resolved) setCardNameLabel(resolved);
@@ -122,14 +251,18 @@
         await saveState(variant.getState());
       }
 
+      await mountProgressSection(variant.card, focusProgress);
       await cardNamePromise;
-      window.scrollTo(0, 0);
+      if (!focusProgress) window.scrollTo(0, 0);
       resizePopup();
     }
 
     window.addEventListener('pagehide', function () {
       if (latestState) {
         saveState(latestState);
+      }
+      if (latestCompletion) {
+        saveCompletion(latestCompletion);
       }
     });
 

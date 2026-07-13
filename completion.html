@@ -5,84 +5,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Définir le progrès</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
-  <link rel="stylesheet" href="./trello-theme.css" />
-  <link rel="stylesheet" href="./priority-ui.css" />
   <script src="./rest-config.js"></script>
   <script src="./priority-trello.js"></script>
-  <script src="./completion-ui.js"></script>
-  <script src="./completion-trello.js"></script>
 </head>
-<body class="tp-page tp-page--completion">
-  <div id="completionMount"></div>
-
+<body class="tp-page">
+  <p class="tp-subtitle" style="margin:16px;max-width:28rem;">
+    Le progr&egrave;s s&rsquo;ouvre dans l&rsquo;&eacute;diteur de priorit&eacute;
+    (section <strong>Progr&egrave;s</strong>). Utilisez le badge
+    &laquo;&nbsp;D&eacute;finir le progr&egrave;s&nbsp;&raquo; sur la carte.
+  </p>
   <script>
-    CompletionTrello.initIframePage(function (t) {
-      var mountEl = document.getElementById('completionMount');
-      var ui = null;
-      var latestData = null;
-      var saveChain = Promise.resolve();
-
-      function saveData(data) {
-        latestData = data;
-        saveChain = saveChain
-          .then(function () {
-            return CompletionTrello.saveCardCompletion(t, data);
-          })
-          .catch(function (err) {
-            console.error('Completion save failed', err);
-          });
-        return saveChain;
-      }
-
-      function resizePopup() {
-        if (typeof t.sizeTo === 'function') {
-          t.sizeTo(document.body);
-        }
-      }
-
-      async function init() {
-        await CompletionTrello.getBoardCompletionColorScheme(t);
-        var stored = await CompletionTrello.getCardCompletion(t);
-
-        ui = CompletionUI.mountCompletionUI(mountEl, {
-          data: stored,
-          onChange: function (data) {
-            saveData(data);
-          },
-          onResize: resizePopup,
-        });
-
-        if (typeof t.arg === 'function') {
-          var argName = t.arg('cardName');
-          if (argName) ui.setCardName(argName);
-        }
-
-        var cardNamePromise = CompletionTrello.getCardName(t).then(
-          function (resolved) {
-            if (resolved) ui.setCardName(resolved);
-          },
-          function () {
-            ui.setCardName(null);
-          }
+    // Legacy URL — progress UI lives in popup.html (openSection: 'progress').
+    // Primary entry is index.html → openPriorityPopup({ openSection: 'progress' }).
+    try {
+      if (window.TrelloPowerUp && typeof TrelloPowerUp.iframe === 'function') {
+        var t = TrelloPowerUp.iframe(
+          (window.PriorityTrello && PriorityTrello.restClientOptions && PriorityTrello.restClientOptions()) || {}
         );
-
-        latestData = ui.getData();
-        await cardNamePromise;
-        ui.focusAddInput();
-        window.scrollTo(0, 0);
-        resizePopup();
+        if (t && typeof t.render === 'function') t.render(function () {});
+        if (t && typeof t.sizeTo === 'function') t.sizeTo(document.body);
       }
-
-      window.addEventListener('pagehide', function () {
-        if (latestData) {
-          saveData(latestData);
-        }
-      });
-
-      return init();
-    }).catch(function (err) {
-      console.error('Completion popup init failed', err);
-    });
+    } catch (err) {
+      console.error('Completion legacy page init failed', err);
+    }
   </script>
 </body>
 </html>

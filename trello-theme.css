@@ -770,6 +770,10 @@ body.tp-page--priority {
   width: 7.75rem;
 }
 
+.tp-page--priority .due-date-popover {
+  max-width: 292px;
+}
+
 .tp-page--priority .due-date-month-label {
   font-size: 15px;
 }
@@ -851,7 +855,7 @@ html[data-color-mode="dark"] .tp-page--priority {
   --due-accent-text: var(--tp-primary-text);
 }
 
-/* Completion editor — modal iframe */
+/* Completion editor — modal iframe (legacy) + embedded in priority popup */
 body.tp-page--completion {
   background: var(--tp-bg);
   color: var(--tp-text);
@@ -865,9 +869,11 @@ body.tp-page--completion {
   --completion-thumb-item: 14px;
 }
 
-/* Bridge priority-ui slider tokens inside completion popup */
+/* Bridge priority-ui slider tokens inside completion surfaces */
 html[data-color-mode="light"] .tp-page--completion,
-html[data-color-mode="dark"] .tp-page--completion {
+html[data-color-mode="dark"] .tp-page--completion,
+html[data-color-mode="light"] .tp-page--priority .tp-completion,
+html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   --surface-0: var(--tp-bg);
   --surface-1: var(--tp-surface-subtle);
   --surface-2: var(--tp-surface);
@@ -888,7 +894,8 @@ html[data-color-mode="dark"] .tp-page--completion {
   --completion-thumb-item: 14px;
 }
 
-html[data-color-mode="dark"] .tp-page--completion {
+html[data-color-mode="dark"] .tp-page--completion,
+html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   --slider-track: #596773;
   --slider-thumb-bg: #ffffff;
   --slider-thumb-border: #738496;
@@ -896,7 +903,8 @@ html[data-color-mode="dark"] .tp-page--completion {
   --slider-focus-ring: 0 0 0 3px rgba(166, 197, 231, 0.35);
 }
 
-.tp-page--completion .tp-completion {
+.tp-page--completion .tp-completion,
+.tp-page--priority .tp-completion {
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -906,8 +914,18 @@ html[data-color-mode="dark"] .tp-page--completion {
   padding: 2px 0 0;
 }
 
-.tp-page--completion .tp-heading {
+.tp-page--completion .tp-heading,
+.tp-page--priority .tp-completion .tp-heading {
   margin-bottom: 0;
+}
+
+.tp-page--priority .progress-section-panel {
+  margin-top: 10px;
+  padding: 0 10px 8px;
+}
+
+.tp-page--priority .progress-section-body {
+  padding-top: 10px;
 }
 
 .tp-completion-progress {
@@ -991,13 +1009,6 @@ html[data-color-mode="dark"] .tp-page--completion {
   font-weight: 700;
 }
 
-.tp-completion-meta {
-  margin: 0;
-  font-size: 12px;
-  color: var(--tp-text-muted);
-  min-height: 1.2em;
-}
-
 .tp-completion-list-section {
   margin: 0;
   display: flex;
@@ -1012,30 +1023,11 @@ html[data-color-mode="dark"] .tp-page--completion {
   gap: 10px;
 }
 
-.tp-completion-list-hint {
-  margin: 0;
-  font-size: 12px;
-  color: var(--tp-text-muted);
-  white-space: nowrap;
-}
-
 .tp-completion-list {
   list-style: none;
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.tp-completion-empty {
-  margin: 0;
-  padding: 14px 12px;
-  border-radius: var(--completion-radius, 8px);
-  background: var(--tp-surface-subtle);
-  box-shadow: inset 0 0 0 1px var(--tp-border);
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--tp-text-muted);
-  text-align: center;
 }
 
 .tp-completion-item {
@@ -1046,6 +1038,11 @@ html[data-color-mode="dark"] .tp-page--completion {
   border-radius: var(--completion-radius, 8px);
   background: var(--tp-surface-subtle);
   box-shadow: inset 0 0 0 1px var(--tp-border);
+}
+
+.tp-completion-item.is-flipping {
+  position: relative;
+  pointer-events: none;
 }
 
 .tp-completion-item-main {
@@ -1249,6 +1246,22 @@ html[data-color-mode="dark"] .tp-page--completion {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  transition: opacity 0.2s ease;
+}
+
+.tp-completion-done-section.is-empty {
+  opacity: 0.55;
+}
+
+.tp-completion-done-section.is-empty .tp-completion-done-toggle {
+  color: var(--tp-text-muted);
+  background: color-mix(in srgb, var(--tp-surface-subtle) 70%, var(--tp-bg));
+  cursor: default;
+  pointer-events: none;
+}
+
+.tp-completion-done-section.is-empty .tp-completion-done-chevron {
+  opacity: 0.45;
 }
 
 .tp-completion-done-toggle {
@@ -1269,10 +1282,14 @@ html[data-color-mode="dark"] .tp-page--completion {
   font-weight: 600;
   cursor: pointer;
   text-align: left;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
 }
 
-.tp-completion-done-toggle:hover {
+.tp-completion-done-toggle:disabled {
+  cursor: default;
+}
+
+.tp-completion-done-toggle:hover:not(:disabled) {
   background: var(--tp-surface-hover);
   color: var(--tp-text);
 }
@@ -1381,10 +1398,6 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked {
   .tp-completion-field-head {
     grid-template-columns: 4rem minmax(0, 1fr) 2.5rem;
     gap: 6px 8px;
-  }
-
-  .tp-completion-list-hint {
-    display: none;
   }
 }
 

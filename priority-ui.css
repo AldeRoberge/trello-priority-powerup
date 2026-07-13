@@ -578,6 +578,9 @@ body {
 }
 
 .due-date-popover {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 292px;
   margin-top: 10px;
   padding: 12px 10px 10px;
   border: 1px solid var(--border);
@@ -638,7 +641,8 @@ body {
 .due-date-weekdays,
 .due-date-row {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(7, 36px);
+  justify-content: center;
   gap: 2px;
 }
 

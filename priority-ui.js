@@ -962,8 +962,6 @@
   }
 
   var DUE_DATE_LABEL = '\u00c9ch\u00e9ance';
-  var DUE_DATE_DESCRIPTION =
-    'Date et heure optionnelles affich\u00e9es en compte \u00e0 rebours sur la carte (surtout pour les priorit\u00e9s hautes).';
   var DUE_DATE_CLEAR_LABEL = 'Effacer l\'\u00e9ch\u00e9ance';
   var DUE_DATE_PLACEHOLDER = 'Choisir une date';
   var DUE_DATE_TODAY_LABEL = 'Aujourd\'hui';
@@ -1117,6 +1115,13 @@
     return daysUntilDue(iso, now) < 0;
   }
 
+  function capitalizeCountdownPhrase(text) {
+    if (!text) return '';
+    var first = text.charAt(0);
+    var upper = first.toLocaleUpperCase('fr-FR');
+    return upper === first ? text : upper + text.slice(1);
+  }
+
   function formatDueCountdownDays(days) {
     if (!isFinite(days)) return '';
     if (days < 0) {
@@ -1126,7 +1131,7 @@
       return 'en retard';
     }
     if (days === 0) return 'aujourd\'hui';
-    if (days === 1) return '1 jour restant';
+    if (days === 1) return 'demain';
     if (days < COUNTDOWN_DAYS_PER_WEEK) return days + ' jours restants';
     if (days < COUNTDOWN_WEEK_THRESHOLD_DAYS) {
       var weeks = Math.max(1, Math.round(days / COUNTDOWN_DAYS_PER_WEEK));
@@ -1142,36 +1147,43 @@
 
   function formatDueCountdown(iso, now, time) {
     var dueTime = normalizeDueTime(time);
-    if (!dueTime) return formatDueCountdownDays(daysUntilDue(iso, now));
+    if (!dueTime) {
+      return capitalizeCountdownPhrase(formatDueCountdownDays(daysUntilDue(iso, now)));
+    }
 
     var ms = msUntilDue(iso, dueTime, now);
     if (!isFinite(ms)) return '';
     var abs = Math.abs(ms);
     var past = ms < 0;
+    var phrase;
 
     if (abs < MS_PER_MINUTE / 2) {
-      return past ? 'en retard' : 'maintenant';
-    }
-
-    var minutes = Math.max(1, Math.round(abs / MS_PER_MINUTE));
-    if (minutes < 60) {
-      if (past) {
-        return minutes === 1 ? 'en retard de 1 min' : 'en retard de ' + minutes + ' min';
+      phrase = past ? 'en retard' : 'maintenant';
+    } else {
+      var minutes = Math.max(1, Math.round(abs / MS_PER_MINUTE));
+      if (minutes < 60) {
+        if (past) {
+          phrase = minutes === 1 ? 'en retard de 1 min' : 'en retard de ' + minutes + ' min';
+        } else {
+          phrase = minutes === 1 ? '1 min restante' : minutes + ' min restantes';
+        }
+      } else {
+        var hours = Math.max(1, Math.round(abs / MS_PER_HOUR));
+        if (hours < 24) {
+          if (past) {
+            phrase = hours === 1 ? 'en retard de 1 h' : 'en retard de ' + hours + ' h';
+          } else {
+            phrase = hours === 1 ? '1 h restante' : hours + ' h restantes';
+          }
+        } else {
+          var days = Math.max(1, Math.round(abs / MS_PER_DAY));
+          if (past) days = -days;
+          phrase = formatDueCountdownDays(days);
+        }
       }
-      return minutes === 1 ? '1 min restante' : minutes + ' min restantes';
     }
 
-    var hours = Math.max(1, Math.round(abs / MS_PER_HOUR));
-    if (hours < 24) {
-      if (past) {
-        return hours === 1 ? 'en retard de 1 h' : 'en retard de ' + hours + ' h';
-      }
-      return hours === 1 ? '1 h restante' : hours + ' h restantes';
-    }
-
-    var days = Math.max(1, Math.round(abs / MS_PER_DAY));
-    if (past) days = -days;
-    return formatDueCountdownDays(days);
+    return capitalizeCountdownPhrase(phrase);
   }
 
   function dueBadgeSuffix(display) {
@@ -2868,7 +2880,6 @@
     input.type = 'checkbox';
     input.className = 'en-attente-checkbox';
     input.checked = checked;
-    input.setAttribute('aria-describedby', 'en-attente-desc');
 
     var textWrap = document.createElement('span');
     textWrap.className = 'en-attente-text';
@@ -2877,13 +2888,7 @@
     title.className = 'en-attente-title';
     title.textContent = BLOCKED_LABEL;
 
-    var desc = document.createElement('span');
-    desc.className = 'en-attente-desc';
-    desc.id = 'en-attente-desc';
-    desc.textContent = BLOCKED_DESCRIPTION;
-
     textWrap.appendChild(title);
-    textWrap.appendChild(desc);
     label.appendChild(input);
     label.appendChild(textWrap);
     field.appendChild(label);
@@ -2999,7 +3004,6 @@
     toggle.type = 'checkbox';
     toggle.className = 'due-date-checkbox';
     toggle.checked = enabled;
-    toggle.setAttribute('aria-describedby', uid + '-desc');
 
     var textWrap = document.createElement('span');
     textWrap.className = 'due-date-text';
@@ -3009,13 +3013,7 @@
     title.id = uid + '-label';
     title.textContent = DUE_DATE_LABEL;
 
-    var desc = document.createElement('span');
-    desc.className = 'due-date-desc';
-    desc.id = uid + '-desc';
-    desc.textContent = DUE_DATE_DESCRIPTION;
-
     textWrap.appendChild(title);
-    textWrap.appendChild(desc);
     label.appendChild(toggle);
     label.appendChild(textWrap);
     field.appendChild(label);

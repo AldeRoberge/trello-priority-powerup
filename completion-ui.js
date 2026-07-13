@@ -398,6 +398,21 @@
     };
   }
 
+  var FLIP_MS = 380;
+  var FLIP_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
+
+  function prefersReducedMotion() {
+    try {
+      return !!(
+        typeof window !== 'undefined' &&
+        window.matchMedia &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      );
+    } catch (e) {
+      return false;
+    }
+  }
+
   function mountCompletionUI(containerEl, options) {
     if (!containerEl) throw new Error('mountCompletionUI: container required');
     var CT = getCompletionTrello();
@@ -409,20 +424,25 @@
     var data = CT.normalizeCompletionData(options.data || { items: [] });
     var onChange = typeof options.onChange === 'function' ? options.onChange : function () {};
     var onResize = typeof options.onResize === 'function' ? options.onResize : function () {};
+    var showCardHeader = options.showCardHeader !== false;
     var masterDragging = false;
+    var flipAnimToken = 0;
 
     containerEl.innerHTML = '';
     containerEl.className = 'tp-completion';
 
-    var header = document.createElement('header');
-    header.className = 'tp-priority-card-header';
-    var cardNameEl = document.createElement('p');
-    cardNameEl.className = 'tp-priority-card-name is-loading';
-    cardNameEl.id = 'cardName';
-    cardNameEl.setAttribute('aria-live', 'polite');
-    cardNameEl.textContent = 'Chargement\u2026';
-    header.appendChild(cardNameEl);
-    containerEl.appendChild(header);
+    var cardNameEl = null;
+    if (showCardHeader) {
+      var header = document.createElement('header');
+      header.className = 'tp-priority-card-header';
+      cardNameEl = document.createElement('p');
+      cardNameEl.className = 'tp-priority-card-name is-loading';
+      cardNameEl.id = 'cardName';
+      cardNameEl.setAttribute('aria-live', 'polite');
+      cardNameEl.textContent = 'Chargement\u2026';
+      header.appendChild(cardNameEl);
+      containerEl.appendChild(header);
+    }
 
     var progressSection = document.createElement('section');
     progressSection.className = 'tp-completion-progress';
@@ -472,11 +492,6 @@
     });
     progressPanel.appendChild(masterSlider.el);
 
-    var metaEl = document.createElement('p');
-    metaEl.className = 'tp-completion-meta';
-    metaEl.id = 'completionMeta';
-    progressPanel.appendChild(metaEl);
-
     progressSection.appendChild(progressPanel);
     containerEl.appendChild(progressSection);
 
@@ -485,17 +500,15 @@
     listSection.innerHTML =
       '<div class="tp-completion-list-head">' +
       '<h3 class="tp-heading">Sous-t\u00e2ches</h3>' +
-      '<p class="tp-completion-list-hint">Pond\u00e9r\u00e9es par difficult\u00e9</p>' +
       '</div>' +
       '<ul class="tp-completion-list" id="completionList" aria-label="Sous-t\u00e2ches"></ul>';
     containerEl.appendChild(listSection);
 
     var doneSection = document.createElement('section');
-    doneSection.className = 'tp-completion-done-section';
-    doneSection.hidden = true;
+    doneSection.className = 'tp-completion-done-section is-empty';
     doneSection.innerHTML =
       '<button type="button" class="tp-completion-done-toggle" id="completionDoneToggle" ' +
-      'aria-expanded="false" aria-controls="completionDoneList">' +
+      'aria-expanded="false" aria-controls="completionDoneList" disabled>' +
       '<span class="tp-completion-done-toggle-label" id="completionDoneLabel">Termin\u00e9es (0)</span>' +
       '<span class="tp-completion-done-chevron" aria-hidden="true"></span>' +
       '</button>' +
@@ -562,17 +575,27 @@
 
     function updateDoneSectionUi(doneCount) {
       var hasDone = doneCount > 0;
-      doneSection.hidden = !hasDone;
+      if (!hasDone) doneSectionExpanded = false;
       doneLabel.textContent =
         'Termin\u00e9es (' + doneCount + ')';
-      doneToggle.setAttribute('aria-expanded', doneSectionExpanded ? 'true' : 'false');
-      doneListEl.hidden = !doneSectionExpanded;
-      doneSection.classList.toggle('is-expanded', doneSectionExpanded);
+      doneSection.classList.toggle('is-empty', !hasDone);
+      doneSection.classList.toggle('is-expanded', hasDone && doneSectionExpanded);
+      doneToggle.disabled = !hasDone;
+      doneToggle.setAttribute(
+        'aria-expanded',
+        hasDone && doneSectionExpanded ? 'true' : 'false'
+      );
+      doneListEl.hidden = !(hasDone && doneSectionExpanded);
     }
 
-    function emitChange() {
+    function emitChange(opts) {
+      opts = opts || {};
       data = CT.normalizeCompletionData(data);
-      renderList();
+      if (opts.animateItemId) {
+        renderListWithFlip(opts.animateItemId, opts.flipWasDone);
+      } else {
+        renderList();
+      }
       updateProgressUi();
       onChange(data);
     }
@@ -604,21 +627,82 @@
         progress.percent === 100
       );
       masterDragging = false;
+    }
 
-      if (!progress.hasItems) {
-        metaEl.textContent = '';
-      } else {
-        metaEl.textContent =
-          progress.doneCount +
-          ' sur ' +
-          progress.totalCount +
-          ' termin\u00e9e' +
-          (progress.doneCount > 1 ? 's' : '') +
-          ' \u00b7 pond\u00e9ration ' +
-          progress.doneWeight +
-          '/' +
-          progress.totalWeight;
+    function clearFlipStyles(el) {
+      if (!el) return;
+      el.classList.remove('is-flipping');
+      el.style.transition = '';
+      el.style.transform = '';
+      el.style.opacity = '';
+      el.style.zIndex = '';
+      el.style.willChange = '';
+    }
+
+    function playFlipTo(el, firstRect) {
+      if (!el || !firstRect || prefersReducedMotion()) return;
+      var last = el.getBoundingClientRect();
+      var dx = firstRect.left - last.left;
+      var dy = firstRect.top - last.top;
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+
+      var token = ++flipAnimToken;
+      el.classList.add('is-flipping');
+      el.style.willChange = 'transform, opacity';
+      el.style.transition = 'none';
+      el.style.transform = 'translate(' + dx + 'px, ' + dy + 'px)';
+      el.style.opacity = '0.92';
+      el.style.zIndex = '2';
+      // Force layout so the invert frame sticks before animating.
+      void el.offsetWidth;
+      el.style.transition =
+        'transform ' + FLIP_MS + 'ms ' + FLIP_EASING +
+        ', opacity ' + FLIP_MS + 'ms ' + FLIP_EASING;
+      el.style.transform = 'translate(0, 0)';
+      el.style.opacity = '1';
+
+      var settled = false;
+      function finish() {
+        if (settled || token !== flipAnimToken) return;
+        settled = true;
+        el.removeEventListener('transitionend', onEnd);
+        clearFlipStyles(el);
+        onResize();
       }
+      function onEnd(e) {
+        if (e.target !== el || (e.propertyName && e.propertyName !== 'transform')) return;
+        finish();
+      }
+      el.addEventListener('transitionend', onEnd);
+      setTimeout(finish, FLIP_MS + 80);
+    }
+
+    function captureItemRect(id) {
+      var row = findItemRow(id);
+      return row ? row.getBoundingClientRect() : null;
+    }
+
+    function renderListWithFlip(itemId, wasDone) {
+      var firstRect = captureItemRect(itemId);
+      var becomingDone = !wasDone;
+
+      if (becomingDone && firstRect && !prefersReducedMotion()) {
+        doneSectionExpanded = true;
+      }
+
+      renderList();
+
+      if (!itemId || !firstRect || prefersReducedMotion()) {
+        onResize();
+        return;
+      }
+
+      var nextRow = findItemRow(itemId);
+      if (!nextRow) {
+        onResize();
+        return;
+      }
+      playFlipTo(nextRow, firstRect);
     }
 
     function setItemProgress(item, progress) {
@@ -641,11 +725,15 @@
       }
 
       checkBtn.addEventListener('click', function () {
+        var wasDone = !!item.done;
         setItemProgress(item, item.done ? 0 : 100);
         itemSlider.value = String(item.progress);
         itemValEl.textContent = item.progress + '\u00a0%';
         syncItemProgressUi();
-        emitChange();
+        emitChange({
+          animateItemId: item.id,
+          flipWasDone: wasDone,
+        });
         onResize();
       });
 
@@ -660,8 +748,17 @@
 
       itemSlider.addEventListener('input', handleItemSlider);
       itemSlider.addEventListener('change', function () {
+        var wasDone = li.classList.contains('is-done');
         handleItemSlider();
-        renderList();
+        var nowDone = !!item.done;
+        if (wasDone !== nowDone) {
+          emitChange({
+            animateItemId: item.id,
+            flipWasDone: wasDone,
+          });
+        } else {
+          renderList();
+        }
         onResize();
       });
 
@@ -776,12 +873,6 @@
 
       if (!data.items.length) {
         updateDoneSectionUi(0);
-        var empty = document.createElement('li');
-        empty.className = 'tp-completion-empty';
-        empty.setAttribute('aria-live', 'polite');
-        empty.textContent =
-          'Aucune sous-t\u00e2che pour l\u2019instant. Ajustez le progr\u00e8s global ci-dessus, ou ajoutez des \u00e9tapes ci-dessous.';
-        listEl.appendChild(empty);
         return;
       }
 
@@ -802,6 +893,7 @@
     }
 
     doneToggle.addEventListener('click', function () {
+      if (doneToggle.disabled) return;
       doneSectionExpanded = !doneSectionExpanded;
       updateDoneSectionUi(
         data.items.filter(function (item) {
@@ -862,6 +954,10 @@
 
     return {
       setCardName: function (name) {
+        if (!cardNameEl) {
+          onResize();
+          return;
+        }
         var label = name || 'Carte';
         cardNameEl.textContent = label;
         cardNameEl.title = name ? name : '';
@@ -881,6 +977,7 @@
       focusAddInput: function () {
         addInput.focus();
       },
+      el: containerEl,
     };
   }
 
