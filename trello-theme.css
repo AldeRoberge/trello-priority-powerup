@@ -767,6 +767,27 @@ body.tp-page--priority {
   background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
 }
 
+/* Overdue Échéance: Bloqué-matching crimson shell (beats neutral enabled backgrounds). */
+.tp-page--priority .variant-due-section.is-overdue > .field--due-date.is-enabled,
+.tp-page--priority .variant-due-section.is-overdue > .field--due-date.has-due-date,
+.tp-page--priority .variant-due-section.is-overdue > .field--due-date.is-open,
+.tp-page--priority .field--due-date.is-past {
+  background: var(--blocked-fill);
+}
+
+.tp-page--priority .variant-due-section.is-overdue > .field--due-date .due-date-title,
+.tp-page--priority .variant-due-section.is-overdue > .field--due-date .section-enable-title,
+.tp-page--priority .field--due-date.is-past .due-date-title,
+.tp-page--priority .field--due-date.is-past .section-enable-title {
+  color: var(--blocked-text);
+}
+
+.tp-page--priority .variant-due-section.is-overdue > .field--due-date .due-date-desc,
+.tp-page--priority .field--due-date.is-past .due-date-desc {
+  color: var(--blocked-muted-text);
+  opacity: 1;
+}
+
 .tp-page--priority .due-date-title {
   font-size: 15px;
   font-weight: 500;

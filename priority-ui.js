@@ -2417,9 +2417,7 @@
   // ── 7. Formatters & heat-preset override solvers ────────────────────────
 
   function formatScore(score) {
-    return Math.abs(score - Math.round(score)) < 0.01
-      ? String(Math.round(score))
-      : score.toFixed(1);
+    return Number(score).toFixed(1);
   }
 
   function formatBaseline(terms, score) {
@@ -3478,8 +3476,13 @@
     var checked = !!config.value;
     var onChange = config.onChange || function () {};
     var onLayoutChange = config.onLayoutChange || function () {};
+    var getSubtasks =
+      typeof config.getSubtasks === 'function' ? config.getSubtasks : function () { return []; };
     var bodyId = 'blocked-section-body-' + Math.random().toString(36).slice(2, 9);
     var currentReason = normalizeBlockedReason(config.blockedReason);
+    var currentLink = isBlockedWaitingOtherTask(currentReason)
+      ? normalizeBlockedLink(config.blockedLink)
+      : null;
     var suggestionButtons = [];
 
     var field = document.createElement('div');
@@ -3519,6 +3522,51 @@
     selectedChip.appendChild(selectedText);
     selectedChip.appendChild(clearBtn);
     selectedWrap.appendChild(selectedChip);
+
+    var subtaskWrap = document.createElement('div');
+    subtaskWrap.className = 'blocked-subtask-wrap';
+    subtaskWrap.hidden = true;
+
+    var subtaskSelectedWrap = document.createElement('div');
+    subtaskSelectedWrap.className = 'blocked-subtask-selected';
+    subtaskSelectedWrap.hidden = true;
+
+    var subtaskChip = document.createElement('span');
+    subtaskChip.className = 'blocked-reason-chip blocked-subtask-chip';
+
+    var subtaskTextEl = document.createElement('span');
+    subtaskTextEl.className = 'blocked-reason-chip-text';
+
+    var subtaskClearBtn = document.createElement('button');
+    subtaskClearBtn.type = 'button';
+    subtaskClearBtn.className = 'blocked-reason-chip-clear';
+    subtaskClearBtn.setAttribute('aria-label', BLOCKED_SUBTASK_CLEAR_LABEL);
+    subtaskClearBtn.textContent = '\u00d7';
+
+    subtaskChip.appendChild(subtaskTextEl);
+    subtaskChip.appendChild(subtaskClearBtn);
+    subtaskSelectedWrap.appendChild(subtaskChip);
+
+    var subtaskPicker = document.createElement('div');
+    subtaskPicker.className = 'blocked-subtask-picker';
+
+    var subtaskPickerLabel = document.createElement('div');
+    subtaskPickerLabel.className = 'blocked-reason-suggestions-label';
+    subtaskPickerLabel.textContent = BLOCKED_SUBTASK_PICKER_LABEL;
+
+    var subtaskEmpty = document.createElement('div');
+    subtaskEmpty.className = 'blocked-subtask-empty';
+    subtaskEmpty.textContent = BLOCKED_SUBTASK_EMPTY;
+
+    var subtaskList = document.createElement('div');
+    subtaskList.className = 'blocked-reason-suggestions-list blocked-subtask-list';
+    subtaskList.setAttribute('role', 'list');
+
+    subtaskPicker.appendChild(subtaskPickerLabel);
+    subtaskPicker.appendChild(subtaskEmpty);
+    subtaskPicker.appendChild(subtaskList);
+    subtaskWrap.appendChild(subtaskSelectedWrap);
+    subtaskWrap.appendChild(subtaskPicker);
 
     var reasonInput = document.createElement('input');
     reasonInput.type = 'text';
@@ -3560,6 +3608,7 @@
     suggestions.appendChild(suggestionsList);
 
     reasonWrap.appendChild(selectedWrap);
+    reasonWrap.appendChild(subtaskWrap);
     reasonWrap.appendChild(reasonInput);
     reasonWrap.appendChild(suggestions);
     field.appendChild(reasonWrap);
@@ -3569,20 +3618,50 @@
       return currentReason;
     }
 
+    function readLink() {
+      return currentLink;
+    }
+
+    function linkedSubtaskLabel() {
+      if (!currentLink) return '';
+      var item = findSubtaskById(getSubtasks() || [], currentLink.id);
+      if (item && item.text) return item.text;
+      return BLOCKED_SUBTASK_FALLBACK_LABEL;
+    }
+
     function notifyReasonChange() {
       collapse.refreshSummary();
       onChange(getValue());
+    }
+
+    function commitLink(nextLink) {
+      var next = normalizeBlockedLink(nextLink);
+      var prevId = currentLink && currentLink.id;
+      var nextId = next && next.id;
+      if (prevId === nextId) {
+        refreshSubtaskUi();
+        return;
+      }
+      currentLink = next;
+      refreshSubtaskUi();
+      notifyReasonChange();
+      onLayoutChange();
     }
 
     function commitReason(value) {
       var next = normalizeBlockedReason(value);
       if (next === currentReason) {
         refreshSelected();
+        refreshSubtaskUi();
         return;
       }
       currentReason = next;
+      if (!isBlockedWaitingOtherTask(currentReason)) {
+        currentLink = null;
+      }
       refreshSelected();
       refreshSuggestions();
+      refreshSubtaskUi();
       notifyReasonChange();
       onLayoutChange();
     }
@@ -3611,6 +3690,60 @@
       if (wasHidden !== suggestions.hidden) onLayoutChange();
     }
 
+    function refreshSubtaskUi() {
+      var waiting = isBlockedWaitingOtherTask(currentReason);
+      var wasHidden = subtaskWrap.hidden;
+      subtaskWrap.hidden = !waiting;
+      if (!waiting) {
+        subtaskSelectedWrap.hidden = true;
+        subtaskPicker.hidden = true;
+        field.classList.remove('has-blocked-subtask-link');
+        if (wasHidden !== subtaskWrap.hidden) onLayoutChange();
+        return;
+      }
+
+      var items = getSubtasks() || [];
+      var linkedItem = currentLink ? findSubtaskById(items, currentLink.id) : null;
+      var hasLink = !!currentLink;
+      subtaskSelectedWrap.hidden = !hasLink;
+      if (hasLink) {
+        subtaskTextEl.textContent = linkedItem && linkedItem.text
+          ? linkedItem.text
+          : BLOCKED_SUBTASK_FALLBACK_LABEL;
+      }
+      field.classList.toggle('has-blocked-subtask-link', hasLink);
+
+      while (subtaskList.firstChild) subtaskList.removeChild(subtaskList.firstChild);
+      var visibleCount = 0;
+      for (var i = 0; i < items.length; i++) {
+        var item = items[i];
+        if (!item || !item.id || !item.text) continue;
+        if (currentLink && item.id === currentLink.id) continue;
+        var opt = document.createElement('button');
+        opt.type = 'button';
+        opt.className = 'blocked-reason-suggestion blocked-subtask-option';
+        opt.setAttribute('role', 'listitem');
+        opt.textContent = item.text;
+        opt.dataset.subtaskId = item.id;
+        opt.title = item.text;
+        (function (subtaskId) {
+          opt.addEventListener('click', function () {
+            commitLink({ type: BLOCKED_LINK_TYPE_SUBTASK, id: subtaskId });
+          });
+        })(item.id);
+        subtaskList.appendChild(opt);
+        visibleCount += 1;
+      }
+
+      var empty = items.length === 0;
+      subtaskEmpty.hidden = !empty;
+      subtaskList.hidden = empty || visibleCount === 0;
+      subtaskPicker.hidden = hasLink && visibleCount === 0 && !empty;
+      if (empty) subtaskPicker.hidden = false;
+
+      if (wasHidden !== subtaskWrap.hidden) onLayoutChange();
+    }
+
     // Keep blockedReason when disabling — only enAttente (enabled) drives badges.
     var collapse = bindCollapsibleEnable({
       field: field,
@@ -3620,7 +3753,12 @@
       expanded: config.expanded != null ? !!config.expanded : checked,
       getSummary: function () {
         var reason = readReason() || BLOCKED_LABEL;
-        return capitalizeCountdownPhrase(reason) + '\u2026';
+        var summary = capitalizeCountdownPhrase(reason);
+        if (isBlockedWaitingOtherTask(reason) && currentLink) {
+          var linkLabel = linkedSubtaskLabel();
+          if (linkLabel) summary += ' \u2014 ' + linkLabel;
+        }
+        return summary + '\u2026';
       },
       onLayoutChange: onLayoutChange,
       onExpandChange: config.onExpandChange || null,
@@ -3639,8 +3777,10 @@
 
     function setBlockedReason(value) {
       currentReason = normalizeBlockedReason(value);
+      if (!isBlockedWaitingOtherTask(currentReason)) currentLink = null;
       refreshSelected();
       refreshSuggestions();
+      refreshSubtaskUi();
       collapse.refreshSummary();
     }
 
@@ -3649,9 +3789,30 @@
       return readReason();
     }
 
+    function setBlockedLink(value) {
+      currentLink = isBlockedWaitingOtherTask(currentReason)
+        ? normalizeBlockedLink(value)
+        : null;
+      refreshSubtaskUi();
+      collapse.refreshSummary();
+    }
+
+    function getBlockedLink() {
+      return isBlockedWaitingOtherTask(currentReason) ? readLink() : null;
+    }
+
+    function refreshSubtasks() {
+      refreshSubtaskUi();
+      collapse.refreshSummary();
+    }
+
     clearBtn.addEventListener('click', function () {
       commitReason('');
       reasonInput.focus();
+    });
+
+    subtaskClearBtn.addEventListener('click', function () {
+      commitLink(null);
     });
 
     reasonInput.addEventListener('input', function () {
@@ -3669,6 +3830,7 @@
     });
 
     setBlockedReason(config.blockedReason);
+    if (config.blockedLink) setBlockedLink(config.blockedLink);
 
     return {
       el: field,
@@ -3676,6 +3838,9 @@
       setValue: setValue,
       getBlockedReason: getBlockedReason,
       setBlockedReason: setBlockedReason,
+      getBlockedLink: getBlockedLink,
+      setBlockedLink: setBlockedLink,
+      refreshSubtasks: refreshSubtasks,
       setExpanded: collapse.setExpanded,
       isExpanded: collapse.isExpanded
     };
@@ -5221,9 +5386,9 @@
 
     function paint(result, display) {
       var d = display || resolveDisplay(result, {});
-      var overdue = !!d.duePast;
-      var visualSource = d.blocked || overdue
-        ? { blocked: true, label: d.blocked ? BLOCKED_LABEL : d.label }
+      // Overdue red lives on Échéance only — Progress keeps normal / blocked badge styling.
+      var visualSource = d.blocked
+        ? { blocked: true, label: BLOCKED_LABEL }
         : (d.inutile ? { inutile: true, label: INUTILE_LABEL } : { i: d.tierI, label: d.label });
       var v = tierVisuals(visualSource);
       var nextLabel = d.eisenhowerLabel || classicTierLabel(d);
@@ -5235,7 +5400,8 @@
       var descChanged = nextDescKey !== lastDescKey;
       var layoutSensitive = labelChanged || descChanged
         || badge.classList.contains('is-blocked') !== !!d.blocked
-        || badge.classList.contains('is-overdue') !== overdue
+        || badge.classList.contains('is-overdue')
+        || panel.classList.contains('is-overdue')
         || panel.classList.contains('has-blocked-warning') !== !!d.blocked;
 
       var firstRects = layoutSensitive ? captureHeatLayoutRects(heatFlipNodes) : null;
@@ -5261,10 +5427,10 @@
       blabel.style.removeProperty('color');
       badge.classList.toggle('is-inutile', !!d.inutile);
       badge.classList.toggle('is-blocked', !!d.blocked);
-      badge.classList.toggle('is-overdue', overdue);
+      badge.classList.remove('is-overdue');
       panel.classList.toggle('is-inutile', !!d.inutile);
-      panel.classList.toggle('is-blocked', !!d.blocked);
-      panel.classList.toggle('is-overdue', overdue);
+      // No panel crimson wash for blocked/overdue — section shells carry red.
+      panel.classList.remove('is-blocked', 'is-overdue');
       panel.classList.toggle('has-blocked-warning', !!d.blocked);
       blockedWarning.hidden = !d.blocked;
       paintTierDescription(tierDesc, d);
@@ -6188,6 +6354,8 @@
     var state = {};
     var enAttenteField;
     var dueDateField;
+    var dueSection;
+    var blockedSection;
     var heat;
     var calcGraph;
     var formulaSwitcher;
@@ -6243,6 +6411,9 @@
       : loadSliderValues(defaultState, variantConfig.dimensions);
     state.enAttente = !!(state.enAttente || defaults.enAttente);
     state.blockedReason = state.blockedReason || defaults.blockedReason || '';
+    state.blockedLink = isBlockedWaitingOtherTask(state.blockedReason)
+      ? normalizeBlockedLink(state.blockedLink || defaults.blockedLink)
+      : null;
     state.dueDate = normalizeDueDate(state.dueDate || defaults.dueDate || '');
     state.dueTime = state.dueDate
       ? normalizeDueTime(state.dueTime || defaults.dueTime || '')
@@ -6281,6 +6452,9 @@
       if (enAttenteField) {
         state.enAttente = enAttenteField.getValue();
         state.blockedReason = enAttenteField.getBlockedReason();
+        state.blockedLink = enAttenteField.getBlockedLink
+          ? enAttenteField.getBlockedLink()
+          : null;
       }
       if (dueDateField) {
         var dueValues = dueDateField.getValues();
@@ -6356,22 +6530,23 @@
         lastPrioritySummary = display && display.label ? display.label : '';
         if (priorityCollapse) priorityCollapse.refreshSummary();
         var cardTier = display.cardTier;
-        if (display.blocked || display.duePast) {
-          cardTier = Object.assign({}, cardTier || {}, { blocked: true });
-        }
-        // Priority-off + not blocked/overdue: drop classes AND clear red/tier CSS vars.
-        // Leaving --card-tier-tint at the blocked crimson value kept a red wash
-        // even after is-blocked was removed (Bloqué toggle off).
+        // Blocked/overdue red is section-scoped (Bloqué / Échéance), not a full-card wash.
+        // Never force --card-tier-tint to blocked crimson on .variant-card.
+        card.classList.remove('is-blocked', 'is-overdue');
         if (state.priorityEnabled === false && !display.blocked && !display.duePast) {
-          card.classList.remove('is-inutile', 'is-blocked', 'is-overdue');
+          card.classList.remove('is-inutile');
           card.dataset.tier = '';
           clearCardTierTint(card);
         } else {
           applyCardTierTint(card, cardTier);
           card.classList.toggle('is-inutile', !!display.inutile);
-          card.classList.toggle('is-blocked', !!display.blocked);
-          card.classList.toggle('is-overdue', !!display.duePast);
           card.dataset.tier = display.label || '';
+        }
+        if (blockedSection) {
+          blockedSection.classList.toggle('is-blocked', !!display.blocked);
+        }
+        if (dueSection) {
+          dueSection.classList.toggle('is-overdue', !!display.duePast);
         }
         if (heat) heat.paint(result, display);
         if (calcGraph) calcGraph.paint(result, state, display);
@@ -6384,9 +6559,11 @@
       if (enAttenteField) {
         enAttenteField.setValue(false);
         enAttenteField.setBlockedReason('');
+        if (enAttenteField.setBlockedLink) enAttenteField.setBlockedLink(null);
       }
       state.enAttente = false;
       state.blockedReason = '';
+      state.blockedLink = null;
       cancelSliderAnim();
       repaint();
       persistSliderState();
@@ -6557,7 +6734,7 @@
       console.error('PriorityUI.createCalcGraphPanel failed', { id: variantId, error: err });
     }
 
-    var dueSection = document.createElement('div');
+    dueSection = document.createElement('div');
     dueSection.className = 'variant-due-section';
     card.appendChild(dueSection);
 
@@ -6583,7 +6760,7 @@
       }
     });
 
-    var blockedSection = document.createElement('div');
+    blockedSection = document.createElement('div');
     blockedSection.className = 'variant-blocked-section';
     card.appendChild(blockedSection);
 
@@ -6591,6 +6768,12 @@
       el: blockedSection,
       value: state.enAttente,
       blockedReason: state.blockedReason,
+      blockedLink: state.blockedLink,
+      getSubtasks: function () {
+        return typeof variantConfig.getBlockedSubtasks === 'function'
+          ? variantConfig.getBlockedSubtasks() || []
+          : [];
+      },
       expanded: sectionExpanded('blocked', !!state.enAttente),
       onExpandChange: persistSectionExpanded('blocked'),
       onChange: function () {
@@ -6652,6 +6835,9 @@
         if (next.blockedReason != null && enAttenteField) {
           enAttenteField.setBlockedReason(next.blockedReason);
         }
+        if (next.blockedLink !== undefined && enAttenteField && enAttenteField.setBlockedLink) {
+          enAttenteField.setBlockedLink(next.blockedLink);
+        }
         if ((next.dueDate != null || next.dueTime != null || next.dueEnabled != null) && dueDateField) {
           dueDateField.setValue({
             dueDate: next.dueDate != null ? next.dueDate : state.dueDate,
@@ -6661,6 +6847,11 @@
         }
         repaint();
         persistSliderState();
+      },
+      refreshBlockedSubtasks: function () {
+        if (enAttenteField && enAttenteField.refreshSubtasks) {
+          enAttenteField.refreshSubtasks();
+        }
       },
       repaint: repaint
     };

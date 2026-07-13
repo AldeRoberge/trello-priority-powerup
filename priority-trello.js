@@ -916,6 +916,38 @@
     return { ok: true };
   }
 
+  /**
+   * Mark (or unmark) the card as Done via REST PUT dueComplete.
+   * Requires OAuth (same path as auto-sort). No-ops when already at target.
+   */
+  async function setCardDueComplete(t, dueComplete) {
+    var want = !!dueComplete;
+    if (!restClientOptions()) return { ok: false, reason: 'no-app-key', changed: false };
+
+    var current = await getCardDueComplete(t);
+    if (current === want) {
+      return { ok: true, changed: false, alreadyComplete: want };
+    }
+
+    var ids = await readCardIdAndListId(t);
+    var cardId = ids && ids.cardId;
+    if (!cardId) {
+      try {
+        var rawId = await cardFieldPromise(t, 'id');
+        if (isPowerUpRequestChain(rawId)) rawId = null;
+        if (typeof rawId === 'object' && rawId) rawId = rawId.id;
+        if (rawId) cardId = String(rawId);
+      } catch (err) {
+        cardId = null;
+      }
+    }
+    if (!cardId) return { ok: false, reason: 'no-card-id', changed: false };
+
+    var put = await restPutCard(t, cardId, { dueComplete: want });
+    if (!put.ok) return Object.assign({ changed: false }, put);
+    return { ok: true, changed: true, dueComplete: want };
+  }
+
   async function autoSortCardInList(t) {
     if (!restClientOptions()) return { moved: false, reason: 'no-app-key' };
 
@@ -1007,6 +1039,7 @@
     getCardDisplay: getCardDisplay,
     getCardName: getCardName,
     getCardDueComplete: getCardDueComplete,
+    setCardDueComplete: setCardDueComplete,
     getBadgeData: getBadgeData,
     formatBadgeText: formatBadgeText,
     formatBlockedBoardBadgeText: formatBlockedBoardBadgeText,

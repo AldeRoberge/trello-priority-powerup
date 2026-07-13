@@ -178,10 +178,7 @@ body {
   transition: background 0.25s ease;
 }
 
-.variant-card.is-blocked,
-.variant-card.is-overdue {
-  background: color-mix(in srgb, var(--card-tier-tint) var(--card-tier-tint-mix), var(--blocked-fill));
-}
+/* Blocked/overdue red is scoped to Bloqué / Échéance sections — not the card shell. */
 
 .variant-fields {
   margin-top: 0;
@@ -504,12 +501,29 @@ body {
   background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
 }
 
-.field--due-date.is-past {
-  background: color-mix(in srgb, var(--blocked-fill) 55%, var(--surface-2));
-}
-
 .field--due-date.is-open {
   background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
+}
+
+/* Overdue shell wins over enabled/has-due/open neutrals (match Bloqué fill). */
+.variant-due-section.is-overdue > .field--due-date.is-enabled,
+.variant-due-section.is-overdue > .field--due-date.has-due-date,
+.variant-due-section.is-overdue > .field--due-date.is-open,
+.field--due-date.is-past {
+  background: var(--blocked-fill);
+}
+
+.variant-due-section.is-overdue > .field--due-date .due-date-title,
+.variant-due-section.is-overdue > .field--due-date .section-enable-title,
+.field--due-date.is-past .due-date-title,
+.field--due-date.is-past .section-enable-title {
+  color: var(--blocked-text);
+}
+
+.variant-due-section.is-overdue > .field--due-date .due-date-desc,
+.field--due-date.is-past .due-date-desc {
+  color: var(--blocked-muted-text);
+  opacity: 1;
 }
 
 .due-date-label {
@@ -1569,6 +1583,35 @@ html[data-color-mode="dark"] .due-date-time-clock {
 .blocked-reason-suggestion:focus-visible {
   outline: 2px solid var(--blocked-accent);
   outline-offset: 1px;
+}
+
+.blocked-subtask-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.blocked-subtask-wrap[hidden],
+.blocked-subtask-selected[hidden],
+.blocked-subtask-picker[hidden],
+.blocked-subtask-empty[hidden],
+.blocked-subtask-list[hidden] {
+  display: none;
+}
+
+.blocked-subtask-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.blocked-subtask-empty {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  color: var(--blocked-muted-text, var(--text-muted));
 }
 
 .en-attente-label:has(.en-attente-checkbox:focus-visible) {

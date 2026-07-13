@@ -113,16 +113,31 @@
       return (normalized.progress || 0) > 0;
     }
 
+    function getBlockedSubtasks() {
+      if (completionUi && typeof completionUi.getData === 'function') {
+        var live = completionUi.getData();
+        return (live && live.items) || [];
+      }
+      if (latestCompletion && latestCompletion.items) return latestCompletion.items;
+      return [];
+    }
+
+    function syncBlockedSubtasks() {
+      if (variant && typeof variant.refreshBlockedSubtasks === 'function') {
+        variant.refreshBlockedSubtasks();
+      }
+    }
+
     function progressSummaryText() {
       if (!completionUi || typeof completionUi.getData !== 'function') return '';
       var progress = CompletionTrello.computeCardProgress(completionUi.getData());
       if (!progress) return '';
       if (progress.hasItems) {
         var remaining = progress.totalCount - progress.doneCount;
-        var counts = ' (' + progress.doneCount + '/' + progress.totalCount + ')';
-        if (remaining <= 0) return 'Aucune restante' + counts;
-        if (remaining === 1) return '1 restante' + counts;
-        return remaining + ' restantes' + counts;
+        if (remaining <= 0) return 'Aucune tâche restante';
+        if (remaining === 1) return 'Une tâche restante';
+        if (remaining === 2) return 'Deux tâches restantes';
+        return remaining + ' tâches restantes';
       }
       // Card-level progress only (no subtasks): keep percent.
       if (progress.percent <= 0) return '';
@@ -219,6 +234,7 @@
             onChange: function (data) {
               saveCompletion(data);
               if (progressCollapse) progressCollapse.refreshSummary();
+              syncBlockedSubtasks();
             },
             onResize: function () {
               resizePopup();
@@ -287,6 +303,7 @@
         defaults: initialDefaults,
         focusSection: focusProgress ? 'progress' : null,
         dimensions: PriorityTrello.PRIORITY_DIMENSIONS,
+        getBlockedSubtasks: getBlockedSubtasks,
         loadState: function (defaults) {
           return Object.assign({}, defaults);
         },
@@ -319,6 +336,7 @@
       }
 
       await mountProgressSection(variant.card, focusProgress);
+      syncBlockedSubtasks();
       await cardNamePromise;
       if (!focusProgress) window.scrollTo(0, 0);
       resizePopup();

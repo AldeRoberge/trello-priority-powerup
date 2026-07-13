@@ -585,6 +585,74 @@ check(
   })()
 );
 check(
+  'normalizeInputs keeps blockedLink for waiting-other-task',
+  (function () {
+    var normalized = PT.normalizeInputs({
+      urgency: 2,
+      impact: 2,
+      ease: 3,
+      enAttente: true,
+      blockedReason: 'En attente d\'une autre t\u00e2che',
+      blockedLink: { type: 'subtask', id: 'sub-1' }
+    });
+    return (
+      normalized &&
+      normalized.blockedLink &&
+      normalized.blockedLink.type === 'subtask' &&
+      normalized.blockedLink.id === 'sub-1'
+    );
+  })()
+);
+check(
+  'normalizeInputs drops blockedLink for other reasons',
+  (function () {
+    var normalized = PT.normalizeInputs({
+      urgency: 2,
+      impact: 2,
+      ease: 3,
+      blockedReason: 'En attente de budget',
+      blockedLink: { type: 'subtask', id: 'sub-1' }
+    });
+    return normalized && normalized.blockedLink == null;
+  })()
+);
+check(
+  'normalizeInputs accepts blockedSubtaskId alias',
+  (function () {
+    var normalized = PT.normalizeInputs({
+      urgency: 2,
+      impact: 2,
+      ease: 3,
+      blockedReason: 'En attente d\'une autre t\u00e2che',
+      blockedSubtaskId: 'sub-2'
+    });
+    return (
+      normalized &&
+      normalized.blockedLink &&
+      normalized.blockedLink.type === 'subtask' &&
+      normalized.blockedLink.id === 'sub-2'
+    );
+  })()
+);
+check(
+  'clearBlockedFromInputs strips blockedLink',
+  (function () {
+    var cleared = PT.clearBlockedFromInputs({
+      urgency: 2,
+      impact: 2,
+      ease: 3,
+      enAttente: true,
+      blockedReason: 'En attente d\'une autre t\u00e2che',
+      blockedLink: { type: 'subtask', id: 'sub-1' }
+    });
+    return (
+      cleared.enAttente == null &&
+      cleared.blockedReason == null &&
+      cleared.blockedLink == null
+    );
+  })()
+);
+check(
   'withDueDateDisplay skips countdown without dueDate',
   (function () {
     var display = PU.withDueDateDisplay({ label: 'Urgente', tierI: 1 }, { dueDate: '' });
