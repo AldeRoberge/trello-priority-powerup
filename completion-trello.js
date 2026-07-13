@@ -5,6 +5,9 @@
   var CARD_COMPLETION_KEY = 'cardCompletion';
   var COMPLETION_COLOR_SCHEME_SETTINGS_KEY = 'completionColorScheme';
   var COMPLETION_COLOR_SCHEME_REV_KEY = 'completionColorSchemeRev';
+  // Set when this Power-Up marks the card dueComplete from all-subtasks-done.
+  // Used to reverse Done only when we own the mark (not a user/manual Done).
+  var COMPLETION_MARKED_DUE_COMPLETE_KEY = 'completionMarkedDueComplete';
   var CARD_DETAIL_BADGE_TITLE = 'Progrès';
   var boardCompletionColorSchemeKey = 'traffic';
   var BADGE_REFRESH_SEC =
@@ -134,6 +137,98 @@
       totalWeight: 0,
       hasItems: false,
     };
+  }
+
+  /** True when every subtask is done (remaining === 0 && totalCount > 0). */
+  function isAllSubtasksComplete(data) {
+    var progress = computeCardProgress(data);
+    return !!(
+      progress.hasItems &&
+      progress.totalCount > 0 &&
+      progress.doneCount >= progress.totalCount
+    );
+  }
+
+  async function getMarkedDueCompleteFlag(t) {
+    try {
+      var flagged = await t.get('card', 'shared', COMPLETION_MARKED_DUE_COMPLETE_KEY);
+      return flagged === true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  async function setMarkedDueCompleteFlag(t, value) {
+    try {
+      if (value) {
+        await t.set('card', 'shared', COMPLETION_MARKED_DUE_COMPLETE_KEY, true);
+      } else {
+        await t.set('card', 'shared', COMPLETION_MARKED_DUE_COMPLETE_KEY, false);
+      }
+    } catch (err) {
+      console.error('Completion marked-due-complete flag failed', err);
+    }
+  }
+
+  /**
+   * When all subtasks complete → mark card Done (dueComplete) via REST if available.
+   * When leaving all-complete → undo Done only if this feature set it.
+   */
+  async function syncCardDueCompleteFromProgress(t, data) {
+    var allComplete = isAllSubtasksComplete(data);
+    var PT = global.PriorityTrello;
+    var weMarked = await getMarkedDueCompleteFlag(t);
+
+    if (!PT || typeof PT.setCardDueComplete !== 'function') {
+      return {
+        allComplete: allComplete,
+        synced: false,
+        reason: 'no-setCardDueComplete',
+      };
+    }
+
+    if (allComplete) {
+      var markResult = await PT.setCardDueComplete(t, true);
+      if (markResult && markResult.ok && markResult.changed) {
+        await setMarkedDueCompleteFlag(t, true);
+        return {
+          allComplete: true,
+          synced: true,
+          changed: true,
+          dueComplete: true,
+        };
+      }
+      if (markResult && markResult.ok && !markResult.changed) {
+        // Already Done (user/prior) — do not claim ownership for undo.
+        return {
+          allComplete: true,
+          synced: true,
+          changed: false,
+          dueComplete: true,
+          alreadyComplete: true,
+        };
+      }
+      return {
+        allComplete: true,
+        synced: false,
+        reason: (markResult && markResult.reason) || 'mark-failed',
+        result: markResult,
+      };
+    }
+
+    if (weMarked) {
+      var unmarkResult = await PT.setCardDueComplete(t, false);
+      await setMarkedDueCompleteFlag(t, false);
+      return {
+        allComplete: false,
+        synced: !!(unmarkResult && unmarkResult.ok),
+        changed: !!(unmarkResult && unmarkResult.changed),
+        dueComplete: false,
+        reason: unmarkResult && !unmarkResult.ok ? unmarkResult.reason : undefined,
+      };
+    }
+
+    return { allComplete: false, synced: true, changed: false };
   }
 
   /**
@@ -391,6 +486,7 @@
     CARD_COMPLETION_KEY: CARD_COMPLETION_KEY,
     COMPLETION_COLOR_SCHEME_SETTINGS_KEY: COMPLETION_COLOR_SCHEME_SETTINGS_KEY,
     COMPLETION_COLOR_SCHEME_REV_KEY: COMPLETION_COLOR_SCHEME_REV_KEY,
+    COMPLETION_MARKED_DUE_COMPLETE_KEY: COMPLETION_MARKED_DUE_COMPLETE_KEY,
     ITEM_TEXT_MAX: ITEM_TEXT_MAX,
     PROGRESS_MIN: PROGRESS_MIN,
     PROGRESS_MAX: PROGRESS_MAX,
@@ -402,6 +498,8 @@
     normalizeCompletionData: normalizeCompletionData,
     computeWeightedProgress: computeWeightedProgress,
     computeCardProgress: computeCardProgress,
+    isAllSubtasksComplete: isAllSubtasksComplete,
+    syncCardDueCompleteFromProgress: syncCardDueCompleteFromProgress,
     applyMasterProgress: applyMasterProgress,
     getCardCompletion: getCardCompletion,
     saveCardCompletion: saveCardCompletion,
