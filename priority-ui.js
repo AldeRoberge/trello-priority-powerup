@@ -1056,6 +1056,8 @@
   var BLOCKED_WAITING_ON_PREFIX = 'En attente de';
   var BLOCKED_REASON_FREQ_STORAGE_KEY = 'trello-priority-powerup/blocked-reason-freq';
   var BLOCKED_REASON_EMPTY_SUGGESTION_CAP = 10;
+  /** Max suggestions shown while filtering/searching in the Bloqué reason input. */
+  var BLOCKED_REASON_FILTER_SUGGESTION_CAP = 4;
   /** Core presets shown in the empty-state suggestion set (with frequent reasons). */
   var BLOCKED_REASON_CORE_PRESETS = [
     'En attente d\'une r\u00e9ponse',
@@ -1223,7 +1225,8 @@
   /**
    * Build ranked suggestion labels.
    * - Empty input: top frequent ∪ core presets (capped), excluding selected.
-   * - Typing: dictionary ∪ frequent customs matching substring, excluding selected.
+   * - Typing: dictionary ∪ frequent customs matching substring, excluding selected
+   *   (capped at BLOCKED_REASON_FILTER_SUGGESTION_CAP after ranking).
    */
   function rankBlockedReasonSuggestions(options) {
     var query = options && options.query != null
@@ -1272,12 +1275,14 @@
       return compareBlockedReasonSuggestions(a, b, freqMap);
     });
 
-    if (!query) {
-      var cap = options && options.cap != null
+    var cap = !query
+      ? (options && options.cap != null
         ? options.cap
-        : BLOCKED_REASON_EMPTY_SUGGESTION_CAP;
-      if (labels.length > cap) labels = labels.slice(0, cap);
-    }
+        : BLOCKED_REASON_EMPTY_SUGGESTION_CAP)
+      : (options && options.filterCap != null
+        ? options.filterCap
+        : BLOCKED_REASON_FILTER_SUGGESTION_CAP);
+    if (labels.length > cap) labels = labels.slice(0, cap);
     return labels;
   }
 
@@ -1507,10 +1512,15 @@
   ];
   /** Quick date chips shown when Échéance has no day set. */
   var DUE_DATE_QUICK_SUGGESTIONS = [
+    { id: 'cet-apres-midi', label: 'Cet apr\u00e8s-midi' },
     { id: 'demain-matin', label: 'Demain matin' },
     { id: 'lundi-prochain', label: 'Lundi prochain' },
+    { id: 'dans-une-semaine', label: 'Dans une semaine' },
     { id: 'dans-deux-semaines', label: 'Dans deux semaines' }
   ];
+  /** Shared workplace times for quick-date presets (match period chips). */
+  var DUE_DATE_QUICK_MORNING_TIME = '09:00';
+  var DUE_DATE_QUICK_AFTERNOON_TIME = '14:00';
   var DUE_DATE_TIME_MINUTE_STEPS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
   var DUE_DATE_TIME_CLOCK_SIZE = 212;
   var DUE_DATE_TIME_CLOCK_INNER_R = 54;
@@ -1543,6 +1553,8 @@
   var MS_PER_DAY = 86400000;
   var MS_PER_HOUR = 3600000;
   var MS_PER_MINUTE = 60000;
+  /** Show hour-granular countdown only when |remaining| hours is below this. */
+  var COUNTDOWN_HOUR_DISPLAY_MAX = 10;
   var COUNTDOWN_DAYS_PER_WEEK = 7;
   var COUNTDOWN_WEEK_THRESHOLD_DAYS = 30;
   var COUNTDOWN_YEAR_THRESHOLD_DAYS = 365;
@@ -1590,20 +1602,30 @@
     return pad2(hours) + ':' + pad2(minutes);
   }
 
-  /** Resolve a quick-date chip id to `{ iso, time }` (local calendar). */
+  /** Resolve a quick-date chip id to `{ iso, time }` (local calendar + workplace time). */
   function resolveDueDateQuickSuggestion(id) {
     if (!id || typeof id !== 'string') return null;
-    var today = startOfLocalDay(new Date());
+    var now = new Date();
+    var today = startOfLocalDay(now);
     var date;
-    var time = '';
-    if (id === 'demain-matin') {
+    var time = DUE_DATE_QUICK_MORNING_TIME;
+    if (id === 'cet-apres-midi') {
+      time = DUE_DATE_QUICK_AFTERNOON_TIME;
+      var afternoonParts = time.split(':');
+      var afternoonMins = (+afternoonParts[0]) * 60 + (+afternoonParts[1]);
+      var nowMins = now.getHours() * 60 + now.getMinutes();
+      // If afternoon target is already past, roll to tomorrow afternoon.
+      var dayOffset = nowMins >= afternoonMins ? 1 : 0;
+      date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + dayOffset);
+    } else if (id === 'demain-matin') {
       date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-      time = '09:00';
     } else if (id === 'lundi-prochain') {
       // JS getDay(): Sun=0 … Sat=6. Want next Monday (1).
       var dow = today.getDay();
       var daysUntilMonday = dow === 0 ? 1 : (8 - dow);
       date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + daysUntilMonday);
+    } else if (id === 'dans-une-semaine') {
+      date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7);
     } else if (id === 'dans-deux-semaines') {
       date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14);
     } else {
@@ -1719,7 +1741,7 @@
     if (dayPart.indexOf('En retard') === 0) return dayPart;
     var compact = dueTime ? dayPart + ' \u00e0 ' + dueTime : dayPart;
     // Day-scale remaining already matches dayPart (e.g. "Demain"). Append only
-    // when a clock time yields finer relative text ("16 h restantes").
+    // when a clock time yields finer relative text ("5 h restantes").
     if (!remaining || remaining === dayPart) return compact;
     if (dueTime) {
       var ms = msUntilDue(normalized, time, now);
@@ -1792,16 +1814,18 @@
         }
       } else {
         var hours = Math.max(1, Math.round(abs / MS_PER_HOUR));
-        if (hours < 24) {
+        if (hours < COUNTDOWN_HOUR_DISPLAY_MAX) {
           if (past) {
             phrase = hours === 1 ? 'en retard de 1 h' : 'en retard de ' + hours + ' h';
           } else {
             phrase = hours === 1 ? '1 h restante' : hours + ' h restantes';
           }
+        } else if (!past) {
+          // ≥10 h left: day-scale (e.g. same-day 12 h → Aujourd'hui, not "12 h").
+          phrase = formatDueCountdownDays(daysUntilDue(iso, now));
         } else {
           var days = Math.max(1, Math.round(abs / MS_PER_DAY));
-          if (past) days = -days;
-          phrase = formatDueCountdownDays(days);
+          phrase = formatDueCountdownDays(-days);
         }
       }
     }
@@ -4921,13 +4945,10 @@
     }
 
     function refreshTimeRow() {
-      /* Muted look only when no date — keep Heure clickable (no disabled attr). */
+      /* Calendrier + Heure stay fully enabled/visible whenever Échéance is on. */
       timeClearBtn.hidden = !currentTime;
       pickers.classList.toggle('has-time', !!currentTime);
       pickers.classList.toggle('has-date', !!current);
-      timePicker.classList.toggle('is-disabled', !current);
-      timeTrigger.disabled = false;
-      timeTrigger.removeAttribute('aria-disabled');
       field.classList.toggle('is-time-open', timeOpen);
       timeTrigger.setAttribute('aria-expanded', timeOpen ? 'true' : 'false');
       if (currentTime) {
@@ -7734,6 +7755,7 @@
     BLOCKED_REASON_CORE_PRESETS: BLOCKED_REASON_CORE_PRESETS,
     BLOCKED_REASON_FREQ_STORAGE_KEY: BLOCKED_REASON_FREQ_STORAGE_KEY,
     BLOCKED_REASON_EMPTY_SUGGESTION_CAP: BLOCKED_REASON_EMPTY_SUGGESTION_CAP,
+    BLOCKED_REASON_FILTER_SUGGESTION_CAP: BLOCKED_REASON_FILTER_SUGGESTION_CAP,
     BLOCKED_REASON_WAITING_OTHER_TASK: BLOCKED_REASON_WAITING_OTHER_TASK,
     BLOCKED_LINK_TYPE_SUBTASK: BLOCKED_LINK_TYPE_SUBTASK,
     BLOCKED_SUBTASK_FALLBACK_LABEL: BLOCKED_SUBTASK_FALLBACK_LABEL,

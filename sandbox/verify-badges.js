@@ -493,12 +493,31 @@ check(
   PU.formatDueCountdown('2026-07-13', nowAfternoon, '17:00') === '3 h restantes'
 );
 check(
+  'countdown hides hours when 10+ remain (same day)',
+  PU.formatDueCountdown('2026-07-13', new Date(2026, 6, 13, 8, 0, 0), '20:00') ===
+    'Aujourd\'hui'
+);
+check(
+  'countdown hides hours when 10+ remain (next day)',
+  PU.formatDueCountdown(addDaysIso('2026-07-13', 1), nowAfternoon, '02:00') ===
+    'Demain'
+);
+check(
+  'countdown still shows hours when under 10 remain',
+  PU.formatDueCountdown('2026-07-13', nowAfternoon, '23:00') === '9 h restantes'
+);
+check(
   'countdown with time overdue minutes',
   PU.formatDueCountdown('2026-07-13', nowAfternoon, '13:40') === 'En retard de 20 min'
 );
 check(
   'countdown with time overdue hours',
   PU.formatDueCountdown('2026-07-13', nowAfternoon, '11:00') === 'En retard de 3 h'
+);
+check(
+  'countdown overdue hides hours when 10+ late',
+  PU.formatDueCountdown('2026-07-13', nowAfternoon, '00:00') ===
+    'En retard de 1 jour'
 );
 check(
   'countdown with time overdue weeks scales',
@@ -959,6 +978,29 @@ check(
     return (
       text.indexOf('3 jours restants') === -1 &&
       text.indexOf('En attente d\'une autre t\u00e2che') !== -1
+    );
+  })()
+);
+check(
+  'blocked badge uses waiting-on task names from links',
+  (function () {
+    var text = PT.formatBadgeText(
+      {
+        tierLabel: 'Urgente',
+        label: 'Urgente',
+        tierI: 1,
+        blocked: true,
+        blockedReasons: ['En attente d\'une autre t\u00e2che'],
+        blockedLinks: [
+          { type: 'subtask', id: 's1', label: 'Revue code' },
+          { type: 'subtask', id: 's2', label: 'Design' }
+        ]
+      },
+      false
+    );
+    return (
+      text.indexOf('En attente de (Revue code)') !== -1 &&
+      text.indexOf('En attente d\'une autre t\u00e2che') === -1
     );
   })()
 );

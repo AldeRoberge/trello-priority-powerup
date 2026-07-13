@@ -655,17 +655,6 @@ body {
   min-width: 0;
 }
 
-/* Visual mute only — Heure stays interactive when no date is set. */
-.due-date-picker.is-disabled {
-  opacity: 0.55;
-}
-
-.due-date-picker.is-disabled .due-date-time-title,
-.due-date-picker.is-disabled .due-date-time-value,
-.due-date-picker.is-disabled .due-date-time-icon {
-  color: var(--text-muted);
-}
-
 .due-date-trigger,
 .due-date-time-trigger {
   width: 100%;
@@ -685,17 +674,12 @@ body {
   cursor: pointer;
   transition:
     background-color 0.15s ease,
-    box-shadow 0.15s ease,
-    opacity 0.15s ease;
+    box-shadow 0.15s ease;
 }
 
 .due-date-trigger:hover,
 .due-date-time-trigger:hover {
   background: var(--surface-hover);
-}
-
-.due-date-picker.is-disabled .due-date-time-trigger:hover {
-  background: color-mix(in srgb, var(--surface-1, var(--surface-2)) 78%, var(--surface-2));
 }
 
 .due-date-trigger:focus-visible,
