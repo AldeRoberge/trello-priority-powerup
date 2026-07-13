@@ -46,6 +46,8 @@
   var EISENHOWER_IMPACT_THRESHOLD = 2;
   var FORMULA_STORAGE_KEY = 'trello-priority-powerup/formula';
   var COLOR_SCHEME_STORAGE_KEY = 'trello-priority-powerup/color-scheme';
+  var SECTION_COLLAPSE_STORAGE_KEY = 'trello-priority-powerup/section-collapse';
+  var SECTION_COLLAPSE_KEYS = ['priority', 'graph', 'due', 'progress', 'blocked'];
   var DEFAULT_COLOR_SCHEME_KEY = 'blue';
   var SCORE_MAX = 10;
   // Urgency / impact axis max (ease uses 1..5).
@@ -982,6 +984,43 @@
   var SLIDER_STEP = 0.05;
   var SLIDER_ANIM_MS = 350;
   var SLIDER_STORAGE_KEY = 'trello-priority-powerup/slider-values';
+
+  /** @returns {{ priority?: boolean, graph?: boolean, due?: boolean, progress?: boolean, blocked?: boolean }}
+   *  Values are expanded (true) vs collapsed (false). Missing keys mean "use default". */
+  function loadSectionCollapseState() {
+    try {
+      if (typeof localStorage === 'undefined') return {};
+      var raw = localStorage.getItem(SECTION_COLLAPSE_STORAGE_KEY);
+      if (!raw) return {};
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return {};
+      var out = {};
+      SECTION_COLLAPSE_KEYS.forEach(function (key) {
+        if (typeof parsed[key] === 'boolean') out[key] = parsed[key];
+      });
+      return out;
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveSectionCollapseState(patch) {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      if (!patch || typeof patch !== 'object') return;
+      var next = Object.assign({}, loadSectionCollapseState());
+      SECTION_COLLAPSE_KEYS.forEach(function (key) {
+        if (typeof patch[key] === 'boolean') next[key] = patch[key];
+      });
+      localStorage.setItem(SECTION_COLLAPSE_STORAGE_KEY, JSON.stringify(next));
+    } catch (e) { /* ignore quota / private mode */ }
+  }
+
+  function resolveSectionExpanded(key, fallback) {
+    var stored = loadSectionCollapseState();
+    if (Object.prototype.hasOwnProperty.call(stored, key)) return !!stored[key];
+    return !!fallback;
+  }
   var INUTILE_EPS = 0.05;
   var INUTILE_LABEL = 'Inutile';
   var INUTILE_STYLES = {
@@ -1006,6 +1045,8 @@
   var BLOCKED_LABEL = 'Bloqu\u00e9';
   var BLOCKED_DISPLAY = BLOCKED_SYMBOL + ' ' + BLOCKED_LABEL;
   var BLOCKED_REASON_PLACEHOLDER = 'Pr\u00e9ciser le blocage\u2026';
+  var BLOCKED_REASON_SUGGESTIONS_LABEL = 'Suggestions';
+  var BLOCKED_REASON_CLEAR_LABEL = 'Effacer le motif';
   var BLOCKED_REASON_OPTIONS = [
     'En attente d\'une r\u00e9ponse',
     'En attente de budget',
@@ -1018,8 +1059,15 @@
   var BLOCKED_DESCRIPTION =
     'T\u00e2che bloqu\u00e9e en attente de quelqu\'un, d\'une autre t\u00e2che, d\'un approbation, de mat\u00e9riel, etc.';
 
+  /** Any non-empty trimmed string is allowed (presets + custom freeform). */
   function isValidBlockedReason(reason) {
-    return !!reason && BLOCKED_REASON_OPTIONS.indexOf(reason) !== -1;
+    return typeof reason === 'string' && reason.trim().length > 0;
+  }
+
+  function normalizeBlockedReason(reason) {
+    if (typeof reason !== 'string') return '';
+    var trimmed = reason.trim();
+    return trimmed || '';
   }
 
   var DUE_DATE_LABEL = '\u00c9ch\u00e9ance';
@@ -1034,8 +1082,10 @@
   var DUE_DATE_TIME_LABEL = 'Heure';
   var DUE_DATE_TIME_PLACEHOLDER = 'Choisir une heure';
   var DUE_DATE_TIME_CLEAR_LABEL = 'Effacer l\'heure';
+  var DUE_DATE_TIME_NO_TIME_LABEL = 'Pas d\'heure';
   var DUE_DATE_TIME_PICKER_LABEL = 'Choix de l\'heure';
   var DUE_DATE_TIME_SUGGESTIONS_LABEL = 'Suggestions';
+  var DUE_DATE_QUICK_SUGGESTIONS_LABEL = 'Suggestions de date';
   var DUE_DATE_TIME_DIAL_LABEL = 'Horloge';
   var DUE_DATE_TIME_HOURS_ARIA = 'Heures';
   var DUE_DATE_TIME_MINUTES_ARIA = 'Minutes';
@@ -1048,6 +1098,12 @@
     { id: 'midi', label: 'Midi', time: '12:00' },
     { id: 'apres-midi', label: 'Apr\u00e8s-midi', time: '14:00' },
     { id: 'soir', label: 'Soir', time: '18:00' }
+  ];
+  /** Quick date chips shown when Échéance has no day set. */
+  var DUE_DATE_QUICK_SUGGESTIONS = [
+    { id: 'demain-matin', label: 'Demain matin' },
+    { id: 'lundi-prochain', label: 'Lundi prochain' },
+    { id: 'dans-deux-semaines', label: 'Dans deux semaines' }
   ];
   var DUE_DATE_TIME_MINUTE_STEPS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
   var DUE_DATE_TIME_CLOCK_SIZE = 212;
@@ -1221,7 +1277,7 @@
   /** Compact header summary when an enabled due-date section is collapsed. */
   function formatDueDateCompactSummary(iso, time, now) {
     var normalized = normalizeDueDate(iso);
-    if (!normalized) return '';
+    if (!normalized) return '\u00ab Pas de date d\'\u00e9ch\u00e9ance \u00bb';
     var days = daysUntilDue(normalized, now);
     var dayPart;
     if (days === 0) dayPart = 'Aujourd\'hui';
@@ -3204,11 +3260,18 @@
     var enabled = alwaysEnabled ? true : !!config.enabled;
     var expanded = config.expanded != null ? !!config.expanded : (!!enabled && !alwaysEnabled);
     var onEnableChange = config.onEnableChange || function () {};
+    var onExpandChange = config.onExpandChange || null;
     var onLayoutChange = config.onLayoutChange || function () {};
     var getSummary = config.getSummary || function () { return ''; };
     var onBeforeDisable = config.onBeforeDisable || null;
     var onAfterEnable = config.onAfterEnable || null;
     var activateHint = 'Activer pour modifier';
+
+    function notifyExpandChange(options) {
+      if (typeof onExpandChange !== 'function') return;
+      if (options && options.persist === false) return;
+      onExpandChange(expanded, options || {});
+    }
 
     // Catcher sits above the inert preview body so clicks can enable the section.
     var shell = body.parentNode && body.parentNode.classList.contains('section-toggle-shell')
@@ -3263,8 +3326,10 @@
 
     function setExpanded(next, options) {
       options = options || {};
+      var wasExpanded = expanded;
       expanded = !!next;
       syncUi(options.notifyLayout !== false);
+      if (wasExpanded !== expanded) notifyExpandChange(options);
     }
 
     function setEnabled(next, options) {
@@ -3272,13 +3337,16 @@
       if (alwaysEnabled) {
         // Always-on sections ignore enable/disable; expand may still be controlled.
         if (options.expand != null) {
+          var wasAlwaysExpanded = expanded;
           expanded = !!options.expand;
           syncUi(options.notifyLayout !== false);
+          if (wasAlwaysExpanded !== expanded) notifyExpandChange(options);
         }
         return;
       }
       var on = !!next;
       var changed = on !== enabled;
+      var wasExpanded = expanded;
       enabled = on;
       if (enabled) {
         if (changed || options.expand != null) expanded = options.expand !== false;
@@ -3289,6 +3357,7 @@
       }
       syncUi(options.notifyLayout !== false);
       if (changed) onEnableChange(enabled, options);
+      if (wasExpanded !== expanded) notifyExpandChange(options);
     }
 
     function refreshSummary() {
@@ -3366,6 +3435,8 @@
     var onChange = config.onChange || function () {};
     var onLayoutChange = config.onLayoutChange || function () {};
     var bodyId = 'blocked-section-body-' + Math.random().toString(36).slice(2, 9);
+    var currentReason = normalizeBlockedReason(config.blockedReason);
+    var suggestionButtons = [];
 
     var field = document.createElement('div');
     field.className = 'field field--en-attente';
@@ -3385,29 +3456,114 @@
     reasonWrap.className = 'blocked-reason-wrap section-toggle-body';
     reasonWrap.id = bodyId;
 
-    var reasonSelect = document.createElement('select');
-    reasonSelect.className = 'blocked-reason-select';
-    reasonSelect.setAttribute('aria-label', 'Motif du blocage');
+    var selectedWrap = document.createElement('div');
+    selectedWrap.className = 'blocked-reason-selected';
 
-    var placeholderOpt = document.createElement('option');
-    placeholderOpt.value = '';
-    placeholderOpt.textContent = BLOCKED_REASON_PLACEHOLDER;
-    reasonSelect.appendChild(placeholderOpt);
+    var selectedChip = document.createElement('span');
+    selectedChip.className = 'blocked-reason-chip';
+
+    var selectedText = document.createElement('span');
+    selectedText.className = 'blocked-reason-chip-text';
+
+    var clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'blocked-reason-chip-clear';
+    clearBtn.setAttribute('aria-label', BLOCKED_REASON_CLEAR_LABEL);
+    clearBtn.textContent = '\u00d7';
+
+    selectedChip.appendChild(selectedText);
+    selectedChip.appendChild(clearBtn);
+    selectedWrap.appendChild(selectedChip);
+
+    var reasonInput = document.createElement('input');
+    reasonInput.type = 'text';
+    reasonInput.className = 'blocked-reason-input';
+    reasonInput.placeholder = BLOCKED_REASON_PLACEHOLDER;
+    reasonInput.setAttribute('aria-label', 'Motif du blocage');
+    reasonInput.setAttribute('autocomplete', 'off');
+    reasonInput.setAttribute('spellcheck', 'false');
+
+    var suggestions = document.createElement('div');
+    suggestions.className = 'blocked-reason-suggestions';
+
+    var suggestionsLabel = document.createElement('div');
+    suggestionsLabel.className = 'blocked-reason-suggestions-label';
+    suggestionsLabel.textContent = BLOCKED_REASON_SUGGESTIONS_LABEL;
+
+    var suggestionsList = document.createElement('div');
+    suggestionsList.className = 'blocked-reason-suggestions-list';
+    suggestionsList.setAttribute('role', 'list');
 
     BLOCKED_REASON_OPTIONS.forEach(function (optionLabel) {
-      var option = document.createElement('option');
-      option.value = optionLabel;
-      option.textContent = optionLabel;
-      reasonSelect.appendChild(option);
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'blocked-reason-suggestion';
+      btn.setAttribute('role', 'listitem');
+      btn.textContent = optionLabel;
+      btn.dataset.reason = optionLabel;
+      btn.addEventListener('click', function () {
+        commitReason(optionLabel);
+        reasonInput.value = '';
+        refreshSuggestions();
+        reasonInput.focus();
+      });
+      suggestionButtons.push(btn);
+      suggestionsList.appendChild(btn);
     });
 
-    reasonWrap.appendChild(reasonSelect);
+    suggestions.appendChild(suggestionsLabel);
+    suggestions.appendChild(suggestionsList);
+
+    reasonWrap.appendChild(selectedWrap);
+    reasonWrap.appendChild(reasonInput);
+    reasonWrap.appendChild(suggestions);
     field.appendChild(reasonWrap);
     el.appendChild(field);
 
     function readReason() {
-      var value = reasonSelect.value || '';
-      return isValidBlockedReason(value) ? value : '';
+      return currentReason;
+    }
+
+    function notifyReasonChange() {
+      collapse.refreshSummary();
+      onChange(getValue());
+    }
+
+    function commitReason(value) {
+      var next = normalizeBlockedReason(value);
+      if (next === currentReason) {
+        refreshSelected();
+        return;
+      }
+      currentReason = next;
+      refreshSelected();
+      refreshSuggestions();
+      notifyReasonChange();
+      onLayoutChange();
+    }
+
+    function refreshSelected() {
+      var hasReason = !!currentReason;
+      selectedWrap.hidden = !hasReason;
+      selectedText.textContent = currentReason;
+      field.classList.toggle('has-blocked-reason', hasReason);
+    }
+
+    function refreshSuggestions() {
+      var query = (reasonInput.value || '').trim().toLocaleLowerCase('fr-FR');
+      var visibleCount = 0;
+      for (var i = 0; i < suggestionButtons.length; i++) {
+        var btn = suggestionButtons[i];
+        var label = btn.dataset.reason || '';
+        var matchesQuery = !query || label.toLocaleLowerCase('fr-FR').indexOf(query) !== -1;
+        var isCurrent = !!currentReason && label === currentReason;
+        var show = matchesQuery && !isCurrent;
+        btn.hidden = !show;
+        if (show) visibleCount += 1;
+      }
+      var wasHidden = suggestions.hidden;
+      suggestions.hidden = visibleCount === 0;
+      if (wasHidden !== suggestions.hidden) onLayoutChange();
     }
 
     // Keep blockedReason when disabling — only enAttente (enabled) drives badges.
@@ -3416,12 +3572,13 @@
       body: reasonWrap,
       chrome: chrome,
       enabled: checked,
-      expanded: checked,
+      expanded: config.expanded != null ? !!config.expanded : checked,
       getSummary: function () {
         var reason = readReason() || BLOCKED_LABEL;
-        return capitalizeCountdownPhrase(reason) + '...';
+        return capitalizeCountdownPhrase(reason) + '\u2026';
       },
       onLayoutChange: onLayoutChange,
+      onExpandChange: config.onExpandChange || null,
       onEnableChange: function () {
         onChange(collapse.isEnabled());
       }
@@ -3436,7 +3593,9 @@
     }
 
     function setBlockedReason(value) {
-      reasonSelect.value = isValidBlockedReason(value) ? value : '';
+      currentReason = normalizeBlockedReason(value);
+      refreshSelected();
+      refreshSuggestions();
       collapse.refreshSummary();
     }
 
@@ -3445,12 +3604,26 @@
       return readReason();
     }
 
-    setBlockedReason(config.blockedReason);
-
-    reasonSelect.addEventListener('change', function () {
-      collapse.refreshSummary();
-      onChange(getValue());
+    clearBtn.addEventListener('click', function () {
+      commitReason('');
+      reasonInput.focus();
     });
+
+    reasonInput.addEventListener('input', function () {
+      refreshSuggestions();
+    });
+
+    reasonInput.addEventListener('keydown', function (event) {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      var typed = normalizeBlockedReason(reasonInput.value);
+      if (!typed) return;
+      commitReason(typed);
+      reasonInput.value = '';
+      refreshSuggestions();
+    });
+
+    setBlockedReason(config.blockedReason);
 
     return {
       el: field,
@@ -3619,8 +3792,28 @@
     pickers.appendChild(datePicker);
     pickers.appendChild(timePicker);
 
+    var suggestions = document.createElement('div');
+    suggestions.className = 'due-date-suggestions';
+    suggestions.setAttribute('role', 'group');
+    suggestions.setAttribute('aria-label', DUE_DATE_QUICK_SUGGESTIONS_LABEL);
+    suggestions.hidden = !!current;
+
+    DUE_DATE_QUICK_SUGGESTIONS.forEach(function (item) {
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'due-date-suggestion';
+      chip.dataset.suggestion = item.id;
+      chip.textContent = item.label;
+      chip.setAttribute('aria-label', item.label);
+      chip.addEventListener('click', function () {
+        applyQuickSuggestion(item.id);
+      });
+      suggestions.appendChild(chip);
+    });
+
     body.appendChild(countdown);
     body.appendChild(pickers);
+    body.appendChild(suggestions);
 
     var timePopover = document.createElement('div');
     timePopover.className = 'due-date-time-popover';
@@ -3633,15 +3826,10 @@
     var timePeriodsSection = document.createElement('div');
     timePeriodsSection.className = 'due-date-time-section';
 
-    var timePeriodsLabel = document.createElement('div');
-    timePeriodsLabel.className = 'due-date-time-section-label';
-    timePeriodsLabel.id = uid + '-time-periods';
-    timePeriodsLabel.textContent = DUE_DATE_TIME_SUGGESTIONS_LABEL;
-
     var timePeriods = document.createElement('div');
     timePeriods.className = 'due-date-time-chips due-date-time-chips--periods';
     timePeriods.setAttribute('role', 'group');
-    timePeriods.setAttribute('aria-labelledby', uid + '-time-periods');
+    timePeriods.setAttribute('aria-label', DUE_DATE_TIME_SUGGESTIONS_LABEL);
 
     DUE_DATE_TIME_PERIODS.forEach(function (period) {
       var chip = document.createElement('button');
@@ -3670,7 +3858,6 @@
       timePeriods.appendChild(chip);
     });
 
-    timePeriodsSection.appendChild(timePeriodsLabel);
     timePeriodsSection.appendChild(timePeriods);
     timePopover.appendChild(timePeriodsSection);
 
@@ -3775,6 +3962,27 @@
     timeDialSection.appendChild(clockFace);
     timePopover.appendChild(timeDialSection);
 
+    var timeFooter = document.createElement('div');
+    timeFooter.className = 'due-date-footer due-date-time-footer';
+
+    var noTimeBtn = document.createElement('button');
+    noTimeBtn.type = 'button';
+    noTimeBtn.className = 'due-date-today due-date-time-no-time';
+    noTimeBtn.textContent = DUE_DATE_TIME_NO_TIME_LABEL;
+    noTimeBtn.setAttribute('aria-label', DUE_DATE_TIME_NO_TIME_LABEL);
+    noTimeBtn.title = DUE_DATE_TIME_NO_TIME_LABEL;
+
+    var timeCloseBtn = document.createElement('button');
+    timeCloseBtn.type = 'button';
+    timeCloseBtn.className = 'due-date-close';
+    timeCloseBtn.textContent = DUE_DATE_CLOSE_LABEL;
+    timeCloseBtn.setAttribute('aria-label', DUE_DATE_CLOSE_LABEL);
+    timeCloseBtn.title = DUE_DATE_CLOSE_LABEL;
+
+    timeFooter.appendChild(noTimeBtn);
+    timeFooter.appendChild(timeCloseBtn);
+    timePopover.appendChild(timeFooter);
+
     var popover = document.createElement('div');
     popover.className = 'due-date-popover';
     popover.id = uid + '-popover';
@@ -3858,15 +4066,22 @@
       });
     }
 
+    function ensureDueDateForTime() {
+      if (current) return false;
+      current = toIsoDate(startOfLocalDay(new Date()));
+      focusIso = current;
+      syncViewFromValue(current);
+      return true;
+    }
+
     function refreshTimeRow() {
-      var hasDate = enabled && !!current;
-      if (!hasDate && timeOpen) closeTimePicker(false);
+      /* Muted look only when no date — keep Heure clickable (no disabled attr). */
       timeClearBtn.hidden = !currentTime;
       pickers.classList.toggle('has-time', !!currentTime);
       pickers.classList.toggle('has-date', !!current);
-      timePicker.classList.toggle('is-disabled', !hasDate);
-      timeTrigger.disabled = !hasDate;
-      timeTrigger.setAttribute('aria-disabled', hasDate ? 'false' : 'true');
+      timePicker.classList.toggle('is-disabled', !current);
+      timeTrigger.disabled = false;
+      timeTrigger.removeAttribute('aria-disabled');
       field.classList.toggle('is-time-open', timeOpen);
       timeTrigger.setAttribute('aria-expanded', timeOpen ? 'true' : 'false');
       if (currentTime) {
@@ -4089,7 +4304,9 @@
     }
 
     function selectTime(hhmm, closeAfter) {
-      if (!enabled || !current) return;
+      if (!enabled) return;
+      ensureDueDateForTime();
+      if (!current) return;
       var next = normalizeDueTime(hhmm);
       currentTime = next || '';
       if (next) {
@@ -4100,6 +4317,29 @@
       emitChange();
       if (closeAfter !== false) closeTimePicker(true);
       else syncTimePickerSelection();
+    }
+
+    function refreshSuggestions() {
+      var show = enabled && !current;
+      var wasHidden = suggestions.hidden;
+      suggestions.hidden = !show;
+      if (wasHidden !== suggestions.hidden) notifyLayout();
+    }
+
+    function applyQuickSuggestion(id) {
+      if (!enabled) return;
+      var resolved = resolveDueDateQuickSuggestion(id);
+      if (!resolved || !resolved.iso) return;
+      var next = normalizeDueDate(resolved.iso);
+      if (!next) return;
+      current = next;
+      currentTime = normalizeDueTime(resolved.time) || '';
+      focusIso = next;
+      syncViewFromValue(next);
+      closeCalendar(false);
+      closeTimePicker(false);
+      emitChange();
+      trigger.focus();
     }
 
     function refreshTrigger() {
@@ -4126,11 +4366,13 @@
         field.classList.remove('has-due-date', 'is-past');
         refreshTimeRow();
         refreshTrigger();
+        refreshSuggestions();
         if (collapseApi) collapseApi.refreshSummary();
         return;
       }
       refreshTrigger();
       refreshTimeRow();
+      refreshSuggestions();
       if (!enabled) {
         countdown.textContent = '';
         countdown.hidden = true;
@@ -4422,7 +4664,7 @@
     }
 
     function openTimePicker() {
-      if (!enabled || !current || timeOpen) return;
+      if (!enabled || timeOpen) return;
       closeCalendar(false);
       timeOpen = true;
       timePopover.hidden = false;
@@ -4448,7 +4690,7 @@
       field.classList.remove('is-time-open');
       timeTrigger.setAttribute('aria-expanded', 'false');
       unbindDocListeners();
-      if (restoreFocus && enabled && current) timeTrigger.focus();
+      if (restoreFocus && enabled) timeTrigger.focus();
       notifyLayout();
     }
 
@@ -4470,17 +4712,28 @@
     });
 
     timeTrigger.addEventListener('click', function () {
-      if (!enabled || !current) return;
+      if (!enabled) return;
       if (timeOpen) closeTimePicker(false);
       else openTimePicker();
     });
 
     timeClearBtn.addEventListener('click', function () {
-      if (!enabled || !current || !currentTime) return;
+      if (!enabled || !currentTime) return;
       currentTime = '';
       emitChange();
       if (timeOpen) syncTimePickerSelection();
       timeTrigger.focus();
+    });
+
+    noTimeBtn.addEventListener('click', function () {
+      if (!enabled) return;
+      currentTime = '';
+      emitChange();
+      closeTimePicker(true);
+    });
+
+    timeCloseBtn.addEventListener('click', function () {
+      closeTimePicker(true);
     });
 
     digitalHourInput.addEventListener('focus', function () {
@@ -4640,11 +4893,12 @@
       body: body,
       chrome: chrome,
       enabled: enabled,
-      expanded: enabled,
+      expanded: config.expanded != null ? !!config.expanded : enabled,
       getSummary: function () {
-        return current ? formatDueDateCompactSummary(current, currentTime) : '';
+        return formatDueDateCompactSummary(current, currentTime);
       },
       onLayoutChange: notifyLayout,
+      onExpandChange: config.onExpandChange || null,
       onBeforeDisable: function () {
         closeCalendar(false);
         closeTimePicker(false);
@@ -5775,11 +6029,8 @@
       chrome: chrome,
       alwaysEnabled: true,
       enabled: true,
-      expanded: false,
-      getSummary: function () {
-        if (!lastScene.display) return '';
-        return lastScene.display.label || '';
-      },
+      expanded: config.expanded != null ? !!config.expanded : false,
+      onExpandChange: config.onExpandChange || null,
       onLayoutChange: function () {
         syncGraphVisibility();
       }
@@ -5896,6 +6147,26 @@
     var calcGraph;
     var formulaSwitcher;
     var sliderAnimFrame = null;
+    var focusSection = variantConfig.focusSection || null;
+
+    function sectionExpandedDefault(key, enabledFallback) {
+      if (key === 'graph') return false;
+      // Opening from Progrès should not auto-expand other sections.
+      if (focusSection === 'progress') return false;
+      return !!enabledFallback;
+    }
+
+    function sectionExpanded(key, enabledFallback) {
+      return resolveSectionExpanded(key, sectionExpandedDefault(key, enabledFallback));
+    }
+
+    function persistSectionExpanded(key) {
+      return function (isExpanded) {
+        var patch = {};
+        patch[key] = !!isExpanded;
+        saveSectionCollapseState(patch);
+      };
+    }
 
     function applyFormulaMode(key) {
       formulaKey = key || 'baseline';
@@ -6162,7 +6433,7 @@
       body: priorityBody,
       chrome: priorityChrome,
       enabled: state.priorityEnabled !== false,
-      expanded: state.priorityEnabled !== false,
+      expanded: sectionExpanded('priority', state.priorityEnabled !== false),
       getSummary: function () {
         return lastPrioritySummary || '';
       },
@@ -6171,6 +6442,7 @@
           variantConfig.onLayoutChange();
         }
       },
+      onExpandChange: persistSectionExpanded('priority'),
       onEnableChange: function (on) {
         state.priorityEnabled = on;
         cancelSliderAnim();
@@ -6223,6 +6495,8 @@
       calcGraph = createCalcGraphPanel({
         el: fieldsSection,
         fields: fields,
+        expanded: sectionExpanded('graph', false),
+        onExpandChange: persistSectionExpanded('graph'),
         onChange: function () {
           cancelSliderAnim();
           repaint();
@@ -6242,13 +6516,16 @@
     dueSection.className = 'variant-due-section';
     card.appendChild(dueSection);
 
+    var dueEnabledInitial = state.dueEnabled !== false && !!state.dueDate;
     dueDateField = createDueDateField({
       el: dueSection,
       value: {
         dueDate: state.dueDate,
         dueTime: state.dueTime,
-        dueEnabled: state.dueEnabled !== false && !!state.dueDate
+        dueEnabled: dueEnabledInitial
       },
+      expanded: sectionExpanded('due', dueEnabledInitial),
+      onExpandChange: persistSectionExpanded('due'),
       onChange: function () {
         cancelSliderAnim();
         repaint();
@@ -6269,6 +6546,8 @@
       el: blockedSection,
       value: state.enAttente,
       blockedReason: state.blockedReason,
+      expanded: sectionExpanded('blocked', !!state.enAttente),
+      onExpandChange: persistSectionExpanded('blocked'),
       onChange: function () {
         cancelSliderAnim();
         repaint();
@@ -6386,6 +6665,10 @@
     normalizeFormulaKey: normalizeFormulaKey,
     loadStoredFormulaKey: loadStoredFormulaKey,
     saveStoredFormulaKey: saveStoredFormulaKey,
+    SECTION_COLLAPSE_STORAGE_KEY: SECTION_COLLAPSE_STORAGE_KEY,
+    loadSectionCollapseState: loadSectionCollapseState,
+    saveSectionCollapseState: saveSectionCollapseState,
+    resolveSectionExpanded: resolveSectionExpanded,
     eisenhowerQuadrantFor: eisenhowerQuadrantFor,
     isEisenhowerUrgent: isEisenhowerUrgent,
     isEisenhowerImportant: isEisenhowerImportant,
@@ -6467,8 +6750,11 @@
     BLOCKED_DISPLAY: BLOCKED_DISPLAY,
     BLOCKED_DESCRIPTION: BLOCKED_DESCRIPTION,
     BLOCKED_REASON_PLACEHOLDER: BLOCKED_REASON_PLACEHOLDER,
+    BLOCKED_REASON_SUGGESTIONS_LABEL: BLOCKED_REASON_SUGGESTIONS_LABEL,
+    BLOCKED_REASON_CLEAR_LABEL: BLOCKED_REASON_CLEAR_LABEL,
     BLOCKED_REASON_OPTIONS: BLOCKED_REASON_OPTIONS,
     isValidBlockedReason: isValidBlockedReason,
+    normalizeBlockedReason: normalizeBlockedReason,
     formatBlockedBadgeText: formatBlockedBadgeText,
     MS_PER_DAY: MS_PER_DAY,
     MS_PER_HOUR: MS_PER_HOUR,
@@ -6479,8 +6765,10 @@
     DAYS_PER_MONTH_AVG: DAYS_PER_MONTH_AVG,
     DAYS_PER_YEAR_AVG: DAYS_PER_YEAR_AVG,
     DUE_DATE_TIME_DEFAULT: DUE_DATE_TIME_DEFAULT,
+    DUE_DATE_QUICK_SUGGESTIONS: DUE_DATE_QUICK_SUGGESTIONS,
     normalizeDueDate: normalizeDueDate,
     normalizeDueTime: normalizeDueTime,
+    resolveDueDateQuickSuggestion: resolveDueDateQuickSuggestion,
     daysUntilDue: daysUntilDue,
     msUntilDue: msUntilDue,
     isDuePast: isDuePast,

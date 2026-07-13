@@ -568,14 +568,62 @@ body {
   gap: 8px;
 }
 
+.due-date-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.due-date-suggestions[hidden] {
+  display: none;
+}
+
+.due-date-suggestion {
+  appearance: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-1, var(--surface-2)) 85%, var(--surface-2));
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.due-date-suggestion:hover {
+  background: var(--surface-hover);
+}
+
+.due-date-suggestion:focus-visible {
+  outline: 2px solid var(--due-accent);
+  outline-offset: 1px;
+}
+
 .due-date-picker {
   position: relative;
   flex: 1 1 0;
   min-width: 0;
 }
 
+/* Visual mute only — Heure stays interactive when no date is set. */
 .due-date-picker.is-disabled {
   opacity: 0.55;
+}
+
+.due-date-picker.is-disabled .due-date-time-title,
+.due-date-picker.is-disabled .due-date-time-value,
+.due-date-picker.is-disabled .due-date-time-icon {
+  color: var(--text-muted);
 }
 
 .due-date-trigger,
@@ -606,18 +654,14 @@ body {
   background: var(--surface-hover);
 }
 
+.due-date-picker.is-disabled .due-date-time-trigger:hover {
+  background: color-mix(in srgb, var(--surface-1, var(--surface-2)) 78%, var(--surface-2));
+}
+
 .due-date-trigger:focus-visible,
 .due-date-time-trigger:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--due-accent-soft);
-}
-
-.due-date-time-trigger:disabled {
-  cursor: not-allowed;
-}
-
-.due-date-time-trigger:disabled:hover {
-  background: color-mix(in srgb, var(--surface-1, var(--surface-2)) 85%, var(--surface-2));
 }
 
 .field--due-date.is-open .due-date-trigger,
@@ -736,20 +780,17 @@ body {
   gap: 8px;
 }
 
-.due-date-time-section-label {
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  line-height: 1.2;
-}
-
 .due-date-time-section--dial {
   padding-top: 12px;
   border-top: none;
   align-items: center;
   gap: 12px;
+}
+
+.due-date-time-footer {
+  margin-top: 0;
+  padding-top: 4px;
+  width: 100%;
 }
 
 .due-date-time-dial-header {
@@ -1383,15 +1424,72 @@ html[data-color-mode="dark"] .due-date-time-clock {
 .blocked-reason-wrap {
   margin-top: 12px;
   padding-left: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .blocked-reason-wrap[hidden] {
   display: none;
 }
 
-.blocked-reason-select {
+.blocked-reason-selected[hidden] {
+  display: none;
+}
+
+.blocked-reason-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 5px 6px 5px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--blocked-accent) 16%, var(--surface-2));
+  color: var(--blocked-text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.blocked-reason-chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blocked-reason-chip-clear {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--blocked-muted-text);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.12s ease, background-color 0.12s ease;
+}
+
+.blocked-reason-chip-clear:hover {
+  color: var(--blocked-text);
+  background: color-mix(in srgb, var(--blocked-accent) 18%, transparent);
+}
+
+.blocked-reason-chip-clear:focus-visible {
+  outline: 2px solid var(--blocked-accent);
+  outline-offset: 1px;
+}
+
+.blocked-reason-input {
   width: 100%;
-  padding: 8px 32px 8px 12px;
+  box-sizing: border-box;
+  padding: 8px 12px;
   border: none;
   border-radius: 10px;
   background: color-mix(in srgb, var(--surface-2) 82%, transparent);
@@ -1400,31 +1498,77 @@ html[data-color-mode="dark"] .due-date-time-clock {
   font-size: 15px;
   font-weight: 400;
   line-height: 1.45;
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23626f86' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
   transition: background-color 0.1s ease, box-shadow 0.1s ease;
 }
 
-.blocked-reason-select:hover:not(:disabled) {
-  background-color: var(--surface-hover);
+.blocked-reason-input::placeholder {
+  color: var(--text-muted);
 }
 
-.blocked-reason-select:focus-visible {
+.blocked-reason-input:hover {
+  background: var(--surface-hover);
+}
+
+.blocked-reason-input:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
-.blocked-reason-select:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
+.blocked-reason-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.blocked-reason-select option {
+.blocked-reason-suggestions[hidden] {
+  display: none;
+}
+
+.blocked-reason-suggestions-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--blocked-muted-text);
+}
+
+.blocked-reason-suggestions-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.blocked-reason-suggestion {
+  appearance: none;
+  flex: 0 1 auto;
+  max-width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-1, var(--surface-2)) 85%, var(--surface-2));
   color: var(--text-primary);
-  background: var(--surface-2);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.blocked-reason-suggestion[hidden] {
+  display: none;
+}
+
+.blocked-reason-suggestion:hover {
+  background: var(--surface-hover);
+}
+
+.blocked-reason-suggestion:focus-visible {
+  outline: 2px solid var(--blocked-accent);
+  outline-offset: 1px;
 }
 
 .en-attente-label:has(.en-attente-checkbox:focus-visible) {
@@ -2429,7 +2573,13 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 }
 
 .heat-tier-desc-body {
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  /* Reserve 3 lines so 2→3 wrap during score drag doesn't reflow the panel */
+  min-height: calc(1.5em * 3);
 }
 
 .heat-panel.is-inutile .heat-seg {

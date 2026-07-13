@@ -796,6 +796,12 @@ body.tp-page--priority {
   padding-bottom: 10px;
 }
 
+.tp-page--priority .due-date-suggestion {
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+}
+
 .tp-page--priority .due-date-trigger-icon,
 .tp-page--priority .due-date-time-icon {
   font-size: 18px;
@@ -842,12 +848,28 @@ body.tp-page--priority {
   font-weight: 500;
 }
 
-.tp-page--priority .blocked-reason-select {
+.tp-page--priority .blocked-reason-input {
   font-size: 15px;
   font-weight: 400;
   border: none;
   padding-top: 8px;
   padding-bottom: 8px;
+}
+
+.tp-page--priority .blocked-reason-suggestion {
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+}
+
+.tp-page--priority .blocked-reason-chip {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.tp-page--priority .blocked-reason-suggestions-label {
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .tp-page--priority .en-attente-title,
