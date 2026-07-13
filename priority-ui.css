@@ -448,9 +448,7 @@ body {
 }
 
 .due-date-label {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  /* Checkbox-only enable control; collapse lives on .section-collapse-btn */
   cursor: pointer;
   user-select: none;
 }
@@ -1930,8 +1928,8 @@ body.help-modal-open {
   container-type: inline-size;
   container-name: heat-panel;
   background: color-mix(in srgb, var(--card-tier-tint) var(--card-panel-tint-mix, 20%), var(--surface-2));
-  border-radius: var(--radius);
-  padding: 12px;
+  border-radius: 12px;
+  padding: 16px;
   margin-top: 0;
   overflow: hidden;
   transition: background 0.25s ease;
@@ -1944,21 +1942,21 @@ body.help-modal-open {
 
 .heat-blocked-warning {
   position: absolute;
-  top: 10px;
+  top: 12px;
   right: 12px;
   z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding: 3px 4px 3px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
+  padding: 4px 6px 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
   line-height: 1.2;
   letter-spacing: -0.01em;
   color: var(--blocked-text);
   background: color-mix(in srgb, var(--blocked-fill) 55%, var(--surface-2));
-  border: 1px solid color-mix(in srgb, var(--blocked-border) 28%, transparent);
+  border: none;
 }
 
 .heat-blocked-warning-label {
@@ -1969,17 +1967,17 @@ body.help-modal-open {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   margin: 0;
   padding: 0;
   border: none;
-  border-radius: 3px;
+  border-radius: 6px;
   background: transparent;
   color: inherit;
   font-family: inherit;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 500;
   line-height: 1;
   cursor: pointer;
   opacity: 0.72;
@@ -2006,7 +2004,7 @@ body.help-modal-open {
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
-  margin: 0 0 12px;
+  margin: 0 0 16px;
   min-width: 0;
 }
 
@@ -2027,15 +2025,15 @@ body.help-modal-open {
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
-  column-gap: 8px;
+  column-gap: 10px;
   flex: 0 0 auto;
   width: max-content;
   max-width: 100%;
-  border-radius: var(--radius);
-  padding: 7px 11px;
+  border-radius: 12px;
+  padding: 10px 14px;
   background: var(--heat-fill, transparent);
   margin: 0;
-  transition: background 0.22s ease, box-shadow 0.22s ease, color 0.22s ease;
+  transition: background 0.22s ease, color 0.22s ease;
 }
 
 @container heat-panel (min-width: 480px) {
@@ -2058,7 +2056,7 @@ body.help-modal-open {
 }
 
 .heat-top-label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--text-secondary);
 }
@@ -2118,7 +2116,7 @@ body.help-modal-open {
 .heat-badge.is-blocked,
 .heat-badge.is-overdue {
   background: color-mix(in srgb, var(--heat-fill, var(--blocked-fill)) 42%, var(--surface-2));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--blocked-border) 24%, transparent);
+  box-shadow: none;
 }
 
 .heat-badge.is-blocked .heat-tier-dot,
@@ -2151,8 +2149,8 @@ body.help-modal-open {
   gap: 6px;
   grid-column: 2;
   grid-row: 1;
-  font-size: 19px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 500;
   line-height: 1.15;
   color: var(--heat-text, var(--heat-accent-fallback));
   min-width: 0;
@@ -2190,15 +2188,15 @@ body.help-modal-open {
 .heat-score-info {
   margin: 0;
   padding: 0;
-  width: 18px;
-  height: 18px;
-  border: 1px solid currentColor;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid currentColor;
   border-radius: 50%;
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
   line-height: 1;
   cursor: pointer;
   opacity: 0.62;
@@ -2223,17 +2221,17 @@ body.help-modal-open {
   z-index: 200;
   min-width: 220px;
   max-width: min(300px, 78vw);
-  padding: 10px 12px;
-  border-radius: var(--radius, 8px);
-  border: 1px solid var(--border, #dfe1e6);
-  background: var(--surface-1, #fff);
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  background: var(--surface-2, #fff);
   color: var(--text-primary, #172b4d);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
   line-height: 1.4;
   white-space: normal;
   text-align: left;
-  box-shadow: 0 4px 16px rgba(9, 30, 66, 0.18);
+  box-shadow: var(--modal-shadow);
   visibility: hidden;
   opacity: 0;
   pointer-events: none;
@@ -2261,7 +2259,7 @@ body.help-modal-open {
 }
 
 .heat-score-tooltip-label {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-primary, #172b4d);
 }
 
@@ -2292,23 +2290,23 @@ body.help-modal-open {
 .heat-score-tooltip-value {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-primary, #172b4d);
 }
 
 .heat-score-tooltip-status {
-  font-weight: 600;
-  font-size: 11px;
+  font-weight: 500;
+  font-size: 12px;
   color: var(--text-primary, #172b4d);
 }
 
 .heat-score-tooltip-sub {
   margin: -4px 0 0;
   padding-left: 10px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
   color: var(--text-secondary, #5e6c84);
-  border-left: 2px solid color-mix(in srgb, var(--border, #dfe1e6) 80%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--text-muted, #626f86) 28%, transparent);
 }
 
 .heat-score-tooltip-info {
@@ -2320,7 +2318,7 @@ body.help-modal-open {
 }
 
 .heat-score-tooltip-info-label {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-secondary, #5e6c84);
 }
 
@@ -2339,14 +2337,14 @@ body.help-modal-open {
   gap: 4px;
   margin-top: 2px;
   padding-top: 8px;
-  border-top: 1px solid var(--border, #dfe1e6);
+  border-top: none;
 }
 
 .heat-score-tooltip-total-value {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-variant-numeric: tabular-nums;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 500;
   color: var(--text-primary, #172b4d);
 }
 
@@ -2366,8 +2364,7 @@ body.help-modal-open {
 
 html[data-color-mode="dark"] .heat-score-tooltip {
   background: var(--surface-2, #22272b);
-  border-color: var(--border, #3d474f);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--modal-shadow);
 }
 
 .heat-badge.is-inutile .heat-badge-num,
@@ -2382,11 +2379,11 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 .heat-tier-desc {
   margin: 0;
   width: 100%;
-  font-size: 13px;
-  line-height: 1.45;
-  min-height: calc(1.45em * 3);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: calc(1.5em * 3);
   color: var(--heat-text, var(--text-secondary));
-  opacity: 0.72;
+  opacity: 0.78;
   transition: color 0.22s ease, opacity 0.16s ease;
 }
 
@@ -2397,7 +2394,7 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 
 @keyframes heat-tier-desc-enter {
   from { opacity: 0.15; }
-  to { opacity: 0.72; }
+  to { opacity: 0.78; }
 }
 
 .heat-badge-label.heat-text-enter {
@@ -2424,8 +2421,8 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 
 .heat-tier-desc-subtitle {
   display: block;
-  font-weight: 600;
-  margin-bottom: 3px;
+  font-weight: 500;
+  margin-bottom: 4px;
 }
 
 .heat-tier-desc-body {
@@ -2446,13 +2443,13 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 
 .heat-segs {
   display: flex;
-  gap: 3px;
+  gap: 4px;
 }
 
 .heat-seg {
-  height: 13px;
+  height: 12px;
   flex: 1;
-  border-radius: 3px;
+  border-radius: 4px;
   background: var(--c);
   opacity: 0.28;
   transition: opacity .12s;
@@ -2469,8 +2466,8 @@ html[data-color-mode="dark"] .heat-score-tooltip {
   display: flex;
   justify-content: space-between;
   gap: 2px;
-  margin-top: 5px;
-  font-size: 11px;
+  margin-top: 8px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 
@@ -2496,18 +2493,17 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 
 /* ── Calc graph panel (inner Priorité subsection) ── */
 .calc-graph-panel {
-  margin-top: 8px;
+  margin-top: 12px;
   padding: 0;
   border-radius: var(--radius);
   background: transparent;
-  border: 1px solid transparent;
-  transition: background 0.2s ease, border-color 0.2s ease, padding 0.2s ease;
+  border: none;
+  transition: background 0.2s ease, padding 0.2s ease;
 }
 
 .calc-graph-panel.is-enabled {
-  padding: 8px 10px;
-  background: color-mix(in srgb, var(--surface-1) 80%, var(--surface-2));
-  border-color: var(--border);
+  padding: 12px;
+  background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
 }
 
 .calc-graph-body {
@@ -2625,8 +2621,8 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 
 .calc-rsm-frame {
   fill: url(#calc-rsm-glass);
-  stroke: var(--border);
-  stroke-width: 0.75;
+  stroke: transparent;
+  stroke-width: 0;
 }
 
 .calc-rsm-plot-bg {
@@ -2679,8 +2675,8 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 }
 
 .calc-rsm-axis-label {
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 500;
   font-family: inherit;
   fill: var(--text-muted);
   pointer-events: none;

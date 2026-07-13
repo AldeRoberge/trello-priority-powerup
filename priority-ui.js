@@ -3177,6 +3177,7 @@
       var text = enabled && !expanded ? (getSummary() || '') : '';
       chrome.summary.textContent = text;
       chrome.summary.hidden = !text;
+      chrome.summary.setAttribute('aria-hidden', text ? 'false' : 'true');
       if (shouldNotifyLayout !== false && wasHidden !== !!body.hidden) {
         onLayoutChange();
       }
