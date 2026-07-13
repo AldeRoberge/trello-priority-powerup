@@ -1047,12 +1047,18 @@
   var BLOCKED_REASON_PLACEHOLDER = 'Pr\u00e9ciser le blocage\u2026';
   var BLOCKED_REASON_SUGGESTIONS_LABEL = 'Suggestions';
   var BLOCKED_REASON_CLEAR_LABEL = 'Effacer le motif';
+  var BLOCKED_REASON_WAITING_OTHER_TASK = 'En attente d\'une autre t\u00e2che';
+  var BLOCKED_LINK_TYPE_SUBTASK = 'subtask';
+  var BLOCKED_SUBTASK_PICKER_LABEL = 'Sous-t\u00e2che bloquante';
+  var BLOCKED_SUBTASK_EMPTY = 'Aucune sous-t\u00e2che';
+  var BLOCKED_SUBTASK_CLEAR_LABEL = 'Retirer le lien vers la sous-t\u00e2che';
+  var BLOCKED_SUBTASK_FALLBACK_LABEL = 'Sous-t\u00e2che';
   var BLOCKED_REASON_OPTIONS = [
     'En attente d\'une r\u00e9ponse',
     'En attente de budget',
     'En attente d\'une approbation',
     'En attente de mat\u00e9riel',
-    'En attente d\'une autre t\u00e2che',
+    BLOCKED_REASON_WAITING_OTHER_TASK,
     'En attente de quelqu\'un',
     'Autre'
   ];
@@ -1068,6 +1074,39 @@
     if (typeof reason !== 'string') return '';
     var trimmed = reason.trim();
     return trimmed || '';
+  }
+
+  function isBlockedWaitingOtherTask(reason) {
+    return normalizeBlockedReason(reason) === BLOCKED_REASON_WAITING_OTHER_TASK;
+  }
+
+  /** Normalize shared-storage blocked link (`{ type: 'subtask', id }`). */
+  function normalizeBlockedLink(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    if (raw.type !== BLOCKED_LINK_TYPE_SUBTASK) return null;
+    var id = typeof raw.id === 'string' ? raw.id.trim() : '';
+    if (!id) return null;
+    return { type: BLOCKED_LINK_TYPE_SUBTASK, id: id };
+  }
+
+  function blockedLinkFromRaw(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    var link = normalizeBlockedLink(raw.blockedLink);
+    if (link) return link;
+    if (typeof raw.blockedSubtaskId === 'string') {
+      var id = raw.blockedSubtaskId.trim();
+      if (id) return { type: BLOCKED_LINK_TYPE_SUBTASK, id: id };
+    }
+    return null;
+  }
+
+  function findSubtaskById(items, id) {
+    if (!id || !items || !items.length) return null;
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      if (item && item.id === id) return item;
+    }
+    return null;
   }
 
   var DUE_DATE_LABEL = '\u00c9ch\u00e9ance';
@@ -1689,10 +1728,15 @@
   function withBlockedDisplay(display, inputs) {
     if (!display || !isEnAttente(inputs)) return display;
     var reason = inputs.blockedReason || '';
-    return Object.assign({}, display, {
+    var next = {
       blocked: true,
       blockedReason: reason
-    });
+    };
+    var link = normalizeBlockedLink(inputs.blockedLink);
+    if (link && isBlockedWaitingOtherTask(reason)) {
+      next.blockedLink = link;
+    }
+    return Object.assign({}, display, next);
   }
 
   function withDisplayExtras(display, inputs) {
@@ -3458,6 +3502,7 @@
 
     var selectedWrap = document.createElement('div');
     selectedWrap.className = 'blocked-reason-selected';
+    selectedWrap.hidden = !currentReason;
 
     var selectedChip = document.createElement('span');
     selectedChip.className = 'blocked-reason-chip';

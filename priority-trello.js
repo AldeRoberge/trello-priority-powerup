@@ -131,6 +131,23 @@
     if (raw.enAttente === true) {
       normalized.enAttente = true;
     }
+    // Link to a completion subtask when waiting on another task.
+    var waitingOther =
+      reason &&
+      PU &&
+      PU.BLOCKED_REASON_WAITING_OTHER_TASK &&
+      reason === PU.BLOCKED_REASON_WAITING_OTHER_TASK;
+    if (waitingOther) {
+      var link =
+        PU.normalizeBlockedLink
+          ? PU.normalizeBlockedLink(raw.blockedLink)
+          : null;
+      if (!link && typeof raw.blockedSubtaskId === 'string') {
+        var subId = raw.blockedSubtaskId.trim();
+        if (subId) link = { type: 'subtask', id: subId };
+      }
+      if (link) normalized.blockedLink = link;
+    }
 
     var dueDate = '';
     if (typeof raw.dueDate === 'string') {
@@ -157,7 +174,9 @@
   }
 
   function clearBlockedFromInputs(inputs) {
-    if (!inputs || (!inputs.enAttente && !inputs.blockedReason)) return inputs;
+    if (!inputs || (!inputs.enAttente && !inputs.blockedReason && !inputs.blockedLink)) {
+      return inputs;
+    }
     var cleared = {
       urgency: inputs.urgency,
       impact: inputs.impact,
