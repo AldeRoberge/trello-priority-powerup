@@ -780,6 +780,7 @@ body {
 
 .due-date-time-digital-part {
   appearance: none;
+  -webkit-appearance: none;
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -791,7 +792,12 @@ body {
   letter-spacing: -0.03em;
   padding: 2px 4px;
   border-radius: 8px;
-  cursor: pointer;
+  cursor: text;
+  width: 2.15em;
+  min-width: 0;
+  text-align: center;
+  box-sizing: border-box;
+  outline: none;
   transition:
     color 0.12s ease,
     background-color 0.12s ease;
@@ -806,8 +812,11 @@ body {
   color: var(--text-primary);
 }
 
+.due-date-time-digital-part:focus,
 .due-date-time-digital-part:focus-visible {
   outline: none;
+  color: var(--due-accent);
+  background: var(--due-accent-soft);
   box-shadow: 0 0 0 3px var(--due-accent-soft);
 }
 
@@ -947,7 +956,7 @@ body {
   background: transparent;
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   line-height: 34px;
@@ -960,16 +969,16 @@ body {
 }
 
 .due-date-time-clock-num--inner {
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .due-date-time-clock-num--outer {
-  font-size: 11px;
+  font-size: 14px;
   color: color-mix(in srgb, var(--text-primary) 78%, var(--text-muted));
 }
 
 .due-date-time-clock-num--minute {
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .due-date-time-clock-num:hover {

@@ -3540,26 +3540,36 @@
     digitalGroup.setAttribute('role', 'group');
     digitalGroup.setAttribute('aria-label', DUE_DATE_TIME_DIAL_LABEL);
 
-    var digitalHourBtn = document.createElement('button');
-    digitalHourBtn.type = 'button';
-    digitalHourBtn.className = 'due-date-time-digital-part due-date-time-digital-part--hour is-active';
-    digitalHourBtn.setAttribute('aria-label', DUE_DATE_TIME_HOURS_ARIA);
-    digitalHourBtn.setAttribute('aria-pressed', 'true');
+    var digitalHourInput = document.createElement('input');
+    digitalHourInput.type = 'text';
+    digitalHourInput.className = 'due-date-time-digital-part due-date-time-digital-part--hour is-active';
+    digitalHourInput.setAttribute('aria-label', DUE_DATE_TIME_HOURS_ARIA);
+    digitalHourInput.setAttribute('aria-pressed', 'true');
+    digitalHourInput.setAttribute('inputmode', 'numeric');
+    digitalHourInput.setAttribute('autocomplete', 'off');
+    digitalHourInput.setAttribute('spellcheck', 'false');
+    digitalHourInput.setAttribute('maxlength', '2');
+    digitalHourInput.value = pad2(dialHour);
 
     var digitalColon = document.createElement('span');
     digitalColon.className = 'due-date-time-digital-colon';
     digitalColon.textContent = ':';
     digitalColon.setAttribute('aria-hidden', 'true');
 
-    var digitalMinuteBtn = document.createElement('button');
-    digitalMinuteBtn.type = 'button';
-    digitalMinuteBtn.className = 'due-date-time-digital-part due-date-time-digital-part--minute';
-    digitalMinuteBtn.setAttribute('aria-label', DUE_DATE_TIME_MINUTES_ARIA);
-    digitalMinuteBtn.setAttribute('aria-pressed', 'false');
+    var digitalMinuteInput = document.createElement('input');
+    digitalMinuteInput.type = 'text';
+    digitalMinuteInput.className = 'due-date-time-digital-part due-date-time-digital-part--minute';
+    digitalMinuteInput.setAttribute('aria-label', DUE_DATE_TIME_MINUTES_ARIA);
+    digitalMinuteInput.setAttribute('aria-pressed', 'false');
+    digitalMinuteInput.setAttribute('inputmode', 'numeric');
+    digitalMinuteInput.setAttribute('autocomplete', 'off');
+    digitalMinuteInput.setAttribute('spellcheck', 'false');
+    digitalMinuteInput.setAttribute('maxlength', '2');
+    digitalMinuteInput.value = pad2(dialMinute);
 
-    digitalGroup.appendChild(digitalHourBtn);
+    digitalGroup.appendChild(digitalHourInput);
     digitalGroup.appendChild(digitalColon);
-    digitalGroup.appendChild(digitalMinuteBtn);
+    digitalGroup.appendChild(digitalMinuteInput);
 
     var meridiemGroup = document.createElement('div');
     meridiemGroup.className = 'due-date-time-meridiem';
@@ -3723,12 +3733,51 @@
 
     function setDialMode(mode) {
       dialMode = mode === 'minute' ? 'minute' : 'hour';
-      digitalHourBtn.classList.toggle('is-active', dialMode === 'hour');
-      digitalMinuteBtn.classList.toggle('is-active', dialMode === 'minute');
-      digitalHourBtn.setAttribute('aria-pressed', dialMode === 'hour' ? 'true' : 'false');
-      digitalMinuteBtn.setAttribute('aria-pressed', dialMode === 'minute' ? 'true' : 'false');
+      digitalHourInput.classList.toggle('is-active', dialMode === 'hour');
+      digitalMinuteInput.classList.toggle('is-active', dialMode === 'minute');
+      digitalHourInput.setAttribute('aria-pressed', dialMode === 'hour' ? 'true' : 'false');
+      digitalMinuteInput.setAttribute('aria-pressed', dialMode === 'minute' ? 'true' : 'false');
       clockFace.dataset.mode = dialMode;
       renderClockFace();
+    }
+
+    function digitsOnly(value, maxLen) {
+      return String(value || '').replace(/\D/g, '').slice(0, maxLen);
+    }
+
+    function parseDigitalPart(value, min, max, fallback) {
+      var digits = digitsOnly(value, 2);
+      if (!digits) return fallback;
+      var n = parseInt(digits, 10);
+      if (isNaN(n)) return fallback;
+      if (n < min) n = min;
+      if (n > max) n = max;
+      return n;
+    }
+
+    function commitDigitalHour(opts) {
+      var advance = !!(opts && opts.advance);
+      var next = parseDigitalPart(digitalHourInput.value, 0, 23, dialHour);
+      dialHour = next;
+      digitalHourInput.value = pad2(dialHour);
+      commitDialTime(false);
+      if (advance) {
+        setDialMode('minute');
+        digitalMinuteInput.focus();
+        digitalMinuteInput.select();
+      }
+    }
+
+    function commitDigitalMinute() {
+      var next = parseDigitalPart(digitalMinuteInput.value, 0, 59, dialMinute);
+      dialMinute = next;
+      digitalMinuteInput.value = pad2(dialMinute);
+      commitDialTime(false);
+    }
+
+    function commitDigitalEdits() {
+      if (document.activeElement === digitalHourInput) commitDigitalHour();
+      else if (document.activeElement === digitalMinuteInput) commitDigitalMinute();
     }
 
     function setMeridiem(nextPm) {
@@ -3813,8 +3862,12 @@
         dialMode === 'hour' ? pad2(dialHour) + ' heures' : pad2(dialMinute) + ' minutes'
       );
 
-      digitalHourBtn.textContent = pad2(dialHour);
-      digitalMinuteBtn.textContent = pad2(dialMinute);
+      if (document.activeElement !== digitalHourInput) {
+        digitalHourInput.value = pad2(dialHour);
+      }
+      if (document.activeElement !== digitalMinuteInput) {
+        digitalMinuteInput.value = pad2(dialMinute);
+      }
 
       var isPm = dialHour >= 12;
       amBtn.classList.toggle('is-selected', !isPm);
@@ -4218,13 +4271,14 @@
       requestAnimationFrame(function () {
         var selected =
           timePopover.querySelector('.due-date-time-chip.is-selected') ||
-          digitalHourBtn;
+          digitalHourInput;
         if (selected) selected.focus();
       });
     }
 
     function closeTimePicker(restoreFocus) {
       if (!timeOpen) return;
+      commitDigitalEdits();
       timeOpen = false;
       timePopover.hidden = true;
       field.classList.remove('is-time-open');
@@ -4265,12 +4319,84 @@
       timeTrigger.focus();
     });
 
-    digitalHourBtn.addEventListener('click', function () {
+    digitalHourInput.addEventListener('focus', function () {
       setDialMode('hour');
+      requestAnimationFrame(function () {
+        digitalHourInput.select();
+      });
     });
 
-    digitalMinuteBtn.addEventListener('click', function () {
+    digitalMinuteInput.addEventListener('focus', function () {
       setDialMode('minute');
+      requestAnimationFrame(function () {
+        digitalMinuteInput.select();
+      });
+    });
+
+    digitalHourInput.addEventListener('click', function () {
+      digitalHourInput.select();
+    });
+
+    digitalMinuteInput.addEventListener('click', function () {
+      digitalMinuteInput.select();
+    });
+
+    digitalHourInput.addEventListener('input', function () {
+      digitalHourInput.value = digitsOnly(digitalHourInput.value, 2);
+      if (digitalHourInput.value.length === 2) {
+        commitDigitalHour({ advance: true });
+      }
+    });
+
+    digitalMinuteInput.addEventListener('input', function () {
+      digitalMinuteInput.value = digitsOnly(digitalMinuteInput.value, 2);
+      if (digitalMinuteInput.value.length === 2) {
+        commitDigitalMinute();
+      }
+    });
+
+    digitalHourInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        commitDigitalHour({ advance: true });
+      } else if (event.key === 'ArrowRight' &&
+          digitalHourInput.selectionStart === digitalHourInput.value.length) {
+        event.preventDefault();
+        commitDigitalHour({ advance: true });
+      }
+    });
+
+    digitalMinuteInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        commitDigitalMinute();
+        digitalMinuteInput.blur();
+      } else if (event.key === 'ArrowLeft' && digitalMinuteInput.selectionStart === 0) {
+        event.preventDefault();
+        commitDigitalMinute();
+        setDialMode('hour');
+        digitalHourInput.focus();
+        digitalHourInput.select();
+      }
+    });
+
+    digitalHourInput.addEventListener('blur', function () {
+      /* Defer so focus moves (e.g. hour → minute) before commit. */
+      setTimeout(function () {
+        if (document.activeElement === digitalHourInput) return;
+        if (!timeOpen) return;
+        if (digitalHourInput.value.length) commitDigitalHour();
+        else digitalHourInput.value = pad2(dialHour);
+      }, 0);
+    });
+
+    digitalMinuteInput.addEventListener('blur', function () {
+      setTimeout(function () {
+        if (document.activeElement === digitalMinuteInput) return;
+        if (!timeOpen) return;
+        if (digitalMinuteInput.value.length) commitDigitalMinute();
+        else digitalMinuteInput.value = pad2(dialMinute);
+      }, 0);
     });
 
     amBtn.addEventListener('click', function () {
