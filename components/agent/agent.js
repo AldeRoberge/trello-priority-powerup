@@ -1333,6 +1333,14 @@
       ];
     }
     var isEn = !!(context && context.profile && context.profile.language === 'en');
+    var agentName =
+      context && context.profile && typeof context.profile.agentName === 'string'
+        ? context.profile.agentName.trim()
+        : '';
+    var agentColor =
+      context && context.profile && typeof context.profile.agentColor === 'string'
+        ? context.profile.agentColor.trim()
+        : '';
     var langLine = isEn
       ? 'Default language: English (switch to French only if the user clearly writes in French).'
       : 'Langue\u00a0: toujours en fran\u00e7ais (sauf si l\'utilisateur \u00e9crit clairement en anglais).';
@@ -1361,12 +1369,18 @@
           '- Ex. FAUX\u00a0: \u00ab\u00a0Motif enregistr\u00e9\u00a0: en attente d\'une approbation.\u00a0\u00bb',
           '- Ex. VRAI\u00a0: \u00ab\u00a0Okay, not\u00e9\u00a0: en attente d\'une approbation.\u00a0\u00bb'
         ];
-    return [
-      isEn
-        ? 'You are the Priority assistant in Trello: a teammate helping on the card, not a formal bot.'
-        : 'Tu es l\'assistant Priorit\u00e9 dans Trello\u00a0: un coll\u00e8gue d\'\u00e9quipe qui aide sur la carte, pas un bot formal.',
-      langLine
-    ]
+    var identityLine = isEn
+      ? agentName
+        ? 'You are ' +
+          agentName +
+          ', the Priority assistant in Trello: a teammate helping on the card, not a formal bot.'
+        : 'You are the Priority assistant in Trello: a teammate helping on the card, not a formal bot.'
+      : agentName
+        ? 'Tu es ' +
+          agentName +
+          ', l\'assistant Priorit\u00e9 dans Trello\u00a0: un coll\u00e8gue d\'\u00e9quipe qui aide sur la carte, pas un bot formal.'
+        : 'Tu es l\'assistant Priorit\u00e9 dans Trello\u00a0: un coll\u00e8gue d\'\u00e9quipe qui aide sur la carte, pas un bot formal.';
+    return [identityLine, langLine]
       .concat(voiceLines)
       .concat(profileLines)
       .concat([
@@ -1437,18 +1451,30 @@
       'R\u00e9ponds UNIQUEMENT avec un objet JSON valide de la forme\u00a0:',
       '{"thinking":"notes priv\u00e9es","message":"texte visible","emotion":"happy","color":"yellow","suggestions":["Question utile","Autre intention"],"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}],"cardPatches":[{"op":"remember","text":"fait local \u00e0 la carte"}]}',
       'Apparence (humeur / couleur \u2014 optionnel mais recommand\u00e9)\u00a0:',
-      '- Tu contr\u00f4les ton avatar\u00a0: champs "emotion" et "color". Choisis-les selon ta humeur du moment.',
+      '- Tu contr\u00f4les ton avatar\u00a0: champs "emotion" et "color".',
       '- emotion: neutral | happy | sad | surprised | curious | thinking | excited | tongue | wink | wideEyed | lookUp | lookDown.',
-      '- color: "orange" (lueur pêche/ambre, d\u00e9faut) ou "yellow" (lueur jaune joyeuse).',
-      '- Guide\u00a0: happy/excited/tongue/wink \u2192 color yellow\u00a0; thinking/curious/neutral/surprised/sad \u2192 color orange.',
-      '- Tu peux forcer une couleur m\u00eame hors guide si \u00e7a colle mieux \u00e0 l\'\u00e9change.',
-      '- Ex. content\u00a0: {"emotion":"happy","color":"yellow","message":"Okay, c\'est fait.","suggestions":["Quelle est la priorit\u00e9?"],"followUps":[],"actions":[]}',
-      '- Ex. concentr\u00e9\u00a0: {"emotion":"thinking","color":"orange","message":"Hmm laisse-moi v\u00e9rifier.","suggestions":["Quelle est la priorit\u00e9?"],"followUps":[],"actions":[]}',
+      '- color (identit\u00e9)\u00a0: orange | yellow | green | purple | blue | pink | red | teal | coral | sky.',
+      agentColor
+        ? '- Ta couleur d\'identit\u00e9 est `' +
+          agentColor +
+          '`\u00a0: mets-la dans "color" par d\u00e9faut. Ne change de couleur que tr\u00e8s rarement pour une pointe d\'humeur.'
+        : '- Sans couleur impos\u00e9e, reste sur une teinte stable (orange ou yellow).',
+      '- Guide humeur\u00a0: varie surtout "emotion"\u00a0; garde "color" = ta couleur d\'identit\u00e9.',
+      '- Ex. content\u00a0: {"emotion":"happy","color":"' +
+        (agentColor || 'yellow') +
+        '","message":"Okay, c\'est fait.","suggestions":["Quelle est la priorit\u00e9?"],"followUps":[],"actions":[]}',
+      '- Ex. concentr\u00e9\u00a0: {"emotion":"thinking","color":"' +
+        (agentColor || 'orange') +
+        '","message":"Hmm laisse-moi v\u00e9rifier.","suggestions":["Quelle est la priorit\u00e9?"],"followUps":[],"actions":[]}',
       'M\u00e9moire de CETTE carte (context.cardMemory.facts)\u00a0:',
       '- Faits locaux \u00e0 la carte (personnes qui attendent, enjeux, contraintes, d\u00e9pendances).',
       '- Quand tu apprends un fait utile pour plus tard\u00a0: cardPatches:[{"op":"remember","text":"\u2026"}] (1\u20132 max).',
       '- INTERDIT d\'y mettre l\'identit\u00e9 utilisateur g\u00e9n\u00e9rale (nom, r\u00f4le) \u2014 \u00e7a va dans la m\u00e9moire board.',
       '- Sers-toi de cardMemory avant de reposer une question d\u00e9j\u00e0 r\u00e9pondue.',
+      'Retours n\u00e9gatifs (pouce bas)\u00a0:',
+      '- Si le message utilisateur commence par [Retour n\u00e9gatif \u2014 auto-correction]\u00a0: tu as fait une erreur.',
+      '- Excuse-toi bri\u00e8vement si besoin, corrige ta r\u00e9ponse, et m\u00e9morise la le\u00e7on via cardPatches (remember) quand c\'est un fait/pr\u00e9f\u00e9rence r\u00e9utilisable.',
+      '- Si une action \u00e9tait fausse, propose de la r\u00e9parer avec les outils. Ne r\u00e9p\u00e8te pas l\'erreur.',
       'Champ thinking (obligatoire)\u00a0:',
       '- Toujours \u00e9crire thinking AVANT message (ordre JSON\u00a0: thinking puis message).',
       '- Utilise-le pour v\u00e9rifier le contexte et planifier les outils. Court, factuel, en fran\u00e7ais ou abr\u00e9g\u00e9.',
@@ -1594,7 +1620,7 @@
       '- 0 ou 1 effet par r\u00e9ponse max. Pas \u00e0 chaque message. Ne promets pas l\'effet dans le texte si tu ne le mets pas dans actions.',
       '- Ex. c\u00e9l\u00e9bration\u00a0: {"message":"Bravo, c\'est plier\u00a0!","suggestions":["Et ensuite\u00a0?"],"followUps":[],"actions":[{"tool":"trigger_effect","args":{"effect":"confetti"}}]}',
       '- Ex. demande\u00a0: user \u00ab\u00a0fais des feux d\'artifice\u00a0\u00bb \u2192 trigger_effect effect=fireworks.',
-      'M\u00e9moire plateau\u00a0: utilise les faits/summary du contexte pour personnaliser (noms, projets, normes). Ne contredis pas la m\u00e9moire sans raison.',
+      'M\u00e9moire plateau\u00a0: utilise les faits/summary du contexte pour personnaliser (noms, projets, normes). Ne contredis pas la m\u00e9moire sans raison. Les notes de correction/pr\u00e9f\u00e9rence (ex. \u00ab\u00a0Pr\u00e9f\u00e9rence / correction\u00a0\u00bb) ont priorit\u00e9 sur une mauvaise r\u00e9ponse ant\u00e9rieure.',
       'Profil utilisateur\u00a0: respecte context.profile (langue, ton, nom, r\u00f4le, notes, fonctionnalit\u00e9s actives).',
       'Contexte carte actuel (JSON)\u00a0:',
       JSON.stringify(context)
@@ -3298,12 +3324,32 @@
     var raw = String(value || '')
       .trim()
       .toLowerCase();
-    if (raw === 'yellow' || raw === 'jaune' || raw === 'gold' || raw === 'amber') {
-      return 'yellow';
+    if (global.UserProfile && typeof global.UserProfile.normalizeAgentColor === 'function') {
+      var fromProfile = global.UserProfile.normalizeAgentColor(raw);
+      if (fromProfile) return fromProfile;
     }
-    if (raw === 'orange' || raw === 'peach' || raw === 'warm') {
-      return 'orange';
-    }
+    var allow = {
+      orange: true,
+      yellow: true,
+      green: true,
+      purple: true,
+      blue: true,
+      pink: true,
+      red: true,
+      teal: true,
+      coral: true,
+      sky: true
+    };
+    if (allow[raw]) return raw;
+    if (raw === 'jaune' || raw === 'gold' || raw === 'amber') return 'yellow';
+    if (raw === 'peach' || raw === 'warm') return 'orange';
+    if (raw === 'vert' || raw === 'lime') return 'green';
+    if (raw === 'violet' || raw === 'lavender') return 'purple';
+    if (raw === 'bleu') return 'blue';
+    if (raw === 'rose') return 'pink';
+    if (raw === 'rouge') return 'red';
+    if (raw === 'turquoise' || raw === 'cyan' || raw === 'mint') return 'teal';
+    if (raw === 'ciel') return 'sky';
     return null;
   }
 

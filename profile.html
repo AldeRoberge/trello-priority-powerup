@@ -43,9 +43,24 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-message-chatbot"></i></span>
       <span class="tp-settings-summary-title">Assistant</span>
-      <span class="tp-settings-summary-hint">Langue et ton des réponses</span>
+      <span class="tp-settings-summary-hint">Identité, langue et ton</span>
     </summary>
     <div class="tp-settings-body">
+      <label class="tp-profile-field">
+        <span class="tp-profile-field-label">Nom</span>
+        <input type="text" class="tp-input" id="profileAgentName" maxlength="40" placeholder="ex. Clementine" autocomplete="off" />
+      </label>
+      <label class="tp-profile-field">
+        <span class="tp-profile-field-label">Couleur</span>
+        <select id="profileAgentColor" class="tp-select" aria-label="Couleur de l’assistant"></select>
+      </label>
+      <label class="tp-profile-field">
+        <span class="tp-profile-field-label">Personnalité</span>
+        <textarea class="tp-input tp-textarea" id="profileAgentPersonality" maxlength="400" rows="3" placeholder="ex. Enthousiaste, un peu taquin, adore les métaphores culinaires…"></textarea>
+      </label>
+      <div class="tp-profile-actions" style="margin: 0 0 12px; justify-content: flex-start;">
+        <button type="button" class="tp-button tp-button--secondary" id="profileAgentReroll">Nouveau nom aléatoire</button>
+      </div>
       <label class="tp-profile-field">
         <span class="tp-profile-field-label">Langue</span>
         <select id="profileLanguage" class="tp-select" aria-label="Langue de l’assistant"></select>
@@ -154,6 +169,9 @@
           language: document.getElementById('profileLanguage').value,
           tone: document.getElementById('profileTone').value,
           agentStatus: document.getElementById('profileAgentStatus').value,
+          agentName: document.getElementById('profileAgentName').value,
+          agentPersonality: document.getElementById('profileAgentPersonality').value,
+          agentColor: document.getElementById('profileAgentColor').value,
           features: features,
           // Experimental toggles live in Settings; keep last known values here.
           experimental: currentExperimental
@@ -161,11 +179,19 @@
       }
 
       function writeForm(profile) {
-        var p = Profile.normalizeProfile(profile);
+        var p = Profile.ensureAgentIdentity(profile).profile;
         currentExperimental = p.experimental;
         document.getElementById('profileDisplayName').value = p.displayName;
         document.getElementById('profileRole').value = p.role;
         document.getElementById('profileNotes').value = p.notes;
+        document.getElementById('profileAgentName').value = p.agentName;
+        document.getElementById('profileAgentPersonality').value = p.agentPersonality;
+        fillSelect(
+          document.getElementById('profileAgentColor'),
+          Profile.AGENT_COLOR_KEYS,
+          Profile.AGENT_COLOR_LABELS,
+          p.agentColor
+        );
         fillSelect(
           document.getElementById('profileLanguage'),
           Profile.LANGUAGE_KEYS,
@@ -242,15 +268,37 @@
         'profileDisplayName',
         'profileRole',
         'profileNotes',
+        'profileAgentName',
+        'profileAgentPersonality',
         'profileLanguage',
         'profileTone',
-        'profileAgentDebug'
+        'profileAgentStatus'
       ].forEach(function (id) {
         var el = document.getElementById(id);
+        if (!el) return;
         el.addEventListener('change', scheduleSave);
         if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
           el.addEventListener('input', scheduleSave);
         }
+      });
+
+      document.getElementById('profileAgentColor').addEventListener('change', function () {
+        var nameEl = document.getElementById('profileAgentName');
+        var nextColor = document.getElementById('profileAgentColor').value;
+        if (
+          !nameEl.value.trim() ||
+          (Profile.isStockAgentName && Profile.isStockAgentName(nameEl.value))
+        ) {
+          nameEl.value = Profile.pickAgentNameForColor(nextColor);
+        }
+        scheduleSave();
+      });
+
+      document.getElementById('profileAgentReroll').addEventListener('click', function () {
+        var color = document.getElementById('profileAgentColor').value;
+        document.getElementById('profileAgentName').value =
+          Profile.pickAgentNameForColor(color);
+        scheduleSave();
       });
 
       document.getElementById('profileFeatures').addEventListener('change', scheduleSave);

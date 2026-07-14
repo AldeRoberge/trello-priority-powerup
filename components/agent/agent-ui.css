@@ -366,6 +366,7 @@
   --agent-face-mid: #f5b58a;
   --agent-face-lo: #e8956a;
   --agent-face-glow: #c4794a;
+  position: relative;
   flex: 0 0 32px;
   display: inline-flex;
   align-items: center;
@@ -374,7 +375,7 @@
   height: 32px;
   margin-top: 2px;
   border-radius: 50%;
-  overflow: hidden;
+  overflow: visible;
   box-shadow:
     0 0 0 1.5px color-mix(in srgb, #fff 70%, transparent),
     0 0 10px 2px color-mix(in srgb, var(--agent-face-glow) 48%, transparent),
@@ -398,6 +399,72 @@
   --agent-face-mid: #f5b58a;
   --agent-face-lo: #e8956a;
   --agent-face-glow: #c4794a;
+}
+
+.tp-page--priority .agent-face[data-aura='green'] {
+  --agent-face-hi: #d8f5c8;
+  --agent-face-mid: #8fd86a;
+  --agent-face-lo: #5aa843;
+  --agent-face-glow: #4a8f38;
+}
+
+.tp-page--priority .agent-face[data-aura='purple'] {
+  --agent-face-hi: #e8d4ff;
+  --agent-face-mid: #b48ae0;
+  --agent-face-lo: #8a5cbf;
+  --agent-face-glow: #6f3fa8;
+}
+
+.tp-page--priority .agent-face[data-aura='blue'] {
+  --agent-face-hi: #cfe4ff;
+  --agent-face-mid: #7eb2f0;
+  --agent-face-lo: #4a86d4;
+  --agent-face-glow: #3a6fb3;
+}
+
+.tp-page--priority .agent-face[data-aura='pink'] {
+  --agent-face-hi: #ffd6e8;
+  --agent-face-mid: #f095b8;
+  --agent-face-lo: #d96a94;
+  --agent-face-glow: #c24f7c;
+}
+
+.tp-page--priority .agent-face[data-aura='red'] {
+  --agent-face-hi: #ffd0c8;
+  --agent-face-mid: #f08070;
+  --agent-face-lo: #d14a3a;
+  --agent-face-glow: #b9382a;
+}
+
+.tp-page--priority .agent-face[data-aura='teal'] {
+  --agent-face-hi: #c8f5ee;
+  --agent-face-mid: #5ecfb8;
+  --agent-face-lo: #2fa892;
+  --agent-face-glow: #1f8a78;
+}
+
+.tp-page--priority .agent-face[data-aura='coral'] {
+  --agent-face-hi: #ffd8c8;
+  --agent-face-mid: #f0a078;
+  --agent-face-lo: #e07850;
+  --agent-face-glow: #c45f38;
+}
+
+.tp-page--priority .agent-face[data-aura='sky'] {
+  --agent-face-hi: #dff4ff;
+  --agent-face-mid: #8ec8e8;
+  --agent-face-lo: #5aa8d0;
+  --agent-face-glow: #3f8ab3;
+}
+
+.tp-page--priority .agent-personality-input {
+  min-height: 4.5rem;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.tp-page--priority .agent-char-actions {
+  margin-bottom: 14px;
 }
 
 .tp-page--priority .agent-face-svg {
@@ -744,6 +811,10 @@
 }
 
 .tp-page--priority .agent-face.is-frozen {
+  flex-basis: 18px;
+  width: 18px;
+  height: 18px;
+  margin-top: 8px;
   animation: none !important;
   filter: grayscale(1) contrast(1.05) brightness(0.96);
   opacity: 0.88;
@@ -1234,10 +1305,66 @@ html[data-color-mode='dark'] .tp-page--priority .agent-hl--y {
 }
 
 .tp-page--priority .agent-msg--assistant > .agent-msg-note,
-.tp-page--priority .agent-msg--assistant > .agent-tool-verify {
+.tp-page--priority .agent-msg--assistant > .agent-msg-feedback {
   flex: 1 0 100%;
   /* Align under bubble: face 32px + gap 8px */
   padding-left: 40px;
+}
+
+/* Leave room for the (i) beside the bubble when present. */
+.tp-page--priority .agent-msg--assistant:has(> .agent-tool-verify) .agent-msg-bubble {
+  max-width: calc(100% - 58px);
+}
+
+.tp-page--priority .agent-msg-feedback {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+
+.tp-page--priority .agent-msg-feedback-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0.72;
+  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+
+.tp-page--priority .agent-msg-feedback-btn:hover:not(:disabled),
+.tp-page--priority .agent-msg-feedback-btn:focus-visible:not(:disabled) {
+  opacity: 1;
+  background: var(--tp-surface-hover, rgba(9, 30, 66, 0.06));
+  color: var(--tp-text);
+  outline: none;
+}
+
+.tp-page--priority .agent-msg-feedback-btn:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.tp-page--priority .agent-msg-feedback.is-rated-up .agent-msg-feedback-btn--up,
+.tp-page--priority .agent-msg-feedback.is-rated-down .agent-msg-feedback-btn--down {
+  opacity: 1;
+  color: var(--tp-primary, #0c66e4);
+  background: color-mix(in srgb, var(--tp-primary, #0c66e4) 10%, transparent);
+}
+
+.tp-page--priority .agent-msg-feedback.is-rated-down .agent-msg-feedback-btn--down {
+  color: var(--tp-danger-text, #ae2e24);
+  background: color-mix(in srgb, var(--tp-danger-text, #ae2e24) 10%, transparent);
 }
 
 /* Pending wait is conveyed by the face; hide the empty bubble until text arrives. */
@@ -1298,8 +1425,8 @@ html[data-color-mode='dark'] .tp-page--priority .agent-hl--y {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
-  align-self: flex-end;
-  margin: 0 0 2px;
+  align-self: center;
+  margin: 0;
 }
 
 .tp-page--priority .agent-tool-verify-btn {
@@ -1514,7 +1641,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-hl--y {
 .tp-page--priority .agent-suggestion-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   padding: 6px 11px;
   border: 1px dashed var(--tp-border-strong);
   border-radius: 16px;
@@ -1526,6 +1653,26 @@ html[data-color-mode='dark'] .tp-page--priority .agent-hl--y {
   cursor: pointer;
   text-align: left;
   animation: agent-suggestion-in 0.28s ease both;
+}
+
+.tp-page--priority .agent-suggestion-chip-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+}
+
+.tp-page--priority .agent-suggestion-icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.tp-page--priority .agent-suggestion-chip-label {
+  min-width: 0;
 }
 
 .tp-page--priority .agent-suggestion-chip:hover:not(:disabled) {
@@ -1675,6 +1822,103 @@ html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-3 {
 html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-4 {
   background: color-mix(in srgb, #e34935 34%, transparent);
   color: #f5a3a2;
+}
+
+/* Named accent colors (impact reach blue→green, etc.) */
+.tp-page--priority .agent-suggestion-chip--color-blue {
+  background: color-mix(in srgb, #0c66e4 18%, transparent);
+  border-color: #0c66e4;
+  color: #0c66e4;
+}
+
+.tp-page--priority .agent-suggestion-chip--color-teal {
+  background: color-mix(in srgb, #1d9aaa 20%, transparent);
+  border-color: #1d9aaa;
+  color: #0f6e7a;
+}
+
+.tp-page--priority .agent-suggestion-chip--color-yellow {
+  background: color-mix(in srgb, #e2b203 20%, transparent);
+  border-color: #c99a00;
+  color: #8a6a00;
+}
+
+.tp-page--priority .agent-suggestion-chip--color-lime {
+  background: color-mix(in srgb, #82b536 20%, transparent);
+  border-color: #82b536;
+  color: #5a7d24;
+}
+
+.tp-page--priority .agent-suggestion-chip--color-green {
+  background: color-mix(in srgb, #22a06b 18%, transparent);
+  border-color: #22a06b;
+  color: #1a7a50;
+}
+
+.tp-page--priority .agent-suggestion-chip--color-orange {
+  background: color-mix(in srgb, #d85a30 22%, transparent);
+  border-color: #d85a30;
+  color: #a83f1c;
+}
+
+.tp-page--priority .agent-suggestion-chip--color-red {
+  background: color-mix(in srgb, #e34935 24%, transparent);
+  border-color: #e34935;
+  color: #b83231;
+}
+
+.tp-page--priority .agent-suggestion-chip--color-gray {
+  background: color-mix(in srgb, #6b778c 16%, transparent);
+  border-color: #6b778c;
+  color: #44546f;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--color-blue {
+  background: color-mix(in srgb, #579dff 28%, transparent);
+  color: #85b8ff;
+  border-color: #579dff;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--color-teal {
+  background: color-mix(in srgb, #42b2c2 30%, transparent);
+  color: #7ad4e0;
+  border-color: #42b2c2;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--color-yellow {
+  background: color-mix(in srgb, #f5cd47 30%, transparent);
+  color: #f0d878;
+  border-color: #f5cd47;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--color-lime {
+  background: color-mix(in srgb, #94c748 30%, transparent);
+  color: #c0e07a;
+  border-color: #94c748;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--color-green {
+  background: color-mix(in srgb, #4bce97 28%, transparent);
+  color: #8de0b8;
+  border-color: #4bce97;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--color-orange {
+  background: color-mix(in srgb, #d85a30 32%, transparent);
+  color: #f0a080;
+  border-color: #d85a30;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--color-red {
+  background: color-mix(in srgb, #e34935 34%, transparent);
+  color: #f5a3a2;
+  border-color: #e34935;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--color-gray {
+  background: color-mix(in srgb, #8c9bab 22%, transparent);
+  color: #b3b9c4;
+  border-color: #8c9bab;
 }
 
 /* Applyable AI improvements (bottom of Assistant) */
@@ -1827,19 +2071,61 @@ html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-4 {
   }
 }
 
-.tp-page--priority .agent-listen-presence {
-  display: inline-flex;
-  align-items: center;
-  align-self: flex-start;
-  margin: 0 0 4px;
+.tp-page--priority .agent-face-status {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  border: 1.5px solid var(--tp-surface, #fff);
+  pointer-events: none;
+  z-index: 2;
 }
 
-.tp-page--priority .agent-listen-presence[hidden] {
-  display: none !important;
+.tp-page--priority .agent-face[data-listen='listening'] .agent-face-status {
+  background: #1f7a68;
+  animation: agent-face-status-listen 1.8s ease-out infinite;
 }
 
-.tp-page--priority .agent-listen-presence .agent-face {
-  margin-top: 0;
+.tp-page--priority .agent-face[data-listen='analyzing'] .agent-face-status {
+  background: #d4a017;
+  animation: agent-face-status-analyze 0.85s ease-out infinite;
+}
+
+.tp-page--priority .agent-face.is-frozen .agent-face-status {
+  display: none;
+}
+
+@keyframes agent-face-status-listen {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, #1f7a68 55%, transparent);
+  }
+  70% {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 5px transparent;
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@keyframes agent-face-status-analyze {
+  0% {
+    transform: scale(0.92);
+    box-shadow: 0 0 0 0 color-mix(in srgb, #d4a017 60%, transparent);
+  }
+  55% {
+    transform: scale(1.12);
+    box-shadow: 0 0 0 4px transparent;
+  }
+  100% {
+    transform: scale(0.92);
+    box-shadow: 0 0 0 0 transparent;
+  }
 }
 
 .tp-page--priority .agent-msg--offer {

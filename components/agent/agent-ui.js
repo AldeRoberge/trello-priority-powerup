@@ -172,6 +172,8 @@
     var listenScanSeq = 0;
     var activeOffer = null;
     var dismissedOffers = {};
+    /** @type {{ row: Element, content: string }|null} */
+    var awaitingFeedback = null;
     var audioCtx = null;
     var LISTEN_POLL_MS = 2000;
     var LISTEN_DEBOUNCE_MS = 1400;
@@ -190,6 +192,12 @@
     var section = el('div', 'variant-chat-section');
     var field = el('div', 'field field--chat');
 
+    var agentIdentity = {
+      agentName: '',
+      agentPersonality: '',
+      agentColor: 'orange'
+    };
+
     var chrome = PriorityUI.createCollapsibleEnableChrome({
       title: 'Assistant',
       bodyId: 'agent-chat-body',
@@ -205,8 +213,8 @@
 
     var settingsBtn = el('button', 'agent-settings-btn', {
       type: 'button',
-      'aria-label': 'Configurer le fournisseur IA',
-      title: 'Configurer le fournisseur'
+      'aria-label': 'Param\u00e8tres de l\'assistant',
+      title: 'Param\u00e8tres'
     });
     var settingsIcon = el('i', 'ti ti-settings');
     settingsIcon.setAttribute('aria-hidden', 'true');
@@ -225,6 +233,53 @@
     // ── Settings panel ──────────────────────────────────────────────────
     var settingsPanel = el('div', 'agent-settings');
     settingsPanel.hidden = true;
+
+    var charTitle = el('h4', 'agent-settings-title', { text: 'Caract\u00e8re' });
+    settingsPanel.appendChild(charTitle);
+    var charHint = el('p', 'agent-settings-hint', {
+      text:
+        'Nom, couleur et personnalit\u00e9 de l\'assistant. Par d\u00e9faut, un nom al\u00e9atoire inspir\u00e9 de sa couleur.'
+    });
+    settingsPanel.appendChild(charHint);
+
+    function labeledInput(labelText, inputEl) {
+      var wrap = el('label', 'agent-field');
+      wrap.appendChild(el('span', 'agent-field-label', { text: labelText }));
+      wrap.appendChild(inputEl);
+      return wrap;
+    }
+
+    var agentNameInput = el('input', 'agent-input', {
+      type: 'text',
+      autocomplete: 'off',
+      spellcheck: 'true',
+      maxlength: '40',
+      placeholder: 'ex. Clementine'
+    });
+    var agentColorSelect = el('select', 'agent-input agent-color-select', {
+      'aria-label': 'Couleur de l\'assistant'
+    });
+    var agentPersonalityInput = el('textarea', 'agent-input agent-personality-input', {
+      rows: '3',
+      maxlength: '400',
+      placeholder: 'ex. Enthousiaste, un peu taquin\u2026'
+    });
+    settingsPanel.appendChild(labeledInput('Nom', agentNameInput));
+    settingsPanel.appendChild(labeledInput('Couleur', agentColorSelect));
+    settingsPanel.appendChild(labeledInput('Personnalit\u00e9', agentPersonalityInput));
+
+    var charActions = el('div', 'agent-settings-actions agent-char-actions');
+    var rerollNameBtn = el('button', 'tp-button agent-btn agent-btn--secondary', {
+      type: 'button',
+      text: 'Nouveau nom'
+    });
+    var rerollColorBtn = el('button', 'tp-button agent-btn agent-btn--secondary', {
+      type: 'button',
+      text: 'Couleur al\u00e9atoire'
+    });
+    charActions.appendChild(rerollNameBtn);
+    charActions.appendChild(rerollColorBtn);
+    settingsPanel.appendChild(charActions);
 
     var settingsTitle = el('h4', 'agent-settings-title', { text: 'Fournisseur IA' });
     settingsPanel.appendChild(settingsTitle);
@@ -248,13 +303,6 @@
       presetRow.appendChild(btn);
     });
     settingsPanel.appendChild(presetRow);
-
-    function labeledInput(labelText, inputEl) {
-      var wrap = el('label', 'agent-field');
-      wrap.appendChild(el('span', 'agent-field-label', { text: labelText }));
-      wrap.appendChild(inputEl);
-      return wrap;
-    }
 
     var apiKeyInput = el('input', 'agent-input', {
       type: 'password',
@@ -387,16 +435,8 @@
 
     // ── Chat panel ──────────────────────────────────────────────────────
     var chatPanel = el('div', 'agent-chat-panel');
-
-    // Presence host: listening / analyzing are shown on her face (created lazily).
-    var listenPresence = el('div', 'agent-listen-presence', {
-      role: 'status',
-      'aria-live': 'polite',
-      'aria-label': 'À l\u2019écoute des changements'
-    });
-    listenPresence.hidden = true;
-    var listenPresenceMode = null;
-    chatPanel.appendChild(listenPresence);
+    /** Listening / analyzing status badge rides on the live chat face. */
+    var listenFaceMode = null;
 
     var emptyState = el('div', 'agent-empty');
     var emptyConfigBtn = el('button', 'tp-link agent-empty-config', {
@@ -1132,6 +1172,115 @@
       }
     }
 
+    function fillAgentColorSelect(selected) {
+      var keys =
+        (global.UserProfile && global.UserProfile.AGENT_COLOR_KEYS) || [
+          'orange',
+          'yellow',
+          'green',
+          'purple',
+          'blue',
+          'pink',
+          'red',
+          'teal',
+          'coral',
+          'sky'
+        ];
+      var labels =
+        (global.UserProfile && global.UserProfile.AGENT_COLOR_LABELS) || {};
+      var current = selected || agentIdentity.agentColor || 'orange';
+      agentColorSelect.replaceChildren();
+      keys.forEach(function (key) {
+        agentColorSelect.appendChild(
+          el('option', null, { value: key, text: labels[key] || key })
+        );
+      });
+      if (keys.indexOf(current) === -1) current = keys[0] || 'orange';
+      agentColorSelect.value = current;
+    }
+
+    function applyAgentIdentity(profile) {
+      var ensured =
+        global.UserProfile && typeof global.UserProfile.ensureAgentIdentity === 'function'
+          ? global.UserProfile.ensureAgentIdentity(profile || {})
+          : { profile: profile || {} };
+      var p = ensured.profile || {};
+      agentIdentity = {
+        agentName: p.agentName || '',
+        agentPersonality: p.agentPersonality || '',
+        agentColor: p.agentColor || 'orange'
+      };
+      agentNameInput.value = agentIdentity.agentName;
+      agentPersonalityInput.value = agentIdentity.agentPersonality || '';
+      fillAgentColorSelect(agentIdentity.agentColor);
+      updateAgentSectionTitle();
+    }
+
+    function readAgentIdentityForm() {
+      var color = agentColorSelect.value || agentIdentity.agentColor || 'orange';
+      if (global.UserProfile && typeof global.UserProfile.normalizeAgentColor === 'function') {
+        color = global.UserProfile.normalizeAgentColor(color) || color;
+      }
+      return {
+        agentName: (agentNameInput.value || '').trim(),
+        agentPersonality: (agentPersonalityInput.value || '').trim(),
+        agentColor: color
+      };
+    }
+
+    function updateAgentSectionTitle() {
+      var name = (agentIdentity.agentName || '').trim() || 'Assistant';
+      if (chrome.title) chrome.title.textContent = name;
+      chrome.collapseLabel = 'Replier ' + name;
+      chrome.expandLabel = 'D\u00e9velopper ' + name;
+      chrome.enableLabel = 'Activer ' + name;
+      if (chrome.checkbox) {
+        chrome.checkbox.setAttribute('aria-label', chrome.enableLabel);
+      }
+      if (chrome.collapseBtn) {
+        var expanded =
+          chrome.collapseBtn.getAttribute('aria-expanded') === 'true';
+        chrome.collapseBtn.setAttribute(
+          'aria-label',
+          expanded ? chrome.collapseLabel : chrome.expandLabel
+        );
+      }
+    }
+
+    async function persistAgentIdentity(nextIdentity) {
+      var next = nextIdentity || readAgentIdentityForm();
+      if (!next.agentName && global.UserProfile && global.UserProfile.pickAgentNameForColor) {
+        next.agentName = global.UserProfile.pickAgentNameForColor(next.agentColor);
+      }
+      agentIdentity = {
+        agentName: next.agentName || '',
+        agentPersonality: next.agentPersonality || '',
+        agentColor: next.agentColor || 'orange'
+      };
+      agentNameInput.value = agentIdentity.agentName;
+      agentPersonalityInput.value = agentIdentity.agentPersonality;
+      fillAgentColorSelect(agentIdentity.agentColor);
+      updateAgentSectionTitle();
+      if (!t || !global.UserProfile || typeof global.UserProfile.load !== 'function') {
+        return agentIdentity;
+      }
+      var profile = await global.UserProfile.load(t);
+      profile.agentName = agentIdentity.agentName;
+      profile.agentPersonality = agentIdentity.agentPersonality;
+      profile.agentColor = agentIdentity.agentColor;
+      await global.UserProfile.save(t, profile);
+      // Keep popup's live profile cache in sync for the next chat turn.
+      if (typeof bridge.getProfile === 'function') {
+        var live = bridge.getProfile();
+        if (live && typeof live === 'object') {
+          live.agentName = profile.agentName;
+          live.agentPersonality = profile.agentPersonality;
+          live.agentColor = profile.agentColor;
+        }
+      }
+      return agentIdentity;
+    }
+
     function fillSettingsForm() {
       apiKeyInput.value = provider.apiKey || '';
       baseUrlInput.value = provider.baseUrl || '';
@@ -1150,12 +1299,10 @@
       var configured = Agent.isConfigured(provider);
       emptyState.classList.toggle('is-hidden', history.length > 0 || configured);
       emptyConfigBtn.hidden = configured;
-      settingsBtn.title = configured
-        ? 'Paramètres du fournisseur'
-        : 'Configurer le fournisseur';
+      settingsBtn.title = configured ? 'Param\u00e8tres' : 'Configurer l\'assistant';
       settingsBtn.setAttribute(
         'aria-label',
-        configured ? 'Paramètres du fournisseur IA' : 'Configurer le fournisseur IA'
+        configured ? 'Param\u00e8tres de l\'assistant' : 'Configurer l\'assistant'
       );
     }
 
@@ -1614,49 +1761,65 @@
     ];
 
     var FACE_AURAS = {
-      orange: {
-        hi: '#ffe0c2',
-        mid: '#f5b58a',
-        lo: '#e8956a'
-      },
-      yellow: {
-        hi: '#fff6c8',
-        mid: '#f5d76e',
-        lo: '#e0b83a'
-      }
+      orange: { hi: '#ffe0c2', mid: '#f5b58a', lo: '#e8956a' },
+      yellow: { hi: '#fff6c8', mid: '#f5d76e', lo: '#e0b83a' },
+      green: { hi: '#d8f5c8', mid: '#8fd86a', lo: '#5aa843' },
+      purple: { hi: '#e8d4ff', mid: '#b48ae0', lo: '#8a5cbf' },
+      blue: { hi: '#cfe4ff', mid: '#7eb2f0', lo: '#4a86d4' },
+      pink: { hi: '#ffd6e8', mid: '#f095b8', lo: '#d96a94' },
+      red: { hi: '#ffd0c8', mid: '#f08070', lo: '#d14a3a' },
+      teal: { hi: '#c8f5ee', mid: '#5ecfb8', lo: '#2fa892' },
+      coral: { hi: '#ffd8c8', mid: '#f0a078', lo: '#e07850' },
+      sky: { hi: '#dff4ff', mid: '#8ec8e8', lo: '#5aa8d0' }
     };
 
     function normalizeFaceAura(value) {
       var raw = String(value || '')
         .trim()
         .toLowerCase();
-      if (raw === 'yellow' || raw === 'jaune' || raw === 'gold' || raw === 'amber') {
-        return 'yellow';
+      if (global.UserProfile && typeof global.UserProfile.normalizeAgentColor === 'function') {
+        var fromProfile = global.UserProfile.normalizeAgentColor(raw);
+        if (fromProfile && FACE_AURAS[fromProfile]) return fromProfile;
       }
-      if (raw === 'orange' || raw === 'peach' || raw === 'warm') {
-        return 'orange';
-      }
+      if (FACE_AURAS[raw]) return raw;
+      if (raw === 'jaune' || raw === 'gold' || raw === 'amber') return 'yellow';
+      if (raw === 'peach' || raw === 'warm') return 'orange';
+      if (raw === 'vert' || raw === 'lime') return 'green';
+      if (raw === 'violet' || raw === 'lavender') return 'purple';
+      if (raw === 'bleu') return 'blue';
+      if (raw === 'rose') return 'pink';
+      if (raw === 'rouge') return 'red';
+      if (raw === 'turquoise' || raw === 'cyan' || raw === 'mint') return 'teal';
+      if (raw === 'ciel') return 'sky';
       return null;
     }
 
+    function identityAura() {
+      return normalizeFaceAura(agentIdentity.agentColor) || 'orange';
+    }
+
     function auraForEmotion(emotion, explicit) {
+      // Identity color is the stable face hue; mood only tweaks expression.
+      var identity = identityAura();
       var forced = normalizeFaceAura(explicit);
-      if (forced) return forced;
+      if (forced && forced === identity) return forced;
+      // Brief mood accents for happy faces on warm-identity agents only.
       var mood = emotion || 'neutral';
       if (
-        mood === 'happy' ||
-        mood === 'excited' ||
-        mood === 'tongue' ||
-        mood === 'wink'
+        (mood === 'happy' ||
+          mood === 'excited' ||
+          mood === 'tongue' ||
+          mood === 'wink') &&
+        (identity === 'orange' || identity === 'yellow' || identity === 'coral')
       ) {
         return 'yellow';
       }
-      return 'orange';
+      return identity;
     }
 
     function applyFaceAura(face, aura) {
       if (!face) return;
-      var tone = normalizeFaceAura(aura) || 'orange';
+      var tone = normalizeFaceAura(aura) || identityAura();
       var palette = FACE_AURAS[tone] || FACE_AURAS.orange;
       face.setAttribute('data-aura', tone);
       var stops = face.querySelectorAll('.agent-face-skin-stop');
@@ -1993,6 +2156,10 @@
         function (face) {
           if (currentRow && currentRow.contains(face)) return;
           clearFaceMotionClasses(face);
+          face.removeAttribute('data-listen');
+          face.removeAttribute('title');
+          var badge = face.querySelector('.agent-face-status');
+          if (badge) badge.remove();
           face.classList.add('is-frozen');
         }
       );
@@ -2005,6 +2172,15 @@
         color: color
       });
       freezeOlderAssistantFaces(row);
+      if (
+        listeningActive &&
+        listenFaceMode &&
+        listenFaceMode !== 'offer' &&
+        !pending &&
+        !interviewActive
+      ) {
+        setListenBarState(listenFaceMode);
+      }
     }
 
     function muteListening(ms) {
@@ -2038,15 +2214,40 @@
       }
     }
 
-    function listenEmotionForMode(mode) {
-      if (mode === 'analyzing') return 'thinking';
-      // Idle listening: attentive / curious glance.
-      return 'curious';
+    function clearListenStatusFromFaces() {
+      Array.prototype.forEach.call(
+        messagesEl.querySelectorAll('.agent-face[data-listen]'),
+        function (face) {
+          face.removeAttribute('data-listen');
+          face.removeAttribute('title');
+          var badge = face.querySelector('.agent-face-status');
+          if (badge) badge.remove();
+        }
+      );
+    }
+
+    function getLiveAssistantFace() {
+      var faces = messagesEl.querySelectorAll(
+        '.agent-msg--assistant .agent-face:not(.is-frozen)'
+      );
+      if (!faces.length) return null;
+      return faces[faces.length - 1];
+    }
+
+    function ensureFaceStatusBadge(face) {
+      if (!face) return null;
+      var badge = face.querySelector('.agent-face-status');
+      if (!badge) {
+        badge = el('span', 'agent-face-status');
+        badge.setAttribute('aria-hidden', 'true');
+        face.appendChild(badge);
+      }
+      return badge;
     }
 
     function setListenBarState(mode) {
       var configured = Agent.isConfigured(provider);
-      // Offer / in-flight reply already carry her face — hide the presence avatar then.
+      // Offer / pending reply: no listening badge (the live face is busy).
       var show =
         configured &&
         listeningActive &&
@@ -2059,25 +2260,15 @@
           : mode === 'offer'
             ? 'Suggestion en attente'
             : 'À l\u2019écoute des changements';
-      var emotion = listenEmotionForMode(mode);
-      var modeChanged = listenPresenceMode !== mode;
-      listenPresenceMode = mode;
-      listenPresence.hidden = !show;
-      listenPresence.setAttribute('aria-label', label);
-      listenPresence.title = label;
-      listenPresence.classList.toggle('is-analyzing', mode === 'analyzing');
+      listenFaceMode = mode;
+      clearListenStatusFromFaces();
       if (show) {
-        var face = listenPresence.querySelector('.agent-face');
-        if (!face) {
-          face = createAssistantFace(emotion);
-          listenPresence.appendChild(face);
-          applyFaceEnterMotion(face, emotion);
-        } else if (modeChanged || face.getAttribute('data-emotion') !== emotion) {
-          clearFaceMotionClasses(face);
-          face.className = 'agent-face agent-face--' + emotion;
-          face.setAttribute('data-emotion', emotion);
-          face.classList.remove('is-frozen');
-          if (modeChanged) applyFaceEnterMotion(face, emotion);
+        var face = getLiveAssistantFace();
+        if (face) {
+          var listenKind = mode === 'analyzing' ? 'analyzing' : 'listening';
+          face.setAttribute('data-listen', listenKind);
+          face.title = label;
+          ensureFaceStatusBadge(face);
         }
       }
       syncApplySummary();
@@ -2296,7 +2487,7 @@
 
     function stopListening() {
       listeningActive = false;
-      listenPresenceMode = null;
+      listenFaceMode = null;
       if (listenTimer) {
         clearInterval(listenTimer);
         listenTimer = null;
@@ -2305,7 +2496,7 @@
         clearTimeout(listenDebounceTimer);
         listenDebounceTimer = null;
       }
-      listenPresence.hidden = true;
+      clearListenStatusFromFaces();
       syncApplySummary();
     }
 
@@ -2348,14 +2539,21 @@
       }
       var emotion = null;
       if (role === 'assistant') {
-        emotion = inferAssistantEmotion(text, meta, {
-          userText: lastUserMessageText()
-        });
+        emotion =
+          (meta && meta.emotion) ||
+          inferAssistantEmotion(text, meta, {
+            userText: lastUserMessageText()
+          });
         attachAssistantFace(
           row,
           emotion,
           meta && (meta.color != null ? meta.color : meta.aura)
         );
+        if (
+          !(meta && (meta.error || meta.recap || meta.noFeedback || meta.offer))
+        ) {
+          attachFeedbackControls(row);
+        }
       }
       messagesEl.appendChild(row);
       messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -2398,6 +2596,15 @@
         color: meta.color != null ? meta.color : meta.aura
       });
       freezeOlderAssistantFaces(row);
+      if (
+        listeningActive &&
+        listenFaceMode &&
+        listenFaceMode !== 'offer' &&
+        !pending &&
+        !interviewActive
+      ) {
+        setListenBarState(listenFaceMode);
+      }
       return emotion;
     }
 
@@ -2522,7 +2729,12 @@
         }
       }
       if (host) {
-        host.appendChild(wrap);
+        var hostBubble = host.querySelector('.agent-msg-bubble');
+        if (hostBubble) {
+          host.insertBefore(wrap, hostBubble.nextSibling);
+        } else {
+          host.appendChild(wrap);
+        }
         if (options.emptyClaim) setAssistantFaceEmotion(host, 'surprised');
         else if (hasFailures) setAssistantFaceEmotion(host, 'sad');
         else setAssistantFaceEmotion(host, 'happy');
@@ -3094,6 +3306,199 @@
       sendUserMessage(label, { skipSpellcheck: true });
     }
 
+    /** Inline SVG paths for suggestion chips (16×16 viewBox). */
+    var SUGGESTION_ICON_STROKE =
+      'stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"';
+
+    var SUGGESTION_ICON_SVG = {
+      'circle-xs':
+        '<circle cx="8" cy="8" r="2" fill="currentColor" stroke="none"/>',
+      'circle-sm':
+        '<circle cx="8" cy="8" r="3.2" ' + SUGGESTION_ICON_STROKE + '/>',
+      'circle-md':
+        '<circle cx="8" cy="8" r="4.6" ' + SUGGESTION_ICON_STROKE + '/>',
+      'circle-lg':
+        '<circle cx="8" cy="8" r="5.6" ' + SUGGESTION_ICON_STROKE + '/>',
+      'circle-xl':
+        '<circle cx="8" cy="8" r="6.4" ' + SUGGESTION_ICON_STROKE + '/>' +
+        '<circle cx="8" cy="8" r="3.2" ' + SUGGESTION_ICON_STROKE + '/>',
+      dots:
+        '<circle cx="3.5" cy="8" r="1.35" fill="currentColor" stroke="none"/>' +
+        '<circle cx="8" cy="8" r="1.35" fill="currentColor" stroke="none"/>' +
+        '<circle cx="12.5" cy="8" r="1.35" fill="currentColor" stroke="none"/>',
+      hammer:
+        '<path d="M6.8 7.6 L12.8 13.6" ' +
+        SUGGESTION_ICON_STROKE +
+        ' stroke-width="2"/>' +
+        '<path d="M2.4 5.2 L8.2 2.8 L9.6 5.8 L3.8 8.2 Z" fill="currentColor" stroke="none"/>' +
+        '<path d="M8.2 2.8 L10.4 1.8 L12 5.2 L9.6 5.8 Z" fill="currentColor" stroke="none"/>',
+      user:
+        '<circle cx="8" cy="5.2" r="2.2" ' + SUGGESTION_ICON_STROKE + '/>' +
+        '<path d="M3.5 13.2c.7-2.4 2.3-3.6 4.5-3.6s3.8 1.2 4.5 3.6" ' +
+        SUGGESTION_ICON_STROKE +
+        '/>',
+      users:
+        '<circle cx="6" cy="5.4" r="2" ' + SUGGESTION_ICON_STROKE + '/>' +
+        '<path d="M2.2 13c.6-2.1 1.9-3.1 3.8-3.1s3.2 1 3.8 3.1" ' +
+        SUGGESTION_ICON_STROKE +
+        '/>' +
+        '<circle cx="11" cy="5.8" r="1.7" ' + SUGGESTION_ICON_STROKE + '/>' +
+        '<path d="M9.2 13c.4-1.5 1.3-2.2 2.6-2.2 1.4 0 2.4.8 2.8 2.2" ' +
+        SUGGESTION_ICON_STROKE +
+        '/>',
+      building:
+        '<path d="M3.5 13.5V4.5h9v9M6 7h1.2M8.8 7H10M6 9.5h1.2M8.8 9.5H10M6.8 13.5V11h2.4v2.5" ' +
+        SUGGESTION_ICON_STROKE +
+        '/>',
+      globe:
+        '<circle cx="8" cy="8" r="5.5" ' + SUGGESTION_ICON_STROKE + '/>' +
+        '<ellipse cx="8" cy="8" rx="2.4" ry="5.5" ' + SUGGESTION_ICON_STROKE + '/>' +
+        '<path d="M2.5 8h11M3.8 5h8.4M3.8 11h8.4" ' +
+        SUGGESTION_ICON_STROKE +
+        ' stroke-width="1.2"/>',
+      flame:
+        '<path d="M8 13.5c2-2.5 3.5-4.5 3.5-6.5a3.5 3.5 0 1 0-7 0c0 2 1.5 4 3.5 6.5z" ' +
+        SUGGESTION_ICON_STROKE +
+        '/>' +
+        '<path d="M8 10v-1.5M6.5 8.5h3" ' + SUGGESTION_ICON_STROKE + '/>',
+      check:
+        '<path d="M3.2 8.2l3.3 3.2 6.3-7" ' + SUGGESTION_ICON_STROKE + '/>',
+      ban:
+        '<circle cx="8" cy="8" r="5.5" ' + SUGGESTION_ICON_STROKE + '/>' +
+        '<path d="M4.2 4.2l7.6 7.6" ' + SUGGESTION_ICON_STROKE + '/>',
+      clock:
+        '<circle cx="8" cy="8.5" r="5" ' + SUGGESTION_ICON_STROKE + '/>' +
+        '<path d="M8 8.5V5.5M8 8.5l2.5 1.5" ' + SUGGESTION_ICON_STROKE + '/>',
+      bolt:
+        '<path d="M9.2 2.5L4.5 9h3.2l-.9 4.5 5.2-7H8.8z" ' +
+        SUGGESTION_ICON_STROKE +
+        '/>',
+      layers:
+        '<path d="M2.5 10.5L8 13.5l5.5-3M2.5 7.5L8 10.5l5.5-3M2.5 4.5L8 7.5l5.5-3L8 1.5z" ' +
+        SUGGESTION_ICON_STROKE +
+        '/>'
+    };
+
+    /** Impact reach (Personnel → Global): growing circles, blue → green. */
+    var IMPACT_REACH_CHIP = {
+      personnel: { icon: 'circle-xs', color: 'blue', label: 'Personnel' },
+      equipe: { icon: 'circle-sm', color: 'teal', label: '\u00c9quipe' },
+      interne: { icon: 'circle-md', color: 'yellow', label: 'Interne' },
+      population: { icon: 'circle-lg', color: 'lime', label: 'Population' },
+      global: { icon: 'circle-xl', color: 'green', label: 'Global' }
+    };
+
+    var SUGGESTION_NAMED_COLORS = {
+      blue: true,
+      bleu: 'blue',
+      teal: true,
+      cyan: 'teal',
+      yellow: true,
+      jaune: 'yellow',
+      lime: true,
+      green: true,
+      vert: 'green',
+      orange: true,
+      red: true,
+      rouge: 'red',
+      gray: true,
+      grey: 'gray',
+      gris: 'gray'
+    };
+
+    function suggestionIconMarkup(iconKey) {
+      var key = String(iconKey || '')
+        .trim()
+        .toLowerCase();
+      var aliases = {
+        'small-circle': 'circle-xs',
+        'circle-small': 'circle-xs',
+        small: 'circle-xs',
+        'medium-circle': 'circle-md',
+        'circle-medium': 'circle-md',
+        medium: 'circle-md',
+        'big-circle': 'circle-lg',
+        'circle-big': 'circle-lg',
+        big: 'circle-lg',
+        'huge-circle': 'circle-xl',
+        'circle-huge': 'circle-xl',
+        huge: 'circle-xl',
+        'three-dots': 'dots',
+        '3-dots': 'dots',
+        ellipsis: 'dots'
+      };
+      if (aliases[key]) key = aliases[key];
+      var inner = SUGGESTION_ICON_SVG[key];
+      if (!inner) return '';
+      return (
+        '<svg class="agent-suggestion-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
+        inner +
+        '</svg>'
+      );
+    }
+
+    function normalizeSuggestionColorName(raw) {
+      if (typeof raw !== 'string') return null;
+      var key = raw.trim().toLowerCase();
+      if (!key) return null;
+      var mapped = SUGGESTION_NAMED_COLORS[key];
+      if (mapped === true) return key;
+      if (typeof mapped === 'string') return mapped;
+      return null;
+    }
+
+    function normalizeImpactReachKey(text) {
+      var raw = String(text || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
+      if (!raw) return null;
+      // "0 (Personnel)", "3 — Population", "impact: Équipe"
+      var numbered = raw.match(
+        /^(?:impact\s*[=:]?\s*)?([0-4])\s*[\-–—:(]\s*(.+?)\s*\)?$/
+      );
+      if (numbered) raw = numbered[2].trim();
+      raw = raw.replace(/^(portee|impact)\s*[=:]?\s*/, '').trim();
+      if (/^(personnel|moi|individuel|individual)$/.test(raw)) return 'personnel';
+      if (/^(equipe|team|squad)$/.test(raw)) return 'equipe';
+      if (/^(interne|org(anisation)?|entreprise|company)$/.test(raw)) return 'interne';
+      if (/^(population|clients?|usagers?|communaute|users?)$/.test(raw)) {
+        return 'population';
+      }
+      if (/^(global|mondial|world|planet)$/.test(raw)) return 'global';
+      return null;
+    }
+
+    /** Enrich chips: strip "0 (Personnel)" → icon + blue→green color. */
+    function enrichSuggestionChipItems(items) {
+      var reachKeys = items.map(function (item) {
+        return normalizeImpactReachKey(item.text);
+      });
+      var reachCount = reachKeys.filter(Boolean).length;
+      var treatAsReach =
+        reachCount >= 2 && reachCount >= Math.ceil(items.length * 0.6);
+      return items.map(function (item, index) {
+        var next = {
+          text: item.text,
+          heat: item.heat,
+          icon: item.icon || null,
+          color: item.color || null
+        };
+        var reachKey = reachKeys[index];
+        if (treatAsReach && reachKey && IMPACT_REACH_CHIP[reachKey]) {
+          var meta = IMPACT_REACH_CHIP[reachKey];
+          next.text = meta.label;
+          if (!next.icon) next.icon = meta.icon;
+          if (!next.color) next.color = meta.color;
+          next.heat = null;
+        }
+        if (next.color) next.color = normalizeSuggestionColorName(next.color);
+        if (next.icon && !suggestionIconMarkup(next.icon)) next.icon = null;
+        return next;
+      });
+    }
+
     /** When suggestions are a full 0–4 or 1–5 axis scale, return heat step 0–4 per item. */
     function scaleHeatSteps(items) {
       var nums = items.map(function (text) {
@@ -3124,6 +3529,8 @@
       (list || []).forEach(function (s) {
         var text = '';
         var heat = null;
+        var icon = null;
+        var color = null;
         if (typeof s === 'string') {
           text = s.trim();
         } else if (s && typeof s === 'object') {
@@ -3132,14 +3539,28 @@
           if (s.heat != null && isFinite(Number(s.heat))) {
             heat = Math.max(0, Math.min(4, Math.round(Number(s.heat))));
           }
+          if (typeof s.icon === 'string' && s.icon.trim()) {
+            icon = s.icon.trim().toLowerCase();
+          }
+          if (typeof s.color === 'string' && s.color.trim()) {
+            color = normalizeSuggestionColorName(s.color);
+          }
         }
         if (!text) return;
-        out.push({ text: text, heat: heat });
+        out.push({ text: text, heat: heat, icon: icon, color: color });
       });
-      return out.slice(0, interviewActive ? 5 : 4);
+      return enrichSuggestionChipItems(out.slice(0, interviewActive ? 5 : 4));
     }
 
     function resolveSuggestionHeatSteps(items) {
+      if (
+        items.some(function (item) {
+          return item.color;
+        })
+      ) {
+        // Named colors (e.g. impact reach blue→green) win over green→red heat.
+        return null;
+      }
       var texts = items.map(function (item) {
         return item.text;
       });
@@ -3155,6 +3576,20 @@
         });
       }
       return null;
+    }
+
+    function fillSuggestionChip(chip, item) {
+      chip.replaceChildren();
+      var iconHtml = item.icon ? suggestionIconMarkup(item.icon) : '';
+      if (iconHtml) {
+        var iconWrap = el('span', 'agent-suggestion-chip-icon');
+        iconWrap.setAttribute('aria-hidden', 'true');
+        iconWrap.innerHTML = iconHtml;
+        chip.appendChild(iconWrap);
+      }
+      var labelEl = el('span', 'agent-suggestion-chip-label');
+      labelEl.textContent = item.text;
+      chip.appendChild(labelEl);
     }
 
     function renderSuggestions(list, options) {
@@ -3186,14 +3621,18 @@
       items.forEach(function (item, index) {
         var text = item.text;
         var chip = el('button', 'agent-suggestion-chip', { type: 'button' });
-        chip.textContent = text;
+        fillSuggestionChip(chip, item);
         chip.setAttribute('data-suggestion', text);
         chip.disabled = pending;
         if (suggestionsMultiSelect) {
           chip.setAttribute('aria-pressed', 'false');
         }
+        var colorName = item.color;
         var heat = heatSteps ? heatSteps[index] : null;
-        if (heat != null && isFinite(heat)) {
+        if (colorName) {
+          chip.classList.add('agent-suggestion-chip--scale');
+          chip.classList.add('agent-suggestion-chip--color-' + colorName);
+        } else if (heat != null && isFinite(heat)) {
           chip.classList.add('agent-suggestion-chip--scale');
           chip.classList.add('agent-suggestion-chip--heat-' + heat);
         }
@@ -3304,13 +3743,13 @@
       interviewBar.hidden = !interviewActive;
       if (interviewActive) {
         applySection.hidden = true;
-        input.placeholder = 'R\u00e9pondez \u00e0 la question\u2026';
         setListenBarState('idle');
+      } else if (settleReady && Agent.isConfigured(provider)) {
+        startListening();
       } else {
-        input.placeholder = 'Demandez ce que vous voulez';
-        if (settleReady && Agent.isConfigured(provider)) startListening();
-        else setListenBarState('idle');
+        setListenBarState('idle');
       }
+      syncComposerPlaceholder();
       notifyLayout();
     }
 
@@ -3402,6 +3841,175 @@
         console.error('AgentUI applyCardPatches failed', err);
         return null;
       }
+    }
+
+    async function applyBoardMemoryPatches(patches) {
+      if (!patches || !patches.length || !t) return null;
+      var Mem = global.AgentMemory;
+      if (!Mem || typeof Mem.applyPatches !== 'function') return null;
+      try {
+        var current =
+          (typeof bridge.getMemory === 'function' && bridge.getMemory()) ||
+          (typeof Mem.emptyMemory === 'function' ? Mem.emptyMemory() : null);
+        if (!current) return null;
+        var updated = await Mem.applyPatches(t, current, patches);
+        if (onMemoryUpdate) onMemoryUpdate(updated);
+        else {
+          bridge.getMemory = function () {
+            return updated;
+          };
+        }
+        return updated;
+      } catch (err) {
+        console.error('AgentUI applyBoardMemoryPatches failed', err);
+        return null;
+      }
+    }
+
+    function syncComposerPlaceholder() {
+      if (awaitingFeedback) {
+        input.placeholder = 'Expliquez ce qui n\'allait pas\u2026';
+      } else if (interviewActive) {
+        input.placeholder = 'R\u00e9pondez \u00e0 la question\u2026';
+      } else {
+        input.placeholder = 'Demandez ce que vous voulez';
+      }
+    }
+
+    function clearAwaitingFeedback() {
+      if (!awaitingFeedback) return;
+      awaitingFeedback = null;
+      syncComposerPlaceholder();
+    }
+
+    function assistantBubbleText(row) {
+      if (!row) return '';
+      var bubble = row.querySelector('.agent-msg-bubble');
+      return bubble ? String(bubble.textContent || '').trim() : '';
+    }
+
+    function markFeedbackRated(row, kind) {
+      if (!row) return;
+      var bar = row.querySelector('.agent-msg-feedback');
+      if (!bar) return;
+      bar.classList.add('is-rated');
+      bar.classList.toggle('is-rated-up', kind === 'up');
+      bar.classList.toggle('is-rated-down', kind === 'down');
+      row.setAttribute('data-feedback', kind);
+      Array.prototype.forEach.call(bar.querySelectorAll('button'), function (btn) {
+        btn.disabled = true;
+      });
+    }
+
+    async function persistUserCorrection(feedbackText, priorAssistant) {
+      var cleaned = String(feedbackText || '').trim();
+      if (!cleaned) return;
+      var pref = ('Pr\u00e9f\u00e9rence: ' + cleaned).slice(0, 160);
+      var note = (
+        'Pr\u00e9f\u00e9rence / correction: ' +
+        cleaned +
+        (priorAssistant
+          ? ' (suite \u00e0: ' + String(priorAssistant).slice(0, 80) + ')'
+          : '')
+      ).slice(0, 200);
+      var cardFact = ('Correction: ' + cleaned).slice(0, 160);
+      await applyBoardMemoryPatches([
+        { op: 'note', text: note },
+        { op: 'remember', text: pref }
+      ]);
+      await applyCardPatchesFromTurn([{ op: 'remember', text: cardFact }]);
+    }
+
+    function buildCorrectionUserPayload(userFeedback, priorAssistant) {
+      return [
+        '[Retour n\u00e9gatif \u2014 auto-correction]',
+        'Ma r\u00e9ponse pr\u00e9c\u00e9dente n\'\u00e9tait pas correcte.',
+        priorAssistant
+          ? 'R\u00e9ponse concern\u00e9e\u00a0: \u00ab' +
+            String(priorAssistant).slice(0, 280) +
+            '\u00bb'
+          : '',
+        'Ce qui n\'allait pas selon l\'utilisateur\u00a0: \u00ab' +
+          String(userFeedback || '').trim() +
+          '\u00bb',
+        'Retiens la le\u00e7on (cardPatches remember si utile) et corrige-toi bri\u00e8vement.',
+        'Si une action \u00e9tait fausse, propose de la r\u00e9parer via outils. Ne r\u00e9p\u00e8te pas l\'erreur.'
+      ]
+        .filter(Boolean)
+        .join('\n');
+    }
+
+    function attachFeedbackControls(row) {
+      if (!row || row.querySelector('.agent-msg-feedback')) return;
+      if (
+        row.classList.contains('agent-msg--error') ||
+        row.classList.contains('agent-msg--offer') ||
+        row.classList.contains('agent-msg--recap') ||
+        row.classList.contains('is-pending')
+      ) {
+        return;
+      }
+      var bar = el('div', 'agent-msg-feedback', {
+        role: 'group',
+        'aria-label': 'Noter cette r\u00e9ponse'
+      });
+      var upBtn = el('button', 'agent-msg-feedback-btn agent-msg-feedback-btn--up', {
+        type: 'button',
+        title: 'Bonne r\u00e9ponse',
+        'aria-label': 'Bonne r\u00e9ponse'
+      });
+      upBtn.appendChild(el('i', 'ti ti-thumb-up'));
+      var downBtn = el(
+        'button',
+        'agent-msg-feedback-btn agent-msg-feedback-btn--down',
+        {
+          type: 'button',
+          title: 'Mauvaise r\u00e9ponse',
+          'aria-label': 'Mauvaise r\u00e9ponse'
+        }
+      );
+      downBtn.appendChild(el('i', 'ti ti-thumb-down'));
+      bar.appendChild(upBtn);
+      bar.appendChild(downBtn);
+      row.appendChild(bar);
+
+      upBtn.addEventListener('click', function () {
+        if (pending || upBtn.disabled) return;
+        markFeedbackRated(row, 'up');
+        if (awaitingFeedback && awaitingFeedback.row === row) {
+          clearAwaitingFeedback();
+        }
+        setAssistantFaceEmotion(row, 'happy', { animate: true });
+        notifyLayout();
+      });
+
+      downBtn.addEventListener('click', function () {
+        if (pending || downBtn.disabled) return;
+        if (awaitingFeedback && awaitingFeedback.row !== row) {
+          clearAwaitingFeedback();
+        }
+        markFeedbackRated(row, 'down');
+        setAssistantFaceEmotion(row, 'sad', { animate: true });
+        var content = assistantBubbleText(row);
+        awaitingFeedback = { row: row, content: content };
+        syncComposerPlaceholder();
+        var ask =
+          'Qu\'est-ce que j\'ai mal fait\u00a0? Je peux m\'am\u00e9liorer.';
+        appendMessage('assistant', ask, {
+          noFeedback: true,
+          emotion: 'curious',
+          noUnread: true
+        });
+        history.push({ role: 'assistant', content: ask });
+        schedulePersistChatHistory();
+        expandAssistant();
+        try {
+          input.focus();
+        } catch (e) {
+          /* ignore */
+        }
+        notifyLayout();
+      });
     }
 
     async function finishInterview(options) {
@@ -3698,6 +4306,7 @@
         if (global.UserProfile && typeof global.UserProfile.load === 'function') {
           try {
             var profile = await global.UserProfile.load(t);
+            applyAgentIdentity(profile);
             if (profile && profile.agentStatus) {
               var fromProfile = normalizeStatusLevel(profile.agentStatus);
               if (fromProfile !== statusLevel) {
@@ -3714,7 +4323,7 @@
               }
             }
           } catch (profErr) {
-            console.error('AgentUI load agentStatus failed', profErr);
+            console.error('AgentUI load profile failed', profErr);
           }
         }
         if (Agent.isConfigured(provider)) {
@@ -3760,23 +4369,19 @@
       }
       var changed = !Agent.providersEqual(next, savedProvider);
       try {
+        await persistAgentIdentity(readAgentIdentityForm());
         await persistProvider(next);
         if (changed) {
           setSettingsStatus('Enregistr\u00e9 \u2014 tests en cours\u2026');
           await runTests({ fromSave: true });
         } else {
-          setSettingsStatus(
-            Agent.isVerified(provider)
-              ? 'Aucune modification.'
-              : 'Fournisseur enregistr\u00e9.',
-            Agent.isVerified(provider) ? 'pass' : undefined
-          );
+          setSettingsStatus('Enregistr\u00e9.', 'pass');
         }
         if (Agent.isConfigured(provider) && !history.length && !interviewBootstrapped) {
           await bootstrapCardInterview();
         }
       } catch (err) {
-        console.error('AgentUI save provider failed', err);
+        console.error('AgentUI save settings failed', err);
         setSettingsStatus(
           (err && err.message) || 'Enregistrement impossible',
           'fail'
@@ -3871,6 +4476,12 @@
       if (opts.fromComposer) {
         input.value = '';
       }
+      var feedbackContext = null;
+      if (awaitingFeedback) {
+        feedbackContext = awaitingFeedback;
+        awaitingFeedback = null;
+        syncComposerPlaceholder();
+      }
       setError('');
       clearFollowUps();
       clearPrompts();
@@ -3887,6 +4498,7 @@
       try {
         if (
           !opts.skipSpellcheck &&
+          !feedbackContext &&
           global.Spellcheck &&
           typeof global.Spellcheck.correct === 'function'
         ) {
@@ -3938,13 +4550,18 @@
             console.error('Spellcheck before chat failed', spellErr);
           }
         }
+        var apiMsg = msg;
+        if (feedbackContext) {
+          await persistUserCorrection(msg, feedbackContext.content);
+          apiMsg = buildCorrectionUserPayload(msg, feedbackContext.content);
+        }
         var turn;
         if (interviewActive && typeof Agent.cardInterviewTurn === 'function') {
           turn = await Agent.cardInterviewTurn(
             provider,
             history.slice(0, -1),
             bridge,
-            msg,
+            apiMsg,
             {
               onDelta: function (visible) {
                 if (!bubble || !visible) return;
@@ -3968,23 +4585,29 @@
             }
           );
         } else {
-          turn = await Agent.chatTurn(provider, history.slice(0, -1), bridge, msg, {
-            onDelta: function (visible) {
-              if (!bubble || !visible) return;
-              if (!streamed) {
-                streamed = true;
-                stopThinkingMotions();
-                thinking.classList.remove('is-pending');
-                thinking.removeAttribute('aria-busy');
-                thinking.removeAttribute('aria-label');
-                revealPendingBubble(bubble, visible);
-              } else {
-                fillHighlightedBubble(bubble, visible);
+          turn = await Agent.chatTurn(
+            provider,
+            history.slice(0, -1),
+            bridge,
+            apiMsg,
+            {
+              onDelta: function (visible) {
+                if (!bubble || !visible) return;
+                if (!streamed) {
+                  streamed = true;
+                  stopThinkingMotions();
+                  thinking.classList.remove('is-pending');
+                  thinking.removeAttribute('aria-busy');
+                  thinking.removeAttribute('aria-label');
+                  revealPendingBubble(bubble, visible);
+                } else {
+                  fillHighlightedBubble(bubble, visible);
+                }
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+                notifyLayout();
               }
-              messagesEl.scrollTop = messagesEl.scrollHeight;
-              notifyLayout();
             }
-          });
+          );
         }
         if (bubble) {
           if (!streamed) revealPendingBubble(bubble, turn.message);
@@ -4003,6 +4626,7 @@
           emotion: turn.emotion,
           color: turn.color
         });
+        attachFeedbackControls(thinking);
         announceAssistantArrival({ emotion: replyEmotion });
         if (collapse && collapse.refreshSummary) {
           collapse.refreshSummary();
@@ -4187,6 +4811,40 @@
     doneBtn.addEventListener('click', function () {
       setSettingsOpen(false);
     });
+    agentColorSelect.addEventListener('change', function () {
+      var nextColor = agentColorSelect.value;
+      var curName = (agentNameInput.value || '').trim();
+      var isStock =
+        !curName ||
+        (global.UserProfile &&
+          global.UserProfile.isStockAgentName &&
+          global.UserProfile.isStockAgentName(curName));
+      if (isStock && global.UserProfile && global.UserProfile.pickAgentNameForColor) {
+        agentNameInput.value = global.UserProfile.pickAgentNameForColor(nextColor);
+      }
+    });
+    rerollNameBtn.addEventListener('click', function () {
+      var color = agentColorSelect.value || agentIdentity.agentColor;
+      if (global.UserProfile && global.UserProfile.pickAgentNameForColor) {
+        agentNameInput.value = global.UserProfile.pickAgentNameForColor(color);
+      }
+      persistAgentIdentity(readAgentIdentityForm()).catch(function (err) {
+        console.error('AgentUI reroll name failed', err);
+      });
+    });
+    rerollColorBtn.addEventListener('click', function () {
+      var nextColor =
+        global.UserProfile && global.UserProfile.pickRandomAgentColor
+          ? global.UserProfile.pickRandomAgentColor()
+          : 'orange';
+      agentColorSelect.value = nextColor;
+      if (global.UserProfile && global.UserProfile.pickAgentNameForColor) {
+        agentNameInput.value = global.UserProfile.pickAgentNameForColor(nextColor);
+      }
+      persistAgentIdentity(readAgentIdentityForm()).catch(function (err) {
+        console.error('AgentUI reroll color failed', err);
+      });
+    });
     sendBtn.addEventListener('click', onSend);
     interviewSkipBtn.addEventListener('click', function () {
       if (pending || !interviewActive) return;
@@ -4202,6 +4860,7 @@
       }
     });
 
+    fillAgentColorSelect(agentIdentity.agentColor);
     fillSettingsForm();
     ensureProviderLoaded();
     updateComposerEnabled();

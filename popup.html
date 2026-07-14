@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-1" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css?v=section-glow-2" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
-  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-offer-2" />
+  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-identity-1" />
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/effects.js?v=fx-1"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
@@ -28,11 +28,11 @@
   <script src="./components/completion/completion-trello.js?v=progress-due-complete-1"></script>
   <script src="./components/goals/goals-trello.js?v=goals-1"></script>
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
-  <script src="./components/agent/agent.js?v=agent-hl-4"></script>
+  <script src="./components/agent/agent.js?v=agent-identity-1"></script>
   <script src="./components/agent/agent-memory.js?v=card-interview-1"></script>
-  <script src="./components/profile/user-profile.js?v=experimental-1"></script>
+  <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
-  <script src="./components/agent/agent-ui.js?v=agent-offer-2"></script>
+  <script src="./components/agent/agent-ui.js?v=agent-identity-1"></script>
 </head>
 <body class="tp-page tp-page--priority">
   <div class="compare-page">
@@ -1396,9 +1396,14 @@
           } catch (lsErr) { /* ignore */ }
         } catch (profErr) {
           console.error('UserProfile.load failed', profErr);
-          cachedProfile = window.UserProfile.emptyProfile
-            ? UserProfile.emptyProfile()
-            : null;
+          cachedProfile =
+            window.UserProfile && UserProfile.ensureAgentIdentity
+              ? UserProfile.ensureAgentIdentity(
+                  UserProfile.emptyProfile ? UserProfile.emptyProfile() : {}
+                ).profile
+              : window.UserProfile && UserProfile.emptyProfile
+                ? UserProfile.emptyProfile()
+                : null;
         }
       }
 

@@ -10,6 +10,49 @@
   var MAX_NAME = 80;
   var MAX_ROLE = 80;
   var MAX_NOTES = 400;
+  var MAX_AGENT_NAME = 40;
+  var MAX_AGENT_PERSONALITY = 400;
+
+  /** Stable identity palette for the assistant face (member-scoped). */
+  var AGENT_COLOR_KEYS = [
+    'orange',
+    'yellow',
+    'green',
+    'purple',
+    'blue',
+    'pink',
+    'red',
+    'teal',
+    'coral',
+    'sky'
+  ];
+
+  var AGENT_COLOR_LABELS = {
+    orange: 'Orange',
+    yellow: 'Jaune',
+    green: 'Vert',
+    purple: 'Violet',
+    blue: 'Bleu',
+    pink: 'Rose',
+    red: 'Rouge',
+    teal: 'Turquoise',
+    coral: 'Corail',
+    sky: 'Ciel'
+  };
+
+  /** Round / food / nature names that fit each glow color. */
+  var AGENT_COLOR_NAMES = {
+    orange: ['Orange', 'Mandarin', 'Clementine', 'Tangerine', 'Pumpkin', 'Pizza', 'Soleil'],
+    yellow: ['Soleil', 'Lemon', 'Banana', 'Honey', 'Gold', 'Butter', 'Canary'],
+    green: ['Lime', 'Pea', 'Kiwi', 'Moss', 'Clover', 'Jade', 'Olive'],
+    purple: ['Plum', 'Grape', 'Fig', 'Violet', 'Lilac', 'Orchid', 'Raisin'],
+    blue: ['Blueberry', 'Ocean', 'Sky', 'Azure', 'Cobalt', 'Indigo', 'Denim'],
+    pink: ['Cherry', 'Blush', 'Rose', 'Peony', 'Berry', 'Cotton', 'Petal'],
+    red: ['Apple', 'Tomato', 'Paprika', 'Ruby', 'Cherry', 'Berry', 'Cranberry'],
+    teal: ['Mint', 'Aqua', 'Lagoon', 'Seafoam', 'Jade', 'Tide', 'Foam'],
+    coral: ['Coral', 'Salmon', 'Papaya', 'Peach', 'Shrimp', 'Apricot', 'Melon'],
+    sky: ['Cloud', 'Sky', 'Azure', 'Breeze', 'Ciel', 'Nimbus', 'Mist']
+  };
 
   var FEATURE_KEYS = [
     'info',
@@ -111,8 +154,77 @@
       features: defaultFeatures(),
       experimental: defaultExperimental(),
       agentStatus: 'standard',
+      agentName: '',
+      agentPersonality: '',
+      agentColor: '',
       updatedAt: ''
     };
+  }
+
+  function normalizeAgentColor(raw) {
+    var c = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    if (AGENT_COLOR_KEYS.indexOf(c) !== -1) return c;
+    // Common aliases from older face auras / FR labels.
+    if (c === 'jaune' || c === 'gold' || c === 'amber') return 'yellow';
+    if (c === 'peach' || c === 'warm') return 'orange';
+    if (c === 'vert' || c === 'lime' || c === 'mint') return c === 'mint' ? 'teal' : 'green';
+    if (c === 'violet' || c === 'lavender') return 'purple';
+    if (c === 'bleu') return 'blue';
+    if (c === 'rose') return 'pink';
+    if (c === 'rouge') return 'red';
+    if (c === 'turquoise' || c === 'cyan') return 'teal';
+    if (c === 'ciel') return 'sky';
+    return '';
+  }
+
+  function pickRandom(list) {
+    if (!list || !list.length) return '';
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  function pickRandomAgentColor() {
+    return pickRandom(AGENT_COLOR_KEYS) || 'orange';
+  }
+
+  function pickAgentNameForColor(color) {
+    var key = normalizeAgentColor(color) || 'orange';
+    return pickRandom(AGENT_COLOR_NAMES[key] || AGENT_COLOR_NAMES.orange) || 'Orange';
+  }
+
+  function isStockAgentName(name) {
+    var n = typeof name === 'string' ? name.trim() : '';
+    if (!n) return false;
+    var lower = n.toLowerCase();
+    for (var i = 0; i < AGENT_COLOR_KEYS.length; i++) {
+      var names = AGENT_COLOR_NAMES[AGENT_COLOR_KEYS[i]] || [];
+      for (var j = 0; j < names.length; j++) {
+        if (String(names[j]).toLowerCase() === lower) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Fill missing agent color / name with a random color-based identity.
+   * Does not overwrite a custom name unless forceName is true.
+   */
+  function ensureAgentIdentity(profile, options) {
+    options = options || {};
+    var p = normalizeProfile(profile);
+    var changed = false;
+    if (!p.agentColor || options.forceColor) {
+      p.agentColor = pickRandomAgentColor();
+      changed = true;
+    }
+    var needName =
+      options.forceName ||
+      !p.agentName ||
+      (options.resyncStockName && isStockAgentName(p.agentName));
+    if (needName) {
+      p.agentName = pickAgentNameForColor(p.agentColor);
+      changed = true;
+    }
+    return { profile: p, changed: changed };
   }
 
   function normalizeTone(raw) {
@@ -159,6 +271,9 @@
       features: normalizeFeatures(src.features),
       experimental: normalizeExperimental(src.experimental),
       agentStatus: normalizeAgentStatus(src.agentStatus, src.agentDebug),
+      agentName: trimStr(src.agentName, MAX_AGENT_NAME),
+      agentPersonality: trimStr(src.agentPersonality, MAX_AGENT_PERSONALITY),
+      agentColor: normalizeAgentColor(src.agentColor),
       updatedAt: typeof src.updatedAt === 'string' ? src.updatedAt : ''
     };
   }
@@ -237,13 +352,43 @@
       tone: p.tone,
       language: p.language,
       features: p.features,
-      experimental: p.experimental
+      experimental: p.experimental,
+      agentName: p.agentName || null,
+      agentPersonality: p.agentPersonality || null,
+      agentColor: p.agentColor || null
     };
   }
 
   function profilePromptLines(profile) {
     var p = normalizeProfile(profile);
     var lines = [];
+    if (p.agentName || p.agentPersonality || p.agentColor) {
+      lines.push('Identité de l\'assistant (persistante — respecter)\u00a0:');
+      if (p.agentName) {
+        lines.push(
+          '- Tu t\'appelles ' +
+            p.agentName +
+            '. Tu peux te présenter ainsi ; ce n\'est pas un surnom temporaire.'
+        );
+      }
+      if (p.agentColor) {
+        var colorLabel = AGENT_COLOR_LABELS[p.agentColor] || p.agentColor;
+        lines.push(
+          '- Couleur d\'identité\u00a0: ' +
+            colorLabel +
+            ' (`' +
+            p.agentColor +
+            '`). Utilise cette couleur pour ton avatar (champ "color") sauf exception brève liée à l\'humeur.'
+        );
+      }
+      if (p.agentPersonality) {
+        lines.push(
+          '- Personnalité / character\u00a0: ' +
+            p.agentPersonality +
+            '. Incarne ce trait dans le ton et les réactions, sans perdre la voix de collègue utile.'
+        );
+      }
+    }
     lines.push('Profil utilisateur (préférences personnelles — respecter)\u00a0:');
     if (p.displayName) {
       lines.push('- Prénom / nom\u00a0: ' + p.displayName + '. Adresse-le ainsi quand c\'est naturel.');
@@ -305,13 +450,25 @@
   }
 
   async function load(t) {
-    if (!t || typeof t.get !== 'function') return emptyProfile();
+    if (!t || typeof t.get !== 'function') {
+      return ensureAgentIdentity(emptyProfile()).profile;
+    }
     try {
       var stored = await t.get('member', 'private', STORAGE_KEY);
-      return normalizeProfile(stored);
+      var profile = normalizeProfile(stored);
+      var ensured = ensureAgentIdentity(profile);
+      if (ensured.changed && typeof t.set === 'function') {
+        try {
+          return await save(t, ensured.profile);
+        } catch (persistErr) {
+          console.error('UserProfile identity persist failed', persistErr);
+          return ensured.profile;
+        }
+      }
+      return ensured.profile;
     } catch (err) {
       console.error('UserProfile.load failed', err);
-      return emptyProfile();
+      return ensureAgentIdentity(emptyProfile()).profile;
     }
   }
 
@@ -326,7 +483,10 @@
   }
 
   async function reset(t) {
-    var blank = emptyProfile();
+    var blank = ensureAgentIdentity(emptyProfile(), {
+      forceColor: true,
+      forceName: true
+    }).profile;
     blank.updatedAt = new Date().toISOString();
     if (t && typeof t.set === 'function') {
       await t.set('member', 'private', STORAGE_KEY, blank);
@@ -347,10 +507,20 @@
     LANGUAGE_LABELS: LANGUAGE_LABELS,
     AGENT_STATUS_KEYS: AGENT_STATUS_KEYS,
     AGENT_STATUS_LABELS: AGENT_STATUS_LABELS,
+    AGENT_COLOR_KEYS: AGENT_COLOR_KEYS,
+    AGENT_COLOR_LABELS: AGENT_COLOR_LABELS,
+    AGENT_COLOR_NAMES: AGENT_COLOR_NAMES,
+    MAX_AGENT_NAME: MAX_AGENT_NAME,
+    MAX_AGENT_PERSONALITY: MAX_AGENT_PERSONALITY,
     emptyProfile: emptyProfile,
     normalizeAgentStatus: normalizeAgentStatus,
+    normalizeAgentColor: normalizeAgentColor,
     normalizeProfile: normalizeProfile,
     normalizeExperimental: normalizeExperimental,
+    pickRandomAgentColor: pickRandomAgentColor,
+    pickAgentNameForColor: pickAgentNameForColor,
+    isStockAgentName: isStockAgentName,
+    ensureAgentIdentity: ensureAgentIdentity,
     isFeatureEnabled: isFeatureEnabled,
     isExperimentalEnabled: isExperimentalEnabled,
     applyFeaturesToCard: applyFeaturesToCard,
