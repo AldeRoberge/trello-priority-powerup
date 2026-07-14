@@ -703,7 +703,7 @@ body {
 }
 
 /* Expanded: body content replaces the header summary */
-.field:not(.is-collapsed) .section-toggle-summary {
+.field:not(.is-collapsed) > .section-toggle-head .section-toggle-summary {
   display: none;
 }
 
@@ -720,7 +720,9 @@ body {
   color: var(--text-primary);
 }
 
-.field:not(.is-collapsed) .section-collapse-chevron {
+/* Direct head only — Graphique nests inside Priorité; a descendant
+   selector would keep its chevron rotated whenever Priorité is open. */
+.field:not(.is-collapsed) > .section-toggle-head .section-collapse-chevron {
   transform: rotate(180deg);
 }
 

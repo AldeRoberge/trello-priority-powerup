@@ -7,7 +7,7 @@
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=section-cbx-1" />
-  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=settings-gear-left-1" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=graphique-chevron-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-1" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=pending-skeleton-1" />
   <script src="./components/shared/rest-config.js"></script>
@@ -610,6 +610,311 @@
         .catch(function (err) {
           console.error('Statut section mount failed', err);
         });
+    }
+
+    function objectifSummaryText() {
+      if (!latestGoals || !latestGoals.hierarchy || !latestGoals.hierarchy.project) {
+        return 'Aucun projet lié';
+      }
+      var h = latestGoals.hierarchy;
+      var parts = [];
+      if (h.vision) parts.push(h.vision.name);
+      if (h.mission) parts.push(h.mission.name);
+      parts.push(h.project.name);
+      return parts.join(' → ');
+    }
+
+    function renderObjectifBody() {
+      if (!objectifUi || !objectifUi.body) return;
+      var body = objectifUi.body;
+      body.replaceChildren();
+      var GT = window.GoalsTrello;
+      if (!GT) {
+        body.appendChild(
+          Object.assign(document.createElement('p'), {
+            className: 'objectif-empty',
+            textContent: 'Module Objectifs indisponible.',
+          })
+        );
+        return;
+      }
+
+      var hierarchy = (latestGoals && latestGoals.hierarchy) || {};
+      var projectId = (latestGoals && latestGoals.projectId) || null;
+      var projects = (latestGoals && latestGoals.projects) || [];
+      var missions = (latestGoals && latestGoals.missions) || [];
+      var activeProjects = GT.activeOnly(projects);
+
+      if (!projectId || !hierarchy.project) {
+        var empty = document.createElement('p');
+        empty.className = 'objectif-empty';
+        empty.textContent =
+          'Aucun projet lié. Reliez cette carte à un projet pour rattacher Vision et Mission.';
+        body.appendChild(empty);
+      } else {
+        var crumb = document.createElement('div');
+        crumb.className = 'objectif-breadcrumb';
+        function appendCrumb(label, opts) {
+          opts = opts || {};
+          var node;
+          if (opts.asButton) {
+            node = document.createElement('button');
+            node.type = 'button';
+            node.className = 'objectif-crumb objectif-crumb--mission';
+          } else {
+            node = document.createElement('span');
+            node.className = 'objectif-crumb';
+          }
+          node.textContent = label || '—';
+          if (opts.retired) {
+            node.classList.add('is-retired');
+            var tag = document.createElement('span');
+            tag.className = 'objectif-retired-tag';
+            tag.textContent = 'Retiré';
+            node.appendChild(document.createTextNode(' '));
+            node.appendChild(tag);
+          }
+          if (opts.onClick) node.addEventListener('click', opts.onClick);
+          crumb.appendChild(node);
+        }
+        function appendSep() {
+          var sep = document.createElement('span');
+          sep.className = 'objectif-crumb-sep';
+          sep.setAttribute('aria-hidden', 'true');
+          sep.textContent = '→';
+          crumb.appendChild(sep);
+        }
+        appendCrumb(hierarchy.vision && hierarchy.vision.name, {
+          retired: hierarchy.vision && hierarchy.vision.retired,
+        });
+        appendSep();
+        appendCrumb(hierarchy.mission && hierarchy.mission.name, {
+          asButton: !!(hierarchy.mission && hierarchy.mission.id),
+          retired: hierarchy.mission && hierarchy.mission.retired,
+          onClick: function () {
+            if (!hierarchy.mission || !window.GoalsUI) return;
+            GT.getMetricsForMission(t, hierarchy.mission.id).then(function (metrics) {
+              GoalsUI.openMetricsPanel(document.body, hierarchy.mission, metrics);
+            });
+          },
+        });
+        appendSep();
+        appendCrumb(hierarchy.project && hierarchy.project.name, {
+          retired: hierarchy.project && hierarchy.project.retired,
+        });
+        body.appendChild(crumb);
+      }
+
+      var pickerRow = document.createElement('div');
+      pickerRow.className = 'objectif-picker-row';
+      var select = document.createElement('select');
+      select.className = 'tp-select';
+      select.setAttribute('aria-label', 'Projet');
+      var optNone = document.createElement('option');
+      optNone.value = '';
+      optNone.textContent = '— Aucun projet —';
+      select.appendChild(optNone);
+
+      var linkedRetired =
+        hierarchy.project && hierarchy.project.retired ? hierarchy.project : null;
+      if (linkedRetired) {
+        var optRetired = document.createElement('option');
+        optRetired.value = linkedRetired.id;
+        optRetired.textContent = linkedRetired.name + ' (retiré)';
+        optRetired.selected = true;
+        select.appendChild(optRetired);
+      }
+
+      activeProjects.forEach(function (p) {
+        var o = document.createElement('option');
+        o.value = p.id;
+        var mission = GT.findById(missions, p.missionId);
+        o.textContent = mission ? p.name + ' · ' + mission.name : p.name;
+        if (projectId === p.id) o.selected = true;
+        select.appendChild(o);
+      });
+
+      select.addEventListener('change', function () {
+        var nextId = select.value || null;
+        GT.setCardProjectId(t, nextId)
+          .then(function () {
+            return refreshObjectifData();
+          })
+          .catch(function (err) {
+            console.error('setCardProjectId failed', err);
+            window.alert((err && err.message) || 'Liaison impossible');
+            return refreshObjectifData();
+          });
+      });
+      pickerRow.appendChild(select);
+      body.appendChild(pickerRow);
+
+      var createRow = document.createElement('div');
+      createRow.className = 'objectif-create-row';
+      var createHint = document.createElement('p');
+      createHint.className = 'objectif-create-hint';
+      var activeMissions = GT.activeOnly(missions);
+      if (!activeMissions.length) {
+        createHint.textContent =
+          'Aucune mission active. Créez Vision / Mission dans Paramètres → Objectifs.';
+        createRow.appendChild(createHint);
+      } else {
+        createHint.textContent = 'Créer un projet et le lier à cette carte :';
+        createRow.appendChild(createHint);
+        var missionSelect = document.createElement('select');
+        missionSelect.className = 'tp-select';
+        missionSelect.setAttribute('aria-label', 'Mission parente');
+        activeMissions.forEach(function (m) {
+          var o = document.createElement('option');
+          o.value = m.id;
+          o.textContent = m.name;
+          if (hierarchy.mission && hierarchy.mission.id === m.id) o.selected = true;
+          missionSelect.appendChild(o);
+        });
+        var nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'tp-goals-input';
+        nameInput.placeholder = 'Nom du projet';
+        nameInput.maxLength = 120;
+        var createBtn = document.createElement('button');
+        createBtn.type = 'button';
+        createBtn.className = 'tp-button tp-button--secondary';
+        createBtn.textContent = 'Créer et lier';
+        createBtn.addEventListener('click', function () {
+          var raw = nameInput.value.trim();
+          if (!raw) return;
+          var missionId = missionSelect.value;
+          if (!missionId) return;
+          createBtn.disabled = true;
+          var spell =
+            window.GoalsUI && GoalsUI.spellcheckText
+              ? GoalsUI.spellcheckText(raw)
+              : Promise.resolve(raw);
+          spell
+            .then(function (name) {
+              return GT.createProject(t, name, missionId);
+            })
+            .then(function (project) {
+              return GT.setCardProjectId(t, project.id);
+            })
+            .then(function () {
+              nameInput.value = '';
+              return refreshObjectifData();
+            })
+            .catch(function (err) {
+              console.error('create project link failed', err);
+              window.alert((err && err.message) || 'Création impossible');
+            })
+            .then(function () {
+              createBtn.disabled = false;
+            });
+        });
+        createRow.appendChild(missionSelect);
+        createRow.appendChild(nameInput);
+        createRow.appendChild(createBtn);
+      }
+      body.appendChild(createRow);
+    }
+
+    function refreshObjectifData() {
+      var GT = window.GoalsTrello;
+      if (!GT) return Promise.resolve();
+      return Promise.all([
+        GT.getCardProjectId(t),
+        GT.preloadBoardGoalsContext(t),
+      ]).then(function (results) {
+        var projectId = results[0];
+        var cache = GT.getCachedBoardGoals();
+        var hierarchy = projectId
+          ? GT.resolveHierarchyFromCache(cache, projectId)
+          : { vision: null, mission: null, project: null };
+        latestGoals = {
+          projectId: projectId,
+          hierarchy: hierarchy,
+          visions: cache.visions,
+          missions: cache.missions,
+          projects: cache.projects,
+          metrics: cache.metrics,
+        };
+        objectifEnabled = !!projectId;
+        if (objectifCollapse) {
+          if (typeof objectifCollapse.setEnabled === 'function') {
+            objectifCollapse.setEnabled(objectifEnabled, { expand: false, silent: true });
+          }
+          objectifCollapse.refreshSummary();
+        }
+        renderObjectifBody();
+        resizePopup();
+        return latestGoals;
+      });
+    }
+
+    function mountObjectifSection(cardEl, initiallyOpen) {
+      if (!window.GoalsTrello || !PriorityUI.createCollapsibleEnableChrome) {
+        console.error('Priority popup: GoalsTrello unavailable');
+        return Promise.resolve();
+      }
+
+      objectifSection = document.createElement('div');
+      objectifSection.className = 'variant-objectif-section';
+
+      var field = document.createElement('div');
+      field.className = 'field field--objectif';
+
+      var chrome = PriorityUI.createCollapsibleEnableChrome({
+        title: 'Objectif',
+        bodyId: 'objectif-section-body',
+        checkboxClass: 'objectif-enable-checkbox',
+        labelClass: 'objectif-enable-label',
+        leadingIcon: 'ti-hierarchy-2',
+        iconClass: 'objectif-leading-icon',
+        titleClass: 'objectif-enable-title',
+        collapseLabel: 'Replier Objectif',
+        expandLabel: 'Développer Objectif',
+      });
+      field.appendChild(chrome.head);
+
+      var body = document.createElement('div');
+      body.className = 'objectif-section-body section-toggle-body';
+      body.id = 'objectif-section-body';
+      body.hidden = true;
+      field.appendChild(body);
+      objectifSection.appendChild(field);
+
+      var prioritySection = cardEl.querySelector('.variant-priority-section');
+      if (prioritySection) {
+        cardEl.insertBefore(objectifSection, prioritySection);
+      } else {
+        var statutSectionEl = cardEl.querySelector('.variant-statut-section');
+        if (statutSectionEl && statutSectionEl.nextSibling) {
+          cardEl.insertBefore(objectifSection, statutSectionEl.nextSibling);
+        } else {
+          cardEl.appendChild(objectifSection);
+        }
+      }
+
+      objectifUi = { body: body, field: field, chrome: chrome };
+
+      return refreshObjectifData().then(function () {
+        var expandObjectif =
+          initiallyOpen || PriorityUI.resolveSectionExpanded('objectif', !!objectifEnabled);
+        objectifCollapse = PriorityUI.bindCollapsibleEnable({
+          field: field,
+          body: body,
+          chrome: chrome,
+          enabled: true,
+          expanded: expandObjectif,
+          hideEnableCheckbox: true,
+          getSummary: objectifSummaryText,
+          onLayoutChange: resizePopup,
+          onExpandChange: function (isExpanded) {
+            objectifExpanded = !!isExpanded;
+            PriorityUI.saveSectionCollapseState({ objectif: !!isExpanded });
+          },
+        });
+        renderObjectifBody();
+        resizePopup();
+      });
     }
 
     function mountProgressSection(cardEl, initiallyOpen) {
