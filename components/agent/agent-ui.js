@@ -2291,26 +2291,31 @@
       var layer = el('div', 'agent-face-puke-layer');
       layer.setAttribute('aria-hidden', 'true');
       var reduced = prefersFaceReducedMotion();
-      var count = reduced ? 10 : 64;
-      var reach = Math.max(global.innerWidth || 800, global.innerHeight || 600);
+      var count = reduced ? 18 : 96;
+      var vw = global.innerWidth || 800;
+      var vh = global.innerHeight || 600;
+      var reach = Math.sqrt(vw * vw + vh * vh);
       for (var i = 0; i < count; i++) {
         var blob = el('span', 'agent-face-puke-blob');
         var ang = Math.random() * Math.PI * 2;
-        var dist = 70 + Math.random() * reach * (reduced ? 0.28 : 0.62);
+        // Fling past viewport corners so spray reads fullscreen.
+        var dist = reach * (reduced ? 0.35 + Math.random() * 0.45 : 0.55 + Math.random() * 0.7);
         var dx = Math.cos(ang) * dist;
-        var dy = Math.sin(ang) * dist * 0.85 + 50 + Math.random() * 160;
-        var size = 5 + Math.random() * (reduced ? 12 : 20);
+        var dy = Math.sin(ang) * dist * 0.95 + 80 + Math.random() * 220;
+        var size = reduced
+          ? 14 + Math.random() * 28
+          : 18 + Math.random() * 52;
         blob.style.setProperty('--px', ox + 'px');
         blob.style.setProperty('--py', oy + 'px');
         blob.style.setProperty('--dx', dx + 'px');
         blob.style.setProperty('--dy', dy + 'px');
         blob.style.setProperty('--size', size + 'px');
         blob.style.setProperty('--rot', Math.floor(Math.random() * 360) + 'deg');
-        blob.style.animationDelay = Math.random() * 0.2 + 's';
-        blob.style.animationDuration = 0.85 + Math.random() * 1.05 + 's';
+        blob.style.animationDelay = Math.random() * 0.18 + 's';
+        blob.style.animationDuration = 1.05 + Math.random() * 1.15 + 's';
         blob.style.background =
           FACE_PUKE_COLORS[Math.floor(Math.random() * FACE_PUKE_COLORS.length)];
-        if (Math.random() > 0.55) {
+        if (Math.random() > 0.45) {
           blob.classList.add('agent-face-puke-blob--splatter');
         }
         layer.appendChild(blob);
@@ -2318,19 +2323,48 @@
       document.body.appendChild(layer);
       global.setTimeout(function () {
         if (layer.parentNode) layer.parentNode.removeChild(layer);
-      }, reduced ? 1600 : 2800);
+      }, reduced ? 2000 : 3200);
+    }
+
+    function clearSickRecoverTimer(face) {
+      if (face && face._sickRecoverTimer != null) {
+        clearTimeout(face._sickRecoverTimer);
+        face._sickRecoverTimer = null;
+      }
+    }
+
+    function recoverAssistantFaceFromSick(face) {
+      if (!face || !face.classList || !face.classList.contains('is-sick')) return;
+      clearSickRecoverTimer(face);
+      face.classList.remove('is-sick');
+      face._spinClicks = 0;
+      face._spinClickAt = 0;
+      face.removeAttribute('title');
+      var resume = face._preSickEmotion || 'happy';
+      face._preSickEmotion = null;
+      var row = face.closest('.agent-msg--assistant');
+      if (!row || !row.isConnected || face.classList.contains('is-frozen')) {
+        applyFaceAura(face, identityAura());
+        return;
+      }
+      setAssistantFaceEmotion(row, resume, {
+        animate: false,
+        smooth: true
+      });
     }
 
     function makeAssistantFaceSick(face) {
       if (!face || !face.classList || face.classList.contains('is-sick')) return;
+      clearSickRecoverTimer(face);
       cancelFaceMorph(face);
       clearFaceMotionClasses(face);
       suppressFaceIdleMachine();
+      face._preSickEmotion = face.getAttribute('data-emotion') || 'happy';
       face._spinClicks = FACE_SPIN_PUKE_AT;
       swapFaceEmotionClass(face, 'surprised');
       face.classList.add('is-sick');
       face.setAttribute('data-emotion', 'surprised');
-      applyFaceAura(face, 'green');
+      applyFacePalette(face, 'yellow', FACE_SICK_PALETTE);
       face.removeAttribute('data-think');
       face.removeAttribute('data-listen');
       face.setAttribute('title', 'Beurk\u2026');
@@ -2339,10 +2373,14 @@
       var row = face.closest('.agent-msg--assistant');
       if (row) {
         row.setAttribute('data-emotion', 'surprised');
-        row.setAttribute('data-aura', 'green');
+        row.setAttribute('data-aura', 'yellow');
       }
       playBarfSound();
       pukeAllOverScreen(face);
+      face._sickRecoverTimer = global.setTimeout(function () {
+        face._sickRecoverTimer = null;
+        recoverAssistantFaceFromSick(face);
+      }, FACE_SICK_RECOVER_MS);
     }
 
     function spinAssistantFace(face) {

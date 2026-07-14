@@ -10,11 +10,11 @@
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-2" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css?v=section-glow-2" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
-  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-identity-1" />
+  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-point-1" />
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/effects.js?v=fx-2"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=experimental-1"></script>
+  <script src="./components/priority/priority-ui.js?v=agent-point-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
@@ -28,11 +28,11 @@
   <script src="./components/completion/completion-trello.js?v=progress-due-complete-1"></script>
   <script src="./components/goals/goals-trello.js?v=goals-1"></script>
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
-  <script src="./components/agent/agent.js?v=agent-interview-snark-1"></script>
+  <script src="./components/agent/agent.js?v=agent-point-1"></script>
   <script src="./components/agent/agent-memory.js?v=card-interview-1"></script>
   <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
-  <script src="./components/agent/agent-ui.js?v=agent-identity-1"></script>
+  <script src="./components/agent/agent-ui.js?v=agent-point-1"></script>
 </head>
 <body class="tp-page tp-page--priority">
   <div class="compare-page">
@@ -1686,6 +1686,104 @@
             var options = opts && typeof opts === 'object' ? Object.assign({}, opts) : {};
             if (!options.root) options.root = document.body;
             return CelebrationEffects.play(name, options);
+          },
+          openSection: function (key, opts) {
+            opts = opts || {};
+            var expand = opts.expand === true;
+            var target = null;
+            if (key === 'progress') {
+              if (progressCollapse && typeof progressCollapse.setExpanded === 'function') {
+                if (expand) {
+                  if (
+                    typeof progressCollapse.isExpanded === 'function' &&
+                    !progressCollapse.isExpanded()
+                  ) {
+                    progressCollapse.setExpanded(true);
+                  }
+                } else if (typeof progressCollapse.isExpanded === 'function') {
+                  progressCollapse.setExpanded(!progressCollapse.isExpanded());
+                }
+              }
+              target =
+                (variant &&
+                  variant.card &&
+                  variant.card.querySelector('.variant-progress-section')) ||
+                null;
+            } else if (key === 'statut') {
+              if (statutUi && typeof statutUi.setExpanded === 'function') {
+                if (expand) {
+                  if (
+                    typeof statutUi.isExpanded === 'function' &&
+                    !statutUi.isExpanded()
+                  ) {
+                    statutUi.setExpanded(true);
+                  } else if (typeof statutUi.isExpanded !== 'function') {
+                    statutUi.setExpanded(true);
+                  }
+                } else {
+                  statutUi.setExpanded(true);
+                }
+              }
+              target =
+                (variant &&
+                  variant.card &&
+                  variant.card.querySelector('.variant-statut-section')) ||
+                null;
+            } else if (key === 'objectif' || key === 'info') {
+              if (infoUi && typeof infoUi.setExpanded === 'function') {
+                infoUi.setExpanded(true);
+              }
+              if (key === 'objectif') {
+                target =
+                  (variant &&
+                    variant.card &&
+                    variant.card.querySelector(
+                      '.variant-objectif-section, .info-row--objectif'
+                    )) ||
+                  null;
+              } else {
+                target =
+                  (variant &&
+                    variant.card &&
+                    variant.card.querySelector(
+                      '.variant-info-section, .info-section-body'
+                    )) ||
+                  null;
+              }
+            } else if (key === 'blocked') {
+              if (expand) {
+                if (statutUi && typeof statutUi.setExpanded === 'function') {
+                  statutUi.setExpanded(true);
+                }
+                if (typeof statutUi.syncBlockedPanel === 'function') {
+                  statutUi.syncBlockedPanel();
+                }
+              }
+              jumpToSection('blocked');
+              target =
+                (typeof variant.getBlockedSection === 'function' &&
+                  variant.getBlockedSection()) ||
+                (variant.card &&
+                  variant.card.querySelector('.statut-blocked-panel')) ||
+                null;
+            } else if (typeof variant.openSection === 'function') {
+              target = variant.openSection(key, { expand: expand });
+            } else if (variant.card) {
+              if (key === 'priority') {
+                target = variant.card.querySelector('.variant-priority-section');
+              } else if (key === 'due') {
+                target = variant.card.querySelector('.variant-due-section');
+              }
+            }
+            if (target && expand) {
+              setTimeout(function () {
+                try {
+                  target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                } catch (e) { /* ignore */ }
+                resizePopup();
+              }, 0);
+            }
+            return target;
           },
           setFormulaKey: function (key) {
             if (variant && typeof variant.setFormulaKey === 'function') {
