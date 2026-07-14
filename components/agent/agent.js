@@ -8,7 +8,11 @@
 
   var PROVIDER_STORAGE_KEY = 'agentProvider';
   var CARD_INTERVIEW_KEY = 'cardAgentInterview';
+  var CARD_CHAT_KEY = 'cardAgentChat';
   var MAX_INTERVIEW_ASKED = 24;
+  var MAX_CHAT_MESSAGES = 24;
+  var MAX_CHAT_CONTENT = 500;
+  var MAX_CHAT_SERIALIZED = 3500;
   var DEFAULT_OPENAI_BASE = 'https://api.openai.com/v1';
   var DEFAULT_OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
@@ -68,8 +72,52 @@
     toggle_subtask: 'Sous-t\u00e2che mise \u00e0 jour.',
     set_subtask_progress: 'Progr\u00e8s de sous-t\u00e2che mis \u00e0 jour.',
     complete_all_subtasks: 'Toutes les sous-t\u00e2ches termin\u00e9es.',
-    reset_progress: 'Progr\u00e8s r\u00e9initialis\u00e9.'
+    reset_progress: 'Progr\u00e8s r\u00e9initialis\u00e9.',
+    trigger_effect: 'Effet lanc\u00e9.'
   };
+
+  var EFFECT_IDS =
+    typeof global.CelebrationEffects !== 'undefined' &&
+    typeof global.CelebrationEffects.list === 'function'
+      ? global.CelebrationEffects.list()
+      : [
+          'fireworks',
+          'confetti',
+          'hearts',
+          'sparkles',
+          'shooting_stars',
+          'bubbles',
+          'aurora',
+          'balloons',
+          'petals',
+          'rainbow',
+          'disco'
+        ];
+
+  function normalizeEffectId(raw) {
+    if (
+      typeof global.CelebrationEffects !== 'undefined' &&
+      typeof global.CelebrationEffects.normalize === 'function'
+    ) {
+      return global.CelebrationEffects.normalize(raw);
+    }
+    if (raw == null) return null;
+    var key = String(raw)
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, '_');
+    return EFFECT_IDS.indexOf(key) !== -1 ? key : null;
+  }
+
+  function effectLabel(id) {
+    if (
+      typeof global.CelebrationEffects !== 'undefined' &&
+      typeof global.CelebrationEffects.label === 'function'
+    ) {
+      return global.CelebrationEffects.label(id);
+    }
+    return id;
+  }
 
   var FORMULA_KEYS = ['baseline', 'eisenhower', 'wsjf', 'valueEffort'];
 
@@ -173,6 +221,13 @@
     if (actions[0].tool === 'set_formula') return 'Changer la formule';
     if (actions[0].tool === 'set_statut') return 'Changer le statut';
     if (actions[0].tool === 'set_project') return 'Lier au projet';
+    if (actions[0].tool === 'trigger_effect') {
+      var fx =
+        actions[0].args &&
+        (actions[0].args.effect || actions[0].args.name || actions[0].args.id);
+      var fxId = normalizeEffectId(fx);
+      return fxId ? 'Effet\u00a0: ' + effectLabel(fxId) : 'Lancer un effet';
+    }
     return label;
   }
 
@@ -1380,7 +1435,15 @@
       '- Ex. Importante, facile\u00a0: \u00ab\u00a0Cette t\u00e2che est utile pour l\'interne et assez facile, donc on la classe Importante.\u00a0\u00bb',
       '- Si priority.enabled=false\u00a0: dis qu\'aucune priorit\u00e9 n\'est d\u00e9finie (ne sors pas d\'anciennes valeurs).',
       'R\u00e9ponds UNIQUEMENT avec un objet JSON valide de la forme\u00a0:',
-      '{"thinking":"notes priv\u00e9es","message":"texte visible","suggestions":["Question utile","Autre intention"],"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}],"cardPatches":[{"op":"remember","text":"fait local \u00e0 la carte"}]}',
+      '{"thinking":"notes priv\u00e9es","message":"texte visible","emotion":"happy","color":"yellow","suggestions":["Question utile","Autre intention"],"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}],"cardPatches":[{"op":"remember","text":"fait local \u00e0 la carte"}]}',
+      'Apparence (humeur / couleur \u2014 optionnel mais recommand\u00e9)\u00a0:',
+      '- Tu contr\u00f4les ton avatar\u00a0: champs "emotion" et "color". Choisis-les selon ta humeur du moment.',
+      '- emotion: neutral | happy | sad | surprised | curious | thinking | excited | tongue | wink | wideEyed | lookUp | lookDown.',
+      '- color: "orange" (lueur pêche/ambre, d\u00e9faut) ou "yellow" (lueur jaune joyeuse).',
+      '- Guide\u00a0: happy/excited/tongue/wink \u2192 color yellow\u00a0; thinking/curious/neutral/surprised/sad \u2192 color orange.',
+      '- Tu peux forcer une couleur m\u00eame hors guide si \u00e7a colle mieux \u00e0 l\'\u00e9change.',
+      '- Ex. content\u00a0: {"emotion":"happy","color":"yellow","message":"Okay, c\'est fait.","suggestions":["Quelle est la priorit\u00e9?"],"followUps":[],"actions":[]}',
+      '- Ex. concentr\u00e9\u00a0: {"emotion":"thinking","color":"orange","message":"Hmm laisse-moi v\u00e9rifier.","suggestions":["Quelle est la priorit\u00e9?"],"followUps":[],"actions":[]}',
       'M\u00e9moire de CETTE carte (context.cardMemory.facts)\u00a0:',
       '- Faits locaux \u00e0 la carte (personnes qui attendent, enjeux, contraintes, d\u00e9pendances).',
       '- Quand tu apprends un fait utile pour plus tard\u00a0: cardPatches:[{"op":"remember","text":"\u2026"}] (1\u20132 max).',
@@ -1395,7 +1458,7 @@
       '- Ne bloque JAMAIS une action pour un param\u00e8tre optionnel. Applique le minimum viable, puis adapte.',
       '- Ne pose une question AVANT d\'appeler un outil QUE si un param\u00e8tre OBLIGATOIRE manque et qu\'aucune action partielle n\'est possible.',
       '- Param\u00e8tres optionnels (ne jamais exiger avant d\'agir)\u00a0: dueTime, blockedReasons, axes priorit\u00e9 non fournis, progress pr\u00e9cis si on active seulement la section.',
-      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_project\u00a0: projectId OU matchText/name OU clear:true\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget, estimatedDuration/estimatedDurationMinutes ou priorityEnabled.',
+      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_project\u00a0: projectId OU matchText/name OU clear:true\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget, estimatedDuration/estimatedDurationMinutes ou priorityEnabled\u00a0; trigger_effect.effect.',
       '- Dates relatives (jours)\u00a0: r\u00e9sous avec context.today (aujourd\'hui / today \u2192 context.today\u00a0; demain \u2192 +1 jour). N\'invente pas d\'autre date.',
       '- Heures relatives (tr\u00e8s important)\u00a0: \u00ab\u00a0dans 15 minutes\u00a0\u00bb / \u00ab\u00a0in 15 minutes\u00a0\u00bb / \u00ab\u00a0dans 2 heures\u00a0\u00bb = D\u00c9LAI depuis maintenant, PAS une heure fixe du matin.',
       '- Pour un d\u00e9lai\u00a0: utilise set_due avec relativeMinutes (ou relativeHours). Le runtime calcule dueDate/dueTime \u00e0 partir de context.nowTime (' +
@@ -1523,6 +1586,14 @@
       '- set_subtask_progress: { id?: string, matchText?: string, progress: 0-100 }',
       '- complete_all_subtasks: {} (tout \u00e0 100%)',
       '- reset_progress: { includeCompleted?: boolean } (d\u00e9faut true\u00a0: tout \u00e0 0%\u00a0; false = seulement les non termin\u00e9es)',
+      '- trigger_effect: { effect: "' +
+        EFFECT_IDS.join('"|"') +
+        '" } (effet visuel + son pour c\u00e9l\u00e9brer / egayer\u00a0; n\'alt\u00e8re pas la carte)',
+      'Effets fun (trigger_effect)\u00a0:',
+      '- Utilise-les pour c\u00e9l\u00e9brer une victoire, un 100\u00a0%, un compliment, une blague, ou quand l\'utilisateur demande un effet / feux d\'artifice / confettis / etc.',
+      '- 0 ou 1 effet par r\u00e9ponse max. Pas \u00e0 chaque message. Ne promets pas l\'effet dans le texte si tu ne le mets pas dans actions.',
+      '- Ex. c\u00e9l\u00e9bration\u00a0: {"message":"Bravo, c\'est plier\u00a0!","suggestions":["Et ensuite\u00a0?"],"followUps":[],"actions":[{"tool":"trigger_effect","args":{"effect":"confetti"}}]}',
+      '- Ex. demande\u00a0: user \u00ab\u00a0fais des feux d\'artifice\u00a0\u00bb \u2192 trigger_effect effect=fireworks.',
       'M\u00e9moire plateau\u00a0: utilise les faits/summary du contexte pour personnaliser (noms, projets, normes). Ne contredis pas la m\u00e9moire sans raison.',
       'Profil utilisateur\u00a0: respecte context.profile (langue, ton, nom, r\u00f4le, notes, fonctionnalit\u00e9s actives).',
       'Contexte carte actuel (JSON)\u00a0:',
@@ -2230,6 +2301,116 @@
     return next;
   }
 
+  // ── Per-card chat history (survives close/reopen) ─────────────────────────
+
+  function emptyCardChat() {
+    return {
+      version: 1,
+      messages: [],
+      updatedAt: ''
+    };
+  }
+
+  function normalizeCardChatMessage(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    var role = raw.role === 'user' || raw.role === 'assistant' ? raw.role : '';
+    if (!role) return null;
+    var content = String(raw.content != null ? raw.content : '')
+      .trim()
+      .slice(0, MAX_CHAT_CONTENT);
+    if (!content) return null;
+    return { role: role, content: content };
+  }
+
+  function chatSerializedSize(chat) {
+    try {
+      return JSON.stringify(chat).length;
+    } catch (e) {
+      return MAX_CHAT_SERIALIZED + 1;
+    }
+  }
+
+  function enforceCardChatBudget(chat) {
+    var next = {
+      version: 1,
+      messages: Array.isArray(chat && chat.messages) ? chat.messages.slice() : [],
+      updatedAt: (chat && typeof chat.updatedAt === 'string' && chat.updatedAt) || ''
+    };
+    while (next.messages.length > MAX_CHAT_MESSAGES) {
+      next.messages.shift();
+    }
+    while (
+      next.messages.length > 1 &&
+      chatSerializedSize(next) > MAX_CHAT_SERIALIZED
+    ) {
+      next.messages.shift();
+    }
+    if (chatSerializedSize(next) > MAX_CHAT_SERIALIZED && next.messages.length === 1) {
+      next.messages[0] = {
+        role: next.messages[0].role,
+        content: String(next.messages[0].content || '').slice(
+          0,
+          Math.max(80, Math.floor(MAX_CHAT_CONTENT / 2))
+        )
+      };
+    }
+    if (chatSerializedSize(next) > MAX_CHAT_SERIALIZED) {
+      next.messages = [];
+    }
+    return next;
+  }
+
+  function normalizeCardChat(raw) {
+    var src = raw && typeof raw === 'object' ? raw : {};
+    var messages = [];
+    if (Array.isArray(src.messages)) {
+      for (var i = 0; i < src.messages.length; i++) {
+        var msg = normalizeCardChatMessage(src.messages[i]);
+        if (msg) messages.push(msg);
+      }
+    }
+    return enforceCardChatBudget({
+      version: 1,
+      messages: messages,
+      updatedAt: typeof src.updatedAt === 'string' ? src.updatedAt : ''
+    });
+  }
+
+  async function loadCardChat(t) {
+    if (!t || typeof t.get !== 'function') return emptyCardChat();
+    try {
+      var stored = await t.get('card', 'private', CARD_CHAT_KEY);
+      return normalizeCardChat(stored);
+    } catch (err) {
+      console.error('PriorityAgent.loadCardChat failed', err);
+      return emptyCardChat();
+    }
+  }
+
+  async function saveCardChat(t, chat) {
+    var next = normalizeCardChat(chat);
+    next.updatedAt = new Date().toISOString();
+    next = enforceCardChatBudget(next);
+    if (!t || typeof t.set !== 'function') return next;
+    try {
+      await t.set('card', 'private', CARD_CHAT_KEY, next);
+    } catch (err) {
+      console.error('PriorityAgent.saveCardChat failed', err);
+      // Retry with a smaller window if Trello rejects oversized plugin data.
+      try {
+        while (next.messages.length > 0) {
+          next.messages.shift();
+          if (chatSerializedSize(next) <= Math.floor(MAX_CHAT_SERIALIZED * 0.85)) break;
+        }
+        next.updatedAt = new Date().toISOString();
+        await t.set('card', 'private', CARD_CHAT_KEY, next);
+      } catch (retryErr) {
+        console.error('PriorityAgent.saveCardChat retry failed', retryErr);
+      }
+    }
+    return next;
+  }
+
   /**
    * First-open card interview turn (one question at a time).
    * Returns { message, suggestions, actions, prompts, followUps, completeInterview,
@@ -2539,6 +2720,8 @@
 
     return {
       message: message,
+      emotion: parsed.emotion || null,
+      color: parsed.color || null,
       suggestions: suggestionEntries,
       actions: actions,
       prompts: prompts,
@@ -2623,6 +2806,9 @@
     ) {
       return true;
     }
+    if (action.tool === 'trigger_effect') {
+      return !!normalizeEffectId(args.effect || args.name || args.id);
+    }
     return true;
   }
 
@@ -2651,6 +2837,11 @@
     }
     if (action.tool === 'set_project') {
       return 'set_project: projectId, matchText/name, ou clear:true requis';
+    }
+    if (action.tool === 'trigger_effect') {
+      return (
+        'trigger_effect: effect requis (' + EFFECT_IDS.join('|') + ')'
+      );
     }
     return action.tool + ': args incomplets';
   }
@@ -3064,11 +3255,65 @@
     };
   }
 
+  var FACE_EMOTION_ALLOW = {
+    neutral: true,
+    happy: true,
+    sad: true,
+    surprised: true,
+    curious: true,
+    thinking: true,
+    tongue: true,
+    wideEyed: true,
+    lookUp: true,
+    lookDown: true,
+    excited: true,
+    wink: true
+  };
+
+  function normalizeAssistantEmotion(value) {
+    var raw = String(value || '')
+      .trim()
+      .toLowerCase();
+    if (!raw) return null;
+    var aliases = {
+      joyeux: 'happy',
+      content: 'happy',
+      triste: 'sad',
+      surpris: 'surprised',
+      curieux: 'curious',
+      pense: 'thinking',
+      'r\u00e9fl\u00e9chit': 'thinking',
+      reflechit: 'thinking',
+      excite: 'excited',
+      'excit\u00e9': 'excited',
+      langue: 'tongue',
+      clin: 'wink'
+    };
+    if (aliases[raw]) raw = aliases[raw];
+    if (FACE_EMOTION_ALLOW[raw]) return raw;
+    return null;
+  }
+
+  function normalizeAssistantColor(value) {
+    var raw = String(value || '')
+      .trim()
+      .toLowerCase();
+    if (raw === 'yellow' || raw === 'jaune' || raw === 'gold' || raw === 'amber') {
+      return 'yellow';
+    }
+    if (raw === 'orange' || raw === 'peach' || raw === 'warm') {
+      return 'orange';
+    }
+    return null;
+  }
+
   function parseAssistantPayload(content) {
     var text = typeof content === 'string' ? content.trim() : '';
     if (!text) {
       return {
         message: 'R\u00e9ponse vide du fournisseur.',
+        emotion: null,
+        color: null,
         followUps: [],
         suggestions: [],
         prompts: [],
@@ -3142,6 +3387,10 @@
       var normalized = normalizeActionsWithMeta(parsed.actions);
       return {
         message: message,
+        emotion: normalizeAssistantEmotion(parsed.emotion || parsed.mood),
+        color: normalizeAssistantColor(
+          parsed.color || parsed.aura || parsed.glow
+        ),
         followUps: followUps,
         suggestions: suggestions,
         prompts: Array.isArray(parsed.prompts) ? parsed.prompts : [],
@@ -3152,6 +3401,8 @@
     } catch (e) {
       return {
         message: text,
+        emotion: null,
+        color: null,
         followUps: [],
         suggestions: [],
         prompts: [],
@@ -3644,6 +3895,8 @@
     debug.usage = usage;
     return {
       message: message,
+      emotion: parsed.emotion || null,
+      color: parsed.color || null,
       followUps: parsed.followUps,
       suggestions: parsed.suggestions,
       prompts: prompts,
@@ -4622,6 +4875,12 @@
     } else if (tool === 'complete_all_subtasks' || tool === 'reset_progress') {
       pushChange(parts, 'progress', beforeC.progress, afterC.progress);
       parts.push('items ' + beforeC.items.length + ' \u2192 ' + afterC.items.length);
+    } else if (tool === 'trigger_effect') {
+      var effectId =
+        (extra && extra.effect) ||
+        normalizeEffectId(args.effect || args.name || args.id) ||
+        '?';
+      parts.push('effect \u2192 ' + effectId);
     }
     return parts.length ? parts.join('; ') : 'aucun diff d\u00e9tect\u00e9';
   }
@@ -5416,6 +5675,39 @@
           )
         };
       }
+      if (tool === 'trigger_effect') {
+        var effectRaw = args.effect || args.name || args.id;
+        var effectId = normalizeEffectId(effectRaw);
+        if (!effectId) {
+          return {
+            ok: false,
+            tool: tool,
+            error:
+              'Effet inconnu. Valeurs\u00a0: ' + EFFECT_IDS.join(', ')
+          };
+        }
+        if (typeof bridge.playEffect !== 'function') {
+          return { ok: false, tool: tool, error: 'Effets indisponibles' };
+        }
+        var played = bridge.playEffect(effectId, { sound: true });
+        if (played && played.ok === false) {
+          return {
+            ok: false,
+            tool: tool,
+            error: (played && played.error) || 'Effet \u00e9chou\u00e9',
+            args: { effect: effectId }
+          };
+        }
+        return {
+          ok: true,
+          tool: tool,
+          args: { effect: effectId },
+          summary: TOOL_LABELS.trigger_effect,
+          detail: detailForTool(tool, null, null, null, null, args, {
+            effect: effectId
+          })
+        };
+      }
       if (tool === 'toggle_subtask' || tool === 'set_subtask_progress') {
         if (typeof bridge.applyCompletion !== 'function') {
           return { ok: false, tool: tool, error: 'Progr\u00e8s indisponible' };
@@ -5826,6 +6118,10 @@
     emptyCardInterview: emptyCardInterview,
     markInterviewQuestionAsked: markInterviewQuestionAsked,
     markInterviewComplete: markInterviewComplete,
+    loadCardChat: loadCardChat,
+    saveCardChat: saveCardChat,
+    normalizeCardChat: normalizeCardChat,
+    emptyCardChat: emptyCardChat,
     suggestQuestions: suggestQuestions,
     suggestCardImprovements: suggestCardImprovements,
     cardSanityCheck: cardSanityCheck,

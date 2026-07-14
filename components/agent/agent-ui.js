@@ -96,6 +96,15 @@
       },
       applyPriority: options.applyPriority || function () {},
       applyCompletion: options.applyCompletion || function () {},
+      playEffect: options.playEffect || function (name, opts) {
+        if (
+          global.CelebrationEffects &&
+          typeof global.CelebrationEffects.play === 'function'
+        ) {
+          return global.CelebrationEffects.play(name, opts || {});
+        }
+        return { ok: false, error: 'CelebrationEffects indisponible' };
+      },
       setFormulaKey: options.setFormulaKey || function () {},
       setCardName: options.setCardName || function () {
         return Promise.resolve({ ok: false, reason: 'no-setCardName' });
@@ -124,6 +133,8 @@
     var provider = Agent.normalizeProvider(null);
     var savedProvider = Agent.normalizeProvider(null);
     var history = [];
+    var chatRestored = false;
+    var chatPersistTimer = null;
     var pending = false;
     var settingsOpen = false;
     var testing = false;
@@ -377,31 +388,15 @@
     // ── Chat panel ──────────────────────────────────────────────────────
     var chatPanel = el('div', 'agent-chat-panel');
 
-    var listenBar = el('div', 'agent-listen-bar', {
+    // Presence host: listening / analyzing are shown on her face (created lazily).
+    var listenPresence = el('div', 'agent-listen-presence', {
       role: 'status',
       'aria-live': 'polite',
       'aria-label': 'À l\u2019écoute des changements'
     });
-    listenBar.hidden = true;
-    var listenIcon = el('span', 'agent-listen-icon agent-listen-icon--idle');
-    listenIcon.setAttribute('aria-hidden', 'true');
-    listenIcon.innerHTML =
-      '<svg class="agent-listen-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" focusable="false">' +
-      '<g class="agent-listen-icon-idle">' +
-      '<path class="agent-listen-wave agent-listen-wave--1" d="M4.5 5.2a4.2 4.2 0 0 1 0 5.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
-      '<path class="agent-listen-wave agent-listen-wave--2" d="M6.6 6.4a2.4 2.4 0 0 1 0 3.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
-      '<circle class="agent-listen-core" cx="9.6" cy="8" r="1.35" fill="currentColor"/>' +
-      '</g>' +
-      '<g class="agent-listen-icon-analyzing">' +
-      '<circle class="agent-listen-orbit" cx="8" cy="8" r="5.2" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-dasharray="8 22"/>' +
-      '<circle class="agent-listen-orbit-dot" cx="8" cy="2.8" r="1.15" fill="currentColor"/>' +
-      '</g>' +
-      '<g class="agent-listen-icon-offer">' +
-      '<path class="agent-listen-spark" d="M8 2.2l.95 3.1 3.25.05-2.6 1.95.95 3.1L8 8.5l-2.55 1.9.95-3.1-2.6-1.95 3.25-.05z" fill="currentColor"/>' +
-      '</g>' +
-      '</svg>';
-    listenBar.appendChild(listenIcon);
-    chatPanel.appendChild(listenBar);
+    listenPresence.hidden = true;
+    var listenPresenceMode = null;
+    chatPanel.appendChild(listenPresence);
 
     var emptyState = el('div', 'agent-empty');
     var emptyConfigBtn = el('button', 'tp-link agent-empty-config', {
@@ -1665,10 +1660,18 @@
       var palette = FACE_AURAS[tone] || FACE_AURAS.orange;
       face.setAttribute('data-aura', tone);
       var stops = face.querySelectorAll('.agent-face-skin-stop');
+      if (stops.length < 3) {
+        stops = face.querySelectorAll('radialGradient stop');
+      }
       if (stops.length >= 3) {
         stops[0].setAttribute('stop-color', palette.hi);
         stops[1].setAttribute('stop-color', palette.mid);
         stops[2].setAttribute('stop-color', palette.lo);
+        if (!stops[0].classList.contains('agent-face-skin-stop')) {
+          stops[0].classList.add('agent-face-skin-stop');
+          stops[1].classList.add('agent-face-skin-stop');
+          stops[2].classList.add('agent-face-skin-stop');
+        }
       }
     }
 
@@ -1693,8 +1696,8 @@
         return 'curious';
       }
       if (mood === 'thinking') {
-        if (roll < 0.35) return 'lookUp';
-        if (roll < 0.55) return 'lookDown';
+        if (roll < 0.2) return 'lookUp';
+        if (roll < 0.35) return 'lookDown';
         return 'thinking';
       }
       if (mood === 'neutral') {
@@ -1724,6 +1727,9 @@
       }
       if (mood === 'curious' || mood === 'lookUp' || mood === 'lookDown') {
         return pickOne(['roll', 'bounce', null, null]);
+      }
+      if (mood === 'thinking') {
+        return pickOne(['roll', 'bounce', 'pop', null]);
       }
       return pickOne(['roll', 'pop', null, null, null]);
     }
@@ -1843,8 +1849,6 @@
         '<path class="agent-face-mouth agent-face-mouth--tongue" d="M14.6 24.6c1.7 2.2 3.9 3.2 5.4 3.2s3.7-1 5.4-3.2" fill="none" stroke="#6b3f2a" stroke-width="1.55" stroke-linecap="round"/>' +
         '<path class="agent-face-mouth agent-face-mouth--wink" d="M15.8 25.2c1.2 1.1 2.8 1.6 4.2 1.5 1.2-.1 2.4-.5 3.4-1.2" fill="none" stroke="#6b3f2a" stroke-width="1.5" stroke-linecap="round"/>' +
         '<path class="agent-face-mouth agent-face-mouth--excited" d="M14 24.2c2 2.8 4.4 4 6 4s4-1.2 6-4" fill="none" stroke="#6b3f2a" stroke-width="1.65" stroke-linecap="round"/>' +
-        '<ellipse class="agent-face-tongue" cx="20" cy="29.2" rx="2.4" ry="2.1" fill="#e85a6b"/>' +
-        '<ellipse class="agent-face-tongue agent-face-tongue--tip" cx="20" cy="30.1" rx="1.3" ry="1.05" fill="#f27888"/>' +
         '</g>' +
         '</g>' +
         '</svg>';
@@ -1862,6 +1866,70 @@
       ].forEach(function (cls) {
         face.classList.remove(cls);
       });
+      face.removeAttribute('data-think');
+    }
+
+    var THINK_MOTIONS = ['glance', 'nod', 'sway', 'search', 'ponder', 'squint', 'bob'];
+    var thinkingMotionTimer = null;
+    var thinkingMotionRow = null;
+    var thinkingMotionLast = '';
+
+    function stopThinkingMotions() {
+      if (thinkingMotionTimer != null) {
+        clearInterval(thinkingMotionTimer);
+        thinkingMotionTimer = null;
+      }
+      if (thinkingMotionRow) {
+        var face = thinkingMotionRow.querySelector('.agent-face');
+        if (face) face.removeAttribute('data-think');
+      }
+      thinkingMotionRow = null;
+      thinkingMotionLast = '';
+    }
+
+    function pickNextThinkMotion() {
+      var choices = THINK_MOTIONS.filter(function (m) {
+        return m !== thinkingMotionLast;
+      });
+      if (!choices.length) choices = THINK_MOTIONS.slice();
+      return pickOne(choices);
+    }
+
+    function applyThinkMotion(face, motion) {
+      if (!face) return;
+      face.setAttribute('data-think', motion || 'glance');
+    }
+
+    function startThinkingMotions(row) {
+      stopThinkingMotions();
+      if (!row) return;
+      thinkingMotionRow = row;
+      // Keep the thinking mouth; only swap body/eye loops.
+      setAssistantFaceEmotion(row, 'thinking', {
+        animate: true,
+        forceEnter: true
+      });
+      var tick = function () {
+        if (!thinkingMotionRow || !thinkingMotionRow.classList.contains('is-pending')) {
+          stopThinkingMotions();
+          return;
+        }
+        var face = thinkingMotionRow.querySelector('.agent-face');
+        if (!face) {
+          stopThinkingMotions();
+          return;
+        }
+        // Stay on thinking emotion if something else changed it.
+        if (face.getAttribute('data-emotion') !== 'thinking') {
+          face.className = 'agent-face agent-face--thinking';
+          face.setAttribute('data-emotion', 'thinking');
+          applyFaceAura(face, auraForEmotion('thinking'));
+        }
+        thinkingMotionLast = pickNextThinkMotion();
+        applyThinkMotion(face, thinkingMotionLast);
+      };
+      tick();
+      thinkingMotionTimer = setInterval(tick, 2100 + Math.floor(Math.random() * 900));
     }
 
     function applyFaceEnterMotion(face, emotion) {
@@ -1909,6 +1977,9 @@
       face.classList.remove('is-frozen');
       row.setAttribute('data-emotion', mood);
       row.setAttribute('data-aura', aura);
+      if (mood !== 'thinking') {
+        face.removeAttribute('data-think');
+      }
       if (options.animate !== false && (isNew || options.forceEnter)) {
         applyFaceEnterMotion(face, mood);
       } else if (mood === 'excited') {
@@ -1967,23 +2038,48 @@
       }
     }
 
+    function listenEmotionForMode(mode) {
+      if (mode === 'analyzing') return 'thinking';
+      // Idle listening: attentive / curious glance.
+      return 'curious';
+    }
+
     function setListenBarState(mode) {
       var configured = Agent.isConfigured(provider);
-      var show = configured && listeningActive && !interviewActive;
+      // Offer / in-flight reply already carry her face — hide the presence avatar then.
+      var show =
+        configured &&
+        listeningActive &&
+        !interviewActive &&
+        !pending &&
+        mode !== 'offer';
       var label =
         mode === 'analyzing'
           ? 'Analyse des changements'
           : mode === 'offer'
             ? 'Suggestion en attente'
             : 'À l\u2019écoute des changements';
-      listenBar.hidden = !show;
-      listenBar.classList.toggle('is-analyzing', mode === 'analyzing');
-      listenBar.classList.toggle('is-offer', mode === 'offer');
-      listenBar.setAttribute('aria-label', label);
-      listenIcon.className =
-        'agent-listen-icon agent-listen-icon--' +
-        (mode === 'analyzing' ? 'analyzing' : mode === 'offer' ? 'offer' : 'idle');
-      listenIcon.title = label;
+      var emotion = listenEmotionForMode(mode);
+      var modeChanged = listenPresenceMode !== mode;
+      listenPresenceMode = mode;
+      listenPresence.hidden = !show;
+      listenPresence.setAttribute('aria-label', label);
+      listenPresence.title = label;
+      listenPresence.classList.toggle('is-analyzing', mode === 'analyzing');
+      if (show) {
+        var face = listenPresence.querySelector('.agent-face');
+        if (!face) {
+          face = createAssistantFace(emotion);
+          listenPresence.appendChild(face);
+          applyFaceEnterMotion(face, emotion);
+        } else if (modeChanged || face.getAttribute('data-emotion') !== emotion) {
+          clearFaceMotionClasses(face);
+          face.className = 'agent-face agent-face--' + emotion;
+          face.setAttribute('data-emotion', emotion);
+          face.classList.remove('is-frozen');
+          if (modeChanged) applyFaceEnterMotion(face, emotion);
+        }
+      }
       syncApplySummary();
       notifyLayout();
     }
@@ -2071,6 +2167,7 @@
         role: 'assistant',
         content: result.summary || result.recap || 'Okay, c\'est fait.'
       });
+      schedulePersistChatHistory();
       muteListening();
       notifyLayout();
     }
@@ -2199,6 +2296,7 @@
 
     function stopListening() {
       listeningActive = false;
+      listenPresenceMode = null;
       if (listenTimer) {
         clearInterval(listenTimer);
         listenTimer = null;
@@ -2207,7 +2305,7 @@
         clearTimeout(listenDebounceTimer);
         listenDebounceTimer = null;
       }
-      listenBar.hidden = true;
+      listenPresence.hidden = true;
       syncApplySummary();
     }
 
@@ -2277,23 +2375,12 @@
       var row = el('div', 'agent-msg agent-msg--assistant is-pending is-streaming');
       row.setAttribute('aria-busy', 'true');
       row.setAttribute('aria-label', 'R\u00e9ponse en cours');
+      // Waiting is conveyed by her face; bubble stays empty until text streams in.
       var bubble = el('div', 'agent-msg-bubble agent-msg-bubble--pending');
-      var spinner = el('span', 'agent-msg-spinner');
-      spinner.setAttribute('aria-hidden', 'true');
-      var spinnerIcon = el('i', 'ti ti-loader-2');
-      spinnerIcon.setAttribute('aria-hidden', 'true');
-      spinner.appendChild(spinnerIcon);
-      var skeleton = el('div', 'agent-msg-skeleton');
-      skeleton.setAttribute('aria-hidden', 'true');
-      skeleton.appendChild(el('span', 'agent-msg-skeleton-line'));
-      skeleton.appendChild(
-        el('span', 'agent-msg-skeleton-line agent-msg-skeleton-line--short')
-      );
-      bubble.appendChild(spinner);
-      bubble.appendChild(skeleton);
       row.appendChild(bubble);
-      attachAssistantFace(row, spiceEmotion('thinking'));
       messagesEl.appendChild(row);
+      startThinkingMotions(row);
+      freezeOlderAssistantFaces(row);
       messagesEl.scrollTop = messagesEl.scrollHeight;
       notifyLayout();
       return row;
@@ -2301,6 +2388,7 @@
 
     function finalizeAssistantRow(row, text, meta) {
       meta = meta || {};
+      stopThinkingMotions();
       var emotion = inferAssistantEmotion(text, meta, {
         userText: lastUserMessageText()
       });
@@ -2594,6 +2682,7 @@
           role: 'assistant',
           content: 'Okay, c\'est mis \u00e0 jour.'
         });
+        schedulePersistChatHistory();
         if (collapse && collapse.refreshSummary) collapse.refreshSummary();
         muteListening();
         refreshSuggestions({ animate: true });
@@ -2779,6 +2868,7 @@
         role: 'assistant',
         content: result.summary || result.recap || 'Okay, c\'est appliqu\u00e9.'
       });
+      schedulePersistChatHistory();
       applySuggestions = applySuggestions.filter(function (_s, i) {
         return i !== index;
       });
@@ -3245,6 +3335,53 @@
       return interviewState;
     }
 
+    async function persistChatHistory() {
+      if (!t || typeof Agent.saveCardChat !== 'function') return null;
+      try {
+        return await Agent.saveCardChat(t, { messages: history });
+      } catch (err) {
+        console.error('AgentUI saveCardChat failed', err);
+        return null;
+      }
+    }
+
+    function schedulePersistChatHistory() {
+      if (!t || typeof Agent.saveCardChat !== 'function') return;
+      if (chatPersistTimer) clearTimeout(chatPersistTimer);
+      chatPersistTimer = setTimeout(function () {
+        chatPersistTimer = null;
+        persistChatHistory();
+      }, 250);
+    }
+
+    async function restoreChatHistory() {
+      if (!t || typeof Agent.loadCardChat !== 'function') return false;
+      try {
+        var stored = await Agent.loadCardChat(t);
+        var msgs = (stored && stored.messages) || [];
+        if (!msgs.length) return false;
+        history.length = 0;
+        for (var i = 0; i < msgs.length; i++) {
+          var entry = msgs[i];
+          if (!entry || !entry.role || !entry.content) continue;
+          history.push({ role: entry.role, content: entry.content });
+          appendMessage(entry.role, entry.content, {
+            silent: true,
+            noSound: true,
+            noUnread: true
+          });
+        }
+        if (!history.length) return false;
+        chatRestored = true;
+        if (collapse && collapse.refreshSummary) collapse.refreshSummary();
+        notifyLayout();
+        return true;
+      } catch (err) {
+        console.error('AgentUI loadCardChat failed', err);
+        return false;
+      }
+    }
+
     async function applyCardPatchesFromTurn(patches) {
       if (!patches || !patches.length || !t) return null;
       var Mem = global.AgentMemory;
@@ -3291,6 +3428,7 @@
             options.message ||
             'Okay, on a le cadre. Tu peux me demander d\'ajuster la priorit\u00e9, la date limite ou les sous-t\u00e2ches quand tu veux.'
         });
+        schedulePersistChatHistory();
       }
       refreshSuggestions({ animate: true });
       await runOpenSanityThenSuggestions({ animate: true });
@@ -3320,6 +3458,7 @@
           role: 'assistant',
           content: result.message
         });
+        schedulePersistChatHistory();
         if (result.suggestions && result.suggestions.length) {
           suggestionsSeq += 1;
           renderSuggestions(result.suggestions, { animate: true });
@@ -3361,10 +3500,25 @@
           ? Agent.emptyCardInterview()
           : { complete: false, asked: [] };
       }
-      if (interviewState.complete || history.length) {
+      if (interviewState.complete) {
         refreshSuggestions({ animate: true });
         markSettleReady();
-        await runOpenSanityThenSuggestions({ animate: true });
+        if (chatRestored) {
+          refreshApplySuggestions({ animate: true });
+        } else {
+          await runOpenSanityThenSuggestions({ animate: true });
+        }
+        return;
+      }
+
+      if (history.length) {
+        // Resume an in-progress interview with restored messages (no second opening).
+        setInterviewMode(true);
+        expandAssistant();
+        refreshSuggestions({ animate: true });
+        markSettleReady();
+        notifyLayout();
+        focusComposerInput();
         return;
       }
 
@@ -3466,6 +3620,7 @@
           }
         );
 
+        stopThinkingMotions();
         thinking.classList.remove('is-pending', 'is-streaming');
         thinking.removeAttribute('aria-busy');
         thinking.removeAttribute('aria-label');
@@ -3478,6 +3633,7 @@
           content: opening,
           rawJson: turn.rawJson
         });
+        schedulePersistChatHistory();
         if (/\?/.test(opening)) {
           interviewState = Agent.markInterviewQuestionAsked
             ? Agent.markInterviewQuestionAsked(interviewState, opening)
@@ -3514,6 +3670,7 @@
         announceAssistantArrival({ emotion: openingEmotion });
       } catch (err) {
         console.error('AgentUI bootstrapCardInterview failed', err);
+        stopThinkingMotions();
         thinking.classList.remove('is-pending', 'is-streaming');
         if (thinking && thinking.parentNode) thinking.remove();
         appendMessage(
@@ -3560,11 +3717,19 @@
             console.error('AgentUI load agentStatus failed', profErr);
           }
         }
-        if (Agent.isConfigured(provider) && !history.length) {
-          await bootstrapCardInterview();
-        } else if (Agent.isConfigured(provider)) {
-          markSettleReady();
-          await runOpenSanityThenSuggestions({ animate: true });
+        if (Agent.isConfigured(provider)) {
+          await restoreChatHistory();
+          if (!interviewBootstrapped) {
+            await bootstrapCardInterview();
+          } else {
+            markSettleReady();
+            if (chatRestored) {
+              refreshSuggestions({ animate: true });
+              refreshApplySuggestions({ animate: true });
+            } else {
+              await runOpenSanityThenSuggestions({ animate: true });
+            }
+          }
         } else {
           markSettleReady();
           await runOpenSanityThenSuggestions({
@@ -3713,6 +3878,7 @@
       var userRow = appendMessage('user', msg);
       var userBubble = userRow.querySelector('.agent-msg-bubble');
       history.push({ role: 'user', content: msg });
+      schedulePersistChatHistory();
       pending = true;
       updateComposerEnabled();
       var thinking = appendPendingMessage();
@@ -3733,6 +3899,7 @@
                 msg = fixed;
                 if (userBubble) userBubble.textContent = msg;
                 history[history.length - 1].content = msg;
+                schedulePersistChatHistory();
                 if (
                   global.Spellcheck &&
                   typeof global.Spellcheck.attachRevert === 'function'
@@ -3756,6 +3923,7 @@
                           }
                         }
                       }
+                      schedulePersistChatHistory();
                       notifyLayout();
                     },
                     onDismiss: function () {
@@ -3782,6 +3950,7 @@
                 if (!bubble || !visible) return;
                 if (!streamed) {
                   streamed = true;
+                  stopThinkingMotions();
                   thinking.classList.remove('is-pending');
                   thinking.removeAttribute('aria-busy');
                   thinking.removeAttribute('aria-label');
@@ -3804,6 +3973,7 @@
               if (!bubble || !visible) return;
               if (!streamed) {
                 streamed = true;
+                stopThinkingMotions();
                 thinking.classList.remove('is-pending');
                 thinking.removeAttribute('aria-busy');
                 thinking.removeAttribute('aria-label');
@@ -3828,6 +3998,7 @@
           content: turn.message,
           rawJson: turn.rawJson
         });
+        schedulePersistChatHistory();
         var replyEmotion = finalizeAssistantRow(thinking, turn.message, {
           emotion: turn.emotion,
           color: turn.color
@@ -3914,6 +4085,7 @@
           refreshSuggestions({ animate: true });
         }
       } catch (err) {
+        stopThinkingMotions();
         thinking.classList.remove('is-pending', 'is-streaming');
         var errText = (err && err.message) || 'Erreur de l\'assistant';
         if (thinking && thinking.parentNode) thinking.remove();
@@ -3945,6 +4117,7 @@
           role: 'assistant',
           content: result.summary || result.recap || 'Okay, c\'est fait.'
         });
+        schedulePersistChatHistory();
         if (collapse && collapse.refreshSummary) collapse.refreshSummary();
         muteListening();
         refreshSuggestions({ animate: true });

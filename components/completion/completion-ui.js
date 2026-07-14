@@ -555,14 +555,16 @@
   }
 
   var FIREWORKS_ID = 'tp-completion-fireworks';
-  var FIREWORKS_MS = 1700;
-  var FIREWORKS_BURST_COUNT = 6;
-  var FIREWORKS_SPARKS_PER_BURST = 14;
-  var FIREWORK_COLORS = ['#22a06b', '#4bce97', '#f5cd47', '#ff8f73', '#579dff', '#fff'];
 
   function clearAllCompleteCelebration(rootEl) {
     try {
       var root = rootEl || (typeof document !== 'undefined' ? document.body : null);
+      if (
+        global.CelebrationEffects &&
+        typeof global.CelebrationEffects.clear === 'function'
+      ) {
+        global.CelebrationEffects.clear(root);
+      }
       if (!root) return;
       var existing = root.querySelector ? root.querySelector('#' + FIREWORKS_ID) : null;
       if (!existing && typeof document !== 'undefined') {
@@ -573,47 +575,26 @@
   }
 
   function playAllCompleteCelebration(rootEl) {
+    var root = rootEl || (typeof document !== 'undefined' ? document.body : null);
+    if (
+      global.CelebrationEffects &&
+      typeof global.CelebrationEffects.play === 'function'
+    ) {
+      global.CelebrationEffects.play('fireworks', { root: root, sound: true });
+      return;
+    }
     if (prefersReducedMotion()) return;
     if (typeof document === 'undefined') return;
-    var root = rootEl || document.body;
     if (!root || !root.appendChild) return;
     clearAllCompleteCelebration(root);
-
     var overlay = document.createElement('div');
     overlay.id = FIREWORKS_ID;
     overlay.className = 'tp-completion-fireworks';
     overlay.setAttribute('aria-hidden', 'true');
-
-    for (var b = 0; b < FIREWORKS_BURST_COUNT; b++) {
-      var burst = document.createElement('div');
-      burst.className = 'tp-completion-firework-burst';
-      burst.style.setProperty('--burst-x', (14 + (b % 3) * 32 + ((b % 3) === 1 ? 4 : 0)) + '%');
-      burst.style.setProperty('--burst-y', (18 + Math.floor(b / 3) * 34 + (b % 2) * 10) + '%');
-      burst.style.setProperty('--burst-delay', (b * 0.1) + 's');
-
-      for (var s = 0; s < FIREWORKS_SPARKS_PER_BURST; s++) {
-        var spark = document.createElement('span');
-        spark.className = 'tp-completion-firework-spark';
-        var angle = (360 / FIREWORKS_SPARKS_PER_BURST) * s + (b * 11);
-        spark.style.setProperty('--spark-angle', angle + 'deg');
-        spark.style.setProperty(
-          '--spark-dist',
-          (52 + ((s + b) % 4) * 16) + 'px'
-        );
-        spark.style.setProperty(
-          '--spark-color',
-          FIREWORK_COLORS[(s + b) % FIREWORK_COLORS.length]
-        );
-        spark.style.setProperty('--spark-delay', (b * 0.1 + s * 0.01) + 's');
-        burst.appendChild(spark);
-      }
-      overlay.appendChild(burst);
-    }
-
     root.appendChild(overlay);
     setTimeout(function () {
       clearAllCompleteCelebration(root);
-    }, FIREWORKS_MS + 200);
+    }, 1900);
   }
 
   function isAllCompleteProgress(progress) {

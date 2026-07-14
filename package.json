@@ -5,10 +5,11 @@
   "scripts": {
     "verify:badges": "node sandbox/verify-badges.js",
     "verify:completion": "node sandbox/verify-completion.js",
+    "verify:effects": "node sandbox/verify-effects.js",
     "verify:matrix": "node sandbox/verify-matrix.js",
     "verify:presets": "cscript //nologo sandbox/verify-presets.js",
     "verify:version": "node sandbox/verify-version.js",
-    "verify": "npm run verify:presets && npm run verify:matrix && npm run verify:version && npm run verify:badges && npm run verify:completion",
+    "verify": "npm run verify:presets && npm run verify:matrix && npm run verify:version && npm run verify:badges && npm run verify:completion && npm run verify:effects",
     "stamp:build": "node scripts/stamp-build.js"
   }
 }
