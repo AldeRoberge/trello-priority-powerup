@@ -1058,6 +1058,7 @@
   var BLOCKED_REASON_SUGGESTIONS_LABEL = 'Suggestions';
   var BLOCKED_REASON_CLEAR_LABEL = 'Effacer le motif';
   var BLOCKED_REASON_EDIT_LABEL = 'Modifier le motif';
+  var BLOCKED_REASON_DONE_LABEL = 'Valider le motif';
   var BLOCKED_REASON_WAITING_OTHER_TASK = 'En attente d\'une autre t\u00e2che';
   var BLOCKED_LINK_TYPE_SUBTASK = 'subtask';
   var BLOCKED_SUBTASK_PICKER_LABEL = 'T\u00e2ches bloquantes';
@@ -1498,7 +1499,8 @@
   var DUE_DATE_PREV_MONTH = 'Mois pr\u00e9c\u00e9dent';
   var DUE_DATE_NEXT_MONTH = 'Mois suivant';
   var DUE_DATE_CALENDAR_LABEL = 'Calendrier d\'\u00e9ch\u00e9ance';
-  var DUE_DATE_BOX_LABEL = 'Calendrier';
+  var DUE_DATE_BOX_LABEL = 'Date';
+  var DUE_DATE_CLEAR_LABEL = 'Effacer la date';
   var DUE_DATE_TIME_LABEL = 'Heure';
   var DUE_DATE_TIME_PLACEHOLDER = 'Choisir une heure';
   var DUE_DATE_TIME_CLEAR_LABEL = 'Effacer l\'heure';
@@ -1676,6 +1678,49 @@
       date.setHours(+parts[0], +parts[1], 0, 0);
     }
     return date;
+  }
+
+  /**
+   * Build a Trello card `due` ISO string from Échéance parts (local calendar).
+   * Date-only → local midnight (round-trips without a dueTime).
+   */
+  function trelloDueIsoFromParts(dueDate, dueTime) {
+    var instant = dueInstant(dueDate, dueTime);
+    if (!instant) return null;
+    return instant.toISOString();
+  }
+
+  /**
+   * Parse Trello `due` (ISO) into `{ dueDate, dueTime? }` in local time.
+   * Midnight local is treated as date-only (no dueTime).
+   */
+  function parseTrelloDueToParts(value) {
+    if (value == null || value === '') return null;
+    if (typeof value !== 'string') return null;
+    var trimmed = value.trim();
+    if (!trimmed) return null;
+    var date = new Date(trimmed);
+    if (isNaN(date.getTime())) return null;
+    var dueDate = toIsoDate(date);
+    if (!dueDate) return null;
+    var hours = date.getHours();
+    var minutes = date.getMinutes();
+    if (hours === 0 && minutes === 0) return { dueDate: dueDate };
+    return { dueDate: dueDate, dueTime: pad2(hours) + ':' + pad2(minutes) };
+  }
+
+  /** Canonical ISO for compare/sync ('' when empty/invalid). */
+  function canonicalizeTrelloDueIso(value) {
+    var parts = parseTrelloDueToParts(value);
+    if (!parts) return '';
+    return trelloDueIsoFromParts(parts.dueDate, parts.dueTime) || '';
+  }
+
+  function inputsToTrelloDueIso(inputs) {
+    if (!inputs) return '';
+    var dueDate = normalizeDueDate(inputs.dueDate);
+    if (!dueDate) return '';
+    return trelloDueIsoFromParts(dueDate, inputs.dueTime) || '';
   }
 
   function formatDueDateBoxDisplay(iso) {
@@ -4331,7 +4376,16 @@
       input.setAttribute('aria-label', BLOCKED_REASON_EDIT_LABEL);
       input.setAttribute('autocomplete', 'off');
       input.setAttribute('spellcheck', 'false');
+
+      var doneBtn = document.createElement('button');
+      doneBtn.type = 'button';
+      doneBtn.className = 'blocked-reason-chip-done';
+      doneBtn.setAttribute('aria-label', BLOCKED_REASON_DONE_LABEL);
+      doneBtn.title = BLOCKED_REASON_DONE_LABEL;
+      doneBtn.innerHTML = '<i class="ti ti-check" aria-hidden="true"></i>';
+
       chip.insertBefore(input, clearBtn);
+      chip.insertBefore(doneBtn, clearBtn);
       input.focus();
       input.select();
       onLayoutChange();
@@ -4348,6 +4402,15 @@
         }
       }
       finishReasonEdit = finish;
+
+      doneBtn.addEventListener('mousedown', function (event) {
+        event.preventDefault();
+      });
+      doneBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        finish(true);
+      });
 
       input.addEventListener('keydown', function (event) {
         if (event.key === 'Enter') {
@@ -4795,8 +4858,17 @@
     triggerText.appendChild(triggerTitle);
     triggerText.appendChild(triggerValue);
 
+    var dateTrashBtn = document.createElement('button');
+    dateTrashBtn.type = 'button';
+    dateTrashBtn.className = 'due-date-trigger-clear';
+    dateTrashBtn.setAttribute('aria-label', DUE_DATE_CLEAR_LABEL);
+    dateTrashBtn.title = DUE_DATE_CLEAR_LABEL;
+    dateTrashBtn.hidden = true;
+    dateTrashBtn.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
+
     trigger.appendChild(triggerIcon);
     trigger.appendChild(triggerText);
+    trigger.appendChild(dateTrashBtn);
 
     datePicker.appendChild(trigger);
 
@@ -4825,8 +4897,17 @@
     timeTriggerText.appendChild(timeTitle);
     timeTriggerText.appendChild(timeValue);
 
+    var timeTrashBtn = document.createElement('button');
+    timeTrashBtn.type = 'button';
+    timeTrashBtn.className = 'due-date-time-trigger-clear';
+    timeTrashBtn.setAttribute('aria-label', DUE_DATE_TIME_CLEAR_LABEL);
+    timeTrashBtn.title = DUE_DATE_TIME_CLEAR_LABEL;
+    timeTrashBtn.hidden = true;
+    timeTrashBtn.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
+
     timeTrigger.appendChild(timeIcon);
     timeTrigger.appendChild(timeTriggerText);
+    timeTrigger.appendChild(timeTrashBtn);
 
     timePicker.appendChild(timeTrigger);
 
@@ -4864,19 +4945,6 @@
     timePopover.setAttribute('role', 'dialog');
     timePopover.setAttribute('aria-modal', 'false');
     timePopover.setAttribute('aria-label', DUE_DATE_TIME_PICKER_LABEL);
-
-    var timeChrome = document.createElement('div');
-    timeChrome.className = 'due-date-time-chrome';
-
-    var timeTrashBtn = document.createElement('button');
-    timeTrashBtn.type = 'button';
-    timeTrashBtn.className = 'due-date-time-chrome-btn due-date-time-chrome-btn--trash';
-    timeTrashBtn.setAttribute('aria-label', DUE_DATE_TIME_CLEAR_LABEL);
-    timeTrashBtn.title = DUE_DATE_TIME_CLEAR_LABEL;
-    timeTrashBtn.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
-
-    timeChrome.appendChild(timeTrashBtn);
-    timePopover.appendChild(timeChrome);
 
     var timePeriodsSection = document.createElement('div');
     timePeriodsSection.className = 'due-date-time-section';
@@ -5079,7 +5147,7 @@
     footer.appendChild(todayBtn);
     popover.appendChild(footer);
 
-    /* Calendar under Calendrier, time under Heure — side-by-side columns. */
+    /* Calendar under Date, time under Heure — side-by-side columns. */
     datePicker.appendChild(popover);
     timePicker.appendChild(timePopover);
 
@@ -5101,7 +5169,7 @@
     }
 
     function refreshTimeRow() {
-      /* Calendrier + Heure stay fully enabled/visible whenever Échéance is on. */
+      /* Date + Heure stay fully enabled/visible whenever Échéance is on. */
       pickers.classList.toggle('has-time', !!currentTime);
       pickers.classList.toggle('has-date', !!current);
       field.classList.toggle('is-time-open', timeOpen);
@@ -5109,10 +5177,12 @@
         timeValue.textContent = currentTime;
         timeValue.classList.remove('is-placeholder');
         timeTrigger.classList.add('has-value');
+        timeTrashBtn.hidden = false;
       } else {
         timeValue.textContent = DUE_DATE_TIME_PLACEHOLDER;
         timeValue.classList.add('is-placeholder');
         timeTrigger.classList.remove('has-value');
+        timeTrashBtn.hidden = true;
       }
       if (timeOpen) syncTimePickerSelection();
     }
@@ -5374,11 +5444,13 @@
         triggerValue.classList.remove('is-placeholder');
         trigger.classList.add('has-value');
         datePicker.classList.add('has-value');
+        dateTrashBtn.hidden = false;
       } else {
         triggerValue.textContent = DUE_DATE_PLACEHOLDER;
         triggerValue.classList.add('is-placeholder');
         trigger.classList.remove('has-value');
         datePicker.classList.remove('has-value');
+        dateTrashBtn.hidden = true;
       }
     }
 
@@ -5658,7 +5730,19 @@
       notifyLayout();
     }
 
-    timeTrashBtn.addEventListener('click', function () {
+    dateTrashBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!enabled) return;
+      current = '';
+      currentTime = '';
+      emitChange();
+      if (open) renderCalendar();
+    });
+
+    timeTrashBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
       if (!enabled) return;
       currentTime = '';
       emitChange();
@@ -7588,13 +7672,19 @@
         savedBlockedEnabledBeforeLock = enAttenteField
           ? !!enAttenteField.getValue()
           : !!state.enAttente;
-        if (dueDateField && dueDateField.setEnableAllowed) {
-          dueDateField.setEnableAllowed(false);
+        if (dueDateField) {
+          if (dueDateField.setEnableAllowed) {
+            dueDateField.setEnableAllowed(false, { expand: false });
+          }
+          if (dueDateField.setExpanded) dueDateField.setExpanded(false);
         }
         if (enAttenteField) {
           // Align with clearBlockedIfComplete / Done celebration: drop blocked when complete.
           if (enAttenteField.getValue()) enAttenteField.setValue(false);
-          if (enAttenteField.setEnableAllowed) enAttenteField.setEnableAllowed(false);
+          if (enAttenteField.setEnableAllowed) {
+            enAttenteField.setEnableAllowed(false, { expand: false });
+          }
+          if (enAttenteField.setExpanded) enAttenteField.setExpanded(false);
         }
       } else {
         if (dueDateField && dueDateField.setEnableAllowed) {
@@ -7866,6 +7956,10 @@
     DUE_DATE_QUICK_SUGGESTIONS: DUE_DATE_QUICK_SUGGESTIONS,
     normalizeDueDate: normalizeDueDate,
     normalizeDueTime: normalizeDueTime,
+    trelloDueIsoFromParts: trelloDueIsoFromParts,
+    parseTrelloDueToParts: parseTrelloDueToParts,
+    canonicalizeTrelloDueIso: canonicalizeTrelloDueIso,
+    inputsToTrelloDueIso: inputsToTrelloDueIso,
     isDueDateQuickSuggestionAvailable: isDueDateQuickSuggestionAvailable,
     resolveDueDateQuickSuggestion: resolveDueDateQuickSuggestion,
     daysUntilDue: daysUntilDue,

@@ -842,7 +842,8 @@ body.tp-page--priority {
 
 .tp-page--priority .due-date-time-popover,
 .tp-page--priority .due-date-popover {
-  max-width: 292px;
+  max-width: none;
+  width: 100%;
   border: none;
 }
 

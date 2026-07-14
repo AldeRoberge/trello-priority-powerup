@@ -321,6 +321,11 @@
         throw new Error('CompletionUI / CompletionTrello must be available in the priority popup');
       }
 
+      try {
+        await PriorityTrello.syncCardDueWithTrello(t, { prefer: 'trello' });
+      } catch (syncErr) {
+        console.error('Priority due sync (popup open) failed', syncErr);
+      }
       const inputs = await PriorityTrello.clearBlockedIfComplete(t);
       await PriorityTrello.ensureBoardPriorityContext(t);
       const boardFormula = PriorityTrello.getCachedBoardFormulaKey

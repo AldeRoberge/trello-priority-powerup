@@ -1024,5 +1024,67 @@ check(
   })()
 );
 
+check('syncCardDueWithTrello export', typeof PT.syncCardDueWithTrello === 'function');
+check('getCardDue export', typeof PT.getCardDue === 'function');
+check('setCardDue export', typeof PT.setCardDue === 'function');
+check('CARD_DUE_SYNCED_KEY', PT.CARD_DUE_SYNCED_KEY === 'cardDueSyncedIso');
+check('trelloDueIsoFromParts export', typeof PU.trelloDueIsoFromParts === 'function');
+check('parseTrelloDueToParts export', typeof PU.parseTrelloDueToParts === 'function');
+check('canonicalizeTrelloDueIso export', typeof PU.canonicalizeTrelloDueIso === 'function');
+check('inputsToTrelloDueIso export', typeof PU.inputsToTrelloDueIso === 'function');
+
+check(
+  'trelloDueIsoFromParts date-only is local midnight ISO',
+  (function () {
+    var iso = PU.trelloDueIsoFromParts('2026-07-20', '');
+    var parts = PU.parseTrelloDueToParts(iso);
+    return (
+      typeof iso === 'string' &&
+      iso.indexOf('T') !== -1 &&
+      parts &&
+      parts.dueDate === '2026-07-20' &&
+      !parts.dueTime
+    );
+  })()
+);
+
+check(
+  'trelloDueIsoFromParts with dueTime round-trips',
+  (function () {
+    var iso = PU.trelloDueIsoFromParts('2026-07-20', '14:30');
+    var parts = PU.parseTrelloDueToParts(iso);
+    return parts && parts.dueDate === '2026-07-20' && parts.dueTime === '14:30';
+  })()
+);
+
+check(
+  'canonicalizeTrelloDueIso matches parts round-trip',
+  (function () {
+    var iso = PU.trelloDueIsoFromParts('2026-08-01', '09:00');
+    return PU.canonicalizeTrelloDueIso(iso) === iso;
+  })()
+);
+
+check(
+  'inputsToTrelloDueIso empty without dueDate',
+  PU.inputsToTrelloDueIso({ urgency: 2, impact: 2, ease: 3 }) === ''
+);
+
+check(
+  'inputsToTrelloDueIso uses dueDate and dueTime',
+  PU.inputsToTrelloDueIso({
+    urgency: 2,
+    impact: 2,
+    ease: 3,
+    dueDate: '2026-07-20',
+    dueTime: '14:30',
+  }) === PU.trelloDueIsoFromParts('2026-07-20', '14:30')
+);
+
+check(
+  'parseTrelloDueToParts rejects invalid',
+  PU.parseTrelloDueToParts('not-a-date') == null && PU.parseTrelloDueToParts('') == null
+);
+
 console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll badge checks passed');
 process.exit(bad ? 1 : 0);
