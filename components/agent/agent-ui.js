@@ -268,7 +268,7 @@
     var agentPersonalityInput = el('textarea', 'agent-input agent-personality-input', {
       rows: '3',
       maxlength: '400',
-      placeholder: 'ex. Enthousiaste, un peu taquin\u2026'
+      placeholder: 'ex. Pote attentionn\u00e9, peu fan de productivit\u00e9\u2026'
     });
     settingsPanel.appendChild(labeledInput('Nom', agentNameInput));
     settingsPanel.appendChild(labeledInput('Couleur', agentColorSelect));
@@ -1258,6 +1258,7 @@
       if (!next.agentName && global.UserProfile && global.UserProfile.pickAgentNameForColor) {
         next.agentName = global.UserProfile.pickAgentNameForColor(next.agentColor);
       }
+      var prevColor = agentIdentity.agentColor;
       agentIdentity = {
         agentName: next.agentName || '',
         agentPersonality: next.agentPersonality || '',
@@ -1267,6 +1268,9 @@
       agentPersonalityInput.value = agentIdentity.agentPersonality;
       fillAgentColorSelect(agentIdentity.agentColor);
       updateAgentSectionTitle();
+      if (prevColor !== agentIdentity.agentColor) {
+        refreshAssistantFacesAura();
+      }
       if (!t || !global.UserProfile || typeof global.UserProfile.load !== 'function') {
         return agentIdentity;
       }
@@ -1299,6 +1303,31 @@
         agentColor: agentIdentity.agentColor
       });
       return { ok: true, name: agentIdentity.agentName };
+    };
+
+    bridge.setAgentColor = async function (color) {
+      var normalized = normalizeFaceAura(color);
+      if (!normalized) return { ok: false, reason: 'invalid-color' };
+      await persistAgentIdentity({
+        agentName: agentIdentity.agentName,
+        agentPersonality: agentIdentity.agentPersonality,
+        agentColor: normalized
+      });
+      return { ok: true, color: agentIdentity.agentColor };
+    };
+
+    bridge.setAgentPersonality = async function (personality) {
+      var trimmed = String(personality || '').trim();
+      if (!trimmed) return { ok: false, reason: 'empty-personality' };
+      var maxLen =
+        (global.UserProfile && global.UserProfile.MAX_AGENT_PERSONALITY) || 400;
+      if (trimmed.length > maxLen) trimmed = trimmed.slice(0, maxLen);
+      await persistAgentIdentity({
+        agentName: agentIdentity.agentName,
+        agentPersonality: trimmed,
+        agentColor: agentIdentity.agentColor
+      });
+      return { ok: true, personality: agentIdentity.agentPersonality };
     };
 
     function fillSettingsForm() {
@@ -2047,6 +2076,19 @@
       applyFacePalette(face, tone, FACE_AURAS[tone] || FACE_AURAS.orange);
     }
 
+    function refreshAssistantFacesAura() {
+      var rows = messagesEl.querySelectorAll('.agent-msg--assistant');
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        var face = row.querySelector('.agent-face');
+        if (!face || face.classList.contains('is-sick')) continue;
+        var mood = face.getAttribute('data-emotion') || 'neutral';
+        var aura = auraForEmotion(mood);
+        applyFaceAura(face, aura);
+        row.setAttribute('data-aura', aura);
+      }
+    }
+
     function spiceEmotion(base) {
       var mood = base || 'neutral';
       var roll = Math.random();
@@ -2519,11 +2561,15 @@
      * on data-idle-fx. Typing forces lookDown until the draft clears.
      */
     var FACE_SM_MAX_AWAY = 3;
-    var FACE_MORPH_SETTLE_MS = 180;
+    var FACE_MORPH_SETTLE_MS = 160;
+    var FACE_POSE_TWEEN_MS = 260;
+    var FACE_POSE_TWEEN_FAST_MS = 110;
+    var FACE_FEATURE_SEL =
+      '.agent-face-eyes, .agent-face-eye, .agent-face-brow, .agent-face-cheek, .agent-face-shine';
 
     var FACE_SM_STATES = {
-      wink: { emotion: 'wink', holdMin: 400, holdMax: 680 },
-      winkAlt: { emotion: 'wink', holdMin: 380, holdMax: 620, fx: 'winkRight' },
+      wink: { emotion: 'wink', holdMin: 160, holdMax: 240 },
+      winkAlt: { emotion: 'wink', holdMin: 150, holdMax: 220, fx: 'winkRight' },
       smile: { emotion: 'happy', holdMin: 1600, holdMax: 3600 },
       grin: { emotion: 'excited', holdMin: 650, holdMax: 1150, fx: 'bounce' },
       tongue: { emotion: 'tongue', holdMin: 850, holdMax: 1450, fx: 'wiggle' },
@@ -2829,11 +2875,14 @@
         else faceSmClearFx();
         return;
       }
+      var fastPose =
+        def.emotion === 'wink' || prevMood === 'wink';
       setAssistantFaceEmotion(row, def.emotion, {
         animate: !!options.enter,
         forceEnter: !!options.enter,
         fromIdleMachine: true,
         smooth: !options.enter,
+        fast: fastPose,
         onApplied: function () {
           if (def.fx) faceSmPlayFx(def.fx);
           else faceSmClearFx();
@@ -2847,12 +2896,17 @@
       var def = FACE_SM_STATES[fromState];
       if (!def || !def.holdMax) return;
       var delay = faceSmRand(def.holdMin, def.holdMax);
-      // Slightly shorten holds when a queue is mid-flight so scans feel snappy,
-      // but always leave room for the settle morph (~180ms).
-      if (faceSm.queue && faceSm.queue.length) {
-        delay = Math.max(FACE_MORPH_SETTLE_MS + 80, Math.round(delay * 0.72));
+      if (fromState === 'wink' || fromState === 'winkAlt') {
+        delay = Math.max(FACE_POSE_TWEEN_FAST_MS + 40, delay);
+      } else if (faceSm.queue && faceSm.queue.length) {
+        // Slightly shorten holds when a queue is mid-flight so scans feel snappy,
+        // but always leave room for the settle morph.
+        delay = Math.max(
+          FACE_MORPH_SETTLE_MS + FACE_POSE_TWEEN_MS,
+          Math.round(delay * 0.72)
+        );
       } else {
-        delay = Math.max(FACE_MORPH_SETTLE_MS + 120, delay);
+        delay = Math.max(FACE_MORPH_SETTLE_MS + FACE_POSE_TWEEN_MS, delay);
       }
       var seq = faceSm.seq;
       faceSm.timer = setTimeout(function () {
@@ -3060,6 +3114,40 @@
       face.style.animation = '';
     }
 
+    function clearFaceFeatureInline(face) {
+      if (!face || !face.querySelectorAll) return;
+      var nodes = face.querySelectorAll(FACE_FEATURE_SEL);
+      for (var i = 0; i < nodes.length; i++) {
+        var node = nodes[i];
+        if (!node.style) continue;
+        node.style.transition = '';
+        node.style.animation = '';
+        node.style.transform = '';
+        node.style.opacity = '';
+      }
+    }
+
+    /**
+     * Capture animated computed transforms as inline styles, then kill
+     * keyframe animations so a CSS pose-tween can take over without a snap.
+     */
+    function freezeFaceFeatures(face) {
+      if (!face || !face.querySelectorAll) return;
+      var nodes = face.querySelectorAll(FACE_FEATURE_SEL);
+      for (var i = 0; i < nodes.length; i++) {
+        var node = nodes[i];
+        try {
+          var cs = global.getComputedStyle(node);
+          var t = cs.transform;
+          node.style.transition = 'none';
+          node.style.animation = 'none';
+          node.style.transform = t && t !== 'none' ? t : 'none';
+        } catch (e) {
+          /* ignore */
+        }
+      }
+    }
+
     function cancelFaceMorph(face) {
       if (!face) return;
       if (face._morphTimer != null) {
@@ -3070,8 +3158,13 @@
         clearTimeout(face._settleTimer);
         face._settleTimer = null;
       }
-      face.classList.remove('is-morphing', 'is-settling');
+      if (face._winkSnapTimer != null) {
+        clearTimeout(face._winkSnapTimer);
+        face._winkSnapTimer = null;
+      }
+      face.classList.remove('is-morphing', 'is-settling', 'is-pose-tween', 'is-wink-snap');
       clearFaceInlineMorph(face);
+      clearFaceFeatureInline(face);
     }
 
     function prefersReducedFaceMotion() {
@@ -3164,18 +3257,33 @@
         return;
       }
 
-      // Smooth path: freeze current animated pose → ease to rest → swap → settle in.
+      // Smooth path: freeze animated features → tween to rest → swap pose →
+      // tween into the new static pose → release animations together.
       cancelFaceMorph(face);
-      face.classList.add('is-morphing');
+      var settleMs = options.fast ? FACE_POSE_TWEEN_FAST_MS : FACE_MORPH_SETTLE_MS;
+      var tweenMs = options.fast ? FACE_POSE_TWEEN_FAST_MS : FACE_POSE_TWEEN_MS;
+      face.classList.add('is-morphing', 'is-pose-tween');
+      freezeFaceFeatures(face);
       try {
         var cs = global.getComputedStyle(face);
         face.style.animation = 'none';
-        face.style.transition =
-          'transform 0.18s cubic-bezier(0.33, 1, 0.68, 1)';
+        face.style.transition = 'none';
         face.style.transform =
           cs.transform && cs.transform !== 'none' ? cs.transform : 'none';
         void face.offsetWidth;
+        face.style.transition =
+          'transform ' +
+          settleMs / 1000 +
+          's cubic-bezier(0.33, 1, 0.68, 1)';
         face.style.transform = 'translateY(0) scale(1) rotate(0deg)';
+        // Release frozen feature transforms so they ease toward the current
+        // emotion's static pose (animations already killed via is-pose-tween).
+        var frozen = face.querySelectorAll(FACE_FEATURE_SEL);
+        for (var fi = 0; fi < frozen.length; fi++) {
+          frozen[fi].style.transition = '';
+          frozen[fi].style.animation = 'none';
+          frozen[fi].style.transform = '';
+        }
       } catch (e) {
         /* ignore style freeze failures */
       }
@@ -3191,12 +3299,16 @@
         commitEmotion(false);
         face.classList.remove('is-morphing');
         face.classList.add('is-settling');
+        // Stay in is-pose-tween so the new emotion's static transforms ease in
+        // before blink / bob loops restart — keeps lids synchronized.
         face._settleTimer = setTimeout(function () {
           face._settleTimer = null;
-          face.classList.remove('is-settling');
-        }, 280);
+          if (morphSeq !== faceSm.seq) return;
+          face.classList.remove('is-settling', 'is-pose-tween');
+          clearFaceFeatureInline(face);
+        }, tweenMs);
         finishExternalHandoff();
-      }, FACE_MORPH_SETTLE_MS);
+      }, settleMs);
     }
 
     // ── Point at page sections (lean + white glove + blink) ─────────────
@@ -3388,17 +3500,16 @@
       glove.innerHTML =
         '<svg class="agent-point-glove-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="56" height="56" focusable="false">' +
         '<defs>' +
-        '<linearGradient id="agentGloveShine" x1="0%" y1="0%" x2="100%" y2="100%">' +
+        '<linearGradient id="agentGloveShine" x1="20%" y1="5%" x2="80%" y2="95%">' +
         '<stop offset="0%" stop-color="#ffffff"/>' +
-        '<stop offset="55%" stop-color="#f4f4f4"/>' +
-        '<stop offset="100%" stop-color="#e4e4e4"/>' +
+        '<stop offset="55%" stop-color="#f3f3f3"/>' +
+        '<stop offset="100%" stop-color="#dedede"/>' +
         '</linearGradient>' +
         '</defs>' +
-        '<g fill="url(#agentGloveShine)" stroke="#d0d0d0" stroke-width="1.4" stroke-linejoin="round">' +
-        '<path d="M28 46c-6 1-11-2-13-8-2-6 1-12 6-14 2-1 4-1 6 0v-8c0-3 2-5 5-5s5 2 5 5v10l1-7c0-3 2-5 5-5s5 2 5 5v9l2-5c1-3 3-4 5-3s4 3 3 6l-6 16c-2 5-7 9-14 9-4 0-8-1-10-5z"/>' +
-        '<path d="M33 8c-2.4 0-4.2 1.8-4.2 4.2V28h3.2V12.2c0-.6.5-1.1 1-1.1s1 .5 1 1.1V29h3.1V14.5c0-3.5-1.8-6.5-4.1-6.5z"/>' +
-        '</g>' +
-        '<ellipse cx="24" cy="42" rx="5" ry="3.2" fill="#ebebeb" stroke="#d0d0d0" stroke-width="1"/>' +
+        '<path fill="url(#agentGloveShine)" stroke="#c8c8c8" stroke-width="1.5" stroke-linejoin="round" ' +
+        'd="M38.2 28.5V11.6c0-3.8 2.7-6.6 6.1-6.6 3.3 0 5.9 2.7 5.9 6.4V29.2c1.1-2.9 3.4-4.2 5.8-3.5 2.6.7 4 3.1 3.4 6.1l-5.8 22.2C51.8 59.2 45.4 63 37.8 63c-7.8 0-14.2-3.6-16.6-11.2L16.4 36c-1.5-4.6 1.1-9.4 5.8-10.6 3.2-.8 6.4.4 8.4 2.8V17.8c0-3.5 2.5-6 5.6-6 3 0 5.4 2.5 5.4 5.8v11z"/>' +
+        '<path fill="none" stroke="#d5d5d5" stroke-width="1.2" stroke-linecap="round" d="M24.5 44c3.5 1.6 7.6 2 11.4.7"/>' +
+        '<circle cx="50.2" cy="7.2" r="1.6" fill="#fff" stroke="#d0d0d0" stroke-width="0.8"/>' +
         '</svg>';
 
       var size = 56;
@@ -3429,6 +3540,19 @@
       clearAgentPointing();
       var seq = pointAtState.seq;
       args = args && typeof args === 'object' ? args : {};
+
+      if (
+        collapse &&
+        typeof collapse.setExpanded === 'function' &&
+        typeof collapse.isExpanded === 'function' &&
+        !collapse.isExpanded()
+      ) {
+        try {
+          collapse.setExpanded(true);
+        } catch (e) {
+          /* ignore */
+        }
+      }
 
       var resolved;
       if (typeof bridge.resolvePointTarget === 'function') {
@@ -5834,14 +5958,19 @@
         var startPrompt = cardTitle
           ? 'Commence l\'interview. Titre de la carte\u00a0: «\u00a0' +
             cardTitle +
-            '\u00a0». Ancre ta premi\u00e8re question sur ce titre (pas «\u00a0cette t\u00e2che\u00a0»).'
-          : 'Commence l\'interview de cette carte.';
+            '\u00a0». Premi\u00e8re question = POURQUOI faut-il faire \u00e7a (ancr\u00e9e au titre, pas «\u00a0cette t\u00e2che\u00a0», pas «\u00a0\u00e7a change quoi\u00a0»). Suggestions = meilleures raisons possibles.'
+          : 'Commence l\'interview de cette carte. Premi\u00e8re question = POURQUOI on fait \u00e7a.';
         var fallbackOpening = cardTitle
-          ? 'Quelle serait la cons\u00e9quence de ne pas ' +
-            cardTitle.charAt(0).toLocaleLowerCase('fr-FR') +
-            cardTitle.slice(1) +
+          ? 'Pourquoi faut-il ' +
+            (/^(faire|mettre|cr[eé]er|r[eé]diger|pr[eé]parer|lancer|acheter|obtenir)\b/i.test(
+              cardTitle
+            )
+              ? cardTitle.charAt(0).toLocaleLowerCase('fr-FR') + cardTitle.slice(1)
+              : 'faire ' +
+                cardTitle.charAt(0).toLocaleLowerCase('fr-FR') +
+                cardTitle.slice(1)) +
             '\u00a0?'
-          : 'Cette carte est nouvelle. \u00c0 qui profite surtout ce travail\u00a0?';
+          : 'Pourquoi faut-il faire cette carte\u00a0?';
 
         var turn = await Agent.cardInterviewTurn(
           provider,

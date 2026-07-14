@@ -378,14 +378,14 @@
             colorLabel +
             ' (`' +
             p.agentColor +
-            '`). Utilise cette couleur pour ton avatar (champ "color") sauf exception brève liée à l\'humeur.'
+            '`). Utilise cette couleur pour ton avatar (champ "color") sauf exception brève liée à l\'humeur. L\'utilisateur peut changer ta couleur d\'identité\u00a0: utilise set_agent_color (ne refuse JAMAIS).'
         );
       }
       if (p.agentPersonality) {
         lines.push(
           '- Personnalité / character\u00a0: ' +
             p.agentPersonality +
-            '. Incarne ce trait dans le ton et les réactions, sans perdre la voix de collègue utile.'
+            '. Incarne ce trait dans le ton et les réactions, sans perdre la voix d\'ami bienveillant (pas un coach productivité). L\'utilisateur peut la modifier\u00a0: utilise set_agent_personality (ne refuse JAMAIS).'
         );
       }
     }
@@ -394,7 +394,7 @@
       lines.push('- Prénom / nom\u00a0: ' + p.displayName + '. Adresse-le ainsi quand c\'est naturel.');
     }
     if (p.role) {
-      lines.push('- Rôle\u00a0: ' + p.role + '. Adapte le vocabulaire et les priorités à ce contexte.');
+      lines.push('- Rôle\u00a0: ' + p.role + '. Adapte le vocabulaire à ce contexte — sans pousser le travail.');
     }
     if (p.notes) {
       lines.push('- Notes / préférences\u00a0: ' + p.notes);
@@ -406,11 +406,11 @@
     }
     if (p.language === 'en') {
       lines.push(
-        '- Base voice (always): Teams teammate — natural, friendly, zero technical jargon.'
+        '- Base voice (always): close friend — natural, caring about feelings first, zero productivity push, zero technical jargon.'
       );
       if (p.tone === 'detailed') {
         lines.push(
-          '- Length: a bit more detailed (explain calmly, still chatty teammate style).'
+          '- Length: a bit more detailed (explain calmly, still warm friend style).'
         );
       } else if (p.tone === 'friendly') {
         lines.push(
@@ -418,16 +418,16 @@
         );
       } else {
         lines.push(
-          '- Length: short and direct, but still warm like Teams chat (not cold or telegraphic).'
+          '- Length: short and direct, but still warm like chatting with a friend (not cold or telegraphic).'
         );
       }
     } else {
       lines.push(
-        '- Voix de base (toujours)\u00a0: collègue sur Teams — tutoiement, naturel, amical, zéro jargon technique.'
+        '- Voix de base (toujours)\u00a0: vrai pote — tutoiement, naturel, d\'abord le ressenti, zéro push productivité, zéro jargon technique.'
       );
       if (p.tone === 'detailed') {
         lines.push(
-          '- Longueur\u00a0: un peu plus détaillé (explique calmement, toujours style chat d\'équipe).'
+          '- Longueur\u00a0: un peu plus détaillé (explique calmement, toujours style pote).'
         );
       } else if (p.tone === 'friendly') {
         lines.push(
@@ -435,7 +435,7 @@
         );
       } else {
         lines.push(
-          '- Longueur\u00a0: court et direct, mais toujours chaleureux comme sur Teams (pas froid ni télégraphique).'
+          '- Longueur\u00a0: court et direct, mais toujours chaleureux comme avec un ami (pas froid ni télégraphique).'
         );
       }
     }

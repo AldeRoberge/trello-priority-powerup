@@ -391,14 +391,29 @@
   transition: stop-color 0.4s ease;
 }
 
-/* Smooth pose blends when the idle machine changes emotion. */
+/*
+ * Feature transforms are driven by keyframes OR by static emotion poses.
+ * Never leave transform transitions on while animations run — that fight is
+ * what made blinks / lids look asynchronous and "tweaky".
+ * Opacity can always ease (mouths/cheeks). Transform eases only during
+ * intentional pose tweens (is-pose-tween / wink snap).
+ */
 .tp-page--priority .agent-face-eyes,
 .tp-page--priority .agent-face-eye,
 .tp-page--priority .agent-face-brow,
 .tp-page--priority .agent-face-cheek,
 .tp-page--priority .agent-face-shine {
-  transition: transform 0.34s cubic-bezier(0.33, 1, 0.68, 1),
-    opacity 0.28s ease;
+  transition: opacity 0.22s ease;
+}
+
+.tp-page--priority .agent-face.is-pose-tween .agent-face-eyes,
+.tp-page--priority .agent-face.is-pose-tween .agent-face-eye,
+.tp-page--priority .agent-face.is-pose-tween .agent-face-brow,
+.tp-page--priority .agent-face.is-pose-tween .agent-face-cheek,
+.tp-page--priority .agent-face.is-pose-tween .agent-face-shine {
+  transition: transform 0.26s cubic-bezier(0.33, 1, 0.68, 1),
+    opacity 0.22s ease;
+  animation: none !important;
 }
 
 .tp-page--priority .agent-face-features {
@@ -498,19 +513,21 @@
     agent-face-glow-pulse 2.6s ease-in-out infinite;
 }
 
-.tp-page--priority .agent-face:not(.is-frozen) .agent-face-eyes {
+/*
+ * Shared blink lives on the eyes *group* so both lids stay locked together.
+ * Emotions that already translate/scale that group (look*, wink, thinking
+ * glances) opt out and — for looks — blink on the per-eye ellipses instead
+ * so gaze and blink can compose.
+ */
+.tp-page--priority .agent-face:not(.is-frozen):not(.is-pose-tween) .agent-face-eyes {
   transform-box: view-box;
   transform-origin: 20px 17.6px;
-  animation: agent-face-blink 4.2s ease-in-out infinite;
+  animation: agent-face-blink 4.8s ease-in-out infinite;
 }
 
-.tp-page--priority .agent-face--happy:not(.is-frozen) .agent-face-eyes,
 .tp-page--priority .agent-face--surprised:not(.is-frozen) .agent-face-eyes,
 .tp-page--priority .agent-face--wideEyed:not(.is-frozen) .agent-face-eyes,
 .tp-page--priority .agent-face--thinking:not(.is-frozen) .agent-face-eyes,
-.tp-page--priority .agent-face--sad:not(.is-frozen) .agent-face-eyes,
-.tp-page--priority .agent-face--tongue:not(.is-frozen) .agent-face-eyes,
-.tp-page--priority .agent-face--excited:not(.is-frozen) .agent-face-eyes,
 .tp-page--priority .agent-face--wink:not(.is-frozen) .agent-face-eyes,
 .tp-page--priority .agent-face--lookUp:not(.is-frozen) .agent-face-eyes,
 .tp-page--priority .agent-face--lookDown:not(.is-frozen) .agent-face-eyes,
@@ -518,6 +535,15 @@
 .tp-page--priority .agent-face--lookRight:not(.is-frozen) .agent-face-eyes,
 .tp-page--priority .agent-face.agent-face--fx-squint:not(.is-frozen) .agent-face-eyes {
   animation: none;
+}
+
+.tp-page--priority .agent-face--lookUp:not(.is-frozen):not(.is-pose-tween) .agent-face-eye,
+.tp-page--priority .agent-face--lookDown:not(.is-frozen):not(.is-pose-tween) .agent-face-eye,
+.tp-page--priority .agent-face--lookLeft:not(.is-frozen):not(.is-pose-tween) .agent-face-eye,
+.tp-page--priority .agent-face--lookRight:not(.is-frozen):not(.is-pose-tween) .agent-face-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: agent-face-blink 4.8s ease-in-out infinite;
 }
 
 .tp-page--priority .agent-face-mouth {
@@ -543,24 +569,21 @@
   opacity: 1;
 }
 
-/* Morph: ease body to rest, hide mouths, pause eye loops so the next pose can fade in. */
-.tp-page--priority .agent-face.is-morphing:not(.is-frozen) {
-  animation: none !important;
-}
-
-.tp-page--priority .agent-face.is-morphing .agent-face-mouth {
-  opacity: 0 !important;
-  transition-duration: 0.12s;
+/* Morph / pose tween: hold the body still (glow only) while features crossfade. */
+.tp-page--priority .agent-face.is-morphing:not(.is-frozen),
+.tp-page--priority .agent-face.is-pose-tween:not(.is-frozen) {
+  animation: agent-face-glow-pulse 2.6s ease-in-out infinite !important;
 }
 
 .tp-page--priority .agent-face.is-morphing .agent-face-eyes,
-.tp-page--priority .agent-face.is-morphing .agent-face-eye {
+.tp-page--priority .agent-face.is-morphing .agent-face-eye,
+.tp-page--priority .agent-face.is-morphing .agent-face-brow {
   animation: none !important;
 }
 
 .tp-page--priority .agent-face.is-settling:not(.is-frozen) {
-  /* Soft land after morph — keep glow, let emotion loop start from rest. */
-  animation-timing-function: ease-out;
+  /* Soft land after morph — glow only until pose-tween clears. */
+  animation: agent-face-glow-pulse 2.6s ease-in-out infinite !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -580,16 +603,16 @@
   }
 }
 
-/* Happy: soft bounce + squinted eyes feel via scale */
+/* Happy: soft bounce + static squint (shared blink handles lids) */
 .tp-page--priority .agent-face--happy:not(.is-frozen) {
   animation: agent-face-happy 1.8s ease-in-out infinite,
     agent-face-glow-pulse 2.2s ease-in-out infinite;
 }
 
-.tp-page--priority .agent-face--happy:not(.is-frozen) .agent-face-eye {
+.tp-page--priority .agent-face--happy .agent-face-eye {
   transform-box: fill-box;
   transform-origin: center;
-  animation: agent-face-happy-eyes 1.8s ease-in-out infinite;
+  transform: scaleY(0.72);
 }
 
 .tp-page--priority .agent-face--happy .agent-face-cheek,
@@ -773,10 +796,10 @@
     agent-face-glow-pulse 2.2s ease-in-out infinite;
 }
 
-.tp-page--priority .agent-face--tongue:not(.is-frozen) .agent-face-eye {
+.tp-page--priority .agent-face--tongue .agent-face-eye {
   transform-box: fill-box;
   transform-origin: center;
-  animation: agent-face-happy-eyes 1.6s ease-in-out infinite;
+  transform: scaleY(0.72);
 }
 
 /* Look up / down */
@@ -865,16 +888,22 @@
     agent-face-glow-pulse 1.6s ease-in-out infinite;
 }
 
-.tp-page--priority .agent-face--excited:not(.is-frozen) .agent-face-eye {
+.tp-page--priority .agent-face--excited .agent-face-eye {
   transform-box: fill-box;
   transform-origin: center;
-  animation: agent-face-happy-eyes 0.72s ease-in-out infinite;
+  transform: scaleY(0.68);
 }
 
-/* Wink */
+/* Wink — snappy tip; eye close uses pose-tween, not a perpetual transform transition */
 .tp-page--priority .agent-face--wink:not(.is-frozen) {
-  animation: agent-face-wink-bob 2s ease-in-out infinite,
+  animation: agent-face-wink-bob 0.42s cubic-bezier(0.34, 1.4, 0.64, 1) both,
     agent-face-glow-pulse 2.2s ease-in-out infinite;
+}
+
+.tp-page--priority .agent-face--wink.is-pose-tween .agent-face-eye,
+.tp-page--priority .agent-face--wink.is-pose-tween .agent-face-brow,
+.tp-page--priority .agent-face--wink.is-pose-tween .agent-face-shine {
+  transition-duration: 0.1s, 0.08s;
 }
 
 .tp-page--priority .agent-face--wink .agent-face-eye--l {
@@ -1152,13 +1181,15 @@
 
 @keyframes agent-face-blink {
   0%,
-  42%,
-  46%,
+  88%,
   100% {
     transform: scaleY(1);
   }
-  44% {
+  90% {
     transform: scaleY(0.08);
+  }
+  92% {
+    transform: scaleY(1);
   }
 }
 
@@ -1172,6 +1203,7 @@
   }
 }
 
+/* Kept for squint FX / thinking squint reuse */
 @keyframes agent-face-happy-eyes {
   0%,
   100% {
@@ -1447,12 +1479,17 @@
 }
 
 @keyframes agent-face-wink-bob {
-  0%,
-  100% {
-    transform: rotate(4deg) translateY(0);
+  0% {
+    transform: rotate(0deg) translateY(0) scale(1);
   }
-  50% {
-    transform: rotate(7deg) translateY(-1.5px);
+  35% {
+    transform: rotate(6deg) translateY(-1.5px) scale(1.03, 0.97);
+  }
+  70% {
+    transform: rotate(4deg) translateY(0) scale(1);
+  }
+  100% {
+    transform: rotate(3deg) translateY(0) scale(1);
   }
 }
 
@@ -3337,7 +3374,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
 
 .tp-page--priority .agent-face.is-pointing {
   z-index: 3;
-  animation: agent-face-point-lean 0.55s cubic-bezier(0.33, 1, 0.68, 1) both;
+  transition: transform 0.35s cubic-bezier(0.33, 1, 0.68, 1);
 }
 
 .tp-page--priority .agent-face.is-pointing.agent-face--lookUp {
@@ -3354,15 +3391,6 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
 
 .tp-page--priority .agent-face.is-pointing.agent-face--lookRight {
   transform: translateX(6px) rotate(12deg) scale(1.04);
-}
-
-@keyframes agent-face-point-lean {
-  from {
-    transform: translateY(0) rotate(0deg) scale(1);
-  }
-  to {
-    /* final pose comes from look* + .is-pointing rules */
-  }
 }
 
 .agent-point-glove {
