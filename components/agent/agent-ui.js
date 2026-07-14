@@ -1272,7 +1272,7 @@
           var delay = (tone.delay || 0) * tMul;
           var dur = tone.dur * tMul;
           var peak = (tone.peak != null ? tone.peak : 0.05) * randBetween(0.88, 1.12);
-          osc.type = tone.type || pickOne(['sine', 'triangle', 'sine']);
+          osc.type = tone.type || 'sine';
           osc.frequency.setValueAtTime(tone.freq * fMul, t0 + delay);
           gain.gain.setValueAtTime(0.0001, t0 + delay);
           gain.gain.exponentialRampToValueAtTime(
@@ -2214,7 +2214,7 @@
       bubble.appendChild(spinner);
       bubble.appendChild(skeleton);
       row.appendChild(bubble);
-      attachAssistantFace(row, 'thinking');
+      attachAssistantFace(row, spiceEmotion('thinking'));
       messagesEl.appendChild(row);
       messagesEl.scrollTop = messagesEl.scrollHeight;
       notifyLayout();
@@ -2225,7 +2225,7 @@
       var emotion = inferAssistantEmotion(text, meta, {
         userText: lastUserMessageText()
       });
-      setAssistantFaceEmotion(row, emotion);
+      setAssistantFaceEmotion(row, emotion, { animate: true, forceEnter: true });
       freezeOlderAssistantFaces(row);
       return emotion;
     }

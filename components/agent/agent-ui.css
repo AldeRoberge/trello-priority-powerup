@@ -362,6 +362,10 @@
 }
 
 .tp-page--priority .agent-face {
+  --agent-face-hi: #ffe0c2;
+  --agent-face-mid: #f5b58a;
+  --agent-face-lo: #e8956a;
+  --agent-face-glow: #c4794a;
   flex: 0 0 32px;
   display: inline-flex;
   align-items: center;
@@ -373,20 +377,39 @@
   overflow: hidden;
   box-shadow:
     0 0 0 1.5px color-mix(in srgb, #fff 70%, transparent),
-    0 2px 8px color-mix(in srgb, #c4794a 28%, transparent);
-  background: #f5b58a;
+    0 0 10px 2px color-mix(in srgb, var(--agent-face-glow) 48%, transparent),
+    0 2px 8px color-mix(in srgb, var(--agent-face-glow) 30%, transparent);
+  background: var(--agent-face-mid);
   transform-origin: 50% 50%;
-  transition: filter 0.45s ease, opacity 0.35s ease, box-shadow 0.35s ease;
+  transition: filter 0.45s ease, opacity 0.35s ease, box-shadow 0.35s ease,
+    background 0.45s ease;
+  will-change: transform;
+}
+
+.tp-page--priority .agent-face[data-aura='yellow'] {
+  --agent-face-hi: #fff6c8;
+  --agent-face-mid: #f5d76e;
+  --agent-face-lo: #e0b83a;
+  --agent-face-glow: #d4a017;
+}
+
+.tp-page--priority .agent-face[data-aura='orange'] {
+  --agent-face-hi: #ffe0c2;
+  --agent-face-mid: #f5b58a;
+  --agent-face-lo: #e8956a;
+  --agent-face-glow: #c4794a;
 }
 
 .tp-page--priority .agent-face-svg {
   display: block;
   width: 100%;
   height: 100%;
+  overflow: visible;
 }
 
 .tp-page--priority .agent-face:not(.is-frozen) {
-  animation: agent-face-idle 2.8s ease-in-out infinite;
+  animation: agent-face-idle 2.8s ease-in-out infinite,
+    agent-face-glow-pulse 2.6s ease-in-out infinite;
 }
 
 .tp-page--priority .agent-face:not(.is-frozen) .agent-face-eyes {
@@ -397,12 +420,19 @@
 
 .tp-page--priority .agent-face--happy:not(.is-frozen) .agent-face-eyes,
 .tp-page--priority .agent-face--surprised:not(.is-frozen) .agent-face-eyes,
+.tp-page--priority .agent-face--wideEyed:not(.is-frozen) .agent-face-eyes,
 .tp-page--priority .agent-face--thinking:not(.is-frozen) .agent-face-eyes,
-.tp-page--priority .agent-face--sad:not(.is-frozen) .agent-face-eyes {
+.tp-page--priority .agent-face--sad:not(.is-frozen) .agent-face-eyes,
+.tp-page--priority .agent-face--tongue:not(.is-frozen) .agent-face-eyes,
+.tp-page--priority .agent-face--excited:not(.is-frozen) .agent-face-eyes,
+.tp-page--priority .agent-face--wink:not(.is-frozen) .agent-face-eyes,
+.tp-page--priority .agent-face--lookUp:not(.is-frozen) .agent-face-eyes,
+.tp-page--priority .agent-face--lookDown:not(.is-frozen) .agent-face-eyes {
   animation: none;
 }
 
-.tp-page--priority .agent-face-mouth {
+.tp-page--priority .agent-face-mouth,
+.tp-page--priority .agent-face-tongue {
   display: none;
 }
 
@@ -410,14 +440,25 @@
 .tp-page--priority .agent-face--happy .agent-face-mouth--happy,
 .tp-page--priority .agent-face--sad .agent-face-mouth--sad,
 .tp-page--priority .agent-face--surprised .agent-face-mouth--surprised,
+.tp-page--priority .agent-face--wideEyed .agent-face-mouth--surprised,
 .tp-page--priority .agent-face--curious .agent-face-mouth--curious,
-.tp-page--priority .agent-face--thinking .agent-face-mouth--thinking {
+.tp-page--priority .agent-face--thinking .agent-face-mouth--thinking,
+.tp-page--priority .agent-face--lookUp .agent-face-mouth--curious,
+.tp-page--priority .agent-face--lookDown .agent-face-mouth--neutral,
+.tp-page--priority .agent-face--tongue .agent-face-mouth--tongue,
+.tp-page--priority .agent-face--wink .agent-face-mouth--wink,
+.tp-page--priority .agent-face--excited .agent-face-mouth--excited {
+  display: inline;
+}
+
+.tp-page--priority .agent-face--tongue .agent-face-tongue {
   display: inline;
 }
 
 /* Happy: soft bounce + squinted eyes feel via scale */
 .tp-page--priority .agent-face--happy:not(.is-frozen) {
-  animation: agent-face-happy 1.8s ease-in-out infinite;
+  animation: agent-face-happy 1.8s ease-in-out infinite,
+    agent-face-glow-pulse 2.2s ease-in-out infinite;
 }
 
 .tp-page--priority .agent-face--happy:not(.is-frozen) .agent-face-eye {
@@ -426,16 +467,21 @@
   animation: agent-face-happy-eyes 1.8s ease-in-out infinite;
 }
 
-.tp-page--priority .agent-face--happy .agent-face-cheek {
+.tp-page--priority .agent-face--happy .agent-face-cheek,
+.tp-page--priority .agent-face--tongue .agent-face-cheek,
+.tp-page--priority .agent-face--excited .agent-face-cheek,
+.tp-page--priority .agent-face--wink .agent-face-cheek {
   opacity: 0.55;
 }
 
 /* Surprised: wide eyes */
 .tp-page--priority .agent-face--surprised:not(.is-frozen) {
-  animation: agent-face-surprise 1.4s ease-in-out infinite;
+  animation: agent-face-surprise 1.4s ease-in-out infinite,
+    agent-face-glow-pulse 1.8s ease-in-out infinite;
 }
 
-.tp-page--priority .agent-face--surprised .agent-face-eye {
+.tp-page--priority .agent-face--surprised .agent-face-eye,
+.tp-page--priority .agent-face--wideEyed .agent-face-eye {
   transform-box: fill-box;
   transform-origin: center;
   transform: scale(1.28, 1.32);
@@ -445,21 +491,44 @@
   animation: agent-face-wide-pulse 1.4s ease-in-out infinite;
 }
 
-.tp-page--priority .agent-face--surprised .agent-face-brow--l {
+.tp-page--priority .agent-face--surprised .agent-face-brow--l,
+.tp-page--priority .agent-face--wideEyed .agent-face-brow--l {
   transform-box: fill-box;
   transform-origin: center;
   transform: translateY(-1.4px) rotate(-8deg);
 }
 
-.tp-page--priority .agent-face--surprised .agent-face-brow--r {
+.tp-page--priority .agent-face--surprised .agent-face-brow--r,
+.tp-page--priority .agent-face--wideEyed .agent-face-brow--r {
   transform-box: fill-box;
   transform-origin: center;
   transform: translateY(-1.4px) rotate(8deg);
 }
 
+/* Extra-wide eyes */
+.tp-page--priority .agent-face--wideEyed:not(.is-frozen) {
+  animation: agent-face-surprise 1.2s ease-in-out infinite,
+    agent-face-glow-pulse 1.8s ease-in-out infinite;
+}
+
+.tp-page--priority .agent-face--wideEyed .agent-face-eye {
+  transform: scale(1.48, 1.55);
+}
+
+.tp-page--priority .agent-face--wideEyed:not(.is-frozen) .agent-face-eye {
+  animation: agent-face-extra-wide-pulse 1.2s ease-in-out infinite;
+}
+
+.tp-page--priority .agent-face--wideEyed .agent-face-shine {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(1.35);
+}
+
 /* Sad: slight frown posture */
 .tp-page--priority .agent-face--sad:not(.is-frozen) {
-  animation: agent-face-sad 2.6s ease-in-out infinite;
+  animation: agent-face-sad 2.6s ease-in-out infinite,
+    agent-face-glow-pulse 3.2s ease-in-out infinite;
 }
 
 .tp-page--priority .agent-face--sad .agent-face-brow--l {
@@ -486,7 +555,8 @@
 
 /* Curious: head tip */
 .tp-page--priority .agent-face--curious:not(.is-frozen) {
-  animation: agent-face-curious 2.2s ease-in-out infinite;
+  animation: agent-face-curious 2.2s ease-in-out infinite,
+    agent-face-glow-pulse 2.4s ease-in-out infinite;
 }
 
 .tp-page--priority .agent-face--curious .agent-face-brow--r {
@@ -497,11 +567,124 @@
 
 /* Thinking: glance + wobble */
 .tp-page--priority .agent-face--thinking:not(.is-frozen) {
-  animation: agent-face-think 2s ease-in-out infinite;
+  animation: agent-face-think 2s ease-in-out infinite,
+    agent-face-glow-pulse 2.4s ease-in-out infinite;
 }
 
 .tp-page--priority .agent-face--thinking:not(.is-frozen) .agent-face-eyes {
   animation: agent-face-glance 2s ease-in-out infinite;
+}
+
+/* Tongue out */
+.tp-page--priority .agent-face--tongue:not(.is-frozen) {
+  animation: agent-face-tongue-wiggle 1.6s ease-in-out infinite,
+    agent-face-glow-pulse 2.2s ease-in-out infinite;
+}
+
+.tp-page--priority .agent-face--tongue:not(.is-frozen) .agent-face-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: agent-face-happy-eyes 1.6s ease-in-out infinite;
+}
+
+.tp-page--priority .agent-face--tongue:not(.is-frozen) .agent-face-tongue {
+  transform-box: fill-box;
+  transform-origin: top center;
+  animation: agent-face-tongue-stick 1.6s ease-in-out infinite;
+}
+
+/* Look up / down */
+.tp-page--priority .agent-face--lookUp:not(.is-frozen) {
+  animation: agent-face-look-up-bob 2.4s ease-in-out infinite,
+    agent-face-glow-pulse 2.4s ease-in-out infinite;
+}
+
+.tp-page--priority .agent-face--lookUp .agent-face-eyes {
+  transform-box: view-box;
+  transform-origin: 20px 17.6px;
+  transform: translateY(-2.4px);
+}
+
+.tp-page--priority .agent-face--lookUp .agent-face-brow--l,
+.tp-page--priority .agent-face--lookUp .agent-face-brow--r {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: translateY(-1.2px);
+}
+
+.tp-page--priority .agent-face--lookDown:not(.is-frozen) {
+  animation: agent-face-look-down-bob 2.6s ease-in-out infinite,
+    agent-face-glow-pulse 2.6s ease-in-out infinite;
+}
+
+.tp-page--priority .agent-face--lookDown .agent-face-eyes {
+  transform-box: view-box;
+  transform-origin: 20px 17.6px;
+  transform: translateY(2.2px) scaleY(0.88);
+}
+
+.tp-page--priority .agent-face--lookDown .agent-face-brow--l {
+  transform-box: fill-box;
+  transform-origin: right center;
+  transform: translateY(0.8px) rotate(6deg);
+}
+
+.tp-page--priority .agent-face--lookDown .agent-face-brow--r {
+  transform-box: fill-box;
+  transform-origin: left center;
+  transform: translateY(0.8px) rotate(-6deg);
+}
+
+/* Excited: big smile + jump */
+.tp-page--priority .agent-face--excited:not(.is-frozen),
+.tp-page--priority .agent-face--motion-jump:not(.is-frozen) {
+  animation: agent-face-jump 0.72s ease-in-out infinite,
+    agent-face-glow-pulse 1.6s ease-in-out infinite;
+}
+
+.tp-page--priority .agent-face--excited:not(.is-frozen) .agent-face-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: agent-face-happy-eyes 0.72s ease-in-out infinite;
+}
+
+/* Wink */
+.tp-page--priority .agent-face--wink:not(.is-frozen) {
+  animation: agent-face-wink-bob 2s ease-in-out infinite,
+    agent-face-glow-pulse 2.2s ease-in-out infinite;
+}
+
+.tp-page--priority .agent-face--wink .agent-face-eye--l {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scaleY(0.12) translateY(1px);
+}
+
+.tp-page--priority .agent-face--wink .agent-face-shine--l {
+  opacity: 0;
+}
+
+.tp-page--priority .agent-face--wink .agent-face-brow--l {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: translateY(1px) rotate(12deg);
+}
+
+/* Enter motions (one-shot; override idle while playing) */
+.tp-page--priority .agent-face.agent-face--enter-roll {
+  animation: agent-face-roll-in 0.7s cubic-bezier(0.22, 1.15, 0.36, 1) both !important;
+}
+
+.tp-page--priority .agent-face.agent-face--enter-bounce {
+  animation: agent-face-bounce-in 0.55s cubic-bezier(0.34, 1.4, 0.64, 1) both !important;
+}
+
+.tp-page--priority .agent-face.agent-face--enter-pop {
+  animation: agent-face-pop-in 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both !important;
+}
+
+.tp-page--priority .agent-face.agent-face--enter-jump {
+  animation: agent-face-jump-in 0.65s ease-out both !important;
 }
 
 .tp-page--priority .agent-face.is-frozen {
@@ -517,7 +700,8 @@
 .tp-page--priority .agent-face.is-frozen .agent-face-eyes,
 .tp-page--priority .agent-face.is-frozen .agent-face-eye,
 .tp-page--priority .agent-face.is-frozen .agent-face-brow--l,
-.tp-page--priority .agent-face.is-frozen .agent-face-brow--r {
+.tp-page--priority .agent-face.is-frozen .agent-face-brow--r,
+.tp-page--priority .agent-face.is-frozen .agent-face-tongue {
   animation: none !important;
 }
 
@@ -528,6 +712,22 @@
   }
   50% {
     transform: translateY(-1.5px);
+  }
+}
+
+@keyframes agent-face-glow-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1.5px color-mix(in srgb, #fff 70%, transparent),
+      0 0 8px 2px color-mix(in srgb, var(--agent-face-glow) 42%, transparent),
+      0 2px 8px color-mix(in srgb, var(--agent-face-glow) 28%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1.5px color-mix(in srgb, #fff 80%, transparent),
+      0 0 16px 5px color-mix(in srgb, var(--agent-face-glow) 68%, transparent),
+      0 2px 10px color-mix(in srgb, var(--agent-face-glow) 40%, transparent);
   }
 }
 
@@ -586,6 +786,16 @@
   }
 }
 
+@keyframes agent-face-extra-wide-pulse {
+  0%,
+  100% {
+    transform: scale(1.42, 1.48);
+  }
+  50% {
+    transform: scale(1.58, 1.68);
+  }
+}
+
 @keyframes agent-face-sad {
   0%,
   100% {
@@ -623,6 +833,136 @@
   }
   50% {
     transform: translate(2.5px, -0.5px);
+  }
+}
+
+@keyframes agent-face-tongue-wiggle {
+  0%,
+  100% {
+    transform: rotate(-3deg) translateY(0);
+  }
+  50% {
+    transform: rotate(4deg) translateY(-2px);
+  }
+}
+
+@keyframes agent-face-tongue-stick {
+  0%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+  50% {
+    transform: translateY(1.2px) scaleY(1.15);
+  }
+}
+
+@keyframes agent-face-look-up-bob {
+  0%,
+  100% {
+    transform: translateY(-1px) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-2.5px) rotate(-4deg);
+  }
+}
+
+@keyframes agent-face-look-down-bob {
+  0%,
+  100% {
+    transform: translateY(1px) rotate(2deg);
+  }
+  50% {
+    transform: translateY(2px) rotate(3deg);
+  }
+}
+
+@keyframes agent-face-jump {
+  0%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  28% {
+    transform: translateY(-7px) scale(0.96, 1.06);
+  }
+  42% {
+    transform: translateY(0) scale(1.06, 0.92);
+  }
+  68% {
+    transform: translateY(-4px) scale(0.98, 1.03);
+  }
+  82% {
+    transform: translateY(0) scale(1.03, 0.96);
+  }
+}
+
+@keyframes agent-face-wink-bob {
+  0%,
+  100% {
+    transform: rotate(4deg) translateY(0);
+  }
+  50% {
+    transform: rotate(7deg) translateY(-1.5px);
+  }
+}
+
+@keyframes agent-face-roll-in {
+  0% {
+    transform: translateY(16px) rotate(-200deg) scale(0.35);
+    opacity: 0;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes agent-face-bounce-in {
+  0% {
+    transform: translateY(12px) scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(-4px) scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes agent-face-pop-in {
+  0% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes agent-face-jump-in {
+  0% {
+    transform: translateY(14px) scale(0.7, 0.85);
+    opacity: 0;
+  }
+  45% {
+    transform: translateY(-8px) scale(0.95, 1.08);
+    opacity: 1;
+  }
+  70% {
+    transform: translateY(0) scale(1.06, 0.92);
+  }
+  100% {
+    transform: translateY(0) scale(1);
   }
 }
 
