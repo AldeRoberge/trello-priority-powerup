@@ -41,8 +41,6 @@
       <span class="tp-settings-summary-hint">Catégories des listes et auto-déplacement</span>
     </summary>
     <div class="tp-settings-body">
-      <p class="tp-color-scheme-hint">Associez chaque liste du tableau à une catégorie (style Linear). La détection initiale utilise les noms connus (FR/EN).</p>
-
       <div class="tp-statut-map" id="statutMapList"></div>
 
       <div class="tp-statut-roles">
@@ -69,7 +67,7 @@
         <span>Déplacer automatiquement vers Terminé quand une carte est complétée</span>
       </label>
 
-      <button type="button" class="tp-button tp-button--secondary" id="statutRedetect">Réinitialiser la détection</button>
+      <button type="button" class="tp-button tp-button--secondary" id="statutRedetect">Détecter à nouveau</button>
     </div>
   </details>
 
@@ -575,10 +573,18 @@
     }
 
     document.getElementById('authorizeAutoSort').addEventListener('click', function () {
+      var statusEl = document.getElementById('autoSortStatus');
       PriorityTrello.authorizeRestForAutoSort(t)
         .then(function () { return refreshAutoSortUi(); })
         .catch(function (err) {
           console.error('Priority REST authorize failed', err);
+          var msg = String((err && (err.name || err.message)) || err || '');
+          var denied = /AuthDenied|annul|blocked|popup/i.test(msg);
+          if (statusEl) {
+            statusEl.textContent = denied
+              ? 'Autorisation annulée ou fenêtre bloquée. Autorisez les popups pour trello.com, vérifiez Allowed Origins (https://VOTRE-UTILISATEUR.github.io) dans l’admin Power-Up, puis réessayez.'
+              : 'Autorisation échouée. Vérifiez la clé API et Allowed Origins dans l’admin Power-Up, puis réessayez.';
+          }
         });
     });
 

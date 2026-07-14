@@ -1400,12 +1400,22 @@
             textInput.value = corrected;
           }
           item.text = corrected;
+          if (corrected !== trimmed) {
+            showItemSpellRevert(item, trimmed);
+          }
           // Persist without re-rendering so a following checkbox click (complete
           // while editing) is not destroyed by replacing the row DOM.
           data = CT.normalizeCompletionData(data);
           updateProgressUi();
           onChange(data);
         });
+      });
+
+      textInput.addEventListener('input', function () {
+        var existing = li.querySelector('.tp-spell-revert');
+        if (existing && typeof existing._spellRevertDismiss === 'function') {
+          existing._spellRevertDismiss();
+        }
       });
 
       textInput.addEventListener('keydown', function (e) {
@@ -1589,7 +1599,7 @@
 
     function addItem(text) {
       var trimmed = (text || '').trim();
-      if (!trimmed) return false;
+      if (!trimmed) return null;
       var hadNoItems = !data.items.length;
       var cardProgress = hadNoItems ? CT.computeCardProgress(data).percent : 0;
       var item = CT.normalizeItem({
@@ -1597,12 +1607,12 @@
         text: trimmed,
         progress: hadNoItems && cardProgress > 0 ? cardProgress : 0,
       });
-      if (!item) return false;
+      if (!item) return null;
       data.items.push(item);
       removeSuggestionMatch(trimmed);
       emitChange();
       onResize();
-      return true;
+      return item;
     }
 
     function setSuggestStatus(text, visible) {
@@ -1729,21 +1739,57 @@
       suggestionsSection.hidden = true;
     }
 
+    function showItemSpellRevert(item, originalText) {
+      if (
+        !item ||
+        !originalText ||
+        item.text === originalText ||
+        typeof global.Spellcheck === 'undefined' ||
+        typeof global.Spellcheck.attachRevert !== 'function'
+      ) {
+        return;
+      }
+      var li = findItemRow(item.id);
+      if (!li) return;
+      var mainRow = li.querySelector('.tp-completion-item-main');
+      var del = li.querySelector('.tp-completion-delete');
+      var textInput = li.querySelector('.tp-completion-text');
+      if (!mainRow || !textInput) return;
+      var token = (item._spellToken || 0) + 1;
+      item._spellToken = token;
+      global.Spellcheck.attachRevert(mainRow, {
+        className: 'tp-completion-spell-revert',
+        before: del,
+        onRevert: function () {
+          if (item._spellToken !== token) return;
+          textInput.value = originalText;
+          item.text = originalText;
+          data = CT.normalizeCompletionData(data);
+          updateProgressUi();
+          onChange(data);
+        }
+      });
+    }
+
     function addFromInput() {
       if (spellcheckBusy) return;
       var raw = addInput.value;
-      if (!(raw || '').trim()) return;
+      var original = (raw || '').trim();
+      if (!original) return;
       spellcheckBusy = true;
       addBtn.disabled = true;
       addInput.disabled = true;
       addInput.classList.add('is-spellchecking');
       spellcheckText(raw).then(function (corrected) {
-        if (corrected !== (raw || '').trim()) {
+        if (corrected !== original) {
           addInput.value = corrected;
         }
-        var ok = addItem(corrected);
-        if (ok) {
+        var item = addItem(corrected);
+        if (item) {
           addInput.value = '';
+          if (corrected !== original) {
+            showItemSpellRevert(item, original);
+          }
         }
       }).finally(function () {
         spellcheckBusy = false;

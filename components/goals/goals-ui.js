@@ -89,17 +89,6 @@
       mission: { names: [], loading: false, seq: 0, key: '' },
       project: { names: [], loading: false, seq: 0, key: '' },
     };
-    var metricSuggest = {
-      missionId: null,
-      items: [],
-      loading: false,
-      seq: 0,
-      key: '',
-      formApi: null,
-      section: null,
-      statusEl: null,
-      listEl: null,
-    };
 
     containerEl.replaceChildren();
     containerEl.classList.add('tp-goals-settings');
@@ -709,19 +698,102 @@
       renderSuggestions('project');
     }
 
+    function createMetricFromText(text) {
+      var trimmed = String(text || '').trim();
+      if (!trimmed) return Promise.resolve();
+      if (!state.selectedMissionId) {
+        window.alert('S\u00e9lectionnez une mission d\u2019abord.');
+        return Promise.resolve();
+      }
+
+      var mission = GT.findById(state.missions, state.selectedMissionId);
+      if (!mission) {
+        window.alert('Mission introuvable.');
+        return Promise.resolve();
+      }
+      if (mission.retired) {
+        window.alert('Impossible d\u2019ajouter sous une mission retir\u00e9e.');
+        return Promise.resolve();
+      }
+
+      var vision = GT.findById(state.visions, mission.visionId);
+      var existing = state.metrics.filter(function (m) {
+        return m.linkedGoalId === state.selectedMissionId;
+      });
+      var hasPrimary = existing.some(function (m) {
+        return m.isPrimary;
+      });
+
+      function fallbackCreate(name) {
+        return GT.createMetric(t, {
+          name: name,
+          type: 'incremental',
+          direction: 'increase',
+          measurement: 'manual',
+          currentValue: 0,
+          linkedGoalId: state.selectedMissionId,
+          isPrimary: !hasPrimary,
+        });
+      }
+
+      if (
+        !state.aiEnabled ||
+        !Agent ||
+        typeof Agent.parseMetric !== 'function' ||
+        typeof Agent.getProvider !== 'function'
+      ) {
+        return fallbackCreate(trimmed).then(reload);
+      }
+
+      return Agent.getProvider(t)
+        .then(function (provider) {
+          if (!Agent.isConfigured(provider)) {
+            state.aiEnabled = false;
+            return null;
+          }
+          return Agent.parseMetric(provider, trimmed, {
+            visionName: vision ? vision.name : '',
+            missionName: mission.name,
+            boardName: state.boardName,
+            existingMetrics: existing,
+            hasPrimary: hasPrimary,
+          });
+        })
+        .then(function (parsed) {
+          if (!parsed || !parsed.name) {
+            return fallbackCreate(trimmed);
+          }
+          var payload = {
+            name: parsed.name,
+            type: parsed.type || 'incremental',
+            direction: parsed.direction || 'increase',
+            measurement: parsed.measurement || 'manual',
+            currentValue:
+              parsed.currentValue != null && isFinite(Number(parsed.currentValue))
+                ? Number(parsed.currentValue)
+                : 0,
+            linkedGoalId: state.selectedMissionId,
+            isPrimary: !!parsed.isPrimary && !hasPrimary,
+          };
+          if (parsed.target != null && isFinite(Number(parsed.target))) {
+            payload.target = Number(parsed.target);
+          }
+          if (
+            payload.type === 'sentimental' &&
+            Array.isArray(parsed.scaleLabels) &&
+            parsed.scaleLabels.length >= 2
+          ) {
+            payload.scaleLabels = parsed.scaleLabels;
+          }
+          return GT.createMetric(t, payload);
+        })
+        .then(reload);
+    }
+
     function renderMetrics() {
       metricsPanel.replaceChildren();
-      metricSuggest.formApi = null;
-      metricSuggest.section = null;
-      metricSuggest.statusEl = null;
-      metricSuggest.listEl = null;
 
       if (!state.selectedMissionId) {
-        metricsPanel.appendChild(
-          el('p', 'tp-goals-empty', {
-            text: 'S\u00e9lectionnez une mission pour g\u00e9rer ses m\u00e9triques.',
-          })
-        );
         return;
       }
 
@@ -746,186 +818,19 @@
       }
       metricsPanel.appendChild(listEl);
 
-      var suggestSection = el('div', 'tp-goals-suggestions tp-goals-metric-suggestions');
-      suggestSection.hidden = true;
-      suggestSection.innerHTML =
-        '<div class="tp-goals-suggestions-head">' +
-        '<span class="tp-goals-suggestions-label">Suggestions IA</span>' +
-        '<button type="button" class="tp-goals-suggestions-refresh" ' +
-        'aria-label="Rafra\u00eechir les suggestions" title="Rafra\u00eechir">\u21bb</button>' +
-        '</div>' +
-        '<p class="tp-goals-suggestions-status" hidden></p>' +
-        '<div class="tp-goals-suggestions-list" role="list"></div>';
-      metricsPanel.appendChild(suggestSection);
-      metricSuggest.section = suggestSection;
-      metricSuggest.statusEl = suggestSection.querySelector('.tp-goals-suggestions-status');
-      metricSuggest.listEl = suggestSection.querySelector('.tp-goals-suggestions-list');
-      suggestSection.querySelector('.tp-goals-suggestions-refresh').addEventListener('click', function () {
-        refreshMetricSuggestions(true);
-      });
-
-      var formApi = renderMetricForm(null, metrics);
-      metricSuggest.formApi = formApi;
-      metricsPanel.appendChild(formApi.el);
-
-      setTimeout(function () {
-        refreshMetricSuggestions(false);
-      }, 0);
-    }
-
-    function setMetricSuggestStatus(text, show) {
-      if (!metricSuggest.statusEl) return;
-      if (!show || !text) {
-        metricSuggest.statusEl.hidden = true;
-        metricSuggest.statusEl.textContent = '';
-        return;
+      var addRow = buildAddRow(
+        'Ex. NPS de 30 \u00e0 70, ou satisfaction\u2026',
+        createMetricFromText
+      );
+      var addInput = addRow.querySelector('input');
+      if (addInput) {
+        addInput.setAttribute('maxlength', '280');
+        addInput.setAttribute(
+          'title',
+          'D\u00e9crivez la m\u00e9trique en texte libre\u00a0; l\u2019IA remplira les champs.'
+        );
       }
-      metricSuggest.statusEl.hidden = false;
-      metricSuggest.statusEl.textContent = text;
-    }
-
-    function applyMetricSuggestion(suggestion, opts) {
-      opts = opts || {};
-      if (!metricSuggest.formApi || !suggestion) return;
-      metricSuggest.formApi.apply(suggestion, { force: !!opts.force });
-      onResize();
-    }
-
-    function renderMetricSuggestions() {
-      if (!metricSuggest.section || !metricSuggest.listEl) return;
-      metricSuggest.listEl.replaceChildren();
-
-      if (!state.aiEnabled || !state.selectedMissionId) {
-        metricSuggest.section.hidden = true;
-        return;
-      }
-      metricSuggest.section.hidden = false;
-
-      if (metricSuggest.loading) {
-        setMetricSuggestStatus('G\u00e9n\u00e9ration des m\u00e9triques\u2026', true);
-        return;
-      }
-      if (!metricSuggest.items.length) {
-        setMetricSuggestStatus('Aucune suggestion pour le moment.', true);
-        return;
-      }
-      setMetricSuggestStatus('', false);
-
-      metricSuggest.items.forEach(function (item, index) {
-        var label = item.name + (item.isPrimary ? ' \u00b7 Principale' : '');
-        var btn = el('button', 'tp-goals-suggestion', {
-          type: 'button',
-          text: label,
-          attrs: {
-            role: 'listitem',
-            title: 'Remplir le formulaire\u00a0: ' + item.name,
-            'data-suggestion-index': String(index),
-          },
-        });
-        btn.addEventListener('click', function () {
-          applyMetricSuggestion(item, { force: true });
-        });
-        metricSuggest.listEl.appendChild(btn);
-      });
-    }
-
-    function refreshMetricSuggestions(force) {
-      if (
-        !state.aiEnabled ||
-        !state.selectedMissionId ||
-        !Agent ||
-        typeof Agent.suggestMetrics !== 'function'
-      ) {
-        if (metricSuggest.section) metricSuggest.section.hidden = true;
-        return Promise.resolve();
-      }
-
-      var mission = GT.findById(state.missions, state.selectedMissionId);
-      if (!mission) {
-        if (metricSuggest.section) metricSuggest.section.hidden = true;
-        return Promise.resolve();
-      }
-      var vision = GT.findById(state.visions, mission.visionId);
-      var existing = state.metrics.filter(function (m) {
-        return m.linkedGoalId === state.selectedMissionId;
-      });
-      var key =
-        mission.id +
-        '|' +
-        (vision ? vision.name : '') +
-        '|' +
-        mission.name +
-        '|' +
-        existing
-          .map(function (m) {
-            return m.name;
-          })
-          .join('\u0001');
-
-      if (
-        !force &&
-        metricSuggest.key === key &&
-        (metricSuggest.items.length || metricSuggest.loading)
-      ) {
-        renderMetricSuggestions();
-        if (metricSuggest.items.length && metricSuggest.formApi) {
-          applyMetricSuggestion(
-            metricSuggest.items.find(function (m) {
-              return m.isPrimary;
-            }) || metricSuggest.items[0],
-            { force: false }
-          );
-        }
-        return Promise.resolve();
-      }
-
-      var seq = ++metricSuggest.seq;
-      metricSuggest.loading = true;
-      metricSuggest.key = key;
-      metricSuggest.missionId = mission.id;
-      metricSuggest.items = [];
-      renderMetricSuggestions();
-
-      return Agent.getProvider(t)
-        .then(function (provider) {
-          if (!Agent.isConfigured(provider)) {
-            state.aiEnabled = false;
-            return [];
-          }
-          return Agent.suggestMetrics(provider, {
-            visionName: vision ? vision.name : '',
-            missionName: mission.name,
-            boardName: state.boardName,
-            existingMetrics: existing,
-          });
-        })
-        .then(function (list) {
-          if (seq !== metricSuggest.seq) return;
-          metricSuggest.items = Array.isArray(list) ? list.slice(0, 3) : [];
-          metricSuggest.loading = false;
-          renderMetricSuggestions();
-          if (metricSuggest.items.length) {
-            applyMetricSuggestion(
-              metricSuggest.items.find(function (m) {
-                return m.isPrimary;
-              }) || metricSuggest.items[0],
-              { force: false }
-            );
-          }
-          onResize();
-        })
-        .catch(function (err) {
-          console.error('Goals metric suggestions failed', err);
-          if (seq !== metricSuggest.seq) return;
-          metricSuggest.loading = false;
-          metricSuggest.items = [];
-          setMetricSuggestStatus(
-            'Impossible de g\u00e9n\u00e9rer des m\u00e9triques (IA indisponible).',
-            true
-          );
-          if (metricSuggest.section) metricSuggest.section.hidden = false;
-          onResize();
-        });
+      metricsPanel.appendChild(addRow);
     }
 
     function renderMetricCard(metric, allMetrics) {
@@ -975,7 +880,7 @@
           return;
         }
         var host = el('div', 'tp-goals-metric-edit');
-        host.appendChild(renderMetricForm(metric, allMetrics).el);
+        host.appendChild(renderMetricForm(metric, allMetrics));
         card.appendChild(host);
         onResize();
       });
@@ -999,11 +904,10 @@
     }
 
     function renderMetricForm(existing, allMetrics) {
-      var isEdit = !!existing;
       var form = el('div', 'tp-goals-metric-form');
       form.appendChild(
         el('h5', 'tp-goals-form-title', {
-          text: isEdit ? 'Modifier la m\u00e9trique' : 'Ajouter une m\u00e9trique',
+          text: 'Modifier la m\u00e9trique',
         })
       );
 
@@ -1014,21 +918,9 @@
         return wrap;
       }
 
-      function setSelectValue(select, value) {
-        var found = false;
-        for (var i = 0; i < select.options.length; i++) {
-          if (select.options[i].value === value) {
-            select.selectedIndex = i;
-            found = true;
-            break;
-          }
-        }
-        return found;
-      }
-
       var nameInput = el('input', 'tp-goals-input', {
         type: 'text',
-        value: existing ? existing.name : '',
+        value: existing.name || '',
         attrs: { maxlength: '120', placeholder: 'Nom' },
       });
       var typeSelect = el('select', 'tp-select');
@@ -1037,9 +929,7 @@
         ['sentimental', 'Sentimentale'],
       ].forEach(function (opt) {
         var o = el('option', null, { value: opt[0], text: opt[1] });
-        if ((existing && existing.type === opt[0]) || (!existing && opt[0] === 'incremental')) {
-          o.selected = true;
-        }
+        if (existing.type === opt[0]) o.selected = true;
         typeSelect.appendChild(o);
       });
 
@@ -1050,9 +940,7 @@
         ['hold', 'Maintenir \u2194'],
       ].forEach(function (opt) {
         var o = el('option', null, { value: opt[0], text: opt[1] });
-        if ((existing && existing.direction === opt[0]) || (!existing && opt[0] === 'increase')) {
-          o.selected = true;
-        }
+        if (existing.direction === opt[0]) o.selected = true;
         dirSelect.appendChild(o);
       });
 
@@ -1062,36 +950,34 @@
         ['direct', 'Directe'],
       ].forEach(function (opt) {
         var o = el('option', null, { value: opt[0], text: opt[1] });
-        if ((existing && existing.measurement === opt[0]) || (!existing && opt[0] === 'manual')) {
-          o.selected = true;
-        }
+        if (existing.measurement === opt[0]) o.selected = true;
         measureSelect.appendChild(o);
       });
 
       var currentInput = el('input', 'tp-goals-input', {
         type: 'number',
-        value: existing ? String(existing.currentValue) : '0',
+        value: String(existing.currentValue != null ? existing.currentValue : 0),
         step: 'any',
       });
       var targetInput = el('input', 'tp-goals-input', {
         type: 'number',
-        value: existing && existing.target != null ? String(existing.target) : '',
+        value: existing.target != null ? String(existing.target) : '',
         step: 'any',
         attrs: { placeholder: 'Optionnel' },
       });
       var scaleLo = el('input', 'tp-goals-input', {
         type: 'text',
-        value: existing && existing.scaleLabels ? existing.scaleLabels[0] : '',
+        value: existing.scaleLabels ? existing.scaleLabels[0] : '',
         attrs: { placeholder: 'Ex. Tr\u00e8s ennuyant' },
       });
       var scaleHi = el('input', 'tp-goals-input', {
         type: 'text',
-        value: existing && existing.scaleLabels ? existing.scaleLabels[1] : '',
+        value: existing.scaleLabels ? existing.scaleLabels[1] : '',
         attrs: { placeholder: 'Ex. Tr\u00e8s valorisant' },
       });
       var primaryCheck = el('input', null, {
         type: 'checkbox',
-        checked: existing ? !!existing.isPrimary : false,
+        checked: !!existing.isPrimary,
       });
       var primaryLabel = el('label', 'tp-goals-toggle');
       primaryLabel.appendChild(primaryCheck);
@@ -1102,11 +988,11 @@
       });
       (allMetrics || [])
         .filter(function (m) {
-          return !existing || m.id !== existing.id;
+          return m.id !== existing.id;
         })
         .forEach(function (m) {
           var o = el('option', null, { value: m.id, text: m.name });
-          if (existing && existing.dependsOn && existing.dependsOn.indexOf(m.id) !== -1) {
+          if (existing.dependsOn && existing.dependsOn.indexOf(m.id) !== -1) {
             o.selected = true;
           }
           depsSelect.appendChild(o);
@@ -1123,57 +1009,9 @@
       form.appendChild(field('D\u00e9pend de', depsSelect));
       form.appendChild(primaryLabel);
 
-      var userEdited = false;
-      if (!isEdit) {
-        function markEdited() {
-          userEdited = true;
-        }
-        nameInput.addEventListener('input', markEdited);
-        typeSelect.addEventListener('change', markEdited);
-        dirSelect.addEventListener('change', markEdited);
-        measureSelect.addEventListener('change', markEdited);
-        currentInput.addEventListener('input', markEdited);
-        targetInput.addEventListener('input', markEdited);
-        scaleLo.addEventListener('input', markEdited);
-        scaleHi.addEventListener('input', markEdited);
-        primaryCheck.addEventListener('change', markEdited);
-      }
-
-      function applySuggestion(suggestion, opts) {
-        opts = opts || {};
-        if (isEdit || !suggestion) return false;
-        if (!opts.force && userEdited && nameInput.value.trim()) return false;
-        nameInput.value = suggestion.name || '';
-        setSelectValue(typeSelect, suggestion.type || 'incremental');
-        setSelectValue(dirSelect, suggestion.direction || 'increase');
-        setSelectValue(measureSelect, suggestion.measurement || 'manual');
-        currentInput.value =
-          suggestion.currentValue != null && isFinite(Number(suggestion.currentValue))
-            ? String(suggestion.currentValue)
-            : '0';
-        targetInput.value =
-          suggestion.target != null && isFinite(Number(suggestion.target))
-            ? String(suggestion.target)
-            : '';
-        if (suggestion.type === 'sentimental' && Array.isArray(suggestion.scaleLabels)) {
-          scaleLo.value = suggestion.scaleLabels[0] || '';
-          scaleHi.value = suggestion.scaleLabels[1] || '';
-        } else {
-          scaleLo.value = '';
-          scaleHi.value = '';
-        }
-        var hasPrimary = (allMetrics || []).some(function (m) {
-          return m.isPrimary;
-        });
-        primaryCheck.checked = !!suggestion.isPrimary && !hasPrimary;
-        userEdited = false;
-        form.classList.add('is-ai-filled');
-        return true;
-      }
-
       var saveBtn = el('button', 'tp-button', {
         type: 'button',
-        text: isEdit ? 'Enregistrer' : 'Ajouter',
+        text: 'Enregistrer',
       });
       saveBtn.addEventListener('click', function () {
         var rawName = nameInput.value.trim();
@@ -1205,17 +1043,14 @@
             }
             if (selectedDeps.length) payload.dependsOn = selectedDeps;
 
-            if (isEdit) {
-              return GT.updateMetric(t, existing.id, payload).then(function () {
-                if (payload.isPrimary) {
-                  return GT.setPrimaryMetric(t, state.selectedMissionId, existing.id);
-                }
-                if (existing.isPrimary && !payload.isPrimary) {
-                  return GT.setPrimaryMetric(t, state.selectedMissionId, null);
-                }
-              });
-            }
-            return GT.createMetric(t, payload);
+            return GT.updateMetric(t, existing.id, payload).then(function () {
+              if (payload.isPrimary) {
+                return GT.setPrimaryMetric(t, state.selectedMissionId, existing.id);
+              }
+              if (existing.isPrimary && !payload.isPrimary) {
+                return GT.setPrimaryMetric(t, state.selectedMissionId, null);
+              }
+            });
           })
           .then(reload)
           .catch(function (err) {
@@ -1227,10 +1062,7 @@
           });
       });
       form.appendChild(saveBtn);
-      return {
-        el: form,
-        apply: applySuggestion,
-      };
+      return form;
     }
 
     function detectAi() {

@@ -935,6 +935,24 @@
               ease: axisWord('ease', easeLvl)
             }
           : null,
+        // Impact reach = labels.impact (Personnel → Global).
+        impactReach: priorityEnabled ? axisWord('impact', impactLvl) || null : null,
+        estimatedDurationMinutes:
+          priorityEnabled &&
+          state.estimatedDurationMinutes != null &&
+          isFinite(+state.estimatedDurationMinutes)
+            ? +state.estimatedDurationMinutes
+            : null,
+        estimatedDurationLabel: (function () {
+          if (!priorityEnabled || state.estimatedDurationMinutes == null) return null;
+          if (
+            typeof PriorityUI !== 'undefined' &&
+            typeof PriorityUI.formatDurationFr === 'function'
+          ) {
+            return PriorityUI.formatDurationFr(state.estimatedDurationMinutes) || null;
+          }
+          return null;
+        })(),
         // Ready-made answer for "is it hard?" / Facilité questions.
         easeExplanation: buildEaseExplanation(state),
         explanation: null
@@ -1124,7 +1142,11 @@
       '- Ex. facile\u00a0: user \u00ab\u00a0is it hard to do?\u00a0\u00bb, easeExplanation pr\u00eate \u2192 {"thinking":"priority.easeExplanation (Facilit\u00e9=Facile).","message":"Non\u00a0: d\'apr\u00e8s la Facilit\u00e9 de cette carte, c\'est jug\u00e9 facile \u00e0 r\u00e9aliser.","suggestions":["Quelle est la priorit\u00e9?","Augmenter l\'impact"],"followUps":[],"actions":[]}',
       '- Ex. difficile\u00a0: labels.ease=Difficile \u2192 message du type \u00ab\u00a0Oui, d\'apr\u00e8s la Facilit\u00e9, cette t\u00e2che est jug\u00e9e difficile.\u00a0\u00bb',
       '- Ex. moyen\u00a0: labels.ease=Moyen \u2192 \u00ab\u00a0Ni vraiment dur ni trivial\u00a0: Facilit\u00e9 moyenne sur cette carte.\u00a0\u00bb',
-      '- M\u00eame logique pour Impact (labels.impact) et Urgence (labels.urgency) quand on pose la question sur ces axes.',
+      '- M\u00eame logique pour Impact (labels.impact / impactReach) et Urgence (labels.urgency) quand on pose la question sur ces axes.',
+      '- Port\u00e9e / impact (Personnel \u2192 \u00c9quipe \u2192 Interne \u2192 Population \u2192 Global)\u00a0: answers via context.priority.impactReach (ou labels.impact). Qui est touch\u00e9?',
+      '- Dur\u00e9e estim\u00e9e (Facilit\u00e9)\u00a0: context.priority.estimatedDurationLabel / estimatedDurationMinutes. Distingue dur\u00e9e (temps) vs Facilit\u00e9 (difficult\u00e9).',
+      '- Ex. port\u00e9e\u00a0: user \u00ab\u00a0qui est impact\u00e9?\u00a0\u00bb, impactReach=\u00c9quipe \u2192 message du type \u00ab\u00a0La port\u00e9e est \u00c9quipe\u00a0: effet sur l\'\u00e9quipe imm\u00e9diate.\u00a0\u00bb',
+      '- Ex. dur\u00e9e\u00a0: user \u00ab\u00a0combien de temps?\u00a0\u00bb, estimatedDurationLabel=\u00ab\u00a0environ 2 jours\u00a0\u00bb \u2192 cite ce libell\u00e9.',
       '- Si priority.enabled=false\u00a0: dis qu\'aucune Facilit\u00e9 / priorit\u00e9 n\'est d\u00e9finie (ne sors pas d\'anciennes valeurs).',
       'Expliquer la priorit\u00e9 actuelle (tr\u00e8s important)\u00a0:',
       '- Quand l\'utilisateur demande la priorit\u00e9 (\u00ab\u00a0Quelle est la priorit\u00e9?\u00a0\u00bb, \u00ab\u00a0priorit\u00e9 actuelle\u00a0\u00bb, etc.)\u00a0: r\u00e9ponds en langage naturel.',
@@ -1146,7 +1168,7 @@
       '- Ne bloque JAMAIS une action pour un param\u00e8tre optionnel. Applique le minimum viable, puis adapte.',
       '- Ne pose une question AVANT d\'appeler un outil QUE si un param\u00e8tre OBLIGATOIRE manque et qu\'aucune action partielle n\'est possible.',
       '- Param\u00e8tres optionnels (ne jamais exiger avant d\'agir)\u00a0: dueTime, blockedReasons, axes priorit\u00e9 non fournis, progress pr\u00e9cis si on active seulement la section.',
-      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_project\u00a0: projectId OU matchText/name OU clear:true\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget ou priorityEnabled.',
+      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_project\u00a0: projectId OU matchText/name OU clear:true\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget, estimatedDuration/estimatedDurationMinutes ou priorityEnabled.',
       '- Dates relatives (jours)\u00a0: r\u00e9sous avec context.today (aujourd\'hui / today \u2192 context.today\u00a0; demain \u2192 +1 jour). N\'invente pas d\'autre date.',
       '- Heures relatives (tr\u00e8s important)\u00a0: \u00ab\u00a0dans 15 minutes\u00a0\u00bb / \u00ab\u00a0in 15 minutes\u00a0\u00bb / \u00ab\u00a0dans 2 heures\u00a0\u00bb = D\u00c9LAI depuis maintenant, PAS une heure fixe du matin.',
       '- Pour un d\u00e9lai\u00a0: utilise set_due avec relativeMinutes (ou relativeHours). Le runtime calcule dueDate/dueTime \u00e0 partir de context.nowTime (' +
@@ -1198,6 +1220,8 @@
       '  \u00b7 Ex. palier\u00a0: user \u00ab\u00a0change priority for flexible\u00a0\u00bb / \u00ab\u00a0Mets Flexible\u00a0\u00bb \u2192 {"message":"Okay, Flexible. Affinez les axes si besoin.","suggestions":["C\'est bon","D\u00e9finir une \u00e9ch\u00e9ance"],"followUps":[],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}]}',
       '  \u00b7 Ex. Critique\u00a0: user \u00ab\u00a0Mets Critique\u00a0\u00bb \u2192 {"message":"Okay, Critique.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Marquer bloqu\u00e9"],"followUps":[],"prompts":[{"type":"priority_axes","urgency":4,"impact":4,"ease":5}],"actions":[{"tool":"set_priority","args":{"tier":"Critique"}}]}',
       '  \u00b7 Axes fournis explicitement (urgence/impact/facilit\u00e9)\u00a0: applique set_priority avec ces valeurs tout de suite (prompts=[]).',
+      '  \u00b7 Dur\u00e9e estim\u00e9e\u00a0: set_priority avec estimatedDurationMinutes (nombre) ou estimatedDuration (texte FR/EN). Ind\u00e9pendant de ease.',
+      '  \u00b7 Port\u00e9e\u00a0: impact 0\u20134 = Personnel / \u00c9quipe / Interne / Population / Global.',
       '  \u00b7 Demande vraiment vague SANS palier NI axes (\u00ab\u00a0mettre \u00e0 jour la priorit\u00e9\u00a0\u00bb)\u00a0: alors seulement propose prompts priority_axes (pr\u00e9rempli avec context.priority) OU une courte question de palier\u00a0; n\'invente pas de palier.',
       '- Si l\'utilisateur active le progr\u00e8s sans chiffre\u00a0: set_progress avec progressEnabled:true tout de suite, puis demande le % en option.',
       '- set_progress avec un % \u00e9chelonne les sous-t\u00e2ches (master) s\'il y en a\u00a0; sinon progres carte.',
@@ -1253,7 +1277,7 @@
       '- Pour activer/d\u00e9sactiver\u00a0: priorityEnabled, dueEnabled, enAttente (Bloqu\u00e9), progressEnabled.',
       '- Pour marquer bloqu\u00e9\u00a0: set_blocked avec enAttente:true tout de suite (motifs ensuite si fournis). Ne dis jamais que c\'est d\u00e9j\u00e0 bloqu\u00e9 si enabled=false.',
       'Outils disponibles\u00a0:',
-      '- set_priority: { urgency?:0-4, impact?:0-4, ease?:1-5, priorityEnabled?:boolean, tier?: string, heatTarget?: number } (tier = Critique|Urgente|Prioritaire|Importante|Flexible|Secondaire|Optionnelle)',
+      '- set_priority: { urgency?:0-4, impact?:0-4, ease?:1-5, estimatedDurationMinutes?:number|null, estimatedDuration?:string, priorityEnabled?:boolean, tier?: string, heatTarget?: number } (tier = Critique|Urgente|Prioritaire|Importante|Flexible|Secondaire|Optionnelle\u00a0; impact 0\u20134 = port\u00e9e Personnel\u2026Global\u00a0; estimatedDuration = texte FR/EN ex. \u00ab\u00a02 jours\u00a0\u00bb)',
       '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean, relativeMinutes?: number, relativeHours?: number } (dueTime OPTIONNEL pour une date\u00a0; d\u00e9lai \u00ab\u00a0dans N min/h\u00a0\u00bb \u2192 relativeMinutes/relativeHours, calcul\u00e9 depuis context.nowTime\u00a0; aujourd\'hui = context.today)',
       '- set_blocked: { enAttente?: boolean, blockedReasons?: string[], blockedLinks?: [{id?:string, matchText?:string, label?:string}] } (enAttente:true seul suffit\u00a0; motifs et liens optionnels)',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (master sur sous-t\u00e2ches si items\u00a0; sinon progres carte)',
@@ -1636,6 +1660,106 @@
     return list.filter(function (m) {
       return m && m.name && !existingKeys[m.name.toLocaleLowerCase('fr-FR')];
     });
+  }
+
+  /**
+   * Parse free-text into a single metric payload.
+   * context: { visionName?, missionName?, boardName?, existingMetrics?, hasPrimary? }
+   * Returns normalized metric or null.
+   */
+  async function parseMetric(provider, text, context, options) {
+    options = options || {};
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) return null;
+    var rawText = typeof text === 'string' ? text.trim() : '';
+    if (!rawText) return null;
+
+    var ctx = context && typeof context === 'object' ? context : {};
+    var visionName = typeof ctx.visionName === 'string' ? ctx.visionName.trim() : '';
+    var missionName = typeof ctx.missionName === 'string' ? ctx.missionName.trim() : '';
+    var existing = Array.isArray(ctx.existingMetrics) ? ctx.existingMetrics : [];
+    var existingNames = existing
+      .map(function (m) {
+        return typeof m === 'string' ? m.trim() : m && m.name ? String(m.name).trim() : '';
+      })
+      .filter(Boolean);
+    var hasPrimary = ctx.hasPrimary === true || existing.some(function (m) {
+      return m && m.isPrimary;
+    });
+
+    var payload = {
+      text: rawText.slice(0, 400),
+      visionName: visionName.slice(0, 200),
+      missionName: missionName.slice(0, 200),
+      boardName: typeof ctx.boardName === 'string' ? ctx.boardName.slice(0, 200) : '',
+      existingMetrics: existingNames.slice(0, 30),
+      hasPrimary: hasPrimary
+    };
+
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu convertis une description libre en UNE m\u00e9trique Trello (Objectifs\u00a0: Vision \u2192 Mission).',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
+          '{"metric":{"name":"\u2026","type":"incremental|sentimental","direction":"increase|decrease|hold","measurement":"manual|direct","currentValue":0,"target":100,"scaleLabels":["bas","haut"],"isPrimary":false}}',
+          'Extrais tout ce qui est dit (nom, valeurs, direction, type). Compl\u00e8te seulement les champs manquants de fa\u00e7on raisonnable.',
+          'type incremental = quantit\u00e9 num\u00e9rique\u00a0; sentimental = \u00e9chelle subjective (alors scaleLabels [bas, haut] obligatoires).',
+          'Ex. \u00ab\u00a0NPS de 30 \u00e0 70\u00a0\u00bb \u2192 incremental, increase, currentValue 30, target 70.',
+          'Ex. \u00ab\u00a0Satisfaction de mauvais \u00e0 excellent\u00a0\u00bb \u2192 sentimental, increase, scaleLabels.',
+          'Ex. \u00ab\u00a0Maintenir le taux \u00e0 80\u00a0\u00bb \u2192 hold, currentValue/target 80.',
+          'measurement\u00a0: manual sauf si l\'utilisateur demande un suivi auto/direct.',
+          'isPrimary:true seulement si explicitement demand\u00e9 OU si aucune m\u00e9trique principale n\'existe encore (hasPrimary:false).',
+          'Nom court en fran\u00e7ais, concret, mesurable \u2014 jamais un copier-coller trop long de la phrase.',
+          'INTERDIT\u00a0: inventer une autre m\u00e9trique sans rapport avec le texte.',
+          'INTERDIT\u00a0: dupliquer une m\u00e9trique existante (m\u00eame sens).',
+          'Contexte\u00a0:',
+          JSON.stringify(payload)
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content: 'Parse cette m\u00e9trique\u00a0: ' + rawText.slice(0, 400)
+      }
+    ];
+
+    var response;
+    try {
+      response = await chatCompletions(p, messages, {
+        jsonMode: true,
+        max_tokens: 360,
+        temperature: 0.2,
+        stream: false
+      });
+    } catch (err) {
+      if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+        response = await chatCompletions(p, messages, {
+          jsonMode: false,
+          max_tokens: 360,
+          temperature: 0.2,
+          stream: false
+        });
+      } else {
+        console.error('PriorityAgent.parseMetric failed', err);
+        return null;
+      }
+    }
+
+    var metric = null;
+    try {
+      var parsed = parseAssistantPayload(response.content);
+      metric = normalizeMetricSuggestion(parsed.metric || parsed);
+    } catch (e) {
+      try {
+        var raw = JSON.parse(response.content);
+        metric = normalizeMetricSuggestion(raw.metric || raw);
+      } catch (e2) {
+        metric = null;
+      }
+    }
+    if (!metric) return null;
+    if (hasPrimary) metric.isPrimary = false;
+    return metric;
   }
 
   /**
@@ -2994,6 +3118,10 @@
       urgency: s.urgency,
       impact: s.impact,
       ease: s.ease,
+      estimatedDurationMinutes:
+        s.estimatedDurationMinutes != null && isFinite(+s.estimatedDurationMinutes)
+          ? +s.estimatedDurationMinutes
+          : null,
       priorityEnabled: s.priorityEnabled !== false,
       dueDate: s.dueDate || '',
       dueTime: s.dueTime || '',
@@ -3243,6 +3371,12 @@
       pushChange(parts, 'urgency', beforeP.urgency, afterP.urgency);
       pushChange(parts, 'impact', beforeP.impact, afterP.impact);
       pushChange(parts, 'ease', beforeP.ease, afterP.ease);
+      pushChange(
+        parts,
+        'estimatedDurationMinutes',
+        beforeP.estimatedDurationMinutes,
+        afterP.estimatedDurationMinutes
+      );
     } else if (tool === 'set_due') {
       pushChange(parts, 'dueEnabled', beforeP.dueEnabled, afterP.dueEnabled);
       pushChange(parts, 'dueDate', beforeP.dueDate, afterP.dueDate);
@@ -3464,12 +3598,46 @@
         if (args.urgency != null) partial.urgency = clampInt(args.urgency, 0, 4, 0);
         if (args.impact != null) partial.impact = clampInt(args.impact, 0, 4, 0);
         if (args.ease != null) partial.ease = clampInt(args.ease, 1, 5, 3);
+        if (args.estimatedDurationMinutes !== undefined) {
+          if (
+            args.estimatedDurationMinutes === null ||
+            args.estimatedDurationMinutes === ''
+          ) {
+            partial.estimatedDurationMinutes = null;
+          } else {
+            var durMin = +args.estimatedDurationMinutes;
+            if (isFinite(durMin) && durMin > 0) {
+              if (
+                typeof PriorityUI !== 'undefined' &&
+                typeof PriorityUI.clampDurationMinutes === 'function'
+              ) {
+                partial.estimatedDurationMinutes =
+                  PriorityUI.clampDurationMinutes(durMin);
+              } else {
+                partial.estimatedDurationMinutes = Math.round(durMin);
+              }
+            }
+          }
+        } else if (
+          typeof args.estimatedDuration === 'string' &&
+          args.estimatedDuration.trim()
+        ) {
+          var parsedDur =
+            typeof PriorityUI !== 'undefined' &&
+            typeof PriorityUI.parseDurationNl === 'function'
+              ? PriorityUI.parseDurationNl(args.estimatedDuration)
+              : null;
+          if (parsedDur != null) {
+            partial.estimatedDurationMinutes = parsedDur;
+          }
+        }
         if (args.priorityEnabled != null) {
           partial.priorityEnabled = !!args.priorityEnabled;
         } else if (
           (partial.urgency != null ||
             partial.impact != null ||
-            partial.ease != null) &&
+            partial.ease != null ||
+            partial.estimatedDurationMinutes !== undefined) &&
           !beforeP.priorityEnabled
         ) {
           // Writing axis values must activate Priorité or the UI stays off.
@@ -4536,6 +4704,7 @@
     suggestSubtasks: suggestSubtasks,
     suggestGoals: suggestGoals,
     suggestMetrics: suggestMetrics,
+    parseMetric: parseMetric,
     executeAction: executeAction,
     executeActions: executeActions,
     formatChangeRecap: formatChangeRecap,

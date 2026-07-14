@@ -104,25 +104,25 @@
     },
     impact: {
       icon: ['impact-0', 'impact-1', 'impact-2', 'impact-3', 'impact-4'],
-      short: ['Aucune', 'Faible', 'Utile', 'Importante', 'Impact majeur'],
+      short: ['Personnel', '\u00c9quipe', 'Interne', 'Population', 'Global'],
       detail: [
-        'Peu ou pas de bénéfice visible. L\'effort ne crée quasi aucune valeur, portée ni opportunité pour l\'équipe.',
-        'Gain marginal avec peu de visibilité. Petite amélioration qui ne change que marginalement la valeur ou la portée des résultats.',
-        'Amélioration nette pour l\'équipe ou le produit. Valeur concrète, bénéfices perceptibles et quelques opportunités débloquées.',
-        'Objectif clé ou livrable majeur. Forte valeur, impact visible et portée significative sur les priorités en cours.',
-        'Valeur exceptionnelle et large portée. Débloque de nombreuses tâches ou personnes ; opportunité stratégique que l\'équipe ressent immédiatement.'
+        'Port\u00e9e individuelle. L\'action touche surtout vous ou une seule personne.',
+        'Port\u00e9e \u00e9quipe. Effet sur le groupe de travail imm\u00e9diat ou le squad.',
+        'Port\u00e9e interne. Impact \u00e0 l\'\u00e9chelle de l\'organisation (plusieurs \u00e9quipes / d\u00e9partements).',
+        'Port\u00e9e population. Effet notable sur clients, usagers ou une communaut\u00e9 large.',
+        'Port\u00e9e mondiale. Rayonnement global : march\u00e9, soci\u00e9t\u00e9 ou plan\u00e8te.'
       ],
       popup: {
-        subtitle: 'À quel point est-il important de faire cette tâche?',
-        intro: 'L\'impact mesure la valeur, l\'importance et la portée d\'une tâche. Les bénéfices concrets qu\'elle apporte, sa visibilité, les opportunités qu\'elle ouvre et le nombre de personnes ou de tâches qu\'elle débloque.',
-        guidance: 'Demandez-vous si le résultat sera visible, utile à l\'équipe ou au produit, et si d\'autres travaux en dépendent.'
+        subtitle: 'Quelle est la port\u00e9e de cette action?',
+        intro: 'L\'impact mesure la port\u00e9e de l\'action\u00a0: qui est touch\u00e9, de l\'individu jusqu\'au global. Plus le cercle est grand, plus la secousse (valeur et audience) est large.',
+        guidance: 'Choisissez le plus petit cercle qui contient vraiment les personnes ou syst\u00e8mes affect\u00e9s.'
       },
       affirmations: [
-        'Aucune. L\'effort ne vaut presque rien.',
-        'Gain marginal. Petite amélioration, peu visible.',
-        'Utile. Amélioration nette pour l\'équipe ou le produit.',
-        'Importante. Objectif clé, livrable visible.',
-        'Impact majeur. Forte valeur, large portée. D\'autres tâches en dépendent.'
+        'Personnel. Touche surtout une personne.',
+        '\u00c9quipe. Effet sur l\'\u00e9quipe imm\u00e9diate.',
+        'Interne. Port\u00e9e organisationnelle.',
+        'Population. Clients, usagers ou communaut\u00e9 large.',
+        'Global. Rayonnement mondial.'
       ]
     },
     ease: {
@@ -320,7 +320,7 @@
   var KEYWORDS = {
     time: 'Pression relative : blocages, dépendances et risque si repoussée.',
     blocking: 'Effet sur l\'équipe : blocages, dépendances et ralentissement du travail.',
-    impact: 'Valeur apportée : importance, portée, bénéfices, visibilité et opportunités débloquées.',
+    impact: 'Port\u00e9e de l\'action : Personnel \u2192 \u00c9quipe \u2192 Interne \u2192 Population \u2192 Global.',
     ease: 'Coût d\'exécution : complexité, ressources, difficulté, confiance et réversibilité.',
     urgency: 'Niveau d\'urgence : blocages, dépendances et risque si repoussée.'
   };
@@ -328,7 +328,7 @@
   var QUESTIONS = {
     time: 'Quelle pression pèse sur cette tâche?',
     blocking: 'Est-ce que quelque chose cesse de fonctionner si ce n\'est pas fait?',
-    impact: 'À quel point est-il important de faire cette tâche?',
+    impact: 'Quelle est la port\u00e9e de cette action?',
     ease: 'À quel point est-il facile de faire cette tâche?',
     urgency: 'À quel point est-ce urgent de faire cette tâche?'
   };
@@ -3755,6 +3755,549 @@
 
   // ── 9. Form controls (field, heat panel, calc graph) ────────────────────
 
+  // Impact reach (Personnel → Global) — vintage earthquake globe palette.
+  var IMPACT_REACH_COLORS = ['#c9b24a', '#c9923a', '#c4642e', '#a63d2a', '#7a2420'];
+  var IMPACT_REACH_RADII = [10, 16, 24, 34, 46];
+
+  // Facilité estimated duration: log scale ~5 min → ~2 years.
+  var DURATION_MIN_MINUTES = 5;
+  var DURATION_MAX_MINUTES = Math.round(2 * 365.25 * 24 * 60);
+  var DURATION_CRACK_MINUTES = Math.round(365.25 * 24 * 60);
+  var DURATION_TICKS = [
+    { label: 'Quelques minutes', minutes: 15 },
+    { label: 'Quelques heures', minutes: 3 * 60 },
+    { label: 'Quelques jours', minutes: 3 * 24 * 60 },
+    { label: 'Quelques semaines', minutes: 3 * 7 * 24 * 60 },
+    { label: 'Quelques mois', minutes: 3 * 30 * 24 * 60 },
+    { label: 'Quelques ann\u00e9es', minutes: DURATION_MAX_MINUTES }
+  ];
+  var DURATION_UNITS = [
+    { id: 'min', label: 'min', minutes: 1 },
+    { id: 'h', label: 'h', minutes: 60 },
+    { id: 'j', label: 'j', minutes: 24 * 60 },
+    { id: 'sem', label: 'sem', minutes: 7 * 24 * 60 },
+    { id: 'mois', label: 'mois', minutes: 30 * 24 * 60 },
+    { id: 'ans', label: 'ans', minutes: 365.25 * 24 * 60 }
+  ];
+
+  function clampDurationMinutes(minutes) {
+    var v = typeof minutes === 'number' ? minutes : parseFloat(minutes);
+    if (!isFinite(v) || v <= 0) return null;
+    return Math.max(
+      DURATION_MIN_MINUTES,
+      Math.min(DURATION_MAX_MINUTES, Math.round(v))
+    );
+  }
+
+  function durationToSlider(minutes) {
+    var m = clampDurationMinutes(minutes);
+    if (m == null) return 0;
+    var logMin = Math.log(DURATION_MIN_MINUTES);
+    var logMax = Math.log(DURATION_MAX_MINUTES);
+    return (
+      ((Math.log(m) - logMin) / (logMax - logMin)) * 100
+    );
+  }
+
+  function sliderToDuration(t) {
+    var x = clamp(typeof t === 'number' ? t : parseFloat(t), 0, 100);
+    var logMin = Math.log(DURATION_MIN_MINUTES);
+    var logMax = Math.log(DURATION_MAX_MINUTES);
+    return Math.round(Math.exp(logMin + (x / 100) * (logMax - logMin)));
+  }
+
+  function pickDurationUnit(minutes) {
+    var m = clampDurationMinutes(minutes) || DURATION_MIN_MINUTES;
+    if (m < 90) return DURATION_UNITS[0];
+    if (m < 36 * 60) return DURATION_UNITS[1];
+    if (m < 10 * 24 * 60) return DURATION_UNITS[2];
+    if (m < 8 * 7 * 24 * 60) return DURATION_UNITS[3];
+    if (m < 18 * 30 * 24 * 60) return DURATION_UNITS[4];
+    return DURATION_UNITS[5];
+  }
+
+  function formatDurationFr(minutes) {
+    var m = clampDurationMinutes(minutes);
+    if (m == null) return '';
+    var unit = pickDurationUnit(m);
+    var qty = m / unit.minutes;
+    var rounded =
+      qty >= 10 ? Math.round(qty) : Math.round(qty * 10) / 10;
+    if (Math.abs(rounded - Math.round(rounded)) < 0.05) {
+      rounded = Math.round(rounded);
+    }
+    var label = unit.label;
+    if (label === 'min') {
+      return rounded <= 1 ? 'environ 1 minute' : 'environ ' + rounded + ' minutes';
+    }
+    if (label === 'h') {
+      return rounded <= 1 ? 'environ 1 heure' : 'environ ' + rounded + ' heures';
+    }
+    if (label === 'j') {
+      return rounded <= 1 ? 'environ 1 jour' : 'environ ' + rounded + ' jours';
+    }
+    if (label === 'sem') {
+      return rounded <= 1 ? 'environ 1 semaine' : 'environ ' + rounded + ' semaines';
+    }
+    if (label === 'mois') {
+      return rounded <= 1 ? 'environ 1 mois' : 'environ ' + rounded + ' mois';
+    }
+    return rounded <= 1 ? 'environ 1 an' : 'environ ' + rounded + ' ans';
+  }
+
+  function parseDurationNl(text) {
+    if (typeof text !== 'string') return null;
+    var raw = text.trim().toLowerCase().replace(/,/g, '.');
+    if (!raw) return null;
+    // "a few minutes|hours|days|weeks|months|years" / "quelques …"
+    if (/quelques?\s+minutes?|a\s+few\s+minutes?/.test(raw)) return 15;
+    if (/quelques?\s+heures?|a\s+few\s+hours?/.test(raw)) return 3 * 60;
+    if (/quelques?\s+jours?|a\s+few\s+days?/.test(raw)) return 3 * 24 * 60;
+    if (/quelques?\s+semaines?|a\s+few\s+weeks?/.test(raw)) return 3 * 7 * 24 * 60;
+    if (/quelques?\s+mois|a\s+few\s+months?/.test(raw)) return 3 * 30 * 24 * 60;
+    if (/quelques?\s+ans|quelques?\s+années?|a\s+few\s+years?/.test(raw)) {
+      return DURATION_MAX_MINUTES;
+    }
+    var m = raw.match(
+      /(\d+(?:\.\d+)?)\s*(minutes?|mins?|min|heures?|hrs?|h|jours?|j|days?|d|semaines?|sem|weeks?|w|mois|months?|mo|ans|ann[eé]es?|years?|y)\b/
+    );
+    if (!m) {
+      // bare number → minutes
+      var bare = raw.match(/^(\d+(?:\.\d+)?)$/);
+      if (bare) return clampDurationMinutes(parseFloat(bare[1]));
+      return null;
+    }
+    var n = parseFloat(m[1]);
+    if (!isFinite(n) || n <= 0) return null;
+    var u = m[2];
+    var factor = 1;
+    if (/^min/.test(u)) factor = 1;
+    else if (/^(h|heure|hr)/.test(u)) factor = 60;
+    else if (/^(j|jour|day|d)$/.test(u)) factor = 24 * 60;
+    else if (/^(sem|semaine|week|w)/.test(u)) factor = 7 * 24 * 60;
+    else if (/^(mois|month|mo)/.test(u)) factor = 30 * 24 * 60;
+    else if (/^(an|ann|year|y)/.test(u)) factor = 365.25 * 24 * 60;
+    return clampDurationMinutes(n * factor);
+  }
+
+  function svgNS() {
+    return 'http://www.w3.org/2000/svg';
+  }
+
+  function svgEl(tag, attrs) {
+    var node = document.createElementNS(svgNS(), tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function (k) {
+        node.setAttribute(k, attrs[k]);
+      });
+    }
+    return node;
+  }
+
+  /**
+   * Retro earthquake-globe visualization bound to an impact field (0–4).
+   */
+  function attachImpactReachVisual(fieldApi) {
+    if (!fieldApi || !fieldApi.el) return null;
+    var wrap = document.createElement('div');
+    wrap.className = 'impact-reach';
+    wrap.setAttribute('aria-hidden', 'true');
+
+    var stage = document.createElement('div');
+    stage.className = 'impact-reach-stage';
+
+    var svg = svgEl('svg', {
+      class: 'impact-reach-svg',
+      viewBox: '0 0 120 88',
+      width: '120',
+      height: '88'
+    });
+
+    // Soft 3D pedestal ellipse (shadow / horizon).
+    var pedestal = svgEl('ellipse', {
+      class: 'impact-reach-pedestal',
+      cx: '60',
+      cy: '78',
+      rx: '38',
+      ry: '6'
+    });
+    svg.appendChild(pedestal);
+
+    var globeG = svgEl('g', { class: 'impact-reach-globe' });
+    globeG.appendChild(
+      svgEl('ellipse', {
+        class: 'impact-reach-sphere',
+        cx: '60',
+        cy: '46',
+        rx: '32',
+        ry: '30'
+      })
+    );
+    // Meridians / parallels — flat retro look.
+    globeG.appendChild(
+      svgEl('ellipse', {
+        class: 'impact-reach-meridian',
+        cx: '60',
+        cy: '46',
+        rx: '14',
+        ry: '30',
+        fill: 'none'
+      })
+    );
+    globeG.appendChild(
+      svgEl('ellipse', {
+        class: 'impact-reach-parallel',
+        cx: '60',
+        cy: '46',
+        rx: '32',
+        ry: '10',
+        fill: 'none'
+      })
+    );
+    globeG.appendChild(
+      svgEl('ellipse', {
+        class: 'impact-reach-parallel',
+        cx: '60',
+        cy: '36',
+        rx: '28',
+        ry: '7',
+        fill: 'none'
+      })
+    );
+    globeG.appendChild(
+      svgEl('path', {
+        class: 'impact-reach-land',
+        d: 'M42 40c4-6 10-8 16-6 5 2 8 7 7 12-1 4-5 7-10 8-6 1-11-2-13-7zM70 52c3-2 7-2 10 1 2 3 1 7-2 9-4 2-8 1-10-2-2-3-1-6 2-8z'
+      })
+    );
+    // Specular highlight for fake 3D.
+    globeG.appendChild(
+      svgEl('ellipse', {
+        class: 'impact-reach-shine',
+        cx: '48',
+        cy: '34',
+        rx: '8',
+        ry: '5'
+      })
+    );
+    svg.appendChild(globeG);
+
+    var quakeG = svgEl('g', { class: 'impact-reach-quake' });
+    var ring = svgEl('ellipse', {
+      class: 'impact-reach-ring',
+      cx: '60',
+      cy: '48',
+      rx: '10',
+      ry: '7',
+      fill: 'none'
+    });
+    var ring2 = svgEl('ellipse', {
+      class: 'impact-reach-ring impact-reach-ring--echo',
+      cx: '60',
+      cy: '48',
+      rx: '10',
+      ry: '7',
+      fill: 'none'
+    });
+    var epicenter = svgEl('circle', {
+      class: 'impact-reach-epicenter',
+      cx: '60',
+      cy: '48',
+      r: '2.5'
+    });
+    quakeG.appendChild(ring2);
+    quakeG.appendChild(ring);
+    quakeG.appendChild(epicenter);
+    svg.appendChild(quakeG);
+
+    stage.appendChild(svg);
+    wrap.appendChild(stage);
+
+    var legend = document.createElement('div');
+    legend.className = 'impact-reach-legend';
+    var shorts = (LABELS.impact && LABELS.impact.short) || [];
+    shorts.forEach(function (name, i) {
+      var chip = document.createElement('span');
+      chip.className = 'impact-reach-chip';
+      chip.dataset.level = String(i);
+      chip.textContent = name;
+      legend.appendChild(chip);
+    });
+    wrap.appendChild(legend);
+
+    fieldApi.el.classList.add('field--impact-reach');
+    fieldApi.el.appendChild(wrap);
+
+    var lastLevel = -1;
+    function paint(level) {
+      var L = clamp(Math.round(level), 0, 4);
+      var color = IMPACT_REACH_COLORS[L];
+      var r = IMPACT_REACH_RADII[L];
+      wrap.style.setProperty('--reach-color', color);
+      wrap.dataset.level = String(L);
+      ring.setAttribute('rx', String(r));
+      ring.setAttribute('ry', String(r * 0.62));
+      ring2.setAttribute('rx', String(r));
+      ring2.setAttribute('ry', String(r * 0.62));
+      epicenter.setAttribute('fill', color);
+      ring.setAttribute('stroke', color);
+      ring2.setAttribute('stroke', color);
+      var chips = legend.querySelectorAll('.impact-reach-chip');
+      for (var i = 0; i < chips.length; i++) {
+        chips[i].classList.toggle('is-active', i === L);
+      }
+      if (L !== lastLevel) {
+        wrap.classList.remove('is-shaking');
+        // Retrigger CSS animation.
+        void wrap.offsetWidth;
+        wrap.classList.add('is-shaking');
+        lastLevel = L;
+      }
+    }
+
+    var origUpdate = fieldApi.updateDisplay;
+    fieldApi.updateDisplay = function (v) {
+      origUpdate(v);
+      paint(snappedLevel(v, 0, 4));
+    };
+    paint(snappedLevel(fieldApi.getValue(), 0, 4));
+
+    return {
+      el: wrap,
+      paint: paint
+    };
+  }
+
+  /**
+   * Estimated-duration block under Facilité: log slider, precise controls, hourglass.
+   */
+  function createEstimatedDurationControl(config) {
+    config = config || {};
+    var host = config.el;
+    var onChange = config.onChange || function () {};
+    var minutes = clampDurationMinutes(config.value);
+
+    var block = document.createElement('div');
+    block.className = 'ease-duration';
+
+    var head = document.createElement('div');
+    head.className = 'ease-duration-head';
+    var title = document.createElement('span');
+    title.className = 'ease-duration-title';
+    title.textContent = 'Dur\u00e9e estim\u00e9e';
+    var summary = document.createElement('span');
+    summary.className = 'ease-duration-summary';
+    head.appendChild(title);
+    head.appendChild(summary);
+    block.appendChild(head);
+
+    var body = document.createElement('div');
+    body.className = 'ease-duration-body';
+
+    // Hourglass visual
+    var glassWrap = document.createElement('div');
+    glassWrap.className = 'hourglass-wrap';
+    var hgSvg = svgEl('svg', {
+      class: 'hourglass-svg',
+      viewBox: '0 0 48 72',
+      width: '40',
+      height: '60'
+    });
+    hgSvg.appendChild(
+      svgEl('path', {
+        class: 'hourglass-frame',
+        d: 'M10 6h28v6c0 8-8 14-14 18 6 4 14 10 14 18v6H10v-6c0-8 8-14 14-18C18 26 10 20 10 12V6z',
+        fill: 'none'
+      })
+    );
+    var sandTop = svgEl('path', {
+      class: 'hourglass-sand hourglass-sand--top',
+      d: 'M14 10h20v2c0 6-6 11-10 14-4-3-10-8-10-14v-2z'
+    });
+    var sandBot = svgEl('path', {
+      class: 'hourglass-sand hourglass-sand--bot',
+      d: 'M24 36c4 3 10 8 10 14v6H14v-6c0-6 6-11 10-14z'
+    });
+    var crackL = svgEl('path', {
+      class: 'hourglass-crack',
+      d: 'M18 22l4 6-3 5 5 7',
+      fill: 'none'
+    });
+    var crackR = svgEl('path', {
+      class: 'hourglass-crack',
+      d: 'M30 24l-3 5 4 6-2 5',
+      fill: 'none'
+    });
+    hgSvg.appendChild(sandBot);
+    hgSvg.appendChild(sandTop);
+    hgSvg.appendChild(crackL);
+    hgSvg.appendChild(crackR);
+    glassWrap.appendChild(hgSvg);
+    body.appendChild(glassWrap);
+
+    var controls = document.createElement('div');
+    controls.className = 'ease-duration-controls';
+
+    var range = document.createElement('input');
+    range.type = 'range';
+    range.className = 'ease-duration-range';
+    range.min = '0';
+    range.max = '100';
+    range.step = '0.5';
+    range.setAttribute('aria-label', 'Dur\u00e9e estim\u00e9e');
+    controls.appendChild(range);
+
+    var ticks = document.createElement('div');
+    ticks.className = 'ease-duration-ticks';
+    DURATION_TICKS.forEach(function (tick) {
+      var t = document.createElement('button');
+      t.type = 'button';
+      t.className = 'ease-duration-tick';
+      t.textContent = tick.label.replace(/^Quelques\s+/i, '');
+      t.title = tick.label;
+      t.addEventListener('click', function () {
+        applyMinutes(tick.minutes, true);
+      });
+      ticks.appendChild(t);
+    });
+    controls.appendChild(ticks);
+
+    var precise = document.createElement('div');
+    precise.className = 'ease-duration-precise';
+    var numInput = document.createElement('input');
+    numInput.type = 'number';
+    numInput.className = 'ease-duration-num';
+    numInput.min = '0';
+    numInput.step = 'any';
+    numInput.setAttribute('aria-label', 'Valeur num\u00e9rique');
+    var unitSelect = document.createElement('select');
+    unitSelect.className = 'ease-duration-unit';
+    unitSelect.setAttribute('aria-label', 'Unit\u00e9');
+    DURATION_UNITS.forEach(function (u) {
+      var opt = document.createElement('option');
+      opt.value = u.id;
+      opt.textContent = u.label;
+      unitSelect.appendChild(opt);
+    });
+    precise.appendChild(numInput);
+    precise.appendChild(unitSelect);
+    controls.appendChild(precise);
+
+    var nlRow = document.createElement('div');
+    nlRow.className = 'ease-duration-nl';
+    var nlInput = document.createElement('input');
+    nlInput.type = 'text';
+    nlInput.className = 'ease-duration-nl-input';
+    nlInput.placeholder = 'ex. 2 jours, a few weeks\u2026';
+    nlInput.setAttribute('aria-label', 'Dur\u00e9e en texte libre');
+    var nlBtn = document.createElement('button');
+    nlBtn.type = 'button';
+    nlBtn.className = 'ease-duration-nl-btn tp-button';
+    nlBtn.textContent = 'Appliquer';
+    nlRow.appendChild(nlInput);
+    nlRow.appendChild(nlBtn);
+    controls.appendChild(nlRow);
+
+    body.appendChild(controls);
+    block.appendChild(body);
+
+    if (host) host.appendChild(block);
+
+    var suppress = false;
+
+    function paintHourglass(m) {
+      var fill = m == null ? 0 : durationToSlider(m) / 100;
+      sandTop.style.opacity = String(Math.max(0.15, 1 - fill));
+      sandBot.style.opacity = String(Math.max(0.2, 0.25 + fill * 0.75));
+      sandBot.style.transform = 'scaleY(' + (0.25 + fill * 0.75) + ')';
+      sandBot.style.transformOrigin = '24px 72px';
+      var cracked = m != null && m >= DURATION_CRACK_MINUTES;
+      block.classList.toggle('hourglass--cracked', cracked);
+      if (cracked) {
+        block.classList.remove('hourglass--smash');
+        void block.offsetWidth;
+        block.classList.add('hourglass--smash');
+      }
+    }
+
+    function syncPreciseFromMinutes(m) {
+      if (m == null) {
+        numInput.value = '';
+        return;
+      }
+      var unit = pickDurationUnit(m);
+      unitSelect.value = unit.id;
+      var qty = m / unit.minutes;
+      numInput.value = String(
+        qty >= 10 ? Math.round(qty) : Math.round(qty * 10) / 10
+      );
+    }
+
+    function applyMinutes(next, notify) {
+      minutes = clampDurationMinutes(next);
+      suppress = true;
+      range.value = String(durationToSlider(minutes == null ? DURATION_MIN_MINUTES : minutes));
+      if (minutes == null) range.value = '0';
+      summary.textContent = minutes == null ? 'Non d\u00e9finie' : formatDurationFr(minutes);
+      summary.classList.toggle('is-empty', minutes == null);
+      syncPreciseFromMinutes(minutes);
+      paintHourglass(minutes);
+      suppress = false;
+      if (notify) onChange(minutes);
+    }
+
+    range.addEventListener('input', function () {
+      if (suppress) return;
+      applyMinutes(sliderToDuration(+range.value), true);
+    });
+
+    function applyFromPrecise() {
+      if (suppress) return;
+      var n = parseFloat(numInput.value);
+      if (!isFinite(n) || n <= 0) {
+        applyMinutes(null, true);
+        return;
+      }
+      var unit =
+        DURATION_UNITS.filter(function (u) {
+          return u.id === unitSelect.value;
+        })[0] || DURATION_UNITS[0];
+      applyMinutes(n * unit.minutes, true);
+    }
+    numInput.addEventListener('change', applyFromPrecise);
+    unitSelect.addEventListener('change', applyFromPrecise);
+
+    function applyNl() {
+      var parsed = parseDurationNl(nlInput.value);
+      if (parsed == null) {
+        nlInput.classList.add('is-invalid');
+        return;
+      }
+      nlInput.classList.remove('is-invalid');
+      applyMinutes(parsed, true);
+      nlInput.value = formatDurationFr(parsed);
+    }
+    nlBtn.addEventListener('click', applyNl);
+    nlInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        applyNl();
+      }
+    });
+
+    applyMinutes(minutes, false);
+
+    return {
+      el: block,
+      getMinutes: function () {
+        return minutes;
+      },
+      setMinutes: function (next) {
+        applyMinutes(next, false);
+      }
+    };
+  }
+
   function createField(config) {
     var el = config.el;
     var id = config.id;
@@ -3878,12 +4421,16 @@
 
     updateDisplay(value);
 
-    return {
+    var api = {
       el: field,
       getValue: getValue,
       setValue: setValue,
       updateDisplay: updateDisplay
     };
+    if (wordsKey === 'impact' || id === 'impact') {
+      attachImpactReachVisual(api);
+    }
+    return api;
   }
 
   function createCollapsibleEnableChrome(config) {
@@ -4692,6 +5239,8 @@
     var descText = typeof config.desc === 'string' ? config.desc : '';
     var members = Array.isArray(config.members) ? config.members.slice() : [];
     var priorityLabel = typeof config.priorityLabel === 'string' ? config.priorityLabel : '';
+    var impactReachLabel = typeof config.impactReach === 'string' ? config.impactReach : '';
+    var durationLabel = typeof config.durationLabel === 'string' ? config.durationLabel : '';
     var dueLabel = typeof config.dueLabel === 'string' ? config.dueLabel : '';
     var blockedLabel = typeof config.blockedLabel === 'string' ? config.blockedLabel : '';
     var blockedOn = !!config.blockedOn;
@@ -4703,6 +5252,7 @@
     var descBusy = false;
     var descSpellcheckGen = 0;
     var descSpellcheckedText = descText.trim() || null;
+    var descSpellRevert = null;
     var authBusy = false;
     var authReason = config.authReason || '';
     var FIELD_SAVE_MS = 450;
@@ -4757,7 +5307,8 @@
         row.tabIndex = 0;
         row.title = 'Aller \u00e0 ' + labelText;
         function jump() {
-          onJump(key);
+          // Portée / Durée live in the Priorité section.
+          onJump(key === 'porte' || key === 'duree' ? 'priority' : key);
         }
         row.addEventListener('click', jump);
         row.addEventListener('keydown', function (e) {
@@ -4875,6 +5426,24 @@
     priorityValueEl.className = 'info-recap-text';
     priorityRow.value.appendChild(priorityValueEl);
     body.appendChild(priorityRow.row);
+
+    var porteRow = makeRow('porte', 'Port\u00e9e', {
+      interactive: true,
+      icon: 'ti-world'
+    });
+    var porteValueEl = document.createElement('span');
+    porteValueEl.className = 'info-recap-text';
+    porteRow.value.appendChild(porteValueEl);
+    body.appendChild(porteRow.row);
+
+    var dureeRow = makeRow('duree', 'Dur\u00e9e', {
+      interactive: true,
+      icon: 'ti-hourglass'
+    });
+    var dureeValueEl = document.createElement('span');
+    dureeValueEl.className = 'info-recap-text';
+    dureeRow.value.appendChild(dureeValueEl);
+    body.appendChild(dureeRow.row);
 
     var dueRow = makeRow('due', '\u00c9ch\u00e9ance', {
       interactive: true,
@@ -5044,6 +5613,8 @@
 
     function renderRecap() {
       setRecapText(priorityValueEl, priorityLabel, 'Non d\u00e9finie');
+      setRecapText(porteValueEl, impactReachLabel, 'Non d\u00e9finie');
+      setRecapText(dureeValueEl, durationLabel, 'Non d\u00e9finie');
       setRecapText(dueValueEl, dueLabel, 'Aucune');
       if (blockedOn) {
         setRecapText(blockedValueEl, blockedLabel || 'Oui', 'Oui');
@@ -5062,6 +5633,8 @@
       }
       var bits = [];
       if (priorityLabel) bits.push(priorityLabel);
+      if (impactReachLabel) bits.push(impactReachLabel);
+      if (durationLabel) bits.push(durationLabel);
       if (dueLabel) bits.push(dueLabel);
       if (blockedOn) bits.push(blockedLabel || 'Bloqu\u00e9');
       return bits.join(' \u00b7 ');
@@ -5142,6 +5715,45 @@
       else descInput.removeAttribute('aria-busy');
     }
 
+    function clearDescSpellRevert() {
+      if (descSpellRevert && typeof descSpellRevert.dismiss === 'function') {
+        descSpellRevert.dismiss();
+      }
+      descSpellRevert = null;
+    }
+
+    function showDescSpellRevert(original, corrected) {
+      clearDescSpellRevert();
+      if (
+        !original ||
+        !corrected ||
+        original === corrected ||
+        typeof global.Spellcheck === 'undefined' ||
+        typeof global.Spellcheck.attachRevert !== 'function'
+      ) {
+        return;
+      }
+      descSpellRevert = global.Spellcheck.attachRevert(descMeta, {
+        before: descStatus,
+        onRevert: function () {
+          descSpellRevert = null;
+          if (descInput.value !== corrected && descInput.value.trim() !== corrected.trim()) {
+            return;
+          }
+          descInput.value = original;
+          descSpellcheckedText = original.trim() || null;
+          descDirty = true;
+          onLayoutChange();
+          flushDescSave();
+        },
+        onDismiss: function () {
+          descSpellRevert = null;
+          onLayoutChange();
+        }
+      });
+      onLayoutChange();
+    }
+
     function spellcheckDescText(text) {
       var trimmed = typeof text === 'string' ? text.trim() : '';
       if (!trimmed) return Promise.resolve('');
@@ -5199,6 +5811,7 @@
         descInput.value = corrected;
         descSpellcheckedText = corrected.trim();
         descDirty = true;
+        showDescSpellRevert(snapshot, corrected);
         onLayoutChange();
         flushDescSave();
       }).catch(function () {
@@ -5282,6 +5895,7 @@
       // Invalidate in-flight spellcheck so a stale correction cannot overwrite new typing.
       descSpellcheckGen += 1;
       setDescSpellchecking(false);
+      clearDescSpellRevert();
       scheduleDescSave();
       onLayoutChange();
     });
@@ -5366,6 +5980,7 @@
         if (document.activeElement === descInput && !options.force) return;
         descSpellcheckGen += 1;
         setDescSpellchecking(false);
+        clearDescSpellRevert();
         descInput.value = value;
         descDirty = false;
         descSpellcheckedText = value.trim() || null;
@@ -5381,6 +5996,8 @@
       setRecap: function (next) {
         if (!next) return;
         if (next.priorityLabel != null) priorityLabel = String(next.priorityLabel || '');
+        if (next.impactReach != null) impactReachLabel = String(next.impactReach || '');
+        if (next.durationLabel != null) durationLabel = String(next.durationLabel || '');
         if (next.dueLabel != null) dueLabel = String(next.dueLabel || '');
         if (next.blockedLabel != null) blockedLabel = String(next.blockedLabel || '');
         if (next.blockedOn != null) blockedOn = !!next.blockedOn;
@@ -5438,6 +6055,8 @@
     // reasonKey → generation; stale AI responses are ignored when gen no longer matches.
     var reasonSpellcheckPending = Object.create(null);
     var reasonSpellcheckGen = 0;
+    // reasonKey(corrected) → { original, timer }
+    var reasonSpellReverts = Object.create(null);
 
     function spellcheckReasonText(text) {
       var trimmed = normalizeBlockedReason(text);
@@ -5480,13 +6099,50 @@
       delete reasonSpellcheckPending[key];
     }
 
+    function clearReasonSpellRevert(corrected) {
+      var key = reasonKey(corrected);
+      if (!key || !reasonSpellReverts[key]) return;
+      if (reasonSpellReverts[key].timer) {
+        clearTimeout(reasonSpellReverts[key].timer);
+      }
+      delete reasonSpellReverts[key];
+    }
+
+    function rememberReasonSpellRevert(corrected, original) {
+      var key = reasonKey(corrected);
+      var originalNorm = normalizeBlockedReason(original);
+      if (!key || !originalNorm || reasonKey(originalNorm) === key) return;
+      clearReasonSpellRevert(corrected);
+      var timeoutMs =
+        global.Spellcheck && global.Spellcheck.REVERT_TIMEOUT_MS != null
+          ? global.Spellcheck.REVERT_TIMEOUT_MS
+          : 10000;
+      var entry = {
+        original: originalNorm,
+        timer: setTimeout(function () {
+          if (reasonSpellReverts[key] === entry) {
+            delete reasonSpellReverts[key];
+            refreshSelected();
+            onLayoutChange();
+          }
+        }, timeoutMs)
+      };
+      reasonSpellReverts[key] = entry;
+    }
+
     function applySpellcheckCorrection(original, corrected, gen) {
       var key = reasonKey(original);
       if (!key || reasonSpellcheckPending[key] !== gen) return;
       clearReasonSpellchecking(original, gen);
       var finalText = normalizeBlockedReason(corrected) || original;
       if (finalText !== original && hasReason(original)) {
-        renameReason(original, finalText);
+        var hadFinalBefore = hasReason(finalText);
+        var renamed = renameReason(original, finalText);
+        if (renamed && !hadFinalBefore && hasReason(finalText)) {
+          rememberReasonSpellRevert(finalText, original);
+        }
+        refreshSelected();
+        onLayoutChange();
       } else {
         refreshSelected();
         onLayoutChange();
@@ -5752,6 +6408,7 @@
       var key = reasonKey(value);
       if (!key) return;
       clearReasonSpellchecking(value);
+      clearReasonSpellRevert(value);
       var next = [];
       for (var i = 0; i < currentReasons.length; i++) {
         if (reasonKey(currentReasons[i]) !== key) next.push(currentReasons[i]);
@@ -5771,6 +6428,7 @@
     function renameReason(oldValue, newValue) {
       var oldKey = reasonKey(oldValue);
       if (!oldKey) return false;
+      clearReasonSpellRevert(oldValue);
       var next = normalizeBlockedReason(newValue);
       if (!next) {
         refreshSelected();
@@ -5831,6 +6489,7 @@
       }
 
       clearReasonSpellchecking(reason);
+      clearReasonSpellRevert(reason);
 
       var chip = null;
       var chips = selectedWrap.querySelectorAll('.blocked-reason-chip:not(.blocked-subtask-chip)');
@@ -5997,6 +6656,33 @@
             spinner.setAttribute('aria-hidden', 'true');
             spinner.innerHTML = '<i class="ti ti-loader-2" aria-hidden="true"></i>';
             chip.appendChild(spinner);
+          } else {
+            var revertInfo = reasonSpellReverts[reasonKey(reason)];
+            if (revertInfo && revertInfo.original) {
+              var revertBtn = document.createElement('button');
+              revertBtn.type = 'button';
+              revertBtn.className = 'blocked-reason-chip-revert tp-spell-revert';
+              revertBtn.setAttribute(
+                'aria-label',
+                'Annuler la correction orthographique'
+              );
+              revertBtn.title = 'Annuler la correction';
+              revertBtn.innerHTML =
+                '<i class="ti ti-arrow-back-up" aria-hidden="true"></i>';
+              revertBtn.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                var previous = revertInfo.original;
+                clearReasonSpellRevert(reason);
+                if (hasReason(reason)) {
+                  renameReason(reason, previous);
+                } else {
+                  refreshSelected();
+                  onLayoutChange();
+                }
+              });
+              chip.appendChild(revertBtn);
+            }
           }
           chip.appendChild(editBtn);
           chip.appendChild(clearBtn);
@@ -9015,6 +9701,11 @@
           merged[dim.key] = clamp(v, dim.min, dim.max);
         }
       });
+      if (stored.estimatedDurationMinutes != null) {
+        merged.estimatedDurationMinutes = clampDurationMinutes(
+          stored.estimatedDurationMinutes
+        );
+      }
     } catch (e) { /* ignore corrupt storage */ }
     return merged;
   }
@@ -9159,9 +9850,15 @@
     } else {
       state.priorityEnabled = true;
     }
+    state.estimatedDurationMinutes = clampDurationMinutes(
+      state.estimatedDurationMinutes != null
+        ? state.estimatedDurationMinutes
+        : defaults.estimatedDurationMinutes
+    );
 
     var priorityCollapse = null;
     var lastPrioritySummary = '';
+    var durationControl = null;
 
     function persistSliderState(skipFieldSync) {
       if (!skipFieldSync) syncStateFromFields();
@@ -9197,6 +9894,9 @@
         state.dueDate = dueValues.dueDate;
         state.dueTime = dueValues.dueTime;
         state.dueEnabled = !!dueValues.dueEnabled;
+      }
+      if (durationControl) {
+        state.estimatedDurationMinutes = durationControl.getMinutes();
       }
     }
 
@@ -9474,6 +10174,20 @@
           setValue: wizardHooks.setValue
         }
       });
+      if (dim.key === 'ease' && fields[dim.key] && fields[dim.key].el) {
+        durationControl = createEstimatedDurationControl({
+          el: fields[dim.key].el,
+          value: state.estimatedDurationMinutes,
+          onChange: function (minutes) {
+            state.estimatedDurationMinutes = minutes;
+            persistSliderState(true);
+            if (typeof variantConfig.onLayoutChange === 'function') {
+              variantConfig.onLayoutChange();
+            }
+          }
+        });
+        fields[dim.key].el.classList.add('field--ease-duration');
+      }
     });
 
     try {
@@ -9688,6 +10402,14 @@
             dueTime: next.dueTime != null ? next.dueTime : state.dueTime,
             dueEnabled: next.dueEnabled != null ? next.dueEnabled : state.dueEnabled
           });
+        }
+        if (next.estimatedDurationMinutes !== undefined) {
+          state.estimatedDurationMinutes = clampDurationMinutes(
+            next.estimatedDurationMinutes
+          );
+          if (durationControl) {
+            durationControl.setMinutes(state.estimatedDurationMinutes);
+          }
         }
         repaint();
         persistSliderState();
@@ -9927,7 +10649,15 @@
     wordHtmlFor: wordHtmlFor,
     levelIconSvg: levelIconSvg,
     affirmationFor: affirmationFor,
-    affirmationDisplayText: affirmationDisplayText
+    affirmationDisplayText: affirmationDisplayText,
+    formatDurationFr: formatDurationFr,
+    parseDurationNl: parseDurationNl,
+    durationToSlider: durationToSlider,
+    sliderToDuration: sliderToDuration,
+    clampDurationMinutes: clampDurationMinutes,
+    DURATION_MIN_MINUTES: DURATION_MIN_MINUTES,
+    DURATION_MAX_MINUTES: DURATION_MAX_MINUTES,
+    DURATION_CRACK_MINUTES: DURATION_CRACK_MINUTES
   };
 
   global.PriorityUI = PriorityUI;

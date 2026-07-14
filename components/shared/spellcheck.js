@@ -146,8 +146,98 @@
     }
   }
 
+  var REVERT_TIMEOUT_MS = 10000;
+
+  /**
+   * Temporary undo control after an AI spelling fix was applied in the UI.
+   * @param {HTMLElement} hostEl
+   * @param {{
+   *   onRevert: function(): void,
+   *   onDismiss?: function(): void,
+   *   before?: HTMLElement|null,
+   *   timeoutMs?: number,
+   *   className?: string,
+   *   ariaLabel?: string,
+   *   title?: string
+   * }} options
+   * @returns {{ dismiss: function(): void, el: HTMLButtonElement }|null}
+   */
+  function attachRevert(hostEl, options) {
+    options = options || {};
+    if (!hostEl || typeof document === 'undefined') return null;
+
+    var prior = hostEl.querySelectorAll('.tp-spell-revert');
+    for (var i = 0; i < prior.length; i++) {
+      if (typeof prior[i]._spellRevertDismiss === 'function') {
+        prior[i]._spellRevertDismiss();
+      } else if (prior[i].parentNode) {
+        prior[i].parentNode.removeChild(prior[i]);
+      }
+    }
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className =
+      'tp-spell-revert' + (options.className ? ' ' + options.className : '');
+    btn.setAttribute(
+      'aria-label',
+      options.ariaLabel || 'Annuler la correction orthographique'
+    );
+    btn.title = options.title || 'Annuler la correction';
+    btn.innerHTML = '<i class="ti ti-arrow-back-up" aria-hidden="true"></i>';
+
+    var ctrl = { el: btn, _timer: null, _dismissed: false };
+
+    function dismiss() {
+      if (ctrl._dismissed) return;
+      ctrl._dismissed = true;
+      if (ctrl._timer) {
+        clearTimeout(ctrl._timer);
+        ctrl._timer = null;
+      }
+      if (btn.parentNode) btn.parentNode.removeChild(btn);
+      btn._spellRevertDismiss = null;
+      if (typeof options.onDismiss === 'function') {
+        try {
+          options.onDismiss();
+        } catch (err) {
+          console.error('Spellcheck.attachRevert onDismiss failed', err);
+        }
+      }
+    }
+
+    btn._spellRevertDismiss = dismiss;
+    btn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      try {
+        if (typeof options.onRevert === 'function') options.onRevert();
+      } catch (err) {
+        console.error('Spellcheck.attachRevert onRevert failed', err);
+      } finally {
+        dismiss();
+      }
+    });
+
+    if (options.before && options.before.parentNode === hostEl) {
+      hostEl.insertBefore(btn, options.before);
+    } else {
+      hostEl.appendChild(btn);
+    }
+
+    var timeoutMs =
+      options.timeoutMs != null ? Number(options.timeoutMs) : REVERT_TIMEOUT_MS;
+    if (timeoutMs > 0 && isFinite(timeoutMs)) {
+      ctrl._timer = setTimeout(dismiss, timeoutMs);
+    }
+
+    return { dismiss: dismiss, el: btn };
+  }
+
   global.Spellcheck = {
     configure: configure,
-    correct: correct
+    correct: correct,
+    attachRevert: attachRevert,
+    REVERT_TIMEOUT_MS: REVERT_TIMEOUT_MS
   };
 })(typeof window !== 'undefined' ? window : this);

@@ -54,6 +54,10 @@
       }
     };
     var onLayoutChange = options.onLayoutChange || function () {};
+    var initiallyOpen = !!options.initiallyOpen;
+    var shouldFocusComposer = options.focusComposer != null
+      ? !!options.focusComposer
+      : initiallyOpen;
     var Agent = global.PriorityAgent;
     if (!Agent) throw new Error('PriorityAgent is required');
     if (!global.PriorityUI) throw new Error('PriorityUI is required');
@@ -397,8 +401,9 @@
     var selectedDebugId = null;
 
     var expandFallback = false;
-    var expandChat =
-      typeof PriorityUI.resolveSectionExpanded === 'function'
+    var expandChat = initiallyOpen
+      ? true
+      : typeof PriorityUI.resolveSectionExpanded === 'function'
         ? PriorityUI.resolveSectionExpanded('chat', expandFallback)
         : expandFallback;
 
@@ -1566,14 +1571,42 @@
       return SUGGESTION_HOLE_RE.test(String(text || ''));
     }
 
-    function insertComposerSuggestion(text) {
-      if (pending) return;
-      input.value = String(text || '');
+    function focusComposerInput() {
+      if (!input || input.disabled) return;
       try {
         input.focus({ preventScroll: true });
       } catch (e) {
-        input.focus();
+        try {
+          input.focus();
+        } catch (e2) {
+          /* ignore */
+        }
       }
+    }
+
+    function openAndFocusComposer() {
+      if (collapse) {
+        if (!collapse.isEnabled()) {
+          collapse.setEnabled(true, { expand: true });
+        } else if (!collapse.isExpanded()) {
+          collapse.setExpanded(true);
+        }
+      }
+      setTimeout(function () {
+        try {
+          section.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        } catch (e) {
+          /* ignore */
+        }
+        focusComposerInput();
+        notifyLayout();
+      }, 0);
+    }
+
+    function insertComposerSuggestion(text) {
+      if (pending) return;
+      input.value = String(text || '');
+      focusComposerInput();
       // Place caret at the first hole so the user can fill the variable.
       var raw = input.value;
       var holeMatch = SUGGESTION_HOLE_RE.exec(raw);
@@ -1863,9 +1896,40 @@
             if (typeof corrected === 'string' && corrected.trim()) {
               var fixed = corrected.trim();
               if (fixed !== msg) {
+                var originalMsg = msg;
                 msg = fixed;
                 if (userBubble) userBubble.textContent = msg;
                 history[history.length - 1].content = msg;
+                if (
+                  global.Spellcheck &&
+                  typeof global.Spellcheck.attachRevert === 'function'
+                ) {
+                  global.Spellcheck.attachRevert(userRow, {
+                    onRevert: function () {
+                      if (userBubble) userBubble.textContent = originalMsg;
+                      var last = history[history.length - 1];
+                      // Prefer the just-corrected user turn; fall back if assistant already appended.
+                      if (last && last.role === 'user' && last.content === fixed) {
+                        last.content = originalMsg;
+                      } else {
+                        for (var hi = history.length - 1; hi >= 0; hi--) {
+                          if (
+                            history[hi] &&
+                            history[hi].role === 'user' &&
+                            history[hi].content === fixed
+                          ) {
+                            history[hi].content = originalMsg;
+                            break;
+                          }
+                        }
+                      }
+                      notifyLayout();
+                    },
+                    onDismiss: function () {
+                      notifyLayout();
+                    }
+                  });
+                }
                 notifyLayout();
               }
             }
@@ -2066,10 +2130,15 @@
     syncDebugControls();
     notifyLayout();
 
+    if (initiallyOpen || shouldFocusComposer) {
+      openAndFocusComposer();
+    }
+
     return {
       el: section,
       refreshProvider: ensureProviderLoaded,
-      collapse: collapse
+      collapse: collapse,
+      focusComposer: openAndFocusComposer
     };
   }
 

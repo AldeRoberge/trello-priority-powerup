@@ -125,7 +125,7 @@ Après le déploiement GitHub Pages, enregistrez ou mettez à jour le Power-Up s
      Doit pointer vers `index.html` à la racine du site déployé (connecteur chargé par Trello dans une iframe).
 3. Onglet **Capabilities** / **Capacités** — cocher **uniquement** les cinq capacités utilisées (voir tableau).  
    Ne **pas** activer `card-buttons`, `list-actions`, `on-disable` ni d'autres capacités non utilisées (des stubs évitent l'erreur console si elles restent cochées).
-4. Onglet **API Key** — générer une clé et la copier dans `components/shared/rest-config.js` (`appKey`) pour activer le **tri automatique** (voir [Tri automatique](#tri-automatique)). **Allowed origins** : ajouter l’origine GitHub Pages du Power-Up (ex. `https://VOTRE-UTILISATEUR.github.io`) — sans cela, la fenêtre OAuth peut s’ouvrir puis l’autorisation échoue (le redirect `return_url` est bloqué).
+4. Onglet **API Key** — générer une clé et la copier dans `components/shared/rest-config.js` (`appKey`) pour activer le **tri automatique** (voir [Tri automatique](#tri-automatique)). **Allowed origins** : ajouter l’origine GitHub Pages du Power-Up (ex. `https://VOTRE-UTILISATEUR.github.io`) — sans cela, la fenêtre OAuth peut s’ouvrir puis l’autorisation échoue (le redirect vers `auth-return.html` est bloqué).
 5. Enregistrer, attendre la fin du déploiement GitHub Pages si l'URL du connecteur vient de changer.
 6. Sur chaque tableau : **retirer et réajouter** le Power-Up (Trello ne recharge pas toujours les capacités sur un tableau déjà ouvert).
 
@@ -206,7 +206,7 @@ Lorsqu'un membre modifie la priorité d'une carte (curseurs, palier, état bloqu
 | `components/shared/rest-config.js` → `appKey` | Oui — clé API de [trello.com/power-ups/admin](https://trello.com/power-ups/admin) |
 | Admin → **Allowed origins** | Oui — origine Pages (ex. `https://VOTRE-UTILISATEUR.github.io`) |
 | `index.html` → `TrelloPowerUp.initialize(…, { appKey, appName })` | Oui (automatique si `appKey` est renseigné) |
-| Autorisation OAuth membre (`read,write`) | Oui — une fois par membre via **Paramètres de priorité** → **Autoriser Trello** |
+| Autorisation OAuth membre (`read,write`) | Oui — une fois par membre via **Paramètres de priorité** → **Autoriser Trello** (retour OAuth : `auth-return.html`) |
 
 **Limitations**
 

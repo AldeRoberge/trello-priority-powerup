@@ -357,7 +357,22 @@
 
 .tp-page--priority .agent-msg--user {
   align-self: flex-end;
-  align-items: flex-end;
+  align-items: center;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tp-page--priority .agent-msg--user .tp-spell-revert {
+  color: var(--tp-text-muted);
+  opacity: 0.85;
+  order: -1;
+}
+
+.tp-page--priority .agent-msg--user .tp-spell-revert:hover {
+  color: var(--tp-text);
+  opacity: 1;
+  background: var(--tp-surface-hover, #091e420f);
 }
 
 .tp-page--priority .agent-msg--assistant {

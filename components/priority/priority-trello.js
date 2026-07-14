@@ -120,6 +120,14 @@
       impact: Math.max(0, Math.min(4, impact)),
       ease: Math.max(1, Math.min(5, ease)),
     };
+    // Sidecar: estimated work duration in minutes (Facilité UI); does not alter ease score.
+    var durationMin = asNumber(raw.estimatedDurationMinutes);
+    if (isFinite(durationMin) && durationMin > 0) {
+      normalized.estimatedDurationMinutes = Math.max(
+        1,
+        Math.min(2 * 365.25 * 24 * 60, Math.round(durationMin))
+      );
+    }
     if (raw.priorityEnabled === false) {
       normalized.priorityEnabled = false;
     }
@@ -1535,30 +1543,137 @@
     }
   }
 
+  // Default key used by TrelloPowerUp RestApi client (localStorage + member private).
+  var REST_TOKEN_STORAGE_KEY = 'trello_token';
+
+  function isLikelyRestToken(token) {
+    // Tokens are opaque (legacy hex or ATTA…). Only reject empty/short values and JWTs.
+    return typeof token === 'string' && token.length >= 20 && token.indexOf('.') === -1;
+  }
+
+  function authReturnUrl() {
+    var url = pageUrl('./auth-return.html');
+    try {
+      return new URL(url, global.location.href).href.split('#')[0].split('?')[0];
+    } catch (err) {
+      if (typeof global.location !== 'undefined' && global.location.origin) {
+        return global.location.origin + global.location.pathname.replace(/[^/]+$/, 'auth-return.html');
+      }
+      return url;
+    }
+  }
+
+  function buildRestAuthorizeUrl(cfg, returnUrl) {
+    var params = {
+      expiration: 'never',
+      scope: 'read,write',
+      name: cfg.appName || 'Priorité',
+      key: cfg.appKey,
+      // fragment + return_url: popup lands on auth-return.html with #token=…
+      callback_method: 'fragment',
+      response_type: 'fragment',
+      return_url: returnUrl,
+    };
+    if (cfg.appAuthor) params.author = cfg.appAuthor;
+    return (
+      'https://trello.com/1/authorize?' +
+      Object.keys(params)
+        .map(function (key) {
+          return encodeURIComponent(key) + '=' + encodeURIComponent(params[key]);
+        })
+        .join('&')
+    );
+  }
+
+  function storeRestToken(t, token) {
+    try {
+      global.localStorage.setItem(REST_TOKEN_STORAGE_KEY, token);
+    } catch (err) {
+      /* ignore quota / privacy mode */
+    }
+    return t.set('member', 'private', REST_TOKEN_STORAGE_KEY, token).then(function () {
+      return token;
+    });
+  }
+
   /**
-   * Kick off Trello REST OAuth. Must stay synchronous through window.open —
-   * awaiting before authorize() drops the click user-gesture and Chrome flashes
-   * the consent popup closed (~0.1s) with no console error.
-   * Call only from a direct click handler (as Trello requires).
+   * Kick off Trello REST OAuth via t.authorize (not getRestApi().authorize).
+   *
+   * getRestApi().authorize() opens the consent popup then immediately calls
+   * getToken(); if anything looks like a token (or the popup appears "closed"
+   * to the poll), it closes the window in ~0.1s — the bug users saw.
+   *
+   * t.authorize + auth-return.html avoids that race: the return page calls
+   * window.opener.authorize(token). Must stay synchronous through window.open
+   * (call only from a direct click handler).
    */
   function authorizeRestForAutoSort(t) {
-    if (!restClientOptions()) {
+    var cfg = restClientOptions();
+    if (!cfg) {
       return Promise.reject(new Error('REST appKey is not configured'));
     }
-    // iframe getRestApi() returns the client synchronously (not a Promise).
-    var api = t.getRestApi();
-    if (!api || typeof api.authorize !== 'function') {
-      return Promise.reject(new Error('REST API client is not available'));
+    if (!t || typeof t.authorize !== 'function') {
+      return Promise.reject(new Error('t.authorize is not available'));
     }
-    // Prefer a stable return URL (origin + path) so Allowed Origins matches.
-    var returnUrl =
-      typeof window !== 'undefined' && window.location
-        ? window.location.origin + window.location.pathname
-        : undefined;
-    return api.authorize({
-      scope: 'read,write',
-      expiration: 'never',
-      returnUrl: returnUrl,
+
+    var returnUrl = authReturnUrl();
+    var authUrl = buildRestAuthorizeUrl(cfg, returnUrl);
+
+    // Drop a leftover local token so follow-up isAuthorized checks stay honest.
+    try {
+      global.localStorage.removeItem(REST_TOKEN_STORAGE_KEY);
+    } catch (err) {
+      /* ignore */
+    }
+
+    return new Promise(function (resolve, reject) {
+      var settled = false;
+      var authWindow = null;
+      var openedAt = Date.now();
+
+      function deny(err) {
+        if (settled) return;
+        settled = true;
+        clearInterval(poll);
+        reject(
+          err ||
+            (global.TrelloPowerUp &&
+            TrelloPowerUp.restApiError &&
+            TrelloPowerUp.restApiError.AuthDeniedError
+              ? new TrelloPowerUp.restApiError.AuthDeniedError()
+              : new Error('AuthDeniedError'))
+        );
+      }
+
+      // Ignore brief startup closed=true; after grace, treat close as cancel/block.
+      var poll = setInterval(function () {
+        if (settled) return;
+        if (!authWindow) return;
+        if (Date.now() - openedAt < 1500) return;
+        if (authWindow.closed) deny();
+      }, 500);
+
+      // Promise executor runs sync → window.open keeps the click user-gesture.
+      t.authorize(authUrl, {
+        width: 550,
+        height: 725,
+        windowCallback: function (win) {
+          authWindow = win;
+          if (!win) deny(new Error('Popup blocked — allow popups for Trello'));
+        },
+        validToken: isLikelyRestToken,
+      })
+        .then(function (token) {
+          if (settled) return;
+          settled = true;
+          clearInterval(poll);
+          resolve(token);
+        })
+        .catch(function (err) {
+          deny(err);
+        });
+    }).then(function (token) {
+      return storeRestToken(t, token);
     });
   }
 

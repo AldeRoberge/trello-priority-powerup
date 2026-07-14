@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Autorisation Priorité</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 2rem;
+      color: #172b4d;
+    }
+  </style>
+</head>
+<body>
+  <p id="msg">Autorisation en cours…</p>
+  <script>
+    (function () {
+      var msg = document.getElementById('msg');
+      var hash = window.location.hash || '';
+      var search = window.location.search || '';
+      var denied = /(?:[#&?]error=)/.test(hash) || /(?:[#&?]error=)/.test(search);
+      var match =
+        /(?:[#&?]token=)([^&]*)/.exec(hash) ||
+        /(?:[#&?]token=)([^&]*)/.exec(search);
+      var token = match && match[1] ? decodeURIComponent(match[1]) : '';
+
+      try {
+        if (token && window.opener && typeof window.opener.authorize === 'function') {
+          window.opener.authorize(token);
+          if (msg) msg.textContent = 'Autorisation réussie. Cette fenêtre va se fermer.';
+        } else if (denied || !token) {
+          if (msg) {
+            msg.textContent =
+              'Autorisation annulée. Vous pouvez fermer cette fenêtre.';
+          }
+        } else if (msg) {
+          msg.textContent =
+            'Impossible de renvoyer le jeton à Priorité. Fermez cette fenêtre et réessayez.';
+        }
+      } catch (err) {
+        console.error('Auth return failed', err);
+        if (msg) {
+          msg.textContent =
+            'Erreur lors de l’autorisation. Fermez cette fenêtre et réessayez.';
+        }
+      }
+
+      setTimeout(function () {
+        try {
+          window.close();
+        } catch (closeErr) {
+          /* ignore */
+        }
+      }, denied || !token ? 800 : 400);
+    })();
+  </script>
+</body>
+</html>
