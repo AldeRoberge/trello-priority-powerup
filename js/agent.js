@@ -189,6 +189,84 @@
     return Math.max(min, Math.min(max, Math.round(v)));
   }
 
+  function axisWord(key, value) {
+    if (typeof PriorityUI !== 'undefined' && typeof PriorityUI.wordFor === 'function') {
+      try {
+        return PriorityUI.wordFor(key, value) || '';
+      } catch (e) {
+        return '';
+      }
+    }
+    return '';
+  }
+
+  /**
+   * Natural-language priority blurb for the agent (adapts to axis levels).
+   * Example: "La priorité de cette tâche est importante. Elle est jugée avoir un grand impact et être facile à réaliser."
+   */
+  function buildPriorityExplanation(state, display) {
+    if (!state || state.priorityEnabled === false) {
+      return 'Aucune priorit\u00e9 n\'est d\u00e9finie pour cette t\u00e2che.';
+    }
+    var tierRaw =
+      (display && (display.label || display.tier)) ||
+      (state && state.label) ||
+      '';
+    var tier = typeof tierRaw === 'string' ? tierRaw.trim() : '';
+    if (!tier) {
+      return 'La priorit\u00e9 de cette t\u00e2che n\'est pas encore class\u00e9e.';
+    }
+    var U = clampInt(state.urgency, 0, 4, 0);
+    var I = clampInt(state.impact, 0, 4, 0);
+    var E = clampInt(state.ease, 1, 5, 3);
+    var traits = [];
+    var tierLower = tier.toLowerCase();
+    var tierImpliesUrgency =
+      tierLower.indexOf('urgent') !== -1 || tierLower.indexOf('critique') !== -1;
+
+    // Prefer impact → ease → urgency; keep at most 2 traits so the answer stays natural.
+    if (I >= 4) traits.push('avoir un impact majeur');
+    else if (I >= 3) traits.push('avoir un grand impact');
+    else if (I <= 0) traits.push('avoir peu ou pas d\'impact');
+    else if (I === 1) traits.push('avoir un impact faible');
+
+    if (traits.length < 2) {
+      if (E >= 5) traits.push('\u00eatre tr\u00e8s facile \u00e0 r\u00e9aliser');
+      else if (E >= 4) traits.push('\u00eatre facile \u00e0 r\u00e9aliser');
+      else if (E <= 1) traits.push('\u00eatre tr\u00e8s difficile \u00e0 r\u00e9aliser');
+      else if (E === 2) traits.push('\u00eatre difficile \u00e0 r\u00e9aliser');
+    }
+
+    if (traits.length < 2 && !tierImpliesUrgency) {
+      if (U >= 4) traits.push('\u00eatre critique');
+      else if (U >= 3) traits.push('\u00eatre urgente');
+      else if (U <= 0) traits.push('ne pas \u00eatre urgente');
+      else if (U === 1) traits.push('avoir peu d\'urgence');
+    }
+
+    // Mid-range fallback when nothing stands out.
+    if (!traits.length) {
+      if (I === 2) traits.push('avoir un impact utile');
+      if (traits.length < 2 && E === 3) traits.push('\u00eatre de difficult\u00e9 moyenne');
+      if (traits.length < 2 && U === 2) traits.push('avoir une urgence mod\u00e9r\u00e9e');
+    }
+
+    var intro =
+      'La priorit\u00e9 de cette t\u00e2che est ' + tier.toLowerCase() + '.';
+    if (!traits.length) return intro;
+    if (traits.length === 1) {
+      return intro + ' Elle est jug\u00e9e ' + traits[0] + '.';
+    }
+    return (
+      intro +
+      ' Elle est jug\u00e9e ' +
+      traits[0] +
+      ' et ' +
+      traits[1] +
+      '.'
+    );
+  }
+
   function normalizeBaseUrl(url) {
     if (typeof url !== 'string') return '';
     return url.trim().replace(/\/+$/, '');
@@ -527,12 +605,24 @@
             return typeof r === 'string' && r.trim();
           })
         : [];
+      var urgencyLvl = clampInt(state.urgency, 0, 4, 0);
+      var impactLvl = clampInt(state.impact, 0, 4, 0);
+      var easeLvl = clampInt(state.ease, 1, 5, 3);
       ctx.priority = {
         enabled: priorityEnabled,
         // Values below are inactive when enabled=false — do not treat as the live priority.
         urgency: state.urgency,
         impact: state.impact,
-        ease: state.ease
+        ease: state.ease,
+        // Qualitative labels (0–4 / 1–5 scales) — use these, never invent 0–10 axis scores.
+        labels: priorityEnabled
+          ? {
+              urgency: axisWord('urgency', urgencyLvl),
+              impact: axisWord('impact', impactLvl),
+              ease: axisWord('ease', easeLvl)
+            }
+          : null,
+        explanation: null
       };
       ctx.due = {
         enabled: dueEnabled,
@@ -604,10 +694,16 @@
                 return seg.label;
               })
             };
+            if (ctx.priority) {
+              ctx.priority.explanation = buildPriorityExplanation(state, ctx.display);
+            }
           }
         } catch (e) {
           console.error('PriorityAgent.buildContext display failed', e);
         }
+      }
+      if (ctx.priority && !ctx.priority.explanation) {
+        ctx.priority.explanation = buildPriorityExplanation(state, ctx.display);
       }
     }
     var completion = null;
@@ -679,6 +775,15 @@
       '- Ex.\u00a0: user \u00ab\u00a0Quels liens 404 doivent \u00eatre corrig\u00e9s?\u00a0\u00bb (rien dans le contexte) \u2192 {"thinking":"progress.items, due, blocked, cardDesc, m\u00e9moire\u00a0: aucun inventaire de liens 404.","message":"Je ne sais pas. Je n\'ai pas cette info sur la carte ni dans mon contexte\u00a0: aucun inventaire de liens 404 n\'y figure.","suggestions":["Quelle est la priorit\u00e9?","Marquer bloqu\u00e9"],"followUps":[],"actions":[]}',
       'INTERDIT dans message\u00a0: questions vagues du type \u00ab\u00a0Que souhaitez-vous faire maintenant?\u00a0\u00bb, \u00ab\u00a0Comment puis-je vous aider?\u00a0\u00bb, \u00ab\u00a0Autre chose?\u00a0\u00bb. Confirme bri\u00e8vement et arr\u00eate-toi\u00a0; les suggestions suffisent pour la suite.',
       'Tu peux expliquer la priorit\u00e9, l\'\u00e9ch\u00e9ance, le blocage et le progr\u00e8s, et proposer des changements.',
+      'Expliquer la priorit\u00e9 actuelle (tr\u00e8s important)\u00a0:',
+      '- Quand l\'utilisateur demande la priorit\u00e9 (\u00ab\u00a0Quelle est la priorit\u00e9?\u00a0\u00bb, \u00ab\u00a0priorit\u00e9 actuelle\u00a0\u00bb, etc.)\u00a0: r\u00e9ponds en langage naturel.',
+      '- Pr\u00e9f\u00e8re context.priority.explanation s\'il est pr\u00e9sent\u00a0; sinon\u00a0: 1) le palier (context.display.label), 2) 1\u20132 traits marquants via labels (impact, facilit\u00e9, urgence).',
+      '- INTERDIT de r\u00e9citer Urgence/Impact/Facilit\u00e9 avec des chiffres, INTERDIT de mentionner le score num\u00e9rique sauf si on le demande explicitement.',
+      '- Les axes vont de 0\u20134 (urgence, impact) et 1\u20135 (facilit\u00e9)\u00a0: ne jamais inventer d\'\u00e9chelles 0\u201310.',
+      '- Adapte la phrase aux valeurs\u00a0: grand impact / impact faible, facile / difficile, urgente / peu urgente, etc.',
+      '- Ex. impact \u00e9lev\u00e9 + facilit\u00e9 \u00e9lev\u00e9e, palier Importante\u00a0: {"thinking":"priority.enabled, display.label=Importante, explanation pr\u00eate.","message":"La priorit\u00e9 de cette t\u00e2che est importante. Elle est jug\u00e9e avoir un grand impact et \u00eatre facile \u00e0 r\u00e9aliser.","suggestions":["Pourquoi ce palier?","Augmenter l\'urgence"],"followUps":[],"actions":[]}',
+      '- Ex. urgence haute (palier Urgente), impact faible\u00a0: message du type \u00ab\u00a0La priorit\u00e9 de cette t\u00e2che est urgente. Elle est jug\u00e9e avoir un impact faible.\u00a0\u00bb',
+      '- Si priority.enabled=false\u00a0: dis qu\'aucune priorit\u00e9 n\'est d\u00e9finie (ne sors pas d\'anciennes valeurs).',
       'R\u00e9ponds UNIQUEMENT avec un objet JSON valide de la forme\u00a0:',
       '{"thinking":"notes priv\u00e9es (contexte v\u00e9rifi\u00e9, intention)","message":"texte visible","suggestions":["Question utile","Autre intention"],"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"actions":[{"tool":"nom","args":{}}]}',
       'Champ thinking (obligatoire)\u00a0:',
@@ -3529,6 +3634,7 @@
     getProvider: getProvider,
     saveProvider: saveProvider,
     buildContext: buildContext,
+    buildPriorityExplanation: buildPriorityExplanation,
     dueFromOffsetMinutes: dueFromOffsetMinutes,
     nowTimeLocal: nowTimeLocal,
     parseRelativeDueOffset: parseRelativeDueOffset,

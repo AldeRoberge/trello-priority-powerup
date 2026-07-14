@@ -41,6 +41,9 @@
       applyPriority: options.applyPriority || function () {},
       applyCompletion: options.applyCompletion || function () {},
       setFormulaKey: options.setFormulaKey || function () {},
+      setCardName: options.setCardName || function () {
+        return Promise.resolve({ ok: false, reason: 'no-setCardName' });
+      },
       getStatut: options.getStatut || function () { return null; },
       selectStatut: options.selectStatut || function () {
         return Promise.resolve({ ok: false, reason: 'no-selectStatut' });
@@ -982,9 +985,14 @@
       if (meta && meta.recap) {
         row.classList.add('agent-msg--recap');
       }
+      if (meta && meta.error) {
+        row.classList.add('agent-msg--error');
+      }
       var bubble = el(
         'div',
-        'agent-msg-bubble' + (meta && meta.recap ? ' agent-msg-bubble--recap' : '')
+        'agent-msg-bubble' +
+          (meta && meta.recap ? ' agent-msg-bubble--recap' : '') +
+          (meta && meta.error ? ' agent-msg-bubble--error' : '')
       );
       bubble.textContent = text;
       row.appendChild(bubble);
@@ -995,6 +1003,13 @@
       messagesEl.scrollTop = messagesEl.scrollHeight;
       notifyLayout();
       return row;
+    }
+
+    function appendChatError(text) {
+      return appendMessage('assistant', text || 'Erreur de l\'assistant', {
+        note: 'Erreur',
+        error: true
+      });
     }
 
     function appendChangeRecap(applied, options) {
@@ -1526,9 +1541,9 @@
       } catch (err) {
         thinking.classList.remove('is-pending', 'is-streaming');
         var errText = (err && err.message) || 'Erreur de l\'assistant';
-        if (bubble) bubble.textContent = errText;
-        else appendMessage('assistant', errText);
-        setError(errText);
+        if (thinking && thinking.parentNode) thinking.remove();
+        appendChatError(errText);
+        setError('');
         if (err && err.debug) pushDebugEntry(err.debug);
         refreshSuggestions({ animate: true });
       } finally {

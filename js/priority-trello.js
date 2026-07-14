@@ -637,6 +637,27 @@
     return { ok: true, changed: true, desc: want };
   }
 
+  /**
+   * Update the card name via REST PUT. Requires OAuth (same as due sync).
+   */
+  async function setCardName(t, name) {
+    var want = typeof name === 'string' ? name.trim() : '';
+    if (!want) return { ok: false, reason: 'empty-name', changed: false };
+    if (!restClientOptions()) return { ok: false, reason: 'no-app-key', changed: false };
+
+    var current = await getCardName(t);
+    if (current === want) {
+      return { ok: true, changed: false, name: want };
+    }
+
+    var cardId = await resolveCurrentCardId(t);
+    if (!cardId) return { ok: false, reason: 'no-card-id', changed: false };
+
+    var put = await restPutCard(t, cardId, { name: want });
+    if (!put.ok) return Object.assign({ changed: false }, put);
+    return { ok: true, changed: true, name: want };
+  }
+
   async function getCardDueComplete(t) {
     try {
       // Documented pattern: t.card(field).get(field).then(value) — resolves the scalar/object.
@@ -1554,6 +1575,7 @@
     getCardDesc: getCardDesc,
     getCardMembers: getCardMembers,
     setCardDesc: setCardDesc,
+    setCardName: setCardName,
     getCardDueComplete: getCardDueComplete,
     setCardDueComplete: setCardDueComplete,
     getCardDue: getCardDue,

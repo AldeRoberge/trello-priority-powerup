@@ -436,6 +436,19 @@
   border: 1px dashed var(--tp-border-strong, rgba(9, 30, 66, 0.14));
 }
 
+.tp-page--priority .agent-msg--error {
+  margin-top: 2px;
+}
+
+.tp-page--priority .agent-msg-bubble--error {
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  color: var(--tp-danger-text, #ae2e24);
+  background: color-mix(in srgb, var(--tp-danger-text, #ae2e24) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tp-danger-text, #ae2e24) 28%, transparent);
+}
+
 .tp-page--priority .agent-followups {
   display: flex;
   flex-wrap: wrap;
