@@ -1175,6 +1175,7 @@
       );
       progressPanel.classList.toggle('is-complete', progress.percent === 100);
       progressPanel.classList.toggle('has-progress', progress.percent > 0);
+      applyProgressSectionTint(progressShellEl, accent, progress.percent);
       syncCompleteAllButton(progress);
       syncResetAllButton(progress);
       if (!opts.skipMasterSync && !masterDragging) {
@@ -1193,6 +1194,18 @@
       );
       masterDragging = false;
       syncAllCompleteSideEffects(progress, opts);
+    }
+
+    function applyProgressSectionTint(shellEl, accent, percent) {
+      if (!shellEl) return;
+      var pct = typeof percent === 'number' ? percent : 0;
+      if (accent && pct > 0) {
+        shellEl.style.setProperty('--progress-section-accent', accent);
+        shellEl.classList.add('has-progress-tint');
+      } else {
+        shellEl.style.removeProperty('--progress-section-accent');
+        shellEl.classList.remove('has-progress-tint');
+      }
     }
 
     function syncAllCompleteSideEffects(progress, opts) {

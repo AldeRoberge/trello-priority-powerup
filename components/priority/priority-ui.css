@@ -41,6 +41,25 @@
   --progress-complete-muted-text: #1F6B5C;
   --progress-complete-fill: #E4F3EF;
   --progress-complete-border: #2A9B82;
+  /* Échéance proximity bands (overdue → far). */
+  --due-band-overdue-fill: var(--blocked-fill);
+  --due-band-overdue-text: var(--blocked-text);
+  --due-band-overdue-muted: var(--blocked-muted-text);
+  --due-band-imminent-fill: #FFF1E0;
+  --due-band-imminent-text: #8B4500;
+  --due-band-imminent-muted: #A85A0A;
+  --due-band-soon-fill: #FFF8D6;
+  --due-band-soon-text: #6B5A00;
+  --due-band-soon-muted: #857000;
+  --due-band-weeks-fill: #E3F5E8;
+  --due-band-weeks-text: #17633A;
+  --due-band-weeks-muted: #2A7D4C;
+  --due-band-month-fill: #E6F0FB;
+  --due-band-month-text: #0C447C;
+  --due-band-month-muted: #1A5C9E;
+  --due-band-far-fill: #F0F1F4;
+  --due-band-far-text: #44546F;
+  --due-band-far-muted: #626F86;
   --surface-hover: #F7F6F3;
 }
 
@@ -66,6 +85,24 @@ html[data-color-mode="light"] {
   --progress-complete-muted-text: #1F6B5C;
   --progress-complete-fill: #E4F3EF;
   --progress-complete-border: #2A9B82;
+  --due-band-overdue-fill: var(--blocked-fill);
+  --due-band-overdue-text: var(--blocked-text);
+  --due-band-overdue-muted: var(--blocked-muted-text);
+  --due-band-imminent-fill: #FFF1E0;
+  --due-band-imminent-text: #8B4500;
+  --due-band-imminent-muted: #A85A0A;
+  --due-band-soon-fill: #FFF8D6;
+  --due-band-soon-text: #6B5A00;
+  --due-band-soon-muted: #857000;
+  --due-band-weeks-fill: #E3F5E8;
+  --due-band-weeks-text: #17633A;
+  --due-band-weeks-muted: #2A7D4C;
+  --due-band-month-fill: #E6F0FB;
+  --due-band-month-text: #0C447C;
+  --due-band-month-muted: #1A5C9E;
+  --due-band-far-fill: #F0F1F4;
+  --due-band-far-text: #44546F;
+  --due-band-far-muted: #626F86;
 }
 
 html[data-color-mode="dark"] {
@@ -107,6 +144,24 @@ html[data-color-mode="dark"] {
   --progress-complete-muted-text: #7EDCC4;
   --progress-complete-fill: #1A332E;
   --progress-complete-border: #5DD4B1;
+  --due-band-overdue-fill: var(--blocked-fill);
+  --due-band-overdue-text: var(--blocked-text);
+  --due-band-overdue-muted: var(--blocked-muted-text);
+  --due-band-imminent-fill: #3D2A14;
+  --due-band-imminent-text: #FFD09A;
+  --due-band-imminent-muted: #E8B06A;
+  --due-band-soon-fill: #3A3414;
+  --due-band-soon-text: #F5E49A;
+  --due-band-soon-muted: #D4C46A;
+  --due-band-weeks-fill: #1A3328;
+  --due-band-weeks-text: #A8E6C4;
+  --due-band-weeks-muted: #7BC9A0;
+  --due-band-month-fill: #1A2A3D;
+  --due-band-month-text: #B5D4F4;
+  --due-band-month-muted: #85B7EB;
+  --due-band-far-fill: #2A2F35;
+  --due-band-far-text: #B6C2CF;
+  --due-band-far-muted: #8B98A8;
   --surface-hover: #a6c5e71f;
 }
 
@@ -1016,6 +1071,20 @@ body {
   background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
 }
 
+.field--priority.is-enabled.has-priority-tint {
+  background: var(--priority-section-fill);
+}
+
+.field--priority.has-priority-tint .priority-enable-title,
+.field--priority.has-priority-tint .section-enable-title {
+  color: var(--priority-section-text);
+}
+
+.field--priority.has-priority-tint .section-toggle-summary {
+  color: var(--priority-section-muted, var(--priority-section-text));
+  opacity: 0.85;
+}
+
 .priority-section-body {
   margin-top: 10px;
 }
@@ -1066,25 +1135,69 @@ body {
   background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
 }
 
-/* Overdue shell wins over enabled/has-due/open neutrals (match Bloqué fill). */
-.variant-due-section.is-overdue > .field--due-date.is-enabled,
-.variant-due-section.is-overdue > .field--due-date.has-due-date,
-.variant-due-section.is-overdue > .field--due-date.is-open,
-.field--due-date.is-past {
-  background: var(--blocked-fill);
+/* Proximity-tinted Échéance shell (beats neutral enabled backgrounds). */
+.variant-due-section[data-due-band] > .field--due-date.is-enabled,
+.variant-due-section[data-due-band] > .field--due-date.has-due-date,
+.variant-due-section[data-due-band] > .field--due-date.is-open,
+.field--due-date[data-due-band] {
+  background: var(--due-band-fill, var(--blocked-fill));
 }
 
-.variant-due-section.is-overdue > .field--due-date .due-date-title,
-.variant-due-section.is-overdue > .field--due-date .section-enable-title,
-.field--due-date.is-past .due-date-title,
-.field--due-date.is-past .section-enable-title {
-  color: var(--blocked-text);
+.variant-due-section[data-due-band] > .field--due-date .due-date-title,
+.variant-due-section[data-due-band] > .field--due-date .section-enable-title,
+.field--due-date[data-due-band] .due-date-title,
+.field--due-date[data-due-band] .section-enable-title {
+  color: var(--due-band-text, var(--blocked-text));
 }
 
-.variant-due-section.is-overdue > .field--due-date .due-date-desc,
-.field--due-date.is-past .due-date-desc {
-  color: var(--blocked-muted-text);
+.variant-due-section[data-due-band] > .field--due-date .due-date-desc,
+.field--due-date[data-due-band] .due-date-desc,
+.variant-due-section[data-due-band] > .field--due-date .section-toggle-summary,
+.field--due-date[data-due-band] .section-toggle-summary {
+  color: var(--due-band-muted, var(--blocked-muted-text));
   opacity: 1;
+}
+
+.variant-due-section[data-due-band="overdue"],
+.field--due-date[data-due-band="overdue"] {
+  --due-band-fill: var(--due-band-overdue-fill);
+  --due-band-text: var(--due-band-overdue-text);
+  --due-band-muted: var(--due-band-overdue-muted);
+}
+
+.variant-due-section[data-due-band="imminent"],
+.field--due-date[data-due-band="imminent"] {
+  --due-band-fill: var(--due-band-imminent-fill);
+  --due-band-text: var(--due-band-imminent-text);
+  --due-band-muted: var(--due-band-imminent-muted);
+}
+
+.variant-due-section[data-due-band="soon"],
+.field--due-date[data-due-band="soon"] {
+  --due-band-fill: var(--due-band-soon-fill);
+  --due-band-text: var(--due-band-soon-text);
+  --due-band-muted: var(--due-band-soon-muted);
+}
+
+.variant-due-section[data-due-band="weeks"],
+.field--due-date[data-due-band="weeks"] {
+  --due-band-fill: var(--due-band-weeks-fill);
+  --due-band-text: var(--due-band-weeks-text);
+  --due-band-muted: var(--due-band-weeks-muted);
+}
+
+.variant-due-section[data-due-band="month"],
+.field--due-date[data-due-band="month"] {
+  --due-band-fill: var(--due-band-month-fill);
+  --due-band-text: var(--due-band-month-text);
+  --due-band-muted: var(--due-band-month-muted);
+}
+
+.variant-due-section[data-due-band="far"],
+.field--due-date[data-due-band="far"] {
+  --due-band-fill: var(--due-band-far-fill);
+  --due-band-text: var(--due-band-far-text);
+  --due-band-muted: var(--due-band-far-muted);
 }
 
 .due-date-label {
@@ -2170,12 +2283,14 @@ html[data-color-mode="dark"] .due-date-time-clock {
   display: none;
 }
 
-.due-date-countdown.is-past .due-date-countdown-primary {
-  color: var(--blocked-text);
+.due-date-countdown.is-past .due-date-countdown-primary,
+.field--due-date[data-due-band] .due-date-countdown-primary {
+  color: var(--due-band-text, var(--blocked-text));
 }
 
-.due-date-countdown.is-past .due-date-countdown-secondary {
-  color: var(--blocked-muted-text, var(--blocked-text));
+.due-date-countdown.is-past .due-date-countdown-secondary,
+.field--due-date[data-due-band] .due-date-countdown-secondary {
+  color: var(--due-band-muted, var(--blocked-muted-text, var(--blocked-text)));
 }
 
 .due-date-countdown[hidden] {
@@ -2841,6 +2956,7 @@ input.field-range:active::-webkit-slider-thumb {
 }
 
 .impact-reach-chip {
+  font: inherit;
   font-size: 10px;
   letter-spacing: 0.02em;
   padding: 0.12rem 0.35rem;
@@ -2848,6 +2964,14 @@ input.field-range:active::-webkit-slider-thumb {
   color: rgba(255, 255, 255, 0.72);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.impact-reach-chip:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .impact-reach-chip.is-active {
@@ -2855,6 +2979,10 @@ input.field-range:active::-webkit-slider-thumb {
   background: var(--reach-color);
   border-color: rgba(0, 0, 0, 0.25);
   font-weight: 600;
+}
+
+.impact-reach-chip.is-active:hover {
+  background: var(--reach-color);
 }
 
 /* ── Facilité estimated duration + hourglass ── */

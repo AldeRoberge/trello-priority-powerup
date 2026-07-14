@@ -6,13 +6,13 @@
   <title>Définir la priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=section-cbx-1" />
-  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=impact-reach-duration-2" />
+  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=section-tint-1" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=section-tint-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=card-interview-1" />
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=impact-reach-duration-2"></script>
+  <script src="./components/priority/priority-ui.js?v=section-tint-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
@@ -22,7 +22,7 @@
   <script src="./components/statut/statut-match.js"></script>
   <script src="./components/statut/statut-trello.js"></script>
   <script src="./components/shared/tab-autocomplete.js?v=tab-complete-1"></script>
-  <script src="./components/completion/completion-ui.js?v=progress-due-complete-1"></script>
+  <script src="./components/completion/completion-ui.js?v=section-tint-1"></script>
   <script src="./components/completion/completion-trello.js?v=progress-due-complete-1"></script>
   <script src="./components/goals/goals-trello.js?v=goals-1"></script>
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
@@ -1375,8 +1375,8 @@
           try {
             if (typeof localStorage !== 'undefined' && cachedProfile) {
               localStorage.setItem(
-                'trello-priority-powerup/agent-debug-enabled',
-                cachedProfile.agentDebug !== false ? '1' : '0'
+                'trello-priority-powerup/agent-status',
+                cachedProfile.agentStatus || 'standard'
               );
             }
           } catch (lsErr) { /* ignore */ }

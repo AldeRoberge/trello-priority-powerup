@@ -54,9 +54,9 @@
         <span class="tp-profile-field-label">Ton</span>
         <select id="profileTone" class="tp-select" aria-label="Ton de l’assistant"></select>
       </label>
-      <label class="tp-statut-toggle">
-        <input type="checkbox" id="profileAgentDebug" />
-        <span>Afficher les infos de débogage de l’assistant</span>
+      <label class="tp-profile-field">
+        <span class="tp-profile-field-label">Afficher le statut</span>
+        <select id="profileAgentStatus" class="tp-select" aria-label="Afficher le statut de l’assistant"></select>
       </label>
     </div>
   </details>
@@ -152,7 +152,7 @@
           notes: document.getElementById('profileNotes').value,
           language: document.getElementById('profileLanguage').value,
           tone: document.getElementById('profileTone').value,
-          agentDebug: document.getElementById('profileAgentDebug').checked,
+          agentStatus: document.getElementById('profileAgentStatus').value,
           features: features
         });
       }
@@ -162,7 +162,6 @@
         document.getElementById('profileDisplayName').value = p.displayName;
         document.getElementById('profileRole').value = p.role;
         document.getElementById('profileNotes').value = p.notes;
-        document.getElementById('profileAgentDebug').checked = p.agentDebug !== false;
         fillSelect(
           document.getElementById('profileLanguage'),
           Profile.LANGUAGE_KEYS,
@@ -174,6 +173,12 @@
           Profile.TONE_KEYS,
           Profile.TONE_LABELS,
           p.tone
+        );
+        fillSelect(
+          document.getElementById('profileAgentStatus'),
+          Profile.AGENT_STATUS_KEYS,
+          Profile.AGENT_STATUS_LABELS,
+          p.agentStatus
         );
         renderFeatures(p.features);
         resize();
@@ -187,8 +192,8 @@
           try {
             if (typeof localStorage !== 'undefined') {
               localStorage.setItem(
-                'trello-priority-powerup/agent-debug-enabled',
-                saved.agentDebug ? '1' : '0'
+                'trello-priority-powerup/agent-status',
+                saved.agentStatus || 'standard'
               );
             }
           } catch (e) { /* ignore */ }
@@ -218,7 +223,7 @@
             writeForm(blank);
             try {
               if (typeof localStorage !== 'undefined') {
-                localStorage.setItem('trello-priority-powerup/agent-debug-enabled', '1');
+                localStorage.setItem('trello-priority-powerup/agent-status', 'standard');
               }
             } catch (e) { /* ignore */ }
             setStatus('Profil réinitialisé.');

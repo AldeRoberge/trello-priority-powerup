@@ -1833,6 +1833,55 @@
     return daysUntilDue(iso, now) < 0;
   }
 
+  /**
+   * Échéance proximity band for section chrome coloring.
+   * overdue | imminent (≤2j) | soon (≤2 sem) | weeks (≤1 mois) | month (≤3 mois) | far
+   */
+  var DUE_PROXIMITY_BANDS = [
+    'overdue',
+    'imminent',
+    'soon',
+    'weeks',
+    'month',
+    'far'
+  ];
+
+  function dueProximityBand(iso, time, now) {
+    if (!normalizeDueDate(iso)) return '';
+    if (isDuePast(iso, time, now)) return 'overdue';
+    var days = daysUntilDue(iso, now);
+    if (!isFinite(days)) return '';
+    if (days <= 2) return 'imminent';
+    if (days <= 14) return 'soon';
+    if (days <= 30) return 'weeks';
+    if (days <= 90) return 'month';
+    return 'far';
+  }
+
+  function clearDueProximityBand(el) {
+    if (!el) return;
+    for (var i = 0; i < DUE_PROXIMITY_BANDS.length; i++) {
+      el.classList.remove('is-due-' + DUE_PROXIMITY_BANDS[i]);
+    }
+    el.classList.remove('is-overdue', 'is-past');
+    if (el.dataset) delete el.dataset.dueBand;
+  }
+
+  function applyDueProximityBand(el, band) {
+    if (!el) return;
+    if (!band) {
+      clearDueProximityBand(el);
+      return;
+    }
+    for (var i = 0; i < DUE_PROXIMITY_BANDS.length; i++) {
+      var name = DUE_PROXIMITY_BANDS[i];
+      el.classList.toggle('is-due-' + name, name === band);
+    }
+    el.classList.toggle('is-overdue', band === 'overdue');
+    el.classList.toggle('is-past', band === 'overdue');
+    if (el.dataset) el.dataset.dueBand = band;
+  }
+
   function capitalizeCountdownPhrase(text) {
     if (!text) return '';
     var first = text.charAt(0);
@@ -2777,6 +2826,38 @@
       panel.style.setProperty('--card-tier-tint', visuals.tint);
       panel.style.setProperty('--card-panel-tint-mix', mix.panel + '%');
     }
+  }
+
+  function clearPrioritySectionTint(fieldEl) {
+    if (!fieldEl) return;
+    fieldEl.classList.remove('has-priority-tint');
+    fieldEl.style.removeProperty('--priority-section-fill');
+    fieldEl.style.removeProperty('--priority-section-text');
+    fieldEl.style.removeProperty('--priority-section-muted');
+    fieldEl.style.removeProperty('--priority-section-seg');
+  }
+
+  /** Soft shell tint for the Priorité section — same palette as the heat badge. */
+  function applyPrioritySectionTint(fieldEl, display, enabled) {
+    if (!fieldEl) return;
+    if (!enabled) {
+      clearPrioritySectionTint(fieldEl);
+      return;
+    }
+    var d = display || {};
+    // Keep blocked crimson on Statut only — Priorité follows score/tier colors.
+    var visualSource = d.inutile
+      ? { inutile: true, label: INUTILE_LABEL }
+      : { i: d.tierI, label: d.label };
+    var v = tierVisuals(visualSource);
+    fieldEl.classList.add('has-priority-tint');
+    fieldEl.style.setProperty('--priority-section-fill', v.fill);
+    fieldEl.style.setProperty('--priority-section-text', v.text);
+    fieldEl.style.setProperty(
+      '--priority-section-muted',
+      v.seg || v.text
+    );
+    fieldEl.style.setProperty('--priority-section-seg', v.seg);
   }
 
   function labelEntry(key, value) {
@@ -4025,10 +4106,16 @@
     legend.className = 'impact-reach-legend';
     var shorts = (LABELS.impact && LABELS.impact.short) || [];
     shorts.forEach(function (name, i) {
-      var chip = document.createElement('span');
+      var chip = document.createElement('button');
+      chip.type = 'button';
       chip.className = 'impact-reach-chip';
       chip.dataset.level = String(i);
       chip.textContent = name;
+      chip.setAttribute('aria-label', 'Port\u00e9e\u00a0: ' + name);
+      chip.addEventListener('click', function () {
+        if (typeof fieldApi.setValue === 'function') fieldApi.setValue(i);
+        if (typeof fieldApi.onChange === 'function') fieldApi.onChange(i);
+      });
       legend.appendChild(chip);
     });
     wrap.appendChild(legend);
@@ -4061,7 +4148,9 @@
       epicenter.setAttribute('r', L >= 4 ? '0' : String(2.2 + L * 0.15));
       var chips = legend.querySelectorAll('.impact-reach-chip');
       for (var i = 0; i < chips.length; i++) {
-        chips[i].classList.toggle('is-active', i === L);
+        var active = i === L;
+        chips[i].classList.toggle('is-active', active);
+        chips[i].setAttribute('aria-pressed', active ? 'true' : 'false');
       }
       if (L !== lastLevel) {
         wrap.classList.remove('is-shaking');
@@ -4330,13 +4419,6 @@
     inputEl.step = String(SLIDER_STEP);
     inputEl.value = String(value);
     inputEl.setAttribute('aria-label', label);
-    function handleRangeInput() {
-      var v = +inputEl.value;
-      updateDisplay(v);
-      onChange(v);
-    }
-    inputEl.addEventListener('input', handleRangeInput);
-    inputEl.addEventListener('change', handleRangeInput);
 
     sliderWrap.appendChild(inputEl);
 
@@ -4349,7 +4431,16 @@
 
     el.appendChild(field);
 
-    function updateDisplay(v) {
+    // Routable through api.updateDisplay so visuals (e.g. impact reach) can wrap it.
+    var api = {
+      el: field,
+      getValue: getValue,
+      setValue: setValue,
+      updateDisplay: updateDisplayBase,
+      onChange: onChange
+    };
+
+    function updateDisplayBase(v) {
       v = clamp(v, min, max);
       var idx = snappedLevel(v, min, max);
       var shortLabel = wordFor(wordsKey, idx);
@@ -4364,24 +4455,25 @@
     }
 
     function setValue(v) {
-      updateDisplay(clamp(Math.round(v), min, max));
+      api.updateDisplay(clamp(Math.round(v), min, max));
     }
 
     function getValue() {
       return +inputEl.value;
     }
 
-    updateDisplay(value);
+    function handleRangeInput() {
+      var v = +inputEl.value;
+      api.updateDisplay(v);
+      onChange(v);
+    }
+    inputEl.addEventListener('input', handleRangeInput);
+    inputEl.addEventListener('change', handleRangeInput);
 
-    var api = {
-      el: field,
-      getValue: getValue,
-      setValue: setValue,
-      updateDisplay: updateDisplay
-    };
     if (wordsKey === 'impact' || id === 'impact') {
       attachImpactReachVisual(api);
     }
+    api.updateDisplay(value);
     return api;
   }
 
@@ -7777,7 +7869,8 @@
         countdownSecondary.hidden = true;
         countdown.hidden = true;
         countdown.classList.remove('is-past');
-        field.classList.remove('has-due-date', 'is-past');
+        field.classList.remove('has-due-date');
+        clearDueProximityBand(field);
         refreshTimeRow();
         refreshTrigger();
         refreshSuggestions();
@@ -7795,19 +7888,21 @@
         countdownSecondary.hidden = true;
         countdown.hidden = true;
         countdown.classList.remove('is-past');
-        field.classList.remove('has-due-date', 'is-past');
+        field.classList.remove('has-due-date');
+        clearDueProximityBand(field);
         if (collapseApi) collapseApi.refreshSummary();
         return;
       }
       var human = formatDueDateHumanReadable(current, currentTime);
-      var past = isDuePast(current, currentTime);
+      var band = dueProximityBand(current, currentTime);
+      var past = band === 'overdue';
       countdownPrimary.textContent = human.primary || '';
       countdownSecondary.textContent = human.secondary || '';
       countdownSecondary.hidden = !human.secondary;
       countdown.hidden = !human.primary;
       countdown.classList.toggle('is-past', past);
       field.classList.add('has-due-date');
-      field.classList.toggle('is-past', past);
+      applyDueProximityBand(field, band);
       if (collapseApi) collapseApi.refreshSummary();
     }
 
@@ -8539,7 +8634,8 @@
       },
       onBeforeDisable: function () {
         hidePickers();
-        field.classList.remove('has-due-date', 'is-past');
+        field.classList.remove('has-due-date');
+        clearDueProximityBand(field);
       },
       onAfterEnable: function () {
         enabled = true;
@@ -9801,6 +9897,7 @@
     var dueSection;
     var blockedSection;
     var heat;
+    var priorityField;
     var calcGraph;
     var formulaSwitcher;
     var sliderAnimFrame = null;
@@ -10023,8 +10120,17 @@
           blockedSection.classList.toggle('is-blocked', !!display.blocked);
         }
         if (dueSection) {
-          dueSection.classList.toggle('is-overdue', !!display.duePast);
+          var dueBand =
+            state.dueEnabled !== false && normalizeDueDate(state.dueDate)
+              ? dueProximityBand(state.dueDate, state.dueTime)
+              : '';
+          applyDueProximityBand(dueSection, dueBand);
         }
+        applyPrioritySectionTint(
+          priorityField,
+          display,
+          state.priorityEnabled !== false
+        );
         if (heat) heat.paint(result, display);
         if (calcGraph) calcGraph.paint(result, state, display);
       } catch (err) {
@@ -10080,7 +10186,7 @@
     var prioritySection = document.createElement('div');
     prioritySection.className = 'variant-priority-section';
 
-    var priorityField = document.createElement('div');
+    priorityField = document.createElement('div');
     priorityField.className = 'field field--priority';
 
     var priorityBodyId = 'priority-section-body-' + Math.random().toString(36).slice(2, 9);

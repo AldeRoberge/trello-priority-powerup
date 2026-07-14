@@ -48,6 +48,22 @@
     en: 'English'
   };
 
+  var AGENT_STATUS_KEYS = ['none', 'standard', 'full'];
+  var AGENT_STATUS_LABELS = {
+    none: 'Aucun',
+    standard: 'Standard',
+    full: 'Complet'
+  };
+
+  function normalizeAgentStatus(raw, legacyDebug) {
+    var s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    if (AGENT_STATUS_KEYS.indexOf(s) !== -1) return s;
+    // Legacy checkbox: true → full (debug panel), false → standard (stats only).
+    if (legacyDebug === false) return 'standard';
+    if (legacyDebug === true) return 'full';
+    return 'standard';
+  }
+
   function trimStr(value, max) {
     var s = typeof value === 'string' ? value.trim() : '';
     if (!s) return '';
@@ -72,7 +88,7 @@
       tone: 'concise',
       language: 'fr',
       features: defaultFeatures(),
-      agentDebug: true,
+      agentStatus: 'standard',
       updatedAt: ''
     };
   }
@@ -110,7 +126,7 @@
       tone: normalizeTone(src.tone),
       language: normalizeLanguage(src.language),
       features: normalizeFeatures(src.features),
-      agentDebug: src.agentDebug !== false,
+      agentStatus: normalizeAgentStatus(src.agentStatus, src.agentDebug),
       updatedAt: typeof src.updatedAt === 'string' ? src.updatedAt : ''
     };
   }
@@ -250,7 +266,10 @@
     TONE_LABELS: TONE_LABELS,
     LANGUAGE_KEYS: LANGUAGE_KEYS,
     LANGUAGE_LABELS: LANGUAGE_LABELS,
+    AGENT_STATUS_KEYS: AGENT_STATUS_KEYS,
+    AGENT_STATUS_LABELS: AGENT_STATUS_LABELS,
     emptyProfile: emptyProfile,
+    normalizeAgentStatus: normalizeAgentStatus,
     normalizeProfile: normalizeProfile,
     isFeatureEnabled: isFeatureEnabled,
     applyFeaturesToCard: applyFeaturesToCard,

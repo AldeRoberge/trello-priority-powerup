@@ -199,21 +199,44 @@
     settingsPanel.appendChild(modelSelectField);
     settingsPanel.appendChild(modelInputField);
 
-    var DEBUG_PREF_STORAGE_KEY = 'trello-priority-powerup/agent-debug-enabled';
-    function loadDebugEnabled() {
-      try {
-        if (typeof localStorage === 'undefined') return true;
-        var raw = localStorage.getItem(DEBUG_PREF_STORAGE_KEY);
-        if (raw == null) return true;
-        return raw === '1' || raw === 'true';
-      } catch (e) {
-        return true;
+    var STATUS_PREF_STORAGE_KEY = 'trello-priority-powerup/agent-status';
+    var LEGACY_DEBUG_PREF_STORAGE_KEY = 'trello-priority-powerup/agent-debug-enabled';
+    var STATUS_LEVELS = ['none', 'standard', 'full'];
+    var STATUS_LABELS = {
+      none: 'Aucun',
+      standard: 'Standard',
+      full: 'Complet'
+    };
+
+    function normalizeStatusLevel(raw) {
+      if (global.UserProfile && typeof global.UserProfile.normalizeAgentStatus === 'function') {
+        return global.UserProfile.normalizeAgentStatus(raw);
       }
+      var s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+      return STATUS_LEVELS.indexOf(s) !== -1 ? s : 'standard';
     }
-    function saveDebugEnabled(on) {
+
+    function loadStatusLevel() {
       try {
         if (typeof localStorage !== 'undefined') {
-          localStorage.setItem(DEBUG_PREF_STORAGE_KEY, on ? '1' : '0');
+          var raw = localStorage.getItem(STATUS_PREF_STORAGE_KEY);
+          if (raw != null) return normalizeStatusLevel(raw);
+          var legacy = localStorage.getItem(LEGACY_DEBUG_PREF_STORAGE_KEY);
+          if (legacy != null) {
+            return legacy === '0' || legacy === 'false' ? 'standard' : 'full';
+          }
+        }
+      } catch (e) {
+        /* ignore */
+      }
+      return 'standard';
+    }
+
+    function saveStatusLevel(level) {
+      var next = normalizeStatusLevel(level);
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(STATUS_PREF_STORAGE_KEY, next);
         }
       } catch (e) {
         /* ignore quota / private mode */
@@ -221,28 +244,27 @@
       if (t && global.UserProfile && typeof global.UserProfile.load === 'function') {
         global.UserProfile.load(t)
           .then(function (profile) {
-            if (!profile || profile.agentDebug === !!on) return null;
-            profile.agentDebug = !!on;
+            if (!profile || profile.agentStatus === next) return null;
+            profile.agentStatus = next;
             return global.UserProfile.save(t, profile);
           })
           .catch(function (err) {
-            console.error('AgentUI: profile agentDebug sync failed', err);
+            console.error('AgentUI: profile agentStatus sync failed', err);
           });
       }
     }
-    var debugEnabled = loadDebugEnabled();
-    var debugPrefLabel = el('label', 'agent-debug-pref');
-    var debugPrefCheckbox = el('input', 'agent-debug-pref-checkbox', {
-      type: 'checkbox'
+
+    var statusLevel = loadStatusLevel();
+    var statusSelect = el('select', 'agent-input agent-status-select', {
+      'aria-label': 'Afficher le statut'
     });
-    debugPrefCheckbox.checked = debugEnabled;
-    debugPrefLabel.appendChild(debugPrefCheckbox);
-    debugPrefLabel.appendChild(
-      el('span', 'agent-debug-pref-text', {
-        text: 'Afficher les infos de d\u00e9bogage'
-      })
-    );
-    settingsPanel.appendChild(debugPrefLabel);
+    STATUS_LEVELS.forEach(function (id) {
+      statusSelect.appendChild(
+        el('option', null, { value: id, text: STATUS_LABELS[id] || id })
+      );
+    });
+    statusSelect.value = statusLevel;
+    settingsPanel.appendChild(labeledInput('Afficher le statut', statusSelect));
 
     var settingsActions = el('div', 'agent-settings-actions');
     var saveBtn = el('button', 'tp-button agent-btn', { type: 'button', text: 'Enregistrer' });
@@ -394,7 +416,7 @@
       title: 'D\u00e9bogage',
       'aria-expanded': 'false'
     });
-    debugBtn.hidden = !debugEnabled;
+    debugBtn.hidden = statusLevel !== 'full';
     var debugIcon = el('i', 'ti ti-bug');
     debugIcon.setAttribute('aria-hidden', 'true');
     debugBtn.appendChild(debugIcon);
@@ -527,13 +549,19 @@
       renderChatStats();
     }
 
-    function syncDebugControls() {
-      debugBtn.hidden = !debugEnabled;
-      if (!debugEnabled && debugOpen) {
+    function syncStatusControls() {
+      var showInfo = statusLevel !== 'none';
+      var showDebug = statusLevel === 'full';
+      infoEl.hidden = !showInfo;
+      statsEl.hidden = !showInfo;
+      debugBtn.hidden = !showDebug;
+      if (!showDebug && debugOpen) {
         setDebugOpen(false);
-        return;
+      } else {
+        debugPanel.hidden = !debugOpen;
       }
-      debugPanel.hidden = !debugOpen;
+      if (showInfo) renderChatStats();
+      else statsEl.replaceChildren();
       notifyLayout();
     }
 
@@ -558,12 +586,12 @@
       debugLog.push(entry);
       if (debugLog.length > 40) debugLog.shift();
       selectedDebugId = entry.id || selectedDebugId;
-      if (debugEnabled && debugOpen) renderDebugPanel();
+      if (statusLevel === 'full' && debugOpen) renderDebugPanel();
       notifyLayout();
     }
 
     function setDebugOpen(open) {
-      debugOpen = !!open && debugEnabled;
+      debugOpen = !!open && statusLevel === 'full';
       debugPanel.hidden = !debugOpen;
       debugBtn.classList.toggle('is-active', debugOpen);
       debugBtn.setAttribute('aria-expanded', debugOpen ? 'true' : 'false');
@@ -775,7 +803,14 @@
     }
 
     function renderChatStats() {
+      if (statusLevel === 'none') {
+        statsEl.replaceChildren();
+        notifyLayout();
+        return;
+      }
+
       var usage = sessionStats.lastUsage;
+      var isFull = statusLevel === 'full';
       statsEl.replaceChildren();
 
       function addRow(className, parts) {
@@ -799,21 +834,34 @@
       if (!usage || sessionStats.turns < 1) {
         addRow('agent-chat-stats-row--last', [
           { label: 'Tokens', value: '\u2014', title: 'Aucun \u00e9change pour l\u2019instant' },
-          { label: 'Co\u00fbt', value: '\u2014' },
-          { label: 'Latence', value: '\u2014' }
-        ]);
-        addRow('agent-chat-stats-row--session', [
-          {
-            label: 'M\u00e9moire',
-            value: history.length + ' msg',
-            title: 'Messages conserv\u00e9s dans cette session'
-          },
-          {
-            label: 'Session',
-            value: '0 tour',
-            title: 'Totaux de cette conversation'
-          }
-        ]);
+          { label: 'Co\u00fbt', value: '\u2014' }
+        ].concat(
+          isFull ? [{ label: 'Latence', value: '\u2014' }] : []
+        ));
+        addRow(
+          'agent-chat-stats-row--session',
+          [
+            {
+              label: 'Contexte',
+              value: '\u2014'
+            },
+            {
+              label: 'M\u00e9moire',
+              value: history.length + ' msg',
+              title: 'Messages conserv\u00e9s dans cette session'
+            }
+          ].concat(
+            isFull
+              ? [
+                  {
+                    label: 'Session',
+                    value: '0 tour',
+                    title: 'Totaux de cette conversation'
+                  }
+                ]
+              : []
+          )
+        );
         notifyLayout();
         return;
       }
@@ -841,24 +889,26 @@
           label: 'Co\u00fbt',
           value: '\u2248' + formatCostUsd(usage.costUsd),
           title: 'Estimation selon le tarif publique du mod\u00e8le (non facturation)'
-        },
-        {
-          label: 'Latence',
-          value: formatLatency(usage.latencyMs)
         }
       ];
-      if (usage.cachedTokens != null && usage.cachedTokens > 0) {
+      if (isFull) {
         lastParts.push({
-          label: 'Cache',
-          value: formatTokenCount(usage.cachedTokens),
-          title: 'Tokens d\'entr\u00e9e en cache'
+          label: 'Latence',
+          value: formatLatency(usage.latencyMs)
         });
-      }
-      if (usage.reasoningTokens != null && usage.reasoningTokens > 0) {
-        lastParts.push({
-          label: 'Raisonnement',
-          value: formatTokenCount(usage.reasoningTokens)
-        });
+        if (usage.cachedTokens != null && usage.cachedTokens > 0) {
+          lastParts.push({
+            label: 'Cache',
+            value: formatTokenCount(usage.cachedTokens),
+            title: 'Tokens d\'entr\u00e9e en cache'
+          });
+        }
+        if (usage.reasoningTokens != null && usage.reasoningTokens > 0) {
+          lastParts.push({
+            label: 'Raisonnement',
+            value: formatTokenCount(usage.reasoningTokens)
+          });
+        }
       }
       addRow('agent-chat-stats-row--last', lastParts);
 
@@ -881,39 +931,43 @@
           label: 'M\u00e9moire',
           value: history.length + ' msg',
           title: 'Messages conserv\u00e9s dans cette session'
-        },
-        {
-          label: 'Compression',
-          value: 'aucune',
-          title:
-            'L\'historique est renvoy\u00e9 en entier \u00e0 chaque tour (pas de r\u00e9sum\u00e9 ni troncature)'
-        },
-        {
-          label: 'Session',
-          value:
-            formatTokenCount(sessionStats.totalTokens) +
-            ' \u00b7 \u2248' +
-            formatCostUsd(sessionStats.costUsd) +
-            ' \u00b7 ' +
-            sessionStats.turns +
-            ' tour' +
-            (sessionStats.turns > 1 ? 's' : ''),
-          title: 'Totaux de cette conversation'
         }
       ];
-      if (usage.model) {
-        memoryParts.push({
-          label: 'Mod\u00e8le',
-          value: usage.model,
-          title: usage.model
-        });
-      }
-      var fr = finishReasonLabel(usage.finishReason);
-      if (fr) {
-        memoryParts.push({
-          label: 'Fin',
-          value: fr
-        });
+      if (isFull) {
+        memoryParts.push(
+          {
+            label: 'Compression',
+            value: 'aucune',
+            title:
+              'L\'historique est renvoy\u00e9 en entier \u00e0 chaque tour (pas de r\u00e9sum\u00e9 ni troncature)'
+          },
+          {
+            label: 'Session',
+            value:
+              formatTokenCount(sessionStats.totalTokens) +
+              ' \u00b7 \u2248' +
+              formatCostUsd(sessionStats.costUsd) +
+              ' \u00b7 ' +
+              sessionStats.turns +
+              ' tour' +
+              (sessionStats.turns > 1 ? 's' : ''),
+            title: 'Totaux de cette conversation'
+          }
+        );
+        if (usage.model) {
+          memoryParts.push({
+            label: 'Mod\u00e8le',
+            value: usage.model,
+            title: usage.model
+          });
+        }
+        var fr = finishReasonLabel(usage.finishReason);
+        if (fr) {
+          memoryParts.push({
+            label: 'Fin',
+            value: fr
+          });
+        }
       }
       addRow('agent-chat-stats-row--session', memoryParts);
       notifyLayout();
@@ -1659,6 +1713,31 @@
       sendUserMessage(label, { skipSpellcheck: true });
     }
 
+    /** When suggestions are a full 0–4 or 1–5 axis scale, return heat step 0–4 per item. */
+    function scaleHeatSteps(items) {
+      var nums = items.map(function (text) {
+        return /^(?:[0-4]|[1-5])$/.test(text) ? parseInt(text, 10) : NaN;
+      });
+      if (nums.some(function (n) { return !isFinite(n); })) return null;
+      var sorted = nums.slice().sort(function (a, b) { return a - b; });
+      var key = sorted.join(',');
+      var min;
+      var max;
+      if (key === '0,1,2,3,4') {
+        min = 0;
+        max = 4;
+      } else if (key === '1,2,3,4,5') {
+        min = 1;
+        max = 5;
+      } else {
+        return null;
+      }
+      var span = max - min;
+      return nums.map(function (n) {
+        return Math.round(((n - min) / span) * 4);
+      });
+    }
+
     function renderSuggestions(list, options) {
       options = options || {};
       var items = (list || [])
@@ -1676,11 +1755,16 @@
         return;
       }
       suggestionsEl.hidden = false;
+      var heatSteps = scaleHeatSteps(items);
       items.forEach(function (text, index) {
         var chip = el('button', 'agent-suggestion-chip', { type: 'button' });
         chip.textContent = text;
         chip.setAttribute('data-suggestion', text);
         chip.disabled = pending;
+        if (heatSteps) {
+          chip.classList.add('agent-suggestion-chip--scale');
+          chip.classList.add('agent-suggestion-chip--heat-' + heatSteps[index]);
+        }
         if (options.animate !== false) {
           chip.style.animationDelay = index * 40 + 'ms';
         }
@@ -1842,7 +1926,7 @@
       // UI-only intro (not sent to the model history).
       appendMessage(
         'assistant',
-        'Premi\u00e8re ouverture\u00a0: quelques questions pour cadrer la priorit\u00e9.'
+        'Ça semble être une nouvelle tâche. Je peux t\'aider à la configurer.'
       );
       pending = true;
       updateComposerEnabled();
@@ -1985,6 +2069,28 @@
         provider = await Agent.getProvider(t);
         savedProvider = Agent.normalizeProvider(provider);
         fillSettingsForm();
+        if (global.UserProfile && typeof global.UserProfile.load === 'function') {
+          try {
+            var profile = await global.UserProfile.load(t);
+            if (profile && profile.agentStatus) {
+              var fromProfile = normalizeStatusLevel(profile.agentStatus);
+              if (fromProfile !== statusLevel) {
+                statusLevel = fromProfile;
+                statusSelect.value = statusLevel;
+                try {
+                  if (typeof localStorage !== 'undefined') {
+                    localStorage.setItem(STATUS_PREF_STORAGE_KEY, statusLevel);
+                  }
+                } catch (lsErr) {
+                  /* ignore */
+                }
+                syncStatusControls();
+              }
+            }
+          } catch (profErr) {
+            console.error('AgentUI load agentStatus failed', profErr);
+          }
+        }
         if (Agent.isConfigured(provider) && !history.length) {
           await bootstrapCardInterview();
         }
@@ -2372,7 +2478,7 @@
     debugBtn.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
-      if (!debugEnabled) return;
+      if (statusLevel !== 'full') return;
       setDebugOpen(!debugOpen);
     });
     document.addEventListener('click', function (e) {
@@ -2387,10 +2493,11 @@
         positionToolVerifyTip
       );
     });
-    debugPrefCheckbox.addEventListener('change', function () {
-      debugEnabled = !!debugPrefCheckbox.checked;
-      saveDebugEnabled(debugEnabled);
-      syncDebugControls();
+    statusSelect.addEventListener('change', function () {
+      statusLevel = normalizeStatusLevel(statusSelect.value);
+      statusSelect.value = statusLevel;
+      saveStatusLevel(statusLevel);
+      syncStatusControls();
     });
     emptyConfigBtn.addEventListener('click', function () {
       if (collapse && !collapse.isEnabled()) {
@@ -2427,8 +2534,7 @@
     fillSettingsForm();
     ensureProviderLoaded();
     updateComposerEnabled();
-    renderChatStats();
-    syncDebugControls();
+    syncStatusControls();
     notifyLayout();
 
     if (initiallyOpen || shouldFocusComposer) {

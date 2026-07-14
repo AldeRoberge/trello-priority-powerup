@@ -154,35 +154,8 @@
   margin-top: 4px;
 }
 
-.tp-page--priority .agent-debug-pref {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 10px 0 4px;
-  padding: 8px;
-  border: 1px solid var(--tp-border);
-  border-radius: 3px;
-  background: var(--tp-surface-subtle);
-  cursor: pointer;
-  font-size: 13px;
-  line-height: 1.35;
-  color: var(--tp-text);
-}
-
-.tp-page--priority .agent-debug-pref:has(.agent-debug-pref-checkbox:focus-visible) {
-  outline: 2px solid var(--tp-primary);
-  outline-offset: 1px;
-}
-
-.tp-page--priority .agent-debug-pref-checkbox {
-  flex: 0 0 auto;
-  margin: 2px 0 0;
-  cursor: pointer;
-}
-
-.tp-page--priority .agent-debug-pref-text {
-  flex: 1 1 auto;
-  min-width: 0;
+.tp-page--priority .agent-status-select {
+  max-width: 100%;
 }
 
 .tp-page--priority .agent-debug-btn[hidden] {
@@ -766,6 +739,74 @@
 .tp-page--priority .agent-suggestion-chip:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+/* Axis scale chips (0–4 / 1–5): cool → hot so high values read as urgent / intense */
+.tp-page--priority .agent-suggestion-chip--scale {
+  border-style: solid;
+  font-weight: 600;
+  min-width: 2.35em;
+  justify-content: center;
+}
+
+.tp-page--priority .agent-suggestion-chip--heat-0 {
+  background: color-mix(in srgb, #9b9890 18%, transparent);
+  border-color: #9b9890;
+  color: #6b6860;
+}
+
+.tp-page--priority .agent-suggestion-chip--heat-1 {
+  background: color-mix(in srgb, #5a9fd4 20%, transparent);
+  border-color: #5a9fd4;
+  color: #2f6f9e;
+}
+
+.tp-page--priority .agent-suggestion-chip--heat-2 {
+  background: color-mix(in srgb, #ba7517 18%, transparent);
+  border-color: #ba7517;
+  color: #8a5510;
+}
+
+.tp-page--priority .agent-suggestion-chip--heat-3 {
+  background: color-mix(in srgb, #d85a30 22%, transparent);
+  border-color: #d85a30;
+  color: #a83f1c;
+}
+
+.tp-page--priority .agent-suggestion-chip--heat-4 {
+  background: color-mix(in srgb, #e24b4a 24%, transparent);
+  border-color: #e24b4a;
+  color: #b83231;
+}
+
+.tp-page--priority .agent-suggestion-chip--scale:hover:not(:disabled) {
+  filter: brightness(0.96);
+  color: inherit;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-0 {
+  background: color-mix(in srgb, #9b9890 28%, transparent);
+  color: #c4c1b8;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-1 {
+  background: color-mix(in srgb, #5a9fd4 30%, transparent);
+  color: #9ec8ea;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-2 {
+  background: color-mix(in srgb, #ba7517 30%, transparent);
+  color: #e0b06a;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-3 {
+  background: color-mix(in srgb, #d85a30 32%, transparent);
+  color: #f0a080;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-4 {
+  background: color-mix(in srgb, #e24b4a 34%, transparent);
+  color: #f5a3a2;
 }
 
 /* Applyable AI improvements (bottom of Assistant) */

@@ -738,6 +738,19 @@
     );
   }
 
+  /** Drop patronizing "(0 = …, 4 = …)" scale legends from assistant copy. */
+  function stripScaleLegendParenthetical(message) {
+    if (typeof message !== 'string' || !message) return message;
+    return message
+      .replace(
+        /\s*\(\s*[0-5]\s*=\s*[^)]{1,80},\s*[0-5]\s*=\s*[^)]{1,80}\)\s*(?=[?!.…]|$)/gi,
+        ''
+      )
+      .replace(/\s{2,}/g, ' ')
+      .replace(/\s+([?!.…])/g, '$1')
+      .trim();
+  }
+
   function buildContext(bridge) {
     var ctx = {
       today: todayIsoLocal(),
@@ -2068,6 +2081,8 @@
       '- suggestions = r\u00e9ponses cliquables courtes (utilise \u2026 pour \u00e0 compl\u00e9ter).',
       '- Si tu poses une \u00e9chelle Urgence ou Impact (0\u20134)\u00a0: inclus les 5 niveaux dans suggestions (0, 1, 2, 3 et 4) \u2014 n\'en omets aucun.',
       '- Si tu poses une \u00e9chelle Facilit\u00e9 (1\u20135)\u00a0: inclus les 5 niveaux dans suggestions (1, 2, 3, 4 et 5).',
+      '- INTERDIT dans message\u00a0: l\u00e9gendes entre parenth\u00e8ses du type \u00ab\u00a0(0 = pas urgent, 4 = tr\u00e8s urgent)\u00a0\u00bb ou \u00ab\u00a0(1 = difficile, 5 = facile)\u00a0\u00bb \u2014 l\'UI colore les suggestions pour \u00e7a.',
+      '- Ex. urgence\u00a0: \u00ab\u00a0Quelle est l\'urgence de cette t\u00e2che sur une \u00e9chelle de 0 \u00e0 4\u00a0?\u00a0\u00bb (sans parenth\u00e8ses).',
       '- Sinon (oui/non, projet, dur\u00e9e\u2026)\u00a0: 2\u20134 suggestions suffisent.',
       '- Maximise le gain d\'information pour urgence / impact / facilit\u00e9.',
       '- D\u00e8s que tu es assez confiant pour un axe (ou dur\u00e9e / due / projet)\u00a0: mets l\'outil dans actions IMM\u00c9DIATEMENT, confirme bri\u00e8vement, puis question suivante si besoin.',
@@ -2203,10 +2218,12 @@
       return a && allowedTools[a.tool];
     });
 
-    var message = polishMessageAfterTierApply(
-      parsed.message || (data && data.message) || '',
-      tierRewrite.tier,
-      tierRewrite.injected
+    var message = stripScaleLegendParenthetical(
+      polishMessageAfterTierApply(
+        parsed.message || (data && data.message) || '',
+        tierRewrite.tier,
+        tierRewrite.injected
+      )
     );
     var prompts = ensurePriorityAxesPrompt(
       normalizePrompts(parsed.prompts, context),
@@ -2690,7 +2707,7 @@
       out += ch;
       i += 1;
     }
-    return out;
+    return stripScaleLegendParenthetical(out);
   }
 
   function throwHttpError(result) {
@@ -3081,10 +3098,12 @@
     var actions = rewriteActionsForRelativeDue(parsed.actions || [], userText);
     var tierRewrite = rewriteActionsForPriorityTier(actions, userText);
     actions = tierRewrite.actions;
-    var message = polishMessageAfterTierApply(
-      parsed.message,
-      tierRewrite.tier,
-      tierRewrite.injected
+    var message = stripScaleLegendParenthetical(
+      polishMessageAfterTierApply(
+        parsed.message,
+        tierRewrite.tier,
+        tierRewrite.injected
+      )
     );
     var prompts = ensurePriorityAxesPrompt(
       normalizePrompts(parsed.prompts, context),
