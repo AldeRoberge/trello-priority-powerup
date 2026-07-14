@@ -4895,16 +4895,26 @@
       }
       confirmEl.hidden = false;
       if (btn) btn.disabled = !!pending;
-      var leftMs = suggestionConfirmDeadline
-        ? Math.max(0, suggestionConfirmDeadline - Date.now())
-        : SUGGESTION_CONFIRM_MS;
-      var leftSec = Math.max(1, Math.ceil(leftMs / 1000));
-      if (countEl) countEl.textContent = String(leftSec);
       var promptText =
         (confirmEl.querySelector('.agent-suggestion-confirm-prompt') || {})
           .textContent || 'C\'est tout?';
-      confirmEl.setAttribute('aria-label', promptText + ' ' + leftSec + ' s');
+      if (suggestionConfirmDeadline) {
+        var leftMs = Math.max(0, suggestionConfirmDeadline - Date.now());
+        var leftSec = Math.max(1, Math.ceil(leftMs / 1000));
+        if (countEl) countEl.textContent = String(leftSec);
+        confirmEl.setAttribute('aria-label', promptText + ' ' + leftSec + ' s');
+      } else {
+        // Timer cancelled (e.g. user typing) — keep confirm, drop countdown.
+        if (countEl) countEl.textContent = '';
+        confirmEl.setAttribute('aria-label', promptText);
+      }
       notifyLayout();
+    }
+
+    function cancelSuggestionConfirmOnComposerInput() {
+      if (!suggestionConfirmTimer && !suggestionConfirmDeadline) return;
+      stopSuggestionConfirmTimer();
+      syncSuggestionConfirmUi();
     }
 
     function startSuggestionConfirmTimer() {
@@ -6730,7 +6740,10 @@
           'Okay, on passe. Tu pourras reprendre la config quand tu veux.'
       });
     });
-    input.addEventListener('input', refreshComposerTypingGaze);
+    input.addEventListener('input', function () {
+      refreshComposerTypingGaze();
+      cancelSuggestionConfirmOnComposerInput();
+    });
     input.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
