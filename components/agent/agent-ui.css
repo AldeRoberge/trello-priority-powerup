@@ -338,8 +338,9 @@
   gap: 4px;
 }
 
-/* Pencil: resume / edit from this user message (shows on hover). */
-.tp-page--priority .agent-msg-edit {
+/* Pencil / copy on user messages (show on hover). */
+.tp-page--priority .agent-msg-edit,
+.tp-page--priority .agent-msg--user > .agent-msg-copy {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -365,7 +366,9 @@
 }
 
 .tp-page--priority .agent-msg--user:hover > .agent-msg-edit,
-.tp-page--priority .agent-msg--user:focus-within > .agent-msg-edit {
+.tp-page--priority .agent-msg--user:focus-within > .agent-msg-edit,
+.tp-page--priority .agent-msg--user:hover > .agent-msg-copy,
+.tp-page--priority .agent-msg--user:focus-within > .agent-msg-copy {
   max-width: 26px;
   opacity: 0.85;
   overflow: visible;
@@ -373,11 +376,21 @@
 }
 
 .tp-page--priority .agent-msg-edit:hover,
-.tp-page--priority .agent-msg-edit:focus-visible {
+.tp-page--priority .agent-msg-edit:focus-visible,
+.tp-page--priority .agent-msg--user > .agent-msg-copy:hover,
+.tp-page--priority .agent-msg--user > .agent-msg-copy:focus-visible {
   opacity: 1;
   background: var(--tp-surface-hover, rgba(9, 30, 66, 0.06));
   color: var(--tp-text);
   outline: none;
+}
+
+.tp-page--priority .agent-msg-copy.is-copied {
+  opacity: 1;
+  max-width: 26px;
+  overflow: visible;
+  pointer-events: auto;
+  color: var(--tp-primary, #0c66e4);
 }
 
 .tp-page--priority .agent-msg--user .tp-spell-revert {
@@ -1929,7 +1942,8 @@ html[data-color-mode='dark'] .tp-page--priority .agent-hl--a {
   max-width: calc(100% - 96px);
 }
 
-/* Sit middle-right of the bubble, like .agent-tool-verify; show on hover. */
+/* Sit middle-right of the bubble, like .agent-tool-verify; show on hover.
+   Keep layout width always so hover opacity does not shift the row. */
 .tp-page--priority .agent-msg-feedback {
   display: inline-flex;
   align-items: center;
@@ -1937,21 +1951,60 @@ html[data-color-mode='dark'] .tp-page--priority .agent-hl--a {
   flex: 0 0 auto;
   align-self: center;
   margin: 0;
-  max-width: 0;
   opacity: 0;
-  overflow: hidden;
   pointer-events: none;
-  transition: opacity 0.15s ease, max-width 0.15s ease;
+  transition: opacity 0.15s ease;
 }
 
 .tp-page--priority .agent-msg--assistant:hover > .agent-msg-feedback,
 .tp-page--priority .agent-msg--assistant:focus-within > .agent-msg-feedback,
 .tp-page--priority .agent-msg-feedback.is-rated-up,
 .tp-page--priority .agent-msg-feedback.is-rated-down {
-  max-width: 60px;
   opacity: 1;
-  overflow: visible;
   pointer-events: auto;
+}
+
+/* Copy beside assistant bubble (same hover reveal as thumbs). */
+.tp-page--priority .agent-msg--assistant > .agent-msg-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  align-self: center;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.tp-page--priority .agent-msg--assistant:hover > .agent-msg-copy,
+.tp-page--priority .agent-msg--assistant:focus-within > .agent-msg-copy,
+.tp-page--priority .agent-msg--assistant > .agent-msg-copy.is-copied {
+  opacity: 0.85;
+  pointer-events: auto;
+}
+
+.tp-page--priority .agent-msg--assistant > .agent-msg-copy:hover,
+.tp-page--priority .agent-msg--assistant > .agent-msg-copy:focus-visible {
+  opacity: 1;
+  background: var(--tp-surface-hover, rgba(9, 30, 66, 0.06));
+  color: var(--tp-text);
+  outline: none;
+}
+
+.tp-page--priority .agent-msg--assistant > .agent-msg-copy.is-copied {
+  opacity: 1;
+  color: var(--tp-primary, #0c66e4);
 }
 
 .tp-page--priority .agent-msg-feedback-btn {

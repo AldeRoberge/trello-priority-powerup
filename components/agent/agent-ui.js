@@ -2054,7 +2054,7 @@
         if (fromProfile && FACE_AURAS[fromProfile]) return fromProfile;
       }
       if (FACE_AURAS[raw]) return raw;
-      if (raw === 'jaune' || raw === 'gold' || raw === 'amber') return 'yellow';
+      if (raw === 'jaune' || raw === 'gold' || raw === 'amber' || raw === 'dore') return 'yellow';
       if (raw === 'peach' || raw === 'warm') return 'orange';
       if (raw === 'vert' || raw === 'lime') return 'green';
       if (raw === 'violet' || raw === 'lavender') return 'purple';
@@ -4203,6 +4203,7 @@
       var emotion = null;
       if (role === 'user') {
         attachUserResumeControl(row);
+        attachMessageCopyControl(row);
       } else if (role === 'assistant') {
         emotion =
           (meta && meta.emotion) ||
@@ -4218,6 +4219,9 @@
           !(meta && (meta.error || meta.recap || meta.noFeedback || meta.offer))
         ) {
           attachFeedbackControls(row);
+        }
+        if (!(meta && meta.offer)) {
+          attachMessageCopyControl(row);
         }
       }
       messagesEl.appendChild(row);
@@ -5887,6 +5891,121 @@
       notifyLayout();
     }
 
+    function copyTextFallback(text) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      var ok = false;
+      try {
+        ok = document.execCommand('copy');
+      } catch (e) {
+        ok = false;
+      }
+      if (ta.parentNode) ta.parentNode.removeChild(ta);
+      return ok;
+    }
+
+    function copyTextToClipboard(text) {
+      var value = String(text || '');
+      if (!value) return Promise.resolve(false);
+      if (
+        global.navigator &&
+        global.navigator.clipboard &&
+        typeof global.navigator.clipboard.writeText === 'function'
+      ) {
+        return global.navigator.clipboard.writeText(value).then(
+          function () {
+            return true;
+          },
+          function () {
+            return copyTextFallback(value);
+          }
+        );
+      }
+      return Promise.resolve(copyTextFallback(value));
+    }
+
+    function messageBubblePlainText(row) {
+      if (!row) return '';
+      var bubble = row.querySelector('.agent-msg-bubble');
+      if (!bubble || bubble.classList.contains('agent-msg-bubble--pending')) {
+        return '';
+      }
+      return String(bubble.textContent || '').trim();
+    }
+
+    function flashCopyButton(btn) {
+      if (!btn) return;
+      var icon = btn.querySelector('i');
+      if (!icon) return;
+      var prevClass = icon.className;
+      var prevTitle = btn.getAttribute('title') || 'Copier';
+      icon.className = 'ti ti-check';
+      btn.classList.add('is-copied');
+      btn.setAttribute('title', 'Copi\u00e9');
+      btn.setAttribute('aria-label', 'Copi\u00e9');
+      if (btn._copyReset) clearTimeout(btn._copyReset);
+      btn._copyReset = setTimeout(function () {
+        icon.className = prevClass;
+        btn.classList.remove('is-copied');
+        btn.setAttribute('title', prevTitle);
+        btn.setAttribute('aria-label', 'Copier le message');
+        btn._copyReset = null;
+      }, 1400);
+    }
+
+    function attachMessageCopyControl(row) {
+      if (!row || row.querySelector('.agent-msg-copy')) return;
+      if (
+        row.classList.contains('is-pending') ||
+        row.classList.contains('agent-msg--offer') ||
+        row.classList.contains('agent-msg--recap')
+      ) {
+        return;
+      }
+      var btn = el('button', 'agent-msg-copy', {
+        type: 'button',
+        title: 'Copier',
+        'aria-label': 'Copier le message'
+      });
+      btn.appendChild(el('i', 'ti ti-copy', { 'aria-hidden': 'true' }));
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var text = messageBubblePlainText(row);
+        if (!text) return;
+        copyTextToClipboard(text).then(function (ok) {
+          if (ok) flashCopyButton(btn);
+        });
+      });
+
+      var bubble = row.querySelector('.agent-msg-bubble');
+      if (row.classList.contains('agent-msg--user')) {
+        if (bubble && bubble.parentNode === row) {
+          row.insertBefore(btn, bubble);
+        } else {
+          row.appendChild(btn);
+        }
+        return;
+      }
+
+      var feedback = row.querySelector('.agent-msg-feedback');
+      var verify = row.querySelector('.agent-tool-verify');
+      if (feedback && feedback.parentNode === row) {
+        row.insertBefore(btn, feedback.nextSibling);
+      } else if (verify && verify.parentNode === row) {
+        row.insertBefore(btn, verify.nextSibling);
+      } else if (bubble && bubble.parentNode === row) {
+        row.insertBefore(btn, bubble.nextSibling);
+      } else {
+        row.appendChild(btn);
+      }
+    }
+
     function attachUserResumeControl(row) {
       if (!row || row.querySelector('.agent-msg-edit')) return;
       var btn = el('button', 'agent-msg-edit', {
@@ -6137,12 +6256,6 @@
 
       setInterviewMode(true);
       expandAssistant();
-      // UI-only intro (not sent to the model history).
-      appendMessage(
-        'assistant',
-        'Ooh, du neuf! Vas-y, balance — je suis curieux, et je juge pas ;)',
-        { silent: true }
-      );
       pending = true;
       updateComposerEnabled();
       setSuggestionsBusy(true);
@@ -6211,8 +6324,8 @@
         var startPrompt = cardTitle
           ? 'Commence l\'interview. Titre de la carte\u00a0: «\u00a0' +
             cardTitle +
-            '\u00a0». Premi\u00e8re r\u00e9ponse = micro-tease snarky mais tr\u00e8s hopeful ancr\u00e9 au titre (hypoth\u00e8se joueuse, bienveillante) + question POURQUOI en langage naturel (pas «\u00a0cette t\u00e2che\u00a0», pas «\u00a0\u00e7a change quoi\u00a0», pas le template plat «\u00a0Pourquoi faut-il\u2026?\u00a0»). Style ex.\u00a0: «\u00a0Ooooh! Tu veux montrer \u00e0 tout le monde que tu connais ton affaire? ;) Dis-moi, pourquoi veux-tu\u2026? T\'inqui\u00e8te pas, je juge pas!\u00a0». Suggestions = meilleures raisons possibles.'
-          : 'Commence l\'interview de cette carte. Premi\u00e8re r\u00e9ponse = tease snarky-hopeful + POURQUOI on fait \u00e7a (pas le template plat «\u00a0Pourquoi faut-il\u2026?\u00a0»).';
+            '\u00a0». Premi\u00e8re r\u00e9ponse = UNE question POURQUOI courte et naturelle, ancr\u00e9e au titre (noyau utile, pas le titre entier recopié). Pas de tease, pas de «\u00a0Ooh\u00a0», pas de «\u00a0je juge pas\u00a0», pas de clin d\'oeil forc\u00e9. Suggestions = meilleures raisons possibles.'
+          : 'Commence l\'interview de cette carte. Premi\u00e8re r\u00e9ponse = UNE question POURQUOI courte et naturelle. Pas de tease ni de th\u00e9\u00e2tre.';
         var fallbackSubject = cardTitle
           ? /^(faire|mettre|cr[eé]er|r[eé]diger|pr[eé]parer|lancer|acheter|obtenir|installer)\b/i.test(
               cardTitle
@@ -6223,10 +6336,8 @@
               cardTitle.slice(1)
           : 'faire cette carte';
         var fallbackOpening = cardTitle
-          ? 'Ooh ok! Dis-moi\u2026 pourquoi tu veux ' +
-            fallbackSubject +
-            '? Allez, sans filtre \u2014 je juge pas ;)'
-          : 'Ooh ok! Dis-moi\u2026 pourquoi tu veux faire cette carte? Allez, sans filtre \u2014 je juge pas ;)';
+          ? 'Pourquoi tu veux ' + fallbackSubject + '?'
+          : 'Pourquoi tu veux faire cette carte?';
 
         var turn = await Agent.cardInterviewTurn(
           provider,
@@ -6634,6 +6745,7 @@
           color: turn.color
         });
         attachFeedbackControls(thinking);
+        attachMessageCopyControl(thinking);
         announceAssistantArrival({ emotion: replyEmotion });
         if (collapse && collapse.refreshSummary) {
           collapse.refreshSummary();

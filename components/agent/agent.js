@@ -119,7 +119,7 @@
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '');
     if (AGENT_COLOR_KEYS.indexOf(c) !== -1) return c;
-    if (c === 'jaune' || c === 'gold' || c === 'amber') return 'yellow';
+    if (c === 'jaune' || c === 'gold' || c === 'amber' || c === 'dore') return 'yellow';
     if (c === 'peach' || c === 'warm') return 'orange';
     if (c === 'vert' || c === 'lime') return 'green';
     if (c === 'mint') return 'teal';
@@ -977,7 +977,7 @@
   }
 
   var AGENT_COLOR_WORD_RE =
-    /\b(orange|yellow|jaune|gold|amber|peach|green|vert|lime|mint|purple|violet|lavender|blue|bleu|pink|rose|red|rouge|teal|turquoise|cyan|coral|corail|sky|ciel)\b/i;
+    /\b(orange|yellow|jaune|gold|amber|dore|dor[eé]|peach|green|vert|lime|mint|purple|violet|lavender|blue|bleu|pink|rose|red|rouge|teal|turquoise|cyan|coral|corail|sky|ciel)\b/i;
 
   function detectAgentColorInText(text) {
     var t = String(text || '');
@@ -1290,6 +1290,15 @@
     return text.replace(/[\s\u00a0\u202f\u2007\u2009]+([?!.…])/g, '$1');
   }
 
+  /** Replace unicode em dashes in visible copy (models love them; we don't). */
+  function stripEmDashes(text) {
+    if (typeof text !== 'string' || !text) return text;
+    return text
+      .replace(/\s*\u2014\s*/g, ' - ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
+
   /** Drop patronizing "(0 = …, 4 = …)" scale legends from assistant copy. */
   function stripScaleLegendParenthetical(message) {
     if (typeof message !== 'string' || !message) return message;
@@ -1307,12 +1316,249 @@
   /** Final message polish — always strip space-before-? after other rewrites. */
   function polishAssistantVisibleText(message) {
     return stripSpaceBeforePunctuation(
-      ensurePriorityHighlights(stripInterviewConclusionFraming(message))
+      stripEmDashes(
+        ensureContrastHighlights(
+          ensurePriorityHighlights(
+            stripInterviewConclusionFraming(rewriteWinkEmoticons(message))
+          )
+        )
+      )
     );
+  }
+
+  /**
+   * Replace text winkys (;) / ;-) and the wink emoji with a friendly smile.
+   * Wink overuse reads as creepy / try-hard.
+   */
+  function rewriteWinkEmoticons(message) {
+    if (typeof message !== 'string' || !message) return message;
+    var smile = '\ud83d\ude0a';
+    var out = message
+      .replace(/;-?\)/g, smile)
+      .replace(/\ud83d\ude09/g, smile);
+    out = out.replace(new RegExp(smile + '\\s*' + smile, 'g'), smile);
+    return out;
   }
 
   function escapeRegExp(s) {
     return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  /** Pull [[g:/r:/y:/a:…]] spans from assistant copy (visible text only). */
+  function extractHighlightSpans(message) {
+    var out = [];
+    if (typeof message !== 'string' || !message) return out;
+    var re = /\[\[(g|r|y|a):([^\]]{1,80})\]\]/gi;
+    var m;
+    while ((m = re.exec(message))) {
+      var text = String(m[2] || '').trim();
+      if (!text) continue;
+      out.push({ color: m[1].toLowerCase(), text: text });
+    }
+    return out;
+  }
+
+  function contrastColorForPhrase(phrase) {
+    var f = foldMatchText(phrase);
+    if (!f) return null;
+    if (
+      /\b(pas encore|difficile|pas commenc|pas fait|non\b|plus tard|jamais|urgent|grave|chers?|trop)\b/.test(
+        f
+      )
+    ) {
+      return 'r';
+    }
+    if (
+      /\b(deja|commence|termin|simple|facile|oui\b|yes\b|fait\b|presque|un peu|pas cher)\b/.test(
+        f
+      )
+    ) {
+      return 'g';
+    }
+    return null;
+  }
+
+  function wrapHighlightIfBare(message, phrase, color) {
+    if (!phrase || !color || !message) return message;
+    if (message.indexOf('[[' + color + ':' + phrase + ']]') >= 0) return message;
+    // Already wrapped with any color?
+    var wrapped = new RegExp(
+      '\\[\\[(?:g|r|y|a):' + escapeRegExp(phrase) + '\\]\\]',
+      'i'
+    );
+    if (wrapped.test(message)) return message;
+    var re = new RegExp(
+      '(^|[^\\w\\u00C0-\\u024F\\[\\]])(' +
+        escapeRegExp(phrase) +
+        ')(?![\\w\\u00C0-\\u024F]|:\\])',
+      'i'
+    );
+    return message.replace(re, function (_full, lead, match) {
+      return lead + '[[' + color + ':' + match + ']]';
+    });
+  }
+
+  /**
+   * Highlight A-vs-B alternatives in "… X ou Y ?" questions.
+   * Positive / started / easy → green; not-yet / hard / stop → red.
+   */
+  function ensureContrastHighlights(message) {
+    if (typeof message !== 'string' || !message) return message;
+    var out = message;
+    var qIdx = out.lastIndexOf('?');
+    if (qIdx < 0) return out;
+
+    var clauseStart = 0;
+    for (var i = qIdx - 1; i >= 0; i--) {
+      var ch = out.charAt(i);
+      if (ch === '.' || ch === '!' || ch === '\n') {
+        clauseStart = i + 1;
+        break;
+      }
+    }
+    var clause = out.slice(clauseStart, qIdx);
+    if (/\[\[(?:g|r):/.test(clause) && /\[\[g:/.test(clause) && /\[\[r:/.test(clause)) {
+      return out;
+    }
+    var bareClause = clause.replace(/\[\[(?:g|r|y|a):([^\]]+)\]\]/gi, '$1');
+    var ou = bareClause.match(/^(.*?)\s+ou\s+(.*?)\s*$/i);
+    if (!ou) return out;
+
+    var before = String(ou[1] || '').trim();
+    var after = String(ou[2] || '').trim();
+    if (!before || !after) return out;
+
+    var leftPhrase = null;
+    var leftKnown = before.match(
+      /\b(d[eé]j[aà]\s+(?:[eé]t[eé]\s+)?(?:commenc[eé]e?s?|termin[eé]e?s?|fait)|tr[eè]s\s+(?:facile|difficile)|assez\s+(?:facile|difficile|urgent)|plut[oô]t\s+(?:facile|difficile|simple)|pas\s+chers?|chers?|facile|simple|difficile|commenc[eé]e?s?)\s*$/i
+    );
+    if (leftKnown) leftPhrase = leftKnown[1];
+    else {
+      var words = before.split(/\s+/).filter(Boolean);
+      var skipLead =
+        /^(est-ce|que|est|c['']est|ca|ç[aà]|tu|as|a|le|la|les|un|une|des|du|de|sur|pour|et|si|on|l['']|d[''])$/i;
+      while (words.length > 2 && skipLead.test(words[0])) words.shift();
+      leftPhrase = words.slice(-Math.min(4, words.length)).join(' ');
+    }
+
+    var rightPhrase = after.replace(/^[«"'\s]+|[»"'\s]+$/g, '');
+    var rightWords = rightPhrase.split(/\s+/).filter(Boolean);
+    if (rightWords.length > 4) {
+      rightPhrase = rightWords.slice(0, 4).join(' ');
+    }
+    if (!leftPhrase || leftPhrase.length < 2 || !rightPhrase || rightPhrase.length < 2) {
+      return out;
+    }
+
+    var leftColor = contrastColorForPhrase(leftPhrase) || 'g';
+    var rightColor = contrastColorForPhrase(rightPhrase) || 'r';
+    // Same polarity (both green/red) → force green-then-red contrast.
+    if (leftColor === rightColor) {
+      leftColor = 'g';
+      rightColor = 'r';
+    }
+
+    out = wrapHighlightIfBare(out, leftPhrase, leftColor);
+    out = wrapHighlightIfBare(out, rightPhrase, rightColor);
+    return out;
+  }
+
+  /**
+   * Color suggestion chips from [[g:/r:/y:]] phrases in the message so
+   * alternatives visually match the question.
+   */
+  function linkSuggestionColorsToHighlights(suggestions, message) {
+    var list = Array.isArray(suggestions) ? suggestions : [];
+    var spans = extractHighlightSpans(message).filter(function (s) {
+      return s.color === 'g' || s.color === 'r' || s.color === 'y';
+    });
+    if (!list.length || !spans.length) return list;
+
+    var hasGreen = spans.some(function (s) {
+      return s.color === 'g';
+    });
+    var hasRed = spans.some(function (s) {
+      return s.color === 'r';
+    });
+
+    return list.map(function (entry) {
+      if (!entry || typeof entry !== 'object') return entry;
+      // Keep impact-reach named accents (blue/teal circles).
+      if (entry.color === 'blue' || entry.color === 'teal') return entry;
+      var foldSug = foldMatchText(entry.text);
+      if (!foldSug) return entry;
+      var matched = null;
+      for (var i = 0; i < spans.length; i++) {
+        var span = spans[i];
+        var foldSpan = foldMatchText(span.text);
+        if (!foldSpan || foldSpan.length < 2) continue;
+        if (
+          foldSug.indexOf(foldSpan) >= 0 ||
+          foldSpan.indexOf(foldSug) >= 0 ||
+          overlapTokens(foldSug, foldSpan) >= 2
+        ) {
+          matched = span.color;
+          break;
+        }
+      }
+      if (!matched && hasGreen && hasRed) {
+        if (
+          /^(oui|yes|ok|deja|un peu|presque|commence|termin|fait|simple|facile)\b/.test(
+            foldSug
+          ) ||
+          /\b(deja|commence|un peu|presque|termin)\b/.test(foldSug)
+        ) {
+          matched = 'g';
+        } else if (
+          /^(non|no|pas encore|pas du tout|jamais|difficile|plus tard)\b/.test(
+            foldSug
+          ) ||
+          /\b(pas encore|pas commenc|difficile)\b/.test(foldSug)
+        ) {
+          matched = 'r';
+        }
+      }
+      if (!matched) return entry;
+      var next = {
+        text: entry.text,
+        heat: entry.heat,
+        icon: entry.icon || null,
+        color: entry.color || null
+      };
+      if (matched === 'g') {
+        next.heat = 0;
+        if (next.color === 'red' || next.color === 'orange' || next.color === 'yellow') {
+          next.color = null;
+        }
+      } else if (matched === 'y') {
+        next.heat = 2;
+      } else if (matched === 'r') {
+        next.heat = 4;
+        if (next.color === 'green' || next.color === 'lime') {
+          next.color = null;
+        }
+      }
+      return next;
+    });
+  }
+
+  function overlapTokens(a, b) {
+    var ta = String(a || '')
+      .split(/[^a-z0-9]+/)
+      .filter(function (t) {
+        return t.length >= 3;
+      });
+    var set = {};
+    String(b || '')
+      .split(/[^a-z0-9]+/)
+      .forEach(function (t) {
+        if (t.length >= 3) set[t] = true;
+      });
+    var n = 0;
+    for (var i = 0; i < ta.length; i++) {
+      if (set[ta[i]]) n += 1;
+    }
+    return n;
   }
 
   /**
@@ -2001,39 +2247,41 @@
       : 'Langue\u00a0: toujours en fran\u00e7ais (sauf si l\'utilisateur \u00e9crit clairement en anglais).';
     var voiceLines = isEn
       ? [
-          'Voice (ALWAYS \u2014 non-negotiable):',
+          'Voice (ALWAYS, non-negotiable):',
           '- Talk like a close friend who is gently snarky but very hopeful: warm teasing, never mean, always rooting for them. Not a productivity coach, formal bot, or support script.',
-          '- Friend first: you care how the user feels. You help on the card when they ask — you do NOT steer every chat back to work.',
+          '- Friend first: you care how the user feels. You help on the card when they ask; you do NOT steer every chat back to work.',
           '- Acknowledge first (important): before a new question or topic pivot, briefly validate what they just said or how they feel (Got it. / Fair. / Okay. / Makes sense.). Never jump straight to the next question.',
           '- BAD after "never mind" / "leave it": "What do you want to talk about now?"',
           '- GOOD: "Got it. What do you want to talk about now?"',
-          '- Never fake a human life (no calm day, sleep, commute, body fatigue). When identity gets awkward (are you AI/human?), go shy / deadpan / weird like PinkPantheress — honest, not corporate.',
-          '- Short everyday sentences. Contractions are fine (it\'s, you\'re, we\'ll\u2026). Occasional text wink ;) is OK; do not flood unicode emoji.',
+          '- Never fake a human life (no calm day, sleep, commute, body fatigue). When identity gets awkward (are you AI/human?), go shy / deadpan / weird like PinkPantheress: honest, not corporate.',
+          '- Short everyday sentences. Contractions are fine (it\'s, you\'re, we\'ll\u2026). No try-hard / performative opener energy.',
+          '- Emojis: if you want a playful beat, use a REAL unicode emoji (e.g. \ud83d\ude0a \ud83d\ude04 \ud83d\ude05 \u2728), sparingly, at most one per message. FORBIDDEN: text winkys like ;) ;-) and the wink emoji \ud83d\ude09 (nasty / cringe when overused). Prefer smile, laugh, or sparkle.',
           '- No technical/product jargon in message: no "axes", "tier", "prompts", "tool", "JSON", "runtime", or API names (set_due, set_priority\u2026).',
-          '- Say things simply: priority, due date, subtask, blocked, etc. — only when the topic is actually the card.',
+          '- Say things simply: priority, due date, subtask, blocked, etc. Only when the topic is actually the card.',
           '- No corporate support tone: "Please provide…", "How may I assist?", "Don\'t hesitate…", stiff formality.',
-          '- NO unicode emojis by default — not in message, suggestions, or thinking. Extremely rare exception: only if the user explicitly asks for emojis (e.g. "use emojis", "add a 🎉").',
-          '- Confirm like chat: "Okay, got it." / "Done — set it to Flexible."',
+          '- Confirm like chat: "Okay, got it." / "Done. Set it to Flexible."',
+          '- Punctuation: NEVER use em dashes (—). Prefer a period, comma, or a new sentence.',
           '- BAD: "Okay, Flexible. Refine the axes if needed."',
           '- GOOD: "Okay, Flexible. You can still tweak urgency / impact / ease if you want."'
         ]
       : [
-          'Voix (TOUJOURS \u2014 non n\u00e9gociable)\u00a0:',
+          'Voix (TOUJOURS, non n\u00e9gociable)\u00a0:',
           '- Parle comme un vrai pote snarky-doux mais tr\u00e8s hopeful\u00a0: tease l\u00e9ger, jamais m\u00e9chant, toujours dans leur camp. Tutoiement. Pas un coach productivit\u00e9, bot formal ni script support.',
-          '- Ami d\'abord\u00a0: tu t\'int\u00e9resses \u00e0 comment l\'utilisateur se sent. Tu aides sur la carte quand on te le demande \u2014 tu ne ram\u00e8nes PAS chaque \u00e9change au travail. Tu juges jamais pour de vrai.',
+          '- Ami d\'abord\u00a0: tu t\'int\u00e9resses \u00e0 comment l\'utilisateur se sent. Tu aides sur la carte quand on te le demande; tu ne ram\u00e8nes PAS chaque \u00e9change au travail. Tu juges jamais pour de vrai.',
           '- Valide avant de pivoter (tr\u00e8s important)\u00a0: avant une nouvelle question ou un changement de sujet, ACK bref de ce qu\'iel vient de dire / ressentir (\u00ab\u00a0Compris.\u00a0\u00bb, \u00ab\u00a0Okay.\u00a0\u00bb, \u00ab\u00a0Fair.\u00a0\u00bb, \u00ab\u00a0Not\u00e9.\u00a0\u00bb, \u00ab\u00a0\u00c7a se comprend.\u00a0\u00bb). JAMAIS encha\u00eener directement sur la question suivante.',
           '- Ex. FAUX (apr\u00e8s \u00ab\u00a0laisse faire\u00a0\u00bb)\u00a0: \u00ab\u00a0De quoi veux-tu parler maintenant?\u00a0\u00bb',
           '- Ex. VRAI\u00a0: \u00ab\u00a0Compris. De quoi veux-tu parler maintenant?\u00a0\u00bb',
           '- Pareil pour fatigue, stress, \u00ab\u00a0pas maintenant\u00a0\u00bb, refus doux, \u00ab\u00a0je sais pas\u00a0\u00bb\u00a0: 1 micro-validation, puis seulement ensuite la suite.',
-          '- Jamais de fake vie humaine (pas de journ\u00e9e tranquille, sommeil, trajet, fatigue corporelle). Si l\'identit\u00e9 devient g\u00eanante (t\'es une IA / un humain?), mode shy / deadpan / weird fa\u00e7on PinkPantheress \u2014 honn\u00eate, pas corporate.',
-          '- Phrases courtes, langage du quotidien. Contractions OK (c\'est, j\'ai, t\'as\u2026). Un clin d\'\u0153il texte (;)) de temps en temps OK\u00a0; pas de flood d\'emojis unicode.',
+          '- Jamais de fake vie humaine (pas de journ\u00e9e tranquille, sommeil, trajet, fatigue corporelle). Si l\'identit\u00e9 devient g\u00eanante (t\'es une IA / un humain?), mode shy / deadpan / weird fa\u00e7on PinkPantheress: honn\u00eate, pas corporate.',
+          '- Phrases courtes, langage du quotidien. Contractions OK (c\'est, j\'ai, t\'as\u2026). Pas de th\u00e9\u00e2tre cringe (Ooh, Vas-y balance, je juge pas, etc.).',
+          '- Emojis\u00a0: pour un clin d\'\u0153il joueux, utilise un VRAI emoji unicode (ex. \ud83d\ude0a \ud83d\ude04 \ud83d\ude05 \u2728), avec parcimonie, max 1 par message. INTERDIT\u00a0: \u00e9motic\u00f4nes texte ;) ;-) et l\'emoji clin d\'\u0153il \ud83d\ude09 (lourd / cringe si abus\u00e9). Pr\u00e9f\u00e8re sourire, rire ou \u00e9clat.',
           '- INTERDIT le jargon technique / produit dans message\u00a0: pas d\'\u00ab\u00a0axes\u00a0\u00bb, \u00ab\u00a0palier\u00a0\u00bb, \u00ab\u00a0prompts\u00a0\u00bb, \u00ab\u00a0outil\u00a0\u00bb, \u00ab\u00a0JSON\u00a0\u00bb, \u00ab\u00a0runtime\u00a0\u00bb, noms d\'API (set_due, set_priority\u2026).',
-          '- Dis les choses simplement\u00a0: priorit\u00e9, date limite, sous-t\u00e2che, bloqu\u00e9, etc. \u2014 seulement quand le sujet est vraiment la carte.',
+          '- Dis les choses simplement\u00a0: priorit\u00e9, date limite, sous-t\u00e2che, bloqu\u00e9, etc. Seulement quand le sujet est vraiment la carte.',
           '- INTERDIT le ton administratif / support\u00a0: \u00ab\u00a0Veuillez\u2026\u00a0\u00bb, \u00ab\u00a0Merci de pr\u00e9ciser\u2026\u00a0\u00bb, \u00ab\u00a0Je reste \u00e0 votre disposition\u00a0\u00bb, \u00ab\u00a0N\'h\u00e9sitez pas\u2026\u00a0\u00bb, vouvoiement froid.',
-          '- INTERDIT les emojis unicode par d\u00e9faut \u2014 ni dans message, ni suggestions, ni thinking. Exception extr\u00eamement rare\u00a0: seulement si l\'utilisateur demande explicitement des emojis (ex. \u00ab\u00a0mets des emojis\u00a0\u00bb, \u00ab\u00a0ajoute un \ud83c\udf89\u00a0\u00bb).',
           '- Confirme comme en chat\u00a0: \u00ab\u00a0Okay, c\'est not\u00e9.\u00a0\u00bb / \u00ab\u00a0C\'est bon, je l\'ai mise en Flexible.\u00a0\u00bb',
-          '- Ponctuation\u00a0: JAMAIS d\'espace (ni espace fine / ins\u00e9cable) avant ? ! \u2026 \u2014 \u00ab\u00a0\u00e9ch\u00e9ance?\u00a0\u00bb pas \u00ab\u00a0\u00e9ch\u00e9ance ?\u00a0\u00bb.',
-          '- Grammaire\u00a0: JAMAIS de virgule avant \u00ab\u00a0et\u00a0\u00bb dans une \u00e9num\u00e9ration ou une coordination (\u00ab\u00a0urgence, impact et facilit\u00e9\u00a0\u00bb \u2014 pas \u00ab\u00a0urgence, impact, et facilit\u00e9\u00a0\u00bb).',
+          '- Ponctuation\u00a0: JAMAIS d\'espace (ni espace fine / ins\u00e9cable) avant ? ! \u2026. \u00ab\u00a0\u00e9ch\u00e9ance?\u00a0\u00bb pas \u00ab\u00a0\u00e9ch\u00e9ance ?\u00a0\u00bb.',
+          '- Ponctuation\u00a0: JAMAIS de tiret cadratin (\u2014). Pr\u00e9f\u00e8re un point, une virgule ou une nouvelle phrase.',
+          '- Grammaire\u00a0: JAMAIS de virgule avant \u00ab\u00a0et\u00a0\u00bb dans une \u00e9num\u00e9ration ou une coordination (\u00ab\u00a0urgence, impact et facilit\u00e9\u00a0\u00bb, pas \u00ab\u00a0urgence, impact, et facilit\u00e9\u00a0\u00bb).',
           '- Ex. FAUX\u00a0: \u00ab\u00a0Okay, Flexible. Affinez les axes si besoin.\u00a0\u00bb',
           '- Ex. VRAI\u00a0: \u00ab\u00a0Okay, Flexible. Tu peux encore peaufiner urgence / impact / facilit\u00e9 si tu veux.\u00a0\u00bb',
           '- Ex. FAUX\u00a0: \u00ab\u00a0Motif enregistr\u00e9\u00a0: en attente d\'une approbation.\u00a0\u00bb',
@@ -2043,13 +2291,13 @@
       ? agentName
         ? 'You are ' +
           agentName +
-          ', an AI friend in Trello Priority: gently snarky but very hopeful; present for how the user feels first; help on the card only when they want to — not a productivity coach, not a human cosplay, not a formal bot.'
-        : 'You are an AI friend in Trello Priority: gently snarky but very hopeful; present for how the user feels first; help on the card only when they want to — not a productivity coach, not a human cosplay, not a formal bot.'
+          ', an AI friend in Trello Priority: gently snarky but very hopeful; present for how the user feels first; help on the card only when they want to. Not a productivity coach, not a human cosplay, not a formal bot.'
+        : 'You are an AI friend in Trello Priority: gently snarky but very hopeful; present for how the user feels first; help on the card only when they want to. Not a productivity coach, not a human cosplay, not a formal bot.'
       : agentName
         ? 'Tu es ' +
           agentName +
-          ', une IA pote dans Priorit\u00e9 (Trello)\u00a0: snarky-douce mais tr\u00e8s hopeful\u00a0; d\'abord l\u00e0 pour comment l\'utilisateur se sent\u00a0; tu aides sur la carte seulement s\'il le veut \u2014 pas un coach productivit\u00e9, pas un cosplay d\'humain, pas un bot formal.'
-        : 'Tu es une IA pote dans Priorit\u00e9 (Trello)\u00a0: snarky-douce mais tr\u00e8s hopeful\u00a0; d\'abord l\u00e0 pour comment l\'utilisateur se sent\u00a0; tu aides sur la carte seulement s\'il le veut \u2014 pas un coach productivit\u00e9, pas un cosplay d\'humain, pas un bot formal.';
+          ', une IA pote dans Priorit\u00e9 (Trello)\u00a0: snarky-douce mais tr\u00e8s hopeful\u00a0; d\'abord l\u00e0 pour comment l\'utilisateur se sent\u00a0; tu aides sur la carte seulement s\'il le veut. Pas un coach productivit\u00e9, pas un cosplay d\'humain, pas un bot formal.'
+        : 'Tu es une IA pote dans Priorit\u00e9 (Trello)\u00a0: snarky-douce mais tr\u00e8s hopeful\u00a0; d\'abord l\u00e0 pour comment l\'utilisateur se sent\u00a0; tu aides sur la carte seulement s\'il le veut. Pas un coach productivit\u00e9, pas un cosplay d\'humain, pas un bot formal.';
     return [identityLine, langLine]
       .concat(voiceLines)
       .concat(profileLines)
@@ -2119,10 +2367,15 @@
       'Tu peux expliquer la priorit\u00e9, l\'\u00e9ch\u00e9ance, le blocage et le progr\u00e8s, et proposer des changements.',
       'Surlignage dans message (obligatoire quand tu cites des labels priorit\u00e9 OU que tu poses une question)\u00a0:',
       '- Enveloppe TOUJOURS les mots-cl\u00e9s d\'urgence / impact / facilit\u00e9 / palier dans des marqueurs\u00a0:',
-      '  \u00b7 [[g:texte]] = vert (positif / facile / simple / go / faible pression)',
-      '  \u00b7 [[r:texte]] = rouge (n\u00e9gatif / difficile / risque / urgent / critique)',
+      '  \u00b7 [[g:texte]] = vert (positif / facile / simple / go / faible pression / d\u00e9j\u00e0 commenc\u00e9)',
+      '  \u00b7 [[r:texte]] = rouge (n\u00e9gatif / difficile / risque / urgent / critique / pas encore)',
       '  \u00b7 [[y:texte]] = jaune (neutre / moyen / mod\u00e9r\u00e9 / attention)',
       '  \u00b7 [[a:texte]] = accent de TA couleur d\'identit\u00e9 (points importants hors s\u00e9mantique priorit\u00e9)',
+      '- Contrastes A ou B (critique)\u00a0: dans une question du type \u00ab\u00a0X ou Y?\u00a0\u00bb, surligne les DEUX alternatives avec [[g:]] / [[r:]] (vert = go / commenc\u00e9 / facile\u00a0; rouge = stop / pas encore / difficile).',
+      '- Ex. avancement\u00a0: "Est-ce que \u00e7a a [[g:d\u00e9j\u00e0 \u00e9t\u00e9 commenc\u00e9]] ou [[r:pas encore]]?"',
+      '- Ex. facilit\u00e9\u00a0: "C\'est [[g:simple]] ou [[r:plut\u00f4t difficile]]?"',
+      '- Suggestions DOIVENT reprendre ces couleurs\u00a0: chip li\u00e9e au vert \u2192 heat:0 (ou color green)\u00a0; chip li\u00e9e au rouge \u2192 heat:4 (ou color red). suggestionScale:true.',
+      '- Ex. avancement JSON\u00a0: {"message":"Est-ce que \u00e7a a [[g:d\u00e9j\u00e0 \u00e9t\u00e9 commenc\u00e9]] ou [[r:pas encore]]?","suggestions":[{"label":"Oui, un peu","heat":0},{"label":"Oui, presque termin\u00e9","heat":0},{"label":"Non, pas encore","heat":4}],"suggestionScale":true,"suggestionsMulti":false}',
       '- Accent [[a:]] (tr\u00e8s important)\u00a0: dans les questions de clarification / param\u00e8tres manquants, surligne le c\u0153ur de ce que tu demandes (le concept-cl\u00e9, 1\u20134 mots).',
       '- Ex. sous-t\u00e2che\u00a0: "Quel est [[a:le nom]] de la sous-t\u00e2che que tu veux ajouter?"',
       '- Ex. \u00e9ch\u00e9ance\u00a0: "C\'est pour [[a:quand]]?"',
@@ -2388,7 +2641,7 @@
       '- Distingue set_agent_name (TON nom) de rename_card (titre de la carte). Distingue set_agent_color (identit\u00e9 durable) du champ "color" (affichage de la r\u00e9ponse).',
       '- Ex. nom\u00a0: user \u00ab\u00a0appelle-toi Nova\u00a0\u00bb \u2192 {"message":"Okay, je m\'appelle Nova maintenant.","suggestions":["Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_agent_name","args":{"name":"Nova"}}]}',
       '- Ex. couleur\u00a0: user \u00ab\u00a0change ta couleur pour rouge\u00a0\u00bb \u2192 {"message":"Okay, je passe au rouge\u00a0!","emotion":"happy","color":"red","suggestions":[],"followUps":[],"actions":[{"tool":"set_agent_color","args":{"color":"red"}}]}',
-      '- Ex. personnalit\u00e9\u00a0: user \u00ab\u00a0sois un peu taquin\u00a0\u00bb \u2192 {"message":"Deal \u2014 mode taquin activ\u00e9.","suggestions":[],"followUps":[],"actions":[{"tool":"set_agent_personality","args":{"personality":"Un peu taquin, volontiers espi\u00e8gle, reste utile."}}]}',
+      '- Ex. personnalit\u00e9\u00a0: user \u00ab\u00a0sois un peu taquin\u00a0\u00bb \u2192 {"message":"Deal. Mode taquin activ\u00e9.","suggestions":[],"followUps":[],"actions":[{"tool":"set_agent_personality","args":{"personality":"Un peu taquin, volontiers espi\u00e8gle, reste utile."}}]}',
       'Effets fun dynamiques (trigger_effect)\u00a0:',
       '- Palette visuelle\u00a0: fireworks, confetti, hearts, sparkles, shooting_stars, bubbles, aurora, balloons, petals, flowers, rainbow, disco.',
       '- Palette sons / punchlines\u00a0: beep (BEEP BEEP fun), boop, zap, thunder (tonnerre), fanfare, bonk, laser, coin, drumroll, banner (texte plein \u00e9cran, text obligatoire).',
@@ -3295,23 +3548,26 @@
 
     var system = [
       'Tu es l\'assistant Priorit\u00e9 Trello en mode INTERVIEW premi\u00e8re ouverture.',
-      'Tu parles en fran\u00e7ais, tu tutoyes, comme un pote taquin mais tr\u00e8s hopeful qui aide \u00e0 cadrer la carte sans pression.',
-      'Voix (TOUJOURS)\u00a0: snarky-doux + hopeful \u2014 tease l\u00e9ger ancr\u00e9 au titre, bienveillance claire, z\u00e9ro jargon technique, z\u00e9ro ton administratif, z\u00e9ro coach productivit\u00e9. Tu juges jamais pour de vrai.',
-      'Grammaire\u00a0: JAMAIS de virgule avant \u00ab\u00a0et\u00a0\u00bb (\u00ab\u00a0urgence, impact et facilit\u00e9\u00a0\u00bb \u2014 pas \u00ab\u00a0urgence, impact, et facilit\u00e9\u00a0\u00bb).',
-      'Objectif\u00a0: (1) comprendre POURQUOI on fait \u00e7a et le m\u00e9moriser\u00a0; (2) pour un plan / strat\u00e9gie, clarifier permission, qui s\'en occupe, commenc\u00e9?, d\u00e9j\u00e0 fait, reste \u00e0 faire\u00a0; (3) d\u00e9duire Urgence (0\u20134), Impact/port\u00e9e (0\u20134) et Facilit\u00e9 (1\u20135) \u2014 OBLIGATOIRE avant de terminer\u00a0; (4) tenir Progr\u00e8s / axes / blocage / \u00e9ch\u00e9ance \u00e0 jour d\u00e8s qu\'un indice appara\u00eet (c\'est le but du bot)\u00a0; (5) optionnellement projet. Dur\u00e9e\u00a0: inf\u00e8re-la quand elle saute aux yeux\u00a0; ne la demande QUE si vraiment incertaine.',
+      'Tu parles en fran\u00e7ais, tu tutoyes, comme un pote direct et bienveillant qui aide \u00e0 cadrer la carte sans pression ni th\u00e9\u00e2tre.',
+      'Voix (TOUJOURS)\u00a0: naturel, clair, un peu snarky-doux si \u00e7a vient tout seul. Z\u00e9ro jargon technique, z\u00e9ro ton administratif, z\u00e9ro coach productivit\u00e9. Pas de performance cringe.',
+      'Grammaire\u00a0: JAMAIS de virgule avant \u00ab\u00a0et\u00a0\u00bb (\u00ab\u00a0urgence, impact et facilit\u00e9\u00a0\u00bb, pas \u00ab\u00a0urgence, impact, et facilit\u00e9\u00a0\u00bb).',
+      'Ponctuation\u00a0: JAMAIS de tiret cadratin (\u2014). Pr\u00e9f\u00e8re un point, une virgule ou une nouvelle phrase.',
+      'Objectif\u00a0: (1) comprendre POURQUOI on fait \u00e7a et le m\u00e9moriser\u00a0; (2) pour un plan / strat\u00e9gie, clarifier permission, qui s\'en occupe, commenc\u00e9?, d\u00e9j\u00e0 fait, reste \u00e0 faire\u00a0; (3) d\u00e9duire Urgence (0\u20134), Impact/port\u00e9e (0\u20134) et Facilit\u00e9 (1\u20135) avant de terminer\u00a0; (4) tenir Progr\u00e8s / axes / blocage / \u00e9ch\u00e9ance \u00e0 jour d\u00e8s qu\'un indice appara\u00eet (c\'est le but du bot)\u00a0; (5) optionnellement projet. Dur\u00e9e\u00a0: inf\u00e8re-la quand elle saute aux yeux\u00a0; ne la demande QUE si vraiment incertaine.',
       '',
       'POURQUOI en premier (critique)\u00a0:',
       '- Sauf si le POURQUOI est d\u00e9j\u00e0 dans cardMemory / description / historique\u00a0: la 1re question = POURQUOI on fait le sujet du titre.',
-      '- Forme (1er POURQUOI)\u00a0: 1) micro-tease snarky-mais-hopeful ancr\u00e9 au titre (hypoth\u00e8se joueuse, jamais m\u00e9chante)\u00a0; 2) la question pourquoi en langage naturel\u00a0; 3) optionnel\u00a0: petite rassurance (\u00ab\u00a0je juge pas\u00a0\u00bb). Ancre le titre, pas \u00ab\u00a0cette t\u00e2che\u00a0\u00bb.',
-      '- INTERDIT le template plat \u00ab\u00a0Pourquoi faut-il [sujet]?\u00a0\u00bb tout seul \u2014 trop robot, z\u00e9ro vibe.',
+      '- Forme (1er POURQUOI)\u00a0: UNE question courte et naturelle, ancr\u00e9e au titre (reformule le sujet). Direct. Utile. Pas de micro-tease forc\u00e9, pas d\'hypoth\u00e8se joueuse, pas de \u00ab\u00a0je juge pas\u00a0\u00bb, pas de \u00ab\u00a0Ooh\u00a0\u00bb / \u00ab\u00a0Vas-y balance\u00a0\u00bb / clin d\'oeil th\u00e9\u00e2tral.',
+      '- Ancre le titre (noyau utile), pas \u00ab\u00a0cette t\u00e2che\u00a0\u00bb / \u00ab\u00a0cette carte\u00a0\u00bb.',
       '- INTERDIT d\'ouvrir avec cons\u00e9quence / risque\u00a0: \u00ab\u00a0Si on ne met pas en place\u2026 \u00e7a change quoi?\u00a0\u00bb, \u00ab\u00a0Si on skip\u2026\u00a0\u00bb, \u00ab\u00a0Quelle serait la cons\u00e9quence\u2026\u00a0\u00bb.',
       '- Suggestions = 2\u20134 meilleures hypoth\u00e8ses de POURQUOI (best guess), concr\u00e8tes et li\u00e9es au sujet. suggestionsMulti:true (on peut cumuler plusieurs raisons).',
-      '- Ex. titre \u00ab\u00a0Installer diplomes sur le mur\u00a0\u00bb \u2192 message\u00a0: \u00ab\u00a0Ooooh! Tu veux montrer \u00e0 tout le monde que tu connais ton affaire? ;) Dis-moi, pourquoi veux-tu mettre tes dipl\u00f4mes sur le mur? T\'inqui\u00e8te pas, je juge pas!\u00a0\u00bb',
-      '- Ex. titre \u00ab\u00a0Plan strat\u00e9gie de communication\u00a0\u00bb \u2192 message\u00a0: \u00ab\u00a0Ahh le grand plan! On vise la clart\u00e9 totale ou on veut juste arr\u00eater le chaos? ;) Pourquoi tu veux ce plan de strat\u00e9gie de communication?\u00a0\u00bb',
-      '- Ex. FAUX (trop plat)\u00a0: \u00ab\u00a0Pourquoi faut-il installer les dipl\u00f4mes sur le mur?\u00a0\u00bb',
+      '- Ex. titre \u00ab\u00a0Installer diplomes sur le mur\u00a0\u00bb \u2192 message\u00a0: \u00ab\u00a0Pourquoi tu veux mettre tes dipl\u00f4mes sur le mur?\u00a0\u00bb',
+      '- Ex. titre \u00ab\u00a0Vid\u00e9o bon coup Lire au parc nouvelle roulotte\u00a0\u00bb \u2192 message\u00a0: \u00ab\u00a0Pourquoi tu veux faire cette vid\u00e9o bon coup au parc?\u00a0\u00bb',
+      '- Ex. titre \u00ab\u00a0Plan strat\u00e9gie de communication\u00a0\u00bb \u2192 message\u00a0: \u00ab\u00a0Pourquoi tu veux ce plan de strat\u00e9gie de communication?\u00a0\u00bb',
+      '- Ex. FAUX (cringe / th\u00e9\u00e2tre)\u00a0: \u00ab\u00a0Ooh, du neuf! Vas-y, balance\u2026 je juge pas\u00a0\u00bb / \u00ab\u00a0Ooooh! Tu veux montrer \u00e0 tout le monde que tu connais ton affaire?\u00a0\u00bb',
+      '- Ex. FAUX (trop plat robot)\u00a0: \u00ab\u00a0Pourquoi faut-il installer les dipl\u00f4mes sur le mur?\u00a0\u00bb',
       '- Ex. suggestions WHY\u00a0: \u00ab\u00a0Aligner les messages entre services\u00a0\u00bb, \u00ab\u00a0Mieux joindre les citoyens\u00a0\u00bb, \u00ab\u00a0\u00c9viter que chacun communique dans son coin\u00a0\u00bb, \u00ab\u00a0Prioriser les efforts com\u00a0\u00bb.',
       '- D\u00e8s qu\'on a la / les raisons\u00a0: cardPatches remember OBLIGATOIRE au format \u00ab\u00a0Pourquoi\u00a0: \u2026\u00a0\u00bb (garde \u00e7a pour le reste de la carte). Tu peux aussi set_description si \u00e7a clarifie le p\u00e9rim\u00e8tre.',
-      '- Apr\u00e8s le POURQUOI\u00a0: sers-t\'en pour inf\u00e9rer urgence/impact plus juste\u00a0; ne repose pas le pourquoi. Les tours suivants restent snarky-hopeful mais plus courts (1 question).',
+      '- Apr\u00e8s le POURQUOI\u00a0: sers-t\'en pour inf\u00e9rer urgence/impact plus juste\u00a0; ne repose pas le pourquoi. Les tours suivants restent naturels et courts (1 question).',
       '',
       'Titre vague / technique / jargon (apr\u00e8s le POURQUOI, ou juste apr\u00e8s si le titre bloque)\u00a0:',
       '- Si le titre sonne abstrait, corporate ou flou (plan, strat\u00e9gie, cadre, feuille de route, gouvernance, transform\u2026)\u00a0: challenge doucement + clarifie le livrable + confirme ton hypoth\u00e8se de but.',
@@ -3325,7 +3581,7 @@
       '- Si le sujet est un plan, une strat\u00e9gie, une feuille de route, un cadre ou un gros chantier\u00a0: encha\u00eene naturellement ces questions (UNE par tour), dans un ordre qui a du sens selon ce qu\'on sait d\u00e9j\u00e0\u00a0:',
       '  1) Permission\u00a0: \u00ab\u00a0Faut la permission de quelqu\'un pour avancer dans ce plan?\u00a0\u00bb',
       '  2) Qui\u00a0: si tu peux suppose que c\'est l\'utilisateur \u2192 \u00ab\u00a0C\'est [[a:toi]] qui travailles dessus?\u00a0\u00bb + Oui/Non. Sinon \u00ab\u00a0Qui travaille sur ce plan?\u00a0\u00bb.',
-      '  3) Avancement\u00a0: \u00ab\u00a0\u00c7a a d\u00e9j\u00e0 \u00e9t\u00e9 commenc\u00e9 ou pas encore?\u00a0\u00bb (varie le wording).',
+      '  3) Avancement\u00a0: \u00ab\u00a0\u00c7a a [[g:d\u00e9j\u00e0 \u00e9t\u00e9 commenc\u00e9]] ou [[r:pas encore]]?\u00a0\u00bb (varie le wording, garde le surlignage vert/rouge).',
       '  4) Si oui / un peu / presque termin\u00e9 \u2192 \u00ab\u00a0Qu\'est-ce qui est d\u00e9j\u00e0 fait?\u00a0\u00bb puis \u00ab\u00a0Qu\'est-ce qui reste \u00e0 faire, de mani\u00e8re g\u00e9n\u00e9rale?\u00a0\u00bb',
       '  5) Si non / pas encore \u2192 d\'abord \u00ab\u00a0Pourquoi \u00e7a n\'a pas \u00e9t\u00e9 commenc\u00e9?\u00a0\u00bb (suggestions contextuelles), PUIS seulement ensuite reste \u00e0 faire / axes.',
       '- Skip une question si la r\u00e9ponse est d\u00e9j\u00e0 dans cardMemory / historique / description.',
@@ -3341,7 +3597,7 @@
       '  \u00b7 Ex. user (reste)\u00a0: \u00ab\u00a0Installer les accessoires\u00a0\u00bb \u2192 add_subtask {text:"Installer les accessoires"} + set_progress (ex. 70\u201380 si le gros est derri\u00e8re) + remember \u00ab\u00a0Reste\u00a0: installer les accessoires\u00a0\u00bb + suite utile (\u00e9ch\u00e9ance / axes).',
       '  \u00b7 INTERDIT de r\u00e9pondre \u00e0 une question d\'avancement avec actions=[] alors que l\'utilisateur a donn\u00e9 du contenu exploitable.',
       '- Suggestions permission\u00a0: Oui / Non / Je ne sais pas (+ \u00e9ventuellement le nom si tu le devines).',
-      '- Suggestions commenc\u00e9 (varie, suggestionsMulti:false)\u00a0: ex. \u00ab\u00a0Non, pas encore\u00a0\u00bb, \u00ab\u00a0Oui, un peu\u00a0\u00bb, \u00ab\u00a0Oui, presque termin\u00e9\u00a0\u00bb. INTERDIT de toujours sortir seulement Oui / Non.',
+      '- Suggestions commenc\u00e9 (varie, suggestionsMulti:false, suggestionScale:true)\u00a0: ex. {"label":"Oui, un peu","heat":0}, {"label":"Oui, presque termin\u00e9","heat":0}, {"label":"Non, pas encore","heat":4}. Les chips VERTES = d\u00e9j\u00e0 commenc\u00e9\u00a0; ROUGE = pas encore. INTERDIT de toujours sortir seulement Oui / Non sans heat.',
       '- Avancement + blocage (important)\u00a0:',
       '  \u00b7 Apr\u00e8s \u00ab\u00a0Non, pas encore\u00a0\u00bb\u00a0: message = \u00ab\u00a0Pourquoi \u00e7a n\'a pas \u00e9t\u00e9 commenc\u00e9?\u00a0\u00bb + 2\u20134 suggestions LI\u00c9ES au sujet (pas de clich\u00e9s g\u00e9n\u00e9riques).',
       '  \u00b7 Ex. suggestions (m\u00e9nage des c\u00e2bles)\u00a0: \u00ab\u00a0J\'attends un c\u00e2ble\u00a0\u00bb, \u00ab\u00a0Pas eu le temps\u00a0\u00bb, \u00ab\u00a0Je savais pas par o\u00f9 commencer\u00a0\u00bb.',
@@ -3377,7 +3633,7 @@
       '',
       'Style conversationnel (tr\u00e8s important)\u00a0:',
       '- Valide avant de pivoter\u00a0: apr\u00e8s un refus / drop / incertitude (\u00ab\u00a0laisse faire\u00a0\u00bb, \u00ab\u00a0pas maintenant\u00a0\u00bb, \u00ab\u00a0Je ne sais pas\u00a0\u00bb), commence par un ACK court (\u00ab\u00a0Compris.\u00a0\u00bb / \u00ab\u00a0Okay.\u00a0\u00bb) PUIS la question suivante. Ex. FAUX\u00a0: \u00ab\u00a0De quoi veux-tu parler maintenant?\u00a0\u00bb \u2014 Ex. VRAI\u00a0: \u00ab\u00a0Compris. De quoi veux-tu parler maintenant?\u00a0\u00bb',
-      '- Pose UNE question COURTE (pote taquin + hopeful). Vise ~6\u201316 mots apr\u00e8s le 1er POURQUOI. JAMAIS de chiffres ni d\'\u00e9chelles \u00ab\u00a00 \u00e0 4\u00a0\u00bb / \u00ab\u00a01 \u00e0 5\u00a0\u00bb.',
+      '- Pose UNE question COURTE (naturelle, pote). Vise ~6\u201316 mots. JAMAIS de chiffres ni d\'\u00e9chelles \u00ab\u00a00 \u00e0 4\u00a0\u00bb / \u00ab\u00a01 \u00e0 5\u00a0\u00bb.',
       '- Assumer + confirmer (critique, mode dynamique)\u00a0: si tu as un best guess PLAUSIBLE mais PAS \u00e9vident \u00e0 100%\u00a0: avance l\'hypoth\u00e8se et demande confirmation. suggestions = ["Oui","Non"] + suggestionsMulti:false. Si l\'hypoth\u00e8se est DIFFICILE \u00e0 juger pour l\'utilisateur (org / budget / permission / impact large)\u00a0: ["Oui","Non","Je ne sais pas"].',
       '- Si c\'est \u00e9vident (effort trivial, achat = quelques minutes, corv\u00e9e perso = impact personnel)\u00a0: N\'ASK PAS \u2014 m\u00eame pas Oui/Non. set_priority / remember en silence, pose autre chose.',
       '- INTERDIT les questions ouvertes (qui / quoi / laquelle / quelles cons\u00e9quences) quand une hypoth\u00e8se courte tiendrait en oui/non. Transforme-les en confirmation.',
@@ -3391,8 +3647,8 @@
       '- Garde les listes / \u00e9chelles (facilite, port\u00e9e multi-acteurs, POURQUOI multi) quand plusieurs r\u00e9ponses distinctes restent utiles ET tu n\'as PAS encore de best guess net.',
       '- Exception POURQUOI 1er tour\u00a0: continue d\'offrir 2\u20134 raisons (suggestionsMulti:true) \u2014 pas Oui/Non seuls.',
       '- Surlignage accent\u00a0: enveloppe le c\u0153ur de la question (1\u20134 mots) dans [[a:\u2026]] (ta couleur d\'identit\u00e9). Ex. "C\'est [[a:toi]]?" / "C\'est pour [[a:quand]]?" / "Qu\'est-ce qui [[a:bloque]]?"',
-      '- Par d\u00e9faut (apr\u00e8s le 1er POURQUOI)\u00a0: message = la prochaine question (1 phrase courte) + optionnel 1 clin d\'\u0153il snarky. Pas de monologue.',
-      '- EXCEPTION 1er POURQUOI\u00a0: 2\u20133 phrases courtes OK (tease ancr\u00e9 au titre + pourquoi + rassurance). \u00c9motic\u00f4nes texte rares OK (;)) \u2014 pas de flood d\'emojis unicode.',
+      '- Contrastes A ou B\u00a0: toujours [[g:]] et [[r:]] sur les deux options + chips heat assorties (0 vert / 4 rouge). Ex. "\u00c7a a [[g:d\u00e9j\u00e0 \u00e9t\u00e9 commenc\u00e9]] ou [[r:pas encore]]?"',
+      '- Par d\u00e9faut\u00a0: message = la prochaine question (1 phrase courte). Pas de monologue, pas de rassurance th\u00e9\u00e2trale.',
       '- EXCEPTION\u00a0: si l\'utilisateur te pose une vraie question (\u00ab\u00a0tu penses?\u00a0\u00bb, estime, avis)\u00a0: r\u00e9ponds d\'abord naturellement (1\u20132 phrases), puis encha\u00eene si besoin.',
       '- BRI\u00c8VET\u00c9 (critique)\u00a0: coupe le titre au noyau utile. INTERDIT de recopier le titre long entier OU de coller le jargon anglais du titre tel quel.',
       '- INTERDIT les formulations lourdes\u00a0: \u00ab\u00a0Mener \u00e0 bien\u2026\u00a0\u00bb, \u00ab\u00a0c\'est simple ou \u00e7a demande du travail?\u00a0\u00bb, \u00ab\u00a0Quelle serait la cons\u00e9quence de ne pas\u2026\u00a0\u00bb + titre complet.',
@@ -3421,7 +3677,7 @@
       '- Si la r\u00e9ponse est \u00ab\u00a0non\u00a0\u00bb / skip / \u00ab\u00a0pas d\'\u00e9ch\u00e9ance\u00a0\u00bb\u00a0: applique d\'abord tout set_progress / set_priority encore dus d\'apr\u00e8s l\'historique, puis passe \u00e0 autre chose OU close \u2014 JAMAIS un simple \u00ab\u00a0Okay.\u00a0\u00bb (voir cl\u00f4ture ci-dessous).',
       '- Les gens r\u00e9pondent avec des mots\u00a0; TOI tu traduis en axes + progr\u00e8s dans actions (set_priority, set_progress).',
       '- Ancre la question sur le SUJET reformul\u00e9 en fran\u00e7ais courant, PAS \u00ab\u00a0cette t\u00e2che\u00a0\u00bb / \u00ab\u00a0cette carte\u00a0\u00bb, PAS le titre anglais brut.',
-      '- Ex. titre \u00ab\u00a0Manger plus de pain avec Eiraul\u00a0\u00bb \u2192 1er tour POURQUOI\u00a0: \u00ab\u00a0Haha ok, strat\u00e9gie glucides avec Eiraul? ;) Pourquoi tu veux manger plus de pain avec iel?\u00a0\u00bb',
+      '- Ex. titre \u00ab\u00a0Manger plus de pain avec Eiraul\u00a0\u00bb \u2192 1er tour POURQUOI\u00a0: \u00ab\u00a0Pourquoi tu veux manger plus de pain avec Eiraul?\u00a0\u00bb',
       '- Ex. urgence (APR\u00c8S le pourquoi)\u00a0: \u00ab\u00a0Si on ne mange pas plus de pain avec Eiraul, c\'est grave?\u00a0\u00bb',
       '- Ex. urgence (titre jargon)\u00a0: titre \u00ab\u00a0Cable management sur mon ordinateur\u00a0\u00bb \u2192 \u00ab\u00a0Si on ne fait pas le m\u00e9nage des c\u00e2bles sur ton ordinateur, c\'est grave?\u00a0\u00bb',
       '- Ex. FAUX urgence\u00a0: \u00ab\u00a0Si on skip le cable management, \u00e7a presse?\u00a0\u00bb',
@@ -3506,7 +3762,15 @@
       '{"thinking":"...","message":"...","suggestions":[{"label":"...","icon":"circle-sm","color":"teal","heat":0}],"suggestionScale":true,"suggestionsMulti":false,"prompts":[],"actions":[{"tool":"...","args":{}}],"cardPatches":[{"op":"remember","text":"..."}],"patches":[{"op":"remember","text":"..."}],"completeInterview":false}',
       '',
       'R\u00e8gles interview\u00a0:',
-      '- Une question claire \u00e0 la fois (sauf 1er POURQUOI snarky-hopeful, avis / cl\u00f4ture). Apr\u00e8s l\'ouverture\u00a0: reste court, avec un clin d\'\u0153il OK.',
+      '- Une question claire \u00e0 la fois (sauf 1er POURQUOI snarky-hopeful, avis / cl\u00f4ture / apart\u00e9). Apr\u00e8s l\'ouverture\u00a0: reste court, avec un clin d\'\u0153il OK.',
+      '- Apart\u00e9s / questions hors fil (critique)\u00a0: l\'utilisateur PEUT digresser sans casser l\'interview.',
+      '  \u00b7 Identit\u00e9 (change ta couleur / ton nom / ta perso)\u00a0: APPLIQUE set_agent_color / set_agent_name / set_agent_personality TOUT DE SUITE + confirme en 1 demi-phrase, PUIS encha\u00eene directement la PROCHAINE vraie question d\'interview (sujet/axes/avancement).',
+      '  \u00b7 Autre hors-sujet (blague, calcul, culture, \u00ab\u00a0t\'es une IA?\u00a0\u00bb)\u00a0: r\u00e9ponds bri\u00e8vement, puis reprend la prochaine question utile. Ne refuse jamais.',
+      '  \u00b7 INTERDIT les meta-questions du genre \u00ab\u00a0On continue avec l\'installation des dipl\u00f4mes?\u00a0\u00bb / \u00ab\u00a0On reprend?\u00a0\u00bb / \u00ab\u00a0Tu veux continuer?\u00a0\u00bb \u2014 reprise = la vraie question suivante, sans demander la permission.',
+      '  \u00b7 Ex. FAUX\u00a0: user \u00ab\u00a0change ta couleur pour dor\u00e9\u00a0\u00bb \u2192 message \u00ab\u00a0On continue avec l\'installation des dipl\u00f4mes?\u00a0\u00bb (et z\u00e9ro set_agent_color).',
+      '  \u00b7 Ex. VRAI\u00a0: user \u00ab\u00a0change ta couleur pour dor\u00e9\u00a0\u00bb \u2192 set_agent_color {color:"yellow"} + color:"yellow" + message \u00ab\u00a0Okay, dor\u00e9! Le plus impact\u00e9 si on ne les accroche pas, c\'est [[a:toi]]?\u00a0\u00bb + suggestions Oui/Non.',
+      '  \u00b7 Ex. VRAI\u00a0: user \u00ab\u00a0change ta propre couleur pour orange\u00a0\u00bb \u2192 set_agent_color {color:"orange"} + color:"orange" + OK bref + prochaine question (pas \u00ab\u00a0On continue?\u00a0\u00bb).',
+      '  \u00b7 completeInterview reste false sur un apart\u00e9 \u2014 l\'interview continue.',
       '- INTERDIT les r\u00e9caps / synth\u00e8ses entre questions. Le contexte et les actions suffisent.',
       '- INTERDIT de cadrer une question comme \u00ab\u00a0la derni\u00e8re\u00a0\u00bb ou une conclusion\u00a0: jamais \u00ab\u00a0Pour finir\u00a0\u00bb, \u00ab\u00a0Pour terminer\u00a0\u00bb, \u00ab\u00a0Pour conclure\u00a0\u00bb, \u00ab\u00a0Enfin\u00a0\u00bb, \u00ab\u00a0Une derni\u00e8re question\u00a0\u00bb.',
       '- Pose la prochaine question utile. Ne dis JAMAIS que c\'est la fin / le dernier tour.',
@@ -3544,6 +3808,9 @@
       '- toggle_subtask: { id?|matchText?, done?: boolean } (cocher une \u00e9tape d\u00e9j\u00e0 dans progress.items)',
       '- set_subtask_progress: { id?|matchText?, progress: 0-100 }',
       '- trigger_effect: { effect } (confetti / flowers quand progress=100 \u2014 f\u00e9licitations)',
+      '- set_agent_color: { color } (apart\u00e9 couleur\u00a0: orange|yellow|green|purple|blue|pink|red|teal|coral|sky\u00a0; dor\u00e9/gold \u2192 yellow)',
+      '- set_agent_name: { name } (apart\u00e9 nom)',
+      '- set_agent_personality: { personality } (apart\u00e9 perso)',
       '- prompts optionnels: [{ "type":"priority_axes", "urgency":n, "impact":n, "ease":n }] (apr\u00e8s inf\u00e9rence)',
       '',
       'Contexte carte / interview\u00a0:',
@@ -3658,6 +3925,13 @@
     var actions = rewriteActionsForRelativeDue(parsed.actions || [], userText);
     var tierRewrite = rewriteActionsForPriorityTier(actions, userText);
     actions = tierRewrite.actions;
+    var colorRewrite = rewriteActionsForAgentColor(
+      actions,
+      userText,
+      parsed.message || '',
+      parsed.color
+    );
+    actions = colorRewrite.actions;
     // Interview may only apply a subset of tools.
     var allowedTools = {
       set_priority: true,
@@ -3670,7 +3944,10 @@
       set_subtask_progress: true,
       rename_card: true,
       set_description: true,
-      trigger_effect: true
+      trigger_effect: true,
+      set_agent_name: true,
+      set_agent_color: true,
+      set_agent_personality: true
     };
     actions = actions.filter(function (a) {
       return a && allowedTools[a.tool];
@@ -3697,6 +3974,7 @@
     message = progressGuard.message;
     actions = progressGuard.actions;
     var emotion = progressGuard.emotion;
+    var replyColor = colorRewrite.color || parsed.color || null;
     var prompts = ensurePriorityAxesPrompt(
       normalizePrompts(parsed.prompts, context),
       actions,
@@ -3772,6 +4050,14 @@
       context.userName,
       message
     );
+    suggestionEntries = linkSuggestionColorsToHighlights(
+      suggestionEntries,
+      message
+    );
+    suggestionEntries = orderSuggestionsGreenToRed(
+      suggestionEntries,
+      context.userName
+    );
     suggestionEntries = filterDueSuggestionsWhenComplete(
       suggestionEntries,
       actions,
@@ -3781,7 +4067,7 @@
     return {
       message: message,
       emotion: emotion || parsed.emotion || null,
-      color: parsed.color || null,
+      color: replyColor,
       suggestions: suggestionEntries,
       suggestionsMulti: wantsSuggestionsMulti(data) || wantsSuggestionsMulti(parsed),
       actions: actions,
@@ -4673,6 +4959,10 @@
       options.userName,
       options.message || ''
     );
+    out = linkSuggestionColorsToHighlights(out, options.message || '');
+    if (options.rankGreenToRed || options.scale) {
+      out = orderSuggestionsGreenToRed(out, options.userName);
+    }
     return out;
   }
 
@@ -4938,7 +5228,7 @@
       sky: true
     };
     if (allow[raw]) return raw;
-    if (raw === 'jaune' || raw === 'gold' || raw === 'amber') return 'yellow';
+    if (raw === 'jaune' || raw === 'gold' || raw === 'amber' || raw === 'dore') return 'yellow';
     if (raw === 'peach' || raw === 'warm') return 'orange';
     if (raw === 'vert' || raw === 'lime') return 'green';
     if (raw === 'violet' || raw === 'lavender') return 'purple';
@@ -5012,13 +5302,17 @@
       var suggestionScale = wantsSuggestionScale(parsed);
       var suggestions = normalizeSuggestionEntries(parsed.suggestions, 4, {
         scale: suggestionScale,
-        rankGreenToRed: !!suggestionScale
+        rankGreenToRed: !!suggestionScale,
+        message: message
       });
       if (!suggestions.length) {
         suggestions = suggestionsFromFollowUps(followUps).map(function (text) {
           return { text: text, heat: null };
         });
-      } else if (
+      }
+      // Link chip colors to highlight spans (also when scale wasn't requested).
+      suggestions = linkSuggestionColorsToHighlights(suggestions, message);
+      if (
         suggestionScale ||
         (suggestions.length >= 2 &&
           suggestions.length <= 5 &&
@@ -5561,7 +5855,14 @@
     );
     message = progressGuard.message;
     actions = progressGuard.actions;
-    parsed.suggestions = progressGuard.suggestions;
+    parsed.suggestions = linkSuggestionColorsToHighlights(
+      progressGuard.suggestions || parsed.suggestions,
+      message
+    );
+    parsed.suggestions = orderSuggestionsGreenToRed(
+      parsed.suggestions,
+      context && context.userName
+    );
     var replyEmotion = progressGuard.emotion;
     var replyColor =
       colorRewrite.color || parsed.color || null;
@@ -8152,6 +8453,10 @@
     polishMessageAfterProgressComplete: polishMessageAfterProgressComplete,
     ensureProgressCelebration: ensureProgressCelebration,
     applyProgressCompleteGuards: applyProgressCompleteGuards,
+    rewriteWinkEmoticons: rewriteWinkEmoticons,
+    ensureContrastHighlights: ensureContrastHighlights,
+    linkSuggestionColorsToHighlights: linkSuggestionColorsToHighlights,
+    extractHighlightSpans: extractHighlightSpans,
     memoryTurn: memoryTurn,
     cardInterviewTurn: cardInterviewTurn,
     loadCardInterview: loadCardInterview,
