@@ -4836,6 +4836,16 @@
     membersRow.value.appendChild(membersEl);
     body.appendChild(membersRow.row);
 
+    // ── Objectif (project / mission link) ───────────────────────────────
+    var objectifRow = makeRow('objectif', 'Objectif', { icon: 'ti-hierarchy-2' });
+    var objectifMount = document.createElement('div');
+    objectifMount.className = 'info-objectif-mount objectif-section-body';
+    objectifMount.id = 'info-objectif-mount';
+    objectifRow.row.classList.add('variant-objectif-section');
+    objectifRow.row.hidden = true;
+    objectifRow.value.appendChild(objectifMount);
+    body.appendChild(objectifRow.row);
+
     // ── Priority / Due / Blocked (recap) ───────────────────────────────
     var priorityRow = makeRow('priority', 'Priorit\u00e9', {
       interactive: true,
@@ -5359,6 +5369,13 @@
       },
       setAuthReason: function (reason) {
         setAuthHint(reason || '');
+        onLayoutChange();
+      },
+      getObjectifMount: function () {
+        return objectifMount;
+      },
+      setObjectifVisible: function (visible) {
+        objectifRow.row.hidden = !visible;
         onLayoutChange();
       },
       flushTitle: flushTitleSave,

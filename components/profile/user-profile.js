@@ -128,7 +128,7 @@
       case 'statut':
         return '.variant-statut-section';
       case 'objectif':
-        return '.variant-objectif-section';
+        return '.info-row--objectif, .variant-objectif-section';
       case 'priority':
         return '.variant-priority-section';
       case 'graph':

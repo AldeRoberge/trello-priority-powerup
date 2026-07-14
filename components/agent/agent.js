@@ -1377,6 +1377,115 @@
   }
 
   /**
+   * Suggest Vision / Mission / Projet names for board Objectifs settings.
+   * context: { kind, boardName?, existingNames?, parentVision?, parentMission?, hierarchy? }
+   */
+  async function suggestGoals(provider, context, options) {
+    options = options || {};
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) return [];
+    var ctx = context && typeof context === 'object' ? context : {};
+    var kind = ctx.kind === 'mission' || ctx.kind === 'project' ? ctx.kind : 'vision';
+    var existing = Array.isArray(ctx.existingNames)
+      ? ctx.existingNames
+          .map(function (s) {
+            return String(s || '').trim();
+          })
+          .filter(Boolean)
+      : [];
+
+    var kindLabel =
+      kind === 'mission' ? 'missions' : kind === 'project' ? 'projets' : 'visions';
+    var kindOne =
+      kind === 'mission' ? 'mission' : kind === 'project' ? 'projet' : 'vision';
+
+    var payload = {
+      kind: kind,
+      boardName: typeof ctx.boardName === 'string' ? ctx.boardName.slice(0, 200) : '',
+      parentVision: typeof ctx.parentVision === 'string' ? ctx.parentVision.slice(0, 200) : '',
+      parentMission: typeof ctx.parentMission === 'string' ? ctx.parentMission.slice(0, 200) : '',
+      existingNames: existing.slice(0, 40),
+      hierarchy: ctx.hierarchy && typeof ctx.hierarchy === 'object' ? ctx.hierarchy : null
+    };
+
+    var roleHints = {
+      vision:
+        'Une vision = ambition strat\u00e9gique durable (ex. \u00ab\u00a0Devenir la r\u00e9f\u00e9rence locale en formation\u00a0\u00bb).',
+      mission:
+        'Une mission = axe concret sous la vision, souvent mesurable (ex. \u00ab\u00a0Doubler les inscriptions Q4\u00a0\u00bb).',
+      project:
+        'Un projet = chantier op\u00e9rationnel sous la mission (ex. \u00ab\u00a0Campagne rentr\u00e9e 2026\u00a0\u00bb).'
+    };
+
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu proposes des noms d\'objectifs pour un Power-Up Trello (hi\u00e9rarchie Vision \u2192 Mission \u2192 Projet).',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":["\u2026","\u2026","\u2026"]}',
+          'Exactement 3 suggestions si possible (2 minimum si le contexte est pauvre).',
+          'Chaque suggestion = un nom court en fran\u00e7ais (pas une question, pas de num\u00e9rotation).',
+          roleHints[kind],
+          'Inspire-toi du tableau, des parents et de la hi\u00e9rarchie existante.',
+          'INTERDIT\u00a0: dupliquer un nom existant (m\u00eame sens).',
+          'INTERDIT\u00a0: placeholders, guillemets superflus, formulations trop g\u00e9n\u00e9riques (\u00ab\u00a0Nouvelle vision\u00a0\u00bb).',
+          'Contexte\u00a0:',
+          JSON.stringify(payload)
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content: 'Propose 3 ' + kindLabel + ' pertinentes pour ce niveau (' + kindOne + ').'
+      }
+    ];
+
+    var response;
+    try {
+      response = await chatCompletions(p, messages, {
+        jsonMode: true,
+        max_tokens: 220,
+        temperature: 0.6,
+        stream: false
+      });
+    } catch (err) {
+      if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+        response = await chatCompletions(p, messages, {
+          jsonMode: false,
+          max_tokens: 220,
+          temperature: 0.6,
+          stream: false
+        });
+      } else {
+        console.error('PriorityAgent.suggestGoals failed', err);
+        return [];
+      }
+    }
+
+    var list = [];
+    try {
+      var parsed = parseAssistantPayload(response.content);
+      list = normalizeSuggestionList(parsed.suggestions);
+    } catch (e) {
+      try {
+        var raw = JSON.parse(response.content);
+        list = normalizeSuggestionList(raw.suggestions || raw.goals || raw.names);
+      } catch (e2) {
+        list = [];
+      }
+    }
+
+    var existingKeys = {};
+    for (var i = 0; i < existing.length; i++) {
+      existingKeys[existing[i].toLocaleLowerCase('fr-FR')] = true;
+    }
+    return list
+      .filter(function (s) {
+        return s && !existingKeys[s.toLocaleLowerCase('fr-FR')];
+      })
+      .slice(0, 3);
+  }
+
+  /**
    * Conversational turn for memory alignment (no card tools).
    * Returns { message, suggestions, patches, rawJson, usage }.
    */
@@ -4272,6 +4381,7 @@
     memoryTurn: memoryTurn,
     suggestQuestions: suggestQuestions,
     suggestSubtasks: suggestSubtasks,
+    suggestGoals: suggestGoals,
     executeAction: executeAction,
     executeActions: executeActions,
     formatChangeRecap: formatChangeRecap,

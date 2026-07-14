@@ -1,32 +1,15 @@
-/* Goals / Objectif — card editor section + metrics overlay */
+/* Goals / Objectif — nested in Information + metrics overlay */
 
-.variant-objectif-section {
-  margin: 0 0 8px;
-  padding: 0 8px;
+.info-row--objectif .info-row-value {
+  min-width: 0;
 }
 
-.field--objectif {
-  margin-bottom: 0;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: transparent;
-  border: none;
-  transition: background 0.2s ease;
-}
-
-.field--objectif.is-enabled {
-  background: color-mix(
-    in srgb,
-    var(--surface-1, var(--tp-surface-subtle)) 72%,
-    var(--surface-2, var(--tp-surface))
-  );
-}
-
+.info-objectif-mount,
 .objectif-section-body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 4px 0 0;
+  padding: 0;
 }
 
 .objectif-empty {
@@ -116,6 +99,39 @@
   margin: 0;
   font-size: 12px;
   color: var(--tp-text-muted, #626f86);
+}
+
+.objectif-create-row .tp-select,
+.objectif-create-row .tp-goals-input {
+  width: 100%;
+}
+
+.objectif-add-mission {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--tp-border, #dfe1e6);
+}
+
+.objectif-add-mission > summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tp-text-subtle, #44546f);
+  list-style: none;
+}
+
+.objectif-add-mission > summary::-webkit-details-marker {
+  display: none;
+}
+
+.objectif-add-mission[open] > summary {
+  margin-bottom: 6px;
+}
+
+.objectif-add-mission .tp-select,
+.objectif-add-mission .tp-goals-input,
+.objectif-add-mission .tp-button {
+  margin-top: 4px;
 }
 
 /* Metrics slide-out overlay (in-modal) */

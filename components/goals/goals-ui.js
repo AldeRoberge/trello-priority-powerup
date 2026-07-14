@@ -63,6 +63,7 @@
     options = options || {};
     var t = options.t;
     var GT = global.GoalsTrello;
+    var Agent = global.PriorityAgent;
     var onResize = typeof options.onResize === 'function' ? options.onResize : function () {};
 
     if (!containerEl || !t || !GT) {
@@ -78,73 +79,155 @@
       selectedVisionId: null,
       selectedMissionId: null,
       selectedProjectId: null,
+      boardName: '',
+      aiEnabled: false,
+    };
+
+    var suggestCache = {
+      vision: { names: [], loading: false, seq: 0, key: '' },
+      mission: { names: [], loading: false, seq: 0, key: '' },
+      project: { names: [], loading: false, seq: 0, key: '' },
     };
 
     containerEl.replaceChildren();
     containerEl.classList.add('tp-goals-settings');
 
-    var cascade = el('div', 'tp-goals-cascade');
-    var visionsCol = el('div', 'tp-goals-col');
-    var missionsCol = el('div', 'tp-goals-col');
-    var projectsCol = el('div', 'tp-goals-col');
+    var stack = el('div', 'tp-goals-stack');
     var metricsPanel = el('div', 'tp-goals-metrics');
 
-    visionsCol.appendChild(el('h4', 'tp-goals-col-title', { text: 'Vision' }));
-    missionsCol.appendChild(el('h4', 'tp-goals-col-title', { text: 'Mission' }));
-    projectsCol.appendChild(el('h4', 'tp-goals-col-title', { text: 'Projet' }));
+    var visionPanel = buildLevelPanel({
+      kind: 'vision',
+      title: 'Vision',
+      icon: 'ti-eye',
+      placeholder: 'Nouvelle vision\u2026',
+      emptyHint: 'Aucune vision pour l\u2019instant.',
+    });
+    var missionPanel = buildLevelPanel({
+      kind: 'mission',
+      title: 'Mission',
+      icon: 'ti-flag',
+      placeholder: 'Nouvelle mission\u2026',
+      emptyHint: 'Choisissez une vision.',
+    });
+    var projectPanel = buildLevelPanel({
+      kind: 'project',
+      title: 'Projet',
+      icon: 'ti-folder',
+      placeholder: 'Nouveau projet\u2026',
+      emptyHint: 'Choisissez une mission.',
+    });
 
-    var visionsList = el('div', 'tp-goals-list');
-    var missionsList = el('div', 'tp-goals-list');
-    var projectsList = el('div', 'tp-goals-list');
-    visionsCol.appendChild(visionsList);
-    missionsCol.appendChild(missionsList);
-    projectsCol.appendChild(projectsList);
+    stack.appendChild(visionPanel.root);
+    stack.appendChild(missionPanel.root);
+    stack.appendChild(projectPanel.root);
+    containerEl.appendChild(stack);
+    containerEl.appendChild(metricsPanel);
 
-    visionsCol.appendChild(buildAddRow('Nouvelle vision…', function (name) {
-      return GT.createVision(t, name).then(function (v) {
-        state.selectedVisionId = v.id;
-        state.selectedMissionId = null;
-        state.selectedProjectId = null;
-        return reload();
+    visionPanel.root.open = true;
+
+    function buildLevelPanel(cfg) {
+      var root = el('details', 'tp-goals-panel');
+      root.dataset.kind = cfg.kind;
+
+      var summary = el('summary', 'tp-goals-panel-summary');
+      summary.appendChild(
+        el('span', 'tp-goals-panel-icon', {
+          html: '<i class="ti ' + cfg.icon + '" aria-hidden="true"></i>',
+        })
+      );
+      summary.appendChild(el('span', 'tp-goals-panel-title', { text: cfg.title }));
+      var selectedLabel = el('span', 'tp-goals-panel-selected');
+      selectedLabel.hidden = true;
+      summary.appendChild(selectedLabel);
+      var countBadge = el('span', 'tp-goals-panel-count', { text: '0' });
+      summary.appendChild(countBadge);
+      root.appendChild(summary);
+
+      var body = el('div', 'tp-goals-panel-body');
+      var listEl = el('div', 'tp-goals-list');
+      body.appendChild(listEl);
+
+      var addRow = buildAddRow(cfg.placeholder, function (name) {
+        return createForKind(cfg.kind, name);
       });
-    }));
-    missionsCol.appendChild(buildAddRow('Nouvelle mission…', function (name) {
-      if (!state.selectedVisionId) {
-        window.alert('Sélectionnez une vision d’abord.');
-        return Promise.resolve();
-      }
-      var vision = GT.findById(state.visions, state.selectedVisionId);
-      if (vision && vision.retired) {
-        window.alert('Impossible d’ajouter sous une vision retirée.');
-        return Promise.resolve();
-      }
-      return GT.createMission(t, name, state.selectedVisionId).then(function (m) {
-        state.selectedMissionId = m.id;
-        state.selectedProjectId = null;
-        return reload();
+      body.appendChild(addRow);
+
+      var suggestSection = el('div', 'tp-goals-suggestions');
+      suggestSection.hidden = true;
+      suggestSection.innerHTML =
+        '<div class="tp-goals-suggestions-head">' +
+        '<span class="tp-goals-suggestions-label">Suggestions IA</span>' +
+        '<button type="button" class="tp-goals-suggestions-refresh" ' +
+        'aria-label="Rafra\u00eechir les suggestions" title="Rafra\u00eechir">\u21bb</button>' +
+        '</div>' +
+        '<p class="tp-goals-suggestions-status" hidden></p>' +
+        '<div class="tp-goals-suggestions-list" role="list"></div>';
+      body.appendChild(suggestSection);
+      root.appendChild(body);
+
+      var refreshBtn = suggestSection.querySelector('.tp-goals-suggestions-refresh');
+      refreshBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        refreshSuggestions(cfg.kind, true);
       });
-    }));
-    projectsCol.appendChild(buildAddRow('Nouveau projet…', function (name) {
+
+      return {
+        kind: cfg.kind,
+        title: cfg.title,
+        emptyHint: cfg.emptyHint,
+        root: root,
+        listEl: listEl,
+        addRow: addRow,
+        selectedLabel: selectedLabel,
+        countBadge: countBadge,
+        suggestSection: suggestSection,
+        suggestStatus: suggestSection.querySelector('.tp-goals-suggestions-status'),
+        suggestList: suggestSection.querySelector('.tp-goals-suggestions-list'),
+      };
+    }
+
+    function createForKind(kind, name) {
+      if (kind === 'vision') {
+        return GT.createVision(t, name).then(function (v) {
+          state.selectedVisionId = v.id;
+          state.selectedMissionId = null;
+          state.selectedProjectId = null;
+          missionPanel.root.open = true;
+          return reload();
+        });
+      }
+      if (kind === 'mission') {
+        if (!state.selectedVisionId) {
+          window.alert('S\u00e9lectionnez une vision d\u2019abord.');
+          return Promise.resolve();
+        }
+        var vision = GT.findById(state.visions, state.selectedVisionId);
+        if (vision && vision.retired) {
+          window.alert('Impossible d\u2019ajouter sous une vision retir\u00e9e.');
+          return Promise.resolve();
+        }
+        return GT.createMission(t, name, state.selectedVisionId).then(function (m) {
+          state.selectedMissionId = m.id;
+          state.selectedProjectId = null;
+          projectPanel.root.open = true;
+          return reload();
+        });
+      }
       if (!state.selectedMissionId) {
-        window.alert('Sélectionnez une mission d’abord.');
+        window.alert('S\u00e9lectionnez une mission d\u2019abord.');
         return Promise.resolve();
       }
       var mission = GT.findById(state.missions, state.selectedMissionId);
       if (mission && mission.retired) {
-        window.alert('Impossible d’ajouter sous une mission retirée.');
+        window.alert('Impossible d\u2019ajouter sous une mission retir\u00e9e.');
         return Promise.resolve();
       }
       return GT.createProject(t, name, state.selectedMissionId).then(function (p) {
         state.selectedProjectId = p.id;
         return reload();
       });
-    }));
-
-    cascade.appendChild(visionsCol);
-    cascade.appendChild(missionsCol);
-    cascade.appendChild(projectsCol);
-    containerEl.appendChild(cascade);
-    containerEl.appendChild(metricsPanel);
+    }
 
     function buildAddRow(placeholder, onCreate) {
       var row = el('div', 'tp-goals-add-row');
@@ -169,7 +252,7 @@
           })
           .catch(function (err) {
             console.error('Goals create failed', err);
-            window.alert((err && err.message) || 'Création impossible');
+            window.alert((err && err.message) || 'Cr\u00e9ation impossible');
           })
           .then(function () {
             btn.disabled = false;
@@ -188,14 +271,19 @@
     }
 
     function entityRow(item, selectedId, onSelect, onRename, onRetire) {
-      var row = el('div', 'tp-goals-item' + (item.id === selectedId ? ' is-selected' : '') + (item.retired ? ' is-retired' : ''));
+      var row = el(
+        'div',
+        'tp-goals-item' +
+          (item.id === selectedId ? ' is-selected' : '') +
+          (item.retired ? ' is-retired' : '')
+      );
       row.setAttribute('role', 'button');
       row.tabIndex = 0;
 
       var nameEl = el('span', 'tp-goals-item-name', { text: item.name });
       row.appendChild(nameEl);
       if (item.retired) {
-        row.appendChild(el('span', 'tp-goals-retired-tag', { text: 'Retiré' }));
+        row.appendChild(el('span', 'tp-goals-retired-tag', { text: 'Retir\u00e9' }));
       }
 
       var actions = el('div', 'tp-goals-item-actions');
@@ -228,7 +316,13 @@
         });
         retireBtn.addEventListener('click', function (e) {
           e.stopPropagation();
-          if (!window.confirm('Retirer « ' + item.name + ' » ? Il disparaîtra des sélecteurs.')) return;
+          if (
+            !window.confirm(
+              'Retirer \u00ab ' + item.name + ' \u00bb ? Il dispara\u00eetra des s\u00e9lecteurs.'
+            )
+          ) {
+            return;
+          }
           onRetire().catch(function (err) {
             console.error('Goals retire failed', err);
           });
@@ -249,13 +343,235 @@
       return row;
     }
 
+    function setPanelSelected(panel, item) {
+      if (item && item.name) {
+        panel.selectedLabel.hidden = false;
+        panel.selectedLabel.textContent = item.name;
+      } else {
+        panel.selectedLabel.hidden = true;
+        panel.selectedLabel.textContent = '';
+      }
+    }
+
+    function setPanelEnabled(panel, enabled) {
+      panel.root.classList.toggle('is-disabled', !enabled);
+      panel.addRow.hidden = !enabled;
+      var inputs = panel.addRow.querySelectorAll('input, button');
+      for (var i = 0; i < inputs.length; i++) {
+        inputs[i].disabled = !enabled;
+      }
+    }
+
+    function hierarchyDigest() {
+      return {
+        visions: state.visions
+          .filter(function (v) {
+            return !v.retired;
+          })
+          .map(function (v) {
+            return v.name;
+          })
+          .slice(0, 20),
+        missions: state.missions
+          .filter(function (m) {
+            return !m.retired && m.visionId === state.selectedVisionId;
+          })
+          .map(function (m) {
+            return m.name;
+          })
+          .slice(0, 20),
+        projects: state.projects
+          .filter(function (p) {
+            return !p.retired && p.missionId === state.selectedMissionId;
+          })
+          .map(function (p) {
+            return p.name;
+          })
+          .slice(0, 20),
+      };
+    }
+
+    function suggestionContext(kind) {
+      var existing = [];
+      var parentVision = '';
+      var parentMission = '';
+      if (kind === 'vision') {
+        existing = state.visions.map(function (v) {
+          return v.name;
+        });
+      } else if (kind === 'mission') {
+        var vision = GT.findById(state.visions, state.selectedVisionId);
+        parentVision = vision ? vision.name : '';
+        existing = state.missions
+          .filter(function (m) {
+            return m.visionId === state.selectedVisionId;
+          })
+          .map(function (m) {
+            return m.name;
+          });
+      } else {
+        var mission = GT.findById(state.missions, state.selectedMissionId);
+        parentMission = mission ? mission.name : '';
+        var parentV = mission ? GT.findById(state.visions, mission.visionId) : null;
+        parentVision = parentV ? parentV.name : '';
+        existing = state.projects
+          .filter(function (p) {
+            return p.missionId === state.selectedMissionId;
+          })
+          .map(function (p) {
+            return p.name;
+          });
+      }
+      return {
+        kind: kind,
+        boardName: state.boardName,
+        parentVision: parentVision,
+        parentMission: parentMission,
+        existingNames: existing,
+        hierarchy: hierarchyDigest(),
+      };
+    }
+
+    function canSuggest(kind) {
+      if (!state.aiEnabled) return false;
+      if (kind === 'mission') return !!state.selectedVisionId;
+      if (kind === 'project') return !!state.selectedMissionId;
+      return true;
+    }
+
+    function panelForKind(kind) {
+      if (kind === 'mission') return missionPanel;
+      if (kind === 'project') return projectPanel;
+      return visionPanel;
+    }
+
+    function setSuggestStatus(panel, text, show) {
+      if (!panel.suggestStatus) return;
+      if (!show || !text) {
+        panel.suggestStatus.hidden = true;
+        panel.suggestStatus.textContent = '';
+        return;
+      }
+      panel.suggestStatus.hidden = false;
+      panel.suggestStatus.textContent = text;
+    }
+
+    function renderSuggestions(kind) {
+      var panel = panelForKind(kind);
+      var cache = suggestCache[kind];
+      panel.suggestList.replaceChildren();
+
+      if (!canSuggest(kind)) {
+        panel.suggestSection.hidden = true;
+        return;
+      }
+      panel.suggestSection.hidden = false;
+
+      if (cache.loading) {
+        setSuggestStatus(panel, 'G\u00e9n\u00e9ration des suggestions\u2026', true);
+        return;
+      }
+      if (!cache.names.length) {
+        setSuggestStatus(panel, 'Aucune suggestion pour le moment.', true);
+        return;
+      }
+      setSuggestStatus(panel, '', false);
+      cache.names.forEach(function (label) {
+        var btn = el('button', 'tp-goals-suggestion', {
+          type: 'button',
+          text: label,
+          attrs: { 'data-suggestion': label, role: 'listitem', title: 'Ajouter\u00a0: ' + label },
+        });
+        btn.addEventListener('click', function () {
+          btn.disabled = true;
+          spellcheckText(label)
+            .then(function (name) {
+              return createForKind(kind, name || label);
+            })
+            .then(function () {
+              cache.names = cache.names.filter(function (s) {
+                return s !== label;
+              });
+              renderSuggestions(kind);
+            })
+            .catch(function (err) {
+              console.error('Goals suggest create failed', err);
+              btn.disabled = false;
+            });
+        });
+        panel.suggestList.appendChild(btn);
+      });
+    }
+
+    function refreshSuggestions(kind, force) {
+      if (!canSuggest(kind) || !Agent || typeof Agent.suggestGoals !== 'function') {
+        panelForKind(kind).suggestSection.hidden = true;
+        return Promise.resolve();
+      }
+      var ctx = suggestionContext(kind);
+      var key =
+        kind +
+        '|' +
+        (ctx.parentVision || '') +
+        '|' +
+        (ctx.parentMission || '') +
+        '|' +
+        ctx.existingNames.join('\u0001');
+      var cache = suggestCache[kind];
+      if (!force && cache.key === key && (cache.names.length || cache.loading)) {
+        renderSuggestions(kind);
+        return Promise.resolve();
+      }
+
+      var seq = ++cache.seq;
+      cache.loading = true;
+      cache.key = key;
+      renderSuggestions(kind);
+
+      return Agent.getProvider(t)
+        .then(function (provider) {
+          if (!Agent.isConfigured(provider)) {
+            state.aiEnabled = false;
+            return [];
+          }
+          return Agent.suggestGoals(provider, ctx);
+        })
+        .then(function (list) {
+          if (seq !== cache.seq) return;
+          cache.names = Array.isArray(list)
+            ? list
+                .map(function (s) {
+                  return String(s || '').trim();
+                })
+                .filter(Boolean)
+                .slice(0, 3)
+            : [];
+          cache.loading = false;
+          renderSuggestions(kind);
+          onResize();
+        })
+        .catch(function (err) {
+          console.error('Goals suggestions failed', err);
+          if (seq !== cache.seq) return;
+          cache.loading = false;
+          cache.names = [];
+          setSuggestStatus(
+            panelForKind(kind),
+            'Impossible de g\u00e9n\u00e9rer des suggestions (IA indisponible).',
+            true
+          );
+          panelForKind(kind).suggestSection.hidden = false;
+          onResize();
+        });
+    }
+
     function renderLists() {
-      visionsList.replaceChildren();
-      missionsList.replaceChildren();
-      projectsList.replaceChildren();
+      visionPanel.listEl.replaceChildren();
+      missionPanel.listEl.replaceChildren();
+      projectPanel.listEl.replaceChildren();
 
       state.visions.forEach(function (v) {
-        visionsList.appendChild(
+        visionPanel.listEl.appendChild(
           entityRow(
             v,
             state.selectedVisionId,
@@ -263,8 +579,11 @@
               state.selectedVisionId = v.id;
               state.selectedMissionId = null;
               state.selectedProjectId = null;
+              missionPanel.root.open = true;
               renderLists();
               renderMetrics();
+              refreshSuggestions('mission', false);
+              refreshSuggestions('project', false);
               onResize();
             },
             function (name) {
@@ -276,29 +595,37 @@
           )
         );
       });
+      if (!state.visions.length) {
+        visionPanel.listEl.appendChild(el('p', 'tp-goals-empty', { text: visionPanel.emptyHint }));
+      }
+      visionPanel.countBadge.textContent = String(state.visions.length);
+      setPanelSelected(visionPanel, GT.findById(state.visions, state.selectedVisionId));
+      setPanelEnabled(visionPanel, true);
 
       var missions = state.missions.filter(function (m) {
         return m.visionId === state.selectedVisionId;
       });
-      if (!state.selectedVisionId) {
-        missionsList.appendChild(
+      var missionReady = !!state.selectedVisionId;
+      setPanelEnabled(missionPanel, missionReady);
+      if (!missionReady) {
+        missionPanel.listEl.appendChild(
           el('p', 'tp-goals-empty', { text: 'Choisissez une vision.' })
         );
       } else if (!missions.length) {
-        missionsList.appendChild(
-          el('p', 'tp-goals-empty', { text: 'Aucune mission.' })
-        );
+        missionPanel.listEl.appendChild(el('p', 'tp-goals-empty', { text: 'Aucune mission.' }));
       } else {
         missions.forEach(function (m) {
-          missionsList.appendChild(
+          missionPanel.listEl.appendChild(
             entityRow(
               m,
               state.selectedMissionId,
               function () {
                 state.selectedMissionId = m.id;
                 state.selectedProjectId = null;
+                projectPanel.root.open = true;
                 renderLists();
                 renderMetrics();
+                refreshSuggestions('project', false);
                 onResize();
               },
               function (name) {
@@ -311,21 +638,26 @@
           );
         });
       }
+      missionPanel.countBadge.textContent = missionReady ? String(missions.length) : '—';
+      setPanelSelected(
+        missionPanel,
+        missionReady ? GT.findById(state.missions, state.selectedMissionId) : null
+      );
 
       var projects = state.projects.filter(function (p) {
         return p.missionId === state.selectedMissionId;
       });
-      if (!state.selectedMissionId) {
-        projectsList.appendChild(
+      var projectReady = !!state.selectedMissionId;
+      setPanelEnabled(projectPanel, projectReady);
+      if (!projectReady) {
+        projectPanel.listEl.appendChild(
           el('p', 'tp-goals-empty', { text: 'Choisissez une mission.' })
         );
       } else if (!projects.length) {
-        projectsList.appendChild(
-          el('p', 'tp-goals-empty', { text: 'Aucun projet.' })
-        );
+        projectPanel.listEl.appendChild(el('p', 'tp-goals-empty', { text: 'Aucun projet.' }));
       } else {
         projects.forEach(function (p) {
-          projectsList.appendChild(
+          projectPanel.listEl.appendChild(
             entityRow(
               p,
               state.selectedProjectId,
@@ -344,6 +676,15 @@
           );
         });
       }
+      projectPanel.countBadge.textContent = projectReady ? String(projects.length) : '—';
+      setPanelSelected(
+        projectPanel,
+        projectReady ? GT.findById(state.projects, state.selectedProjectId) : null
+      );
+
+      renderSuggestions('vision');
+      renderSuggestions('mission');
+      renderSuggestions('project');
     }
 
     function renderMetrics() {

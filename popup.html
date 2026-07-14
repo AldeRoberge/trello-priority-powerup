@@ -8,11 +8,11 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=section-cbx-1" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css?v=graphique-chevron-1" />
-  <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-1" />
+  <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=tool-verify-side-1" />
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=settings-gear-left-1"></script>
+  <script src="./components/priority/priority-ui.js?v=info-objectif-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
@@ -28,7 +28,7 @@
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
   <script src="./components/agent/agent.js?v=agent-3"></script>
   <script src="./components/agent/agent-memory.js?v=memory-2"></script>
-  <script src="./components/profile/user-profile.js?v=profile-1"></script>
+  <script src="./components/profile/user-profile.js?v=profile-2"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-2"></script>
   <script src="./components/agent/agent-ui.js?v=suggestions-autosend-1"></script>
 </head>
@@ -60,9 +60,6 @@
     let latestGoals = null;
     let objectifUi = null;
     let objectifSection = null;
-    let objectifCollapse = null;
-    let objectifEnabled = false;
-    let objectifExpanded = false;
     let infoUi = null;
     let infoSection = null;
     let cardDesc = '';
@@ -612,16 +609,73 @@
         });
     }
 
-    function objectifSummaryText() {
-      if (!latestGoals || !latestGoals.hierarchy || !latestGoals.hierarchy.project) {
-        return 'Aucun projet lié';
+    function spellcheckGoalName(raw) {
+      if (window.GoalsUI && typeof GoalsUI.spellcheckText === 'function') {
+        return GoalsUI.spellcheckText(raw);
       }
-      var h = latestGoals.hierarchy;
-      var parts = [];
-      if (h.vision) parts.push(h.vision.name);
-      if (h.mission) parts.push(h.mission.name);
-      parts.push(h.project.name);
-      return parts.join(' → ');
+      return Promise.resolve(String(raw || '').trim());
+    }
+
+    function appendObjectifCrumb(crumb, label, opts) {
+      opts = opts || {};
+      var node;
+      if (opts.asButton) {
+        node = document.createElement('button');
+        node.type = 'button';
+        node.className = 'objectif-crumb objectif-crumb--mission';
+      } else {
+        node = document.createElement('span');
+        node.className = 'objectif-crumb';
+      }
+      node.textContent = label || '—';
+      if (opts.retired) {
+        node.classList.add('is-retired');
+        var tag = document.createElement('span');
+        tag.className = 'objectif-retired-tag';
+        tag.textContent = 'Retiré';
+        node.appendChild(document.createTextNode(' '));
+        node.appendChild(tag);
+      }
+      if (opts.onClick) node.addEventListener('click', opts.onClick);
+      crumb.appendChild(node);
+    }
+
+    function appendObjectifSep(crumb) {
+      var sep = document.createElement('span');
+      sep.className = 'objectif-crumb-sep';
+      sep.setAttribute('aria-hidden', 'true');
+      sep.textContent = '→';
+      crumb.appendChild(sep);
+    }
+
+    function bindCreateAction(btn, input, createFn) {
+      function run() {
+        var raw = input.value.trim();
+        if (!raw) return;
+        btn.disabled = true;
+        spellcheckGoalName(raw)
+          .then(function (name) {
+            return createFn(name);
+          })
+          .then(function () {
+            input.value = '';
+            return refreshObjectifData();
+          })
+          .catch(function (err) {
+            console.error('objectif create failed', err);
+            window.alert((err && err.message) || 'Création impossible');
+          })
+          .then(function () {
+            btn.disabled = false;
+          });
+      }
+      btn.addEventListener('click', run);
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          run();
+        }
+      });
     }
 
     function renderObjectifBody() {
@@ -643,52 +697,19 @@
       var projectId = (latestGoals && latestGoals.projectId) || null;
       var projects = (latestGoals && latestGoals.projects) || [];
       var missions = (latestGoals && latestGoals.missions) || [];
+      var visions = (latestGoals && latestGoals.visions) || [];
       var activeProjects = GT.activeOnly(projects);
+      var activeMissions = GT.activeOnly(missions);
+      var activeVisions = GT.activeOnly(visions);
 
-      if (!projectId || !hierarchy.project) {
-        var empty = document.createElement('p');
-        empty.className = 'objectif-empty';
-        empty.textContent =
-          'Aucun projet lié. Reliez cette carte à un projet pour rattacher Vision et Mission.';
-        body.appendChild(empty);
-      } else {
+      if (projectId && hierarchy.project) {
         var crumb = document.createElement('div');
         crumb.className = 'objectif-breadcrumb';
-        function appendCrumb(label, opts) {
-          opts = opts || {};
-          var node;
-          if (opts.asButton) {
-            node = document.createElement('button');
-            node.type = 'button';
-            node.className = 'objectif-crumb objectif-crumb--mission';
-          } else {
-            node = document.createElement('span');
-            node.className = 'objectif-crumb';
-          }
-          node.textContent = label || '—';
-          if (opts.retired) {
-            node.classList.add('is-retired');
-            var tag = document.createElement('span');
-            tag.className = 'objectif-retired-tag';
-            tag.textContent = 'Retiré';
-            node.appendChild(document.createTextNode(' '));
-            node.appendChild(tag);
-          }
-          if (opts.onClick) node.addEventListener('click', opts.onClick);
-          crumb.appendChild(node);
-        }
-        function appendSep() {
-          var sep = document.createElement('span');
-          sep.className = 'objectif-crumb-sep';
-          sep.setAttribute('aria-hidden', 'true');
-          sep.textContent = '→';
-          crumb.appendChild(sep);
-        }
-        appendCrumb(hierarchy.vision && hierarchy.vision.name, {
+        appendObjectifCrumb(crumb, hierarchy.vision && hierarchy.vision.name, {
           retired: hierarchy.vision && hierarchy.vision.retired,
         });
-        appendSep();
-        appendCrumb(hierarchy.mission && hierarchy.mission.name, {
+        appendObjectifSep(crumb);
+        appendObjectifCrumb(crumb, hierarchy.mission && hierarchy.mission.name, {
           asButton: !!(hierarchy.mission && hierarchy.mission.id),
           retired: hierarchy.mission && hierarchy.mission.retired,
           onClick: function () {
@@ -698,76 +719,149 @@
             });
           },
         });
-        appendSep();
-        appendCrumb(hierarchy.project && hierarchy.project.name, {
+        appendObjectifSep(crumb);
+        appendObjectifCrumb(crumb, hierarchy.project && hierarchy.project.name, {
           retired: hierarchy.project && hierarchy.project.retired,
         });
         body.appendChild(crumb);
       }
 
-      var pickerRow = document.createElement('div');
-      pickerRow.className = 'objectif-picker-row';
-      var select = document.createElement('select');
-      select.className = 'tp-select';
-      select.setAttribute('aria-label', 'Projet');
-      var optNone = document.createElement('option');
-      optNone.value = '';
-      optNone.textContent = '— Aucun projet —';
-      select.appendChild(optNone);
+      if (activeProjects.length || (hierarchy.project && hierarchy.project.retired)) {
+        var pickerRow = document.createElement('div');
+        pickerRow.className = 'objectif-picker-row';
+        var select = document.createElement('select');
+        select.className = 'tp-select';
+        select.setAttribute('aria-label', 'Projet');
 
-      var linkedRetired =
-        hierarchy.project && hierarchy.project.retired ? hierarchy.project : null;
-      if (linkedRetired) {
-        var optRetired = document.createElement('option');
-        optRetired.value = linkedRetired.id;
-        optRetired.textContent = linkedRetired.name + ' (retiré)';
-        optRetired.selected = true;
-        select.appendChild(optRetired);
+        var optPrompt = document.createElement('option');
+        optPrompt.value = '';
+        optPrompt.textContent = projectId ? 'Délier / créer un projet…' : 'Créer un projet…';
+        if (!projectId) optPrompt.selected = true;
+        select.appendChild(optPrompt);
+
+        var linkedRetired =
+          hierarchy.project && hierarchy.project.retired ? hierarchy.project : null;
+        if (linkedRetired) {
+          var optRetired = document.createElement('option');
+          optRetired.value = linkedRetired.id;
+          optRetired.textContent = linkedRetired.name + ' (retiré)';
+          optRetired.selected = true;
+          select.appendChild(optRetired);
+        }
+
+        activeProjects.forEach(function (p) {
+          var o = document.createElement('option');
+          o.value = p.id;
+          var mission = GT.findById(missions, p.missionId);
+          o.textContent = mission ? p.name + ' · ' + mission.name : p.name;
+          if (projectId === p.id) o.selected = true;
+          select.appendChild(o);
+        });
+
+        select.addEventListener('change', function () {
+          var nextId = select.value || null;
+          if (!nextId) {
+            // Keep card unlinked and focus create form.
+            GT.setCardProjectId(t, null)
+              .then(function () {
+                return refreshObjectifData();
+              })
+              .then(function () {
+                var focusEl = body.querySelector('.tp-goals-input');
+                if (focusEl) focusEl.focus();
+              })
+              .catch(function (err) {
+                console.error('setCardProjectId failed', err);
+                window.alert((err && err.message) || 'Liaison impossible');
+                return refreshObjectifData();
+              });
+            return;
+          }
+          GT.setCardProjectId(t, nextId)
+            .then(function () {
+              return refreshObjectifData();
+            })
+            .catch(function (err) {
+              console.error('setCardProjectId failed', err);
+              window.alert((err && err.message) || 'Liaison impossible');
+              return refreshObjectifData();
+            });
+        });
+        pickerRow.appendChild(select);
+        body.appendChild(pickerRow);
       }
-
-      activeProjects.forEach(function (p) {
-        var o = document.createElement('option');
-        o.value = p.id;
-        var mission = GT.findById(missions, p.missionId);
-        o.textContent = mission ? p.name + ' · ' + mission.name : p.name;
-        if (projectId === p.id) o.selected = true;
-        select.appendChild(o);
-      });
-
-      select.addEventListener('change', function () {
-        var nextId = select.value || null;
-        GT.setCardProjectId(t, nextId)
-          .then(function () {
-            return refreshObjectifData();
-          })
-          .catch(function (err) {
-            console.error('setCardProjectId failed', err);
-            window.alert((err && err.message) || 'Liaison impossible');
-            return refreshObjectifData();
-          });
-      });
-      pickerRow.appendChild(select);
-      body.appendChild(pickerRow);
 
       var createRow = document.createElement('div');
       createRow.className = 'objectif-create-row';
-      var createHint = document.createElement('p');
-      createHint.className = 'objectif-create-hint';
-      var activeMissions = GT.activeOnly(missions);
+
       if (!activeMissions.length) {
-        createHint.textContent =
-          'Aucune mission active. Créez Vision / Mission dans Paramètres → Objectifs.';
-        createRow.appendChild(createHint);
+        if (!activeVisions.length) {
+          var visionHint = document.createElement('p');
+          visionHint.className = 'objectif-create-hint';
+          visionHint.textContent = 'Créer une vision, puis une mission et un projet :';
+          createRow.appendChild(visionHint);
+          var visionInput = document.createElement('input');
+          visionInput.type = 'text';
+          visionInput.className = 'tp-goals-input';
+          visionInput.placeholder = 'Nom de la vision';
+          visionInput.maxLength = 120;
+          var visionBtn = document.createElement('button');
+          visionBtn.type = 'button';
+          visionBtn.className = 'tp-button tp-button--secondary';
+          visionBtn.textContent = 'Créer la vision';
+          bindCreateAction(visionBtn, visionInput, function (name) {
+            return GT.createVision(t, name);
+          });
+          createRow.appendChild(visionInput);
+          createRow.appendChild(visionBtn);
+        } else {
+          var missionHint = document.createElement('p');
+          missionHint.className = 'objectif-create-hint';
+          missionHint.textContent = 'Créer une mission :';
+          createRow.appendChild(missionHint);
+          var visionSelect = document.createElement('select');
+          visionSelect.className = 'tp-select';
+          visionSelect.setAttribute('aria-label', 'Vision parente');
+          activeVisions.forEach(function (v) {
+            var o = document.createElement('option');
+            o.value = v.id;
+            o.textContent = v.name;
+            if (hierarchy.vision && hierarchy.vision.id === v.id) o.selected = true;
+            visionSelect.appendChild(o);
+          });
+          var missionInput = document.createElement('input');
+          missionInput.type = 'text';
+          missionInput.className = 'tp-goals-input';
+          missionInput.placeholder = 'Nom de la mission';
+          missionInput.maxLength = 120;
+          var missionBtn = document.createElement('button');
+          missionBtn.type = 'button';
+          missionBtn.className = 'tp-button tp-button--secondary';
+          missionBtn.textContent = 'Créer la mission';
+          bindCreateAction(missionBtn, missionInput, function (name) {
+            var visionId = visionSelect.value;
+            if (!visionId) return Promise.reject(new Error('Vision requise'));
+            return GT.createMission(t, name, visionId);
+          });
+          createRow.appendChild(visionSelect);
+          createRow.appendChild(missionInput);
+          createRow.appendChild(missionBtn);
+        }
       } else {
-        createHint.textContent = 'Créer un projet et le lier à cette carte :';
-        createRow.appendChild(createHint);
+        var projectHint = document.createElement('p');
+        projectHint.className = 'objectif-create-hint';
+        projectHint.textContent = activeProjects.length
+          ? 'Ou créer un projet et le lier :'
+          : 'Créer un projet et le lier à cette carte :';
+        createRow.appendChild(projectHint);
         var missionSelect = document.createElement('select');
         missionSelect.className = 'tp-select';
         missionSelect.setAttribute('aria-label', 'Mission parente');
         activeMissions.forEach(function (m) {
           var o = document.createElement('option');
           o.value = m.id;
-          o.textContent = m.name;
+          var vision = GT.findById(visions, m.visionId);
+          o.textContent = vision ? m.name + ' · ' + vision.name : m.name;
           if (hierarchy.mission && hierarchy.mission.id === m.id) o.selected = true;
           missionSelect.appendChild(o);
         });
@@ -780,38 +874,67 @@
         createBtn.type = 'button';
         createBtn.className = 'tp-button tp-button--secondary';
         createBtn.textContent = 'Créer et lier';
-        createBtn.addEventListener('click', function () {
-          var raw = nameInput.value.trim();
-          if (!raw) return;
+        bindCreateAction(createBtn, nameInput, function (name) {
           var missionId = missionSelect.value;
-          if (!missionId) return;
-          createBtn.disabled = true;
-          var spell =
-            window.GoalsUI && GoalsUI.spellcheckText
-              ? GoalsUI.spellcheckText(raw)
-              : Promise.resolve(raw);
-          spell
-            .then(function (name) {
-              return GT.createProject(t, name, missionId);
-            })
-            .then(function (project) {
-              return GT.setCardProjectId(t, project.id);
-            })
-            .then(function () {
-              nameInput.value = '';
-              return refreshObjectifData();
-            })
-            .catch(function (err) {
-              console.error('create project link failed', err);
-              window.alert((err && err.message) || 'Création impossible');
-            })
-            .then(function () {
-              createBtn.disabled = false;
-            });
+          if (!missionId) return Promise.reject(new Error('Mission requise'));
+          return GT.createProject(t, name, missionId).then(function (project) {
+            return GT.setCardProjectId(t, project.id);
+          });
         });
         createRow.appendChild(missionSelect);
         createRow.appendChild(nameInput);
         createRow.appendChild(createBtn);
+
+        // Allow adding another mission from this window as well.
+        var addMissionDetails = document.createElement('details');
+        addMissionDetails.className = 'objectif-add-mission';
+        var addMissionSummary = document.createElement('summary');
+        addMissionSummary.textContent = 'Configurer une mission';
+        addMissionDetails.appendChild(addMissionSummary);
+        if (activeVisions.length) {
+          var addVisionSelect = document.createElement('select');
+          addVisionSelect.className = 'tp-select';
+          addVisionSelect.setAttribute('aria-label', 'Vision parente');
+          activeVisions.forEach(function (v) {
+            var o = document.createElement('option');
+            o.value = v.id;
+            o.textContent = v.name;
+            addVisionSelect.appendChild(o);
+          });
+          var addMissionInput = document.createElement('input');
+          addMissionInput.type = 'text';
+          addMissionInput.className = 'tp-goals-input';
+          addMissionInput.placeholder = 'Nom de la mission';
+          addMissionInput.maxLength = 120;
+          var addMissionBtn = document.createElement('button');
+          addMissionBtn.type = 'button';
+          addMissionBtn.className = 'tp-button tp-button--secondary';
+          addMissionBtn.textContent = 'Ajouter la mission';
+          bindCreateAction(addMissionBtn, addMissionInput, function (name) {
+            var visionId = addVisionSelect.value;
+            if (!visionId) return Promise.reject(new Error('Vision requise'));
+            return GT.createMission(t, name, visionId);
+          });
+          addMissionDetails.appendChild(addVisionSelect);
+          addMissionDetails.appendChild(addMissionInput);
+          addMissionDetails.appendChild(addMissionBtn);
+        } else {
+          var addVisionInput = document.createElement('input');
+          addVisionInput.type = 'text';
+          addVisionInput.className = 'tp-goals-input';
+          addVisionInput.placeholder = 'Nom de la vision';
+          addVisionInput.maxLength = 120;
+          var addVisionBtn = document.createElement('button');
+          addVisionBtn.type = 'button';
+          addVisionBtn.className = 'tp-button tp-button--secondary';
+          addVisionBtn.textContent = 'Créer la vision';
+          bindCreateAction(addVisionBtn, addVisionInput, function (name) {
+            return GT.createVision(t, name);
+          });
+          addMissionDetails.appendChild(addVisionInput);
+          addMissionDetails.appendChild(addVisionBtn);
+        }
+        createRow.appendChild(addMissionDetails);
       }
       body.appendChild(createRow);
     }
@@ -836,10 +959,6 @@
           projects: cache.projects,
           metrics: cache.metrics,
         };
-        objectifEnabled = !!projectId;
-        if (objectifCollapse) {
-          objectifCollapse.refreshSummary();
-        }
         renderObjectifBody();
         resizePopup();
         return latestGoals;
@@ -847,69 +966,28 @@
     }
 
     function mountObjectifSection(cardEl, initiallyOpen) {
-      if (!window.GoalsTrello || !PriorityUI.createCollapsibleEnableChrome) {
+      if (!window.GoalsTrello) {
         console.error('Priority popup: GoalsTrello unavailable');
         return Promise.resolve();
       }
-
-      objectifSection = document.createElement('div');
-      objectifSection.className = 'variant-objectif-section';
-
-      var field = document.createElement('div');
-      field.className = 'field field--objectif';
-
-      var chrome = PriorityUI.createCollapsibleEnableChrome({
-        title: 'Objectif',
-        bodyId: 'objectif-section-body',
-        checkboxClass: 'objectif-enable-checkbox',
-        labelClass: 'objectif-enable-label',
-        leadingIcon: 'ti-hierarchy-2',
-        iconClass: 'objectif-leading-icon',
-        titleClass: 'objectif-enable-title',
-        hideEnable: true,
-        collapseLabel: 'Replier Objectif',
-        expandLabel: 'Développer Objectif',
-      });
-      field.appendChild(chrome.head);
-
-      var body = document.createElement('div');
-      body.className = 'objectif-section-body section-toggle-body';
-      body.id = 'objectif-section-body';
-      body.hidden = true;
-      field.appendChild(body);
-      objectifSection.appendChild(field);
-
-      var prioritySection = cardEl.querySelector('.variant-priority-section');
-      if (prioritySection) {
-        cardEl.insertBefore(objectifSection, prioritySection);
-      } else {
-        var statutSectionEl = cardEl.querySelector('.variant-statut-section');
-        if (statutSectionEl && statutSectionEl.nextSibling) {
-          cardEl.insertBefore(objectifSection, statutSectionEl.nextSibling);
-        } else {
-          cardEl.appendChild(objectifSection);
-        }
+      if (!infoUi || typeof infoUi.getObjectifMount !== 'function') {
+        console.error('Priority popup: Information Objectif mount unavailable');
+        return Promise.resolve();
       }
 
-      objectifUi = { body: body, field: field, chrome: chrome };
+      var mount = infoUi.getObjectifMount();
+      if (!mount) return Promise.resolve();
+
+      if (typeof infoUi.setObjectifVisible === 'function') {
+        infoUi.setObjectifVisible(true);
+      }
+      objectifSection = mount.closest('.info-row--objectif') || mount;
+      objectifUi = { body: mount };
 
       return refreshObjectifData().then(function () {
-        var expandObjectif =
-          initiallyOpen || PriorityUI.resolveSectionExpanded('objectif', true);
-        objectifCollapse = PriorityUI.bindCollapsibleEnable({
-          field: field,
-          body: body,
-          chrome: chrome,
-          enabled: true,
-          alwaysEnabled: true,
-          expanded: expandObjectif,
-          getSummary: objectifSummaryText,
-          onLayoutChange: resizePopup,
-          onExpandChange: function (isExpanded) {
-            objectifExpanded = !!isExpanded;
-            PriorityUI.saveSectionCollapseState({ objectif: !!isExpanded });
-          },
-        });
+        if (initiallyOpen && typeof infoUi.setExpanded === 'function') {
+          infoUi.setExpanded(true);
+        }
         renderObjectifBody();
         resizePopup();
       });
@@ -1437,7 +1515,10 @@
 
       await cardNamePromise;
       if (focusObjectif && objectifSection) {
-        objectifSection.scrollIntoView({ block: 'start' });
+        if (infoUi && typeof infoUi.setExpanded === 'function') {
+          infoUi.setExpanded(true);
+        }
+        objectifSection.scrollIntoView({ block: 'nearest' });
       } else if (!focusProgress) {
         window.scrollTo(0, 0);
       }
