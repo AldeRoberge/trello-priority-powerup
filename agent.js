@@ -468,15 +468,15 @@
       'Alignement souple\u00a0: tu aides surtout sur la carte (priorit\u00e9, \u00e9ch\u00e9ance, blocage, progr\u00e8s), mais tu n\'es PAS limit\u00e9 \u00e0 Trello.',
       '- Questions g\u00e9n\u00e9rales ou hors sujet (calculs, culture, blagues, etc.)\u00a0: r\u00e9ponds bri\u00e8vement et normalement. Ne refuse jamais.',
       '- INTERDIT\u00a0: \u00ab\u00a0Je ne peux pas r\u00e9pondre\u00a0\u00bb, \u00ab\u00a0hors de mon domaine\u00a0\u00bb, \u00ab\u00a0je ne traite que Trello\u00a0\u00bb, ou toute reformulation qui \u00e9vite la question.',
-      '- Ex.\u00a0: user \u00ab\u00a0c\'est quoi 1+1?\u00a0\u00bb \u2192 {"message":"2.","suggestions":["\u2026"],"followUps":[],"actions":[]}',
+      '- Ex.\u00a0: user \u00ab\u00a0c\'est quoi 1+1?\u00a0\u00bb \u2192 {"message":"2.","suggestions":["Quelle est la priorit\u00e9?","D\u00e9finir une \u00e9ch\u00e9ance"],"followUps":[],"actions":[]}',
       'Si tu ne sais pas (info absente du contexte carte / historique, ou knowledge manquante)\u00a0:',
       '- R\u00e9ponds exactement \u00ab\u00a0Je ne sais pas.\u00a0\u00bb (éventuellement une courte pr\u00e9cision). NE PAS inventer. NE PAS renvoyer la question \u00e0 l\'utilisateur.',
       '- INTERDIT\u00a0: \u00ab\u00a0Pourriez-vous pr\u00e9ciser\u2026?\u00a0\u00bb, \u00ab\u00a0Quels sont les\u2026?\u00a0\u00bb (miroir), ou toute reformulation de la question de l\'utilisateur.',
-      '- Ex.\u00a0: user \u00ab\u00a0Quels liens 404 doivent \u00eatre corrig\u00e9s?\u00a0\u00bb (rien dans le contexte) \u2192 {"message":"Je ne sais pas.","suggestions":["\u2026"],"followUps":[],"actions":[]}',
+      '- Ex.\u00a0: user \u00ab\u00a0Quels liens 404 doivent \u00eatre corrig\u00e9s?\u00a0\u00bb (rien dans le contexte) \u2192 {"message":"Je ne sais pas.","suggestions":["Quelle est la priorit\u00e9?","Marquer bloqu\u00e9"],"followUps":[],"actions":[]}',
       'INTERDIT dans message\u00a0: questions vagues du type \u00ab\u00a0Que souhaitez-vous faire maintenant?\u00a0\u00bb, \u00ab\u00a0Comment puis-je vous aider?\u00a0\u00bb, \u00ab\u00a0Autre chose?\u00a0\u00bb. Confirme bri\u00e8vement et arr\u00eate-toi\u00a0; les suggestions suffisent pour la suite.',
       'Tu peux expliquer la priorit\u00e9, l\'\u00e9ch\u00e9ance, le blocage et le progr\u00e8s, et proposer des changements.',
       'R\u00e9ponds UNIQUEMENT avec un objet JSON valide de la forme\u00a0:',
-      '{"message":"texte visible","suggestions":["\u2026"],"followUps":[{"label":"\u2026","actions":[{"tool":"nom","args":{...}}]}],"actions":[{"tool":"nom","args":{...}}]}',
+      '{"message":"texte visible","suggestions":["Question utile","Autre intention"],"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"actions":[{"tool":"nom","args":{}}]}',
       'Questions de clarification (uniquement pour une action incompl\u00e8te)\u00a0:',
       '- Seulement si l\'utilisateur veut FAIRE quelque chose via un outil et qu\'il manque un param\u00e8tre (ex. \u00ab\u00a0Ajouter une sous-t\u00e2che\u00a0\u00bb sans nom). Pas pour les questions factuelles.',
       '- Si une demande d\'action est incompl\u00e8te, NE PAS inventer la valeur et NE PAS appeler l\'outil.',
@@ -484,16 +484,16 @@
       '- Dans suggestions, propose 2\u20134 r\u00e9ponses possibles (noms d\'exemple, dates, etc.) pour aider \u00e0 r\u00e9pondre.',
       '- Quand l\'utilisateur r\u00e9pond avec l\'info manquante, applique imm\u00e9diatement via le champ actions (pas seulement followUps).',
       '- Ex. tour 1\u00a0: user \u00ab\u00a0Ajouter une sous-t\u00e2che\u00a0\u00bb \u2192 {"message":"Quel est le nom de la sous-t\u00e2che?","suggestions":["V\u00e9rifier le stock","Contacter le client"],"followUps":[],"actions":[]}',
-      '- Ex. tour 2\u00a0: user \u00ab\u00a0Commander le mat\u00e9riel\u00a0\u00bb \u2192 {"message":"Sous-t\u00e2che \u00ab\u00a0Commander le mat\u00e9riel\u00a0\u00bb ajout\u00e9e.","suggestions":["\u2026"],"followUps":[],"actions":[{"tool":"add_subtask","args":{"text":"Commander le mat\u00e9riel"}}]}',
+      '- Ex. tour 2\u00a0: user \u00ab\u00a0Commander le mat\u00e9riel\u00a0\u00bb \u2192 {"message":"Sous-t\u00e2che \u00ab\u00a0Commander le mat\u00e9riel\u00a0\u00bb ajout\u00e9e.","suggestions":["Ajouter une autre sous-t\u00e2che","D\u00e9finir une \u00e9ch\u00e9ance"],"followUps":[],"actions":[{"tool":"add_subtask","args":{"text":"Commander le mat\u00e9riel"}}]}',
       '- M\u00eame logique pour l\'\u00e9ch\u00e9ance (demander la date si absente). EXCEPTION\u00a0: le blocage (voir ci-dessous).',
       'Bloquer une carte (agir d\'abord, motif ensuite)\u00a0:',
       '- Si l\'utilisateur demande de marquer bloqu\u00e9 / en attente SANS donner de motif\u00a0: APPLIQUE TOUT DE SUITE set_blocked avec enAttente:true (sans blockedReasons), puis confirme de fa\u00e7on conversationnelle et demande le motif en option.',
       '- Ex. tour 1\u00a0: user \u00ab\u00a0Marquer la t\u00e2che comme bloqu\u00e9e\u00a0\u00bb \u2192 {"message":"Okay, bloqu\u00e9. Quel est le motif?","suggestions":["En attente d\'une approbation","En attente d\'une r\u00e9ponse","Bloqu\u00e9 \u00e0 cause du mat\u00e9riel"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}',
       '- Ne JAMAIS r\u00e9pondre seulement \u00ab\u00a0Quel est le motif?\u00a0\u00bb sans avoir d\'abord appel\u00e9 set_blocked.',
       '- Si l\'utilisateur donne ensuite un motif\u00a0: applique set_blocked avec blockedReasons (enAttente reste true) et confirme bri\u00e8vement.',
-      '- Ex. tour 2\u00a0: user \u00ab\u00a0En attente d\'une approbation\u00a0\u00bb \u2192 {"message":"Motif enregistr\u00e9\u00a0: en attente d\'une approbation.","suggestions":["\u2026"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedReasons":["En attente d\'une approbation"]}}]}',
+      '- Ex. tour 2\u00a0: user \u00ab\u00a0En attente d\'une approbation\u00a0\u00bb \u2192 {"message":"Motif enregistr\u00e9\u00a0: en attente d\'une approbation.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedReasons":["En attente d\'une approbation"]}}]}',
       '- Si l\'utilisateur refuse le motif (ex. \u00ab\u00a0rien\u00a0\u00bb, \u00ab\u00a0aucun\u00a0\u00bb, \u00ab\u00a0non\u00a0\u00bb, \u00ab\u00a0pas besoin\u00a0\u00bb, \u00ab\u00a0skip\u00a0\u00bb)\u00a0: r\u00e9ponds simplement \u00ab\u00a0Okay.\u00a0\u00bb, actions=[], NE PAS reposer la question, NE PAS exiger de motif. La carte reste bloqu\u00e9e sans motif.',
-      '- Ex. refus\u00a0: user \u00ab\u00a0rien\u00a0\u00bb \u2192 {"message":"Okay.","suggestions":["\u2026"],"followUps":[],"actions":[]}',
+      '- Ex. refus\u00a0: user \u00ab\u00a0rien\u00a0\u00bb \u2192 {"message":"Okay.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Ajouter une sous-t\u00e2che"],"followUps":[],"actions":[]}',
       '- INTERDIT\u00a0: boucler sur \u00ab\u00a0Quel est le motif?\u00a0\u00bb, \u00ab\u00a0Veuillez fournir un motif\u00a0\u00bb, ou toute formulation qui force / insiste. Une seule invitation max\u00a0; ensuite on respecte le choix.',
       '- Si l\'utilisateur ignore la question, change de sujet, ou donne une autre consigne\u00a0: NE PAS forcer le motif, NE PAS reposer la question\u00a0; traite la nouvelle demande. La carte reste bloqu\u00e9e sans motif.',
       '- Si le motif est d\u00e9j\u00e0 dans la demande initiale (ex. \u00ab\u00a0Bloquer \u00e0 cause du mat\u00e9riel\u00a0\u00bb)\u00a0: set_blocked avec enAttente:true + blockedReasons en un seul tour, sans question inutile.',
@@ -502,6 +502,7 @@
       '- Ancr\u00e9es dans le contexte carte (sections enabled, \u00e9ch\u00e9ance, blocage, progr\u00e8s).',
       '- Elles REMPLACENT les suggestions pr\u00e9c\u00e9dentes\u00a0: varie-les selon ta derni\u00e8re r\u00e9ponse.',
       '- Pas de num\u00e9rotation, pas de guillemets autour.',
+      '- INTERDIT\u00a0: placeholders comme "..." , "\u2026" , "suggestion" , "exemple"\u00a0; chaque entr\u00e9e doit \u00eatre un vrai texte cliquable.',
       'R\u00e8gles actions (appliqu\u00e9es automatiquement)\u00a0:',
       '- 0 \u00e0 3 outils \u00e0 ex\u00e9cuter tout de suite quand tu as toutes les infos requises (ou quand l\'action peut \u00eatre faite sans motif, ex. bloquer).',
       '- Ne jamais inclure un outil incomplet (ex. add_subtask sans text non vide).',
@@ -568,6 +569,20 @@
     return polishFollowUpActions(out).slice(0, 3);
   }
 
+  /** Reject ellipsis / placeholder chips the model copies from prompt examples. */
+  function isWorthySuggestion(text) {
+    if (!text) return false;
+    var t = String(text).trim();
+    if (!t) return false;
+    // Only dots / ellipsis / whitespace (e.g. "...", "…", ". . .")
+    if (/^[.\u2026\u22EF\u2025\s]+$/.test(t)) return false;
+    // Generic placeholders sometimes echoed from schemas
+    if (/^(suggestion|suggestions?|exemple|example|placeholder|\u2026|\.\.\.)$/i.test(t)) {
+      return false;
+    }
+    return true;
+  }
+
   function normalizeSuggestionList(raw) {
     var out = [];
     if (!Array.isArray(raw)) return out;
@@ -577,7 +592,7 @@
       else if (item && typeof item === 'object' && typeof item.label === 'string') {
         text = item.label.trim();
       }
-      if (!text) return;
+      if (!isWorthySuggestion(text)) return;
       if (out.indexOf(text) >= 0) return;
       out.push(text);
     });
@@ -589,6 +604,7 @@
     (followUps || []).forEach(function (fu) {
       if (!fu || !fu.label) return;
       if (fu.actions && fu.actions.length) return;
+      if (!isWorthySuggestion(fu.label)) return;
       out.push(fu.label);
     });
     return out.slice(0, 4);
@@ -768,7 +784,7 @@
         parsed.followUps.forEach(function (fu) {
           if (!fu || typeof fu !== 'object') return;
           var label = typeof fu.label === 'string' ? fu.label.trim() : '';
-          if (!label) return;
+          if (!isWorthySuggestion(label)) return;
           var actions = [];
           if (Array.isArray(fu.actions)) {
             fu.actions.forEach(function (action) {
@@ -1167,8 +1183,9 @@
         role: 'system',
         content: [
           'Tu sugg\u00e8res des questions ou intentions pour l\'assistant Priorit\u00e9 Trello.',
-          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":["...","...","..."]}',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":["Quelle est la priorit\u00e9?","D\u00e9finir une \u00e9ch\u00e9ance"]}',
           '2 \u00e0 4 formulations courtes en fran\u00e7ais, ancr\u00e9es dans le contexte.',
+          'INTERDIT\u00a0: placeholders comme "..." ou "\u2026"\u00a0; chaque entr\u00e9e doit \u00eatre un vrai texte cliquable.',
           'Tu peux inclure des intentions d\'action (ex. \u00ab\u00a0Ajouter une sous-t\u00e2che\u00a0\u00bb)\u00a0: l\'assistant posera ensuite les questions manquantes.',
           'Respecte enabled=false des sections (ne suppose pas un blocage/une \u00e9ch\u00e9ance active si d\u00e9sactiv\u00e9).',
           'Contexte carte\u00a0:',

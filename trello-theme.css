@@ -1369,6 +1369,18 @@ body.tp-page--priority {
   font-weight: 500;
 }
 
+.tp-page--priority .due-date-month-pick,
+.tp-page--priority .due-date-year-pick {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.tp-page--priority .due-date-month-option,
+.tp-page--priority .due-date-year-option {
+  font-size: 13px;
+  font-weight: 500;
+}
+
 .tp-page--priority .due-date-day {
   font-size: 14px;
   font-weight: 500;

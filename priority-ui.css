@@ -1483,13 +1483,59 @@ html[data-color-mode="dark"] .due-date-time-clock {
 }
 
 .due-date-month-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 2px 4px;
   text-align: center;
   font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
   letter-spacing: -0.015em;
   line-height: 1.3;
+  min-width: 0;
+}
+
+.due-date-month-pick,
+.due-date-year-pick {
+  appearance: none;
+  margin: 0;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
   text-transform: capitalize;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.due-date-month-pick:hover,
+.due-date-year-pick:hover {
+  background: var(--surface-hover);
+}
+
+.due-date-month-pick:focus-visible,
+.due-date-year-pick:focus-visible {
+  outline: 2px solid var(--due-accent);
+  outline-offset: 1px;
+}
+
+.due-date-month-pick.is-active,
+.due-date-year-pick.is-active {
+  color: var(--due-accent);
+  background: var(--due-accent-soft);
+}
+
+.due-date-month-pick[hidden],
+.due-date-year-pick[hidden] {
+  display: none;
 }
 
 .due-date-nav-btn {
@@ -1529,6 +1575,10 @@ html[data-color-mode="dark"] .due-date-time-clock {
   margin-bottom: 2px;
 }
 
+.due-date-weekdays[hidden] {
+  display: none;
+}
+
 .due-date-weekday {
   display: flex;
   align-items: center;
@@ -1545,6 +1595,71 @@ html[data-color-mode="dark"] .due-date-time-clock {
   display: flex;
   flex-direction: column;
   gap: 1px;
+}
+
+.due-date-grid--months,
+.due-date-grid--years {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  min-height: 168px;
+  align-content: stretch;
+}
+
+.due-date-month-option,
+.due-date-year-option {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  margin: 0;
+  padding: 6px 4px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  text-transform: capitalize;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.due-date-month-option:hover,
+.due-date-year-option:hover {
+  background: var(--surface-hover);
+}
+
+.due-date-month-option:focus-visible,
+.due-date-year-option:focus-visible {
+  outline: 2px solid var(--due-accent);
+  outline-offset: 1px;
+}
+
+.due-date-month-option.is-today,
+.due-date-year-option.is-today {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--due-accent) 45%, transparent);
+}
+
+.due-date-month-option.is-current:not(.is-selected),
+.due-date-year-option.is-current:not(.is-selected) {
+  color: var(--due-accent);
+}
+
+.due-date-month-option.is-selected,
+.due-date-year-option.is-selected {
+  background: var(--due-accent);
+  color: var(--due-accent-text, #ffffff);
+  box-shadow: none;
+}
+
+.due-date-month-option.is-selected:hover,
+.due-date-year-option.is-selected:hover {
+  background: color-mix(in srgb, var(--due-accent) 88%, #000);
 }
 
 .due-date-cell {

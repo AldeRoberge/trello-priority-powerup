@@ -6425,9 +6425,11 @@
           'aria-label',
           DUE_DATE_MONTH_NAMES[m].charAt(0).toUpperCase() + DUE_DATE_MONTH_NAMES[m].slice(1) + ' ' + viewYear
         );
-        monthBtn.setAttribute('aria-selected', m === selectedMonth || m === viewMonth ? 'true' : 'false');
+        var monthSelected = m === viewMonth;
+        monthBtn.setAttribute('aria-selected', monthSelected ? 'true' : 'false');
         if (m === thisMonth) monthBtn.classList.add('is-today');
-        if (m === selectedMonth || m === viewMonth) monthBtn.classList.add('is-selected');
+        if (m === selectedMonth) monthBtn.classList.add('is-current');
+        if (monthSelected) monthBtn.classList.add('is-selected');
         monthBtn.addEventListener('click', function (ev) {
           ev.preventDefault();
           selectMonth(+ev.currentTarget.dataset.month);
@@ -6458,9 +6460,11 @@
         yearBtn.textContent = String(year);
         yearBtn.setAttribute('role', 'option');
         yearBtn.setAttribute('aria-label', String(year));
-        yearBtn.setAttribute('aria-selected', year === selectedYear || year === viewYear ? 'true' : 'false');
+        var yearSelected = year === viewYear;
+        yearBtn.setAttribute('aria-selected', yearSelected ? 'true' : 'false');
         if (year === nowYear) yearBtn.classList.add('is-today');
-        if (year === selectedYear || year === viewYear) yearBtn.classList.add('is-selected');
+        if (year === selectedYear) yearBtn.classList.add('is-current');
+        if (yearSelected) yearBtn.classList.add('is-selected');
         yearBtn.addEventListener('click', function (ev) {
           ev.preventDefault();
           selectYear(+ev.currentTarget.dataset.year);
@@ -6616,6 +6620,7 @@
       var wasOpen = open && timeOpen;
       open = true;
       timeOpen = true;
+      calendarMode = 'day';
       if (current) syncViewFromValue(current);
       else {
         syncViewFromValue('');
