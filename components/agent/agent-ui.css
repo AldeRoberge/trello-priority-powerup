@@ -362,7 +362,10 @@
 
 .tp-page--priority .agent-msg--assistant {
   align-self: flex-start;
-  align-items: flex-start;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
 }
 
 .tp-page--priority .agent-msg-bubble {
@@ -387,13 +390,17 @@
   border-bottom-left-radius: 2px;
 }
 
+.tp-page--priority .agent-msg--assistant > .agent-msg-note {
+  flex: 1 0 100%;
+}
+
 .tp-page--priority .agent-msg-bubble--pending {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
-  min-width: 140px;
-  padding-top: 9px;
-  padding-bottom: 9px;
+  min-width: 96px;
+  padding-top: 7px;
+  padding-bottom: 7px;
 }
 
 .tp-page--priority .agent-msg-spinner {
@@ -403,7 +410,6 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  margin-top: 1px;
   color: var(--tp-text-muted);
 }
 
@@ -423,16 +429,15 @@
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  padding-top: 2px;
 }
 
 .tp-page--priority .agent-msg-skeleton-line {
   display: block;
   width: 100%;
-  height: 8px;
-  border-radius: 4px;
+  height: 6px;
+  border-radius: 3px;
   background: linear-gradient(
     90deg,
     color-mix(in srgb, var(--tp-border, rgba(9, 30, 66, 0.14)) 70%, transparent) 0%,
@@ -443,14 +448,9 @@
   animation: agent-msg-skeleton-shimmer 1.2s ease-in-out infinite;
 }
 
-.tp-page--priority .agent-msg-skeleton-line--mid {
-  width: 78%;
-  animation-delay: 0.12s;
-}
-
 .tp-page--priority .agent-msg-skeleton-line--short {
-  width: 52%;
-  animation-delay: 0.24s;
+  width: 58%;
+  animation-delay: 0.12s;
 }
 
 @keyframes agent-msg-skeleton-shimmer {
@@ -510,34 +510,36 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  margin-top: 4px;
+  flex: 0 0 auto;
+  align-self: flex-end;
+  margin: 0 0 2px;
 }
 
 .tp-page--priority .agent-tool-verify-btn {
   margin: 0;
   padding: 0;
-  width: 18px;
-  height: 18px;
-  border: 1.5px solid currentColor;
+  width: 13px;
+  height: 13px;
+  border: 1px solid currentColor;
   border-radius: 50%;
   background: transparent;
   color: var(--tp-text-muted);
   font: inherit;
-  font-size: 11px;
+  font-size: 8px;
   font-weight: 600;
   font-style: italic;
   line-height: 1;
   cursor: pointer;
-  opacity: 0.72;
+  opacity: 0.38;
   transition: opacity 0.12s, background 0.12s, color 0.12s;
 }
 
 .tp-page--priority .agent-tool-verify-btn:hover,
 .tp-page--priority .agent-tool-verify-btn:focus-visible,
 .tp-page--priority .agent-tool-verify.is-open .agent-tool-verify-btn {
-  opacity: 1;
-  background: color-mix(in srgb, currentColor 12%, transparent);
-  color: var(--tp-text);
+  opacity: 0.75;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  color: var(--tp-text-muted);
 }
 
 .tp-page--priority .agent-tool-verify-btn:focus-visible {

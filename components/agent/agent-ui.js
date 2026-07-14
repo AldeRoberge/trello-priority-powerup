@@ -1072,9 +1072,6 @@
       skeleton.setAttribute('aria-hidden', 'true');
       skeleton.appendChild(el('span', 'agent-msg-skeleton-line'));
       skeleton.appendChild(
-        el('span', 'agent-msg-skeleton-line agent-msg-skeleton-line--mid')
-      );
-      skeleton.appendChild(
         el('span', 'agent-msg-skeleton-line agent-msg-skeleton-line--short')
       );
       bubble.appendChild(spinner);
@@ -1562,6 +1559,13 @@
       );
     }
 
+    /** Holes needing user fill-in: …, ..., or [label] */
+    var SUGGESTION_HOLE_RE = /(\u2026|\.{3,}|\[([^\]]*)\])/;
+
+    function suggestionNeedsVariableInput(text) {
+      return SUGGESTION_HOLE_RE.test(String(text || ''));
+    }
+
     function insertComposerSuggestion(text) {
       if (pending) return;
       input.value = String(text || '');
@@ -1570,14 +1574,33 @@
       } catch (e) {
         input.focus();
       }
+      // Place caret at the first hole so the user can fill the variable.
+      var raw = input.value;
+      var holeMatch = SUGGESTION_HOLE_RE.exec(raw);
       try {
-        var len = input.value.length;
-        input.setSelectionRange(len, len);
+        if (holeMatch) {
+          input.setSelectionRange(holeMatch.index, holeMatch.index + holeMatch[0].length);
+        } else {
+          var len = raw.length;
+          input.setSelectionRange(len, len);
+        }
       } catch (e2) {
         /* ignore */
       }
       if (tabComplete) tabComplete.refresh();
       notifyLayout();
+    }
+
+    function onSuggestionChip(text) {
+      if (pending) return;
+      var label = String(text || '').trim();
+      if (!label) return;
+      if (suggestionNeedsVariableInput(label)) {
+        insertComposerSuggestion(label);
+        return;
+      }
+      clearSuggestions();
+      sendUserMessage(label, { skipSpellcheck: true });
     }
 
     function renderSuggestions(list, options) {
@@ -1606,8 +1629,7 @@
           chip.style.animationDelay = index * 40 + 'ms';
         }
         chip.addEventListener('click', function () {
-          if (pending) return;
-          insertComposerSuggestion(text);
+          onSuggestionChip(text);
         });
         suggestionsEl.appendChild(chip);
       });

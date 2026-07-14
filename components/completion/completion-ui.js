@@ -755,7 +755,7 @@
         } else {
           data.progress = v;
         }
-        updateProgressUi({ skipMasterSync: true });
+        updateProgressUi({ skipMasterSync: true, deferDoneListReveal: true });
         onChange(CT.normalizeCompletionData(data));
       },
       'completionMasterSlider'
@@ -1002,6 +1002,18 @@
     function emitChange(opts) {
       opts = opts || {};
       data = CT.normalizeCompletionData(data);
+      // Turn on show-done before paint when crossing into 100%, so the list
+      // never flashes empty (syncAllCompleteSideEffects will see it already on).
+      if (
+        data.items.length &&
+        !showCompleted &&
+        lastAllComplete === false &&
+        isAllCompleteProgress(CT.computeCardProgress(data))
+      ) {
+        showCompleted = true;
+        saveShowDonePreference(true);
+        showDoneCheckbox.checked = true;
+      }
       if (opts.animateItemId) {
         renderListWithFlip(opts.animateItemId, opts.flipWasDone);
       } else {
@@ -1178,10 +1190,11 @@
         Number(masterSlider.input.value) >= 100
       );
       masterDragging = false;
-      syncAllCompleteSideEffects(progress);
+      syncAllCompleteSideEffects(progress, opts);
     }
 
-    function syncAllCompleteSideEffects(progress) {
+    function syncAllCompleteSideEffects(progress, opts) {
+      opts = opts || {};
       var allComplete = isAllCompleteProgress(progress);
       if (progressShellEl) {
         progressShellEl.classList.toggle('is-progress-complete', allComplete);
@@ -1191,6 +1204,17 @@
       var edgeIntoComplete = lastAllComplete === false && allComplete;
       if (edgeIntoComplete) {
         playAllCompleteCelebration(celebrateRootEl || document.body);
+        // Reveal completed subtasks so the list is not empty at 100%.
+        if (data.items.length && !showCompleted) {
+          showCompleted = true;
+          saveShowDonePreference(true);
+          showDoneCheckbox.checked = true;
+          // Sliders defer rebuild until change/emitChange (avoid tearing mid-drag).
+          if (!opts.deferDoneListReveal) {
+            renderList();
+            onResize();
+          }
+        }
       } else if (!allComplete) {
         clearAllCompleteCelebration(celebrateRootEl || document.body);
       }
@@ -1330,7 +1354,7 @@
         setItemProgress(item, v);
         itemValEl.textContent = v + '\u00a0%';
         syncItemProgressUi();
-        updateProgressUi();
+        updateProgressUi({ deferDoneListReveal: true });
         onChange(CT.normalizeCompletionData(data));
       }
 

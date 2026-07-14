@@ -548,7 +548,14 @@
         }
         chip.addEventListener('click', function () {
           if (pending) return;
-          applySuggestion(label);
+          var hasHole = parseTemplate(label).some(function (s) {
+            return s.type === 'hole';
+          });
+          if (hasHole) {
+            applySuggestion(label);
+            return;
+          }
+          sendUser(plainSuggestion(label) || label);
         });
         suggestionsEl.appendChild(chip);
       });
