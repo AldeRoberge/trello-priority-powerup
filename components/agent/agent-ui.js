@@ -1225,72 +1225,104 @@
       return audioCtx;
     }
 
-    /** Sharp two-tone cue for ordinary assistant chat replies. */
-    function playNewMessageSound() {
+    function playToneChord(tones, options) {
+      options = options || {};
       try {
         var ctx = ensureAudioCtx();
         if (!ctx) return;
         var t0 = ctx.currentTime;
-        var tones = [
-          { freq: 587.33, delay: 0, dur: 0.28 },
-          { freq: 880, delay: 0.09, dur: 0.34 }
-        ];
+        var dest = ctx.destination;
+        if (options.lowpass) {
+          var filter = ctx.createBiquadFilter();
+          filter.type = 'lowpass';
+          filter.frequency.setValueAtTime(options.lowpass, t0);
+          filter.Q.setValueAtTime(options.q != null ? options.q : 0.7, t0);
+          filter.connect(ctx.destination);
+          dest = filter;
+        }
         tones.forEach(function (tone) {
           var osc = ctx.createOscillator();
           var gain = ctx.createGain();
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(tone.freq, t0 + tone.delay);
-          gain.gain.setValueAtTime(0.0001, t0 + tone.delay);
-          gain.gain.exponentialRampToValueAtTime(0.055, t0 + tone.delay + 0.02);
-          gain.gain.exponentialRampToValueAtTime(0.0001, t0 + tone.delay + tone.dur);
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start(t0 + tone.delay);
-          osc.stop(t0 + tone.delay + tone.dur + 0.02);
-        });
-      } catch (e) {
-        /* ignore audio failures */
-      }
-    }
-
-    /** Soft filtered pad for proactive AI suggestion offers. */
-    function playSuggestionSound() {
-      try {
-        var ctx = ensureAudioCtx();
-        if (!ctx) return;
-        var t0 = ctx.currentTime;
-        var filter = ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(920, t0);
-        filter.Q.setValueAtTime(0.7, t0);
-        filter.connect(ctx.destination);
-        var tones = [
-          { freq: 246.94, delay: 0, dur: 1.05, peak: 0.018 },
-          { freq: 369.99, delay: 0.12, dur: 1.15, peak: 0.014 },
-          { freq: 493.88, delay: 0.28, dur: 1.25, peak: 0.01 }
-        ];
-        tones.forEach(function (tone) {
-          var osc = ctx.createOscillator();
-          var gain = ctx.createGain();
-          osc.type = 'triangle';
+          osc.type = tone.type || 'sine';
           osc.frequency.setValueAtTime(tone.freq, t0 + tone.delay);
           gain.gain.setValueAtTime(0.0001, t0 + tone.delay);
           gain.gain.exponentialRampToValueAtTime(
-            tone.peak,
-            t0 + tone.delay + 0.18
+            tone.peak != null ? tone.peak : 0.05,
+            t0 + tone.delay + (tone.attack != null ? tone.attack : 0.02)
           );
           gain.gain.exponentialRampToValueAtTime(
             0.0001,
             t0 + tone.delay + tone.dur
           );
           osc.connect(gain);
-          gain.connect(filter);
+          gain.connect(dest);
           osc.start(t0 + tone.delay);
           osc.stop(t0 + tone.delay + tone.dur + 0.05);
         });
       } catch (e) {
         /* ignore audio failures */
       }
+    }
+
+    /** Bright major two-tone — success / happy. */
+    function playHappySound() {
+      playToneChord([
+        { freq: 587.33, delay: 0, dur: 0.28, peak: 0.055 },
+        { freq: 880, delay: 0.09, dur: 0.34, peak: 0.055 }
+      ]);
+    }
+
+    /** Soft minor triad — sad / apologetic. */
+    function playSadSound() {
+      playToneChord(
+        [
+          { freq: 392.0, delay: 0, dur: 0.55, peak: 0.032, type: 'triangle', attack: 0.06 },
+          { freq: 466.16, delay: 0.08, dur: 0.6, peak: 0.024, type: 'triangle', attack: 0.08 },
+          { freq: 587.33, delay: 0.18, dur: 0.7, peak: 0.018, type: 'sine', attack: 0.1 }
+        ],
+        { lowpass: 1100 }
+      );
+    }
+
+    /** Quick rising spark — surprised / unexpected. */
+    function playSurprisedSound() {
+      playToneChord([
+        { freq: 523.25, delay: 0, dur: 0.14, peak: 0.04, attack: 0.01 },
+        { freq: 784.0, delay: 0.07, dur: 0.18, peak: 0.038, attack: 0.01 },
+        { freq: 1046.5, delay: 0.14, dur: 0.28, peak: 0.03, attack: 0.015 }
+      ]);
+    }
+
+    /** Soft filtered pad — curious / suggestion. */
+    function playCuriousSound() {
+      playToneChord(
+        [
+          { freq: 246.94, delay: 0, dur: 1.05, peak: 0.018, type: 'triangle', attack: 0.18 },
+          { freq: 369.99, delay: 0.12, dur: 1.15, peak: 0.014, type: 'triangle', attack: 0.18 },
+          { freq: 493.88, delay: 0.28, dur: 1.25, peak: 0.01, type: 'triangle', attack: 0.2 }
+        ],
+        { lowpass: 920 }
+      );
+    }
+
+    /** Gentle mid chime — neutral. */
+    function playNeutralSound() {
+      playToneChord([
+        { freq: 523.25, delay: 0, dur: 0.32, peak: 0.036, type: 'sine', attack: 0.04 },
+        { freq: 659.25, delay: 0.1, dur: 0.36, peak: 0.028, type: 'sine', attack: 0.05 }
+      ]);
+    }
+
+    function playEmotionSound(emotion) {
+      if (emotion === 'sad') playSadSound();
+      else if (emotion === 'surprised') playSurprisedSound();
+      else if (emotion === 'curious' || emotion === 'thinking') playCuriousSound();
+      else if (emotion === 'neutral') playNeutralSound();
+      else playHappySound();
+    }
+
+    function playSuggestionSound() {
+      playCuriousSound();
     }
 
     function isAssistantExpanded() {
@@ -1302,13 +1334,155 @@
       if (!settleReady) return;
       if (options.sound !== false) {
         if (options.soundKind === 'suggestion') playSuggestionSound();
-        else playNewMessageSound();
+        else playEmotionSound(options.emotion || 'happy');
       }
       if (options.unread === false) return;
       if (!isAssistantExpanded()) {
         unreadAssistant += 1;
         syncApplySummary();
       }
+    }
+
+    function lastUserMessageText() {
+      for (var i = history.length - 1; i >= 0; i--) {
+        if (history[i] && history[i].role === 'user') {
+          return String(history[i].content || '');
+        }
+      }
+      return '';
+    }
+
+    function isMeanUserText(text) {
+      var t = String(text || '').toLowerCase();
+      if (!t) return false;
+      return /\b(idiot|stupide|nuls?|merde|connards?|connasses?|cons?\b|abruti|d[eé]bile|inutile|ferme[- ]?la|tais[- ]?toi|shut\s?up|fuck|hate|d[eé]teste|nique|fdp|nul\s+à\s+chier)\b/i.test(
+        t
+      );
+    }
+
+    function inferAssistantEmotion(text, meta, context) {
+      meta = meta || {};
+      context = context || {};
+      if (meta.emotion) return meta.emotion;
+      if (context.thinking) return 'thinking';
+      if (meta.error) return 'sad';
+      if (meta.offer) return 'curious';
+      if (meta.ok === false) return 'sad';
+      if (meta.surprised) return 'surprised';
+
+      var userText =
+        context.userText != null ? context.userText : lastUserMessageText();
+      if (isMeanUserText(userText)) return 'sad';
+
+      var t = String(text || '');
+      var lower = t.toLowerCase();
+
+      if (
+        /\b(erreur|échou|echou|impossible|d[eé]sol[eé]|navr[eé]|n['']ai pas pu|n['']ai pas r[eé]ussi|échec|fail)\b/i.test(
+          lower
+        )
+      ) {
+        return 'sad';
+      }
+      if (
+        meta.ok === true ||
+        /\b(c['']est fait|appliqu[eé]|parfait|tr[eè]s bien|voil[aà]|mis à jour|mis a jour|bravo|super|nickel|impeccable)\b/i.test(
+          lower
+        )
+      ) {
+        return 'happy';
+      }
+      if (
+        /\b(oh+|tiens|inattendu|surprise|étrange|etrange|intéressant|interessant|wow|hein\b)\b/i.test(
+          lower
+        ) ||
+        meta.emptyClaim
+      ) {
+        return 'surprised';
+      }
+      if (/\?/.test(t) && t.length < 160) return 'curious';
+      if (meta.recap) return meta.ok === false ? 'sad' : 'happy';
+      return 'neutral';
+    }
+
+    var faceGradientSeq = 0;
+
+    function createAssistantFace(emotion) {
+      var mood = emotion || 'neutral';
+      var face = el('span', 'agent-face agent-face--' + mood);
+      face.setAttribute('aria-hidden', 'true');
+      face.setAttribute('data-emotion', mood);
+      var gradId = 'agentFaceSkin' + ++faceGradientSeq;
+      face.innerHTML =
+        '<svg class="agent-face-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40" focusable="false">' +
+        '<defs>' +
+        '<radialGradient id="' +
+        gradId +
+        '" cx="35%" cy="30%" r="70%">' +
+        '<stop offset="0%" stop-color="#ffe0c2"/>' +
+        '<stop offset="55%" stop-color="#f5b58a"/>' +
+        '<stop offset="100%" stop-color="#e8956a"/>' +
+        '</radialGradient>' +
+        '</defs>' +
+        '<circle class="agent-face-bg" cx="20" cy="20" r="19.2" fill="url(#' +
+        gradId +
+        ')"/>' +
+        '<circle class="agent-face-ring" cx="20" cy="20" r="19.2" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="1.4"/>' +
+        '<g class="agent-face-features">' +
+        '<g class="agent-face-brows">' +
+        '<path class="agent-face-brow agent-face-brow--l" d="M11.5 14.2c1.4-.9 3.2-.9 4.6 0" fill="none" stroke="#6b3f2a" stroke-width="1.35" stroke-linecap="round"/>' +
+        '<path class="agent-face-brow agent-face-brow--r" d="M23.9 14.2c1.4-.9 3.2-.9 4.6 0" fill="none" stroke="#6b3f2a" stroke-width="1.35" stroke-linecap="round"/>' +
+        '</g>' +
+        '<g class="agent-face-eyes">' +
+        '<ellipse class="agent-face-eye agent-face-eye--l" cx="14.2" cy="17.6" rx="2.35" ry="2.7" fill="#2a211c"/>' +
+        '<ellipse class="agent-face-eye agent-face-eye--r" cx="25.8" cy="17.6" rx="2.35" ry="2.7" fill="#2a211c"/>' +
+        '<circle class="agent-face-shine agent-face-shine--l" cx="15" cy="16.7" r="0.7" fill="#fff"/>' +
+        '<circle class="agent-face-shine agent-face-shine--r" cx="26.6" cy="16.7" r="0.7" fill="#fff"/>' +
+        '</g>' +
+        '<g class="agent-face-cheeks">' +
+        '<ellipse class="agent-face-cheek agent-face-cheek--l" cx="11.2" cy="22.4" rx="2.4" ry="1.4" fill="#f07a7a" opacity="0.35"/>' +
+        '<ellipse class="agent-face-cheek agent-face-cheek--r" cx="28.8" cy="22.4" rx="2.4" ry="1.4" fill="#f07a7a" opacity="0.35"/>' +
+        '</g>' +
+        '<g class="agent-face-mouths">' +
+        '<path class="agent-face-mouth agent-face-mouth--neutral" d="M15.6 25.2c1.4.9 3.2 1.3 4.4 1.3s3-.4 4.4-1.3" fill="none" stroke="#6b3f2a" stroke-width="1.5" stroke-linecap="round"/>' +
+        '<path class="agent-face-mouth agent-face-mouth--happy" d="M14.4 24.4c1.8 2.4 4.2 3.5 5.6 3.5s3.8-1.1 5.6-3.5" fill="none" stroke="#6b3f2a" stroke-width="1.55" stroke-linecap="round"/>' +
+        '<path class="agent-face-mouth agent-face-mouth--sad" d="M15.4 26.8c1.5-1.2 3.3-1.7 4.6-1.7s3.1.5 4.6 1.7" fill="none" stroke="#6b3f2a" stroke-width="1.5" stroke-linecap="round"/>' +
+        '<ellipse class="agent-face-mouth agent-face-mouth--surprised" cx="20" cy="25.6" rx="2.1" ry="2.5" fill="#6b3f2a"/>' +
+        '<path class="agent-face-mouth agent-face-mouth--curious" d="M16.2 25c1.2 1.35 2.8 2 3.8 2s2.6-.65 3.8-2" fill="none" stroke="#6b3f2a" stroke-width="1.5" stroke-linecap="round"/>' +
+        '<path class="agent-face-mouth agent-face-mouth--thinking" d="M17.5 25.4c1.1.35 2.4.5 3.4.35" fill="none" stroke="#6b3f2a" stroke-width="1.5" stroke-linecap="round"/>' +
+        '</g>' +
+        '</g>' +
+        '</svg>';
+      return face;
+    }
+
+    function setAssistantFaceEmotion(row, emotion) {
+      if (!row) return;
+      var mood = emotion || 'neutral';
+      var face = row.querySelector('.agent-face');
+      if (!face) {
+        face = createAssistantFace(mood);
+        row.insertBefore(face, row.firstChild);
+      }
+      face.className = 'agent-face agent-face--' + mood;
+      face.setAttribute('data-emotion', mood);
+      face.classList.remove('is-frozen');
+      row.setAttribute('data-emotion', mood);
+    }
+
+    function freezeOlderAssistantFaces(currentRow) {
+      Array.prototype.forEach.call(
+        messagesEl.querySelectorAll('.agent-msg--assistant .agent-face'),
+        function (face) {
+          if (currentRow && currentRow.contains(face)) return;
+          face.classList.add('is-frozen');
+        }
+      );
+    }
+
+    function attachAssistantFace(row, emotion) {
+      setAssistantFaceEmotion(row, emotion);
+      freezeOlderAssistantFaces(row);
     }
 
     function muteListening(ms) {
@@ -1408,6 +1582,7 @@
       actions.appendChild(noBtn);
       bubble.appendChild(actions);
       row.appendChild(bubble);
+      attachAssistantFace(row, 'curious');
       messagesEl.appendChild(row);
       messagesEl.scrollTop = messagesEl.scrollHeight;
 
@@ -1423,7 +1598,11 @@
         onOfferDecline(item, row);
       });
 
-      announceAssistantArrival({ sound: true, soundKind: 'suggestion' });
+      announceAssistantArrival({
+        sound: true,
+        soundKind: 'suggestion',
+        emotion: 'curious'
+      });
       notifyLayout();
       return row;
     }
@@ -1617,16 +1796,20 @@
       if (meta && meta.note) {
         row.appendChild(el('div', 'agent-msg-note', { text: meta.note }));
       }
+      var emotion = null;
+      if (role === 'assistant') {
+        emotion = inferAssistantEmotion(text, meta, {
+          userText: lastUserMessageText()
+        });
+        attachAssistantFace(row, emotion);
+      }
       messagesEl.appendChild(row);
       messagesEl.scrollTop = messagesEl.scrollHeight;
-      if (
-        role === 'assistant' &&
-        !(meta && meta.error) &&
-        !(meta && meta.silent)
-      ) {
+      if (role === 'assistant' && !(meta && meta.silent)) {
         announceAssistantArrival({
           sound: !(meta && meta.noSound),
-          unread: !(meta && meta.noUnread)
+          unread: !(meta && meta.noUnread),
+          emotion: emotion || (meta && meta.error ? 'sad' : 'happy')
         });
       }
       notifyLayout();
@@ -1653,10 +1836,20 @@
       bubble.appendChild(spinner);
       bubble.appendChild(skeleton);
       row.appendChild(bubble);
+      attachAssistantFace(row, 'thinking');
       messagesEl.appendChild(row);
       messagesEl.scrollTop = messagesEl.scrollHeight;
       notifyLayout();
       return row;
+    }
+
+    function finalizeAssistantRow(row, text, meta) {
+      var emotion = inferAssistantEmotion(text, meta, {
+        userText: lastUserMessageText()
+      });
+      setAssistantFaceEmotion(row, emotion);
+      freezeOlderAssistantFaces(row);
+      return emotion;
     }
 
     function revealPendingBubble(bubble, text) {
@@ -1781,9 +1974,16 @@
       }
       if (host) {
         host.appendChild(wrap);
+        if (options.emptyClaim) setAssistantFaceEmotion(host, 'surprised');
+        else if (hasFailures) setAssistantFaceEmotion(host, 'sad');
+        else setAssistantFaceEmotion(host, 'happy');
       } else {
         var row = el('div', 'agent-msg agent-msg--assistant agent-msg--recap');
         row.appendChild(wrap);
+        attachAssistantFace(
+          row,
+          options.emptyClaim ? 'surprised' : hasFailures ? 'sad' : 'happy'
+        );
         messagesEl.appendChild(row);
       }
       messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -2621,7 +2821,12 @@
           await finishInterview({ announce: false });
         }
         markSettleReady();
-        announceAssistantArrival();
+        var openingEmotion = finalizeAssistantRow(thinking, opening, {});
+        if (typeof applied !== 'undefined') {
+          openingEmotion = applied.ok ? 'happy' : 'sad';
+          setAssistantFaceEmotion(thinking, openingEmotion);
+        }
+        announceAssistantArrival({ emotion: openingEmotion });
       } catch (err) {
         console.error('AgentUI bootstrapCardInterview failed', err);
         thinking.classList.remove('is-pending', 'is-streaming');
@@ -2931,7 +3136,8 @@
           content: turn.message,
           rawJson: turn.rawJson
         });
-        announceAssistantArrival();
+        var replyEmotion = finalizeAssistantRow(thinking, turn.message, {});
+        announceAssistantArrival({ emotion: replyEmotion });
         if (collapse && collapse.refreshSummary) {
           collapse.refreshSummary();
         }
@@ -2944,6 +3150,7 @@
             droppedActions: turn.droppedActions,
             ok: applied.ok
           });
+          setAssistantFaceEmotion(thinking, applied.ok ? 'happy' : 'sad');
           if (interviewActive) interviewPriorityTrusted = true;
           muteListening();
           // Defer until after pending clears in finally.
@@ -2957,6 +3164,9 @@
           var hasDropped =
             turn.droppedActions && turn.droppedActions.length;
           if (emptyClaim || hasDropped) {
+            if (emptyClaim && !hasDropped) {
+              setAssistantFaceEmotion(thinking, 'surprised');
+            }
             appendChangeRecap(
               { results: [] },
               {

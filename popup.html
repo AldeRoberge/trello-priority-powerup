@@ -6,7 +6,7 @@
   <title>Définir la priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=section-glow-2" />
+  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=section-glow-3" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css?v=section-glow-2" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-offer-2" />
@@ -1446,6 +1446,7 @@
         experimentalFlags = UserProfile.normalizeExperimental(experimentalFlags);
       } else {
         experimentalFlags = experimentalFlags || {
+          objectif: false,
           impactGlobe: false,
           easeHourglass: false
         };
@@ -1507,14 +1508,22 @@
         return profileFeatures[key] !== false;
       };
 
+      var experimentalOn = function (key) {
+        if (
+          window.UserProfile &&
+          typeof UserProfile.isExperimentalEnabled === 'function'
+        ) {
+          return UserProfile.isExperimentalEnabled(cachedProfile, key);
+        }
+        return !!(experimentalFlags && experimentalFlags[key] === true);
+      };
+
       if (featureOn('statut')) {
         await mountStatutSection(variant.card);
         attachBlockedIntoStatut();
       }
-      if (featureOn('objectif') || focusObjectif) {
+      if (experimentalOn('objectif') || focusObjectif) {
         await mountObjectifSection(variant.card, focusObjectif);
-      } else if (window.GoalsTrello) {
-        await refreshObjectifData();
       }
       if (featureOn('progress') || focusProgress) {
         var openAssistantChat =

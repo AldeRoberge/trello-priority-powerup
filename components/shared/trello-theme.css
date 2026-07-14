@@ -1765,7 +1765,23 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
 }
 
-/* Stronger wash when all tasks are complete (still the radial glow). */
+/* Keep progress glow while enabled (is-enabled's background shorthand would clear it). */
+.tp-page--priority .field--progress.has-section-glow.is-enabled {
+  background-color: color-mix(
+    in srgb,
+    var(--surface-1, var(--tp-surface-subtle)) 72%,
+    var(--surface-2, var(--tp-surface))
+  );
+  background-image: radial-gradient(
+    ellipse 140% 95% at 50% -5%,
+    color-mix(in srgb, var(--section-glow, transparent) 46%, transparent) 0%,
+    color-mix(in srgb, var(--section-glow, transparent) 18%, transparent) 42%,
+    transparent 72%
+  );
+  background-repeat: no-repeat;
+}
+
+/* Stronger wash when all tasks are complete. */
 .tp-page--priority .variant-progress-section.is-progress-complete > .field--progress.has-section-glow {
   background-image: radial-gradient(
     ellipse 140% 95% at 50% -5%,

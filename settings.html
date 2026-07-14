@@ -24,11 +24,11 @@
   <link rel="stylesheet" href="./components/shared/trello-theme.css" />
 </head>
 <body class="tp-page tp-page--settings">
-  <details class="tp-settings-section" id="goalsSettingsSection" open>
+  <details class="tp-settings-section" id="goalsSettingsSection" hidden>
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-hierarchy-2"></i></span>
       <span class="tp-settings-summary-title">Objectifs</span>
-      <span class="tp-settings-summary-hint">Vision, mission, projet et métriques</span>
+      <span class="tp-settings-summary-hint">Vision, mission, projet et métriques (expérimental)</span>
     </summary>
     <div class="tp-settings-body">
       <div id="goalsSettingsMount"></div>
@@ -158,7 +158,7 @@
       <span class="tp-settings-summary-hint">Fonctionnalités bêta (par membre)</span>
     </summary>
     <div class="tp-settings-body">
-      <p class="tp-color-scheme-hint">Activez les visuels bêta dans l’éditeur Priorité. Ces préférences sont personnelles (membre).</p>
+      <p class="tp-color-scheme-hint">Activez les fonctionnalités et visuels bêta. Ces préférences sont personnelles (membre).</p>
       <div class="tp-profile-features" id="experimentalFlags" role="group" aria-label="Fonctionnalités expérimentales"></div>
     </div>
   </details>
@@ -235,9 +235,14 @@
       }
     }
 
-    async function initGoalsSettings() {
+    var goalsSettingsMounted = false;
+
+    async function initGoalsSettings(options) {
+      options = options || {};
+      var force = options.force === true;
       var section = document.getElementById('goalsSettingsSection');
       var mount = document.getElementById('goalsSettingsMount');
+      var Profile = window.UserProfile;
       if (
         !mount ||
         typeof GoalsTrello === 'undefined' ||
@@ -247,6 +252,27 @@
         if (section) section.hidden = true;
         return;
       }
+
+      var profile = null;
+      try {
+        profile = Profile ? await Profile.load(t) : null;
+      } catch (err) {
+        console.error('Goals settings profile load failed', err);
+      }
+      var objectifOn =
+        Profile && typeof Profile.isExperimentalEnabled === 'function'
+          ? Profile.isExperimentalEnabled(profile, 'objectif')
+          : false;
+      if (!objectifOn) {
+        if (section) section.hidden = true;
+        return;
+      }
+      if (section) section.hidden = false;
+      if (goalsSettingsMounted && !force) {
+        resizeSettingsPopup();
+        return;
+      }
+
       var initialSelection = {
         visionId: t.arg('selectedVisionId') || null,
         missionId: t.arg('selectedMissionId') || null,
@@ -266,6 +292,7 @@
           onResize: resizeSettingsPopup,
           initialSelection: hasSelection ? initialSelection : null,
         });
+        goalsSettingsMounted = true;
         if (section && hasSelection && typeof section.scrollIntoView === 'function') {
           section.scrollIntoView({ block: 'start' });
         }
@@ -427,7 +454,20 @@
             .then(function (saved) {
               profileState = saved;
               renderExperimental(saved.experimental);
-              resizeSettingsPopup();
+              var goalsSection = document.getElementById('goalsSettingsSection');
+              var objectifOn = saved.experimental && saved.experimental.objectif === true;
+              if (!objectifOn) {
+                if (goalsSection) goalsSection.hidden = true;
+                resizeSettingsPopup();
+                return;
+              }
+              return initGoalsSettings({ force: !goalsSettingsMounted }).then(function () {
+                if (goalsSection) {
+                  goalsSection.hidden = false;
+                  goalsSection.open = true;
+                }
+                resizeSettingsPopup();
+              });
             })
             .catch(function (err) {
               console.error('Experimental flags save failed', err);

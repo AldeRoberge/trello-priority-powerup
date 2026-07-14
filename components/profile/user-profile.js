@@ -14,7 +14,6 @@
   var FEATURE_KEYS = [
     'info',
     'statut',
-    'objectif',
     'priority',
     'graph',
     'progress',
@@ -26,7 +25,6 @@
   var FEATURE_LABELS = {
     info: 'Information',
     statut: 'Statut',
-    objectif: 'Objectif',
     priority: 'Priorité',
     graph: 'Graphique',
     progress: 'Progrès',
@@ -35,15 +33,17 @@
     assistant: 'Assistant'
   };
 
-  /** Opt-in beta visuals (default off). */
-  var EXPERIMENTAL_KEYS = ['impactGlobe', 'easeHourglass'];
+  /** Opt-in beta features (default off). */
+  var EXPERIMENTAL_KEYS = ['objectif', 'impactGlobe', 'easeHourglass'];
 
   var EXPERIMENTAL_LABELS = {
+    objectif: 'Objectifs (vision, mission, projet)',
     impactGlobe: 'Globe d’impact (portée)',
     easeHourglass: 'Sablier de durée (Facilité)'
   };
 
   var EXPERIMENTAL_HINTS = {
+    objectif: 'Section Objectif sur les cartes, badges et paramètres Vision → Mission → Projet',
     impactGlobe: 'Anneau de portée autour du globe sur le champ Impact',
     easeHourglass: 'Contrôle de durée estimée avec sablier sous Facilité'
   };
@@ -202,20 +202,29 @@
   }
 
   /**
-   * Show/hide card-editor sections according to profile.features.
+   * Show/hide card-editor sections according to profile.features
+   * and experimental flags (e.g. Objectif).
    * Safe to call repeatedly after mounts complete.
    */
   function applyFeaturesToCard(cardEl, profile) {
     if (!cardEl || !cardEl.querySelector) return;
-    var features = normalizeProfile(profile).features;
+    var p = normalizeProfile(profile);
     FEATURE_KEYS.forEach(function (key) {
       var sel = featureSelector(key);
       if (!sel) return;
       var nodes = cardEl.querySelectorAll(sel);
       for (var i = 0; i < nodes.length; i++) {
-        nodes[i].hidden = features[key] === false;
+        nodes[i].hidden = p.features[key] === false;
       }
     });
+    var objectifSel = featureSelector('objectif');
+    if (objectifSel) {
+      var objectifOn = p.experimental.objectif === true;
+      var objectifNodes = cardEl.querySelectorAll(objectifSel);
+      for (var j = 0; j < objectifNodes.length; j++) {
+        objectifNodes[j].hidden = !objectifOn;
+      }
+    }
   }
 
   /** Compact object for LLM context (no storage metadata). */

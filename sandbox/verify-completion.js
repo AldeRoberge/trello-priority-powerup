@@ -40,6 +40,7 @@ check('PriorityTrello.getCardDueComplete export', !!(PT && typeof PT.getCardDueC
   'computeWeightedProgress',
   'computeCardProgress',
   'isAllSubtasksComplete',
+  'detectDonePendingMismatch',
   'syncCardDueCompleteFromProgress',
   'applyMasterProgress',
   'clampProgress',

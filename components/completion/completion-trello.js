@@ -150,6 +150,52 @@
   }
 
   /**
+   * Detect Statut Terminé / completed while some subtasks remain unfinished.
+   * Returns null when consistent; otherwise a structured mismatch for UI / AI.
+   */
+  function detectDonePendingMismatch(statut, completion) {
+    if (!statut || typeof statut !== 'object') return null;
+    var category = statut.category || null;
+    var listId = statut.listId != null ? String(statut.listId) : null;
+    var roleCompleted =
+      statut.roleLists && statut.roleLists.completed != null
+        ? String(statut.roleLists.completed)
+        : null;
+    var isCompleted =
+      category === 'completed' || (!!listId && !!roleCompleted && listId === roleCompleted);
+    if (!isCompleted) return null;
+
+    var normalized = normalizeCompletionData(completion || { items: [] });
+    if (normalized.progressEnabled === false) return null;
+    var progress = computeCardProgress(normalized);
+    if (!progress.hasItems || progress.doneCount >= progress.totalCount) return null;
+
+    var pendingItems = [];
+    for (var i = 0; i < normalized.items.length; i++) {
+      var item = normalized.items[i];
+      if (!item || item.done === true || itemProgress(item) >= PROGRESS_MAX) continue;
+      pendingItems.push({
+        id: item.id,
+        text: item.text,
+        progress: itemProgress(item),
+      });
+    }
+    if (!pendingItems.length) return null;
+
+    return {
+      kind: 'done_pending_tasks',
+      category: 'completed',
+      listId: listId,
+      listName: typeof statut.listName === 'string' ? statut.listName : '',
+      pendingCount: pendingItems.length,
+      totalCount: progress.totalCount,
+      doneCount: progress.doneCount,
+      percent: progress.percent,
+      pendingItems: pendingItems,
+    };
+  }
+
+  /**
    * Force completion data to 100% (all subtasks, or card-level progress).
    * Clears progressEnabled:false so Progrès is treated as on.
    */
@@ -582,6 +628,7 @@
     computeWeightedProgress: computeWeightedProgress,
     computeCardProgress: computeCardProgress,
     isAllSubtasksComplete: isAllSubtasksComplete,
+    detectDonePendingMismatch: detectDonePendingMismatch,
     markFullyComplete: markFullyComplete,
     setDueCompleteSuppressed: setDueCompleteSuppressed,
     getDueCompleteSuppressed: getDueCompleteSuppressed,
