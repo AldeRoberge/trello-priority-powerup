@@ -550,8 +550,25 @@
     completeAllBtn.title = 'Tout compl\u00e9ter';
     completeAllBtn.hidden = true;
 
+    var resetAllBtn = document.createElement('button');
+    resetAllBtn.type = 'button';
+    resetAllBtn.className = 'tp-completion-reset-all';
+    resetAllBtn.id = 'completionResetAll';
+    resetAllBtn.innerHTML = '<i class="ti ti-x" aria-hidden="true"></i>';
+    resetAllBtn.setAttribute(
+      'aria-label',
+      'Remettre le progr\u00e8s \u00e0 0\u00a0% (conserve les t\u00e2ches termin\u00e9es)'
+    );
+    resetAllBtn.title = 'Tout invalider';
+    resetAllBtn.hidden = true;
+
+    var progressActions = document.createElement('div');
+    progressActions.className = 'tp-completion-progress-actions';
+    progressActions.appendChild(completeAllBtn);
+    progressActions.appendChild(resetAllBtn);
+
     progressHead.appendChild(progressHero);
-    progressHead.appendChild(completeAllBtn);
+    progressHead.appendChild(progressActions);
     progressPanel.appendChild(progressHead);
 
     var masterSlider = createProgressSlider(
@@ -761,6 +778,31 @@
       onChange(data);
     }
 
+    // After the first × click (incomplete → 0%), a second click also clears done items.
+    var resetAllClearsCompleted = false;
+
+    function hasIncompleteItemProgress() {
+      if (data.items.length) {
+        for (var i = 0; i < data.items.length; i++) {
+          var item = data.items[i];
+          if (!item.done && CT.itemProgress(item) > 0) return true;
+        }
+        return false;
+      }
+      var cardProgress = CT.clampProgress(data.progress);
+      return cardProgress > 0 && cardProgress < 100;
+    }
+
+    function hasCompletedTasks() {
+      if (data.items.length) {
+        for (var i = 0; i < data.items.length; i++) {
+          if (data.items[i].done) return true;
+        }
+        return false;
+      }
+      return CT.clampProgress(data.progress) >= 100;
+    }
+
     function syncCompleteAllButton(progress) {
       var hasProgress = progress.percent > 0;
       var fullyComplete =
@@ -770,11 +812,38 @@
       completeAllBtn.disabled = fullyComplete;
     }
 
+    function syncResetAllButton(progress) {
+      if (progress.percent <= 0) {
+        resetAllClearsCompleted = false;
+      } else if (hasIncompleteItemProgress()) {
+        // Incomplete progress returned — next × is pass 1 again.
+        resetAllClearsCompleted = false;
+      }
+      var canReset = progress.percent > 0;
+      resetAllBtn.hidden = !canReset;
+      resetAllBtn.disabled = !canReset;
+      resetAllBtn.classList.toggle('is-armed', !!resetAllClearsCompleted);
+      if (resetAllClearsCompleted) {
+        resetAllBtn.title = 'Invalider aussi les t\u00e2ches termin\u00e9es';
+        resetAllBtn.setAttribute(
+          'aria-label',
+          'Remettre aussi les t\u00e2ches termin\u00e9es \u00e0 0\u00a0%'
+        );
+      } else {
+        resetAllBtn.title = 'Tout invalider';
+        resetAllBtn.setAttribute(
+          'aria-label',
+          'Remettre le progr\u00e8s \u00e0 0\u00a0% (conserve les t\u00e2ches termin\u00e9es)'
+        );
+      }
+    }
+
     function completeAllTasks() {
       var progress = CT.computeCardProgress(data);
       if (progress.percent <= 0 || progress.percent >= 100 || isAllCompleteProgress(progress)) {
         return;
       }
+      resetAllClearsCompleted = false;
       if (data.items.length) {
         data.items = CT.applyMasterProgress(data.items, 100);
       } else {
@@ -784,7 +853,60 @@
       onResize();
     }
 
+    function resetAllTasks() {
+      var progress = CT.computeCardProgress(data);
+      if (progress.percent <= 0) return;
+
+      if (data.items.length) {
+        if (!resetAllClearsCompleted) {
+          // Pass 1: zero incomplete items only; leave done tasks alone.
+          var changed = false;
+          for (var i = 0; i < data.items.length; i++) {
+            var item = data.items[i];
+            if (!item.done && CT.itemProgress(item) > 0) {
+              setItemProgress(item, 0);
+              changed = true;
+            }
+          }
+          resetAllClearsCompleted = hasCompletedTasks();
+          if (!changed && !resetAllClearsCompleted) return;
+          if (!changed && resetAllClearsCompleted) {
+            // Armed for a second click; no data change yet.
+            syncResetAllButton(CT.computeCardProgress(data));
+            return;
+          }
+        } else {
+          // Pass 2: also clear completed tasks.
+          for (var j = 0; j < data.items.length; j++) {
+            setItemProgress(data.items[j], 0);
+          }
+          resetAllClearsCompleted = false;
+        }
+      } else {
+        var cardProgress = CT.clampProgress(data.progress);
+        if (!resetAllClearsCompleted) {
+          if (cardProgress > 0 && cardProgress < 100) {
+            data.progress = 0;
+            resetAllClearsCompleted = false;
+          } else if (cardProgress >= 100) {
+            resetAllClearsCompleted = true;
+            syncResetAllButton(progress);
+            return;
+          } else {
+            return;
+          }
+        } else {
+          data.progress = 0;
+          resetAllClearsCompleted = false;
+        }
+      }
+
+      emitChange();
+      onResize();
+    }
+
     completeAllBtn.addEventListener('click', completeAllTasks);
+    resetAllBtn.addEventListener('click', resetAllTasks);
 
     function updateProgressUi(opts) {
       opts = opts || {};
@@ -804,6 +926,7 @@
       progressPanel.classList.toggle('is-complete', progress.percent === 100);
       progressPanel.classList.toggle('has-progress', progress.percent > 0);
       syncCompleteAllButton(progress);
+      syncResetAllButton(progress);
       if (!opts.skipMasterSync && !masterDragging) {
         masterSlider.setValue(progress.percent);
       } else {

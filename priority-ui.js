@@ -648,31 +648,38 @@
   var TIER_DEFS = [
     {
       min: 8.6, label: 'Critique', i: TIER_I.CRITIQUE,
-      description: 'Tâche prioritaire absolue. Impact direct sur l\'objectif, impossible de repousser sans conséquences majeures.'
+      title: 'T\u00e2che prioritaire absolue',
+      description: 'Impact direct sur l\'objectif, impossible de repousser sans cons\u00e9quences majeures.'
     },
     {
       min: 7.2, label: 'Urgente', i: TIER_I.URGENTE,
-      description: 'Tâche pressante, priorité absolue. Action rapide sous forte pression.'
+      title: 'T\u00e2che pressante',
+      description: 'Priorit\u00e9 absolue. Action rapide sous forte pression.'
     },
     {
       min: 5.8, label: 'Prioritaire', i: TIER_I.PRIORITAIRE,
-      description: 'Attention prioritaire. À traiter en tête de file.'
+      title: 'Attention prioritaire',
+      description: '\u00c0 traiter en t\u00eate de file.'
     },
     {
       min: 4.3, label: 'Importante', i: TIER_I.IMPORTANTE,
-      description: 'Planifiée. À exécuter avec engagement clair dans le backlog.'
+      title: 'Planifi\u00e9e',
+      description: '\u00c0 ex\u00e9cuter avec engagement clair dans le backlog.'
     },
     {
       min: 2.9, label: 'Flexible', i: TIER_I.FLEXIBLE,
-      description: 'Sans urgence ni blocage. À traiter selon l\'opportunité, peut glisser.'
+      title: 'Sans urgence ni blocage',
+      description: '\u00c0 traiter selon l\'opportunit\u00e9, peut glisser.'
     },
     {
       min: 1.4, label: 'Secondaire', i: TIER_I.SECONDAIRE,
-      description: 'Utile mais non essentielle. À envisager quand la bande passante le permet.'
+      title: 'Utile mais non essentielle',
+      description: '\u00c0 envisager quand la bande passante le permet.'
     },
     {
       min: 0, label: 'Optionnelle', i: TIER_I.OPTIONNELLE,
-      description: 'Facultative, sans conséquence si ignorée. Peut être écartée de la file.'
+      title: 'Facultative',
+      description: 'Sans cons\u00e9quence si ignor\u00e9e. Peut \u00eatre \u00e9cart\u00e9e de la file.'
     }
   ];
 
@@ -688,6 +695,7 @@
         min: def.min,
         label: def.label,
         i: def.i,
+        title: def.title,
         description: def.description,
         fill: styles.fill,
         text: styles.text,
@@ -726,6 +734,7 @@
         target: def.target,
         color: tier.seg,
         label: tierDef.label,
+        title: tierDef.title,
         description: tierDef.description,
         preset: def.preset
       });
@@ -1029,7 +1038,8 @@
     text: '#9B9890',
     seg: '#9B9890',
     tint: '#F1EFE8',
-    description: 'Sans valeur ni urgence. Trop complexe ou impossible à réaliser.'
+    title: 'Sans valeur ni urgence',
+    description: 'Trop complexe ou impossible \u00e0 r\u00e9aliser.'
   };
 
   var INUTILE_STYLES_DARK = {
@@ -1047,6 +1057,7 @@
   var BLOCKED_REASON_PLACEHOLDER = 'Pr\u00e9ciser le blocage\u2026';
   var BLOCKED_REASON_SUGGESTIONS_LABEL = 'Suggestions';
   var BLOCKED_REASON_CLEAR_LABEL = 'Effacer le motif';
+  var BLOCKED_REASON_EDIT_LABEL = 'Modifier le motif';
   var BLOCKED_REASON_WAITING_OTHER_TASK = 'En attente d\'une autre t\u00e2che';
   var BLOCKED_LINK_TYPE_SUBTASK = 'subtask';
   var BLOCKED_SUBTASK_PICKER_LABEL = 'T\u00e2ches bloquantes';
@@ -1519,10 +1530,10 @@
   var DUE_DATE_QUICK_MORNING_TIME = '09:00';
   var DUE_DATE_QUICK_AFTERNOON_TIME = '14:00';
   var DUE_DATE_TIME_MINUTE_STEPS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
-  var DUE_DATE_TIME_CLOCK_SIZE = 212;
-  var DUE_DATE_TIME_CLOCK_INNER_R = 54;
-  var DUE_DATE_TIME_CLOCK_OUTER_R = 88;
-  var DUE_DATE_TIME_CLOCK_MINUTE_R = 78;
+  var DUE_DATE_TIME_CLOCK_SIZE = 148;
+  var DUE_DATE_TIME_CLOCK_INNER_R = 38;
+  var DUE_DATE_TIME_CLOCK_OUTER_R = 60;
+  var DUE_DATE_TIME_CLOCK_MINUTE_R = 54;
   var DUE_DATE_MONTH_NAMES = [
     'janvier',
     'f\u00e9vrier',
@@ -1741,16 +1752,27 @@
     if (!normalized) return 'Pas de date d\'\u00e9ch\u00e9ance';
     var days = daysUntilDue(normalized, now);
     var dayPart;
-    if (days === 0) dayPart = 'Aujourd\'hui';
-    else if (days === 1) dayPart = 'Demain';
-    else if (days === -1) dayPart = 'Hier';
-    else dayPart = capitalizeCountdownPhrase(formatDueCountdownDays(days));
+    var namedDay = false;
+    if (days === 0) {
+      dayPart = 'Aujourd\'hui';
+      namedDay = true;
+    } else if (days === 1) {
+      dayPart = 'Demain';
+      namedDay = true;
+    } else if (days === -1) {
+      dayPart = 'Hier';
+      namedDay = true;
+    } else {
+      dayPart = capitalizeCountdownPhrase(formatDueCountdownDays(days));
+    }
     var dueTime = formatDueTimeCompactFr(time);
     var remaining = formatDueCountdown(normalized, now, time);
     // Overdue: relative lateness only — no redundant clock ("… à 13 h").
     if (remaining && remaining.indexOf('En retard') === 0) return remaining;
     if (dayPart.indexOf('En retard') === 0) return dayPart;
-    var compact = dueTime ? dayPart + ' \u00e0 ' + dueTime : dayPart;
+    // Clock only with calendar day names ("Demain à 9 h"), never with
+    // day-scale countdowns ("6 jours restants à 9 h").
+    var compact = dueTime && namedDay ? dayPart + ' \u00e0 ' + dueTime : dayPart;
     // Day-scale remaining already matches dayPart (e.g. "Demain"). Append only
     // when a clock time yields finer relative text ("5 h restantes").
     if (!remaining || remaining === dayPart) return compact;
@@ -2225,7 +2247,11 @@
         label: result.tier.label,
         tierLabel: result.tier.label,
         matrixLabel: matrix && matrix.fromMatrix ? matrix.label : null,
-        description: matrix ? matrix.description : (result.tier.description || ''),
+        descriptionTitle:
+          matrix && matrix.fromMatrix ? null : (result.tier.title || null),
+        description: matrix
+          ? matrix.description
+          : (result.tier.description || ''),
         matrixRuleId: matrix ? matrix.ruleId : null,
         matrixLevels: matrix ? matrix.levels : null,
         matrixEnabled: matrixEnabled,
@@ -2241,6 +2267,7 @@
       inutile: true,
       score: 0,
       label: INUTILE_LABEL,
+      descriptionTitle: INUTILE_STYLES.title || '',
       description: INUTILE_STYLES.description || '',
       tierLabel: INUTILE_LABEL,
       matrixRuleId: null,
@@ -2264,6 +2291,18 @@
     return display.tierLabel || display.label || '';
   }
 
+  function tierDescriptionTitle(display) {
+    if (!display) return '';
+    if (display.inutile) return INUTILE_STYLES.title || '';
+    if (display.matrixLabel) return display.matrixLabel;
+    if (display.descriptionTitle) return display.descriptionTitle;
+    if (display.tierI == null) return '';
+    for (var k = 0; k < TIERS.length; k++) {
+      if (TIERS[k].i === display.tierI) return TIERS[k].title || '';
+    }
+    return '';
+  }
+
   function tierDescriptionBody(display) {
     if (display.inutile) return INUTILE_STYLES.description || '';
     if (display.description) return display.description;
@@ -2274,13 +2313,28 @@
     return '';
   }
 
+  function formatTierDescriptionTooltip(label, title, description) {
+    var parts = [];
+    if (label) parts.push(label);
+    if (title) parts.push(title);
+    if (description) parts.push(description);
+    return parts.join('. ');
+  }
+
   function tierDescriptionContentKey(display) {
     if (!display) return '';
-    if (display.inutile) return 'inutile:' + (INUTILE_STYLES.description || '');
+    if (display.inutile) {
+      return 'inutile:' + (INUTILE_STYLES.title || '') + '\n' + (INUTILE_STYLES.description || '');
+    }
     if (display.matrixLabel) {
       return 'matrix:' + display.matrixLabel + '\n' + (display.description || '');
     }
-    return 'tier:' + tierDescriptionBody(display);
+    return (
+      'tier:' +
+      (tierDescriptionTitle(display) || '') +
+      '\n' +
+      tierDescriptionBody(display)
+    );
   }
 
   function paintTierDescription(el, display) {
@@ -2289,26 +2343,22 @@
       el.hidden = true;
       return;
     }
-    if (display.inutile) {
-      var inutileDesc = INUTILE_STYLES.description || '';
-      el.textContent = inutileDesc;
-      el.hidden = !inutileDesc;
+    var title = tierDescriptionTitle(display);
+    var body = tierDescriptionBody(display);
+    if (!title && !body) {
+      el.textContent = '';
+      el.hidden = true;
       return;
     }
-    if (display.matrixLabel) {
-      var matrixDesc = display.description || '';
-      var html = '<span class="heat-tier-desc-subtitle">' + escapeHtml(display.matrixLabel) + '</span>';
-      if (matrixDesc) {
-        html += '<span class="heat-tier-desc-body">' + escapeHtml(matrixDesc) + '</span>';
-      }
-      el.innerHTML = html;
-      el.hidden = false;
-      el.style.removeProperty('color');
-      return;
+    var html = '';
+    if (title) {
+      html += '<span class="heat-tier-desc-subtitle">' + escapeHtml(title) + '</span>';
     }
-    var desc = tierDescriptionBody(display);
-    el.textContent = desc;
-    el.hidden = !desc;
+    if (body) {
+      html += '<span class="heat-tier-desc-body">' + escapeHtml(body) + '</span>';
+    }
+    el.innerHTML = html;
+    el.hidden = false;
     el.style.removeProperty('color');
   }
 
@@ -2395,7 +2445,7 @@
       {
         id: 'do',
         label: 'Faire',
-        description: 'Urgent et important. À traiter en priorité absolue, sans report.',
+        description: 'Urgent et important. \u00c0 traiter en priorit\u00e9 absolue, sans report.',
         score: 9.0,
         urgent: true,
         important: true,
@@ -2404,7 +2454,7 @@
       {
         id: 'schedule',
         label: 'Planifier',
-        description: 'Important mais pas urgent. À caler dans le backlog avec une date ou un créneau dédié.',
+        description: 'Important mais pas urgent. \u00c0 caler dans le backlog avec une date ou un cr\u00e9neau d\u00e9di\u00e9.',
         score: 6.5,
         urgent: false,
         important: true,
@@ -2412,8 +2462,8 @@
       },
       {
         id: 'delegate',
-        label: 'Déléguer',
-        description: 'Urgent mais peu important. À confier ou traiter au minimum viable.',
+        label: 'D\u00e9l\u00e9guer',
+        description: 'Urgent mais peu important. \u00c0 confier ou traiter au minimum viable.',
         score: 4.0,
         urgent: true,
         important: false,
@@ -2421,8 +2471,8 @@
       },
       {
         id: 'delete',
-        label: 'Éliminer',
-        description: 'Ni urgent ni important. Candidat à écarter, repousser sans limite ou supprimer.',
+        label: '\u00c9liminer',
+        description: 'Ni urgent ni important. Candidat \u00e0 \u00e9carter, repousser sans limite ou supprimer.',
         score: 1.5,
         urgent: false,
         important: false,
@@ -4193,6 +4243,131 @@
       onLayoutChange();
     }
 
+    function renameReason(oldValue, newValue) {
+      var oldKey = reasonKey(oldValue);
+      if (!oldKey) return false;
+      var next = normalizeBlockedReason(newValue);
+      if (!next) {
+        refreshSelected();
+        return false;
+      }
+      var newKey = reasonKey(next);
+      var index = -1;
+      for (var i = 0; i < currentReasons.length; i++) {
+        if (reasonKey(currentReasons[i]) === oldKey) {
+          index = i;
+          break;
+        }
+      }
+      if (index < 0) {
+        refreshSelected();
+        return false;
+      }
+      if (oldKey === newKey) {
+        if (currentReasons[index] === next) {
+          refreshSelected();
+          return false;
+        }
+        currentReasons = currentReasons.slice();
+        currentReasons[index] = next;
+      } else {
+        var duplicate = false;
+        for (var j = 0; j < currentReasons.length; j++) {
+          if (j !== index && reasonKey(currentReasons[j]) === newKey) {
+            duplicate = true;
+            break;
+          }
+        }
+        if (duplicate) {
+          // Renaming onto an existing chip: drop the edited one, keep the other.
+          removeReason(oldValue);
+          return true;
+        }
+        bumpBlockedReasonFreq(next);
+        currentReasons = currentReasons.slice();
+        currentReasons[index] = next;
+        if (!isBlockedWaitingOtherTask(currentReasons)) {
+          currentLinks = [];
+        }
+      }
+      refreshSelected();
+      refreshSuggestions();
+      refreshSubtaskUi();
+      notifyReasonChange();
+      onLayoutChange();
+      return true;
+    }
+
+    var finishReasonEdit = null;
+
+    function beginEditReasonChip(reason) {
+      if (typeof finishReasonEdit === 'function') {
+        finishReasonEdit(true);
+      }
+
+      var chip = null;
+      var chips = selectedWrap.querySelectorAll('.blocked-reason-chip:not(.blocked-subtask-chip)');
+      for (var c = 0; c < chips.length; c++) {
+        if (chips[c].dataset.reason === reason) {
+          chip = chips[c];
+          break;
+        }
+      }
+      if (!chip || chip.classList.contains('is-editing')) return;
+
+      var textEl = chip.querySelector('.blocked-reason-chip-text');
+      var editBtn = chip.querySelector('.blocked-reason-chip-edit');
+      var clearBtn = chip.querySelector('.blocked-reason-chip-clear');
+      if (!textEl || !clearBtn) return;
+
+      chip.classList.add('is-editing');
+      textEl.hidden = true;
+      if (editBtn) editBtn.hidden = true;
+
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'blocked-reason-chip-input';
+      input.value = reason;
+      input.setAttribute('aria-label', BLOCKED_REASON_EDIT_LABEL);
+      input.setAttribute('autocomplete', 'off');
+      input.setAttribute('spellcheck', 'false');
+      chip.insertBefore(input, clearBtn);
+      input.focus();
+      input.select();
+      onLayoutChange();
+
+      var finished = false;
+      function finish(commit) {
+        if (finished) return;
+        finished = true;
+        if (finishReasonEdit === finish) finishReasonEdit = null;
+        if (commit) renameReason(reason, input.value);
+        else {
+          refreshSelected();
+          onLayoutChange();
+        }
+      }
+      finishReasonEdit = finish;
+
+      input.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          event.stopPropagation();
+          finish(true);
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          finish(false);
+        }
+      });
+      input.addEventListener('blur', function () {
+        setTimeout(function () {
+          if (finished) return;
+          finish(true);
+        }, 0);
+      });
+    }
+
     function setReasons(value) {
       currentReasons = normalizeBlockedReasons(value);
       syncLinksWithReasons();
@@ -4219,11 +4394,24 @@
           hasAny = true;
           var chip = document.createElement('span');
           chip.className = 'blocked-reason-chip';
+          chip.dataset.reason = reason;
 
           var text = document.createElement('span');
           text.className = 'blocked-reason-chip-text';
           text.textContent = reason;
           text.title = reason;
+
+          var editBtn = document.createElement('button');
+          editBtn.type = 'button';
+          editBtn.className = 'blocked-reason-chip-edit';
+          editBtn.setAttribute('aria-label', BLOCKED_REASON_EDIT_LABEL + ' : ' + reason);
+          editBtn.title = BLOCKED_REASON_EDIT_LABEL;
+          editBtn.innerHTML = '<i class="ti ti-pencil" aria-hidden="true"></i>';
+          editBtn.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            beginEditReasonChip(reason);
+          });
 
           var clearBtn = document.createElement('button');
           clearBtn.type = 'button';
@@ -4231,11 +4419,13 @@
           clearBtn.setAttribute('aria-label', BLOCKED_REASON_CLEAR_LABEL + ' : ' + reason);
           clearBtn.textContent = '\u00d7';
           clearBtn.addEventListener('click', function () {
+            if (typeof finishReasonEdit === 'function') finishReasonEdit(false);
             removeReason(reason);
             reasonInput.focus();
           });
 
           chip.appendChild(text);
+          chip.appendChild(editBtn);
           chip.appendChild(clearBtn);
           selectedWrap.appendChild(chip);
         })(currentReasons[i]);
@@ -4889,9 +5079,9 @@
     footer.appendChild(todayBtn);
     popover.appendChild(footer);
 
-    /* Calendar + time panels stay expanded under the dual picker row. */
-    body.appendChild(popover);
-    body.appendChild(timePopover);
+    /* Calendar under Calendrier, time under Heure — side-by-side columns. */
+    datePicker.appendChild(popover);
+    timePicker.appendChild(timePopover);
 
     field.appendChild(body);
     el.appendChild(field);
@@ -5680,10 +5870,19 @@
     blockedWarning.hidden = true;
     blockedWarning.setAttribute('role', 'status');
 
-    var blockedWarningLabel = document.createElement('span');
+    var blockedWarningLabel = document.createElement('button');
+    blockedWarningLabel.type = 'button';
     blockedWarningLabel.className = 'heat-blocked-warning-label';
     blockedWarningLabel.textContent = BLOCKED_DISPLAY;
-    blockedWarningLabel.title = 'Cette t\u00e2che est bloqu\u00e9e';
+    blockedWarningLabel.title = 'Ouvrir la section Bloqu\u00e9';
+    blockedWarningLabel.setAttribute('aria-label', 'Ouvrir la section Bloqu\u00e9');
+    blockedWarningLabel.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof config.onOpenBlocked === 'function') {
+        config.onOpenBlocked();
+      }
+    });
     blockedWarning.appendChild(blockedWarningLabel);
 
     var blockedDismiss = document.createElement('button');
@@ -5848,7 +6047,9 @@
       s.setAttribute('role', 'button');
       s.setAttribute('tabindex', '0');
       s.setAttribute('aria-label', seg.label);
-      if (seg.description) s.title = seg.label + '. ' + seg.description;
+      if (seg.description || seg.title) {
+        s.title = formatTierDescriptionTooltip(seg.label, seg.title, seg.description);
+      }
       bindSegmentTarget(s, seg);
       segsWrap.appendChild(s);
       segs.push(s);
@@ -5864,7 +6065,9 @@
       label.setAttribute('role', 'button');
       label.setAttribute('tabindex', '0');
       label.setAttribute('aria-label', seg.label);
-      if (seg.description) label.title = seg.label + '. ' + seg.description;
+      if (seg.description || seg.title) {
+        label.title = formatTierDescriptionTooltip(seg.label, seg.title, seg.description);
+      }
       bindSegmentTarget(label, seg);
       segLabels.appendChild(label);
       segLabelTargets.push({ el: label, fullLabel: seg.label });
@@ -7170,6 +7373,20 @@
       formulaKey: formulaKey,
       hideSegments: formulaKey === 'eisenhower',
       onUnblock: unblockTask,
+      onOpenBlocked: function () {
+        if (!enAttenteField || !blockedSection) return;
+        if (enAttenteField.setExpanded) {
+          enAttenteField.setExpanded(true);
+        }
+        setTimeout(function () {
+          try {
+            blockedSection.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          } catch (e) { /* ignore */ }
+          if (typeof variantConfig.onLayoutChange === 'function') {
+            variantConfig.onLayoutChange();
+          }
+        }, 0);
+      },
       onSegmentClick: function (targetP) {
         if (state.priorityEnabled === false) return;
         syncStateFromFields();
@@ -7615,6 +7832,7 @@
     BLOCKED_REASON_PLACEHOLDER: BLOCKED_REASON_PLACEHOLDER,
     BLOCKED_REASON_SUGGESTIONS_LABEL: BLOCKED_REASON_SUGGESTIONS_LABEL,
     BLOCKED_REASON_CLEAR_LABEL: BLOCKED_REASON_CLEAR_LABEL,
+    BLOCKED_REASON_EDIT_LABEL: BLOCKED_REASON_EDIT_LABEL,
     BLOCKED_REASON_OPTIONS: BLOCKED_REASON_OPTIONS,
     BLOCKED_REASON_CORE_PRESETS: BLOCKED_REASON_CORE_PRESETS,
     BLOCKED_REASON_FREQ_STORAGE_KEY: BLOCKED_REASON_FREQ_STORAGE_KEY,

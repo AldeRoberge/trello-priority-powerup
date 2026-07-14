@@ -1177,7 +1177,15 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   color: var(--tp-text-muted);
 }
 
-.tp-completion-complete-all {
+.tp-completion-progress-actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.tp-completion-complete-all,
+.tp-completion-reset-all {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -1201,20 +1209,34 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   color: var(--tp-text);
 }
 
-.tp-completion-complete-all:focus {
+.tp-completion-reset-all:hover {
+  background: color-mix(in srgb, var(--tp-danger-text, #ae2e24) 12%, transparent);
+  color: var(--tp-danger-text, #ae2e24);
+}
+
+.tp-completion-reset-all.is-armed {
+  color: var(--tp-danger-text, #ae2e24);
+  background: color-mix(in srgb, var(--tp-danger-text, #ae2e24) 10%, transparent);
+}
+
+.tp-completion-complete-all:focus,
+.tp-completion-reset-all:focus {
   outline: none;
 }
 
-.tp-completion-complete-all:focus-visible {
+.tp-completion-complete-all:focus-visible,
+.tp-completion-reset-all:focus-visible {
   box-shadow: 0 0 0 2px var(--tp-surface), 0 0 0 4px var(--tp-focus, #0c66e4);
 }
 
-.tp-completion-complete-all:disabled {
+.tp-completion-complete-all:disabled,
+.tp-completion-reset-all:disabled {
   opacity: 0.45;
   cursor: default;
 }
 
-.tp-completion-complete-all[hidden] {
+.tp-completion-complete-all[hidden],
+.tp-completion-reset-all[hidden] {
   display: none;
 }
 
@@ -1305,22 +1327,22 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
 }
 
-/* Subtask rows — soft pads / separators, no boxed borders */
+/* Subtask rows — darker pads so each item reads as its own section */
 .tp-completion-item {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 10px 10px;
   border-radius: var(--completion-radius, 10px);
-  background: transparent;
+  background: color-mix(in srgb, var(--tp-surface-subtle) 88%, var(--tp-surface));
   transition: background 0.15s ease;
 }
 
 .tp-completion-item:hover {
-  background: color-mix(in srgb, var(--tp-surface-subtle) 88%, transparent);
+  background: var(--tp-surface-subtle);
 }
 
 .tp-completion-item.is-flipping {
