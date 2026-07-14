@@ -67,10 +67,24 @@
     });
 
     function saveState(state) {
+      var wasBlocked = !!(latestState && latestState.enAttente);
       latestState = state;
       saveChain = saveChain
         .then(function () {
           return PriorityTrello.saveCardInputs(t, state);
+        })
+        .then(function () {
+          if (state && state.enAttente && !wasBlocked && statutUi && StatutTrello) {
+            return StatutTrello.getCardStatut(t).then(function (statut) {
+              if (statutUi && typeof statutUi.setData === 'function') {
+                statutUi.setData({
+                  listId: statut.listId,
+                  lists: statut.lists,
+                  settings: statut.settings,
+                });
+              }
+            });
+          }
         })
         .catch(function (err) {
           console.error('Priority save failed', err);
@@ -231,6 +245,20 @@
                       Object.assign({}, variant.getState(), { enAttente: true })
                     );
                   }
+                  if (
+                    result.sideEffects.category === 'completed' &&
+                    typeof variant.setState === 'function'
+                  ) {
+                    var cleared = Object.assign({}, variant.getState(), {
+                      enAttente: false,
+                      blockedReasons: [],
+                      blockedLinks: [],
+                    });
+                    variant.setState(cleared);
+                    if (typeof variant.setProgressCompleteLock === 'function') {
+                      variant.setProgressCompleteLock(true);
+                    }
+                  }
                 }
                 return result;
               });
@@ -344,6 +372,18 @@
               ) {
                 syncPromise.then(function () {
                   return PriorityTrello.clearBlockedIfComplete(t);
+                }).then(function () {
+                  if (allComplete && statutUi && typeof StatutTrello !== 'undefined') {
+                    return StatutTrello.getCardStatut(t).then(function (statut) {
+                      if (statutUi && typeof statutUi.setData === 'function') {
+                        statutUi.setData({
+                          listId: statut.listId,
+                          lists: statut.lists,
+                          settings: statut.settings,
+                        });
+                      }
+                    });
+                  }
                 }).catch(function (err) {
                   console.error('clearBlockedIfComplete after Done failed', err);
                 });

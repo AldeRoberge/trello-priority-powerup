@@ -18,12 +18,13 @@
     return node;
   }
 
-  function statusIcon(status) {
-    if (status === 'pass') return '\u2713';
-    if (status === 'fail') return '\u2717';
-    if (status === 'warn') return '!';
-    return '\u2013';
-  }
+    function statusIcon(status) {
+      if (status === 'pass') return '\u2713';
+      if (status === 'fail') return '\u2717';
+      if (status === 'warn') return '!';
+      if (status === 'running') return '\u2026';
+      return '\u2013';
+    }
 
   function mount(cardEl, options) {
     if (!cardEl) throw new Error('AgentUI.mount: cardEl required');
@@ -123,6 +124,13 @@
       spellcheck: 'false',
       placeholder: 'https://api.openai.com/v1'
     });
+    var modelSelect = el('select', 'agent-input agent-model-select', {
+      'aria-label': 'Mod\u00e8le OpenAI'
+    });
+    (Agent.OPENAI_MODELS || []).forEach(function (m) {
+      var opt = el('option', null, { value: m.id, text: m.label || m.id });
+      modelSelect.appendChild(opt);
+    });
     var modelInput = el('input', 'agent-input', {
       type: 'text',
       autocomplete: 'off',
@@ -130,9 +138,13 @@
       placeholder: 'gpt-4o-mini'
     });
 
+    var modelSelectField = labeledInput('Mod\u00e8le', modelSelect);
+    var modelInputField = labeledInput('Mod\u00e8le', modelInput);
+
     settingsPanel.appendChild(labeledInput('Cl\u00e9 API', apiKeyInput));
     settingsPanel.appendChild(labeledInput('URL de base', baseUrlInput));
-    settingsPanel.appendChild(labeledInput('Mod\u00e8le', modelInput));
+    settingsPanel.appendChild(modelSelectField);
+    settingsPanel.appendChild(modelInputField);
 
     var settingsActions = el('div', 'agent-settings-actions');
     var saveBtn = el('button', 'tp-button agent-btn', { type: 'button', text: 'Enregistrer' });
@@ -260,18 +272,39 @@
       });
     }
 
+    function ensureModelSelectValue(modelId) {
+      var id = modelId || '';
+      if (!id) return;
+      var exists = Array.prototype.some.call(modelSelect.options, function (opt) {
+        return opt.value === id;
+      });
+      if (!exists) {
+        modelSelect.appendChild(el('option', null, { value: id, text: id }));
+      }
+      modelSelect.value = id;
+    }
+
+    function syncModelControls() {
+      var isOpenAI = provider.preset === 'openai';
+      modelSelectField.hidden = !isOpenAI;
+      modelInputField.hidden = isOpenAI;
+      if (isOpenAI) {
+        ensureModelSelectValue(provider.model || Agent.PRESETS.openai.model);
+      } else {
+        modelInput.value = provider.model || '';
+      }
+    }
+
     function fillSettingsForm() {
       apiKeyInput.value = provider.apiKey || '';
       baseUrlInput.value = provider.baseUrl || '';
-      modelInput.value = provider.model || '';
-      var isCustom = provider.preset === 'custom';
-      baseUrlInput.readOnly = !isCustom && provider.preset !== 'custom';
-      // OpenAI / OpenRouter presets lock URL; custom unlocks. Model always editable.
+      // OpenAI / OpenRouter presets lock URL; custom unlocks.
       if (provider.preset === 'openai' || provider.preset === 'openrouter') {
         baseUrlInput.readOnly = true;
       } else {
         baseUrlInput.readOnly = false;
       }
+      syncModelControls();
       syncPresetButtons();
       if (collapse && collapse.refreshSummary) collapse.refreshSummary();
       updateComposerEnabled();
@@ -280,25 +313,30 @@
     }
 
     function readSettingsForm() {
+      var isOpenAI = provider.preset === 'openai';
       return Agent.normalizeProvider({
         preset: provider.preset || 'openai',
         apiKey: apiKeyInput.value,
         baseUrl: baseUrlInput.value,
-        model: modelInput.value
+        model: isOpenAI ? modelSelect.value : modelInput.value
       });
     }
 
     function applyPreset(id) {
       var preset = Agent.PRESETS[id] || Agent.PRESETS.openai;
+      var currentModel =
+        (provider.preset === 'openai' ? modelSelect.value : modelInput.value) ||
+        provider.model ||
+        '';
       var next = {
         preset: preset.id,
         apiKey: apiKeyInput.value,
         baseUrl: preset.baseUrl || baseUrlInput.value,
-        model: preset.model || modelInput.value || provider.model
+        model: provider.preset === preset.id ? currentModel : preset.model || currentModel
       };
       if (preset.id === 'custom') {
         next.baseUrl = baseUrlInput.value || provider.baseUrl || '';
-        next.model = modelInput.value || provider.model || '';
+        next.model = modelInput.value || currentModel || '';
       }
       provider = Agent.normalizeProvider(next);
       fillSettingsForm();
@@ -356,25 +394,32 @@
       notifyLayout();
     }
 
-    function renderTestResults(results) {
+    function buildTestItem(r) {
+      var li = el('li', 'agent-test-item is-' + r.status);
+      li.setAttribute('data-test-id', r.id);
+      var mark = el('span', 'agent-test-mark', { text: statusIcon(r.status) });
+      var bodyWrap = el('span', 'agent-test-body');
+      bodyWrap.appendChild(el('span', 'agent-test-label', { text: r.label }));
+      var detail = r.detail || '';
+      if (r.ms != null) detail = (detail ? detail + ' \u00b7 ' : '') + r.ms + ' ms';
+      if (detail) bodyWrap.appendChild(el('span', 'agent-test-detail', { text: detail }));
+      li.appendChild(mark);
+      li.appendChild(bodyWrap);
+      return li;
+    }
+
+    function clearTestResults() {
       testResultsEl.replaceChildren();
-      if (!results || !results.length) {
-        testResultsEl.hidden = true;
-        return;
-      }
+      testResultsEl.hidden = true;
+    }
+
+    function upsertTestResult(r) {
+      if (!r || !r.id) return;
       testResultsEl.hidden = false;
-      results.forEach(function (r) {
-        var li = el('li', 'agent-test-item is-' + r.status);
-        var mark = el('span', 'agent-test-mark', { text: statusIcon(r.status) });
-        var bodyWrap = el('span', 'agent-test-body');
-        bodyWrap.appendChild(el('span', 'agent-test-label', { text: r.label }));
-        var detail = r.detail || '';
-        if (r.ms != null) detail = (detail ? detail + ' \u00b7 ' : '') + r.ms + ' ms';
-        if (detail) bodyWrap.appendChild(el('span', 'agent-test-detail', { text: detail }));
-        li.appendChild(mark);
-        li.appendChild(bodyWrap);
-        testResultsEl.appendChild(li);
-      });
+      var next = buildTestItem(r);
+      var existing = testResultsEl.querySelector('[data-test-id="' + r.id + '"]');
+      if (existing) existing.replaceWith(next);
+      else testResultsEl.appendChild(next);
       notifyLayout();
     }
 
@@ -413,10 +458,11 @@
       fillSettingsForm();
       testBtn.disabled = true;
       setSettingsStatus('Tests en cours\u2026');
-      renderTestResults([]);
+      clearTestResults();
       try {
-        var results = await Agent.runProviderTests(provider);
-        renderTestResults(results);
+        var results = await Agent.runProviderTests(provider, function (item) {
+          upsertTestResult(item);
+        });
         var failed = results.some(function (r) {
           return r.status === 'fail';
         });

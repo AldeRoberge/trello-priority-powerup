@@ -31,6 +31,25 @@
     }
   };
 
+  /** Curated chat models for the OpenAI preset selector (API model ids). */
+  var OPENAI_MODELS = [
+    { id: 'gpt-5.4', label: 'GPT-5.4' },
+    { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini' },
+    { id: 'gpt-5.4-nano', label: 'GPT-5.4 nano' },
+    { id: 'gpt-5.2', label: 'GPT-5.2' },
+    { id: 'gpt-5.1', label: 'GPT-5.1' },
+    { id: 'gpt-5', label: 'GPT-5' },
+    { id: 'gpt-5-mini', label: 'GPT-5 mini' },
+    { id: 'gpt-5-nano', label: 'GPT-5 nano' },
+    { id: 'gpt-4.1', label: 'GPT-4.1' },
+    { id: 'gpt-4.1-mini', label: 'GPT-4.1 mini' },
+    { id: 'gpt-4.1-nano', label: 'GPT-4.1 nano' },
+    { id: 'gpt-4o', label: 'GPT-4o' },
+    { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
+    { id: 'o4-mini', label: 'o4-mini' },
+    { id: 'o3-mini', label: 'o3-mini' }
+  ];
+
   var TOOL_LABELS = {
     set_priority: 'Priorit\u00e9 mise \u00e0 jour.',
     set_due: '\u00c9ch\u00e9ance mise \u00e0 jour.',
@@ -616,34 +635,64 @@
     };
   }
 
-  async function runProviderTests(provider) {
+  async function runProviderTests(provider, onResult) {
     var p = normalizeProvider(provider);
     var results = [];
 
-    function push(id, label, status, detail, ms) {
-      results.push({
+    function paint() {
+      return new Promise(function (resolve) {
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(function () {
+            resolve();
+          });
+        } else {
+          setTimeout(resolve, 0);
+        }
+      });
+    }
+
+    async function push(id, label, status, detail, ms) {
+      var item = {
         id: id,
         label: label,
         status: status,
         detail: detail || '',
         ms: typeof ms === 'number' ? ms : null
-      });
+      };
+      var idx = -1;
+      for (var i = 0; i < results.length; i++) {
+        if (results[i].id === id) {
+          idx = i;
+          break;
+        }
+      }
+      if (idx >= 0) results[idx] = item;
+      else results.push(item);
+      if (typeof onResult === 'function') {
+        try {
+          onResult(item, results.slice());
+        } catch (cbErr) {
+          console.error('runProviderTests onResult failed', cbErr);
+        }
+      }
+      await paint();
+      return item;
     }
 
     // 1. Config
     if (!p.apiKey) {
-      push('config', 'Configuration', 'fail', 'Cl\u00e9 API manquante');
+      await push('config', 'Configuration', 'fail', 'Cl\u00e9 API manquante');
       return results;
     }
     if (!p.baseUrl) {
-      push('config', 'Configuration', 'fail', 'URL de base manquante');
+      await push('config', 'Configuration', 'fail', 'URL de base manquante');
       return results;
     }
     if (!p.model) {
-      push('config', 'Configuration', 'fail', 'Mod\u00e8le manquant');
+      await push('config', 'Configuration', 'fail', 'Mod\u00e8le manquant');
       return results;
     }
-    push(
+    await push(
       'config',
       'Configuration',
       'pass',
@@ -651,6 +700,7 @@
     );
 
     // 2. Reachability / CORS (+ auth signal)
+    await push('reach', 'Accessibilit\u00e9 / CORS', 'running', 'En cours\u2026');
     var t0 = Date.now();
     var modelsRes = null;
     var reachErr = null;
@@ -662,15 +712,16 @@
     var reachMs = Date.now() - t0;
 
     if (reachErr && reachErr.code === 'cors_or_network') {
-      push('reach', 'Accessibilit\u00e9 / CORS', 'fail', reachErr.message, reachMs);
-      push('auth', 'Authentification', 'skip', 'Non test\u00e9 (CORS / r\u00e9seau)');
-      push('chat', '\u00c9change chat', 'skip', 'Non test\u00e9');
-      push('json', 'Mode JSON', 'skip', 'Non test\u00e9');
+      await push('reach', 'Accessibilit\u00e9 / CORS', 'fail', reachErr.message, reachMs);
+      await push('auth', 'Authentification', 'skip', 'Non test\u00e9 (CORS / r\u00e9seau)');
+      await push('chat', '\u00c9change chat', 'skip', 'Non test\u00e9');
+      await push('json', 'Mode JSON', 'skip', 'Non test\u00e9');
       return results;
     }
 
     if (reachErr) {
       // Fallback: try a tiny chat completion to prove reachability
+      await push('reach', 'Accessibilit\u00e9 / CORS', 'running', 'Tentative via chat\u2026');
       t0 = Date.now();
       try {
         await chatCompletions(
@@ -678,20 +729,20 @@
           [{ role: 'user', content: 'Reply with OK' }],
           { jsonMode: false, max_tokens: 5, temperature: 0 }
         );
-        push(
+        await push(
           'reach',
           'Accessibilit\u00e9 / CORS',
           'pass',
           '/models indisponible, chat OK',
           Date.now() - t0
         );
-        push('auth', 'Authentification', 'pass', 'Cl\u00e9 accept\u00e9e via chat');
+        await push('auth', 'Authentification', 'pass', 'Cl\u00e9 accept\u00e9e via chat');
       } catch (chatErr) {
         var classified = chatErr.code === 'cors_or_network'
           ? chatErr
           : classifyFetchError(chatErr);
         if (chatErr.code === 'cors_or_network' || classified.code === 'cors_or_network') {
-          push(
+          await push(
             'reach',
             'Accessibilit\u00e9 / CORS',
             'fail',
@@ -699,14 +750,14 @@
             Date.now() - t0
           );
         } else if (chatErr.status === 401 || chatErr.status === 403 || chatErr.code === 'auth') {
-          push(
+          await push(
             'reach',
             'Accessibilit\u00e9 / CORS',
             'pass',
             'Endpoint joignable',
             Date.now() - t0
           );
-          push(
+          await push(
             'auth',
             'Authentification',
             'fail',
@@ -714,7 +765,7 @@
             Date.now() - t0
           );
         } else {
-          push(
+          await push(
             'reach',
             'Accessibilit\u00e9 / CORS',
             'fail',
@@ -723,22 +774,22 @@
           );
         }
         if (results.every(function (r) { return r.id !== 'auth'; })) {
-          push('auth', 'Authentification', 'skip', 'Non conclu');
+          await push('auth', 'Authentification', 'skip', 'Non conclu');
         }
-        push('chat', '\u00c9change chat', 'skip', 'Non test\u00e9');
-        push('json', 'Mode JSON', 'skip', 'Non test\u00e9');
+        await push('chat', '\u00c9change chat', 'skip', 'Non test\u00e9');
+        await push('json', 'Mode JSON', 'skip', 'Non test\u00e9');
         return results;
       }
     } else if (modelsRes) {
       if (modelsRes.status === 401 || modelsRes.status === 403) {
-        push(
+        await push(
           'reach',
           'Accessibilit\u00e9 / CORS',
           'pass',
           'Endpoint joignable (HTTP ' + modelsRes.status + ')',
           reachMs
         );
-        push(
+        await push(
           'auth',
           'Authentification',
           'fail',
@@ -748,8 +799,8 @@
             'Cl\u00e9 refus\u00e9e (HTTP ' + modelsRes.status + ')',
           reachMs
         );
-        push('chat', '\u00c9change chat', 'skip', 'Non test\u00e9 (auth)');
-        push('json', 'Mode JSON', 'skip', 'Non test\u00e9 (auth)');
+        await push('chat', '\u00c9change chat', 'skip', 'Non test\u00e9 (auth)');
+        await push('json', 'Mode JSON', 'skip', 'Non test\u00e9 (auth)');
         return results;
       }
       if (modelsRes.ok) {
@@ -757,7 +808,7 @@
           modelsRes.data && Array.isArray(modelsRes.data.data)
             ? modelsRes.data.data.length
             : null;
-        push(
+        await push(
           'reach',
           'Accessibilit\u00e9 / CORS',
           'pass',
@@ -766,16 +817,16 @@
             : 'GET /models OK',
           reachMs
         );
-        push('auth', 'Authentification', 'pass', 'Cl\u00e9 accept\u00e9e', reachMs);
+        await push('auth', 'Authentification', 'pass', 'Cl\u00e9 accept\u00e9e', reachMs);
       } else {
-        push(
+        await push(
           'reach',
           'Accessibilit\u00e9 / CORS',
           'warn',
           'GET /models HTTP ' + modelsRes.status + ' \u2014 on tente le chat',
           reachMs
         );
-        push(
+        await push(
           'auth',
           'Authentification',
           'warn',
@@ -786,6 +837,7 @@
     }
 
     // 3/4. Chat round-trip
+    await push('chat', '\u00c9change chat', 'running', 'En cours\u2026');
     t0 = Date.now();
     try {
       var chatRes = await chatCompletions(
@@ -794,7 +846,7 @@
         { jsonMode: false, max_tokens: 8, temperature: 0 }
       );
       var okText = (chatRes.content || '').trim();
-      push(
+      await push(
         'chat',
         '\u00c9change chat',
         /ok/i.test(okText) ? 'pass' : 'warn',
@@ -807,24 +859,31 @@
         // Upgrade auth if still warn/skip
         for (var i = 0; i < results.length; i++) {
           if (results[i].id === 'auth' && results[i].status !== 'pass') {
-            results[i].status = 'pass';
-            results[i].detail = 'Cl\u00e9 accept\u00e9e via chat';
+            await push(
+              'auth',
+              'Authentification',
+              'pass',
+              'Cl\u00e9 accept\u00e9e via chat',
+              results[i].ms
+            );
+            break;
           }
         }
       }
     } catch (chatErr2) {
-      push(
+      await push(
         'chat',
         '\u00c9change chat',
         'fail',
         chatErr2.message || String(chatErr2),
         Date.now() - t0
       );
-      push('json', 'Mode JSON', 'skip', 'Non test\u00e9');
+      await push('json', 'Mode JSON', 'skip', 'Non test\u00e9');
       return results;
     }
 
     // 5. JSON mode
+    await push('json', 'Mode JSON', 'running', 'En cours\u2026');
     t0 = Date.now();
     try {
       var jsonRes = await chatCompletions(
@@ -840,7 +899,7 @@
       );
       var parsed = parseAssistantPayload(jsonRes.content);
       if (parsed && parsed.message) {
-        push(
+        await push(
           'json',
           'Mode JSON',
           'pass',
@@ -848,7 +907,7 @@
           Date.now() - t0
         );
       } else {
-        push(
+        await push(
           'json',
           'Mode JSON',
           'warn',
@@ -857,7 +916,7 @@
         );
       }
     } catch (jsonErr) {
-      push(
+      await push(
         'json',
         'Mode JSON',
         'warn',
@@ -873,6 +932,7 @@
   global.PriorityAgent = {
     PROVIDER_STORAGE_KEY: PROVIDER_STORAGE_KEY,
     PRESETS: PRESETS,
+    OPENAI_MODELS: OPENAI_MODELS,
     normalizeProvider: normalizeProvider,
     isConfigured: isConfigured,
     getProvider: getProvider,
