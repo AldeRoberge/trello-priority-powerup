@@ -87,18 +87,18 @@
       // Popup width is fixed (narrow) by Trello; modal gives a comfortable editor width.
       // Use pageUrl (absolute, unsigned) — t.modal signs once; t.signUrl() double-signs.
       // Pass card name via args so the iframe can show it immediately (reliable card context).
-      // openSection: 'progress' checks/expands the Progrès section inside popup.html.
+      // openSection expands that section inside popup.html (priority / progress).
       options = options || {};
       var card = await t.card('name');
       var cardName = card && typeof card.name === 'string' ? card.name : '';
-      var args = { cardName: cardName };
-      if (options.openSection) args.openSection = options.openSection;
-      var focusProgress = options.openSection === 'progress';
+      var openSection = options.openSection || 'priority';
+      var args = { cardName: cardName, openSection: openSection };
+      var focusProgress = openSection === 'progress';
       return t.modal({
         title: focusProgress ? 'D\u00e9finir le progr\u00e8s' : 'D\u00e9finir la priorit\u00e9',
         url: PriorityTrello.pageUrl('./popup.html'),
         args: args,
-        height: focusProgress ? 1100 : 960,
+        height: 1100,
         fullscreen: false,
         accentColor: '#22272B',
       });

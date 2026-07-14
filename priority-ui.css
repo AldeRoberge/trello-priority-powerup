@@ -943,6 +943,16 @@ body {
   cursor: pointer;
 }
 
+.due-date-time-clock-mode {
+  margin: 0;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+}
+
 .due-date-time-clock:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--due-accent-soft);
@@ -965,7 +975,7 @@ body {
   border-radius: 2px 2px 0 0;
   pointer-events: none;
   transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1);
-  z-index: 1;
+  z-index: 4;
 }
 
 .due-date-time-clock.is-dragging .due-date-time-clock-hand {
@@ -982,6 +992,13 @@ body {
   border-radius: 50%;
   background: var(--due-accent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--due-accent) 35%, transparent);
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+}
+
+.due-date-time-clock.is-dragging .due-date-time-clock-thumb {
+  cursor: grabbing;
 }
 
 .due-date-time-clock-center {
@@ -1001,6 +1018,11 @@ body {
   position: absolute;
   inset: 0;
   z-index: 3;
+  pointer-events: none;
+}
+
+.due-date-time-clock-nums .due-date-time-clock-num {
+  pointer-events: auto;
 }
 
 .due-date-time-clock-num {

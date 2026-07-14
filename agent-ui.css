@@ -1,0 +1,390 @@
+/* Assistant chat section — priority popup */
+
+.tp-page--priority .variant-chat-section {
+  margin-top: 8px;
+}
+
+.tp-page--priority .field--chat {
+  border: 1px solid var(--tp-border);
+  border-radius: 8px;
+  background: var(--tp-surface);
+  padding: 0;
+  overflow: hidden;
+}
+
+.tp-page--priority .field--chat.is-enabled {
+  background: var(--tp-surface);
+}
+
+.tp-page--priority .field--chat .section-toggle-head {
+  align-items: center;
+}
+
+.tp-page--priority .agent-settings-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 2px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  cursor: pointer;
+  z-index: 1;
+}
+
+.tp-page--priority .agent-settings-btn:hover,
+.tp-page--priority .agent-settings-btn.is-active {
+  background: var(--tp-surface-hover);
+  color: var(--tp-text);
+}
+
+.tp-page--priority .agent-chat-body {
+  padding: 0 10px 10px;
+}
+
+.tp-page--priority .agent-settings {
+  margin: 0 0 10px;
+  padding: 10px;
+  border: 1px solid var(--tp-border);
+  border-radius: 6px;
+  background: var(--tp-surface-subtle);
+}
+
+.tp-page--priority .agent-settings-title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tp-text);
+}
+
+.tp-page--priority .agent-settings-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--tp-text-muted);
+}
+
+.tp-page--priority .agent-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.tp-page--priority .agent-preset-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--tp-border-strong);
+  border-radius: 3px;
+  background: var(--tp-surface);
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tp-page--priority .agent-preset-btn:hover {
+  background: var(--tp-surface-hover);
+}
+
+.tp-page--priority .agent-preset-btn.is-active {
+  border-color: var(--tp-primary);
+  color: var(--tp-primary);
+  background: var(--tp-surface);
+  font-weight: 600;
+}
+
+.tp-page--priority .agent-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.tp-page--priority .agent-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tp-text-subtle);
+}
+
+.tp-page--priority .agent-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--tp-border-strong);
+  border-radius: 3px;
+  background: var(--tp-input-bg);
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.tp-page--priority .agent-input:read-only {
+  opacity: 0.75;
+}
+
+.tp-page--priority .agent-input:focus {
+  outline: 2px solid var(--tp-primary);
+  outline-offset: 1px;
+}
+
+.tp-page--priority .agent-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.tp-page--priority .agent-btn--secondary {
+  background: transparent;
+  color: var(--tp-link);
+  border: 1px solid var(--tp-border-strong);
+}
+
+.tp-page--priority .agent-btn--secondary:hover {
+  background: var(--tp-surface-hover);
+  filter: none;
+}
+
+.tp-page--priority .agent-settings-status {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--tp-text-muted);
+}
+
+.tp-page--priority .agent-settings-status.is-pass {
+  color: var(--tp-success);
+}
+
+.tp-page--priority .agent-settings-status.is-fail {
+  color: var(--tp-danger-text);
+}
+
+.tp-page--priority .agent-settings-status.is-warn {
+  color: var(--tp-text-subtle);
+}
+
+.tp-page--priority .agent-test-results {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tp-page--priority .agent-test-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.tp-page--priority .agent-test-mark {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  margin-top: 1px;
+  background: var(--tp-surface);
+  color: var(--tp-text-muted);
+  border: 1px solid var(--tp-border);
+}
+
+.tp-page--priority .agent-test-item.is-pass .agent-test-mark {
+  color: var(--tp-success);
+  border-color: var(--tp-success);
+  background: var(--tp-success-bg);
+}
+
+.tp-page--priority .agent-test-item.is-fail .agent-test-mark {
+  color: var(--tp-danger-text);
+  border-color: var(--tp-danger-text);
+}
+
+.tp-page--priority .agent-test-item.is-warn .agent-test-mark {
+  color: var(--tp-text);
+  border-color: var(--tp-border-strong);
+}
+
+.tp-page--priority .agent-test-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.tp-page--priority .agent-test-label {
+  font-weight: 600;
+  color: var(--tp-text);
+}
+
+.tp-page--priority .agent-test-detail {
+  color: var(--tp-text-muted);
+  word-break: break-word;
+}
+
+.tp-page--priority .agent-chat-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tp-page--priority .agent-empty {
+  padding: 8px 2px 4px;
+}
+
+.tp-page--priority .agent-empty.is-hidden {
+  display: none;
+}
+
+.tp-page--priority .agent-empty-text {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--tp-text-muted);
+}
+
+.tp-page--priority .agent-empty-config {
+  font-size: 13px;
+}
+
+.tp-page--priority .agent-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+
+.tp-page--priority .agent-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 92%;
+}
+
+.tp-page--priority .agent-msg--user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.tp-page--priority .agent-msg--assistant {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.tp-page--priority .agent-msg-bubble {
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tp-page--priority .agent-msg--user .agent-msg-bubble {
+  background: var(--tp-primary);
+  color: var(--tp-primary-text);
+  border-bottom-right-radius: 2px;
+}
+
+.tp-page--priority .agent-msg--assistant .agent-msg-bubble {
+  background: var(--tp-surface-subtle);
+  color: var(--tp-text);
+  border: 1px solid var(--tp-border);
+  border-bottom-left-radius: 2px;
+}
+
+.tp-page--priority .agent-msg.is-pending .agent-msg-bubble {
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.tp-page--priority .agent-msg-note {
+  font-size: 11px;
+  color: var(--tp-text-muted);
+  padding: 0 4px;
+}
+
+.tp-page--priority .agent-followups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tp-page--priority .agent-followup-chip {
+  padding: 5px 10px;
+  border: 1px solid var(--tp-border-strong);
+  border-radius: 16px;
+  background: var(--tp-surface);
+  color: var(--tp-link);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.3;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tp-page--priority .agent-followup-chip:hover {
+  background: var(--tp-surface-hover);
+  border-color: var(--tp-primary);
+}
+
+.tp-page--priority .agent-composer {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.tp-page--priority .agent-composer-input {
+  flex: 1;
+  min-height: 40px;
+  max-height: 96px;
+  resize: vertical;
+  padding: 7px 8px;
+  border: 1px solid var(--tp-border-strong);
+  border-radius: 3px;
+  background: var(--tp-input-bg);
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.tp-page--priority .agent-composer-input:focus {
+  outline: 2px solid var(--tp-primary);
+  outline-offset: 1px;
+}
+
+.tp-page--priority .agent-send-btn {
+  flex: 0 0 auto;
+  align-self: stretch;
+}
+
+.tp-page--priority .agent-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tp-page--priority .agent-error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--tp-danger-text);
+}
+
+.tp-page--priority .chat-leading-icon {
+  color: var(--tp-text-muted);
+}

@@ -47,7 +47,7 @@
   var FORMULA_STORAGE_KEY = 'trello-priority-powerup/formula';
   var COLOR_SCHEME_STORAGE_KEY = 'trello-priority-powerup/color-scheme';
   var SECTION_COLLAPSE_STORAGE_KEY = 'trello-priority-powerup/section-collapse';
-  var SECTION_COLLAPSE_KEYS = ['priority', 'graph', 'progress', 'due', 'blocked'];
+  var SECTION_COLLAPSE_KEYS = ['priority', 'graph', 'progress', 'due', 'blocked', 'chat'];
   var DEFAULT_COLOR_SCHEME_KEY = 'blue';
   var SCORE_MAX = 10;
   // Urgency / impact axis max (ease uses 1..5).
@@ -1510,6 +1510,8 @@
   var DUE_DATE_TIME_DIAL_LABEL = 'Horloge';
   var DUE_DATE_TIME_HOURS_ARIA = 'Heures';
   var DUE_DATE_TIME_MINUTES_ARIA = 'Minutes';
+  var DUE_DATE_TIME_MODE_HOUR_LABEL = 'Heure';
+  var DUE_DATE_TIME_MODE_MINUTE_LABEL = 'Minutes';
   var DUE_DATE_TIME_AM_LABEL = 'AM';
   var DUE_DATE_TIME_PM_LABEL = 'PM';
   var DUE_DATE_TIME_MERIDIEM_ARIA = 'Matin ou apr\u00e8s-midi';
@@ -4777,6 +4779,7 @@
         : config.time;
     var current = normalizeDueDate(initialDate);
     var currentTime = current ? normalizeDueTime(initialTime) : '';
+    var rememberedTime = currentTime || '';
     var initialEnabled =
       initialValue && typeof initialValue === 'object' && initialValue.dueEnabled != null
         ? !!initialValue.dueEnabled && !!current
@@ -4976,7 +4979,7 @@
       chip.appendChild(chipBody);
       chip.addEventListener('click', function () {
         selectTime(period.time);
-        setDialMode('minute');
+        setDialMode('hour');
       });
       timePeriods.appendChild(chip);
     });
@@ -5081,8 +5084,14 @@
     clockFace.appendChild(clockCenter);
     clockFace.appendChild(clockNums);
 
+    var clockModeLabel = document.createElement('div');
+    clockModeLabel.className = 'due-date-time-clock-mode';
+    clockModeLabel.setAttribute('aria-live', 'polite');
+    clockModeLabel.textContent = DUE_DATE_TIME_MODE_HOUR_LABEL;
+
     timeDialSection.appendChild(timeDialHeader);
     timeDialSection.appendChild(clockFace);
+    timeDialSection.appendChild(clockModeLabel);
     timePopover.appendChild(timeDialSection);
 
     var popover = document.createElement('div');
@@ -5204,6 +5213,9 @@
       digitalHourInput.setAttribute('aria-pressed', dialMode === 'hour' ? 'true' : 'false');
       digitalMinuteInput.setAttribute('aria-pressed', dialMode === 'minute' ? 'true' : 'false');
       clockFace.dataset.mode = dialMode;
+      clockModeLabel.textContent = dialMode === 'minute'
+        ? DUE_DATE_TIME_MODE_MINUTE_LABEL
+        : DUE_DATE_TIME_MODE_HOUR_LABEL;
       renderClockFace();
     }
 
@@ -5381,7 +5393,7 @@
     }
 
     function syncTimePickerSelection() {
-      var parsed = parseDialTime(currentTime || DUE_DATE_TIME_DEFAULT);
+      var parsed = parseDialTime(currentTime || rememberedTime || DUE_DATE_TIME_DEFAULT);
       dialHour = parsed.hour;
       dialMinute = parsed.minute;
       renderClockFace();
@@ -5401,6 +5413,7 @@
       var next = normalizeDueTime(hhmm);
       currentTime = next || '';
       if (next) {
+        rememberedTime = next;
         var parsed = parseDialTime(next);
         dialHour = parsed.hour;
         dialMinute = parsed.minute;
@@ -5431,6 +5444,7 @@
       if (!next) return;
       current = next;
       currentTime = normalizeDueTime(resolved.time) || '';
+      if (currentTime) rememberedTime = currentTime;
       focusIso = next;
       syncViewFromValue(next);
       if (open) renderCalendar();
@@ -5510,6 +5524,7 @@
       if (value && typeof value === 'object') {
         current = normalizeDueDate(value.dueDate);
         currentTime = current ? normalizeDueTime(value.dueTime) : '';
+        if (currentTime) rememberedTime = currentTime;
         if (value.dueEnabled != null) enabled = !!value.dueEnabled;
         else enabled = !!current;
       } else {
@@ -5559,8 +5574,9 @@
       var next = normalizeDueDate(iso);
       if (!next) return;
       if (!currentTime) {
-        currentTime = DUE_DATE_TIME_DEFAULT;
+        currentTime = rememberedTime || DUE_DATE_TIME_DEFAULT;
       }
+      if (currentTime) rememberedTime = currentTime;
       current = next;
       focusIso = next;
       syncViewFromValue(next);
@@ -5734,6 +5750,7 @@
       event.preventDefault();
       event.stopPropagation();
       if (!enabled) return;
+      if (currentTime) rememberedTime = currentTime;
       current = '';
       currentTime = '';
       emitChange();
@@ -5745,6 +5762,7 @@
       event.stopPropagation();
       if (!enabled) return;
       currentTime = '';
+      rememberedTime = '';
       emitChange();
       if (timeOpen) syncTimePickerSelection();
     });
@@ -7174,12 +7192,15 @@
 
     function sectionExpandedDefault(key, enabledFallback) {
       if (key === 'graph') return false;
-      // Opening from Progrès should not auto-expand other sections.
-      if (focusSection === 'progress') return false;
+      // Opening focused on one section should not auto-expand the others.
+      if (focusSection && key !== focusSection) return false;
+      if (focusSection && key === focusSection) return true;
       return !!enabledFallback;
     }
 
     function sectionExpanded(key, enabledFallback) {
+      // Mirror Progrès: focused entry expands that section even if collapse prefs say otherwise.
+      if (focusSection && key === focusSection) return true;
       return resolveSectionExpanded(key, sectionExpandedDefault(key, enabledFallback));
     }
 

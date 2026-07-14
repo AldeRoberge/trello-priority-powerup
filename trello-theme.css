@@ -1862,7 +1862,7 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   }
 }
 
-/* All-subtasks-complete fireworks overlay (brief edge-triggered celebration). */
+/* 100%-complete fireworks overlay (brief edge-triggered celebration). */
 .tp-completion-fireworks {
   position: fixed;
   inset: 0;

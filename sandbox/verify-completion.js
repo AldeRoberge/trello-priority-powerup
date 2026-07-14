@@ -156,8 +156,8 @@ check(
   CT.isAllSubtasksComplete({ items: [] }) === false
 );
 check(
-  'isAllSubtasksComplete false for card-only 100%',
-  CT.isAllSubtasksComplete({ items: [], progress: 100 }) === false
+  'isAllSubtasksComplete true for card-only 100%',
+  CT.isAllSubtasksComplete({ items: [], progress: 100 }) === true
 );
 check(
   'isAllSubtasksComplete false when some open',

@@ -139,14 +139,10 @@
     };
   }
 
-  /** True when every subtask is done (remaining === 0 && totalCount > 0). */
+  /** True when overall completedness is 100% (subtasks average or card-level progress). */
   function isAllSubtasksComplete(data) {
     var progress = computeCardProgress(data);
-    return !!(
-      progress.hasItems &&
-      progress.totalCount > 0 &&
-      progress.doneCount >= progress.totalCount
-    );
+    return !!(progress && progress.percent >= 100);
   }
 
   async function getMarkedDueCompleteFlag(t) {
@@ -171,8 +167,8 @@
   }
 
   /**
-   * When all subtasks complete → mark card Done (dueComplete) via REST if available.
-   * When leaving all-complete → undo Done only if this feature set it.
+   * When progress reaches 100% → mark card Done (dueComplete) via REST if available.
+   * When leaving 100% → undo Done only if this feature set it.
    */
   async function syncCardDueCompleteFromProgress(t, data) {
     var allComplete = isAllSubtasksComplete(data);

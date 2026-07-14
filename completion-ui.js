@@ -459,12 +459,7 @@
   }
 
   function isAllCompleteProgress(progress) {
-    return !!(
-      progress &&
-      progress.hasItems &&
-      progress.totalCount > 0 &&
-      progress.doneCount >= progress.totalCount
-    );
+    return !!(progress && percentIsComplete(progress.percent));
   }
 
   function loadShowDonePreference() {

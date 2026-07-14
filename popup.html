@@ -8,9 +8,10 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./trello-theme.css?v=all-complete-1" />
   <link rel="stylesheet" href="./priority-ui.css?v=progress-lock-1" />
+  <link rel="stylesheet" href="./agent-ui.css?v=agent-1" />
   <script src="./rest-config.js"></script>
   <script src="./priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./priority-ui.js?v=progress-lock-1"></script>
+  <script src="./priority-ui.js?v=agent-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
@@ -19,6 +20,8 @@
   <script src="./priority-trello.js?v=all-complete-1"></script>
   <script src="./completion-ui.js?v=all-complete-1"></script>
   <script src="./completion-trello.js?v=all-complete-1"></script>
+  <script src="./agent.js?v=agent-1"></script>
+  <script src="./agent-ui.js?v=agent-1"></script>
 </head>
 <body class="tp-page tp-page--priority">
   <div class="compare-page">
@@ -138,6 +141,7 @@
       if (!completionUi || typeof completionUi.getData !== 'function') return '';
       var progress = CompletionTrello.computeCardProgress(completionUi.getData());
       if (!progress) return '';
+      if (progress.percent <= 0) return 'En attente';
       if (progress.hasItems) {
         var remaining = progress.totalCount - progress.doneCount;
         if (remaining <= 0) return 'Complété';
@@ -146,7 +150,6 @@
         return remaining + ' tâches restantes';
       }
       // Card-level progress only (no subtasks): keep percent.
-      if (progress.percent <= 0) return '';
       return progress.percent + '\u00a0%';
     }
 
@@ -339,6 +342,8 @@
         argName = t.arg('cardName');
       }
       var focusProgress = openSection === 'progress';
+      var focusPriority = openSection === 'priority';
+      var focusSection = focusProgress ? 'progress' : (focusPriority ? 'priority' : null);
 
       const hasSavedPriority = !!inputs;
       const initialDefaults = hasSavedPriority
@@ -352,7 +357,7 @@
         showCardHeader: true,
         formula: boardFormula,
         defaults: initialDefaults,
-        focusSection: focusProgress ? 'progress' : null,
+        focusSection: focusSection,
         dimensions: PriorityTrello.PRIORITY_DIMENSIONS,
         getBlockedSubtasks: getBlockedSubtasks,
         loadState: function (defaults) {
@@ -388,6 +393,60 @@
 
       await mountProgressSection(variant.card, focusProgress);
       syncBlockedSubtasks();
+
+      if (window.AgentUI && window.PriorityAgent) {
+        AgentUI.mount(variant.card, {
+          t: t,
+          getCardName: function () {
+            var nameEl = document.getElementById('cardName');
+            if (nameEl && nameEl.textContent && !nameEl.classList.contains('is-loading')) {
+              return nameEl.textContent;
+            }
+            return '';
+          },
+          getFormulaKey: function () {
+            if (variant && typeof variant.getFormulaKey === 'function') {
+              return variant.getFormulaKey();
+            }
+            return boardFormula || 'baseline';
+          },
+          getPriorityState: function () {
+            return variant && typeof variant.getState === 'function'
+              ? variant.getState()
+              : latestState || {};
+          },
+          getCompletion: function () {
+            if (completionUi && typeof completionUi.getData === 'function') {
+              return completionUi.getData();
+            }
+            return latestCompletion || { items: [] };
+          },
+          applyPriority: function (partial) {
+            if (!variant || typeof variant.setState !== 'function') return;
+            variant.setState(Object.assign({}, variant.getState(), partial || {}));
+          },
+          applyCompletion: function (next) {
+            if (!completionUi || typeof completionUi.setData !== 'function') return;
+            completionUi.setData(next);
+            var live = completionUi.getData();
+            saveCompletion(live);
+            if (progressCollapse) progressCollapse.refreshSummary();
+            syncBlockedSubtasks();
+            syncDueBlockedForProgress(live);
+            if (live.progressEnabled !== false) {
+              var wasOff = progressCollapse && !progressCollapse.isEnabled();
+              setProgressEnabled(true, {
+                expand: wasOff,
+                persist: false
+              });
+            }
+          },
+          onLayoutChange: resizePopup
+        });
+      } else {
+        console.error('Priority popup: AgentUI / PriorityAgent unavailable');
+      }
+
       await cardNamePromise;
       if (!focusProgress) window.scrollTo(0, 0);
       resizePopup();
