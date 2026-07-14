@@ -5,25 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
-  <script src="./js/rest-config.js"></script>
-  <script src="./js/version.js"></script>
-  <script src="./js/priority-matrix.js"></script>
-  <script src="./js/priority-ui.js"></script>
+  <script src="./components/shared/rest-config.js"></script>
+  <script src="./components/shared/version.js"></script>
+  <script src="./components/priority/priority-matrix.js"></script>
+  <script src="./components/priority/priority-ui.js"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority connector: priority-ui.js did not expose window.PriorityUI');
     }
   </script>
-  <script src="./js/priority-trello.js"></script>
-  <script src="./js/statut-match.js"></script>
-  <script src="./js/statut-trello.js"></script>
-  <script src="./js/tab-autocomplete.js"></script>
-  <script src="./js/completion-ui.js"></script>
-  <script src="./js/completion-trello.js"></script>
-  <script src="./js/agent.js"></script>
-  <script src="./js/agent-memory.js"></script>
-  <script src="./js/user-profile.js"></script>
-  <link rel="stylesheet" href="./css/trello-theme.css" />
+  <script src="./components/priority/priority-trello.js"></script>
+  <script src="./components/statut/statut-match.js"></script>
+  <script src="./components/statut/statut-trello.js"></script>
+  <script src="./components/shared/tab-autocomplete.js"></script>
+  <script src="./components/completion/completion-ui.js"></script>
+  <script src="./components/completion/completion-trello.js"></script>
+  <script src="./components/agent/agent.js"></script>
+  <script src="./components/agent/agent-memory.js"></script>
+  <script src="./components/profile/user-profile.js"></script>
+  <link rel="stylesheet" href="./components/shared/trello-theme.css" />
 </head>
 <body>
   <div id="landing" class="tp-landing" hidden>

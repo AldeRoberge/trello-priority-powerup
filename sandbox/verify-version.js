@@ -2,7 +2,7 @@
 const assert = require('assert');
 
 global.window = global;
-require('../js/version.js');
+require('../components/shared/version.js');
 
 const { relativeAgo, resolveBuiltAt, parseTimestampMs } = global.BuildVersion;
 

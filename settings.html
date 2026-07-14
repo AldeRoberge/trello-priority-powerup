@@ -6,17 +6,17 @@
   <title>Paramètres de priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <script src="./js/rest-config.js"></script>
-  <script src="./js/version.js"></script>
-  <script src="./js/priority-matrix.js"></script>
-  <script src="./js/priority-ui.js"></script>
-  <script src="./js/priority-trello.js"></script>
-  <script src="./js/statut-match.js"></script>
-  <script src="./js/statut-trello.js"></script>
-  <script src="./js/tab-autocomplete.js"></script>
-  <script src="./js/completion-ui.js"></script>
-  <script src="./js/completion-trello.js"></script>
-  <link rel="stylesheet" href="./css/trello-theme.css" />
+  <script src="./components/shared/rest-config.js"></script>
+  <script src="./components/shared/version.js"></script>
+  <script src="./components/priority/priority-matrix.js"></script>
+  <script src="./components/priority/priority-ui.js"></script>
+  <script src="./components/priority/priority-trello.js"></script>
+  <script src="./components/statut/statut-match.js"></script>
+  <script src="./components/statut/statut-trello.js"></script>
+  <script src="./components/shared/tab-autocomplete.js"></script>
+  <script src="./components/completion/completion-ui.js"></script>
+  <script src="./components/completion/completion-trello.js"></script>
+  <link rel="stylesheet" href="./components/shared/trello-theme.css" />
 </head>
 <body class="tp-page tp-page--settings">
   <details class="tp-settings-section" id="statutSettingsSection" open>
@@ -269,7 +269,7 @@
       if (section) section.hidden = false;
       if (!PriorityTrello.restClientOptions || !PriorityTrello.restClientOptions()) {
         statusEl.textContent =
-          'Déplacement de cartes / tri auto : indisponible. Renseignez appKey dans js/rest-config.js (clé depuis trello.com/power-ups/admin), puis rechargez le Power-Up.';
+          'Déplacement de cartes / tri auto : indisponible. Renseignez appKey dans components/shared/rest-config.js (clé depuis trello.com/power-ups/admin), puis rechargez le Power-Up.';
         authBtn.hidden = true;
         return;
       }
