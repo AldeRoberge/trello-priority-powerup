@@ -259,7 +259,9 @@
       getSummary: function () {
         if (!Agent.isConfigured(provider)) return 'Non configur\u00e9';
         if (!Agent.isVerified(provider)) return 'Non v\u00e9rifi\u00e9';
-        return provider.model || '';
+        var n = history.length;
+        if (!n) return '';
+        return n === 1 ? '1 message' : n + ' messages';
       },
       onLayoutChange: onLayoutChange,
       onEnableChange: function (on) {
@@ -597,7 +599,13 @@
     function appendMessage(role, text, meta) {
       emptyState.classList.add('is-hidden');
       var row = el('div', 'agent-msg agent-msg--' + role);
-      var bubble = el('div', 'agent-msg-bubble');
+      if (meta && meta.recap) {
+        row.classList.add('agent-msg--recap');
+      }
+      var bubble = el(
+        'div',
+        'agent-msg-bubble' + (meta && meta.recap ? ' agent-msg-bubble--recap' : '')
+      );
       bubble.textContent = text;
       row.appendChild(bubble);
       if (meta && meta.note) {
@@ -607,6 +615,20 @@
       messagesEl.scrollTop = messagesEl.scrollHeight;
       notifyLayout();
       return row;
+    }
+
+    function appendChangeRecap(applied, options) {
+      options = options || {};
+      var recap = Agent.formatChangeRecap
+        ? Agent.formatChangeRecap(applied || { results: [] }, options)
+        : (applied && applied.recap) || '';
+      if (!recap) return null;
+      var note = options.emptyClaim
+        ? 'V\u00e9rification'
+        : options.ok === false
+          ? 'Modifications (erreurs)'
+          : 'Modifications techniques';
+      return appendMessage('assistant', recap, { note: note, recap: true });
     }
 
     function clearFollowUps() {
@@ -926,13 +948,31 @@
           content: turn.message,
           rawJson: turn.rawJson
         });
+        if (collapse && collapse.refreshSummary) {
+          collapse.refreshSummary();
+        }
         // Auto-apply tools when the assistant has enough info (e.g. after a clarifying answer).
+        // Executor result is source of truth — always show a technical recap.
         if (turn.actions && turn.actions.length) {
           var applied = Agent.executeActions(bridge, turn.actions);
-          if (applied.errors && applied.errors.length) {
-            appendMessage('assistant', applied.errors.join('; '));
-          } else if (collapse && collapse.refreshSummary) {
-            collapse.refreshSummary();
+          appendChangeRecap(applied, {
+            droppedActions: turn.droppedActions,
+            ok: applied.ok
+          });
+        } else {
+          var emptyClaim =
+            Agent.looksLikeAppliedClaim &&
+            Agent.looksLikeAppliedClaim(turn.message);
+          var hasDropped =
+            turn.droppedActions && turn.droppedActions.length;
+          if (emptyClaim || hasDropped) {
+            appendChangeRecap(
+              { results: [] },
+              {
+                droppedActions: turn.droppedActions || [],
+                emptyClaim: emptyClaim && !hasDropped
+              }
+            );
           }
         }
         // Successful chat proves the provider works — persist verified + hide configure CTA.
@@ -975,19 +1015,13 @@
       var actions = (fu && fu.actions) || [];
       if (actions.length) {
         var result = Agent.executeActions(bridge, actions);
-        var note =
-          result.summary ||
-          (result.errors && result.errors[0]) ||
-          'Action effectu\u00e9e.';
-        if (result.errors && result.errors.length && result.summary) {
-          note = result.summary + ' (' + result.errors.join('; ') + ')';
-        } else if (result.errors && result.errors.length && !result.ok) {
-          note = result.errors.join('; ');
-        }
-        appendMessage('assistant', note, { note: fu.label });
+        appendMessage('assistant', result.summary || 'Action effectu\u00e9e.', {
+          note: fu.label
+        });
+        appendChangeRecap(result, { ok: result.ok });
         history.push({
           role: 'assistant',
-          content: note
+          content: result.summary || result.recap || 'Action effectu\u00e9e.'
         });
         if (collapse && collapse.refreshSummary) collapse.refreshSummary();
         refreshSuggestions({ animate: true });

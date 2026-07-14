@@ -506,6 +506,8 @@
       'R\u00e8gles actions (appliqu\u00e9es automatiquement)\u00a0:',
       '- 0 \u00e0 3 outils \u00e0 ex\u00e9cuter tout de suite quand tu as toutes les infos requises (ou quand l\'action peut \u00eatre faite sans motif, ex. bloquer).',
       '- Ne jamais inclure un outil incomplet (ex. add_subtask sans text non vide).',
+      '- INTERDIT d\'affirmer dans message qu\'une modification est faite (ajout\u00e9e, mise \u00e0 jour, bloqu\u00e9e\u2026) si le champ actions est vide. Sans outil, rien n\'est appliqu\u00e9.',
+      '- Le runtime ex\u00e9cute actions et affiche un r\u00e9cap technique v\u00e9rifi\u00e9\u00a0; le message reste conversationnel et court.',
       'R\u00e8gles followUps\u00a0:',
       '- 0 \u00e0 3 actions rapides optionnelles (boutons\u00a0; le clic applique sans nouvel appel).',
       '- Si actions (du followUp) est non vide\u00a0: le label EST une action \u2192 commence toujours par un verbe \u00e0 l\'infinitif (Marquer, D\u00e9finir, Ajouter\u2026). Ex.\u00a0: "Marquer bloqu\u00e9 (mat\u00e9riel)". Jamais un nom seul ni une question.',
@@ -552,9 +554,24 @@
     return true;
   }
 
+  function incompleteActionError(action) {
+    if (!action || !action.tool) return 'Action invalide';
+    if (action.tool === 'add_subtask') return 'add_subtask: text requis';
+    if (action.tool === 'toggle_subtask') return 'toggle_subtask: id requis';
+    if (action.tool === 'set_subtask_progress') {
+      return 'set_subtask_progress: id requis';
+    }
+    return action.tool + ': args incomplets';
+  }
+
   function normalizeActionList(raw) {
+    return normalizeActionsWithMeta(raw).actions;
+  }
+
+  function normalizeActionsWithMeta(raw) {
     var out = [];
-    if (!Array.isArray(raw)) return out;
+    var dropped = [];
+    if (!Array.isArray(raw)) return { actions: out, dropped: dropped };
     raw.forEach(function (action) {
       if (!action || typeof action !== 'object') return;
       var tool = typeof action.tool === 'string' ? action.tool.trim() : '';
@@ -563,10 +580,16 @@
         tool: tool,
         args: action.args && typeof action.args === 'object' ? action.args : {}
       };
-      if (!isCompleteAction(item)) return;
+      if (!isCompleteAction(item)) {
+        dropped.push({ tool: item.tool, error: incompleteActionError(item) });
+        return;
+      }
       out.push(item);
     });
-    return polishFollowUpActions(out).slice(0, 3);
+    return {
+      actions: polishFollowUpActions(out).slice(0, 3),
+      dropped: dropped
+    };
   }
 
   /** Reject ellipsis / placeholder chips the model copies from prompt examples. */
@@ -762,7 +785,8 @@
         message: 'R\u00e9ponse vide du fournisseur.',
         followUps: [],
         suggestions: [],
-        actions: []
+        actions: [],
+        droppedActions: []
       };
     }
     var jsonText = text;
@@ -809,15 +833,22 @@
       if (!suggestions.length) {
         suggestions = suggestionsFromFollowUps(followUps);
       }
-      var actions = normalizeActionList(parsed.actions);
+      var normalized = normalizeActionsWithMeta(parsed.actions);
       return {
         message: message,
         followUps: followUps,
         suggestions: suggestions,
-        actions: actions
+        actions: normalized.actions,
+        droppedActions: normalized.dropped
       };
     } catch (e) {
-      return { message: text, followUps: [], suggestions: [], actions: [] };
+      return {
+        message: text,
+        followUps: [],
+        suggestions: [],
+        actions: [],
+        droppedActions: []
+      };
     }
   }
 
@@ -1152,6 +1183,7 @@
       followUps: parsed.followUps,
       suggestions: parsed.suggestions,
       actions: parsed.actions || [],
+      droppedActions: parsed.droppedActions || [],
       rawJson: response.content,
       context: context,
       usage: usage
@@ -1245,49 +1277,252 @@
     return trimmed;
   }
 
+  function snapshotPriority(bridge) {
+    var s =
+      typeof bridge.getPriorityState === 'function' ? bridge.getPriorityState() || {} : {};
+    return {
+      urgency: s.urgency,
+      impact: s.impact,
+      ease: s.ease,
+      priorityEnabled: s.priorityEnabled !== false,
+      dueDate: s.dueDate || '',
+      dueTime: s.dueTime || '',
+      dueEnabled: !!s.dueEnabled,
+      enAttente: !!s.enAttente,
+      blockedReasons: Array.isArray(s.blockedReasons)
+        ? s.blockedReasons.slice()
+        : s.blockedReason
+          ? [s.blockedReason]
+          : []
+    };
+  }
+
+  function snapshotCompletion(bridge) {
+    var c =
+      typeof bridge.getCompletion === 'function'
+        ? bridge.getCompletion() || { items: [] }
+        : { items: [] };
+    return {
+      progress: c.progress,
+      progressEnabled: c.progressEnabled !== false,
+      items: (c.items || []).map(function (it) {
+        return {
+          id: it.id,
+          text: it.text,
+          done: !!it.done,
+          progress: it.progress != null ? it.progress : 0
+        };
+      })
+    };
+  }
+
+  function fmtVal(v) {
+    if (v == null || v === '') return 'null';
+    if (typeof v === 'boolean') return v ? 'true' : 'false';
+    if (Array.isArray(v)) return '[' + v.join(', ') + ']';
+    return String(v);
+  }
+
+  function pushChange(parts, key, before, after) {
+    if (before === after) return;
+    if (
+      Array.isArray(before) &&
+      Array.isArray(after) &&
+      JSON.stringify(before) === JSON.stringify(after)
+    ) {
+      return;
+    }
+    parts.push(key + ' ' + fmtVal(before) + ' \u2192 ' + fmtVal(after));
+  }
+
+  function findItem(items, id) {
+    for (var i = 0; i < (items || []).length; i++) {
+      if (items[i].id === id) return items[i];
+    }
+    return null;
+  }
+
+  function detailForTool(tool, beforeP, afterP, beforeC, afterC, args, extra) {
+    var parts = [];
+    args = args || {};
+    extra = extra || {};
+    if (tool === 'set_priority') {
+      pushChange(parts, 'priorityEnabled', beforeP.priorityEnabled, afterP.priorityEnabled);
+      pushChange(parts, 'urgency', beforeP.urgency, afterP.urgency);
+      pushChange(parts, 'impact', beforeP.impact, afterP.impact);
+      pushChange(parts, 'ease', beforeP.ease, afterP.ease);
+    } else if (tool === 'set_due') {
+      pushChange(parts, 'dueEnabled', beforeP.dueEnabled, afterP.dueEnabled);
+      pushChange(parts, 'dueDate', beforeP.dueDate, afterP.dueDate);
+      pushChange(parts, 'dueTime', beforeP.dueTime, afterP.dueTime);
+    } else if (tool === 'set_blocked') {
+      pushChange(parts, 'enAttente', beforeP.enAttente, afterP.enAttente);
+      pushChange(
+        parts,
+        'blockedReasons',
+        beforeP.blockedReasons,
+        afterP.blockedReasons
+      );
+    } else if (tool === 'set_progress') {
+      pushChange(
+        parts,
+        'progressEnabled',
+        beforeC.progressEnabled,
+        afterC.progressEnabled
+      );
+      pushChange(parts, 'progress', beforeC.progress, afterC.progress);
+    } else if (tool === 'add_subtask') {
+      var text = typeof args.text === 'string' ? args.text.trim() : '';
+      parts.push('+ "' + text + '"' + (extra.id ? ' (id: ' + extra.id + ')' : ''));
+      parts.push('items ' + beforeC.items.length + ' \u2192 ' + afterC.items.length);
+    } else if (tool === 'toggle_subtask' || tool === 'set_subtask_progress') {
+      var beforeItem = findItem(beforeC.items, args.id);
+      var afterItem = findItem(afterC.items, args.id);
+      if (beforeItem && afterItem) {
+        parts.push('id: ' + args.id);
+        if (beforeItem.text) parts.push('"' + beforeItem.text + '"');
+        pushChange(parts, 'done', beforeItem.done, afterItem.done);
+        pushChange(parts, 'progress', beforeItem.progress, afterItem.progress);
+      } else {
+        parts.push('id: ' + (args.id || '?'));
+      }
+    }
+    return parts.length ? parts.join('; ') : 'aucun diff d\u00e9tect\u00e9';
+  }
+
+  /**
+   * True when the assistant message claims a card change was applied
+   * (used to warn if actions was empty).
+   */
+  function looksLikeAppliedClaim(message) {
+    if (typeof message !== 'string' || !message.trim()) return false;
+    return /\b(ajout(\u00e9e?|er)|mise?\s+[aà]\s+jour|mis\s+[aà]\s+jour|enregistr(\u00e9e?|er)|d(\u00e9|e)fini[ee]?|bloqu(\u00e9e?|er)|d(\u00e9|e)bloqu(\u00e9e?|er)|appliqu(\u00e9e?|er)|modifi(\u00e9e?|er)|okay,?\s*bloqu)/i.test(
+      message
+    );
+  }
+
+  /**
+   * Technical recap from executeActions results (executor is source of truth).
+   */
+  function formatChangeRecap(applied, options) {
+    options = options || {};
+    var lines = [];
+    var results = (applied && applied.results) || [];
+    results.forEach(function (r) {
+      if (!r) return;
+      var tool = r.tool || '?';
+      if (r.ok) {
+        lines.push('\u2713 ' + tool + (r.detail ? ': ' + r.detail : ''));
+      } else {
+        lines.push('\u2717 ' + tool + ': ' + (r.error || '\u00e9chec'));
+      }
+    });
+    (options.droppedActions || []).forEach(function (d) {
+      if (!d) return;
+      lines.push('\u2717 ' + (d.tool || '?') + ': ' + (d.error || 'args incomplets'));
+    });
+    if (!lines.length) {
+      if (options.emptyClaim) {
+        return 'Aucun outil ex\u00e9cut\u00e9 \u2014 rien n\'a \u00e9t\u00e9 modifi\u00e9 sur la carte.';
+      }
+      return '';
+    }
+    return lines.join('\n');
+  }
+
   function executeAction(bridge, action) {
     if (!bridge || !action || !action.tool) {
-      return { ok: false, error: 'Action invalide' };
+      return { ok: false, tool: action && action.tool, error: 'Action invalide' };
     }
     var tool = action.tool;
     var args = action.args && typeof action.args === 'object' ? action.args : {};
     try {
       if (tool === 'set_priority') {
+        if (typeof bridge.applyPriority !== 'function') {
+          return { ok: false, tool: tool, error: 'Bridge priorit\u00e9 indisponible' };
+        }
+        var beforeP = snapshotPriority(bridge);
         var partial = {};
         if (args.urgency != null) partial.urgency = clampInt(args.urgency, 0, 4, 0);
         if (args.impact != null) partial.impact = clampInt(args.impact, 0, 4, 0);
         if (args.ease != null) partial.ease = clampInt(args.ease, 1, 5, 3);
-        if (args.priorityEnabled != null) partial.priorityEnabled = !!args.priorityEnabled;
+        if (args.priorityEnabled != null) {
+          partial.priorityEnabled = !!args.priorityEnabled;
+        } else if (
+          (partial.urgency != null || partial.impact != null || partial.ease != null) &&
+          !beforeP.priorityEnabled
+        ) {
+          // Writing axis values must activate Priorité or the UI stays off.
+          partial.priorityEnabled = true;
+        }
         if (!Object.keys(partial).length) {
-          return { ok: false, error: 'Aucun champ priorit\u00e9 \u00e0 modifier' };
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Aucun champ priorit\u00e9 \u00e0 modifier'
+          };
         }
         bridge.applyPriority(partial);
-        return { ok: true, summary: TOOL_LABELS.set_priority };
+        var afterP = snapshotPriority(bridge);
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.set_priority,
+          detail: detailForTool(tool, beforeP, afterP, null, null, args)
+        };
       }
       if (tool === 'set_due') {
+        if (typeof bridge.applyPriority !== 'function') {
+          return { ok: false, tool: tool, error: 'Bridge priorit\u00e9 indisponible' };
+        }
+        var beforeDue = snapshotPriority(bridge);
         var duePartial = {};
         if (Object.prototype.hasOwnProperty.call(args, 'dueDate')) {
           var dueDate = validateDueDate(args.dueDate);
           if (dueDate === undefined) {
-            return { ok: false, error: 'dueDate invalide (YYYY-MM-DD)' };
+            return { ok: false, tool: tool, error: 'dueDate invalide (YYYY-MM-DD)' };
           }
           duePartial.dueDate = dueDate || '';
         }
         if (Object.prototype.hasOwnProperty.call(args, 'dueTime')) {
           var dueTime = validateDueTime(args.dueTime);
           if (dueTime === undefined) {
-            return { ok: false, error: 'dueTime invalide (HH:MM)' };
+            return { ok: false, tool: tool, error: 'dueTime invalide (HH:MM)' };
           }
           duePartial.dueTime = dueTime || '';
         }
-        if (args.dueEnabled != null) duePartial.dueEnabled = !!args.dueEnabled;
+        if (args.dueEnabled != null) {
+          duePartial.dueEnabled = !!args.dueEnabled;
+        } else if (
+          (Object.prototype.hasOwnProperty.call(duePartial, 'dueDate') ||
+            Object.prototype.hasOwnProperty.call(duePartial, 'dueTime')) &&
+          !beforeDue.dueEnabled
+        ) {
+          duePartial.dueEnabled = true;
+        }
         if (!Object.keys(duePartial).length) {
-          return { ok: false, error: 'Aucun champ \u00e9ch\u00e9ance \u00e0 modifier' };
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Aucun champ \u00e9ch\u00e9ance \u00e0 modifier'
+          };
         }
         bridge.applyPriority(duePartial);
-        return { ok: true, summary: TOOL_LABELS.set_due };
+        var afterDue = snapshotPriority(bridge);
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.set_due,
+          detail: detailForTool(tool, beforeDue, afterDue, null, null, args)
+        };
       }
       if (tool === 'set_blocked') {
+        if (typeof bridge.applyPriority !== 'function') {
+          return { ok: false, tool: tool, error: 'Bridge priorit\u00e9 indisponible' };
+        }
+        var beforeBlocked = snapshotPriority(bridge);
         var blockedPartial = {};
         if (Array.isArray(args.blockedReasons)) {
           blockedPartial.blockedReasons = args.blockedReasons
@@ -1309,36 +1544,71 @@
           blockedPartial.enAttente = true;
         }
         if (!Object.keys(blockedPartial).length) {
-          return { ok: false, error: 'Aucun champ blocage \u00e0 modifier' };
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Aucun champ blocage \u00e0 modifier'
+          };
         }
         bridge.applyPriority(blockedPartial);
-        return { ok: true, summary: TOOL_LABELS.set_blocked };
+        var afterBlocked = snapshotPriority(bridge);
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.set_blocked,
+          detail: detailForTool(
+            tool,
+            beforeBlocked,
+            afterBlocked,
+            null,
+            null,
+            args
+          )
+        };
       }
       if (tool === 'set_progress') {
         if (typeof bridge.applyCompletion !== 'function') {
-          return { ok: false, error: 'Progr\u00e8s indisponible' };
+          return { ok: false, tool: tool, error: 'Progr\u00e8s indisponible' };
         }
+        var beforeProg = snapshotCompletion(bridge);
         var current =
-          typeof bridge.getCompletion === 'function' ? bridge.getCompletion() : { items: [] };
+          typeof bridge.getCompletion === 'function'
+            ? bridge.getCompletion()
+            : { items: [] };
         var next = Object.assign({}, current);
         if (args.progressEnabled != null) {
           if (args.progressEnabled === false) next.progressEnabled = false;
           else delete next.progressEnabled;
+        } else if (args.progress != null && current.progressEnabled === false) {
+          delete next.progressEnabled;
         }
         if (args.progress != null) {
           next.progress = clampInt(args.progress, 0, 100, 0);
         }
         bridge.applyCompletion(next);
-        return { ok: true, summary: TOOL_LABELS.set_progress };
+        var afterProg = snapshotCompletion(bridge);
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.set_progress,
+          detail: detailForTool(tool, null, null, beforeProg, afterProg, args)
+        };
       }
       if (tool === 'add_subtask') {
         if (typeof bridge.applyCompletion !== 'function') {
-          return { ok: false, error: 'Progr\u00e8s indisponible' };
+          return { ok: false, tool: tool, error: 'Progr\u00e8s indisponible' };
         }
         var text = typeof args.text === 'string' ? args.text.trim() : '';
-        if (!text) return { ok: false, error: 'Texte de sous-t\u00e2che requis' };
+        if (!text) {
+          return { ok: false, tool: tool, error: 'Texte de sous-t\u00e2che requis' };
+        }
+        var beforeAdd = snapshotCompletion(bridge);
         var data =
-          typeof bridge.getCompletion === 'function' ? bridge.getCompletion() : { items: [] };
+          typeof bridge.getCompletion === 'function'
+            ? bridge.getCompletion()
+            : { items: [] };
         var items = (data.items || []).slice();
         var id =
           'agent-' +
@@ -1350,16 +1620,31 @@
         delete added.progress;
         if (added.progressEnabled === false) delete added.progressEnabled;
         bridge.applyCompletion(added);
-        return { ok: true, summary: TOOL_LABELS.add_subtask, id: id };
+        var afterAdd = snapshotCompletion(bridge);
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.add_subtask,
+          id: id,
+          detail: detailForTool(tool, null, null, beforeAdd, afterAdd, args, {
+            id: id
+          })
+        };
       }
       if (tool === 'toggle_subtask' || tool === 'set_subtask_progress') {
         if (typeof bridge.applyCompletion !== 'function') {
-          return { ok: false, error: 'Progr\u00e8s indisponible' };
+          return { ok: false, tool: tool, error: 'Progr\u00e8s indisponible' };
         }
         var targetId = typeof args.id === 'string' ? args.id : '';
-        if (!targetId) return { ok: false, error: 'id de sous-t\u00e2che requis' };
+        if (!targetId) {
+          return { ok: false, tool: tool, error: 'id de sous-t\u00e2che requis' };
+        }
+        var beforeSub = snapshotCompletion(bridge);
         var base =
-          typeof bridge.getCompletion === 'function' ? bridge.getCompletion() : { items: [] };
+          typeof bridge.getCompletion === 'function'
+            ? bridge.getCompletion()
+            : { items: [] };
         var found = false;
         var nextItems = (base.items || []).map(function (item) {
           if (item.id !== targetId) return item;
@@ -1368,27 +1653,38 @@
           if (tool === 'toggle_subtask') {
             var done = args.done != null ? !!args.done : !item.done;
             copy.done = done;
-            copy.progress = done ? 100 : args.progress != null ? clampInt(args.progress, 0, 100, 0) : 0;
+            copy.progress = done
+              ? 100
+              : args.progress != null
+                ? clampInt(args.progress, 0, 100, 0)
+                : 0;
           } else {
             copy.progress = clampInt(args.progress, 0, 100, item.progress || 0);
             copy.done = copy.progress >= 100;
           }
           return copy;
         });
-        if (!found) return { ok: false, error: 'Sous-t\u00e2che introuvable' };
+        if (!found) {
+          return { ok: false, tool: tool, error: 'Sous-t\u00e2che introuvable' };
+        }
         bridge.applyCompletion(Object.assign({}, base, { items: nextItems }));
+        var afterSub = snapshotCompletion(bridge);
         return {
           ok: true,
+          tool: tool,
+          args: args,
           summary:
             tool === 'toggle_subtask'
               ? TOOL_LABELS.toggle_subtask
-              : TOOL_LABELS.set_subtask_progress
+              : TOOL_LABELS.set_subtask_progress,
+          detail: detailForTool(tool, null, null, beforeSub, afterSub, args)
         };
       }
-      return { ok: false, error: 'Outil inconnu\u00a0: ' + tool };
+      return { ok: false, tool: tool, error: 'Outil inconnu\u00a0: ' + tool };
     } catch (err) {
       return {
         ok: false,
+        tool: tool,
         error: (err && err.message) || '\u00c9chec d\'ex\u00e9cution'
       };
     }
@@ -1405,12 +1701,14 @@
       if (result.ok && result.summary) summaries.push(result.summary);
       if (!result.ok && result.error) errors.push(result.error);
     });
-    return {
+    var applied = {
       results: results,
       summary: summaries.filter(Boolean).join(' ') || (errors.length ? '' : 'OK'),
       errors: errors,
       ok: errors.length === 0 && results.length > 0
     };
+    applied.recap = formatChangeRecap(applied);
+    return applied;
   }
 
   async function runProviderTests(provider, onResult) {
@@ -1725,6 +2023,8 @@
     suggestQuestions: suggestQuestions,
     executeAction: executeAction,
     executeActions: executeActions,
+    formatChangeRecap: formatChangeRecap,
+    looksLikeAppliedClaim: looksLikeAppliedClaim,
     runProviderTests: runProviderTests,
     chatCompletions: chatCompletions,
     extractStreamingMessage: extractStreamingMessage,

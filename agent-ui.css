@@ -48,6 +48,11 @@
   color: var(--text-primary, var(--tp-text));
 }
 
+.tp-page--priority .agent-settings-btn .ti {
+  font-size: 16px;
+  line-height: 1;
+}
+
 .tp-page--priority .agent-chat-body {
   margin-top: 10px;
   padding: 0;
@@ -379,6 +384,21 @@
   font-size: 11px;
   color: var(--tp-text-muted);
   padding: 0 4px;
+}
+
+.tp-page--priority .agent-msg--recap {
+  margin-top: 2px;
+}
+
+.tp-page--priority .agent-msg-bubble--recap {
+  font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', Menlo, Consolas,
+    monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  color: var(--tp-text-muted);
+  background: var(--tp-surface-hover, rgba(9, 30, 66, 0.04));
+  border: 1px dashed var(--tp-border-strong, rgba(9, 30, 66, 0.14));
 }
 
 .tp-page--priority .agent-followups {
