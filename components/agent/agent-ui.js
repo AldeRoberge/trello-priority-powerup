@@ -102,8 +102,12 @@
     var settingsIcon = el('i', 'ti ti-settings');
     settingsIcon.setAttribute('aria-hidden', 'true');
     settingsBtn.appendChild(settingsIcon);
-    // Place after the enable checkbox so the gear stays on the far right edge.
-    chrome.head.appendChild(settingsBtn);
+    // Gear left of the enable checkbox (checkbox stays on the far right).
+    if (chrome.label) {
+      chrome.head.insertBefore(settingsBtn, chrome.label);
+    } else {
+      chrome.head.appendChild(settingsBtn);
+    }
 
     var body = el('div', 'agent-chat-body section-toggle-body');
     body.id = 'agent-chat-body';
@@ -275,6 +279,14 @@
     promptsEl.hidden = true;
     chatPanel.appendChild(promptsEl);
 
+    // Create before TabAutocomplete.bind — its initial refresh() calls onProposal
+    // → markSuggestionTabTarget, which needs suggestionsEl.
+    var suggestionsEl = el('div', 'agent-suggestions', {
+      role: 'group',
+      'aria-label': 'Questions sugg\u00e9r\u00e9es'
+    });
+    suggestionsEl.hidden = true;
+
     var composer = el('div', 'agent-composer');
     var input = el('textarea', 'agent-composer-input', {
       rows: '2',
@@ -311,12 +323,6 @@
     }
     composer.appendChild(sendBtn);
     chatPanel.appendChild(composer);
-
-    var suggestionsEl = el('div', 'agent-suggestions', {
-      role: 'group',
-      'aria-label': 'Questions sugg\u00e9r\u00e9es'
-    });
-    suggestionsEl.hidden = true;
     chatPanel.appendChild(suggestionsEl);
 
     var applySection = el('div', 'agent-apply-suggestions');
@@ -1538,6 +1544,7 @@
     }
 
     function markSuggestionTabTarget(text) {
+      if (!suggestionsEl) return;
       var target = String(text || '').trim();
       Array.prototype.forEach.call(
         suggestionsEl.querySelectorAll('.agent-suggestion-chip'),

@@ -47,7 +47,7 @@
   var FORMULA_STORAGE_KEY = 'trello-priority-powerup/formula';
   var COLOR_SCHEME_STORAGE_KEY = 'trello-priority-powerup/color-scheme';
   var SECTION_COLLAPSE_STORAGE_KEY = 'trello-priority-powerup/section-collapse';
-  var SECTION_COLLAPSE_KEYS = ['info', 'statut', 'priority', 'graph', 'progress', 'due', 'blocked', 'chat'];
+  var SECTION_COLLAPSE_KEYS = ['info', 'statut', 'objectif', 'priority', 'graph', 'progress', 'due', 'blocked', 'chat'];
   var DEFAULT_COLOR_SCHEME_KEY = 'blue';
   var SCORE_MAX = 10;
   // Urgency / impact axis max (ease uses 1..5).
@@ -3933,7 +3933,7 @@
     if (!hideEnable) {
       // Checkbox alone enables/disables — title is not part of the label,
       // so clicking the heading collapses instead of toggling the feature.
-      // Keep enable toggle on the right edge (settings gears append after it).
+      // Keep enable toggle on the right edge (settings gears insert before it).
       label = document.createElement('label');
       label.className = ('section-enable-label ' + labelClass).trim();
 
@@ -4348,8 +4348,12 @@
     settingsIcon.className = 'ti ti-settings';
     settingsIcon.setAttribute('aria-hidden', 'true');
     settingsBtn.appendChild(settingsIcon);
-    // After the enable checkbox so the gear stays on the far right edge.
-    chrome.head.appendChild(settingsBtn);
+    // Gear left of the enable checkbox (checkbox stays on the far right).
+    if (chrome.label) {
+      chrome.head.insertBefore(settingsBtn, chrome.label);
+    } else {
+      chrome.head.appendChild(settingsBtn);
+    }
     settingsBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       if (!onOpenSettings) return;

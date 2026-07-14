@@ -267,14 +267,14 @@ body {
 
 /* ── Shared section enable + collapse chrome ──
    Chevron (left) + title/summary = expand/collapse body
-   Checkbox (right) = enable/disable feature; settings gears append after it */
+   Settings gear (optional) then checkbox (far right) = enable/disable feature */
 .section-toggle-head {
   display: flex;
   align-items: flex-start;
   gap: 8px;
 }
 
-/* Settings gear sits after the enable checkbox — share one horizontal axis.
+/* Settings gear sits left of the enable checkbox — share one horizontal axis.
    Keep flex-start on the head so the enable checkbox lines up with other sections;
    the gear uses align-self: center on its own. */
 .field--statut .section-collapse-btn,
@@ -842,6 +842,7 @@ body {
   flex-direction: row;
   flex-wrap: wrap;
   align-items: stretch;
+  justify-content: center;
   gap: 8px;
   width: 100%;
 }
@@ -1055,14 +1056,6 @@ body {
   /* Checkbox-only enable control; collapse lives on .section-collapse-btn */
   cursor: pointer;
   user-select: none;
-}
-
-.due-date-checkbox {
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  flex-shrink: 0;
-  cursor: pointer;
 }
 
 .due-date-text {

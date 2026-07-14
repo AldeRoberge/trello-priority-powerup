@@ -16,10 +16,26 @@
   <script src="./components/shared/tab-autocomplete.js"></script>
   <script src="./components/completion/completion-ui.js"></script>
   <script src="./components/completion/completion-trello.js"></script>
+  <script src="./components/goals/goals-trello.js"></script>
+  <script src="./components/goals/goals-ui.js"></script>
+  <script src="./components/shared/spellcheck.js"></script>
+  <script src="./components/agent/agent.js"></script>
   <link rel="stylesheet" href="./components/shared/trello-theme.css" />
 </head>
 <body class="tp-page tp-page--settings">
-  <details class="tp-settings-section" id="statutSettingsSection" open>
+  <details class="tp-settings-section" id="goalsSettingsSection" open>
+    <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-hierarchy-2"></i></span>
+      <span class="tp-settings-summary-title">Objectifs</span>
+      <span class="tp-settings-summary-hint">Vision, mission, projet et métriques</span>
+    </summary>
+    <div class="tp-settings-body">
+      <p class="tp-color-scheme-hint">Hiérarchie Vision → Mission → Projet. Les missions portent les métriques (une principale max). Les éléments retirés restent résolus pour les cartes déjà liées.</p>
+      <div id="goalsSettingsMount"></div>
+    </div>
+  </details>
+
+  <details class="tp-settings-section" id="statutSettingsSection">
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-layout-list"></i></span>
       <span class="tp-settings-summary-title">Statut</span>
@@ -112,6 +128,10 @@
     PriorityTrello.initIframePage(function (t) {
     let buildStampTimer;
 
+    if (window.Spellcheck && typeof Spellcheck.configure === 'function') {
+      Spellcheck.configure({ t: t });
+    }
+
     function renderBuildInfo(builtAt) {
       const el = document.getElementById('buildInfo');
       el.textContent = `${BuildVersion.updatedLabel(builtAt)} · ${BuildVersion.formatUtc(builtAt)}`;
@@ -165,6 +185,30 @@
     function resizeSettingsPopup() {
       if (typeof t.sizeTo === 'function') {
         t.sizeTo(document.body);
+      }
+    }
+
+    async function initGoalsSettings() {
+      var section = document.getElementById('goalsSettingsSection');
+      var mount = document.getElementById('goalsSettingsMount');
+      if (
+        !mount ||
+        typeof GoalsTrello === 'undefined' ||
+        typeof GoalsUI === 'undefined' ||
+        typeof GoalsUI.mountGoalsSettings !== 'function'
+      ) {
+        if (section) section.hidden = true;
+        return;
+      }
+      try {
+        await GoalsUI.mountGoalsSettings(mount, {
+          t: t,
+          onResize: resizeSettingsPopup,
+        });
+        resizeSettingsPopup();
+      } catch (err) {
+        console.error('Goals settings init failed', err);
+        if (section) section.hidden = true;
       }
     }
 
@@ -549,6 +593,7 @@
 
     return Promise.allSettled([
       loadBuildInfo(),
+      initGoalsSettings(),
       initStatutSettings(),
       initColorSchemePicker(),
       initCompletionSchemePicker(),

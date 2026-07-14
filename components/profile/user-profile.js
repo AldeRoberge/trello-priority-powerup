@@ -14,6 +14,7 @@
   var FEATURE_KEYS = [
     'info',
     'statut',
+    'objectif',
     'priority',
     'graph',
     'progress',
@@ -25,6 +26,7 @@
   var FEATURE_LABELS = {
     info: 'Information',
     statut: 'Statut',
+    objectif: 'Objectif',
     priority: 'Priorité',
     graph: 'Graphique',
     progress: 'Progrès',
@@ -125,6 +127,8 @@
         return '.variant-info-section';
       case 'statut':
         return '.variant-statut-section';
+      case 'objectif':
+        return '.variant-objectif-section';
       case 'priority':
         return '.variant-priority-section';
       case 'graph':
