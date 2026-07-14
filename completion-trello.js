@@ -145,6 +145,21 @@
     return !!(progress && progress.percent >= 100);
   }
 
+  /**
+   * Force completion data to 100% (all subtasks, or card-level progress).
+   * Clears progressEnabled:false so Progrès is treated as on.
+   */
+  function markFullyComplete(data) {
+    var next = normalizeCompletionData(data || { items: [] });
+    if (next.items && next.items.length) {
+      next.items = applyMasterProgress(next.items, PROGRESS_MAX);
+    } else {
+      next.progress = PROGRESS_MAX;
+    }
+    delete next.progressEnabled;
+    return normalizeCompletionData(next);
+  }
+
   async function getMarkedDueCompleteFlag(t) {
     try {
       var flagged = await t.get('card', 'shared', COMPLETION_MARKED_DUE_COMPLETE_KEY);
@@ -495,6 +510,7 @@
     computeWeightedProgress: computeWeightedProgress,
     computeCardProgress: computeCardProgress,
     isAllSubtasksComplete: isAllSubtasksComplete,
+    markFullyComplete: markFullyComplete,
     syncCardDueCompleteFromProgress: syncCardDueCompleteFromProgress,
     applyMasterProgress: applyMasterProgress,
     getCardCompletion: getCardCompletion,

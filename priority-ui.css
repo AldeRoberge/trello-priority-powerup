@@ -521,7 +521,7 @@ body {
   flex-direction: row;
   flex-wrap: wrap;
   align-items: stretch;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
 }
 
@@ -545,21 +545,23 @@ body {
   display: inline-flex;
   flex-direction: row;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   max-width: 100%;
   border: 1px solid color-mix(in srgb, var(--statut-color, #626f86) 45%, var(--tp-border, rgba(9, 30, 66, 0.14)));
   background: color-mix(in srgb, var(--statut-color, #626f86) 12%, var(--tp-surface, transparent));
   color: var(--tp-text, inherit);
-  border-radius: 8px;
-  padding: 5px 10px 5px 8px;
-  font-size: 12px;
-  line-height: 1.2;
+  border-radius: 9px;
+  padding: 8px 12px 8px 10px;
+  font-size: 13px;
+  line-height: 1.25;
   cursor: pointer;
   text-align: left;
 }
 
 .statut-list-option-icon {
   flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
   color: var(--statut-color, #626f86);
 }
 
@@ -567,7 +569,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 11rem;
+  max-width: 12rem;
 }
 
 .statut-list-option:hover:not(:disabled) {
@@ -608,12 +610,36 @@ body {
   margin: 0;
 }
 
-.statut-settings-button {
+.statut-settings-btn {
+  flex: 0 0 auto;
   display: inline-flex;
-  width: auto;
-  max-width: 100%;
-  font-size: 12px;
-  padding: 4px 10px;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 2px;
+  margin-top: 1px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted, var(--tp-text-muted));
+  cursor: pointer;
+}
+
+.statut-settings-btn:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+
+.statut-settings-btn:focus-visible {
+  outline: 2px solid var(--focus-ring-strong, #0c66e4);
+  outline-offset: 1px;
+}
+
+.statut-settings-btn .ti {
+  font-size: 16px;
+  line-height: 1;
 }
 
 .field--priority {

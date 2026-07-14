@@ -16,61 +16,84 @@
   <script src="./completion-trello.js"></script>
   <link rel="stylesheet" href="./trello-theme.css" />
 </head>
-<body class="tp-page">
-  <h3 class="tp-heading">Priorité</h3>
-  <p class="tp-subtitle">Évaluez chaque carte selon l'urgence, l'impact et la facilité pour obtenir un score et un libellé de palier (Critique, Urgente, Prioritaire…).</p>
+<body class="tp-page tp-page--settings">
+  <details class="tp-settings-section" id="statutSettingsSection" open>
+    <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-title">Statut</span>
+      <span class="tp-settings-summary-hint">Catégories des listes et auto-déplacement</span>
+    </summary>
+    <div class="tp-settings-body">
+      <p class="tp-color-scheme-hint">Associez chaque liste du tableau à une catégorie (style Linear). La détection initiale utilise les noms connus (FR/EN).</p>
 
-  <section class="tp-statut-settings" id="statutSettingsSection" aria-labelledby="statutSettingsHeading">
-    <h4 class="tp-heading" id="statutSettingsHeading">Statut</h4>
-    <p class="tp-color-scheme-hint">Associez chaque liste du tableau à une catégorie (style Linear). La détection initiale utilise les noms connus (FR/EN).</p>
+      <div class="tp-statut-map" id="statutMapList"></div>
 
-    <div class="tp-statut-map" id="statutMapList"></div>
+      <div class="tp-statut-roles">
+        <label class="tp-statut-role">
+          <span class="tp-statut-role-label">Liste Bloqué (auto-déplacement)</span>
+          <select id="statutBlockedList" class="tp-select" aria-label="Liste Bloqué"></select>
+        </label>
+        <label class="tp-statut-role">
+          <span class="tp-statut-role-label">Liste Terminé (auto-déplacement)</span>
+          <select id="statutCompletedList" class="tp-select" aria-label="Liste Terminé"></select>
+        </label>
+      </div>
 
-    <div class="tp-statut-roles">
-      <label class="tp-statut-role">
-        <span class="tp-statut-role-label">Liste Bloqué (auto-déplacement)</span>
-        <select id="statutBlockedList" class="tp-select" aria-label="Liste Bloqué"></select>
+      <label class="tp-statut-toggle">
+        <input type="checkbox" id="statutAutoMoveBlocked" />
+        <span>Déplacer automatiquement vers Bloqué quand une carte est marquée bloquée</span>
       </label>
-      <label class="tp-statut-role">
-        <span class="tp-statut-role-label">Liste Terminé (auto-déplacement)</span>
-        <select id="statutCompletedList" class="tp-select" aria-label="Liste Terminé"></select>
+      <label class="tp-statut-toggle">
+        <input type="checkbox" id="statutAutoMoveCompleted" />
+        <span>Déplacer automatiquement vers Terminé quand une carte est complétée</span>
       </label>
+
+      <button type="button" class="tp-button tp-button--secondary" id="statutRedetect">Réinitialiser la détection</button>
     </div>
+  </details>
 
-    <label class="tp-statut-toggle">
-      <input type="checkbox" id="statutAutoMoveBlocked" />
-      <span>Déplacer automatiquement vers Bloqué quand une carte est marquée bloquée</span>
-    </label>
-    <label class="tp-statut-toggle">
-      <input type="checkbox" id="statutAutoMoveCompleted" />
-      <span>Déplacer automatiquement vers Terminé quand une carte est complétée</span>
-    </label>
-
-    <button type="button" class="tp-button tp-button--secondary" id="statutRedetect">Réinitialiser la détection</button>
-  </section>
-
-  <section class="tp-color-scheme" id="colorSchemeSection" aria-labelledby="colorSchemeHeading">
-    <h4 class="tp-heading" id="colorSchemeHeading">Schéma de couleurs</h4>
-    <p class="tp-color-scheme-hint">Palette des paliers de priorité affichés sur le tableau.</p>
-    <div class="tp-color-scheme-list" id="colorSchemeList" role="radiogroup" aria-label="Schéma de couleurs"></div>
-    <div class="tp-badge-preview" id="badgePreviewSection" aria-labelledby="badgePreviewHeading">
-      <p class="tp-color-scheme-hint" id="badgePreviewHeading">Aperçu des badges sur les cartes</p>
-      <div class="tp-badge-preview-list" id="badgePreviewList"></div>
+  <details class="tp-settings-section" id="colorSchemeSection">
+    <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-title">Schéma de couleurs</span>
+      <span class="tp-settings-summary-hint">Palette des paliers de priorité</span>
+    </summary>
+    <div class="tp-settings-body">
+      <p class="tp-color-scheme-hint">Palette des paliers de priorité affichés sur le tableau.</p>
+      <div class="tp-color-scheme-list" id="colorSchemeList" role="radiogroup" aria-label="Schéma de couleurs"></div>
+      <div class="tp-badge-preview" id="badgePreviewSection" aria-labelledby="badgePreviewHeading">
+        <p class="tp-color-scheme-hint" id="badgePreviewHeading">Aperçu des badges sur les cartes</p>
+        <div class="tp-badge-preview-list" id="badgePreviewList"></div>
+      </div>
     </div>
-  </section>
+  </details>
 
-  <section class="tp-color-scheme" id="completionSchemeSection" aria-labelledby="completionSchemeHeading">
-    <h4 class="tp-heading" id="completionSchemeHeading">Schéma de progrès</h4>
-    <p class="tp-color-scheme-hint">Couleur de la barre de progression et des badges de progrès (0&nbsp;% → 100&nbsp;%).</p>
-    <div class="tp-color-scheme-list" id="completionSchemeList" role="radiogroup" aria-label="Schéma de progrès"></div>
-  </section>
+  <details class="tp-settings-section" id="completionSchemeSection">
+    <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-title">Schéma de progrès</span>
+      <span class="tp-settings-summary-hint">Couleurs de la barre 0&nbsp;% → 100&nbsp;%</span>
+    </summary>
+    <div class="tp-settings-body">
+      <p class="tp-color-scheme-hint">Couleur de la barre de progression et des badges de progrès (0&nbsp;% → 100&nbsp;%).</p>
+      <div class="tp-color-scheme-list" id="completionSchemeList" role="radiogroup" aria-label="Schéma de progrès"></div>
+    </div>
+  </details>
 
-  <div class="tp-build-info" id="buildInfo">Build : chargement…</div>
-  <div class="tp-auto-sort" id="autoSortSection">
-    <p class="tp-auto-sort-status" id="autoSortStatus"></p>
-    <button type="button" class="tp-button" id="authorizeAutoSort" hidden>Autoriser Trello (lecture + écriture)</button>
+  <details class="tp-settings-section" id="autoSortSection">
+    <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-title">Autorisation</span>
+      <span class="tp-settings-summary-hint">Déplacement de cartes et tri auto</span>
+    </summary>
+    <div class="tp-settings-body">
+      <div class="tp-auto-sort">
+        <p class="tp-auto-sort-status" id="autoSortStatus"></p>
+        <button type="button" class="tp-button" id="authorizeAutoSort" hidden>Autoriser Trello (lecture + écriture)</button>
+      </div>
+    </div>
+  </details>
+
+  <div class="tp-settings-footer">
+    <button type="button" class="tp-link" id="showGuide">Voir le guide de configuration</button>
+    <div class="tp-build-info" id="buildInfo">Build : chargement…</div>
   </div>
-  <button type="button" class="tp-link" id="showGuide">Voir le guide de configuration</button>
 
   <script>
     PriorityTrello.initIframePage(function (t) {
@@ -253,7 +276,7 @@
       var section = document.getElementById('autoSortSection');
       var statusEl = document.getElementById('autoSortStatus');
       var authBtn = document.getElementById('authorizeAutoSort');
-      section.hidden = false;
+      if (section) section.hidden = false;
       if (!PriorityTrello.restClientOptions || !PriorityTrello.restClientOptions()) {
         statusEl.textContent =
           'Déplacement de cartes / tri auto : indisponible. Renseignez appKey dans rest-config.js (clé depuis trello.com/power-ups/admin), puis rechargez le Power-Up.';
@@ -511,6 +534,10 @@
         fullscreen: false,
         accentColor: '#22272B',
       });
+    });
+
+    document.querySelectorAll('.tp-settings-section').forEach(function (section) {
+      section.addEventListener('toggle', resizeSettingsPopup);
     });
 
     return Promise.allSettled([

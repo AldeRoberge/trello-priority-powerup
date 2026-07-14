@@ -167,10 +167,13 @@
           icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/settings.svg',
           text: 'Paramètres de priorité',
           callback: function(t) {
-            return t.popup({
+            // Popup width is fixed (narrow) by Trello; modal fits statut mapping + color schemes.
+            return t.modal({
               title: 'Paramètres de priorité',
               url: PriorityTrello.pageUrl('./settings.html'),
               height: 720,
+              fullscreen: false,
+              accentColor: '#22272B',
             });
           },
         }];

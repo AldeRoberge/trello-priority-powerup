@@ -259,27 +259,68 @@
     settings = settings || (await ensureStatutSettings(t)).settings;
     var category =
       settings.listCategories && listId ? settings.listCategories[String(listId)] : null;
+    var isBlockedRole =
+      !!(
+        settings.roleLists &&
+        settings.roleLists.blocked &&
+        String(settings.roleLists.blocked) === String(listId)
+      );
+    var isBlocked = category === 'blocked' || isBlockedRole;
+    if (isBlocked && category !== 'blocked') {
+      category = 'blocked';
+    }
+    var isCompletedRole =
+      !!(
+        settings.roleLists &&
+        settings.roleLists.completed &&
+        String(settings.roleLists.completed) === String(listId)
+      );
+    var isCompleted = category === 'completed' || isCompletedRole;
+    if (isCompleted && category !== 'completed') {
+      category = 'completed';
+    }
     var PT = priorityTrello();
     var side = { category: category || null };
 
-    if (category === 'blocked' && PT && typeof PT.getCardInputs === 'function') {
-      var inputs = await PT.getCardInputs(t);
-      if (inputs && !inputs.enAttente) {
-        var blocked = Object.assign({}, inputs, { enAttente: true });
+    if (isBlocked && PT && typeof PT.getCardInputs === 'function') {
+      var inputs = null;
+      try {
+        inputs = await PT.getCardInputs(t);
+      } catch (err) {
+        console.error('StatutTrello.applyStatutSideEffects getCardInputs failed', err);
+      }
+      if (!inputs || !inputs.enAttente) {
+        var blocked = Object.assign({}, inputs || {}, { enAttente: true });
         await PT.saveCardInputs(t, blocked, {
           autoSort: false,
           syncDue: false,
           skipStatutAutoMove: true,
         });
-        side.enAttenteSet = true;
       }
+      side.enAttenteSet = true;
+      side.enAttente = true;
     }
 
-    if (category === 'completed' && PT && typeof PT.setCardDueComplete === 'function') {
-      var mark = await PT.setCardDueComplete(t, true, { skipStatutAutoMove: true });
-      side.dueComplete = mark;
-      if (typeof PT.clearBlockedIfComplete === 'function') {
-        await PT.clearBlockedIfComplete(t);
+    if (isCompleted) {
+      var CT = global.CompletionTrello;
+      if (CT && typeof CT.getCardCompletion === 'function' && typeof CT.markFullyComplete === 'function') {
+        try {
+          var stored = await CT.getCardCompletion(t);
+          var completeData = CT.markFullyComplete(stored);
+          await CT.saveCardCompletion(t, completeData);
+          side.progressComplete = true;
+          side.completion = completeData;
+        } catch (err) {
+          console.error('StatutTrello.applyStatutSideEffects mark progress complete failed', err);
+        }
+      }
+
+      if (PT && typeof PT.setCardDueComplete === 'function') {
+        var mark = await PT.setCardDueComplete(t, true, { skipStatutAutoMove: true });
+        side.dueComplete = mark;
+        if (typeof PT.clearBlockedIfComplete === 'function') {
+          await PT.clearBlockedIfComplete(t);
+        }
       }
     }
 

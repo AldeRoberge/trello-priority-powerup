@@ -182,6 +182,40 @@
       variant.setProgressCompleteLock(progressIsFullyComplete(data));
     }
 
+    /** Mirror Terminé → Progrès 100% in the open popup (persistence already done in side effects). */
+    function applyCompletionFromStatutComplete(completionData) {
+      var CT = CompletionTrello;
+      var next =
+        completionData ||
+        (CT.markFullyComplete
+          ? CT.markFullyComplete(
+              (completionUi && typeof completionUi.getData === 'function' && completionUi.getData()) ||
+                latestCompletion ||
+                { items: [] }
+            )
+          : null);
+      if (!next) return;
+
+      latestCompletion = withProgressEnabledFlag(next, true);
+      if (completionUi && typeof completionUi.setData === 'function') {
+        completionUi.setData(latestCompletion);
+      }
+      var live =
+        completionUi && typeof completionUi.getData === 'function'
+          ? completionUi.getData()
+          : latestCompletion;
+      // Persist again with progressEnabled on (statut side effect may have left it unset).
+      saveCompletion(live);
+      if (progressCollapse) progressCollapse.refreshSummary();
+      syncBlockedSubtasks();
+      syncDueBlockedForProgress(live);
+      if (progressCollapse && !progressCollapse.isEnabled()) {
+        setProgressEnabled(true, { expand: true, persist: true });
+      } else {
+        progressEnabled = true;
+      }
+    }
+
     function setProgressEnabled(enabled, options) {
       options = options || {};
       if (progressCollapse) {
@@ -247,33 +281,43 @@
               return PriorityTrello.authorizeRestForAutoSort(t);
             },
             onOpenSettings: function () {
-              return t.popup({
+              // Popup width is fixed (narrow) by Trello; modal is wide enough for statut mapping.
+              return t.modal({
                 title: 'Paramètres de priorité',
                 url: PriorityTrello.pageUrl('./settings.html'),
                 height: 720,
+                fullscreen: false,
+                accentColor: '#22272B',
               });
             },
             onSelectList: function (listId) {
               return StatutTrello.selectCardStatut(t, listId).then(function (result) {
                 if (result && result.ok && variant && result.sideEffects) {
-                  if (result.sideEffects.enAttenteSet && typeof variant.setState === 'function') {
+                  var side = result.sideEffects;
+                  if (
+                    (side.enAttenteSet || side.category === 'blocked') &&
+                    typeof variant.setState === 'function'
+                  ) {
+                    // Progress-complete lock disables Bloqué; clear it so the section can enable.
+                    if (typeof variant.setProgressCompleteLock === 'function') {
+                      variant.setProgressCompleteLock(false);
+                    }
                     variant.setState(
                       Object.assign({}, variant.getState(), { enAttente: true })
                     );
+                    resizePopup();
                   }
-                  if (
-                    result.sideEffects.category === 'completed' &&
-                    typeof variant.setState === 'function'
-                  ) {
-                    var cleared = Object.assign({}, variant.getState(), {
-                      enAttente: false,
-                      blockedReasons: [],
-                      blockedLinks: [],
-                    });
-                    variant.setState(cleared);
-                    if (typeof variant.setProgressCompleteLock === 'function') {
-                      variant.setProgressCompleteLock(true);
+                  if (side.category === 'completed') {
+                    if (typeof variant.setState === 'function') {
+                      var cleared = Object.assign({}, variant.getState(), {
+                        enAttente: false,
+                        blockedReasons: [],
+                        blockedLinks: [],
+                      });
+                      variant.setState(cleared);
                     }
+                    applyCompletionFromStatutComplete(side.completion);
+                    resizePopup();
                   }
                 }
                 return result;

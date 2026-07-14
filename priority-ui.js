@@ -3956,7 +3956,8 @@
         if (changed || options.expand != null) expanded = options.expand !== false;
         if (changed && typeof onAfterEnable === 'function') onAfterEnable(options);
       } else {
-        if (options.expand != null) expanded = !!options.expand;
+        // Disabling collapses by default; pass expand:true to keep open.
+        expanded = options.expand != null ? !!options.expand : false;
         if (changed && typeof onBeforeDisable === 'function') onBeforeDisable(options);
       }
       syncUi(options.notifyLayout !== false);
@@ -3974,10 +3975,9 @@
       }
       enableAllowed = next;
       if (!enableAllowed && enabled) {
-        setEnabled(false, {
-          notifyLayout: options.notifyLayout,
-          expand: options.expand != null ? options.expand : expanded
-        });
+        var disableOpts = { notifyLayout: options.notifyLayout };
+        if (options.expand != null) disableOpts.expand = options.expand;
+        setEnabled(false, disableOpts);
         return;
       }
       syncUi(options.notifyLayout !== false);
@@ -4092,8 +4092,8 @@
     var ns = 'http://www.w3.org/2000/svg';
     var svg = document.createElementNS(ns, 'svg');
     svg.setAttribute('viewBox', '0 0 16 16');
-    svg.setAttribute('width', '14');
-    svg.setAttribute('height', '14');
+    svg.setAttribute('width', '16');
+    svg.setAttribute('height', '16');
     svg.setAttribute('aria-hidden', 'true');
     svg.classList.add('statut-list-option-icon');
 
@@ -4223,6 +4223,26 @@
     });
     field.appendChild(chrome.head);
 
+    var settingsBtn = document.createElement('button');
+    settingsBtn.type = 'button';
+    settingsBtn.className = 'statut-settings-btn';
+    settingsBtn.setAttribute('aria-label', 'Personnaliser les statuts');
+    settingsBtn.title = 'Personnaliser les statuts';
+    settingsBtn.hidden = !onOpenSettings;
+    var settingsIcon = document.createElement('i');
+    settingsIcon.className = 'ti ti-settings';
+    settingsIcon.setAttribute('aria-hidden', 'true');
+    settingsBtn.appendChild(settingsIcon);
+    // After the collapse control so it stays clickable (collapse is flex:1).
+    chrome.head.appendChild(settingsBtn);
+    settingsBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (!onOpenSettings) return;
+      Promise.resolve(onOpenSettings()).catch(function (err) {
+        console.error('Statut open settings failed', err);
+      });
+    });
+
     var body = document.createElement('div');
     body.className = 'statut-section-body section-toggle-body';
     body.id = bodyId;
@@ -4277,34 +4297,20 @@
     var unassignedCheckbox = document.createElement('input');
     unassignedCheckbox.type = 'checkbox';
     unassignedCheckbox.checked = showUnassigned;
-    unassignedCheckbox.setAttribute('aria-label', 'Show unassigned statuses');
+    unassignedCheckbox.setAttribute('aria-label', 'Afficher les statuts non assignés');
     var unassignedLabel = document.createElement('span');
-    unassignedLabel.textContent = 'Show unassigned statuses';
+    unassignedLabel.textContent = 'Afficher les statuts non assignés';
     unassignedToggle.appendChild(unassignedCheckbox);
     unassignedToggle.appendChild(unassignedLabel);
-
-    var settingsBtn = document.createElement('button');
-    settingsBtn.type = 'button';
-    settingsBtn.className = 'tp-button tp-button--secondary statut-settings-button';
-    settingsBtn.textContent = 'Customize statuses';
-    settingsBtn.hidden = !showUnassigned || !onOpenSettings;
-    settingsBtn.addEventListener('click', function () {
-      if (!onOpenSettings) return;
-      Promise.resolve(onOpenSettings()).catch(function (err) {
-        console.error('Statut open settings failed', err);
-      });
-    });
 
     unassignedCheckbox.addEventListener('change', function () {
       showUnassigned = !!unassignedCheckbox.checked;
       saveShowUnassignedStatuts(showUnassigned);
-      settingsBtn.hidden = !showUnassigned || !onOpenSettings;
       renderOptions();
       onLayoutChange();
     });
 
     footer.appendChild(unassignedToggle);
-    footer.appendChild(settingsBtn);
 
     body.appendChild(authBox);
     body.appendChild(groupsEl);
@@ -4409,7 +4415,7 @@
       groupsEl.replaceChildren();
       var groups = ensureCurrentListVisible(buildGroups());
       emptyEl.hidden = lists.length > 0;
-      settingsBtn.hidden = !showUnassigned || !onOpenSettings;
+      settingsBtn.hidden = !onOpenSettings;
 
       if (!groups.length) return;
 
@@ -8242,7 +8248,13 @@
           state.priorityEnabled = !!next.priorityEnabled;
         }
         if (next.enAttente != null && enAttenteField) {
+          if (next.enAttente && enAttenteField.setEnableAllowed) {
+            enAttenteField.setEnableAllowed(true);
+          }
           enAttenteField.setValue(next.enAttente);
+          if (next.enAttente && enAttenteField.setExpanded) {
+            enAttenteField.setExpanded(true);
+          }
         }
         if (
           (next.blockedReasons != null || next.blockedReason != null) &&

@@ -287,7 +287,7 @@ html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
 .tp-link:hover { text-decoration: underline; }
 
 .tp-auto-sort {
-  margin: 12px 0 4px;
+  margin: 0 0 12px;
 }
 
 .tp-auto-sort-status {
@@ -337,6 +337,116 @@ html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
 
 .tp-statut-settings {
   margin: 0 0 16px;
+}
+
+.tp-page--settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tp-settings-section {
+  margin: 0;
+  border: 1px solid var(--tp-border, #091e4224);
+  border-radius: 8px;
+  background: var(--tp-surface, #fff);
+  overflow: hidden;
+}
+
+.tp-settings-section[hidden] {
+  display: none;
+}
+
+.tp-settings-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'title chevron'
+    'hint chevron';
+  column-gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tp-settings-summary::-webkit-details-marker {
+  display: none;
+}
+
+.tp-settings-summary::after {
+  grid-area: chevron;
+  content: '';
+  width: 0.45em;
+  height: 0.45em;
+  margin-right: 2px;
+  border-right: 2px solid var(--tp-text-muted, #5e6c84);
+  border-bottom: 2px solid var(--tp-text-muted, #5e6c84);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+
+.tp-settings-section[open] > .tp-settings-summary::after {
+  transform: translateY(3px) rotate(225deg);
+}
+
+.tp-settings-summary:hover {
+  background: var(--tp-surface-hover, #091e420a);
+}
+
+.tp-settings-summary:focus-visible {
+  outline: 2px solid var(--tp-primary, #0c66e4);
+  outline-offset: -2px;
+}
+
+.tp-settings-summary-title {
+  grid-area: title;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tp-text, #172b4d);
+}
+
+.tp-settings-summary-hint {
+  grid-area: hint;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--tp-text-muted, #5e6c84);
+}
+
+.tp-settings-body {
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--tp-border, #091e4224);
+}
+
+.tp-settings-body > .tp-color-scheme-hint:first-child {
+  margin-top: 10px;
+}
+
+.tp-settings-body .tp-link {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 0;
+}
+
+.tp-settings-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-top: 4px;
+  padding: 4px 2px 0;
+}
+
+.tp-settings-footer .tp-link {
+  padding: 0;
+}
+
+.tp-settings-footer .tp-build-info {
+  margin: 0;
+  padding: 0;
+  border: none;
 }
 
 .tp-statut-map {
@@ -397,7 +507,7 @@ html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
 }
 
 .tp-color-scheme-hint {
-  margin: -8px 0 10px;
+  margin: 0 0 10px;
   font-size: 13px;
   line-height: 1.45;
   color: var(--tp-text-muted, #5e6c84);

@@ -230,6 +230,25 @@ var toComplete = CT.applyMasterProgress(
 );
 check('master to 100 completes all', toComplete.every(function (i) { return i.progress === 100 && i.done; }));
 
+var markedFromZero = CT.markFullyComplete({ items: [], progress: 0 });
+check('markFullyComplete card progress', markedFromZero.progress === 100);
+check(
+  'markFullyComplete clears disabled flag',
+  markedFromZero.progressEnabled !== false
+);
+var markedItems = CT.markFullyComplete({
+  items: [
+    { id: 'a', text: 'A', progress: 10, difficulty: 1 },
+    { id: 'b', text: 'B', progress: 40, difficulty: 1 },
+  ],
+  progressEnabled: false,
+});
+check(
+  'markFullyComplete items',
+  markedItems.items.every(function (i) { return i.progress === 100 && i.done; }) &&
+    markedItems.progressEnabled !== false
+);
+
 check(
   'face badge hidden at 0%',
   CT.buildCardFaceBadge({ hasItems: true, percent: 0 }) === null
