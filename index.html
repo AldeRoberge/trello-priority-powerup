@@ -123,9 +123,15 @@
       }),
 
       // card-buttons is not used (priority is opened via card-detail-badges).
-      // Return [] so Trello does not error if the capability was enabled in admin.
+      // list-actions / on-disable: stubs if enabled in admin (avoids IFrameIO "not implemented").
       'card-buttons': function () {
         return [];
+      },
+      'list-actions': function () {
+        return [];
+      },
+      'on-disable': function () {
+        // No board cleanup required; shared plugin data is left intact for re-enable.
       },
 
       'card-detail-badges': withBoardContext(function (t) {

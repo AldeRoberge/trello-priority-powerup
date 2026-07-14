@@ -1075,7 +1075,7 @@
     'En attente d\'une r\u00e9ponse',
     'En attente de budget',
     'En attente d\'une approbation',
-    'En attente de mat\u00e9riel',
+    'Bloqu\u00e9 \u00e0 cause de la disponibilit\u00e9 du mat\u00e9riel',
     BLOCKED_REASON_WAITING_OTHER_TASK,
     'En attente de quelqu\'un',
     'Autre'
@@ -1108,6 +1108,7 @@
     'En attente de brief client',
     'En attente de contenus client',
     'Client indisponible',
+    'Bloqu\u00e9 \u00e0 cause de la disponibilit\u00e9 du mat\u00e9riel',
     'En attente de mat\u00e9riel',
     BLOCKED_REASON_WAITING_OTHER_TASK,
     'En attente de quelqu\'un',

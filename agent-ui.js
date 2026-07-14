@@ -176,17 +176,20 @@
     testResultsEl.hidden = true;
     settingsPanel.appendChild(testResultsEl);
 
+    var doneWrap = el('div', 'agent-settings-done');
+    var doneBtn = el('button', 'tp-button agent-btn', {
+      type: 'button',
+      text: 'Termin\u00e9'
+    });
+    doneWrap.appendChild(doneBtn);
+    settingsPanel.appendChild(doneWrap);
+
     body.appendChild(settingsPanel);
 
     // ── Chat panel ──────────────────────────────────────────────────────
     var chatPanel = el('div', 'agent-chat-panel');
 
     var emptyState = el('div', 'agent-empty');
-    emptyState.appendChild(
-      el('p', 'agent-empty-text', {
-        text: 'Posez une question sur cette carte, ou demandez une modification (priorit\u00e9, \u00e9ch\u00e9ance, progr\u00e8s\u2026).'
-      })
-    );
     var emptyConfigBtn = el('button', 'tp-link agent-empty-config', {
       type: 'button',
       text: 'Configurer le fournisseur'
@@ -201,13 +204,6 @@
     followUpsEl.hidden = true;
     chatPanel.appendChild(followUpsEl);
 
-    var suggestionsEl = el('div', 'agent-suggestions', {
-      role: 'group',
-      'aria-label': 'Questions sugg\u00e9r\u00e9es'
-    });
-    suggestionsEl.hidden = true;
-    chatPanel.appendChild(suggestionsEl);
-
     var composer = el('div', 'agent-composer');
     var input = el('textarea', 'agent-composer-input', {
       rows: '2',
@@ -221,6 +217,13 @@
     composer.appendChild(input);
     composer.appendChild(sendBtn);
     chatPanel.appendChild(composer);
+
+    var suggestionsEl = el('div', 'agent-suggestions', {
+      role: 'group',
+      'aria-label': 'Questions sugg\u00e9r\u00e9es'
+    });
+    suggestionsEl.hidden = true;
+    chatPanel.appendChild(suggestionsEl);
 
     var statsEl = el('div', 'agent-chat-stats', {
       role: 'status',
@@ -520,8 +523,8 @@
       if (collapse && collapse.refreshSummary) collapse.refreshSummary();
       updateComposerEnabled();
       emptyState.classList.toggle('is-hidden', history.length > 0);
-      // Hide configure CTA once the current settings were successfully tested.
-      emptyConfigBtn.hidden = Agent.isVerified(provider);
+      // Hide "Configurer le fournisseur" once credentials are in place (settings gear remains).
+      emptyConfigBtn.hidden = Agent.isConfigured(provider);
     }
 
     function readSettingsForm() {
@@ -856,16 +859,48 @@
       pending = true;
       updateComposerEnabled();
       var thinking = appendMessage('assistant', '\u2026');
-      thinking.classList.add('is-pending');
+      thinking.classList.add('is-pending', 'is-streaming');
+      var bubble = thinking.querySelector('.agent-msg-bubble');
+      var streamed = false;
       try {
-        var turn = await Agent.chatTurn(provider, history.slice(0, -1), bridge, msg);
-        thinking.remove();
-        appendMessage('assistant', turn.message);
+        var turn = await Agent.chatTurn(provider, history.slice(0, -1), bridge, msg, {
+          onDelta: function (visible) {
+            if (!bubble || !visible) return;
+            if (!streamed) {
+              streamed = true;
+              thinking.classList.remove('is-pending');
+            }
+            bubble.textContent = visible;
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+            notifyLayout();
+          }
+        });
+        if (bubble) bubble.textContent = turn.message;
+        thinking.classList.remove('is-pending', 'is-streaming');
         history.push({
           role: 'assistant',
           content: turn.message,
           rawJson: turn.rawJson
         });
+        // Auto-apply tools when the assistant has enough info (e.g. after a clarifying answer).
+        if (turn.actions && turn.actions.length) {
+          var applied = Agent.executeActions(bridge, turn.actions);
+          if (applied.errors && applied.errors.length) {
+            appendMessage('assistant', applied.errors.join('; '));
+          } else if (collapse && collapse.refreshSummary) {
+            collapse.refreshSummary();
+          }
+        }
+        // Successful chat proves the provider works — persist verified + hide configure CTA.
+        if (!Agent.isVerified(provider)) {
+          try {
+            await persistProvider(Agent.markVerified(provider));
+          } catch (verifyErr) {
+            console.error('AgentUI mark verified after chat failed', verifyErr);
+            provider = Agent.markVerified(provider);
+            fillSettingsForm();
+          }
+        }
         if (turn.usage) updateSessionStats(turn.usage);
         else renderChatStats();
         renderFollowUps(turn.followUps);
@@ -876,9 +911,10 @@
           refreshSuggestions({ animate: true });
         }
       } catch (err) {
-        thinking.remove();
+        thinking.classList.remove('is-pending', 'is-streaming');
         var errText = (err && err.message) || 'Erreur de l\'assistant';
-        appendMessage('assistant', errText);
+        if (bubble) bubble.textContent = errText;
+        else appendMessage('assistant', errText);
         setError(errText);
         refreshSuggestions({ animate: true });
       } finally {
@@ -939,6 +975,9 @@
     });
     testBtn.addEventListener('click', function () {
       runTests();
+    });
+    doneBtn.addEventListener('click', function () {
+      setSettingsOpen(false);
     });
     sendBtn.addEventListener('click', onSend);
     input.addEventListener('keydown', function (e) {

@@ -118,13 +118,13 @@ Après le déploiement GitHub Pages, enregistrez ou mettez à jour le Power-Up s
 2. Onglet **Basic information** / informations principales :
    - **Iframe connector URL** : `https://VOTRE-UTILISATEUR.github.io/trello-priority-powerup/index.html`  
      Doit pointer vers `index.html` à la racine du site déployé (connecteur chargé par Trello dans une iframe).
-3. Onglet **Capabilities** / **Capacités** — cocher **uniquement** les cinq capacités listées ci-dessous (tableau).  
-   Ne **pas** activer `card-buttons` ni d'autres capacités non implémentées dans `index.html`.
+3. Onglet **Capabilities** / **Capacités** — cocher **uniquement** les cinq capacités utilisées (voir tableau).  
+   Ne **pas** activer `card-buttons`, `list-actions`, `on-disable` ni d'autres capacités non utilisées (des stubs évitent l'erreur console si elles restent cochées).
 4. Onglet **API Key** — générer une clé et la copier dans `rest-config.js` (`appKey`) pour activer le **tri automatique** (voir [Tri automatique](#tri-automatique)). **Allowed origins** : *non requis* pour les pages statiques du Power-Up ; l'OAuth REST utilise le flux intégré Trello.
 5. Enregistrer, attendre la fin du déploiement GitHub Pages si l'URL du connecteur vient de changer.
 6. Sur chaque tableau : **retirer et réajouter** le Power-Up (Trello ne recharge pas toujours les capacités sur un tableau déjà ouvert).
 
-Le connecteur enregistre six clés dans `TrelloPowerUp.initialize()` ; cinq doivent être **activées** dans l'admin, une doit rester **désactivée** :
+Le connecteur enregistre les capacités ci-dessous dans `TrelloPowerUp.initialize()`. Cinq sont **utilisées** ; les autres sont des **stubs** (`[]` / no-op) pour éviter l'erreur console si elles restent cochées dans l'admin :
 
 | Capacité | Admin | Rôle dans ce Power-Up | Page / UI |
 |----------|:-----:|----------------------|-----------|
@@ -133,10 +133,12 @@ Le connecteur enregistre six clés dans `TrelloPowerUp.initialize()` ; cinq doiv
 | `board-buttons` | **Oui** | Bouton de tableau **Paramètres de priorité** | `settings.html` (popup) |
 | `list-sorters` | **Oui** | Entrée **Priorité** dans le menu `…` d'une liste → **Trier par…** (Critique en haut, sans priorité en bas) | — |
 | `on-enable` | **Oui** | Modal d'accueil à l'**activation** du Power-Up sur un tableau | `welcome.html` |
-| `card-buttons` | **Non** | Non utilisé — la priorité s'ouvre via `card-detail-badges`, pas un bouton sur la face de carte. Le connecteur renvoie `[]` si la capacité est cochée par erreur (évite une erreur Trello) | — |
+| `card-buttons` | **Non** | Stub `[]` — la priorité s'ouvre via `card-detail-badges`, pas un bouton sur la face de carte | — |
+| `list-actions` | **Non** | Stub `[]` — aucune action supplémentaire dans le menu `…` de liste (le tri passe par `list-sorters`) | — |
+| `on-disable` | **Non** | Stub no-op — pas de nettoyage à la désactivation (données partagées conservées) | — |
 
 **À activer (5)** : `card-badges`, `card-detail-badges`, `board-buttons`, `list-sorters`, `on-enable`.  
-**À ne pas activer** : `card-buttons` (et toute autre capacité absente du tableau ci-dessus).
+**À ne pas activer** : `card-buttons`, `list-actions`, `on-disable` (stubs présents si cochées par erreur).
 
 Dépannage tri / capacités : voir [Trier une colonne par priorité](#trier-une-colonne-par-priorité) et [« Priorité » n'apparaît pas dans *Trier par…*](#priorité-napparaît-pas-dans-trier-par).
 
@@ -215,7 +217,7 @@ Certaines erreurs affichées dans la console du navigateur proviennent de **Trel
 | Message | Origine |
 |---------|---------|
 | `get-paint-metrics.js` — « Deprecated API for given entry type » | Métriques de rendu internes à Trello (React). Sans impact sur le Power-Up. |
-| `platform-dst-motion-theme-default` — « Client must be initialized… » | Contrôle interne du thème / feature gate Atlassian. Souvent bénin si badges et popup fonctionnent. |
+| `platform-dst-motion-theme-default` — « Client must be initialized… » | Bug interne du SDK `power-up.min.js` (FeatureGates / thème iframe). Se produit au premier `TrelloPowerUp.iframe()` ; **non corrigeable** côté Power-Up. Bénin si badges et popup fonctionnent. |
 
 Les pages iframe reportent les appels API via `t.render()` (`runWhenIframeReady`). Les URL passées à `t.modal()` / `t.popup()` sont résolues en absolu via `PriorityTrello.pageUrl()` (sans `t.signUrl()`, qui provoque un double-signalement). `t.signUrl()` reste réservé aux requêtes `fetch` (ex. `build-info.json` dans les paramètres).
 

@@ -3,7 +3,7 @@
   'use strict';
 
   global.PriorityRestConfig = {
-    appKey: '',
+    appKey: 'e449f4c01b03a2501072808abe5611ab',
     appName: 'Priorité',
     appAuthor: 'AldeRoberge',
     autoSortDebounceMs: 400,

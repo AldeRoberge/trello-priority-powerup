@@ -60,6 +60,108 @@
     set_subtask_progress: 'Progr\u00e8s de sous-t\u00e2che mis \u00e0 jour.'
   };
 
+  /** Action-like labels mistakenly used as block reasons → proper cause phrases. */
+  var BLOCKED_REASON_ACTION_FIXES = {
+    'v\u00e9rifier le mat\u00e9riel':
+      'Bloqu\u00e9 \u00e0 cause de la disponibilit\u00e9 du mat\u00e9riel',
+    'verifier le materiel':
+      'Bloqu\u00e9 \u00e0 cause de la disponibilit\u00e9 du mat\u00e9riel',
+    'v\u00e9rifier mat\u00e9riel':
+      'Bloqu\u00e9 \u00e0 cause de la disponibilit\u00e9 du mat\u00e9riel',
+    'mat\u00e9riel': 'Bloqu\u00e9 \u00e0 cause de la disponibilit\u00e9 du mat\u00e9riel',
+    'disponibilit\u00e9 du mat\u00e9riel':
+      'Bloqu\u00e9 \u00e0 cause de la disponibilit\u00e9 du mat\u00e9riel',
+    'en attente de mat\u00e9riel':
+      'Bloqu\u00e9 \u00e0 cause de la disponibilit\u00e9 du mat\u00e9riel'
+  };
+
+  var ACTION_VERB_REASON_RE =
+    /^(v\u00e9rifier|verifier|commander|obtenir|contacter|demander|chercher|valider|acheter|r\u00e9server|reserver|appeler|envoyer|approuver)\s+/i;
+
+  /**
+   * Motifs must describe why the card is blocked — not an action to do.
+   * Rewrites known bad phrases and action-verb labels into cause wording.
+   */
+  function normalizeAgentBlockedReason(reason) {
+    if (typeof reason !== 'string') return '';
+    var trimmed = reason.trim();
+    if (!trimmed) return '';
+    var key = trimmed.toLocaleLowerCase('fr-FR');
+    if (BLOCKED_REASON_ACTION_FIXES[key]) return BLOCKED_REASON_ACTION_FIXES[key];
+    if (/^bloqu\u00e9\s+\u00e0\s+cause\s+de\s+/i.test(trimmed)) return trimmed;
+    if (/^en\s+attente\s+(de|d\')/i.test(trimmed)) return trimmed;
+    var match = trimmed.match(ACTION_VERB_REASON_RE);
+    if (match) {
+      var rest = trimmed.slice(match[0].length).trim();
+      if (!rest) return trimmed;
+      var restKey = rest.toLocaleLowerCase('fr-FR');
+      if (BLOCKED_REASON_ACTION_FIXES[restKey]) {
+        return BLOCKED_REASON_ACTION_FIXES[restKey];
+      }
+      if (/^(le|la|les|du|de|des|un|une)\s+mat\u00e9riel\b/i.test(rest)) {
+        return 'Bloqu\u00e9 \u00e0 cause de la disponibilit\u00e9 du mat\u00e9riel';
+      }
+      return 'Bloqu\u00e9 \u00e0 cause de ' + rest;
+    }
+    return trimmed;
+  }
+
+  function ensureFollowUpActionVerb(label, actions) {
+    if (!actions || !actions.length) return label;
+    // Already starts with an infinitive / action verb — keep it.
+    if (
+      /^[A-Za-z\u00C0-\u024F]+er\b/i.test(label) ||
+      /^[A-Za-z\u00C0-\u024F]+ir\b/i.test(label) ||
+      /^(mettre|faire|ouvrir|fermer)\b/i.test(label)
+    ) {
+      return label;
+    }
+    var blocked = null;
+    for (var i = 0; i < actions.length; i++) {
+      if (actions[i].tool === 'set_blocked') {
+        blocked = actions[i];
+        break;
+      }
+    }
+    if (blocked) {
+      var reasons =
+        blocked.args && Array.isArray(blocked.args.blockedReasons)
+          ? blocked.args.blockedReasons
+          : [];
+      var reason = reasons[0] ? String(reasons[0]) : '';
+      var short = '';
+      if (/mat\u00e9riel/i.test(reason) || /mat\u00e9riel/i.test(label)) {
+        short = ' (mat\u00e9riel)';
+      } else if (reason) {
+        short =
+          ' (' +
+          reason.replace(/^Bloqu\u00e9 \u00e0 cause de\s+/i, '').slice(0, 32) +
+          ')';
+      }
+      return 'Marquer bloqu\u00e9' + short;
+    }
+    if (actions[0].tool === 'set_due') return 'D\u00e9finir l\'\u00e9ch\u00e9ance';
+    if (actions[0].tool === 'set_priority') return 'Mettre \u00e0 jour la priorit\u00e9';
+    if (actions[0].tool === 'set_progress') return 'Mettre \u00e0 jour le progr\u00e8s';
+    if (actions[0].tool === 'add_subtask') return 'Ajouter une sous-t\u00e2che';
+    return label;
+  }
+
+  function polishFollowUpActions(actions) {
+    return (actions || []).map(function (action) {
+      if (!action || action.tool !== 'set_blocked') return action;
+      var args = action.args && typeof action.args === 'object' ? action.args : {};
+      if (!Array.isArray(args.blockedReasons)) return action;
+      var reasons = args.blockedReasons
+        .map(normalizeAgentBlockedReason)
+        .filter(Boolean);
+      return {
+        tool: action.tool,
+        args: Object.assign({}, args, { blockedReasons: reasons })
+      };
+    });
+  }
+
   function clampInt(n, min, max, fallback) {
     var v = typeof n === 'number' ? n : parseInt(n, 10);
     if (!isFinite(v)) return fallback;
@@ -365,16 +467,33 @@
       'Tu r\u00e9ponds toujours en fran\u00e7ais, de fa\u00e7on concise et utile.',
       'Tu peux expliquer la priorit\u00e9, l\'\u00e9ch\u00e9ance, le blocage et le progr\u00e8s, et proposer des changements.',
       'R\u00e9ponds UNIQUEMENT avec un objet JSON valide de la forme\u00a0:',
-      '{"message":"texte visible","suggestions":["question courte 1","question courte 2"],"followUps":[{"label":"libell\u00e9 court","actions":[{"tool":"nom","args":{...}}]}]}',
+      '{"message":"texte visible","suggestions":["\u2026"],"followUps":[{"label":"\u2026","actions":[{"tool":"nom","args":{...}}]}],"actions":[{"tool":"nom","args":{...}}]}',
+      'Questions de clarification (obligatoire quand une info manque)\u00a0:',
+      '- Si une demande est incompl\u00e8te (ex. \u00ab\u00a0Ajouter une sous-t\u00e2che\u00a0\u00bb sans nom), NE PAS inventer la valeur et NE PAS appeler l\'outil.',
+      '- Pose UNE question courte dans message (ex. \u00ab\u00a0Quel est le nom de la sous-t\u00e2che\u00a0?\u00a0\u00bb). actions=[], followUps=[].',
+      '- Dans suggestions, propose 2\u20134 r\u00e9ponses possibles (noms d\'exemple, dates, etc.) pour aider \u00e0 r\u00e9pondre.',
+      '- Quand l\'utilisateur r\u00e9pond avec l\'info manquante, applique imm\u00e9diatement via le champ actions (pas seulement followUps).',
+      '- Ex. tour 1\u00a0: user \u00ab\u00a0Ajouter une sous-t\u00e2che\u00a0\u00bb \u2192 {"message":"Quel est le nom de la sous-t\u00e2che\u00a0?","suggestions":["V\u00e9rifier le stock","Contacter le client"],"followUps":[],"actions":[]}',
+      '- Ex. tour 2\u00a0: user \u00ab\u00a0Commander le mat\u00e9riel\u00a0\u00bb \u2192 {"message":"Sous-t\u00e2che \u00ab\u00a0Commander le mat\u00e9riel\u00a0\u00bb ajout\u00e9e.","suggestions":["\u2026"],"followUps":[],"actions":[{"tool":"add_subtask","args":{"text":"Commander le mat\u00e9riel"}}]}',
+      '- M\u00eame logique pour l\'\u00e9ch\u00e9ance (demander la date si absente), le motif de blocage, etc.',
       'R\u00e8gles suggestions (obligatoire)\u00a0:',
-      '- Toujours proposer 2 \u00e0 4 questions courtes en fran\u00e7ais (ce que l\'utilisateur pourrait taper ensuite).',
+      '- Toujours proposer 2 \u00e0 4 formulations courtes en fran\u00e7ais (questions OU r\u00e9ponses \u00e0 ta question de clarification).',
       '- Ancr\u00e9es dans le contexte carte (sections enabled, \u00e9ch\u00e9ance, blocage, progr\u00e8s).',
       '- Elles REMPLACENT les suggestions pr\u00e9c\u00e9dentes\u00a0: varie-les selon ta derni\u00e8re r\u00e9ponse.',
-      '- Pas de num\u00e9rotation, pas de guillemets autour, style question ou courte demande.',
+      '- Pas de num\u00e9rotation, pas de guillemets autour.',
+      'R\u00e8gles actions (appliqu\u00e9es automatiquement)\u00a0:',
+      '- 0 \u00e0 3 outils \u00e0 ex\u00e9cuter tout de suite quand tu as toutes les infos requises.',
+      '- Ne jamais inclure un outil incomplet (ex. add_subtask sans text non vide).',
       'R\u00e8gles followUps\u00a0:',
-      '- 0 \u00e0 3 actions rapides (boutons qui appliquent des outils sans nouvel appel).',
-      '- Si actions est non vide, le clic applique les outils sans nouvel appel.',
+      '- 0 \u00e0 3 actions rapides optionnelles (boutons\u00a0; le clic applique sans nouvel appel).',
+      '- Si actions (du followUp) est non vide\u00a0: le label EST une action \u2192 commence toujours par un verbe \u00e0 l\'infinitif (Marquer, D\u00e9finir, Ajouter\u2026). Ex.\u00a0: "Marquer bloqu\u00e9 (mat\u00e9riel)". Jamais un nom seul ni une question.',
+      '- Pr\u00e9f\u00e8re le champ actions (auto) quand tu viens de recevoir la r\u00e9ponse \u00e0 ta question\u00a0; followUps pour des choix encore optionnels.',
       '- Si actions est [] , le label est renvoy\u00e9 comme message utilisateur (pr\u00e9f\u00e8re suggestions pour \u00e7a).',
+      'Motifs de blocage (blockedReasons) \u2014 tr\u00e8s important\u00a0:',
+      '- Un motif d\u00e9crit POURQUOI la carte est bloqu\u00e9e (cause / \u00e9tat), pas une t\u00e2che \u00e0 faire.',
+      '- Formule pr\u00e9f\u00e9r\u00e9e\u00a0: "Bloqu\u00e9 \u00e0 cause de \u2026" ou "En attente de \u2026".',
+      '- INTERDIT\u00a0: infinitifs d\'action comme "V\u00e9rifier le mat\u00e9riel", "Contacter le client", "Commander du stock".',
+      '- Exemple mat\u00e9riel\u00a0: label d\'action "Marquer bloqu\u00e9 (mat\u00e9riel)" + motif "Bloqu\u00e9 \u00e0 cause de la disponibilit\u00e9 du mat\u00e9riel" (PAS "V\u00e9rifier le mat\u00e9riel" comme motif).',
       'Sections activables (tr\u00e8s important)\u00a0:',
       '- Chaque bloc a un champ enabled. Si enabled=false, la section est d\u00e9sactiv\u00e9e\u00a0: les valeurs saved* / latentes NE comptent PAS.',
       '- Priorit\u00e9 active seulement si priority.enabled=true.',
@@ -389,12 +508,42 @@
       '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean }',
       '- set_blocked: { enAttente?: boolean, blockedReasons?: string[] } (fournir des motifs active aussi Bloqu\u00e9)',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (progress carte si pas de sous-t\u00e2ches)',
-      '- add_subtask: { text: string }',
+      '- add_subtask: { text: string } (text obligatoire, non vide)',
       '- toggle_subtask: { id: string, done?: boolean }',
       '- set_subtask_progress: { id: string, progress: 0-100 }',
       'Contexte carte actuel (JSON)\u00a0:',
       JSON.stringify(context)
     ].join('\n');
+  }
+
+  /** Drop tool calls that are missing required args (e.g. empty add_subtask). */
+  function isCompleteAction(action) {
+    if (!action || typeof action.tool !== 'string' || !action.tool) return false;
+    var args = action.args && typeof action.args === 'object' ? action.args : {};
+    if (action.tool === 'add_subtask') {
+      return typeof args.text === 'string' && !!args.text.trim();
+    }
+    if (action.tool === 'toggle_subtask' || action.tool === 'set_subtask_progress') {
+      return typeof args.id === 'string' && !!args.id;
+    }
+    return true;
+  }
+
+  function normalizeActionList(raw) {
+    var out = [];
+    if (!Array.isArray(raw)) return out;
+    raw.forEach(function (action) {
+      if (!action || typeof action !== 'object') return;
+      var tool = typeof action.tool === 'string' ? action.tool.trim() : '';
+      if (!tool) return;
+      var item = {
+        tool: tool,
+        args: action.args && typeof action.args === 'object' ? action.args : {}
+      };
+      if (!isCompleteAction(item)) return;
+      out.push(item);
+    });
+    return polishFollowUpActions(out).slice(0, 3);
   }
 
   function normalizeSuggestionList(raw) {
@@ -574,7 +723,8 @@
       return {
         message: 'R\u00e9ponse vide du fournisseur.',
         followUps: [],
-        suggestions: []
+        suggestions: [],
+        actions: []
       };
     }
     var jsonText = text;
@@ -603,12 +753,16 @@
               if (!action || typeof action !== 'object') return;
               var tool = typeof action.tool === 'string' ? action.tool.trim() : '';
               if (!tool) return;
-              actions.push({
+              var item = {
                 tool: tool,
                 args: action.args && typeof action.args === 'object' ? action.args : {}
-              });
+              };
+              if (!isCompleteAction(item)) return;
+              actions.push(item);
             });
           }
+          actions = polishFollowUpActions(actions);
+          label = ensureFollowUpActionVerb(label, actions);
           followUps.push({ label: label, actions: actions });
         });
       }
@@ -617,53 +771,267 @@
       if (!suggestions.length) {
         suggestions = suggestionsFromFollowUps(followUps);
       }
-      return { message: message, followUps: followUps, suggestions: suggestions };
+      var actions = normalizeActionList(parsed.actions);
+      return {
+        message: message,
+        followUps: followUps,
+        suggestions: suggestions,
+        actions: actions
+      };
     } catch (e) {
-      return { message: text, followUps: [], suggestions: [] };
+      return { message: text, followUps: [], suggestions: [], actions: [] };
     }
+  }
+
+  /**
+   * Pull the visible `message` string out of a partial JSON assistant payload
+   * while tokens are still arriving. Falls back to plain text when the stream
+   * is not structured as JSON.
+   */
+  function extractStreamingMessage(accumulated) {
+    var text = typeof accumulated === 'string' ? accumulated : '';
+    if (!text) return '';
+    var trimmed = text.replace(/^\s+/, '');
+    var looksJson =
+      trimmed.charAt(0) === '{' ||
+      /^```/.test(trimmed) ||
+      /"message"\s*:/.test(trimmed);
+    if (!looksJson) return text;
+
+    var key = trimmed.match(/"message"\s*:\s*"/);
+    if (!key) return '';
+    var i = key.index + key[0].length;
+    var out = '';
+    while (i < trimmed.length) {
+      var ch = trimmed.charAt(i);
+      if (ch === '"') break;
+      if (ch === '\\') {
+        if (i + 1 >= trimmed.length) break; // escape still incomplete
+        var next = trimmed.charAt(i + 1);
+        if (next === 'n') out += '\n';
+        else if (next === 'r') out += '\r';
+        else if (next === 't') out += '\t';
+        else if (next === '"' || next === '\\' || next === '/') out += next;
+        else if (next === 'u' && i + 5 < trimmed.length) {
+          var hex = trimmed.slice(i + 2, i + 6);
+          if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+            out += String.fromCharCode(parseInt(hex, 16));
+            i += 6;
+            continue;
+          }
+          break;
+        } else {
+          out += next;
+        }
+        i += 2;
+        continue;
+      }
+      out += ch;
+      i += 1;
+    }
+    return out;
+  }
+
+  function throwHttpError(result) {
+    var errMsg =
+      (result.data &&
+        result.data.error &&
+        (result.data.error.message || result.data.error)) ||
+      result.text ||
+      'HTTP ' + result.status;
+    var err = new Error(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
+    err.status = result.status;
+    err.code = result.status === 401 || result.status === 403 ? 'auth' : 'http';
+    throw err;
+  }
+
+  /**
+   * OpenAI-compatible SSE reader for chat.completions with stream:true.
+   * Calls onDelta(deltaText, accumulated) for each content token.
+   */
+  async function readSseChatStream(res, onDelta) {
+    var content = '';
+    var usage = null;
+    var model = null;
+    var finishReason = null;
+    var lastChunk = null;
+
+    function handleChunk(chunk) {
+      if (!chunk || typeof chunk !== 'object') return;
+      lastChunk = chunk;
+      if (typeof chunk.model === 'string' && chunk.model) model = chunk.model;
+      if (chunk.usage && typeof chunk.usage === 'object') usage = chunk.usage;
+      var choice = chunk.choices && chunk.choices[0] ? chunk.choices[0] : null;
+      if (!choice) return;
+      if (choice.finish_reason) finishReason = String(choice.finish_reason);
+      var delta = choice.delta || null;
+      var piece =
+        delta && typeof delta.content === 'string'
+          ? delta.content
+          : choice.message && typeof choice.message.content === 'string'
+            ? choice.message.content
+            : '';
+      if (!piece) return;
+      content += piece;
+      if (typeof onDelta === 'function') {
+        try {
+          onDelta(piece, content);
+        } catch (cbErr) {
+          console.error('chat stream onDelta failed', cbErr);
+        }
+      }
+    }
+
+    function consumeSseBlock(block) {
+      var lines = block.split(/\r?\n/);
+      var dataParts = [];
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        if (!line) continue;
+        if (line.charAt(0) === ':') continue; // comment / keepalive
+        if (line.indexOf('data:') === 0) {
+          dataParts.push(line.slice(5).replace(/^ /, ''));
+        }
+      }
+      if (!dataParts.length) return;
+      var payload = dataParts.join('\n').trim();
+      if (!payload || payload === '[DONE]') return;
+      try {
+        handleChunk(JSON.parse(payload));
+      } catch (e) {
+        // Ignore partial/malformed SSE payloads.
+      }
+    }
+
+    if (!res.body || typeof res.body.getReader !== 'function') {
+      var fallbackText = await res.text();
+      fallbackText.split(/\n\n|\r\n\r\n/).forEach(consumeSseBlock);
+    } else {
+      var reader = res.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = '';
+      while (true) {
+        var read = await reader.read();
+        if (read.done) break;
+        buffer += decoder.decode(read.value, { stream: true });
+        var parts = buffer.split(/\n\n|\r\n\r\n/);
+        buffer = parts.pop();
+        parts.forEach(consumeSseBlock);
+      }
+      buffer += decoder.decode();
+      if (buffer.trim()) {
+        buffer.split(/\n\n|\r\n\r\n/).forEach(consumeSseBlock);
+      }
+    }
+
+    return {
+      content: content,
+      raw: {
+        model: model || (lastChunk && lastChunk.model) || undefined,
+        choices: [
+          {
+            finish_reason: finishReason || 'stop',
+            message: { role: 'assistant', content: content }
+          }
+        ],
+        usage: usage || undefined
+      }
+    };
   }
 
   async function chatCompletions(provider, messages, options) {
     var p = normalizeProvider(provider);
+    var opts = options || {};
+    var stream = !!opts.stream;
+    var onDelta = typeof opts.onDelta === 'function' ? opts.onDelta : null;
     var body = {
       model: p.model,
       messages: messages,
-      temperature: options && options.temperature != null ? options.temperature : 0.3
+      temperature: opts.temperature != null ? opts.temperature : 0.3
     };
-    if (!options || options.jsonMode !== false) {
+    if (opts.jsonMode !== false) {
       body.response_format = { type: 'json_object' };
     }
-    if (options && options.max_tokens != null) {
-      body.max_tokens = options.max_tokens;
+    if (opts.max_tokens != null) {
+      body.max_tokens = opts.max_tokens;
     }
-    var result = await apiFetch(p, '/chat/completions', {
-      method: 'POST',
-      body: body
-    });
-    if (!result.ok) {
-      var errMsg =
-        (result.data &&
-          result.data.error &&
-          (result.data.error.message || result.data.error)) ||
-        result.text ||
-        'HTTP ' + result.status;
-      var err = new Error(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
-      err.status = result.status;
-      err.code = result.status === 401 || result.status === 403 ? 'auth' : 'http';
-      throw err;
+    if (stream) {
+      body.stream = true;
+      if (opts.includeUsage !== false) {
+        body.stream_options = { include_usage: true };
+      }
     }
-    var choice =
-      result.data &&
-      result.data.choices &&
-      result.data.choices[0] &&
-      result.data.choices[0].message
-        ? result.data.choices[0].message
-        : null;
-    var content = choice && typeof choice.content === 'string' ? choice.content : '';
-    return { content: content, raw: result.data };
+
+    if (!stream) {
+      var result = await apiFetch(p, '/chat/completions', {
+        method: 'POST',
+        body: body
+      });
+      if (!result.ok) throwHttpError(result);
+      var choice =
+        result.data &&
+        result.data.choices &&
+        result.data.choices[0] &&
+        result.data.choices[0].message
+          ? result.data.choices[0].message
+          : null;
+      var content = choice && typeof choice.content === 'string' ? choice.content : '';
+      return { content: content, raw: result.data };
+    }
+
+    var url = p.baseUrl + '/chat/completions';
+    var res;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: requestHeaders(p),
+        body: JSON.stringify(body)
+      });
+    } catch (err) {
+      var classified = classifyFetchError(err);
+      var e = new Error(classified.message);
+      e.code = classified.code;
+      e.cause = err;
+      throw e;
+    }
+
+    if (!res.ok) {
+      var text = '';
+      try {
+        text = await res.text();
+      } catch (readErr) {
+        text = '';
+      }
+      var data = null;
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch (parseErr) {
+          data = { raw: text };
+        }
+      }
+      // Some gateways reject stream_options — retry once without it.
+      if (
+        body.stream_options &&
+        /stream_options|include_usage|unrecognized|unknown/i.test(text || '')
+      ) {
+        delete body.stream_options;
+        return chatCompletions(p, messages, Object.assign({}, opts, { includeUsage: false }));
+      }
+      throwHttpError({ ok: false, status: res.status, data: data, text: text });
+    }
+
+    return readSseChatStream(res, onDelta);
   }
 
-  async function chatTurn(provider, history, bridge, userText) {
+  /**
+   * @param {object} [options]
+   * @param {(visibleMessage: string, accumulatedRaw: string) => void} [options.onDelta]
+   *   Called as tokens arrive with the best-effort visible assistant message.
+   */
+  async function chatTurn(provider, history, bridge, userText, options) {
+    options = options || {};
+    var onDelta = typeof options.onDelta === 'function' ? options.onDelta : null;
     var p = normalizeProvider(provider);
     var context = buildContext(bridge);
     var messages = [
@@ -683,19 +1051,61 @@
     });
     messages.push({ role: 'user', content: String(userText || '').trim() });
 
+    function notifyVisible(accumulated) {
+      if (!onDelta) return;
+      var visible = extractStreamingMessage(accumulated);
+      if (!visible) return;
+      try {
+        onDelta(visible, accumulated);
+      } catch (cbErr) {
+        console.error('chatTurn onDelta failed', cbErr);
+      }
+    }
+
     var t0 = Date.now();
     var response;
     try {
-      response = await chatCompletions(p, messages, { jsonMode: true });
+      response = await chatCompletions(p, messages, {
+        jsonMode: true,
+        stream: true,
+        onDelta: function (_piece, accumulated) {
+          notifyVisible(accumulated);
+        }
+      });
     } catch (err) {
       if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
-        response = await chatCompletions(p, messages, { jsonMode: false });
+        response = await chatCompletions(p, messages, {
+          jsonMode: false,
+          stream: true,
+          onDelta: function (_piece, accumulated) {
+            notifyVisible(accumulated);
+          }
+        });
+      } else if (err && /stream/i.test((err && err.message) || '')) {
+        // Provider rejected streaming — fall back to a blocking call.
+        try {
+          response = await chatCompletions(p, messages, { jsonMode: true, stream: false });
+        } catch (err2) {
+          if (err2 && err2.message && /response_format|json_object|json mode/i.test(err2.message)) {
+            response = await chatCompletions(p, messages, { jsonMode: false, stream: false });
+          } else {
+            throw err2;
+          }
+        }
+        notifyVisible(response.content);
       } else {
         throw err;
       }
     }
     var latencyMs = Date.now() - t0;
     var parsed = parseAssistantPayload(response.content);
+    if (onDelta && parsed.message) {
+      try {
+        onDelta(parsed.message, response.content);
+      } catch (finalCbErr) {
+        console.error('chatTurn final onDelta failed', finalCbErr);
+      }
+    }
     var usage = extractUsageFromRaw(response.raw, messages, response.content, p.model);
     usage.latencyMs = latencyMs;
     usage.historyTurns = (history || []).length;
@@ -703,6 +1113,7 @@
       message: parsed.message,
       followUps: parsed.followUps,
       suggestions: parsed.suggestions,
+      actions: parsed.actions || [],
       rawJson: response.content,
       context: context,
       usage: usage
@@ -733,9 +1144,10 @@
       {
         role: 'system',
         content: [
-          'Tu sugg\u00e8res des questions pour l\'assistant Priorit\u00e9 Trello.',
+          'Tu sugg\u00e8res des questions ou intentions pour l\'assistant Priorit\u00e9 Trello.',
           'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":["...","...","..."]}',
-          '2 \u00e0 4 questions courtes en fran\u00e7ais, ancr\u00e9es dans le contexte.',
+          '2 \u00e0 4 formulations courtes en fran\u00e7ais, ancr\u00e9es dans le contexte.',
+          'Tu peux inclure des intentions d\'action (ex. \u00ab\u00a0Ajouter une sous-t\u00e2che\u00a0\u00bb)\u00a0: l\'assistant posera ensuite les questions manquantes.',
           'Respecte enabled=false des sections (ne suppose pas un blocage/une \u00e9ch\u00e9ance active si d\u00e9sactiv\u00e9).',
           'Contexte carte\u00a0:',
           JSON.stringify(context),
@@ -844,8 +1256,9 @@
               return typeof r === 'string' && r.trim();
             })
             .map(function (r) {
-              return r.trim();
-            });
+              return normalizeAgentBlockedReason(r);
+            })
+            .filter(Boolean);
         }
         if (args.enAttente != null) {
           blockedPartial.enAttente = !!args.enAttente;
@@ -1275,6 +1688,7 @@
     executeActions: executeActions,
     runProviderTests: runProviderTests,
     chatCompletions: chatCompletions,
+    extractStreamingMessage: extractStreamingMessage,
     estimateCostUsd: estimateCostUsd,
     extractUsageFromRaw: extractUsageFromRaw,
     contextWindowForModel: contextWindowForModel
