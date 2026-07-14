@@ -1846,6 +1846,19 @@
     'far'
   ];
 
+  var DUE_BAND_ACCENTS = {
+    overdue: '#C9372C',
+    imminent: '#FF9F1A',
+    soon: '#F2D600',
+    weeks: '#61BD4F',
+    month: '#0079BF',
+    far: '#B3BAC5'
+  };
+
+  function dueBandAccent(band) {
+    return DUE_BAND_ACCENTS[band] || '';
+  }
+
   function dueProximityBand(iso, time, now) {
     if (!normalizeDueDate(iso)) return '';
     if (isDuePast(iso, time, now)) return 'overdue';
@@ -2869,19 +2882,6 @@
       : { i: d.tierI, label: d.label };
     var v = tierVisuals(visualSource);
     applySectionGlow(fieldEl, v.seg || v.fill);
-  }
-
-  var DUE_BAND_ACCENTS = {
-    overdue: '#C9372C',
-    imminent: '#FF9F1A',
-    soon: '#F2D600',
-    weeks: '#61BD4F',
-    month: '#0079BF',
-    far: '#B3BAC5'
-  };
-
-  function dueBandAccent(band) {
-    return DUE_BAND_ACCENTS[band] || '';
   }
 
   function labelEntry(key, value) {
@@ -4947,6 +4947,13 @@
     var currentListId = config.listId ? String(config.listId) : '';
     var lists = Array.isArray(config.lists) ? config.lists.slice() : [];
     var settings = config.settings || null;
+    if (
+      settings &&
+      typeof global.StatutMatch !== 'undefined' &&
+      typeof global.StatutMatch.applyStateColors === 'function'
+    ) {
+      global.StatutMatch.applyStateColors(settings.stateColors);
+    }
     var busy = false;
     var authBusy = false;
     var showUnassigned =

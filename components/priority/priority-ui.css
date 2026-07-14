@@ -890,19 +890,6 @@ body {
   background-repeat: no-repeat;
 }
 
-.field.has-section-glow .section-enable-title,
-.field.has-section-glow .due-date-title,
-.field.has-section-glow .priority-enable-title,
-.field.has-section-glow .progress-enable-title {
-  color: color-mix(in srgb, var(--section-glow) 72%, var(--text-primary, #172b4d));
-}
-
-.field.has-section-glow .section-toggle-summary,
-.field.has-section-glow .due-date-desc {
-  color: color-mix(in srgb, var(--section-glow) 48%, var(--text-muted, #626f86));
-  opacity: 1;
-}
-
 .statut-section-body {
   margin-top: 8px;
 }

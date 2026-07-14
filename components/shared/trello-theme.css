@@ -587,6 +587,42 @@ html[data-color-mode="dark"] .tp-page--settings {
   flex-shrink: 0;
 }
 
+.tp-statut-colors {
+  margin: 14px 0 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--tp-border, rgba(9, 30, 66, 0.14));
+}
+
+.tp-statut-color-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+}
+
+.tp-statut-color {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  cursor: pointer;
+}
+
+.tp-statut-color-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tp-text, #172b4d);
+}
+
+.tp-statut-color-hint {
+  flex: 1 1 auto;
+  font-size: 12px;
+  color: var(--tp-text-muted, #626f86);
+}
+
+.tp-statut-color .tp-color-swatch {
+  margin-left: auto;
+}
+
 .tp-color-scheme {
   margin: 0 0 16px;
 }
@@ -1368,19 +1404,6 @@ body.tp-page--priority {
     transparent 72%
   );
   background-repeat: no-repeat;
-}
-
-.tp-page--priority .field.has-section-glow .section-enable-title,
-.tp-page--priority .field.has-section-glow .due-date-title,
-.tp-page--priority .field.has-section-glow .priority-enable-title,
-.tp-page--priority .field.has-section-glow .progress-enable-title {
-  color: color-mix(in srgb, var(--section-glow) 72%, var(--text-primary, var(--tp-text)));
-}
-
-.tp-page--priority .field.has-section-glow .section-toggle-summary,
-.tp-page--priority .field.has-section-glow .due-date-desc {
-  color: color-mix(in srgb, var(--section-glow) 48%, var(--text-muted, var(--tp-text-muted)));
-  opacity: 1;
 }
 
 .tp-page--priority .field--due-date[data-due-band] .due-date-countdown-primary {

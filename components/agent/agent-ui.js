@@ -2019,11 +2019,26 @@
           await persistInterviewState(interviewState);
         }
 
+        var cardTitle = String(
+          (bridge.getCardName && bridge.getCardName()) || ''
+        ).trim();
+        var startPrompt = cardTitle
+          ? 'Commence l\'interview. Titre de la carte\u00a0: «\u00a0' +
+            cardTitle +
+            '\u00a0». Ancre ta premi\u00e8re question sur ce titre (pas «\u00a0cette t\u00e2che\u00a0»).'
+          : 'Commence l\'interview de cette carte.';
+        var fallbackOpening = cardTitle
+          ? 'Quelle serait la cons\u00e9quence de ne pas ' +
+            cardTitle.charAt(0).toLocaleLowerCase('fr-FR') +
+            cardTitle.slice(1) +
+            '\u00a0?'
+          : 'Cette carte est nouvelle. \u00c0 qui profite surtout ce travail\u00a0?';
+
         var turn = await Agent.cardInterviewTurn(
           provider,
           [],
           bridge,
-          'Commence l\'interview de cette carte.',
+          startPrompt,
           {
             asked: interviewState.asked || [],
             surrounding: interviewSurrounding,
@@ -2036,15 +2051,9 @@
         thinking.removeAttribute('aria-busy');
         thinking.removeAttribute('aria-label');
         if (bubble) {
-          revealPendingBubble(
-            bubble,
-            turn.message ||
-              'Cette carte est nouvelle. \u00c0 qui profite surtout ce travail\u00a0?'
-          );
+          revealPendingBubble(bubble, turn.message || fallbackOpening);
         }
-        var opening =
-          turn.message ||
-          'Cette carte est nouvelle. \u00c0 qui profite surtout ce travail\u00a0?';
+        var opening = turn.message || fallbackOpening;
         history.push({
           role: 'assistant',
           content: opening,
