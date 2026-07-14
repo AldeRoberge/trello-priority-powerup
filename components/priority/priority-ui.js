@@ -5524,6 +5524,22 @@
     reasonInput.setAttribute('autocomplete', 'off');
     reasonInput.setAttribute('spellcheck', 'false');
 
+    // Build suggestions DOM before TabAutocomplete.bind — bind() calls
+    // onProposal synchronously during init, so suggestionsList must exist.
+    var suggestions = document.createElement('div');
+    suggestions.className = 'blocked-reason-suggestions';
+
+    var suggestionsLabel = document.createElement('div');
+    suggestionsLabel.className = 'blocked-reason-suggestions-label';
+    suggestionsLabel.textContent = BLOCKED_REASON_SUGGESTIONS_LABEL;
+
+    var suggestionsList = document.createElement('div');
+    suggestionsList.className = 'blocked-reason-suggestions-list';
+    suggestionsList.setAttribute('role', 'list');
+
+    suggestions.appendChild(suggestionsLabel);
+    suggestions.appendChild(suggestionsList);
+
     var reasonTabCandidates = [];
     var reasonTabComplete = null;
     var reasonInputMount = reasonInput;
@@ -5543,6 +5559,7 @@
         onProposal: function (proposal) {
           var target =
             proposal && proposal.candidate ? String(proposal.candidate.text || '') : '';
+          if (!suggestionsList) return;
           Array.prototype.forEach.call(
             suggestionsList.querySelectorAll('.blocked-reason-suggestion'),
             function (btn) {
@@ -5563,20 +5580,6 @@
         }
       });
     }
-
-    var suggestions = document.createElement('div');
-    suggestions.className = 'blocked-reason-suggestions';
-
-    var suggestionsLabel = document.createElement('div');
-    suggestionsLabel.className = 'blocked-reason-suggestions-label';
-    suggestionsLabel.textContent = BLOCKED_REASON_SUGGESTIONS_LABEL;
-
-    var suggestionsList = document.createElement('div');
-    suggestionsList.className = 'blocked-reason-suggestions-list';
-    suggestionsList.setAttribute('role', 'list');
-
-    suggestions.appendChild(suggestionsLabel);
-    suggestions.appendChild(suggestionsList);
 
     reasonWrap.appendChild(selectedWrap);
     reasonWrap.appendChild(subtaskWrap);
