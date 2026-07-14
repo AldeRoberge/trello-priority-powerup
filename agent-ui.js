@@ -47,6 +47,7 @@
     var savedProvider = Agent.normalizeProvider(null);
     var history = [];
     var pending = false;
+    var spellcheckLock = false;
     var settingsOpen = false;
     var testing = false;
     var suggestionsSeq = 0;
@@ -263,7 +264,6 @@
       onLayoutChange: onLayoutChange,
       onEnableChange: function (on) {
         if (!on && settingsOpen) setSettingsOpen(false);
-        notifyLayout();
       },
       onExpandChange: function (isExpanded) {
         if (typeof PriorityUI.saveSectionCollapseState === 'function') {
@@ -667,7 +667,7 @@
         }
         chip.addEventListener('click', function () {
           if (pending) return;
-          sendUserMessage(text);
+          sendUserMessage(text, { skipSpellcheck: true });
         });
         suggestionsEl.appendChild(chip);
       });
@@ -856,13 +856,44 @@
       }
     }
 
-    async function sendUserMessage(text) {
+    async function sendUserMessage(text, options) {
+      var opts = options || {};
       var msg = (text || '').trim();
-      if (!msg || pending) return;
+      if (!msg || pending || spellcheckLock) return;
       if (!Agent.isConfigured(provider)) {
         setSettingsOpen(true);
         setError('Configurez d\'abord un fournisseur IA.');
         return;
+      }
+      if (
+        !opts.skipSpellcheck &&
+        global.Spellcheck &&
+        typeof global.Spellcheck.correct === 'function'
+      ) {
+        spellcheckLock = true;
+        try {
+          input.classList.add('is-spellchecking');
+          input.disabled = true;
+          sendBtn.disabled = true;
+          var corrected = await global.Spellcheck.correct(msg);
+          if (typeof corrected === 'string' && corrected.trim()) {
+            msg = corrected.trim();
+          }
+          if (opts.fromComposer && msg !== (text || '').trim()) {
+            input.value = msg;
+          }
+        } catch (spellErr) {
+          console.error('Spellcheck before chat failed', spellErr);
+        } finally {
+          spellcheckLock = false;
+          input.classList.remove('is-spellchecking');
+          input.disabled = false;
+          updateComposerEnabled();
+        }
+        if (!msg || pending) return;
+      }
+      if (opts.fromComposer) {
+        input.value = '';
       }
       setError('');
       clearFollowUps();
@@ -963,13 +994,11 @@
         notifyLayout();
         return;
       }
-      sendUserMessage(fu.label);
+      sendUserMessage(fu.label, { skipSpellcheck: true });
     }
 
     function onSend() {
-      var msg = input.value;
-      input.value = '';
-      sendUserMessage(msg);
+      sendUserMessage(input.value, { fromComposer: true });
     }
 
     settingsBtn.addEventListener('click', function (e) {

@@ -656,6 +656,26 @@
     var flipAnimToken = 0;
     // null = not yet painted — avoid fireworks on initial mount when already complete.
     var lastAllComplete = null;
+    var spellcheckBusy = false;
+
+    function spellcheckText(text) {
+      var trimmed = (text || '').trim();
+      if (!trimmed) return Promise.resolve('');
+      if (
+        typeof global.Spellcheck === 'undefined' ||
+        typeof global.Spellcheck.correct !== 'function'
+      ) {
+        return Promise.resolve(trimmed);
+      }
+      return global.Spellcheck.correct(trimmed).then(
+        function (corrected) {
+          return typeof corrected === 'string' ? corrected.trim() : trimmed;
+        },
+        function () {
+          return trimmed;
+        }
+      );
+    }
 
     containerEl.innerHTML = '';
     containerEl.className = 'tp-completion';
@@ -1275,12 +1295,30 @@
           removeItem(item.id);
           return;
         }
-        item.text = trimmed;
-        // Persist without re-rendering so a following checkbox click (complete
-        // while editing) is not destroyed by replacing the row DOM.
-        data = CT.normalizeCompletionData(data);
-        updateProgressUi();
-        onChange(data);
+        var editToken = (item._spellToken || 0) + 1;
+        item._spellToken = editToken;
+        textInput.classList.add('is-spellchecking');
+        spellcheckText(trimmed).then(function (corrected) {
+          if (item._spellToken !== editToken) return;
+          textInput.classList.remove('is-spellchecking');
+          var stillPresent = data.items.some(function (row) {
+            return row.id === item.id;
+          });
+          if (!stillPresent) return;
+          if (!corrected) {
+            removeItem(item.id);
+            return;
+          }
+          if (corrected !== textInput.value.trim()) {
+            textInput.value = corrected;
+          }
+          item.text = corrected;
+          // Persist without re-rendering so a following checkbox click (complete
+          // while editing) is not destroyed by replacing the row DOM.
+          data = CT.normalizeCompletionData(data);
+          updateProgressUi();
+          onChange(data);
+        });
       });
 
       textInput.addEventListener('keydown', function (e) {
@@ -1480,11 +1518,28 @@
     }
 
     function addFromInput() {
-      var ok = addItem(addInput.value);
-      if (ok) {
-        addInput.value = '';
+      if (spellcheckBusy) return;
+      var raw = addInput.value;
+      if (!(raw || '').trim()) return;
+      spellcheckBusy = true;
+      addBtn.disabled = true;
+      addInput.disabled = true;
+      addInput.classList.add('is-spellchecking');
+      spellcheckText(raw).then(function (corrected) {
+        if (corrected !== (raw || '').trim()) {
+          addInput.value = corrected;
+        }
+        var ok = addItem(corrected);
+        if (ok) {
+          addInput.value = '';
+        }
+      }).finally(function () {
+        spellcheckBusy = false;
+        addBtn.disabled = false;
+        addInput.disabled = false;
+        addInput.classList.remove('is-spellchecking');
         addInput.focus();
-      }
+      });
     }
 
     addBtn.addEventListener('click', addFromInput);

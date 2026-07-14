@@ -274,6 +274,31 @@ body {
   gap: 8px;
 }
 
+/* Settings gear sits beside the collapse control — share one horizontal axis */
+.field--statut .section-toggle-head,
+.field--chat .section-toggle-head {
+  align-items: center;
+}
+
+.field--statut .section-collapse-btn,
+.field--chat .section-collapse-btn {
+  align-items: center;
+  /* Keep hit-area padding, but don't overlap the trailing settings control */
+  margin-right: 0;
+}
+
+.field--statut .section-collapse-chevron,
+.field--chat .section-collapse-chevron,
+.field--statut .section-leading-icon,
+.field--chat .section-leading-icon {
+  margin-top: 0;
+}
+
+.field--statut .section-enable-checkbox,
+.field--chat .section-enable-checkbox {
+  margin-top: 0;
+}
+
 .section-enable-label {
   display: inline-flex;
   align-items: flex-start;
@@ -304,17 +329,19 @@ body {
   display: inline-flex;
   align-items: flex-start;
   justify-content: center;
-  flex: 0 0 22px;
-  width: 22px;
-  margin: 1px 0 0;
+  flex: 0 0 16px;
+  width: 16px;
+  margin: 3px 0 0;
   color: var(--text-muted);
   pointer-events: none;
   user-select: none;
 }
 
 .section-leading-icon-glyph {
-  font-size: 22px;
+  font-size: 16px;
   line-height: 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .field--graphique .section-leading-icon,
@@ -325,7 +352,7 @@ body {
 .field--due-date .section-leading-icon,
 .field--en-attente .section-leading-icon {
   color: var(--text-primary);
-  opacity: 0.72;
+  opacity: 0.85;
 }
 
 .section-collapse-btn {
@@ -624,13 +651,14 @@ body {
 
 .statut-settings-btn {
   flex: 0 0 auto;
+  align-self: center;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
   margin-left: 2px;
-  margin-top: 1px;
+  margin-top: 0;
   padding: 0;
   border: none;
   border-radius: 4px;
@@ -795,35 +823,44 @@ body {
 }
 
 .due-date-suggestions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
-  margin-top: 8px;
+  margin: 10px 0 0;
+  padding-left: 26px;
 }
 
 .due-date-suggestions[hidden] {
   display: none;
 }
 
+.field--due-date.is-collapsed > .due-date-suggestions {
+  display: none !important;
+}
+
 .due-date-suggestion {
   appearance: none;
-  flex: 1 1 auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
-  padding: 8px 10px;
+  min-height: 0;
+  padding: 7px 8px;
   border: none;
   border-radius: 10px;
   background: color-mix(in srgb, var(--surface-1, var(--surface-2)) 85%, var(--surface-2));
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 1.25;
-  text-align: center;
+  text-align: left;
   cursor: pointer;
   transition:
     background-color 0.15s ease,
     color 0.15s ease;
+}
+
+.due-date-suggestion[hidden] {
+  display: none;
 }
 
 .due-date-suggestion:hover {
@@ -833,6 +870,41 @@ body {
 .due-date-suggestion:focus-visible {
   outline: 2px solid var(--due-accent);
   outline-offset: 1px;
+}
+
+.due-date-suggestion-icon {
+  flex-shrink: 0;
+  display: block;
+  color: var(--due-accent);
+}
+
+.due-date-suggestion-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.due-date-suggestion-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.due-date-suggestion-hint {
+  font-size: 11px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  color: var(--text-muted);
 }
 
 .due-date-picker {
@@ -906,20 +978,21 @@ body {
 
 .due-date-trigger-title,
 .due-date-time-title {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
-  color: var(--text-primary);
-  line-height: 1.25;
+  color: var(--due-accent);
+  line-height: 1.2;
   letter-spacing: -0.01em;
 }
 
 .due-date-trigger-value,
 .due-date-time-value {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  color: var(--due-accent);
-  line-height: 1.2;
+  color: var(--text-primary);
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1564,21 +1637,44 @@ html[data-color-mode="dark"] .due-date-time-clock {
 }
 
 .due-date-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   margin: 0 0 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--due-accent) 10%, var(--surface-1, var(--surface-2)));
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
   border: none;
-  font-size: 15px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--text-primary);
-  line-height: 1.35;
+  line-height: 1.3;
 }
 
-.due-date-countdown.is-past {
+.due-date-countdown-primary {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.due-date-countdown-secondary {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--due-accent);
+  line-height: 1.25;
+}
+
+.due-date-countdown-secondary[hidden] {
+  display: none;
+}
+
+.due-date-countdown.is-past .due-date-countdown-primary {
   color: var(--blocked-text);
-  background: color-mix(in srgb, var(--blocked-text) 10%, var(--surface-1, var(--surface-2)));
+}
+
+.due-date-countdown.is-past .due-date-countdown-secondary {
+  color: var(--blocked-muted-text, var(--blocked-text));
 }
 
 .due-date-countdown[hidden] {
@@ -1785,6 +1881,12 @@ html[data-color-mode="dark"] .due-date-time-clock {
 .blocked-reason-input:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+/* Spellcheck module — brief busy state while AI verifies orthography */
+.is-spellchecking {
+  opacity: 0.72;
+  cursor: progress;
 }
 
 .blocked-reason-suggestions {

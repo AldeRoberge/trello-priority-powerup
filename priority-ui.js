@@ -279,6 +279,37 @@
       inner + '</svg>';
   }
 
+  /* Quick date suggestions — afternoon / morning / Monday / +1w / +2w */
+  var DUE_DATE_QUICK_ICON_SVG = {
+    'cet-apres-midi':
+      '<circle cx="5.6" cy="5.6" r="2.2" ' + ICON_S + '/>' +
+      '<path d="M5.6 2.1v1M2.1 5.6h1M3.3 3.3l.7.7M7.9 3.3l-.7.7" ' + ICON_S + ' stroke-width="1"/>' +
+      '<path d="M4.8 12h6.2a2 2 0 0 0 .15-3.95 2.7 2.7 0 0 0-5.05-.95A2.15 2.15 0 0 0 4.8 12z" ' + ICON_S + '/>',
+    'demain-matin':
+      '<circle cx="8" cy="8" r="2.6" ' + ICON_S + '/>' +
+      '<path d="M8 2.4v1.4M8 12.2v1.4M2.4 8h1.4M12.2 8h1.4M4 4l1 1M11 11l1 1M4 12l1-1M11 5l1-1" ' +
+        ICON_S + ' stroke-width="1"/>',
+    'lundi-prochain':
+      '<rect x="2.5" y="3.5" width="11" height="10" rx="1.2" ' + ICON_S + '/>' +
+      '<path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" ' + ICON_S + '/>' +
+      '<path d="M5.5 9.5h1.2M7.8 9.5h1.2M10.1 9.5h1.2" ' + ICON_S + ' stroke-width="1.35"/>',
+    'dans-une-semaine':
+      '<rect x="2.5" y="3.5" width="11" height="10" rx="1.2" ' + ICON_S + '/>' +
+      '<path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" ' + ICON_S + '/>' +
+      '<path d="M8 8.2v3.2M6.4 10.3l1.6 1.4 1.6-1.4" ' + ICON_S + '/>',
+    'dans-deux-semaines':
+      '<rect x="2.5" y="3.5" width="11" height="10" rx="1.2" ' + ICON_S + '/>' +
+      '<path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" ' + ICON_S + '/>' +
+      '<path d="M5.2 9.2h2.3M8.5 9.2h2.3M5.2 11.3h2.3M8.5 11.3h2.3" ' + ICON_S + ' stroke-width="1.35"/>'
+  };
+
+  function dueDateQuickIconSvg(id) {
+    var inner = DUE_DATE_QUICK_ICON_SVG[id];
+    if (!inner) return '';
+    return '<svg class="due-date-suggestion-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">' +
+      inner + '</svg>';
+  }
+
   function escapeHtml(s) {
     return String(s)
       .replace(/&/g, '&amp;')
@@ -1527,11 +1558,11 @@
   ];
   /** Quick date chips shown when Échéance has no day set. */
   var DUE_DATE_QUICK_SUGGESTIONS = [
-    { id: 'cet-apres-midi', label: 'Cet apr\u00e8s-midi' },
-    { id: 'demain-matin', label: 'Demain matin' },
-    { id: 'lundi-prochain', label: 'Lundi prochain' },
-    { id: 'dans-une-semaine', label: 'Dans une semaine' },
-    { id: 'dans-deux-semaines', label: 'Dans deux semaines' }
+    { id: 'cet-apres-midi', label: 'Cet apr\u00e8s-midi', hint: '14:00' },
+    { id: 'demain-matin', label: 'Demain matin', hint: '09:00' },
+    { id: 'lundi-prochain', label: 'Lundi prochain', hint: '09:00' },
+    { id: 'dans-une-semaine', label: 'Dans une semaine', hint: '+7 j' },
+    { id: 'dans-deux-semaines', label: 'Dans deux semaines', hint: '+14 j' }
   ];
   /** Shared workplace times for quick-date presets (match period chips). */
   var DUE_DATE_QUICK_MORNING_TIME = '09:00';
@@ -1555,15 +1586,15 @@
     'novembre',
     'd\u00e9cembre'
   ];
-  var DUE_DATE_WEEKDAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+  var DUE_DATE_WEEKDAYS = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
   var DUE_DATE_WEEKDAY_NAMES = [
+    'dimanche',
     'lundi',
     'mardi',
     'mercredi',
     'jeudi',
     'vendredi',
-    'samedi',
-    'dimanche'
+    'samedi'
   ];
   var MS_PER_DAY = 86400000;
   var MS_PER_HOUR = 3600000;
@@ -1756,8 +1787,9 @@
     return dateText + ' \u00b7 ' + normalizedTime;
   }
 
-  function mondayOffset(date) {
-    return (date.getDay() + 6) % 7;
+  /** Column index in a Sunday-first week (JS getDay(): Sun=0 … Sat=6). */
+  function sundayOffset(date) {
+    return date.getDay();
   }
 
   function daysUntilDue(iso, now) {
@@ -1796,43 +1828,112 @@
     return String(hours) + ' h ' + pad2(minutes);
   }
 
+  /** Match a due time to a period chip (matin / midi / après-midi / soir). */
+  function matchDueTimePeriod(time) {
+    var normalized = normalizeDueTime(time);
+    if (!normalized) return null;
+    for (var i = 0; i < DUE_DATE_TIME_PERIODS.length; i++) {
+      if (DUE_DATE_TIME_PERIODS[i].time === normalized) return DUE_DATE_TIME_PERIODS[i];
+    }
+    return null;
+  }
+
+  /** Short calendar day label, e.g. "20 juil." (adds year when not current). */
+  function formatDueDateDayMonthShort(iso, now) {
+    var date = dueDateToLocalDate(iso);
+    if (!date) return '';
+    var at = now || new Date();
+    try {
+      var opts = { day: 'numeric', month: 'short' };
+      if (date.getFullYear() !== at.getFullYear()) opts.year = 'numeric';
+      return date.toLocaleDateString('fr-FR', opts);
+    } catch (err) {
+      var text =
+        date.getDate() + ' ' + DUE_DATE_MONTH_NAMES[date.getMonth()];
+      if (date.getFullYear() !== at.getFullYear()) text += ' ' + date.getFullYear();
+      return text;
+    }
+  }
+
+  /**
+   * Relative calendar day for human-readable due titles
+   * (Aujourd'hui, Demain, Lundi prochain, Lundi 20 juil., …).
+   */
+  function formatDueDateRelativeDay(iso, now) {
+    var normalized = normalizeDueDate(iso);
+    if (!normalized) return '';
+    var days = daysUntilDue(normalized, now);
+    if (days === 0) return 'Aujourd\'hui';
+    if (days === 1) return 'Demain';
+    if (days === -1) return 'Hier';
+    if (days === 2) return 'Apr\u00e8s-demain';
+
+    var due = dueDateToLocalDate(normalized);
+    if (!due) return '';
+    var weekday = capitalizeCountdownPhrase(DUE_DATE_WEEKDAY_NAMES[sundayOffset(due)]);
+    if (days >= 3 && days <= 7) return weekday + ' prochain';
+    if (days <= -2 && days >= -7) return weekday + ' dernier';
+    return weekday + ' ' + formatDueDateDayMonthShort(normalized, now);
+  }
+
+  /**
+   * Human-readable due headline + remaining line for the Échéance body.
+   * Ex. primary "Lundi prochain à midi", secondary "6 jours restants".
+   */
+  function formatDueDateHumanReadable(iso, time, now) {
+    var normalized = normalizeDueDate(iso);
+    if (!normalized) return { primary: '', secondary: '' };
+
+    var days = daysUntilDue(normalized, now);
+    var dayPhrase = formatDueDateRelativeDay(normalized, now);
+    var period = matchDueTimePeriod(time);
+    var primary = dayPhrase;
+    var dueTime = normalizeDueTime(time);
+
+    if (period) {
+      var periodWord = period.label.toLocaleLowerCase('fr-FR');
+      if (days === 0) {
+        if (period.id === 'matin') primary = 'Ce matin';
+        else if (period.id === 'apres-midi') primary = 'Cet apr\u00e8s-midi';
+        else if (period.id === 'soir') primary = 'Ce soir';
+        else primary = 'Aujourd\'hui \u00e0 ' + periodWord;
+      } else if (days === 1 && (period.id === 'matin' || period.id === 'apres-midi' || period.id === 'soir')) {
+        primary = 'Demain ' + periodWord;
+      } else {
+        primary = dayPhrase + ' \u00e0 ' + periodWord;
+      }
+    } else if (dueTime) {
+      primary = dayPhrase + ' \u00e0 ' + formatDueTimeCompactFr(dueTime);
+    }
+
+    var secondary = formatDueCountdown(normalized, now, time);
+    // Avoid "Demain matin" / "Demain" duplication when countdown is only the day name.
+    if (
+      secondary &&
+      primary &&
+      secondary.toLocaleLowerCase('fr-FR') === dayPhrase.toLocaleLowerCase('fr-FR')
+    ) {
+      secondary = '';
+    }
+    if (
+      secondary &&
+      primary &&
+      secondary.toLocaleLowerCase('fr-FR') === primary.toLocaleLowerCase('fr-FR')
+    ) {
+      secondary = '';
+    }
+
+    return { primary: primary, secondary: secondary };
+  }
+
   /** Compact header summary when an enabled due-date section is collapsed. */
   function formatDueDateCompactSummary(iso, time, now) {
-    var normalized = normalizeDueDate(iso);
-    if (!normalized) return 'Aucune date d\'\u00e9ch\u00e9ance';
-    var days = daysUntilDue(normalized, now);
-    var dayPart;
-    var namedDay = false;
-    if (days === 0) {
-      dayPart = 'Aujourd\'hui';
-      namedDay = true;
-    } else if (days === 1) {
-      dayPart = 'Demain';
-      namedDay = true;
-    } else if (days === -1) {
-      dayPart = 'Hier';
-      namedDay = true;
-    } else {
-      dayPart = capitalizeCountdownPhrase(formatDueCountdownDays(days));
+    var human = formatDueDateHumanReadable(iso, time, now);
+    if (!normalizeDueDate(iso)) return 'Aucune date d\'\u00e9ch\u00e9ance';
+    if (human.secondary && human.primary) {
+      return human.primary + ' \u00b7 ' + human.secondary;
     }
-    var dueTime = formatDueTimeCompactFr(time);
-    var remaining = formatDueCountdown(normalized, now, time);
-    // Overdue: relative lateness only — no redundant clock ("… à 13 h").
-    if (remaining && remaining.indexOf('En retard') === 0) return remaining;
-    if (dayPart.indexOf('En retard') === 0) return dayPart;
-    // Clock only with calendar day names ("Demain à 9 h"), never with
-    // day-scale countdowns ("6 jours restants à 9 h").
-    var compact = dueTime && namedDay ? dayPart + ' \u00e0 ' + dueTime : dayPart;
-    // Day-scale remaining already matches dayPart (e.g. "Demain"). Append only
-    // when a clock time yields finer relative text ("5 h restantes").
-    if (!remaining || remaining === dayPart) return compact;
-    if (dueTime) {
-      var ms = msUntilDue(normalized, time, now);
-      if (isFinite(ms) && Math.abs(ms) < MS_PER_DAY) {
-        return compact + ' \u00b7 ' + remaining;
-      }
-    }
-    return compact;
+    return human.primary || formatDueCountdown(iso, now, time) || '';
   }
 
   function formatDueCountdownDays(days) {
@@ -4593,6 +4694,28 @@
                 : []
           )
         : [];
+    var reasonSpellcheckBusy = false;
+
+    function spellcheckReasonText(text) {
+      var trimmed = normalizeBlockedReason(text);
+      if (!trimmed) return Promise.resolve('');
+      if (
+        typeof global.Spellcheck === 'undefined' ||
+        typeof global.Spellcheck.correct !== 'function'
+      ) {
+        return Promise.resolve(trimmed);
+      }
+      return global.Spellcheck.correct(trimmed).then(
+        function (corrected) {
+          return normalizeBlockedReason(
+            typeof corrected === 'string' ? corrected : trimmed
+          );
+        },
+        function () {
+          return trimmed;
+        }
+      );
+    }
 
     var field = document.createElement('div');
     field.className = 'field field--en-attente';
@@ -4909,11 +5032,23 @@
         if (finished) return;
         finished = true;
         if (finishReasonEdit === finish) finishReasonEdit = null;
-        if (commit) renameReason(reason, input.value);
-        else {
+        if (!commit) {
           refreshSelected();
           onLayoutChange();
+          return;
         }
+        var rawValue = input.value;
+        input.disabled = true;
+        input.classList.add('is-spellchecking');
+        doneBtn.disabled = true;
+        spellcheckReasonText(rawValue).then(function (corrected) {
+          if (corrected && corrected !== input.value.trim()) {
+            input.value = corrected;
+          }
+          renameReason(reason, corrected || rawValue);
+        }).catch(function () {
+          renameReason(reason, rawValue);
+        });
       }
       finishReasonEdit = finish;
 
@@ -5236,11 +5371,25 @@
     reasonInput.addEventListener('keydown', function (event) {
       if (event.key !== 'Enter') return;
       event.preventDefault();
+      if (reasonSpellcheckBusy) return;
       var typed = normalizeBlockedReason(reasonInput.value);
       if (!typed) return;
-      addReason(typed);
-      reasonInput.value = '';
-      refreshSuggestions();
+      reasonSpellcheckBusy = true;
+      reasonInput.disabled = true;
+      reasonInput.classList.add('is-spellchecking');
+      spellcheckReasonText(typed).then(function (corrected) {
+        if (corrected && corrected !== reasonInput.value.trim()) {
+          reasonInput.value = corrected;
+        }
+        if (corrected) addReason(corrected);
+        reasonInput.value = '';
+        refreshSuggestions();
+      }).finally(function () {
+        reasonSpellcheckBusy = false;
+        reasonInput.disabled = false;
+        reasonInput.classList.remove('is-spellchecking');
+        reasonInput.focus();
+      });
     });
 
     setBlockedReasons(
@@ -5346,6 +5495,15 @@
     countdown.setAttribute('aria-live', 'polite');
     countdown.hidden = true;
 
+    var countdownPrimary = document.createElement('div');
+    countdownPrimary.className = 'due-date-countdown-primary';
+
+    var countdownSecondary = document.createElement('div');
+    countdownSecondary.className = 'due-date-countdown-secondary';
+
+    countdown.appendChild(countdownPrimary);
+    countdown.appendChild(countdownSecondary);
+
     var pickers = document.createElement('div');
     pickers.className = 'due-date-pickers';
 
@@ -5372,8 +5530,8 @@
     var triggerValue = document.createElement('span');
     triggerValue.className = 'due-date-trigger-value';
 
-    triggerText.appendChild(triggerTitle);
     triggerText.appendChild(triggerValue);
+    triggerText.appendChild(triggerTitle);
 
     var dateTrashBtn = document.createElement('button');
     dateTrashBtn.type = 'button';
@@ -5411,8 +5569,8 @@
     var timeValue = document.createElement('span');
     timeValue.className = 'due-date-time-value';
 
-    timeTriggerText.appendChild(timeTitle);
     timeTriggerText.appendChild(timeValue);
+    timeTriggerText.appendChild(timeTitle);
 
     var timeTrashBtn = document.createElement('button');
     timeTrashBtn.type = 'button';
@@ -5442,9 +5600,25 @@
       chip.type = 'button';
       chip.className = 'due-date-suggestion';
       chip.dataset.suggestion = item.id;
-      chip.textContent = item.label;
-      chip.setAttribute('aria-label', item.label);
+      chip.setAttribute(
+        'aria-label',
+        item.hint ? item.label + ', ' + item.hint : item.label
+      );
       chip.hidden = !isDueDateQuickSuggestionAvailable(item.id);
+      chip.innerHTML = dueDateQuickIconSvg(item.id);
+      var chipBody = document.createElement('span');
+      chipBody.className = 'due-date-suggestion-body';
+      var chipLabel = document.createElement('span');
+      chipLabel.className = 'due-date-suggestion-label';
+      chipLabel.textContent = item.label;
+      chipBody.appendChild(chipLabel);
+      if (item.hint) {
+        var chipHint = document.createElement('span');
+        chipHint.className = 'due-date-suggestion-hint';
+        chipHint.textContent = item.hint;
+        chipBody.appendChild(chipHint);
+      }
+      chip.appendChild(chipBody);
       chip.addEventListener('click', function () {
         applyQuickSuggestion(item.id);
       });
@@ -5453,7 +5627,6 @@
 
     body.appendChild(countdown);
     body.appendChild(pickers);
-    body.appendChild(suggestions);
 
     var timePopover = document.createElement('div');
     timePopover.className = 'due-date-time-popover';
@@ -5674,6 +5847,8 @@
     datePicker.appendChild(popover);
     timePicker.appendChild(timePopover);
 
+    /* Suggestions sit above section-toggle-shell (wraps body in bindCollapsibleEnable). */
+    field.appendChild(suggestions);
     field.appendChild(body);
     el.appendChild(field);
 
@@ -5937,7 +6112,8 @@
     }
 
     function refreshSuggestions() {
-      var show = enabled && !current;
+      var expanded = !collapseApi || collapseApi.isExpanded();
+      var show = enabled && expanded && !current;
       var chips = suggestions.querySelectorAll('[data-suggestion]');
       var anyAvailable = false;
       for (var i = 0; i < chips.length; i++) {
@@ -5984,7 +6160,9 @@
 
     function refreshCountdown() {
       if (!current) {
-        countdown.textContent = '';
+        countdownPrimary.textContent = '';
+        countdownSecondary.textContent = '';
+        countdownSecondary.hidden = true;
         countdown.hidden = true;
         countdown.classList.remove('is-past');
         field.classList.remove('has-due-date', 'is-past');
@@ -5998,18 +6176,21 @@
       refreshTimeRow();
       refreshSuggestions();
       if (!enabled) {
-        countdown.textContent = '';
+        countdownPrimary.textContent = '';
+        countdownSecondary.textContent = '';
+        countdownSecondary.hidden = true;
         countdown.hidden = true;
         countdown.classList.remove('is-past');
         field.classList.remove('has-due-date', 'is-past');
         if (collapseApi) collapseApi.refreshSummary();
         return;
       }
-      var text = formatDueCountdown(current, null, currentTime);
+      var human = formatDueDateHumanReadable(current, currentTime);
       var past = isDuePast(current, currentTime);
-      // Remaining text lives in `.section-toggle-summary`; keep this node for a11y only.
-      countdown.textContent = text;
-      countdown.hidden = true;
+      countdownPrimary.textContent = human.primary || '';
+      countdownSecondary.textContent = human.secondary || '';
+      countdownSecondary.hidden = !human.secondary;
+      countdown.hidden = !human.primary;
       countdown.classList.toggle('is-past', past);
       field.classList.add('has-due-date');
       field.classList.toggle('is-past', past);
@@ -6109,7 +6290,7 @@
         monthName.charAt(0).toUpperCase() + monthName.slice(1) + ' ' + viewYear;
 
       var first = new Date(viewYear, viewMonth, 1);
-      var startOffset = mondayOffset(first);
+      var startOffset = sundayOffset(first);
       var gridStart = new Date(viewYear, viewMonth, 1 - startOffset);
       var todayIso = toIsoDate(startOfLocalDay(new Date()));
 
@@ -6144,7 +6325,7 @@
         dayBtn.textContent = String(cellDate.getDate());
         dayBtn.setAttribute(
           'aria-label',
-          DUE_DATE_WEEKDAY_NAMES[mondayOffset(cellDate)] +
+          DUE_DATE_WEEKDAY_NAMES[sundayOffset(cellDate)] +
             ' ' +
             cellDate.getDate() +
             ' ' +
@@ -6439,7 +6620,12 @@
         return formatDueDateCompactSummary(current, currentTime);
       },
       onLayoutChange: notifyLayout,
-      onExpandChange: config.onExpandChange || null,
+      onExpandChange: function (expanded, options) {
+        refreshSuggestions();
+        if (typeof config.onExpandChange === 'function') {
+          config.onExpandChange(expanded, options);
+        }
+      },
       onBeforeDisable: function () {
         hidePickers();
         field.classList.remove('has-due-date', 'is-past');
@@ -8512,6 +8698,7 @@
     formatDueCountdown: formatDueCountdown,
     formatDueDateDisplay: formatDueDateDisplay,
     formatDueDateCompactSummary: formatDueDateCompactSummary,
+    formatDueDateHumanReadable: formatDueDateHumanReadable,
     formatDueBadgeText: formatDueBadgeText,
     dueBadgeSuffix: dueBadgeSuffix,
     isDueEnabled: isDueEnabled,

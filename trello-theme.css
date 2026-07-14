@@ -1277,9 +1277,23 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .due-date-countdown {
-  font-size: 15px;
-  font-weight: 500;
+  font-size: 17px;
+  font-weight: 600;
   border: none;
+  background: transparent;
+  padding: 0;
+}
+
+.tp-page--priority .due-date-countdown-primary {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary, var(--tp-text));
+}
+
+.tp-page--priority .due-date-countdown-secondary {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--due-accent, var(--tp-primary, #0c66e4));
 }
 
 .tp-page--priority .due-date-body {
@@ -1296,9 +1310,19 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .due-date-suggestion {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   border: none;
+}
+
+.tp-page--priority .due-date-suggestion-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tp-page--priority .due-date-suggestion-hint {
+  font-size: 11px;
+  font-weight: 400;
 }
 
 .tp-page--priority .due-date-trigger-icon,
@@ -1308,14 +1332,16 @@ body.tp-page--priority {
 
 .tp-page--priority .due-date-trigger-title,
 .tp-page--priority .due-date-time-title {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
+  color: var(--due-accent, var(--tp-primary, #0c66e4));
 }
 
 .tp-page--priority .due-date-trigger-value,
 .tp-page--priority .due-date-time-value {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
+  color: var(--text-primary, var(--tp-text));
 }
 
 .tp-page--priority .due-date-time-popover,
