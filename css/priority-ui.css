@@ -266,22 +266,22 @@ body {
 }
 
 /* ── Shared section enable + collapse chrome ──
-   Checkbox = enable/disable feature
-   Rest of header (title + summary + chevron) = expand/collapse body */
+   Chevron (left) + title/summary = expand/collapse body
+   Checkbox (right) = enable/disable feature; settings gears append after it */
 .section-toggle-head {
   display: flex;
   align-items: flex-start;
   gap: 8px;
 }
 
-/* Settings gear sits beside the collapse control — share one horizontal axis.
+/* Settings gear sits after the enable checkbox — share one horizontal axis.
    Keep flex-start on the head so the enable checkbox lines up with other sections;
    the gear uses align-self: center on its own. */
 .field--statut .section-collapse-btn,
 .field--chat .section-collapse-btn,
 .field--info .section-collapse-btn {
   align-items: center;
-  /* Keep hit-area padding, but don't overlap the trailing settings control */
+  /* Keep hit-area padding, but don't overlap the trailing enable/settings controls */
   margin-right: 0;
 }
 
@@ -296,11 +296,12 @@ body {
 
 .section-enable-label {
   display: inline-flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   flex: 0 0 18px;
   width: 18px;
   margin: 0;
+  align-self: center;
   cursor: pointer;
   user-select: none;
 }
@@ -308,16 +309,10 @@ body {
 .section-enable-checkbox {
   width: 15px;
   height: 15px;
-  margin: 3px 0 0;
+  margin: 0;
   flex-shrink: 0;
   accent-color: var(--tp-primary, #0c66e4);
   cursor: pointer;
-}
-
-.section-enable-spacer {
-  flex: 0 0 18px;
-  width: 18px;
-  pointer-events: none;
 }
 
 .section-leading-icon {
@@ -714,7 +709,6 @@ body {
 
 .section-collapse-chevron {
   flex-shrink: 0;
-  margin-left: auto;
   margin-top: 1px;
   font-size: 18px;
   line-height: 1;
@@ -1066,7 +1060,7 @@ body {
 .due-date-checkbox {
   width: 18px;
   height: 18px;
-  margin: 2px 0 0;
+  margin: 0;
   flex-shrink: 0;
   cursor: pointer;
 }

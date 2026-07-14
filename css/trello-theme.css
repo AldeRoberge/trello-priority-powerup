@@ -1633,6 +1633,19 @@ html[data-color-mode="dark"] .tp-page--priority {
   --due-accent-text: var(--tp-primary-text);
 }
 
+/* Bridge the same tokens for memory align / board-bar pages */
+html[data-color-mode="light"] .memory-page,
+html[data-color-mode="dark"] .memory-page {
+  --surface-0: var(--tp-bg);
+  --surface-1: var(--tp-surface-subtle);
+  --surface-2: var(--tp-surface);
+  --border: var(--tp-border);
+  --text-primary: var(--tp-text);
+  --text-secondary: var(--tp-text-subtle);
+  --text-muted: var(--tp-text-muted);
+  --surface-hover: var(--tp-surface-hover);
+}
+
 /* Completion editor — modal iframe (legacy) + embedded in priority popup */
 body.tp-page--completion {
   background: var(--tp-bg);

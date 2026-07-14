@@ -1345,6 +1345,8 @@
       '- Pose UNE question claire \u00e0 la fois quand tu as besoin d\'info.',
       '- Quand l\'utilisateur r\u00e9pond, enregistre via remember (et \u00e9ventuellement set_summary).',
       '- suggestions = 2\u20134 r\u00e9ponses/intentions cliquables courtes.',
+      '- Pour les r\u00e9ponses \u00e0 compl\u00e9ter, utilise \u2026 (ou [libell\u00e9]) comme trou \u00e0 remplir\u00a0: ex. \u00ab\u00a0Je m\'appelle\u2026\u00a0\u00bb, \u00ab\u00a0Mon patron s\'appelle\u2026\u00a0\u00bb, \u00ab\u00a0Je travaille sur\u2026\u00a0\u00bb.',
+      '- Les suggestions sans trou restent des r\u00e9ponses compl\u00e8tes cliquables.',
       mode === 'onboarding'
         ? '- Mode onboarding\u00a0: apr\u00e8s ~2\u20134 faits utiles, remercie bri\u00e8vement et inclus complete_onboarding.'
         : '- Mode continu\u00a0: mets \u00e0 jour la m\u00e9moire; complete_onboarding seulement si l\'utilisateur confirme avoir fini l\'alignement.',

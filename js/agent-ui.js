@@ -102,7 +102,7 @@
     var settingsIcon = el('i', 'ti ti-settings');
     settingsIcon.setAttribute('aria-hidden', 'true');
     settingsBtn.appendChild(settingsIcon);
-    // Place after the collapse control so it stays clickable (collapse is flex:1).
+    // Place after the enable checkbox so the gear stays on the far right edge.
     chrome.head.appendChild(settingsBtn);
 
     var body = el('div', 'agent-chat-body section-toggle-body');

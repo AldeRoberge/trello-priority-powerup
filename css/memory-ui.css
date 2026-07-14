@@ -4,6 +4,8 @@
   margin: 0;
   padding: 12px 14px 16px;
   box-sizing: border-box;
+  background: var(--tp-bg);
+  color: var(--tp-text);
 }
 
 .memory-page--bar {
@@ -29,20 +31,69 @@
   font-size: 18px;
   font-weight: 650;
   letter-spacing: -0.02em;
-  color: var(--text-primary, var(--tp-text, #172b4d));
+  color: var(--tp-text);
 }
 
 .memory-ui-subtitle {
   margin: 0;
   font-size: 13px;
   line-height: 1.4;
-  color: var(--text-muted, var(--tp-text-muted, #626f86));
+  color: var(--tp-text-muted);
+}
+
+.memory-ui-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.memory-ui-progress[hidden] {
+  display: none;
+}
+
+.memory-ui-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.memory-ui-progress-caption {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--tp-text-muted);
+}
+
+.memory-ui-progress-count {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tp-text-subtle);
+}
+
+.memory-ui-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--tp-surface-subtle);
+  border: 1px solid var(--tp-border);
+}
+
+.memory-ui-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: var(--tp-primary);
+  transition: width 0.35s ease;
 }
 
 .memory-ui-summary {
   padding: 10px 12px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--surface-2, #f1f2f4) 88%, transparent);
+  border: 1px solid var(--tp-border);
+  background: var(--tp-surface-subtle);
 }
 
 .memory-ui-summary[hidden] {
@@ -54,7 +105,7 @@
   font-weight: 650;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--text-muted, #626f86);
+  color: var(--tp-text-muted);
   margin-bottom: 6px;
 }
 
@@ -63,7 +114,7 @@
   margin: 0 0 6px;
   font-size: 13px;
   line-height: 1.4;
-  color: var(--text-primary, #172b4d);
+  color: var(--tp-text);
 }
 
 .memory-ui-facts {
@@ -71,7 +122,7 @@
   padding-left: 1.1em;
   font-size: 13px;
   line-height: 1.4;
-  color: var(--text-primary, #172b4d);
+  color: var(--tp-text);
 }
 
 .memory-ui-messages {
@@ -110,14 +161,15 @@
 }
 
 .memory-ui-msg--user .memory-ui-bubble {
-  background: var(--tp-primary, #0c66e4);
-  color: #fff;
+  background: var(--tp-primary);
+  color: var(--tp-primary-text);
   border-bottom-right-radius: 4px;
 }
 
 .memory-ui-msg--assistant .memory-ui-bubble {
-  background: color-mix(in srgb, var(--surface-2, #ebecf0) 92%, transparent);
-  color: var(--text-primary, #172b4d);
+  background: var(--tp-surface-subtle);
+  color: var(--tp-text);
+  border: 1px solid var(--tp-border);
   border-bottom-left-radius: 4px;
 }
 
@@ -133,25 +185,63 @@
 
 .memory-ui-chip {
   appearance: none;
-  border: none;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  border: 1px solid var(--tp-border-strong);
   border-radius: 999px;
   padding: 6px 10px;
   font: inherit;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  background: color-mix(in srgb, var(--surface-1, #fff) 70%, var(--surface-2, #ebecf0));
-  color: var(--text-primary, #172b4d);
+  background: var(--tp-surface);
+  color: var(--tp-text);
+  text-align: left;
+  line-height: 1.35;
 }
 
 .memory-ui-chip:hover {
-  background: var(--surface-hover, #e2e4e9);
+  background: var(--tp-surface-hover);
+  border-color: var(--tp-primary);
+  color: var(--tp-link);
+}
+
+.memory-ui-chip.is-tab-target {
+  border-color: var(--tp-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tp-primary) 35%, transparent);
+}
+
+.memory-ui-chip-hole {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 5px;
+  border: 1px dashed color-mix(in srgb, var(--tp-primary) 70%, var(--tp-border-strong));
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--tp-primary) 12%, transparent);
+  color: var(--tp-text-muted);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.memory-ui-chip-tab {
+  margin-left: 2px;
+  padding: 1px 5px;
+  border: 1px solid var(--tp-border-strong);
+  border-radius: 4px;
+  background: var(--tp-surface-subtle);
+  color: var(--tp-text-muted);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.2;
 }
 
 .memory-ui-error {
   margin: 0;
   font-size: 12px;
-  color: var(--tp-danger-text, #c9372c);
+  color: var(--tp-danger-text);
 }
 
 .memory-ui-error[hidden] {
@@ -164,24 +254,119 @@
   align-items: flex-end;
 }
 
-.memory-ui-input {
+.memory-ui-input-wrap {
+  position: relative;
   flex: 1;
-  min-height: 40px;
-  max-height: 88px;
-  resize: vertical;
-  padding: 8px 10px;
-  border: 1px solid var(--tp-border-strong, #8590a2);
+  min-width: 0;
+  border: 1px solid var(--tp-border-strong);
   border-radius: 8px;
-  background: var(--tp-input-bg, #fff);
-  color: var(--text-primary, #172b4d);
-  font: inherit;
-  font-size: 13px;
+  background: var(--tp-surface);
   box-sizing: border-box;
 }
 
-.memory-ui-input:focus {
-  outline: 2px solid var(--tp-primary, #0c66e4);
+.memory-ui-input-wrap:focus-within {
+  outline: 2px solid var(--tp-primary);
   outline-offset: 1px;
+}
+
+.memory-ui-input-ghost {
+  position: absolute;
+  inset: 0;
+  padding: 8px 10px;
+  color: var(--tp-text-muted);
+  opacity: 0;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
+.memory-ui-input-wrap.has-ghost .memory-ui-input-ghost {
+  opacity: 0.55;
+}
+
+.memory-ui-input {
+  position: relative;
+  z-index: 1;
+  min-height: 40px;
+  max-height: 88px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  box-sizing: border-box;
+  caret-color: var(--tp-text);
+  outline: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.memory-ui-input.is-empty::before {
+  content: attr(data-placeholder);
+  color: var(--tp-text-muted);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.memory-ui-input.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.memory-ui-hole {
+  display: inline-block;
+  min-width: 2.75em;
+  min-height: 1.15em;
+  margin: 0 1px;
+  padding: 1px 7px;
+  border: 1.5px dashed color-mix(in srgb, var(--tp-primary) 75%, var(--tp-border-strong));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--tp-primary) 14%, transparent);
+  color: var(--tp-text-muted);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  vertical-align: baseline;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.memory-ui-hole.is-empty {
+  color: var(--tp-text-muted);
+}
+
+.memory-ui-hole:not(.is-empty) {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--tp-primary) 55%, var(--tp-border-strong));
+  background: color-mix(in srgb, var(--tp-primary) 10%, var(--tp-surface));
+  color: var(--tp-text);
+  font-weight: 500;
+}
+
+/* Dark modal chrome is near --tp-surface; lift the field so it reads clearly. */
+html[data-color-mode='dark'] .memory-ui-input-wrap {
+  background: var(--tp-surface-subtle);
+  border-color: var(--tp-border-strong);
+}
+
+html[data-color-mode='dark'] .memory-ui-chip {
+  background: var(--tp-surface-subtle);
+}
+
+html[data-color-mode='dark'] .memory-ui-hole {
+  background: color-mix(in srgb, var(--tp-primary) 18%, transparent);
+}
+
+html[data-color-mode='dark'] .memory-ui-hole:not(.is-empty) {
+  background: color-mix(in srgb, var(--tp-primary) 14%, var(--tp-surface-subtle));
 }
 
 .memory-ui-send {

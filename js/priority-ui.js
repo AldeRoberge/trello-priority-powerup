@@ -3888,34 +3888,18 @@
     var checkbox = null;
     var leadingIconEl = null;
 
-    if (!hideEnable) {
-      // Checkbox alone enables/disables — title is not part of the label,
-      // so clicking the heading collapses instead of toggling the feature.
-      label = document.createElement('label');
-      label.className = ('section-enable-label ' + labelClass).trim();
-
-      checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.className = ('section-enable-checkbox ' + checkboxClass).trim();
-      checkbox.setAttribute('aria-label', enableLabel);
-      if (bodyId) checkbox.setAttribute('aria-controls', bodyId);
-
-      label.appendChild(checkbox);
-      head.appendChild(label);
-    } else if (leadingIcon) {
-      // Keep title columns aligned with checkbox sections (18px enable slot).
-      var enableSpacer = document.createElement('span');
-      enableSpacer.className = 'section-enable-spacer';
-      enableSpacer.setAttribute('aria-hidden', 'true');
-      head.appendChild(enableSpacer);
-    }
-
     var collapseBtn = document.createElement('button');
     collapseBtn.type = 'button';
     collapseBtn.className = 'section-collapse-btn';
     if (bodyId) collapseBtn.setAttribute('aria-controls', bodyId);
     collapseBtn.setAttribute('aria-expanded', 'false');
     collapseBtn.setAttribute('aria-label', expandLabel);
+
+    // Chevron leads on the left; title/summary fill the middle.
+    var chevron = document.createElement('i');
+    chevron.className = 'ti ti-chevron-down section-collapse-chevron';
+    chevron.setAttribute('aria-hidden', 'true');
+    collapseBtn.appendChild(chevron);
 
     // Icon lives inside the collapse button so hover/focus highlight wraps it.
     if (leadingIcon) {
@@ -3942,15 +3926,26 @@
     summary.hidden = true;
     summary.setAttribute('aria-hidden', 'true');
 
-    var chevron = document.createElement('i');
-    chevron.className = 'ti ti-chevron-down section-collapse-chevron';
-    chevron.setAttribute('aria-hidden', 'true');
-
     collapseBtn.appendChild(textWrap);
     collapseBtn.appendChild(summary);
-    collapseBtn.appendChild(chevron);
-
     head.appendChild(collapseBtn);
+
+    if (!hideEnable) {
+      // Checkbox alone enables/disables — title is not part of the label,
+      // so clicking the heading collapses instead of toggling the feature.
+      // Keep enable toggle on the right edge (settings gears append after it).
+      label = document.createElement('label');
+      label.className = ('section-enable-label ' + labelClass).trim();
+
+      checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = ('section-enable-checkbox ' + checkboxClass).trim();
+      checkbox.setAttribute('aria-label', enableLabel);
+      if (bodyId) checkbox.setAttribute('aria-controls', bodyId);
+
+      label.appendChild(checkbox);
+      head.appendChild(label);
+    }
 
     return {
       head: head,
@@ -4353,7 +4348,7 @@
     settingsIcon.className = 'ti ti-settings';
     settingsIcon.setAttribute('aria-hidden', 'true');
     settingsBtn.appendChild(settingsIcon);
-    // After the collapse control so it stays clickable (collapse is flex:1).
+    // After the enable checkbox so the gear stays on the far right edge.
     chrome.head.appendChild(settingsBtn);
     settingsBtn.addEventListener('click', function (e) {
       e.stopPropagation();
@@ -9610,7 +9605,8 @@
         }
       },
       /**
-       * Expand a named section and return its root element (for scroll/focus).
+       * Toggle a named section open/closed and return its root element (for scroll/focus).
+       * Re-clicking from Information collapses when already expanded.
        * Keys: 'priority' | 'due' | 'blocked'
        */
       openSection: function (key) {
@@ -9618,17 +9614,24 @@
         if (key === 'priority') {
           target = prioritySection;
           if (priorityCollapse && priorityCollapse.setExpanded) {
-            priorityCollapse.setExpanded(true);
+            var priorityOpen = priorityCollapse.isExpanded
+              ? priorityCollapse.isExpanded()
+              : false;
+            priorityCollapse.setExpanded(!priorityOpen);
           }
         } else if (key === 'due') {
           target = dueSection;
           if (dueDateField && dueDateField.setExpanded) {
-            dueDateField.setExpanded(true);
+            var dueOpen = dueDateField.isExpanded ? dueDateField.isExpanded() : false;
+            dueDateField.setExpanded(!dueOpen);
           }
         } else if (key === 'blocked') {
           target = blockedSection;
           if (enAttenteField && enAttenteField.setExpanded) {
-            enAttenteField.setExpanded(true);
+            var blockedOpen = enAttenteField.isExpanded
+              ? enAttenteField.isExpanded()
+              : false;
+            enAttenteField.setExpanded(!blockedOpen);
           }
         }
         return target;

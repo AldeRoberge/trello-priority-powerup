@@ -1535,12 +1535,31 @@
     }
   }
 
-  async function authorizeRestForAutoSort(t) {
+  /**
+   * Kick off Trello REST OAuth. Must stay synchronous through window.open —
+   * awaiting before authorize() drops the click user-gesture and Chrome flashes
+   * the consent popup closed (~0.1s) with no console error.
+   * Call only from a direct click handler (as Trello requires).
+   */
+  function authorizeRestForAutoSort(t) {
     if (!restClientOptions()) {
-      throw new Error('REST appKey is not configured');
+      return Promise.reject(new Error('REST appKey is not configured'));
     }
-    var api = await t.getRestApi();
-    return api.authorize({ scope: 'read,write', expiration: 'never' });
+    // iframe getRestApi() returns the client synchronously (not a Promise).
+    var api = t.getRestApi();
+    if (!api || typeof api.authorize !== 'function') {
+      return Promise.reject(new Error('REST API client is not available'));
+    }
+    // Prefer a stable return URL (origin + path) so Allowed Origins matches.
+    var returnUrl =
+      typeof window !== 'undefined' && window.location
+        ? window.location.origin + window.location.pathname
+        : undefined;
+    return api.authorize({
+      scope: 'read,write',
+      expiration: 'never',
+      returnUrl: returnUrl,
+    });
   }
 
   function getCachedBoardFormulaKey() {
