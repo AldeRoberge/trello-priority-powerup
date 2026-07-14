@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=section-glow-2" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css?v=section-glow-2" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
-  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=listen-offer-1" />
+  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-hl-1" />
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
   <script src="./components/priority/priority-ui.js?v=experimental-1"></script>
@@ -26,11 +26,11 @@
   <script src="./components/completion/completion-trello.js?v=progress-due-complete-1"></script>
   <script src="./components/goals/goals-trello.js?v=goals-1"></script>
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
-  <script src="./components/agent/agent.js?v=card-interview-1"></script>
+  <script src="./components/agent/agent.js?v=agent-hl-3"></script>
   <script src="./components/agent/agent-memory.js?v=card-interview-1"></script>
   <script src="./components/profile/user-profile.js?v=experimental-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
-  <script src="./components/agent/agent-ui.js?v=listen-offer-1"></script>
+  <script src="./components/agent/agent-ui.js?v=agent-hl-1"></script>
 </head>
 <body class="tp-page tp-page--priority">
   <div class="compare-page">
@@ -582,11 +582,16 @@
     function setProgressEnabled(enabled, options) {
       options = options || {};
       if (progressCollapse) {
-        progressCollapse.setEnabled(!!enabled, {
-          expand: options.expand !== false && !!enabled,
-          focusAdd: options.focusAdd,
-          persist: options.persist
-        });
+        var enableOpts = {
+          persist: options.persist,
+          focusAdd: options.focusAdd
+        };
+        if (options.preserveCollapse) {
+          enableOpts.preserveCollapse = true;
+        } else {
+          enableOpts.expand = options.expand !== false && !!enabled;
+        }
+        progressCollapse.setEnabled(!!enabled, enableOpts);
         return;
       }
       progressEnabled = !!enabled;
@@ -1630,7 +1635,9 @@
           },
           applyPriority: function (partial) {
             if (!variant || typeof variant.setState !== 'function') return;
-            variant.setState(Object.assign({}, variant.getState(), partial || {}));
+            variant.setState(Object.assign({}, variant.getState(), partial || {}), {
+              preserveCollapse: true
+            });
           },
           applyCompletion: function (next) {
             if (!completionUi || typeof completionUi.setData !== 'function') return;
@@ -1646,9 +1653,9 @@
               clearSuppress: progressIsFullyComplete(live),
             });
             if (live.progressEnabled !== false) {
-              var wasOff = progressCollapse && !progressCollapse.isEnabled();
               setProgressEnabled(true, {
-                expand: wasOff,
+                expand: false,
+                preserveCollapse: true,
                 persist: false
               });
             }

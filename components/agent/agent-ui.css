@@ -378,6 +378,83 @@
   border-bottom-left-radius: 2px;
 }
 
+/* Soft gradient phrase highlights from [[g:…]] / [[r:…]] / [[y:…]] */
+.tp-page--priority .agent-hl {
+  display: inline;
+  padding: 0.08em 0.32em;
+  margin: 0 0.04em;
+  border-radius: 0.4em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  transition: background 0.2s ease;
+}
+
+.tp-page--priority .agent-hl--g {
+  color: inherit;
+  background: linear-gradient(
+    105deg,
+    color-mix(in srgb, #61bd4f 6%, transparent) 0%,
+    color-mix(in srgb, #61bd4f 34%, transparent) 35%,
+    color-mix(in srgb, #61bd4f 22%, transparent) 70%,
+    color-mix(in srgb, #61bd4f 8%, transparent) 100%
+  );
+  box-shadow: inset 0 -0.1em 0 color-mix(in srgb, #61bd4f 28%, transparent);
+}
+
+.tp-page--priority .agent-hl--r {
+  color: inherit;
+  background: linear-gradient(
+    105deg,
+    color-mix(in srgb, #eb5a46 6%, transparent) 0%,
+    color-mix(in srgb, #eb5a46 34%, transparent) 35%,
+    color-mix(in srgb, #eb5a46 22%, transparent) 70%,
+    color-mix(in srgb, #eb5a46 8%, transparent) 100%
+  );
+  box-shadow: inset 0 -0.1em 0 color-mix(in srgb, #eb5a46 28%, transparent);
+}
+
+.tp-page--priority .agent-hl--y {
+  color: inherit;
+  background: linear-gradient(
+    105deg,
+    color-mix(in srgb, #f2d600 8%, transparent) 0%,
+    color-mix(in srgb, #f2d600 38%, transparent) 35%,
+    color-mix(in srgb, #f2d600 24%, transparent) 70%,
+    color-mix(in srgb, #f2d600 10%, transparent) 100%
+  );
+  box-shadow: inset 0 -0.1em 0 color-mix(in srgb, #e2b203 32%, transparent);
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-hl--g {
+  background: linear-gradient(
+    105deg,
+    color-mix(in srgb, #7dd69a 10%, transparent) 0%,
+    color-mix(in srgb, #7dd69a 38%, transparent) 40%,
+    color-mix(in srgb, #7dd69a 18%, transparent) 100%
+  );
+  box-shadow: inset 0 -0.1em 0 color-mix(in srgb, #7dd69a 35%, transparent);
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-hl--r {
+  background: linear-gradient(
+    105deg,
+    color-mix(in srgb, #f87171 10%, transparent) 0%,
+    color-mix(in srgb, #f87171 38%, transparent) 40%,
+    color-mix(in srgb, #f87171 18%, transparent) 100%
+  );
+  box-shadow: inset 0 -0.1em 0 color-mix(in srgb, #f87171 35%, transparent);
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-hl--y {
+  background: linear-gradient(
+    105deg,
+    color-mix(in srgb, #f5e49a 10%, transparent) 0%,
+    color-mix(in srgb, #f5e49a 40%, transparent) 40%,
+    color-mix(in srgb, #f5e49a 18%, transparent) 100%
+  );
+  box-shadow: inset 0 -0.1em 0 color-mix(in srgb, #f5e49a 35%, transparent);
+}
+
 .tp-page--priority .agent-msg--assistant > .agent-msg-note {
   flex: 1 0 100%;
 }

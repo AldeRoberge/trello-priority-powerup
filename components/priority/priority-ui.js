@@ -4720,10 +4720,15 @@
       var wasExpanded = expanded;
       enabled = on;
       if (enabled) {
-        if (changed || options.expand != null) expanded = options.expand !== false;
+        if (options.preserveCollapse) {
+          // Keep current expand/collapse (e.g. AI edits must not reopen sections).
+        } else if (changed || options.expand != null) {
+          expanded = options.expand !== false;
+        }
         if (changed && typeof onAfterEnable === 'function') onAfterEnable(options);
       } else {
         // Disabling collapses by default; pass expand:true to keep open.
+        // preserveCollapse only skips unintended opens — disable still collapses.
         expanded = options.expand != null ? !!options.expand : false;
         if (changed && typeof onBeforeDisable === 'function') onBeforeDisable(options);
       }
@@ -6994,9 +6999,13 @@
       });
     }
 
-    function setValue(value) {
+    function setValue(value, options) {
+      options = options || {};
       if (collapse) {
-        collapse.setEnabled(!!value, { notifyLayout: false, expand: !!value });
+        var enableOpts = { notifyLayout: false };
+        if (options.preserveCollapse) enableOpts.preserveCollapse = true;
+        else enableOpts.expand = !!value;
+        collapse.setEnabled(!!value, enableOpts);
         return;
       }
       var next = !!value;
@@ -7977,7 +7986,8 @@
       return enabled ? (current || '') : '';
     }
 
-    function setValue(value) {
+    function setValue(value, options) {
+      options = options || {};
       if (value && typeof value === 'object') {
         current = normalizeDueDate(value.dueDate);
         currentTime = current ? normalizeDueTime(value.dueTime) : '';
@@ -7995,10 +8005,10 @@
         syncViewFromValue('');
       }
       if (collapseApi) {
-        collapseApi.setEnabled(enabled, {
-          notifyLayout: false,
-          expand: enabled
-        });
+        var enableOpts = { notifyLayout: false };
+        if (options.preserveCollapse) enableOpts.preserveCollapse = true;
+        else enableOpts.expand = enabled;
+        collapseApi.setEnabled(enabled, enableOpts);
       }
       if (enabled) showPickers();
       else hidePickers();
@@ -10473,25 +10483,31 @@
         saveStoredFormulaKey(key);
         repaint();
       },
-      setState: function (next) {
+      setState: function (next, options) {
+        options = options || {};
+        var preserveCollapse = options.preserveCollapse === true;
         Object.keys(next).forEach(function (key) {
           state[key] = next[key];
           if (fields[key]) fields[key].setValue(next[key]);
         });
         if (next.priorityEnabled != null && priorityCollapse) {
-          priorityCollapse.setEnabled(!!next.priorityEnabled, {
-            notifyLayout: false,
-            expand: !!next.priorityEnabled
-          });
+          var priorityOpts = { notifyLayout: false };
+          if (preserveCollapse) priorityOpts.preserveCollapse = true;
+          else priorityOpts.expand = !!next.priorityEnabled;
+          priorityCollapse.setEnabled(!!next.priorityEnabled, priorityOpts);
           state.priorityEnabled = !!next.priorityEnabled;
         }
         if (next.enAttente != null && enAttenteField) {
           if (next.enAttente && enAttenteField.setEnableAllowed) {
             enAttenteField.setEnableAllowed(true);
           }
-          enAttenteField.setValue(next.enAttente);
-          if (next.enAttente && enAttenteField.setExpanded) {
-            enAttenteField.setExpanded(true);
+          if (preserveCollapse) {
+            enAttenteField.setValue(next.enAttente, { preserveCollapse: true });
+          } else {
+            enAttenteField.setValue(next.enAttente);
+            if (next.enAttente && enAttenteField.setExpanded) {
+              enAttenteField.setExpanded(true);
+            }
           }
         }
         if (
@@ -10531,11 +10547,16 @@
           }
         }
         if ((next.dueDate != null || next.dueTime != null || next.dueEnabled != null) && dueDateField) {
-          dueDateField.setValue({
+          var duePayload = {
             dueDate: next.dueDate != null ? next.dueDate : state.dueDate,
             dueTime: next.dueTime != null ? next.dueTime : state.dueTime,
             dueEnabled: next.dueEnabled != null ? next.dueEnabled : state.dueEnabled
-          });
+          };
+          if (preserveCollapse) {
+            dueDateField.setValue(duePayload, { preserveCollapse: true });
+          } else {
+            dueDateField.setValue(duePayload);
+          }
         }
         if (next.estimatedDurationMinutes !== undefined) {
           state.estimatedDurationMinutes = clampDurationMinutes(

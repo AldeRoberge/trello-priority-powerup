@@ -751,6 +751,84 @@
       .trim();
   }
 
+  /**
+   * Drop "Pour finir / Une dernière question / …" framing that creates a
+   * false "conclusion" loop — keep asking plainly when a question remains.
+   * Also rewrite soft yes/no offers into direct value questions.
+   */
+  function stripInterviewConclusionFraming(message) {
+    if (typeof message !== 'string' || !message) return message;
+    var out = message;
+    var lead =
+      /^\s*((?:et\s+)?(?:alors\s+)?,?\s*)?(?:pour\s+finir|pour\s+terminer|pour\s+conclure|pour\s+clore|avant\s+de\s+conclure|en\s+conclusion|pour\s+boucler|pour\s+fermer(?:\s+l['']interview)?|enfin|une\s+derni[eè]re\s+question|dernier\s+point|derni[eè]re\s+chose|pour\s+terminer\s+sur\s+(?:une\s+)?note)\s*[,:\-–—]?\s*/i;
+    var trimmed = out;
+    var guard = 0;
+    while (lead.test(trimmed) && guard < 3) {
+      trimmed = trimmed.replace(lead, '');
+      guard += 1;
+    }
+    trimmed = trimmed.replace(
+      /^\s*([^?]{0,40}?)\b(?:une\s+)?derni[eè]re\s+question\s*[,:\-–—]\s*/i,
+      function (_m, prefix) {
+        return prefix && /\S/.test(prefix) ? prefix : '';
+      }
+    );
+
+    // Soft yes/no due offers → direct ask (blank) or confirm a concrete day.
+    var dueWhen = extractProposedDueWhen(trimmed);
+    if (
+      /je\s+peux\s+(?:d[eé]finir|fixer|mettre|ajouter).{0,40}(?:\u00e9ch[eé]ance|date\s+limite)/i.test(
+        trimmed
+      ) ||
+      /je\s+m['']?\s*en\s+occupe/i.test(trimmed) ||
+      /(?:souhaites?|voudr?[ae]|veux|aimerie[zs]|veux-tu|est-ce\s+que\s+tu\s+(?:veux|souhaites)).{0,40}(?:d[eé]finir|fixer|ajouter|mettre|avoir).{0,40}(?:\u00e9ch[eé]ance|date\s+limite)/i.test(
+        trimmed
+      ) ||
+      /(?:y\s+a[- ]t[- ]il|est-ce\s+qu['']?il\s+y\s+a).{0,20}\u00e9ch[eé]ance/i.test(
+        trimmed
+      ) ||
+      /d[eé]finir\s+une\s+\u00e9ch[eé]ance\s+pour\s+(?:cette\s+)?t[aâ]che/i.test(
+        trimmed
+      )
+    ) {
+      if (dueWhen) {
+        return 'Veux-tu d\u00e9finir la date limite \u00e0 ' + dueWhen + '\u00a0?';
+      }
+      return 'Quelle est la date d\'\u00e9ch\u00e9ance\u00a0?';
+    }
+    if (
+      /(?:souhaites?|voudr?[ae]|veux|aimerie[zs]).{0,40}(?:d[eé]finir|estimer|avoir).{0,30}dur[eé]e/i.test(
+        trimmed
+      ) ||
+      /(?:y\s+a[- ]t[- ]il|est-ce\s+qu['']?il\s+y\s+a).{0,20}dur[eé]e\s+estim/i.test(
+        trimmed
+      )
+    ) {
+      return 'Quelle est la dur\u00e9e estim\u00e9e\u00a0?';
+    }
+
+    return trimmed
+      .replace(/\s{2,}/g, ' ')
+      .replace(/^\s*([a-zàâäéèêëïîôùûüç])/u, function (_m, ch) {
+        return ch.toLocaleUpperCase('fr-FR');
+      })
+      .trim();
+  }
+
+  /** Pull a spoken due when (demain, aujourd'hui, …) from soft offer copy. */
+  function extractProposedDueWhen(text) {
+    if (typeof text !== 'string' || !text) return '';
+    var m = text.match(
+      /\b(?:aujourd['']hui|demain|apr[eè]s[- ]demain|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|\d{1,2}\s*(?:\/|-)\s*\d{1,2}(?:\s*(?:\/|-)\s*\d{2,4})?|\d{4}-\d{2}-\d{2})\b/i
+    );
+    if (!m) return '';
+    var w = m[0];
+    if (/^aujourd/i.test(w)) return 'aujourd\'hui';
+    if (/^demain/i.test(w)) return 'demain';
+    if (/^apr/i.test(w)) return 'apr\u00e8s-demain';
+    return w.toLocaleLowerCase('fr-FR');
+  }
+
   function normalizeCardPatches(raw) {
     var list = Array.isArray(raw) ? raw : [];
     var out = [];
@@ -1207,16 +1285,31 @@
       '- INTERDIT\u00a0: \u00ab\u00a0Pourriez-vous pr\u00e9ciser\u2026?\u00a0\u00bb, \u00ab\u00a0Quels sont les\u2026?\u00a0\u00bb (miroir), ou toute reformulation de la question de l\'utilisateur.',
       '- Ex.\u00a0: user \u00ab\u00a0Quels liens 404 doivent \u00eatre corrig\u00e9s?\u00a0\u00bb (rien dans le contexte) \u2192 {"thinking":"progress.items, due, blocked, cardDesc, m\u00e9moire\u00a0: aucun inventaire de liens 404.","message":"Je ne sais pas. Je n\'ai pas cette info sur la carte ni dans mon contexte\u00a0: aucun inventaire de liens 404 n\'y figure.","suggestions":["Quelle est la priorit\u00e9?","Marquer bloqu\u00e9"],"followUps":[],"actions":[]}',
       'INTERDIT dans message\u00a0: questions vagues du type \u00ab\u00a0Que souhaitez-vous faire maintenant?\u00a0\u00bb, \u00ab\u00a0Comment puis-je vous aider?\u00a0\u00bb, \u00ab\u00a0Autre chose?\u00a0\u00bb. Confirme bri\u00e8vement et arr\u00eate-toi\u00a0; les suggestions suffisent pour la suite.',
+      'Propositions d\'\u00e9ch\u00e9ance / date limite (tr\u00e8s important)\u00a0:',
+      '- INTERDIT\u00a0: \u00ab\u00a0Je peux d\u00e9finir l\'\u00e9ch\u00e9ance \u00e0 demain. Je m\'en occupe\u00a0?\u00a0\u00bb ou toute variante \u00ab\u00a0Je peux\u2026 / Je m\'en occupe\u00a0?\u00a0\u00bb.',
+      '- Si tu proposes une date concr\u00e8te pour confirmation (sans encore appeler set_due)\u00a0: \u00ab\u00a0Veux-tu d\u00e9finir la date limite \u00e0 demain\u00a0?\u00a0\u00bb (ou aujourd\'hui / vendredi / \u2026).',
+      '- Ex. FAUX\u00a0: {"message":"Je peux d\u00e9finir l\'\u00e9ch\u00e9ance \u00e0 demain. Je m\'en occupe\u00a0?"}',
+      '- Ex. VRAI\u00a0: {"message":"Veux-tu d\u00e9finir la date limite \u00e0 demain\u00a0?","suggestions":["Oui","Non","Apr\u00e8s-demain"]}',
+      '- Si l\'utilisateur a d\u00e9j\u00e0 donn\u00e9 la date clairement\u00a0: APPLIQUE set_due tout de suite (\u00ab\u00a0Okay, demain.\u00a0\u00bb) sans redemander.',
+      'Tu peux expliquer la priorit\u00e9, l\'\u00e9ch\u00e9ance, le blocage et le progr\u00e8s, et proposer des changements.',
+      '- Pour souligner un contraste (facile vs difficile, urgent vs flexible, etc.), enveloppe les mots-cl\u00e9s dans des marqueurs\u00a0:',
+      '  \u00b7 [[g:texte]] = vert (positif / facile / simple / go)',
+      '  \u00b7 [[r:texte]] = rouge (n\u00e9gatif / difficile / risque / stop)',
+      '  \u00b7 [[y:texte]] = jaune (neutre / moyen / attention)',
+      '- Ex. question\u00a0: "Est-ce que tu penses que manger plus de pain avec Eiraul est [[g:simple]] \u00e0 r\u00e9aliser ou [[r:plut\u00f4t difficile]]?"',
+      '- Ex. r\u00e9ponse Facilit\u00e9 facile\u00a0: "Non\u00a0: d\'apr\u00e8s la Facilit\u00e9, c\'est jug\u00e9 [[g:simple]] \u00e0 r\u00e9aliser."',
+      '- Ex. r\u00e9ponse Difficile\u00a0: "Oui, d\'apr\u00e8s la Facilit\u00e9, c\'est [[r:plut\u00f4t difficile]]."',
+      '- 1\u20134 spans max par message. INTERDIT le HTML ou Markdown\u00a0; uniquement ces marqueurs.',
       'Tu peux expliquer la priorit\u00e9, l\'\u00e9ch\u00e9ance, le blocage et le progr\u00e8s, et proposer des changements.',
       'Facilit\u00e9 / difficult\u00e9 (axe Priorit\u00e9 \u2014 tr\u00e8s important)\u00a0:',
       '- Questions du type \u00ab\u00a0is it hard to do?\u00a0\u00bb, \u00ab\u00a0c\'est difficile?\u00a0\u00bb, \u00ab\u00a0c\'est facile?\u00a0\u00bb, \u00ab\u00a0quelle facilit\u00e9?\u00a0\u00bb, \u00ab\u00a0effort?\u00a0\u00bb\u00a0: r\u00e9ponds UNIQUEMENT d\'apr\u00e8s le champ Facilit\u00e9 de la section Priorit\u00e9.',
       '- Pr\u00e9f\u00e8re context.priority.easeExplanation s\'il est pr\u00e9sent (phrase pr\u00eate)\u00a0; sinon labels.ease (Tr\u00e8s difficile / Difficile / Moyen / Facile / Super facile).',
       '- Tu peux t\'appuyer sur context.priority.ease (1\u20135) en thinking, sans r\u00e9citer le chiffre sauf demande.',
       '- INTERDIT les r\u00e9ponses g\u00e9n\u00e9riques du type \u00ab\u00a0\u00e7a d\u00e9pend des comp\u00e9tences\u00a0\u00bb, \u00ab\u00a0des ressources disponibles\u00a0\u00bb, \u00ab\u00a0n\'h\u00e9sitez pas \u00e0 demander\u00a0\u00bb, ou tout conseil abstrait hors donn\u00e9es carte.',
-      '- Formule naturelle\u00a0: oui/non ou formulation courte + le libell\u00e9 Facilit\u00e9 (ex. jug\u00e9e facile / difficile / moyenne).',
-      '- Ex. facile\u00a0: user \u00ab\u00a0is it hard to do?\u00a0\u00bb, easeExplanation pr\u00eate \u2192 {"thinking":"priority.easeExplanation (Facilit\u00e9=Facile).","message":"Non\u00a0: d\'apr\u00e8s la Facilit\u00e9 de cette carte, c\'est jug\u00e9 facile \u00e0 r\u00e9aliser.","suggestions":["Quelle est la priorit\u00e9?","Augmenter l\'impact"],"followUps":[],"actions":[]}',
-      '- Ex. difficile\u00a0: labels.ease=Difficile \u2192 message du type \u00ab\u00a0Oui, d\'apr\u00e8s la Facilit\u00e9, cette t\u00e2che est jug\u00e9e difficile.\u00a0\u00bb',
-      '- Ex. moyen\u00a0: labels.ease=Moyen \u2192 \u00ab\u00a0Ni vraiment dur ni trivial\u00a0: Facilit\u00e9 moyenne sur cette carte.\u00a0\u00bb',
+      '- Formule naturelle\u00a0: oui/non ou formulation courte + le libell\u00e9 Facilit\u00e9 (ex. jug\u00e9e facile / difficile / moyenne), avec surlignage [[g:\u2026]] / [[r:\u2026]] sur les mots-cl\u00e9s.',
+      '- Ex. facile\u00a0: user \u00ab\u00a0is it hard to do?\u00a0\u00bb, easeExplanation pr\u00eate \u2192 {"thinking":"priority.easeExplanation (Facilit\u00e9=Facile).","message":"Non\u00a0: d\'apr\u00e8s la Facilit\u00e9 de cette carte, c\'est jug\u00e9 [[g:facile]] \u00e0 r\u00e9aliser.","suggestions":["Quelle est la priorit\u00e9?","Augmenter l\'impact"],"followUps":[],"actions":[]}',
+      '- Ex. difficile\u00a0: labels.ease=Difficile \u2192 message du type \u00ab\u00a0Oui, d\'apr\u00e8s la Facilit\u00e9, cette t\u00e2che est jug\u00e9e [[r:difficile]].\u00a0\u00bb',
+      '- Ex. moyen\u00a0: labels.ease=Moyen \u2192 \u00ab\u00a0Ni vraiment dur ni trivial\u00a0: Facilit\u00e9 [[y:moyenne]] sur cette carte.\u00a0\u00bb',
       '- M\u00eame logique pour Impact (labels.impact / impactReach) et Urgence (labels.urgency) quand on pose la question sur ces axes.',
       '- Port\u00e9e / impact (Personnel \u2192 \u00c9quipe \u2192 Interne \u2192 Population \u2192 Global)\u00a0: answers via context.priority.impactReach (ou labels.impact). Qui est touch\u00e9?',
       '- Dur\u00e9e estim\u00e9e (Facilit\u00e9)\u00a0: context.priority.estimatedDurationLabel / estimatedDurationMinutes. Distingue dur\u00e9e (temps) vs Facilit\u00e9 (difficult\u00e9).',
@@ -1330,7 +1423,7 @@
       '- Elles REMPLACENT les suggestions pr\u00e9c\u00e9dentes\u00a0: varie-les selon ta derni\u00e8re r\u00e9ponse.',
       '- Pas de num\u00e9rotation, pas de guillemets autour.',
       '- INTERDIT\u00a0: placeholders comme "..." , "\u2026" , "suggestion" , "exemple"\u00a0; chaque entr\u00e9e doit \u00eatre un vrai texte cliquable.',
-      '- \u00c9chelle / choix ordonn\u00e9s (facilit\u00e9, gravit\u00e9, urgence\u2026)\u00a0: colorie vert\u2192rouge via heat 0\u20134 ou color ("green"|"yellow"|"orange"|"red"), ordonnes du plus doux au plus intense. Ex.\u00a0: {"label":"C\'est simple","heat":0}. Tu peux aussi mettre suggestionScale:true.',
+      '- \u00c9chelle / choix ordonn\u00e9s (facilit\u00e9, gravit\u00e9, urgence\u2026)\u00a0: TOUJOURS vert\u2192rouge (gauche\u2192droite). FAUX\u00a0: facile, difficile, faisable. VRAI\u00a0: facile, faisable, difficile. heat 0\u20134 ou color ("green"|"yellow"|"orange"|"red"). Ex.\u00a0: {"label":"C\'est facile","heat":0}. suggestionScale:true encourag\u00e9.',
       'R\u00e8gles actions (appliqu\u00e9es automatiquement)\u00a0:',
       '- 0 \u00e0 3 outils \u00e0 ex\u00e9cuter tout de suite d\u00e8s qu\'une action partielle est possible (ne pas attendre les d\u00e9tails optionnels).',
       '- Ne jamais inclure un outil incomplet sur un champ OBLIGATOIRE (ex. add_subtask sans text non vide).',
@@ -2122,6 +2215,16 @@
       '',
       'Style conversationnel (tr\u00e8s important)\u00a0:',
       '- Pose UNE question en langage naturel. JAMAIS de chiffres ni d\'\u00e9chelles \u00ab\u00a00 \u00e0 4\u00a0\u00bb / \u00ab\u00a01 \u00e0 5\u00a0\u00bb dans la question ni dans les suggestions.',
+      '- message = uniquement la prochaine question (1 phrase). Pas de pr\u00e9ambule.',
+      '- INTERDIT de r\u00e9capituler ce qui a d\u00e9j\u00e0 \u00e9t\u00e9 dit (\u00ab\u00a0Pour r\u00e9capituler\u00a0\u00bb, \u00ab\u00a0on a \u00e9tabli que\u00a0\u00bb, \u00ab\u00a0cela semble bien cadr\u00e9\u00a0\u00bb, \u00ab\u00a0en r\u00e9sum\u00e9\u00a0\u00bb, reformuler urgence/impact/facilit\u00e9 d\u00e9j\u00e0 obtenus).',
+      '- INTERDIT aussi les accroches de conclusion (\u00ab\u00a0Pour finir\u00a0\u00bb, \u00ab\u00a0Pour terminer\u00a0\u00bb, \u00ab\u00a0Une derni\u00e8re question\u00a0\u00bb, \u00ab\u00a0Enfin\u00a0\u00bb)\u00a0: pose la question directement.',
+      '- Ex. FAUX\u00a0: \u00ab\u00a0Pour r\u00e9capituler, \u2026 cela demande un peu de travail. Est-ce qu\'il y a une dur\u00e9e estim\u00e9e\u00a0?\u00a0\u00bb',
+      '- Ex. FAUX\u00a0: \u00ab\u00a0Pour finir, quelle serait la dur\u00e9e estim\u00e9e\u00a0?\u00a0\u00bb',
+      '- Ex. FAUX\u00a0: \u00ab\u00a0Pour conclure, souhaites-tu d\u00e9finir une \u00e9ch\u00e9ance pour cette t\u00e2che\u00a0?\u00a0\u00bb',
+      '- Ex. VRAI\u00a0: \u00ab\u00a0Quelle est la date d\'\u00e9ch\u00e9ance\u00a0?\u00a0\u00bb',
+      '- Ex. VRAI\u00a0: \u00ab\u00a0Quelle est la dur\u00e9e estim\u00e9e\u00a0?\u00a0\u00bb',
+      '- Questions DIRECTES uniquement\u00a0: demande la valeur (date, dur\u00e9e, projet), JAMAIS \u00ab\u00a0souhaites-tu d\u00e9finir\u2026?\u00a0\u00bb / \u00ab\u00a0veux-tu fixer\u2026?\u00a0\u00bb / \u00ab\u00a0est-ce qu\'il y a une \u00e9ch\u00e9ance\u00a0?\u00a0\u00bb.',
+      '- Si la r\u00e9ponse est \u00ab\u00a0non\u00a0\u00bb / \u00ab\u00a0pas d\'\u00e9ch\u00e9ance\u00a0\u00bb / skip\u00a0: okay et passe \u00e0 autre chose (ou completeInterview).',
       '- Les gens r\u00e9pondent avec des mots\u00a0; TOI tu traduis en axes dans actions (set_priority).',
       '- INCORPORE le titre (context.cardName) dans la question, conjug\u00e9 naturellement \u2014 PAS \u00ab\u00a0cette t\u00e2che\u00a0\u00bb / \u00ab\u00a0cette carte\u00a0\u00bb si le titre est clair.',
       '- Ex. titre \u00ab\u00a0Manger plus de pain avec Eiraul\u00a0\u00bb \u2192 \u00ab\u00a0Quelle serait la cons\u00e9quence de ne pas manger plus de pain avec Eiraul\u00a0?\u00a0\u00bb',
@@ -2130,15 +2233,17 @@
       '- Ex. facilit\u00e9\u00a0: \u00ab\u00a0Manger plus de pain avec Eiraul, c\'est simple ou \u00e7a demande du travail\u00a0?\u00a0\u00bb',
       '- Si le titre est trop long / cryptique\u00a0: raccourcis-le ou reformule-le sans perdre le sens (pas de guillemets lourds autour du titre).',
       '- Suggestions = r\u00e9ponses courtes en mots (2\u20134), pas des nombres. Ex.\u00a0: \u00ab\u00a0Pas grand-chose\u00a0\u00bb, \u00ab\u00a0Quelqu\'un attend\u00a0\u00bb, \u00ab\u00a0\u00c7a bloque d\'autres trucs\u00a0\u00bb, \u00ab\u00a0Cons\u00e9quences graves\u00a0\u00bb.',
-      '- Ordonne TOUJOURS les suggestions du plus doux / simple / faible (vert) au plus intense / difficile / grave (rouge).',
+      '- Ordonne TOUJOURS les suggestions du plus doux / simple / faible (VERT, gauche) au plus intense / difficile / grave (ROUGE, droite).',
+      '- INTERDIT de mettre le plus difficile avant le milieu. Ex. FAUX\u00a0: \u00ab\u00a0C\'est facile\u00a0\u00bb, \u00ab\u00a0C\'est difficile\u00a0\u00bb, \u00ab\u00a0C\'est faisable mais avec des efforts\u00a0\u00bb.',
+      '- Ex. VRAI facilit\u00e9\u00a0: \u00ab\u00a0C\'est facile\u00a0\u00bb (vert) \u2192 \u00ab\u00a0C\'est faisable\u00a0\u00bb / \u00ab\u00a0avec des efforts\u00a0\u00bb (jaune) \u2192 \u00ab\u00a0C\'est difficile\u00a0\u00bb (rouge).',
       '- Colorie automatiquement chaque r\u00e9ponse d\'\u00e9chelle avec heat 0\u20134 (0=vert, 4=rouge), OU suggestionScale:true + strings ordonn\u00e9es.',
-      '- Ex. facilit\u00e9\u00a0: {"suggestions":[{"label":"C\'est simple","heat":0},{"label":"\u00c7a demande un peu de travail","heat":2},{"label":"C\'est assez compliqu\u00e9","heat":4}],"suggestionScale":true}',
+      '- Ex. facilit\u00e9 JSON\u00a0: {"suggestions":[{"label":"C\'est facile","heat":0},{"label":"C\'est faisable","heat":2},{"label":"C\'est difficile","heat":4}],"suggestionScale":true}',
       '- Ex. urgence (doux\u2192grave)\u00a0: heat 0 \u00ab\u00a0Pas grand-chose\u00a0\u00bb \u2026 heat 4 \u00ab\u00a0Cons\u00e9quences graves\u00a0\u00bb.',
       '- Utilise \u2026 seulement pour une r\u00e9ponse \u00e0 compl\u00e9ter (ex. \u00ab\u00a0\u2026 attend\u00a0\u00bb).',
       '',
       'Inf\u00e9rence + m\u00e9moire carte\u00a0:',
-      '- D\u00e8s qu\'une r\u00e9ponse laisse assez d\'indices\u00a0: set_priority IMM\u00c9DIATEMENT avec les axes d\u00e9duits, confirme bri\u00e8vement, puis question suivante si besoin.',
-      '- Ex.\u00a0: \u00ab\u00a0Marie-Laure serait vraiment tr\u00e8s f\u00e2ch\u00e9e\u00a0\u00bb \u2192 urgence \u00e9lev\u00e9e (3\u20134) + cardPatches remember (\u00ab\u00a0Marie-Laure attend cette t\u00e2che / serait tr\u00e8s f\u00e2ch\u00e9e si non faite\u00a0\u00bb).',
+      '- D\u00e8s qu\'une r\u00e9ponse laisse assez d\'indices\u00a0: set_priority IMM\u00c9DIATEMENT avec les axes d\u00e9duits, puis pose directement la question suivante (sans r\u00e9sumer).',
+      '- Ex.\u00a0: \u00ab\u00a0Marie-Laure serait vraiment tr\u00e8s f\u00e2ch\u00e9e\u00a0\u00bb \u2192 urgence \u00e9lev\u00e9e (3\u20134) + cardPatches remember (\u00ab\u00a0Marie-Laure attend cette t\u00e2che / serait tr\u00e8s f\u00e2ch\u00e9e si non faite\u00a0\u00bb) + message = seule la question suivante.',
       '- M\u00e9morise les faits utiles \u00e0 CETTE carte via cardPatches (personnes, enjeux, attentes, contraintes)\u00a0: {"op":"remember","text":"\u2026"}.',
       '- Ne repose pas ce qui est d\u00e9j\u00e0 dans context.cardMemory.facts ou dans l\'historique.',
       '',
@@ -2149,13 +2254,19 @@
       '{"thinking":"...","message":"...","suggestions":[{"label":"...","heat":0}],"suggestionScale":true,"prompts":[],"actions":[{"tool":"...","args":{}}],"cardPatches":[{"op":"remember","text":"..."}],"completeInterview":false}',
       '',
       'R\u00e8gles interview\u00a0:',
-      '- Une question claire \u00e0 la fois.',
+      '- Une question claire \u00e0 la fois\u00a0; message = UNIQUEMENT cette question (1 phrase). Pas de pr\u00e9ambule.',
+      '- INTERDIT les r\u00e9caps / synth\u00e8ses entre questions. Le contexte et les actions suffisent.',
+      '- INTERDIT de cadrer une question comme \u00ab\u00a0la derni\u00e8re\u00a0\u00bb ou une conclusion\u00a0: jamais \u00ab\u00a0Pour finir\u00a0\u00bb, \u00ab\u00a0Pour terminer\u00a0\u00bb, \u00ab\u00a0Pour conclure\u00a0\u00bb, \u00ab\u00a0Enfin\u00a0\u00bb, \u00ab\u00a0Une derni\u00e8re question\u00a0\u00bb, \u00ab\u00a0Dernier point\u00a0\u00bb, \u00ab\u00a0Avant de conclure\u00a0\u00bb, \u00ab\u00a0Pour clore\u00a0\u00bb.',
+      '- Pose simplement la prochaine question utile. Ne dis JAMAIS que c\'est la fin / le dernier tour \u2014 ni dans le message, ni dans thinking comme excuse pour une cl\u00f4ture verbeuse.',
+      '- Quand tu n\'as plus de question utile (urgence+impact+ease fix\u00e9s et rien d\'autre \u00e0 creuser)\u00a0: completeInterview:true et message court du type \u00ab\u00a0Okay.\u00a0\u00bb / \u00ab\u00a0C\'est not\u00e9.\u00a0\u00bb (sans annoncer une conclusion).',
       '- INTERDIT de demander \u00ab\u00a0sur une \u00e9chelle de 0 \u00e0 4\u00a0\u00bb, des chiffres seuls, ou des l\u00e9gendes (0 = \u2026, 4 = \u2026).',
       '- Maximise le gain d\'information pour urgence / impact / facilit\u00e9 via des situations concr\u00e8tes.',
       '- N\'invente PAS d\'\u00e9ch\u00e9ance, projet ou sous-t\u00e2ches sans indice (titre, r\u00e9ponse, voisinage).',
       '- Si l\'utilisateur dit passer / plus tard / skip / non merci\u00a0: completeInterview:true, actions=[] (sauf ce que tu as d\u00e9j\u00e0 assez pour appliquer).',
-      '- Quand urgence+impact+ease sont fix\u00e9s (via actions cette tour ou tours pr\u00e9c\u00e9dents)\u00a0: tu peux completeInterview:true. Cible ~3\u20136 questions max.',
-      '- completeInterview:true quand l\'interview est termin\u00e9e.',
+      '- Quand urgence+impact+ease sont fix\u00e9s (via actions cette tour ou tours pr\u00e9c\u00e9dents)\u00a0: tu peux encore poser UNE question optionnelle utile (dur\u00e9e, \u00e9ch\u00e9ance, projet) SANS dire que c\'est la derni\u00e8re\u00a0; sinon completeInterview:true.',
+      '- Pour \u00e9ch\u00e9ance\u00a0: \u00ab\u00a0Quelle est la date d\'\u00e9ch\u00e9ance\u00a0?\u00a0\u00bb (+ suggestions Aujourd\'hui / Demain / Pas d\'\u00e9ch\u00e9ance). INTERDIT \u00ab\u00a0souhaites-tu d\u00e9finir une \u00e9ch\u00e9ance\u00a0?\u00a0\u00bb.',
+      '- Pour dur\u00e9e\u00a0: \u00ab\u00a0Quelle est la dur\u00e9e estim\u00e9e\u00a0?\u00a0\u00bb. Pour projet\u00a0: \u00ab\u00a0\u00c0 quel projet la lier\u00a0?\u00a0\u00bb.',
+      '- completeInterview:true quand l\'interview est termin\u00e9e (silencieusement).',
       '- \u00c9vite de reposer les questions d\u00e9j\u00e0 pos\u00e9es.',
       '- INTERDIT\u00a0: \u00ab\u00a0Comment puis-je vous aider?\u00a0\u00bb / questions vagues ouvertes.',
       '',
@@ -2285,11 +2396,13 @@
       return a && allowedTools[a.tool];
     });
 
-    var message = stripScaleLegendParenthetical(
-      polishMessageAfterTierApply(
-        parsed.message || (data && data.message) || '',
-        tierRewrite.tier,
-        tierRewrite.injected
+    var message = stripInterviewConclusionFraming(
+      stripScaleLegendParenthetical(
+        polishMessageAfterTierApply(
+          parsed.message || (data && data.message) || '',
+          tierRewrite.tier,
+          tierRewrite.injected
+        )
       )
     );
     var prompts = ensurePriorityAxesPrompt(
@@ -2323,24 +2436,28 @@
     var suggestionEntries = normalizeSuggestionEntries(
       (data && data.suggestions) || parsed.suggestions,
       5,
-      { scale: suggestionScale }
+      { scale: suggestionScale, rankGreenToRed: true }
     );
     // Interview answer chips (no "?") are ordinal soft→intense when unmarked.
     if (
-      !suggestionScale &&
       suggestionEntries.length >= 2 &&
       suggestionEntries.length <= 5 &&
-      !suggestionEntries.some(function (entry) {
-        return entry.heat != null;
-      }) &&
       suggestionEntries.every(function (entry) {
         return entry.text.indexOf('?') < 0;
       })
     ) {
-      var interviewSteps = spreadScaleHeat(suggestionEntries.length);
-      suggestionEntries.forEach(function (entry, i) {
-        entry.heat = interviewSteps[i];
-      });
+      suggestionEntries = orderSuggestionsGreenToRed(suggestionEntries);
+      if (
+        !suggestionEntries.some(function (entry) {
+          return entry.heat != null;
+        })
+      ) {
+        var interviewSteps = spreadScaleHeat(suggestionEntries.length);
+        suggestionEntries.forEach(function (entry, i) {
+          entry.heat = interviewSteps[i];
+        });
+        suggestionEntries = orderSuggestionsGreenToRed(suggestionEntries);
+      }
     }
 
     return {
@@ -2552,6 +2669,102 @@
   }
 
   /**
+   * Soft→intense score for answer chips (lower = greener).
+   * Returns null when the text looks unrelated to a severity/ease scale.
+   */
+  function suggestionIntensityRank(text) {
+    var raw = String(text || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    if (!raw) return null;
+    // Action / navigation chips — do not treat as a scale.
+    if (
+      /^(marquer|definir|ajouter|supprimer|renommer|passer|lie[re]?|mettre|quelle|comment)\b/.test(
+        raw
+      )
+    ) {
+      return null;
+    }
+    var rules = [
+      { re: /\b(impossible|catastroph|critique|urgentes?|bloque\b)/, score: 100 },
+      { re: /\b(tres\s+difficile|extremement|enorme|graves?)\b/, score: 95 },
+      { re: /\b(difficile|hard|compliqu|complexe|intense)\b/, score: 90 },
+      { re: /\b(beaucoup|a lot|majeur|major)\b/, score: 75 },
+      {
+        re: /\b(efforts?|du travail|assez|plutot|avec\s+des\s+efforts)\b/,
+        score: 55
+      },
+      {
+        re: /\b(faisable|doable|moyen|moderate|gerable|un\s+peu|quelques)\b/,
+        score: 45
+      },
+      { re: /\b(facile|easy|simple|rapide|trivial)\b/, score: 10 },
+      {
+        re: /\b(pas\s+grand.?chose|rien\b|faible|petit|negligeable|aucune?)\b/,
+        score: 5
+      }
+    ];
+    var best = null;
+    rules.forEach(function (rule) {
+      if (!rule.re.test(raw)) return;
+      if (best == null || rule.score > best) best = rule.score;
+    });
+    return best;
+  }
+
+  /**
+   * Force green→red order: sort by heat when known, else by intensity keywords,
+   * then re-spread heat 0…4 so colors match left→right.
+   */
+  function orderSuggestionsGreenToRed(entries) {
+    if (!Array.isArray(entries) || entries.length < 2) {
+      return entries || [];
+    }
+    var list = entries.map(function (entry) {
+      return {
+        text: entry.text,
+        heat: entry.heat,
+        rank: suggestionIntensityRank(entry.text)
+      };
+    });
+    var heatedCount = list.filter(function (item) {
+      return item.heat != null;
+    }).length;
+    var ranked = list.filter(function (item) {
+      return item.rank != null;
+    });
+    var canRank =
+      ranked.length >= 2 &&
+      ranked.some(function (item) {
+        return item.rank !== ranked[0].rank;
+      });
+
+    if (canRank) {
+      list.sort(function (a, b) {
+        var ra = a.rank == null ? 50 : a.rank;
+        var rb = b.rank == null ? 50 : b.rank;
+        if (ra !== rb) return ra - rb;
+        if (a.heat != null && b.heat != null && a.heat !== b.heat) {
+          return a.heat - b.heat;
+        }
+        return 0;
+      });
+    } else if (heatedCount === list.length) {
+      list.sort(function (a, b) {
+        return a.heat - b.heat;
+      });
+    } else {
+      return entries;
+    }
+
+    var steps = spreadScaleHeat(list.length);
+    return list.map(function (item, i) {
+      return { text: item.text, heat: steps[i] };
+    });
+  }
+
+  /**
    * Normalize AI suggestions to { text, heat }[].
    * heat is 0–4 (green→red) or null. options.scale forces even spread when
    * no per-item heat/color was provided.
@@ -2592,6 +2805,9 @@
       out.forEach(function (entry, i) {
         entry.heat = steps[i];
       });
+    }
+    if (options.scale || options.rankGreenToRed) {
+      out = orderSuggestionsGreenToRed(out);
     }
     return out;
   }
@@ -2826,12 +3042,25 @@
       followUps = followUps.slice(0, 4);
       var suggestionScale = wantsSuggestionScale(parsed);
       var suggestions = normalizeSuggestionEntries(parsed.suggestions, 4, {
-        scale: suggestionScale
+        scale: suggestionScale,
+        rankGreenToRed: !!suggestionScale
       });
       if (!suggestions.length) {
         suggestions = suggestionsFromFollowUps(followUps).map(function (text) {
           return { text: text, heat: null };
         });
+      } else if (
+        suggestionScale ||
+        (suggestions.length >= 2 &&
+          suggestions.length <= 5 &&
+          suggestions.every(function (entry) {
+            return entry.text.indexOf('?') < 0;
+          }) &&
+          suggestions.some(function (entry) {
+            return entry.heat != null || suggestionIntensityRank(entry.text) != null;
+          }))
+      ) {
+        suggestions = orderSuggestionsGreenToRed(suggestions);
       }
       var normalized = normalizeActionsWithMeta(parsed.actions);
       return {
@@ -2902,7 +3131,7 @@
       out += ch;
       i += 1;
     }
-    return stripScaleLegendParenthetical(out);
+    return stripInterviewConclusionFraming(stripScaleLegendParenthetical(out));
   }
 
   function throwHttpError(result) {
@@ -3293,11 +3522,13 @@
     var actions = rewriteActionsForRelativeDue(parsed.actions || [], userText);
     var tierRewrite = rewriteActionsForPriorityTier(actions, userText);
     actions = tierRewrite.actions;
-    var message = stripScaleLegendParenthetical(
-      polishMessageAfterTierApply(
-        parsed.message,
-        tierRewrite.tier,
-        tierRewrite.injected
+    var message = stripInterviewConclusionFraming(
+      stripScaleLegendParenthetical(
+        polishMessageAfterTierApply(
+          parsed.message,
+          tierRewrite.tier,
+          tierRewrite.injected
+        )
       )
     );
     var prompts = ensurePriorityAxesPrompt(

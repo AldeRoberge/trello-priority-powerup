@@ -18,6 +18,56 @@
     return node;
   }
 
+  /** Hide a trailing unfinished [[g:… marker so streaming does not flash raw syntax. */
+  function hideIncompleteHighlightMarker(text) {
+    if (typeof text !== 'string' || !text) return text || '';
+    var lastOpen = text.lastIndexOf('[[');
+    if (lastOpen === -1) {
+      if (text.charAt(text.length - 1) === '[') return text.slice(0, -1);
+      return text;
+    }
+    var after = text.slice(lastOpen);
+    if (after.indexOf(']]') !== -1) return text;
+    if (/^\[\[[gry]?(?::[^\]]*)?$/.test(after) || after === '[[') {
+      return text.slice(0, lastOpen);
+    }
+    return text;
+  }
+
+  /**
+   * Render assistant text with optional [[g:…]] / [[r:…]] / [[y:…]] highlights.
+   * Safe: every phrase is textContent; no HTML from the model.
+   */
+  function fillHighlightedBubble(bubble, text) {
+    if (!bubble) return;
+    bubble.replaceChildren();
+    var raw = typeof text === 'string' ? text : '';
+    var display = hideIncompleteHighlightMarker(raw);
+    if (!display) return;
+    var re = /\[\[([gry]):([^\]]{1,120})\]\]/g;
+    var last = 0;
+    var m;
+    var hasHighlight = false;
+    while ((m = re.exec(display)) !== null) {
+      hasHighlight = true;
+      if (m.index > last) {
+        bubble.appendChild(document.createTextNode(display.slice(last, m.index)));
+      }
+      var span = document.createElement('span');
+      span.className = 'agent-hl agent-hl--' + m[1];
+      span.textContent = m[2];
+      bubble.appendChild(span);
+      last = m.index + m[0].length;
+    }
+    if (!hasHighlight) {
+      bubble.textContent = display;
+      return;
+    }
+    if (last < display.length) {
+      bubble.appendChild(document.createTextNode(display.slice(last)));
+    }
+  }
+
     function statusIcon(status) {
       if (status === 'pass') return '\u2713';
       if (status === 'fail') return '\u2717';
@@ -1517,7 +1567,11 @@
           (meta && meta.recap ? ' agent-msg-bubble--recap' : '') +
           (meta && meta.error ? ' agent-msg-bubble--error' : '')
       );
-      bubble.textContent = text;
+      if (role === 'assistant' && !(meta && meta.error)) {
+        fillHighlightedBubble(bubble, text);
+      } else {
+        bubble.textContent = text;
+      }
       row.appendChild(bubble);
       if (meta && meta.note) {
         row.appendChild(el('div', 'agent-msg-note', { text: meta.note }));
@@ -1567,8 +1621,7 @@
     function revealPendingBubble(bubble, text) {
       if (!bubble) return;
       bubble.classList.remove('agent-msg-bubble--pending');
-      bubble.replaceChildren();
-      bubble.textContent = text || '';
+      fillHighlightedBubble(bubble, text || '');
     }
 
     function appendChatError(text) {
@@ -2796,7 +2849,7 @@
                   thinking.removeAttribute('aria-label');
                   revealPendingBubble(bubble, visible);
                 } else {
-                  bubble.textContent = visible;
+                  fillHighlightedBubble(bubble, visible);
                 }
                 messagesEl.scrollTop = messagesEl.scrollHeight;
                 notifyLayout();
@@ -2818,7 +2871,7 @@
                 thinking.removeAttribute('aria-label');
                 revealPendingBubble(bubble, visible);
               } else {
-                bubble.textContent = visible;
+                fillHighlightedBubble(bubble, visible);
               }
               messagesEl.scrollTop = messagesEl.scrollHeight;
               notifyLayout();
@@ -2827,7 +2880,7 @@
         }
         if (bubble) {
           if (!streamed) revealPendingBubble(bubble, turn.message);
-          else bubble.textContent = turn.message;
+          else fillHighlightedBubble(bubble, turn.message);
         }
         thinking.classList.remove('is-pending', 'is-streaming');
         thinking.removeAttribute('aria-busy');
