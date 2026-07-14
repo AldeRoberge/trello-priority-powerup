@@ -285,7 +285,30 @@
       type: 'button',
       text: 'Envoyer'
     });
-    composer.appendChild(input);
+    var composerSuggestions = [];
+    var tabComplete = null;
+    if (global.TabAutocomplete && typeof global.TabAutocomplete.wrapField === 'function') {
+      var wrappedComposer = global.TabAutocomplete.wrapField(input);
+      composer.appendChild(wrappedComposer.wrap);
+      tabComplete = global.TabAutocomplete.bind({
+        field: input,
+        wrapEl: wrappedComposer.wrap,
+        ghostEl: wrappedComposer.ghost,
+        getCandidates: function () {
+          return composerSuggestions.slice();
+        },
+        isEnabled: function () {
+          return !input.disabled && !pending;
+        },
+        onProposal: function (proposal) {
+          markSuggestionTabTarget(
+            proposal && proposal.candidate ? proposal.candidate.text : ''
+          );
+        }
+      });
+    } else {
+      composer.appendChild(input);
+    }
     composer.appendChild(sendBtn);
     chatPanel.appendChild(composer);
 
@@ -1366,8 +1389,10 @@
     }
 
     function clearSuggestions() {
+      composerSuggestions = [];
       suggestionsEl.replaceChildren();
       suggestionsEl.hidden = true;
+      if (tabComplete) tabComplete.refresh();
       notifyLayout();
     }
 
@@ -1512,6 +1537,42 @@
       notifyLayout();
     }
 
+    function markSuggestionTabTarget(text) {
+      var target = String(text || '').trim();
+      Array.prototype.forEach.call(
+        suggestionsEl.querySelectorAll('.agent-suggestion-chip'),
+        function (chip) {
+          var label = String(chip.getAttribute('data-suggestion') || chip.textContent || '').trim();
+          var isTarget = !!(target && label === target);
+          chip.classList.toggle('is-tab-target', isTarget);
+          var hint = chip.querySelector('.tp-tab-hint');
+          if (isTarget && !hint) {
+            chip.appendChild(el('kbd', 'tp-tab-hint', { text: 'Tab' }));
+          } else if (!isTarget && hint) {
+            hint.remove();
+          }
+        }
+      );
+    }
+
+    function insertComposerSuggestion(text) {
+      if (pending) return;
+      input.value = String(text || '');
+      try {
+        input.focus({ preventScroll: true });
+      } catch (e) {
+        input.focus();
+      }
+      try {
+        var len = input.value.length;
+        input.setSelectionRange(len, len);
+      } catch (e2) {
+        /* ignore */
+      }
+      if (tabComplete) tabComplete.refresh();
+      notifyLayout();
+    }
+
     function renderSuggestions(list, options) {
       options = options || {};
       var items = (list || [])
@@ -1520,9 +1581,11 @@
         })
         .filter(Boolean)
         .slice(0, 4);
+      composerSuggestions = items.slice();
       suggestionsEl.replaceChildren();
       if (!items.length || !Agent.isConfigured(provider)) {
         suggestionsEl.hidden = true;
+        if (tabComplete) tabComplete.refresh();
         notifyLayout();
         return;
       }
@@ -1530,16 +1593,18 @@
       items.forEach(function (text, index) {
         var chip = el('button', 'agent-suggestion-chip', { type: 'button' });
         chip.textContent = text;
+        chip.setAttribute('data-suggestion', text);
         chip.disabled = pending;
         if (options.animate !== false) {
           chip.style.animationDelay = index * 40 + 'ms';
         }
         chip.addEventListener('click', function () {
           if (pending) return;
-          sendUserMessage(text, { skipSpellcheck: true });
+          insertComposerSuggestion(text);
         });
         suggestionsEl.appendChild(chip);
       });
+      if (tabComplete) tabComplete.refresh();
       notifyLayout();
     }
 

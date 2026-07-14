@@ -1,26 +1,30 @@
 /**
- * Board AI memory — per-member private facts/summary for Priorité assistant.
- * Stored at board/private (separate from member/private agentProvider).
- * Exposes window.AgentMemory (no bundler).
+ * Board AI memory — short-term (board/session) + long-term (durable user facts).
+ * Stored at board/private. Exposes window.AgentMemory (no bundler).
+ *
+ * Long-term is curated and high-bar: identity, role, boss, tools, durable prefs.
+ * Short-term holds board context and provisional notes that must not pollute LTM.
  */
 (function (global) {
   'use strict';
 
   var STORAGE_KEY = 'aiMemory';
-  var MAX_FACTS = 12;
-  var MAX_FACT_LEN = 160;
-  var MAX_SUMMARY_LEN = 600;
+  var MAX_LTM_FACTS = 8;
+  var MAX_STM_NOTES = 6;
+  var MAX_FACT_LEN = 140;
+  var MAX_SUMMARY_LEN = 280;
+  var MAX_BOARD_SUMMARY_LEN = 420;
   var MAX_SERIALIZED = 2500;
-  var SCAN_TTL_MS = 3 * 60 * 60 * 1000; // 3 hours
+  var SCAN_TTL_MS = 3 * 60 * 60 * 1000;
   var MAX_ASKED = 24;
 
   function emptyMemory() {
     return {
-      version: 1,
+      version: 2,
       onboardingComplete: false,
       lastScanAt: '',
-      summary: '',
-      facts: [],
+      longTerm: { summary: '', facts: [] },
+      shortTerm: { boardSummary: '', notes: [], updatedAt: '' },
       preferredQuestionsAsked: []
     };
   }
@@ -32,6 +36,16 @@
     return s.slice(0, Math.max(0, max - 1)).trim() + '\u2026';
   }
 
+  function normKey(s) {
+    return String(s || '')
+      .toLocaleLowerCase('fr-FR')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\w\s\-']/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   function factId() {
     return (
       'f-' +
@@ -41,35 +55,238 @@
     );
   }
 
-  function normalizeFact(raw) {
-    if (!raw) return null;
-    if (typeof raw === 'string') {
-      var text = trimStr(raw, MAX_FACT_LEN);
-      if (!text) return null;
-      return { id: factId(), text: text, updatedAt: new Date().toISOString() };
+  /**
+   * Noise / meta / click-accident statements that must never enter long-term.
+   */
+  function isJunkFact(text) {
+    var t = normKey(text);
+    if (!t || t.length < 8) return true;
+    var junk = [
+      /ne souhaite pas/,
+      /pas aborder/,
+      /nouveaux objectifs/,
+      /priorites pour le moment/,
+      /disponible pour partager/,
+      /partager des informations/,
+      /debut de l.?alignement/,
+      /alignement pour les projets/,
+      /commence l.?alignement/,
+      /mise a jour de memoire/,
+      /memoire actuelle/,
+      /aucun fait/,
+      /problemes? recemment/,
+      /a rencontre des problemes/,
+      /ok(ay)?$/,
+      /d.?accord$/,
+      /passer$/,
+      /plus tard$/,
+      /je ne sais pas/,
+      /pas maintenant/,
+      /suggestion/,
+      /remplir/
+    ];
+    for (var i = 0; i < junk.length; i++) {
+      if (junk[i].test(t)) return true;
     }
-    if (typeof raw !== 'object') return null;
-    var t = trimStr(raw.text, MAX_FACT_LEN);
-    if (!t) return null;
+    // Generic board fluff phrased as a "user fact"
+    if (
+      /le tableau se concentre/.test(t) ||
+      /plusieurs taches sont en attente/.test(t) ||
+      /gestion de divers projets/.test(t)
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Durable personal/work facts worth long-term storage.
+   */
+  function isDurableFact(text) {
+    if (isJunkFact(text)) return false;
+    var t = normKey(text);
+    // Concrete identity / work anchors
+    if (
+      /nom de l.?utilisateur|je m.?appelle|je suis\b|mon nom|appelle\b/.test(t)
+    ) {
+      return /\b[a-z]{2,}/.test(t.replace(/nom|utilisateur|appelle|suis|je|mon/g, ' '));
+    }
+    if (/\b\d{1,3}\s*ans\b|\bage\b|age\b/.test(t)) return true;
+    if (/patron|manager|boss|superieur|n\+1|responsable/.test(t)) return true;
+    if (/role|poste|titre|job title|fonction\b/.test(t)) return true;
+    if (/travaille sur|focus|projet (actuel|principal)|en charge de/.test(t)) {
+      return t.length >= 18;
+    }
+    if (/outil|stack|utilise|jira|slack|notion|figma|github/.test(t)) return true;
+    if (/equipe|collegue|equipe de/.test(t) && t.length >= 16) return true;
+    if (/prefere|habitude|norme|toujours|jamais|ne pas\b/.test(t) && t.length >= 20) {
+      // Preference must be concrete, not a decline of conversation
+      if (/ne souhaite|pas aborder|pas maintenant/.test(t)) return false;
+      return true;
+    }
+    if (/document|guide|plan strategie|livrable/.test(t) && t.length >= 18) return true;
+    // Require a proper-name-ish token or digit for anything else
+    if (/[A-ZÀÂÄÉÈÊËÏÎÔÙÛÜÇ][a-zàâäéèêëïîôùûüç\-]{2,}/.test(String(text || ''))) {
+      return t.length >= 16 && t.length <= 120;
+    }
+    return false;
+  }
+
+  /**
+   * Stable identity key so "Nom: X" and "Nom: X." replace instead of duplicating.
+   */
+  function factIdentityKey(text) {
+    var t = normKey(text);
+    if (/nom de l.?utilisateur|je m.?appelle|mon nom|je suis\b/.test(t)) {
+      return 'identity.name';
+    }
+    if (/\b\d{1,3}\s*ans\b|\bage\b/.test(t)) return 'identity.age';
+    if (/patron|manager|boss|superieur|n\+1/.test(t)) return 'work.boss';
+    if (/role|poste|titre|fonction\b/.test(t)) return 'work.role';
+    if (/travaille sur|focus du jour|projet (actuel|principal)/.test(t)) {
+      return 'work.focus';
+    }
+    if (/outil|stack|utilise/.test(t)) return 'work.tools';
+    if (/equipe|collegue/.test(t)) return 'work.team';
+    if (/document|guide|plan strategie/.test(t)) return 'work.docs';
+    if (/prefere|habitude|norme/.test(t)) return 'work.pref:' + t.slice(0, 32);
+    return 'fact:' + t.slice(0, 56);
+  }
+
+  function normalizeFact(raw, options) {
+    options = options || {};
+    if (!raw) return null;
+    var text =
+      typeof raw === 'string'
+        ? trimStr(raw, MAX_FACT_LEN)
+        : trimStr(raw && raw.text, MAX_FACT_LEN);
+    if (!text) return null;
+    if (options.requireDurable && !isDurableFact(text)) return null;
+    if (!options.allowJunk && isJunkFact(text)) return null;
+    var key =
+      (raw && typeof raw === 'object' && typeof raw.key === 'string' && raw.key) ||
+      factIdentityKey(text);
     return {
-      id: typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : factId(),
-      text: t,
+      id:
+        raw && typeof raw === 'object' && typeof raw.id === 'string' && raw.id.trim()
+          ? raw.id.trim()
+          : factId(),
+      text: text,
+      key: key,
       updatedAt:
-        typeof raw.updatedAt === 'string' && raw.updatedAt
+        raw && typeof raw === 'object' && typeof raw.updatedAt === 'string' && raw.updatedAt
           ? raw.updatedAt
           : new Date().toISOString()
     };
   }
 
+  function upsertFactList(list, incoming, max, requireDurable) {
+    var next = Array.isArray(list) ? list.slice() : [];
+    var items = Array.isArray(incoming) ? incoming : [incoming];
+    var now = new Date().toISOString();
+    for (var i = 0; i < items.length; i++) {
+      var fact = normalizeFact(items[i], {
+        requireDurable: !!requireDurable,
+        allowJunk: false
+      });
+      if (!fact) continue;
+      var idx = -1;
+      for (var j = 0; j < next.length; j++) {
+        if (next[j].key === fact.key || normKey(next[j].text) === normKey(fact.text)) {
+          idx = j;
+          break;
+        }
+      }
+      // Prefer the more specific / longer concrete statement when replacing.
+      if (idx >= 0) {
+        var prev = next[idx];
+        var keepText =
+          fact.text.length >= prev.text.length || /:/.test(fact.text) ? fact.text : prev.text;
+        next[idx] = {
+          id: prev.id,
+          text: keepText,
+          key: fact.key || prev.key,
+          updatedAt: now
+        };
+      } else {
+        next.unshift({
+          id: fact.id,
+          text: fact.text,
+          key: fact.key,
+          updatedAt: now
+        });
+      }
+    }
+    // Dedup by key again (belt and suspenders)
+    var seen = Object.create(null);
+    var deduped = [];
+    for (var k = 0; k < next.length; k++) {
+      var key = next[k].key || factIdentityKey(next[k].text);
+      if (seen[key]) continue;
+      seen[key] = true;
+      next[k].key = key;
+      deduped.push(next[k]);
+    }
+    return deduped.slice(0, max);
+  }
+
+  function migrateFromV1(src) {
+    var out = emptyMemory();
+    out.onboardingComplete = !!src.onboardingComplete;
+    out.lastScanAt = typeof src.lastScanAt === 'string' ? src.lastScanAt : '';
+    out.preferredQuestionsAsked = Array.isArray(src.preferredQuestionsAsked)
+      ? src.preferredQuestionsAsked
+      : [];
+    var oldSummary = typeof src.summary === 'string' ? src.summary.trim() : '';
+    if (oldSummary) {
+      // Board-ish summaries go to STM; short personal ones can stay LTM.
+      if (
+        /tableau|taches|projets lies|communication et|en attente ou bloque/.test(
+          normKey(oldSummary)
+        )
+      ) {
+        out.shortTerm.boardSummary = trimStr(oldSummary, MAX_BOARD_SUMMARY_LEN);
+      } else if (!isJunkFact(oldSummary)) {
+        out.longTerm.summary = trimStr(oldSummary, MAX_SUMMARY_LEN);
+      }
+    }
+    var facts = Array.isArray(src.facts) ? src.facts : [];
+    for (var i = 0; i < facts.length; i++) {
+      var text = typeof facts[i] === 'string' ? facts[i] : facts[i] && facts[i].text;
+      if (!text) continue;
+      if (isDurableFact(text)) {
+        out.longTerm.facts = upsertFactList(out.longTerm.facts, text, MAX_LTM_FACTS, true);
+      } else if (!isJunkFact(text)) {
+        out.shortTerm.notes = upsertFactList(out.shortTerm.notes, text, MAX_STM_NOTES, false);
+      }
+      // else drop junk
+    }
+    return out;
+  }
+
   function normalizeMemory(raw) {
     var src = raw && typeof raw === 'object' ? raw : {};
-    var facts = Array.isArray(src.facts) ? src.facts : [];
-    var normalizedFacts = [];
-    for (var i = 0; i < facts.length; i++) {
-      var f = normalizeFact(facts[i]);
-      if (f) normalizedFacts.push(f);
+    // Legacy v1 shape: summary/facts at root without longTerm
+    if ((!src.longTerm || typeof src.longTerm !== 'object') && (src.facts || src.summary)) {
+      src = migrateFromV1(src);
     }
-    normalizedFacts = normalizedFacts.slice(0, MAX_FACTS);
+    var lt = src.longTerm && typeof src.longTerm === 'object' ? src.longTerm : {};
+    var st = src.shortTerm && typeof src.shortTerm === 'object' ? src.shortTerm : {};
+
+    var cleanedLt = upsertFactList(
+      [],
+      Array.isArray(lt.facts) ? lt.facts : [],
+      MAX_LTM_FACTS,
+      true
+    );
+
+    var stmNotes = upsertFactList(
+      [],
+      Array.isArray(st.notes) ? st.notes : [],
+      MAX_STM_NOTES,
+      false
+    );
+
     var asked = Array.isArray(src.preferredQuestionsAsked)
       ? src.preferredQuestionsAsked
           .map(function (q) {
@@ -78,13 +295,46 @@
           .filter(Boolean)
           .slice(0, MAX_ASKED)
       : [];
+
+    var ltSummary = trimStr(lt.summary, MAX_SUMMARY_LEN);
+    if (ltSummary && isJunkFact(ltSummary)) ltSummary = '';
+    if (
+      ltSummary &&
+      /tableau se concentre|taches sont en attente|divers projets/.test(normKey(ltSummary))
+    ) {
+      // Misplaced board summary
+      st.boardSummary = st.boardSummary || ltSummary;
+      ltSummary = '';
+    }
+
     return {
-      version: 1,
+      version: 2,
       onboardingComplete: !!src.onboardingComplete,
       lastScanAt: typeof src.lastScanAt === 'string' ? src.lastScanAt : '',
-      summary: trimStr(src.summary, MAX_SUMMARY_LEN),
-      facts: normalizedFacts,
+      longTerm: {
+        summary: ltSummary,
+        facts: cleanedLt
+      },
+      shortTerm: {
+        boardSummary: trimStr(st.boardSummary, MAX_BOARD_SUMMARY_LEN),
+        notes: stmNotes,
+        updatedAt: typeof st.updatedAt === 'string' ? st.updatedAt : ''
+      },
       preferredQuestionsAsked: asked
+    };
+  }
+
+  /** Back-compat accessors used by older UI/agent code. */
+  function legacyView(memory) {
+    var m = normalizeMemory(memory);
+    return {
+      summary: m.longTerm.summary,
+      facts: m.longTerm.facts,
+      boardSummary: m.shortTerm.boardSummary,
+      shortNotes: m.shortTerm.notes,
+      onboardingComplete: m.onboardingComplete,
+      longTerm: m.longTerm,
+      shortTerm: m.shortTerm
     };
   }
 
@@ -98,11 +348,20 @@
 
   function enforceBudget(memory) {
     var next = normalizeMemory(memory);
-    while (serializedSize(next) > MAX_SERIALIZED && next.facts.length) {
-      next.facts = next.facts.slice(0, -1);
+    while (serializedSize(next) > MAX_SERIALIZED && next.shortTerm.notes.length) {
+      next.shortTerm.notes = next.shortTerm.notes.slice(0, -1);
+    }
+    while (serializedSize(next) > MAX_SERIALIZED && next.longTerm.facts.length) {
+      next.longTerm.facts = next.longTerm.facts.slice(0, -1);
     }
     if (serializedSize(next) > MAX_SERIALIZED) {
-      next.summary = trimStr(next.summary, Math.floor(MAX_SUMMARY_LEN / 2));
+      next.shortTerm.boardSummary = trimStr(
+        next.shortTerm.boardSummary,
+        Math.floor(MAX_BOARD_SUMMARY_LEN / 2)
+      );
+    }
+    if (serializedSize(next) > MAX_SERIALIZED) {
+      next.longTerm.summary = trimStr(next.longTerm.summary, Math.floor(MAX_SUMMARY_LEN / 2));
     }
     while (serializedSize(next) > MAX_SERIALIZED && next.preferredQuestionsAsked.length) {
       next.preferredQuestionsAsked = next.preferredQuestionsAsked.slice(0, -1);
@@ -114,7 +373,26 @@
     if (!t || typeof t.get !== 'function') return emptyMemory();
     try {
       var stored = await t.get('board', 'private', STORAGE_KEY);
-      return normalizeMemory(stored);
+      var next = enforceBudget(normalizeMemory(stored));
+      var prevCount = 0;
+      if (stored && stored.longTerm && Array.isArray(stored.longTerm.facts)) {
+        prevCount = stored.longTerm.facts.length;
+      } else if (stored && Array.isArray(stored.facts)) {
+        prevCount = stored.facts.length;
+      }
+      var shouldRewrite =
+        !stored ||
+        stored.version !== 2 ||
+        next.longTerm.facts.length < prevCount ||
+        (!!(stored && stored.summary) && !next.longTerm.summary && !!next.shortTerm.boardSummary);
+      if (shouldRewrite && typeof t.set === 'function') {
+        try {
+          await t.set('board', 'private', STORAGE_KEY, next);
+        } catch (persistErr) {
+          console.error('AgentMemory.load purge persist failed', persistErr);
+        }
+      }
+      return next;
     } catch (err) {
       console.error('AgentMemory.load failed', err);
       return emptyMemory();
@@ -135,53 +413,57 @@
   function needsOnboarding(memory) {
     var m = normalizeMemory(memory);
     if (m.onboardingComplete) return false;
-    if (m.facts.length >= 2 || (m.summary && m.summary.length > 40)) return false;
+    if (m.longTerm.facts.length >= 2) return false;
+    if (m.longTerm.summary && m.longTerm.summary.length > 30) return false;
     return true;
   }
 
-  function mergeFacts(memory, incoming) {
+  function rememberLongTerm(memory, incoming) {
     var next = normalizeMemory(memory);
-    var list = Array.isArray(incoming) ? incoming : [incoming];
-    var now = new Date().toISOString();
-    for (var i = 0; i < list.length; i++) {
-      var fact = normalizeFact(list[i]);
-      if (!fact) continue;
-      var key = fact.text.toLocaleLowerCase('fr-FR');
-      var replaced = false;
-      for (var j = 0; j < next.facts.length; j++) {
-        if (next.facts[j].text.toLocaleLowerCase('fr-FR') === key) {
-          next.facts[j] = {
-            id: next.facts[j].id,
-            text: fact.text,
-            updatedAt: now
-          };
-          replaced = true;
-          break;
-        }
-      }
-      if (!replaced) {
-        next.facts.unshift({ id: fact.id, text: fact.text, updatedAt: now });
-      }
-    }
-    next.facts = next.facts.slice(0, MAX_FACTS);
+    next.longTerm.facts = upsertFactList(next.longTerm.facts, incoming, MAX_LTM_FACTS, true);
     return enforceBudget(next);
+  }
+
+  function rememberShortTerm(memory, incoming) {
+    var next = normalizeMemory(memory);
+    next.shortTerm.notes = upsertFactList(next.shortTerm.notes, incoming, MAX_STM_NOTES, false);
+    next.shortTerm.updatedAt = new Date().toISOString();
+    return enforceBudget(next);
+  }
+
+  /** @deprecated Use rememberLongTerm — kept for call sites. */
+  function mergeFacts(memory, incoming) {
+    return rememberLongTerm(memory, incoming);
   }
 
   function forgetFacts(memory, query) {
     var next = normalizeMemory(memory);
-    var q = trimStr(String(query || ''), 120).toLocaleLowerCase('fr-FR');
+    var q = normKey(query);
     if (!q) return next;
-    next.facts = next.facts.filter(function (f) {
-      var text = (f.text || '').toLocaleLowerCase('fr-FR');
-      var id = (f.id || '').toLocaleLowerCase('fr-FR');
-      return text.indexOf(q) < 0 && id !== q;
+    next.longTerm.facts = next.longTerm.facts.filter(function (f) {
+      return normKey(f.text).indexOf(q) < 0 && normKey(f.id) !== q && normKey(f.key) !== q;
+    });
+    next.shortTerm.notes = next.shortTerm.notes.filter(function (f) {
+      return normKey(f.text).indexOf(q) < 0 && normKey(f.id) !== q;
     });
     return enforceBudget(next);
   }
 
   function setSummary(memory, summary) {
     var next = normalizeMemory(memory);
-    next.summary = trimStr(summary, MAX_SUMMARY_LEN);
+    var s = trimStr(summary, MAX_SUMMARY_LEN);
+    if (!s || isJunkFact(s)) return next;
+    if (/tableau se concentre|taches sont en attente/.test(normKey(s))) {
+      return setBoardSummary(next, s);
+    }
+    next.longTerm.summary = s;
+    return enforceBudget(next);
+  }
+
+  function setBoardSummary(memory, summary) {
+    var next = normalizeMemory(memory);
+    next.shortTerm.boardSummary = trimStr(summary, MAX_BOARD_SUMMARY_LEN);
+    next.shortTerm.updatedAt = new Date().toISOString();
     return enforceBudget(next);
   }
 
@@ -207,16 +489,32 @@
 
   function buildPromptBlock(memory) {
     var m = normalizeMemory(memory);
-    if (!m.summary && !m.facts.length) {
-      return 'M\u00e9moire plateau\u00a0: (vide)';
-    }
-    var lines = ['M\u00e9moire plateau (faits importants pour cet utilisateur)\u00a0:'];
-    if (m.summary) lines.push('R\u00e9sum\u00e9\u00a0: ' + m.summary);
-    if (m.facts.length) {
-      lines.push('Faits\u00a0:');
-      for (var i = 0; i < m.facts.length; i++) {
-        lines.push('- ' + m.facts[i].text);
+    var lines = ['Memoire utilisateur (Priorite)\u00a0:'];
+    var hasLt = !!(m.longTerm.summary || m.longTerm.facts.length);
+    var hasSt = !!(m.shortTerm.boardSummary || m.shortTerm.notes.length);
+    if (!hasLt && !hasSt) return 'Memoire utilisateur\u00a0: (vide)';
+
+    lines.push('LONG TERME (faits durables, prioritaires)\u00a0:');
+    if (m.longTerm.summary) lines.push('Resume\u00a0: ' + m.longTerm.summary);
+    if (m.longTerm.facts.length) {
+      for (var i = 0; i < m.longTerm.facts.length; i++) {
+        lines.push('- ' + m.longTerm.facts[i].text);
       }
+    } else {
+      lines.push('- (aucun)');
+    }
+
+    lines.push('COURT TERME (contexte tableau / provisoire, moins prioritaire)\u00a0:');
+    if (m.shortTerm.boardSummary) {
+      lines.push('Tableau\u00a0: ' + m.shortTerm.boardSummary);
+    }
+    if (m.shortTerm.notes.length) {
+      for (var j = 0; j < m.shortTerm.notes.length; j++) {
+        lines.push('- ' + m.shortTerm.notes[j].text);
+      }
+    }
+    if (!m.shortTerm.boardSummary && !m.shortTerm.notes.length) {
+      lines.push('- (aucun)');
     }
     return lines.join('\n');
   }
@@ -231,8 +529,7 @@
   }
 
   /**
-   * Scan board cards, ask the model to refresh summary + facts, persist.
-   * @returns {Promise<object>} updated memory
+   * Scan board → refresh SHORT-TERM board summary only (never dump into LTM).
    */
   async function scanAndRefresh(t, provider, options) {
     options = options || {};
@@ -272,19 +569,20 @@
     }
 
     var prompt = [
-      'Tu mets \u00e0 jour la m\u00e9moire d\'un assistant Trello pour CE membre sur CE tableau.',
+      'Tu produis UNIQUEMENT du contexte COURT TERME pour un assistant Trello.',
       'R\u00e9ponds UNIQUEMENT en JSON\u00a0:',
-      '{"summary":"2 \u00e0 5 phrases","facts":["fait court", "..."],"suggestedQuestions":["question d\'alignement", "..."]}',
-      'R\u00e8gles\u00a0:',
-      '- summary = vue d\'ensemble du travail / th\u00e8mes du board (pas une liste brute).',
-      '- facts = 3 \u00e0 8 faits utiles et stables (noms, projets, outils, contraintes).',
-      '- suggestedQuestions = 2 \u00e0 4 questions conversationnelles pour mieux aligner (patron, focus du jour, normes).',
-      '- Fran\u00e7ais. Courts. Pas d\'invention hors digest + m\u00e9moire existante.',
+      '{"boardSummary":"2\u20133 phrases max sur les th\u00e8mes du tableau","suggestedQuestions":["\u2026"]}',
+      'R\u00e8gles STRICTES\u00a0:',
+      '- boardSummary = th\u00e8mes / types de cartes du board. COURT.',
+      '- INTERDIT d\'inventer des faits personnels sur l\'utilisateur (nom, \u00e2ge, patron, pr\u00e9f\u00e9rences).',
+      '- INTERDIT de remplir une m\u00e9moire long terme depuis le digest.',
+      '- suggestedQuestions = 2\u20133 questions pour apprendre des faits durables (nom, r\u00f4le, focus, outils).',
+      '- Fran\u00e7ais. Pas de remplissage.',
       '',
-      'M\u00e9moire actuelle\u00a0:',
+      'M\u00e9moire long terme actuelle (ne pas r\u00e9p\u00e9ter ici)\u00a0:',
       JSON.stringify({
-        summary: memory.summary,
-        facts: memory.facts.map(function (f) {
+        summary: memory.longTerm.summary,
+        facts: memory.longTerm.facts.map(function (f) {
           return f.text;
         })
       }),
@@ -298,12 +596,9 @@
         provider,
         [
           { role: 'system', content: prompt },
-          {
-            role: 'user',
-            content: 'Produis la mise \u00e0 jour de m\u00e9moire JSON.'
-          }
+          { role: 'user', content: 'Produis le JSON court terme.' }
         ],
-        { temperature: 0.3, jsonMode: true, max_tokens: 500, stream: false }
+        { temperature: 0.2, jsonMode: true, max_tokens: 280, stream: false }
       );
       var raw = response && response.content ? response.content.trim() : '';
       var data = null;
@@ -321,12 +616,13 @@
         }
       }
       if (data && typeof data === 'object') {
-        if (typeof data.summary === 'string' && data.summary.trim()) {
-          memory = setSummary(memory, data.summary);
+        if (typeof data.boardSummary === 'string' && data.boardSummary.trim()) {
+          memory = setBoardSummary(memory, data.boardSummary);
+        } else if (typeof data.summary === 'string' && data.summary.trim()) {
+          // Legacy field name from older prompts → STM only
+          memory = setBoardSummary(memory, data.summary);
         }
-        if (Array.isArray(data.facts) && data.facts.length) {
-          memory = mergeFacts(memory, data.facts);
-        }
+        // Ignore any "facts" array from the model for scans — LTM is user-stated only.
         if (Array.isArray(data.suggestedQuestions)) {
           memory._openingQuestions = data.suggestedQuestions
             .map(function (q) {
@@ -342,7 +638,6 @@
 
     memory = normalizeMemory(memory);
     memory.lastScanAt = new Date().toISOString();
-    // Drop ephemeral field before persist
     var opening = memory._openingQuestions;
     delete memory._openingQuestions;
     var saved = await save(t, memory);
@@ -351,7 +646,7 @@
   }
 
   /**
-   * Apply memory patches from a memoryTurn response.
+   * Apply memory patches from a memoryTurn response — gated hard for LTM.
    */
   async function applyPatches(t, memory, patches) {
     var next = normalizeMemory(memory);
@@ -359,13 +654,24 @@
     for (var i = 0; i < list.length; i++) {
       var p = list[i];
       if (!p || typeof p !== 'object') continue;
-      if (p.op === 'remember' && p.text) {
-        next = mergeFacts(next, p.text);
-      } else if (p.op === 'forget' && p.query) {
+      var op = String(p.op || '');
+      if ((op === 'remember' || op === 'remember_long') && p.text) {
+        // High bar: only durable, non-junk facts enter long-term.
+        if (isDurableFact(p.text)) {
+          next = rememberLongTerm(next, p.text);
+        } else if (!isJunkFact(p.text)) {
+          // Soft landing: provisional short-term note instead of polluting LTM.
+          next = rememberShortTerm(next, p.text);
+        }
+      } else if ((op === 'note' || op === 'remember_short') && p.text) {
+        if (!isJunkFact(p.text)) next = rememberShortTerm(next, p.text);
+      } else if (op === 'forget' && p.query) {
         next = forgetFacts(next, p.query);
-      } else if (p.op === 'set_summary' && p.text != null) {
+      } else if (op === 'set_summary' && p.text != null) {
         next = setSummary(next, p.text);
-      } else if (p.op === 'complete_onboarding') {
+      } else if (op === 'set_board_summary' && p.text != null) {
+        next = setBoardSummary(next, p.text);
+      } else if (op === 'complete_onboarding') {
         next = markOnboardingComplete(next);
       }
     }
@@ -374,22 +680,31 @@
 
   global.AgentMemory = {
     STORAGE_KEY: STORAGE_KEY,
-    MAX_FACTS: MAX_FACTS,
+    MAX_FACTS: MAX_LTM_FACTS,
+    MAX_LTM_FACTS: MAX_LTM_FACTS,
+    MAX_STM_NOTES: MAX_STM_NOTES,
     SCAN_TTL_MS: SCAN_TTL_MS,
     emptyMemory: emptyMemory,
     normalizeMemory: normalizeMemory,
+    legacyView: legacyView,
     load: load,
     save: save,
     needsOnboarding: needsOnboarding,
     mergeFacts: mergeFacts,
+    rememberLongTerm: rememberLongTerm,
+    rememberShortTerm: rememberShortTerm,
     forgetFacts: forgetFacts,
     setSummary: setSummary,
+    setBoardSummary: setBoardSummary,
     markOnboardingComplete: markOnboardingComplete,
     markQuestionAsked: markQuestionAsked,
     buildPromptBlock: buildPromptBlock,
     scanIsFresh: scanIsFresh,
     scanAndRefresh: scanAndRefresh,
     applyPatches: applyPatches,
-    enforceBudget: enforceBudget
+    enforceBudget: enforceBudget,
+    isJunkFact: isJunkFact,
+    isDurableFact: isDurableFact,
+    factIdentityKey: factIdentityKey
   };
 })(typeof window !== 'undefined' ? window : this);

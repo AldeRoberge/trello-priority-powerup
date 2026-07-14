@@ -849,6 +849,48 @@
     var statusFilter = 'all';
     showDoneCheckbox.checked = showCompleted;
 
+    var addTabComplete = null;
+    if (
+      addInput &&
+      global.TabAutocomplete &&
+      typeof global.TabAutocomplete.wrapField === 'function'
+    ) {
+      var addWrapped = global.TabAutocomplete.wrapField(addInput);
+      addTabComplete = global.TabAutocomplete.bind({
+        field: addInput,
+        wrapEl: addWrapped.wrap,
+        ghostEl: addWrapped.ghost,
+        getCandidates: function () {
+          return currentSuggestions.slice();
+        },
+        isEnabled: function () {
+          return !addInput.disabled && !spellcheckBusy;
+        },
+        onProposal: function (proposal) {
+          var target =
+            proposal && proposal.candidate ? String(proposal.candidate.text || '') : '';
+          if (!suggestListEl) return;
+          Array.prototype.forEach.call(
+            suggestListEl.querySelectorAll('.tp-completion-suggestion'),
+            function (btn) {
+              var label = String(btn.getAttribute('data-suggestion') || btn.textContent || '');
+              var on = !!(target && label === target);
+              btn.classList.toggle('is-tab-target', on);
+              var hint = btn.querySelector('.tp-tab-hint');
+              if (on && !hint) {
+                var kbd = document.createElement('kbd');
+                kbd.className = 'tp-tab-hint';
+                kbd.textContent = 'Tab';
+                btn.appendChild(kbd);
+              } else if (!on && hint) {
+                hint.remove();
+              }
+            }
+          );
+        }
+      });
+    }
+
     var CHECK_ICON_SVG =
       '<svg class="tp-completion-check-icon" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">' +
       '<path fill="currentColor" d="M13.2 4.3 6.5 11 2.8 7.3l1.1-1.1 2.6 2.6 5.6-5.6z"/>' +
@@ -1583,6 +1625,7 @@
         btn.type = 'button';
         btn.className = 'tp-completion-suggestion';
         btn.setAttribute('role', 'listitem');
+        btn.setAttribute('data-suggestion', label);
         btn.textContent = label;
         btn.title = 'Ajouter\u00a0: ' + label;
         btn.addEventListener('click', function () {
@@ -1600,6 +1643,7 @@
         });
         suggestListEl.appendChild(btn);
       });
+      if (addTabComplete) addTabComplete.refresh();
       onResize();
     }
 

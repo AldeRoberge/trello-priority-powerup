@@ -789,17 +789,30 @@
       try {
         var mem = bridge.getMemory();
         if (mem && typeof mem === 'object') {
+          var Mem = global.AgentMemory;
+          var view =
+            Mem && typeof Mem.legacyView === 'function' ? Mem.legacyView(mem) : mem;
           ctx.memory = {
-            summary: typeof mem.summary === 'string' ? mem.summary : '',
-            facts: Array.isArray(mem.facts)
-              ? mem.facts
+            summary: typeof view.summary === 'string' ? view.summary : '',
+            facts: Array.isArray(view.facts)
+              ? view.facts
                   .map(function (f) {
                     return typeof f === 'string' ? f : f && f.text ? f.text : '';
                   })
                   .filter(Boolean)
-                  .slice(0, 12)
+                  .slice(0, 8)
               : [],
-            onboardingComplete: !!mem.onboardingComplete
+            boardSummary:
+              typeof view.boardSummary === 'string' ? view.boardSummary : '',
+            shortNotes: Array.isArray(view.shortNotes)
+              ? view.shortNotes
+                  .map(function (f) {
+                    return typeof f === 'string' ? f : f && f.text ? f.text : '';
+                  })
+                  .filter(Boolean)
+                  .slice(0, 6)
+              : [],
+            onboardingComplete: !!view.onboardingComplete
           };
         }
       } catch (e) { /* ignore */ }
@@ -1329,28 +1342,40 @@
     }
 
     var mem = memory && typeof memory === 'object' ? memory : {};
+    var Mem = global.AgentMemory;
+    var view = Mem && typeof Mem.legacyView === 'function' ? Mem.legacyView(mem) : mem;
     var asked = Array.isArray(mem.preferredQuestionsAsked) ? mem.preferredQuestionsAsked : [];
     var system = [
       'Tu es l\'assistant m\u00e9moire du Power-Up Priorit\u00e9 (Trello).',
       'Tu parles en fran\u00e7ais, de fa\u00e7on conversationnelle et chaleureuse.',
-      'Ton r\u00f4le\u00a0: apprendre et mettre \u00e0 jour des faits utiles sur le travail de l\'utilisateur (patron, \u00e9quipe, projets, outils, normes).',
+      'La m\u00e9moire a deux \u00e9tages\u00a0: LONG TERME (durable) et COURT TERME (provisoire / tableau).',
+      'Mettre \u00e0 jour le LONG TERME est un GROS d\u00e9al\u00a0: seulement des faits stables et pr\u00e9cieux.',
       'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
       '{"message":"texte","suggestions":["r\u00e9ponse courte","\u2026"],"patches":[{"op":"remember","text":"\u2026"}]}',
       'Ops patches autoris\u00e9es\u00a0:',
-      '- {"op":"remember","text":"fait court"}',
+      '- {"op":"remember","text":"fait durable"} \u2192 LONG TERME (strict)',
+      '- {"op":"note","text":"note provisoire"} \u2192 COURT TERME',
       '- {"op":"forget","query":"mot-cl\u00e9"}',
-      '- {"op":"set_summary","text":"r\u00e9sum\u00e9"}',
-      '- {"op":"complete_onboarding"} (quand tu as assez de contexte)',
-      'R\u00e8gles\u00a0:',
-      '- Pose UNE question claire \u00e0 la fois quand tu as besoin d\'info.',
-      '- Quand l\'utilisateur r\u00e9pond, enregistre via remember (et \u00e9ventuellement set_summary).',
+      '- {"op":"set_summary","text":"1\u20132 phrases sur l\'utilisateur"} \u2192 LONG TERME',
+      '- {"op":"set_board_summary","text":"th\u00e8mes du tableau"} \u2192 COURT TERME',
+      '- {"op":"complete_onboarding"} (quand tu as assez de faits durables)',
+      'R\u00e8gles LONG TERME (remember / set_summary)\u00a0:',
+      '- UNIQUEMENT si l\'utilisateur vient d\'affirmer un fait concret et durable.',
+      '- Ex. accept\u00e9s\u00a0: nom, \u00e2ge, r\u00f4le, patron, outils, focus projet, norme d\'\u00e9quipe claire.',
+      '- INTERDIT\u00a0: m\u00e9ta-conversation, refus, \u00ab\u00a0pas maintenant\u00a0\u00bb, disponibilit\u00e9 \u00e0 discuter,',
+      '  d\u00e9but d\'alignement, suggestions cliqu\u00e9es par erreur, reformulations vagues,',
+      '  r\u00e9sum\u00e9s g\u00e9n\u00e9riques du tableau, doublons (un seul fait par th\u00e8me\u00a0: nom, \u00e2ge, etc.).',
+      '- Si le fait n\'est pas assez solide\u00a0: n\'\u00e9cris PAS de patch remember (demande confirmation).',
+      '- Un seul remember par th\u00e8me\u00a0; \u00e9crase mentalement les doublons (ex. nom).',
+      'R\u00e8gles g\u00e9n\u00e9rales\u00a0:',
+      '- Pose UNE question claire \u00e0 la fois.',
       '- suggestions = 2\u20134 r\u00e9ponses/intentions cliquables courtes.',
-      '- Pour les r\u00e9ponses \u00e0 compl\u00e9ter, utilise \u2026 (ou [libell\u00e9]) comme trou \u00e0 remplir\u00a0: ex. \u00ab\u00a0Je m\'appelle\u2026\u00a0\u00bb, \u00ab\u00a0Mon patron s\'appelle\u2026\u00a0\u00bb, \u00ab\u00a0Je travaille sur\u2026\u00a0\u00bb.',
-      '- Les suggestions sans trou restent des r\u00e9ponses compl\u00e8tes cliquables.',
+      '- Pour r\u00e9ponses \u00e0 compl\u00e9ter\u00a0: utilise \u2026 (ex. \u00ab\u00a0Je m\'appelle\u2026\u00a0\u00bb).',
+      '- Les suggestions de type \u00ab\u00a0passer / plus tard / pas d\'objectif\u00a0\u00bb NE doivent JAMAIS devenir des faits.',
       mode === 'onboarding'
-        ? '- Mode onboarding\u00a0: apr\u00e8s ~2\u20134 faits utiles, remercie bri\u00e8vement et inclus complete_onboarding.'
-        : '- Mode continu\u00a0: mets \u00e0 jour la m\u00e9moire; complete_onboarding seulement si l\'utilisateur confirme avoir fini l\'alignement.',
-      '- \u00c9vite de reposer les questions d\u00e9j\u00e0 pos\u00e9es list\u00e9es ci-dessous.',
+        ? '- Mode onboarding\u00a0: apr\u00e8s ~2\u20133 faits LONG TERME solides, remercie et complete_onboarding.'
+        : '- Mode continu\u00a0: sois encore plus s\u00e9lectif pour remember.',
+      '- \u00c9vite de reposer les questions d\u00e9j\u00e0 pos\u00e9es.',
       '- INTERDIT d\'inventer des faits non dits par l\'utilisateur.',
       '',
       'Questions d\u00e9j\u00e0 pos\u00e9es\u00a0:',
@@ -1358,16 +1383,27 @@
       '',
       'M\u00e9moire actuelle\u00a0:',
       JSON.stringify({
-        summary: mem.summary || '',
-        facts: Array.isArray(mem.facts)
-          ? mem.facts.map(function (f) {
-              return typeof f === 'string' ? f : f && f.text ? f.text : '';
-            })
-          : [],
+        longTerm: {
+          summary: view.summary || '',
+          facts: Array.isArray(view.facts)
+            ? view.facts.map(function (f) {
+                return typeof f === 'string' ? f : f && f.text ? f.text : '';
+              })
+            : []
+        },
+        shortTerm: {
+          boardSummary: view.boardSummary || '',
+          notes: Array.isArray(view.shortNotes)
+            ? view.shortNotes.map(function (f) {
+                return typeof f === 'string' ? f : f && f.text ? f.text : '';
+              })
+            : []
+        },
         onboardingComplete: !!mem.onboardingComplete
       }),
       options.boardDigest
-        ? '\nDigest tableau (extrait)\u00a0:\n' + String(options.boardDigest).slice(0, 3500)
+        ? '\nDigest tableau (extrait, contexte COURT TERME seulement)\u00a0:\n' +
+          String(options.boardDigest).slice(0, 3500)
         : ''
     ]
       .filter(Boolean)

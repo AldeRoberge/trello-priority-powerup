@@ -723,6 +723,9 @@
 }
 
 .tp-page--priority .agent-suggestion-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 6px 11px;
   border: 1px dashed var(--tp-border-strong);
   border-radius: 16px;
@@ -932,6 +935,25 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
   align-items: flex-end;
 }
 
+.tp-page--priority .agent-composer .tp-tab-complete-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--tp-border-strong);
+  border-radius: 3px;
+  background: var(--tp-input-bg);
+}
+
+.tp-page--priority .agent-composer .tp-tab-complete-wrap:focus-within {
+  outline: 2px solid var(--tp-primary);
+  outline-offset: 1px;
+}
+
+.tp-page--priority .agent-composer .tp-tab-complete-ghost {
+  padding: 7px 8px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 .tp-page--priority .agent-composer-input {
   flex: 1;
   min-height: 40px;
@@ -947,9 +969,20 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
   line-height: 1.35;
 }
 
+.tp-page--priority .agent-composer .tp-tab-complete-wrap .agent-composer-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: 3px;
+}
+
 .tp-page--priority .agent-composer-input:focus {
   outline: 2px solid var(--tp-primary);
   outline-offset: 1px;
+}
+
+.tp-page--priority .agent-composer .tp-tab-complete-wrap .agent-composer-input:focus {
+  outline: none;
 }
 
 .tp-page--priority .agent-composer-input.is-spellchecking {

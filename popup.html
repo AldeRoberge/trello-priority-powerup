@@ -20,10 +20,11 @@
   <script src="./js/priority-trello.js?v=info-panel-1"></script>
   <script src="./js/statut-match.js"></script>
   <script src="./js/statut-trello.js"></script>
+  <script src="./js/tab-autocomplete.js?v=tab-complete-1"></script>
   <script src="./js/completion-ui.js?v=progress-due-complete-1"></script>
   <script src="./js/completion-trello.js?v=progress-due-complete-1"></script>
   <script src="./js/agent.js?v=agent-3"></script>
-  <script src="./js/agent-memory.js?v=memory-1"></script>
+  <script src="./js/agent-memory.js?v=memory-2"></script>
   <script src="./js/user-profile.js?v=profile-1"></script>
   <script src="./js/spellcheck.js?v=spellcheck-2"></script>
   <script src="./js/agent-ui.js?v=pending-skeleton-1"></script>
@@ -1006,7 +1007,16 @@
             });
           },
           getMemory: function () {
-            return cachedMemory || { summary: '', facts: [], onboardingComplete: false };
+            return (
+              cachedMemory || {
+                version: 2,
+                summary: '',
+                facts: [],
+                longTerm: { summary: '', facts: [] },
+                shortTerm: { boardSummary: '', notes: [] },
+                onboardingComplete: false
+              }
+            );
           },
           getProfile: function () {
             return cachedProfile;

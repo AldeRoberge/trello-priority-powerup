@@ -109,12 +109,23 @@
   margin-bottom: 6px;
 }
 
+.memory-ui-summary-label--stm {
+  margin-top: 12px;
+  opacity: 0.9;
+}
+
 .memory-ui-summary-text,
 .memory-ui-summary-empty {
   margin: 0 0 6px;
   font-size: 13px;
   line-height: 1.4;
   color: var(--tp-text);
+}
+
+.memory-ui-summary-text--stm,
+.memory-ui-facts--stm {
+  color: var(--tp-text-muted);
+  font-size: 12.5px;
 }
 
 .memory-ui-facts {

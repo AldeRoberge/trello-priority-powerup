@@ -2343,6 +2343,27 @@ html[data-color-mode="dark"] .due-date-time-clock {
   transition: background-color 0.1s ease, box-shadow 0.1s ease;
 }
 
+.blocked-reason-wrap .tp-tab-complete-wrap {
+  width: 100%;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-2) 82%, transparent);
+}
+
+.blocked-reason-wrap .tp-tab-complete-ghost {
+  padding: 8px 12px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.blocked-reason-wrap .tp-tab-complete-wrap .blocked-reason-input {
+  background: transparent;
+}
+
+.blocked-reason-wrap .tp-tab-complete-wrap:focus-within {
+  box-shadow: 0 0 0 2px var(--blocked-accent, var(--tp-primary, #0c66e4));
+}
+
 .blocked-reason-input::placeholder {
   color: var(--text-muted);
 }
@@ -2415,6 +2436,10 @@ html[data-color-mode="dark"] .due-date-time-clock {
 
 .blocked-reason-suggestion {
   appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   flex: 0 1 auto;
   max-width: 100%;
   padding: 7px 10px;

@@ -2407,6 +2407,33 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   align-items: center;
 }
 
+.tp-completion-add-row .tp-tab-complete-wrap {
+  min-width: 0;
+  border: 1px solid var(--tp-border);
+  border-radius: var(--completion-control-radius, 8px);
+  background: var(--tp-surface-subtle, var(--surface-1));
+  box-shadow: inset 0 1px 1px color-mix(in srgb, var(--tp-text) 5%, transparent);
+}
+
+.tp-completion-add-row .tp-tab-complete-wrap:focus-within {
+  border-color: color-mix(in srgb, var(--tp-primary) 55%, transparent);
+  background: var(--tp-surface, var(--tp-input-bg));
+  box-shadow: var(--slider-focus-ring, 0 0 0 3px rgba(12, 102, 228, 0.28));
+}
+
+.tp-completion-add-row .tp-tab-complete-ghost {
+  padding: 8px 12px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.tp-completion-add-row .tp-tab-complete-wrap .tp-completion-add-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
 .tp-completion-add-input {
   padding: 8px 12px;
   font-size: 14px;
@@ -2511,6 +2538,9 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
 
 .tp-completion-suggestion {
   appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex: 0 1 auto;
   max-width: 100%;
   padding: 7px 10px;
@@ -2748,3 +2778,56 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
 html[data-color-mode="dark"] .tp-profile-status.is-error {
   color: #f87462;
 }
+
+/* Shared Tab autocomplete (ghost + field wrap) */
+.tp-tab-complete-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: block;
+}
+
+.tp-tab-complete-ghost {
+  position: absolute;
+  inset: 0;
+  padding: inherit;
+  color: var(--tp-text-muted, #626f86);
+  opacity: 0;
+  font: inherit;
+  line-height: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+}
+
+.tp-tab-complete-wrap.has-ghost .tp-tab-complete-ghost {
+  opacity: 0.5;
+}
+
+.tp-tab-complete-field {
+  position: relative;
+  z-index: 1;
+}
+
+.tp-tab-hint {
+  margin-left: 4px;
+  padding: 1px 5px;
+  border: 1px solid var(--tp-border-strong, rgba(9, 30, 66, 0.31));
+  border-radius: 4px;
+  background: var(--tp-surface-subtle, #f1f2f4);
+  color: var(--tp-text-muted, #626f86);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.2;
+  vertical-align: middle;
+}
+
+.is-tab-target {
+  outline: 1px solid color-mix(in srgb, var(--tp-primary, #0c66e4) 55%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tp-primary, #0c66e4) 22%, transparent);
+}
+

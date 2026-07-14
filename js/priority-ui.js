@@ -5524,6 +5524,46 @@
     reasonInput.setAttribute('autocomplete', 'off');
     reasonInput.setAttribute('spellcheck', 'false');
 
+    var reasonTabCandidates = [];
+    var reasonTabComplete = null;
+    var reasonInputMount = reasonInput;
+    if (global.TabAutocomplete && typeof global.TabAutocomplete.wrapField === 'function') {
+      var reasonWrapped = global.TabAutocomplete.wrapField(reasonInput);
+      reasonInputMount = reasonWrapped.wrap;
+      reasonTabComplete = global.TabAutocomplete.bind({
+        field: reasonInput,
+        wrapEl: reasonWrapped.wrap,
+        ghostEl: reasonWrapped.ghost,
+        getCandidates: function () {
+          return reasonTabCandidates.slice();
+        },
+        isEnabled: function () {
+          return !reasonInput.disabled;
+        },
+        onProposal: function (proposal) {
+          var target =
+            proposal && proposal.candidate ? String(proposal.candidate.text || '') : '';
+          Array.prototype.forEach.call(
+            suggestionsList.querySelectorAll('.blocked-reason-suggestion'),
+            function (btn) {
+              var label = String(btn.dataset.reason || btn.textContent || '');
+              var on = !!(target && label === target);
+              btn.classList.toggle('is-tab-target', on);
+              var hint = btn.querySelector('.tp-tab-hint');
+              if (on && !hint) {
+                var kbd = document.createElement('kbd');
+                kbd.className = 'tp-tab-hint';
+                kbd.textContent = 'Tab';
+                btn.appendChild(kbd);
+              } else if (!on && hint) {
+                hint.remove();
+              }
+            }
+          );
+        }
+      });
+    }
+
     var suggestions = document.createElement('div');
     suggestions.className = 'blocked-reason-suggestions';
 
@@ -5540,7 +5580,7 @@
 
     reasonWrap.appendChild(selectedWrap);
     reasonWrap.appendChild(subtaskWrap);
-    reasonWrap.appendChild(reasonInput);
+    reasonWrap.appendChild(reasonInputMount);
     reasonWrap.appendChild(suggestions);
     field.appendChild(reasonWrap);
     el.appendChild(field);
@@ -5958,6 +5998,7 @@
       while (suggestionsList.firstChild) {
         suggestionsList.removeChild(suggestionsList.firstChild);
       }
+      reasonTabCandidates = ranked.slice();
       for (var i = 0; i < ranked.length; i++) {
         (function (optionLabel) {
           var btn = document.createElement('button');
@@ -5975,6 +6016,7 @@
           suggestionsList.appendChild(btn);
         })(ranked[i]);
       }
+      if (reasonTabComplete) reasonTabComplete.refresh();
       var wasHidden = suggestions.hidden;
       suggestions.hidden = ranked.length === 0;
       if (wasHidden !== suggestions.hidden) onLayoutChange();

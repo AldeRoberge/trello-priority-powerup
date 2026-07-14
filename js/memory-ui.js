@@ -226,10 +226,21 @@
       onLayoutChange();
     }
 
+    function memoryView() {
+      if (Mem && typeof Mem.legacyView === 'function') return Mem.legacyView(memory);
+      return {
+        summary: memory.summary || '',
+        facts: memory.facts || [],
+        boardSummary: (memory.shortTerm && memory.shortTerm.boardSummary) || '',
+        shortNotes: (memory.shortTerm && memory.shortTerm.notes) || []
+      };
+    }
+
     function updateProgress() {
       if (progressEl.hidden) return;
+      var view = memoryView();
       var fromAnswers = answeredCount;
-      var fromFacts = memory && memory.facts ? memory.facts.length : 0;
+      var fromFacts = view.facts ? view.facts.length : 0;
       var current = Math.max(fromAnswers, Math.min(fromFacts, TARGET_ANSWERS));
       if (memory && memory.onboardingComplete) {
         current = TARGET_ANSWERS;
@@ -248,23 +259,53 @@
     function renderSummary() {
       if (summaryEl.hidden) return;
       summaryEl.replaceChildren();
-      var label = el('div', 'memory-ui-summary-label', { text: 'M\u00e9moire actuelle' });
-      summaryEl.appendChild(label);
-      if (memory.summary) {
-        summaryEl.appendChild(el('p', 'memory-ui-summary-text', { text: memory.summary }));
+      var view = memoryView();
+
+      var ltLabel = el('div', 'memory-ui-summary-label', {
+        text: 'M\u00e9moire long terme'
+      });
+      summaryEl.appendChild(ltLabel);
+      if (view.summary) {
+        summaryEl.appendChild(el('p', 'memory-ui-summary-text', { text: view.summary }));
       }
-      if (memory.facts && memory.facts.length) {
+      if (view.facts && view.facts.length) {
         var ul = el('ul', 'memory-ui-facts');
-        memory.facts.slice(0, 8).forEach(function (f) {
+        view.facts.slice(0, 8).forEach(function (f) {
           ul.appendChild(
             el('li', null, { text: typeof f === 'string' ? f : f.text || '' })
           );
         });
         summaryEl.appendChild(ul);
-      } else if (!memory.summary) {
+      } else if (!view.summary) {
         summaryEl.appendChild(
-          el('p', 'memory-ui-summary-empty', { text: 'Aucun fait enregistr\u00e9 pour l\'instant.' })
+          el('p', 'memory-ui-summary-empty', {
+            text: 'Aucun fait durable pour l\'instant (nom, r\u00f4le, focus\u2026).'
+          })
         );
+      }
+
+      if (view.boardSummary || (view.shortNotes && view.shortNotes.length)) {
+        summaryEl.appendChild(
+          el('div', 'memory-ui-summary-label memory-ui-summary-label--stm', {
+            text: 'Contexte court terme'
+          })
+        );
+        if (view.boardSummary) {
+          summaryEl.appendChild(
+            el('p', 'memory-ui-summary-text memory-ui-summary-text--stm', {
+              text: view.boardSummary
+            })
+          );
+        }
+        if (view.shortNotes && view.shortNotes.length) {
+          var sul = el('ul', 'memory-ui-facts memory-ui-facts--stm');
+          view.shortNotes.slice(0, 6).forEach(function (f) {
+            sul.appendChild(
+              el('li', null, { text: typeof f === 'string' ? f : f.text || '' })
+            );
+          });
+          summaryEl.appendChild(sul);
+        }
       }
       onLayoutChange();
     }
@@ -441,48 +482,50 @@
     }
 
     function getBestAutocomplete(query) {
-      var ranked = rankSuggestions(query, allSuggestions);
-      if (!ranked.length) return null;
-      var top = ranked[0];
-      var q = normalizeMatch(query);
-      if (!q) return null;
-      // Only offer Tab when typed text is a prefix of the suggestion / its stem.
-      var nPlain = normalizeMatch(top.plain);
-      var nPrefix = normalizeMatch(prefixBeforeHole(top.item));
-      if (nPlain.indexOf(q) === 0 || (nPrefix && nPrefix.indexOf(q) === 0)) {
-        return top.item;
-      }
-      if (q.indexOf(nPrefix) === 0 && nPrefix.length > 0 && top.item !== query) {
-        return top.item;
-      }
-      return null;
+      var TA = global.TabAutocomplete;
+      if (!TA) return null;
+      var proposal = TA.propose(
+        query,
+        allSuggestions.map(function (s) {
+          return { text: plainSuggestion(s), raw: s };
+        })
+      );
+      if (!proposal || !proposal.candidate) return null;
+      return proposal.candidate.raw != null ? proposal.candidate.raw : proposal.candidate.text;
     }
 
     function updateGhost(query, best) {
-      // Ghost completion only for plain (no-hole) suggestions — hole width won't match.
+      var TA = global.TabAutocomplete;
+      if (!TA || !ghostEl) return;
+      var proposal = best
+        ? TA.propose(
+            query,
+            allSuggestions.map(function (s) {
+              return { text: plainSuggestion(s), raw: s };
+            })
+          )
+        : null;
       if (
-        !best ||
-        parseTemplate(best).some(function (s) {
+        proposal &&
+        proposal.candidate &&
+        parseTemplate(
+          proposal.candidate.raw != null ? String(proposal.candidate.raw) : proposal.candidate.text
+        ).some(function (s) {
           return s.type === 'hole';
         })
       ) {
+        // Hole templates: skip ghost (widths won't match dashed boxes).
         ghostEl.textContent = '';
         inputWrap.classList.remove('has-ghost');
         return;
       }
-      var plain = plainSuggestion(best);
-      var typed = String(query || '');
-      if (
-        normalizeMatch(plain).indexOf(normalizeMatch(typed)) === 0 &&
-        typed.length > 0 &&
-        typed.length < plain.length
-      ) {
-        ghostEl.textContent = plain;
+      if (proposal && proposal.ghost) {
+        ghostEl.textContent = proposal.ghost;
         inputWrap.classList.add('has-ghost');
-        return;
+      } else {
+        ghostEl.textContent = '';
+        inputWrap.classList.remove('has-ghost');
       }
-      ghostEl.textContent = '';
-      inputWrap.classList.remove('has-ghost');
     }
 
     function renderSuggestionChips(list, preferredTab) {
@@ -495,15 +538,13 @@
         return;
       }
       suggestionsEl.hidden = false;
-      items.forEach(function (label, index) {
+      items.forEach(function (label) {
         var chip = el('button', 'memory-ui-chip', { type: 'button' });
         appendChipSegments(chip, label);
         if (tabTarget && label === tabTarget) {
           chip.classList.add('is-tab-target');
-          var hint = el('kbd', 'memory-ui-chip-tab', { text: 'Tab' });
+          var hint = el('kbd', 'memory-ui-chip-tab tp-tab-hint', { text: 'Tab' });
           chip.appendChild(hint);
-        } else if (!tabTarget && index === 0 && getComposerText()) {
-          // no-op
         }
         chip.addEventListener('click', function () {
           if (pending) return;
@@ -516,9 +557,7 @@
 
     function refreshSuggestionFilter() {
       var query = getComposerRaw().replace(/\u200b/g, '');
-      // Prefer composer text without unfilled hole placeholders for matching.
       var typed = getComposerText() || query.replace(/\u2026/g, '').replace(/\.{3,}/g, '');
-      // If the only content is hole placeholders, treat as empty for filtering.
       if (!getComposerText() && input.querySelector('.memory-ui-hole')) {
         typed = prefixFromComposer();
       }
@@ -530,6 +569,7 @@
       tabTarget = best || '';
       updateGhost(typed, best);
       renderSuggestionChips(visible.length ? visible : typed ? [] : allSuggestions, best);
+      if (tabComplete) tabComplete.refresh();
     }
 
     function prefixFromComposer() {
@@ -553,41 +593,105 @@
       setSuggestions(list);
     }
 
+    function composerQuery() {
+      if (!getComposerText() && input.querySelector('.memory-ui-hole')) {
+        return prefixFromComposer();
+      }
+      return (
+        getComposerText() ||
+        getComposerRaw().replace(/\u200b/g, '').replace(/\u2026/g, '').replace(/\.{3,}/g, '')
+      );
+    }
+
     function acceptAutocomplete() {
-      var typed = getComposerText() || prefixFromComposer();
-      var best = getBestAutocomplete(typed) || tabTarget;
-      if (!best) return false;
-      var segments = parseTemplate(best);
-      var hasHole = segments.some(function (s) {
+      var TA = global.TabAutocomplete;
+      if (!TA) return false;
+      var typed = composerQuery();
+      var proposal = TA.propose(
+        typed,
+        allSuggestions.map(function (s) {
+          return { text: plainSuggestion(s), raw: s };
+        })
+      );
+      if (!proposal) return false;
+
+      var raw =
+        proposal.candidate.raw != null ? proposal.candidate.raw : proposal.candidate.text;
+      var hasHole = parseTemplate(String(raw)).some(function (s) {
         return s.type === 'hole';
       });
-      if (!hasHole) {
-        clearComposer();
-        input.appendChild(document.createTextNode(plainSuggestion(best)));
-        syncEmptyClass();
-        placeCaretAtEnd(input);
+
+      if (proposal.mode === 'full' && hasHole) {
+        var stem = prefixBeforeHole(raw);
+        var typedRaw = getComposerText();
+        var remainder = '';
+        if (
+          normalizeMatch(typedRaw).indexOf(normalizeMatch(stem.trim())) === 0 &&
+          typedRaw.length >= stem.trim().length
+        ) {
+          remainder = typedRaw.slice(stem.trim().length).replace(/^\s+/, '');
+        }
+        applySuggestion(raw);
+        var hole = input.querySelector('.memory-ui-hole');
+        if (hole && remainder) {
+          hole.textContent = remainder;
+          hole.classList.remove('is-empty');
+          placeCaretAtEnd(hole);
+        }
         refreshSuggestionFilter();
         return true;
       }
-      // Keep anything the user typed beyond the stem and drop it into the first hole.
-      var stem = prefixBeforeHole(best);
-      var typedRaw = getComposerText();
-      var remainder = '';
-      if (
-        normalizeMatch(typedRaw).indexOf(normalizeMatch(stem.trim())) === 0 &&
-        typedRaw.length >= stem.trim().length
-      ) {
-        remainder = typedRaw.slice(stem.trim().length).replace(/^\s+/, '');
-      }
-      applySuggestion(best);
-      var hole = input.querySelector('.memory-ui-hole');
-      if (hole && remainder) {
-        hole.textContent = remainder;
-        hole.classList.remove('is-empty');
-        placeCaretAtEnd(hole);
-      }
+
+      clearComposer();
+      input.appendChild(document.createTextNode(proposal.nextValue));
+      syncEmptyClass();
+      placeCaretAtEnd(input);
       refreshSuggestionFilter();
       return true;
+    }
+
+    var tabComplete = null;
+    if (global.TabAutocomplete) {
+      tabComplete = global.TabAutocomplete.bind({
+        field: input,
+        wrapEl: inputWrap,
+        ghostEl: ghostEl,
+        getCandidates: function () {
+          return allSuggestions.map(function (s) {
+            return { text: plainSuggestion(s), raw: s };
+          });
+        },
+        getValue: composerQuery,
+        setValue: function (v) {
+          clearComposer();
+          input.appendChild(document.createTextNode(v));
+          syncEmptyClass();
+          placeCaretAtEnd(input);
+        },
+        isEnabled: function () {
+          return !pending && !input.classList.contains('is-disabled');
+        },
+        onAccept: function (proposal) {
+          // Reuse hole-aware acceptor; signal handled.
+          var raw =
+            proposal.candidate.raw != null
+              ? proposal.candidate.raw
+              : proposal.candidate.text;
+          var hasHole = parseTemplate(String(raw)).some(function (s) {
+            return s.type === 'hole';
+          });
+          if (proposal.mode === 'full' && hasHole) {
+            acceptAutocomplete();
+            return true;
+          }
+          clearComposer();
+          input.appendChild(document.createTextNode(proposal.nextValue));
+          syncEmptyClass();
+          placeCaretAtEnd(input);
+          refreshSuggestionFilter();
+          return true;
+        }
+      });
     }
 
     function setComposerEnabled(on) {
@@ -684,7 +788,8 @@
     sendBtn.addEventListener('click', send);
 
     input.addEventListener('keydown', function (e) {
-      if (e.key === 'Tab') {
+      // Tab is handled by TabAutocomplete.bind when available.
+      if (e.key === 'Tab' && !global.TabAutocomplete) {
         if (acceptAutocomplete()) {
           e.preventDefault();
         }
@@ -800,7 +905,10 @@
       renderSummary();
       messagesEl.replaceChildren();
 
-      answeredCount = Math.min(TARGET_ANSWERS, (memory.facts && memory.facts.length) || 0);
+      answeredCount = Math.min(
+        TARGET_ANSWERS,
+        (memoryView().facts && memoryView().facts.length) || 0
+      );
       updateProgress();
 
       var opening =
