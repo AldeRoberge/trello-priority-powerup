@@ -6042,19 +6042,22 @@
         var startPrompt = cardTitle
           ? 'Commence l\'interview. Titre de la carte\u00a0: «\u00a0' +
             cardTitle +
-            '\u00a0». Premi\u00e8re question = POURQUOI faut-il faire \u00e7a (ancr\u00e9e au titre, pas «\u00a0cette t\u00e2che\u00a0», pas «\u00a0\u00e7a change quoi\u00a0»). Suggestions = meilleures raisons possibles.'
-          : 'Commence l\'interview de cette carte. Premi\u00e8re question = POURQUOI on fait \u00e7a.';
-        var fallbackOpening = cardTitle
-          ? 'Pourquoi faut-il ' +
-            (/^(faire|mettre|cr[eé]er|r[eé]diger|pr[eé]parer|lancer|acheter|obtenir)\b/i.test(
+            '\u00a0». Premi\u00e8re r\u00e9ponse = micro-tease snarky mais tr\u00e8s hopeful ancr\u00e9 au titre (hypoth\u00e8se joueuse, bienveillante) + question POURQUOI en langage naturel (pas «\u00a0cette t\u00e2che\u00a0», pas «\u00a0\u00e7a change quoi\u00a0», pas le template plat «\u00a0Pourquoi faut-il\u2026?\u00a0»). Style ex.\u00a0: «\u00a0Ooooh! Tu veux montrer \u00e0 tout le monde que tu connais ton affaire? ;) Dis-moi, pourquoi veux-tu\u2026? T\'inqui\u00e8te pas, je juge pas!\u00a0». Suggestions = meilleures raisons possibles.'
+          : 'Commence l\'interview de cette carte. Premi\u00e8re r\u00e9ponse = tease snarky-hopeful + POURQUOI on fait \u00e7a (pas le template plat «\u00a0Pourquoi faut-il\u2026?\u00a0»).';
+        var fallbackSubject = cardTitle
+          ? /^(faire|mettre|cr[eé]er|r[eé]diger|pr[eé]parer|lancer|acheter|obtenir|installer)\b/i.test(
               cardTitle
             )
-              ? cardTitle.charAt(0).toLocaleLowerCase('fr-FR') + cardTitle.slice(1)
-              : 'faire ' +
-                cardTitle.charAt(0).toLocaleLowerCase('fr-FR') +
-                cardTitle.slice(1)) +
-            '?'
-          : 'Pourquoi faut-il faire cette carte?';
+            ? cardTitle.charAt(0).toLocaleLowerCase('fr-FR') + cardTitle.slice(1)
+            : 'faire ' +
+              cardTitle.charAt(0).toLocaleLowerCase('fr-FR') +
+              cardTitle.slice(1)
+          : 'faire cette carte';
+        var fallbackOpening = cardTitle
+          ? 'Ooh ok! Dis-moi\u2026 pourquoi tu veux ' +
+            fallbackSubject +
+            '? Allez, sans filtre \u2014 je juge pas ;)'
+          : 'Ooh ok! Dis-moi\u2026 pourquoi tu veux faire cette carte? Allez, sans filtre \u2014 je juge pas ;)';
 
         var turn = await Agent.cardInterviewTurn(
           provider,
@@ -6595,7 +6598,13 @@
     }
 
     function onSend() {
-      sendUserMessage(input.value, { fromComposer: true });
+      var typed = (input.value || '').trim();
+      var selected = getSelectedSuggestionTexts();
+      var msg = typed;
+      if (typed && selected.length) {
+        msg = formatSelectedSuggestions(selected.concat([typed]));
+      }
+      sendUserMessage(msg, { fromComposer: true });
     }
 
     applyRefreshBtn.addEventListener('click', function () {
