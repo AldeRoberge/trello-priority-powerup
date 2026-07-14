@@ -20,6 +20,7 @@
       showUnassigned: false,
       autoMoveBlocked: true,
       autoMoveCompleted: true,
+      stateColors: null
     };
   }
 
@@ -50,6 +51,19 @@
       }
     }
 
+    var stateColors =
+      SM && typeof SM.normalizeStateColors === 'function'
+        ? SM.normalizeStateColors(raw.stateColors)
+        : Object.assign(
+            {},
+            (SM && SM.DEFAULT_STATE_COLORS) || {
+              gray: '#626F86',
+              yellow: '#E2B203',
+              red: '#E34935',
+              green: '#22A06B'
+            }
+          );
+
     return {
       initialized: !!raw.initialized,
       listCategories: listCategories,
@@ -57,7 +71,28 @@
       showUnassigned: !!raw.showUnassigned,
       autoMoveBlocked: raw.autoMoveBlocked !== false,
       autoMoveCompleted: raw.autoMoveCompleted !== false,
+      stateColors: stateColors
     };
+  }
+
+  function applySettingsColors(settings) {
+    var SM = matchApi();
+    if (!SM || typeof SM.applyStateColors !== 'function') return;
+    SM.applyStateColors(settings && settings.stateColors);
+  }
+
+  async function readStatutSettings(t) {
+    try {
+      var raw = await t.get('board', 'shared', STATUT_SETTINGS_KEY);
+      var settings = normalizeSettings(raw);
+      applySettingsColors(settings);
+      return settings;
+    } catch (err) {
+      console.error('StatutTrello.readStatutSettings failed', err);
+      var fallback = defaultSettings();
+      applySettingsColors(fallback);
+      return fallback;
+    }
   }
 
   async function getBoardLists(t) {

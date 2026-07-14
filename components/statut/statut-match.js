@@ -141,6 +141,78 @@
     _none: { color: '#626f86', icon: 'dot' },
   };
 
+  /**
+   * Section chrome bands (customizable in settings).
+   * gray = idle / backlog · yellow = in progress · red = blocked · green = done
+   */
+  var DEFAULT_STATE_COLORS = {
+    gray: '#626F86',
+    yellow: '#E2B203',
+    red: '#E34935',
+    green: '#22A06B'
+  };
+
+  var STATE_COLOR_KEYS = ['gray', 'yellow', 'red', 'green'];
+
+  var CATEGORY_STATE_BAND = {
+    triage: 'gray',
+    backlog: 'gray',
+    unstarted: 'gray',
+    started: 'yellow',
+    blocked: 'red',
+    completed: 'green',
+    canceled: 'gray',
+    _none: 'gray'
+  };
+
+  var activeStateColors = Object.assign({}, DEFAULT_STATE_COLORS);
+
+  function normalizeHexColor(value, fallback) {
+    var raw = typeof value === 'string' ? value.trim() : '';
+    if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw.toUpperCase();
+    if (/^#[0-9a-fA-F]{3}$/.test(raw)) {
+      return (
+        '#' +
+        raw.charAt(1) +
+        raw.charAt(1) +
+        raw.charAt(2) +
+        raw.charAt(2) +
+        raw.charAt(3) +
+        raw.charAt(3)
+      ).toUpperCase();
+    }
+    return fallback || '#626F86';
+  }
+
+  function normalizeStateColors(raw) {
+    var out = Object.assign({}, DEFAULT_STATE_COLORS);
+    if (!raw || typeof raw !== 'object') return out;
+    STATE_COLOR_KEYS.forEach(function (key) {
+      if (raw[key] != null) {
+        out[key] = normalizeHexColor(raw[key], DEFAULT_STATE_COLORS[key]);
+      }
+    });
+    return out;
+  }
+
+  function applyStateColors(raw) {
+    activeStateColors = normalizeStateColors(raw);
+    return getStateColors();
+  }
+
+  function getStateColors() {
+    return Object.assign({}, activeStateColors);
+  }
+
+  function stateBandForCategory(key) {
+    return CATEGORY_STATE_BAND[key] || 'gray';
+  }
+
+  function stateColorForCategory(key) {
+    var band = stateBandForCategory(key);
+    return activeStateColors[band] || DEFAULT_STATE_COLORS.gray;
+  }
+
   /** Prefer ≥0.7 similarity, or absolute distance ≤2 for short names. */
   var MIN_SIMILARITY = 0.7;
   var MAX_DISTANCE = 2;
@@ -292,13 +364,22 @@
   }
 
   function categoryStyle(key) {
-    return CATEGORY_STYLE[key] || CATEGORY_STYLE._none;
+    var base = CATEGORY_STYLE[key] || CATEGORY_STYLE._none;
+    var band = stateBandForCategory(key);
+    return {
+      color: stateColorForCategory(key),
+      icon: base.icon,
+      band: band
+    };
   }
 
   global.StatutMatch = {
     CATEGORIES: CATEGORIES,
     CATEGORY_KEYS: CATEGORY_KEYS,
     CATEGORY_STYLE: CATEGORY_STYLE,
+    DEFAULT_STATE_COLORS: DEFAULT_STATE_COLORS,
+    STATE_COLOR_KEYS: STATE_COLOR_KEYS,
+    CATEGORY_STATE_BAND: CATEGORY_STATE_BAND,
     MIN_SIMILARITY: MIN_SIMILARITY,
     MAX_DISTANCE: MAX_DISTANCE,
     normalizeName: normalizeName,
@@ -308,6 +389,12 @@
     isCategoryKey: isCategoryKey,
     categoryLabel: categoryLabel,
     categoryStyle: categoryStyle,
+    normalizeHexColor: normalizeHexColor,
+    normalizeStateColors: normalizeStateColors,
+    applyStateColors: applyStateColors,
+    getStateColors: getStateColors,
+    stateBandForCategory: stateBandForCategory,
+    stateColorForCategory: stateColorForCategory,
     detectFromLists: detectFromLists,
   };
 })(typeof window !== 'undefined' ? window : this);
