@@ -64,12 +64,12 @@ function isTrelloBadgeColor(name) {
 PU.applyColorScheme('blue');
 
 check(
-  'exactly three color schemes',
-  Object.keys(PU.COLOR_SCHEMES).length === 3 &&
-    PU.COLOR_SCHEME_OPTIONS.length === 3 &&
+  'exactly two color schemes',
+  Object.keys(PU.COLOR_SCHEMES).length === 2 &&
+    PU.COLOR_SCHEME_OPTIONS.length === 2 &&
     !!PU.COLOR_SCHEMES.blue &&
     !!PU.COLOR_SCHEMES.fire &&
-    !!PU.COLOR_SCHEMES.board
+    !PU.COLOR_SCHEMES.board
 );
 check('default scheme is classique blue', PU.DEFAULT_COLOR_SCHEME_KEY === 'blue');
 check(
@@ -84,10 +84,12 @@ check(
     PU.normalizeColorSchemeKey('green') === 'blue'
 );
 check(
+  'retired board scheme maps to fire',
+  PU.normalizeColorSchemeKey('board') === 'fire'
+);
+check(
   'french scheme labels',
-  PU.COLOR_SCHEMES.blue.label === 'Classique' &&
-    PU.COLOR_SCHEMES.fire.label === 'Feu' &&
-    PU.COLOR_SCHEMES.board.label === 'Tableau'
+  PU.COLOR_SCHEMES.blue.label === 'Classique' && PU.COLOR_SCHEMES.fire.label === 'Feu'
 );
 
 check(
@@ -191,27 +193,9 @@ check(
   })()
 );
 check(
-  'fire badge map is warm mono',
+  'fire badge map is polychrome trello',
   (function () {
     PU.applyColorScheme('fire');
-    var samples = PU.schemeBadgePreviewSamples();
-    PU.applyColorScheme('blue');
-    // Least → most: Optionnelle … Critique
-    return (
-      samples[0].color === 'light-gray' &&
-      samples[1].color === 'light-gray' &&
-      samples[2].color === 'light-gray' &&
-      samples[3].color === 'yellow' &&
-      samples[4].color === 'yellow' &&
-      samples[5].color === 'orange' &&
-      samples[6].color === 'red'
-    );
-  })()
-);
-check(
-  'board badge map is polychrome trello',
-  (function () {
-    PU.applyColorScheme('board');
     var samples = PU.schemeBadgePreviewSamples();
     PU.applyColorScheme('blue');
     // Least → most: Optionnelle … Critique

@@ -471,19 +471,8 @@
     6: TRELLO_BADGE_COLOR_MUTED
   };
 
-  // Feu: gray → orange → red; maps cleanly onto Trello named badge colors.
+  // Feu: polychrome Trello colors (gray → yellow → orange → blue → red).
   var FIRE_TIER_TRELLO_BADGE_COLORS = {
-    0: 'red',
-    1: 'orange',
-    2: 'yellow',
-    3: 'yellow',
-    4: TRELLO_BADGE_COLOR_MUTED,
-    5: TRELLO_BADGE_COLOR_MUTED,
-    6: TRELLO_BADGE_COLOR_MUTED
-  };
-
-  // Tableau: polychrome Trello board colors (gray → yellow → orange → blue → red).
-  var BOARD_TIER_TRELLO_BADGE_COLORS = {
     0: 'red',
     1: 'orange',
     2: 'yellow',
@@ -493,7 +482,7 @@
     6: TRELLO_BADGE_COLOR_MUTED
   };
 
-  // Classique (default) + Feu + Tableau (polychrome Trello colors).
+  // Exactly two schemes: Classique (default) + Feu.
   var COLOR_SCHEMES = {
     blue: buildColorSchemeFromHex(
       'blue',
@@ -505,23 +494,15 @@
     fire: buildColorSchemeFromHex(
       'fire',
       'Feu',
-      ['#F0EEE9', '#C9B8A6', '#E8A04A', '#E07030', '#C23B2A'],
-      '#C23B2A',
-      FIRE_TIER_TRELLO_BADGE_COLORS
-    ),
-    board: buildColorSchemeFromHex(
-      'board',
-      'Tableau',
       ['#E8EAED', '#F5E49A', '#FF9F1A', '#0079BF', '#EB5A46'],
       '#172B4D',
-      BOARD_TIER_TRELLO_BADGE_COLORS
+      FIRE_TIER_TRELLO_BADGE_COLORS
     )
   };
 
   var COLOR_SCHEME_OPTIONS = [
     { key: 'blue', label: COLOR_SCHEMES.blue.label, icon: 'ti-droplet' },
-    { key: 'fire', label: COLOR_SCHEMES.fire.label, icon: 'ti-flame' },
-    { key: 'board', label: COLOR_SCHEMES.board.label, icon: 'ti-layout-kanban' }
+    { key: 'fire', label: COLOR_SCHEMES.fire.label, icon: 'ti-flame' }
   ];
 
   var activeColorSchemeKey = DEFAULT_COLOR_SCHEME_KEY;
@@ -830,7 +811,8 @@
   }
 
   function normalizeColorSchemeKey(key) {
-    // Unknown / retired keys (vert, violet, amber, teal, …) fall back to Classique.
+    // Retired Tableau key → Feu; other unknown keys fall back to Classique.
+    if (key === 'board') return 'fire';
     return COLOR_SCHEMES[key] ? key : DEFAULT_COLOR_SCHEME_KEY;
   }
 
