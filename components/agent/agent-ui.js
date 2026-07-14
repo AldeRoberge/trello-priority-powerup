@@ -2211,13 +2211,122 @@
       face.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
+        if (face.classList.contains('is-frozen') || face.classList.contains('is-sick')) {
+          return;
+        }
+        var clicks = noteFaceSpinClick(face);
+        if (clicks >= FACE_SPIN_PUKE_AT) {
+          makeAssistantFaceSick(face);
+          return;
+        }
         spinAssistantFace(face);
       });
       return face;
     }
 
+    var FACE_SPIN_PUKE_AT = 5;
+    var FACE_SPIN_CLICK_WINDOW_MS = 3500;
+    var FACE_PUKE_COLORS = [
+      '#7dcc4a',
+      '#6bbf3a',
+      '#a8e063',
+      '#9acd32',
+      '#c5e17a',
+      '#5aa843',
+      '#8fd86a',
+      '#b8d96a',
+      '#d4e157'
+    ];
+
+    function noteFaceSpinClick(face) {
+      var now = Date.now();
+      if (!face._spinClickAt || now - face._spinClickAt > FACE_SPIN_CLICK_WINDOW_MS) {
+        face._spinClicks = 0;
+      }
+      face._spinClickAt = now;
+      face._spinClicks = (face._spinClicks || 0) + 1;
+      return face._spinClicks;
+    }
+
+    function prefersFaceReducedMotion() {
+      try {
+        return !!(
+          global.matchMedia &&
+          global.matchMedia('(prefers-reduced-motion: reduce)').matches
+        );
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function pukeAllOverScreen(face) {
+      var rect = face && face.getBoundingClientRect ? face.getBoundingClientRect() : null;
+      var ox = rect ? rect.left + rect.width / 2 : global.innerWidth / 2;
+      var oy = rect ? rect.top + rect.height * 0.72 : global.innerHeight / 2;
+      var layer = el('div', 'agent-face-puke-layer');
+      layer.setAttribute('aria-hidden', 'true');
+      var reduced = prefersFaceReducedMotion();
+      var count = reduced ? 10 : 64;
+      var reach = Math.max(global.innerWidth || 800, global.innerHeight || 600);
+      for (var i = 0; i < count; i++) {
+        var blob = el('span', 'agent-face-puke-blob');
+        var ang = Math.random() * Math.PI * 2;
+        var dist = 70 + Math.random() * reach * (reduced ? 0.28 : 0.62);
+        var dx = Math.cos(ang) * dist;
+        var dy = Math.sin(ang) * dist * 0.85 + 50 + Math.random() * 160;
+        var size = 5 + Math.random() * (reduced ? 12 : 20);
+        blob.style.setProperty('--px', ox + 'px');
+        blob.style.setProperty('--py', oy + 'px');
+        blob.style.setProperty('--dx', dx + 'px');
+        blob.style.setProperty('--dy', dy + 'px');
+        blob.style.setProperty('--size', size + 'px');
+        blob.style.setProperty('--rot', Math.floor(Math.random() * 360) + 'deg');
+        blob.style.animationDelay = Math.random() * 0.2 + 's';
+        blob.style.animationDuration = 0.85 + Math.random() * 1.05 + 's';
+        blob.style.background =
+          FACE_PUKE_COLORS[Math.floor(Math.random() * FACE_PUKE_COLORS.length)];
+        if (Math.random() > 0.55) {
+          blob.classList.add('agent-face-puke-blob--splatter');
+        }
+        layer.appendChild(blob);
+      }
+      document.body.appendChild(layer);
+      global.setTimeout(function () {
+        if (layer.parentNode) layer.parentNode.removeChild(layer);
+      }, reduced ? 1600 : 2800);
+    }
+
+    function makeAssistantFaceSick(face) {
+      if (!face || !face.classList || face.classList.contains('is-sick')) return;
+      clearFaceMotionClasses(face);
+      suppressFaceIdleMachine();
+      face._spinClicks = FACE_SPIN_PUKE_AT;
+      face.className = 'agent-face agent-face--surprised is-sick';
+      face.setAttribute('data-emotion', 'surprised');
+      applyFaceAura(face, 'green');
+      face.removeAttribute('data-think');
+      face.removeAttribute('data-listen');
+      face.setAttribute('title', 'Beurk\u2026');
+      var badge = face.querySelector('.agent-face-status');
+      if (badge) badge.remove();
+      var row = face.closest('.agent-msg--assistant');
+      if (row) {
+        row.setAttribute('data-emotion', 'surprised');
+        row.setAttribute('data-aura', 'green');
+      }
+      playBarfSound();
+      pukeAllOverScreen(face);
+    }
+
     function spinAssistantFace(face) {
-      if (!face || !face.classList || face.classList.contains('is-frozen')) return;
+      if (
+        !face ||
+        !face.classList ||
+        face.classList.contains('is-frozen') ||
+        face.classList.contains('is-sick')
+      ) {
+        return;
+      }
       if (face._agentSpinEnd) {
         face.removeEventListener('animationend', face._agentSpinEnd);
         face._agentSpinEnd = null;
@@ -2384,7 +2493,7 @@
 
     function faceSmLiveRow() {
       if (faceSm.row && faceSm.row.isConnected) {
-        var live = faceSm.row.querySelector('.agent-face:not(.is-frozen)');
+        var live = faceSm.row.querySelector('.agent-face:not(.is-frozen):not(.is-sick)');
         if (live) return faceSm.row;
       }
       var face = getLiveAssistantFace();
@@ -2571,6 +2680,7 @@
       );
       var face = row.querySelector('.agent-face');
       var isNew = !face;
+      if (face && face.classList.contains('is-sick')) return;
       if (!face) {
         face = createAssistantFace(mood, aura);
         row.insertBefore(face, row.firstChild);
@@ -2580,6 +2690,7 @@
       face.setAttribute('data-emotion', mood);
       applyFaceAura(face, aura);
       face.classList.remove('is-frozen');
+      face.classList.remove('is-sick');
       row.setAttribute('data-emotion', mood);
       row.setAttribute('data-aura', aura);
       if (mood !== 'thinking') {
@@ -2614,6 +2725,7 @@
           face.removeAttribute('title');
           var badge = face.querySelector('.agent-face-status');
           if (badge) badge.remove();
+          face.classList.remove('is-sick');
           face.classList.add('is-frozen');
         }
       );
@@ -2701,7 +2813,7 @@
 
     function getLiveAssistantFace() {
       var faces = messagesEl.querySelectorAll(
-        '.agent-msg--assistant .agent-face:not(.is-frozen)'
+        '.agent-msg--assistant .agent-face:not(.is-frozen):not(.is-sick)'
       );
       if (!faces.length) return null;
       return faces[faces.length - 1];
