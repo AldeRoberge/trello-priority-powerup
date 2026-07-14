@@ -369,19 +369,28 @@
 
     var listenBar = el('div', 'agent-listen-bar', {
       role: 'status',
-      'aria-live': 'polite'
+      'aria-live': 'polite',
+      'aria-label': 'À l\u2019écoute des changements'
     });
     listenBar.hidden = true;
-    var listenPulse = el('span', 'agent-listen-pulse');
-    listenPulse.setAttribute('aria-hidden', 'true');
-    for (var li = 0; li < 3; li++) {
-      listenPulse.appendChild(el('span', 'agent-listen-dot'));
-    }
-    var listenLabel = el('span', 'agent-listen-label', {
-      text: 'À l\u2019écoute des changements'
-    });
-    listenBar.appendChild(listenPulse);
-    listenBar.appendChild(listenLabel);
+    var listenIcon = el('span', 'agent-listen-icon agent-listen-icon--idle');
+    listenIcon.setAttribute('aria-hidden', 'true');
+    listenIcon.innerHTML =
+      '<svg class="agent-listen-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" focusable="false">' +
+      '<g class="agent-listen-icon-idle">' +
+      '<path class="agent-listen-wave agent-listen-wave--1" d="M4.5 5.2a4.2 4.2 0 0 1 0 5.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
+      '<path class="agent-listen-wave agent-listen-wave--2" d="M6.6 6.4a2.4 2.4 0 0 1 0 3.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
+      '<circle class="agent-listen-core" cx="9.6" cy="8" r="1.35" fill="currentColor"/>' +
+      '</g>' +
+      '<g class="agent-listen-icon-analyzing">' +
+      '<circle class="agent-listen-orbit" cx="8" cy="8" r="5.2" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-dasharray="8 22"/>' +
+      '<circle class="agent-listen-orbit-dot" cx="8" cy="2.8" r="1.15" fill="currentColor"/>' +
+      '</g>' +
+      '<g class="agent-listen-icon-offer">' +
+      '<path class="agent-listen-spark" d="M8 2.2l.95 3.1 3.25.05-2.6 1.95.95 3.1L8 8.5l-2.55 1.9.95-3.1-2.6-1.95 3.25-.05z" fill="currentColor"/>' +
+      '</g>' +
+      '</svg>';
+    listenBar.appendChild(listenIcon);
     chatPanel.appendChild(listenBar);
 
     var emptyState = el('div', 'agent-empty');
@@ -1206,31 +1215,78 @@
       }
     }
 
+    function ensureAudioCtx() {
+      var Ctx = global.AudioContext || global.webkitAudioContext;
+      if (!Ctx) return null;
+      if (!audioCtx) audioCtx = new Ctx();
+      if (audioCtx.state === 'suspended' && typeof audioCtx.resume === 'function') {
+        audioCtx.resume();
+      }
+      return audioCtx;
+    }
+
+    /** Sharp two-tone cue for ordinary assistant chat replies. */
     function playNewMessageSound() {
       try {
-        var Ctx = global.AudioContext || global.webkitAudioContext;
-        if (!Ctx) return;
-        if (!audioCtx) audioCtx = new Ctx();
-        if (audioCtx.state === 'suspended' && typeof audioCtx.resume === 'function') {
-          audioCtx.resume();
-        }
-        var t0 = audioCtx.currentTime;
+        var ctx = ensureAudioCtx();
+        if (!ctx) return;
+        var t0 = ctx.currentTime;
         var tones = [
           { freq: 587.33, delay: 0, dur: 0.28 },
           { freq: 880, delay: 0.09, dur: 0.34 }
         ];
         tones.forEach(function (tone) {
-          var osc = audioCtx.createOscillator();
-          var gain = audioCtx.createGain();
+          var osc = ctx.createOscillator();
+          var gain = ctx.createGain();
           osc.type = 'sine';
           osc.frequency.setValueAtTime(tone.freq, t0 + tone.delay);
           gain.gain.setValueAtTime(0.0001, t0 + tone.delay);
           gain.gain.exponentialRampToValueAtTime(0.055, t0 + tone.delay + 0.02);
           gain.gain.exponentialRampToValueAtTime(0.0001, t0 + tone.delay + tone.dur);
           osc.connect(gain);
-          gain.connect(audioCtx.destination);
+          gain.connect(ctx.destination);
           osc.start(t0 + tone.delay);
           osc.stop(t0 + tone.delay + tone.dur + 0.02);
+        });
+      } catch (e) {
+        /* ignore audio failures */
+      }
+    }
+
+    /** Soft filtered pad for proactive AI suggestion offers. */
+    function playSuggestionSound() {
+      try {
+        var ctx = ensureAudioCtx();
+        if (!ctx) return;
+        var t0 = ctx.currentTime;
+        var filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(920, t0);
+        filter.Q.setValueAtTime(0.7, t0);
+        filter.connect(ctx.destination);
+        var tones = [
+          { freq: 246.94, delay: 0, dur: 1.05, peak: 0.018 },
+          { freq: 369.99, delay: 0.12, dur: 1.15, peak: 0.014 },
+          { freq: 493.88, delay: 0.28, dur: 1.25, peak: 0.01 }
+        ];
+        tones.forEach(function (tone) {
+          var osc = ctx.createOscillator();
+          var gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(tone.freq, t0 + tone.delay);
+          gain.gain.setValueAtTime(0.0001, t0 + tone.delay);
+          gain.gain.exponentialRampToValueAtTime(
+            tone.peak,
+            t0 + tone.delay + 0.18
+          );
+          gain.gain.exponentialRampToValueAtTime(
+            0.0001,
+            t0 + tone.delay + tone.dur
+          );
+          osc.connect(gain);
+          gain.connect(filter);
+          osc.start(t0 + tone.delay);
+          osc.stop(t0 + tone.delay + tone.dur + 0.05);
         });
       } catch (e) {
         /* ignore audio failures */
@@ -1244,7 +1300,10 @@
     function announceAssistantArrival(options) {
       options = options || {};
       if (!settleReady) return;
-      if (options.sound !== false) playNewMessageSound();
+      if (options.sound !== false) {
+        if (options.soundKind === 'suggestion') playSuggestionSound();
+        else playNewMessageSound();
+      }
       if (options.unread === false) return;
       if (!isAssistantExpanded()) {
         unreadAssistant += 1;
@@ -1286,16 +1345,20 @@
     function setListenBarState(mode) {
       var configured = Agent.isConfigured(provider);
       var show = configured && listeningActive && !interviewActive;
+      var label =
+        mode === 'analyzing'
+          ? 'Analyse des changements'
+          : mode === 'offer'
+            ? 'Suggestion en attente'
+            : 'À l\u2019écoute des changements';
       listenBar.hidden = !show;
       listenBar.classList.toggle('is-analyzing', mode === 'analyzing');
       listenBar.classList.toggle('is-offer', mode === 'offer');
-      if (mode === 'analyzing') {
-        listenLabel.textContent = 'Analyse des changements\u2026';
-      } else if (mode === 'offer') {
-        listenLabel.textContent = 'Suggestion en attente';
-      } else {
-        listenLabel.textContent = 'À l\u2019écoute des changements';
-      }
+      listenBar.setAttribute('aria-label', label);
+      listenIcon.className =
+        'agent-listen-icon agent-listen-icon--' +
+        (mode === 'analyzing' ? 'analyzing' : mode === 'offer' ? 'offer' : 'idle');
+      listenIcon.title = label;
       syncApplySummary();
       notifyLayout();
     }
@@ -1360,7 +1423,7 @@
         onOfferDecline(item, row);
       });
 
-      announceAssistantArrival({ sound: true });
+      announceAssistantArrival({ sound: true, soundKind: 'suggestion' });
       notifyLayout();
       return row;
     }

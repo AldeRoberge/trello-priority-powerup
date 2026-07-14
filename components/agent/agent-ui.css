@@ -1036,22 +1036,24 @@ html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-4 {
 }
 
 .tp-page--priority .agent-listen-bar {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  align-self: flex-start;
+  gap: 0;
   margin: 0 0 8px;
-  padding: 7px 10px;
-  border-radius: 10px;
+  padding: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
   border: 1px solid color-mix(in srgb, #1f7a68 22%, var(--tp-border));
   background: linear-gradient(
     120deg,
     color-mix(in srgb, #1f7a68 10%, var(--tp-surface)) 0%,
     color-mix(in srgb, #2a6f9e 8%, var(--tp-surface)) 100%
   );
-  color: var(--tp-text-muted);
-  font-size: 11px;
-  line-height: 1.35;
-  transition: border-color 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+  color: #1f7a68;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease, opacity 0.2s ease;
 }
 
 .tp-page--priority .agent-listen-bar[hidden] {
@@ -1060,59 +1062,112 @@ html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-4 {
 
 .tp-page--priority .agent-listen-bar.is-analyzing {
   border-color: color-mix(in srgb, #2a6f9e 40%, var(--tp-border));
-  color: var(--tp-text);
+  color: #2a6f9e;
 }
 
 .tp-page--priority .agent-listen-bar.is-offer {
   border-color: color-mix(in srgb, #1f7a68 48%, var(--tp-border));
-  color: var(--tp-text);
+  color: #1f7a68;
 }
 
-.tp-page--priority .agent-listen-pulse {
+.tp-page--priority .agent-listen-icon {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  height: 10px;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: inherit;
 }
 
-.tp-page--priority .agent-listen-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #1f7a68;
-  opacity: 0.45;
-  animation: agent-listen-wave 1.2s ease-in-out infinite;
+.tp-page--priority .agent-listen-icon-svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  overflow: visible;
 }
 
-.tp-page--priority .agent-listen-dot:nth-child(2) {
-  animation-delay: 0.15s;
+.tp-page--priority .agent-listen-icon-idle,
+.tp-page--priority .agent-listen-icon-analyzing,
+.tp-page--priority .agent-listen-icon-offer {
+  display: none;
 }
 
-.tp-page--priority .agent-listen-dot:nth-child(3) {
-  animation-delay: 0.3s;
+.tp-page--priority .agent-listen-icon--idle .agent-listen-icon-idle,
+.tp-page--priority .agent-listen-icon--analyzing .agent-listen-icon-analyzing,
+.tp-page--priority .agent-listen-icon--offer .agent-listen-icon-offer {
+  display: inline;
 }
 
-.tp-page--priority .agent-listen-bar.is-analyzing .agent-listen-dot {
-  background: #2a6f9e;
+.tp-page--priority .agent-listen-icon--idle .agent-listen-wave--1 {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: agent-listen-wave-soft 1.8s ease-in-out infinite;
 }
 
-@keyframes agent-listen-wave {
+.tp-page--priority .agent-listen-icon--idle .agent-listen-wave--2 {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: agent-listen-wave-soft 1.8s ease-in-out infinite 0.28s;
+}
+
+.tp-page--priority .agent-listen-icon--idle .agent-listen-core {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: agent-listen-core-pulse 1.8s ease-in-out infinite;
+}
+
+.tp-page--priority .agent-listen-icon--analyzing .agent-listen-icon-analyzing {
+  transform-box: view-box;
+  transform-origin: 8px 8px;
+  animation: agent-listen-spin 1.1s linear infinite;
+}
+
+.tp-page--priority .agent-listen-icon--offer .agent-listen-spark {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: agent-listen-sparkle 1.6s ease-in-out infinite;
+}
+
+@keyframes agent-listen-wave-soft {
   0%,
   100% {
-    transform: translateY(0);
-    opacity: 0.35;
+    opacity: 0.28;
+    transform: scale(0.92);
   }
   50% {
-    transform: translateY(-2px);
     opacity: 1;
+    transform: scale(1.06);
   }
 }
 
-.tp-page--priority .agent-listen-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+@keyframes agent-listen-core-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes agent-listen-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes agent-listen-sparkle {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.88) rotate(-8deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.12) rotate(8deg);
+  }
 }
 
 .tp-page--priority .agent-msg--offer {
