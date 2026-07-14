@@ -129,6 +129,18 @@
     CATEGORY_BY_KEY[c.key] = c;
   });
 
+  /** UI colors + icon keys for category chips (card popup). */
+  var CATEGORY_STYLE = {
+    triage: { color: '#5e6ad2', icon: 'inbox' },
+    backlog: { color: '#6b778c', icon: 'layers' },
+    unstarted: { color: '#44546f', icon: 'circle' },
+    started: { color: '#e2b203', icon: 'hammer' },
+    blocked: { color: '#e34935', icon: 'ban' },
+    completed: { color: '#22a06b', icon: 'check' },
+    canceled: { color: '#8590a2', icon: 'x' },
+    _none: { color: '#626f86', icon: 'dot' },
+  };
+
   /** Prefer ≥0.7 similarity, or absolute distance ≤2 for short names. */
   var MIN_SIMILARITY = 0.7;
   var MAX_DISTANCE = 2;
@@ -279,9 +291,14 @@
     };
   }
 
+  function categoryStyle(key) {
+    return CATEGORY_STYLE[key] || CATEGORY_STYLE._none;
+  }
+
   global.StatutMatch = {
     CATEGORIES: CATEGORIES,
     CATEGORY_KEYS: CATEGORY_KEYS,
+    CATEGORY_STYLE: CATEGORY_STYLE,
     MIN_SIMILARITY: MIN_SIMILARITY,
     MAX_DISTANCE: MAX_DISTANCE,
     normalizeName: normalizeName,
@@ -290,6 +307,7 @@
     matchListToCategory: matchListToCategory,
     isCategoryKey: isCategoryKey,
     categoryLabel: categoryLabel,
+    categoryStyle: categoryStyle,
     detectFromLists: detectFromLists,
   };
 })(typeof window !== 'undefined' ? window : this);

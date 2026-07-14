@@ -47,6 +47,7 @@
   var FORMULA_STORAGE_KEY = 'trello-priority-powerup/formula';
   var COLOR_SCHEME_STORAGE_KEY = 'trello-priority-powerup/color-scheme';
   var SECTION_COLLAPSE_STORAGE_KEY = 'trello-priority-powerup/section-collapse';
+  var STATUT_SHOW_UNASSIGNED_KEY = 'trello-priority-powerup/statut-show-unassigned';
   var SECTION_COLLAPSE_KEYS = ['statut', 'priority', 'graph', 'progress', 'due', 'blocked', 'chat'];
   var DEFAULT_COLOR_SCHEME_KEY = 'blue';
   var SCORE_MAX = 10;
@@ -4061,18 +4062,149 @@
     };
   }
 
+  function loadShowUnassignedStatuts() {
+    try {
+      if (typeof localStorage === 'undefined') return false;
+      return localStorage.getItem(STATUT_SHOW_UNASSIGNED_KEY) === '1';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function saveShowUnassignedStatuts(on) {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.setItem(STATUT_SHOW_UNASSIGNED_KEY, on ? '1' : '0');
+    } catch (e) { /* ignore */ }
+  }
+
+  function statutCategoryStyle(key) {
+    if (
+      typeof global.StatutMatch !== 'undefined' &&
+      typeof global.StatutMatch.categoryStyle === 'function'
+    ) {
+      return global.StatutMatch.categoryStyle(key);
+    }
+    return { color: '#626f86', icon: 'dot' };
+  }
+
+  function createStatutIcon(iconKey) {
+    var ns = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 16 16');
+    svg.setAttribute('width', '14');
+    svg.setAttribute('height', '14');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.classList.add('statut-list-option-icon');
+
+    function path(d, attrs) {
+      var p = document.createElementNS(ns, 'path');
+      p.setAttribute('d', d);
+      p.setAttribute('fill', 'none');
+      p.setAttribute('stroke', 'currentColor');
+      p.setAttribute('stroke-width', '1.6');
+      p.setAttribute('stroke-linecap', 'round');
+      p.setAttribute('stroke-linejoin', 'round');
+      if (attrs) {
+        Object.keys(attrs).forEach(function (k) {
+          p.setAttribute(k, attrs[k]);
+        });
+      }
+      return p;
+    }
+
+    function circle(cx, cy, r, attrs) {
+      var c = document.createElementNS(ns, 'circle');
+      c.setAttribute('cx', String(cx));
+      c.setAttribute('cy', String(cy));
+      c.setAttribute('r', String(r));
+      c.setAttribute('fill', 'none');
+      c.setAttribute('stroke', 'currentColor');
+      c.setAttribute('stroke-width', '1.6');
+      if (attrs) {
+        Object.keys(attrs).forEach(function (k) {
+          c.setAttribute(k, attrs[k]);
+        });
+      }
+      return c;
+    }
+
+    function line(x1, y1, x2, y2) {
+      var l = document.createElementNS(ns, 'line');
+      l.setAttribute('x1', String(x1));
+      l.setAttribute('y1', String(y1));
+      l.setAttribute('x2', String(x2));
+      l.setAttribute('y2', String(y2));
+      l.setAttribute('stroke', 'currentColor');
+      l.setAttribute('stroke-width', '1.6');
+      l.setAttribute('stroke-linecap', 'round');
+      return l;
+    }
+
+    if (iconKey === 'check') {
+      svg.appendChild(path('M3.2 8.2 L6.5 11.4 L12.8 4.4'));
+    } else if (iconKey === 'ban') {
+      svg.appendChild(circle(8, 8, 5.5));
+      svg.appendChild(line(4.2, 4.2, 11.8, 11.8));
+    } else if (iconKey === 'hammer') {
+      // Claw hammer: diagonal handle + rectangular head
+      svg.appendChild(
+        path('M6.8 7.6 L12.8 13.6', { 'stroke-width': '2' })
+      );
+      svg.appendChild(
+        path('M2.4 5.2 L8.2 2.8 L9.6 5.8 L3.8 8.2 Z', {
+          fill: 'currentColor',
+          stroke: 'none',
+        })
+      );
+      svg.appendChild(
+        path('M8.2 2.8 L10.4 1.8 L12 5.2 L9.6 5.8 Z', {
+          fill: 'currentColor',
+          stroke: 'none',
+        })
+      );
+    } else if (iconKey === 'inbox') {
+      svg.appendChild(path('M2.5 6.5 L8 2.8 L13.5 6.5 V13 H2.5 Z'));
+      svg.appendChild(path('M2.5 6.5 H13.5'));
+    } else if (iconKey === 'layers') {
+      svg.appendChild(path('M2.5 10.5 L8 13.5 L13.5 10.5'));
+      svg.appendChild(path('M2.5 7.5 L8 10.5 L13.5 7.5'));
+      svg.appendChild(path('M2.5 4.5 L8 7.5 L13.5 4.5 L8 1.5 Z'));
+    } else if (iconKey === 'circle') {
+      svg.appendChild(circle(8, 8, 5));
+    } else if (iconKey === 'x') {
+      svg.appendChild(line(4.5, 4.5, 11.5, 11.5));
+      svg.appendChild(line(11.5, 4.5, 4.5, 11.5));
+    } else {
+      // Dot / unassigned
+      var d = document.createElementNS(ns, 'circle');
+      d.setAttribute('cx', '8');
+      d.setAttribute('cy', '8');
+      d.setAttribute('r', '2.4');
+      d.setAttribute('fill', 'currentColor');
+      svg.appendChild(d);
+    }
+    return svg;
+  }
+
   function createStatutField(config) {
     var el = config.el;
     var onChange = config.onChange || function () {};
     var onLayoutChange = config.onLayoutChange || function () {};
     var onSelectList =
       typeof config.onSelectList === 'function' ? config.onSelectList : null;
+    var onOpenSettings =
+      typeof config.onOpenSettings === 'function' ? config.onOpenSettings : null;
     var bodyId = 'statut-section-body-' + Math.random().toString(36).slice(2, 9);
     var currentListId = config.listId ? String(config.listId) : '';
     var lists = Array.isArray(config.lists) ? config.lists.slice() : [];
     var settings = config.settings || null;
     var busy = false;
     var authBusy = false;
+    var showUnassigned =
+      config.showUnassigned != null
+        ? !!config.showUnassigned
+        : loadShowUnassignedStatuts();
     var onAuthorize =
       typeof config.onAuthorize === 'function' ? config.onAuthorize : null;
     var authReason = config.authReason || (config.needsAuth ? 'not-authorized' : '');
@@ -4137,9 +4269,47 @@
     emptyEl.hidden = true;
     emptyEl.textContent = 'Aucune liste trouvée sur ce tableau.';
 
+    var footer = document.createElement('div');
+    footer.className = 'statut-footer';
+
+    var unassignedToggle = document.createElement('label');
+    unassignedToggle.className = 'statut-unassigned-toggle';
+    var unassignedCheckbox = document.createElement('input');
+    unassignedCheckbox.type = 'checkbox';
+    unassignedCheckbox.checked = showUnassigned;
+    unassignedCheckbox.setAttribute('aria-label', 'Show unassigned statuses');
+    var unassignedLabel = document.createElement('span');
+    unassignedLabel.textContent = 'Show unassigned statuses';
+    unassignedToggle.appendChild(unassignedCheckbox);
+    unassignedToggle.appendChild(unassignedLabel);
+
+    var settingsBtn = document.createElement('button');
+    settingsBtn.type = 'button';
+    settingsBtn.className = 'tp-button tp-button--secondary statut-settings-button';
+    settingsBtn.textContent = 'Customize statuses';
+    settingsBtn.hidden = !showUnassigned || !onOpenSettings;
+    settingsBtn.addEventListener('click', function () {
+      if (!onOpenSettings) return;
+      Promise.resolve(onOpenSettings()).catch(function (err) {
+        console.error('Statut open settings failed', err);
+      });
+    });
+
+    unassignedCheckbox.addEventListener('change', function () {
+      showUnassigned = !!unassignedCheckbox.checked;
+      saveShowUnassignedStatuts(showUnassigned);
+      settingsBtn.hidden = !showUnassigned || !onOpenSettings;
+      renderOptions();
+      onLayoutChange();
+    });
+
+    footer.appendChild(unassignedToggle);
+    footer.appendChild(settingsBtn);
+
     body.appendChild(authBox);
     body.appendChild(groupsEl);
     body.appendChild(emptyEl);
+    body.appendChild(footer);
 
     function authMessage(reason) {
       if (reason === 'no-app-key') {
@@ -4190,53 +4360,98 @@
         typeof global.StatutTrello !== 'undefined' &&
         global.StatutTrello.groupListsByCategory
       ) {
-        return global.StatutTrello.groupListsByCategory(lists, settings);
+        return global.StatutTrello.groupListsByCategory(lists, settings, {
+          includeUnassigned: showUnassigned,
+        });
       }
       return lists.length
         ? [{ key: '_none', label: 'Listes', lists: lists }]
         : [];
     }
 
+    /** Keep the active list visible even when unassigned chip row is hidden. */
+    function ensureCurrentListVisible(groups) {
+      if (!currentListId || showUnassigned) return groups;
+      var found = false;
+      for (var gi = 0; gi < groups.length; gi++) {
+        for (var li = 0; li < groups[gi].lists.length; li++) {
+          if (String(groups[gi].lists[li].id) === String(currentListId)) {
+            found = true;
+            break;
+          }
+        }
+        if (found) break;
+      }
+      if (found) return groups;
+
+      var current = null;
+      for (var i = 0; i < lists.length; i++) {
+        if (String(lists[i].id) === String(currentListId)) {
+          current = lists[i];
+          break;
+        }
+      }
+      if (!current) return groups;
+
+      var style = statutCategoryStyle('_none');
+      var next = groups.slice();
+      next.push({
+        key: '_none',
+        label: 'Non assigné',
+        lists: [current],
+        color: style.color,
+        icon: style.icon,
+      });
+      return next;
+    }
+
     function renderOptions() {
       groupsEl.replaceChildren();
-      var groups = buildGroups();
-      emptyEl.hidden = groups.length > 0;
+      var groups = ensureCurrentListVisible(buildGroups());
+      emptyEl.hidden = lists.length > 0;
+      settingsBtn.hidden = !showUnassigned || !onOpenSettings;
+
+      if (!groups.length) return;
+
+      var chipRow = document.createElement('div');
+      chipRow.className = 'statut-chip-row';
+      chipRow.setAttribute('role', 'group');
+      chipRow.setAttribute('aria-label', 'Statuts');
+
       groups.forEach(function (group) {
-        var groupEl = document.createElement('div');
-        groupEl.className = 'statut-group';
-        groupEl.dataset.category = group.key;
-
-        var heading = document.createElement('div');
-        heading.className = 'statut-group-label';
-        heading.textContent = group.label;
-        groupEl.appendChild(heading);
-
-        var listEl = document.createElement('div');
-        listEl.className = 'statut-list-options';
-        listEl.setAttribute('role', 'group');
-        listEl.setAttribute('aria-label', group.label);
+        var style = statutCategoryStyle(group.key);
+        var color = group.color || style.color;
+        var iconKey = group.icon || style.icon;
 
         group.lists.forEach(function (list) {
           var btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'statut-list-option';
           btn.dataset.listId = list.id;
+          btn.dataset.category = group.key;
           btn.setAttribute('role', 'option');
+          btn.style.setProperty('--statut-color', color);
           var selected = String(list.id) === String(currentListId);
           btn.classList.toggle('is-selected', selected);
           btn.setAttribute('aria-selected', selected ? 'true' : 'false');
           btn.disabled = busy;
-          btn.textContent = list.name;
+          btn.title = group.label + ' — ' + list.name;
+
+          btn.appendChild(createStatutIcon(iconKey));
+          var nameSpan = document.createElement('span');
+          nameSpan.className = 'statut-list-option-name';
+          nameSpan.textContent = list.name;
+          btn.appendChild(nameSpan);
+
           btn.addEventListener('click', function () {
             if (busy || String(list.id) === String(currentListId)) return;
             selectList(list.id);
           });
-          listEl.appendChild(btn);
+          chipRow.appendChild(btn);
         });
-
-        groupEl.appendChild(listEl);
-        groupsEl.appendChild(groupEl);
       });
+
+      groupsEl.appendChild(chipRow);
     }
 
     function selectList(listId) {
@@ -4314,6 +4529,11 @@
           setAuthHint(next.authReason);
         } else if (next.needsAuth != null) {
           setAuthHint(next.needsAuth ? 'not-authorized' : '');
+        }
+        if (next.showUnassigned != null) {
+          showUnassigned = !!next.showUnassigned;
+          unassignedCheckbox.checked = showUnassigned;
+          saveShowUnassignedStatuts(showUnassigned);
         }
         renderOptions();
         collapse.refreshSummary();

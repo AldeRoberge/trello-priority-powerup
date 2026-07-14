@@ -293,6 +293,11 @@
   font-size: 13px;
 }
 
+/* .tp-link sets display:inline-block; keep [hidden] winning. */
+.tp-page--priority .agent-empty-config[hidden] {
+  display: none !important;
+}
+
 .tp-page--priority .agent-messages {
   display: flex;
   flex-direction: column;

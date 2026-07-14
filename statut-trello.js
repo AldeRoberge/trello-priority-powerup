@@ -293,20 +293,40 @@
     return Object.assign({}, move, { sideEffects: side });
   }
 
-  /** Group lists by category key for UI (uncategorized → '_none'). */
-  function groupListsByCategory(lists, settings) {
+  /**
+   * Group lists by category key for UI (uncategorized → '_none').
+   * @param {object} [options]
+   * @param {boolean} [options.includeUnassigned=true] Include Non assigné group.
+   */
+  function groupListsByCategory(lists, settings, options) {
+    options = options || {};
+    var includeUnassigned = options.includeUnassigned !== false;
     var SM = matchApi();
     var categories = SM ? SM.CATEGORIES.slice() : [];
     var groups = [];
     var byKey = {};
 
     categories.forEach(function (cat) {
-      var group = { key: cat.key, label: cat.label, lists: [] };
+      var style = SM && SM.categoryStyle ? SM.categoryStyle(cat.key) : null;
+      var group = {
+        key: cat.key,
+        label: cat.label,
+        lists: [],
+        color: style ? style.color : null,
+        icon: style ? style.icon : null,
+      };
       byKey[cat.key] = group;
       groups.push(group);
     });
 
-    var uncategorized = { key: '_none', label: 'Non assigné', lists: [] };
+    var noneStyle = SM && SM.categoryStyle ? SM.categoryStyle('_none') : null;
+    var uncategorized = {
+      key: '_none',
+      label: 'Non assigné',
+      lists: [],
+      color: noneStyle ? noneStyle.color : null,
+      icon: noneStyle ? noneStyle.icon : null,
+    };
     byKey._none = uncategorized;
 
     var cats = (settings && settings.listCategories) || {};
@@ -316,7 +336,9 @@
       else uncategorized.lists.push(list);
     });
 
-    if (uncategorized.lists.length) groups.push(uncategorized);
+    if (includeUnassigned && uncategorized.lists.length) {
+      groups.push(uncategorized);
+    }
     return groups.filter(function (g) {
       return g.lists.length > 0;
     });

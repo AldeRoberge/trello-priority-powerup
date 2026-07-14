@@ -246,6 +246,13 @@
             onAuthorize: function () {
               return PriorityTrello.authorizeRestForAutoSort(t);
             },
+            onOpenSettings: function () {
+              return t.popup({
+                title: 'Paramètres de priorité',
+                url: PriorityTrello.pageUrl('./settings.html'),
+                height: 720,
+              });
+            },
             onSelectList: function (listId) {
               return StatutTrello.selectCardStatut(t, listId).then(function (result) {
                 if (result && result.ok && variant && result.sideEffects) {

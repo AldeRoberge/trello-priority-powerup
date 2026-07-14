@@ -512,9 +512,17 @@ body {
 }
 
 .statut-groups {
+  display: block;
+  width: 100%;
+}
+
+.statut-chip-row {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
 }
 
 .statut-group-label {
@@ -534,30 +542,78 @@ body {
 
 .statut-list-option {
   appearance: none;
-  border: 1px solid var(--tp-border, rgba(9, 30, 66, 0.14));
-  background: var(--tp-surface, transparent);
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  border: 1px solid color-mix(in srgb, var(--statut-color, #626f86) 45%, var(--tp-border, rgba(9, 30, 66, 0.14)));
+  background: color-mix(in srgb, var(--statut-color, #626f86) 12%, var(--tp-surface, transparent));
   color: var(--tp-text, inherit);
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 13px;
+  border-radius: 8px;
+  padding: 5px 10px 5px 8px;
+  font-size: 12px;
   line-height: 1.2;
   cursor: pointer;
   text-align: left;
 }
 
+.statut-list-option-icon {
+  flex: 0 0 auto;
+  color: var(--statut-color, #626f86);
+}
+
+.statut-list-option-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 11rem;
+}
+
 .statut-list-option:hover:not(:disabled) {
-  background: var(--tp-surface-hover, rgba(9, 30, 66, 0.06));
+  background: color-mix(in srgb, var(--statut-color, #626f86) 22%, var(--tp-surface, transparent));
 }
 
 .statut-list-option.is-selected {
-  border-color: var(--tp-primary, #0c66e4);
-  background: color-mix(in srgb, var(--tp-primary, #0c66e4) 14%, transparent);
+  border-color: var(--statut-color, var(--tp-primary, #0c66e4));
+  background: color-mix(in srgb, var(--statut-color, #0c66e4) 28%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--statut-color, #0c66e4) 40%, transparent);
   font-weight: 600;
 }
 
 .statut-list-option:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.statut-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 10px;
+}
+
+.statut-unassigned-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--tp-text-muted, var(--text-muted, #626f86));
+  cursor: pointer;
+  user-select: none;
+}
+
+.statut-unassigned-toggle input {
+  margin: 0;
+}
+
+.statut-settings-button {
+  display: inline-flex;
+  width: auto;
+  max-width: 100%;
+  font-size: 12px;
+  padding: 4px 10px;
 }
 
 .field--priority {

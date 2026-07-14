@@ -522,9 +522,18 @@
       syncPresetButtons();
       if (collapse && collapse.refreshSummary) collapse.refreshSummary();
       updateComposerEnabled();
-      emptyState.classList.toggle('is-hidden', history.length > 0);
-      // Hide "Configurer le fournisseur" once credentials are in place (settings gear remains).
-      emptyConfigBtn.hidden = Agent.isConfigured(provider);
+      // Empty CTA only for unset providers; chat history or a configured provider hide it.
+      // (.tp-link { display:inline-block } would otherwise override the hidden attribute.)
+      var configured = Agent.isConfigured(provider);
+      emptyState.classList.toggle('is-hidden', history.length > 0 || configured);
+      emptyConfigBtn.hidden = configured;
+      settingsBtn.title = configured
+        ? 'Paramètres du fournisseur'
+        : 'Configurer le fournisseur';
+      settingsBtn.setAttribute(
+        'aria-label',
+        configured ? 'Paramètres du fournisseur IA' : 'Configurer le fournisseur IA'
+      );
     }
 
     function readSettingsForm() {

@@ -93,5 +93,20 @@ check('groupListsByCategory has groups', groups.length >= 2);
 var uncat = groups.filter(function (g) { return g.key === '_none'; })[0];
 check('uncategorized group', !!(uncat && uncat.lists.length === 1));
 
+var groupsHidden = ST.groupListsByCategory(
+  [
+    { id: '2', name: 'À faire' },
+    { id: 'x', name: 'Misc' },
+  ],
+  { listCategories: { '2': 'unstarted', x: null } },
+  { includeUnassigned: false }
+);
+var uncatHidden = groupsHidden.filter(function (g) { return g.key === '_none'; })[0];
+check('includeUnassigned false hides uncategorized', !uncatHidden);
+
+check('categoryStyle completed green', !!(SM.categoryStyle && SM.categoryStyle('completed').icon === 'check'));
+check('categoryStyle blocked ban', SM.categoryStyle('blocked').icon === 'ban');
+check('categoryStyle started hammer', SM.categoryStyle('started').icon === 'hammer');
+
 console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll statut checks passed');
 process.exit(bad ? 1 : 0);
