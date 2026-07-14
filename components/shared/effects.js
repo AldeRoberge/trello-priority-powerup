@@ -1,6 +1,7 @@
 /**
  * CelebrationEffects — brief visual overlays + Web Audio stingers.
  * Used by completion UI (fireworks) and the agent (trigger_effect).
+ * Supports optional fullscreen text via play(name, { text: 'TWO' }).
  */
 (function (global) {
   'use strict';
@@ -19,7 +20,17 @@
     balloons: { label: 'Ballons', ms: 3200 },
     petals: { label: 'P\u00e9tales', ms: 3400 },
     rainbow: { label: 'Arc-en-ciel', ms: 2600 },
-    disco: { label: 'Disco', ms: 2400 }
+    disco: { label: 'Disco', ms: 2400 },
+    beep: { label: 'Beep beep', ms: 1200 },
+    boop: { label: 'Boop', ms: 900 },
+    zap: { label: 'Zap', ms: 1100 },
+    thunder: { label: 'Tonnerre', ms: 2200 },
+    fanfare: { label: 'Fanfare', ms: 2000 },
+    bonk: { label: 'Bonk', ms: 1000 },
+    laser: { label: 'Laser', ms: 1100 },
+    coin: { label: 'Pi\u00e8ce', ms: 1000 },
+    drumroll: { label: 'Roulement', ms: 1800 },
+    banner: { label: 'Bannière', ms: 2400 }
   };
 
   var EFFECT_ALIASES = {
@@ -44,14 +55,73 @@
     cherry_blossoms: 'petals',
     arc_en_ciel: 'rainbow',
     party: 'disco',
-    laser: 'disco'
+    laser_show: 'disco',
+    beep_beep: 'beep',
+    beeps: 'beep',
+    bip: 'beep',
+    bip_bip: 'beep',
+    bleep: 'beep',
+    boops: 'boop',
+    electric: 'zap',
+    shock: 'zap',
+    lightning: 'thunder',
+    thunderclap: 'thunder',
+    tonnerre: 'thunder',
+    eclair: 'thunder',
+    trumpets: 'fanfare',
+    victory: 'fanfare',
+    trompette: 'fanfare',
+    bonk_head: 'bonk',
+    thud: 'bonk',
+    pew: 'laser',
+    blaster: 'laser',
+    ring: 'coin',
+    ping: 'coin',
+    piece: 'coin',
+    roll: 'drumroll',
+    drums: 'drumroll',
+    rumble: 'drumroll',
+    text: 'banner',
+    fullscreen_text: 'banner',
+    fullscreen: 'banner',
+    stinger: 'banner',
+    flash_text: 'banner',
+    title_card: 'banner'
+  };
+
+  var SOUND_ONLY_IDS = {
+    beep: true,
+    boop: true,
+    zap: true,
+    thunder: true,
+    fanfare: true,
+    bonk: true,
+    laser: true,
+    coin: true,
+    drumroll: true
   };
 
   var COLORS = {
     party: ['#22a06b', '#4bce97', '#f5cd47', '#ff8f73', '#579dff', '#9f8fef', '#fff'],
     hearts: ['#ff8f73', '#ff5c8a', '#e5688f', '#ffb3c7', '#f87171'],
     cool: ['#579dff', '#4bce97', '#9f8fef', '#6ee7b7', '#93c5fd'],
-    warm: ['#f5cd47', '#ff8f73', '#fb923c', '#fbbf24', '#fff']
+    warm: ['#f5cd47', '#ff8f73', '#fb923c', '#fbbf24', '#fff'],
+    neon: ['#39ff14', '#00f0ff', '#ff2bd6', '#ffe600', '#ffffff']
+  };
+
+  var BANNER_THEMES = {
+    thunder: { className: 'is-thunder', flash: true },
+    beep: { className: 'is-beep', flash: false },
+    zap: { className: 'is-zap', flash: true },
+    fanfare: { className: 'is-fanfare', flash: false },
+    bonk: { className: 'is-bonk', flash: false },
+    laser: { className: 'is-laser', flash: false },
+    coin: { className: 'is-coin', flash: false },
+    drumroll: { className: 'is-drumroll', flash: false },
+    fireworks: { className: 'is-party', flash: true },
+    confetti: { className: 'is-party', flash: false },
+    disco: { className: 'is-party', flash: true },
+    banner: { className: 'is-banner', flash: false }
   };
 
   function prefersReducedMotion() {
@@ -100,6 +170,11 @@
     return min + Math.random() * (max - min);
   }
 
+  function pickOne(items) {
+    if (!items || !items.length) return null;
+    return items[Math.floor(Math.random() * items.length)];
+  }
+
   function playTones(tones, options) {
     options = options || {};
     try {
@@ -107,6 +182,8 @@
       if (!ctx) return;
       var t0 = ctx.currentTime;
       var dest = ctx.destination;
+      var fMul = 1 + rand(-(options.freqJitter != null ? options.freqJitter : 0.03), options.freqJitter != null ? options.freqJitter : 0.03);
+      var tMul = 1 + rand(-(options.timeJitter != null ? options.timeJitter : 0.05), options.timeJitter != null ? options.timeJitter : 0.05);
       if (options.lowpass) {
         var filter = ctx.createBiquadFilter();
         filter.type = 'lowpass';
@@ -118,14 +195,14 @@
       tones.forEach(function (tone) {
         var osc = ctx.createOscillator();
         var gain = ctx.createGain();
-        var delay = tone.delay || 0;
-        var dur = tone.dur || 0.2;
-        var peak = tone.peak != null ? tone.peak : 0.045;
+        var delay = (tone.delay || 0) * tMul;
+        var dur = (tone.dur || 0.2) * tMul;
+        var peak = (tone.peak != null ? tone.peak : 0.045) * rand(0.9, 1.1);
         osc.type = tone.type || 'sine';
-        osc.frequency.setValueAtTime(tone.freq, t0 + delay);
+        osc.frequency.setValueAtTime(tone.freq * fMul, t0 + delay);
         if (tone.freqEnd != null) {
           osc.frequency.exponentialRampToValueAtTime(
-            Math.max(20, tone.freqEnd),
+            Math.max(20, tone.freqEnd * fMul),
             t0 + delay + dur
           );
         }
@@ -153,8 +230,10 @@
       var dur = options.dur != null ? options.dur : 0.18;
       var buffer = ctx.createBuffer(1, Math.max(1, Math.floor(ctx.sampleRate * dur)), ctx.sampleRate);
       var data = buffer.getChannelData(0);
+      var power = options.power != null ? options.power : 1;
       for (var i = 0; i < data.length; i++) {
-        data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+        var env = Math.pow(1 - i / data.length, power);
+        data[i] = (Math.random() * 2 - 1) * env;
       }
       var src = ctx.createBufferSource();
       src.buffer = buffer;
@@ -162,11 +241,22 @@
       filter.type = options.filterType || 'bandpass';
       filter.frequency.value = options.freq != null ? options.freq : 1800;
       filter.Q.value = options.q != null ? options.q : 1.2;
+      if (options.freqEnd != null) {
+        var t0f = ctx.currentTime + (options.delay || 0);
+        filter.frequency.setValueAtTime(filter.frequency.value, t0f);
+        filter.frequency.exponentialRampToValueAtTime(
+          Math.max(40, options.freqEnd),
+          t0f + dur
+        );
+      }
       var gain = ctx.createGain();
       var t0 = ctx.currentTime + (options.delay || 0);
       var peak = options.peak != null ? options.peak : 0.04;
       gain.gain.setValueAtTime(0.0001, t0);
-      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t0 + 0.01);
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t0 + (options.attack != null ? options.attack : 0.01));
+      if (options.sustain != null) {
+        gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * options.sustain), t0 + dur * 0.45);
+      }
       gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
       src.connect(filter);
       filter.connect(gain);
@@ -178,130 +268,485 @@
     }
   }
 
+  function playRandomToneSet(variants, options) {
+    var chosen = pickOne(variants);
+    if (!chosen) return;
+    playTones(typeof chosen === 'function' ? chosen() : chosen, options);
+  }
+
+  function soundBeep() {
+    var variants = [
+      [
+        { freq: 880, delay: 0, dur: 0.11, peak: 0.07, type: 'square', attack: 0.004 },
+        { freq: 880, delay: 0.16, dur: 0.14, peak: 0.07, type: 'square', attack: 0.004 }
+      ],
+      [
+        { freq: 988, delay: 0, dur: 0.09, peak: 0.065, type: 'square', attack: 0.003 },
+        { freq: 1175, delay: 0.13, dur: 0.12, peak: 0.06, type: 'square', attack: 0.003 }
+      ],
+      [
+        { freq: 740, delay: 0, dur: 0.1, peak: 0.068, type: 'triangle', attack: 0.004 },
+        { freq: 740, delay: 0.14, dur: 0.1, peak: 0.068, type: 'triangle', attack: 0.004 },
+        { freq: 990, delay: 0.28, dur: 0.16, peak: 0.055, type: 'square', attack: 0.004 }
+      ],
+      [
+        { freq: 1046, delay: 0, dur: 0.08, peak: 0.06, type: 'square', attack: 0.003 },
+        { freq: 784, delay: 0.1, dur: 0.08, peak: 0.055, type: 'square', attack: 0.003 },
+        { freq: 1046, delay: 0.2, dur: 0.12, peak: 0.062, type: 'square', attack: 0.003 }
+      ],
+      [
+        { freq: 660, delay: 0, dur: 0.12, peak: 0.06, type: 'square', attack: 0.005 },
+        { freq: 880, delay: 0.15, dur: 0.12, peak: 0.065, type: 'square', attack: 0.005 },
+        { freq: 1100, delay: 0.3, dur: 0.1, peak: 0.05, type: 'triangle', attack: 0.004 }
+      ]
+    ];
+    playRandomToneSet(variants, { freqJitter: 0.02, timeJitter: 0.04 });
+  }
+
+  function soundBoop() {
+    playRandomToneSet(
+      [
+        [{ freq: 420, delay: 0, dur: 0.18, peak: 0.055, type: 'sine', freqEnd: 280, attack: 0.01 }],
+        [{ freq: 520, delay: 0, dur: 0.14, peak: 0.05, type: 'triangle', freqEnd: 360, attack: 0.008 }],
+        [
+          { freq: 380, delay: 0, dur: 0.1, peak: 0.048, type: 'sine', freqEnd: 300 },
+          { freq: 300, delay: 0.12, dur: 0.16, peak: 0.04, type: 'triangle', freqEnd: 220 }
+        ],
+        [{ freq: 600, delay: 0, dur: 0.2, peak: 0.05, type: 'sine', freqEnd: 180, attack: 0.012 }]
+      ],
+      { lowpass: 2200 }
+    );
+  }
+
+  function soundZap() {
+    var n = Math.floor(rand(2, 5));
+    for (var i = 0; i < n; i++) {
+      playNoiseBurst({
+        delay: i * 0.05,
+        dur: rand(0.04, 0.09),
+        freq: rand(1800, 4200),
+        freqEnd: rand(400, 900),
+        peak: 0.045,
+        filterType: 'bandpass',
+        q: 3.5,
+        power: 0.7
+      });
+    }
+    playRandomToneSet([
+      [{ freq: 1400, delay: 0, dur: 0.18, peak: 0.035, type: 'sawtooth', freqEnd: 220, attack: 0.005 }],
+      [{ freq: 2100, delay: 0.02, dur: 0.14, peak: 0.03, type: 'square', freqEnd: 180, attack: 0.004 }],
+      [
+        { freq: 1600, delay: 0, dur: 0.08, peak: 0.032, type: 'sawtooth', freqEnd: 600 },
+        { freq: 900, delay: 0.1, dur: 0.12, peak: 0.028, type: 'triangle', freqEnd: 160 }
+      ]
+    ]);
+  }
+
+  function soundThunder() {
+    playNoiseBurst({
+      delay: 0,
+      dur: 0.12,
+      freq: 4200,
+      peak: 0.09,
+      filterType: 'highpass',
+      q: 0.7,
+      attack: 0.002,
+      power: 0.35
+    });
+    playNoiseBurst({
+      delay: 0.04,
+      dur: 0.9,
+      freq: 180,
+      freqEnd: 60,
+      peak: 0.1,
+      filterType: 'lowpass',
+      q: 0.5,
+      attack: 0.01,
+      sustain: 0.55,
+      power: 0.85
+    });
+    playNoiseBurst({
+      delay: 0.2,
+      dur: 0.55,
+      freq: 120,
+      freqEnd: 40,
+      peak: 0.07,
+      filterType: 'lowpass',
+      q: 0.4,
+      power: 1.1
+    });
+    playTones(
+      [
+        { freq: 70, delay: 0.05, dur: 0.85, peak: 0.05, type: 'sine', freqEnd: 45, attack: 0.02 },
+        { freq: 55, delay: 0.18, dur: 1.0, peak: 0.04, type: 'triangle', freqEnd: 35, attack: 0.04 }
+      ],
+      { lowpass: 220, q: 0.3, freqJitter: 0.08 }
+    );
+  }
+
+  function soundFanfare() {
+    playRandomToneSet([
+      [
+        { freq: 392, delay: 0, dur: 0.16, peak: 0.045, type: 'triangle' },
+        { freq: 523.25, delay: 0.14, dur: 0.16, peak: 0.048, type: 'triangle' },
+        { freq: 659.25, delay: 0.28, dur: 0.16, peak: 0.05, type: 'triangle' },
+        { freq: 784, delay: 0.42, dur: 0.35, peak: 0.055, type: 'triangle' },
+        { freq: 1046.5, delay: 0.55, dur: 0.45, peak: 0.04, type: 'sine' }
+      ],
+      [
+        { freq: 440, delay: 0, dur: 0.12, peak: 0.045, type: 'square', attack: 0.01 },
+        { freq: 554, delay: 0.12, dur: 0.12, peak: 0.045, type: 'square', attack: 0.01 },
+        { freq: 659, delay: 0.24, dur: 0.12, peak: 0.048, type: 'square', attack: 0.01 },
+        { freq: 880, delay: 0.36, dur: 0.4, peak: 0.05, type: 'triangle' }
+      ],
+      [
+        { freq: 523.25, delay: 0, dur: 0.2, peak: 0.04 },
+        { freq: 659.25, delay: 0.1, dur: 0.2, peak: 0.04 },
+        { freq: 783.99, delay: 0.2, dur: 0.2, peak: 0.042 },
+        { freq: 1046.5, delay: 0.35, dur: 0.5, peak: 0.048, type: 'triangle' },
+        { freq: 1318.5, delay: 0.55, dur: 0.4, peak: 0.03 }
+      ]
+    ]);
+  }
+
+  function soundBonk() {
+    playRandomToneSet([
+      [{ freq: 180, delay: 0, dur: 0.22, peak: 0.07, type: 'sine', freqEnd: 90, attack: 0.005 }],
+      [{ freq: 220, delay: 0, dur: 0.18, peak: 0.065, type: 'triangle', freqEnd: 80, attack: 0.004 }],
+      [
+        { freq: 160, delay: 0, dur: 0.14, peak: 0.07, type: 'sine', freqEnd: 100 },
+        { freq: 90, delay: 0.08, dur: 0.2, peak: 0.04, type: 'triangle', freqEnd: 50 }
+      ]
+    ]);
+    playNoiseBurst({ delay: 0, dur: 0.08, freq: 400, peak: 0.035, filterType: 'lowpass', q: 1 });
+  }
+
+  function soundLaser() {
+    playRandomToneSet([
+      [{ freq: 1600, delay: 0, dur: 0.35, peak: 0.045, type: 'sawtooth', freqEnd: 220, attack: 0.005 }],
+      [{ freq: 2200, delay: 0, dur: 0.28, peak: 0.04, type: 'square', freqEnd: 180, attack: 0.004 }],
+      [
+        { freq: 1400, delay: 0, dur: 0.2, peak: 0.042, type: 'sawtooth', freqEnd: 400 },
+        { freq: 900, delay: 0.18, dur: 0.25, peak: 0.03, type: 'triangle', freqEnd: 120 }
+      ],
+      [{ freq: 2800, delay: 0, dur: 0.22, peak: 0.038, type: 'sine', freqEnd: 300, attack: 0.003 }]
+    ]);
+  }
+
+  function soundCoin() {
+    playRandomToneSet([
+      [
+        { freq: 988, delay: 0, dur: 0.08, peak: 0.05, type: 'square', attack: 0.003 },
+        { freq: 1318, delay: 0.08, dur: 0.28, peak: 0.045, type: 'square', attack: 0.003 }
+      ],
+      [
+        { freq: 1046, delay: 0, dur: 0.07, peak: 0.048, type: 'square', attack: 0.003 },
+        { freq: 1568, delay: 0.07, dur: 0.32, peak: 0.042, type: 'triangle', attack: 0.004 }
+      ],
+      [
+        { freq: 880, delay: 0, dur: 0.06, peak: 0.05, type: 'square', attack: 0.002 },
+        { freq: 1175, delay: 0.06, dur: 0.08, peak: 0.045, type: 'square', attack: 0.002 },
+        { freq: 1760, delay: 0.14, dur: 0.25, peak: 0.038, type: 'sine', attack: 0.003 }
+      ]
+    ]);
+  }
+
+  function soundDrumroll() {
+    var hits = 10;
+    for (var i = 0; i < hits; i++) {
+      playNoiseBurst({
+        delay: i * (0.07 - i * 0.003),
+        dur: 0.05,
+        freq: 180 + i * 12,
+        peak: 0.03 + i * 0.004,
+        filterType: 'bandpass',
+        q: 2.2,
+        power: 0.6
+      });
+    }
+    playNoiseBurst({
+      delay: 0.85,
+      dur: 0.25,
+      freq: 120,
+      peak: 0.08,
+      filterType: 'lowpass',
+      q: 0.8,
+      power: 0.5
+    });
+    playTones([{ freq: 140, delay: 0.85, dur: 0.35, peak: 0.05, type: 'sine', freqEnd: 70, attack: 0.01 }]);
+  }
+
   function playEffectSound(id) {
     switch (id) {
       case 'fireworks':
         playNoiseBurst({ delay: 0.05, dur: 0.16, freq: 2200, peak: 0.05 });
         playNoiseBurst({ delay: 0.28, dur: 0.2, freq: 1400, peak: 0.045 });
         playNoiseBurst({ delay: 0.55, dur: 0.22, freq: 900, peak: 0.04 });
-        playTones([
-          { freq: 740, delay: 0.08, dur: 0.35, peak: 0.035, type: 'triangle' },
-          { freq: 988, delay: 0.32, dur: 0.4, peak: 0.032, type: 'triangle' },
-          { freq: 1175, delay: 0.6, dur: 0.45, peak: 0.028, type: 'sine' }
+        playRandomToneSet([
+          [
+            { freq: 740, delay: 0.08, dur: 0.35, peak: 0.035, type: 'triangle' },
+            { freq: 988, delay: 0.32, dur: 0.4, peak: 0.032, type: 'triangle' },
+            { freq: 1175, delay: 0.6, dur: 0.45, peak: 0.028, type: 'sine' }
+          ],
+          [
+            { freq: 659, delay: 0.05, dur: 0.3, peak: 0.03, type: 'triangle' },
+            { freq: 880, delay: 0.25, dur: 0.35, peak: 0.034 },
+            { freq: 1318, delay: 0.5, dur: 0.4, peak: 0.028, type: 'sine' }
+          ],
+          [
+            { freq: 523, delay: 0.1, dur: 0.25, peak: 0.032 },
+            { freq: 784, delay: 0.3, dur: 0.3, peak: 0.03, type: 'triangle' },
+            { freq: 1046, delay: 0.55, dur: 0.42, peak: 0.03 }
+          ]
         ]);
         break;
       case 'confetti':
-        playTones(
+        playRandomToneSet(
           [
-            { freq: 523.25, delay: 0, dur: 0.14, peak: 0.04, type: 'triangle' },
-            { freq: 659.25, delay: 0.07, dur: 0.14, peak: 0.042 },
-            { freq: 783.99, delay: 0.14, dur: 0.16, peak: 0.045 },
-            { freq: 1046.5, delay: 0.22, dur: 0.28, peak: 0.04 },
-            { freq: 1318.5, delay: 0.34, dur: 0.32, peak: 0.03, type: 'triangle' }
+            [
+              { freq: 523.25, delay: 0, dur: 0.14, peak: 0.04, type: 'triangle' },
+              { freq: 659.25, delay: 0.07, dur: 0.14, peak: 0.042 },
+              { freq: 783.99, delay: 0.14, dur: 0.16, peak: 0.045 },
+              { freq: 1046.5, delay: 0.22, dur: 0.28, peak: 0.04 },
+              { freq: 1318.5, delay: 0.34, dur: 0.32, peak: 0.03, type: 'triangle' }
+            ],
+            [
+              { freq: 587, delay: 0, dur: 0.12, peak: 0.04, type: 'triangle' },
+              { freq: 740, delay: 0.08, dur: 0.12, peak: 0.042 },
+              { freq: 880, delay: 0.16, dur: 0.14, peak: 0.044 },
+              { freq: 1175, delay: 0.28, dur: 0.3, peak: 0.038 }
+            ],
+            [
+              { freq: 659, delay: 0, dur: 0.1, peak: 0.042 },
+              { freq: 784, delay: 0.06, dur: 0.1, peak: 0.04 },
+              { freq: 988, delay: 0.12, dur: 0.12, peak: 0.042 },
+              { freq: 1318, delay: 0.22, dur: 0.28, peak: 0.036, type: 'triangle' },
+              { freq: 1568, delay: 0.38, dur: 0.24, peak: 0.028 }
+            ]
           ],
           { lowpass: 4200 }
         );
         break;
       case 'hearts':
-        playTones(
+        playRandomToneSet(
           [
-            { freq: 349.23, delay: 0, dur: 0.45, peak: 0.04, type: 'sine' },
-            { freq: 440, delay: 0.08, dur: 0.5, peak: 0.038 },
-            { freq: 523.25, delay: 0.18, dur: 0.55, peak: 0.035 },
-            { freq: 659.25, delay: 0.42, dur: 0.5, peak: 0.028, type: 'triangle' }
+            [
+              { freq: 349.23, delay: 0, dur: 0.45, peak: 0.04, type: 'sine' },
+              { freq: 440, delay: 0.08, dur: 0.5, peak: 0.038 },
+              { freq: 523.25, delay: 0.18, dur: 0.55, peak: 0.035 },
+              { freq: 659.25, delay: 0.42, dur: 0.5, peak: 0.028, type: 'triangle' }
+            ],
+            [
+              { freq: 392, delay: 0, dur: 0.4, peak: 0.038, type: 'sine' },
+              { freq: 494, delay: 0.12, dur: 0.45, peak: 0.034 },
+              { freq: 587, delay: 0.28, dur: 0.55, peak: 0.03, type: 'triangle' }
+            ],
+            [
+              { freq: 330, delay: 0, dur: 0.5, peak: 0.036, type: 'triangle' },
+              { freq: 415, delay: 0.15, dur: 0.55, peak: 0.032 },
+              { freq: 554, delay: 0.35, dur: 0.6, peak: 0.028 }
+            ]
           ],
           { lowpass: 2800 }
         );
         break;
       case 'sparkles':
-        playTones([
-          { freq: 1760, delay: 0, dur: 0.18, peak: 0.028, type: 'sine', attack: 0.005 },
-          { freq: 2093, delay: 0.1, dur: 0.16, peak: 0.026, attack: 0.005 },
-          { freq: 2637, delay: 0.2, dur: 0.2, peak: 0.024, attack: 0.005 },
-          { freq: 3136, delay: 0.34, dur: 0.22, peak: 0.02, attack: 0.005 },
-          { freq: 2349, delay: 0.5, dur: 0.18, peak: 0.022, attack: 0.005 }
+        playRandomToneSet([
+          [
+            { freq: 1760, delay: 0, dur: 0.18, peak: 0.028, type: 'sine', attack: 0.005 },
+            { freq: 2093, delay: 0.1, dur: 0.16, peak: 0.026, attack: 0.005 },
+            { freq: 2637, delay: 0.2, dur: 0.2, peak: 0.024, attack: 0.005 },
+            { freq: 3136, delay: 0.34, dur: 0.22, peak: 0.02, attack: 0.005 },
+            { freq: 2349, delay: 0.5, dur: 0.18, peak: 0.022, attack: 0.005 }
+          ],
+          [
+            { freq: 2093, delay: 0, dur: 0.12, peak: 0.026, attack: 0.004 },
+            { freq: 2637, delay: 0.08, dur: 0.12, peak: 0.024, attack: 0.004 },
+            { freq: 3136, delay: 0.18, dur: 0.14, peak: 0.022, attack: 0.004 },
+            { freq: 3520, delay: 0.32, dur: 0.18, peak: 0.018, attack: 0.004 }
+          ],
+          [
+            { freq: 1568, delay: 0, dur: 0.14, peak: 0.03, attack: 0.005 },
+            { freq: 1976, delay: 0.12, dur: 0.14, peak: 0.028, attack: 0.005 },
+            { freq: 2489, delay: 0.26, dur: 0.2, peak: 0.024, attack: 0.005 }
+          ]
         ]);
         break;
       case 'shooting_stars':
-        playTones([
-          {
-            freq: 1880,
-            freqEnd: 420,
-            delay: 0.05,
-            dur: 0.55,
-            peak: 0.03,
-            type: 'sine',
-            attack: 0.01
-          },
-          { freq: 1318.5, delay: 0.45, dur: 0.35, peak: 0.028, type: 'triangle' },
-          { freq: 1760, delay: 0.7, dur: 0.4, peak: 0.022 }
+        playRandomToneSet([
+          [
+            {
+              freq: 1880,
+              freqEnd: 420,
+              delay: 0.05,
+              dur: 0.55,
+              peak: 0.03,
+              type: 'sine',
+              attack: 0.01
+            },
+            { freq: 1318.5, delay: 0.45, dur: 0.35, peak: 0.028, type: 'triangle' },
+            { freq: 1760, delay: 0.7, dur: 0.4, peak: 0.022 }
+          ],
+          [
+            {
+              freq: 2200,
+              freqEnd: 360,
+              delay: 0,
+              dur: 0.6,
+              peak: 0.032,
+              type: 'sine',
+              attack: 0.008
+            },
+            { freq: 1568, delay: 0.5, dur: 0.3, peak: 0.024, type: 'triangle' }
+          ]
         ]);
         break;
       case 'bubbles':
-        playTones(
+        playRandomToneSet(
           [
-            { freq: 420, delay: 0, dur: 0.16, peak: 0.03, type: 'sine', freqEnd: 620 },
-            { freq: 380, delay: 0.22, dur: 0.18, peak: 0.028, freqEnd: 560 },
-            { freq: 460, delay: 0.48, dur: 0.2, peak: 0.03, freqEnd: 700 },
-            { freq: 340, delay: 0.78, dur: 0.22, peak: 0.026, freqEnd: 520 }
+            [
+              { freq: 420, delay: 0, dur: 0.16, peak: 0.03, type: 'sine', freqEnd: 620 },
+              { freq: 380, delay: 0.22, dur: 0.18, peak: 0.028, freqEnd: 560 },
+              { freq: 460, delay: 0.48, dur: 0.2, peak: 0.03, freqEnd: 700 },
+              { freq: 340, delay: 0.78, dur: 0.22, peak: 0.026, freqEnd: 520 }
+            ],
+            [
+              { freq: 500, delay: 0, dur: 0.14, peak: 0.028, type: 'sine', freqEnd: 720 },
+              { freq: 360, delay: 0.2, dur: 0.16, peak: 0.026, freqEnd: 540 },
+              { freq: 480, delay: 0.42, dur: 0.18, peak: 0.028, freqEnd: 680 }
+            ]
           ],
           { lowpass: 1600 }
         );
         break;
       case 'aurora':
-        playTones(
+        playRandomToneSet(
           [
-            { freq: 196, delay: 0, dur: 1.4, peak: 0.03, type: 'sine' },
-            { freq: 246.94, delay: 0.2, dur: 1.5, peak: 0.025, type: 'triangle' },
-            { freq: 293.66, delay: 0.45, dur: 1.6, peak: 0.022 },
-            { freq: 392, delay: 0.9, dur: 1.2, peak: 0.018 }
+            [
+              { freq: 196, delay: 0, dur: 1.4, peak: 0.03, type: 'sine' },
+              { freq: 246.94, delay: 0.2, dur: 1.5, peak: 0.025, type: 'triangle' },
+              { freq: 293.66, delay: 0.45, dur: 1.6, peak: 0.022 },
+              { freq: 392, delay: 0.9, dur: 1.2, peak: 0.018 }
+            ],
+            [
+              { freq: 174, delay: 0, dur: 1.5, peak: 0.028, type: 'sine' },
+              { freq: 220, delay: 0.3, dur: 1.4, peak: 0.022, type: 'triangle' },
+              { freq: 329, delay: 0.7, dur: 1.3, peak: 0.018 }
+            ]
           ],
           { lowpass: 1200, q: 0.4 }
         );
         break;
       case 'balloons':
-        playTones([
-          { freq: 392, delay: 0, dur: 0.18, peak: 0.04, type: 'triangle' },
-          { freq: 494, delay: 0.2, dur: 0.18, peak: 0.038, type: 'triangle' },
-          { freq: 587, delay: 0.42, dur: 0.2, peak: 0.036, type: 'triangle' },
-          { freq: 740, delay: 0.68, dur: 0.28, peak: 0.03 }
+        playRandomToneSet([
+          [
+            { freq: 392, delay: 0, dur: 0.18, peak: 0.04, type: 'triangle' },
+            { freq: 494, delay: 0.2, dur: 0.18, peak: 0.038, type: 'triangle' },
+            { freq: 587, delay: 0.42, dur: 0.2, peak: 0.036, type: 'triangle' },
+            { freq: 740, delay: 0.68, dur: 0.28, peak: 0.03 }
+          ],
+          [
+            { freq: 349, delay: 0, dur: 0.16, peak: 0.038, type: 'triangle' },
+            { freq: 440, delay: 0.18, dur: 0.16, peak: 0.036, type: 'triangle' },
+            { freq: 523, delay: 0.36, dur: 0.18, peak: 0.034, type: 'triangle' },
+            { freq: 698, delay: 0.58, dur: 0.3, peak: 0.03 }
+          ]
         ]);
         break;
       case 'petals':
-        playTones(
+        playRandomToneSet(
           [
-            { freq: 523.25, delay: 0, dur: 0.5, peak: 0.03, type: 'sine' },
-            { freq: 587.33, delay: 0.25, dur: 0.55, peak: 0.028 },
-            { freq: 698.46, delay: 0.55, dur: 0.6, peak: 0.026, type: 'triangle' },
-            { freq: 880, delay: 0.95, dur: 0.7, peak: 0.022 }
+            [
+              { freq: 523.25, delay: 0, dur: 0.5, peak: 0.03, type: 'sine' },
+              { freq: 587.33, delay: 0.25, dur: 0.55, peak: 0.028 },
+              { freq: 698.46, delay: 0.55, dur: 0.6, peak: 0.026, type: 'triangle' },
+              { freq: 880, delay: 0.95, dur: 0.7, peak: 0.022 }
+            ],
+            [
+              { freq: 494, delay: 0, dur: 0.55, peak: 0.028, type: 'sine' },
+              { freq: 622, delay: 0.3, dur: 0.6, peak: 0.024, type: 'triangle' },
+              { freq: 784, delay: 0.7, dur: 0.7, peak: 0.02 }
+            ]
           ],
           { lowpass: 2400 }
         );
         break;
       case 'rainbow':
-        playTones([
-          { freq: 261.63, delay: 0, dur: 0.22, peak: 0.038 },
-          { freq: 293.66, delay: 0.12, dur: 0.22, peak: 0.038 },
-          { freq: 329.63, delay: 0.24, dur: 0.22, peak: 0.038 },
-          { freq: 349.23, delay: 0.36, dur: 0.22, peak: 0.038 },
-          { freq: 392, delay: 0.48, dur: 0.22, peak: 0.038 },
-          { freq: 440, delay: 0.6, dur: 0.22, peak: 0.038 },
-          { freq: 493.88, delay: 0.72, dur: 0.28, peak: 0.036 },
-          { freq: 523.25, delay: 0.9, dur: 0.45, peak: 0.034, type: 'triangle' }
+        playRandomToneSet([
+          [
+            { freq: 261.63, delay: 0, dur: 0.22, peak: 0.038 },
+            { freq: 293.66, delay: 0.12, dur: 0.22, peak: 0.038 },
+            { freq: 329.63, delay: 0.24, dur: 0.22, peak: 0.038 },
+            { freq: 349.23, delay: 0.36, dur: 0.22, peak: 0.038 },
+            { freq: 392, delay: 0.48, dur: 0.22, peak: 0.038 },
+            { freq: 440, delay: 0.6, dur: 0.22, peak: 0.038 },
+            { freq: 493.88, delay: 0.72, dur: 0.28, peak: 0.036 },
+            { freq: 523.25, delay: 0.9, dur: 0.45, peak: 0.034, type: 'triangle' }
+          ],
+          [
+            { freq: 293.66, delay: 0, dur: 0.18, peak: 0.036 },
+            { freq: 329.63, delay: 0.1, dur: 0.18, peak: 0.036 },
+            { freq: 369.99, delay: 0.2, dur: 0.18, peak: 0.036 },
+            { freq: 415.3, delay: 0.3, dur: 0.18, peak: 0.036 },
+            { freq: 466.16, delay: 0.4, dur: 0.18, peak: 0.036 },
+            { freq: 523.25, delay: 0.5, dur: 0.18, peak: 0.036 },
+            { freq: 587.33, delay: 0.6, dur: 0.18, peak: 0.034 },
+            { freq: 659.25, delay: 0.72, dur: 0.4, peak: 0.032, type: 'triangle' }
+          ]
         ]);
         break;
       case 'disco':
-        playTones([
-          { freq: 110, delay: 0, dur: 0.12, peak: 0.05, type: 'square', attack: 0.005 },
-          { freq: 146.83, delay: 0.18, dur: 0.12, peak: 0.045, type: 'square', attack: 0.005 },
-          { freq: 110, delay: 0.36, dur: 0.12, peak: 0.05, type: 'square', attack: 0.005 },
-          { freq: 174.61, delay: 0.54, dur: 0.14, peak: 0.042, type: 'square', attack: 0.005 },
-          { freq: 659.25, delay: 0.1, dur: 0.1, peak: 0.022, type: 'triangle' },
-          { freq: 783.99, delay: 0.4, dur: 0.1, peak: 0.022, type: 'triangle' },
-          { freq: 987.77, delay: 0.7, dur: 0.16, peak: 0.02, type: 'triangle' }
+        playRandomToneSet([
+          [
+            { freq: 110, delay: 0, dur: 0.12, peak: 0.05, type: 'square', attack: 0.005 },
+            { freq: 146.83, delay: 0.18, dur: 0.12, peak: 0.045, type: 'square', attack: 0.005 },
+            { freq: 110, delay: 0.36, dur: 0.12, peak: 0.05, type: 'square', attack: 0.005 },
+            { freq: 174.61, delay: 0.54, dur: 0.14, peak: 0.042, type: 'square', attack: 0.005 },
+            { freq: 659.25, delay: 0.1, dur: 0.1, peak: 0.022, type: 'triangle' },
+            { freq: 783.99, delay: 0.4, dur: 0.1, peak: 0.022, type: 'triangle' },
+            { freq: 987.77, delay: 0.7, dur: 0.16, peak: 0.02, type: 'triangle' }
+          ],
+          [
+            { freq: 98, delay: 0, dur: 0.1, peak: 0.05, type: 'square', attack: 0.004 },
+            { freq: 130, delay: 0.14, dur: 0.1, peak: 0.048, type: 'square', attack: 0.004 },
+            { freq: 98, delay: 0.28, dur: 0.1, peak: 0.05, type: 'square', attack: 0.004 },
+            { freq: 164, delay: 0.42, dur: 0.12, peak: 0.045, type: 'square', attack: 0.004 },
+            { freq: 740, delay: 0.2, dur: 0.08, peak: 0.02, type: 'triangle' },
+            { freq: 880, delay: 0.5, dur: 0.1, peak: 0.022, type: 'triangle' }
+          ]
         ]);
         playNoiseBurst({ delay: 0.05, dur: 0.08, freq: 3000, peak: 0.025, filterType: 'highpass' });
         playNoiseBurst({ delay: 0.4, dur: 0.08, freq: 2800, peak: 0.022, filterType: 'highpass' });
+        break;
+      case 'beep':
+        soundBeep();
+        break;
+      case 'boop':
+        soundBoop();
+        break;
+      case 'zap':
+        soundZap();
+        break;
+      case 'thunder':
+        soundThunder();
+        break;
+      case 'fanfare':
+        soundFanfare();
+        break;
+      case 'bonk':
+        soundBonk();
+        break;
+      case 'laser':
+        soundLaser();
+        break;
+      case 'coin':
+        soundCoin();
+        break;
+      case 'drumroll':
+        soundDrumroll();
+        break;
+      case 'banner':
+        soundFanfare();
         break;
       default:
         break;
@@ -342,6 +787,119 @@
 
   function pick(arr, i) {
     return arr[i % arr.length];
+  }
+
+  function sanitizeBannerText(raw) {
+    if (raw == null) return '';
+    var text = String(raw).replace(/\s+/g, ' ').trim();
+    if (!text) return '';
+    if (text.length > 48) text = text.slice(0, 48);
+    return text;
+  }
+
+  function appendFlash(overlay) {
+    var flash = document.createElement('div');
+    flash.className = 'tp-fx-flash';
+    overlay.appendChild(flash);
+  }
+
+  function appendBannerText(overlay, text, themeId) {
+    var clean = sanitizeBannerText(text);
+    if (!clean) return null;
+    var theme = BANNER_THEMES[themeId] || BANNER_THEMES.banner;
+    if (theme.flash) appendFlash(overlay);
+    var wrap = document.createElement('div');
+    wrap.className = 'tp-fx-banner ' + (theme.className || 'is-banner');
+    var label = document.createElement('span');
+    label.className = 'tp-fx-banner-text';
+    label.textContent = clean;
+    wrap.appendChild(label);
+    overlay.appendChild(wrap);
+    return wrap;
+  }
+
+  function buildPulseBlips(overlay, count, colorSet) {
+    var colors = colorSet || COLORS.neon;
+    for (var i = 0; i < count; i++) {
+      var el = document.createElement('span');
+      el.className = 'tp-fx-blip';
+      el.style.setProperty('--x', rand(12, 88) + '%');
+      el.style.setProperty('--y', rand(18, 78) + '%');
+      el.style.setProperty('--size', rand(10, 28) + 'px');
+      el.style.setProperty('--c', pick(colors, i));
+      el.style.setProperty('--delay', rand(0, 0.35) + 's');
+      overlay.appendChild(el);
+    }
+  }
+
+  function buildBeep(overlay) {
+    appendFlash(overlay);
+    buildPulseBlips(overlay, 8, ['#39ff14', '#00f0ff', '#fff']);
+  }
+
+  function buildBoop(overlay) {
+    buildPulseBlips(overlay, 5, COLORS.cool);
+  }
+
+  function buildZap(overlay) {
+    appendFlash(overlay);
+    for (var i = 0; i < 6; i++) {
+      var bolt = document.createElement('span');
+      bolt.className = 'tp-fx-bolt';
+      bolt.style.setProperty('--x', rand(15, 85) + '%');
+      bolt.style.setProperty('--delay', i * 0.05 + 's');
+      bolt.style.setProperty('--rot', rand(-25, 25) + 'deg');
+      overlay.appendChild(bolt);
+    }
+  }
+
+  function buildThunder(overlay) {
+    appendFlash(overlay);
+    var storm = document.createElement('div');
+    storm.className = 'tp-fx-storm';
+    overlay.appendChild(storm);
+    for (var i = 0; i < 4; i++) {
+      var bolt = document.createElement('span');
+      bolt.className = 'tp-fx-bolt is-heavy';
+      bolt.style.setProperty('--x', rand(20, 80) + '%');
+      bolt.style.setProperty('--delay', i * 0.08 + 's');
+      bolt.style.setProperty('--rot', rand(-18, 18) + 'deg');
+      overlay.appendChild(bolt);
+    }
+  }
+
+  function buildFanfare(overlay) {
+    buildPulseBlips(overlay, 14, COLORS.warm);
+  }
+
+  function buildBonk(overlay) {
+    var star = document.createElement('div');
+    star.className = 'tp-fx-bonk-star';
+    star.textContent = '*';
+    overlay.appendChild(star);
+  }
+
+  function buildLaser(overlay) {
+    for (var i = 0; i < 5; i++) {
+      var beam = document.createElement('span');
+      beam.className = 'tp-fx-laser-beam';
+      beam.style.setProperty('--y', rand(20, 80) + '%');
+      beam.style.setProperty('--delay', i * 0.06 + 's');
+      beam.style.setProperty('--c', pick(COLORS.neon, i));
+      overlay.appendChild(beam);
+    }
+  }
+
+  function buildCoin(overlay) {
+    buildPulseBlips(overlay, 10, ['#f5cd47', '#ffb347', '#fff']);
+  }
+
+  function buildDrumroll(overlay) {
+    buildPulseBlips(overlay, 12, COLORS.party);
+  }
+
+  function buildBanner(overlay, text, themeId) {
+    appendBannerText(overlay, text || '!', themeId || 'banner');
   }
 
   function buildFireworks(overlay) {
@@ -544,13 +1102,23 @@
     balloons: buildBalloons,
     petals: buildPetals,
     rainbow: buildRainbow,
-    disco: buildDisco
+    disco: buildDisco,
+    beep: buildBeep,
+    boop: buildBoop,
+    zap: buildZap,
+    thunder: buildThunder,
+    fanfare: buildFanfare,
+    bonk: buildBonk,
+    laser: buildLaser,
+    coin: buildCoin,
+    drumroll: buildDrumroll,
+    banner: buildBanner
   };
 
   /**
    * @param {string} name
-   * @param {{ root?: Element, sound?: boolean, clearOthers?: boolean }|Element} [options]
-   * @returns {{ ok: boolean, effect?: string, error?: string }}
+   * @param {{ root?: Element, sound?: boolean|string, text?: string, clearOthers?: boolean }|Element} [options]
+   * @returns {{ ok: boolean, effect?: string, error?: string, text?: string }}
    */
   function play(name, options) {
     var opts = options && typeof options === 'object' && !options.appendChild
@@ -568,24 +1136,53 @@
       return { ok: false, effect: id, error: 'Root invalide' };
     }
 
+    var bannerText = sanitizeBannerText(
+      opts.text != null ? opts.text : opts.label != null ? opts.label : opts.message
+    );
+    if (id === 'banner' && !bannerText) {
+      return { ok: false, effect: id, error: 'Texte requis pour banner' };
+    }
+
     if (opts.clearOthers !== false) {
       clearEffects(mount);
     }
 
-    var playSound = opts.sound !== false;
-    if (playSound) playEffectSound(id);
-
-    if (prefersReducedMotion()) {
-      return { ok: true, effect: id, reducedMotion: true };
+    var soundId = id;
+    if (typeof opts.sound === 'string') {
+      soundId = normalizeEffectId(opts.sound) || id;
+    } else if (typeof opts.soundEffect === 'string') {
+      soundId = normalizeEffectId(opts.soundEffect) || id;
+    } else if (typeof opts.sfx === 'string') {
+      soundId = normalizeEffectId(opts.sfx) || id;
     }
 
-    var builder = BUILDERS[id];
-    if (!builder) return { ok: false, effect: id, error: 'Builder manquant' };
+    var playSound = opts.sound !== false;
+    if (playSound) playEffectSound(soundId);
+
+    if (prefersReducedMotion()) {
+      return { ok: true, effect: id, text: bannerText || undefined, reducedMotion: true };
+    }
 
     var overlay = makeRoot(id, mount);
-    builder(overlay);
-    scheduleClear(overlay, EFFECT_META[id].ms + 200);
-    return { ok: true, effect: id };
+    var duration = EFFECT_META[id].ms;
+
+    if (id === 'banner') {
+      buildBanner(overlay, bannerText, soundId);
+      duration = Math.max(duration, 1800 + Math.min(bannerText.length, 24) * 20);
+    } else {
+      var builder = BUILDERS[id];
+      if (!builder) return { ok: false, effect: id, error: 'Builder manquant' };
+      builder(overlay);
+      if (bannerText) {
+        appendBannerText(overlay, bannerText, id);
+        duration = Math.max(duration, 2000);
+      } else if (SOUND_ONLY_IDS[id] && !bannerText) {
+        /* light visuals already from builder */
+      }
+    }
+
+    scheduleClear(overlay, duration + 200);
+    return { ok: true, effect: id, text: bannerText || undefined, sound: soundId };
   }
 
   global.CelebrationEffects = {

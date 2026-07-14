@@ -1283,6 +1283,20 @@
       return agentIdentity;
     }
 
+    bridge.setAgentName = async function (name) {
+      var trimmed = String(name || '').trim();
+      if (!trimmed) return { ok: false, reason: 'empty-name' };
+      var maxLen =
+        (global.UserProfile && global.UserProfile.MAX_AGENT_NAME) || 40;
+      if (trimmed.length > maxLen) trimmed = trimmed.slice(0, maxLen);
+      await persistAgentIdentity({
+        agentName: trimmed,
+        agentPersonality: agentIdentity.agentPersonality,
+        agentColor: agentIdentity.agentColor
+      });
+      return { ok: true, name: agentIdentity.agentName };
+    };
+
     function fillSettingsForm() {
       apiKeyInput.value = provider.apiKey || '';
       baseUrlInput.value = provider.baseUrl || '';
@@ -2354,11 +2368,21 @@
         'agent-face--enter-bounce',
         'agent-face--enter-pop',
         'agent-face--enter-jump',
-        'agent-face--motion-jump'
+        'agent-face--motion-jump',
+        'agent-face--fx-bounce',
+        'agent-face--fx-nod',
+        'agent-face--fx-tip',
+        'agent-face--fx-pop',
+        'agent-face--fx-shake',
+        'agent-face--fx-sparkle',
+        'agent-face--fx-wiggle',
+        'agent-face--fx-squint',
+        'agent-face--fx-breathe'
       ].forEach(function (cls) {
         face.classList.remove(cls);
       });
       face.removeAttribute('data-think');
+      face.removeAttribute('data-idle-fx');
     }
 
     var THINK_MOTIONS = ['glance', 'nod', 'sway', 'search', 'ponder', 'squint', 'bob'];
@@ -2437,22 +2461,149 @@
 
     /**
      * Idle face choreography state machine.
-     * Sequences have a start + end (e.g. wink → smile), then random
-     * lookLeft / lookRight digressions that return to smile. Typing
-     * forces lookDown at the composer until the draft is cleared.
      *
-     *   wink ──► smile ◄──► lookLeft
-     *              ▲    ◄──► lookRight
-     *              │
-     *           lookDown (typing)
+     * Weighted graph + optional queued mini-sequences. Each digression
+     * has a start/hold/end (usually back toward smile). One-shot fx ride
+     * on data-idle-fx. Typing forces lookDown until the draft clears.
      */
+    var FACE_SM_MAX_AWAY = 3;
+
     var FACE_SM_STATES = {
-      wink: { emotion: 'wink', holdMin: 420, holdMax: 720 },
-      smile: { emotion: 'happy', holdMin: 2200, holdMax: 4600 },
-      lookLeft: { emotion: 'lookLeft', holdMin: 900, holdMax: 1700 },
-      lookRight: { emotion: 'lookRight', holdMin: 900, holdMax: 1700 },
+      wink: { emotion: 'wink', holdMin: 400, holdMax: 680 },
+      winkAlt: { emotion: 'wink', holdMin: 380, holdMax: 620, fx: 'winkRight' },
+      smile: { emotion: 'happy', holdMin: 1600, holdMax: 3600 },
+      grin: { emotion: 'excited', holdMin: 650, holdMax: 1150, fx: 'bounce' },
+      tongue: { emotion: 'tongue', holdMin: 850, holdMax: 1450, fx: 'wiggle' },
+      curious: { emotion: 'curious', holdMin: 1000, holdMax: 1900, fx: 'tip' },
+      lookLeft: { emotion: 'lookLeft', holdMin: 750, holdMax: 1500 },
+      lookRight: { emotion: 'lookRight', holdMin: 750, holdMax: 1500 },
+      lookUp: { emotion: 'lookUp', holdMin: 850, holdMax: 1550 },
+      peek: { emotion: 'lookLeft', holdMin: 320, holdMax: 520, fx: 'pop' },
+      bounce: { emotion: 'happy', holdMin: 550, holdMax: 950, fx: 'bounce' },
+      nod: { emotion: 'happy', holdMin: 650, holdMax: 1050, fx: 'nod' },
+      squint: { emotion: 'curious', holdMin: 750, holdMax: 1300, fx: 'squint' },
+      sparkle: { emotion: 'happy', holdMin: 850, holdMax: 1350, fx: 'sparkle' },
+      rest: { emotion: 'neutral', holdMin: 1200, holdMax: 2400, fx: 'breathe' },
+      shake: { emotion: 'surprised', holdMin: 450, holdMax: 700, fx: 'shake' },
       lookDown: { emotion: 'lookDown', holdMin: 0, holdMax: 0 }
     };
+
+    /** Weighted edges; `seq` enqueues a mini-script instead of a single hop. */
+    var FACE_SM_TRANSITIONS = {
+      smile: [
+        { to: 'lookLeft', w: 12 },
+        { to: 'lookRight', w: 12 },
+        { to: 'lookUp', w: 9 },
+        { to: 'wink', w: 10 },
+        { to: 'winkAlt', w: 6 },
+        { to: 'curious', w: 9 },
+        { to: 'peek', w: 8 },
+        { to: 'bounce', w: 6 },
+        { to: 'nod', w: 7 },
+        { to: 'tongue', w: 5 },
+        { to: 'grin', w: 5 },
+        { to: 'sparkle', w: 5 },
+        { to: 'squint', w: 4 },
+        { to: 'rest', w: 6 },
+        { to: 'shake', w: 2 },
+        { to: 'smile', w: 8 },
+        { seq: ['lookLeft', 'lookRight', 'smile'], w: 7 },
+        { seq: ['lookRight', 'lookLeft', 'smile'], w: 5 },
+        { seq: ['lookUp', 'curious', 'smile'], w: 4 },
+        { seq: ['peek', 'lookRight', 'wink', 'smile'], w: 4 },
+        { seq: ['bounce', 'grin', 'smile'], w: 3 },
+        { seq: ['sparkle', 'wink', 'smile'], w: 3 }
+      ],
+      wink: [
+        { to: 'smile', w: 14 },
+        { to: 'winkAlt', w: 2 },
+        { to: 'tongue', w: 1 }
+      ],
+      winkAlt: [
+        { to: 'smile', w: 14 },
+        { to: 'wink', w: 2 }
+      ],
+      grin: [
+        { to: 'smile', w: 12 },
+        { to: 'wink', w: 3 },
+        { to: 'bounce', w: 2 }
+      ],
+      tongue: [
+        { to: 'smile', w: 10 },
+        { to: 'wink', w: 7 },
+        { to: 'winkAlt', w: 2 }
+      ],
+      curious: [
+        { to: 'smile', w: 8 },
+        { to: 'lookUp', w: 6 },
+        { to: 'squint', w: 3 },
+        { to: 'wink', w: 3 }
+      ],
+      lookLeft: [
+        { to: 'smile', w: 10 },
+        { to: 'lookRight', w: 5 },
+        { to: 'lookUp', w: 3 },
+        { to: 'peek', w: 2 }
+      ],
+      lookRight: [
+        { to: 'smile', w: 10 },
+        { to: 'lookLeft', w: 5 },
+        { to: 'lookUp', w: 3 },
+        { to: 'wink', w: 2 }
+      ],
+      lookUp: [
+        { to: 'smile', w: 10 },
+        { to: 'curious', w: 5 },
+        { to: 'lookLeft', w: 2 },
+        { to: 'lookRight', w: 2 }
+      ],
+      peek: [
+        { to: 'smile', w: 8 },
+        { to: 'lookRight', w: 6 },
+        { to: 'lookLeft', w: 2 }
+      ],
+      bounce: [
+        { to: 'smile', w: 10 },
+        { to: 'grin', w: 4 },
+        { to: 'sparkle', w: 2 }
+      ],
+      nod: [
+        { to: 'smile', w: 12 },
+        { to: 'wink', w: 3 }
+      ],
+      squint: [
+        { to: 'smile', w: 8 },
+        { to: 'curious', w: 4 },
+        { to: 'lookUp', w: 3 }
+      ],
+      sparkle: [
+        { to: 'smile', w: 10 },
+        { to: 'wink', w: 4 },
+        { to: 'grin', w: 2 }
+      ],
+      rest: [
+        { to: 'smile', w: 12 },
+        { to: 'lookUp', w: 4 },
+        { to: 'curious', w: 3 }
+      ],
+      shake: [
+        { to: 'smile', w: 10 },
+        { to: 'curious', w: 3 },
+        { to: 'wink', w: 2 }
+      ]
+    };
+
+    var FACE_SM_ARRIVALS = [
+      ['wink', 'smile'],
+      ['winkAlt', 'smile'],
+      ['bounce', 'smile'],
+      ['sparkle', 'smile'],
+      ['curious', 'wink', 'smile'],
+      ['peek', 'lookRight', 'smile'],
+      ['nod', 'smile'],
+      ['grin', 'wink', 'smile'],
+      ['tongue', 'smile']
+    ];
 
     var faceSm = {
       state: null,
@@ -2461,6 +2612,9 @@
       typing: false,
       suppressed: false,
       seq: 0,
+      queue: null,
+      awayCount: 0,
+      lastState: null,
       /** Emotion to restore after lookDown when idle machine is suppressed. */
       resumeEmotion: null
     };
@@ -2478,26 +2632,125 @@
 
     function stopFaceIdleMachine() {
       clearFaceIdleTimer();
+      faceSmClearFx();
       faceSm.state = null;
       faceSm.row = null;
       faceSm.suppressed = false;
       faceSm.resumeEmotion = null;
+      faceSm.queue = null;
+      faceSm.awayCount = 0;
+      faceSm.lastState = null;
       faceSm.seq += 1;
     }
 
     function suppressFaceIdleMachine() {
       faceSm.suppressed = true;
       clearFaceIdleTimer();
+      faceSmClearFx();
       faceSm.state = null;
+      faceSm.queue = null;
+      faceSm.awayCount = 0;
     }
 
     function faceSmLiveRow() {
       if (faceSm.row && faceSm.row.isConnected) {
-        var live = faceSm.row.querySelector('.agent-face:not(.is-frozen):not(.is-sick)');
+        var live = faceSm.row.querySelector(
+          '.agent-face:not(.is-frozen):not(.is-sick)'
+        );
         if (live) return faceSm.row;
       }
       var face = getLiveAssistantFace();
       return face ? face.closest('.agent-msg--assistant') : null;
+    }
+
+    function faceSmFace() {
+      var row = faceSm.row;
+      if (!row) return null;
+      return row.querySelector('.agent-face:not(.is-frozen):not(.is-sick)');
+    }
+
+    function faceSmClearFx() {
+      var face = faceSmFace();
+      if (!face) return;
+      face.removeAttribute('data-idle-fx');
+      face.classList.remove(
+        'agent-face--fx-bounce',
+        'agent-face--fx-nod',
+        'agent-face--fx-tip',
+        'agent-face--fx-pop',
+        'agent-face--fx-shake',
+        'agent-face--fx-sparkle',
+        'agent-face--fx-wiggle',
+        'agent-face--fx-squint',
+        'agent-face--fx-breathe'
+      );
+    }
+
+    function faceSmPlayFx(fx) {
+      var face = faceSmFace();
+      if (!face || !fx) return;
+      faceSmClearFx();
+      face.setAttribute('data-idle-fx', fx);
+      var cls = 'agent-face--fx-' + fx;
+      if (
+        [
+          'bounce',
+          'nod',
+          'tip',
+          'pop',
+          'shake',
+          'sparkle',
+          'wiggle',
+          'squint',
+          'breathe'
+        ].indexOf(fx) !== -1
+      ) {
+        // Restart one-shot / loop class animations.
+        void face.offsetWidth;
+        face.classList.add(cls);
+      }
+      if (fx === 'sparkle') {
+        faceSmSpawnSparkles(face);
+      }
+    }
+
+    function faceSmSpawnSparkles(face) {
+      if (!face || !document.body) return;
+      var rect = face.getBoundingClientRect();
+      var cx = rect.left + rect.width / 2;
+      var cy = rect.top + rect.height / 2;
+      var layer = el('span', 'agent-face-sparkle-layer');
+      layer.setAttribute('aria-hidden', 'true');
+      var count = 5 + Math.floor(Math.random() * 3);
+      for (var i = 0; i < count; i++) {
+        var speck = el('span', 'agent-face-sparkle');
+        var ang = (Math.PI * 2 * i) / count + Math.random() * 0.4;
+        var dist = 14 + Math.random() * 18;
+        speck.style.setProperty('--sx', cx + 'px');
+        speck.style.setProperty('--sy', cy + 'px');
+        speck.style.setProperty('--dx', Math.cos(ang) * dist + 'px');
+        speck.style.setProperty('--dy', Math.sin(ang) * dist - 6 + 'px');
+        speck.style.animationDelay = Math.random() * 0.12 + 's';
+        layer.appendChild(speck);
+      }
+      document.body.appendChild(layer);
+      global.setTimeout(function () {
+        if (layer.parentNode) layer.parentNode.removeChild(layer);
+      }, 900);
+    }
+
+    function faceSmPickWeighted(edges) {
+      if (!edges || !edges.length) return null;
+      var total = 0;
+      for (var i = 0; i < edges.length; i++) total += edges[i].w || 0;
+      if (total <= 0) return edges[0];
+      var roll = Math.random() * total;
+      var acc = 0;
+      for (var j = 0; j < edges.length; j++) {
+        acc += edges[j].w || 0;
+        if (roll <= acc) return edges[j];
+      }
+      return edges[edges.length - 1];
     }
 
     function faceSmApply(stateName, options) {
@@ -2505,12 +2758,23 @@
       var def = FACE_SM_STATES[stateName];
       var row = faceSm.row;
       if (!def || !row) return;
+      faceSm.lastState = faceSm.state;
       faceSm.state = stateName;
+      if (stateName === 'smile' || stateName === 'lookDown') {
+        faceSm.awayCount = 0;
+      } else {
+        faceSm.awayCount += 1;
+      }
       setAssistantFaceEmotion(row, def.emotion, {
         animate: !!options.enter,
         forceEnter: !!options.enter,
         fromIdleMachine: true
       });
+      if (def.fx) {
+        faceSmPlayFx(def.fx);
+      } else {
+        faceSmClearFx();
+      }
     }
 
     function faceSmScheduleNext(fromState) {
@@ -2519,6 +2783,10 @@
       var def = FACE_SM_STATES[fromState];
       if (!def || !def.holdMax) return;
       var delay = faceSmRand(def.holdMin, def.holdMax);
+      // Slightly shorten holds when a queue is mid-flight so scans feel snappy.
+      if (faceSm.queue && faceSm.queue.length) {
+        delay = Math.round(delay * 0.72);
+      }
       var seq = faceSm.seq;
       faceSm.timer = setTimeout(function () {
         if (seq !== faceSm.seq) return;
@@ -2526,36 +2794,62 @@
       }, delay);
     }
 
+    function faceSmEnqueue(states) {
+      if (!states || !states.length) return;
+      faceSm.queue = (faceSm.queue || []).concat(states);
+    }
+
+    function faceSmPickNext(fromState) {
+      if (faceSm.queue && faceSm.queue.length) {
+        return faceSm.queue.shift();
+      }
+      if (faceSm.awayCount >= FACE_SM_MAX_AWAY && fromState !== 'smile') {
+        return 'smile';
+      }
+      var edges = FACE_SM_TRANSITIONS[fromState];
+      if (!edges || !edges.length) return 'smile';
+      // Avoid immediate repeat of the same digression when smiling.
+      var filtered = edges;
+      if (fromState === 'smile' && faceSm.lastState) {
+        var noRepeat = edges.filter(function (e) {
+          if (e.seq) return e.seq[0] !== faceSm.lastState;
+          return e.to !== faceSm.lastState;
+        });
+        if (noRepeat.length) filtered = noRepeat;
+      }
+      var pick = faceSmPickWeighted(filtered);
+      if (!pick) return 'smile';
+      if (pick.seq && pick.seq.length) {
+        faceSmEnqueue(pick.seq.slice(1));
+        return pick.seq[0];
+      }
+      return pick.to || 'smile';
+    }
+
     function faceSmAdvance(fromState) {
       if (faceSm.suppressed || faceSm.typing || !faceSm.row) return;
-      var next;
-      // Finite segments: gaze / wink always resolve back to the smile resting state.
-      if (
-        fromState === 'wink' ||
-        fromState === 'lookLeft' ||
-        fromState === 'lookRight'
-      ) {
-        next = 'smile';
-      } else if (fromState === 'smile') {
-        var roll = Math.random();
-        if (roll < 0.34) next = 'lookLeft';
-        else if (roll < 0.68) next = 'lookRight';
-        else if (roll < 0.88) next = 'wink';
-        else next = 'smile';
-      } else {
-        next = 'smile';
-      }
+      var next = faceSmPickNext(fromState);
+      if (!FACE_SM_STATES[next]) next = 'smile';
       faceSmApply(next);
       faceSmScheduleNext(next);
+    }
+
+    function faceSmPickArrival() {
+      var script = pickOne(FACE_SM_ARRIVALS) || ['wink', 'smile'];
+      return script.slice();
     }
 
     function startFaceIdleMachine(row, options) {
       options = options || {};
       clearFaceIdleTimer();
+      faceSmClearFx();
       faceSm.seq += 1;
       faceSm.suppressed = false;
       faceSm.row = row || null;
       faceSm.state = null;
+      faceSm.lastState = null;
+      faceSm.awayCount = 0;
+      faceSm.queue = null;
       if (!faceSm.row) return;
 
       if (faceSm.typing) {
@@ -2563,10 +2857,17 @@
         return;
       }
 
-      // Arrival sequence: wink (start) → smile (end), then random digressions.
-      var startState = options.startState || 'wink';
-      faceSmApply(startState, { enter: options.enter !== false });
-      faceSmScheduleNext(startState);
+      // Arrival: play a short start→end script, then free roam from smile.
+      if (options.startState) {
+        faceSmApply(options.startState, { enter: options.enter !== false });
+        faceSmScheduleNext(options.startState);
+        return;
+      }
+      var arrival = faceSmPickArrival();
+      var first = arrival.shift();
+      if (arrival.length) faceSmEnqueue(arrival);
+      faceSmApply(first, { enter: options.enter !== false });
+      faceSmScheduleNext(first);
     }
 
     function setFaceIdleTyping(isTyping) {
@@ -2578,6 +2879,7 @@
           if (rowFresh && faceSm.state !== 'lookDown') {
             faceSm.row = rowFresh;
             clearFaceIdleTimer();
+            faceSmClearFx();
             setAssistantFaceEmotion(rowFresh, 'lookDown', { fromIdleMachine: true });
             faceSm.state = 'lookDown';
           }
@@ -2592,6 +2894,8 @@
 
       if (faceSm.typing) {
         clearFaceIdleTimer();
+        faceSm.queue = null;
+        faceSmClearFx();
         var faceNow = row.querySelector('.agent-face');
         var current = faceNow && faceNow.getAttribute('data-emotion');
         if (current && current !== 'lookDown') {
@@ -2622,6 +2926,8 @@
       }
 
       faceSm.resumeEmotion = null;
+      faceSm.queue = null;
+      faceSm.awayCount = 0;
       faceSmApply('smile');
       faceSmScheduleNext('smile');
     }
@@ -2640,8 +2946,9 @@
         faceSm.row = row;
         return;
       }
+      // Prefer varied arrival scripts; honor an explicit start when provided.
       startFaceIdleMachine(row, {
-        startState: options.startState || 'wink',
+        startState: options.startState || null,
         enter: options.enter !== false
       });
     }
@@ -2708,7 +3015,7 @@
           faceSm.row = row;
         } else if (options.idleHandOff !== false) {
           handOffToFaceIdleMachine(row, mood, {
-            startState: options.idleStart || 'wink',
+            startState: options.idleStart || null,
             enter: false
           });
         }
@@ -2735,18 +3042,14 @@
       var mood = emotion || 'happy';
       freezeOlderAssistantFaces(row);
       if (FACE_IDLE_ELIGIBLE[mood]) {
-        // Seed aura/color, then run wink → smile choreography.
-        setAssistantFaceEmotion(row, 'wink', {
-          animate: true,
-          forceEnter: true,
+        // Seed aura/color, then run a varied arrival script.
+        setAssistantFaceEmotion(row, 'happy', {
+          animate: false,
           color: color,
           idleHandOff: false,
           fromIdleMachine: true
         });
-        handOffToFaceIdleMachine(row, mood, {
-          startState: 'wink',
-          enter: false
-        });
+        handOffToFaceIdleMachine(row, mood, { enter: true });
       } else {
         setAssistantFaceEmotion(row, mood, {
           animate: true,
@@ -3224,17 +3527,13 @@
       var color = meta.color != null ? meta.color : meta.aura;
       freezeOlderAssistantFaces(row);
       if (FACE_IDLE_ELIGIBLE[emotion]) {
-        setAssistantFaceEmotion(row, 'wink', {
-          animate: true,
-          forceEnter: true,
+        setAssistantFaceEmotion(row, 'happy', {
+          animate: false,
           color: color,
           idleHandOff: false,
           fromIdleMachine: true
         });
-        handOffToFaceIdleMachine(row, emotion, {
-          startState: 'wink',
-          enter: false
-        });
+        handOffToFaceIdleMachine(row, emotion, { enter: true });
       } else {
         setAssistantFaceEmotion(row, emotion, {
           animate: true,
@@ -4125,10 +4424,17 @@
       );
       if (numbered) raw = numbered[2].trim();
       raw = raw.replace(/^(portee|impact)\s*[=:]?\s*/, '').trim();
-      if (/^(personnel|moi|individuel|individual)$/.test(raw)) return 'personnel';
-      if (/^(equipe|team|squad)$/.test(raw)) return 'equipe';
-      if (/^(interne|org(anisation)?|entreprise|company)$/.test(raw)) return 'interne';
-      if (/^(population|clients?|usagers?|communaute|users?)$/.test(raw)) {
+      raw = raw.replace(/^sur\s+/, '').trim();
+      if (/^(personnel|moi|individuel|individual|me)$/.test(raw)) return 'personnel';
+      if (/^(l['\u2019]?equipe|equipe|team|squad)$/.test(raw)) return 'equipe';
+      if (/^(interne|l['\u2019]?org(anisation)?|entreprise|company)$/.test(raw)) {
+        return 'interne';
+      }
+      if (
+        /^(les?\s+)?(population|clients?|usagers?|utilisateurs?|communaute|users?)$/.test(
+          raw
+        )
+      ) {
         return 'population';
       }
       if (/^(global|mondial|world|planet)$/.test(raw)) return 'global';
@@ -4168,6 +4474,20 @@
       var reachCount = reachKeys.filter(Boolean).length;
       var treatAsReach =
         reachCount >= 2 && reachCount >= Math.ceil(items.length * 0.6);
+      // Conversational personal chip: "Impact sur Alex" among reach options.
+      if (treatAsReach) {
+        items.forEach(function (item, index) {
+          if (reachKeys[index]) return;
+          var raw = String(item.text || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim();
+          if (/^(impact\s+sur|sur)\s+\S+/.test(raw)) {
+            reachKeys[index] = 'personnel';
+          }
+        });
+      }
       return items.map(function (item, index) {
         var next = {
           text: item.text,
@@ -4178,7 +4498,14 @@
         var reachKey = reachKeys[index];
         if (treatAsReach && reachKey && IMPACT_REACH_CHIP[reachKey]) {
           var meta = IMPACT_REACH_CHIP[reachKey];
-          next.text = meta.label;
+          var conversational = /^(impact\s+sur|sur)\s+/i.test(String(item.text || ''));
+          // Keep "Impact sur …" phrasing and personalized names.
+          var keepLabel =
+            conversational ||
+            (reachKey === 'personnel' &&
+              item.text &&
+              !/^(personnel|moi)$/i.test(String(item.text).trim()));
+          next.text = keepLabel ? item.text : meta.label;
           if (!next.icon) next.icon = meta.icon;
           if (!next.color) next.color = meta.color;
           next.heat = null;

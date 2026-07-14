@@ -448,6 +448,252 @@
   100% { opacity: 0; transform: scale(1.8); }
 }
 
+/* ── Sound-effect visuals (beep / zap / thunder / …) ───────────────────── */
+
+.tp-fx-flash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.55), transparent 60%);
+  opacity: 0;
+  animation: tp-fx-flash-burst 0.55s ease-out forwards;
+}
+
+@keyframes tp-fx-flash-burst {
+  0% { opacity: 0; }
+  18% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
+.tp-fx-blip {
+  position: absolute;
+  left: var(--x, 50%);
+  top: var(--y, 50%);
+  width: var(--size, 16px);
+  height: var(--size, 16px);
+  margin: calc(var(--size, 16px) * -0.5) 0 0 calc(var(--size, 16px) * -0.5);
+  border-radius: 50%;
+  opacity: 0;
+  background: radial-gradient(circle, #fff 0%, color-mix(in srgb, var(--c, #39ff14) 80%, transparent) 45%, transparent 70%);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--c, #39ff14) 70%, transparent);
+  animation: tp-fx-blip-pop 0.7s ease-out forwards;
+  animation-delay: var(--delay, 0s);
+}
+
+@keyframes tp-fx-blip-pop {
+  0% { opacity: 0; transform: scale(0.2); }
+  35% { opacity: 1; transform: scale(1.25); }
+  100% { opacity: 0; transform: scale(1.8); }
+}
+
+.tp-fx-bolt {
+  position: absolute;
+  left: var(--x, 50%);
+  top: 8%;
+  width: 3px;
+  height: 42%;
+  opacity: 0;
+  background: linear-gradient(to bottom, #fff, #a5f3fc 40%, transparent);
+  box-shadow: 0 0 12px #67e8f9, 0 0 28px #22d3ee;
+  transform: rotate(var(--rot, 0deg)) scaleY(0.2);
+  transform-origin: 50% 0;
+  clip-path: polygon(40% 0, 70% 0, 55% 28%, 85% 28%, 30% 100%, 48% 48%, 18% 48%);
+  animation: tp-fx-bolt-strike 0.45s ease-out forwards;
+  animation-delay: var(--delay, 0s);
+}
+
+.tp-fx-bolt.is-heavy {
+  width: 5px;
+  height: 55%;
+  box-shadow: 0 0 18px #fef08a, 0 0 40px #facc15;
+  background: linear-gradient(to bottom, #fff, #fde047 35%, transparent);
+}
+
+@keyframes tp-fx-bolt-strike {
+  0% { opacity: 0; transform: rotate(var(--rot, 0deg)) scaleY(0.15); }
+  20% { opacity: 1; transform: rotate(var(--rot, 0deg)) scaleY(1); }
+  55% { opacity: 0.9; }
+  100% { opacity: 0; transform: rotate(var(--rot, 0deg)) scaleY(1.05); }
+}
+
+.tp-fx-storm {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(15, 23, 42, 0.35), transparent 65%);
+  opacity: 0;
+  animation: tp-fx-storm-dim 1.6s ease-out forwards;
+}
+
+@keyframes tp-fx-storm-dim {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.tp-fx-bonk-star {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  margin: -0.5em 0 0 -0.5em;
+  font-size: min(18vw, 120px);
+  font-weight: 900;
+  line-height: 1;
+  color: #f5cd47;
+  text-shadow: 0 0 20px rgba(245, 205, 71, 0.8);
+  opacity: 0;
+  animation: tp-fx-bonk-pop 0.7s cubic-bezier(0.2, 1.2, 0.3, 1) forwards;
+}
+
+@keyframes tp-fx-bonk-pop {
+  0% { opacity: 0; transform: scale(0.2) rotate(-20deg); }
+  40% { opacity: 1; transform: scale(1.25) rotate(8deg); }
+  100% { opacity: 0; transform: scale(1.4) rotate(12deg); }
+}
+
+.tp-fx-laser-beam {
+  position: absolute;
+  left: -5%;
+  top: var(--y, 50%);
+  width: 110%;
+  height: 3px;
+  opacity: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--c, #00f0ff) 90%, #fff) 20%,
+    #fff 50%,
+    color-mix(in srgb, var(--c, #00f0ff) 90%, #fff) 80%,
+    transparent
+  );
+  box-shadow: 0 0 14px var(--c, #00f0ff);
+  animation: tp-fx-laser-sweep 0.55s ease-out forwards;
+  animation-delay: var(--delay, 0s);
+}
+
+@keyframes tp-fx-laser-sweep {
+  0% { opacity: 0; transform: scaleX(0.1); }
+  30% { opacity: 1; transform: scaleX(1); }
+  100% { opacity: 0; transform: scaleX(1.05); }
+}
+
+/* ── Fullscreen dynamic text banner ────────────────────────────────────── */
+
+.tp-fx-banner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6vw;
+  text-align: center;
+}
+
+.tp-fx-banner-text {
+  display: block;
+  max-width: 96vw;
+  font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', 'Segoe UI Black', sans-serif;
+  font-size: clamp(3.5rem, 22vw, 11rem);
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+  word-break: break-word;
+  opacity: 0;
+  text-shadow:
+    0 0 12px rgba(255, 255, 255, 0.55),
+    0 8px 0 rgba(0, 0, 0, 0.25),
+    0 0 48px rgba(87, 157, 255, 0.45);
+  animation: tp-fx-banner-slam 2.1s cubic-bezier(0.16, 0.9, 0.24, 1) forwards;
+}
+
+.tp-fx-banner.is-thunder .tp-fx-banner-text {
+  color: #fef08a;
+  text-shadow:
+    0 0 10px #fff,
+    0 0 36px #facc15,
+    0 0 70px #f59e0b,
+    0 10px 0 rgba(15, 23, 42, 0.55);
+  animation-name: tp-fx-banner-thunder;
+}
+
+.tp-fx-banner.is-beep .tp-fx-banner-text {
+  color: #39ff14;
+  text-shadow:
+    0 0 10px #fff,
+    0 0 28px #39ff14,
+    0 0 56px #22c55e;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.tp-fx-banner.is-zap .tp-fx-banner-text {
+  color: #67e8f9;
+  text-shadow:
+    0 0 12px #fff,
+    0 0 34px #22d3ee,
+    0 0 60px #0891b2;
+}
+
+.tp-fx-banner.is-fanfare .tp-fx-banner-text,
+.tp-fx-banner.is-party .tp-fx-banner-text,
+.tp-fx-banner.is-coin .tp-fx-banner-text {
+  color: #fde047;
+  text-shadow:
+    0 0 12px #fff,
+    0 0 30px #f5cd47,
+    0 0 58px #fb923c;
+}
+
+.tp-fx-banner.is-laser .tp-fx-banner-text {
+  color: #ff2bd6;
+  text-shadow:
+    0 0 12px #fff,
+    0 0 30px #ff2bd6,
+    0 0 58px #a21caf;
+}
+
+.tp-fx-banner.is-bonk .tp-fx-banner-text {
+  color: #ff8f73;
+  animation-name: tp-fx-banner-bonk;
+}
+
+.tp-fx-banner.is-drumroll .tp-fx-banner-text {
+  animation-duration: 2.4s;
+  animation-name: tp-fx-banner-build;
+}
+
+@keyframes tp-fx-banner-slam {
+  0% { opacity: 0; transform: scale(2.4) rotate(-4deg); filter: blur(8px); }
+  18% { opacity: 1; transform: scale(0.92) rotate(1deg); filter: blur(0); }
+  32% { transform: scale(1.06) rotate(-0.5deg); }
+  55% { opacity: 1; transform: scale(1) rotate(0); }
+  100% { opacity: 0; transform: scale(1.12); }
+}
+
+@keyframes tp-fx-banner-thunder {
+  0% { opacity: 0; transform: scale(2.8); filter: brightness(2); }
+  12% { opacity: 1; transform: scale(0.88) translate(2px, -2px); }
+  18% { transform: scale(1.08) translate(-3px, 2px); }
+  24% { transform: scale(0.97) translate(2px, 1px); }
+  32% { transform: scale(1.04) translate(-1px, -1px); }
+  50% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.15); }
+}
+
+@keyframes tp-fx-banner-bonk {
+  0% { opacity: 0; transform: scale(0.2) translateY(-20px); }
+  25% { opacity: 1; transform: scale(1.2) translateY(0) rotate(-4deg); }
+  40% { transform: scale(0.95) rotate(3deg); }
+  60% { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 0; transform: scale(1.2) translateY(10px); }
+}
+
+@keyframes tp-fx-banner-build {
+  0% { opacity: 0; transform: scale(0.4); letter-spacing: 0.4em; }
+  55% { opacity: 0.85; transform: scale(0.85); letter-spacing: 0.18em; }
+  72% { opacity: 1; transform: scale(1.12); letter-spacing: 0.04em; }
+  100% { opacity: 0; transform: scale(1.2); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tp-fx-root {
     display: none;

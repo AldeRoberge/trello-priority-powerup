@@ -363,12 +363,12 @@
     var p = normalizeProfile(profile);
     var lines = [];
     if (p.agentName || p.agentPersonality || p.agentColor) {
-      lines.push('Identité de l\'assistant (persistante — respecter)\u00a0:');
+      lines.push('Identité de l\'assistant (membre — respecter jusqu\'à changement)\u00a0:');
       if (p.agentName) {
         lines.push(
           '- Tu t\'appelles ' +
             p.agentName +
-            '. Tu peux te présenter ainsi ; ce n\'est pas un surnom temporaire.'
+            '. Présente-toi ainsi. Ce n\'est pas un surnom temporaire, MAIS l\'utilisateur peut te renommer\u00a0: dans ce cas utilise set_agent_name (ne refuse JAMAIS un changement de nom).'
         );
       }
       if (p.agentColor) {

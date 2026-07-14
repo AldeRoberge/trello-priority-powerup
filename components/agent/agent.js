@@ -73,7 +73,8 @@
     set_subtask_progress: 'Progr\u00e8s de sous-t\u00e2che mis \u00e0 jour.',
     complete_all_subtasks: 'Toutes les sous-t\u00e2ches termin\u00e9es.',
     reset_progress: 'Progr\u00e8s r\u00e9initialis\u00e9.',
-    trigger_effect: 'Effet lanc\u00e9.'
+    trigger_effect: 'Effet lanc\u00e9.',
+    set_agent_name: 'Nom de l\'assistant mis \u00e0 jour.'
   };
 
   var EFFECT_IDS =
@@ -91,7 +92,17 @@
           'balloons',
           'petals',
           'rainbow',
-          'disco'
+          'disco',
+          'beep',
+          'boop',
+          'zap',
+          'thunder',
+          'fanfare',
+          'bonk',
+          'laser',
+          'coin',
+          'drumroll',
+          'banner'
         ];
 
   function normalizeEffectId(raw) {
@@ -221,6 +232,7 @@
     if (actions[0].tool === 'set_formula') return 'Changer la formule';
     if (actions[0].tool === 'set_statut') return 'Changer le statut';
     if (actions[0].tool === 'set_project') return 'Lier au projet';
+    if (actions[0].tool === 'set_agent_name') return 'Changer mon nom';
     if (actions[0].tool === 'trigger_effect') {
       var fx =
         actions[0].args &&
@@ -1528,7 +1540,7 @@
       '- Ne bloque JAMAIS une action pour un param\u00e8tre optionnel. Applique le minimum viable, puis adapte.',
       '- Ne pose une question AVANT d\'appeler un outil QUE si un param\u00e8tre OBLIGATOIRE manque et qu\'aucune action partielle n\'est possible.',
       '- Param\u00e8tres optionnels (ne jamais exiger avant d\'agir)\u00a0: dueTime, blockedReasons, axes priorit\u00e9 non fournis, progress pr\u00e9cis si on active seulement la section.',
-      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_project\u00a0: projectId OU matchText/name OU clear:true\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget, estimatedDuration/estimatedDurationMinutes ou priorityEnabled\u00a0; trigger_effect.effect.',
+      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_project\u00a0: projectId OU matchText/name OU clear:true\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget, estimatedDuration/estimatedDurationMinutes ou priorityEnabled\u00a0; trigger_effect.effect\u00a0; set_agent_name.name.',
       '- Dates relatives (jours)\u00a0: r\u00e9sous avec context.today (aujourd\'hui / today \u2192 context.today\u00a0; demain \u2192 +1 jour). N\'invente pas d\'autre date.',
       '- Heures relatives (tr\u00e8s important)\u00a0: \u00ab\u00a0dans 15 minutes\u00a0\u00bb / \u00ab\u00a0in 15 minutes\u00a0\u00bb / \u00ab\u00a0dans 2 heures\u00a0\u00bb = D\u00c9LAI depuis maintenant, PAS une heure fixe du matin.',
       '- Pour un d\u00e9lai\u00a0: utilise set_due avec relativeMinutes (ou relativeHours). Le runtime calcule dueDate/dueTime \u00e0 partir de context.nowTime (' +
@@ -1668,6 +1680,16 @@
       '- trigger_effect: { effect: "' +
         EFFECT_IDS.join('"|"') +
         '" } (effet visuel + son pour c\u00e9l\u00e9brer / egayer\u00a0; n\'alt\u00e8re pas la carte)',
+      '- set_agent_name: { name: string } (nouveau nom de l\'assistant\u00a0; name obligatoire, non vide, max ~40 car.\u00a0; persiste pour le membre)',
+      'Identit\u00e9 / nom de l\'assistant (set_agent_name)\u00a0:',
+      '- Tu PEUX changer ton nom. Quand l\'utilisateur le demande (ou te laisse choisir), utilise set_agent_name. INTERDIT de r\u00e9pondre que tu gardes ton nom / que tu ne peux pas.',
+      '- Nouveau nom connu (\u00ab\u00a0appelle-toi Max\u00a0\u00bb, \u00ab\u00a0rename yourself Nova\u00a0\u00bb)\u00a0: APPLIQUE set_agent_name tout de suite, confirme bri\u00e8vement.',
+      '- Demande sans nom (\u00ab\u00a0est-ce que je peux changer ton nom?\u00a0\u00bb, \u00ab\u00a0change ton nom\u00a0\u00bb)\u00a0: dis oui, demande le nom voulu (ou propose 2\u20133 options en suggestions). actions=[] tant que le nom n\'est pas choisi.',
+      '- Si l\'utilisateur dit de choisir / inventer un nom\u00a0: choisis un pr\u00e9nom court sympa et APPLIQUE set_agent_name.',
+      '- Distingue set_agent_name (TON nom) de rename_card (titre de la carte).',
+      '- Ex. permission\u00a0: user \u00ab\u00a0est-ce que je peux changer ton nom?\u00a0\u00bb \u2192 {"message":"Oui grave\u00a0! Tu veux quel nom?","suggestions":["Max","Nova","Lumen"],"followUps":[],"actions":[]}',
+      '- Ex. nom donn\u00e9\u00a0: user \u00ab\u00a0appelle-toi Nova\u00a0\u00bb \u2192 {"message":"Okay, je m\'appelle Nova maintenant.","suggestions":["Quelle est la priorit\u00e9?","Ajouter une sous-t\u00e2che"],"followUps":[],"actions":[{"tool":"set_agent_name","args":{"name":"Nova"}}]}',
+      '- Ex. choisir\u00a0: user \u00ab\u00a0choisis-toi un nouveau nom\u00a0\u00bb \u2192 set_agent_name avec un nom court invent\u00e9 + confirmation.',
       'Effets fun (trigger_effect)\u00a0:',
       '- Utilise-les pour c\u00e9l\u00e9brer une victoire, un 100\u00a0%, un compliment, une blague, ou quand l\'utilisateur demande un effet / feux d\'artifice / confettis / etc.',
       '- 0 ou 1 effet par r\u00e9ponse max. Pas \u00e0 chaque message. Ne promets pas l\'effet dans le texte si tu ne le mets pas dans actions.',
@@ -2789,7 +2811,12 @@
     var suggestionEntries = normalizeSuggestionEntries(
       (data && data.suggestions) || parsed.suggestions,
       5,
-      { scale: suggestionScale, rankGreenToRed: true }
+      {
+        scale: suggestionScale,
+        rankGreenToRed: true,
+        userName: context.userName,
+        message: message
+      }
     );
     // Interview answer chips (no "?") are ordinal soft→intense when unmarked.
     if (
@@ -2799,7 +2826,10 @@
         return entry.text.indexOf('?') < 0;
       })
     ) {
-      suggestionEntries = orderSuggestionsGreenToRed(suggestionEntries);
+      suggestionEntries = orderSuggestionsGreenToRed(
+        suggestionEntries,
+        context.userName
+      );
       var hasHeat = suggestionEntries.some(function (entry) {
         return entry.heat != null;
       });
@@ -2811,9 +2841,17 @@
         suggestionEntries.forEach(function (entry, i) {
           entry.heat = interviewSteps[i];
         });
-        suggestionEntries = orderSuggestionsGreenToRed(suggestionEntries);
+        suggestionEntries = orderSuggestionsGreenToRed(
+          suggestionEntries,
+          context.userName
+        );
       }
     }
+    suggestionEntries = ensurePersonalImpactSuggestion(
+      suggestionEntries,
+      context.userName,
+      message
+    );
 
     return {
       message: message,
@@ -2905,7 +2943,23 @@
       return true;
     }
     if (action.tool === 'trigger_effect') {
-      return !!normalizeEffectId(args.effect || args.name || args.id);
+      var fxOk = !!normalizeEffectId(args.effect || args.name || args.id);
+      if (!fxOk) return false;
+      var fxNorm = normalizeEffectId(args.effect || args.name || args.id);
+      if (fxNorm === 'banner') {
+        var bannerText =
+          (typeof args.text === 'string' && args.text.trim()) ||
+          (typeof args.label === 'string' && args.label.trim()) ||
+          (typeof args.message === 'string' && args.message.trim());
+        return !!bannerText;
+      }
+      return true;
+    }
+    if (action.tool === 'set_agent_name') {
+      return (
+        (typeof args.name === 'string' && !!args.name.trim()) ||
+        (typeof args.text === 'string' && !!args.text.trim())
+      );
     }
     return true;
   }
@@ -2937,9 +2991,18 @@
       return 'set_project: projectId, matchText/name, ou clear:true requis';
     }
     if (action.tool === 'trigger_effect') {
+      var fxTry = normalizeEffectId(
+        action.args && (action.args.effect || action.args.name || action.args.id)
+      );
+      if (fxTry === 'banner') {
+        return 'trigger_effect: banner exige text (texte plein \u00e9cran)';
+      }
       return (
         'trigger_effect: effect requis (' + EFFECT_IDS.join('|') + ')'
       );
+    }
+    if (action.tool === 'set_agent_name') {
+      return 'set_agent_name: name requis';
     }
     return action.tool + ': args incomplets';
   }
@@ -3156,7 +3219,7 @@
     return normalizeSuggestionIconId(item.icon);
   }
 
-  function impactReachKeyFromText(text) {
+  function impactReachKeyFromText(text, knownName) {
     var raw = String(text || '')
       .toLowerCase()
       .normalize('NFD')
@@ -3168,29 +3231,132 @@
     );
     if (numbered) raw = numbered[2].trim();
     raw = raw.replace(/^(portee|impact)\s*[=:]?\s*/, '').trim();
-    if (/^(personnel|moi|individuel|individual)$/.test(raw)) return 'personnel';
-    if (/^(equipe|team|squad)$/.test(raw)) return 'equipe';
-    if (/^(interne|org(anisation)?|entreprise|company)$/.test(raw)) return 'interne';
-    if (/^(population|clients?|usagers?|communaute|users?)$/.test(raw)) {
+    // "Impact sur l'équipe" / "sur moi" conversational chips
+    raw = raw.replace(/^sur\s+/, '').trim();
+    if (/^(personnel|moi|individuel|individual|me)$/.test(raw)) return 'personnel';
+    if (/^(l['\u2019]?equipe|equipe|team|squad)$/.test(raw)) return 'equipe';
+    if (/^(interne|l['\u2019]?org(anisation)?|entreprise|company)$/.test(raw)) {
+      return 'interne';
+    }
+    if (
+      /^(les?\s+)?(population|clients?|usagers?|utilisateurs?|communaute|users?)$/.test(
+        raw
+      )
+    ) {
       return 'population';
     }
     if (/^(global|mondial|world|planet)$/.test(raw)) return 'global';
+    if (knownName) {
+      var nameKey = String(knownName)
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
+      var first = nameKey.split(/\s+/)[0];
+      if (
+        (first && first.length >= 2 && (raw === first || raw.indexOf(first) === 0)) ||
+        (nameKey.length >= 2 && raw === nameKey)
+      ) {
+        return 'personnel';
+      }
+    }
     return null;
   }
 
+  /**
+   * If impact-audience chips omit the known user, prepend "Impact sur {name}".
+   */
+  function ensurePersonalImpactSuggestion(entries, userName, message) {
+    var name = String(userName || '').trim();
+    if (!name || !Array.isArray(entries) || entries.length < 2) {
+      return entries || [];
+    }
+    var firstName = name.split(/\s+/)[0];
+    if (!firstName) return entries;
+
+    function fold(s) {
+      return String(s || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function looksLikeAudience(text) {
+      var raw = fold(text).trim();
+      if (/^(impact\s+sur|sur)\s+/.test(raw)) return true;
+      return !!impactReachKeyFromText(text, name);
+    }
+
+    function mentionsUser(text) {
+      var raw = fold(text);
+      if (/\b(moi|personnel|individuel|me)\b/.test(raw)) return true;
+      var key = fold(firstName);
+      return key.length >= 2 && raw.indexOf(key) >= 0;
+    }
+
+    var audienceHits = 0;
+    for (var i = 0; i < entries.length; i++) {
+      if (looksLikeAudience(entries[i].text)) audienceHits += 1;
+    }
+    var messageLooksImpact = /impact|touch[eé]|port[eé]e|qui\s+(est|sont)/i.test(
+      String(message || '')
+    );
+    if (audienceHits < 2 && !(messageLooksImpact && audienceHits >= 1)) {
+      return entries;
+    }
+    if (audienceHits < Math.ceil(entries.length * 0.5) && audienceHits < 2) {
+      return entries;
+    }
+    if (
+      entries.some(function (entry) {
+        return mentionsUser(entry.text);
+      })
+    ) {
+      return entries;
+    }
+
+    var personal = {
+      text: 'Impact sur ' + firstName,
+      heat: null,
+      icon: 'circle-xs',
+      color: 'blue'
+    };
+    return [personal].concat(entries).slice(0, 5);
+  }
+
   /** Rewrite numbered reach chips (0 Personnel…) into labelled icon+color chips. */
-  function enrichImpactReachSuggestions(entries) {
+  function enrichImpactReachSuggestions(entries, userName) {
     if (!Array.isArray(entries) || entries.length < 2) return entries || [];
     var keys = entries.map(function (entry) {
-      return impactReachKeyFromText(entry.text);
+      return impactReachKeyFromText(entry.text, userName);
     });
     var hit = keys.filter(Boolean).length;
     if (hit < 2 || hit < Math.ceil(entries.length * 0.6)) return entries;
     return entries.map(function (entry, i) {
       var meta = keys[i] ? IMPACT_REACH_SUGGESTION[keys[i]] : null;
       if (!meta) return entry;
+      var label = meta.label;
+      var conversational = /^(impact\s+sur|sur)\s+/i.test(String(entry.text || ''));
+      if (conversational) {
+        label = entry.text;
+      } else if (keys[i] === 'personnel' && userName) {
+        var first = String(userName).trim().split(/\s+/)[0];
+        var folded = String(entry.text || '')
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+        var firstFold = String(first || '')
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+        if (firstFold && folded.indexOf(firstFold) >= 0) {
+          label = entry.text;
+        } else if (first) {
+          label = first;
+        }
+      }
       return {
-        text: meta.label,
+        text: label,
         heat: null,
         icon: entry.icon || meta.icon,
         color: entry.color || meta.color
@@ -3298,16 +3464,16 @@
    * Force green→red order: sort by heat when known, else by intensity keywords,
    * then re-spread heat 0…4 so colors match left→right.
    */
-  function orderSuggestionsGreenToRed(entries) {
+  function orderSuggestionsGreenToRed(entries, userName) {
     if (!Array.isArray(entries) || entries.length < 2) {
       return entries || [];
     }
     // Impact reach (blue→green + circle icons) must not be remapped to heat.
     var reachHits = entries.filter(function (entry) {
-      return impactReachKeyFromText(entry.text);
+      return impactReachKeyFromText(entry.text, userName);
     }).length;
     if (reachHits >= 2 && reachHits >= Math.ceil(entries.length * 0.6)) {
-      return enrichImpactReachSuggestions(entries);
+      return enrichImpactReachSuggestions(entries, userName);
     }
     var list = entries.map(function (entry) {
       return {
@@ -3397,7 +3563,9 @@
       }
       out.push({ text: text, heat: heat, icon: icon, color: color });
     });
-    out = enrichUrgencyIcons(enrichImpactReachSuggestions(out.slice(0, max)));
+    out = enrichUrgencyIcons(
+      enrichImpactReachSuggestions(out.slice(0, max), options.userName)
+    );
     var hasHeat = out.some(function (entry) {
       return entry.heat != null;
     });
@@ -3411,8 +3579,13 @@
       });
     }
     if (options.scale || options.rankGreenToRed) {
-      out = orderSuggestionsGreenToRed(out);
+      out = orderSuggestionsGreenToRed(out, options.userName);
     }
+    out = ensurePersonalImpactSuggestion(
+      out,
+      options.userName,
+      options.message || ''
+    );
     return out;
   }
 
@@ -4233,6 +4406,11 @@
     }
     var latencyMs = Date.now() - t0;
     var parsed = parseAssistantPayload(response.content);
+    parsed.suggestions = ensurePersonalImpactSuggestion(
+      parsed.suggestions,
+      context && context.userName,
+      parsed.message
+    );
     var actions = rewriteActionsForRelativeDue(parsed.actions || [], userText);
     var tierRewrite = rewriteActionsForPriorityTier(actions, userText);
     actions = tierRewrite.actions;
@@ -5268,6 +5446,25 @@
         normalizeEffectId(args.effect || args.name || args.id) ||
         '?';
       parts.push('effect \u2192 ' + effectId);
+      var fxText =
+        (extra && extra.text) ||
+        (typeof args.text === 'string' && args.text.trim()) ||
+        (typeof args.label === 'string' && args.label.trim()) ||
+        '';
+      if (fxText) parts.push('text \u2192 ' + fxText);
+    } else if (tool === 'set_agent_name') {
+      var beforeAgent =
+        (extra && typeof extra.before === 'string' && extra.before) || '';
+      var afterAgent =
+        (extra && typeof extra.after === 'string' && extra.after) ||
+        (typeof args.name === 'string' && args.name.trim()) ||
+        (typeof args.text === 'string' && args.text.trim()) ||
+        '?';
+      if (beforeAgent) {
+        parts.push('"' + beforeAgent + '" \u2192 "' + afterAgent + '"');
+      } else {
+        parts.push('name \u2192 "' + afterAgent + '"');
+      }
     }
     return parts.length ? parts.join('; ') : 'aucun diff d\u00e9tect\u00e9';
   }
@@ -6073,25 +6270,107 @@
               'Effet inconnu. Valeurs\u00a0: ' + EFFECT_IDS.join(', ')
           };
         }
+        var effectText = '';
+        if (typeof args.text === 'string' && args.text.trim()) {
+          effectText = args.text.trim().slice(0, 48);
+        } else if (typeof args.label === 'string' && args.label.trim()) {
+          effectText = args.label.trim().slice(0, 48);
+        } else if (typeof args.message === 'string' && args.message.trim()) {
+          effectText = args.message.trim().slice(0, 48);
+        }
+        if (effectId === 'banner' && !effectText) {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'banner exige un text (plein \u00e9cran)',
+            args: { effect: effectId }
+          };
+        }
+        var soundOverride = null;
+        if (typeof args.sound === 'string' && args.sound.trim()) {
+          soundOverride = normalizeEffectId(args.sound);
+        } else if (typeof args.soundEffect === 'string' && args.soundEffect.trim()) {
+          soundOverride = normalizeEffectId(args.soundEffect);
+        } else if (typeof args.sfx === 'string' && args.sfx.trim()) {
+          soundOverride = normalizeEffectId(args.sfx);
+        }
         if (typeof bridge.playEffect !== 'function') {
           return { ok: false, tool: tool, error: 'Effets indisponibles' };
         }
-        var played = bridge.playEffect(effectId, { sound: true });
+        var playOpts = { sound: soundOverride || true };
+        if (effectText) playOpts.text = effectText;
+        var played = bridge.playEffect(effectId, playOpts);
         if (played && played.ok === false) {
           return {
             ok: false,
             tool: tool,
             error: (played && played.error) || 'Effet \u00e9chou\u00e9',
-            args: { effect: effectId }
+            args: { effect: effectId, text: effectText || undefined }
           };
         }
+        var resultArgs = { effect: effectId };
+        if (effectText) resultArgs.text = effectText;
+        if (soundOverride) resultArgs.sound = soundOverride;
         return {
           ok: true,
           tool: tool,
-          args: { effect: effectId },
+          args: resultArgs,
           summary: TOOL_LABELS.trigger_effect,
           detail: detailForTool(tool, null, null, null, null, args, {
-            effect: effectId
+            effect: effectId,
+            text: effectText || undefined
+          })
+        };
+      }
+      if (tool === 'set_agent_name') {
+        if (typeof bridge.setAgentName !== 'function') {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Changement de nom indisponible'
+          };
+        }
+        var newAgentName =
+          typeof args.name === 'string' && args.name.trim()
+            ? args.name.trim()
+            : typeof args.text === 'string'
+              ? args.text.trim()
+              : '';
+        if (!newAgentName) {
+          return { ok: false, tool: tool, error: 'Nouveau nom requis' };
+        }
+        var beforeAgentName = '';
+        if (typeof bridge.getProfile === 'function') {
+          try {
+            var profSnap = bridge.getProfile();
+            if (profSnap && typeof profSnap.agentName === 'string') {
+              beforeAgentName = profSnap.agentName.trim();
+            }
+          } catch (e) { /* ignore */ }
+        }
+        var renameAgentResult = await Promise.resolve(
+          bridge.setAgentName(newAgentName)
+        );
+        if (!renameAgentResult || !renameAgentResult.ok) {
+          var agentRenameReason =
+            (renameAgentResult &&
+              (renameAgentResult.reason || renameAgentResult.error)) ||
+            'Changement de nom \u00e9chou\u00e9';
+          if (agentRenameReason === 'empty-name') {
+            agentRenameReason = 'Nouveau nom requis';
+          }
+          return { ok: false, tool: tool, error: agentRenameReason };
+        }
+        var afterAgentName =
+          (renameAgentResult && renameAgentResult.name) || newAgentName;
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.set_agent_name,
+          detail: detailForTool(tool, null, null, null, null, args, {
+            before: beforeAgentName,
+            after: afterAgentName
           })
         };
       }
