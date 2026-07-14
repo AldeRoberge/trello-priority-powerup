@@ -66,9 +66,9 @@
   </section>
 
   <div class="tp-build-info" id="buildInfo">Build : chargement…</div>
-  <div class="tp-auto-sort" id="autoSortSection" hidden>
+  <div class="tp-auto-sort" id="autoSortSection">
     <p class="tp-auto-sort-status" id="autoSortStatus"></p>
-    <button type="button" class="tp-button" id="authorizeAutoSort" hidden>Autoriser le tri automatique</button>
+    <button type="button" class="tp-button" id="authorizeAutoSort" hidden>Autoriser Trello (lecture + écriture)</button>
   </div>
   <button type="button" class="tp-link" id="showGuide">Voir le guide de configuration</button>
 
@@ -253,17 +253,21 @@
       var section = document.getElementById('autoSortSection');
       var statusEl = document.getElementById('autoSortStatus');
       var authBtn = document.getElementById('authorizeAutoSort');
+      section.hidden = false;
       if (!PriorityTrello.restClientOptions || !PriorityTrello.restClientOptions()) {
-        section.hidden = true;
+        statusEl.textContent =
+          'Déplacement de cartes / tri auto : indisponible. Renseignez appKey dans rest-config.js (clé depuis trello.com/power-ups/admin), puis rechargez le Power-Up.';
+        authBtn.hidden = true;
         return;
       }
-      section.hidden = false;
       var authorized = await PriorityTrello.isRestAuthorized(t);
       if (authorized) {
-        statusEl.textContent = 'Tri automatique / déplacement Statut : activé (autorisation lecture + écriture).';
+        statusEl.textContent =
+          'Déplacement de cartes / tri auto : activé (autorisation lecture + écriture).';
         authBtn.hidden = true;
       } else {
-        statusEl.textContent = 'Tri automatique / déplacement Statut : autorisation requise (portée lecture + écriture, une fois par membre).';
+        statusEl.textContent =
+          'Déplacement de cartes / tri auto : cliquez ci-dessous pour autoriser Trello (lecture + écriture, une fois par membre).';
         authBtn.hidden = false;
       }
     }

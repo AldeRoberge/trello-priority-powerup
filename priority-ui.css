@@ -494,11 +494,21 @@ body {
   margin-top: 10px;
 }
 
+.statut-auth-box {
+  margin: 0 0 10px;
+}
+
 .statut-auth-hint,
 .statut-empty {
   margin: 0 0 8px;
   font-size: 12px;
   color: var(--tp-text-muted, var(--text-muted, #626f86));
+}
+
+.statut-auth-button {
+  display: inline-flex;
+  width: auto;
+  max-width: 100%;
 }
 
 .statut-groups {

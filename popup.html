@@ -224,19 +224,28 @@
           var hasRest =
             PriorityTrello.restClientOptions && !!PriorityTrello.restClientOptions();
           var expandStatut = PriorityUI.resolveSectionExpanded('statut', true);
+          var authReason = !hasRest
+            ? 'no-app-key'
+            : authorized
+              ? ''
+              : 'not-authorized';
 
           statutUi = PriorityUI.createStatutField({
             el: statutSection,
             listId: statut.listId,
             lists: statut.lists || [],
             settings: statut.settings,
-            needsAuth: hasRest && !authorized,
+            authReason: authReason,
+            needsAuth: authReason === 'not-authorized',
             enabled: true,
             expanded: expandStatut,
             onExpandChange: function (isExpanded) {
               PriorityUI.saveSectionCollapseState({ statut: !!isExpanded });
             },
             onLayoutChange: resizePopup,
+            onAuthorize: function () {
+              return PriorityTrello.authorizeRestForAutoSort(t);
+            },
             onSelectList: function (listId) {
               return StatutTrello.selectCardStatut(t, listId).then(function (result) {
                 if (result && result.ok && variant && result.sideEffects) {

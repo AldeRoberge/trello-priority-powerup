@@ -4071,7 +4071,10 @@
     var lists = Array.isArray(config.lists) ? config.lists.slice() : [];
     var settings = config.settings || null;
     var busy = false;
-    var authHint = !!config.needsAuth;
+    var authBusy = false;
+    var onAuthorize =
+      typeof config.onAuthorize === 'function' ? config.onAuthorize : null;
+    var authReason = config.authReason || (config.needsAuth ? 'not-authorized' : '');
 
     var field = document.createElement('div');
     field.className = 'field field--statut is-enabled';
@@ -4091,11 +4094,37 @@
     body.className = 'statut-section-body section-toggle-body';
     body.id = bodyId;
 
+    var authBox = document.createElement('div');
+    authBox.className = 'statut-auth-box';
+
     var hint = document.createElement('p');
     hint.className = 'statut-auth-hint';
-    hint.hidden = !authHint;
-    hint.textContent =
-      'Pour déplacer la carte entre les listes : ouvrez « Paramètres de priorité » (bouton du tableau), puis cliquez sur « Autoriser le tri automatique ».';
+
+    var authBtn = document.createElement('button');
+    authBtn.type = 'button';
+    authBtn.className = 'tp-button statut-auth-button';
+    authBtn.textContent = 'Autoriser Trello (lecture + écriture)';
+    authBtn.addEventListener('click', function () {
+      if (!onAuthorize || authBusy) return;
+      authBusy = true;
+      authBtn.disabled = true;
+      Promise.resolve(onAuthorize())
+        .then(function () {
+          setAuthHint('');
+        })
+        .catch(function (err) {
+          console.error('Statut REST authorize failed', err);
+          setAuthHint('not-authorized');
+        })
+        .then(function () {
+          authBusy = false;
+          updateAuthUi();
+          onLayoutChange();
+        });
+    });
+
+    authBox.appendChild(hint);
+    authBox.appendChild(authBtn);
 
     var groupsEl = document.createElement('div');
     groupsEl.className = 'statut-groups';
@@ -4107,9 +4136,40 @@
     emptyEl.hidden = true;
     emptyEl.textContent = 'Aucune liste trouvée sur ce tableau.';
 
-    body.appendChild(hint);
+    body.appendChild(authBox);
     body.appendChild(groupsEl);
     body.appendChild(emptyEl);
+
+    function authMessage(reason) {
+      if (reason === 'no-app-key') {
+        return (
+          'Impossible de déplacer la carte : aucune clé API Trello n’est configurée pour ce Power-Up. ' +
+          'Dans rest-config.js, renseignez appKey (clé depuis trello.com/power-ups/admin), puis rechargez.'
+        );
+      }
+      if (reason === 'not-authorized') {
+        return (
+          'Impossible de déplacer la carte : Trello n’a pas encore l’autorisation d’écriture. ' +
+          'Cliquez sur le bouton ci-dessous (une fois par membre).'
+        );
+      }
+      return '';
+    }
+
+    function updateAuthUi() {
+      var msg = authMessage(authReason);
+      hint.textContent = msg;
+      authBox.hidden = !msg;
+      authBtn.hidden = authReason !== 'not-authorized' || !onAuthorize;
+      authBtn.disabled = authBusy;
+    }
+
+    function setAuthHint(reason) {
+      authReason = reason || '';
+      updateAuthUi();
+    }
+
+    updateAuthUi();
     field.appendChild(body);
     el.appendChild(field);
 
@@ -4192,14 +4252,12 @@
         .then(function (result) {
           if (result && result.ok === false) {
             if (result.reason === 'not-authorized' || result.reason === 'no-app-key') {
-              authHint = true;
-              hint.hidden = false;
+              setAuthHint(result.reason);
             }
             return;
           }
           currentListId = String(listId);
-          authHint = false;
-          hint.hidden = true;
+          setAuthHint('');
           onChange({ listId: currentListId, result: result });
         })
         .catch(function (err) {
@@ -4251,9 +4309,10 @@
         if (next.lists) lists = next.lists.slice();
         if (next.settings) settings = next.settings;
         if (next.listId != null) currentListId = next.listId ? String(next.listId) : '';
-        if (next.needsAuth != null) {
-          authHint = !!next.needsAuth;
-          hint.hidden = !authHint;
+        if (next.authReason != null) {
+          setAuthHint(next.authReason);
+        } else if (next.needsAuth != null) {
+          setAuthHint(next.needsAuth ? 'not-authorized' : '');
         }
         renderOptions();
         collapse.refreshSummary();
