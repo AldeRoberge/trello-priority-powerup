@@ -154,6 +154,41 @@
   margin-top: 4px;
 }
 
+.tp-page--priority .agent-debug-pref {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0 4px;
+  padding: 8px;
+  border: 1px solid var(--tp-border);
+  border-radius: 3px;
+  background: var(--tp-surface-subtle);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--tp-text);
+}
+
+.tp-page--priority .agent-debug-pref:has(.agent-debug-pref-checkbox:focus-visible) {
+  outline: 2px solid var(--tp-primary);
+  outline-offset: 1px;
+}
+
+.tp-page--priority .agent-debug-pref-checkbox {
+  flex: 0 0 auto;
+  margin: 2px 0 0;
+  cursor: pointer;
+}
+
+.tp-page--priority .agent-debug-pref-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tp-page--priority .agent-debug-btn[hidden] {
+  display: none;
+}
+
 .tp-page--priority .agent-btn--secondary {
   background: transparent;
   color: var(--tp-link);

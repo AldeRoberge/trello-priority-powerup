@@ -51,7 +51,6 @@
     var savedProvider = Agent.normalizeProvider(null);
     var history = [];
     var pending = false;
-    var spellcheckLock = false;
     var settingsOpen = false;
     var testing = false;
     var suggestionsSeq = 0;
@@ -167,6 +166,39 @@
     settingsPanel.appendChild(modelSelectField);
     settingsPanel.appendChild(modelInputField);
 
+    var DEBUG_PREF_STORAGE_KEY = 'trello-priority-powerup/agent-debug-enabled';
+    function loadDebugEnabled() {
+      try {
+        if (typeof localStorage === 'undefined') return true;
+        var raw = localStorage.getItem(DEBUG_PREF_STORAGE_KEY);
+        if (raw == null) return true;
+        return raw === '1' || raw === 'true';
+      } catch (e) {
+        return true;
+      }
+    }
+    function saveDebugEnabled(on) {
+      try {
+        if (typeof localStorage === 'undefined') return;
+        localStorage.setItem(DEBUG_PREF_STORAGE_KEY, on ? '1' : '0');
+      } catch (e) {
+        /* ignore quota / private mode */
+      }
+    }
+    var debugEnabled = loadDebugEnabled();
+    var debugPrefLabel = el('label', 'agent-debug-pref');
+    var debugPrefCheckbox = el('input', 'agent-debug-pref-checkbox', {
+      type: 'checkbox'
+    });
+    debugPrefCheckbox.checked = debugEnabled;
+    debugPrefLabel.appendChild(debugPrefCheckbox);
+    debugPrefLabel.appendChild(
+      el('span', 'agent-debug-pref-text', {
+        text: 'Afficher les infos de d\u00e9bogage'
+      })
+    );
+    settingsPanel.appendChild(debugPrefLabel);
+
     var settingsActions = el('div', 'agent-settings-actions');
     var saveBtn = el('button', 'tp-button agent-btn', { type: 'button', text: 'Enregistrer' });
     var testBtn = el('button', 'tp-button agent-btn agent-btn--secondary', {
@@ -261,7 +293,6 @@
     var infoEl = el('div', 'agent-chat-info', {
       'aria-label': 'Informations de la conversation'
     });
-    infoEl.hidden = true;
 
     var infoHead = el('div', 'agent-chat-info-head');
     var statsEl = el('div', 'agent-chat-stats', {
@@ -277,6 +308,7 @@
       title: 'D\u00e9bogage',
       'aria-expanded': 'false'
     });
+    debugBtn.hidden = !debugEnabled;
     var debugIcon = el('i', 'ti ti-bug');
     debugIcon.setAttribute('aria-hidden', 'true');
     debugBtn.appendChild(debugIcon);
@@ -408,12 +440,14 @@
       renderChatStats();
     }
 
-    function syncInfoVisibility() {
-      var hasStats = !!(sessionStats.lastUsage && sessionStats.turns > 0);
-      var hasDebug = debugLog.length > 0;
-      var show = hasStats || hasDebug || debugOpen;
-      infoEl.hidden = !show;
-      if (!show) notifyLayout();
+    function syncDebugControls() {
+      debugBtn.hidden = !debugEnabled;
+      if (!debugEnabled && debugOpen) {
+        setDebugOpen(false);
+        return;
+      }
+      debugPanel.hidden = !debugOpen;
+      notifyLayout();
     }
 
     function prettyJson(value) {
@@ -437,22 +471,16 @@
       debugLog.push(entry);
       if (debugLog.length > 40) debugLog.shift();
       selectedDebugId = entry.id || selectedDebugId;
-      if (debugOpen) renderDebugPanel();
-      else syncInfoVisibility();
+      if (debugEnabled && debugOpen) renderDebugPanel();
       notifyLayout();
     }
 
     function setDebugOpen(open) {
-      debugOpen = !!open;
+      debugOpen = !!open && debugEnabled;
       debugPanel.hidden = !debugOpen;
       debugBtn.classList.toggle('is-active', debugOpen);
       debugBtn.setAttribute('aria-expanded', debugOpen ? 'true' : 'false');
-      if (debugOpen) {
-        infoEl.hidden = false;
-        renderDebugPanel();
-      } else {
-        syncInfoVisibility();
-      }
+      if (debugOpen) renderDebugPanel();
       notifyLayout();
     }
 
@@ -532,7 +560,6 @@
         debugLog = [];
         selectedDebugId = null;
         renderDebugPanel();
-        syncInfoVisibility();
         notifyLayout();
       });
       toolbar.appendChild(clearBtn);
@@ -663,11 +690,6 @@
     function renderChatStats() {
       var usage = sessionStats.lastUsage;
       statsEl.replaceChildren();
-      if (!usage || sessionStats.turns < 1) {
-        syncInfoVisibility();
-        return;
-      }
-      infoEl.hidden = false;
 
       function addRow(className, parts) {
         var row = el('div', 'agent-chat-stats-row' + (className ? ' ' + className : ''));
@@ -685,6 +707,28 @@
           row.appendChild(cell);
         });
         statsEl.appendChild(row);
+      }
+
+      if (!usage || sessionStats.turns < 1) {
+        addRow('agent-chat-stats-row--last', [
+          { label: 'Tokens', value: '\u2014', title: 'Aucun \u00e9change pour l\u2019instant' },
+          { label: 'Co\u00fbt', value: '\u2014' },
+          { label: 'Latence', value: '\u2014' }
+        ]);
+        addRow('agent-chat-stats-row--session', [
+          {
+            label: 'M\u00e9moire',
+            value: history.length + ' msg',
+            title: 'Messages conserv\u00e9s dans cette session'
+          },
+          {
+            label: 'Session',
+            value: '0 tour',
+            title: 'Totaux de cette conversation'
+          }
+        ]);
+        notifyLayout();
+        return;
       }
 
       var tokenApprox = usage.estimated || sessionStats.estimated ? '\u2248' : '';
@@ -785,7 +829,6 @@
         });
       }
       addRow('agent-chat-stats-row--session', memoryParts);
-      syncInfoVisibility();
       notifyLayout();
     }
 
@@ -1363,46 +1406,21 @@
     async function sendUserMessage(text, options) {
       var opts = options || {};
       var msg = (text || '').trim();
-      if (!msg || pending || spellcheckLock) return;
+      if (!msg || pending) return;
       if (!Agent.isConfigured(provider)) {
         setSettingsOpen(true);
         setError('Configurez d\'abord un fournisseur IA.');
         return;
       }
-      if (
-        !opts.skipSpellcheck &&
-        global.Spellcheck &&
-        typeof global.Spellcheck.correct === 'function'
-      ) {
-        spellcheckLock = true;
-        try {
-          input.classList.add('is-spellchecking');
-          input.disabled = true;
-          sendBtn.disabled = true;
-          var corrected = await global.Spellcheck.correct(msg);
-          if (typeof corrected === 'string' && corrected.trim()) {
-            msg = corrected.trim();
-          }
-          if (opts.fromComposer && msg !== (text || '').trim()) {
-            input.value = msg;
-          }
-        } catch (spellErr) {
-          console.error('Spellcheck before chat failed', spellErr);
-        } finally {
-          spellcheckLock = false;
-          input.classList.remove('is-spellchecking');
-          input.disabled = false;
-          updateComposerEnabled();
-        }
-        if (!msg || pending) return;
-      }
+      // Ingest immediately so Enter never freezes on the composer.
       if (opts.fromComposer) {
         input.value = '';
       }
       setError('');
       clearFollowUps();
       setSuggestionsBusy(true);
-      appendMessage('user', msg);
+      var userRow = appendMessage('user', msg);
+      var userBubble = userRow.querySelector('.agent-msg-bubble');
       history.push({ role: 'user', content: msg });
       pending = true;
       updateComposerEnabled();
@@ -1411,6 +1429,26 @@
       var bubble = thinking.querySelector('.agent-msg-bubble');
       var streamed = false;
       try {
+        if (
+          !opts.skipSpellcheck &&
+          global.Spellcheck &&
+          typeof global.Spellcheck.correct === 'function'
+        ) {
+          try {
+            var corrected = await global.Spellcheck.correct(msg);
+            if (typeof corrected === 'string' && corrected.trim()) {
+              var fixed = corrected.trim();
+              if (fixed !== msg) {
+                msg = fixed;
+                if (userBubble) userBubble.textContent = msg;
+                history[history.length - 1].content = msg;
+                notifyLayout();
+              }
+            }
+          } catch (spellErr) {
+            console.error('Spellcheck before chat failed', spellErr);
+          }
+        }
         var turn = await Agent.chatTurn(provider, history.slice(0, -1), bridge, msg, {
           onDelta: function (visible) {
             if (!bubble || !visible) return;
@@ -1541,7 +1579,13 @@
     debugBtn.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
+      if (!debugEnabled) return;
       setDebugOpen(!debugOpen);
+    });
+    debugPrefCheckbox.addEventListener('change', function () {
+      debugEnabled = !!debugPrefCheckbox.checked;
+      saveDebugEnabled(debugEnabled);
+      syncDebugControls();
     });
     emptyConfigBtn.addEventListener('click', function () {
       if (collapse && !collapse.isEnabled()) {
@@ -1571,6 +1615,8 @@
     fillSettingsForm();
     ensureProviderLoaded();
     updateComposerEnabled();
+    renderChatStats();
+    syncDebugControls();
     notifyLayout();
 
     return {
