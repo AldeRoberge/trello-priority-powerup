@@ -1618,6 +1618,60 @@
       'wink'
     ];
 
+    var FACE_AURAS = {
+      orange: {
+        hi: '#ffe0c2',
+        mid: '#f5b58a',
+        lo: '#e8956a'
+      },
+      yellow: {
+        hi: '#fff6c8',
+        mid: '#f5d76e',
+        lo: '#e0b83a'
+      }
+    };
+
+    function normalizeFaceAura(value) {
+      var raw = String(value || '')
+        .trim()
+        .toLowerCase();
+      if (raw === 'yellow' || raw === 'jaune' || raw === 'gold' || raw === 'amber') {
+        return 'yellow';
+      }
+      if (raw === 'orange' || raw === 'peach' || raw === 'warm') {
+        return 'orange';
+      }
+      return null;
+    }
+
+    function auraForEmotion(emotion, explicit) {
+      var forced = normalizeFaceAura(explicit);
+      if (forced) return forced;
+      var mood = emotion || 'neutral';
+      if (
+        mood === 'happy' ||
+        mood === 'excited' ||
+        mood === 'tongue' ||
+        mood === 'wink'
+      ) {
+        return 'yellow';
+      }
+      return 'orange';
+    }
+
+    function applyFaceAura(face, aura) {
+      if (!face) return;
+      var tone = normalizeFaceAura(aura) || 'orange';
+      var palette = FACE_AURAS[tone] || FACE_AURAS.orange;
+      face.setAttribute('data-aura', tone);
+      var stops = face.querySelectorAll('.agent-face-skin-stop');
+      if (stops.length >= 3) {
+        stops[0].setAttribute('stop-color', palette.hi);
+        stops[1].setAttribute('stop-color', palette.mid);
+        stops[2].setAttribute('stop-color', palette.lo);
+      }
+    }
+
     function spiceEmotion(base) {
       var mood = base || 'neutral';
       var roll = Math.random();
@@ -1733,12 +1787,15 @@
 
     var faceGradientSeq = 0;
 
-    function createAssistantFace(emotion) {
+    function createAssistantFace(emotion, color) {
       var mood = emotion || 'neutral';
       if (FACE_EMOTIONS.indexOf(mood) === -1) mood = 'neutral';
+      var aura = auraForEmotion(mood, color);
+      var palette = FACE_AURAS[aura] || FACE_AURAS.orange;
       var face = el('span', 'agent-face agent-face--' + mood);
       face.setAttribute('aria-hidden', 'true');
       face.setAttribute('data-emotion', mood);
+      face.setAttribute('data-aura', aura);
       var gradId = 'agentFaceSkin' + ++faceGradientSeq;
       face.innerHTML =
         '<svg class="agent-face-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40" focusable="false">' +
@@ -1746,9 +1803,15 @@
         '<radialGradient id="' +
         gradId +
         '" cx="35%" cy="30%" r="70%">' +
-        '<stop offset="0%" stop-color="#ffe0c2"/>' +
-        '<stop offset="55%" stop-color="#f5b58a"/>' +
-        '<stop offset="100%" stop-color="#e8956a"/>' +
+        '<stop class="agent-face-skin-stop" offset="0%" stop-color="' +
+        palette.hi +
+        '"/>' +
+        '<stop class="agent-face-skin-stop" offset="55%" stop-color="' +
+        palette.mid +
+        '"/>' +
+        '<stop class="agent-face-skin-stop" offset="100%" stop-color="' +
+        palette.lo +
+        '"/>' +
         '</radialGradient>' +
         '</defs>' +
         '<circle class="agent-face-bg" cx="20" cy="20" r="19.2" fill="url(#' +
@@ -1829,17 +1892,23 @@
       options = options || {};
       var mood = emotion || 'neutral';
       if (FACE_EMOTIONS.indexOf(mood) === -1) mood = 'neutral';
+      var aura = auraForEmotion(
+        mood,
+        options.color != null ? options.color : options.aura
+      );
       var face = row.querySelector('.agent-face');
       var isNew = !face;
       if (!face) {
-        face = createAssistantFace(mood);
+        face = createAssistantFace(mood, aura);
         row.insertBefore(face, row.firstChild);
       }
       clearFaceMotionClasses(face);
       face.className = 'agent-face agent-face--' + mood;
       face.setAttribute('data-emotion', mood);
+      applyFaceAura(face, aura);
       face.classList.remove('is-frozen');
       row.setAttribute('data-emotion', mood);
+      row.setAttribute('data-aura', aura);
       if (options.animate !== false && (isNew || options.forceEnter)) {
         applyFaceEnterMotion(face, mood);
       } else if (mood === 'excited') {
@@ -1858,8 +1927,12 @@
       );
     }
 
-    function attachAssistantFace(row, emotion) {
-      setAssistantFaceEmotion(row, emotion, { animate: true, forceEnter: true });
+    function attachAssistantFace(row, emotion, color) {
+      setAssistantFaceEmotion(row, emotion, {
+        animate: true,
+        forceEnter: true,
+        color: color
+      });
       freezeOlderAssistantFaces(row);
     }
 
@@ -1960,7 +2033,8 @@
       actions.appendChild(noBtn);
       bubble.appendChild(actions);
       row.appendChild(bubble);
-      attachAssistantFace(row, 'curious');
+      var offerEmotion = spiceEmotion('curious');
+      attachAssistantFace(row, offerEmotion);
       messagesEl.appendChild(row);
       messagesEl.scrollTop = messagesEl.scrollHeight;
 
@@ -1979,7 +2053,7 @@
       announceAssistantArrival({
         sound: true,
         soundKind: 'suggestion',
-        emotion: 'curious'
+        emotion: offerEmotion
       });
       notifyLayout();
       return row;
@@ -2179,7 +2253,11 @@
         emotion = inferAssistantEmotion(text, meta, {
           userText: lastUserMessageText()
         });
-        attachAssistantFace(row, emotion);
+        attachAssistantFace(
+          row,
+          emotion,
+          meta && (meta.color != null ? meta.color : meta.aura)
+        );
       }
       messagesEl.appendChild(row);
       messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -2222,10 +2300,15 @@
     }
 
     function finalizeAssistantRow(row, text, meta) {
+      meta = meta || {};
       var emotion = inferAssistantEmotion(text, meta, {
         userText: lastUserMessageText()
       });
-      setAssistantFaceEmotion(row, emotion, { animate: true, forceEnter: true });
+      setAssistantFaceEmotion(row, emotion, {
+        animate: true,
+        forceEnter: true,
+        color: meta.color != null ? meta.color : meta.aura
+      });
       freezeOlderAssistantFaces(row);
       return emotion;
     }
@@ -3745,7 +3828,10 @@
           content: turn.message,
           rawJson: turn.rawJson
         });
-        var replyEmotion = finalizeAssistantRow(thinking, turn.message, {});
+        var replyEmotion = finalizeAssistantRow(thinking, turn.message, {
+          emotion: turn.emotion,
+          color: turn.color
+        });
         announceAssistantArrival({ emotion: replyEmotion });
         if (collapse && collapse.refreshSummary) {
           collapse.refreshSummary();
@@ -3759,7 +3845,9 @@
             droppedActions: turn.droppedActions,
             ok: applied.ok
           });
-          setAssistantFaceEmotion(thinking, applied.ok ? 'happy' : 'sad');
+          setAssistantFaceEmotion(thinking, applied.ok ? 'happy' : 'sad', {
+            color: turn.color || (applied.ok ? 'yellow' : 'orange')
+          });
           if (interviewActive) interviewPriorityTrusted = true;
           muteListening();
           // Defer until after pending clears in finally.
@@ -3774,7 +3862,9 @@
             turn.droppedActions && turn.droppedActions.length;
           if (emptyClaim || hasDropped) {
             if (emptyClaim && !hasDropped) {
-              setAssistantFaceEmotion(thinking, 'surprised');
+              setAssistantFaceEmotion(thinking, 'surprised', {
+                color: turn.color || 'orange'
+              });
             }
             appendChangeRecap(
               { results: [] },

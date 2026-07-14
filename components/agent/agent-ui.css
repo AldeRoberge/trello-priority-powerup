@@ -696,13 +696,8 @@
     0 1px 4px color-mix(in srgb, #000 18%, transparent);
 }
 
-.tp-page--priority .agent-face.is-frozen .agent-face-features,
-.tp-page--priority .agent-face.is-frozen .agent-face-eyes,
-.tp-page--priority .agent-face.is-frozen .agent-face-eye,
-.tp-page--priority .agent-face.is-frozen .agent-face-brow--l,
-.tp-page--priority .agent-face.is-frozen .agent-face-brow--r,
-.tp-page--priority .agent-face.is-frozen .agent-face-tongue {
-  animation: none !important;
+.tp-page--priority .agent-face.is-frozen .agent-face-features {
+  display: none;
 }
 
 @keyframes agent-face-idle {
