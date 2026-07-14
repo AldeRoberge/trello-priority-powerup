@@ -864,7 +864,11 @@
       )
     ) {
       if (dueWhen) {
-        return 'Veux-tu d\u00e9finir la date limite \u00e0 ' + dueWhen + '\u00a0?';
+        return (
+          'Veux-tu que je d\u00e9finisse l\'\u00e9ch\u00e9ance \u00e0 ' +
+          dueWhen +
+          '\u00a0?'
+        );
       }
       return 'Quelle est la date d\'\u00e9ch\u00e9ance\u00a0?';
     }
@@ -1408,9 +1412,9 @@
       '- N\'applique PAS automatiquement complete_all_subtasks ni set_statut sans confirmation pour cette incoh\u00e9rence.',
       'Propositions d\'\u00e9ch\u00e9ance / date limite (tr\u00e8s important)\u00a0:',
       '- INTERDIT\u00a0: \u00ab\u00a0Je peux d\u00e9finir l\'\u00e9ch\u00e9ance \u00e0 demain. Je m\'en occupe\u00a0?\u00a0\u00bb ou toute variante \u00ab\u00a0Je peux\u2026 / Je m\'en occupe\u00a0?\u00a0\u00bb.',
-      '- Si tu proposes une date concr\u00e8te pour confirmation (sans encore appeler set_due)\u00a0: \u00ab\u00a0On met la date limite \u00e0 demain\u00a0?\u00a0\u00bb (ou aujourd\'hui / vendredi / \u2026).',
+      '- Si tu proposes une date concr\u00e8te pour confirmation (sans encore appeler set_due)\u00a0: \u00ab\u00a0Veux-tu que je d\u00e9finisse l\'\u00e9ch\u00e9ance \u00e0 demain\u00a0?\u00a0\u00bb (ou aujourd\'hui / vendredi / \u2026).',
       '- Ex. FAUX\u00a0: {"message":"Je peux d\u00e9finir l\'\u00e9ch\u00e9ance \u00e0 demain. Je m\'en occupe\u00a0?"}',
-      '- Ex. VRAI\u00a0: {"message":"On met la date limite \u00e0 demain\u00a0?","suggestions":["Oui","Non","Apr\u00e8s-demain"]}',
+      '- Ex. VRAI\u00a0: {"message":"Veux-tu que je d\u00e9finisse l\'\u00e9ch\u00e9ance \u00e0 demain\u00a0?","suggestions":["Oui","Non","Apr\u00e8s-demain"]}',
       '- Si l\'utilisateur a d\u00e9j\u00e0 donn\u00e9 la date clairement\u00a0: APPLIQUE set_due tout de suite (\u00ab\u00a0Okay, demain.\u00a0\u00bb) sans redemander.',
       'Tu peux expliquer la priorit\u00e9, l\'\u00e9ch\u00e9ance, le blocage et le progr\u00e8s, et proposer des changements.',
       'Surlignage dans message (optionnel, fort recommand\u00e9 pour contrastes)\u00a0:',
@@ -1449,7 +1453,7 @@
       '- Ex. Importante, facile\u00a0: \u00ab\u00a0Cette t\u00e2che est utile pour l\'interne et assez facile, donc on la classe Importante.\u00a0\u00bb',
       '- Si priority.enabled=false\u00a0: dis qu\'aucune priorit\u00e9 n\'est d\u00e9finie (ne sors pas d\'anciennes valeurs).',
       'R\u00e9ponds UNIQUEMENT avec un objet JSON valide de la forme\u00a0:',
-      '{"thinking":"notes priv\u00e9es","message":"texte visible","emotion":"happy","color":"yellow","suggestions":["Question utile","Autre intention"],"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}],"cardPatches":[{"op":"remember","text":"fait local \u00e0 la carte"}]}',
+      '{"thinking":"notes priv\u00e9es","message":"texte visible","emotion":"happy","color":"yellow","suggestions":["Question utile","Autre intention"],"suggestionsMulti":false,"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}],"cardPatches":[{"op":"remember","text":"fait local \u00e0 la carte"}]}',
       'Apparence (humeur / couleur \u2014 optionnel mais recommand\u00e9)\u00a0:',
       '- Tu contr\u00f4les ton avatar\u00a0: champs "emotion" et "color".',
       '- emotion: neutral | happy | sad | surprised | curious | thinking | excited | tongue | wink | wideEyed | lookUp | lookDown.',
@@ -1563,12 +1567,17 @@
       'R\u00e8gles suggestions (obligatoire)\u00a0:',
       '- Toujours proposer 2 \u00e0 4 formulations courtes en fran\u00e7ais (questions OU r\u00e9ponses \u00e0 ta question de clarification).',
       '- Ancr\u00e9es dans le contexte carte (titre, sections enabled, \u00e9ch\u00e9ance, blocage, progr\u00e8s) \u2014 CONTEXTUELLES, jamais une grille g\u00e9n\u00e9rique.',
-      '- Si tu poses une question\u00a0: les suggestions = r\u00e9ponses concr\u00e8tes \u00e0 CETTE question (li\u00e9es au sujet), cumulables si plusieurs raisons/cons\u00e9quences.',
+      '- Si tu poses une question\u00a0: les suggestions = r\u00e9ponses concr\u00e8tes \u00e0 CETTE question (li\u00e9es au sujet).',
+      '- suggestionsMulti (bool, obligatoire quand tu proposes des r\u00e9ponses)\u00a0: true si plusieurs r\u00e9ponses peuvent \u00eatre combin\u00e9es (causes, cons\u00e9quences cumulables)\u00a0; false si un seul choix (facilit\u00e9, port\u00e9e, oui/non, date, palier\u2026).',
+      '- Ex. multi\u00a0: causes d\'urgence \u2192 suggestionsMulti:true. Ex. mono\u00a0: Personnel/\u00c9quipe/Global ou facile/difficile \u2192 suggestionsMulti:false.',
       '- INTERDIT comme r\u00e9ponses stock\u00a0: \u00ab\u00a0Quelqu\'un attend\u00a0\u00bb, \u00ab\u00a0\u00c7a bloque d\'autres trucs\u00a0\u00bb, \u00ab\u00a0Cons\u00e9quences graves\u00a0\u00bb hors sujet.',
       '- Elles REMPLACENT les suggestions pr\u00e9c\u00e9dentes\u00a0: varie-les selon ta derni\u00e8re r\u00e9ponse.',
       '- Pas de num\u00e9rotation, pas de guillemets autour.',
       '- INTERDIT\u00a0: placeholders comme "..." , "\u2026" , "suggestion" , "exemple"\u00a0; chaque entr\u00e9e doit \u00eatre un vrai texte cliquable.',
-      '- \u00c9chelle / choix ordonn\u00e9s (facilit\u00e9, gravit\u00e9, urgence\u2026)\u00a0: TOUJOURS vert\u2192rouge (gauche\u2192droite). FAUX\u00a0: facile, difficile, faisable. VRAI\u00a0: facile, faisable, difficile. heat 0\u20134 ou color ("green"|"yellow"|"orange"|"red"). Ex.\u00a0: {"label":"C\'est facile","heat":0}. suggestionScale:true encourag\u00e9.',
+      '- \u00c9chelle / choix ordonn\u00e9s (facilit\u00e9, gravit\u00e9, urgence\u2026)\u00a0: TOUJOURS vert\u2192rouge (gauche\u2192droite). FAUX\u00a0: facile, difficile, faisable. VRAI\u00a0: facile, faisable, difficile. heat 0\u20134 ou color ("green"|"yellow"|"orange"|"red"). Ex.\u00a0: {"label":"C\'est facile","heat":0}. suggestionScale:true + suggestionsMulti:false.',
+      '- Port\u00e9e / impact (Personnel\u2192Global)\u00a0: JAMAIS "0 (Personnel)" ni des chiffres. Utilise label + icon + color\u00a0: circle-xs/blue, circle-sm/teal, circle-md/yellow, circle-lg/green, circle-xl/green. Ex.\u00a0: {"label":"Personnel","icon":"circle-xs","color":"blue"} + suggestionsMulti:false.',
+      '- Ic\u00f4nes disponibles (champ icon)\u00a0: circle-xs, circle-sm, circle-md, circle-lg, circle-xl, dots, hammer, user, users, building, globe, flame, check, ban, clock, bolt, layers.',
+      '- color nomm\u00e9e\u00a0: blue|teal|yellow|lime|green|orange|red|gray (affich\u00e9e sur le chip). heat 0\u20134 reste r\u00e9serv\u00e9 aux \u00e9chelles gravit\u00e9 (vert\u2192rouge).',
       'R\u00e8gles actions (appliqu\u00e9es automatiquement)\u00a0:',
       '- 0 \u00e0 3 outils \u00e0 ex\u00e9cuter tout de suite d\u00e8s qu\'une action partielle est possible (ne pas attendre les d\u00e9tails optionnels).',
       '- Ne jamais inclure un outil incomplet sur un champ OBLIGATOIRE (ex. add_subtask sans text non vide).',
@@ -2494,7 +2503,7 @@
       '- Ex. FAUX\u00a0: \u00ab\u00a0Pour finir, quelle serait la dur\u00e9e estim\u00e9e\u00a0?\u00a0\u00bb',
       '- Ex. FAUX\u00a0: \u00ab\u00a0Je peux d\u00e9finir l\'\u00e9ch\u00e9ance \u00e0 demain. Je m\'en occupe\u00a0?\u00a0\u00bb',
       '- Ex. VRAI\u00a0: \u00ab\u00a0C\'est pour quand\u00a0?\u00a0\u00bb',
-      '- Ex. VRAI (si tu proposes d\u00e9j\u00e0 un jour)\u00a0: \u00ab\u00a0On met demain\u00a0?\u00a0\u00bb',
+      '- Ex. VRAI (si tu proposes d\u00e9j\u00e0 un jour)\u00a0: \u00ab\u00a0Veux-tu que je d\u00e9finisse l\'\u00e9ch\u00e9ance \u00e0 demain\u00a0?\u00a0\u00bb',
       '- Ex. VRAI\u00a0: \u00ab\u00a0\u00c7a prend combien de temps\u00a0?\u00a0\u00bb',
       '- Questions DIRECTES\u00a0: demande la valeur. INTERDIT les offres molles (\u00ab\u00a0souhaites-tu d\u00e9finir une \u00e9ch\u00e9ance\u00a0?\u00a0\u00bb, \u00ab\u00a0Je peux / Je m\'en occupe\u00a0?\u00a0\u00bb).',
       '- Si la r\u00e9ponse est \u00ab\u00a0non\u00a0\u00bb / skip\u00a0: okay et passe \u00e0 autre chose (ou completeInterview).',
@@ -2509,13 +2518,18 @@
       '- INTERDIT les clich\u00e9s hors sujet\u00a0: \u00ab\u00a0Quelqu\'un attend\u00a0\u00bb, \u00ab\u00a0\u00c7a bloque d\'autres trucs\u00a0\u00bb, \u00ab\u00a0Cons\u00e9quences graves\u00a0\u00bb, sauf si c\'est exactement ce que la question porte.',
       '- Ex. FAUX (urgence archivage rushs / DaVinci)\u00a0: \u00ab\u00a0Pas grand-chose\u00a0\u00bb, \u00ab\u00a0Quelqu\'un attend\u00a0\u00bb, \u00ab\u00a0Cons\u00e9quences graves\u00a0\u00bb, \u00ab\u00a0\u00c7a bloque d\'autres trucs\u00a0\u00bb.',
       '- Ex. VRAI (m\u00eame question)\u00a0: \u00ab\u00a0Pas grand chose\u00a0\u00bb, \u00ab\u00a0On pourrait avoir de la difficult\u00e9 \u00e0 retrouver des anciens projets\u00a0\u00bb, \u00ab\u00a0On pourrait perdre des anciens projets\u00a0\u00bb.',
-      '- L\'utilisateur peut s\u00e9lectionner PLUSIEURS r\u00e9ponses (cumulables)\u00a0: chaque suggestion doit tenir seule OU avec d\'autres.',
-      '- Pour \u00e9chelles exclusives (facilit\u00e9)\u00a0: ordonne TOUJOURS doux\u2192intense (VERT gauche \u2192 ROUGE droite).',
+      '- L\'utilisateur ne multi-s\u00e9lectionne QUE si tu mets suggestionsMulti:true (causes/cons\u00e9quences cumulables). Sinon suggestionsMulti:false = un seul clic.',
+      '- Pour \u00e9chelles exclusives (facilit\u00e9, port\u00e9e)\u00a0: suggestionsMulti:false + ordonne doux\u2192intense (VERT\u2192ROUGE) ou cercle bleu\u2192vert.',
       '- INTERDIT de mettre le plus difficile avant le milieu. Ex. FAUX\u00a0: \u00ab\u00a0C\'est facile\u00a0\u00bb, \u00ab\u00a0C\'est difficile\u00a0\u00bb, \u00ab\u00a0C\'est faisable\u00a0\u00bb.',
-      '- Ex. VRAI facilit\u00e9\u00a0: \u00ab\u00a0C\'est facile\u00a0\u00bb (vert) \u2192 \u00ab\u00a0C\'est faisable\u00a0\u00bb (jaune) \u2192 \u00ab\u00a0C\'est difficile\u00a0\u00bb (rouge).',
-      '- Pour cons\u00e9quences / impacts / causes (souvent cumulables)\u00a0: r\u00e9ponses concr\u00e8tes au sujet\u00a0; oriente doux\u2192grave si \u00e7a a du sens.',
-      '- Colorie les r\u00e9ponses d\'\u00e9chelle avec heat 0\u20134 (0=vert, 4=rouge), OU suggestionScale:true + strings ordonn\u00e9es.',
-      '- Ex. facilit\u00e9 JSON\u00a0: {"suggestions":[{"label":"C\'est facile","heat":0},{"label":"C\'est faisable","heat":2},{"label":"C\'est difficile","heat":4}],"suggestionScale":true}',
+      '- Ex. VRAI facilit\u00e9\u00a0: \u00ab\u00a0C\'est facile\u00a0\u00bb (vert) \u2192 \u00ab\u00a0C\'est faisable\u00a0\u00bb (jaune) \u2192 \u00ab\u00a0C\'est difficile\u00a0\u00bb (rouge) + suggestionsMulti:false.',
+      '- Pour cons\u00e9quences / causes cumulables\u00a0: suggestionsMulti:true\u00a0; chaque suggestion doit tenir seule OU avec d\'autres.',
+      '- Port\u00e9e / impact\u00a0: INTERDIT "0 (Personnel)", "1 (\u00c9quipe)"\u2026 Utilise les libell\u00e9s + icon + color (bleu\u2192vert) + suggestionsMulti:false\u00a0:',
+      '  Personnel circle-xs/blue \u00b7 \u00c9quipe circle-sm/teal \u00b7 Interne circle-md/yellow \u00b7 Population circle-lg/green \u00b7 Global circle-xl/green.',
+      '- Ic\u00f4nes dispo\u00a0: circle-xs|circle-sm|circle-md|circle-lg|circle-xl|dots|hammer|user|users|building|globe|flame|check|ban|clock|bolt|layers.',
+      '- Colorie les \u00e9chelles de gravit\u00e9 avec heat 0\u20134 (0=vert, 4=rouge), OU suggestionScale:true + strings ordonn\u00e9es.',
+      '- Ex. facilit\u00e9 JSON\u00a0: {"suggestions":[{"label":"C\'est facile","heat":0},{"label":"C\'est faisable","heat":2},{"label":"C\'est difficile","heat":4}],"suggestionScale":true,"suggestionsMulti":false}',
+      '- Ex. port\u00e9e JSON\u00a0: {"suggestions":[{"label":"Personnel","icon":"circle-xs","color":"blue"},{"label":"\u00c9quipe","icon":"circle-sm","color":"teal"},{"label":"Population","icon":"circle-lg","color":"green"}],"suggestionScale":true,"suggestionsMulti":false}',
+      '- Ex. multi JSON\u00a0: {"suggestions":[{"label":"On perd le contexte des rushs"},{"label":"Marie-Laure serait f\u00e2ch\u00e9e"}],"suggestionsMulti":true}',
       '- Utilise \u2026 seulement pour une r\u00e9ponse \u00e0 compl\u00e9ter (ex. \u00ab\u00a0On risque de perdre\u2026\u00a0\u00bb).',
       '',
       'Inf\u00e9rence + clarification carte\u00a0:',
@@ -2531,7 +2545,7 @@
       'Les axes priority actuels sont des VALEURS PAR D\u00c9FAUT non fiables sauf si priorityAxesTrusted=true.',
       '',
       'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
-      '{"thinking":"...","message":"...","suggestions":[{"label":"...","heat":0}],"suggestionScale":true,"prompts":[],"actions":[{"tool":"...","args":{}}],"cardPatches":[{"op":"remember","text":"..."}],"completeInterview":false}',
+      '{"thinking":"...","message":"...","suggestions":[{"label":"...","icon":"circle-sm","color":"teal","heat":0}],"suggestionScale":true,"suggestionsMulti":false,"prompts":[],"actions":[{"tool":"...","args":{}}],"cardPatches":[{"op":"remember","text":"..."}],"completeInterview":false}',
       '',
       'R\u00e8gles interview\u00a0:',
       '- Une question claire et COURTE \u00e0 la fois\u00a0; message = UNIQUEMENT cette question. Pas de pr\u00e9ambule.',
@@ -2731,11 +2745,13 @@
       })
     ) {
       suggestionEntries = orderSuggestionsGreenToRed(suggestionEntries);
-      if (
-        !suggestionEntries.some(function (entry) {
-          return entry.heat != null;
-        })
-      ) {
+      var hasHeat = suggestionEntries.some(function (entry) {
+        return entry.heat != null;
+      });
+      var hasNamedColor = suggestionEntries.some(function (entry) {
+        return !!entry.color;
+      });
+      if (!hasHeat && !hasNamedColor) {
         var interviewSteps = spreadScaleHeat(suggestionEntries.length);
         suggestionEntries.forEach(function (entry, i) {
           entry.heat = interviewSteps[i];
@@ -2749,6 +2765,7 @@
       emotion: parsed.emotion || null,
       color: parsed.color || null,
       suggestions: suggestionEntries,
+      suggestionsMulti: wantsSuggestionsMulti(data) || wantsSuggestionsMulti(parsed),
       actions: actions,
       prompts: prompts,
       followUps: parsed.followUps || [],
@@ -2992,9 +3009,9 @@
       label: 'Interne',
       heat: null
     },
-    population: {
+      population: {
       icon: 'circle-lg',
-      color: 'lime',
+      color: 'green',
       label: 'Population',
       heat: null
     },
@@ -3180,10 +3197,19 @@
     if (!Array.isArray(entries) || entries.length < 2) {
       return entries || [];
     }
+    // Impact reach (blue→green + circle icons) must not be remapped to heat.
+    var reachHits = entries.filter(function (entry) {
+      return impactReachKeyFromText(entry.text);
+    }).length;
+    if (reachHits >= 2 && reachHits >= Math.ceil(entries.length * 0.6)) {
+      return enrichImpactReachSuggestions(entries);
+    }
     var list = entries.map(function (entry) {
       return {
         text: entry.text,
         heat: entry.heat,
+        icon: entry.icon || null,
+        color: entry.color || null,
         rank: suggestionIntensityRank(entry.text)
       };
     });
@@ -3219,12 +3245,17 @@
 
     var steps = spreadScaleHeat(list.length);
     return list.map(function (item, i) {
-      return { text: item.text, heat: steps[i] };
+      return {
+        text: item.text,
+        heat: steps[i],
+        icon: item.icon,
+        color: item.color
+      };
     });
   }
 
   /**
-   * Normalize AI suggestions to { text, heat }[].
+   * Normalize AI suggestions to { text, heat, icon, color }[].
    * heat is 0–4 (green→red) or null. options.scale forces even spread when
    * no per-item heat/color was provided.
    */
@@ -3237,6 +3268,8 @@
     raw.forEach(function (item) {
       var text = '';
       var heat = null;
+      var icon = null;
+      var color = null;
       if (typeof item === 'string') {
         text = item.trim();
       } else if (item && typeof item === 'object') {
@@ -3244,6 +3277,10 @@
         else if (typeof item.text === 'string') text = item.text.trim();
         else if (typeof item.suggestion === 'string') text = item.suggestion.trim();
         heat = heatFromSuggestionItem(item);
+        icon = iconFromSuggestionItem(item);
+        color = colorFromSuggestionItem(item);
+        // Named blue/teal never become heat; keep the accent color.
+        if (color && (color === 'blue' || color === 'teal')) heat = null;
       }
       if (!isWorthySuggestion(text)) return;
       if (
@@ -3253,13 +3290,16 @@
       ) {
         return;
       }
-      out.push({ text: text, heat: heat });
+      out.push({ text: text, heat: heat, icon: icon, color: color });
     });
-    out = out.slice(0, max);
+    out = enrichImpactReachSuggestions(out.slice(0, max));
     var hasHeat = out.some(function (entry) {
       return entry.heat != null;
     });
-    if (options.scale && !hasHeat) {
+    var hasNamedColor = out.some(function (entry) {
+      return !!entry.color;
+    });
+    if (options.scale && !hasHeat && !hasNamedColor) {
       var steps = spreadScaleHeat(out.length);
       out.forEach(function (entry, i) {
         entry.heat = steps[i];
@@ -3286,6 +3326,29 @@
     if (typeof colors === 'string') {
       var key = colors.trim().toLowerCase();
       return key === 'scale' || key === 'green-red' || key === 'vert-rouge';
+    }
+    return false;
+  }
+
+  /**
+   * Whether answer chips allow multi-select (AI-controlled).
+   * true = cumulable answers; false/omitted = single choice.
+   */
+  function wantsSuggestionsMulti(parsed) {
+    if (!parsed || typeof parsed !== 'object') return false;
+    if (parsed.suggestionsMulti === true || parsed.suggestionMulti === true) {
+      return true;
+    }
+    if (parsed.multiSelect === true || parsed.multiAnswers === true) {
+      return true;
+    }
+    if (
+      parsed.suggestionsMulti === false ||
+      parsed.suggestionMulti === false ||
+      parsed.multiSelect === false ||
+      parsed.multiAnswers === false
+    ) {
+      return false;
     }
     return false;
   }
@@ -3527,6 +3590,7 @@
         color: null,
         followUps: [],
         suggestions: [],
+        suggestionsMulti: false,
         prompts: [],
         actions: [],
         droppedActions: [],
@@ -3604,6 +3668,7 @@
         ),
         followUps: followUps,
         suggestions: suggestions,
+        suggestionsMulti: wantsSuggestionsMulti(parsed),
         prompts: Array.isArray(parsed.prompts) ? parsed.prompts : [],
         actions: normalized.actions,
         droppedActions: normalized.dropped,
@@ -3616,6 +3681,7 @@
         color: null,
         followUps: [],
         suggestions: [],
+        suggestionsMulti: false,
         prompts: [],
         actions: [],
         droppedActions: [],
@@ -4110,6 +4176,7 @@
       color: parsed.color || null,
       followUps: parsed.followUps,
       suggestions: parsed.suggestions,
+      suggestionsMulti: !!parsed.suggestionsMulti,
       prompts: prompts,
       actions: actions,
       droppedActions: parsed.droppedActions || [],

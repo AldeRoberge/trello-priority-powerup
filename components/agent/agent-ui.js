@@ -136,6 +136,8 @@
     var chatRestored = false;
     var chatPersistTimer = null;
     var pending = false;
+    /** User messages typed while a turn is in flight; drained FIFO after pending clears. */
+    var messageQueue = [];
     var settingsOpen = false;
     var testing = false;
     var suggestionsSeq = 0;
@@ -491,7 +493,7 @@
           return composerSuggestions.slice();
         },
         isEnabled: function () {
-          return !input.disabled && !pending;
+          return !input.disabled;
         },
         onProposal: function (proposal) {
           markSuggestionTabTarget(
@@ -1352,10 +1354,10 @@
 
     function updateComposerEnabled() {
       var configured = Agent.isConfigured(provider);
-      var ok = configured && !pending;
+      // Keep composer typable during in-flight turns; extra sends go to messageQueue.
       composer.hidden = !configured;
-      sendBtn.disabled = !ok;
-      input.disabled = !configured || pending;
+      sendBtn.disabled = !configured;
+      input.disabled = !configured;
       if (!configured) {
         clearSuggestions();
         clearApplySuggestions();
@@ -1365,6 +1367,52 @@
         setApplySuggestionsBusy(pending);
         if (settleReady && !interviewActive) startListening();
       }
+    }
+
+    function activateQueuedUserRow(row) {
+      if (!row) return;
+      row.classList.remove('is-queued');
+      row.removeAttribute('aria-label');
+      var note = row.querySelector('.agent-msg-note');
+      if (note && note.parentNode) note.parentNode.removeChild(note);
+    }
+
+    function enqueueUserMessage(text, options) {
+      var opts = options || {};
+      var msg = (text || '').trim();
+      if (!msg) return false;
+      if (opts.fromComposer) {
+        input.value = '';
+      }
+      var row = appendMessage('user', msg, { note: 'En attente' });
+      row.classList.add('is-queued');
+      row.setAttribute('aria-label', 'Message en attente');
+      messageQueue.push({
+        text: msg,
+        options: { skipSpellcheck: !!opts.skipSpellcheck },
+        row: row
+      });
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      notifyLayout();
+      return true;
+    }
+
+    function drainMessageQueue() {
+      if (pending || !messageQueue.length) return;
+      var next = messageQueue.shift();
+      if (!next || !next.text) return;
+      sendUserMessage(next.text, {
+        skipSpellcheck: !!(next.options && next.options.skipSpellcheck),
+        queuedRow: next.row
+      });
+    }
+
+    function releasePendingAndDrain() {
+      pending = false;
+      updateComposerEnabled();
+      setSuggestionsBusy(false);
+      notifyLayout();
+      drainMessageQueue();
     }
 
     function ensureAudioCtx() {
@@ -1710,6 +1758,66 @@
       );
     }
 
+    /** Airy whoosh for the face click-spin. */
+    function playSwooshSound() {
+      try {
+        var ctx = ensureAudioCtx();
+        if (!ctx) return;
+        var t0 = ctx.currentTime;
+        var dur = 0.45 * randBetween(0.92, 1.08);
+        var peak = 0.052 * randBetween(0.9, 1.12);
+
+        if (typeof ctx.createBuffer === 'function') {
+          var buffer = ctx.createBuffer(
+            1,
+            Math.max(1, Math.floor(ctx.sampleRate * dur)),
+            ctx.sampleRate
+          );
+          var data = buffer.getChannelData(0);
+          for (var i = 0; i < data.length; i++) {
+            data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 0.4);
+          }
+          var src = ctx.createBufferSource();
+          src.buffer = buffer;
+          var bp = ctx.createBiquadFilter();
+          bp.type = 'bandpass';
+          bp.Q.setValueAtTime(0.85, t0);
+          bp.frequency.setValueAtTime(2600 * randBetween(0.9, 1.1), t0);
+          bp.frequency.exponentialRampToValueAtTime(
+            220 * randBetween(0.85, 1.1),
+            t0 + dur
+          );
+          var ng = ctx.createGain();
+          ng.gain.setValueAtTime(0.0001, t0);
+          ng.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t0 + 0.02);
+          ng.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+          src.connect(bp);
+          bp.connect(ng);
+          ng.connect(ctx.destination);
+          src.start(t0);
+          src.stop(t0 + dur + 0.03);
+        }
+
+        var osc = ctx.createOscillator();
+        var og = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(920 * randBetween(0.92, 1.08), t0);
+        osc.frequency.exponentialRampToValueAtTime(
+          160 * randBetween(0.9, 1.1),
+          t0 + dur * 0.92
+        );
+        og.gain.setValueAtTime(0.0001, t0);
+        og.gain.exponentialRampToValueAtTime(0.028 * randBetween(0.9, 1.1), t0 + 0.012);
+        og.gain.exponentialRampToValueAtTime(0.0001, t0 + dur * 0.95);
+        osc.connect(og);
+        og.connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t0 + dur + 0.04);
+      } catch (e) {
+        /* ignore audio failures */
+      }
+    }
+
     function isAssistantExpanded() {
       return !!(collapse && typeof collapse.isExpanded === 'function' && collapse.isExpanded());
     }
@@ -2015,12 +2123,39 @@
         '</g>' +
         '</g>' +
         '</svg>';
+      face.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        spinAssistantFace(face);
+      });
       return face;
+    }
+
+    function spinAssistantFace(face) {
+      if (!face || !face.classList || face.classList.contains('is-frozen')) return;
+      if (face._agentSpinEnd) {
+        face.removeEventListener('animationend', face._agentSpinEnd);
+        face._agentSpinEnd = null;
+      }
+      face.classList.remove('agent-face--spin');
+      // Force restart if clicked mid-spin.
+      void face.offsetWidth;
+      face.classList.add('agent-face--spin');
+      playSwooshSound();
+      var onEnd = function (ev) {
+        if (ev && ev.target !== face) return;
+        face.classList.remove('agent-face--spin');
+        face.removeEventListener('animationend', onEnd);
+        face._agentSpinEnd = null;
+      };
+      face._agentSpinEnd = onEnd;
+      face.addEventListener('animationend', onEnd);
     }
 
     function clearFaceMotionClasses(face) {
       if (!face || !face.classList) return;
       [
+        'agent-face--spin',
         'agent-face--enter-roll',
         'agent-face--enter-bounce',
         'agent-face--enter-pop',
@@ -2281,6 +2416,45 @@
       return L.charAt(0).toLowerCase() + L.slice(1);
     }
 
+    /** Turn an infinitive suggestion label into a friendly yes/no offer. */
+    function phraseOfferQuestion(label) {
+      var L = phraseOfferLabel(label);
+      var conjugated = null;
+      var rules = [
+        [/^d[eé]finir\b/i, 'd\u00e9finisse'],
+        [/^fixer\b/i, 'fixe'],
+        [/^mettre\s+[aà]\s+jour\b/i, 'mette \u00e0 jour'],
+        [/^mettre\b/i, 'mette'],
+        [/^ajouter\b/i, 'ajoute'],
+        [/^marquer\b/i, 'marque'],
+        [/^renommer\b/i, 'renomme'],
+        [/^modifier\b/i, 'modifie'],
+        [/^supprimer\b/i, 'supprime'],
+        [/^retirer\b/i, 'retire'],
+        [/^changer\b/i, 'change'],
+        [/^lier\b/i, 'lie'],
+        [/^r[eé]initialiser\b/i, 'r\u00e9initialise'],
+        [/^compl[eé]ter\b/i, 'compl\u00e8te'],
+        [/^estimer\b/i, 'estime'],
+        [/^lancer\b/i, 'lance'],
+        [/^activer\b/i, 'active']
+      ];
+      for (var i = 0; i < rules.length; i++) {
+        if (rules[i][0].test(L)) {
+          conjugated = L.replace(rules[i][0], rules[i][1]);
+          break;
+        }
+      }
+      if (!conjugated) {
+        var er = L.match(/^([A-Za-z\u00c0-\u017f]{2,})er\b([\s\S]*)$/i);
+        if (er) conjugated = er[1].toLowerCase() + 'e' + er[2];
+      }
+      if (conjugated) {
+        return 'Veux-tu que je ' + conjugated + '\u00a0?';
+      }
+      return 'Veux-tu que je m\u2019occupe de ' + L + '\u00a0?';
+    }
+
     function clearActiveOffer(row) {
       if (row && row.parentNode) {
         row.classList.add('is-resolved');
@@ -2301,10 +2475,7 @@
       );
       bubble.appendChild(
         el('div', 'agent-offer-text', {
-          text:
-            'Je peux ' +
-            phraseOfferLabel(item.label) +
-            '. Je m\u2019en occupe\u00a0?'
+          text: phraseOfferQuestion(item.label)
         })
       );
       var actions = el('div', 'agent-offer-actions');
@@ -2902,9 +3073,7 @@
       } catch (err) {
         appendChatError((err && err.message) || 'Erreur lors de l\'affinage');
       } finally {
-        pending = false;
-        updateComposerEnabled();
-        notifyLayout();
+        releasePendingAndDrain();
       }
     }
 
@@ -3152,7 +3321,6 @@
     }
 
     function insertComposerSuggestion(text) {
-      if (pending) return;
       input.value = String(text || '');
       focusComposerInput();
       // Place caret at the first hole so the user can fill the variable.
@@ -3172,12 +3340,9 @@
       notifyLayout();
     }
 
-    function suggestionsAllowMultiSelect(items) {
-      if (!items || !items.length) return false;
-      return items.every(function (item) {
-        var text = item && item.text ? item.text : '';
-        return text.indexOf('?') < 0 && !suggestionNeedsVariableInput(text);
-      });
+    function suggestionsAllowMultiSelect(explicit) {
+      // AI decides via suggestionsMulti; default is single-choice.
+      return explicit === true;
     }
 
     function pickSuggestionConfirmPrompt() {
@@ -3384,7 +3549,7 @@
       personnel: { icon: 'circle-xs', color: 'blue', label: 'Personnel' },
       equipe: { icon: 'circle-sm', color: 'teal', label: '\u00c9quipe' },
       interne: { icon: 'circle-md', color: 'yellow', label: 'Interne' },
-      population: { icon: 'circle-lg', color: 'lime', label: 'Population' },
+      population: { icon: 'circle-lg', color: 'green', label: 'Population' },
       global: { icon: 'circle-xl', color: 'green', label: 'Global' }
     };
 
@@ -3609,7 +3774,7 @@
         return;
       }
       suggestionsEl.hidden = false;
-      suggestionsMultiSelect = suggestionsAllowMultiSelect(items);
+      suggestionsMultiSelect = suggestionsAllowMultiSelect(options.multi);
       if (suggestionsMultiSelect) suggestionsEl.classList.add('is-multi');
       suggestionsEl.setAttribute(
         'aria-label',
@@ -3876,10 +4041,24 @@
       }
     }
 
-    function clearAwaitingFeedback() {
+    function clearAwaitingFeedback(options) {
+      options = options || {};
       if (!awaitingFeedback) return;
+      var promptRow = awaitingFeedback.promptRow;
+      var ask = awaitingFeedback.ask;
       awaitingFeedback = null;
       syncComposerPlaceholder();
+      if (options.removePrompt && promptRow) {
+        if (promptRow.parentNode) promptRow.parentNode.removeChild(promptRow);
+        if (ask && history.length) {
+          var last = history[history.length - 1];
+          if (last && last.role === 'assistant' && last.content === ask) {
+            history.pop();
+            schedulePersistChatHistory();
+          }
+        }
+        notifyLayout();
+      }
     }
 
     function assistantBubbleText(row) {
@@ -3896,8 +4075,22 @@
       bar.classList.toggle('is-rated-up', kind === 'up');
       bar.classList.toggle('is-rated-down', kind === 'down');
       row.setAttribute('data-feedback', kind);
+      var upBtn = bar.querySelector('.agent-msg-feedback-btn--up');
+      var downBtn = bar.querySelector('.agent-msg-feedback-btn--down');
+      if (upBtn) upBtn.setAttribute('aria-pressed', kind === 'up' ? 'true' : 'false');
+      if (downBtn) {
+        downBtn.setAttribute('aria-pressed', kind === 'down' ? 'true' : 'false');
+      }
+    }
+
+    function clearFeedbackRated(row) {
+      if (!row) return;
+      var bar = row.querySelector('.agent-msg-feedback');
+      if (!bar) return;
+      bar.classList.remove('is-rated', 'is-rated-up', 'is-rated-down');
+      row.removeAttribute('data-feedback');
       Array.prototype.forEach.call(bar.querySelectorAll('button'), function (btn) {
-        btn.disabled = true;
+        btn.setAttribute('aria-pressed', 'false');
       });
     }
 
@@ -3971,35 +4164,68 @@
       downBtn.appendChild(el('i', 'ti ti-thumb-down'));
       bar.appendChild(upBtn);
       bar.appendChild(downBtn);
-      row.appendChild(bar);
+      var bubble = row.querySelector('.agent-msg-bubble');
+      var verify = row.querySelector('.agent-tool-verify');
+      if (verify && verify.parentNode === row) {
+        row.insertBefore(bar, verify.nextSibling);
+      } else if (bubble && bubble.parentNode === row) {
+        row.insertBefore(bar, bubble.nextSibling);
+      } else {
+        row.appendChild(bar);
+      }
+
+      upBtn.setAttribute('aria-pressed', 'false');
+      downBtn.setAttribute('aria-pressed', 'false');
 
       upBtn.addEventListener('click', function () {
-        if (pending || upBtn.disabled) return;
-        markFeedbackRated(row, 'up');
-        if (awaitingFeedback && awaitingFeedback.row === row) {
-          clearAwaitingFeedback();
+        if (pending) return;
+        var current = row.getAttribute('data-feedback');
+        if (current === 'up') {
+          clearFeedbackRated(row);
+          setAssistantFaceEmotion(row, 'neutral', { animate: true });
+          notifyLayout();
+          return;
         }
+        if (awaitingFeedback) {
+          clearAwaitingFeedback({ removePrompt: true });
+        }
+        markFeedbackRated(row, 'up');
         setAssistantFaceEmotion(row, 'happy', { animate: true });
         notifyLayout();
       });
 
       downBtn.addEventListener('click', function () {
-        if (pending || downBtn.disabled) return;
-        if (awaitingFeedback && awaitingFeedback.row !== row) {
-          clearAwaitingFeedback();
+        if (pending) return;
+        var current = row.getAttribute('data-feedback');
+        if (current === 'down') {
+          if (awaitingFeedback && awaitingFeedback.row === row) {
+            clearAwaitingFeedback({ removePrompt: true });
+          }
+          clearFeedbackRated(row);
+          setAssistantFaceEmotion(row, 'neutral', { animate: true });
+          notifyLayout();
+          return;
+        }
+        if (awaitingFeedback) {
+          clearAwaitingFeedback({ removePrompt: true });
         }
         markFeedbackRated(row, 'down');
         setAssistantFaceEmotion(row, 'sad', { animate: true });
         var content = assistantBubbleText(row);
-        awaitingFeedback = { row: row, content: content };
-        syncComposerPlaceholder();
         var ask =
           'Qu\'est-ce que j\'ai mal fait\u00a0? Je peux m\'am\u00e9liorer.';
-        appendMessage('assistant', ask, {
+        var promptRow = appendMessage('assistant', ask, {
           noFeedback: true,
           emotion: 'curious',
           noUnread: true
         });
+        awaitingFeedback = {
+          row: row,
+          content: content,
+          ask: ask,
+          promptRow: promptRow
+        };
+        syncComposerPlaceholder();
         history.push({ role: 'assistant', content: ask });
         schedulePersistChatHistory();
         expandAssistant();
@@ -4069,7 +4295,10 @@
         schedulePersistChatHistory();
         if (result.suggestions && result.suggestions.length) {
           suggestionsSeq += 1;
-          renderSuggestions(result.suggestions, { animate: true });
+          renderSuggestions(result.suggestions, {
+            animate: true,
+            multi: result.suggestionsMulti
+          });
         }
         if (result.followUps && result.followUps.length) {
           renderFollowUps(result.followUps);
@@ -4264,10 +4493,10 @@
         renderPrompts(turn.prompts);
         if (turn.suggestions && turn.suggestions.length) {
           suggestionsSeq += 1;
-          renderSuggestions(turn.suggestions, { animate: true });
-        }
-        if (turn.completeInterview) {
-          await finishInterview({ announce: false });
+          renderSuggestions(turn.suggestions, {
+            animate: true,
+            multi: turn.suggestionsMulti
+          });
         }
         markSettleReady();
         var openingEmotion = finalizeAssistantRow(thinking, opening, {});
@@ -4289,10 +4518,7 @@
         refreshSuggestions({ animate: true });
         markSettleReady();
       } finally {
-        pending = false;
-        updateComposerEnabled();
-        setSuggestionsBusy(false);
-        notifyLayout();
+        releasePendingAndDrain();
         focusComposerInput();
       }
     }
@@ -4466,10 +4692,14 @@
     async function sendUserMessage(text, options) {
       var opts = options || {};
       var msg = (text || '').trim();
-      if (!msg || pending) return;
+      if (!msg) return;
       if (!Agent.isConfigured(provider)) {
         setSettingsOpen(true);
         setError('Configurez d\'abord un fournisseur IA.');
+        return;
+      }
+      if (pending) {
+        enqueueUserMessage(msg, opts);
         return;
       }
       // Ingest immediately so Enter never freezes on the composer.
@@ -4486,7 +4716,12 @@
       clearFollowUps();
       clearPrompts();
       setSuggestionsBusy(true);
-      var userRow = appendMessage('user', msg);
+      var userRow = opts.queuedRow;
+      if (userRow) {
+        activateQueuedUserRow(userRow);
+      } else {
+        userRow = appendMessage('user', msg);
+      }
       var userBubble = userRow.querySelector('.agent-msg-bubble');
       history.push({ role: 'user', content: msg });
       schedulePersistChatHistory();
@@ -4698,13 +4933,19 @@
           await finishInterview({ announce: false });
           if (turn.suggestions && turn.suggestions.length) {
             suggestionsSeq += 1;
-            renderSuggestions(turn.suggestions, { animate: true });
+            renderSuggestions(turn.suggestions, {
+              animate: true,
+              multi: turn.suggestionsMulti
+            });
           } else {
             refreshSuggestions({ animate: true });
           }
         } else if (turn.suggestions && turn.suggestions.length) {
           suggestionsSeq += 1;
-          renderSuggestions(turn.suggestions, { animate: true });
+          renderSuggestions(turn.suggestions, {
+            animate: true,
+            multi: turn.suggestionsMulti
+          });
         } else if (!interviewActive) {
           refreshSuggestions({ animate: true });
         }
@@ -4718,10 +4959,7 @@
         if (err && err.debug) pushDebugEntry(err.debug);
         refreshSuggestions({ animate: true });
       } finally {
-        pending = false;
-        updateComposerEnabled();
-        setSuggestionsBusy(false);
-        notifyLayout();
+        releasePendingAndDrain();
       }
     }
 
