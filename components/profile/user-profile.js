@@ -259,12 +259,40 @@
     } else {
       lines.push('- Langue\u00a0: réponds en français.');
     }
-    if (p.tone === 'detailed') {
-      lines.push('- Ton\u00a0: un peu plus détaillé et expliqué (reste clair, pas de jargon inutile).');
-    } else if (p.tone === 'friendly') {
-      lines.push('- Ton\u00a0: chaleureux et encourageant, sans être verbeux.');
+    if (p.language === 'en') {
+      lines.push(
+        '- Base voice (always): Teams teammate — natural, friendly, zero technical jargon.'
+      );
+      if (p.tone === 'detailed') {
+        lines.push(
+          '- Length: a bit more detailed (explain calmly, still chatty teammate style).'
+        );
+      } else if (p.tone === 'friendly') {
+        lines.push(
+          '- Length / warmth: even warmer and encouraging, without monologues.'
+        );
+      } else {
+        lines.push(
+          '- Length: short and direct, but still warm like Teams chat (not cold or telegraphic).'
+        );
+      }
     } else {
-      lines.push('- Ton\u00a0: concis et direct.');
+      lines.push(
+        '- Voix de base (toujours)\u00a0: collègue sur Teams — tutoiement, naturel, amical, zéro jargon technique.'
+      );
+      if (p.tone === 'detailed') {
+        lines.push(
+          '- Longueur\u00a0: un peu plus détaillé (explique calmement, toujours style chat d\'équipe).'
+        );
+      } else if (p.tone === 'friendly') {
+        lines.push(
+          '- Longueur / chaleur\u00a0: encore plus chaleureux et encourageant, sans monologue.'
+        );
+      } else {
+        lines.push(
+          '- Longueur\u00a0: court et direct, mais toujours chaleureux comme sur Teams (pas froid ni télégraphique).'
+        );
+      }
     }
     var enabled = [];
     FEATURE_KEYS.forEach(function (key) {

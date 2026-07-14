@@ -344,5 +344,51 @@ check('encouragement bien avance', CUI.progressEncouragementText(85) === 'Bien a
 check('encouragement bientot termine', CUI.progressEncouragementText(95) === 'Bient\u00f4t termin\u00e9');
 check('encouragement termine', CUI.progressEncouragementText(100) === 'Termin\u00e9');
 
+var mismatchDone = CT.detectDonePendingMismatch(
+  { category: 'completed', listName: 'Done', listId: 'L1' },
+  {
+    items: [
+      { id: 'a', text: 'Ship', progress: 100 },
+      { id: 'b', text: 'Polish', progress: 40 },
+    ],
+  }
+);
+check('detectDonePendingMismatch finds pending under completed', !!mismatchDone);
+check('detectDonePendingMismatch pendingCount', mismatchDone && mismatchDone.pendingCount === 1);
+check(
+  'detectDonePendingMismatch pending text',
+  mismatchDone && mismatchDone.pendingItems[0].text === 'Polish'
+);
+check(
+  'detectDonePendingMismatch null when all done',
+  CT.detectDonePendingMismatch(
+    { category: 'completed' },
+    { items: [{ id: 'a', text: 'Ship', progress: 100 }] }
+  ) === null
+);
+check(
+  'detectDonePendingMismatch null when not completed',
+  CT.detectDonePendingMismatch(
+    { category: 'started' },
+    {
+      items: [
+        { id: 'a', text: 'Ship', progress: 100 },
+        { id: 'b', text: 'Polish', progress: 40 },
+      ],
+    }
+  ) === null
+);
+check(
+  'detectDonePendingMismatch via completed role list',
+  !!CT.detectDonePendingMismatch(
+    { category: null, listId: 'Ldone', roleLists: { completed: 'Ldone' }, listName: 'Termin\u00e9' },
+    { items: [{ id: 'a', text: 'Left', progress: 0 }] }
+  )
+);
+check(
+  'detectDonePendingMismatch ignores card-only progress',
+  CT.detectDonePendingMismatch({ category: 'completed' }, { items: [], progress: 40 }) === null
+);
+
 console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll completion checks passed');
 process.exit(bad ? 1 : 0);

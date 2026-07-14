@@ -128,6 +128,15 @@
     var settingsOpen = false;
     var testing = false;
     var suggestionsSeq = 0;
+    var suggestionsMultiSelect = false;
+    var suggestionConfirmTimer = null;
+    var suggestionConfirmDeadline = 0;
+    var SUGGESTION_CONFIRM_MS = 5000;
+    var SUGGESTION_CONFIRM_PROMPTS = [
+      'C\'est tout\u00a0?',
+      'Quoi d\'autre\u00a0?',
+      'Is that all\u00a0?'
+    ];
     var applySuggestionsSeq = 0;
     var applySuggestions = [];
     var applySuggestionsLoading = false;
@@ -139,6 +148,7 @@
     var interviewRecentCards = [];
     var interviewPriorityTrusted = false;
     var interviewBootstrapped = false;
+    var sanityBootstrapped = false;
     var unreadAssistant = 0;
     var settleReady = false;
     var listeningActive = false;
@@ -1225,6 +1235,15 @@
       return audioCtx;
     }
 
+    function pickOne(items) {
+      if (!items || !items.length) return null;
+      return items[Math.floor(Math.random() * items.length)];
+    }
+
+    function randBetween(min, max) {
+      return min + Math.random() * (max - min);
+    }
+
     function playToneChord(tones, options) {
       options = options || {};
       try {
@@ -1232,10 +1251,17 @@
         if (!ctx) return;
         var t0 = ctx.currentTime;
         var dest = ctx.destination;
+        var freqJitter = options.freqJitter != null ? options.freqJitter : 0.04;
+        var timeJitter = options.timeJitter != null ? options.timeJitter : 0.08;
+        var fMul = 1 + randBetween(-freqJitter, freqJitter);
+        var tMul = 1 + randBetween(-timeJitter, timeJitter);
         if (options.lowpass) {
           var filter = ctx.createBiquadFilter();
           filter.type = 'lowpass';
-          filter.frequency.setValueAtTime(options.lowpass, t0);
+          filter.frequency.setValueAtTime(
+            options.lowpass * (1 + randBetween(-0.08, 0.08)),
+            t0
+          );
           filter.Q.setValueAtTime(options.q != null ? options.q : 0.7, t0);
           filter.connect(ctx.destination);
           dest = filter;
@@ -1243,86 +1269,303 @@
         tones.forEach(function (tone) {
           var osc = ctx.createOscillator();
           var gain = ctx.createGain();
-          osc.type = tone.type || 'sine';
-          osc.frequency.setValueAtTime(tone.freq, t0 + tone.delay);
-          gain.gain.setValueAtTime(0.0001, t0 + tone.delay);
+          var delay = (tone.delay || 0) * tMul;
+          var dur = tone.dur * tMul;
+          var peak = (tone.peak != null ? tone.peak : 0.05) * randBetween(0.88, 1.12);
+          osc.type = tone.type || pickOne(['sine', 'triangle', 'sine']);
+          osc.frequency.setValueAtTime(tone.freq * fMul, t0 + delay);
+          gain.gain.setValueAtTime(0.0001, t0 + delay);
           gain.gain.exponentialRampToValueAtTime(
-            tone.peak != null ? tone.peak : 0.05,
-            t0 + tone.delay + (tone.attack != null ? tone.attack : 0.02)
+            Math.max(0.0002, peak),
+            t0 + delay + (tone.attack != null ? tone.attack : 0.02)
           );
-          gain.gain.exponentialRampToValueAtTime(
-            0.0001,
-            t0 + tone.delay + tone.dur
-          );
+          gain.gain.exponentialRampToValueAtTime(0.0001, t0 + delay + dur);
           osc.connect(gain);
           gain.connect(dest);
-          osc.start(t0 + tone.delay);
-          osc.stop(t0 + tone.delay + tone.dur + 0.05);
+          osc.start(t0 + delay);
+          osc.stop(t0 + delay + dur + 0.05);
         });
       } catch (e) {
         /* ignore audio failures */
       }
     }
 
-    /** Bright major two-tone — success / happy. */
+    function playRandomChord(variants, options) {
+      var tones = typeof variants[0] === 'function'
+        ? pickOne(variants)()
+        : pickOne(variants);
+      playToneChord(tones, options);
+    }
+
+    /** Bright / playful — success, happy, tongue, wink, excited. */
     function playHappySound() {
-      playToneChord([
-        { freq: 587.33, delay: 0, dur: 0.28, peak: 0.055 },
-        { freq: 880, delay: 0.09, dur: 0.34, peak: 0.055 }
+      playRandomChord([
+        [
+          { freq: 587.33, delay: 0, dur: 0.28, peak: 0.055 },
+          { freq: 880, delay: 0.09, dur: 0.34, peak: 0.055 }
+        ],
+        [
+          { freq: 659.25, delay: 0, dur: 0.2, peak: 0.048, type: 'triangle' },
+          { freq: 783.99, delay: 0.08, dur: 0.22, peak: 0.05 },
+          { freq: 1046.5, delay: 0.16, dur: 0.32, peak: 0.042 }
+        ],
+        [
+          { freq: 523.25, delay: 0, dur: 0.16, peak: 0.045 },
+          { freq: 659.25, delay: 0.06, dur: 0.18, peak: 0.048 },
+          { freq: 783.99, delay: 0.12, dur: 0.2, peak: 0.05 },
+          { freq: 987.77, delay: 0.2, dur: 0.28, peak: 0.04 }
+        ],
+        [
+          { freq: 698.46, delay: 0, dur: 0.14, peak: 0.05, type: 'triangle', attack: 0.01 },
+          { freq: 880, delay: 0.11, dur: 0.14, peak: 0.05, type: 'triangle', attack: 0.01 },
+          { freq: 698.46, delay: 0.22, dur: 0.14, peak: 0.045, type: 'triangle', attack: 0.01 },
+          { freq: 1046.5, delay: 0.34, dur: 0.3, peak: 0.052 }
+        ],
+        [
+          { freq: 440, delay: 0, dur: 0.18, peak: 0.04, type: 'triangle' },
+          { freq: 554.37, delay: 0.07, dur: 0.2, peak: 0.045 },
+          { freq: 659.25, delay: 0.15, dur: 0.36, peak: 0.05 }
+        ]
       ]);
     }
 
-    /** Soft minor triad — sad / apologetic. */
+    /** Soft minor — sad / apologetic. */
     function playSadSound() {
-      playToneChord(
+      playRandomChord(
         [
-          { freq: 392.0, delay: 0, dur: 0.55, peak: 0.032, type: 'triangle', attack: 0.06 },
-          { freq: 466.16, delay: 0.08, dur: 0.6, peak: 0.024, type: 'triangle', attack: 0.08 },
-          { freq: 587.33, delay: 0.18, dur: 0.7, peak: 0.018, type: 'sine', attack: 0.1 }
+          [
+            { freq: 392.0, delay: 0, dur: 0.55, peak: 0.032, type: 'triangle', attack: 0.06 },
+            { freq: 466.16, delay: 0.08, dur: 0.6, peak: 0.024, type: 'triangle', attack: 0.08 },
+            { freq: 587.33, delay: 0.18, dur: 0.7, peak: 0.018, type: 'sine', attack: 0.1 }
+          ],
+          [
+            { freq: 349.23, delay: 0, dur: 0.65, peak: 0.03, type: 'triangle', attack: 0.08 },
+            { freq: 415.3, delay: 0.12, dur: 0.72, peak: 0.022, type: 'sine', attack: 0.1 },
+            { freq: 523.25, delay: 0.28, dur: 0.8, peak: 0.016, type: 'sine', attack: 0.12 }
+          ],
+          [
+            { freq: 311.13, delay: 0, dur: 0.5, peak: 0.028, type: 'triangle', attack: 0.07 },
+            { freq: 369.99, delay: 0.16, dur: 0.55, peak: 0.02, type: 'triangle', attack: 0.09 },
+            { freq: 466.16, delay: 0.32, dur: 0.7, peak: 0.014, type: 'sine', attack: 0.12 }
+          ],
+          [
+            { freq: 440, delay: 0, dur: 0.4, peak: 0.03, type: 'sine', attack: 0.05 },
+            { freq: 415.3, delay: 0.2, dur: 0.55, peak: 0.024, type: 'triangle', attack: 0.08 },
+            { freq: 349.23, delay: 0.4, dur: 0.75, peak: 0.018, type: 'sine', attack: 0.12 }
+          ]
         ],
         { lowpass: 1100 }
       );
     }
 
-    /** Quick rising spark — surprised / unexpected. */
+    /** Rising spark — surprised / wide-eyed. */
     function playSurprisedSound() {
-      playToneChord([
-        { freq: 523.25, delay: 0, dur: 0.14, peak: 0.04, attack: 0.01 },
-        { freq: 784.0, delay: 0.07, dur: 0.18, peak: 0.038, attack: 0.01 },
-        { freq: 1046.5, delay: 0.14, dur: 0.28, peak: 0.03, attack: 0.015 }
+      playRandomChord([
+        [
+          { freq: 523.25, delay: 0, dur: 0.14, peak: 0.04, attack: 0.01 },
+          { freq: 784.0, delay: 0.07, dur: 0.18, peak: 0.038, attack: 0.01 },
+          { freq: 1046.5, delay: 0.14, dur: 0.28, peak: 0.03, attack: 0.015 }
+        ],
+        [
+          { freq: 659.25, delay: 0, dur: 0.1, peak: 0.045, attack: 0.008 },
+          { freq: 987.77, delay: 0.05, dur: 0.12, peak: 0.04, attack: 0.008 },
+          { freq: 1318.5, delay: 0.11, dur: 0.22, peak: 0.032, attack: 0.01 }
+        ],
+        [
+          { freq: 392.0, delay: 0, dur: 0.12, peak: 0.035, type: 'triangle', attack: 0.01 },
+          { freq: 587.33, delay: 0.06, dur: 0.14, peak: 0.04, attack: 0.01 },
+          { freq: 880, delay: 0.13, dur: 0.16, peak: 0.038, attack: 0.01 },
+          { freq: 1174.7, delay: 0.22, dur: 0.26, peak: 0.03, attack: 0.012 }
+        ],
+        [
+          { freq: 880, delay: 0, dur: 0.08, peak: 0.05, attack: 0.005 },
+          { freq: 660, delay: 0.09, dur: 0.1, peak: 0.038, attack: 0.008 },
+          { freq: 1100, delay: 0.18, dur: 0.28, peak: 0.042, attack: 0.01 }
+        ]
       ]);
     }
 
-    /** Soft filtered pad — curious / suggestion. */
+    /** Soft pad — curious / look-around / suggestion. */
     function playCuriousSound() {
-      playToneChord(
+      playRandomChord(
         [
-          { freq: 246.94, delay: 0, dur: 1.05, peak: 0.018, type: 'triangle', attack: 0.18 },
-          { freq: 369.99, delay: 0.12, dur: 1.15, peak: 0.014, type: 'triangle', attack: 0.18 },
-          { freq: 493.88, delay: 0.28, dur: 1.25, peak: 0.01, type: 'triangle', attack: 0.2 }
+          [
+            { freq: 246.94, delay: 0, dur: 1.05, peak: 0.018, type: 'triangle', attack: 0.18 },
+            { freq: 369.99, delay: 0.12, dur: 1.15, peak: 0.014, type: 'triangle', attack: 0.18 },
+            { freq: 493.88, delay: 0.28, dur: 1.25, peak: 0.01, type: 'triangle', attack: 0.2 }
+          ],
+          [
+            { freq: 277.18, delay: 0, dur: 0.9, peak: 0.02, type: 'triangle', attack: 0.15 },
+            { freq: 415.3, delay: 0.18, dur: 1.0, peak: 0.014, type: 'sine', attack: 0.16 },
+            { freq: 554.37, delay: 0.4, dur: 1.1, peak: 0.01, type: 'triangle', attack: 0.18 }
+          ],
+          [
+            { freq: 220, delay: 0, dur: 0.7, peak: 0.016, type: 'triangle', attack: 0.2 },
+            { freq: 329.63, delay: 0.2, dur: 0.85, peak: 0.014, type: 'triangle', attack: 0.18 },
+            { freq: 440, delay: 0.45, dur: 0.55, peak: 0.012, type: 'sine', attack: 0.1 },
+            { freq: 554.37, delay: 0.7, dur: 0.65, peak: 0.01, type: 'sine', attack: 0.12 }
+          ],
+          [
+            { freq: 311.13, delay: 0, dur: 0.45, peak: 0.02, type: 'sine', attack: 0.08 },
+            { freq: 466.16, delay: 0.22, dur: 0.5, peak: 0.016, type: 'triangle', attack: 0.1 },
+            { freq: 622.25, delay: 0.48, dur: 0.7, peak: 0.012, type: 'sine', attack: 0.12 }
+          ]
         ],
         { lowpass: 920 }
       );
     }
 
+    /** Contemplative wobble — thinking. */
+    function playThinkingSound() {
+      playRandomChord(
+        [
+          [
+            { freq: 196.0, delay: 0, dur: 0.85, peak: 0.016, type: 'triangle', attack: 0.2 },
+            { freq: 246.94, delay: 0.25, dur: 0.9, peak: 0.014, type: 'triangle', attack: 0.18 },
+            { freq: 293.66, delay: 0.55, dur: 0.75, peak: 0.011, type: 'sine', attack: 0.16 }
+          ],
+          [
+            { freq: 233.08, delay: 0, dur: 0.6, peak: 0.018, type: 'sine', attack: 0.12 },
+            { freq: 277.18, delay: 0.28, dur: 0.55, peak: 0.014, type: 'triangle', attack: 0.1 },
+            { freq: 233.08, delay: 0.55, dur: 0.7, peak: 0.012, type: 'sine', attack: 0.14 }
+          ],
+          [
+            { freq: 174.61, delay: 0, dur: 1.1, peak: 0.015, type: 'triangle', attack: 0.22 },
+            { freq: 261.63, delay: 0.35, dur: 1.0, peak: 0.012, type: 'triangle', attack: 0.2 }
+          ]
+        ],
+        { lowpass: 780 }
+      );
+    }
+
     /** Gentle mid chime — neutral. */
     function playNeutralSound() {
-      playToneChord([
-        { freq: 523.25, delay: 0, dur: 0.32, peak: 0.036, type: 'sine', attack: 0.04 },
-        { freq: 659.25, delay: 0.1, dur: 0.36, peak: 0.028, type: 'sine', attack: 0.05 }
+      playRandomChord([
+        [
+          { freq: 523.25, delay: 0, dur: 0.32, peak: 0.036, type: 'sine', attack: 0.04 },
+          { freq: 659.25, delay: 0.1, dur: 0.36, peak: 0.028, type: 'sine', attack: 0.05 }
+        ],
+        [
+          { freq: 493.88, delay: 0, dur: 0.28, peak: 0.034, type: 'triangle', attack: 0.05 },
+          { freq: 587.33, delay: 0.12, dur: 0.34, peak: 0.026, type: 'sine', attack: 0.05 }
+        ],
+        [
+          { freq: 440, delay: 0, dur: 0.4, peak: 0.03, type: 'sine', attack: 0.06 },
+          { freq: 554.37, delay: 0.14, dur: 0.42, peak: 0.024, type: 'triangle', attack: 0.06 }
+        ],
+        [{ freq: 587.33, delay: 0, dur: 0.45, peak: 0.032, type: 'sine', attack: 0.05 }]
+      ]);
+    }
+
+    /** Silly blip — tongue-out / cheeky. */
+    function playTongueSound() {
+      playRandomChord([
+        [
+          { freq: 720, delay: 0, dur: 0.1, peak: 0.045, type: 'triangle', attack: 0.008 },
+          { freq: 540, delay: 0.09, dur: 0.12, peak: 0.04, type: 'triangle', attack: 0.01 },
+          { freq: 860, delay: 0.2, dur: 0.22, peak: 0.048, type: 'sine', attack: 0.01 }
+        ],
+        [
+          { freq: 640, delay: 0, dur: 0.08, peak: 0.05, attack: 0.005 },
+          { freq: 800, delay: 0.07, dur: 0.08, peak: 0.045, attack: 0.005 },
+          { freq: 640, delay: 0.14, dur: 0.08, peak: 0.04, attack: 0.005 },
+          { freq: 960, delay: 0.24, dur: 0.2, peak: 0.042, attack: 0.01 }
+        ],
+        [
+          { freq: 500, delay: 0, dur: 0.15, peak: 0.04, type: 'triangle' },
+          { freq: 750, delay: 0.1, dur: 0.12, peak: 0.045, type: 'triangle' },
+          { freq: 1000, delay: 0.2, dur: 0.12, peak: 0.035, type: 'sine' },
+          { freq: 750, delay: 0.3, dur: 0.18, peak: 0.04, type: 'triangle' }
+        ]
+      ]);
+    }
+
+    /** Bouncy arpeggio — excited / jump. */
+    function playExcitedSound() {
+      playRandomChord([
+        [
+          { freq: 523.25, delay: 0, dur: 0.12, peak: 0.045, attack: 0.01 },
+          { freq: 659.25, delay: 0.1, dur: 0.12, peak: 0.048, attack: 0.01 },
+          { freq: 783.99, delay: 0.2, dur: 0.12, peak: 0.05, attack: 0.01 },
+          { freq: 1046.5, delay: 0.3, dur: 0.28, peak: 0.05, attack: 0.012 },
+          { freq: 783.99, delay: 0.48, dur: 0.18, peak: 0.035, attack: 0.01 }
+        ],
+        [
+          { freq: 587.33, delay: 0, dur: 0.1, peak: 0.048, type: 'triangle', attack: 0.008 },
+          { freq: 740, delay: 0.09, dur: 0.1, peak: 0.05, type: 'triangle', attack: 0.008 },
+          { freq: 880, delay: 0.18, dur: 0.1, peak: 0.05, type: 'triangle', attack: 0.008 },
+          { freq: 1175, delay: 0.28, dur: 0.24, peak: 0.048, attack: 0.01 }
+        ],
+        [
+          { freq: 440, delay: 0, dur: 0.1, peak: 0.04, attack: 0.01 },
+          { freq: 554.37, delay: 0.08, dur: 0.1, peak: 0.045, attack: 0.01 },
+          { freq: 659.25, delay: 0.16, dur: 0.1, peak: 0.05, attack: 0.01 },
+          { freq: 880, delay: 0.24, dur: 0.1, peak: 0.048, attack: 0.01 },
+          { freq: 1108.7, delay: 0.34, dur: 0.26, peak: 0.045, attack: 0.012 }
+        ]
+      ]);
+    }
+
+    /** Soft wink — one-sided chime. */
+    function playWinkSound() {
+      playRandomChord([
+        [
+          { freq: 698.46, delay: 0, dur: 0.12, peak: 0.04, attack: 0.01 },
+          { freq: 880, delay: 0.14, dur: 0.28, peak: 0.036, type: 'triangle', attack: 0.04 }
+        ],
+        [
+          { freq: 783.99, delay: 0, dur: 0.18, peak: 0.042, type: 'sine', attack: 0.02 },
+          { freq: 987.77, delay: 0.16, dur: 0.22, peak: 0.03, type: 'triangle', attack: 0.03 }
+        ],
+        [
+          { freq: 659.25, delay: 0, dur: 0.1, peak: 0.038, attack: 0.008 },
+          { freq: 523.25, delay: 0.1, dur: 0.12, peak: 0.03, attack: 0.01 },
+          { freq: 880, delay: 0.22, dur: 0.26, peak: 0.04, attack: 0.015 }
+        ]
       ]);
     }
 
     function playEmotionSound(emotion) {
-      if (emotion === 'sad') playSadSound();
-      else if (emotion === 'surprised') playSurprisedSound();
-      else if (emotion === 'curious' || emotion === 'thinking') playCuriousSound();
-      else if (emotion === 'neutral') playNeutralSound();
+      var mood = emotion || 'happy';
+      if (mood === 'sad') playSadSound();
+      else if (mood === 'surprised' || mood === 'wideEyed') playSurprisedSound();
+      else if (mood === 'curious' || mood === 'lookUp' || mood === 'lookDown') playCuriousSound();
+      else if (mood === 'thinking') playThinkingSound();
+      else if (mood === 'neutral') playNeutralSound();
+      else if (mood === 'tongue') playTongueSound();
+      else if (mood === 'excited') playExcitedSound();
+      else if (mood === 'wink') playWinkSound();
+      else if (mood === 'happy') playHappySound();
       else playHappySound();
     }
 
     function playSuggestionSound() {
-      playCuriousSound();
+      playRandomChord(
+        [
+          function () {
+            return [
+              { freq: 246.94, delay: 0, dur: 1.05, peak: 0.018, type: 'triangle', attack: 0.18 },
+              { freq: 369.99, delay: 0.12, dur: 1.15, peak: 0.014, type: 'triangle', attack: 0.18 },
+              { freq: 493.88, delay: 0.28, dur: 1.25, peak: 0.01, type: 'triangle', attack: 0.2 }
+            ];
+          },
+          function () {
+            return [
+              { freq: 261.63, delay: 0, dur: 0.8, peak: 0.02, type: 'triangle', attack: 0.14 },
+              { freq: 392.0, delay: 0.15, dur: 0.9, peak: 0.015, type: 'sine', attack: 0.14 },
+              { freq: 523.25, delay: 0.35, dur: 0.85, peak: 0.012, type: 'triangle', attack: 0.16 }
+            ];
+          },
+          function () {
+            return [
+              { freq: 329.63, delay: 0, dur: 0.55, peak: 0.02, type: 'sine', attack: 0.1 },
+              { freq: 493.88, delay: 0.2, dur: 0.65, peak: 0.016, type: 'triangle', attack: 0.12 },
+              { freq: 659.25, delay: 0.42, dur: 0.7, peak: 0.012, type: 'sine', attack: 0.12 }
+            ];
+          }
+        ],
+        { lowpass: 960 }
+      );
     }
 
     function isAssistantExpanded() {
@@ -1360,15 +1603,86 @@
       );
     }
 
+    var FACE_EMOTIONS = [
+      'neutral',
+      'happy',
+      'sad',
+      'surprised',
+      'curious',
+      'thinking',
+      'tongue',
+      'wideEyed',
+      'lookUp',
+      'lookDown',
+      'excited',
+      'wink'
+    ];
+
+    function spiceEmotion(base) {
+      var mood = base || 'neutral';
+      var roll = Math.random();
+      if (mood === 'happy') {
+        if (roll < 0.22) return 'excited';
+        if (roll < 0.4) return 'tongue';
+        if (roll < 0.55) return 'wink';
+        return 'happy';
+      }
+      if (mood === 'surprised') {
+        if (roll < 0.45) return 'wideEyed';
+        if (roll < 0.6) return 'excited';
+        return 'surprised';
+      }
+      if (mood === 'curious') {
+        if (roll < 0.28) return 'lookUp';
+        if (roll < 0.5) return 'lookDown';
+        if (roll < 0.62) return 'wink';
+        return 'curious';
+      }
+      if (mood === 'thinking') {
+        if (roll < 0.35) return 'lookUp';
+        if (roll < 0.55) return 'lookDown';
+        return 'thinking';
+      }
+      if (mood === 'neutral') {
+        if (roll < 0.18) return 'lookDown';
+        if (roll < 0.3) return 'lookUp';
+        if (roll < 0.4) return 'wink';
+        if (roll < 0.48) return 'tongue';
+        return 'neutral';
+      }
+      if (mood === 'sad') {
+        if (roll < 0.25) return 'lookDown';
+        return 'sad';
+      }
+      return mood;
+    }
+
+    function pickFaceEnterMotion(emotion) {
+      var mood = emotion || 'neutral';
+      if (mood === 'excited') {
+        return pickOne(['roll', 'bounce', 'jump', 'jump', 'pop']);
+      }
+      if (mood === 'happy' || mood === 'tongue' || mood === 'wink') {
+        return pickOne(['roll', 'bounce', 'pop', 'jump', null, null]);
+      }
+      if (mood === 'surprised' || mood === 'wideEyed') {
+        return pickOne(['pop', 'bounce', 'roll', null]);
+      }
+      if (mood === 'curious' || mood === 'lookUp' || mood === 'lookDown') {
+        return pickOne(['roll', 'bounce', null, null]);
+      }
+      return pickOne(['roll', 'pop', null, null, null]);
+    }
+
     function inferAssistantEmotion(text, meta, context) {
       meta = meta || {};
       context = context || {};
       if (meta.emotion) return meta.emotion;
-      if (context.thinking) return 'thinking';
+      if (context.thinking) return spiceEmotion('thinking');
       if (meta.error) return 'sad';
-      if (meta.offer) return 'curious';
+      if (meta.offer) return spiceEmotion('curious');
       if (meta.ok === false) return 'sad';
-      if (meta.surprised) return 'surprised';
+      if (meta.surprised) return spiceEmotion('surprised');
 
       var userText =
         context.userText != null ? context.userText : lastUserMessageText();
@@ -1385,30 +1699,43 @@
         return 'sad';
       }
       if (
+        /\b(haha|hihi|lol|mdr|ptdr|:p|;p|tongue|langue)\b/i.test(lower) ||
+        /:p|;p|😛|😜/.test(t)
+      ) {
+        return 'tongue';
+      }
+      if (
+        /\b(youhou|hourra|g[eé]nial|incroyable|let'?s go|allez|top\b)\b/i.test(lower) ||
+        /🎉|🥳|✨/.test(t)
+      ) {
+        return spiceEmotion('excited');
+      }
+      if (
         meta.ok === true ||
         /\b(c['']est fait|appliqu[eé]|parfait|tr[eè]s bien|voil[aà]|mis à jour|mis a jour|bravo|super|nickel|impeccable)\b/i.test(
           lower
         )
       ) {
-        return 'happy';
+        return spiceEmotion('happy');
       }
       if (
-        /\b(oh+|tiens|inattendu|surprise|étrange|etrange|intéressant|interessant|wow|hein\b)\b/i.test(
+        /\b(oh+|tiens|inattendu|surprise|étrange|etrange|intéressant|interessant|wow|hein\b|waouh)\b/i.test(
           lower
         ) ||
         meta.emptyClaim
       ) {
-        return 'surprised';
+        return spiceEmotion('surprised');
       }
-      if (/\?/.test(t) && t.length < 160) return 'curious';
-      if (meta.recap) return meta.ok === false ? 'sad' : 'happy';
-      return 'neutral';
+      if (/\?/.test(t) && t.length < 160) return spiceEmotion('curious');
+      if (meta.recap) return meta.ok === false ? 'sad' : spiceEmotion('happy');
+      return spiceEmotion('neutral');
     }
 
     var faceGradientSeq = 0;
 
     function createAssistantFace(emotion) {
       var mood = emotion || 'neutral';
+      if (FACE_EMOTIONS.indexOf(mood) === -1) mood = 'neutral';
       var face = el('span', 'agent-face agent-face--' + mood);
       face.setAttribute('aria-hidden', 'true');
       face.setAttribute('data-emotion', mood);
@@ -1450,24 +1777,74 @@
         '<ellipse class="agent-face-mouth agent-face-mouth--surprised" cx="20" cy="25.6" rx="2.1" ry="2.5" fill="#6b3f2a"/>' +
         '<path class="agent-face-mouth agent-face-mouth--curious" d="M16.2 25c1.2 1.35 2.8 2 3.8 2s2.6-.65 3.8-2" fill="none" stroke="#6b3f2a" stroke-width="1.5" stroke-linecap="round"/>' +
         '<path class="agent-face-mouth agent-face-mouth--thinking" d="M17.5 25.4c1.1.35 2.4.5 3.4.35" fill="none" stroke="#6b3f2a" stroke-width="1.5" stroke-linecap="round"/>' +
+        '<path class="agent-face-mouth agent-face-mouth--tongue" d="M14.6 24.6c1.7 2.2 3.9 3.2 5.4 3.2s3.7-1 5.4-3.2" fill="none" stroke="#6b3f2a" stroke-width="1.55" stroke-linecap="round"/>' +
+        '<path class="agent-face-mouth agent-face-mouth--wink" d="M15.8 25.2c1.2 1.1 2.8 1.6 4.2 1.5 1.2-.1 2.4-.5 3.4-1.2" fill="none" stroke="#6b3f2a" stroke-width="1.5" stroke-linecap="round"/>' +
+        '<path class="agent-face-mouth agent-face-mouth--excited" d="M14 24.2c2 2.8 4.4 4 6 4s4-1.2 6-4" fill="none" stroke="#6b3f2a" stroke-width="1.65" stroke-linecap="round"/>' +
+        '<ellipse class="agent-face-tongue" cx="20" cy="29.2" rx="2.4" ry="2.1" fill="#e85a6b"/>' +
+        '<ellipse class="agent-face-tongue agent-face-tongue--tip" cx="20" cy="30.1" rx="1.3" ry="1.05" fill="#f27888"/>' +
         '</g>' +
         '</g>' +
         '</svg>';
       return face;
     }
 
-    function setAssistantFaceEmotion(row, emotion) {
+    function clearFaceMotionClasses(face) {
+      if (!face || !face.classList) return;
+      [
+        'agent-face--enter-roll',
+        'agent-face--enter-bounce',
+        'agent-face--enter-pop',
+        'agent-face--enter-jump',
+        'agent-face--motion-jump'
+      ].forEach(function (cls) {
+        face.classList.remove(cls);
+      });
+    }
+
+    function applyFaceEnterMotion(face, emotion) {
+      if (!face) return;
+      clearFaceMotionClasses(face);
+      var motion = pickFaceEnterMotion(emotion);
+      if (!motion) {
+        if (emotion === 'excited' || (emotion === 'happy' && Math.random() < 0.35)) {
+          face.classList.add('agent-face--motion-jump');
+        }
+        return;
+      }
+      var enterCls = 'agent-face--enter-' + motion;
+      face.classList.add(enterCls);
+      if (motion === 'jump' || emotion === 'excited') {
+        face.classList.add('agent-face--motion-jump');
+      }
+      var onEnd = function (ev) {
+        if (ev && ev.target !== face) return;
+        face.classList.remove(enterCls);
+        face.removeEventListener('animationend', onEnd);
+      };
+      face.addEventListener('animationend', onEnd);
+    }
+
+    function setAssistantFaceEmotion(row, emotion, options) {
       if (!row) return;
+      options = options || {};
       var mood = emotion || 'neutral';
+      if (FACE_EMOTIONS.indexOf(mood) === -1) mood = 'neutral';
       var face = row.querySelector('.agent-face');
+      var isNew = !face;
       if (!face) {
         face = createAssistantFace(mood);
         row.insertBefore(face, row.firstChild);
       }
+      clearFaceMotionClasses(face);
       face.className = 'agent-face agent-face--' + mood;
       face.setAttribute('data-emotion', mood);
       face.classList.remove('is-frozen');
       row.setAttribute('data-emotion', mood);
+      if (options.animate !== false && (isNew || options.forceEnter)) {
+        applyFaceEnterMotion(face, mood);
+      } else if (mood === 'excited') {
+        face.classList.add('agent-face--motion-jump');
+      }
     }
 
     function freezeOlderAssistantFaces(currentRow) {
@@ -1475,13 +1852,14 @@
         messagesEl.querySelectorAll('.agent-msg--assistant .agent-face'),
         function (face) {
           if (currentRow && currentRow.contains(face)) return;
+          clearFaceMotionClasses(face);
           face.classList.add('is-frozen');
         }
       );
     }
 
     function attachAssistantFace(row, emotion) {
-      setAssistantFaceEmotion(row, emotion);
+      setAssistantFaceEmotion(row, emotion, { animate: true, forceEnter: true });
       freezeOlderAssistantFaces(row);
     }
 
@@ -1611,13 +1989,13 @@
       clearActiveOffer(row);
       muteListening();
       var result = await Agent.executeActions(bridge, item.actions || []);
-      appendMessage('assistant', result.summary || 'C\u2019est fait.', {
+      appendMessage('assistant', result.summary || 'Okay, c\'est fait.', {
         note: item.label
       });
       appendChangeRecap(result, { ok: result.ok });
       history.push({
         role: 'assistant',
-        content: result.summary || result.recap || 'C\u2019est fait.'
+        content: result.summary || result.recap || 'Okay, c\'est fait.'
       });
       muteListening();
       notifyLayout();
@@ -2125,13 +2503,13 @@
           }
         ]);
         clearPrompts();
-        appendMessage('assistant', 'Axes mis \u00e0 jour.', {
+        appendMessage('assistant', 'Okay, c\'est mis \u00e0 jour.', {
           note: 'Affinage priorit\u00e9'
         });
         appendChangeRecap(result, { ok: result.ok });
         history.push({
           role: 'assistant',
-          content: 'Axes mis \u00e0 jour.'
+          content: 'Okay, c\'est mis \u00e0 jour.'
         });
         if (collapse && collapse.refreshSummary) collapse.refreshSummary();
         muteListening();
@@ -2168,10 +2546,21 @@
       notifyLayout();
     }
 
+    function stopSuggestionConfirmTimer() {
+      if (suggestionConfirmTimer) {
+        clearInterval(suggestionConfirmTimer);
+        suggestionConfirmTimer = null;
+      }
+      suggestionConfirmDeadline = 0;
+    }
+
     function clearSuggestions() {
+      stopSuggestionConfirmTimer();
+      suggestionsMultiSelect = false;
       composerSuggestions = [];
       suggestionsEl.replaceChildren();
       suggestionsEl.hidden = true;
+      suggestionsEl.classList.remove('is-multi');
       if (tabComplete) tabComplete.refresh();
       notifyLayout();
     }
@@ -2299,13 +2688,13 @@
       if (pending || !item || !item.actions || !item.actions.length) return;
       muteListening();
       var result = await Agent.executeActions(bridge, item.actions);
-      appendMessage('assistant', result.summary || 'Suggestion appliqu\u00e9e.', {
+      appendMessage('assistant', result.summary || 'Okay, c\'est appliqu\u00e9.', {
         note: item.label
       });
       appendChangeRecap(result, { ok: result.ok });
       history.push({
         role: 'assistant',
-        content: result.summary || result.recap || 'Suggestion appliqu\u00e9e.'
+        content: result.summary || result.recap || 'Okay, c\'est appliqu\u00e9.'
       });
       applySuggestions = applySuggestions.filter(function (_s, i) {
         return i !== index;
@@ -2398,12 +2787,134 @@
       notifyLayout();
     }
 
-    function onSuggestionChip(text) {
+    function suggestionsAllowMultiSelect(items) {
+      if (!items || !items.length) return false;
+      return items.every(function (item) {
+        var text = item && item.text ? item.text : '';
+        return text.indexOf('?') < 0 && !suggestionNeedsVariableInput(text);
+      });
+    }
+
+    function pickSuggestionConfirmPrompt() {
+      return SUGGESTION_CONFIRM_PROMPTS[
+        Math.floor(Math.random() * SUGGESTION_CONFIRM_PROMPTS.length)
+      ];
+    }
+
+    function getSelectedSuggestionTexts() {
+      var selected = [];
+      Array.prototype.forEach.call(
+        suggestionsEl.querySelectorAll('.agent-suggestion-chip.is-selected'),
+        function (chip) {
+          var label = String(
+            chip.getAttribute('data-suggestion') || chip.textContent || ''
+          ).trim();
+          if (label) selected.push(label);
+        }
+      );
+      return selected;
+    }
+
+    function formatSelectedSuggestions(labels) {
+      return (labels || [])
+        .map(function (label) {
+          return String(label || '').trim();
+        })
+        .filter(Boolean)
+        .join('. ');
+    }
+
+    function syncSuggestionConfirmUi() {
+      var confirmEl = suggestionsEl.querySelector('.agent-suggestion-confirm');
+      if (!confirmEl) return;
+      var selected = getSelectedSuggestionTexts();
+      var countEl = confirmEl.querySelector('.agent-suggestion-confirm-count');
+      var btn = confirmEl.querySelector('.agent-suggestion-confirm-btn');
+      if (!selected.length) {
+        confirmEl.hidden = true;
+        stopSuggestionConfirmTimer();
+        if (countEl) countEl.textContent = '';
+        if (btn) btn.disabled = true;
+        notifyLayout();
+        return;
+      }
+      confirmEl.hidden = false;
+      if (btn) btn.disabled = !!pending;
+      var leftMs = suggestionConfirmDeadline
+        ? Math.max(0, suggestionConfirmDeadline - Date.now())
+        : SUGGESTION_CONFIRM_MS;
+      var leftSec = Math.max(1, Math.ceil(leftMs / 1000));
+      if (countEl) countEl.textContent = String(leftSec);
+      var promptText =
+        (confirmEl.querySelector('.agent-suggestion-confirm-prompt') || {})
+          .textContent || 'C\'est tout\u00a0?';
+      confirmEl.setAttribute('aria-label', promptText + ' ' + leftSec + ' s');
+      notifyLayout();
+    }
+
+    function startSuggestionConfirmTimer() {
+      stopSuggestionConfirmTimer();
+      suggestionConfirmDeadline = Date.now() + SUGGESTION_CONFIRM_MS;
+      syncSuggestionConfirmUi();
+      suggestionConfirmTimer = setInterval(function () {
+        if (pending) {
+          stopSuggestionConfirmTimer();
+          return;
+        }
+        if (!getSelectedSuggestionTexts().length) {
+          stopSuggestionConfirmTimer();
+          syncSuggestionConfirmUi();
+          return;
+        }
+        if (Date.now() >= suggestionConfirmDeadline) {
+          stopSuggestionConfirmTimer();
+          commitSelectedSuggestions();
+          return;
+        }
+        syncSuggestionConfirmUi();
+      }, 200);
+    }
+
+    function commitSelectedSuggestions() {
+      if (pending) return;
+      var labels = getSelectedSuggestionTexts();
+      if (!labels.length) return;
+      var msg = formatSelectedSuggestions(labels);
+      stopSuggestionConfirmTimer();
+      clearSuggestions();
+      sendUserMessage(msg, { skipSpellcheck: true });
+    }
+
+    function toggleSuggestionChip(chip, text) {
+      if (pending || !chip) return;
+      var label = String(text || '').trim();
+      if (!label) return;
+      var wasSelected = chip.classList.contains('is-selected');
+      chip.classList.toggle('is-selected', !wasSelected);
+      chip.setAttribute('aria-pressed', wasSelected ? 'false' : 'true');
+      var selected = getSelectedSuggestionTexts();
+      if (!selected.length) {
+        stopSuggestionConfirmTimer();
+        syncSuggestionConfirmUi();
+        return;
+      }
+      var promptEl = suggestionsEl.querySelector('.agent-suggestion-confirm-prompt');
+      if (promptEl && !wasSelected) {
+        promptEl.textContent = pickSuggestionConfirmPrompt();
+      }
+      startSuggestionConfirmTimer();
+    }
+
+    function onSuggestionChip(text, chip) {
       if (pending) return;
       var label = String(text || '').trim();
       if (!label) return;
       if (suggestionNeedsVariableInput(label)) {
         insertComposerSuggestion(label);
+        return;
+      }
+      if (suggestionsMultiSelect && chip) {
+        toggleSuggestionChip(chip, label);
         return;
       }
       clearSuggestions();
@@ -2479,7 +2990,10 @@
       composerSuggestions = items.map(function (item) {
         return item.text;
       });
+      stopSuggestionConfirmTimer();
       suggestionsEl.replaceChildren();
+      suggestionsMultiSelect = false;
+      suggestionsEl.classList.remove('is-multi');
       if (!items.length || !Agent.isConfigured(provider)) {
         suggestionsEl.hidden = true;
         if (tabComplete) tabComplete.refresh();
@@ -2487,6 +3001,14 @@
         return;
       }
       suggestionsEl.hidden = false;
+      suggestionsMultiSelect = suggestionsAllowMultiSelect(items);
+      if (suggestionsMultiSelect) suggestionsEl.classList.add('is-multi');
+      suggestionsEl.setAttribute(
+        'aria-label',
+        suggestionsMultiSelect
+          ? 'R\u00e9ponses sugg\u00e9r\u00e9es (plusieurs possibles)'
+          : 'Questions sugg\u00e9r\u00e9es'
+      );
       var heatSteps = resolveSuggestionHeatSteps(items);
       items.forEach(function (item, index) {
         var text = item.text;
@@ -2494,6 +3016,9 @@
         chip.textContent = text;
         chip.setAttribute('data-suggestion', text);
         chip.disabled = pending;
+        if (suggestionsMultiSelect) {
+          chip.setAttribute('aria-pressed', 'false');
+        }
         var heat = heatSteps ? heatSteps[index] : null;
         if (heat != null && isFinite(heat)) {
           chip.classList.add('agent-suggestion-chip--scale');
@@ -2503,10 +3028,32 @@
           chip.style.animationDelay = index * 40 + 'ms';
         }
         chip.addEventListener('click', function () {
-          onSuggestionChip(text);
+          onSuggestionChip(text, chip);
         });
         suggestionsEl.appendChild(chip);
       });
+      if (suggestionsMultiSelect) {
+        var confirmEl = el('div', 'agent-suggestion-confirm');
+        confirmEl.hidden = true;
+        var promptEl = el('span', 'agent-suggestion-confirm-prompt');
+        promptEl.textContent = SUGGESTION_CONFIRM_PROMPTS[0];
+        var confirmBtn = el('button', 'agent-suggestion-confirm-btn', {
+          type: 'button',
+          'aria-label': 'Confirmer les r\u00e9ponses s\u00e9lectionn\u00e9es'
+        });
+        confirmBtn.disabled = true;
+        var checkIcon = el('i', 'ti ti-check');
+        checkIcon.setAttribute('aria-hidden', 'true');
+        var countEl = el('span', 'agent-suggestion-confirm-count');
+        confirmBtn.appendChild(checkIcon);
+        confirmBtn.appendChild(countEl);
+        confirmBtn.addEventListener('click', function () {
+          commitSelectedSuggestions();
+        });
+        confirmEl.appendChild(promptEl);
+        confirmEl.appendChild(confirmBtn);
+        suggestionsEl.appendChild(confirmEl);
+      }
       if (tabComplete) tabComplete.refresh();
       notifyLayout();
     }
@@ -2518,6 +3065,12 @@
           chip.disabled = !!isBusy || pending;
         }
       );
+      var confirmBtn = suggestionsEl.querySelector('.agent-suggestion-confirm-btn');
+      if (confirmBtn) {
+        confirmBtn.disabled =
+          !!isBusy || pending || !getSelectedSuggestionTexts().length;
+      }
+      if (isBusy || pending) stopSuggestionConfirmTimer();
     }
 
     async function refreshSuggestions(options) {
@@ -2647,24 +3200,73 @@
         appendMessage(
           'assistant',
           options.message ||
-            'Interview termin\u00e9e. Vous pouvez me demander d\'affiner priorit\u00e9, \u00e9ch\u00e9ance ou sous-t\u00e2ches.'
+            'Okay, on a le cadre. Tu peux me demander d\'ajuster la priorit\u00e9, la date limite ou les sous-t\u00e2ches quand tu veux.'
         );
         history.push({
           role: 'assistant',
           content:
             options.message ||
-            'Interview termin\u00e9e. Vous pouvez me demander d\'affiner priorit\u00e9, \u00e9ch\u00e9ance ou sous-t\u00e2ches.'
+            'Okay, on a le cadre. Tu peux me demander d\'ajuster la priorit\u00e9, la date limite ou les sous-t\u00e2ches quand tu veux.'
         });
       }
       refreshSuggestions({ animate: true });
-      refreshApplySuggestions({ animate: true });
+      await runOpenSanityThenSuggestions({ animate: true });
       notifyLayout();
+    }
+
+    /**
+     * On settle after interview (or returning to a known card): surface coherence issues
+     * before the usual applyable improvement chips.
+     */
+    async function bootstrapSanityCheck() {
+      if (sanityBootstrapped || pending || interviewActive) return null;
+      if (typeof Agent.cardSanityCheck !== 'function') return null;
+      sanityBootstrapped = true;
+      try {
+        var result = await Agent.cardSanityCheck(provider, bridge, {
+          onDebug: function (entry) {
+            pushDebugEntry(entry);
+          }
+        });
+        if (!result || !result.message) return null;
+        expandAssistant();
+        appendMessage('assistant', result.message, {
+          note: 'Coh\u00e9rence'
+        });
+        history.push({
+          role: 'assistant',
+          content: result.message
+        });
+        if (result.suggestions && result.suggestions.length) {
+          suggestionsSeq += 1;
+          renderSuggestions(result.suggestions, { animate: true });
+        }
+        if (result.followUps && result.followUps.length) {
+          renderFollowUps(result.followUps);
+        }
+        notifyLayout();
+        return result;
+      } catch (err) {
+        console.error('AgentUI bootstrapSanityCheck failed', err);
+        return null;
+      }
+    }
+
+    async function runOpenSanityThenSuggestions(options) {
+      options = options || {};
+      await bootstrapSanityCheck();
+      if (options.skipApplySuggestions) return;
+      refreshApplySuggestions({ animate: options.animate !== false });
     }
 
     async function bootstrapCardInterview() {
       if (!t || interviewBootstrapped || pending) return;
       if (!Agent.isConfigured(provider) || typeof Agent.cardInterviewTurn !== 'function') {
         markSettleReady();
+        await runOpenSanityThenSuggestions({
+          animate: true,
+          skipApplySuggestions: !Agent.isConfigured(provider)
+        });
         return;
       }
       interviewBootstrapped = true;
@@ -2678,8 +3280,8 @@
       }
       if (interviewState.complete || history.length) {
         refreshSuggestions({ animate: true });
-        refreshApplySuggestions({ animate: true });
         markSettleReady();
+        await runOpenSanityThenSuggestions({ animate: true });
         return;
       }
 
@@ -2879,6 +3481,13 @@
           await bootstrapCardInterview();
         } else if (Agent.isConfigured(provider)) {
           markSettleReady();
+          await runOpenSanityThenSuggestions({ animate: true });
+        } else {
+          markSettleReady();
+          await runOpenSanityThenSuggestions({
+            animate: true,
+            skipApplySuggestions: true
+          });
         }
       } catch (err) {
         console.error('AgentUI load provider failed', err);
@@ -3238,13 +3847,13 @@
       if (actions.length) {
         muteListening();
         var result = await Agent.executeActions(bridge, actions);
-        appendMessage('assistant', result.summary || 'Action effectu\u00e9e.', {
+        appendMessage('assistant', result.summary || 'Okay, c\'est fait.', {
           note: fu.label
         });
         appendChangeRecap(result, { ok: result.ok });
         history.push({
           role: 'assistant',
-          content: result.summary || result.recap || 'Action effectu\u00e9e.'
+          content: result.summary || result.recap || 'Okay, c\'est fait.'
         });
         if (collapse && collapse.refreshSummary) collapse.refreshSummary();
         muteListening();
@@ -3320,7 +3929,7 @@
       if (pending || !interviewActive) return;
       finishInterview({
         message:
-          'Okay, configuration initiale ignor\u00e9e. Vous pouvez reprendre quand vous voulez.'
+          'Okay, on passe. Tu pourras reprendre la config quand tu veux.'
       });
     });
     input.addEventListener('keydown', function (e) {

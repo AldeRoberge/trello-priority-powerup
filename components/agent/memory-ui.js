@@ -127,8 +127,8 @@
     var subtitle = el('p', 'memory-ui-subtitle', {
       text:
         mode === 'onboarding'
-          ? 'Quelques questions pour mieux contextualiser vos cartes et suggestions.'
-          : 'Mettez \u00e0 jour les faits importants (bas du tableau).'
+          ? 'Quelques questions pour mieux cadrer tes cartes et suggestions.'
+          : 'Ajoute ou corrige les faits importants (bas du tableau).'
     });
     header.appendChild(title);
     header.appendChild(subtitle);
@@ -920,8 +920,8 @@
 
       var opening =
         mode === 'onboarding'
-          ? 'Bonjour\u00a0! J\'ai parcouru vos cartes. Pour mieux vous aider\u00a0: comment vous appelez-vous au sein de l\'\u00e9quipe, et sur quoi travaillez-vous aujourd\'hui\u00a0?'
-          : 'Voici ce que je retiens du tableau. Que voulez-vous ajouter ou corriger dans ma m\u00e9moire\u00a0?';
+          ? 'Salut\u00a0! J\'ai jet\u00e9 un \u0153il aux cartes. Pour mieux t\'aider\u00a0: c\'est quoi ton pr\u00e9nom / comment on t\'appelle dans l\'\u00e9quipe, et sur quoi tu bosses en ce moment\u00a0?'
+          : 'Voici ce que je retiens du tableau. Qu\'est-ce que tu veux ajouter ou corriger\u00a0?';
 
       var openingQs = memory._openingQuestions || [];
       delete memory._openingQuestions;

@@ -210,40 +210,41 @@
 
   /**
    * Natural-language Facilité answer for difficulty / ease questions.
-   * Example: "D'après la Facilité de cette carte, c'est jugé facile à réaliser."
+   * Example: "Non, on la voit plutôt facile à faire."
    */
   function buildEaseExplanation(state) {
     if (!state || state.priorityEnabled === false) {
-      return 'Aucune Facilit\u00e9 n\'est d\u00e9finie\u00a0: la priorit\u00e9 n\'est pas activ\u00e9e sur cette carte.';
+      return 'Y a pas encore de Facilit\u00e9 sur cette carte\u00a0: la priorit\u00e9 n\'est pas activ\u00e9e.';
     }
     var E = clampInt(state.ease, 1, 5, 3);
-    var label = axisWord('ease', E) || '';
-    if (E >= 5) {
-      return 'Non\u00a0: d\'apr\u00e8s la Facilit\u00e9 de cette carte, c\'est jug\u00e9 super facile \u00e0 r\u00e9aliser.';
-    }
-    if (E >= 4) {
-      return 'Non\u00a0: d\'apr\u00e8s la Facilit\u00e9 de cette carte, c\'est jug\u00e9 facile \u00e0 r\u00e9aliser.';
-    }
-    if (E <= 1) {
-      return 'Oui\u00a0: d\'apr\u00e8s la Facilit\u00e9 de cette carte, c\'est jug\u00e9 tr\u00e8s difficile \u00e0 r\u00e9aliser.';
-    }
-    if (E === 2) {
-      return 'Oui\u00a0: d\'apr\u00e8s la Facilit\u00e9 de cette carte, c\'est jug\u00e9 difficile \u00e0 r\u00e9aliser.';
-    }
-    return (
-      'Ni vraiment dur ni trivial\u00a0: d\'apr\u00e8s la Facilit\u00e9 de cette carte, c\'est jug\u00e9 ' +
-      (label ? label.toLowerCase() : 'moyen') +
-      '.'
-    );
+    if (E >= 5) return 'Non, on la voit [[g:super facile]] \u00e0 faire.';
+    if (E >= 4) return 'Non, on la voit plut\u00f4t [[g:facile]] \u00e0 faire.';
+    if (E <= 1) return 'Oui, on la voit [[r:tr\u00e8s difficile]].';
+    if (E === 2) return 'Oui, on la voit plut\u00f4t [[r:difficile]].';
+    return 'Ni super dur ni trivial\u00a0: plut\u00f4t [[y:moyen]].';
+  }
+
+  /** Conversational "for the team / for interne…" from impact reach (0–4). */
+  function impactAudiencePhrase(impactLevel) {
+    var reach = axisWord('impact', impactLevel) || '';
+    var r = reach.toLowerCase();
+    if (r.indexOf('personnel') !== -1) return 'surtout pour toi / une personne';
+    if (r.indexOf('quipe') !== -1) return 'pour l\'\u00e9quipe';
+    if (r.indexOf('interne') !== -1) return 'pour l\'interne';
+    if (r.indexOf('population') !== -1) return 'pour beaucoup de gens';
+    if (r.indexOf('global') !== -1) return 'pour tout le monde';
+    if (impactLevel >= 3) return 'pour l\'\u00e9quipe';
+    if (impactLevel <= 0) return 'surtout au niveau perso';
+    return 'sur le p\u00e9rim\u00e8tre';
   }
 
   /**
    * Natural-language priority blurb for the agent (adapts to axis levels).
-   * Example: "La priorité de cette tâche est importante. Elle est jugée avoir un grand impact et être facile à réaliser."
+   * Example: "Cette tâche est urgente et importante pour l'équipe, donc on lui donne la priorité maximale."
    */
   function buildPriorityExplanation(state, display) {
     if (!state || state.priorityEnabled === false) {
-      return 'Aucune priorit\u00e9 n\'est d\u00e9finie pour cette t\u00e2che.';
+      return 'Y a pas encore de priorit\u00e9 sur cette t\u00e2che.';
     }
     var tierRaw =
       (display && (display.label || display.tier)) ||
@@ -256,51 +257,67 @@
     var U = clampInt(state.urgency, 0, 4, 0);
     var I = clampInt(state.impact, 0, 4, 0);
     var E = clampInt(state.ease, 1, 5, 3);
-    var traits = [];
     var tierLower = tier.toLowerCase();
-    var tierImpliesUrgency =
-      tierLower.indexOf('urgent') !== -1 || tierLower.indexOf('critique') !== -1;
+    var audience = impactAudiencePhrase(I);
 
-    // Prefer impact → ease → urgency; keep at most 2 traits so the answer stays natural.
-    if (I >= 4) traits.push('avoir un impact majeur');
-    else if (I >= 3) traits.push('avoir un grand impact');
-    else if (I <= 0) traits.push('avoir peu ou pas d\'impact');
-    else if (I === 1) traits.push('avoir un impact faible');
+    var urgencyBit = '';
+    if (U >= 4) urgencyBit = 'vraiment urgente';
+    else if (U >= 3) urgencyBit = 'urgente';
+    else if (U === 2) urgencyBit = 'assez urgente';
+    else if (U === 1) urgencyBit = 'peu urgente';
+    else urgencyBit = 'pas urgente';
 
-    if (traits.length < 2) {
-      if (E >= 5) traits.push('\u00eatre tr\u00e8s facile \u00e0 r\u00e9aliser');
-      else if (E >= 4) traits.push('\u00eatre facile \u00e0 r\u00e9aliser');
-      else if (E <= 1) traits.push('\u00eatre tr\u00e8s difficile \u00e0 r\u00e9aliser');
-      else if (E === 2) traits.push('\u00eatre difficile \u00e0 r\u00e9aliser');
+    var impactBit = '';
+    if (I >= 3) impactBit = 'importante ' + audience;
+    else if (I === 2) impactBit = 'utile ' + audience;
+    else if (I === 1) impactBit = 'd\'impact assez limit\u00e9 (' + audience + ')';
+    else impactBit = 'surtout perso';
+
+    var easeBit = '';
+    if (E >= 5) easeBit = 'plut\u00f4t simple \u00e0 faire';
+    else if (E >= 4) easeBit = 'assez facile';
+    else if (E <= 1) easeBit = 'plut\u00f4t costaud \u00e0 faire';
+    else if (E === 2) easeBit = 'pas si simple';
+
+    var conclusion = '';
+    if (tierLower.indexOf('critique') !== -1) {
+      conclusion = 'on lui donne la priorit\u00e9 maximale';
+    } else if (tierLower.indexOf('urgent') !== -1) {
+      conclusion = 'on la traite en Urgente';
+    } else if (tierLower.indexOf('prioritaire') !== -1) {
+      conclusion = 'on la met en Prioritaire';
+    } else if (tierLower.indexOf('importante') !== -1) {
+      conclusion = 'on la classe Importante';
+    } else if (tierLower.indexOf('flexible') !== -1) {
+      conclusion = 'on peut la garder Flexible';
+    } else if (tierLower.indexOf('secondaire') !== -1) {
+      conclusion = 'elle reste Secondaire';
+    } else if (tierLower.indexOf('optionnelle') !== -1) {
+      conclusion = 'c\'est plut\u00f4t Optionnelle';
+    } else {
+      conclusion = 'on la met en ' + tier;
     }
 
-    if (traits.length < 2 && !tierImpliesUrgency) {
-      if (U >= 4) traits.push('\u00eatre critique');
-      else if (U >= 3) traits.push('\u00eatre urgente');
-      else if (U <= 0) traits.push('ne pas \u00eatre urgente');
-      else if (U === 1) traits.push('avoir peu d\'urgence');
+    // Prefer urgency + impact (the user’s style). Add ease only when mid-tier needs colour.
+    var parts = [];
+    var strongU = U >= 3;
+    var strongI = I >= 2;
+    if (strongU) parts.push(urgencyBit);
+    if (strongI) parts.push(impactBit);
+    if (!parts.length) {
+      parts.push(urgencyBit);
+      parts.push(impactBit);
+    } else if (parts.length === 1 && easeBit && (E <= 2 || E >= 4)) {
+      parts.push(easeBit);
+    } else if (parts.length === 1) {
+      parts.push(strongU ? impactBit : urgencyBit);
     }
 
-    // Mid-range fallback when nothing stands out.
-    if (!traits.length) {
-      if (I === 2) traits.push('avoir un impact utile');
-      if (traits.length < 2 && E === 3) traits.push('\u00eatre de difficult\u00e9 moyenne');
-      if (traits.length < 2 && U === 2) traits.push('avoir une urgence mod\u00e9r\u00e9e');
-    }
-
-    var intro =
-      'La priorit\u00e9 de cette t\u00e2che est ' + tier.toLowerCase() + '.';
-    if (!traits.length) return intro;
-    if (traits.length === 1) {
-      return intro + ' Elle est jug\u00e9e ' + traits[0] + '.';
+    if (parts.length === 1) {
+      return 'Cette t\u00e2che est ' + parts[0] + ', donc ' + conclusion + '.';
     }
     return (
-      intro +
-      ' Elle est jug\u00e9e ' +
-      traits[0] +
-      ' et ' +
-      traits[1] +
-      '.'
+      'Cette t\u00e2che est ' + parts[0] + ' et ' + parts[1] + ', donc ' + conclusion + '.'
     );
   }
 
@@ -734,7 +751,7 @@
     return (
       'Okay, ' +
       tier +
-      '. Affinez les axes si besoin.'
+      '. Tu peux encore peaufiner urgence / impact / facilit\u00e9 si tu veux.'
     );
   }
 
@@ -1260,25 +1277,42 @@
         'Profil utilisateur\u00a0: r\u00e9ponds en anglais (English) sauf si l\'utilisateur \u00e9crit clairement en fran\u00e7ais.'
       ];
     }
-    var langLine =
-      context && context.profile && context.profile.language === 'en'
-        ? 'Default language: English (switch to French only if the user clearly writes in French).'
-        : 'Langue\u00a0: toujours en fran\u00e7ais (sauf si l\'utilisateur \u00e9crit clairement en anglais).';
+    var isEn = !!(context && context.profile && context.profile.language === 'en');
+    var langLine = isEn
+      ? 'Default language: English (switch to French only if the user clearly writes in French).'
+      : 'Langue\u00a0: toujours en fran\u00e7ais (sauf si l\'utilisateur \u00e9crit clairement en anglais).';
+    var voiceLines = isEn
+      ? [
+          'Voice (ALWAYS \u2014 non-negotiable):',
+          '- Talk like a teammate on Teams: natural, friendly, direct. Not a formal bot or support script.',
+          '- Short everyday sentences. Contractions are fine (it\'s, you\'re, we\'ll\u2026).',
+          '- No technical/product jargon in message: no "axes", "tier", "prompts", "tool", "JSON", "runtime", or API names (set_due, set_priority\u2026).',
+          '- Say things simply: priority, due date, subtask, blocked, etc.',
+          '- No corporate support tone: "Please provide…", "How may I assist?", "Don\'t hesitate…", stiff formality.',
+          '- Confirm like chat: "Okay, got it." / "Done — set it to Flexible."',
+          '- BAD: "Okay, Flexible. Refine the axes if needed."',
+          '- GOOD: "Okay, Flexible. You can still tweak urgency / impact / ease if you want."'
+        ]
+      : [
+          'Voix (TOUJOURS \u2014 non n\u00e9gociable)\u00a0:',
+          '- Parle comme un pote d\'\u00e9quipe sur Teams\u00a0: naturel, amical, direct. Tutoiement.',
+          '- Phrases courtes, langage du quotidien. Contractions OK (c\'est, j\'ai, t\'as\u2026).',
+          '- INTERDIT le jargon technique / produit dans message\u00a0: pas d\'\u00ab\u00a0axes\u00a0\u00bb, \u00ab\u00a0palier\u00a0\u00bb, \u00ab\u00a0prompts\u00a0\u00bb, \u00ab\u00a0outil\u00a0\u00bb, \u00ab\u00a0JSON\u00a0\u00bb, \u00ab\u00a0runtime\u00a0\u00bb, noms d\'API (set_due, set_priority\u2026).',
+          '- Dis les choses simplement\u00a0: priorit\u00e9, date limite, sous-t\u00e2che, bloqu\u00e9, etc.',
+          '- INTERDIT le ton administratif / support\u00a0: \u00ab\u00a0Veuillez\u2026\u00a0\u00bb, \u00ab\u00a0Merci de pr\u00e9ciser\u2026\u00a0\u00bb, \u00ab\u00a0Je reste \u00e0 votre disposition\u00a0\u00bb, \u00ab\u00a0N\'h\u00e9sitez pas\u2026\u00a0\u00bb, vouvoiement froid.',
+          '- Confirme comme en chat\u00a0: \u00ab\u00a0Okay, c\'est not\u00e9.\u00a0\u00bb / \u00ab\u00a0C\'est bon, je l\'ai mise en Flexible.\u00a0\u00bb',
+          '- Ex. FAUX\u00a0: \u00ab\u00a0Okay, Flexible. Affinez les axes si besoin.\u00a0\u00bb',
+          '- Ex. VRAI\u00a0: \u00ab\u00a0Okay, Flexible. Tu peux encore peaufiner urgence / impact / facilit\u00e9 si tu veux.\u00a0\u00bb',
+          '- Ex. FAUX\u00a0: \u00ab\u00a0Motif enregistr\u00e9\u00a0: en attente d\'une approbation.\u00a0\u00bb',
+          '- Ex. VRAI\u00a0: \u00ab\u00a0Okay, not\u00e9\u00a0: en attente d\'une approbation.\u00a0\u00bb'
+        ];
     return [
-      'Tu es l\'assistant Priorit\u00e9 dans Trello\u00a0: un coll\u00e8gue d\'\u00e9quipe qui aide sur la carte, pas un bot formal.',
-      langLine,
-      'Voix (TOUJOURS \u2014 non n\u00e9gociable)\u00a0:',
-      '- Parle comme un pote d\'\u00e9quipe sur Teams\u00a0: naturel, amical, direct. Tutoiement.',
-      '- Phrases courtes, langage du quotidien. Contractions OK (c\'est, j\'ai, t\'as\u2026).',
-      '- INTERDIT le jargon technique / produit dans message\u00a0: pas d\'\u00ab\u00a0axes\u00a0\u00bb, \u00ab\u00a0palier\u00a0\u00bb, \u00ab\u00a0prompts\u00a0\u00bb, \u00ab\u00a0outil\u00a0\u00bb, \u00ab\u00a0JSON\u00a0\u00bb, \u00ab\u00a0runtime\u00a0\u00bb, noms d\'API (set_due, set_priority\u2026).',
-      '- Dis les choses simplement\u00a0: priorit\u00e9, date limite, sous-t\u00e2che, bloqu\u00e9, etc.',
-      '- INTERDIT le ton administratif / support\u00a0: \u00ab\u00a0Veuillez\u2026\u00a0\u00bb, \u00ab\u00a0Merci de pr\u00e9ciser\u2026\u00a0\u00bb, \u00ab\u00a0Je reste \u00e0 votre disposition\u00a0\u00bb, \u00ab\u00a0N\'h\u00e9sitez pas\u2026\u00a0\u00bb, vouvoiement froid.',
-      '- Confirme comme en chat\u00a0: \u00ab\u00a0Okay, c\'est not\u00e9.\u00a0\u00bb / \u00ab\u00a0C\'est bon, je l\'ai mise en Flexible.\u00a0\u00bb',
-      '- Ex. FAUX\u00a0: \u00ab\u00a0Okay, Flexible. Affinez les axes si besoin.\u00a0\u00bb',
-      '- Ex. VRAI\u00a0: \u00ab\u00a0Okay, Flexible. Tu peux encore peaufiner urgence / impact / facilit\u00e9 si tu veux.\u00a0\u00bb',
-      '- Ex. FAUX\u00a0: \u00ab\u00a0Motif enregistr\u00e9\u00a0: en attente d\'une approbation.\u00a0\u00bb',
-      '- Ex. VRAI\u00a0: \u00ab\u00a0Okay, not\u00e9\u00a0: en attente d\'une approbation.\u00a0\u00bb',
+      isEn
+        ? 'You are the Priority assistant in Trello: a teammate helping on the card, not a formal bot.'
+        : 'Tu es l\'assistant Priorit\u00e9 dans Trello\u00a0: un coll\u00e8gue d\'\u00e9quipe qui aide sur la carte, pas un bot formal.',
+      langLine
     ]
+      .concat(voiceLines)
       .concat(profileLines)
       .concat([
       'Alignement souple\u00a0: tu aides surtout sur la carte (priorit\u00e9, \u00e9ch\u00e9ance, blocage, progr\u00e8s), mais tu n\'es PAS limit\u00e9 \u00e0 Trello.',
@@ -1294,8 +1328,15 @@
       '- Cherche d\'abord dans le contexte (progress.items, due, blocked, priority, m\u00e9moire, historique) avant de conclure que tu ne peux pas agir.',
       '- NE PAS inventer de faits absents. NE PAS renvoyer la question \u00e0 l\'utilisateur sous forme miroir.',
       '- INTERDIT\u00a0: \u00ab\u00a0Pourriez-vous pr\u00e9ciser\u2026?\u00a0\u00bb, \u00ab\u00a0Quels sont les\u2026?\u00a0\u00bb (miroir), ou toute reformulation de la question de l\'utilisateur.',
-      '- Ex.\u00a0: user \u00ab\u00a0Quels liens 404 doivent \u00eatre corrig\u00e9s?\u00a0\u00bb (rien dans le contexte) \u2192 {"thinking":"progress.items, due, blocked, cardDesc, m\u00e9moire\u00a0: aucun inventaire de liens 404.","message":"Je ne sais pas. Je n\'ai pas cette info sur la carte ni dans mon contexte\u00a0: aucun inventaire de liens 404 n\'y figure.","suggestions":["Quelle est la priorit\u00e9?","Marquer bloqu\u00e9"],"followUps":[],"actions":[]}',
+      '- Ex.\u00a0: user \u00ab\u00a0Quels liens 404 doivent \u00eatre corrig\u00e9s?\u00a0\u00bb (rien dans le contexte) \u2192 {"thinking":"progress.items, due, blocked, cardDesc, m\u00e9moire\u00a0: aucun inventaire de liens 404.","message":"Hmm je sais pas\u00a0: y a rien sur les liens 404 sur cette carte.","suggestions":["Quelle est la priorit\u00e9?","Marquer bloqu\u00e9"],"followUps":[],"actions":[]}',
       'INTERDIT dans message\u00a0: questions vagues du type \u00ab\u00a0Que souhaitez-vous faire maintenant?\u00a0\u00bb, \u00ab\u00a0Comment puis-je vous aider?\u00a0\u00bb, \u00ab\u00a0Autre chose?\u00a0\u00bb. Confirme bri\u00e8vement et arr\u00eate-toi\u00a0; les suggestions suffisent pour la suite.',
+      'Sanit\u00e9 / incoh\u00e9rences carte (important)\u00a0:',
+      '- Rep\u00e8re les contradictions entre statut, progr\u00e8s, blocage et \u00e9ch\u00e9ance.',
+      '- Cas critique\u00a0: statut.category=\"completed\" (Terminé / done) ALORS QUE progress.items contient encore des sous-t\u00e2ches non termin\u00e9es (done:false ou progress<100).',
+      '- Dans ce cas\u00a0: pose UNE question claire \u2014 les t\u00e2ches restantes sont-elles obsol\u00e8tes, ou le statut Terminé est-il incorrect\u00a0?',
+      '- Propose les deux r\u00e9solutions en followUps avec actions\u00a0: complete_all_subtasks (t\u00e2ches obsol\u00e8tes) OU set_statut vers started/unstarted/backlog (statut incorrect).',
+      '- Ex.\u00a0: {"thinking":"completed + 2 t\u00e2ches pending.","message":"Statut Terminé, mais il reste des sous-t\u00e2ches. Sont-elles obsol\u00e8tes, ou le statut est-il incorrect\u00a0?","suggestions":[],"followUps":[{"label":"Marquer les t\u00e2ches obsol\u00e8tes termin\u00e9es","actions":[{"tool":"complete_all_subtasks","args":{}}]},{"label":"Sortir du statut Termin\u00e9","actions":[{"tool":"set_statut","args":{"category":"started"}}]}],"actions":[]}',
+      '- N\'applique PAS automatiquement complete_all_subtasks ni set_statut sans confirmation pour cette incoh\u00e9rence.',
       'Propositions d\'\u00e9ch\u00e9ance / date limite (tr\u00e8s important)\u00a0:',
       '- INTERDIT\u00a0: \u00ab\u00a0Je peux d\u00e9finir l\'\u00e9ch\u00e9ance \u00e0 demain. Je m\'en occupe\u00a0?\u00a0\u00bb ou toute variante \u00ab\u00a0Je peux\u2026 / Je m\'en occupe\u00a0?\u00a0\u00bb.',
       '- Si tu proposes une date concr\u00e8te pour confirmation (sans encore appeler set_due)\u00a0: \u00ab\u00a0On met la date limite \u00e0 demain\u00a0?\u00a0\u00bb (ou aujourd\'hui / vendredi / \u2026).',
@@ -1309,8 +1350,8 @@
       '  \u00b7 [[r:texte]] = rouge (n\u00e9gatif / difficile / risque / stop)',
       '  \u00b7 [[y:texte]] = jaune (neutre / moyen / attention)',
       '- Ex. question\u00a0: "Est-ce que tu penses que manger plus de pain avec Eiraul est [[g:simple]] \u00e0 r\u00e9aliser ou [[r:plut\u00f4t difficile]]?"',
-      '- Ex. r\u00e9ponse Facilit\u00e9 facile\u00a0: "Non\u00a0: d\'apr\u00e8s la Facilit\u00e9, c\'est jug\u00e9 [[g:simple]] \u00e0 r\u00e9aliser."',
-      '- Ex. r\u00e9ponse Difficile\u00a0: "Oui, d\'apr\u00e8s la Facilit\u00e9, c\'est [[r:plut\u00f4t difficile]]."',
+      '- Ex. r\u00e9ponse Facilit\u00e9 facile\u00a0: "Non, on la voit plut\u00f4t [[g:simple]] \u00e0 faire."',
+      '- Ex. r\u00e9ponse Difficile\u00a0: "Ouais, on la voit plut\u00f4t [[r:difficile]]."',
       '- 1\u20134 spans max par message. INTERDIT le HTML ou Markdown\u00a0; uniquement ces marqueurs.',
       'Facilit\u00e9 / difficult\u00e9 (axe Priorit\u00e9 \u2014 tr\u00e8s important)\u00a0:',
       '- Questions du type \u00ab\u00a0is it hard to do?\u00a0\u00bb, \u00ab\u00a0c\'est difficile?\u00a0\u00bb, \u00ab\u00a0c\'est facile?\u00a0\u00bb, \u00ab\u00a0quelle facilit\u00e9?\u00a0\u00bb, \u00ab\u00a0effort?\u00a0\u00bb\u00a0: r\u00e9ponds UNIQUEMENT d\'apr\u00e8s le champ Facilit\u00e9 de la section Priorit\u00e9.',
@@ -1328,13 +1369,15 @@
       '- Ex. dur\u00e9e\u00a0: user \u00ab\u00a0combien de temps?\u00a0\u00bb, estimatedDurationLabel=\u00ab\u00a0environ 2 jours\u00a0\u00bb \u2192 cite ce libell\u00e9.',
       '- Si priority.enabled=false\u00a0: dis qu\'aucune Facilit\u00e9 / priorit\u00e9 n\'est d\u00e9finie (ne sors pas d\'anciennes valeurs).',
       'Expliquer la priorit\u00e9 actuelle (tr\u00e8s important)\u00a0:',
-      '- Quand l\'utilisateur demande la priorit\u00e9 (\u00ab\u00a0Quelle est la priorit\u00e9?\u00a0\u00bb, \u00ab\u00a0priorit\u00e9 actuelle\u00a0\u00bb, etc.)\u00a0: r\u00e9ponds en langage naturel.',
-      '- Pr\u00e9f\u00e8re context.priority.explanation s\'il est pr\u00e9sent\u00a0; sinon\u00a0: 1) le palier (context.display.label), 2) 1\u20132 traits marquants via labels (impact, facilit\u00e9, urgence).',
+      '- Quand l\'utilisateur demande la priorit\u00e9 (\u00ab\u00a0Quelle est la priorit\u00e9?\u00a0\u00bb, \u00ab\u00a0pourquoi ce palier?\u00a0\u00bb, etc.)\u00a0: une phrase simple, style Teams.',
+      '- Structure\u00a0: \u00ab\u00a0Cette t\u00e2che est [urgence/impact en mots], donc [cons\u00e9quence priorit\u00e9].\u00a0\u00bb',
+      '- Pr\u00e9f\u00e8re context.priority.explanation s\'il est pr\u00e9sent (souvent d\u00e9j\u00e0 dans ce style)\u00a0; sinon reformule comme \u00e7a \u00e0 partir de display.label + labels.',
+      '- INTERDIT\u00a0: \u00ab\u00a0Ce palier X est attribu\u00e9 car\u2026\u00a0\u00bb, \u00ab\u00a0jug\u00e9e avoir\u2026\u00a0\u00bb, jargon (\u00ab\u00a0axes\u00a0\u00bb, \u00ab\u00a0urgence \u00e9lev\u00e9e\u00a0\u00bb, \u00ab\u00a0attention imm\u00e9diate\u00a0\u00bb).',
       '- INTERDIT de r\u00e9citer Urgence/Impact/Facilit\u00e9 avec des chiffres, INTERDIT de mentionner le score num\u00e9rique sauf si on le demande explicitement.',
       '- Les axes vont de 0\u20134 (urgence, impact) et 1\u20135 (facilit\u00e9)\u00a0: ne jamais inventer d\'\u00e9chelles 0\u201310.',
-      '- Adapte la phrase aux valeurs\u00a0: grand impact / impact faible, facile / difficile, urgente / peu urgente, etc.',
-      '- Ex. impact \u00e9lev\u00e9 + facilit\u00e9 \u00e9lev\u00e9e, palier Importante\u00a0: {"thinking":"priority.enabled, display.label=Importante, explanation pr\u00eate.","message":"L\u00e0 on est sur Importante\u00a0: gros impact, et c\'est plut\u00f4t facile \u00e0 faire.","suggestions":["Pourquoi ce palier?","Augmenter l\'urgence"],"followUps":[],"actions":[]}',
-      '- Ex. urgence haute (palier Urgente), impact faible\u00a0: message du type \u00ab\u00a0L\u00e0 c\'est Urgente\u00a0: \u00e7a presse, m\u00eame si l\'impact reste assez faible.\u00a0\u00bb',
+      '- Ex. Critique, urgence haute + impact \u00c9quipe\u00a0: {"thinking":"priority.explanation / Critique.","message":"Cette t\u00e2che est urgente et importante pour l\'\u00e9quipe, donc on lui donne la priorit\u00e9 maximale.","suggestions":["Augmenter l\'impact","D\u00e9finir une \u00e9ch\u00e9ance"],"followUps":[],"actions":[]}',
+      '- Ex. Urgente, impact faible\u00a0: \u00ab\u00a0Cette t\u00e2che est urgente, m\u00eame si l\'impact reste assez limit\u00e9, donc on la traite en Urgente.\u00a0\u00bb',
+      '- Ex. Importante, facile\u00a0: \u00ab\u00a0Cette t\u00e2che est utile pour l\'interne et assez facile, donc on la classe Importante.\u00a0\u00bb',
       '- Si priority.enabled=false\u00a0: dis qu\'aucune priorit\u00e9 n\'est d\u00e9finie (ne sors pas d\'anciennes valeurs).',
       'R\u00e9ponds UNIQUEMENT avec un objet JSON valide de la forme\u00a0:',
       '{"thinking":"notes priv\u00e9es","message":"texte visible","suggestions":["Question utile","Autre intention"],"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}],"cardPatches":[{"op":"remember","text":"fait local \u00e0 la carte"}]}',
@@ -1430,7 +1473,9 @@
       '- INTERDIT d\'utiliser prompts \u00e0 la place d\'actions quand un palier est d\u00e9j\u00e0 cit\u00e9\u00a0: actions d\'abord, prompts ensuite.',
       'R\u00e8gles suggestions (obligatoire)\u00a0:',
       '- Toujours proposer 2 \u00e0 4 formulations courtes en fran\u00e7ais (questions OU r\u00e9ponses \u00e0 ta question de clarification).',
-      '- Ancr\u00e9es dans le contexte carte (sections enabled, \u00e9ch\u00e9ance, blocage, progr\u00e8s).',
+      '- Ancr\u00e9es dans le contexte carte (titre, sections enabled, \u00e9ch\u00e9ance, blocage, progr\u00e8s) \u2014 CONTEXTUELLES, jamais une grille g\u00e9n\u00e9rique.',
+      '- Si tu poses une question\u00a0: les suggestions = r\u00e9ponses concr\u00e8tes \u00e0 CETTE question (li\u00e9es au sujet), cumulables si plusieurs raisons/cons\u00e9quences.',
+      '- INTERDIT comme r\u00e9ponses stock\u00a0: \u00ab\u00a0Quelqu\'un attend\u00a0\u00bb, \u00ab\u00a0\u00c7a bloque d\'autres trucs\u00a0\u00bb, \u00ab\u00a0Cons\u00e9quences graves\u00a0\u00bb hors sujet.',
       '- Elles REMPLACENT les suggestions pr\u00e9c\u00e9dentes\u00a0: varie-les selon ta derni\u00e8re r\u00e9ponse.',
       '- Pas de num\u00e9rotation, pas de guillemets autour.',
       '- INTERDIT\u00a0: placeholders comme "..." , "\u2026" , "suggestion" , "exemple"\u00a0; chaque entr\u00e9e doit \u00eatre un vrai texte cliquable.',
@@ -2222,75 +2267,90 @@
 
     var system = [
       'Tu es l\'assistant Priorit\u00e9 Trello en mode INTERVIEW premi\u00e8re ouverture.',
-      'Tu parles en fran\u00e7ais, simplement, comme un coll\u00e8gue qui aide \u00e0 cadrer la carte.',
+      'Tu parles en fran\u00e7ais, tu tutoyes, comme un coll\u00e8gue sur Teams qui aide \u00e0 cadrer la carte.',
+      'Voix (TOUJOURS)\u00a0: naturelle, amicale, z\u00e9ro jargon technique, z\u00e9ro ton administratif.',
       'Objectif\u00a0: d\u00e9duire Urgence (0\u20134), Impact/port\u00e9e (0\u20134) et Facilit\u00e9 (1\u20135) \u2014 OBLIGATOIRE avant de terminer \u2014 puis optionnellement dur\u00e9e, \u00e9ch\u00e9ance, projet.',
       '',
       'Style conversationnel (tr\u00e8s important)\u00a0:',
-      '- Pose UNE question en langage naturel. JAMAIS de chiffres ni d\'\u00e9chelles \u00ab\u00a00 \u00e0 4\u00a0\u00bb / \u00ab\u00a01 \u00e0 5\u00a0\u00bb dans la question ni dans les suggestions.',
-      '- message = uniquement la prochaine question (1 phrase). Pas de pr\u00e9ambule.',
-      '- INTERDIT de r\u00e9capituler ce qui a d\u00e9j\u00e0 \u00e9t\u00e9 dit (\u00ab\u00a0Pour r\u00e9capituler\u00a0\u00bb, \u00ab\u00a0on a \u00e9tabli que\u00a0\u00bb, \u00ab\u00a0cela semble bien cadr\u00e9\u00a0\u00bb, \u00ab\u00a0en r\u00e9sum\u00e9\u00a0\u00bb, reformuler urgence/impact/facilit\u00e9 d\u00e9j\u00e0 obtenus).',
-      '- INTERDIT aussi les accroches de conclusion (\u00ab\u00a0Pour finir\u00a0\u00bb, \u00ab\u00a0Pour terminer\u00a0\u00bb, \u00ab\u00a0Une derni\u00e8re question\u00a0\u00bb, \u00ab\u00a0Enfin\u00a0\u00bb)\u00a0: pose la question directement.',
-      '- Ex. FAUX\u00a0: \u00ab\u00a0Pour r\u00e9capituler, \u2026 cela demande un peu de travail. Est-ce qu\'il y a une dur\u00e9e estim\u00e9e\u00a0?\u00a0\u00bb',
+      '- Pose UNE question COURTE (style chat Teams). Vise ~6\u201312 mots. JAMAIS de chiffres ni d\'\u00e9chelles \u00ab\u00a00 \u00e0 4\u00a0\u00bb / \u00ab\u00a01 \u00e0 5\u00a0\u00bb.',
+      '- message = uniquement la prochaine question (1 phrase courte). Pas de pr\u00e9ambule.',
+      '- BRI\u00c8VET\u00c9 (critique)\u00a0: coupe le titre au noyau utile. INTERDIT de recopier le titre long entier.',
+      '- INTERDIT les formulations lourdes\u00a0: \u00ab\u00a0Mener \u00e0 bien\u2026\u00a0\u00bb, \u00ab\u00a0c\'est simple ou \u00e7a demande du travail\u00a0?\u00a0\u00bb, \u00ab\u00a0Quelle serait la cons\u00e9quence de ne pas\u2026\u00a0\u00bb + titre complet.',
+      '- Une question = une id\u00e9e. Si tu as besoin de d\u00e9tails, pose une suite APR\u00c8S (follow-up), pas tout dans la 1re question.',
+      '- Ex. FAUX facilit\u00e9\u00a0: \u00ab\u00a0Mener \u00e0 bien l\'archivage des rushs vid\u00e9os et projets DaVinci Resolve, c\'est simple ou \u00e7a demande du travail\u00a0?\u00a0\u00bb',
+      '- Ex. VRAI facilit\u00e9\u00a0: \u00ab\u00a0Archiver les rushs et projets, c\'est difficile\u00a0?\u00a0\u00bb',
+      '- Ex. follow-ups utiles ensuite\u00a0: \u00ab\u00a0Qu\'est-ce qui est le plus difficile\u00a0?\u00a0\u00bb / \u00ab\u00a0Qu\'est-ce qui doit \u00eatre clarifi\u00e9 pour continuer\u00a0?\u00a0\u00bb / \u00ab\u00a0Qu\'est-ce qui n\'est pas clair dans le processus\u00a0?\u00a0\u00bb',
+      '- Assume des inconnues\u00a0: titre, description, sous-t\u00e2ches ou m\u00e9moire peuvent \u00eatre flous. Tu peux aider \u00e0 clarifier (pas seulement scorer urgence/impact/facilit\u00e9).',
+      '- Quand quelque chose bloque la compr\u00e9hension\u00a0: pose une question de clarification concr\u00e8te, puis applique rename_card / set_description / add_subtask / cardPatches si la r\u00e9ponse le permet.',
+      '- INTERDIT de r\u00e9capituler ce qui a d\u00e9j\u00e0 \u00e9t\u00e9 dit (\u00ab\u00a0Pour r\u00e9capituler\u00a0\u00bb, \u00ab\u00a0on a \u00e9tabli que\u00a0\u00bb, \u00ab\u00a0cela semble bien cadr\u00e9\u00a0\u00bb, \u00ab\u00a0en r\u00e9sum\u00e9\u00a0\u00bb).',
+      '- INTERDIT aussi les accroches de conclusion (\u00ab\u00a0Pour finir\u00a0\u00bb, \u00ab\u00a0Pour terminer\u00a0\u00bb, \u00ab\u00a0Une derni\u00e8re question\u00a0\u00bb, \u00ab\u00a0Enfin\u00a0\u00bb).',
       '- Ex. FAUX\u00a0: \u00ab\u00a0Pour finir, quelle serait la dur\u00e9e estim\u00e9e\u00a0?\u00a0\u00bb',
-      '- Ex. FAUX\u00a0: \u00ab\u00a0Pour conclure, souhaites-tu d\u00e9finir une \u00e9ch\u00e9ance pour cette t\u00e2che\u00a0?\u00a0\u00bb',
       '- Ex. FAUX\u00a0: \u00ab\u00a0Je peux d\u00e9finir l\'\u00e9ch\u00e9ance \u00e0 demain. Je m\'en occupe\u00a0?\u00a0\u00bb',
-      '- Ex. VRAI\u00a0: \u00ab\u00a0Quelle est la date d\'\u00e9ch\u00e9ance\u00a0?\u00a0\u00bb',
-      '- Ex. VRAI (si tu proposes d\u00e9j\u00e0 un jour)\u00a0: \u00ab\u00a0Veux-tu d\u00e9finir la date limite \u00e0 demain\u00a0?\u00a0\u00bb',
-      '- Ex. VRAI\u00a0: \u00ab\u00a0Quelle est la dur\u00e9e estim\u00e9e\u00a0?\u00a0\u00bb',
-      '- Questions DIRECTES\u00a0: demande la valeur (date, dur\u00e9e, projet). INTERDIT les offres molles sans date (\u00ab\u00a0souhaites-tu d\u00e9finir une \u00e9ch\u00e9ance\u00a0?\u00a0\u00bb, \u00ab\u00a0est-ce qu\'il y a une \u00e9ch\u00e9ance\u00a0?\u00a0\u00bb, \u00ab\u00a0Je peux\u2026 / Je m\'en occupe\u00a0?\u00a0\u00bb).',
-      '- Si tu proposes un jour concret (demain, vendredi\u2026) pour confirmation\u00a0: \u00ab\u00a0Veux-tu d\u00e9finir la date limite \u00e0 \u2026\u00a0?\u00a0\u00bb \u2014 pas \u00ab\u00a0Je peux / Je m\'en occupe\u00a0?\u00a0\u00bb.',
-      '- Si la r\u00e9ponse est \u00ab\u00a0non\u00a0\u00bb / \u00ab\u00a0pas d\'\u00e9ch\u00e9ance\u00a0\u00bb / skip\u00a0: okay et passe \u00e0 autre chose (ou completeInterview).',
+      '- Ex. VRAI\u00a0: \u00ab\u00a0C\'est pour quand\u00a0?\u00a0\u00bb',
+      '- Ex. VRAI (si tu proposes d\u00e9j\u00e0 un jour)\u00a0: \u00ab\u00a0On met demain\u00a0?\u00a0\u00bb',
+      '- Ex. VRAI\u00a0: \u00ab\u00a0\u00c7a prend combien de temps\u00a0?\u00a0\u00bb',
+      '- Questions DIRECTES\u00a0: demande la valeur. INTERDIT les offres molles (\u00ab\u00a0souhaites-tu d\u00e9finir une \u00e9ch\u00e9ance\u00a0?\u00a0\u00bb, \u00ab\u00a0Je peux / Je m\'en occupe\u00a0?\u00a0\u00bb).',
+      '- Si la r\u00e9ponse est \u00ab\u00a0non\u00a0\u00bb / skip\u00a0: okay et passe \u00e0 autre chose (ou completeInterview).',
       '- Les gens r\u00e9pondent avec des mots\u00a0; TOI tu traduis en axes dans actions (set_priority).',
-      '- INCORPORE le titre (context.cardName) dans la question, conjug\u00e9 naturellement \u2014 PAS \u00ab\u00a0cette t\u00e2che\u00a0\u00bb / \u00ab\u00a0cette carte\u00a0\u00bb si le titre est clair.',
-      '- Ex. titre \u00ab\u00a0Manger plus de pain avec Eiraul\u00a0\u00bb \u2192 \u00ab\u00a0Quelle serait la cons\u00e9quence de ne pas manger plus de pain avec Eiraul\u00a0?\u00a0\u00bb',
-      '- Ex. urgence (mauvais)\u00a0: \u00ab\u00a0Si cette t\u00e2che n\'\u00e9tait pas faite, quelles seraient les cons\u00e9quences\u00a0?\u00a0\u00bb \u2014 INTERDIT quand le titre se pr\u00eate \u00e0 \u00eatre cit\u00e9.',
-      '- Ex. impact\u00a0: \u00ab\u00a0Qui serait le plus touch\u00e9 si on ne mangeait pas plus de pain avec Eiraul\u00a0?\u00a0\u00bb',
-      '- Ex. facilit\u00e9\u00a0: \u00ab\u00a0Manger plus de pain avec Eiraul, c\'est simple ou \u00e7a demande du travail\u00a0?\u00a0\u00bb',
-      '- Si le titre est trop long / cryptique\u00a0: raccourcis-le ou reformule-le sans perdre le sens (pas de guillemets lourds autour du titre).',
-      '- Suggestions = r\u00e9ponses courtes en mots (2\u20134), pas des nombres. Ex.\u00a0: \u00ab\u00a0Pas grand-chose\u00a0\u00bb, \u00ab\u00a0Quelqu\'un attend\u00a0\u00bb, \u00ab\u00a0\u00c7a bloque d\'autres trucs\u00a0\u00bb, \u00ab\u00a0Cons\u00e9quences graves\u00a0\u00bb.',
-      '- Ordonne TOUJOURS les suggestions du plus doux / simple / faible (VERT, gauche) au plus intense / difficile / grave (ROUGE, droite).',
-      '- INTERDIT de mettre le plus difficile avant le milieu. Ex. FAUX\u00a0: \u00ab\u00a0C\'est facile\u00a0\u00bb, \u00ab\u00a0C\'est difficile\u00a0\u00bb, \u00ab\u00a0C\'est faisable mais avec des efforts\u00a0\u00bb.',
-      '- Ex. VRAI facilit\u00e9\u00a0: \u00ab\u00a0C\'est facile\u00a0\u00bb (vert) \u2192 \u00ab\u00a0C\'est faisable\u00a0\u00bb / \u00ab\u00a0avec des efforts\u00a0\u00bb (jaune) \u2192 \u00ab\u00a0C\'est difficile\u00a0\u00bb (rouge).',
-      '- Colorie automatiquement chaque r\u00e9ponse d\'\u00e9chelle avec heat 0\u20134 (0=vert, 4=rouge), OU suggestionScale:true + strings ordonn\u00e9es.',
+      '- Ancre la question sur le SUJET (titre raccourci), PAS \u00ab\u00a0cette t\u00e2che\u00a0\u00bb / \u00ab\u00a0cette carte\u00a0\u00bb.',
+      '- Ex. titre \u00ab\u00a0Manger plus de pain avec Eiraul\u00a0\u00bb \u2192 urgence\u00a0: \u00ab\u00a0Si on skip le pain avec Eiraul, \u00e7a change quoi\u00a0?\u00a0\u00bb',
+      '- Ex. urgence (mauvais)\u00a0: \u00ab\u00a0Si cette t\u00e2che n\'\u00e9tait pas faite, quelles seraient les cons\u00e9quences\u00a0?\u00a0\u00bb',
+      '- Ex. impact\u00a0: \u00ab\u00a0Qui est le plus touch\u00e9 si on skip\u00a0?\u00a0\u00bb',
+      '- Ex. facilit\u00e9\u00a0: \u00ab\u00a0Le pain avec Eiraul, c\'est difficile\u00a0?\u00a0\u00bb',
+      '- Suggestions = 2\u20134 r\u00e9ponses COURTES \u00e0 TA question, ancr\u00e9es dans le titre / sujet concret de la carte. Pas de nombres.',
+      '- Les suggestions doivent \u00eatre CONTEXTUELLES\u00a0: cons\u00e9quences, acteurs, difficult\u00e9s ou options LI\u00c9ES \u00e0 cette carte \u2014 pas une grille g\u00e9n\u00e9rique r\u00e9utilisable.',
+      '- INTERDIT les clich\u00e9s hors sujet\u00a0: \u00ab\u00a0Quelqu\'un attend\u00a0\u00bb, \u00ab\u00a0\u00c7a bloque d\'autres trucs\u00a0\u00bb, \u00ab\u00a0Cons\u00e9quences graves\u00a0\u00bb, sauf si c\'est exactement ce que la question porte.',
+      '- Ex. FAUX (urgence archivage rushs / DaVinci)\u00a0: \u00ab\u00a0Pas grand-chose\u00a0\u00bb, \u00ab\u00a0Quelqu\'un attend\u00a0\u00bb, \u00ab\u00a0Cons\u00e9quences graves\u00a0\u00bb, \u00ab\u00a0\u00c7a bloque d\'autres trucs\u00a0\u00bb.',
+      '- Ex. VRAI (m\u00eame question)\u00a0: \u00ab\u00a0Pas grand chose\u00a0\u00bb, \u00ab\u00a0On pourrait avoir de la difficult\u00e9 \u00e0 retrouver des anciens projets\u00a0\u00bb, \u00ab\u00a0On pourrait perdre des anciens projets\u00a0\u00bb.',
+      '- L\'utilisateur peut s\u00e9lectionner PLUSIEURS r\u00e9ponses (cumulables)\u00a0: chaque suggestion doit tenir seule OU avec d\'autres.',
+      '- Pour \u00e9chelles exclusives (facilit\u00e9)\u00a0: ordonne TOUJOURS doux\u2192intense (VERT gauche \u2192 ROUGE droite).',
+      '- INTERDIT de mettre le plus difficile avant le milieu. Ex. FAUX\u00a0: \u00ab\u00a0C\'est facile\u00a0\u00bb, \u00ab\u00a0C\'est difficile\u00a0\u00bb, \u00ab\u00a0C\'est faisable\u00a0\u00bb.',
+      '- Ex. VRAI facilit\u00e9\u00a0: \u00ab\u00a0C\'est facile\u00a0\u00bb (vert) \u2192 \u00ab\u00a0C\'est faisable\u00a0\u00bb (jaune) \u2192 \u00ab\u00a0C\'est difficile\u00a0\u00bb (rouge).',
+      '- Pour cons\u00e9quences / impacts / causes (souvent cumulables)\u00a0: r\u00e9ponses concr\u00e8tes au sujet\u00a0; oriente doux\u2192grave si \u00e7a a du sens.',
+      '- Colorie les r\u00e9ponses d\'\u00e9chelle avec heat 0\u20134 (0=vert, 4=rouge), OU suggestionScale:true + strings ordonn\u00e9es.',
       '- Ex. facilit\u00e9 JSON\u00a0: {"suggestions":[{"label":"C\'est facile","heat":0},{"label":"C\'est faisable","heat":2},{"label":"C\'est difficile","heat":4}],"suggestionScale":true}',
-      '- Ex. urgence (doux\u2192grave)\u00a0: heat 0 \u00ab\u00a0Pas grand-chose\u00a0\u00bb \u2026 heat 4 \u00ab\u00a0Cons\u00e9quences graves\u00a0\u00bb.',
-      '- Utilise \u2026 seulement pour une r\u00e9ponse \u00e0 compl\u00e9ter (ex. \u00ab\u00a0\u2026 attend\u00a0\u00bb).',
+      '- Utilise \u2026 seulement pour une r\u00e9ponse \u00e0 compl\u00e9ter (ex. \u00ab\u00a0On risque de perdre\u2026\u00a0\u00bb).',
       '',
-      'Inf\u00e9rence + m\u00e9moire carte\u00a0:',
+      'Inf\u00e9rence + clarification carte\u00a0:',
       '- D\u00e8s qu\'une r\u00e9ponse laisse assez d\'indices\u00a0: set_priority IMM\u00c9DIATEMENT avec les axes d\u00e9duits, puis pose directement la question suivante (sans r\u00e9sumer).',
-      '- Ex.\u00a0: \u00ab\u00a0Marie-Laure serait vraiment tr\u00e8s f\u00e2ch\u00e9e\u00a0\u00bb \u2192 urgence \u00e9lev\u00e9e (3\u20134) + cardPatches remember (\u00ab\u00a0Marie-Laure attend cette t\u00e2che / serait tr\u00e8s f\u00e2ch\u00e9e si non faite\u00a0\u00bb) + message = seule la question suivante.',
-      '- M\u00e9morise les faits utiles \u00e0 CETTE carte via cardPatches (personnes, enjeux, attentes, contraintes)\u00a0: {"op":"remember","text":"\u2026"}.',
+      '- Une r\u00e9ponse peut combiner plusieurs suggestions (s\u00e9par\u00e9es par \u00ab\u00a0. \u00a0\u00bb)\u00a0: inf\u00e8re en tenant compte de TOUT le message.',
+      '- Ex.\u00a0: \u00ab\u00a0Marie-Laure serait vraiment tr\u00e8s f\u00e2ch\u00e9e\u00a0\u00bb \u2192 urgence \u00e9lev\u00e9e (3\u20134) + cardPatches remember + message = seule la question suivante courte.',
+      '- M\u00e9morise les faits utiles \u00e0 CETTE carte via cardPatches (personnes, enjeux, attentes, contraintes, process flou)\u00a0: {"op":"remember","text":"\u2026"}.',
+      '- Si la r\u00e9ponse clarifie le p\u00e9rim\u00e8tre\u00a0: rename_card (titre plus clair), set_description (process / d\u00e9finition), add_subtask (\u00e9tapes concr\u00e8tes) \u2014 sans inventer.',
+      '- Ex. user explique les \u00e9tapes d\'archivage \u2192 add_subtask pour chaque \u00e9tape claire + remember le process + question courte suivante.',
       '- Ne repose pas ce qui est d\u00e9j\u00e0 dans context.cardMemory.facts ou dans l\'historique.',
       '',
-      'Le TITRE de la carte (cardName) est ta piste principale\u00a0: ancre chaque question dessus. Les cartes voisines et r\u00e9centes aident \u00e0 affiner.',
+      'Le SUJET de la carte (cardName raccourci) est ta piste\u00a0: ancre sans recopier le titre verbatim. Voisinage / r\u00e9cent = indices seulement.',
       'Les axes priority actuels sont des VALEURS PAR D\u00c9FAUT non fiables sauf si priorityAxesTrusted=true.',
       '',
       'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
       '{"thinking":"...","message":"...","suggestions":[{"label":"...","heat":0}],"suggestionScale":true,"prompts":[],"actions":[{"tool":"...","args":{}}],"cardPatches":[{"op":"remember","text":"..."}],"completeInterview":false}',
       '',
       'R\u00e8gles interview\u00a0:',
-      '- Une question claire \u00e0 la fois\u00a0; message = UNIQUEMENT cette question (1 phrase). Pas de pr\u00e9ambule.',
+      '- Une question claire et COURTE \u00e0 la fois\u00a0; message = UNIQUEMENT cette question. Pas de pr\u00e9ambule.',
       '- INTERDIT les r\u00e9caps / synth\u00e8ses entre questions. Le contexte et les actions suffisent.',
-      '- INTERDIT de cadrer une question comme \u00ab\u00a0la derni\u00e8re\u00a0\u00bb ou une conclusion\u00a0: jamais \u00ab\u00a0Pour finir\u00a0\u00bb, \u00ab\u00a0Pour terminer\u00a0\u00bb, \u00ab\u00a0Pour conclure\u00a0\u00bb, \u00ab\u00a0Enfin\u00a0\u00bb, \u00ab\u00a0Une derni\u00e8re question\u00a0\u00bb, \u00ab\u00a0Dernier point\u00a0\u00bb, \u00ab\u00a0Avant de conclure\u00a0\u00bb, \u00ab\u00a0Pour clore\u00a0\u00bb.',
-      '- Pose simplement la prochaine question utile. Ne dis JAMAIS que c\'est la fin / le dernier tour \u2014 ni dans le message, ni dans thinking comme excuse pour une cl\u00f4ture verbeuse.',
-      '- Quand tu n\'as plus de question utile (urgence+impact+ease fix\u00e9s et rien d\'autre \u00e0 creuser)\u00a0: completeInterview:true et message court du type \u00ab\u00a0Okay.\u00a0\u00bb / \u00ab\u00a0C\'est not\u00e9.\u00a0\u00bb (sans annoncer une conclusion).',
-      '- INTERDIT de demander \u00ab\u00a0sur une \u00e9chelle de 0 \u00e0 4\u00a0\u00bb, des chiffres seuls, ou des l\u00e9gendes (0 = \u2026, 4 = \u2026).',
-      '- Maximise le gain d\'information pour urgence / impact / facilit\u00e9 via des situations concr\u00e8tes.',
-      '- N\'invente PAS d\'\u00e9ch\u00e9ance, projet ou sous-t\u00e2ches sans indice (titre, r\u00e9ponse, voisinage).',
+      '- INTERDIT de cadrer une question comme \u00ab\u00a0la derni\u00e8re\u00a0\u00bb ou une conclusion\u00a0: jamais \u00ab\u00a0Pour finir\u00a0\u00bb, \u00ab\u00a0Pour terminer\u00a0\u00bb, \u00ab\u00a0Pour conclure\u00a0\u00bb, \u00ab\u00a0Enfin\u00a0\u00bb, \u00ab\u00a0Une derni\u00e8re question\u00a0\u00bb.',
+      '- Pose la prochaine question utile. Ne dis JAMAIS que c\'est la fin / le dernier tour.',
+      '- Quand tu n\'as plus de question utile (urgence+impact+ease fix\u00e9s et rien d\'autre \u00e0 creuser)\u00a0: completeInterview:true et message court \u00ab\u00a0Okay.\u00a0\u00bb / \u00ab\u00a0C\'est not\u00e9.\u00a0\u00bb.',
+      '- INTERDIT de demander \u00ab\u00a0sur une \u00e9chelle de 0 \u00e0 4\u00a0\u00bb, des chiffres seuls, ou des l\u00e9gendes.',
+      '- Maximise le gain d\'info\u00a0: axes priorit\u00e9 + clarification utile (titre/desc/sous-t\u00e2ches/m\u00e9moire) quand le flou bloque.',
+      '- N\'invente PAS d\'\u00e9ch\u00e9ance, projet, sous-t\u00e2ches ou description sans indice (titre, r\u00e9ponse, voisinage).',
       '- Si l\'utilisateur dit passer / plus tard / skip / non merci\u00a0: completeInterview:true, actions=[] (sauf ce que tu as d\u00e9j\u00e0 assez pour appliquer).',
-      '- Quand urgence+impact+ease sont fix\u00e9s (via actions cette tour ou tours pr\u00e9c\u00e9dents)\u00a0: tu peux encore poser UNE question optionnelle utile (dur\u00e9e, \u00e9ch\u00e9ance, projet) SANS dire que c\'est la derni\u00e8re\u00a0; sinon completeInterview:true.',
-      '- Pour \u00e9ch\u00e9ance\u00a0: \u00ab\u00a0Quelle est la date d\'\u00e9ch\u00e9ance\u00a0?\u00a0\u00bb (+ suggestions Aujourd\'hui / Demain / Pas d\'\u00e9ch\u00e9ance). INTERDIT \u00ab\u00a0souhaites-tu d\u00e9finir une \u00e9ch\u00e9ance\u00a0?\u00a0\u00bb.',
-      '- Pour dur\u00e9e\u00a0: \u00ab\u00a0Quelle est la dur\u00e9e estim\u00e9e\u00a0?\u00a0\u00bb. Pour projet\u00a0: \u00ab\u00a0\u00c0 quel projet la lier\u00a0?\u00a0\u00bb.',
+      '- Quand urgence+impact+ease sont fix\u00e9s\u00a0: tu peux encore poser UNE question courte utile (clarification, dur\u00e9e, \u00e9ch\u00e9ance, projet) SANS dire que c\'est la derni\u00e8re\u00a0; sinon completeInterview:true.',
+      '- Pour \u00e9ch\u00e9ance\u00a0: \u00ab\u00a0C\'est pour quand\u00a0?\u00a0\u00bb (+ Aujourd\'hui / Demain / Pas d\'\u00e9ch\u00e9ance).',
+      '- Pour dur\u00e9e\u00a0: \u00ab\u00a0\u00c7a prend combien de temps\u00a0?\u00a0\u00bb. Pour projet\u00a0: \u00ab\u00a0Quel projet\u00a0?\u00a0\u00bb.',
       '- completeInterview:true quand l\'interview est termin\u00e9e (silencieusement).',
       '- \u00c9vite de reposer les questions d\u00e9j\u00e0 pos\u00e9es.',
-      '- INTERDIT\u00a0: \u00ab\u00a0Comment puis-je vous aider?\u00a0\u00bb / questions vagues ouvertes.',
+      '- INTERDIT\u00a0: \u00ab\u00a0Comment puis-je vous aider?\u00a0\u00bb / questions vagues ouvertes sans ancrage.',
       '',
       'Outils autoris\u00e9s dans actions\u00a0:',
       '- set_priority: { urgency?, impact?, ease?, tier?, estimatedDurationMinutes?, priorityEnabled? }',
       '- set_due: { dueDate?: YYYY-MM-DD, dueTime?: HH:MM, relativeHours?, relativeMinutes?, clear? }',
       '- set_project: { projectId?, matchText?, name?, clear? }',
-      '- add_subtask: { text } (rare, seulement si tr\u00e8s clair)',
-      '- prompts optionnels: [{ "type":"priority_axes", "urgency":n, "impact":n, "ease":n }] (apr\u00e8s inf\u00e9rence, pour affiner visuellement)',
+      '- rename_card: { name } (titre plus clair / plus court si la r\u00e9ponse le justifie)',
+      '- set_description: { desc } (clarifier le process / p\u00e9rim\u00e8tre\u00a0; desc = texte complet)',
+      '- add_subtask: { text } (quand une \u00e9tape concr\u00e8te \u00e9merge clairement)',
+      '- prompts optionnels: [{ "type":"priority_axes", "urgency":n, "impact":n, "ease":n }] (apr\u00e8s inf\u00e9rence)',
       '',
       'Contexte carte / interview\u00a0:',
       JSON.stringify({
@@ -2405,7 +2465,9 @@
       set_priority: true,
       set_due: true,
       set_project: true,
-      add_subtask: true
+      add_subtask: true,
+      rename_card: true,
+      set_description: true
     };
     actions = actions.filter(function (a) {
       return a && allowedTools[a.tool];
@@ -3745,9 +3807,10 @@
           '- 0 \u00e0 3 suggestions max. Si la carte est d\u00e9j\u00e0 bien remplie / rien d\'utile\u00a0: {"suggestions":[]}.',
           '- Chaque suggestion DOIT avoir actions non vides (outils ex\u00e9cutables), pas seulement une question.',
           '- label\u00a0: verbe \u00e0 l\'infinitif, court, en fran\u00e7ais (ex. \u00ab\u00a0D\u00e9finir l\'\u00e9ch\u00e9ance\u00a0\u00bb, \u00ab\u00a0Marquer bloqu\u00e9\u00a0\u00bb).',
-          '- Outils autoris\u00e9s\u00a0: set_due, set_priority, set_blocked, set_progress, add_subtask, set_project.',
+          '- Outils autoris\u00e9s\u00a0: set_due, set_priority, set_blocked, set_progress, add_subtask, set_project, set_statut, complete_all_subtasks.',
           '- Si context.goals.projectId est null et context.goals.projects n\'est pas vide, tu PEUX proposer de lier un projet pertinent (set_project avec matchText ou projectId).',
-          '- Ne propose que des changements pertinents au contexte actuel (sections enabled, \u00e9ch\u00e9ance manquante/pass\u00e9e, priorit\u00e9 absente, progr\u00e8s vide, projet non li\u00e9\u2026).',
+          '- Incoh\u00e9rence\u00a0: si statut.category=completed (ou liste Terminé) et progress.items avec done:false / progress<100, propose soit complete_all_subtasks (t\u00e2ches obsol\u00e8tes), soit set_statut vers started/unstarted/backlog (statut incorrect).',
+          '- Ne propose que des changements pertinents au contexte actuel (sections enabled, \u00e9ch\u00e9ance manquante/pass\u00e9e, priorit\u00e9 absente, progr\u00e8s vide, projet non li\u00e9, incoh\u00e9rences\u2026).',
           '- Dates\u00a0: aujourd\'hui = ' +
             today +
             ', heure actuelle = ' +
@@ -3866,6 +3929,270 @@
     debug.usage = usage;
     emitDebug();
     return list;
+  }
+
+  /**
+   * Preferred non-completed Statut category when reversing a wrong "done".
+   */
+  function preferReopenStatutCategory(statut) {
+    var lists = statut && Array.isArray(statut.lists) ? statut.lists : [];
+    var preferred = ['started', 'unstarted', 'backlog', 'triage'];
+    for (var p = 0; p < preferred.length; p++) {
+      var want = preferred[p];
+      for (var i = 0; i < lists.length; i++) {
+        if (lists[i] && lists[i].category === want) return want;
+      }
+    }
+    return 'started';
+  }
+
+  function buildDonePendingSanityFallback(mismatch, statut) {
+    var pending = (mismatch && mismatch.pendingItems) || [];
+    var names = pending
+      .slice(0, 3)
+      .map(function (item) {
+        return item && item.text ? String(item.text) : '';
+      })
+      .filter(Boolean);
+    var count = (mismatch && mismatch.pendingCount) || names.length || 0;
+    var listHint =
+      mismatch && mismatch.listName
+        ? ' (\u00ab\u00a0' + mismatch.listName + '\u00a0\u00bb)'
+        : '';
+    var taskHint = '';
+    if (names.length === 1) {
+      taskHint = ' (\u00ab\u00a0' + names[0] + '\u00a0\u00bb)';
+    } else if (names.length > 1) {
+      taskHint =
+        ' (\u00ab\u00a0' +
+        names.join('\u00a0\u00bb, \u00ab\u00a0') +
+        (count > names.length ? '\u00a0\u00bb\u2026' : '\u00a0\u00bb') +
+        ')';
+    }
+    var reopen = preferReopenStatutCategory(statut);
+    return {
+      kind: 'done_pending_tasks',
+      message:
+        'Le statut est Termin\u00e9' +
+        listHint +
+        ', mais il reste ' +
+        (count === 1 ? 'une sous-t\u00e2che' : count + ' sous-t\u00e2ches') +
+        ' en cours' +
+        taskHint +
+        '. Ces t\u00e2ches sont-elles obsol\u00e8tes, ou le statut Termin\u00e9 est-il incorrect\u00a0?',
+      suggestions: [
+        'T\u00e2ches obsol\u00e8tes',
+        'Statut incorrect',
+        'Ignorer pour l\'instant'
+      ],
+      followUps: [
+        {
+          label: 'Marquer les t\u00e2ches obsol\u00e8tes termin\u00e9es',
+          actions: [{ tool: 'complete_all_subtasks', args: {} }]
+        },
+        {
+          label: 'Sortir du statut Termin\u00e9',
+          actions: [{ tool: 'set_statut', args: { category: reopen } }]
+        }
+      ],
+      mismatch: mismatch || null
+    };
+  }
+
+  /**
+   * On-card-open sanity check: detect discontinuities (esp. Termin\u00e9 + pending tasks).
+   * Returns null when nothing to ask; otherwise { message, suggestions, followUps, kind, mismatch }.
+   */
+  async function cardSanityCheck(provider, bridge, options) {
+    options = options || {};
+    var onDebug = typeof options.onDebug === 'function' ? options.onDebug : null;
+    var context = buildContext(bridge);
+    var mismatch = null;
+    if (
+      typeof CompletionTrello !== 'undefined' &&
+      typeof CompletionTrello.detectDonePendingMismatch === 'function'
+    ) {
+      try {
+        mismatch = CompletionTrello.detectDonePendingMismatch(
+          context.statut,
+          typeof bridge.getCompletion === 'function' ? bridge.getCompletion() : null
+        );
+      } catch (detectErr) {
+        console.error('cardSanityCheck detectDonePendingMismatch failed', detectErr);
+        mismatch = null;
+      }
+    }
+
+    var fallback = mismatch
+      ? buildDonePendingSanityFallback(mismatch, context.statut)
+      : null;
+
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) {
+      return fallback;
+    }
+
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu fais un contr\u00f4le de coh\u00e9rence (sanity check) \u00e0 l\'ouverture d\'une carte Trello (Power-Up Priorit\u00e9).',
+          'Cherche les discontinuit\u00e9s / contradictions entre statut, sous-t\u00e2ches, blocage et \u00e9ch\u00e9ance.',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
+          '{"hasIssue":true,"message":"…","suggestions":["…"],"followUps":[{"label":"…","actions":[…]}]}',
+          'ou {"hasIssue":false} si tout est coh\u00e9rent.',
+          'R\u00e8gles\u00a0:',
+          '- Si detected.donePendingMismatch est pr\u00e9sent (statut Termin\u00e9 + sous-t\u00e2ches non finies)\u00a0: hasIssue DOIT \u00eatre true.',
+          '- Pose ALORS la question dichotomique\u00a0: t\u00e2ches obsol\u00e8tes OU statut Termin\u00e9 incorrect\u00a0?',
+          '- followUps OBLIGATOIRES avec actions exactes\u00a0:',
+          '  1) complete_all_subtasks {} (t\u00e2ches obsol\u00e8tes)',
+          '  2) set_statut { category: "started" } (ou unstarted/backlog si plus pertinent d\'apr\u00e8s context.statut.lists)',
+          '- message\u00a0: 1–3 phrases, cite 1–2 noms de t\u00e2ches restantes si dispo. Pas de \"Que puis-je faire?\".',
+          '- N\'applique AUCUNE action automatiquement (actions:[] ou omit). confirmation via followUps seulement.',
+          '- Autres incoh\u00e9rences (bloqu\u00e9 + Termin\u00e9, \u00e9ch\u00e9ance pass\u00e9e + Termin\u00e9 sans t\u00e2ches, etc.)\u00a0: tu PEUX signaler si nettes; sinon hasIssue:false.',
+          '- Si rien de net\u00a0: {"hasIssue":false}.',
+          'Contexte carte\u00a0:',
+          JSON.stringify(context),
+          'D\u00e9tections d\u00e9terministes\u00a0:',
+          JSON.stringify({
+            donePendingMismatch: mismatch || null
+          })
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content: mismatch
+          ? 'Sanity check\u00a0: Termin\u00e9 avec des t\u00e2ches encore ouvertes. Pose la question obsol\u00e8tes vs statut incorrect.'
+          : 'Y a-t-il une incoh\u00e9rence nette \u00e0 signaler sur cette carte\u00a0? Sinon hasIssue:false.'
+      }
+    ];
+
+    var debug = {
+      id: 'sanity-' + Date.now().toString(36),
+      kind: 'cardSanityCheck',
+      label: 'Contr\u00f4le de coh\u00e9rence',
+      startedAt: Date.now(),
+      attempts: []
+    };
+    function emitDebug() {
+      if (!onDebug) return;
+      try {
+        onDebug(debug);
+      } catch (cbErr) {
+        console.error('cardSanityCheck onDebug failed', cbErr);
+      }
+    }
+
+    var response;
+    var t0 = Date.now();
+    try {
+      try {
+        response = await chatCompletions(p, messages, {
+          jsonMode: true,
+          max_tokens: 480,
+          temperature: 0.3
+        });
+        if (response.meta) debug.attempts.push(Object.assign({ label: 'json' }, response.meta));
+      } catch (err) {
+        if (err && err.debugMeta) {
+          debug.attempts.push(Object.assign({ label: 'json' }, err.debugMeta));
+        }
+        if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+          response = await chatCompletions(p, messages, {
+            jsonMode: false,
+            max_tokens: 480,
+            temperature: 0.3
+          });
+          if (response.meta) {
+            debug.attempts.push(Object.assign({ label: 'sans json mode' }, response.meta));
+          }
+        } else {
+          throw err;
+        }
+      }
+    } catch (fatal) {
+      debug.endedAt = Date.now();
+      debug.latencyMs = Date.now() - t0;
+      debug.ok = false;
+      debug.error = (fatal && fatal.message) || String(fatal || 'Erreur');
+      debug.request = debug.attempts.length ? debug.attempts[debug.attempts.length - 1] : null;
+      emitDebug();
+      return fallback;
+    }
+
+    var data = null;
+    try {
+      var text = typeof response.content === 'string' ? response.content.trim() : '';
+      var fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+      if (fence) text = fence[1].trim();
+      var start = text.indexOf('{');
+      var end = text.lastIndexOf('}');
+      if (start >= 0 && end > start) text = text.slice(start, end + 1);
+      data = JSON.parse(text);
+    } catch (parseErr) {
+      data = null;
+    }
+
+    var usage = extractUsageFromRaw(response.raw, messages, response.content, p.model);
+    usage.latencyMs = Date.now() - t0;
+    debug.endedAt = Date.now();
+    debug.latencyMs = usage.latencyMs;
+    debug.ok = true;
+    debug.request =
+      response.meta || (debug.attempts.length ? debug.attempts[debug.attempts.length - 1] : null);
+    debug.response = {
+      status: response.meta && response.meta.status,
+      content: response.content,
+      raw: cloneJsonSafe(response.raw),
+      parsed: data
+    };
+    debug.usage = usage;
+    emitDebug();
+
+    if (!data || data.hasIssue === false) {
+      // Deterministic mismatch always surfaces even if the model said no.
+      return fallback;
+    }
+
+    var message =
+      typeof data.message === 'string' && data.message.trim()
+        ? data.message.trim()
+        : fallback
+          ? fallback.message
+          : '';
+    if (!message) return fallback;
+
+    var followUps = [];
+    if (Array.isArray(data.followUps)) {
+      data.followUps.forEach(function (item) {
+        if (!item || typeof item !== 'object') return;
+        var label = typeof item.label === 'string' ? item.label.trim() : '';
+        if (!label) return;
+        var actionsMeta = normalizeActionsWithMeta(item.actions);
+        var actions = polishFollowUpActions(actionsMeta.actions || []);
+        if (!actions.length) return;
+        followUps.push({
+          label: ensureFollowUpActionVerb(label, actions),
+          actions: actions
+        });
+      });
+    }
+    if (mismatch && followUps.length < 2 && fallback) {
+      followUps = fallback.followUps.slice();
+    }
+
+    var suggestions = normalizeSuggestionList(data.suggestions);
+    if (!suggestions.length && fallback) {
+      suggestions = fallback.suggestions.slice();
+    }
+
+    return {
+      kind: mismatch ? 'done_pending_tasks' : 'discontinuity',
+      message: message,
+      suggestions: suggestions,
+      followUps: followUps,
+      mismatch: mismatch || null
+    };
   }
 
   function validateDueDate(value) {
@@ -5501,6 +5828,7 @@
     markInterviewComplete: markInterviewComplete,
     suggestQuestions: suggestQuestions,
     suggestCardImprovements: suggestCardImprovements,
+    cardSanityCheck: cardSanityCheck,
     suggestSubtasks: suggestSubtasks,
     suggestGoals: suggestGoals,
     suggestMetrics: suggestMetrics,

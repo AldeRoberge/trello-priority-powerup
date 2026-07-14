@@ -317,8 +317,10 @@
   flex-direction: column;
   gap: 8px;
   max-height: 240px;
+  overflow-x: hidden;
   overflow-y: auto;
-  padding: 2px 0;
+  /* Room for face scale/rotate + shadow so the avatar is not clipped on the left. */
+  padding: 6px 4px 6px 6px;
 }
 
 .tp-page--priority .agent-msg {
@@ -354,11 +356,13 @@
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 8px;
-  max-width: 96%;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .tp-page--priority .agent-face {
-  flex: 0 0 auto;
+  flex: 0 0 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -628,6 +632,7 @@
   font-size: 13px;
   line-height: 1.4;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
@@ -638,6 +643,10 @@
 }
 
 .tp-page--priority .agent-msg--assistant .agent-msg-bubble {
+  /* Shrink beside the face instead of wrapping the whole bubble underneath. */
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: calc(100% - 40px);
   background: var(--tp-surface-subtle);
   color: var(--tp-text);
   border: 1px solid var(--tp-border);
@@ -1084,6 +1093,76 @@ html[data-color-mode='dark'] .tp-page--priority .agent-hl--y {
 .tp-page--priority .agent-suggestion-chip:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.tp-page--priority .agent-suggestions.is-multi .agent-suggestion-chip.is-selected {
+  border-style: solid;
+  border-color: var(--tp-primary);
+  background: color-mix(in srgb, var(--tp-primary) 14%, transparent);
+  color: var(--tp-link);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tp-primary) 55%, transparent);
+}
+
+.tp-page--priority .agent-suggestions.is-multi .agent-suggestion-chip--scale.is-selected {
+  filter: brightness(0.97);
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.tp-page--priority .agent-suggestion-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 2px;
+  animation: agent-suggestion-in 0.28s ease both;
+}
+
+.tp-page--priority .agent-suggestion-confirm[hidden] {
+  display: none !important;
+}
+
+.tp-page--priority .agent-suggestion-confirm-prompt {
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--tp-text-subtle, var(--tp-text-secondary, #626f86));
+  white-space: nowrap;
+}
+
+.tp-page--priority .agent-suggestion-confirm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 36px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--tp-primary);
+  border-radius: 15px;
+  background: var(--tp-primary);
+  color: var(--tp-primary-text, #fff);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tp-page--priority .agent-suggestion-confirm-btn:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.tp-page--priority .agent-suggestion-confirm-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.tp-page--priority .agent-suggestion-confirm-btn .ti {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.tp-page--priority .agent-suggestion-confirm-count {
+  min-width: 0.9em;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Axis / ranked-answer chips: green → red (calm → intense) */
