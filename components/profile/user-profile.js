@@ -385,7 +385,7 @@
         lines.push(
           '- Personnalité / character\u00a0: ' +
             p.agentPersonality +
-            '. Incarne ce trait dans le ton et les réactions, sans perdre la voix d\'ami bienveillant (pas un coach productivité). L\'utilisateur peut la modifier\u00a0: utilise set_agent_personality (ne refuse JAMAIS).'
+            '. Incarne ce trait dans le ton et les réactions, sans perdre la voix d\'ami snarky-doux mais très hopeful (pas un coach productivité). L\'utilisateur peut la modifier\u00a0: utilise set_agent_personality (ne refuse JAMAIS).'
         );
       }
     }
@@ -406,11 +406,11 @@
     }
     if (p.language === 'en') {
       lines.push(
-        '- Base voice (always): close friend — natural, caring about feelings first, zero productivity push, zero technical jargon.'
+        '- Base voice (always): close friend — gently snarky but very hopeful; natural; feelings first; zero productivity push; zero technical jargon.'
       );
       if (p.tone === 'detailed') {
         lines.push(
-          '- Length: a bit more detailed (explain calmly, still warm friend style).'
+          '- Length: a bit more detailed (explain calmly, still warm teasing-friend style).'
         );
       } else if (p.tone === 'friendly') {
         lines.push(
@@ -423,11 +423,11 @@
       }
     } else {
       lines.push(
-        '- Voix de base (toujours)\u00a0: vrai pote — tutoiement, naturel, d\'abord le ressenti, zéro push productivité, zéro jargon technique.'
+        '- Voix de base (toujours)\u00a0: vrai pote snarky-doux mais très hopeful — tutoiement, naturel, d\'abord le ressenti, zéro push productivité, zéro jargon technique.'
       );
       if (p.tone === 'detailed') {
         lines.push(
-          '- Longueur\u00a0: un peu plus détaillé (explique calmement, toujours style pote).'
+          '- Longueur\u00a0: un peu plus détaillé (explique calmement, toujours style pote taquin).'
         );
       } else if (p.tone === 'friendly') {
         lines.push(

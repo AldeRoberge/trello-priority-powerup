@@ -150,7 +150,6 @@
     var SUGGESTION_CONFIRM_MS = 5000;
     var SUGGESTION_CONFIRM_PROMPTS = [
       'C\'est tout?',
-      'Quoi d\'autre?',
       'Rien d\'autre?'
     ];
     var applySuggestionsSeq = 0;
@@ -4894,7 +4893,8 @@
       var selected = getSelectedSuggestionTexts();
       var countEl = confirmEl.querySelector('.agent-suggestion-confirm-count');
       var btn = confirmEl.querySelector('.agent-suggestion-confirm-btn');
-      if (!selected.length) {
+      var composerHasText = !!(input.value || '').trim();
+      if (!selected.length || composerHasText) {
         confirmEl.hidden = true;
         stopSuggestionConfirmTimer();
         if (countEl) countEl.textContent = '';
@@ -4913,7 +4913,6 @@
         if (countEl) countEl.textContent = String(leftSec);
         confirmEl.setAttribute('aria-label', promptText + ' ' + leftSec + ' s');
       } else {
-        // Timer cancelled (e.g. user typing) — keep confirm, drop countdown.
         if (countEl) countEl.textContent = '';
         confirmEl.setAttribute('aria-label', promptText);
       }
@@ -4921,7 +4920,6 @@
     }
 
     function cancelSuggestionConfirmOnComposerInput() {
-      if (!suggestionConfirmTimer && !suggestionConfirmDeadline) return;
       stopSuggestionConfirmTimer();
       syncSuggestionConfirmUi();
     }
@@ -5973,7 +5971,7 @@
       // UI-only intro (not sent to the model history).
       appendMessage(
         'assistant',
-        'Ça semble être une nouvelle tâche. Je peux t\'aider à la configurer.',
+        'Ooh, du neuf! Vas-y, balance — je suis curieux, et je juge pas ;)',
         { silent: true }
       );
       pending = true;
