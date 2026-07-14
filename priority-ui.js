@@ -1601,21 +1601,35 @@
     return pad2(hours) + ':' + pad2(minutes);
   }
 
+  /** Whether a quick-date chip is still meaningful at `now` (local). */
+  function isDueDateQuickSuggestionAvailable(id, now) {
+    if (!id || typeof id !== 'string') return false;
+    if (id === 'cet-apres-midi') {
+      var at = now || new Date();
+      var afternoonParts = DUE_DATE_QUICK_AFTERNOON_TIME.split(':');
+      var afternoonMins = (+afternoonParts[0]) * 60 + (+afternoonParts[1]);
+      var nowMins = at.getHours() * 60 + at.getMinutes();
+      // « Cet après-midi » is today-only; hide once the afternoon target has passed.
+      return nowMins < afternoonMins;
+    }
+    for (var i = 0; i < DUE_DATE_QUICK_SUGGESTIONS.length; i++) {
+      if (DUE_DATE_QUICK_SUGGESTIONS[i].id === id) return true;
+    }
+    return false;
+  }
+
   /** Resolve a quick-date chip id to `{ iso, time }` (local calendar + workplace time). */
   function resolveDueDateQuickSuggestion(id) {
     if (!id || typeof id !== 'string') return null;
+    if (!isDueDateQuickSuggestionAvailable(id)) return null;
     var now = new Date();
     var today = startOfLocalDay(now);
     var date;
     var time = DUE_DATE_QUICK_MORNING_TIME;
     if (id === 'cet-apres-midi') {
+      // Always today at afternoon time — never reinterpret as tomorrow.
       time = DUE_DATE_QUICK_AFTERNOON_TIME;
-      var afternoonParts = time.split(':');
-      var afternoonMins = (+afternoonParts[0]) * 60 + (+afternoonParts[1]);
-      var nowMins = now.getHours() * 60 + now.getMinutes();
-      // If afternoon target is already past, roll to tomorrow afternoon.
-      var dayOffset = nowMins >= afternoonMins ? 1 : 0;
-      date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + dayOffset);
+      date = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     } else if (id === 'demain-matin') {
       date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
     } else if (id === 'lundi-prochain') {
@@ -4666,6 +4680,7 @@
       chip.dataset.suggestion = item.id;
       chip.textContent = item.label;
       chip.setAttribute('aria-label', item.label);
+      chip.hidden = !isDueDateQuickSuggestionAvailable(item.id);
       chip.addEventListener('click', function () {
         applyQuickSuggestion(item.id);
       });
@@ -5179,8 +5194,15 @@
 
     function refreshSuggestions() {
       var show = enabled && !current;
+      var chips = suggestions.querySelectorAll('[data-suggestion]');
+      var anyAvailable = false;
+      for (var i = 0; i < chips.length; i++) {
+        var available = isDueDateQuickSuggestionAvailable(chips[i].dataset.suggestion);
+        chips[i].hidden = !available;
+        if (available) anyAvailable = true;
+      }
       var wasHidden = suggestions.hidden;
-      suggestions.hidden = !show;
+      suggestions.hidden = !(show && anyAvailable);
       if (wasHidden !== suggestions.hidden) notifyLayout();
     }
 
@@ -7770,6 +7792,7 @@
     DUE_DATE_QUICK_SUGGESTIONS: DUE_DATE_QUICK_SUGGESTIONS,
     normalizeDueDate: normalizeDueDate,
     normalizeDueTime: normalizeDueTime,
+    isDueDateQuickSuggestionAvailable: isDueDateQuickSuggestionAvailable,
     resolveDueDateQuickSuggestion: resolveDueDateQuickSuggestion,
     daysUntilDue: daysUntilDue,
     msUntilDue: msUntilDue,

@@ -119,13 +119,6 @@
       resizePopup();
     }
 
-    function completionHasActivity(data) {
-      if (!data) return false;
-      var normalized = CompletionTrello.normalizeCompletionData(data);
-      if (normalized.items && normalized.items.length) return true;
-      return (normalized.progress || 0) > 0;
-    }
-
     function getBlockedSubtasks() {
       if (completionUi && typeof completionUi.getData === 'function') {
         var live = completionUi.getData();
@@ -240,7 +233,8 @@
         onEnableChange: function (on, opts) {
           progressEnabled = on;
           progressExpanded = on && progressCollapse.isExpanded();
-          if (latestCompletion || completionUi) {
+          // persist:false = programmatic defaults on open; do not write card data yet.
+          if (!(opts && opts.persist === false) && (latestCompletion || completionUi)) {
             var data = completionUi ? completionUi.getData() : latestCompletion;
             saveCompletion(data);
           }
@@ -257,7 +251,6 @@
           return CompletionTrello.getCardCompletion(t);
         })
         .then(function (stored) {
-          var storedEnabled = !(stored && stored.progressEnabled === false);
           completionUi = CompletionUI.mountCompletionUI(completionMount, {
             data: stored,
             showCardHeader: false,
@@ -296,11 +289,9 @@
           syncDueBlockedForProgress(latestCompletion);
           // Initial paint may already be all-complete — sync Done without fireworks.
           syncDueCompleteFromProgress(latestCompletion);
-          // Enable when deep-linked, stored flag on, or saved progress exists (back-compat).
+          // Mirror priorityEnabled: on unless explicitly disabled (empty/new cards default on).
           var shouldEnable =
-            !!initiallyOpen ||
-            (storedEnabled && completionHasActivity(latestCompletion)) ||
-            (stored && stored.progressEnabled === true);
+            !!initiallyOpen || !(stored && stored.progressEnabled === false);
           var expandFallback = initiallyOpen ? false : shouldEnable;
           var expandProgress = initiallyOpen
             ? true
@@ -308,8 +299,8 @@
           setProgressEnabled(shouldEnable, {
             focusAdd: !!initiallyOpen,
             expand: expandProgress,
-            // Focus-from-Progrès only forces expand for this open; do not overwrite prefs.
-            persist: initiallyOpen ? false : undefined
+            // Initial open defaults: do not overwrite collapse prefs or seed empty completion.
+            persist: false
           });
           if (initiallyOpen) {
             setTimeout(function () {
