@@ -294,6 +294,12 @@ body {
   cursor: pointer;
 }
 
+.section-enable-spacer {
+  flex: 0 0 22px;
+  width: 22px;
+  pointer-events: none;
+}
+
 .section-leading-icon {
   display: inline-flex;
   align-items: flex-start;
@@ -311,7 +317,13 @@ body {
   line-height: 1;
 }
 
-.field--graphique .section-leading-icon {
+.field--graphique .section-leading-icon,
+.field--chat .section-leading-icon,
+.field--statut .section-leading-icon,
+.field--priority .section-leading-icon,
+.field--progress .section-leading-icon,
+.field--due-date .section-leading-icon,
+.field--en-attente .section-leading-icon {
   color: var(--text-primary);
   opacity: 0.72;
 }
