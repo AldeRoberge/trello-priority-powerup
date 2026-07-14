@@ -1231,7 +1231,7 @@ body {
   border-radius: 2px 2px 0 0;
   pointer-events: none;
   transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1);
-  z-index: 4;
+  z-index: 1;
 }
 
 .due-date-time-clock.is-dragging .due-date-time-clock-hand {
@@ -1251,6 +1251,7 @@ body {
   pointer-events: auto;
   cursor: grab;
   touch-action: none;
+  z-index: 1;
 }
 
 .due-date-time-clock.is-dragging .due-date-time-clock-thumb {
@@ -1279,6 +1280,16 @@ body {
 
 .due-date-time-clock-nums .due-date-time-clock-num {
   pointer-events: auto;
+}
+
+/* Selected digit draws on top of the pick handle (white on accent thumb). */
+.due-date-time-clock-nums .due-date-time-clock-num.is-selected {
+  z-index: 4;
+  color: var(--due-accent-text, #ffffff);
+  background: transparent;
+  font-weight: 600;
+  /* Let drag events hit the thumb underneath. */
+  pointer-events: none;
 }
 
 .due-date-time-clock-num {
@@ -1319,12 +1330,6 @@ body {
 
 .due-date-time-clock-num:hover {
   background: color-mix(in srgb, var(--due-accent) 12%, transparent);
-}
-
-.due-date-time-clock-num.is-selected {
-  color: var(--due-accent-text);
-  background: transparent;
-  font-weight: 500;
 }
 
 .due-date-time-clock-num:focus-visible {

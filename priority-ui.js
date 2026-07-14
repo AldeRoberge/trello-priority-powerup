@@ -1532,6 +1532,12 @@
   var DUE_DATE_TODAY_LABEL = 'Aujourd\'hui';
   var DUE_DATE_PREV_MONTH = 'Mois pr\u00e9c\u00e9dent';
   var DUE_DATE_NEXT_MONTH = 'Mois suivant';
+  var DUE_DATE_PREV_YEAR = 'Ann\u00e9e pr\u00e9c\u00e9dente';
+  var DUE_DATE_NEXT_YEAR = 'Ann\u00e9e suivante';
+  var DUE_DATE_PREV_YEARS = 'Ann\u00e9es pr\u00e9c\u00e9dentes';
+  var DUE_DATE_NEXT_YEARS = 'Ann\u00e9es suivantes';
+  var DUE_DATE_PICK_MONTH_LABEL = 'Choisir le mois';
+  var DUE_DATE_PICK_YEAR_LABEL = 'Choisir l\'ann\u00e9e';
   var DUE_DATE_CALENDAR_LABEL = 'Calendrier d\'\u00e9ch\u00e9ance';
   var DUE_DATE_BOX_LABEL = 'Date';
   var DUE_DATE_CLEAR_LABEL = 'Effacer la date';
@@ -1586,6 +1592,21 @@
     'novembre',
     'd\u00e9cembre'
   ];
+  var DUE_DATE_MONTH_SHORT = [
+    'janv.',
+    'f\u00e9vr.',
+    'mars',
+    'avr.',
+    'mai',
+    'juin',
+    'juil.',
+    'ao\u00fbt',
+    'sept.',
+    'oct.',
+    'nov.',
+    'd\u00e9c.'
+  ];
+  var DUE_DATE_YEAR_PICKER_COUNT = 12;
   var DUE_DATE_WEEKDAYS = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
   var DUE_DATE_WEEKDAY_NAMES = [
     'dimanche',
@@ -5452,6 +5473,8 @@
     var timeOpen = false;
     var viewYear;
     var viewMonth;
+    var calendarMode = 'day'; /* day | month | year */
+    var yearPickerStart = null;
     var focusIso = current || toIsoDate(startOfLocalDay(new Date()));
     var docListenersBound = false;
     var uid = 'due-cal-' + Math.random().toString(36).slice(2, 9);
@@ -5802,6 +5825,21 @@
     monthLabel.className = 'due-date-month-label';
     monthLabel.id = uid + '-month';
     monthLabel.setAttribute('aria-live', 'polite');
+
+    var monthPickBtn = document.createElement('button');
+    monthPickBtn.type = 'button';
+    monthPickBtn.className = 'due-date-month-pick';
+    monthPickBtn.setAttribute('aria-label', DUE_DATE_PICK_MONTH_LABEL);
+    monthPickBtn.setAttribute('aria-expanded', 'false');
+
+    var yearPickBtn = document.createElement('button');
+    yearPickBtn.type = 'button';
+    yearPickBtn.className = 'due-date-year-pick';
+    yearPickBtn.setAttribute('aria-label', DUE_DATE_PICK_YEAR_LABEL);
+    yearPickBtn.setAttribute('aria-expanded', 'false');
+
+    monthLabel.appendChild(monthPickBtn);
+    monthLabel.appendChild(yearPickBtn);
 
     var nextBtn = document.createElement('button');
     nextBtn.type = 'button';
@@ -6253,15 +6291,93 @@
       emitChange();
     }
 
-    function shiftMonth(delta) {
-      var next = new Date(viewYear, viewMonth + delta, 1);
-      viewYear = next.getFullYear();
-      viewMonth = next.getMonth();
+    function clampFocusToViewMonth() {
       var daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
       var focusDay = dueDateToLocalDate(focusIso);
       var day = focusDay ? Math.min(focusDay.getDate(), daysInMonth) : 1;
       focusIso = toIsoDate(new Date(viewYear, viewMonth, day));
+    }
+
+    function yearPickerRangeStart(year) {
+      var y = year == null ? viewYear : year;
+      return y - ((y % DUE_DATE_YEAR_PICKER_COUNT + DUE_DATE_YEAR_PICKER_COUNT) % DUE_DATE_YEAR_PICKER_COUNT);
+    }
+
+    function syncNavChrome() {
+      var monthName = DUE_DATE_MONTH_NAMES[viewMonth];
+      var monthCap = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+      monthPickBtn.textContent = monthCap;
+      yearPickBtn.textContent = String(viewYear);
+      monthPickBtn.hidden = calendarMode === 'year';
+      yearPickBtn.hidden = false;
+      monthPickBtn.setAttribute('aria-expanded', calendarMode === 'month' ? 'true' : 'false');
+      yearPickBtn.setAttribute('aria-expanded', calendarMode === 'year' ? 'true' : 'false');
+      monthPickBtn.classList.toggle('is-active', calendarMode === 'month');
+      yearPickBtn.classList.toggle('is-active', calendarMode === 'year');
+
+      if (calendarMode === 'year') {
+        if (yearPickerStart == null) yearPickerStart = yearPickerRangeStart(viewYear);
+        var endYear = yearPickerStart + DUE_DATE_YEAR_PICKER_COUNT - 1;
+        yearPickBtn.textContent = yearPickerStart + '\u2013' + endYear;
+        prevBtn.setAttribute('aria-label', DUE_DATE_PREV_YEARS);
+        nextBtn.setAttribute('aria-label', DUE_DATE_NEXT_YEARS);
+      } else if (calendarMode === 'month') {
+        yearPickBtn.textContent = String(viewYear);
+        prevBtn.setAttribute('aria-label', DUE_DATE_PREV_YEAR);
+        nextBtn.setAttribute('aria-label', DUE_DATE_NEXT_YEAR);
+      } else {
+        prevBtn.setAttribute('aria-label', DUE_DATE_PREV_MONTH);
+        nextBtn.setAttribute('aria-label', DUE_DATE_NEXT_MONTH);
+      }
+
+      weekdays.hidden = calendarMode !== 'day';
+      popover.dataset.calendarMode = calendarMode;
+    }
+
+    function setCalendarMode(mode) {
+      var next = mode === 'month' || mode === 'year' ? mode : 'day';
+      calendarMode = next;
+      if (calendarMode === 'year') {
+        yearPickerStart = yearPickerRangeStart(viewYear);
+      }
+      renderCalendar(calendarMode === 'day');
+    }
+
+    function shiftCalendar(delta) {
+      if (calendarMode === 'year') {
+        if (yearPickerStart == null) yearPickerStart = yearPickerRangeStart(viewYear);
+        yearPickerStart += delta * DUE_DATE_YEAR_PICKER_COUNT;
+        renderCalendar();
+        return;
+      }
+      if (calendarMode === 'month') {
+        viewYear += delta;
+        clampFocusToViewMonth();
+        renderCalendar(true);
+        return;
+      }
+      var next = new Date(viewYear, viewMonth + delta, 1);
+      viewYear = next.getFullYear();
+      viewMonth = next.getMonth();
+      clampFocusToViewMonth();
       renderCalendar(true);
+    }
+
+    function selectMonth(monthIndex) {
+      if (monthIndex < 0 || monthIndex > 11) return;
+      viewMonth = monthIndex;
+      clampFocusToViewMonth();
+      calendarMode = 'day';
+      renderCalendar(true);
+    }
+
+    function selectYear(year) {
+      if (!isFinite(year)) return;
+      viewYear = year;
+      yearPickerStart = yearPickerRangeStart(year);
+      clampFocusToViewMonth();
+      calendarMode = 'month';
+      renderCalendar();
     }
 
     function selectIso(iso) {
@@ -6275,6 +6391,7 @@
       current = next;
       focusIso = next;
       syncViewFromValue(next);
+      calendarMode = 'day';
       emitChange();
       renderCalendar();
     }
@@ -6284,17 +6401,84 @@
       if (btn) btn.focus();
     }
 
-    function renderCalendar(keepFocus) {
-      var monthName = DUE_DATE_MONTH_NAMES[viewMonth];
-      monthLabel.textContent =
-        monthName.charAt(0).toUpperCase() + monthName.slice(1) + ' ' + viewYear;
+    function renderMonthPicker() {
+      grid.className = 'due-date-grid due-date-grid--months';
+      grid.setAttribute('role', 'listbox');
+      grid.setAttribute('aria-label', DUE_DATE_PICK_MONTH_LABEL);
+      var now = new Date();
+      var thisMonth = now.getFullYear() === viewYear ? now.getMonth() : -1;
+      var selectedMonth = current
+        ? (function () {
+            var d = dueDateToLocalDate(current);
+            return d && d.getFullYear() === viewYear ? d.getMonth() : -1;
+          })()
+        : -1;
+
+      for (var m = 0; m < 12; m++) {
+        var monthBtn = document.createElement('button');
+        monthBtn.type = 'button';
+        monthBtn.className = 'due-date-month-option';
+        monthBtn.dataset.month = String(m);
+        monthBtn.textContent = DUE_DATE_MONTH_SHORT[m];
+        monthBtn.setAttribute('role', 'option');
+        monthBtn.setAttribute(
+          'aria-label',
+          DUE_DATE_MONTH_NAMES[m].charAt(0).toUpperCase() + DUE_DATE_MONTH_NAMES[m].slice(1) + ' ' + viewYear
+        );
+        monthBtn.setAttribute('aria-selected', m === selectedMonth || m === viewMonth ? 'true' : 'false');
+        if (m === thisMonth) monthBtn.classList.add('is-today');
+        if (m === selectedMonth || m === viewMonth) monthBtn.classList.add('is-selected');
+        monthBtn.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          selectMonth(+ev.currentTarget.dataset.month);
+        });
+        grid.appendChild(monthBtn);
+      }
+    }
+
+    function renderYearPicker() {
+      grid.className = 'due-date-grid due-date-grid--years';
+      grid.setAttribute('role', 'listbox');
+      grid.setAttribute('aria-label', DUE_DATE_PICK_YEAR_LABEL);
+      if (yearPickerStart == null) yearPickerStart = yearPickerRangeStart(viewYear);
+      var nowYear = new Date().getFullYear();
+      var selectedYear = current
+        ? (function () {
+            var d = dueDateToLocalDate(current);
+            return d ? d.getFullYear() : -1;
+          })()
+        : -1;
+
+      for (var i = 0; i < DUE_DATE_YEAR_PICKER_COUNT; i++) {
+        var year = yearPickerStart + i;
+        var yearBtn = document.createElement('button');
+        yearBtn.type = 'button';
+        yearBtn.className = 'due-date-year-option';
+        yearBtn.dataset.year = String(year);
+        yearBtn.textContent = String(year);
+        yearBtn.setAttribute('role', 'option');
+        yearBtn.setAttribute('aria-label', String(year));
+        yearBtn.setAttribute('aria-selected', year === selectedYear || year === viewYear ? 'true' : 'false');
+        if (year === nowYear) yearBtn.classList.add('is-today');
+        if (year === selectedYear || year === viewYear) yearBtn.classList.add('is-selected');
+        yearBtn.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          selectYear(+ev.currentTarget.dataset.year);
+        });
+        grid.appendChild(yearBtn);
+      }
+    }
+
+    function renderDayGrid(keepFocus) {
+      grid.className = 'due-date-grid';
+      grid.setAttribute('role', 'grid');
+      grid.setAttribute('aria-labelledby', uid + '-month');
 
       var first = new Date(viewYear, viewMonth, 1);
       var startOffset = sundayOffset(first);
       var gridStart = new Date(viewYear, viewMonth, 1 - startOffset);
       var todayIso = toIsoDate(startOfLocalDay(new Date()));
 
-      grid.textContent = '';
       var row = null;
       for (var i = 0; i < 42; i++) {
         if (i % 7 === 0) {
@@ -6352,8 +6536,26 @@
       if (keepFocus) focusDayButton(focusIso);
     }
 
+    function renderCalendar(keepFocus) {
+      syncNavChrome();
+      grid.textContent = '';
+      if (calendarMode === 'month') {
+        renderMonthPicker();
+        return;
+      }
+      if (calendarMode === 'year') {
+        renderYearPicker();
+        return;
+      }
+      renderDayGrid(keepFocus);
+    }
+
+    function shiftMonth(delta) {
+      shiftCalendar(delta);
+    }
+
     function onDocKeyDown(ev) {
-      if (!open || !enabled) return;
+      if (!open || !enabled || calendarMode !== 'day') return;
       if (!grid.contains(document.activeElement) && document.activeElement !== todayBtn) {
         return;
       }
@@ -6606,7 +6808,16 @@
       shiftMonth(1);
     });
 
+    monthPickBtn.addEventListener('click', function () {
+      setCalendarMode(calendarMode === 'month' ? 'day' : 'month');
+    });
+
+    yearPickBtn.addEventListener('click', function () {
+      setCalendarMode(calendarMode === 'year' ? 'day' : 'year');
+    });
+
     todayBtn.addEventListener('click', function () {
+      calendarMode = 'day';
       selectIso(toIsoDate(startOfLocalDay(new Date())));
     });
 
