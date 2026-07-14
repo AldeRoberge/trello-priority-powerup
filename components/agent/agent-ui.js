@@ -505,8 +505,8 @@
       composer.appendChild(input);
     }
     composer.appendChild(sendBtn);
-    chatPanel.appendChild(composer);
     chatPanel.appendChild(suggestionsEl);
+    chatPanel.appendChild(composer);
 
     var interviewBar = el('div', 'agent-interview-bar');
     interviewBar.hidden = true;
@@ -1383,6 +1383,7 @@
       if (!msg) return false;
       if (opts.fromComposer) {
         input.value = '';
+        refreshComposerTypingGaze();
       }
       var row = appendMessage('user', msg, { note: 'En attente' });
       row.classList.add('is-queued');
@@ -1719,8 +1720,15 @@
       var mood = emotion || 'happy';
       if (mood === 'sad') playSadSound();
       else if (mood === 'surprised' || mood === 'wideEyed') playSurprisedSound();
-      else if (mood === 'curious' || mood === 'lookUp' || mood === 'lookDown') playCuriousSound();
-      else if (mood === 'thinking') playThinkingSound();
+      else if (
+        mood === 'curious' ||
+        mood === 'lookUp' ||
+        mood === 'lookDown' ||
+        mood === 'lookLeft' ||
+        mood === 'lookRight'
+      ) {
+        playCuriousSound();
+      } else if (mood === 'thinking') playThinkingSound();
       else if (mood === 'neutral') playNeutralSound();
       else if (mood === 'tongue') playTongueSound();
       else if (mood === 'excited') playExcitedSound();
@@ -1818,6 +1826,61 @@
       }
     }
 
+    /** Wet retch for the over-spun face easter egg. */
+    function playBarfSound() {
+      try {
+        var ctx = ensureAudioCtx();
+        if (!ctx) return;
+        var t0 = ctx.currentTime;
+        var dur = 0.85;
+
+        if (typeof ctx.createBuffer === 'function') {
+          var buffer = ctx.createBuffer(
+            1,
+            Math.max(1, Math.floor(ctx.sampleRate * dur)),
+            ctx.sampleRate
+          );
+          var data = buffer.getChannelData(0);
+          for (var i = 0; i < data.length; i++) {
+            var env = Math.pow(1 - i / data.length, 0.55);
+            data[i] = (Math.random() * 2 - 1) * env;
+          }
+          var src = ctx.createBufferSource();
+          src.buffer = buffer;
+          var lp = ctx.createBiquadFilter();
+          lp.type = 'lowpass';
+          lp.Q.setValueAtTime(0.7, t0);
+          lp.frequency.setValueAtTime(900, t0);
+          lp.frequency.exponentialRampToValueAtTime(140, t0 + dur);
+          var ng = ctx.createGain();
+          ng.gain.setValueAtTime(0.0001, t0);
+          ng.gain.exponentialRampToValueAtTime(0.085, t0 + 0.04);
+          ng.gain.exponentialRampToValueAtTime(0.04, t0 + 0.28);
+          ng.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+          src.connect(lp);
+          lp.connect(ng);
+          ng.connect(ctx.destination);
+          src.start(t0);
+          src.stop(t0 + dur + 0.04);
+        }
+
+        var osc = ctx.createOscillator();
+        var og = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(180, t0);
+        osc.frequency.exponentialRampToValueAtTime(55, t0 + 0.55);
+        og.gain.setValueAtTime(0.0001, t0);
+        og.gain.exponentialRampToValueAtTime(0.03, t0 + 0.03);
+        og.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.7);
+        osc.connect(og);
+        og.connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t0 + 0.75);
+      } catch (e) {
+        /* ignore audio failures */
+      }
+    }
+
     function isAssistantExpanded() {
       return !!(collapse && typeof collapse.isExpanded === 'function' && collapse.isExpanded());
     }
@@ -1864,9 +1927,25 @@
       'wideEyed',
       'lookUp',
       'lookDown',
+      'lookLeft',
+      'lookRight',
       'excited',
       'wink'
     ];
+
+    /** Emotions that hand off to the idle choreography state machine. */
+    var FACE_IDLE_ELIGIBLE = {
+      neutral: true,
+      happy: true,
+      curious: true,
+      tongue: true,
+      lookUp: true,
+      lookDown: true,
+      lookLeft: true,
+      lookRight: true,
+      excited: true,
+      wink: true
+    };
 
     var FACE_AURAS = {
       orange: { hi: '#ffe0c2', mid: '#f5b58a', lo: '#e8956a' },
@@ -1996,7 +2075,13 @@
       if (mood === 'surprised' || mood === 'wideEyed') {
         return pickOne(['pop', 'bounce', 'roll', null]);
       }
-      if (mood === 'curious' || mood === 'lookUp' || mood === 'lookDown') {
+      if (
+        mood === 'curious' ||
+        mood === 'lookUp' ||
+        mood === 'lookDown' ||
+        mood === 'lookLeft' ||
+        mood === 'lookRight'
+      ) {
         return pickOne(['roll', 'bounce', null, null]);
       }
       if (mood === 'thinking') {
@@ -2201,11 +2286,13 @@
     function startThinkingMotions(row) {
       stopThinkingMotions();
       if (!row) return;
+      suppressFaceIdleMachine();
       thinkingMotionRow = row;
       // Keep the thinking mouth; only swap body/eye loops.
       setAssistantFaceEmotion(row, 'thinking', {
         animate: true,
-        forceEnter: true
+        forceEnter: true,
+        fromIdleMachine: true
       });
       var tick = function () {
         if (!thinkingMotionRow || !thinkingMotionRow.classList.contains('is-pending')) {
@@ -2215,6 +2302,15 @@
         var face = thinkingMotionRow.querySelector('.agent-face');
         if (!face) {
           stopThinkingMotions();
+          return;
+        }
+        // Typing takes over: glance at the composer instead of thinking loops.
+        if (faceSm.typing) {
+          if (face.getAttribute('data-emotion') !== 'lookDown') {
+            setAssistantFaceEmotion(thinkingMotionRow, 'lookDown', {
+              fromIdleMachine: true
+            });
+          }
           return;
         }
         // Stay on thinking emotion if something else changed it.
@@ -2228,6 +2324,217 @@
       };
       tick();
       thinkingMotionTimer = setInterval(tick, 2100 + Math.floor(Math.random() * 900));
+    }
+
+    /**
+     * Idle face choreography state machine.
+     * Sequences have a start + end (e.g. wink → smile), then random
+     * lookLeft / lookRight digressions that return to smile. Typing
+     * forces lookDown at the composer until the draft is cleared.
+     *
+     *   wink ──► smile ◄──► lookLeft
+     *              ▲    ◄──► lookRight
+     *              │
+     *           lookDown (typing)
+     */
+    var FACE_SM_STATES = {
+      wink: { emotion: 'wink', holdMin: 420, holdMax: 720 },
+      smile: { emotion: 'happy', holdMin: 2200, holdMax: 4600 },
+      lookLeft: { emotion: 'lookLeft', holdMin: 900, holdMax: 1700 },
+      lookRight: { emotion: 'lookRight', holdMin: 900, holdMax: 1700 },
+      lookDown: { emotion: 'lookDown', holdMin: 0, holdMax: 0 }
+    };
+
+    var faceSm = {
+      state: null,
+      timer: null,
+      row: null,
+      typing: false,
+      suppressed: false,
+      seq: 0,
+      /** Emotion to restore after lookDown when idle machine is suppressed. */
+      resumeEmotion: null
+    };
+
+    function faceSmRand(min, max) {
+      return min + Math.floor(Math.random() * (max - min + 1));
+    }
+
+    function clearFaceIdleTimer() {
+      if (faceSm.timer != null) {
+        clearTimeout(faceSm.timer);
+        faceSm.timer = null;
+      }
+    }
+
+    function stopFaceIdleMachine() {
+      clearFaceIdleTimer();
+      faceSm.state = null;
+      faceSm.row = null;
+      faceSm.suppressed = false;
+      faceSm.resumeEmotion = null;
+      faceSm.seq += 1;
+    }
+
+    function suppressFaceIdleMachine() {
+      faceSm.suppressed = true;
+      clearFaceIdleTimer();
+      faceSm.state = null;
+    }
+
+    function faceSmLiveRow() {
+      if (faceSm.row && faceSm.row.isConnected) {
+        var live = faceSm.row.querySelector('.agent-face:not(.is-frozen)');
+        if (live) return faceSm.row;
+      }
+      var face = getLiveAssistantFace();
+      return face ? face.closest('.agent-msg--assistant') : null;
+    }
+
+    function faceSmApply(stateName, options) {
+      options = options || {};
+      var def = FACE_SM_STATES[stateName];
+      var row = faceSm.row;
+      if (!def || !row) return;
+      faceSm.state = stateName;
+      setAssistantFaceEmotion(row, def.emotion, {
+        animate: !!options.enter,
+        forceEnter: !!options.enter,
+        fromIdleMachine: true
+      });
+    }
+
+    function faceSmScheduleNext(fromState) {
+      clearFaceIdleTimer();
+      if (faceSm.suppressed || faceSm.typing || !faceSm.row) return;
+      var def = FACE_SM_STATES[fromState];
+      if (!def || !def.holdMax) return;
+      var delay = faceSmRand(def.holdMin, def.holdMax);
+      var seq = faceSm.seq;
+      faceSm.timer = setTimeout(function () {
+        if (seq !== faceSm.seq) return;
+        faceSmAdvance(fromState);
+      }, delay);
+    }
+
+    function faceSmAdvance(fromState) {
+      if (faceSm.suppressed || faceSm.typing || !faceSm.row) return;
+      var next;
+      // Finite segments: gaze / wink always resolve back to the smile resting state.
+      if (
+        fromState === 'wink' ||
+        fromState === 'lookLeft' ||
+        fromState === 'lookRight'
+      ) {
+        next = 'smile';
+      } else if (fromState === 'smile') {
+        var roll = Math.random();
+        if (roll < 0.34) next = 'lookLeft';
+        else if (roll < 0.68) next = 'lookRight';
+        else if (roll < 0.88) next = 'wink';
+        else next = 'smile';
+      } else {
+        next = 'smile';
+      }
+      faceSmApply(next);
+      faceSmScheduleNext(next);
+    }
+
+    function startFaceIdleMachine(row, options) {
+      options = options || {};
+      clearFaceIdleTimer();
+      faceSm.seq += 1;
+      faceSm.suppressed = false;
+      faceSm.row = row || null;
+      faceSm.state = null;
+      if (!faceSm.row) return;
+
+      if (faceSm.typing) {
+        faceSmApply('lookDown');
+        return;
+      }
+
+      // Arrival sequence: wink (start) → smile (end), then random digressions.
+      var startState = options.startState || 'wink';
+      faceSmApply(startState, { enter: options.enter !== false });
+      faceSmScheduleNext(startState);
+    }
+
+    function setFaceIdleTyping(isTyping) {
+      var next = !!isTyping;
+      if (faceSm.typing === next) {
+        // Still refresh lookDown if a new live face appeared while drafting.
+        if (next) {
+          var rowFresh = faceSmLiveRow() || thinkingMotionRow;
+          if (rowFresh && faceSm.state !== 'lookDown') {
+            faceSm.row = rowFresh;
+            clearFaceIdleTimer();
+            setAssistantFaceEmotion(rowFresh, 'lookDown', { fromIdleMachine: true });
+            faceSm.state = 'lookDown';
+          }
+        }
+        return;
+      }
+      faceSm.typing = next;
+
+      var row = faceSmLiveRow() || thinkingMotionRow;
+      if (!row) return;
+      faceSm.row = row;
+
+      if (faceSm.typing) {
+        clearFaceIdleTimer();
+        var faceNow = row.querySelector('.agent-face');
+        var current = faceNow && faceNow.getAttribute('data-emotion');
+        if (current && current !== 'lookDown') {
+          faceSm.resumeEmotion = current;
+        }
+        setAssistantFaceEmotion(row, 'lookDown', { fromIdleMachine: true });
+        faceSm.state = 'lookDown';
+        return;
+      }
+
+      // Draft cleared — resume choreography unless thinking/sad hold the face.
+      if (faceSm.suppressed) {
+        if (
+          thinkingMotionRow &&
+          thinkingMotionRow === row &&
+          thinkingMotionRow.classList.contains('is-pending')
+        ) {
+          setAssistantFaceEmotion(row, 'thinking', { fromIdleMachine: true });
+          var face = row.querySelector('.agent-face');
+          if (face) applyThinkMotion(face, thinkingMotionLast || 'glance');
+        } else if (faceSm.resumeEmotion) {
+          setAssistantFaceEmotion(row, faceSm.resumeEmotion, {
+            fromIdleMachine: true
+          });
+        }
+        faceSm.resumeEmotion = null;
+        return;
+      }
+
+      faceSm.resumeEmotion = null;
+      faceSmApply('smile');
+      faceSmScheduleNext('smile');
+    }
+
+    function refreshComposerTypingGaze() {
+      var hasText = !!(input.value && String(input.value).replace(/\s+/g, ''));
+      setFaceIdleTyping(hasText);
+    }
+
+    function handOffToFaceIdleMachine(row, emotion, options) {
+      options = options || {};
+      if (!row) return;
+      var mood = emotion || 'happy';
+      if (!FACE_IDLE_ELIGIBLE[mood]) {
+        suppressFaceIdleMachine();
+        faceSm.row = row;
+        return;
+      }
+      startFaceIdleMachine(row, {
+        startState: options.startState || 'wink',
+        enter: options.enter !== false
+      });
     }
 
     function applyFaceEnterMotion(face, emotion) {
@@ -2283,6 +2590,18 @@
       } else if (mood === 'excited') {
         face.classList.add('agent-face--motion-jump');
       }
+      // External emotion changes drive or pause the idle state machine.
+      if (!options.fromIdleMachine) {
+        if (mood === 'thinking' || !FACE_IDLE_ELIGIBLE[mood]) {
+          suppressFaceIdleMachine();
+          faceSm.row = row;
+        } else if (options.idleHandOff !== false) {
+          handOffToFaceIdleMachine(row, mood, {
+            startState: options.idleStart || 'wink',
+            enter: false
+          });
+        }
+      }
     }
 
     function freezeOlderAssistantFaces(currentRow) {
@@ -2301,12 +2620,31 @@
     }
 
     function attachAssistantFace(row, emotion, color) {
-      setAssistantFaceEmotion(row, emotion, {
-        animate: true,
-        forceEnter: true,
-        color: color
-      });
+      var mood = emotion || 'happy';
       freezeOlderAssistantFaces(row);
+      if (FACE_IDLE_ELIGIBLE[mood]) {
+        // Seed aura/color, then run wink → smile choreography.
+        setAssistantFaceEmotion(row, 'wink', {
+          animate: true,
+          forceEnter: true,
+          color: color,
+          idleHandOff: false,
+          fromIdleMachine: true
+        });
+        handOffToFaceIdleMachine(row, mood, {
+          startState: 'wink',
+          enter: false
+        });
+      } else {
+        setAssistantFaceEmotion(row, mood, {
+          animate: true,
+          forceEnter: true,
+          color: color,
+          idleHandOff: false
+        });
+        suppressFaceIdleMachine();
+        faceSm.row = row;
+      }
       if (
         listeningActive &&
         listenFaceMode &&
@@ -2744,8 +3082,18 @@
       var row = el('div', 'agent-msg agent-msg--assistant is-pending is-streaming');
       row.setAttribute('aria-busy', 'true');
       row.setAttribute('aria-label', 'R\u00e9ponse en cours');
-      // Waiting is conveyed by her face; bubble stays empty until text streams in.
+      // Face + thinking clouds while waiting; bubble swaps to text when streaming starts.
       var bubble = el('div', 'agent-msg-bubble agent-msg-bubble--pending');
+      var clouds = el('div', 'agent-think-clouds');
+      clouds.setAttribute('aria-hidden', 'true');
+      clouds.appendChild(el('span', 'agent-think-puff agent-think-puff--1'));
+      clouds.appendChild(el('span', 'agent-think-puff agent-think-puff--2'));
+      var cloud = el('span', 'agent-think-cloud');
+      cloud.appendChild(el('span', 'agent-think-dot'));
+      cloud.appendChild(el('span', 'agent-think-dot'));
+      cloud.appendChild(el('span', 'agent-think-dot'));
+      clouds.appendChild(cloud);
+      bubble.appendChild(clouds);
       row.appendChild(bubble);
       messagesEl.appendChild(row);
       startThinkingMotions(row);
@@ -2761,12 +3109,30 @@
       var emotion = inferAssistantEmotion(text, meta, {
         userText: lastUserMessageText()
       });
-      setAssistantFaceEmotion(row, emotion, {
-        animate: true,
-        forceEnter: true,
-        color: meta.color != null ? meta.color : meta.aura
-      });
+      var color = meta.color != null ? meta.color : meta.aura;
       freezeOlderAssistantFaces(row);
+      if (FACE_IDLE_ELIGIBLE[emotion]) {
+        setAssistantFaceEmotion(row, 'wink', {
+          animate: true,
+          forceEnter: true,
+          color: color,
+          idleHandOff: false,
+          fromIdleMachine: true
+        });
+        handOffToFaceIdleMachine(row, emotion, {
+          startState: 'wink',
+          enter: false
+        });
+      } else {
+        setAssistantFaceEmotion(row, emotion, {
+          animate: true,
+          forceEnter: true,
+          color: color,
+          idleHandOff: false
+        });
+        suppressFaceIdleMachine();
+        faceSm.row = row;
+      }
       if (
         listeningActive &&
         listenFaceMode &&
@@ -3497,6 +3863,19 @@
         ' stroke-width="2"/>' +
         '<path d="M2.4 5.2 L8.2 2.8 L9.6 5.8 L3.8 8.2 Z" fill="currentColor" stroke="none"/>' +
         '<path d="M8.2 2.8 L10.4 1.8 L12 5.2 L9.6 5.8 Z" fill="currentColor" stroke="none"/>',
+      'calm-face':
+        '<circle cx="8" cy="8" r="5.6" ' + SUGGESTION_ICON_STROKE + '/>' +
+        '<circle cx="5.8" cy="7" r="0.85" fill="currentColor" stroke="none"/>' +
+        '<circle cx="10.2" cy="7" r="0.85" fill="currentColor" stroke="none"/>' +
+        '<path d="M5.6 10.1c.9 1.1 2.1 1.6 2.4 1.6s1.5-.5 2.4-1.6" ' +
+        SUGGESTION_ICON_STROKE +
+        '/>',
+      exclaim:
+        '<path d="M5.2 3.2v6.2M10.8 3.2v6.2" ' +
+        SUGGESTION_ICON_STROKE +
+        ' stroke-width="1.7"/>' +
+        '<circle cx="5.2" cy="12.4" r="1" fill="currentColor" stroke="none"/>' +
+        '<circle cx="10.8" cy="12.4" r="1" fill="currentColor" stroke="none"/>',
       user:
         '<circle cx="8" cy="5.2" r="2.2" ' + SUGGESTION_ICON_STROKE + '/>' +
         '<path d="M3.5 13.2c.7-2.4 2.3-3.6 4.5-3.6s3.8 1.2 4.5 3.6" ' +
@@ -3590,7 +3969,16 @@
         huge: 'circle-xl',
         'three-dots': 'dots',
         '3-dots': 'dots',
-        ellipsis: 'dots'
+        ellipsis: 'dots',
+        calm: 'calm-face',
+        'face-calm': 'calm-face',
+        smile: 'calm-face',
+        relaxed: 'calm-face',
+        '!!': 'exclaim',
+        bangs: 'exclaim',
+        'double-exclaim': 'exclaim',
+        'exclamation-marks': 'exclaim',
+        'exclamations': 'exclaim'
       };
       if (aliases[key]) key = aliases[key];
       var inner = SUGGESTION_ICON_SVG[key];
@@ -3635,6 +4023,31 @@
       return null;
     }
 
+    /** Map urgency wording → calm face (low) / !! (high). */
+    function urgencyChipIconFromText(text) {
+      var raw = String(text || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
+      if (!raw) return null;
+      if (
+        /pas\s+(du\s+tout\s+)?urgent|aucune?\s+(urgence|pression)|not\s+urgent|no\s+rush|zero\s+urgen/.test(
+          raw
+        ) ||
+        /^(calme|tranquille|relaxed|aucune)$/.test(raw)
+      ) {
+        return 'calm-face';
+      }
+      if (
+        /(tres|vraiment|super)\s+urgent|urgentes?\b|critique\b|asap|immediate/.test(raw) &&
+        !/pas\s+|peu\s+|assez\s+|moyenne?|faible|legere?/.test(raw)
+      ) {
+        return 'exclaim';
+      }
+      return null;
+    }
+
     /** Enrich chips: strip "0 (Personnel)" → icon + blue→green color. */
     function enrichSuggestionChipItems(items) {
       var reachKeys = items.map(function (item) {
@@ -3658,6 +4071,8 @@
           if (!next.color) next.color = meta.color;
           next.heat = null;
         }
+        var urgencyIcon = urgencyChipIconFromText(next.text);
+        if (urgencyIcon) next.icon = urgencyIcon;
         if (next.color) next.color = normalizeSuggestionColorName(next.color);
         if (next.icon && !suggestionIconMarkup(next.icon)) next.icon = null;
         return next;
@@ -4705,6 +5120,7 @@
       // Ingest immediately so Enter never freezes on the composer.
       if (opts.fromComposer) {
         input.value = '';
+        refreshComposerTypingGaze();
       }
       var feedbackContext = null;
       if (awaitingFeedback) {
@@ -5091,10 +5507,16 @@
           'Okay, on passe. Tu pourras reprendre la config quand tu veux.'
       });
     });
+    input.addEventListener('input', refreshComposerTypingGaze);
     input.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         onSend();
+        return;
+      }
+      // Glance down as soon as the user starts typing (before value updates).
+      if (!faceSm.typing && e.key && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        setFaceIdleTyping(true);
       }
     });
 

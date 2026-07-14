@@ -1313,7 +1313,47 @@
         })
       };
     }
+    ctx.userName = resolveUserDisplayName(ctx);
     return ctx;
+  }
+
+  /**
+   * Pull a display name from identity-style memory facts
+   * ("Nom: Alex", "Je m'appelle Alex", …).
+   */
+  function extractNameFromIdentityFact(text) {
+    var s = String(text || '').trim();
+    if (!s) return '';
+    var m =
+      s.match(/nom\s+de\s+l['\u2019]?utilisateur\s*[:\-]?\s*(.+)$/i) ||
+      s.match(/je\s+m['\u2019]appelle\s+(.+)$/i) ||
+      s.match(/mon\s+nom\s+(?:est\s+)?(.+)$/i) ||
+      s.match(/^nom\s*[:\-]\s*(.+)$/i) ||
+      s.match(/prenom\s*[:\-]?\s*(.+)$/i);
+    if (!m) return '';
+    var name = String(m[1] || '')
+      .replace(/[。.!?]+$/g, '')
+      .split(/[,;(/]/)[0]
+      .trim();
+    if (name.length < 2 || name.length > 40) return '';
+    // Reject leftover filler words without a real name token.
+    if (/^(est|suis|appel+e)$/i.test(name)) return '';
+    return name;
+  }
+
+  /** Prefer profile.displayName, else identity fact from board memory. */
+  function resolveUserDisplayName(ctx) {
+    if (ctx && ctx.profile && typeof ctx.profile.displayName === 'string') {
+      var fromProfile = ctx.profile.displayName.trim();
+      if (fromProfile) return fromProfile;
+    }
+    var facts =
+      ctx && ctx.memory && Array.isArray(ctx.memory.facts) ? ctx.memory.facts : [];
+    for (var i = 0; i < facts.length; i++) {
+      var n = extractNameFromIdentityFact(facts[i]);
+      if (n) return n;
+    }
+    return '';
   }
 
   function systemPrompt(context) {
@@ -1456,7 +1496,7 @@
       '{"thinking":"notes priv\u00e9es","message":"texte visible","emotion":"happy","color":"yellow","suggestions":["Question utile","Autre intention"],"suggestionsMulti":false,"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}],"cardPatches":[{"op":"remember","text":"fait local \u00e0 la carte"}]}',
       'Apparence (humeur / couleur \u2014 optionnel mais recommand\u00e9)\u00a0:',
       '- Tu contr\u00f4les ton avatar\u00a0: champs "emotion" et "color".',
-      '- emotion: neutral | happy | sad | surprised | curious | thinking | excited | tongue | wink | wideEyed | lookUp | lookDown.',
+      '- emotion: neutral | happy | sad | surprised | curious | thinking | excited | tongue | wink | wideEyed | lookUp | lookDown | lookLeft | lookRight.',
       '- color (identit\u00e9)\u00a0: orange | yellow | green | purple | blue | pink | red | teal | coral | sky.',
       agentColor
         ? '- Ta couleur d\'identit\u00e9 est `' +
@@ -1576,7 +1616,11 @@
       '- INTERDIT\u00a0: placeholders comme "..." , "\u2026" , "suggestion" , "exemple"\u00a0; chaque entr\u00e9e doit \u00eatre un vrai texte cliquable.',
       '- \u00c9chelle / choix ordonn\u00e9s (facilit\u00e9, gravit\u00e9, urgence\u2026)\u00a0: TOUJOURS vert\u2192rouge (gauche\u2192droite). FAUX\u00a0: facile, difficile, faisable. VRAI\u00a0: facile, faisable, difficile. heat 0\u20134 ou color ("green"|"yellow"|"orange"|"red"). Ex.\u00a0: {"label":"C\'est facile","heat":0}. suggestionScale:true + suggestionsMulti:false.',
       '- Port\u00e9e / impact (Personnel\u2192Global)\u00a0: JAMAIS "0 (Personnel)" ni des chiffres. Utilise label + icon + color\u00a0: circle-xs/blue, circle-sm/teal, circle-md/yellow, circle-lg/green, circle-xl/green. Ex.\u00a0: {"label":"Personnel","icon":"circle-xs","color":"blue"} + suggestionsMulti:false.',
-      '- Ic\u00f4nes disponibles (champ icon)\u00a0: circle-xs, circle-sm, circle-md, circle-lg, circle-xl, dots, hammer, user, users, building, globe, flame, check, ban, clock, bolt, layers.',
+      '- Impact / qui est touch\u00e9\u00a0: si context.userName (ou profile.displayName / fait m\u00e9moire \u00ab\u00a0Nom\u00a0:\u00a0\u2026\u00a0\u00bb) est connu, inclus TOUJOURS l\'utilisateur dans les suggestions (ex. \u00ab\u00a0Impact sur Alex\u00a0\u00bb / \u00ab\u00a0Sur Alex\u00a0\u00bb / pr\u00e9nom + circle-xs/blue). INTERDIT de ne proposer que \u00e9quipe / utilisateurs / clients en omettant la personne.',
+      '- Ex. VRAI (userName=Alex)\u00a0: \u00ab\u00a0Impact sur Alex\u00a0\u00bb, \u00ab\u00a0Impact sur l\'\u00e9quipe\u00a0\u00bb, \u00ab\u00a0Impact sur les utilisateurs\u00a0\u00bb.',
+      '- Ex. FAUX\u00a0: seulement \u00ab\u00a0Impact sur l\'\u00e9quipe\u00a0\u00bb + \u00ab\u00a0Impact sur les utilisateurs\u00a0\u00bb alors que le pr\u00e9nom est connu.',
+      '- Ic\u00f4nes disponibles (champ icon)\u00a0: circle-xs, circle-sm, circle-md, circle-lg, circle-xl, dots, hammer, calm-face, exclaim, user, users, building, globe, flame, check, ban, clock, bolt, layers.',
+      '- Urgence\u00a0: calm-face pour \u00ab\u00a0Pas urgent\u00a0\u00bb / aucune pression\u00a0; exclaim (!!) pour Urgent / Critique. Ex.\u00a0: {"label":"Pas urgent du tout","icon":"calm-face","heat":0} \u2026 {"label":"Urgent","icon":"exclaim","heat":4}.',
       '- color nomm\u00e9e\u00a0: blue|teal|yellow|lime|green|orange|red|gray (affich\u00e9e sur le chip). heat 0\u20134 reste r\u00e9serv\u00e9 aux \u00e9chelles gravit\u00e9 (vert\u2192rouge).',
       'R\u00e8gles actions (appliqu\u00e9es automatiquement)\u00a0:',
       '- 0 \u00e0 3 outils \u00e0 ex\u00e9cuter tout de suite d\u00e8s qu\'une action partielle est possible (ne pas attendre les d\u00e9tails optionnels).',
@@ -1631,9 +1675,15 @@
       '- Ex. demande\u00a0: user \u00ab\u00a0fais des feux d\'artifice\u00a0\u00bb \u2192 trigger_effect effect=fireworks.',
       'M\u00e9moire plateau\u00a0: utilise les faits/summary du contexte pour personnaliser (noms, projets, normes). Ne contredis pas la m\u00e9moire sans raison. Les notes de correction/pr\u00e9f\u00e9rence (ex. \u00ab\u00a0Pr\u00e9f\u00e9rence / correction\u00a0\u00bb) ont priorit\u00e9 sur une mauvaise r\u00e9ponse ant\u00e9rieure.',
       'Profil utilisateur\u00a0: respecte context.profile (langue, ton, nom, r\u00f4le, notes, fonctionnalit\u00e9s actives).',
+      context && context.userName
+        ? 'Pr\u00e9nom connu (context.userName)\u00a0: ' +
+          context.userName +
+          '. Utilise-le pour personnaliser (salutations, suggestions d\'impact / qui est touch\u00e9).'
+        : '',
       'Contexte carte actuel (JSON)\u00a0:',
       JSON.stringify(context)
-    ]).join('\n');
+    ].filter(Boolean))
+    .join('\n');
   }
 
   /**
@@ -2525,10 +2575,14 @@
       '- Pour cons\u00e9quences / causes cumulables\u00a0: suggestionsMulti:true\u00a0; chaque suggestion doit tenir seule OU avec d\'autres.',
       '- Port\u00e9e / impact\u00a0: INTERDIT "0 (Personnel)", "1 (\u00c9quipe)"\u2026 Utilise les libell\u00e9s + icon + color (bleu\u2192vert) + suggestionsMulti:false\u00a0:',
       '  Personnel circle-xs/blue \u00b7 \u00c9quipe circle-sm/teal \u00b7 Interne circle-md/yellow \u00b7 Population circle-lg/green \u00b7 Global circle-xl/green.',
-      '- Ic\u00f4nes dispo\u00a0: circle-xs|circle-sm|circle-md|circle-lg|circle-xl|dots|hammer|user|users|building|globe|flame|check|ban|clock|bolt|layers.',
+      '- Impact / qui est touch\u00e9\u00a0: si context.userName est connu, inclus TOUJOURS l\'utilisateur dans les suggestions (ex. \u00ab\u00a0Impact sur Alex\u00a0\u00bb ou le pr\u00e9nom + circle-xs/blue). INTERDIT de ne lister que \u00e9quipe / utilisateurs / clients en omettant la personne.',
+      '- Ex. VRAI (userName=Alex, question impact)\u00a0: \u00ab\u00a0Impact sur Alex\u00a0\u00bb, \u00ab\u00a0Impact sur l\'\u00e9quipe\u00a0\u00bb, \u00ab\u00a0Impact sur les utilisateurs\u00a0\u00bb.',
+      '- Ex. port\u00e9e JSON (pr\u00e9nom connu)\u00a0: {"suggestions":[{"label":"Alex","icon":"circle-xs","color":"blue"},{"label":"\u00c9quipe","icon":"circle-sm","color":"teal"},{"label":"Population","icon":"circle-lg","color":"green"}],"suggestionScale":true,"suggestionsMulti":false}',
+      '- Ic\u00f4nes dispo\u00a0: circle-xs|circle-sm|circle-md|circle-lg|circle-xl|dots|hammer|calm-face|exclaim|user|users|building|globe|flame|check|ban|clock|bolt|layers.',
+      '- Urgence\u00a0: calm-face (\u00ab\u00a0Pas urgent\u00a0\u00bb) et exclaim (!! pour Urgent). INTERDIT hammer/bolt pour l\'urgence.',
       '- Colorie les \u00e9chelles de gravit\u00e9 avec heat 0\u20134 (0=vert, 4=rouge), OU suggestionScale:true + strings ordonn\u00e9es.',
       '- Ex. facilit\u00e9 JSON\u00a0: {"suggestions":[{"label":"C\'est facile","heat":0},{"label":"C\'est faisable","heat":2},{"label":"C\'est difficile","heat":4}],"suggestionScale":true,"suggestionsMulti":false}',
-      '- Ex. port\u00e9e JSON\u00a0: {"suggestions":[{"label":"Personnel","icon":"circle-xs","color":"blue"},{"label":"\u00c9quipe","icon":"circle-sm","color":"teal"},{"label":"Population","icon":"circle-lg","color":"green"}],"suggestionScale":true,"suggestionsMulti":false}',
+      '- Ex. port\u00e9e JSON (sans pr\u00e9nom)\u00a0: {"suggestions":[{"label":"Personnel","icon":"circle-xs","color":"blue"},{"label":"\u00c9quipe","icon":"circle-sm","color":"teal"},{"label":"Population","icon":"circle-lg","color":"green"}],"suggestionScale":true,"suggestionsMulti":false}',
       '- Ex. multi JSON\u00a0: {"suggestions":[{"label":"On perd le contexte des rushs"},{"label":"Marie-Laure serait f\u00e2ch\u00e9e"}],"suggestionsMulti":true}',
       '- Utilise \u2026 seulement pour une r\u00e9ponse \u00e0 compl\u00e9ter (ex. \u00ab\u00a0On risque de perdre\u2026\u00a0\u00bb).',
       '',
@@ -2584,6 +2638,7 @@
         memory: context.memory,
         cardMemory: context.cardMemory || { facts: [] },
         profile: context.profile,
+        userName: context.userName || '',
         asked: context.interview.asked,
         surrounding: context.interview.surrounding,
         recentCards: context.interview.recentCards,
@@ -2978,6 +3033,8 @@
     'circle-xl',
     'dots',
     'hammer',
+    'calm-face',
+    'exclaim',
     'user',
     'users',
     'building',
@@ -3057,7 +3114,16 @@
       huge: 'circle-xl',
       'three-dots': 'dots',
       '3-dots': 'dots',
-      ellipsis: 'dots'
+      ellipsis: 'dots',
+      calm: 'calm-face',
+      'face-calm': 'calm-face',
+      smile: 'calm-face',
+      relaxed: 'calm-face',
+      '!!': 'exclaim',
+      bangs: 'exclaim',
+      'double-exclaim': 'exclaim',
+      'exclamation-marks': 'exclaim',
+      exclamations: 'exclaim'
     };
     if (aliases[key]) key = aliases[key];
     return SUGGESTION_ICON_IDS.indexOf(key) >= 0 ? key : null;
@@ -3128,6 +3194,45 @@
         heat: null,
         icon: entry.icon || meta.icon,
         color: entry.color || meta.color
+      };
+    });
+  }
+
+  /** Calm face for "pas urgent…", !! for clear "urgent / critique". */
+  function urgencyIconFromText(text) {
+    var raw = String(text || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+    if (!raw) return null;
+    if (
+      /pas\s+(du\s+tout\s+)?urgent|aucune?\s+(urgence|pression)|not\s+urgent|no\s+rush|zero\s+urgen/.test(
+        raw
+      ) ||
+      /^(calme|tranquille|relaxed|aucune)$/.test(raw)
+    ) {
+      return 'calm-face';
+    }
+    if (
+      /(tres|vraiment|super)\s+urgent|urgentes?\b|critique\b|asap|immediate/.test(raw) &&
+      !/pas\s+|peu\s+|assez\s+|moyenne?|faible|legere?/.test(raw)
+    ) {
+      return 'exclaim';
+    }
+    return null;
+  }
+
+  function enrichUrgencyIcons(entries) {
+    if (!Array.isArray(entries) || !entries.length) return entries || [];
+    return entries.map(function (entry) {
+      var icon = urgencyIconFromText(entry.text);
+      if (!icon) return entry;
+      return {
+        text: entry.text,
+        heat: entry.heat,
+        icon: icon,
+        color: entry.color
       };
     });
   }
@@ -3292,7 +3397,7 @@
       }
       out.push({ text: text, heat: heat, icon: icon, color: color });
     });
-    out = enrichImpactReachSuggestions(out.slice(0, max));
+    out = enrichUrgencyIcons(enrichImpactReachSuggestions(out.slice(0, max)));
     var hasHeat = out.some(function (entry) {
       return entry.heat != null;
     });
@@ -3520,6 +3625,8 @@
     wideEyed: true,
     lookUp: true,
     lookDown: true,
+    lookLeft: true,
+    lookRight: true,
     excited: true,
     wink: true
   };
@@ -3541,7 +3648,9 @@
       excite: 'excited',
       'excit\u00e9': 'excited',
       langue: 'tongue',
-      clin: 'wink'
+      clin: 'wink',
+      gauche: 'lookLeft',
+      droite: 'lookRight'
     };
     if (aliases[raw]) raw = aliases[raw];
     if (FACE_EMOTION_ALLOW[raw]) return raw;
