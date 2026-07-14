@@ -157,6 +157,12 @@
     if (actions[0].tool === 'set_progress') return 'Mettre \u00e0 jour le progr\u00e8s';
     if (actions[0].tool === 'add_subtask') return 'Ajouter une sous-t\u00e2che';
     if (actions[0].tool === 'rename_subtask') return 'Renommer la sous-t\u00e2che';
+    if (actions[0].tool === 'remove_subtask') return 'Supprimer la sous-t\u00e2che';
+    if (actions[0].tool === 'complete_all_subtasks') {
+      return 'Tout marquer termin\u00e9';
+    }
+    if (actions[0].tool === 'reset_progress') return 'R\u00e9initialiser le progr\u00e8s';
+    if (actions[0].tool === 'set_formula') return 'Changer la formule';
     return label;
   }
 
@@ -504,15 +510,35 @@
         savedDueDate: !dueEnabled && state.dueDate ? state.dueDate : undefined,
         savedDueTime: !dueEnabled && state.dueTime ? state.dueTime : undefined
       };
+      var blockedLinksRaw = Array.isArray(state.blockedLinks)
+        ? state.blockedLinks
+        : [];
+      var blockedLinks = blockedLinksRaw
+        .map(function (link) {
+          if (!link || typeof link !== 'object') return null;
+          var lid = link.id != null ? String(link.id).trim() : '';
+          if (!lid) return null;
+          return {
+            type: 'subtask',
+            id: lid,
+            label:
+              typeof link.label === 'string' && link.label.trim()
+                ? link.label.trim()
+                : undefined
+          };
+        })
+        .filter(Boolean);
       ctx.blocked = {
         // Bloqué section checkbox === enAttente. Card is blocked ONLY when enabled=true.
         enabled: blockedEnabled,
         enAttente: blockedEnabled,
         blockedReasons: blockedEnabled ? blockedReasons.slice() : [],
+        blockedLinks: blockedEnabled ? blockedLinks : [],
         // Retained while the section is off — historical only, NOT an active block.
         savedReasons: !blockedEnabled && blockedReasons.length
           ? blockedReasons.slice()
-          : undefined
+          : undefined,
+        savedLinks: !blockedEnabled && blockedLinks.length ? blockedLinks : undefined
       };
       if (typeof PriorityUI !== 'undefined' && PriorityUI.resolveDisplay) {
         try {
@@ -619,7 +645,7 @@
       '- Ne bloque JAMAIS une action pour un param\u00e8tre optionnel. Applique le minimum viable, puis adapte.',
       '- Ne pose une question AVANT d\'appeler un outil QUE si un param\u00e8tre OBLIGATOIRE manque et qu\'aucune action partielle n\'est possible.',
       '- Param\u00e8tres optionnels (ne jamais exiger avant d\'agir)\u00a0: dueTime, blockedReasons, axes priorit\u00e9 non fournis, progress pr\u00e9cis si on active seulement la section.',
-      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_subtask.text + (id OU matchText)\u00a0; toggle/set_subtask_progress.id\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e.',
+      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula.',
       '- Dates relatives (jours)\u00a0: r\u00e9sous avec context.today (aujourd\'hui / today \u2192 context.today\u00a0; demain \u2192 +1 jour). N\'invente pas d\'autre date.',
       '- Heures relatives (tr\u00e8s important)\u00a0: \u00ab\u00a0dans 15 minutes\u00a0\u00bb / \u00ab\u00a0in 15 minutes\u00a0\u00bb / \u00ab\u00a0dans 2 heures\u00a0\u00bb = D\u00c9LAI depuis maintenant, PAS une heure fixe du matin.',
       '- Pour un d\u00e9lai\u00a0: utilise set_due avec relativeMinutes (ou relativeHours). Le runtime calcule dueDate/dueTime \u00e0 partir de context.nowTime (' +
@@ -647,16 +673,28 @@
       '- Si l\'utilisateur donne ensuite un motif\u00a0: applique set_blocked avec blockedReasons (enAttente reste true) et confirme bri\u00e8vement.',
       '- Ex. tour 2\u00a0: user \u00ab\u00a0En attente d\'une approbation\u00a0\u00bb \u2192 {"message":"Motif enregistr\u00e9\u00a0: en attente d\'une approbation.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedReasons":["En attente d\'une approbation"]}}]}',
       '- Si le motif est d\u00e9j\u00e0 dans la demande initiale\u00a0: set_blocked avec enAttente:true + blockedReasons en un seul tour.',
+      '- Lien vers une sous-t\u00e2che (attente d\'une autre t\u00e2che)\u00a0: set_blocked avec blockedLinks (id ou matchText depuis progress.items). Le runtime ajoute le motif \u00ab\u00a0En attente d\'une autre t\u00e2che\u00a0\u00bb si besoin.',
+      '- Ex. lien\u00a0: user \u00ab\u00a0Bloqu\u00e9 en attendant Contacter Ian\u00a0\u00bb \u2192 {"message":"Okay, bloqu\u00e9 sur Contacter Ian.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedLinks":[{"matchText":"Contacter Ian"}]}}]}',
+      '- D\u00e9bloquer\u00a0: set_blocked avec enAttente:false (ou blockedReasons:[], blockedLinks:[]).',
       'Sous-t\u00e2ches (progress.items du contexte)\u00a0:',
       '- Les sous-t\u00e2ches existantes sont dans context.progress.items (id + text). Quand l\'utilisateur cite un nom (\u00ab\u00a0Contacter Ian\u00a0\u00bb, etc.), c\'est une sous-t\u00e2che\u00a0: retrouve-la dans items.',
+      '- Pour toute op\u00e9ration sur une sous-t\u00e2che existante\u00a0: passer id OU matchText (libell\u00e9 actuel).',
       '- Ajout\u00a0: sans nom \u2192 demander le nom, actions=[]. Avec un nom \u2192 add_subtask tout de suite.',
-      '- Renommer / corriger le texte\u00a0: utilise rename_subtask avec le nouvel text et l\'id (ou matchText = libell\u00e9 actuel). Agis tout de suite si ancien + nouveau nom sont clairs.',
+      '- Renommer\u00a0: rename_subtask avec text (nouveau) + id/matchText.',
+      '- Supprimer\u00a0: remove_subtask avec id/matchText.',
+      '- Terminer / cocher\u00a0: toggle_subtask avec done:true (ou set_subtask_progress \u00e0 100).',
+      '- Progress partiel d\'une sous-t\u00e2che\u00a0: set_subtask_progress.',
+      '- Tout terminer\u00a0: complete_all_subtasks. Tout remettre \u00e0 0\u00a0: reset_progress (includeCompleted:true par d\u00e9faut).',
       '- Ex. ajout tour 1\u00a0: user \u00ab\u00a0Ajouter une sous-t\u00e2che\u00a0\u00bb \u2192 {"message":"Quel est le nom de la sous-t\u00e2che?","suggestions":["V\u00e9rifier le stock","Contacter le client"],"followUps":[],"actions":[]}',
       '- Ex. ajout tour 2\u00a0: user \u00ab\u00a0Commander le mat\u00e9riel\u00a0\u00bb \u2192 {"message":"Okay, ajout\u00e9e.","suggestions":["Ajouter une autre sous-t\u00e2che","D\u00e9finir une \u00e9ch\u00e9ance"],"followUps":[],"actions":[{"tool":"add_subtask","args":{"text":"Commander le mat\u00e9riel"}}]}',
-      '- Ex. renommer\u00a0: user \u00ab\u00a0Rename \'Contacter Ian\' to \'Appeler Ian\'\u00a0\u00bb (items contient Contacter Ian) \u2192 {"message":"Okay, renomm\u00e9e.","suggestions":["Ajouter une sous-t\u00e2che","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"rename_subtask","args":{"matchText":"Contacter Ian","text":"Appeler Ian"}}]}',
-      'Priorit\u00e9 / progr\u00e8s\u00a0:',
+      '- Ex. renommer\u00a0: user \u00ab\u00a0Rename \'Contacter Ian\' to \'Appeler Ian\'\u00a0\u00bb \u2192 {"message":"Okay, renomm\u00e9e.","suggestions":["Ajouter une sous-t\u00e2che","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"rename_subtask","args":{"matchText":"Contacter Ian","text":"Appeler Ian"}}]}',
+      '- Ex. supprimer\u00a0: user \u00ab\u00a0Supprime Contacter Ian\u00a0\u00bb \u2192 {"message":"Okay, supprim\u00e9e.","suggestions":["Ajouter une sous-t\u00e2che","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"remove_subtask","args":{"matchText":"Contacter Ian"}}]}',
+      'Priorit\u00e9 / progr\u00e8s / formule\u00a0:',
       '- Applique immédiatement tout axe ou pourcentage fourni. Si la demande est vague (\u00ab\u00a0mettre \u00e0 jour la priorit\u00e9\u00a0\u00bb) sans valeurs\u00a0: pose UNE question pour les valeurs, actions=[].',
       '- Si l\'utilisateur active le progr\u00e8s sans chiffre\u00a0: set_progress avec progressEnabled:true tout de suite, puis demande le % en option.',
+      '- set_progress avec un % \u00e9chelonne les sous-t\u00e2ches (master) s\'il y en a\u00a0; sinon progres carte.',
+      '- Formule de score\u00a0: set_formula avec baseline | eisenhower | wsjf | valueEffort (context.formula = actuelle).',
+      '- cardName / cardDesc sont en lecture seule (pas d\'outil pour les modifier).',
       'R\u00e8gles suggestions (obligatoire)\u00a0:',
       '- Toujours proposer 2 \u00e0 4 formulations courtes en fran\u00e7ais (questions OU r\u00e9ponses \u00e0 ta question de clarification).',
       '- Ancr\u00e9es dans le contexte carte (sections enabled, \u00e9ch\u00e9ance, blocage, progr\u00e8s).',
@@ -692,12 +730,16 @@
       'Outils disponibles\u00a0:',
       '- set_priority: { urgency?:0-4, impact?:0-4, ease?:1-5, priorityEnabled?:boolean }',
       '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean, relativeMinutes?: number, relativeHours?: number } (dueTime OPTIONNEL pour une date\u00a0; d\u00e9lai \u00ab\u00a0dans N min/h\u00a0\u00bb \u2192 relativeMinutes/relativeHours, calcul\u00e9 depuis context.nowTime\u00a0; aujourd\'hui = context.today)',
-      '- set_blocked: { enAttente?: boolean, blockedReasons?: string[] } (enAttente:true seul suffit\u00a0; motifs optionnels)',
-      '- set_progress: { progress?:0-100, progressEnabled?: boolean } (progress carte si pas de sous-t\u00e2ches)',
+      '- set_blocked: { enAttente?: boolean, blockedReasons?: string[], blockedLinks?: [{id?:string, matchText?:string, label?:string}] } (enAttente:true seul suffit\u00a0; motifs et liens optionnels)',
+      '- set_progress: { progress?:0-100, progressEnabled?: boolean } (master sur sous-t\u00e2ches si items\u00a0; sinon progres carte)',
+      '- set_formula: { formula: "baseline"|"eisenhower"|"wsjf"|"valueEffort" }',
       '- add_subtask: { text: string } (text obligatoire, non vide)',
-      '- rename_subtask: { text: string, id?: string, matchText?: string } (nouveau text obligatoire\u00a0; id OU matchText = libell\u00e9 actuel dans progress.items)',
-      '- toggle_subtask: { id: string, done?: boolean }',
-      '- set_subtask_progress: { id: string, progress: 0-100 }',
+      '- rename_subtask: { text: string, id?: string, matchText?: string } (nouveau text\u00a0; id OU matchText)',
+      '- remove_subtask: { id?: string, matchText?: string } (id OU matchText)',
+      '- toggle_subtask: { id?: string, matchText?: string, done?: boolean }',
+      '- set_subtask_progress: { id?: string, matchText?: string, progress: 0-100 }',
+      '- complete_all_subtasks: {} (tout \u00e0 100%)',
+      '- reset_progress: { includeCompleted?: boolean } (d\u00e9faut true\u00a0: tout \u00e0 0%\u00a0; false = seulement les non termin\u00e9es)',
       'M\u00e9moire plateau\u00a0: utilise les faits/summary du contexte pour personnaliser (noms, projets, normes). Ne contredis pas la m\u00e9moire sans raison.',
       'Contexte carte actuel (JSON)\u00a0:',
       JSON.stringify(context)
@@ -939,6 +981,14 @@
   }
 
   /** Drop tool calls that are missing required args (e.g. empty add_subtask). */
+  function hasSubtaskRef(args) {
+    return (
+      (typeof args.id === 'string' && !!args.id.trim()) ||
+      (typeof args.matchText === 'string' && !!args.matchText.trim()) ||
+      (typeof args.from === 'string' && !!args.from.trim())
+    );
+  }
+
   function isCompleteAction(action) {
     if (!action || typeof action.tool !== 'string' || !action.tool) return false;
     var args = action.args && typeof action.args === 'object' ? action.args : {};
@@ -946,14 +996,32 @@
       return typeof args.text === 'string' && !!args.text.trim();
     }
     if (action.tool === 'rename_subtask') {
-      var newText = typeof args.text === 'string' && !!args.text.trim();
-      var hasId = typeof args.id === 'string' && !!args.id;
-      var hasMatch =
-        typeof args.matchText === 'string' && !!args.matchText.trim();
-      return newText && (hasId || hasMatch);
+      return (
+        typeof args.text === 'string' &&
+        !!args.text.trim() &&
+        hasSubtaskRef(args)
+      );
     }
-    if (action.tool === 'toggle_subtask' || action.tool === 'set_subtask_progress') {
-      return typeof args.id === 'string' && !!args.id;
+    if (
+      action.tool === 'remove_subtask' ||
+      action.tool === 'toggle_subtask'
+    ) {
+      return hasSubtaskRef(args);
+    }
+    if (action.tool === 'set_subtask_progress') {
+      return hasSubtaskRef(args) && args.progress != null;
+    }
+    if (action.tool === 'set_formula') {
+      return (
+        typeof args.formula === 'string' &&
+        FORMULA_KEYS.indexOf(args.formula.trim()) !== -1
+      );
+    }
+    if (
+      action.tool === 'complete_all_subtasks' ||
+      action.tool === 'reset_progress'
+    ) {
+      return true;
     }
     return true;
   }
@@ -964,9 +1032,17 @@
     if (action.tool === 'rename_subtask') {
       return 'rename_subtask: text et id (ou matchText) requis';
     }
-    if (action.tool === 'toggle_subtask') return 'toggle_subtask: id requis';
+    if (action.tool === 'remove_subtask') {
+      return 'remove_subtask: id (ou matchText) requis';
+    }
+    if (action.tool === 'toggle_subtask') {
+      return 'toggle_subtask: id (ou matchText) requis';
+    }
     if (action.tool === 'set_subtask_progress') {
-      return 'set_subtask_progress: id requis';
+      return 'set_subtask_progress: id (ou matchText) et progress requis';
+    }
+    if (action.tool === 'set_formula') {
+      return 'set_formula: formula requis (baseline|eisenhower|wsjf|valueEffort)';
     }
     return action.tool + ': args incomplets';
   }
@@ -1826,7 +1902,7 @@
       debug.ok = false;
       debug.error = (fatal && fatal.message) || String(fatal || 'Erreur');
       debug.request = debug.attempts.length ? debug.attempts[debug.attempts.length - 1] : null;
-      emitDebug();
+      fatal.debug = debug;
       throw fatal;
     }
     var parsed = parseAssistantPayload(response.content);
@@ -1858,6 +1934,154 @@
     return list;
   }
 
+  /**
+   * On-card-open: AI proposes applyable improvements (set_due, set_priority…).
+   * Returns [] when nothing useful to change.
+   * @returns {Promise<Array<{label:string, actions:Array}>>}
+   */
+  async function suggestCardImprovements(provider, bridge, options) {
+    options = options || {};
+    var onDebug = typeof options.onDebug === 'function' ? options.onDebug : null;
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) return [];
+    var context = buildContext(bridge);
+    var today = (context && context.today) || todayIsoLocal();
+    var nowTime = (context && context.nowTime) || nowTimeLocal();
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu analyses une carte Trello (Power-Up Priorit\u00e9) et proposes des am\u00e9liorations APPLIQUABLES.',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
+          '{"suggestions":[{"label":"D\u00e9finir l\'\u00e9ch\u00e9ance \u00e0 demain","actions":[{"tool":"set_due","args":{"dueDate":"' +
+            today +
+            '","dueEnabled":true}}]}]}',
+          'R\u00e8gles\u00a0:',
+          '- 0 \u00e0 3 suggestions max. Si la carte est d\u00e9j\u00e0 bien remplie / rien d\'utile\u00a0: {"suggestions":[]}.',
+          '- Chaque suggestion DOIT avoir actions non vides (outils ex\u00e9cutables), pas seulement une question.',
+          '- label\u00a0: verbe \u00e0 l\'infinitif, court, en fran\u00e7ais (ex. \u00ab\u00a0D\u00e9finir l\'\u00e9ch\u00e9ance\u00a0\u00bb, \u00ab\u00a0Marquer bloqu\u00e9\u00a0\u00bb).',
+          '- Outils autoris\u00e9s\u00a0: set_due, set_priority, set_blocked, set_progress, add_subtask.',
+          '- Ne propose que des changements pertinents au contexte actuel (sections enabled, \u00e9ch\u00e9ance manquante/pass\u00e9e, priorit\u00e9 absente, progr\u00e8s vide\u2026).',
+          '- Dates\u00a0: aujourd\'hui = ' +
+            today +
+            ', heure actuelle = ' +
+            nowTime +
+            '. D\u00e9lais \u00ab\u00a0dans N min\u00a0\u00bb \u2192 relativeMinutes.',
+          '- Ne duplique pas un \u00e9tat d\u00e9j\u00e0 actif (ex. ne re-bloque pas si d\u00e9j\u00e0 bloqu\u00e9).',
+          '- add_subtask.text obligatoire et concret si utilis\u00e9.',
+          'Contexte carte\u00a0:',
+          JSON.stringify(context)
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content:
+          'Y a-t-il des am\u00e9liorations \u00e0 appliquer sur cette carte? Sinon renvoie suggestions vides.'
+      }
+    ];
+    var debug = {
+      id: 'improve-' + Date.now().toString(36),
+      kind: 'suggestCardImprovements',
+      label: 'Suggestions applicables',
+      startedAt: Date.now(),
+      attempts: []
+    };
+    function emitDebug() {
+      if (!onDebug) return;
+      try {
+        onDebug(debug);
+      } catch (cbErr) {
+        console.error('suggestCardImprovements onDebug failed', cbErr);
+      }
+    }
+    var response;
+    var t0 = Date.now();
+    try {
+      try {
+        response = await chatCompletions(p, messages, {
+          jsonMode: true,
+          max_tokens: 420,
+          temperature: 0.4
+        });
+        if (response.meta) debug.attempts.push(Object.assign({ label: 'json' }, response.meta));
+      } catch (err) {
+        if (err && err.debugMeta) {
+          debug.attempts.push(Object.assign({ label: 'json' }, err.debugMeta));
+        }
+        if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+          response = await chatCompletions(p, messages, {
+            jsonMode: false,
+            max_tokens: 420,
+            temperature: 0.4
+          });
+          if (response.meta) {
+            debug.attempts.push(Object.assign({ label: 'sans json mode' }, response.meta));
+          }
+        } else {
+          throw err;
+        }
+      }
+    } catch (fatal) {
+      debug.endedAt = Date.now();
+      debug.latencyMs = Date.now() - t0;
+      debug.ok = false;
+      debug.error = (fatal && fatal.message) || String(fatal || 'Erreur');
+      debug.request = debug.attempts.length ? debug.attempts[debug.attempts.length - 1] : null;
+      emitDebug();
+      throw fatal;
+    }
+
+    var parsed = parseAssistantPayload(response.content);
+    var list = [];
+    // Prefer applyable followUps-shaped items; also accept suggestions with actions.
+    var rawItems = [];
+    try {
+      var data = JSON.parse(
+        (function () {
+          var text = typeof response.content === 'string' ? response.content.trim() : '';
+          var fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+          if (fence) return fence[1].trim();
+          var start = text.indexOf('{');
+          var end = text.lastIndexOf('}');
+          return start >= 0 && end > start ? text.slice(start, end + 1) : text;
+        })()
+      );
+      if (Array.isArray(data.suggestions)) rawItems = data.suggestions;
+      else if (Array.isArray(data.followUps)) rawItems = data.followUps;
+    } catch (parseErr) {
+      rawItems = parsed.followUps || [];
+    }
+    rawItems.forEach(function (item) {
+      if (!item || typeof item !== 'object') return;
+      var label = typeof item.label === 'string' ? item.label.trim() : '';
+      if (!label && typeof item.text === 'string') label = item.text.trim();
+      if (!isWorthySuggestion(label)) return;
+      var actionsMeta = normalizeActionsWithMeta(item.actions);
+      var actions = polishFollowUpActions(actionsMeta.actions || []);
+      if (!actions.length) return;
+      label = ensureFollowUpActionVerb(label, actions);
+      list.push({ label: label, actions: actions });
+    });
+    list = list.slice(0, 3);
+
+    var usage = extractUsageFromRaw(response.raw, messages, response.content, p.model);
+    usage.latencyMs = Date.now() - t0;
+    debug.endedAt = Date.now();
+    debug.latencyMs = usage.latencyMs;
+    debug.ok = true;
+    debug.request =
+      response.meta || (debug.attempts.length ? debug.attempts[debug.attempts.length - 1] : null);
+    debug.response = {
+      status: response.meta && response.meta.status,
+      content: response.content,
+      raw: cloneJsonSafe(response.raw),
+      suggestions: list
+    };
+    debug.usage = usage;
+    emitDebug();
+    return list;
+  }
+
   function validateDueDate(value) {
     if (value == null || value === '') return null;
     if (typeof value !== 'string') return undefined;
@@ -1877,6 +2101,23 @@
   function snapshotPriority(bridge) {
     var s =
       typeof bridge.getPriorityState === 'function' ? bridge.getPriorityState() || {} : {};
+    var links = Array.isArray(s.blockedLinks)
+      ? s.blockedLinks
+          .map(function (link) {
+            if (!link || typeof link !== 'object') return null;
+            var lid = link.id != null ? String(link.id).trim() : '';
+            if (!lid) return null;
+            return {
+              type: 'subtask',
+              id: lid,
+              label:
+                typeof link.label === 'string' && link.label.trim()
+                  ? link.label.trim()
+                  : undefined
+            };
+          })
+          .filter(Boolean)
+      : [];
     return {
       urgency: s.urgency,
       impact: s.impact,
@@ -1890,7 +2131,8 @@
         ? s.blockedReasons.slice()
         : s.blockedReason
           ? [s.blockedReason]
-          : []
+          : [],
+      blockedLinks: links
     };
   }
 
@@ -1969,6 +2211,37 @@
     return exact || contains;
   }
 
+  /** Resolve blockedLinks args against live subtasks (id or matchText). */
+  function resolveBlockedLinkArgs(rawLinks, items) {
+    if (!Array.isArray(rawLinks)) return null;
+    var out = [];
+    var seen = {};
+    for (var i = 0; i < rawLinks.length; i++) {
+      var raw = rawLinks[i];
+      if (!raw || typeof raw !== 'object') continue;
+      var target = resolveSubtaskItem(items, raw);
+      if (!target && typeof raw.id === 'string' && raw.id.trim()) {
+        target = { id: raw.id.trim(), text: raw.label || '' };
+      }
+      if (!target || !target.id) continue;
+      var id = String(target.id);
+      if (seen[id]) continue;
+      seen[id] = true;
+      var label =
+        typeof raw.label === 'string' && raw.label.trim()
+          ? raw.label.trim()
+          : target.text
+            ? String(target.text).trim()
+            : undefined;
+      out.push({
+        type: 'subtask',
+        id: id,
+        label: label
+      });
+    }
+    return out;
+  }
+
   function detailForTool(tool, beforeP, afterP, beforeC, afterC, args, extra) {
     var parts = [];
     args = args || {};
@@ -1990,6 +2263,16 @@
         beforeP.blockedReasons,
         afterP.blockedReasons
       );
+      pushChange(
+        parts,
+        'blockedLinks',
+        (beforeP.blockedLinks || []).map(function (l) {
+          return l.id + (l.label ? ':' + l.label : '');
+        }),
+        (afterP.blockedLinks || []).map(function (l) {
+          return l.id + (l.label ? ':' + l.label : '');
+        })
+      );
     } else if (tool === 'set_progress') {
       pushChange(
         parts,
@@ -1998,6 +2281,19 @@
         afterC.progressEnabled
       );
       pushChange(parts, 'progress', beforeC.progress, afterC.progress);
+      if (
+        (beforeC.items && beforeC.items.length) ||
+        (afterC.items && afterC.items.length)
+      ) {
+        parts.push(
+          'items ' +
+            (beforeC.items || []).length +
+            ' \u2192 ' +
+            (afterC.items || []).length
+        );
+      }
+    } else if (tool === 'set_formula') {
+      parts.push('formula \u2192 ' + ((extra && extra.formula) || args.formula || '?'));
     } else if (tool === 'add_subtask') {
       var text = typeof args.text === 'string' ? args.text.trim() : '';
       parts.push('+ "' + text + '"' + (extra.id ? ' (id: ' + extra.id + ')' : ''));
@@ -2017,17 +2313,33 @@
       } else {
         parts.push('id: ' + ((extra && extra.id) || args.id || '?'));
       }
-    } else if (tool === 'toggle_subtask' || tool === 'set_subtask_progress') {
-      var beforeItem = findItem(beforeC.items, args.id);
-      var afterItem = findItem(afterC.items, args.id);
+    } else if (tool === 'remove_subtask') {
+      var removed = findItem(beforeC.items, (extra && extra.id) || args.id);
+      parts.push(
+        '- "' +
+          ((removed && removed.text) || args.matchText || '?') +
+          '"' +
+          (extra && extra.id ? ' (id: ' + extra.id + ')' : '')
+      );
+      parts.push('items ' + beforeC.items.length + ' \u2192 ' + afterC.items.length);
+    } else if (
+      tool === 'toggle_subtask' ||
+      tool === 'set_subtask_progress'
+    ) {
+      var tid = (extra && extra.id) || args.id;
+      var beforeItem = findItem(beforeC.items, tid);
+      var afterItem = findItem(afterC.items, tid);
       if (beforeItem && afterItem) {
-        parts.push('id: ' + args.id);
+        parts.push('id: ' + tid);
         if (beforeItem.text) parts.push('"' + beforeItem.text + '"');
         pushChange(parts, 'done', beforeItem.done, afterItem.done);
         pushChange(parts, 'progress', beforeItem.progress, afterItem.progress);
       } else {
-        parts.push('id: ' + (args.id || '?'));
+        parts.push('id: ' + (tid || '?'));
       }
+    } else if (tool === 'complete_all_subtasks' || tool === 'reset_progress') {
+      pushChange(parts, 'progress', beforeC.progress, afterC.progress);
+      parts.push('items ' + beforeC.items.length + ' \u2192 ' + afterC.items.length);
     }
     return parts.length ? parts.join('; ') : 'aucun diff d\u00e9tect\u00e9';
   }
@@ -2038,7 +2350,7 @@
    */
   function looksLikeAppliedClaim(message) {
     if (typeof message !== 'string' || !message.trim()) return false;
-    return /\b(ajout(\u00e9e?|er)|mise?\s+[aà]\s+jour|mis\s+[aà]\s+jour|enregistr(\u00e9e?|er)|d(\u00e9|e)fini[ee]?|bloqu(\u00e9e?|er)|d(\u00e9|e)bloqu(\u00e9e?|er)|appliqu(\u00e9e?|er)|modifi(\u00e9e?|er)|okay,?\s*bloqu)/i.test(
+    return /\b(ajout(\u00e9e?|er)|renomm(\u00e9e?|er)|supprim(\u00e9e?|er)|r(\u00e9|e)initialis(\u00e9e?|er)|mise?\s+[aà]\s+jour|mis\s+[aà]\s+jour|enregistr(\u00e9e?|er)|d(\u00e9|e)fini[ee]?|bloqu(\u00e9e?|er)|d(\u00e9|e)bloqu(\u00e9e?|er)|appliqu(\u00e9e?|er)|modifi(\u00e9e?|er)|termin(\u00e9e?|er)|okay,?\s*bloqu)/i.test(
       message
     );
   }
@@ -2199,6 +2511,10 @@
           return { ok: false, tool: tool, error: 'Bridge priorit\u00e9 indisponible' };
         }
         var beforeBlocked = snapshotPriority(bridge);
+        var completionForLinks =
+          typeof bridge.getCompletion === 'function'
+            ? bridge.getCompletion()
+            : { items: [] };
         var blockedPartial = {};
         if (Array.isArray(args.blockedReasons)) {
           blockedPartial.blockedReasons = args.blockedReasons
@@ -2210,13 +2526,42 @@
             })
             .filter(Boolean);
         }
+        if (Object.prototype.hasOwnProperty.call(args, 'blockedLinks')) {
+          var resolvedLinks = resolveBlockedLinkArgs(
+            args.blockedLinks,
+            (completionForLinks && completionForLinks.items) || []
+          );
+          if (resolvedLinks == null) {
+            return {
+              ok: false,
+              tool: tool,
+              error: 'blockedLinks invalide'
+            };
+          }
+          blockedPartial.blockedLinks = resolvedLinks;
+          if (
+            resolvedLinks.length &&
+            Array.isArray(blockedPartial.blockedReasons)
+          ) {
+            var hasWaiting = blockedPartial.blockedReasons.some(function (r) {
+              return r === WAITING_OTHER_TASK_REASON;
+            });
+            if (!hasWaiting) {
+              blockedPartial.blockedReasons =
+                blockedPartial.blockedReasons.concat([
+                  WAITING_OTHER_TASK_REASON
+                ]);
+            }
+          }
+        }
         if (args.enAttente != null) {
           blockedPartial.enAttente = !!args.enAttente;
         } else if (
-          blockedPartial.blockedReasons &&
-          blockedPartial.blockedReasons.length
+          (blockedPartial.blockedReasons &&
+            blockedPartial.blockedReasons.length) ||
+          (blockedPartial.blockedLinks && blockedPartial.blockedLinks.length)
         ) {
-          // Providing reasons without enAttente implies enabling the Bloqué section.
+          // Providing reasons/links without enAttente implies enabling Bloqué.
           blockedPartial.enAttente = true;
         }
         if (!Object.keys(blockedPartial).length) {
@@ -2243,6 +2588,30 @@
           )
         };
       }
+      if (tool === 'set_formula') {
+        if (typeof bridge.setFormulaKey !== 'function') {
+          return { ok: false, tool: tool, error: 'Formule indisponible' };
+        }
+        var formula =
+          typeof args.formula === 'string' ? args.formula.trim() : '';
+        if (FORMULA_KEYS.indexOf(formula) === -1) {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Formule invalide (baseline|eisenhower|wsjf|valueEffort)'
+          };
+        }
+        bridge.setFormulaKey(formula);
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.set_formula,
+          detail: detailForTool(tool, null, null, null, null, args, {
+            formula: formula
+          })
+        };
+      }
       if (tool === 'set_progress') {
         if (typeof bridge.applyCompletion !== 'function') {
           return { ok: false, tool: tool, error: 'Progr\u00e8s indisponible' };
@@ -2260,7 +2629,20 @@
           delete next.progressEnabled;
         }
         if (args.progress != null) {
-          next.progress = clampInt(args.progress, 0, 100, 0);
+          var masterPct = clampInt(args.progress, 0, 100, 0);
+          if (
+            current.items &&
+            current.items.length &&
+            typeof CompletionTrello !== 'undefined' &&
+            CompletionTrello.applyMasterProgress
+          ) {
+            next.items = CompletionTrello.applyMasterProgress(
+              current.items,
+              masterPct
+            );
+          } else {
+            next.progress = masterPct;
+          }
         }
         bridge.applyCompletion(next);
         var afterProg = snapshotCompletion(bridge);
@@ -2354,23 +2736,157 @@
           )
         };
       }
-      if (tool === 'toggle_subtask' || tool === 'set_subtask_progress') {
+      if (tool === 'remove_subtask') {
         if (typeof bridge.applyCompletion !== 'function') {
           return { ok: false, tool: tool, error: 'Progr\u00e8s indisponible' };
         }
-        var targetId = typeof args.id === 'string' ? args.id : '';
-        if (!targetId) {
-          return { ok: false, tool: tool, error: 'id de sous-t\u00e2che requis' };
+        var beforeRemove = snapshotCompletion(bridge);
+        var removeBase =
+          typeof bridge.getCompletion === 'function'
+            ? bridge.getCompletion()
+            : { items: [] };
+        var removeTarget = resolveSubtaskItem(removeBase.items, args);
+        if (!removeTarget) {
+          return { ok: false, tool: tool, error: 'Sous-t\u00e2che introuvable' };
+        }
+        var nextRemoveItems = (removeBase.items || []).filter(function (item) {
+          return item.id !== removeTarget.id;
+        });
+        var removePayload = Object.assign({}, removeBase, {
+          items: nextRemoveItems
+        });
+        if (!nextRemoveItems.length && (removeBase.items || []).length) {
+          var priorPct = 0;
+          if (
+            typeof CompletionTrello !== 'undefined' &&
+            CompletionTrello.computeCardProgress
+          ) {
+            priorPct = CompletionTrello.computeCardProgress(removeBase).percent;
+          }
+          removePayload.progress = priorPct;
+        }
+        if (removePayload.progressEnabled === false) {
+          delete removePayload.progressEnabled;
+        }
+        bridge.applyCompletion(removePayload);
+        var afterRemove = snapshotCompletion(bridge);
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.remove_subtask,
+          id: removeTarget.id,
+          detail: detailForTool(
+            tool,
+            null,
+            null,
+            beforeRemove,
+            afterRemove,
+            args,
+            { id: removeTarget.id }
+          )
+        };
+      }
+      if (tool === 'complete_all_subtasks') {
+        if (typeof bridge.applyCompletion !== 'function') {
+          return { ok: false, tool: tool, error: 'Progr\u00e8s indisponible' };
+        }
+        var beforeComplete = snapshotCompletion(bridge);
+        var completeBase =
+          typeof bridge.getCompletion === 'function'
+            ? bridge.getCompletion()
+            : { items: [] };
+        var completeNext;
+        if (
+          typeof CompletionTrello !== 'undefined' &&
+          CompletionTrello.markFullyComplete
+        ) {
+          completeNext = CompletionTrello.markFullyComplete(completeBase);
+        } else if (completeBase.items && completeBase.items.length) {
+          completeNext = Object.assign({}, completeBase, {
+            items: (completeBase.items || []).map(function (item) {
+              return Object.assign({}, item, { done: true, progress: 100 });
+            })
+          });
+          delete completeNext.progressEnabled;
+        } else {
+          completeNext = Object.assign({}, completeBase, { progress: 100 });
+          delete completeNext.progressEnabled;
+        }
+        bridge.applyCompletion(completeNext);
+        var afterComplete = snapshotCompletion(bridge);
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.complete_all_subtasks,
+          detail: detailForTool(
+            tool,
+            null,
+            null,
+            beforeComplete,
+            afterComplete,
+            args
+          )
+        };
+      }
+      if (tool === 'reset_progress') {
+        if (typeof bridge.applyCompletion !== 'function') {
+          return { ok: false, tool: tool, error: 'Progr\u00e8s indisponible' };
+        }
+        var includeCompleted = args.includeCompleted !== false;
+        var beforeReset = snapshotCompletion(bridge);
+        var resetBase =
+          typeof bridge.getCompletion === 'function'
+            ? bridge.getCompletion()
+            : { items: [] };
+        var resetNext;
+        if (resetBase.items && resetBase.items.length) {
+          resetNext = Object.assign({}, resetBase, {
+            items: (resetBase.items || []).map(function (item) {
+              if (!includeCompleted && item.done) return item;
+              return Object.assign({}, item, { done: false, progress: 0 });
+            })
+          });
+        } else {
+          resetNext = Object.assign({}, resetBase, { progress: 0 });
+        }
+        if (resetNext.progressEnabled === false) {
+          delete resetNext.progressEnabled;
+        }
+        bridge.applyCompletion(resetNext);
+        var afterReset = snapshotCompletion(bridge);
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.reset_progress,
+          detail: detailForTool(
+            tool,
+            null,
+            null,
+            beforeReset,
+            afterReset,
+            args
+          )
+        };
+      }
+      if (tool === 'toggle_subtask' || tool === 'set_subtask_progress') {
+        if (typeof bridge.applyCompletion !== 'function') {
+          return { ok: false, tool: tool, error: 'Progr\u00e8s indisponible' };
         }
         var beforeSub = snapshotCompletion(bridge);
         var base =
           typeof bridge.getCompletion === 'function'
             ? bridge.getCompletion()
             : { items: [] };
-        var found = false;
+        var resolved = resolveSubtaskItem(base.items, args);
+        if (!resolved) {
+          return { ok: false, tool: tool, error: 'Sous-t\u00e2che introuvable' };
+        }
+        var targetId = resolved.id;
         var nextItems = (base.items || []).map(function (item) {
           if (item.id !== targetId) return item;
-          found = true;
           var copy = Object.assign({}, item);
           if (tool === 'toggle_subtask') {
             var done = args.done != null ? !!args.done : !item.done;
@@ -2386,10 +2902,11 @@
           }
           return copy;
         });
-        if (!found) {
-          return { ok: false, tool: tool, error: 'Sous-t\u00e2che introuvable' };
+        var togglePayload = Object.assign({}, base, { items: nextItems });
+        if (togglePayload.progressEnabled === false) {
+          delete togglePayload.progressEnabled;
         }
-        bridge.applyCompletion(Object.assign({}, base, { items: nextItems }));
+        bridge.applyCompletion(togglePayload);
         var afterSub = snapshotCompletion(bridge);
         return {
           ok: true,
@@ -2399,7 +2916,10 @@
             tool === 'toggle_subtask'
               ? TOOL_LABELS.toggle_subtask
               : TOOL_LABELS.set_subtask_progress,
-          detail: detailForTool(tool, null, null, beforeSub, afterSub, args)
+          id: targetId,
+          detail: detailForTool(tool, null, null, beforeSub, afterSub, args, {
+            id: targetId
+          })
         };
       }
       return { ok: false, tool: tool, error: 'Outil inconnu\u00a0: ' + tool };

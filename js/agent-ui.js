@@ -39,7 +39,8 @@
       getMemory: options.getMemory || function () { return null; },
       getBoardDigest: options.getBoardDigest || function () { return ''; },
       applyPriority: options.applyPriority || function () {},
-      applyCompletion: options.applyCompletion || function () {}
+      applyCompletion: options.applyCompletion || function () {},
+      setFormulaKey: options.setFormulaKey || function () {}
     };
     var onLayoutChange = options.onLayoutChange || function () {};
     var Agent = global.PriorityAgent;
@@ -54,6 +55,9 @@
     var settingsOpen = false;
     var testing = false;
     var suggestionsSeq = 0;
+    var applySuggestionsSeq = 0;
+    var applySuggestions = [];
+    var applySuggestionsLoading = false;
     var sessionStats = {
       turns: 0,
       promptTokens: 0,
@@ -230,6 +234,30 @@
     suggestionsEl.hidden = true;
     chatPanel.appendChild(suggestionsEl);
 
+    var applySection = el('div', 'agent-apply-suggestions');
+    applySection.hidden = true;
+    var applyHead = el('div', 'agent-apply-suggestions-head');
+    applyHead.appendChild(
+      el('span', 'agent-apply-suggestions-label', { text: 'Suggestions IA' })
+    );
+    var applyRefreshBtn = el('button', 'agent-apply-suggestions-refresh', {
+      type: 'button',
+      'aria-label': 'Rafra\u00eechir les suggestions',
+      title: 'Rafra\u00eechir'
+    });
+    applyRefreshBtn.textContent = '\u21bb';
+    applyHead.appendChild(applyRefreshBtn);
+    applySection.appendChild(applyHead);
+    var applyListEl = el('div', 'agent-apply-suggestions-list', {
+      role: 'list',
+      'aria-label': 'Suggestions applicables'
+    });
+    applySection.appendChild(applyListEl);
+    var applyStatusEl = el('p', 'agent-apply-suggestions-status');
+    applyStatusEl.hidden = true;
+    applySection.appendChild(applyStatusEl);
+    chatPanel.appendChild(applySection);
+
     var infoEl = el('div', 'agent-chat-info', {
       'aria-label': 'Informations de la conversation'
     });
@@ -290,6 +318,12 @@
       enabled: true,
       expanded: expandChat,
       getSummary: function () {
+        if (applySuggestionsLoading) return 'Analyse\u2026';
+        if (applySuggestions.length) {
+          return applySuggestions.length === 1
+            ? '1 suggestion'
+            : applySuggestions.length + ' suggestions';
+        }
         if (!Agent.isConfigured(provider)) return 'Non configur\u00e9';
         if (!Agent.isVerified(provider)) return 'Non v\u00e9rifi\u00e9';
         var n = history.length;
@@ -306,6 +340,15 @@
         }
       }
     });
+
+    function syncApplySummary() {
+      field.classList.toggle(
+        'has-ai-suggestions',
+        applySuggestions.length > 0 || applySuggestionsLoading
+      );
+      field.classList.toggle('is-ai-suggestions-loading', applySuggestionsLoading);
+      if (collapse && collapse.refreshSummary) collapse.refreshSummary();
+    }
 
     function notifyLayout() {
       onLayoutChange();
@@ -505,10 +548,14 @@
       }
 
       var list = el('div', 'agent-debug-list', { role: 'list' });
-      var selected =
-        debugLog.find(function (e) {
-          return e.id === selectedDebugId;
-        }) || debugLog[debugLog.length - 1];
+      var selected = null;
+      for (var i = 0; i < debugLog.length; i++) {
+        if (debugLog[i].id === selectedDebugId) {
+          selected = debugLog[i];
+          break;
+        }
+      }
+      if (!selected) selected = debugLog[debugLog.length - 1];
       selectedDebugId = selected && selected.id;
 
       debugLog
@@ -873,8 +920,13 @@
       composer.hidden = !configured;
       sendBtn.disabled = !ok;
       input.disabled = !configured || pending;
-      if (!configured) clearSuggestions();
-      else setSuggestionsBusy(pending);
+      if (!configured) {
+        clearSuggestions();
+        clearApplySuggestions();
+      } else {
+        setSuggestionsBusy(pending);
+        setApplySuggestionsBusy(pending);
+      }
     }
 
     function appendMessage(role, text, meta) {
@@ -943,6 +995,147 @@
     function clearSuggestions() {
       suggestionsEl.replaceChildren();
       suggestionsEl.hidden = true;
+      notifyLayout();
+    }
+
+    function clearApplySuggestions() {
+      applySuggestions = [];
+      applySuggestionsLoading = false;
+      applyListEl.replaceChildren();
+      applySection.hidden = true;
+      applyStatusEl.hidden = true;
+      applyStatusEl.textContent = '';
+      syncApplySummary();
+      notifyLayout();
+    }
+
+    function setApplyStatus(msg, show) {
+      if (!msg) {
+        applyStatusEl.hidden = true;
+        applyStatusEl.textContent = '';
+        return;
+      }
+      applyStatusEl.hidden = !show;
+      applyStatusEl.textContent = msg;
+    }
+
+    function renderApplySuggestions(list, options) {
+      options = options || {};
+      applySuggestions = (list || [])
+        .filter(function (item) {
+          return (
+            item &&
+            typeof item.label === 'string' &&
+            item.label.trim() &&
+            Array.isArray(item.actions) &&
+            item.actions.length
+          );
+        })
+        .slice(0, 3);
+      applyListEl.replaceChildren();
+      if (!applySuggestions.length || !Agent.isConfigured(provider)) {
+        applySection.hidden = true;
+        setApplyStatus('', false);
+        syncApplySummary();
+        notifyLayout();
+        return;
+      }
+      applySection.hidden = false;
+      setApplyStatus('', false);
+      applySuggestions.forEach(function (item, index) {
+        var chip = el('button', 'agent-apply-suggestion-chip', {
+          type: 'button',
+          role: 'listitem'
+        });
+        chip.textContent = item.label;
+        chip.disabled = pending;
+        if (options.animate !== false) {
+          chip.style.animationDelay = index * 40 + 'ms';
+        }
+        chip.addEventListener('click', function () {
+          onApplySuggestion(item, index);
+        });
+        applyListEl.appendChild(chip);
+      });
+      syncApplySummary();
+      notifyLayout();
+    }
+
+    function setApplySuggestionsBusy(isBusy) {
+      applyRefreshBtn.disabled = !!isBusy || pending;
+      Array.prototype.forEach.call(
+        applyListEl.querySelectorAll('.agent-apply-suggestion-chip'),
+        function (chip) {
+          chip.disabled = !!isBusy || pending;
+        }
+      );
+    }
+
+    async function refreshApplySuggestions(options) {
+      options = options || {};
+      if (!Agent.isConfigured(provider) || pending) return;
+      if (typeof Agent.suggestCardImprovements !== 'function') return;
+      var seq = ++applySuggestionsSeq;
+      applySuggestionsLoading = true;
+      setApplySuggestionsBusy(true);
+      applySection.hidden = false;
+      setApplyStatus('Analyse de la carte\u2026', true);
+      applyListEl.replaceChildren();
+      syncApplySummary();
+      notifyLayout();
+      try {
+        var list = await Agent.suggestCardImprovements(provider, bridge, {
+          onDebug: function (entry) {
+            pushDebugEntry(entry);
+          }
+        });
+        if (seq !== applySuggestionsSeq) return;
+        applySuggestionsLoading = false;
+        renderApplySuggestions(list, { animate: options.animate !== false });
+        if (!list || !list.length) {
+          applySection.hidden = true;
+          setApplyStatus('', false);
+          syncApplySummary();
+        }
+      } catch (err) {
+        if (seq !== applySuggestionsSeq) return;
+        console.error('AgentUI suggestCardImprovements failed', err);
+        if (err && err.debug) pushDebugEntry(err.debug);
+        applySuggestionsLoading = false;
+        applySuggestions = [];
+        applyListEl.replaceChildren();
+        applySection.hidden = true;
+        setApplyStatus('', false);
+        syncApplySummary();
+      } finally {
+        if (seq === applySuggestionsSeq) {
+          applySuggestionsLoading = false;
+          setApplySuggestionsBusy(false);
+          syncApplySummary();
+        }
+        notifyLayout();
+      }
+    }
+
+    function onApplySuggestion(item, index) {
+      if (pending || !item || !item.actions || !item.actions.length) return;
+      var result = Agent.executeActions(bridge, item.actions);
+      appendMessage('assistant', result.summary || 'Suggestion appliqu\u00e9e.', {
+        note: item.label
+      });
+      appendChangeRecap(result, { ok: result.ok });
+      history.push({
+        role: 'assistant',
+        content: result.summary || result.recap || 'Suggestion appliqu\u00e9e.'
+      });
+      applySuggestions = applySuggestions.filter(function (_s, i) {
+        return i !== index;
+      });
+      renderApplySuggestions(applySuggestions, { animate: false });
+      if (!applySuggestions.length) {
+        // Re-scan for follow-up improvements after applying.
+        refreshApplySuggestions({ animate: true });
+      }
       notifyLayout();
     }
 
@@ -1047,6 +1240,7 @@
         fillSettingsForm();
         if (Agent.isConfigured(provider) && !history.length) {
           refreshSuggestions({ animate: true });
+          refreshApplySuggestions({ animate: true });
         }
       } catch (err) {
         console.error('AgentUI load provider failed', err);
@@ -1151,7 +1345,10 @@
               'pass'
             );
           }
-          if (!history.length) refreshSuggestions({ animate: true });
+          if (!history.length) {
+            refreshSuggestions({ animate: true });
+            refreshApplySuggestions({ animate: true });
+          }
         }
       } catch (err) {
         setSettingsStatus((err && err.message) || 'Tests interrompus', 'fail');
@@ -1244,6 +1441,10 @@
             droppedActions: turn.droppedActions,
             ok: applied.ok
           });
+          // Defer until after pending clears in finally.
+          setTimeout(function () {
+            refreshApplySuggestions({ animate: true });
+          }, 0);
         } else {
           var emptyClaim =
             Agent.looksLikeAppliedClaim &&
@@ -1312,6 +1513,7 @@
         });
         if (collapse && collapse.refreshSummary) collapse.refreshSummary();
         refreshSuggestions({ animate: true });
+        refreshApplySuggestions({ animate: true });
         notifyLayout();
         return;
       }
@@ -1322,6 +1524,10 @@
       sendUserMessage(input.value, { fromComposer: true });
     }
 
+    applyRefreshBtn.addEventListener('click', function () {
+      if (pending) return;
+      refreshApplySuggestions({ animate: true });
+    });
     settingsBtn.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();

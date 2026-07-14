@@ -462,6 +462,143 @@
   cursor: not-allowed;
 }
 
+/* Applyable AI improvements (bottom of Assistant) */
+.tp-page--priority .agent-apply-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--tp-border, rgba(9, 30, 66, 0.12));
+}
+
+.tp-page--priority .agent-apply-suggestions[hidden] {
+  display: none !important;
+}
+
+.tp-page--priority .agent-apply-suggestions-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tp-page--priority .agent-apply-suggestions-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tp-text-muted, var(--text-muted));
+  letter-spacing: 0.01em;
+}
+
+.tp-page--priority .agent-apply-suggestions-refresh {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-text-muted, var(--text-muted));
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tp-page--priority .agent-apply-suggestions-refresh:hover:not(:disabled) {
+  background: var(--tp-surface-hover);
+  color: var(--tp-text);
+}
+
+.tp-page--priority .agent-apply-suggestions-refresh:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tp-page--priority .agent-apply-suggestions-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tp-page--priority .agent-apply-suggestion-chip {
+  padding: 7px 12px;
+  border: 1px solid color-mix(in srgb, #2a9b82 45%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, #2a9b82 12%, transparent);
+  color: #164b45;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  cursor: pointer;
+  text-align: left;
+  animation: agent-suggestion-in 0.28s ease both;
+}
+
+.tp-page--priority .agent-apply-suggestion-chip:hover:not(:disabled) {
+  background: color-mix(in srgb, #2a9b82 22%, transparent);
+  border-color: #2a9b82;
+}
+
+.tp-page--priority .agent-apply-suggestion-chip:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.tp-page--priority .agent-apply-suggestions-status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--tp-text-muted, var(--text-muted));
+  line-height: 1.35;
+}
+
+.tp-page--priority .agent-apply-suggestions-status[hidden] {
+  display: none !important;
+}
+
+/* Green bubble in collapsed Assistant summary when apply suggestions exist */
+.tp-page--priority .field--chat.has-ai-suggestions .section-toggle-summary {
+  display: inline-flex;
+  flex: 0 1 auto;
+  max-width: none;
+  align-items: center;
+  margin-top: 0;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #2a9b82;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.tp-page--priority .field--chat.has-ai-suggestions.is-ai-suggestions-loading .section-toggle-summary {
+  background: color-mix(in srgb, #2a9b82 70%, #6b7280);
+  font-weight: 500;
+}
+
+/* Keep green bubble visible only while collapsed (matches section summary hide rule) */
+.tp-page--priority .field--chat.has-ai-suggestions:not(.is-collapsed) .section-toggle-summary {
+  display: none;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-apply-suggestion-chip {
+  background: color-mix(in srgb, #5dd4b1 16%, transparent);
+  border-color: color-mix(in srgb, #5dd4b1 50%, transparent);
+  color: #b8f0df;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-apply-suggestion-chip:hover:not(:disabled) {
+  background: color-mix(in srgb, #5dd4b1 26%, transparent);
+  border-color: #5dd4b1;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .field--chat.has-ai-suggestions .section-toggle-summary {
+  background: #2a9b82;
+  color: #fff;
+}
+
 @keyframes agent-suggestion-in {
   from {
     opacity: 0;
@@ -514,21 +651,252 @@
   cursor: not-allowed;
 }
 
-.tp-page--priority .agent-chat-stats {
+.tp-page--priority .agent-chat-info {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 6px;
   padding: 6px 8px;
   border-radius: 3px;
   background: var(--tp-surface-subtle);
   border: 1px solid var(--tp-border);
+}
+
+.tp-page--priority .agent-chat-info[hidden] {
+  display: none;
+}
+
+.tp-page--priority .agent-chat-info-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tp-page--priority .agent-chat-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
   font-size: 11px;
   line-height: 1.35;
   color: var(--tp-text-muted);
 }
 
-.tp-page--priority .agent-chat-stats[hidden] {
+.tp-page--priority .agent-chat-stats:empty {
   display: none;
+}
+
+.tp-page--priority .agent-debug-btn {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted, var(--tp-text-muted));
+  cursor: pointer;
+}
+
+.tp-page--priority .agent-debug-btn:hover,
+.tp-page--priority .agent-debug-btn.is-active {
+  background: var(--surface-hover, var(--tp-surface-hover));
+  color: var(--text-primary, var(--tp-text));
+}
+
+.tp-page--priority .agent-debug-btn .ti {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.tp-page--priority .agent-debug-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--tp-border);
+  max-height: 320px;
+  overflow: auto;
+}
+
+.tp-page--priority .agent-debug-panel[hidden] {
+  display: none;
+}
+
+.tp-page--priority .agent-debug-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tp-page--priority .agent-debug-toolbar-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tp-text);
+}
+
+.tp-page--priority .agent-debug-clear {
+  border: none;
+  background: transparent;
+  color: var(--tp-text-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.tp-page--priority .agent-debug-clear:hover:not(:disabled) {
+  background: var(--surface-hover, var(--tp-surface-hover));
+  color: var(--tp-text);
+}
+
+.tp-page--priority .agent-debug-clear:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.tp-page--priority .agent-debug-empty,
+.tp-page--priority .agent-debug-error {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--tp-text-muted);
+}
+
+.tp-page--priority .agent-debug-error {
+  color: var(--tp-danger-text);
+}
+
+.tp-page--priority .agent-debug-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tp-page--priority .agent-debug-list-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  margin: 0;
+  padding: 5px 7px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--tp-surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tp-page--priority .agent-debug-list-item:hover {
+  border-color: var(--tp-border);
+}
+
+.tp-page--priority .agent-debug-list-item.is-active {
+  border-color: var(--tp-border-strong);
+  background: color-mix(in srgb, var(--tp-surface) 70%, var(--tp-surface-subtle));
+}
+
+.tp-page--priority .agent-debug-list-item.is-fail .agent-debug-list-label {
+  color: var(--tp-danger-text);
+}
+
+.tp-page--priority .agent-debug-list-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tp-text);
+}
+
+.tp-page--priority .agent-debug-list-meta {
+  font-size: 10px;
+  color: var(--tp-text-muted);
+}
+
+.tp-page--priority .agent-debug-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tp-page--priority .agent-debug-section {
+  margin: 0;
+  border: 1px solid var(--tp-border);
+  border-radius: 4px;
+  background: var(--tp-surface);
+}
+
+.tp-page--priority .agent-debug-section > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 5px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tp-text);
+  user-select: none;
+}
+
+.tp-page--priority .agent-debug-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tp-page--priority .agent-debug-section-body {
+  padding: 0 7px 7px;
+}
+
+.tp-page--priority .agent-debug-pre {
+  margin: 0;
+  padding: 6px;
+  max-height: 180px;
+  overflow: auto;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--tp-surface-subtle) 80%, #000 8%);
+  color: var(--tp-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tp-page--priority .agent-debug-metric-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tp-page--priority .agent-debug-metric-row {
+  display: grid;
+  grid-template-columns: minmax(7em, 38%) 1fr;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.tp-page--priority .agent-debug-metric-row dt {
+  margin: 0;
+  color: var(--tp-text-muted);
+}
+
+.tp-page--priority .agent-debug-metric-row dd {
+  margin: 0;
+  color: var(--tp-text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .tp-page--priority .agent-chat-stats-row {

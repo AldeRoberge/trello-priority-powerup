@@ -728,6 +728,11 @@
               });
             }
           },
+          setFormulaKey: function (key) {
+            if (variant && typeof variant.setFormulaKey === 'function') {
+              variant.setFormulaKey(key);
+            }
+          },
           onLayoutChange: resizePopup
         });
       } else {
