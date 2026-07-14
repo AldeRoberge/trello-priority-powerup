@@ -2065,7 +2065,10 @@
       '',
       'R\u00e8gles interview\u00a0:',
       '- Pose UNE question claire \u00e0 la fois (choix multiples / oui-non pr\u00e9f\u00e9r\u00e9s).',
-      '- suggestions = 2\u20134 r\u00e9ponses cliquables courtes (utilise \u2026 pour \u00e0 compl\u00e9ter).',
+      '- suggestions = r\u00e9ponses cliquables courtes (utilise \u2026 pour \u00e0 compl\u00e9ter).',
+      '- Si tu poses une \u00e9chelle Urgence ou Impact (0\u20134)\u00a0: inclus les 5 niveaux dans suggestions (0, 1, 2, 3 et 4) \u2014 n\'en omets aucun.',
+      '- Si tu poses une \u00e9chelle Facilit\u00e9 (1\u20135)\u00a0: inclus les 5 niveaux dans suggestions (1, 2, 3, 4 et 5).',
+      '- Sinon (oui/non, projet, dur\u00e9e\u2026)\u00a0: 2\u20134 suggestions suffisent.',
       '- Maximise le gain d\'information pour urgence / impact / facilit\u00e9.',
       '- D\u00e8s que tu es assez confiant pour un axe (ou dur\u00e9e / due / projet)\u00a0: mets l\'outil dans actions IMM\u00c9DIATEMENT, confirme bri\u00e8vement, puis question suivante si besoin.',
       '- N\'invente PAS d\'\u00e9ch\u00e9ance, projet ou sous-t\u00e2ches sans indice (titre, r\u00e9ponse, voisinage).',
@@ -2231,7 +2234,8 @@
     return {
       message: message,
       suggestions: normalizeSuggestionList(
-        (data && data.suggestions) || parsed.suggestions
+        (data && data.suggestions) || parsed.suggestions,
+        5
       ),
       actions: actions,
       prompts: prompts,
@@ -2389,7 +2393,9 @@
     return true;
   }
 
-  function normalizeSuggestionList(raw) {
+  function normalizeSuggestionList(raw, maxItems) {
+    var max =
+      typeof maxItems === 'number' && maxItems > 0 ? Math.floor(maxItems) : 4;
     var out = [];
     if (!Array.isArray(raw)) return out;
     raw.forEach(function (item) {
@@ -2402,7 +2408,7 @@
       if (out.indexOf(text) >= 0) return;
       out.push(text);
     });
-    return out.slice(0, 4);
+    return out.slice(0, max);
   }
 
   function suggestionsFromFollowUps(followUps) {

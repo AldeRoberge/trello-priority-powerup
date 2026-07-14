@@ -345,14 +345,10 @@
 
     var interviewBar = el('div', 'agent-interview-bar');
     interviewBar.hidden = true;
-    var interviewHint = el('span', 'agent-interview-hint', {
-      text: 'Premi\u00e8re ouverture\u00a0: quelques questions pour cadrer la priorit\u00e9.'
-    });
     var interviewSkipBtn = el('button', 'tp-link agent-interview-skip', {
       type: 'button',
-      text: 'Passer l\'interview'
+      text: 'Ignorer la configuration initiale'
     });
-    interviewBar.appendChild(interviewHint);
     interviewBar.appendChild(interviewSkipBtn);
     chatPanel.appendChild(interviewBar);
 
@@ -1670,7 +1666,7 @@
           return typeof s === 'string' ? s.trim() : '';
         })
         .filter(Boolean)
-        .slice(0, 4);
+        .slice(0, interviewActive ? 5 : 4);
       composerSuggestions = items.slice();
       suggestionsEl.replaceChildren();
       if (!items.length || !Agent.isConfigured(provider)) {
@@ -1843,6 +1839,11 @@
 
       setInterviewMode(true);
       expandAssistant();
+      // UI-only intro (not sent to the model history).
+      appendMessage(
+        'assistant',
+        'Premi\u00e8re ouverture\u00a0: quelques questions pour cadrer la priorit\u00e9.'
+      );
       pending = true;
       updateComposerEnabled();
       setSuggestionsBusy(true);
@@ -2413,7 +2414,7 @@
       if (pending || !interviewActive) return;
       finishInterview({
         message:
-          'Okay, interview pass\u00e9e. Vous pouvez reprendre quand vous voulez.'
+          'Okay, configuration initiale ignor\u00e9e. Vous pouvez reprendre quand vous voulez.'
       });
     });
     input.addEventListener('keydown', function (e) {
