@@ -75,7 +75,9 @@
     reset_progress: 'Progr\u00e8s r\u00e9initialis\u00e9.',
     trigger_effect: 'Effet lanc\u00e9.',
     point_at: 'Section montr\u00e9e.',
-    set_agent_name: 'Nom de l\'assistant mis \u00e0 jour.'
+    set_agent_name: 'Nom de l\'assistant mis \u00e0 jour.',
+    set_agent_color: 'Couleur de l\'assistant mise \u00e0 jour.',
+    set_agent_personality: 'Personnalit\u00e9 de l\'assistant mise \u00e0 jour.'
   };
 
   var POINT_SECTIONS = [
@@ -361,6 +363,10 @@
     if (actions[0].tool === 'set_statut') return 'Changer le statut';
     if (actions[0].tool === 'set_project') return 'Lier au projet';
     if (actions[0].tool === 'set_agent_name') return 'Changer mon nom';
+    if (actions[0].tool === 'set_agent_color') return 'Changer ma couleur';
+    if (actions[0].tool === 'set_agent_personality') {
+      return 'Changer ma personnalit\u00e9';
+    }
     if (actions[0].tool === 'trigger_effect') {
       var fx =
         actions[0].args &&
