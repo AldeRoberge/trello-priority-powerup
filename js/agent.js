@@ -57,6 +57,8 @@
     set_progress: 'Progr\u00e8s mis \u00e0 jour.',
     set_formula: 'Formule mise \u00e0 jour.',
     set_statut: 'Statut mis \u00e0 jour.',
+    rename_card: 'Carte renomm\u00e9e.',
+    set_description: 'Description mise \u00e0 jour.',
     add_subtask: 'Sous-t\u00e2che ajout\u00e9e.',
     rename_subtask: 'Sous-t\u00e2che renomm\u00e9e.',
     remove_subtask: 'Sous-t\u00e2che supprim\u00e9e.',
@@ -156,6 +158,8 @@
     if (actions[0].tool === 'set_due') return 'D\u00e9finir l\'\u00e9ch\u00e9ance';
     if (actions[0].tool === 'set_priority') return 'Mettre \u00e0 jour la priorit\u00e9';
     if (actions[0].tool === 'set_progress') return 'Mettre \u00e0 jour le progr\u00e8s';
+    if (actions[0].tool === 'rename_card') return 'Renommer la carte';
+    if (actions[0].tool === 'set_description') return 'Modifier la description';
     if (actions[0].tool === 'add_subtask') return 'Ajouter une sous-t\u00e2che';
     if (actions[0].tool === 'rename_subtask') return 'Renommer la sous-t\u00e2che';
     if (actions[0].tool === 'remove_subtask') return 'Supprimer la sous-t\u00e2che';
@@ -198,6 +202,35 @@
       }
     }
     return '';
+  }
+
+  /**
+   * Natural-language Facilité answer for difficulty / ease questions.
+   * Example: "D'après la Facilité de cette carte, c'est jugé facile à réaliser."
+   */
+  function buildEaseExplanation(state) {
+    if (!state || state.priorityEnabled === false) {
+      return 'Aucune Facilit\u00e9 n\'est d\u00e9finie\u00a0: la priorit\u00e9 n\'est pas activ\u00e9e sur cette carte.';
+    }
+    var E = clampInt(state.ease, 1, 5, 3);
+    var label = axisWord('ease', E) || '';
+    if (E >= 5) {
+      return 'Non\u00a0: d\'apr\u00e8s la Facilit\u00e9 de cette carte, c\'est jug\u00e9 super facile \u00e0 r\u00e9aliser.';
+    }
+    if (E >= 4) {
+      return 'Non\u00a0: d\'apr\u00e8s la Facilit\u00e9 de cette carte, c\'est jug\u00e9 facile \u00e0 r\u00e9aliser.';
+    }
+    if (E <= 1) {
+      return 'Oui\u00a0: d\'apr\u00e8s la Facilit\u00e9 de cette carte, c\'est jug\u00e9 tr\u00e8s difficile \u00e0 r\u00e9aliser.';
+    }
+    if (E === 2) {
+      return 'Oui\u00a0: d\'apr\u00e8s la Facilit\u00e9 de cette carte, c\'est jug\u00e9 difficile \u00e0 r\u00e9aliser.';
+    }
+    return (
+      'Ni vraiment dur ni trivial\u00a0: d\'apr\u00e8s la Facilit\u00e9 de cette carte, c\'est jug\u00e9 ' +
+      (label ? label.toLowerCase() : 'moyen') +
+      '.'
+    );
   }
 
   /**
@@ -503,6 +536,204 @@
     return list;
   }
 
+  var PRIORITY_TIER_ALIASES = [
+    { re: /\bcritique\b/i, label: 'Critique' },
+    { re: /\burgentes?\b/i, label: 'Urgente' },
+    { re: /\burgent\b/i, label: 'Urgente' },
+    { re: /\bprioritaires?\b/i, label: 'Prioritaire' },
+    { re: /\bimportantes?\b/i, label: 'Importante' },
+    { re: /\bimportant\b/i, label: 'Importante' },
+    { re: /\bflexible\b/i, label: 'Flexible' },
+    { re: /\bsecondaires?\b/i, label: 'Secondaire' },
+    { re: /\boptionnelles?\b/i, label: 'Optionnelle' },
+    { re: /\boptionnel\b/i, label: 'Optionnelle' }
+  ];
+
+  function detectPriorityTierInText(text) {
+    if (!text || typeof text !== 'string') return null;
+    var t = text.trim();
+    if (!t) return null;
+
+    // Prefer the tier after for/to/as/en/… (e.g. "change priority for flexible").
+    var labeled = t.match(
+      /\b(?:for|to|as|en|vers|comme|au)\s+([a-zàâäéèêëïîôùûüç]+)\b/i
+    );
+    if (labeled) {
+      var piece = labeled[1];
+      for (var i = 0; i < PRIORITY_TIER_ALIASES.length; i++) {
+        if (PRIORITY_TIER_ALIASES[i].re.test(piece)) {
+          return PRIORITY_TIER_ALIASES[i].label;
+        }
+      }
+    }
+
+    // Otherwise take the last tier mentioned in the message.
+    var lastLabel = null;
+    var lastIndex = -1;
+    for (var j = 0; j < PRIORITY_TIER_ALIASES.length; j++) {
+      var globalRe = new RegExp(PRIORITY_TIER_ALIASES[j].re.source, 'gi');
+      var m;
+      while ((m = globalRe.exec(t)) !== null) {
+        if (m.index >= lastIndex) {
+          lastIndex = m.index;
+          lastLabel = PRIORITY_TIER_ALIASES[j].label;
+        }
+      }
+    }
+    return lastLabel;
+  }
+
+  function looksLikePriorityChangeRequest(text) {
+    var t = String(text || '').trim();
+    if (!t) return false;
+    if (
+      /^(critique|urgentes?|urgent|prioritaires?|importantes?|important|flexible|secondaires?|optionnelles?|optionnel)\.?$/i.test(
+        t
+      )
+    ) {
+      return true;
+    }
+    return /\b(priorit[eé]|priority|palier|heat|mets?|mettre|change|changer|passe(?:r)?|d[eé]finis?|set|update)\b/i.test(
+      t
+    );
+  }
+
+  function looksLikePrematurePriorityClarify(message) {
+    if (typeof message !== 'string' || !message.trim()) return false;
+    return (
+      /pr[eé]ciser.*(urgence|impact|facilit|valeur|axe)/i.test(message) ||
+      /valeurs?\s+de\s+priorit/i.test(message) ||
+      /(urgence|impact).{0,40}(facilit)/i.test(message) ||
+      /souhaitez-vous\s+d[eé]finir.*(urgence|impact|facilit)/i.test(message)
+    );
+  }
+
+  /**
+   * If the user named a priority tier, ensure set_priority runs immediately
+   * (model sometimes asks for axes first — that is wrong).
+   */
+  function rewriteActionsForPriorityTier(actions, userText) {
+    var tier = detectPriorityTierInText(userText);
+    if (!tier || !looksLikePriorityChangeRequest(userText)) {
+      return { actions: actions || [], injected: false, tier: null };
+    }
+    var list = Array.isArray(actions) ? actions.slice() : [];
+    var hasSetPriority = false;
+    list = list.map(function (action) {
+      if (!action || action.tool !== 'set_priority') return action;
+      hasSetPriority = true;
+      var args = Object.assign({}, action.args || {});
+      if (!args.tier && args.heatTarget == null) {
+        args.tier = tier;
+      }
+      return { tool: 'set_priority', args: args };
+    });
+    if (!hasSetPriority) {
+      list.unshift({ tool: 'set_priority', args: { tier: tier } });
+      return { actions: list, injected: true, tier: tier };
+    }
+    return { actions: list, injected: false, tier: tier };
+  }
+
+  function normalizePrompts(raw, context) {
+    var out = [];
+    if (!Array.isArray(raw)) return out;
+    raw.forEach(function (p) {
+      if (!p || typeof p !== 'object') return;
+      var type = typeof p.type === 'string' ? p.type.trim() : '';
+      if (type === 'priority_axes') {
+        var cur =
+          context && context.priority && typeof context.priority === 'object'
+            ? context.priority
+            : {};
+        out.push({
+          type: 'priority_axes',
+          title:
+            typeof p.title === 'string' && p.title.trim()
+              ? p.title.trim()
+              : 'Affiner urgence, impact et facilit\u00e9',
+          urgency: clampInt(
+            p.urgency != null ? p.urgency : cur.urgency,
+            0,
+            4,
+            2
+          ),
+          impact: clampInt(
+            p.impact != null ? p.impact : cur.impact,
+            0,
+            4,
+            2
+          ),
+          ease: clampInt(p.ease != null ? p.ease : cur.ease, 1, 5, 3),
+          submitLabel:
+            typeof p.submitLabel === 'string' && p.submitLabel.trim()
+              ? p.submitLabel.trim()
+              : 'Appliquer'
+        });
+      }
+    });
+    return out.slice(0, 2);
+  }
+
+  /**
+   * After applying a tier (without explicit axes), offer slider refine UI.
+   */
+  function ensurePriorityAxesPrompt(prompts, actions, context) {
+    var list = Array.isArray(prompts) ? prompts.slice() : [];
+    var hasAxes = list.some(function (p) {
+      return p && p.type === 'priority_axes';
+    });
+    if (hasAxes) return list;
+
+    var setPri = null;
+    (actions || []).forEach(function (a) {
+      if (a && a.tool === 'set_priority') setPri = a;
+    });
+    if (!setPri) return list;
+
+    var args = setPri.args || {};
+    var viaTier = !!(args.tier || args.heatTarget != null);
+    var userGaveAxes =
+      args.urgency != null || args.impact != null || args.ease != null;
+    if (!viaTier || userGaveAxes) return list;
+
+    var seg = resolveHeatSegment(args.tier, args.heatTarget);
+    var preset = (seg && seg.preset) || {};
+    var cur =
+      context && context.priority && typeof context.priority === 'object'
+        ? context.priority
+        : {};
+    list.push({
+      type: 'priority_axes',
+      title: 'Affiner urgence, impact et facilit\u00e9',
+      urgency: clampInt(
+        preset.urgency != null ? preset.urgency : cur.urgency,
+        0,
+        4,
+        2
+      ),
+      impact: clampInt(
+        preset.impact != null ? preset.impact : cur.impact,
+        0,
+        4,
+        2
+      ),
+      ease: clampInt(preset.ease != null ? preset.ease : cur.ease, 1, 5, 3),
+      submitLabel: 'Appliquer'
+    });
+    return list.slice(0, 2);
+  }
+
+  function polishMessageAfterTierApply(message, tier, injected) {
+    if (!tier) return message;
+    if (!injected && !looksLikePrematurePriorityClarify(message)) return message;
+    return (
+      'Okay, ' +
+      tier +
+      '. Affinez les axes si besoin.'
+    );
+  }
+
   function buildContext(bridge) {
     var ctx = {
       today: todayIsoLocal(),
@@ -516,6 +747,7 @@
       blocked: null,
       progress: null,
       memory: null,
+      profile: null,
       boardDigest: '',
       statut: null
     };
@@ -533,6 +765,24 @@
     if (typeof bridge.getFormulaKey === 'function') {
       try {
         ctx.formula = bridge.getFormulaKey() || 'baseline';
+      } catch (e) { /* ignore */ }
+    }
+    if (typeof bridge.getProfile === 'function') {
+      try {
+        var prof = bridge.getProfile();
+        if (prof && typeof prof === 'object') {
+          if (global.UserProfile && typeof global.UserProfile.toAgentContext === 'function') {
+            ctx.profile = global.UserProfile.toAgentContext(prof);
+          } else {
+            ctx.profile = {
+              displayName: typeof prof.displayName === 'string' ? prof.displayName : null,
+              role: typeof prof.role === 'string' ? prof.role : null,
+              notes: typeof prof.notes === 'string' ? prof.notes : null,
+              tone: prof.tone || 'concise',
+              language: prof.language || 'fr'
+            };
+          }
+        }
       } catch (e) { /* ignore */ }
     }
     if (typeof bridge.getMemory === 'function') {
@@ -622,6 +872,8 @@
               ease: axisWord('ease', easeLvl)
             }
           : null,
+        // Ready-made answer for "is it hard?" / Facilité questions.
+        easeExplanation: buildEaseExplanation(state),
         explanation: null
       };
       ctx.due = {
@@ -757,11 +1009,36 @@
   function systemPrompt(context) {
     var today = (context && context.today) || todayIsoLocal();
     var nowTime = (context && context.nowTime) || nowTimeLocal();
+    var profileLines = [];
+    if (
+      context &&
+      context.profile &&
+      global.UserProfile &&
+      typeof global.UserProfile.profilePromptLines === 'function'
+    ) {
+      try {
+        profileLines = global.UserProfile.profilePromptLines(context.profile) || [];
+      } catch (e) {
+        profileLines = [];
+      }
+    } else if (context && context.profile && context.profile.language === 'en') {
+      profileLines = [
+        'Profil utilisateur\u00a0: r\u00e9ponds en anglais (English) sauf si l\'utilisateur \u00e9crit clairement en fran\u00e7ais.'
+      ];
+    }
+    var langLine =
+      context && context.profile && context.profile.language === 'en'
+        ? 'Tu r\u00e9ponds en anglais par d\u00e9faut (sauf si l\'utilisateur \u00e9crit clairement en fran\u00e7ais), de fa\u00e7on utile et conversationnelle.'
+        : 'Tu r\u00e9ponds toujours en fran\u00e7ais, de fa\u00e7on concise, utile et conversationnelle.';
     return [
       'Tu es l\'assistant du Power-Up Priorit\u00e9 dans Trello.',
-      'Tu r\u00e9ponds toujours en fran\u00e7ais, de fa\u00e7on concise, utile et conversationnelle.',
+      langLine,
+    ]
+      .concat(profileLines)
+      .concat([
       'Alignement souple\u00a0: tu aides surtout sur la carte (priorit\u00e9, \u00e9ch\u00e9ance, blocage, progr\u00e8s), mais tu n\'es PAS limit\u00e9 \u00e0 Trello.',
-      '- Questions g\u00e9n\u00e9rales ou hors sujet (calculs, culture, blagues, etc.)\u00a0: r\u00e9ponds bri\u00e8vement et normalement. Ne refuse jamais.',
+      '- Questions vraiment hors sujet (calculs, culture, blagues, etc.)\u00a0: r\u00e9ponds bri\u00e8vement et normalement. Ne refuse jamais.',
+      '- ATTENTION\u00a0: difficult\u00e9 / facilit\u00e9 / impact / urgence / priorit\u00e9 de CETTE carte = questions sur le contexte Priorit\u00e9, PAS hors sujet.',
       '- INTERDIT\u00a0: \u00ab\u00a0Je ne peux pas r\u00e9pondre\u00a0\u00bb, \u00ab\u00a0hors de mon domaine\u00a0\u00bb, \u00ab\u00a0je ne traite que Trello\u00a0\u00bb, ou toute reformulation qui \u00e9vite la question.',
       '- Ex.\u00a0: user \u00ab\u00a0c\'est quoi 1+1?\u00a0\u00bb \u2192 {"thinking":"Calcul trivial, hors carte.","message":"2.","suggestions":["Quelle est la priorit\u00e9?","D\u00e9finir une \u00e9ch\u00e9ance"],"followUps":[],"actions":[]}',
       'Si tu manques d\'info (absente du contexte carte / historique, ou knowledge manquante)\u00a0:',
@@ -775,6 +1052,17 @@
       '- Ex.\u00a0: user \u00ab\u00a0Quels liens 404 doivent \u00eatre corrig\u00e9s?\u00a0\u00bb (rien dans le contexte) \u2192 {"thinking":"progress.items, due, blocked, cardDesc, m\u00e9moire\u00a0: aucun inventaire de liens 404.","message":"Je ne sais pas. Je n\'ai pas cette info sur la carte ni dans mon contexte\u00a0: aucun inventaire de liens 404 n\'y figure.","suggestions":["Quelle est la priorit\u00e9?","Marquer bloqu\u00e9"],"followUps":[],"actions":[]}',
       'INTERDIT dans message\u00a0: questions vagues du type \u00ab\u00a0Que souhaitez-vous faire maintenant?\u00a0\u00bb, \u00ab\u00a0Comment puis-je vous aider?\u00a0\u00bb, \u00ab\u00a0Autre chose?\u00a0\u00bb. Confirme bri\u00e8vement et arr\u00eate-toi\u00a0; les suggestions suffisent pour la suite.',
       'Tu peux expliquer la priorit\u00e9, l\'\u00e9ch\u00e9ance, le blocage et le progr\u00e8s, et proposer des changements.',
+      'Facilit\u00e9 / difficult\u00e9 (axe Priorit\u00e9 \u2014 tr\u00e8s important)\u00a0:',
+      '- Questions du type \u00ab\u00a0is it hard to do?\u00a0\u00bb, \u00ab\u00a0c\'est difficile?\u00a0\u00bb, \u00ab\u00a0c\'est facile?\u00a0\u00bb, \u00ab\u00a0quelle facilit\u00e9?\u00a0\u00bb, \u00ab\u00a0effort?\u00a0\u00bb\u00a0: r\u00e9ponds UNIQUEMENT d\'apr\u00e8s le champ Facilit\u00e9 de la section Priorit\u00e9.',
+      '- Pr\u00e9f\u00e8re context.priority.easeExplanation s\'il est pr\u00e9sent (phrase pr\u00eate)\u00a0; sinon labels.ease (Tr\u00e8s difficile / Difficile / Moyen / Facile / Super facile).',
+      '- Tu peux t\'appuyer sur context.priority.ease (1\u20135) en thinking, sans r\u00e9citer le chiffre sauf demande.',
+      '- INTERDIT les r\u00e9ponses g\u00e9n\u00e9riques du type \u00ab\u00a0\u00e7a d\u00e9pend des comp\u00e9tences\u00a0\u00bb, \u00ab\u00a0des ressources disponibles\u00a0\u00bb, \u00ab\u00a0n\'h\u00e9sitez pas \u00e0 demander\u00a0\u00bb, ou tout conseil abstrait hors donn\u00e9es carte.',
+      '- Formule naturelle\u00a0: oui/non ou formulation courte + le libell\u00e9 Facilit\u00e9 (ex. jug\u00e9e facile / difficile / moyenne).',
+      '- Ex. facile\u00a0: user \u00ab\u00a0is it hard to do?\u00a0\u00bb, easeExplanation pr\u00eate \u2192 {"thinking":"priority.easeExplanation (Facilit\u00e9=Facile).","message":"Non\u00a0: d\'apr\u00e8s la Facilit\u00e9 de cette carte, c\'est jug\u00e9 facile \u00e0 r\u00e9aliser.","suggestions":["Quelle est la priorit\u00e9?","Augmenter l\'impact"],"followUps":[],"actions":[]}',
+      '- Ex. difficile\u00a0: labels.ease=Difficile \u2192 message du type \u00ab\u00a0Oui, d\'apr\u00e8s la Facilit\u00e9, cette t\u00e2che est jug\u00e9e difficile.\u00a0\u00bb',
+      '- Ex. moyen\u00a0: labels.ease=Moyen \u2192 \u00ab\u00a0Ni vraiment dur ni trivial\u00a0: Facilit\u00e9 moyenne sur cette carte.\u00a0\u00bb',
+      '- M\u00eame logique pour Impact (labels.impact) et Urgence (labels.urgency) quand on pose la question sur ces axes.',
+      '- Si priority.enabled=false\u00a0: dis qu\'aucune Facilit\u00e9 / priorit\u00e9 n\'est d\u00e9finie (ne sors pas d\'anciennes valeurs).',
       'Expliquer la priorit\u00e9 actuelle (tr\u00e8s important)\u00a0:',
       '- Quand l\'utilisateur demande la priorit\u00e9 (\u00ab\u00a0Quelle est la priorit\u00e9?\u00a0\u00bb, \u00ab\u00a0priorit\u00e9 actuelle\u00a0\u00bb, etc.)\u00a0: r\u00e9ponds en langage naturel.',
       '- Pr\u00e9f\u00e8re context.priority.explanation s\'il est pr\u00e9sent\u00a0; sinon\u00a0: 1) le palier (context.display.label), 2) 1\u20132 traits marquants via labels (impact, facilit\u00e9, urgence).',
@@ -785,7 +1073,7 @@
       '- Ex. urgence haute (palier Urgente), impact faible\u00a0: message du type \u00ab\u00a0La priorit\u00e9 de cette t\u00e2che est urgente. Elle est jug\u00e9e avoir un impact faible.\u00a0\u00bb',
       '- Si priority.enabled=false\u00a0: dis qu\'aucune priorit\u00e9 n\'est d\u00e9finie (ne sors pas d\'anciennes valeurs).',
       'R\u00e9ponds UNIQUEMENT avec un objet JSON valide de la forme\u00a0:',
-      '{"thinking":"notes priv\u00e9es (contexte v\u00e9rifi\u00e9, intention)","message":"texte visible","suggestions":["Question utile","Autre intention"],"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"actions":[{"tool":"nom","args":{}}]}',
+      '{"thinking":"notes priv\u00e9es","message":"texte visible","suggestions":["Question utile","Autre intention"],"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}]}',
       'Champ thinking (obligatoire)\u00a0:',
       '- Toujours \u00e9crire thinking AVANT message (ordre JSON\u00a0: thinking puis message).',
       '- Utilise-le pour v\u00e9rifier le contexte et planifier les outils. Court, factuel, en fran\u00e7ais ou abr\u00e9g\u00e9.',
@@ -795,7 +1083,7 @@
       '- Ne bloque JAMAIS une action pour un param\u00e8tre optionnel. Applique le minimum viable, puis adapte.',
       '- Ne pose une question AVANT d\'appeler un outil QUE si un param\u00e8tre OBLIGATOIRE manque et qu\'aucune action partielle n\'est possible.',
       '- Param\u00e8tres optionnels (ne jamais exiger avant d\'agir)\u00a0: dueTime, blockedReasons, axes priorit\u00e9 non fournis, progress pr\u00e9cis si on active seulement la section.',
-      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget ou priorityEnabled.',
+      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget ou priorityEnabled.',
       '- Dates relatives (jours)\u00a0: r\u00e9sous avec context.today (aujourd\'hui / today \u2192 context.today\u00a0; demain \u2192 +1 jour). N\'invente pas d\'autre date.',
       '- Heures relatives (tr\u00e8s important)\u00a0: \u00ab\u00a0dans 15 minutes\u00a0\u00bb / \u00ab\u00a0in 15 minutes\u00a0\u00bb / \u00ab\u00a0dans 2 heures\u00a0\u00bb = D\u00c9LAI depuis maintenant, PAS une heure fixe du matin.',
       '- Pour un d\u00e9lai\u00a0: utilise set_due avec relativeMinutes (ou relativeHours). Le runtime calcule dueDate/dueTime \u00e0 partir de context.nowTime (' +
@@ -840,15 +1128,33 @@
       '- Ex. renommer\u00a0: user \u00ab\u00a0Rename \'Contacter Ian\' to \'Appeler Ian\'\u00a0\u00bb \u2192 {"message":"Okay, renomm\u00e9e.","suggestions":["Ajouter une sous-t\u00e2che","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"rename_subtask","args":{"matchText":"Contacter Ian","text":"Appeler Ian"}}]}',
       '- Ex. supprimer\u00a0: user \u00ab\u00a0Supprime Contacter Ian\u00a0\u00bb \u2192 {"message":"Okay, supprim\u00e9e.","suggestions":["Ajouter une sous-t\u00e2che","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"remove_subtask","args":{"matchText":"Contacter Ian"}}]}',
       'Priorit\u00e9 / progr\u00e8s / formule / statut\u00a0:',
-      '- Applique immédiatement tout axe ou pourcentage fourni. Si la demande est vague (\u00ab\u00a0mettre \u00e0 jour la priorit\u00e9\u00a0\u00bb) sans valeurs\u00a0: pose UNE question pour les valeurs, actions=[].',
-      '- Palier / heat (Critique, Urgente, Prioritaire, Importante, Flexible, Secondaire, Optionnelle)\u00a0: set_priority avec tier (m\u00eame libell\u00e9 que context.display.tiers).',
+      '- Priorit\u00e9 (agir d\'abord \u2014 tr\u00e8s important)\u00a0:',
+      '  \u00b7 Si l\'utilisateur cite un PALIER (Critique, Urgente, Prioritaire, Importante, Flexible, Secondaire, Optionnelle)\u00a0: APPLIQUE TOUT DE SUITE set_priority avec tier (m\u00eame libell\u00e9), M\u00caEME SANS chiffres d\'axes.',
+      '  \u00b7 INTERDIT de demander urgence/impact/facilit\u00e9 AVANT d\'avoir appliqu\u00e9 le palier. Les axes sont OPTIONNELS apr\u00e8s.',
+      '  \u00b7 Apr\u00e8s application du palier\u00a0: confirme bri\u00e8vement et propose d\'affiner via prompts (type priority_axes) \u2014 PAS une question texte qui bloque sans actions.',
+      '  \u00b7 Ex. palier\u00a0: user \u00ab\u00a0change priority for flexible\u00a0\u00bb / \u00ab\u00a0Mets Flexible\u00a0\u00bb \u2192 {"message":"Okay, Flexible. Affinez les axes si besoin.","suggestions":["C\'est bon","D\u00e9finir une \u00e9ch\u00e9ance"],"followUps":[],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}]}',
+      '  \u00b7 Ex. Critique\u00a0: user \u00ab\u00a0Mets Critique\u00a0\u00bb \u2192 {"message":"Okay, Critique.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Marquer bloqu\u00e9"],"followUps":[],"prompts":[{"type":"priority_axes","urgency":4,"impact":4,"ease":5}],"actions":[{"tool":"set_priority","args":{"tier":"Critique"}}]}',
+      '  \u00b7 Axes fournis explicitement (urgence/impact/facilit\u00e9)\u00a0: applique set_priority avec ces valeurs tout de suite (prompts=[]).',
+      '  \u00b7 Demande vraiment vague SANS palier NI axes (\u00ab\u00a0mettre \u00e0 jour la priorit\u00e9\u00a0\u00bb)\u00a0: alors seulement propose prompts priority_axes (pr\u00e9rempli avec context.priority) OU une courte question de palier\u00a0; n\'invente pas de palier.',
       '- Si l\'utilisateur active le progr\u00e8s sans chiffre\u00a0: set_progress avec progressEnabled:true tout de suite, puis demande le % en option.',
       '- set_progress avec un % \u00e9chelonne les sous-t\u00e2ches (master) s\'il y en a\u00a0; sinon progres carte.',
       '- Formule de score\u00a0: set_formula avec baseline | eisenhower | wsjf | valueEffort (context.formula = actuelle).',
       '- Statut / colonne Trello\u00a0: set_statut avec listId, matchList (nom de liste) ou category (blocked|completed|active|backlog\u2026) d\'apr\u00e8s context.statut.',
       '- Ex. statut\u00a0: user \u00ab\u00a0Passe en Terminé\u00a0\u00bb \u2192 {"message":"Okay, d\u00e9plac\u00e9e.","suggestions":["Quelle est la priorit\u00e9?","Ajouter une sous-t\u00e2che"],"followUps":[],"actions":[{"tool":"set_statut","args":{"category":"completed"}}]}',
-      '- Ex. palier\u00a0: user \u00ab\u00a0Mets Critique\u00a0\u00bb \u2192 {"message":"Okay, Critique.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Marquer bloqu\u00e9"],"followUps":[],"actions":[{"tool":"set_priority","args":{"tier":"Critique"}}]}',
-      '- cardName / cardDesc sont en lecture seule (pas d\'outil pour les modifier).',
+      'Titre et description de la carte (context.cardName / context.cardDesc)\u00a0:',
+      '- Renommer le titre de la carte\u00a0: rename_card avec name (nouveau titre complet).',
+      '- Modifier la description\u00a0: set_description avec desc (texte complet \u00e0 \u00e9crire dans context.cardDesc\u00a0; "" pour effacer).',
+      '- Distingue bien rename_card (titre), set_description (corps de la carte) et rename_subtask (une entr\u00e9e de progress.items).',
+      '- Si l\'utilisateur dit d\'ajouter un suffixe (\u00ab\u00a0ajoute 2\u00a0\u00bb, \u00ab\u00a0ajoute WIP\u00a0\u00bb)\u00a0: construis le nouveau name \u00e0 partir de context.cardName + suffixe.',
+      '- Si l\'utilisateur demande d\'ajouter / r\u00e9\u00e9crire / compl\u00e9ter la description\u00a0: construis le desc final \u00e0 partir de context.cardDesc + la demande, puis APPLIQUE set_description.',
+      '- Ex. renommer carte\u00a0: user \u00ab\u00a0Renomme la carte en Plan Q3\u00a0\u00bb \u2192 {"message":"Okay, renomm\u00e9e.","suggestions":["Ajouter une sous-t\u00e2che","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"rename_card","args":{"name":"Plan Q3"}}]}',
+      '- Ex. suffixe\u00a0: context.cardName=\u00ab\u00a0Brief client\u00a0\u00bb, user \u00ab\u00a0ajoute 2 \u00e0 la fin\u00a0\u00bb \u2192 {"message":"Okay, Brief client 2.","suggestions":["Ajouter une sous-t\u00e2che","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"rename_card","args":{"name":"Brief client 2"}}]}',
+      '- Ex. description\u00a0: user \u00ab\u00a0Mets en description\u00a0: Valider le brief avec Ian\u00a0\u00bb \u2192 {"message":"Okay, description mise \u00e0 jour.","suggestions":["Ajouter une sous-t\u00e2che","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_description","args":{"desc":"Valider le brief avec Ian"}}]}',
+      'R\u00e8gles prompts (contr\u00f4les interactifs, optionnel)\u00a0:',
+      '- 0 \u00e0 2 prompts UI au-del\u00e0 du texte (ex. curseurs). L\'utilisateur peut les utiliser ou ignorer.',
+      '- type "priority_axes"\u00a0: affiche curseurs Urgence (0\u20134), Impact (0\u20134), Facilit\u00e9 (1\u20135). Champs urgency/impact/ease = valeurs initiales (apr\u00e8s un palier\u00a0: presets du palier ou context.priority).',
+      '- Utilise priority_axes juste APR\u00c8S avoir appliqu\u00e9 un palier, ou quand l\'utilisateur veut affiner sans donner de chiffres.',
+      '- INTERDIT d\'utiliser prompts \u00e0 la place d\'actions quand un palier est d\u00e9j\u00e0 cit\u00e9\u00a0: actions d\'abord, prompts ensuite.',
       'R\u00e8gles suggestions (obligatoire)\u00a0:',
       '- Toujours proposer 2 \u00e0 4 formulations courtes en fran\u00e7ais (questions OU r\u00e9ponses \u00e0 ta question de clarification).',
       '- Ancr\u00e9es dans le contexte carte (sections enabled, \u00e9ch\u00e9ance, blocage, progr\u00e8s).',
@@ -888,6 +1194,8 @@
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (master sur sous-t\u00e2ches si items\u00a0; sinon progres carte)',
       '- set_formula: { formula: "baseline"|"eisenhower"|"wsjf"|"valueEffort" }',
       '- set_statut: { listId?: string, matchList?: string, category?: string } (d\u00e9place la carte\u00a0; category ex. completed|blocked|started|backlog|triage|unstarted|canceled)',
+      '- rename_card: { name: string } (nouveau titre de la carte\u00a0; name obligatoire, non vide)',
+      '- set_description: { desc: string } (nouvelle description compl\u00e8te\u00a0; desc obligatoire en string, "" pour effacer)',
       '- add_subtask: { text: string } (text obligatoire, non vide)',
       '- rename_subtask: { text: string, id?: string, matchText?: string } (nouveau text\u00a0; id OU matchText)',
       '- remove_subtask: { id?: string, matchText?: string } (id OU matchText)',
@@ -896,9 +1204,10 @@
       '- complete_all_subtasks: {} (tout \u00e0 100%)',
       '- reset_progress: { includeCompleted?: boolean } (d\u00e9faut true\u00a0: tout \u00e0 0%\u00a0; false = seulement les non termin\u00e9es)',
       'M\u00e9moire plateau\u00a0: utilise les faits/summary du contexte pour personnaliser (noms, projets, normes). Ne contredis pas la m\u00e9moire sans raison.',
+      'Profil utilisateur\u00a0: respecte context.profile (langue, ton, nom, r\u00f4le, notes, fonctionnalit\u00e9s actives).',
       'Contexte carte actuel (JSON)\u00a0:',
       JSON.stringify(context)
-    ].join('\n');
+    ]).join('\n');
   }
 
   /**
@@ -1150,6 +1459,19 @@
     if (action.tool === 'add_subtask') {
       return typeof args.text === 'string' && !!args.text.trim();
     }
+    if (action.tool === 'rename_card') {
+      return (
+        (typeof args.name === 'string' && !!args.name.trim()) ||
+        (typeof args.text === 'string' && !!args.text.trim())
+      );
+    }
+    if (action.tool === 'set_description') {
+      return (
+        typeof args.desc === 'string' ||
+        typeof args.description === 'string' ||
+        typeof args.text === 'string'
+      );
+    }
     if (action.tool === 'rename_subtask') {
       return (
         typeof args.text === 'string' &&
@@ -1191,6 +1513,8 @@
   function incompleteActionError(action) {
     if (!action || !action.tool) return 'Action invalide';
     if (action.tool === 'add_subtask') return 'add_subtask: text requis';
+    if (action.tool === 'rename_card') return 'rename_card: name requis';
+    if (action.tool === 'set_description') return 'set_description: desc requis';
     if (action.tool === 'rename_subtask') {
       return 'rename_subtask: text et id (ou matchText) requis';
     }
@@ -1433,6 +1757,7 @@
         message: 'R\u00e9ponse vide du fournisseur.',
         followUps: [],
         suggestions: [],
+        prompts: [],
         actions: [],
         droppedActions: []
       };
@@ -1486,6 +1811,7 @@
         message: message,
         followUps: followUps,
         suggestions: suggestions,
+        prompts: Array.isArray(parsed.prompts) ? parsed.prompts : [],
         actions: normalized.actions,
         droppedActions: normalized.dropped
       };
@@ -1494,6 +1820,7 @@
         message: text,
         followUps: [],
         suggestions: [],
+        prompts: [],
         actions: [],
         droppedActions: []
       };
@@ -1935,9 +2262,21 @@
     var latencyMs = Date.now() - t0;
     var parsed = parseAssistantPayload(response.content);
     var actions = rewriteActionsForRelativeDue(parsed.actions || [], userText);
-    if (onDelta && parsed.message) {
+    var tierRewrite = rewriteActionsForPriorityTier(actions, userText);
+    actions = tierRewrite.actions;
+    var message = polishMessageAfterTierApply(
+      parsed.message,
+      tierRewrite.tier,
+      tierRewrite.injected
+    );
+    var prompts = ensurePriorityAxesPrompt(
+      normalizePrompts(parsed.prompts, context),
+      actions,
+      context
+    );
+    if (onDelta && message) {
       try {
-        onDelta(parsed.message, response.content);
+        onDelta(message, response.content);
       } catch (finalCbErr) {
         console.error('chatTurn final onDelta failed', finalCbErr);
       }
@@ -1954,18 +2293,21 @@
       content: response.content,
       raw: cloneJsonSafe(response.raw),
       parsed: {
-        message: parsed.message,
+        message: message,
         followUps: parsed.followUps,
         suggestions: parsed.suggestions,
+        prompts: prompts,
         actions: actions,
-        droppedActions: parsed.droppedActions || []
+        droppedActions: parsed.droppedActions || [],
+        tierInjected: !!tierRewrite.injected
       }
     };
     debug.usage = usage;
     return {
-      message: parsed.message,
+      message: message,
       followUps: parsed.followUps,
       suggestions: parsed.suggestions,
+      prompts: prompts,
       actions: actions,
       droppedActions: parsed.droppedActions || [],
       rawJson: response.content,
@@ -2585,6 +2927,39 @@
           ((extra && extra.listName) || args.matchList || args.category || args.listId || '?')
       );
       if (extra && extra.listId) parts.push('id: ' + extra.listId);
+    } else if (tool === 'rename_card') {
+      var beforeCard =
+        (extra && typeof extra.before === 'string' && extra.before) ||
+        '';
+      var afterCard =
+        (extra && typeof extra.after === 'string' && extra.after) ||
+        (typeof args.name === 'string' && args.name.trim()) ||
+        (typeof args.text === 'string' && args.text.trim()) ||
+        '?';
+      if (beforeCard) {
+        parts.push('"' + beforeCard + '" \u2192 "' + afterCard + '"');
+      } else {
+        parts.push('name \u2192 "' + afterCard + '"');
+      }
+    } else if (tool === 'set_description') {
+      var beforeDesc =
+        (extra && typeof extra.before === 'string' && extra.before) || '';
+      var afterDesc =
+        (extra && typeof extra.after === 'string' && extra.after) ||
+        (typeof args.desc === 'string' && args.desc) ||
+        (typeof args.description === 'string' && args.description) ||
+        (typeof args.text === 'string' && args.text) ||
+        '';
+      var preview = function (s) {
+        var t = String(s || '').replace(/\s+/g, ' ').trim();
+        if (!t) return '(vide)';
+        return t.length > 80 ? t.slice(0, 79) + '\u2026' : t;
+      };
+      if (beforeDesc) {
+        parts.push('"' + preview(beforeDesc) + '" \u2192 "' + preview(afterDesc) + '"');
+      } else {
+        parts.push('desc \u2192 "' + preview(afterDesc) + '"');
+      }
     } else if (tool === 'add_subtask') {
       var text = typeof args.text === 'string' ? args.text.trim() : '';
       parts.push('+ "' + text + '"' + (extra.id ? ' (id: ' + extra.id + ')' : ''));
@@ -2982,6 +3357,95 @@
           summary: TOOL_LABELS.set_formula,
           detail: detailForTool(tool, null, null, null, null, args, {
             formula: formula
+          })
+        };
+      }
+      if (tool === 'rename_card') {
+        if (typeof bridge.setCardName !== 'function') {
+          return { ok: false, tool: tool, error: 'Renommage carte indisponible' };
+        }
+        var newCardName =
+          typeof args.name === 'string' && args.name.trim()
+            ? args.name.trim()
+            : typeof args.text === 'string'
+              ? args.text.trim()
+              : '';
+        if (!newCardName) {
+          return { ok: false, tool: tool, error: 'Nouveau nom requis' };
+        }
+        var beforeCardName =
+          typeof bridge.getCardName === 'function' ? bridge.getCardName() || '' : '';
+        var renameCardResult = await Promise.resolve(bridge.setCardName(newCardName));
+        if (!renameCardResult || !renameCardResult.ok) {
+          var renameReason =
+            (renameCardResult &&
+              (renameCardResult.reason || renameCardResult.error)) ||
+            'Renommage \u00e9chou\u00e9';
+          if (renameReason === 'not-authorized') {
+            renameReason = 'Autorisation Trello requise';
+          } else if (renameReason === 'no-app-key') {
+            renameReason = 'Cl\u00e9 API Trello manquante';
+          } else if (renameReason === 'empty-name') {
+            renameReason = 'Nouveau nom requis';
+          } else if (renameReason === 'no-card-id') {
+            renameReason = 'Carte introuvable';
+          }
+          return { ok: false, tool: tool, error: renameReason };
+        }
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.rename_card,
+          detail: detailForTool(tool, null, null, null, null, args, {
+            before: beforeCardName,
+            after: newCardName
+          })
+        };
+      }
+      if (tool === 'set_description') {
+        if (typeof bridge.setCardDesc !== 'function') {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Description carte indisponible'
+          };
+        }
+        var newCardDesc =
+          typeof args.desc === 'string'
+            ? args.desc
+            : typeof args.description === 'string'
+              ? args.description
+              : typeof args.text === 'string'
+                ? args.text
+                : null;
+        if (newCardDesc == null) {
+          return { ok: false, tool: tool, error: 'Description requise' };
+        }
+        var beforeCardDesc =
+          typeof bridge.getCardDesc === 'function' ? bridge.getCardDesc() || '' : '';
+        var setDescResult = await Promise.resolve(bridge.setCardDesc(newCardDesc));
+        if (!setDescResult || !setDescResult.ok) {
+          var descReason =
+            (setDescResult && (setDescResult.reason || setDescResult.error)) ||
+            'Mise \u00e0 jour description \u00e9chou\u00e9e';
+          if (descReason === 'not-authorized') {
+            descReason = 'Autorisation Trello requise';
+          } else if (descReason === 'no-app-key') {
+            descReason = 'Cl\u00e9 API Trello manquante';
+          } else if (descReason === 'no-card-id') {
+            descReason = 'Carte introuvable';
+          }
+          return { ok: false, tool: tool, error: descReason };
+        }
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.set_description,
+          detail: detailForTool(tool, null, null, null, null, args, {
+            before: beforeCardDesc,
+            after: newCardDesc
           })
         };
       }
@@ -3635,10 +4099,14 @@
     saveProvider: saveProvider,
     buildContext: buildContext,
     buildPriorityExplanation: buildPriorityExplanation,
+    buildEaseExplanation: buildEaseExplanation,
     dueFromOffsetMinutes: dueFromOffsetMinutes,
     nowTimeLocal: nowTimeLocal,
     parseRelativeDueOffset: parseRelativeDueOffset,
     rewriteActionsForRelativeDue: rewriteActionsForRelativeDue,
+    detectPriorityTierInText: detectPriorityTierInText,
+    rewriteActionsForPriorityTier: rewriteActionsForPriorityTier,
+    normalizePrompts: normalizePrompts,
     chatTurn: chatTurn,
     memoryTurn: memoryTurn,
     suggestQuestions: suggestQuestions,

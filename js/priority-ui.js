@@ -3903,7 +3903,7 @@
       label.appendChild(checkbox);
       head.appendChild(label);
     } else if (leadingIcon) {
-      // Keep title columns aligned with checkbox sections (22px enable slot).
+      // Keep title columns aligned with checkbox sections (18px enable slot).
       var enableSpacer = document.createElement('span');
       enableSpacer.className = 'section-enable-spacer';
       enableSpacer.setAttribute('aria-hidden', 'true');
@@ -4015,8 +4015,12 @@
       var wasHidden = !!body.hidden;
       if (chrome.checkbox) {
         chrome.checkbox.checked = enabled;
+        // Always-on sections keep a checked, clickable-looking checkbox that cannot turn off.
         chrome.checkbox.disabled = alwaysEnabled ? false : !enableAllowed;
-        if (!enableAllowed) {
+        if (alwaysEnabled) {
+          chrome.checkbox.title = 'Toujours activ\u00e9';
+          chrome.checkbox.setAttribute('aria-disabled', 'true');
+        } else if (!enableAllowed) {
           chrome.checkbox.title = lockedHint;
           chrome.checkbox.setAttribute('aria-disabled', 'true');
         } else {
@@ -4143,14 +4147,14 @@
       chrome.checkbox.addEventListener('click', function (event) {
         // Keep enable clicks from bubbling into any header handlers.
         event.stopPropagation();
-        if (!enableAllowed) {
+        if (alwaysEnabled || !enableAllowed) {
           event.preventDefault();
           chrome.checkbox.checked = enabled;
         }
       });
 
       chrome.checkbox.addEventListener('change', function () {
-        if (!enableAllowed) {
+        if (alwaysEnabled || !enableAllowed) {
           chrome.checkbox.checked = enabled;
           return;
         }
@@ -4656,6 +4660,8 @@
   function createInfoField(config) {
     var el = config.el;
     var onLayoutChange = config.onLayoutChange || function () {};
+    var onTitleChange =
+      typeof config.onTitleChange === 'function' ? config.onTitleChange : null;
     var onDescChange =
       typeof config.onDescChange === 'function' ? config.onDescChange : null;
     var onAuthorize =
@@ -4670,12 +4676,17 @@
     var dueLabel = typeof config.dueLabel === 'string' ? config.dueLabel : '';
     var blockedLabel = typeof config.blockedLabel === 'string' ? config.blockedLabel : '';
     var blockedOn = !!config.blockedOn;
+    var titleDirty = false;
+    var titleSaveTimer = null;
+    var titleBusy = false;
     var descDirty = false;
     var descSaveTimer = null;
     var descBusy = false;
+    var descSpellcheckGen = 0;
+    var descSpellcheckedText = descText.trim() || null;
     var authBusy = false;
     var authReason = config.authReason || '';
-    var DESC_SAVE_MS = 450;
+    var FIELD_SAVE_MS = 450;
 
     var field = document.createElement('div');
     field.className = 'field field--info is-enabled';
@@ -4683,7 +4694,8 @@
     var chrome = createCollapsibleEnableChrome({
       title: 'Information',
       bodyId: bodyId,
-      hideEnable: true,
+      checkboxClass: 'info-enable-checkbox',
+      labelClass: 'info-enable-label',
       leadingIcon: 'ti-info-circle',
       iconClass: 'info-leading-icon',
       titleClass: 'info-enable-title',
@@ -4704,7 +4716,16 @@
 
       var label = document.createElement('div');
       label.className = 'info-row-label';
-      label.textContent = labelText;
+      if (options.icon) {
+        var labelIcon = document.createElement('i');
+        labelIcon.className = 'ti ' + options.icon + ' info-row-icon';
+        labelIcon.setAttribute('aria-hidden', 'true');
+        label.appendChild(labelIcon);
+      }
+      var labelTextEl = document.createElement('span');
+      labelTextEl.className = 'info-row-label-text';
+      labelTextEl.textContent = labelText;
+      label.appendChild(labelTextEl);
 
       var value = document.createElement('div');
       value.className = 'info-row-value';
@@ -4732,18 +4753,39 @@
     }
 
     // ── Title ──────────────────────────────────────────────────────────
-    var titleRow = makeRow('title', 'Titre');
-    var titleEl = document.createElement('p');
-    titleEl.className = 'tp-priority-card-name is-loading';
-    titleEl.id = 'cardName';
-    titleEl.setAttribute('aria-live', 'polite');
-    titleEl.textContent = titleText || 'Chargement\u2026';
-    if (titleText) titleEl.classList.remove('is-loading');
-    titleRow.value.appendChild(titleEl);
+    var titleRow = makeRow('title', 'Titre', { icon: 'ti-heading' });
+    var titleWrap = document.createElement('div');
+    titleWrap.className = 'info-title-wrap';
+
+    var titleInput = document.createElement('textarea');
+    titleInput.className = 'info-title-input';
+    titleInput.id = 'cardName';
+    titleInput.rows = 1;
+    titleInput.setAttribute('aria-label', 'Titre de la carte');
+    titleInput.setAttribute('aria-live', 'polite');
+    titleInput.placeholder = 'Titre de la carte';
+    if (titleText) {
+      titleInput.value = titleText;
+    } else {
+      titleInput.classList.add('is-loading');
+      titleInput.value = 'Chargement\u2026';
+      titleInput.readOnly = true;
+    }
+
+    var titleMeta = document.createElement('div');
+    titleMeta.className = 'info-desc-meta';
+    var titleStatus = document.createElement('span');
+    titleStatus.className = 'info-desc-status';
+    titleStatus.setAttribute('aria-live', 'polite');
+    titleMeta.appendChild(titleStatus);
+
+    titleWrap.appendChild(titleInput);
+    titleWrap.appendChild(titleMeta);
+    titleRow.value.appendChild(titleWrap);
     body.appendChild(titleRow.row);
 
     // ── Description ────────────────────────────────────────────────────
-    var descRow = makeRow('desc', 'Description');
+    var descRow = makeRow('desc', 'Description', { icon: 'ti-notes' });
     var descWrap = document.createElement('div');
     descWrap.className = 'info-desc-wrap';
 
@@ -4753,13 +4795,20 @@
     descInput.rows = 3;
     descInput.placeholder = 'Ajouter une description\u2026';
     descInput.setAttribute('aria-label', 'Description de la carte');
+    descInput.setAttribute('spellcheck', 'false');
     descInput.value = descText;
 
     var descMeta = document.createElement('div');
     descMeta.className = 'info-desc-meta';
+    var descSpellSpinner = document.createElement('span');
+    descSpellSpinner.className = 'info-desc-spinner';
+    descSpellSpinner.hidden = true;
+    descSpellSpinner.setAttribute('aria-hidden', 'true');
+    descSpellSpinner.innerHTML = '<i class="ti ti-loader-2" aria-hidden="true"></i>';
     var descStatus = document.createElement('span');
     descStatus.className = 'info-desc-status';
     descStatus.setAttribute('aria-live', 'polite');
+    descMeta.appendChild(descSpellSpinner);
     descMeta.appendChild(descStatus);
 
     var authBox = document.createElement('div');
@@ -4781,7 +4830,7 @@
     body.appendChild(descRow.row);
 
     // ── Assignees ──────────────────────────────────────────────────────
-    var membersRow = makeRow('members', 'Assign\u00e9s');
+    var membersRow = makeRow('members', 'Assign\u00e9s', { icon: 'ti-users' });
     var membersEl = document.createElement('div');
     membersEl.className = 'info-members';
     membersEl.setAttribute('aria-label', 'Membres assign\u00e9s');
@@ -4789,19 +4838,28 @@
     body.appendChild(membersRow.row);
 
     // ── Priority / Due / Blocked (recap) ───────────────────────────────
-    var priorityRow = makeRow('priority', 'Priorit\u00e9', { interactive: true });
+    var priorityRow = makeRow('priority', 'Priorit\u00e9', {
+      interactive: true,
+      icon: 'ti-flame'
+    });
     var priorityValueEl = document.createElement('span');
     priorityValueEl.className = 'info-recap-text';
     priorityRow.value.appendChild(priorityValueEl);
     body.appendChild(priorityRow.row);
 
-    var dueRow = makeRow('due', '\u00c9ch\u00e9ance', { interactive: true });
+    var dueRow = makeRow('due', '\u00c9ch\u00e9ance', {
+      interactive: true,
+      icon: 'ti-calendar'
+    });
     var dueValueEl = document.createElement('span');
     dueValueEl.className = 'info-recap-text';
     dueRow.value.appendChild(dueValueEl);
     body.appendChild(dueRow.row);
 
-    var blockedRow = makeRow('blocked', 'Bloqu\u00e9', { interactive: true });
+    var blockedRow = makeRow('blocked', 'Bloqu\u00e9', {
+      interactive: true,
+      icon: 'ti-barrier-block'
+    });
     var blockedValueEl = document.createElement('span');
     blockedValueEl.className = 'info-recap-text';
     blockedRow.value.appendChild(blockedValueEl);
@@ -4820,19 +4878,31 @@
       }
       if (authReason === 'no-app-key') {
         authHint.textContent =
-          'Enregistrement de la description indisponible (cl\u00e9 d\u2019app manquante).';
+          'Enregistrement du titre et de la description indisponible (cl\u00e9 d\u2019app manquante).';
         authBtn.hidden = true;
       } else {
         authHint.textContent =
-          'Autorisez Trello pour enregistrer la description sur la carte.';
+          'Autorisez Trello pour enregistrer le titre et la description sur la carte.';
         authBtn.hidden = !onAuthorize;
       }
+    }
+
+    function setTitleStatus(text, kind) {
+      titleStatus.textContent = text || '';
+      titleStatus.classList.toggle('is-error', kind === 'error');
+      titleStatus.classList.toggle('is-ok', kind === 'ok');
     }
 
     function setDescStatus(text, kind) {
       descStatus.textContent = text || '';
       descStatus.classList.toggle('is-error', kind === 'error');
       descStatus.classList.toggle('is-ok', kind === 'ok');
+    }
+
+    function syncTitleInputSize() {
+      titleInput.style.height = 'auto';
+      var next = Math.max(titleInput.scrollHeight, 28);
+      titleInput.style.height = Math.min(next, 96) + 'px';
     }
 
     function memberDisplayName(member) {
@@ -4951,7 +5021,7 @@
     }
 
     function summaryText() {
-      if (titleText && !titleEl.classList.contains('is-loading')) {
+      if (titleText && !titleInput.classList.contains('is-loading')) {
         return titleText;
       }
       var bits = [];
@@ -4959,6 +5029,147 @@
       if (dueLabel) bits.push(dueLabel);
       if (blockedOn) bits.push(blockedLabel || 'Bloqu\u00e9');
       return bits.join(' \u00b7 ');
+    }
+
+    function flushTitleSave() {
+      if (titleSaveTimer) {
+        clearTimeout(titleSaveTimer);
+        titleSaveTimer = null;
+      }
+      if (!onTitleChange || !titleDirty || titleBusy) return Promise.resolve();
+      var next = (titleInput.value || '').trim();
+      if (!next) {
+        // Trello titles cannot be empty — restore last saved value.
+        titleInput.value = titleText || '';
+        titleDirty = false;
+        setTitleStatus('Le titre ne peut pas \u00eatre vide', 'error');
+        syncTitleInputSize();
+        onLayoutChange();
+        return Promise.resolve({ ok: false, reason: 'empty-name', changed: false });
+      }
+      if (next === titleText) {
+        titleDirty = false;
+        titleInput.value = next;
+        syncTitleInputSize();
+        return Promise.resolve({ ok: true, changed: false, name: next });
+      }
+      titleBusy = true;
+      setTitleStatus('Enregistrement\u2026');
+      return Promise.resolve(onTitleChange(next))
+        .then(function (result) {
+          titleBusy = false;
+          if (result && result.ok === false) {
+            if (result.reason === 'not-authorized' || result.reason === 'no-app-key') {
+              setAuthHint(result.reason);
+              setTitleStatus('', 'error');
+            } else if (result.reason === 'empty-name') {
+              setTitleStatus('Le titre ne peut pas \u00eatre vide', 'error');
+            } else {
+              setTitleStatus('\u00c9chec de l\u2019enregistrement', 'error');
+            }
+            return result;
+          }
+          titleDirty = false;
+          titleText = next;
+          titleInput.value = next;
+          setAuthHint('');
+          setTitleStatus('Enregistr\u00e9', 'ok');
+          collapse.refreshSummary();
+          setTimeout(function () {
+            if (titleStatus.textContent === 'Enregistr\u00e9') setTitleStatus('');
+          }, 1400);
+          syncTitleInputSize();
+          onLayoutChange();
+          return result;
+        })
+        .catch(function (err) {
+          titleBusy = false;
+          console.error('Info title save failed', err);
+          setTitleStatus('\u00c9chec de l\u2019enregistrement', 'error');
+        });
+    }
+
+    function scheduleTitleSave() {
+      titleDirty = true;
+      setTitleStatus('');
+      if (titleSaveTimer) clearTimeout(titleSaveTimer);
+      titleSaveTimer = setTimeout(function () {
+        titleSaveTimer = null;
+        flushTitleSave();
+      }, FIELD_SAVE_MS);
+    }
+
+    function setDescSpellchecking(on) {
+      descSpellSpinner.hidden = !on;
+      descInput.classList.toggle('is-spellchecking', !!on);
+      if (on) descInput.setAttribute('aria-busy', 'true');
+      else descInput.removeAttribute('aria-busy');
+    }
+
+    function spellcheckDescText(text) {
+      var trimmed = typeof text === 'string' ? text.trim() : '';
+      if (!trimmed) return Promise.resolve('');
+      if (
+        typeof global.Spellcheck === 'undefined' ||
+        typeof global.Spellcheck.correct !== 'function'
+      ) {
+        return Promise.resolve(trimmed);
+      }
+      return global.Spellcheck.correct(trimmed).then(
+        function (corrected) {
+          return typeof corrected === 'string' ? corrected.trim() : trimmed;
+        },
+        function () {
+          return trimmed;
+        }
+      );
+    }
+
+    /**
+     * Save first (never blocked). Then AI may refine orthography in the background;
+     * apply only if the field is unchanged since this check started.
+     */
+    function spellcheckDescAfterCommit() {
+      if (
+        typeof global.Spellcheck === 'undefined' ||
+        typeof global.Spellcheck.correct !== 'function'
+      ) {
+        return;
+      }
+      var snapshot = descInput.value;
+      var trimmed = snapshot.trim();
+      if (!trimmed) {
+        descSpellcheckedText = snapshot;
+        setDescSpellchecking(false);
+        return;
+      }
+      if (trimmed === descSpellcheckedText) return;
+      var gen = ++descSpellcheckGen;
+      setDescSpellchecking(true);
+      onLayoutChange();
+      spellcheckDescText(snapshot).then(function (corrected) {
+        if (gen !== descSpellcheckGen) return;
+        setDescSpellchecking(false);
+        if (!corrected || corrected === trimmed) {
+          descSpellcheckedText = trimmed;
+          onLayoutChange();
+          return;
+        }
+        // User edited again while we were checking — discard this correction.
+        if (descInput.value !== snapshot) {
+          onLayoutChange();
+          return;
+        }
+        descInput.value = corrected;
+        descSpellcheckedText = corrected.trim();
+        descDirty = true;
+        onLayoutChange();
+        flushDescSave();
+      }).catch(function () {
+        if (gen !== descSpellcheckGen) return;
+        setDescSpellchecking(false);
+        onLayoutChange();
+      });
     }
 
     function flushDescSave() {
@@ -4980,6 +5191,13 @@
             } else {
               setDescStatus('\u00c9chec de l\u2019enregistrement', 'error');
             }
+            return result;
+          }
+          // Spellcheck (or typing) may have changed the field while this save ran.
+          if (descInput.value !== next) {
+            descText = next;
+            descDirty = true;
+            scheduleDescSave();
             return result;
           }
           descDirty = false;
@@ -5005,15 +5223,36 @@
       descSaveTimer = setTimeout(function () {
         descSaveTimer = null;
         flushDescSave();
-      }, DESC_SAVE_MS);
+      }, FIELD_SAVE_MS);
     }
 
+    titleInput.addEventListener('input', function () {
+      if (titleInput.classList.contains('is-loading')) return;
+      scheduleTitleSave();
+      syncTitleInputSize();
+      onLayoutChange();
+    });
+    titleInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        titleInput.blur();
+      }
+    });
+    titleInput.addEventListener('blur', function () {
+      flushTitleSave();
+    });
+
     descInput.addEventListener('input', function () {
+      // Invalidate in-flight spellcheck so a stale correction cannot overwrite new typing.
+      descSpellcheckGen += 1;
+      setDescSpellchecking(false);
       scheduleDescSave();
       onLayoutChange();
     });
     descInput.addEventListener('blur', function () {
+      // Persist immediately; spellcheck runs async with a small spinner.
       flushDescSave();
+      spellcheckDescAfterCommit();
     });
 
     authBtn.addEventListener('click', function () {
@@ -5023,6 +5262,9 @@
       Promise.resolve(onAuthorize())
         .then(function () {
           setAuthHint('');
+          return flushTitleSave();
+        })
+        .then(function () {
           return flushDescSave();
         })
         .catch(function (err) {
@@ -5051,22 +5293,34 @@
     renderMembers();
     renderRecap();
     setAuthHint(authReason);
+    syncTitleInputSize();
     collapse.refreshSummary();
 
     return {
       field: field,
-      setTitle: function (name) {
-        titleText = typeof name === 'string' ? name : '';
+      setTitle: function (name, options) {
+        options = options || {};
+        var value = typeof name === 'string' ? name : '';
+        if (titleDirty && !options.force) return;
+        if (document.activeElement === titleInput && !options.force) return;
+        titleText = value;
+        titleInput.readOnly = false;
+        titleInput.classList.remove('is-loading');
         if (titleText) {
-          titleEl.textContent = titleText;
-          titleEl.title = titleText;
-          titleEl.classList.remove('is-loading');
+          titleInput.value = titleText;
+          titleInput.title = titleText;
         } else {
-          titleEl.textContent = 'Carte';
-          titleEl.title = '';
-          titleEl.classList.remove('is-loading');
+          titleInput.value = '';
+          titleInput.title = '';
+          titleInput.placeholder = 'Titre de la carte';
         }
+        titleDirty = false;
+        syncTitleInputSize();
         collapse.refreshSummary();
+      },
+      getTitle: function () {
+        if (titleInput.classList.contains('is-loading')) return titleText || '';
+        return (titleInput.value || '').trim() || titleText || '';
       },
       setDesc: function (next, options) {
         options = options || {};
@@ -5074,8 +5328,11 @@
         if (descDirty && !options.force) return;
         descText = value;
         if (document.activeElement === descInput && !options.force) return;
+        descSpellcheckGen += 1;
+        setDescSpellchecking(false);
         descInput.value = value;
         descDirty = false;
+        descSpellcheckedText = value.trim() || null;
       },
       getDesc: function () {
         return descInput.value;
@@ -5098,6 +5355,7 @@
         setAuthHint(reason || '');
         onLayoutChange();
       },
+      flushTitle: flushTitleSave,
       flushDesc: flushDescSave,
       refreshSummary: function () {
         collapse.refreshSummary();
@@ -5134,7 +5392,9 @@
                 : []
           )
         : [];
-    var reasonSpellcheckBusy = false;
+    // reasonKey → generation; stale AI responses are ignored when gen no longer matches.
+    var reasonSpellcheckPending = Object.create(null);
+    var reasonSpellcheckGen = 0;
 
     function spellcheckReasonText(text) {
       var trimmed = normalizeBlockedReason(text);
@@ -5153,6 +5413,62 @@
         },
         function () {
           return trimmed;
+        }
+      );
+    }
+
+    function isReasonSpellchecking(reason) {
+      var key = reasonKey(reason);
+      return !!(key && reasonSpellcheckPending[key]);
+    }
+
+    function markReasonSpellchecking(reason) {
+      var key = reasonKey(reason);
+      if (!key) return 0;
+      reasonSpellcheckGen += 1;
+      reasonSpellcheckPending[key] = reasonSpellcheckGen;
+      return reasonSpellcheckGen;
+    }
+
+    function clearReasonSpellchecking(reason, gen) {
+      var key = reasonKey(reason);
+      if (!key) return;
+      if (gen != null && reasonSpellcheckPending[key] !== gen) return;
+      delete reasonSpellcheckPending[key];
+    }
+
+    function applySpellcheckCorrection(original, corrected, gen) {
+      var key = reasonKey(original);
+      if (!key || reasonSpellcheckPending[key] !== gen) return;
+      clearReasonSpellchecking(original, gen);
+      var finalText = normalizeBlockedReason(corrected) || original;
+      if (finalText !== original && hasReason(original)) {
+        renameReason(original, finalText);
+      } else {
+        refreshSelected();
+        onLayoutChange();
+      }
+    }
+
+    /** Show the reason immediately, then swap in AI spelling fixes when ready. */
+    function spellcheckAfterCommit(original) {
+      var typed = normalizeBlockedReason(original);
+      if (!typed || !hasReason(typed)) return;
+      if (
+        typeof global.Spellcheck === 'undefined' ||
+        typeof global.Spellcheck.correct !== 'function'
+      ) {
+        return;
+      }
+      var gen = markReasonSpellchecking(typed);
+      refreshSelected();
+      onLayoutChange();
+      spellcheckReasonText(typed).then(
+        function (corrected) {
+          applySpellcheckCorrection(typed, corrected, gen);
+        },
+        function () {
+          applySpellcheckCorrection(typed, typed, gen);
         }
       );
     }
@@ -5349,6 +5665,7 @@
     function removeReason(value) {
       var key = reasonKey(value);
       if (!key) return;
+      clearReasonSpellchecking(value);
       var next = [];
       for (var i = 0; i < currentReasons.length; i++) {
         if (reasonKey(currentReasons[i]) !== key) next.push(currentReasons[i]);
@@ -5427,6 +5744,8 @@
         finishReasonEdit(true);
       }
 
+      clearReasonSpellchecking(reason);
+
       var chip = null;
       var chips = selectedWrap.querySelectorAll('.blocked-reason-chip:not(.blocked-subtask-chip)');
       for (var c = 0; c < chips.length; c++) {
@@ -5442,9 +5761,13 @@
       var clearBtn = chip.querySelector('.blocked-reason-chip-clear');
       if (!textEl || !clearBtn) return;
 
+      chip.classList.remove('is-spellchecking');
+      chip.removeAttribute('aria-busy');
       chip.classList.add('is-editing');
       textEl.hidden = true;
       if (editBtn) editBtn.hidden = true;
+      var pendingSpinner = chip.querySelector('.blocked-reason-chip-spinner');
+      if (pendingSpinner) pendingSpinner.remove();
 
       var input = document.createElement('input');
       input.type = 'text';
@@ -5478,17 +5801,20 @@
           return;
         }
         var rawValue = input.value;
-        input.disabled = true;
-        input.classList.add('is-spellchecking');
-        doneBtn.disabled = true;
-        spellcheckReasonText(rawValue).then(function (corrected) {
-          if (corrected && corrected !== input.value.trim()) {
-            input.value = corrected;
-          }
-          renameReason(reason, corrected || rawValue);
-        }).catch(function () {
-          renameReason(reason, rawValue);
-        });
+        var pending = normalizeBlockedReason(rawValue);
+        if (!pending) {
+          refreshSelected();
+          onLayoutChange();
+          return;
+        }
+        // Commit immediately; spellcheck may refine orthography asynchronously.
+        // Skip spellcheck when renaming onto an existing chip (merge/drop).
+        var mergingIntoExisting =
+          reasonKey(pending) !== reasonKey(reason) && hasReason(pending);
+        renameReason(reason, pending);
+        if (!mergingIntoExisting && hasReason(pending)) {
+          spellcheckAfterCommit(pending);
+        }
       }
       finishReasonEdit = finish;
 
@@ -5577,6 +5903,15 @@
           });
 
           chip.appendChild(text);
+          if (isReasonSpellchecking(reason)) {
+            chip.classList.add('is-spellchecking');
+            chip.setAttribute('aria-busy', 'true');
+            var spinner = document.createElement('span');
+            spinner.className = 'blocked-reason-chip-spinner';
+            spinner.setAttribute('aria-hidden', 'true');
+            spinner.innerHTML = '<i class="ti ti-loader-2" aria-hidden="true"></i>';
+            chip.appendChild(spinner);
+          }
           chip.appendChild(editBtn);
           chip.appendChild(clearBtn);
           selectedWrap.appendChild(chip);
@@ -5811,25 +6146,16 @@
     reasonInput.addEventListener('keydown', function (event) {
       if (event.key !== 'Enter') return;
       event.preventDefault();
-      if (reasonSpellcheckBusy) return;
       var typed = normalizeBlockedReason(reasonInput.value);
       if (!typed) return;
-      reasonSpellcheckBusy = true;
-      reasonInput.disabled = true;
-      reasonInput.classList.add('is-spellchecking');
-      spellcheckReasonText(typed).then(function (corrected) {
-        if (corrected && corrected !== reasonInput.value.trim()) {
-          reasonInput.value = corrected;
-        }
-        if (corrected) addReason(corrected);
-        reasonInput.value = '';
-        refreshSuggestions();
-      }).finally(function () {
-        reasonSpellcheckBusy = false;
-        reasonInput.disabled = false;
-        reasonInput.classList.remove('is-spellchecking');
-        reasonInput.focus();
-      });
+      // Ingest immediately so Enter never freezes on spellcheck.
+      reasonInput.value = '';
+      refreshSuggestions();
+      if (!hasReason(typed)) {
+        addReason(typed);
+        spellcheckAfterCommit(typed);
+      }
+      reasonInput.focus();
     });
 
     setBlockedReasons(
@@ -9282,6 +9608,30 @@
         if (enAttenteField && enAttenteField.refreshSubtasks) {
           enAttenteField.refreshSubtasks();
         }
+      },
+      /**
+       * Expand a named section and return its root element (for scroll/focus).
+       * Keys: 'priority' | 'due' | 'blocked'
+       */
+      openSection: function (key) {
+        var target = null;
+        if (key === 'priority') {
+          target = prioritySection;
+          if (priorityCollapse && priorityCollapse.setExpanded) {
+            priorityCollapse.setExpanded(true);
+          }
+        } else if (key === 'due') {
+          target = dueSection;
+          if (dueDateField && dueDateField.setExpanded) {
+            dueDateField.setExpanded(true);
+          }
+        } else if (key === 'blocked') {
+          target = blockedSection;
+          if (enAttenteField && enAttenteField.setExpanded) {
+            enAttenteField.setExpanded(true);
+          }
+        }
+        return target;
       },
       setProgressCompleteLock: setProgressCompleteLock,
       isProgressCompleteLock: function () {

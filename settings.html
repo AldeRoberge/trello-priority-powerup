@@ -100,7 +100,10 @@
   </details>
 
   <div class="tp-settings-footer">
-    <button type="button" class="tp-link" id="showGuide">Voir le guide de configuration</button>
+    <div class="tp-settings-footer-links">
+      <button type="button" class="tp-link" id="openProfile">Mon profil</button>
+      <button type="button" class="tp-link" id="showGuide">Voir le guide de configuration</button>
+    </div>
     <div class="tp-build-info" id="buildInfo">Build : chargement…</div>
   </div>
 
@@ -517,6 +520,16 @@
         .catch(function (err) {
           console.error('Priority REST authorize failed', err);
         });
+    });
+
+    document.getElementById('openProfile').addEventListener('click', function () {
+      t.modal({
+        title: 'Mon profil',
+        url: PriorityTrello.pageUrl('./profile.html'),
+        height: 640,
+        fullscreen: false,
+        accentColor: '#22272B',
+      });
     });
 
     document.getElementById('showGuide').addEventListener('click', () => {

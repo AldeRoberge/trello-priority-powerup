@@ -17,6 +17,7 @@ Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques
 - **Compatibilité** : les anciennes priorités P1–P5 sont lues pour l'affichage jusqu'à la prochaine sauvegarde
 - **Tri par colonne** : menu `…` d'une liste → **Trier par…** → **Priorité** (Critique en haut, cartes sans priorité en bas)
 - **Tri automatique** (optionnel) : après chaque changement de priorité, la carte se réordonne dans sa liste (nécessite clé API + autorisation OAuth ; voir ci-dessous)
+- **Profil** : préférences personnelles (identité, langue/ton de l’assistant, sections visibles dans l’éditeur), stockées en privé sur le compte Trello (`Mon profil`)
 
 ---
 
@@ -27,6 +28,7 @@ Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques
 | `index.html` | Connecteur Power-Up (iframe Trello + page d'accueil hors iframe) |
 | `popup.html` | Éditeur de priorité / progrès / agent |
 | `settings.html` | Paramètres du tableau (statut, infos, build, guide) |
+| `profile.html` | Profil membre (préférences, fonctionnalités, assistant) |
 | `welcome.html` | Modal d'accueil à l'activation du Power-Up |
 | `js/` | Modules JS (priorité, completion, statut, agent, config) |
 | `css/` | Styles (`trello-theme`, `priority-ui`, `agent-ui`) |

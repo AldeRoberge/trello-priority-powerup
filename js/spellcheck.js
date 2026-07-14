@@ -11,7 +11,8 @@
 
   var SYSTEM_PROMPT = [
     'Tu es un correcteur orthographique strict pour du fran\u00e7ais.',
-    'On te donne un court texte saisi par un utilisateur (sous-t\u00e2che, motif, message).',
+    'On te donne un texte saisi par un utilisateur (sous-t\u00e2che, motif, description, message).',
+    'Il peut faire une ligne ou plusieurs\u00a0; pr\u00e9serve les retours \u00e0 la ligne.',
     'R\u00e9ponds UNIQUEMENT avec un objet JSON\u00a0:',
     '{"corrected":"<texte>","changed":true|false,"certain":true|false}',
     '',
@@ -55,10 +56,18 @@
     var a = original.trim();
     var b = corrected.trim();
     if (!b || a === b) return false;
-    if (Math.abs(wordCount(a) - wordCount(b)) > 1) return false;
+    var words = wordCount(a);
+    // Allow a few more word-count shifts on longer texts (apostrophe splits, etc.).
+    var maxWordDelta = Math.max(1, Math.min(8, Math.floor(words / 20)));
+    if (Math.abs(words - wordCount(b)) > maxWordDelta) return false;
     var ratio = b.length / Math.max(a.length, 1);
     if (ratio < 0.7 || ratio > 1.45) return false;
     return true;
+  }
+
+  function maxTokensFor(text) {
+    // JSON wraps the full corrected string — scale with input length.
+    return Math.min(2500, Math.max(180, Math.ceil(String(text || '').length * 0.65) + 100));
   }
 
   function parsePayload(rawContent, original) {
@@ -124,7 +133,7 @@
         {
           temperature: 0,
           jsonMode: true,
-          max_tokens: 180,
+          max_tokens: maxTokensFor(original),
           stream: false
         }
       );

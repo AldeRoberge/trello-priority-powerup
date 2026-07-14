@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mon profil</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <script src="./js/rest-config.js"></script>
+  <script src="./js/priority-trello.js"></script>
+  <script src="./js/user-profile.js"></script>
+  <link rel="stylesheet" href="./css/trello-theme.css" />
+</head>
+<body class="tp-page tp-page--settings tp-page--profile">
+  <p class="tp-profile-intro">
+    Préférences personnelles enregistrées sur votre compte Trello.
+    Elles personnalisent l’éditeur de carte et l’assistant.
+  </p>
+
+  <details class="tp-settings-section" id="identitySection" open>
+    <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-user"></i></span>
+      <span class="tp-settings-summary-title">Identité</span>
+      <span class="tp-settings-summary-hint">Comment l’assistant s’adresse à vous</span>
+    </summary>
+    <div class="tp-settings-body">
+      <label class="tp-profile-field">
+        <span class="tp-profile-field-label">Prénom ou nom</span>
+        <input type="text" class="tp-input" id="profileDisplayName" maxlength="80" placeholder="ex. Alex" autocomplete="nickname" />
+      </label>
+      <label class="tp-profile-field">
+        <span class="tp-profile-field-label">Rôle</span>
+        <input type="text" class="tp-input" id="profileRole" maxlength="80" placeholder="ex. Chef de projet" autocomplete="organization-title" />
+      </label>
+      <label class="tp-profile-field">
+        <span class="tp-profile-field-label">Notes pour l’assistant</span>
+        <textarea class="tp-input tp-textarea" id="profileNotes" maxlength="400" rows="3" placeholder="ex. Préfère les échéances le vendredi, évite le jargon technique…"></textarea>
+      </label>
+    </div>
+  </details>
+
+  <details class="tp-settings-section" id="assistantPrefSection" open>
+    <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-message-chatbot"></i></span>
+      <span class="tp-settings-summary-title">Assistant</span>
+      <span class="tp-settings-summary-hint">Langue et ton des réponses</span>
+    </summary>
+    <div class="tp-settings-body">
+      <label class="tp-profile-field">
+        <span class="tp-profile-field-label">Langue</span>
+        <select id="profileLanguage" class="tp-select" aria-label="Langue de l’assistant"></select>
+      </label>
+      <label class="tp-profile-field">
+        <span class="tp-profile-field-label">Ton</span>
+        <select id="profileTone" class="tp-select" aria-label="Ton de l’assistant"></select>
+      </label>
+      <label class="tp-statut-toggle">
+        <input type="checkbox" id="profileAgentDebug" />
+        <span>Afficher les infos de débogage de l’assistant</span>
+      </label>
+    </div>
+  </details>
+
+  <details class="tp-settings-section" id="featuresSection" open>
+    <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-layout-navbar"></i></span>
+      <span class="tp-settings-summary-title">Fonctionnalités</span>
+      <span class="tp-settings-summary-hint">Sections visibles dans l’éditeur de carte</span>
+    </summary>
+    <div class="tp-settings-body">
+      <p class="tp-color-scheme-hint">Décochez ce que vous n’utilisez pas pour alléger l’éditeur. Au moins une section clé (priorité, progrès, échéance ou bloqué) reste active.</p>
+      <div class="tp-profile-features" id="profileFeatures" role="group" aria-label="Fonctionnalités de l’éditeur"></div>
+    </div>
+  </details>
+
+  <div class="tp-profile-actions">
+    <button type="button" class="tp-button" id="profileSave">Enregistrer</button>
+    <button type="button" class="tp-button tp-button--secondary" id="profileReset">Réinitialiser</button>
+  </div>
+  <p class="tp-profile-status" id="profileStatus" hidden></p>
+
+  <script>
+    PriorityTrello.initIframePage(function (t) {
+      var Profile = window.UserProfile;
+      if (!Profile) {
+        console.error('UserProfile missing');
+        return;
+      }
+
+      var featureChecks = {};
+      var statusEl = document.getElementById('profileStatus');
+      var saveTimer = null;
+
+      function resize() {
+        if (typeof t.sizeTo === 'function') {
+          t.sizeTo(document.body);
+        }
+      }
+
+      function setStatus(text, isError) {
+        if (!statusEl) return;
+        if (!text) {
+          statusEl.hidden = true;
+          statusEl.textContent = '';
+          return;
+        }
+        statusEl.hidden = false;
+        statusEl.textContent = text;
+        statusEl.classList.toggle('is-error', !!isError);
+        resize();
+      }
+
+      function fillSelect(selectEl, keys, labels, current) {
+        selectEl.replaceChildren();
+        keys.forEach(function (key) {
+          var opt = document.createElement('option');
+          opt.value = key;
+          opt.textContent = labels[key] || key;
+          if (key === current) opt.selected = true;
+          selectEl.appendChild(opt);
+        });
+      }
+
+      function renderFeatures(features) {
+        var wrap = document.getElementById('profileFeatures');
+        wrap.replaceChildren();
+        featureChecks = {};
+        Profile.FEATURE_KEYS.forEach(function (key) {
+          var label = document.createElement('label');
+          label.className = 'tp-statut-toggle';
+          var input = document.createElement('input');
+          input.type = 'checkbox';
+          input.checked = features[key] !== false;
+          input.dataset.feature = key;
+          featureChecks[key] = input;
+          label.appendChild(input);
+          var span = document.createElement('span');
+          span.textContent = Profile.FEATURE_LABELS[key] || key;
+          label.appendChild(span);
+          wrap.appendChild(label);
+        });
+      }
+
+      function readForm() {
+        var features = {};
+        Profile.FEATURE_KEYS.forEach(function (key) {
+          features[key] = featureChecks[key] ? !!featureChecks[key].checked : true;
+        });
+        return Profile.normalizeProfile({
+          displayName: document.getElementById('profileDisplayName').value,
+          role: document.getElementById('profileRole').value,
+          notes: document.getElementById('profileNotes').value,
+          language: document.getElementById('profileLanguage').value,
+          tone: document.getElementById('profileTone').value,
+          agentDebug: document.getElementById('profileAgentDebug').checked,
+          features: features
+        });
+      }
+
+      function writeForm(profile) {
+        var p = Profile.normalizeProfile(profile);
+        document.getElementById('profileDisplayName').value = p.displayName;
+        document.getElementById('profileRole').value = p.role;
+        document.getElementById('profileNotes').value = p.notes;
+        document.getElementById('profileAgentDebug').checked = p.agentDebug !== false;
+        fillSelect(
+          document.getElementById('profileLanguage'),
+          Profile.LANGUAGE_KEYS,
+          Profile.LANGUAGE_LABELS,
+          p.language
+        );
+        fillSelect(
+          document.getElementById('profileTone'),
+          Profile.TONE_KEYS,
+          Profile.TONE_LABELS,
+          p.tone
+        );
+        renderFeatures(p.features);
+        resize();
+      }
+
+      async function persist(showOk) {
+        try {
+          var saved = await Profile.save(t, readForm());
+          writeForm(saved);
+          if (showOk) setStatus('Profil enregistré.');
+          try {
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem(
+                'trello-priority-powerup/agent-debug-enabled',
+                saved.agentDebug ? '1' : '0'
+              );
+            }
+          } catch (e) { /* ignore */ }
+          return saved;
+        } catch (err) {
+          console.error('UserProfile.save failed', err);
+          setStatus('Enregistrement impossible.', true);
+          throw err;
+        }
+      }
+
+      function scheduleSave() {
+        setStatus('');
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(function () {
+          persist(true).catch(function () {});
+        }, 450);
+      }
+
+      document.getElementById('profileSave').addEventListener('click', function () {
+        persist(true).catch(function () {});
+      });
+
+      document.getElementById('profileReset').addEventListener('click', function () {
+        Profile.reset(t)
+          .then(function (blank) {
+            writeForm(blank);
+            try {
+              if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('trello-priority-powerup/agent-debug-enabled', '1');
+              }
+            } catch (e) { /* ignore */ }
+            setStatus('Profil réinitialisé.');
+          })
+          .catch(function (err) {
+            console.error('UserProfile.reset failed', err);
+            setStatus('Réinitialisation impossible.', true);
+          });
+      });
+
+      [
+        'profileDisplayName',
+        'profileRole',
+        'profileNotes',
+        'profileLanguage',
+        'profileTone',
+        'profileAgentDebug'
+      ].forEach(function (id) {
+        var el = document.getElementById(id);
+        el.addEventListener('change', scheduleSave);
+        if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+          el.addEventListener('input', scheduleSave);
+        }
+      });
+
+      document.getElementById('profileFeatures').addEventListener('change', scheduleSave);
+
+      Profile.load(t)
+        .then(writeForm)
+        .catch(function (err) {
+          console.error('UserProfile.load failed', err);
+          writeForm(Profile.emptyProfile());
+          setStatus('Chargement du profil impossible — valeurs par défaut.', true);
+        });
+    }).catch(function (err) {
+      console.error('Priority profile init failed', err);
+    });
+  </script>
+</body>
+</html>

@@ -7,11 +7,11 @@
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./css/trello-theme.css?v=info-panel-1" />
-  <link rel="stylesheet" href="./css/priority-ui.css?v=info-panel-1" />
-  <link rel="stylesheet" href="./css/agent-ui.css?v=section-icons-1" />
+  <link rel="stylesheet" href="./css/priority-ui.css?v=info-title-edit-1" />
+  <link rel="stylesheet" href="./css/agent-ui.css?v=pending-skeleton-1" />
   <script src="./js/rest-config.js"></script>
   <script src="./js/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./js/priority-ui.js?v=info-panel-1"></script>
+  <script src="./js/priority-ui.js?v=info-enable-cb-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
@@ -24,8 +24,9 @@
   <script src="./js/completion-trello.js?v=progress-due-complete-1"></script>
   <script src="./js/agent.js?v=agent-3"></script>
   <script src="./js/agent-memory.js?v=memory-1"></script>
-  <script src="./js/spellcheck.js?v=spellcheck-1"></script>
-  <script src="./js/agent-ui.js?v=section-icons-1"></script>
+  <script src="./js/user-profile.js?v=profile-1"></script>
+  <script src="./js/spellcheck.js?v=spellcheck-2"></script>
+  <script src="./js/agent-ui.js?v=pending-skeleton-1"></script>
 </head>
 <body class="tp-page tp-page--priority">
   <div class="compare-page">
@@ -56,6 +57,7 @@
     let infoSection = null;
     let cardDesc = '';
     let cachedMemory = null;
+    let cachedProfile = null;
     let boardDigestCache = '';
 
     t.render(function () {
@@ -146,11 +148,29 @@
       var el = document.getElementById('cardName');
       if (!el) return;
       var label = name || 'Carte';
-      el.textContent = label;
-      el.title = name ? name : '';
-      el.classList.remove('is-loading');
-      el.removeAttribute('hidden');
+      if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+        el.value = label;
+        el.readOnly = false;
+        el.classList.remove('is-loading');
+      } else {
+        el.textContent = label;
+        el.title = name ? name : '';
+        el.classList.remove('is-loading');
+        el.removeAttribute('hidden');
+      }
       resizePopup();
+    }
+
+    function readCardNameLabel() {
+      if (infoUi && typeof infoUi.getTitle === 'function') {
+        return infoUi.getTitle() || '';
+      }
+      var el = document.getElementById('cardName');
+      if (!el || el.classList.contains('is-loading')) return '';
+      if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+        return (el.value || '').trim();
+      }
+      return (el.textContent || '').trim();
     }
 
     function syncInfoRecap() {
@@ -203,15 +223,20 @@
     }
 
     function jumpToSection(key) {
+      if (!variant) return;
       var target = null;
-      if (key === 'priority') {
-        target = variant && variant.card && variant.card.querySelector('.variant-priority-section');
-      } else if (key === 'due') {
-        target = variant && variant.card && variant.card.querySelector('.variant-due-section');
-      } else if (key === 'blocked') {
-        target = variant && variant.card && variant.card.querySelector('.variant-blocked-section');
+      if (typeof variant.openSection === 'function') {
+        target = variant.openSection(key);
+      } else if (variant.card) {
+        if (key === 'priority') {
+          target = variant.card.querySelector('.variant-priority-section');
+        } else if (key === 'due') {
+          target = variant.card.querySelector('.variant-due-section');
+        } else if (key === 'blocked') {
+          target = variant.card.querySelector('.variant-blocked-section');
+        }
       }
-      if (!target) return;
+      if (!target || target.hidden) return;
       setTimeout(function () {
         try {
           target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -257,6 +282,16 @@
         onJump: jumpToSection,
         onAuthorize: function () {
           return PriorityTrello.authorizeRestForAutoSort(t);
+        },
+        onTitleChange: function (nextTitle) {
+          var next = typeof nextTitle === 'string' ? nextTitle.trim() : '';
+          if (!next) {
+            return Promise.resolve({ ok: false, reason: 'empty-name', changed: false });
+          }
+          return PriorityTrello.setCardName(t, next).then(function (result) {
+            if (result && result.ok === false) return result;
+            return { ok: true, name: next, changed: !!(result && result.changed) };
+          });
         },
         onDescChange: function (nextDesc) {
           cardDesc = typeof nextDesc === 'string' ? nextDesc : '';
@@ -699,11 +734,7 @@
                       }
                     }
                   } catch (e) { /* ignore */ }
-                  var nameEl = document.getElementById('cardName');
-                  var cardName =
-                    nameEl && nameEl.textContent && !nameEl.classList.contains('is-loading')
-                      ? nameEl.textContent
-                      : '';
+                  var cardName = readCardNameLabel();
                   return PriorityAgent.suggestSubtasks(provider, {
                     cardName: cardName,
                     cardDesc: cardDesc,
@@ -818,6 +849,25 @@
         }
       }
 
+      if (window.UserProfile) {
+        try {
+          cachedProfile = await UserProfile.load(t);
+          try {
+            if (typeof localStorage !== 'undefined' && cachedProfile) {
+              localStorage.setItem(
+                'trello-priority-powerup/agent-debug-enabled',
+                cachedProfile.agentDebug !== false ? '1' : '0'
+              );
+            }
+          } catch (lsErr) { /* ignore */ }
+        } catch (profErr) {
+          console.error('UserProfile.load failed', profErr);
+          cachedProfile = window.UserProfile.emptyProfile
+            ? UserProfile.emptyProfile()
+            : null;
+        }
+      }
+
       try {
         await PriorityTrello.syncCardDueWithTrello(t, { prefer: 'trello' });
       } catch (syncErr) {
@@ -889,20 +939,32 @@
         await saveState(variant.getState());
       }
 
-      await mountStatutSection(variant.card);
-      await mountProgressSection(variant.card, focusProgress);
+      var profileFeatures =
+        cachedProfile && cachedProfile.features
+          ? cachedProfile.features
+          : null;
+      var featureOn = function (key) {
+        if (!profileFeatures) return true;
+        if (window.UserProfile && typeof UserProfile.isFeatureEnabled === 'function') {
+          return UserProfile.isFeatureEnabled(cachedProfile, key);
+        }
+        return profileFeatures[key] !== false;
+      };
+
+      if (featureOn('statut')) {
+        await mountStatutSection(variant.card);
+      }
+      if (featureOn('progress') || focusProgress) {
+        await mountProgressSection(variant.card, focusProgress);
+      }
       syncBlockedSubtasks();
       syncInfoRecap();
 
-      if (window.AgentUI && window.PriorityAgent) {
+      if (featureOn('assistant') && window.AgentUI && window.PriorityAgent) {
         AgentUI.mount(variant.card, {
           t: t,
           getCardName: function () {
-            var nameEl = document.getElementById('cardName');
-            if (nameEl && nameEl.textContent && !nameEl.classList.contains('is-loading')) {
-              return nameEl.textContent;
-            }
-            return '';
+            return readCardNameLabel();
           },
           getCardDesc: function () {
             if (infoUi && typeof infoUi.getDesc === 'function') {
@@ -910,8 +972,44 @@
             }
             return cardDesc || '';
           },
+          setCardName: function (name) {
+            var next = typeof name === 'string' ? name.trim() : '';
+            if (!next) {
+              return Promise.resolve({ ok: false, reason: 'empty-name', changed: false });
+            }
+            if (!PriorityTrello || typeof PriorityTrello.setCardName !== 'function') {
+              return Promise.resolve({ ok: false, reason: 'no-setCardName', changed: false });
+            }
+            return PriorityTrello.setCardName(t, next).then(function (result) {
+              if (result && result.ok) {
+                setCardNameLabel(next);
+                if (infoUi && typeof infoUi.setTitle === 'function') {
+                  infoUi.setTitle(next, { force: true });
+                }
+              }
+              return result;
+            });
+          },
+          setCardDesc: function (desc) {
+            var next = typeof desc === 'string' ? desc : '';
+            if (!PriorityTrello || typeof PriorityTrello.setCardDesc !== 'function') {
+              return Promise.resolve({ ok: false, reason: 'no-setCardDesc', changed: false });
+            }
+            return PriorityTrello.setCardDesc(t, next).then(function (result) {
+              if (result && result.ok) {
+                cardDesc = next;
+                if (infoUi && typeof infoUi.setDesc === 'function') {
+                  infoUi.setDesc(next, { force: true });
+                }
+              }
+              return result;
+            });
+          },
           getMemory: function () {
             return cachedMemory || { summary: '', facts: [], onboardingComplete: false };
+          },
+          getProfile: function () {
+            return cachedProfile;
           },
           getBoardDigest: function () {
             return boardDigestCache || '';
@@ -971,8 +1069,12 @@
           },
           onLayoutChange: resizePopup
         });
-      } else {
+      } else if (featureOn('assistant')) {
         console.error('Priority popup: AgentUI / PriorityAgent unavailable');
+      }
+
+      if (window.UserProfile && typeof UserProfile.applyFeaturesToCard === 'function' && variant && variant.card) {
+        UserProfile.applyFeaturesToCard(variant.card, cachedProfile);
       }
 
       await cardNamePromise;

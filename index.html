@@ -21,6 +21,7 @@
   <script src="./js/completion-trello.js"></script>
   <script src="./js/agent.js"></script>
   <script src="./js/agent-memory.js"></script>
+  <script src="./js/user-profile.js"></script>
   <link rel="stylesheet" href="./css/trello-theme.css" />
 </head>
 <body>
@@ -193,6 +194,19 @@
                 title: 'Paramètres de priorité',
                 url: PriorityTrello.pageUrl('./settings.html'),
                 height: 720,
+                fullscreen: false,
+                accentColor: '#22272B',
+              });
+            },
+          },
+          {
+            icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/user.svg',
+            text: 'Mon profil',
+            callback: function(t) {
+              return t.modal({
+                title: 'Mon profil',
+                url: PriorityTrello.pageUrl('./profile.html'),
+                height: 640,
                 fullscreen: false,
                 accentColor: '#22272B',
               });

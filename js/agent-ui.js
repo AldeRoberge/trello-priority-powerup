@@ -37,12 +37,16 @@
       getPriorityState: options.getPriorityState || function () { return {}; },
       getCompletion: options.getCompletion || function () { return { items: [] }; },
       getMemory: options.getMemory || function () { return null; },
+      getProfile: options.getProfile || function () { return null; },
       getBoardDigest: options.getBoardDigest || function () { return ''; },
       applyPriority: options.applyPriority || function () {},
       applyCompletion: options.applyCompletion || function () {},
       setFormulaKey: options.setFormulaKey || function () {},
       setCardName: options.setCardName || function () {
         return Promise.resolve({ ok: false, reason: 'no-setCardName' });
+      },
+      setCardDesc: options.setCardDesc || function () {
+        return Promise.resolve({ ok: false, reason: 'no-setCardDesc' });
       },
       getStatut: options.getStatut || function () { return null; },
       selectStatut: options.selectStatut || function () {
@@ -186,10 +190,22 @@
     }
     function saveDebugEnabled(on) {
       try {
-        if (typeof localStorage === 'undefined') return;
-        localStorage.setItem(DEBUG_PREF_STORAGE_KEY, on ? '1' : '0');
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(DEBUG_PREF_STORAGE_KEY, on ? '1' : '0');
+        }
       } catch (e) {
         /* ignore quota / private mode */
+      }
+      if (t && global.UserProfile && typeof global.UserProfile.load === 'function') {
+        global.UserProfile.load(t)
+          .then(function (profile) {
+            if (!profile || profile.agentDebug === !!on) return null;
+            profile.agentDebug = !!on;
+            return global.UserProfile.save(t, profile);
+          })
+          .catch(function (err) {
+            console.error('AgentUI: profile agentDebug sync failed', err);
+          });
       }
     }
     var debugEnabled = loadDebugEnabled();
@@ -251,6 +267,13 @@
     var followUpsEl = el('div', 'agent-followups', { role: 'group', 'aria-label': 'Actions rapides' });
     followUpsEl.hidden = true;
     chatPanel.appendChild(followUpsEl);
+
+    var promptsEl = el('div', 'agent-prompts', {
+      role: 'group',
+      'aria-label': 'Contr\u00f4les interactifs'
+    });
+    promptsEl.hidden = true;
+    chatPanel.appendChild(promptsEl);
 
     var composer = el('div', 'agent-composer');
     var input = el('textarea', 'agent-composer-input', {
@@ -1005,11 +1028,78 @@
       return row;
     }
 
+    function appendPendingMessage() {
+      emptyState.classList.add('is-hidden');
+      var row = el('div', 'agent-msg agent-msg--assistant is-pending is-streaming');
+      row.setAttribute('aria-busy', 'true');
+      row.setAttribute('aria-label', 'R\u00e9ponse en cours');
+      var bubble = el('div', 'agent-msg-bubble agent-msg-bubble--pending');
+      var spinner = el('span', 'agent-msg-spinner');
+      spinner.setAttribute('aria-hidden', 'true');
+      var spinnerIcon = el('i', 'ti ti-loader-2');
+      spinnerIcon.setAttribute('aria-hidden', 'true');
+      spinner.appendChild(spinnerIcon);
+      var skeleton = el('div', 'agent-msg-skeleton');
+      skeleton.setAttribute('aria-hidden', 'true');
+      skeleton.appendChild(el('span', 'agent-msg-skeleton-line'));
+      skeleton.appendChild(
+        el('span', 'agent-msg-skeleton-line agent-msg-skeleton-line--mid')
+      );
+      skeleton.appendChild(
+        el('span', 'agent-msg-skeleton-line agent-msg-skeleton-line--short')
+      );
+      bubble.appendChild(spinner);
+      bubble.appendChild(skeleton);
+      row.appendChild(bubble);
+      messagesEl.appendChild(row);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      notifyLayout();
+      return row;
+    }
+
+    function revealPendingBubble(bubble, text) {
+      if (!bubble) return;
+      bubble.classList.remove('agent-msg-bubble--pending');
+      bubble.replaceChildren();
+      bubble.textContent = text || '';
+    }
+
     function appendChatError(text) {
       return appendMessage('assistant', text || 'Erreur de l\'assistant', {
         note: 'Erreur',
         error: true
       });
+    }
+
+    function closeToolVerifyTips(exceptWrap) {
+      Array.prototype.forEach.call(
+        messagesEl.querySelectorAll('.agent-tool-verify.is-open'),
+        function (wrap) {
+          if (exceptWrap && wrap === exceptWrap) return;
+          wrap.classList.remove('is-open');
+          var btn = wrap.querySelector('.agent-tool-verify-btn');
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+        }
+      );
+    }
+
+    function positionToolVerifyTip(wrap) {
+      var btn = wrap.querySelector('.agent-tool-verify-btn');
+      var tip = wrap.querySelector('.agent-tool-verify-tip');
+      if (!btn || !tip) return;
+      var anchor = btn.getBoundingClientRect();
+      var gap = 6;
+      var margin = 8;
+      var tipW = tip.offsetWidth || 200;
+      var tipH = tip.offsetHeight || 40;
+      var top = anchor.bottom + gap;
+      var left = anchor.left;
+      if (top + tipH > window.innerHeight - margin && anchor.top - gap - tipH >= margin) {
+        top = anchor.top - gap - tipH;
+      }
+      left = Math.max(margin, Math.min(left, window.innerWidth - tipW - margin));
+      tip.style.left = left + 'px';
+      tip.style.top = top + 'px';
     }
 
     function appendChangeRecap(applied, options) {
@@ -1018,18 +1108,239 @@
         ? Agent.formatChangeRecap(applied || { results: [] }, options)
         : (applied && applied.recap) || '';
       if (!recap) return null;
+      var hasFailures =
+        options.ok === false ||
+        !!(options.droppedActions && options.droppedActions.length) ||
+        !!(
+          applied &&
+          Array.isArray(applied.results) &&
+          applied.results.some(function (r) {
+            return r && r.ok === false;
+          })
+        );
       var note = options.emptyClaim
         ? 'V\u00e9rification'
-        : options.ok === false
-          ? 'Modifications (erreurs)'
+        : hasFailures
+          ? 'Erreur'
           : 'Modifications techniques';
-      return appendMessage('assistant', recap, { note: note, recap: true });
+      var tipId =
+        'agent-tool-verify-tip-' + Math.random().toString(36).slice(2, 9);
+
+      var wrap = el(
+        'div',
+        'agent-tool-verify' + (hasFailures ? ' is-error' : '')
+      );
+      var btn = el('button', 'agent-tool-verify-btn', {
+        type: 'button',
+        'aria-label': note,
+        title: note,
+        'aria-expanded': 'false',
+        'aria-controls': tipId
+      });
+      btn.textContent = 'i';
+      var tip = el('div', 'agent-tool-verify-tip', {
+        id: tipId,
+        role: 'tooltip'
+      });
+      tip.textContent = recap;
+
+      function openTip() {
+        closeToolVerifyTips(wrap);
+        positionToolVerifyTip(wrap);
+        wrap.classList.add('is-open');
+        btn.setAttribute('aria-expanded', 'true');
+      }
+      function closeTip() {
+        wrap.classList.remove('is-open');
+        btn.setAttribute('aria-expanded', 'false');
+      }
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (wrap.classList.contains('is-open')) closeTip();
+        else openTip();
+      });
+      btn.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          closeTip();
+          btn.blur();
+        }
+      });
+
+      wrap.appendChild(btn);
+      wrap.appendChild(tip);
+
+      var host = null;
+      var kids = messagesEl.children;
+      for (var i = kids.length - 1; i >= 0; i--) {
+        if (kids[i].classList && kids[i].classList.contains('agent-msg--assistant')) {
+          host = kids[i];
+          break;
+        }
+      }
+      if (host) {
+        host.appendChild(wrap);
+      } else {
+        var row = el('div', 'agent-msg agent-msg--assistant agent-msg--recap');
+        row.appendChild(wrap);
+        messagesEl.appendChild(row);
+      }
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      notifyLayout();
+      return wrap;
     }
 
     function clearFollowUps() {
       followUpsEl.replaceChildren();
       followUpsEl.hidden = true;
       notifyLayout();
+    }
+
+    function clearPrompts() {
+      promptsEl.replaceChildren();
+      promptsEl.hidden = true;
+      notifyLayout();
+    }
+
+    function axisWordLabel(key, value) {
+      if (
+        typeof PriorityUI !== 'undefined' &&
+        typeof PriorityUI.wordFor === 'function'
+      ) {
+        try {
+          return PriorityUI.wordFor(key, value) || String(value);
+        } catch (e) {
+          return String(value);
+        }
+      }
+      return String(value);
+    }
+
+    function renderPriorityAxesPrompt(prompt) {
+      var card = el('div', 'agent-prompt agent-prompt--priority-axes');
+      var title = el('div', 'agent-prompt-title', {
+        text: prompt.title || 'Affiner urgence, impact et facilit\u00e9'
+      });
+      card.appendChild(title);
+
+      var dims =
+        (global.PriorityTrello && global.PriorityTrello.PRIORITY_DIMENSIONS) ||
+        [
+          { key: 'urgency', label: 'Urgence', min: 0, max: 4 },
+          { key: 'impact', label: 'Impact', min: 0, max: 4 },
+          { key: 'ease', label: 'Facilit\u00e9', min: 1, max: 5 }
+        ];
+
+      var values = {
+        urgency: prompt.urgency,
+        impact: prompt.impact,
+        ease: prompt.ease
+      };
+      var valueEls = {};
+
+      dims.forEach(function (dim) {
+        var key = dim.key;
+        var row = el('div', 'agent-prompt-slider-row');
+        var head = el('div', 'agent-prompt-slider-head');
+        head.appendChild(
+          el('span', 'agent-prompt-slider-label', { text: dim.label })
+        );
+        var valEl = el('span', 'agent-prompt-slider-value', {
+          text: axisWordLabel(key, values[key])
+        });
+        head.appendChild(valEl);
+        valueEls[key] = valEl;
+
+        var sliderWrap = el('div', 'field-slider agent-prompt-slider');
+        var input = el('input', 'field-range', {
+          type: 'range',
+          min: String(dim.min),
+          max: String(dim.max),
+          step: '1',
+          value: String(values[key]),
+          'aria-label': dim.label
+        });
+        input.addEventListener('input', function () {
+          values[key] = Number(input.value);
+          valEl.textContent = axisWordLabel(key, values[key]);
+        });
+        sliderWrap.appendChild(input);
+        row.appendChild(head);
+        row.appendChild(sliderWrap);
+        card.appendChild(row);
+      });
+
+      var actionsRow = el('div', 'agent-prompt-actions');
+      var applyBtn = el('button', 'tp-button agent-prompt-apply', {
+        type: 'button',
+        text: prompt.submitLabel || 'Appliquer'
+      });
+      var skipBtn = el('button', 'agent-prompt-skip', {
+        type: 'button',
+        text: 'C\'est bon'
+      });
+      applyBtn.addEventListener('click', function () {
+        if (pending) return;
+        onPromptApplyPriorityAxes(values);
+      });
+      skipBtn.addEventListener('click', function () {
+        clearPrompts();
+      });
+      actionsRow.appendChild(applyBtn);
+      actionsRow.appendChild(skipBtn);
+      card.appendChild(actionsRow);
+      return card;
+    }
+
+    function renderPrompts(prompts) {
+      clearPrompts();
+      if (!prompts || !prompts.length) return;
+      var rendered = 0;
+      prompts.forEach(function (p) {
+        if (!p || p.type !== 'priority_axes') return;
+        promptsEl.appendChild(renderPriorityAxesPrompt(p));
+        rendered += 1;
+      });
+      if (!rendered) return;
+      promptsEl.hidden = false;
+      notifyLayout();
+    }
+
+    async function onPromptApplyPriorityAxes(values) {
+      if (pending) return;
+      pending = true;
+      updateComposerEnabled();
+      try {
+        var result = await Agent.executeActions(bridge, [
+          {
+            tool: 'set_priority',
+            args: {
+              urgency: values.urgency,
+              impact: values.impact,
+              ease: values.ease,
+              priorityEnabled: true
+            }
+          }
+        ]);
+        clearPrompts();
+        appendMessage('assistant', 'Axes mis \u00e0 jour.', {
+          note: 'Affinage priorit\u00e9'
+        });
+        appendChangeRecap(result, { ok: result.ok });
+        history.push({
+          role: 'assistant',
+          content: 'Axes mis \u00e0 jour.'
+        });
+        if (collapse && collapse.refreshSummary) collapse.refreshSummary();
+        refreshSuggestions({ animate: true });
+        refreshApplySuggestions({ animate: true });
+      } catch (err) {
+        appendChatError((err && err.message) || 'Erreur lors de l\'affinage');
+      } finally {
+        pending = false;
+        updateComposerEnabled();
+        notifyLayout();
+      }
     }
 
     function renderFollowUps(followUps) {
@@ -1437,14 +1748,14 @@
       }
       setError('');
       clearFollowUps();
+      clearPrompts();
       setSuggestionsBusy(true);
       var userRow = appendMessage('user', msg);
       var userBubble = userRow.querySelector('.agent-msg-bubble');
       history.push({ role: 'user', content: msg });
       pending = true;
       updateComposerEnabled();
-      var thinking = appendMessage('assistant', '\u2026');
-      thinking.classList.add('is-pending', 'is-streaming');
+      var thinking = appendPendingMessage();
       var bubble = thinking.querySelector('.agent-msg-bubble');
       var streamed = false;
       try {
@@ -1474,14 +1785,23 @@
             if (!streamed) {
               streamed = true;
               thinking.classList.remove('is-pending');
+              thinking.removeAttribute('aria-busy');
+              thinking.removeAttribute('aria-label');
+              revealPendingBubble(bubble, visible);
+            } else {
+              bubble.textContent = visible;
             }
-            bubble.textContent = visible;
             messagesEl.scrollTop = messagesEl.scrollHeight;
             notifyLayout();
           }
         });
-        if (bubble) bubble.textContent = turn.message;
+        if (bubble) {
+          if (!streamed) revealPendingBubble(bubble, turn.message);
+          else bubble.textContent = turn.message;
+        }
         thinking.classList.remove('is-pending', 'is-streaming');
+        thinking.removeAttribute('aria-busy');
+        thinking.removeAttribute('aria-label');
         history.push({
           role: 'assistant',
           content: turn.message,
@@ -1532,6 +1852,7 @@
         else renderChatStats();
         if (turn.debug) pushDebugEntry(turn.debug);
         renderFollowUps(turn.followUps);
+        renderPrompts(turn.prompts);
         if (turn.suggestions && turn.suggestions.length) {
           suggestionsSeq += 1;
           renderSuggestions(turn.suggestions, { animate: true });
@@ -1557,6 +1878,7 @@
     async function onFollowUp(fu) {
       if (pending) return;
       clearFollowUps();
+      clearPrompts();
       var actions = (fu && fu.actions) || [];
       if (actions.length) {
         var result = await Agent.executeActions(bridge, actions);
@@ -1600,6 +1922,18 @@
       e.stopPropagation();
       if (!debugEnabled) return;
       setDebugOpen(!debugOpen);
+    });
+    document.addEventListener('click', function (e) {
+      if (e.target && e.target.closest && e.target.closest('.agent-tool-verify')) {
+        return;
+      }
+      closeToolVerifyTips();
+    });
+    window.addEventListener('resize', function () {
+      Array.prototype.forEach.call(
+        messagesEl.querySelectorAll('.agent-tool-verify.is-open'),
+        positionToolVerifyTip
+      );
     });
     debugPrefCheckbox.addEventListener('change', function () {
       debugEnabled = !!debugPrefCheckbox.checked;
