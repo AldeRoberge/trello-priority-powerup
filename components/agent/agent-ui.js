@@ -139,6 +139,8 @@
     var chatRestored = false;
     var chatPersistTimer = null;
     var pending = false;
+    /** Bumped to invalidate in-flight turns when the user resumes from an earlier message. */
+    var chatTurnGen = 0;
     /** User messages typed while a turn is in flight; drained FIFO after pending clears. */
     var messageQueue = [];
     var settingsOpen = false;
@@ -1432,6 +1434,14 @@
         input.value = '';
         refreshComposerTypingGaze();
       }
+      if (opts.isSelfPrompt || opts.silentUser) {
+        messageQueue.push({
+          text: msg,
+          isSelfPrompt: !!opts.isSelfPrompt,
+          silent: true
+        });
+        return true;
+      }
       var row = appendMessage('user', msg, { note: 'En attente' });
       row.classList.add('is-queued');
       row.setAttribute('aria-label', 'Message en attente');
@@ -1449,7 +1459,9 @@
       var next = messageQueue.shift();
       if (!next || !next.text) return;
       sendUserMessage(next.text, {
-        queuedRow: next.row
+        queuedRow: next.row,
+        isSelfPrompt: !!next.isSelfPrompt,
+        silentUser: !!next.silent || !!next.isSelfPrompt
       });
     }
 
@@ -1459,6 +1471,34 @@
       setSuggestionsBusy(false);
       notifyLayout();
       drainMessageQueue();
+    }
+
+    function isSelfPromptHistoryText(text) {
+      return /^\[Auto-revue\b/i.test(String(text || '').trim());
+    }
+
+    function buildSelfPromptUserText(focus) {
+      var lines = [
+        '[Auto-revue]',
+        'Tu viens de terminer un cycle de travail sur cette carte. Le contexte syst\u00e8me est \u00e0 jour.',
+        'Mission de ce tour\u00a0:',
+        '1) Revue rapide\u00a0: incoh\u00e9rence ou oubli apr\u00e8s tes derni\u00e8res actions?',
+        '2) Surtout\u00a0: trouve UNE nouvelle opportunit\u00e9 concr\u00e8te d\'aider (prochaine \u00e9tape, sous-t\u00e2che manquante, \u00e9ch\u00e9ance, coh\u00e9rence, offrande utile).',
+        'Si opportunit\u00e9 utile\u00a0: message court + suggestions/followUps et/ou actions.',
+        'Si rien d\'utile\u00a0: 1 phrase courte + 2\u20133 suggestions utiles; actions=[].',
+        'selfPrompt:false OBLIGATOIRE (pas de boucle). Ne r\u00e9capitule pas longuement ce que tu as d\u00e9j\u00e0 fait.'
+      ];
+      var f = String(focus || '').trim();
+      if (f) lines.push('Focus\u00a0: ' + f.slice(0, 240));
+      return lines.join('\n');
+    }
+
+    function queueSelfPromptReview(focus) {
+      if (interviewActive) return;
+      enqueueUserMessage(buildSelfPromptUserText(focus), {
+        isSelfPrompt: true,
+        silentUser: true
+      });
     }
 
     function ensureAudioCtx() {
@@ -4161,7 +4201,9 @@
         row.appendChild(el('div', 'agent-msg-note', { text: meta.note }));
       }
       var emotion = null;
-      if (role === 'assistant') {
+      if (role === 'user') {
+        attachUserResumeControl(row);
+      } else if (role === 'assistant') {
         emotion =
           (meta && meta.emotion) ||
           inferAssistantEmotion(text, meta, {
@@ -5575,7 +5617,14 @@
         for (var i = 0; i < msgs.length; i++) {
           var entry = msgs[i];
           if (!entry || !entry.role || !entry.content) continue;
-          history.push({ role: entry.role, content: entry.content });
+          var selfPromptEntry =
+            !!entry.selfPrompt || isSelfPromptHistoryText(entry.content);
+          history.push({
+            role: entry.role,
+            content: entry.content,
+            selfPrompt: selfPromptEntry
+          });
+          if (selfPromptEntry && entry.role === 'user') continue;
           appendMessage(entry.role, entry.content, {
             silent: true,
             noSound: true,
@@ -5737,6 +5786,126 @@
       ]
         .filter(Boolean)
         .join('\n');
+    }
+
+    /** Map a committed user DOM row to its index in `history` (nth user message). */
+    function historyIndexForUserRow(row) {
+      if (!row || !messagesEl) return -1;
+      var userOrdinal = 0;
+      var kids = messagesEl.children;
+      for (var i = 0; i < kids.length; i++) {
+        var kid = kids[i];
+        if (kid === row) break;
+        if (
+          kid.classList &&
+          kid.classList.contains('agent-msg--user') &&
+          !kid.classList.contains('is-queued')
+        ) {
+          userOrdinal++;
+        }
+      }
+      var seen = 0;
+      for (var j = 0; j < history.length; j++) {
+        if (history[j] && history[j].role === 'user') {
+          if (seen === userOrdinal) return j;
+          seen++;
+        }
+      }
+      return -1;
+    }
+
+    function removeMessageRowsFrom(row) {
+      if (!row) return;
+      var next = row;
+      while (next) {
+        var remove = next;
+        next = next.nextSibling;
+        if (remove.parentNode) remove.parentNode.removeChild(remove);
+      }
+    }
+
+    /**
+     * Pencil on a user bubble: drop that message and everything after,
+     * put the text back in the composer to edit / re-send.
+     */
+    function resumeFromUserMessage(row) {
+      if (!row || !row.classList.contains('agent-msg--user')) return;
+      var bubble = row.querySelector('.agent-msg-bubble');
+      var text = bubble ? String(bubble.textContent || '') : '';
+
+      // Invalidate any in-flight turn so its completion is ignored.
+      chatTurnGen += 1;
+      stopThinkingMotions();
+      clearSuggestions();
+      clearFollowUps();
+      clearPrompts();
+      clearApplySuggestions();
+      if (awaitingFeedback) {
+        awaitingFeedback = null;
+        syncComposerPlaceholder();
+      }
+      if (activeOffer) {
+        activeOffer = null;
+        setListenBarState('idle');
+        syncApplySummary();
+      }
+
+      if (row.classList.contains('is-queued')) {
+        var dropQueued = false;
+        var keptQueue = [];
+        for (var q = 0; q < messageQueue.length; q++) {
+          if (messageQueue[q] && messageQueue[q].row === row) dropQueued = true;
+          if (!dropQueued) keptQueue.push(messageQueue[q]);
+        }
+        messageQueue = keptQueue;
+        removeMessageRowsFrom(row);
+        pending = false;
+        updateComposerEnabled();
+        insertComposerSuggestion(text);
+        openAndFocusComposer();
+        if (collapse && collapse.refreshSummary) collapse.refreshSummary();
+        notifyLayout();
+        return;
+      }
+
+      var histIdx = historyIndexForUserRow(row);
+      messageQueue = [];
+      removeMessageRowsFrom(row);
+      if (histIdx >= 0) {
+        history.splice(histIdx);
+      }
+      pending = false;
+      updateComposerEnabled();
+      schedulePersistChatHistory();
+      insertComposerSuggestion(text);
+      openAndFocusComposer();
+      if (collapse && collapse.refreshSummary) collapse.refreshSummary();
+      emptyState.classList.toggle(
+        'is-hidden',
+        history.length > 0 || Agent.isConfigured(provider)
+      );
+      notifyLayout();
+    }
+
+    function attachUserResumeControl(row) {
+      if (!row || row.querySelector('.agent-msg-edit')) return;
+      var btn = el('button', 'agent-msg-edit', {
+        type: 'button',
+        title: 'Modifier et reprendre',
+        'aria-label': 'Modifier ce message et reprendre depuis ici'
+      });
+      btn.appendChild(el('i', 'ti ti-pencil', { 'aria-hidden': 'true' }));
+      var bubble = row.querySelector('.agent-msg-bubble');
+      if (bubble && bubble.parentNode === row) {
+        row.insertBefore(btn, bubble);
+      } else {
+        row.insertBefore(btn, row.firstChild);
+      }
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        resumeFromUserMessage(row);
+      });
     }
 
     function attachFeedbackControls(row) {
@@ -6337,23 +6506,31 @@
       setError('');
       clearFollowUps();
       clearPrompts();
+      var silentUser = !!(opts.silentUser || opts.isSelfPrompt);
       var userRow = opts.queuedRow;
       if (userRow) {
         activateQueuedUserRow(userRow);
-      } else {
+      } else if (!silentUser) {
         userRow = appendMessage('user', msg);
       }
-      history.push({ role: 'user', content: msg });
+      history.push({
+        role: 'user',
+        content: msg,
+        selfPrompt: !!opts.isSelfPrompt || isSelfPromptHistoryText(msg)
+      });
       schedulePersistChatHistory();
       pending = true;
       updateComposerEnabled();
+      var myGen = ++chatTurnGen;
       var thinking = appendPendingMessage();
       var bubble = thinking.querySelector('.agent-msg-bubble');
       var streamed = false;
+      var queuedSelfPromptFocus = null;
       try {
         var apiMsg = msg;
         if (feedbackContext) {
           await persistUserCorrection(msg, feedbackContext.content);
+          if (myGen !== chatTurnGen) return;
           apiMsg = buildCorrectionUserPayload(msg, feedbackContext.content);
         }
         var turn;
@@ -6365,6 +6542,7 @@
             apiMsg,
             {
               onDelta: function (visible) {
+                if (myGen !== chatTurnGen) return;
                 if (!bubble || !visible) return;
                 if (!streamed) {
                   streamed = true;
@@ -6393,6 +6571,7 @@
             apiMsg,
             {
               onDelta: function (visible) {
+                if (myGen !== chatTurnGen) return;
                 if (!bubble || !visible) return;
                 if (!streamed) {
                   streamed = true;
@@ -6410,6 +6589,7 @@
             }
           );
         }
+        if (myGen !== chatTurnGen) return;
         if (bubble) {
           if (!streamed) revealPendingBubble(bubble, turn.message);
           else fillHighlightedBubble(bubble, turn.message);
@@ -6515,6 +6695,19 @@
         if (turn.patches && turn.patches.length) {
           await applyBoardMemoryPatches(turn.patches);
         }
+        var didCardWork =
+          !!(otherActions.length && applied && applied.ok) ||
+          !!(turn.cardPatches && turn.cardPatches.length) ||
+          !!(turn.patches && turn.patches.length);
+        if (
+          turn.selfPrompt &&
+          didCardWork &&
+          !opts.isSelfPrompt &&
+          !interviewActive &&
+          !isSelfPromptHistoryText(msg)
+        ) {
+          queuedSelfPromptFocus = turn.selfPromptFocus || '';
+        }
         if (interviewActive && turn.message && /\?/.test(turn.message)) {
           interviewState = Agent.markInterviewQuestionAsked
             ? Agent.markInterviewQuestionAsked(interviewState, turn.message)
@@ -6557,6 +6750,7 @@
           refreshSuggestions({ animate: true });
         }
       } catch (err) {
+        if (myGen !== chatTurnGen) return;
         stopThinkingMotions();
         thinking.classList.remove('is-pending', 'is-streaming');
         var errText = (err && err.message) || 'Erreur de l\'assistant';
@@ -6566,7 +6760,12 @@
         if (err && err.debug) pushDebugEntry(err.debug);
         refreshSuggestions({ animate: true });
       } finally {
-        releasePendingAndDrain();
+        if (myGen === chatTurnGen) {
+          if (queuedSelfPromptFocus != null) {
+            queueSelfPromptReview(queuedSelfPromptFocus);
+          }
+          releasePendingAndDrain();
+        }
       }
     }
 

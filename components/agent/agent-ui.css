@@ -338,6 +338,48 @@
   gap: 4px;
 }
 
+/* Pencil: resume / edit from this user message (shows on hover). */
+.tp-page--priority .agent-msg-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  order: -1;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease, max-width 0.15s ease, background 0.15s ease,
+    color 0.15s ease;
+}
+
+.tp-page--priority .agent-msg--user:hover > .agent-msg-edit,
+.tp-page--priority .agent-msg--user:focus-within > .agent-msg-edit {
+  max-width: 26px;
+  opacity: 0.85;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+.tp-page--priority .agent-msg-edit:hover,
+.tp-page--priority .agent-msg-edit:focus-visible {
+  opacity: 1;
+  background: var(--tp-surface-hover, rgba(9, 30, 66, 0.06));
+  color: var(--tp-text);
+  outline: none;
+}
+
 .tp-page--priority .agent-msg--user .tp-spell-revert {
   color: var(--tp-text-muted);
   opacity: 0.85;
