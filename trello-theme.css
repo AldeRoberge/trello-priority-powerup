@@ -579,7 +579,7 @@ body.tp-page--priority {
 .tp-priority-card-name {
   margin: 0;
   min-height: 1.4em;
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 500;
   line-height: 1.35;
   color: var(--tp-text);
@@ -593,7 +593,7 @@ body.tp-page--priority {
 
 .tp-priority-card-name.is-loading {
   font-weight: 400;
-  font-size: 15px;
+  font-size: 18px;
   color: var(--tp-text-muted);
 }
 

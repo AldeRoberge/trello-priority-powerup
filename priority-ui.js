@@ -1482,10 +1482,8 @@
   }
 
   var DUE_DATE_LABEL = '\u00c9ch\u00e9ance';
-  var DUE_DATE_CLEAR_LABEL = 'Effacer l\'\u00e9ch\u00e9ance';
   var DUE_DATE_PLACEHOLDER = 'Choisir une date';
   var DUE_DATE_TODAY_LABEL = 'Aujourd\'hui';
-  var DUE_DATE_CLOSE_LABEL = 'Fermer';
   var DUE_DATE_PREV_MONTH = 'Mois pr\u00e9c\u00e9dent';
   var DUE_DATE_NEXT_MONTH = 'Mois suivant';
   var DUE_DATE_CALENDAR_LABEL = 'Calendrier d\'\u00e9ch\u00e9ance';
@@ -4542,6 +4540,7 @@
     var uid = 'due-cal-' + Math.random().toString(36).slice(2, 9);
     var bodyId = uid + '-body';
     var collapseApi = null;
+    /* Calendar + time panels stay expanded whenever Échéance is enabled. */
 
     function syncViewFromValue(iso) {
       var date = dueDateToLocalDate(iso) || startOfLocalDay(new Date());
@@ -4583,12 +4582,9 @@
     var datePicker = document.createElement('div');
     datePicker.className = 'due-date-picker due-date-picker--calendar';
 
-    var trigger = document.createElement('button');
-    trigger.type = 'button';
+    var trigger = document.createElement('div');
     trigger.className = 'due-date-trigger';
-    trigger.setAttribute('aria-haspopup', 'dialog');
-    trigger.setAttribute('aria-expanded', 'false');
-    trigger.setAttribute('aria-controls', uid + '-popover');
+    trigger.setAttribute('role', 'group');
     trigger.setAttribute('aria-labelledby', uid + '-label');
     trigger.setAttribute('aria-describedby', uid + '-desc');
 
@@ -4612,25 +4608,14 @@
     trigger.appendChild(triggerIcon);
     trigger.appendChild(triggerText);
 
-    var clearBtn = document.createElement('button');
-    clearBtn.type = 'button';
-    clearBtn.className = 'due-date-clear';
-    clearBtn.textContent = '\u00d7';
-    clearBtn.title = DUE_DATE_CLEAR_LABEL;
-    clearBtn.setAttribute('aria-label', DUE_DATE_CLEAR_LABEL);
-
     datePicker.appendChild(trigger);
-    datePicker.appendChild(clearBtn);
 
     var timePicker = document.createElement('div');
     timePicker.className = 'due-date-picker due-date-picker--time';
 
-    var timeTrigger = document.createElement('button');
-    timeTrigger.type = 'button';
+    var timeTrigger = document.createElement('div');
     timeTrigger.className = 'due-date-time-trigger';
-    timeTrigger.setAttribute('aria-haspopup', 'dialog');
-    timeTrigger.setAttribute('aria-expanded', 'false');
-    timeTrigger.setAttribute('aria-controls', uid + '-time-popover');
+    timeTrigger.setAttribute('role', 'group');
     timeTrigger.setAttribute('aria-label', DUE_DATE_TIME_LABEL);
 
     var timeIcon = document.createElement('i');
@@ -4653,16 +4638,7 @@
     timeTrigger.appendChild(timeIcon);
     timeTrigger.appendChild(timeTriggerText);
 
-    var timeClearBtn = document.createElement('button');
-    timeClearBtn.type = 'button';
-    timeClearBtn.className = 'due-date-time-clear';
-    timeClearBtn.textContent = '\u00d7';
-    timeClearBtn.title = DUE_DATE_TIME_CLEAR_LABEL;
-    timeClearBtn.setAttribute('aria-label', DUE_DATE_TIME_CLEAR_LABEL);
-    timeClearBtn.hidden = !currentTime;
-
     timePicker.appendChild(timeTrigger);
-    timePicker.appendChild(timeClearBtn);
 
     pickers.appendChild(datePicker);
     pickers.appendChild(timePicker);
@@ -4709,15 +4685,7 @@
     timeTrashBtn.title = DUE_DATE_TIME_CLEAR_LABEL;
     timeTrashBtn.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
 
-    var timeDismissBtn = document.createElement('button');
-    timeDismissBtn.type = 'button';
-    timeDismissBtn.className = 'due-date-time-chrome-btn due-date-time-chrome-btn--close';
-    timeDismissBtn.setAttribute('aria-label', DUE_DATE_CLOSE_LABEL);
-    timeDismissBtn.title = DUE_DATE_CLOSE_LABEL;
-    timeDismissBtn.innerHTML = '<i class="ti ti-x" aria-hidden="true"></i>';
-
     timeChrome.appendChild(timeTrashBtn);
-    timeChrome.appendChild(timeDismissBtn);
     timePopover.appendChild(timeChrome);
 
     var timePeriodsSection = document.createElement('div');
@@ -4749,7 +4717,7 @@
       chipBody.appendChild(chipTime);
       chip.appendChild(chipBody);
       chip.addEventListener('click', function () {
-        selectTime(period.time, false);
+        selectTime(period.time);
         setDialMode('minute');
       });
       timePeriods.appendChild(chip);
@@ -4918,18 +4886,10 @@
     todayBtn.className = 'due-date-today';
     todayBtn.textContent = DUE_DATE_TODAY_LABEL;
 
-    var closeBtn = document.createElement('button');
-    closeBtn.type = 'button';
-    closeBtn.className = 'due-date-close';
-    closeBtn.textContent = DUE_DATE_CLOSE_LABEL;
-    closeBtn.setAttribute('aria-label', DUE_DATE_CLOSE_LABEL);
-    closeBtn.title = DUE_DATE_CLOSE_LABEL;
-
     footer.appendChild(todayBtn);
-    footer.appendChild(closeBtn);
     popover.appendChild(footer);
 
-    /* Popovers stack under the dual Calendar / Time picker row. */
+    /* Calendar + time panels stay expanded under the dual picker row. */
     body.appendChild(popover);
     body.appendChild(timePopover);
 
@@ -4952,11 +4912,9 @@
 
     function refreshTimeRow() {
       /* Calendrier + Heure stay fully enabled/visible whenever Échéance is on. */
-      timeClearBtn.hidden = !currentTime;
       pickers.classList.toggle('has-time', !!currentTime);
       pickers.classList.toggle('has-date', !!current);
       field.classList.toggle('is-time-open', timeOpen);
-      timeTrigger.setAttribute('aria-expanded', timeOpen ? 'true' : 'false');
       if (currentTime) {
         timeValue.textContent = currentTime;
         timeValue.classList.remove('is-placeholder');
@@ -5035,8 +4993,8 @@
       commitDialTime(false);
     }
 
-    function commitDialTime(closeAfter) {
-      selectTime(dialHhmm(), closeAfter === true);
+    function commitDialTime() {
+      selectTime(dialHhmm());
     }
 
     function clockAngleDeg(value, max) {
@@ -5176,7 +5134,7 @@
       }
     }
 
-    function selectTime(hhmm, closeAfter) {
+    function selectTime(hhmm) {
       if (!enabled) return;
       ensureDueDateForTime();
       if (!current) return;
@@ -5188,8 +5146,7 @@
         dialMinute = parsed.minute;
       }
       emitChange();
-      if (closeAfter !== false) closeTimePicker(true);
-      else syncTimePickerSelection();
+      syncTimePickerSelection();
     }
 
     function refreshSuggestions() {
@@ -5216,10 +5173,8 @@
       currentTime = normalizeDueTime(resolved.time) || '';
       focusIso = next;
       syncViewFromValue(next);
-      closeCalendar(false);
-      closeTimePicker(false);
+      if (open) renderCalendar();
       emitChange();
-      trigger.focus();
     }
 
     function refreshTrigger() {
@@ -5242,7 +5197,6 @@
         countdown.textContent = '';
         countdown.hidden = true;
         countdown.classList.remove('is-past');
-        clearBtn.hidden = true;
         field.classList.remove('has-due-date', 'is-past');
         refreshTimeRow();
         refreshTrigger();
@@ -5257,7 +5211,6 @@
         countdown.textContent = '';
         countdown.hidden = true;
         countdown.classList.remove('is-past');
-        clearBtn.hidden = true;
         field.classList.remove('has-due-date', 'is-past');
         if (collapseApi) collapseApi.refreshSummary();
         return;
@@ -5268,7 +5221,6 @@
       countdown.textContent = text;
       countdown.hidden = true;
       countdown.classList.toggle('is-past', past);
-      clearBtn.hidden = false;
       field.classList.add('has-due-date');
       field.classList.toggle('is-past', past);
       if (collapseApi) collapseApi.refreshSummary();
@@ -5307,8 +5259,6 @@
         syncViewFromValue(current);
       } else {
         syncViewFromValue('');
-        closeCalendar(false);
-        closeTimePicker(false);
       }
       if (collapseApi) {
         collapseApi.setEnabled(enabled, {
@@ -5316,7 +5266,8 @@
           expand: enabled
         });
       }
-      if (open && enabled) renderCalendar();
+      if (enabled) showPickers();
+      else hidePickers();
       refreshCountdown();
     }
 
@@ -5341,26 +5292,18 @@
       renderCalendar(true);
     }
 
-    function selectIso(iso, closeAfter) {
+    function selectIso(iso) {
       if (!enabled) return;
       var next = normalizeDueDate(iso);
       if (!next) return;
-      var appliedDefaultTime = false;
       if (!currentTime) {
         currentTime = DUE_DATE_TIME_DEFAULT;
-        appliedDefaultTime = true;
       }
       current = next;
       focusIso = next;
       syncViewFromValue(next);
       emitChange();
-      if (closeAfter !== false) {
-        closeCalendar(false);
-        if (appliedDefaultTime) openTimePicker();
-        else if (enabled) trigger.focus();
-      } else {
-        renderCalendar();
-      }
+      renderCalendar();
     }
 
     function focusDayButton(iso) {
@@ -5426,7 +5369,7 @@
 
         dayBtn.addEventListener('click', function (ev) {
           ev.preventDefault();
-          selectIso(ev.currentTarget.dataset.iso, true);
+          selectIso(ev.currentTarget.dataset.iso);
         });
 
         cell.appendChild(dayBtn);
@@ -5436,28 +5379,8 @@
       if (keepFocus) focusDayButton(focusIso);
     }
 
-    function onDocPointerDown(ev) {
-      if (!open && !timeOpen) return;
-      if (field.contains(ev.target)) return;
-      if (open) closeCalendar(true);
-      if (timeOpen) closeTimePicker(true);
-    }
-
     function onDocKeyDown(ev) {
-      if (ev.key === 'Escape') {
-        if (timeOpen) {
-          ev.preventDefault();
-          closeTimePicker(true);
-          return;
-        }
-        if (open) {
-          ev.preventDefault();
-          closeCalendar(true);
-          return;
-        }
-      }
-      if (!open) return;
-      if (document.activeElement === closeBtn) return;
+      if (!open || !enabled) return;
       if (!grid.contains(document.activeElement) && document.activeElement !== todayBtn) {
         return;
       }
@@ -5486,7 +5409,7 @@
       } else if (ev.key === 'Enter' || ev.key === ' ') {
         if (document.activeElement && document.activeElement.dataset && document.activeElement.dataset.iso) {
           ev.preventDefault();
-          selectIso(document.activeElement.dataset.iso, true);
+          selectIso(document.activeElement.dataset.iso);
         }
         return;
       }
@@ -5502,118 +5425,54 @@
 
     function bindDocListeners() {
       if (docListenersBound) return;
-      document.addEventListener('mousedown', onDocPointerDown, true);
       document.addEventListener('keydown', onDocKeyDown, true);
       docListenersBound = true;
     }
 
     function unbindDocListeners() {
       if (docListenersBound && !open && !timeOpen) {
-        document.removeEventListener('mousedown', onDocPointerDown, true);
         document.removeEventListener('keydown', onDocKeyDown, true);
         docListenersBound = false;
       }
     }
 
-    function openCalendar() {
-      if (!enabled || open) return;
-      closeTimePicker(false);
+    function showPickers() {
+      if (!enabled) return;
+      var wasOpen = open && timeOpen;
       open = true;
+      timeOpen = true;
       if (current) syncViewFromValue(current);
       else {
         syncViewFromValue('');
         focusIso = toIsoDate(startOfLocalDay(new Date()));
       }
       popover.hidden = false;
-      field.classList.add('is-open');
-      trigger.setAttribute('aria-expanded', 'true');
-      renderCalendar(true);
-      bindDocListeners();
-      notifyLayout();
-    }
-
-    function closeCalendar(restoreFocus) {
-      if (!open) return;
-      open = false;
-      popover.hidden = true;
-      field.classList.remove('is-open');
-      trigger.setAttribute('aria-expanded', 'false');
-      unbindDocListeners();
-      if (restoreFocus && enabled) trigger.focus();
-      notifyLayout();
-    }
-
-    function openTimePicker() {
-      if (!enabled || timeOpen) return;
-      closeCalendar(false);
-      timeOpen = true;
       timePopover.hidden = false;
-      field.classList.add('is-time-open');
-      timeTrigger.setAttribute('aria-expanded', 'true');
-      setDialMode('hour');
+      field.classList.add('is-open', 'is-time-open');
+      setDialMode(dialMode === 'minute' ? 'minute' : 'hour');
+      renderCalendar();
       syncTimePickerSelection();
       bindDocListeners();
-      notifyLayout();
-      requestAnimationFrame(function () {
-        var selected =
-          timePopover.querySelector('.due-date-time-chip.is-selected') ||
-          digitalHourInput;
-        if (selected) selected.focus();
-      });
+      if (!wasOpen) notifyLayout();
     }
 
-    function closeTimePicker(restoreFocus) {
-      if (!timeOpen) return;
+    function hidePickers() {
+      if (!open && !timeOpen) return;
       commitDigitalEdits();
+      open = false;
       timeOpen = false;
+      popover.hidden = true;
       timePopover.hidden = true;
-      field.classList.remove('is-time-open');
-      timeTrigger.setAttribute('aria-expanded', 'false');
+      field.classList.remove('is-open', 'is-time-open');
       unbindDocListeners();
-      if (restoreFocus && enabled) timeTrigger.focus();
       notifyLayout();
     }
-
-    trigger.addEventListener('click', function () {
-      if (!enabled) return;
-      if (open) closeCalendar(false);
-      else openCalendar();
-    });
-
-    clearBtn.addEventListener('click', function () {
-      if (!enabled) return;
-      current = '';
-      currentTime = '';
-      closeCalendar(false);
-      closeTimePicker(false);
-      syncViewFromValue('');
-      emitChange();
-      trigger.focus();
-    });
-
-    timeTrigger.addEventListener('click', function () {
-      if (!enabled) return;
-      if (timeOpen) closeTimePicker(false);
-      else openTimePicker();
-    });
-
-    timeClearBtn.addEventListener('click', function () {
-      if (!enabled || !currentTime) return;
-      currentTime = '';
-      emitChange();
-      if (timeOpen) syncTimePickerSelection();
-      timeTrigger.focus();
-    });
 
     timeTrashBtn.addEventListener('click', function () {
       if (!enabled) return;
       currentTime = '';
       emitChange();
       if (timeOpen) syncTimePickerSelection();
-    });
-
-    timeDismissBtn.addEventListener('click', function () {
-      closeTimePicker(true);
     });
 
     digitalHourInput.addEventListener('focus', function () {
@@ -5761,11 +5620,7 @@
     });
 
     todayBtn.addEventListener('click', function () {
-      selectIso(toIsoDate(startOfLocalDay(new Date())), true);
-    });
-
-    closeBtn.addEventListener('click', function () {
-      closeCalendar(true);
+      selectIso(toIsoDate(startOfLocalDay(new Date())));
     });
 
     collapseApi = bindCollapsibleEnable({
@@ -5780,12 +5635,12 @@
       onLayoutChange: notifyLayout,
       onExpandChange: config.onExpandChange || null,
       onBeforeDisable: function () {
-        closeCalendar(false);
-        closeTimePicker(false);
-        field.classList.remove('is-open', 'is-time-open', 'has-due-date', 'is-past');
+        hidePickers();
+        field.classList.remove('has-due-date', 'is-past');
       },
       onAfterEnable: function () {
-        if (!current) openCalendar();
+        enabled = true;
+        showPickers();
       },
       onEnableChange: function (on) {
         enabled = on;
@@ -5794,6 +5649,7 @@
       }
     });
     refreshCountdown();
+    if (enabled) showPickers();
 
     return {
       el: field,

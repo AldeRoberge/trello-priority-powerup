@@ -359,11 +359,12 @@ body {
   min-width: 0;
   max-width: 46%;
   margin-top: 2px;
+  padding-left: 12px;
   font-size: 13px;
   font-weight: 400;
   color: var(--text-muted);
   line-height: 1.35;
-  text-align: right;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -656,7 +657,7 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 34px 10px 12px;
+  padding: 10px 12px;
   border: none;
   border-radius: 10px;
   background: color-mix(in srgb, var(--surface-1, var(--surface-2)) 85%, var(--surface-2));
@@ -665,7 +666,7 @@ body {
   font-size: 15px;
   line-height: 1.35;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
   transition:
     background-color 0.15s ease,
     box-shadow 0.15s ease;
@@ -673,18 +674,17 @@ body {
 
 .due-date-trigger:hover,
 .due-date-time-trigger:hover {
-  background: var(--surface-hover);
+  background: color-mix(in srgb, var(--surface-1, var(--surface-2)) 85%, var(--surface-2));
 }
 
 .due-date-trigger:focus-visible,
 .due-date-time-trigger:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--due-accent-soft);
 }
 
 .field--due-date.is-open .due-date-trigger,
 .field--due-date.is-time-open .due-date-time-trigger {
-  box-shadow: 0 0 0 3px var(--due-accent-soft);
+  box-shadow: none;
 }
 
 .due-date-picker.has-value .due-date-trigger,
@@ -736,43 +736,6 @@ body {
   color: var(--text-muted);
 }
 
-.due-date-clear,
-.due-date-time-clear {
-  position: absolute;
-  top: 50%;
-  right: 6px;
-  z-index: 1;
-  transform: translateY(-50%);
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  transition: color 0.12s ease, background-color 0.12s ease;
-}
-
-.due-date-clear:hover,
-.due-date-time-clear:hover {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
-}
-
-.due-date-clear:focus-visible,
-.due-date-time-clear:focus-visible {
-  outline: 2px solid var(--due-accent);
-  outline-offset: 1px;
-}
-
-.due-date-clear[hidden],
-.due-date-time-clear[hidden] {
-  display: none;
-}
-
 .due-date-time-popover {
   box-sizing: border-box;
   width: 100%;
@@ -808,7 +771,7 @@ body {
 .due-date-time-chrome {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   width: 100%;
   margin: -2px 0 0;
@@ -1345,7 +1308,7 @@ html[data-color-mode="dark"] .due-date-time-clock {
 .due-date-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   margin-top: 8px;
   padding-top: 8px;
@@ -1370,29 +1333,6 @@ html[data-color-mode="dark"] .due-date-time-clock {
 }
 
 .due-date-today:focus-visible {
-  outline: 2px solid var(--due-accent);
-  outline-offset: 1px;
-}
-
-.due-date-close {
-  border: none;
-  border-radius: 999px;
-  padding: 8px 14px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.12s ease, color 0.12s ease;
-}
-
-.due-date-close:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-}
-
-.due-date-close:focus-visible {
   outline: 2px solid var(--due-accent);
   outline-offset: 1px;
 }
