@@ -4095,7 +4095,7 @@
     hint.className = 'statut-auth-hint';
     hint.hidden = !authHint;
     hint.textContent =
-      'Autorisez l’API (Paramètres) pour déplacer la carte entre les listes.';
+      'Pour déplacer la carte entre les listes : ouvrez « Paramètres de priorité » (bouton du tableau), puis cliquez sur « Autoriser le tri automatique ».';
 
     var groupsEl = document.createElement('div');
     groupsEl.className = 'statut-groups';

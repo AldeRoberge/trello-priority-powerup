@@ -44,9 +44,21 @@
     if (!global.PriorityUI) throw new Error('PriorityUI is required');
 
     var provider = Agent.normalizeProvider(null);
+    var savedProvider = Agent.normalizeProvider(null);
     var history = [];
     var pending = false;
     var settingsOpen = false;
+    var testing = false;
+    var suggestionsSeq = 0;
+    var sessionStats = {
+      turns: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      costUsd: 0,
+      estimated: false,
+      lastUsage: null
+    };
 
     var section = el('div', 'variant-chat-section');
     var field = el('div', 'field field--chat');
@@ -185,9 +197,16 @@
     var messagesEl = el('div', 'agent-messages', { role: 'log', 'aria-live': 'polite' });
     chatPanel.appendChild(messagesEl);
 
-    var followUpsEl = el('div', 'agent-followups', { role: 'group', 'aria-label': 'Suggestions' });
+    var followUpsEl = el('div', 'agent-followups', { role: 'group', 'aria-label': 'Actions rapides' });
     followUpsEl.hidden = true;
     chatPanel.appendChild(followUpsEl);
+
+    var suggestionsEl = el('div', 'agent-suggestions', {
+      role: 'group',
+      'aria-label': 'Questions sugg\u00e9r\u00e9es'
+    });
+    suggestionsEl.hidden = true;
+    chatPanel.appendChild(suggestionsEl);
 
     var composer = el('div', 'agent-composer');
     var input = el('textarea', 'agent-composer-input', {
@@ -202,6 +221,14 @@
     composer.appendChild(input);
     composer.appendChild(sendBtn);
     chatPanel.appendChild(composer);
+
+    var statsEl = el('div', 'agent-chat-stats', {
+      role: 'status',
+      'aria-live': 'polite',
+      'aria-label': 'Statistiques de la conversation'
+    });
+    statsEl.hidden = true;
+    chatPanel.appendChild(statsEl);
 
     var errorEl = el('p', 'agent-error');
     errorEl.hidden = true;
@@ -227,6 +254,7 @@
       expanded: expandChat,
       getSummary: function () {
         if (!Agent.isConfigured(provider)) return 'Non configur\u00e9';
+        if (!Agent.isVerified(provider)) return 'Non v\u00e9rifi\u00e9';
         return provider.model || '';
       },
       onLayoutChange: onLayoutChange,
@@ -239,6 +267,189 @@
 
     function notifyLayout() {
       onLayoutChange();
+    }
+
+    function formatTokenCount(n) {
+      if (n == null || !isFinite(n)) return '\u2014';
+      var v = Math.round(n);
+      if (v >= 1000000) return (v / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+      if (v >= 10000) return Math.round(v / 1000) + 'k';
+      if (v >= 1000) return (v / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+      return String(v);
+    }
+
+    function formatCostUsd(n) {
+      if (n == null || !isFinite(n)) return '\u2014';
+      if (n < 0.0001) return '<\u00a0$0.0001';
+      if (n < 0.01) return '$' + n.toFixed(4);
+      if (n < 1) return '$' + n.toFixed(3);
+      return '$' + n.toFixed(2);
+    }
+
+    function formatLatency(ms) {
+      if (ms == null || !isFinite(ms)) return '\u2014';
+      if (ms < 1000) return Math.round(ms) + '\u00a0ms';
+      return (ms / 1000).toFixed(1).replace(/\.0$/, '') + '\u00a0s';
+    }
+
+    function formatWindow(n) {
+      if (n == null || !isFinite(n)) return '\u2014';
+      if (n >= 1000000) return Math.round(n / 1000000) + 'M';
+      if (n >= 1000) return Math.round(n / 1000) + 'k';
+      return String(n);
+    }
+
+    function finishReasonLabel(reason) {
+      if (!reason) return '';
+      var map = {
+        stop: 'termin\u00e9',
+        length: 'tronqu\u00e9',
+        content_filter: 'filtr\u00e9',
+        tool_calls: 'outils',
+        function_call: 'fonction'
+      };
+      return map[reason] || reason;
+    }
+
+    function updateSessionStats(usage) {
+      if (!usage) return;
+      sessionStats.turns += 1;
+      sessionStats.promptTokens += usage.promptTokens || 0;
+      sessionStats.completionTokens += usage.completionTokens || 0;
+      sessionStats.totalTokens += usage.totalTokens || 0;
+      sessionStats.costUsd += usage.costUsd || 0;
+      if (usage.estimated) sessionStats.estimated = true;
+      sessionStats.lastUsage = usage;
+      renderChatStats();
+    }
+
+    function renderChatStats() {
+      var usage = sessionStats.lastUsage;
+      if (!usage || sessionStats.turns < 1) {
+        statsEl.hidden = true;
+        statsEl.replaceChildren();
+        return;
+      }
+      statsEl.hidden = false;
+      statsEl.replaceChildren();
+
+      function addRow(className, parts) {
+        var row = el('div', 'agent-chat-stats-row' + (className ? ' ' + className : ''));
+        parts.forEach(function (part, idx) {
+          if (idx > 0) {
+            row.appendChild(el('span', 'agent-chat-stats-sep', { text: '\u00b7' }));
+          }
+          var cell = el('span', 'agent-chat-stats-item');
+          if (part.label) {
+            cell.appendChild(el('span', 'agent-chat-stats-label', { text: part.label }));
+            cell.appendChild(document.createTextNode('\u00a0'));
+          }
+          cell.appendChild(el('span', 'agent-chat-stats-value', { text: part.value }));
+          if (part.title) cell.title = part.title;
+          row.appendChild(cell);
+        });
+        statsEl.appendChild(row);
+      }
+
+      var tokenApprox = usage.estimated || sessionStats.estimated ? '\u2248' : '';
+      var tokenTitle = usage.estimated
+        ? 'Estimation (le fournisseur n\'a pas renvoy\u00e9 usage)'
+        : 'Tokens du dernier \u00e9change';
+      var lastTokenValue =
+        tokenApprox +
+        formatTokenCount(usage.totalTokens) +
+        ' (' +
+        formatTokenCount(usage.promptTokens) +
+        '\u2191 ' +
+        formatTokenCount(usage.completionTokens) +
+        '\u2193)';
+
+      var lastParts = [
+        {
+          label: 'Tokens',
+          value: lastTokenValue,
+          title: tokenTitle
+        },
+        {
+          label: 'Co\u00fbt',
+          value: '\u2248' + formatCostUsd(usage.costUsd),
+          title: 'Estimation selon le tarif publique du mod\u00e8le (non facturation)'
+        },
+        {
+          label: 'Latence',
+          value: formatLatency(usage.latencyMs)
+        }
+      ];
+      if (usage.cachedTokens != null && usage.cachedTokens > 0) {
+        lastParts.push({
+          label: 'Cache',
+          value: formatTokenCount(usage.cachedTokens),
+          title: 'Tokens d\'entr\u00e9e en cache'
+        });
+      }
+      if (usage.reasoningTokens != null && usage.reasoningTokens > 0) {
+        lastParts.push({
+          label: 'Raisonnement',
+          value: formatTokenCount(usage.reasoningTokens)
+        });
+      }
+      addRow('agent-chat-stats-row--last', lastParts);
+
+      var ctx = usage.context || {};
+      var fill = typeof ctx.fillPercent === 'number' ? ctx.fillPercent : null;
+      var compressionHint =
+        fill != null && fill >= 50
+          ? 'Contexte charg\u00e9 \u2014 l\'historique allonge les requ\u00eates'
+          : 'Part du contexte utilis\u00e9e par le prompt + l\'historique';
+      var memoryParts = [
+        {
+          label: 'Contexte',
+          value:
+            fill != null
+              ? fill + '% (' + formatTokenCount(ctx.requestTokens) + '/' + formatWindow(ctx.windowTokens) + ')'
+              : formatTokenCount(ctx.requestTokens),
+          title: compressionHint
+        },
+        {
+          label: 'M\u00e9moire',
+          value: history.length + ' msg',
+          title: 'Messages conserv\u00e9s dans cette session'
+        },
+        {
+          label: 'Compression',
+          value: 'aucune',
+          title:
+            'L\'historique est renvoy\u00e9 en entier \u00e0 chaque tour (pas de r\u00e9sum\u00e9 ni troncature)'
+        },
+        {
+          label: 'Session',
+          value:
+            formatTokenCount(sessionStats.totalTokens) +
+            ' \u00b7 \u2248' +
+            formatCostUsd(sessionStats.costUsd) +
+            ' \u00b7 ' +
+            sessionStats.turns +
+            ' tour' +
+            (sessionStats.turns > 1 ? 's' : ''),
+          title: 'Totaux de cette conversation'
+        }
+      ];
+      if (usage.model) {
+        memoryParts.push({
+          label: 'Mod\u00e8le',
+          value: usage.model,
+          title: usage.model
+        });
+      }
+      var fr = finishReasonLabel(usage.finishReason);
+      if (fr) {
+        memoryParts.push({
+          label: 'Fin',
+          value: fr
+        });
+      }
+      addRow('agent-chat-stats-row--session', memoryParts);
+      notifyLayout();
     }
 
     function setError(msg) {
@@ -309,17 +520,24 @@
       if (collapse && collapse.refreshSummary) collapse.refreshSummary();
       updateComposerEnabled();
       emptyState.classList.toggle('is-hidden', history.length > 0);
-      emptyConfigBtn.hidden = Agent.isConfigured(provider);
+      // Hide configure CTA once the current settings were successfully tested.
+      emptyConfigBtn.hidden = Agent.isVerified(provider);
     }
 
     function readSettingsForm() {
       var isOpenAI = provider.preset === 'openai';
-      return Agent.normalizeProvider({
+      var next = Agent.normalizeProvider({
         preset: provider.preset || 'openai',
         apiKey: apiKeyInput.value,
         baseUrl: baseUrlInput.value,
-        model: isOpenAI ? modelSelect.value : modelInput.value
+        model: isOpenAI ? modelSelect.value : modelInput.value,
+        verifiedFingerprint: provider.verifiedFingerprint || ''
       });
+      // Config changed vs last verified fingerprint → not verified anymore.
+      if (!Agent.isVerified(next)) {
+        next = Agent.clearVerified(next);
+      }
+      return next;
     }
 
     function applyPreset(id) {
@@ -356,6 +574,8 @@
       composer.hidden = !configured;
       sendBtn.disabled = !ok;
       input.disabled = !configured || pending;
+      if (!configured) clearSuggestions();
+      else setSuggestionsBusy(pending);
     }
 
     function appendMessage(role, text, meta) {
@@ -382,9 +602,16 @@
     function renderFollowUps(followUps) {
       clearFollowUps();
       if (!followUps || !followUps.length) return;
+      // Action chips only — question-style follow-ups live in suggestions.
+      var actionsOnly = followUps.filter(function (fu) {
+        return fu && fu.actions && fu.actions.length;
+      });
+      if (!actionsOnly.length) return;
       followUpsEl.hidden = false;
-      followUps.forEach(function (fu) {
-        var chip = el('button', 'agent-followup-chip', { type: 'button' });
+      actionsOnly.forEach(function (fu) {
+        var chip = el('button', 'agent-followup-chip agent-followup-chip--action', {
+          type: 'button'
+        });
         chip.textContent = fu.label;
         chip.addEventListener('click', function () {
           onFollowUp(fu);
@@ -392,6 +619,72 @@
         followUpsEl.appendChild(chip);
       });
       notifyLayout();
+    }
+
+    function clearSuggestions() {
+      suggestionsEl.replaceChildren();
+      suggestionsEl.hidden = true;
+      notifyLayout();
+    }
+
+    function renderSuggestions(list, options) {
+      options = options || {};
+      var items = (list || [])
+        .map(function (s) {
+          return typeof s === 'string' ? s.trim() : '';
+        })
+        .filter(Boolean)
+        .slice(0, 4);
+      suggestionsEl.replaceChildren();
+      if (!items.length || !Agent.isConfigured(provider)) {
+        suggestionsEl.hidden = true;
+        notifyLayout();
+        return;
+      }
+      suggestionsEl.hidden = false;
+      items.forEach(function (text, index) {
+        var chip = el('button', 'agent-suggestion-chip', { type: 'button' });
+        chip.textContent = text;
+        chip.disabled = pending;
+        if (options.animate !== false) {
+          chip.style.animationDelay = index * 40 + 'ms';
+        }
+        chip.addEventListener('click', function () {
+          if (pending) return;
+          sendUserMessage(text);
+        });
+        suggestionsEl.appendChild(chip);
+      });
+      notifyLayout();
+    }
+
+    function setSuggestionsBusy(isBusy) {
+      Array.prototype.forEach.call(
+        suggestionsEl.querySelectorAll('.agent-suggestion-chip'),
+        function (chip) {
+          chip.disabled = !!isBusy || pending;
+        }
+      );
+    }
+
+    async function refreshSuggestions(options) {
+      options = options || {};
+      if (!Agent.isConfigured(provider) || pending) return;
+      var seq = ++suggestionsSeq;
+      setSuggestionsBusy(true);
+      try {
+        var list = await Agent.suggestQuestions(provider, bridge, {
+          history: history
+        });
+        if (seq !== suggestionsSeq) return;
+        renderSuggestions(list, { animate: options.animate !== false });
+      } catch (err) {
+        if (seq !== suggestionsSeq) return;
+        console.error('AgentUI suggestQuestions failed', err);
+        if (!suggestionsEl.childNodes.length) clearSuggestions();
+      } finally {
+        if (seq === suggestionsSeq) setSuggestionsBusy(false);
+      }
     }
 
     function buildTestItem(r) {
@@ -427,23 +720,46 @@
       if (!t) return;
       try {
         provider = await Agent.getProvider(t);
+        savedProvider = Agent.normalizeProvider(provider);
         fillSettingsForm();
+        if (Agent.isConfigured(provider) && !history.length) {
+          refreshSuggestions({ animate: true });
+        }
       } catch (err) {
         console.error('AgentUI load provider failed', err);
       }
     }
 
+    async function persistProvider(next) {
+      provider = Agent.normalizeProvider(next);
+      if (!t) return provider;
+      provider = await Agent.saveProvider(t, provider);
+      savedProvider = Agent.normalizeProvider(provider);
+      fillSettingsForm();
+      return provider;
+    }
+
     async function saveSettings() {
-      provider = readSettingsForm();
+      var next = readSettingsForm();
       fillSettingsForm();
       if (!t) {
         setSettingsStatus('Client Trello indisponible', 'fail');
         return;
       }
+      var changed = !Agent.providersEqual(next, savedProvider);
       try {
-        provider = await Agent.saveProvider(t, provider);
-        fillSettingsForm();
-        setSettingsStatus('Fournisseur enregistr\u00e9.', 'pass');
+        await persistProvider(next);
+        if (changed) {
+          setSettingsStatus('Enregistr\u00e9 \u2014 tests en cours\u2026');
+          await runTests({ fromSave: true });
+        } else {
+          setSettingsStatus(
+            Agent.isVerified(provider)
+              ? 'Aucune modification.'
+              : 'Fournisseur enregistr\u00e9.',
+            Agent.isVerified(provider) ? 'pass' : undefined
+          );
+        }
       } catch (err) {
         console.error('AgentUI save provider failed', err);
         setSettingsStatus(
@@ -453,10 +769,14 @@
       }
     }
 
-    async function runTests() {
+    async function runTests(options) {
+      options = options || {};
+      if (testing) return;
       provider = readSettingsForm();
       fillSettingsForm();
+      testing = true;
       testBtn.disabled = true;
+      saveBtn.disabled = true;
       setSettingsStatus('Tests en cours\u2026');
       clearTestResults();
       try {
@@ -469,13 +789,53 @@
         var warned = results.some(function (r) {
           return r.status === 'warn';
         });
-        if (failed) setSettingsStatus('Des tests ont \u00e9chou\u00e9.', 'fail');
-        else if (warned) setSettingsStatus('Fournisseur joignable avec avertissements.', 'warn');
-        else setSettingsStatus('Tous les tests sont pass\u00e9s.', 'pass');
+        if (failed) {
+          provider = Agent.clearVerified(provider);
+          if (t) {
+            try {
+              await persistProvider(provider);
+            } catch (persistErr) {
+              console.error('AgentUI clear verified failed', persistErr);
+            }
+          } else {
+            fillSettingsForm();
+          }
+          setSettingsStatus('Des tests ont \u00e9chou\u00e9.', 'fail');
+        } else {
+          provider = Agent.markVerified(provider);
+          if (t) {
+            try {
+              await persistProvider(provider);
+            } catch (persistErr) {
+              console.error('AgentUI mark verified failed', persistErr);
+              fillSettingsForm();
+            }
+          } else {
+            fillSettingsForm();
+          }
+          if (warned) {
+            setSettingsStatus(
+              options.fromSave
+                ? 'Enregistr\u00e9 \u2014 fournisseur joignable avec avertissements.'
+                : 'Fournisseur joignable avec avertissements.',
+              'warn'
+            );
+          } else {
+            setSettingsStatus(
+              options.fromSave
+                ? 'Enregistr\u00e9 \u2014 tous les tests sont pass\u00e9s.'
+                : 'Tous les tests sont pass\u00e9s.',
+              'pass'
+            );
+          }
+          if (!history.length) refreshSuggestions({ animate: true });
+        }
       } catch (err) {
         setSettingsStatus((err && err.message) || 'Tests interrompus', 'fail');
       } finally {
+        testing = false;
         testBtn.disabled = false;
+        saveBtn.disabled = false;
         notifyLayout();
       }
     }
@@ -490,6 +850,7 @@
       }
       setError('');
       clearFollowUps();
+      setSuggestionsBusy(true);
       appendMessage('user', msg);
       history.push({ role: 'user', content: msg });
       pending = true;
@@ -505,16 +866,25 @@
           content: turn.message,
           rawJson: turn.rawJson
         });
+        if (turn.usage) updateSessionStats(turn.usage);
+        else renderChatStats();
         renderFollowUps(turn.followUps);
+        if (turn.suggestions && turn.suggestions.length) {
+          suggestionsSeq += 1;
+          renderSuggestions(turn.suggestions, { animate: true });
+        } else {
+          refreshSuggestions({ animate: true });
+        }
       } catch (err) {
         thinking.remove();
         var errText = (err && err.message) || 'Erreur de l\'assistant';
         appendMessage('assistant', errText);
         setError(errText);
-        // Keep history consistent: drop the user turn that failed mid-flight? keep it.
+        refreshSuggestions({ animate: true });
       } finally {
         pending = false;
         updateComposerEnabled();
+        setSuggestionsBusy(false);
         notifyLayout();
       }
     }
@@ -540,6 +910,7 @@
           content: note
         });
         if (collapse && collapse.refreshSummary) collapse.refreshSummary();
+        refreshSuggestions({ animate: true });
         notifyLayout();
         return;
       }

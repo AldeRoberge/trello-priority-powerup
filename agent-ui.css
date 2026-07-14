@@ -368,6 +368,54 @@
   border-color: var(--tp-primary);
 }
 
+.tp-page--priority .agent-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.tp-page--priority .agent-suggestions[hidden] {
+  display: none !important;
+}
+
+.tp-page--priority .agent-suggestion-chip {
+  padding: 6px 11px;
+  border: 1px dashed var(--tp-border-strong);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.35;
+  cursor: pointer;
+  text-align: left;
+  animation: agent-suggestion-in 0.28s ease both;
+}
+
+.tp-page--priority .agent-suggestion-chip:hover:not(:disabled) {
+  background: var(--tp-surface-hover);
+  border-style: solid;
+  border-color: var(--tp-primary);
+  color: var(--tp-link);
+}
+
+.tp-page--priority .agent-suggestion-chip:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@keyframes agent-suggestion-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .tp-page--priority .agent-composer {
   display: flex;
   gap: 8px;
@@ -402,6 +450,64 @@
 .tp-page--priority .agent-send-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.tp-page--priority .agent-chat-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  border-radius: 3px;
+  background: var(--tp-surface-subtle);
+  border: 1px solid var(--tp-border);
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--tp-text-muted);
+}
+
+.tp-page--priority .agent-chat-stats[hidden] {
+  display: none;
+}
+
+.tp-page--priority .agent-chat-stats-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 0;
+  min-width: 0;
+}
+
+.tp-page--priority .agent-chat-stats-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.tp-page--priority .agent-chat-stats-label {
+  color: var(--tp-text-muted);
+  opacity: 0.85;
+}
+
+.tp-page--priority .agent-chat-stats-value {
+  color: var(--tp-text);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14em;
+}
+
+.tp-page--priority .agent-chat-stats-row--session .agent-chat-stats-item:last-child .agent-chat-stats-value {
+  max-width: 18em;
+}
+
+.tp-page--priority .agent-chat-stats-sep {
+  display: inline-block;
+  margin: 0 5px;
+  color: var(--tp-border-strong);
+  user-select: none;
 }
 
 .tp-page--priority .agent-error {

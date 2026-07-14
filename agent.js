@@ -82,17 +82,46 @@
         ? src.model.trim()
         : preset.model || 'gpt-4o-mini';
     var apiKey = typeof src.apiKey === 'string' ? src.apiKey.trim() : '';
+    var verifiedFingerprint =
+      typeof src.verifiedFingerprint === 'string' ? src.verifiedFingerprint : '';
     return {
       preset: presetId,
       baseUrl: baseUrl,
       model: model,
-      apiKey: apiKey
+      apiKey: apiKey,
+      verifiedFingerprint: verifiedFingerprint
     };
+  }
+
+  function providerFingerprint(provider) {
+    var p = normalizeProvider(provider);
+    return [p.preset, p.baseUrl, p.model, p.apiKey].join('\u0001');
   }
 
   function isConfigured(provider) {
     var p = normalizeProvider(provider);
     return !!(p.apiKey && p.baseUrl && p.model);
+  }
+
+  function isVerified(provider) {
+    var p = normalizeProvider(provider);
+    return isConfigured(p) && !!p.verifiedFingerprint && p.verifiedFingerprint === providerFingerprint(p);
+  }
+
+  function markVerified(provider) {
+    var p = normalizeProvider(provider);
+    p.verifiedFingerprint = providerFingerprint(p);
+    return p;
+  }
+
+  function clearVerified(provider) {
+    var p = normalizeProvider(provider);
+    p.verifiedFingerprint = '';
+    return p;
+  }
+
+  function providersEqual(a, b) {
+    return providerFingerprint(a) === providerFingerprint(b);
   }
 
   async function getProvider(t) {
@@ -218,22 +247,38 @@
       }
     }
     if (state && typeof state === 'object') {
+      var priorityEnabled = state.priorityEnabled !== false;
+      var dueEnabled = state.dueEnabled !== false;
+      var blockedEnabled = !!state.enAttente;
+      var blockedReasons = Array.isArray(state.blockedReasons)
+        ? state.blockedReasons.filter(function (r) {
+            return typeof r === 'string' && r.trim();
+          })
+        : [];
       ctx.priority = {
-        enabled: state.priorityEnabled !== false,
+        enabled: priorityEnabled,
+        // Values below are inactive when enabled=false — do not treat as the live priority.
         urgency: state.urgency,
         impact: state.impact,
         ease: state.ease
       };
       ctx.due = {
-        enabled: state.dueEnabled !== false,
-        dueDate: state.dueDate || null,
-        dueTime: state.dueTime || null
+        enabled: dueEnabled,
+        // dueDate/dueTime are inactive when enabled=false.
+        dueDate: dueEnabled ? state.dueDate || null : null,
+        dueTime: dueEnabled ? state.dueTime || null : null,
+        savedDueDate: !dueEnabled && state.dueDate ? state.dueDate : undefined,
+        savedDueTime: !dueEnabled && state.dueTime ? state.dueTime : undefined
       };
       ctx.blocked = {
-        enAttente: !!state.enAttente,
-        blockedReasons: Array.isArray(state.blockedReasons)
-          ? state.blockedReasons.slice()
-          : []
+        // Bloqué section checkbox === enAttente. Card is blocked ONLY when enabled=true.
+        enabled: blockedEnabled,
+        enAttente: blockedEnabled,
+        blockedReasons: blockedEnabled ? blockedReasons.slice() : [],
+        // Retained while the section is off — historical only, NOT an active block.
+        savedReasons: !blockedEnabled && blockedReasons.length
+          ? blockedReasons.slice()
+          : undefined
       };
       if (typeof PriorityUI !== 'undefined' && PriorityUI.resolveDisplay) {
         try {
@@ -253,10 +298,12 @@
               score: display.score,
               label: display.label,
               inutile: !!display.inutile,
+              // false when Bloqué is disabled, even if savedReasons exist
               blocked: !!display.blocked,
-              dueCountdown: display.dueCountdown || null,
-              duePast: !!display.duePast,
-              dueDate: display.dueDate || null
+              dueCountdown: dueEnabled ? display.dueCountdown || null : null,
+              duePast: dueEnabled ? !!display.duePast : false,
+              dueDate: dueEnabled ? display.dueDate || null : null,
+              priorityEnabled: priorityEnabled
             };
           }
         } catch (e) {
@@ -273,8 +320,10 @@
       }
     }
     if (completion && typeof completion === 'object') {
+      var progressEnabled = completion.progressEnabled !== false;
       var progressMeta = null;
       if (
+        progressEnabled &&
         typeof CompletionTrello !== 'undefined' &&
         CompletionTrello.computeCardProgress
       ) {
@@ -285,24 +334,26 @@
         }
       }
       ctx.progress = {
-        enabled: completion.progressEnabled !== false,
+        enabled: progressEnabled,
         cardProgress:
-          completion.items && completion.items.length
-            ? null
-            : typeof completion.progress === 'number'
+          progressEnabled && !(completion.items && completion.items.length)
+            ? typeof completion.progress === 'number'
               ? completion.progress
-              : null,
+              : null
+            : null,
         percent: progressMeta ? progressMeta.percent : null,
         doneCount: progressMeta ? progressMeta.doneCount : null,
         totalCount: progressMeta ? progressMeta.totalCount : null,
-        items: (completion.items || []).map(function (item) {
-          return {
-            id: item.id,
-            text: item.text,
-            done: !!item.done,
-            progress: item.progress
-          };
-        })
+        items: progressEnabled
+          ? (completion.items || []).map(function (item) {
+              return {
+                id: item.id,
+                text: item.text,
+                done: !!item.done,
+                progress: item.progress
+              };
+            })
+          : []
       };
     }
     return ctx;
@@ -314,16 +365,29 @@
       'Tu r\u00e9ponds toujours en fran\u00e7ais, de fa\u00e7on concise et utile.',
       'Tu peux expliquer la priorit\u00e9, l\'\u00e9ch\u00e9ance, le blocage et le progr\u00e8s, et proposer des changements.',
       'R\u00e9ponds UNIQUEMENT avec un objet JSON valide de la forme\u00a0:',
-      '{"message":"texte visible","followUps":[{"label":"libell\u00e9 court","actions":[{"tool":"nom","args":{...}}]}]}',
+      '{"message":"texte visible","suggestions":["question courte 1","question courte 2"],"followUps":[{"label":"libell\u00e9 court","actions":[{"tool":"nom","args":{...}}]}]}',
+      'R\u00e8gles suggestions (obligatoire)\u00a0:',
+      '- Toujours proposer 2 \u00e0 4 questions courtes en fran\u00e7ais (ce que l\'utilisateur pourrait taper ensuite).',
+      '- Ancr\u00e9es dans le contexte carte (sections enabled, \u00e9ch\u00e9ance, blocage, progr\u00e8s).',
+      '- Elles REMPLACENT les suggestions pr\u00e9c\u00e9dentes\u00a0: varie-les selon ta derni\u00e8re r\u00e9ponse.',
+      '- Pas de num\u00e9rotation, pas de guillemets autour, style question ou courte demande.',
       'R\u00e8gles followUps\u00a0:',
-      '- Propose 0 \u00e0 4 suggestions pertinentes.',
+      '- 0 \u00e0 3 actions rapides (boutons qui appliquent des outils sans nouvel appel).',
       '- Si actions est non vide, le clic applique les outils sans nouvel appel.',
-      '- Si actions est [] (tableau vide), le label est renvoy\u00e9 comme message utilisateur.',
-      '- Pour une question purement informative, tu peux proposer des follow-ups sans actions.',
+      '- Si actions est [] , le label est renvoy\u00e9 comme message utilisateur (pr\u00e9f\u00e8re suggestions pour \u00e7a).',
+      'Sections activables (tr\u00e8s important)\u00a0:',
+      '- Chaque bloc a un champ enabled. Si enabled=false, la section est d\u00e9sactiv\u00e9e\u00a0: les valeurs saved* / latentes NE comptent PAS.',
+      '- Priorit\u00e9 active seulement si priority.enabled=true.',
+      '- \u00c9ch\u00e9ance active seulement si due.enabled=true (sinon dueDate/dueTime actifs sont null).',
+      '- Bloqu\u00e9 / en attente actif SEULEMENT si blocked.enabled=true (identique \u00e0 enAttente).',
+      '- Si blocked.enabled=false, la carte N\'EST PAS bloqu\u00e9e, m\u00eame si savedReasons contient d\'anciens motifs.',
+      '- Progr\u00e8s actif seulement si progress.enabled=true.',
+      '- Pour activer/d\u00e9sactiver\u00a0: priorityEnabled, dueEnabled, enAttente (Bloqu\u00e9), progressEnabled.',
+      '- Pour marquer bloqu\u00e9\u00a0: set_blocked avec enAttente:true (et motifs si besoin). Ne dis jamais que c\'est d\u00e9j\u00e0 bloqu\u00e9 si enabled=false.',
       'Outils disponibles\u00a0:',
       '- set_priority: { urgency?:0-4, impact?:0-4, ease?:1-5, priorityEnabled?:boolean }',
       '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean }',
-      '- set_blocked: { enAttente?: boolean, blockedReasons?: string[] }',
+      '- set_blocked: { enAttente?: boolean, blockedReasons?: string[] } (fournir des motifs active aussi Bloqu\u00e9)',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (progress carte si pas de sous-t\u00e2ches)',
       '- add_subtask: { text: string }',
       '- toggle_subtask: { id: string, done?: boolean }',
@@ -333,12 +397,184 @@
     ].join('\n');
   }
 
+  function normalizeSuggestionList(raw) {
+    var out = [];
+    if (!Array.isArray(raw)) return out;
+    raw.forEach(function (item) {
+      var text = '';
+      if (typeof item === 'string') text = item.trim();
+      else if (item && typeof item === 'object' && typeof item.label === 'string') {
+        text = item.label.trim();
+      }
+      if (!text) return;
+      if (out.indexOf(text) >= 0) return;
+      out.push(text);
+    });
+    return out.slice(0, 4);
+  }
+
+  function suggestionsFromFollowUps(followUps) {
+    var out = [];
+    (followUps || []).forEach(function (fu) {
+      if (!fu || !fu.label) return;
+      if (fu.actions && fu.actions.length) return;
+      out.push(fu.label);
+    });
+    return out.slice(0, 4);
+  }
+
+  /** Rough token estimate when the provider omits usage (≈4 chars / token). */
+  function estimateTokensFromText(text) {
+    var s = typeof text === 'string' ? text : '';
+    if (!s) return 0;
+    return Math.max(1, Math.ceil(s.length / 4));
+  }
+
+  function estimateMessagesTokens(messages) {
+    var total = 0;
+    (messages || []).forEach(function (m) {
+      if (!m) return;
+      total += estimateTokensFromText(m.role || '');
+      total += estimateTokensFromText(m.content || '');
+      total += 4; // per-message overhead
+    });
+    return total;
+  }
+
+  /**
+   * Approximate context window by model id (best-effort; OpenAI-compatible ids vary).
+   */
+  function contextWindowForModel(modelId) {
+    var id = (modelId || '').toLowerCase();
+    if (/gpt-4\.1|gpt-5\.4|gpt-5\.2|gpt-5\.1|gpt-5(?!-)/.test(id)) return 1048576;
+    if (/gpt-5-mini|gpt-5-nano|gpt-4o|o4-mini|o3-mini|gpt-4\.1-mini|gpt-4\.1-nano/.test(id)) {
+      return 128000;
+    }
+    if (/claude.*opus|claude.*sonnet|claude-3/.test(id)) return 200000;
+    if (/gemini.*pro|gemini.*flash/.test(id)) return 1000000;
+    return 128000;
+  }
+
+  /**
+   * Approx USD per 1M tokens { input, output }. Matched longest suffix first via includes.
+   * Used only for a rough UI estimate — not billing-accurate.
+   */
+  var MODEL_PRICE_PER_M = [
+    { match: 'gpt-5.4-nano', input: 0.1, output: 0.4 },
+    { match: 'gpt-5.4-mini', input: 0.25, output: 2.0 },
+    { match: 'gpt-5.4', input: 1.25, output: 10.0 },
+    { match: 'gpt-5-nano', input: 0.05, output: 0.4 },
+    { match: 'gpt-5-mini', input: 0.25, output: 2.0 },
+    { match: 'gpt-5.2', input: 1.25, output: 10.0 },
+    { match: 'gpt-5.1', input: 1.25, output: 10.0 },
+    { match: 'gpt-5', input: 1.25, output: 10.0 },
+    { match: 'gpt-4.1-nano', input: 0.1, output: 0.4 },
+    { match: 'gpt-4.1-mini', input: 0.4, output: 1.6 },
+    { match: 'gpt-4.1', input: 2.0, output: 8.0 },
+    { match: 'gpt-4o-mini', input: 0.15, output: 0.6 },
+    { match: 'gpt-4o', input: 2.5, output: 10.0 },
+    { match: 'o4-mini', input: 1.1, output: 4.4 },
+    { match: 'o3-mini', input: 1.1, output: 4.4 },
+    { match: 'claude-3-5-haiku', input: 0.8, output: 4.0 },
+    { match: 'claude-3-5-sonnet', input: 3.0, output: 15.0 },
+    { match: 'claude-sonnet', input: 3.0, output: 15.0 },
+    { match: 'claude-opus', input: 15.0, output: 75.0 },
+    { match: 'gemini-2.0-flash', input: 0.1, output: 0.4 },
+    { match: 'gemini-flash', input: 0.1, output: 0.4 }
+  ];
+
+  function pricingForModel(modelId) {
+    var id = (modelId || '').toLowerCase();
+    for (var i = 0; i < MODEL_PRICE_PER_M.length; i++) {
+      if (id.indexOf(MODEL_PRICE_PER_M[i].match) >= 0) {
+        return MODEL_PRICE_PER_M[i];
+      }
+    }
+    return { match: 'default', input: 0.15, output: 0.6 };
+  }
+
+  function estimateCostUsd(modelId, promptTokens, completionTokens) {
+    var price = pricingForModel(modelId);
+    var cost =
+      (Math.max(0, promptTokens || 0) / 1e6) * price.input +
+      (Math.max(0, completionTokens || 0) / 1e6) * price.output;
+    return cost;
+  }
+
+  function extractUsageFromRaw(raw, messages, content, modelId) {
+    var usage = (raw && raw.usage) || null;
+    var promptTokens = usage && typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : null;
+    var completionTokens =
+      usage && typeof usage.completion_tokens === 'number' ? usage.completion_tokens : null;
+    var totalTokens = usage && typeof usage.total_tokens === 'number' ? usage.total_tokens : null;
+    var cachedTokens = null;
+    var reasoningTokens = null;
+    if (usage && usage.prompt_tokens_details && typeof usage.prompt_tokens_details.cached_tokens === 'number') {
+      cachedTokens = usage.prompt_tokens_details.cached_tokens;
+    }
+    if (
+      usage &&
+      usage.completion_tokens_details &&
+      typeof usage.completion_tokens_details.reasoning_tokens === 'number'
+    ) {
+      reasoningTokens = usage.completion_tokens_details.reasoning_tokens;
+    }
+    var estimated = promptTokens == null || completionTokens == null;
+    if (promptTokens == null) promptTokens = estimateMessagesTokens(messages);
+    if (completionTokens == null) completionTokens = estimateTokensFromText(content || '');
+    if (totalTokens == null) totalTokens = promptTokens + completionTokens;
+
+    var finishReason = null;
+    if (raw && raw.choices && raw.choices[0] && raw.choices[0].finish_reason) {
+      finishReason = String(raw.choices[0].finish_reason);
+    }
+    var resolvedModel =
+      (raw && typeof raw.model === 'string' && raw.model) || modelId || '';
+
+    var systemChars = 0;
+    var historyChars = 0;
+    var userChars = 0;
+    (messages || []).forEach(function (m) {
+      if (!m) return;
+      var len = String(m.content || '').length;
+      if (m.role === 'system') systemChars += len;
+      else if (m.role === 'user') userChars += len;
+      else historyChars += len;
+    });
+    var contextTokens = estimated ? estimateMessagesTokens(messages) : promptTokens;
+    var windowTokens = contextWindowForModel(resolvedModel);
+    var fillPercent =
+      windowTokens > 0 ? Math.min(100, Math.round((contextTokens / windowTokens) * 1000) / 10) : 0;
+
+    return {
+      promptTokens: promptTokens,
+      completionTokens: completionTokens,
+      totalTokens: totalTokens,
+      cachedTokens: cachedTokens,
+      reasoningTokens: reasoningTokens,
+      estimated: estimated,
+      costUsd: estimateCostUsd(resolvedModel, promptTokens, completionTokens),
+      model: resolvedModel,
+      finishReason: finishReason,
+      context: {
+        requestTokens: contextTokens,
+        windowTokens: windowTokens,
+        fillPercent: fillPercent,
+        messageCount: (messages || []).length,
+        systemChars: systemChars,
+        historyChars: historyChars,
+        userChars: userChars
+      }
+    };
+  }
+
   function parseAssistantPayload(content) {
     var text = typeof content === 'string' ? content.trim() : '';
     if (!text) {
       return {
         message: 'R\u00e9ponse vide du fournisseur.',
-        followUps: []
+        followUps: [],
+        suggestions: []
       };
     }
     var jsonText = text;
@@ -376,9 +612,14 @@
           followUps.push({ label: label, actions: actions });
         });
       }
-      return { message: message, followUps: followUps.slice(0, 4) };
+      followUps = followUps.slice(0, 4);
+      var suggestions = normalizeSuggestionList(parsed.suggestions);
+      if (!suggestions.length) {
+        suggestions = suggestionsFromFollowUps(followUps);
+      }
+      return { message: message, followUps: followUps, suggestions: suggestions };
     } catch (e) {
-      return { message: text, followUps: [] };
+      return { message: text, followUps: [], suggestions: [] };
     }
   }
 
@@ -423,6 +664,7 @@
   }
 
   async function chatTurn(provider, history, bridge, userText) {
+    var p = normalizeProvider(provider);
     var context = buildContext(bridge);
     var messages = [
       { role: 'system', content: systemPrompt(context) }
@@ -441,23 +683,99 @@
     });
     messages.push({ role: 'user', content: String(userText || '').trim() });
 
+    var t0 = Date.now();
     var response;
     try {
-      response = await chatCompletions(provider, messages, { jsonMode: true });
+      response = await chatCompletions(p, messages, { jsonMode: true });
     } catch (err) {
       if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
-        response = await chatCompletions(provider, messages, { jsonMode: false });
+        response = await chatCompletions(p, messages, { jsonMode: false });
+      } else {
+        throw err;
+      }
+    }
+    var latencyMs = Date.now() - t0;
+    var parsed = parseAssistantPayload(response.content);
+    var usage = extractUsageFromRaw(response.raw, messages, response.content, p.model);
+    usage.latencyMs = latencyMs;
+    usage.historyTurns = (history || []).length;
+    return {
+      message: parsed.message,
+      followUps: parsed.followUps,
+      suggestions: parsed.suggestions,
+      rawJson: response.content,
+      context: context,
+      usage: usage
+    };
+  }
+
+  /**
+   * Lightweight call: AI-generated question chips for the card (opening state
+   * or refresh after structural changes). Returns string[].
+   */
+  async function suggestQuestions(provider, bridge, options) {
+    options = options || {};
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) return [];
+    var context = buildContext(bridge);
+    var historyHint = '';
+    if (options.history && options.history.length) {
+      var last = options.history[options.history.length - 1];
+      if (last && last.content) {
+        historyHint =
+          '\nDernier \u00e9change\u00a0: ' +
+          String(last.role || '') +
+          ' \u2014 ' +
+          String(last.content).slice(0, 280);
+      }
+    }
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu sugg\u00e8res des questions pour l\'assistant Priorit\u00e9 Trello.',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":["...","...","..."]}',
+          '2 \u00e0 4 questions courtes en fran\u00e7ais, ancr\u00e9es dans le contexte.',
+          'Respecte enabled=false des sections (ne suppose pas un blocage/une \u00e9ch\u00e9ance active si d\u00e9sactiv\u00e9).',
+          'Contexte carte\u00a0:',
+          JSON.stringify(context),
+          historyHint
+        ]
+          .filter(Boolean)
+          .join('\n')
+      },
+      {
+        role: 'user',
+        content:
+          'Propose des questions utiles que l\'utilisateur pourrait poser maintenant sur cette carte.'
+      }
+    ];
+    var response;
+    try {
+      response = await chatCompletions(p, messages, {
+        jsonMode: true,
+        max_tokens: 180,
+        temperature: 0.7
+      });
+    } catch (err) {
+      if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+        response = await chatCompletions(p, messages, {
+          jsonMode: false,
+          max_tokens: 180,
+          temperature: 0.7
+        });
       } else {
         throw err;
       }
     }
     var parsed = parseAssistantPayload(response.content);
-    return {
-      message: parsed.message,
-      followUps: parsed.followUps,
-      rawJson: response.content,
-      context: context
-    };
+    if (parsed.suggestions && parsed.suggestions.length) return parsed.suggestions;
+    try {
+      var raw = JSON.parse(response.content);
+      return normalizeSuggestionList(raw.suggestions || raw.questions);
+    } catch (e) {
+      return [];
+    }
   }
 
   function validateDueDate(value) {
@@ -520,7 +838,6 @@
       }
       if (tool === 'set_blocked') {
         var blockedPartial = {};
-        if (args.enAttente != null) blockedPartial.enAttente = !!args.enAttente;
         if (Array.isArray(args.blockedReasons)) {
           blockedPartial.blockedReasons = args.blockedReasons
             .filter(function (r) {
@@ -529,6 +846,15 @@
             .map(function (r) {
               return r.trim();
             });
+        }
+        if (args.enAttente != null) {
+          blockedPartial.enAttente = !!args.enAttente;
+        } else if (
+          blockedPartial.blockedReasons &&
+          blockedPartial.blockedReasons.length
+        ) {
+          // Providing reasons without enAttente implies enabling the Bloqué section.
+          blockedPartial.enAttente = true;
         }
         if (!Object.keys(blockedPartial).length) {
           return { ok: false, error: 'Aucun champ blocage \u00e0 modifier' };
@@ -934,14 +1260,23 @@
     PRESETS: PRESETS,
     OPENAI_MODELS: OPENAI_MODELS,
     normalizeProvider: normalizeProvider,
+    providerFingerprint: providerFingerprint,
+    providersEqual: providersEqual,
     isConfigured: isConfigured,
+    isVerified: isVerified,
+    markVerified: markVerified,
+    clearVerified: clearVerified,
     getProvider: getProvider,
     saveProvider: saveProvider,
     buildContext: buildContext,
     chatTurn: chatTurn,
+    suggestQuestions: suggestQuestions,
     executeAction: executeAction,
     executeActions: executeActions,
     runProviderTests: runProviderTests,
-    chatCompletions: chatCompletions
+    chatCompletions: chatCompletions,
+    estimateCostUsd: estimateCostUsd,
+    extractUsageFromRaw: extractUsageFromRaw,
+    contextWindowForModel: contextWindowForModel
   };
 })(typeof window !== 'undefined' ? window : this);
