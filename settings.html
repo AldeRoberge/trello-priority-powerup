@@ -261,7 +261,7 @@
       if (section) section.hidden = false;
       if (!PriorityTrello.restClientOptions || !PriorityTrello.restClientOptions()) {
         statusEl.textContent =
-          'Déplacement de cartes / tri auto : indisponible. Renseignez appKey dans rest-config.js (clé depuis trello.com/power-ups/admin), puis rechargez le Power-Up.';
+          'Déplacement de cartes / tri auto : indisponible. Renseignez appKey dans js/rest-config.js (clé depuis trello.com/power-ups/admin), puis rechargez le Power-Up.';
         authBtn.hidden = true;
         return;
       }

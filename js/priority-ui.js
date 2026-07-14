@@ -4452,7 +4452,7 @@
       if (reason === 'no-app-key') {
         return (
           'Impossible de déplacer la carte : aucune clé API Trello n’est configurée pour ce Power-Up. ' +
-          'Dans rest-config.js, renseignez appKey (clé depuis trello.com/power-ups/admin), puis rechargez.'
+          'Dans js/rest-config.js, renseignez appKey (clé depuis trello.com/power-ups/admin), puis rechargez.'
         );
       }
       if (reason === 'not-authorized') {

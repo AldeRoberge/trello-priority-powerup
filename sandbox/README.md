@@ -13,29 +13,33 @@ Ouvrir les fichiers directement dans le navigateur — pas de build ni de serveu
 
 ### Ordre de chargement des scripts (`priority-variants.html`)
 
-1. `../priority-ui.js` → expose `window.PriorityUI`
+1. `../js/priority-ui.js` → expose `window.PriorityUI`
 
-Styles : `../priority-ui.css`
+Styles : `../css/priority-ui.css`
 
-## Fichiers partagés (racine du dépôt)
+## Fichiers partagés (production)
 
 | Fichier | Rôle |
 |---------|------|
-| `../priority-ui.js` | Formules de score, libellés de palier FR, icônes SVG, composants UI (`mountVariant`, modale d'aide, graphique RSM). |
-| `../priority-ui.css` | Styles de l'éditeur de priorité (partagés avec la production). |
+| `../js/priority-ui.js` | Formules de score, libellés de palier FR, icônes SVG, composants UI (`mountVariant`, modale d'aide, graphique RSM). |
+| `../css/priority-ui.css` | Styles de l'éditeur de priorité (partagés avec la production). |
 
 ## Scripts de vérification
 
 | Script | Runtime | Commande |
 |--------|---------|----------|
 | `verify-presets.js` | Windows `cscript` | `npm run verify:presets` ou `cscript //nologo sandbox\verify-presets.js` |
-| `verify-version.js` | Node.js | `npm run verify:version` ou `node sandbox/verify-version.js` |
+| `verify-matrix.js` | Node.js | `npm run verify:matrix` |
+| `verify-version.js` | Node.js | `npm run verify:version` |
+| `verify-badges.js` | Node.js | `npm run verify:badges` |
+| `verify-completion.js` | Node.js | `npm run verify:completion` |
+| `verify-statut.js` | Node.js | `node sandbox/verify-statut.js` |
 
-- **verify-presets** : formule baseline, paliers (`TIERS`), presets `HEAT_SEGMENTS`. La logique est **dupliquée** volontairement (exécutable sans navigateur ni DOM) — doit rester alignée avec `priority-ui.js` (section « Scoring »).
-- **verify-version** : formatage et résolution de l'horodatage de build (`version.js`, `build-info.json`).
+- **verify-presets** : formule baseline, paliers (`TIERS`), presets `HEAT_SEGMENTS`. La logique est **dupliquée** volontairement (exécutable sans navigateur ni DOM) — doit rester alignée avec `js/priority-ui.js` (section « Scoring »).
+- **verify-version** : formatage et résolution de l'horodatage de build (`js/version.js`, `build-info.json`).
 
 Code de sortie `0` = succès, `1` = échec.
 
 ## Formule (`priority-variants.html`)
 
-Variante **A (baseline)** : pression d'urgence + impact pondéré + terme facilité, avec atténuation et boost d'urgence. Détails dans `PriorityUI.calc` (`priority-ui.js`).
+Variante **A (baseline)** : pression d'urgence + impact pondéré + terme facilité, avec atténuation et boost d'urgence. Détails dans `PriorityUI.calc` (`js/priority-ui.js`).

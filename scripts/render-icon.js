@@ -14,9 +14,9 @@ async function main() {
     process.exit(1);
   }
 
-  const root = path.join(__dirname, '..');
-  const svgPath = path.join(root, 'icon.svg');
-  const pngPath = path.join(root, 'icon.png');
+  const assets = path.join(__dirname, '..', 'assets');
+  const svgPath = path.join(assets, 'icon.svg');
+  const pngPath = path.join(assets, 'icon.png');
 
   await sharp(svgPath)
     .resize(144, 144)
