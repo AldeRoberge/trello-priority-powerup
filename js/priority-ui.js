@@ -1899,7 +1899,7 @@
 
   /**
    * Human-readable due headline + remaining line for the Échéance body.
-   * Ex. primary "Lundi prochain à midi", secondary "6 jours restants".
+   * Ex. primary "6 jours restants", secondary "Lundi prochain à midi".
    */
   function formatDueDateHumanReadable(iso, time, now) {
     var normalized = normalizeDueDate(iso);
@@ -1908,43 +1908,39 @@
     var days = daysUntilDue(normalized, now);
     var dayPhrase = formatDueDateRelativeDay(normalized, now);
     var period = matchDueTimePeriod(time);
-    var primary = dayPhrase;
+    var whenPhrase = dayPhrase;
     var dueTime = normalizeDueTime(time);
 
     if (period) {
       var periodWord = period.label.toLocaleLowerCase('fr-FR');
       if (days === 0) {
-        if (period.id === 'matin') primary = 'Ce matin';
-        else if (period.id === 'apres-midi') primary = 'Cet apr\u00e8s-midi';
-        else if (period.id === 'soir') primary = 'Ce soir';
-        else primary = 'Aujourd\'hui \u00e0 ' + periodWord;
+        if (period.id === 'matin') whenPhrase = 'Ce matin';
+        else if (period.id === 'apres-midi') whenPhrase = 'Cet apr\u00e8s-midi';
+        else if (period.id === 'soir') whenPhrase = 'Ce soir';
+        else whenPhrase = 'Aujourd\'hui \u00e0 ' + periodWord;
       } else if (days === 1 && (period.id === 'matin' || period.id === 'apres-midi' || period.id === 'soir')) {
-        primary = 'Demain ' + periodWord;
+        whenPhrase = 'Demain ' + periodWord;
       } else {
-        primary = dayPhrase + ' \u00e0 ' + periodWord;
+        whenPhrase = dayPhrase + ' \u00e0 ' + periodWord;
       }
     } else if (dueTime) {
-      primary = dayPhrase + ' \u00e0 ' + formatDueTimeCompactFr(dueTime);
+      whenPhrase = dayPhrase + ' \u00e0 ' + formatDueTimeCompactFr(dueTime);
     }
 
-    var secondary = formatDueCountdown(normalized, now, time);
+    var countdown = formatDueCountdown(normalized, now, time);
     // Avoid "Demain matin" / "Demain" duplication when countdown is only the day name.
-    if (
-      secondary &&
-      primary &&
-      secondary.toLocaleLowerCase('fr-FR') === dayPhrase.toLocaleLowerCase('fr-FR')
-    ) {
-      secondary = '';
-    }
-    if (
-      secondary &&
-      primary &&
-      secondary.toLocaleLowerCase('fr-FR') === primary.toLocaleLowerCase('fr-FR')
-    ) {
-      secondary = '';
+    var countdownKey = countdown ? countdown.toLocaleLowerCase('fr-FR') : '';
+    var redundant =
+      !countdown ||
+      !whenPhrase ||
+      countdownKey === dayPhrase.toLocaleLowerCase('fr-FR') ||
+      countdownKey === whenPhrase.toLocaleLowerCase('fr-FR');
+
+    if (redundant) {
+      return { primary: whenPhrase || countdown, secondary: '' };
     }
 
-    return { primary: primary, secondary: secondary };
+    return { primary: countdown, secondary: whenPhrase };
   }
 
   /** Compact header summary when an enabled due-date section is collapsed. */
