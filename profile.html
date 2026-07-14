@@ -88,6 +88,7 @@
       }
 
       var featureChecks = {};
+      var currentExperimental = null;
       var statusEl = document.getElementById('profileStatus');
       var saveTimer = null;
 
@@ -153,12 +154,15 @@
           language: document.getElementById('profileLanguage').value,
           tone: document.getElementById('profileTone').value,
           agentStatus: document.getElementById('profileAgentStatus').value,
-          features: features
+          features: features,
+          // Experimental toggles live in Settings; keep last known values here.
+          experimental: currentExperimental
         });
       }
 
       function writeForm(profile) {
         var p = Profile.normalizeProfile(profile);
+        currentExperimental = p.experimental;
         document.getElementById('profileDisplayName').value = p.displayName;
         document.getElementById('profileRole').value = p.role;
         document.getElementById('profileNotes').value = p.notes;

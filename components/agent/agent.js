@@ -1330,6 +1330,7 @@
       '- Elles REMPLACENT les suggestions pr\u00e9c\u00e9dentes\u00a0: varie-les selon ta derni\u00e8re r\u00e9ponse.',
       '- Pas de num\u00e9rotation, pas de guillemets autour.',
       '- INTERDIT\u00a0: placeholders comme "..." , "\u2026" , "suggestion" , "exemple"\u00a0; chaque entr\u00e9e doit \u00eatre un vrai texte cliquable.',
+      '- \u00c9chelle / choix ordonn\u00e9s (facilit\u00e9, gravit\u00e9, urgence\u2026)\u00a0: colorie vert\u2192rouge via heat 0\u20134 ou color ("green"|"yellow"|"orange"|"red"), ordonnes du plus doux au plus intense. Ex.\u00a0: {"label":"C\'est simple","heat":0}. Tu peux aussi mettre suggestionScale:true.',
       'R\u00e8gles actions (appliqu\u00e9es automatiquement)\u00a0:',
       '- 0 \u00e0 3 outils \u00e0 ex\u00e9cuter tout de suite d\u00e8s qu\'une action partielle est possible (ne pas attendre les d\u00e9tails optionnels).',
       '- Ne jamais inclure un outil incomplet sur un champ OBLIGATOIRE (ex. add_subtask sans text non vide).',
@@ -2129,6 +2130,10 @@
       '- Ex. facilit\u00e9\u00a0: \u00ab\u00a0Manger plus de pain avec Eiraul, c\'est simple ou \u00e7a demande du travail\u00a0?\u00a0\u00bb',
       '- Si le titre est trop long / cryptique\u00a0: raccourcis-le ou reformule-le sans perdre le sens (pas de guillemets lourds autour du titre).',
       '- Suggestions = r\u00e9ponses courtes en mots (2\u20134), pas des nombres. Ex.\u00a0: \u00ab\u00a0Pas grand-chose\u00a0\u00bb, \u00ab\u00a0Quelqu\'un attend\u00a0\u00bb, \u00ab\u00a0\u00c7a bloque d\'autres trucs\u00a0\u00bb, \u00ab\u00a0Cons\u00e9quences graves\u00a0\u00bb.',
+      '- Ordonne TOUJOURS les suggestions du plus doux / simple / faible (vert) au plus intense / difficile / grave (rouge).',
+      '- Colorie automatiquement chaque r\u00e9ponse d\'\u00e9chelle avec heat 0\u20134 (0=vert, 4=rouge), OU suggestionScale:true + strings ordonn\u00e9es.',
+      '- Ex. facilit\u00e9\u00a0: {"suggestions":[{"label":"C\'est simple","heat":0},{"label":"\u00c7a demande un peu de travail","heat":2},{"label":"C\'est assez compliqu\u00e9","heat":4}],"suggestionScale":true}',
+      '- Ex. urgence (doux\u2192grave)\u00a0: heat 0 \u00ab\u00a0Pas grand-chose\u00a0\u00bb \u2026 heat 4 \u00ab\u00a0Cons\u00e9quences graves\u00a0\u00bb.',
       '- Utilise \u2026 seulement pour une r\u00e9ponse \u00e0 compl\u00e9ter (ex. \u00ab\u00a0\u2026 attend\u00a0\u00bb).',
       '',
       'Inf\u00e9rence + m\u00e9moire carte\u00a0:',
@@ -2141,7 +2146,7 @@
       'Les axes priority actuels sont des VALEURS PAR D\u00c9FAUT non fiables sauf si priorityAxesTrusted=true.',
       '',
       'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
-      '{"thinking":"...","message":"...","suggestions":["..."],"prompts":[],"actions":[{"tool":"...","args":{}}],"cardPatches":[{"op":"remember","text":"..."}],"completeInterview":false}',
+      '{"thinking":"...","message":"...","suggestions":[{"label":"...","heat":0}],"suggestionScale":true,"prompts":[],"actions":[{"tool":"...","args":{}}],"cardPatches":[{"op":"remember","text":"..."}],"completeInterview":false}',
       '',
       'R\u00e8gles interview\u00a0:',
       '- Une question claire \u00e0 la fois.',
@@ -2314,12 +2319,33 @@
       (data && data.cardPatches) || (parsed && parsed.cardPatches)
     );
 
+    var suggestionScale = wantsSuggestionScale(data) || wantsSuggestionScale(parsed);
+    var suggestionEntries = normalizeSuggestionEntries(
+      (data && data.suggestions) || parsed.suggestions,
+      5,
+      { scale: suggestionScale }
+    );
+    // Interview answer chips (no "?") are ordinal soft→intense when unmarked.
+    if (
+      !suggestionScale &&
+      suggestionEntries.length >= 2 &&
+      suggestionEntries.length <= 5 &&
+      !suggestionEntries.some(function (entry) {
+        return entry.heat != null;
+      }) &&
+      suggestionEntries.every(function (entry) {
+        return entry.text.indexOf('?') < 0;
+      })
+    ) {
+      var interviewSteps = spreadScaleHeat(suggestionEntries.length);
+      suggestionEntries.forEach(function (entry, i) {
+        entry.heat = interviewSteps[i];
+      });
+    }
+
     return {
       message: message,
-      suggestions: normalizeSuggestionList(
-        (data && data.suggestions) || parsed.suggestions,
-        5
-      ),
+      suggestions: suggestionEntries,
       actions: actions,
       prompts: prompts,
       followUps: parsed.followUps || [],
@@ -2477,22 +2503,116 @@
     return true;
   }
 
-  function normalizeSuggestionList(raw, maxItems) {
+  /** Named colors (FR/EN) → heat 0–4 (green → red). */
+  var SUGGESTION_COLOR_HEAT = {
+    green: 0,
+    vert: 0,
+    lime: 1,
+    yellow: 2,
+    jaune: 2,
+    amber: 2,
+    orange: 3,
+    red: 4,
+    rouge: 4,
+    blue: 1,
+    bleu: 1,
+    gray: 0,
+    grey: 0,
+    gris: 0
+  };
+
+  function clampSuggestionHeat(value) {
+    var n = typeof value === 'number' ? value : parseFloat(value);
+    if (!isFinite(n)) return null;
+    return Math.max(0, Math.min(4, Math.round(n)));
+  }
+
+  function heatFromSuggestionItem(item) {
+    if (!item || typeof item !== 'object') return null;
+    if (item.heat != null) return clampSuggestionHeat(item.heat);
+    if (typeof item.color === 'string') {
+      var key = item.color.trim().toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(SUGGESTION_COLOR_HEAT, key)) {
+        return SUGGESTION_COLOR_HEAT[key];
+      }
+    }
+    return null;
+  }
+
+  /** Even green→red steps for N chips (e.g. 3 → 0,2,4). */
+  function spreadScaleHeat(count) {
+    var n = Math.max(0, Math.floor(count));
+    if (n <= 0) return [];
+    if (n === 1) return [2];
+    var out = [];
+    for (var i = 0; i < n; i++) {
+      out.push(Math.round((i / (n - 1)) * 4));
+    }
+    return out;
+  }
+
+  /**
+   * Normalize AI suggestions to { text, heat }[].
+   * heat is 0–4 (green→red) or null. options.scale forces even spread when
+   * no per-item heat/color was provided.
+   */
+  function normalizeSuggestionEntries(raw, maxItems, options) {
+    options = options || {};
     var max =
       typeof maxItems === 'number' && maxItems > 0 ? Math.floor(maxItems) : 4;
     var out = [];
     if (!Array.isArray(raw)) return out;
     raw.forEach(function (item) {
       var text = '';
-      if (typeof item === 'string') text = item.trim();
-      else if (item && typeof item === 'object' && typeof item.label === 'string') {
-        text = item.label.trim();
+      var heat = null;
+      if (typeof item === 'string') {
+        text = item.trim();
+      } else if (item && typeof item === 'object') {
+        if (typeof item.label === 'string') text = item.label.trim();
+        else if (typeof item.text === 'string') text = item.text.trim();
+        else if (typeof item.suggestion === 'string') text = item.suggestion.trim();
+        heat = heatFromSuggestionItem(item);
       }
       if (!isWorthySuggestion(text)) return;
-      if (out.indexOf(text) >= 0) return;
-      out.push(text);
+      if (
+        out.some(function (entry) {
+          return entry.text === text;
+        })
+      ) {
+        return;
+      }
+      out.push({ text: text, heat: heat });
     });
-    return out.slice(0, max);
+    out = out.slice(0, max);
+    var hasHeat = out.some(function (entry) {
+      return entry.heat != null;
+    });
+    if (options.scale && !hasHeat) {
+      var steps = spreadScaleHeat(out.length);
+      out.forEach(function (entry, i) {
+        entry.heat = steps[i];
+      });
+    }
+    return out;
+  }
+
+  function normalizeSuggestionList(raw, maxItems) {
+    return normalizeSuggestionEntries(raw, maxItems).map(function (entry) {
+      return entry.text;
+    });
+  }
+
+  function wantsSuggestionScale(parsed) {
+    if (!parsed || typeof parsed !== 'object') return false;
+    if (parsed.suggestionScale === true || parsed.scaleSuggestions === true) {
+      return true;
+    }
+    var colors = parsed.suggestionColors;
+    if (typeof colors === 'string') {
+      var key = colors.trim().toLowerCase();
+      return key === 'scale' || key === 'green-red' || key === 'vert-rouge';
+    }
+    return false;
   }
 
   function suggestionsFromFollowUps(followUps) {
@@ -2704,9 +2824,14 @@
         });
       }
       followUps = followUps.slice(0, 4);
-      var suggestions = normalizeSuggestionList(parsed.suggestions);
+      var suggestionScale = wantsSuggestionScale(parsed);
+      var suggestions = normalizeSuggestionEntries(parsed.suggestions, 4, {
+        scale: suggestionScale
+      });
       if (!suggestions.length) {
-        suggestions = suggestionsFromFollowUps(followUps);
+        suggestions = suggestionsFromFollowUps(followUps).map(function (text) {
+          return { text: text, heat: null };
+        });
       }
       var normalized = normalizeActionsWithMeta(parsed.actions);
       return {

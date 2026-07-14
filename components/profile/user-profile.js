@@ -35,6 +35,19 @@
     assistant: 'Assistant'
   };
 
+  /** Opt-in beta visuals (default off). */
+  var EXPERIMENTAL_KEYS = ['impactGlobe', 'easeHourglass'];
+
+  var EXPERIMENTAL_LABELS = {
+    impactGlobe: 'Globe d’impact (portée)',
+    easeHourglass: 'Sablier de durée (Facilité)'
+  };
+
+  var EXPERIMENTAL_HINTS = {
+    impactGlobe: 'Anneau de portée autour du globe sur le champ Impact',
+    easeHourglass: 'Contrôle de durée estimée avec sablier sous Facilité'
+  };
+
   var TONE_KEYS = ['concise', 'detailed', 'friendly'];
   var TONE_LABELS = {
     concise: 'Concise',
@@ -79,6 +92,14 @@
     return out;
   }
 
+  function defaultExperimental() {
+    var out = {};
+    EXPERIMENTAL_KEYS.forEach(function (key) {
+      out[key] = false;
+    });
+    return out;
+  }
+
   function emptyProfile() {
     return {
       version: 1,
@@ -88,6 +109,7 @@
       tone: 'concise',
       language: 'fr',
       features: defaultFeatures(),
+      experimental: defaultExperimental(),
       agentStatus: 'standard',
       updatedAt: ''
     };
@@ -116,6 +138,15 @@
     return out;
   }
 
+  function normalizeExperimental(raw) {
+    var src = raw && typeof raw === 'object' ? raw : {};
+    var out = defaultExperimental();
+    EXPERIMENTAL_KEYS.forEach(function (key) {
+      if (typeof src[key] === 'boolean') out[key] = src[key];
+    });
+    return out;
+  }
+
   function normalizeProfile(raw) {
     var src = raw && typeof raw === 'object' ? raw : {};
     return {
@@ -126,6 +157,7 @@
       tone: normalizeTone(src.tone),
       language: normalizeLanguage(src.language),
       features: normalizeFeatures(src.features),
+      experimental: normalizeExperimental(src.experimental),
       agentStatus: normalizeAgentStatus(src.agentStatus, src.agentDebug),
       updatedAt: typeof src.updatedAt === 'string' ? src.updatedAt : ''
     };
@@ -135,6 +167,12 @@
     var p = normalizeProfile(profile);
     if (FEATURE_KEYS.indexOf(key) === -1) return true;
     return p.features[key] !== false;
+  }
+
+  function isExperimentalEnabled(profile, key) {
+    var p = normalizeProfile(profile);
+    if (EXPERIMENTAL_KEYS.indexOf(key) === -1) return false;
+    return p.experimental[key] === true;
   }
 
   function featureSelector(key) {
@@ -189,7 +227,8 @@
       notes: p.notes || null,
       tone: p.tone,
       language: p.language,
-      features: p.features
+      features: p.features,
+      experimental: p.experimental
     };
   }
 
@@ -262,6 +301,9 @@
     STORAGE_KEY: STORAGE_KEY,
     FEATURE_KEYS: FEATURE_KEYS,
     FEATURE_LABELS: FEATURE_LABELS,
+    EXPERIMENTAL_KEYS: EXPERIMENTAL_KEYS,
+    EXPERIMENTAL_LABELS: EXPERIMENTAL_LABELS,
+    EXPERIMENTAL_HINTS: EXPERIMENTAL_HINTS,
     TONE_KEYS: TONE_KEYS,
     TONE_LABELS: TONE_LABELS,
     LANGUAGE_KEYS: LANGUAGE_KEYS,
@@ -271,7 +313,9 @@
     emptyProfile: emptyProfile,
     normalizeAgentStatus: normalizeAgentStatus,
     normalizeProfile: normalizeProfile,
+    normalizeExperimental: normalizeExperimental,
     isFeatureEnabled: isFeatureEnabled,
+    isExperimentalEnabled: isExperimentalEnabled,
     applyFeaturesToCard: applyFeaturesToCard,
     toAgentContext: toAgentContext,
     profilePromptLines: profilePromptLines,

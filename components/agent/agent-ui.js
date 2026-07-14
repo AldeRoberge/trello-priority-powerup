@@ -2141,15 +2141,50 @@
       });
     }
 
+    function normalizeSuggestionChipItems(list) {
+      var out = [];
+      (list || []).forEach(function (s) {
+        var text = '';
+        var heat = null;
+        if (typeof s === 'string') {
+          text = s.trim();
+        } else if (s && typeof s === 'object') {
+          if (typeof s.text === 'string') text = s.text.trim();
+          else if (typeof s.label === 'string') text = s.label.trim();
+          if (s.heat != null && isFinite(Number(s.heat))) {
+            heat = Math.max(0, Math.min(4, Math.round(Number(s.heat))));
+          }
+        }
+        if (!text) return;
+        out.push({ text: text, heat: heat });
+      });
+      return out.slice(0, interviewActive ? 5 : 4);
+    }
+
+    function resolveSuggestionHeatSteps(items) {
+      var texts = items.map(function (item) {
+        return item.text;
+      });
+      var numeric = scaleHeatSteps(texts);
+      if (numeric) return numeric;
+      if (
+        items.some(function (item) {
+          return item.heat != null;
+        })
+      ) {
+        return items.map(function (item) {
+          return item.heat;
+        });
+      }
+      return null;
+    }
+
     function renderSuggestions(list, options) {
       options = options || {};
-      var items = (list || [])
-        .map(function (s) {
-          return typeof s === 'string' ? s.trim() : '';
-        })
-        .filter(Boolean)
-        .slice(0, interviewActive ? 5 : 4);
-      composerSuggestions = items.slice();
+      var items = normalizeSuggestionChipItems(list);
+      composerSuggestions = items.map(function (item) {
+        return item.text;
+      });
       suggestionsEl.replaceChildren();
       if (!items.length || !Agent.isConfigured(provider)) {
         suggestionsEl.hidden = true;
@@ -2158,15 +2193,17 @@
         return;
       }
       suggestionsEl.hidden = false;
-      var heatSteps = scaleHeatSteps(items);
-      items.forEach(function (text, index) {
+      var heatSteps = resolveSuggestionHeatSteps(items);
+      items.forEach(function (item, index) {
+        var text = item.text;
         var chip = el('button', 'agent-suggestion-chip', { type: 'button' });
         chip.textContent = text;
         chip.setAttribute('data-suggestion', text);
         chip.disabled = pending;
-        if (heatSteps) {
+        var heat = heatSteps ? heatSteps[index] : null;
+        if (heat != null && isFinite(heat)) {
           chip.classList.add('agent-suggestion-chip--scale');
-          chip.classList.add('agent-suggestion-chip--heat-' + heatSteps[index]);
+          chip.classList.add('agent-suggestion-chip--heat-' + heat);
         }
         if (options.animate !== false) {
           chip.style.animationDelay = index * 40 + 'ms';

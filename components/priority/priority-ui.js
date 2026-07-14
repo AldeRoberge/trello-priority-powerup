@@ -4494,7 +4494,10 @@
     inputEl.addEventListener('input', handleRangeInput);
     inputEl.addEventListener('change', handleRangeInput);
 
-    if (wordsKey === 'impact' || id === 'impact') {
+    if (
+      config.showImpactGlobe &&
+      (wordsKey === 'impact' || id === 'impact')
+    ) {
       attachImpactReachVisual(api);
     }
     api.updateDisplay(value);
@@ -10271,6 +10274,13 @@
       }
     };
 
+    var experimental =
+      variantConfig.experimental && typeof variantConfig.experimental === 'object'
+        ? variantConfig.experimental
+        : {};
+    var showImpactGlobe = experimental.impactGlobe === true;
+    var showEaseHourglass = experimental.easeHourglass === true;
+
     variantConfig.dimensions.forEach(function (dim, dimIndex) {
       fields[dim.key] = createField({
         el: fieldsWrap,
@@ -10281,6 +10291,7 @@
         min: dim.min,
         max: dim.max,
         value: state[dim.key],
+        showImpactGlobe: showImpactGlobe,
         onChange: function () {
           cancelSliderAnim();
           repaint();
@@ -10293,7 +10304,12 @@
           setValue: wizardHooks.setValue
         }
       });
-      if (dim.key === 'ease' && fields[dim.key] && fields[dim.key].el) {
+      if (
+        showEaseHourglass &&
+        dim.key === 'ease' &&
+        fields[dim.key] &&
+        fields[dim.key].el
+      ) {
         durationControl = createEstimatedDurationControl({
           el: fields[dim.key].el,
           value: state.estimatedDurationMinutes,

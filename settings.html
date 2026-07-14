@@ -20,6 +20,7 @@
   <script src="./components/goals/goals-ui.js"></script>
   <script src="./components/shared/spellcheck.js"></script>
   <script src="./components/agent/agent.js"></script>
+  <script src="./components/profile/user-profile.js"></script>
   <link rel="stylesheet" href="./components/shared/trello-theme.css" />
 </head>
 <body class="tp-page tp-page--settings">
@@ -147,6 +148,18 @@
         <p class="tp-auto-sort-status" id="autoSortStatus"></p>
         <button type="button" class="tp-button" id="authorizeAutoSort" hidden>Autoriser Trello (lecture + écriture)</button>
       </div>
+    </div>
+  </details>
+
+  <details class="tp-settings-section" id="experimentalSettingsSection">
+    <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-flask"></i></span>
+      <span class="tp-settings-summary-title">Expérimental</span>
+      <span class="tp-settings-summary-hint">Fonctionnalités bêta (par membre)</span>
+    </summary>
+    <div class="tp-settings-body">
+      <p class="tp-color-scheme-hint">Activez les visuels bêta dans l’éditeur Priorité. Ces préférences sont personnelles (membre).</p>
+      <div class="tp-profile-features" id="experimentalFlags" role="group" aria-label="Fonctionnalités expérimentales"></div>
     </div>
   </details>
 
@@ -355,6 +368,82 @@
       });
 
       setActiveColorSchemeUi(activeKey);
+    }
+
+    async function initExperimentalSettings() {
+      var section = document.getElementById('experimentalSettingsSection');
+      var wrap = document.getElementById('experimentalFlags');
+      var Profile = window.UserProfile;
+      if (!section || !wrap || !Profile) {
+        if (section) section.hidden = true;
+        return;
+      }
+
+      var experimentalChecks = {};
+      var profileState = null;
+      var saveTimer = null;
+
+      function renderExperimental(experimental) {
+        wrap.replaceChildren();
+        experimentalChecks = {};
+        Profile.EXPERIMENTAL_KEYS.forEach(function (key) {
+          var label = document.createElement('label');
+          label.className = 'tp-statut-toggle';
+          var input = document.createElement('input');
+          input.type = 'checkbox';
+          input.checked = experimental[key] === true;
+          input.dataset.experimental = key;
+          experimentalChecks[key] = input;
+          label.appendChild(input);
+          var text = document.createElement('span');
+          var title = Profile.EXPERIMENTAL_LABELS[key] || key;
+          var hint = Profile.EXPERIMENTAL_HINTS && Profile.EXPERIMENTAL_HINTS[key];
+          text.textContent = hint ? title + ' — ' + hint : title;
+          label.appendChild(text);
+          wrap.appendChild(label);
+        });
+      }
+
+      function readExperimental() {
+        var out = {};
+        Profile.EXPERIMENTAL_KEYS.forEach(function (key) {
+          out[key] = experimentalChecks[key]
+            ? !!experimentalChecks[key].checked
+            : false;
+        });
+        return out;
+      }
+
+      function persistExperimental() {
+        if (!profileState) return;
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(function () {
+          var next = Profile.normalizeProfile(
+            Object.assign({}, profileState, {
+              experimental: readExperimental(),
+            })
+          );
+          Profile.save(t, next)
+            .then(function (saved) {
+              profileState = saved;
+              renderExperimental(saved.experimental);
+              resizeSettingsPopup();
+            })
+            .catch(function (err) {
+              console.error('Experimental flags save failed', err);
+            });
+        }, 180);
+      }
+
+      try {
+        profileState = await Profile.load(t);
+        renderExperimental(profileState.experimental);
+        wrap.addEventListener('change', persistExperimental);
+        resizeSettingsPopup();
+      } catch (err) {
+        console.error('Experimental settings init failed', err);
+        section.hidden = true;
+      }
     }
 
     async function refreshAutoSortUi() {
@@ -706,6 +795,7 @@
       initColorSchemePicker(),
       initCompletionSchemePicker(),
       refreshAutoSortUi(),
+      initExperimentalSettings(),
     ]).then(function () {
       resizeSettingsPopup();
     });

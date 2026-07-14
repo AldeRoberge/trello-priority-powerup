@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=listen-offer-1" />
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=section-glow-1"></script>
+  <script src="./components/priority/priority-ui.js?v=experimental-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
@@ -28,7 +28,7 @@
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
   <script src="./components/agent/agent.js?v=card-interview-1"></script>
   <script src="./components/agent/agent-memory.js?v=card-interview-1"></script>
-  <script src="./components/profile/user-profile.js?v=profile-2"></script>
+  <script src="./components/profile/user-profile.js?v=experimental-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
   <script src="./components/agent/agent-ui.js?v=listen-offer-1"></script>
 </head>
@@ -1430,6 +1430,22 @@
             priorityEnabled: !focusProgress
           });
 
+      var experimentalFlags =
+        cachedProfile && cachedProfile.experimental
+          ? cachedProfile.experimental
+          : null;
+      if (
+        window.UserProfile &&
+        typeof UserProfile.normalizeExperimental === 'function'
+      ) {
+        experimentalFlags = UserProfile.normalizeExperimental(experimentalFlags);
+      } else {
+        experimentalFlags = experimentalFlags || {
+          impactGlobe: false,
+          easeHourglass: false
+        };
+      }
+
       variant = PriorityUI.mountVariant(mountEl, {
         id: 'card',
         showCardHeader: true,
@@ -1438,6 +1454,7 @@
         defaults: initialDefaults,
         focusSection: focusSection,
         dimensions: PriorityTrello.PRIORITY_DIMENSIONS,
+        experimental: experimentalFlags,
         getBlockedSubtasks: getBlockedSubtasks,
         loadState: function (defaults) {
           return Object.assign({}, defaults);

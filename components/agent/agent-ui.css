@@ -741,30 +741,29 @@
   cursor: not-allowed;
 }
 
-/* Axis scale chips (0–4 / 1–5): cool → hot so high values read as urgent / intense */
+/* Axis / ranked-answer chips: green → red (calm → intense) */
 .tp-page--priority .agent-suggestion-chip--scale {
   border-style: solid;
   font-weight: 600;
-  min-width: 2.35em;
   justify-content: center;
 }
 
 .tp-page--priority .agent-suggestion-chip--heat-0 {
-  background: color-mix(in srgb, #9b9890 18%, transparent);
-  border-color: #9b9890;
-  color: #6b6860;
+  background: color-mix(in srgb, #22a06b 18%, transparent);
+  border-color: #22a06b;
+  color: #1a7a50;
 }
 
 .tp-page--priority .agent-suggestion-chip--heat-1 {
-  background: color-mix(in srgb, #5a9fd4 20%, transparent);
-  border-color: #5a9fd4;
-  color: #2f6f9e;
+  background: color-mix(in srgb, #82b536 20%, transparent);
+  border-color: #82b536;
+  color: #5a7d24;
 }
 
 .tp-page--priority .agent-suggestion-chip--heat-2 {
-  background: color-mix(in srgb, #ba7517 18%, transparent);
-  border-color: #ba7517;
-  color: #8a5510;
+  background: color-mix(in srgb, #e2b203 20%, transparent);
+  border-color: #c99a00;
+  color: #8a6a00;
 }
 
 .tp-page--priority .agent-suggestion-chip--heat-3 {
@@ -774,8 +773,8 @@
 }
 
 .tp-page--priority .agent-suggestion-chip--heat-4 {
-  background: color-mix(in srgb, #e24b4a 24%, transparent);
-  border-color: #e24b4a;
+  background: color-mix(in srgb, #e34935 24%, transparent);
+  border-color: #e34935;
   color: #b83231;
 }
 
@@ -785,18 +784,18 @@
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-0 {
-  background: color-mix(in srgb, #9b9890 28%, transparent);
-  color: #c4c1b8;
+  background: color-mix(in srgb, #4bce97 28%, transparent);
+  color: #8de0b8;
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-1 {
-  background: color-mix(in srgb, #5a9fd4 30%, transparent);
-  color: #9ec8ea;
+  background: color-mix(in srgb, #94c748 30%, transparent);
+  color: #c0e07a;
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-2 {
-  background: color-mix(in srgb, #ba7517 30%, transparent);
-  color: #e0b06a;
+  background: color-mix(in srgb, #f5cd47 30%, transparent);
+  color: #f0d878;
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-3 {
@@ -805,7 +804,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-3 {
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-4 {
-  background: color-mix(in srgb, #e24b4a 34%, transparent);
+  background: color-mix(in srgb, #e34935 34%, transparent);
   color: #f5a3a2;
 }
 
