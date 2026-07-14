@@ -92,6 +92,81 @@ Agent.executeAction(bridge, {
   })
   .then(function (res) {
     check('empty name fails', !!(res && !res.ok));
+
+    check(
+      'detect blue from "sois bleu"',
+      Agent.detectAgentColorInText('sois bleu') === 'blue'
+    );
+    check(
+      'detect red from English request',
+      Agent.detectAgentColorInText('change your color to red') === 'red'
+    );
+    check(
+      'color change request FR',
+      !!Agent.looksLikeAgentColorChangeRequest('change ta couleur pour bleu')
+    );
+    check(
+      'color change request short',
+      !!Agent.looksLikeAgentColorChangeRequest('be blue')
+    );
+    check(
+      'color claim English',
+      !!Agent.looksLikeAgentColorChangeClaim("Okay I'm blue now!")
+    );
+    check(
+      'color claim French',
+      !!Agent.looksLikeAgentColorChangeClaim('Okay, je passe au bleu !')
+    );
+    check(
+      'happy yellow echo is not a color claim',
+      !Agent.looksLikeAgentColorChangeClaim('Super, c\'est noté.')
+    );
+
+    var injected = Agent.rewriteActionsForAgentColor(
+      [],
+      'change ta couleur pour blue',
+      "Okay I'm blue now!",
+      'blue'
+    );
+    check('injects set_agent_color from user request', !!injected.injected);
+    check(
+      'injected color is blue',
+      !!(
+        injected.actions &&
+        injected.actions[0] &&
+        injected.actions[0].tool === 'set_agent_color' &&
+        injected.actions[0].args &&
+        injected.actions[0].args.color === 'blue'
+      )
+    );
+
+    var claimOnly = Agent.rewriteActionsForAgentColor(
+      [],
+      'hey',
+      "Okay I'm blue now!",
+      'blue'
+    );
+    check('injects from claim + color field', !!claimOnly.injected);
+
+    var noInjectMood = Agent.rewriteActionsForAgentColor(
+      [],
+      'merci',
+      'Super, c\'est noté.',
+      'yellow'
+    );
+    check(
+      'does not inject mood color alone',
+      !noInjectMood.injected && (!noInjectMood.actions || !noInjectMood.actions.length)
+    );
+
+    var already = Agent.rewriteActionsForAgentColor(
+      [{ tool: 'set_agent_color', args: { color: 'blue' } }],
+      'be blue',
+      'Okay!',
+      'blue'
+    );
+    check('does not double-inject', !already.injected);
+
     if (bad) process.exit(1);
     console.log('All set_agent identity checks passed.');
   })

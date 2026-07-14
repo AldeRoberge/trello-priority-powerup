@@ -148,9 +148,9 @@
     var suggestionConfirmDeadline = 0;
     var SUGGESTION_CONFIRM_MS = 5000;
     var SUGGESTION_CONFIRM_PROMPTS = [
-      'C\'est tout\u00a0?',
-      'Quoi d\'autre\u00a0?',
-      'Is that all\u00a0?'
+      'C\'est tout?',
+      'Quoi d\'autre?',
+      'Rien d\'autre?'
     ];
     var applySuggestionsSeq = 0;
     var applySuggestions = [];
@@ -2034,6 +2034,8 @@
 
     function auraForEmotion(emotion, explicit) {
       // Identity color is the stable face hue; mood only tweaks expression.
+      // Honor an explicit color when it matches identity (model echo) — and also
+      // right after set_agent_color, when identity was just updated to that hue.
       var identity = identityAura();
       var forced = normalizeFaceAura(explicit);
       if (forced && forced === identity) return forced;
@@ -3849,9 +3851,9 @@
         if (er) conjugated = er[1].toLowerCase() + 'e' + er[2];
       }
       if (conjugated) {
-        return 'Veux-tu que je ' + conjugated + '\u00a0?';
+        return 'Veux-tu que je ' + conjugated + '?';
       }
-      return 'Veux-tu que je m\u2019occupe de ' + L + '\u00a0?';
+      return 'Veux-tu que je m\u2019occupe de ' + L + '?';
     }
 
     function clearActiveOffer(row) {
@@ -3947,14 +3949,14 @@
       var next = pickListenSuggestion(lastListenSuggestions);
 
       if (next) {
-        appendMessage('assistant', soft + ' Autre id\u00e9e\u00a0?', {
+        appendMessage('assistant', soft + ' Autre id\u00e9e?', {
           emotion: spiceEmotion('happy'),
           noUnread: true,
           noSound: true
         });
         history.push({
           role: 'assistant',
-          content: soft + ' Autre id\u00e9e\u00a0?'
+          content: soft + ' Autre id\u00e9e?'
         });
         schedulePersistChatHistory();
         appendOfferMessage(next);
@@ -3971,7 +3973,7 @@
         schedulePersistChatHistory();
         renderSuggestions(
           [
-            'Quelle est la priorit\u00e9\u00a0?',
+            'Quelle est la priorit\u00e9?',
             'D\u00e9finir une \u00e9ch\u00e9ance',
             'Ajouter une sous-t\u00e2che'
           ],
@@ -4900,7 +4902,7 @@
       if (countEl) countEl.textContent = String(leftSec);
       var promptText =
         (confirmEl.querySelector('.agent-suggestion-confirm-prompt') || {})
-          .textContent || 'C\'est tout\u00a0?';
+          .textContent || 'C\'est tout?';
       confirmEl.setAttribute('aria-label', promptText + ' ' + leftSec + ' s');
       notifyLayout();
     }
@@ -5712,7 +5714,7 @@
         'Ce qui n\'allait pas selon l\'utilisateur\u00a0: \u00ab' +
           String(userFeedback || '').trim() +
           '\u00bb',
-        'Retiens la le\u00e7on (cardPatches remember si utile) et corrige-toi bri\u00e8vement.',
+        'Retiens la le\u00e7on (patches board si pr\u00e9f\u00e9rence g\u00e9n\u00e9rale, cardPatches si li\u00e9e \u00e0 la carte) et corrige-toi bri\u00e8vement.',
         'Si une action \u00e9tait fausse, propose de la r\u00e9parer via outils. Ne r\u00e9p\u00e8te pas l\'erreur.'
       ]
         .filter(Boolean)
@@ -5800,7 +5802,7 @@
         setAssistantFaceEmotion(row, 'sad', { animate: true });
         var content = assistantBubbleText(row);
         var ask =
-          'Qu\'est-ce que j\'ai mal fait\u00a0? Je peux m\'am\u00e9liorer.';
+          'Qu\'est-ce que j\'ai mal fait? Je peux m\'am\u00e9liorer.';
         var promptRow = appendMessage('assistant', ask, {
           noFeedback: true,
           emotion: 'curious',
@@ -6033,8 +6035,8 @@
               : 'faire ' +
                 cardTitle.charAt(0).toLocaleLowerCase('fr-FR') +
                 cardTitle.slice(1)) +
-            '\u00a0?'
-          : 'Pourquoi faut-il faire cette carte\u00a0?';
+            '?'
+          : 'Pourquoi faut-il faire cette carte?';
 
         var turn = await Agent.cardInterviewTurn(
           provider,
@@ -6080,6 +6082,9 @@
         }
         if (turn.cardPatches && turn.cardPatches.length) {
           await applyCardPatchesFromTurn(turn.cardPatches);
+        }
+        if (turn.patches && turn.patches.length) {
+          await applyBoardMemoryPatches(turn.patches);
         }
         if (turn.usage) updateSessionStats(turn.usage);
         renderPrompts(turn.prompts);
@@ -6450,6 +6455,32 @@
           rawJson: turn.rawJson
         });
         schedulePersistChatHistory();
+        var identityTools = {
+          set_agent_color: true,
+          set_agent_name: true,
+          set_agent_personality: true
+        };
+        var identityActions = [];
+        var otherActions = [];
+        (turn.actions || []).forEach(function (a) {
+          if (a && identityTools[a.tool]) identityActions.push(a);
+          else if (a) otherActions.push(a);
+        });
+        var identityApplied = null;
+        if (identityActions.length) {
+          identityApplied = await Agent.executeActions(bridge, identityActions);
+          if (identityApplied && identityApplied.ok && turn.color) {
+            // Keep reply color aligned with the persisted identity.
+            var appliedColor = null;
+            (identityApplied.results || []).forEach(function (r) {
+              if (r && r.ok && r.tool === 'set_agent_color' && r.args) {
+                appliedColor =
+                  (typeof r.args.color === 'string' && r.args.color) || appliedColor;
+              }
+            });
+            if (appliedColor) turn.color = appliedColor;
+          }
+        }
         var replyEmotion = finalizeAssistantRow(thinking, turn.message, {
           emotion: turn.emotion,
           color: turn.color
@@ -6461,15 +6492,27 @@
         }
         // Auto-apply tools when the assistant has enough info (e.g. after a clarifying answer).
         // Executor result is source of truth — always show a technical recap.
-        if (turn.actions && turn.actions.length) {
+        var applied = identityApplied;
+        if (otherActions.length) {
           muteListening();
-          var applied = await Agent.executeActions(bridge, turn.actions);
-          appendChangeRecap(applied, {
+          var restApplied = await Agent.executeActions(bridge, otherActions);
+          if (!applied) {
+            applied = restApplied;
+          } else {
+            applied = {
+              ok: !!(applied.ok && restApplied.ok),
+              results: (applied.results || []).concat(restApplied.results || [])
+            };
+          }
+        }
+        if (applied || (turn.actions && turn.actions.length)) {
+          muteListening();
+          appendChangeRecap(applied || { results: [] }, {
             droppedActions: turn.droppedActions,
-            ok: applied.ok
+            ok: applied ? applied.ok : false
           });
-          setAssistantFaceEmotion(thinking, applied.ok ? 'happy' : 'sad', {
-            color: turn.color || (applied.ok ? 'yellow' : 'orange')
+          setAssistantFaceEmotion(thinking, applied && applied.ok ? 'happy' : 'sad', {
+            color: turn.color || (applied && applied.ok ? 'yellow' : 'orange')
           });
           if (interviewActive) interviewPriorityTrusted = true;
           muteListening();
@@ -6500,6 +6543,9 @@
         }
         if (turn.cardPatches && turn.cardPatches.length) {
           await applyCardPatchesFromTurn(turn.cardPatches);
+        }
+        if (turn.patches && turn.patches.length) {
+          await applyBoardMemoryPatches(turn.patches);
         }
         if (interviewActive && turn.message && /\?/.test(turn.message)) {
           interviewState = Agent.markInterviewQuestionAsked

@@ -361,6 +361,50 @@
   }
 }
 
+/* ── Flowers ───────────────────────────────────────────────────────────── */
+
+.tp-fx-flower {
+  position: absolute;
+  left: var(--x, 50%);
+  bottom: -10%;
+  width: var(--size, 24px);
+  height: var(--size, 24px);
+  opacity: 0;
+  margin-left: calc(var(--size, 24px) * -0.5);
+  animation: tp-fx-flower-rise var(--dur, 2.8s) ease-out forwards;
+  animation-delay: var(--delay, 0s);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.14));
+}
+
+.tp-fx-flower::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 18%, var(--c, #ff8f73) 0 26%, transparent 27%),
+    radial-gradient(circle at 82% 38%, var(--c, #ff8f73) 0 26%, transparent 27%),
+    radial-gradient(circle at 70% 78%, var(--c, #ff8f73) 0 26%, transparent 27%),
+    radial-gradient(circle at 30% 78%, var(--c, #ff8f73) 0 26%, transparent 27%),
+    radial-gradient(circle at 18% 38%, var(--c, #ff8f73) 0 26%, transparent 27%),
+    radial-gradient(circle at 50% 50%, var(--center, #f5cd47) 0 18%, transparent 19%);
+}
+
+@keyframes tp-fx-flower-rise {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 24px, 0) scale(0.25) rotate(0deg);
+  }
+  14% { opacity: 1; }
+  55% {
+    opacity: 1;
+    transform: translate3d(calc(var(--drift, 20px) * 0.55), -55vh, 0) scale(1.08) rotate(var(--spin, 12deg));
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--drift, 20px), -112vh, 0) scale(0.9) rotate(calc(var(--spin, 12deg) * 1.6));
+  }
+}
+
 /* ── Rainbow ───────────────────────────────────────────────────────────── */
 
 .tp-fx-rainbow {

@@ -37,6 +37,7 @@ var expected = [
   'aurora',
   'balloons',
   'petals',
+  'flowers',
   'rainbow',
   'disco',
   'beep',
@@ -51,7 +52,7 @@ var expected = [
   'banner'
 ];
 
-check('list has 21 effects', FX.list().length === 21);
+check('list has 22 effects', FX.list().length === 22);
 expected.forEach(function (id) {
   check('has ' + id, FX.list().indexOf(id) !== -1);
   check('normalize ' + id, FX.normalize(id) === id);
@@ -62,6 +63,8 @@ check('alias etoiles → shooting_stars', FX.normalize('etoiles') === 'shooting_
 check('alias beep_beep → beep', FX.normalize('beep_beep') === 'beep');
 check('alias tonnerre → thunder', FX.normalize('tonnerre') === 'thunder');
 check('alias fullscreen_text → banner', FX.normalize('fullscreen_text') === 'banner');
+check('alias fleurs → flowers', FX.normalize('fleurs') === 'flowers');
+check('alias bouquet → flowers', FX.normalize('bouquet') === 'flowers');
 check('unknown effect', FX.normalize('lava') == null);
 check('label fireworks', typeof FX.label('fireworks') === 'string' && FX.label('fireworks').length > 0);
 check('play export', typeof FX.play === 'function');
@@ -74,7 +77,11 @@ check(
 
 if (Agent && typeof Agent.executeAction === 'function') {
   var played = [];
+  var bridgeLang = 'fr';
   var bridge = {
+    getProfile: function () {
+      return { language: bridgeLang };
+    },
     playEffect: function (name, opts) {
       played.push({ name: name, opts: opts || {} });
       return { ok: true, effect: name };
@@ -106,7 +113,23 @@ if (Agent && typeof Agent.executeAction === 'function') {
   }).then(function (res) {
     check('execute thunder+text ok', !!(res && res.ok));
     var last = played[played.length - 1];
-    check('passes text TWO', !!(last && last.opts && last.opts.text === 'TWO'));
+    check(
+      'localizes TWO → DEUX (fr)',
+      !!(last && last.opts && last.opts.text === 'DEUX')
+    );
+    bridgeLang = 'en';
+    return Agent.executeAction(bridge, {
+      tool: 'trigger_effect',
+      args: { effect: 'thunder', text: 'TWO' }
+    });
+  }).then(function (res) {
+    check('execute thunder+text en ok', !!(res && res.ok));
+    var lastEn = played[played.length - 1];
+    check(
+      'keeps text TWO (en)',
+      !!(lastEn && lastEn.opts && lastEn.opts.text === 'TWO')
+    );
+    bridgeLang = 'fr';
     return Agent.executeAction(bridge, {
       tool: 'trigger_effect',
       args: { effect: 'banner', text: 'BOOM', sound: 'fanfare' }
@@ -116,6 +139,7 @@ if (Agent && typeof Agent.executeAction === 'function') {
     var last = played[played.length - 1];
     check('banner name', !!(last && last.name === 'banner'));
     check('banner sound override', !!(last && last.opts && last.opts.sound === 'fanfare'));
+    check('banner BOOM unchanged', !!(last && last.opts && last.opts.text === 'BOOM'));
     return Agent.executeAction(bridge, {
       tool: 'trigger_effect',
       args: { effect: 'banner' }

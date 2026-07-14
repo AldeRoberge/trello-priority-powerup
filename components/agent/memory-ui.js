@@ -920,8 +920,8 @@
 
       var opening =
         mode === 'onboarding'
-          ? 'Salut\u00a0! J\'ai jet\u00e9 un \u0153il aux cartes. Pour mieux t\'aider\u00a0: c\'est quoi ton pr\u00e9nom / comment on t\'appelle dans l\'\u00e9quipe, et sur quoi tu bosses en ce moment\u00a0?'
-          : 'Voici ce que je retiens du tableau. Qu\'est-ce que tu veux ajouter ou corriger\u00a0?';
+          ? 'Salut\u00a0! J\'ai jet\u00e9 un \u0153il aux cartes. Pour mieux t\'aider\u00a0: c\'est quoi ton pr\u00e9nom / comment on t\'appelle dans l\'\u00e9quipe, et sur quoi tu bosses en ce moment?'
+          : 'Voici ce que je retiens du tableau. Qu\'est-ce que tu veux ajouter ou corriger?';
 
       var openingQs = memory._openingQuestions || [];
       delete memory._openingQuestions;

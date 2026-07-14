@@ -1,7 +1,7 @@
 /**
  * CelebrationEffects — brief visual overlays + Web Audio stingers.
  * Used by completion UI (fireworks) and the agent (trigger_effect).
- * Supports optional fullscreen text via play(name, { text: 'TWO' }).
+ * Supports optional fullscreen text via play(name, { text: 'DEUX' }).
  */
 (function (global) {
   'use strict';
@@ -19,6 +19,7 @@
     aurora: { label: 'Aurore', ms: 3000 },
     balloons: { label: 'Ballons', ms: 3200 },
     petals: { label: 'P\u00e9tales', ms: 3400 },
+    flowers: { label: 'Fleurs', ms: 3200 },
     rainbow: { label: 'Arc-en-ciel', ms: 2600 },
     disco: { label: 'Disco', ms: 2400 },
     beep: { label: 'Beep beep', ms: 1200 },
@@ -53,6 +54,12 @@
     petal: 'petals',
     petales: 'petals',
     cherry_blossoms: 'petals',
+    flower: 'flowers',
+    fleur: 'flowers',
+    fleurs: 'flowers',
+    bouquet: 'flowers',
+    roses: 'flowers',
+    rose: 'flowers',
     arc_en_ciel: 'rainbow',
     party: 'disco',
     laser_show: 'disco',
@@ -92,6 +99,7 @@
   var COLORS = {
     party: ['#22a06b', '#4bce97', '#f5cd47', '#ff8f73', '#579dff', '#9f8fef', '#fff'],
     hearts: ['#ff8f73', '#ff5c8a', '#e5688f', '#ffb3c7', '#f87171'],
+    flowers: ['#ff8f73', '#ff5c8a', '#f5cd47', '#9f8fef', '#579dff', '#fda4af', '#fbcfe8'],
     cool: ['#579dff', '#4bce97', '#9f8fef', '#6ee7b7', '#93c5fd'],
     warm: ['#f5cd47', '#ff8f73', '#fb923c', '#fbbf24', '#fff'],
     neon: ['#39ff14', '#00f0ff', '#ff2bd6', '#ffe600', '#ffffff']
@@ -659,6 +667,26 @@
           { lowpass: 2400 }
         );
         break;
+      case 'flowers':
+        playRandomToneSet(
+          [
+            [
+              { freq: 392, delay: 0, dur: 0.35, peak: 0.032, type: 'sine' },
+              { freq: 523.25, delay: 0.12, dur: 0.4, peak: 0.03 },
+              { freq: 659.25, delay: 0.28, dur: 0.45, peak: 0.028, type: 'triangle' },
+              { freq: 783.99, delay: 0.5, dur: 0.5, peak: 0.024 },
+              { freq: 987.77, delay: 0.78, dur: 0.55, peak: 0.02, type: 'sine' }
+            ],
+            [
+              { freq: 349.23, delay: 0, dur: 0.4, peak: 0.03, type: 'sine' },
+              { freq: 440, delay: 0.15, dur: 0.4, peak: 0.028 },
+              { freq: 554.37, delay: 0.32, dur: 0.45, peak: 0.026, type: 'triangle' },
+              { freq: 698.46, delay: 0.55, dur: 0.55, peak: 0.022 }
+            ]
+          ],
+          { lowpass: 2600 }
+        );
+        break;
       case 'rainbow':
         playRandomToneSet([
           [
@@ -1043,6 +1071,24 @@
     }
   }
 
+  function buildFlowers(overlay) {
+    var colors = COLORS.flowers;
+    var centers = ['#f5cd47', '#fff7ae', '#ffe8a3', '#fff'];
+    for (var i = 0; i < 20; i++) {
+      var el = document.createElement('span');
+      el.className = 'tp-fx-flower';
+      el.style.setProperty('--x', rand(6, 94) + '%');
+      el.style.setProperty('--size', rand(18, 34) + 'px');
+      el.style.setProperty('--c', pick(colors, i));
+      el.style.setProperty('--center', pick(centers, i));
+      el.style.setProperty('--delay', rand(0, 0.85) + 's');
+      el.style.setProperty('--dur', rand(2.4, 3.2) + 's');
+      el.style.setProperty('--drift', rand(-55, 55) + 'px');
+      el.style.setProperty('--spin', rand(-40, 40) + 'deg');
+      overlay.appendChild(el);
+    }
+  }
+
   function buildRainbow(overlay) {
     var el = document.createElement('div');
     el.className = 'tp-fx-rainbow';
@@ -1089,6 +1135,7 @@
     aurora: buildAurora,
     balloons: buildBalloons,
     petals: buildPetals,
+    flowers: buildFlowers,
     rainbow: buildRainbow,
     disco: buildDisco,
     beep: buildBeep,
