@@ -2563,13 +2563,13 @@
     var FACE_SM_MAX_AWAY = 3;
     var FACE_MORPH_SETTLE_MS = 160;
     var FACE_POSE_TWEEN_MS = 260;
-    var FACE_POSE_TWEEN_FAST_MS = 110;
+    var FACE_POSE_TWEEN_FAST_MS = 90;
     var FACE_FEATURE_SEL =
       '.agent-face-eyes, .agent-face-eye, .agent-face-brow, .agent-face-cheek, .agent-face-shine';
 
     var FACE_SM_STATES = {
-      wink: { emotion: 'wink', holdMin: 160, holdMax: 240 },
-      winkAlt: { emotion: 'wink', holdMin: 150, holdMax: 220, fx: 'winkRight' },
+      wink: { emotion: 'wink', holdMin: 260, holdMax: 340 },
+      winkAlt: { emotion: 'wink', holdMin: 240, holdMax: 320, fx: 'winkRight' },
       smile: { emotion: 'happy', holdMin: 1600, holdMax: 3600 },
       grin: { emotion: 'excited', holdMin: 650, holdMax: 1150, fx: 'bounce' },
       tongue: { emotion: 'tongue', holdMin: 850, holdMax: 1450, fx: 'wiggle' },
@@ -2897,7 +2897,7 @@
       if (!def || !def.holdMax) return;
       var delay = faceSmRand(def.holdMin, def.holdMax);
       if (fromState === 'wink' || fromState === 'winkAlt') {
-        delay = Math.max(FACE_POSE_TWEEN_FAST_MS + 40, delay);
+        delay = Math.max(FACE_POSE_TWEEN_FAST_MS * 2 + 40, delay);
       } else if (faceSm.queue && faceSm.queue.length) {
         // Slightly shorten holds when a queue is mid-flight so scans feel snappy,
         // but always leave room for the settle morph.
@@ -3276,12 +3276,13 @@
           settleMs / 1000 +
           's cubic-bezier(0.33, 1, 0.68, 1)';
         face.style.transform = 'translateY(0) scale(1) rotate(0deg)';
-        // Release frozen feature transforms so they ease toward the current
-        // emotion's static pose (animations already killed via is-pose-tween).
+        // After a frame lock, release frozen feature transforms so they ease
+        // toward the current emotion's static pose (no keyframe fight).
+        void face.offsetWidth;
         var frozen = face.querySelectorAll(FACE_FEATURE_SEL);
         for (var fi = 0; fi < frozen.length; fi++) {
           frozen[fi].style.transition = '';
-          frozen[fi].style.animation = 'none';
+          frozen[fi].style.animation = '';
           frozen[fi].style.transform = '';
         }
       } catch (e) {
@@ -3306,6 +3307,27 @@
           if (morphSeq !== faceSm.seq) return;
           face.classList.remove('is-settling', 'is-pose-tween');
           clearFaceFeatureInline(face);
+          // Restart one-shot fx that were applied while bob loops were suppressed.
+          var fx = face.getAttribute('data-idle-fx');
+          if (
+            fx &&
+            [
+              'bounce',
+              'nod',
+              'tip',
+              'pop',
+              'shake',
+              'sparkle',
+              'wiggle',
+              'squint',
+              'breathe'
+            ].indexOf(fx) !== -1
+          ) {
+            var fxCls = 'agent-face--fx-' + fx;
+            face.classList.remove(fxCls);
+            void face.offsetWidth;
+            face.classList.add(fxCls);
+          }
         }, tweenMs);
         finishExternalHandoff();
       }, settleMs);
@@ -3953,7 +3975,7 @@
             'D\u00e9finir une \u00e9ch\u00e9ance',
             'Ajouter une sous-t\u00e2che'
           ],
-          { animate: true }
+          { animate: true, answering: false }
         );
         refreshApplySuggestions({ animate: true });
       }
@@ -4562,6 +4584,41 @@
       suggestionsEl.classList.remove('is-multi');
       if (tabComplete) tabComplete.refresh();
       notifyLayout();
+    }
+
+    /** Last assistant turn text that looks like a clarifying question. */
+    function lastAssistantAsksQuestion() {
+      for (var i = history.length - 1; i >= 0; i--) {
+        var turn = history[i];
+        if (turn && turn.role === 'assistant') {
+          return /\?/.test(String(turn.content || ''));
+        }
+      }
+      return false;
+    }
+
+    /**
+     * Answer chips stay above the input; next-intent / starter chips go below.
+     * options.answering forces the mode when known (e.g. suggestQuestions → false).
+     */
+    function shouldPlaceSuggestionsAbove(options) {
+      options = options || {};
+      if (options.answering === true) return true;
+      if (options.answering === false) return false;
+      if (interviewActive) return true;
+      if (options.multi === true) return true;
+      return lastAssistantAsksQuestion();
+    }
+
+    function syncSuggestionsPlacement(placeAbove) {
+      suggestionsEl.classList.toggle('is-below-composer', !placeAbove);
+      if (placeAbove) {
+        if (composer.previousSibling !== suggestionsEl) {
+          chatPanel.insertBefore(suggestionsEl, composer);
+        }
+      } else if (composer.nextSibling !== suggestionsEl) {
+        chatPanel.insertBefore(suggestionsEl, composer.nextSibling);
+      }
     }
 
     function clearApplySuggestions() {
@@ -5297,12 +5354,16 @@
         return;
       }
       suggestionsEl.hidden = false;
+      var placeAbove = shouldPlaceSuggestionsAbove(options);
+      syncSuggestionsPlacement(placeAbove);
       suggestionsMultiSelect = suggestionsAllowMultiSelect(options.multi);
       if (suggestionsMultiSelect) suggestionsEl.classList.add('is-multi');
       suggestionsEl.setAttribute(
         'aria-label',
-        suggestionsMultiSelect
-          ? 'R\u00e9ponses sugg\u00e9r\u00e9es (plusieurs possibles)'
+        placeAbove
+          ? suggestionsMultiSelect
+            ? 'R\u00e9ponses sugg\u00e9r\u00e9es (plusieurs possibles)'
+            : 'R\u00e9ponses sugg\u00e9r\u00e9es'
           : 'Questions sugg\u00e9r\u00e9es'
       );
       var heatSteps = resolveSuggestionHeatSteps(items);
@@ -5386,7 +5447,10 @@
           }
         });
         if (seq !== suggestionsSeq) return;
-        renderSuggestions(list, { animate: options.animate !== false });
+        renderSuggestions(list, {
+          animate: options.animate !== false,
+          answering: false
+        });
       } catch (err) {
         if (seq !== suggestionsSeq) return;
         console.error('AgentUI suggestQuestions failed', err);

@@ -396,7 +396,7 @@
  * Never leave transform transitions on while animations run — that fight is
  * what made blinks / lids look asynchronous and "tweaky".
  * Opacity can always ease (mouths/cheeks). Transform eases only during
- * intentional pose tweens (is-pose-tween / wink snap).
+ * intentional pose tweens (is-pose-tween).
  */
 .tp-page--priority .agent-face-eyes,
 .tp-page--priority .agent-face-eye,
@@ -597,7 +597,8 @@
     transition: none !important;
   }
 
-  .tp-page--priority .agent-face.is-morphing:not(.is-frozen) {
+  .tp-page--priority .agent-face.is-morphing:not(.is-frozen),
+  .tp-page--priority .agent-face.is-pose-tween:not(.is-frozen) {
     animation: agent-face-idle 2.8s ease-in-out infinite,
       agent-face-glow-pulse 2.6s ease-in-out infinite !important;
   }
@@ -2284,6 +2285,12 @@ html[data-color-mode='dark'] .tp-page--priority .agent-hl--y {
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 8px;
+}
+
+/* Next-intent / starter chips sit under the composer. */
+.tp-page--priority .agent-suggestions.is-below-composer {
+  margin-top: 8px;
+  margin-bottom: 0;
 }
 
 .tp-page--priority .agent-suggestions[hidden] {

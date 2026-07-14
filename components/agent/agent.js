@@ -1209,6 +1209,50 @@
     return out.slice(0, 4);
   }
 
+  /** Board / project memory patches (long-term remember or short-term note). */
+  function normalizeBoardPatches(raw) {
+    var list = Array.isArray(raw) ? raw : [];
+    var out = [];
+    var allowed = {
+      remember: true,
+      remember_long: true,
+      note: true,
+      remember_short: true,
+      forget: true,
+      set_summary: true,
+      set_board_summary: true
+    };
+    list.forEach(function (p) {
+      if (!p || typeof p !== 'object') return;
+      var op = String(p.op || '')
+        .trim()
+        .toLowerCase();
+      if (!allowed[op]) return;
+      if (op === 'forget') {
+        var q =
+          (typeof p.query === 'string' && p.query.trim()) ||
+          (typeof p.text === 'string' && p.text.trim()) ||
+          '';
+        if (!q) return;
+        out.push({ op: 'forget', query: q.slice(0, 120) });
+        return;
+      }
+      if (op === 'set_summary' || op === 'set_board_summary') {
+        var summary = typeof p.text === 'string' ? p.text.trim() : '';
+        if (!summary) return;
+        out.push({ op: op, text: summary.slice(0, 280) });
+        return;
+      }
+      var text = typeof p.text === 'string' ? p.text.trim() : '';
+      if (!text) return;
+      out.push({
+        op: op === 'remember_long' ? 'remember' : op === 'remember_short' ? 'note' : op,
+        text: text.slice(0, 160)
+      });
+    });
+    return out.slice(0, 4);
+  }
+
   function buildContext(bridge) {
     var ctx = {
       today: todayIsoLocal(),
@@ -1783,7 +1827,7 @@
       '- Ex. Importante, facile\u00a0: \u00ab\u00a0Cette t\u00e2che est utile pour l\'interne et [[g:assez facile]], donc on la classe [[y:Importante]].\u00a0\u00bb',
       '- Si priority.enabled=false\u00a0: dis qu\'aucune priorit\u00e9 n\'est d\u00e9finie (ne sors pas d\'anciennes valeurs).',
       'R\u00e9ponds UNIQUEMENT avec un objet JSON valide de la forme\u00a0:',
-      '{"thinking":"notes priv\u00e9es","message":"texte visible","emotion":"happy","color":"yellow","suggestions":["Question utile","Autre intention"],"suggestionsMulti":false,"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}],"cardPatches":[{"op":"remember","text":"fait local \u00e0 la carte"}]}',
+      '{"thinking":"notes priv\u00e9es","message":"texte visible","emotion":"happy","color":"yellow","suggestions":["Question utile","Autre intention"],"suggestionsMulti":false,"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}],"cardPatches":[{"op":"remember","text":"fait local \u00e0 la carte"}],"patches":[{"op":"remember","text":"fait projet / tableau"}]}',
       'Apparence (humeur / couleur \u2014 optionnel mais recommand\u00e9)\u00a0:',
       '- Tu contr\u00f4les ton avatar\u00a0: champs "emotion" et "color".',
       '- emotion: neutral | happy | sad | surprised | curious | thinking | excited | tongue | wink | wideEyed | lookUp | lookDown | lookLeft | lookRight.',
@@ -1800,14 +1844,17 @@
       '- Ex. concentr\u00e9\u00a0: {"emotion":"thinking","color":"' +
         (agentColor || 'orange') +
         '","message":"Hmm laisse-moi v\u00e9rifier.","suggestions":["Quelle est la priorit\u00e9?"],"followUps":[],"actions":[]}',
-      'M\u00e9moire de CETTE carte (context.cardMemory.facts)\u00a0:',
-      '- Faits locaux \u00e0 la carte (personnes qui attendent, enjeux, contraintes, d\u00e9pendances).',
-      '- Quand tu apprends un fait utile pour plus tard\u00a0: cardPatches:[{"op":"remember","text":"\u2026"}] (1\u20132 max).',
-      '- INTERDIT d\'y mettre l\'identit\u00e9 utilisateur g\u00e9n\u00e9rale (nom, r\u00f4le) \u2014 \u00e7a va dans la m\u00e9moire board.',
-      '- Sers-toi de cardMemory avant de reposer une question d\u00e9j\u00e0 r\u00e9pondue.',
+      'M\u00e9moire \u2014 deux niveaux (important)\u00a0:',
+      '- cardPatches (CETTE t\u00e2che)\u00a0: faits locaux (pourquoi, livrable, avancement, reste \u00e0 faire, contraintes de la carte).',
+      '  Ex. {"op":"remember","text":"D\u00e9j\u00e0 fait\u00a0: \u2026"} / {"op":"remember","text":"Reste\u00a0: \u2026"}. 1\u20132 max par tour.',
+      '- patches (projet / tableau)\u00a0: faits r\u00e9utilisables ailleurs (qui approuve, qui travaille sur quoi, normes \u00e9quipe, r\u00f4les, outils stables).',
+      '  Ex. {"op":"remember","text":"Julie valide les achats logiciels"} ou {"op":"note","text":"\u2026"} si provisoire.',
+      '- Si c\'est tr\u00e8s important et vrai au-del\u00e0 de cette carte \u2192 patches. Si \u00e7a ne sert qu\'\u00e0 CETTE carte \u2192 cardPatches.',
+      '- INTERDIT d\'y mettre l\'identit\u00e9 utilisateur g\u00e9n\u00e9rale (nom, r\u00f4le) en cardPatches \u2014 \u00e7a va en patches board.',
+      '- Sers-toi de cardMemory et context.memory avant de reposer une question d\u00e9j\u00e0 r\u00e9pondue.',
       'Retours n\u00e9gatifs (pouce bas)\u00a0:',
       '- Si le message utilisateur commence par [Retour n\u00e9gatif \u2014 auto-correction]\u00a0: tu as fait une erreur.',
-      '- Excuse-toi bri\u00e8vement si besoin, corrige ta r\u00e9ponse, et m\u00e9morise la le\u00e7on via cardPatches (remember) quand c\'est un fait/pr\u00e9f\u00e9rence r\u00e9utilisable.',
+      '- Excuse-toi bri\u00e8vement si besoin, corrige ta r\u00e9ponse, et m\u00e9morise la le\u00e7on\u00a0: patches (board) si pr\u00e9f\u00e9rence g\u00e9n\u00e9rale, cardPatches si li\u00e9e \u00e0 cette carte.',
       '- Si une action \u00e9tait fausse, propose de la r\u00e9parer avec les outils. Ne r\u00e9p\u00e8te pas l\'erreur.',
       'Champ thinking (obligatoire)\u00a0:',
       '- Toujours \u00e9crire thinking AVANT message (ordre JSON\u00a0: thinking puis message).',
@@ -2839,6 +2886,7 @@
         prompts: [],
         followUps: [],
         cardPatches: [],
+        patches: [],
         completeInterview: false,
         droppedActions: [],
         rawJson: '',
@@ -2881,14 +2929,27 @@
       '- Sur r\u00e9ponse\u00a0: remember \u00ab\u00a0Livrable\u00a0: \u2026\u00a0\u00bb / \u00ab\u00a0But\u00a0: \u2026\u00a0\u00bb (+ rename_card / set_description si \u00e7a rend la carte plus claire).',
       '- Une id\u00e9e par tour\u00a0: d\'abord POURQUOI, puis vague?, puis livrable, puis confirmation de but \u2014 pas tout en une question.',
       '',
+      'Plans / strat\u00e9gies / projets larges (apr\u00e8s POURQUOI + cadrage si besoin)\u00a0:',
+      '- Si le sujet est un plan, une strat\u00e9gie, une feuille de route, un cadre ou un gros chantier\u00a0: encha\u00eene naturellement ces questions (UNE par tour), dans un ordre qui a du sens selon ce qu\'on sait d\u00e9j\u00e0\u00a0:',
+      '  1) Permission\u00a0: \u00ab\u00a0Faut la permission de quelqu\'un pour avancer dans ce plan\u00a0?\u00a0\u00bb',
+      '  2) Qui\u00a0: \u00ab\u00a0Qui travaille sur ce plan\u00a0?\u00a0\u00bb',
+      '  3) Avancement\u00a0: \u00ab\u00a0Ce plan est-il d\u00e9j\u00e0 commenc\u00e9\u00a0?\u00a0\u00bb',
+      '  4) Si oui \u2192 \u00ab\u00a0Qu\'est-ce qui est d\u00e9j\u00e0 fait\u00a0?\u00a0\u00bb puis \u00ab\u00a0Qu\'est-ce qui reste \u00e0 faire, de mani\u00e8re g\u00e9n\u00e9rale\u00a0?\u00a0\u00bb',
+      '  5) Si non / pas commenc\u00e9 \u2192 saute \u00e0 \u00ab\u00a0Qu\'est-ce qui reste \u00e0 faire, de mani\u00e8re g\u00e9n\u00e9rale\u00a0?\u00a0\u00bb (ou passe aux axes si assez clair).',
+      '- Skip une question si la r\u00e9ponse est d\u00e9j\u00e0 dans cardMemory / historique / description.',
+      '- Sur r\u00e9ponses\u00a0: m\u00e9morise fort (voir m\u00e9moire ci-dessous) + add_subtask pour les \u00e9tapes concr\u00e8tes du reste \u00e0 faire.',
+      '- Suggestions permission\u00a0: Oui / Non / Je sais pas (+ éventuellement le nom si tu le devines).',
+      '- Suggestions commenc\u00e9\u00a0: Oui / Non / Juste un peu.',
+      '',
       'Inf\u00e9rence titre + connaissances (critique)\u00a0:',
       '- Lis le titre et utilise ton bon sens AVANT de poser une question. Ne demande JAMAIS ce qui est \u00e9vident.',
       '- Achat / licence / abonnement / commande / \"obtenir X\" logiciel\u00a0: l\'acte en soi prend ~quelques minutes (pas des heures). Inf\u00e8re une dur\u00e9e tr\u00e8s courte (set_priority estimatedDurationMinutes ~1\u20135) et NE pose PAS \u00ab\u00a0\u00c7a prend combien de temps\u00a0?\u00a0\u00bb.',
-      '- Pour ces cartes, la friction = budget + permissions / OK des bosses. Pose \u00e7a, pas l\'effort ni la dur\u00e9e.',
-      '- Ex. FAUX (achat DaVinci)\u00a0: \u00ab\u00a0\u00c7a prend combien de temps\u00a0?\u00a0\u00bb / \u00ab\u00a0c\'est difficile\u00a0?\u00a0\u00bb',
-      '- Ex. VRAI (achat DaVinci)\u00a0: 1er tour POURQUOI si pas encore clair, sinon \u00ab\u00a0DaVinci Resolve, c\'est cher\u00a0?\u00a0\u00bb puis \u00ab\u00a0Faut l\'OK des bosses\u00a0?\u00a0\u00bb \u2014 et set_priority avec estimatedDurationMinutes court sans demander.',
+      '- Pour ces cartes, la friction = budget + permission / validation. Pose \u00e7a, pas l\'effort ni la dur\u00e9e.',
+      '- INTERDIT les anglicismes et le jargon import\u00e9\u00a0: jamais \u00ab\u00a0bosses\u00a0\u00bb, \u00ab\u00a0OK des bosses\u00a0\u00bb, \u00ab\u00a0le deal\u00a0\u00bb, etc. Fran\u00e7ais naturel\u00a0: permission, validation, accord, qui doit signer.',
+      '- Ex. FAUX (achat DaVinci)\u00a0: \u00ab\u00a0\u00c7a prend combien de temps\u00a0?\u00a0\u00bb / \u00ab\u00a0c\'est difficile\u00a0?\u00a0\u00bb / \u00ab\u00a0Faut l\'OK des bosses\u00a0?\u00a0\u00bb',
+      '- Ex. VRAI (achat DaVinci)\u00a0: 1er tour POURQUOI si pas encore clair, sinon \u00ab\u00a0DaVinci Resolve, c\'est cher\u00a0?\u00a0\u00bb puis \u00ab\u00a0Faut la permission de quelqu\'un pour avancer\u00a0?\u00a0\u00bb \u2014 et set_priority avec estimatedDurationMinutes court sans demander.',
       '- Si L\'UTILISATEUR te demande ton avis sur la dur\u00e9e (\u00ab\u00a0combien de temps tu penses\u00a0?\u00a0\u00bb, \u00ab\u00a0\u00e0 ton avis\u00a0?\u00a0\u00bb)\u00a0: R\u00c9PONDS (ne repose pas la question). Pour un achat / licence\u00a0: ton honn\u00eate opinion + pivot friction.',
-      '- Ex. VRAI (user \u00ab\u00a0combien de temps tu penses\u00a0?\u00a0\u00bb, achat DaVinci)\u00a0: \u00ab\u00a0Je sais pas moi\u2026 Quelques minutes\u00a0? J\'imagine que le plus difficile l\u00e0-dedans c\'est d\'avoir les permissions et surtout le budget.\u00a0\u00bb + set_priority estimatedDurationMinutes court, puis question suivante utile (ou close si fini).',
+      '- Ex. VRAI (user \u00ab\u00a0combien de temps tu penses\u00a0?\u00a0\u00bb, achat DaVinci)\u00a0: \u00ab\u00a0Je sais pas moi\u2026 Quelques minutes\u00a0? J\'imagine que le plus difficile l\u00e0-dedans c\'est d\'avoir la permission et surtout le budget.\u00a0\u00bb + set_priority estimatedDurationMinutes court, puis question suivante utile (ou close si fini).',
       '- Autres sujets \u00e9vidents\u00a0: \u00ab\u00a0Envoyer un mail\u00a0\u00bb / \u00ab\u00a0Liker un post\u00a0\u00bb / renommer un fichier \u2192 dur\u00e9e courte + ease \u00e9lev\u00e9e\u00a0; POURQUOI court si utile, sinon passe \u00e0 urgence/impact.',
       '- Ne pose une question que si la r\u00e9ponse change vraiment le scoring OU le POURQUOI / livrable. Si tu peux d\u00e9j\u00e0 setter un axe raisonnablement, fais-le dans actions et passe \u00e0 la suite.',
       '',
@@ -2899,14 +2960,14 @@
       '- BRI\u00c8VET\u00c9 (critique)\u00a0: coupe le titre au noyau utile. INTERDIT de recopier le titre long entier.',
       '- INTERDIT les formulations lourdes\u00a0: \u00ab\u00a0Mener \u00e0 bien\u2026\u00a0\u00bb, \u00ab\u00a0c\'est simple ou \u00e7a demande du travail\u00a0?\u00a0\u00bb, \u00ab\u00a0Quelle serait la cons\u00e9quence de ne pas\u2026\u00a0\u00bb + titre complet.',
       '- Une question = une id\u00e9e. Si tu as besoin de d\u00e9tails, pose une suite APR\u00c8S (follow-up), pas tout dans la 1re question.',
-      '- Facilit\u00e9 = friction r\u00e9elle (effort, co\u00fbt $, d\u00e9pendances, approbation, incertitude) \u2014 PAS toujours \u00ab\u00a0difficile\u00a0\u00bb.',
-      '- Choisis la friction qui a du sens pour LE sujet. Achat / licence / abonnement / budget \u2192 co\u00fbt ou OK bosses. Travail tech / process \u2192 effort. Coordination \u2192 d\u00e9pendances.',
+      '- Facilit\u00e9 = friction r\u00e9elle (effort, co\u00fbt $, d\u00e9pendances, permission / validation, incertitude) \u2014 PAS toujours \u00ab\u00a0difficile\u00a0\u00bb.',
+      '- Choisis la friction qui a du sens pour LE sujet. Achat / licence / abonnement / budget \u2192 co\u00fbt ou permission. Travail tech / process \u2192 effort. Coordination \u2192 d\u00e9pendances. Plan / strat\u00e9gie \u2192 avancement + qui s\'en occupe.',
       '- INTERDIT de demander \u00ab\u00a0c\'est difficile\u00a0?\u00a0\u00bb ou \u00ab\u00a0\u00e7a prend combien de temps\u00a0?\u00a0\u00bb quand ce n\'est clairement pas la friction (ex. un achat logiciel).',
       '- Ex. FAUX facilit\u00e9\u00a0: \u00ab\u00a0Mener \u00e0 bien l\'archivage des rushs vid\u00e9os et projets DaVinci Resolve, c\'est simple ou \u00e7a demande du travail\u00a0?\u00a0\u00bb',
       '- Ex. FAUX (achat)\u00a0: \u00ab\u00a0L\'achat de DaVinci Resolve, c\'est difficile\u00a0?\u00a0\u00bb',
       '- Ex. VRAI (achat)\u00a0: \u00ab\u00a0DaVinci Resolve, c\'est cher\u00a0?\u00a0\u00bb',
       '- Ex. VRAI (archivage)\u00a0: \u00ab\u00a0Archiver les rushs et projets, \u00e7a prend du temps\u00a0?\u00a0\u00bb',
-      '- Ex. follow-ups utiles ensuite\u00a0: \u00ab\u00a0C\'est le budget ou l\'approbation qui freine\u00a0?\u00a0\u00bb / \u00ab\u00a0Faut l\'OK des bosses\u00a0?\u00a0\u00bb / \u00ab\u00a0Qu\'est-ce qui n\'est pas clair dans le processus\u00a0?\u00a0\u00bb',
+      '- Ex. follow-ups utiles ensuite\u00a0: \u00ab\u00a0C\'est le budget ou la permission qui freine\u00a0?\u00a0\u00bb / \u00ab\u00a0Faut la permission de quelqu\'un pour avancer\u00a0?\u00a0\u00bb / \u00ab\u00a0Qu\'est-ce qui n\'est pas clair dans le processus\u00a0?\u00a0\u00bb',
       '- Si le titre / la description sont flous\u00a0: alors clarifie. Sinon, inf\u00e8re et n\'interroge pas pour le plaisir.',
       '- Quand quelque chose bloque la compr\u00e9hension\u00a0: pose une question de clarification concr\u00e8te, puis applique rename_card / set_description / add_subtask / cardPatches si la r\u00e9ponse le permet.',
       '- INTERDIT de r\u00e9capituler ce qui a d\u00e9j\u00e0 \u00e9t\u00e9 dit (\u00ab\u00a0Pour r\u00e9capituler\u00a0\u00bb, \u00ab\u00a0on a \u00e9tabli que\u00a0\u00bb, \u00ab\u00a0cela semble bien cadr\u00e9\u00a0\u00bb, \u00ab\u00a0en r\u00e9sum\u00e9\u00a0\u00bb).',
@@ -2958,17 +3019,24 @@
       '- Une r\u00e9ponse peut combiner plusieurs suggestions (s\u00e9par\u00e9es par \u00ab\u00a0. \u00a0\u00bb)\u00a0: inf\u00e8re en tenant compte de TOUT le message.',
       '- Ex. POURQUOI\u00a0: user \u00ab\u00a0Aligner les messages entre services. Mieux joindre les citoyens\u00a0\u00bb \u2192 cardPatches [{"op":"remember","text":"Pourquoi\u00a0: aligner les messages entre services\u00a0; mieux joindre les citoyens"}] + prochaine question (vague?/livrable/axes).',
       '- Ex.\u00a0: \u00ab\u00a0Marie-Laure serait vraiment tr\u00e8s f\u00e2ch\u00e9e\u00a0\u00bb \u2192 urgence \u00e9lev\u00e9e (3\u20134) + cardPatches remember + message = seule la question suivante courte.',
-      '- Ex. achat logiciel\u00a0: user \u00ab\u00a0Tr\u00e8s cher\u00a0\u00bb \u2192 ease bas (1\u20132) + remember co\u00fbt + estimatedDurationMinutes court + question \u00ab\u00a0Faut l\'OK des bosses\u00a0?\u00a0\u00bb.',
-      '- M\u00e9morise les faits utiles \u00e0 CETTE carte via cardPatches (POURQUOI en priorit\u00e9, puis livrable, but, personnes, enjeux, contraintes, process)\u00a0: {"op":"remember","text":"\u2026"}.',
+      '- Ex. achat logiciel\u00a0: user \u00ab\u00a0Tr\u00e8s cher\u00a0\u00bb \u2192 ease bas (1\u20132) + cardPatches remember co\u00fbt + estimatedDurationMinutes court + question \u00ab\u00a0Faut la permission de quelqu\'un pour avancer\u00a0?\u00a0\u00bb.',
+      '- Ex. plan commenc\u00e9\u00a0: user \u00ab\u00a0Oui\u00a0\u00bb \u2192 cardPatches [{"op":"remember","text":"Plan d\u00e9j\u00e0 commenc\u00e9"}] + question \u00ab\u00a0Qu\'est-ce qui est d\u00e9j\u00e0 fait\u00a0?\u00a0\u00bb.',
+      '- Ex. \u00ab\u00a0Marie et Sam s\'en occupent\u00a0\u00bb \u2192 cardPatches {"op":"remember","text":"Qui\u00a0: Marie et Sam"} + patches {"op":"remember","text":"Marie et Sam travaillent sur le plan de strat\u00e9gie de communication"} (utile au tableau).',
+      '- Ex. permission \u00ab\u00a0Faut l\'accord de Julie\u00a0\u00bb \u2192 cardPatches + patches {"op":"remember","text":"Julie valide / donne la permission pour avancer sur ce genre de plan"}.',
+      '- M\u00e9moire \u2014 deux niveaux (critique)\u00a0:',
+      '  \u00b7 cardPatches = d\u00e9pendant de CETTE t\u00e2che (POURQUOI, livrable, but, d\u00e9j\u00e0 fait, reste \u00e0 faire, contraintes locales).',
+      '  \u00b7 patches = projet / tableau (qui approuve, qui travaille sur quoi, r\u00f4les, normes, faits r\u00e9utilisables sur d\'autres cartes).',
+      '  \u00b7 Tr\u00e8s important et vrai au-del\u00e0 de la carte \u2192 patches (remember si durable, note si provisoire). Sinon \u2192 cardPatches.',
+      '- Formats cardPatches utiles\u00a0: \u00ab\u00a0Pourquoi\u00a0: \u2026\u00a0\u00bb, \u00ab\u00a0Livrable\u00a0: \u2026\u00a0\u00bb, \u00ab\u00a0Qui\u00a0: \u2026\u00a0\u00bb, \u00ab\u00a0Permission\u00a0: \u2026\u00a0\u00bb, \u00ab\u00a0D\u00e9j\u00e0 fait\u00a0: \u2026\u00a0\u00bb, \u00ab\u00a0Reste\u00a0: \u2026\u00a0\u00bb.',
       '- Si la r\u00e9ponse clarifie le p\u00e9rim\u00e8tre\u00a0: rename_card (titre plus clair), set_description (process / d\u00e9finition / pourquoi), add_subtask (\u00e9tapes concr\u00e8tes) \u2014 sans inventer.',
       '- Ex. user explique les \u00e9tapes d\'archivage \u2192 add_subtask pour chaque \u00e9tape claire + remember le process + question courte suivante.',
-      '- Ne repose pas ce qui est d\u00e9j\u00e0 dans context.cardMemory.facts ou dans l\'historique (surtout un \u00ab\u00a0Pourquoi\u00a0:\u00a0\u00bb d\u00e9j\u00e0 not\u00e9).',
+      '- Ne repose pas ce qui est d\u00e9j\u00e0 dans context.cardMemory.facts, context.memory, ou l\'historique (surtout un \u00ab\u00a0Pourquoi\u00a0:\u00a0\u00bb d\u00e9j\u00e0 not\u00e9).',
       '',
       'Le SUJET de la carte (cardName raccourci) est ta piste\u00a0: ancre sans recopier le titre verbatim. Voisinage / r\u00e9cent = indices seulement.',
       'Les axes priority actuels sont des VALEURS PAR D\u00c9FAUT non fiables sauf si priorityAxesTrusted=true.',
       '',
       'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
-      '{"thinking":"...","message":"...","suggestions":[{"label":"...","icon":"circle-sm","color":"teal","heat":0}],"suggestionScale":true,"suggestionsMulti":false,"prompts":[],"actions":[{"tool":"...","args":{}}],"cardPatches":[{"op":"remember","text":"..."}],"completeInterview":false}',
+      '{"thinking":"...","message":"...","suggestions":[{"label":"...","icon":"circle-sm","color":"teal","heat":0}],"suggestionScale":true,"suggestionsMulti":false,"prompts":[],"actions":[{"tool":"...","args":{}}],"cardPatches":[{"op":"remember","text":"..."}],"patches":[{"op":"remember","text":"..."}],"completeInterview":false}',
       '',
       'R\u00e8gles interview\u00a0:',
       '- Une question claire et COURTE \u00e0 la fois (sauf exception avis / cl\u00f4ture). Pas de pr\u00e9ambule inutile.',
@@ -2978,14 +3046,14 @@
       '- Cl\u00f4ture (completeInterview:true) \u2014 tr\u00e8s important\u00a0:',
       '- Quand plus de question utile (POURQUOI m\u00e9moris\u00e9 sauf skip, urgence+impact+ease fix\u00e9s, skip \u00e9ch\u00e9ance, passer / plus tard)\u00a0: completeInterview:true.',
       '- INTERDIT de terminer avec seulement \u00ab\u00a0Okay.\u00a0\u00bb / \u00ab\u00a0C\'est not\u00e9.\u00a0\u00bb / \u00ab\u00a0Ok.\u00a0\u00bb / \u00ab\u00a0D\'accord.\u00a0\u00bb',
-      '- \u00c0 la place\u00a0: UNE remarque courte, un peu s\u00e8che / maligne, ancr\u00e9e dans CE qu\'on vient de discuter (sujet de la carte, budget, permissions, ce que tu peux / ne peux pas faire).',
-      '- Varie\u00a0: pique sur l\'\u00e9change, offre concr\u00e8te d\'aide, aveu d\'impuissance utile, ou nudge (\u00ab\u00a0va demander au boss s\'il a le budget\u00a0\u00bb). Montre que tu as compris le contexte.',
+      '- \u00c0 la place\u00a0: UNE remarque courte, un peu s\u00e8che / maligne, ancr\u00e9e dans CE qu\'on vient de discuter (sujet de la carte, budget, permission, avancement, ce que tu peux / ne peux pas faire).',
+      '- Varie\u00a0: pique sur l\'\u00e9change, offre concr\u00e8te d\'aide, aveu d\'impuissance utile, ou nudge (\u00ab\u00a0va demander si y\'a le budget\u00a0\u00bb). Montre que tu as compris le contexte.',
       '- Ex. FAUX (apr\u00e8s \u00ab\u00a0Pas d\'\u00e9ch\u00e9ance\u00a0\u00bb sur achat DaVinci)\u00a0: \u00ab\u00a0Okay.\u00a0\u00bb',
-      '- Ex. VRAI\u00a0: \u00ab\u00a0Bon, sans deadline c\'est surtout une question de thunes et d\'OK des bosses. Si on veut vraiment Resolve, faut aller leur demander s\'ils ont le budget.\u00a0\u00bb',
+      '- Ex. VRAI\u00a0: \u00ab\u00a0Bon, sans deadline c\'est surtout une question de thunes et de permission. Si on veut vraiment Resolve, faut aller demander s\'ils ont le budget.\u00a0\u00bb',
       '- Ex. VRAI (autre)\u00a0: \u00ab\u00a0Moi je peux te noter la priorit\u00e9\u00a0; le reste, c\'est plut\u00f4t une conversation avec la compta.\u00a0\u00bb',
-      '- Ex. VRAI (skip total)\u00a0: \u00ab\u00a0Ok on laisse \u00e7a. Reviens quand t\'auras une id\u00e9e du budget ou qui doit signer.\u00a0\u00bb',
+      '- Ex. VRAI (skip total)\u00a0: \u00ab\u00a0Ok on laisse \u00e7a. Reviens quand t\'auras une id\u00e9e du budget ou qui doit valider.\u00a0\u00bb',
       '- INTERDIT de demander \u00ab\u00a0sur une \u00e9chelle de 0 \u00e0 4\u00a0\u00bb, des chiffres seuls, ou des l\u00e9gendes.',
-      '- Maximise le gain d\'info\u00a0: POURQUOI d\'abord (sauf d\u00e9j\u00e0 connu), puis clarifie si le titre est vague, puis inf\u00e8re axes (titre + connaissances)\u00a0; pose seulement ce qui reste ambigu (budget, permissions, urgence, impact).',
+      '- Maximise le gain d\'info\u00a0: POURQUOI d\'abord (sauf d\u00e9j\u00e0 connu), puis clarifie si le titre est vague, puis (plans) permission / qui / commenc\u00e9 / d\u00e9j\u00e0 fait / reste, puis inf\u00e8re axes\u00a0; pose seulement ce qui reste ambigu (budget, permission, urgence, impact).',
       '- N\'invente PAS d\'\u00e9ch\u00e9ance, projet, sous-t\u00e2ches ou description sans indice (titre, r\u00e9ponse, voisinage). La dur\u00e9e COURTE pour un achat / un clic / un mail\u00a0: OK \u00e0 inf\u00e9rer.',
       '- Si l\'utilisateur dit passer / plus tard / skip / non merci\u00a0: completeInterview:true, actions=[] (sauf ce que tu as d\u00e9j\u00e0 assez pour appliquer) + message de cl\u00f4ture malin (pas \u00ab\u00a0Okay.\u00a0\u00bb).',
       '- Quand urgence+impact+ease sont fix\u00e9s\u00a0: tu peux encore poser UNE question courte utile (\u00e9ch\u00e9ance, projet, clarification) SANS dire que c\'est la derni\u00e8re\u00a0; sinon completeInterview:true + cl\u00f4ture maligne. Pas de question dur\u00e9e si d\u00e9j\u00e0 inf\u00e9r\u00e9e.',
@@ -3163,6 +3231,9 @@
     var cardPatches = normalizeCardPatches(
       (data && data.cardPatches) || (parsed && parsed.cardPatches)
     );
+    var patches = normalizeBoardPatches(
+      (data && data.patches) || (parsed && parsed.patches)
+    );
 
     var suggestionScale = wantsSuggestionScale(data) || wantsSuggestionScale(parsed);
     var suggestionEntries = normalizeSuggestionEntries(
@@ -3220,6 +3291,7 @@
       prompts: prompts,
       followUps: parsed.followUps || [],
       cardPatches: cardPatches,
+      patches: patches,
       completeInterview: completeInterview,
       droppedActions: parsed.droppedActions || [],
       rawJson: content,
@@ -4265,7 +4337,8 @@
         prompts: [],
         actions: [],
         droppedActions: [],
-        cardPatches: []
+        cardPatches: [],
+        patches: []
       };
     }
     var jsonText = text;
@@ -4343,7 +4416,8 @@
         prompts: Array.isArray(parsed.prompts) ? parsed.prompts : [],
         actions: normalized.actions,
         droppedActions: normalized.dropped,
-        cardPatches: normalizeCardPatches(parsed.cardPatches)
+        cardPatches: normalizeCardPatches(parsed.cardPatches),
+        patches: normalizeBoardPatches(parsed.patches)
       };
     } catch (e) {
       return {
@@ -4356,7 +4430,8 @@
         prompts: [],
         actions: [],
         droppedActions: [],
-        cardPatches: []
+        cardPatches: [],
+        patches: []
       };
     }
   }
@@ -4859,6 +4934,7 @@
       actions: actions,
       droppedActions: parsed.droppedActions || [],
       cardPatches: parsed.cardPatches || [],
+      patches: parsed.patches || [],
       rawJson: response.content,
       context: context,
       usage: usage,
