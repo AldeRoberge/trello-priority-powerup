@@ -3232,6 +3232,15 @@ html[data-color-mode="dark"] .tp-profile-status.is-error {
   border: 1px solid var(--tp-border, rgba(9, 30, 66, 0.14));
 }
 
+.tp-goals-metric-form.is-ai-filled {
+  border-color: color-mix(in srgb, var(--tp-primary, #0c66e4) 35%, var(--tp-border, rgba(9, 30, 66, 0.14)));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tp-primary, #0c66e4) 12%, transparent);
+}
+
+.tp-goals-metric-suggestions {
+  margin-bottom: 2px;
+}
+
 .tp-goals-form-title {
   grid-column: 1 / -1;
   margin: 0;

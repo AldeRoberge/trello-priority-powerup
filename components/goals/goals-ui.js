@@ -65,6 +65,7 @@
     var GT = global.GoalsTrello;
     var Agent = global.PriorityAgent;
     var onResize = typeof options.onResize === 'function' ? options.onResize : function () {};
+    var initialSelection = options.initialSelection || null;
 
     if (!containerEl || !t || !GT) {
       console.error('GoalsUI.mountGoalsSettings: missing deps');
@@ -87,6 +88,17 @@
       vision: { names: [], loading: false, seq: 0, key: '' },
       mission: { names: [], loading: false, seq: 0, key: '' },
       project: { names: [], loading: false, seq: 0, key: '' },
+    };
+    var metricSuggest = {
+      missionId: null,
+      items: [],
+      loading: false,
+      seq: 0,
+      key: '',
+      formApi: null,
+      section: null,
+      statusEl: null,
+      listEl: null,
     };
 
     containerEl.replaceChildren();
@@ -230,18 +242,24 @@
     }
 
     function buildAddRow(placeholder, onCreate) {
-      var row = el('div', 'tp-goals-add-row');
+      var row = el('form', 'tp-goals-add-row');
+      row.setAttribute('novalidate', '');
       var input = el('input', 'tp-goals-input', {
         type: 'text',
-        attrs: { placeholder: placeholder, maxlength: '120' },
+        attrs: { placeholder: placeholder, maxlength: '120', autocomplete: 'off' },
       });
       var btn = el('button', 'tp-button tp-button--secondary tp-goals-add-btn', {
-        type: 'button',
+        type: 'submit',
         text: 'Ajouter',
       });
-      btn.addEventListener('click', function () {
+
+      function submitCreate(e) {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
         var raw = input.value.trim();
-        if (!raw) return;
+        if (!raw || btn.disabled) return;
         btn.disabled = true;
         spellcheckText(raw)
           .then(function (name) {
@@ -249,6 +267,7 @@
           })
           .then(function () {
             input.value = '';
+            input.focus();
           })
           .catch(function (err) {
             console.error('Goals create failed', err);
@@ -258,11 +277,14 @@
             btn.disabled = false;
             onResize();
           });
-      });
+      }
+
+      row.addEventListener('submit', submitCreate);
       input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' || e.keyCode === 13) {
           e.preventDefault();
-          btn.click();
+          e.stopPropagation();
+          submitCreate(e);
         }
       });
       row.appendChild(input);
@@ -689,10 +711,15 @@
 
     function renderMetrics() {
       metricsPanel.replaceChildren();
+      metricSuggest.formApi = null;
+      metricSuggest.section = null;
+      metricSuggest.statusEl = null;
+      metricSuggest.listEl = null;
+
       if (!state.selectedMissionId) {
         metricsPanel.appendChild(
           el('p', 'tp-goals-empty', {
-            text: 'Sélectionnez une mission pour gérer ses métriques.',
+            text: 'S\u00e9lectionnez une mission pour g\u00e9rer ses m\u00e9triques.',
           })
         );
         return;
@@ -701,7 +728,7 @@
       var mission = GT.findById(state.missions, state.selectedMissionId);
       metricsPanel.appendChild(
         el('h4', 'tp-goals-col-title', {
-          text: 'Métriques — ' + (mission ? mission.name : ''),
+          text: 'M\u00e9triques \u2014 ' + (mission ? mission.name : ''),
         })
       );
 
@@ -711,14 +738,194 @@
 
       var listEl = el('div', 'tp-goals-metrics-list');
       if (!metrics.length) {
-        listEl.appendChild(el('p', 'tp-goals-empty', { text: 'Aucune métrique.' }));
+        listEl.appendChild(el('p', 'tp-goals-empty', { text: 'Aucune m\u00e9trique.' }));
       } else {
         metrics.forEach(function (metric) {
           listEl.appendChild(renderMetricCard(metric, metrics));
         });
       }
       metricsPanel.appendChild(listEl);
-      metricsPanel.appendChild(renderMetricForm(null, metrics));
+
+      var suggestSection = el('div', 'tp-goals-suggestions tp-goals-metric-suggestions');
+      suggestSection.hidden = true;
+      suggestSection.innerHTML =
+        '<div class="tp-goals-suggestions-head">' +
+        '<span class="tp-goals-suggestions-label">Suggestions IA</span>' +
+        '<button type="button" class="tp-goals-suggestions-refresh" ' +
+        'aria-label="Rafra\u00eechir les suggestions" title="Rafra\u00eechir">\u21bb</button>' +
+        '</div>' +
+        '<p class="tp-goals-suggestions-status" hidden></p>' +
+        '<div class="tp-goals-suggestions-list" role="list"></div>';
+      metricsPanel.appendChild(suggestSection);
+      metricSuggest.section = suggestSection;
+      metricSuggest.statusEl = suggestSection.querySelector('.tp-goals-suggestions-status');
+      metricSuggest.listEl = suggestSection.querySelector('.tp-goals-suggestions-list');
+      suggestSection.querySelector('.tp-goals-suggestions-refresh').addEventListener('click', function () {
+        refreshMetricSuggestions(true);
+      });
+
+      var formApi = renderMetricForm(null, metrics);
+      metricSuggest.formApi = formApi;
+      metricsPanel.appendChild(formApi.el);
+
+      setTimeout(function () {
+        refreshMetricSuggestions(false);
+      }, 0);
+    }
+
+    function setMetricSuggestStatus(text, show) {
+      if (!metricSuggest.statusEl) return;
+      if (!show || !text) {
+        metricSuggest.statusEl.hidden = true;
+        metricSuggest.statusEl.textContent = '';
+        return;
+      }
+      metricSuggest.statusEl.hidden = false;
+      metricSuggest.statusEl.textContent = text;
+    }
+
+    function applyMetricSuggestion(suggestion, opts) {
+      opts = opts || {};
+      if (!metricSuggest.formApi || !suggestion) return;
+      metricSuggest.formApi.apply(suggestion, { force: !!opts.force });
+      onResize();
+    }
+
+    function renderMetricSuggestions() {
+      if (!metricSuggest.section || !metricSuggest.listEl) return;
+      metricSuggest.listEl.replaceChildren();
+
+      if (!state.aiEnabled || !state.selectedMissionId) {
+        metricSuggest.section.hidden = true;
+        return;
+      }
+      metricSuggest.section.hidden = false;
+
+      if (metricSuggest.loading) {
+        setMetricSuggestStatus('G\u00e9n\u00e9ration des m\u00e9triques\u2026', true);
+        return;
+      }
+      if (!metricSuggest.items.length) {
+        setMetricSuggestStatus('Aucune suggestion pour le moment.', true);
+        return;
+      }
+      setMetricSuggestStatus('', false);
+
+      metricSuggest.items.forEach(function (item, index) {
+        var label = item.name + (item.isPrimary ? ' \u00b7 Principale' : '');
+        var btn = el('button', 'tp-goals-suggestion', {
+          type: 'button',
+          text: label,
+          attrs: {
+            role: 'listitem',
+            title: 'Remplir le formulaire\u00a0: ' + item.name,
+            'data-suggestion-index': String(index),
+          },
+        });
+        btn.addEventListener('click', function () {
+          applyMetricSuggestion(item, { force: true });
+        });
+        metricSuggest.listEl.appendChild(btn);
+      });
+    }
+
+    function refreshMetricSuggestions(force) {
+      if (
+        !state.aiEnabled ||
+        !state.selectedMissionId ||
+        !Agent ||
+        typeof Agent.suggestMetrics !== 'function'
+      ) {
+        if (metricSuggest.section) metricSuggest.section.hidden = true;
+        return Promise.resolve();
+      }
+
+      var mission = GT.findById(state.missions, state.selectedMissionId);
+      if (!mission) {
+        if (metricSuggest.section) metricSuggest.section.hidden = true;
+        return Promise.resolve();
+      }
+      var vision = GT.findById(state.visions, mission.visionId);
+      var existing = state.metrics.filter(function (m) {
+        return m.linkedGoalId === state.selectedMissionId;
+      });
+      var key =
+        mission.id +
+        '|' +
+        (vision ? vision.name : '') +
+        '|' +
+        mission.name +
+        '|' +
+        existing
+          .map(function (m) {
+            return m.name;
+          })
+          .join('\u0001');
+
+      if (
+        !force &&
+        metricSuggest.key === key &&
+        (metricSuggest.items.length || metricSuggest.loading)
+      ) {
+        renderMetricSuggestions();
+        if (metricSuggest.items.length && metricSuggest.formApi) {
+          applyMetricSuggestion(
+            metricSuggest.items.find(function (m) {
+              return m.isPrimary;
+            }) || metricSuggest.items[0],
+            { force: false }
+          );
+        }
+        return Promise.resolve();
+      }
+
+      var seq = ++metricSuggest.seq;
+      metricSuggest.loading = true;
+      metricSuggest.key = key;
+      metricSuggest.missionId = mission.id;
+      metricSuggest.items = [];
+      renderMetricSuggestions();
+
+      return Agent.getProvider(t)
+        .then(function (provider) {
+          if (!Agent.isConfigured(provider)) {
+            state.aiEnabled = false;
+            return [];
+          }
+          return Agent.suggestMetrics(provider, {
+            visionName: vision ? vision.name : '',
+            missionName: mission.name,
+            boardName: state.boardName,
+            existingMetrics: existing,
+          });
+        })
+        .then(function (list) {
+          if (seq !== metricSuggest.seq) return;
+          metricSuggest.items = Array.isArray(list) ? list.slice(0, 3) : [];
+          metricSuggest.loading = false;
+          renderMetricSuggestions();
+          if (metricSuggest.items.length) {
+            applyMetricSuggestion(
+              metricSuggest.items.find(function (m) {
+                return m.isPrimary;
+              }) || metricSuggest.items[0],
+              { force: false }
+            );
+          }
+          onResize();
+        })
+        .catch(function (err) {
+          console.error('Goals metric suggestions failed', err);
+          if (seq !== metricSuggest.seq) return;
+          metricSuggest.loading = false;
+          metricSuggest.items = [];
+          setMetricSuggestStatus(
+            'Impossible de g\u00e9n\u00e9rer des m\u00e9triques (IA indisponible).',
+            true
+          );
+          if (metricSuggest.section) metricSuggest.section.hidden = false;
+          onResize();
+        });
     }
 
     function renderMetricCard(metric, allMetrics) {
@@ -768,7 +975,7 @@
           return;
         }
         var host = el('div', 'tp-goals-metric-edit');
-        host.appendChild(renderMetricForm(metric, allMetrics));
+        host.appendChild(renderMetricForm(metric, allMetrics).el);
         card.appendChild(host);
         onResize();
       });
@@ -796,7 +1003,7 @@
       var form = el('div', 'tp-goals-metric-form');
       form.appendChild(
         el('h5', 'tp-goals-form-title', {
-          text: isEdit ? 'Modifier la métrique' : 'Ajouter une métrique',
+          text: isEdit ? 'Modifier la m\u00e9trique' : 'Ajouter une m\u00e9trique',
         })
       );
 
@@ -807,6 +1014,18 @@
         return wrap;
       }
 
+      function setSelectValue(select, value) {
+        var found = false;
+        for (var i = 0; i < select.options.length; i++) {
+          if (select.options[i].value === value) {
+            select.selectedIndex = i;
+            found = true;
+            break;
+          }
+        }
+        return found;
+      }
+
       var nameInput = el('input', 'tp-goals-input', {
         type: 'text',
         value: existing ? existing.name : '',
@@ -814,7 +1033,7 @@
       });
       var typeSelect = el('select', 'tp-select');
       [
-        ['incremental', 'Incrémentale'],
+        ['incremental', 'Incr\u00e9mentale'],
         ['sentimental', 'Sentimentale'],
       ].forEach(function (opt) {
         var o = el('option', null, { value: opt[0], text: opt[1] });
@@ -826,9 +1045,9 @@
 
       var dirSelect = el('select', 'tp-select');
       [
-        ['increase', 'Augmenter ↑'],
-        ['decrease', 'Diminuer ↓'],
-        ['hold', 'Maintenir ↔'],
+        ['increase', 'Augmenter \u2191'],
+        ['decrease', 'Diminuer \u2193'],
+        ['hold', 'Maintenir \u2194'],
       ].forEach(function (opt) {
         var o = el('option', null, { value: opt[0], text: opt[1] });
         if ((existing && existing.direction === opt[0]) || (!existing && opt[0] === 'increase')) {
@@ -863,12 +1082,12 @@
       var scaleLo = el('input', 'tp-goals-input', {
         type: 'text',
         value: existing && existing.scaleLabels ? existing.scaleLabels[0] : '',
-        attrs: { placeholder: 'Ex. Très ennuyant' },
+        attrs: { placeholder: 'Ex. Tr\u00e8s ennuyant' },
       });
       var scaleHi = el('input', 'tp-goals-input', {
         type: 'text',
         value: existing && existing.scaleLabels ? existing.scaleLabels[1] : '',
-        attrs: { placeholder: 'Ex. Très valorisant' },
+        attrs: { placeholder: 'Ex. Tr\u00e8s valorisant' },
       });
       var primaryCheck = el('input', null, {
         type: 'checkbox',
@@ -876,7 +1095,7 @@
       });
       var primaryLabel = el('label', 'tp-goals-toggle');
       primaryLabel.appendChild(primaryCheck);
-      primaryLabel.appendChild(document.createTextNode(' Métrique principale'));
+      primaryLabel.appendChild(document.createTextNode(' M\u00e9trique principale'));
 
       var depsSelect = el('select', 'tp-select tp-goals-deps-select', {
         multiple: true,
@@ -899,10 +1118,58 @@
       form.appendChild(field('Mesure', measureSelect));
       form.appendChild(field('Valeur actuelle', currentInput));
       form.appendChild(field('Cible', targetInput));
-      form.appendChild(field('Échelle (bas)', scaleLo));
-      form.appendChild(field('Échelle (haut)', scaleHi));
-      form.appendChild(field('Dépend de', depsSelect));
+      form.appendChild(field('\u00c9chelle (bas)', scaleLo));
+      form.appendChild(field('\u00c9chelle (haut)', scaleHi));
+      form.appendChild(field('D\u00e9pend de', depsSelect));
       form.appendChild(primaryLabel);
+
+      var userEdited = false;
+      if (!isEdit) {
+        function markEdited() {
+          userEdited = true;
+        }
+        nameInput.addEventListener('input', markEdited);
+        typeSelect.addEventListener('change', markEdited);
+        dirSelect.addEventListener('change', markEdited);
+        measureSelect.addEventListener('change', markEdited);
+        currentInput.addEventListener('input', markEdited);
+        targetInput.addEventListener('input', markEdited);
+        scaleLo.addEventListener('input', markEdited);
+        scaleHi.addEventListener('input', markEdited);
+        primaryCheck.addEventListener('change', markEdited);
+      }
+
+      function applySuggestion(suggestion, opts) {
+        opts = opts || {};
+        if (isEdit || !suggestion) return false;
+        if (!opts.force && userEdited && nameInput.value.trim()) return false;
+        nameInput.value = suggestion.name || '';
+        setSelectValue(typeSelect, suggestion.type || 'incremental');
+        setSelectValue(dirSelect, suggestion.direction || 'increase');
+        setSelectValue(measureSelect, suggestion.measurement || 'manual');
+        currentInput.value =
+          suggestion.currentValue != null && isFinite(Number(suggestion.currentValue))
+            ? String(suggestion.currentValue)
+            : '0';
+        targetInput.value =
+          suggestion.target != null && isFinite(Number(suggestion.target))
+            ? String(suggestion.target)
+            : '';
+        if (suggestion.type === 'sentimental' && Array.isArray(suggestion.scaleLabels)) {
+          scaleLo.value = suggestion.scaleLabels[0] || '';
+          scaleHi.value = suggestion.scaleLabels[1] || '';
+        } else {
+          scaleLo.value = '';
+          scaleHi.value = '';
+        }
+        var hasPrimary = (allMetrics || []).some(function (m) {
+          return m.isPrimary;
+        });
+        primaryCheck.checked = !!suggestion.isPrimary && !hasPrimary;
+        userEdited = false;
+        form.classList.add('is-ai-filled');
+        return true;
+      }
 
       var saveBtn = el('button', 'tp-button', {
         type: 'button',
@@ -960,7 +1227,10 @@
           });
       });
       form.appendChild(saveBtn);
-      return form;
+      return {
+        el: form,
+        apply: applySuggestion,
+      };
     }
 
     function detectAi() {
@@ -1000,6 +1270,50 @@
         });
     }
 
+    function applyInitialSelection(sel) {
+      if (!sel) return;
+      var visionId = sel.visionId || null;
+      var missionId = sel.missionId || null;
+      var projectId = sel.projectId || null;
+
+      if (projectId) {
+        var project = GT.findById(state.projects, projectId);
+        if (project) {
+          projectId = project.id;
+          missionId = missionId || project.missionId || null;
+        } else {
+          projectId = null;
+        }
+      }
+      if (missionId) {
+        var mission = GT.findById(state.missions, missionId);
+        if (mission) {
+          missionId = mission.id;
+          visionId = visionId || mission.visionId || null;
+        } else {
+          missionId = null;
+          projectId = null;
+        }
+      }
+      if (visionId && !GT.findById(state.visions, visionId)) {
+        visionId = null;
+        missionId = null;
+        projectId = null;
+      }
+
+      state.selectedVisionId = visionId;
+      state.selectedMissionId = missionId;
+      state.selectedProjectId = projectId;
+
+      visionPanel.root.open = true;
+      if (missionId) missionPanel.root.open = true;
+      if (projectId) projectPanel.root.open = true;
+
+      renderLists();
+      renderMetrics();
+      onResize();
+    }
+
     function reload() {
       return Promise.all([
         GT.getVisions(t),
@@ -1037,6 +1351,15 @@
     }
 
     return reload().then(function () {
+      if (initialSelection) {
+        applyInitialSelection(initialSelection);
+        initialSelection = null;
+        setTimeout(function () {
+          refreshSuggestions('vision', false);
+          if (state.selectedVisionId) refreshSuggestions('mission', false);
+          if (state.selectedMissionId) refreshSuggestions('project', false);
+        }, 0);
+      }
       return {
         reload: reload,
         getState: function () {

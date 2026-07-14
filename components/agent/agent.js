@@ -1485,6 +1485,159 @@
       .slice(0, 3);
   }
 
+  function normalizeMetricSuggestion(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    var name = typeof raw.name === 'string' ? raw.name.trim() : '';
+    if (!name || name.length > 120) return null;
+    var type = raw.type === 'sentimental' ? 'sentimental' : 'incremental';
+    var direction =
+      raw.direction === 'decrease' || raw.direction === 'hold' ? raw.direction : 'increase';
+    var measurement = raw.measurement === 'direct' ? 'direct' : 'manual';
+    var currentValue = Number(raw.currentValue);
+    if (!isFinite(currentValue)) currentValue = 0;
+    var metric = {
+      name: name,
+      type: type,
+      direction: direction,
+      measurement: measurement,
+      currentValue: currentValue,
+      isPrimary: raw.isPrimary === true
+    };
+    var target = Number(raw.target);
+    if (isFinite(target)) metric.target = target;
+    if (type === 'sentimental' && Array.isArray(raw.scaleLabels) && raw.scaleLabels.length >= 2) {
+      var lo = typeof raw.scaleLabels[0] === 'string' ? raw.scaleLabels[0].trim() : '';
+      var hi = typeof raw.scaleLabels[1] === 'string' ? raw.scaleLabels[1].trim() : '';
+      if (lo && hi) metric.scaleLabels = [lo.slice(0, 80), hi.slice(0, 80)];
+    }
+    return metric;
+  }
+
+  function normalizeMetricSuggestionList(raw) {
+    var list = Array.isArray(raw) ? raw : [];
+    var out = [];
+    var seen = Object.create(null);
+    var primaryClaimed = false;
+    for (var i = 0; i < list.length; i++) {
+      var metric = normalizeMetricSuggestion(list[i]);
+      if (!metric) continue;
+      var key = metric.name.toLocaleLowerCase('fr-FR');
+      if (seen[key]) continue;
+      seen[key] = true;
+      if (metric.isPrimary) {
+        if (primaryClaimed) metric.isPrimary = false;
+        else primaryClaimed = true;
+      }
+      out.push(metric);
+      if (out.length >= 3) break;
+    }
+    if (out.length && !primaryClaimed) out[0].isPrimary = true;
+    return out;
+  }
+
+  /**
+   * Suggest mission metrics from Vision + Mission names.
+   * context: { visionName, missionName, boardName?, existingMetrics? }
+   * Returns [{ name, type, direction, measurement, currentValue, target?, scaleLabels?, isPrimary }]
+   */
+  async function suggestMetrics(provider, context, options) {
+    options = options || {};
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) return [];
+    var ctx = context && typeof context === 'object' ? context : {};
+    var visionName = typeof ctx.visionName === 'string' ? ctx.visionName.trim() : '';
+    var missionName = typeof ctx.missionName === 'string' ? ctx.missionName.trim() : '';
+    if (!missionName) return [];
+
+    var existing = Array.isArray(ctx.existingMetrics) ? ctx.existingMetrics : [];
+    var existingNames = existing
+      .map(function (m) {
+        return typeof m === 'string' ? m.trim() : m && m.name ? String(m.name).trim() : '';
+      })
+      .filter(Boolean);
+
+    var payload = {
+      visionName: visionName.slice(0, 200),
+      missionName: missionName.slice(0, 200),
+      boardName: typeof ctx.boardName === 'string' ? ctx.boardName.slice(0, 200) : '',
+      existingMetrics: existingNames.slice(0, 30)
+    };
+
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu proposes des m\u00e9triques pour une Mission Trello (Objectifs\u00a0: Vision \u2192 Mission).',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
+          '{"metrics":[{"name":"\u2026","type":"incremental|sentimental","direction":"increase|decrease|hold","measurement":"manual|direct","currentValue":0,"target":100,"scaleLabels":["bas","haut"],"isPrimary":true}]}',
+          'Propose 1 \u00e0 3 m\u00e9triques (pr\u00e9f\u00e8re 2) ancr\u00e9es dans les noms Vision et Mission.',
+          'Exactement UNE m\u00e9trique isPrimary:true (la plus centrale pour la mission).',
+          'type incremental = quantit\u00e9 num\u00e9rique\u00a0; sentimental = \u00e9chelle subjective (alors scaleLabels [bas, haut] obligatoires).',
+          'direction\u00a0: increase / decrease / hold selon l\'objectif.',
+          'measurement\u00a0: manual (saisie) ou direct (suivi auto) \u2014 privil\u00e9gie manual.',
+          'currentValue et target num\u00e9riques coh\u00e9rents (target optionnel si hold).',
+          'Noms courts en fran\u00e7ais, concrets, mesurables.',
+          'INTERDIT\u00a0: dupliquer une m\u00e9trique existante (m\u00eame sens).',
+          'INTERDIT\u00a0: placeholders g\u00e9n\u00e9riques (\u00ab\u00a0KPI 1\u00a0\u00bb, \u00ab\u00a0M\u00e9trique principale\u00a0\u00bb).',
+          'Contexte\u00a0:',
+          JSON.stringify(payload)
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content:
+          'Propose des m\u00e9triques pour la mission \u00ab\u00a0' +
+          missionName +
+          '\u00a0\u00bb' +
+          (visionName ? ' (vision\u00a0: \u00ab\u00a0' + visionName + '\u00a0\u00bb)' : '') +
+          '.'
+      }
+    ];
+
+    var response;
+    try {
+      response = await chatCompletions(p, messages, {
+        jsonMode: true,
+        max_tokens: 520,
+        temperature: 0.45,
+        stream: false
+      });
+    } catch (err) {
+      if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+        response = await chatCompletions(p, messages, {
+          jsonMode: false,
+          max_tokens: 520,
+          temperature: 0.45,
+          stream: false
+        });
+      } else {
+        console.error('PriorityAgent.suggestMetrics failed', err);
+        return [];
+      }
+    }
+
+    var list = [];
+    try {
+      var parsed = parseAssistantPayload(response.content);
+      list = normalizeMetricSuggestionList(parsed.metrics || parsed.suggestions);
+    } catch (e) {
+      try {
+        var raw = JSON.parse(response.content);
+        list = normalizeMetricSuggestionList(raw.metrics || raw.suggestions);
+      } catch (e2) {
+        list = [];
+      }
+    }
+
+    var existingKeys = {};
+    for (var i = 0; i < existingNames.length; i++) {
+      existingKeys[existingNames[i].toLocaleLowerCase('fr-FR')] = true;
+    }
+    return list.filter(function (m) {
+      return m && m.name && !existingKeys[m.name.toLocaleLowerCase('fr-FR')];
+    });
+  }
+
   /**
    * Conversational turn for memory alignment (no card tools).
    * Returns { message, suggestions, patches, rawJson, usage }.
@@ -4382,6 +4535,7 @@
     suggestQuestions: suggestQuestions,
     suggestSubtasks: suggestSubtasks,
     suggestGoals: suggestGoals,
+    suggestMetrics: suggestMetrics,
     executeAction: executeAction,
     executeActions: executeActions,
     formatChangeRecap: formatChangeRecap,

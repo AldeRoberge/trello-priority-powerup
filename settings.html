@@ -80,7 +80,6 @@
       <span class="tp-settings-summary-hint">Palette des paliers de priorité</span>
     </summary>
     <div class="tp-settings-body">
-      <p class="tp-color-scheme-hint">Palette des paliers de priorité affichés sur le tableau.</p>
       <div class="tp-color-scheme-list" id="colorSchemeList" role="radiogroup" aria-label="Schéma de couleurs"></div>
       <div class="tp-badge-preview" id="badgePreviewSection" aria-labelledby="badgePreviewHeading">
         <p class="tp-color-scheme-hint" id="badgePreviewHeading">Aperçu des badges sur les cartes</p>
@@ -199,11 +198,28 @@
         if (section) section.hidden = true;
         return;
       }
+      var initialSelection = {
+        visionId: t.arg('selectedVisionId') || null,
+        missionId: t.arg('selectedMissionId') || null,
+        projectId: t.arg('selectedProjectId') || null,
+      };
+      var hasSelection = !!(
+        initialSelection.visionId ||
+        initialSelection.missionId ||
+        initialSelection.projectId
+      );
+      if (section && hasSelection) {
+        section.open = true;
+      }
       try {
         await GoalsUI.mountGoalsSettings(mount, {
           t: t,
           onResize: resizeSettingsPopup,
+          initialSelection: hasSelection ? initialSelection : null,
         });
+        if (section && hasSelection && typeof section.scrollIntoView === 'function') {
+          section.scrollIntoView({ block: 'start' });
+        }
         resizeSettingsPopup();
       } catch (err) {
         console.error('Goals settings init failed', err);

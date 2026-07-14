@@ -64,11 +64,12 @@ function isTrelloBadgeColor(name) {
 PU.applyColorScheme('blue');
 
 check(
-  'exactly two color schemes',
-  Object.keys(PU.COLOR_SCHEMES).length === 2 &&
-    PU.COLOR_SCHEME_OPTIONS.length === 2 &&
+  'exactly three color schemes',
+  Object.keys(PU.COLOR_SCHEMES).length === 3 &&
+    PU.COLOR_SCHEME_OPTIONS.length === 3 &&
     !!PU.COLOR_SCHEMES.blue &&
-    !!PU.COLOR_SCHEMES.fire
+    !!PU.COLOR_SCHEMES.fire &&
+    !!PU.COLOR_SCHEMES.board
 );
 check('default scheme is classique blue', PU.DEFAULT_COLOR_SCHEME_KEY === 'blue');
 check(
@@ -84,7 +85,9 @@ check(
 );
 check(
   'french scheme labels',
-  PU.COLOR_SCHEMES.blue.label === 'Classique' && PU.COLOR_SCHEMES.fire.label === 'Feu'
+  PU.COLOR_SCHEMES.blue.label === 'Classique' &&
+    PU.COLOR_SCHEMES.fire.label === 'Feu' &&
+    PU.COLOR_SCHEMES.board.label === 'Tableau'
 );
 
 check(
@@ -139,10 +142,15 @@ check(
   (function () {
     var samples = PU.schemeBadgePreviewSamples();
     if (!Array.isArray(samples) || samples.length !== PU.TIERS.length) return false;
-    if (samples[PU.TIER_I.CRITIQUE].label !== PU.TASK_BADGE_LABELS.Critique) return false;
-    if (samples[PU.TIER_I.URGENTE].label !== PU.TASK_BADGE_LABELS.Urgente) return false;
-    if (samples[PU.TIER_I.IMPORTANTE].label !== PU.TASK_BADGE_LABELS.Importante) return false;
-    if (samples[PU.TIER_I.OPTIONNELLE].label !== PU.TASK_BADGE_LABELS.Optionnelle) return false;
+    // Preview is least → most critical (Optionnelle … Critique).
+    if (samples[0].label !== PU.TASK_BADGE_LABELS.Optionnelle) return false;
+    if (samples[samples.length - 1].label !== PU.TASK_BADGE_LABELS.Critique) return false;
+    var byTier = {};
+    samples.forEach(function (s) { byTier[s.tierI] = s; });
+    if (byTier[PU.TIER_I.CRITIQUE].label !== PU.TASK_BADGE_LABELS.Critique) return false;
+    if (byTier[PU.TIER_I.URGENTE].label !== PU.TASK_BADGE_LABELS.Urgente) return false;
+    if (byTier[PU.TIER_I.IMPORTANTE].label !== PU.TASK_BADGE_LABELS.Importante) return false;
+    if (byTier[PU.TIER_I.OPTIONNELLE].label !== PU.TASK_BADGE_LABELS.Optionnelle) return false;
     return samples.every(function (sample) {
       return (
         typeof sample.tierI === 'number' &&
@@ -170,14 +178,15 @@ check(
   (function () {
     PU.applyColorScheme('blue');
     var samples = PU.schemeBadgePreviewSamples();
+    // Least → most: Optionnelle … Critique
     return (
-      samples[0].color === 'blue' &&
-      samples[1].color === 'blue' &&
+      samples[0].color === 'light-gray' &&
+      samples[1].color === 'light-gray' &&
       samples[2].color === 'sky' &&
       samples[3].color === 'sky' &&
       samples[4].color === 'sky' &&
-      samples[5].color === 'light-gray' &&
-      samples[6].color === 'light-gray'
+      samples[5].color === 'blue' &&
+      samples[6].color === 'blue'
     );
   })()
 );
@@ -187,14 +196,33 @@ check(
     PU.applyColorScheme('fire');
     var samples = PU.schemeBadgePreviewSamples();
     PU.applyColorScheme('blue');
+    // Least → most: Optionnelle … Critique
     return (
-      samples[0].color === 'red' &&
-      samples[1].color === 'orange' &&
-      samples[2].color === 'yellow' &&
+      samples[0].color === 'light-gray' &&
+      samples[1].color === 'light-gray' &&
+      samples[2].color === 'light-gray' &&
       samples[3].color === 'yellow' &&
-      samples[4].color === 'light-gray' &&
-      samples[5].color === 'light-gray' &&
-      samples[6].color === 'light-gray'
+      samples[4].color === 'yellow' &&
+      samples[5].color === 'orange' &&
+      samples[6].color === 'red'
+    );
+  })()
+);
+check(
+  'board badge map is polychrome trello',
+  (function () {
+    PU.applyColorScheme('board');
+    var samples = PU.schemeBadgePreviewSamples();
+    PU.applyColorScheme('blue');
+    // Least → most: Optionnelle … Critique
+    return (
+      samples[0].color === 'light-gray' &&
+      samples[1].color === 'light-gray' &&
+      samples[2].color === 'sky' &&
+      samples[3].color === 'blue' &&
+      samples[4].color === 'yellow' &&
+      samples[5].color === 'orange' &&
+      samples[6].color === 'red'
     );
   })()
 );

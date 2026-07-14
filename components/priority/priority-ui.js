@@ -481,7 +481,18 @@
     6: TRELLO_BADGE_COLOR_MUTED
   };
 
-  // Exactly two schemes: Classique (default) + Feu.
+  // Tableau: polychrome Trello board colors (gray → yellow → orange → blue → red).
+  var BOARD_TIER_TRELLO_BADGE_COLORS = {
+    0: 'red',
+    1: 'orange',
+    2: 'yellow',
+    3: 'blue',
+    4: 'sky',
+    5: TRELLO_BADGE_COLOR_MUTED,
+    6: TRELLO_BADGE_COLOR_MUTED
+  };
+
+  // Classique (default) + Feu + Tableau (polychrome Trello colors).
   var COLOR_SCHEMES = {
     blue: buildColorSchemeFromHex(
       'blue',
@@ -496,12 +507,20 @@
       ['#F0EEE9', '#C9B8A6', '#E8A04A', '#E07030', '#C23B2A'],
       '#C23B2A',
       FIRE_TIER_TRELLO_BADGE_COLORS
+    ),
+    board: buildColorSchemeFromHex(
+      'board',
+      'Tableau',
+      ['#E8EAED', '#F5E49A', '#FF9F1A', '#0079BF', '#EB5A46'],
+      '#172B4D',
+      BOARD_TIER_TRELLO_BADGE_COLORS
     )
   };
 
   var COLOR_SCHEME_OPTIONS = [
     { key: 'blue', label: COLOR_SCHEMES.blue.label, icon: 'ti-droplet' },
-    { key: 'fire', label: COLOR_SCHEMES.fire.label, icon: 'ti-flame' }
+    { key: 'fire', label: COLOR_SCHEMES.fire.label, icon: 'ti-flame' },
+    { key: 'board', label: COLOR_SCHEMES.board.label, icon: 'ti-layout-kanban' }
   ];
 
   var activeColorSchemeKey = DEFAULT_COLOR_SCHEME_KEY;
@@ -2212,7 +2231,8 @@
 
   function schemeBadgePreviewSamples() {
     var samples = [];
-    for (var i = 0; i < TIER_DEFS.length; i++) {
+    // Least → most critical so the settings preview reads as a rising scale.
+    for (var i = TIER_DEFS.length - 1; i >= 0; i--) {
       var def = TIER_DEFS[i];
       var label = taskBadgeLabelForTierKey(def.label);
       var color = Object.prototype.hasOwnProperty.call(TIER_TRELLO_BADGE_COLORS, def.i)

@@ -45,7 +45,7 @@
   flex-shrink: 0;
 }
 
-.objectif-crumb--mission {
+.objectif-crumb--button {
   border: none;
   background: transparent;
   padding: 0;
@@ -56,7 +56,7 @@
   text-underline-offset: 2px;
 }
 
-.objectif-crumb--mission:hover {
+.objectif-crumb--button:hover {
   color: var(--tp-text, #172b4d);
 }
 

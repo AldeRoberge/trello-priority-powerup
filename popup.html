@@ -616,13 +616,37 @@
       return Promise.resolve(String(raw || '').trim());
     }
 
+    function openGoalsSettings(selection) {
+      selection = selection || {};
+      return t
+        .modal({
+          title: 'Paramètres de priorité',
+          url: PriorityTrello.pageUrl('./settings.html'),
+          height: 720,
+          fullscreen: false,
+          accentColor: '#22272B',
+          args: {
+            selectedVisionId: selection.visionId || null,
+            selectedMissionId: selection.missionId || null,
+            selectedProjectId: selection.projectId || null,
+          },
+        })
+        .then(function () {
+          return refreshObjectifData();
+        })
+        .catch(function (err) {
+          console.error('Open goals settings failed', err);
+        });
+    }
+
     function appendObjectifCrumb(crumb, label, opts) {
       opts = opts || {};
       var node;
       if (opts.asButton) {
         node = document.createElement('button');
         node.type = 'button';
-        node.className = 'objectif-crumb objectif-crumb--mission';
+        node.className = 'objectif-crumb objectif-crumb--button';
+        if (opts.title) node.title = opts.title;
       } else {
         node = document.createElement('span');
         node.className = 'objectif-crumb';
@@ -705,23 +729,41 @@
       if (projectId && hierarchy.project) {
         var crumb = document.createElement('div');
         crumb.className = 'objectif-breadcrumb';
+        var visionId = hierarchy.vision && hierarchy.vision.id;
+        var missionId = hierarchy.mission && hierarchy.mission.id;
+        var linkedProjectId = hierarchy.project && hierarchy.project.id;
         appendObjectifCrumb(crumb, hierarchy.vision && hierarchy.vision.name, {
+          asButton: !!visionId,
           retired: hierarchy.vision && hierarchy.vision.retired,
+          title: 'Modifier la vision',
+          onClick: function () {
+            openGoalsSettings({ visionId: visionId });
+          },
         });
         appendObjectifSep(crumb);
         appendObjectifCrumb(crumb, hierarchy.mission && hierarchy.mission.name, {
-          asButton: !!(hierarchy.mission && hierarchy.mission.id),
+          asButton: !!missionId,
           retired: hierarchy.mission && hierarchy.mission.retired,
+          title: 'Modifier la mission',
           onClick: function () {
-            if (!hierarchy.mission || !window.GoalsUI) return;
-            GT.getMetricsForMission(t, hierarchy.mission.id).then(function (metrics) {
-              GoalsUI.openMetricsPanel(document.body, hierarchy.mission, metrics);
+            openGoalsSettings({
+              visionId: visionId,
+              missionId: missionId,
             });
           },
         });
         appendObjectifSep(crumb);
         appendObjectifCrumb(crumb, hierarchy.project && hierarchy.project.name, {
+          asButton: !!linkedProjectId,
           retired: hierarchy.project && hierarchy.project.retired,
+          title: 'Modifier le projet',
+          onClick: function () {
+            openGoalsSettings({
+              visionId: visionId,
+              missionId: missionId,
+              projectId: linkedProjectId,
+            });
+          },
         });
         body.appendChild(crumb);
       }
