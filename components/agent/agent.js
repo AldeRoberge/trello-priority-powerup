@@ -2914,7 +2914,10 @@
     return true;
   }
 
-  /** Named colors (FR/EN) → heat 0–4 (green → red). */
+  /**
+   * Named colors (FR/EN) → heat 0–4 (green → red) for severity scales.
+   * Blue/teal stay as named colors (impact reach) and do not map to heat.
+   */
   var SUGGESTION_COLOR_HEAT = {
     green: 0,
     vert: 0,
@@ -2925,11 +2928,82 @@
     orange: 3,
     red: 4,
     rouge: 4,
-    blue: 1,
-    bleu: 1,
     gray: 0,
     grey: 0,
     gris: 0
+  };
+
+  /** Colors rendered as named accents (not green→red heat). */
+  var SUGGESTION_NAMED_COLORS = {
+    blue: true,
+    bleu: 'blue',
+    teal: true,
+    cyan: 'teal',
+    yellow: true,
+    jaune: 'yellow',
+    lime: true,
+    green: true,
+    vert: 'green',
+    orange: true,
+    red: true,
+    rouge: 'red',
+    gray: true,
+    grey: 'gray',
+    gris: 'gray'
+  };
+
+  /** Icons the model may set on suggestion chips. */
+  var SUGGESTION_ICON_IDS = [
+    'circle-xs',
+    'circle-sm',
+    'circle-md',
+    'circle-lg',
+    'circle-xl',
+    'dots',
+    'hammer',
+    'user',
+    'users',
+    'building',
+    'globe',
+    'flame',
+    'check',
+    'ban',
+    'clock',
+    'bolt',
+    'layers'
+  ];
+
+  var IMPACT_REACH_SUGGESTION = {
+    personnel: {
+      icon: 'circle-xs',
+      color: 'blue',
+      label: 'Personnel',
+      heat: null
+    },
+    equipe: {
+      icon: 'circle-sm',
+      color: 'teal',
+      label: '\u00c9quipe',
+      heat: null
+    },
+    interne: {
+      icon: 'circle-md',
+      color: 'yellow',
+      label: 'Interne',
+      heat: null
+    },
+    population: {
+      icon: 'circle-lg',
+      color: 'lime',
+      label: 'Population',
+      heat: null
+    },
+    global: {
+      icon: 'circle-xl',
+      color: 'green',
+      label: 'Global',
+      heat: null
+    }
   };
 
   function clampSuggestionHeat(value) {
@@ -2938,16 +3012,107 @@
     return Math.max(0, Math.min(4, Math.round(n)));
   }
 
+  function normalizeSuggestionColorName(raw) {
+    if (typeof raw !== 'string') return null;
+    var key = raw.trim().toLowerCase();
+    if (!key) return null;
+    var mapped = SUGGESTION_NAMED_COLORS[key];
+    if (mapped === true) return key;
+    if (typeof mapped === 'string') return mapped;
+    return null;
+  }
+
+  function normalizeSuggestionIconId(raw) {
+    if (typeof raw !== 'string') return null;
+    var key = raw.trim().toLowerCase();
+    var aliases = {
+      'small-circle': 'circle-xs',
+      'circle-small': 'circle-xs',
+      small: 'circle-xs',
+      'medium-circle': 'circle-md',
+      'circle-medium': 'circle-md',
+      medium: 'circle-md',
+      'big-circle': 'circle-lg',
+      'circle-big': 'circle-lg',
+      big: 'circle-lg',
+      'huge-circle': 'circle-xl',
+      'circle-huge': 'circle-xl',
+      huge: 'circle-xl',
+      'three-dots': 'dots',
+      '3-dots': 'dots',
+      ellipsis: 'dots'
+    };
+    if (aliases[key]) key = aliases[key];
+    return SUGGESTION_ICON_IDS.indexOf(key) >= 0 ? key : null;
+  }
+
   function heatFromSuggestionItem(item) {
     if (!item || typeof item !== 'object') return null;
     if (item.heat != null) return clampSuggestionHeat(item.heat);
     if (typeof item.color === 'string') {
       var key = item.color.trim().toLowerCase();
+      // Blue/teal are reach accents — keep out of green→red heat.
+      if (key === 'blue' || key === 'bleu' || key === 'teal' || key === 'cyan') {
+        return null;
+      }
       if (Object.prototype.hasOwnProperty.call(SUGGESTION_COLOR_HEAT, key)) {
         return SUGGESTION_COLOR_HEAT[key];
       }
     }
     return null;
+  }
+
+  function colorFromSuggestionItem(item) {
+    if (!item || typeof item !== 'object') return null;
+    if (typeof item.color !== 'string') return null;
+    return normalizeSuggestionColorName(item.color);
+  }
+
+  function iconFromSuggestionItem(item) {
+    if (!item || typeof item !== 'object') return null;
+    return normalizeSuggestionIconId(item.icon);
+  }
+
+  function impactReachKeyFromText(text) {
+    var raw = String(text || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+    if (!raw) return null;
+    var numbered = raw.match(
+      /^(?:impact\s*[=:]?\s*)?([0-4])\s*[\-–—:(]\s*(.+?)\s*\)?$/
+    );
+    if (numbered) raw = numbered[2].trim();
+    raw = raw.replace(/^(portee|impact)\s*[=:]?\s*/, '').trim();
+    if (/^(personnel|moi|individuel|individual)$/.test(raw)) return 'personnel';
+    if (/^(equipe|team|squad)$/.test(raw)) return 'equipe';
+    if (/^(interne|org(anisation)?|entreprise|company)$/.test(raw)) return 'interne';
+    if (/^(population|clients?|usagers?|communaute|users?)$/.test(raw)) {
+      return 'population';
+    }
+    if (/^(global|mondial|world|planet)$/.test(raw)) return 'global';
+    return null;
+  }
+
+  /** Rewrite numbered reach chips (0 Personnel…) into labelled icon+color chips. */
+  function enrichImpactReachSuggestions(entries) {
+    if (!Array.isArray(entries) || entries.length < 2) return entries || [];
+    var keys = entries.map(function (entry) {
+      return impactReachKeyFromText(entry.text);
+    });
+    var hit = keys.filter(Boolean).length;
+    if (hit < 2 || hit < Math.ceil(entries.length * 0.6)) return entries;
+    return entries.map(function (entry, i) {
+      var meta = keys[i] ? IMPACT_REACH_SUGGESTION[keys[i]] : null;
+      if (!meta) return entry;
+      return {
+        text: meta.label,
+        heat: null,
+        icon: entry.icon || meta.icon,
+        color: entry.color || meta.color
+      };
+    });
   }
 
   /** Even green→red steps for N chips (e.g. 3 → 0,2,4). */

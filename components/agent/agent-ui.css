@@ -1797,6 +1797,8 @@ html[data-color-mode='dark'] .tp-page--priority .agent-hl--y {
 .tp-page--priority .agent-suggestion-chip--scale:hover:not(:disabled) {
   filter: brightness(0.96);
   color: inherit;
+  border-color: inherit;
+  background: inherit;
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-0 {
