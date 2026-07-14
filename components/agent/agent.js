@@ -7,6 +7,8 @@
   'use strict';
 
   var PROVIDER_STORAGE_KEY = 'agentProvider';
+  var CARD_INTERVIEW_KEY = 'cardAgentInterview';
+  var MAX_INTERVIEW_ASKED = 24;
   var DEFAULT_OPENAI_BASE = 'https://api.openai.com/v1';
   var DEFAULT_OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
@@ -814,6 +816,20 @@
                   .filter(Boolean)
                   .slice(0, 6)
               : [],
+            recentCards: Array.isArray(view.recentCards)
+              ? view.recentCards
+                  .map(function (c) {
+                    if (!c || typeof c !== 'object') return null;
+                    return {
+                      id: c.id || '',
+                      name: c.name || '',
+                      list: c.list || '',
+                      at: c.at || ''
+                    };
+                  })
+                  .filter(Boolean)
+                  .slice(0, 10)
+              : [],
             onboardingComplete: !!view.onboardingComplete
           };
         }
@@ -984,7 +1000,7 @@
         })
         .filter(Boolean);
       ctx.blocked = {
-        // Bloqué section checkbox === enAttente. Card is blocked ONLY when enabled=true.
+        // Card is blocked ONLY when enAttente=true (shown under Statut when status is Bloqué).
         enabled: blockedEnabled,
         enAttente: blockedEnabled,
         blockedReasons: blockedEnabled ? blockedReasons.slice() : [],
@@ -1271,7 +1287,7 @@
       '- Chaque bloc a un champ enabled. Si enabled=false, la section est d\u00e9sactiv\u00e9e\u00a0: les valeurs saved* / latentes NE comptent PAS.',
       '- Priorit\u00e9 active seulement si priority.enabled=true.',
       '- \u00c9ch\u00e9ance active seulement si due.enabled=true (sinon dueDate/dueTime actifs sont null).',
-      '- Bloqu\u00e9 / en attente actif SEULEMENT si blocked.enabled=true (identique \u00e0 enAttente).',
+      '- Bloqu\u00e9 / en attente actif SEULEMENT si blocked.enabled=true (identique \u00e0 enAttente\u00a0; le motif s\u2019\u00e9dite sous Statut quand la carte est en Bloqu\u00e9).',
       '- Si blocked.enabled=false, la carte N\'EST PAS bloqu\u00e9e, m\u00eame si savedReasons contient d\'anciens motifs.',
       '- Progr\u00e8s actif seulement si progress.enabled=true.',
       '- Pour activer/d\u00e9sactiver\u00a0: priorityEnabled, dueEnabled, enAttente (Bloqu\u00e9), progressEnabled.',
@@ -1918,6 +1934,313 @@
       patches: patches,
       rawJson: content,
       usage: extractUsageFromRaw(response && response.raw)
+    };
+  }
+
+  // ── Card first-open interview (Akinator / Q20) ────────────────────────────
+
+  function emptyCardInterview() {
+    return {
+      complete: false,
+      asked: [],
+      startedAt: '',
+      completedAt: ''
+    };
+  }
+
+  function normalizeCardInterview(raw) {
+    var src = raw && typeof raw === 'object' ? raw : {};
+    var asked = Array.isArray(src.asked)
+      ? src.asked
+          .map(function (q) {
+            return String(q || '')
+              .trim()
+              .slice(0, 120);
+          })
+          .filter(Boolean)
+          .slice(0, MAX_INTERVIEW_ASKED)
+      : [];
+    return {
+      complete: !!src.complete,
+      asked: asked,
+      startedAt: typeof src.startedAt === 'string' ? src.startedAt : '',
+      completedAt: typeof src.completedAt === 'string' ? src.completedAt : ''
+    };
+  }
+
+  async function loadCardInterview(t) {
+    if (!t || typeof t.get !== 'function') return emptyCardInterview();
+    try {
+      var stored = await t.get('card', 'shared', CARD_INTERVIEW_KEY);
+      return normalizeCardInterview(stored);
+    } catch (err) {
+      console.error('PriorityAgent.loadCardInterview failed', err);
+      return emptyCardInterview();
+    }
+  }
+
+  async function saveCardInterview(t, interview) {
+    var next = normalizeCardInterview(interview);
+    if (!t || typeof t.set !== 'function') return next;
+    try {
+      await t.set('card', 'shared', CARD_INTERVIEW_KEY, next);
+    } catch (err) {
+      console.error('PriorityAgent.saveCardInterview failed', err);
+    }
+    return next;
+  }
+
+  function markInterviewQuestionAsked(interview, question) {
+    var next = normalizeCardInterview(interview);
+    var q = String(question || '')
+      .trim()
+      .slice(0, 120);
+    if (!q) return next;
+    var key = q.toLocaleLowerCase('fr-FR');
+    var already = next.asked.some(function (x) {
+      return String(x).toLocaleLowerCase('fr-FR') === key;
+    });
+    if (!already) {
+      next.asked = [q].concat(next.asked).slice(0, MAX_INTERVIEW_ASKED);
+    }
+    if (!next.startedAt) next.startedAt = new Date().toISOString();
+    return next;
+  }
+
+  function markInterviewComplete(interview) {
+    var next = normalizeCardInterview(interview);
+    next.complete = true;
+    next.completedAt = new Date().toISOString();
+    if (!next.startedAt) next.startedAt = next.completedAt;
+    return next;
+  }
+
+  /**
+   * First-open card interview turn (one question at a time).
+   * Returns { message, suggestions, actions, prompts, followUps, completeInterview,
+   *   droppedActions, rawJson, usage, context }.
+   */
+  async function cardInterviewTurn(provider, history, bridge, userText, options) {
+    options = options || {};
+    var onDelta = typeof options.onDelta === 'function' ? options.onDelta : null;
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) {
+      return {
+        message: 'Configurez d\'abord un fournisseur IA dans les param\u00e8tres.',
+        suggestions: [],
+        actions: [],
+        prompts: [],
+        followUps: [],
+        completeInterview: false,
+        droppedActions: [],
+        rawJson: '',
+        usage: null,
+        context: null
+      };
+    }
+
+    var context = buildContext(bridge);
+    context.interview = {
+      asked: Array.isArray(options.asked) ? options.asked : [],
+      surrounding: Array.isArray(options.surrounding) ? options.surrounding : [],
+      recentCards: Array.isArray(options.recentCards)
+        ? options.recentCards
+        : (context.memory && context.memory.recentCards) || [],
+      priorityAxesTrusted: !!options.priorityAxesTrusted
+    };
+
+    var system = [
+      'Tu es l\'assistant Priorit\u00e9 Trello en mode INTERVIEW premi\u00e8re ouverture (style Akinator / Q20).',
+      'Tu parles en fran\u00e7ais, de fa\u00e7on claire et concise.',
+      'Objectif\u00a0: d\u00e9duire avec le MOINS de questions possible\u00a0:',
+      '1) Urgence (0\u20134), Impact / port\u00e9e (0\u20134), Facilit\u00e9 (1\u20135) \u2014 OBLIGATOIRE avant de terminer.',
+      '2) Dur\u00e9e estim\u00e9e, \u00e9ch\u00e9ance, projet li\u00e9 \u2014 seulement si tu peux les d\u00e9duire avec confiance.',
+      '3) Sous-t\u00e2ches (add_subtask) \u2014 SEULEMENT si le but est tr\u00e8s \u00e9vident\u00a0; max 2\u20133\u00a0; sinon n\'en invente pas.',
+      '',
+      'Le TITRE de la carte est ta piste principale. Les cartes voisines et r\u00e9centes aident \u00e0 affiner.',
+      'Les axes priority actuels sont des VALEURS PAR D\u00c9FAUT non fiables (placeholder Importance)\u00a0; ne les traite pas comme d\u00e9j\u00e0 valid\u00e9s sauf si priorityAxesTrusted=true.',
+      '',
+      'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
+      '{"thinking":"...","message":"...","suggestions":["..."],"prompts":[],"actions":[{"tool":"...","args":{}}],"completeInterview":false}',
+      '',
+      'R\u00e8gles interview\u00a0:',
+      '- Pose UNE question claire \u00e0 la fois (choix multiples / oui-non pr\u00e9f\u00e9r\u00e9s).',
+      '- suggestions = 2\u20134 r\u00e9ponses cliquables courtes (utilise \u2026 pour \u00e0 compl\u00e9ter).',
+      '- Maximise le gain d\'information pour urgence / impact / facilit\u00e9.',
+      '- D\u00e8s que tu es assez confiant pour un axe (ou dur\u00e9e / due / projet)\u00a0: mets l\'outil dans actions IMM\u00c9DIATEMENT, confirme bri\u00e8vement, puis question suivante si besoin.',
+      '- N\'invente PAS d\'\u00e9ch\u00e9ance, projet ou sous-t\u00e2ches sans indice (titre, r\u00e9ponse, voisinage).',
+      '- Si l\'utilisateur dit passer / plus tard / skip / non merci\u00a0: completeInterview:true, actions=[] (sauf ce que tu as d\u00e9j\u00e0 assez pour appliquer).',
+      '- Quand urgence+impact+ease sont fix\u00e9s (via actions cette tour ou tours pr\u00e9c\u00e9dents)\u00a0: tu peux completeInterview:true. Cible ~4\u20138 questions max.',
+      '- completeInterview:true quand l\'interview est termin\u00e9e.',
+      '- \u00c9vite de reposer les questions d\u00e9j\u00e0 pos\u00e9es.',
+      '- INTERDIT\u00a0: \u00ab\u00a0Comment puis-je vous aider?\u00a0\u00bb / questions vagues ouvertes.',
+      '',
+      'Outils autoris\u00e9s dans actions\u00a0:',
+      '- set_priority: { urgency?, impact?, ease?, tier?, estimatedDurationMinutes?, priorityEnabled? }',
+      '- set_due: { dueDate?: YYYY-MM-DD, dueTime?: HH:MM, relativeHours?, relativeMinutes?, clear? }',
+      '- set_project: { projectId?, matchText?, name?, clear? }',
+      '- add_subtask: { text } (rare, seulement si tr\u00e8s clair)',
+      '- prompts optionnels: [{ "type":"priority_axes", "urgency":n, "impact":n, "ease":n }]',
+      '',
+      'Contexte carte / interview\u00a0:',
+      JSON.stringify({
+        today: context.today,
+        nowTime: context.nowTime,
+        cardName: context.cardName,
+        cardDesc: context.cardDesc,
+        priority: context.priority,
+        goals: context.goals || null,
+        memory: context.memory,
+        profile: context.profile,
+        asked: context.interview.asked,
+        surrounding: context.interview.surrounding,
+        recentCards: context.interview.recentCards,
+        priorityAxesTrusted: context.interview.priorityAxesTrusted
+      })
+    ].join('\n');
+
+    var messages = [{ role: 'system', content: system }];
+    (history || []).forEach(function (entry) {
+      if (!entry || !entry.role || !entry.content) return;
+      if (entry.role === 'user' || entry.role === 'assistant') {
+        messages.push({
+          role: entry.role,
+          content:
+            entry.role === 'assistant' && entry.rawJson
+              ? entry.rawJson
+              : String(entry.content)
+        });
+      }
+    });
+    messages.push({ role: 'user', content: String(userText || '').trim() });
+
+    function notifyVisible(accumulated) {
+      if (!onDelta) return;
+      var visible = extractStreamingMessage(accumulated);
+      if (!visible) return;
+      try {
+        onDelta(visible, accumulated);
+      } catch (cbErr) {
+        console.error('cardInterviewTurn onDelta failed', cbErr);
+      }
+    }
+
+    var t0 = Date.now();
+    var response;
+    try {
+      try {
+        response = await chatCompletions(p, messages, {
+          jsonMode: true,
+          stream: !!onDelta,
+          max_tokens: 520,
+          temperature: 0.45,
+          onDelta: onDelta
+            ? function (_piece, accumulated) {
+                notifyVisible(accumulated);
+              }
+            : undefined
+        });
+      } catch (err) {
+        if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+          response = await chatCompletions(p, messages, {
+            jsonMode: false,
+            stream: !!onDelta,
+            max_tokens: 520,
+            temperature: 0.45,
+            onDelta: onDelta
+              ? function (_piece, accumulated) {
+                  notifyVisible(accumulated);
+                }
+              : undefined
+          });
+        } else if (err && /stream/i.test((err && err.message) || '')) {
+          response = await chatCompletions(p, messages, {
+            jsonMode: true,
+            stream: false,
+            max_tokens: 520,
+            temperature: 0.45
+          });
+          notifyVisible(response.content);
+        } else {
+          throw err;
+        }
+      }
+    } catch (fatal) {
+      throw fatal;
+    }
+
+    var content = response && response.content ? response.content : '';
+    var parsed = parseAssistantPayload(content);
+    var data = null;
+    try {
+      data = JSON.parse(content.trim());
+    } catch (e) {
+      var start = content.indexOf('{');
+      var end = content.lastIndexOf('}');
+      if (start >= 0 && end > start) {
+        try {
+          data = JSON.parse(content.slice(start, end + 1));
+        } catch (e2) {
+          data = null;
+        }
+      }
+    }
+
+    var actions = rewriteActionsForRelativeDue(parsed.actions || [], userText);
+    var tierRewrite = rewriteActionsForPriorityTier(actions, userText);
+    actions = tierRewrite.actions;
+    // Interview may only apply a subset of tools.
+    var allowedTools = {
+      set_priority: true,
+      set_due: true,
+      set_project: true,
+      add_subtask: true
+    };
+    actions = actions.filter(function (a) {
+      return a && allowedTools[a.tool];
+    });
+
+    var message = polishMessageAfterTierApply(
+      parsed.message || (data && data.message) || '',
+      tierRewrite.tier,
+      tierRewrite.injected
+    );
+    var prompts = ensurePriorityAxesPrompt(
+      normalizePrompts(parsed.prompts, context),
+      actions,
+      context
+    );
+    if (onDelta && message) {
+      try {
+        onDelta(message, content);
+      } catch (finalCbErr) {
+        console.error('cardInterviewTurn final onDelta failed', finalCbErr);
+      }
+    }
+
+    var completeInterview = !!(data && data.completeInterview);
+    var skipPhrase = /^\s*(passer|plus\s+tard|skip|non\s+merci|arr[eê]te|stop)\b/i.test(
+      String(userText || '')
+    );
+    if (skipPhrase) completeInterview = true;
+
+    var usage = extractUsageFromRaw(response && response.raw, messages, content, p.model);
+    usage.latencyMs = Date.now() - t0;
+    usage.historyTurns = (history || []).length;
+
+    return {
+      message: message,
+      suggestions: normalizeSuggestionList(
+        (data && data.suggestions) || parsed.suggestions
+      ),
+      actions: actions,
+      prompts: prompts,
+      followUps: parsed.followUps || [],
+      completeInterview: completeInterview,
+      droppedActions: parsed.droppedActions || [],
+      rawJson: content,
+      context: context,
+      usage: usage
     };
   }
 
@@ -4677,6 +5000,7 @@
 
   global.PriorityAgent = {
     PROVIDER_STORAGE_KEY: PROVIDER_STORAGE_KEY,
+    CARD_INTERVIEW_KEY: CARD_INTERVIEW_KEY,
     PRESETS: PRESETS,
     OPENAI_MODELS: OPENAI_MODELS,
     normalizeProvider: normalizeProvider,
@@ -4700,7 +5024,15 @@
     normalizePrompts: normalizePrompts,
     chatTurn: chatTurn,
     memoryTurn: memoryTurn,
+    cardInterviewTurn: cardInterviewTurn,
+    loadCardInterview: loadCardInterview,
+    saveCardInterview: saveCardInterview,
+    normalizeCardInterview: normalizeCardInterview,
+    emptyCardInterview: emptyCardInterview,
+    markInterviewQuestionAsked: markInterviewQuestionAsked,
+    markInterviewComplete: markInterviewComplete,
     suggestQuestions: suggestQuestions,
+    suggestCardImprovements: suggestCardImprovements,
     suggestSubtasks: suggestSubtasks,
     suggestGoals: suggestGoals,
     suggestMetrics: suggestMetrics,

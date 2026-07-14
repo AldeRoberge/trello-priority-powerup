@@ -657,6 +657,8 @@
     // null = not yet painted — avoid fireworks on initial mount when already complete.
     var lastAllComplete = null;
     var spellcheckBusy = false;
+    // itemId → original text before AI spell fix (kept until popup closes / revert / edit)
+    var itemSpellReverts = Object.create(null);
 
     function spellcheckText(text) {
       var trimmed = (text || '').trim();
@@ -1400,18 +1402,22 @@
             textInput.value = corrected;
           }
           item.text = corrected;
-          if (corrected !== trimmed) {
-            showItemSpellRevert(item, trimmed);
-          }
           // Persist without re-rendering so a following checkbox click (complete
           // while editing) is not destroyed by replacing the row DOM.
           data = CT.normalizeCompletionData(data);
+          if (corrected !== trimmed) {
+            itemSpellReverts[item.id] = trimmed;
+            showItemSpellRevert(item.id, trimmed);
+          } else {
+            delete itemSpellReverts[item.id];
+          }
           updateProgressUi();
           onChange(data);
         });
       });
 
       textInput.addEventListener('input', function () {
+        delete itemSpellReverts[item.id];
         var existing = li.querySelector('.tp-spell-revert');
         if (existing && typeof existing._spellRevertDismiss === 'function') {
           existing._spellRevertDismiss();
@@ -1430,6 +1436,15 @@
       });
 
       syncItemProgressUi();
+
+      if (
+        itemSpellReverts[item.id] &&
+        itemSpellReverts[item.id] !== (item.text || '').trim()
+      ) {
+        showItemSpellRevert(item.id, itemSpellReverts[item.id]);
+      } else if (itemSpellReverts[item.id]) {
+        delete itemSpellReverts[item.id];
+      }
     }
 
     function renderItem(item) {
@@ -1586,6 +1601,7 @@
     });
 
     function removeItem(id) {
+      delete itemSpellReverts[id];
       var nextItems = data.items.filter(function (item) {
         return item.id !== id;
       });
@@ -1739,34 +1755,53 @@
       suggestionsSection.hidden = true;
     }
 
-    function showItemSpellRevert(item, originalText) {
+    function findLiveItem(id) {
+      for (var i = 0; i < data.items.length; i++) {
+        if (data.items[i].id === id) return data.items[i];
+      }
+      return null;
+    }
+
+    function showItemSpellRevert(itemId, originalText) {
+      var live = findLiveItem(itemId);
       if (
-        !item ||
+        !live ||
         !originalText ||
-        item.text === originalText ||
+        live.text === originalText ||
         typeof global.Spellcheck === 'undefined' ||
         typeof global.Spellcheck.attachRevert !== 'function'
       ) {
+        if (itemSpellReverts[itemId] === originalText) {
+          delete itemSpellReverts[itemId];
+        }
         return;
       }
-      var li = findItemRow(item.id);
+      var li = findItemRow(itemId);
       if (!li) return;
       var mainRow = li.querySelector('.tp-completion-item-main');
       var del = li.querySelector('.tp-completion-delete');
       var textInput = li.querySelector('.tp-completion-text');
       if (!mainRow || !textInput) return;
-      var token = (item._spellToken || 0) + 1;
-      item._spellToken = token;
+      itemSpellReverts[itemId] = originalText;
       global.Spellcheck.attachRevert(mainRow, {
         className: 'tp-completion-spell-revert',
         before: del,
+        previous: originalText,
         onRevert: function () {
-          if (item._spellToken !== token) return;
+          if (itemSpellReverts[itemId] !== originalText) return;
+          var current = findLiveItem(itemId);
+          if (!current) return;
           textInput.value = originalText;
-          item.text = originalText;
+          current.text = originalText;
+          delete itemSpellReverts[itemId];
           data = CT.normalizeCompletionData(data);
           updateProgressUi();
           onChange(data);
+        },
+        onDismiss: function () {
+          if (itemSpellReverts[itemId] === originalText) {
+            delete itemSpellReverts[itemId];
+          }
         }
       });
     }
@@ -1788,7 +1823,8 @@
         if (item) {
           addInput.value = '';
           if (corrected !== original) {
-            showItemSpellRevert(item, original);
+            itemSpellReverts[item.id] = original;
+            showItemSpellRevert(item.id, original);
           }
         }
       }).finally(function () {

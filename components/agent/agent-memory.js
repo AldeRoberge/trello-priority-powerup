@@ -11,10 +11,11 @@
   var STORAGE_KEY = 'aiMemory';
   var MAX_LTM_FACTS = 8;
   var MAX_STM_NOTES = 6;
+  var MAX_RECENT_CARDS = 10;
   var MAX_FACT_LEN = 140;
   var MAX_SUMMARY_LEN = 280;
   var MAX_BOARD_SUMMARY_LEN = 420;
-  var MAX_SERIALIZED = 2500;
+  var MAX_SERIALIZED = 3200;
   var SCAN_TTL_MS = 3 * 60 * 60 * 1000;
   var MAX_ASKED = 24;
 
@@ -24,9 +25,54 @@
       onboardingComplete: false,
       lastScanAt: '',
       longTerm: { summary: '', facts: [] },
-      shortTerm: { boardSummary: '', notes: [], updatedAt: '' },
+      shortTerm: { boardSummary: '', notes: [], recentCards: [], updatedAt: '' },
       preferredQuestionsAsked: []
     };
+  }
+
+  /** Approx creation time from Mongo ObjectId embedded in Trello card ids. */
+  function cardIdCreatedAt(cardId) {
+    var id = String(cardId || '');
+    if (!/^[a-f0-9]{24}$/i.test(id)) return '';
+    var seconds = parseInt(id.slice(0, 8), 16);
+    if (!isFinite(seconds) || seconds <= 0) return '';
+    try {
+      return new Date(seconds * 1000).toISOString();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function normalizeRecentCard(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    var id = typeof raw.id === 'string' ? raw.id.trim() : '';
+    if (!id) return null;
+    var name = trimStr(raw.name, 120);
+    var list = trimStr(raw.list || raw.listName, 80);
+    var at =
+      (typeof raw.at === 'string' && raw.at.trim()) ||
+      cardIdCreatedAt(id) ||
+      (typeof raw.dateLastActivity === 'string' ? raw.dateLastActivity : '') ||
+      new Date().toISOString();
+    return { id: id, name: name, list: list, at: at };
+  }
+
+  function normalizeRecentCards(list) {
+    var src = Array.isArray(list) ? list : [];
+    var seen = {};
+    var out = [];
+    for (var i = 0; i < src.length; i++) {
+      var card = normalizeRecentCard(src[i]);
+      if (!card || seen[card.id]) continue;
+      seen[card.id] = true;
+      out.push(card);
+    }
+    out.sort(function (a, b) {
+      var ta = Date.parse(a.at) || 0;
+      var tb = Date.parse(b.at) || 0;
+      return tb - ta;
+    });
+    return out.slice(0, MAX_RECENT_CARDS);
   }
 
   function trimStr(value, max) {
@@ -318,6 +364,7 @@
       shortTerm: {
         boardSummary: trimStr(st.boardSummary, MAX_BOARD_SUMMARY_LEN),
         notes: stmNotes,
+        recentCards: normalizeRecentCards(st.recentCards),
         updatedAt: typeof st.updatedAt === 'string' ? st.updatedAt : ''
       },
       preferredQuestionsAsked: asked
@@ -332,6 +379,7 @@
       facts: m.longTerm.facts,
       boardSummary: m.shortTerm.boardSummary,
       shortNotes: m.shortTerm.notes,
+      recentCards: m.shortTerm.recentCards,
       onboardingComplete: m.onboardingComplete,
       longTerm: m.longTerm,
       shortTerm: m.shortTerm
@@ -348,6 +396,9 @@
 
   function enforceBudget(memory) {
     var next = normalizeMemory(memory);
+    while (serializedSize(next) > MAX_SERIALIZED && next.shortTerm.recentCards.length) {
+      next.shortTerm.recentCards = next.shortTerm.recentCards.slice(0, -1);
+    }
     while (serializedSize(next) > MAX_SERIALIZED && next.shortTerm.notes.length) {
       next.shortTerm.notes = next.shortTerm.notes.slice(0, -1);
     }
@@ -467,6 +518,37 @@
     return enforceBudget(next);
   }
 
+  /**
+   * Merge recently created / opened cards into STM (not LTM).
+   * Incoming cards are normalized and sorted by approx creation time.
+   */
+  function mergeRecentCards(memory, cards) {
+    var next = normalizeMemory(memory);
+    var incoming = normalizeRecentCards(cards);
+    if (!incoming.length) return next;
+    next.shortTerm.recentCards = normalizeRecentCards(
+      incoming.concat(next.shortTerm.recentCards)
+    );
+    next.shortTerm.updatedAt = new Date().toISOString();
+    return enforceBudget(next);
+  }
+
+  /**
+   * Load memory, upsert recent card entries from board scan, persist.
+   * @param {object} t Trello iframe client
+   * @param {Array|{id,name,list?,at?}} cardsOrCard cards to record
+   */
+  async function recordRecentCards(t, cardsOrCard) {
+    var list = Array.isArray(cardsOrCard)
+      ? cardsOrCard
+      : cardsOrCard
+        ? [cardsOrCard]
+        : [];
+    var memory = await load(t);
+    var next = mergeRecentCards(memory, list);
+    return save(t, next);
+  }
+
   function markOnboardingComplete(memory) {
     var next = normalizeMemory(memory);
     next.onboardingComplete = true;
@@ -513,7 +595,20 @@
         lines.push('- ' + m.shortTerm.notes[j].text);
       }
     }
-    if (!m.shortTerm.boardSummary && !m.shortTerm.notes.length) {
+    if (m.shortTerm.recentCards && m.shortTerm.recentCards.length) {
+      lines.push('Cartes r\u00e9centes\u00a0:');
+      for (var r = 0; r < m.shortTerm.recentCards.length; r++) {
+        var rc = m.shortTerm.recentCards[r];
+        var bit = '- ' + (rc.name || rc.id);
+        if (rc.list) bit += ' [' + rc.list + ']';
+        lines.push(bit);
+      }
+    }
+    if (
+      !m.shortTerm.boardSummary &&
+      !m.shortTerm.notes.length &&
+      !(m.shortTerm.recentCards && m.shortTerm.recentCards.length)
+    ) {
       lines.push('- (aucun)');
     }
     return lines.join('\n');
@@ -683,6 +778,7 @@
     MAX_FACTS: MAX_LTM_FACTS,
     MAX_LTM_FACTS: MAX_LTM_FACTS,
     MAX_STM_NOTES: MAX_STM_NOTES,
+    MAX_RECENT_CARDS: MAX_RECENT_CARDS,
     SCAN_TTL_MS: SCAN_TTL_MS,
     emptyMemory: emptyMemory,
     normalizeMemory: normalizeMemory,
@@ -696,6 +792,9 @@
     forgetFacts: forgetFacts,
     setSummary: setSummary,
     setBoardSummary: setBoardSummary,
+    mergeRecentCards: mergeRecentCards,
+    recordRecentCards: recordRecentCards,
+    cardIdCreatedAt: cardIdCreatedAt,
     markOnboardingComplete: markOnboardingComplete,
     markQuestionAsked: markQuestionAsked,
     buildPromptBlock: buildPromptBlock,

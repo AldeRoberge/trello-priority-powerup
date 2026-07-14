@@ -7,18 +7,18 @@
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=section-cbx-1" />
-  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=impact-reach-duration-1" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=impact-reach-duration-2" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
-  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=tool-verify-side-1" />
+  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=card-interview-1" />
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=impact-reach-duration-1"></script>
+  <script src="./components/priority/priority-ui.js?v=impact-reach-duration-2"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
     }
   </script>
-  <script src="./components/priority/priority-trello.js?v=impact-reach-duration-1"></script>
+  <script src="./components/priority/priority-trello.js?v=card-interview-1"></script>
   <script src="./components/statut/statut-match.js"></script>
   <script src="./components/statut/statut-trello.js"></script>
   <script src="./components/shared/tab-autocomplete.js?v=tab-complete-1"></script>
@@ -26,11 +26,11 @@
   <script src="./components/completion/completion-trello.js?v=progress-due-complete-1"></script>
   <script src="./components/goals/goals-trello.js?v=goals-1"></script>
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
-  <script src="./components/agent/agent.js?v=impact-reach-duration-1"></script>
-  <script src="./components/agent/agent-memory.js?v=memory-2"></script>
+  <script src="./components/agent/agent.js?v=card-interview-1"></script>
+  <script src="./components/agent/agent-memory.js?v=card-interview-1"></script>
   <script src="./components/profile/user-profile.js?v=profile-2"></script>
-  <script src="./components/shared/spellcheck.js?v=spellcheck-3"></script>
-  <script src="./components/agent/agent-ui.js?v=suggestions-autosend-1"></script>
+  <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
+  <script src="./components/agent/agent-ui.js?v=card-interview-1"></script>
 </head>
 <body class="tp-page tp-page--priority">
   <div class="compare-page">
@@ -246,18 +246,70 @@
       });
     }
 
+    function attachBlockedIntoStatut() {
+      if (!statutUi || !variant) return;
+      var mount =
+        typeof statutUi.getBlockedMount === 'function'
+          ? statutUi.getBlockedMount()
+          : null;
+      var blockedEl =
+        typeof variant.getBlockedSection === 'function'
+          ? variant.getBlockedSection()
+          : null;
+      if (!mount || !blockedEl) return;
+      if (blockedEl.parentNode !== mount) {
+        mount.appendChild(blockedEl);
+      }
+      if (typeof statutUi.syncBlockedPanel === 'function') {
+        statutUi.syncBlockedPanel();
+      }
+      // Card already on Bloqué: keep enAttente in sync with the visible motif panel.
+      if (
+        typeof statutUi.getCategory === 'function' &&
+        statutUi.getCategory() === 'blocked' &&
+        typeof variant.getState === 'function' &&
+        typeof variant.setState === 'function'
+      ) {
+        var st = variant.getState();
+        if (st && !st.enAttente) {
+          variant.setState(Object.assign({}, st, { enAttente: true }));
+        }
+      }
+    }
+
     function jumpToSection(key) {
       if (!variant) return;
       var target = null;
-      if (typeof variant.openSection === 'function') {
+      if (key === 'blocked') {
+        if (statutUi && typeof statutUi.setExpanded === 'function') {
+          statutUi.setExpanded(true);
+        }
+        if (typeof statutUi.syncBlockedPanel === 'function') {
+          statutUi.syncBlockedPanel();
+        }
+        target =
+          (typeof variant.getBlockedSection === 'function' &&
+            variant.getBlockedSection()) ||
+          (statutUi &&
+            typeof statutUi.getBlockedMount === 'function' &&
+            statutUi.getBlockedMount()) ||
+          (variant.card && variant.card.querySelector('.statut-blocked-panel'));
+        if (target && target.closest) {
+          var panel = target.closest('.statut-blocked-panel');
+          if (
+            panel &&
+            (panel.hidden || !panel.classList.contains('is-statut-blocked'))
+          ) {
+            return;
+          }
+        }
+      } else if (typeof variant.openSection === 'function') {
         target = variant.openSection(key);
       } else if (variant.card) {
         if (key === 'priority') {
           target = variant.card.querySelector('.variant-priority-section');
         } else if (key === 'due') {
           target = variant.card.querySelector('.variant-due-section');
-        } else if (key === 'blocked') {
-          target = variant.card.querySelector('.variant-blocked-section');
         }
       }
       if (!target || target.hidden) return;
@@ -447,6 +499,8 @@
       return StatutTrello.selectCardStatut(t, listId).then(function (result) {
         if (result && result.ok && variant && result.sideEffects) {
           var side = result.sideEffects;
+          var wasBlockedCat =
+            !!(latestStatut && latestStatut.category === 'blocked');
           if (
             (side.enAttenteSet || side.category === 'blocked') &&
             typeof variant.setState === 'function'
@@ -456,6 +510,17 @@
             }
             variant.setState(
               Object.assign({}, variant.getState(), { enAttente: true })
+            );
+            resizePopup();
+          } else if (
+            wasBlockedCat &&
+            side.category !== 'blocked' &&
+            side.category !== 'completed' &&
+            typeof variant.setState === 'function'
+          ) {
+            // Leaving Bloqué: drop active block (keep motives for next time).
+            variant.setState(
+              Object.assign({}, variant.getState(), { enAttente: false })
             );
             resizePopup();
           }
@@ -503,6 +568,8 @@
                 lists: (statut && statut.lists) || [],
                 settings: (statut && statut.settings) || undefined
               });
+            } else if (statutUi && typeof statutUi.syncBlockedPanel === 'function') {
+              statutUi.syncBlockedPanel();
             }
             return result;
           });
@@ -619,6 +686,7 @@
             roleLists:
               (statut.settings && statut.settings.roleLists) || {}
           };
+          attachBlockedIntoStatut();
           resizePopup();
         })
         .catch(function (err) {
@@ -1087,17 +1155,12 @@
 
       progressField.appendChild(progressBody);
       progressPanel.appendChild(progressField);
-      // Order: Priorité → Graphique → Progrès → Échéance → Bloqué
+      // Order: Priorité → Graphique → Progrès → Échéance
       var dueSection = cardEl.querySelector('.variant-due-section');
       if (dueSection) {
         cardEl.insertBefore(progressPanel, dueSection);
       } else {
-        var blockedSection = cardEl.querySelector('.variant-blocked-section');
-        if (blockedSection) {
-          cardEl.insertBefore(progressPanel, blockedSection);
-        } else {
-          cardEl.appendChild(progressPanel);
-        }
+        cardEl.appendChild(progressPanel);
       }
 
       progressCollapse = PriorityUI.bindCollapsibleEnable({
@@ -1379,6 +1442,9 @@
         onLayoutChange: function () {
           resizePopup();
         },
+        onOpenBlocked: function () {
+          jumpToSection('blocked');
+        },
         onFormulaChange: function (formulaKey) {
           PriorityTrello.saveBoardFormula(t, formulaKey).catch(function (err) {
             console.error('Priority formula save failed', err);
@@ -1417,6 +1483,7 @@
 
       if (featureOn('statut')) {
         await mountStatutSection(variant.card);
+        attachBlockedIntoStatut();
       }
       if (featureOn('objectif') || focusObjectif) {
         await mountObjectifSection(variant.card, focusObjectif);
@@ -1493,10 +1560,15 @@
                 summary: '',
                 facts: [],
                 longTerm: { summary: '', facts: [] },
-                shortTerm: { boardSummary: '', notes: [] },
+                shortTerm: { boardSummary: '', notes: [], recentCards: [] },
                 onboardingComplete: false
               }
             );
+          },
+          onMemoryUpdate: function (next) {
+            if (next && typeof next === 'object') {
+              cachedMemory = next;
+            }
           },
           getProfile: function () {
             return cachedProfile;

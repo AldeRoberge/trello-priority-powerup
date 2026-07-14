@@ -146,15 +146,29 @@
     }
   }
 
-  var REVERT_TIMEOUT_MS = 10000;
+  /**
+   * Hover / accessibility label for a spellfix revert control.
+   * @param {string} previous
+   * @returns {string}
+   */
+  function revertLabel(previous) {
+    var prev = typeof previous === 'string' ? previous : '';
+    // Preserve internal newlines as spaces so the native title tooltip stays readable.
+    prev = prev.replace(/\s+/g, ' ').trim();
+    if (!prev) return 'Annuler la correction';
+    if (prev.length > 220) prev = prev.slice(0, 219) + '\u2026';
+    return prev;
+  }
 
   /**
-   * Temporary undo control after an AI spelling fix was applied in the UI.
+   * Undo control after an AI spelling fix. Stays until reverted, dismissed, or
+   * the host UI is torn down (popup closed).
    * @param {HTMLElement} hostEl
    * @param {{
    *   onRevert: function(): void,
    *   onDismiss?: function(): void,
    *   before?: HTMLElement|null,
+   *   previous?: string,
    *   timeoutMs?: number,
    *   className?: string,
    *   ariaLabel?: string,
@@ -175,15 +189,21 @@
       }
     }
 
+    var titleText =
+      options.title ||
+      revertLabel(options.previous != null ? options.previous : '');
+    var ariaText =
+      options.ariaLabel ||
+      (options.previous
+        ? 'Annuler la correction\u00a0: ' + revertLabel(options.previous)
+        : 'Annuler la correction orthographique');
+
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className =
       'tp-spell-revert' + (options.className ? ' ' + options.className : '');
-    btn.setAttribute(
-      'aria-label',
-      options.ariaLabel || 'Annuler la correction orthographique'
-    );
-    btn.title = options.title || 'Annuler la correction';
+    btn.setAttribute('aria-label', ariaText);
+    btn.title = titleText;
     btn.innerHTML = '<i class="ti ti-arrow-back-up" aria-hidden="true"></i>';
 
     var ctrl = { el: btn, _timer: null, _dismissed: false };
@@ -225,8 +245,9 @@
       hostEl.appendChild(btn);
     }
 
+    // Opt-in only — by default the control stays until the popup is closed.
     var timeoutMs =
-      options.timeoutMs != null ? Number(options.timeoutMs) : REVERT_TIMEOUT_MS;
+      options.timeoutMs != null ? Number(options.timeoutMs) : 0;
     if (timeoutMs > 0 && isFinite(timeoutMs)) {
       ctrl._timer = setTimeout(dismiss, timeoutMs);
     }
@@ -238,6 +259,6 @@
     configure: configure,
     correct: correct,
     attachRevert: attachRevert,
-    REVERT_TIMEOUT_MS: REVERT_TIMEOUT_MS
+    revertLabel: revertLabel
   };
 })(typeof window !== 'undefined' ? window : this);

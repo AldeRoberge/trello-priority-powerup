@@ -1337,12 +1337,21 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .variant-blocked-section {
-  margin-top: 12px;
-  padding: 0 8px;
+  margin-top: 0;
+  padding: 0;
 }
 
-.tp-page--priority .variant-blocked-section > .field--en-attente {
+.tp-page--priority .variant-blocked-section > .field--en-attente,
+.tp-page--priority .variant-blocked-section > .field--en-attente-embedded {
   margin-bottom: 0;
+}
+
+.tp-page--priority .field--statut.has-blocked-panel.is-enabled {
+  background: color-mix(in srgb, var(--blocked-fill, #ffeceb) 88%, var(--tp-surface, var(--surface-2)));
+}
+
+.tp-page--priority .statut-blocked-panel {
+  border-top-color: color-mix(in srgb, var(--blocked-border, #c9372c) 40%, transparent);
 }
 
 .tp-page--priority .variant-due-section {

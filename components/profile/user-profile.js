@@ -138,7 +138,8 @@
       case 'due':
         return '.variant-due-section';
       case 'blocked':
-        return '.variant-blocked-section';
+        // Nested under Statut (reasons panel shown when status is Bloqué).
+        return '.statut-blocked-panel';
       case 'assistant':
         return '.variant-chat-section';
       default:

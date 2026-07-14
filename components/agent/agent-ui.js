@@ -39,6 +39,10 @@
       getMemory: options.getMemory || function () { return null; },
       getProfile: options.getProfile || function () { return null; },
       getBoardDigest: options.getBoardDigest || function () { return ''; },
+      getGoals: options.getGoals || function () { return null; },
+      setProject: options.setProject || function () {
+        return Promise.resolve({ ok: false, reason: 'no-setProject' });
+      },
       applyPriority: options.applyPriority || function () {},
       applyCompletion: options.applyCompletion || function () {},
       setFormulaKey: options.setFormulaKey || function () {},
@@ -53,6 +57,8 @@
         return Promise.resolve({ ok: false, reason: 'no-selectStatut' });
       }
     };
+    var onMemoryUpdate =
+      typeof options.onMemoryUpdate === 'function' ? options.onMemoryUpdate : null;
     var onLayoutChange = options.onLayoutChange || function () {};
     var initiallyOpen = !!options.initiallyOpen;
     var shouldFocusComposer = options.focusComposer != null
@@ -72,6 +78,14 @@
     var applySuggestionsSeq = 0;
     var applySuggestions = [];
     var applySuggestionsLoading = false;
+    var interviewActive = false;
+    var interviewState = Agent.emptyCardInterview
+      ? Agent.emptyCardInterview()
+      : { complete: false, asked: [], startedAt: '', completedAt: '' };
+    var interviewSurrounding = [];
+    var interviewRecentCards = [];
+    var interviewPriorityTrusted = false;
+    var interviewBootstrapped = false;
     var sessionStats = {
       turns: 0,
       promptTokens: 0,
@@ -328,6 +342,19 @@
     composer.appendChild(sendBtn);
     chatPanel.appendChild(composer);
     chatPanel.appendChild(suggestionsEl);
+
+    var interviewBar = el('div', 'agent-interview-bar');
+    interviewBar.hidden = true;
+    var interviewHint = el('span', 'agent-interview-hint', {
+      text: 'Premi\u00e8re ouverture\u00a0: quelques questions pour cadrer la priorit\u00e9.'
+    });
+    var interviewSkipBtn = el('button', 'tp-link agent-interview-skip', {
+      type: 'button',
+      text: 'Passer l\'interview'
+    });
+    interviewBar.appendChild(interviewHint);
+    interviewBar.appendChild(interviewSkipBtn);
+    chatPanel.appendChild(interviewBar);
 
     var applySection = el('div', 'agent-apply-suggestions');
     applySection.hidden = true;
@@ -1732,6 +1759,225 @@
       notifyLayout();
     }
 
+    function setInterviewMode(active) {
+      interviewActive = !!active;
+      interviewBar.hidden = !interviewActive;
+      if (interviewActive) {
+        applySection.hidden = true;
+        input.placeholder = 'R\u00e9pondez \u00e0 la question\u2026';
+      } else {
+        input.placeholder = 'Demandez ce que vous voulez';
+      }
+      notifyLayout();
+    }
+
+    function expandAssistant() {
+      if (collapse && !collapse.isEnabled()) {
+        collapse.setEnabled(true, { expand: true });
+      } else if (collapse && !collapse.isExpanded()) {
+        collapse.setExpanded(true);
+      }
+    }
+
+    async function persistInterviewState(next) {
+      interviewState = Agent.normalizeCardInterview
+        ? Agent.normalizeCardInterview(next)
+        : next;
+      if (!t || typeof Agent.saveCardInterview !== 'function') return interviewState;
+      try {
+        interviewState = await Agent.saveCardInterview(t, interviewState);
+      } catch (err) {
+        console.error('AgentUI saveCardInterview failed', err);
+      }
+      return interviewState;
+    }
+
+    async function finishInterview(options) {
+      options = options || {};
+      if (interviewState.complete && !interviewActive) return;
+      interviewState = Agent.markInterviewComplete
+        ? Agent.markInterviewComplete(interviewState)
+        : Object.assign({}, interviewState, {
+            complete: true,
+            completedAt: new Date().toISOString()
+          });
+      await persistInterviewState(interviewState);
+      setInterviewMode(false);
+      if (options.announce !== false) {
+        appendMessage(
+          'assistant',
+          options.message ||
+            'Interview termin\u00e9e. Vous pouvez me demander d\'affiner priorit\u00e9, \u00e9ch\u00e9ance ou sous-t\u00e2ches.'
+        );
+        history.push({
+          role: 'assistant',
+          content:
+            options.message ||
+            'Interview termin\u00e9e. Vous pouvez me demander d\'affiner priorit\u00e9, \u00e9ch\u00e9ance ou sous-t\u00e2ches.'
+        });
+      }
+      refreshSuggestions({ animate: true });
+      refreshApplySuggestions({ animate: true });
+      notifyLayout();
+    }
+
+    async function bootstrapCardInterview() {
+      if (!t || interviewBootstrapped || pending) return;
+      if (!Agent.isConfigured(provider) || typeof Agent.cardInterviewTurn !== 'function') {
+        return;
+      }
+      interviewBootstrapped = true;
+      try {
+        interviewState = await Agent.loadCardInterview(t);
+      } catch (err) {
+        console.error('AgentUI loadCardInterview failed', err);
+        interviewState = Agent.emptyCardInterview
+          ? Agent.emptyCardInterview()
+          : { complete: false, asked: [] };
+      }
+      if (interviewState.complete || history.length) {
+        refreshSuggestions({ animate: true });
+        refreshApplySuggestions({ animate: true });
+        return;
+      }
+
+      setInterviewMode(true);
+      expandAssistant();
+      pending = true;
+      updateComposerEnabled();
+      setSuggestionsBusy(true);
+      var thinking = appendPendingMessage();
+      var bubble = thinking.querySelector('.agent-msg-bubble');
+
+      try {
+        var PT = global.PriorityTrello;
+        var Mem = global.AgentMemory;
+        var neighborhood = { surrounding: [], recentCreated: [], current: null };
+        if (PT && typeof PT.getCardNeighborhood === 'function') {
+          neighborhood = await PT.getCardNeighborhood(t, {
+            neighborRadius: 4,
+            recentMax: 8,
+            includePriority: false
+          });
+        }
+        interviewSurrounding = neighborhood.surrounding || [];
+        interviewRecentCards = neighborhood.recentCreated || [];
+
+        var toRecord = [];
+        if (neighborhood.current) {
+          toRecord.push({
+            id: neighborhood.current.id,
+            name: neighborhood.current.name,
+            list: neighborhood.current.list,
+            at:
+              (Mem && Mem.cardIdCreatedAt && Mem.cardIdCreatedAt(neighborhood.current.id)) ||
+              new Date().toISOString()
+          });
+        }
+        (neighborhood.recentCreated || []).forEach(function (c) {
+          toRecord.push({
+            id: c.id,
+            name: c.name,
+            list: c.list,
+            at: c.at
+          });
+        });
+        if (Mem && typeof Mem.recordRecentCards === 'function' && toRecord.length) {
+          try {
+            var updatedMem = await Mem.recordRecentCards(t, toRecord);
+            if (onMemoryUpdate) onMemoryUpdate(updatedMem);
+            else {
+              var prevGet = bridge.getMemory;
+              bridge.getMemory = function () {
+                return updatedMem || (prevGet && prevGet());
+              };
+            }
+            if (updatedMem && updatedMem.shortTerm && updatedMem.shortTerm.recentCards) {
+              interviewRecentCards = updatedMem.shortTerm.recentCards.slice();
+            }
+          } catch (memErr) {
+            console.error('AgentUI recordRecentCards failed', memErr);
+          }
+        }
+
+        if (!interviewState.startedAt) {
+          interviewState.startedAt = new Date().toISOString();
+          await persistInterviewState(interviewState);
+        }
+
+        var turn = await Agent.cardInterviewTurn(
+          provider,
+          [],
+          bridge,
+          'Commence l\'interview de cette carte.',
+          {
+            asked: interviewState.asked || [],
+            surrounding: interviewSurrounding,
+            recentCards: interviewRecentCards,
+            priorityAxesTrusted: interviewPriorityTrusted
+          }
+        );
+
+        thinking.classList.remove('is-pending', 'is-streaming');
+        thinking.removeAttribute('aria-busy');
+        thinking.removeAttribute('aria-label');
+        if (bubble) {
+          revealPendingBubble(
+            bubble,
+            turn.message ||
+              'Cette carte est nouvelle. \u00c0 qui profite surtout ce travail\u00a0?'
+          );
+        }
+        var opening =
+          turn.message ||
+          'Cette carte est nouvelle. \u00c0 qui profite surtout ce travail\u00a0?';
+        history.push({
+          role: 'assistant',
+          content: opening,
+          rawJson: turn.rawJson
+        });
+        if (/\?/.test(opening)) {
+          interviewState = Agent.markInterviewQuestionAsked
+            ? Agent.markInterviewQuestionAsked(interviewState, opening)
+            : interviewState;
+          await persistInterviewState(interviewState);
+        }
+        if (turn.actions && turn.actions.length) {
+          var applied = await Agent.executeActions(bridge, turn.actions);
+          appendChangeRecap(applied, {
+            droppedActions: turn.droppedActions,
+            ok: applied.ok
+          });
+          interviewPriorityTrusted = true;
+        }
+        if (turn.usage) updateSessionStats(turn.usage);
+        renderPrompts(turn.prompts);
+        if (turn.suggestions && turn.suggestions.length) {
+          suggestionsSeq += 1;
+          renderSuggestions(turn.suggestions, { animate: true });
+        }
+        if (turn.completeInterview) {
+          await finishInterview({ announce: false });
+        }
+      } catch (err) {
+        console.error('AgentUI bootstrapCardInterview failed', err);
+        thinking.classList.remove('is-pending', 'is-streaming');
+        if (thinking && thinking.parentNode) thinking.remove();
+        appendMessage(
+          'assistant',
+          'Je n\'ai pas pu d\u00e9marrer l\'interview. Posez-moi une question sur cette carte.'
+        );
+        setInterviewMode(false);
+        refreshSuggestions({ animate: true });
+      } finally {
+        pending = false;
+        updateComposerEnabled();
+        setSuggestionsBusy(false);
+        notifyLayout();
+        focusComposerInput();
+      }
+    }
+
     async function ensureProviderLoaded() {
       if (!t) return;
       try {
@@ -1739,8 +1985,7 @@
         savedProvider = Agent.normalizeProvider(provider);
         fillSettingsForm();
         if (Agent.isConfigured(provider) && !history.length) {
-          refreshSuggestions({ animate: true });
-          refreshApplySuggestions({ animate: true });
+          await bootstrapCardInterview();
         }
       } catch (err) {
         console.error('AgentUI load provider failed', err);
@@ -1776,6 +2021,9 @@
               : 'Fournisseur enregistr\u00e9.',
             Agent.isVerified(provider) ? 'pass' : undefined
           );
+        }
+        if (Agent.isConfigured(provider) && !history.length && !interviewBootstrapped) {
+          await bootstrapCardInterview();
         }
       } catch (err) {
         console.error('AgentUI save provider failed', err);
@@ -1937,22 +2185,52 @@
             console.error('Spellcheck before chat failed', spellErr);
           }
         }
-        var turn = await Agent.chatTurn(provider, history.slice(0, -1), bridge, msg, {
-          onDelta: function (visible) {
-            if (!bubble || !visible) return;
-            if (!streamed) {
-              streamed = true;
-              thinking.classList.remove('is-pending');
-              thinking.removeAttribute('aria-busy');
-              thinking.removeAttribute('aria-label');
-              revealPendingBubble(bubble, visible);
-            } else {
-              bubble.textContent = visible;
+        var turn;
+        if (interviewActive && typeof Agent.cardInterviewTurn === 'function') {
+          turn = await Agent.cardInterviewTurn(
+            provider,
+            history.slice(0, -1),
+            bridge,
+            msg,
+            {
+              onDelta: function (visible) {
+                if (!bubble || !visible) return;
+                if (!streamed) {
+                  streamed = true;
+                  thinking.classList.remove('is-pending');
+                  thinking.removeAttribute('aria-busy');
+                  thinking.removeAttribute('aria-label');
+                  revealPendingBubble(bubble, visible);
+                } else {
+                  bubble.textContent = visible;
+                }
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+                notifyLayout();
+              },
+              asked: interviewState.asked || [],
+              surrounding: interviewSurrounding,
+              recentCards: interviewRecentCards,
+              priorityAxesTrusted: interviewPriorityTrusted
             }
-            messagesEl.scrollTop = messagesEl.scrollHeight;
-            notifyLayout();
-          }
-        });
+          );
+        } else {
+          turn = await Agent.chatTurn(provider, history.slice(0, -1), bridge, msg, {
+            onDelta: function (visible) {
+              if (!bubble || !visible) return;
+              if (!streamed) {
+                streamed = true;
+                thinking.classList.remove('is-pending');
+                thinking.removeAttribute('aria-busy');
+                thinking.removeAttribute('aria-label');
+                revealPendingBubble(bubble, visible);
+              } else {
+                bubble.textContent = visible;
+              }
+              messagesEl.scrollTop = messagesEl.scrollHeight;
+              notifyLayout();
+            }
+          });
+        }
         if (bubble) {
           if (!streamed) revealPendingBubble(bubble, turn.message);
           else bubble.textContent = turn.message;
@@ -1976,9 +2254,10 @@
             droppedActions: turn.droppedActions,
             ok: applied.ok
           });
+          if (interviewActive) interviewPriorityTrusted = true;
           // Defer until after pending clears in finally.
           setTimeout(function () {
-            refreshApplySuggestions({ animate: true });
+            if (!interviewActive) refreshApplySuggestions({ animate: true });
           }, 0);
         } else {
           var emptyClaim =
@@ -1996,6 +2275,12 @@
             );
           }
         }
+        if (interviewActive && turn.message && /\?/.test(turn.message)) {
+          interviewState = Agent.markInterviewQuestionAsked
+            ? Agent.markInterviewQuestionAsked(interviewState, turn.message)
+            : interviewState;
+          await persistInterviewState(interviewState);
+        }
         // Successful chat proves the provider works — persist verified + hide configure CTA.
         if (!Agent.isVerified(provider)) {
           try {
@@ -2009,12 +2294,20 @@
         if (turn.usage) updateSessionStats(turn.usage);
         else renderChatStats();
         if (turn.debug) pushDebugEntry(turn.debug);
-        renderFollowUps(turn.followUps);
+        renderFollowUps(interviewActive ? [] : turn.followUps);
         renderPrompts(turn.prompts);
-        if (turn.suggestions && turn.suggestions.length) {
+        if (interviewActive && turn.completeInterview) {
+          await finishInterview({ announce: false });
+          if (turn.suggestions && turn.suggestions.length) {
+            suggestionsSeq += 1;
+            renderSuggestions(turn.suggestions, { animate: true });
+          } else {
+            refreshSuggestions({ animate: true });
+          }
+        } else if (turn.suggestions && turn.suggestions.length) {
           suggestionsSeq += 1;
           renderSuggestions(turn.suggestions, { animate: true });
-        } else {
+        } else if (!interviewActive) {
           refreshSuggestions({ animate: true });
         }
       } catch (err) {
@@ -2116,6 +2409,13 @@
       setSettingsOpen(false);
     });
     sendBtn.addEventListener('click', onSend);
+    interviewSkipBtn.addEventListener('click', function () {
+      if (pending || !interviewActive) return;
+      finishInterview({
+        message:
+          'Okay, interview pass\u00e9e. Vous pouvez reprendre quand vous voulez.'
+      });
+    });
     input.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();

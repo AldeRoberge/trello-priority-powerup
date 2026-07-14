@@ -952,6 +952,43 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
   align-items: flex-end;
 }
 
+.tp-page--priority .agent-interview-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: color-mix(
+    in srgb,
+    var(--surface-2, var(--tp-surface-subtle)) 80%,
+    var(--tp-primary, #0c66e4) 8%
+  );
+  border: 1px solid var(--tp-border, rgba(9, 30, 66, 0.14));
+}
+
+.tp-page--priority .agent-interview-bar[hidden] {
+  display: none;
+}
+
+.tp-page--priority .agent-interview-hint {
+  flex: 1 1 160px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--tp-text-muted, #626f86);
+}
+
+.tp-page--priority .agent-interview-skip {
+  flex: 0 0 auto;
+  font-size: 12px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
 .tp-page--priority .agent-composer .tp-tab-complete-wrap {
   flex: 1 1 auto;
   min-width: 0;

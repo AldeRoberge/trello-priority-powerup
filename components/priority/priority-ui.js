@@ -47,6 +47,7 @@
   var FORMULA_STORAGE_KEY = 'trello-priority-powerup/formula';
   var COLOR_SCHEME_STORAGE_KEY = 'trello-priority-powerup/color-scheme';
   var SECTION_COLLAPSE_STORAGE_KEY = 'trello-priority-powerup/section-collapse';
+  // 'blocked' kept for legacy prefs; Bloqué is nested under Statut (not collapsible).
   var SECTION_COLLAPSE_KEYS = ['info', 'statut', 'objectif', 'priority', 'graph', 'progress', 'due', 'blocked', 'chat'];
   var DEFAULT_COLOR_SCHEME_KEY = 'blue';
   var SCORE_MAX = 10;
@@ -3755,11 +3756,20 @@
 
   // ── 9. Form controls (field, heat panel, calc graph) ────────────────────
 
-  // Impact reach (Personnel → Global) — vintage earthquake globe palette.
-  var IMPACT_REACH_COLORS = ['#c9b24a', '#c9923a', '#c4642e', '#a63d2a', '#7a2420'];
-  var IMPACT_REACH_RADII = [10, 16, 24, 34, 46];
+  // Impact reach (Personnel → Global) — orange quake ring wrapping the globe.
+  // Radii grow from a small epicenter disc to the full sphere outline (3D wrap).
+  var IMPACT_GLOBE = { cx: 60, cy: 44, rx: 32, ry: 30 };
+  var IMPACT_REACH_COLORS = ['#e8a838', '#e8922e', '#e07028', '#d45520', '#c43c18'];
+  // [rx, ry] — ry opens toward sphere aspect so the ring reads as wrapping the globe.
+  var IMPACT_REACH_ELLIPSES = [
+    [7, 3.5],
+    [14, 8],
+    [21, 15],
+    [27, 23],
+    [IMPACT_GLOBE.rx, IMPACT_GLOBE.ry]
+  ];
 
-  // Facilité estimated duration: log scale ~5 min → ~2 years.
+  // Facilité estimated duration: log-spaced presets ~minutes → years.
   var DURATION_MIN_MINUTES = 5;
   var DURATION_MAX_MINUTES = Math.round(2 * 365.25 * 24 * 60);
   var DURATION_CRACK_MINUTES = Math.round(365.25 * 24 * 60);
@@ -3895,10 +3905,16 @@
   }
 
   /**
-   * Retro earthquake-globe visualization bound to an impact field (0–4).
+   * Earthquake-globe visualization bound to an impact field (0–4).
+   * Orange ring grows from a small surface disc until it wraps the whole 3D globe.
    */
   function attachImpactReachVisual(fieldApi) {
     if (!fieldApi || !fieldApi.el) return null;
+    var cx = IMPACT_GLOBE.cx;
+    var cy = IMPACT_GLOBE.cy;
+    var gRx = IMPACT_GLOBE.rx;
+    var gRy = IMPACT_GLOBE.ry;
+
     var wrap = document.createElement('div');
     wrap.className = 'impact-reach';
     wrap.setAttribute('aria-hidden', 'true');
@@ -3914,42 +3930,42 @@
     });
 
     // Soft 3D pedestal ellipse (shadow / horizon).
-    var pedestal = svgEl('ellipse', {
-      class: 'impact-reach-pedestal',
-      cx: '60',
-      cy: '78',
-      rx: '38',
-      ry: '6'
-    });
-    svg.appendChild(pedestal);
+    svg.appendChild(
+      svgEl('ellipse', {
+        class: 'impact-reach-pedestal',
+        cx: String(cx),
+        cy: '76',
+        rx: String(gRx + 6),
+        ry: '5.5'
+      })
+    );
 
     var globeG = svgEl('g', { class: 'impact-reach-globe' });
     globeG.appendChild(
       svgEl('ellipse', {
         class: 'impact-reach-sphere',
-        cx: '60',
-        cy: '46',
-        rx: '32',
-        ry: '30'
+        cx: String(cx),
+        cy: String(cy),
+        rx: String(gRx),
+        ry: String(gRy)
       })
     );
-    // Meridians / parallels — flat retro look.
     globeG.appendChild(
       svgEl('ellipse', {
         class: 'impact-reach-meridian',
-        cx: '60',
-        cy: '46',
+        cx: String(cx),
+        cy: String(cy),
         rx: '14',
-        ry: '30',
+        ry: String(gRy),
         fill: 'none'
       })
     );
     globeG.appendChild(
       svgEl('ellipse', {
         class: 'impact-reach-parallel',
-        cx: '60',
-        cy: '46',
-        rx: '32',
+        cx: String(cx),
+        cy: String(cy),
+        rx: String(gRx),
         ry: '10',
         fill: 'none'
       })
@@ -3957,8 +3973,8 @@
     globeG.appendChild(
       svgEl('ellipse', {
         class: 'impact-reach-parallel',
-        cx: '60',
-        cy: '36',
+        cx: String(cx),
+        cy: String(cy - 10),
         rx: '28',
         ry: '7',
         fill: 'none'
@@ -3967,45 +3983,55 @@
     globeG.appendChild(
       svgEl('path', {
         class: 'impact-reach-land',
-        d: 'M42 40c4-6 10-8 16-6 5 2 8 7 7 12-1 4-5 7-10 8-6 1-11-2-13-7zM70 52c3-2 7-2 10 1 2 3 1 7-2 9-4 2-8 1-10-2-2-3-1-6 2-8z'
+        d: 'M42 38c4-6 10-8 16-6 5 2 8 7 7 12-1 4-5 7-10 8-6 1-11-2-13-7zM70 50c3-2 7-2 10 1 2 3 1 7-2 9-4 2-8 1-10-2-2-3-1-6 2-8z'
       })
     );
-    // Specular highlight for fake 3D.
     globeG.appendChild(
       svgEl('ellipse', {
         class: 'impact-reach-shine',
-        cx: '48',
-        cy: '34',
+        cx: String(cx - 12),
+        cy: String(cy - 12),
         rx: '8',
         ry: '5'
       })
     );
     svg.appendChild(globeG);
 
+    // Quake rings sit in the same 3D plane as the globe (shared center).
     var quakeG = svgEl('g', { class: 'impact-reach-quake' });
-    var ring = svgEl('ellipse', {
-      class: 'impact-reach-ring',
-      cx: '60',
-      cy: '48',
-      rx: '10',
-      ry: '7',
+    // Back half (dashed) suggests the ring wrapping behind the sphere.
+    var ringBack = svgEl('ellipse', {
+      class: 'impact-reach-ring impact-reach-ring--back',
+      cx: String(cx),
+      cy: String(cy),
+      rx: '7',
+      ry: '3.5',
       fill: 'none'
     });
-    var ring2 = svgEl('ellipse', {
+    var ring = svgEl('ellipse', {
+      class: 'impact-reach-ring',
+      cx: String(cx),
+      cy: String(cy),
+      rx: '7',
+      ry: '3.5',
+      fill: 'none'
+    });
+    var ringEcho = svgEl('ellipse', {
       class: 'impact-reach-ring impact-reach-ring--echo',
-      cx: '60',
-      cy: '48',
-      rx: '10',
-      ry: '7',
+      cx: String(cx),
+      cy: String(cy),
+      rx: '7',
+      ry: '3.5',
       fill: 'none'
     });
     var epicenter = svgEl('circle', {
       class: 'impact-reach-epicenter',
-      cx: '60',
-      cy: '48',
-      r: '2.5'
+      cx: String(cx),
+      cy: String(cy),
+      r: '2.4'
     });
-    quakeG.appendChild(ring2);
+    quakeG.appendChild(ringBack);
+    quakeG.appendChild(ringEcho);
     quakeG.appendChild(ring);
     quakeG.appendChild(epicenter);
     svg.appendChild(quakeG);
@@ -4032,23 +4058,31 @@
     function paint(level) {
       var L = clamp(Math.round(level), 0, 4);
       var color = IMPACT_REACH_COLORS[L];
-      var r = IMPACT_REACH_RADII[L];
+      var ell = IMPACT_REACH_ELLIPSES[L];
+      var rx = ell[0];
+      var ry = ell[1];
       wrap.style.setProperty('--reach-color', color);
       wrap.dataset.level = String(L);
-      ring.setAttribute('rx', String(r));
-      ring.setAttribute('ry', String(r * 0.62));
-      ring2.setAttribute('rx', String(r));
-      ring2.setAttribute('ry', String(r * 0.62));
+      // At Global, ring coincides with the sphere silhouette (full wrap).
+      ring.setAttribute('rx', String(rx));
+      ring.setAttribute('ry', String(ry));
+      ringBack.setAttribute('rx', String(rx));
+      ringBack.setAttribute('ry', String(ry));
+      // Echo sits slightly outside the primary ring for ripple depth.
+      var echoScale = L >= 4 ? 1.06 : 1.12;
+      ringEcho.setAttribute('rx', String(rx * echoScale));
+      ringEcho.setAttribute('ry', String(ry * echoScale));
       epicenter.setAttribute('fill', color);
       ring.setAttribute('stroke', color);
-      ring2.setAttribute('stroke', color);
+      ringBack.setAttribute('stroke', color);
+      ringEcho.setAttribute('stroke', color);
+      epicenter.setAttribute('r', L >= 4 ? '0' : String(2.2 + L * 0.15));
       var chips = legend.querySelectorAll('.impact-reach-chip');
       for (var i = 0; i < chips.length; i++) {
         chips[i].classList.toggle('is-active', i === L);
       }
       if (L !== lastLevel) {
         wrap.classList.remove('is-shaking');
-        // Retrigger CSS animation.
         void wrap.offsetWidth;
         wrap.classList.add('is-shaking');
         lastLevel = L;
@@ -4069,7 +4103,7 @@
   }
 
   /**
-   * Estimated-duration block under Facilité: log slider, precise controls, hourglass.
+   * Estimated-duration block under Facilité: simple log-spaced grid + hourglass.
    */
   function createEstimatedDurationControl(config) {
     config = config || {};
@@ -4094,14 +4128,14 @@
     var body = document.createElement('div');
     body.className = 'ease-duration-body';
 
-    // Hourglass visual
+    // Hourglass visual — chambers: top y=8→34, waist≈36, bottom y=38→64
     var glassWrap = document.createElement('div');
     glassWrap.className = 'hourglass-wrap';
     var hgSvg = svgEl('svg', {
       class: 'hourglass-svg',
       viewBox: '0 0 48 72',
-      width: '40',
-      height: '60'
+      width: '36',
+      height: '54'
     });
     hgSvg.appendChild(
       svgEl('path', {
@@ -4116,7 +4150,7 @@
     });
     var sandBot = svgEl('path', {
       class: 'hourglass-sand hourglass-sand--bot',
-      d: 'M24 36c4 3 10 8 10 14v6H14v-6c0-6 6-11 10-14z'
+      d: 'M24 38c4 3 10 8 10 14v6H14v-6c0-6 6-11 10-14z'
     });
     var crackL = svgEl('path', {
       class: 'hourglass-crack',
@@ -4138,79 +4172,65 @@
     var controls = document.createElement('div');
     controls.className = 'ease-duration-controls';
 
-    var range = document.createElement('input');
-    range.type = 'range';
-    range.className = 'ease-duration-range';
-    range.min = '0';
-    range.max = '100';
-    range.step = '0.5';
-    range.setAttribute('aria-label', 'Dur\u00e9e estim\u00e9e');
-    controls.appendChild(range);
+    var grid = document.createElement('div');
+    grid.className = 'ease-duration-grid';
+    grid.setAttribute('role', 'listbox');
+    grid.setAttribute('aria-label', 'Dur\u00e9e estim\u00e9e');
 
-    var ticks = document.createElement('div');
-    ticks.className = 'ease-duration-ticks';
-    DURATION_TICKS.forEach(function (tick) {
-      var t = document.createElement('button');
-      t.type = 'button';
-      t.className = 'ease-duration-tick';
-      t.textContent = tick.label.replace(/^Quelques\s+/i, '');
-      t.title = tick.label;
-      t.addEventListener('click', function () {
+    var cellButtons = [];
+    DURATION_TICKS.forEach(function (tick, idx) {
+      var cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'ease-duration-cell';
+      cell.setAttribute('role', 'option');
+      cell.dataset.minutes = String(tick.minutes);
+      cell.dataset.index = String(idx);
+      // Shorter label for grid density; full phrase stays as title.
+      cell.textContent = tick.label.replace(/^Quelques\s+/i, '');
+      cell.title = tick.label;
+      cell.addEventListener('click', function () {
         applyMinutes(tick.minutes, true);
       });
-      ticks.appendChild(t);
+      grid.appendChild(cell);
+      cellButtons.push(cell);
     });
-    controls.appendChild(ticks);
-
-    var precise = document.createElement('div');
-    precise.className = 'ease-duration-precise';
-    var numInput = document.createElement('input');
-    numInput.type = 'number';
-    numInput.className = 'ease-duration-num';
-    numInput.min = '0';
-    numInput.step = 'any';
-    numInput.setAttribute('aria-label', 'Valeur num\u00e9rique');
-    var unitSelect = document.createElement('select');
-    unitSelect.className = 'ease-duration-unit';
-    unitSelect.setAttribute('aria-label', 'Unit\u00e9');
-    DURATION_UNITS.forEach(function (u) {
-      var opt = document.createElement('option');
-      opt.value = u.id;
-      opt.textContent = u.label;
-      unitSelect.appendChild(opt);
-    });
-    precise.appendChild(numInput);
-    precise.appendChild(unitSelect);
-    controls.appendChild(precise);
-
-    var nlRow = document.createElement('div');
-    nlRow.className = 'ease-duration-nl';
-    var nlInput = document.createElement('input');
-    nlInput.type = 'text';
-    nlInput.className = 'ease-duration-nl-input';
-    nlInput.placeholder = 'ex. 2 jours, a few weeks\u2026';
-    nlInput.setAttribute('aria-label', 'Dur\u00e9e en texte libre');
-    var nlBtn = document.createElement('button');
-    nlBtn.type = 'button';
-    nlBtn.className = 'ease-duration-nl-btn tp-button';
-    nlBtn.textContent = 'Appliquer';
-    nlRow.appendChild(nlInput);
-    nlRow.appendChild(nlBtn);
-    controls.appendChild(nlRow);
-
+    controls.appendChild(grid);
     body.appendChild(controls);
     block.appendChild(body);
 
     if (host) host.appendChild(block);
 
-    var suppress = false;
+    function nearestTickIndex(m) {
+      if (m == null) return -1;
+      var best = 0;
+      var bestDist = Infinity;
+      for (var i = 0; i < DURATION_TICKS.length; i++) {
+        var d = Math.abs(
+          Math.log(DURATION_TICKS[i].minutes) - Math.log(m)
+        );
+        if (d < bestDist) {
+          bestDist = d;
+          best = i;
+        }
+      }
+      return best;
+    }
 
     function paintHourglass(m) {
       var fill = m == null ? 0 : durationToSlider(m) / 100;
-      sandTop.style.opacity = String(Math.max(0.15, 1 - fill));
-      sandBot.style.opacity = String(Math.max(0.2, 0.25 + fill * 0.75));
-      sandBot.style.transform = 'scaleY(' + (0.25 + fill * 0.75) + ')';
-      sandBot.style.transformOrigin = '24px 72px';
+      // Top chamber empties (scale from top lip), bottom fills (scale from floor).
+      var topScale = Math.max(0.08, 1 - fill);
+      var botScale = Math.max(0.08, fill);
+      sandTop.setAttribute(
+        'transform',
+        'translate(24 10) scale(1 ' + topScale.toFixed(3) + ') translate(-24 -10)'
+      );
+      sandBot.setAttribute(
+        'transform',
+        'translate(24 58) scale(1 ' + botScale.toFixed(3) + ') translate(-24 -58)'
+      );
+      sandTop.style.opacity = String(0.35 + topScale * 0.65);
+      sandBot.style.opacity = String(0.35 + botScale * 0.65);
       var cracked = m != null && m >= DURATION_CRACK_MINUTES;
       block.classList.toggle('hourglass--cracked', cracked);
       if (cracked) {
@@ -4220,70 +4240,20 @@
       }
     }
 
-    function syncPreciseFromMinutes(m) {
-      if (m == null) {
-        numInput.value = '';
-        return;
-      }
-      var unit = pickDurationUnit(m);
-      unitSelect.value = unit.id;
-      var qty = m / unit.minutes;
-      numInput.value = String(
-        qty >= 10 ? Math.round(qty) : Math.round(qty * 10) / 10
-      );
-    }
-
     function applyMinutes(next, notify) {
       minutes = clampDurationMinutes(next);
-      suppress = true;
-      range.value = String(durationToSlider(minutes == null ? DURATION_MIN_MINUTES : minutes));
-      if (minutes == null) range.value = '0';
-      summary.textContent = minutes == null ? 'Non d\u00e9finie' : formatDurationFr(minutes);
+      summary.textContent =
+        minutes == null ? 'Non d\u00e9finie' : formatDurationFr(minutes);
       summary.classList.toggle('is-empty', minutes == null);
-      syncPreciseFromMinutes(minutes);
+      var activeIdx = nearestTickIndex(minutes);
+      for (var i = 0; i < cellButtons.length; i++) {
+        var on = i === activeIdx && minutes != null;
+        cellButtons[i].classList.toggle('is-active', on);
+        cellButtons[i].setAttribute('aria-selected', on ? 'true' : 'false');
+      }
       paintHourglass(minutes);
-      suppress = false;
       if (notify) onChange(minutes);
     }
-
-    range.addEventListener('input', function () {
-      if (suppress) return;
-      applyMinutes(sliderToDuration(+range.value), true);
-    });
-
-    function applyFromPrecise() {
-      if (suppress) return;
-      var n = parseFloat(numInput.value);
-      if (!isFinite(n) || n <= 0) {
-        applyMinutes(null, true);
-        return;
-      }
-      var unit =
-        DURATION_UNITS.filter(function (u) {
-          return u.id === unitSelect.value;
-        })[0] || DURATION_UNITS[0];
-      applyMinutes(n * unit.minutes, true);
-    }
-    numInput.addEventListener('change', applyFromPrecise);
-    unitSelect.addEventListener('change', applyFromPrecise);
-
-    function applyNl() {
-      var parsed = parseDurationNl(nlInput.value);
-      if (parsed == null) {
-        nlInput.classList.add('is-invalid');
-        return;
-      }
-      nlInput.classList.remove('is-invalid');
-      applyMinutes(parsed, true);
-      nlInput.value = formatDurationFr(parsed);
-    }
-    nlBtn.addEventListener('click', applyNl);
-    nlInput.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        applyNl();
-      }
-    });
 
     applyMinutes(minutes, false);
 
@@ -4979,6 +4949,15 @@
     body.appendChild(groupsEl);
     body.appendChild(emptyEl);
 
+    var blockedPanel = document.createElement('div');
+    // Visibility is class-driven (is-statut-blocked) so profile feature flags can
+    // still use the [hidden] attribute without fighting category sync.
+    blockedPanel.className = 'statut-blocked-panel';
+    var blockedMount = document.createElement('div');
+    blockedMount.className = 'statut-blocked-mount';
+    blockedPanel.appendChild(blockedMount);
+    body.appendChild(blockedPanel);
+
     function authMessage(reason) {
       if (reason === 'no-app-key') {
         return (
@@ -5017,6 +4996,31 @@
         if (String(lists[i].id) === String(currentListId)) return lists[i].name;
       }
       return '';
+    }
+
+    function currentCategory() {
+      if (!currentListId) return null;
+      var cats = (settings && settings.listCategories) || {};
+      var cat = cats[currentListId] || cats[String(currentListId)] || null;
+      var roleBlocked =
+        settings && settings.roleLists && settings.roleLists.blocked
+          ? String(settings.roleLists.blocked)
+          : '';
+      if (roleBlocked && roleBlocked === String(currentListId)) return 'blocked';
+      var roleCompleted =
+        settings && settings.roleLists && settings.roleLists.completed
+          ? String(settings.roleLists.completed)
+          : '';
+      if (roleCompleted && roleCompleted === String(currentListId)) return 'completed';
+      return cat || null;
+    }
+
+    function syncBlockedPanel() {
+      var show = currentCategory() === 'blocked';
+      var wasActive = blockedPanel.classList.contains('is-statut-blocked');
+      blockedPanel.classList.toggle('is-statut-blocked', show);
+      field.classList.toggle('has-blocked-panel', show);
+      if (wasActive !== show) onLayoutChange();
     }
 
     function summaryText() {
@@ -5120,6 +5124,7 @@
       });
 
       groupsEl.appendChild(chipRow);
+      syncBlockedPanel();
     }
 
     function selectList(listId) {
@@ -5127,6 +5132,7 @@
         currentListId = String(listId);
         renderOptions();
         collapse.refreshSummary();
+        syncBlockedPanel();
         onChange({ listId: currentListId });
         return;
       }
@@ -5151,6 +5157,7 @@
           busy = false;
           renderOptions();
           collapse.refreshSummary();
+          syncBlockedPanel();
           onLayoutChange();
         });
     }
@@ -5183,10 +5190,22 @@
       getListId: function () {
         return currentListId;
       },
+      getCategory: currentCategory,
+      getBlockedMount: function () {
+        return blockedMount;
+      },
+      syncBlockedPanel: syncBlockedPanel,
+      setExpanded: function (on, opts) {
+        return collapse.setExpanded(on, opts);
+      },
+      isExpanded: function () {
+        return collapse.isExpanded();
+      },
       setListId: function (listId) {
         currentListId = listId ? String(listId) : '';
         renderOptions();
         collapse.refreshSummary();
+        syncBlockedPanel();
       },
       setData: function (next) {
         if (!next) return;
@@ -5205,6 +5224,7 @@
         }
         renderOptions();
         collapse.refreshSummary();
+        syncBlockedPanel();
         onLayoutChange();
       },
       isEnabled: function () {
@@ -5735,6 +5755,7 @@
       }
       descSpellRevert = global.Spellcheck.attachRevert(descMeta, {
         before: descStatus,
+        previous: original,
         onRevert: function () {
           descSpellRevert = null;
           if (descInput.value !== corrected && descInput.value.trim() !== corrected.trim()) {
@@ -6036,6 +6057,8 @@
     var onLayoutChange = config.onLayoutChange || function () {};
     var getSubtasks =
       typeof config.getSubtasks === 'function' ? config.getSubtasks : function () { return []; };
+    // Nested under Statut: no collapse chrome / enable checkbox.
+    var embedded = !!config.embedded;
     var bodyId = 'blocked-section-body-' + Math.random().toString(36).slice(2, 9);
     var currentReasons = normalizeBlockedReasons(
       config.blockedReasons != null ? config.blockedReasons : config
@@ -6055,7 +6078,7 @@
     // reasonKey → generation; stale AI responses are ignored when gen no longer matches.
     var reasonSpellcheckPending = Object.create(null);
     var reasonSpellcheckGen = 0;
-    // reasonKey(corrected) → { original, timer }
+    // reasonKey(corrected) → { original } kept until popup closes / revert / edit
     var reasonSpellReverts = Object.create(null);
 
     function spellcheckReasonText(text) {
@@ -6102,9 +6125,6 @@
     function clearReasonSpellRevert(corrected) {
       var key = reasonKey(corrected);
       if (!key || !reasonSpellReverts[key]) return;
-      if (reasonSpellReverts[key].timer) {
-        clearTimeout(reasonSpellReverts[key].timer);
-      }
       delete reasonSpellReverts[key];
     }
 
@@ -6112,22 +6132,7 @@
       var key = reasonKey(corrected);
       var originalNorm = normalizeBlockedReason(original);
       if (!key || !originalNorm || reasonKey(originalNorm) === key) return;
-      clearReasonSpellRevert(corrected);
-      var timeoutMs =
-        global.Spellcheck && global.Spellcheck.REVERT_TIMEOUT_MS != null
-          ? global.Spellcheck.REVERT_TIMEOUT_MS
-          : 10000;
-      var entry = {
-        original: originalNorm,
-        timer: setTimeout(function () {
-          if (reasonSpellReverts[key] === entry) {
-            delete reasonSpellReverts[key];
-            refreshSelected();
-            onLayoutChange();
-          }
-        }, timeoutMs)
-      };
-      reasonSpellReverts[key] = entry;
+      reasonSpellReverts[key] = { original: originalNorm };
     }
 
     function applySpellcheckCorrection(original, corrected, gen) {
@@ -6173,23 +6178,45 @@
     }
 
     var field = document.createElement('div');
-    field.className = 'field field--en-attente';
+    field.className = embedded
+      ? 'field field--en-attente field--en-attente-embedded is-enabled'
+      : 'field field--en-attente';
 
-    var chrome = createCollapsibleEnableChrome({
-      title: BLOCKED_LABEL,
-      bodyId: bodyId,
-      checkboxClass: 'en-attente-checkbox',
-      labelClass: 'en-attente-label',
-      leadingIcon: 'ti-barrier-block',
-      iconClass: 'blocked-leading-icon',
-      titleClass: 'en-attente-title',
-      collapseLabel: 'Replier Bloqu\u00e9',
-      expandLabel: 'D\u00e9velopper Bloqu\u00e9'
-    });
-    field.appendChild(chrome.head);
+    var chrome = null;
+    if (!embedded) {
+      chrome = createCollapsibleEnableChrome({
+        title: BLOCKED_LABEL,
+        bodyId: bodyId,
+        checkboxClass: 'en-attente-checkbox',
+        labelClass: 'en-attente-label',
+        leadingIcon: 'ti-barrier-block',
+        iconClass: 'blocked-leading-icon',
+        titleClass: 'en-attente-title',
+        collapseLabel: 'Replier Bloqu\u00e9',
+        expandLabel: 'D\u00e9velopper Bloqu\u00e9'
+      });
+      field.appendChild(chrome.head);
+    } else {
+      var embeddedHead = document.createElement('div');
+      embeddedHead.className = 'blocked-embedded-head';
+      var embeddedIcon = document.createElement('span');
+      embeddedIcon.className = 'section-leading-icon blocked-leading-icon';
+      embeddedIcon.setAttribute('aria-hidden', 'true');
+      var embeddedGlyph = document.createElement('i');
+      embeddedGlyph.className = 'ti ti-barrier-block section-leading-icon-glyph';
+      embeddedIcon.appendChild(embeddedGlyph);
+      var embeddedTitle = document.createElement('span');
+      embeddedTitle.className = 'blocked-embedded-title';
+      embeddedTitle.textContent = 'Motif';
+      embeddedHead.appendChild(embeddedIcon);
+      embeddedHead.appendChild(embeddedTitle);
+      field.appendChild(embeddedHead);
+    }
 
     var reasonWrap = document.createElement('div');
-    reasonWrap.className = 'blocked-reason-wrap section-toggle-body';
+    reasonWrap.className = embedded
+      ? 'blocked-reason-wrap'
+      : 'blocked-reason-wrap section-toggle-body';
     reasonWrap.id = bodyId;
 
     var selectedWrap = document.createElement('div');
@@ -6326,7 +6353,7 @@
     }
 
     function notifyReasonChange() {
-      collapse.refreshSummary();
+      if (collapse) collapse.refreshSummary();
       onChange(getValue());
     }
 
@@ -6597,7 +6624,7 @@
       refreshSelected();
       refreshSuggestions();
       refreshSubtaskUi();
-      collapse.refreshSummary();
+      if (collapse) collapse.refreshSummary();
     }
 
     function refreshSelected() {
@@ -6659,23 +6686,27 @@
           } else {
             var revertInfo = reasonSpellReverts[reasonKey(reason)];
             if (revertInfo && revertInfo.original) {
+              var previousText = revertInfo.original;
+              var revertTitle =
+                global.Spellcheck && typeof global.Spellcheck.revertLabel === 'function'
+                  ? global.Spellcheck.revertLabel(previousText)
+                  : previousText;
               var revertBtn = document.createElement('button');
               revertBtn.type = 'button';
               revertBtn.className = 'blocked-reason-chip-revert tp-spell-revert';
               revertBtn.setAttribute(
                 'aria-label',
-                'Annuler la correction orthographique'
+                'Annuler la correction\u00a0: ' + revertTitle
               );
-              revertBtn.title = 'Annuler la correction';
+              revertBtn.title = revertTitle;
               revertBtn.innerHTML =
                 '<i class="ti ti-arrow-back-up" aria-hidden="true"></i>';
               revertBtn.addEventListener('click', function (event) {
                 event.preventDefault();
                 event.stopPropagation();
-                var previous = revertInfo.original;
                 clearReasonSpellRevert(reason);
                 if (hasReason(reason)) {
-                  renameReason(reason, previous);
+                  renameReason(reason, previousText);
                 } else {
                   refreshSelected();
                   onLayoutChange();
@@ -6809,35 +6840,47 @@
     }
 
     // Keep blockedReasons when disabling — only enAttente (enabled) drives badges.
-    var collapse = bindCollapsibleEnable({
-      field: field,
-      body: reasonWrap,
-      chrome: chrome,
-      enabled: checked,
-      expanded: config.expanded != null ? !!config.expanded : checked,
-      getSummary: function () {
-        var summary = capitalizeCountdownPhrase(
-          formatBlockedReasonsSummary(currentReasons, {
-            empty: BLOCKED_LABEL,
-            links: currentLinks,
-            items: getSubtasks() || []
-          })
-        );
-        return summary + '\u2026';
-      },
-      onLayoutChange: onLayoutChange,
-      onExpandChange: config.onExpandChange || null,
-      onEnableChange: function () {
-        onChange(collapse.isEnabled());
-      }
-    });
+    var collapse = null;
+    var enableAllowed = true;
+    if (!embedded) {
+      collapse = bindCollapsibleEnable({
+        field: field,
+        body: reasonWrap,
+        chrome: chrome,
+        enabled: checked,
+        expanded: config.expanded != null ? !!config.expanded : checked,
+        getSummary: function () {
+          var summary = capitalizeCountdownPhrase(
+            formatBlockedReasonsSummary(currentReasons, {
+              empty: BLOCKED_LABEL,
+              links: currentLinks,
+              items: getSubtasks() || []
+            })
+          );
+          return summary + '\u2026';
+        },
+        onLayoutChange: onLayoutChange,
+        onExpandChange: config.onExpandChange || null,
+        onEnableChange: function () {
+          onChange(collapse.isEnabled());
+        }
+      });
+    }
 
     function setValue(value) {
-      collapse.setEnabled(!!value, { notifyLayout: false, expand: !!value });
+      if (collapse) {
+        collapse.setEnabled(!!value, { notifyLayout: false, expand: !!value });
+        return;
+      }
+      var next = !!value;
+      var changed = next !== checked;
+      checked = next;
+      field.classList.toggle('is-enabled', checked);
+      if (changed) onChange(checked);
     }
 
     function getValue() {
-      return collapse.isEnabled();
+      return collapse ? collapse.isEnabled() : checked;
     }
 
     function setBlockedReasons(value) {
@@ -6871,7 +6914,7 @@
       refreshSelected();
       refreshSuggestions();
       refreshSubtaskUi();
-      collapse.refreshSummary();
+      if (collapse) collapse.refreshSummary();
     }
 
     function getBlockedLinks() {
@@ -6910,7 +6953,7 @@
       currentLinks = refreshed;
       refreshSelected();
       refreshSubtaskUi();
-      collapse.refreshSummary();
+      if (collapse) collapse.refreshSummary();
     }
 
     reasonInput.addEventListener('input', function () {
@@ -6957,11 +7000,27 @@
       setEnabled: function (next) {
         setValue(next);
       },
-      setEnableAllowed: collapse.setEnableAllowed,
-      isEnableAllowed: collapse.isEnableAllowed,
-      isEnabled: collapse.isEnabled,
-      setExpanded: collapse.setExpanded,
-      isExpanded: collapse.isExpanded
+      setEnableAllowed: collapse
+        ? collapse.setEnableAllowed
+        : function (allowed) {
+            enableAllowed = allowed !== false;
+          },
+      isEnableAllowed: collapse
+        ? collapse.isEnableAllowed
+        : function () {
+            return enableAllowed;
+          },
+      isEnabled: getValue,
+      setExpanded: collapse
+        ? collapse.setExpanded
+        : function () {
+            /* embedded: always open when visible */
+          },
+      isExpanded: collapse
+        ? collapse.isExpanded
+        : function () {
+            return true;
+          }
     };
   }
 
@@ -8546,8 +8605,8 @@
     blockedWarningLabel.type = 'button';
     blockedWarningLabel.className = 'heat-blocked-warning-label';
     blockedWarningLabel.textContent = BLOCKED_DISPLAY;
-    blockedWarningLabel.title = 'Ouvrir la section Bloqu\u00e9';
-    blockedWarningLabel.setAttribute('aria-label', 'Ouvrir la section Bloqu\u00e9');
+    blockedWarningLabel.title = 'Ouvrir le motif de blocage';
+    blockedWarningLabel.setAttribute('aria-label', 'Ouvrir le motif de blocage');
     blockedWarningLabel.addEventListener('click', function (event) {
       event.preventDefault();
       event.stopPropagation();
@@ -10066,10 +10125,11 @@
       hideSegments: formulaKey === 'eisenhower',
       onUnblock: unblockTask,
       onOpenBlocked: function () {
-        if (!enAttenteField || !blockedSection) return;
-        if (enAttenteField.setExpanded) {
-          enAttenteField.setExpanded(true);
+        if (typeof variantConfig.onOpenBlocked === 'function') {
+          variantConfig.onOpenBlocked();
+          return;
         }
+        if (!blockedSection) return;
         setTimeout(function () {
           try {
             blockedSection.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -10237,12 +10297,13 @@
       }
     });
 
+    // Bloqué reasons live inside Statut (mounted by the popup into statut's slot).
     blockedSection = document.createElement('div');
     blockedSection.className = 'variant-blocked-section';
-    card.appendChild(blockedSection);
 
     enAttenteField = createEnAttenteField({
       el: blockedSection,
+      embedded: true,
       value: state.enAttente,
       blockedReasons: state.blockedReasons,
       blockedLinks: state.blockedLinks,
@@ -10251,8 +10312,6 @@
           ? variantConfig.getBlockedSubtasks() || []
           : [];
       },
-      expanded: sectionExpanded('blocked', !!state.enAttente),
-      onExpandChange: persistSectionExpanded('blocked'),
       onChange: function () {
         cancelSliderAnim();
         repaint();
@@ -10423,6 +10482,8 @@
        * Toggle a named section open/closed and return its root element (for scroll/focus).
        * Re-clicking from Information collapses when already expanded.
        * Keys: 'priority' | 'due' | 'blocked'
+       * Bloqué is nested under Statut — openSection('blocked') returns the panel root
+       * (popup expands Statut and scrolls).
        */
       openSection: function (key) {
         var target = null;
@@ -10442,14 +10503,11 @@
           }
         } else if (key === 'blocked') {
           target = blockedSection;
-          if (enAttenteField && enAttenteField.setExpanded) {
-            var blockedOpen = enAttenteField.isExpanded
-              ? enAttenteField.isExpanded()
-              : false;
-            enAttenteField.setExpanded(!blockedOpen);
-          }
         }
         return target;
+      },
+      getBlockedSection: function () {
+        return blockedSection;
       },
       setProgressCompleteLock: setProgressCompleteLock,
       isProgressCompleteLock: function () {

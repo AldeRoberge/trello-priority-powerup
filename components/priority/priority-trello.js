@@ -1184,7 +1184,16 @@
       lists = [];
     }
     try {
-      cards = (await t.cards('id', 'name', 'desc', 'idList', 'due')) || [];
+      cards =
+        (await t.cards(
+          'id',
+          'name',
+          'desc',
+          'idList',
+          'due',
+          'pos',
+          'dateLastActivity'
+        )) || [];
     } catch (err) {
       console.error('PriorityTrello.scanBoardCards cards failed', err);
       cards = [];
@@ -1238,7 +1247,10 @@
         name: name,
         desc: desc,
         list: listLabel,
+        listId: card.idList || null,
         due: card.due || null,
+        pos: typeof card.pos === 'number' ? card.pos : Number(card.pos) || 0,
+        dateLastActivity: card.dateLastActivity || null,
         priority: priorityLabel || null
       });
       var bit = '- [' + listLabel + '] ' + name;
@@ -1254,6 +1266,131 @@
       lists: lists.map(function (l) {
         return { id: l.id, name: l.name };
       })
+    };
+  }
+
+  /**
+   * Same-list neighbors + recently created cards for card interview context.
+   * @returns {Promise<{ surrounding: Array, recentCreated: Array, current: object|null }>}
+   */
+  async function getCardNeighborhood(t, options) {
+    options = options || {};
+    var neighborRadius =
+      typeof options.neighborRadius === 'number' ? options.neighborRadius : 4;
+    var recentMax = typeof options.recentMax === 'number' ? options.recentMax : 8;
+    var descMax = typeof options.descMax === 'number' ? options.descMax : 120;
+    var includePriority = options.includePriority === true;
+
+    var currentId = options.cardId || null;
+    if (!currentId && t && typeof t.card === 'function') {
+      try {
+        var me = await t.card('id');
+        currentId = (me && me.id) || null;
+      } catch (e) {
+        currentId = null;
+      }
+    }
+
+    var scan;
+    try {
+      scan = await scanBoardCards(t, {
+        maxCards: 80,
+        descMax: descMax,
+        includePriority: includePriority
+      });
+    } catch (err) {
+      console.error('PriorityTrello.getCardNeighborhood scan failed', err);
+      return { surrounding: [], recentCreated: [], current: null };
+    }
+
+    var cards = (scan && scan.cards) || [];
+    var current = null;
+    var idx = -1;
+    for (var i = 0; i < cards.length; i++) {
+      if (currentId && cards[i].id === currentId) {
+        current = cards[i];
+        idx = i;
+        break;
+      }
+    }
+
+    var surrounding = [];
+    if (current && current.listId) {
+      var sameList = cards
+        .filter(function (c) {
+          return c && String(c.listId) === String(current.listId);
+        })
+        .slice()
+        .sort(function (a, b) {
+          return (a.pos || 0) - (b.pos || 0);
+        });
+      var localIdx = -1;
+      for (var si = 0; si < sameList.length; si++) {
+        if (sameList[si].id === current.id) {
+          localIdx = si;
+          break;
+        }
+      }
+      if (localIdx >= 0) {
+        var from = Math.max(0, localIdx - neighborRadius);
+        var to = Math.min(sameList.length, localIdx + neighborRadius + 1);
+        for (var ni = from; ni < to; ni++) {
+          if (ni === localIdx) continue;
+          var n = sameList[ni];
+          surrounding.push({
+            id: n.id,
+            name: n.name,
+            desc: n.desc,
+            list: n.list,
+            due: n.due,
+            priority: n.priority,
+            relation: ni < localIdx ? 'above' : 'below'
+          });
+        }
+      }
+    }
+
+    var Mem = global.AgentMemory;
+    var recentCreated = cards
+      .slice()
+      .map(function (c) {
+        var at =
+          (Mem && typeof Mem.cardIdCreatedAt === 'function' && Mem.cardIdCreatedAt(c.id)) ||
+          c.dateLastActivity ||
+          '';
+        return {
+          id: c.id,
+          name: c.name,
+          list: c.list,
+          at: at,
+          due: c.due,
+          priority: c.priority
+        };
+      })
+      .filter(function (c) {
+        return c.id && c.id !== currentId;
+      })
+      .sort(function (a, b) {
+        var ta = Date.parse(a.at) || 0;
+        var tb = Date.parse(b.at) || 0;
+        if (tb !== ta) return tb - ta;
+        return String(b.id).localeCompare(String(a.id));
+      })
+      .slice(0, recentMax);
+
+    return {
+      surrounding: surrounding,
+      recentCreated: recentCreated,
+      current: current
+        ? {
+            id: current.id,
+            name: current.name,
+            desc: current.desc,
+            list: current.list,
+            due: current.due,
+            priority: current.priority
+          }
+        : null
     };
   }
 
@@ -1585,15 +1722,29 @@
     );
   }
 
+  function isPluginDataConflict(err) {
+    var msg = String((err && (err.message || err.name || err)) || '');
+    return /\b409\b|Conflict/i.test(msg);
+  }
+
+  /**
+   * Persist the OAuth token once under the RestApi client's storage key.
+   * Do not also seed localStorage: getToken()/isAuthorized() would then call
+   * fetchAndStoreToken → storeToken and POST pluginData a second time (409).
+   */
   function storeRestToken(t, token) {
-    try {
-      global.localStorage.setItem(REST_TOKEN_STORAGE_KEY, token);
-    } catch (err) {
-      /* ignore quota / privacy mode */
-    }
-    return t.set('member', 'private', REST_TOKEN_STORAGE_KEY, token).then(function () {
-      return token;
-    });
+    return Promise.resolve()
+      .then(function () {
+        return t.set('member', 'private', REST_TOKEN_STORAGE_KEY, token);
+      })
+      .then(function () {
+        return token;
+      })
+      .catch(function (err) {
+        // Concurrent member pluginData write — treat as ok if the token landed.
+        if (!isPluginDataConflict(err)) throw err;
+        return token;
+      });
   }
 
   /**
@@ -1729,6 +1880,7 @@
     saveCardInputs: saveCardInputs,
     getCardInputsById: getCardInputsById,
     scanBoardCards: scanBoardCards,
+    getCardNeighborhood: getCardNeighborhood,
     prioritySortRank: prioritySortRank,
     comparePriorityDisplays: comparePriorityDisplays,
     sortListCardsByPriority: sortListCardsByPriority,
