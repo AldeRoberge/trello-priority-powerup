@@ -18,7 +18,7 @@
     return node;
   }
 
-  /** Hide a trailing unfinished [[g:… marker so streaming does not flash raw syntax. */
+  /** Hide a trailing unfinished [[g:… / [[a:… marker so streaming does not flash raw syntax. */
   function hideIncompleteHighlightMarker(text) {
     if (typeof text !== 'string' || !text) return text || '';
     var lastOpen = text.lastIndexOf('[[');
@@ -28,14 +28,15 @@
     }
     var after = text.slice(lastOpen);
     if (after.indexOf(']]') !== -1) return text;
-    if (/^\[\[[gry]?(?::[^\]]*)?$/.test(after) || after === '[[') {
+    if (/^\[\[[grya]?(?::[^\]]*)?$/.test(after) || after === '[[') {
       return text.slice(0, lastOpen);
     }
     return text;
   }
 
   /**
-   * Render assistant text with optional [[g:…]] / [[r:…]] / [[y:…]] highlights.
+   * Render assistant text with optional highlights:
+   * [[g:/r:/y:]] = semantic priority colors; [[a:]] = agent identity accent.
    * Safe: every phrase is textContent; no HTML from the model.
    */
   function fillHighlightedBubble(bubble, text) {
@@ -44,7 +45,7 @@
     var raw = typeof text === 'string' ? text : '';
     var display = hideIncompleteHighlightMarker(raw);
     if (!display) return;
-    var re = /\[\[([gry]):([^\]]{1,120})\]\]/g;
+    var re = /\[\[([grya]):([^\]]{1,120})\]\]/g;
     var last = 0;
     var m;
     var hasHighlight = false;
@@ -1437,7 +1438,6 @@
       row.setAttribute('aria-label', 'Message en attente');
       messageQueue.push({
         text: msg,
-        options: { skipSpellcheck: !!opts.skipSpellcheck },
         row: row
       });
       messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -1450,7 +1450,6 @@
       var next = messageQueue.shift();
       if (!next || !next.text) return;
       sendUserMessage(next.text, {
-        skipSpellcheck: !!(next.options && next.options.skipSpellcheck),
         queuedRow: next.row
       });
     }
@@ -4146,6 +4145,14 @@
           (meta && meta.error ? ' agent-msg-bubble--error' : '')
       );
       if (role === 'assistant' && !(meta && meta.error)) {
+        // Seed aura before highlights so [[a:]] uses identity / turn color on first paint.
+        row.setAttribute(
+          'data-aura',
+          auraForEmotion(
+            (meta && meta.emotion) || 'neutral',
+            meta && (meta.color != null ? meta.color : meta.aura)
+          )
+        );
         fillHighlightedBubble(bubble, text);
       } else {
         bubble.textContent = text;
@@ -4190,6 +4197,8 @@
       var row = el('div', 'agent-msg agent-msg--assistant is-pending is-streaming');
       row.setAttribute('aria-busy', 'true');
       row.setAttribute('aria-label', 'R\u00e9ponse en cours');
+      // Seed identity aura so [[a:…]] accents paint correctly during stream.
+      row.setAttribute('data-aura', identityAura());
       // Face + thinking clouds while waiting; bubble swaps to text when streaming starts.
       var bubble = el('div', 'agent-msg-bubble agent-msg-bubble--pending');
       var clouds = el('div', 'agent-think-clouds');
@@ -4947,7 +4956,7 @@
       var msg = formatSelectedSuggestions(labels);
       stopSuggestionConfirmTimer();
       clearSuggestions();
-      sendUserMessage(msg, { skipSpellcheck: true });
+      sendUserMessage(msg);
     }
 
     function toggleSuggestionChip(chip, text) {
@@ -4983,7 +4992,7 @@
         return;
       }
       clearSuggestions();
-      sendUserMessage(label, { skipSpellcheck: true });
+      sendUserMessage(label);
     }
 
     /** Inline SVG paths for suggestion chips (16×16 viewBox). */
@@ -5306,7 +5315,8 @@
         if (!text) return;
         out.push({ text: text, heat: heat, icon: icon, color: color });
       });
-      return enrichSuggestionChipItems(out.slice(0, interviewActive ? 5 : 4));
+      // Allow up to 6 answer chips so existing subtasks can all be offered.
+      return enrichSuggestionChipItems(out.slice(0, interviewActive ? 5 : 6));
     }
 
     function resolveSuggestionHeatSteps(items) {
@@ -6305,6 +6315,9 @@
         setError('Configurez d\'abord un fournisseur IA.');
         return;
       }
+      // Typed send (and any other commit) drops stale answer chips immediately —
+      // same as tapping a suggestion. New ones arrive with the next turn.
+      clearSuggestions();
       if (pending) {
         enqueueUserMessage(msg, opts);
         return;
@@ -6323,14 +6336,12 @@
       setError('');
       clearFollowUps();
       clearPrompts();
-      setSuggestionsBusy(true);
       var userRow = opts.queuedRow;
       if (userRow) {
         activateQueuedUserRow(userRow);
       } else {
         userRow = appendMessage('user', msg);
       }
-      var userBubble = userRow.querySelector('.agent-msg-bubble');
       history.push({ role: 'user', content: msg });
       schedulePersistChatHistory();
       pending = true;
@@ -6339,60 +6350,6 @@
       var bubble = thinking.querySelector('.agent-msg-bubble');
       var streamed = false;
       try {
-        if (
-          !opts.skipSpellcheck &&
-          !feedbackContext &&
-          global.Spellcheck &&
-          typeof global.Spellcheck.correct === 'function'
-        ) {
-          try {
-            var corrected = await global.Spellcheck.correct(msg);
-            if (typeof corrected === 'string' && corrected.trim()) {
-              var fixed = corrected.trim();
-              if (fixed !== msg) {
-                var originalMsg = msg;
-                msg = fixed;
-                if (userBubble) userBubble.textContent = msg;
-                history[history.length - 1].content = msg;
-                schedulePersistChatHistory();
-                if (
-                  global.Spellcheck &&
-                  typeof global.Spellcheck.attachRevert === 'function'
-                ) {
-                  global.Spellcheck.attachRevert(userRow, {
-                    onRevert: function () {
-                      if (userBubble) userBubble.textContent = originalMsg;
-                      var last = history[history.length - 1];
-                      // Prefer the just-corrected user turn; fall back if assistant already appended.
-                      if (last && last.role === 'user' && last.content === fixed) {
-                        last.content = originalMsg;
-                      } else {
-                        for (var hi = history.length - 1; hi >= 0; hi--) {
-                          if (
-                            history[hi] &&
-                            history[hi].role === 'user' &&
-                            history[hi].content === fixed
-                          ) {
-                            history[hi].content = originalMsg;
-                            break;
-                          }
-                        }
-                      }
-                      schedulePersistChatHistory();
-                      notifyLayout();
-                    },
-                    onDismiss: function () {
-                      notifyLayout();
-                    }
-                  });
-                }
-                notifyLayout();
-              }
-            }
-          } catch (spellErr) {
-            console.error('Spellcheck before chat failed', spellErr);
-          }
-        }
         var apiMsg = msg;
         if (feedbackContext) {
           await persistUserCorrection(msg, feedbackContext.content);
@@ -6636,7 +6593,7 @@
         notifyLayout();
         return;
       }
-      sendUserMessage(fu.label, { skipSpellcheck: true });
+      sendUserMessage(fu.label);
     }
 
     function onSend() {
