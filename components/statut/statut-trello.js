@@ -58,7 +58,7 @@
             {},
             (SM && SM.DEFAULT_STATE_COLORS) || {
               gray: '#626F86',
-              yellow: '#E2B203',
+              blue: '#0C66E4',
               red: '#E34935',
               green: '#22A06B'
             }

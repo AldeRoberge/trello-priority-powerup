@@ -79,11 +79,11 @@
             </span>
           </label>
           <label class="tp-statut-color">
-            <span class="tp-statut-color-label">Jaune</span>
+            <span class="tp-statut-color-label">Bleu</span>
             <span class="tp-statut-color-hint">en cours</span>
             <span class="tp-color-swatch">
-              <span class="tp-color-preview" id="statutColorPreviewYellow"></span>
-              <input type="color" id="statutColorYellow" data-state-color="yellow" aria-label="Couleur jaune" />
+              <span class="tp-color-preview" id="statutColorPreviewBlue"></span>
+              <input type="color" id="statutColorBlue" data-state-color="blue" aria-label="Couleur bleue" />
             </span>
           </label>
           <label class="tp-statut-color">
@@ -532,8 +532,8 @@
           ? StatutMatch.normalizeStateColors(
               statutState.settings && statutState.settings.stateColors
             )
-          : { gray: '#626F86', yellow: '#E2B203', red: '#E34935', green: '#22A06B' };
-      ['gray', 'yellow', 'red', 'green'].forEach(function (key) {
+          : { gray: '#626F86', blue: '#0C66E4', red: '#E34935', green: '#22A06B' };
+      ['gray', 'blue', 'red', 'green'].forEach(function (key) {
         var input = document.getElementById(
           'statutColor' + key.charAt(0).toUpperCase() + key.slice(1)
         );

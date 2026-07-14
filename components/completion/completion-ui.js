@@ -1161,21 +1161,19 @@
     function updateProgressUi(opts) {
       opts = opts || {};
       var progress = CT.computeCardProgress(data);
-      var accent = progress.percent > 0
-        ? completionColorForProgress(progress.percent)
-        : '';
+      var accent = completionColorForProgress(progress.percent);
       percentEl.textContent = progress.percent + '\u00a0%';
-      percentEl.style.color = accent;
+      percentEl.style.color = progress.percent > 0 ? accent : '';
       encouragementEl.textContent = progressEncouragementText(progress.percent);
-      encouragementEl.style.color = accent;
+      encouragementEl.style.color = progress.percent > 0 ? accent : '';
       encouragementEl.classList.toggle('is-complete', progress.percent === 100);
       progressPanel.style.setProperty(
         '--completion-hero-accent',
-        accent || 'var(--tp-border-strong)'
+        progress.percent > 0 ? accent : 'var(--tp-border-strong)'
       );
       progressPanel.classList.toggle('is-complete', progress.percent === 100);
       progressPanel.classList.toggle('has-progress', progress.percent > 0);
-      applyProgressSectionTint(progressShellEl, accent, progress.percent);
+      applyProgressSectionTint(progressShellEl, accent);
       syncCompleteAllButton(progress);
       syncResetAllButton(progress);
       if (!opts.skipMasterSync && !masterDragging) {
@@ -1196,7 +1194,7 @@
       syncAllCompleteSideEffects(progress, opts);
     }
 
-    function applyProgressSectionTint(shellEl, accent, percent) {
+    function applyProgressSectionTint(shellEl, accent) {
       if (!shellEl) return;
       var field =
         shellEl.classList && shellEl.classList.contains('field--progress')
@@ -1205,8 +1203,7 @@
             ? shellEl.querySelector('.field--progress')
             : null;
       var target = field || shellEl;
-      var pct = typeof percent === 'number' ? percent : 0;
-      if (accent && pct > 0) {
+      if (accent) {
         target.style.setProperty('--section-glow', accent);
         target.classList.add('has-section-glow');
         shellEl.classList.add('has-progress-tint');

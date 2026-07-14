@@ -134,7 +134,7 @@
     triage: { color: '#5e6ad2', icon: 'inbox' },
     backlog: { color: '#6b778c', icon: 'layers' },
     unstarted: { color: '#44546f', icon: 'circle' },
-    started: { color: '#e2b203', icon: 'hammer' },
+    started: { color: '#0c66e4', icon: 'hammer' },
     blocked: { color: '#e34935', icon: 'ban' },
     completed: { color: '#22a06b', icon: 'check' },
     canceled: { color: '#8590a2', icon: 'x' },
@@ -143,22 +143,22 @@
 
   /**
    * Section chrome bands (customizable in settings).
-   * gray = idle / backlog · yellow = in progress · red = blocked · green = done
+   * gray = idle / backlog · blue = in progress · red = blocked · green = done
    */
   var DEFAULT_STATE_COLORS = {
     gray: '#626F86',
-    yellow: '#E2B203',
+    blue: '#0C66E4',
     red: '#E34935',
     green: '#22A06B'
   };
 
-  var STATE_COLOR_KEYS = ['gray', 'yellow', 'red', 'green'];
+  var STATE_COLOR_KEYS = ['gray', 'blue', 'red', 'green'];
 
   var CATEGORY_STATE_BAND = {
     triage: 'gray',
     backlog: 'gray',
     unstarted: 'gray',
-    started: 'yellow',
+    started: 'blue',
     blocked: 'red',
     completed: 'green',
     canceled: 'gray',
@@ -187,6 +187,10 @@
   function normalizeStateColors(raw) {
     var out = Object.assign({}, DEFAULT_STATE_COLORS);
     if (!raw || typeof raw !== 'object') return out;
+    // Legacy: "en cours" used to be keyed as yellow.
+    if (raw.blue == null && raw.yellow != null) {
+      out.blue = normalizeHexColor(raw.yellow, DEFAULT_STATE_COLORS.blue);
+    }
     STATE_COLOR_KEYS.forEach(function (key) {
       if (raw[key] != null) {
         out[key] = normalizeHexColor(raw[key], DEFAULT_STATE_COLORS[key]);

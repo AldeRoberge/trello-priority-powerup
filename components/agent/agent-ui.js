@@ -89,6 +89,23 @@
     var interviewRecentCards = [];
     var interviewPriorityTrusted = false;
     var interviewBootstrapped = false;
+    var unreadAssistant = 0;
+    var settleReady = false;
+    var listeningActive = false;
+    var listeningAnalyzing = false;
+    var listenTimer = null;
+    var listenDebounceTimer = null;
+    var listenFingerprint = '';
+    var listenMutedUntil = 0;
+    var listenCooldownUntil = 0;
+    var listenScanSeq = 0;
+    var activeOffer = null;
+    var dismissedOffers = {};
+    var audioCtx = null;
+    var LISTEN_POLL_MS = 2000;
+    var LISTEN_DEBOUNCE_MS = 1400;
+    var LISTEN_COOLDOWN_MS = 14000;
+    var LISTEN_MUTE_MS = 1800;
     var sessionStats = {
       turns: 0,
       promptTokens: 0,
@@ -300,6 +317,23 @@
     // ── Chat panel ──────────────────────────────────────────────────────
     var chatPanel = el('div', 'agent-chat-panel');
 
+    var listenBar = el('div', 'agent-listen-bar', {
+      role: 'status',
+      'aria-live': 'polite'
+    });
+    listenBar.hidden = true;
+    var listenPulse = el('span', 'agent-listen-pulse');
+    listenPulse.setAttribute('aria-hidden', 'true');
+    for (var li = 0; li < 3; li++) {
+      listenPulse.appendChild(el('span', 'agent-listen-dot'));
+    }
+    var listenLabel = el('span', 'agent-listen-label', {
+      text: 'À l\u2019écoute des changements'
+    });
+    listenBar.appendChild(listenPulse);
+    listenBar.appendChild(listenLabel);
+    chatPanel.appendChild(listenBar);
+
     var emptyState = el('div', 'agent-empty');
     var emptyConfigBtn = el('button', 'tp-link agent-empty-config', {
       type: 'button',
@@ -466,23 +500,32 @@
       enabled: true,
       expanded: expandChat,
       getSummary: function () {
-        if (applySuggestionsLoading) return 'Analyse\u2026';
+        if (applySuggestionsLoading || listeningAnalyzing) return 'Analyse\u2026';
+        if (activeOffer) return 'Suggestion';
         if (applySuggestions.length) {
           return applySuggestions.length === 1
             ? '1 suggestion'
             : applySuggestions.length + ' suggestions';
         }
+        if (unreadAssistant > 0) {
+          return unreadAssistant === 1
+            ? 'Nouveau message'
+            : unreadAssistant + ' nouveaux';
+        }
         if (!Agent.isConfigured(provider)) return 'Non configur\u00e9';
         if (!Agent.isVerified(provider)) return 'Non v\u00e9rifi\u00e9';
-        var n = history.length;
-        if (!n) return '';
-        return n === 1 ? '1 message' : n + ' messages';
+        if (listeningActive) return 'À l\u2019écoute';
+        return '';
       },
       onLayoutChange: onLayoutChange,
       onEnableChange: function (on) {
         if (!on && settingsOpen) setSettingsOpen(false);
       },
       onExpandChange: function (isExpanded) {
+        if (isExpanded && unreadAssistant) {
+          unreadAssistant = 0;
+          syncApplySummary();
+        }
         if (typeof PriorityUI.saveSectionCollapseState === 'function') {
           PriorityUI.saveSectionCollapseState({ chat: !!isExpanded });
         }
@@ -492,9 +535,14 @@
     function syncApplySummary() {
       field.classList.toggle(
         'has-ai-suggestions',
-        applySuggestions.length > 0 || applySuggestionsLoading
+        applySuggestions.length > 0 || applySuggestionsLoading || !!activeOffer
       );
-      field.classList.toggle('is-ai-suggestions-loading', applySuggestionsLoading);
+      field.classList.toggle('is-ai-suggestions-loading', applySuggestionsLoading || listeningAnalyzing);
+      field.classList.toggle('has-new-message', unreadAssistant > 0 && !activeOffer);
+      field.classList.toggle(
+        'is-listening',
+        listeningActive && Agent.isConfigured(provider) && !interviewActive
+      );
       if (collapse && collapse.refreshSummary) collapse.refreshSummary();
     }
 
@@ -839,19 +887,12 @@
       }
 
       if (!usage || sessionStats.turns < 1) {
-        addRow('agent-chat-stats-row--last', [
-          { label: 'Tokens', value: '\u2014', title: 'Aucun \u00e9change pour l\u2019instant' },
-          { label: 'Co\u00fbt', value: '\u2014' }
-        ].concat(
-          isFull ? [{ label: 'Latence', value: '\u2014' }] : []
-        ));
         addRow(
-          'agent-chat-stats-row--session',
+          '',
           [
-            {
-              label: 'Contexte',
-              value: '\u2014'
-            },
+            { label: 'Tokens', value: '\u2014', title: 'Aucun \u00e9change pour l\u2019instant' },
+            { label: 'Co\u00fbt', value: '\u2014' },
+            { label: 'Contexte', value: '\u2014' },
             {
               label: 'M\u00e9moire',
               value: history.length + ' msg',
@@ -860,6 +901,7 @@
           ].concat(
             isFull
               ? [
+                  { label: 'Latence', value: '\u2014' },
                   {
                     label: 'Session',
                     value: '0 tour',
@@ -886,7 +928,14 @@
         formatTokenCount(usage.completionTokens) +
         '\u2193)';
 
-      var lastParts = [
+      var ctx = usage.context || {};
+      var fill = typeof ctx.fillPercent === 'number' ? ctx.fillPercent : null;
+      var compressionHint =
+        fill != null && fill >= 50
+          ? 'Contexte charg\u00e9 \u2014 l\'historique allonge les requ\u00eates'
+          : 'Part du contexte utilis\u00e9e par le prompt + l\'historique';
+
+      var parts = [
         {
           label: 'Tokens',
           value: lastTokenValue,
@@ -896,36 +945,7 @@
           label: 'Co\u00fbt',
           value: '\u2248' + formatCostUsd(usage.costUsd),
           title: 'Estimation selon le tarif publique du mod\u00e8le (non facturation)'
-        }
-      ];
-      if (isFull) {
-        lastParts.push({
-          label: 'Latence',
-          value: formatLatency(usage.latencyMs)
-        });
-        if (usage.cachedTokens != null && usage.cachedTokens > 0) {
-          lastParts.push({
-            label: 'Cache',
-            value: formatTokenCount(usage.cachedTokens),
-            title: 'Tokens d\'entr\u00e9e en cache'
-          });
-        }
-        if (usage.reasoningTokens != null && usage.reasoningTokens > 0) {
-          lastParts.push({
-            label: 'Raisonnement',
-            value: formatTokenCount(usage.reasoningTokens)
-          });
-        }
-      }
-      addRow('agent-chat-stats-row--last', lastParts);
-
-      var ctx = usage.context || {};
-      var fill = typeof ctx.fillPercent === 'number' ? ctx.fillPercent : null;
-      var compressionHint =
-        fill != null && fill >= 50
-          ? 'Contexte charg\u00e9 \u2014 l\'historique allonge les requ\u00eates'
-          : 'Part du contexte utilis\u00e9e par le prompt + l\'historique';
-      var memoryParts = [
+        },
         {
           label: 'Contexte',
           value:
@@ -941,7 +961,24 @@
         }
       ];
       if (isFull) {
-        memoryParts.push(
+        parts.push({
+          label: 'Latence',
+          value: formatLatency(usage.latencyMs)
+        });
+        if (usage.cachedTokens != null && usage.cachedTokens > 0) {
+          parts.push({
+            label: 'Cache',
+            value: formatTokenCount(usage.cachedTokens),
+            title: 'Tokens d\'entr\u00e9e en cache'
+          });
+        }
+        if (usage.reasoningTokens != null && usage.reasoningTokens > 0) {
+          parts.push({
+            label: 'Raisonnement',
+            value: formatTokenCount(usage.reasoningTokens)
+          });
+        }
+        parts.push(
           {
             label: 'Compression',
             value: 'aucune',
@@ -962,7 +999,7 @@
           }
         );
         if (usage.model) {
-          memoryParts.push({
+          parts.push({
             label: 'Mod\u00e8le',
             value: usage.model,
             title: usage.model
@@ -970,13 +1007,13 @@
         }
         var fr = finishReasonLabel(usage.finishReason);
         if (fr) {
-          memoryParts.push({
+          parts.push({
             label: 'Fin',
             value: fr
           });
         }
       }
-      addRow('agent-chat-stats-row--session', memoryParts);
+      addRow('', parts);
       notifyLayout();
     }
 
@@ -1114,9 +1151,354 @@
       if (!configured) {
         clearSuggestions();
         clearApplySuggestions();
+        stopListening();
       } else {
         setSuggestionsBusy(pending);
         setApplySuggestionsBusy(pending);
+        if (settleReady && !interviewActive) startListening();
+      }
+    }
+
+    function playNewMessageSound() {
+      try {
+        var Ctx = global.AudioContext || global.webkitAudioContext;
+        if (!Ctx) return;
+        if (!audioCtx) audioCtx = new Ctx();
+        if (audioCtx.state === 'suspended' && typeof audioCtx.resume === 'function') {
+          audioCtx.resume();
+        }
+        var t0 = audioCtx.currentTime;
+        var tones = [
+          { freq: 587.33, delay: 0, dur: 0.28 },
+          { freq: 880, delay: 0.09, dur: 0.34 }
+        ];
+        tones.forEach(function (tone) {
+          var osc = audioCtx.createOscillator();
+          var gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(tone.freq, t0 + tone.delay);
+          gain.gain.setValueAtTime(0.0001, t0 + tone.delay);
+          gain.gain.exponentialRampToValueAtTime(0.055, t0 + tone.delay + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t0 + tone.delay + tone.dur);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(t0 + tone.delay);
+          osc.stop(t0 + tone.delay + tone.dur + 0.02);
+        });
+      } catch (e) {
+        /* ignore audio failures */
+      }
+    }
+
+    function isAssistantExpanded() {
+      return !!(collapse && typeof collapse.isExpanded === 'function' && collapse.isExpanded());
+    }
+
+    function announceAssistantArrival(options) {
+      options = options || {};
+      if (!settleReady) return;
+      if (options.sound !== false) playNewMessageSound();
+      if (options.unread === false) return;
+      if (!isAssistantExpanded()) {
+        unreadAssistant += 1;
+        syncApplySummary();
+      }
+    }
+
+    function muteListening(ms) {
+      listenMutedUntil = Date.now() + (ms != null ? ms : LISTEN_MUTE_MS);
+      try {
+        listenFingerprint = fingerprintCard();
+      } catch (e) {
+        /* ignore */
+      }
+    }
+
+    function fingerprintCard() {
+      if (!Agent || typeof Agent.buildContext !== 'function') return '';
+      var ctx = Agent.buildContext(bridge) || {};
+      var slim = {
+        cardName: ctx.cardName || '',
+        cardDesc: ctx.cardDesc || '',
+        formula: ctx.formula || '',
+        priority: ctx.priority || null,
+        due: ctx.due || null,
+        blocked: ctx.blocked || null,
+        progress: ctx.progress || null,
+        statut: ctx.statut || null,
+        goals: ctx.goals || null,
+        cardMemory: ctx.cardMemory || null
+      };
+      try {
+        return JSON.stringify(slim);
+      } catch (e) {
+        return String(Date.now());
+      }
+    }
+
+    function setListenBarState(mode) {
+      var configured = Agent.isConfigured(provider);
+      var show = configured && listeningActive && !interviewActive;
+      listenBar.hidden = !show;
+      listenBar.classList.toggle('is-analyzing', mode === 'analyzing');
+      listenBar.classList.toggle('is-offer', mode === 'offer');
+      if (mode === 'analyzing') {
+        listenLabel.textContent = 'Analyse des changements\u2026';
+      } else if (mode === 'offer') {
+        listenLabel.textContent = 'Suggestion en attente';
+      } else {
+        listenLabel.textContent = 'À l\u2019écoute des changements';
+      }
+      syncApplySummary();
+      notifyLayout();
+    }
+
+    function phraseOfferLabel(label) {
+      var L = String(label || '').trim();
+      if (!L) return 'faire un petit ajustement';
+      return L.charAt(0).toLowerCase() + L.slice(1);
+    }
+
+    function clearActiveOffer(row) {
+      if (row && row.parentNode) {
+        row.classList.add('is-resolved');
+      }
+      activeOffer = null;
+      setListenBarState('idle');
+      syncApplySummary();
+    }
+
+    function appendOfferMessage(item) {
+      emptyState.classList.add('is-hidden');
+      clearApplySuggestions();
+      var row = el('div', 'agent-msg agent-msg--assistant agent-msg--offer');
+      var bubble = el('div', 'agent-msg-bubble agent-msg-bubble--offer');
+      bubble.appendChild(
+        el('div', 'agent-offer-eyebrow', { text: 'Coup de pouce' })
+      );
+      bubble.appendChild(
+        el('div', 'agent-offer-text', {
+          text:
+            'Je peux ' +
+            phraseOfferLabel(item.label) +
+            '. Je m\u2019en occupe\u00a0?'
+        })
+      );
+      var actions = el('div', 'agent-offer-actions');
+      var yesBtn = el('button', 'agent-offer-btn agent-offer-btn--yes', {
+        type: 'button',
+        text: 'Oui'
+      });
+      var noBtn = el('button', 'agent-offer-btn agent-offer-btn--no', {
+        type: 'button',
+        text: 'Non'
+      });
+      actions.appendChild(yesBtn);
+      actions.appendChild(noBtn);
+      bubble.appendChild(actions);
+      row.appendChild(bubble);
+      messagesEl.appendChild(row);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+
+      activeOffer = { item: item, row: row };
+      setListenBarState('offer');
+
+      yesBtn.addEventListener('click', function () {
+        if (pending || !activeOffer || activeOffer.row !== row) return;
+        onOfferAccept(item, row);
+      });
+      noBtn.addEventListener('click', function () {
+        if (!activeOffer || activeOffer.row !== row) return;
+        onOfferDecline(item, row);
+      });
+
+      announceAssistantArrival({ sound: true });
+      notifyLayout();
+      return row;
+    }
+
+    async function onOfferAccept(item, row) {
+      yesDisableOffer(row);
+      clearActiveOffer(row);
+      muteListening();
+      var result = await Agent.executeActions(bridge, item.actions || []);
+      appendMessage('assistant', result.summary || 'C\u2019est fait.', {
+        note: item.label
+      });
+      appendChangeRecap(result, { ok: result.ok });
+      history.push({
+        role: 'assistant',
+        content: result.summary || result.recap || 'C\u2019est fait.'
+      });
+      muteListening();
+      notifyLayout();
+    }
+
+    function onOfferDecline(item, row) {
+      dismissedOffers[String(item.label || '').trim()] = Date.now();
+      yesDisableOffer(row);
+      var bubble = row.querySelector('.agent-msg-bubble--offer');
+      if (bubble) {
+        bubble.replaceChildren();
+        bubble.appendChild(
+          el('div', 'agent-offer-text agent-offer-text--declined', {
+            text: 'D\u2019accord, je laisse faire.'
+          })
+        );
+      }
+      clearActiveOffer(row);
+      muteListening(800);
+      notifyLayout();
+    }
+
+    function yesDisableOffer(row) {
+      Array.prototype.forEach.call(
+        row.querySelectorAll('.agent-offer-btn'),
+        function (btn) {
+          btn.disabled = true;
+        }
+      );
+    }
+
+    function pickListenSuggestion(list) {
+      var now = Date.now();
+      var candidates = (list || []).filter(function (item) {
+        if (
+          !item ||
+          typeof item.label !== 'string' ||
+          !item.label.trim() ||
+          !Array.isArray(item.actions) ||
+          !item.actions.length
+        ) {
+          return false;
+        }
+        var key = item.label.trim();
+        var dismissedAt = dismissedOffers[key];
+        if (dismissedAt && now - dismissedAt < 10 * 60 * 1000) return false;
+        return true;
+      });
+      return candidates[0] || null;
+    }
+
+    async function runListenScan() {
+      if (!Agent.isConfigured(provider) || pending || interviewActive) return;
+      if (activeOffer) return;
+      if (typeof Agent.suggestCardImprovements !== 'function') return;
+      var seq = ++listenScanSeq;
+      listeningAnalyzing = true;
+      setListenBarState('analyzing');
+      try {
+        var list = await Agent.suggestCardImprovements(provider, bridge, {
+          onDebug: function (entry) {
+            pushDebugEntry(entry);
+          }
+        });
+        if (seq !== listenScanSeq) return;
+        var pick = pickListenSuggestion(list);
+        if (pick) {
+          appendOfferMessage(pick);
+        } else {
+          setListenBarState('idle');
+        }
+      } catch (err) {
+        if (seq !== listenScanSeq) return;
+        console.error('AgentUI listen scan failed', err);
+        if (err && err.debug) pushDebugEntry(err.debug);
+        setListenBarState('idle');
+      } finally {
+        if (seq === listenScanSeq) {
+          listeningAnalyzing = false;
+          listenCooldownUntil = Date.now() + LISTEN_COOLDOWN_MS;
+          try {
+            listenFingerprint = fingerprintCard();
+          } catch (e2) {
+            /* ignore */
+          }
+          syncApplySummary();
+        }
+      }
+    }
+
+    function scheduleListenScan() {
+      if (listenDebounceTimer) {
+        clearTimeout(listenDebounceTimer);
+        listenDebounceTimer = null;
+      }
+      listenDebounceTimer = setTimeout(function () {
+        listenDebounceTimer = null;
+        runListenScan();
+      }, LISTEN_DEBOUNCE_MS);
+    }
+
+    function tickListen() {
+      if (!listeningActive || !settleReady) return;
+      if (!Agent.isConfigured(provider) || pending || interviewActive) {
+        setListenBarState(activeOffer ? 'offer' : 'idle');
+        return;
+      }
+      if (activeOffer || listeningAnalyzing) return;
+      if (Date.now() < listenMutedUntil) return;
+      if (Date.now() < listenCooldownUntil) return;
+      var nextFp;
+      try {
+        nextFp = fingerprintCard();
+      } catch (e) {
+        return;
+      }
+      if (!listenFingerprint) {
+        listenFingerprint = nextFp;
+        setListenBarState('idle');
+        return;
+      }
+      if (nextFp === listenFingerprint) {
+        setListenBarState('idle');
+        return;
+      }
+      listenFingerprint = nextFp;
+      scheduleListenScan();
+    }
+
+    function startListening() {
+      if (listeningActive) {
+        setListenBarState(activeOffer ? 'offer' : listeningAnalyzing ? 'analyzing' : 'idle');
+        return;
+      }
+      if (!Agent.isConfigured(provider)) return;
+      listeningActive = true;
+      try {
+        listenFingerprint = fingerprintCard();
+      } catch (e) {
+        listenFingerprint = '';
+      }
+      setListenBarState('idle');
+      if (listenTimer) clearInterval(listenTimer);
+      listenTimer = setInterval(tickListen, LISTEN_POLL_MS);
+    }
+
+    function stopListening() {
+      listeningActive = false;
+      if (listenTimer) {
+        clearInterval(listenTimer);
+        listenTimer = null;
+      }
+      if (listenDebounceTimer) {
+        clearTimeout(listenDebounceTimer);
+        listenDebounceTimer = null;
+      }
+      listenBar.hidden = true;
+      syncApplySummary();
+    }
+
+    function markSettleReady() {
+      if (settleReady) return;
+      settleReady = true;
+      try {
+        listenFingerprint = fingerprintCard();
+      } catch (e) {
+        listenFingerprint = '';
+      }
+      if (Agent.isConfigured(provider) && !interviewActive) {
+        startListening();
       }
     }
 
@@ -1142,6 +1524,16 @@
       }
       messagesEl.appendChild(row);
       messagesEl.scrollTop = messagesEl.scrollHeight;
+      if (
+        role === 'assistant' &&
+        !(meta && meta.error) &&
+        !(meta && meta.silent)
+      ) {
+        announceAssistantArrival({
+          sound: !(meta && meta.noSound),
+          unread: !(meta && meta.noUnread)
+        });
+      }
       notifyLayout();
       return row;
     }
@@ -1426,6 +1818,7 @@
       pending = true;
       updateComposerEnabled();
       try {
+        muteListening();
         var result = await Agent.executeActions(bridge, [
           {
             tool: 'set_priority',
@@ -1447,6 +1840,7 @@
           content: 'Axes mis \u00e0 jour.'
         });
         if (collapse && collapse.refreshSummary) collapse.refreshSummary();
+        muteListening();
         refreshSuggestions({ animate: true });
         refreshApplySuggestions({ animate: true });
       } catch (err) {
@@ -1609,6 +2003,7 @@
 
     async function onApplySuggestion(item, index) {
       if (pending || !item || !item.actions || !item.actions.length) return;
+      muteListening();
       var result = await Agent.executeActions(bridge, item.actions);
       appendMessage('assistant', result.summary || 'Suggestion appliqu\u00e9e.', {
         note: item.label
@@ -1626,6 +2021,7 @@
         // Re-scan for follow-up improvements after applying.
         refreshApplySuggestions({ animate: true });
       }
+      muteListening();
       notifyLayout();
     }
 
@@ -1852,8 +2248,11 @@
       if (interviewActive) {
         applySection.hidden = true;
         input.placeholder = 'R\u00e9pondez \u00e0 la question\u2026';
+        setListenBarState('idle');
       } else {
         input.placeholder = 'Demandez ce que vous voulez';
+        if (settleReady && Agent.isConfigured(provider)) startListening();
+        else setListenBarState('idle');
       }
       notifyLayout();
     }
@@ -1912,6 +2311,7 @@
           });
       await persistInterviewState(interviewState);
       setInterviewMode(false);
+      markSettleReady();
       if (options.announce !== false) {
         appendMessage(
           'assistant',
@@ -1933,6 +2333,7 @@
     async function bootstrapCardInterview() {
       if (!t || interviewBootstrapped || pending) return;
       if (!Agent.isConfigured(provider) || typeof Agent.cardInterviewTurn !== 'function') {
+        markSettleReady();
         return;
       }
       interviewBootstrapped = true;
@@ -1947,6 +2348,7 @@
       if (interviewState.complete || history.length) {
         refreshSuggestions({ animate: true });
         refreshApplySuggestions({ animate: true });
+        markSettleReady();
         return;
       }
 
@@ -1955,7 +2357,8 @@
       // UI-only intro (not sent to the model history).
       appendMessage(
         'assistant',
-        'Ça semble être une nouvelle tâche. Je peux t\'aider à la configurer.'
+        'Ça semble être une nouvelle tâche. Je peux t\'aider à la configurer.',
+        { silent: true }
       );
       pending = true;
       updateComposerEnabled();
@@ -2072,6 +2475,7 @@
             ok: applied.ok
           });
           interviewPriorityTrusted = true;
+          muteListening();
         }
         if (turn.cardPatches && turn.cardPatches.length) {
           await applyCardPatchesFromTurn(turn.cardPatches);
@@ -2085,6 +2489,8 @@
         if (turn.completeInterview) {
           await finishInterview({ announce: false });
         }
+        markSettleReady();
+        announceAssistantArrival();
       } catch (err) {
         console.error('AgentUI bootstrapCardInterview failed', err);
         thinking.classList.remove('is-pending', 'is-streaming');
@@ -2095,6 +2501,7 @@
         );
         setInterviewMode(false);
         refreshSuggestions({ animate: true });
+        markSettleReady();
       } finally {
         pending = false;
         updateComposerEnabled();
@@ -2134,6 +2541,8 @@
         }
         if (Agent.isConfigured(provider) && !history.length) {
           await bootstrapCardInterview();
+        } else if (Agent.isConfigured(provider)) {
+          markSettleReady();
         }
       } catch (err) {
         console.error('AgentUI load provider failed', err);
@@ -2391,18 +2800,21 @@
           content: turn.message,
           rawJson: turn.rawJson
         });
+        announceAssistantArrival();
         if (collapse && collapse.refreshSummary) {
           collapse.refreshSummary();
         }
         // Auto-apply tools when the assistant has enough info (e.g. after a clarifying answer).
         // Executor result is source of truth — always show a technical recap.
         if (turn.actions && turn.actions.length) {
+          muteListening();
           var applied = await Agent.executeActions(bridge, turn.actions);
           appendChangeRecap(applied, {
             droppedActions: turn.droppedActions,
             ok: applied.ok
           });
           if (interviewActive) interviewPriorityTrusted = true;
+          muteListening();
           // Defer until after pending clears in finally.
           setTimeout(function () {
             if (!interviewActive) refreshApplySuggestions({ animate: true });
@@ -2483,6 +2895,7 @@
       clearPrompts();
       var actions = (fu && fu.actions) || [];
       if (actions.length) {
+        muteListening();
         var result = await Agent.executeActions(bridge, actions);
         appendMessage('assistant', result.summary || 'Action effectu\u00e9e.', {
           note: fu.label
@@ -2493,6 +2906,7 @@
           content: result.summary || result.recap || 'Action effectu\u00e9e.'
         });
         if (collapse && collapse.refreshSummary) collapse.refreshSummary();
+        muteListening();
         refreshSuggestions({ animate: true });
         refreshApplySuggestions({ animate: true });
         notifyLayout();
