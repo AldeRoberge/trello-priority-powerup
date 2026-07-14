@@ -2256,9 +2256,12 @@
       '- Si l\'utilisateur active le progr\u00e8s sans chiffre\u00a0: set_progress avec progressEnabled:true tout de suite, puis demande le % en option.',
       '- set_progress avec un % \u00e9chelonne les sous-t\u00e2ches (master) s\'il y en a\u00a0; sinon progres carte.',
       '- Inf\u00e9rence avancement (critique \u2014 c\'est le job)\u00a0:',
-      '  \u00b7 Si l\'utilisateur d\u00e9crit ce qui est fait / ce qui reste / \u00ab\u00a0un peu avanc\u00e9\u00a0\u00bb / \u00ab\u00a0presque fini\u00a0\u00bb\u00a0: APPLIQUE set_progress (progressEnabled:true + %) et add_subtask pour les restes concrets. Ne te contente PAS de chatter.',
+      '  \u00b7 Si l\'utilisateur d\u00e9crit ce qui est fait / ce qui reste / \u00ab\u00a0un peu avanc\u00e9\u00a0\u00bb / \u00ab\u00a0presque fini\u00a0\u00bb\u00a0: APPLIQUE set_progress (progressEnabled:true + %) + add_subtask. Ne te contente PAS de chatter.',
+      '  \u00b7 \u00c9tapes d\u00e9j\u00e0 faites\u00a0: add_subtask {text:"\u2026", done:true} pour chacune (cr\u00e9e + coche). Si elle existe d\u00e9j\u00e0 \u2192 toggle_subtask done:true.',
+      '  \u00b7 \u00c9tapes restantes\u00a0: add_subtask {text:"\u2026"} sans done.',
       '  \u00b7 Bar\u00e8me\u00a0: rien\approx0\u201310\u00a0; un peu / pr\u00e9paration\approx25\u201340\u00a0; bonne partie\approx50\u201365\u00a0; presque fini\approx75\u201390\u00a0; fini\approx100.',
-      '  \u00b7 Ex.\u00a0: user \u00ab\u00a0J\'ai organis\u00e9 les c\u00e2bles et achet\u00e9 les accessoires, il reste \u00e0 les installer\u00a0\u00bb \u2192 set_progress {progressEnabled:true, progress:70} + add_subtask {text:"Installer les accessoires"} + confirme bri\u00e8vement.',
+      '  \u00b7 Ex.\u00a0: user \u00ab\u00a0J\'ai organis\u00e9 les c\u00e2bles et achet\u00e9 les accessoires, il reste \u00e0 les installer\u00a0\u00bb \u2192 set_progress {progressEnabled:true, progress:70} + add_subtask {text:"Organiser les c\u00e2bles", done:true} + add_subtask {text:"Acheter les accessoires", done:true} + add_subtask {text:"Installer les accessoires"} + confirme bri\u00e8vement.',
+      '  \u00b7 Ex. (d\u00e9j\u00e0 fait seuls)\u00a0: user \u00ab\u00a0J\'ai choisi les dipl\u00f4mes. J\'ai pr\u00e9par\u00e9 l\'emplacement\u00a0\u00bb \u2192 add_subtask done:true pour chaque + set_progress.',
       '  \u00b7 M\u00eame sans \u00ab\u00a0mets le progr\u00e8s \u00e0 X%\u00a0\u00bb\u00a0: d\u00e8s qu\'un indice clair change Progr\u00e8s / Urgence / Impact / Facilit\u00e9 / blocage, mets le champ \u00e0 jour dans actions.',
       '  \u00b7 100% / fini / termin\u00e9 / complete_all_subtasks (critique)\u00a0: F\u00c9LICITE (Bravo, emotion happy) + trigger_effect confetti (ou flowers). INTERDIT de demander une \u00e9ch\u00e9ance / \u00ab\u00a0Veux-tu que je d\u00e9finisse l\'\u00e9ch\u00e9ance?\u00a0\u00bb / \u00ab\u00a0C\'est pour quand?\u00a0\u00bb \u2014 une t\u00e2che termin\u00e9e n\'en a plus besoin.',
       '  \u00b7 Ex. VRAI\u00a0: user \u00ab\u00a0Mets le progr\u00e8s \u00e0 100%\u00a0\u00bb \u2192 {"message":"Bravo, c\'est pli\u00e9\u00a0!","emotion":"happy","suggestions":["Passer en Termin\u00e9","Et ensuite?"],"followUps":[],"actions":[{"tool":"set_progress","args":{"progressEnabled":true,"progress":100}},{"tool":"trigger_effect","args":{"effect":"confetti"}}]}',
@@ -2338,7 +2341,7 @@
       '- set_project: { projectId?: string, matchText?: string, name?: string, clear?: boolean } (lie la carte \u00e0 un projet Objectif\u00a0; clear:true d\u00e9lie\u00a0; matchText/name parmi context.goals.projects)',
       '- rename_card: { name: string } (nouveau titre de la carte\u00a0; name obligatoire, non vide)',
       '- set_description: { desc: string } (nouvelle description compl\u00e8te\u00a0; desc obligatoire en string, "" pour effacer)',
-      '- add_subtask: { text: string } (text obligatoire, non vide)',
+      '- add_subtask: { text: string, done?: boolean } (text obligatoire, non vide\u00a0; done:true = cr\u00e9er d\u00e9j\u00e0 coch\u00e9e)',
       '- rename_subtask: { text: string, id?: string, matchText?: string } (nouveau text\u00a0; id OU matchText)',
       '- remove_subtask: { id?: string, matchText?: string } (id OU matchText)',
       '- toggle_subtask: { id?: string, matchText?: string, done?: boolean }',
@@ -3308,9 +3311,12 @@
       '- Sur r\u00e9ponses avancement (critique \u2014 NE PAS seulement chatter)\u00a0:',
       '  \u00b7 M\u00e9morise (cardPatches) + APPLIQUE les outils\u00a0: set_progress, add_subtask, set_priority / set_blocked si l\'indice le justifie.',
       '  \u00b7 \u00ab\u00a0D\u00e9j\u00e0 fait\u00a0\u00bb / \u00ab\u00a0Reste\u00a0\u00bb / \u00ab\u00a0commenc\u00e9 un peu / presque fini\u00a0\u00bb \u2192 set_progress avec progressEnabled:true + % estim\u00e9 (voir bar\u00e8me ci-dessous) + cardPatches \u00ab\u00a0D\u00e9j\u00e0 fait\u00a0: \u2026\u00a0\u00bb / \u00ab\u00a0Reste\u00a0: \u2026\u00a0\u00bb.',
-      '  \u00b7 Chaque \u00e9tape restante claire \u2192 add_subtask (texte court). Si context.progress.items a d\u00e9j\u00e0 l\'\u00e9tape, ne la recr\u00e9e pas.',
+      '  \u00b7 D\u00e9j\u00e0 fait (OBLIGATOIRE)\u00a0: pour CHAQUE \u00e9tape concr\u00e8te d\u00e9j\u00e0 faite \u2192 add_subtask {text:"\u2026", done:true}. Cr\u00e9e ET coche. INTERDIT de seulement remember / set_progress sans sous-t\u00e2ches.',
+      '  \u00b7 Si l\'\u00e9tape existe d\u00e9j\u00e0 dans context.progress.items (m\u00eame sens)\u00a0: toggle_subtask {matchText:"\u2026", done:true} au lieu de la recr\u00e9er.',
+      '  \u00b7 Chaque \u00e9tape restante claire \u2192 add_subtask {text:"\u2026"} (sans done, ou done:false). Si context.progress.items a d\u00e9j\u00e0 l\'\u00e9tape, ne la recr\u00e9e pas.',
       '  \u00b7 Bar\u00e8me % (honn\u00eate)\u00a0: rien commenc\u00e9\approx0\u201310\u00a0; un peu / pr\u00e9paration\approx25\u201340\u00a0; une bonne partie\approx50\u201365\u00a0; presque fini / il reste surtout \u00e0 installer-finaliser\approx75\u201390\u00a0; fini\approx100.',
-      '  \u00b7 Ex. user (d\u00e9j\u00e0 fait)\u00a0: \u00ab\u00a0J\'ai organis\u00e9 quelques c\u00e2bles. J\'ai achet\u00e9 des accessoires. J\'ai planifi\u00e9 l\'emplacement\u00a0\u00bb \u2192 set_progress {progressEnabled:true, progress:55} + remember \u00ab\u00a0D\u00e9j\u00e0 fait\u00a0: \u2026\u00a0\u00bb + question \u00ab\u00a0Qu\'est-ce qui reste \u00e0 faire?\u00a0\u00bb.',
+      '  \u00b7 Ex. user (d\u00e9j\u00e0 fait)\u00a0: \u00ab\u00a0J\'ai choisi les dipl\u00f4mes \u00e0 installer. J\'ai pr\u00e9par\u00e9 l\'emplacement\u00a0\u00bb \u2192 set_progress {progressEnabled:true, progress:40} + add_subtask {text:"Choisir les dipl\u00f4mes", done:true} + add_subtask {text:"Pr\u00e9parer l\'emplacement", done:true} + remember + question \u00ab\u00a0Qu\'est-ce qui reste \u00e0 faire?\u00a0\u00bb.',
+      '  \u00b7 Ex. FAUX (d\u00e9j\u00e0 fait)\u00a0: seulement set_progress + remember, sans add_subtask done:true.',
       '  \u00b7 Ex. user (reste)\u00a0: \u00ab\u00a0Installer les accessoires\u00a0\u00bb \u2192 add_subtask {text:"Installer les accessoires"} + set_progress (ex. 70\u201380 si le gros est derri\u00e8re) + remember \u00ab\u00a0Reste\u00a0: installer les accessoires\u00a0\u00bb + suite utile (\u00e9ch\u00e9ance / axes).',
       '  \u00b7 INTERDIT de r\u00e9pondre \u00e0 une question d\'avancement avec actions=[] alors que l\'utilisateur a donn\u00e9 du contenu exploitable.',
       '- Suggestions permission\u00a0: Oui / Non / Je sais pas (+ éventuellement le nom si tu le devines).',
@@ -3448,6 +3454,7 @@
       '- Ex.\u00a0: \u00ab\u00a0Marie-Laure serait vraiment tr\u00e8s f\u00e2ch\u00e9e\u00a0\u00bb \u2192 urgence \u00e9lev\u00e9e (3\u20134) + cardPatches remember + message = seule la question suivante courte.',
       '- Ex. achat logiciel\u00a0: user \u00ab\u00a0Tr\u00e8s cher\u00a0\u00bb \u2192 ease bas (1\u20132) + cardPatches remember co\u00fbt + estimatedDurationMinutes court + question \u00ab\u00a0Faut la permission de quelqu\'un pour avancer?\u00a0\u00bb.',
       '- Ex. plan commenc\u00e9\u00a0: user \u00ab\u00a0Oui, un peu\u00a0\u00bb \u2192 cardPatches [{"op":"remember","text":"Plan d\u00e9j\u00e0 commenc\u00e9 (un peu)"}] + set_progress {progressEnabled:true, progress:30} + question \u00ab\u00a0Qu\'est-ce qui est d\u00e9j\u00e0 fait?\u00a0\u00bb.',
+      '- Ex. d\u00e9j\u00e0 fait (critique)\u00a0: user \u00ab\u00a0J\'ai choisi les dipl\u00f4mes \u00e0 installer. J\'ai pr\u00e9par\u00e9 l\'emplacement\u00a0\u00bb \u2192 add_subtask {text:"Choisir les dipl\u00f4mes", done:true} + add_subtask {text:"Pr\u00e9parer l\'emplacement", done:true} + set_progress {progressEnabled:true, progress:40} + remember + question reste \u00e0 faire.',
       '- Ex. plan presque fini\u00a0: user \u00ab\u00a0Oui, presque termin\u00e9\u00a0\u00bb \u2192 set_progress {progressEnabled:true, progress:85} + remember + question sur le reste (PAS l\'\u00e9ch\u00e9ance tant qu\'il reste du travail).',
       '- Ex. plan fini / 100%\u00a0: user \u00ab\u00a0Oui, c\'est termin\u00e9\u00a0\u00bb / \u00ab\u00a0100%\u00a0\u00bb \u2192 set_progress {progressEnabled:true, progress:100} + trigger_effect confetti + message f\u00e9licitations (Bravo\u2026). INTERDIT \u00e9ch\u00e9ance. Si axes d\u00e9j\u00e0 ok\u00a0: completeInterview:true\u00a0; sinon question d\'axe utile ensuite.',
       '- Ex. plan pas commenc\u00e9\u00a0: user \u00ab\u00a0Non, pas encore\u00a0\u00bb \u2192 cardPatches remember + set_progress {progressEnabled:true, progress:0} (ou laisse 0) + message \u00ab\u00a0Pourquoi \u00e7a n\'a pas \u00e9t\u00e9 commenc\u00e9?\u00a0\u00bb + suggestions contextuelles.',
@@ -3504,7 +3511,7 @@
       '- set_project: { projectId?, matchText?, name?, clear? }',
       '- rename_card: { name } (titre plus clair / plus court si la r\u00e9ponse le justifie)',
       '- set_description: { desc } (clarifier le process / p\u00e9rim\u00e8tre / pourquoi\u00a0; desc = texte complet)',
-      '- add_subtask: { text } (quand une \u00e9tape concr\u00e8te \u00e9merge clairement)',
+      '- add_subtask: { text } (quand une \u00e9tape concr\u00e8te \u00e9merge clairement\u00a0; done:true si d\u00e9j\u00e0 faite)',
       '- toggle_subtask: { id?|matchText?, done?: boolean } (cocher une \u00e9tape d\u00e9j\u00e0 dans progress.items)',
       '- set_subtask_progress: { id?|matchText?, progress: 0-100 }',
       '- trigger_effect: { effect } (confetti / flowers quand progress=100 \u2014 f\u00e9licitations)',
@@ -7196,7 +7203,13 @@
           Date.now().toString(36) +
           '-' +
           Math.random().toString(36).slice(2, 8);
-        items.push({ id: id, text: text, done: false, progress: 0 });
+        var addDone = !!args.done;
+        items.push({
+          id: id,
+          text: text,
+          done: addDone,
+          progress: addDone ? 100 : 0
+        });
         var added = Object.assign({}, data, { items: items });
         delete added.progress;
         if (added.progressEnabled === false) delete added.progressEnabled;
