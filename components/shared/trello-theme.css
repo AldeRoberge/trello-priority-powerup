@@ -2026,12 +2026,12 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   gap: 8px;
   padding: 10px 10px;
   border-radius: var(--completion-radius, 10px);
-  background: color-mix(in srgb, var(--tp-surface-subtle) 88%, var(--tp-surface));
+  background: color-mix(in srgb, #000 12%, var(--tp-surface-subtle));
   transition: background 0.15s ease;
 }
 
 .tp-completion-item:hover {
-  background: var(--tp-surface-subtle);
+  background: color-mix(in srgb, #000 16%, var(--tp-surface-subtle));
 }
 
 .tp-completion-item.is-flipping {

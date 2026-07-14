@@ -3196,20 +3196,41 @@ html[data-color-mode='dark'] .tp-page--priority .agent-msg-bubble--offer {
   );
 }
 
+html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats {
+  color: #8c9bab;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-label {
+  color: #738496;
+  opacity: 1;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-value {
+  color: #9fadbc;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-sep {
+  color: color-mix(in srgb, #738496 70%, transparent);
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-debug-btn {
+  color: #8c9bab;
+}
+
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-panel {
-  color: color-mix(in srgb, #fff 72%, #9fadbc);
+  color: color-mix(in srgb, #9fadbc 78%, #738496);
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-toolbar-title,
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-list-label,
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-section > summary,
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-metric-row dd {
-  color: color-mix(in srgb, #fff 78%, #9fadbc);
+  color: color-mix(in srgb, #b6c2cf 72%, #8c9bab);
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-list-meta,
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-empty {
-  color: color-mix(in srgb, #fff 58%, #9fadbc);
+  color: #738496;
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-list-item,
@@ -3223,7 +3244,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-list-item.is-active
 
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
   background: color-mix(in srgb, var(--tp-surface-subtle) 55%, #000 45%);
-  color: color-mix(in srgb, #fff 68%, #9fadbc);
+  color: color-mix(in srgb, #9fadbc 82%, #738496);
 }
 
 @keyframes agent-suggestion-in {
@@ -3620,12 +3641,13 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
 
 .tp-page--priority .agent-chat-stats-label {
   color: var(--tp-text-muted);
-  opacity: 0.85;
+  opacity: 0.75;
   flex: 0 0 auto;
 }
 
 .tp-page--priority .agent-chat-stats-value {
-  color: var(--tp-text);
+  color: var(--tp-text-subtle);
+  opacity: 0.9;
   font-variant-numeric: tabular-nums;
   overflow: hidden;
   text-overflow: ellipsis;
