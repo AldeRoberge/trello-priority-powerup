@@ -1008,11 +1008,34 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
 
 .tp-page--priority .agent-interview-skip {
   flex: 0 0 auto;
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   padding: 0;
-  border: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
   background: transparent;
+  color: var(--tp-text-muted, #626f86);
   cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.tp-page--priority .agent-interview-skip .ti {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.tp-page--priority .agent-interview-skip:hover {
+  color: var(--tp-text, #172b4d);
+  background: var(--tp-surface-hover, rgba(9, 30, 66, 0.06));
+  border-color: var(--tp-border, rgba(9, 30, 66, 0.14));
+}
+
+.tp-page--priority .agent-interview-skip:focus-visible {
+  outline: 2px solid var(--tp-primary, #0c66e4);
+  outline-offset: 1px;
 }
 
 .tp-page--priority .agent-composer .tp-tab-complete-wrap {

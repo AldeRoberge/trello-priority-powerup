@@ -37,6 +37,7 @@
       getPriorityState: options.getPriorityState || function () { return {}; },
       getCompletion: options.getCompletion || function () { return { items: [] }; },
       getMemory: options.getMemory || function () { return null; },
+      getCardMemory: options.getCardMemory || function () { return null; },
       getProfile: options.getProfile || function () { return null; },
       getBoardDigest: options.getBoardDigest || function () { return ''; },
       getGoals: options.getGoals || function () { return null; },
@@ -59,6 +60,8 @@
     };
     var onMemoryUpdate =
       typeof options.onMemoryUpdate === 'function' ? options.onMemoryUpdate : null;
+    var onCardMemoryUpdate =
+      typeof options.onCardMemoryUpdate === 'function' ? options.onCardMemoryUpdate : null;
     var onLayoutChange = options.onLayoutChange || function () {};
     var initiallyOpen = !!options.initiallyOpen;
     var shouldFocusComposer = options.focusComposer != null
@@ -367,10 +370,14 @@
 
     var interviewBar = el('div', 'agent-interview-bar');
     interviewBar.hidden = true;
-    var interviewSkipBtn = el('button', 'tp-link agent-interview-skip', {
+    var interviewSkipBtn = el('button', 'agent-interview-skip', {
       type: 'button',
-      text: 'Ignorer la configuration initiale'
+      'aria-label': 'Ignorer la configuration initiale',
+      title: 'Ignorer la configuration initiale'
     });
+    var interviewSkipIcon = el('i', 'ti ti-x');
+    interviewSkipIcon.setAttribute('aria-hidden', 'true');
+    interviewSkipBtn.appendChild(interviewSkipIcon);
     interviewBar.appendChild(interviewSkipBtn);
     chatPanel.appendChild(interviewBar);
 
@@ -1872,6 +1879,28 @@
       return interviewState;
     }
 
+    async function applyCardPatchesFromTurn(patches) {
+      if (!patches || !patches.length || !t) return null;
+      var Mem = global.AgentMemory;
+      if (!Mem || typeof Mem.applyCardPatches !== 'function') return null;
+      try {
+        var current =
+          (typeof bridge.getCardMemory === 'function' && bridge.getCardMemory()) ||
+          Mem.emptyCardMemory();
+        var updated = await Mem.applyCardPatches(t, current, patches);
+        if (onCardMemoryUpdate) onCardMemoryUpdate(updated);
+        else {
+          bridge.getCardMemory = function () {
+            return updated;
+          };
+        }
+        return updated;
+      } catch (err) {
+        console.error('AgentUI applyCardPatches failed', err);
+        return null;
+      }
+    }
+
     async function finishInterview(options) {
       options = options || {};
       if (interviewState.complete && !interviewActive) return;
@@ -2034,6 +2063,9 @@
             ok: applied.ok
           });
           interviewPriorityTrusted = true;
+        }
+        if (turn.cardPatches && turn.cardPatches.length) {
+          await applyCardPatchesFromTurn(turn.cardPatches);
         }
         if (turn.usage) updateSessionStats(turn.usage);
         renderPrompts(turn.prompts);
@@ -2381,6 +2413,9 @@
               }
             );
           }
+        }
+        if (turn.cardPatches && turn.cardPatches.length) {
+          await applyCardPatchesFromTurn(turn.cardPatches);
         }
         if (interviewActive && turn.message && /\?/.test(turn.message)) {
           interviewState = Agent.markInterviewQuestionAsked

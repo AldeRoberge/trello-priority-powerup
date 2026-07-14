@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=section-tint-1" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css?v=section-tint-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
-  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=card-interview-1" />
+  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=interview-skip-x-1" />
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
   <script src="./components/priority/priority-ui.js?v=section-tint-1"></script>
@@ -30,7 +30,7 @@
   <script src="./components/agent/agent-memory.js?v=card-interview-1"></script>
   <script src="./components/profile/user-profile.js?v=profile-2"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
-  <script src="./components/agent/agent-ui.js?v=card-interview-1"></script>
+  <script src="./components/agent/agent-ui.js?v=interview-skip-x-1"></script>
 </head>
 <body class="tp-page tp-page--priority">
   <div class="compare-page">
@@ -64,6 +64,7 @@
     let infoSection = null;
     let cardDesc = '';
     let cachedMemory = null;
+    let cachedCardMemory = null;
     let cachedProfile = null;
     let boardDigestCache = '';
 
@@ -1367,6 +1368,12 @@
           console.error('AgentMemory.load failed', memErr);
           cachedMemory = null;
         }
+        try {
+          cachedCardMemory = await AgentMemory.loadCardMemory(t);
+        } catch (cardMemErr) {
+          console.error('AgentMemory.loadCardMemory failed', cardMemErr);
+          cachedCardMemory = null;
+        }
       }
 
       if (window.UserProfile) {
@@ -1568,6 +1575,20 @@
           onMemoryUpdate: function (next) {
             if (next && typeof next === 'object') {
               cachedMemory = next;
+            }
+          },
+          getCardMemory: function () {
+            return (
+              cachedCardMemory || {
+                version: 1,
+                facts: [],
+                updatedAt: ''
+              }
+            );
+          },
+          onCardMemoryUpdate: function (next) {
+            if (next && typeof next === 'object') {
+              cachedCardMemory = next;
             }
           },
           getProfile: function () {

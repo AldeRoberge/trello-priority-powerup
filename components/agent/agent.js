@@ -751,6 +751,30 @@
       .trim();
   }
 
+  function normalizeCardPatches(raw) {
+    var list = Array.isArray(raw) ? raw : [];
+    var out = [];
+    list.forEach(function (p) {
+      if (!p || typeof p !== 'object') return;
+      var op = String(p.op || '')
+        .trim()
+        .toLowerCase();
+      if (op === 'remember' || op === 'note') {
+        var text = typeof p.text === 'string' ? p.text.trim() : '';
+        if (!text) return;
+        out.push({ op: op === 'note' ? 'note' : 'remember', text: text.slice(0, 160) });
+      } else if (op === 'forget') {
+        var q =
+          (typeof p.query === 'string' && p.query.trim()) ||
+          (typeof p.text === 'string' && p.text.trim()) ||
+          '';
+        if (!q) return;
+        out.push({ op: 'forget', query: q.slice(0, 120) });
+      }
+    });
+    return out.slice(0, 4);
+  }
+
   function buildContext(bridge) {
     var ctx = {
       today: todayIsoLocal(),
@@ -844,6 +868,28 @@
                   .slice(0, 10)
               : [],
             onboardingComplete: !!view.onboardingComplete
+          };
+        }
+      } catch (e) { /* ignore */ }
+    }
+    if (typeof bridge.getCardMemory === 'function') {
+      try {
+        var cardMem = bridge.getCardMemory();
+        if (cardMem && typeof cardMem === 'object') {
+          var MemCard = global.AgentMemory;
+          var cardNorm =
+            MemCard && typeof MemCard.normalizeCardMemory === 'function'
+              ? MemCard.normalizeCardMemory(cardMem)
+              : cardMem;
+          ctx.cardMemory = {
+            facts: Array.isArray(cardNorm.facts)
+              ? cardNorm.facts
+                  .map(function (f) {
+                    return typeof f === 'string' ? f : f && f.text ? f.text : '';
+                  })
+                  .filter(Boolean)
+                  .slice(0, 8)
+              : []
           };
         }
       } catch (e) { /* ignore */ }
@@ -1187,7 +1233,12 @@
       '- Ex. urgence haute (palier Urgente), impact faible\u00a0: message du type \u00ab\u00a0La priorit\u00e9 de cette t\u00e2che est urgente. Elle est jug\u00e9e avoir un impact faible.\u00a0\u00bb',
       '- Si priority.enabled=false\u00a0: dis qu\'aucune priorit\u00e9 n\'est d\u00e9finie (ne sors pas d\'anciennes valeurs).',
       'R\u00e9ponds UNIQUEMENT avec un objet JSON valide de la forme\u00a0:',
-      '{"thinking":"notes priv\u00e9es","message":"texte visible","suggestions":["Question utile","Autre intention"],"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}]}',
+      '{"thinking":"notes priv\u00e9es","message":"texte visible","suggestions":["Question utile","Autre intention"],"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}],"cardPatches":[{"op":"remember","text":"fait local \u00e0 la carte"}]}',
+      'M\u00e9moire de CETTE carte (context.cardMemory.facts)\u00a0:',
+      '- Faits locaux \u00e0 la carte (personnes qui attendent, enjeux, contraintes, d\u00e9pendances).',
+      '- Quand tu apprends un fait utile pour plus tard\u00a0: cardPatches:[{"op":"remember","text":"\u2026"}] (1\u20132 max).',
+      '- INTERDIT d\'y mettre l\'identit\u00e9 utilisateur g\u00e9n\u00e9rale (nom, r\u00f4le) \u2014 \u00e7a va dans la m\u00e9moire board.',
+      '- Sers-toi de cardMemory avant de reposer une question d\u00e9j\u00e0 r\u00e9pondue.',
       'Champ thinking (obligatoire)\u00a0:',
       '- Toujours \u00e9crire thinking AVANT message (ordre JSON\u00a0: thinking puis message).',
       '- Utilise-le pour v\u00e9rifier le contexte et planifier les outils. Court, factuel, en fran\u00e7ais ou abr\u00e9g\u00e9.',
@@ -2044,6 +2095,7 @@
         actions: [],
         prompts: [],
         followUps: [],
+        cardPatches: [],
         completeInterview: false,
         droppedActions: [],
         rawJson: '',
@@ -2063,32 +2115,38 @@
     };
 
     var system = [
-      'Tu es l\'assistant Priorit\u00e9 Trello en mode INTERVIEW premi\u00e8re ouverture (style Akinator / Q20).',
-      'Tu parles en fran\u00e7ais, de fa\u00e7on claire et concise.',
-      'Objectif\u00a0: d\u00e9duire avec le MOINS de questions possible\u00a0:',
-      '1) Urgence (0\u20134), Impact / port\u00e9e (0\u20134), Facilit\u00e9 (1\u20135) \u2014 OBLIGATOIRE avant de terminer.',
-      '2) Dur\u00e9e estim\u00e9e, \u00e9ch\u00e9ance, projet li\u00e9 \u2014 seulement si tu peux les d\u00e9duire avec confiance.',
-      '3) Sous-t\u00e2ches (add_subtask) \u2014 SEULEMENT si le but est tr\u00e8s \u00e9vident\u00a0; max 2\u20133\u00a0; sinon n\'en invente pas.',
+      'Tu es l\'assistant Priorit\u00e9 Trello en mode INTERVIEW premi\u00e8re ouverture.',
+      'Tu parles en fran\u00e7ais, simplement, comme un coll\u00e8gue qui aide \u00e0 cadrer la carte.',
+      'Objectif\u00a0: d\u00e9duire Urgence (0\u20134), Impact/port\u00e9e (0\u20134) et Facilit\u00e9 (1\u20135) \u2014 OBLIGATOIRE avant de terminer \u2014 puis optionnellement dur\u00e9e, \u00e9ch\u00e9ance, projet.',
+      '',
+      'Style conversationnel (tr\u00e8s important)\u00a0:',
+      '- Pose UNE question en langage naturel. JAMAIS de chiffres ni d\'\u00e9chelles \u00ab\u00a00 \u00e0 4\u00a0\u00bb / \u00ab\u00a01 \u00e0 5\u00a0\u00bb dans la question ni dans les suggestions.',
+      '- Les gens r\u00e9pondent avec des mots\u00a0; TOI tu traduis en axes dans actions (set_priority).',
+      '- Ex. urgence\u00a0: \u00ab\u00a0Que se passerait-il si cette t\u00e2che n\'\u00e9tait pas faite\u00a0?\u00a0\u00bb',
+      '- Ex. impact\u00a0: \u00ab\u00a0Qui serait le plus touch\u00e9 si on la livrait (ou pas)\u00a0?\u00a0\u00bb',
+      '- Ex. facilit\u00e9\u00a0: \u00ab\u00a0C\'est simple \u00e0 faire, ou \u00e7a demande du travail\u00a0?\u00a0\u00bb',
+      '- Suggestions = r\u00e9ponses courtes en mots (2\u20134), pas des nombres. Ex.\u00a0: \u00ab\u00a0Pas grand-chose\u00a0\u00bb, \u00ab\u00a0Quelqu\'un attend\u00a0\u00bb, \u00ab\u00a0\u00c7a bloque d\'autres trucs\u00a0\u00bb, \u00ab\u00a0Cons\u00e9quences graves\u00a0\u00bb.',
+      '- Utilise \u2026 seulement pour une r\u00e9ponse \u00e0 compl\u00e9ter (ex. \u00ab\u00a0\u2026 attend\u00a0\u00bb).',
+      '',
+      'Inf\u00e9rence + m\u00e9moire carte\u00a0:',
+      '- D\u00e8s qu\'une r\u00e9ponse laisse assez d\'indices\u00a0: set_priority IMM\u00c9DIATEMENT avec les axes d\u00e9duits, confirme bri\u00e8vement, puis question suivante si besoin.',
+      '- Ex.\u00a0: \u00ab\u00a0Marie-Laure serait vraiment tr\u00e8s f\u00e2ch\u00e9e\u00a0\u00bb \u2192 urgence \u00e9lev\u00e9e (3\u20134) + cardPatches remember (\u00ab\u00a0Marie-Laure attend cette t\u00e2che / serait tr\u00e8s f\u00e2ch\u00e9e si non faite\u00a0\u00bb).',
+      '- M\u00e9morise les faits utiles \u00e0 CETTE carte via cardPatches (personnes, enjeux, attentes, contraintes)\u00a0: {"op":"remember","text":"\u2026"}.',
+      '- Ne repose pas ce qui est d\u00e9j\u00e0 dans context.cardMemory.facts ou dans l\'historique.',
       '',
       'Le TITRE de la carte est ta piste principale. Les cartes voisines et r\u00e9centes aident \u00e0 affiner.',
-      'Les axes priority actuels sont des VALEURS PAR D\u00c9FAUT non fiables (placeholder Importance)\u00a0; ne les traite pas comme d\u00e9j\u00e0 valid\u00e9s sauf si priorityAxesTrusted=true.',
+      'Les axes priority actuels sont des VALEURS PAR D\u00c9FAUT non fiables sauf si priorityAxesTrusted=true.',
       '',
       'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
-      '{"thinking":"...","message":"...","suggestions":["..."],"prompts":[],"actions":[{"tool":"...","args":{}}],"completeInterview":false}',
+      '{"thinking":"...","message":"...","suggestions":["..."],"prompts":[],"actions":[{"tool":"...","args":{}}],"cardPatches":[{"op":"remember","text":"..."}],"completeInterview":false}',
       '',
       'R\u00e8gles interview\u00a0:',
-      '- Pose UNE question claire \u00e0 la fois (choix multiples / oui-non pr\u00e9f\u00e9r\u00e9s).',
-      '- suggestions = r\u00e9ponses cliquables courtes (utilise \u2026 pour \u00e0 compl\u00e9ter).',
-      '- Si tu poses une \u00e9chelle Urgence ou Impact (0\u20134)\u00a0: inclus les 5 niveaux dans suggestions (0, 1, 2, 3 et 4) \u2014 n\'en omets aucun.',
-      '- Si tu poses une \u00e9chelle Facilit\u00e9 (1\u20135)\u00a0: inclus les 5 niveaux dans suggestions (1, 2, 3, 4 et 5).',
-      '- INTERDIT dans message\u00a0: l\u00e9gendes entre parenth\u00e8ses du type \u00ab\u00a0(0 = pas urgent, 4 = tr\u00e8s urgent)\u00a0\u00bb ou \u00ab\u00a0(1 = difficile, 5 = facile)\u00a0\u00bb \u2014 l\'UI colore les suggestions pour \u00e7a.',
-      '- Ex. urgence\u00a0: \u00ab\u00a0Quelle est l\'urgence de cette t\u00e2che sur une \u00e9chelle de 0 \u00e0 4\u00a0?\u00a0\u00bb (sans parenth\u00e8ses).',
-      '- Sinon (oui/non, projet, dur\u00e9e\u2026)\u00a0: 2\u20134 suggestions suffisent.',
-      '- Maximise le gain d\'information pour urgence / impact / facilit\u00e9.',
-      '- D\u00e8s que tu es assez confiant pour un axe (ou dur\u00e9e / due / projet)\u00a0: mets l\'outil dans actions IMM\u00c9DIATEMENT, confirme bri\u00e8vement, puis question suivante si besoin.',
+      '- Une question claire \u00e0 la fois.',
+      '- INTERDIT de demander \u00ab\u00a0sur une \u00e9chelle de 0 \u00e0 4\u00a0\u00bb, des chiffres seuls, ou des l\u00e9gendes (0 = \u2026, 4 = \u2026).',
+      '- Maximise le gain d\'information pour urgence / impact / facilit\u00e9 via des situations concr\u00e8tes.',
       '- N\'invente PAS d\'\u00e9ch\u00e9ance, projet ou sous-t\u00e2ches sans indice (titre, r\u00e9ponse, voisinage).',
       '- Si l\'utilisateur dit passer / plus tard / skip / non merci\u00a0: completeInterview:true, actions=[] (sauf ce que tu as d\u00e9j\u00e0 assez pour appliquer).',
-      '- Quand urgence+impact+ease sont fix\u00e9s (via actions cette tour ou tours pr\u00e9c\u00e9dents)\u00a0: tu peux completeInterview:true. Cible ~4\u20138 questions max.',
+      '- Quand urgence+impact+ease sont fix\u00e9s (via actions cette tour ou tours pr\u00e9c\u00e9dents)\u00a0: tu peux completeInterview:true. Cible ~3\u20136 questions max.',
       '- completeInterview:true quand l\'interview est termin\u00e9e.',
       '- \u00c9vite de reposer les questions d\u00e9j\u00e0 pos\u00e9es.',
       '- INTERDIT\u00a0: \u00ab\u00a0Comment puis-je vous aider?\u00a0\u00bb / questions vagues ouvertes.',
@@ -2098,7 +2156,7 @@
       '- set_due: { dueDate?: YYYY-MM-DD, dueTime?: HH:MM, relativeHours?, relativeMinutes?, clear? }',
       '- set_project: { projectId?, matchText?, name?, clear? }',
       '- add_subtask: { text } (rare, seulement si tr\u00e8s clair)',
-      '- prompts optionnels: [{ "type":"priority_axes", "urgency":n, "impact":n, "ease":n }]',
+      '- prompts optionnels: [{ "type":"priority_axes", "urgency":n, "impact":n, "ease":n }] (apr\u00e8s inf\u00e9rence, pour affiner visuellement)',
       '',
       'Contexte carte / interview\u00a0:',
       JSON.stringify({
@@ -2109,6 +2167,7 @@
         priority: context.priority,
         goals: context.goals || null,
         memory: context.memory,
+        cardMemory: context.cardMemory || { facts: [] },
         profile: context.profile,
         asked: context.interview.asked,
         surrounding: context.interview.surrounding,
@@ -2248,6 +2307,10 @@
     usage.latencyMs = Date.now() - t0;
     usage.historyTurns = (history || []).length;
 
+    var cardPatches = normalizeCardPatches(
+      (data && data.cardPatches) || (parsed && parsed.cardPatches)
+    );
+
     return {
       message: message,
       suggestions: normalizeSuggestionList(
@@ -2257,6 +2320,7 @@
       actions: actions,
       prompts: prompts,
       followUps: parsed.followUps || [],
+      cardPatches: cardPatches,
       completeInterview: completeInterview,
       droppedActions: parsed.droppedActions || [],
       rawJson: content,
@@ -2593,7 +2657,8 @@
         suggestions: [],
         prompts: [],
         actions: [],
-        droppedActions: []
+        droppedActions: [],
+        cardPatches: []
       };
     }
     var jsonText = text;
@@ -2647,7 +2712,8 @@
         suggestions: suggestions,
         prompts: Array.isArray(parsed.prompts) ? parsed.prompts : [],
         actions: normalized.actions,
-        droppedActions: normalized.dropped
+        droppedActions: normalized.dropped,
+        cardPatches: normalizeCardPatches(parsed.cardPatches)
       };
     } catch (e) {
       return {
@@ -2656,7 +2722,8 @@
         suggestions: [],
         prompts: [],
         actions: [],
-        droppedActions: []
+        droppedActions: [],
+        cardPatches: []
       };
     }
   }
@@ -3146,6 +3213,7 @@
       prompts: prompts,
       actions: actions,
       droppedActions: parsed.droppedActions || [],
+      cardPatches: parsed.cardPatches || [],
       rawJson: response.content,
       context: context,
       usage: usage,
@@ -5047,6 +5115,7 @@
     detectPriorityTierInText: detectPriorityTierInText,
     rewriteActionsForPriorityTier: rewriteActionsForPriorityTier,
     normalizePrompts: normalizePrompts,
+    normalizeCardPatches: normalizeCardPatches,
     chatTurn: chatTurn,
     memoryTurn: memoryTurn,
     cardInterviewTurn: cardInterviewTurn,

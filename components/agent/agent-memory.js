@@ -773,12 +773,150 @@
     return save(t, next);
   }
 
+  // ── Per-card memory (card/shared) — local facts about THIS card only ─────
+
+  var CARD_STORAGE_KEY = 'cardAiMemory';
+  var MAX_CARD_FACTS = 8;
+  var MAX_CARD_FACT_LEN = 160;
+
+  function emptyCardMemory() {
+    return { version: 1, facts: [], updatedAt: '' };
+  }
+
+  function normalizeCardFact(raw) {
+    if (!raw) return null;
+    var text =
+      typeof raw === 'string'
+        ? trimStr(raw, MAX_CARD_FACT_LEN)
+        : trimStr(raw && raw.text, MAX_CARD_FACT_LEN);
+    if (!text || isJunkFact(text)) return null;
+    var key =
+      (raw && typeof raw === 'object' && typeof raw.key === 'string' && raw.key) ||
+      factIdentityKey(text);
+    return {
+      id:
+        raw && typeof raw === 'object' && typeof raw.id === 'string' && raw.id.trim()
+          ? raw.id.trim()
+          : factId(),
+      text: text,
+      key: key,
+      updatedAt:
+        raw && typeof raw === 'object' && typeof raw.updatedAt === 'string' && raw.updatedAt
+          ? raw.updatedAt
+          : new Date().toISOString()
+    };
+  }
+
+  function normalizeCardMemory(raw) {
+    var src = raw && typeof raw === 'object' ? raw : {};
+    var facts = [];
+    if (Array.isArray(src.facts)) {
+      for (var i = 0; i < src.facts.length; i++) {
+        var f = normalizeCardFact(src.facts[i]);
+        if (f) facts.push(f);
+      }
+    }
+    var seen = Object.create(null);
+    var deduped = [];
+    for (var j = 0; j < facts.length; j++) {
+      var k = facts[j].key || factIdentityKey(facts[j].text);
+      if (seen[k]) continue;
+      seen[k] = true;
+      facts[j].key = k;
+      deduped.push(facts[j]);
+    }
+    return {
+      version: 1,
+      facts: deduped.slice(0, MAX_CARD_FACTS),
+      updatedAt: typeof src.updatedAt === 'string' ? src.updatedAt : ''
+    };
+  }
+
+  async function loadCardMemory(t) {
+    if (!t || typeof t.get !== 'function') return emptyCardMemory();
+    try {
+      var stored = await t.get('card', 'shared', CARD_STORAGE_KEY);
+      return normalizeCardMemory(stored);
+    } catch (err) {
+      console.error('AgentMemory.loadCardMemory failed', err);
+      return emptyCardMemory();
+    }
+  }
+
+  async function saveCardMemory(t, memory) {
+    var next = normalizeCardMemory(memory);
+    next.updatedAt = new Date().toISOString();
+    if (!t || typeof t.set !== 'function') return next;
+    try {
+      await t.set('card', 'shared', CARD_STORAGE_KEY, next);
+    } catch (err) {
+      console.error('AgentMemory.saveCardMemory failed', err);
+    }
+    return next;
+  }
+
+  function rememberCardFact(memory, text) {
+    var next = normalizeCardMemory(memory);
+    var fact = normalizeCardFact(text);
+    if (!fact) return next;
+    next.facts = upsertFactList(next.facts, fact, MAX_CARD_FACTS, false);
+    next.updatedAt = new Date().toISOString();
+    return next;
+  }
+
+  function forgetCardFacts(memory, query) {
+    var next = normalizeCardMemory(memory);
+    var q = normKey(query);
+    if (!q) return next;
+    next.facts = next.facts.filter(function (f) {
+      return normKey(f.text).indexOf(q) === -1 && (f.key || '').indexOf(q) === -1;
+    });
+    next.updatedAt = new Date().toISOString();
+    return next;
+  }
+
+  /**
+   * Apply card-local patches: remember | note | forget.
+   * Lower bar than board LTM — any non-junk card fact is kept.
+   */
+  async function applyCardPatches(t, memory, patches) {
+    var next = normalizeCardMemory(memory);
+    var list = Array.isArray(patches) ? patches : [];
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i];
+      if (!p || typeof p !== 'object') continue;
+      var op = String(p.op || '');
+      if ((op === 'remember' || op === 'note') && p.text) {
+        next = rememberCardFact(next, p.text);
+      } else if (op === 'forget') {
+        var q =
+          (typeof p.query === 'string' && p.query) ||
+          (typeof p.text === 'string' && p.text) ||
+          '';
+        if (q) next = forgetCardFacts(next, q);
+      }
+    }
+    return saveCardMemory(t, next);
+  }
+
+  function buildCardPromptBlock(memory) {
+    var mem = normalizeCardMemory(memory);
+    if (!mem.facts.length) return '';
+    var lines = ['Faits mémorisés sur cette carte :'];
+    mem.facts.forEach(function (f) {
+      lines.push('- ' + f.text);
+    });
+    return lines.join('\n');
+  }
+
   global.AgentMemory = {
     STORAGE_KEY: STORAGE_KEY,
+    CARD_STORAGE_KEY: CARD_STORAGE_KEY,
     MAX_FACTS: MAX_LTM_FACTS,
     MAX_LTM_FACTS: MAX_LTM_FACTS,
     MAX_STM_NOTES: MAX_STM_NOTES,
     MAX_RECENT_CARDS: MAX_RECENT_CARDS,
+    MAX_CARD_FACTS: MAX_CARD_FACTS,
     SCAN_TTL_MS: SCAN_TTL_MS,
     emptyMemory: emptyMemory,
     normalizeMemory: normalizeMemory,
@@ -804,6 +942,14 @@
     enforceBudget: enforceBudget,
     isJunkFact: isJunkFact,
     isDurableFact: isDurableFact,
-    factIdentityKey: factIdentityKey
+    factIdentityKey: factIdentityKey,
+    emptyCardMemory: emptyCardMemory,
+    normalizeCardMemory: normalizeCardMemory,
+    loadCardMemory: loadCardMemory,
+    saveCardMemory: saveCardMemory,
+    rememberCardFact: rememberCardFact,
+    forgetCardFacts: forgetCardFacts,
+    applyCardPatches: applyCardPatches,
+    buildCardPromptBlock: buildCardPromptBlock
   };
 })(typeof window !== 'undefined' ? window : this);
