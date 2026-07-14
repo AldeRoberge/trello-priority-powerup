@@ -10581,7 +10581,9 @@
        * Bloqué is nested under Statut — openSection('blocked') returns the panel root
        * (popup expands Statut and scrolls).
        */
-      openSection: function (key) {
+      openSection: function (key, options) {
+        options = options || {};
+        var forceExpand = options.expand === true;
         var target = null;
         if (key === 'priority') {
           target = prioritySection;
@@ -10589,13 +10591,21 @@
             var priorityOpen = priorityCollapse.isExpanded
               ? priorityCollapse.isExpanded()
               : false;
-            priorityCollapse.setExpanded(!priorityOpen);
+            if (forceExpand) {
+              if (!priorityOpen) priorityCollapse.setExpanded(true);
+            } else {
+              priorityCollapse.setExpanded(!priorityOpen);
+            }
           }
         } else if (key === 'due') {
           target = dueSection;
           if (dueDateField && dueDateField.setExpanded) {
             var dueOpen = dueDateField.isExpanded ? dueDateField.isExpanded() : false;
-            dueDateField.setExpanded(!dueOpen);
+            if (forceExpand) {
+              if (!dueOpen) dueDateField.setExpanded(true);
+            } else {
+              dueDateField.setExpanded(!dueOpen);
+            }
           }
         } else if (key === 'blocked') {
           target = blockedSection;

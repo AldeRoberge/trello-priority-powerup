@@ -387,6 +387,24 @@
   will-change: transform;
 }
 
+.tp-page--priority .agent-face-skin-stop {
+  transition: stop-color 0.4s ease;
+}
+
+/* Smooth pose blends when the idle machine changes emotion. */
+.tp-page--priority .agent-face-eyes,
+.tp-page--priority .agent-face-eye,
+.tp-page--priority .agent-face-brow,
+.tp-page--priority .agent-face-cheek,
+.tp-page--priority .agent-face-shine {
+  transition: transform 0.34s cubic-bezier(0.33, 1, 0.68, 1),
+    opacity 0.28s ease;
+}
+
+.tp-page--priority .agent-face-features {
+  transition: opacity 0.2s ease;
+}
+
 .tp-page--priority .agent-face[data-aura='yellow'] {
   --agent-face-hi: #fff6c8;
   --agent-face-mid: #f5d76e;
@@ -497,12 +515,15 @@
 .tp-page--priority .agent-face--lookUp:not(.is-frozen) .agent-face-eyes,
 .tp-page--priority .agent-face--lookDown:not(.is-frozen) .agent-face-eyes,
 .tp-page--priority .agent-face--lookLeft:not(.is-frozen) .agent-face-eyes,
-.tp-page--priority .agent-face--lookRight:not(.is-frozen) .agent-face-eyes {
+.tp-page--priority .agent-face--lookRight:not(.is-frozen) .agent-face-eyes,
+.tp-page--priority .agent-face.agent-face--fx-squint:not(.is-frozen) .agent-face-eyes {
   animation: none;
 }
 
 .tp-page--priority .agent-face-mouth {
-  display: none;
+  display: inline;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
 .tp-page--priority .agent-face--neutral .agent-face-mouth--neutral,
@@ -519,7 +540,44 @@
 .tp-page--priority .agent-face--tongue .agent-face-mouth--tongue,
 .tp-page--priority .agent-face--wink .agent-face-mouth--wink,
 .tp-page--priority .agent-face--excited .agent-face-mouth--excited {
-  display: inline;
+  opacity: 1;
+}
+
+/* Morph: ease body to rest, hide mouths, pause eye loops so the next pose can fade in. */
+.tp-page--priority .agent-face.is-morphing:not(.is-frozen) {
+  animation: none !important;
+}
+
+.tp-page--priority .agent-face.is-morphing .agent-face-mouth {
+  opacity: 0 !important;
+  transition-duration: 0.12s;
+}
+
+.tp-page--priority .agent-face.is-morphing .agent-face-eyes,
+.tp-page--priority .agent-face.is-morphing .agent-face-eye {
+  animation: none !important;
+}
+
+.tp-page--priority .agent-face.is-settling:not(.is-frozen) {
+  /* Soft land after morph — keep glow, let emotion loop start from rest. */
+  animation-timing-function: ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tp-page--priority .agent-face-eyes,
+  .tp-page--priority .agent-face-eye,
+  .tp-page--priority .agent-face-brow,
+  .tp-page--priority .agent-face-cheek,
+  .tp-page--priority .agent-face-shine,
+  .tp-page--priority .agent-face-mouth,
+  .tp-page--priority .agent-face-features {
+    transition: none !important;
+  }
+
+  .tp-page--priority .agent-face.is-morphing:not(.is-frozen) {
+    animation: agent-face-idle 2.8s ease-in-out infinite,
+      agent-face-glow-pulse 2.6s ease-in-out infinite !important;
+  }
 }
 
 /* Happy: soft bounce + squinted eyes feel via scale */
@@ -835,6 +893,110 @@
   transform: translateY(1px) rotate(12deg);
 }
 
+/* Idle state-machine one-shot / short-loop effects */
+.tp-page--priority .agent-face.agent-face--fx-bounce:not(.is-frozen) {
+  animation: agent-face-fx-bounce 0.58s cubic-bezier(0.34, 1.45, 0.64, 1) both,
+    agent-face-glow-pulse 1.8s ease-in-out infinite;
+}
+
+.tp-page--priority .agent-face.agent-face--fx-nod:not(.is-frozen) {
+  animation: agent-face-fx-nod 0.75s ease-in-out both,
+    agent-face-glow-pulse 2.2s ease-in-out infinite;
+}
+
+.tp-page--priority .agent-face.agent-face--fx-tip:not(.is-frozen) {
+  animation: agent-face-fx-tip 0.85s ease-in-out both,
+    agent-face-glow-pulse 2.4s ease-in-out infinite;
+}
+
+.tp-page--priority .agent-face.agent-face--fx-pop:not(.is-frozen) {
+  animation: agent-face-fx-pop 0.4s cubic-bezier(0.2, 1.5, 0.4, 1) both,
+    agent-face-glow-pulse 2s ease-in-out infinite;
+}
+
+.tp-page--priority .agent-face.agent-face--fx-shake:not(.is-frozen) {
+  animation: agent-face-fx-shake 0.55s ease-in-out both,
+    agent-face-glow-pulse 1.6s ease-in-out infinite;
+}
+
+.tp-page--priority .agent-face.agent-face--fx-wiggle:not(.is-frozen) {
+  animation: agent-face-tongue-wiggle 0.9s ease-in-out both,
+    agent-face-glow-pulse 2s ease-in-out infinite;
+}
+
+.tp-page--priority .agent-face.agent-face--fx-breathe:not(.is-frozen) {
+  animation: agent-face-fx-breathe 2.2s ease-in-out infinite,
+    agent-face-glow-pulse 2.8s ease-in-out infinite;
+}
+
+.tp-page--priority .agent-face.agent-face--fx-sparkle:not(.is-frozen) {
+  animation: agent-face-fx-sparkle-pulse 0.9s ease-out both,
+    agent-face-glow-pulse 1.5s ease-in-out infinite;
+}
+
+.tp-page--priority .agent-face.agent-face--fx-squint:not(.is-frozen) .agent-face-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: agent-face-think-squint-eyes 0.9s ease-in-out both;
+}
+
+.tp-page--priority .agent-face.agent-face--fx-squint:not(.is-frozen) .agent-face-eyes {
+  animation: none;
+}
+
+/* Alternate wink (right eye) for winkAlt state */
+.tp-page--priority .agent-face--wink[data-idle-fx='winkRight'] .agent-face-eye--l {
+  transform: none;
+}
+
+.tp-page--priority .agent-face--wink[data-idle-fx='winkRight'] .agent-face-shine--l {
+  opacity: 1;
+}
+
+.tp-page--priority .agent-face--wink[data-idle-fx='winkRight'] .agent-face-brow--l {
+  transform: none;
+}
+
+.tp-page--priority .agent-face--wink[data-idle-fx='winkRight'] .agent-face-eye--r {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scaleY(0.12) translateY(1px);
+}
+
+.tp-page--priority .agent-face--wink[data-idle-fx='winkRight'] .agent-face-shine--r {
+  opacity: 0;
+}
+
+.tp-page--priority .agent-face--wink[data-idle-fx='winkRight'] .agent-face-brow--r {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: translateY(1px) rotate(-12deg);
+}
+
+/* Floating sparkles spawned by the idle sparkle state */
+.agent-face-sparkle-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.agent-face-sparkle {
+  position: fixed;
+  left: var(--sx);
+  top: var(--sy);
+  width: 5px;
+  height: 5px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: #fff8d6;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #ffe08a 70%, transparent),
+    0 0 8px 2px color-mix(in srgb, #ffd060 55%, transparent);
+  animation: agent-face-sparkle-fly 0.75s ease-out forwards;
+}
+
 /* Click spin (one-shot; override idle while playing) */
 .tp-page--priority .agent-face.agent-face--spin {
   animation: agent-face-spin 0.7s cubic-bezier(0.2, 0.8, 0.25, 1) both !important;
@@ -874,11 +1036,15 @@
   display: none;
 }
 
-/* Over-spun face: disabled, green, done clicking. */
+/* Over-spun face: bile yellow-green, recovers after a few seconds. */
 .tp-page--priority .agent-face.is-sick {
   cursor: not-allowed;
   animation: none !important;
-  filter: saturate(1.35);
+  --agent-face-hi: #f2f6a8;
+  --agent-face-mid: #c9d83a;
+  --agent-face-lo: #9aa820;
+  --agent-face-glow: #8a9c18;
+  filter: saturate(1.4);
   opacity: 1;
   box-shadow:
     0 0 0 1.5px color-mix(in srgb, #fff 60%, transparent),
@@ -898,8 +1064,8 @@
 }
 
 .tp-page--priority .agent-face.is-sick .agent-face-cheek {
-  fill: #8fd86a;
-  opacity: 0.7;
+  fill: #c4d44a;
+  opacity: 0.75;
 }
 
 .tp-page--priority .agent-face.is-sick .agent-face-status {
@@ -924,8 +1090,8 @@
   border-radius: 50% 40% 60% 45%;
   opacity: 0.95;
   box-shadow:
-    0 0 0 1px color-mix(in srgb, #4a8f38 25%, transparent),
-    0 0 8px color-mix(in srgb, #6bbf3a 45%, transparent);
+    0 0 0 1px color-mix(in srgb, #8a9c18 28%, transparent),
+    0 0 8px color-mix(in srgb, #c9d83a 48%, transparent);
   transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(0.28);
   animation: agent-face-puke-fly 1.2s cubic-bezier(0.18, 0.72, 0.32, 1) forwards;
   will-change: transform, opacity;
@@ -1287,6 +1453,124 @@
   }
   50% {
     transform: rotate(7deg) translateY(-1.5px);
+  }
+}
+
+@keyframes agent-face-fx-bounce {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  35% {
+    transform: translateY(-7px) scale(1.08, 0.94);
+  }
+  55% {
+    transform: translateY(0) scale(0.96, 1.06);
+  }
+  75% {
+    transform: translateY(-3px) scale(1.03, 0.98);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes agent-face-fx-nod {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateY(3px) rotate(2deg);
+  }
+  55% {
+    transform: translateY(-2px) rotate(-1deg);
+  }
+  80% {
+    transform: translateY(1px) rotate(1deg);
+  }
+}
+
+@keyframes agent-face-fx-tip {
+  0% {
+    transform: rotate(0deg);
+  }
+  40% {
+    transform: rotate(-12deg) translateY(-1px);
+  }
+  100% {
+    transform: rotate(-6deg);
+  }
+}
+
+@keyframes agent-face-fx-pop {
+  0% {
+    transform: scale(0.72);
+    filter: brightness(1.05);
+  }
+  60% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes agent-face-fx-shake {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  20% {
+    transform: translateX(-3px) rotate(-6deg);
+  }
+  40% {
+    transform: translateX(3px) rotate(6deg);
+  }
+  60% {
+    transform: translateX(-2px) rotate(-4deg);
+  }
+  80% {
+    transform: translateX(2px) rotate(3deg);
+  }
+}
+
+@keyframes agent-face-fx-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+@keyframes agent-face-fx-sparkle-pulse {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  40% {
+    transform: scale(1.1);
+    filter: brightness(1.18);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes agent-face-sparkle-fly {
+  0% {
+    transform: translate(0, 0) scale(0.4);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--dx), var(--dy)) scale(1.15);
+    opacity: 0;
   }
 }
 

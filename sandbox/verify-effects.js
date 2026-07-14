@@ -38,10 +38,20 @@ var expected = [
   'balloons',
   'petals',
   'rainbow',
-  'disco'
+  'disco',
+  'beep',
+  'boop',
+  'zap',
+  'thunder',
+  'fanfare',
+  'bonk',
+  'laser',
+  'coin',
+  'drumroll',
+  'banner'
 ];
 
-check('list has 11 effects', FX.list().length === 11);
+check('list has 21 effects', FX.list().length === 21);
 expected.forEach(function (id) {
   check('has ' + id, FX.list().indexOf(id) !== -1);
   check('normalize ' + id, FX.normalize(id) === id);
@@ -49,16 +59,24 @@ expected.forEach(function (id) {
 
 check('alias confettis → confetti', FX.normalize('confettis') === 'confetti');
 check('alias etoiles → shooting_stars', FX.normalize('etoiles') === 'shooting_stars');
+check('alias beep_beep → beep', FX.normalize('beep_beep') === 'beep');
+check('alias tonnerre → thunder', FX.normalize('tonnerre') === 'thunder');
+check('alias fullscreen_text → banner', FX.normalize('fullscreen_text') === 'banner');
 check('unknown effect', FX.normalize('lava') == null);
 check('label fireworks', typeof FX.label('fireworks') === 'string' && FX.label('fireworks').length > 0);
 check('play export', typeof FX.play === 'function');
 check('clear export', typeof FX.clear === 'function');
+check('banner without text fails', FX.play('banner', { sound: false }).ok === false);
+check(
+  'beep play ok without DOM visuals path',
+  typeof FX.playSound === 'function'
+);
 
 if (Agent && typeof Agent.executeAction === 'function') {
   var played = [];
   var bridge = {
-    playEffect: function (name) {
-      played.push(name);
+    playEffect: function (name, opts) {
+      played.push({ name: name, opts: opts || {} });
       return { ok: true, effect: name };
     }
   };
@@ -67,13 +85,43 @@ if (Agent && typeof Agent.executeAction === 'function') {
     args: { effect: 'confetti' }
   }).then(function (res) {
     check('execute trigger_effect ok', !!(res && res.ok));
-    check('execute plays confetti', played[0] === 'confetti');
+    check('execute plays confetti', played[0] && played[0].name === 'confetti');
     return Agent.executeAction(bridge, {
       tool: 'trigger_effect',
       args: { effect: 'nope' }
     });
   }).then(function (res) {
     check('execute unknown effect fails', !!(res && !res.ok));
+    return Agent.executeAction(bridge, {
+      tool: 'trigger_effect',
+      args: { effect: 'beep' }
+    });
+  }).then(function (res) {
+    check('execute beep ok', !!(res && res.ok));
+    check('execute plays beep', played.some(function (p) { return p.name === 'beep'; }));
+    return Agent.executeAction(bridge, {
+      tool: 'trigger_effect',
+      args: { effect: 'thunder', text: 'TWO' }
+    });
+  }).then(function (res) {
+    check('execute thunder+text ok', !!(res && res.ok));
+    var last = played[played.length - 1];
+    check('passes text TWO', !!(last && last.opts && last.opts.text === 'TWO'));
+    return Agent.executeAction(bridge, {
+      tool: 'trigger_effect',
+      args: { effect: 'banner', text: 'BOOM', sound: 'fanfare' }
+    });
+  }).then(function (res) {
+    check('execute banner+sound ok', !!(res && res.ok));
+    var last = played[played.length - 1];
+    check('banner name', !!(last && last.name === 'banner'));
+    check('banner sound override', !!(last && last.opts && last.opts.sound === 'fanfare'));
+    return Agent.executeAction(bridge, {
+      tool: 'trigger_effect',
+      args: { effect: 'banner' }
+    });
+  }).then(function (res) {
+    check('banner without text fails execute', !!(res && !res.ok));
     if (bad) process.exit(1);
     console.log('All effects checks passed.');
   }).catch(function (err) {

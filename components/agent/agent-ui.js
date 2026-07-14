@@ -105,6 +105,8 @@
         }
         return { ok: false, error: 'CelebrationEffects indisponible' };
       },
+      openSection: options.openSection || null,
+      resolvePointTarget: options.resolvePointTarget || null,
       setFormulaKey: options.setFormulaKey || function () {},
       setCardName: options.setCardName || function () {
         return Promise.resolve({ ok: false, reason: 'no-setCardName' });
@@ -174,6 +176,8 @@
     var listenScanSeq = 0;
     var activeOffer = null;
     var dismissedOffers = {};
+    /** Last Coup de pouce candidates from listen scan (for alternate after Non). */
+    var lastListenSuggestions = [];
     /** @type {{ row: Element, content: string }|null} */
     var awaitingFeedback = null;
     var audioCtx = null;
@@ -2018,11 +2022,9 @@
       return identity;
     }
 
-    function applyFaceAura(face, aura) {
-      if (!face) return;
-      var tone = normalizeFaceAura(aura) || identityAura();
-      var palette = FACE_AURAS[tone] || FACE_AURAS.orange;
-      face.setAttribute('data-aura', tone);
+    function applyFacePalette(face, tone, palette) {
+      if (!face || !palette) return;
+      face.setAttribute('data-aura', tone || 'orange');
       var stops = face.querySelectorAll('.agent-face-skin-stop');
       if (stops.length < 3) {
         stops = face.querySelectorAll('radialGradient stop');
@@ -2037,6 +2039,12 @@
           stops[2].classList.add('agent-face-skin-stop');
         }
       }
+    }
+
+    function applyFaceAura(face, aura) {
+      if (!face) return;
+      var tone = normalizeFaceAura(aura) || identityAura();
+      applyFacePalette(face, tone, FACE_AURAS[tone] || FACE_AURAS.orange);
     }
 
     function spiceEmotion(base) {
@@ -2240,16 +2248,19 @@
 
     var FACE_SPIN_PUKE_AT = 5;
     var FACE_SPIN_CLICK_WINDOW_MS = 3500;
+    var FACE_SICK_RECOVER_MS = 5000;
+    /** Bile / vomit yellow-green (not identity green). */
+    var FACE_SICK_PALETTE = { hi: '#f2f6a8', mid: '#c9d83a', lo: '#9aa820' };
     var FACE_PUKE_COLORS = [
-      '#7dcc4a',
-      '#6bbf3a',
-      '#a8e063',
-      '#9acd32',
-      '#c5e17a',
-      '#5aa843',
-      '#8fd86a',
-      '#b8d96a',
-      '#d4e157'
+      '#d4e040',
+      '#c5d63a',
+      '#e8e060',
+      '#b8c92a',
+      '#cfd84a',
+      '#a8b830',
+      '#dce86a',
+      '#9cb82a',
+      '#b0c038'
     ];
 
     function noteFaceSpinClick(face) {
@@ -2312,10 +2323,12 @@
 
     function makeAssistantFaceSick(face) {
       if (!face || !face.classList || face.classList.contains('is-sick')) return;
+      cancelFaceMorph(face);
       clearFaceMotionClasses(face);
       suppressFaceIdleMachine();
       face._spinClicks = FACE_SPIN_PUKE_AT;
-      face.className = 'agent-face agent-face--surprised is-sick';
+      swapFaceEmotionClass(face, 'surprised');
+      face.classList.add('is-sick');
       face.setAttribute('data-emotion', 'surprised');
       applyFaceAura(face, 'green');
       face.removeAttribute('data-think');
@@ -2441,15 +2454,16 @@
         if (faceSm.typing) {
           if (face.getAttribute('data-emotion') !== 'lookDown') {
             setAssistantFaceEmotion(thinkingMotionRow, 'lookDown', {
-              fromIdleMachine: true
+              fromIdleMachine: true,
+              smooth: true
             });
           }
           return;
         }
         // Stay on thinking emotion if something else changed it.
         if (face.getAttribute('data-emotion') !== 'thinking') {
-          face.className = 'agent-face agent-face--thinking';
-          face.setAttribute('data-emotion', 'thinking');
+          cancelFaceMorph(face);
+          swapFaceEmotionClass(face, 'thinking');
           applyFaceAura(face, auraForEmotion('thinking'));
         }
         thinkingMotionLast = pickNextThinkMotion();
@@ -2467,6 +2481,7 @@
      * on data-idle-fx. Typing forces lookDown until the draft clears.
      */
     var FACE_SM_MAX_AWAY = 3;
+    var FACE_MORPH_SETTLE_MS = 180;
 
     var FACE_SM_STATES = {
       wink: { emotion: 'wink', holdMin: 400, holdMax: 680 },
@@ -2633,6 +2648,7 @@
     function stopFaceIdleMachine() {
       clearFaceIdleTimer();
       faceSmClearFx();
+      cancelFaceMorph(faceSmFace());
       faceSm.state = null;
       faceSm.row = null;
       faceSm.suppressed = false;
@@ -2647,6 +2663,7 @@
       faceSm.suppressed = true;
       clearFaceIdleTimer();
       faceSmClearFx();
+      cancelFaceMorph(faceSmFace());
       faceSm.state = null;
       faceSm.queue = null;
       faceSm.awayCount = 0;
@@ -2765,16 +2782,25 @@
       } else {
         faceSm.awayCount += 1;
       }
+      var face = row.querySelector('.agent-face');
+      var prevMood = face && face.getAttribute('data-emotion');
+      var sameMood = prevMood === def.emotion;
+      // Same emotion (e.g. smile → bounce): only swap the one-shot fx.
+      if (sameMood && !options.enter && face && !face.classList.contains('is-frozen')) {
+        if (def.fx) faceSmPlayFx(def.fx);
+        else faceSmClearFx();
+        return;
+      }
       setAssistantFaceEmotion(row, def.emotion, {
         animate: !!options.enter,
         forceEnter: !!options.enter,
-        fromIdleMachine: true
+        fromIdleMachine: true,
+        smooth: !options.enter,
+        onApplied: function () {
+          if (def.fx) faceSmPlayFx(def.fx);
+          else faceSmClearFx();
+        }
       });
-      if (def.fx) {
-        faceSmPlayFx(def.fx);
-      } else {
-        faceSmClearFx();
-      }
     }
 
     function faceSmScheduleNext(fromState) {
@@ -2783,9 +2809,12 @@
       var def = FACE_SM_STATES[fromState];
       if (!def || !def.holdMax) return;
       var delay = faceSmRand(def.holdMin, def.holdMax);
-      // Slightly shorten holds when a queue is mid-flight so scans feel snappy.
+      // Slightly shorten holds when a queue is mid-flight so scans feel snappy,
+      // but always leave room for the settle morph (~180ms).
       if (faceSm.queue && faceSm.queue.length) {
-        delay = Math.round(delay * 0.72);
+        delay = Math.max(FACE_MORPH_SETTLE_MS + 80, Math.round(delay * 0.72));
+      } else {
+        delay = Math.max(FACE_MORPH_SETTLE_MS + 120, delay);
       }
       var seq = faceSm.seq;
       faceSm.timer = setTimeout(function () {
@@ -2880,7 +2909,10 @@
             faceSm.row = rowFresh;
             clearFaceIdleTimer();
             faceSmClearFx();
-            setAssistantFaceEmotion(rowFresh, 'lookDown', { fromIdleMachine: true });
+            setAssistantFaceEmotion(rowFresh, 'lookDown', {
+              fromIdleMachine: true,
+              smooth: true
+            });
             faceSm.state = 'lookDown';
           }
         }
@@ -2901,7 +2933,10 @@
         if (current && current !== 'lookDown') {
           faceSm.resumeEmotion = current;
         }
-        setAssistantFaceEmotion(row, 'lookDown', { fromIdleMachine: true });
+        setAssistantFaceEmotion(row, 'lookDown', {
+          fromIdleMachine: true,
+          smooth: true
+        });
         faceSm.state = 'lookDown';
         return;
       }
@@ -2913,12 +2948,16 @@
           thinkingMotionRow === row &&
           thinkingMotionRow.classList.contains('is-pending')
         ) {
-          setAssistantFaceEmotion(row, 'thinking', { fromIdleMachine: true });
+          setAssistantFaceEmotion(row, 'thinking', {
+            fromIdleMachine: true,
+            smooth: true
+          });
           var face = row.querySelector('.agent-face');
           if (face) applyThinkMotion(face, thinkingMotionLast || 'glance');
         } else if (faceSm.resumeEmotion) {
           setAssistantFaceEmotion(row, faceSm.resumeEmotion, {
-            fromIdleMachine: true
+            fromIdleMachine: true,
+            smooth: true
           });
         }
         faceSm.resumeEmotion = null;
@@ -2976,6 +3015,48 @@
       face.addEventListener('animationend', onEnd);
     }
 
+    function clearFaceInlineMorph(face) {
+      if (!face || !face.style) return;
+      face.style.transition = '';
+      face.style.transform = '';
+      face.style.animation = '';
+    }
+
+    function cancelFaceMorph(face) {
+      if (!face) return;
+      if (face._morphTimer != null) {
+        clearTimeout(face._morphTimer);
+        face._morphTimer = null;
+      }
+      if (face._settleTimer != null) {
+        clearTimeout(face._settleTimer);
+        face._settleTimer = null;
+      }
+      face.classList.remove('is-morphing', 'is-settling');
+      clearFaceInlineMorph(face);
+    }
+
+    function prefersReducedFaceMotion() {
+      try {
+        return !!(
+          global.matchMedia &&
+          global.matchMedia('(prefers-reduced-motion: reduce)').matches
+        );
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function swapFaceEmotionClass(face, mood) {
+      if (!face) return;
+      for (var i = 0; i < FACE_EMOTIONS.length; i++) {
+        face.classList.remove('agent-face--' + FACE_EMOTIONS[i]);
+      }
+      face.classList.add('agent-face');
+      face.classList.add('agent-face--' + mood);
+      face.setAttribute('data-emotion', mood);
+    }
+
     function setAssistantFaceEmotion(row, emotion, options) {
       if (!row) return;
       options = options || {};
@@ -2992,47 +3073,428 @@
         face = createAssistantFace(mood, aura);
         row.insertBefore(face, row.firstChild);
       }
-      clearFaceMotionClasses(face);
-      face.className = 'agent-face agent-face--' + mood;
-      face.setAttribute('data-emotion', mood);
-      applyFaceAura(face, aura);
-      face.classList.remove('is-frozen');
-      face.classList.remove('is-sick');
-      row.setAttribute('data-emotion', mood);
-      row.setAttribute('data-aura', aura);
-      if (mood !== 'thinking') {
-        face.removeAttribute('data-think');
-      }
-      if (options.animate !== false && (isNew || options.forceEnter)) {
-        applyFaceEnterMotion(face, mood);
-      } else if (mood === 'excited') {
-        face.classList.add('agent-face--motion-jump');
-      }
-      // External emotion changes drive or pause the idle state machine.
-      if (!options.fromIdleMachine) {
-        if (mood === 'thinking' || !FACE_IDLE_ELIGIBLE[mood]) {
-          suppressFaceIdleMachine();
-          faceSm.row = row;
-        } else if (options.idleHandOff !== false) {
-          handOffToFaceIdleMachine(row, mood, {
-            startState: options.idleStart || null,
-            enter: false
-          });
+
+      var prevMood = face.getAttribute('data-emotion');
+      var canSmooth =
+        options.smooth === true &&
+        !isNew &&
+        !options.forceEnter &&
+        prevMood &&
+        prevMood !== mood &&
+        !face.classList.contains('agent-face--spin') &&
+        !prefersReducedFaceMotion();
+
+      function commitEmotion(applyEnter) {
+        clearFaceMotionClasses(face);
+        swapFaceEmotionClass(face, mood);
+        applyFaceAura(face, aura);
+        face.classList.remove('is-frozen');
+        face.classList.remove('is-sick');
+        row.setAttribute('data-emotion', mood);
+        row.setAttribute('data-aura', aura);
+        if (mood !== 'thinking') {
+          face.removeAttribute('data-think');
+        }
+        if (applyEnter && options.animate !== false && (isNew || options.forceEnter)) {
+          applyFaceEnterMotion(face, mood);
+        } else if (mood === 'excited' && !canSmooth) {
+          face.classList.add('agent-face--motion-jump');
+        }
+        if (typeof options.onApplied === 'function') {
+          options.onApplied(face);
         }
       }
+
+      function finishExternalHandoff() {
+        if (!options.fromIdleMachine) {
+          if (mood === 'thinking' || !FACE_IDLE_ELIGIBLE[mood]) {
+            suppressFaceIdleMachine();
+            faceSm.row = row;
+          } else if (options.idleHandOff !== false) {
+            handOffToFaceIdleMachine(row, mood, {
+              startState: options.idleStart || null,
+              enter: false
+            });
+          }
+        }
+      }
+
+      if (!canSmooth) {
+        cancelFaceMorph(face);
+        commitEmotion(true);
+        finishExternalHandoff();
+        return;
+      }
+
+      // Smooth path: freeze current animated pose → ease to rest → swap → settle in.
+      cancelFaceMorph(face);
+      face.classList.add('is-morphing');
+      try {
+        var cs = global.getComputedStyle(face);
+        face.style.animation = 'none';
+        face.style.transition =
+          'transform 0.18s cubic-bezier(0.33, 1, 0.68, 1)';
+        face.style.transform =
+          cs.transform && cs.transform !== 'none' ? cs.transform : 'none';
+        void face.offsetWidth;
+        face.style.transform = 'translateY(0) scale(1) rotate(0deg)';
+      } catch (e) {
+        /* ignore style freeze failures */
+      }
+
+      var morphSeq = faceSm.seq;
+      face._morphTimer = setTimeout(function () {
+        face._morphTimer = null;
+        if (morphSeq !== faceSm.seq) {
+          cancelFaceMorph(face);
+          return;
+        }
+        clearFaceInlineMorph(face);
+        commitEmotion(false);
+        face.classList.remove('is-morphing');
+        face.classList.add('is-settling');
+        face._settleTimer = setTimeout(function () {
+          face._settleTimer = null;
+          face.classList.remove('is-settling');
+        }, 280);
+        finishExternalHandoff();
+      }, FACE_MORPH_SETTLE_MS);
     }
+
+    // ── Point at page sections (lean + white glove + blink) ─────────────
+    var POINT_HOLD_MS = 2800;
+    var POINT_BLINK_MS = 2600;
+    var pointAtState = {
+      seq: 0,
+      clearTimer: null,
+      faceTimer: null,
+      targetEl: null,
+      gloveEl: null
+    };
+
+    function clearAgentPointTarget() {
+      var prev = document.querySelectorAll('.is-agent-point-target');
+      for (var i = 0; i < prev.length; i++) {
+        prev[i].classList.remove('is-agent-point-target');
+      }
+      pointAtState.targetEl = null;
+    }
+
+    function clearAgentPointGlove() {
+      if (pointAtState.gloveEl && pointAtState.gloveEl.parentNode) {
+        pointAtState.gloveEl.parentNode.removeChild(pointAtState.gloveEl);
+      }
+      pointAtState.gloveEl = null;
+      Array.prototype.forEach.call(
+        document.querySelectorAll('.agent-point-glove'),
+        function (node) {
+          if (node && node.parentNode) node.parentNode.removeChild(node);
+        }
+      );
+    }
+
+    function clearAgentPointing() {
+      pointAtState.seq += 1;
+      if (pointAtState.clearTimer != null) {
+        clearTimeout(pointAtState.clearTimer);
+        pointAtState.clearTimer = null;
+      }
+      if (pointAtState.faceTimer != null) {
+        clearTimeout(pointAtState.faceTimer);
+        pointAtState.faceTimer = null;
+      }
+      clearAgentPointGlove();
+      clearAgentPointTarget();
+      Array.prototype.forEach.call(
+        document.querySelectorAll('.agent-face.is-pointing'),
+        function (face) {
+          face.classList.remove('is-pointing');
+          face.style.removeProperty('--agent-point-angle');
+        }
+      );
+    }
+
+    function sectionSelector(section) {
+      if (section === 'priority') return '.variant-priority-section';
+      if (section === 'due') return '.variant-due-section';
+      if (section === 'blocked') {
+        return '.statut-blocked-panel, .variant-blocked-section';
+      }
+      if (section === 'progress') return '.variant-progress-section';
+      if (section === 'statut') return '.variant-statut-section';
+      if (section === 'objectif') {
+        return '.variant-objectif-section, .info-row--objectif';
+      }
+      if (section === 'info') return '.variant-info-section, .info-section-body';
+      return null;
+    }
+
+    function defaultResolvePointTarget(args) {
+      args = args || {};
+      var section =
+        typeof Agent.normalizePointSection === 'function'
+          ? Agent.normalizePointSection(args.section)
+          : args.section || null;
+      var field =
+        typeof Agent.normalizePointField === 'function'
+          ? Agent.normalizePointField(args.field)
+          : args.field || null;
+      var level =
+        typeof Agent.normalizePointLevel === 'function'
+          ? Agent.normalizePointLevel(args.level)
+          : args.level != null
+            ? Number(args.level)
+            : null;
+      if (field && !section) section = 'priority';
+
+      if (typeof bridge.openSection === 'function' && section) {
+        try {
+          bridge.openSection(section, { expand: true });
+        } catch (e) {
+          /* ignore */
+        }
+      }
+
+      var root = cardEl || document;
+      var target = null;
+
+      if (field === 'impact' && level != null) {
+        target = root.querySelector(
+          '.impact-reach-chip[data-level="' + level + '"]'
+        );
+      }
+      if (!target && field) {
+        target =
+          root.querySelector('[data-field-id$="-' + field + '"]') ||
+          root.querySelector('[data-field-id="' + field + '"]');
+      }
+      if (!target && section) {
+        var sel = sectionSelector(section);
+        if (sel) target = root.querySelector(sel);
+      }
+      if (
+        target &&
+        field === 'impact' &&
+        level == null &&
+        target.querySelector
+      ) {
+        var activeChip = target.querySelector(
+          '.impact-reach-chip.is-active, .impact-reach-chip[aria-pressed="true"]'
+        );
+        if (activeChip) target = activeChip;
+      }
+      return {
+        ok: !!target,
+        el: target,
+        section: section || null,
+        field: field || null,
+        level: level != null && isFinite(level) ? level : null,
+        error: target ? null : 'Cible introuvable'
+      };
+    }
+
+    function leanFaceToward(targetEl) {
+      var face = faceSmFace() || getLiveAssistantFace();
+      if (!face || !targetEl) return null;
+      var row = face.closest('.agent-msg--assistant');
+      if (!row) return null;
+
+      var faceRect = face.getBoundingClientRect();
+      var targetRect = targetEl.getBoundingClientRect();
+      var fx = faceRect.left + faceRect.width / 2;
+      var fy = faceRect.top + faceRect.height / 2;
+      var tx = targetRect.left + targetRect.width / 2;
+      var ty = targetRect.top + Math.min(targetRect.height * 0.35, 28);
+      var dx = tx - fx;
+      var dy = ty - fy;
+      var emotion;
+      if (Math.abs(dy) >= Math.abs(dx) * 0.85) {
+        emotion = dy < 0 ? 'lookUp' : 'lookDown';
+      } else {
+        emotion = dx < 0 ? 'lookLeft' : 'lookRight';
+      }
+      var angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+
+      suppressFaceIdleMachine();
+      faceSm.row = row;
+      setAssistantFaceEmotion(row, emotion, {
+        animate: true,
+        forceEnter: true,
+        fromIdleMachine: true,
+        idleHandOff: false
+      });
+      face.classList.add('is-pointing');
+      face.style.setProperty('--agent-point-angle', angleDeg.toFixed(1) + 'deg');
+      return { face: face, row: row, emotion: emotion, dx: dx, dy: dy };
+    }
+
+    function placePointGlove(face, targetEl) {
+      clearAgentPointGlove();
+      if (!face || !targetEl) return null;
+      var faceRect = face.getBoundingClientRect();
+      var targetRect = targetEl.getBoundingClientRect();
+      var fx = faceRect.left + faceRect.width / 2;
+      var fy = faceRect.top + faceRect.height / 2;
+      var tipX = targetRect.left + targetRect.width * 0.72;
+      var tipY = targetRect.top + Math.min(18, targetRect.height * 0.25);
+      // Finger tip sits near the target; wrist trails back toward the face.
+      var dx = tipX - fx;
+      var dy = tipY - fy;
+      var angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+      // Glove art points roughly up-right; rotate so index tip faces the target.
+      var rotate = angle + 55;
+
+      var glove = document.createElement('div');
+      glove.className = 'agent-point-glove';
+      glove.setAttribute('aria-hidden', 'true');
+      glove.innerHTML =
+        '<svg class="agent-point-glove-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="56" height="56" focusable="false">' +
+        '<defs>' +
+        '<linearGradient id="agentGloveShine" x1="0%" y1="0%" x2="100%" y2="100%">' +
+        '<stop offset="0%" stop-color="#ffffff"/>' +
+        '<stop offset="55%" stop-color="#f4f4f4"/>' +
+        '<stop offset="100%" stop-color="#e4e4e4"/>' +
+        '</linearGradient>' +
+        '</defs>' +
+        '<g fill="url(#agentGloveShine)" stroke="#d0d0d0" stroke-width="1.4" stroke-linejoin="round">' +
+        '<path d="M28 46c-6 1-11-2-13-8-2-6 1-12 6-14 2-1 4-1 6 0v-8c0-3 2-5 5-5s5 2 5 5v10l1-7c0-3 2-5 5-5s5 2 5 5v9l2-5c1-3 3-4 5-3s4 3 3 6l-6 16c-2 5-7 9-14 9-4 0-8-1-10-5z"/>' +
+        '<path d="M33 8c-2.4 0-4.2 1.8-4.2 4.2V28h3.2V12.2c0-.6.5-1.1 1-1.1s1 .5 1 1.1V29h3.1V14.5c0-3.5-1.8-6.5-4.1-6.5z"/>' +
+        '</g>' +
+        '<ellipse cx="24" cy="42" rx="5" ry="3.2" fill="#ebebeb" stroke="#d0d0d0" stroke-width="1"/>' +
+        '</svg>';
+
+      var size = 56;
+      // Anchor near fingertip (upper-right of the glove art).
+      var left = tipX - size * 0.72;
+      var top = tipY - size * 0.18;
+      glove.style.left = Math.round(left) + 'px';
+      glove.style.top = Math.round(top) + 'px';
+      glove.style.setProperty('--agent-glove-rotate', rotate.toFixed(1) + 'deg');
+
+      (document.body || document.documentElement).appendChild(glove);
+      pointAtState.gloveEl = glove;
+      void glove.offsetWidth;
+      glove.classList.add('is-visible');
+      return glove;
+    }
+
+    function blinkPointTarget(targetEl) {
+      if (!targetEl) return;
+      clearAgentPointTarget();
+      targetEl.classList.remove('is-agent-point-target');
+      void targetEl.offsetWidth;
+      targetEl.classList.add('is-agent-point-target');
+      pointAtState.targetEl = targetEl;
+    }
+
+    function pointAtOnPage(args) {
+      clearAgentPointing();
+      var seq = pointAtState.seq;
+      args = args && typeof args === 'object' ? args : {};
+
+      var resolved;
+      if (typeof bridge.resolvePointTarget === 'function') {
+        try {
+          resolved = bridge.resolvePointTarget(args);
+        } catch (e) {
+          resolved = null;
+        }
+      }
+      if (!resolved || !resolved.el) {
+        resolved = defaultResolvePointTarget(args);
+      }
+      if (!resolved || !resolved.el) {
+        return {
+          ok: false,
+          error: (resolved && resolved.error) || 'Cible introuvable'
+        };
+      }
+
+      var targetEl = resolved.el;
+      try {
+        targetEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } catch (scrollErr) {
+        try {
+          targetEl.scrollIntoView(true);
+        } catch (e2) {
+          /* ignore */
+        }
+      }
+      try {
+        onLayoutChange();
+      } catch (layoutErr) {
+        /* ignore */
+      }
+
+      function runPointVisuals() {
+        if (seq !== pointAtState.seq) return;
+        var lean = leanFaceToward(targetEl);
+        blinkPointTarget(targetEl);
+        if (lean && lean.face) {
+          placePointGlove(lean.face, targetEl);
+        } else {
+          placePointGlove(getLiveAssistantFace(), targetEl);
+        }
+        try {
+          onLayoutChange();
+        } catch (e3) {
+          /* ignore */
+        }
+
+        pointAtState.faceTimer = setTimeout(function () {
+          if (seq !== pointAtState.seq) return;
+          var row = lean && lean.row;
+          if (row && row.isConnected) {
+            handOffToFaceIdleMachine(row, 'curious', {
+              startState: 'curious',
+              enter: false
+            });
+          }
+        }, POINT_HOLD_MS);
+
+        pointAtState.clearTimer = setTimeout(function () {
+          if (seq !== pointAtState.seq) return;
+          clearAgentPointGlove();
+          clearAgentPointTarget();
+          Array.prototype.forEach.call(
+            document.querySelectorAll('.agent-face.is-pointing'),
+            function (face) {
+              face.classList.remove('is-pointing');
+              face.style.removeProperty('--agent-point-angle');
+            }
+          );
+        }, POINT_BLINK_MS);
+      }
+
+      // Allow collapse/expand layout to settle before measuring.
+      setTimeout(runPointVisuals, 90);
+
+      return {
+        ok: true,
+        section: resolved.section || undefined,
+        field: resolved.field || undefined,
+        level: resolved.level != null ? resolved.level : undefined
+      };
+    }
+
+    bridge.pointAt = typeof options.pointAt === 'function'
+      ? options.pointAt
+      : pointAtOnPage;
 
     function freezeOlderAssistantFaces(currentRow) {
       Array.prototype.forEach.call(
         messagesEl.querySelectorAll('.agent-msg--assistant .agent-face'),
         function (face) {
           if (currentRow && currentRow.contains(face)) return;
+          cancelFaceMorph(face);
           clearFaceMotionClasses(face);
+          clearSickRecoverTimer(face);
           face.removeAttribute('data-listen');
           face.removeAttribute('title');
           var badge = face.querySelector('.agent-face-status');
           if (badge) badge.remove();
           face.classList.remove('is-sick');
+          face._preSickEmotion = null;
           face.classList.add('is-frozen');
         }
       );
@@ -3290,6 +3752,50 @@
     function onOfferDecline(item, row) {
       dismissedOffers[String(item.label || '').trim()] = Date.now();
       clearActiveOffer(row);
+
+      var softReplies = [
+        'Pas de souci\u00a0!',
+        'Ok, no worries.',
+        'Tranquille, on laisse \u00e7a.',
+        'Ok, on passe.'
+      ];
+      var soft = softReplies[Math.floor(Math.random() * softReplies.length)];
+      var next = pickListenSuggestion(lastListenSuggestions);
+
+      if (next) {
+        appendMessage('assistant', soft + ' Autre id\u00e9e\u00a0?', {
+          emotion: spiceEmotion('happy'),
+          noUnread: true,
+          noSound: true
+        });
+        history.push({
+          role: 'assistant',
+          content: soft + ' Autre id\u00e9e\u00a0?'
+        });
+        schedulePersistChatHistory();
+        appendOfferMessage(next);
+      } else {
+        appendMessage(
+          'assistant',
+          soft + ' Dis-moi si tu veux autre chose.',
+          { emotion: spiceEmotion('happy') }
+        );
+        history.push({
+          role: 'assistant',
+          content: soft + ' Dis-moi si tu veux autre chose.'
+        });
+        schedulePersistChatHistory();
+        renderSuggestions(
+          [
+            'Quelle est la priorit\u00e9\u00a0?',
+            'D\u00e9finir une \u00e9ch\u00e9ance',
+            'Ajouter une sous-t\u00e2che'
+          ],
+          { animate: true }
+        );
+        refreshApplySuggestions({ animate: true });
+      }
+
       muteListening(800);
       notifyLayout();
     }
@@ -3328,7 +3834,8 @@
           }
         });
         if (seq !== listenScanSeq) return;
-        var pick = pickListenSuggestion(list);
+        lastListenSuggestions = Array.isArray(list) ? list.slice() : [];
+        var pick = pickListenSuggestion(lastListenSuggestions);
         if (pick) {
           appendOfferMessage(pick);
         } else {

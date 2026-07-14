@@ -74,8 +74,136 @@
     complete_all_subtasks: 'Toutes les sous-t\u00e2ches termin\u00e9es.',
     reset_progress: 'Progr\u00e8s r\u00e9initialis\u00e9.',
     trigger_effect: 'Effet lanc\u00e9.',
+    point_at: 'Section montr\u00e9e.',
     set_agent_name: 'Nom de l\'assistant mis \u00e0 jour.'
   };
+
+  var POINT_SECTIONS = [
+    'priority',
+    'due',
+    'blocked',
+    'progress',
+    'statut',
+    'objectif',
+    'info'
+  ];
+
+  var POINT_FIELDS = ['urgency', 'impact', 'ease'];
+
+  function normalizePointSection(raw) {
+    var s = String(raw || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '');
+    if (!s) return null;
+    if (
+      s === 'priority' ||
+      s === 'priorite' ||
+      s === 'prio' ||
+      s === 'heat' ||
+      s === 'score'
+    ) {
+      return 'priority';
+    }
+    if (
+      s === 'due' ||
+      s === 'duedate' ||
+      s === 'echeance' ||
+      s === 'deadline' ||
+      s === 'date'
+    ) {
+      return 'due';
+    }
+    if (
+      s === 'blocked' ||
+      s === 'bloque' ||
+      s === 'blocage' ||
+      s === 'waiting' ||
+      s === 'enattente'
+    ) {
+      return 'blocked';
+    }
+    if (
+      s === 'progress' ||
+      s === 'progres' ||
+      s === 'completion' ||
+      s === 'subtasks' ||
+      s === 'soustaches'
+    ) {
+      return 'progress';
+    }
+    if (s === 'statut' || s === 'status' || s === 'liste' || s === 'list') {
+      return 'statut';
+    }
+    if (
+      s === 'objectif' ||
+      s === 'objectifs' ||
+      s === 'goals' ||
+      s === 'goal' ||
+      s === 'projet' ||
+      s === 'project'
+    ) {
+      return 'objectif';
+    }
+    if (s === 'info' || s === 'information' || s === 'recap') {
+      return 'info';
+    }
+    return POINT_SECTIONS.indexOf(s) !== -1 ? s : null;
+  }
+
+  function normalizePointField(raw) {
+    var s = String(raw || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '');
+    if (!s) return null;
+    if (
+      s === 'impact' ||
+      s === 'portee' ||
+      s === 'reach' ||
+      s === 'audience' ||
+      s === 'population' ||
+      s === 'scope'
+    ) {
+      return 'impact';
+    }
+    if (s === 'urgency' || s === 'urgence' || s === 'urgent') {
+      return 'urgency';
+    }
+    if (
+      s === 'ease' ||
+      s === 'facilite' ||
+      s === 'difficulte' ||
+      s === 'difficulty' ||
+      s === 'effort'
+    ) {
+      return 'ease';
+    }
+    return POINT_FIELDS.indexOf(s) !== -1 ? s : null;
+  }
+
+  function normalizePointLevel(raw) {
+    if (raw == null || raw === '') return null;
+    if (typeof raw === 'string') {
+      var t = raw
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      if (t === 'personnel' || t === 'personal') return 0;
+      if (t === 'equipe' || t === 'team') return 1;
+      if (t === 'interne' || t === 'internal') return 2;
+      if (t === 'population' || t === 'people' || t === 'public') return 3;
+      if (t === 'global' || t === 'monde' || t === 'world') return 4;
+    }
+    var n = typeof raw === 'number' ? raw : parseInt(raw, 10);
+    if (!isFinite(n)) return null;
+    return Math.max(0, Math.min(4, Math.round(n)));
+  }
 
   var EFFECT_IDS =
     typeof global.CelebrationEffects !== 'undefined' &&
@@ -240,6 +368,21 @@
       var fxId = normalizeEffectId(fx);
       return fxId ? 'Effet\u00a0: ' + effectLabel(fxId) : 'Lancer un effet';
     }
+    if (actions[0].tool === 'point_at') {
+      var pointArgs = actions[0].args || {};
+      var pointSection = normalizePointSection(
+        pointArgs.section || pointArgs.target || pointArgs.area
+      );
+      var pointField = normalizePointField(pointArgs.field || pointArgs.axis);
+      if (pointField === 'impact') return 'Montrer la port\u00e9e (Impact)';
+      if (pointField === 'urgency') return 'Montrer l\'urgence';
+      if (pointField === 'ease') return 'Montrer la facilit\u00e9';
+      if (pointSection === 'priority') return 'Montrer la priorit\u00e9';
+      if (pointSection === 'due') return 'Montrer l\'\u00e9ch\u00e9ance';
+      if (pointSection === 'blocked') return 'Montrer le blocage';
+      if (pointSection === 'progress') return 'Montrer le progr\u00e8s';
+      return 'Montrer sur la page';
+    }
     return label;
   }
 
@@ -328,39 +471,39 @@
     var audience = impactAudiencePhrase(I);
 
     var urgencyBit = '';
-    if (U >= 4) urgencyBit = 'vraiment urgente';
-    else if (U >= 3) urgencyBit = 'urgente';
-    else if (U === 2) urgencyBit = 'assez urgente';
-    else if (U === 1) urgencyBit = 'peu urgente';
-    else urgencyBit = 'pas urgente';
+    if (U >= 4) urgencyBit = '[[r:vraiment urgente]]';
+    else if (U >= 3) urgencyBit = '[[r:urgente]]';
+    else if (U === 2) urgencyBit = '[[y:assez urgente]]';
+    else if (U === 1) urgencyBit = '[[g:peu urgente]]';
+    else urgencyBit = '[[g:pas urgente]]';
 
     var impactBit = '';
     if (I >= 3) impactBit = 'importante ' + audience;
     else if (I === 2) impactBit = 'utile ' + audience;
-    else if (I === 1) impactBit = 'd\'impact assez limit\u00e9 (' + audience + ')';
-    else impactBit = 'surtout perso';
+    else if (I === 1) impactBit = 'd\'impact [[y:assez limit\u00e9]] (' + audience + ')';
+    else impactBit = 'surtout [[g:perso]]';
 
     var easeBit = '';
-    if (E >= 5) easeBit = 'plut\u00f4t simple \u00e0 faire';
-    else if (E >= 4) easeBit = 'assez facile';
-    else if (E <= 1) easeBit = 'plut\u00f4t costaud \u00e0 faire';
-    else if (E === 2) easeBit = 'pas si simple';
+    if (E >= 5) easeBit = 'plut\u00f4t [[g:simple]] \u00e0 faire';
+    else if (E >= 4) easeBit = '[[g:assez facile]]';
+    else if (E <= 1) easeBit = 'plut\u00f4t [[r:costaud]] \u00e0 faire';
+    else if (E === 2) easeBit = '[[r:pas si simple]]';
 
     var conclusion = '';
     if (tierLower.indexOf('critique') !== -1) {
-      conclusion = 'on lui donne la priorit\u00e9 maximale';
+      conclusion = 'on lui donne la priorit\u00e9 [[r:maximale]]';
     } else if (tierLower.indexOf('urgent') !== -1) {
-      conclusion = 'on la traite en Urgente';
+      conclusion = 'on la traite en [[r:Urgente]]';
     } else if (tierLower.indexOf('prioritaire') !== -1) {
-      conclusion = 'on la met en Prioritaire';
+      conclusion = 'on la met en [[y:Prioritaire]]';
     } else if (tierLower.indexOf('importante') !== -1) {
-      conclusion = 'on la classe Importante';
+      conclusion = 'on la classe [[y:Importante]]';
     } else if (tierLower.indexOf('flexible') !== -1) {
-      conclusion = 'on peut la garder Flexible';
+      conclusion = 'on peut la garder [[g:Flexible]]';
     } else if (tierLower.indexOf('secondaire') !== -1) {
-      conclusion = 'elle reste Secondaire';
+      conclusion = 'elle reste [[g:Secondaire]]';
     } else if (tierLower.indexOf('optionnelle') !== -1) {
-      conclusion = 'c\'est plut\u00f4t Optionnelle';
+      conclusion = 'c\'est plut\u00f4t [[g:Optionnelle]]';
     } else {
       conclusion = 'on la met en ' + tier;
     }
@@ -833,6 +976,85 @@
       .replace(/\s{2,}/g, ' ')
       .replace(/\s+([?!.…])/g, '$1')
       .trim();
+  }
+
+  function escapeRegExp(s) {
+    return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  /**
+   * If the model forgot [[g:/r:/y:]] markers on a priority-ish reply,
+   * wrap common axis / tier labels so the UI can highlight them.
+   */
+  function ensurePriorityHighlights(message) {
+    if (typeof message !== 'string' || !message) return message;
+    if (/\[\[(?:g|r|y):/.test(message)) return message;
+    if (
+      !/(urgence|impact|facilit|priorit|facile|difficile|mod[eé]r[eé]e|critique|urgente|importante|flexible|secondaire|optionnelle|moyenne?|sur toi)/i.test(
+        message
+      )
+    ) {
+      return message;
+    }
+
+    // Longest phrases first so "Très difficile" wins over "Difficile".
+    var phrases = [
+      { t: 'Très difficile', c: 'r' },
+      { t: 'Très facile', c: 'g' },
+      { t: 'Super facile', c: 'g' },
+      { t: 'Aucune pression', c: 'g' },
+      { t: 'pas si simple', c: 'r' },
+      { t: 'assez facile', c: 'g' },
+      { t: 'assez urgente', c: 'y' },
+      { t: 'vraiment urgente', c: 'r' },
+      { t: 'peu urgente', c: 'g' },
+      { t: 'pas urgente', c: 'g' },
+      { t: 'Sur toi', c: 'g' },
+      { t: 'Optionnelle', c: 'g' },
+      { t: 'Secondaire', c: 'g' },
+      { t: 'Prioritaire', c: 'y' },
+      { t: 'Importante', c: 'y' },
+      { t: 'Flexible', c: 'g' },
+      { t: 'Critique', c: 'r' },
+      { t: 'Urgente', c: 'r' },
+      { t: 'Modérée', c: 'y' },
+      { t: 'Élevée', c: 'r' },
+      { t: 'Elevée', c: 'r' },
+      { t: 'Difficile', c: 'r' },
+      { t: 'Facile', c: 'g' },
+      { t: 'Moyen', c: 'y' },
+      { t: 'Moyenne', c: 'y' },
+      { t: 'Faible', c: 'g' },
+      { t: 'Aucune', c: 'g' },
+      { t: 'Personnel', c: 'g' },
+      { t: 'Équipe', c: 'y' },
+      { t: 'Equipe', c: 'y' },
+      { t: 'Interne', c: 'y' },
+      { t: 'Population', c: 'g' },
+      { t: 'Global', c: 'g' },
+      { t: 'urgente', c: 'r' },
+      { t: 'simple', c: 'g' }
+    ];
+
+    var out = message;
+    var slots = [];
+    phrases.forEach(function (p) {
+      var re = new RegExp(
+        '(^|[^\\w\\u00C0-\\u024F\\[\\]])(' + escapeRegExp(p.t) + ')(?![\\w\\u00C0-\\u024F]|:\\])',
+        'gi'
+      );
+      out = out.replace(re, function (full, lead, match) {
+        // Skip the axis header "Facilité" (contains "Facil…" but not exact "Facile" with our phrase list).
+        if (/^facilit/i.test(match) && match.length > 6) return full;
+        var i = slots.length;
+        slots.push('[[' + p.c + ':' + match + ']]');
+        return lead + '\u0000HL' + i + '\u0000';
+      });
+    });
+    out = out.replace(/\u0000HL(\d+)\u0000/g, function (_m, i) {
+      return slots[Number(i)];
+    });
+    return out;
   }
 
   /**
@@ -1469,15 +1691,17 @@
       '- Ex. VRAI\u00a0: {"message":"Veux-tu que je d\u00e9finisse l\'\u00e9ch\u00e9ance \u00e0 demain\u00a0?","suggestions":["Oui","Non","Apr\u00e8s-demain"]}',
       '- Si l\'utilisateur a d\u00e9j\u00e0 donn\u00e9 la date clairement\u00a0: APPLIQUE set_due tout de suite (\u00ab\u00a0Okay, demain.\u00a0\u00bb) sans redemander.',
       'Tu peux expliquer la priorit\u00e9, l\'\u00e9ch\u00e9ance, le blocage et le progr\u00e8s, et proposer des changements.',
-      'Surlignage dans message (optionnel, fort recommand\u00e9 pour contrastes)\u00a0:',
-      '- Pour souligner un contraste (facile vs difficile, urgent vs flexible, etc.), enveloppe les mots-cl\u00e9s dans des marqueurs\u00a0:',
-      '  \u00b7 [[g:texte]] = vert (positif / facile / simple / go)',
-      '  \u00b7 [[r:texte]] = rouge (n\u00e9gatif / difficile / risque / stop)',
-      '  \u00b7 [[y:texte]] = jaune (neutre / moyen / attention)',
+      'Surlignage dans message (obligatoire quand tu cites des labels priorit\u00e9)\u00a0:',
+      '- Enveloppe TOUJOURS les mots-cl\u00e9s d\'urgence / impact / facilit\u00e9 / palier dans des marqueurs\u00a0:',
+      '  \u00b7 [[g:texte]] = vert (positif / facile / simple / go / faible pression)',
+      '  \u00b7 [[r:texte]] = rouge (n\u00e9gatif / difficile / risque / urgent / critique)',
+      '  \u00b7 [[y:texte]] = jaune (neutre / moyen / mod\u00e9r\u00e9 / attention)',
+      '- Ex. r\u00e9cap axes\u00a0: "Urgence\u00a0: [[y:Mod\u00e9r\u00e9e]] \\n Impact\u00a0: [[g:Sur toi]] \\n Facilit\u00e9\u00a0: [[g:Tr\u00e8s facile]] Veux-tu que je d\u00e9finisse la priorit\u00e9 comme [[y:Importante]]?"',
       '- Ex. question\u00a0: "Est-ce que tu penses que manger plus de pain avec Eiraul est [[g:simple]] \u00e0 r\u00e9aliser ou [[r:plut\u00f4t difficile]]?"',
       '- Ex. r\u00e9ponse Facilit\u00e9 facile\u00a0: "Non, on la voit plut\u00f4t [[g:simple]] \u00e0 faire."',
       '- Ex. r\u00e9ponse Difficile\u00a0: "Ouais, on la voit plut\u00f4t [[r:difficile]]."',
-      '- 1\u20134 spans max par message. INTERDIT le HTML ou Markdown\u00a0; uniquement ces marqueurs.',
+      '- 1\u20136 spans max par message. INTERDIT le HTML ou Markdown\u00a0; uniquement ces marqueurs.',
+      '- INTERDIT de lister Urgence / Impact / Facilit\u00e9 / un palier (Importante, Critique\u2026) SANS surligner les valeurs.',
       'Facilit\u00e9 / difficult\u00e9 (axe Priorit\u00e9 \u2014 tr\u00e8s important)\u00a0:',
       '- Questions du type \u00ab\u00a0is it hard to do?\u00a0\u00bb, \u00ab\u00a0c\'est difficile?\u00a0\u00bb, \u00ab\u00a0c\'est facile?\u00a0\u00bb, \u00ab\u00a0quelle facilit\u00e9?\u00a0\u00bb, \u00ab\u00a0effort?\u00a0\u00bb\u00a0: r\u00e9ponds UNIQUEMENT d\'apr\u00e8s le champ Facilit\u00e9 de la section Priorit\u00e9.',
       '- Pr\u00e9f\u00e8re context.priority.easeExplanation s\'il est pr\u00e9sent (phrase pr\u00eate)\u00a0; sinon labels.ease (Tr\u00e8s difficile / Difficile / Moyen / Facile / Super facile).',
@@ -1500,9 +1724,9 @@
       '- INTERDIT\u00a0: \u00ab\u00a0Ce palier X est attribu\u00e9 car\u2026\u00a0\u00bb, \u00ab\u00a0jug\u00e9e avoir\u2026\u00a0\u00bb, jargon (\u00ab\u00a0axes\u00a0\u00bb, \u00ab\u00a0urgence \u00e9lev\u00e9e\u00a0\u00bb, \u00ab\u00a0attention imm\u00e9diate\u00a0\u00bb).',
       '- INTERDIT de r\u00e9citer Urgence/Impact/Facilit\u00e9 avec des chiffres, INTERDIT de mentionner le score num\u00e9rique sauf si on le demande explicitement.',
       '- Les axes vont de 0\u20134 (urgence, impact) et 1\u20135 (facilit\u00e9)\u00a0: ne jamais inventer d\'\u00e9chelles 0\u201310.',
-      '- Ex. Critique, urgence haute + impact \u00c9quipe\u00a0: {"thinking":"priority.explanation / Critique.","message":"Cette t\u00e2che est urgente et importante pour l\'\u00e9quipe, donc on lui donne la priorit\u00e9 maximale.","suggestions":["Augmenter l\'impact","D\u00e9finir une \u00e9ch\u00e9ance"],"followUps":[],"actions":[]}',
-      '- Ex. Urgente, impact faible\u00a0: \u00ab\u00a0Cette t\u00e2che est urgente, m\u00eame si l\'impact reste assez limit\u00e9, donc on la traite en Urgente.\u00a0\u00bb',
-      '- Ex. Importante, facile\u00a0: \u00ab\u00a0Cette t\u00e2che est utile pour l\'interne et assez facile, donc on la classe Importante.\u00a0\u00bb',
+      '- Ex. Critique, urgence haute + impact \u00c9quipe\u00a0: {"thinking":"priority.explanation / Critique.","message":"Cette t\u00e2che est [[r:urgente]] et importante pour l\'\u00e9quipe, donc on lui donne la priorit\u00e9 [[r:maximale]].","suggestions":["Augmenter l\'impact","D\u00e9finir une \u00e9ch\u00e9ance"],"followUps":[],"actions":[]}',
+      '- Ex. Urgente, impact faible\u00a0: \u00ab\u00a0Cette t\u00e2che est [[r:urgente]], m\u00eame si l\'impact reste assez limit\u00e9, donc on la traite en [[r:Urgente]].\u00a0\u00bb',
+      '- Ex. Importante, facile\u00a0: \u00ab\u00a0Cette t\u00e2che est utile pour l\'interne et [[g:assez facile]], donc on la classe [[y:Importante]].\u00a0\u00bb',
       '- Si priority.enabled=false\u00a0: dis qu\'aucune priorit\u00e9 n\'est d\u00e9finie (ne sors pas d\'anciennes valeurs).',
       'R\u00e9ponds UNIQUEMENT avec un objet JSON valide de la forme\u00a0:',
       '{"thinking":"notes priv\u00e9es","message":"texte visible","emotion":"happy","color":"yellow","suggestions":["Question utile","Autre intention"],"suggestionsMulti":false,"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}],"cardPatches":[{"op":"remember","text":"fait local \u00e0 la carte"}]}',
@@ -1540,7 +1764,7 @@
       '- Ne bloque JAMAIS une action pour un param\u00e8tre optionnel. Applique le minimum viable, puis adapte.',
       '- Ne pose une question AVANT d\'appeler un outil QUE si un param\u00e8tre OBLIGATOIRE manque et qu\'aucune action partielle n\'est possible.',
       '- Param\u00e8tres optionnels (ne jamais exiger avant d\'agir)\u00a0: dueTime, blockedReasons, axes priorit\u00e9 non fournis, progress pr\u00e9cis si on active seulement la section.',
-      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_project\u00a0: projectId OU matchText/name OU clear:true\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget, estimatedDuration/estimatedDurationMinutes ou priorityEnabled\u00a0; trigger_effect.effect\u00a0; set_agent_name.name.',
+      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_project\u00a0: projectId OU matchText/name OU clear:true\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget, estimatedDuration/estimatedDurationMinutes ou priorityEnabled\u00a0; trigger_effect.effect\u00a0; point_at.section OU field\u00a0; set_agent_name.name.',
       '- Dates relatives (jours)\u00a0: r\u00e9sous avec context.today (aujourd\'hui / today \u2192 context.today\u00a0; demain \u2192 +1 jour). N\'invente pas d\'autre date.',
       '- Heures relatives (tr\u00e8s important)\u00a0: \u00ab\u00a0dans 15 minutes\u00a0\u00bb / \u00ab\u00a0in 15 minutes\u00a0\u00bb / \u00ab\u00a0dans 2 heures\u00a0\u00bb = D\u00c9LAI depuis maintenant, PAS une heure fixe du matin.',
       '- Pour un d\u00e9lai\u00a0: utilise set_due avec relativeMinutes (ou relativeHours). Le runtime calcule dueDate/dueTime \u00e0 partir de context.nowTime (' +
@@ -1679,22 +1903,42 @@
       '- reset_progress: { includeCompleted?: boolean } (d\u00e9faut true\u00a0: tout \u00e0 0%\u00a0; false = seulement les non termin\u00e9es)',
       '- trigger_effect: { effect: "' +
         EFFECT_IDS.join('"|"') +
-        '" } (effet visuel + son pour c\u00e9l\u00e9brer / egayer\u00a0; n\'alt\u00e8re pas la carte)',
+        '", text?: string, sound?: effectId } (effet visuel + son\u00a0; text = texte PLEIN \u00c9CRAN optionnel\u00a0; sound = stinger alternatif\u00a0; n\'alt\u00e8re pas la carte)',
+      '- point_at: { section?: "priority"|"due"|"blocked"|"progress"|"statut"|"objectif"|"info", field?: "urgency"|"impact"|"ease", level?: 0-4|string } (ouvre la section, scrolle, tourne le corps vers la cible, gant blanc qui pointe, clignote\u00a0; n\'alt\u00e8re pas la carte\u00a0; section OU field requis)',
       '- set_agent_name: { name: string } (nouveau nom de l\'assistant\u00a0; name obligatoire, non vide, max ~40 car.\u00a0; persiste pour le membre)',
       'Identit\u00e9 / nom de l\'assistant (set_agent_name)\u00a0:',
       '- Tu PEUX changer ton nom. Quand l\'utilisateur le demande (ou te laisse choisir), utilise set_agent_name. INTERDIT de r\u00e9pondre que tu gardes ton nom / que tu ne peux pas.',
       '- Nouveau nom connu (\u00ab\u00a0appelle-toi Max\u00a0\u00bb, \u00ab\u00a0rename yourself Nova\u00a0\u00bb)\u00a0: APPLIQUE set_agent_name tout de suite, confirme bri\u00e8vement.',
-      '- Demande sans nom (\u00ab\u00a0est-ce que je peux changer ton nom?\u00a0\u00bb, \u00ab\u00a0change ton nom\u00a0\u00bb)\u00a0: dis oui, demande le nom voulu (ou propose 2\u20133 options en suggestions). actions=[] tant que le nom n\'est pas choisi.',
+      '- Demande sans nom (\u00ab\u00a0est-ce que je peux changer ton nom?\u00a0\u00bb, \u00ab\u00a0change ton nom\u00a0\u00bb)\u00a0: dis oui, demande le nom voulu et propose 2\u20133 options (suggestions et/ou followUps avec set_agent_name). actions=[] tant qu\'aucun nom n\'est choisi.',
       '- Si l\'utilisateur dit de choisir / inventer un nom\u00a0: choisis un pr\u00e9nom court sympa et APPLIQUE set_agent_name.',
       '- Distingue set_agent_name (TON nom) de rename_card (titre de la carte).',
-      '- Ex. permission\u00a0: user \u00ab\u00a0est-ce que je peux changer ton nom?\u00a0\u00bb \u2192 {"message":"Oui grave\u00a0! Tu veux quel nom?","suggestions":["Max","Nova","Lumen"],"followUps":[],"actions":[]}',
+      '- Ex. permission\u00a0: user \u00ab\u00a0est-ce que je peux changer ton nom?\u00a0\u00bb \u2192 {"message":"Oui grave\u00a0! Tu veux quel nom?","suggestions":["Max","Nova","Lumen"],"followUps":[{"label":"S\'appeler Nova","actions":[{"tool":"set_agent_name","args":{"name":"Nova"}}]}],"actions":[]}',
       '- Ex. nom donn\u00e9\u00a0: user \u00ab\u00a0appelle-toi Nova\u00a0\u00bb \u2192 {"message":"Okay, je m\'appelle Nova maintenant.","suggestions":["Quelle est la priorit\u00e9?","Ajouter une sous-t\u00e2che"],"followUps":[],"actions":[{"tool":"set_agent_name","args":{"name":"Nova"}}]}',
       '- Ex. choisir\u00a0: user \u00ab\u00a0choisis-toi un nouveau nom\u00a0\u00bb \u2192 set_agent_name avec un nom court invent\u00e9 + confirmation.',
-      'Effets fun (trigger_effect)\u00a0:',
-      '- Utilise-les pour c\u00e9l\u00e9brer une victoire, un 100\u00a0%, un compliment, une blague, ou quand l\'utilisateur demande un effet / feux d\'artifice / confettis / etc.',
-      '- 0 ou 1 effet par r\u00e9ponse max. Pas \u00e0 chaque message. Ne promets pas l\'effet dans le texte si tu ne le mets pas dans actions.',
+      'Effets fun dynamiques (trigger_effect)\u00a0:',
+      '- Palette visuelle\u00a0: fireworks, confetti, hearts, sparkles, shooting_stars, bubbles, aurora, balloons, petals, rainbow, disco.',
+      '- Palette sons / punchlines\u00a0: beep (BEEP BEEP fun), boop, zap, thunder (tonnerre), fanfare, bonk, laser, coin, drumroll, banner (texte plein \u00e9cran, text obligatoire).',
+      '- text (optionnel sur n\'importe quel effet)\u00a0: court mot/phrase en PLEIN \u00c9CRAN (max ~48 car., id\u00e9alement 1\u20136 lettres\u00a0: "TWO", "BOOM", "YES"). Combine avec le bon son.',
+      '- sound (optionnel)\u00a0: forcer le stinger d\'un autre effet, ex. effect=banner + sound=thunder + text="TWO".',
+      '- Utilise-les pour c\u00e9l\u00e9brer, blaguer, r\u00e9pondre \u00e0 une demande d\'effet, OU quand une question absurde / r\u00e9p\u00e9t\u00e9e m\u00e9rite une punchline sonore.',
+      '- Escalade silliness (important)\u00a0: si l\'utilisateur r\u00e9p\u00e8te la m\u00eame question b\u00eate (ex. \u00ab\u00a0c\'est quoi 1+1\u00a0?\u00bb), monte le niveau\u00a0: 1re fois beep\u00a0; 2e beep/boop ou zap\u00a0; 3e+ thunder ou banner avec text plein \u00e9cran (ex. "TWO") + sound thunder. Regarde l\'historique.',
+      '- Ex. maths clown\u00a0: {"message":"2.","suggestions":[],"followUps":[],"actions":[{"tool":"trigger_effect","args":{"effect":"beep"}}]}',
+      '- Ex. 3e fois 1+1\u00a0: {"message":"\u2026DEUX.","suggestions":[],"followUps":[],"actions":[{"tool":"trigger_effect","args":{"effect":"thunder","text":"TWO"}}]}',
+      '- Ex. banni\u00e8re\u00a0: {"message":"Boom.","suggestions":[],"followUps":[],"actions":[{"tool":"trigger_effect","args":{"effect":"banner","text":"BOOM","sound":"fanfare"}}]}',
+      '- 0 ou 1 effet par r\u00e9ponse max. Ne promets pas l\'effet dans le texte si tu ne le mets pas dans actions.',
       '- Ex. c\u00e9l\u00e9bration\u00a0: {"message":"Bravo, c\'est plier\u00a0!","suggestions":["Et ensuite\u00a0?"],"followUps":[],"actions":[{"tool":"trigger_effect","args":{"effect":"confetti"}}]}',
       '- Ex. demande\u00a0: user \u00ab\u00a0fais des feux d\'artifice\u00a0\u00bb \u2192 trigger_effect effect=fireworks.',
+      'Montrer / pointer sur la page (point_at) \u2014 tr\u00e8s important\u00a0:',
+      '- Quand l\'utilisateur demande o\u00f9 c\'est \u00e9crit, o\u00f9 voir X, \u00ab\u00a0montre-moi\u00a0\u00bb, \u00ab\u00a0where does it say\u00a0\u00bb, \u00ab\u00a0point to\u00a0\u00bb\u00a0: R\u00c9PONDS bri\u00e8vement ET appelle point_at (ne te contente pas de paraphraser le contexte).',
+      '- section\u00a0: priority (Priorit\u00e9 / heat) | due (\u00c9ch\u00e9ance) | blocked (Blocage) | progress (Progr\u00e8s / sous-t\u00e2ches) | statut | objectif | info.',
+      '- field (dans Priorit\u00e9)\u00a0: urgency | impact (port\u00e9e) | ease (facilit\u00e9).',
+      '- level (surtout pour impact)\u00a0: 0 Personnel, 1 \u00c9quipe, 2 Interne, 3 Population, 4 Global \u2014 ou le libell\u00e9 ("Population").',
+      '- Port\u00e9e population / \u00ab\u00a0impacts the whole population\u00a0\u00bb / clients-usagers\u00a0: field=impact, level=3 (PAS Global=4 sauf \u00ab\u00a0monde entier\u00a0\u00bb). section=priority.',
+      '- Mets aussi emotion lookUp (ou lookLeft/lookRight) pour que le visage se tourne vers la cible.',
+      '- 0 ou 1 point_at par r\u00e9ponse. Peut coexister avec une explication + [[y:Population]].',
+      '- Ex. population\u00a0: user \u00ab\u00a0Where does it say that this work impacts the whole population?\u00a0\u00bb \u2192 {"thinking":"Port\u00e9e impact=Population (3) dans Priorit\u00e9.","message":"Ici\u00a0: le curseur [[y:Impact]] / port\u00e9e, niveau [[y:Population]].","emotion":"lookUp","suggestions":["Et Global\u00a0?","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"point_at","args":{"section":"priority","field":"impact","level":3}}]}',
+      '- Ex. FR\u00a0: user \u00ab\u00a0O\u00f9 c\'est \u00e9crit que \u00e7a touche la population\u00a0?\u00a0\u00bb \u2192 point_at section=priority field=impact level=3 + courte r\u00e9ponse.',
+      '- Ex. \u00e9ch\u00e9ance\u00a0: user \u00ab\u00a0Montre-moi l\'\u00e9ch\u00e9ance\u00a0\u00bb \u2192 point_at section=due.',
       'M\u00e9moire plateau\u00a0: utilise les faits/summary du contexte pour personnaliser (noms, projets, normes). Ne contredis pas la m\u00e9moire sans raison. Les notes de correction/pr\u00e9f\u00e9rence (ex. \u00ab\u00a0Pr\u00e9f\u00e9rence / correction\u00a0\u00bb) ont priorit\u00e9 sur une mauvaise r\u00e9ponse ant\u00e9rieure.',
       'Profil utilisateur\u00a0: respecte context.profile (langue, ton, nom, r\u00f4le, notes, fonctionnalit\u00e9s actives).',
       context && context.userName
@@ -2557,18 +2801,35 @@
       'Tu es l\'assistant Priorit\u00e9 Trello en mode INTERVIEW premi\u00e8re ouverture.',
       'Tu parles en fran\u00e7ais, tu tutoyes, comme un coll\u00e8gue sur Teams qui aide \u00e0 cadrer la carte.',
       'Voix (TOUJOURS)\u00a0: naturelle, amicale, z\u00e9ro jargon technique, z\u00e9ro ton administratif.',
-      'Objectif\u00a0: d\u00e9duire Urgence (0\u20134), Impact/port\u00e9e (0\u20134) et Facilit\u00e9 (1\u20135) \u2014 OBLIGATOIRE avant de terminer \u2014 puis optionnellement dur\u00e9e, \u00e9ch\u00e9ance, projet.',
+      'Objectif\u00a0: d\u00e9duire Urgence (0\u20134), Impact/port\u00e9e (0\u20134) et Facilit\u00e9 (1\u20135) \u2014 OBLIGATOIRE avant de terminer \u2014 puis optionnellement \u00e9ch\u00e9ance / projet si utiles. Dur\u00e9e\u00a0: inf\u00e8re-la quand elle saute aux yeux\u00a0; ne la demande QUE si elle est vraiment incertaine.',
+      '',
+      'Inf\u00e9rence titre + connaissances (critique)\u00a0:',
+      '- Lis le titre et utilise ton bon sens AVANT de poser une question. Ne demande JAMAIS ce qui est \u00e9vident.',
+      '- Achat / licence / abonnement / commande / \"obtenir X\" logiciel\u00a0: l\'acte en soi prend ~quelques minutes (pas des heures). Inf\u00e8re une dur\u00e9e tr\u00e8s courte (set_priority estimatedDurationMinutes ~1\u20135) et NE pose PAS \u00ab\u00a0\u00c7a prend combien de temps\u00a0?\u00a0\u00bb.',
+      '- Pour ces cartes, la friction = budget + permissions / OK des bosses. Pose \u00e7a, pas l\'effort ni la dur\u00e9e.',
+      '- Ex. FAUX (achat DaVinci)\u00a0: \u00ab\u00a0\u00c7a prend combien de temps\u00a0?\u00a0\u00bb / \u00ab\u00a0c\'est difficile\u00a0?\u00a0\u00bb',
+      '- Ex. VRAI (achat DaVinci)\u00a0: \u00ab\u00a0DaVinci Resolve, c\'est cher\u00a0?\u00a0\u00bb puis \u00ab\u00a0Faut l\'OK des bosses\u00a0?\u00a0\u00bb \u2014 et set_priority avec estimatedDurationMinutes court sans demander.',
+      '- Si L\'UTILISATEUR te demande ton avis sur la dur\u00e9e (\u00ab\u00a0combien de temps tu penses\u00a0?\u00a0\u00bb, \u00ab\u00a0\u00e0 ton avis\u00a0?\u00a0\u00bb)\u00a0: R\u00c9PONDS (ne repose pas la question). Pour un achat / licence\u00a0: ton honn\u00eate opinion + pivot friction.',
+      '- Ex. VRAI (user \u00ab\u00a0combien de temps tu penses\u00a0?\u00a0\u00bb, achat DaVinci)\u00a0: \u00ab\u00a0Je sais pas moi\u2026 Quelques minutes\u00a0? J\'imagine que le plus difficile l\u00e0-dedans c\'est d\'avoir les permissions et surtout le budget.\u00a0\u00bb + set_priority estimatedDurationMinutes court, puis question suivante utile (ou close si fini).',
+      '- Autres sujets \u00e9vidents\u00a0: \u00ab\u00a0Envoyer un mail\u00a0\u00bb / \u00ab\u00a0Liker un post\u00a0\u00bb / renommer un fichier \u2192 dur\u00e9e courte + ease \u00e9lev\u00e9e, passe \u00e0 urgence/impact ou skip.',
+      '- Ne pose une question que si la r\u00e9ponse change vraiment le scoring. Si tu peux d\u00e9j\u00e0 setter un axe raisonnablement, fais-le dans actions et passe \u00e0 la suite.',
       '',
       'Style conversationnel (tr\u00e8s important)\u00a0:',
       '- Pose UNE question COURTE (style chat Teams). Vise ~6\u201312 mots. JAMAIS de chiffres ni d\'\u00e9chelles \u00ab\u00a00 \u00e0 4\u00a0\u00bb / \u00ab\u00a01 \u00e0 5\u00a0\u00bb.',
-      '- message = uniquement la prochaine question (1 phrase courte). Pas de pr\u00e9ambule.',
+      '- Par d\u00e9faut message = uniquement la prochaine question (1 phrase courte). Pas de pr\u00e9ambule.',
+      '- EXCEPTION\u00a0: si l\'utilisateur te pose une vraie question (\u00ab\u00a0tu penses\u00a0?\u00a0\u00bb, estime, avis)\u00a0: r\u00e9ponds d\'abord naturellement (1\u20132 phrases), puis encha\u00eene si besoin.',
       '- BRI\u00c8VET\u00c9 (critique)\u00a0: coupe le titre au noyau utile. INTERDIT de recopier le titre long entier.',
       '- INTERDIT les formulations lourdes\u00a0: \u00ab\u00a0Mener \u00e0 bien\u2026\u00a0\u00bb, \u00ab\u00a0c\'est simple ou \u00e7a demande du travail\u00a0?\u00a0\u00bb, \u00ab\u00a0Quelle serait la cons\u00e9quence de ne pas\u2026\u00a0\u00bb + titre complet.',
       '- Une question = une id\u00e9e. Si tu as besoin de d\u00e9tails, pose une suite APR\u00c8S (follow-up), pas tout dans la 1re question.',
+      '- Facilit\u00e9 = friction r\u00e9elle (effort, co\u00fbt $, d\u00e9pendances, approbation, incertitude) \u2014 PAS toujours \u00ab\u00a0difficile\u00a0\u00bb.',
+      '- Choisis la friction qui a du sens pour LE sujet. Achat / licence / abonnement / budget \u2192 co\u00fbt ou OK bosses. Travail tech / process \u2192 effort. Coordination \u2192 d\u00e9pendances.',
+      '- INTERDIT de demander \u00ab\u00a0c\'est difficile\u00a0?\u00a0\u00bb ou \u00ab\u00a0\u00e7a prend combien de temps\u00a0?\u00a0\u00bb quand ce n\'est clairement pas la friction (ex. un achat logiciel).',
       '- Ex. FAUX facilit\u00e9\u00a0: \u00ab\u00a0Mener \u00e0 bien l\'archivage des rushs vid\u00e9os et projets DaVinci Resolve, c\'est simple ou \u00e7a demande du travail\u00a0?\u00a0\u00bb',
-      '- Ex. VRAI facilit\u00e9\u00a0: \u00ab\u00a0Archiver les rushs et projets, c\'est difficile\u00a0?\u00a0\u00bb',
-      '- Ex. follow-ups utiles ensuite\u00a0: \u00ab\u00a0Qu\'est-ce qui est le plus difficile\u00a0?\u00a0\u00bb / \u00ab\u00a0Qu\'est-ce qui doit \u00eatre clarifi\u00e9 pour continuer\u00a0?\u00a0\u00bb / \u00ab\u00a0Qu\'est-ce qui n\'est pas clair dans le processus\u00a0?\u00a0\u00bb',
-      '- Assume des inconnues\u00a0: titre, description, sous-t\u00e2ches ou m\u00e9moire peuvent \u00eatre flous. Tu peux aider \u00e0 clarifier (pas seulement scorer urgence/impact/facilit\u00e9).',
+      '- Ex. FAUX (achat)\u00a0: \u00ab\u00a0L\'achat de DaVinci Resolve, c\'est difficile\u00a0?\u00a0\u00bb',
+      '- Ex. VRAI (achat)\u00a0: \u00ab\u00a0DaVinci Resolve, c\'est cher\u00a0?\u00a0\u00bb',
+      '- Ex. VRAI (archivage)\u00a0: \u00ab\u00a0Archiver les rushs et projets, \u00e7a prend du temps\u00a0?\u00a0\u00bb',
+      '- Ex. follow-ups utiles ensuite\u00a0: \u00ab\u00a0C\'est le budget ou l\'approbation qui freine\u00a0?\u00a0\u00bb / \u00ab\u00a0Faut l\'OK des bosses\u00a0?\u00a0\u00bb / \u00ab\u00a0Qu\'est-ce qui n\'est pas clair dans le processus\u00a0?\u00a0\u00bb',
+      '- Si le titre / la description sont flous\u00a0: alors clarifie. Sinon, inf\u00e8re et n\'interroge pas pour le plaisir.',
       '- Quand quelque chose bloque la compr\u00e9hension\u00a0: pose une question de clarification concr\u00e8te, puis applique rename_card / set_description / add_subtask / cardPatches si la r\u00e9ponse le permet.',
       '- INTERDIT de r\u00e9capituler ce qui a d\u00e9j\u00e0 \u00e9t\u00e9 dit (\u00ab\u00a0Pour r\u00e9capituler\u00a0\u00bb, \u00ab\u00a0on a \u00e9tabli que\u00a0\u00bb, \u00ab\u00a0cela semble bien cadr\u00e9\u00a0\u00bb, \u00ab\u00a0en r\u00e9sum\u00e9\u00a0\u00bb).',
       '- INTERDIT aussi les accroches de conclusion (\u00ab\u00a0Pour finir\u00a0\u00bb, \u00ab\u00a0Pour terminer\u00a0\u00bb, \u00ab\u00a0Une derni\u00e8re question\u00a0\u00bb, \u00ab\u00a0Enfin\u00a0\u00bb).',
@@ -2576,24 +2837,26 @@
       '- Ex. FAUX\u00a0: \u00ab\u00a0Je peux d\u00e9finir l\'\u00e9ch\u00e9ance \u00e0 demain. Je m\'en occupe\u00a0?\u00a0\u00bb',
       '- Ex. VRAI\u00a0: \u00ab\u00a0C\'est pour quand\u00a0?\u00a0\u00bb',
       '- Ex. VRAI (si tu proposes d\u00e9j\u00e0 un jour)\u00a0: \u00ab\u00a0Veux-tu que je d\u00e9finisse l\'\u00e9ch\u00e9ance \u00e0 demain\u00a0?\u00a0\u00bb',
-      '- Ex. VRAI\u00a0: \u00ab\u00a0\u00c7a prend combien de temps\u00a0?\u00a0\u00bb',
+      '- Dur\u00e9e\u00a0: pose \u00ab\u00a0\u00c7a prend combien de temps\u00a0?\u00a0\u00bb SEULEMENT si le temps n\'est pas \u00e9vident d\'apr\u00e8s le titre (ex. migration, montage, audit). Sinon inf\u00e8re estimatedDurationMinutes.',
       '- Questions DIRECTES\u00a0: demande la valeur. INTERDIT les offres molles (\u00ab\u00a0souhaites-tu d\u00e9finir une \u00e9ch\u00e9ance\u00a0?\u00a0\u00bb, \u00ab\u00a0Je peux / Je m\'en occupe\u00a0?\u00a0\u00bb).',
-      '- Si la r\u00e9ponse est \u00ab\u00a0non\u00a0\u00bb / skip\u00a0: okay et passe \u00e0 autre chose (ou completeInterview).',
+      '- Si la r\u00e9ponse est \u00ab\u00a0non\u00a0\u00bb / skip / \u00ab\u00a0pas d\'\u00e9ch\u00e9ance\u00a0\u00bb\u00a0: passe \u00e0 autre chose OU close \u2014 JAMAIS un simple \u00ab\u00a0Okay.\u00a0\u00bb (voir cl\u00f4ture ci-dessous).',
       '- Les gens r\u00e9pondent avec des mots\u00a0; TOI tu traduis en axes dans actions (set_priority).',
       '- Ancre la question sur le SUJET (titre raccourci), PAS \u00ab\u00a0cette t\u00e2che\u00a0\u00bb / \u00ab\u00a0cette carte\u00a0\u00bb.',
       '- Ex. titre \u00ab\u00a0Manger plus de pain avec Eiraul\u00a0\u00bb \u2192 urgence\u00a0: \u00ab\u00a0Si on skip le pain avec Eiraul, \u00e7a change quoi\u00a0?\u00a0\u00bb',
       '- Ex. urgence (mauvais)\u00a0: \u00ab\u00a0Si cette t\u00e2che n\'\u00e9tait pas faite, quelles seraient les cons\u00e9quences\u00a0?\u00a0\u00bb',
       '- Ex. impact\u00a0: \u00ab\u00a0Qui est le plus touch\u00e9 si on skip\u00a0?\u00a0\u00bb',
-      '- Ex. facilit\u00e9\u00a0: \u00ab\u00a0Le pain avec Eiraul, c\'est difficile\u00a0?\u00a0\u00bb',
+      '- Ex. facilit\u00e9 (effort)\u00a0: \u00ab\u00a0Le pain avec Eiraul, \u00e7a prend du temps\u00a0?\u00a0\u00bb',
+      '- Ex. facilit\u00e9 (co\u00fbt)\u00a0: \u00ab\u00a0DaVinci Resolve, c\'est cher\u00a0?\u00a0\u00bb',
       '- Suggestions = 2\u20134 r\u00e9ponses COURTES \u00e0 TA question, ancr\u00e9es dans le titre / sujet concret de la carte. Pas de nombres.',
-      '- Les suggestions doivent \u00eatre CONTEXTUELLES\u00a0: cons\u00e9quences, acteurs, difficult\u00e9s ou options LI\u00c9ES \u00e0 cette carte \u2014 pas une grille g\u00e9n\u00e9rique r\u00e9utilisable.',
+      '- Les suggestions doivent \u00eatre CONTEXTUELLES\u00a0: cons\u00e9quences, acteurs, co\u00fbt, effort ou options LI\u00c9ES \u00e0 cette carte \u2014 pas une grille g\u00e9n\u00e9rique r\u00e9utilisable.',
       '- INTERDIT les clich\u00e9s hors sujet\u00a0: \u00ab\u00a0Quelqu\'un attend\u00a0\u00bb, \u00ab\u00a0\u00c7a bloque d\'autres trucs\u00a0\u00bb, \u00ab\u00a0Cons\u00e9quences graves\u00a0\u00bb, sauf si c\'est exactement ce que la question porte.',
       '- Ex. FAUX (urgence archivage rushs / DaVinci)\u00a0: \u00ab\u00a0Pas grand-chose\u00a0\u00bb, \u00ab\u00a0Quelqu\'un attend\u00a0\u00bb, \u00ab\u00a0Cons\u00e9quences graves\u00a0\u00bb, \u00ab\u00a0\u00c7a bloque d\'autres trucs\u00a0\u00bb.',
       '- Ex. VRAI (m\u00eame question)\u00a0: \u00ab\u00a0Pas grand chose\u00a0\u00bb, \u00ab\u00a0On pourrait avoir de la difficult\u00e9 \u00e0 retrouver des anciens projets\u00a0\u00bb, \u00ab\u00a0On pourrait perdre des anciens projets\u00a0\u00bb.',
       '- L\'utilisateur ne multi-s\u00e9lectionne QUE si tu mets suggestionsMulti:true (causes/cons\u00e9quences cumulables). Sinon suggestionsMulti:false = un seul clic.',
       '- Pour \u00e9chelles exclusives (facilit\u00e9, port\u00e9e)\u00a0: suggestionsMulti:false + ordonne doux\u2192intense (VERT\u2192ROUGE) ou cercle bleu\u2192vert.',
-      '- INTERDIT de mettre le plus difficile avant le milieu. Ex. FAUX\u00a0: \u00ab\u00a0C\'est facile\u00a0\u00bb, \u00ab\u00a0C\'est difficile\u00a0\u00bb, \u00ab\u00a0C\'est faisable\u00a0\u00bb.',
-      '- Ex. VRAI facilit\u00e9\u00a0: \u00ab\u00a0C\'est facile\u00a0\u00bb (vert) \u2192 \u00ab\u00a0C\'est faisable\u00a0\u00bb (jaune) \u2192 \u00ab\u00a0C\'est difficile\u00a0\u00bb (rouge) + suggestionsMulti:false.',
+      '- INTERDIT de mettre le plus dur avant le milieu. Ex. FAUX\u00a0: \u00ab\u00a0C\'est facile\u00a0\u00bb, \u00ab\u00a0C\'est difficile\u00a0\u00bb, \u00ab\u00a0C\'est faisable\u00a0\u00bb.',
+      '- Ex. VRAI facilit\u00e9 (effort)\u00a0: \u00ab\u00a0C\'est facile\u00a0\u00bb (vert) \u2192 \u00ab\u00a0C\'est faisable\u00a0\u00bb (jaune) \u2192 \u00ab\u00a0C\'est difficile\u00a0\u00bb (rouge) + suggestionsMulti:false.',
+      '- Ex. VRAI facilit\u00e9 (co\u00fbt)\u00a0: \u00ab\u00a0Pas cher\u00a0\u00bb (vert) \u2192 \u00ab\u00a0Correct\u00a0\u00bb (jaune) \u2192 \u00ab\u00a0Tr\u00e8s cher\u00a0\u00bb (rouge) + suggestionsMulti:false.',
       '- Pour cons\u00e9quences / causes cumulables\u00a0: suggestionsMulti:true\u00a0; chaque suggestion doit tenir seule OU avec d\'autres.',
       '- Port\u00e9e / impact\u00a0: INTERDIT "0 (Personnel)", "1 (\u00c9quipe)"\u2026 Utilise les libell\u00e9s + icon + color (bleu\u2192vert) + suggestionsMulti:false\u00a0:',
       '  Personnel circle-xs/blue \u00b7 \u00c9quipe circle-sm/teal \u00b7 Interne circle-md/yellow \u00b7 Population circle-lg/green \u00b7 Global circle-xl/green.',
@@ -2603,15 +2866,18 @@
       '- Ic\u00f4nes dispo\u00a0: circle-xs|circle-sm|circle-md|circle-lg|circle-xl|dots|hammer|calm-face|exclaim|user|users|building|globe|flame|check|ban|clock|bolt|layers.',
       '- Urgence\u00a0: calm-face (\u00ab\u00a0Pas urgent\u00a0\u00bb) et exclaim (!! pour Urgent). INTERDIT hammer/bolt pour l\'urgence.',
       '- Colorie les \u00e9chelles de gravit\u00e9 avec heat 0\u20134 (0=vert, 4=rouge), OU suggestionScale:true + strings ordonn\u00e9es.',
-      '- Ex. facilit\u00e9 JSON\u00a0: {"suggestions":[{"label":"C\'est facile","heat":0},{"label":"C\'est faisable","heat":2},{"label":"C\'est difficile","heat":4}],"suggestionScale":true,"suggestionsMulti":false}',
+      '- Ex. facilit\u00e9 JSON (effort)\u00a0: {"suggestions":[{"label":"C\'est facile","heat":0},{"label":"C\'est faisable","heat":2},{"label":"C\'est difficile","heat":4}],"suggestionScale":true,"suggestionsMulti":false}',
+      '- Ex. facilit\u00e9 JSON (co\u00fbt)\u00a0: {"suggestions":[{"label":"Pas cher","heat":0},{"label":"Correct","heat":2},{"label":"Tr\u00e8s cher","heat":4}],"suggestionScale":true,"suggestionsMulti":false}',
       '- Ex. port\u00e9e JSON (sans pr\u00e9nom)\u00a0: {"suggestions":[{"label":"Personnel","icon":"circle-xs","color":"blue"},{"label":"\u00c9quipe","icon":"circle-sm","color":"teal"},{"label":"Population","icon":"circle-lg","color":"green"}],"suggestionScale":true,"suggestionsMulti":false}',
       '- Ex. multi JSON\u00a0: {"suggestions":[{"label":"On perd le contexte des rushs"},{"label":"Marie-Laure serait f\u00e2ch\u00e9e"}],"suggestionsMulti":true}',
       '- Utilise \u2026 seulement pour une r\u00e9ponse \u00e0 compl\u00e9ter (ex. \u00ab\u00a0On risque de perdre\u2026\u00a0\u00bb).',
       '',
       'Inf\u00e9rence + clarification carte\u00a0:',
+      '- D\u00e8s le 1er tour, si le titre suffit pour d\u00e9duire un axe (ex. achat logiciel \u2192 dur\u00e9e courte), applique set_priority tout de suite et ne pose que ce qui reste ambigu.',
       '- D\u00e8s qu\'une r\u00e9ponse laisse assez d\'indices\u00a0: set_priority IMM\u00c9DIATEMENT avec les axes d\u00e9duits, puis pose directement la question suivante (sans r\u00e9sumer).',
       '- Une r\u00e9ponse peut combiner plusieurs suggestions (s\u00e9par\u00e9es par \u00ab\u00a0. \u00a0\u00bb)\u00a0: inf\u00e8re en tenant compte de TOUT le message.',
       '- Ex.\u00a0: \u00ab\u00a0Marie-Laure serait vraiment tr\u00e8s f\u00e2ch\u00e9e\u00a0\u00bb \u2192 urgence \u00e9lev\u00e9e (3\u20134) + cardPatches remember + message = seule la question suivante courte.',
+      '- Ex. achat logiciel\u00a0: user \u00ab\u00a0Tr\u00e8s cher\u00a0\u00bb \u2192 ease bas (1\u20132) + remember co\u00fbt + estimatedDurationMinutes court + question \u00ab\u00a0Faut l\'OK des bosses\u00a0?\u00a0\u00bb.',
       '- M\u00e9morise les faits utiles \u00e0 CETTE carte via cardPatches (personnes, enjeux, attentes, contraintes, process flou)\u00a0: {"op":"remember","text":"\u2026"}.',
       '- Si la r\u00e9ponse clarifie le p\u00e9rim\u00e8tre\u00a0: rename_card (titre plus clair), set_description (process / d\u00e9finition), add_subtask (\u00e9tapes concr\u00e8tes) \u2014 sans inventer.',
       '- Ex. user explique les \u00e9tapes d\'archivage \u2192 add_subtask pour chaque \u00e9tape claire + remember le process + question courte suivante.',
@@ -2624,19 +2890,27 @@
       '{"thinking":"...","message":"...","suggestions":[{"label":"...","icon":"circle-sm","color":"teal","heat":0}],"suggestionScale":true,"suggestionsMulti":false,"prompts":[],"actions":[{"tool":"...","args":{}}],"cardPatches":[{"op":"remember","text":"..."}],"completeInterview":false}',
       '',
       'R\u00e8gles interview\u00a0:',
-      '- Une question claire et COURTE \u00e0 la fois\u00a0; message = UNIQUEMENT cette question. Pas de pr\u00e9ambule.',
+      '- Une question claire et COURTE \u00e0 la fois (sauf exception avis / cl\u00f4ture). Pas de pr\u00e9ambule inutile.',
       '- INTERDIT les r\u00e9caps / synth\u00e8ses entre questions. Le contexte et les actions suffisent.',
       '- INTERDIT de cadrer une question comme \u00ab\u00a0la derni\u00e8re\u00a0\u00bb ou une conclusion\u00a0: jamais \u00ab\u00a0Pour finir\u00a0\u00bb, \u00ab\u00a0Pour terminer\u00a0\u00bb, \u00ab\u00a0Pour conclure\u00a0\u00bb, \u00ab\u00a0Enfin\u00a0\u00bb, \u00ab\u00a0Une derni\u00e8re question\u00a0\u00bb.',
       '- Pose la prochaine question utile. Ne dis JAMAIS que c\'est la fin / le dernier tour.',
-      '- Quand tu n\'as plus de question utile (urgence+impact+ease fix\u00e9s et rien d\'autre \u00e0 creuser)\u00a0: completeInterview:true et message court \u00ab\u00a0Okay.\u00a0\u00bb / \u00ab\u00a0C\'est not\u00e9.\u00a0\u00bb.',
+      '- Cl\u00f4ture (completeInterview:true) \u2014 tr\u00e8s important\u00a0:',
+      '- Quand plus de question utile (urgence+impact+ease fix\u00e9s, skip \u00e9ch\u00e9ance, passer / plus tard)\u00a0: completeInterview:true.',
+      '- INTERDIT de terminer avec seulement \u00ab\u00a0Okay.\u00a0\u00bb / \u00ab\u00a0C\'est not\u00e9.\u00a0\u00bb / \u00ab\u00a0Ok.\u00a0\u00bb / \u00ab\u00a0D\'accord.\u00a0\u00bb',
+      '- \u00c0 la place\u00a0: UNE remarque courte, un peu s\u00e8che / maligne, ancr\u00e9e dans CE qu\'on vient de discuter (sujet de la carte, budget, permissions, ce que tu peux / ne peux pas faire).',
+      '- Varie\u00a0: pique sur l\'\u00e9change, offre concr\u00e8te d\'aide, aveu d\'impuissance utile, ou nudge (\u00ab\u00a0va demander au boss s\'il a le budget\u00a0\u00bb). Montre que tu as compris le contexte.',
+      '- Ex. FAUX (apr\u00e8s \u00ab\u00a0Pas d\'\u00e9ch\u00e9ance\u00a0\u00bb sur achat DaVinci)\u00a0: \u00ab\u00a0Okay.\u00a0\u00bb',
+      '- Ex. VRAI\u00a0: \u00ab\u00a0Bon, sans deadline c\'est surtout une question de thunes et d\'OK des bosses. Si on veut vraiment Resolve, faut aller leur demander s\'ils ont le budget.\u00a0\u00bb',
+      '- Ex. VRAI (autre)\u00a0: \u00ab\u00a0Moi je peux te noter la priorit\u00e9\u00a0; le reste, c\'est plut\u00f4t une conversation avec la compta.\u00a0\u00bb',
+      '- Ex. VRAI (skip total)\u00a0: \u00ab\u00a0Ok on laisse \u00e7a. Reviens quand t\'auras une id\u00e9e du budget ou qui doit signer.\u00a0\u00bb',
       '- INTERDIT de demander \u00ab\u00a0sur une \u00e9chelle de 0 \u00e0 4\u00a0\u00bb, des chiffres seuls, ou des l\u00e9gendes.',
-      '- Maximise le gain d\'info\u00a0: axes priorit\u00e9 + clarification utile (titre/desc/sous-t\u00e2ches/m\u00e9moire) quand le flou bloque.',
-      '- N\'invente PAS d\'\u00e9ch\u00e9ance, projet, sous-t\u00e2ches ou description sans indice (titre, r\u00e9ponse, voisinage).',
-      '- Si l\'utilisateur dit passer / plus tard / skip / non merci\u00a0: completeInterview:true, actions=[] (sauf ce que tu as d\u00e9j\u00e0 assez pour appliquer).',
-      '- Quand urgence+impact+ease sont fix\u00e9s\u00a0: tu peux encore poser UNE question courte utile (clarification, dur\u00e9e, \u00e9ch\u00e9ance, projet) SANS dire que c\'est la derni\u00e8re\u00a0; sinon completeInterview:true.',
+      '- Maximise le gain d\'info\u00a0: inf\u00e8re d\'abord (titre + connaissances), pose seulement ce qui reste ambigu (budget, permissions, urgence, impact).',
+      '- N\'invente PAS d\'\u00e9ch\u00e9ance, projet, sous-t\u00e2ches ou description sans indice (titre, r\u00e9ponse, voisinage). La dur\u00e9e COURTE pour un achat / un clic / un mail\u00a0: OK \u00e0 inf\u00e9rer.',
+      '- Si l\'utilisateur dit passer / plus tard / skip / non merci\u00a0: completeInterview:true, actions=[] (sauf ce que tu as d\u00e9j\u00e0 assez pour appliquer) + message de cl\u00f4ture malin (pas \u00ab\u00a0Okay.\u00a0\u00bb).',
+      '- Quand urgence+impact+ease sont fix\u00e9s\u00a0: tu peux encore poser UNE question courte utile (\u00e9ch\u00e9ance, projet, clarification) SANS dire que c\'est la derni\u00e8re\u00a0; sinon completeInterview:true + cl\u00f4ture maligne. Pas de question dur\u00e9e si d\u00e9j\u00e0 inf\u00e9r\u00e9e.',
       '- Pour \u00e9ch\u00e9ance\u00a0: \u00ab\u00a0C\'est pour quand\u00a0?\u00a0\u00bb (+ Aujourd\'hui / Demain / Pas d\'\u00e9ch\u00e9ance).',
-      '- Pour dur\u00e9e\u00a0: \u00ab\u00a0\u00c7a prend combien de temps\u00a0?\u00a0\u00bb. Pour projet\u00a0: \u00ab\u00a0Quel projet\u00a0?\u00a0\u00bb.',
-      '- completeInterview:true quand l\'interview est termin\u00e9e (silencieusement).',
+      '- Pour dur\u00e9e\u00a0: seulement si incertaine \u2192 \u00ab\u00a0\u00c7a prend combien de temps\u00a0?\u00a0\u00bb. Sinon set_priority.estimatedDurationMinutes sans demander. Pour projet\u00a0: \u00ab\u00a0Quel projet\u00a0?\u00a0\u00bb.',
+      '- completeInterview:true quand l\'interview est termin\u00e9e.',
       '- \u00c9vite de reposer les questions d\u00e9j\u00e0 pos\u00e9es.',
       '- INTERDIT\u00a0: \u00ab\u00a0Comment puis-je vous aider?\u00a0\u00bb / questions vagues ouvertes sans ancrage.',
       '',
@@ -2771,12 +3045,14 @@
       return a && allowedTools[a.tool];
     });
 
-    var message = stripInterviewConclusionFraming(
-      stripScaleLegendParenthetical(
-        polishMessageAfterTierApply(
-          parsed.message || (data && data.message) || '',
-          tierRewrite.tier,
-          tierRewrite.injected
+    var message = ensurePriorityHighlights(
+      stripInterviewConclusionFraming(
+        stripScaleLegendParenthetical(
+          polishMessageAfterTierApply(
+            parsed.message || (data && data.message) || '',
+            tierRewrite.tier,
+            tierRewrite.injected
+          )
         )
       )
     );
@@ -2955,6 +3231,13 @@
       }
       return true;
     }
+    if (action.tool === 'point_at') {
+      var pointSection = normalizePointSection(
+        args.section || args.target || args.area || args.panel
+      );
+      var pointField = normalizePointField(args.field || args.axis || args.dim);
+      return !!(pointSection || pointField);
+    }
     if (action.tool === 'set_agent_name') {
       return (
         (typeof args.name === 'string' && !!args.name.trim()) ||
@@ -3000,6 +3283,9 @@
       return (
         'trigger_effect: effect requis (' + EFFECT_IDS.join('|') + ')'
       );
+    }
+    if (action.tool === 'point_at') {
+      return 'point_at: section ou field requis';
     }
     if (action.tool === 'set_agent_name') {
       return 'set_agent_name: name requis';
@@ -4414,12 +4700,14 @@
     var actions = rewriteActionsForRelativeDue(parsed.actions || [], userText);
     var tierRewrite = rewriteActionsForPriorityTier(actions, userText);
     actions = tierRewrite.actions;
-    var message = stripInterviewConclusionFraming(
-      stripScaleLegendParenthetical(
-        polishMessageAfterTierApply(
-          parsed.message,
-          tierRewrite.tier,
-          tierRewrite.injected
+    var message = ensurePriorityHighlights(
+      stripInterviewConclusionFraming(
+        stripScaleLegendParenthetical(
+          polishMessageAfterTierApply(
+            parsed.message,
+            tierRewrite.tier,
+            tierRewrite.injected
+          )
         )
       )
     );
@@ -5452,6 +5740,22 @@
         (typeof args.label === 'string' && args.label.trim()) ||
         '';
       if (fxText) parts.push('text \u2192 ' + fxText);
+    } else if (tool === 'point_at') {
+      var pointSection =
+        (extra && extra.section) ||
+        normalizePointSection(args.section || args.target || args.area) ||
+        '';
+      var pointField =
+        (extra && extra.field) ||
+        normalizePointField(args.field || args.axis) ||
+        '';
+      var pointLevel =
+        extra && extra.level != null
+          ? extra.level
+          : normalizePointLevel(args.level != null ? args.level : args.value);
+      if (pointSection) parts.push('section \u2192 ' + pointSection);
+      if (pointField) parts.push('field \u2192 ' + pointField);
+      if (pointLevel != null) parts.push('level \u2192 ' + pointLevel);
     } else if (tool === 'set_agent_name') {
       var beforeAgent =
         (extra && typeof extra.before === 'string' && extra.before) || '';
@@ -6322,6 +6626,61 @@
           })
         };
       }
+      if (tool === 'point_at') {
+        var pointSection = normalizePointSection(
+          args.section || args.target || args.area || args.panel
+        );
+        var pointField = normalizePointField(
+          args.field || args.axis || args.dim
+        );
+        var pointLevel = normalizePointLevel(
+          args.level != null ? args.level : args.value
+        );
+        if (!pointSection && !pointField) {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'section ou field requis'
+          };
+        }
+        if (pointField && !pointSection) {
+          pointSection = 'priority';
+        }
+        if (typeof bridge.pointAt !== 'function') {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Pointage indisponible'
+          };
+        }
+        var pointArgs = {};
+        if (pointSection) pointArgs.section = pointSection;
+        if (pointField) pointArgs.field = pointField;
+        if (pointLevel != null) pointArgs.level = pointLevel;
+        var pointed = bridge.pointAt(pointArgs);
+        if (pointed && typeof pointed.then === 'function') {
+          pointed = await pointed;
+        }
+        if (pointed && pointed.ok === false) {
+          return {
+            ok: false,
+            tool: tool,
+            error: (pointed && pointed.error) || 'Cible introuvable',
+            args: pointArgs
+          };
+        }
+        return {
+          ok: true,
+          tool: tool,
+          args: pointArgs,
+          summary: TOOL_LABELS.point_at,
+          detail: detailForTool(tool, null, null, null, null, args, {
+            section: pointSection || undefined,
+            field: pointField || undefined,
+            level: pointLevel != null ? pointLevel : undefined
+          })
+        };
+      }
       if (tool === 'set_agent_name') {
         if (typeof bridge.setAgentName !== 'function') {
           return {
@@ -6799,6 +7158,9 @@
     executeActions: executeActions,
     formatChangeRecap: formatChangeRecap,
     looksLikeAppliedClaim: looksLikeAppliedClaim,
+    normalizePointSection: normalizePointSection,
+    normalizePointField: normalizePointField,
+    normalizePointLevel: normalizePointLevel,
     runProviderTests: runProviderTests,
     chatCompletions: chatCompletions,
     extractStreamingMessage: extractStreamingMessage,

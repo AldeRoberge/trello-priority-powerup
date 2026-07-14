@@ -30,7 +30,7 @@
     laser: { label: 'Laser', ms: 1100 },
     coin: { label: 'Pi\u00e8ce', ms: 1000 },
     drumroll: { label: 'Roulement', ms: 1800 },
-    banner: { label: 'Bannière', ms: 2400 }
+    banner: { label: 'Banni\u00e8re', ms: 2400 }
   };
 
   var EFFECT_ALIASES = {
@@ -87,18 +87,6 @@
     stinger: 'banner',
     flash_text: 'banner',
     title_card: 'banner'
-  };
-
-  var SOUND_ONLY_IDS = {
-    beep: true,
-    boop: true,
-    zap: true,
-    thunder: true,
-    fanfare: true,
-    bonk: true,
-    laser: true,
-    coin: true,
-    drumroll: true
   };
 
   var COLORS = {
@@ -1176,8 +1164,6 @@
       if (bannerText) {
         appendBannerText(overlay, bannerText, id);
         duration = Math.max(duration, 2000);
-      } else if (SOUND_ONLY_IDS[id] && !bannerText) {
-        /* light visuals already from builder */
       }
     }
 
