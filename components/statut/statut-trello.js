@@ -115,18 +115,9 @@
     }
   }
 
-  async function readStatutSettings(t) {
-    try {
-      var stored = await t.get('board', 'shared', STATUT_SETTINGS_KEY);
-      return normalizeSettings(stored);
-    } catch (err) {
-      console.error('StatutTrello.readStatutSettings failed', err);
-      return defaultSettings();
-    }
-  }
-
   async function saveStatutSettings(t, settings) {
     var normalized = normalizeSettings(settings);
+    applySettingsColors(normalized);
     await t.set('board', 'shared', STATUT_SETTINGS_KEY, normalized);
     return normalized;
   }
@@ -148,6 +139,7 @@
       showUnassigned: !!base.showUnassigned,
       autoMoveBlocked: base.autoMoveBlocked !== false,
       autoMoveCompleted: base.autoMoveCompleted !== false,
+      stateColors: base.stateColors
     };
   }
 

@@ -878,6 +878,31 @@ body {
   background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
 }
 
+/* Soft circle glow from the top edge, fading into the section surface. */
+.field.has-section-glow {
+  background-color: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
+  background-image: radial-gradient(
+    ellipse 140% 95% at 50% -5%,
+    color-mix(in srgb, var(--section-glow, transparent) 46%, transparent) 0%,
+    color-mix(in srgb, var(--section-glow, transparent) 18%, transparent) 42%,
+    transparent 72%
+  );
+  background-repeat: no-repeat;
+}
+
+.field.has-section-glow .section-enable-title,
+.field.has-section-glow .due-date-title,
+.field.has-section-glow .priority-enable-title,
+.field.has-section-glow .progress-enable-title {
+  color: color-mix(in srgb, var(--section-glow) 72%, var(--text-primary, #172b4d));
+}
+
+.field.has-section-glow .section-toggle-summary,
+.field.has-section-glow .due-date-desc {
+  color: color-mix(in srgb, var(--section-glow) 48%, var(--text-muted, #626f86));
+  opacity: 1;
+}
+
 .statut-section-body {
   margin-top: 8px;
 }
@@ -899,10 +924,6 @@ body {
 
 .statut-blocked-mount {
   min-width: 0;
-}
-
-.field--statut.has-blocked-panel.is-enabled {
-  background: color-mix(in srgb, var(--blocked-fill, #ffeceb) 88%, var(--surface-2));
 }
 
 .statut-auth-box {
@@ -1071,20 +1092,6 @@ body {
   background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
 }
 
-.field--priority.is-enabled.has-priority-tint {
-  background: var(--priority-section-fill);
-}
-
-.field--priority.has-priority-tint .priority-enable-title,
-.field--priority.has-priority-tint .section-enable-title {
-  color: var(--priority-section-text);
-}
-
-.field--priority.has-priority-tint .section-toggle-summary {
-  color: var(--priority-section-muted, var(--priority-section-text));
-  opacity: 0.85;
-}
-
 .priority-section-body {
   margin-top: 10px;
 }
@@ -1135,69 +1142,24 @@ body {
   background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
 }
 
-/* Proximity-tinted Échéance shell (beats neutral enabled backgrounds). */
-.variant-due-section[data-due-band] > .field--due-date.is-enabled,
-.variant-due-section[data-due-band] > .field--due-date.has-due-date,
-.variant-due-section[data-due-band] > .field--due-date.is-open,
-.field--due-date[data-due-band] {
-  background: var(--due-band-fill, var(--blocked-fill));
+.field--due-date.has-section-glow.is-enabled,
+.field--due-date.has-section-glow.has-due-date,
+.field--due-date.has-section-glow.is-open {
+  background-color: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
+  background-image: radial-gradient(
+    ellipse 140% 95% at 50% -5%,
+    color-mix(in srgb, var(--section-glow, transparent) 46%, transparent) 0%,
+    color-mix(in srgb, var(--section-glow, transparent) 18%, transparent) 42%,
+    transparent 72%
+  );
 }
 
-.variant-due-section[data-due-band] > .field--due-date .due-date-title,
-.variant-due-section[data-due-band] > .field--due-date .section-enable-title,
-.field--due-date[data-due-band] .due-date-title,
-.field--due-date[data-due-band] .section-enable-title {
-  color: var(--due-band-text, var(--blocked-text));
+.field--due-date[data-due-band] .due-date-countdown-primary {
+  color: color-mix(in srgb, var(--section-glow, var(--blocked-text)) 80%, var(--text-primary, #172b4d));
 }
 
-.variant-due-section[data-due-band] > .field--due-date .due-date-desc,
-.field--due-date[data-due-band] .due-date-desc,
-.variant-due-section[data-due-band] > .field--due-date .section-toggle-summary,
-.field--due-date[data-due-band] .section-toggle-summary {
-  color: var(--due-band-muted, var(--blocked-muted-text));
-  opacity: 1;
-}
-
-.variant-due-section[data-due-band="overdue"],
-.field--due-date[data-due-band="overdue"] {
-  --due-band-fill: var(--due-band-overdue-fill);
-  --due-band-text: var(--due-band-overdue-text);
-  --due-band-muted: var(--due-band-overdue-muted);
-}
-
-.variant-due-section[data-due-band="imminent"],
-.field--due-date[data-due-band="imminent"] {
-  --due-band-fill: var(--due-band-imminent-fill);
-  --due-band-text: var(--due-band-imminent-text);
-  --due-band-muted: var(--due-band-imminent-muted);
-}
-
-.variant-due-section[data-due-band="soon"],
-.field--due-date[data-due-band="soon"] {
-  --due-band-fill: var(--due-band-soon-fill);
-  --due-band-text: var(--due-band-soon-text);
-  --due-band-muted: var(--due-band-soon-muted);
-}
-
-.variant-due-section[data-due-band="weeks"],
-.field--due-date[data-due-band="weeks"] {
-  --due-band-fill: var(--due-band-weeks-fill);
-  --due-band-text: var(--due-band-weeks-text);
-  --due-band-muted: var(--due-band-weeks-muted);
-}
-
-.variant-due-section[data-due-band="month"],
-.field--due-date[data-due-band="month"] {
-  --due-band-fill: var(--due-band-month-fill);
-  --due-band-text: var(--due-band-month-text);
-  --due-band-muted: var(--due-band-month-muted);
-}
-
-.variant-due-section[data-due-band="far"],
-.field--due-date[data-due-band="far"] {
-  --due-band-fill: var(--due-band-far-fill);
-  --due-band-text: var(--due-band-far-text);
-  --due-band-muted: var(--due-band-far-muted);
+.field--due-date[data-due-band] .due-date-countdown-secondary {
+  color: color-mix(in srgb, var(--section-glow, var(--blocked-muted-text)) 55%, var(--text-muted, #626f86));
 }
 
 .due-date-label {
@@ -2283,14 +2245,12 @@ html[data-color-mode="dark"] .due-date-time-clock {
   display: none;
 }
 
-.due-date-countdown.is-past .due-date-countdown-primary,
-.field--due-date[data-due-band] .due-date-countdown-primary {
-  color: var(--due-band-text, var(--blocked-text));
+.due-date-countdown.is-past .due-date-countdown-primary {
+  color: var(--blocked-text);
 }
 
-.due-date-countdown.is-past .due-date-countdown-secondary,
-.field--due-date[data-due-band] .due-date-countdown-secondary {
-  color: var(--due-band-muted, var(--blocked-muted-text, var(--blocked-text)));
+.due-date-countdown.is-past .due-date-countdown-secondary {
+  color: var(--blocked-muted-text, var(--blocked-text));
 }
 
 .due-date-countdown[hidden] {
@@ -3499,86 +3459,6 @@ body.help-modal-open {
   background: color-mix(in srgb, var(--card-tier-tint) var(--card-panel-tint-mix, 20%), var(--blocked-fill));
 }
 
-.heat-blocked-warning {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 4px 6px 4px 10px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-  color: var(--blocked-text);
-  background: color-mix(in srgb, var(--blocked-fill) 55%, var(--surface-2));
-  border: none;
-}
-
-.heat-blocked-warning-label {
-  display: inline-flex;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  letter-spacing: inherit;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.heat-blocked-warning-label:hover {
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.heat-blocked-warning-label:focus-visible {
-  outline: 2px solid var(--blocked-accent);
-  outline-offset: 1px;
-}
-
-.heat-blocked-dismiss {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  margin: 0;
-  padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: inherit;
-  font-family: inherit;
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0.72;
-  flex-shrink: 0;
-}
-
-.heat-blocked-dismiss:hover {
-  opacity: 1;
-  background: color-mix(in srgb, var(--blocked-text) 14%, transparent);
-}
-
-.heat-blocked-dismiss:focus-visible {
-  opacity: 1;
-  outline: 2px solid var(--blocked-accent);
-  outline-offset: 1px;
-}
-
-.heat-blocked-warning[hidden] {
-  display: none;
-}
-
 .heat-head {
   display: flex;
   flex-direction: column;
@@ -3593,10 +3473,6 @@ body.help-modal-open {
 .heat-tier-desc.heat-flip-active {
   transition: transform 0.22s ease;
   will-change: transform;
-}
-
-.heat-panel.has-blocked-warning .heat-head {
-  padding-right: 118px;
 }
 
 .heat-badge {

@@ -1858,15 +1858,6 @@
     return 'far';
   }
 
-  function clearDueProximityBand(el) {
-    if (!el) return;
-    for (var i = 0; i < DUE_PROXIMITY_BANDS.length; i++) {
-      el.classList.remove('is-due-' + DUE_PROXIMITY_BANDS[i]);
-    }
-    el.classList.remove('is-overdue', 'is-past');
-    if (el.dataset) delete el.dataset.dueBand;
-  }
-
   function applyDueProximityBand(el, band) {
     if (!el) return;
     if (!band) {
@@ -1880,6 +1871,21 @@
     el.classList.toggle('is-overdue', band === 'overdue');
     el.classList.toggle('is-past', band === 'overdue');
     if (el.dataset) el.dataset.dueBand = band;
+    applySectionGlow(el.classList.contains('field--due-date') ? el : el.querySelector('.field--due-date') || el, dueBandAccent(band));
+  }
+
+  function clearDueProximityBand(el) {
+    if (!el) return;
+    for (var i = 0; i < DUE_PROXIMITY_BANDS.length; i++) {
+      el.classList.remove('is-due-' + DUE_PROXIMITY_BANDS[i]);
+    }
+    el.classList.remove('is-overdue', 'is-past');
+    if (el.dataset) delete el.dataset.dueBand;
+    clearSectionGlow(
+      el.classList.contains('field--due-date')
+        ? el
+        : el.querySelector('.field--due-date') || el
+    );
   }
 
   function capitalizeCountdownPhrase(text) {
@@ -2828,13 +2834,25 @@
     }
   }
 
+  function clearSectionGlow(el) {
+    if (!el) return;
+    el.classList.remove('has-section-glow');
+    el.style.removeProperty('--section-glow');
+  }
+
+  /** Top radial glow that softens into the section's normal background. */
+  function applySectionGlow(el, color) {
+    if (!el) return;
+    if (!color) {
+      clearSectionGlow(el);
+      return;
+    }
+    el.style.setProperty('--section-glow', color);
+    el.classList.add('has-section-glow');
+  }
+
   function clearPrioritySectionTint(fieldEl) {
-    if (!fieldEl) return;
-    fieldEl.classList.remove('has-priority-tint');
-    fieldEl.style.removeProperty('--priority-section-fill');
-    fieldEl.style.removeProperty('--priority-section-text');
-    fieldEl.style.removeProperty('--priority-section-muted');
-    fieldEl.style.removeProperty('--priority-section-seg');
+    clearSectionGlow(fieldEl);
   }
 
   /** Soft shell tint for the Priorité section — same palette as the heat badge. */
@@ -2850,14 +2868,20 @@
       ? { inutile: true, label: INUTILE_LABEL }
       : { i: d.tierI, label: d.label };
     var v = tierVisuals(visualSource);
-    fieldEl.classList.add('has-priority-tint');
-    fieldEl.style.setProperty('--priority-section-fill', v.fill);
-    fieldEl.style.setProperty('--priority-section-text', v.text);
-    fieldEl.style.setProperty(
-      '--priority-section-muted',
-      v.seg || v.text
-    );
-    fieldEl.style.setProperty('--priority-section-seg', v.seg);
+    applySectionGlow(fieldEl, v.seg || v.fill);
+  }
+
+  var DUE_BAND_ACCENTS = {
+    overdue: '#C9372C',
+    imminent: '#FF9F1A',
+    soon: '#F2D600',
+    weeks: '#61BD4F',
+    month: '#0079BF',
+    far: '#B3BAC5'
+  };
+
+  function dueBandAccent(band) {
+    return DUE_BAND_ACCENTS[band] || '';
   }
 
   function labelEntry(key, value) {
@@ -5097,6 +5121,17 @@
       if (wasActive !== show) onLayoutChange();
     }
 
+    function syncStatutSectionTint() {
+      syncBlockedPanel();
+      var cat = currentCategory();
+      if (!cat) {
+        clearSectionGlow(field);
+        return;
+      }
+      var style = statutCategoryStyle(cat);
+      applySectionGlow(field, style && style.color);
+    }
+
     function summaryText() {
       return currentListName() || (currentListId ? 'Liste inconnue' : '—');
     }
@@ -5198,7 +5233,7 @@
       });
 
       groupsEl.appendChild(chipRow);
-      syncBlockedPanel();
+      syncStatutSectionTint();
     }
 
     function selectList(listId) {
@@ -5206,7 +5241,7 @@
         currentListId = String(listId);
         renderOptions();
         collapse.refreshSummary();
-        syncBlockedPanel();
+        syncStatutSectionTint();
         onChange({ listId: currentListId });
         return;
       }
@@ -5231,7 +5266,7 @@
           busy = false;
           renderOptions();
           collapse.refreshSummary();
-          syncBlockedPanel();
+          syncStatutSectionTint();
           onLayoutChange();
         });
     }
@@ -5268,7 +5303,7 @@
       getBlockedMount: function () {
         return blockedMount;
       },
-      syncBlockedPanel: syncBlockedPanel,
+      syncBlockedPanel: syncStatutSectionTint,
       setExpanded: function (on, opts) {
         return collapse.setExpanded(on, opts);
       },
@@ -5279,12 +5314,20 @@
         currentListId = listId ? String(listId) : '';
         renderOptions();
         collapse.refreshSummary();
-        syncBlockedPanel();
+        syncStatutSectionTint();
       },
       setData: function (next) {
         if (!next) return;
         if (next.lists) lists = next.lists.slice();
-        if (next.settings) settings = next.settings;
+        if (next.settings) {
+          settings = next.settings;
+          if (
+            typeof global.StatutMatch !== 'undefined' &&
+            typeof global.StatutMatch.applyStateColors === 'function'
+          ) {
+            global.StatutMatch.applyStateColors(settings.stateColors);
+          }
+        }
         if (next.listId != null) currentListId = next.listId ? String(next.listId) : '';
         if (next.authReason != null) {
           setAuthHint(next.authReason);
@@ -5298,7 +5341,7 @@
         }
         renderOptions();
         collapse.refreshSummary();
-        syncBlockedPanel();
+        syncStatutSectionTint();
         onLayoutChange();
       },
       isEnabled: function () {
@@ -8674,42 +8717,6 @@
     var panel = document.createElement('div');
     panel.className = 'heat-panel';
 
-    var blockedWarning = document.createElement('div');
-    blockedWarning.className = 'heat-blocked-warning';
-    blockedWarning.hidden = true;
-    blockedWarning.setAttribute('role', 'status');
-
-    var blockedWarningLabel = document.createElement('button');
-    blockedWarningLabel.type = 'button';
-    blockedWarningLabel.className = 'heat-blocked-warning-label';
-    blockedWarningLabel.textContent = BLOCKED_DISPLAY;
-    blockedWarningLabel.title = 'Ouvrir le motif de blocage';
-    blockedWarningLabel.setAttribute('aria-label', 'Ouvrir le motif de blocage');
-    blockedWarningLabel.addEventListener('click', function (event) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (typeof config.onOpenBlocked === 'function') {
-        config.onOpenBlocked();
-      }
-    });
-    blockedWarning.appendChild(blockedWarningLabel);
-
-    var blockedDismiss = document.createElement('button');
-    blockedDismiss.type = 'button';
-    blockedDismiss.className = 'heat-blocked-dismiss';
-    blockedDismiss.textContent = '\u00D7';
-    blockedDismiss.title = 'Retirer le blocage';
-    blockedDismiss.setAttribute('aria-label', 'Retirer le blocage');
-    blockedDismiss.addEventListener('click', function (event) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (typeof config.onUnblock === 'function') {
-        config.onUnblock();
-      }
-    });
-    blockedWarning.appendChild(blockedDismiss);
-    panel.appendChild(blockedWarning);
-
     var badge = document.createElement('div');
     badge.className = 'heat-badge';
 
@@ -8940,8 +8947,7 @@
       var descChanged = nextDescKey !== lastDescKey;
       var layoutSensitive = labelChanged || descChanged
         || badge.classList.contains('is-overdue')
-        || panel.classList.contains('is-overdue')
-        || panel.classList.contains('has-blocked-warning') !== !!d.blocked;
+        || panel.classList.contains('is-overdue');
 
       var firstRects = layoutSensitive ? captureHeatLayoutRects(heatFlipNodes) : null;
       if (layoutSensitive) {
@@ -8950,7 +8956,7 @@
       }
 
       bnumVal.textContent = formatScore(d.score);
-      // Do not paint the heat-badge dot as a blocked glyph — warn chip + Bloqué section carry that state.
+      // Do not paint the heat-badge dot as a blocked glyph — Bloqué section carries that state.
       dot.classList.remove('is-blocked');
       dot.style.setProperty('--heat-tier-dot-size', heatTierDotSizePx(d).toFixed(2) + 'px');
       dot.style.background = v.seg;
@@ -8966,8 +8972,6 @@
       panel.classList.toggle('is-inutile', !!d.inutile);
       // No panel / heat-badge crimson wash for blocked/overdue — section shells carry red.
       panel.classList.remove('is-blocked', 'is-overdue');
-      panel.classList.toggle('has-blocked-warning', !!d.blocked);
-      blockedWarning.hidden = !d.blocked;
       paintTierDescription(tierDesc, d);
       if (labelChanged) flashHeatTextEnter(blabel);
       if (descChanged) flashHeatTextEnter(tierDesc);
@@ -10138,30 +10142,6 @@
       }
     }
 
-    function unblockTask() {
-      if (enAttenteField) {
-        enAttenteField.setValue(false);
-        if (enAttenteField.setBlockedReasons) {
-          enAttenteField.setBlockedReasons([]);
-        } else {
-          enAttenteField.setBlockedReason('');
-        }
-        if (enAttenteField.setBlockedLinks) {
-          enAttenteField.setBlockedLinks([]);
-        } else if (enAttenteField.setBlockedLink) {
-          enAttenteField.setBlockedLink(null);
-        }
-      }
-      state.enAttente = false;
-      state.blockedReasons = [];
-      delete state.blockedReason;
-      state.blockedLinks = [];
-      delete state.blockedLink;
-      cancelSliderAnim();
-      repaint();
-      persistSliderState();
-    }
-
     if (variantConfig.showFormulaSwitcher === true) {
       formulaSwitcher = createFormulaSwitcher({
         el: card,
@@ -10211,22 +10191,6 @@
       el: priorityBody,
       formulaKey: formulaKey,
       hideSegments: formulaKey === 'eisenhower',
-      onUnblock: unblockTask,
-      onOpenBlocked: function () {
-        if (typeof variantConfig.onOpenBlocked === 'function') {
-          variantConfig.onOpenBlocked();
-          return;
-        }
-        if (!blockedSection) return;
-        setTimeout(function () {
-          try {
-            blockedSection.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-          } catch (e) { /* ignore */ }
-          if (typeof variantConfig.onLayoutChange === 'function') {
-            variantConfig.onLayoutChange();
-          }
-        }, 0);
-      },
       onSegmentClick: function (targetP) {
         if (state.priorityEnabled === false) return;
         syncStateFromFields();

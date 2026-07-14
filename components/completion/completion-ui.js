@@ -1198,12 +1198,21 @@
 
     function applyProgressSectionTint(shellEl, accent, percent) {
       if (!shellEl) return;
+      var field =
+        shellEl.classList && shellEl.classList.contains('field--progress')
+          ? shellEl
+          : shellEl.querySelector
+            ? shellEl.querySelector('.field--progress')
+            : null;
+      var target = field || shellEl;
       var pct = typeof percent === 'number' ? percent : 0;
       if (accent && pct > 0) {
-        shellEl.style.setProperty('--progress-section-accent', accent);
+        target.style.setProperty('--section-glow', accent);
+        target.classList.add('has-section-glow');
         shellEl.classList.add('has-progress-tint');
       } else {
-        shellEl.style.removeProperty('--progress-section-accent');
+        target.style.removeProperty('--section-glow');
+        target.classList.remove('has-section-glow');
         shellEl.classList.remove('has-progress-tint');
       }
     }

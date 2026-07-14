@@ -1228,19 +1228,6 @@ body.tp-page--priority {
   border-radius: 12px;
 }
 
-.tp-page--priority .heat-blocked-warning {
-  top: 14px;
-  right: 14px;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 4px 8px 4px 10px;
-  border: none;
-}
-
-.tp-page--priority .heat-panel.has-blocked-warning .heat-head {
-  padding-right: 126px;
-}
-
 .tp-page--priority .heat-head {
   margin-bottom: 16px;
   gap: 10px;
@@ -1346,10 +1333,6 @@ body.tp-page--priority {
   margin-bottom: 0;
 }
 
-.tp-page--priority .field--statut.has-blocked-panel.is-enabled {
-  background: color-mix(in srgb, var(--blocked-fill, #ffeceb) 88%, var(--tp-surface, var(--surface-2)));
-}
-
 .tp-page--priority .statut-blocked-panel {
   border-top-color: color-mix(in srgb, var(--blocked-border, #c9372c) 40%, transparent);
 }
@@ -1372,69 +1355,40 @@ body.tp-page--priority {
   background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
 }
 
-/* Proximity-tinted Échéance shell (beats neutral enabled backgrounds). */
-.tp-page--priority .variant-due-section[data-due-band] > .field--due-date.is-enabled,
-.tp-page--priority .variant-due-section[data-due-band] > .field--due-date.has-due-date,
-.tp-page--priority .variant-due-section[data-due-band] > .field--due-date.is-open,
-.tp-page--priority .field--due-date[data-due-band] {
-  background: var(--due-band-fill, var(--blocked-fill));
+.tp-page--priority .field.has-section-glow {
+  background-color: color-mix(
+    in srgb,
+    var(--surface-1, var(--tp-surface-subtle)) 72%,
+    var(--surface-2, var(--tp-surface))
+  );
+  background-image: radial-gradient(
+    ellipse 140% 95% at 50% -5%,
+    color-mix(in srgb, var(--section-glow, transparent) 46%, transparent) 0%,
+    color-mix(in srgb, var(--section-glow, transparent) 18%, transparent) 42%,
+    transparent 72%
+  );
+  background-repeat: no-repeat;
 }
 
-.tp-page--priority .variant-due-section[data-due-band] > .field--due-date .due-date-title,
-.tp-page--priority .variant-due-section[data-due-band] > .field--due-date .section-enable-title,
-.tp-page--priority .field--due-date[data-due-band] .due-date-title,
-.tp-page--priority .field--due-date[data-due-band] .section-enable-title {
-  color: var(--due-band-text, var(--blocked-text));
+.tp-page--priority .field.has-section-glow .section-enable-title,
+.tp-page--priority .field.has-section-glow .due-date-title,
+.tp-page--priority .field.has-section-glow .priority-enable-title,
+.tp-page--priority .field.has-section-glow .progress-enable-title {
+  color: color-mix(in srgb, var(--section-glow) 72%, var(--text-primary, var(--tp-text)));
 }
 
-.tp-page--priority .variant-due-section[data-due-band] > .field--due-date .due-date-desc,
-.tp-page--priority .field--due-date[data-due-band] .due-date-desc,
-.tp-page--priority .variant-due-section[data-due-band] > .field--due-date .section-toggle-summary,
-.tp-page--priority .field--due-date[data-due-band] .section-toggle-summary {
-  color: var(--due-band-muted, var(--blocked-muted-text));
+.tp-page--priority .field.has-section-glow .section-toggle-summary,
+.tp-page--priority .field.has-section-glow .due-date-desc {
+  color: color-mix(in srgb, var(--section-glow) 48%, var(--text-muted, var(--tp-text-muted)));
   opacity: 1;
 }
 
-.tp-page--priority .variant-due-section[data-due-band="overdue"],
-.tp-page--priority .field--due-date[data-due-band="overdue"] {
-  --due-band-fill: var(--due-band-overdue-fill, var(--blocked-fill));
-  --due-band-text: var(--due-band-overdue-text, var(--blocked-text));
-  --due-band-muted: var(--due-band-overdue-muted, var(--blocked-muted-text));
+.tp-page--priority .field--due-date[data-due-band] .due-date-countdown-primary {
+  color: color-mix(in srgb, var(--section-glow, var(--blocked-text)) 80%, var(--text-primary, var(--tp-text)));
 }
 
-.tp-page--priority .variant-due-section[data-due-band="imminent"],
-.tp-page--priority .field--due-date[data-due-band="imminent"] {
-  --due-band-fill: var(--due-band-imminent-fill, #FFF1E0);
-  --due-band-text: var(--due-band-imminent-text, #8B4500);
-  --due-band-muted: var(--due-band-imminent-muted, #A85A0A);
-}
-
-.tp-page--priority .variant-due-section[data-due-band="soon"],
-.tp-page--priority .field--due-date[data-due-band="soon"] {
-  --due-band-fill: var(--due-band-soon-fill, #FFF8D6);
-  --due-band-text: var(--due-band-soon-text, #6B5A00);
-  --due-band-muted: var(--due-band-soon-muted, #857000);
-}
-
-.tp-page--priority .variant-due-section[data-due-band="weeks"],
-.tp-page--priority .field--due-date[data-due-band="weeks"] {
-  --due-band-fill: var(--due-band-weeks-fill, #E3F5E8);
-  --due-band-text: var(--due-band-weeks-text, #17633A);
-  --due-band-muted: var(--due-band-weeks-muted, #2A7D4C);
-}
-
-.tp-page--priority .variant-due-section[data-due-band="month"],
-.tp-page--priority .field--due-date[data-due-band="month"] {
-  --due-band-fill: var(--due-band-month-fill, #E6F0FB);
-  --due-band-text: var(--due-band-month-text, #0C447C);
-  --due-band-muted: var(--due-band-month-muted, #1A5C9E);
-}
-
-.tp-page--priority .variant-due-section[data-due-band="far"],
-.tp-page--priority .field--due-date[data-due-band="far"] {
-  --due-band-fill: var(--due-band-far-fill, #F0F1F4);
-  --due-band-text: var(--due-band-far-text, #44546F);
-  --due-band-muted: var(--due-band-far-muted, #626F86);
+.tp-page--priority .field--due-date[data-due-band] .due-date-countdown-secondary {
+  color: color-mix(in srgb, var(--section-glow, var(--blocked-muted-text)) 55%, var(--text-muted, var(--tp-text-muted)));
 }
 
 .tp-page--priority .due-date-title {
@@ -1634,20 +1588,6 @@ body.tp-page--priority {
   background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
 }
 
-.tp-page--priority .field--priority.is-enabled.has-priority-tint {
-  background: var(--priority-section-fill);
-}
-
-.tp-page--priority .field--priority.has-priority-tint .priority-enable-title,
-.tp-page--priority .field--priority.has-priority-tint .section-enable-title {
-  color: var(--priority-section-text);
-}
-
-.tp-page--priority .field--priority.has-priority-tint .section-toggle-summary {
-  color: var(--priority-section-muted, var(--priority-section-text));
-  opacity: 0.85;
-}
-
 .tp-page--priority .section-toggle-summary {
   font-size: 13px;
   font-weight: 400;
@@ -1802,44 +1742,14 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
 }
 
-/* Progress section tracks the slider / custom theme accent continuously. */
-.tp-page--priority .variant-progress-section.has-progress-tint > .field--progress.is-enabled {
-  background: color-mix(
-    in srgb,
-    var(--progress-section-accent) 18%,
-    var(--surface-2, var(--tp-surface))
+/* Stronger wash when all tasks are complete (still the radial glow). */
+.tp-page--priority .variant-progress-section.is-progress-complete > .field--progress.has-section-glow {
+  background-image: radial-gradient(
+    ellipse 140% 95% at 50% -5%,
+    color-mix(in srgb, var(--section-glow, transparent) 58%, transparent) 0%,
+    color-mix(in srgb, var(--section-glow, transparent) 24%, transparent) 45%,
+    transparent 74%
   );
-}
-
-.tp-page--priority .variant-progress-section.has-progress-tint .progress-enable-title,
-.tp-page--priority .variant-progress-section.has-progress-tint .section-enable-title {
-  color: var(--progress-section-accent);
-}
-
-.tp-page--priority .variant-progress-section.has-progress-tint .section-toggle-summary {
-  color: color-mix(in srgb, var(--progress-section-accent) 70%, var(--text-muted, #626f86));
-}
-
-/* All subtasks done — stronger wash of the same theme accent. */
-.tp-page--priority .variant-progress-section.is-progress-complete.has-progress-tint > .field--progress.is-enabled {
-  background: color-mix(
-    in srgb,
-    var(--progress-section-accent) 28%,
-    var(--surface-2, var(--tp-surface))
-  );
-}
-
-.tp-page--priority .variant-progress-section.is-progress-complete:not(.has-progress-tint) > .field--progress.is-enabled {
-  background: var(--progress-complete-fill, #E4F3EF);
-}
-
-.tp-page--priority .variant-progress-section.is-progress-complete:not(.has-progress-tint) .progress-enable-title,
-.tp-page--priority .variant-progress-section.is-progress-complete:not(.has-progress-tint) .section-enable-title {
-  color: var(--progress-complete-text, #164B45);
-}
-
-.tp-page--priority .variant-progress-section.is-progress-complete:not(.has-progress-tint) .section-toggle-summary {
-  color: var(--progress-complete-muted-text, #1F6B5C);
 }
 
 .tp-page--priority .progress-enable-title {

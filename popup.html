@@ -1449,9 +1449,6 @@
         onLayoutChange: function () {
           resizePopup();
         },
-        onOpenBlocked: function () {
-          jumpToSection('blocked');
-        },
         onFormulaChange: function (formulaKey) {
           PriorityTrello.saveBoardFormula(t, formulaKey).catch(function (err) {
             console.error('Priority formula save failed', err);

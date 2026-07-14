@@ -67,6 +67,44 @@
         <span>Déplacer automatiquement vers Terminé quand une carte est complétée</span>
       </label>
 
+      <div class="tp-statut-colors" id="statutStateColors">
+        <p class="tp-color-scheme-hint">Couleurs de la section Statut</p>
+        <div class="tp-statut-color-grid" role="group" aria-label="Couleurs de statut">
+          <label class="tp-statut-color">
+            <span class="tp-statut-color-label">Gris</span>
+            <span class="tp-statut-color-hint">Repos / backlog</span>
+            <span class="tp-color-swatch">
+              <span class="tp-color-preview" id="statutColorPreviewGray"></span>
+              <input type="color" id="statutColorGray" data-state-color="gray" aria-label="Couleur gris" />
+            </span>
+          </label>
+          <label class="tp-statut-color">
+            <span class="tp-statut-color-label">Jaune</span>
+            <span class="tp-statut-color-hint">en cours</span>
+            <span class="tp-color-swatch">
+              <span class="tp-color-preview" id="statutColorPreviewYellow"></span>
+              <input type="color" id="statutColorYellow" data-state-color="yellow" aria-label="Couleur jaune" />
+            </span>
+          </label>
+          <label class="tp-statut-color">
+            <span class="tp-statut-color-label">Rouge</span>
+            <span class="tp-statut-color-hint">bloqué</span>
+            <span class="tp-color-swatch">
+              <span class="tp-color-preview" id="statutColorPreviewRed"></span>
+              <input type="color" id="statutColorRed" data-state-color="red" aria-label="Couleur rouge" />
+            </span>
+          </label>
+          <label class="tp-statut-color">
+            <span class="tp-statut-color-label">Vert</span>
+            <span class="tp-statut-color-hint">terminé</span>
+            <span class="tp-color-swatch">
+              <span class="tp-color-preview" id="statutColorPreviewGreen"></span>
+              <input type="color" id="statutColorGreen" data-state-color="green" aria-label="Couleur vert" />
+            </span>
+          </label>
+        </div>
+      </div>
+
       <button type="button" class="tp-button tp-button--secondary" id="statutRedetect">Détecter à nouveau</button>
     </div>
   </details>
@@ -484,7 +522,44 @@
       if (showUnassigned) showUnassigned.checked = !!settings.showUnassigned;
       if (autoBlocked) autoBlocked.checked = settings.autoMoveBlocked !== false;
       if (autoCompleted) autoCompleted.checked = settings.autoMoveCompleted !== false;
+      syncStatutStateColorsFromState();
       renderStatutMap();
+    }
+
+    function syncStatutStateColorsFromState() {
+      var colors =
+        typeof StatutMatch !== 'undefined' && StatutMatch.normalizeStateColors
+          ? StatutMatch.normalizeStateColors(
+              statutState.settings && statutState.settings.stateColors
+            )
+          : { gray: '#626F86', yellow: '#E2B203', red: '#E34935', green: '#22A06B' };
+      ['gray', 'yellow', 'red', 'green'].forEach(function (key) {
+        var input = document.getElementById(
+          'statutColor' + key.charAt(0).toUpperCase() + key.slice(1)
+        );
+        var preview = document.getElementById(
+          'statutColorPreview' + key.charAt(0).toUpperCase() + key.slice(1)
+        );
+        var hex = colors[key];
+        if (input) input.value = hex;
+        if (preview) preview.style.background = hex;
+      });
+    }
+
+    var statutColorSaveTimer = null;
+    function persistStatutStateColor(key, value) {
+      if (!statutState.settings) return;
+      var colors =
+        typeof StatutMatch !== 'undefined' && StatutMatch.normalizeStateColors
+          ? StatutMatch.normalizeStateColors(statutState.settings.stateColors)
+          : Object.assign({}, statutState.settings.stateColors || {});
+      colors[key] = value;
+      if (statutColorSaveTimer) clearTimeout(statutColorSaveTimer);
+      statutColorSaveTimer = setTimeout(function () {
+        persistStatutPatch({ stateColors: colors }).catch(function (err) {
+          console.error('Statut state color save failed', err);
+        });
+      }, 180);
     }
 
     async function persistStatutPatch(patch) {
@@ -565,6 +640,18 @@
             .catch(function (err) {
               console.error('Statut redetect failed', err);
             });
+        });
+
+        document.querySelectorAll('[data-state-color]').forEach(function (input) {
+          input.addEventListener('input', function () {
+            var key = input.getAttribute('data-state-color');
+            var hex = input.value;
+            var preview = document.getElementById(
+              'statutColorPreview' + key.charAt(0).toUpperCase() + key.slice(1)
+            );
+            if (preview) preview.style.background = hex;
+            persistStatutStateColor(key, hex);
+          });
         });
       } catch (err) {
         console.error('Statut settings init failed', err);
