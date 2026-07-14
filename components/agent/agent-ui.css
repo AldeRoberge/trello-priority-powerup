@@ -902,15 +902,8 @@ html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-4 {
 .tp-page--priority .agent-apply-suggestions-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
-}
-
-.tp-page--priority .agent-apply-suggestions-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--tp-text-muted, var(--text-muted));
-  letter-spacing: 0.01em;
 }
 
 .tp-page--priority .agent-apply-suggestions-refresh {
@@ -1167,11 +1160,6 @@ html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-4 {
   color: var(--tp-text);
 }
 
-.tp-page--priority .agent-offer-text--declined {
-  color: var(--tp-text-muted);
-  font-size: 12px;
-}
-
 .tp-page--priority .agent-offer-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1219,7 +1207,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-suggestion-chip--heat-4 {
 }
 
 .tp-page--priority .agent-msg--offer.is-resolved {
-  opacity: 0.92;
+  display: none;
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-apply-suggestion-chip {

@@ -774,29 +774,6 @@
     progressSection.appendChild(progressPanel);
     containerEl.appendChild(progressSection);
 
-    var addSection = document.createElement('section');
-    addSection.className = 'tp-completion-add';
-    addSection.innerHTML =
-      '<div class="tp-completion-add-row">' +
-      '<input type="text" class="tp-input tp-completion-add-input" id="completionAddInput" ' +
-      'placeholder="Ajouter une sous-t\u00e2che\u2026" maxlength="500" autocomplete="off" />' +
-      '<button type="button" class="tp-btn tp-btn--primary tp-completion-add-btn" id="completionAddBtn">Ajouter</button>' +
-      '</div>';
-    containerEl.appendChild(addSection);
-
-    var suggestionsSection = document.createElement('section');
-    suggestionsSection.className = 'tp-completion-suggestions';
-    suggestionsSection.hidden = true;
-    suggestionsSection.innerHTML =
-      '<div class="tp-completion-suggestions-head">' +
-      '<span class="tp-completion-suggestions-label">Suggestions</span>' +
-      '<button type="button" class="tp-completion-suggestions-refresh" id="completionSuggestRefresh" ' +
-      'aria-label="Rafra\u00eechir les suggestions" title="Rafra\u00eechir">\u21bb</button>' +
-      '</div>' +
-      '<p class="tp-completion-suggestions-status" id="completionSuggestStatus" hidden></p>' +
-      '<div class="tp-completion-suggestions-list" id="completionSuggestList" role="list"></div>';
-    containerEl.appendChild(suggestionsSection);
-
     var listSection = document.createElement('section');
     listSection.className = 'tp-completion-list-section';
     listSection.innerHTML =
@@ -825,6 +802,29 @@
       '<ul class="tp-completion-list tp-completion-done-list" id="completionDoneList" ' +
       'aria-label="T\u00e2ches termin\u00e9es" hidden></ul>';
     containerEl.appendChild(doneSection);
+
+    var addSection = document.createElement('section');
+    addSection.className = 'tp-completion-add';
+    addSection.innerHTML =
+      '<div class="tp-completion-add-row">' +
+      '<input type="text" class="tp-input tp-completion-add-input" id="completionAddInput" ' +
+      'placeholder="Ajouter une sous-t\u00e2che\u2026" maxlength="500" autocomplete="off" />' +
+      '<button type="button" class="tp-btn tp-btn--primary tp-completion-add-btn" id="completionAddBtn">Ajouter</button>' +
+      '</div>';
+    containerEl.appendChild(addSection);
+
+    var suggestionsSection = document.createElement('section');
+    suggestionsSection.className = 'tp-completion-suggestions';
+    suggestionsSection.hidden = true;
+    suggestionsSection.innerHTML =
+      '<div class="tp-completion-suggestions-head">' +
+      '<span class="tp-completion-suggestions-label">Suggestions</span>' +
+      '<button type="button" class="tp-completion-suggestions-refresh" id="completionSuggestRefresh" ' +
+      'aria-label="Rafra\u00eechir les suggestions" title="Rafra\u00eechir">\u21bb</button>' +
+      '</div>' +
+      '<p class="tp-completion-suggestions-status" id="completionSuggestStatus" hidden></p>' +
+      '<div class="tp-completion-suggestions-list" id="completionSuggestList" role="list"></div>';
+    containerEl.appendChild(suggestionsSection);
 
     var listEl = containerEl.querySelector('#completionList');
     var doneListEl = containerEl.querySelector('#completionDoneList');

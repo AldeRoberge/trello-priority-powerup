@@ -468,9 +468,6 @@
     var applySection = el('div', 'agent-apply-suggestions');
     applySection.hidden = true;
     var applyHead = el('div', 'agent-apply-suggestions-head');
-    applyHead.appendChild(
-      el('span', 'agent-apply-suggestions-label', { text: 'Suggestions IA' })
-    );
     var applyRefreshBtn = el('button', 'agent-apply-suggestions-refresh', {
       type: 'button',
       'aria-label': 'Rafra\u00eechir les suggestions',
@@ -1312,6 +1309,7 @@
     function clearActiveOffer(row) {
       if (row && row.parentNode) {
         row.classList.add('is-resolved');
+        row.remove();
       }
       activeOffer = null;
       setListenBarState('idle');
@@ -1368,7 +1366,6 @@
     }
 
     async function onOfferAccept(item, row) {
-      yesDisableOffer(row);
       clearActiveOffer(row);
       muteListening();
       var result = await Agent.executeActions(bridge, item.actions || []);
@@ -1386,28 +1383,9 @@
 
     function onOfferDecline(item, row) {
       dismissedOffers[String(item.label || '').trim()] = Date.now();
-      yesDisableOffer(row);
-      var bubble = row.querySelector('.agent-msg-bubble--offer');
-      if (bubble) {
-        bubble.replaceChildren();
-        bubble.appendChild(
-          el('div', 'agent-offer-text agent-offer-text--declined', {
-            text: 'D\u2019accord, je laisse faire.'
-          })
-        );
-      }
       clearActiveOffer(row);
       muteListening(800);
       notifyLayout();
-    }
-
-    function yesDisableOffer(row) {
-      Array.prototype.forEach.call(
-        row.querySelectorAll('.agent-offer-btn'),
-        function (btn) {
-          btn.disabled = true;
-        }
-      );
     }
 
     function pickListenSuggestion(list) {
