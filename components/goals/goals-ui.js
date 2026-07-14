@@ -638,7 +638,7 @@
           );
         });
       }
-      missionPanel.countBadge.textContent = missionReady ? String(missions.length) : '—';
+      missionPanel.countBadge.textContent = missionReady ? String(missions.length) : '\u2014';
       setPanelSelected(
         missionPanel,
         missionReady ? GT.findById(state.missions, state.selectedMissionId) : null
@@ -676,7 +676,7 @@
           );
         });
       }
-      projectPanel.countBadge.textContent = projectReady ? String(projects.length) : '—';
+      projectPanel.countBadge.textContent = projectReady ? String(projects.length) : '\u2014';
       setPanelSelected(
         projectPanel,
         projectReady ? GT.findById(state.projects, state.selectedProjectId) : null
@@ -963,12 +963,51 @@
       return form;
     }
 
+    function detectAi() {
+      if (!Agent || typeof Agent.getProvider !== 'function' || typeof Agent.isConfigured !== 'function') {
+        state.aiEnabled = false;
+        return Promise.resolve(false);
+      }
+      return Agent.getProvider(t)
+        .then(function (provider) {
+          state.aiEnabled = Agent.isConfigured(provider);
+          return state.aiEnabled;
+        })
+        .catch(function () {
+          state.aiEnabled = false;
+          return false;
+        });
+    }
+
+    function loadBoardName() {
+      if (!t || typeof t.board !== 'function') return Promise.resolve('');
+      return Promise.resolve()
+        .then(function () {
+          return t.board('name');
+        })
+        .then(function (board) {
+          state.boardName =
+            board && typeof board.name === 'string'
+              ? board.name
+              : typeof board === 'string'
+                ? board
+                : '';
+          return state.boardName;
+        })
+        .catch(function () {
+          state.boardName = '';
+          return '';
+        });
+    }
+
     function reload() {
       return Promise.all([
         GT.getVisions(t),
         GT.getMissions(t),
         GT.getProjects(t),
         GT.getMetrics(t),
+        detectAi(),
+        loadBoardName(),
       ]).then(function (results) {
         state.visions = results[0];
         state.missions = results[1];
@@ -989,6 +1028,11 @@
         renderLists();
         renderMetrics();
         onResize();
+        setTimeout(function () {
+          refreshSuggestions('vision', false);
+          if (state.selectedVisionId) refreshSuggestions('mission', false);
+          if (state.selectedMissionId) refreshSuggestions('project', false);
+        }, 0);
       });
     }
 
