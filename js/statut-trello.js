@@ -17,6 +17,7 @@
       initialized: false,
       listCategories: {},
       roleLists: { blocked: null, completed: null },
+      showUnassigned: false,
       autoMoveBlocked: true,
       autoMoveCompleted: true,
     };
@@ -53,6 +54,7 @@
       initialized: !!raw.initialized,
       listCategories: listCategories,
       roleLists: roleLists,
+      showUnassigned: !!raw.showUnassigned,
       autoMoveBlocked: raw.autoMoveBlocked !== false,
       autoMoveCompleted: raw.autoMoveCompleted !== false,
     };
@@ -108,6 +110,7 @@
         blocked: detected.roleLists.blocked || null,
         completed: detected.roleLists.completed || null,
       },
+      showUnassigned: !!base.showUnassigned,
       autoMoveBlocked: base.autoMoveBlocked !== false,
       autoMoveCompleted: base.autoMoveCompleted !== false,
     };

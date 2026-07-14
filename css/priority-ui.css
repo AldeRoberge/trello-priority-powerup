@@ -276,12 +276,14 @@ body {
 
 /* Settings gear sits beside the collapse control — share one horizontal axis */
 .field--statut .section-toggle-head,
-.field--chat .section-toggle-head {
+.field--chat .section-toggle-head,
+.field--info .section-toggle-head {
   align-items: center;
 }
 
 .field--statut .section-collapse-btn,
-.field--chat .section-collapse-btn {
+.field--chat .section-collapse-btn,
+.field--info .section-collapse-btn {
   align-items: center;
   /* Keep hit-area padding, but don't overlap the trailing settings control */
   margin-right: 0;
@@ -289,8 +291,10 @@ body {
 
 .field--statut .section-collapse-chevron,
 .field--chat .section-collapse-chevron,
+.field--info .section-collapse-chevron,
 .field--statut .section-leading-icon,
-.field--chat .section-leading-icon {
+.field--chat .section-leading-icon,
+.field--info .section-leading-icon {
   margin-top: 0;
 }
 
@@ -347,12 +351,224 @@ body {
 .field--graphique .section-leading-icon,
 .field--chat .section-leading-icon,
 .field--statut .section-leading-icon,
+.field--info .section-leading-icon,
 .field--priority .section-leading-icon,
 .field--progress .section-leading-icon,
 .field--due-date .section-leading-icon,
 .field--en-attente .section-leading-icon {
   color: var(--text-primary);
   opacity: 0.85;
+}
+
+/* ── Information (recap) panel ── */
+.variant-info-section {
+  margin-top: 0;
+  padding: 0 12px;
+}
+
+.field--info {
+  margin-bottom: 0;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: transparent;
+  border: none;
+  transition: background 0.2s ease;
+}
+
+.field--info.is-enabled {
+  background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
+}
+
+.info-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0 2px;
+}
+
+.info-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 10px 12px;
+  align-items: start;
+}
+
+.info-row-label {
+  margin: 0;
+  padding-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.info-row-value {
+  min-width: 0;
+}
+
+.info-row--title .tp-priority-card-name {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.info-row.is-interactive {
+  cursor: pointer;
+  border-radius: 8px;
+  margin: 0 -6px;
+  padding: 4px 6px;
+  transition: background-color 0.12s ease;
+}
+
+.info-row.is-interactive:hover {
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+.info-row.is-interactive:focus-visible {
+  outline: 2px solid var(--focus-ring-strong, #0c66e4);
+  outline-offset: 1px;
+}
+
+.info-row.is-blocked .info-row-label,
+.info-row.is-blocked .info-recap-text.is-blocked {
+  color: var(--blocked-text, #5D1A1A);
+}
+
+.info-recap-text,
+.info-recap-empty {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.info-recap-text.is-empty,
+.info-recap-empty {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.info-desc-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.info-desc-input {
+  width: 100%;
+  min-height: 72px;
+  max-height: 220px;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.info-desc-input::placeholder {
+  color: var(--text-muted);
+}
+
+.info-desc-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--tp-primary, #0c66e4) 55%, var(--border));
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.info-desc-meta {
+  min-height: 1.1em;
+}
+
+.info-desc-status {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.info-desc-status.is-ok {
+  color: var(--progress-complete-muted-text, #1F6B5C);
+}
+
+.info-desc-status.is-error {
+  color: var(--blocked-muted-text, #6E2424);
+}
+
+.info-auth-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-1);
+}
+
+.info-auth-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.info-auth-button {
+  font-size: 12px;
+}
+
+.info-members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.info-member {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 2px 8px 2px 2px;
+  border-radius: 999px;
+  background: var(--surface-1);
+}
+
+.info-member-avatar,
+.info-member-initials {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+
+.info-member-avatar {
+  object-fit: cover;
+  background: var(--surface-2);
+}
+
+.info-member-initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--tp-primary, #0c66e4) 16%, var(--surface-2));
+}
+
+.info-member-name {
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
 }
 
 .section-collapse-btn {
@@ -652,28 +868,6 @@ body {
   cursor: not-allowed;
 }
 
-.statut-footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  margin-top: 10px;
-}
-
-.statut-unassigned-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--tp-text-muted, var(--text-muted, #626f86));
-  cursor: pointer;
-  user-select: none;
-}
-
-.statut-unassigned-toggle input {
-  margin: 0;
-}
-
 .statut-settings-btn {
   flex: 0 0 auto;
   align-self: center;
@@ -938,7 +1132,20 @@ body {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
+  box-sizing: border-box;
+  padding: 0;
+  border: none;
+  border-radius: 14px;
+  background: var(--surface-2);
+  box-shadow: var(--modal-shadow);
+  overflow: hidden;
+  transition: background-color 0.15s ease;
+}
+
+.due-date-picker.has-value,
+.due-date-pickers.has-time .due-date-picker--time {
+  background: color-mix(in srgb, var(--due-accent) 8%, var(--surface-2));
 }
 
 .due-date-trigger,
@@ -950,22 +1157,19 @@ body {
   gap: 10px;
   padding: 10px 8px 10px 12px;
   border: none;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--surface-1, var(--surface-2)) 85%, var(--surface-2));
+  border-radius: 0;
+  background: transparent;
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: 15px;
   line-height: 1.35;
   text-align: left;
   cursor: default;
-  transition:
-    background-color 0.15s ease,
-    box-shadow 0.15s ease;
 }
 
 .due-date-trigger:hover,
 .due-date-time-trigger:hover {
-  background: color-mix(in srgb, var(--surface-1, var(--surface-2)) 85%, var(--surface-2));
+  background: transparent;
 }
 
 .due-date-trigger:focus-visible,
@@ -976,11 +1180,7 @@ body {
 .field--due-date.is-open .due-date-trigger,
 .field--due-date.is-time-open .due-date-time-trigger {
   box-shadow: none;
-}
-
-.due-date-picker.has-value .due-date-trigger,
-.due-date-pickers.has-time .due-date-time-trigger {
-  background: color-mix(in srgb, var(--due-accent) 8%, var(--surface-1, var(--surface-2)));
+  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
 .due-date-trigger-icon,
@@ -1072,11 +1272,11 @@ body {
   width: 100%;
   max-width: none;
   margin-top: 0;
-  padding: 8px;
+  padding: 0 8px 8px;
   border: none;
-  border-radius: 14px;
-  background: var(--surface-2);
-  box-shadow: var(--modal-shadow);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1486,11 +1686,11 @@ html[data-color-mode="dark"] .due-date-time-clock {
   width: 100%;
   max-width: none;
   margin-top: 0;
-  padding: 8px;
+  padding: 0 8px 8px;
   border: none;
-  border-radius: 14px;
-  background: var(--surface-2);
-  box-shadow: var(--modal-shadow);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -1522,6 +1722,7 @@ html[data-color-mode="dark"] .due-date-time-clock {
   min-width: 0;
 }
 
+.due-date-day-pick,
 .due-date-month-pick,
 .due-date-year-pick {
   appearance: none;
@@ -1541,23 +1742,27 @@ html[data-color-mode="dark"] .due-date-time-clock {
   transition: background-color 0.12s ease, color 0.12s ease;
 }
 
+.due-date-day-pick:hover,
 .due-date-month-pick:hover,
 .due-date-year-pick:hover {
   background: var(--surface-hover);
 }
 
+.due-date-day-pick:focus-visible,
 .due-date-month-pick:focus-visible,
 .due-date-year-pick:focus-visible {
   outline: 2px solid var(--due-accent);
   outline-offset: 1px;
 }
 
+.due-date-day-pick.is-active,
 .due-date-month-pick.is-active,
 .due-date-year-pick.is-active {
   color: var(--due-accent);
   background: var(--due-accent-soft);
 }
 
+.due-date-day-pick[hidden],
 .due-date-month-pick[hidden],
 .due-date-year-pick[hidden] {
   display: none;
@@ -1578,7 +1783,7 @@ html[data-color-mode="dark"] .due-date-time-clock {
   transition: background-color 0.12s ease, color 0.12s ease;
 }
 
-.due-date-nav-btn:hover {
+.due-date-nav-btn:hover:not(:disabled) {
   background: var(--surface-hover);
   color: var(--text-primary);
 }
@@ -1586,6 +1791,11 @@ html[data-color-mode="dark"] .due-date-time-clock {
 .due-date-nav-btn:focus-visible {
   outline: 2px solid var(--due-accent);
   outline-offset: 1px;
+}
+
+.due-date-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .due-date-weekdays,
@@ -1623,7 +1833,8 @@ html[data-color-mode="dark"] .due-date-time-clock {
 }
 
 .due-date-grid--months,
-.due-date-grid--years {
+.due-date-grid--years,
+.due-date-grid--dates {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
@@ -1631,8 +1842,13 @@ html[data-color-mode="dark"] .due-date-time-clock {
   align-content: stretch;
 }
 
+.due-date-grid--dates {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .due-date-month-option,
-.due-date-year-option {
+.due-date-year-option,
+.due-date-date-option {
   appearance: none;
   display: flex;
   align-items: center;
@@ -1655,36 +1871,58 @@ html[data-color-mode="dark"] .due-date-time-clock {
 }
 
 .due-date-month-option:hover,
-.due-date-year-option:hover {
+.due-date-year-option:hover,
+.due-date-date-option:hover {
   background: var(--surface-hover);
 }
 
 .due-date-month-option:focus-visible,
-.due-date-year-option:focus-visible {
+.due-date-year-option:focus-visible,
+.due-date-date-option:focus-visible {
   outline: 2px solid var(--due-accent);
   outline-offset: 1px;
 }
 
 .due-date-month-option.is-today,
-.due-date-year-option.is-today {
+.due-date-year-option.is-today,
+.due-date-date-option.is-today {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--due-accent) 45%, transparent);
 }
 
 .due-date-month-option.is-current:not(.is-selected),
-.due-date-year-option.is-current:not(.is-selected) {
+.due-date-year-option.is-current:not(.is-selected),
+.due-date-date-option.is-current:not(.is-selected) {
   color: var(--due-accent);
 }
 
 .due-date-month-option.is-selected,
-.due-date-year-option.is-selected {
+.due-date-year-option.is-selected,
+.due-date-date-option.is-selected {
   background: var(--due-accent);
   color: var(--due-accent-text, #ffffff);
   box-shadow: none;
 }
 
 .due-date-month-option.is-selected:hover,
-.due-date-year-option.is-selected:hover {
+.due-date-year-option.is-selected:hover,
+.due-date-date-option.is-selected:hover {
   background: color-mix(in srgb, var(--due-accent) 88%, #000);
+}
+
+.due-date-month-option.is-past,
+.due-date-date-option.is-past,
+.due-date-month-option:disabled,
+.due-date-date-option:disabled {
+  color: var(--text-muted);
+  opacity: 0.4;
+  cursor: default;
+}
+
+.due-date-month-option.is-past:hover,
+.due-date-date-option.is-past:hover,
+.due-date-month-option:disabled:hover,
+.due-date-date-option:disabled:hover {
+  background: transparent;
 }
 
 .due-date-cell {
@@ -1728,6 +1966,23 @@ html[data-color-mode="dark"] .due-date-time-clock {
   opacity: 0.72;
 }
 
+.due-date-day.is-past,
+.due-date-day:disabled {
+  color: var(--text-muted);
+  opacity: 0.38;
+  cursor: default;
+}
+
+.due-date-day.is-past:hover,
+.due-date-day:disabled:hover {
+  background: transparent;
+}
+
+.due-date-day.is-past.is-outside,
+.due-date-day:disabled.is-outside {
+  opacity: 0.28;
+}
+
 .due-date-day.is-today:not(.is-selected) {
   color: var(--due-accent);
   font-weight: 500;
@@ -1743,6 +1998,13 @@ html[data-color-mode="dark"] .due-date-time-clock {
   color: var(--due-accent-text);
   font-weight: 500;
   box-shadow: none;
+}
+
+.due-date-day.is-past.is-selected,
+.due-date-day:disabled.is-selected {
+  opacity: 1;
+  color: var(--due-accent-text);
+  background: var(--due-accent);
 }
 
 .due-date-day.is-selected:hover {

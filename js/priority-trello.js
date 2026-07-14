@@ -576,6 +576,67 @@
     }
   }
 
+  async function getCardDesc(t) {
+    try {
+      var card = await cardDataPromise(t, 'desc');
+      if (card && typeof card.desc === 'string') return card.desc;
+      var scalar = await cardFieldPromise(t, 'desc');
+      if (typeof scalar === 'string') return scalar;
+      if (scalar && typeof scalar === 'object' && typeof scalar.desc === 'string') {
+        return scalar.desc;
+      }
+      return '';
+    } catch (err) {
+      console.error('Priority card desc failed', err);
+      return '';
+    }
+  }
+
+  /**
+   * Members assigned to the current card (`t.card('members')`).
+   * Each entry typically has id, fullName, username, initials, avatarHash/avatarUrl.
+   */
+  async function getCardMembers(t) {
+    try {
+      var card = await cardDataPromise(t, 'members');
+      var list = null;
+      if (card && Array.isArray(card.members)) list = card.members;
+      else if (Array.isArray(card)) list = card;
+      else {
+        var scalar = await cardFieldPromise(t, 'members');
+        if (Array.isArray(scalar)) list = scalar;
+        else if (scalar && Array.isArray(scalar.members)) list = scalar.members;
+      }
+      if (!list) return [];
+      return list.filter(function (m) {
+        return m && typeof m === 'object' && !isPowerUpRequestChain(m);
+      });
+    } catch (err) {
+      console.error('Priority card members failed', err);
+      return [];
+    }
+  }
+
+  /**
+   * Update the card description via REST PUT. Requires OAuth (same as due sync).
+   */
+  async function setCardDesc(t, desc) {
+    var want = typeof desc === 'string' ? desc : '';
+    if (!restClientOptions()) return { ok: false, reason: 'no-app-key', changed: false };
+
+    var current = await getCardDesc(t);
+    if (current === want) {
+      return { ok: true, changed: false, desc: want };
+    }
+
+    var cardId = await resolveCurrentCardId(t);
+    if (!cardId) return { ok: false, reason: 'no-card-id', changed: false };
+
+    var put = await restPutCard(t, cardId, { desc: want });
+    if (!put.ok) return Object.assign({ changed: false }, put);
+    return { ok: true, changed: true, desc: want };
+  }
+
   async function getCardDueComplete(t) {
     try {
       // Documented pattern: t.card(field).get(field).then(value) — resolves the scalar/object.
@@ -1490,6 +1551,9 @@
     computeDisplay: computeDisplay,
     getCardDisplay: getCardDisplay,
     getCardName: getCardName,
+    getCardDesc: getCardDesc,
+    getCardMembers: getCardMembers,
+    setCardDesc: setCardDesc,
     getCardDueComplete: getCardDueComplete,
     setCardDueComplete: setCardDueComplete,
     getCardDue: getCardDue,

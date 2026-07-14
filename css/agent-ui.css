@@ -557,10 +557,10 @@
 
 .tp-page--priority .agent-apply-suggestion-chip {
   padding: 7px 12px;
-  border: 1px solid color-mix(in srgb, #2a9b82 45%, transparent);
+  border: 1px solid color-mix(in srgb, #1f7a68 40%, transparent);
   border-radius: 16px;
-  background: color-mix(in srgb, #2a9b82 12%, transparent);
-  color: #164b45;
+  background: color-mix(in srgb, #1f7a68 9%, transparent);
+  color: #1a3f3a;
   font: inherit;
   font-size: 12px;
   font-weight: 500;
@@ -571,8 +571,8 @@
 }
 
 .tp-page--priority .agent-apply-suggestion-chip:hover:not(:disabled) {
-  background: color-mix(in srgb, #2a9b82 22%, transparent);
-  border-color: #2a9b82;
+  background: color-mix(in srgb, #1f7a68 16%, transparent);
+  border-color: #1f7a68;
 }
 
 .tp-page--priority .agent-apply-suggestion-chip:disabled {
@@ -600,8 +600,8 @@
   margin-top: 0;
   padding: 2px 10px;
   border-radius: 999px;
-  background: #2a9b82;
-  color: #fff;
+  background: #1f7a68;
+  color: #e8f5f1;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.4;
@@ -609,7 +609,7 @@
 }
 
 .tp-page--priority .field--chat.has-ai-suggestions.is-ai-suggestions-loading .section-toggle-summary {
-  background: color-mix(in srgb, #2a9b82 70%, #6b7280);
+  background: color-mix(in srgb, #1f7a68 68%, #6b7280);
   font-weight: 500;
 }
 
@@ -619,19 +619,49 @@
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-apply-suggestion-chip {
-  background: color-mix(in srgb, #5dd4b1 16%, transparent);
-  border-color: color-mix(in srgb, #5dd4b1 50%, transparent);
-  color: #b8f0df;
+  background: color-mix(in srgb, #3fa88c 12%, transparent);
+  border-color: color-mix(in srgb, #3fa88c 38%, transparent);
+  color: #8fc9b5;
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-apply-suggestion-chip:hover:not(:disabled) {
-  background: color-mix(in srgb, #5dd4b1 26%, transparent);
-  border-color: #5dd4b1;
+  background: color-mix(in srgb, #3fa88c 20%, transparent);
+  border-color: #3fa88c;
 }
 
 html[data-color-mode='dark'] .tp-page--priority .field--chat.has-ai-suggestions .section-toggle-summary {
-  background: #2a9b82;
-  color: #fff;
+  background: #1f7a68;
+  color: #e8f5f1;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-debug-panel {
+  color: color-mix(in srgb, #fff 72%, #9fadbc);
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-debug-toolbar-title,
+html[data-color-mode='dark'] .tp-page--priority .agent-debug-list-label,
+html[data-color-mode='dark'] .tp-page--priority .agent-debug-section > summary,
+html[data-color-mode='dark'] .tp-page--priority .agent-debug-metric-row dd {
+  color: color-mix(in srgb, #fff 78%, #9fadbc);
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-debug-list-meta,
+html[data-color-mode='dark'] .tp-page--priority .agent-debug-empty {
+  color: color-mix(in srgb, #fff 58%, #9fadbc);
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-debug-list-item,
+html[data-color-mode='dark'] .tp-page--priority .agent-debug-section {
+  background: color-mix(in srgb, var(--tp-surface-subtle) 92%, #000 8%);
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-debug-list-item.is-active {
+  background: color-mix(in srgb, var(--tp-surface-subtle) 78%, #000 12%);
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
+  background: color-mix(in srgb, var(--tp-surface-subtle) 55%, #000 45%);
+  color: color-mix(in srgb, #fff 68%, #9fadbc);
 }
 
 @keyframes agent-suggestion-in {
@@ -762,6 +792,7 @@ html[data-color-mode='dark'] .tp-page--priority .field--chat.has-ai-suggestions 
   border-top: 1px solid var(--tp-border);
   max-height: 320px;
   overflow: auto;
+  color: color-mix(in srgb, var(--tp-text) 78%, var(--tp-text-muted));
 }
 
 .tp-page--priority .agent-debug-panel[hidden] {
@@ -778,7 +809,7 @@ html[data-color-mode='dark'] .tp-page--priority .field--chat.has-ai-suggestions 
 .tp-page--priority .agent-debug-toolbar-title {
   font-size: 12px;
   font-weight: 600;
-  color: var(--tp-text);
+  color: color-mix(in srgb, var(--tp-text) 82%, var(--tp-text-muted));
 }
 
 .tp-page--priority .agent-debug-clear {
@@ -830,7 +861,7 @@ html[data-color-mode='dark'] .tp-page--priority .field--chat.has-ai-suggestions 
   padding: 5px 7px;
   border: 1px solid transparent;
   border-radius: 4px;
-  background: var(--tp-surface);
+  background: color-mix(in srgb, var(--tp-surface-subtle) 88%, var(--tp-surface));
   color: inherit;
   font: inherit;
   text-align: left;
@@ -843,7 +874,7 @@ html[data-color-mode='dark'] .tp-page--priority .field--chat.has-ai-suggestions 
 
 .tp-page--priority .agent-debug-list-item.is-active {
   border-color: var(--tp-border-strong);
-  background: color-mix(in srgb, var(--tp-surface) 70%, var(--tp-surface-subtle));
+  background: color-mix(in srgb, var(--tp-surface-subtle) 70%, var(--tp-surface));
 }
 
 .tp-page--priority .agent-debug-list-item.is-fail .agent-debug-list-label {
@@ -853,7 +884,7 @@ html[data-color-mode='dark'] .tp-page--priority .field--chat.has-ai-suggestions 
 .tp-page--priority .agent-debug-list-label {
   font-size: 11px;
   font-weight: 600;
-  color: var(--tp-text);
+  color: color-mix(in srgb, var(--tp-text) 82%, var(--tp-text-muted));
 }
 
 .tp-page--priority .agent-debug-list-meta {
@@ -871,7 +902,7 @@ html[data-color-mode='dark'] .tp-page--priority .field--chat.has-ai-suggestions 
   margin: 0;
   border: 1px solid var(--tp-border);
   border-radius: 4px;
-  background: var(--tp-surface);
+  background: color-mix(in srgb, var(--tp-surface-subtle) 88%, var(--tp-surface));
 }
 
 .tp-page--priority .agent-debug-section > summary {
@@ -880,7 +911,7 @@ html[data-color-mode='dark'] .tp-page--priority .field--chat.has-ai-suggestions 
   padding: 5px 7px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--tp-text);
+  color: color-mix(in srgb, var(--tp-text) 82%, var(--tp-text-muted));
   user-select: none;
 }
 
@@ -898,8 +929,8 @@ html[data-color-mode='dark'] .tp-page--priority .field--chat.has-ai-suggestions 
   max-height: 180px;
   overflow: auto;
   border-radius: 3px;
-  background: color-mix(in srgb, var(--tp-surface-subtle) 80%, #000 8%);
-  color: var(--tp-text);
+  background: color-mix(in srgb, var(--tp-surface-subtle) 72%, #000 14%);
+  color: color-mix(in srgb, var(--tp-text) 76%, var(--tp-text-muted));
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 10px;
   line-height: 1.4;
@@ -929,7 +960,7 @@ html[data-color-mode='dark'] .tp-page--priority .field--chat.has-ai-suggestions 
 
 .tp-page--priority .agent-debug-metric-row dd {
   margin: 0;
-  color: var(--tp-text);
+  color: color-mix(in srgb, var(--tp-text) 82%, var(--tp-text-muted));
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }

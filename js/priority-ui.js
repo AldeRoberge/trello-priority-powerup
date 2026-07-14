@@ -47,8 +47,7 @@
   var FORMULA_STORAGE_KEY = 'trello-priority-powerup/formula';
   var COLOR_SCHEME_STORAGE_KEY = 'trello-priority-powerup/color-scheme';
   var SECTION_COLLAPSE_STORAGE_KEY = 'trello-priority-powerup/section-collapse';
-  var STATUT_SHOW_UNASSIGNED_KEY = 'trello-priority-powerup/statut-show-unassigned';
-  var SECTION_COLLAPSE_KEYS = ['statut', 'priority', 'graph', 'progress', 'due', 'blocked', 'chat'];
+  var SECTION_COLLAPSE_KEYS = ['info', 'statut', 'priority', 'graph', 'progress', 'due', 'blocked', 'chat'];
   var DEFAULT_COLOR_SCHEME_KEY = 'blue';
   var SCORE_MAX = 10;
   // Urgency / impact axis max (ease uses 1..5).
@@ -1536,6 +1535,7 @@
   var DUE_DATE_NEXT_YEAR = 'Ann\u00e9e suivante';
   var DUE_DATE_PREV_YEARS = 'Ann\u00e9es pr\u00e9c\u00e9dentes';
   var DUE_DATE_NEXT_YEARS = 'Ann\u00e9es suivantes';
+  var DUE_DATE_PICK_DAY_LABEL = 'Choisir le jour';
   var DUE_DATE_PICK_MONTH_LABEL = 'Choisir le mois';
   var DUE_DATE_PICK_YEAR_LABEL = 'Choisir l\'ann\u00e9e';
   var DUE_DATE_CALENDAR_LABEL = 'Calendrier d\'\u00e9ch\u00e9ance';
@@ -4192,22 +4192,6 @@
     };
   }
 
-  function loadShowUnassignedStatuts() {
-    try {
-      if (typeof localStorage === 'undefined') return false;
-      return localStorage.getItem(STATUT_SHOW_UNASSIGNED_KEY) === '1';
-    } catch (e) {
-      return false;
-    }
-  }
-
-  function saveShowUnassignedStatuts(on) {
-    try {
-      if (typeof localStorage === 'undefined') return;
-      localStorage.setItem(STATUT_SHOW_UNASSIGNED_KEY, on ? '1' : '0');
-    } catch (e) { /* ignore */ }
-  }
-
   function statutCategoryStyle(key) {
     if (
       typeof global.StatutMatch !== 'undefined' &&
@@ -4334,7 +4318,7 @@
     var showUnassigned =
       config.showUnassigned != null
         ? !!config.showUnassigned
-        : loadShowUnassignedStatuts();
+        : !!(settings && settings.showUnassigned);
     var onAuthorize =
       typeof config.onAuthorize === 'function' ? config.onAuthorize : null;
     var authReason = config.authReason || (config.needsAuth ? 'not-authorized' : '');
@@ -4421,33 +4405,9 @@
     emptyEl.hidden = true;
     emptyEl.textContent = 'Aucune liste trouvée sur ce tableau.';
 
-    var footer = document.createElement('div');
-    footer.className = 'statut-footer';
-
-    var unassignedToggle = document.createElement('label');
-    unassignedToggle.className = 'statut-unassigned-toggle';
-    var unassignedCheckbox = document.createElement('input');
-    unassignedCheckbox.type = 'checkbox';
-    unassignedCheckbox.checked = showUnassigned;
-    unassignedCheckbox.setAttribute('aria-label', 'Afficher les statuts non assignés');
-    var unassignedLabel = document.createElement('span');
-    unassignedLabel.textContent = 'Afficher les statuts non assignés';
-    unassignedToggle.appendChild(unassignedCheckbox);
-    unassignedToggle.appendChild(unassignedLabel);
-
-    unassignedCheckbox.addEventListener('change', function () {
-      showUnassigned = !!unassignedCheckbox.checked;
-      saveShowUnassignedStatuts(showUnassigned);
-      renderOptions();
-      onLayoutChange();
-    });
-
-    footer.appendChild(unassignedToggle);
-
     body.appendChild(authBox);
     body.appendChild(groupsEl);
     body.appendChild(emptyEl);
-    body.appendChild(footer);
 
     function authMessage(reason) {
       if (reason === 'no-app-key') {
@@ -4670,8 +4630,8 @@
         }
         if (next.showUnassigned != null) {
           showUnassigned = !!next.showUnassigned;
-          unassignedCheckbox.checked = showUnassigned;
-          saveShowUnassignedStatuts(showUnassigned);
+        } else if (next.settings) {
+          showUnassigned = !!settings.showUnassigned;
         }
         renderOptions();
         collapse.refreshSummary();
@@ -4686,6 +4646,468 @@
       refreshSummary: function () {
         collapse.refreshSummary();
       },
+    };
+  }
+
+  /**
+   * Top-of-popup recap: title, description (editable), assignees, priority, due, blocked.
+   * Priority / due / blocked are read-only mirrors of the sections below.
+   */
+  function createInfoField(config) {
+    var el = config.el;
+    var onLayoutChange = config.onLayoutChange || function () {};
+    var onDescChange =
+      typeof config.onDescChange === 'function' ? config.onDescChange : null;
+    var onAuthorize =
+      typeof config.onAuthorize === 'function' ? config.onAuthorize : null;
+    var onJump =
+      typeof config.onJump === 'function' ? config.onJump : null;
+    var bodyId = 'info-section-body-' + Math.random().toString(36).slice(2, 9);
+    var titleText = typeof config.title === 'string' ? config.title : '';
+    var descText = typeof config.desc === 'string' ? config.desc : '';
+    var members = Array.isArray(config.members) ? config.members.slice() : [];
+    var priorityLabel = typeof config.priorityLabel === 'string' ? config.priorityLabel : '';
+    var dueLabel = typeof config.dueLabel === 'string' ? config.dueLabel : '';
+    var blockedLabel = typeof config.blockedLabel === 'string' ? config.blockedLabel : '';
+    var blockedOn = !!config.blockedOn;
+    var descDirty = false;
+    var descSaveTimer = null;
+    var descBusy = false;
+    var authBusy = false;
+    var authReason = config.authReason || '';
+    var DESC_SAVE_MS = 450;
+
+    var field = document.createElement('div');
+    field.className = 'field field--info is-enabled';
+
+    var chrome = createCollapsibleEnableChrome({
+      title: 'Information',
+      bodyId: bodyId,
+      hideEnable: true,
+      leadingIcon: 'ti-info-circle',
+      iconClass: 'info-leading-icon',
+      titleClass: 'info-enable-title',
+      collapseLabel: 'Replier Information',
+      expandLabel: 'D\u00e9velopper Information'
+    });
+    field.appendChild(chrome.head);
+
+    var body = document.createElement('div');
+    body.className = 'info-section-body section-toggle-body';
+    body.id = bodyId;
+
+    function makeRow(key, labelText, options) {
+      options = options || {};
+      var row = document.createElement('div');
+      row.className = 'info-row info-row--' + key;
+      if (options.interactive) row.classList.add('is-interactive');
+
+      var label = document.createElement('div');
+      label.className = 'info-row-label';
+      label.textContent = labelText;
+
+      var value = document.createElement('div');
+      value.className = 'info-row-value';
+
+      row.appendChild(label);
+      row.appendChild(value);
+
+      if (options.interactive && onJump) {
+        row.setAttribute('role', 'button');
+        row.tabIndex = 0;
+        row.title = 'Aller \u00e0 ' + labelText;
+        function jump() {
+          onJump(key);
+        }
+        row.addEventListener('click', jump);
+        row.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            jump();
+          }
+        });
+      }
+
+      return { row: row, value: value };
+    }
+
+    // ── Title ──────────────────────────────────────────────────────────
+    var titleRow = makeRow('title', 'Titre');
+    var titleEl = document.createElement('p');
+    titleEl.className = 'tp-priority-card-name is-loading';
+    titleEl.id = 'cardName';
+    titleEl.setAttribute('aria-live', 'polite');
+    titleEl.textContent = titleText || 'Chargement\u2026';
+    if (titleText) titleEl.classList.remove('is-loading');
+    titleRow.value.appendChild(titleEl);
+    body.appendChild(titleRow.row);
+
+    // ── Description ────────────────────────────────────────────────────
+    var descRow = makeRow('desc', 'Description');
+    var descWrap = document.createElement('div');
+    descWrap.className = 'info-desc-wrap';
+
+    var descInput = document.createElement('textarea');
+    descInput.className = 'info-desc-input';
+    descInput.id = 'cardDesc';
+    descInput.rows = 3;
+    descInput.placeholder = 'Ajouter une description\u2026';
+    descInput.setAttribute('aria-label', 'Description de la carte');
+    descInput.value = descText;
+
+    var descMeta = document.createElement('div');
+    descMeta.className = 'info-desc-meta';
+    var descStatus = document.createElement('span');
+    descStatus.className = 'info-desc-status';
+    descStatus.setAttribute('aria-live', 'polite');
+    descMeta.appendChild(descStatus);
+
+    var authBox = document.createElement('div');
+    authBox.className = 'info-auth-box';
+    authBox.hidden = true;
+    var authHint = document.createElement('p');
+    authHint.className = 'info-auth-hint';
+    var authBtn = document.createElement('button');
+    authBtn.type = 'button';
+    authBtn.className = 'tp-button info-auth-button';
+    authBtn.textContent = 'Autoriser Trello (lecture + \u00e9criture)';
+    authBox.appendChild(authHint);
+    authBox.appendChild(authBtn);
+
+    descWrap.appendChild(descInput);
+    descWrap.appendChild(descMeta);
+    descWrap.appendChild(authBox);
+    descRow.value.appendChild(descWrap);
+    body.appendChild(descRow.row);
+
+    // ── Assignees ──────────────────────────────────────────────────────
+    var membersRow = makeRow('members', 'Assign\u00e9s');
+    var membersEl = document.createElement('div');
+    membersEl.className = 'info-members';
+    membersEl.setAttribute('aria-label', 'Membres assign\u00e9s');
+    membersRow.value.appendChild(membersEl);
+    body.appendChild(membersRow.row);
+
+    // ── Priority / Due / Blocked (recap) ───────────────────────────────
+    var priorityRow = makeRow('priority', 'Priorit\u00e9', { interactive: true });
+    var priorityValueEl = document.createElement('span');
+    priorityValueEl.className = 'info-recap-text';
+    priorityRow.value.appendChild(priorityValueEl);
+    body.appendChild(priorityRow.row);
+
+    var dueRow = makeRow('due', '\u00c9ch\u00e9ance', { interactive: true });
+    var dueValueEl = document.createElement('span');
+    dueValueEl.className = 'info-recap-text';
+    dueRow.value.appendChild(dueValueEl);
+    body.appendChild(dueRow.row);
+
+    var blockedRow = makeRow('blocked', 'Bloqu\u00e9', { interactive: true });
+    var blockedValueEl = document.createElement('span');
+    blockedValueEl.className = 'info-recap-text';
+    blockedRow.value.appendChild(blockedValueEl);
+    body.appendChild(blockedRow.row);
+
+    field.appendChild(body);
+    el.appendChild(field);
+
+    function setAuthHint(reason) {
+      authReason = reason || '';
+      var show = !!authReason;
+      authBox.hidden = !show;
+      if (!show) {
+        authHint.textContent = '';
+        return;
+      }
+      if (authReason === 'no-app-key') {
+        authHint.textContent =
+          'Enregistrement de la description indisponible (cl\u00e9 d\u2019app manquante).';
+        authBtn.hidden = true;
+      } else {
+        authHint.textContent =
+          'Autorisez Trello pour enregistrer la description sur la carte.';
+        authBtn.hidden = !onAuthorize;
+      }
+    }
+
+    function setDescStatus(text, kind) {
+      descStatus.textContent = text || '';
+      descStatus.classList.toggle('is-error', kind === 'error');
+      descStatus.classList.toggle('is-ok', kind === 'ok');
+    }
+
+    function memberDisplayName(member) {
+      if (!member || typeof member !== 'object') return '';
+      if (typeof member.fullName === 'string' && member.fullName.trim()) {
+        return member.fullName.trim();
+      }
+      if (typeof member.username === 'string' && member.username.trim()) {
+        return member.username.trim();
+      }
+      return '';
+    }
+
+    function memberInitials(member) {
+      if (!member || typeof member !== 'object') return '?';
+      if (typeof member.initials === 'string' && member.initials.trim()) {
+        return member.initials.trim().slice(0, 3).toUpperCase();
+      }
+      var name = memberDisplayName(member);
+      if (!name) return '?';
+      var parts = name.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) {
+        return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+      }
+      return name.slice(0, 2).toUpperCase();
+    }
+
+    function memberAvatarUrl(member) {
+      if (!member || typeof member !== 'object') return '';
+      if (typeof member.avatarUrl === 'string' && member.avatarUrl.trim()) {
+        var base = member.avatarUrl.trim().replace(/\/$/, '');
+        return base + '/50.png';
+      }
+      if (
+        member.id &&
+        typeof member.avatarHash === 'string' &&
+        member.avatarHash.trim()
+      ) {
+        return (
+          'https://trello-members.s3.amazonaws.com/' +
+          encodeURIComponent(member.id) +
+          '/' +
+          encodeURIComponent(member.avatarHash.trim()) +
+          '/50.png'
+        );
+      }
+      return '';
+    }
+
+    function renderMembers() {
+      membersEl.replaceChildren();
+      if (!members.length) {
+        var empty = document.createElement('span');
+        empty.className = 'info-recap-empty';
+        empty.textContent = 'Personne';
+        membersEl.appendChild(empty);
+        return;
+      }
+      members.forEach(function (member) {
+        var name = memberDisplayName(member) || 'Membre';
+        var chip = document.createElement('span');
+        chip.className = 'info-member';
+        chip.title = name;
+        chip.setAttribute('aria-label', name);
+
+        var avatarUrl = memberAvatarUrl(member);
+        if (avatarUrl) {
+          var img = document.createElement('img');
+          img.className = 'info-member-avatar';
+          img.src = avatarUrl;
+          img.alt = '';
+          img.width = 28;
+          img.height = 28;
+          img.loading = 'lazy';
+          img.addEventListener('error', function () {
+            img.remove();
+            var fallback = document.createElement('span');
+            fallback.className = 'info-member-initials';
+            fallback.textContent = memberInitials(member);
+            chip.appendChild(fallback);
+          });
+          chip.appendChild(img);
+        } else {
+          var initials = document.createElement('span');
+          initials.className = 'info-member-initials';
+          initials.textContent = memberInitials(member);
+          chip.appendChild(initials);
+        }
+
+        var nameEl = document.createElement('span');
+        nameEl.className = 'info-member-name';
+        nameEl.textContent = name;
+        chip.appendChild(nameEl);
+        membersEl.appendChild(chip);
+      });
+    }
+
+    function setRecapText(node, text, emptyLabel) {
+      var value = (text || '').trim();
+      node.textContent = value || emptyLabel;
+      node.classList.toggle('is-empty', !value);
+    }
+
+    function renderRecap() {
+      setRecapText(priorityValueEl, priorityLabel, 'Non d\u00e9finie');
+      setRecapText(dueValueEl, dueLabel, 'Aucune');
+      if (blockedOn) {
+        setRecapText(blockedValueEl, blockedLabel || 'Oui', 'Oui');
+        blockedValueEl.classList.add('is-blocked');
+      } else {
+        blockedValueEl.textContent = 'Non';
+        blockedValueEl.classList.add('is-empty');
+        blockedValueEl.classList.remove('is-blocked');
+      }
+      blockedRow.row.classList.toggle('is-blocked', blockedOn);
+    }
+
+    function summaryText() {
+      if (titleText && !titleEl.classList.contains('is-loading')) {
+        return titleText;
+      }
+      var bits = [];
+      if (priorityLabel) bits.push(priorityLabel);
+      if (dueLabel) bits.push(dueLabel);
+      if (blockedOn) bits.push(blockedLabel || 'Bloqu\u00e9');
+      return bits.join(' \u00b7 ');
+    }
+
+    function flushDescSave() {
+      if (descSaveTimer) {
+        clearTimeout(descSaveTimer);
+        descSaveTimer = null;
+      }
+      if (!onDescChange || !descDirty || descBusy) return Promise.resolve();
+      var next = descInput.value;
+      descBusy = true;
+      setDescStatus('Enregistrement\u2026');
+      return Promise.resolve(onDescChange(next))
+        .then(function (result) {
+          descBusy = false;
+          if (result && result.ok === false) {
+            if (result.reason === 'not-authorized' || result.reason === 'no-app-key') {
+              setAuthHint(result.reason);
+              setDescStatus('', 'error');
+            } else {
+              setDescStatus('\u00c9chec de l\u2019enregistrement', 'error');
+            }
+            return result;
+          }
+          descDirty = false;
+          descText = next;
+          setAuthHint('');
+          setDescStatus('Enregistr\u00e9', 'ok');
+          setTimeout(function () {
+            if (descStatus.textContent === 'Enregistr\u00e9') setDescStatus('');
+          }, 1400);
+          return result;
+        })
+        .catch(function (err) {
+          descBusy = false;
+          console.error('Info description save failed', err);
+          setDescStatus('\u00c9chec de l\u2019enregistrement', 'error');
+        });
+    }
+
+    function scheduleDescSave() {
+      descDirty = true;
+      setDescStatus('');
+      if (descSaveTimer) clearTimeout(descSaveTimer);
+      descSaveTimer = setTimeout(function () {
+        descSaveTimer = null;
+        flushDescSave();
+      }, DESC_SAVE_MS);
+    }
+
+    descInput.addEventListener('input', function () {
+      scheduleDescSave();
+      onLayoutChange();
+    });
+    descInput.addEventListener('blur', function () {
+      flushDescSave();
+    });
+
+    authBtn.addEventListener('click', function () {
+      if (!onAuthorize || authBusy) return;
+      authBusy = true;
+      authBtn.disabled = true;
+      Promise.resolve(onAuthorize())
+        .then(function () {
+          setAuthHint('');
+          return flushDescSave();
+        })
+        .catch(function (err) {
+          console.error('Info REST authorize failed', err);
+          setAuthHint('not-authorized');
+        })
+        .then(function () {
+          authBusy = false;
+          authBtn.disabled = false;
+          onLayoutChange();
+        });
+    });
+
+    var collapse = bindCollapsibleEnable({
+      field: field,
+      body: body,
+      chrome: chrome,
+      alwaysEnabled: true,
+      enabled: true,
+      expanded: config.expanded != null ? !!config.expanded : true,
+      getSummary: summaryText,
+      onLayoutChange: onLayoutChange,
+      onExpandChange: config.onExpandChange || function () {}
+    });
+
+    renderMembers();
+    renderRecap();
+    setAuthHint(authReason);
+    collapse.refreshSummary();
+
+    return {
+      field: field,
+      setTitle: function (name) {
+        titleText = typeof name === 'string' ? name : '';
+        if (titleText) {
+          titleEl.textContent = titleText;
+          titleEl.title = titleText;
+          titleEl.classList.remove('is-loading');
+        } else {
+          titleEl.textContent = 'Carte';
+          titleEl.title = '';
+          titleEl.classList.remove('is-loading');
+        }
+        collapse.refreshSummary();
+      },
+      setDesc: function (next, options) {
+        options = options || {};
+        var value = typeof next === 'string' ? next : '';
+        if (descDirty && !options.force) return;
+        descText = value;
+        if (document.activeElement === descInput && !options.force) return;
+        descInput.value = value;
+        descDirty = false;
+      },
+      getDesc: function () {
+        return descInput.value;
+      },
+      setMembers: function (list) {
+        members = Array.isArray(list) ? list.slice() : [];
+        renderMembers();
+        onLayoutChange();
+      },
+      setRecap: function (next) {
+        if (!next) return;
+        if (next.priorityLabel != null) priorityLabel = String(next.priorityLabel || '');
+        if (next.dueLabel != null) dueLabel = String(next.dueLabel || '');
+        if (next.blockedLabel != null) blockedLabel = String(next.blockedLabel || '');
+        if (next.blockedOn != null) blockedOn = !!next.blockedOn;
+        renderRecap();
+        collapse.refreshSummary();
+      },
+      setAuthReason: function (reason) {
+        setAuthHint(reason || '');
+        onLayoutChange();
+      },
+      flushDesc: flushDescSave,
+      refreshSummary: function () {
+        collapse.refreshSummary();
+      },
+      setExpanded: function (on, opts) {
+        return collapse.setExpanded(on, opts);
+      },
+      isExpanded: function () {
+        return collapse.isExpanded();
+      }
     };
   }
 
@@ -5470,7 +5892,7 @@
     var timeOpen = false;
     var viewYear;
     var viewMonth;
-    var calendarMode = 'day'; /* day | month | year */
+    var calendarMode = 'day'; /* day | date | month | year */
     var yearPickerStart = null;
     var focusIso = current || toIsoDate(startOfLocalDay(new Date()));
     var docListenersBound = false;
@@ -5823,6 +6245,12 @@
     monthLabel.id = uid + '-month';
     monthLabel.setAttribute('aria-live', 'polite');
 
+    var dayPickBtn = document.createElement('button');
+    dayPickBtn.type = 'button';
+    dayPickBtn.className = 'due-date-day-pick';
+    dayPickBtn.setAttribute('aria-label', DUE_DATE_PICK_DAY_LABEL);
+    dayPickBtn.setAttribute('aria-expanded', 'false');
+
     var monthPickBtn = document.createElement('button');
     monthPickBtn.type = 'button';
     monthPickBtn.className = 'due-date-month-pick';
@@ -5835,6 +6263,7 @@
     yearPickBtn.setAttribute('aria-label', DUE_DATE_PICK_YEAR_LABEL);
     yearPickBtn.setAttribute('aria-expanded', 'false');
 
+    monthLabel.appendChild(dayPickBtn);
     monthLabel.appendChild(monthPickBtn);
     monthLabel.appendChild(yearPickBtn);
 
@@ -6193,6 +6622,13 @@
       }
     }
 
+    function refreshTodayBtn() {
+      var todayIso = toIsoDate(startOfLocalDay(new Date()));
+      var hideToday = !!current && current === todayIso;
+      todayBtn.hidden = hideToday;
+      footer.hidden = hideToday;
+    }
+
     function refreshCountdown() {
       if (!current) {
         countdownPrimary.textContent = '';
@@ -6204,12 +6640,14 @@
         refreshTimeRow();
         refreshTrigger();
         refreshSuggestions();
+        refreshTodayBtn();
         if (collapseApi) collapseApi.refreshSummary();
         return;
       }
       refreshTrigger();
       refreshTimeRow();
       refreshSuggestions();
+      refreshTodayBtn();
       if (!enabled) {
         countdownPrimary.textContent = '';
         countdownSecondary.textContent = '';
@@ -6296,35 +6734,48 @@
     }
 
     function yearPickerRangeStart(year) {
+      var nowYear = new Date().getFullYear();
       var y = year == null ? viewYear : year;
-      return y - ((y % DUE_DATE_YEAR_PICKER_COUNT + DUE_DATE_YEAR_PICKER_COUNT) % DUE_DATE_YEAR_PICKER_COUNT);
+      if (y < nowYear) y = nowYear;
+      var offset = y - nowYear;
+      return nowYear + Math.floor(offset / DUE_DATE_YEAR_PICKER_COUNT) * DUE_DATE_YEAR_PICKER_COUNT;
     }
 
     function syncNavChrome() {
       var monthName = DUE_DATE_MONTH_NAMES[viewMonth];
       var monthCap = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+      var focusDay = dueDateToLocalDate(focusIso);
+      var nowYear = new Date().getFullYear();
+      dayPickBtn.textContent = String(focusDay ? focusDay.getDate() : 1);
       monthPickBtn.textContent = monthCap;
       yearPickBtn.textContent = String(viewYear);
+      dayPickBtn.hidden = calendarMode === 'year';
       monthPickBtn.hidden = calendarMode === 'year';
       yearPickBtn.hidden = false;
+      dayPickBtn.setAttribute('aria-expanded', calendarMode === 'date' ? 'true' : 'false');
       monthPickBtn.setAttribute('aria-expanded', calendarMode === 'month' ? 'true' : 'false');
       yearPickBtn.setAttribute('aria-expanded', calendarMode === 'year' ? 'true' : 'false');
+      dayPickBtn.classList.toggle('is-active', calendarMode === 'date');
       monthPickBtn.classList.toggle('is-active', calendarMode === 'month');
       yearPickBtn.classList.toggle('is-active', calendarMode === 'year');
 
       if (calendarMode === 'year') {
         if (yearPickerStart == null) yearPickerStart = yearPickerRangeStart(viewYear);
+        if (yearPickerStart < nowYear) yearPickerStart = nowYear;
         var endYear = yearPickerStart + DUE_DATE_YEAR_PICKER_COUNT - 1;
         yearPickBtn.textContent = yearPickerStart + '\u2013' + endYear;
         prevBtn.setAttribute('aria-label', DUE_DATE_PREV_YEARS);
         nextBtn.setAttribute('aria-label', DUE_DATE_NEXT_YEARS);
+        prevBtn.disabled = yearPickerStart <= nowYear;
       } else if (calendarMode === 'month') {
         yearPickBtn.textContent = String(viewYear);
         prevBtn.setAttribute('aria-label', DUE_DATE_PREV_YEAR);
         nextBtn.setAttribute('aria-label', DUE_DATE_NEXT_YEAR);
+        prevBtn.disabled = false;
       } else {
         prevBtn.setAttribute('aria-label', DUE_DATE_PREV_MONTH);
         nextBtn.setAttribute('aria-label', DUE_DATE_NEXT_MONTH);
+        prevBtn.disabled = false;
       }
 
       weekdays.hidden = calendarMode !== 'day';
@@ -6332,7 +6783,7 @@
     }
 
     function setCalendarMode(mode) {
-      var next = mode === 'month' || mode === 'year' ? mode : 'day';
+      var next = mode === 'month' || mode === 'year' || mode === 'date' ? mode : 'day';
       calendarMode = next;
       if (calendarMode === 'year') {
         yearPickerStart = yearPickerRangeStart(viewYear);
@@ -6342,8 +6793,12 @@
 
     function shiftCalendar(delta) {
       if (calendarMode === 'year') {
+        var nowYear = new Date().getFullYear();
         if (yearPickerStart == null) yearPickerStart = yearPickerRangeStart(viewYear);
-        yearPickerStart += delta * DUE_DATE_YEAR_PICKER_COUNT;
+        var nextStart = yearPickerStart + delta * DUE_DATE_YEAR_PICKER_COUNT;
+        if (nextStart < nowYear) nextStart = nowYear;
+        if (nextStart === yearPickerStart && delta < 0) return;
+        yearPickerStart = nextStart;
         renderCalendar();
         return;
       }
@@ -6362,14 +6817,33 @@
 
     function selectMonth(monthIndex) {
       if (monthIndex < 0 || monthIndex > 11) return;
+      var now = new Date();
+      if (
+        viewYear < now.getFullYear() ||
+        (viewYear === now.getFullYear() && monthIndex < now.getMonth())
+      ) {
+        return;
+      }
       viewMonth = monthIndex;
       clampFocusToViewMonth();
       calendarMode = 'day';
       renderCalendar(true);
     }
 
+    function selectDayOfMonth(dayNum) {
+      if (!isFinite(dayNum) || dayNum < 1) return;
+      var daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+      var day = Math.min(Math.floor(dayNum), daysInMonth);
+      var iso = toIsoDate(new Date(viewYear, viewMonth, day));
+      var todayIso = toIsoDate(startOfLocalDay(new Date()));
+      if (iso < todayIso) return;
+      selectIso(iso);
+    }
+
     function selectYear(year) {
       if (!isFinite(year)) return;
+      var nowYear = new Date().getFullYear();
+      if (year < nowYear) return;
       viewYear = year;
       yearPickerStart = yearPickerRangeStart(year);
       clampFocusToViewMonth();
@@ -6381,6 +6855,8 @@
       if (!enabled) return;
       var next = normalizeDueDate(iso);
       if (!next) return;
+      var todayIso = toIsoDate(startOfLocalDay(new Date()));
+      if (next < todayIso) return;
       if (!currentTime) {
         currentTime = rememberedTime || DUE_DATE_TIME_DEFAULT;
       }
@@ -6396,6 +6872,63 @@
     function focusDayButton(iso) {
       var btn = grid.querySelector('[data-iso="' + iso + '"]');
       if (btn) btn.focus();
+    }
+
+    function renderDatePicker() {
+      grid.className = 'due-date-grid due-date-grid--dates';
+      grid.setAttribute('role', 'listbox');
+      grid.setAttribute('aria-label', DUE_DATE_PICK_DAY_LABEL);
+      var daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+      var now = startOfLocalDay(new Date());
+      var todayDay =
+        now.getFullYear() === viewYear && now.getMonth() === viewMonth ? now.getDate() : -1;
+      var selectedDay = current
+        ? (function () {
+            var d = dueDateToLocalDate(current);
+            return d && d.getFullYear() === viewYear && d.getMonth() === viewMonth
+              ? d.getDate()
+              : -1;
+          })()
+        : -1;
+      var focusDay = dueDateToLocalDate(focusIso);
+      var focusedDay =
+        focusDay && focusDay.getFullYear() === viewYear && focusDay.getMonth() === viewMonth
+          ? focusDay.getDate()
+          : -1;
+
+      for (var d = 1; d <= daysInMonth; d++) {
+        var dateBtn = document.createElement('button');
+        dateBtn.type = 'button';
+        dateBtn.className = 'due-date-date-option';
+        dateBtn.dataset.day = String(d);
+        dateBtn.textContent = String(d);
+        dateBtn.setAttribute('role', 'option');
+        dateBtn.setAttribute(
+          'aria-label',
+          d +
+            ' ' +
+            DUE_DATE_MONTH_NAMES[viewMonth] +
+            ' ' +
+            viewYear
+        );
+        var cellDate = new Date(viewYear, viewMonth, d);
+        var isPast = cellDate.getTime() < now.getTime();
+        var daySelected = d === focusedDay || (focusedDay < 0 && d === selectedDay);
+        dateBtn.setAttribute('aria-selected', daySelected ? 'true' : 'false');
+        if (d === todayDay) dateBtn.classList.add('is-today');
+        if (d === selectedDay) dateBtn.classList.add('is-current');
+        if (daySelected) dateBtn.classList.add('is-selected');
+        if (isPast) {
+          dateBtn.classList.add('is-past');
+          dateBtn.disabled = true;
+        } else {
+          dateBtn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            selectDayOfMonth(+ev.currentTarget.dataset.day);
+          });
+        }
+        grid.appendChild(dateBtn);
+      }
     }
 
     function renderMonthPicker() {
@@ -6422,15 +6955,23 @@
           'aria-label',
           DUE_DATE_MONTH_NAMES[m].charAt(0).toUpperCase() + DUE_DATE_MONTH_NAMES[m].slice(1) + ' ' + viewYear
         );
+        var isPast =
+          viewYear < now.getFullYear() ||
+          (viewYear === now.getFullYear() && m < now.getMonth());
         var monthSelected = m === viewMonth;
         monthBtn.setAttribute('aria-selected', monthSelected ? 'true' : 'false');
         if (m === thisMonth) monthBtn.classList.add('is-today');
         if (m === selectedMonth) monthBtn.classList.add('is-current');
         if (monthSelected) monthBtn.classList.add('is-selected');
-        monthBtn.addEventListener('click', function (ev) {
-          ev.preventDefault();
-          selectMonth(+ev.currentTarget.dataset.month);
-        });
+        if (isPast) {
+          monthBtn.classList.add('is-past');
+          monthBtn.disabled = true;
+        } else {
+          monthBtn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            selectMonth(+ev.currentTarget.dataset.month);
+          });
+        }
         grid.appendChild(monthBtn);
       }
     }
@@ -6439,8 +6980,10 @@
       grid.className = 'due-date-grid due-date-grid--years';
       grid.setAttribute('role', 'listbox');
       grid.setAttribute('aria-label', DUE_DATE_PICK_YEAR_LABEL);
-      if (yearPickerStart == null) yearPickerStart = yearPickerRangeStart(viewYear);
       var nowYear = new Date().getFullYear();
+      if (yearPickerStart == null || yearPickerStart < nowYear) {
+        yearPickerStart = yearPickerRangeStart(viewYear);
+      }
       var selectedYear = current
         ? (function () {
             var d = dueDateToLocalDate(current);
@@ -6496,6 +7039,7 @@
         var iso = toIsoDate(cellDate);
         var inMonth = cellDate.getMonth() === viewMonth;
         var isToday = iso === todayIso;
+        var isPast = iso < todayIso;
         var isSelected = !!current && iso === current;
         var isFocused = iso === focusIso;
 
@@ -6519,16 +7063,21 @@
             cellDate.getFullYear()
         );
         dayBtn.setAttribute('aria-selected', isSelected ? 'true' : 'false');
-        dayBtn.tabIndex = isFocused ? 0 : -1;
+        dayBtn.tabIndex = isFocused && !isPast ? 0 : -1;
 
         if (!inMonth) dayBtn.classList.add('is-outside');
         if (isToday) dayBtn.classList.add('is-today');
+        if (isPast) dayBtn.classList.add('is-past');
         if (isSelected) dayBtn.classList.add('is-selected');
 
-        dayBtn.addEventListener('click', function (ev) {
-          ev.preventDefault();
-          selectIso(ev.currentTarget.dataset.iso);
-        });
+        if (isPast) {
+          dayBtn.disabled = true;
+        } else {
+          dayBtn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            selectIso(ev.currentTarget.dataset.iso);
+          });
+        }
 
         cell.appendChild(dayBtn);
         row.appendChild(cell);
@@ -6546,6 +7095,10 @@
       }
       if (calendarMode === 'year') {
         renderYearPicker();
+        return;
+      }
+      if (calendarMode === 'date') {
+        renderDatePicker();
         return;
       }
       renderDayGrid(keepFocus);
@@ -6812,6 +7365,10 @@
 
     monthPickBtn.addEventListener('click', function () {
       setCalendarMode(calendarMode === 'month' ? 'day' : 'month');
+    });
+
+    dayPickBtn.addEventListener('click', function () {
+      setCalendarMode(calendarMode === 'date' ? 'day' : 'date');
     });
 
     yearPickBtn.addEventListener('click', function () {
@@ -8352,7 +8909,8 @@
       });
     }
 
-    if (variantConfig.showCardHeader === true) {
+    // Card title lives in the Information panel (createInfoField) when mounted by the popup.
+    if (variantConfig.showCardHeader === true && !variantConfig.hideCardHeader) {
       var cardHeader = document.createElement('header');
       cardHeader.className = 'tp-priority-card-header';
       var cardNameLabel = document.createElement('p');
@@ -8916,6 +9474,7 @@
     dueBadgeSuffix: dueBadgeSuffix,
     isDueEnabled: isDueEnabled,
     withDueDateDisplay: withDueDateDisplay,
+    createInfoField: createInfoField,
     createCollapsibleEnableChrome: createCollapsibleEnableChrome,
     bindCollapsibleEnable: bindCollapsibleEnable,
     wordFor: wordFor,

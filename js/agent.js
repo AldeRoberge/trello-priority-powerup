@@ -56,6 +56,7 @@
     set_blocked: 'Blocage mis \u00e0 jour.',
     set_progress: 'Progr\u00e8s mis \u00e0 jour.',
     set_formula: 'Formule mise \u00e0 jour.',
+    set_statut: 'Statut mis \u00e0 jour.',
     add_subtask: 'Sous-t\u00e2che ajout\u00e9e.',
     rename_subtask: 'Sous-t\u00e2che renomm\u00e9e.',
     remove_subtask: 'Sous-t\u00e2che supprim\u00e9e.',
@@ -163,6 +164,7 @@
     }
     if (actions[0].tool === 'reset_progress') return 'R\u00e9initialiser le progr\u00e8s';
     if (actions[0].tool === 'set_formula') return 'Changer la formule';
+    if (actions[0].tool === 'set_statut') return 'Changer le statut';
     return label;
   }
 
@@ -436,7 +438,8 @@
       blocked: null,
       progress: null,
       memory: null,
-      boardDigest: ''
+      boardDigest: '',
+      statut: null
     };
     if (!bridge) return ctx;
     if (typeof bridge.getCardName === 'function') {
@@ -476,6 +479,35 @@
     if (typeof bridge.getBoardDigest === 'function') {
       try {
         ctx.boardDigest = String(bridge.getBoardDigest() || '').slice(0, 4000);
+      } catch (e) { /* ignore */ }
+    }
+    if (typeof bridge.getStatut === 'function') {
+      try {
+        var statutRaw = bridge.getStatut();
+        if (statutRaw && typeof statutRaw === 'object') {
+          ctx.statut = {
+            listId: statutRaw.listId || null,
+            listName: statutRaw.listName || '',
+            category: statutRaw.category || null,
+            lists: Array.isArray(statutRaw.lists)
+              ? statutRaw.lists
+                  .map(function (list) {
+                    if (!list || list.id == null) return null;
+                    return {
+                      id: String(list.id),
+                      name: list.name || '',
+                      category: list.category || null
+                    };
+                  })
+                  .filter(Boolean)
+                  .slice(0, 40)
+              : [],
+            roleLists:
+              statutRaw.roleLists && typeof statutRaw.roleLists === 'object'
+                ? statutRaw.roleLists
+                : {}
+          };
+        }
       } catch (e) { /* ignore */ }
     }
     var state = null;
@@ -557,13 +589,20 @@
             ctx.display = {
               score: display.score,
               label: display.label,
+              tier: display.label || null,
               inutile: !!display.inutile,
               // false when Bloqué is disabled, even if savedReasons exist
               blocked: !!display.blocked,
               dueCountdown: dueEnabled ? display.dueCountdown || null : null,
               duePast: dueEnabled ? !!display.duePast : false,
               dueDate: dueEnabled ? display.dueDate || null : null,
-              priorityEnabled: priorityEnabled
+              priorityEnabled: priorityEnabled,
+              tiers: (
+                (typeof PriorityUI !== 'undefined' && PriorityUI.HEAT_SEGMENTS) ||
+                []
+              ).map(function (seg) {
+                return seg.label;
+              })
             };
           }
         } catch (e) {
@@ -651,7 +690,7 @@
       '- Ne bloque JAMAIS une action pour un param\u00e8tre optionnel. Applique le minimum viable, puis adapte.',
       '- Ne pose une question AVANT d\'appeler un outil QUE si un param\u00e8tre OBLIGATOIRE manque et qu\'aucune action partielle n\'est possible.',
       '- Param\u00e8tres optionnels (ne jamais exiger avant d\'agir)\u00a0: dueTime, blockedReasons, axes priorit\u00e9 non fournis, progress pr\u00e9cis si on active seulement la section.',
-      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula.',
+      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget ou priorityEnabled.',
       '- Dates relatives (jours)\u00a0: r\u00e9sous avec context.today (aujourd\'hui / today \u2192 context.today\u00a0; demain \u2192 +1 jour). N\'invente pas d\'autre date.',
       '- Heures relatives (tr\u00e8s important)\u00a0: \u00ab\u00a0dans 15 minutes\u00a0\u00bb / \u00ab\u00a0in 15 minutes\u00a0\u00bb / \u00ab\u00a0dans 2 heures\u00a0\u00bb = D\u00c9LAI depuis maintenant, PAS une heure fixe du matin.',
       '- Pour un d\u00e9lai\u00a0: utilise set_due avec relativeMinutes (ou relativeHours). Le runtime calcule dueDate/dueTime \u00e0 partir de context.nowTime (' +
@@ -695,11 +734,15 @@
       '- Ex. ajout tour 2\u00a0: user \u00ab\u00a0Commander le mat\u00e9riel\u00a0\u00bb \u2192 {"message":"Okay, ajout\u00e9e.","suggestions":["Ajouter une autre sous-t\u00e2che","D\u00e9finir une \u00e9ch\u00e9ance"],"followUps":[],"actions":[{"tool":"add_subtask","args":{"text":"Commander le mat\u00e9riel"}}]}',
       '- Ex. renommer\u00a0: user \u00ab\u00a0Rename \'Contacter Ian\' to \'Appeler Ian\'\u00a0\u00bb \u2192 {"message":"Okay, renomm\u00e9e.","suggestions":["Ajouter une sous-t\u00e2che","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"rename_subtask","args":{"matchText":"Contacter Ian","text":"Appeler Ian"}}]}',
       '- Ex. supprimer\u00a0: user \u00ab\u00a0Supprime Contacter Ian\u00a0\u00bb \u2192 {"message":"Okay, supprim\u00e9e.","suggestions":["Ajouter une sous-t\u00e2che","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"remove_subtask","args":{"matchText":"Contacter Ian"}}]}',
-      'Priorit\u00e9 / progr\u00e8s / formule\u00a0:',
+      'Priorit\u00e9 / progr\u00e8s / formule / statut\u00a0:',
       '- Applique immédiatement tout axe ou pourcentage fourni. Si la demande est vague (\u00ab\u00a0mettre \u00e0 jour la priorit\u00e9\u00a0\u00bb) sans valeurs\u00a0: pose UNE question pour les valeurs, actions=[].',
+      '- Palier / heat (Critique, Urgente, Prioritaire, Importante, Flexible, Secondaire, Optionnelle)\u00a0: set_priority avec tier (m\u00eame libell\u00e9 que context.display.tiers).',
       '- Si l\'utilisateur active le progr\u00e8s sans chiffre\u00a0: set_progress avec progressEnabled:true tout de suite, puis demande le % en option.',
       '- set_progress avec un % \u00e9chelonne les sous-t\u00e2ches (master) s\'il y en a\u00a0; sinon progres carte.',
       '- Formule de score\u00a0: set_formula avec baseline | eisenhower | wsjf | valueEffort (context.formula = actuelle).',
+      '- Statut / colonne Trello\u00a0: set_statut avec listId, matchList (nom de liste) ou category (blocked|completed|active|backlog\u2026) d\'apr\u00e8s context.statut.',
+      '- Ex. statut\u00a0: user \u00ab\u00a0Passe en Terminé\u00a0\u00bb \u2192 {"message":"Okay, d\u00e9plac\u00e9e.","suggestions":["Quelle est la priorit\u00e9?","Ajouter une sous-t\u00e2che"],"followUps":[],"actions":[{"tool":"set_statut","args":{"category":"completed"}}]}',
+      '- Ex. palier\u00a0: user \u00ab\u00a0Mets Critique\u00a0\u00bb \u2192 {"message":"Okay, Critique.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Marquer bloqu\u00e9"],"followUps":[],"actions":[{"tool":"set_priority","args":{"tier":"Critique"}}]}',
       '- cardName / cardDesc sont en lecture seule (pas d\'outil pour les modifier).',
       'R\u00e8gles suggestions (obligatoire)\u00a0:',
       '- Toujours proposer 2 \u00e0 4 formulations courtes en fran\u00e7ais (questions OU r\u00e9ponses \u00e0 ta question de clarification).',
@@ -734,11 +777,12 @@
       '- Pour activer/d\u00e9sactiver\u00a0: priorityEnabled, dueEnabled, enAttente (Bloqu\u00e9), progressEnabled.',
       '- Pour marquer bloqu\u00e9\u00a0: set_blocked avec enAttente:true tout de suite (motifs ensuite si fournis). Ne dis jamais que c\'est d\u00e9j\u00e0 bloqu\u00e9 si enabled=false.',
       'Outils disponibles\u00a0:',
-      '- set_priority: { urgency?:0-4, impact?:0-4, ease?:1-5, priorityEnabled?:boolean }',
+      '- set_priority: { urgency?:0-4, impact?:0-4, ease?:1-5, priorityEnabled?:boolean, tier?: string, heatTarget?: number } (tier = Critique|Urgente|Prioritaire|Importante|Flexible|Secondaire|Optionnelle)',
       '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean, relativeMinutes?: number, relativeHours?: number } (dueTime OPTIONNEL pour une date\u00a0; d\u00e9lai \u00ab\u00a0dans N min/h\u00a0\u00bb \u2192 relativeMinutes/relativeHours, calcul\u00e9 depuis context.nowTime\u00a0; aujourd\'hui = context.today)',
       '- set_blocked: { enAttente?: boolean, blockedReasons?: string[], blockedLinks?: [{id?:string, matchText?:string, label?:string}] } (enAttente:true seul suffit\u00a0; motifs et liens optionnels)',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (master sur sous-t\u00e2ches si items\u00a0; sinon progres carte)',
       '- set_formula: { formula: "baseline"|"eisenhower"|"wsjf"|"valueEffort" }',
+      '- set_statut: { listId?: string, matchList?: string, category?: string } (d\u00e9place la carte\u00a0; category ex. completed|blocked|started|backlog|triage|unstarted|canceled)',
       '- add_subtask: { text: string } (text obligatoire, non vide)',
       '- rename_subtask: { text: string, id?: string, matchText?: string } (nouveau text\u00a0; id OU matchText)',
       '- remove_subtask: { id?: string, matchText?: string } (id OU matchText)',
@@ -1023,6 +1067,13 @@
         FORMULA_KEYS.indexOf(args.formula.trim()) !== -1
       );
     }
+    if (action.tool === 'set_statut') {
+      return (
+        (typeof args.listId === 'string' && !!args.listId.trim()) ||
+        (typeof args.matchList === 'string' && !!args.matchList.trim()) ||
+        (typeof args.category === 'string' && !!args.category.trim())
+      );
+    }
     if (
       action.tool === 'complete_all_subtasks' ||
       action.tool === 'reset_progress'
@@ -1049,6 +1100,9 @@
     }
     if (action.tool === 'set_formula') {
       return 'set_formula: formula requis (baseline|eisenhower|wsjf|valueEffort)';
+    }
+    if (action.tool === 'set_statut') {
+      return 'set_statut: listId, matchList ou category requis';
     }
     return action.tool + ': args incomplets';
   }
@@ -2248,6 +2302,126 @@
     return out;
   }
 
+  function resolveHeatSegment(tier, heatTarget) {
+    var segs =
+      typeof PriorityUI !== 'undefined' && Array.isArray(PriorityUI.HEAT_SEGMENTS)
+        ? PriorityUI.HEAT_SEGMENTS
+        : [];
+    if (heatTarget != null && isFinite(Number(heatTarget))) {
+      var target = Number(heatTarget);
+      var best = null;
+      var bestDist = Infinity;
+      for (var i = 0; i < segs.length; i++) {
+        var dist = Math.abs(segs[i].target - target);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = segs[i];
+        }
+      }
+      if (best && bestDist < 0.6) return best;
+    }
+    if (typeof tier !== 'string' || !tier.trim()) return null;
+    var needle = tier.trim().toLocaleLowerCase('fr-FR');
+    var aliases = {
+      critique: 'Critique',
+      urgente: 'Urgente',
+      urgent: 'Urgente',
+      prioritaire: 'Prioritaire',
+      importante: 'Importante',
+      important: 'Importante',
+      flexible: 'Flexible',
+      secondaire: 'Secondaire',
+      optionnelle: 'Optionnelle',
+      optionnel: 'Optionnelle'
+    };
+    if (aliases[needle]) needle = aliases[needle].toLocaleLowerCase('fr-FR');
+    for (var j = 0; j < segs.length; j++) {
+      var label = String(segs[j].label || '').toLocaleLowerCase('fr-FR');
+      if (label === needle) return segs[j];
+    }
+    return null;
+  }
+
+  function resolveStatutListId(statut, args) {
+    if (!statut || typeof statut !== 'object') return null;
+    var lists = Array.isArray(statut.lists) ? statut.lists : [];
+    var roleLists =
+      statut.roleLists && typeof statut.roleLists === 'object'
+        ? statut.roleLists
+        : {};
+
+    if (typeof args.listId === 'string' && args.listId.trim()) {
+      var wantId = args.listId.trim();
+      for (var i = 0; i < lists.length; i++) {
+        if (String(lists[i].id) === wantId) return wantId;
+      }
+      return wantId;
+    }
+
+    if (typeof args.category === 'string' && args.category.trim()) {
+      var catRaw = args.category.trim().toLocaleLowerCase('fr-FR');
+      var roleAlias = {
+        blocked: 'blocked',
+        bloque: 'blocked',
+        'bloqu\u00e9': 'blocked',
+        bloquee: 'blocked',
+        completed: 'completed',
+        complete: 'completed',
+        termine: 'completed',
+        'termin\u00e9': 'completed',
+        terminee: 'completed',
+        done: 'completed',
+        triage: 'triage',
+        backlog: 'backlog',
+        unstarted: 'unstarted',
+        'a faire': 'unstarted',
+        todo: 'unstarted',
+        started: 'started',
+        active: 'started',
+        'en cours': 'started',
+        waiting: 'waiting',
+        attente: 'waiting',
+        canceled: 'canceled',
+        cancelled: 'canceled',
+        annule: 'canceled'
+      };
+      var role = roleAlias[catRaw] || catRaw;
+      // Role lists only define blocked/completed targets.
+      if (
+        (role === 'blocked' || role === 'completed') &&
+        roleLists[role]
+      ) {
+        return String(roleLists[role]);
+      }
+      for (var c = 0; c < lists.length; c++) {
+        var listCat = lists[c].category
+          ? String(lists[c].category).toLocaleLowerCase('fr-FR')
+          : '';
+        if (listCat === role || listCat === catRaw) return String(lists[c].id);
+      }
+    }
+
+    if (typeof args.matchList === 'string' && args.matchList.trim()) {
+      var needle = args.matchList.trim().toLocaleLowerCase('fr-FR');
+      var exact = null;
+      var contains = null;
+      for (var m = 0; m < lists.length; m++) {
+        var name = String(lists[m].name || '')
+          .trim()
+          .toLocaleLowerCase('fr-FR');
+        if (name === needle) {
+          exact = lists[m];
+          break;
+        }
+        if (!contains && name.indexOf(needle) !== -1) contains = lists[m];
+      }
+      var hit = exact || contains;
+      return hit ? String(hit.id) : null;
+    }
+
+    return null;
+  }
+
   function detailForTool(tool, beforeP, afterP, beforeC, afterC, args, extra) {
     var parts = [];
     args = args || {};
@@ -2300,6 +2474,12 @@
       }
     } else if (tool === 'set_formula') {
       parts.push('formula \u2192 ' + ((extra && extra.formula) || args.formula || '?'));
+    } else if (tool === 'set_statut') {
+      parts.push(
+        'list \u2192 ' +
+          ((extra && extra.listName) || args.matchList || args.category || args.listId || '?')
+      );
+      if (extra && extra.listId) parts.push('id: ' + extra.listId);
     } else if (tool === 'add_subtask') {
       var text = typeof args.text === 'string' ? args.text.trim() : '';
       parts.push('+ "' + text + '"' + (extra.id ? ' (id: ' + extra.id + ')' : ''));
@@ -2356,7 +2536,7 @@
    */
   function looksLikeAppliedClaim(message) {
     if (typeof message !== 'string' || !message.trim()) return false;
-    return /\b(ajout(\u00e9e?|er)|renomm(\u00e9e?|er)|supprim(\u00e9e?|er)|r(\u00e9|e)initialis(\u00e9e?|er)|mise?\s+[aà]\s+jour|mis\s+[aà]\s+jour|enregistr(\u00e9e?|er)|d(\u00e9|e)fini[ee]?|bloqu(\u00e9e?|er)|d(\u00e9|e)bloqu(\u00e9e?|er)|appliqu(\u00e9e?|er)|modifi(\u00e9e?|er)|termin(\u00e9e?|er)|okay,?\s*bloqu)/i.test(
+    return /\b(ajout(\u00e9e?|er)|renomm(\u00e9e?|er)|supprim(\u00e9e?|er)|r(\u00e9|e)initialis(\u00e9e?|er)|d(\u00e9|e)plac(\u00e9e?|er)|mise?\s+[aà]\s+jour|mis\s+[aà]\s+jour|enregistr(\u00e9e?|er)|d(\u00e9|e)fini[ee]?|bloqu(\u00e9e?|er)|d(\u00e9|e)bloqu(\u00e9e?|er)|appliqu(\u00e9e?|er)|modifi(\u00e9e?|er)|termin(\u00e9e?|er)|okay,?\s*bloqu)/i.test(
       message
     );
   }
@@ -2390,7 +2570,7 @@
     return lines.join('\n');
   }
 
-  function executeAction(bridge, action) {
+  async function executeAction(bridge, action) {
     if (!bridge || !action || !action.tool) {
       return { ok: false, tool: action && action.tool, error: 'Action invalide' };
     }
@@ -2403,13 +2583,48 @@
         }
         var beforeP = snapshotPriority(bridge);
         var partial = {};
+        var heatSeg = resolveHeatSegment(args.tier, args.heatTarget);
+        if (heatSeg) {
+          var formulaKey = 'baseline';
+          if (typeof bridge.getFormulaKey === 'function') {
+            try {
+              formulaKey = bridge.getFormulaKey() || 'baseline';
+            } catch (e) { /* ignore */ }
+          }
+          var stateNow =
+            typeof bridge.getPriorityState === 'function'
+              ? bridge.getPriorityState() || {}
+              : {};
+          var formulaDef =
+            typeof PriorityUI !== 'undefined' &&
+            PriorityUI.FORMULAS &&
+            PriorityUI.FORMULAS[formulaKey]
+              ? PriorityUI.FORMULAS[formulaKey]
+              : null;
+          if (heatSeg.preset && (!formulaDef || formulaKey === 'baseline')) {
+            if (heatSeg.preset.urgency != null) partial.urgency = heatSeg.preset.urgency;
+            if (heatSeg.preset.impact != null) partial.impact = heatSeg.preset.impact;
+            if (heatSeg.preset.ease != null) partial.ease = heatSeg.preset.ease;
+          } else if (formulaDef && typeof formulaDef.override === 'function') {
+            var overridden = formulaDef.override(heatSeg.target, stateNow) || {};
+            if (overridden.urgency != null) partial.urgency = overridden.urgency;
+            if (overridden.impact != null) partial.impact = overridden.impact;
+            if (overridden.ease != null) partial.ease = overridden.ease;
+          } else if (heatSeg.preset) {
+            if (heatSeg.preset.urgency != null) partial.urgency = heatSeg.preset.urgency;
+            if (heatSeg.preset.impact != null) partial.impact = heatSeg.preset.impact;
+            if (heatSeg.preset.ease != null) partial.ease = heatSeg.preset.ease;
+          }
+        }
         if (args.urgency != null) partial.urgency = clampInt(args.urgency, 0, 4, 0);
         if (args.impact != null) partial.impact = clampInt(args.impact, 0, 4, 0);
         if (args.ease != null) partial.ease = clampInt(args.ease, 1, 5, 3);
         if (args.priorityEnabled != null) {
           partial.priorityEnabled = !!args.priorityEnabled;
         } else if (
-          (partial.urgency != null || partial.impact != null || partial.ease != null) &&
+          (partial.urgency != null ||
+            partial.impact != null ||
+            partial.ease != null) &&
           !beforeP.priorityEnabled
         ) {
           // Writing axis values must activate Priorité or the UI stays off.
@@ -2430,6 +2645,53 @@
           args: args,
           summary: TOOL_LABELS.set_priority,
           detail: detailForTool(tool, beforeP, afterP, null, null, args)
+        };
+      }
+      if (tool === 'set_statut') {
+        if (typeof bridge.selectStatut !== 'function') {
+          return { ok: false, tool: tool, error: 'Statut indisponible' };
+        }
+        var statutCtx =
+          typeof bridge.getStatut === 'function' ? bridge.getStatut() : null;
+        var targetListId = resolveStatutListId(statutCtx, args);
+        if (!targetListId) {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Liste statut introuvable'
+          };
+        }
+        var listName = '';
+        if (statutCtx && Array.isArray(statutCtx.lists)) {
+          for (var li = 0; li < statutCtx.lists.length; li++) {
+            if (String(statutCtx.lists[li].id) === String(targetListId)) {
+              listName = statutCtx.lists[li].name || '';
+              break;
+            }
+          }
+        }
+        var selectResult = await Promise.resolve(
+          bridge.selectStatut(targetListId)
+        );
+        if (!selectResult || !selectResult.ok) {
+          return {
+            ok: false,
+            tool: tool,
+            error:
+              (selectResult &&
+                (selectResult.reason || selectResult.error)) ||
+              'D\u00e9placement statut \u00e9chou\u00e9'
+          };
+        }
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.set_statut,
+          detail: detailForTool(tool, null, null, null, null, args, {
+            listId: targetListId,
+            listName: listName
+          })
         };
       }
       if (tool === 'set_due') {
@@ -2938,17 +3200,17 @@
     }
   }
 
-  function executeActions(bridge, actions) {
+  async function executeActions(bridge, actions) {
     var list = Array.isArray(actions) ? actions : [];
     var results = [];
     var summaries = [];
     var errors = [];
-    list.forEach(function (action) {
-      var result = executeAction(bridge, action);
+    for (var i = 0; i < list.length; i++) {
+      var result = await executeAction(bridge, list[i]);
       results.push(result);
       if (result.ok && result.summary) summaries.push(result.summary);
       if (!result.ok && result.error) errors.push(result.error);
-    });
+    }
     var applied = {
       results: results,
       summary: summaries.filter(Boolean).join(' ') || (errors.length ? '' : 'OK'),

@@ -6,18 +6,18 @@
   <title>Définir la priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <link rel="stylesheet" href="./css/trello-theme.css?v=all-complete-1" />
-  <link rel="stylesheet" href="./css/priority-ui.css?v=section-icons-1" />
+  <link rel="stylesheet" href="./css/trello-theme.css?v=info-panel-1" />
+  <link rel="stylesheet" href="./css/priority-ui.css?v=info-panel-1" />
   <link rel="stylesheet" href="./css/agent-ui.css?v=section-icons-1" />
   <script src="./js/rest-config.js"></script>
   <script src="./js/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./js/priority-ui.js?v=section-icons-1"></script>
+  <script src="./js/priority-ui.js?v=info-panel-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
     }
   </script>
-  <script src="./js/priority-trello.js?v=all-complete-1"></script>
+  <script src="./js/priority-trello.js?v=info-panel-1"></script>
   <script src="./js/statut-match.js"></script>
   <script src="./js/statut-trello.js"></script>
   <script src="./js/completion-ui.js?v=progress-due-complete-1"></script>
@@ -51,6 +51,9 @@
     let dueCompleteSyncChain = Promise.resolve();
     let statutUi = null;
     let statutSection = null;
+    let latestStatut = null;
+    let infoUi = null;
+    let infoSection = null;
     let cardDesc = '';
     let cachedMemory = null;
     let boardDigestCache = '';
@@ -135,6 +138,11 @@
     }
 
     function setCardNameLabel(name) {
+      if (infoUi && typeof infoUi.setTitle === 'function') {
+        infoUi.setTitle(name || '');
+        resizePopup();
+        return;
+      }
       var el = document.getElementById('cardName');
       if (!el) return;
       var label = name || 'Carte';
@@ -143,6 +151,153 @@
       el.classList.remove('is-loading');
       el.removeAttribute('hidden');
       resizePopup();
+    }
+
+    function syncInfoRecap() {
+      if (!infoUi || typeof infoUi.setRecap !== 'function') return;
+      var state =
+        variant && typeof variant.getState === 'function'
+          ? variant.getState()
+          : latestState || {};
+      var priorityLabel = '';
+      try {
+        if (window.PriorityUI && PriorityUI.resolveDisplay && variant) {
+          var formulaKey =
+            typeof variant.getFormulaKey === 'function'
+              ? variant.getFormulaKey()
+              : 'baseline';
+          var calc =
+            PriorityUI.FORMULAS &&
+            PriorityUI.FORMULAS[formulaKey] &&
+            PriorityUI.FORMULAS[formulaKey].calc
+              ? PriorityUI.FORMULAS[formulaKey].calc
+              : null;
+          if (calc && state.priorityEnabled !== false) {
+            var display = PriorityUI.resolveDisplay(calc(state), state);
+            priorityLabel = (display && display.label) || '';
+          }
+        }
+      } catch (e) { /* ignore */ }
+
+      var dueLabel = '';
+      if (state.dueEnabled !== false && state.dueDate && PriorityUI.formatDueDateCompactSummary) {
+        dueLabel = PriorityUI.formatDueDateCompactSummary(state.dueDate, state.dueTime) || '';
+      }
+
+      var blockedOn = !!state.enAttente;
+      var blockedLabel = '';
+      if (blockedOn && PriorityUI.formatBlockedReasonsSummary) {
+        blockedLabel = PriorityUI.formatBlockedReasonsSummary(state.blockedReasons, {
+          empty: 'Bloqu\u00e9',
+          links: state.blockedLinks,
+          items: getBlockedSubtasks()
+        });
+      }
+
+      infoUi.setRecap({
+        priorityLabel: priorityLabel,
+        dueLabel: dueLabel,
+        blockedOn: blockedOn,
+        blockedLabel: blockedLabel
+      });
+    }
+
+    function jumpToSection(key) {
+      var target = null;
+      if (key === 'priority') {
+        target = variant && variant.card && variant.card.querySelector('.variant-priority-section');
+      } else if (key === 'due') {
+        target = variant && variant.card && variant.card.querySelector('.variant-due-section');
+      } else if (key === 'blocked') {
+        target = variant && variant.card && variant.card.querySelector('.variant-blocked-section');
+      }
+      if (!target) return;
+      setTimeout(function () {
+        try {
+          target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        } catch (e) { /* ignore */ }
+        resizePopup();
+      }, 0);
+    }
+
+    function mountInfoSection(cardEl) {
+      if (!PriorityUI.createInfoField) {
+        console.error('Priority popup: createInfoField unavailable');
+        // Fall back to the classic card title header.
+        if (variant && variant.card && !document.getElementById('cardName')) {
+          var fallbackHeader = document.createElement('header');
+          fallbackHeader.className = 'tp-priority-card-header';
+          var fallbackName = document.createElement('p');
+          fallbackName.className = 'tp-priority-card-name is-loading';
+          fallbackName.id = 'cardName';
+          fallbackName.setAttribute('aria-live', 'polite');
+          fallbackName.textContent = 'Chargement\u2026';
+          fallbackHeader.appendChild(fallbackName);
+          cardEl.insertBefore(fallbackHeader, cardEl.firstChild);
+        }
+        return Promise.resolve();
+      }
+
+      infoSection = document.createElement('div');
+      infoSection.className = 'variant-info-section';
+      cardEl.insertBefore(infoSection, cardEl.firstChild);
+
+      var expandInfo = PriorityUI.resolveSectionExpanded('info', true);
+
+      infoUi = PriorityUI.createInfoField({
+        el: infoSection,
+        title: '',
+        desc: cardDesc || '',
+        members: [],
+        expanded: expandInfo,
+        onExpandChange: function (isExpanded) {
+          PriorityUI.saveSectionCollapseState({ info: !!isExpanded });
+        },
+        onLayoutChange: resizePopup,
+        onJump: jumpToSection,
+        onAuthorize: function () {
+          return PriorityTrello.authorizeRestForAutoSort(t);
+        },
+        onDescChange: function (nextDesc) {
+          cardDesc = typeof nextDesc === 'string' ? nextDesc : '';
+          return PriorityTrello.setCardDesc(t, cardDesc).then(function (result) {
+            if (result && result.ok === false) return result;
+            return { ok: true, desc: cardDesc };
+          });
+        }
+      });
+
+      return Promise.all([
+        PriorityTrello.getCardMembers
+          ? PriorityTrello.getCardMembers(t)
+          : Promise.resolve([]),
+        PriorityTrello.isRestAuthorized
+          ? PriorityTrello.isRestAuthorized(t)
+          : Promise.resolve(false),
+      ])
+        .then(function (results) {
+          var members = results[0] || [];
+          var authorized = !!results[1];
+          var hasRest =
+            PriorityTrello.restClientOptions && !!PriorityTrello.restClientOptions();
+          if (infoUi && typeof infoUi.setMembers === 'function') {
+            infoUi.setMembers(members);
+          }
+          if (infoUi && typeof infoUi.setDesc === 'function') {
+            infoUi.setDesc(cardDesc || '', { force: true });
+          }
+          if (!hasRest && infoUi && typeof infoUi.setAuthReason === 'function') {
+            infoUi.setAuthReason('no-app-key');
+          } else if (!authorized && infoUi && typeof infoUi.setAuthReason === 'function') {
+            // Soft hint only after a failed save; leave empty until then.
+            infoUi.setAuthReason('');
+          }
+          syncInfoRecap();
+          resizePopup();
+        })
+        .catch(function (err) {
+          console.error('Info section mount failed', err);
+        });
     }
 
     function getBlockedSubtasks() {
@@ -221,6 +376,78 @@
       }
     }
 
+    /** Same side effects as clicking a Statut chip (shared by UI + agent). */
+    function applyStatutListSelection(listId) {
+      if (!window.StatutTrello) {
+        return Promise.resolve({ ok: false, reason: 'no-statut' });
+      }
+      return StatutTrello.selectCardStatut(t, listId).then(function (result) {
+        if (result && result.ok && variant && result.sideEffects) {
+          var side = result.sideEffects;
+          if (
+            (side.enAttenteSet || side.category === 'blocked') &&
+            typeof variant.setState === 'function'
+          ) {
+            if (typeof variant.setProgressCompleteLock === 'function') {
+              variant.setProgressCompleteLock(false);
+            }
+            variant.setState(
+              Object.assign({}, variant.getState(), { enAttente: true })
+            );
+            resizePopup();
+          }
+          if (side.category === 'completed') {
+            if (typeof variant.setState === 'function') {
+              var cleared = Object.assign({}, variant.getState(), {
+                enAttente: false,
+                blockedReasons: [],
+                blockedLinks: [],
+              });
+              variant.setState(cleared);
+            }
+            applyCompletionFromStatutComplete(side.completion);
+            resizePopup();
+          } else if (side.dueCompleteCleared) {
+            if (typeof variant.setProgressCompleteLock === 'function') {
+              variant.setProgressCompleteLock(false);
+            }
+            resizePopup();
+          }
+        }
+        if (result && result.ok) {
+          return StatutTrello.getCardStatut(t).then(function (statut) {
+            latestStatut = {
+              listId: (statut && statut.listId) || listId || null,
+              listName: (statut && statut.listName) || '',
+              category: (statut && statut.category) || null,
+              lists: ((statut && statut.lists) || []).map(function (list) {
+                return {
+                  id: list.id,
+                  name: list.name,
+                  category:
+                    (statut.settings &&
+                      statut.settings.listCategories &&
+                      statut.settings.listCategories[list.id]) ||
+                    null
+                };
+              }),
+              roleLists:
+                (statut && statut.settings && statut.settings.roleLists) || {}
+            };
+            if (statutUi && typeof statutUi.setData === 'function') {
+              statutUi.setData({
+                listId: latestStatut.listId,
+                lists: (statut && statut.lists) || [],
+                settings: (statut && statut.settings) || undefined
+              });
+            }
+            return result;
+          });
+        }
+        return result;
+      });
+    }
+
     function setProgressEnabled(enabled, options) {
       options = options || {};
       if (progressCollapse) {
@@ -243,7 +470,7 @@
 
       statutSection = document.createElement('div');
       statutSection.className = 'variant-statut-section';
-      // Order: Statut → Priorité → …
+      // Order: Information → Statut → Priorité → …
       var prioritySection = cardEl.querySelector('.variant-priority-section');
       if (prioritySection) {
         cardEl.insertBefore(statutSection, prioritySection);
@@ -287,54 +514,48 @@
             },
             onOpenSettings: function () {
               // Popup width is fixed (narrow) by Trello; modal is wide enough for statut mapping.
-              return t.modal({
-                title: 'Paramètres de priorité',
-                url: PriorityTrello.pageUrl('./settings.html'),
-                height: 720,
-                fullscreen: false,
-                accentColor: '#22272B',
-              });
+              return t
+                .modal({
+                  title: 'Paramètres de priorité',
+                  url: PriorityTrello.pageUrl('./settings.html'),
+                  height: 720,
+                  fullscreen: false,
+                  accentColor: '#22272B',
+                })
+                .then(function () {
+                  return StatutTrello.getCardStatut(t).then(function (statut) {
+                    if (statutUi && typeof statutUi.setData === 'function') {
+                      statutUi.setData({
+                        listId: statut.listId,
+                        lists: statut.lists,
+                        settings: statut.settings,
+                      });
+                    }
+                  });
+                });
             },
             onSelectList: function (listId) {
-              return StatutTrello.selectCardStatut(t, listId).then(function (result) {
-                if (result && result.ok && variant && result.sideEffects) {
-                  var side = result.sideEffects;
-                  if (
-                    (side.enAttenteSet || side.category === 'blocked') &&
-                    typeof variant.setState === 'function'
-                  ) {
-                    // Progress-complete lock disables Bloqué; clear it so the section can enable.
-                    if (typeof variant.setProgressCompleteLock === 'function') {
-                      variant.setProgressCompleteLock(false);
-                    }
-                    variant.setState(
-                      Object.assign({}, variant.getState(), { enAttente: true })
-                    );
-                    resizePopup();
-                  }
-                  if (side.category === 'completed') {
-                    if (typeof variant.setState === 'function') {
-                      var cleared = Object.assign({}, variant.getState(), {
-                        enAttente: false,
-                        blockedReasons: [],
-                        blockedLinks: [],
-                      });
-                      variant.setState(cleared);
-                    }
-                    applyCompletionFromStatutComplete(side.completion);
-                    resizePopup();
-                  } else if (side.dueCompleteCleared) {
-                    // Left Terminé: unlock due/blocked even if progress is still 100%.
-                    if (typeof variant.setProgressCompleteLock === 'function') {
-                      variant.setProgressCompleteLock(false);
-                    }
-                    resizePopup();
-                  }
-                }
-                return result;
-              });
+              return applyStatutListSelection(listId);
             },
           });
+          latestStatut = {
+            listId: statut.listId || null,
+            listName: statut.listName || '',
+            category: statut.category || null,
+            lists: (statut.lists || []).map(function (list) {
+              return {
+                id: list.id,
+                name: list.name,
+                category:
+                  (statut.settings &&
+                    statut.settings.listCategories &&
+                    statut.settings.listCategories[list.id]) ||
+                  null
+              };
+            }),
+            roleLists:
+              (statut.settings && statut.settings.roleLists) || {}
+          };
           resizePopup();
         })
         .catch(function (err) {
@@ -499,6 +720,7 @@
               if (progressCollapse) progressCollapse.refreshSummary();
               syncBlockedSubtasks();
               syncDueBlockedForProgress(data);
+              syncInfoRecap();
             },
             onAllCompleteChange: function (allComplete, meta) {
               var live =
@@ -627,6 +849,7 @@
       variant = PriorityUI.mountVariant(mountEl, {
         id: 'card',
         showCardHeader: true,
+        hideCardHeader: true,
         formula: boardFormula,
         defaults: initialDefaults,
         focusSection: focusSection,
@@ -637,6 +860,7 @@
         },
         onStateChange: function (state) {
           saveState(state);
+          syncInfoRecap();
         },
         onLayoutChange: function () {
           resizePopup();
@@ -647,6 +871,8 @@
           });
         },
       });
+
+      await mountInfoSection(variant.card);
 
       if (argName) setCardNameLabel(argName);
       var cardNameEl = document.getElementById('cardName');
@@ -666,6 +892,7 @@
       await mountStatutSection(variant.card);
       await mountProgressSection(variant.card, focusProgress);
       syncBlockedSubtasks();
+      syncInfoRecap();
 
       if (window.AgentUI && window.PriorityAgent) {
         AgentUI.mount(variant.card, {
@@ -678,6 +905,9 @@
             return '';
           },
           getCardDesc: function () {
+            if (infoUi && typeof infoUi.getDesc === 'function') {
+              return infoUi.getDesc() || '';
+            }
             return cardDesc || '';
           },
           getMemory: function () {
@@ -733,6 +963,12 @@
               variant.setFormulaKey(key);
             }
           },
+          getStatut: function () {
+            return latestStatut;
+          },
+          selectStatut: function (listId) {
+            return applyStatutListSelection(listId);
+          },
           onLayoutChange: resizePopup
         });
       } else {
@@ -745,6 +981,9 @@
     }
 
     window.addEventListener('pagehide', function () {
+      if (infoUi && typeof infoUi.flushDesc === 'function') {
+        infoUi.flushDesc();
+      }
       if (latestState) {
         saveState(latestState);
       }

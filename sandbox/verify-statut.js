@@ -73,11 +73,17 @@ var normalized = ST.normalizeSettings({
   listCategories: { a: 'started', b: 'nope' },
   roleLists: { blocked: '4' },
   autoMoveBlocked: false,
+  showUnassigned: true,
 });
 check('normalize drops invalid category', normalized.listCategories.b === null);
 check('normalize keeps started', normalized.listCategories.a === 'started');
 check('normalize autoMoveBlocked false', normalized.autoMoveBlocked === false);
 check('normalize autoMoveCompleted default true', normalized.autoMoveCompleted === true);
+check('normalize showUnassigned true', normalized.showUnassigned === true);
+check(
+  'normalize showUnassigned default false',
+  ST.normalizeSettings({}).showUnassigned === false
+);
 
 var groups = ST.groupListsByCategory(
   [

@@ -41,6 +41,10 @@
       </div>
 
       <label class="tp-statut-toggle">
+        <input type="checkbox" id="statutShowUnassigned" />
+        <span>Afficher les statuts non assignés</span>
+      </label>
+      <label class="tp-statut-toggle">
         <input type="checkbox" id="statutAutoMoveBlocked" />
         <span>Déplacer automatiquement vers Bloqué quand une carte est marquée bloquée</span>
       </label>
@@ -400,6 +404,7 @@
       if (!settings) return;
       var blockedSel = document.getElementById('statutBlockedList');
       var completedSel = document.getElementById('statutCompletedList');
+      var showUnassigned = document.getElementById('statutShowUnassigned');
       var autoBlocked = document.getElementById('statutAutoMoveBlocked');
       var autoCompleted = document.getElementById('statutAutoMoveCompleted');
 
@@ -415,6 +420,7 @@
         settings.roleLists && settings.roleLists.completed,
         'completed'
       );
+      if (showUnassigned) showUnassigned.checked = !!settings.showUnassigned;
       if (autoBlocked) autoBlocked.checked = settings.autoMoveBlocked !== false;
       if (autoCompleted) autoCompleted.checked = settings.autoMoveCompleted !== false;
       renderStatutMap();
@@ -463,6 +469,11 @@
             roleLists: { completed: e.target.value || null },
           }).catch(function (err) {
             console.error('Statut completed list save failed', err);
+          });
+        });
+        document.getElementById('statutShowUnassigned').addEventListener('change', function (e) {
+          persistStatutPatch({ showUnassigned: !!e.target.checked }).catch(function (err) {
+            console.error('Statut showUnassigned save failed', err);
           });
         });
         document.getElementById('statutAutoMoveBlocked').addEventListener('change', function (e) {

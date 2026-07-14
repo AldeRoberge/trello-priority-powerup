@@ -40,7 +40,11 @@
       getBoardDigest: options.getBoardDigest || function () { return ''; },
       applyPriority: options.applyPriority || function () {},
       applyCompletion: options.applyCompletion || function () {},
-      setFormulaKey: options.setFormulaKey || function () {}
+      setFormulaKey: options.setFormulaKey || function () {},
+      getStatut: options.getStatut || function () { return null; },
+      selectStatut: options.selectStatut || function () {
+        return Promise.resolve({ ok: false, reason: 'no-selectStatut' });
+      }
     };
     var onLayoutChange = options.onLayoutChange || function () {};
     var Agent = global.PriorityAgent;
@@ -1160,9 +1164,9 @@
       }
     }
 
-    function onApplySuggestion(item, index) {
+    async function onApplySuggestion(item, index) {
       if (pending || !item || !item.actions || !item.actions.length) return;
-      var result = Agent.executeActions(bridge, item.actions);
+      var result = await Agent.executeActions(bridge, item.actions);
       appendMessage('assistant', result.summary || 'Suggestion appliqu\u00e9e.', {
         note: item.label
       });
@@ -1474,7 +1478,7 @@
         // Auto-apply tools when the assistant has enough info (e.g. after a clarifying answer).
         // Executor result is source of truth — always show a technical recap.
         if (turn.actions && turn.actions.length) {
-          var applied = Agent.executeActions(bridge, turn.actions);
+          var applied = await Agent.executeActions(bridge, turn.actions);
           appendChangeRecap(applied, {
             droppedActions: turn.droppedActions,
             ok: applied.ok
@@ -1535,12 +1539,12 @@
       }
     }
 
-    function onFollowUp(fu) {
+    async function onFollowUp(fu) {
       if (pending) return;
       clearFollowUps();
       var actions = (fu && fu.actions) || [];
       if (actions.length) {
-        var result = Agent.executeActions(bridge, actions);
+        var result = await Agent.executeActions(bridge, actions);
         appendMessage('assistant', result.summary || 'Action effectu\u00e9e.', {
           note: fu.label
         });
