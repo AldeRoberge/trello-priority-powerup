@@ -18,8 +18,10 @@
     }
   </script>
   <script src="./priority-trello.js?v=all-complete-1"></script>
-  <script src="./completion-ui.js?v=all-complete-1"></script>
-  <script src="./completion-trello.js?v=all-complete-1"></script>
+  <script src="./statut-match.js"></script>
+  <script src="./statut-trello.js"></script>
+  <script src="./completion-ui.js?v=progress-due-complete-1"></script>
+  <script src="./completion-trello.js?v=progress-due-complete-1"></script>
   <script src="./agent.js?v=agent-1"></script>
   <script src="./agent-ui.js?v=agent-1"></script>
 </head>
@@ -45,6 +47,8 @@
     let progressCollapse = null;
     let progressSummaryEl = null;
     let dueCompleteSyncChain = Promise.resolve();
+    let statutUi = null;
+    let statutSection = null;
 
     t.render(function () {
       PriorityTrello.getBoardColorScheme(t)
@@ -176,6 +180,67 @@
       }
       progressEnabled = !!enabled;
       progressExpanded = !!enabled;
+    }
+
+    function mountStatutSection(cardEl) {
+      if (!window.StatutTrello || !PriorityUI.createStatutField) {
+        console.error('Priority popup: StatutTrello / createStatutField unavailable');
+        return Promise.resolve();
+      }
+
+      statutSection = document.createElement('div');
+      statutSection.className = 'variant-statut-section';
+      // Order: Statut → Priorité → …
+      var prioritySection = cardEl.querySelector('.variant-priority-section');
+      if (prioritySection) {
+        cardEl.insertBefore(statutSection, prioritySection);
+      } else {
+        cardEl.insertBefore(statutSection, cardEl.firstChild);
+      }
+
+      return Promise.all([
+        StatutTrello.getCardStatut(t),
+        PriorityTrello.isRestAuthorized
+          ? PriorityTrello.isRestAuthorized(t)
+          : Promise.resolve(false),
+      ])
+        .then(function (results) {
+          var statut = results[0] || {};
+          var authorized = !!results[1];
+          var hasRest =
+            PriorityTrello.restClientOptions && !!PriorityTrello.restClientOptions();
+          var expandStatut = PriorityUI.resolveSectionExpanded('statut', true);
+
+          statutUi = PriorityUI.createStatutField({
+            el: statutSection,
+            listId: statut.listId,
+            lists: statut.lists || [],
+            settings: statut.settings,
+            needsAuth: hasRest && !authorized,
+            enabled: true,
+            expanded: expandStatut,
+            onExpandChange: function (isExpanded) {
+              PriorityUI.saveSectionCollapseState({ statut: !!isExpanded });
+            },
+            onLayoutChange: resizePopup,
+            onSelectList: function (listId) {
+              return StatutTrello.selectCardStatut(t, listId).then(function (result) {
+                if (result && result.ok && variant && result.sideEffects) {
+                  if (result.sideEffects.enAttenteSet && typeof variant.setState === 'function') {
+                    variant.setState(
+                      Object.assign({}, variant.getState(), { enAttente: true })
+                    );
+                  }
+                }
+                return result;
+              });
+            },
+          });
+          resizePopup();
+        })
+        .catch(function (err) {
+          console.error('Statut section mount failed', err);
+        });
     }
 
     function mountProgressSection(cardEl, initiallyOpen) {
@@ -391,6 +456,7 @@
         await saveState(variant.getState());
       }
 
+      await mountStatutSection(variant.card);
       await mountProgressSection(variant.card, focusProgress);
       syncBlockedSubtasks();
 
@@ -433,6 +499,9 @@
             if (progressCollapse) progressCollapse.refreshSummary();
             syncBlockedSubtasks();
             syncDueBlockedForProgress(live);
+            // setData may have fired onAllCompleteChange; sync again so agent
+            // updates to 100% always set Trello "Mark complete".
+            syncDueCompleteFromProgress(live);
             if (live.progressEnabled !== false) {
               var wasOff = progressCollapse && !progressCollapse.isEnabled();
               setProgressEnabled(true, {

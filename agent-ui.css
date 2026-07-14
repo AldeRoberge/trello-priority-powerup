@@ -1,23 +1,26 @@
 /* Assistant chat section — priority popup */
 
 .tp-page--priority .variant-chat-section {
-  margin-top: 8px;
+  margin-top: 12px;
+  padding: 0 8px 8px;
 }
 
+/* Soft enable shell — match Priorité / Progrès / Statut */
 .tp-page--priority .field--chat {
-  border: 1px solid var(--tp-border);
-  border-radius: 8px;
-  background: var(--tp-surface);
-  padding: 0;
-  overflow: hidden;
+  margin-bottom: 0;
+  padding: 12px;
+  border: none;
+  border-radius: var(--radius, 8px);
+  background: transparent;
+  transition: background 0.2s ease;
 }
 
 .tp-page--priority .field--chat.is-enabled {
-  background: var(--tp-surface);
-}
-
-.tp-page--priority .field--chat .section-toggle-head {
-  align-items: center;
+  background: color-mix(
+    in srgb,
+    var(--surface-1, var(--tp-surface-subtle)) 72%,
+    var(--surface-2, var(--tp-surface))
+  );
 }
 
 .tp-page--priority .agent-settings-btn {
@@ -28,23 +31,25 @@
   width: 28px;
   height: 28px;
   margin-left: 2px;
+  margin-top: 1px;
   padding: 0;
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--tp-text-muted);
+  color: var(--text-muted, var(--tp-text-muted));
   cursor: pointer;
   z-index: 1;
 }
 
 .tp-page--priority .agent-settings-btn:hover,
 .tp-page--priority .agent-settings-btn.is-active {
-  background: var(--tp-surface-hover);
-  color: var(--tp-text);
+  background: var(--surface-hover, var(--tp-surface-hover));
+  color: var(--text-primary, var(--tp-text));
 }
 
 .tp-page--priority .agent-chat-body {
-  padding: 0 10px 10px;
+  margin-top: 10px;
+  padding: 0;
 }
 
 .tp-page--priority .agent-settings {
@@ -386,5 +391,5 @@
 }
 
 .tp-page--priority .chat-leading-icon {
-  color: var(--tp-text-muted);
+  color: var(--text-muted, var(--tp-text-muted));
 }

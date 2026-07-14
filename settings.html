@@ -10,6 +10,8 @@
   <script src="./priority-matrix.js"></script>
   <script src="./priority-ui.js"></script>
   <script src="./priority-trello.js"></script>
+  <script src="./statut-match.js"></script>
+  <script src="./statut-trello.js"></script>
   <script src="./completion-ui.js"></script>
   <script src="./completion-trello.js"></script>
   <link rel="stylesheet" href="./trello-theme.css" />
@@ -17,6 +19,35 @@
 <body class="tp-page">
   <h3 class="tp-heading">Priorité</h3>
   <p class="tp-subtitle">Évaluez chaque carte selon l'urgence, l'impact et la facilité pour obtenir un score et un libellé de palier (Critique, Urgente, Prioritaire…).</p>
+
+  <section class="tp-statut-settings" id="statutSettingsSection" aria-labelledby="statutSettingsHeading">
+    <h4 class="tp-heading" id="statutSettingsHeading">Statut</h4>
+    <p class="tp-color-scheme-hint">Associez chaque liste du tableau à une catégorie (style Linear). La détection initiale utilise les noms connus (FR/EN).</p>
+
+    <div class="tp-statut-map" id="statutMapList"></div>
+
+    <div class="tp-statut-roles">
+      <label class="tp-statut-role">
+        <span class="tp-statut-role-label">Liste Bloqué (auto-déplacement)</span>
+        <select id="statutBlockedList" class="tp-select" aria-label="Liste Bloqué"></select>
+      </label>
+      <label class="tp-statut-role">
+        <span class="tp-statut-role-label">Liste Terminé (auto-déplacement)</span>
+        <select id="statutCompletedList" class="tp-select" aria-label="Liste Terminé"></select>
+      </label>
+    </div>
+
+    <label class="tp-statut-toggle">
+      <input type="checkbox" id="statutAutoMoveBlocked" />
+      <span>Déplacer automatiquement vers Bloqué quand une carte est marquée bloquée</span>
+    </label>
+    <label class="tp-statut-toggle">
+      <input type="checkbox" id="statutAutoMoveCompleted" />
+      <span>Déplacer automatiquement vers Terminé quand une carte est complétée</span>
+    </label>
+
+    <button type="button" class="tp-button tp-button--secondary" id="statutRedetect">Réinitialiser la détection</button>
+  </section>
 
   <section class="tp-color-scheme" id="colorSchemeSection" aria-labelledby="colorSchemeHeading">
     <h4 class="tp-heading" id="colorSchemeHeading">Schéma de couleurs</h4>
@@ -229,11 +260,234 @@
       section.hidden = false;
       var authorized = await PriorityTrello.isRestAuthorized(t);
       if (authorized) {
-        statusEl.textContent = 'Tri automatique : activé (la carte se réordonne dans sa liste après chaque changement de priorité).';
+        statusEl.textContent = 'Tri automatique / déplacement Statut : activé (autorisation lecture + écriture).';
         authBtn.hidden = true;
       } else {
-        statusEl.textContent = 'Tri automatique : autorisation requise (portée lecture + écriture, une fois par membre).';
+        statusEl.textContent = 'Tri automatique / déplacement Statut : autorisation requise (portée lecture + écriture, une fois par membre).';
         authBtn.hidden = false;
+      }
+    }
+
+    var statutState = { lists: [], settings: null };
+
+    function categoryOptionsHtml(selected) {
+      var cats =
+        typeof StatutMatch !== 'undefined' && StatutMatch.CATEGORIES
+          ? StatutMatch.CATEGORIES
+          : [];
+      var html = '<option value="">Non assigné</option>';
+      cats.forEach(function (cat) {
+        var sel = selected === cat.key ? ' selected' : '';
+        html +=
+          '<option value="' +
+          cat.key +
+          '"' +
+          sel +
+          '>' +
+          cat.label +
+          '</option>';
+      });
+      return html;
+    }
+
+    function fillRoleSelect(selectEl, lists, selectedId, preferredCategory) {
+      if (!selectEl) return;
+      selectEl.replaceChildren();
+      var none = document.createElement('option');
+      none.value = '';
+      none.textContent = '— Aucune —';
+      selectEl.appendChild(none);
+
+      var settings = statutState.settings;
+      var preferred = [];
+      var others = [];
+      (lists || []).forEach(function (list) {
+        var cat =
+          settings && settings.listCategories
+            ? settings.listCategories[list.id]
+            : null;
+        if (preferredCategory && cat === preferredCategory) preferred.push(list);
+        else others.push(list);
+      });
+
+      function addOpt(list, suffix) {
+        var opt = document.createElement('option');
+        opt.value = list.id;
+        opt.textContent = list.name + (suffix || '');
+        if (selectedId && String(selectedId) === String(list.id)) {
+          opt.selected = true;
+        }
+        selectEl.appendChild(opt);
+      }
+
+      preferred.forEach(function (list) {
+        addOpt(list, '');
+      });
+      others.forEach(function (list) {
+        addOpt(list, '');
+      });
+    }
+
+    function renderStatutMap() {
+      var listEl = document.getElementById('statutMapList');
+      if (!listEl || !statutState.settings) return;
+      listEl.replaceChildren();
+      var cats = statutState.settings.listCategories || {};
+
+      if (!statutState.lists.length) {
+        var empty = document.createElement('p');
+        empty.className = 'tp-color-scheme-hint';
+        empty.textContent = 'Aucune liste trouvée.';
+        listEl.appendChild(empty);
+        return;
+      }
+
+      statutState.lists.forEach(function (list) {
+        var row = document.createElement('div');
+        row.className = 'tp-statut-map-row';
+
+        var name = document.createElement('span');
+        name.className = 'tp-statut-map-name';
+        name.textContent = list.name;
+        name.title = list.name;
+
+        var select = document.createElement('select');
+        select.className = 'tp-select tp-statut-map-select';
+        select.dataset.listId = list.id;
+        select.setAttribute('aria-label', 'Catégorie pour ' + list.name);
+        select.innerHTML = categoryOptionsHtml(cats[list.id] || '');
+        select.addEventListener('change', function () {
+          var next = Object.assign({}, statutState.settings);
+          next.listCategories = Object.assign({}, next.listCategories);
+          var val = select.value || null;
+          next.listCategories[list.id] = val;
+          // If this list just became blocked/completed and role is empty, set it.
+          if (val === 'blocked' && !next.roleLists.blocked) {
+            next.roleLists = Object.assign({}, next.roleLists, { blocked: list.id });
+          }
+          if (val === 'completed' && !next.roleLists.completed) {
+            next.roleLists = Object.assign({}, next.roleLists, {
+              completed: list.id,
+            });
+          }
+          StatutTrello.saveStatutSettings(t, next)
+            .then(function (saved) {
+              statutState.settings = saved;
+              syncStatutControlsFromState();
+            })
+            .catch(function (err) {
+              console.error('Statut category save failed', err);
+            });
+        });
+
+        row.appendChild(name);
+        row.appendChild(select);
+        listEl.appendChild(row);
+      });
+    }
+
+    function syncStatutControlsFromState() {
+      var settings = statutState.settings;
+      if (!settings) return;
+      var blockedSel = document.getElementById('statutBlockedList');
+      var completedSel = document.getElementById('statutCompletedList');
+      var autoBlocked = document.getElementById('statutAutoMoveBlocked');
+      var autoCompleted = document.getElementById('statutAutoMoveCompleted');
+
+      fillRoleSelect(
+        blockedSel,
+        statutState.lists,
+        settings.roleLists && settings.roleLists.blocked,
+        'blocked'
+      );
+      fillRoleSelect(
+        completedSel,
+        statutState.lists,
+        settings.roleLists && settings.roleLists.completed,
+        'completed'
+      );
+      if (autoBlocked) autoBlocked.checked = settings.autoMoveBlocked !== false;
+      if (autoCompleted) autoCompleted.checked = settings.autoMoveCompleted !== false;
+      renderStatutMap();
+    }
+
+    async function persistStatutPatch(patch) {
+      var next = Object.assign({}, statutState.settings, patch);
+      if (patch.roleLists) {
+        next.roleLists = Object.assign(
+          {},
+          statutState.settings.roleLists,
+          patch.roleLists
+        );
+      }
+      statutState.settings = await StatutTrello.saveStatutSettings(t, next);
+      syncStatutControlsFromState();
+      resizeSettingsPopup();
+    }
+
+    async function initStatutSettings() {
+      var section = document.getElementById('statutSettingsSection');
+      if (
+        !section ||
+        typeof StatutTrello === 'undefined' ||
+        typeof StatutMatch === 'undefined'
+      ) {
+        if (section) section.hidden = true;
+        return;
+      }
+
+      try {
+        var ensured = await StatutTrello.ensureStatutSettings(t);
+        statutState.lists = ensured.lists || [];
+        statutState.settings = ensured.settings;
+        syncStatutControlsFromState();
+
+        document.getElementById('statutBlockedList').addEventListener('change', function (e) {
+          persistStatutPatch({
+            roleLists: { blocked: e.target.value || null },
+          }).catch(function (err) {
+            console.error('Statut blocked list save failed', err);
+          });
+        });
+        document.getElementById('statutCompletedList').addEventListener('change', function (e) {
+          persistStatutPatch({
+            roleLists: { completed: e.target.value || null },
+          }).catch(function (err) {
+            console.error('Statut completed list save failed', err);
+          });
+        });
+        document.getElementById('statutAutoMoveBlocked').addEventListener('change', function (e) {
+          persistStatutPatch({ autoMoveBlocked: !!e.target.checked }).catch(function (err) {
+            console.error('Statut autoMoveBlocked save failed', err);
+          });
+        });
+        document.getElementById('statutAutoMoveCompleted').addEventListener('change', function (e) {
+          persistStatutPatch({ autoMoveCompleted: !!e.target.checked }).catch(function (err) {
+            console.error('Statut autoMoveCompleted save failed', err);
+          });
+        });
+        document.getElementById('statutRedetect').addEventListener('click', function () {
+          if (
+            !window.confirm(
+              'Réexécuter la détection automatique des catégories à partir des noms de listes ? Les associations actuelles seront remplacées.'
+            )
+          ) {
+            return;
+          }
+          StatutTrello.ensureStatutSettings(t, { forceRedetect: true })
+            .then(function (ensured2) {
+              statutState.lists = ensured2.lists || [];
+              statutState.settings = ensured2.settings;
+              syncStatutControlsFromState();
+              resizeSettingsPopup();
+            })
+            .catch(function (err) {
+              console.error('Statut redetect failed', err);
+            });
+        });
+      } catch (err) {
+        console.error('Statut settings init failed', err);
+        section.hidden = true;
       }
     }
 
@@ -257,6 +511,7 @@
 
     return Promise.allSettled([
       loadBuildInfo(),
+      initStatutSettings(),
       initColorSchemePicker(),
       initCompletionSchemePicker(),
       refreshAutoSortUi(),

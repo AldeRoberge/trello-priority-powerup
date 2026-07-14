@@ -15,6 +15,8 @@
     }
   </script>
   <script src="./priority-trello.js"></script>
+  <script src="./statut-match.js"></script>
+  <script src="./statut-trello.js"></script>
   <script src="./completion-ui.js"></script>
   <script src="./completion-trello.js"></script>
   <link rel="stylesheet" href="./trello-theme.css" />
@@ -136,15 +138,21 @@
       }),
 
       'on-enable': function(t) {
-        return PriorityTrello.preloadBoardPriorityContext(t).then(function () {
-          return t.modal({
-            title: 'Priorité',
-            url: PriorityTrello.pageUrl('./welcome.html'),
-            height: 420,
-            fullscreen: false,
-            accentColor: '#22272B',
+        return PriorityTrello.preloadBoardPriorityContext(t)
+          .then(function () {
+            if (typeof StatutTrello !== 'undefined' && StatutTrello.ensureStatutSettings) {
+              return StatutTrello.ensureStatutSettings(t);
+            }
+          })
+          .then(function () {
+            return t.modal({
+              title: 'Priorité',
+              url: PriorityTrello.pageUrl('./welcome.html'),
+              height: 420,
+              fullscreen: false,
+              accentColor: '#22272B',
+            });
           });
-        });
       },
 
       // Settings popup loads board context itself — do not gate the menu item on preload.
@@ -156,7 +164,7 @@
             return t.popup({
               title: 'Paramètres de priorité',
               url: PriorityTrello.pageUrl('./settings.html'),
-              height: 580,
+              height: 720,
             });
           },
         }];

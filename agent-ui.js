@@ -313,9 +313,11 @@
     }
 
     function updateComposerEnabled() {
-      var ok = Agent.isConfigured(provider) && !pending;
+      var configured = Agent.isConfigured(provider);
+      var ok = configured && !pending;
+      composer.hidden = !configured;
       sendBtn.disabled = !ok;
-      input.disabled = pending;
+      input.disabled = !configured || pending;
     }
 
     function appendMessage(role, text, meta) {

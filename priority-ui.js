@@ -47,7 +47,7 @@
   var FORMULA_STORAGE_KEY = 'trello-priority-powerup/formula';
   var COLOR_SCHEME_STORAGE_KEY = 'trello-priority-powerup/color-scheme';
   var SECTION_COLLAPSE_STORAGE_KEY = 'trello-priority-powerup/section-collapse';
-  var SECTION_COLLAPSE_KEYS = ['priority', 'graph', 'progress', 'due', 'blocked', 'chat'];
+  var SECTION_COLLAPSE_KEYS = ['statut', 'priority', 'graph', 'progress', 'due', 'blocked', 'chat'];
   var DEFAULT_COLOR_SCHEME_KEY = 'blue';
   var SCORE_MAX = 10;
   // Urgency / impact axis max (ease uses 1..5).
@@ -4060,6 +4060,217 @@
     };
   }
 
+  function createStatutField(config) {
+    var el = config.el;
+    var onChange = config.onChange || function () {};
+    var onLayoutChange = config.onLayoutChange || function () {};
+    var onSelectList =
+      typeof config.onSelectList === 'function' ? config.onSelectList : null;
+    var bodyId = 'statut-section-body-' + Math.random().toString(36).slice(2, 9);
+    var currentListId = config.listId ? String(config.listId) : '';
+    var lists = Array.isArray(config.lists) ? config.lists.slice() : [];
+    var settings = config.settings || null;
+    var busy = false;
+    var authHint = !!config.needsAuth;
+
+    var field = document.createElement('div');
+    field.className = 'field field--statut is-enabled';
+
+    var chrome = createCollapsibleEnableChrome({
+      title: 'Statut',
+      bodyId: bodyId,
+      checkboxClass: 'statut-enable-checkbox',
+      labelClass: 'statut-enable-label',
+      titleClass: 'statut-enable-title',
+      collapseLabel: 'Replier Statut',
+      expandLabel: 'Développer Statut',
+    });
+    field.appendChild(chrome.head);
+
+    var body = document.createElement('div');
+    body.className = 'statut-section-body section-toggle-body';
+    body.id = bodyId;
+
+    var hint = document.createElement('p');
+    hint.className = 'statut-auth-hint';
+    hint.hidden = !authHint;
+    hint.textContent =
+      'Autorisez l’API (Paramètres) pour déplacer la carte entre les listes.';
+
+    var groupsEl = document.createElement('div');
+    groupsEl.className = 'statut-groups';
+    groupsEl.setAttribute('role', 'listbox');
+    groupsEl.setAttribute('aria-label', 'Listes du tableau');
+
+    var emptyEl = document.createElement('p');
+    emptyEl.className = 'statut-empty';
+    emptyEl.hidden = true;
+    emptyEl.textContent = 'Aucune liste trouvée sur ce tableau.';
+
+    body.appendChild(hint);
+    body.appendChild(groupsEl);
+    body.appendChild(emptyEl);
+    field.appendChild(body);
+    el.appendChild(field);
+
+    function currentListName() {
+      for (var i = 0; i < lists.length; i++) {
+        if (String(lists[i].id) === String(currentListId)) return lists[i].name;
+      }
+      return '';
+    }
+
+    function summaryText() {
+      return currentListName() || (currentListId ? 'Liste inconnue' : '—');
+    }
+
+    function buildGroups() {
+      if (
+        typeof global.StatutTrello !== 'undefined' &&
+        global.StatutTrello.groupListsByCategory
+      ) {
+        return global.StatutTrello.groupListsByCategory(lists, settings);
+      }
+      return lists.length
+        ? [{ key: '_none', label: 'Listes', lists: lists }]
+        : [];
+    }
+
+    function renderOptions() {
+      groupsEl.replaceChildren();
+      var groups = buildGroups();
+      emptyEl.hidden = groups.length > 0;
+      groups.forEach(function (group) {
+        var groupEl = document.createElement('div');
+        groupEl.className = 'statut-group';
+        groupEl.dataset.category = group.key;
+
+        var heading = document.createElement('div');
+        heading.className = 'statut-group-label';
+        heading.textContent = group.label;
+        groupEl.appendChild(heading);
+
+        var listEl = document.createElement('div');
+        listEl.className = 'statut-list-options';
+        listEl.setAttribute('role', 'group');
+        listEl.setAttribute('aria-label', group.label);
+
+        group.lists.forEach(function (list) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'statut-list-option';
+          btn.dataset.listId = list.id;
+          btn.setAttribute('role', 'option');
+          var selected = String(list.id) === String(currentListId);
+          btn.classList.toggle('is-selected', selected);
+          btn.setAttribute('aria-selected', selected ? 'true' : 'false');
+          btn.disabled = busy;
+          btn.textContent = list.name;
+          btn.addEventListener('click', function () {
+            if (busy || String(list.id) === String(currentListId)) return;
+            selectList(list.id);
+          });
+          listEl.appendChild(btn);
+        });
+
+        groupEl.appendChild(listEl);
+        groupsEl.appendChild(groupEl);
+      });
+    }
+
+    function selectList(listId) {
+      if (!onSelectList) {
+        currentListId = String(listId);
+        renderOptions();
+        collapse.refreshSummary();
+        onChange({ listId: currentListId });
+        return;
+      }
+      busy = true;
+      renderOptions();
+      Promise.resolve(onSelectList(listId))
+        .then(function (result) {
+          if (result && result.ok === false) {
+            if (result.reason === 'not-authorized' || result.reason === 'no-app-key') {
+              authHint = true;
+              hint.hidden = false;
+            }
+            return;
+          }
+          currentListId = String(listId);
+          authHint = false;
+          hint.hidden = true;
+          onChange({ listId: currentListId, result: result });
+        })
+        .catch(function (err) {
+          console.error('Statut list select failed', err);
+        })
+        .then(function () {
+          busy = false;
+          renderOptions();
+          collapse.refreshSummary();
+          onLayoutChange();
+        });
+    }
+
+    var collapse = bindCollapsibleEnable({
+      field: field,
+      body: body,
+      chrome: chrome,
+      enabled: config.enabled !== false,
+      expanded:
+        config.expanded != null
+          ? !!config.expanded
+          : true,
+      getSummary: summaryText,
+      onLayoutChange: onLayoutChange,
+      onExpandChange: config.onExpandChange || function () {},
+      onEnableChange: function (on) {
+        if (typeof config.onEnableChange === 'function') {
+          config.onEnableChange(on);
+        }
+        onLayoutChange();
+      },
+    });
+
+    renderOptions();
+    collapse.refreshSummary();
+
+    return {
+      field: field,
+      getListId: function () {
+        return currentListId;
+      },
+      setListId: function (listId) {
+        currentListId = listId ? String(listId) : '';
+        renderOptions();
+        collapse.refreshSummary();
+      },
+      setData: function (next) {
+        if (!next) return;
+        if (next.lists) lists = next.lists.slice();
+        if (next.settings) settings = next.settings;
+        if (next.listId != null) currentListId = next.listId ? String(next.listId) : '';
+        if (next.needsAuth != null) {
+          authHint = !!next.needsAuth;
+          hint.hidden = !authHint;
+        }
+        renderOptions();
+        collapse.refreshSummary();
+        onLayoutChange();
+      },
+      isEnabled: function () {
+        return collapse.isEnabled();
+      },
+      setEnabled: function (on, opts) {
+        return collapse.setEnabled(on, opts);
+      },
+      refreshSummary: function () {
+        collapse.refreshSummary();
+      },
+    };
+  }
+
   function createEnAttenteField(config) {
     var el = config.el;
     var checked = !!config.value;
@@ -7901,6 +8112,7 @@
     closeHelpModal: closeHelpModal,
     openCriteriaWizard: openCriteriaWizard,
     createField: createField,
+    createStatutField: createStatutField,
     createEnAttenteField: createEnAttenteField,
     createDueDateField: createDueDateField,
     createHeatPanel: createHeatPanel,

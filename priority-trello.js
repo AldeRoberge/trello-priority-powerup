@@ -1033,18 +1033,40 @@
   }
 
   async function saveCardInputs(t, inputs, options) {
+    options = options || {};
+    var previous = null;
+    try {
+      previous = await getCardInputs(t);
+    } catch (readErr) {
+      previous = null;
+    }
+    var wasBlocked = !!(previous && previous.enAttente);
     var normalized = normalizeInputs(inputs);
     if (!normalized) return;
     await t.set('card', 'shared', CARD_PRIORITY_KEY, normalized);
-    if (!options || options.syncDue !== false) {
+    if (options.syncDue !== false) {
       try {
         await syncCardDueWithTrello(t, { inputs: normalized, prefer: 'powerup' });
       } catch (syncErr) {
         console.error('Priority due sync (save) failed', syncErr);
       }
     }
-    if (!options || options.autoSort !== false) {
+    if (options.autoSort !== false) {
       scheduleAutoSortCard(t);
+    }
+    // Newly blocked → move to the board's Bloqué list when configured.
+    if (
+      options.skipStatutAutoMove !== true &&
+      normalized.enAttente &&
+      !wasBlocked &&
+      global.StatutTrello &&
+      typeof global.StatutTrello.maybeAutoMoveForBlocked === 'function'
+    ) {
+      try {
+        await global.StatutTrello.maybeAutoMoveForBlocked(t);
+      } catch (moveErr) {
+        console.error('Statut auto-move (blocked) failed', moveErr);
+      }
     }
   }
 
@@ -1252,7 +1274,8 @@
    * Mark (or unmark) the card as Done via REST PUT dueComplete.
    * Requires OAuth (same path as auto-sort). No-ops when already at target.
    */
-  async function setCardDueComplete(t, dueComplete) {
+  async function setCardDueComplete(t, dueComplete, options) {
+    options = options || {};
     var want = !!dueComplete;
     if (!restClientOptions()) return { ok: false, reason: 'no-app-key', changed: false };
 
@@ -1266,6 +1289,21 @@
 
     var put = await restPutCard(t, cardId, { dueComplete: want });
     if (!put.ok) return Object.assign({ changed: false }, put);
+
+    // Newly completed → move to the board's Terminé list when configured.
+    if (
+      want &&
+      options.skipStatutAutoMove !== true &&
+      global.StatutTrello &&
+      typeof global.StatutTrello.maybeAutoMoveForCompleted === 'function'
+    ) {
+      try {
+        await global.StatutTrello.maybeAutoMoveForCompleted(t);
+      } catch (moveErr) {
+        console.error('Statut auto-move (completed) failed', moveErr);
+      }
+    }
+
     return { ok: true, changed: true, dueComplete: want };
   }
 
@@ -1388,6 +1426,9 @@
     isRestAuthorized: isRestAuthorized,
     authorizeRestForAutoSort: authorizeRestForAutoSort,
     restClientOptions: restClientOptions,
+    restPutCard: restPutCard,
+    readCardIdAndListId: readCardIdAndListId,
+    resolveCurrentCardId: resolveCurrentCardId,
     pageUrl: pageUrl,
     createIframeClient: createIframeClient,
     createIframeClientDeferred: createIframeClientDeferred,

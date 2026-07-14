@@ -111,7 +111,7 @@
   }
 
   // Named OKLCH stops [L, C, H] for progress ramps (0 % → 100 %).
-  // Shared anchors keep schemes coherent: cool gray → blue mid → green complete.
+  // Shared anchors: cool gray → blue mid → teal-green complete (avoids lime/blue clash).
   var PROGRESS_OKLCH = {
     GRAY: [0.720, 0.014, 250],
     GRAY_SOFT: [0.740, 0.010, 250],
@@ -120,11 +120,12 @@
     BLUE_DEEP: [0.560, 0.140, 250],
     BLUE_SKY: [0.680, 0.100, 230],
     TEAL: [0.640, 0.110, 195],
-    MINT: [0.700, 0.100, 170],
-    BLUE_GREEN: [0.640, 0.120, 175],
-    GREEN_SOFT: [0.660, 0.130, 155],
-    GREEN: [0.580, 0.195, 145],
-    GREEN_MUTED: [0.580, 0.120, 145]
+    MINT: [0.700, 0.095, 172],
+    BLUE_GREEN: [0.640, 0.115, 178],
+    GREEN_SOFT: [0.640, 0.120, 162],
+    // Hue ~158 (teal-green), softer chroma than the old lime ~145°.
+    GREEN: [0.590, 0.145, 158],
+    GREEN_MUTED: [0.580, 0.100, 158]
   };
 
   // Five OKLCH ramps: gray (low) → blue (mid) → green (complete). No warm/red start.

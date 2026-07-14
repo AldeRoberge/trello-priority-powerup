@@ -311,6 +311,87 @@ html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
 
 .tp-button:hover { filter: brightness(1.05); }
 
+.tp-button--secondary {
+  background: transparent;
+  color: var(--tp-link);
+  border: 1px solid var(--tp-border);
+  margin-top: 10px;
+}
+
+.tp-button--secondary:hover {
+  filter: none;
+  background: var(--tp-surface-hover);
+}
+
+.tp-select {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--tp-border);
+  border-radius: 3px;
+  background: var(--tp-input-bg, var(--tp-surface));
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.tp-statut-settings {
+  margin: 0 0 16px;
+}
+
+.tp-statut-map {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.tp-statut-map-row {
+  display: grid;
+  grid-template-columns: 1fr minmax(120px, 40%);
+  gap: 8px;
+  align-items: center;
+}
+
+.tp-statut-map-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-statut-roles {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.tp-statut-role {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tp-statut-role-label {
+  font-size: 12px;
+  color: var(--tp-text-muted, #5e6c84);
+}
+
+.tp-statut-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.tp-statut-toggle input {
+  margin-top: 2px;
+}
+
 .tp-color-scheme {
   margin: 0 0 16px;
 }
@@ -1084,18 +1165,18 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
 }
 
-/* All subtasks done — green tint (mirror blocked/overdue red shell). */
+/* All subtasks done — cool teal-green tint (pairs with blue mid-progress). */
 .tp-page--priority .variant-progress-section.is-progress-complete > .field--progress.is-enabled {
-  background: var(--progress-complete-fill, #DFFCF0);
+  background: var(--progress-complete-fill, #E4F3EF);
 }
 
 .tp-page--priority .variant-progress-section.is-progress-complete .progress-enable-title,
 .tp-page--priority .variant-progress-section.is-progress-complete .section-enable-title {
-  color: var(--progress-complete-text, #164B35);
+  color: var(--progress-complete-text, #164B45);
 }
 
 .tp-page--priority .variant-progress-section.is-progress-complete .section-toggle-summary {
-  color: var(--progress-complete-muted-text, #216E4E);
+  color: var(--progress-complete-muted-text, #1F6B5C);
 }
 
 .tp-page--priority .progress-enable-checkbox {
@@ -1510,7 +1591,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 
 .tp-completion-check {
   --completion-check-size: 22px;
-  --completion-check-green: #22a06b;
+  --completion-check-green: #2a9b82;
   box-sizing: border-box;
   width: var(--completion-check-size);
   height: var(--completion-check-size);
@@ -1654,7 +1735,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 html[data-color-mode="dark"] .tp-completion-check {
-  --completion-check-green: #4bce97;
+  --completion-check-green: #5dd4b1;
   border-color: color-mix(in srgb, var(--tp-border-strong) 55%, var(--tp-text-muted));
   background: transparent;
   color: transparent;

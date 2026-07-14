@@ -35,11 +35,12 @@
   --blocked-muted-text: #6E2424;
   --blocked-fill: #FCE8E8;
   --blocked-border: #C9372C;
-  --progress-complete-accent: #1F845A;
-  --progress-complete-text: #164B35;
-  --progress-complete-muted-text: #216E4E;
-  --progress-complete-fill: #DFFCF0;
-  --progress-complete-border: #22A06B;
+  /* Cool teal-green — reads as done without clashing against blue UI chrome. */
+  --progress-complete-accent: #1D7A65;
+  --progress-complete-text: #164B45;
+  --progress-complete-muted-text: #1F6B5C;
+  --progress-complete-fill: #E4F3EF;
+  --progress-complete-border: #2A9B82;
   --surface-hover: #F7F6F3;
 }
 
@@ -60,11 +61,11 @@ html[data-color-mode="light"] {
   --blocked-muted-text: #6E2424;
   --blocked-fill: #FCE8E8;
   --blocked-border: #C9372C;
-  --progress-complete-accent: #1F845A;
-  --progress-complete-text: #164B35;
-  --progress-complete-muted-text: #216E4E;
-  --progress-complete-fill: #DFFCF0;
-  --progress-complete-border: #22A06B;
+  --progress-complete-accent: #1D7A65;
+  --progress-complete-text: #164B45;
+  --progress-complete-muted-text: #1F6B5C;
+  --progress-complete-fill: #E4F3EF;
+  --progress-complete-border: #2A9B82;
 }
 
 html[data-color-mode="dark"] {
@@ -101,11 +102,11 @@ html[data-color-mode="dark"] {
   --blocked-muted-text: #F5C4C2;
   --blocked-fill: #3D1F1F;
   --blocked-border: #F87171;
-  --progress-complete-accent: #4BCE97;
-  --progress-complete-text: #BAF3DB;
-  --progress-complete-muted-text: #7EE2B8;
-  --progress-complete-fill: #1C3329;
-  --progress-complete-border: #4BCE97;
+  --progress-complete-accent: #5DD4B1;
+  --progress-complete-text: #B8F1E0;
+  --progress-complete-muted-text: #7EDCC4;
+  --progress-complete-fill: #1A332E;
+  --progress-complete-border: #5DD4B1;
   --surface-hover: #a6c5e71f;
 }
 
@@ -469,6 +470,84 @@ body {
 .variant-priority-section {
   margin-top: 8px;
   padding: 0 12px;
+}
+
+.variant-statut-section {
+  margin-top: 8px;
+  padding: 0 12px;
+}
+
+.field--statut {
+  margin-bottom: 0;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: transparent;
+  border: none;
+  transition: background 0.2s ease;
+}
+
+.field--statut.is-enabled {
+  background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
+}
+
+.statut-section-body {
+  margin-top: 10px;
+}
+
+.statut-auth-hint,
+.statut-empty {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--tp-text-muted, var(--text-muted, #626f86));
+}
+
+.statut-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.statut-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--tp-text-muted, var(--text-muted, #626f86));
+  margin-bottom: 4px;
+}
+
+.statut-list-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.statut-list-option {
+  appearance: none;
+  border: 1px solid var(--tp-border, rgba(9, 30, 66, 0.14));
+  background: var(--tp-surface, transparent);
+  color: var(--tp-text, inherit);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  line-height: 1.2;
+  cursor: pointer;
+  text-align: left;
+}
+
+.statut-list-option:hover:not(:disabled) {
+  background: var(--tp-surface-hover, rgba(9, 30, 66, 0.06));
+}
+
+.statut-list-option.is-selected {
+  border-color: var(--tp-primary, #0c66e4);
+  background: color-mix(in srgb, var(--tp-primary, #0c66e4) 14%, transparent);
+  font-weight: 600;
+}
+
+.statut-list-option:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .field--priority {
