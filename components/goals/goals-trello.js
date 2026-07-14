@@ -322,6 +322,10 @@
   }
 
   async function createMission(t, name, visionId) {
+    var visions = await getVisions(t);
+    var vision = findById(visions, visionId);
+    if (!vision) throw new Error('Vision introuvable');
+    if (vision.retired) throw new Error('Vision retirée');
     var list = await getMissions(t);
     var entity = normalizeMission({
       id: generateId(),
@@ -361,6 +365,10 @@
   }
 
   async function createProject(t, name, missionId) {
+    var missions = await getMissions(t);
+    var mission = findById(missions, missionId);
+    if (!mission) throw new Error('Mission introuvable');
+    if (mission.retired) throw new Error('Mission retirée');
     var list = await getProjects(t);
     var entity = normalizeProject({
       id: generateId(),
@@ -398,6 +406,11 @@
   }
 
   async function createMetric(t, raw) {
+    var missions = await getMissions(t);
+    var linkedGoalId = raw && raw.linkedGoalId;
+    var mission = findById(missions, linkedGoalId);
+    if (!mission) throw new Error('Mission introuvable');
+    if (mission.retired) throw new Error('Mission retirée');
     var list = await getMetrics(t);
     var ids = Object.create(null);
     list.forEach(function (m) {

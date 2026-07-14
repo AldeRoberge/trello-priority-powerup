@@ -57,6 +57,7 @@
     set_progress: 'Progr\u00e8s mis \u00e0 jour.',
     set_formula: 'Formule mise \u00e0 jour.',
     set_statut: 'Statut mis \u00e0 jour.',
+    set_project: 'Projet li\u00e9.',
     rename_card: 'Carte renomm\u00e9e.',
     set_description: 'Description mise \u00e0 jour.',
     add_subtask: 'Sous-t\u00e2che ajout\u00e9e.',
@@ -169,6 +170,7 @@
     if (actions[0].tool === 'reset_progress') return 'R\u00e9initialiser le progr\u00e8s';
     if (actions[0].tool === 'set_formula') return 'Changer la formule';
     if (actions[0].tool === 'set_statut') return 'Changer le statut';
+    if (actions[0].tool === 'set_project') return 'Lier au projet';
     return label;
   }
 
@@ -851,6 +853,54 @@
         }
       } catch (e) { /* ignore */ }
     }
+    if (typeof bridge.getGoals === 'function') {
+      try {
+        var goalsRaw = bridge.getGoals();
+        if (goalsRaw && typeof goalsRaw === 'object') {
+          var h = goalsRaw.hierarchy || {};
+          var projectsList = Array.isArray(goalsRaw.projects) ? goalsRaw.projects : [];
+          var activeProjects = projectsList.filter(function (p) {
+            return p && !p.retired;
+          });
+          ctx.goals = {
+            projectId: goalsRaw.projectId || null,
+            vision: h.vision
+              ? { id: h.vision.id, name: h.vision.name, retired: !!h.vision.retired }
+              : null,
+            mission: h.mission
+              ? { id: h.mission.id, name: h.mission.name, retired: !!h.mission.retired }
+              : null,
+            project: h.project
+              ? { id: h.project.id, name: h.project.name, retired: !!h.project.retired }
+              : null,
+            projects: activeProjects
+              .map(function (p) {
+                return { id: p.id, name: p.name, missionId: p.missionId };
+              })
+              .slice(0, 40),
+            metrics: Array.isArray(goalsRaw.metrics)
+              ? goalsRaw.metrics
+                  .filter(function (m) {
+                    return (
+                      h.mission && m.linkedGoalId === h.mission.id
+                    );
+                  })
+                  .map(function (m) {
+                    return {
+                      id: m.id,
+                      name: m.name,
+                      currentValue: m.currentValue,
+                      target: m.target,
+                      direction: m.direction,
+                      isPrimary: !!m.isPrimary,
+                    };
+                  })
+                  .slice(0, 20)
+              : [],
+          };
+        }
+      } catch (e) { /* ignore */ }
+    }
     var state = null;
     if (typeof bridge.getPriorityState === 'function') {
       try {
@@ -1096,7 +1146,7 @@
       '- Ne bloque JAMAIS une action pour un param\u00e8tre optionnel. Applique le minimum viable, puis adapte.',
       '- Ne pose une question AVANT d\'appeler un outil QUE si un param\u00e8tre OBLIGATOIRE manque et qu\'aucune action partielle n\'est possible.',
       '- Param\u00e8tres optionnels (ne jamais exiger avant d\'agir)\u00a0: dueTime, blockedReasons, axes priorit\u00e9 non fournis, progress pr\u00e9cis si on active seulement la section.',
-      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget ou priorityEnabled.',
+      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_project\u00a0: projectId OU matchText/name OU clear:true\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget ou priorityEnabled.',
       '- Dates relatives (jours)\u00a0: r\u00e9sous avec context.today (aujourd\'hui / today \u2192 context.today\u00a0; demain \u2192 +1 jour). N\'invente pas d\'autre date.',
       '- Heures relatives (tr\u00e8s important)\u00a0: \u00ab\u00a0dans 15 minutes\u00a0\u00bb / \u00ab\u00a0in 15 minutes\u00a0\u00bb / \u00ab\u00a0dans 2 heures\u00a0\u00bb = D\u00c9LAI depuis maintenant, PAS une heure fixe du matin.',
       '- Pour un d\u00e9lai\u00a0: utilise set_due avec relativeMinutes (ou relativeHours). Le runtime calcule dueDate/dueTime \u00e0 partir de context.nowTime (' +
@@ -1154,6 +1204,8 @@
       '- Formule de score\u00a0: set_formula avec baseline | eisenhower | wsjf | valueEffort (context.formula = actuelle).',
       '- Statut / colonne Trello\u00a0: set_statut avec listId, matchList (nom de liste) ou category (blocked|completed|active|backlog\u2026) d\'apr\u00e8s context.statut.',
       '- Ex. statut\u00a0: user \u00ab\u00a0Passe en Terminé\u00a0\u00bb \u2192 {"message":"Okay, d\u00e9plac\u00e9e.","suggestions":["Quelle est la priorit\u00e9?","Ajouter une sous-t\u00e2che"],"followUps":[],"actions":[{"tool":"set_statut","args":{"category":"completed"}}]}',
+      '- Ex. projet\u00a0: user \u00ab\u00a0Lie au projet Sport 2026\u00a0\u00bb \u2192 {"message":"Okay, li\u00e9e \u00e0 Sport 2026.","suggestions":["Quelle est la priorit\u00e9?","Ajouter une sous-t\u00e2che"],"followUps":[],"actions":[{"tool":"set_project","args":{"matchText":"Sport 2026"}}]}',
+      '- Ex. d\u00e9lier projet\u00a0: user \u00ab\u00a0Enl\u00e8ve le projet\u00a0\u00bb \u2192 {"message":"Okay, projet d\u00e9li\u00e9.","suggestions":["Lier un projet","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_project","args":{"clear":true}}]}',
       'Titre et description de la carte (context.cardName / context.cardDesc)\u00a0:',
       '- Renommer le titre de la carte\u00a0: rename_card avec name (nouveau titre complet).',
       '- Modifier la description\u00a0: set_description avec desc (texte complet \u00e0 \u00e9crire dans context.cardDesc\u00a0; "" pour effacer).',
@@ -1207,6 +1259,7 @@
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (master sur sous-t\u00e2ches si items\u00a0; sinon progres carte)',
       '- set_formula: { formula: "baseline"|"eisenhower"|"wsjf"|"valueEffort" }',
       '- set_statut: { listId?: string, matchList?: string, category?: string } (d\u00e9place la carte\u00a0; category ex. completed|blocked|started|backlog|triage|unstarted|canceled)',
+      '- set_project: { projectId?: string, matchText?: string, name?: string, clear?: boolean } (lie la carte \u00e0 un projet Objectif\u00a0; clear:true d\u00e9lie\u00a0; matchText/name parmi context.goals.projects)',
       '- rename_card: { name: string } (nouveau titre de la carte\u00a0; name obligatoire, non vide)',
       '- set_description: { desc: string } (nouvelle description compl\u00e8te\u00a0; desc obligatoire en string, "" pour effacer)',
       '- add_subtask: { text: string } (text obligatoire, non vide)',
@@ -1539,6 +1592,14 @@
         (typeof args.category === 'string' && !!args.category.trim())
       );
     }
+    if (action.tool === 'set_project') {
+      if (args.clear === true) return true;
+      return (
+        (typeof args.projectId === 'string' && !!args.projectId.trim()) ||
+        (typeof args.matchText === 'string' && !!args.matchText.trim()) ||
+        (typeof args.name === 'string' && !!args.name.trim())
+      );
+    }
     if (
       action.tool === 'complete_all_subtasks' ||
       action.tool === 'reset_progress'
@@ -1570,6 +1631,9 @@
     }
     if (action.tool === 'set_statut') {
       return 'set_statut: listId, matchList ou category requis';
+    }
+    if (action.tool === 'set_project') {
+      return 'set_project: projectId, matchText/name, ou clear:true requis';
     }
     return action.tool + ': args incomplets';
   }
@@ -2505,8 +2569,9 @@
           '- 0 \u00e0 3 suggestions max. Si la carte est d\u00e9j\u00e0 bien remplie / rien d\'utile\u00a0: {"suggestions":[]}.',
           '- Chaque suggestion DOIT avoir actions non vides (outils ex\u00e9cutables), pas seulement une question.',
           '- label\u00a0: verbe \u00e0 l\'infinitif, court, en fran\u00e7ais (ex. \u00ab\u00a0D\u00e9finir l\'\u00e9ch\u00e9ance\u00a0\u00bb, \u00ab\u00a0Marquer bloqu\u00e9\u00a0\u00bb).',
-          '- Outils autoris\u00e9s\u00a0: set_due, set_priority, set_blocked, set_progress, add_subtask.',
-          '- Ne propose que des changements pertinents au contexte actuel (sections enabled, \u00e9ch\u00e9ance manquante/pass\u00e9e, priorit\u00e9 absente, progr\u00e8s vide\u2026).',
+          '- Outils autoris\u00e9s\u00a0: set_due, set_priority, set_blocked, set_progress, add_subtask, set_project.',
+          '- Si context.goals.projectId est null et context.goals.projects n\'est pas vide, tu PEUX proposer de lier un projet pertinent (set_project avec matchText ou projectId).',
+          '- Ne propose que des changements pertinents au contexte actuel (sections enabled, \u00e9ch\u00e9ance manquante/pass\u00e9e, priorit\u00e9 absente, progr\u00e8s vide, projet non li\u00e9\u2026).',
           '- Dates\u00a0: aujourd\'hui = ' +
             today +
             ', heure actuelle = ' +
@@ -3209,6 +3274,64 @@
           detail: detailForTool(tool, null, null, null, null, args, {
             listId: targetListId,
             listName: listName
+          })
+        };
+      }
+      if (tool === 'set_project') {
+        if (typeof bridge.setProject !== 'function') {
+          return { ok: false, tool: tool, error: 'Objectifs indisponibles' };
+        }
+        var clearProject = args.clear === true;
+        var projectId = null;
+        var projectName = '';
+        if (!clearProject) {
+          var goalsCtx =
+            typeof bridge.getGoals === 'function' ? bridge.getGoals() : null;
+          var projects =
+            goalsCtx && Array.isArray(goalsCtx.projects) ? goalsCtx.projects : [];
+          var matched =
+            typeof GoalsTrello !== 'undefined' && GoalsTrello.findProjectByMatch
+              ? GoalsTrello.findProjectByMatch(projects, args)
+              : null;
+          if (!matched && typeof args.projectId === 'string' && args.projectId.trim()) {
+            for (var pi = 0; pi < projects.length; pi++) {
+              if (projects[pi].id === args.projectId.trim()) {
+                matched = projects[pi];
+                break;
+              }
+            }
+          }
+          if (!matched) {
+            return { ok: false, tool: tool, error: 'Projet introuvable' };
+          }
+          if (matched.retired) {
+            return { ok: false, tool: tool, error: 'Projet retir\u00e9' };
+          }
+          projectId = matched.id;
+          projectName = matched.name || '';
+        }
+        var projectResult = await Promise.resolve(bridge.setProject(projectId));
+        if (!projectResult || !projectResult.ok) {
+          return {
+            ok: false,
+            tool: tool,
+            error:
+              (projectResult &&
+                (projectResult.reason || projectResult.error)) ||
+              'Liaison projet \u00e9chou\u00e9e'
+          };
+        }
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: clearProject
+            ? 'Projet d\u00e9li\u00e9.'
+            : TOOL_LABELS.set_project,
+          detail: detailForTool(tool, null, null, null, null, args, {
+            projectId: projectId,
+            projectName: projectName,
+            cleared: clearProject
           })
         };
       }

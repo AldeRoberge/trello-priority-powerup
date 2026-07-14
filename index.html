@@ -20,6 +20,7 @@
   <script src="./components/shared/tab-autocomplete.js"></script>
   <script src="./components/completion/completion-ui.js"></script>
   <script src="./components/completion/completion-trello.js"></script>
+  <script src="./components/goals/goals-trello.js"></script>
   <script src="./components/agent/agent.js"></script>
   <script src="./components/agent/agent-memory.js"></script>
   <script src="./components/profile/user-profile.js"></script>
@@ -83,6 +84,13 @@
             })
           );
         }
+        if (typeof GoalsTrello !== 'undefined' && GoalsTrello.preloadBoardGoalsContext) {
+          preloads.push(
+            GoalsTrello.preloadBoardGoalsContext(t).catch(function (err) {
+              console.error('Goals board context preload failed', err);
+            })
+          );
+        }
         return Promise.all(preloads).then(function () {
           return capabilityFn(t, opts);
         });
@@ -93,15 +101,21 @@
       // Popup width is fixed (narrow) by Trello; modal gives a comfortable editor width.
       // Use pageUrl (absolute, unsigned) — t.modal signs once; t.signUrl() double-signs.
       // Pass card name via args so the iframe can show it immediately (reliable card context).
-      // openSection expands that section inside popup.html (priority / progress).
+      // openSection expands that section inside popup.html (priority / progress / objectif).
       options = options || {};
       var card = await t.card('name');
       var cardName = card && typeof card.name === 'string' ? card.name : '';
       var openSection = options.openSection || 'priority';
       var args = { cardName: cardName, openSection: openSection };
       var focusProgress = openSection === 'progress';
+      var focusObjectif = openSection === 'objectif';
+      var title = focusProgress
+        ? 'Définir le progrès'
+        : focusObjectif
+          ? 'Objectif'
+          : 'Définir la priorité';
       return t.modal({
-        title: focusProgress ? 'D\u00e9finir le progr\u00e8s' : 'D\u00e9finir la priorit\u00e9',
+        title: title,
         url: PriorityTrello.pageUrl('./popup.html'),
         args: args,
         height: 1100,
@@ -115,14 +129,24 @@
       return openPriorityPopup(t, { openSection: 'progress' });
     }
 
+    async function openObjectifPopup(t) {
+      return openPriorityPopup(t, { openSection: 'objectif' });
+    }
+
     TrelloPowerUp.initialize({
 
       'card-badges': withBoardContext(function (t) {
-        return Promise.all([
+        var jobs = [
           PriorityTrello.cardFaceBadges(t),
           CompletionTrello.cardFaceBadges(t),
-        ]).then(function (results) {
-          return results[0].concat(results[1]);
+        ];
+        if (typeof GoalsTrello !== 'undefined' && GoalsTrello.cardFaceBadges) {
+          jobs.push(GoalsTrello.cardFaceBadges(t));
+        }
+        return Promise.all(jobs).then(function (results) {
+          return results.reduce(function (acc, list) {
+            return acc.concat(list || []);
+          }, []);
         });
       }),
 
@@ -139,11 +163,17 @@
       },
 
       'card-detail-badges': withBoardContext(function (t) {
-        return Promise.all([
+        var jobs = [
           PriorityTrello.cardDetailBadges(t, openPriorityPopup),
           CompletionTrello.cardDetailBadges(t, openCompletionPopup),
-        ]).then(function (results) {
-          return results[0].concat(results[1]);
+        ];
+        if (typeof GoalsTrello !== 'undefined' && GoalsTrello.cardDetailBadges) {
+          jobs.push(GoalsTrello.cardDetailBadges(t, openObjectifPopup));
+        }
+        return Promise.all(jobs).then(function (results) {
+          return results.reduce(function (acc, list) {
+            return acc.concat(list || []);
+          }, []);
         });
       }),
 

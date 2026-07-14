@@ -113,6 +113,11 @@
         window.alert('Sélectionnez une vision d’abord.');
         return Promise.resolve();
       }
+      var vision = GT.findById(state.visions, state.selectedVisionId);
+      if (vision && vision.retired) {
+        window.alert('Impossible d’ajouter sous une vision retirée.');
+        return Promise.resolve();
+      }
       return GT.createMission(t, name, state.selectedVisionId).then(function (m) {
         state.selectedMissionId = m.id;
         state.selectedProjectId = null;
@@ -122,6 +127,11 @@
     projectsCol.appendChild(buildAddRow('Nouveau projet…', function (name) {
       if (!state.selectedMissionId) {
         window.alert('Sélectionnez une mission d’abord.');
+        return Promise.resolve();
+      }
+      var mission = GT.findById(state.missions, state.selectedMissionId);
+      if (mission && mission.retired) {
+        window.alert('Impossible d’ajouter sous une mission retirée.');
         return Promise.resolve();
       }
       return GT.createProject(t, name, state.selectedMissionId).then(function (p) {

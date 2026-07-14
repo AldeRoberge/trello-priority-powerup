@@ -1139,12 +1139,23 @@ body.tp-page--priority {
 
 .tp-page--priority .variant-info-section {
   margin: 0 0 8px;
+  padding: 0 8px;
 }
 
 .tp-page--priority .field--info {
-  padding: 10px 12px 12px;
+  padding: 10px 12px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
+}
+
+.tp-page--priority .variant-statut-section {
+  margin-top: 8px;
+  padding: 0 8px;
+}
+
+.tp-page--priority .field--statut {
+  padding: 10px 12px;
+  border-radius: 12px;
 }
 
 .tp-page--priority .field--info .info-row-label {

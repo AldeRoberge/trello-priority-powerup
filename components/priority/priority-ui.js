@@ -4899,9 +4899,16 @@
     }
 
     function syncTitleInputSize() {
+      var maxHeight = 96;
+      titleInput.style.overflowY = 'hidden';
       titleInput.style.height = 'auto';
-      var next = Math.max(titleInput.scrollHeight, 28);
-      titleInput.style.height = Math.min(next, 96) + 'px';
+      var next = titleInput.scrollHeight;
+      if (next > maxHeight) {
+        titleInput.style.height = maxHeight + 'px';
+        titleInput.style.overflowY = 'auto';
+      } else {
+        titleInput.style.height = next + 'px';
+      }
     }
 
     function memberDisplayName(member) {

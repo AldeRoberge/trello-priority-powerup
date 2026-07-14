@@ -2,13 +2,31 @@
 
 .variant-objectif-section {
   margin: 0 0 8px;
+  padding: 0 8px;
+}
+
+.field--objectif {
+  margin-bottom: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: transparent;
+  border: none;
+  transition: background 0.2s ease;
+}
+
+.field--objectif.is-enabled {
+  background: color-mix(
+    in srgb,
+    var(--surface-1, var(--tp-surface-subtle)) 72%,
+    var(--surface-2, var(--tp-surface))
+  );
 }
 
 .objectif-section-body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 4px 0 8px;
+  padding: 4px 0 0;
 }
 
 .objectif-empty {

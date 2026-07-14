@@ -838,9 +838,6 @@
         };
         objectifEnabled = !!projectId;
         if (objectifCollapse) {
-          if (typeof objectifCollapse.setEnabled === 'function') {
-            objectifCollapse.setEnabled(objectifEnabled, { expand: false, silent: true });
-          }
           objectifCollapse.refreshSummary();
         }
         renderObjectifBody();
@@ -869,6 +866,7 @@
         leadingIcon: 'ti-hierarchy-2',
         iconClass: 'objectif-leading-icon',
         titleClass: 'objectif-enable-title',
+        hideEnable: true,
         collapseLabel: 'Replier Objectif',
         expandLabel: 'Développer Objectif',
       });
@@ -897,14 +895,14 @@
 
       return refreshObjectifData().then(function () {
         var expandObjectif =
-          initiallyOpen || PriorityUI.resolveSectionExpanded('objectif', !!objectifEnabled);
+          initiallyOpen || PriorityUI.resolveSectionExpanded('objectif', true);
         objectifCollapse = PriorityUI.bindCollapsibleEnable({
           field: field,
           body: body,
           chrome: chrome,
           enabled: true,
+          alwaysEnabled: true,
           expanded: expandObjectif,
-          hideEnableCheckbox: true,
           getSummary: objectifSummaryText,
           onLayoutChange: resizePopup,
           onExpandChange: function (isExpanded) {
@@ -1206,7 +1204,14 @@
       }
       var focusProgress = openSection === 'progress';
       var focusPriority = openSection === 'priority';
-      var focusSection = focusProgress ? 'progress' : (focusPriority ? 'priority' : null);
+      var focusObjectif = openSection === 'objectif';
+      var focusSection = focusProgress
+        ? 'progress'
+        : focusPriority
+          ? 'priority'
+          : focusObjectif
+            ? null
+            : null;
 
       const hasSavedPriority = !!inputs;
       const initialDefaults = hasSavedPriority
@@ -1272,6 +1277,11 @@
 
       if (featureOn('statut')) {
         await mountStatutSection(variant.card);
+      }
+      if (featureOn('objectif') || focusObjectif) {
+        await mountObjectifSection(variant.card, focusObjectif);
+      } else if (window.GoalsTrello) {
+        await refreshObjectifData();
       }
       if (featureOn('progress') || focusProgress) {
         await mountProgressSection(variant.card, focusProgress);
@@ -1395,6 +1405,26 @@
           selectStatut: function (listId) {
             return applyStatutListSelection(listId);
           },
+          getGoals: function () {
+            return latestGoals;
+          },
+          setProject: function (projectId) {
+            if (!window.GoalsTrello) {
+              return Promise.resolve({ ok: false, reason: 'no-goals' });
+            }
+            return GoalsTrello.setCardProjectId(t, projectId || null)
+              .then(function (id) {
+                return refreshObjectifData().then(function () {
+                  return { ok: true, projectId: id };
+                });
+              })
+              .catch(function (err) {
+                return {
+                  ok: false,
+                  reason: (err && err.message) || 'set-project-failed',
+                };
+              });
+          },
           onLayoutChange: resizePopup
         });
       } else if (featureOn('assistant')) {
@@ -1406,7 +1436,11 @@
       }
 
       await cardNamePromise;
-      if (!focusProgress) window.scrollTo(0, 0);
+      if (focusObjectif && objectifSection) {
+        objectifSection.scrollIntoView({ block: 'start' });
+      } else if (!focusProgress) {
+        window.scrollTo(0, 0);
+      }
       resizePopup();
     }
 
