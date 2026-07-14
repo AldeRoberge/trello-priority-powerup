@@ -111,11 +111,11 @@
       return completionSaveChain;
     }
 
-    function syncDueCompleteFromProgress(data) {
+    function syncDueCompleteFromProgress(data, options) {
       if (!CompletionTrello.syncCardDueCompleteFromProgress) return;
       dueCompleteSyncChain = dueCompleteSyncChain
         .then(function () {
-          return CompletionTrello.syncCardDueCompleteFromProgress(t, data);
+          return CompletionTrello.syncCardDueCompleteFromProgress(t, data, options);
         })
         .catch(function (err) {
           console.error('Completion dueComplete sync failed', err);
@@ -318,6 +318,12 @@
                     }
                     applyCompletionFromStatutComplete(side.completion);
                     resizePopup();
+                  } else if (side.dueCompleteCleared) {
+                    // Left Terminé: unlock due/blocked even if progress is still 100%.
+                    if (typeof variant.setProgressCompleteLock === 'function') {
+                      variant.setProgressCompleteLock(false);
+                    }
+                    resizePopup();
                   }
                 }
                 return result;
@@ -343,6 +349,8 @@
         bodyId: 'progress-section-body',
         checkboxClass: 'progress-enable-checkbox',
         labelClass: 'progress-enable-label',
+        leadingIcon: 'ti-list-check',
+        iconClass: 'progress-leading-icon',
         titleClass: 'progress-enable-title',
         collapseLabel: 'Replier Progr\u00e8s',
         expandLabel: 'D\u00e9velopper Progr\u00e8s'
@@ -424,7 +432,10 @@
                 (meta && meta.data) ||
                 latestCompletion;
               syncDueBlockedForProgress(live);
-              var syncPromise = syncDueCompleteFromProgress(live);
+              // Hit/leave 100%: sync Trello Done. Entering 100% clears Terminé-leave suppress.
+              var syncPromise = syncDueCompleteFromProgress(live, {
+                clearSuppress: !!allComplete,
+              });
               if (
                 allComplete &&
                 syncPromise &&
@@ -601,7 +612,9 @@
             syncDueBlockedForProgress(live);
             // setData may have fired onAllCompleteChange; sync again so agent
             // updates to 100% always set Trello "Mark complete".
-            syncDueCompleteFromProgress(live);
+            syncDueCompleteFromProgress(live, {
+              clearSuppress: progressIsFullyComplete(live),
+            });
             if (live.progressEnabled !== false) {
               var wasOff = progressCollapse && !progressCollapse.isEnabled();
               setProgressEnabled(true, {

@@ -5,9 +5,13 @@
   var CARD_COMPLETION_KEY = 'cardCompletion';
   var COMPLETION_COLOR_SCHEME_SETTINGS_KEY = 'completionColorScheme';
   var COMPLETION_COLOR_SCHEME_REV_KEY = 'completionColorSchemeRev';
+  var COMPLETION_COLOR_GRADIENT_SETTINGS_KEY = 'completionColorGradient';
   // Set when this Power-Up marks the card dueComplete from all-subtasks-done.
   // Used to reverse Done only when we own the mark (not a user/manual Done).
   var COMPLETION_MARKED_DUE_COMPLETE_KEY = 'completionMarkedDueComplete';
+  // When Statut leaves Terminé while progress is still 100%, keep Done off until
+  // the user edits progress (or returns to Terminé).
+  var COMPLETION_SUPPRESS_DUE_COMPLETE_KEY = 'completionSuppressDueComplete';
   var CARD_DETAIL_BADGE_TITLE = 'Progrès';
   var boardCompletionColorSchemeKey = 'traffic';
   var BADGE_REFRESH_SEC =
@@ -181,42 +185,61 @@
     }
   }
 
+  async function getDueCompleteSuppressed(t) {
+    try {
+      return (await t.get('card', 'shared', COMPLETION_SUPPRESS_DUE_COMPLETE_KEY)) === true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  async function setDueCompleteSuppressed(t, value) {
+    try {
+      if (value) {
+        await t.set('card', 'shared', COMPLETION_SUPPRESS_DUE_COMPLETE_KEY, true);
+      } else {
+        await t.set('card', 'shared', COMPLETION_SUPPRESS_DUE_COMPLETE_KEY, false);
+      }
+    } catch (err) {
+      console.error('Completion suppress-due-complete flag failed', err);
+    }
+  }
+
   /**
    * When progress reaches 100% → mark card Done (dueComplete) via REST if available.
-   * When leaving 100% → undo Done only if this feature set it.
+   * When progress leaves 100% → always turn Done off.
+   * options.clearSuppress: user edited progress — allow Done again at 100%.
    */
-  async function syncCardDueCompleteFromProgress(t, data) {
+  async function syncCardDueCompleteFromProgress(t, data, options) {
+    options = options || {};
     var allComplete = isAllSubtasksComplete(data);
     var PT = global.PriorityTrello;
-    var weMarked = await getMarkedDueCompleteFlag(t);
+
+    if (options.clearSuppress) {
+      await setDueCompleteSuppressed(t, false);
+    }
+
+    var suppressed = await getDueCompleteSuppressed(t);
 
     if (!PT || typeof PT.setCardDueComplete !== 'function') {
       return {
         allComplete: allComplete,
         synced: false,
         reason: 'no-setCardDueComplete',
+        suppressed: suppressed,
       };
     }
 
-    if (allComplete) {
+    if (allComplete && !suppressed) {
       var markResult = await PT.setCardDueComplete(t, true);
-      if (markResult && markResult.ok && markResult.changed) {
+      if (markResult && markResult.ok) {
         await setMarkedDueCompleteFlag(t, true);
         return {
           allComplete: true,
           synced: true,
-          changed: true,
+          changed: !!markResult.changed,
           dueComplete: true,
-        };
-      }
-      if (markResult && markResult.ok && !markResult.changed) {
-        // Already Done (user/prior) — do not claim ownership for undo.
-        return {
-          allComplete: true,
-          synced: true,
-          changed: false,
-          dueComplete: true,
-          alreadyComplete: true,
+          alreadyComplete: !markResult.changed,
         };
       }
       return {
@@ -227,19 +250,20 @@
       };
     }
 
-    if (weMarked) {
-      var unmarkResult = await PT.setCardDueComplete(t, false);
-      await setMarkedDueCompleteFlag(t, false);
-      return {
-        allComplete: false,
-        synced: !!(unmarkResult && unmarkResult.ok),
-        changed: !!(unmarkResult && unmarkResult.changed),
-        dueComplete: false,
-        reason: unmarkResult && !unmarkResult.ok ? unmarkResult.reason : undefined,
-      };
+    // Progress < 100%, or Done suppressed after leaving Terminé: always unmark.
+    var unmarkResult = await PT.setCardDueComplete(t, false);
+    await setMarkedDueCompleteFlag(t, false);
+    if (!allComplete) {
+      await setDueCompleteSuppressed(t, false);
     }
-
-    return { allComplete: false, synced: true, changed: false };
+    return {
+      allComplete: false,
+      synced: !!(unmarkResult && unmarkResult.ok),
+      changed: !!(unmarkResult && unmarkResult.changed),
+      dueComplete: false,
+      suppressed: suppressed,
+      reason: unmarkResult && !unmarkResult.ok ? unmarkResult.reason : undefined,
+    };
   }
 
   /**
@@ -325,31 +349,77 @@
 
   async function getBoardCompletionColorScheme(t) {
     if (typeof global.CompletionUI === 'undefined') return 'traffic';
+    var UI = global.CompletionUI;
     try {
-      var stored = await t.get('board', 'shared', COMPLETION_COLOR_SCHEME_SETTINGS_KEY);
-      if (typeof stored === 'string') {
-        boardCompletionColorSchemeKey = global.CompletionUI.normalizeCompletionSchemeKey(stored);
-        global.CompletionUI.applyCompletionColorScheme(boardCompletionColorSchemeKey);
+      var storedGradient = await t.get('board', 'shared', COMPLETION_COLOR_GRADIENT_SETTINGS_KEY);
+      var storedKey = await t.get('board', 'shared', COMPLETION_COLOR_SCHEME_SETTINGS_KEY);
+      if (Array.isArray(storedGradient) && storedGradient.length >= 2) {
+        var stops = UI.normalizeGradientStops(storedGradient);
+        var key =
+          typeof storedKey === 'string'
+            ? UI.normalizeCompletionSchemeKey(storedKey)
+            : UI.CUSTOM_COMPLETION_SCHEME_KEY;
+        boardCompletionColorSchemeKey = key;
+        UI.applyCompletionGradient(stops, key);
+        return boardCompletionColorSchemeKey;
+      }
+      if (typeof storedKey === 'string') {
+        boardCompletionColorSchemeKey = UI.normalizeCompletionSchemeKey(storedKey);
+        UI.applyCompletionColorScheme(boardCompletionColorSchemeKey);
         return boardCompletionColorSchemeKey;
       }
     } catch (err) {
       console.error('Completion board color scheme load failed', err);
     }
-    var fromLocal = global.CompletionUI.loadStoredCompletionSchemeKey();
-    boardCompletionColorSchemeKey = fromLocal || global.CompletionUI.DEFAULT_COMPLETION_SCHEME_KEY || 'traffic';
-    global.CompletionUI.applyCompletionColorScheme(boardCompletionColorSchemeKey);
+    var fromLocalGradient = UI.loadStoredCompletionGradient && UI.loadStoredCompletionGradient();
+    if (fromLocalGradient && fromLocalGradient.length >= 2) {
+      var localKey = UI.loadStoredCompletionSchemeKey() || UI.CUSTOM_COMPLETION_SCHEME_KEY;
+      boardCompletionColorSchemeKey = UI.normalizeCompletionSchemeKey(localKey);
+      UI.applyCompletionGradient(fromLocalGradient, boardCompletionColorSchemeKey);
+      return boardCompletionColorSchemeKey;
+    }
+    var fromLocal = UI.loadStoredCompletionSchemeKey();
+    boardCompletionColorSchemeKey = fromLocal || UI.DEFAULT_COMPLETION_SCHEME_KEY || 'traffic';
+    UI.applyCompletionColorScheme(boardCompletionColorSchemeKey);
     return boardCompletionColorSchemeKey;
   }
 
   async function saveBoardCompletionColorScheme(t, schemeKey) {
     if (typeof global.CompletionUI === 'undefined') return 'traffic';
-    var key = global.CompletionUI.normalizeCompletionSchemeKey(schemeKey);
+    var UI = global.CompletionUI;
+    var key = UI.normalizeCompletionSchemeKey(schemeKey);
+    UI.applyCompletionColorScheme(key);
+    var stops = UI.getActiveCompletionGradient();
     boardCompletionColorSchemeKey = key;
-    global.CompletionUI.applyCompletionColorScheme(key);
-    global.CompletionUI.saveStoredCompletionSchemeKey(key);
+    UI.saveStoredCompletionSchemeKey(key);
+    if (UI.saveStoredCompletionGradient) UI.saveStoredCompletionGradient(stops);
     await t.set('board', 'shared', COMPLETION_COLOR_SCHEME_SETTINGS_KEY, key);
+    await t.set('board', 'shared', COMPLETION_COLOR_GRADIENT_SETTINGS_KEY, stops);
     await t.set('board', 'shared', COMPLETION_COLOR_SCHEME_REV_KEY, Date.now());
     return key;
+  }
+
+  async function saveBoardCompletionGradient(t, stops, schemeKey) {
+    if (typeof global.CompletionUI === 'undefined') return null;
+    var UI = global.CompletionUI;
+    var key =
+      schemeKey != null
+        ? UI.normalizeCompletionSchemeKey(schemeKey)
+        : UI.CUSTOM_COMPLETION_SCHEME_KEY;
+    var normalized = UI.applyCompletionGradient(stops, key);
+    boardCompletionColorSchemeKey = key;
+    UI.saveStoredCompletionSchemeKey(key);
+    if (UI.saveStoredCompletionGradient) UI.saveStoredCompletionGradient(normalized);
+    await t.set('board', 'shared', COMPLETION_COLOR_SCHEME_SETTINGS_KEY, key);
+    await t.set('board', 'shared', COMPLETION_COLOR_GRADIENT_SETTINGS_KEY, normalized);
+    await t.set('board', 'shared', COMPLETION_COLOR_SCHEME_REV_KEY, Date.now());
+    return { schemeKey: key, stops: normalized };
+  }
+
+  async function getBoardCompletionGradient(t) {
+    await getBoardCompletionColorScheme(t);
+    if (typeof global.CompletionUI === 'undefined') return [];
+    return global.CompletionUI.getActiveCompletionGradient();
   }
 
   async function preloadBoardCompletionContext(t) {
@@ -497,7 +567,9 @@
     CARD_COMPLETION_KEY: CARD_COMPLETION_KEY,
     COMPLETION_COLOR_SCHEME_SETTINGS_KEY: COMPLETION_COLOR_SCHEME_SETTINGS_KEY,
     COMPLETION_COLOR_SCHEME_REV_KEY: COMPLETION_COLOR_SCHEME_REV_KEY,
+    COMPLETION_COLOR_GRADIENT_SETTINGS_KEY: COMPLETION_COLOR_GRADIENT_SETTINGS_KEY,
     COMPLETION_MARKED_DUE_COMPLETE_KEY: COMPLETION_MARKED_DUE_COMPLETE_KEY,
+    COMPLETION_SUPPRESS_DUE_COMPLETE_KEY: COMPLETION_SUPPRESS_DUE_COMPLETE_KEY,
     ITEM_TEXT_MAX: ITEM_TEXT_MAX,
     PROGRESS_MIN: PROGRESS_MIN,
     PROGRESS_MAX: PROGRESS_MAX,
@@ -511,12 +583,16 @@
     computeCardProgress: computeCardProgress,
     isAllSubtasksComplete: isAllSubtasksComplete,
     markFullyComplete: markFullyComplete,
+    setDueCompleteSuppressed: setDueCompleteSuppressed,
+    getDueCompleteSuppressed: getDueCompleteSuppressed,
     syncCardDueCompleteFromProgress: syncCardDueCompleteFromProgress,
     applyMasterProgress: applyMasterProgress,
     getCardCompletion: getCardCompletion,
     saveCardCompletion: saveCardCompletion,
     getBoardCompletionColorScheme: getBoardCompletionColorScheme,
     saveBoardCompletionColorScheme: saveBoardCompletionColorScheme,
+    getBoardCompletionGradient: getBoardCompletionGradient,
+    saveBoardCompletionGradient: saveBoardCompletionGradient,
     preloadBoardCompletionContext: preloadBoardCompletionContext,
     getCachedBoardCompletionColorSchemeKey: getCachedBoardCompletionColorSchemeKey,
     formatFaceBadgeText: formatFaceBadgeText,

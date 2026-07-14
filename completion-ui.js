@@ -3,7 +3,11 @@
   'use strict';
 
   var COMPLETION_SCHEME_STORAGE_KEY = 'trello-priority-powerup/completion-color-scheme';
+  var COMPLETION_GRADIENT_STORAGE_KEY = 'trello-priority-powerup/completion-color-gradient';
   var DEFAULT_COMPLETION_SCHEME_KEY = 'traffic';
+  var CUSTOM_COMPLETION_SCHEME_KEY = 'custom';
+  var MIN_GRADIENT_STOPS = 2;
+  var MAX_GRADIENT_STOPS = 8;
 
   // Perceptual color helpers (OKLab / OKLCH) — same approach as priority-ui.js.
   function srgbToLinear(c) {
@@ -99,36 +103,118 @@
     return '#' + byte(rgb.r) + byte(rgb.g) + byte(rgb.b);
   }
 
+  function normalizeHexColor(hex, fallback) {
+    var raw = String(hex == null ? '' : hex).trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw.toLowerCase();
+    if (/^[0-9a-fA-F]{6}$/.test(raw)) return ('#' + raw).toLowerCase();
+    if (/^#[0-9a-fA-F]{3}$/.test(raw)) {
+      return (
+        '#' +
+        raw[1] + raw[1] +
+        raw[2] + raw[2] +
+        raw[3] + raw[3]
+      ).toLowerCase();
+    }
+    return fallback || '#b3bac5';
+  }
+
+  function cloneGradientStops(stops) {
+    return (stops || []).map(function (stop) {
+      return {
+        p: Math.max(0, Math.min(100, Number(stop.p) || 0)),
+        color: normalizeHexColor(stop.color || stop.c, '#b3bac5')
+      };
+    });
+  }
+
+  function sortGradientStops(stops) {
+    return cloneGradientStops(stops).sort(function (a, b) {
+      return a.p - b.p;
+    });
+  }
+
+  function normalizeGradientStops(stops) {
+    var next = sortGradientStops(stops);
+    if (!next.length) {
+      return [
+        { p: 0, color: '#b3bac5' },
+        { p: 100, color: '#2d8f4e' }
+      ];
+    }
+    if (next.length === 1) {
+      next.push({ p: 100, color: next[0].color });
+    }
+    if (next.length > MAX_GRADIENT_STOPS) {
+      next = next.slice(0, MAX_GRADIENT_STOPS);
+    }
+    // Keep a usable span: pin extremes if everything collapsed.
+    if (next[0].p > 0) next[0].p = 0;
+    if (next[next.length - 1].p < 100) next[next.length - 1].p = 100;
+    // Nudge duplicate positions slightly so interpolation stays stable.
+    for (var i = 1; i < next.length; i++) {
+      if (next[i].p <= next[i - 1].p) {
+        next[i].p = Math.min(100, next[i - 1].p + 0.5);
+      }
+    }
+    next[next.length - 1].p = 100;
+    return next;
+  }
+
+  /** Even hex list → positioned stops (last stop locked at 100 % for a hard complete snap). */
+  function positionedStopsFromHex(hexStops) {
+    var hexes = (hexStops || []).map(function (h) {
+      return normalizeHexColor(h, '#b3bac5');
+    });
+    if (hexes.length < 2) {
+      return normalizeGradientStops([
+        { p: 0, color: hexes[0] || '#b3bac5' },
+        { p: 100, color: hexes[0] || '#2d8f4e' }
+      ]);
+    }
+    var maxMid = hexes.length - 2;
+    var out = [];
+    for (var i = 0; i < hexes.length; i++) {
+      var p = i === hexes.length - 1 ? 100 : maxMid <= 0 ? 0 : (i / maxMid) * 99;
+      out.push({ p: p, color: hexes[i] });
+    }
+    return normalizeGradientStops(out);
+  }
+
   function buildCompletionScheme(key, label, oklchStops) {
     var stops = oklchStopsToHex(oklchStops);
+    var gradientStops = positionedStopsFromHex(stops);
     return {
       key: key,
       label: label,
       oklchStops: oklchStops,
       oklabStops: oklchStopsToOklab(oklchStops),
-      stops: stops
+      stops: stops,
+      gradientStops: gradientStops
     };
   }
 
   // Named OKLCH stops [L, C, H] for progress ramps (0 % → 100 %).
-  // Shared anchors: cool gray → blue mid → teal-green complete (avoids lime/blue clash).
   var PROGRESS_OKLCH = {
     GRAY: [0.720, 0.014, 250],
     GRAY_SOFT: [0.740, 0.010, 250],
     GRAY_BLUE: [0.680, 0.045, 248],
     BLUE: [0.600, 0.130, 245],
-    BLUE_DEEP: [0.560, 0.140, 250],
-    BLUE_SKY: [0.680, 0.100, 230],
-    TEAL: [0.640, 0.110, 195],
-    MINT: [0.700, 0.095, 172],
+    BLUE_DEEP: [0.520, 0.145, 255],
+    BLUE_SKY: [0.720, 0.110, 230],
+    TEAL: [0.640, 0.120, 195],
+    MINT: [0.760, 0.110, 168],
+    CYAN: [0.700, 0.120, 205],
+    ORANGE: [0.720, 0.145, 55],
+    AMBER: [0.780, 0.130, 75],
+    RED_SOFT: [0.680, 0.140, 25],
     BLUE_GREEN: [0.640, 0.115, 178],
-    GREEN_SOFT: [0.640, 0.120, 162],
-    // Hue ~158 (teal-green), softer chroma than the old lime ~145°.
-    GREEN: [0.590, 0.145, 158],
-    GREEN_MUTED: [0.580, 0.100, 158]
+    GREEN: [0.590, 0.155, 148],
+    GREEN_MUTED: [0.560, 0.085, 155],
+    SLATE: [0.620, 0.020, 250],
+    CHARCOAL: [0.480, 0.015, 250]
   };
 
-  // Five OKLCH ramps: gray (low) → blue (mid) → green (complete). No warm/red start.
+  // Distinct preset ramps (visually different paths to green).
   var COMPLETION_COLOR_SCHEMES = {
     traffic: buildCompletionScheme('traffic', 'Classique', [
       PROGRESS_OKLCH.GRAY,
@@ -139,30 +225,30 @@
     ]),
     mint: buildCompletionScheme('mint', 'Menthe fraîche', [
       PROGRESS_OKLCH.GRAY_SOFT,
-      PROGRESS_OKLCH.GRAY_BLUE,
+      PROGRESS_OKLCH.CYAN,
       PROGRESS_OKLCH.TEAL,
       PROGRESS_OKLCH.MINT,
       PROGRESS_OKLCH.GREEN
     ]),
     ocean: buildCompletionScheme('ocean', 'Océan', [
-      PROGRESS_OKLCH.GRAY,
+      PROGRESS_OKLCH.CHARCOAL,
       PROGRESS_OKLCH.BLUE_DEEP,
       PROGRESS_OKLCH.BLUE,
       PROGRESS_OKLCH.TEAL,
       PROGRESS_OKLCH.GREEN
     ]),
     sunset: buildCompletionScheme('sunset', 'Horizon', [
-      PROGRESS_OKLCH.GRAY_SOFT,
-      PROGRESS_OKLCH.BLUE_SKY,
-      PROGRESS_OKLCH.BLUE,
+      PROGRESS_OKLCH.RED_SOFT,
+      PROGRESS_OKLCH.ORANGE,
+      PROGRESS_OKLCH.AMBER,
       PROGRESS_OKLCH.MINT,
       PROGRESS_OKLCH.GREEN
     ]),
     monochrome: buildCompletionScheme('monochrome', 'Monochrome', [
       PROGRESS_OKLCH.GRAY_SOFT,
-      [0.660, 0.025, 248],
-      [0.600, 0.055, 245],
-      [0.620, 0.070, 180],
+      PROGRESS_OKLCH.SLATE,
+      PROGRESS_OKLCH.CHARCOAL,
+      [0.540, 0.040, 160],
       PROGRESS_OKLCH.GREEN_MUTED
     ])
   };
@@ -186,33 +272,51 @@
   var TRELLO_BADGE_COLOR_NAMES = Object.keys(TRELLO_BADGE_COLOR_HEX);
 
   var activeCompletionSchemeKey = DEFAULT_COMPLETION_SCHEME_KEY;
-  var activeOklabStops = COMPLETION_COLOR_SCHEMES.traffic.oklabStops.slice();
+  var activeGradientStops = cloneGradientStops(
+    COMPLETION_COLOR_SCHEMES.traffic.gradientStops
+  );
 
-  function normalizeCompletionSchemeKey(key) {
-    return COMPLETION_COLOR_SCHEMES[key] ? key : DEFAULT_COMPLETION_SCHEME_KEY;
+  function isPresetCompletionSchemeKey(key) {
+    return !!(key && COMPLETION_COLOR_SCHEMES[key]);
   }
 
-  function progressStopT(percent, oklabStops) {
-    var stops = oklabStops || activeOklabStops;
-    var maxIdx = stops.length - 1;
+  function normalizeCompletionSchemeKey(key) {
+    if (key === CUSTOM_COMPLETION_SCHEME_KEY) return CUSTOM_COMPLETION_SCHEME_KEY;
+    return isPresetCompletionSchemeKey(key) ? key : DEFAULT_COMPLETION_SCHEME_KEY;
+  }
+
+  function gradientStopsForScheme(schemeKey) {
+    var key = normalizeCompletionSchemeKey(schemeKey);
+    if (key === CUSTOM_COMPLETION_SCHEME_KEY) {
+      return normalizeGradientStops(activeGradientStops);
+    }
+    return cloneGradientStops(COMPLETION_COLOR_SCHEMES[key].gradientStops);
+  }
+
+  function rgbFromGradientStops(percent, stops) {
+    var list = normalizeGradientStops(stops || activeGradientStops);
     var pct = Math.max(0, Math.min(100, Number(percent) || 0));
-    if (maxIdx <= 0) return 0;
-    // Reserve the final stop for a hard 100% punch — map 0–99 onto
-    // stops[0]…stops[maxIdx - 1] so 99% ≠ almost-green.
-    if (pct >= 100) return maxIdx;
-    return (pct / 99) * (maxIdx - 1);
+    if (pct <= list[0].p) return parseHex(list[0].color);
+    if (pct >= list[list.length - 1].p) return parseHex(list[list.length - 1].color);
+    for (var i = 0; i < list.length - 1; i++) {
+      var a = list[i];
+      var b = list[i + 1];
+      if (pct >= a.p && pct <= b.p) {
+        var span = b.p - a.p;
+        var t = span <= 0 ? 0 : (pct - a.p) / span;
+        return oklabToRgb(
+          lerpOklab(rgbToOklab(parseHex(a.color)), rgbToOklab(parseHex(b.color)), t)
+        );
+      }
+    }
+    return parseHex(list[list.length - 1].color);
   }
 
   function rgbAtProgress(percent, schemeKey) {
-    var scheme = COMPLETION_COLOR_SCHEMES[normalizeCompletionSchemeKey(schemeKey || activeCompletionSchemeKey)];
-    var stops = scheme.oklabStops;
-    var stopT = progressStopT(percent, stops);
-    var maxIdx = stops.length - 1;
-    stopT = Math.max(0, Math.min(maxIdx, stopT));
-    var lo = Math.floor(stopT);
-    var hi = Math.min(lo + 1, maxIdx);
-    var t = stopT - lo;
-    return oklabToRgb(lerpOklab(stops[lo], stops[hi], t));
+    if (schemeKey && isPresetCompletionSchemeKey(schemeKey)) {
+      return rgbFromGradientStops(percent, COMPLETION_COLOR_SCHEMES[schemeKey].gradientStops);
+    }
+    return rgbFromGradientStops(percent, activeGradientStops);
   }
 
   function colorAtProgress(schemeKey, percent) {
@@ -221,9 +325,9 @@
 
   function completionColorForProgress(percent) {
     if (percentIsComplete(percent)) {
-      return colorAtProgress(activeCompletionSchemeKey, 100);
+      return rgbToHex(rgbFromGradientStops(100, activeGradientStops));
     }
-    return colorAtProgress(activeCompletionSchemeKey, percent);
+    return rgbToHex(rgbFromGradientStops(percent, activeGradientStops));
   }
 
   function nearestTrelloBadgeColorName(hex) {
@@ -249,11 +353,28 @@
     return nearestTrelloBadgeColorName(completionColorForProgress(percent));
   }
 
+  function applyCompletionGradient(stops, schemeKey) {
+    activeGradientStops = normalizeGradientStops(stops);
+    if (schemeKey === CUSTOM_COMPLETION_SCHEME_KEY) {
+      activeCompletionSchemeKey = CUSTOM_COMPLETION_SCHEME_KEY;
+    } else if (isPresetCompletionSchemeKey(schemeKey)) {
+      activeCompletionSchemeKey = schemeKey;
+    } else {
+      activeCompletionSchemeKey = CUSTOM_COMPLETION_SCHEME_KEY;
+    }
+    return getActiveCompletionGradient();
+  }
+
   function applyCompletionColorScheme(schemeKey) {
     var key = normalizeCompletionSchemeKey(schemeKey);
+    if (key === CUSTOM_COMPLETION_SCHEME_KEY) {
+      activeCompletionSchemeKey = CUSTOM_COMPLETION_SCHEME_KEY;
+      activeGradientStops = normalizeGradientStops(activeGradientStops);
+      return key;
+    }
     var scheme = COMPLETION_COLOR_SCHEMES[key];
     activeCompletionSchemeKey = key;
-    activeOklabStops = scheme.oklabStops.slice();
+    activeGradientStops = cloneGradientStops(scheme.gradientStops);
     return key;
   }
 
@@ -261,26 +382,62 @@
     return activeCompletionSchemeKey;
   }
 
+  function getActiveCompletionGradient() {
+    return cloneGradientStops(activeGradientStops);
+  }
+
   function loadStoredCompletionSchemeKey() {
     try {
       if (typeof localStorage === 'undefined') return null;
       var raw = localStorage.getItem(COMPLETION_SCHEME_STORAGE_KEY);
       if (!raw) return null;
-      return COMPLETION_COLOR_SCHEMES[raw] ? raw : null;
+      if (raw === CUSTOM_COMPLETION_SCHEME_KEY) return CUSTOM_COMPLETION_SCHEME_KEY;
+      return isPresetCompletionSchemeKey(raw) ? raw : null;
     } catch (e) { return null; }
   }
 
   function saveStoredCompletionSchemeKey(key) {
     try {
       if (typeof localStorage === 'undefined') return;
-      if (!COMPLETION_COLOR_SCHEMES[key]) return;
-      localStorage.setItem(COMPLETION_SCHEME_STORAGE_KEY, key);
+      var normalized = normalizeCompletionSchemeKey(key);
+      localStorage.setItem(COMPLETION_SCHEME_STORAGE_KEY, normalized);
     } catch (e) { /* ignore quota / private mode */ }
   }
 
+  function loadStoredCompletionGradient() {
+    try {
+      if (typeof localStorage === 'undefined') return null;
+      var raw = localStorage.getItem(COMPLETION_GRADIENT_STORAGE_KEY);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || !parsed.length) return null;
+      return normalizeGradientStops(parsed);
+    } catch (e) { return null; }
+  }
+
+  function saveStoredCompletionGradient(stops) {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.setItem(
+        COMPLETION_GRADIENT_STORAGE_KEY,
+        JSON.stringify(normalizeGradientStops(stops))
+      );
+    } catch (e) { /* ignore quota / private mode */ }
+  }
+
+  function gradientCssFromStops(stops) {
+    var list = normalizeGradientStops(stops);
+    var parts = list.map(function (stop) {
+      return stop.color + ' ' + (Math.round(stop.p * 10) / 10) + '%';
+    });
+    return 'linear-gradient(90deg,' + parts.join(',') + ')';
+  }
+
   function schemeGradientCss(schemeKey) {
-    var scheme = COMPLETION_COLOR_SCHEMES[normalizeCompletionSchemeKey(schemeKey)];
-    return 'linear-gradient(90deg,' + scheme.stops.join(',') + ')';
+    if (schemeKey === CUSTOM_COMPLETION_SCHEME_KEY || !schemeKey) {
+      return gradientCssFromStops(activeGradientStops);
+    }
+    return gradientCssFromStops(gradientStopsForScheme(schemeKey));
   }
 
   applyCompletionColorScheme(DEFAULT_COMPLETION_SCHEME_KEY);
@@ -1370,23 +1527,424 @@
     };
   }
 
+  function progressBadgePreviewSamples(stops) {
+    var list = normalizeGradientStops(stops || activeGradientStops);
+    return [0, 25, 50, 75, 100].map(function (pct) {
+      var hex = rgbToHex(rgbFromGradientStops(pct, list));
+      var colorName =
+        pct >= 100 ? 'green' : pct <= 0 ? 'light-gray' : nearestTrelloBadgeColorName(hex);
+      var text = pct >= 100 ? '\u2713 ' + pct + '\u00a0%' : pct + '\u00a0%';
+      return { percent: pct, hex: hex, color: colorName, text: text };
+    });
+  }
+
+  /**
+   * Photoshop-style progress gradient editor (add / drag / recolor stops).
+   * options: { initialStops, initialSchemeKey, onChange(stops, meta), onResize }
+   */
+  function mountProgressGradientEditor(containerEl, options) {
+    options = options || {};
+    var stops = normalizeGradientStops(
+      options.initialStops || getActiveCompletionGradient()
+    );
+    var schemeKey = options.initialSchemeKey || CUSTOM_COMPLETION_SCHEME_KEY;
+    var selectedIndex = 0;
+    var dragState = null;
+
+    containerEl.classList.add('tp-progress-gradient');
+    containerEl.replaceChildren();
+
+    var presetsRow = document.createElement('div');
+    presetsRow.className = 'tp-progress-gradient-presets';
+    presetsRow.setAttribute('role', 'group');
+    presetsRow.setAttribute('aria-label', 'Préréglages');
+
+    COMPLETION_SCHEME_OPTIONS.forEach(function (option) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tp-progress-gradient-preset';
+      btn.dataset.scheme = option.key;
+      btn.title = option.label;
+      btn.setAttribute('aria-label', option.label);
+      var thumb = document.createElement('span');
+      thumb.className = 'tp-progress-gradient-preset-swatch';
+      thumb.style.background = schemeGradientCss(option.key);
+      btn.appendChild(thumb);
+      var lbl = document.createElement('span');
+      lbl.className = 'tp-progress-gradient-preset-label';
+      lbl.textContent = option.label;
+      btn.appendChild(lbl);
+      btn.addEventListener('click', function () {
+        schemeKey = option.key;
+        stops = cloneGradientStops(COMPLETION_COLOR_SCHEMES[option.key].gradientStops);
+        selectedIndex = 0;
+        emitChange({ source: 'preset' });
+        render();
+      });
+      presetsRow.appendChild(btn);
+    });
+    containerEl.appendChild(presetsRow);
+
+    var editor = document.createElement('div');
+    editor.className = 'tp-progress-gradient-editor';
+    containerEl.appendChild(editor);
+
+    var trackWrap = document.createElement('div');
+    trackWrap.className = 'tp-progress-gradient-track-wrap';
+    editor.appendChild(trackWrap);
+
+    var track = document.createElement('div');
+    track.className = 'tp-progress-gradient-track';
+    track.setAttribute('role', 'slider');
+    track.setAttribute('aria-label', 'Dégradé de progrès');
+    trackWrap.appendChild(track);
+
+    var handlesLayer = document.createElement('div');
+    handlesLayer.className = 'tp-progress-gradient-handles';
+    trackWrap.appendChild(handlesLayer);
+
+    var scale = document.createElement('div');
+    scale.className = 'tp-progress-gradient-scale';
+    scale.innerHTML =
+      '<span>0&nbsp;%</span><span>50&nbsp;%</span><span>100&nbsp;%</span>';
+    editor.appendChild(scale);
+
+    var controls = document.createElement('div');
+    controls.className = 'tp-progress-gradient-controls';
+    editor.appendChild(controls);
+
+    var colorLabel = document.createElement('label');
+    colorLabel.className = 'tp-progress-gradient-color';
+    var colorCaption = document.createElement('span');
+    colorCaption.textContent = 'Couleur';
+    var colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.className = 'tp-progress-gradient-color-input';
+    colorLabel.appendChild(colorCaption);
+    colorLabel.appendChild(colorInput);
+    controls.appendChild(colorLabel);
+
+    var posLabel = document.createElement('label');
+    posLabel.className = 'tp-progress-gradient-pos';
+    var posCaption = document.createElement('span');
+    posCaption.textContent = 'Position';
+    var posInput = document.createElement('input');
+    posInput.type = 'number';
+    posInput.min = '0';
+    posInput.max = '100';
+    posInput.step = '1';
+    posInput.className = 'tp-progress-gradient-pos-input';
+    var posSuffix = document.createElement('span');
+    posSuffix.className = 'tp-progress-gradient-pos-suffix';
+    posSuffix.textContent = '%';
+    posLabel.appendChild(posCaption);
+    posLabel.appendChild(posInput);
+    posLabel.appendChild(posSuffix);
+    controls.appendChild(posLabel);
+
+    var deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'tp-button tp-button--secondary tp-progress-gradient-delete';
+    deleteBtn.textContent = 'Supprimer le point';
+    controls.appendChild(deleteBtn);
+
+    var hint = document.createElement('p');
+    hint.className = 'tp-color-scheme-hint tp-progress-gradient-hint';
+    hint.textContent =
+      'Cliquez sur le dégradé pour ajouter un point. Glissez un point pour le déplacer.';
+    editor.appendChild(hint);
+
+    var preview = document.createElement('div');
+    preview.className = 'tp-progress-gradient-preview';
+    preview.setAttribute('aria-labelledby', 'completionGradientPreviewHeading');
+    var previewHeading = document.createElement('p');
+    previewHeading.className = 'tp-color-scheme-hint';
+    previewHeading.id = 'completionGradientPreviewHeading';
+    previewHeading.textContent = 'Aperçu';
+    preview.appendChild(previewHeading);
+
+    var previewBars = document.createElement('div');
+    previewBars.className = 'tp-progress-gradient-preview-bars';
+    preview.appendChild(previewBars);
+
+    var previewBadges = document.createElement('div');
+    previewBadges.className = 'tp-badge-preview-list tp-progress-gradient-preview-badges';
+    preview.appendChild(previewBadges);
+
+    containerEl.appendChild(preview);
+
+    function notifyResize() {
+      if (typeof options.onResize === 'function') options.onResize();
+    }
+
+    function emitChange(meta) {
+      if (typeof options.onChange !== 'function') return;
+      options.onChange(cloneGradientStops(stops), {
+        schemeKey: schemeKey,
+        source: (meta && meta.source) || 'edit'
+      });
+    }
+
+    function markCustom() {
+      schemeKey = CUSTOM_COMPLETION_SCHEME_KEY;
+    }
+
+    function selectStop(index) {
+      selectedIndex = Math.max(0, Math.min(stops.length - 1, index));
+      syncControls();
+      renderHandles();
+    }
+
+    function syncControls() {
+      var stop = stops[selectedIndex];
+      if (!stop) return;
+      colorInput.value = normalizeHexColor(stop.color, '#b3bac5');
+      posInput.value = String(Math.round(stop.p));
+      var isEndpoint = selectedIndex === 0 || selectedIndex === stops.length - 1;
+      posInput.disabled = isEndpoint;
+      posInput.title = isEndpoint
+        ? 'Les extrémités restent ancrées à 0 % et 100 %'
+        : 'Position du point (0–100 %)';
+      var canDelete = stops.length > MIN_GRADIENT_STOPS;
+      deleteBtn.disabled = !canDelete;
+      deleteBtn.title = !canDelete
+        ? 'Au moins deux points sont requis'
+        : isEndpoint
+          ? 'Supprimer ce point (les extrémités seront réancrées à 0 % / 100 %)'
+          : 'Supprimer ce point';
+      Array.prototype.forEach.call(presetsRow.children, function (btn) {
+        var active = schemeKey !== CUSTOM_COMPLETION_SCHEME_KEY && btn.dataset.scheme === schemeKey;
+        btn.classList.toggle('is-active', active);
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+    }
+
+    function renderTrack() {
+      track.style.background = gradientCssFromStops(stops);
+    }
+
+    function renderHandles() {
+      handlesLayer.replaceChildren();
+      stops.forEach(function (stop, index) {
+        var handle = document.createElement('button');
+        handle.type = 'button';
+        handle.className =
+          'tp-progress-gradient-handle' + (index === selectedIndex ? ' is-selected' : '');
+        handle.style.left = stop.p + '%';
+        handle.style.setProperty('--stop-color', stop.color);
+        handle.setAttribute('aria-label', 'Point à ' + Math.round(stop.p) + ' %');
+        handle.dataset.index = String(index);
+
+        handle.addEventListener('pointerdown', function (e) {
+          if (e.button != null && e.button !== 0) return;
+          e.preventDefault();
+          e.stopPropagation();
+          selectStop(index);
+          dragState = {
+            index: index,
+            pointerId: e.pointerId,
+            moved: false
+          };
+          try {
+            handle.setPointerCapture(e.pointerId);
+          } catch (err) { /* ignore */ }
+        });
+
+        handle.addEventListener('pointermove', function (e) {
+          if (!dragState || dragState.pointerId !== e.pointerId) return;
+          // Endpoints stay pinned at 0 % / 100 % (color only).
+          if (index === 0 || index === stops.length - 1) return;
+          var rect = track.getBoundingClientRect();
+          if (!rect.width) return;
+          var nextP = ((e.clientX - rect.left) / rect.width) * 100;
+          nextP = Math.max(0, Math.min(100, nextP));
+          var minP = stops[index - 1].p + 0.5;
+          var maxP = stops[index + 1].p - 0.5;
+          nextP = Math.max(minP, Math.min(maxP, nextP));
+          if (Math.abs(nextP - stops[index].p) < 0.05) return;
+          dragState.moved = true;
+          stops[index].p = nextP;
+          markCustom();
+          renderTrack();
+          handle.style.left = stops[index].p + '%';
+          posInput.value = String(Math.round(stops[index].p));
+          renderPreview();
+        });
+
+        function endDrag(e) {
+          if (!dragState || dragState.pointerId !== e.pointerId) return;
+          var moved = dragState.moved;
+          dragState = null;
+          try {
+            handle.releasePointerCapture(e.pointerId);
+          } catch (err) { /* ignore */ }
+          stops = normalizeGradientStops(stops);
+          selectedIndex = Math.min(selectedIndex, stops.length - 1);
+          if (moved) emitChange({ source: 'drag' });
+          render();
+        }
+        handle.addEventListener('pointerup', endDrag);
+        handle.addEventListener('pointercancel', endDrag);
+
+        handlesLayer.appendChild(handle);
+      });
+    }
+
+    function renderPreview() {
+      previewBars.replaceChildren();
+      previewBadges.replaceChildren();
+      progressBadgePreviewSamples(stops).forEach(function (sample) {
+        var row = document.createElement('div');
+        row.className = 'tp-progress-gradient-preview-row';
+
+        var label = document.createElement('span');
+        label.className = 'tp-progress-gradient-preview-label';
+        label.textContent = sample.percent + '\u00a0%';
+
+        var bar = document.createElement('div');
+        bar.className = 'tp-progress-gradient-preview-bar';
+        bar.style.setProperty('--completion-pct', sample.percent + '%');
+        bar.style.setProperty('--completion-fill', sample.hex);
+
+        var fill = document.createElement('span');
+        fill.className = 'tp-progress-gradient-preview-fill';
+        bar.appendChild(fill);
+
+        row.appendChild(label);
+        row.appendChild(bar);
+        previewBars.appendChild(row);
+
+        var chip = document.createElement('span');
+        chip.className = 'tp-badge-preview-chip';
+        chip.dataset.trelloColor = sample.color;
+        chip.textContent = sample.text;
+        previewBadges.appendChild(chip);
+      });
+    }
+
+    function render() {
+      stops = normalizeGradientStops(stops);
+      if (selectedIndex >= stops.length) selectedIndex = stops.length - 1;
+      renderTrack();
+      renderHandles();
+      syncControls();
+      renderPreview();
+      notifyResize();
+    }
+
+    function positionFromEvent(e) {
+      var rect = track.getBoundingClientRect();
+      if (!rect.width) return 50;
+      return Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+    }
+
+    trackWrap.addEventListener('pointerdown', function (e) {
+      if (e.target.closest && e.target.closest('.tp-progress-gradient-handle')) return;
+      if (e.button != null && e.button !== 0) return;
+      if (stops.length >= MAX_GRADIENT_STOPS) return;
+      var p = positionFromEvent(e);
+      var color = rgbToHex(rgbFromGradientStops(p, stops));
+      stops.push({ p: p, color: color });
+      stops = normalizeGradientStops(stops);
+      // Select the new stop (closest to click position after normalize).
+      var best = 0;
+      var bestDist = Infinity;
+      stops.forEach(function (stop, i) {
+        var d = Math.abs(stop.p - p);
+        if (d < bestDist) {
+          bestDist = d;
+          best = i;
+        }
+      });
+      selectedIndex = best;
+      markCustom();
+      emitChange({ source: 'add' });
+      render();
+    });
+
+    colorInput.addEventListener('input', function () {
+      if (!stops[selectedIndex]) return;
+      stops[selectedIndex].color = normalizeHexColor(colorInput.value, stops[selectedIndex].color);
+      markCustom();
+      renderTrack();
+      renderHandles();
+      renderPreview();
+    });
+    colorInput.addEventListener('change', function () {
+      markCustom();
+      emitChange({ source: 'color' });
+      render();
+    });
+
+    posInput.addEventListener('change', function () {
+      if (!stops[selectedIndex]) return;
+      if (selectedIndex === 0 || selectedIndex === stops.length - 1) {
+        posInput.value = String(Math.round(stops[selectedIndex].p));
+        return;
+      }
+      var nextP = Math.max(0, Math.min(100, Number(posInput.value) || 0));
+      stops[selectedIndex].p = nextP;
+      markCustom();
+      stops = normalizeGradientStops(stops);
+      emitChange({ source: 'position' });
+      render();
+    });
+
+    deleteBtn.addEventListener('click', function () {
+      if (stops.length <= MIN_GRADIENT_STOPS) return;
+      stops.splice(selectedIndex, 1);
+      selectedIndex = Math.max(0, selectedIndex - 1);
+      markCustom();
+      emitChange({ source: 'delete' });
+      render();
+    });
+
+    render();
+
+    return {
+      getStops: function () {
+        return cloneGradientStops(stops);
+      },
+      getSchemeKey: function () {
+        return schemeKey;
+      },
+      setStops: function (nextStops, nextSchemeKey) {
+        stops = normalizeGradientStops(nextStops);
+        if (nextSchemeKey) schemeKey = normalizeCompletionSchemeKey(nextSchemeKey);
+        else schemeKey = CUSTOM_COMPLETION_SCHEME_KEY;
+        selectedIndex = 0;
+        render();
+      },
+      el: containerEl
+    };
+  }
+
   global.CompletionUI = {
     PROGRESS_OKLCH: PROGRESS_OKLCH,
     COMPLETION_COLOR_SCHEMES: COMPLETION_COLOR_SCHEMES,
     COMPLETION_SCHEME_OPTIONS: COMPLETION_SCHEME_OPTIONS,
     DEFAULT_COMPLETION_SCHEME_KEY: DEFAULT_COMPLETION_SCHEME_KEY,
+    CUSTOM_COMPLETION_SCHEME_KEY: CUSTOM_COMPLETION_SCHEME_KEY,
     normalizeCompletionSchemeKey: normalizeCompletionSchemeKey,
+    normalizeGradientStops: normalizeGradientStops,
     applyCompletionColorScheme: applyCompletionColorScheme,
+    applyCompletionGradient: applyCompletionGradient,
     getActiveCompletionSchemeKey: getActiveCompletionSchemeKey,
+    getActiveCompletionGradient: getActiveCompletionGradient,
     loadStoredCompletionSchemeKey: loadStoredCompletionSchemeKey,
     saveStoredCompletionSchemeKey: saveStoredCompletionSchemeKey,
+    loadStoredCompletionGradient: loadStoredCompletionGradient,
+    saveStoredCompletionGradient: saveStoredCompletionGradient,
     colorAtProgress: colorAtProgress,
     completionColorForProgress: completionColorForProgress,
     completionTrelloBadgeColor: completionTrelloBadgeColor,
     schemeGradientCss: schemeGradientCss,
+    gradientCssFromStops: gradientCssFromStops,
+    progressBadgePreviewSamples: progressBadgePreviewSamples,
     progressEncouragementText: progressEncouragementText,
     playAllCompleteCelebration: playAllCompleteCelebration,
     clearAllCompleteCelebration: clearAllCompleteCelebration,
     mountCompletionUI: mountCompletionUI,
+    mountProgressGradientEditor: mountProgressGradientEditor,
   };
 })(typeof window !== 'undefined' ? window : this);

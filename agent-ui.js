@@ -66,9 +66,10 @@
     var chrome = PriorityUI.createCollapsibleEnableChrome({
       title: 'Assistant',
       bodyId: 'agent-chat-body',
-      hideEnable: true,
+      checkboxClass: 'chat-enable-checkbox',
+      labelClass: 'chat-enable-label',
       leadingIcon: 'ti-message-chatbot',
-      labelClass: 'chat-leading-icon',
+      iconClass: 'chat-leading-icon',
       titleClass: 'chat-enable-title',
       collapseLabel: 'Replier Assistant',
       expandLabel: 'D\u00e9velopper Assistant'
@@ -207,7 +208,7 @@
     var composer = el('div', 'agent-composer');
     var input = el('textarea', 'agent-composer-input', {
       rows: '2',
-      placeholder: 'Ex. Quand est l\'\u00e9ch\u00e9ance\u00a0?',
+      placeholder: 'Demandez ce que vous voulez',
       'aria-label': 'Message \u00e0 l\'assistant'
     });
     var sendBtn = el('button', 'tp-button agent-send-btn', {
@@ -252,7 +253,6 @@
       field: field,
       body: body,
       chrome: chrome,
-      alwaysEnabled: true,
       enabled: true,
       expanded: expandChat,
       getSummary: function () {
@@ -261,6 +261,10 @@
         return provider.model || '';
       },
       onLayoutChange: onLayoutChange,
+      onEnableChange: function (on) {
+        if (!on && settingsOpen) setSettingsOpen(false);
+        notifyLayout();
+      },
       onExpandChange: function (isExpanded) {
         if (typeof PriorityUI.saveSectionCollapseState === 'function') {
           PriorityUI.saveSectionCollapseState({ chat: !!isExpanded });

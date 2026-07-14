@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Paramètres de priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <script src="./rest-config.js"></script>
   <script src="./version.js"></script>
   <script src="./priority-matrix.js"></script>
@@ -19,6 +20,7 @@
 <body class="tp-page tp-page--settings">
   <details class="tp-settings-section" id="statutSettingsSection" open>
     <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-layout-list"></i></span>
       <span class="tp-settings-summary-title">Statut</span>
       <span class="tp-settings-summary-hint">Catégories des listes et auto-déplacement</span>
     </summary>
@@ -53,6 +55,7 @@
 
   <details class="tp-settings-section" id="colorSchemeSection">
     <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-palette"></i></span>
       <span class="tp-settings-summary-title">Schéma de couleurs</span>
       <span class="tp-settings-summary-hint">Palette des paliers de priorité</span>
     </summary>
@@ -68,17 +71,19 @@
 
   <details class="tp-settings-section" id="completionSchemeSection">
     <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-percentage"></i></span>
       <span class="tp-settings-summary-title">Schéma de progrès</span>
       <span class="tp-settings-summary-hint">Couleurs de la barre 0&nbsp;% → 100&nbsp;%</span>
     </summary>
     <div class="tp-settings-body">
-      <p class="tp-color-scheme-hint">Couleur de la barre de progression et des badges de progrès (0&nbsp;% → 100&nbsp;%).</p>
-      <div class="tp-color-scheme-list" id="completionSchemeList" role="radiogroup" aria-label="Schéma de progrès"></div>
+      <p class="tp-color-scheme-hint">Couleur de la barre de progression et des badges de progrès (0&nbsp;% → 100&nbsp;%). Choisissez un préréglage ou personnalisez le dégradé (ajoutez / glissez les points).</p>
+      <div id="completionGradientEditor" class="tp-progress-gradient"></div>
     </div>
   </details>
 
   <details class="tp-settings-section" id="autoSortSection">
     <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-lock"></i></span>
       <span class="tp-settings-summary-title">Autorisation</span>
       <span class="tp-settings-summary-hint">Déplacement de cartes et tri auto</span>
     </summary>
@@ -149,34 +154,6 @@
       renderBadgePreview();
     }
 
-    function renderCompletionSchemeSwatches(scheme) {
-      if (!scheme || !scheme.stops || !scheme.stops.length) return '';
-      var gradientCss =
-        typeof CompletionUI !== 'undefined' && CompletionUI.schemeGradientCss
-          ? CompletionUI.schemeGradientCss(scheme.key)
-          : 'linear-gradient(90deg,' + scheme.stops[0] + ',' + scheme.stops[scheme.stops.length - 1] + ')';
-      return (
-        '<span class="tp-color-scheme-swatch tp-color-scheme-swatch--start" style="background:' +
-        scheme.stops[0] +
-        '"></span>' +
-        '<span class="tp-color-scheme-swatch tp-color-scheme-swatch--gradient" style="background:' +
-        gradientCss +
-        '"></span>' +
-        '<span class="tp-color-scheme-swatch tp-color-scheme-swatch--end" style="background:' +
-        scheme.stops[scheme.stops.length - 1] +
-        '"></span>'
-      );
-    }
-
-    function setActiveCompletionSchemeUi(activeKey) {
-      var buttons = document.querySelectorAll('.tp-completion-scheme-option');
-      buttons.forEach(function (btn) {
-        var selected = btn.dataset.scheme === activeKey;
-        btn.classList.toggle('is-active', selected);
-        btn.setAttribute('aria-checked', selected ? 'true' : 'false');
-      });
-    }
-
     function resizeSettingsPopup() {
       if (typeof t.sizeTo === 'function') {
         t.sizeTo(document.body);
@@ -185,49 +162,49 @@
 
     async function initCompletionSchemePicker() {
       var section = document.getElementById('completionSchemeSection');
-      var listEl = document.getElementById('completionSchemeList');
+      var editorEl = document.getElementById('completionGradientEditor');
       if (
-        !listEl ||
+        !editorEl ||
         typeof CompletionUI === 'undefined' ||
-        typeof CompletionTrello === 'undefined'
+        typeof CompletionTrello === 'undefined' ||
+        typeof CompletionUI.mountProgressGradientEditor !== 'function'
       ) {
         if (section) section.hidden = true;
         return;
       }
 
       try {
-      var activeKey = await CompletionTrello.getBoardCompletionColorScheme(t);
-      listEl.replaceChildren();
+        var activeKey = await CompletionTrello.getBoardCompletionColorScheme(t);
+        var activeStops =
+          typeof CompletionTrello.getBoardCompletionGradient === 'function'
+            ? await CompletionTrello.getBoardCompletionGradient(t)
+            : CompletionUI.getActiveCompletionGradient();
 
-      CompletionUI.COMPLETION_SCHEME_OPTIONS.forEach(function (option) {
-        var scheme = CompletionUI.COMPLETION_COLOR_SCHEMES[option.key];
-        if (!scheme) return;
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'tp-color-scheme-option tp-completion-scheme-option';
-        btn.dataset.scheme = option.key;
-        btn.setAttribute('role', 'radio');
-        btn.setAttribute('aria-checked', option.key === activeKey ? 'true' : 'false');
-        btn.innerHTML =
-          '<span class="tp-color-scheme-label">' + option.label + '</span>' +
-          '<span class="tp-color-scheme-swatches" aria-hidden="true">' +
-          renderCompletionSchemeSwatches(scheme) +
-          '</span>';
-        btn.addEventListener('click', function () {
-          if (btn.classList.contains('is-active')) return;
-          CompletionUI.applyCompletionColorScheme(option.key);
-          CompletionTrello.saveBoardCompletionColorScheme(t, option.key)
-            .then(function (savedKey) {
-              setActiveCompletionSchemeUi(savedKey);
-            })
-            .catch(function (err) {
-              console.error('Completion color scheme save failed', err);
+        var saveTimer = null;
+        function persistGradient(stops, meta) {
+          clearTimeout(saveTimer);
+          saveTimer = setTimeout(function () {
+            var schemeKey =
+              meta && meta.schemeKey
+                ? meta.schemeKey
+                : CompletionUI.CUSTOM_COMPLETION_SCHEME_KEY;
+            var savePromise =
+              typeof CompletionTrello.saveBoardCompletionGradient === 'function'
+                ? CompletionTrello.saveBoardCompletionGradient(t, stops, schemeKey)
+                : CompletionTrello.saveBoardCompletionColorScheme(t, schemeKey);
+            savePromise.catch(function (err) {
+              console.error('Completion gradient save failed', err);
             });
-        });
-        listEl.appendChild(btn);
-      });
+          }, 180);
+        }
 
-      setActiveCompletionSchemeUi(activeKey);
+        CompletionUI.mountProgressGradientEditor(editorEl, {
+          initialStops: activeStops,
+          initialSchemeKey: activeKey,
+          onChange: persistGradient,
+          onResize: resizeSettingsPopup,
+        });
+        resizeSettingsPopup();
       } catch (err) {
         console.error('Completion scheme picker init failed', err);
         if (section) section.hidden = true;
@@ -250,7 +227,12 @@
         btn.setAttribute('role', 'radio');
         btn.setAttribute('aria-checked', option.key === activeKey ? 'true' : 'false');
         btn.innerHTML =
-          '<span class="tp-color-scheme-label">' + option.label + '</span>' +
+          '<span class="tp-color-scheme-label">' +
+          (option.icon
+            ? '<i class="ti ' + option.icon + ' tp-color-scheme-icon" aria-hidden="true"></i>'
+            : '') +
+          '<span class="tp-color-scheme-label-text">' + option.label + '</span>' +
+          '</span>' +
           '<span class="tp-color-scheme-swatches" aria-hidden="true">' +
           renderColorSchemeSwatches(scheme.stops) +
           '</span>';
@@ -496,7 +478,7 @@
         document.getElementById('statutRedetect').addEventListener('click', function () {
           if (
             !window.confirm(
-              'Réexécuter la détection automatique des catégories à partir des noms de listes ? Les associations actuelles seront remplacées.'
+              'Réexécuter la détection automatique des catégories à partir des noms de listes? Les associations actuelles seront remplacées.'
             )
           ) {
             return;

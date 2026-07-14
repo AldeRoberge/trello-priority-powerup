@@ -63,9 +63,15 @@ check('no difficultyWeight export', typeof CT.difficultyWeight !== 'function');
 check('no DIFFICULTY_LEVELS export', !CT.DIFFICULTY_LEVELS);
 check('storage key', CT.CARD_COMPLETION_KEY === 'cardCompletion');
 check('completion scheme storage key', CT.COMPLETION_COLOR_SCHEME_SETTINGS_KEY === 'completionColorScheme');
+check('completion gradient storage key', CT.COMPLETION_COLOR_GRADIENT_SETTINGS_KEY === 'completionColorGradient');
 check('default scheme traffic', CUI.DEFAULT_COMPLETION_SCHEME_KEY === 'traffic');
+check('custom scheme key', CUI.CUSTOM_COMPLETION_SCHEME_KEY === 'custom');
 check('five completion schemes', Object.keys(CUI.COMPLETION_COLOR_SCHEMES).length === 5);
 check('progress oklch anchors exported', !!CUI.PROGRESS_OKLCH && !!CUI.PROGRESS_OKLCH.GRAY && !!CUI.PROGRESS_OKLCH.BLUE && !!CUI.PROGRESS_OKLCH.GREEN);
+check('mountProgressGradientEditor export', typeof CUI.mountProgressGradientEditor === 'function');
+check('normalizeGradientStops export', typeof CUI.normalizeGradientStops === 'function');
+check('applyCompletionGradient export', typeof CUI.applyCompletionGradient === 'function');
+check('getActiveCompletionGradient export', typeof CUI.getActiveCompletionGradient === 'function');
 check(
   'color at 0 differs from 100',
   CUI.colorAtProgress('traffic', 0).toLowerCase() !== CUI.colorAtProgress('traffic', 100).toLowerCase()
@@ -85,7 +91,7 @@ check(
   /^#[0-9a-f]{6}$/i.test(CUI.completionColorForProgress(50))
 );
 
-// Gray → blue → green ramp (no warm/red start)
+// Gray → blue → green ramp (no warm/red start) for Classique
 function hexToRgb(hex) {
   var h = String(hex).replace('#', '');
   return {
@@ -106,6 +112,40 @@ check('ramp 100% leans green', c100.g > c100.r && c100.g >= c100.b);
 check(
   'scheme gradient includes mid stop',
   (CUI.schemeGradientCss('traffic').match(/#/g) || []).length >= 3
+);
+
+var sunset0 = hexToRgb(CUI.colorAtProgress('sunset', 0));
+check(
+  'horizon preset starts warm (distinct from classique)',
+  sunset0.r > sunset0.b && sunset0.r >= sunset0.g - 10
+);
+
+var customStops = CUI.normalizeGradientStops([
+  { p: 0, color: '#ff0000' },
+  { p: 50, color: '#0000ff' },
+  { p: 100, color: '#00ff00' },
+]);
+CUI.applyCompletionGradient(customStops, 'custom');
+check('custom gradient apply key', CUI.getActiveCompletionSchemeKey() === 'custom');
+check(
+  'custom gradient mid is bluish',
+  hexToRgb(CUI.completionColorForProgress(50)).b >
+    hexToRgb(CUI.completionColorForProgress(50)).r
+);
+check(
+  'custom gradient ends greenish',
+  hexToRgb(CUI.completionColorForProgress(100)).g >
+    hexToRgb(CUI.completionColorForProgress(100)).r
+);
+CUI.applyCompletionColorScheme('traffic');
+check('restore traffic after custom', CUI.getActiveCompletionSchemeKey() === 'traffic');
+
+check('saveBoardCompletionGradient export', typeof CT.saveBoardCompletionGradient === 'function');
+check('getBoardCompletionGradient export', typeof CT.getBoardCompletionGradient === 'function');
+check(
+  'progress badge preview samples',
+  Array.isArray(CUI.progressBadgePreviewSamples()) &&
+    CUI.progressBadgePreviewSamples().length === 5
 );
 
 // Legacy migration: done boolean → progress; difficulty ignored
@@ -179,6 +219,12 @@ check(
 );
 check('syncCardDueCompleteFromProgress export', typeof CT.syncCardDueCompleteFromProgress === 'function');
 check('completion marked due key', CT.COMPLETION_MARKED_DUE_COMPLETE_KEY === 'completionMarkedDueComplete');
+check(
+  'completion suppress due key',
+  CT.COMPLETION_SUPPRESS_DUE_COMPLETE_KEY === 'completionSuppressDueComplete'
+);
+check('setDueCompleteSuppressed export', typeof CT.setDueCompleteSuppressed === 'function');
+check('getDueCompleteSuppressed export', typeof CT.getDueCompleteSuppressed === 'function');
 check('playAllCompleteCelebration export', typeof CUI.playAllCompleteCelebration === 'function');
 check('clearAllCompleteCelebration export', typeof CUI.clearAllCompleteCelebration === 'function');
 

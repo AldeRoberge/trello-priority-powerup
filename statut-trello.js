@@ -314,12 +314,45 @@
           console.error('StatutTrello.applyStatutSideEffects mark progress complete failed', err);
         }
       }
+      if (CT && typeof CT.setDueCompleteSuppressed === 'function') {
+        try {
+          await CT.setDueCompleteSuppressed(t, false);
+        } catch (suppressErr) {
+          console.error('StatutTrello clear dueComplete suppress failed', suppressErr);
+        }
+      }
 
       if (PT && typeof PT.setCardDueComplete === 'function') {
         var mark = await PT.setCardDueComplete(t, true, { skipStatutAutoMove: true });
         side.dueComplete = mark;
         if (typeof PT.clearBlockedIfComplete === 'function') {
           await PT.clearBlockedIfComplete(t);
+        }
+      }
+    } else {
+      // Any status other than Terminé: turn off Trello "Mark completed".
+      if (PT && typeof PT.setCardDueComplete === 'function') {
+        var unmark = await PT.setCardDueComplete(t, false, { skipStatutAutoMove: true });
+        side.dueComplete = unmark;
+        side.dueCompleteCleared = true;
+      }
+      var CTu = global.CompletionTrello;
+      if (CTu) {
+        try {
+          var current =
+            typeof CTu.getCardCompletion === 'function'
+              ? await CTu.getCardCompletion(t)
+              : null;
+          var stillComplete =
+            current &&
+            typeof CTu.isAllSubtasksComplete === 'function' &&
+            CTu.isAllSubtasksComplete(current);
+          // Keep Done from bouncing back on reopen while progress is still 100%.
+          if (typeof CTu.setDueCompleteSuppressed === 'function') {
+            await CTu.setDueCompleteSuppressed(t, !!stillComplete);
+          }
+        } catch (err) {
+          console.error('StatutTrello.applyStatutSideEffects unmark complete failed', err);
         }
       }
     }

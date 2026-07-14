@@ -469,9 +469,10 @@
     )
   };
 
-  var COLOR_SCHEME_OPTIONS = ['blue', 'fire'].map(function (key) {
-    return { key: key, label: COLOR_SCHEMES[key].label };
-  });
+  var COLOR_SCHEME_OPTIONS = [
+    { key: 'blue', label: COLOR_SCHEMES.blue.label, icon: 'ti-droplet' },
+    { key: 'fire', label: COLOR_SCHEMES.fire.label, icon: 'ti-flame' }
+  ];
 
   var activeColorSchemeKey = DEFAULT_COLOR_SCHEME_KEY;
   var activeColorStops = COLOR_SCHEMES.blue.stops.slice();
@@ -1055,7 +1056,7 @@
   var BLOCKED_SYMBOL = '\u2298'; // ⊘
   var BLOCKED_LABEL = 'Bloqu\u00e9';
   var BLOCKED_DISPLAY = BLOCKED_SYMBOL + ' ' + BLOCKED_LABEL;
-  var BLOCKED_REASON_PLACEHOLDER = 'Pr\u00e9ciser le blocage\u2026';
+  var BLOCKED_REASON_PLACEHOLDER = 'Pr\u00e9ciser la raison du blocage\u2026';
   var BLOCKED_REASON_SUGGESTIONS_LABEL = 'Suggestions';
   var BLOCKED_REASON_CLEAR_LABEL = 'Effacer le motif';
   var BLOCKED_REASON_EDIT_LABEL = 'Modifier le motif';
@@ -1068,7 +1069,7 @@
   var BLOCKED_SUBTASK_FALLBACK_LABEL = 'T\u00e2che inconnue';
   var BLOCKED_WAITING_ON_PREFIX = 'En attente de';
   var BLOCKED_REASON_FREQ_STORAGE_KEY = 'trello-priority-powerup/blocked-reason-freq';
-  var BLOCKED_REASON_EMPTY_SUGGESTION_CAP = 10;
+  var BLOCKED_REASON_EMPTY_SUGGESTION_CAP = 6;
   /** Max suggestions shown while filtering/searching in the Bloqué reason input. */
   var BLOCKED_REASON_FILTER_SUGGESTION_CAP = 4;
   /** Core presets shown in the empty-state suggestion set (with frequent reasons). */
@@ -1798,7 +1799,7 @@
   /** Compact header summary when an enabled due-date section is collapsed. */
   function formatDueDateCompactSummary(iso, time, now) {
     var normalized = normalizeDueDate(iso);
-    if (!normalized) return 'Pas de date d\'\u00e9ch\u00e9ance';
+    if (!normalized) return 'Aucune date d\'\u00e9ch\u00e9ance';
     var days = daysUntilDue(normalized, now);
     var dayPart;
     var namedDay = false;
@@ -3752,9 +3753,12 @@
     var bodyId = config.bodyId || '';
     var checkboxClass = config.checkboxClass || '';
     var labelClass = config.labelClass || '';
+    var iconClass = config.iconClass || '';
     var titleClass = config.titleClass || '';
     var leadingIcon = config.leadingIcon || '';
-    var hideEnable = !!config.hideEnable || !!leadingIcon;
+    // hideEnable and leadingIcon are independent: always-on sections may use an
+    // icon alone; enable sections may show checkbox + icon together.
+    var hideEnable = !!config.hideEnable;
     var enableLabel = config.enableLabel || ('Activer ' + titleText);
     var collapseLabel = config.collapseLabel || ('Replier ' + titleText);
     var expandLabel = config.expandLabel || ('D\u00e9velopper ' + titleText);
@@ -3781,9 +3785,16 @@
       label.appendChild(checkbox);
       head.appendChild(label);
     } else if (leadingIcon) {
-      // Decorative icon in place of the enable checkbox (always-on sections).
+      // Keep title columns aligned with checkbox sections (22px enable slot).
+      var enableSpacer = document.createElement('span');
+      enableSpacer.className = 'section-enable-spacer';
+      enableSpacer.setAttribute('aria-hidden', 'true');
+      head.appendChild(enableSpacer);
+    }
+
+    if (leadingIcon) {
       leadingIconEl = document.createElement('span');
-      leadingIconEl.className = ('section-leading-icon ' + labelClass).trim();
+      leadingIconEl.className = ('section-leading-icon ' + iconClass).trim();
       leadingIconEl.setAttribute('aria-hidden', 'true');
 
       var iconGlyph = document.createElement('i');
@@ -4217,6 +4228,8 @@
       bodyId: bodyId,
       checkboxClass: 'statut-enable-checkbox',
       labelClass: 'statut-enable-label',
+      leadingIcon: 'ti-list',
+      iconClass: 'statut-leading-icon',
       titleClass: 'statut-enable-title',
       collapseLabel: 'Replier Statut',
       expandLabel: 'Développer Statut',
@@ -4589,6 +4602,8 @@
       bodyId: bodyId,
       checkboxClass: 'en-attente-checkbox',
       labelClass: 'en-attente-label',
+      leadingIcon: 'ti-barrier-block',
+      iconClass: 'blocked-leading-icon',
       titleClass: 'en-attente-title',
       collapseLabel: 'Replier Bloqu\u00e9',
       expandLabel: 'D\u00e9velopper Bloqu\u00e9'
@@ -5312,6 +5327,8 @@
       bodyId: bodyId,
       checkboxClass: 'due-date-checkbox',
       labelClass: 'due-date-label',
+      leadingIcon: 'ti-calendar',
+      iconClass: 'due-leading-icon',
       titleClass: 'due-date-title',
       collapseLabel: 'Replier \u00c9ch\u00e9ance',
       expandLabel: 'D\u00e9velopper \u00c9ch\u00e9ance'
@@ -6930,7 +6947,7 @@
       bodyId: bodyId,
       hideEnable: true,
       leadingIcon: 'ti-chart-area',
-      labelClass: 'graphique-leading-icon',
+      iconClass: 'graphique-leading-icon',
       titleClass: 'graphique-enable-title',
       collapseLabel: 'Replier Graphique',
       expandLabel: 'D\u00e9velopper Graphique'
@@ -7960,6 +7977,8 @@
       bodyId: priorityBodyId,
       checkboxClass: 'priority-enable-checkbox',
       labelClass: 'priority-enable-label',
+      leadingIcon: 'ti-flame',
+      iconClass: 'priority-leading-icon',
       titleClass: 'priority-enable-title',
       collapseLabel: 'Replier Priorit\u00e9',
       expandLabel: 'D\u00e9velopper Priorit\u00e9'
