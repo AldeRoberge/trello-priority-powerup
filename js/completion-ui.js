@@ -782,6 +782,19 @@
       '</div>';
     containerEl.appendChild(addSection);
 
+    var suggestionsSection = document.createElement('section');
+    suggestionsSection.className = 'tp-completion-suggestions';
+    suggestionsSection.hidden = true;
+    suggestionsSection.innerHTML =
+      '<div class="tp-completion-suggestions-head">' +
+      '<span class="tp-completion-suggestions-label">Suggestions</span>' +
+      '<button type="button" class="tp-completion-suggestions-refresh" id="completionSuggestRefresh" ' +
+      'aria-label="Rafra\u00eechir les suggestions" title="Rafra\u00eechir">\u21bb</button>' +
+      '</div>' +
+      '<p class="tp-completion-suggestions-status" id="completionSuggestStatus" hidden></p>' +
+      '<div class="tp-completion-suggestions-list" id="completionSuggestList" role="list"></div>';
+    containerEl.appendChild(suggestionsSection);
+
     var listSection = document.createElement('section');
     listSection.className = 'tp-completion-list-section';
     listSection.innerHTML =
@@ -823,6 +836,14 @@
     var encouragementEl = containerEl.querySelector('#completionEncouragement');
     var addInput = containerEl.querySelector('#completionAddInput');
     var addBtn = containerEl.querySelector('#completionAddBtn');
+    var suggestStatusEl = containerEl.querySelector('#completionSuggestStatus');
+    var suggestListEl = containerEl.querySelector('#completionSuggestList');
+    var suggestRefreshBtn = containerEl.querySelector('#completionSuggestRefresh');
+    var suggestSubtasksFn =
+      typeof options.suggestSubtasks === 'function' ? options.suggestSubtasks : null;
+    var currentSuggestions = [];
+    var suggestionsLoading = false;
+    var suggestionsSeq = 0;
     var showCompleted = loadShowDonePreference();
     var searchQuery = '';
     var statusFilter = 'all';
@@ -1512,9 +1533,132 @@
       });
       if (!item) return false;
       data.items.push(item);
+      removeSuggestionMatch(trimmed);
       emitChange();
       onResize();
       return true;
+    }
+
+    function setSuggestStatus(text, visible) {
+      if (!suggestStatusEl) return;
+      if (!visible || !text) {
+        suggestStatusEl.hidden = true;
+        suggestStatusEl.textContent = '';
+        return;
+      }
+      suggestStatusEl.hidden = false;
+      suggestStatusEl.textContent = text;
+    }
+
+    function removeSuggestionMatch(text) {
+      var key = String(text || '')
+        .trim()
+        .toLocaleLowerCase('fr-FR');
+      if (!key) return;
+      currentSuggestions = currentSuggestions.filter(function (s) {
+        return String(s || '').trim().toLocaleLowerCase('fr-FR') !== key;
+      });
+      renderSuggestions();
+    }
+
+    function renderSuggestions() {
+      if (!suggestListEl || !suggestionsSection) return;
+      suggestListEl.replaceChildren();
+      if (!suggestSubtasksFn) {
+        suggestionsSection.hidden = true;
+        return;
+      }
+      suggestionsSection.hidden = false;
+      if (suggestionsLoading) {
+        setSuggestStatus('G\u00e9n\u00e9ration des suggestions\u2026', true);
+        return;
+      }
+      if (!currentSuggestions.length) {
+        setSuggestStatus('Aucune suggestion pour le moment.', true);
+        return;
+      }
+      setSuggestStatus('', false);
+      currentSuggestions.forEach(function (label) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tp-completion-suggestion';
+        btn.setAttribute('role', 'listitem');
+        btn.textContent = label;
+        btn.title = 'Ajouter\u00a0: ' + label;
+        btn.addEventListener('click', function () {
+          if (spellcheckBusy) return;
+          spellcheckBusy = true;
+          btn.disabled = true;
+          spellcheckText(label)
+            .then(function (corrected) {
+              var ok = addItem(corrected || label);
+              if (!ok) removeSuggestionMatch(label);
+            })
+            .finally(function () {
+              spellcheckBusy = false;
+            });
+        });
+        suggestListEl.appendChild(btn);
+      });
+      onResize();
+    }
+
+    function refreshSuggestions(force) {
+      if (!suggestSubtasksFn) {
+        suggestionsSection.hidden = true;
+        return Promise.resolve();
+      }
+      var seq = ++suggestionsSeq;
+      suggestionsLoading = true;
+      renderSuggestions();
+      return Promise.resolve()
+        .then(function () {
+          return suggestSubtasksFn({
+            force: !!force,
+            items: (data.items || []).map(function (it) {
+              return it.text;
+            })
+          });
+        })
+        .then(function (list) {
+          if (seq !== suggestionsSeq) return;
+          currentSuggestions = Array.isArray(list)
+            ? list
+                .map(function (s) {
+                  return String(s || '').trim();
+                })
+                .filter(Boolean)
+                .slice(0, 3)
+            : [];
+          suggestionsLoading = false;
+          renderSuggestions();
+        })
+        .catch(function (err) {
+          console.error('CompletionUI suggestions failed', err);
+          if (seq !== suggestionsSeq) return;
+          suggestionsLoading = false;
+          currentSuggestions = [];
+          setSuggestStatus(
+            'Impossible de g\u00e9n\u00e9rer des suggestions (IA indisponible).',
+            true
+          );
+          suggestionsSection.hidden = false;
+          onResize();
+        });
+    }
+
+    if (suggestRefreshBtn) {
+      suggestRefreshBtn.addEventListener('click', function () {
+        refreshSuggestions(true);
+      });
+    }
+    if (suggestSubtasksFn) {
+      // Defer so mount returns before first network call.
+      setTimeout(function () {
+        refreshSuggestions(false);
+      }, 0);
+    } else {
+      suggestionsSection.hidden = true;
     }
 
     function addFromInput() {
@@ -1575,6 +1719,7 @@
         onResize();
       },
       addItem: addItem,
+      refreshSuggestions: refreshSuggestions,
       focusAddInput: function () {
         addInput.focus();
       },

@@ -1074,6 +1074,99 @@
     return readStoredCardInputs(t, cardId);
   }
 
+  /**
+   * Compact board digest for AI memory / suggestions.
+   * Caps cards and truncates descriptions to stay prompt-friendly.
+   * @returns {Promise<{ digest: string, cards: Array, lists: Array }>}
+   */
+  async function scanBoardCards(t, options) {
+    options = options || {};
+    var maxCards = typeof options.maxCards === 'number' ? options.maxCards : 40;
+    var descMax = typeof options.descMax === 'number' ? options.descMax : 200;
+    var includePriority = options.includePriority !== false;
+
+    var lists = [];
+    var cards = [];
+    try {
+      lists = (await t.lists('id', 'name')) || [];
+    } catch (err) {
+      console.error('PriorityTrello.scanBoardCards lists failed', err);
+      lists = [];
+    }
+    try {
+      cards = (await t.cards('id', 'name', 'desc', 'idList', 'due')) || [];
+    } catch (err) {
+      console.error('PriorityTrello.scanBoardCards cards failed', err);
+      cards = [];
+    }
+
+    var listNameById = {};
+    for (var li = 0; li < lists.length; li++) {
+      if (lists[li] && lists[li].id) {
+        listNameById[lists[li].id] = lists[li].name || '';
+      }
+    }
+
+    var slice = cards.slice(0, maxCards);
+    var settings = null;
+    if (includePriority) {
+      try {
+        settings = await ensureBoardPriorityContext(t);
+      } catch (e) {
+        settings = null;
+      }
+    }
+
+    var lines = [];
+    lines.push('Listes (' + lists.length + ')\u00a0:');
+    for (var lj = 0; lj < lists.length; lj++) {
+      lines.push('- ' + (lists[lj].name || lists[lj].id));
+    }
+    lines.push('Cartes ouvertes (' + Math.min(cards.length, maxCards) + '/' + cards.length + ')\u00a0:');
+
+    var enriched = [];
+    for (var ci = 0; ci < slice.length; ci++) {
+      var card = slice[ci];
+      var name = (card && card.name) || '';
+      var desc = typeof card.desc === 'string' ? card.desc.trim() : '';
+      if (desc.length > descMax) desc = desc.slice(0, descMax - 1) + '\u2026';
+      var listLabel = listNameById[card.idList] || card.idList || '?';
+      var priorityLabel = '';
+      if (includePriority && settings && card.id) {
+        try {
+          var inputs = await getCardInputsById(t, card.id);
+          var display = inputs ? computeDisplay(inputs, settings) : null;
+          if (display && display.priorityEnabled !== false) {
+            priorityLabel = formatBadgeText(display, false) || display.label || '';
+          }
+        } catch (e) {
+          /* ignore per-card */
+        }
+      }
+      enriched.push({
+        id: card.id,
+        name: name,
+        desc: desc,
+        list: listLabel,
+        due: card.due || null,
+        priority: priorityLabel || null
+      });
+      var bit = '- [' + listLabel + '] ' + name;
+      if (priorityLabel) bit += ' (' + priorityLabel + ')';
+      if (card.due) bit += ' due:' + String(card.due).slice(0, 10);
+      if (desc) bit += ' \u2014 ' + desc.replace(/\s+/g, ' ');
+      lines.push(bit);
+    }
+
+    return {
+      digest: lines.join('\n'),
+      cards: enriched,
+      lists: lists.map(function (l) {
+        return { id: l.id, name: l.name };
+      })
+    };
+  }
+
   // ── List-sorters (native Trello sortedIds) ──────────────────────────────
 
   function prioritySortRank(display) {
@@ -1415,6 +1508,7 @@
     cardDetailBadges: cardDetailBadges,
     saveCardInputs: saveCardInputs,
     getCardInputsById: getCardInputsById,
+    scanBoardCards: scanBoardCards,
     prioritySortRank: prioritySortRank,
     comparePriorityDisplays: comparePriorityDisplays,
     sortListCardsByPriority: sortListCardsByPriority,

@@ -2318,6 +2318,100 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   box-shadow: var(--slider-focus-ring, 0 0 0 3px rgba(12, 102, 228, 0.28));
 }
 
+.tp-completion-suggestions {
+  margin: 4px 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tp-completion-suggestions[hidden] {
+  display: none;
+}
+
+.tp-completion-suggestions-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+.tp-completion-suggestions-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted, var(--tp-text-muted));
+}
+
+.tp-completion-suggestions-refresh {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, var(--tp-text-muted));
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.tp-completion-suggestions-refresh:hover {
+  background: var(--surface-hover, rgba(0, 0, 0, 0.06));
+  color: var(--text-primary, var(--tp-text));
+}
+
+.tp-completion-suggestions-status {
+  margin: 0;
+  padding: 0 2px;
+  font-size: 13px;
+  color: var(--text-muted, var(--tp-text-muted));
+}
+
+.tp-completion-suggestions-status[hidden] {
+  display: none;
+}
+
+.tp-completion-suggestions-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tp-completion-suggestion {
+  appearance: none;
+  flex: 0 1 auto;
+  max-width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-1, var(--surface-2, #f1f2f4)) 85%, var(--surface-2, #ebecf0));
+  color: var(--text-primary, var(--tp-text));
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.tp-completion-suggestion:hover {
+  background: var(--surface-hover, #e2e4e9);
+}
+
+.tp-completion-suggestion:focus-visible {
+  outline: 2px solid var(--tp-primary, #0c66e4);
+  outline-offset: 1px;
+}
+
+.tp-completion-suggestion:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
 @media (max-width: 400px) {
   .tp-completion-tools {
     flex-direction: column;

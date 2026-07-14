@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aligner l'assistant</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./js/rest-config.js"></script>
+  <script src="./js/priority-trello.js"></script>
+  <script src="./js/agent.js"></script>
+  <script src="./js/agent-memory.js"></script>
+  <script src="./js/memory-ui.js"></script>
+  <link rel="stylesheet" href="./css/trello-theme.css" />
+  <link rel="stylesheet" href="./css/agent-ui.css" />
+  <link rel="stylesheet" href="./css/memory-ui.css" />
+</head>
+<body class="tp-page tp-page--roomy memory-page memory-page--align">
+  <div id="memoryMount"></div>
+  <script>
+    PriorityTrello.initIframePage(function (t) {
+      var mount = document.getElementById('memoryMount');
+      function resize() {
+        if (typeof t.sizeTo === 'function') t.sizeTo(document.body);
+      }
+      MemoryUI.mount(mount, {
+        t: t,
+        mode: 'onboarding',
+        showSkip: true,
+        showSummary: true,
+        onLayoutChange: resize,
+        onSkip: function () {
+          t.closeModal();
+        },
+        onComplete: function () {
+          t.closeModal();
+        }
+      });
+      resize();
+    }).catch(function (err) {
+      console.error('memory-align init failed', err);
+    });
+  </script>
+</body>
+</html>

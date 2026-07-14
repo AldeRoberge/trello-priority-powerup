@@ -3910,6 +3910,14 @@
       head.appendChild(enableSpacer);
     }
 
+    var collapseBtn = document.createElement('button');
+    collapseBtn.type = 'button';
+    collapseBtn.className = 'section-collapse-btn';
+    if (bodyId) collapseBtn.setAttribute('aria-controls', bodyId);
+    collapseBtn.setAttribute('aria-expanded', 'false');
+    collapseBtn.setAttribute('aria-label', expandLabel);
+
+    // Icon lives inside the collapse button so hover/focus highlight wraps it.
     if (leadingIcon) {
       leadingIconEl = document.createElement('span');
       leadingIconEl.className = ('section-leading-icon ' + iconClass).trim();
@@ -3918,15 +3926,8 @@
       var iconGlyph = document.createElement('i');
       iconGlyph.className = ('ti ' + leadingIcon + ' section-leading-icon-glyph').trim();
       leadingIconEl.appendChild(iconGlyph);
-      head.appendChild(leadingIconEl);
+      collapseBtn.appendChild(leadingIconEl);
     }
-
-    var collapseBtn = document.createElement('button');
-    collapseBtn.type = 'button';
-    collapseBtn.className = 'section-collapse-btn';
-    if (bodyId) collapseBtn.setAttribute('aria-controls', bodyId);
-    collapseBtn.setAttribute('aria-expanded', 'false');
-    collapseBtn.setAttribute('aria-label', expandLabel);
 
     var textWrap = document.createElement('span');
     textWrap.className = 'section-enable-text';

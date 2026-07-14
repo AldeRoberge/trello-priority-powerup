@@ -23,6 +23,7 @@
   <script src="./js/completion-ui.js?v=progress-due-complete-1"></script>
   <script src="./js/completion-trello.js?v=progress-due-complete-1"></script>
   <script src="./js/agent.js?v=agent-3"></script>
+  <script src="./js/agent-memory.js?v=memory-1"></script>
   <script src="./js/spellcheck.js?v=spellcheck-1"></script>
   <script src="./js/agent-ui.js?v=section-icons-1"></script>
 </head>
@@ -50,6 +51,9 @@
     let dueCompleteSyncChain = Promise.resolve();
     let statutUi = null;
     let statutSection = null;
+    let cardDesc = '';
+    let cachedMemory = null;
+    let boardDigestCache = '';
 
     t.render(function () {
       PriorityTrello.getBoardColorScheme(t)
@@ -421,6 +425,75 @@
             showCardHeader: false,
             shellEl: progressPanel,
             celebrateRoot: document.body,
+            suggestSubtasks: function (opts) {
+              if (!window.PriorityAgent || !window.AgentMemory) {
+                return Promise.resolve([]);
+              }
+              return PriorityAgent.getProvider(t).then(function (provider) {
+                if (!PriorityAgent.isConfigured(provider)) return [];
+                var existing =
+                  (opts && opts.items) ||
+                  (completionUi && completionUi.getData && completionUi.getData().items
+                    ? completionUi.getData().items.map(function (it) {
+                        return it.text;
+                      })
+                    : []);
+                var memPromise = cachedMemory
+                  ? Promise.resolve(cachedMemory)
+                  : AgentMemory.load(t).then(function (m) {
+                      cachedMemory = m;
+                      return m;
+                    });
+                var digestPromise = boardDigestCache
+                  ? Promise.resolve(boardDigestCache)
+                  : PriorityTrello.scanBoardCards
+                    ? PriorityTrello.scanBoardCards(t, { maxCards: 25, includePriority: false }).then(
+                        function (scan) {
+                          boardDigestCache = (scan && scan.digest) || '';
+                          return boardDigestCache;
+                        }
+                      )
+                    : Promise.resolve('');
+                return Promise.all([memPromise, digestPromise]).then(function (pair) {
+                  var memory = pair[0];
+                  var digest = pair[1];
+                  var state =
+                    variant && typeof variant.getState === 'function' ? variant.getState() : {};
+                  var priorityLabel = '';
+                  try {
+                    if (window.PriorityUI && PriorityUI.resolveDisplay && variant) {
+                      var formulaKey =
+                        typeof variant.getFormulaKey === 'function'
+                          ? variant.getFormulaKey()
+                          : 'baseline';
+                      var calc =
+                        PriorityUI.FORMULAS &&
+                        PriorityUI.FORMULAS[formulaKey] &&
+                        PriorityUI.FORMULAS[formulaKey].calc
+                          ? PriorityUI.FORMULAS[formulaKey].calc
+                          : null;
+                      if (calc) {
+                        var display = PriorityUI.resolveDisplay(calc(state), state);
+                        priorityLabel = display.label || '';
+                      }
+                    }
+                  } catch (e) { /* ignore */ }
+                  var nameEl = document.getElementById('cardName');
+                  var cardName =
+                    nameEl && nameEl.textContent && !nameEl.classList.contains('is-loading')
+                      ? nameEl.textContent
+                      : '';
+                  return PriorityAgent.suggestSubtasks(provider, {
+                    cardName: cardName,
+                    cardDesc: cardDesc,
+                    priorityLabel: priorityLabel,
+                    existingSubtasks: existing,
+                    memory: memory,
+                    boardDigest: digest
+                  });
+                });
+              });
+            },
             onChange: function (data) {
               saveCompletion(data);
               if (progressCollapse) progressCollapse.refreshSummary();
@@ -506,6 +579,24 @@
       }
 
       try {
+        var cardBasics = await t.card('name', 'desc');
+        if (cardBasics && typeof cardBasics.desc === 'string') {
+          cardDesc = cardBasics.desc;
+        }
+      } catch (cardErr) {
+        console.error('Priority popup card basics failed', cardErr);
+      }
+
+      if (window.AgentMemory) {
+        try {
+          cachedMemory = await AgentMemory.load(t);
+        } catch (memErr) {
+          console.error('AgentMemory.load failed', memErr);
+          cachedMemory = null;
+        }
+      }
+
+      try {
         await PriorityTrello.syncCardDueWithTrello(t, { prefer: 'trello' });
       } catch (syncErr) {
         console.error('Priority due sync (popup open) failed', syncErr);
@@ -585,6 +676,15 @@
               return nameEl.textContent;
             }
             return '';
+          },
+          getCardDesc: function () {
+            return cardDesc || '';
+          },
+          getMemory: function () {
+            return cachedMemory || { summary: '', facts: [], onboardingComplete: false };
+          },
+          getBoardDigest: function () {
+            return boardDigestCache || '';
           },
           getFormulaKey: function () {
             if (variant && typeof variant.getFormulaKey === 'function') {

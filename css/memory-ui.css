@@ -1,0 +1,201 @@
+/* Memory alignment chat — modal + board bar */
+
+.memory-page {
+  margin: 0;
+  padding: 12px 14px 16px;
+  box-sizing: border-box;
+}
+
+.memory-page--bar {
+  padding: 10px 12px 12px;
+}
+
+.memory-ui {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.memory-ui-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.memory-ui-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text-primary, var(--tp-text, #172b4d));
+}
+
+.memory-ui-subtitle {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-muted, var(--tp-text-muted, #626f86));
+}
+
+.memory-ui-summary {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-2, #f1f2f4) 88%, transparent);
+}
+
+.memory-ui-summary[hidden] {
+  display: none;
+}
+
+.memory-ui-summary-label {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, #626f86);
+  margin-bottom: 6px;
+}
+
+.memory-ui-summary-text,
+.memory-ui-summary-empty {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-primary, #172b4d);
+}
+
+.memory-ui-facts {
+  margin: 0;
+  padding-left: 1.1em;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-primary, #172b4d);
+}
+
+.memory-ui-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+  padding: 4px 2px;
+}
+
+.memory-page--bar .memory-ui-messages {
+  max-height: 140px;
+}
+
+.memory-ui-msg {
+  display: flex;
+}
+
+.memory-ui-msg--user {
+  justify-content: flex-end;
+}
+
+.memory-ui-msg--assistant {
+  justify-content: flex-start;
+}
+
+.memory-ui-bubble {
+  max-width: 92%;
+  padding: 8px 11px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.memory-ui-msg--user .memory-ui-bubble {
+  background: var(--tp-primary, #0c66e4);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.memory-ui-msg--assistant .memory-ui-bubble {
+  background: color-mix(in srgb, var(--surface-2, #ebecf0) 92%, transparent);
+  color: var(--text-primary, #172b4d);
+  border-bottom-left-radius: 4px;
+}
+
+.memory-ui-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.memory-ui-suggestions[hidden] {
+  display: none;
+}
+
+.memory-ui-chip {
+  appearance: none;
+  border: none;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--surface-1, #fff) 70%, var(--surface-2, #ebecf0));
+  color: var(--text-primary, #172b4d);
+}
+
+.memory-ui-chip:hover {
+  background: var(--surface-hover, #e2e4e9);
+}
+
+.memory-ui-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--tp-danger-text, #c9372c);
+}
+
+.memory-ui-error[hidden] {
+  display: none;
+}
+
+.memory-ui-composer {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.memory-ui-input {
+  flex: 1;
+  min-height: 40px;
+  max-height: 88px;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--tp-border-strong, #8590a2);
+  border-radius: 8px;
+  background: var(--tp-input-bg, #fff);
+  color: var(--text-primary, #172b4d);
+  font: inherit;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.memory-ui-input:focus {
+  outline: 2px solid var(--tp-primary, #0c66e4);
+  outline-offset: 1px;
+}
+
+.memory-ui-send {
+  flex: 0 0 auto;
+  align-self: stretch;
+}
+
+.memory-ui-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.memory-ui-skip {
+  margin-right: auto;
+}

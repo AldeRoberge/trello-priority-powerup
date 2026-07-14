@@ -55,10 +55,22 @@
     set_due: '\u00c9ch\u00e9ance mise \u00e0 jour.',
     set_blocked: 'Blocage mis \u00e0 jour.',
     set_progress: 'Progr\u00e8s mis \u00e0 jour.',
+    set_formula: 'Formule mise \u00e0 jour.',
     add_subtask: 'Sous-t\u00e2che ajout\u00e9e.',
+    rename_subtask: 'Sous-t\u00e2che renomm\u00e9e.',
+    remove_subtask: 'Sous-t\u00e2che supprim\u00e9e.',
     toggle_subtask: 'Sous-t\u00e2che mise \u00e0 jour.',
-    set_subtask_progress: 'Progr\u00e8s de sous-t\u00e2che mis \u00e0 jour.'
+    set_subtask_progress: 'Progr\u00e8s de sous-t\u00e2che mis \u00e0 jour.',
+    complete_all_subtasks: 'Toutes les sous-t\u00e2ches termin\u00e9es.',
+    reset_progress: 'Progr\u00e8s r\u00e9initialis\u00e9.'
   };
+
+  var FORMULA_KEYS = ['baseline', 'eisenhower', 'wsjf', 'valueEffort'];
+
+  var WAITING_OTHER_TASK_REASON =
+    (typeof PriorityUI !== 'undefined' &&
+      PriorityUI.BLOCKED_REASON_WAITING_OTHER_TASK) ||
+    'En attente d\'une autre t\u00e2che';
 
   /** Action-like labels mistakenly used as block reasons → proper cause phrases. */
   var BLOCKED_REASON_ACTION_FIXES = {
@@ -144,6 +156,7 @@
     if (actions[0].tool === 'set_priority') return 'Mettre \u00e0 jour la priorit\u00e9';
     if (actions[0].tool === 'set_progress') return 'Mettre \u00e0 jour le progr\u00e8s';
     if (actions[0].tool === 'add_subtask') return 'Ajouter une sous-t\u00e2che';
+    if (actions[0].tool === 'rename_subtask') return 'Renommer la sous-t\u00e2che';
     return label;
   }
 
@@ -310,24 +323,114 @@
     return { ok: res.ok, status: res.status, data: data, text: text };
   }
 
-  function todayIsoLocal() {
-    var d = new Date();
+  function todayIsoLocal(d) {
+    d = d || new Date();
     var y = d.getFullYear();
     var m = String(d.getMonth() + 1).padStart(2, '0');
     var day = String(d.getDate()).padStart(2, '0');
     return y + '-' + m + '-' + day;
   }
 
+  function nowTimeLocal(d) {
+    d = d || new Date();
+    var hh = String(d.getHours()).padStart(2, '0');
+    var mm = String(d.getMinutes()).padStart(2, '0');
+    return hh + ':' + mm;
+  }
+
+  /**
+   * Resolve a due date/time from now + offset minutes (local clock).
+   * Used for phrases like « dans 15 minutes ».
+   */
+  function dueFromOffsetMinutes(offsetMinutes, fromDate) {
+    var mins = Math.round(Number(offsetMinutes));
+    if (!isFinite(mins)) return null;
+    var base = fromDate ? new Date(fromDate.getTime()) : new Date();
+    base.setSeconds(0, 0);
+    base.setMinutes(base.getMinutes() + mins);
+    return {
+      dueDate: todayIsoLocal(base),
+      dueTime: nowTimeLocal(base)
+    };
+  }
+
+  /**
+   * Parse « dans 15 minutes » / « in 2 hours » style delays.
+   * @returns {{ relativeMinutes?: number, relativeHours?: number }|null}
+   */
+  function parseRelativeDueOffset(text) {
+    if (!text || typeof text !== 'string') return null;
+    var t = text.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!t) return null;
+    var m = t.match(/\b(?:dans|in)\s+(\d+)\s*(?:minutes?|mins?|min)\b/);
+    if (m) return { relativeMinutes: parseInt(m[1], 10) };
+    m = t.match(/\b(?:dans|in)\s+(\d+)\s*(?:heures?|hours?|hrs?|h)\b/);
+    if (m) return { relativeHours: parseInt(m[1], 10) };
+    if (/\b(?:dans\s+une\s+minute|in\s+a\s+minute)\b/.test(t)) {
+      return { relativeMinutes: 1 };
+    }
+    if (/\b(?:dans\s+une\s+heure|in\s+an\s+hour)\b/.test(t)) {
+      return { relativeHours: 1 };
+    }
+    return null;
+  }
+
+  function isBareRelativeDuePhrase(text) {
+    var t = String(text || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
+    if (!t) return false;
+    return (
+      /^(?:dans|in)\s+\d+\s*(?:minutes?|mins?|min|heures?|hours?|hrs?|h)\.?$/.test(t) ||
+      /^(?:dans\s+une\s+(?:minute|heure)|in\s+an?\s+(?:minute|hour))\.?$/.test(t)
+    );
+  }
+
+  /**
+   * If the user gave a relative delay, force set_due to use relativeMinutes/Hours
+   * instead of a hallucinated absolute time (e.g. 08:15 from the default).
+   */
+  function rewriteActionsForRelativeDue(actions, userText) {
+    var offset = parseRelativeDueOffset(userText);
+    if (!offset) return actions || [];
+    var list = Array.isArray(actions) ? actions.slice() : [];
+    var hasSetDue = false;
+    list = list.map(function (action) {
+      if (!action || action.tool !== 'set_due') return action;
+      hasSetDue = true;
+      var args = Object.assign({}, action.args || {});
+      delete args.dueDate;
+      delete args.dueTime;
+      delete args.relativeMinutes;
+      delete args.relativeHours;
+      Object.assign(args, offset);
+      args.dueEnabled = true;
+      return { tool: 'set_due', args: args };
+    });
+    if (!hasSetDue && isBareRelativeDuePhrase(userText)) {
+      list.push({
+        tool: 'set_due',
+        args: Object.assign({ dueEnabled: true }, offset)
+      });
+    }
+    return list;
+  }
+
   function buildContext(bridge) {
     var ctx = {
       today: todayIsoLocal(),
+      nowTime: nowTimeLocal(),
       cardName: '',
+      cardDesc: '',
       formula: 'baseline',
       priority: null,
       display: null,
       due: null,
       blocked: null,
-      progress: null
+      progress: null,
+      memory: null,
+      boardDigest: ''
     };
     if (!bridge) return ctx;
     if (typeof bridge.getCardName === 'function') {
@@ -335,9 +438,38 @@
         ctx.cardName = bridge.getCardName() || '';
       } catch (e) { /* ignore */ }
     }
+    if (typeof bridge.getCardDesc === 'function') {
+      try {
+        ctx.cardDesc = bridge.getCardDesc() || '';
+      } catch (e) { /* ignore */ }
+    }
     if (typeof bridge.getFormulaKey === 'function') {
       try {
         ctx.formula = bridge.getFormulaKey() || 'baseline';
+      } catch (e) { /* ignore */ }
+    }
+    if (typeof bridge.getMemory === 'function') {
+      try {
+        var mem = bridge.getMemory();
+        if (mem && typeof mem === 'object') {
+          ctx.memory = {
+            summary: typeof mem.summary === 'string' ? mem.summary : '',
+            facts: Array.isArray(mem.facts)
+              ? mem.facts
+                  .map(function (f) {
+                    return typeof f === 'string' ? f : f && f.text ? f.text : '';
+                  })
+                  .filter(Boolean)
+                  .slice(0, 12)
+              : [],
+            onboardingComplete: !!mem.onboardingComplete
+          };
+        }
+      } catch (e) { /* ignore */ }
+    }
+    if (typeof bridge.getBoardDigest === 'function') {
+      try {
+        ctx.boardDigest = String(bridge.getBoardDigest() || '').slice(0, 4000);
       } catch (e) { /* ignore */ }
     }
     var state = null;
@@ -446,22 +578,24 @@
         percent: progressMeta ? progressMeta.percent : null,
         doneCount: progressMeta ? progressMeta.doneCount : null,
         totalCount: progressMeta ? progressMeta.totalCount : null,
-        items: progressEnabled
-          ? (completion.items || []).map(function (item) {
-              return {
-                id: item.id,
-                text: item.text,
-                done: !!item.done,
-                progress: item.progress
-              };
-            })
-          : []
+        // Always include items so the agent can match/rename by name even if the
+        // section is momentarily off (values are inactive when enabled=false).
+        items: (completion.items || []).map(function (item) {
+          return {
+            id: item.id,
+            text: item.text,
+            done: !!item.done,
+            progress: item.progress
+          };
+        })
       };
     }
     return ctx;
   }
 
   function systemPrompt(context) {
+    var today = (context && context.today) || todayIsoLocal();
+    var nowTime = (context && context.nowTime) || nowTimeLocal();
     return [
       'Tu es l\'assistant du Power-Up Priorit\u00e9 dans Trello.',
       'Tu r\u00e9ponds toujours en fran\u00e7ais, de fa\u00e7on concise, utile et conversationnelle.',
@@ -469,34 +603,60 @@
       '- Questions g\u00e9n\u00e9rales ou hors sujet (calculs, culture, blagues, etc.)\u00a0: r\u00e9ponds bri\u00e8vement et normalement. Ne refuse jamais.',
       '- INTERDIT\u00a0: \u00ab\u00a0Je ne peux pas r\u00e9pondre\u00a0\u00bb, \u00ab\u00a0hors de mon domaine\u00a0\u00bb, \u00ab\u00a0je ne traite que Trello\u00a0\u00bb, ou toute reformulation qui \u00e9vite la question.',
       '- Ex.\u00a0: user \u00ab\u00a0c\'est quoi 1+1?\u00a0\u00bb \u2192 {"message":"2.","suggestions":["Quelle est la priorit\u00e9?","D\u00e9finir une \u00e9ch\u00e9ance"],"followUps":[],"actions":[]}',
-      'Si tu ne sais pas (info absente du contexte carte / historique, ou knowledge manquante)\u00a0:',
-      '- R\u00e9ponds exactement \u00ab\u00a0Je ne sais pas.\u00a0\u00bb (éventuellement une courte pr\u00e9cision). NE PAS inventer. NE PAS renvoyer la question \u00e0 l\'utilisateur.',
+      'Si tu manques d\'info (absente du contexte carte / historique, ou knowledge manquante)\u00a0:',
+      '- INTERDIT\u00a0: \u00ab\u00a0Je ne sais pas.\u00a0\u00bb seul. Explique bri\u00e8vement CE QUI manque (ex. pas dans le contexte carte) et CE QUE tu as compris / inf\u00e9r\u00e9 de la demande.',
+      '- Inf\u00e8re au maximum\u00a0: intention (renommer, ajouter, bloquer\u2026), cible mentionn\u00e9e (nom de sous-t\u00e2che, date\u2026), et applique toute partie faisable avec les outils.',
+      '- Cherche d\'abord dans le contexte (progress.items, due, blocked, priority, m\u00e9moire, historique) avant de conclure que tu ne peux pas agir.',
+      '- NE PAS inventer de faits absents. NE PAS renvoyer la question \u00e0 l\'utilisateur sous forme miroir.',
       '- INTERDIT\u00a0: \u00ab\u00a0Pourriez-vous pr\u00e9ciser\u2026?\u00a0\u00bb, \u00ab\u00a0Quels sont les\u2026?\u00a0\u00bb (miroir), ou toute reformulation de la question de l\'utilisateur.',
-      '- Ex.\u00a0: user \u00ab\u00a0Quels liens 404 doivent \u00eatre corrig\u00e9s?\u00a0\u00bb (rien dans le contexte) \u2192 {"message":"Je ne sais pas.","suggestions":["Quelle est la priorit\u00e9?","Marquer bloqu\u00e9"],"followUps":[],"actions":[]}',
+      '- Ex.\u00a0: user \u00ab\u00a0Quels liens 404 doivent \u00eatre corrig\u00e9s?\u00a0\u00bb (rien dans le contexte) \u2192 {"message":"Je n\'ai pas cette info sur la carte ni dans mon contexte\u00a0: aucun inventaire de liens 404 n\'y figure.","suggestions":["Quelle est la priorit\u00e9?","Marquer bloqu\u00e9"],"followUps":[],"actions":[]}',
       'INTERDIT dans message\u00a0: questions vagues du type \u00ab\u00a0Que souhaitez-vous faire maintenant?\u00a0\u00bb, \u00ab\u00a0Comment puis-je vous aider?\u00a0\u00bb, \u00ab\u00a0Autre chose?\u00a0\u00bb. Confirme bri\u00e8vement et arr\u00eate-toi\u00a0; les suggestions suffisent pour la suite.',
       'Tu peux expliquer la priorit\u00e9, l\'\u00e9ch\u00e9ance, le blocage et le progr\u00e8s, et proposer des changements.',
       'R\u00e9ponds UNIQUEMENT avec un objet JSON valide de la forme\u00a0:',
       '{"message":"texte visible","suggestions":["Question utile","Autre intention"],"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"actions":[{"tool":"nom","args":{}}]}',
-      'Questions de clarification (uniquement pour une action incompl\u00e8te)\u00a0:',
-      '- Seulement si l\'utilisateur veut FAIRE quelque chose via un outil et qu\'il manque un param\u00e8tre (ex. \u00ab\u00a0Ajouter une sous-t\u00e2che\u00a0\u00bb sans nom). Pas pour les questions factuelles.',
-      '- Si une demande d\'action est incompl\u00e8te, NE PAS inventer la valeur et NE PAS appeler l\'outil.',
-      '- Pose UNE question courte dans message (ex. \u00ab\u00a0Quel est le nom de la sous-t\u00e2che?\u00a0\u00bb). actions=[], followUps=[].',
-      '- Dans suggestions, propose 2\u20134 r\u00e9ponses possibles (noms d\'exemple, dates, etc.) pour aider \u00e0 r\u00e9pondre.',
-      '- Quand l\'utilisateur r\u00e9pond avec l\'info manquante, applique imm\u00e9diatement via le champ actions (pas seulement followUps).',
-      '- Ex. tour 1\u00a0: user \u00ab\u00a0Ajouter une sous-t\u00e2che\u00a0\u00bb \u2192 {"message":"Quel est le nom de la sous-t\u00e2che?","suggestions":["V\u00e9rifier le stock","Contacter le client"],"followUps":[],"actions":[]}',
-      '- Ex. tour 2\u00a0: user \u00ab\u00a0Commander le mat\u00e9riel\u00a0\u00bb \u2192 {"message":"Sous-t\u00e2che \u00ab\u00a0Commander le mat\u00e9riel\u00a0\u00bb ajout\u00e9e.","suggestions":["Ajouter une autre sous-t\u00e2che","D\u00e9finir une \u00e9ch\u00e9ance"],"followUps":[],"actions":[{"tool":"add_subtask","args":{"text":"Commander le mat\u00e9riel"}}]}',
-      '- M\u00eame logique pour l\'\u00e9ch\u00e9ance (demander la date si absente). EXCEPTION\u00a0: le blocage (voir ci-dessous).',
+      'Agir d\'abord, affiner ensuite (r\u00e8gle g\u00e9n\u00e9rale \u2014 tr\u00e8s important)\u00a0:',
+      '- D\u00e8s que tu as assez d\'info pour APPLIQUER une partie de la demande\u00a0: appelle l\'outil TOUT DE SUITE dans actions, confirme bri\u00e8vement, puis demande les d\u00e9tails OPTIONNELS.',
+      '- Ne bloque JAMAIS une action pour un param\u00e8tre optionnel. Applique le minimum viable, puis adapte.',
+      '- Ne pose une question AVANT d\'appeler un outil QUE si un param\u00e8tre OBLIGATOIRE manque et qu\'aucune action partielle n\'est possible.',
+      '- Param\u00e8tres optionnels (ne jamais exiger avant d\'agir)\u00a0: dueTime, blockedReasons, axes priorit\u00e9 non fournis, progress pr\u00e9cis si on active seulement la section.',
+      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_subtask.text + (id OU matchText)\u00a0; toggle/set_subtask_progress.id\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e.',
+      '- Dates relatives (jours)\u00a0: r\u00e9sous avec context.today (aujourd\'hui / today \u2192 context.today\u00a0; demain \u2192 +1 jour). N\'invente pas d\'autre date.',
+      '- Heures relatives (tr\u00e8s important)\u00a0: \u00ab\u00a0dans 15 minutes\u00a0\u00bb / \u00ab\u00a0in 15 minutes\u00a0\u00bb / \u00ab\u00a0dans 2 heures\u00a0\u00bb = D\u00c9LAI depuis maintenant, PAS une heure fixe du matin.',
+      '- Pour un d\u00e9lai\u00a0: utilise set_due avec relativeMinutes (ou relativeHours). Le runtime calcule dueDate/dueTime \u00e0 partir de context.nowTime (' +
+        nowTime +
+        '). INTERDIT d\'inventer 08:xx ou toute autre heure absolue \u00e0 la place.',
+      '- Refus / skip d\'un d\u00e9tail optionnel (\u00ab\u00a0rien\u00a0\u00bb, \u00ab\u00a0non\u00a0\u00bb, \u00ab\u00a0pas besoin\u00a0\u00bb, \u00ab\u00a0skip\u00a0\u00bb)\u00a0: \u00ab\u00a0Okay.\u00a0\u00bb, actions=[], ne repose pas la question.',
+      '- Une seule invitation max pour un d\u00e9tail optionnel\u00a0; si l\'utilisateur change de sujet, suis la nouvelle demande.',
+      '\u00c9ch\u00e9ance (dueTime optionnel sauf d\u00e9lai relatif)\u00a0:',
+      '- Si une date est connue (ex. \u00ab\u00a0aujourd\'hui\u00a0\u00bb, \u00ab\u00a0demain\u00a0\u00bb, \u00ab\u00a02026-07-14\u00a0\u00bb)\u00a0: APPLIQUE set_due avec dueDate (+ dueEnabled:true) TOUT DE SUITE, m\u00eame sans heure.',
+      '- dueTime est OPTIONNEL pour une date seule. Ne demande JAMAIS l\'heure avant d\'avoir pos\u00e9 la date.',
+      '- Si l\'utilisateur donne un d\u00e9lai (\u00ab\u00a0dans N minutes/heures\u00a0\u00bb)\u00a0: APPLIQUE set_due avec relativeMinutes/relativeHours (+ dueEnabled:true) TOUT DE SUITE. Ne redemande pas date ni heure.',
+      '- Ex. d\u00e9lai\u00a0: user \u00ab\u00a0dans 15 minutes\u00a0\u00bb \u2192 {"message":"Okay, dans 15 minutes.","suggestions":["Marquer bloqu\u00e9","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_due","args":{"relativeMinutes":15,"dueEnabled":true}}]}',
+      '- Ex. d\u00e9lai heures\u00a0: user \u00ab\u00a0dans 2 heures\u00a0\u00bb \u2192 {"message":"Okay, dans 2 heures.","suggestions":["Marquer bloqu\u00e9","Ajouter une sous-t\u00e2che"],"followUps":[],"actions":[{"tool":"set_due","args":{"relativeHours":2,"dueEnabled":true}}]}',
+      '- Ex. tour 1\u00a0: user \u00ab\u00a0mark \u00e9ch\u00e9ance for today\u00a0\u00bb \u2192 {"message":"Okay, c\'est fait. Quelle heure?","suggestions":["09:00","12:00","17:00","Pas d\'heure"],"followUps":[],"actions":[{"tool":"set_due","args":{"dueDate":"' +
+        today +
+        '","dueEnabled":true}}]}',
+      '- Ex. tour 2 heure\u00a0: user \u00ab\u00a014:00\u00a0\u00bb \u2192 {"message":"Okay, 14:00.","suggestions":["Marquer bloqu\u00e9","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_due","args":{"dueTime":"14:00","dueEnabled":true}}]}',
+      '- Ex. refus heure\u00a0: user \u00ab\u00a0pas d\'heure\u00a0\u00bb \u2192 {"message":"Okay.","suggestions":["Marquer bloqu\u00e9","Ajouter une sous-t\u00e2che"],"followUps":[],"actions":[]}',
+      '- Si \u00ab\u00a0d\u00e9finir une \u00e9ch\u00e9ance\u00a0\u00bb SANS aucune date\u00a0: alors seulement demander la date (obligatoire). actions=[].',
+      '- Ex. sans date\u00a0: user \u00ab\u00a0D\u00e9finir une \u00e9ch\u00e9ance\u00a0\u00bb \u2192 {"message":"Pour quelle date?","suggestions":["Aujourd\'hui","Demain","Vendredi"],"followUps":[],"actions":[]}',
       'Bloquer une carte (agir d\'abord, motif ensuite)\u00a0:',
-      '- Si l\'utilisateur demande de marquer bloqu\u00e9 / en attente SANS donner de motif\u00a0: APPLIQUE TOUT DE SUITE set_blocked avec enAttente:true (sans blockedReasons), puis confirme de fa\u00e7on conversationnelle et demande le motif en option.',
+      '- Si l\'utilisateur demande de marquer bloqu\u00e9 / en attente SANS donner de motif\u00a0: APPLIQUE TOUT DE SUITE set_blocked avec enAttente:true (sans blockedReasons), puis confirme et demande le motif en option.',
       '- Ex. tour 1\u00a0: user \u00ab\u00a0Marquer la t\u00e2che comme bloqu\u00e9e\u00a0\u00bb \u2192 {"message":"Okay, bloqu\u00e9. Quel est le motif?","suggestions":["En attente d\'une approbation","En attente d\'une r\u00e9ponse","Bloqu\u00e9 \u00e0 cause du mat\u00e9riel"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}',
       '- Ne JAMAIS r\u00e9pondre seulement \u00ab\u00a0Quel est le motif?\u00a0\u00bb sans avoir d\'abord appel\u00e9 set_blocked.',
       '- Si l\'utilisateur donne ensuite un motif\u00a0: applique set_blocked avec blockedReasons (enAttente reste true) et confirme bri\u00e8vement.',
       '- Ex. tour 2\u00a0: user \u00ab\u00a0En attente d\'une approbation\u00a0\u00bb \u2192 {"message":"Motif enregistr\u00e9\u00a0: en attente d\'une approbation.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedReasons":["En attente d\'une approbation"]}}]}',
-      '- Si l\'utilisateur refuse le motif (ex. \u00ab\u00a0rien\u00a0\u00bb, \u00ab\u00a0aucun\u00a0\u00bb, \u00ab\u00a0non\u00a0\u00bb, \u00ab\u00a0pas besoin\u00a0\u00bb, \u00ab\u00a0skip\u00a0\u00bb)\u00a0: r\u00e9ponds simplement \u00ab\u00a0Okay.\u00a0\u00bb, actions=[], NE PAS reposer la question, NE PAS exiger de motif. La carte reste bloqu\u00e9e sans motif.',
-      '- Ex. refus\u00a0: user \u00ab\u00a0rien\u00a0\u00bb \u2192 {"message":"Okay.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Ajouter une sous-t\u00e2che"],"followUps":[],"actions":[]}',
-      '- INTERDIT\u00a0: boucler sur \u00ab\u00a0Quel est le motif?\u00a0\u00bb, \u00ab\u00a0Veuillez fournir un motif\u00a0\u00bb, ou toute formulation qui force / insiste. Une seule invitation max\u00a0; ensuite on respecte le choix.',
-      '- Si l\'utilisateur ignore la question, change de sujet, ou donne une autre consigne\u00a0: NE PAS forcer le motif, NE PAS reposer la question\u00a0; traite la nouvelle demande. La carte reste bloqu\u00e9e sans motif.',
-      '- Si le motif est d\u00e9j\u00e0 dans la demande initiale (ex. \u00ab\u00a0Bloquer \u00e0 cause du mat\u00e9riel\u00a0\u00bb)\u00a0: set_blocked avec enAttente:true + blockedReasons en un seul tour, sans question inutile.',
+      '- Si le motif est d\u00e9j\u00e0 dans la demande initiale\u00a0: set_blocked avec enAttente:true + blockedReasons en un seul tour.',
+      'Sous-t\u00e2ches (progress.items du contexte)\u00a0:',
+      '- Les sous-t\u00e2ches existantes sont dans context.progress.items (id + text). Quand l\'utilisateur cite un nom (\u00ab\u00a0Contacter Ian\u00a0\u00bb, etc.), c\'est une sous-t\u00e2che\u00a0: retrouve-la dans items.',
+      '- Ajout\u00a0: sans nom \u2192 demander le nom, actions=[]. Avec un nom \u2192 add_subtask tout de suite.',
+      '- Renommer / corriger le texte\u00a0: utilise rename_subtask avec le nouvel text et l\'id (ou matchText = libell\u00e9 actuel). Agis tout de suite si ancien + nouveau nom sont clairs.',
+      '- Ex. ajout tour 1\u00a0: user \u00ab\u00a0Ajouter une sous-t\u00e2che\u00a0\u00bb \u2192 {"message":"Quel est le nom de la sous-t\u00e2che?","suggestions":["V\u00e9rifier le stock","Contacter le client"],"followUps":[],"actions":[]}',
+      '- Ex. ajout tour 2\u00a0: user \u00ab\u00a0Commander le mat\u00e9riel\u00a0\u00bb \u2192 {"message":"Okay, ajout\u00e9e.","suggestions":["Ajouter une autre sous-t\u00e2che","D\u00e9finir une \u00e9ch\u00e9ance"],"followUps":[],"actions":[{"tool":"add_subtask","args":{"text":"Commander le mat\u00e9riel"}}]}',
+      '- Ex. renommer\u00a0: user \u00ab\u00a0Rename \'Contacter Ian\' to \'Appeler Ian\'\u00a0\u00bb (items contient Contacter Ian) \u2192 {"message":"Okay, renomm\u00e9e.","suggestions":["Ajouter une sous-t\u00e2che","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"rename_subtask","args":{"matchText":"Contacter Ian","text":"Appeler Ian"}}]}',
+      'Priorit\u00e9 / progr\u00e8s\u00a0:',
+      '- Applique immédiatement tout axe ou pourcentage fourni. Si la demande est vague (\u00ab\u00a0mettre \u00e0 jour la priorit\u00e9\u00a0\u00bb) sans valeurs\u00a0: pose UNE question pour les valeurs, actions=[].',
+      '- Si l\'utilisateur active le progr\u00e8s sans chiffre\u00a0: set_progress avec progressEnabled:true tout de suite, puis demande le % en option.',
       'R\u00e8gles suggestions (obligatoire)\u00a0:',
       '- Toujours proposer 2 \u00e0 4 formulations courtes en fran\u00e7ais (questions OU r\u00e9ponses \u00e0 ta question de clarification).',
       '- Ancr\u00e9es dans le contexte carte (sections enabled, \u00e9ch\u00e9ance, blocage, progr\u00e8s).',
@@ -504,9 +664,10 @@
       '- Pas de num\u00e9rotation, pas de guillemets autour.',
       '- INTERDIT\u00a0: placeholders comme "..." , "\u2026" , "suggestion" , "exemple"\u00a0; chaque entr\u00e9e doit \u00eatre un vrai texte cliquable.',
       'R\u00e8gles actions (appliqu\u00e9es automatiquement)\u00a0:',
-      '- 0 \u00e0 3 outils \u00e0 ex\u00e9cuter tout de suite quand tu as toutes les infos requises (ou quand l\'action peut \u00eatre faite sans motif, ex. bloquer).',
-      '- Ne jamais inclure un outil incomplet (ex. add_subtask sans text non vide).',
-      '- INTERDIT d\'affirmer dans message qu\'une modification est faite (ajout\u00e9e, mise \u00e0 jour, bloqu\u00e9e\u2026) si le champ actions est vide. Sans outil, rien n\'est appliqu\u00e9.',
+      '- 0 \u00e0 3 outils \u00e0 ex\u00e9cuter tout de suite d\u00e8s qu\'une action partielle est possible (ne pas attendre les d\u00e9tails optionnels).',
+      '- Ne jamais inclure un outil incomplet sur un champ OBLIGATOIRE (ex. add_subtask sans text non vide).',
+      '- set_due sans dueTime est VALIDE et pr\u00e9f\u00e9r\u00e9 quand l\'heure n\'est pas donn\u00e9e (sauf d\u00e9lai relatif\u00a0: utiliser relativeMinutes/relativeHours).',
+      '- INTERDIT d\'affirmer dans message qu\'une modification est faite (ajout\u00e9e, mise \u00e0 jour, bloqu\u00e9e, c\'est fait\u2026) si le champ actions est vide. Sans outil, rien n\'est appliqu\u00e9.',
       '- Le runtime ex\u00e9cute actions et affiche un r\u00e9cap technique v\u00e9rifi\u00e9\u00a0; le message reste conversationnel et court.',
       'R\u00e8gles followUps\u00a0:',
       '- 0 \u00e0 3 actions rapides optionnelles (boutons\u00a0; le clic applique sans nouvel appel).',
@@ -530,15 +691,251 @@
       '- Pour marquer bloqu\u00e9\u00a0: set_blocked avec enAttente:true tout de suite (motifs ensuite si fournis). Ne dis jamais que c\'est d\u00e9j\u00e0 bloqu\u00e9 si enabled=false.',
       'Outils disponibles\u00a0:',
       '- set_priority: { urgency?:0-4, impact?:0-4, ease?:1-5, priorityEnabled?:boolean }',
-      '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean }',
-      '- set_blocked: { enAttente?: boolean, blockedReasons?: string[] } (enAttente:true seul suffit pour bloquer\u00a0; fournir des motifs active aussi Bloqu\u00e9)',
+      '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean, relativeMinutes?: number, relativeHours?: number } (dueTime OPTIONNEL pour une date\u00a0; d\u00e9lai \u00ab\u00a0dans N min/h\u00a0\u00bb \u2192 relativeMinutes/relativeHours, calcul\u00e9 depuis context.nowTime\u00a0; aujourd\'hui = context.today)',
+      '- set_blocked: { enAttente?: boolean, blockedReasons?: string[] } (enAttente:true seul suffit\u00a0; motifs optionnels)',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (progress carte si pas de sous-t\u00e2ches)',
       '- add_subtask: { text: string } (text obligatoire, non vide)',
+      '- rename_subtask: { text: string, id?: string, matchText?: string } (nouveau text obligatoire\u00a0; id OU matchText = libell\u00e9 actuel dans progress.items)',
       '- toggle_subtask: { id: string, done?: boolean }',
       '- set_subtask_progress: { id: string, progress: 0-100 }',
+      'M\u00e9moire plateau\u00a0: utilise les faits/summary du contexte pour personnaliser (noms, projets, normes). Ne contredis pas la m\u00e9moire sans raison.',
       'Contexte carte actuel (JSON)\u00a0:',
       JSON.stringify(context)
     ].join('\n');
+  }
+
+  /**
+   * Suggest ~3 follow-up subtasks for the Progress section.
+   * @returns {Promise<string[]>}
+   */
+  async function suggestSubtasks(provider, context, options) {
+    options = options || {};
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) return [];
+    var ctx = context && typeof context === 'object' ? context : {};
+    var existing = Array.isArray(ctx.existingSubtasks)
+      ? ctx.existingSubtasks
+      : Array.isArray(ctx.items)
+        ? ctx.items.map(function (it) {
+            return typeof it === 'string' ? it : it && it.text ? it.text : '';
+          })
+        : [];
+    existing = existing
+      .map(function (s) {
+        return String(s || '').trim();
+      })
+      .filter(Boolean);
+
+    var payload = {
+      cardName: ctx.cardName || '',
+      cardDesc: ctx.cardDesc || '',
+      priorityLabel: ctx.priorityLabel || '',
+      existingSubtasks: existing,
+      memory: ctx.memory || null,
+      boardDigest: typeof ctx.boardDigest === 'string' ? ctx.boardDigest.slice(0, 3000) : ''
+    };
+
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu proposes des sous-t\u00e2ches de suivi pour une carte Trello (section Progr\u00e8s).',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":["\u2026","\u2026","\u2026"]}',
+          'Exactement 3 suggestions si possible (2 minimum si le contexte est pauvre).',
+          'Chaque suggestion = une action concr\u00e8te courte en fran\u00e7ais (pas une question).',
+          'Inspire-toi du titre, de la description, de la priorit\u00e9, des sous-t\u00e2ches existantes et de la m\u00e9moire.',
+          'Exemple\u00a0: titre \u00ab\u00a0Plan strat\u00e9gie de communication\u00a0\u00bb \u2192 \u00ab\u00a0Rencontrer tous les services\u00a0\u00bb.',
+          'Exemple\u00a0: \u00ab\u00a0Archivage des rushs vid\u00e9os et projets DaVinci Resolve\u00a0\u00bb \u2192 stockage long terme + guide de proc\u00e9dure.',
+          'INTERDIT\u00a0: dupliquer une sous-t\u00e2che existante (m\u00eame sens).',
+          'INTERDIT\u00a0: placeholders, num\u00e9rotation, guillemets superflus.',
+          'Contexte\u00a0:',
+          JSON.stringify(payload)
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content: 'Propose 3 sous-t\u00e2ches de suivi pertinentes.'
+      }
+    ];
+
+    var response;
+    try {
+      response = await chatCompletions(p, messages, {
+        jsonMode: true,
+        max_tokens: 280,
+        temperature: 0.55,
+        stream: false
+      });
+    } catch (err) {
+      if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+        response = await chatCompletions(p, messages, {
+          jsonMode: false,
+          max_tokens: 280,
+          temperature: 0.55,
+          stream: false
+        });
+      } else {
+        console.error('PriorityAgent.suggestSubtasks failed', err);
+        return [];
+      }
+    }
+
+    var list = [];
+    try {
+      var parsed = parseAssistantPayload(response.content);
+      list = normalizeSuggestionList(parsed.suggestions);
+    } catch (e) {
+      try {
+        var raw = JSON.parse(response.content);
+        list = normalizeSuggestionList(raw.suggestions || raw.subtasks);
+      } catch (e2) {
+        list = [];
+      }
+    }
+
+    var existingKeys = {};
+    for (var i = 0; i < existing.length; i++) {
+      existingKeys[existing[i].toLocaleLowerCase('fr-FR')] = true;
+    }
+    return list
+      .filter(function (s) {
+        return s && !existingKeys[s.toLocaleLowerCase('fr-FR')];
+      })
+      .slice(0, 3);
+  }
+
+  /**
+   * Conversational turn for memory alignment (no card tools).
+   * Returns { message, suggestions, patches, rawJson, usage }.
+   */
+  async function memoryTurn(provider, history, memory, userText, options) {
+    options = options || {};
+    var mode = options.mode === 'onboarding' ? 'onboarding' : 'ongoing';
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) {
+      return {
+        message: 'Configurez d\'abord un fournisseur IA dans les param\u00e8tres.',
+        suggestions: [],
+        patches: [],
+        rawJson: '',
+        usage: null
+      };
+    }
+
+    var mem = memory && typeof memory === 'object' ? memory : {};
+    var asked = Array.isArray(mem.preferredQuestionsAsked) ? mem.preferredQuestionsAsked : [];
+    var system = [
+      'Tu es l\'assistant m\u00e9moire du Power-Up Priorit\u00e9 (Trello).',
+      'Tu parles en fran\u00e7ais, de fa\u00e7on conversationnelle et chaleureuse.',
+      'Ton r\u00f4le\u00a0: apprendre et mettre \u00e0 jour des faits utiles sur le travail de l\'utilisateur (patron, \u00e9quipe, projets, outils, normes).',
+      'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
+      '{"message":"texte","suggestions":["r\u00e9ponse courte","\u2026"],"patches":[{"op":"remember","text":"\u2026"}]}',
+      'Ops patches autoris\u00e9es\u00a0:',
+      '- {"op":"remember","text":"fait court"}',
+      '- {"op":"forget","query":"mot-cl\u00e9"}',
+      '- {"op":"set_summary","text":"r\u00e9sum\u00e9"}',
+      '- {"op":"complete_onboarding"} (quand tu as assez de contexte)',
+      'R\u00e8gles\u00a0:',
+      '- Pose UNE question claire \u00e0 la fois quand tu as besoin d\'info.',
+      '- Quand l\'utilisateur r\u00e9pond, enregistre via remember (et \u00e9ventuellement set_summary).',
+      '- suggestions = 2\u20134 r\u00e9ponses/intentions cliquables courtes.',
+      mode === 'onboarding'
+        ? '- Mode onboarding\u00a0: apr\u00e8s ~2\u20134 faits utiles, remercie bri\u00e8vement et inclus complete_onboarding.'
+        : '- Mode continu\u00a0: mets \u00e0 jour la m\u00e9moire; complete_onboarding seulement si l\'utilisateur confirme avoir fini l\'alignement.',
+      '- \u00c9vite de reposer les questions d\u00e9j\u00e0 pos\u00e9es list\u00e9es ci-dessous.',
+      '- INTERDIT d\'inventer des faits non dits par l\'utilisateur.',
+      '',
+      'Questions d\u00e9j\u00e0 pos\u00e9es\u00a0:',
+      JSON.stringify(asked),
+      '',
+      'M\u00e9moire actuelle\u00a0:',
+      JSON.stringify({
+        summary: mem.summary || '',
+        facts: Array.isArray(mem.facts)
+          ? mem.facts.map(function (f) {
+              return typeof f === 'string' ? f : f && f.text ? f.text : '';
+            })
+          : [],
+        onboardingComplete: !!mem.onboardingComplete
+      }),
+      options.boardDigest
+        ? '\nDigest tableau (extrait)\u00a0:\n' + String(options.boardDigest).slice(0, 3500)
+        : ''
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    var messages = [{ role: 'system', content: system }];
+    (history || []).forEach(function (entry) {
+      if (!entry || !entry.role || !entry.content) return;
+      if (entry.role === 'user' || entry.role === 'assistant') {
+        messages.push({
+          role: entry.role,
+          content: String(entry.content)
+        });
+      }
+    });
+    messages.push({ role: 'user', content: String(userText || '').trim() });
+
+    var response;
+    try {
+      response = await chatCompletions(p, messages, {
+        jsonMode: true,
+        max_tokens: 420,
+        temperature: 0.5,
+        stream: false
+      });
+    } catch (err) {
+      if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+        response = await chatCompletions(p, messages, {
+          jsonMode: false,
+          max_tokens: 420,
+          temperature: 0.5,
+          stream: false
+        });
+      } else {
+        throw err;
+      }
+    }
+
+    var content = response && response.content ? response.content : '';
+    var data = null;
+    try {
+      data = JSON.parse(content.trim());
+    } catch (e) {
+      var start = content.indexOf('{');
+      var end = content.lastIndexOf('}');
+      if (start >= 0 && end > start) {
+        try {
+          data = JSON.parse(content.slice(start, end + 1));
+        } catch (e2) {
+          data = null;
+        }
+      }
+    }
+    if (!data || typeof data !== 'object') {
+      return {
+        message: content.trim() || 'Je n\'ai pas compris. Peux-tu reformuler?',
+        suggestions: [],
+        patches: [],
+        rawJson: content,
+        usage: extractUsageFromRaw(response && response.raw)
+      };
+    }
+
+    var patches = Array.isArray(data.patches)
+      ? data.patches.filter(function (patch) {
+          return patch && typeof patch === 'object' && typeof patch.op === 'string';
+        })
+      : [];
+
+    return {
+      message: typeof data.message === 'string' ? data.message.trim() : '',
+      suggestions: normalizeSuggestionList(data.suggestions),
+      patches: patches,
+      rawJson: content,
+      usage: extractUsageFromRaw(response && response.raw)
+    };
   }
 
   /** Drop tool calls that are missing required args (e.g. empty add_subtask). */
@@ -547,6 +944,13 @@
     var args = action.args && typeof action.args === 'object' ? action.args : {};
     if (action.tool === 'add_subtask') {
       return typeof args.text === 'string' && !!args.text.trim();
+    }
+    if (action.tool === 'rename_subtask') {
+      var newText = typeof args.text === 'string' && !!args.text.trim();
+      var hasId = typeof args.id === 'string' && !!args.id;
+      var hasMatch =
+        typeof args.matchText === 'string' && !!args.matchText.trim();
+      return newText && (hasId || hasMatch);
     }
     if (action.tool === 'toggle_subtask' || action.tool === 'set_subtask_progress') {
       return typeof args.id === 'string' && !!args.id;
@@ -557,6 +961,9 @@
   function incompleteActionError(action) {
     if (!action || !action.tool) return 'Action invalide';
     if (action.tool === 'add_subtask') return 'add_subtask: text requis';
+    if (action.tool === 'rename_subtask') {
+      return 'rename_subtask: text et id (ou matchText) requis';
+    }
     if (action.tool === 'toggle_subtask') return 'toggle_subtask: id requis';
     if (action.tool === 'set_subtask_progress') {
       return 'set_subtask_progress: id requis';
@@ -1004,7 +1411,36 @@
           }
         ],
         usage: usage || undefined
-      }
+      },
+      status: typeof res.status === 'number' ? res.status : null
+    };
+  }
+
+  function cloneJsonSafe(value) {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (e) {
+      return value;
+    }
+  }
+
+  function buildRequestMeta(provider, body, extras) {
+    var p = normalizeProvider(provider);
+    var extra = extras || {};
+    return {
+      url: p.baseUrl + '/chat/completions',
+      method: 'POST',
+      model: (body && body.model) || p.model || '',
+      stream: !!(body && body.stream),
+      jsonMode: !!(body && body.response_format),
+      temperature: body && body.temperature,
+      max_tokens: body && body.max_tokens,
+      messageCount: body && body.messages ? body.messages.length : 0,
+      body: cloneJsonSafe(body),
+      status: extra.status != null ? extra.status : null,
+      ok: extra.ok != null ? extra.ok : null,
+      error: extra.error || null,
+      note: extra.note || null
     };
   }
 
@@ -1036,7 +1472,23 @@
         method: 'POST',
         body: body
       });
-      if (!result.ok) throwHttpError(result);
+      if (!result.ok) {
+        var httpErr = null;
+        try {
+          throwHttpError(result);
+        } catch (thrown) {
+          httpErr = thrown;
+        }
+        if (httpErr) {
+          httpErr.debugMeta = buildRequestMeta(p, body, {
+            status: result.status,
+            ok: false,
+            error: httpErr.message,
+            note: 'HTTP error (non-stream)'
+          });
+          throw httpErr;
+        }
+      }
       var choice =
         result.data &&
         result.data.choices &&
@@ -1045,7 +1497,11 @@
           ? result.data.choices[0].message
           : null;
       var content = choice && typeof choice.content === 'string' ? choice.content : '';
-      return { content: content, raw: result.data };
+      return {
+        content: content,
+        raw: result.data,
+        meta: buildRequestMeta(p, body, { status: result.status, ok: true })
+      };
     }
 
     var url = p.baseUrl + '/chat/completions';
@@ -1061,6 +1517,12 @@
       var e = new Error(classified.message);
       e.code = classified.code;
       e.cause = err;
+      e.debugMeta = buildRequestMeta(p, body, {
+        status: null,
+        ok: false,
+        error: classified.message,
+        note: 'Network / CORS failure'
+      });
       throw e;
     }
 
@@ -1087,10 +1549,25 @@
         delete body.stream_options;
         return chatCompletions(p, messages, Object.assign({}, opts, { includeUsage: false }));
       }
-      throwHttpError({ ok: false, status: res.status, data: data, text: text });
+      try {
+        throwHttpError({ ok: false, status: res.status, data: data, text: text });
+      } catch (streamHttpErr) {
+        streamHttpErr.debugMeta = buildRequestMeta(p, body, {
+          status: res.status,
+          ok: false,
+          error: streamHttpErr.message,
+          note: 'HTTP error (stream)'
+        });
+        throw streamHttpErr;
+      }
     }
 
-    return readSseChatStream(res, onDelta);
+    var streamed = await readSseChatStream(res, onDelta);
+    streamed.meta = buildRequestMeta(p, body, {
+      status: streamed.status != null ? streamed.status : res.status,
+      ok: true
+    });
+    return streamed;
   }
 
   /**
@@ -1120,6 +1597,30 @@
     });
     messages.push({ role: 'user', content: String(userText || '').trim() });
 
+    var debug = {
+      id: 'chat-' + Date.now().toString(36),
+      kind: 'chatTurn',
+      label: 'Tour de conversation',
+      startedAt: Date.now(),
+      attempts: []
+    };
+
+    function recordAttempt(label, metaOrErr) {
+      if (metaOrErr && metaOrErr.meta) {
+        debug.attempts.push(Object.assign({ label: label }, metaOrErr.meta));
+        return;
+      }
+      if (metaOrErr && metaOrErr.debugMeta) {
+        debug.attempts.push(Object.assign({ label: label }, metaOrErr.debugMeta));
+        return;
+      }
+      debug.attempts.push({
+        label: label,
+        error: (metaOrErr && metaOrErr.message) || String(metaOrErr || 'error'),
+        ok: false
+      });
+    }
+
     function notifyVisible(accumulated) {
       if (!onDelta) return;
       var visible = extractStreamingMessage(accumulated);
@@ -1134,40 +1635,65 @@
     var t0 = Date.now();
     var response;
     try {
-      response = await chatCompletions(p, messages, {
-        jsonMode: true,
-        stream: true,
-        onDelta: function (_piece, accumulated) {
-          notifyVisible(accumulated);
-        }
-      });
-    } catch (err) {
-      if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+      try {
         response = await chatCompletions(p, messages, {
-          jsonMode: false,
+          jsonMode: true,
           stream: true,
           onDelta: function (_piece, accumulated) {
             notifyVisible(accumulated);
           }
         });
-      } else if (err && /stream/i.test((err && err.message) || '')) {
-        // Provider rejected streaming — fall back to a blocking call.
-        try {
-          response = await chatCompletions(p, messages, { jsonMode: true, stream: false });
-        } catch (err2) {
-          if (err2 && err2.message && /response_format|json_object|json mode/i.test(err2.message)) {
-            response = await chatCompletions(p, messages, { jsonMode: false, stream: false });
-          } else {
-            throw err2;
+        recordAttempt('stream + json', response);
+      } catch (err) {
+        recordAttempt('stream + json', err);
+        if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+          response = await chatCompletions(p, messages, {
+            jsonMode: false,
+            stream: true,
+            onDelta: function (_piece, accumulated) {
+              notifyVisible(accumulated);
+            }
+          });
+          recordAttempt('stream (sans json mode)', response);
+        } else if (err && /stream/i.test((err && err.message) || '')) {
+          // Provider rejected streaming — fall back to a blocking call.
+          try {
+            response = await chatCompletions(p, messages, { jsonMode: true, stream: false });
+            recordAttempt('non-stream + json', response);
+          } catch (err2) {
+            recordAttempt('non-stream + json', err2);
+            if (err2 && err2.message && /response_format|json_object|json mode/i.test(err2.message)) {
+              response = await chatCompletions(p, messages, { jsonMode: false, stream: false });
+              recordAttempt('non-stream (sans json mode)', response);
+            } else {
+              throw err2;
+            }
           }
+          notifyVisible(response.content);
+        } else {
+          throw err;
         }
-        notifyVisible(response.content);
-      } else {
-        throw err;
       }
+    } catch (fatal) {
+      debug.endedAt = Date.now();
+      debug.latencyMs = Date.now() - t0;
+      debug.ok = false;
+      debug.error = (fatal && fatal.message) || String(fatal || 'Erreur');
+      debug.request = debug.attempts.length
+        ? debug.attempts[debug.attempts.length - 1]
+        : buildRequestMeta(p, {
+            model: p.model,
+            messages: messages,
+            temperature: 0.3,
+            stream: true,
+            response_format: { type: 'json_object' }
+          });
+      fatal.debug = debug;
+      throw fatal;
     }
     var latencyMs = Date.now() - t0;
     var parsed = parseAssistantPayload(response.content);
+    var actions = rewriteActionsForRelativeDue(parsed.actions || [], userText);
     if (onDelta && parsed.message) {
       try {
         onDelta(parsed.message, response.content);
@@ -1178,15 +1704,33 @@
     var usage = extractUsageFromRaw(response.raw, messages, response.content, p.model);
     usage.latencyMs = latencyMs;
     usage.historyTurns = (history || []).length;
+    debug.endedAt = Date.now();
+    debug.latencyMs = latencyMs;
+    debug.ok = true;
+    debug.request = response.meta || (debug.attempts.length ? debug.attempts[debug.attempts.length - 1] : null);
+    debug.response = {
+      status: response.meta && response.meta.status,
+      content: response.content,
+      raw: cloneJsonSafe(response.raw),
+      parsed: {
+        message: parsed.message,
+        followUps: parsed.followUps,
+        suggestions: parsed.suggestions,
+        actions: actions,
+        droppedActions: parsed.droppedActions || []
+      }
+    };
+    debug.usage = usage;
     return {
       message: parsed.message,
       followUps: parsed.followUps,
       suggestions: parsed.suggestions,
-      actions: parsed.actions || [],
+      actions: actions,
       droppedActions: parsed.droppedActions || [],
       rawJson: response.content,
       context: context,
-      usage: usage
+      usage: usage,
+      debug: debug
     };
   }
 
@@ -1196,6 +1740,7 @@
    */
   async function suggestQuestions(provider, bridge, options) {
     options = options || {};
+    var onDebug = typeof options.onDebug === 'function' ? options.onDebug : null;
     var p = normalizeProvider(provider);
     if (!isConfigured(p)) return [];
     var context = buildContext(bridge);
@@ -1233,32 +1778,84 @@
           'Propose des questions utiles que l\'utilisateur pourrait poser maintenant sur cette carte.'
       }
     ];
+    var debug = {
+      id: 'suggest-' + Date.now().toString(36),
+      kind: 'suggestQuestions',
+      label: 'Suggestions de questions',
+      startedAt: Date.now(),
+      attempts: []
+    };
+    function emitDebug() {
+      if (!onDebug) return;
+      try {
+        onDebug(debug);
+      } catch (cbErr) {
+        console.error('suggestQuestions onDebug failed', cbErr);
+      }
+    }
     var response;
+    var t0 = Date.now();
     try {
-      response = await chatCompletions(p, messages, {
-        jsonMode: true,
-        max_tokens: 180,
-        temperature: 0.7
-      });
-    } catch (err) {
-      if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+      try {
         response = await chatCompletions(p, messages, {
-          jsonMode: false,
+          jsonMode: true,
           max_tokens: 180,
           temperature: 0.7
         });
-      } else {
-        throw err;
+        if (response.meta) debug.attempts.push(Object.assign({ label: 'json' }, response.meta));
+      } catch (err) {
+        if (err && err.debugMeta) {
+          debug.attempts.push(Object.assign({ label: 'json' }, err.debugMeta));
+        }
+        if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+          response = await chatCompletions(p, messages, {
+            jsonMode: false,
+            max_tokens: 180,
+            temperature: 0.7
+          });
+          if (response.meta) {
+            debug.attempts.push(Object.assign({ label: 'sans json mode' }, response.meta));
+          }
+        } else {
+          throw err;
+        }
       }
+    } catch (fatal) {
+      debug.endedAt = Date.now();
+      debug.latencyMs = Date.now() - t0;
+      debug.ok = false;
+      debug.error = (fatal && fatal.message) || String(fatal || 'Erreur');
+      debug.request = debug.attempts.length ? debug.attempts[debug.attempts.length - 1] : null;
+      emitDebug();
+      throw fatal;
     }
     var parsed = parseAssistantPayload(response.content);
-    if (parsed.suggestions && parsed.suggestions.length) return parsed.suggestions;
-    try {
-      var raw = JSON.parse(response.content);
-      return normalizeSuggestionList(raw.suggestions || raw.questions);
-    } catch (e) {
-      return [];
+    var list = [];
+    if (parsed.suggestions && parsed.suggestions.length) {
+      list = parsed.suggestions;
+    } else {
+      try {
+        var raw = JSON.parse(response.content);
+        list = normalizeSuggestionList(raw.suggestions || raw.questions);
+      } catch (e) {
+        list = [];
+      }
     }
+    var usage = extractUsageFromRaw(response.raw, messages, response.content, p.model);
+    usage.latencyMs = Date.now() - t0;
+    debug.endedAt = Date.now();
+    debug.latencyMs = usage.latencyMs;
+    debug.ok = true;
+    debug.request = response.meta || (debug.attempts.length ? debug.attempts[debug.attempts.length - 1] : null);
+    debug.response = {
+      status: response.meta && response.meta.status,
+      content: response.content,
+      raw: cloneJsonSafe(response.raw),
+      suggestions: list
+    };
+    debug.usage = usage;
+    emitDebug();
+    return list;
   }
 
   function validateDueDate(value) {
@@ -1342,6 +1939,36 @@
     return null;
   }
 
+  /** Resolve a subtask by id, or by case-insensitive text match (exact then contains). */
+  function resolveSubtaskItem(items, args) {
+    var list = items || [];
+    var id = args && typeof args.id === 'string' ? args.id.trim() : '';
+    if (id) {
+      var byId = findItem(list, id);
+      if (byId) return byId;
+    }
+    var matchRaw =
+      args && typeof args.matchText === 'string'
+        ? args.matchText.trim()
+        : args && typeof args.from === 'string'
+          ? args.from.trim()
+          : '';
+    if (!matchRaw) return null;
+    var needle = matchRaw.toLocaleLowerCase('fr-FR');
+    var exact = null;
+    var contains = null;
+    for (var i = 0; i < list.length; i++) {
+      var text = String(list[i].text || '').trim();
+      var key = text.toLocaleLowerCase('fr-FR');
+      if (key === needle) {
+        exact = list[i];
+        break;
+      }
+      if (!contains && key.indexOf(needle) !== -1) contains = list[i];
+    }
+    return exact || contains;
+  }
+
   function detailForTool(tool, beforeP, afterP, beforeC, afterC, args, extra) {
     var parts = [];
     args = args || {};
@@ -1375,6 +2002,21 @@
       var text = typeof args.text === 'string' ? args.text.trim() : '';
       parts.push('+ "' + text + '"' + (extra.id ? ' (id: ' + extra.id + ')' : ''));
       parts.push('items ' + beforeC.items.length + ' \u2192 ' + afterC.items.length);
+    } else if (tool === 'rename_subtask') {
+      var beforeRename = findItem(beforeC.items, (extra && extra.id) || args.id);
+      var afterRename = findItem(afterC.items, (extra && extra.id) || args.id);
+      if (beforeRename && afterRename) {
+        parts.push('id: ' + afterRename.id);
+        parts.push(
+          '"' +
+            (beforeRename.text || '') +
+            '" \u2192 "' +
+            (afterRename.text || '') +
+            '"'
+        );
+      } else {
+        parts.push('id: ' + ((extra && extra.id) || args.id || '?'));
+      }
     } else if (tool === 'toggle_subtask' || tool === 'set_subtask_progress') {
       var beforeItem = findItem(beforeC.items, args.id);
       var afterItem = findItem(afterC.items, args.id);
@@ -1478,19 +2120,53 @@
         }
         var beforeDue = snapshotPriority(bridge);
         var duePartial = {};
-        if (Object.prototype.hasOwnProperty.call(args, 'dueDate')) {
-          var dueDate = validateDueDate(args.dueDate);
-          if (dueDate === undefined) {
-            return { ok: false, tool: tool, error: 'dueDate invalide (YYYY-MM-DD)' };
+        var hasRelative =
+          args.relativeMinutes != null || args.relativeHours != null;
+        if (hasRelative) {
+          var offsetMins = 0;
+          if (args.relativeHours != null) {
+            var hours = Number(args.relativeHours);
+            if (!isFinite(hours)) {
+              return { ok: false, tool: tool, error: 'relativeHours invalide' };
+            }
+            offsetMins += hours * 60;
           }
-          duePartial.dueDate = dueDate || '';
-        }
-        if (Object.prototype.hasOwnProperty.call(args, 'dueTime')) {
-          var dueTime = validateDueTime(args.dueTime);
-          if (dueTime === undefined) {
-            return { ok: false, tool: tool, error: 'dueTime invalide (HH:MM)' };
+          if (args.relativeMinutes != null) {
+            var minutes = Number(args.relativeMinutes);
+            if (!isFinite(minutes)) {
+              return { ok: false, tool: tool, error: 'relativeMinutes invalide' };
+            }
+            offsetMins += minutes;
           }
-          duePartial.dueTime = dueTime || '';
+          offsetMins = Math.round(offsetMins);
+          if (offsetMins < 0) {
+            return {
+              ok: false,
+              tool: tool,
+              error: 'd\u00e9lai relatif doit \u00eatre \u2265 0'
+            };
+          }
+          var resolvedRelative = dueFromOffsetMinutes(offsetMins);
+          if (!resolvedRelative) {
+            return { ok: false, tool: tool, error: 'd\u00e9lai relatif invalide' };
+          }
+          duePartial.dueDate = resolvedRelative.dueDate;
+          duePartial.dueTime = resolvedRelative.dueTime;
+        } else {
+          if (Object.prototype.hasOwnProperty.call(args, 'dueDate')) {
+            var dueDate = validateDueDate(args.dueDate);
+            if (dueDate === undefined) {
+              return { ok: false, tool: tool, error: 'dueDate invalide (YYYY-MM-DD)' };
+            }
+            duePartial.dueDate = dueDate || '';
+          }
+          if (Object.prototype.hasOwnProperty.call(args, 'dueTime')) {
+            var dueTime = validateDueTime(args.dueTime);
+            if (dueTime === undefined) {
+              return { ok: false, tool: tool, error: 'dueTime invalide (HH:MM)' };
+            }
+            duePartial.dueTime = dueTime || '';
+          }
         }
         if (args.dueEnabled != null) {
           duePartial.dueEnabled = !!args.dueEnabled;
@@ -1630,6 +2306,52 @@
           detail: detailForTool(tool, null, null, beforeAdd, afterAdd, args, {
             id: id
           })
+        };
+      }
+      if (tool === 'rename_subtask') {
+        if (typeof bridge.applyCompletion !== 'function') {
+          return { ok: false, tool: tool, error: 'Progr\u00e8s indisponible' };
+        }
+        var renameText = typeof args.text === 'string' ? args.text.trim() : '';
+        if (!renameText) {
+          return { ok: false, tool: tool, error: 'Nouveau texte requis' };
+        }
+        var beforeRename = snapshotCompletion(bridge);
+        var renameBase =
+          typeof bridge.getCompletion === 'function'
+            ? bridge.getCompletion()
+            : { items: [] };
+        var target = resolveSubtaskItem(renameBase.items, args);
+        if (!target) {
+          return { ok: false, tool: tool, error: 'Sous-t\u00e2che introuvable' };
+        }
+        var renamedItems = (renameBase.items || []).map(function (item) {
+          if (item.id !== target.id) return item;
+          return Object.assign({}, item, { text: renameText });
+        });
+        var renamedPayload = Object.assign({}, renameBase, {
+          items: renamedItems
+        });
+        if (renamedPayload.progressEnabled === false) {
+          delete renamedPayload.progressEnabled;
+        }
+        bridge.applyCompletion(renamedPayload);
+        var afterRenameSnap = snapshotCompletion(bridge);
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.rename_subtask,
+          id: target.id,
+          detail: detailForTool(
+            tool,
+            null,
+            null,
+            beforeRename,
+            afterRenameSnap,
+            args,
+            { id: target.id }
+          )
         };
       }
       if (tool === 'toggle_subtask' || tool === 'set_subtask_progress') {
@@ -2019,8 +2741,14 @@
     getProvider: getProvider,
     saveProvider: saveProvider,
     buildContext: buildContext,
+    dueFromOffsetMinutes: dueFromOffsetMinutes,
+    nowTimeLocal: nowTimeLocal,
+    parseRelativeDueOffset: parseRelativeDueOffset,
+    rewriteActionsForRelativeDue: rewriteActionsForRelativeDue,
     chatTurn: chatTurn,
+    memoryTurn: memoryTurn,
     suggestQuestions: suggestQuestions,
+    suggestSubtasks: suggestSubtasks,
     executeAction: executeAction,
     executeActions: executeActions,
     formatChangeRecap: formatChangeRecap,

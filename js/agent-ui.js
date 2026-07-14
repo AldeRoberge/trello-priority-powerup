@@ -32,9 +32,12 @@
     var t = options.t;
     var bridge = {
       getCardName: options.getCardName || function () { return ''; },
+      getCardDesc: options.getCardDesc || function () { return ''; },
       getFormulaKey: options.getFormulaKey || function () { return 'baseline'; },
       getPriorityState: options.getPriorityState || function () { return {}; },
       getCompletion: options.getCompletion || function () { return { items: [] }; },
+      getMemory: options.getMemory || function () { return null; },
+      getBoardDigest: options.getBoardDigest || function () { return ''; },
       applyPriority: options.applyPriority || function () {},
       applyCompletion: options.applyCompletion || function () {}
     };
@@ -227,13 +230,39 @@
     suggestionsEl.hidden = true;
     chatPanel.appendChild(suggestionsEl);
 
+    var infoEl = el('div', 'agent-chat-info', {
+      'aria-label': 'Informations de la conversation'
+    });
+    infoEl.hidden = true;
+
+    var infoHead = el('div', 'agent-chat-info-head');
     var statsEl = el('div', 'agent-chat-stats', {
       role: 'status',
       'aria-live': 'polite',
       'aria-label': 'Statistiques de la conversation'
     });
-    statsEl.hidden = true;
-    chatPanel.appendChild(statsEl);
+    infoHead.appendChild(statsEl);
+
+    var debugBtn = el('button', 'agent-debug-btn', {
+      type: 'button',
+      'aria-label': 'Panneau de d\u00e9bogage',
+      title: 'D\u00e9bogage',
+      'aria-expanded': 'false'
+    });
+    var debugIcon = el('i', 'ti ti-bug');
+    debugIcon.setAttribute('aria-hidden', 'true');
+    debugBtn.appendChild(debugIcon);
+    infoHead.appendChild(debugBtn);
+    infoEl.appendChild(infoHead);
+
+    var debugPanel = el('div', 'agent-debug-panel', {
+      role: 'region',
+      'aria-label': 'Panneau de d\u00e9bogage'
+    });
+    debugPanel.hidden = true;
+    infoEl.appendChild(debugPanel);
+
+    chatPanel.appendChild(infoEl);
 
     var errorEl = el('p', 'agent-error');
     errorEl.hidden = true;
@@ -243,6 +272,10 @@
     field.appendChild(body);
     section.appendChild(field);
     cardEl.appendChild(section);
+
+    var debugOpen = false;
+    var debugLog = [];
+    var selectedDebugId = null;
 
     var expandFallback = false;
     var expandChat =
@@ -332,15 +365,262 @@
       renderChatStats();
     }
 
-    function renderChatStats() {
-      var usage = sessionStats.lastUsage;
-      if (!usage || sessionStats.turns < 1) {
-        statsEl.hidden = true;
-        statsEl.replaceChildren();
+    function syncInfoVisibility() {
+      var hasStats = !!(sessionStats.lastUsage && sessionStats.turns > 0);
+      var hasDebug = debugLog.length > 0;
+      var show = hasStats || hasDebug || debugOpen;
+      infoEl.hidden = !show;
+      if (!show) notifyLayout();
+    }
+
+    function prettyJson(value) {
+      if (value == null) return '';
+      if (typeof value === 'string') {
+        try {
+          return JSON.stringify(JSON.parse(value), null, 2);
+        } catch (e) {
+          return value;
+        }
+      }
+      try {
+        return JSON.stringify(value, null, 2);
+      } catch (e) {
+        return String(value);
+      }
+    }
+
+    function pushDebugEntry(entry) {
+      if (!entry) return;
+      debugLog.push(entry);
+      if (debugLog.length > 40) debugLog.shift();
+      selectedDebugId = entry.id || selectedDebugId;
+      if (debugOpen) renderDebugPanel();
+      else syncInfoVisibility();
+      notifyLayout();
+    }
+
+    function setDebugOpen(open) {
+      debugOpen = !!open;
+      debugPanel.hidden = !debugOpen;
+      debugBtn.classList.toggle('is-active', debugOpen);
+      debugBtn.setAttribute('aria-expanded', debugOpen ? 'true' : 'false');
+      if (debugOpen) {
+        infoEl.hidden = false;
+        renderDebugPanel();
+      } else {
+        syncInfoVisibility();
+      }
+      notifyLayout();
+    }
+
+    function renderMetricsBlock(usage) {
+      var wrap = el('div', 'agent-debug-metrics');
+      if (!usage) {
+        wrap.appendChild(el('p', 'agent-debug-empty', { text: 'Aucune m\u00e9trique.' }));
+        return wrap;
+      }
+      var rows = [
+        ['Tokens prompt', formatTokenCount(usage.promptTokens)],
+        ['Tokens compl\u00e9tion', formatTokenCount(usage.completionTokens)],
+        ['Tokens total', formatTokenCount(usage.totalTokens)],
+        ['Co\u00fbt estim\u00e9', '\u2248' + formatCostUsd(usage.costUsd)],
+        ['Latence', formatLatency(usage.latencyMs)],
+        ['Mod\u00e8le', usage.model || '\u2014'],
+        ['Fin', finishReasonLabel(usage.finishReason) || usage.finishReason || '\u2014'],
+        ['Estim\u00e9', usage.estimated ? 'oui' : 'non']
+      ];
+      if (usage.cachedTokens != null) {
+        rows.push(['Cache', formatTokenCount(usage.cachedTokens)]);
+      }
+      if (usage.reasoningTokens != null) {
+        rows.push(['Raisonnement', formatTokenCount(usage.reasoningTokens)]);
+      }
+      if (usage.historyTurns != null) {
+        rows.push(['Historique (tours)', String(usage.historyTurns)]);
+      }
+      var ctx = usage.context || {};
+      if (ctx.requestTokens != null || ctx.windowTokens != null) {
+        rows.push([
+          'Contexte',
+          formatTokenCount(ctx.requestTokens) +
+            ' / ' +
+            formatWindow(ctx.windowTokens) +
+            (ctx.fillPercent != null ? ' (' + ctx.fillPercent + '%)' : '')
+        ]);
+      }
+      if (ctx.messageCount != null) {
+        rows.push(['Messages envoy\u00e9s', String(ctx.messageCount)]);
+      }
+      if (ctx.systemChars != null) {
+        rows.push([
+          'Caract\u00e8res',
+          'sys ' +
+            formatTokenCount(ctx.systemChars) +
+            ' \u00b7 hist ' +
+            formatTokenCount(ctx.historyChars) +
+            ' \u00b7 user ' +
+            formatTokenCount(ctx.userChars)
+        ]);
+      }
+      var dl = el('dl', 'agent-debug-metric-list');
+      rows.forEach(function (pair) {
+        var row = el('div', 'agent-debug-metric-row');
+        row.appendChild(el('dt', null, { text: pair[0] }));
+        row.appendChild(el('dd', null, { text: pair[1] }));
+        dl.appendChild(row);
+      });
+      wrap.appendChild(dl);
+      return wrap;
+    }
+
+    function renderDebugPanel() {
+      debugPanel.replaceChildren();
+
+      var toolbar = el('div', 'agent-debug-toolbar');
+      toolbar.appendChild(
+        el('span', 'agent-debug-toolbar-title', { text: 'D\u00e9bogage' })
+      );
+      var clearBtn = el('button', 'agent-debug-clear', {
+        type: 'button',
+        text: 'Effacer'
+      });
+      clearBtn.disabled = !debugLog.length;
+      clearBtn.addEventListener('click', function () {
+        debugLog = [];
+        selectedDebugId = null;
+        renderDebugPanel();
+        syncInfoVisibility();
+        notifyLayout();
+      });
+      toolbar.appendChild(clearBtn);
+      debugPanel.appendChild(toolbar);
+
+      if (!debugLog.length) {
+        debugPanel.appendChild(
+          el('p', 'agent-debug-empty', {
+            text: 'Aucun \u00e9change r\u00e9seau pour l\u2019instant. Envoyez un message ou rechargez les suggestions.'
+          })
+        );
         return;
       }
-      statsEl.hidden = false;
+
+      var list = el('div', 'agent-debug-list', { role: 'list' });
+      var selected =
+        debugLog.find(function (e) {
+          return e.id === selectedDebugId;
+        }) || debugLog[debugLog.length - 1];
+      selectedDebugId = selected && selected.id;
+
+      debugLog
+        .slice()
+        .reverse()
+        .forEach(function (entry) {
+          var item = el('button', 'agent-debug-list-item', { type: 'button', role: 'listitem' });
+          if (entry.id === selectedDebugId) item.classList.add('is-active');
+          if (entry.ok === false) item.classList.add('is-fail');
+          var when = entry.startedAt
+            ? new Date(entry.startedAt).toLocaleTimeString()
+            : '';
+          item.appendChild(
+            el('span', 'agent-debug-list-label', {
+              text: (entry.label || entry.kind || 'requ\u00eate') + (when ? ' · ' + when : '')
+            })
+          );
+          var metaBits = [];
+          if (entry.latencyMs != null) metaBits.push(formatLatency(entry.latencyMs));
+          if (entry.ok === false) metaBits.push('erreur');
+          else if (entry.usage && entry.usage.totalTokens != null) {
+            metaBits.push(formatTokenCount(entry.usage.totalTokens) + ' tok');
+          }
+          if (metaBits.length) {
+            item.appendChild(
+              el('span', 'agent-debug-list-meta', { text: metaBits.join(' · ') })
+            );
+          }
+          item.addEventListener('click', function () {
+            selectedDebugId = entry.id;
+            renderDebugPanel();
+            notifyLayout();
+          });
+          list.appendChild(item);
+        });
+      debugPanel.appendChild(list);
+
+      if (!selected) return;
+
+      var detail = el('div', 'agent-debug-detail');
+      if (selected.error) {
+        detail.appendChild(
+          el('p', 'agent-debug-error', { text: selected.error })
+        );
+      }
+
+      function addSection(title, contentNode) {
+        var sectionNode = el('details', 'agent-debug-section');
+        sectionNode.open = true;
+        sectionNode.appendChild(el('summary', null, { text: title }));
+        var bodyNode = el('div', 'agent-debug-section-body');
+        bodyNode.appendChild(contentNode);
+        sectionNode.appendChild(bodyNode);
+        detail.appendChild(sectionNode);
+      }
+
+      addSection('M\u00e9triques', renderMetricsBlock(selected.usage));
+
+      var req = selected.request || null;
+      var reqPre = el('pre', 'agent-debug-pre');
+      reqPre.textContent = prettyJson(
+        req
+          ? {
+              url: req.url,
+              method: req.method,
+              status: req.status,
+              model: req.model,
+              stream: req.stream,
+              jsonMode: req.jsonMode,
+              temperature: req.temperature,
+              max_tokens: req.max_tokens,
+              messageCount: req.messageCount,
+              note: req.note,
+              error: req.error,
+              body: req.body
+            }
+          : null
+      ) || '(aucune requ\u00eate)';
+      addSection('Requ\u00eate sortante', reqPre);
+
+      var res = selected.response || null;
+      var resPre = el('pre', 'agent-debug-pre');
+      resPre.textContent = prettyJson(
+        res
+          ? {
+              status: res.status,
+              content: res.content,
+              raw: res.raw,
+              parsed: res.parsed,
+              suggestions: res.suggestions
+            }
+          : null
+      ) || '(aucune r\u00e9ponse)';
+      addSection('R\u00e9ponse / sortie brute', resPre);
+
+      if (selected.attempts && selected.attempts.length) {
+        var attemptsPre = el('pre', 'agent-debug-pre');
+        attemptsPre.textContent = prettyJson(selected.attempts);
+        addSection('Tentatives (' + selected.attempts.length + ')', attemptsPre);
+      }
+
+      debugPanel.appendChild(detail);
+    }
+
+    function renderChatStats() {
+      var usage = sessionStats.lastUsage;
       statsEl.replaceChildren();
+      if (!usage || sessionStats.turns < 1) {
+        syncInfoVisibility();
+        return;
+      }
+      infoEl.hidden = false;
 
       function addRow(className, parts) {
         var row = el('div', 'agent-chat-stats-row' + (className ? ' ' + className : ''));
@@ -458,6 +738,7 @@
         });
       }
       addRow('agent-chat-stats-row--session', memoryParts);
+      syncInfoVisibility();
       notifyLayout();
     }
 
@@ -712,13 +993,17 @@
       setSuggestionsBusy(true);
       try {
         var list = await Agent.suggestQuestions(provider, bridge, {
-          history: history
+          history: history,
+          onDebug: function (entry) {
+            pushDebugEntry(entry);
+          }
         });
         if (seq !== suggestionsSeq) return;
         renderSuggestions(list, { animate: options.animate !== false });
       } catch (err) {
         if (seq !== suggestionsSeq) return;
         console.error('AgentUI suggestQuestions failed', err);
+        if (err && err.debug) pushDebugEntry(err.debug);
         if (!suggestionsEl.childNodes.length) clearSuggestions();
       } finally {
         if (seq === suggestionsSeq) setSuggestionsBusy(false);
@@ -987,6 +1272,7 @@
         }
         if (turn.usage) updateSessionStats(turn.usage);
         else renderChatStats();
+        if (turn.debug) pushDebugEntry(turn.debug);
         renderFollowUps(turn.followUps);
         if (turn.suggestions && turn.suggestions.length) {
           suggestionsSeq += 1;
@@ -1000,6 +1286,7 @@
         if (bubble) bubble.textContent = errText;
         else appendMessage('assistant', errText);
         setError(errText);
+        if (err && err.debug) pushDebugEntry(err.debug);
         refreshSuggestions({ animate: true });
       } finally {
         pending = false;
@@ -1044,6 +1331,11 @@
         collapse.setExpanded(true);
       }
       setSettingsOpen(!settingsOpen);
+    });
+    debugBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      setDebugOpen(!debugOpen);
     });
     emptyConfigBtn.addEventListener('click', function () {
       if (collapse && !collapse.isEnabled()) {

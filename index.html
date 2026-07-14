@@ -19,6 +19,8 @@
   <script src="./js/statut-trello.js"></script>
   <script src="./js/completion-ui.js"></script>
   <script src="./js/completion-trello.js"></script>
+  <script src="./js/agent.js"></script>
+  <script src="./js/agent-memory.js"></script>
   <link rel="stylesheet" href="./css/trello-theme.css" />
 </head>
 <body>
@@ -151,32 +153,81 @@
             }
           })
           .then(function () {
-            return t.modal({
-              title: 'Priorité',
-              url: PriorityTrello.pageUrl('./welcome.html'),
-              height: 420,
-              fullscreen: false,
-              accentColor: '#22272B',
+            return new Promise(function (resolve) {
+              t.modal({
+                title: 'Priorité',
+                url: PriorityTrello.pageUrl('./welcome.html'),
+                height: 520,
+                fullscreen: false,
+                accentColor: '#22272B',
+                callback: function () {
+                  resolve();
+                },
+              });
+            });
+          })
+          .then(function () {
+            if (typeof AgentMemory === 'undefined') return;
+            return AgentMemory.load(t).then(function (memory) {
+              if (!AgentMemory.needsOnboarding(memory)) return;
+              return t.modal({
+                title: 'Aligner l\'assistant',
+                url: PriorityTrello.pageUrl('./memory-align.html'),
+                height: 560,
+                fullscreen: false,
+                accentColor: '#22272B',
+              });
             });
           });
       },
 
       // Settings popup loads board context itself — do not gate the menu item on preload.
       'board-buttons': function(t) {
-        return [{
-          icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/settings.svg',
-          text: 'Paramètres de priorité',
-          callback: function(t) {
-            // Popup width is fixed (narrow) by Trello; modal fits statut mapping + color schemes.
-            return t.modal({
-              title: 'Paramètres de priorité',
-              url: PriorityTrello.pageUrl('./settings.html'),
-              height: 720,
-              fullscreen: false,
-              accentColor: '#22272B',
-            });
+        return [
+          {
+            icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/settings.svg',
+            text: 'Paramètres de priorité',
+            callback: function(t) {
+              // Popup width is fixed (narrow) by Trello; modal fits statut mapping + color schemes.
+              return t.modal({
+                title: 'Paramètres de priorité',
+                url: PriorityTrello.pageUrl('./settings.html'),
+                height: 720,
+                fullscreen: false,
+                accentColor: '#22272B',
+              });
+            },
           },
-        }];
+          {
+            icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/bot.svg',
+            text: 'Assistant (mémoire)',
+            callback: function(t) {
+              return Promise.resolve()
+                .then(function () {
+                  if (typeof AgentMemory === 'undefined') return null;
+                  return AgentMemory.load(t);
+                })
+                .then(function (memory) {
+                  if (memory && AgentMemory.needsOnboarding(memory)) {
+                    return t.modal({
+                      title: 'Aligner l\'assistant',
+                      url: PriorityTrello.pageUrl('./memory-align.html'),
+                      height: 560,
+                      fullscreen: false,
+                      accentColor: '#22272B',
+                    });
+                  }
+                  return t.boardBar({
+                    url: PriorityTrello.pageUrl('./memory-chat.html'),
+                    title: 'Assistant',
+                    height: 280,
+                    resizable: true,
+                    accentColor: '#22272B',
+                  });
+                });
+            },
+          },
+        ];
       },
 
       'list-sorters': withBoardContext(function (t) {
