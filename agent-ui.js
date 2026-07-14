@@ -975,13 +975,20 @@
     settingsBtn.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
+      if (collapse && !collapse.isEnabled()) {
+        collapse.setEnabled(true, { expand: true });
+      } else if (collapse && !collapse.isExpanded()) {
+        collapse.setExpanded(true);
+      }
       setSettingsOpen(!settingsOpen);
     });
     emptyConfigBtn.addEventListener('click', function () {
-      setSettingsOpen(true);
-      if (collapse && !collapse.isExpanded()) {
+      if (collapse && !collapse.isEnabled()) {
+        collapse.setEnabled(true, { expand: true });
+      } else if (collapse && !collapse.isExpanded()) {
         collapse.setExpanded(true);
       }
+      setSettingsOpen(true);
     });
     saveBtn.addEventListener('click', function () {
       saveSettings();

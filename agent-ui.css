@@ -554,5 +554,6 @@
 }
 
 .tp-page--priority .chat-leading-icon {
-  color: var(--text-muted, var(--tp-text-muted));
+  color: var(--text-primary, var(--tp-text));
+  opacity: 0.72;
 }
