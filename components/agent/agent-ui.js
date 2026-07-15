@@ -215,6 +215,8 @@
     var dreamInFlight = false;
     var dreamGen = 0;
     var dreamDirty = false;
+    /** One attempt per popup session to rewrite legacy structured Description dumps. */
+    var verboseDescRewriteTried = false;
     var unreadAssistant = 0;
     var settleReady = false;
     var listeningActive = false;
@@ -1766,7 +1768,7 @@
 
     /**
      * Dream stage — async consolidation between chats.
-     * Concatenates card learnings and updates the Trello Description when idle.
+     * Keeps Description as a short summary + misc notes when idle.
      */
     function scheduleCardDream(options) {
       options = options || {};
@@ -1786,7 +1788,16 @@
       }, Math.max(0, delay));
     }
 
+    function cardDescNeedsDreamRewrite() {
+      if (verboseDescRewriteTried) return false;
+      if (typeof Agent.isVerboseStructuredDesc !== 'function') return false;
+      var desc =
+        typeof bridge.getCardDesc === 'function' ? bridge.getCardDesc() || '' : '';
+      return !!Agent.isVerboseStructuredDesc(desc);
+    }
+
     function cardMemoryNeedsDream() {
+      if (cardDescNeedsDreamRewrite()) return true;
       var Mem = global.AgentMemory;
       if (!Mem || typeof Mem.cardDreamNeedsRefresh !== 'function') return false;
       var mem =
@@ -1807,8 +1818,10 @@
       }
       if (typeof bridge.setCardDesc !== 'function') return;
 
+      var rewritingVerbose = cardDescNeedsDreamRewrite();
       dreamInFlight = true;
       dreamDirty = false;
+      if (rewritingVerbose) verboseDescRewriteTried = true;
       var myDream = ++dreamGen;
       try {
         var result = await Agent.cardDreamTurn(provider, bridge, {
@@ -1857,6 +1870,7 @@
         console.error('AgentUI cardDream failed', err);
         // Retry later if facts still need consolidation.
         dreamDirty = true;
+        if (rewritingVerbose) verboseDescRewriteTried = false;
         scheduleCardDream({ delay: 12000 });
       } finally {
         if (myDream === dreamGen) dreamInFlight = false;

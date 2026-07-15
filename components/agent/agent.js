@@ -2764,7 +2764,8 @@
       'Titre et description de la carte (context.cardName / context.cardDesc)\u00a0:',
       '- Renommer le titre de la carte\u00a0: rename_card avec name (nouveau titre complet).',
       '- Modifier la description\u00a0: set_description avec desc (texte complet \u00e0 \u00e9crire dans context.cardDesc\u00a0; "" pour effacer).',
-      '- Une phase R\u00caVE tourne en arri\u00e8re-plan entre les chats\u00a0: elle concat\u00e8ne les cardPatches importants dans la Description. Utilise set_description surtout si l\'utilisateur le demande, ou pour une maj imm\u00e9diate \u00e9vidente.',
+      '- Description = r\u00e9sum\u00e9 court de la t\u00e2che + infos misc (liens, pr\u00e9cisions, notes) ABSENTES des autres champs. INTERDIT d\'y coller Pourquoi / Livrable / Qui / \u00e9ch\u00e9ance / d\u00e9j\u00e0 fait / reste (c\'est d\u00e9j\u00e0 dans la carte / m\u00e9moire / sous-t\u00e2ches).',
+      '- Une phase R\u00caVE tourne en arri\u00e8re-plan entre les chats\u00a0: elle garde la Description courte (r\u00e9sum\u00e9 + misc). Utilise set_description surtout si l\'utilisateur le demande, ou pour une maj imm\u00e9diate \u00e9vidente \u2014 jamais pour recopier les champs carte.',
       '- Distingue bien rename_card (titre), set_description (corps de la carte) et rename_subtask (une entr\u00e9e de progress.items).',
       '- Si l\'utilisateur dit d\'ajouter un suffixe (\u00ab\u00a0ajoute 2\u00a0\u00bb, \u00ab\u00a0ajoute WIP\u00a0\u00bb)\u00a0: construis le nouveau name \u00e0 partir de context.cardName + suffixe.',
       '- Si l\'utilisateur demande d\'ajouter / r\u00e9\u00e9crire / compl\u00e9ter la description\u00a0: construis le desc final \u00e0 partir de context.cardDesc + la demande, puis APPLIQUE set_description.',
@@ -2835,7 +2836,7 @@
       '- set_statut: { listId?: string, matchList?: string, category?: string } (d\u00e9place la carte\u00a0; category ex. completed|blocked|started|backlog|triage|unstarted|canceled)',
       '- set_project: { projectId?: string, matchText?: string, name?: string, clear?: boolean } (lie la carte \u00e0 un projet Objectif\u00a0; clear:true d\u00e9lie\u00a0; matchText/name parmi context.goals.projects)',
       '- rename_card: { name: string } (nouveau titre de la carte\u00a0; name obligatoire, non vide)',
-      '- set_description: { desc: string } (nouvelle description compl\u00e8te\u00a0; desc obligatoire en string, "" pour effacer)',
+      '- set_description: { desc: string } (nouvelle description compl\u00e8te\u00a0; r\u00e9sum\u00e9 court + misc\u00a0; desc obligatoire en string, "" pour effacer)',
       '- add_subtask: { text: string, done?: boolean, estimatedMinutes?: number } (text obligatoire, non vide\u00a0; done:true = cr\u00e9er d\u00e9j\u00e0 coch\u00e9e)',
       '- rename_subtask: { text: string, id?: string, matchText?: string } (nouveau text\u00a0; id OU matchText)',
       '- remove_subtask: { id?: string, matchText?: string } (id OU matchText)',
@@ -4744,7 +4745,7 @@
       '- Ex. FAUX (cringe / th\u00e9\u00e2tre)\u00a0: \u00ab\u00a0Ooh, du neuf! Vas-y, balance\u2026 je juge pas\u00a0\u00bb / \u00ab\u00a0Ooooh! Tu veux montrer \u00e0 tout le monde que tu connais ton affaire?\u00a0\u00bb',
       '- Ex. FAUX (trop plat robot)\u00a0: \u00ab\u00a0Pourquoi faut-il installer les dipl\u00f4mes sur le mur?\u00a0\u00bb',
       '- Ex. suggestions WHY\u00a0: \u00ab\u00a0Aligner les messages entre services\u00a0\u00bb, \u00ab\u00a0Mieux joindre les citoyens\u00a0\u00bb, \u00ab\u00a0\u00c9viter que chacun communique dans son coin\u00a0\u00bb, \u00ab\u00a0Prioriser les efforts com\u00a0\u00bb.',
-      '- D\u00e8s qu\'on a la / les raisons\u00a0: cardPatches remember OBLIGATOIRE au format \u00ab\u00a0Pourquoi\u00a0: \u2026\u00a0\u00bb (garde \u00e7a pour le reste de la carte). Tu peux aussi set_description si \u00e7a clarifie le p\u00e9rim\u00e8tre.',
+      '- D\u00e8s qu\'on a la / les raisons\u00a0: cardPatches remember OBLIGATOIRE au format \u00ab\u00a0Pourquoi\u00a0: \u2026\u00a0\u00bb (garde \u00e7a pour le reste de la carte). set_description seulement pour un r\u00e9sum\u00e9 court / misc \u2014 pas pour y coller le Pourquoi.',
       '- Apr\u00e8s le POURQUOI\u00a0: sers-t\'en pour inf\u00e9rer urgence/impact plus juste\u00a0; ne repose pas le pourquoi. Les tours suivants restent naturels et courts (1 question).',
       '',
       'Titre vague / technique / jargon (apr\u00e8s le POURQUOI, ou juste apr\u00e8s si le titre bloque)\u00a0:',
@@ -4752,7 +4753,7 @@
       '- Challenge vague (1 tour, avec?)\u00a0: \u00ab\u00a0[Sujet], \u00e7a sonne un peu technique et sans vouloir t\'offenser, un peu vague?\u00a0\u00bb',
       '- Livrable (suggestionsMulti:true)\u00a0: \u00ab\u00a0Le produit final, c\'est un document texte? Un diaporama?\u00a0\u00bb (+ autres formats plausibles si pertinents\u00a0: PDF, atelier, checklist\u2026).',
       '- Hypoth\u00e8se de but (oui/non, suggestionsMulti:false)\u00a0: avance ton best guess en question. Ex. strat\u00e9gie com\u00a0: \u00ab\u00a0\u00c7a sert \u00e0 guider le service des communications pour offrir un meilleur service, c\'est \u00e7a?\u00a0\u00bb',
-      '- Sur r\u00e9ponse\u00a0: remember \u00ab\u00a0Livrable\u00a0: \u2026\u00a0\u00bb / \u00ab\u00a0But\u00a0: \u2026\u00a0\u00bb (+ rename_card / set_description si \u00e7a rend la carte plus claire).',
+      '- Sur r\u00e9ponse\u00a0: remember \u00ab\u00a0Livrable\u00a0: \u2026\u00a0\u00bb / \u00ab\u00a0But\u00a0: \u2026\u00a0\u00bb (+ rename_card si le titre devient plus clair\u00a0; set_description seulement pour un r\u00e9sum\u00e9 court, sans dump Livrable/But).',
       '- Une id\u00e9e par tour\u00a0: d\'abord POURQUOI, puis vague?, puis livrable, puis confirmation de but \u2014 pas tout en une question.',
       '',
       'Plans / strat\u00e9gies / projets larges (apr\u00e8s POURQUOI + cadrage si besoin)\u00a0:',
@@ -4936,7 +4937,7 @@
       '  \u00b7 patches = projet / tableau (qui approuve, qui travaille sur quoi, r\u00f4les, normes, faits r\u00e9utilisables sur d\'autres cartes).',
       '  \u00b7 Tr\u00e8s important et vrai au-del\u00e0 de la carte \u2192 patches (remember si durable, note si provisoire). Sinon \u2192 cardPatches.',
       '- Formats cardPatches utiles\u00a0: \u00ab\u00a0Pourquoi\u00a0: \u2026\u00a0\u00bb, \u00ab\u00a0Livrable\u00a0: \u2026\u00a0\u00bb, \u00ab\u00a0Qui\u00a0: \u2026\u00a0\u00bb, \u00ab\u00a0Permission\u00a0: \u2026\u00a0\u00bb, \u00ab\u00a0D\u00e9j\u00e0 fait\u00a0: \u2026\u00a0\u00bb, \u00ab\u00a0Reste\u00a0: \u2026\u00a0\u00bb.',
-      '- Si la r\u00e9ponse clarifie le p\u00e9rim\u00e8tre\u00a0: rename_card (titre plus clair), set_description (process / d\u00e9finition / pourquoi), add_subtask (\u00e9tapes concr\u00e8tes) \u2014 sans inventer.',
+      '- Si la r\u00e9ponse clarifie le p\u00e9rim\u00e8tre\u00a0: rename_card (titre plus clair), set_description (r\u00e9sum\u00e9 court + misc absents des autres champs\u00a0; INTERDIT dump Pourquoi/Livrable/Qui/D\u00e9j\u00e0 fait/Reste), add_subtask (\u00e9tapes concr\u00e8tes) \u2014 sans inventer.',
       '- Ex. user explique les \u00e9tapes d\'archivage \u2192 add_subtask pour chaque \u00e9tape claire + remember le process + question courte suivante.',
       '- Ne repose pas ce qui est d\u00e9j\u00e0 dans context.cardMemory.facts, context.memory, ou l\'historique (surtout un \u00ab\u00a0Pourquoi\u00a0:\u00a0\u00bb d\u00e9j\u00e0 not\u00e9).',
       '',
@@ -5005,7 +5006,7 @@
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (active le bloc Progr\u00e8s + % carte\u00a0; OBLIGATOIRE d\u00e8s qu\'on parle d\'avancement)',
       '- set_project: { projectId?, matchText?, name?, clear? }',
       '- rename_card: { name } (titre plus clair / plus court si la r\u00e9ponse le justifie)',
-      '- set_description: { desc } (clarifier le process / p\u00e9rim\u00e8tre / pourquoi\u00a0; desc = texte complet)',
+      '- set_description: { desc } (r\u00e9sum\u00e9 court + misc\u00a0; pas de dump Pourquoi/Livrable/Qui/\u00e9ch\u00e9ance/d\u00e9j\u00e0 fait/reste\u00a0; desc = texte complet)',
       '- add_subtask: { text, estimatedMinutes? } (quand une \u00e9tape concr\u00e8te \u00e9merge clairement\u00a0; done:true si d\u00e9j\u00e0 faite)',
       '- toggle_subtask: { id?|matchText?, done?: boolean } (cocher une \u00e9tape d\u00e9j\u00e0 dans progress.items)',
       '- set_subtask_progress: { id?|matchText?, progress: 0-100 }',
@@ -8345,8 +8346,8 @@
     };
   }
 
-  var MAX_DREAM_DESC_LEN = 6000;
-  var MAX_DREAM_HISTORY_CHARS = 1800;
+  var MAX_DREAM_DESC_LEN = 900;
+  var MAX_DREAM_HISTORY_CHARS = 1200;
 
   function normalizeDescForCompare(text) {
     return String(text || '')
@@ -8377,9 +8378,78 @@
   }
 
   /**
-   * Dream stage: between chats, concatenate card learnings and distill important
-   * information into the Trello card Description. Silent consolidation pass —
-   * not a user-facing conversation turn.
+   * True when Description looks like the old verbose structured brief
+   * (## Pourquoi / Livrable / Qui / …) that Dream used to emit.
+   */
+  function isVerboseStructuredDesc(desc) {
+    var t = String(desc || '');
+    if (t.length < 120) return false;
+    var hits = 0;
+    if (/#{1,3}\s*Pourquoi\b/i.test(t)) hits++;
+    if (/#{1,3}\s*Livrable\b/i.test(t) || /#{1,3}\s*But\b/i.test(t)) hits++;
+    if (/#{1,3}\s*Qui\b/i.test(t)) hits++;
+    if (/#{1,3}\s*Contraintes?\b/i.test(t)) hits++;
+    if (/#{1,3}\s*D[e\u00e9]j[a\u00e0]\s*fait\b/i.test(t)) hits++;
+    if (/#{1,3}\s*Reste\b/i.test(t)) hits++;
+    return hits >= 2;
+  }
+
+  /** Compact snapshot of fields already visible on the card (so dream does not repeat them). */
+  function buildDreamCardSnapshot(context) {
+    var due = context && context.due;
+    var progress = context && context.progress;
+    var blocked = context && context.blocked;
+    var items =
+      progress && Array.isArray(progress.items)
+        ? progress.items
+            .map(function (it) {
+              if (!it || typeof it !== 'object') return null;
+              var text = typeof it.text === 'string' ? it.text.trim() : '';
+              if (!text) return null;
+              return (it.done ? '[x] ' : '[ ] ') + text.slice(0, 80);
+            })
+            .filter(Boolean)
+            .slice(0, 8)
+        : [];
+    return {
+      due:
+        due && due.enabled && due.dueDate
+          ? {
+              dueDate: due.dueDate,
+              dueTime: due.dueTime || null
+            }
+          : null,
+      progress:
+        progress && progress.enabled !== false
+          ? {
+              percent:
+                typeof progress.percent === 'number'
+                  ? progress.percent
+                  : typeof progress.cardProgress === 'number'
+                    ? progress.cardProgress
+                    : null,
+              items: items
+            }
+          : null,
+      blocked:
+        blocked && blocked.enabled
+          ? {
+              reasons: Array.isArray(blocked.blockedReasons)
+                ? blocked.blockedReasons.slice(0, 4)
+                : []
+            }
+          : null,
+      statut:
+        context && context.statut && context.statut.listName
+          ? context.statut.listName
+          : null
+    };
+  }
+
+  /**
+   * Dream stage: between chats, keep the Trello Description as a short task
+   * summary + misc notes that are not already visible on other card fields.
+   * Silent consolidation pass — not a user-facing conversation turn.
    *
    * Returns { ok, skipped?, reason?, updated?, desc?, applied?, usage?, debug }.
    */
@@ -8398,6 +8468,7 @@
     var currentDesc =
       typeof context.cardDesc === 'string' ? context.cardDesc : '';
     var historyExcerpt = buildDreamHistoryExcerpt(options.history);
+    var cardSnapshot = buildDreamCardSnapshot(context);
 
     var p = normalizeProvider(provider);
     if (!isConfigured(p)) {
@@ -8409,25 +8480,31 @@
         role: 'system',
         content: [
           'Tu es en phase R\u00caVE (consolidation asynchrone entre conversations) pour une carte Trello (Power-Up Priorit\u00e9).',
-          'Mission\u00a0: concat\u00e9ner les apprentissages (cardMemory.facts + extraits de chat utiles) et en extraire l\'essentiel dans la Description de la carte.',
+          'Mission\u00a0: maintenir une Description COURTE = r\u00e9sum\u00e9 de la t\u00e2che + infos misc absentes des autres champs carte.',
           'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
           '{"shouldUpdate":true,"desc":"\u2026","reason":"courte justification priv\u00e9e"}',
-          'ou {"shouldUpdate":false,"reason":"\u2026"} si la description actuelle couvre d\u00e9j\u00e0 l\'essentiel.',
+          'ou {"shouldUpdate":false,"reason":"\u2026"} si la description actuelle est d\u00e9j\u00e0 bonne (courte, utile, sans redites).',
           'R\u00e8gles\u00a0:',
-          '- La Description = note de brief partag\u00e9e sur la carte (pas un log de chat, pas de questions).',
-          '- Distille les faits importants\u00a0: Pourquoi, Livrable/But, Qui, Contraintes, D\u00e9j\u00e0 fait, Reste, d\u00e9cisions.',
-          '- Markdown court et scannable (## titres et/ou listes). Pas de blabla, pas d\'emoji superflus.',
-          '- Conserve les infos d\u00e9j\u00e0 en description qui restent utiles et non contredites par les faits.',
-          '- N\'invente rien\u00a0: seulement ce qui est dans facts / cardDesc / historyExcerpt / titre.',
+          '- Description = 1\u20133 phrases max (ou un court paragraphe). R\u00e9sum\u00e9 du quoi / p\u00e9rim\u00e8tre + notes misc (liens, style, d\u00e9tail ponctuel utile).',
+          '- INTERDIT les sections structur\u00e9es ## Pourquoi / Livrable / But / Qui / Contraintes / D\u00e9j\u00e0 fait / Reste (ou listes \u00e9quivalentes).',
+          '- INTERDIT de recopier ce qui est d\u00e9j\u00e0 visible ailleurs\u00a0: titre, \u00e9ch\u00e9ance (cardSnapshot.due), statut, priorit\u00e9, % / sous-t\u00e2ches (d\u00e9j\u00e0 fait / reste), blocage, faits cardMemory (Pourquoi:, Livrable:, Qui:, etc.).',
+          '- Les faits cardMemory restent en m\u00e9moire interne\u00a0: s\'en servir pour \u00e9crire le r\u00e9sum\u00e9, sans les dump section par section.',
+          '- Si la description actuelle est un long brief structur\u00e9 redondant\u00a0: shouldUpdate:true et r\u00e9\u00e9cris-la en version courte.',
+          '- Conserve seulement les infos misc d\u00e9j\u00e0 en description qui restent utiles et non contredites.',
+          '- N\'invente rien\u00a0: seulement facts / cardDesc / historyExcerpt / titre / cardSnapshot.',
+          '- Markdown minimal (pas de ## obligatoire). Pas de blabla, pas d\'emoji superflus.',
           '- desc = texte COMPLET de remplacement (pas un diff). Max ~' +
             MAX_DREAM_DESC_LEN +
-            ' caractères.',
-          '- shouldUpdate:false si les faits n\'ajoutent rien de net à la description actuelle.',
-          '- INTERDIT d\'émettre des actions outils\u00a0: tu proposes seulement le desc.',
+            ' caract\u00e8res (vise beaucoup moins).',
+          '- shouldUpdate:false si rien \u00e0 ajouter/couper de net.',
+          '- INTERDIT d\'\u00e9mettre des actions outils\u00a0: tu proposes seulement le desc.',
+          'Ex. BON\u00a0: "Vid\u00e9o bon coup au parc (nouvelle roulotte) pour les r\u00e9seaux. Montage + SFX + sous-titres avant publication."',
+          'Ex. MAUVAIS\u00a0: brief avec ## Pourquoi / ## Livrable / ## Qui / ## Contraintes / ## D\u00e9j\u00e0 fait / ## Reste.',
           'Contexte\u00a0:',
           JSON.stringify({
             cardName: context.cardName || '',
             cardDesc: currentDesc.slice(0, MAX_DREAM_DESC_LEN),
+            cardSnapshot: cardSnapshot,
             facts: facts.slice(0, 8),
             historyExcerpt: historyExcerpt
           })
@@ -8436,7 +8513,7 @@
       {
         role: 'user',
         content:
-          'Phase R\u00caVE\u00a0: consolide les apprentissages importants dans la Description si besoin. Sinon shouldUpdate:false.'
+          'Phase R\u00caVE\u00a0: si besoin, r\u00e9\u00e9cris une Description courte (r\u00e9sum\u00e9 + misc, sans redites). Sinon shouldUpdate:false.'
       }
     ];
 
@@ -8462,7 +8539,7 @@
       try {
         response = await chatCompletions(p, messages, {
           jsonMode: true,
-          max_tokens: 900,
+          max_tokens: 400,
           temperature: 0.25
         });
         if (response.meta) debug.attempts.push(Object.assign({ label: 'json' }, response.meta));
@@ -8473,7 +8550,7 @@
         if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
           response = await chatCompletions(p, messages, {
             jsonMode: false,
-            max_tokens: 900,
+            max_tokens: 400,
             temperature: 0.25
           });
           if (response.meta) {
@@ -10977,8 +11054,10 @@
     addDaysIsoLocal: addDaysIsoLocal,
     cardSanityCheck: cardSanityCheck,
     cardDreamTurn: cardDreamTurn,
+    isVerboseStructuredDesc: isVerboseStructuredDesc,
     suggestSubtasks: suggestSubtasks,
     estimateSubtaskDurations: estimateSubtaskDurations,
+    heuristicSubtaskEstimates: heuristicSubtaskEstimates,
     parseDurationMinutes: parseDurationMinutes,
     suggestGoals: suggestGoals,
     suggestLabels: suggestLabels,

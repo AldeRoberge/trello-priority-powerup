@@ -767,6 +767,69 @@
     }
   }
 
+  /**
+   * If the card has no assignees, assign the card creator.
+   * No-op when already assigned, creator unknown, or REST unavailable.
+   *
+   * @param {object} t Power-Up client
+   * @param {{ members?: Array, boardMembers?: Array, creator?: object|null }} [options]
+   * @returns {Promise<{ ok: boolean, changed: boolean, reason?: string, members?: Array, creator?: object|null, memberId?: string }>}
+   */
+  async function ensureCreatorAssigned(t, options) {
+    options = options || {};
+    try {
+      var members = Array.isArray(options.members)
+        ? normalizeMemberList(options.members)
+        : await getCardMembers(t);
+      if (members.length) {
+        return {
+          ok: true,
+          changed: false,
+          reason: 'already-assigned',
+          members: members,
+          creator: options.creator || null
+        };
+      }
+
+      var creator =
+        options.creator && options.creator.id
+          ? options.creator
+          : await getCardCreator(t, options.boardMembers);
+      if (!creator || !creator.id) {
+        return { ok: false, changed: false, reason: 'no-creator', members: members };
+      }
+
+      var addResult = await addCardMember(t, creator.id);
+      if (!addResult || addResult.ok === false) {
+        return {
+          ok: false,
+          changed: false,
+          reason: (addResult && addResult.reason) || 'add-failed',
+          members: members,
+          creator: creator
+        };
+      }
+
+      var nextMembers = await getCardMembers(t);
+      if (!nextMembers.length) nextMembers = [creator];
+      return {
+        ok: true,
+        changed: true,
+        members: nextMembers,
+        creator: creator,
+        memberId: String(creator.id)
+      };
+    } catch (err) {
+      console.error('Priority ensureCreatorAssigned failed', err);
+      return {
+        ok: false,
+        changed: false,
+        reason: 'error',
+        error: (err && err.message) || String(err || 'Erreur')
+      };
+    }
+  }
+
   function normalizeLabelList(list) {
     if (!Array.isArray(list)) return [];
     return list.filter(function (label) {
@@ -2288,6 +2351,7 @@
     getCardMembers: getCardMembers,
     getBoardMembers: getBoardMembers,
     getCardCreator: getCardCreator,
+    ensureCreatorAssigned: ensureCreatorAssigned,
     getCardLabels: getCardLabels,
     getBoardLabels: getBoardLabels,
     addCardLabel: addCardLabel,

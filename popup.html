@@ -30,13 +30,13 @@
   <script src="./components/completion/completion-trello.js?v=progress-due-complete-1"></script>
   <script src="./components/goals/goals-trello.js?v=goals-1"></script>
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
-  <script src="./components/agent/agent.js?v=chat-budget-1"></script>
+  <script src="./components/agent/agent.js?v=estimate-fallback-1"></script>
   <script src="./components/agent/agent-memory.js?v=agent-dream-1"></script>
   <script src="./components/agent/memory-ui.js?v=memory-settings-1"></script>
   <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
   <script src="./components/agent/agent-ui.js?v=attente-hourglass-1"></script>
-  <script src="./components/history/card-history.js?v=history-5"></script>
+  <script src="./components/history/card-history.js?v=history-budget-1"></script>
   <script src="./components/history/history-ui.js?v=history-5"></script>
 </head>
 <body class="tp-page tp-page--priority">
@@ -1287,9 +1287,67 @@
       }
       silentEstimateBusy = true;
       silentEstimateQueued = false;
+      var needingPayload = needing.map(function (it) {
+        return { id: it.id, text: it.text };
+      });
+
+      function applyEstimates(estimates) {
+        if (!estimates || !estimates.length || !completionUi) return false;
+        silentEstimateSuppress = true;
+        try {
+          if (typeof completionUi.applyItemEstimates === 'function') {
+            completionUi.applyItemEstimates(estimates, { lock: false });
+          }
+          syncInfoRecap();
+        } finally {
+          silentEstimateSuppress = false;
+        }
+        return true;
+      }
+
+      function localFallback() {
+        if (typeof PriorityAgent.heuristicSubtaskEstimates === 'function') {
+          return PriorityAgent.heuristicSubtaskEstimates({ items: needingPayload });
+        }
+        return needingPayload.map(function (it) {
+          return {
+            id: it.id,
+            matchText: it.text,
+            estimatedMinutes: 30
+          };
+        });
+      }
+
+      function withTimeout(promise, ms) {
+        return new Promise(function (resolve, reject) {
+          var settled = false;
+          var timer = setTimeout(function () {
+            if (settled) return;
+            settled = true;
+            reject(new Error('Estimation timeout'));
+          }, ms);
+          Promise.resolve(promise).then(
+            function (value) {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              resolve(value);
+            },
+            function (err) {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              reject(err);
+            }
+          );
+        });
+      }
+
       PriorityAgent.getProvider(t)
         .then(function (provider) {
-          if (!PriorityAgent.isConfigured(provider)) return null;
+          if (!PriorityAgent.isConfigured(provider)) {
+            return applyEstimates(localFallback());
+          }
           if (typeof completionUi.setEstimatingItemIds === 'function') {
             completionUi.setEstimatingItemIds(
               needing.map(function (it) {
@@ -1297,35 +1355,37 @@
               })
             );
           }
-          return resolveCardNameForAi().then(function (cardName) {
-            return PriorityAgent.estimateSubtaskDurations(provider, {
-              cardName: cardName || readCardNameLabel(),
-              cardDesc:
-                (infoUi && typeof infoUi.getDesc === 'function'
-                  ? infoUi.getDesc()
-                  : '') ||
-                cardDesc ||
-                '',
-              items: needing.map(function (it) {
-                return { id: it.id, text: it.text };
-              })
+          return resolveCardNameForAi()
+            .then(function (cardName) {
+              return withTimeout(
+                PriorityAgent.estimateSubtaskDurations(provider, {
+                  cardName: cardName || readCardNameLabel(),
+                  cardDesc:
+                    (infoUi && typeof infoUi.getDesc === 'function'
+                      ? infoUi.getDesc()
+                      : '') ||
+                    cardDesc ||
+                    '',
+                  items: needingPayload
+                }),
+                20000
+              );
+            })
+            .then(function (estimates) {
+              if (estimates && estimates.length) {
+                applyEstimates(estimates);
+                return;
+              }
+              applyEstimates(localFallback());
+            })
+            .catch(function (err) {
+              console.error('Silent subtask estimate failed', err);
+              applyEstimates(localFallback());
             });
-          });
-        })
-        .then(function (estimates) {
-          if (!estimates || !estimates.length || !completionUi) return;
-          silentEstimateSuppress = true;
-          try {
-            if (typeof completionUi.applyItemEstimates === 'function') {
-              completionUi.applyItemEstimates(estimates, { lock: false });
-            }
-            syncInfoRecap();
-          } finally {
-            silentEstimateSuppress = false;
-          }
         })
         .catch(function (err) {
           console.error('Silent subtask estimate failed', err);
+          applyEstimates(localFallback());
         })
         .then(function () {
           silentEstimateBusy = false;
@@ -1804,14 +1864,51 @@
           resizePopup();
 
           var creatorPromise =
-            PriorityTrello.getCardCreator && infoUi && typeof infoUi.setCreator === 'function'
+            PriorityTrello.getCardCreator
               ? PriorityTrello.getCardCreator(t, boardMembers).then(function (creator) {
                   if (infoUi && typeof infoUi.setCreator === 'function') {
                     infoUi.setCreator(creator);
                   }
                   resizePopup();
+                  return creator;
                 })
-              : Promise.resolve();
+              : Promise.resolve(null);
+
+          var assignCreatorPromise = creatorPromise
+            .then(function (creator) {
+              if (
+                !authorized ||
+                !creator ||
+                !creator.id ||
+                (members && members.length) ||
+                typeof PriorityTrello.ensureCreatorAssigned !== 'function'
+              ) {
+                return null;
+              }
+              return PriorityTrello.ensureCreatorAssigned(t, {
+                members: members,
+                boardMembers: boardMembers,
+                creator: creator
+              }).then(function (result) {
+                if (!result || !result.changed) return result;
+                markMembersDirty();
+                var next = Array.isArray(result.members) ? result.members : [];
+                latestMembersFp = fingerprintIds(next);
+                appliedMembersFp = latestMembersFp;
+                if (infoUi && typeof infoUi.setMembers === 'function') {
+                  infoUi.setMembers(next);
+                }
+                syncInfoRecap();
+                resizePopup();
+                return commitHistoryNow('Assigné au créateur').then(function () {
+                  return result;
+                });
+              });
+            })
+            .catch(function (err) {
+              console.error('Auto-assign creator failed', err);
+              return null;
+            });
 
           var parentPromise =
             childId &&
@@ -1829,7 +1926,7 @@
                 )
               : Promise.resolve();
 
-          return Promise.all([creatorPromise, parentPromise]);
+          return Promise.all([assignCreatorPromise, parentPromise]);
         })
         .catch(function (err) {
           console.error('Info section mount failed', err);

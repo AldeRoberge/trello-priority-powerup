@@ -7330,12 +7330,7 @@
     function renderMembers() {
       membersEl.replaceChildren();
 
-      if (!members.length) {
-        var empty = document.createElement('span');
-        empty.className = 'info-recap-empty';
-        empty.textContent = 'Personne';
-        membersEl.appendChild(empty);
-      } else {
+      if (members.length) {
         members.forEach(function (member) {
           var name = memberDisplayName(member) || 'Membre';
           var chip = document.createElement('span');
@@ -7765,12 +7760,7 @@
     function renderLabels() {
       labelsEl.replaceChildren();
 
-      if (!labels.length) {
-        var empty = document.createElement('span');
-        empty.className = 'info-recap-empty';
-        empty.textContent = 'Aucune';
-        labelsEl.appendChild(empty);
-      } else {
+      if (labels.length) {
         labels.forEach(function (label) {
           var name = labelDisplayName(label);
           var hex = labelColorHex(label.color);

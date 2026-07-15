@@ -923,13 +923,18 @@
       return t
         .get('card', 'private', HISTORY_KEY)
         .then(function (raw) {
-          store = normalizeStore(raw);
+          store = trimStore(normalizeStore(raw));
           notify();
+          // Rewrite slimmed history so an oversized legacy blob frees card/private room.
+          if (raw != null) {
+            persist();
+          }
           return store;
         })
         .catch(function (err) {
           console.error('CardHistory.load failed', err);
           store = emptyStore();
+          persist();
           return store;
         });
     }

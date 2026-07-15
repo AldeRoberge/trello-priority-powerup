@@ -65,6 +65,30 @@ var agentSrc = fs.readFileSync(
 );
 check('agent exports cardDreamTurn', /cardDreamTurn:\s*cardDreamTurn/.test(agentSrc));
 check('agent defines cardDreamTurn', /async function cardDreamTurn\(/.test(agentSrc));
+check(
+  'dream prompt forbids structured brief dump',
+  agentSrc.indexOf('INTERDIT les sections structur') !== -1 &&
+    agentSrc.indexOf('## Pourquoi / Livrable / But / Qui') !== -1
+);
+check(
+  'dream prompt prefers short summary',
+  agentSrc.indexOf('Description COURTE') !== -1 &&
+    agentSrc.indexOf('infos misc absentes des autres champs carte') !== -1
+);
+check('dream builds card snapshot', /function buildDreamCardSnapshot\(/.test(agentSrc));
+check('dream detects verbose dump', /function isVerboseStructuredDesc\(/.test(agentSrc));
+check('dream exports verbose detector', /isVerboseStructuredDesc:\s*isVerboseStructuredDesc/.test(agentSrc));
+check('dream desc cap is short', /var MAX_DREAM_DESC_LEN = 900/.test(agentSrc));
+check(
+  'dream rewrites verbose briefs',
+  agentSrc.indexOf('long brief structur') !== -1 &&
+    agentSrc.indexOf('version courte') !== -1
+);
+
+check(
+  'ui rewrites verbose desc once',
+  /verboseDescRewriteTried/.test(uiSrc) && /cardDescNeedsDreamRewrite/.test(uiSrc)
+);
 
 var uiSrc = fs.readFileSync(
   path.join(__dirname, '..', 'components', 'agent', 'agent-ui.js'),
