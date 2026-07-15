@@ -2,8 +2,26 @@
 var fs = require('fs');
 var path = require('path');
 var vm = require('vm');
+var { URL } = require('url');
 
-var sandbox = { PriorityUI: null, window: {} };
+var sandbox = {
+  PriorityUI: null,
+  window: {},
+  URL: URL,
+  fetch: function () {
+    return Promise.reject(new Error('fetch disabled in verify-markdown'));
+  },
+  sessionStorage: {
+    _data: Object.create(null),
+    getItem: function (k) {
+      return this._data[k] || null;
+    },
+    setItem: function (k, v) {
+      this._data[k] = String(v);
+    }
+  }
+};
+sandbox.window = sandbox;
 vm.runInNewContext(
   fs.readFileSync(path.join(__dirname, '..', 'components', 'priority', 'priority-ui.js'), 'utf8'),
   sandbox
@@ -23,8 +41,10 @@ var smart =
   '[https://docs.google.com/document/d/104eWT2AmtFuJsTiZ-RToWFVXfTjQL8QKva6C_Z_uDXE/edit?tab=t.0](https://docs.google.com/document/d/104eWT2AmtFuJsTiZ-RToWFVXfTjQL8QKva6C_Z_uDXE/edit?tab=t.0 "smartCard-block")';
 var outSmart = PU.renderMarkdownToHtml(smart);
 check(
-  'smartCard-block becomes anchor',
-  outSmart.indexOf('<a class="info-md-link"') !== -1 && outSmart.indexOf('smartCard') === -1,
+  'smartCard-block becomes smartcard',
+  outSmart.indexOf('info-md-smartcard--block') !== -1 &&
+    outSmart.indexOf('data-smart-url=') !== -1 &&
+    outSmart.indexOf('smartCard') === -1,
   outSmart
 );
 check(
@@ -37,20 +57,37 @@ check(
 
 var withAmp = PU.renderMarkdownToHtml('[label](https://example.com?a=1&b=2 "smartCard-inline")');
 check(
-  'ampersand in URL not double-escaped',
-  withAmp.indexOf('href="https://example.com?a=1&amp;b=2"') !== -1 &&
+  'smartCard-inline ampersand href',
+  withAmp.indexOf('info-md-smartcard--inline') !== -1 &&
+    withAmp.indexOf('href="https://example.com?a=1&amp;b=2"') !== -1 &&
     withAmp.indexOf('&amp;amp;') === -1,
   withAmp
 );
 
 var plain = PU.renderMarkdownToHtml('[plain](https://example.com)');
-check('untitled link still works', plain.indexOf('<a class="info-md-link"') !== -1, plain);
+check('named link stays inline', plain.indexOf('info-md-link') !== -1, plain);
 
 var titled = PU.renderMarkdownToHtml('[Click](https://example.com "title")');
 check(
   'standard titled link',
   titled.indexOf('<a class="info-md-link"') !== -1 && titled.indexOf('>Click<') !== -1,
   titled
+);
+
+var bare = PU.renderMarkdownToHtml('See https://example.com/path for more');
+check('bare url becomes smartcard', bare.indexOf('info-md-smartcard--block') !== -1, bare);
+
+check(
+  'smartCardMode block',
+  PU.smartCardModeForLink('https://x.com', 'https://x.com', 'smartCard-block') === 'block'
+);
+check(
+  'smartCardMode inline',
+  PU.smartCardModeForLink('label', 'https://x.com', 'smartCard-inline') === 'inline'
+);
+check(
+  'smartCardMode named',
+  PU.smartCardModeForLink('Click here', 'https://x.com', '') === ''
 );
 
 check('wrapMarkdownInlineSelection export', typeof PU.wrapMarkdownInlineSelection === 'function');

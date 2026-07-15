@@ -8,14 +8,14 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=info-labels-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-3" />
-  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=info-members-1" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=info-add-right-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-scope-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/effects.js?v=fx-3"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=info-members-1"></script>
+  <script src="./components/priority/priority-ui.js?v=info-add-right-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
@@ -270,24 +270,12 @@
         }
       }
 
-      var blockedOn = !!state.enAttente;
-      var blockedLabel = '';
-      if (blockedOn && PriorityUI.formatBlockedReasonsSummary) {
-        blockedLabel = PriorityUI.formatBlockedReasonsSummary(state.blockedReasons, {
-          empty: 'Bloqu\u00e9',
-          links: state.blockedLinks,
-          items: getBlockedSubtasks()
-        });
-      }
-
       infoUi.setRecap({
         priorityLabel: priorityLabel,
         priorityVisual: priorityVisual,
         impactReach: impactReach,
         durationLabel: durationLabel,
-        dueLabel: dueLabel,
-        blockedOn: blockedOn,
-        blockedLabel: blockedLabel
+        dueLabel: dueLabel
       });
     }
 

@@ -5923,8 +5923,7 @@
     var chrome = createCollapsibleEnableChrome({
       title: 'Statut',
       bodyId: bodyId,
-      checkboxClass: 'statut-enable-checkbox',
-      labelClass: 'statut-enable-label',
+      hideEnable: true,
       leadingIcon: 'ti-list',
       iconClass: 'statut-leading-icon',
       titleClass: 'statut-enable-title',
@@ -6245,7 +6244,8 @@
       field: field,
       body: body,
       chrome: chrome,
-      enabled: config.enabled !== false,
+      alwaysEnabled: true,
+      enabled: true,
       expanded:
         config.expanded != null
           ? !!config.expanded
@@ -6366,8 +6366,6 @@
     var impactReachLabel = typeof config.impactReach === 'string' ? config.impactReach : '';
     var durationLabel = typeof config.durationLabel === 'string' ? config.durationLabel : '';
     var dueLabel = typeof config.dueLabel === 'string' ? config.dueLabel : '';
-    var blockedLabel = typeof config.blockedLabel === 'string' ? config.blockedLabel : '';
-    var blockedOn = !!config.blockedOn;
     var titleDirty = false;
     var titleSaveTimer = null;
     var titleBusy = false;
@@ -6452,7 +6450,7 @@
         });
       }
 
-      return { row: row, value: value };
+      return { row: row, label: label, value: value };
     }
 
     // ── Title ──────────────────────────────────────────────────────────
@@ -6692,8 +6690,8 @@
 
     membersAddWrap.appendChild(membersAddBtn);
     membersAddWrap.appendChild(membersPicker);
+    membersRow.label.appendChild(membersAddWrap);
     membersWrap.appendChild(membersEl);
-    membersWrap.appendChild(membersAddWrap);
     membersWrap.appendChild(membersStatus);
     membersRow.value.appendChild(membersWrap);
     body.appendChild(membersRow.row);
@@ -6747,8 +6745,8 @@
 
     labelsAddWrap.appendChild(labelsAddBtn);
     labelsAddWrap.appendChild(labelsPicker);
+    labelsRow.label.appendChild(labelsAddWrap);
     labelsWrap.appendChild(labelsEl);
-    labelsWrap.appendChild(labelsAddWrap);
     labelsWrap.appendChild(labelsStatus);
     labelsWrap.appendChild(labelsSuggestSection);
     labelsRow.value.appendChild(labelsWrap);
@@ -6764,7 +6762,7 @@
     objectifRow.value.appendChild(objectifMount);
     body.appendChild(objectifRow.row);
 
-    // ── Priority / Due / Blocked (recap) ───────────────────────────────
+    // ── Priority / Due (recap) ─────────────────────────────────────────
     var priorityRow = makeRow('priority', 'Priorit\u00e9', {
       interactive: true,
       icon: 'ti-flame'
@@ -6814,15 +6812,6 @@
     dueValueEl.className = 'info-recap-text';
     dueRow.value.appendChild(dueValueEl);
     body.appendChild(dueRow.row);
-
-    var blockedRow = makeRow('blocked', 'Bloqu\u00e9', {
-      interactive: true,
-      icon: 'ti-barrier-block'
-    });
-    var blockedValueEl = document.createElement('span');
-    blockedValueEl.className = 'info-recap-text';
-    blockedRow.value.appendChild(blockedValueEl);
-    body.appendChild(blockedRow.row);
 
     field.appendChild(body);
     el.appendChild(field);
@@ -6881,6 +6870,12 @@
           '<span class="info-desc-placeholder">Ajouter une description\u2026</span>';
       } else {
         descPreview.innerHTML = renderMarkdownToHtml(value);
+        hydrateSmartLinkPreviews(descPreview, {
+          onDone: function () {
+            if (!descEditing) syncDescPreviewSize();
+            onLayoutChange();
+          }
+        });
       }
       if (!descEditing) syncDescPreviewSize();
     }
@@ -7760,15 +7755,6 @@
       setRecapText(porteValueEl, impactReachLabel, 'Non d\u00e9finie');
       setRecapText(dureeValueEl, durationLabel, 'Non d\u00e9finie');
       setRecapText(dueValueEl, dueLabel, 'Aucune');
-      if (blockedOn) {
-        setRecapText(blockedValueEl, blockedLabel || 'Oui', 'Oui');
-        blockedValueEl.classList.add('is-blocked');
-      } else {
-        blockedValueEl.textContent = 'Non';
-        blockedValueEl.classList.add('is-empty');
-        blockedValueEl.classList.remove('is-blocked');
-      }
-      blockedRow.row.classList.toggle('is-blocked', blockedOn);
     }
 
     function summaryText() {
@@ -7780,7 +7766,6 @@
       if (impactReachLabel) bits.push(impactReachLabel);
       if (durationLabel) bits.push(durationLabel);
       if (dueLabel) bits.push(dueLabel);
-      if (blockedOn) bits.push(blockedLabel || 'Bloqu\u00e9');
       return bits.join(' \u00b7 ');
     }
 
@@ -8297,8 +8282,6 @@
         if (next.impactReach != null) impactReachLabel = String(next.impactReach || '');
         if (next.durationLabel != null) durationLabel = String(next.durationLabel || '');
         if (next.dueLabel != null) dueLabel = String(next.dueLabel || '');
-        if (next.blockedLabel != null) blockedLabel = String(next.blockedLabel || '');
-        if (next.blockedOn != null) blockedOn = !!next.blockedOn;
         renderRecap();
         collapse.refreshSummary();
       },
@@ -9321,13 +9304,20 @@
     var current = normalizeDueDate(initialDate);
     var currentTime = current ? normalizeDueTime(initialTime) : '';
     var rememberedTime = currentTime || '';
-    var initialEnabled =
+    // Section is always on (no enable checkbox). dueEnabled tracks whether a
+    // date is set — empty stays optional / visually quiet (no has-due-date).
+    var enabled = true;
+    var hasDueDateInitially = !!current && (
       initialValue && typeof initialValue === 'object' && initialValue.dueEnabled != null
-        ? !!initialValue.dueEnabled && !!current
+        ? !!initialValue.dueEnabled
         : config.enabled != null
           ? !!config.enabled
-          : !!current;
-    var enabled = initialEnabled;
+          : true
+    );
+    if (!hasDueDateInitially) {
+      current = '';
+      currentTime = '';
+    }
     var open = false;
     var timeOpen = false;
     var viewYear;
@@ -9356,8 +9346,7 @@
     var chrome = createCollapsibleEnableChrome({
       title: DUE_DATE_LABEL,
       bodyId: bodyId,
-      checkboxClass: 'due-date-checkbox',
-      labelClass: 'due-date-label',
+      hideEnable: true,
       leadingIcon: 'ti-calendar',
       iconClass: 'due-leading-icon',
       titleClass: 'due-date-title',
@@ -10228,16 +10217,15 @@
     }
 
     function getValues() {
-      // Keep date/time even when disabled so re-enable restores them.
       return {
         dueDate: current || '',
         dueTime: current ? (currentTime || '') : '',
-        dueEnabled: enabled
+        dueEnabled: !!current
       };
     }
 
     function getValue() {
-      return enabled ? (current || '') : '';
+      return current || '';
     }
 
     function setValue(value, options) {
@@ -10246,37 +10234,39 @@
         current = normalizeDueDate(value.dueDate);
         currentTime = current ? normalizeDueTime(value.dueTime) : '';
         if (currentTime) rememberedTime = currentTime;
-        if (value.dueEnabled != null) enabled = !!value.dueEnabled;
-        else enabled = !!current;
+        // dueEnabled:false with a date means "cleared" (legacy disable checkbox).
+        if (value.dueEnabled === false) {
+          current = '';
+          currentTime = '';
+        }
       } else {
         current = normalizeDueDate(value);
         if (!current) currentTime = '';
-        enabled = !!current;
       }
       if (current) {
         syncViewFromValue(current);
       } else {
         syncViewFromValue('');
       }
-      if (collapseApi) {
-        var enableOpts = { notifyLayout: false };
-        if (options.preserveCollapse) enableOpts.preserveCollapse = true;
-        else enableOpts.expand = enabled;
-        collapseApi.setEnabled(enabled, enableOpts);
+      if (collapseApi && options.expand != null) {
+        collapseApi.setExpanded(!!options.expand, { notifyLayout: false });
+      } else if (collapseApi && current && !options.preserveCollapse) {
+        // Keep current expand state; do not force-open on every setValue.
       }
-      if (enabled) showPickers();
-      else hidePickers();
+      showPickers();
       refreshCountdown();
     }
 
-    function setEnabled(nextEnabled) {
-      if (collapseApi) {
-        collapseApi.setEnabled(!!nextEnabled, { expand: !!nextEnabled });
+    function setEnabled(nextEnabled, options) {
+      // No enable checkbox — treat as expand control when asked to open/close.
+      options = options || {};
+      if (collapseApi && options.expand != null) {
+        collapseApi.setExpanded(!!options.expand);
         return;
       }
-      enabled = !!nextEnabled;
-      refreshCountdown();
-      emitChange();
+      if (collapseApi && nextEnabled && options.expand !== false) {
+        collapseApi.setExpanded(true);
+      }
     }
 
     function clampFocusToViewMonth() {
