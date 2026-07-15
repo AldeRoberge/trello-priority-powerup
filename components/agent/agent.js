@@ -2729,6 +2729,7 @@
       boardDigest: typeof ctx.boardDigest === 'string' ? ctx.boardDigest.slice(0, 3000) : ''
     };
 
+    var title = String(payload.cardName || '').trim();
     var messages = [
       {
         role: 'system',
@@ -2737,9 +2738,18 @@
           'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":["\u2026","\u2026","\u2026"]}',
           'Exactement 3 suggestions si possible (2 minimum si le contexte est pauvre).',
           'Chaque suggestion = une action concr\u00e8te courte en fran\u00e7ais (pas une question).',
-          'Inspire-toi du titre, de la description, de la priorit\u00e9, des sous-t\u00e2ches existantes et de la m\u00e9moire.',
-          'Exemple\u00a0: titre \u00ab\u00a0Plan strat\u00e9gie de communication\u00a0\u00bb \u2192 \u00ab\u00a0Rencontrer tous les services\u00a0\u00bb.',
-          'Exemple\u00a0: \u00ab\u00a0Archivage des rushs vid\u00e9os et projets DaVinci Resolve\u00a0\u00bb \u2192 stockage long terme + guide de proc\u00e9dure.',
+          'Inf\u00e9rence titre (critique \u2014 c\'est le job)\u00a0:',
+          '- Le TITRE de la carte est la source principale. Lis-le et d\u00e9compose-le en étapes concr\u00e8tes.',
+          '- Inf\u00e8re ce qu\'il faut vraiment faire pour accomplir CE titre (savoir pratique + contexte carte).',
+          '- Chaque suggestion doit \u00eatre sp\u00e9cifique \u00e0 CE titre\u00a0: on doit pouvoir dire \u00e0 quel projet elle appartient sans le lire \u00e0 c\u00f4t\u00e9.',
+          '- Description / priorit\u00e9 / m\u00e9moire / digest\u00a0: indices secondaires seulement.',
+          title
+            ? '- Titre actuel\u00a0: \u00ab\u00a0' + title.slice(0, 200) + '\u00a0\u00bb.'
+            : '- Titre manquant\u00a0: propose 2\u20133 \u00e9tapes g\u00e9n\u00e9riques minimales (pas de blabla).',
+          'Exemple\u00a0: titre \u00ab\u00a0Plan strat\u00e9gie de communication\u00a0\u00bb \u2192 \u00ab\u00a0Rencontrer tous les services\u00a0\u00bb, \u00ab\u00a0Lister les canaux prioritaires\u00a0\u00bb, \u00ab\u00a0R\u00e9diger le message cl\u00e9\u00a0\u00bb.',
+          'Exemple\u00a0: \u00ab\u00a0Archivage des rushs vid\u00e9os et projets DaVinci Resolve\u00a0\u00bb \u2192 stockage long terme + guide de proc\u00e9dure + inventaire des projets.',
+          'Exemple\u00a0: \u00ab\u00a0Accrocher les dipl\u00f4mes dans le bureau\u00a0\u00bb \u2192 \u00ab\u00a0Mesurer l\'emplacement au mur\u00a0\u00bb, \u00ab\u00a0Acheter crochets / clous\u00a0\u00bb, \u00ab\u00a0Fixer et aligner les cadres\u00a0\u00bb.',
+          'INTERDIT\u00a0: suggestions g\u00e9n\u00e9riques / m\u00e9ta (\u00ab\u00a0Faire un plan\u00a0\u00bb, \u00ab\u00a0D\u00e9finir les objectifs\u00a0\u00bb, \u00ab\u00a0Commencer la t\u00e2che\u00a0\u00bb, \u00ab\u00a0Avancer sur le projet\u00a0\u00bb, \u00ab\u00a0V\u00e9rifier le statut\u00a0\u00bb).',
           'INTERDIT\u00a0: dupliquer une sous-t\u00e2che existante (m\u00eame sens).',
           'INTERDIT\u00a0: placeholders, num\u00e9rotation, guillemets superflus.',
           'Contexte\u00a0:',
@@ -2748,7 +2758,11 @@
       },
       {
         role: 'user',
-        content: 'Propose 3 sous-t\u00e2ches de suivi pertinentes.'
+        content: title
+          ? 'Propose 3 sous-t\u00e2ches concr\u00e8tes pour accomplir\u00a0: \u00ab\u00a0' +
+            title.slice(0, 200) +
+            '\u00a0\u00bb. Inf\u00e8re les \u00e9tapes depuis le titre.'
+          : 'Propose 3 sous-t\u00e2ches de suivi pertinentes.'
       }
     ];
 

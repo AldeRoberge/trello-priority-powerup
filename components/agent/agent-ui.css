@@ -3205,8 +3205,9 @@ html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-label {
   opacity: 1;
 }
 
-html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-value {
-  color: #9fadbc;
+html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-value.is-ok {
+  color: #ffffff;
+  opacity: 0.92;
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-sep {
@@ -3646,13 +3647,44 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
 }
 
 .tp-page--priority .agent-chat-stats-value {
-  color: var(--tp-text-subtle);
-  opacity: 0.9;
   font-variant-numeric: tabular-nums;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 14em;
+  opacity: 0.95;
+}
+
+.tp-page--priority .agent-chat-stats-value.is-ok {
+  color: var(--tp-text);
+  opacity: 0.88;
+}
+
+.tp-page--priority .agent-chat-stats-value.is-warn {
+  color: #c2a11a;
+  opacity: 1;
+}
+
+.tp-page--priority .agent-chat-stats-value.is-caution {
+  color: #cf7a1d;
+  opacity: 1;
+}
+
+.tp-page--priority .agent-chat-stats-value.is-bad {
+  color: #ae2e24;
+  opacity: 1;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-value.is-warn {
+  color: #f5cd47;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-value.is-caution {
+  color: #fea362;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-value.is-bad {
+  color: #f87168;
 }
 
 .tp-page--priority .agent-chat-stats-item:last-child .agent-chat-stats-value {

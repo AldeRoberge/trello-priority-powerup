@@ -701,6 +701,43 @@
       return map[reason] || reason;
     }
 
+    /** ok (white) → warn (yellow) → caution (orange) → bad (red) */
+    function toneFromThresholds(value, warnAt, cautionAt, badAt) {
+      if (value == null || !isFinite(value)) return 'ok';
+      if (value >= badAt) return 'bad';
+      if (value >= cautionAt) return 'caution';
+      if (value >= warnAt) return 'warn';
+      return 'ok';
+    }
+
+    function latencyTone(ms) {
+      return toneFromThresholds(ms, 2000, 3500, 5000);
+    }
+
+    function contextTone(fillPercent) {
+      return toneFromThresholds(fillPercent, 50, 65, 80);
+    }
+
+    function costTone(usd) {
+      return toneFromThresholds(usd, 0.01, 0.02, 0.05);
+    }
+
+    function tokensTone(totalTokens, fillPercent) {
+      if (fillPercent != null && isFinite(fillPercent)) {
+        return contextTone(fillPercent);
+      }
+      return toneFromThresholds(totalTokens, 6000, 12000, 20000);
+    }
+
+    function memoryTone(messageCount) {
+      return toneFromThresholds(messageCount, 12, 24, 40);
+    }
+
+    function finishTone(reason) {
+      if (reason === 'length' || reason === 'content_filter') return 'bad';
+      return 'ok';
+    }
+
     function updateSessionStats(usage) {
       if (!usage) return;
       sessionStats.turns += 1;
@@ -983,12 +1020,15 @@
           if (idx > 0) {
             row.appendChild(el('span', 'agent-chat-stats-sep', { text: '\u00b7' }));
           }
-          var cell = el('span', 'agent-chat-stats-item');
+          var tone = part.tone || 'ok';
+          var cell = el('span', 'agent-chat-stats-item is-' + tone);
           if (part.label) {
             cell.appendChild(el('span', 'agent-chat-stats-label', { text: part.label }));
             cell.appendChild(document.createTextNode('\u00a0'));
           }
-          cell.appendChild(el('span', 'agent-chat-stats-value', { text: part.value }));
+          cell.appendChild(
+            el('span', 'agent-chat-stats-value is-' + tone, { text: part.value })
+          );
           if (part.title) cell.title = part.title;
           row.appendChild(cell);
         });
@@ -1005,7 +1045,8 @@
             {
               label: 'M\u00e9moire',
               value: history.length + ' msg',
-              title: 'Messages conserv\u00e9s dans cette session'
+              title: 'Messages conserv\u00e9s dans cette session',
+              tone: memoryTone(history.length)
             }
           ].concat(
             isFull
@@ -1048,12 +1089,14 @@
         {
           label: 'Tokens',
           value: lastTokenValue,
-          title: tokenTitle
+          title: tokenTitle,
+          tone: tokensTone(usage.totalTokens, fill)
         },
         {
           label: 'Co\u00fbt',
           value: '\u2248' + formatCostUsd(usage.costUsd),
-          title: 'Estimation selon le tarif publique du mod\u00e8le (non facturation)'
+          title: 'Estimation selon le tarif publique du mod\u00e8le (non facturation)',
+          tone: costTone(usage.costUsd)
         },
         {
           label: 'Contexte',
@@ -1061,30 +1104,35 @@
             fill != null
               ? fill + '% (' + formatTokenCount(ctx.requestTokens) + '/' + formatWindow(ctx.windowTokens) + ')'
               : formatTokenCount(ctx.requestTokens),
-          title: compressionHint
+          title: compressionHint,
+          tone: contextTone(fill)
         },
         {
           label: 'M\u00e9moire',
           value: history.length + ' msg',
-          title: 'Messages conserv\u00e9s dans cette session'
+          title: 'Messages conserv\u00e9s dans cette session',
+          tone: memoryTone(history.length)
         }
       ];
       if (isFull) {
         parts.push({
           label: 'Latence',
-          value: formatLatency(usage.latencyMs)
+          value: formatLatency(usage.latencyMs),
+          tone: latencyTone(usage.latencyMs)
         });
         if (usage.cachedTokens != null && usage.cachedTokens > 0) {
           parts.push({
             label: 'Cache',
             value: formatTokenCount(usage.cachedTokens),
-            title: 'Tokens d\'entr\u00e9e en cache'
+            title: 'Tokens d\'entr\u00e9e en cache',
+            tone: 'ok'
           });
         }
         if (usage.reasoningTokens != null && usage.reasoningTokens > 0) {
           parts.push({
             label: 'Raisonnement',
-            value: formatTokenCount(usage.reasoningTokens)
+            value: formatTokenCount(usage.reasoningTokens),
+            tone: toneFromThresholds(usage.reasoningTokens, 2000, 5000, 10000)
           });
         }
         parts.push(
@@ -1092,7 +1140,8 @@
             label: 'Compression',
             value: 'aucune',
             title:
-              'L\'historique est renvoy\u00e9 en entier \u00e0 chaque tour (pas de r\u00e9sum\u00e9 ni troncature)'
+              'L\'historique est renvoy\u00e9 en entier \u00e0 chaque tour (pas de r\u00e9sum\u00e9 ni troncature)',
+            tone: fill != null && fill >= 65 ? 'warn' : 'ok'
           },
           {
             label: 'Session',
@@ -1104,21 +1153,24 @@
               sessionStats.turns +
               ' tour' +
               (sessionStats.turns > 1 ? 's' : ''),
-            title: 'Totaux de cette conversation'
+            title: 'Totaux de cette conversation',
+            tone: costTone(sessionStats.costUsd)
           }
         );
         if (usage.model) {
           parts.push({
             label: 'Mod\u00e8le',
             value: usage.model,
-            title: usage.model
+            title: usage.model,
+            tone: 'ok'
           });
         }
         var fr = finishReasonLabel(usage.finishReason);
         if (fr) {
           parts.push({
             label: 'Fin',
-            value: fr
+            value: fr,
+            tone: finishTone(usage.finishReason)
           });
         }
       }

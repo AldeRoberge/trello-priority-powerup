@@ -24,11 +24,11 @@
   <script src="./components/statut/statut-match.js?v=section-glow-1"></script>
   <script src="./components/statut/statut-trello.js?v=section-glow-1"></script>
   <script src="./components/shared/tab-autocomplete.js?v=tab-complete-1"></script>
-  <script src="./components/completion/completion-ui.js?v=progress-layout-1"></script>
+  <script src="./components/completion/completion-ui.js?v=progress-suggest-ai-1"></script>
   <script src="./components/completion/completion-trello.js?v=progress-due-complete-1"></script>
   <script src="./components/goals/goals-trello.js?v=goals-1"></script>
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
-  <script src="./components/agent/agent.js?v=agent-point-1"></script>
+  <script src="./components/agent/agent.js?v=progress-suggest-ai-1"></script>
   <script src="./components/agent/agent-memory.js?v=card-interview-1"></script>
   <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
@@ -65,6 +65,8 @@
     let infoUi = null;
     let infoSection = null;
     let cardDesc = '';
+    let cardNameCache = '';
+    let cardNamePromise = Promise.resolve('');
     let cachedMemory = null;
     let cachedCardMemory = null;
     let cachedProfile = null;
@@ -150,6 +152,8 @@
     }
 
     function setCardNameLabel(name) {
+      var trimmed = typeof name === 'string' ? name.trim() : '';
+      if (trimmed) cardNameCache = trimmed;
       if (infoUi && typeof infoUi.setTitle === 'function') {
         infoUi.setTitle(name || '');
         resizePopup();
@@ -157,14 +161,14 @@
       }
       var el = document.getElementById('cardName');
       if (!el) return;
-      var label = name || 'Carte';
+      var label = trimmed || 'Carte';
       if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
         el.value = label;
         el.readOnly = false;
         el.classList.remove('is-loading');
       } else {
         el.textContent = label;
-        el.title = name ? name : '';
+        el.title = trimmed ? trimmed : '';
         el.classList.remove('is-loading');
         el.removeAttribute('hidden');
       }
@@ -173,14 +177,29 @@
 
     function readCardNameLabel() {
       if (infoUi && typeof infoUi.getTitle === 'function') {
-        return infoUi.getTitle() || '';
+        var fromInfo = (infoUi.getTitle() || '').trim();
+        if (fromInfo) return fromInfo;
       }
       var el = document.getElementById('cardName');
-      if (!el || el.classList.contains('is-loading')) return '';
-      if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
-        return (el.value || '').trim();
+      if (el && !el.classList.contains('is-loading')) {
+        var fromEl =
+          el.tagName === 'INPUT' || el.tagName === 'TEXTAREA'
+            ? (el.value || '').trim()
+            : (el.textContent || '').trim();
+        if (fromEl && fromEl !== 'Carte' && fromEl !== 'Chargement\u2026') {
+          return fromEl;
+        }
       }
-      return (el.textContent || '').trim();
+      return cardNameCache || '';
+    }
+
+    /** Prefer live title; wait for name load if still empty (Progrès AI suggestions). */
+    function resolveCardNameForAi() {
+      var now = readCardNameLabel();
+      if (now) return Promise.resolve(now);
+      return Promise.resolve(cardNamePromise).then(function () {
+        return readCardNameLabel();
+      });
     }
 
     function syncInfoRecap() {
@@ -1210,66 +1229,84 @@
             shellEl: progressPanel,
             celebrateRoot: document.body,
             suggestSubtasks: function (opts) {
-              if (!window.PriorityAgent || !window.AgentMemory) {
+              if (!window.PriorityAgent) {
                 return Promise.resolve([]);
               }
-              return PriorityAgent.getProvider(t).then(function (provider) {
-                if (!PriorityAgent.isConfigured(provider)) return [];
-                var existing =
-                  (opts && opts.items) ||
-                  (completionUi && completionUi.getData && completionUi.getData().items
-                    ? completionUi.getData().items.map(function (it) {
-                        return it.text;
-                      })
-                    : []);
-                var memPromise = cachedMemory
-                  ? Promise.resolve(cachedMemory)
-                  : AgentMemory.load(t).then(function (m) {
-                      cachedMemory = m;
-                      return m;
-                    });
-                var digestPromise = boardDigestCache
-                  ? Promise.resolve(boardDigestCache)
-                  : PriorityTrello.scanBoardCards
-                    ? PriorityTrello.scanBoardCards(t, { maxCards: 25, includePriority: false }).then(
-                        function (scan) {
+              return resolveCardNameForAi().then(function (cardName) {
+                return PriorityAgent.getProvider(t).then(function (provider) {
+                  if (!PriorityAgent.isConfigured(provider)) return [];
+                  var existing =
+                    (opts && opts.items) ||
+                    (completionUi && completionUi.getData && completionUi.getData().items
+                      ? completionUi.getData().items.map(function (it) {
+                          return it.text;
+                        })
+                      : []);
+                  var memPromise =
+                    cachedMemory != null
+                      ? Promise.resolve(cachedMemory)
+                      : window.AgentMemory
+                        ? AgentMemory.load(t)
+                            .then(function (m) {
+                              cachedMemory = m;
+                              return m;
+                            })
+                            .catch(function () {
+                              return null;
+                            })
+                        : Promise.resolve(null);
+                  var digestPromise = boardDigestCache
+                    ? Promise.resolve(boardDigestCache)
+                    : PriorityTrello.scanBoardCards
+                      ? PriorityTrello.scanBoardCards(t, {
+                          maxCards: 25,
+                          includePriority: false
+                        }).then(function (scan) {
                           boardDigestCache = (scan && scan.digest) || '';
                           return boardDigestCache;
+                        })
+                      : Promise.resolve('');
+                  return Promise.all([memPromise, digestPromise]).then(function (pair) {
+                    var memory = pair[0];
+                    var digest = pair[1];
+                    var state =
+                      variant && typeof variant.getState === 'function'
+                        ? variant.getState()
+                        : {};
+                    var priorityLabel = '';
+                    try {
+                      if (window.PriorityUI && PriorityUI.resolveDisplay && variant) {
+                        var formulaKey =
+                          typeof variant.getFormulaKey === 'function'
+                            ? variant.getFormulaKey()
+                            : 'baseline';
+                        var calc =
+                          PriorityUI.FORMULAS &&
+                          PriorityUI.FORMULAS[formulaKey] &&
+                          PriorityUI.FORMULAS[formulaKey].calc
+                            ? PriorityUI.FORMULAS[formulaKey].calc
+                            : null;
+                        if (calc) {
+                          var display = PriorityUI.resolveDisplay(calc(state), state);
+                          priorityLabel = display.label || '';
                         }
-                      )
-                    : Promise.resolve('');
-                return Promise.all([memPromise, digestPromise]).then(function (pair) {
-                  var memory = pair[0];
-                  var digest = pair[1];
-                  var state =
-                    variant && typeof variant.getState === 'function' ? variant.getState() : {};
-                  var priorityLabel = '';
-                  try {
-                    if (window.PriorityUI && PriorityUI.resolveDisplay && variant) {
-                      var formulaKey =
-                        typeof variant.getFormulaKey === 'function'
-                          ? variant.getFormulaKey()
-                          : 'baseline';
-                      var calc =
-                        PriorityUI.FORMULAS &&
-                        PriorityUI.FORMULAS[formulaKey] &&
-                        PriorityUI.FORMULAS[formulaKey].calc
-                          ? PriorityUI.FORMULAS[formulaKey].calc
-                          : null;
-                      if (calc) {
-                        var display = PriorityUI.resolveDisplay(calc(state), state);
-                        priorityLabel = display.label || '';
                       }
+                    } catch (e) {
+                      /* ignore */
                     }
-                  } catch (e) { /* ignore */ }
-                  var cardName = readCardNameLabel();
-                  return PriorityAgent.suggestSubtasks(provider, {
-                    cardName: cardName,
-                    cardDesc: cardDesc,
-                    priorityLabel: priorityLabel,
-                    existingSubtasks: existing,
-                    memory: memory,
-                    boardDigest: digest
+                    return PriorityAgent.suggestSubtasks(provider, {
+                      cardName: cardName || readCardNameLabel(),
+                      cardDesc:
+                        (infoUi && typeof infoUi.getDesc === 'function'
+                          ? infoUi.getDesc()
+                          : '') ||
+                        cardDesc ||
+                        '',
+                      priorityLabel: priorityLabel,
+                      existingSubtasks: existing,
+                      memory: memory,
+                      boardDigest: digest
+                    });
                   });
                 });
               });
@@ -1363,6 +1400,9 @@
         var cardBasics = await t.card('name', 'desc');
         if (cardBasics && typeof cardBasics.desc === 'string') {
           cardDesc = cardBasics.desc;
+        }
+        if (cardBasics && typeof cardBasics.name === 'string' && cardBasics.name.trim()) {
+          cardNameCache = cardBasics.name.trim();
         }
       } catch (cardErr) {
         console.error('Priority popup card basics failed', cardErr);
@@ -1489,13 +1529,16 @@
       await mountInfoSection(variant.card);
 
       if (argName) setCardNameLabel(argName);
+      else if (cardNameCache) setCardNameLabel(cardNameCache);
       var cardNameEl = document.getElementById('cardName');
-      var cardNamePromise = PriorityTrello.getCardName(t).then(function (resolved) {
+      cardNamePromise = PriorityTrello.getCardName(t).then(function (resolved) {
         if (resolved) setCardNameLabel(resolved);
+        return resolved || cardNameCache || '';
       }, function () {
         if (cardNameEl && cardNameEl.classList.contains('is-loading')) {
           setCardNameLabel(null);
         }
+        return cardNameCache || '';
       });
 
       // Don't auto-seed cardPriority when opened only for progress on an unset card.

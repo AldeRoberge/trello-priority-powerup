@@ -799,7 +799,7 @@
     suggestionsSection.hidden = true;
     suggestionsSection.innerHTML =
       '<div class="tp-completion-suggestions-head">' +
-      '<span class="tp-completion-suggestions-label">Suggestions</span>' +
+      '<span class="tp-completion-suggestions-label">Suggestions IA</span>' +
       '<button type="button" class="tp-completion-suggestions-refresh" id="completionSuggestRefresh" ' +
       'aria-label="Rafra\u00eechir les suggestions" title="Rafra\u00eechir">\u21bb</button>' +
       '</div>' +
