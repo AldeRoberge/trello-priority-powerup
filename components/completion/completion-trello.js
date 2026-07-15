@@ -42,21 +42,16 @@
     return Math.max(PROGRESS_MIN, Math.min(PROGRESS_MAX, Math.round(p)));
   }
 
-  /** Clamp estimated effort minutes (1 … ~2 years). Prefer PriorityUI when present. */
+  /** Clamp estimated effort minutes (1 … ~2 years). */
   function clampEstimatedMinutes(minutes) {
-    var PU = global.PriorityUI;
-    if (PU && typeof PU.clampDurationMinutes === 'function') {
-      var viaUi = PU.clampDurationMinutes(minutes);
-      if (viaUi != null) return viaUi;
-      // PriorityUI floors at 5 min; allow short AI estimates below that.
-      var v = asNumber(minutes);
-      if (!isFinite(v) || v <= 0) return null;
-      if (v < 5) return Math.max(ESTIMATE_MIN_MINUTES, Math.round(v));
-      return null;
-    }
     var n = asNumber(minutes);
     if (!isFinite(n) || n <= 0) return null;
-    return Math.max(ESTIMATE_MIN_MINUTES, Math.min(ESTIMATE_MAX_MINUTES, Math.round(n)));
+    var max = ESTIMATE_MAX_MINUTES;
+    var PU = global.PriorityUI;
+    if (PU && typeof PU.DURATION_MAX_MINUTES === 'number' && isFinite(PU.DURATION_MAX_MINUTES)) {
+      max = PU.DURATION_MAX_MINUTES;
+    }
+    return Math.max(ESTIMATE_MIN_MINUTES, Math.min(max, Math.round(n)));
   }
 
   function formatEstimatedMinutesCompact(minutes) {

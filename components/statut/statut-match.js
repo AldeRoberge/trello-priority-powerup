@@ -132,7 +132,7 @@
   /** UI colors + icon keys for category chips (card popup). */
   var CATEGORY_STYLE = {
     triage: { color: '#5e6ad2', icon: 'inbox' },
-    backlog: { color: '#6b778c', icon: 'layers' },
+    backlog: { color: '#6b778c', icon: 'hourglass' },
     unstarted: { color: '#44546f', icon: 'circle' },
     started: { color: '#0c66e4', icon: 'hammer' },
     blocked: { color: '#e34935', icon: 'ban' },

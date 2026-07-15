@@ -361,10 +361,14 @@
     for (var pIdx = 0; pIdx < porteNodes.length; pIdx++) {
       porteNodes[pIdx].hidden = !porteOn;
     }
-    var dureeOn = p.experimental.easeHourglass === true;
+    // Durée (Facilité) retired — estimates live under Progrès.
     var dureeNodes = cardEl.querySelectorAll('.info-row--duree');
     for (var d = 0; d < dureeNodes.length; d++) {
-      dureeNodes[d].hidden = !dureeOn;
+      dureeNodes[d].hidden = true;
+    }
+    var progresNodes = cardEl.querySelectorAll('.info-row--progress');
+    for (var pr = 0; pr < progresNodes.length; pr++) {
+      progresNodes[pr].hidden = p.features.progress === false;
     }
   }
 

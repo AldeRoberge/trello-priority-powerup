@@ -647,20 +647,92 @@
     return null;
   }
 
+  /**
+   * Local parse returned bare minutes while the user typed a unit word —
+   * classic bug class ("5 jours" → 5). Prefer an AI reinterpretation.
+   */
+  function isSuspiciousDurationParse(text, minutes) {
+    if (minutes == null) return true;
+    var raw = String(text || '')
+      .trim()
+      .toLowerCase()
+      .replace(/,/g, '.');
+    if (!raw) return false;
+    var bare = raw.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
+    if (!bare) return true;
+    var rest = (bare[2] || '').trim();
+    if (!rest) return false;
+    var n = Math.round(parseFloat(bare[1]));
+    if (!isFinite(n) || n <= 0) return true;
+    return minutes === n || minutes === Math.max(5, n);
+  }
+
+  /**
+   * Local NL parse, then a quick AI call when missing/suspicious.
+   * @returns {Promise<number|null>}
+   */
+  function resolveEstimateInput(text, CT, t) {
+    var trimmed = typeof text === 'string' ? text.trim() : '';
+    if (!trimmed) return Promise.resolve(null);
+
+    var local = parseEstimateInput(trimmed, CT);
+    if (local != null && !isSuspiciousDurationParse(trimmed, local)) {
+      return Promise.resolve(local);
+    }
+
+    var Agent = global.PriorityAgent;
+    if (
+      !Agent ||
+      typeof Agent.getProvider !== 'function' ||
+      typeof Agent.parseDurationMinutes !== 'function'
+    ) {
+      return Promise.resolve(local);
+    }
+
+    return Promise.resolve(Agent.getProvider(t))
+      .then(function (provider) {
+        if (typeof Agent.isConfigured === 'function' && !Agent.isConfigured(provider)) {
+          return local;
+        }
+        return Agent.parseDurationMinutes(provider, trimmed).then(function (aiMins) {
+          if (aiMins == null) return local;
+          if (CT && typeof CT.clampEstimatedMinutes === 'function') {
+            return CT.clampEstimatedMinutes(aiMins);
+          }
+          return aiMins;
+        });
+      })
+      .catch(function (err) {
+        console.error('resolveEstimateInput AI failed', err);
+        return local;
+      });
+  }
+
   var ESTIMATE_LOG_MAX = Math.round(2 * 365.25 * 24 * 60);
 
   function closeOpenEstimatePopovers(except) {
     var open = document.querySelectorAll('.tp-estimate-popover.is-open');
     for (var i = 0; i < open.length; i++) {
       if (except && open[i] === except) continue;
-      open[i].classList.remove('is-open');
-      open[i].hidden = true;
+      var el = open[i];
+      var ownerWrap = el.parentElement;
+      if (ownerWrap && typeof ownerWrap._tpCloseEstimate === 'function') {
+        ownerWrap._tpCloseEstimate();
+        continue;
+      }
+      el.classList.remove('is-open', 'is-fixed');
+      el.hidden = true;
+      el.style.left = '';
+      el.style.right = '';
+      el.style.top = '';
+      el.style.bottom = '';
+      el.style.maxWidth = '';
     }
   }
 
   /**
    * Compact duration chip + popover (ticks + freeform).
-   * config: { minutes, readOnly, adjusted, compact, ariaLabel, onChange(minutes|null) }
+   * config: { minutes, readOnly, adjusted, compact, ariaLabel, onChange(minutes|null), t }
    */
   function createEstimateChip(CT, config) {
     config = config || {};
@@ -672,6 +744,7 @@
           : null;
     var readOnly = !!config.readOnly;
     var onChange = typeof config.onChange === 'function' ? config.onChange : null;
+    var trelloT = config.t || null;
 
     var wrap = document.createElement('div');
     wrap.className =
@@ -735,12 +808,91 @@
       if (notify && onChange) onChange(minutes);
     }
 
+    var onDocClose = null;
+    var onPopoverReposition = null;
+
+    function clearPopoverPosition() {
+      if (!popover) return;
+      popover.classList.remove('is-fixed');
+      popover.style.left = '';
+      popover.style.right = '';
+      popover.style.top = '';
+      popover.style.bottom = '';
+      popover.style.maxWidth = '';
+    }
+
+    /**
+     * Anchor below the chip (right-aligned), then clamp into the viewport so
+     * left-side chips (master "Estimer") do not spill off-screen.
+     */
+    function positionPopover() {
+      if (!popover || popover.hidden) return;
+      var margin = 8;
+      var gap = 6;
+      var chipRect = chip.getBoundingClientRect();
+      var viewW = document.documentElement.clientWidth || window.innerWidth || 0;
+      var viewH = document.documentElement.clientHeight || window.innerHeight || 0;
+      if (viewW <= 0 || viewH <= 0) return;
+
+      popover.style.right = 'auto';
+      popover.style.bottom = 'auto';
+      popover.style.maxWidth = Math.max(160, viewW - margin * 2) + 'px';
+      // Tentative anchor before measuring (avoids a 0,0 flash with position:fixed).
+      popover.style.left = Math.round(chipRect.left) + 'px';
+      popover.style.top = Math.round(chipRect.bottom + gap) + 'px';
+      popover.classList.add('is-fixed');
+
+      var popW = popover.offsetWidth;
+      var popH = popover.offsetHeight;
+
+      // Prefer right-align to chip (matches CSS default).
+      var left = chipRect.right - popW;
+      var top = chipRect.bottom + gap;
+
+      if (left < margin) left = margin;
+      if (left + popW > viewW - margin) {
+        left = Math.max(margin, viewW - margin - popW);
+      }
+
+      if (top + popH > viewH - margin) {
+        var above = chipRect.top - gap - popH;
+        if (above >= margin) top = above;
+        else top = Math.max(margin, viewH - margin - popH);
+      }
+
+      popover.style.left = Math.round(left) + 'px';
+      popover.style.top = Math.round(top) + 'px';
+    }
+
+    function bindPopoverReposition(on) {
+      if (on) {
+        if (onPopoverReposition) return;
+        onPopoverReposition = function () {
+          positionPopover();
+        };
+        window.addEventListener('resize', onPopoverReposition);
+        window.addEventListener('scroll', onPopoverReposition, true);
+      } else if (onPopoverReposition) {
+        window.removeEventListener('resize', onPopoverReposition);
+        window.removeEventListener('scroll', onPopoverReposition, true);
+        onPopoverReposition = null;
+      }
+    }
+
     function closePopover() {
       if (!popover) return;
       popover.classList.remove('is-open');
       popover.hidden = true;
+      clearPopoverPosition();
+      bindPopoverReposition(false);
       chip.setAttribute('aria-expanded', 'false');
+      if (onDocClose) {
+        document.removeEventListener('click', onDocClose, true);
+        onDocClose = null;
+      }
     }
+
+    wrap._tpCloseEstimate = closePopover;
 
     function openPopover() {
       if (readOnly || !popover) return;
@@ -748,6 +900,14 @@
       popover.hidden = false;
       popover.classList.add('is-open');
       chip.setAttribute('aria-expanded', 'true');
+      positionPopover();
+      bindPopoverReposition(true);
+      if (!onDocClose) {
+        onDocClose = function (e) {
+          if (!wrap.contains(e.target)) closePopover();
+        };
+        document.addEventListener('click', onDocClose, true);
+      }
       if (freeInput) {
         freeInput.value =
           minutes != null
@@ -797,31 +957,45 @@
       freeInput.className = 'tp-input tp-estimate-free-input';
       freeInput.placeholder = 'ex. 2 h';
       freeInput.setAttribute('aria-label', 'Dur\u00e9e personnalis\u00e9e');
+      var applyBtn = document.createElement('button');
+      applyBtn.type = 'button';
+      applyBtn.className = 'tp-estimate-free-apply';
+      applyBtn.textContent = 'OK';
+
+      var applyBusy = false;
+      function applyFreeformEstimate() {
+        if (applyBusy) return Promise.resolve();
+        var typed = freeInput.value;
+        applyBusy = true;
+        applyBtn.disabled = true;
+        freeInput.disabled = true;
+        return resolveEstimateInput(typed, CT, trelloT)
+          .then(function (parsed) {
+            if (parsed != null) {
+              setMinutes(parsed, true);
+              closePopover();
+            }
+          })
+          .finally(function () {
+            applyBusy = false;
+            applyBtn.disabled = false;
+            freeInput.disabled = false;
+          });
+      }
+
       freeInput.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') {
           e.preventDefault();
-          var parsed = parseEstimateInput(freeInput.value, CT);
-          if (parsed != null) {
-            setMinutes(parsed, true);
-            closePopover();
-          }
+          applyFreeformEstimate();
         } else if (e.key === 'Escape') {
           e.preventDefault();
           closePopover();
         }
       });
-      freeRow.appendChild(freeInput);
-      var applyBtn = document.createElement('button');
-      applyBtn.type = 'button';
-      applyBtn.className = 'tp-estimate-free-apply';
-      applyBtn.textContent = 'OK';
       applyBtn.addEventListener('click', function () {
-        var parsed = parseEstimateInput(freeInput.value, CT);
-        if (parsed != null) {
-          setMinutes(parsed, true);
-          closePopover();
-        }
+        applyFreeformEstimate();
       });
+      freeRow.appendChild(freeInput);
       freeRow.appendChild(applyBtn);
       popover.appendChild(freeRow);
 
@@ -832,13 +1006,6 @@
         if (popover.classList.contains('is-open')) closePopover();
         else openPopover();
       });
-      document.addEventListener(
-        'click',
-        function (e) {
-          if (!wrap.contains(e.target)) closePopover();
-        },
-        true
-      );
     }
 
     paint();
@@ -882,6 +1049,7 @@
       typeof options.getBoardCards === 'function' ? options.getBoardCards : null;
     var resolveLinkedTree =
       typeof options.resolveLinkedTree === 'function' ? options.resolveLinkedTree : null;
+    var trelloT = options.t || null;
     var progressShellEl = options.shellEl || null;
     var celebrateRootEl = options.celebrateRoot || null;
     var showCardHeader = options.showCardHeader !== false;
@@ -981,6 +1149,7 @@
 
     var linkedSnapshots = Object.create(null);
     var masterEstimateChip = createEstimateChip(CT, {
+      t: trelloT,
       minutes: CT.computeEstimatedTotal(data),
       adjusted:
         data.items.length &&
@@ -2434,6 +2603,7 @@
         sliderRow.appendChild(itemValEl);
 
         var itemEstimate = createEstimateChip(CT, {
+          t: trelloT,
           minutes: CT.itemEstimatedMinutes(item, linkedSnapshots),
           compact: true,
           ariaLabel: 'Dur\u00e9e estim\u00e9e de la sous-t\u00e2che',

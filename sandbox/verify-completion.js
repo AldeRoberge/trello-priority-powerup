@@ -481,6 +481,126 @@ var fakeT = {
   },
 };
 
+// ── Estimate time (Progrès) ───────────────────────────────────────────
+[
+  'clampEstimatedMinutes',
+  'computeEstimatedTotal',
+  'computeEstimatedRemaining',
+  'computeItemsEstimateBase',
+  'itemsNeedingEstimate',
+  'applyItemEstimates',
+  'applyMasterEstimate',
+  'applyItemEstimate',
+  'migrateEstimateFromPriority',
+  'formatEstimatedMinutesCompact',
+  'formatEstimatedRemainingLabel',
+].forEach(function (name) {
+  check('export ' + name, typeof CT[name] === 'function');
+});
+
+var estItems = CT.normalizeCompletionData({
+  items: [
+    { id: 'e1', text: 'A', progress: 0, estimatedMinutes: 60 },
+    { id: 'e2', text: 'B', progress: 50, estimatedMinutes: 120 },
+  ],
+});
+check(
+  'estimate sum of subtasks',
+  CT.computeEstimatedTotal(estItems) === 180
+);
+check(
+  'estimate remaining respects progress',
+  CT.computeEstimatedRemaining(estItems) === 60 + 60
+);
+
+var withOffset = CT.applyMasterEstimate(estItems, 240, { lock: true });
+check(
+  'master edit sets hidden offset',
+  withOffset.estimatedMinutesOffset === 60 &&
+    withOffset.estimatedMinutesLocked === true
+);
+check(
+  'total includes offset',
+  CT.computeEstimatedTotal(withOffset) === 240
+);
+check(
+  'remaining includes positive offset fraction',
+  CT.computeEstimatedRemaining(withOffset) ===
+    60 + 60 + Math.round(60 * (1 - CT.computeCardProgress(withOffset).percent / 100))
+);
+
+var lockedItem = CT.applyItemEstimate(estItems, 'e1', 90, { lock: true });
+check(
+  'item estimate lock',
+  lockedItem.items[0].estimatedMinutes === 90 &&
+    lockedItem.items[0].estimatedMinutesLocked === true
+);
+var aiFill = CT.applyItemEstimates(
+  {
+    items: [
+      { id: 'e1', text: 'A', progress: 0, estimatedMinutes: 90, estimatedMinutesLocked: true },
+      { id: 'e2', text: 'B', progress: 0 },
+    ],
+  },
+  [
+    { id: 'e1', estimatedMinutes: 5 },
+    { id: 'e2', estimatedMinutes: 30 },
+  ]
+);
+check(
+  'AI fill skips locked item',
+  aiFill.items[0].estimatedMinutes === 90 && aiFill.items[1].estimatedMinutes === 30
+);
+check(
+  'items needing estimate filters locked/set',
+  CT.itemsNeedingEstimate(aiFill).length === 0
+);
+
+var cardOnlyEst = CT.normalizeCompletionData({
+  items: [],
+  progress: 50,
+  estimatedMinutes: 100,
+});
+check('card-level estimate total', CT.computeEstimatedTotal(cardOnlyEst) === 100);
+check('card-level estimate remaining half', CT.computeEstimatedRemaining(cardOnlyEst) === 50);
+
+var migratedEst = CT.migrateEstimateFromPriority({ items: [] }, 45);
+check(
+  'migrate Facilité → card estimate',
+  migratedEst && migratedEst.estimatedMinutes === 45
+);
+var migratedOffset = CT.migrateEstimateFromPriority(
+  {
+    items: [
+      { id: 'x', text: 'X', progress: 0 },
+    ],
+  },
+  90
+);
+check(
+  'migrate Facilité → offset when items lack times',
+  migratedOffset && migratedOffset.estimatedMinutesOffset === 90
+);
+check(
+  'migrate no-op when estimate exists',
+  CT.migrateEstimateFromPriority({ items: [], estimatedMinutes: 20 }, 45) === null
+);
+
+var preserved = CT.applyMasterProgress(
+  [{ id: 'p1', text: 'P', progress: 20, estimatedMinutes: 40, estimatedMinutesLocked: true }],
+  40
+);
+check(
+  'applyMasterProgress keeps estimates',
+  preserved[0].estimatedMinutes === 40 && preserved[0].estimatedMinutesLocked === true
+);
+
+check(
+  'remaining label compact',
+  typeof CT.formatEstimatedRemainingLabel(60) === 'string' &&
+    CT.formatEstimatedRemainingLabel(60).indexOf('restantes') !== -1
+);
+
 CT.resolveLinkedCompletionTree(fakeT, store['card-a'], {
   currentCardId: 'card-a',
   cardNameById: { 'card-a': 'Carte A', 'card-b': 'Carte B' },

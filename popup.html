@@ -12,32 +12,32 @@
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-scope-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
-  <link rel="stylesheet" href="./components/history/history-ui.css?v=history-3" />
+  <link rel="stylesheet" href="./components/history/history-ui.css?v=history-4" />
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/effects.js?v=fx-3"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=save-spin-1"></script>
+  <script src="./components/priority/priority-ui.js?v=attente-hourglass-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
     }
   </script>
-  <script src="./components/priority/priority-trello.js?v=info-creator-1"></script>
-  <script src="./components/statut/statut-match.js?v=section-glow-1"></script>
+  <script src="./components/priority/priority-trello.js?v=creator-rest-1"></script>
+  <script src="./components/statut/statut-match.js?v=attente-hourglass-1"></script>
   <script src="./components/statut/statut-trello.js?v=section-glow-1"></script>
   <script src="./components/shared/tab-autocomplete.js?v=tab-complete-1"></script>
   <script src="./components/completion/completion-ui.js?v=master-title-edit-1"></script>
   <script src="./components/completion/completion-trello.js?v=progress-due-complete-1"></script>
   <script src="./components/goals/goals-trello.js?v=goals-1"></script>
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
-  <script src="./components/agent/agent.js?v=agent-dream-1"></script>
+  <script src="./components/agent/agent.js?v=chat-budget-1"></script>
   <script src="./components/agent/agent-memory.js?v=agent-dream-1"></script>
   <script src="./components/agent/memory-ui.js?v=memory-settings-1"></script>
   <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
-  <script src="./components/agent/agent-ui.js?v=agent-dream-1"></script>
-  <script src="./components/history/card-history.js?v=history-2"></script>
-  <script src="./components/history/history-ui.js?v=history-3"></script>
+  <script src="./components/agent/agent-ui.js?v=attente-hourglass-1"></script>
+  <script src="./components/history/card-history.js?v=history-4"></script>
+  <script src="./components/history/history-ui.js?v=history-4"></script>
 </head>
 <body class="tp-page tp-page--priority">
   <div class="compare-page">
@@ -1065,6 +1065,11 @@
         getEntries: function () {
           return cardHistory ? cardHistory.list() : [];
         },
+        getEntryDetails: function (entryId) {
+          return cardHistory && typeof cardHistory.getEntryDetails === 'function'
+            ? cardHistory.getEntryDetails(entryId)
+            : null;
+        },
         onRevert: function (entryId) {
           return runHistoryRevert(entryId);
         },
@@ -1179,25 +1184,115 @@
       } catch (e) { /* ignore */ }
 
       var impactReach = '';
-      var durationLabel = '';
       if (state.priorityEnabled !== false && window.PriorityUI) {
         if (typeof PriorityUI.wordFor === 'function' && state.impact != null) {
           impactReach = PriorityUI.wordFor('impact', state.impact) || '';
         }
+      }
+
+      var progressLabel = '';
+      if (window.CompletionTrello) {
+        var completionSnap =
+          (completionUi && typeof completionUi.getData === 'function'
+            ? completionUi.getData()
+            : null) ||
+          latestCompletion ||
+          { items: [] };
+        var progressMeta = CompletionTrello.computeCardProgress(completionSnap);
+        var remainingMins =
+          typeof CompletionTrello.computeEstimatedRemaining === 'function'
+            ? CompletionTrello.computeEstimatedRemaining(completionSnap)
+            : null;
+        var totalMins =
+          typeof CompletionTrello.computeEstimatedTotal === 'function'
+            ? CompletionTrello.computeEstimatedTotal(completionSnap)
+            : null;
+        var pctBit =
+          progressMeta && progressMeta.percent != null
+            ? progressMeta.percent + '\u00a0%'
+            : '';
+        var remainBit = '';
         if (
-          state.estimatedDurationMinutes != null &&
-          typeof PriorityUI.formatDurationFr === 'function'
+          remainingMins != null &&
+          typeof CompletionTrello.formatEstimatedRemainingLabel === 'function'
         ) {
-          durationLabel =
-            PriorityUI.formatDurationFr(state.estimatedDurationMinutes) || '';
+          remainBit = CompletionTrello.formatEstimatedRemainingLabel(remainingMins);
+        } else if (
+          totalMins != null &&
+          typeof CompletionTrello.formatEstimatedMinutesCompact === 'function'
+        ) {
+          remainBit = CompletionTrello.formatEstimatedMinutesCompact(totalMins);
         }
+        if (pctBit && remainBit) progressLabel = pctBit + ' \u00b7 ' + remainBit;
+        else progressLabel = remainBit || pctBit || '';
       }
 
       infoUi.setRecap({
         priorityLabel: priorityLabel,
         impactReach: impactReach,
-        durationLabel: durationLabel
+        durationLabel: '',
+        progressLabel: progressLabel
       });
+    }
+
+    var silentEstimateBusy = false;
+    var silentEstimateTimer = null;
+
+    /** Fill missing unlocked subtask estimates via AI (toast-free). */
+    function maybeSilentEstimateDurations() {
+      if (silentEstimateTimer) {
+        clearTimeout(silentEstimateTimer);
+        silentEstimateTimer = null;
+      }
+      silentEstimateTimer = setTimeout(function () {
+        silentEstimateTimer = null;
+        runSilentEstimateDurations();
+      }, 400);
+    }
+
+    function runSilentEstimateDurations() {
+      if (silentEstimateBusy) return;
+      if (!window.PriorityAgent || !window.CompletionTrello) return;
+      if (!completionUi || typeof completionUi.getData !== 'function') return;
+      if (typeof PriorityAgent.estimateSubtaskDurations !== 'function') return;
+      var data = completionUi.getData();
+      var needing =
+        typeof CompletionTrello.itemsNeedingEstimate === 'function'
+          ? CompletionTrello.itemsNeedingEstimate(data)
+          : [];
+      if (!needing.length) return;
+      silentEstimateBusy = true;
+      resolveCardNameForAi()
+        .then(function (cardName) {
+          return PriorityAgent.getProvider(t).then(function (provider) {
+            if (!PriorityAgent.isConfigured(provider)) return null;
+            return PriorityAgent.estimateSubtaskDurations(provider, {
+              cardName: cardName || readCardNameLabel(),
+              cardDesc:
+                (infoUi && typeof infoUi.getDesc === 'function'
+                  ? infoUi.getDesc()
+                  : '') ||
+                cardDesc ||
+                '',
+              items: needing.map(function (it) {
+                return { id: it.id, text: it.text };
+              })
+            });
+          });
+        })
+        .then(function (estimates) {
+          if (!estimates || !estimates.length || !completionUi) return;
+          if (typeof completionUi.applyItemEstimates === 'function') {
+            completionUi.applyItemEstimates(estimates, { lock: false });
+          }
+          syncInfoRecap();
+        })
+        .catch(function (err) {
+          console.error('Silent subtask estimate failed', err);
+        })
+        .then(function () {
+          silentEstimateBusy = false;
+        });
     }
 
     function attachBlockedIntoStatut() {
@@ -2371,7 +2466,34 @@
             (cardInfo && typeof cardInfo.name === 'string' && cardInfo.name.trim()) ||
             readCardNameLabel() ||
             '';
+          // One-time seed from legacy Facilité estimatedDurationMinutes.
+          try {
+            var priState =
+              variant && typeof variant.getState === 'function'
+                ? variant.getState()
+                : latestState;
+            var legacyMins =
+              priState && priState.estimatedDurationMinutes != null
+                ? priState.estimatedDurationMinutes
+                : null;
+            if (
+              legacyMins != null &&
+              typeof CompletionTrello.migrateEstimateFromPriority === 'function'
+            ) {
+              var migrated = CompletionTrello.migrateEstimateFromPriority(
+                stored,
+                legacyMins
+              );
+              if (migrated) {
+                stored = migrated;
+                saveCompletion(stored);
+              }
+            }
+          } catch (migErr) {
+            console.error('Completion estimate migration failed', migErr);
+          }
           completionUi = CompletionUI.mountCompletionUI(completionMount, {
+            t: t,
             data: stored,
             showCardHeader: false,
             cardName: initialName,
@@ -2599,6 +2721,7 @@
               syncBlockedSubtasks();
               syncDueBlockedForProgress(data);
               syncInfoRecap();
+              maybeSilentEstimateDurations();
             },
             onAllCompleteChange: function (allComplete, meta) {
               var live =
@@ -2643,8 +2766,10 @@
           });
           latestCompletion = completionUi.getData();
           syncDueBlockedForProgress(latestCompletion);
+          syncInfoRecap();
           // Initial paint may already be all-complete — sync Done without fireworks.
           syncDueCompleteFromProgress(latestCompletion);
+          maybeSilentEstimateDurations();
           // Progrès is always on; only expand follows stored prefs / focus entry.
           var expandFallback = initiallyOpen ? false : true;
           var expandProgress = initiallyOpen
@@ -3012,6 +3137,8 @@
             if (progressCollapse) progressCollapse.refreshSummary();
             syncBlockedSubtasks();
             syncDueBlockedForProgress(live);
+            syncInfoRecap();
+            maybeSilentEstimateDurations();
             // setData may have fired onAllCompleteChange; sync again so agent
             // updates to 100% always set Trello "Mark complete".
             syncDueCompleteFromProgress(live, {

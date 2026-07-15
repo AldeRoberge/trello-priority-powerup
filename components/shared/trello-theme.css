@@ -2169,6 +2169,13 @@ span.tp-estimate-chip {
   animation: tp-estimate-pop 0.16s ease;
 }
 
+/* Viewport-clamped placement (set by JS) — escapes overflow:hidden ancestors. */
+.tp-estimate-popover.is-fixed {
+  position: fixed;
+  right: auto;
+  bottom: auto;
+}
+
 .tp-estimate-popover[hidden] {
   display: none !important;
 }
@@ -2248,7 +2255,7 @@ span.tp-estimate-chip {
 }
 
 .tp-completion-item-slider-row .tp-completion-item-estimate {
-  margin-left: 2px;
+  justify-self: end;
 }
 
 .tp-completion-link-meta .tp-estimate-chip-wrap {
@@ -2528,10 +2535,17 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
   font-style: italic;
 }
 
-.tp-completion-item-slider-row,
 .tp-completion-field-head {
   display: grid;
   grid-template-columns: 4.75rem minmax(0, 1fr) 3rem;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+/* label | slider | % | estimate — keep encouragement text in its column */
+.tp-completion-item-slider-row {
+  display: grid;
+  grid-template-columns: minmax(0, 7.25rem) minmax(0, 1fr) 2.75rem auto;
   align-items: center;
   gap: 8px 10px;
 }
@@ -2658,11 +2672,14 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
   font-size: 13px;
   font-weight: 500;
   color: var(--tp-text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .tp-completion-item-progress-lbl {
-  min-width: 7.5em;
+  max-width: 100%;
   transition: color 0.2s ease;
 }
 
@@ -3305,9 +3322,13 @@ html[data-color-mode='dark'] .tp-completion-suggestion.is-link:hover {
     grid-template-columns: 28px minmax(0, 1fr) 32px;
   }
 
-  .tp-completion-item-slider-row,
   .tp-completion-field-head {
     grid-template-columns: 4rem minmax(0, 1fr) 2.5rem;
+    gap: 6px 8px;
+  }
+
+  .tp-completion-item-slider-row {
+    grid-template-columns: minmax(0, 6.25rem) minmax(0, 1fr) 2.5rem auto;
     gap: 6px 8px;
   }
 }

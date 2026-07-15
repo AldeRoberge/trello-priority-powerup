@@ -5614,6 +5614,10 @@
       layers:
         '<path d="M2.5 10.5L8 13.5l5.5-3M2.5 7.5L8 10.5l5.5-3M2.5 4.5L8 7.5l5.5-3L8 1.5z" ' +
         SUGGESTION_ICON_STROKE +
+        '/>',
+      hourglass:
+        '<path d="M4.5 2.5h7M4.5 13.5h7M5.5 3.5L8 8 5.5 12.5M10.5 3.5L8 8l2.5 4.5" ' +
+        SUGGESTION_ICON_STROKE +
         '/>'
     };
 

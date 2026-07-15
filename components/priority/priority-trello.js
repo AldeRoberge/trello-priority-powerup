@@ -704,21 +704,47 @@
   }
 
   /**
-   * Member who created the card (`t.card('idMemberCreator')`), resolved to a
-   * member object via board members or REST when authorized.
+   * idMemberCreator is not an allowed t.card() field — load it via REST.
+   */
+  async function fetchCardIdMemberCreatorRest(t) {
+    if (!restClientOptions()) return null;
+    try {
+      var cardId = await resolveCurrentCardId(t);
+      if (!cardId) return null;
+      var api = await t.getRestApi();
+      var authorized = await api.isAuthorized();
+      if (!authorized) return null;
+      var token = await api.getToken();
+      if (!token) return null;
+      var cfg = restClientOptions();
+      var url =
+        'https://api.trello.com/1/cards/' +
+        encodeURIComponent(cardId) +
+        '?fields=idMemberCreator' +
+        '&key=' +
+        encodeURIComponent(cfg.appKey) +
+        '&token=' +
+        encodeURIComponent(token);
+      var response = await fetch(url, { method: 'GET' });
+      if (!response.ok) return null;
+      var card = await response.json();
+      return parseIdMemberCreator(card);
+    } catch (err) {
+      console.error('Priority card idMemberCreator REST failed', err);
+      return null;
+    }
+  }
+
+  /**
+   * Member who created the card, resolved via REST (idMemberCreator) then
+   * board members / member REST lookup.
    * @param {object} t Power-Up client
    * @param {Array} [knownBoardMembers] Optional board members (avoids a second fetch)
    */
   async function getCardCreator(t, knownBoardMembers) {
     try {
-      var card = await cardDataPromise(t, 'idMemberCreator');
-      var creatorId = parseIdMemberCreator(card);
-      if (!creatorId) {
-        var scalar = await cardFieldPromise(t, 'idMemberCreator');
-        if (!isPowerUpRequestChain(scalar)) {
-          creatorId = parseIdMemberCreator(scalar);
-        }
-      }
+      // t.card() does not expose idMemberCreator — REST only.
+      var creatorId = await fetchCardIdMemberCreatorRest(t);
       if (!creatorId) return null;
 
       var boardMembers = Array.isArray(knownBoardMembers)

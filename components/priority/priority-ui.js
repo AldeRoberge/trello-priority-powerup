@@ -4906,12 +4906,15 @@
     if (!isFinite(n) || n <= 0) return null;
     var u = m[2];
     var factor = 1;
+    // Match plurals too ("jours", "heures") — a trailing $ on jour rejected "jours"
+    // and silently fell through to factor=1 (minutes).
     if (/^min/.test(u)) factor = 1;
     else if (/^(h|heure|hr)/.test(u)) factor = 60;
-    else if (/^(j|jour|day|d)$/.test(u)) factor = 24 * 60;
-    else if (/^(sem|semaine|week|w)/.test(u)) factor = 7 * 24 * 60;
-    else if (/^(mois|month|mo)/.test(u)) factor = 30 * 24 * 60;
-    else if (/^(an|ann|year|y)/.test(u)) factor = 365.25 * 24 * 60;
+    else if (/^(j|jours?|days?|d)$/.test(u)) factor = 24 * 60;
+    else if (/^(sem|semaines?|weeks?|w)$/.test(u)) factor = 7 * 24 * 60;
+    else if (/^(mois|months?|mo)$/.test(u)) factor = 30 * 24 * 60;
+    else if (/^(ans?|ann[eé]es?|years?|y)$/.test(u)) factor = 365.25 * 24 * 60;
+    else return null;
     return clampDurationMinutes(n * factor);
   }
 
@@ -5871,6 +5874,12 @@
       svg.appendChild(path('M2.5 10.5 L8 13.5 L13.5 10.5'));
       svg.appendChild(path('M2.5 7.5 L8 10.5 L13.5 7.5'));
       svg.appendChild(path('M2.5 4.5 L8 7.5 L13.5 4.5 L8 1.5 Z'));
+    } else if (iconKey === 'hourglass') {
+      // Hourglass (En attente / backlog): caps + glass silhouette.
+      svg.appendChild(path('M4.5 2.5 H11.5'));
+      svg.appendChild(path('M4.5 13.5 H11.5'));
+      svg.appendChild(path('M5.5 3.5 L8 8 L5.5 12.5'));
+      svg.appendChild(path('M10.5 3.5 L8 8 L10.5 12.5'));
     } else if (iconKey === 'circle') {
       svg.appendChild(circle(8, 8, 5));
     } else if (iconKey === 'x') {
@@ -6328,7 +6337,7 @@
 
   /**
    * Top-of-popup recap: title, description (editable), creator, assignees, labels.
-   * Optional Portée / Durée mirrors (experimental) jump to Priorité.
+   * Progrès mirror (remaining estimate) jumps to Progrès; optional Portée jump to Priorité.
    */
   function createInfoField(config) {
     var el = config.el;
@@ -6370,6 +6379,8 @@
     var priorityLabel = typeof config.priorityLabel === 'string' ? config.priorityLabel : '';
     var impactReachLabel = typeof config.impactReach === 'string' ? config.impactReach : '';
     var durationLabel = typeof config.durationLabel === 'string' ? config.durationLabel : '';
+    var progressLabel =
+      typeof config.progressLabel === 'string' ? config.progressLabel : '';
     var titleDirty = false;
     var titleSaveTimer = null;
     var titleBusy = false;
@@ -6441,8 +6452,8 @@
         row.tabIndex = 0;
         row.title = 'Aller \u00e0 ' + labelText;
         function jump() {
-          // Portée / Durée live in the Priorité section.
-          onJump(key === 'porte' || key === 'duree' ? 'priority' : key);
+          // Portée lives in Priorité; Progrès has its own section.
+          onJump(key === 'porte' ? 'priority' : key);
         }
         row.addEventListener('click', jump);
         row.addEventListener('keydown', function (e) {
@@ -6792,16 +6803,25 @@
     porteRow.value.appendChild(porteValueEl);
     body.appendChild(porteRow.row);
 
+    // Legacy Durée (Facilité) — permanently hidden; estimates live in Progrès.
     var dureeRow = makeRow('duree', 'Dur\u00e9e', {
       interactive: true,
       icon: 'ti-hourglass'
     });
     var dureeValueEl = document.createElement('span');
     dureeValueEl.className = 'info-recap-text';
-    // Shown only when experimental.easeHourglass is enabled (applyFeaturesToCard).
     dureeRow.row.hidden = true;
     dureeRow.value.appendChild(dureeValueEl);
     body.appendChild(dureeRow.row);
+
+    var progresRow = makeRow('progress', 'Progr\u00e8s', {
+      interactive: true,
+      icon: 'ti-percentage'
+    });
+    var progresValueEl = document.createElement('span');
+    progresValueEl.className = 'info-recap-text';
+    progresRow.value.appendChild(progresValueEl);
+    body.appendChild(progresRow.row);
 
     field.appendChild(body);
     el.appendChild(field);
@@ -7804,6 +7824,7 @@
     function renderRecap() {
       setRecapText(porteValueEl, impactReachLabel, 'Non d\u00e9finie');
       setRecapText(dureeValueEl, durationLabel, 'Non d\u00e9finie');
+      setRecapText(progresValueEl, progressLabel, 'Non estim\u00e9');
     }
 
     function summaryText() {
@@ -7811,8 +7832,8 @@
         return titleText;
       }
       var bits = [];
+      if (progressLabel) bits.push(progressLabel);
       if (impactReachLabel) bits.push(impactReachLabel);
-      if (durationLabel) bits.push(durationLabel);
       return bits.join(' \u00b7 ');
     }
 
@@ -8323,6 +8344,7 @@
         if (next.priorityLabel != null) priorityLabel = String(next.priorityLabel || '');
         if (next.impactReach != null) impactReachLabel = String(next.impactReach || '');
         if (next.durationLabel != null) durationLabel = String(next.durationLabel || '');
+        if (next.progressLabel != null) progressLabel = String(next.progressLabel || '');
         renderRecap();
         collapse.refreshSummary();
       },
@@ -12613,7 +12635,8 @@
         ? variantConfig.experimental
         : {};
     var showImpactGlobe = experimental.impactGlobe === true;
-    var showEaseHourglass = experimental.easeHourglass === true;
+    // Facilité hourglass deprecated — estimates live in Progrès.
+    var showEaseHourglass = false;
 
     variantConfig.dimensions.forEach(function (dim, dimIndex) {
       fields[dim.key] = createField({

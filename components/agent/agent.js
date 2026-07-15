@@ -11,9 +11,12 @@
   var CARD_CHAT_KEY = 'cardAgentChat';
   var BOARD_CHAT_KEY = 'boardAgentChat';
   var MAX_INTERVIEW_ASKED = 24;
-  var MAX_CHAT_MESSAGES = 24;
-  var MAX_CHAT_CONTENT = 500;
-  var MAX_CHAT_SERIALIZED = 3500;
+  var MAX_CHAT_MESSAGES = 16;
+  var MAX_CHAT_CONTENT = 400;
+  // Trello plugin data limit is 4096 chars (shared) / often enforced similarly for private.
+  // Stay well under — JSON escaping + non-ASCII inflate stored size vs JS .length.
+  var MAX_CHAT_SERIALIZED = 2800;
+  var MAX_CHAT_SERIALIZED_HARD = 2400;
 
   /** Where the assistant UI is hosted — shapes prompts, tools, and chat storage. */
   var ASSISTANT_SCOPES = {
@@ -2675,7 +2678,7 @@
       '- Ne bloque JAMAIS une action pour un param\u00e8tre optionnel. Applique le minimum viable, puis adapte.',
       '- Ne pose une question AVANT d\'appeler un outil QUE si un param\u00e8tre OBLIGATOIRE manque et qu\'aucune action partielle n\'est possible.',
       '- Param\u00e8tres optionnels (ne jamais exiger avant d\'agir)\u00a0: dueTime, blockedReasons, axes priorit\u00e9 non fournis, progress pr\u00e9cis si on active seulement la section.',
-      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_project\u00a0: projectId OU matchText/name OU clear:true\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget, estimatedDuration/estimatedDurationMinutes ou priorityEnabled\u00a0; trigger_effect.effect\u00a0; point_at.section OU field\u00a0; set_agent_name.name\u00a0; set_agent_color.color\u00a0; set_agent_personality.personality.',
+      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_subtask_estimate\u00a0: id OU matchText + estimatedMinutes\u00a0; set_progress_estimate.estimatedMinutes\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_project\u00a0: projectId OU matchText/name OU clear:true\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget ou priorityEnabled\u00a0; trigger_effect.effect\u00a0; point_at.section OU field\u00a0; set_agent_name.name\u00a0; set_agent_color.color\u00a0; set_agent_personality.personality.',
       '- Dates relatives (jours)\u00a0: r\u00e9sous avec context.today (aujourd\'hui / today \u2192 context.today\u00a0; demain \u2192 +1 jour). N\'invente pas d\'autre date.',
       '- Heures relatives (tr\u00e8s important)\u00a0: \u00ab\u00a0dans 15 minutes\u00a0\u00bb / \u00ab\u00a0in 15 minutes\u00a0\u00bb / \u00ab\u00a0dans 2 heures\u00a0\u00bb = D\u00c9LAI depuis maintenant, PAS une heure fixe du matin.',
       '- Pour un d\u00e9lai\u00a0: utilise set_due avec relativeMinutes (ou relativeHours). Le runtime calcule dueDate/dueTime \u00e0 partir de context.nowTime (' +
@@ -2792,7 +2795,7 @@
       '- Impact / qui est touch\u00e9\u00a0: si context.userName (ou profile.displayName / fait m\u00e9moire \u00ab\u00a0Nom\u00a0:\u00a0\u2026\u00a0\u00bb) est connu, inclus TOUJOURS l\'utilisateur dans les suggestions (ex. \u00ab\u00a0Impact sur Alex\u00a0\u00bb / \u00ab\u00a0Sur Alex\u00a0\u00bb / pr\u00e9nom + circle-xs/blue). INTERDIT de ne proposer que \u00e9quipe / utilisateurs / clients en omettant la personne.',
       '- Ex. VRAI (userName=Alex)\u00a0: \u00ab\u00a0Impact sur Alex\u00a0\u00bb, \u00ab\u00a0Impact sur l\'\u00e9quipe\u00a0\u00bb, \u00ab\u00a0Impact sur les utilisateurs\u00a0\u00bb.',
       '- Ex. FAUX\u00a0: seulement \u00ab\u00a0Impact sur l\'\u00e9quipe\u00a0\u00bb + \u00ab\u00a0Impact sur les utilisateurs\u00a0\u00bb alors que le pr\u00e9nom est connu.',
-      '- Ic\u00f4nes disponibles (champ icon)\u00a0: circle-xs, circle-sm, circle-md, circle-lg, circle-xl, dots, hammer, calm-face, exclaim, user, users, building, globe, flame, check, ban, clock, bolt, layers.',
+      '- Ic\u00f4nes disponibles (champ icon)\u00a0: circle-xs, circle-sm, circle-md, circle-lg, circle-xl, dots, hammer, calm-face, exclaim, user, users, building, globe, flame, check, ban, clock, bolt, layers, hourglass.',
       '- Urgence\u00a0: calm-face pour \u00ab\u00a0Pas urgent\u00a0\u00bb / aucune pression\u00a0; exclaim (!!) pour Urgent / Critique. Ex.\u00a0: {"label":"Pas urgent du tout","icon":"calm-face","heat":0} \u2026 {"label":"Urgent","icon":"exclaim","heat":4}.',
       '- color nomm\u00e9e\u00a0: blue|teal|yellow|lime|green|orange|red|gray (affich\u00e9e sur le chip). heat 0\u20134 reste r\u00e9serv\u00e9 aux \u00e9chelles gravit\u00e9 (vert\u2192rouge).',
       'R\u00e8gles actions (appliqu\u00e9es automatiquement)\u00a0:',
@@ -3368,6 +3371,101 @@
       out.push(est);
     });
     return out;
+  }
+
+  /**
+   * Quick NL duration parse → minutes (e.g. "5 jours", "une demie journ\u00e9e").
+   * @returns {Promise<number|null>}
+   */
+  async function parseDurationMinutes(provider, text, options) {
+    options = options || {};
+    var raw = typeof text === 'string' ? text.trim() : '';
+    if (!raw) return null;
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) return null;
+
+    var clamp =
+      typeof CompletionTrello !== 'undefined' &&
+      typeof CompletionTrello.clampEstimatedMinutes === 'function'
+        ? CompletionTrello.clampEstimatedMinutes
+        : typeof PriorityUI !== 'undefined' &&
+            typeof PriorityUI.clampDurationMinutes === 'function'
+          ? PriorityUI.clampDurationMinutes
+          : function (m) {
+              var n = Number(m);
+              return isFinite(n) && n > 0 ? Math.round(n) : null;
+            };
+
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu convertis une dur\u00e9e saisie par un utilisateur (fran\u00e7ais ou anglais) en minutes enti\u00e8res.',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"minutes":7200,"certain":true}',
+          'minutes = effort total en minutes (entier > 0). Ex.\u00a0:',
+          '  "5 min" / "5 minutes" \u2192 5',
+          '  "2 h" / "2 heures" \u2192 120',
+          '  "5 jours" / "5 days" \u2192 7200 (5\u00d724\u00d760)',
+          '  "1 semaine" \u2192 10080',
+          '  "un mois" \u2192 43200 (30\u00d724\u00d760)',
+          'Si la saisie n\u2019est pas une dur\u00e9e\u00a0: {"minutes":null,"certain":false}.',
+          'certain=true seulement si tu es s\u00fbr de l\u2019unit\u00e9 (ne suppose pas des minutes si un jour/heure/semaine est \u00e9crit).'
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content: raw.slice(0, 120)
+      }
+    ];
+
+    var response;
+    try {
+      response = await chatCompletions(p, messages, {
+        jsonMode: true,
+        max_tokens: 80,
+        temperature: 0,
+        stream: false
+      });
+    } catch (err) {
+      if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+        try {
+          response = await chatCompletions(p, messages, {
+            jsonMode: false,
+            max_tokens: 80,
+            temperature: 0,
+            stream: false
+          });
+        } catch (err2) {
+          console.error('PriorityAgent.parseDurationMinutes failed', err2);
+          return null;
+        }
+      } else {
+        console.error('PriorityAgent.parseDurationMinutes failed', err);
+        return null;
+      }
+    }
+
+    var content =
+      response && typeof response.content === 'string' ? response.content.trim() : '';
+    if (!content) return null;
+    var jsonText = content;
+    var fence = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fence) jsonText = fence[1].trim();
+    else {
+      var start = content.indexOf('{');
+      var end = content.lastIndexOf('}');
+      if (start >= 0 && end > start) jsonText = content.slice(start, end + 1);
+    }
+    var data = null;
+    try {
+      data = JSON.parse(jsonText);
+    } catch (e) {
+      return null;
+    }
+    if (!data || typeof data !== 'object') return null;
+    if (data.certain === false) return null;
+    if (data.minutes == null || data.minutes === '') return null;
+    return clamp(data.minutes);
   }
 
   /**
@@ -4353,37 +4451,54 @@
 
   function chatSerializedSize(chat) {
     try {
-      return JSON.stringify(chat).length;
+      var json = JSON.stringify(chat);
+      // Prefer UTF-8 byte length when available (closer to Trello’s count for accents/emoji).
+      if (typeof TextEncoder !== 'undefined') {
+        return new TextEncoder().encode(json).length;
+      }
+      return unescape(encodeURIComponent(json)).length;
     } catch (e) {
       return MAX_CHAT_SERIALIZED + 1;
     }
   }
 
-  function enforceCardChatBudget(chat) {
+  function enforceCardChatBudget(chat, maxBytes) {
+    var budget =
+      typeof maxBytes === 'number' && maxBytes > 0 ? maxBytes : MAX_CHAT_SERIALIZED;
     var next = {
       version: 1,
       messages: Array.isArray(chat && chat.messages) ? chat.messages.slice() : [],
       updatedAt: (chat && typeof chat.updatedAt === 'string' && chat.updatedAt) || ''
     };
+    // Persist only role + content (drop selfPrompt and any UI-only fields).
+    next.messages = next.messages
+      .map(function (msg) {
+        return normalizeCardChatMessage(msg);
+      })
+      .filter(Boolean);
     while (next.messages.length > MAX_CHAT_MESSAGES) {
       next.messages.shift();
     }
     while (
       next.messages.length > 1 &&
-      chatSerializedSize(next) > MAX_CHAT_SERIALIZED
+      chatSerializedSize(next) > budget
     ) {
       next.messages.shift();
     }
-    if (chatSerializedSize(next) > MAX_CHAT_SERIALIZED && next.messages.length === 1) {
-      next.messages[0] = {
-        role: next.messages[0].role,
-        content: String(next.messages[0].content || '').slice(
-          0,
-          Math.max(80, Math.floor(MAX_CHAT_CONTENT / 2))
-        )
-      };
+    if (chatSerializedSize(next) > budget && next.messages.length === 1) {
+      var slimCap = Math.max(60, Math.floor(MAX_CHAT_CONTENT / 2));
+      while (
+        slimCap >= 40 &&
+        chatSerializedSize(next) > budget
+      ) {
+        next.messages[0] = {
+          role: next.messages[0].role,
+          content: String(next.messages[0].content || '').slice(0, slimCap)
+        };
+        slimCap = Math.floor(slimCap * 0.7);
+      }
     }
-    if (chatSerializedSize(next) > MAX_CHAT_SERIALIZED) {
+    if (chatSerializedSize(next) > budget) {
       next.messages = [];
     }
     return next;
@@ -4416,28 +4531,49 @@
     }
   }
 
-  async function saveCardChat(t, chat) {
+  async function savePluginChat(t, scope, key, chat) {
     var next = normalizeCardChat(chat);
     next.updatedAt = new Date().toISOString();
-    next = enforceCardChatBudget(next);
+    next = enforceCardChatBudget(next, MAX_CHAT_SERIALIZED);
     if (!t || typeof t.set !== 'function') return next;
+
+    async function write(payload) {
+      await t.set(scope, 'private', key, payload);
+    }
+
     try {
-      await t.set('card', 'private', CARD_CHAT_KEY, next);
+      await write(next);
+      return next;
     } catch (err) {
-      console.error('PriorityAgent.saveCardChat failed', err);
-      // Retry with a smaller window if Trello rejects oversized plugin data.
+      // Shrink aggressively then retry; only log if hard-fail.
+      var shrunk = enforceCardChatBudget(next, MAX_CHAT_SERIALIZED_HARD);
+      shrunk.updatedAt = new Date().toISOString();
       try {
-        while (next.messages.length > 0) {
-          next.messages.shift();
-          if (chatSerializedSize(next) <= Math.floor(MAX_CHAT_SERIALIZED * 0.85)) break;
-        }
-        next.updatedAt = new Date().toISOString();
-        await t.set('card', 'private', CARD_CHAT_KEY, next);
+        await write(shrunk);
+        return shrunk;
       } catch (retryErr) {
-        console.error('PriorityAgent.saveCardChat retry failed', retryErr);
+        var empty = emptyCardChat();
+        empty.updatedAt = new Date().toISOString();
+        try {
+          await write(empty);
+          console.warn(
+            'PriorityAgent.saveChat exceeded plugin data limit; cleared history (' +
+              scope +
+              '/' +
+              key +
+              ')'
+          );
+          return empty;
+        } catch (emptyErr) {
+          console.error('PriorityAgent.saveChat failed', emptyErr || retryErr || err);
+          return shrunk;
+        }
       }
     }
-    return next;
+  }
+
+  async function saveCardChat(t, chat) {
+    return savePluginChat(t, 'card', CARD_CHAT_KEY, chat);
   }
 
   async function loadBoardChat(t) {
@@ -4452,26 +4588,7 @@
   }
 
   async function saveBoardChat(t, chat) {
-    var next = normalizeCardChat(chat);
-    next.updatedAt = new Date().toISOString();
-    next = enforceCardChatBudget(next);
-    if (!t || typeof t.set !== 'function') return next;
-    try {
-      await t.set('board', 'private', BOARD_CHAT_KEY, next);
-    } catch (err) {
-      console.error('PriorityAgent.saveBoardChat failed', err);
-      try {
-        while (next.messages.length > 0) {
-          next.messages.shift();
-          if (chatSerializedSize(next) <= Math.floor(MAX_CHAT_SERIALIZED * 0.85)) break;
-        }
-        next.updatedAt = new Date().toISOString();
-        await t.set('board', 'private', BOARD_CHAT_KEY, next);
-      } catch (retryErr) {
-        console.error('PriorityAgent.saveBoardChat retry failed', retryErr);
-      }
-    }
-    return next;
+    return savePluginChat(t, 'board', BOARD_CHAT_KEY, chat);
   }
 
   /**
@@ -4594,11 +4711,11 @@
       '- Lis le titre et utilise ton bon sens AVANT de poser une question. Ne demande JAMAIS ce qui est \u00e9vident.',
       '- Facilit\u00e9 / effort \u00c9VIDENT (critique)\u00a0: si le titre d\u00e9crit une t\u00e2che clairement triviale / courte (accrocher / installer des dipl\u00f4mes, liker un post, envoyer un mail, renommer un fichier, coller un sticker, changer une ampoule simple\u2026)\u00a0:',
       '  \u00b7 NE POSE PAS \u00ab\u00a0\u00e7a prend du temps?\u00a0\u00bb, \u00ab\u00a0c\'est difficile?\u00a0\u00bb, \u00ab\u00a0c\'est facile?\u00a0\u00bb \u2014 m\u00eame pas en oui/non. C\'est stupide.',
-      '  \u00b7 set_priority IMM\u00c9DIATEMENT avec ease \u00e9lev\u00e9e (4\u20135) + estimatedDurationMinutes court (~1\u201315 selon le cas) et passe \u00e0 une question NON \u00e9vidente (POURQUOI, urgence, impact, \u00e9ch\u00e9ance\u2026).',
+      '  \u00b7 set_priority IMM\u00c9DIATEMENT avec ease \u00e9lev\u00e9e (4\u20135) + set_progress_estimate court (~1\u201315 min selon le cas) et passe \u00e0 une question NON \u00e9vidente (POURQUOI, urgence, impact, \u00e9ch\u00e9ance\u2026).',
       '  \u00b7 Ex. FAUX (dipl\u00f4mes)\u00a0: \u00ab\u00a0Installer les dipl\u00f4mes, \u00e7a prend du temps?\u00a0\u00bb / \u00ab\u00a0C\'est facile?\u00a0\u00bb',
-      '  \u00b7 Ex. VRAI (dipl\u00f4mes)\u00a0: actions set_priority {ease:5, estimatedDurationMinutes:10} (sans en parler) + question utile genre impact/urgence/POURQUOI.',
+      '  \u00b7 Ex. VRAI (dipl\u00f4mes)\u00a0: actions set_priority {ease:5} + set_progress_estimate {estimatedMinutes:10} (sans en parler) + question utile genre impact/urgence/POURQUOI.',
       '- Pose facilit\u00e9 / dur\u00e9e SEULEMENT quand l\'effort est r\u00e9ellement ambigu (archivage de rushs, migration, montage, audit, chantier multi-\u00e9tapes, coordination).',
-      '- Achat / licence / abonnement / commande / \"obtenir X\" logiciel\u00a0: l\'acte en soi prend ~quelques minutes (pas des heures). Inf\u00e8re une dur\u00e9e tr\u00e8s courte (set_priority estimatedDurationMinutes ~1\u20135) et NE pose PAS \u00ab\u00a0\u00c7a prend combien de temps?\u00a0\u00bb.',
+      '- Achat / licence / abonnement / commande / \"obtenir X\" logiciel\u00a0: l\'acte en soi prend ~quelques minutes (pas des heures). Inf\u00e8re une dur\u00e9e tr\u00e8s courte (set_progress_estimate ~1\u20135) et NE pose PAS \u00ab\u00a0\u00c7a prend combien de temps?\u00a0\u00bb.',
       '- Pour ces cartes, la friction = budget + permission / validation. Pose \u00e7a, pas l\'effort ni la dur\u00e9e.',
       '- T\u00e2ches perso solo (critique)\u00a0: si le titre est clairement quelque chose que L\'UTILISATEUR fait seul sur son setup / chez lui / pour lui (c\u00e2bles sur mon ordi, ranger mon bureau, nettoyer mon \u00e9cran, installer un outil perso, accrocher des dipl\u00f4mes\u2026)\u00a0:',
       '  \u00b7 INTERDIT permission / validation / \u00ab\u00a0qui doit donner l\'accord?\u00a0\u00bb / \u00ab\u00a0qui s\'en occupe?\u00a0\u00bb \u2014 \u00e7a d\u00e9pend de personne d\'autre.',
@@ -4609,9 +4726,9 @@
       '- INTERDIT les anglicismes et le jargon import\u00e9 dans les questions\u00a0: jamais \u00ab\u00a0skip\u00a0\u00bb, \u00ab\u00a0cable management\u00a0\u00bb, \u00ab\u00a0bosses\u00a0\u00bb, \u00ab\u00a0OK des bosses\u00a0\u00bb, \u00ab\u00a0le deal\u00a0\u00bb, etc. Fran\u00e7ais naturel\u00a0: si on ne fait pas / si on laisse, permission, validation, accord, qui doit signer.',
       '- Si le titre est en anglais / jargon\u00a0: REFORMULE en fran\u00e7ais courant avant de poser la question. Ex. \u00ab\u00a0Cable management sur mon ordinateur\u00a0\u00bb \u2192 \u00ab\u00a0le m\u00e9nage des c\u00e2bles sur ton ordinateur\u00a0\u00bb (pas \u00ab\u00a0le cable management\u00a0\u00bb).',
       '- Ex. FAUX (achat DaVinci)\u00a0: \u00ab\u00a0\u00c7a prend combien de temps?\u00a0\u00bb / \u00ab\u00a0c\'est difficile?\u00a0\u00bb / \u00ab\u00a0Faut l\'OK des bosses?\u00a0\u00bb',
-      '- Ex. VRAI (achat DaVinci)\u00a0: 1er tour POURQUOI si pas encore clair, sinon \u00ab\u00a0DaVinci Resolve, c\'est cher?\u00a0\u00bb puis \u00ab\u00a0Faut la permission de quelqu\'un pour avancer?\u00a0\u00bb \u2014 et set_priority avec estimatedDurationMinutes court sans demander.',
+      '- Ex. VRAI (achat DaVinci)\u00a0: 1er tour POURQUOI si pas encore clair, sinon \u00ab\u00a0DaVinci Resolve, c\'est cher?\u00a0\u00bb puis \u00ab\u00a0Faut la permission de quelqu\'un pour avancer?\u00a0\u00bb \u2014 et set_progress_estimate court sans demander.',
       '- Si L\'UTILISATEUR te demande ton avis sur la dur\u00e9e (\u00ab\u00a0combien de temps tu penses?\u00a0\u00bb, \u00ab\u00a0\u00e0 ton avis?\u00a0\u00bb)\u00a0: R\u00c9PONDS (ne repose pas la question). Pour un achat / licence\u00a0: ton honn\u00eate opinion + pivot friction.',
-      '- Ex. VRAI (user \u00ab\u00a0combien de temps tu penses?\u00a0\u00bb, achat DaVinci)\u00a0: \u00ab\u00a0Je sais pas moi\u2026 Quelques minutes? J\'imagine que le plus difficile l\u00e0-dedans c\'est d\'avoir la permission et surtout le budget.\u00a0\u00bb + set_priority estimatedDurationMinutes court, puis question suivante utile (ou close si fini).',
+      '- Ex. VRAI (user \u00ab\u00a0combien de temps tu penses?\u00a0\u00bb, achat DaVinci)\u00a0: \u00ab\u00a0Je sais pas moi\u2026 Quelques minutes? J\'imagine que le plus difficile l\u00e0-dedans c\'est d\'avoir la permission et surtout le budget.\u00a0\u00bb + set_progress_estimate court, puis question suivante utile (ou close si fini).',
       '- Autres sujets \u00e9vidents\u00a0: \u00ab\u00a0Envoyer un mail\u00a0\u00bb / \u00ab\u00a0Liker un post\u00a0\u00bb / renommer un fichier / installer des dipl\u00f4mes \u2192 dur\u00e9e courte + ease \u00e9lev\u00e9e en silence + PAS de permission + PAS de question facilit\u00e9\u00a0; POURQUOI court si utile, sinon urgence/impact.',
       '- Ne pose une question que si la r\u00e9ponse change vraiment le scoring OU le POURQUOI / livrable. Si tu peux d\u00e9j\u00e0 setter un axe raisonnablement, fais-le dans actions et passe \u00e0 la suite.',
       '',
@@ -4656,7 +4773,7 @@
       '- Ex. FAUX\u00a0: \u00ab\u00a0Je peux d\u00e9finir l\'\u00e9ch\u00e9ance \u00e0 demain. Je m\'en occupe?\u00a0\u00bb',
       '- Ex. VRAI\u00a0: \u00ab\u00a0C\'est pour quand?\u00a0\u00bb',
       '- Ex. VRAI (si tu proposes d\u00e9j\u00e0 un jour)\u00a0: \u00ab\u00a0Veux-tu que je d\u00e9finisse l\'\u00e9ch\u00e9ance \u00e0 demain?\u00a0\u00bb',
-      '- Dur\u00e9e\u00a0: pose \u00ab\u00a0\u00c7a prend combien de temps?\u00a0\u00bb SEULEMENT si le temps n\'est pas \u00e9vident d\'apr\u00e8s le titre (ex. migration, montage, audit). Sinon inf\u00e8re estimatedDurationMinutes.',
+      '- Dur\u00e9e\u00a0: pose \u00ab\u00a0\u00c7a prend combien de temps?\u00a0\u00bb SEULEMENT si le temps n\'est pas \u00e9vident d\'apr\u00e8s le titre (ex. migration, montage, audit). Sinon inf\u00e8re via set_progress_estimate / set_subtask_estimate.',
       '- Questions DIRECTES\u00a0: demande la valeur. INTERDIT les offres molles (\u00ab\u00a0souhaites-tu d\u00e9finir une \u00e9ch\u00e9ance?\u00a0\u00bb, \u00ab\u00a0Je peux / Je m\'en occupe?\u00a0\u00bb).',
       '- Si la r\u00e9ponse est \u00ab\u00a0non\u00a0\u00bb / skip / \u00ab\u00a0pas d\'\u00e9ch\u00e9ance\u00a0\u00bb\u00a0: applique d\'abord tout set_progress / set_priority encore dus d\'apr\u00e8s l\'historique, puis passe \u00e0 autre chose OU close \u2014 JAMAIS un simple \u00ab\u00a0Okay.\u00a0\u00bb (voir cl\u00f4ture ci-dessous).',
       '- Les gens r\u00e9pondent avec des mots\u00a0; TOI tu traduis en axes + progr\u00e8s dans actions (set_priority, set_progress).',
@@ -4702,7 +4819,7 @@
       '- Ex. VRAI impact (assumer, dipl\u00f4mes)\u00a0: {"message":"Le plus impact\u00e9 si on ne les installe pas, c\'est toi?","suggestions":["Oui","Non"],"suggestionsMulti":false}',
       '- Ex. VRAI impact (fallback \u00e9chelle apr\u00e8s Non)\u00a0: \u00ab\u00a0Impact sur Alex\u00a0\u00bb, \u00ab\u00a0Impact sur l\'\u00e9quipe\u00a0\u00bb, \u00ab\u00a0Impact sur les utilisateurs\u00a0\u00bb.',
       '- Ex. port\u00e9e JSON (pr\u00e9nom connu, fallback)\u00a0: {"suggestions":[{"label":"Alex","icon":"circle-xs","color":"blue"},{"label":"\u00c9quipe","icon":"circle-sm","color":"teal"},{"label":"Population","icon":"circle-lg","color":"green"}],"suggestionScale":true,"suggestionsMulti":false}',
-      '- Ic\u00f4nes dispo\u00a0: circle-xs|circle-sm|circle-md|circle-lg|circle-xl|dots|hammer|calm-face|exclaim|user|users|building|globe|flame|check|ban|clock|bolt|layers.',
+      '- Ic\u00f4nes dispo\u00a0: circle-xs|circle-sm|circle-md|circle-lg|circle-xl|dots|hammer|calm-face|exclaim|user|users|building|globe|flame|check|ban|clock|bolt|layers|hourglass.',
       '- Urgence\u00a0: calm-face (\u00ab\u00a0Pas urgent\u00a0\u00bb) et exclaim (!! pour Urgent). INTERDIT hammer/bolt pour l\'urgence.',
       '- Colorie les \u00e9chelles de gravit\u00e9 avec heat 0\u20134 (0=vert, 4=rouge), OU suggestionScale:true + strings ordonn\u00e9es.',
       '- Ex. facilit\u00e9 JSON (effort)\u00a0: {"suggestions":[{"label":"C\'est facile","heat":0},{"label":"C\'est faisable","heat":2},{"label":"C\'est difficile","heat":4}],"suggestionScale":true,"suggestionsMulti":false}',
@@ -4778,7 +4895,7 @@
       '- INTERDIT d\'offrir / demander une \u00e9ch\u00e9ance si alreadyKnown.dueActive=true (due.enabled + dueDate). L\'\u00e9ch\u00e9ance est d\u00e9j\u00e0 pos\u00e9e\u00a0: passe aux axes ou cl\u00f4ture.',
       '- Ex. FAUX (due d\u00e9j\u00e0 l\u00e0)\u00a0: apr\u00e8s le POURQUOI, message \u00ab\u00a0C\'est pour quand?\u00a0\u00bb alors que context.due.dueDate est d\u00e9fini.',
       '- Ex. VRAI (due d\u00e9j\u00e0 l\u00e0)\u00a0: apr\u00e8s le POURQUOI \u2192 urgence / impact / facilit\u00e9 (ou completeInterview si axes ok).',
-      '- Pour dur\u00e9e\u00a0: seulement si incertaine \u2192 \u00ab\u00a0\u00c7a prend combien de temps?\u00a0\u00bb. Sinon set_priority.estimatedDurationMinutes sans demander. Pour projet\u00a0: \u00ab\u00a0Quel projet?\u00a0\u00bb.',
+      '- Pour dur\u00e9e\u00a0: seulement si incertaine \u2192 \u00ab\u00a0\u00c7a prend combien de temps?\u00a0\u00bb. Sinon set_progress_estimate sans demander. Pour projet\u00a0: \u00ab\u00a0Quel projet?\u00a0\u00bb.',
       '- completeInterview:true quand l\'interview est termin\u00e9e.',
       '- \u00c9vite de reposer les questions d\u00e9j\u00e0 pos\u00e9es.',
       '- INTERDIT\u00a0: \u00ab\u00a0Comment puis-je vous aider?\u00a0\u00bb / questions vagues ouvertes sans ancrage.',
@@ -5479,7 +5596,8 @@
     'ban',
     'clock',
     'bolt',
-    'layers'
+    'layers',
+    'hourglass'
   ];
 
   var IMPACT_REACH_SUGGESTION = {
@@ -8635,15 +8753,66 @@
     return {
       progress: c.progress,
       progressEnabled: c.progressEnabled !== false,
+      estimatedMinutes:
+        c.estimatedMinutes != null && isFinite(+c.estimatedMinutes)
+          ? +c.estimatedMinutes
+          : null,
+      estimatedMinutesOffset:
+        typeof c.estimatedMinutesOffset === 'number' &&
+        isFinite(c.estimatedMinutesOffset)
+          ? c.estimatedMinutesOffset
+          : null,
       items: (c.items || []).map(function (it) {
         return {
           id: it.id,
           text: it.text,
           done: !!it.done,
-          progress: it.progress != null ? it.progress : 0
+          progress: it.progress != null ? it.progress : 0,
+          estimatedMinutes:
+            it.estimatedMinutes != null && isFinite(+it.estimatedMinutes)
+              ? +it.estimatedMinutes
+              : null
         };
       })
     };
+  }
+
+  function resolveEstimateMinutesArg(args) {
+    args = args || {};
+    if (args.estimatedMinutes === null || args.estimatedMinutes === '') {
+      return null;
+    }
+    if (args.estimatedMinutes !== undefined && args.estimatedMinutes !== '') {
+      if (
+        typeof CompletionTrello !== 'undefined' &&
+        typeof CompletionTrello.clampEstimatedMinutes === 'function'
+      ) {
+        return CompletionTrello.clampEstimatedMinutes(args.estimatedMinutes);
+      }
+      var n = +args.estimatedMinutes;
+      return isFinite(n) && n > 0 ? Math.round(n) : null;
+    }
+    var text =
+      typeof args.estimatedDuration === 'string'
+        ? args.estimatedDuration
+        : typeof args.duration === 'string'
+          ? args.duration
+          : '';
+    if (!text.trim()) return undefined;
+    if (
+      typeof PriorityUI !== 'undefined' &&
+      typeof PriorityUI.parseDurationNl === 'function'
+    ) {
+      var parsed = PriorityUI.parseDurationNl(text);
+      if (
+        typeof CompletionTrello !== 'undefined' &&
+        typeof CompletionTrello.clampEstimatedMinutes === 'function'
+      ) {
+        return CompletionTrello.clampEstimatedMinutes(parsed);
+      }
+      return parsed;
+    }
+    return undefined;
   }
 
   function fmtVal(v) {
@@ -9158,66 +9327,74 @@
         if (args.urgency != null) partial.urgency = clampInt(args.urgency, 0, 4, 0);
         if (args.impact != null) partial.impact = clampInt(args.impact, 0, 4, 0);
         if (args.ease != null) partial.ease = clampInt(args.ease, 1, 5, 3);
-        if (args.estimatedDurationMinutes !== undefined) {
-          if (
-            args.estimatedDurationMinutes === null ||
-            args.estimatedDurationMinutes === ''
-          ) {
-            partial.estimatedDurationMinutes = null;
-          } else {
-            var durMin = +args.estimatedDurationMinutes;
-            if (isFinite(durMin) && durMin > 0) {
-              if (
-                typeof PriorityUI !== 'undefined' &&
-                typeof PriorityUI.clampDurationMinutes === 'function'
-              ) {
-                partial.estimatedDurationMinutes =
-                  PriorityUI.clampDurationMinutes(durMin);
-              } else {
-                partial.estimatedDurationMinutes = Math.round(durMin);
-              }
-            }
-          }
-        } else if (
-          typeof args.estimatedDuration === 'string' &&
-          args.estimatedDuration.trim()
-        ) {
-          var parsedDur =
-            typeof PriorityUI !== 'undefined' &&
-            typeof PriorityUI.parseDurationNl === 'function'
-              ? PriorityUI.parseDurationNl(args.estimatedDuration)
-              : null;
-          if (parsedDur != null) {
-            partial.estimatedDurationMinutes = parsedDur;
-          }
-        }
+        // Duration now lives in Progrès — redirect legacy Facilité duration args.
+        var redirectedEstimate = resolveEstimateMinutesArg({
+          estimatedMinutes:
+            args.estimatedDurationMinutes !== undefined
+              ? args.estimatedDurationMinutes
+              : undefined,
+          estimatedDuration:
+            typeof args.estimatedDuration === 'string'
+              ? args.estimatedDuration
+              : undefined
+        });
+        var hasRedirectedEstimate =
+          args.estimatedDurationMinutes !== undefined ||
+          (typeof args.estimatedDuration === 'string' &&
+            !!args.estimatedDuration.trim());
         if (args.priorityEnabled != null) {
           partial.priorityEnabled = !!args.priorityEnabled;
         } else if (
           (partial.urgency != null ||
             partial.impact != null ||
-            partial.ease != null ||
-            partial.estimatedDurationMinutes !== undefined) &&
+            partial.ease != null) &&
           !beforeP.priorityEnabled
         ) {
           // Writing axis values must activate Priorité or the UI stays off.
           partial.priorityEnabled = true;
         }
-        if (!Object.keys(partial).length) {
+        if (!Object.keys(partial).length && !hasRedirectedEstimate) {
           return {
             ok: false,
             tool: tool,
             error: 'Aucun champ priorit\u00e9 \u00e0 modifier'
           };
         }
-        bridge.applyPriority(partial);
+        if (Object.keys(partial).length) {
+          bridge.applyPriority(partial);
+        }
+        var beforeCRedirect = null;
+        var afterCRedirect = null;
+        if (
+          hasRedirectedEstimate &&
+          typeof bridge.applyCompletion === 'function' &&
+          typeof bridge.getCompletion === 'function' &&
+          typeof CompletionTrello !== 'undefined' &&
+          typeof CompletionTrello.applyMasterEstimate === 'function'
+        ) {
+          beforeCRedirect = snapshotCompletion(bridge);
+          var redirected = CompletionTrello.applyMasterEstimate(
+            bridge.getCompletion() || { items: [] },
+            redirectedEstimate == null ? null : redirectedEstimate,
+            { lock: false }
+          );
+          bridge.applyCompletion(redirected);
+          afterCRedirect = snapshotCompletion(bridge);
+        }
         var afterP = snapshotPriority(bridge);
         return {
           ok: true,
           tool: tool,
           args: args,
           summary: TOOL_LABELS.set_priority,
-          detail: detailForTool(tool, beforeP, afterP, null, null, args)
+          detail: detailForTool(
+            tool,
+            beforeP,
+            afterP,
+            beforeCRedirect,
+            afterCRedirect,
+            args
+          )
         };
       }
       if (tool === 'set_statut') {
@@ -9685,12 +9862,15 @@
           '-' +
           Math.random().toString(36).slice(2, 8);
         var addDone = !!args.done;
-        items.push({
+        var newItem = {
           id: id,
           text: text,
           done: addDone,
           progress: addDone ? 100 : 0
-        });
+        };
+        var addEst = resolveEstimateMinutesArg(args);
+        if (addEst != null) newItem.estimatedMinutes = addEst;
+        items.push(newItem);
         var added = Object.assign({}, data, { items: items });
         delete added.progress;
         if (added.progressEnabled === false) delete added.progressEnabled;
@@ -9705,6 +9885,94 @@
           detail: detailForTool(tool, null, null, beforeAdd, afterAdd, args, {
             id: id
           })
+        };
+      }
+      if (tool === 'set_subtask_estimate') {
+        if (typeof bridge.applyCompletion !== 'function') {
+          return { ok: false, tool: tool, error: 'Progr\u00e8s indisponible' };
+        }
+        var estMins = resolveEstimateMinutesArg(args);
+        if (estMins === undefined && args.estimatedMinutes !== null) {
+          return { ok: false, tool: tool, error: 'Dur\u00e9e estim\u00e9e invalide' };
+        }
+        var beforeEst = snapshotCompletion(bridge);
+        var estBase =
+          typeof bridge.getCompletion === 'function'
+            ? bridge.getCompletion()
+            : { items: [] };
+        var estTarget = resolveSubtaskItem(estBase.items, args);
+        if (!estTarget) {
+          return { ok: false, tool: tool, error: 'Sous-t\u00e2che introuvable' };
+        }
+        var nextEst =
+          typeof CompletionTrello !== 'undefined' &&
+          typeof CompletionTrello.applyItemEstimate === 'function'
+            ? CompletionTrello.applyItemEstimate(estBase, estTarget.id, estMins, {
+                lock: true
+              })
+            : (function () {
+                var copy = Object.assign({}, estBase, {
+                  items: (estBase.items || []).map(function (item) {
+                    if (item.id !== estTarget.id) return item;
+                    var row = Object.assign({}, item);
+                    if (estMins == null) delete row.estimatedMinutes;
+                    else row.estimatedMinutes = estMins;
+                    row.estimatedMinutesLocked = true;
+                    return row;
+                  })
+                });
+                return copy;
+              })();
+        bridge.applyCompletion(nextEst);
+        var afterEst = snapshotCompletion(bridge);
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.set_subtask_estimate,
+          id: estTarget.id,
+          detail: detailForTool(tool, null, null, beforeEst, afterEst, args, {
+            id: estTarget.id
+          })
+        };
+      }
+      if (tool === 'set_progress_estimate') {
+        if (typeof bridge.applyCompletion !== 'function') {
+          return { ok: false, tool: tool, error: 'Progr\u00e8s indisponible' };
+        }
+        var masterMins = resolveEstimateMinutesArg(args);
+        if (masterMins === undefined && args.estimatedMinutes !== null) {
+          return { ok: false, tool: tool, error: 'Dur\u00e9e estim\u00e9e invalide' };
+        }
+        var beforeMaster = snapshotCompletion(bridge);
+        var masterBase =
+          typeof bridge.getCompletion === 'function'
+            ? bridge.getCompletion()
+            : { items: [] };
+        var nextMaster =
+          typeof CompletionTrello !== 'undefined' &&
+          typeof CompletionTrello.applyMasterEstimate === 'function'
+            ? CompletionTrello.applyMasterEstimate(masterBase, masterMins, {
+                lock: true
+              })
+            : Object.assign({}, masterBase, {
+                estimatedMinutes: masterMins
+              });
+        bridge.applyCompletion(nextMaster);
+        var afterMaster = snapshotCompletion(bridge);
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.set_progress_estimate,
+          detail: detailForTool(
+            tool,
+            null,
+            null,
+            beforeMaster,
+            afterMaster,
+            args
+          )
         };
       }
       if (tool === 'rename_subtask') {
@@ -10627,6 +10895,7 @@
     cardDreamTurn: cardDreamTurn,
     suggestSubtasks: suggestSubtasks,
     estimateSubtaskDurations: estimateSubtaskDurations,
+    parseDurationMinutes: parseDurationMinutes,
     suggestGoals: suggestGoals,
     suggestLabels: suggestLabels,
     suggestMetrics: suggestMetrics,
