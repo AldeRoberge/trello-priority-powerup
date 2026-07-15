@@ -1494,7 +1494,7 @@
     }
 
     function updateAgentSectionTitle() {
-      var name = (agentIdentity.agentName || '').trim() || 'Assistant';
+      var name = 'Assistant';
       if (chrome.title) chrome.title.textContent = name;
       chrome.collapseLabel = 'Replier ' + name;
       chrome.expandLabel = 'D\u00e9velopper ' + name;

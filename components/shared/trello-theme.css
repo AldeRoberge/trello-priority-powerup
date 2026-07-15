@@ -2134,6 +2134,25 @@ button.tp-estimate-chip:focus-visible {
   opacity: 0.35;
 }
 
+.tp-estimate-chip.is-estimating {
+  color: color-mix(in srgb, var(--estimate-accent, var(--tp-text-muted)) 70%, var(--tp-text));
+}
+
+.tp-estimate-chip.is-estimating .tp-estimate-chip-sand {
+  opacity: 0.9;
+  animation: tp-estimate-sand-spin 0.85s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+@keyframes tp-estimate-sand-spin {
+  from {
+    transform: rotate(0deg) scaleY(0.55);
+  }
+  to {
+    transform: rotate(360deg) scaleY(0.55);
+  }
+}
+
 .tp-estimate-chip-label {
   white-space: nowrap;
 }
@@ -2708,6 +2727,17 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
   justify-content: center;
 }
 
+/* Preview checkmark on wrap hover (unchecked only). */
+.tp-completion-check-wrap:hover .tp-completion-check:not(.is-checked) {
+  border-color: var(--completion-check-fill);
+  background: color-mix(in srgb, var(--completion-check-fill) 8%, transparent);
+  color: var(--completion-check-fill);
+}
+
+.tp-completion-check-wrap:hover .tp-completion-check:not(.is-checked) .tp-completion-check-icon {
+  opacity: 0.45;
+}
+
 .tp-completion-check {
   --completion-check-size: 22px;
   --completion-check-green: #2a9b82;
@@ -2890,9 +2920,11 @@ html[data-color-mode="dark"] .tp-completion-check {
   color: transparent;
 }
 
-html[data-color-mode="dark"] .tp-completion-check:hover {
+html[data-color-mode="dark"] .tp-completion-check-wrap:hover .tp-completion-check:not(.is-checked),
+html[data-color-mode="dark"] .tp-completion-check:hover:not(.is-checked) {
   border-color: var(--completion-check-fill);
   background: color-mix(in srgb, var(--completion-check-fill) 12%, transparent);
+  color: var(--completion-check-fill);
 }
 
 html[data-color-mode="dark"] .tp-completion-check.is-checked,
@@ -3182,17 +3214,9 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
 .tp-completion-suggestions-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
   padding: 0 2px;
-}
-
-.tp-completion-suggestions-label {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--text-muted, var(--tp-text-muted));
 }
 
 .tp-completion-suggestions-refresh {
@@ -3830,16 +3854,8 @@ html[data-color-mode="dark"] .tp-profile-status.is-error {
 .tp-goals-suggestions-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
-}
-
-.tp-goals-suggestions-label {
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--tp-text-muted, #626f86);
 }
 
 .tp-goals-suggestions-refresh {

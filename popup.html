@@ -6,9 +6,9 @@
   <title>Définir la priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=info-labels-1" />
+  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=estimate-spin-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-3" />
-  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=save-spin-2" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=parent-clear-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-scope-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
@@ -16,7 +16,7 @@
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/effects.js?v=fx-3"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=attente-hourglass-1"></script>
+  <script src="./components/priority/priority-ui.js?v=parent-clear-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
@@ -26,7 +26,7 @@
   <script src="./components/statut/statut-match.js?v=attente-hourglass-1"></script>
   <script src="./components/statut/statut-trello.js?v=section-glow-1"></script>
   <script src="./components/shared/tab-autocomplete.js?v=tab-complete-1"></script>
-  <script src="./components/completion/completion-ui.js?v=master-title-edit-1"></script>
+  <script src="./components/completion/completion-ui.js?v=estimate-spin-1"></script>
   <script src="./components/completion/completion-trello.js?v=progress-due-complete-1"></script>
   <script src="./components/goals/goals-trello.js?v=goals-1"></script>
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
@@ -1199,32 +1199,37 @@
           latestCompletion ||
           { items: [] };
         var progressMeta = CompletionTrello.computeCardProgress(completionSnap);
-        var remainingMins =
-          typeof CompletionTrello.computeEstimatedRemaining === 'function'
-            ? CompletionTrello.computeEstimatedRemaining(completionSnap)
-            : null;
-        var totalMins =
-          typeof CompletionTrello.computeEstimatedTotal === 'function'
-            ? CompletionTrello.computeEstimatedTotal(completionSnap)
-            : null;
-        var pctBit =
-          progressMeta && progressMeta.percent != null
-            ? progressMeta.percent + '\u00a0%'
-            : '';
-        var remainBit = '';
-        if (
-          remainingMins != null &&
-          typeof CompletionTrello.formatEstimatedRemainingLabel === 'function'
-        ) {
-          remainBit = CompletionTrello.formatEstimatedRemainingLabel(remainingMins);
-        } else if (
-          totalMins != null &&
-          typeof CompletionTrello.formatEstimatedMinutesCompact === 'function'
-        ) {
-          remainBit = CompletionTrello.formatEstimatedMinutesCompact(totalMins);
+        if (progressMeta && progressMeta.percent === 100) {
+          progressLabel = 'Termin\u00e9';
+        } else {
+          var remainingMins =
+            typeof CompletionTrello.computeEstimatedRemaining === 'function'
+              ? CompletionTrello.computeEstimatedRemaining(completionSnap)
+              : null;
+          var totalMins =
+            typeof CompletionTrello.computeEstimatedTotal === 'function'
+              ? CompletionTrello.computeEstimatedTotal(completionSnap)
+              : null;
+          var pctBit =
+            progressMeta && progressMeta.percent != null
+              ? progressMeta.percent + '\u00a0%'
+              : '';
+          var remainBit = '';
+          if (
+            remainingMins != null &&
+            remainingMins > 0 &&
+            typeof CompletionTrello.formatEstimatedRemainingLabel === 'function'
+          ) {
+            remainBit = CompletionTrello.formatEstimatedRemainingLabel(remainingMins);
+          } else if (
+            totalMins != null &&
+            typeof CompletionTrello.formatEstimatedMinutesCompact === 'function'
+          ) {
+            remainBit = CompletionTrello.formatEstimatedMinutesCompact(totalMins);
+          }
+          if (pctBit && remainBit) progressLabel = pctBit + ' \u00b7 ' + remainBit;
+          else progressLabel = remainBit || pctBit || '';
         }
-        if (pctBit && remainBit) progressLabel = pctBit + ' \u00b7 ' + remainBit;
-        else progressLabel = remainBit || pctBit || '';
       }
 
       infoUi.setRecap({
@@ -1236,10 +1241,22 @@
     }
 
     var silentEstimateBusy = false;
+    var silentEstimateQueued = false;
+    var silentEstimateSuppress = false;
     var silentEstimateTimer = null;
+
+    function clearSilentEstimateUi() {
+      if (
+        completionUi &&
+        typeof completionUi.setEstimatingItemIds === 'function'
+      ) {
+        completionUi.setEstimatingItemIds([]);
+      }
+    }
 
     /** Fill missing unlocked subtask estimates via AI (toast-free). */
     function maybeSilentEstimateDurations() {
+      if (silentEstimateSuppress) return;
       if (silentEstimateTimer) {
         clearTimeout(silentEstimateTimer);
         silentEstimateTimer = null;
@@ -1251,7 +1268,11 @@
     }
 
     function runSilentEstimateDurations() {
-      if (silentEstimateBusy) return;
+      if (silentEstimateSuppress) return;
+      if (silentEstimateBusy) {
+        silentEstimateQueued = true;
+        return;
+      }
       if (!window.PriorityAgent || !window.CompletionTrello) return;
       if (!completionUi || typeof completionUi.getData !== 'function') return;
       if (typeof PriorityAgent.estimateSubtaskDurations !== 'function') return;
@@ -1260,12 +1281,23 @@
         typeof CompletionTrello.itemsNeedingEstimate === 'function'
           ? CompletionTrello.itemsNeedingEstimate(data)
           : [];
-      if (!needing.length) return;
+      if (!needing.length) {
+        clearSilentEstimateUi();
+        return;
+      }
       silentEstimateBusy = true;
-      resolveCardNameForAi()
-        .then(function (cardName) {
-          return PriorityAgent.getProvider(t).then(function (provider) {
-            if (!PriorityAgent.isConfigured(provider)) return null;
+      silentEstimateQueued = false;
+      PriorityAgent.getProvider(t)
+        .then(function (provider) {
+          if (!PriorityAgent.isConfigured(provider)) return null;
+          if (typeof completionUi.setEstimatingItemIds === 'function') {
+            completionUi.setEstimatingItemIds(
+              needing.map(function (it) {
+                return it.id;
+              })
+            );
+          }
+          return resolveCardNameForAi().then(function (cardName) {
             return PriorityAgent.estimateSubtaskDurations(provider, {
               cardName: cardName || readCardNameLabel(),
               cardDesc:
@@ -1282,16 +1314,26 @@
         })
         .then(function (estimates) {
           if (!estimates || !estimates.length || !completionUi) return;
-          if (typeof completionUi.applyItemEstimates === 'function') {
-            completionUi.applyItemEstimates(estimates, { lock: false });
+          silentEstimateSuppress = true;
+          try {
+            if (typeof completionUi.applyItemEstimates === 'function') {
+              completionUi.applyItemEstimates(estimates, { lock: false });
+            }
+            syncInfoRecap();
+          } finally {
+            silentEstimateSuppress = false;
           }
-          syncInfoRecap();
         })
         .catch(function (err) {
           console.error('Silent subtask estimate failed', err);
         })
         .then(function () {
           silentEstimateBusy = false;
+          clearSilentEstimateUi();
+          if (silentEstimateQueued) {
+            silentEstimateQueued = false;
+            maybeSilentEstimateDurations();
+          }
         });
     }
 

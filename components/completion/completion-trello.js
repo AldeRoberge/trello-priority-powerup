@@ -81,11 +81,9 @@
   }
 
   function formatEstimatedRemainingLabel(remainingMinutes) {
+    if (remainingMinutes === 0) return 'Termin\u00e9';
     var m = clampEstimatedMinutes(remainingMinutes);
-    if (m == null) {
-      if (remainingMinutes === 0) return '0 min restantes';
-      return '';
-    }
+    if (m == null) return '';
     var compact = formatEstimatedMinutesCompact(m).replace(/^~/, '');
     return compact + ' restantes';
   }
@@ -144,7 +142,7 @@
    */
   function computeEstimatedRemaining(data, snapshotsByCardId) {
     var normalized = normalizeCompletionData(data);
-    var progress = computeCardProgress(normalized);
+    var progress = computeCardProgress(normalized, snapshotsByCardId);
     if (normalized.items.length) {
       var remaining = 0;
       var hasAny = false;
@@ -360,7 +358,7 @@
       if (!linkedCardId) return null;
       text = 'Carte li\u00e9e';
     }
-    // Legacy `difficulty` fields are ignored (equal-weight progress).
+    // Legacy `difficulty` fields are ignored; estimates weight progress.
 
     var progress = asNumber(raw.progress);
     if (!isFinite(progress)) {
@@ -408,8 +406,36 @@
     return out;
   }
 
-  // Equal-weight average of item progress percentages.
-  function computeWeightedProgress(items) {
+  /**
+   * Fallback weight when an item has no estimate: 1 if none of the siblings
+   * are estimated, otherwise the average of sibling estimates (so unestimated
+   * items still count without drowning out long tasks).
+   */
+  function averageEstimateFallback(items, snapshotsByCardId) {
+    if (!items || !items.length) return 1;
+    var sum = 0;
+    var count = 0;
+    for (var i = 0; i < items.length; i++) {
+      var mins = itemEstimatedMinutes(items[i], snapshotsByCardId);
+      if (mins != null) {
+        sum += mins;
+        count++;
+      }
+    }
+    if (!count) return 1;
+    return Math.max(1, Math.round(sum / count));
+  }
+
+  /** Effort weight for Progrès: estimated minutes, else average/equal fallback. */
+  function itemProgressWeight(item, snapshotsByCardId, fallbackWeight) {
+    var mins = itemEstimatedMinutes(item, snapshotsByCardId);
+    if (mins != null) return mins;
+    var fb = asNumber(fallbackWeight);
+    return isFinite(fb) && fb > 0 ? fb : 1;
+  }
+
+  // Estimate-weighted average of item progress (equal weight when none estimated).
+  function computeWeightedProgress(items, snapshotsByCardId) {
     if (!items || !items.length) {
       return {
         percent: 0,
@@ -420,28 +446,36 @@
         hasItems: false,
       };
     }
-    var progressSum = 0;
+    var fallback = averageEstimateFallback(items, snapshotsByCardId);
+    var weightedProgressSum = 0;
+    var totalWeight = 0;
     var doneCount = 0;
     for (var i = 0; i < items.length; i++) {
       var p = itemProgress(items[i]);
-      progressSum += p / PROGRESS_MAX;
+      var w = itemProgressWeight(items[i], snapshotsByCardId, fallback);
+      weightedProgressSum += (p / PROGRESS_MAX) * w;
+      totalWeight += w;
       if (p >= PROGRESS_MAX) doneCount++;
     }
-    var totalWeight = items.length;
-    var percent = Math.round((progressSum / totalWeight) * 100);
+    var percent =
+      totalWeight > 0
+        ? Math.round((weightedProgressSum / totalWeight) * 100)
+        : 0;
     return {
       percent: percent,
       doneCount: doneCount,
       totalCount: items.length,
-      doneWeight: Math.round(progressSum * 10) / 10,
-      totalWeight: totalWeight,
+      doneWeight: Math.round(weightedProgressSum * 10) / 10,
+      totalWeight: Math.round(totalWeight * 10) / 10,
       hasItems: true,
     };
   }
 
-  function computeCardProgress(data) {
+  function computeCardProgress(data, snapshotsByCardId) {
     var normalized = normalizeCompletionData(data);
-    if (normalized.items.length) return computeWeightedProgress(normalized.items);
+    if (normalized.items.length) {
+      return computeWeightedProgress(normalized.items, snapshotsByCardId);
+    }
     return {
       percent: clampProgress(normalized.progress),
       doneCount: 0,
@@ -657,10 +691,10 @@
 
   /**
    * Master slider: proportionally scale each local item's progress so the
-   * overall average approaches targetPercent. Linked board-card items keep
-   * their cached remote progress (not scaled here).
+   * estimate-weighted overall approaches targetPercent. Linked board-card
+   * items keep their cached remote progress (not scaled here).
    */
-  function applyMasterProgress(items, targetPercent) {
+  function applyMasterProgress(items, targetPercent, snapshotsByCardId) {
     if (!items || !items.length) return [];
     var target = clampProgress(targetPercent);
     var working = items.map(function (item) {
@@ -701,24 +735,39 @@
       return working;
     }
 
-    var n = working.length;
-    var linkedSum = 0;
-    for (var li = 0; li < working.length; li++) {
-      if (isLinkedItem(working[li])) linkedSum += itemProgress(working[li]);
+    var fallback = averageEstimateFallback(working, snapshotsByCardId);
+    var weights = [];
+    var totalWeight = 0;
+    var linkedContrib = 0;
+    var localWeight = 0;
+    for (var wi = 0; wi < working.length; wi++) {
+      var w = itemProgressWeight(working[wi], snapshotsByCardId, fallback);
+      weights[wi] = w;
+      totalWeight += w;
+      if (isLinkedItem(working[wi])) {
+        linkedContrib += (itemProgress(working[wi]) / PROGRESS_MAX) * w;
+      } else {
+        localWeight += w;
+      }
     }
-    // Solve for local average so overall average ≈ target.
-    var desiredLocalSum = target * n - linkedSum;
-    var localCount = localIndexes.length;
-    var localTarget = clampProgress(desiredLocalSum / localCount);
+    if (!(totalWeight > 0) || !(localWeight > 0)) return working;
 
-    var localCurrentSum = 0;
+    // Solve for local contribution so estimate-weighted overall ≈ target.
+    var desiredLocalContrib =
+      (target / PROGRESS_MAX) * totalWeight - linkedContrib;
+    var localTargetFrac = desiredLocalContrib / localWeight;
+    var localTarget = clampProgress(localTargetFrac * PROGRESS_MAX);
+
+    var localCurrentContrib = 0;
     localIndexes.forEach(function (idx) {
-      localCurrentSum += itemProgress(working[idx]);
+      localCurrentContrib +=
+        (itemProgress(working[idx]) / PROGRESS_MAX) * weights[idx];
     });
-    var localCurrent = Math.round(localCurrentSum / localCount);
+    var localCurrentFrac = localCurrentContrib / localWeight;
+    var localCurrent = Math.round(localCurrentFrac * PROGRESS_MAX);
     if (localCurrent === localTarget) return working;
 
-    if (localCurrent === 0) {
+    if (localCurrentContrib <= 0) {
       localIndexes.forEach(function (idx) {
         working[idx].progress = localTarget;
         syncDoneFromProgress(working[idx]);
@@ -726,7 +775,7 @@
       return working;
     }
 
-    var scale = localTarget / localCurrent;
+    var scale = desiredLocalContrib / localCurrentContrib;
     localIndexes.forEach(function (idx) {
       working[idx].progress = clampProgress(working[idx].progress * scale);
       syncDoneFromProgress(working[idx]);
@@ -1504,6 +1553,8 @@
     applyMasterEstimate: applyMasterEstimate,
     applyItemEstimate: applyItemEstimate,
     migrateEstimateFromPriority: migrateEstimateFromPriority,
+    averageEstimateFallback: averageEstimateFallback,
+    itemProgressWeight: itemProgressWeight,
     computeWeightedProgress: computeWeightedProgress,
     computeCardProgress: computeCardProgress,
     isAllSubtasksComplete: isAllSubtasksComplete,

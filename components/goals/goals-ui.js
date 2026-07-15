@@ -157,7 +157,6 @@
       suggestSection.hidden = true;
       suggestSection.innerHTML =
         '<div class="tp-goals-suggestions-head">' +
-        '<span class="tp-goals-suggestions-label">Suggestions IA</span>' +
         '<button type="button" class="tp-goals-suggestions-refresh" ' +
         'aria-label="Rafra\u00eechir les suggestions" title="Rafra\u00eechir">\u21bb</button>' +
         '</div>' +

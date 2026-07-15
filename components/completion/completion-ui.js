@@ -330,6 +330,20 @@
     return rgbToHex(rgbFromGradientStops(percent, activeGradientStops));
   }
 
+  // Estimate chip accent by duration length (not subtask progress).
+  var ESTIMATE_COLOR_HOUR_MINS = 60;
+  var ESTIMATE_COLOR_DAY_MINS = 24 * 60;
+  var ESTIMATE_COLOR_WEEK_MINS = 7 * 24 * 60;
+
+  function completionColorForEstimate(minutes) {
+    var m = Number(minutes);
+    if (minutes == null || !isFinite(m) || m <= 0) return '';
+    if (m < ESTIMATE_COLOR_HOUR_MINS) return '#61BD4F'; // green — under 1h
+    if (m < ESTIMATE_COLOR_DAY_MINS) return '#B5D033'; // green-yellow — under 1 day
+    if (m < ESTIMATE_COLOR_WEEK_MINS) return '#FF9F1A'; // orange — under 1 week
+    return '#EB5A46'; // red — 1 week or more
+  }
+
   function nearestTrelloBadgeColorName(hex) {
     var target = rgbToOklab(parseHex(hex));
     var ranked = TRELLO_BADGE_COLOR_NAMES.map(function (name) {
@@ -771,8 +785,10 @@
     var freeInput = null;
 
     function paint() {
-      var text =
-        minutes == null
+      var estimating = !!config.estimating && minutes == null;
+      var text = estimating
+        ? 'Estimation'
+        : minutes == null
           ? 'Estimer'
           : typeof CT.formatEstimatedMinutesCompact === 'function'
             ? CT.formatEstimatedMinutesCompact(minutes)
@@ -780,9 +796,12 @@
       label.textContent = text;
       chip.classList.toggle('is-empty', minutes == null);
       chip.classList.toggle('is-set', minutes != null);
+      chip.classList.toggle('is-estimating', estimating);
       chip.classList.toggle('is-adjusted', !!config.adjusted && minutes != null);
-      chip.title =
-        minutes == null
+      chip.setAttribute('aria-busy', estimating ? 'true' : 'false');
+      chip.title = estimating
+        ? 'Estimation en cours\u00a0\u2014 vous pouvez encore la modifier'
+        : minutes == null
           ? 'D\u00e9finir une dur\u00e9e estim\u00e9e'
           : config.adjusted
             ? 'Total ajust\u00e9\u00a0: ' + text
@@ -794,7 +813,12 @@
               1,
               Math.log(Math.max(minutes, 5)) / Math.log(ESTIMATE_LOG_MAX)
             );
-      sand.style.transform = 'scaleY(' + (0.12 + fill * 0.88).toFixed(3) + ')';
+      sand.style.transform = estimating
+        ? ''
+        : 'scaleY(' + (0.12 + fill * 0.88).toFixed(3) + ')';
+      var accent = completionColorForEstimate(minutes);
+      if (accent) wrap.style.setProperty('--estimate-accent', accent);
+      else wrap.style.removeProperty('--estimate-accent');
     }
 
     function setMinutes(next, notify) {
@@ -804,8 +828,14 @@
           : next != null && isFinite(+next) && +next > 0
             ? Math.round(+next)
             : null;
+      if (minutes != null) config.estimating = false;
       paint();
       if (notify && onChange) onChange(minutes);
+    }
+
+    function setEstimating(on) {
+      config.estimating = !!on && minutes == null;
+      paint();
     }
 
     var onDocClose = null;
@@ -1010,7 +1040,7 @@
 
     paint();
 
-    return {
+    var api = {
       el: wrap,
       chip: chip,
       getMinutes: function () {
@@ -1019,6 +1049,7 @@
       setMinutes: function (next) {
         setMinutes(next, false);
       },
+      setEstimating: setEstimating,
       setAdjusted: function (adjusted) {
         config.adjusted = !!adjusted;
         paint();
@@ -1028,6 +1059,8 @@
         else wrap.style.removeProperty('--estimate-accent');
       }
     };
+    wrap._tpEstimateChip = api;
+    return api;
   }
 
   function mountCompletionUI(containerEl, options) {
@@ -1070,6 +1103,8 @@
     var spellcheckBusy = false;
     // itemId → original text before AI spell fix (kept until popup closes / revert / edit)
     var itemSpellReverts = Object.create(null);
+    // itemId → true while silent AI estimate is in flight
+    var estimatingItemIds = Object.create(null);
     // itemId → nested tree node from resolveLinkedCompletionTree
     var linkedTreeByItemId = Object.create(null);
     var linkedResolveSeq = 0;
@@ -1217,7 +1252,7 @@
       function (v) {
         masterDragging = true;
         if (data.items.length) {
-          data.items = CT.applyMasterProgress(data.items, v);
+          data.items = CT.applyMasterProgress(data.items, v, linkedSnapshots);
           syncItemSlidersFromData();
         } else {
           data.progress = v;
@@ -1295,7 +1330,6 @@
     suggestionsSection.hidden = true;
     suggestionsSection.innerHTML =
       '<div class="tp-completion-suggestions-head">' +
-      '<span class="tp-completion-suggestions-label">Suggestions IA</span>' +
       '<button type="button" class="tp-completion-suggestions-refresh" id="completionSuggestRefresh" ' +
       'aria-label="Rafra\u00eechir les suggestions" title="Rafra\u00eechir">\u21bb</button>' +
       '</div>' +
@@ -1725,7 +1759,7 @@
         persisted.items.length &&
         !showCompleted &&
         lastAllComplete === false &&
-        isAllCompleteProgress(CT.computeCardProgress(persisted))
+        isAllCompleteProgress(CT.computeCardProgress(persisted, linkedSnapshots))
       ) {
         showCompleted = true;
         saveShowDonePreference(true);
@@ -1804,13 +1838,13 @@
     }
 
     function completeAllTasks() {
-      var progress = CT.computeCardProgress(data);
+      var progress = CT.computeCardProgress(data, linkedSnapshots);
       if (progress.percent <= 0 || progress.percent >= 100 || isAllCompleteProgress(progress)) {
         return;
       }
       resetAllClearsCompleted = false;
       if (data.items.length) {
-        data.items = CT.applyMasterProgress(data.items, 100);
+        data.items = CT.applyMasterProgress(data.items, 100, linkedSnapshots);
       } else {
         data.progress = 100;
       }
@@ -1819,7 +1853,7 @@
     }
 
     function resetAllTasks() {
-      var progress = CT.computeCardProgress(data);
+      var progress = CT.computeCardProgress(data, linkedSnapshots);
       if (progress.percent <= 0) return;
 
       if (data.items.length) {
@@ -1837,7 +1871,7 @@
           if (!changed && !resetAllClearsCompleted) return;
           if (!changed && resetAllClearsCompleted) {
             // Armed for a second click; no data change yet.
-            syncResetAllButton(CT.computeCardProgress(data));
+            syncResetAllButton(CT.computeCardProgress(data, linkedSnapshots));
             return;
           }
         } else {
@@ -1873,7 +1907,7 @@
     completeAllBtn.addEventListener('click', completeAllTasks);
     resetAllBtn.addEventListener('click', resetAllTasks);
 
-    function syncMasterEstimateChip(progress) {
+    function syncMasterEstimateChip() {
       var total = CT.computeEstimatedTotal(data, linkedSnapshots);
       var remaining = CT.computeEstimatedRemaining(data, linkedSnapshots);
       masterEstimateChip.setMinutes(total);
@@ -1884,11 +1918,6 @@
           data.estimatedMinutesOffset !== 0
         )
       );
-      var accent =
-        progress && progress.percent > 0
-          ? completionColorForProgress(progress.percent)
-          : '';
-      masterEstimateChip.setAccent(accent);
       masterEstimateChip.chip.title =
         total == null
           ? 'D\u00e9finir une dur\u00e9e estim\u00e9e'
@@ -1901,7 +1930,7 @@
 
     function updateProgressUi(opts) {
       opts = opts || {};
-      var progress = CT.computeCardProgress(data);
+      var progress = CT.computeCardProgress(data, linkedSnapshots);
       var accent = completionColorForProgress(progress.percent);
       percentEl.textContent = progress.percent + '\u00a0%';
       percentEl.style.color = progress.percent > 0 ? accent : '';
@@ -1915,7 +1944,7 @@
       progressPanel.classList.toggle('is-complete', progress.percent === 100);
       progressPanel.classList.toggle('has-progress', progress.percent > 0);
       applyProgressSectionTint(progressShellEl, accent);
-      syncMasterEstimateChip(progress);
+      syncMasterEstimateChip();
       syncCompleteAllButton(progress);
       syncResetAllButton(progress);
       if (!opts.skipMasterSync && !masterDragging) {
@@ -2606,8 +2635,10 @@
           t: trelloT,
           minutes: CT.itemEstimatedMinutes(item, linkedSnapshots),
           compact: true,
+          estimating: !!estimatingItemIds[item.id],
           ariaLabel: 'Dur\u00e9e estim\u00e9e de la sous-t\u00e2che',
           onChange: function (mins) {
+            delete estimatingItemIds[item.id];
             data = CT.applyItemEstimate(data, item.id, mins, { lock: true });
             var live = findLiveItem(item.id);
             if (live) {
@@ -2618,7 +2649,7 @@
             onResize();
           }
         });
-        itemEstimate.setAccent(completionColorForProgress(itemProgress));
+        itemEstimate.el.dataset.estimateItemId = item.id;
         itemEstimate.el.classList.add('tp-completion-item-estimate');
         sliderRow.appendChild(itemEstimate.el);
         li.appendChild(sliderRow);
@@ -2645,9 +2676,6 @@
             readOnly: true,
             ariaLabel: 'Dur\u00e9e estim\u00e9e de la carte li\u00e9e'
           });
-          linkEstimate.setAccent(
-            completionColorForProgress(CT.itemProgress(item))
-          );
           linkMeta.appendChild(linkEstimate.el);
         }
         li.appendChild(linkMeta);
@@ -2759,7 +2787,7 @@
         return item.id !== id;
       });
       if (!nextItems.length && data.items.length) {
-        data.progress = CT.computeCardProgress(data).percent;
+        data.progress = CT.computeCardProgress(data, linkedSnapshots).percent;
       }
       data.items = nextItems;
       delete linkedTreeByItemId[id];
@@ -3209,11 +3237,42 @@
         var prev = JSON.stringify(CT.normalizeCompletionData(data));
         var persisted = applyNormalizedKeepingDrafts(next);
         if (JSON.stringify(persisted) === prev) return persisted;
+        // Clear estimating flags for items that now have a duration.
+        if (persisted.items) {
+          for (var i = 0; i < persisted.items.length; i++) {
+            var row = persisted.items[i];
+            if (
+              row &&
+              row.id &&
+              CT.clampEstimatedMinutes(row.estimatedMinutes) != null
+            ) {
+              delete estimatingItemIds[row.id];
+            }
+          }
+        }
         renderList();
         updateProgressUi();
         onChange(persisted);
         onResize();
         return persisted;
+      },
+      setEstimatingItemIds: function (ids) {
+        var next = Object.create(null);
+        if (Array.isArray(ids)) {
+          for (var i = 0; i < ids.length; i++) {
+            var id = ids[i];
+            if (typeof id === 'string' && id) next[id] = true;
+          }
+        }
+        estimatingItemIds = next;
+        var wraps = containerEl.querySelectorAll('[data-estimate-item-id]');
+        for (var w = 0; w < wraps.length; w++) {
+          var wrap = wraps[w];
+          var itemId = wrap.getAttribute('data-estimate-item-id');
+          var chipApi = wrap._tpEstimateChip;
+          if (!chipApi || typeof chipApi.setEstimating !== 'function') continue;
+          chipApi.setEstimating(!!(itemId && estimatingItemIds[itemId]));
+        }
       },
       getEstimateSummary: function () {
         var progress = CT.computeCardProgress(data);
@@ -3650,6 +3709,7 @@
     saveStoredCompletionGradient: saveStoredCompletionGradient,
     colorAtProgress: colorAtProgress,
     completionColorForProgress: completionColorForProgress,
+    completionColorForEstimate: completionColorForEstimate,
     completionTrelloBadgeColor: completionTrelloBadgeColor,
     schemeGradientCss: schemeGradientCss,
     gradientCssFromStops: gradientCssFromStops,

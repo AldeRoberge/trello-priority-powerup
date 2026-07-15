@@ -672,39 +672,121 @@ check(
   typeof CT.formatEstimatedRemainingLabel(60) === 'string' &&
     CT.formatEstimatedRemainingLabel(60).indexOf('restantes') !== -1
 );
+check(
+  'remaining label at 0 is Terminé',
+  CT.formatEstimatedRemainingLabel(0) === 'Termin\u00e9'
+);
+
+var boardCardsForParent = [
+  { id: 'card-parent', name: 'Parent', list: 'Todo' },
+  { id: 'card-child', name: 'Enfant', list: 'Todo' },
+  { id: 'card-other', name: 'Autre', list: 'Doing' },
+  { id: 'card-a', name: 'Carte A', list: 'Todo' },
+  { id: 'card-b', name: 'Carte B', list: 'Todo' },
+];
 
 CT.resolveLinkedCompletionTree(fakeT, store['card-a'], {
   currentCardId: 'card-a',
   cardNameById: { 'card-a': 'Carte A', 'card-b': 'Carte B' },
   maxDepth: 2,
-}).then(function (resolved) {
-  var node = resolved && resolved.byItemId && resolved.byItemId.a1;
-  check('resolve tree loads linked title', node && node.text === 'Carte B');
-  check('resolve tree shows depth-2 children', node && node.children && node.children.length === 2);
-  check(
-    'resolve tree marks cycle on back-link',
-    node &&
-      node.children.some(function (c) {
-        return c.linkedCardId === 'card-a' && c.isCycle;
-      })
-  );
-  check(
-    'resolve tree does not nest past cycle',
-    node &&
-      node.children.every(function (c) {
-        return !c.children || !c.children.length;
-      })
-  );
-  check(
-    'resolve tree caches linked progress on item',
-    resolved.data.items[0].progress ===
-      CT.computeCardProgress(CT.normalizeCompletionData(store['card-b'])).percent
-  );
+})
+  .then(function (resolved) {
+    var node = resolved && resolved.byItemId && resolved.byItemId.a1;
+    check('resolve tree loads linked title', node && node.text === 'Carte B');
+    check(
+      'resolve tree shows depth-2 children',
+      node && node.children && node.children.length === 2
+    );
+    check(
+      'resolve tree marks cycle on back-link',
+      node &&
+        node.children.some(function (c) {
+          return c.linkedCardId === 'card-a' && c.isCycle;
+        })
+    );
+    check(
+      'resolve tree does not nest past cycle',
+      node &&
+        node.children.every(function (c) {
+          return !c.children || !c.children.length;
+        })
+    );
+    check(
+      'resolve tree caches linked progress on item',
+      resolved.data.items[0].progress ===
+        CT.computeCardProgress(CT.normalizeCompletionData(store['card-b'])).percent
+    );
 
-  console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll completion checks passed');
-  process.exit(bad ? 1 : 0);
-}).catch(function (err) {
-  console.error(err);
-  console.log('\nFAIL resolveLinkedCompletionTree threw');
-  process.exit(1);
-});
+    return CT.findParentCards(fakeT, 'card-child', {
+      cards: boardCardsForParent,
+    });
+  })
+  .then(function (parents) {
+    check(
+      'findParentCards finds reverse link',
+      Array.isArray(parents) &&
+        parents.length === 1 &&
+        parents[0].id === 'card-parent' &&
+        parents[0].name === 'Parent'
+    );
+
+    return CT.setParentCard(fakeT, 'card-child', null, {
+      cards: boardCardsForParent,
+    });
+  })
+  .then(function (cleared) {
+    check('setParentCard clear ok', cleared && cleared.ok);
+    check(
+      'setParentCard clear removes from parent',
+      !CT.completionLinksToCard(store['card-parent'], 'card-child')
+    );
+
+    return CT.setParentCard(fakeT, 'card-child', 'card-other', {
+      cards: boardCardsForParent,
+      childName: 'Enfant',
+      childProgress: 30,
+      parentName: 'Autre',
+      parentList: 'Doing',
+    });
+  })
+  .then(function (setResult) {
+    check('setParentCard set ok', setResult && setResult.ok);
+    check(
+      'setParentCard sets new parent link',
+      CT.completionLinksToCard(store['card-other'], 'card-child')
+    );
+    check(
+      'setParentCard parent meta',
+      setResult.parent &&
+        setResult.parent.id === 'card-other' &&
+        setResult.parent.name === 'Autre'
+    );
+
+    return CT.setParentCard(fakeT, 'card-child', 'card-child', {
+      cards: boardCardsForParent,
+    });
+  })
+  .then(function (selfResult) {
+    check(
+      'setParentCard rejects self',
+      selfResult && selfResult.ok === false && selfResult.reason === 'self'
+    );
+
+    return CT.setParentCard(fakeT, 'card-a', 'card-b', {
+      cards: boardCardsForParent,
+    });
+  })
+  .then(function (cycleResult) {
+    check(
+      'setParentCard rejects cycle',
+      cycleResult && cycleResult.ok === false && cycleResult.reason === 'cycle'
+    );
+
+    console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll completion checks passed');
+    process.exit(bad ? 1 : 0);
+  })
+  .catch(function (err) {
+    console.error(err);
+    console.log('\nFAIL parent / resolveLinkedCompletionTree threw');
+    process.exit(1);
+  });

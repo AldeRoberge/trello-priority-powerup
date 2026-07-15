@@ -6776,7 +6776,6 @@
     labelsSuggestSection.hidden = true;
     labelsSuggestSection.innerHTML =
       '<div class="info-labels-suggestions-head">' +
-      '<span class="info-labels-suggestions-label">Suggestions IA</span>' +
       '<button type="button" class="info-labels-suggestions-refresh" ' +
       'aria-label="Rafra\u00eechir les suggestions" title="Rafra\u00eechir">\u21bb</button>' +
       '</div>' +
@@ -6810,25 +6809,33 @@
     var parentInline = document.createElement('div');
     parentInline.className = 'info-parent-inline';
 
-    var parentChip = document.createElement('button');
-    parentChip.type = 'button';
+    var parentChip = document.createElement('span');
     parentChip.className = 'info-parent-chip';
     parentChip.hidden = true;
 
+    var parentChipOpen = document.createElement('button');
+    parentChipOpen.type = 'button';
+    parentChipOpen.className = 'info-parent-chip-open';
+
+    var parentChipText = document.createElement('span');
+    parentChipText.className = 'info-parent-chip-text';
     var parentChipName = document.createElement('span');
     parentChipName.className = 'info-parent-chip-name';
     var parentChipList = document.createElement('span');
     parentChipList.className = 'info-parent-chip-list';
-    parentChip.appendChild(parentChipName);
-    parentChip.appendChild(parentChipList);
+    parentChipText.appendChild(parentChipName);
+    parentChipText.appendChild(parentChipList);
+    parentChipOpen.appendChild(parentChipText);
 
     var parentClearBtn = document.createElement('button');
     parentClearBtn.type = 'button';
     parentClearBtn.className = 'info-parent-clear';
     parentClearBtn.setAttribute('aria-label', 'Retirer la t\u00e2che parente');
     parentClearBtn.title = 'Retirer';
-    parentClearBtn.innerHTML = '<i class="ti ti-x" aria-hidden="true"></i>';
-    parentClearBtn.hidden = true;
+    parentClearBtn.textContent = '\u00d7';
+
+    parentChip.appendChild(parentChipOpen);
+    parentChip.appendChild(parentClearBtn);
 
     var parentPickWrap = document.createElement('div');
     parentPickWrap.className = 'info-parent-pick-wrap';
@@ -6869,7 +6876,6 @@
     parentPickWrap.appendChild(parentPicker);
 
     parentInline.appendChild(parentChip);
-    parentInline.appendChild(parentClearBtn);
     parentInline.appendChild(parentPickWrap);
     parentWrap.appendChild(parentInline);
     parentRow.value.appendChild(parentWrap);
@@ -8017,8 +8023,9 @@
     function renderParent() {
       var hasParent = !!(parentCard && parentCard.id);
       var canPick = !!getBoardCards && !!onParentChange;
+      var canClear = hasParent && !!onParentChange;
       parentChip.hidden = !hasParent;
-      parentClearBtn.hidden = !hasParent || !onParentChange;
+      parentClearBtn.hidden = !canClear;
       parentPickBtn.hidden = !canPick;
       var pickLabelEl = parentPickBtn.querySelector('.info-parent-pick-label');
       if (pickLabelEl) {
@@ -8026,7 +8033,7 @@
       }
       parentPickBtn.disabled = parentBusy;
       parentClearBtn.disabled = parentBusy;
-      parentChip.disabled = parentBusy || !onOpenParent;
+      parentChipOpen.disabled = parentBusy || !onOpenParent;
       if (hasParent) {
         parentChipName.textContent = parentCard.name || 'Carte sans titre';
         if (parentCard.list) {
@@ -8036,7 +8043,7 @@
           parentChipList.hidden = true;
           parentChipList.textContent = '';
         }
-        parentChip.title = onOpenParent
+        parentChipOpen.title = onOpenParent
           ? 'Ouvrir la t\u00e2che parente'
           : parentCard.name || '';
       }
@@ -8534,10 +8541,18 @@
       applyParentChange(null);
     });
 
-    parentChip.addEventListener('click', function (event) {
+    parentChipOpen.addEventListener('click', function (event) {
       event.preventDefault();
       event.stopPropagation();
-      if (!parentCard || !parentCard.id || !onOpenParent || parentBusy) return;
+      if (
+        !parentCard ||
+        !parentCard.id ||
+        !onOpenParent ||
+        parentBusy ||
+        parentChipOpen.disabled
+      ) {
+        return;
+      }
       Promise.resolve(onOpenParent(parentCard.id)).catch(function (err) {
         console.error('Info open parent failed', err);
       });
