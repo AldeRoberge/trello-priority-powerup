@@ -25,14 +25,19 @@ html[data-color-mode="light"] {
 
 html[data-color-mode="dark"] {
   color-scheme: dark;
-  --tp-bg: transparent;
-  --tp-surface: #22272b;
-  --tp-surface-subtle: #282e33;
-  --tp-surface-hover: #a6c5e71f;
-  --tp-surface-active: #a6c5e733;
-  --tp-text: #ffffff;
-  --tp-text-subtle: #ffffff;
-  --tp-text-muted: #ffffff;
+  /* Elevation: dark canvas → lighter as layers rise */
+  --tp-elev-0: #1d2125;
+  --tp-elev-1: #282e33;
+  --tp-elev-2: #333c43;
+  --tp-elev-3: #3d464f;
+  --tp-bg: var(--tp-elev-0);
+  --tp-surface-subtle: var(--tp-elev-1);
+  --tp-surface: var(--tp-elev-2);
+  --tp-surface-hover: #a6c5e729;
+  --tp-surface-active: #a6c5e73d;
+  --tp-text: #f7f8f9;
+  --tp-text-subtle: #b6c2cf;
+  --tp-text-muted: #8c9bab;
   --tp-border: #a6c5e75c;
   --tp-border-strong: #a6c5e799;
   --tp-primary: #579dff;
@@ -43,7 +48,7 @@ html[data-color-mode="dark"] {
   --tp-success-bg: #1c3329;
   --tp-danger-text: #fd9891;
   --tp-shadow: none;
-  --tp-input-bg: #22272b;
+  --tp-input-bg: var(--tp-elev-2);
 }
 
 /* Standalone pages (landing) — no data-color-mode from Trello */
@@ -369,11 +374,6 @@ html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
 
 html[data-color-mode] .tp-page--settings {
   padding: 14px 14px 16px;
-}
-
-html[data-color-mode="dark"] .tp-page--settings {
-  --tp-text-subtle: #b6c2cf;
-  --tp-text-muted: #8c9bab;
 }
 
 .tp-settings-section {
@@ -1724,8 +1724,8 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 html[data-color-mode="dark"] .tp-page--completion,
 html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   --slider-track: #596773;
-  --slider-thumb-bg: #ffffff;
-  --slider-thumb-border: #738496;
+  --slider-thumb-bg: #f7f8f9;
+  --slider-thumb-border: #8c9bab;
   --slider-thumb-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
   --slider-focus-ring: 0 0 0 3px rgba(166, 197, 231, 0.35);
 }
@@ -2019,18 +2019,26 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   gap: 6px;
 }
 
-/* Subtask rows — darker pads so each item reads as its own section */
+/* Subtask rows — recessed relative to the raised progress shell */
 .tp-completion-item {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 10px 10px;
   border-radius: var(--completion-radius, 10px);
-  background: color-mix(in srgb, #000 12%, var(--tp-surface-subtle));
+  background: color-mix(in srgb, var(--tp-bg, #1d2125) 55%, var(--tp-surface-subtle));
   transition: background 0.15s ease;
 }
 
 .tp-completion-item:hover {
+  background: color-mix(in srgb, var(--tp-bg, #1d2125) 40%, var(--tp-surface-subtle));
+}
+
+html[data-color-mode="light"] .tp-completion-item {
+  background: color-mix(in srgb, #000 12%, var(--tp-surface-subtle));
+}
+
+html[data-color-mode="light"] .tp-completion-item:hover {
   background: color-mix(in srgb, #000 16%, var(--tp-surface-subtle));
 }
 
@@ -2199,6 +2207,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 .tp-completion-check {
   --completion-check-size: 22px;
   --completion-check-green: #2a9b82;
+  --completion-check-fill: var(--completion-check-green);
   --completion-progress: 0;
   box-sizing: border-box;
   position: relative;
@@ -2222,7 +2231,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
     transform 0.12s ease;
 }
 
-/* Radial pie fill — angle tracks --completion-progress (0–100). */
+/* Clock-style pie: starts at 12 o'clock, fills clockwise. */
 .tp-completion-check::before {
   content: '';
   position: absolute;
@@ -2230,7 +2239,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   border-radius: 50%;
   background: conic-gradient(
     from -90deg,
-    var(--completion-check-green) calc(var(--completion-progress) * 1%),
+    var(--completion-check-fill) calc(var(--completion-progress) * 1%),
     transparent 0
   );
   pointer-events: none;
@@ -2238,12 +2247,12 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-completion-check:hover {
-  border-color: var(--completion-check-green);
-  background: color-mix(in srgb, var(--completion-check-green) 8%, transparent);
+  border-color: var(--completion-check-fill);
+  background: color-mix(in srgb, var(--completion-check-fill) 8%, transparent);
 }
 
 .tp-completion-check.has-progress {
-  border-color: var(--completion-check-green);
+  border-color: var(--completion-check-fill);
 }
 
 .tp-completion-check:focus {
@@ -2256,10 +2265,10 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-completion-check.is-checked {
-  background: var(--completion-check-green);
-  border-color: var(--completion-check-green);
+  background: var(--completion-check-fill);
+  border-color: var(--completion-check-fill);
   color: #fff;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--completion-check-green) 35%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--completion-check-fill) 35%, transparent);
 }
 
 .tp-completion-check.is-checked::before {
@@ -2267,8 +2276,8 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-completion-check.is-checked:hover {
-  background: color-mix(in srgb, var(--completion-check-green) 88%, #000);
-  border-color: color-mix(in srgb, var(--completion-check-green) 88%, #000);
+  background: color-mix(in srgb, var(--completion-check-fill) 88%, #000);
+  border-color: color-mix(in srgb, var(--completion-check-fill) 88%, #000);
   color: #fff;
 }
 
@@ -2371,20 +2380,21 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 
 html[data-color-mode="dark"] .tp-completion-check {
   --completion-check-green: #5dd4b1;
+  --completion-check-fill: var(--completion-check-green);
   border-color: color-mix(in srgb, var(--tp-border-strong) 55%, var(--tp-text-muted));
   background: transparent;
   color: transparent;
 }
 
 html[data-color-mode="dark"] .tp-completion-check:hover {
-  border-color: var(--completion-check-green);
-  background: color-mix(in srgb, var(--completion-check-green) 12%, transparent);
+  border-color: var(--completion-check-fill);
+  background: color-mix(in srgb, var(--completion-check-fill) 12%, transparent);
 }
 
 html[data-color-mode="dark"] .tp-completion-check.is-checked,
 html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
-  background: var(--completion-check-green);
-  border-color: var(--completion-check-green);
+  background: var(--completion-check-fill);
+  border-color: var(--completion-check-fill);
   color: #fff;
 }
 
@@ -2393,8 +2403,8 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked::before {
 }
 
 html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
-  background: color-mix(in srgb, var(--completion-check-green) 88%, #fff);
-  border-color: color-mix(in srgb, var(--completion-check-green) 88%, #fff);
+  background: color-mix(in srgb, var(--completion-check-fill) 88%, #fff);
+  border-color: color-mix(in srgb, var(--completion-check-fill) 88%, #fff);
 }
 
 /* Soft inputs inside completion — kill 2px gray cages from .tp-input */

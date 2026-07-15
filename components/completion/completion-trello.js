@@ -22,6 +22,8 @@
   var ITEM_TEXT_MAX = 500;
   var PROGRESS_MIN = 0;
   var PROGRESS_MAX = 100;
+  /** Nested linked-card subtasks shown under a master item (master → link → nested). */
+  var LINK_NEST_MAX_DEPTH = 2;
 
   function asNumber(value) {
     if (typeof value === 'number' && isFinite(value)) return value;
@@ -36,6 +38,21 @@
     var p = asNumber(value);
     if (!isFinite(p)) return 0;
     return Math.max(PROGRESS_MIN, Math.min(PROGRESS_MAX, Math.round(p)));
+  }
+
+  function itemLinkedCardId(item) {
+    if (!item || typeof item !== 'object') return '';
+    var id =
+      typeof item.linkedCardId === 'string'
+        ? item.linkedCardId.trim()
+        : typeof item.cardId === 'string'
+          ? item.cardId.trim()
+          : '';
+    return id || '';
+  }
+
+  function isLinkedItem(item) {
+    return !!itemLinkedCardId(item);
   }
 
   function itemProgress(item) {
@@ -61,9 +78,14 @@
 
   function normalizeItem(raw) {
     if (!raw || typeof raw !== 'object') return null;
+    var linkedCardId = itemLinkedCardId(raw);
     var text = typeof raw.text === 'string' ? raw.text.trim() : '';
-    if (!text) return null;
     if (text.length > ITEM_TEXT_MAX) text = text.slice(0, ITEM_TEXT_MAX);
+    // Linked board cards may resolve the title asynchronously; keep a placeholder.
+    if (!text) {
+      if (!linkedCardId) return null;
+      text = 'Carte li\u00e9e';
+    }
     // Legacy `difficulty` fields are ignored (equal-weight progress).
 
     var progress = asNumber(raw.progress);
@@ -72,12 +94,14 @@
     }
     progress = clampProgress(progress);
 
-    return syncDoneFromProgress({
+    var out = syncDoneFromProgress({
       id: typeof raw.id === 'string' && raw.id ? raw.id : generateId(),
       text: text,
       done: progress >= PROGRESS_MAX,
       progress: progress,
     });
+    if (linkedCardId) out.linkedCardId = linkedCardId;
+    return out;
   }
 
   function normalizeCompletionData(raw) {

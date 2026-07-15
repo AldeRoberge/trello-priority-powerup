@@ -106,13 +106,14 @@ html[data-color-mode="light"] {
 }
 
 html[data-color-mode="dark"] {
-  --surface-0: transparent;
+  /* Match trello-theme elevation: 0 dark → 2 lighter */
+  --surface-0: #1d2125;
   --surface-1: #282e33;
-  --surface-2: #22272b;
+  --surface-2: #333c43;
   --border: #a6c5e75c;
-  --text-primary: #ffffff;
-  --text-secondary: #ffffff;
-  --text-muted: #ffffff;
+  --text-primary: #f7f8f9;
+  --text-secondary: #b6c2cf;
+  --text-muted: #8c9bab;
   --due-accent: #579dff;
   --due-accent-text: #1d2125;
   --focus-ring: rgba(166, 197, 231, 0.4);
@@ -121,17 +122,17 @@ html[data-color-mode="dark"] {
   --modal-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
   --card-shadow: none;
   --slider-track: #596773;
-  --slider-thumb-bg: #ffffff;
-  --slider-thumb-border: #738496;
+  --slider-thumb-bg: #f7f8f9;
+  --slider-thumb-border: #8c9bab;
   --slider-thumb-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
   --slider-focus-ring: 0 0 0 3px rgba(166, 197, 231, 0.35);
-  --chart-grid-stroke: rgba(255, 255, 255, 0.06);
-  --chart-crosshair-stroke: rgba(182, 194, 207, 0.35);
+  --chart-grid-stroke: rgba(255, 255, 255, 0.08);
+  --chart-crosshair-stroke: rgba(182, 194, 207, 0.4);
   --chart-marker-shadow: rgba(0, 0, 0, 0.45);
   --chart-marker-shadow-inutile: rgba(0, 0, 0, 0.3);
   --chart-marker-core: #ffffff;
   --chart-marker-core-inutile: #ffffff;
-  --chart-marker-stroke-inutile: #738496;
+  --chart-marker-stroke-inutile: #8c9bab;
   --heat-accent-fallback: #85B7EB;
   --heat-dot-fallback: #85B7EB;
   --blocked-accent: #F87171;
@@ -159,10 +160,10 @@ html[data-color-mode="dark"] {
   --due-band-month-fill: #1A2A3D;
   --due-band-month-text: #B5D4F4;
   --due-band-month-muted: #85B7EB;
-  --due-band-far-fill: #2A2F35;
+  --due-band-far-fill: #252a2f;
   --due-band-far-text: #B6C2CF;
   --due-band-far-muted: #8B98A8;
-  --surface-hover: #a6c5e71f;
+  --surface-hover: #a6c5e729;
 }
 
 /* Dark mode — prevent opacity stacking from dimming white text */

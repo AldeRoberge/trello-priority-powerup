@@ -911,7 +911,13 @@
           : done
             ? 100
             : 0;
+      var fill = p > 0 ? completionColorForProgress(p) : '';
       btn.style.setProperty('--completion-progress', String(p));
+      if (fill) {
+        btn.style.setProperty('--completion-check-fill', fill);
+      } else {
+        btn.style.removeProperty('--completion-check-fill');
+      }
       btn.classList.toggle('is-checked', done);
       btn.classList.toggle('has-progress', p > 0 && !done);
       btn.setAttribute('aria-pressed', done ? 'true' : 'false');

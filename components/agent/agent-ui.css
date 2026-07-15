@@ -1775,7 +1775,7 @@
   flex: 0 1 auto;
   min-width: 0;
   max-width: calc(100% - 40px);
-  background: var(--tp-surface-subtle);
+  background: var(--tp-elev-3, var(--tp-surface-subtle));
   color: var(--tp-text);
   border: 1px solid var(--tp-border);
   border-bottom-left-radius: 2px;
