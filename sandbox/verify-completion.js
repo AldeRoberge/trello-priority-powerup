@@ -406,6 +406,26 @@ check('encouragement bon progres', CUI.progressEncouragementText(60) === 'Bon pr
 check('encouragement bien avance', CUI.progressEncouragementText(85) === 'Bien avanc\u00e9');
 check('encouragement bientot termine', CUI.progressEncouragementText(95) === 'Bient\u00f4t termin\u00e9');
 check('encouragement termine', CUI.progressEncouragementText(100) === 'Termin\u00e9');
+check(
+  'encouragement idle icon',
+  CUI.progressEncouragementMeta(0).icon === 'ti-player-pause' &&
+    CUI.progressEncouragementMeta(0).tone === 'idle'
+);
+check(
+  'encouragement play icon',
+  CUI.progressEncouragementMeta(40).icon === 'ti-player-play' &&
+    CUI.progressEncouragementMeta(40).tone === 'active'
+);
+check(
+  'encouragement almost-done icon',
+  CUI.progressEncouragementMeta(95).icon === 'ti-player-skip-forward' &&
+    CUI.progressEncouragementMeta(95).tone === 'near'
+);
+check(
+  'encouragement done icon',
+  CUI.progressEncouragementMeta(100).icon === 'ti-check' &&
+    CUI.progressEncouragementMeta(100).tone === 'done'
+);
 
 var mismatchDone = CT.detectDonePendingMismatch(
   { category: 'completed', listName: 'Done', listId: 'L1' },
@@ -606,25 +626,42 @@ var fakeT = {
   'formatEstimatedMinutesCompact',
   'formatEstimatedRemainingLabel',
   'formatEstimateForScale',
+  'formatEstimateForScales',
   'normalizeEstimateScale',
+  'normalizeEstimateScales',
   'getEstimateScale',
   'getEstimateScaleTicks',
   'nearestEstimateTick',
+  'getCachedBoardEstimateScales',
+  'setCachedBoardEstimateScales',
 ].forEach(function (name) {
   check('export ' + name, typeof CT[name] === 'function');
 });
 
 check('default estimate scale is time', CT.DEFAULT_ESTIMATE_SCALE === 'time');
 check(
-  'three estimate scales',
-  CT.ESTIMATE_SCALE_ORDER.length === 3 &&
+  'two estimate scales (no cafés)',
+  CT.ESTIMATE_SCALE_ORDER.length === 2 &&
     !!CT.ESTIMATE_SCALES.time &&
     !!CT.ESTIMATE_SCALES.tshirt &&
-    !!CT.ESTIMATE_SCALES.coffee
+    !CT.ESTIMATE_SCALES.coffee
+);
+check(
+  'default board scales are time + tshirt',
+  Array.isArray(CT.DEFAULT_ESTIMATE_SCALES) &&
+    CT.DEFAULT_ESTIMATE_SCALES.join(',') === 'time,tshirt'
 );
 check('normalize unknown scale → time', CT.normalizeEstimateScale('nope') === 'time');
 check('normalize tailles → tshirt', CT.normalizeEstimateScale('tailles') === 'tshirt');
-check('normalize cafés → coffee', CT.normalizeEstimateScale('cafés') === 'coffee');
+check('normalize legacy cafés → time', CT.normalizeEstimateScale('cafés') === 'time');
+check(
+  'normalizeEstimateScales accepts both',
+  CT.normalizeEstimateScales(['tshirt', 'time']).join(',') === 'time,tshirt'
+);
+check(
+  'normalizeEstimateScales empty → defaults',
+  CT.normalizeEstimateScales([]).join(',') === 'time,tshirt'
+);
 check(
   'tshirt ticks XS–XL',
   CT.getEstimateScaleTicks('tshirt')
@@ -634,16 +671,13 @@ check(
     .join(',') === 'XS,S,M,L,XL'
 );
 check(
-  'coffee ticks five cups',
-  CT.getEstimateScaleTicks('coffee').length === 5
-);
-check(
   'format tshirt M',
   CT.formatEstimateForScale(4 * 60, 'tshirt') === 'M'
 );
 check(
-  'format coffee Mug',
-  CT.formatEstimateForScale(4 * 60, 'coffee') === 'Mug'
+  'format dual scales',
+  CT.formatEstimateForScales(4 * 60, ['time', 'tshirt']).indexOf('M') !== -1 &&
+    CT.formatEstimateForScales(4 * 60, ['time', 'tshirt']).indexOf('h') !== -1
 );
 check(
   'nearest tshirt for 50 min → S',
@@ -654,17 +688,8 @@ check(
   CT.formatEstimatedRemainingLabel(60, 'tshirt') === '~S restantes'
 );
 check(
-  'remaining label coffee',
-  CT.formatEstimatedRemainingLabel(15, 'coffee') === '~Expresso restant'
-);
-check(
-  'normalize keeps estimateScale',
+  'normalize drops legacy per-card estimateScale',
   CT.normalizeCompletionData({ items: [], estimateScale: 'tshirt' }).estimateScale ===
-    'tshirt'
-);
-check(
-  'normalize omits default time scale',
-  CT.normalizeCompletionData({ items: [], estimateScale: 'time' }).estimateScale ===
     undefined
 );
 

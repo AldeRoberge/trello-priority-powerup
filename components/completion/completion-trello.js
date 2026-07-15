@@ -101,14 +101,89 @@
     var key = typeof value === 'string' ? value.trim().toLowerCase() : '';
     if (key === 'temps') key = 'time';
     if (key === 'taille' || key === 'tailles' || key === 'size') key = 'tshirt';
-    if (key === 'cafe' || key === 'cafes' || key === 'caf\u00e9' || key === 'caf\u00e9s') {
-      key = 'coffee';
+    // Legacy café scale removed — treat as default time.
+    if (
+      key === 'coffee' ||
+      key === 'cafe' ||
+      key === 'cafes' ||
+      key === 'caf\u00e9' ||
+      key === 'caf\u00e9s'
+    ) {
+      key = 'time';
     }
     return ESTIMATE_SCALES[key] ? key : DEFAULT_ESTIMATE_SCALE;
   }
 
+  /**
+   * Normalize one or more enabled scales. Order follows ESTIMATE_SCALE_ORDER.
+   * At least one scale is always returned (defaults to Temps + Tailles).
+   */
+  function normalizeEstimateScales(value) {
+    var seen = Object.create(null);
+    var collected = [];
+
+    function pushRaw(raw) {
+      if (raw == null) return;
+      if (typeof raw === 'string') {
+        var key = normalizeEstimateScale(raw);
+        if (ESTIMATE_SCALES[key] && !seen[key]) {
+          seen[key] = true;
+          collected.push(key);
+        }
+        return;
+      }
+      if (typeof raw === 'object' && typeof raw.id === 'string') {
+        pushRaw(raw.id);
+      }
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach(pushRaw);
+    } else if (value != null && value !== '') {
+      pushRaw(value);
+    }
+
+    var ordered = [];
+    for (var i = 0; i < ESTIMATE_SCALE_ORDER.length; i++) {
+      var id = ESTIMATE_SCALE_ORDER[i];
+      if (seen[id]) ordered.push(id);
+    }
+    if (!ordered.length) return DEFAULT_ESTIMATE_SCALES.slice();
+    return ordered;
+  }
+
   function getEstimateScale(scaleId) {
     return ESTIMATE_SCALES[normalizeEstimateScale(scaleId)] || ESTIMATE_SCALES.time;
+  }
+
+  function getCachedBoardEstimateScales() {
+    return boardEstimateScales.slice();
+  }
+
+  function setCachedBoardEstimateScales(scales) {
+    boardEstimateScales = normalizeEstimateScales(scales);
+    return boardEstimateScales.slice();
+  }
+
+  async function getBoardEstimateScales(t) {
+    try {
+      var stored = await t.get('board', 'shared', ESTIMATE_SCALES_SETTINGS_KEY);
+      if (stored != null) {
+        boardEstimateScales = normalizeEstimateScales(stored);
+        return boardEstimateScales.slice();
+      }
+    } catch (err) {
+      console.error('Board estimate scales load failed', err);
+    }
+    boardEstimateScales = DEFAULT_ESTIMATE_SCALES.slice();
+    return boardEstimateScales.slice();
+  }
+
+  async function saveBoardEstimateScales(t, scales) {
+    var next = normalizeEstimateScales(scales);
+    boardEstimateScales = next;
+    await t.set('board', 'shared', ESTIMATE_SCALES_SETTINGS_KEY, next);
+    return next.slice();
   }
 
   function getEstimateScaleTicks(scaleId) {
@@ -208,19 +283,36 @@
     return tick ? tick.label : formatEstimatedMinutesCompact(m);
   }
 
-  function formatEstimatedRemainingLabel(remainingMinutes, scaleId) {
+  /** Join labels for every enabled scale (e.g. "~2 h · M"). */
+  function formatEstimateForScales(minutes, scaleIds) {
+    var m = clampEstimatedMinutes(minutes);
+    if (m == null) return '';
+    var scales = normalizeEstimateScales(scaleIds);
+    var parts = [];
+    for (var i = 0; i < scales.length; i++) {
+      var part = formatEstimateForScale(m, scales[i]);
+      if (part) parts.push(part);
+    }
+    return parts.join(' \u00b7 ');
+  }
+
+  function formatEstimatedRemainingLabel(remainingMinutes, scaleIds) {
     if (remainingMinutes === 0) return 'Termin\u00e9';
     var m = clampEstimatedMinutes(remainingMinutes);
     if (m == null) return '';
-    var scale = getEstimateScale(scaleId);
-    if (scale.id === 'time') {
-      var compact = formatEstimatedMinutesCompact(m).replace(/^~/, '');
-      return compact + ' restantes';
+    var scales = normalizeEstimateScales(scaleIds);
+    var parts = [];
+    for (var i = 0; i < scales.length; i++) {
+      var scale = getEstimateScale(scales[i]);
+      if (scale.id === 'time') {
+        parts.push(formatEstimatedMinutesCompact(m).replace(/^~/, '') + ' restantes');
+      } else {
+        var tick = nearestEstimateTick(m, scale.id);
+        if (tick) parts.push('~' + tick.label + ' restantes');
+        else parts.push(formatEstimatedMinutesCompact(m) + ' restantes');
+      }
     }
-    var tick = nearestEstimateTick(m, scale.id);
-    if (!tick) return formatEstimatedMinutesCompact(m) + ' restantes';
-    if (scale.id === 'tshirt') return '~' + tick.label + ' restantes';
-    return '~' + tick.label + ' restant';
+    return parts.join(' \u00b7 ');
   }
 
   function itemEstimatedMinutes(item, snapshotsByCardId) {
@@ -538,8 +630,7 @@
     }
     if (raw.estimatedMinutesLocked === true) out.estimatedMinutesLocked = true;
     if (raw.progressEnabled === false) out.progressEnabled = false;
-    var scale = normalizeEstimateScale(raw.estimateScale);
-    if (scale !== DEFAULT_ESTIMATE_SCALE) out.estimateScale = scale;
+    // estimateScale is board-level now; drop any legacy per-card value.
     return out;
   }
 
@@ -1519,7 +1610,13 @@
   }
 
   async function preloadBoardCompletionContext(t) {
-    return getBoardCompletionColorScheme(t);
+    await Promise.all([
+      getBoardCompletionColorScheme(t),
+      getBoardEstimateScales(t).catch(function () {
+        return getCachedBoardEstimateScales();
+      }),
+    ]);
+    return boardCompletionColorSchemeKey;
   }
 
   function getCachedBoardCompletionColorSchemeKey() {
@@ -1664,6 +1761,7 @@
     COMPLETION_COLOR_SCHEME_SETTINGS_KEY: COMPLETION_COLOR_SCHEME_SETTINGS_KEY,
     COMPLETION_COLOR_SCHEME_REV_KEY: COMPLETION_COLOR_SCHEME_REV_KEY,
     COMPLETION_COLOR_GRADIENT_SETTINGS_KEY: COMPLETION_COLOR_GRADIENT_SETTINGS_KEY,
+    ESTIMATE_SCALES_SETTINGS_KEY: ESTIMATE_SCALES_SETTINGS_KEY,
     COMPLETION_MARKED_DUE_COMPLETE_KEY: COMPLETION_MARKED_DUE_COMPLETE_KEY,
     COMPLETION_SUPPRESS_DUE_COMPLETE_KEY: COMPLETION_SUPPRESS_DUE_COMPLETE_KEY,
     ITEM_TEXT_MAX: ITEM_TEXT_MAX,
@@ -1681,14 +1779,21 @@
     ESTIMATE_SCALES: ESTIMATE_SCALES,
     ESTIMATE_SCALE_ORDER: ESTIMATE_SCALE_ORDER,
     DEFAULT_ESTIMATE_SCALE: DEFAULT_ESTIMATE_SCALE,
+    DEFAULT_ESTIMATE_SCALES: DEFAULT_ESTIMATE_SCALES,
     normalizeEstimateScale: normalizeEstimateScale,
+    normalizeEstimateScales: normalizeEstimateScales,
     getEstimateScale: getEstimateScale,
     getEstimateScaleTicks: getEstimateScaleTicks,
     nearestEstimateTick: nearestEstimateTick,
     formatEstimateForScale: formatEstimateForScale,
+    formatEstimateForScales: formatEstimateForScales,
     clampEstimatedMinutes: clampEstimatedMinutes,
     formatEstimatedMinutesCompact: formatEstimatedMinutesCompact,
     formatEstimatedRemainingLabel: formatEstimatedRemainingLabel,
+    getBoardEstimateScales: getBoardEstimateScales,
+    saveBoardEstimateScales: saveBoardEstimateScales,
+    getCachedBoardEstimateScales: getCachedBoardEstimateScales,
+    setCachedBoardEstimateScales: setCachedBoardEstimateScales,
     itemEstimatedMinutes: itemEstimatedMinutes,
     computeItemsEstimateBase: computeItemsEstimateBase,
     computeEstimatedTotal: computeEstimatedTotal,

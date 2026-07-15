@@ -2031,7 +2031,8 @@
 
   /**
    * Build ranked suggestion labels.
-   * - Empty input: top frequent ∪ core presets (capped), excluding selected.
+   * - Empty input: unused by UI (suggestions stay hidden until typing); still
+   *   returns top frequent ∪ core presets when called with no query.
    * - Typing: dictionary ∪ frequent customs matching substring, excluding selected
    *   (capped at BLOCKED_REASON_FILTER_SUGGESTION_CAP after ranking).
    */
@@ -6356,6 +6357,8 @@
       typeof config.onLabelAdd === 'function' ? config.onLabelAdd : null;
     var onLabelRemove =
       typeof config.onLabelRemove === 'function' ? config.onLabelRemove : null;
+    var onLabelCreate =
+      typeof config.onLabelCreate === 'function' ? config.onLabelCreate : null;
     var suggestLabelsFn =
       typeof config.suggestLabels === 'function' ? config.suggestLabels : null;
     var onAuthorize =
@@ -6768,6 +6771,27 @@
     labelsPicker.hidden = true;
     labelsPicker.setAttribute('role', 'listbox');
     labelsPicker.setAttribute('aria-label', '\u00c9tiquettes du tableau');
+
+    var labelsSearchInput = document.createElement('input');
+    labelsSearchInput.type = 'search';
+    labelsSearchInput.className = 'tp-input info-labels-search';
+    labelsSearchInput.placeholder = 'Rechercher une \u00e9tiquette\u2026';
+    labelsSearchInput.setAttribute('aria-label', 'Rechercher une \u00e9tiquette');
+    labelsSearchInput.setAttribute('autocomplete', 'off');
+
+    var labelsPickerList = document.createElement('div');
+    labelsPickerList.className = 'info-labels-picker-list';
+    labelsPickerList.setAttribute('role', 'group');
+    labelsPickerList.setAttribute('aria-label', '\u00c9tiquettes disponibles');
+
+    var labelsCreateBtn = document.createElement('button');
+    labelsCreateBtn.type = 'button';
+    labelsCreateBtn.className = 'info-labels-picker-create';
+    labelsCreateBtn.hidden = true;
+
+    labelsPicker.appendChild(labelsSearchInput);
+    labelsPicker.appendChild(labelsPickerList);
+    labelsPicker.appendChild(labelsCreateBtn);
 
     var labelsStatus = document.createElement('span');
     labelsStatus.className = 'info-desc-status';
@@ -7708,53 +7732,132 @@
       labelsPicker.hidden = !labelsPickerOpen;
       labelsAddBtn.setAttribute('aria-expanded', labelsPickerOpen ? 'true' : 'false');
       labelsAddWrap.classList.toggle('is-open', labelsPickerOpen);
-      if (labelsPickerOpen) renderLabelsPicker();
+      if (labelsPickerOpen) {
+        renderLabelsPicker();
+        try {
+          labelsSearchInput.focus();
+          labelsSearchInput.select();
+        } catch (e) {
+          /* ignore */
+        }
+      } else {
+        labelsSearchInput.value = '';
+      }
       onLayoutChange();
     }
 
-    function renderLabelsPicker() {
-      labelsPicker.replaceChildren();
+    function filteredAvailableBoardLabels(query) {
       var available = availableBoardLabels();
+      var q = String(query || '')
+        .trim()
+        .toLowerCase();
+      if (!q) return available;
+      return available.filter(function (label) {
+        return labelDisplayName(label).toLowerCase().indexOf(q) !== -1;
+      });
+    }
+
+    function boardHasLabelName(name) {
+      var needle = String(name || '')
+        .trim()
+        .toLowerCase();
+      if (!needle) return false;
+      for (var i = 0; i < boardLabels.length; i++) {
+        if (labelDisplayName(boardLabels[i]).toLowerCase() === needle) return true;
+      }
+      return false;
+    }
+
+    function updateLabelsCreateButton(query) {
+      if (!onLabelCreate) {
+        labelsCreateBtn.hidden = true;
+        labelsCreateBtn.textContent = '';
+        labelsCreateBtn.disabled = true;
+        return;
+      }
+      var q = String(query || '').trim();
+      labelsCreateBtn.hidden = false;
+      if (!q) {
+        labelsCreateBtn.disabled = true;
+        labelsCreateBtn.innerHTML =
+          '<i class="ti ti-plus" aria-hidden="true"></i>' +
+          '<span>Cr\u00e9er une nouvelle \u00e9tiquette</span>';
+        labelsCreateBtn.title =
+          'Tapez un nom pour cr\u00e9er une nouvelle \u00e9tiquette';
+        return;
+      }
+      if (boardHasLabelName(q) || labelsBusy) {
+        labelsCreateBtn.disabled = true;
+        labelsCreateBtn.innerHTML =
+          '<i class="ti ti-plus" aria-hidden="true"></i>' +
+          '<span>Cr\u00e9er une nouvelle \u00e9tiquette</span>';
+        labelsCreateBtn.title = boardHasLabelName(q)
+          ? 'Cette \u00e9tiquette existe d\u00e9j\u00e0'
+          : 'Cr\u00e9ation en cours\u2026';
+        return;
+      }
+      labelsCreateBtn.disabled = false;
+      labelsCreateBtn.innerHTML =
+        '<i class="ti ti-plus" aria-hidden="true"></i>' +
+        '<span>Cr\u00e9er une nouvelle \u00e9tiquette\u00a0: <strong></strong></span>';
+      var strong = labelsCreateBtn.querySelector('strong');
+      if (strong) strong.textContent = q;
+      labelsCreateBtn.title = 'Cr\u00e9er l\u2019\u00e9tiquette\u00a0: ' + q;
+    }
+
+    function renderLabelsPicker() {
+      labelsPickerList.replaceChildren();
+      var query = labelsSearchInput.value;
+      var available = filteredAvailableBoardLabels(query);
+      var q = String(query || '').trim();
+
       if (!available.length) {
         var empty = document.createElement('div');
         empty.className = 'info-labels-picker-empty';
-        empty.textContent = boardLabels.length
-          ? 'Toutes les \u00e9tiquettes sont d\u00e9j\u00e0 sur la carte'
-          : 'Aucune \u00e9tiquette sur ce tableau';
-        labelsPicker.appendChild(empty);
-        return;
-      }
-      available.forEach(function (label) {
-        var name = labelDisplayName(label);
-        var hex = labelColorHex(label.color);
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'info-labels-picker-option';
-        btn.setAttribute('role', 'option');
-        btn.style.setProperty('--label-color', hex);
-        btn.style.setProperty(
-          '--label-fg',
-          labelNeedsDarkText(hex) ? '#172b4d' : '#ffffff'
-        );
-        btn.title = name;
-        btn.disabled = labelsBusy;
-        btn.dataset.labelId = String(label.id);
+        if (q) {
+          empty.textContent = 'Aucune \u00e9tiquette correspondante';
+        } else if (boardLabels.length) {
+          empty.textContent =
+            'Toutes les \u00e9tiquettes sont d\u00e9j\u00e0 sur la carte';
+        } else {
+          empty.textContent = 'Aucune \u00e9tiquette sur ce tableau';
+        }
+        labelsPickerList.appendChild(empty);
+      } else {
+        available.forEach(function (label) {
+          var name = labelDisplayName(label);
+          var hex = labelColorHex(label.color);
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'info-labels-picker-option';
+          btn.setAttribute('role', 'option');
+          btn.style.setProperty('--label-color', hex);
+          btn.style.setProperty(
+            '--label-fg',
+            labelNeedsDarkText(hex) ? '#172b4d' : '#ffffff'
+          );
+          btn.title = name;
+          btn.disabled = labelsBusy;
+          btn.dataset.labelId = String(label.id);
 
-        var swatch = document.createElement('span');
-        swatch.className = 'info-label-swatch';
-        swatch.setAttribute('aria-hidden', 'true');
+          var swatch = document.createElement('span');
+          swatch.className = 'info-label-swatch';
+          swatch.setAttribute('aria-hidden', 'true');
 
-        var text = document.createElement('span');
-        text.className = 'info-labels-picker-option-text';
-        text.textContent = name;
+          var text = document.createElement('span');
+          text.className = 'info-labels-picker-option-text';
+          text.textContent = name;
 
-        btn.appendChild(swatch);
-        btn.appendChild(text);
-        btn.addEventListener('click', function () {
-          addLabelFromPicker(label);
+          btn.appendChild(swatch);
+          btn.appendChild(text);
+          btn.addEventListener('click', function () {
+            addLabelFromPicker(label);
+          });
+          labelsPickerList.appendChild(btn);
         });
-        labelsPicker.appendChild(btn);
-      });
+      }
+
+      updateLabelsCreateButton(query);
     }
 
     function renderLabels() {
@@ -7801,11 +7904,93 @@
         });
       }
 
-      var canAdd = !!onLabelAdd;
-      labelsAddBtn.hidden = !onLabelAdd;
+      var canAdd = !!onLabelAdd || !!onLabelCreate;
+      labelsAddBtn.hidden = !canAdd;
       labelsAddBtn.disabled = labelsBusy || !canAdd;
       if (labelsPickerOpen) renderLabelsPicker();
       renderLabelSuggestions();
+    }
+
+    function createLabelFromPicker() {
+      if (!onLabelCreate || labelsBusy) return;
+      var name = String(labelsSearchInput.value || '').trim();
+      if (!name || boardHasLabelName(name)) return;
+      labelsBusy = true;
+      setLabelsStatus('', 'saving');
+      renderLabels();
+      Promise.resolve(
+        onLabelCreate({
+          name: name,
+          existingLabels: boardLabels.slice()
+        })
+      )
+        .then(function (result) {
+          labelsBusy = false;
+          if (result && result.ok === false) {
+            if (result.reason === 'not-authorized' || result.reason === 'no-app-key') {
+              setAuthHint(result.reason);
+              setLabelsStatus('', 'error');
+            } else if (result.reason === 'empty-name') {
+              setLabelsStatus('Nom requis', 'error');
+            } else {
+              setLabelsStatus('\u00c9chec de la cr\u00e9ation', 'error');
+            }
+            renderLabels();
+            onLayoutChange();
+            return result;
+          }
+          var created =
+            result && result.label && typeof result.label === 'object'
+              ? result.label
+              : null;
+          if (created && created.id) {
+            var createdId = String(created.id);
+            var onBoard = false;
+            for (var i = 0; i < boardLabels.length; i++) {
+              if (boardLabels[i] && String(boardLabels[i].id) === createdId) {
+                onBoard = true;
+                break;
+              }
+            }
+            if (!onBoard) {
+              boardLabels = boardLabels.concat([
+                {
+                  id: created.id,
+                  name: typeof created.name === 'string' ? created.name : name,
+                  color: created.color != null ? created.color : null,
+                  idBoard: created.idBoard
+                }
+              ]);
+            }
+            if (!selectedLabelIds()[createdId]) {
+              labels = labels.concat([
+                {
+                  id: created.id,
+                  name: typeof created.name === 'string' ? created.name : name,
+                  color: created.color != null ? created.color : null,
+                  idBoard: created.idBoard
+                }
+              ]);
+            }
+          }
+          setAuthHint('');
+          setLabelsStatus('', 'ok');
+          setLabelsPickerOpen(false);
+          renderLabels();
+          scheduleLabelSuggestions(false);
+          setTimeout(function () {
+            if (labelsStatus.classList.contains('is-ok')) setLabelsStatus('');
+          }, 1400);
+          onLayoutChange();
+          return result;
+        })
+        .catch(function (err) {
+          labelsBusy = false;
+          console.error('Info label create failed', err);
+          setLabelsStatus('\u00c9chec de la cr\u00e9ation', 'error');
+          renderLabels();
+          onLayoutChange();
+        });
     }
 
     function addLabelFromPicker(label) {
@@ -8505,6 +8690,62 @@
       setLabelsPickerOpen(!labelsPickerOpen);
     });
 
+    labelsSearchInput.addEventListener('input', function () {
+      if (!labelsPickerOpen) return;
+      renderLabelsPicker();
+      onLayoutChange();
+    });
+
+    labelsSearchInput.addEventListener('click', function (event) {
+      event.stopPropagation();
+    });
+
+    labelsSearchInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setLabelsPickerOpen(false);
+        return;
+      }
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      var q = String(labelsSearchInput.value || '').trim();
+      var matches = filteredAvailableBoardLabels(q);
+      if (matches.length === 1) {
+        addLabelFromPicker(matches[0]);
+        return;
+      }
+      if (matches.length > 1 && q) {
+        var exact = null;
+        for (var i = 0; i < matches.length; i++) {
+          if (labelDisplayName(matches[i]).toLowerCase() === q.toLowerCase()) {
+            exact = matches[i];
+            break;
+          }
+        }
+        if (exact) {
+          addLabelFromPicker(exact);
+          return;
+        }
+      }
+      if (onLabelCreate && q && !boardHasLabelName(q)) {
+        createLabelFromPicker();
+      }
+    });
+
+    labelsCreateBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (labelsCreateBtn.disabled) {
+        try {
+          labelsSearchInput.focus();
+        } catch (e) {
+          /* ignore */
+        }
+        return;
+      }
+      createLabelFromPicker();
+    });
+
     if (labelsSuggestRefreshBtn) {
       labelsSuggestRefreshBtn.addEventListener('click', function (event) {
         event.preventDefault();
@@ -8931,6 +9172,8 @@
     // onProposal synchronously during init, so suggestionsList must exist.
     var suggestions = document.createElement('div');
     suggestions.className = 'blocked-reason-suggestions';
+    // Shown only while the user is typing a filter query.
+    suggestions.hidden = true;
 
     var suggestionsLabel = document.createElement('div');
     suggestionsLabel.className = 'blocked-reason-suggestions-label';
@@ -9430,11 +9673,14 @@
 
     function refreshSuggestions() {
       var query = (reasonInput.value || '').trim();
-      var ranked = rankBlockedReasonSuggestions({
-        query: query,
-        selected: currentReasons,
-        cap: BLOCKED_REASON_EMPTY_SUGGESTION_CAP
-      });
+      // Keep the list hidden until the user types — including when a reason
+      // is already selected under Statut (no idle preset chips).
+      var ranked = query
+        ? rankBlockedReasonSuggestions({
+            query: query,
+            selected: currentReasons
+          })
+        : [];
       while (suggestionsList.firstChild) {
         suggestionsList.removeChild(suggestionsList.firstChild);
       }

@@ -884,6 +884,168 @@
     }
   }
 
+  async function resolveCurrentBoardId(t) {
+    try {
+      if (t && typeof t.board === 'function') {
+        var board = await new Promise(function (resolve, reject) {
+          t.board('id').then(resolve, reject);
+        });
+        if (typeof board === 'string' && board.trim()) return board.trim();
+        if (board && typeof board === 'object' && !isPowerUpRequestChain(board)) {
+          if (board.id != null && String(board.id).trim()) return String(board.id).trim();
+        }
+      }
+    } catch (err) {
+      /* ignore */
+    }
+    try {
+      var cardId = await resolveCurrentCardId(t);
+      if (!cardId || !restClientOptions()) return null;
+      var api = await t.getRestApi();
+      var authorized = await api.isAuthorized();
+      if (!authorized) return null;
+      var token = await api.getToken();
+      if (!token) return null;
+      var cfg = restClientOptions();
+      var url =
+        'https://api.trello.com/1/cards/' +
+        encodeURIComponent(cardId) +
+        '?fields=idBoard' +
+        '&key=' +
+        encodeURIComponent(cfg.appKey) +
+        '&token=' +
+        encodeURIComponent(token);
+      var response = await fetch(url, { method: 'GET' });
+      if (!response.ok) return null;
+      var card = await response.json();
+      if (card && card.idBoard != null && String(card.idBoard).trim()) {
+        return String(card.idBoard).trim();
+      }
+    } catch (restErr) {
+      console.error('Priority board id REST failed', restErr);
+    }
+    return null;
+  }
+
+  var BOARD_LABEL_COLORS = [
+    'green',
+    'yellow',
+    'orange',
+    'red',
+    'purple',
+    'blue',
+    'sky',
+    'lime',
+    'pink',
+    'black'
+  ];
+
+  function normalizeBoardLabelColor(color) {
+    if (color == null || color === '') return null;
+    var base = String(color)
+      .replace(/_(light|dark)$/i, '')
+      .toLowerCase()
+      .trim();
+    if (BOARD_LABEL_COLORS.indexOf(base) !== -1) return base;
+    return null;
+  }
+
+  function pickUnusedLabelColor(existingLabels) {
+    var used = Object.create(null);
+    var list = Array.isArray(existingLabels) ? existingLabels : [];
+    for (var i = 0; i < list.length; i++) {
+      var c = normalizeBoardLabelColor(list[i] && list[i].color);
+      if (c) used[c] = true;
+    }
+    for (var j = 0; j < BOARD_LABEL_COLORS.length; j++) {
+      if (!used[BOARD_LABEL_COLORS[j]]) return BOARD_LABEL_COLORS[j];
+    }
+    return BOARD_LABEL_COLORS[list.length % BOARD_LABEL_COLORS.length] || 'blue';
+  }
+
+  /**
+   * Create a board label via REST POST /labels, then optionally attach it to the card.
+   * Requires OAuth (same as title / description edits).
+   *
+   * @param {object} t Power-Up client
+   * @param {{ name: string, color?: string|null, addToCard?: boolean, existingLabels?: Array }} options
+   */
+  async function createBoardLabel(t, options) {
+    options = options || {};
+    var name = typeof options.name === 'string' ? options.name.trim() : '';
+    if (!name) return { ok: false, reason: 'empty-name', changed: false };
+    if (!restClientOptions()) return { ok: false, reason: 'no-app-key', changed: false };
+
+    var boardId = await resolveCurrentBoardId(t);
+    if (!boardId) return { ok: false, reason: 'no-board-id', changed: false };
+
+    var cfg = restClientOptions();
+    var api = await t.getRestApi();
+    var authorized = await api.isAuthorized();
+    if (!authorized) return { ok: false, reason: 'not-authorized', changed: false };
+    var token = await api.getToken();
+    if (!token) return { ok: false, reason: 'no-token', changed: false };
+
+    var color =
+      options.color !== undefined
+        ? normalizeBoardLabelColor(options.color)
+        : pickUnusedLabelColor(options.existingLabels);
+
+    var url =
+      'https://api.trello.com/1/labels' +
+      '?name=' +
+      encodeURIComponent(name.slice(0, 16384)) +
+      '&idBoard=' +
+      encodeURIComponent(boardId) +
+      '&key=' +
+      encodeURIComponent(cfg.appKey) +
+      '&token=' +
+      encodeURIComponent(token);
+    if (color) url += '&color=' + encodeURIComponent(color);
+
+    var response = await fetch(url, { method: 'POST' });
+    if (!response.ok) {
+      var detail = '';
+      try {
+        detail = await response.text();
+      } catch (readErr) {
+        detail = readErr && readErr.message ? readErr.message : '';
+      }
+      throw new Error(
+        'Trello REST POST /labels failed: ' +
+          response.status +
+          (detail ? ' ' + detail : '')
+      );
+    }
+
+    var created = await response.json();
+    if (!created || !created.id) {
+      return { ok: false, reason: 'no-label', changed: false };
+    }
+
+    var label = {
+      id: String(created.id),
+      name: typeof created.name === 'string' ? created.name : name,
+      color: created.color != null ? created.color : color,
+      idBoard: created.idBoard != null ? String(created.idBoard) : boardId
+    };
+
+    var addToCard = options.addToCard !== false;
+    if (addToCard) {
+      var addResult = await addCardLabel(t, label.id);
+      if (!addResult || addResult.ok === false) {
+        return {
+          ok: false,
+          reason: (addResult && addResult.reason) || 'add-failed',
+          changed: false,
+          label: label
+        };
+      }
+    }
+
+    return { ok: true, changed: true, label: label, labelId: label.id };
+  }
+
   /**
    * Add an existing board label to the card via REST POST /cards/{id}/idLabels.
    * Requires OAuth (same as title / description edits).
@@ -2354,6 +2516,7 @@
     ensureCreatorAssigned: ensureCreatorAssigned,
     getCardLabels: getCardLabels,
     getBoardLabels: getBoardLabels,
+    createBoardLabel: createBoardLabel,
     addCardLabel: addCardLabel,
     removeCardLabel: removeCardLabel,
     addCardMember: addCardMember,

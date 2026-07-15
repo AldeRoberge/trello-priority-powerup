@@ -2614,7 +2614,7 @@
       '- Ex. moyen\u00a0: labels.ease=Moyen \u2192 \u00ab\u00a0Ni super dur ni trivial\u00a0: plut\u00f4t [[y:moyen]].\u00a0\u00bb',
       '- M\u00eame logique pour Impact (labels.impact / impactReach) et Urgence (labels.urgency) quand on pose la question sur ces axes.',
       '- Port\u00e9e / impact (Personnel \u2192 \u00c9quipe \u2192 Interne \u2192 Population \u2192 Global)\u00a0: answers via context.priority.impactReach (ou labels.impact). Qui est touch\u00e9?',
-      '- Dur\u00e9e estim\u00e9e (Progr\u00e8s)\u00a0: context.progress.estimatedTotalMinutes / estimatedRemainingMinutes et items[].estimatedMinutes. Distingue dur\u00e9e (temps) vs Facilit\u00e9 (difficult\u00e9 / ease).',
+      '- Dur\u00e9e estim\u00e9e (Progr\u00e8s)\u00a0: context.progress.estimatedTotalMinutes / estimatedRemainingMinutes et items[].estimatedMinutes (minutes\u00a0; affich\u00e9es en Temps et/ou Tailles XS\u2013XL). Distingue dur\u00e9e (effort) vs Facilit\u00e9 (difficult\u00e9 / ease).',
       '- Ex. port\u00e9e\u00a0: user \u00ab\u00a0qui est impact\u00e9?\u00a0\u00bb, impactReach=\u00c9quipe \u2192 message du type \u00ab\u00a0La port\u00e9e est \u00c9quipe\u00a0: effet sur l\'\u00e9quipe imm\u00e9diate.\u00a0\u00bb',
       '- Ex. dur\u00e9e\u00a0: user \u00ab\u00a0combien de temps?\u00a0\u00bb \u2192 cite le total / restant Progr\u00e8s.',
       '- Si priority.enabled=false\u00a0: dis qu\'aucune Facilit\u00e9 / priorit\u00e9 n\'est d\u00e9finie (ne sors pas d\'anciennes valeurs).',
@@ -3141,7 +3141,7 @@
         : 'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":[{"text":"\u2026","estimatedMinutes":30},{"text":"\u2026","estimatedMinutes":60},{"text":"\u2026","estimatedMinutes":15}]}',
       'Exactement 3 suggestions si possible (2 minimum si le contexte est pauvre).',
       'Chaque suggestion texte = une action concr\u00e8te courte en fran\u00e7ais (pas une question).',
-      'Chaque suggestion DOIT inclure estimatedMinutes (nombre entier > 0) = effort r\u00e9aliste pour cette \u00e9tape seule (pas le total de la carte).',
+      'Chaque suggestion DOIT inclure estimatedMinutes (nombre entier > 0) = effort r\u00e9aliste pour cette \u00e9tape seule (pas le total de la carte). Les minutes alimentent Temps et Tailles (XS\u224815 min, S\u22481 h, M\u22484 h, L\u22482 j, XL\u22485 j)\u00a0: inf\u00e8re une dur\u00e9e coh\u00e9rente avec les deux.',
       'Inf\u00e9rence titre (critique \u2014 c\'est le job)\u00a0:',
       '- Le TITRE de la carte est la source principale. Lis-le et d\u00e9compose-le en \u00e9tapes concr\u00e8tes.',
       '- Inf\u00e8re ce qu\'il faut vraiment faire pour accomplir CE titre (savoir pratique + contexte carte).',
@@ -3286,6 +3286,8 @@
           'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"estimates":[{"id":"\u2026","estimatedMinutes":30},{"matchText":"\u2026","estimatedMinutes":15}]}',
           'Une entr\u00e9e par item fourni. Pr\u00e9f\u00e8re id quand fourni, sinon matchText = texte exact.',
           'estimatedMinutes = entier > 0 = effort r\u00e9aliste pour CETTE \u00e9tape seule (minutes).',
+          'Les minutes alimentent \u00e0 la fois l\u2019affichage Temps et Tailles (XS\u2013XL)\u00a0: choisis une dur\u00e9e coh\u00e9rente avec les deux \u00e9chelles.',
+          'Rep\u00e8res tailles\u00a0: XS\u224815 min, S\u22481 h, M\u22484 h, L\u22482 j, XL\u22485 j.',
           'Ex. achat logiciel ~5, r\u00e9union ~60, r\u00e9daction courte ~90, audit/migration ~480+.',
           'INTERDIT\u00a0: inventer des sous-t\u00e2ches; omettre un item; dur\u00e9es absurdes.',
           'Contexte\u00a0:',
@@ -3294,7 +3296,8 @@
       },
       {
         role: 'user',
-        content: 'Estime la dur\u00e9e de chaque sous-t\u00e2che list\u00e9e.'
+        content:
+          'Estime la dur\u00e9e (minutes) de chaque sous-t\u00e2che list\u00e9e, en pensant aussi \u00e0 la taille XS\u2013XL correspondante.'
       }
     ];
 
