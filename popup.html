@@ -1489,12 +1489,16 @@
           if (infoUi && typeof infoUi.setMembers === 'function') {
             infoUi.setMembers(members);
           }
+          latestMembersFp = fingerprintIds(members);
+          appliedMembersFp = latestMembersFp;
           if (infoUi && typeof infoUi.setBoardMembers === 'function') {
             infoUi.setBoardMembers(boardMembers);
           }
           if (infoUi && typeof infoUi.setLabels === 'function') {
             infoUi.setLabels(cardLabels);
           }
+          latestLabelsFp = fingerprintIds(cardLabels);
+          appliedLabelsFp = latestLabelsFp;
           if (infoUi && typeof infoUi.setBoardLabels === 'function') {
             infoUi.setBoardLabels(boardLabels);
           }
