@@ -903,13 +903,25 @@
       }
     }
 
-    function syncCheckButton(btn, done) {
+    function syncCheckButton(btn, done, progress) {
       if (!btn) return;
+      var p =
+        typeof progress === 'number' && isFinite(progress)
+          ? CT.clampProgress(progress)
+          : done
+            ? 100
+            : 0;
+      btn.style.setProperty('--completion-progress', String(p));
       btn.classList.toggle('is-checked', done);
+      btn.classList.toggle('has-progress', p > 0 && !done);
       btn.setAttribute('aria-pressed', done ? 'true' : 'false');
       btn.setAttribute(
         'aria-label',
-        done ? 'Marquer comme non termin\u00e9' : 'Marquer comme termin\u00e9 (100\u00a0%)'
+        done
+          ? 'Marquer comme non termin\u00e9'
+          : p > 0
+            ? 'Marquer comme termin\u00e9 (100\u00a0%) — ' + p + '\u00a0%'
+            : 'Marquer comme termin\u00e9 (100\u00a0%)'
       );
     }
 
@@ -926,7 +938,7 @@
           applySliderProgressTrack(slider, p);
         }
         if (valEl) valEl.textContent = p + '\u00a0%';
-        syncCheckButton(checkBtn, item.done);
+        syncCheckButton(checkBtn, item.done, p);
         li.classList.toggle('is-done', item.done);
       });
     }
@@ -1331,7 +1343,7 @@
       function syncItemProgressUi() {
         var p = CT.itemProgress(item);
         if (itemSlider) applySliderProgressTrack(itemSlider, p);
-        syncCheckButton(checkBtn, item.done);
+        syncCheckButton(checkBtn, item.done, p);
         li.classList.toggle('is-done', item.done);
       }
 
@@ -1461,7 +1473,7 @@
       checkBtn.type = 'button';
       checkBtn.className = 'tp-completion-check' + (item.done ? ' is-checked' : '');
       checkBtn.innerHTML = CHECK_ICON_SVG;
-      syncCheckButton(checkBtn, item.done);
+      syncCheckButton(checkBtn, item.done, CT.itemProgress(item));
       checkWrap.appendChild(checkBtn);
 
       var textInput = document.createElement('input');

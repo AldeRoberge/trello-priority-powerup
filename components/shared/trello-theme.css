@@ -1894,8 +1894,8 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-completion-complete-all:hover {
-  background: color-mix(in srgb, var(--completion-hero-accent) 14%, transparent);
-  color: var(--tp-text);
+  background: color-mix(in srgb, var(--tp-success, #216e4e) 12%, transparent);
+  color: var(--tp-success, #216e4e);
 }
 
 .tp-completion-reset-all:hover {
@@ -2199,7 +2199,10 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 .tp-completion-check {
   --completion-check-size: 22px;
   --completion-check-green: #2a9b82;
+  --completion-progress: 0;
   box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
   width: var(--completion-check-size);
   height: var(--completion-check-size);
   padding: 0;
@@ -2219,9 +2222,28 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
     transform 0.12s ease;
 }
 
+/* Radial pie fill — angle tracks --completion-progress (0–100). */
+.tp-completion-check::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from -90deg,
+    var(--completion-check-green) calc(var(--completion-progress) * 1%),
+    transparent 0
+  );
+  pointer-events: none;
+  transition: background 0.15s ease;
+}
+
 .tp-completion-check:hover {
   border-color: var(--completion-check-green);
   background: color-mix(in srgb, var(--completion-check-green) 8%, transparent);
+}
+
+.tp-completion-check.has-progress {
+  border-color: var(--completion-check-green);
 }
 
 .tp-completion-check:focus {
@@ -2240,6 +2262,10 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   box-shadow: 0 1px 2px color-mix(in srgb, var(--completion-check-green) 35%, transparent);
 }
 
+.tp-completion-check.is-checked::before {
+  background: transparent;
+}
+
 .tp-completion-check.is-checked:hover {
   background: color-mix(in srgb, var(--completion-check-green) 88%, #000);
   border-color: color-mix(in srgb, var(--completion-check-green) 88%, #000);
@@ -2251,6 +2277,8 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-completion-check-icon {
+  position: relative;
+  z-index: 1;
   display: block;
   flex: none;
   opacity: 0;
@@ -2358,6 +2386,10 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   background: var(--completion-check-green);
   border-color: var(--completion-check-green);
   color: #fff;
+}
+
+html[data-color-mode="dark"] .tp-completion-check.is-checked::before {
+  background: transparent;
 }
 
 html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {

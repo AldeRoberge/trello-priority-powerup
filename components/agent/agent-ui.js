@@ -635,6 +635,12 @@
           unreadAssistant = 0;
           syncApplySummary();
         }
+        if (isExpanded && messagesEl) {
+          // Body was just unhidden — wait a frame so scrollHeight is correct.
+          requestAnimationFrame(function () {
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+          });
+        }
         if (typeof PriorityUI.saveSectionCollapseState === 'function') {
           PriorityUI.saveSectionCollapseState({ chat: !!isExpanded });
         }

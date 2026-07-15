@@ -6047,6 +6047,333 @@
     return list;
   }
 
+  /** Local calendar date shifted by N days (YYYY-MM-DD). */
+  function addDaysIsoLocal(isoOrToday, days) {
+    var base =
+      typeof isoOrToday === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(isoOrToday)
+        ? isoOrToday
+        : todayIsoLocal();
+    var parts = base.split('-');
+    var d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+    d.setDate(d.getDate() + (Number(days) || 0));
+    return todayIsoLocal(d);
+  }
+
+  /**
+   * Resolve proposed dueDate/dueTime from set_due args (absolute or relative).
+   * @returns {{dueDate:?string, dueTime:?string, hasDate:boolean, hasTime:boolean}|null}
+   */
+  function resolveImprovementDueArgs(args, context) {
+    if (!args || typeof args !== 'object') return null;
+    var hasRelative =
+      args.relativeMinutes != null || args.relativeHours != null;
+    if (hasRelative) {
+      var offsetMins = 0;
+      if (args.relativeHours != null) {
+        var hours = Number(args.relativeHours);
+        if (!isFinite(hours)) return null;
+        offsetMins += hours * 60;
+      }
+      if (args.relativeMinutes != null) {
+        var minutes = Number(args.relativeMinutes);
+        if (!isFinite(minutes)) return null;
+        offsetMins += minutes;
+      }
+      offsetMins = Math.round(offsetMins);
+      if (offsetMins < 0) return null;
+      var from = null;
+      if (context && context.today && context.nowTime) {
+        var tp = String(context.nowTime).split(':');
+        var dp = String(context.today).split('-');
+        if (dp.length === 3 && tp.length >= 2) {
+          from = new Date(
+            +dp[0],
+            +dp[1] - 1,
+            +dp[2],
+            +tp[0] || 0,
+            +tp[1] || 0,
+            0,
+            0
+          );
+        }
+      }
+      var resolved = dueFromOffsetMinutes(offsetMins, from || undefined);
+      if (!resolved) return null;
+      return {
+        dueDate: resolved.dueDate,
+        dueTime: resolved.dueTime,
+        hasDate: true,
+        hasTime: true
+      };
+    }
+    var out = { dueDate: null, dueTime: null, hasDate: false, hasTime: false };
+    if (Object.prototype.hasOwnProperty.call(args, 'dueDate')) {
+      var dueDate = validateDueDate(args.dueDate);
+      if (dueDate === undefined) return null;
+      out.dueDate = dueDate;
+      out.hasDate = true;
+    }
+    if (Object.prototype.hasOwnProperty.call(args, 'dueTime')) {
+      var dueTime = validateDueTime(args.dueTime);
+      if (dueTime === undefined) return null;
+      out.dueTime = dueTime;
+      out.hasTime = true;
+    }
+    return out;
+  }
+
+  /**
+   * True when an improvement action would not change the card given context.
+   * Used to drop nonsensical Coup de pouce / apply suggestions (e.g. set due
+   * to tomorrow when it is already tomorrow).
+   */
+  function isNoOpImprovementAction(action, context) {
+    if (!action || !action.tool) return true;
+    var args = action.args && typeof action.args === 'object' ? action.args : {};
+    var tool = action.tool;
+    var due = context && context.due;
+    var priority = context && context.priority;
+    var blocked = context && context.blocked;
+    var progress = context && context.progress;
+    var goals = context && context.goals;
+    var statut = context && context.statut;
+
+    if (tool === 'set_due') {
+      if (!due) return false;
+      var proposed = resolveImprovementDueArgs(args, context);
+      if (!proposed) return false;
+      var wantEnabled =
+        args.dueEnabled != null
+          ? !!args.dueEnabled
+          : proposed.hasDate || proposed.hasTime
+            ? true
+            : !!due.enabled;
+      if (wantEnabled !== !!due.enabled) return false;
+      if (!wantEnabled) return true;
+      var nextDate = proposed.hasDate ? proposed.dueDate : due.dueDate || null;
+      var nextTime = proposed.hasTime ? proposed.dueTime : due.dueTime || null;
+      var curDate = due.dueDate || null;
+      var curTime = due.dueTime || null;
+      if ((nextDate || null) !== (curDate || null)) return false;
+      if ((nextTime || null) !== (curTime || null)) return false;
+      return true;
+    }
+
+    if (tool === 'set_blocked') {
+      if (!blocked) return false;
+      var wantBlocked =
+        args.enAttente != null
+          ? !!args.enAttente
+          : Array.isArray(args.blockedReasons) && args.blockedReasons.length
+            ? true
+            : Array.isArray(args.blockedLinks) && args.blockedLinks.length
+              ? true
+              : !!blocked.enabled;
+      if (wantBlocked !== !!blocked.enabled) return false;
+      if (!wantBlocked) return true;
+      if (Array.isArray(args.blockedReasons)) {
+        var nextReasons = args.blockedReasons
+          .filter(function (r) {
+            return typeof r === 'string' && r.trim();
+          })
+          .map(function (r) {
+            return normalizeAgentBlockedReason(r) || String(r).trim();
+          });
+        var curReasons = Array.isArray(blocked.blockedReasons)
+          ? blocked.blockedReasons.slice()
+          : [];
+        if (JSON.stringify(nextReasons) !== JSON.stringify(curReasons)) {
+          return false;
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(args, 'blockedLinks')) {
+        var nextLinks = Array.isArray(args.blockedLinks)
+          ? args.blockedLinks
+              .map(function (link) {
+                if (!link) return '';
+                if (typeof link === 'string') return link.trim();
+                if (typeof link === 'object' && link.id != null) {
+                  return String(link.id).trim();
+                }
+                return '';
+              })
+              .filter(Boolean)
+              .sort()
+          : [];
+        var curLinks = Array.isArray(blocked.blockedLinks)
+          ? blocked.blockedLinks
+              .map(function (link) {
+                return link && link.id != null ? String(link.id).trim() : '';
+              })
+              .filter(Boolean)
+              .sort()
+          : [];
+        if (JSON.stringify(nextLinks) !== JSON.stringify(curLinks)) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    if (tool === 'set_priority') {
+      if (!priority) return false;
+      var wantPri =
+        args.priorityEnabled != null
+          ? !!args.priorityEnabled
+          : args.urgency != null ||
+              args.impact != null ||
+              args.ease != null ||
+              args.tier != null ||
+              args.heatTarget != null ||
+              args.estimatedDurationMinutes !== undefined ||
+              (typeof args.estimatedDuration === 'string' &&
+                !!args.estimatedDuration.trim())
+            ? true
+            : !!priority.enabled;
+      if (wantPri !== !!priority.enabled) return false;
+      if (!wantPri) return true;
+      if (args.urgency != null && +args.urgency !== +priority.urgency) {
+        return false;
+      }
+      if (args.impact != null && +args.impact !== +priority.impact) {
+        return false;
+      }
+      if (args.ease != null && +args.ease !== +priority.ease) return false;
+      if (args.estimatedDurationMinutes !== undefined) {
+        var nextDur =
+          args.estimatedDurationMinutes === null ||
+          args.estimatedDurationMinutes === ''
+            ? null
+            : +args.estimatedDurationMinutes;
+        var curDur =
+          priority.estimatedDurationMinutes != null
+            ? +priority.estimatedDurationMinutes
+            : null;
+        if (nextDur !== curDur) return false;
+      }
+      if (args.tier != null || args.heatTarget != null) {
+        var curTier =
+          context.display && context.display.tier
+            ? String(context.display.tier)
+            : '';
+        var wantTier = args.tier != null ? String(args.tier) : '';
+        if (wantTier && curTier && wantTier.toLowerCase() === curTier.toLowerCase()) {
+          // Same palier label — no-op unless axes/duration also change (already checked).
+        } else if (wantTier && curTier) {
+          return false;
+        } else {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    if (tool === 'set_progress') {
+      if (!progress) return false;
+      var wantProgEnabled =
+        args.progressEnabled != null
+          ? !!args.progressEnabled
+          : args.progress != null
+            ? true
+            : !!progress.enabled;
+      if (wantProgEnabled !== !!progress.enabled) return false;
+      if (!wantProgEnabled) return true;
+      if (args.progress != null) {
+        var curPct =
+          progress.percent != null
+            ? progress.percent
+            : progress.cardProgress != null
+              ? progress.cardProgress
+              : null;
+        if (curPct == null || +args.progress !== +curPct) return false;
+      }
+      return true;
+    }
+
+    if (tool === 'set_project') {
+      var curProjectId = goals && goals.projectId ? String(goals.projectId) : '';
+      if (args.clear === true) return !curProjectId;
+      var wantProjectId =
+        typeof args.projectId === 'string' ? args.projectId.trim() : '';
+      if (wantProjectId) return wantProjectId === curProjectId;
+      var match =
+        (typeof args.matchText === 'string' && args.matchText.trim()) ||
+        (typeof args.name === 'string' && args.name.trim()) ||
+        '';
+      if (match && goals && goals.project && goals.project.name) {
+        var curName = String(goals.project.name).trim().toLowerCase();
+        if (match.trim().toLowerCase() === curName) return true;
+      }
+      return false;
+    }
+
+    if (tool === 'set_statut') {
+      if (!statut) return false;
+      if (typeof args.listId === 'string' && args.listId.trim()) {
+        return String(args.listId.trim()) === String(statut.listId || '');
+      }
+      if (typeof args.category === 'string' && args.category.trim()) {
+        var wantCat = args.category.trim().toLowerCase();
+        var curCat = statut.category ? String(statut.category).toLowerCase() : '';
+        if (wantCat && curCat && wantCat === curCat) return true;
+      }
+      if (typeof args.matchList === 'string' && args.matchList.trim()) {
+        var wantList = args.matchList.trim().toLowerCase();
+        var curList = statut.listName
+          ? String(statut.listName).trim().toLowerCase()
+          : '';
+        if (wantList && curList && wantList === curList) return true;
+      }
+      return false;
+    }
+
+    if (tool === 'add_subtask') {
+      var text =
+        typeof args.text === 'string' ? args.text.trim().toLowerCase() : '';
+      if (!text || !progress || !Array.isArray(progress.items)) return false;
+      for (var si = 0; si < progress.items.length; si++) {
+        var existing = progress.items[si] && progress.items[si].text;
+        if (
+          typeof existing === 'string' &&
+          existing.trim().toLowerCase() === text
+        ) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    if (tool === 'complete_all_subtasks') {
+      if (!progress || !Array.isArray(progress.items) || !progress.items.length) {
+        if (progress && progress.cardProgress === 100) return true;
+        return !progress || !progress.items || !progress.items.length;
+      }
+      return progress.items.every(function (item) {
+        return (
+          item &&
+          (!!item.done ||
+            (item.progress != null && +item.progress >= 100))
+        );
+      });
+    }
+
+    return false;
+  }
+
+  /** Keep suggestions that have at least one action that would change the card. */
+  function filterNoOpImprovementSuggestions(list, context) {
+    if (!Array.isArray(list) || !list.length) return [];
+    return list.filter(function (item) {
+      if (!item || !Array.isArray(item.actions) || !item.actions.length) {
+        return false;
+      }
+      for (var i = 0; i < item.actions.length; i++) {
+        if (!isNoOpImprovementAction(item.actions[i], context)) return true;
+      }
+      return false;
+    });
+  }
+
   /**
    * On-card-open: AI proposes applyable improvements (set_due, set_priority…).
    * Returns [] when nothing useful to change.
@@ -6059,7 +6386,9 @@
     if (!isConfigured(p)) return [];
     var context = buildContext(bridge);
     var today = (context && context.today) || todayIsoLocal();
+    var tomorrow = addDaysIsoLocal(today, 1);
     var nowTime = (context && context.nowTime) || nowTimeLocal();
+    var dueAlready = context.due && context.due.enabled && context.due.dueDate;
     var messages = [
       {
         role: 'system',
@@ -6067,7 +6396,7 @@
           'Tu analyses une carte Trello (Power-Up Priorit\u00e9) et proposes des am\u00e9liorations APPLIQUABLES.',
           'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
           '{"suggestions":[{"label":"D\u00e9finir l\'\u00e9ch\u00e9ance \u00e0 demain","actions":[{"tool":"set_due","args":{"dueDate":"' +
-            today +
+            tomorrow +
             '","dueEnabled":true}}]}]}',
           'R\u00e8gles\u00a0:',
           '- 0 \u00e0 3 suggestions max. Si la carte est d\u00e9j\u00e0 bien remplie / rien d\'utile\u00a0: {"suggestions":[]}.',
@@ -6079,10 +6408,16 @@
           '- Ne propose que des changements pertinents au contexte actuel (sections enabled, \u00e9ch\u00e9ance manquante/pass\u00e9e, priorit\u00e9 absente, progr\u00e8s vide, projet non li\u00e9, incoh\u00e9rences\u2026).',
           '- Dates\u00a0: aujourd\'hui = ' +
             today +
+            ', demain = ' +
+            tomorrow +
             ', heure actuelle = ' +
             nowTime +
             '. D\u00e9lais \u00ab\u00a0dans N min\u00a0\u00bb \u2192 relativeMinutes.',
-          '- Ne duplique pas un \u00e9tat d\u00e9j\u00e0 actif (ex. ne re-bloque pas si d\u00e9j\u00e0 bloqu\u00e9).',
+          '- INTERDIT de proposer un \u00e9tat d\u00e9j\u00e0 actif (noop)\u00a0: ne re-bloque pas si d\u00e9j\u00e0 bloqu\u00e9\u00a0; ne red\u00e9finis pas la priorit\u00e9/statut/projet identiques\u00a0; ne propose pas complete_all_subtasks si tout est d\u00e9j\u00e0 \u00e0 100%.',
+          '- \u00c9ch\u00e9ance\u00a0: INTERDIT de proposer set_due vers une date d\u00e9j\u00e0 active. Si context.due.enabled=true et context.due.dueDate est renseign\u00e9e, ne propose PAS de la remettre \u00e0 la m\u00eame date (ex. d\u00e9j\u00e0 demain/' +
+            (dueAlready || 'YYYY-MM-DD') +
+            ' \u2192 ne pas redemander demain/aujourd\'hui pour cette date). Propose set_due seulement si l\'\u00e9ch\u00e9ance est absente, d\u00e9sactiv\u00e9e, pass\u00e9e, ou clairement \u00e0 d\u00e9caler.',
+          '- L\'exemple JSON ci-dessus (demain) n\'est valable QUE si l\'\u00e9ch\u00e9ance est manquante/d\u00e9sactiv\u00e9e.',
           '- add_subtask.text obligatoire et concret si utilis\u00e9.',
           'Contexte carte\u00a0:',
           JSON.stringify(context)
@@ -6177,7 +6512,7 @@
       label = ensureFollowUpActionVerb(label, actions);
       list.push({ label: label, actions: actions });
     });
-    list = list.slice(0, 3);
+    list = filterNoOpImprovementSuggestions(list, context).slice(0, 3);
 
     var usage = extractUsageFromRaw(response.raw, messages, response.content, p.model);
     usage.latencyMs = Date.now() - t0;
@@ -8471,6 +8806,9 @@
     emptyCardChat: emptyCardChat,
     suggestQuestions: suggestQuestions,
     suggestCardImprovements: suggestCardImprovements,
+    filterNoOpImprovementSuggestions: filterNoOpImprovementSuggestions,
+    isNoOpImprovementAction: isNoOpImprovementAction,
+    addDaysIsoLocal: addDaysIsoLocal,
     cardSanityCheck: cardSanityCheck,
     suggestSubtasks: suggestSubtasks,
     suggestGoals: suggestGoals,
