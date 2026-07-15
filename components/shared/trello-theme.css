@@ -1213,6 +1213,16 @@ body.tp-page--priority {
   background: var(--tp-surface-subtle, var(--surface-1));
 }
 
+.tp-page--priority .info-labels-add-btn {
+  border-color: color-mix(in srgb, var(--tp-text, var(--text-primary)) 22%, transparent);
+  color: var(--tp-text-muted, var(--text-secondary));
+}
+
+.tp-page--priority .info-labels-picker {
+  background: var(--tp-surface, var(--surface-1));
+  border-color: var(--tp-border, var(--border));
+}
+
 .tp-priority-card-name {
   margin: 0;
   min-height: 1.4em;
@@ -1967,6 +1977,59 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+input.tp-completion-master-title {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  padding: 2px 6px;
+  margin: 0 0 2px -6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  color: var(--tp-text);
+  cursor: text;
+  text-overflow: ellipsis;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+input.tp-completion-master-title::placeholder {
+  color: var(--tp-text-muted);
+  font-weight: 500;
+}
+
+input.tp-completion-master-title:hover:not(:focus):not(.is-saving) {
+  background: color-mix(in srgb, var(--tp-text) 5%, transparent);
+}
+
+input.tp-completion-master-title:focus {
+  outline: none;
+  overflow: visible;
+  text-overflow: clip;
+  border-color: color-mix(in srgb, var(--tp-primary, #0c66e4) 55%, var(--tp-border));
+  background: var(--tp-surface-2, var(--surface-2, transparent));
+  box-shadow: 0 0 0 3px var(--tp-focus-ring, var(--focus-ring, rgba(12, 102, 228, 0.25)));
+}
+
+input.tp-completion-master-title.is-saving {
+  opacity: 0.72;
+  cursor: progress;
+}
+
+input.tp-completion-master-title.is-empty:not(:focus) {
+  color: var(--tp-text-muted);
+  font-weight: 500;
 }
 
 .tp-completion-master-title[hidden] {

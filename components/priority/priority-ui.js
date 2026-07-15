@@ -5676,11 +5676,11 @@
       }
       if (authReason === 'no-app-key') {
         authHint.textContent =
-          'Enregistrement du titre et de la description indisponible (cl\u00e9 d\u2019app manquante).';
+          'Enregistrement du titre, de la description et des \u00e9tiquettes indisponible (cl\u00e9 d\u2019app manquante).';
         authBtn.hidden = true;
       } else {
         authHint.textContent =
-          'Autorisez Trello pour enregistrer le titre et la description sur la carte.';
+          'Autorisez Trello pour enregistrer le titre, la description et les \u00e9tiquettes sur la carte.';
         authBtn.hidden = !onAuthorize;
       }
     }
@@ -5803,6 +5803,296 @@
         chip.appendChild(nameEl);
         membersEl.appendChild(chip);
       });
+    }
+
+    var LABEL_COLOR_HEX = {
+      green: '#61BD4F',
+      yellow: '#F2D600',
+      orange: '#FF9F1A',
+      red: '#EB5A46',
+      purple: '#C377E0',
+      blue: '#0079BF',
+      sky: '#00C2E0',
+      lime: '#51E898',
+      pink: '#FF78CB',
+      black: '#344563'
+    };
+    var LABEL_COLOR_NAMES_FR = {
+      green: 'Vert',
+      yellow: 'Jaune',
+      orange: 'Orange',
+      red: 'Rouge',
+      purple: 'Violet',
+      blue: 'Bleu',
+      sky: 'Ciel',
+      lime: 'Citron',
+      pink: 'Rose',
+      black: 'Noir'
+    };
+    var LABEL_COLOR_FALLBACK = '#B3BAC5';
+
+    function labelBaseColor(color) {
+      if (!color || typeof color !== 'string') return '';
+      return color.replace(/_(light|dark)$/i, '').toLowerCase();
+    }
+
+    function labelColorHex(color) {
+      var base = labelBaseColor(color);
+      if (base && Object.prototype.hasOwnProperty.call(LABEL_COLOR_HEX, base)) {
+        return LABEL_COLOR_HEX[base];
+      }
+      return LABEL_COLOR_FALLBACK;
+    }
+
+    function labelDisplayName(label) {
+      if (!label || typeof label !== 'object') return '\u00c9tiquette';
+      if (typeof label.name === 'string' && label.name.trim()) {
+        return label.name.trim();
+      }
+      var base = labelBaseColor(label.color);
+      if (base && Object.prototype.hasOwnProperty.call(LABEL_COLOR_NAMES_FR, base)) {
+        return LABEL_COLOR_NAMES_FR[base];
+      }
+      return 'Sans nom';
+    }
+
+    function labelNeedsDarkText(hex) {
+      var raw = (hex || '').replace(/^#/, '');
+      if (raw.length !== 6) return false;
+      var r = parseInt(raw.slice(0, 2), 16);
+      var g = parseInt(raw.slice(2, 4), 16);
+      var b = parseInt(raw.slice(4, 6), 16);
+      if (isNaN(r) || isNaN(g) || isNaN(b)) return false;
+      // Relative luminance (sRGB approx).
+      var luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+      return luma > 0.62;
+    }
+
+    function setLabelsStatus(text, kind) {
+      labelsStatus.textContent = text || '';
+      labelsStatus.classList.toggle('is-error', kind === 'error');
+      labelsStatus.classList.toggle('is-ok', kind === 'ok');
+    }
+
+    function selectedLabelIds() {
+      var ids = Object.create(null);
+      for (var i = 0; i < labels.length; i++) {
+        if (labels[i] && labels[i].id) ids[String(labels[i].id)] = true;
+      }
+      return ids;
+    }
+
+    function availableBoardLabels() {
+      var selected = selectedLabelIds();
+      var out = [];
+      for (var i = 0; i < boardLabels.length; i++) {
+        var label = boardLabels[i];
+        if (!label || !label.id) continue;
+        if (selected[String(label.id)]) continue;
+        out.push(label);
+      }
+      return out;
+    }
+
+    function setLabelsPickerOpen(open) {
+      labelsPickerOpen = !!open;
+      labelsPicker.hidden = !labelsPickerOpen;
+      labelsAddBtn.setAttribute('aria-expanded', labelsPickerOpen ? 'true' : 'false');
+      labelsAddWrap.classList.toggle('is-open', labelsPickerOpen);
+      if (labelsPickerOpen) renderLabelsPicker();
+      onLayoutChange();
+    }
+
+    function renderLabelsPicker() {
+      labelsPicker.replaceChildren();
+      var available = availableBoardLabels();
+      if (!available.length) {
+        var empty = document.createElement('div');
+        empty.className = 'info-labels-picker-empty';
+        empty.textContent = boardLabels.length
+          ? 'Toutes les \u00e9tiquettes sont d\u00e9j\u00e0 sur la carte'
+          : 'Aucune \u00e9tiquette sur ce tableau';
+        labelsPicker.appendChild(empty);
+        return;
+      }
+      available.forEach(function (label) {
+        var name = labelDisplayName(label);
+        var hex = labelColorHex(label.color);
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'info-labels-picker-option';
+        btn.setAttribute('role', 'option');
+        btn.style.setProperty('--label-color', hex);
+        btn.style.setProperty(
+          '--label-fg',
+          labelNeedsDarkText(hex) ? '#172b4d' : '#ffffff'
+        );
+        btn.title = name;
+        btn.disabled = labelsBusy;
+        btn.dataset.labelId = String(label.id);
+
+        var swatch = document.createElement('span');
+        swatch.className = 'info-label-swatch';
+        swatch.setAttribute('aria-hidden', 'true');
+
+        var text = document.createElement('span');
+        text.className = 'info-labels-picker-option-text';
+        text.textContent = name;
+
+        btn.appendChild(swatch);
+        btn.appendChild(text);
+        btn.addEventListener('click', function () {
+          addLabelFromPicker(label);
+        });
+        labelsPicker.appendChild(btn);
+      });
+    }
+
+    function renderLabels() {
+      labelsEl.replaceChildren();
+
+      if (!labels.length) {
+        var empty = document.createElement('span');
+        empty.className = 'info-recap-empty';
+        empty.textContent = 'Aucune';
+        labelsEl.appendChild(empty);
+      } else {
+        labels.forEach(function (label) {
+          var name = labelDisplayName(label);
+          var hex = labelColorHex(label.color);
+          var chip = document.createElement('span');
+          chip.className = 'info-label';
+          chip.style.setProperty('--label-color', hex);
+          chip.style.setProperty(
+            '--label-fg',
+            labelNeedsDarkText(hex) ? '#172b4d' : '#ffffff'
+          );
+          chip.title = name;
+          chip.setAttribute('aria-label', name);
+
+          var text = document.createElement('span');
+          text.className = 'info-label-name';
+          text.textContent = name;
+          chip.appendChild(text);
+
+          if (onLabelRemove) {
+            var clearBtn = document.createElement('button');
+            clearBtn.type = 'button';
+            clearBtn.className = 'info-label-clear';
+            clearBtn.setAttribute(
+              'aria-label',
+              'Retirer l\u2019\u00e9tiquette\u00a0: ' + name
+            );
+            clearBtn.textContent = '\u00d7';
+            clearBtn.disabled = labelsBusy;
+            clearBtn.addEventListener('click', function (event) {
+              event.preventDefault();
+              event.stopPropagation();
+              removeLabelFromCard(label);
+            });
+            chip.appendChild(clearBtn);
+          }
+
+          labelsEl.appendChild(chip);
+        });
+      }
+
+      var canAdd = !!onLabelAdd && availableBoardLabels().length > 0;
+      labelsAddBtn.hidden = !onLabelAdd;
+      labelsAddBtn.disabled = labelsBusy || !canAdd;
+      if (!canAdd && labelsPickerOpen) setLabelsPickerOpen(false);
+      else if (labelsPickerOpen) renderLabelsPicker();
+    }
+
+    function addLabelFromPicker(label) {
+      if (!onLabelAdd || labelsBusy || !label || !label.id) return;
+      var id = String(label.id);
+      if (selectedLabelIds()[id]) return;
+      labelsBusy = true;
+      setLabelsStatus('Enregistrement\u2026');
+      renderLabels();
+      Promise.resolve(onLabelAdd(label))
+        .then(function (result) {
+          labelsBusy = false;
+          if (result && result.ok === false) {
+            if (result.reason === 'not-authorized' || result.reason === 'no-app-key') {
+              setAuthHint(result.reason);
+              setLabelsStatus('', 'error');
+            } else {
+              setLabelsStatus('\u00c9chec de l\u2019ajout', 'error');
+            }
+            renderLabels();
+            onLayoutChange();
+            return result;
+          }
+          if (!selectedLabelIds()[id]) {
+            labels = labels.concat([
+              {
+                id: label.id,
+                name: typeof label.name === 'string' ? label.name : '',
+                color: label.color != null ? label.color : null,
+                idBoard: label.idBoard
+              }
+            ]);
+          }
+          setAuthHint('');
+          setLabelsStatus('Enregistr\u00e9', 'ok');
+          setLabelsPickerOpen(false);
+          renderLabels();
+          setTimeout(function () {
+            if (labelsStatus.textContent === 'Enregistr\u00e9') setLabelsStatus('');
+          }, 1400);
+          onLayoutChange();
+          return result;
+        })
+        .catch(function (err) {
+          labelsBusy = false;
+          console.error('Info label add failed', err);
+          setLabelsStatus('\u00c9chec de l\u2019ajout', 'error');
+          renderLabels();
+          onLayoutChange();
+        });
+    }
+
+    function removeLabelFromCard(label) {
+      if (!onLabelRemove || labelsBusy || !label || !label.id) return;
+      var id = String(label.id);
+      labelsBusy = true;
+      setLabelsStatus('Enregistrement\u2026');
+      renderLabels();
+      Promise.resolve(onLabelRemove(label))
+        .then(function (result) {
+          labelsBusy = false;
+          if (result && result.ok === false) {
+            if (result.reason === 'not-authorized' || result.reason === 'no-app-key') {
+              setAuthHint(result.reason);
+              setLabelsStatus('', 'error');
+            } else {
+              setLabelsStatus('\u00c9chec du retrait', 'error');
+            }
+            renderLabels();
+            onLayoutChange();
+            return result;
+          }
+          labels = labels.filter(function (item) {
+            return !(item && String(item.id) === id);
+          });
+          setAuthHint('');
+          setLabelsStatus('Enregistr\u00e9', 'ok');
+          renderLabels();
+          setTimeout(function () {
+            if (labelsStatus.textContent === 'Enregistr\u00e9') setLabelsStatus('');
+          }, 1400);
+          onLayoutChange();
+          return result;
+        })
+        .catch(function (err) {
+          labelsBusy = false;
+          console.error('Info label remove failed', err);
+          setLabelsStatus('\u00c9chec du retrait', 'error');
+          renderLabels();
+          onLayoutChange();
+        });
     }
 
     function setRecapText(node, text, emptyLabel) {
@@ -6129,6 +6419,19 @@
         });
     });
 
+    labelsAddBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (labelsAddBtn.disabled) return;
+      setLabelsPickerOpen(!labelsPickerOpen);
+    });
+
+    document.addEventListener('click', function (event) {
+      if (!labelsPickerOpen) return;
+      if (labelsAddWrap.contains(event.target)) return;
+      setLabelsPickerOpen(false);
+    });
+
     var collapse = bindCollapsibleEnable({
       field: field,
       body: body,
@@ -6142,6 +6445,7 @@
     });
 
     renderMembers();
+    renderLabels();
     renderRecap();
     setAuthHint(authReason);
     syncTitleInputSize();
@@ -6192,6 +6496,16 @@
       setMembers: function (list) {
         members = Array.isArray(list) ? list.slice() : [];
         renderMembers();
+        onLayoutChange();
+      },
+      setLabels: function (list) {
+        labels = Array.isArray(list) ? list.slice() : [];
+        renderLabels();
+        onLayoutChange();
+      },
+      setBoardLabels: function (list) {
+        boardLabels = Array.isArray(list) ? list.slice() : [];
+        renderLabels();
         onLayoutChange();
       },
       setRecap: function (next) {

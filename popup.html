@@ -6,25 +6,25 @@
   <title>Définir la priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=slider-seek-1" />
+  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=info-labels-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-3" />
-  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=section-glow-2" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=info-labels-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-sparkle-1" />
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/effects.js?v=fx-3"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=agent-point-1"></script>
+  <script src="./components/priority/priority-ui.js?v=info-labels-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
     }
   </script>
-  <script src="./components/priority/priority-trello.js?v=card-interview-1"></script>
+  <script src="./components/priority/priority-trello.js?v=info-labels-1"></script>
   <script src="./components/statut/statut-match.js?v=section-glow-1"></script>
   <script src="./components/statut/statut-trello.js?v=section-glow-1"></script>
   <script src="./components/shared/tab-autocomplete.js?v=tab-complete-1"></script>
-  <script src="./components/completion/completion-ui.js?v=subtask-progress-label-1"></script>
+  <script src="./components/completion/completion-ui.js?v=master-title-edit-1"></script>
   <script src="./components/completion/completion-trello.js?v=progress-due-complete-1"></script>
   <script src="./components/goals/goals-trello.js?v=goals-1"></script>
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
@@ -379,6 +379,8 @@
         title: '',
         desc: cardDesc || '',
         members: [],
+        labels: [],
+        boardLabels: [],
         expanded: expandInfo,
         onExpandChange: function (isExpanded) {
           PriorityUI.saveSectionCollapseState({ info: !!isExpanded });
@@ -395,6 +397,7 @@
           }
           return PriorityTrello.setCardName(t, next).then(function (result) {
             if (result && result.ok === false) return result;
+            setCardNameLabel(next);
             return { ok: true, name: next, changed: !!(result && result.changed) };
           });
         },
@@ -404,6 +407,24 @@
             if (result && result.ok === false) return result;
             return { ok: true, desc: cardDesc };
           });
+        },
+        onLabelAdd: function (label) {
+          if (!label || !label.id || !PriorityTrello.addCardLabel) {
+            return Promise.resolve({ ok: false, reason: 'unavailable', changed: false });
+          }
+          return PriorityTrello.addCardLabel(t, label.id).then(function (result) {
+            if (result && result.ok === false) return result;
+            return { ok: true, labelId: label.id, changed: !!(result && result.changed) };
+          });
+        },
+        onLabelRemove: function (label) {
+          if (!label || !label.id || !PriorityTrello.removeCardLabel) {
+            return Promise.resolve({ ok: false, reason: 'unavailable', changed: false });
+          }
+          return PriorityTrello.removeCardLabel(t, label.id).then(function (result) {
+            if (result && result.ok === false) return result;
+            return { ok: true, labelId: label.id, changed: !!(result && result.changed) };
+          });
         }
       });
 
@@ -411,17 +432,31 @@
         PriorityTrello.getCardMembers
           ? PriorityTrello.getCardMembers(t)
           : Promise.resolve([]),
+        PriorityTrello.getCardLabels
+          ? PriorityTrello.getCardLabels(t)
+          : Promise.resolve([]),
+        PriorityTrello.getBoardLabels
+          ? PriorityTrello.getBoardLabels(t)
+          : Promise.resolve([]),
         PriorityTrello.isRestAuthorized
           ? PriorityTrello.isRestAuthorized(t)
           : Promise.resolve(false),
       ])
         .then(function (results) {
           var members = results[0] || [];
-          var authorized = !!results[1];
+          var cardLabels = results[1] || [];
+          var boardLabels = results[2] || [];
+          var authorized = !!results[3];
           var hasRest =
             PriorityTrello.restClientOptions && !!PriorityTrello.restClientOptions();
           if (infoUi && typeof infoUi.setMembers === 'function') {
             infoUi.setMembers(members);
+          }
+          if (infoUi && typeof infoUi.setLabels === 'function') {
+            infoUi.setLabels(cardLabels);
+          }
+          if (infoUi && typeof infoUi.setBoardLabels === 'function') {
+            infoUi.setBoardLabels(boardLabels);
           }
           if (infoUi && typeof infoUi.setDesc === 'function') {
             infoUi.setDesc(cardDesc || '', { force: true });
@@ -1245,6 +1280,20 @@
             currentCardId: selfCardId,
             shellEl: progressPanel,
             celebrateRoot: document.body,
+            onTitleChange: function (nextTitle) {
+              var next = typeof nextTitle === 'string' ? nextTitle.trim() : '';
+              if (!next) {
+                return Promise.resolve({ ok: false, reason: 'empty-name', changed: false });
+              }
+              if (!PriorityTrello || typeof PriorityTrello.setCardName !== 'function') {
+                return Promise.resolve({ ok: false, reason: 'no-setCardName', changed: false });
+              }
+              return PriorityTrello.setCardName(t, next).then(function (result) {
+                if (result && result.ok === false) return result;
+                setCardNameLabel(next);
+                return { ok: true, name: next, changed: !!(result && result.changed) };
+              });
+            },
             getBoardCards: function () {
               return Promise.all([
                 Promise.resolve(selfCardId),

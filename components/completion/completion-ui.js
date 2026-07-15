@@ -639,6 +639,8 @@
     var progressShellEl = options.shellEl || null;
     var celebrateRootEl = options.celebrateRoot || null;
     var showCardHeader = options.showCardHeader !== false;
+    var onTitleChange =
+      typeof options.onTitleChange === 'function' ? options.onTitleChange : null;
     var masterTitle =
       typeof options.cardName === 'string' && options.cardName.trim()
         ? options.cardName.trim()
@@ -646,6 +648,8 @@
     var currentCardId =
       typeof options.currentCardId === 'string' ? options.currentCardId.trim() : '';
     var masterDragging = false;
+    var masterTitleDirty = false;
+    var masterTitleBusy = false;
     var flipAnimToken = 0;
     // null = not yet painted — avoid fireworks on initial mount when already complete.
     var lastAllComplete = null;
@@ -705,12 +709,35 @@
 
     var progressHero = document.createElement('div');
     progressHero.className = 'tp-completion-progress-hero';
-    progressHero.innerHTML =
-      '<p class="tp-completion-master-title" id="completionMasterTitle" hidden></p>' +
-      '<span class="tp-completion-percent" id="completionPercent">0\u00a0%</span>' +
-      '<p class="tp-completion-encouragement" id="completionEncouragement" aria-live="polite">' +
-      progressEncouragementText(0) +
-      '</p>';
+
+    var masterTitleEl = document.createElement(onTitleChange ? 'input' : 'p');
+    masterTitleEl.className = 'tp-completion-master-title';
+    masterTitleEl.id = 'completionMasterTitle';
+    masterTitleEl.hidden = true;
+    if (onTitleChange) {
+      masterTitleEl.type = 'text';
+      masterTitleEl.maxLength = 16384;
+      masterTitleEl.autocomplete = 'off';
+      masterTitleEl.spellcheck = true;
+      masterTitleEl.setAttribute('aria-label', 'Titre de la carte');
+      masterTitleEl.placeholder = 'Titre de la carte';
+      masterTitleEl.title = 'Cliquer pour modifier le titre';
+    }
+
+    var percentEl = document.createElement('span');
+    percentEl.className = 'tp-completion-percent';
+    percentEl.id = 'completionPercent';
+    percentEl.textContent = '0\u00a0%';
+
+    var encouragementEl = document.createElement('p');
+    encouragementEl.className = 'tp-completion-encouragement';
+    encouragementEl.id = 'completionEncouragement';
+    encouragementEl.setAttribute('aria-live', 'polite');
+    encouragementEl.textContent = progressEncouragementText(0);
+
+    progressHero.appendChild(masterTitleEl);
+    progressHero.appendChild(percentEl);
+    progressHero.appendChild(encouragementEl);
 
     var completeAllBtn = document.createElement('button');
     completeAllBtn.type = 'button';
@@ -845,9 +872,7 @@
     var filterEmptyEl = containerEl.querySelector('#completionFilterEmpty');
     var showDoneCheckbox = containerEl.querySelector('#completionShowDone');
     var showDoneLabel = containerEl.querySelector('#completionShowDoneLabel');
-    var percentEl = containerEl.querySelector('#completionPercent');
-    var encouragementEl = containerEl.querySelector('#completionEncouragement');
-    var masterTitleEl = containerEl.querySelector('#completionMasterTitle');
+    // percentEl / encouragementEl / masterTitleEl created above in progressHero
     var addInput = containerEl.querySelector('#completionAddInput');
     var addBtn = containerEl.querySelector('#completionAddBtn');
     var linkBtn = containerEl.querySelector('#completionLinkBtn');
@@ -868,18 +893,124 @@
     var statusFilter = 'all';
     showDoneCheckbox.checked = showCompleted;
 
-    function syncMasterTitleUi() {
+    function syncMasterTitleUi(options) {
+      options = options || {};
       if (!masterTitleEl) return;
-      if (masterTitle) {
-        masterTitleEl.hidden = false;
-        masterTitleEl.textContent = masterTitle;
-        masterTitleEl.title = masterTitle;
+      var editable = !!onTitleChange;
+      var show = !!(masterTitle || editable);
+      masterTitleEl.hidden = !show;
+      if (!show) return;
+      if (
+        editable &&
+        !options.force &&
+        (masterTitleDirty || document.activeElement === masterTitleEl)
+      ) {
+        return;
+      }
+      if (editable) {
+        masterTitleEl.value = masterTitle;
+        masterTitleEl.title = masterTitle
+          ? 'Cliquer pour modifier le titre'
+          : 'Cliquer pour d\u00e9finir le titre';
+        masterTitleEl.classList.toggle('is-empty', !masterTitle);
       } else {
-        masterTitleEl.hidden = true;
-        masterTitleEl.textContent = '';
-        masterTitleEl.removeAttribute('title');
+        masterTitleEl.textContent = masterTitle;
+        if (masterTitle) masterTitleEl.title = masterTitle;
+        else masterTitleEl.removeAttribute('title');
       }
     }
+
+    function flushMasterTitleSave() {
+      if (!onTitleChange || !masterTitleDirty || masterTitleBusy) {
+        return Promise.resolve();
+      }
+      var next = (masterTitleEl.value || '').trim();
+      if (!next) {
+        masterTitleEl.value = masterTitle || '';
+        masterTitleDirty = false;
+        masterTitleEl.classList.toggle('is-empty', !masterTitle);
+        masterTitleEl.title = 'Le titre ne peut pas \u00eatre vide';
+        onResize();
+        return Promise.resolve({ ok: false, reason: 'empty-name', changed: false });
+      }
+      if (next === masterTitle) {
+        masterTitleDirty = false;
+        masterTitleEl.value = next;
+        masterTitleEl.classList.remove('is-empty');
+        return Promise.resolve({ ok: true, changed: false, name: next });
+      }
+      var previous = masterTitle;
+      masterTitleBusy = true;
+      masterTitleDirty = false;
+      masterTitleEl.classList.add('is-saving');
+      masterTitleEl.title = 'Enregistrement\u2026';
+      return Promise.resolve(onTitleChange(next))
+        .then(function (result) {
+          masterTitleBusy = false;
+          masterTitleEl.classList.remove('is-saving');
+          if (result && result.ok === false) {
+            masterTitle = previous;
+            masterTitleEl.value = previous || '';
+            if (result.reason === 'empty-name') {
+              masterTitleEl.title = 'Le titre ne peut pas \u00eatre vide';
+            } else if (
+              result.reason === 'not-authorized' ||
+              result.reason === 'no-app-key'
+            ) {
+              masterTitleEl.title =
+                'Autorisez Trello dans Infos pour enregistrer le titre';
+            } else {
+              masterTitleEl.title = '\u00c9chec de l\u2019enregistrement';
+            }
+            masterTitleEl.classList.toggle('is-empty', !masterTitle);
+            return result;
+          }
+          masterTitle = next;
+          masterTitleEl.value = next;
+          masterTitleEl.classList.remove('is-empty');
+          masterTitleEl.title = 'Cliquer pour modifier le titre';
+          onResize();
+          return result;
+        })
+        .catch(function (err) {
+          masterTitleBusy = false;
+          masterTitleDirty = false;
+          masterTitle = previous;
+          masterTitleEl.value = previous || '';
+          masterTitleEl.classList.remove('is-saving');
+          masterTitleEl.classList.toggle('is-empty', !masterTitle);
+          console.error('Completion master title save failed', err);
+          masterTitleEl.title = '\u00c9chec de l\u2019enregistrement';
+          return { ok: false, reason: 'error', changed: false };
+        });
+    }
+
+    if (onTitleChange) {
+      masterTitleEl.addEventListener('input', function () {
+        masterTitleDirty = true;
+        masterTitleEl.classList.toggle(
+          'is-empty',
+          !(masterTitleEl.value || '').trim()
+        );
+        onResize();
+      });
+      masterTitleEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          masterTitleEl.blur();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          masterTitleDirty = false;
+          masterTitleEl.value = masterTitle || '';
+          masterTitleEl.classList.toggle('is-empty', !masterTitle);
+          masterTitleEl.blur();
+        }
+      });
+      masterTitleEl.addEventListener('blur', function () {
+        flushMasterTitleSave();
+      });
+    }
+
     syncMasterTitleUi();
 
     var addTabComplete = null;
@@ -2402,9 +2533,19 @@
     refreshLinkedTree({ skipPersist: false });
 
     return {
-      setCardName: function (name) {
-        masterTitle = typeof name === 'string' ? name.trim() : '';
-        syncMasterTitleUi();
+      setCardName: function (name, options) {
+        options = options || {};
+        var next = typeof name === 'string' ? name.trim() : '';
+        if (
+          !options.force &&
+          onTitleChange &&
+          (masterTitleDirty || document.activeElement === masterTitleEl)
+        ) {
+          return;
+        }
+        masterTitle = next;
+        masterTitleDirty = false;
+        syncMasterTitleUi({ force: !!options.force });
         if (cardNameEl) {
           var label = masterTitle || 'Carte';
           cardNameEl.textContent = label;
