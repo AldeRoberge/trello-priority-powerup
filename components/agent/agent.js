@@ -98,6 +98,8 @@
     remove_subtask: 'Sous-t\u00e2che supprim\u00e9e.',
     toggle_subtask: 'Sous-t\u00e2che mise \u00e0 jour.',
     set_subtask_progress: 'Progr\u00e8s de sous-t\u00e2che mis \u00e0 jour.',
+    set_subtask_estimate: 'Dur\u00e9e de sous-t\u00e2che mise \u00e0 jour.',
+    set_progress_estimate: 'Dur\u00e9e estim\u00e9e mise \u00e0 jour.',
     complete_all_subtasks: 'Toutes les sous-t\u00e2ches termin\u00e9es.',
     reset_progress: 'Progr\u00e8s r\u00e9initialis\u00e9.',
     trigger_effect: 'Effet lanc\u00e9.',
@@ -2182,20 +2184,9 @@
           : null,
         // Impact reach = labels.impact (Personnel → Global).
         impactReach: priorityEnabled ? axisWord('impact', impactLvl) || null : null,
-        estimatedDurationMinutes:
-          priorityEnabled &&
-          state.estimatedDurationMinutes != null &&
-          isFinite(+state.estimatedDurationMinutes)
-            ? +state.estimatedDurationMinutes
-            : null,
+        // Legacy Facilité field — prefer context.progress.estimatedTotalMinutes.
+        estimatedDurationMinutes: null,
         estimatedDurationLabel: (function () {
-          if (!priorityEnabled || state.estimatedDurationMinutes == null) return null;
-          if (
-            typeof PriorityUI !== 'undefined' &&
-            typeof PriorityUI.formatDurationFr === 'function'
-          ) {
-            return PriorityUI.formatDurationFr(state.estimatedDurationMinutes) || null;
-          }
           return null;
         })(),
         // Ready-made answer for "is it hard?" / Facilité questions.
@@ -2324,10 +2315,35 @@
             id: item.id,
             text: item.text,
             done: !!item.done,
-            progress: item.progress
+            progress: item.progress,
+            estimatedMinutes:
+              item.estimatedMinutes != null && isFinite(+item.estimatedMinutes)
+                ? +item.estimatedMinutes
+                : null,
+            estimatedMinutesLocked: item.estimatedMinutesLocked === true
           };
-        })
+        }),
+        estimatedTotalMinutes: null,
+        estimatedRemainingMinutes: null,
+        estimatedMinutesOffset:
+          typeof completion.estimatedMinutesOffset === 'number' &&
+          isFinite(completion.estimatedMinutesOffset)
+            ? completion.estimatedMinutesOffset
+            : null
       };
+      if (
+        typeof CompletionTrello !== 'undefined' &&
+        CompletionTrello.computeEstimatedTotal
+      ) {
+        try {
+          ctx.progress.estimatedTotalMinutes =
+            CompletionTrello.computeEstimatedTotal(completion);
+          ctx.progress.estimatedRemainingMinutes =
+            CompletionTrello.computeEstimatedRemaining(completion);
+        } catch (eEst) {
+          /* ignore */
+        }
+      }
     }
     ctx.userName = resolveUserDisplayName(ctx);
     return ctx;
@@ -2909,7 +2925,24 @@
     var seenText = Object.create(null);
     var seenCard = Object.create(null);
 
-    function pushText(label) {
+    function clampSuggestionMinutes(raw) {
+      if (
+        typeof CompletionTrello !== 'undefined' &&
+        typeof CompletionTrello.clampEstimatedMinutes === 'function'
+      ) {
+        return CompletionTrello.clampEstimatedMinutes(raw);
+      }
+      if (
+        typeof PriorityUI !== 'undefined' &&
+        typeof PriorityUI.clampDurationMinutes === 'function'
+      ) {
+        return PriorityUI.clampDurationMinutes(raw);
+      }
+      var n = Number(raw);
+      return isFinite(n) && n > 0 ? Math.round(n) : null;
+    }
+
+    function pushText(label, estimatedMinutes) {
       var text = String(label || '')
         .trim()
         .replace(/^["«]|["»]$/g, '')
@@ -2918,7 +2951,10 @@
       var key = text.toLocaleLowerCase('fr-FR');
       if (existingKeys[key] || seenText[key]) return;
       seenText[key] = true;
-      out.push({ type: 'text', text: text });
+      var row = { type: 'text', text: text };
+      var mins = clampSuggestionMinutes(estimatedMinutes);
+      if (mins != null) row.estimatedMinutes = mins;
+      out.push(row);
     }
 
     function pushLink(card) {
@@ -2983,6 +3019,12 @@
         return;
       }
       if (!item || typeof item !== 'object') return;
+      var estMins =
+        item.estimatedMinutes != null
+          ? item.estimatedMinutes
+          : item.minutes != null
+            ? item.minutes
+            : item.durationMinutes;
       if (isLinkItem(item)) {
         pushLink(resolveCardRef(item));
         return;
@@ -2995,7 +3037,7 @@
             : typeof item.suggestion === 'string'
               ? item.suggestion
               : '';
-      pushText(label);
+      pushText(label, estMins);
     });
 
     return out.slice(0, max);
@@ -3089,10 +3131,11 @@
     var systemLines = [
       'Tu proposes des sous-t\u00e2ches de suivi pour une carte Trello (section Progr\u00e8s).',
       allowLinks
-        ? 'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":[{"type":"text","text":"\u2026"},{"type":"link","cardIndex":0},{"type":"text","text":"\u2026"}]}'
-        : 'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":["\u2026","\u2026","\u2026"]}',
+        ? 'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":[{"type":"text","text":"\u2026","estimatedMinutes":30},{"type":"link","cardIndex":0},{"type":"text","text":"\u2026","estimatedMinutes":15}]}'
+        : 'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":[{"text":"\u2026","estimatedMinutes":30},{"text":"\u2026","estimatedMinutes":60},{"text":"\u2026","estimatedMinutes":15}]}',
       'Exactement 3 suggestions si possible (2 minimum si le contexte est pauvre).',
       'Chaque suggestion texte = une action concr\u00e8te courte en fran\u00e7ais (pas une question).',
+      'Chaque suggestion DOIT inclure estimatedMinutes (nombre entier > 0) = effort r\u00e9aliste pour cette \u00e9tape seule (pas le total de la carte).',
       'Inf\u00e9rence titre (critique \u2014 c\'est le job)\u00a0:',
       '- Le TITRE de la carte est la source principale. Lis-le et d\u00e9compose-le en \u00e9tapes concr\u00e8tes.',
       '- Inf\u00e8re ce qu\'il faut vraiment faire pour accomplir CE titre (savoir pratique + contexte carte).',

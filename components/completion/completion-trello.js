@@ -24,6 +24,8 @@
   var PROGRESS_MAX = 100;
   /** Nested linked-card subtasks shown under a master item (master → link → nested). */
   var LINK_NEST_MAX_DEPTH = 2;
+  var ESTIMATE_MIN_MINUTES = 1;
+  var ESTIMATE_MAX_MINUTES = Math.round(2 * 365.25 * 24 * 60);
 
   function asNumber(value) {
     if (typeof value === 'number' && isFinite(value)) return value;
@@ -38,6 +40,283 @@
     var p = asNumber(value);
     if (!isFinite(p)) return 0;
     return Math.max(PROGRESS_MIN, Math.min(PROGRESS_MAX, Math.round(p)));
+  }
+
+  /** Clamp estimated effort minutes (1 … ~2 years). Prefer PriorityUI when present. */
+  function clampEstimatedMinutes(minutes) {
+    var PU = global.PriorityUI;
+    if (PU && typeof PU.clampDurationMinutes === 'function') {
+      var viaUi = PU.clampDurationMinutes(minutes);
+      if (viaUi != null) return viaUi;
+      // PriorityUI floors at 5 min; allow short AI estimates below that.
+      var v = asNumber(minutes);
+      if (!isFinite(v) || v <= 0) return null;
+      if (v < 5) return Math.max(ESTIMATE_MIN_MINUTES, Math.round(v));
+      return null;
+    }
+    var n = asNumber(minutes);
+    if (!isFinite(n) || n <= 0) return null;
+    return Math.max(ESTIMATE_MIN_MINUTES, Math.min(ESTIMATE_MAX_MINUTES, Math.round(n)));
+  }
+
+  function formatEstimatedMinutesCompact(minutes) {
+    var m = clampEstimatedMinutes(minutes);
+    if (m == null) return '';
+    var PU = global.PriorityUI;
+    if (PU && typeof PU.formatDurationFr === 'function') {
+      var long = PU.formatDurationFr(m);
+      if (long) {
+        return long
+          .replace(/^environ\s+/i, '~')
+          .replace(/\s+minutes?/i, ' min')
+          .replace(/\s+heures?/i, ' h')
+          .replace(/\s+jours?/i, ' j')
+          .replace(/\s+semaines?/i, ' sem')
+          .replace(/\s+mois/i, ' mois')
+          .replace(/\s+ans?/i, ' an');
+      }
+    }
+    if (m < 90) return '~' + m + ' min';
+    if (m < 36 * 60) {
+      var h = Math.round((m / 60) * 10) / 10;
+      return '~' + h + ' h';
+    }
+    var d = Math.round(m / (24 * 60));
+    return '~' + d + ' j';
+  }
+
+  function formatEstimatedRemainingLabel(remainingMinutes) {
+    var m = clampEstimatedMinutes(remainingMinutes);
+    if (m == null) {
+      if (remainingMinutes === 0) return '0 min restantes';
+      return '';
+    }
+    var compact = formatEstimatedMinutesCompact(m).replace(/^~/, '');
+    return compact + ' restantes';
+  }
+
+  function itemEstimatedMinutes(item, snapshotsByCardId) {
+    if (!item || typeof item !== 'object') return null;
+    var linkedId = itemLinkedCardId(item);
+    if (linkedId && snapshotsByCardId && snapshotsByCardId[linkedId]) {
+      var snap = snapshotsByCardId[linkedId];
+      var snapTotal = clampEstimatedMinutes(snap.estimatedTotalMinutes);
+      if (snapTotal != null) return snapTotal;
+    }
+    return clampEstimatedMinutes(item.estimatedMinutes);
+  }
+
+  function copyEstimateFields(from, to) {
+    if (!from || !to) return to;
+    var mins = clampEstimatedMinutes(from.estimatedMinutes);
+    if (mins != null) to.estimatedMinutes = mins;
+    if (from.estimatedMinutesLocked === true) to.estimatedMinutesLocked = true;
+    return to;
+  }
+
+  function computeItemsEstimateBase(items, snapshotsByCardId) {
+    if (!items || !items.length) return 0;
+    var sum = 0;
+    for (var i = 0; i < items.length; i++) {
+      var m = itemEstimatedMinutes(items[i], snapshotsByCardId);
+      if (m != null) sum += m;
+    }
+    return sum;
+  }
+
+  /**
+   * Total estimated minutes for a completion payload.
+   * With items: sum(item estimates) + hidden offset.
+   * Without items: card-level estimatedMinutes.
+   */
+  function computeEstimatedTotal(data, snapshotsByCardId) {
+    var normalized = normalizeCompletionData(data);
+    if (normalized.items.length) {
+      var base = computeItemsEstimateBase(normalized.items, snapshotsByCardId);
+      var offset =
+        typeof normalized.estimatedMinutesOffset === 'number' &&
+        isFinite(normalized.estimatedMinutesOffset)
+          ? Math.round(normalized.estimatedMinutesOffset)
+          : 0;
+      var total = base + offset;
+      return total > 0 ? total : null;
+    }
+    return clampEstimatedMinutes(normalized.estimatedMinutes);
+  }
+
+  /**
+   * Remaining estimated minutes weighted by incomplete progress.
+   */
+  function computeEstimatedRemaining(data, snapshotsByCardId) {
+    var normalized = normalizeCompletionData(data);
+    var progress = computeCardProgress(normalized);
+    if (normalized.items.length) {
+      var remaining = 0;
+      var hasAny = false;
+      for (var i = 0; i < normalized.items.length; i++) {
+        var item = normalized.items[i];
+        var mins = itemEstimatedMinutes(item, snapshotsByCardId);
+        if (mins == null) continue;
+        hasAny = true;
+        var p = itemProgress(item);
+        remaining += mins * (1 - p / PROGRESS_MAX);
+      }
+      var offset =
+        typeof normalized.estimatedMinutesOffset === 'number' &&
+        isFinite(normalized.estimatedMinutesOffset)
+          ? Math.round(normalized.estimatedMinutesOffset)
+          : 0;
+      if (offset > 0) {
+        hasAny = true;
+        remaining += offset * (1 - progress.percent / PROGRESS_MAX);
+      }
+      if (!hasAny) return null;
+      return Math.max(0, Math.round(remaining));
+    }
+    var cardMins = clampEstimatedMinutes(normalized.estimatedMinutes);
+    if (cardMins == null) return null;
+    return Math.max(
+      0,
+      Math.round(cardMins * (1 - progress.percent / PROGRESS_MAX))
+    );
+  }
+
+  function itemsNeedingEstimate(data) {
+    var normalized = normalizeCompletionData(data);
+    return normalized.items.filter(function (item) {
+      if (isLinkedItem(item)) return false;
+      if (item.estimatedMinutesLocked === true) return false;
+      return clampEstimatedMinutes(item.estimatedMinutes) == null;
+    });
+  }
+
+  /**
+   * Apply AI / bulk estimates. Skips locked items and existing values unless force.
+   */
+  function applyItemEstimates(data, estimates, options) {
+    options = options || {};
+    var force = options.force === true;
+    var lock = options.lock === true;
+    var normalized = normalizeCompletionData(data);
+    var list = Array.isArray(estimates) ? estimates : [];
+    if (!list.length || !normalized.items.length) return normalized;
+
+    var byId = Object.create(null);
+    var byText = Object.create(null);
+    for (var e = 0; e < list.length; e++) {
+      var est = list[e];
+      if (!est || typeof est !== 'object') continue;
+      var mins = clampEstimatedMinutes(est.estimatedMinutes);
+      if (mins == null) continue;
+      if (typeof est.id === 'string' && est.id) byId[est.id] = mins;
+      var match =
+        typeof est.matchText === 'string'
+          ? est.matchText.trim().toLowerCase()
+          : typeof est.text === 'string'
+            ? est.text.trim().toLowerCase()
+            : '';
+      if (match) byText[match] = mins;
+    }
+
+    var changed = false;
+    normalized.items = normalized.items.map(function (item) {
+      if (isLinkedItem(item)) return item;
+      if (!force && item.estimatedMinutesLocked === true) return item;
+      if (!force && clampEstimatedMinutes(item.estimatedMinutes) != null) return item;
+      var nextMins = byId[item.id];
+      if (nextMins == null) {
+        nextMins = byText[String(item.text || '').trim().toLowerCase()];
+      }
+      if (nextMins == null) return item;
+      changed = true;
+      var next = Object.assign({}, item, { estimatedMinutes: nextMins });
+      if (lock) next.estimatedMinutesLocked = true;
+      return next;
+    });
+    return changed ? normalizeCompletionData(normalized) : normalized;
+  }
+
+  /**
+   * User (or AI-locked) edit of master total.
+   * With items → hidden offset; without → card-level estimatedMinutes.
+   */
+  function applyMasterEstimate(data, totalMinutes, options) {
+    options = options || {};
+    var lock = options.lock !== false;
+    var normalized = normalizeCompletionData(data);
+    var mins = clampEstimatedMinutes(totalMinutes);
+    if (normalized.items.length) {
+      var base = computeItemsEstimateBase(normalized.items, options.snapshotsByCardId);
+      if (mins == null) {
+        delete normalized.estimatedMinutesOffset;
+      } else {
+        normalized.estimatedMinutesOffset = Math.round(mins - base);
+      }
+      if (lock) normalized.estimatedMinutesLocked = true;
+      else if (options.lock === false) delete normalized.estimatedMinutesLocked;
+      delete normalized.estimatedMinutes;
+      return normalizeCompletionData(normalized);
+    }
+    if (mins == null) {
+      delete normalized.estimatedMinutes;
+    } else {
+      normalized.estimatedMinutes = mins;
+    }
+    if (lock) normalized.estimatedMinutesLocked = true;
+    else if (options.lock === false) delete normalized.estimatedMinutesLocked;
+    delete normalized.estimatedMinutesOffset;
+    return normalizeCompletionData(normalized);
+  }
+
+  /**
+   * Set one item's estimate. lock defaults true for user edits.
+   */
+  function applyItemEstimate(data, itemId, minutes, options) {
+    options = options || {};
+    var lock = options.lock !== false;
+    var normalized = normalizeCompletionData(data);
+    var mins = clampEstimatedMinutes(minutes);
+    var found = false;
+    normalized.items = normalized.items.map(function (item) {
+      if (item.id !== itemId) return item;
+      found = true;
+      var next = Object.assign({}, item);
+      if (mins == null) {
+        delete next.estimatedMinutes;
+      } else {
+        next.estimatedMinutes = mins;
+      }
+      if (lock) next.estimatedMinutesLocked = true;
+      return next;
+    });
+    return found ? normalizeCompletionData(normalized) : normalized;
+  }
+
+  /**
+   * One-time seed from legacy Facilité estimatedDurationMinutes.
+   * Returns null when no migration needed; otherwise new completion data.
+   */
+  function migrateEstimateFromPriority(completion, priorityEstimatedMinutes) {
+    var normalized = normalizeCompletionData(completion || { items: [] });
+    var legacy = clampEstimatedMinutes(priorityEstimatedMinutes);
+    if (legacy == null) return null;
+
+    var hasItemEstimate = normalized.items.some(function (item) {
+      return clampEstimatedMinutes(item.estimatedMinutes) != null;
+    });
+    var hasCardEstimate = clampEstimatedMinutes(normalized.estimatedMinutes) != null;
+    var hasOffset =
+      typeof normalized.estimatedMinutesOffset === 'number' &&
+      isFinite(normalized.estimatedMinutesOffset) &&
+      normalized.estimatedMinutesOffset !== 0;
+    if (hasItemEstimate || hasCardEstimate || hasOffset) return null;
+
+    if (normalized.items.length) {
+      normalized.estimatedMinutesOffset = legacy;
+      return normalizeCompletionData(normalized);
+    }
+    normalized.estimatedMinutes = legacy;
+    return normalizeCompletionData(normalized);
   }
 
   function itemLinkedCardId(item) {
@@ -101,6 +380,7 @@
       progress: progress,
     });
     if (linkedCardId) out.linkedCardId = linkedCardId;
+    copyEstimateFields(raw, out);
     return out;
   }
 
@@ -117,8 +397,18 @@
       normalized.push(item);
     }
     var out;
-    if (normalized.length) out = { items: normalized };
-    else out = { items: [], progress: clampProgress(raw.progress) };
+    if (normalized.length) {
+      out = { items: normalized };
+      var offset = asNumber(raw.estimatedMinutesOffset);
+      if (isFinite(offset) && offset !== 0) {
+        out.estimatedMinutesOffset = Math.round(offset);
+      }
+    } else {
+      out = { items: [], progress: clampProgress(raw.progress) };
+      var cardMins = clampEstimatedMinutes(raw.estimatedMinutes);
+      if (cardMins != null) out.estimatedMinutes = cardMins;
+    }
+    if (raw.estimatedMinutesLocked === true) out.estimatedMinutesLocked = true;
     if (raw.progressEnabled === false) out.progressEnabled = false;
     return out;
   }
@@ -387,6 +677,7 @@
       });
       var linkedId = itemLinkedCardId(item);
       if (linkedId) copy.linkedCardId = linkedId;
+      copyEstimateFields(item, copy);
       return copy;
     });
 
@@ -492,6 +783,7 @@
         done: item.done,
         linkedCardId: linkedId,
       };
+      copyEstimateFields(item, next);
       if (typeof snap.name === 'string' && snap.name.trim() && snap.name.trim() !== item.text) {
         next.text = snap.name.trim().slice(0, ITEM_TEXT_MAX);
         changed = true;
@@ -503,6 +795,11 @@
           syncDoneFromProgress(next);
           changed = true;
         }
+      }
+      var snapTotal = clampEstimatedMinutes(snap.estimatedTotalMinutes);
+      if (snapTotal != null && clampEstimatedMinutes(item.estimatedMinutes) !== snapTotal) {
+        next.estimatedMinutes = snapTotal;
+        changed = true;
       }
       return next;
     });
@@ -552,6 +849,7 @@
           percent: progress.percent,
           items: completion.items.slice(),
           progressEnabled: completion.progressEnabled !== false,
+          estimatedTotalMinutes: computeEstimatedTotal(completion),
         };
         snapshots[cardId] = snap;
         return snap;
@@ -888,6 +1186,18 @@
     generateId: generateId,
     normalizeItem: normalizeItem,
     normalizeCompletionData: normalizeCompletionData,
+    clampEstimatedMinutes: clampEstimatedMinutes,
+    formatEstimatedMinutesCompact: formatEstimatedMinutesCompact,
+    formatEstimatedRemainingLabel: formatEstimatedRemainingLabel,
+    itemEstimatedMinutes: itemEstimatedMinutes,
+    computeItemsEstimateBase: computeItemsEstimateBase,
+    computeEstimatedTotal: computeEstimatedTotal,
+    computeEstimatedRemaining: computeEstimatedRemaining,
+    itemsNeedingEstimate: itemsNeedingEstimate,
+    applyItemEstimates: applyItemEstimates,
+    applyMasterEstimate: applyMasterEstimate,
+    applyItemEstimate: applyItemEstimate,
+    migrateEstimateFromPriority: migrateEstimateFromPriority,
     computeWeightedProgress: computeWeightedProgress,
     computeCardProgress: computeCardProgress,
     isAllSubtasksComplete: isAllSubtasksComplete,

@@ -617,6 +617,252 @@
     } catch (e) { /* ignore quota / private mode */ }
   }
 
+  function durationTicks() {
+    var PU = global.PriorityUI;
+    if (PU && Array.isArray(PU.DURATION_TICKS) && PU.DURATION_TICKS.length) {
+      return PU.DURATION_TICKS;
+    }
+    return [
+      { label: 'Quelques minutes', minutes: 15 },
+      { label: 'Quelques heures', minutes: 3 * 60 },
+      { label: 'Quelques jours', minutes: 3 * 24 * 60 },
+      { label: 'Quelques semaines', minutes: 3 * 7 * 24 * 60 },
+      { label: 'Quelques mois', minutes: 3 * 30 * 24 * 60 },
+      { label: 'Quelques ann\u00e9es', minutes: Math.round(2 * 365.25 * 24 * 60) }
+    ];
+  }
+
+  function parseEstimateInput(text, CT) {
+    var PU = global.PriorityUI;
+    if (PU && typeof PU.parseDurationNl === 'function') {
+      var parsed = PU.parseDurationNl(text);
+      if (parsed != null && CT && typeof CT.clampEstimatedMinutes === 'function') {
+        return CT.clampEstimatedMinutes(parsed);
+      }
+      return parsed;
+    }
+    if (CT && typeof CT.clampEstimatedMinutes === 'function') {
+      return CT.clampEstimatedMinutes(text);
+    }
+    return null;
+  }
+
+  var ESTIMATE_LOG_MAX = Math.round(2 * 365.25 * 24 * 60);
+
+  function closeOpenEstimatePopovers(except) {
+    var open = document.querySelectorAll('.tp-estimate-popover.is-open');
+    for (var i = 0; i < open.length; i++) {
+      if (except && open[i] === except) continue;
+      open[i].classList.remove('is-open');
+      open[i].hidden = true;
+    }
+  }
+
+  /**
+   * Compact duration chip + popover (ticks + freeform).
+   * config: { minutes, readOnly, adjusted, compact, ariaLabel, onChange(minutes|null) }
+   */
+  function createEstimateChip(CT, config) {
+    config = config || {};
+    var minutes =
+      typeof CT.clampEstimatedMinutes === 'function'
+        ? CT.clampEstimatedMinutes(config.minutes)
+        : config.minutes != null
+          ? Math.round(config.minutes)
+          : null;
+    var readOnly = !!config.readOnly;
+    var onChange = typeof config.onChange === 'function' ? config.onChange : null;
+
+    var wrap = document.createElement('div');
+    wrap.className =
+      'tp-estimate-chip-wrap' + (config.compact ? ' is-compact' : '');
+
+    var chip = document.createElement(readOnly ? 'span' : 'button');
+    if (!readOnly) chip.type = 'button';
+    chip.className = 'tp-estimate-chip';
+    chip.setAttribute(
+      'aria-label',
+      config.ariaLabel || 'Dur\u00e9e estim\u00e9e'
+    );
+
+    var sand = document.createElement('span');
+    sand.className = 'tp-estimate-chip-sand';
+    sand.setAttribute('aria-hidden', 'true');
+    var label = document.createElement('span');
+    label.className = 'tp-estimate-chip-label';
+    chip.appendChild(sand);
+    chip.appendChild(label);
+    wrap.appendChild(chip);
+
+    var popover = null;
+    var freeInput = null;
+
+    function paint() {
+      var text =
+        minutes == null
+          ? 'Estimer'
+          : typeof CT.formatEstimatedMinutesCompact === 'function'
+            ? CT.formatEstimatedMinutesCompact(minutes)
+            : String(minutes) + ' min';
+      label.textContent = text;
+      chip.classList.toggle('is-empty', minutes == null);
+      chip.classList.toggle('is-set', minutes != null);
+      chip.classList.toggle('is-adjusted', !!config.adjusted && minutes != null);
+      chip.title =
+        minutes == null
+          ? 'D\u00e9finir une dur\u00e9e estim\u00e9e'
+          : config.adjusted
+            ? 'Total ajust\u00e9\u00a0: ' + text
+            : text;
+      var fill =
+        minutes == null
+          ? 0
+          : Math.min(
+              1,
+              Math.log(Math.max(minutes, 5)) / Math.log(ESTIMATE_LOG_MAX)
+            );
+      sand.style.transform = 'scaleY(' + (0.12 + fill * 0.88).toFixed(3) + ')';
+    }
+
+    function setMinutes(next, notify) {
+      minutes =
+        typeof CT.clampEstimatedMinutes === 'function'
+          ? CT.clampEstimatedMinutes(next)
+          : next != null && isFinite(+next) && +next > 0
+            ? Math.round(+next)
+            : null;
+      paint();
+      if (notify && onChange) onChange(minutes);
+    }
+
+    function closePopover() {
+      if (!popover) return;
+      popover.classList.remove('is-open');
+      popover.hidden = true;
+      chip.setAttribute('aria-expanded', 'false');
+    }
+
+    function openPopover() {
+      if (readOnly || !popover) return;
+      closeOpenEstimatePopovers(popover);
+      popover.hidden = false;
+      popover.classList.add('is-open');
+      chip.setAttribute('aria-expanded', 'true');
+      if (freeInput) {
+        freeInput.value =
+          minutes != null
+            ? typeof CT.formatEstimatedMinutesCompact === 'function'
+              ? CT.formatEstimatedMinutesCompact(minutes).replace(/^~/, '')
+              : String(minutes)
+            : '';
+        setTimeout(function () {
+          freeInput.focus();
+          freeInput.select();
+        }, 0);
+      }
+    }
+
+    if (!readOnly) {
+      chip.setAttribute('aria-haspopup', 'dialog');
+      chip.setAttribute('aria-expanded', 'false');
+      popover = document.createElement('div');
+      popover.className = 'tp-estimate-popover';
+      popover.hidden = true;
+      popover.setAttribute('role', 'dialog');
+      popover.setAttribute('aria-label', 'Choisir une dur\u00e9e');
+
+      var ticks = document.createElement('div');
+      ticks.className = 'tp-estimate-ticks';
+      ticks.setAttribute('role', 'listbox');
+      durationTicks().forEach(function (tick) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tp-estimate-tick';
+        btn.setAttribute('role', 'option');
+        btn.textContent = tick.label.replace(/^Quelques\s+/i, '');
+        btn.title = tick.label;
+        btn.dataset.minutes = String(tick.minutes);
+        btn.addEventListener('click', function () {
+          setMinutes(tick.minutes, true);
+          closePopover();
+        });
+        ticks.appendChild(btn);
+      });
+      popover.appendChild(ticks);
+
+      var freeRow = document.createElement('div');
+      freeRow.className = 'tp-estimate-free';
+      freeInput = document.createElement('input');
+      freeInput.type = 'text';
+      freeInput.className = 'tp-input tp-estimate-free-input';
+      freeInput.placeholder = 'ex. 2 h';
+      freeInput.setAttribute('aria-label', 'Dur\u00e9e personnalis\u00e9e');
+      freeInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          var parsed = parseEstimateInput(freeInput.value, CT);
+          if (parsed != null) {
+            setMinutes(parsed, true);
+            closePopover();
+          }
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          closePopover();
+        }
+      });
+      freeRow.appendChild(freeInput);
+      var applyBtn = document.createElement('button');
+      applyBtn.type = 'button';
+      applyBtn.className = 'tp-estimate-free-apply';
+      applyBtn.textContent = 'OK';
+      applyBtn.addEventListener('click', function () {
+        var parsed = parseEstimateInput(freeInput.value, CT);
+        if (parsed != null) {
+          setMinutes(parsed, true);
+          closePopover();
+        }
+      });
+      freeRow.appendChild(applyBtn);
+      popover.appendChild(freeRow);
+
+      wrap.appendChild(popover);
+      chip.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (popover.classList.contains('is-open')) closePopover();
+        else openPopover();
+      });
+      document.addEventListener(
+        'click',
+        function (e) {
+          if (!wrap.contains(e.target)) closePopover();
+        },
+        true
+      );
+    }
+
+    paint();
+
+    return {
+      el: wrap,
+      chip: chip,
+      getMinutes: function () {
+        return minutes;
+      },
+      setMinutes: function (next) {
+        setMinutes(next, false);
+      },
+      setAdjusted: function (adjusted) {
+        config.adjusted = !!adjusted;
+        paint();
+      },
+      setAccent: function (color) {
+        if (color) wrap.style.setProperty('--estimate-accent', color);
+        else wrap.style.removeProperty('--estimate-accent');
+      }
+    };
+  }
+
   function mountCompletionUI(containerEl, options) {
     if (!containerEl) throw new Error('mountCompletionUI: container required');
     var CT = getCompletionTrello();
@@ -729,6 +975,30 @@
     percentEl.id = 'completionPercent';
     percentEl.textContent = '0\u00a0%';
 
+    var percentRow = document.createElement('div');
+    percentRow.className = 'tp-completion-percent-row';
+    percentRow.appendChild(percentEl);
+
+    var linkedSnapshots = Object.create(null);
+    var masterEstimateChip = createEstimateChip(CT, {
+      minutes: CT.computeEstimatedTotal(data),
+      adjusted:
+        data.items.length &&
+        typeof data.estimatedMinutesOffset === 'number' &&
+        data.estimatedMinutesOffset !== 0,
+      ariaLabel: 'Dur\u00e9e totale estim\u00e9e',
+      onChange: function (mins) {
+        data = CT.applyMasterEstimate(data, mins, {
+          lock: true,
+          snapshotsByCardId: linkedSnapshots
+        });
+        emitChange();
+        onResize();
+      }
+    });
+    masterEstimateChip.el.classList.add('tp-completion-master-estimate');
+    percentRow.appendChild(masterEstimateChip.el);
+
     var encouragementEl = document.createElement('p');
     encouragementEl.className = 'tp-completion-encouragement';
     encouragementEl.id = 'completionEncouragement';
@@ -736,7 +1006,7 @@
     encouragementEl.textContent = progressEncouragementText(0);
 
     progressHero.appendChild(masterTitleEl);
-    progressHero.appendChild(percentEl);
+    progressHero.appendChild(percentRow);
     progressHero.appendChild(encouragementEl);
 
     var completeAllBtn = document.createElement('button');
@@ -1262,6 +1532,18 @@
         data.progress = normalized.progress;
       }
       if (normalized.progressEnabled === false) data.progressEnabled = false;
+      if (normalized.estimatedMinutes != null) {
+        data.estimatedMinutes = normalized.estimatedMinutes;
+      }
+      if (
+        typeof normalized.estimatedMinutesOffset === 'number' &&
+        isFinite(normalized.estimatedMinutesOffset)
+      ) {
+        data.estimatedMinutesOffset = normalized.estimatedMinutesOffset;
+      }
+      if (normalized.estimatedMinutesLocked === true) {
+        data.estimatedMinutesLocked = true;
+      }
       return normalized;
     }
 
@@ -1422,6 +1704,32 @@
     completeAllBtn.addEventListener('click', completeAllTasks);
     resetAllBtn.addEventListener('click', resetAllTasks);
 
+    function syncMasterEstimateChip(progress) {
+      var total = CT.computeEstimatedTotal(data, linkedSnapshots);
+      var remaining = CT.computeEstimatedRemaining(data, linkedSnapshots);
+      masterEstimateChip.setMinutes(total);
+      masterEstimateChip.setAdjusted(
+        !!(
+          data.items.length &&
+          typeof data.estimatedMinutesOffset === 'number' &&
+          data.estimatedMinutesOffset !== 0
+        )
+      );
+      var accent =
+        progress && progress.percent > 0
+          ? completionColorForProgress(progress.percent)
+          : '';
+      masterEstimateChip.setAccent(accent);
+      masterEstimateChip.chip.title =
+        total == null
+          ? 'D\u00e9finir une dur\u00e9e estim\u00e9e'
+          : remaining != null && remaining !== total
+            ? CT.formatEstimatedMinutesCompact(total) +
+              ' au total \u00b7 ' +
+              CT.formatEstimatedRemainingLabel(remaining)
+            : CT.formatEstimatedMinutesCompact(total) + ' au total';
+    }
+
     function updateProgressUi(opts) {
       opts = opts || {};
       var progress = CT.computeCardProgress(data);
@@ -1438,6 +1746,7 @@
       progressPanel.classList.toggle('is-complete', progress.percent === 100);
       progressPanel.classList.toggle('has-progress', progress.percent > 0);
       applyProgressSectionTint(progressShellEl, accent);
+      syncMasterEstimateChip(progress);
       syncCompleteAllButton(progress);
       syncResetAllButton(progress);
       if (!opts.skipMasterSync && !masterDragging) {
@@ -1773,6 +2082,10 @@
           linkedTreeByItemId =
             resolved && resolved.byItemId
               ? resolved.byItemId
+              : Object.create(null);
+          linkedSnapshots =
+            resolved && resolved.snapshots
+              ? resolved.snapshots
               : Object.create(null);
           if (resolved && resolved.data) {
             var prev = JSON.stringify(CT.normalizeCompletionData(data));
@@ -2119,22 +2432,54 @@
         sliderRow.appendChild(sliderLbl);
         sliderRow.appendChild(sliderWrap);
         sliderRow.appendChild(itemValEl);
+
+        var itemEstimate = createEstimateChip(CT, {
+          minutes: CT.itemEstimatedMinutes(item, linkedSnapshots),
+          compact: true,
+          ariaLabel: 'Dur\u00e9e estim\u00e9e de la sous-t\u00e2che',
+          onChange: function (mins) {
+            data = CT.applyItemEstimate(data, item.id, mins, { lock: true });
+            var live = findLiveItem(item.id);
+            if (live) {
+              item.estimatedMinutes = live.estimatedMinutes;
+              item.estimatedMinutesLocked = live.estimatedMinutesLocked;
+            }
+            emitChange();
+            onResize();
+          }
+        });
+        itemEstimate.setAccent(completionColorForProgress(itemProgress));
+        itemEstimate.el.classList.add('tp-completion-item-estimate');
+        sliderRow.appendChild(itemEstimate.el);
         li.appendChild(sliderRow);
       } else {
         var linkMeta = document.createElement('div');
         linkMeta.className = 'tp-completion-link-meta';
-        var linkPct = document.createElement('span');
-        linkPct.className = 'tp-completion-link-pct';
-        linkPct.textContent = CT.itemProgress(item) + '\u00a0%';
-        linkPct.style.color = completionColorForProgress(CT.itemProgress(item));
         var linkHint = document.createElement('span');
         linkHint.className = 'tp-completion-link-hint';
         linkHint.textContent =
           treeNode && treeNode.isCycle
             ? 'Lien circulaire'
             : 'Carte li\u00e9e';
+        var linkPct = document.createElement('span');
+        linkPct.className = 'tp-completion-link-pct';
+        linkPct.textContent = CT.itemProgress(item) + '\u00a0%';
+        linkPct.style.color = completionColorForProgress(CT.itemProgress(item));
         linkMeta.appendChild(linkHint);
         linkMeta.appendChild(linkPct);
+        var linkMins = CT.itemEstimatedMinutes(item, linkedSnapshots);
+        if (linkMins != null) {
+          var linkEstimate = createEstimateChip(CT, {
+            minutes: linkMins,
+            compact: true,
+            readOnly: true,
+            ariaLabel: 'Dur\u00e9e estim\u00e9e de la carte li\u00e9e'
+          });
+          linkEstimate.setAccent(
+            completionColorForProgress(CT.itemProgress(item))
+          );
+          linkMeta.appendChild(linkEstimate.el);
+        }
         li.appendChild(linkMeta);
       }
 
@@ -2253,14 +2598,21 @@
       onResize();
     }
 
-    function addItem(text) {
+    function addItem(text, estimateOpts) {
+      estimateOpts = estimateOpts || {};
       var trimmed = (text || '').trim();
       if (!trimmed) return null;
-      var item = CT.normalizeItem({
+      var rawItem = {
         id: CT.generateId(),
         text: trimmed,
         progress: 0,
-      });
+      };
+      var est = CT.clampEstimatedMinutes(estimateOpts.estimatedMinutes);
+      if (est != null) {
+        rawItem.estimatedMinutes = est;
+        if (estimateOpts.lock) rawItem.estimatedMinutesLocked = true;
+      }
+      var item = CT.normalizeItem(rawItem);
       if (!item) return null;
       data.items.push(item);
       removeSuggestionMatch(trimmed);
@@ -2344,18 +2696,29 @@
             : '';
       var type =
         raw.type === 'link' || raw.kind === 'link' || cardId ? 'link' : 'text';
+      var estMins = CT.clampEstimatedMinutes(
+        raw.estimatedMinutes != null
+          ? raw.estimatedMinutes
+          : raw.minutes != null
+            ? raw.minutes
+            : raw.durationMinutes
+      );
       if (type === 'link') {
         if (!cardId || (currentCardId && cardId === currentCardId)) return null;
         if (linkedIdsAlreadyUsed()[cardId]) return null;
-        return {
+        var linkRow = {
           type: 'link',
           text: text || 'Carte li\u00e9e',
           cardId: cardId,
           list: typeof raw.list === 'string' ? raw.list : ''
         };
+        if (estMins != null) linkRow.estimatedMinutes = estMins;
+        return linkRow;
       }
       if (!text) return null;
-      return { type: 'text', text: text };
+      var textRow = { type: 'text', text: text };
+      if (estMins != null) textRow.estimatedMinutes = estMins;
+      return textRow;
     }
 
     function suggestionKey(row) {
@@ -2426,8 +2789,19 @@
             row.text +
             (row.list ? ' (' + row.list + ')' : '');
         } else {
-          btn.textContent = row.text;
-          btn.title = 'Ajouter\u00a0: ' + row.text;
+          var sugLabel = row.text;
+          if (row.estimatedMinutes != null) {
+            sugLabel +=
+              ' · ' +
+              (CT.formatEstimatedMinutesCompact(row.estimatedMinutes) || '');
+          }
+          btn.textContent = sugLabel;
+          btn.title =
+            'Ajouter\u00a0: ' +
+            row.text +
+            (row.estimatedMinutes != null
+              ? ' (' + CT.formatEstimatedMinutesCompact(row.estimatedMinutes) + ')'
+              : '');
         }
         btn.addEventListener('click', function () {
           if (spellcheckBusy) return;
@@ -2450,7 +2824,9 @@
           btn.disabled = true;
           spellcheckText(row.text)
             .then(function (corrected) {
-              addItem(corrected || row.text);
+              addItem(corrected || row.text, {
+                estimatedMinutes: row.estimatedMinutes
+              });
               // Always drop this chip (addItem may only clear by corrected text).
               removeSuggestionMatch(row);
             })
@@ -2657,6 +3033,31 @@
         updateProgressUi();
         refreshLinkedTree({ skipPersist: true });
         onResize();
+      },
+      applyItemEstimates: function (estimates, options) {
+        var next = CT.applyItemEstimates(data, estimates, options || {});
+        var prev = JSON.stringify(CT.normalizeCompletionData(data));
+        var persisted = applyNormalizedKeepingDrafts(next);
+        if (JSON.stringify(persisted) === prev) return persisted;
+        renderList();
+        updateProgressUi();
+        onChange(persisted);
+        onResize();
+        return persisted;
+      },
+      getEstimateSummary: function () {
+        var progress = CT.computeCardProgress(data);
+        return {
+          percent: progress.percent,
+          totalMinutes: CT.computeEstimatedTotal(data, linkedSnapshots),
+          remainingMinutes: CT.computeEstimatedRemaining(data, linkedSnapshots),
+          needingEstimate: CT.itemsNeedingEstimate(data),
+          hasOffset: !!(
+            data.items.length &&
+            typeof data.estimatedMinutesOffset === 'number' &&
+            data.estimatedMinutesOffset !== 0
+          )
+        };
       },
       addItem: addItem,
       addLinkedCard: addLinkedCard,

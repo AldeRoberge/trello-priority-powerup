@@ -194,9 +194,15 @@
   function quoteText(value, maxLen) {
     var s = String(value == null ? '' : value).trim().replace(/\s+/g, ' ');
     maxLen = maxLen || 36;
-    if (!s) return '« »';
-    if (s.length > maxLen) s = s.slice(0, Math.max(1, maxLen - 1)) + '\u2026';
+    if (!s) return '\u00ab \u00bb';
+    if (maxLen > 0 && s.length > maxLen) {
+      s = s.slice(0, Math.max(1, maxLen - 1)) + '\u2026';
+    }
     return '\u00ab ' + s + ' \u00bb';
+  }
+
+  function fullText(value) {
+    return String(value == null ? '' : value).trim();
   }
 
   function formatDueFr(date, time) {

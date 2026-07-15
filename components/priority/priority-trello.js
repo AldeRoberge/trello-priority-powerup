@@ -655,6 +655,92 @@
     }
   }
 
+  function parseIdMemberCreator(value) {
+    if (value == null || value === '') return null;
+    if (typeof value === 'string') {
+      var trimmed = value.trim();
+      return trimmed || null;
+    }
+    if (typeof value === 'object' && !isPowerUpRequestChain(value)) {
+      if (value.idMemberCreator != null && value.idMemberCreator !== '') {
+        return String(value.idMemberCreator);
+      }
+      if (value.id != null && value.id !== '' && typeof value.fullName === 'string') {
+        // Already a member-shaped object from some clients.
+        return String(value.id);
+      }
+    }
+    return null;
+  }
+
+  async function fetchMemberByIdRest(t, memberId) {
+    var id = memberId != null ? String(memberId).trim() : '';
+    if (!id) return null;
+    if (!restClientOptions()) return null;
+    try {
+      var api = await t.getRestApi();
+      var authorized = await api.isAuthorized();
+      if (!authorized) return null;
+      var token = await api.getToken();
+      if (!token) return null;
+      var cfg = restClientOptions();
+      var url =
+        'https://api.trello.com/1/members/' +
+        encodeURIComponent(id) +
+        '?fields=fullName,username,initials,avatarUrl,avatarHash' +
+        '&key=' +
+        encodeURIComponent(cfg.appKey) +
+        '&token=' +
+        encodeURIComponent(token);
+      var response = await fetch(url, { method: 'GET' });
+      if (!response.ok) return null;
+      var member = await response.json();
+      if (!member || !member.id) return null;
+      return member;
+    } catch (err) {
+      console.error('Priority member fetch failed', err);
+      return null;
+    }
+  }
+
+  /**
+   * Member who created the card (`t.card('idMemberCreator')`), resolved to a
+   * member object via board members or REST when authorized.
+   * @param {object} t Power-Up client
+   * @param {Array} [knownBoardMembers] Optional board members (avoids a second fetch)
+   */
+  async function getCardCreator(t, knownBoardMembers) {
+    try {
+      var card = await cardDataPromise(t, 'idMemberCreator');
+      var creatorId = parseIdMemberCreator(card);
+      if (!creatorId) {
+        var scalar = await cardFieldPromise(t, 'idMemberCreator');
+        if (!isPowerUpRequestChain(scalar)) {
+          creatorId = parseIdMemberCreator(scalar);
+        }
+      }
+      if (!creatorId) return null;
+
+      var boardMembers = Array.isArray(knownBoardMembers)
+        ? normalizeMemberList(knownBoardMembers)
+        : await getBoardMembers(t);
+      for (var i = 0; i < boardMembers.length; i++) {
+        var boardMember = boardMembers[i];
+        if (boardMember && String(boardMember.id) === creatorId) {
+          return boardMember;
+        }
+      }
+
+      var fromRest = await fetchMemberByIdRest(t, creatorId);
+      if (fromRest) return fromRest;
+
+      return { id: creatorId };
+    } catch (err) {
+      console.error('Priority card creator failed', err);
+      return null;
+    }
+  }
+
   function normalizeLabelList(list) {
     if (!Array.isArray(list)) return [];
     return list.filter(function (label) {
@@ -2175,6 +2261,7 @@
     getCardDesc: getCardDesc,
     getCardMembers: getCardMembers,
     getBoardMembers: getBoardMembers,
+    getCardCreator: getCardCreator,
     getCardLabels: getCardLabels,
     getBoardLabels: getBoardLabels,
     addCardLabel: addCardLabel,

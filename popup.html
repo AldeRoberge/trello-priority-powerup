@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=info-labels-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-3" />
-  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=info-add-inline-1" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=save-spin-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-scope-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
@@ -16,13 +16,13 @@
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/effects.js?v=fx-3"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=live-sync-1"></script>
+  <script src="./components/priority/priority-ui.js?v=save-spin-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
     }
   </script>
-  <script src="./components/priority/priority-trello.js?v=info-members-1"></script>
+  <script src="./components/priority/priority-trello.js?v=info-creator-1"></script>
   <script src="./components/statut/statut-match.js?v=section-glow-1"></script>
   <script src="./components/statut/statut-trello.js?v=section-glow-1"></script>
   <script src="./components/shared/tab-autocomplete.js?v=tab-complete-1"></script>
@@ -1157,8 +1157,8 @@
             : variant && typeof variant.getState === 'function'
               ? variant.getState()
               : {};
+      // Priority label is kept for Information label suggestions only (not displayed).
       var priorityLabel = '';
-      var priorityVisual = null;
       try {
         if (window.PriorityUI && PriorityUI.resolveDisplay && variant) {
           var formulaKey =
@@ -1174,25 +1174,9 @@
           if (calc && state.priorityEnabled !== false) {
             var display = PriorityUI.resolveDisplay(calc(state), state);
             priorityLabel = (display && display.label) || '';
-            if (display && priorityLabel) {
-              priorityVisual = {
-                tierI: display.tierI != null ? display.tierI : null,
-                score: typeof display.score === 'number' ? display.score : null,
-                inutile: !!display.inutile
-              };
-            }
           }
         }
       } catch (e) { /* ignore */ }
-
-      var dueLabel = '';
-      var dueBand = '';
-      if (state.dueEnabled !== false && state.dueDate && PriorityUI.formatDueDateCompactSummary) {
-        dueLabel = PriorityUI.formatDueDateCompactSummary(state.dueDate, state.dueTime) || '';
-        if (dueLabel && typeof PriorityUI.dueProximityBand === 'function') {
-          dueBand = PriorityUI.dueProximityBand(state.dueDate, state.dueTime) || '';
-        }
-      }
 
       var impactReach = '';
       var durationLabel = '';
@@ -1211,11 +1195,8 @@
 
       infoUi.setRecap({
         priorityLabel: priorityLabel,
-        priorityVisual: priorityVisual,
         impactReach: impactReach,
-        durationLabel: durationLabel,
-        dueLabel: dueLabel,
-        dueBand: dueBand
+        durationLabel: durationLabel
       });
     }
 
@@ -1571,6 +1552,16 @@
           }
           syncInfoRecap();
           resizePopup();
+
+          if (!PriorityTrello.getCardCreator || !infoUi || typeof infoUi.setCreator !== 'function') {
+            return;
+          }
+          return PriorityTrello.getCardCreator(t, boardMembers).then(function (creator) {
+            if (infoUi && typeof infoUi.setCreator === 'function') {
+              infoUi.setCreator(creator);
+            }
+            resizePopup();
+          });
         })
         .catch(function (err) {
           console.error('Info section mount failed', err);

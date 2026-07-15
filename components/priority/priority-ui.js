@@ -6327,8 +6327,8 @@
   }
 
   /**
-   * Top-of-popup recap: title, description (editable), assignees, labels, priority, due, blocked.
-   * Priority / due / blocked are read-only mirrors of the sections below.
+   * Top-of-popup recap: title, description (editable), creator, assignees, labels.
+   * Optional Portée / Durée mirrors (experimental) jump to Priorité.
    */
   function createInfoField(config) {
     var el = config.el;
@@ -6355,6 +6355,10 @@
     var titleText = typeof config.title === 'string' ? config.title : '';
     var descText = typeof config.desc === 'string' ? config.desc : '';
     var members = Array.isArray(config.members) ? config.members.slice() : [];
+    var creatorMember =
+      config.creator && typeof config.creator === 'object' && config.creator.id
+        ? config.creator
+        : null;
     var boardMembers = Array.isArray(config.boardMembers)
       ? config.boardMembers.slice()
       : [];
@@ -6362,12 +6366,10 @@
     var boardLabels = Array.isArray(config.boardLabels)
       ? config.boardLabels.slice()
       : [];
+    // Kept for label suggestions / collapsed summary — not shown as an Information row.
     var priorityLabel = typeof config.priorityLabel === 'string' ? config.priorityLabel : '';
     var impactReachLabel = typeof config.impactReach === 'string' ? config.impactReach : '';
     var durationLabel = typeof config.durationLabel === 'string' ? config.durationLabel : '';
-    var dueLabel = typeof config.dueLabel === 'string' ? config.dueLabel : '';
-    // Visual meta for the proximity circle (same palette as Échéance section glow).
-    var dueBand = typeof config.dueBand === 'string' ? config.dueBand : '';
     var titleDirty = false;
     var titleSaveTimer = null;
     var titleBusy = false;
@@ -6659,6 +6661,15 @@
     descRow.value.appendChild(descWrap);
     body.appendChild(descRow.row);
 
+    // ── Creator (visible when ≠ sole assignee) ─────────────────────────
+    var creatorRow = makeRow('creator', 'Cr\u00e9ateur', { icon: 'ti-user' });
+    var creatorEl = document.createElement('div');
+    creatorEl.className = 'info-members info-creator';
+    creatorEl.setAttribute('aria-label', 'Cr\u00e9ateur de la carte');
+    creatorRow.value.appendChild(creatorEl);
+    creatorRow.row.hidden = true;
+    body.appendChild(creatorRow.row);
+
     // ── Assignees ──────────────────────────────────────────────────────
     var membersRow = makeRow('members', 'Assign\u00e9s', { icon: 'ti-users' });
     var membersWrap = document.createElement('div');
@@ -6769,26 +6780,7 @@
     objectifRow.value.appendChild(objectifMount);
     body.appendChild(objectifRow.row);
 
-    // ── Priority / Due (recap) ─────────────────────────────────────────
-    var priorityRow = makeRow('priority', 'Priorit\u00e9', {
-      interactive: true,
-      icon: 'ti-flame'
-    });
-    var priorityRecapEl = document.createElement('div');
-    priorityRecapEl.className = 'info-priority-recap';
-    var priorityDotEl = document.createElement('span');
-    priorityDotEl.className = 'heat-tier-dot info-priority-dot';
-    priorityDotEl.setAttribute('aria-hidden', 'true');
-    priorityDotEl.hidden = true;
-    var priorityValueEl = document.createElement('span');
-    priorityValueEl.className = 'info-recap-text';
-    priorityRecapEl.appendChild(priorityDotEl);
-    priorityRecapEl.appendChild(priorityValueEl);
-    priorityRow.value.appendChild(priorityRecapEl);
-    body.appendChild(priorityRow.row);
-    // Visual meta for the heat-tier circle (same palette as Priorité).
-    var priorityVisual = null;
-
+    // ── Portée / Durée (experimental mirrors of Priorité) ─────────────
     var porteRow = makeRow('porte', 'Port\u00e9e', {
       interactive: true,
       icon: 'ti-world'
@@ -6810,23 +6802,6 @@
     dureeRow.row.hidden = true;
     dureeRow.value.appendChild(dureeValueEl);
     body.appendChild(dureeRow.row);
-
-    var dueRow = makeRow('due', '\u00c9ch\u00e9ance', {
-      interactive: true,
-      icon: 'ti-calendar'
-    });
-    var dueRecapEl = document.createElement('div');
-    dueRecapEl.className = 'info-due-recap';
-    var dueDotEl = document.createElement('span');
-    dueDotEl.className = 'heat-tier-dot info-due-dot';
-    dueDotEl.setAttribute('aria-hidden', 'true');
-    dueDotEl.hidden = true;
-    var dueValueEl = document.createElement('span');
-    dueValueEl.className = 'info-recap-text';
-    dueRecapEl.appendChild(dueDotEl);
-    dueRecapEl.appendChild(dueValueEl);
-    dueRow.value.appendChild(dueRecapEl);
-    body.appendChild(dueRow.row);
 
     field.appendChild(body);
     el.appendChild(field);
@@ -6850,16 +6825,36 @@
       }
     }
 
+    function applyInfoSaveStatus(el, text, kind) {
+      var saving = kind === 'saving' || text === 'Enregistrement\u2026';
+      var saved = kind === 'ok';
+      var errored = kind === 'error';
+      el.classList.toggle('is-saving', !!saving);
+      el.classList.toggle('is-ok', !!saved && !saving);
+      el.classList.toggle('is-error', !!errored && !saving && !saved);
+      if (saving) {
+        el.innerHTML = '<i class="ti ti-loader-2" aria-hidden="true"></i>';
+        el.setAttribute('aria-label', 'Enregistrement');
+        el.title = 'Enregistrement\u2026';
+        return;
+      }
+      if (saved) {
+        el.innerHTML = '<i class="ti ti-loader-2" aria-hidden="true"></i>';
+        el.setAttribute('aria-label', 'Enregistr\u00e9');
+        el.title = 'Enregistr\u00e9';
+        return;
+      }
+      el.removeAttribute('title');
+      el.removeAttribute('aria-label');
+      el.textContent = text || '';
+    }
+
     function setTitleStatus(text, kind) {
-      titleStatus.textContent = text || '';
-      titleStatus.classList.toggle('is-error', kind === 'error');
-      titleStatus.classList.toggle('is-ok', kind === 'ok');
+      applyInfoSaveStatus(titleStatus, text, kind);
     }
 
     function setDescStatus(text, kind) {
-      descStatus.textContent = text || '';
-      descStatus.classList.toggle('is-error', kind === 'error');
-      descStatus.classList.toggle('is-ok', kind === 'ok');
+      applyInfoSaveStatus(descStatus, text, kind);
     }
 
     function syncDescInputSize() {
@@ -7111,10 +7106,40 @@
       chip.appendChild(initials);
     }
 
+    function creatorDiffersFromAssignees() {
+      if (!creatorMember || !creatorMember.id) return false;
+      if (
+        members.length === 1 &&
+        members[0] &&
+        members[0].id &&
+        String(members[0].id) === String(creatorMember.id)
+      ) {
+        return false;
+      }
+      return true;
+    }
+
+    function renderCreator() {
+      creatorEl.replaceChildren();
+      var show = creatorDiffersFromAssignees();
+      creatorRow.row.hidden = !show;
+      if (!show) return;
+
+      var name = memberDisplayName(creatorMember) || 'Membre';
+      var chip = document.createElement('span');
+      chip.className = 'info-member';
+      chip.title = name;
+      chip.setAttribute('aria-label', name);
+      appendMemberAvatar(chip, creatorMember);
+      var nameEl = document.createElement('span');
+      nameEl.className = 'info-member-name';
+      nameEl.textContent = name;
+      chip.appendChild(nameEl);
+      creatorEl.appendChild(chip);
+    }
+
     function setMembersStatus(text, kind) {
-      membersStatus.textContent = text || '';
-      membersStatus.classList.toggle('is-error', kind === 'error');
-      membersStatus.classList.toggle('is-ok', kind === 'ok');
+      applyInfoSaveStatus(membersStatus, text, kind);
     }
 
     function selectedMemberIds() {
@@ -7234,6 +7259,7 @@
       membersAddBtn.hidden = !onMemberAdd;
       membersAddBtn.disabled = membersBusy || !canAdd;
       if (membersPickerOpen) renderMembersPicker();
+      renderCreator();
     }
 
     function addMemberFromPicker(member) {
@@ -7241,7 +7267,7 @@
       var id = String(member.id);
       if (selectedMemberIds()[id]) return;
       membersBusy = true;
-      setMembersStatus('Enregistrement\u2026');
+      setMembersStatus('', 'saving');
       renderMembers();
       Promise.resolve(onMemberAdd(member))
         .then(function (result) {
@@ -7277,11 +7303,11 @@
             ]);
           }
           setAuthHint('');
-          setMembersStatus('Enregistr\u00e9', 'ok');
+          setMembersStatus('', 'ok');
           setMembersPickerOpen(false);
           renderMembers();
           setTimeout(function () {
-            if (membersStatus.textContent === 'Enregistr\u00e9') {
+            if (membersStatus.classList.contains('is-ok')) {
               setMembersStatus('');
             }
           }, 1400);
@@ -7301,7 +7327,7 @@
       if (!onMemberRemove || membersBusy || !member || !member.id) return;
       var id = String(member.id);
       membersBusy = true;
-      setMembersStatus('Enregistrement\u2026');
+      setMembersStatus('', 'saving');
       renderMembers();
       Promise.resolve(onMemberRemove(member))
         .then(function (result) {
@@ -7321,10 +7347,10 @@
             return !(item && String(item.id) === id);
           });
           setAuthHint('');
-          setMembersStatus('Enregistr\u00e9', 'ok');
+          setMembersStatus('', 'ok');
           renderMembers();
           setTimeout(function () {
-            if (membersStatus.textContent === 'Enregistr\u00e9') {
+            if (membersStatus.classList.contains('is-ok')) {
               setMembersStatus('');
             }
           }, 1400);
@@ -7404,9 +7430,7 @@
     }
 
     function setLabelsStatus(text, kind) {
-      labelsStatus.textContent = text || '';
-      labelsStatus.classList.toggle('is-error', kind === 'error');
-      labelsStatus.classList.toggle('is-ok', kind === 'ok');
+      applyInfoSaveStatus(labelsStatus, text, kind);
     }
 
     function pruneLabelSuggestions() {
@@ -7682,7 +7706,7 @@
       var id = String(label.id);
       if (selectedLabelIds()[id]) return;
       labelsBusy = true;
-      setLabelsStatus('Enregistrement\u2026');
+      setLabelsStatus('', 'saving');
       renderLabels();
       Promise.resolve(onLabelAdd(label))
         .then(function (result) {
@@ -7712,11 +7736,11 @@
             return !(item && String(item.id) === id);
           });
           setAuthHint('');
-          setLabelsStatus('Enregistr\u00e9', 'ok');
+          setLabelsStatus('', 'ok');
           setLabelsPickerOpen(false);
           renderLabels();
           setTimeout(function () {
-            if (labelsStatus.textContent === 'Enregistr\u00e9') setLabelsStatus('');
+            if (labelsStatus.classList.contains('is-ok')) setLabelsStatus('');
           }, 1400);
           onLayoutChange();
           return result;
@@ -7734,7 +7758,7 @@
       if (!onLabelRemove || labelsBusy || !label || !label.id) return;
       var id = String(label.id);
       labelsBusy = true;
-      setLabelsStatus('Enregistrement\u2026');
+      setLabelsStatus('', 'saving');
       renderLabels();
       Promise.resolve(onLabelRemove(label))
         .then(function (result) {
@@ -7754,10 +7778,10 @@
             return !(item && String(item.id) === id);
           });
           setAuthHint('');
-          setLabelsStatus('Enregistr\u00e9', 'ok');
+          setLabelsStatus('', 'ok');
           renderLabels();
           setTimeout(function () {
-            if (labelsStatus.textContent === 'Enregistr\u00e9') setLabelsStatus('');
+            if (labelsStatus.classList.contains('is-ok')) setLabelsStatus('');
           }, 1400);
           onLayoutChange();
           return result;
@@ -7777,56 +7801,9 @@
       node.classList.toggle('is-empty', !value);
     }
 
-    function paintPriorityRecap() {
-      var hasPriority = !!(priorityLabel || '').trim() && priorityVisual;
-      setRecapText(priorityValueEl, priorityLabel, 'Non d\u00e9finie');
-      if (!hasPriority) {
-        priorityDotEl.hidden = true;
-        priorityDotEl.style.removeProperty('background');
-        priorityDotEl.style.removeProperty('--heat-tier-dot-size');
-        priorityDotEl.classList.remove('is-inutile');
-        priorityRecapEl.classList.remove('is-inutile');
-        priorityValueEl.style.removeProperty('color');
-        return;
-      }
-      var visualSource = priorityVisual.inutile
-        ? { inutile: true, label: INUTILE_LABEL }
-        : { i: priorityVisual.tierI, label: priorityLabel };
-      var v = tierVisuals(visualSource);
-      priorityDotEl.hidden = false;
-      priorityDotEl.style.setProperty(
-        '--heat-tier-dot-size',
-        heatTierDotSizePx(priorityVisual).toFixed(2) + 'px'
-      );
-      priorityDotEl.style.background = v.seg;
-      priorityDotEl.classList.toggle('is-inutile', !!priorityVisual.inutile);
-      priorityRecapEl.classList.toggle('is-inutile', !!priorityVisual.inutile);
-      priorityValueEl.style.color = v.text;
-    }
-
-    function paintDueRecap() {
-      var hasDue = !!(dueLabel || '').trim() && !!dueBand;
-      setRecapText(dueValueEl, dueLabel, 'Aucune');
-      if (!hasDue) {
-        dueDotEl.hidden = true;
-        dueDotEl.style.removeProperty('background');
-        dueValueEl.style.removeProperty('color');
-        if (dueRecapEl.dataset) delete dueRecapEl.dataset.dueBand;
-        return;
-      }
-      var accent = dueBandAccent(dueBand);
-      dueDotEl.hidden = !accent;
-      if (accent) dueDotEl.style.background = accent;
-      else dueDotEl.style.removeProperty('background');
-      dueValueEl.style.color = 'var(--due-band-' + dueBand + '-text)';
-      if (dueRecapEl.dataset) dueRecapEl.dataset.dueBand = dueBand;
-    }
-
     function renderRecap() {
-      paintPriorityRecap();
       setRecapText(porteValueEl, impactReachLabel, 'Non d\u00e9finie');
       setRecapText(dureeValueEl, durationLabel, 'Non d\u00e9finie');
-      paintDueRecap();
     }
 
     function summaryText() {
@@ -7834,10 +7811,8 @@
         return titleText;
       }
       var bits = [];
-      if (priorityLabel) bits.push(priorityLabel);
       if (impactReachLabel) bits.push(impactReachLabel);
       if (durationLabel) bits.push(durationLabel);
-      if (dueLabel) bits.push(dueLabel);
       return bits.join(' \u00b7 ');
     }
 
@@ -7864,7 +7839,7 @@
         return Promise.resolve({ ok: true, changed: false, name: next });
       }
       titleBusy = true;
-      setTitleStatus('Enregistrement\u2026');
+      setTitleStatus('', 'saving');
       return Promise.resolve(onTitleChange(next))
         .then(function (result) {
           titleBusy = false;
@@ -7883,11 +7858,11 @@
           titleText = next;
           titleInput.value = next;
           setAuthHint('');
-          setTitleStatus('Enregistr\u00e9', 'ok');
+          setTitleStatus('', 'ok');
           collapse.refreshSummary();
           scheduleLabelSuggestions(false);
           setTimeout(function () {
-            if (titleStatus.textContent === 'Enregistr\u00e9') setTitleStatus('');
+            if (titleStatus.classList.contains('is-ok')) setTitleStatus('');
           }, 1400);
           syncTitleInputSize();
           onLayoutChange();
@@ -8036,7 +8011,7 @@
       if (!onDescChange || !descDirty || descBusy) return Promise.resolve();
       var next = descInput.value;
       descBusy = true;
-      setDescStatus('Enregistrement\u2026');
+      setDescStatus('', 'saving');
       return Promise.resolve(onDescChange(next))
         .then(function (result) {
           descBusy = false;
@@ -8059,10 +8034,10 @@
           descDirty = false;
           descText = next;
           setAuthHint('');
-          setDescStatus('Enregistr\u00e9', 'ok');
+          setDescStatus('', 'ok');
           scheduleLabelSuggestions(false);
           setTimeout(function () {
-            if (descStatus.textContent === 'Enregistr\u00e9') setDescStatus('');
+            if (descStatus.classList.contains('is-ok')) setDescStatus('');
           }, 1400);
           return result;
         })
@@ -8319,9 +8294,16 @@
         renderMembers();
         onLayoutChange();
       },
+      setCreator: function (member) {
+        creatorMember =
+          member && typeof member === 'object' && member.id ? member : null;
+        renderCreator();
+        onLayoutChange();
+      },
       setBoardMembers: function (list) {
         boardMembers = Array.isArray(list) ? list.slice() : [];
         renderMembers();
+        renderCreator();
         onLayoutChange();
       },
       setLabels: function (list) {
@@ -8339,24 +8321,8 @@
       setRecap: function (next) {
         if (!next) return;
         if (next.priorityLabel != null) priorityLabel = String(next.priorityLabel || '');
-        if (Object.prototype.hasOwnProperty.call(next, 'priorityVisual')) {
-          var pv = next.priorityVisual;
-          if (pv && typeof pv === 'object') {
-            priorityVisual = {
-              tierI: pv.tierI != null ? pv.tierI : null,
-              score: typeof pv.score === 'number' ? pv.score : null,
-              inutile: !!pv.inutile
-            };
-          } else {
-            priorityVisual = null;
-          }
-        }
         if (next.impactReach != null) impactReachLabel = String(next.impactReach || '');
         if (next.durationLabel != null) durationLabel = String(next.durationLabel || '');
-        if (next.dueLabel != null) dueLabel = String(next.dueLabel || '');
-        if (Object.prototype.hasOwnProperty.call(next, 'dueBand')) {
-          dueBand = typeof next.dueBand === 'string' ? next.dueBand : '';
-        }
         renderRecap();
         collapse.refreshSummary();
       },
@@ -13210,7 +13176,8 @@
     clampDurationMinutes: clampDurationMinutes,
     DURATION_MIN_MINUTES: DURATION_MIN_MINUTES,
     DURATION_MAX_MINUTES: DURATION_MAX_MINUTES,
-    DURATION_CRACK_MINUTES: DURATION_CRACK_MINUTES
+    DURATION_CRACK_MINUTES: DURATION_CRACK_MINUTES,
+    DURATION_TICKS: DURATION_TICKS
   };
 
   global.PriorityUI = PriorityUI;
