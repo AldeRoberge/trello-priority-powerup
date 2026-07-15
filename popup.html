@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=estimate-time-ticks-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-3" />
-  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=parent-clear-1" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=parent-clear-2" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-scope-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
@@ -26,8 +26,22 @@
   <script src="./components/statut/statut-match.js?v=attente-hourglass-1"></script>
   <script src="./components/statut/statut-trello.js?v=section-glow-1"></script>
   <script src="./components/shared/tab-autocomplete.js?v=tab-complete-1"></script>
-  <script src="./components/completion/completion-ui.js?v=add-immediate-1"></script>
-  <script src="./components/completion/completion-trello.js?v=estimate-time-ticks-1"></script>
+  <script
+    src="./components/completion/completion-ui.js?v=estimate-scales-2"
+    onerror="console.error('Priority popup: failed to load completion-ui.js', this.src)"
+  ></script>
+  <script
+    src="./components/completion/completion-trello.js?v=estimate-scales-2"
+    onerror="console.error('Priority popup: failed to load completion-trello.js', this.src)"
+  ></script>
+  <script>
+    if (!window.CompletionUI || !window.CompletionTrello) {
+      console.error('Priority popup: completion modules did not expose globals', {
+        CompletionUI: typeof window.CompletionUI,
+        CompletionTrello: typeof window.CompletionTrello
+      });
+    }
+  </script>
   <script src="./components/goals/goals-trello.js?v=goals-1"></script>
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
   <script src="./components/agent/agent.js?v=estimate-fallback-1"></script>
@@ -1428,14 +1442,23 @@
       }
     }
 
+    function expandProgressSection() {
+      if (progressCollapse && typeof progressCollapse.setExpanded === 'function') {
+        if (
+          typeof progressCollapse.isExpanded !== 'function' ||
+          !progressCollapse.isExpanded()
+        ) {
+          progressCollapse.setExpanded(true);
+        }
+      }
+    }
+
     function jumpToSection(key) {
       if (!variant) return;
       var target = null;
       if (key === 'blocked') {
-        if (statutUi && typeof statutUi.setExpanded === 'function') {
-          statutUi.setExpanded(true);
-        }
-        if (typeof statutUi.syncBlockedPanel === 'function') {
+        expandProgressSection();
+        if (statutUi && typeof statutUi.syncBlockedPanel === 'function') {
           statutUi.syncBlockedPanel();
         }
         target =
@@ -2066,6 +2089,256 @@
       variant.setProgressCompleteLock(progressIsFullyComplete(data));
     }
 
+    /** Prevent Progrès ↔ Bloqué sync feedback loops. */
+    var syncingBlockedBridge = false;
+
+    function blockedLinksFingerprint(links) {
+      if (!Array.isArray(links) || !links.length) return '';
+      return links
+        .map(function (link) {
+          return link && link.id ? String(link.id) : '';
+        })
+        .filter(Boolean)
+        .sort()
+        .join(',');
+    }
+
+    /**
+     * Progrès blocked → Statut enAttente + blockedLinks.
+     * Card is Bloqué iff master or any item is blocked.
+     */
+    function syncPriorityFromProgressBlocked(data) {
+      if (syncingBlockedBridge) return;
+      if (!variant || typeof variant.setState !== 'function') return;
+      if (typeof CompletionTrello === 'undefined' || !CompletionTrello.hasAnyBlocked) {
+        return;
+      }
+      var hasBlocked = CompletionTrello.hasAnyBlocked(data);
+      var progressLinks = CompletionTrello.blockedLinksFromCompletion
+        ? CompletionTrello.blockedLinksFromCompletion(data)
+        : [];
+      var st =
+        typeof variant.getState === 'function' ? variant.getState() || {} : {};
+      var curEnAttente = !!st.enAttente;
+      var curLinksFp = blockedLinksFingerprint(st.blockedLinks);
+      var nextLinks = hasBlocked
+        ? progressLinks.length
+          ? progressLinks
+          : Array.isArray(st.blockedLinks)
+            ? st.blockedLinks
+            : []
+        : [];
+      var nextLinksFp = blockedLinksFingerprint(nextLinks);
+      if (hasBlocked === curEnAttente && nextLinksFp === curLinksFp) return;
+
+      syncingBlockedBridge = true;
+      try {
+        variant.setState(
+          Object.assign({}, st, {
+            enAttente: hasBlocked,
+            blockedLinks: nextLinks,
+          })
+        );
+        if (
+          hasBlocked &&
+          typeof statutUi !== 'undefined' &&
+          statutUi &&
+          typeof statutUi.syncBlockedPanel === 'function'
+        ) {
+          statutUi.syncBlockedPanel();
+        }
+        attachBlockedIntoStatut();
+      } finally {
+        syncingBlockedBridge = false;
+      }
+    }
+
+    /**
+     * Statut / enAttente → Progrès master.blocked (or clear all).
+     */
+    function syncProgressFromPriorityBlocked(state) {
+      if (syncingBlockedBridge) return;
+      if (!completionUi || typeof CompletionTrello === 'undefined') return;
+      if (!CompletionTrello.hasAnyBlocked) return;
+      var enAttente = !!(state && state.enAttente);
+      var live =
+        typeof completionUi.getData === 'function'
+          ? completionUi.getData()
+          : latestCompletion || { items: [] };
+      var hasBlocked = CompletionTrello.hasAnyBlocked(live);
+      if (enAttente === hasBlocked) return;
+
+      syncingBlockedBridge = true;
+      try {
+        if (enAttente && !hasBlocked) {
+          if (typeof completionUi.setMasterBlocked === 'function') {
+            latestCompletion = withProgressEnabledFlag(
+              completionUi.setMasterBlocked(true)
+            );
+          } else {
+            latestCompletion = withProgressEnabledFlag(
+              CompletionTrello.setMasterBlocked(live, true)
+            );
+            if (typeof completionUi.setData === 'function') {
+              completionUi.setData(latestCompletion);
+            }
+            saveCompletion(latestCompletion);
+          }
+        } else if (!enAttente && hasBlocked) {
+          if (typeof completionUi.clearAllBlocked === 'function') {
+            latestCompletion = withProgressEnabledFlag(
+              completionUi.clearAllBlocked()
+            );
+          } else {
+            latestCompletion = withProgressEnabledFlag(
+              CompletionTrello.clearAllBlocked(live)
+            );
+            if (typeof completionUi.setData === 'function') {
+              completionUi.setData(latestCompletion);
+            }
+            saveCompletion(latestCompletion);
+          }
+        }
+        if (progressCollapse) progressCollapse.refreshSummary();
+        syncBlockedSubtasks();
+        syncDueBlockedForProgress(
+          (completionUi &&
+            typeof completionUi.getData === 'function' &&
+            completionUi.getData()) ||
+            latestCompletion
+        );
+      } finally {
+        syncingBlockedBridge = false;
+      }
+    }
+
+    /**
+     * After a new Statut motif: AI (or fallback) creates a blocked Progrès subtask.
+     */
+    function createBlockedSubtaskFromReason(reason) {
+      var text = typeof reason === 'string' ? reason.trim() : '';
+      if (!text) return Promise.resolve(null);
+      if (typeof CompletionTrello === 'undefined') return Promise.resolve(null);
+
+      function titleMatches(itemText, candidate) {
+        var a = String(itemText || '')
+          .trim()
+          .toLocaleLowerCase('fr-FR');
+        var b = String(candidate || '')
+          .trim()
+          .toLocaleLowerCase('fr-FR');
+        return !!a && !!b && (a === b || a.indexOf(b) !== -1 || b.indexOf(a) !== -1);
+      }
+
+      function findExistingMatch(items, title, reasonText) {
+        for (var i = 0; i < (items || []).length; i++) {
+          var item = items[i];
+          if (!item || item.done) continue;
+          if (titleMatches(item.text, title) || titleMatches(item.text, reasonText)) {
+            return item;
+          }
+        }
+        return null;
+      }
+
+      function applyBlockedItem(title) {
+        var live =
+          (completionUi &&
+            typeof completionUi.getData === 'function' &&
+            completionUi.getData()) ||
+          latestCompletion ||
+          { items: [] };
+        var existing = findExistingMatch(live.items, title, text);
+        if (existing) {
+          if (!CompletionTrello.isItemBlocked(existing)) {
+            if (completionUi && typeof completionUi.setItemBlocked === 'function') {
+              latestCompletion = withProgressEnabledFlag(
+                completionUi.setItemBlocked(existing.id, true)
+              );
+            } else {
+              latestCompletion = withProgressEnabledFlag(
+                CompletionTrello.setItemBlocked(live, existing.id, true)
+              );
+              if (completionUi && typeof completionUi.setData === 'function') {
+                completionUi.setData(latestCompletion);
+              }
+              saveCompletion(latestCompletion);
+            }
+          }
+          syncPriorityFromProgressBlocked(
+            (completionUi &&
+              typeof completionUi.getData === 'function' &&
+              completionUi.getData()) ||
+              latestCompletion
+          );
+          return existing;
+        }
+
+        var item = null;
+        if (completionUi && typeof completionUi.addItem === 'function') {
+          item = completionUi.addItem(title, { blocked: true });
+        } else {
+          var next = Object.assign({}, live, {
+            items: (live.items || []).concat([
+              {
+                id: CompletionTrello.generateId(),
+                text: title,
+                progress: 0,
+                blocked: true,
+              },
+            ]),
+          });
+          latestCompletion = withProgressEnabledFlag(
+            CompletionTrello.normalizeCompletionData(next)
+          );
+          if (completionUi && typeof completionUi.setData === 'function') {
+            completionUi.setData(latestCompletion);
+          }
+          saveCompletion(latestCompletion);
+          item = latestCompletion.items[latestCompletion.items.length - 1] || null;
+        }
+        if (progressCollapse) progressCollapse.refreshSummary();
+        syncBlockedSubtasks();
+        syncPriorityFromProgressBlocked(
+          (completionUi &&
+            typeof completionUi.getData === 'function' &&
+            completionUi.getData()) ||
+            latestCompletion
+        );
+        resizePopup();
+        return item;
+      }
+
+      function finishWithTitle(suggested) {
+        var title =
+          typeof suggested === 'string' && suggested.trim()
+            ? suggested.trim()
+            : window.PriorityAgent &&
+                typeof PriorityAgent.fallbackUnblockSubtaskText === 'function'
+              ? PriorityAgent.fallbackUnblockSubtaskText(text)
+              : text;
+        if (!title) title = text;
+        return applyBlockedItem(title);
+      }
+
+      if (
+        !window.PriorityAgent ||
+        typeof PriorityAgent.suggestUnblockSubtaskText !== 'function' ||
+        typeof PriorityAgent.getProvider !== 'function'
+      ) {
+        return Promise.resolve(finishWithTitle(null));
+      }
+
+      return PriorityAgent.getProvider(t)
+        .then(function (provider) {
+          return PriorityAgent.suggestUnblockSubtaskText(provider, text);
+        })
+        .catch(function () {
+          return null;
+        })
+        .then(finishWithTitle);
+    }
+
     /** Mirror Terminé → Progrès 100% in the open popup (persistence already done in side effects). */
     function applyCompletionFromStatutComplete(completionData) {
       var CT = CompletionTrello;
@@ -2143,6 +2416,8 @@
               syncDueBlockedForProgress(blockedLive);
               syncDueCompleteFromProgress(blockedLive, { clearSuppress: true });
             }
+            // Statut Bloqué with no progress blocked yet → mark master blocked.
+            syncProgressFromPriorityBlocked({ enAttente: true });
             resizePopup();
           } else if (
             wasBlockedCat &&
@@ -2154,6 +2429,7 @@
             variant.setState(
               Object.assign({}, variant.getState(), { enAttente: false })
             );
+            syncProgressFromPriorityBlocked({ enAttente: false });
             resizePopup();
           }
           if (side.category === 'completed') {
@@ -2166,6 +2442,19 @@
               variant.setState(cleared);
             }
             applyCompletionFromStatutComplete(side.completion);
+            if (
+              completionUi &&
+              typeof completionUi.clearAllBlocked === 'function'
+            ) {
+              syncingBlockedBridge = true;
+              try {
+                latestCompletion = withProgressEnabledFlag(
+                  completionUi.clearAllBlocked()
+                );
+              } finally {
+                syncingBlockedBridge = false;
+              }
+            }
             resizePopup();
           } else if (side.dueCompleteCleared) {
             if (typeof variant.setProgressCompleteLock === 'function') {
@@ -2216,21 +2505,19 @@
       progressExpanded = options.expand != null ? !!options.expand : progressExpanded;
     }
 
-    function mountStatutSection(cardEl) {
+    function mountStatutSection(hostEl) {
       if (!window.StatutTrello || !PriorityUI.createStatutField) {
         console.error('Priority popup: StatutTrello / createStatutField unavailable');
         return Promise.resolve();
       }
-
-      statutSection = document.createElement('div');
-      statutSection.className = 'variant-statut-section';
-      // Order: Information → Statut → Priorité → …
-      var prioritySection = cardEl.querySelector('.variant-priority-section');
-      if (prioritySection) {
-        cardEl.insertBefore(statutSection, prioritySection);
-      } else {
-        cardEl.insertBefore(statutSection, cardEl.firstChild);
+      if (!hostEl) {
+        console.error('Priority popup: Statut mount requires Progrès body');
+        return Promise.resolve();
       }
+
+      // Nested under Progrès (list chips + Bloqué motif above completion UI).
+      statutSection = hostEl;
+      statutSection.className = 'statut-in-progress-mount';
 
       return Promise.all([
         StatutTrello.getCardStatut(t),
@@ -2243,7 +2530,6 @@
           var authorized = !!results[1];
           var hasRest =
             PriorityTrello.restClientOptions && !!PriorityTrello.restClientOptions();
-          var expandStatut = PriorityUI.resolveSectionExpanded('statut', true);
           var authReason = !hasRest
             ? 'no-app-key'
             : authorized
@@ -2252,16 +2538,13 @@
 
           statutUi = PriorityUI.createStatutField({
             el: statutSection,
+            embedded: true,
             listId: statut.listId,
             lists: statut.lists || [],
             settings: statut.settings,
             authReason: authReason,
             needsAuth: authReason === 'not-authorized',
             enabled: true,
-            expanded: expandStatut,
-            onExpandChange: function (isExpanded) {
-              PriorityUI.saveSectionCollapseState({ statut: !!isExpanded });
-            },
             onLayoutChange: resizePopup,
             onAuthorize: function () {
               return PriorityTrello.authorizeRestForAutoSort(t);
@@ -2767,6 +3050,11 @@
       progressBody.id = 'progress-section-body';
       progressBody.hidden = true;
 
+      // Statut chips / Bloqué nest above completion (filled by mountStatutSection).
+      var statutMount = document.createElement('div');
+      statutMount.className = 'statut-in-progress-mount';
+      progressBody.appendChild(statutMount);
+
       var completionMount = document.createElement('div');
       completionMount.id = 'completionMount';
       progressBody.appendChild(completionMount);
@@ -3085,11 +3373,15 @@
                 });
               });
             },
+            onBlockedChange: function (data) {
+              syncPriorityFromProgressBlocked(data || completionUi.getData());
+            },
             onChange: function (data) {
               saveCompletion(data);
               if (progressCollapse) progressCollapse.refreshSummary();
               syncBlockedSubtasks();
               syncDueBlockedForProgress(data);
+              syncPriorityFromProgressBlocked(data);
               syncInfoRecap();
               maybeSilentEstimateDurations();
             },
@@ -3115,6 +3407,37 @@
                   }
                 })
                 .then(function () {
+                  if (allComplete) {
+                    if (
+                      completionUi &&
+                      typeof completionUi.clearAllBlocked === 'function' &&
+                      completionUi.hasAnyBlocked &&
+                      completionUi.hasAnyBlocked()
+                    ) {
+                      syncingBlockedBridge = true;
+                      try {
+                        latestCompletion = withProgressEnabledFlag(
+                          completionUi.clearAllBlocked()
+                        );
+                      } finally {
+                        syncingBlockedBridge = false;
+                      }
+                    }
+                    if (variant && typeof variant.setState === 'function') {
+                      syncingBlockedBridge = true;
+                      try {
+                        variant.setState(
+                          Object.assign({}, variant.getState(), {
+                            enAttente: false,
+                            blockedLinks: [],
+                          }),
+                          { silent: false }
+                        );
+                      } finally {
+                        syncingBlockedBridge = false;
+                      }
+                    }
+                  }
                   if (!statutUi || typeof StatutTrello === 'undefined') return;
                   return StatutTrello.getCardStatut(t).then(function (statut) {
                     if (statutUi && typeof statutUi.setData === 'function') {
@@ -3167,7 +3490,14 @@
         throw new Error('PriorityUI is not available — priority-ui.js failed to load or initialize');
       }
       if (!window.CompletionUI || !window.CompletionTrello) {
-        throw new Error('CompletionUI / CompletionTrello must be available in the priority popup');
+        throw new Error(
+          'CompletionUI / CompletionTrello must be available in the priority popup' +
+            ' (CompletionUI=' +
+            typeof window.CompletionUI +
+            ', CompletionTrello=' +
+            typeof window.CompletionTrello +
+            ')'
+        );
       }
 
       if (window.Spellcheck && typeof Spellcheck.configure === 'function') {
@@ -3295,6 +3625,14 @@
         dimensions: PriorityTrello.PRIORITY_DIMENSIONS,
         experimental: experimentalFlags,
         getBlockedSubtasks: getBlockedSubtasks,
+        onBlockedReasonAdded: function (reason) {
+          createBlockedSubtaskFromReason(reason).catch(function (err) {
+            console.error('Blocked reason → subtask failed', err);
+          });
+        },
+        onBlockedStateChange: function (state) {
+          syncProgressFromPriorityBlocked(state);
+        },
         loadState: function (defaults) {
           return Object.assign({}, defaults);
         },
@@ -3354,14 +3692,7 @@
         return !!(experimentalFlags && experimentalFlags[key] === true);
       };
 
-      if (featureOn('statut')) {
-        await mountStatutSection(variant.card);
-        attachBlockedIntoStatut();
-      }
-      if (experimentalOn('objectif') || focusObjectif) {
-        await mountObjectifSection(variant.card, focusObjectif);
-      }
-      if (featureOn('progress') || focusProgress) {
+      if (featureOn('progress') || focusProgress || featureOn('statut')) {
         var openAssistantChat =
           focusProgress &&
           featureOn('assistant') &&
@@ -3372,6 +3703,17 @@
           focusAdd: !openAssistantChat,
           scrollIntoView: !openAssistantChat
         });
+      }
+      if (featureOn('statut')) {
+        var statutMount =
+          (progressBody &&
+            progressBody.querySelector('.statut-in-progress-mount')) ||
+          null;
+        await mountStatutSection(statutMount);
+        attachBlockedIntoStatut();
+      }
+      if (experimentalOn('objectif') || focusObjectif) {
+        await mountObjectifSection(variant.card, focusObjectif);
       }
       syncBlockedSubtasks();
       syncInfoRecap();
@@ -3497,6 +3839,15 @@
             variant.setState(Object.assign({}, variant.getState(), partial || {}), {
               preserveCollapse: true
             });
+            if (
+              partial &&
+              (Object.prototype.hasOwnProperty.call(partial, 'enAttente') ||
+                Object.prototype.hasOwnProperty.call(partial, 'blockedLinks'))
+            ) {
+              syncProgressFromPriorityBlocked(
+                typeof variant.getState === 'function' ? variant.getState() : partial
+              );
+            }
             scheduleHistoryCommit('Priorité (assistant)');
           },
           applyCompletion: function (next) {
@@ -3507,6 +3858,7 @@
             if (progressCollapse) progressCollapse.refreshSummary();
             syncBlockedSubtasks();
             syncDueBlockedForProgress(live);
+            syncPriorityFromProgressBlocked(live);
             syncInfoRecap();
             maybeSilentEstimateDurations();
             // setData may have fired onAllCompleteChange; sync again so agent
@@ -3557,24 +3909,17 @@
                   variant.card.querySelector('.variant-progress-section')) ||
                 null;
             } else if (key === 'statut') {
-              if (statutUi && typeof statutUi.setExpanded === 'function') {
-                if (expand) {
-                  if (
-                    typeof statutUi.isExpanded === 'function' &&
-                    !statutUi.isExpanded()
-                  ) {
-                    statutUi.setExpanded(true);
-                  } else if (typeof statutUi.isExpanded !== 'function') {
-                    statutUi.setExpanded(true);
-                  }
-                } else {
-                  statutUi.setExpanded(true);
-                }
-              }
+              expandProgressSection();
               target =
+                statutSection ||
                 (variant &&
                   variant.card &&
-                  variant.card.querySelector('.variant-statut-section')) ||
+                  variant.card.querySelector(
+                    '.statut-in-progress-mount, .field--statut-embedded'
+                  )) ||
+                (variant &&
+                  variant.card &&
+                  variant.card.querySelector('.variant-progress-section')) ||
                 null;
             } else if (key === 'objectif' || key === 'info') {
               if (infoUi && typeof infoUi.setExpanded === 'function') {
@@ -3599,10 +3944,8 @@
               }
             } else if (key === 'blocked') {
               if (expand) {
-                if (statutUi && typeof statutUi.setExpanded === 'function') {
-                  statutUi.setExpanded(true);
-                }
-                if (typeof statutUi.syncBlockedPanel === 'function') {
+                expandProgressSection();
+                if (statutUi && typeof statutUi.syncBlockedPanel === 'function') {
                   statutUi.syncBlockedPanel();
                 }
               }

@@ -47,7 +47,7 @@
   var FORMULA_STORAGE_KEY = 'trello-priority-powerup/formula';
   var COLOR_SCHEME_STORAGE_KEY = 'trello-priority-powerup/color-scheme';
   var SECTION_COLLAPSE_STORAGE_KEY = 'trello-priority-powerup/section-collapse';
-  // 'blocked' kept for legacy prefs; Bloqué is nested under Statut (not collapsible).
+  // 'blocked' / 'statut' kept for legacy prefs; both nest under Progrès (not collapsible).
   var SECTION_COLLAPSE_KEYS = ['info', 'statut', 'objectif', 'priority', 'graph', 'progress', 'due', 'blocked', 'chat', 'historique'];
   var DEFAULT_COLOR_SCHEME_KEY = 'blue';
   /** Member clock preference: '24' (default) or '12'. Canonical storage stays HH:MM. */
@@ -5908,6 +5908,7 @@
       typeof config.onSelectList === 'function' ? config.onSelectList : null;
     var onOpenSettings =
       typeof config.onOpenSettings === 'function' ? config.onOpenSettings : null;
+    var embedded = !!config.embedded;
     var bodyId = 'statut-section-body-' + Math.random().toString(36).slice(2, 9);
     var currentListId = config.listId ? String(config.listId) : '';
     var lists = Array.isArray(config.lists) ? config.lists.slice() : [];
@@ -5930,19 +5931,24 @@
     var authReason = config.authReason || (config.needsAuth ? 'not-authorized' : '');
 
     var field = document.createElement('div');
-    field.className = 'field field--statut is-enabled';
+    field.className = embedded
+      ? 'field field--statut field--statut-embedded is-enabled'
+      : 'field field--statut is-enabled';
 
-    var chrome = createCollapsibleEnableChrome({
-      title: 'Statut',
-      bodyId: bodyId,
-      hideEnable: true,
-      leadingIcon: 'ti-list',
-      iconClass: 'statut-leading-icon',
-      titleClass: 'statut-enable-title',
-      collapseLabel: 'Replier Statut',
-      expandLabel: 'Développer Statut',
-    });
-    field.appendChild(chrome.head);
+    var chrome = null;
+    if (!embedded) {
+      chrome = createCollapsibleEnableChrome({
+        title: 'Statut',
+        bodyId: bodyId,
+        hideEnable: true,
+        leadingIcon: 'ti-list',
+        iconClass: 'statut-leading-icon',
+        titleClass: 'statut-enable-title',
+        collapseLabel: 'Replier Statut',
+        expandLabel: 'Développer Statut',
+      });
+      field.appendChild(chrome.head);
+    }
 
     var settingsBtn = document.createElement('button');
     settingsBtn.type = 'button';
@@ -5954,12 +5960,6 @@
     settingsIcon.className = 'ti ti-settings';
     settingsIcon.setAttribute('aria-hidden', 'true');
     settingsBtn.appendChild(settingsIcon);
-    // Gear left of the enable checkbox (checkbox stays on the far right).
-    if (chrome.label) {
-      chrome.head.insertBefore(settingsBtn, chrome.label);
-    } else {
-      chrome.head.appendChild(settingsBtn);
-    }
     settingsBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       if (!onOpenSettings) return;
@@ -5968,9 +5968,28 @@
       });
     });
 
+    if (!embedded) {
+      // Gear left of the enable checkbox (checkbox stays on the far right).
+      if (chrome.label) {
+        chrome.head.insertBefore(settingsBtn, chrome.label);
+      } else {
+        chrome.head.appendChild(settingsBtn);
+      }
+    }
+
     var body = document.createElement('div');
-    body.className = 'statut-section-body section-toggle-body';
+    body.className = embedded
+      ? 'statut-section-body statut-section-body--embedded'
+      : 'statut-section-body section-toggle-body';
     body.id = bodyId;
+
+    var embeddedBar = null;
+    if (embedded) {
+      embeddedBar = document.createElement('div');
+      embeddedBar.className = 'statut-embedded-bar';
+      embeddedBar.appendChild(settingsBtn);
+      body.appendChild(embeddedBar);
+    }
 
     var authBox = document.createElement('div');
     authBox.className = 'statut-auth-box';
@@ -6172,6 +6191,7 @@
       var groups = ensureCurrentListVisible(buildGroups());
       emptyEl.hidden = lists.length > 0;
       settingsBtn.hidden = !onOpenSettings;
+      if (embeddedBar) embeddedBar.hidden = !onOpenSettings;
 
       if (!groups.length) return;
 
@@ -6221,7 +6241,7 @@
       if (!onSelectList) {
         currentListId = String(listId);
         renderOptions();
-        collapse.refreshSummary();
+        refreshSummary();
         syncStatutSectionTint();
         onChange({ listId: currentListId });
         return;
@@ -6246,35 +6266,42 @@
         .then(function () {
           busy = false;
           renderOptions();
-          collapse.refreshSummary();
+          refreshSummary();
           syncStatutSectionTint();
           onLayoutChange();
         });
     }
 
-    var collapse = bindCollapsibleEnable({
-      field: field,
-      body: body,
-      chrome: chrome,
-      alwaysEnabled: true,
-      enabled: true,
-      expanded:
-        config.expanded != null
-          ? !!config.expanded
-          : true,
-      getSummary: summaryContent,
-      onLayoutChange: onLayoutChange,
-      onExpandChange: config.onExpandChange || function () {},
-      onEnableChange: function (on) {
-        if (typeof config.onEnableChange === 'function') {
-          config.onEnableChange(on);
-        }
-        onLayoutChange();
-      },
-    });
+    var collapse = null;
+    if (!embedded) {
+      collapse = bindCollapsibleEnable({
+        field: field,
+        body: body,
+        chrome: chrome,
+        alwaysEnabled: true,
+        enabled: true,
+        expanded:
+          config.expanded != null
+            ? !!config.expanded
+            : true,
+        getSummary: summaryContent,
+        onLayoutChange: onLayoutChange,
+        onExpandChange: config.onExpandChange || function () {},
+        onEnableChange: function (on) {
+          if (typeof config.onEnableChange === 'function') {
+            config.onEnableChange(on);
+          }
+          onLayoutChange();
+        },
+      });
+    }
+
+    function refreshSummary() {
+      if (collapse) collapse.refreshSummary();
+    }
 
     renderOptions();
-    collapse.refreshSummary();
+    refreshSummary();
 
     return {
       field: field,
@@ -6287,15 +6314,16 @@
       },
       syncBlockedPanel: syncStatutSectionTint,
       setExpanded: function (on, opts) {
+        if (!collapse) return;
         return collapse.setExpanded(on, opts);
       },
       isExpanded: function () {
-        return collapse.isExpanded();
+        return collapse ? collapse.isExpanded() : true;
       },
       setListId: function (listId) {
         currentListId = listId ? String(listId) : '';
         renderOptions();
-        collapse.refreshSummary();
+        refreshSummary();
         syncStatutSectionTint();
       },
       setData: function (next) {
@@ -6322,19 +6350,18 @@
           showUnassigned = !!settings.showUnassigned;
         }
         renderOptions();
-        collapse.refreshSummary();
+        refreshSummary();
         syncStatutSectionTint();
         onLayoutChange();
       },
       isEnabled: function () {
-        return collapse.isEnabled();
+        return collapse ? collapse.isEnabled() : true;
       },
       setEnabled: function (on, opts) {
+        if (!collapse) return;
         return collapse.setEnabled(on, opts);
       },
-      refreshSummary: function () {
-        collapse.refreshSummary();
-      },
+      refreshSummary: refreshSummary,
     };
   }
 
@@ -7621,11 +7648,28 @@
         return;
       }
       var current = labelBaseColor(label.color);
+      var head = document.createElement('div');
+      head.className = 'info-labels-color-picker-head';
+
       var title = document.createElement('div');
       title.className = 'info-labels-color-picker-title';
-      title.textContent =
-        'Couleur\u00a0: ' + labelDisplayName(label);
-      labelsColorPicker.appendChild(title);
+      title.textContent = 'Couleur\u00a0: ' + labelDisplayName(label);
+
+      var closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'info-labels-color-picker-close';
+      closeBtn.setAttribute('aria-label', 'Fermer');
+      closeBtn.title = 'Fermer';
+      closeBtn.textContent = '\u00d7';
+      closeBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        setLabelsColorPickerOpen('');
+      });
+
+      head.appendChild(title);
+      head.appendChild(closeBtn);
+      labelsColorPicker.appendChild(head);
 
       var grid = document.createElement('div');
       grid.className = 'info-labels-color-picker-grid';
@@ -7992,6 +8036,9 @@
           text.textContent = name;
           chip.appendChild(text);
 
+          var actions = document.createElement('span');
+          actions.className = 'info-label-actions';
+
           if (onLabelColorChange && label && label.id) {
             var editBtn = document.createElement('button');
             editBtn.type = 'button';
@@ -8014,7 +8061,7 @@
               event.stopPropagation();
               setLabelsColorPickerOpen(label.id);
             });
-            chip.appendChild(editBtn);
+            actions.appendChild(editBtn);
           }
 
           if (onLabelRemove) {
@@ -8025,7 +8072,7 @@
               'aria-label',
               'Retirer l\u2019\u00e9tiquette\u00a0: ' + name
             );
-            clearBtn.textContent = '\u00d7';
+            clearBtn.innerHTML = '<i class="ti ti-x" aria-hidden="true"></i>';
             clearBtn.disabled = labelsBusy;
             clearBtn.addEventListener('click', function (event) {
               event.preventDefault();
@@ -8033,9 +8080,10 @@
               if (labelsColorEditId) setLabelsColorPickerOpen('');
               removeLabelFromCard(label);
             });
-            chip.appendChild(clearBtn);
+            actions.appendChild(clearBtn);
           }
 
+          if (actions.childNodes.length) chip.appendChild(actions);
           labelsEl.appendChild(chip);
         });
       }
@@ -9178,9 +9226,13 @@
     var checked = !!config.value;
     var onChange = config.onChange || function () {};
     var onLayoutChange = config.onLayoutChange || function () {};
+    var onBlockedReasonAdded =
+      typeof config.onBlockedReasonAdded === 'function'
+        ? config.onBlockedReasonAdded
+        : null;
     var getSubtasks =
       typeof config.getSubtasks === 'function' ? config.getSubtasks : function () { return []; };
-    // Nested under Statut: no collapse chrome / enable checkbox.
+    // Nested under Progrès (via Statut): no collapse chrome / enable checkbox.
     var embedded = !!config.embedded;
     var bodyId = 'blocked-section-body-' + Math.random().toString(36).slice(2, 9);
     var currentReasons = normalizeBlockedReasons(
@@ -9541,6 +9593,7 @@
     function addReason(value, options) {
       var next = normalizeBlockedReason(value);
       var trackFreq = !(options && options.trackFreq === false);
+      var skipTaskCreate = !!(options && options.skipTaskCreate);
       if (!next || hasReason(next)) {
         refreshSelected();
         refreshSuggestions();
@@ -9549,11 +9602,28 @@
       }
       if (trackFreq) bumpBlockedReasonFreq(next);
       currentReasons = currentReasons.concat([next]);
+      // Motif implies the card is blocked (embedded Statut panel has no enable switch).
+      if (embedded && !checked) {
+        checked = true;
+        field.classList.add('is-enabled');
+      }
       refreshSelected();
       refreshSuggestions();
       refreshSubtaskUi();
       notifyReasonChange();
       onLayoutChange();
+      // Waiting-on-another-task links existing Progrès items — do not invent a new one.
+      if (
+        !skipTaskCreate &&
+        onBlockedReasonAdded &&
+        next !== BLOCKED_REASON_WAITING_OTHER_TASK
+      ) {
+        try {
+          onBlockedReasonAdded(next);
+        } catch (err) {
+          console.error('onBlockedReasonAdded failed', err);
+        }
+      }
     }
 
     function removeReason(value) {
@@ -13534,7 +13604,7 @@
       }
     });
 
-    // Bloqué reasons live inside Statut (mounted by the popup into statut's slot).
+    // Bloqué reasons live inside Progrès → Statut (mounted by the popup into statut's slot).
     blockedSection = document.createElement('div');
     blockedSection.className = 'variant-blocked-section';
 
@@ -13549,10 +13619,22 @@
           ? variantConfig.getBlockedSubtasks() || []
           : [];
       },
+      onBlockedReasonAdded: function (reason) {
+        if (typeof variantConfig.onBlockedReasonAdded === 'function') {
+          variantConfig.onBlockedReasonAdded(reason);
+        }
+      },
       onChange: function () {
         cancelSliderAnim();
         repaint();
         persistSliderState();
+        if (typeof variantConfig.onBlockedStateChange === 'function') {
+          try {
+            variantConfig.onBlockedStateChange(Object.assign({}, state));
+          } catch (err) {
+            console.error('onBlockedStateChange failed', err);
+          }
+        }
       },
       onLayoutChange: function () {
         if (typeof variantConfig.onLayoutChange === 'function') {
@@ -13742,8 +13824,8 @@
        * Toggle a named section open/closed and return its root element (for scroll/focus).
        * Re-clicking from Information collapses when already expanded.
        * Keys: 'priority' | 'due' | 'blocked'
-       * Bloqué is nested under Statut — openSection('blocked') returns the panel root
-       * (popup expands Statut and scrolls).
+       * Bloqué is nested under Progrès (Statut) — openSection('blocked') returns the panel root
+       * (popup expands Progrès and scrolls).
        */
       openSection: function (key, options) {
         options = options || {};

@@ -311,7 +311,7 @@
       case 'info':
         return '.variant-info-section';
       case 'statut':
-        return '.variant-statut-section';
+        return '.statut-in-progress-mount, .field--statut-embedded';
       case 'objectif':
         return '.info-row--objectif, .variant-objectif-section';
       case 'priority':
@@ -323,7 +323,7 @@
       case 'due':
         return '.variant-due-section';
       case 'blocked':
-        // Nested under Statut (reasons panel shown when status is Bloqué).
+        // Nested under Progrès → Statut (reasons panel shown when status is Bloqué).
         return '.statut-blocked-panel';
       case 'assistant':
         return '.variant-chat-section';
@@ -343,6 +343,25 @@
     FEATURE_KEYS.forEach(function (key) {
       var sel = featureSelector(key);
       if (!sel) return;
+      // Statut nests under Progrès: keep the Progrès shell when Statut is on.
+      if (key === 'progress') {
+        var completionOnly = cardEl.querySelectorAll(
+          '#completionMount, .tp-completion'
+        );
+        if (p.features.progress === false && p.features.statut !== false) {
+          var progressShell = cardEl.querySelectorAll(sel);
+          for (var ps = 0; ps < progressShell.length; ps++) {
+            progressShell[ps].hidden = false;
+          }
+          for (var c = 0; c < completionOnly.length; c++) {
+            completionOnly[c].hidden = true;
+          }
+          return;
+        }
+        for (var cu = 0; cu < completionOnly.length; cu++) {
+          completionOnly[cu].hidden = p.features.progress === false;
+        }
+      }
       var nodes = cardEl.querySelectorAll(sel);
       for (var i = 0; i < nodes.length; i++) {
         nodes[i].hidden = p.features[key] === false;

@@ -41,6 +41,25 @@ if (!Agent || !CT) {
   process.exit(1);
 }
 
+check(
+  'fallbackUnblockSubtaskText export',
+  typeof Agent.fallbackUnblockSubtaskText === 'function'
+);
+check(
+  'suggestUnblockSubtaskText export',
+  typeof Agent.suggestUnblockSubtaskText === 'function'
+);
+check(
+  'fallback waiting cable',
+  Agent.fallbackUnblockSubtaskText("En attente d'un c\u00e2ble") ===
+    'Obtenir un c\u00e2ble'
+);
+check(
+  'fallback approval',
+  Agent.fallbackUnblockSubtaskText("En attente d'une approbation") ===
+    "Obtenir l'approbation"
+);
+
 var priority = { enAttente: false, blockedReasons: [] };
 var completion = { items: [], progress: 100 };
 
@@ -74,6 +93,10 @@ Agent.executeAction(bridge, {
       completion.progress === 0 && !CT.isAllSubtasksComplete(completion)
     );
     check(
+      'master blocked mirrored',
+      completion.blocked === true && CT.hasAnyBlocked(completion)
+    );
+    check(
       'detail mentions progress',
       !!(res && res.detail && /progress/.test(res.detail))
     );
@@ -87,7 +110,11 @@ Agent.executeAction(bridge, {
     });
   })
   .then(function (res) {
-    check('set_blocked keeps partial progress', !!(res && res.ok) && completion.progress === 40);
+    check(
+      'set_blocked keeps partial progress',
+      !!(res && res.ok) && completion.progress === 40
+    );
+    check('set_blocked sets master.blocked', completion.blocked === true);
 
     // Items at 100% also clear.
     priority = { enAttente: false, blockedReasons: [] };
@@ -109,6 +136,62 @@ Agent.executeAction(bridge, {
       completion.items.every(function (i) {
         return i.progress === 0 && !i.done;
       }) && !CT.isAllSubtasksComplete(completion)
+    );
+    check('master blocked when enabling without links', completion.blocked === true);
+
+    // Unblock clears progress blocked flags.
+    return Agent.executeAction(bridge, {
+      tool: 'set_blocked',
+      args: { enAttente: false }
+    });
+  })
+  .then(function (res) {
+    check('set_blocked unblock ok', !!(res && res.ok));
+    check('enAttente false', priority.enAttente === false);
+    check(
+      'clearAllBlocked via set_blocked false',
+      !completion.blocked && !CT.hasAnyBlocked(completion)
+    );
+
+    // add_subtask blocked:true creates blocked item + enAttente.
+    priority = { enAttente: false, blockedReasons: [], blockedLinks: [] };
+    completion = { items: [] };
+    return Agent.executeAction(bridge, {
+      tool: 'add_subtask',
+      args: { text: 'Obtenir le mat\u00e9riel', blocked: true }
+    });
+  })
+  .then(function (res) {
+    check('add_subtask blocked ok', !!(res && res.ok));
+    check(
+      'add_subtask blocked item',
+      completion.items.length === 1 &&
+        completion.items[0].blocked === true &&
+        completion.items[0].text === 'Obtenir le mat\u00e9riel'
+    );
+    check('add_subtask blocked enables enAttente', priority.enAttente === true);
+    check(
+      'add_subtask blocked sets blockedLinks',
+      Array.isArray(priority.blockedLinks) &&
+        priority.blockedLinks.length === 1 &&
+        priority.blockedLinks[0].id === completion.items[0].id
+    );
+
+    // set_subtask_blocked toggle off clears card when last blocked item.
+    return Agent.executeAction(bridge, {
+      tool: 'set_subtask_blocked',
+      args: { id: completion.items[0].id, blocked: false }
+    });
+  })
+  .then(function (res) {
+    check('set_subtask_blocked off ok', !!(res && res.ok));
+    check(
+      'set_subtask_blocked clears item',
+      completion.items[0] && !completion.items[0].blocked
+    );
+    check(
+      'set_subtask_blocked clears enAttente when none left',
+      priority.enAttente === false
     );
 
     if (bad) process.exit(1);

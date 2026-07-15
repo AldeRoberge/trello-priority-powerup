@@ -100,6 +100,7 @@
     rename_subtask: 'Sous-t\u00e2che renomm\u00e9e.',
     remove_subtask: 'Sous-t\u00e2che supprim\u00e9e.',
     toggle_subtask: 'Sous-t\u00e2che mise \u00e0 jour.',
+    set_subtask_blocked: 'Sous-t\u00e2che bloqu\u00e9e mise \u00e0 jour.',
     set_subtask_progress: 'Progr\u00e8s de sous-t\u00e2che mis \u00e0 jour.',
     set_subtask_estimate: 'Dur\u00e9e de sous-t\u00e2che mise \u00e0 jour.',
     set_progress_estimate: 'Dur\u00e9e estim\u00e9e mise \u00e0 jour.',
@@ -2223,7 +2224,7 @@
         })
         .filter(Boolean);
       ctx.blocked = {
-        // Card is blocked ONLY when enAttente=true (shown under Statut when status is Bloqué).
+        // Card is blocked ONLY when enAttente=true (shown under Progrès when status is Bloqué).
         enabled: blockedEnabled,
         enAttente: blockedEnabled,
         blockedReasons: blockedEnabled ? blockedReasons.slice() : [],
@@ -2319,6 +2320,7 @@
             text: item.text,
             done: !!item.done,
             progress: item.progress,
+            blocked: item.blocked === true,
             estimatedMinutes:
               item.estimatedMinutes != null && isFinite(+item.estimatedMinutes)
                 ? +item.estimatedMinutes
@@ -2326,6 +2328,7 @@
             estimatedMinutesLocked: item.estimatedMinutesLocked === true
           };
         }),
+        blocked: completion.blocked === true,
         estimatedTotalMinutes: null,
         estimatedRemainingMinutes: null,
         estimatedMinutesOffset:
@@ -2678,7 +2681,7 @@
       '- Ne bloque JAMAIS une action pour un param\u00e8tre optionnel. Applique le minimum viable, puis adapte.',
       '- Ne pose une question AVANT d\'appeler un outil QUE si un param\u00e8tre OBLIGATOIRE manque et qu\'aucune action partielle n\'est possible.',
       '- Param\u00e8tres optionnels (ne jamais exiger avant d\'agir)\u00a0: dueTime, blockedReasons, axes priorit\u00e9 non fournis, progress pr\u00e9cis si on active seulement la section.',
-      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_subtask_estimate\u00a0: id OU matchText + estimatedMinutes\u00a0; set_progress_estimate.estimatedMinutes\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_project\u00a0: projectId OU matchText/name OU clear:true\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget ou priorityEnabled\u00a0; trigger_effect.effect\u00a0; point_at.section OU field\u00a0; set_agent_name.name\u00a0; set_agent_color.color\u00a0; set_agent_personality.personality.',
+      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_blocked / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_subtask_estimate\u00a0: id OU matchText + estimatedMinutes\u00a0; set_progress_estimate.estimatedMinutes\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_project\u00a0: projectId OU matchText/name OU clear:true\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget ou priorityEnabled\u00a0; trigger_effect.effect\u00a0; point_at.section OU field\u00a0; set_agent_name.name\u00a0; set_agent_color.color\u00a0; set_agent_personality.personality.',
       '- Dates relatives (jours)\u00a0: r\u00e9sous avec context.today (aujourd\'hui / today \u2192 context.today\u00a0; demain \u2192 +1 jour). N\'invente pas d\'autre date.',
       '- Heures relatives (tr\u00e8s important)\u00a0: \u00ab\u00a0dans 15 minutes\u00a0\u00bb / \u00ab\u00a0in 15 minutes\u00a0\u00bb / \u00ab\u00a0dans 2 heures\u00a0\u00bb = D\u00c9LAI depuis maintenant, PAS une heure fixe du matin.',
       '- Pour un d\u00e9lai\u00a0: utilise set_due avec relativeMinutes (ou relativeHours). Le runtime calcule dueDate/dueTime \u00e0 partir de context.nowTime (' +
@@ -2704,14 +2707,15 @@
       '- Ex. tour 1\u00a0: user \u00ab\u00a0Marquer la t\u00e2che comme bloqu\u00e9e\u00a0\u00bb \u2192 {"message":"Okay, bloqu\u00e9. Quel est le motif?","suggestions":["En attente d\'une approbation","En attente d\'une r\u00e9ponse","Bloqu\u00e9 \u00e0 cause du mat\u00e9riel"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}',
       '- INTERDIT (sans motif)\u00a0: inventer qui on attend, un pr\u00e9nom, ou \u00ab\u00a0en attendant X\u00a0\u00bb. Message du tour 1 = confirmation neutre + demande de motif (comme l\'ex. ci-dessus).',
       '- Ne JAMAIS r\u00e9pondre seulement \u00ab\u00a0Quel est le motif?\u00a0\u00bb sans avoir d\'abord appel\u00e9 set_blocked.',
-      '- Si l\'utilisateur donne ensuite un motif\u00a0: applique set_blocked avec blockedReasons (enAttente reste true) et confirme bri\u00e8vement.',
-      '- Ex. tour 2\u00a0: user \u00ab\u00a0En attente d\'une approbation\u00a0\u00bb \u2192 {"message":"Okay, not\u00e9\u00a0: en attente d\'une approbation.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedReasons":["En attente d\'une approbation"]}}]}',
-      '- Si le motif est d\u00e9j\u00e0 dans la demande initiale\u00a0: set_blocked avec enAttente:true + blockedReasons en un seul tour.',
-      '- Lien vers une sous-t\u00e2che (attente d\'une autre t\u00e2che)\u00a0: set_blocked avec blockedLinks (id ou matchText depuis progress.items). Le runtime ajoute le motif \u00ab\u00a0En attente d\'une autre t\u00e2che\u00a0\u00bb si besoin.',
-      '- Ex. lien\u00a0: user \u00ab\u00a0Bloqu\u00e9 en attendant Valider le devis\u00a0\u00bb \u2192 {"message":"Okay, bloqu\u00e9 sur Valider le devis.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedLinks":[{"matchText":"Valider le devis"}]}}]}',
+      '- Si l\'utilisateur donne ensuite un motif\u00a0: applique set_blocked avec blockedReasons (enAttente reste true) ET cr\u00e9e une sous-t\u00e2che d\u00e9blocage via add_subtask {text:"\u2026", blocked:true} (titre = action \u00e0 l\'infinitif, ex. Obtenir l\'approbation). Ne recr\u00e9e pas si progress.items a d\u00e9j\u00e0 l\'\u00e9quivalent.',
+      '- Ex. tour 2\u00a0: user \u00ab\u00a0En attente d\'une approbation\u00a0\u00bb \u2192 {"message":"Okay, not\u00e9\u00a0: en attente d\'une approbation.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedReasons":["En attente d\'une approbation"]}},{"tool":"add_subtask","args":{"text":"Obtenir l\'approbation","blocked":true}}]}',
+      '- Si le motif est d\u00e9j\u00e0 dans la demande initiale\u00a0: set_blocked avec enAttente:true + blockedReasons + add_subtask blocked:true en un seul tour.',
+      '- Lien vers une sous-t\u00e2che (attente d\'une autre t\u00e2che)\u00a0: set_blocked avec blockedLinks (id ou matchText depuis progress.items) ET set_subtask_blocked {matchText|\u00a0id, blocked:true}. Le runtime ajoute le motif \u00ab\u00a0En attente d\'une autre t\u00e2che\u00a0\u00bb si besoin.',
+      '- Ex. lien\u00a0: user \u00ab\u00a0Bloqu\u00e9 en attendant Valider le devis\u00a0\u00bb \u2192 {"message":"Okay, bloqu\u00e9 sur Valider le devis.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedLinks":[{"matchText":"Valider le devis"}]}},{"tool":"set_subtask_blocked","args":{"matchText":"Valider le devis","blocked":true}}]}',
+      '- Marquer une sous-t\u00e2che (ou la t\u00e2che ma\u00eetre via progress.blocked) bloqu\u00e9e implique Statut Bloqu\u00e9\u00a0: utilise set_subtask_blocked ou set_blocked; le runtime synchronise les deux.',
       '- Bloqu\u00e9 \u2260 Termin\u00e9\u00a0: si context.progress.percent=100 (ou carte marqu\u00e9e compl\u00e8te), set_blocked DOIT aussi remettre le progr\u00e8s hors Termin\u00e9 via set_progress {progressEnabled:true, progress:0} (ou le % r\u00e9el si partiel). Le runtime le fait aussi, mais inclus set_progress dans actions.',
-      '- Ex. (attente + pas commenc\u00e9)\u00a0: user \u00ab\u00a0J\'attends l\'acc\u00e8s admin\u00a0\u00bb \u2192 {"message":"Ok, bloqu\u00e9 en attendant l\'acc\u00e8s admin.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedReasons":["En attente de l\'acc\u00e8s admin"]}},{"tool":"set_progress","args":{"progressEnabled":true,"progress":0}}]}',
-      '- D\u00e9bloquer\u00a0: set_blocked avec enAttente:false (ou blockedReasons:[], blockedLinks:[]).',
+      '- Ex. (attente + pas commenc\u00e9)\u00a0: user \u00ab\u00a0J\'attends l\'acc\u00e8s admin\u00a0\u00bb \u2192 {"message":"Ok, bloqu\u00e9 en attendant l\'acc\u00e8s admin.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedReasons":["En attente de l\'acc\u00e8s admin"]}},{"tool":"add_subtask","args":{"text":"Obtenir l\'acc\u00e8s admin","blocked":true}},{"tool":"set_progress","args":{"progressEnabled":true,"progress":0}}]}',
+      '- D\u00e9bloquer\u00a0: set_blocked avec enAttente:false (ou blockedReasons:[], blockedLinks:[]) \u2014 le runtime efface aussi progress.blocked / items[].blocked.',
       'Sous-t\u00e2ches (progress.items du contexte)\u00a0:',
       '- Les sous-t\u00e2ches existantes sont dans context.progress.items (id + text). Quand l\'utilisateur cite un libell\u00e9 d\'item (\u00ab\u00a0Valider le devis\u00a0\u00bb, etc.), c\'est une sous-t\u00e2che\u00a0: retrouve-la dans items.',
       '- Pour toute op\u00e9ration sur une sous-t\u00e2che existante\u00a0: passer id OU matchText (libell\u00e9 actuel).',
@@ -2828,7 +2832,7 @@
       'Outils disponibles\u00a0:',
       '- set_priority: { urgency?:0-4, impact?:0-4, ease?:1-5, priorityEnabled?:boolean, tier?: string, heatTarget?: number } (tier = Critique|Urgente|Prioritaire|Importante|Flexible|Secondaire|Optionnelle\u00a0; impact 0\u20134 = port\u00e9e Personnel\u2026Global). Legacy estimatedDuration* \u2192 redirig\u00e9 vers set_progress_estimate.',
       '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean, relativeMinutes?: number, relativeHours?: number } (dueTime OPTIONNEL pour une date\u00a0; d\u00e9lai \u00ab\u00a0dans N min/h\u00a0\u00bb \u2192 relativeMinutes/relativeHours, calcul\u00e9 depuis context.nowTime\u00a0; aujourd\'hui = context.today)',
-      '- set_blocked: { enAttente?: boolean, blockedReasons?: string[], blockedLinks?: [{id?:string, matchText?:string, label?:string}] } (enAttente:true seul suffit\u00a0; motifs et liens optionnels\u00a0; si progr\u00e8s \u00e0 100%, le runtime le remet \u00e0 0% \u2014 ajoute aussi set_progress)',
+      '- set_blocked: { enAttente?: boolean, blockedReasons?: string[], blockedLinks?: [{id?:string, matchText?:string, label?:string}] } (enAttente:true seul suffit\u00a0; motifs et liens optionnels\u00a0; synchronise Progr\u00e8s blocked\u00a0; si progr\u00e8s \u00e0 100%, le runtime le remet \u00e0 0% \u2014 ajoute aussi set_progress)',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (master sur sous-t\u00e2ches si items\u00a0; sinon progres carte)',
       '- set_subtask_estimate: { id?: string, matchText?: string, estimatedMinutes: number|null, estimatedDuration?: string }',
       '- set_progress_estimate: { estimatedMinutes: number|null, estimatedDuration?: string } (total master)',
@@ -2837,7 +2841,8 @@
       '- set_project: { projectId?: string, matchText?: string, name?: string, clear?: boolean } (lie la carte \u00e0 un projet Objectif\u00a0; clear:true d\u00e9lie\u00a0; matchText/name parmi context.goals.projects)',
       '- rename_card: { name: string } (nouveau titre de la carte\u00a0; name obligatoire, non vide)',
       '- set_description: { desc: string } (nouvelle description compl\u00e8te\u00a0; r\u00e9sum\u00e9 court + misc\u00a0; desc obligatoire en string, "" pour effacer)',
-      '- add_subtask: { text: string, done?: boolean, estimatedMinutes?: number } (text obligatoire, non vide\u00a0; done:true = cr\u00e9er d\u00e9j\u00e0 coch\u00e9e)',
+      '- add_subtask: { text: string, done?: boolean, blocked?: boolean, estimatedMinutes?: number } (text obligatoire, non vide\u00a0; done:true = cr\u00e9er d\u00e9j\u00e0 coch\u00e9e\u00a0; blocked:true = sous-t\u00e2che bloquante + Statut Bloqu\u00e9)',
+      '- set_subtask_blocked: { id?|matchText?, blocked?: boolean } (marquer / d\u00e9marquer une sous-t\u00e2che bloqu\u00e9e\u00a0; synchronise enAttente)',
       '- rename_subtask: { text: string, id?: string, matchText?: string } (nouveau text\u00a0; id OU matchText)',
       '- remove_subtask: { id?: string, matchText?: string } (id OU matchText)',
       '- toggle_subtask: { id?: string, matchText?: string, done?: boolean }',
@@ -3397,6 +3402,130 @@
       out.push(est);
     });
     return out;
+  }
+
+  /**
+   * Deterministic fallback: turn a block motif into an actionable Progrès title.
+   * "En attente d'un câble" → "Obtenir un câble"
+   */
+  function fallbackUnblockSubtaskText(reason) {
+    var trimmed = typeof reason === 'string' ? reason.trim() : '';
+    if (!trimmed) return '';
+    if (
+      /^[A-Za-z\u00C0-\u024F]+er\b/i.test(trimmed) ||
+      /^[A-Za-z\u00C0-\u024F]+ir\b/i.test(trimmed) ||
+      /^(mettre|faire|ouvrir|fermer|obtenir|relancer|r\u00e9soudre)\b/i.test(trimmed)
+    ) {
+      return trimmed.slice(0, 500);
+    }
+    var waiting = trimmed.match(
+      /^en\s+attente\s+(de|d\')\s*(.+)$/i
+    );
+    if (waiting && waiting[2]) {
+      var restWait = waiting[2].trim().replace(/\.+$/, '');
+      if (/^mat\u00e9riel\b/i.test(restWait)) {
+        return 'Obtenir le mat\u00e9riel';
+      }
+      if (/^(une\s+)?r\u00e9ponse\b/i.test(restWait)) {
+        return 'Relancer pour obtenir une r\u00e9ponse';
+      }
+      if (/^(une\s+)?approbation\b/i.test(restWait)) {
+        return 'Obtenir l\'approbation';
+      }
+      return ('Obtenir ' + restWait).slice(0, 500);
+    }
+    var cause = trimmed.match(
+      /^bloqu\u00e9\s+\u00e0\s+cause\s+de\s+(.+)$/i
+    );
+    if (cause && cause[1]) {
+      var restCause = cause[1].trim().replace(/\.+$/, '');
+      if (/disponibilit\u00e9\s+du\s+mat\u00e9riel/i.test(restCause)) {
+        return 'Obtenir le mat\u00e9riel';
+      }
+      return ('R\u00e9soudre ' + restCause).slice(0, 500);
+    }
+    return ('D\u00e9bloquer\u00a0: ' + trimmed).slice(0, 500);
+  }
+
+  /**
+   * AI-assisted title for the Progrès subtask created from a block motif.
+   * Falls back to fallbackUnblockSubtaskText when the provider is missing/fails.
+   */
+  async function suggestUnblockSubtaskText(provider, reason) {
+    var trimmed = typeof reason === 'string' ? reason.trim() : '';
+    if (!trimmed) return '';
+    var fallback = fallbackUnblockSubtaskText(trimmed);
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) return fallback;
+
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu transformes un motif de blocage Trello en titre de sous-t\u00e2che actionable.',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"text":"\u2026"}',
+          'R\u00e8gles\u00a0:',
+          '- text = une action courte en fran\u00e7ais, \u00e0 l\'infinitif (ex. Obtenir le c\u00e2ble, Relancer Marie).',
+          '- Le titre doit d\u00e9bloquer la carte / avancer malgr\u00e9 le motif.',
+          '- PAS de question, PAS de motif recopié tel quel (sauf s\'il est d\u00e9j\u00e0 une action).',
+          '- Max ~80 caract\u00e8res, pas de guillemets superflus ni de num\u00e9rotation.',
+          'Ex.\u00a0: \u00ab\u00a0En attente d\'un c\u00e2ble\u00a0\u00bb \u2192 {"text":"Obtenir le c\u00e2ble"}',
+          'Ex.\u00a0: \u00ab\u00a0En attente d\'une approbation\u00a0\u00bb \u2192 {"text":"Obtenir l\'approbation"}',
+          'Ex.\u00a0: \u00ab\u00a0Bloqu\u00e9 \u00e0 cause du mat\u00e9riel\u00a0\u00bb \u2192 {"text":"Obtenir le mat\u00e9riel"}'
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content: 'Motif de blocage\u00a0: «' + trimmed.slice(0, 200) + '»'
+      }
+    ];
+
+    var response;
+    try {
+      response = await chatCompletions(p, messages, {
+        jsonMode: true,
+        max_tokens: 80,
+        temperature: 0.35,
+        stream: false
+      });
+    } catch (err) {
+      if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+        try {
+          response = await chatCompletions(p, messages, {
+            jsonMode: false,
+            max_tokens: 80,
+            temperature: 0.35,
+            stream: false
+          });
+        } catch (err2) {
+          console.error('PriorityAgent.suggestUnblockSubtaskText failed', err2);
+          return fallback;
+        }
+      } else {
+        console.error('PriorityAgent.suggestUnblockSubtaskText failed', err);
+        return fallback;
+      }
+    }
+
+    var text = '';
+    try {
+      var parsed = parseAssistantPayload(response.content);
+      text = typeof parsed.text === 'string' ? parsed.text : '';
+      if (!text && parsed.title) text = String(parsed.title);
+      if (!text && parsed.subtask) text = String(parsed.subtask);
+    } catch (e) {
+      try {
+        var raw = JSON.parse(response.content);
+        text = typeof raw.text === 'string' ? raw.text : '';
+      } catch (e2) {
+        text = '';
+      }
+    }
+    text = String(text || '')
+      .trim()
+      .replace(/^["«]\s*|\s*["»]$/g, '')
+      .slice(0, 500);
+    return text || fallback;
   }
 
   /**
@@ -5196,6 +5325,7 @@
       set_project: true,
       add_subtask: true,
       toggle_subtask: true,
+      set_subtask_blocked: true,
       set_subtask_progress: true,
       set_subtask_estimate: true,
       set_progress_estimate: true,
@@ -5453,7 +5583,8 @@
     }
     if (
       action.tool === 'remove_subtask' ||
-      action.tool === 'toggle_subtask'
+      action.tool === 'toggle_subtask' ||
+      action.tool === 'set_subtask_blocked'
     ) {
       return hasSubtaskRef(args);
     }
@@ -5545,6 +5676,9 @@
     }
     if (action.tool === 'toggle_subtask') {
       return 'toggle_subtask: id (ou matchText) requis';
+    }
+    if (action.tool === 'set_subtask_blocked') {
+      return 'set_subtask_blocked: id (ou matchText) requis';
     }
     if (action.tool === 'set_subtask_progress') {
       return 'set_subtask_progress: id (ou matchText) et progress requis';
@@ -9316,7 +9450,8 @@
       parts.push('items ' + beforeC.items.length + ' \u2192 ' + afterC.items.length);
     } else if (
       tool === 'toggle_subtask' ||
-      tool === 'set_subtask_progress'
+      tool === 'set_subtask_progress' ||
+      tool === 'set_subtask_blocked'
     ) {
       var tid = (extra && extra.id) || args.id;
       var beforeItem = findItem(beforeC.items, tid);
@@ -9326,6 +9461,7 @@
         if (beforeItem.text) parts.push('"' + beforeItem.text + '"');
         pushChange(parts, 'done', beforeItem.done, afterItem.done);
         pushChange(parts, 'progress', beforeItem.progress, afterItem.progress);
+        pushChange(parts, 'blocked', !!beforeItem.blocked, !!afterItem.blocked);
       } else {
         parts.push('id: ' + (tid || '?'));
       }
@@ -9817,21 +9953,67 @@
             : null;
         bridge.applyPriority(blockedPartial);
         var afterBlockedCompletion = beforeBlockedCompletion;
-        // Bloqué contradicts Terminé / 100%: drop progress off complete.
+        // Keep Progrès blocked flags in sync with card Bloqué (bidirectional).
         if (
-          blockedPartial.enAttente === true &&
           typeof bridge.applyCompletion === 'function' &&
           typeof bridge.getCompletion === 'function' &&
-          typeof CompletionTrello !== 'undefined' &&
-          typeof CompletionTrello.markNotFullyComplete === 'function' &&
-          typeof CompletionTrello.isAllSubtasksComplete === 'function'
+          typeof CompletionTrello !== 'undefined'
         ) {
           var completionWhileBlocked = bridge.getCompletion() || { items: [] };
-          if (CompletionTrello.isAllSubtasksComplete(completionWhileBlocked)) {
-            var incomplete = CompletionTrello.markNotFullyComplete(
-              completionWhileBlocked
-            );
-            bridge.applyCompletion(incomplete);
+          var nextBlockedCompletion = completionWhileBlocked;
+          if (blockedPartial.enAttente === false) {
+            if (typeof CompletionTrello.clearAllBlocked === 'function') {
+              nextBlockedCompletion =
+                CompletionTrello.clearAllBlocked(completionWhileBlocked);
+            }
+          } else if (blockedPartial.enAttente === true) {
+            if (
+              typeof CompletionTrello.isAllSubtasksComplete === 'function' &&
+              typeof CompletionTrello.markNotFullyComplete === 'function' &&
+              CompletionTrello.isAllSubtasksComplete(completionWhileBlocked)
+            ) {
+              nextBlockedCompletion = CompletionTrello.markNotFullyComplete(
+                completionWhileBlocked
+              );
+            }
+            // Mirror linked items → item.blocked; otherwise master.blocked.
+            var linkIds = [];
+            if (Array.isArray(blockedPartial.blockedLinks)) {
+              blockedPartial.blockedLinks.forEach(function (link) {
+                if (link && link.id) linkIds.push(String(link.id));
+              });
+            }
+            if (
+              linkIds.length &&
+              typeof CompletionTrello.setItemBlocked === 'function'
+            ) {
+              linkIds.forEach(function (id) {
+                nextBlockedCompletion = CompletionTrello.setItemBlocked(
+                  nextBlockedCompletion,
+                  id,
+                  true
+                );
+              });
+            } else if (
+              typeof CompletionTrello.hasAnyBlocked === 'function' &&
+              !CompletionTrello.hasAnyBlocked(nextBlockedCompletion) &&
+              typeof CompletionTrello.setMasterBlocked === 'function'
+            ) {
+              nextBlockedCompletion = CompletionTrello.setMasterBlocked(
+                nextBlockedCompletion,
+                true
+              );
+            }
+          }
+          if (
+            JSON.stringify(
+              CompletionTrello.normalizeCompletionData(completionWhileBlocked)
+            ) !==
+            JSON.stringify(
+              CompletionTrello.normalizeCompletionData(nextBlockedCompletion)
+            )
+          ) {
+            bridge.applyCompletion(nextBlockedCompletion);
             afterBlockedCompletion = snapshotCompletion(bridge);
           }
         }
@@ -10026,12 +10208,14 @@
           '-' +
           Math.random().toString(36).slice(2, 8);
         var addDone = !!args.done;
+        var addBlocked = !addDone && !!args.blocked;
         var newItem = {
           id: id,
           text: text,
           done: addDone,
           progress: addDone ? 100 : 0
         };
+        if (addBlocked) newItem.blocked = true;
         var addEst = resolveEstimateMinutesArg(args);
         if (addEst != null) newItem.estimatedMinutes = addEst;
         items.push(newItem);
@@ -10039,6 +10223,14 @@
         delete added.progress;
         if (added.progressEnabled === false) delete added.progressEnabled;
         bridge.applyCompletion(added);
+        // Blocked subtask implies card Bloqué (same rule as Progrès UI).
+        if (addBlocked && typeof bridge.applyPriority === 'function') {
+          var blockedPri = { enAttente: true };
+          blockedPri.blockedLinks = [
+            { type: 'subtask', id: id, label: text }
+          ];
+          bridge.applyPriority(blockedPri);
+        }
         var afterAdd = snapshotCompletion(bridge);
         return {
           ok: true,
@@ -10049,6 +10241,68 @@
           detail: detailForTool(tool, null, null, beforeAdd, afterAdd, args, {
             id: id
           })
+        };
+      }
+      if (tool === 'set_subtask_blocked') {
+        if (typeof bridge.applyCompletion !== 'function') {
+          return { ok: false, tool: tool, error: 'Progr\u00e8s indisponible' };
+        }
+        if (typeof CompletionTrello === 'undefined') {
+          return { ok: false, tool: tool, error: 'CompletionTrello indisponible' };
+        }
+        var beforeItemBlocked = snapshotCompletion(bridge);
+        var itemBlockedBase =
+          typeof bridge.getCompletion === 'function'
+            ? bridge.getCompletion()
+            : { items: [] };
+        var itemBlockedTarget = resolveSubtaskItem(itemBlockedBase.items, args);
+        if (!itemBlockedTarget) {
+          return { ok: false, tool: tool, error: 'Sous-t\u00e2che introuvable' };
+        }
+        var wantBlocked =
+          args.blocked != null ? !!args.blocked : !itemBlockedTarget.blocked;
+        var nextItemBlocked = CompletionTrello.setItemBlocked(
+          itemBlockedBase,
+          itemBlockedTarget.id,
+          wantBlocked
+        );
+        bridge.applyCompletion(nextItemBlocked);
+        if (typeof bridge.applyPriority === 'function') {
+          if (wantBlocked) {
+            bridge.applyPriority({
+              enAttente: true,
+              blockedLinks: CompletionTrello.blockedLinksFromCompletion(
+                nextItemBlocked
+              ),
+            });
+          } else if (
+            typeof CompletionTrello.hasAnyBlocked === 'function' &&
+            !CompletionTrello.hasAnyBlocked(nextItemBlocked)
+          ) {
+            bridge.applyPriority({ enAttente: false, blockedLinks: [] });
+          } else {
+            bridge.applyPriority({
+              blockedLinks: CompletionTrello.blockedLinksFromCompletion(
+                nextItemBlocked
+              ),
+            });
+          }
+        }
+        var afterItemBlocked = snapshotCompletion(bridge);
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.set_subtask_blocked,
+          detail: detailForTool(
+            tool,
+            null,
+            null,
+            beforeItemBlocked,
+            afterItemBlocked,
+            args,
+            { id: itemBlockedTarget.id, blocked: wantBlocked }
+          )
         };
       }
       if (tool === 'set_subtask_estimate') {
@@ -10630,9 +10884,11 @@
               : args.progress != null
                 ? clampInt(args.progress, 0, 100, 0)
                 : 0;
+            if (done) delete copy.blocked;
           } else {
             copy.progress = clampInt(args.progress, 0, 100, item.progress || 0);
             copy.done = copy.progress >= 100;
+            if (copy.done) delete copy.blocked;
           }
           return copy;
         });
@@ -11060,6 +11316,8 @@
     isVerboseStructuredDesc: isVerboseStructuredDesc,
     suggestSubtasks: suggestSubtasks,
     estimateSubtaskDurations: estimateSubtaskDurations,
+    fallbackUnblockSubtaskText: fallbackUnblockSubtaskText,
+    suggestUnblockSubtaskText: suggestUnblockSubtaskText,
     heuristicSubtaskEstimates: heuristicSubtaskEstimates,
     parseDurationMinutes: parseDurationMinutes,
     suggestGoals: suggestGoals,

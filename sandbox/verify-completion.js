@@ -48,6 +48,13 @@ check('PriorityTrello.getCardDueComplete export', !!(PT && typeof PT.getCardDueC
   'clampProgress',
   'itemProgress',
   'syncDoneFromProgress',
+  'isItemBlocked',
+  'isMasterBlocked',
+  'hasAnyBlocked',
+  'setMasterBlocked',
+  'setItemBlocked',
+  'clearAllBlocked',
+  'blockedLinksFromCompletion',
   'getCardCompletion',
   'saveCardCompletion',
   'formatFaceBadgeText',
@@ -815,6 +822,88 @@ check(
 check(
   'remaining label at 0 is Terminé',
   CT.formatEstimatedRemainingLabel(0) === 'Termin\u00e9'
+);
+
+// --- Blocked master / subtask flags ---
+var blockedNorm = CT.normalizeCompletionData({
+  items: [
+    { id: 'b1', text: 'Obtenir le c\u00e2ble', progress: 10, blocked: true },
+    { id: 'b2', text: 'Installer', progress: 0 },
+  ],
+  blocked: true,
+});
+check(
+  'normalize keeps item.blocked',
+  blockedNorm.items[0].blocked === true && !blockedNorm.items[1].blocked
+);
+check('normalize keeps master.blocked', blockedNorm.blocked === true);
+check('hasAnyBlocked true with flags', CT.hasAnyBlocked(blockedNorm) === true);
+
+var doneClearsBlocked = CT.normalizeItem({
+  id: 'x',
+  text: 'Done',
+  progress: 100,
+  blocked: true,
+});
+check(
+  'normalizeItem clears blocked when done',
+  doneClearsBlocked && doneClearsBlocked.done && !doneClearsBlocked.blocked
+);
+
+var setItem = CT.setItemBlocked(
+  { items: [{ id: 'b1', text: 'A', progress: 100, done: true }] },
+  'b1',
+  true
+);
+check(
+  'setItemBlocked drops item off 100%',
+  setItem.items[0].blocked === true &&
+    setItem.items[0].progress === 0 &&
+    !setItem.items[0].done
+);
+
+var setMaster = CT.setMasterBlocked({ items: [], progress: 100 }, true);
+check(
+  'setMasterBlocked drops card progress off 100%',
+  setMaster.blocked === true && setMaster.progress === 0
+);
+
+var clearedBlocked = CT.clearAllBlocked({
+  blocked: true,
+  items: [{ id: 'b1', text: 'A', progress: 20, blocked: true }],
+});
+check(
+  'clearAllBlocked removes all flags',
+  !clearedBlocked.blocked &&
+    clearedBlocked.items.every(function (i) {
+      return !i.blocked;
+    }) &&
+    !CT.hasAnyBlocked(clearedBlocked)
+);
+
+var linksFromBlocked = CT.blockedLinksFromCompletion({
+  items: [
+    { id: 'b1', text: 'Obtenir le c\u00e2ble', progress: 0, blocked: true },
+    { id: 'b2', text: 'Autre', progress: 0 },
+  ],
+});
+check(
+  'blockedLinksFromCompletion maps blocked items',
+  linksFromBlocked.length === 1 &&
+    linksFromBlocked[0].id === 'b1' &&
+    linksFromBlocked[0].type === 'subtask'
+);
+
+var fullyDone = CT.markFullyComplete({
+  blocked: true,
+  items: [{ id: 'b1', text: 'A', progress: 50, blocked: true }],
+});
+check(
+  'markFullyComplete clears blocked flags',
+  !fullyDone.blocked &&
+    fullyDone.items.every(function (i) {
+      return !i.blocked;
+    })
 );
 
 var boardCardsForParent = [

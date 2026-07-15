@@ -3871,7 +3871,9 @@
         return '.statut-blocked-panel, .variant-blocked-section';
       }
       if (section === 'progress') return '.variant-progress-section';
-      if (section === 'statut') return '.variant-statut-section';
+      if (section === 'statut') {
+        return '.statut-in-progress-mount, .field--statut-embedded, .variant-progress-section';
+      }
       if (section === 'objectif') {
         return '.variant-objectif-section, .info-row--objectif';
       }
