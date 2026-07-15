@@ -601,6 +601,41 @@ check(
     'Dans deux jours'
 );
 check(
+  'period label today',
+  PU.formatDueTimePeriodLabel('matin', '2026-07-13', nowAfternoon) === 'Ce matin' &&
+    PU.formatDueTimePeriodLabel('midi', '2026-07-13', nowAfternoon) === 'Ce midi' &&
+    PU.formatDueTimePeriodLabel('apres-midi', '2026-07-13', nowAfternoon) ===
+      'Cet apr\u00e8s-midi' &&
+    PU.formatDueTimePeriodLabel('soir', '2026-07-13', nowAfternoon) === 'Ce soir'
+);
+check(
+  'period label tomorrow',
+  PU.formatDueTimePeriodLabel('matin', addDaysIso('2026-07-13', 1), nowAfternoon) ===
+    'Demain matin' &&
+    PU.formatDueTimePeriodLabel('midi', addDaysIso('2026-07-13', 1), nowAfternoon) ===
+      'Demain midi' &&
+    PU.formatDueTimePeriodLabel('soir', addDaysIso('2026-07-13', 1), nowAfternoon) ===
+      'Demain soir'
+);
+check(
+  'period label yesterday',
+  PU.formatDueTimePeriodLabel('matin', addDaysIso('2026-07-13', -1), nowAfternoon) ===
+    'Hier matin' &&
+    PU.formatDueTimePeriodLabel('midi', addDaysIso('2026-07-13', -1), nowAfternoon) ===
+      'Hier midi' &&
+    PU.formatDueTimePeriodLabel('soir', addDaysIso('2026-07-13', -1), nowAfternoon) ===
+      'Hier soir'
+);
+check(
+  'period label upcoming weekday',
+  PU.formatDueTimePeriodLabel('soir', addDaysIso('2026-07-13', 3), nowAfternoon) ===
+    'Jeudi soir'
+);
+check(
+  'period label bare without date',
+  PU.formatDueTimePeriodLabel('matin', '', nowAfternoon) === 'Matin'
+);
+check(
   'human readable includes period clock time',
   (function () {
     var human = PU.formatDueDateHumanReadable(
@@ -619,6 +654,28 @@ check(
       human.primary.indexOf('18 h') !== -1 ||
       (human.secondary && human.secondary.indexOf('18 h') !== -1)
     );
+  })()
+);
+check(
+  'human readable past today uses Il y a not Aujourd\'hui',
+  (function () {
+    var human = PU.formatDueDateHumanReadable('2026-07-13', '13:00', nowAfternoon);
+    return (
+      human.primary === 'Il y a une heure' &&
+      !human.secondary &&
+      human.primary.indexOf('Aujourd') === -1
+    );
+  })()
+);
+check(
+  'human readable past date-only uses relative day',
+  (function () {
+    var human = PU.formatDueDateHumanReadable(
+      addDaysIso('2026-07-13', -1),
+      '',
+      nowAfternoon
+    );
+    return human.primary === 'Hier' && !human.secondary;
   })()
 );
 check(

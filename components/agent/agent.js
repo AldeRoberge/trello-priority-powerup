@@ -1223,6 +1223,127 @@
     );
   }
 
+  /** True when the card already has an active due date the AI must not re-ask. */
+  function contextHasActiveDue(context) {
+    var due = context && context.due;
+    return !!(due && due.enabled && due.dueDate);
+  }
+
+  function cardMemoryHasWhyFact(cardMemory) {
+    var facts =
+      cardMemory && Array.isArray(cardMemory.facts) ? cardMemory.facts : [];
+    for (var i = 0; i < facts.length; i++) {
+      var f = facts[i];
+      var text =
+        typeof f === 'string'
+          ? f
+          : f && typeof f === 'object'
+            ? String(f.text || f.fact || '')
+            : '';
+      if (/^\s*pourquoi\b/i.test(text)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Explicit "already filled" clues for the interview model — do not re-ask.
+   */
+  function summarizeInterviewAlreadyKnown(context) {
+    var due = context && context.due;
+    var activeDue = contextHasActiveDue(context);
+    return {
+      dueActive: activeDue,
+      dueDate: activeDue ? due.dueDate : null,
+      dueTime: activeDue ? due.dueTime || null : null,
+      whyKnown: cardMemoryHasWhyFact(context && context.cardMemory),
+      priorityAxesTrusted: !!(
+        context &&
+        context.interview &&
+        context.interview.priorityAxesTrusted
+      ),
+      progressComplete: contextProgressComplete(context)
+    };
+  }
+
+  /**
+   * Runtime pivot when we must leave the current interview angle.
+   * Never asks for a due date that is already set (or when the task is done).
+   */
+  function buildInterviewNextPivot(context) {
+    var trusted = !!(
+      context &&
+      context.interview &&
+      context.interview.priorityAxesTrusted
+    );
+
+    // Default axis values are unreliable until trusted — ask/confirm axes first.
+    if (!trusted) {
+      return {
+        message: 'Si on ne le livre pas, c\'est [[a:grave]]?',
+        suggestions: [
+          { label: 'Pas grand-chose', heat: 0 },
+          { label: 'Un peu emb\u00eatant', heat: 2 },
+          { label: 'Oui, c\'est urgent', heat: 4 }
+        ],
+        suggestionsMulti: false,
+        suggestionScale: true,
+        completeInterview: false
+      };
+    }
+
+    if (!contextProgressComplete(context) && !contextHasActiveDue(context)) {
+      return {
+        message: 'C\'est pour [[a:quand]]?',
+        suggestions: ['Aujourd\'hui', 'Demain', 'Pas d\'\u00e9ch\u00e9ance'],
+        suggestionsMulti: false,
+        suggestionScale: true,
+        completeInterview: false
+      };
+    }
+
+    return {
+      message:
+        'Ok, on a l\'essentiel' +
+        (contextHasActiveDue(context) ? ' (l\'\u00e9ch\u00e9ance est d\u00e9j\u00e0 pos\u00e9e)' : '') +
+        '. Tu peux peaufiner si tu veux.',
+      suggestions: [],
+      suggestionsMulti: false,
+      suggestionScale: false,
+      completeInterview: true
+    };
+  }
+
+  /**
+   * If the model asks for a due date that context already has, pivot away.
+   * (Same class of bug as progress-complete due asks.)
+   */
+  function applyKnownDueGuards(turn, context) {
+    turn = turn && typeof turn === 'object' ? turn : {};
+    var message = typeof turn.message === 'string' ? turn.message : '';
+    if (!looksLikeDueAskMessage(message)) return turn;
+    if (contextProgressComplete(context)) return turn;
+    if (!contextHasActiveDue(context)) return turn;
+
+    var pivot = buildInterviewNextPivot(context);
+    if (looksLikeDueAskMessage(pivot.message)) {
+      pivot = {
+        message:
+          'Ok, l\'\u00e9ch\u00e9ance est d\u00e9j\u00e0 pos\u00e9e. Tu peux peaufiner si tu veux.',
+        suggestions: [],
+        suggestionsMulti: false,
+        suggestionScale: false,
+        completeInterview: true
+      };
+    }
+    return Object.assign({}, turn, {
+      message: pivot.message,
+      suggestions: pivot.suggestions,
+      suggestionsMulti: pivot.suggestionsMulti,
+      suggestionScale: pivot.suggestionScale,
+      completeInterview: !!pivot.completeInterview
+    });
+  }
+
   function looksLikeCongratulation(message) {
     if (typeof message !== 'string' || !message) return false;
     return /\b(bravo|f[eé]licitations|chapeau|pli[eé]|bien jou[eé]|nice\b|woo+hoo|yay|congrats?|well\s+done)\b/i.test(
@@ -2434,8 +2555,10 @@
       '- N\'applique PAS automatiquement complete_all_subtasks ni set_statut sans confirmation pour cette incoh\u00e9rence.',
       'Propositions d\'\u00e9ch\u00e9ance / date limite (tr\u00e8s important)\u00a0:',
       '- INTERDIT\u00a0: \u00ab\u00a0Je peux d\u00e9finir l\'\u00e9ch\u00e9ance \u00e0 demain. Je m\'en occupe?\u00a0\u00bb ou toute variante \u00ab\u00a0Je peux\u2026 / Je m\'en occupe?\u00a0\u00bb.',
+      '- Si context.due.enabled=true et due.dueDate est d\u00e9j\u00e0 d\u00e9fini\u00a0: INTERDIT \u00ab\u00a0C\'est pour quand?\u00a0\u00bb / redemander une \u00e9ch\u00e9ance, SAUF si l\'utilisateur demande explicitement de la changer.',
       '- Si tu proposes une date concr\u00e8te pour confirmation (sans encore appeler set_due)\u00a0: \u00ab\u00a0Veux-tu que je d\u00e9finisse l\'\u00e9ch\u00e9ance \u00e0 demain?\u00a0\u00bb (ou aujourd\'hui / vendredi / \u2026).',
       '- Ex. FAUX\u00a0: {"message":"Je peux d\u00e9finir l\'\u00e9ch\u00e9ance \u00e0 demain. Je m\'en occupe?"}',
+      '- Ex. FAUX (due d\u00e9j\u00e0 active)\u00a0: context.due.dueDate connu + message \u00ab\u00a0C\'est pour quand?\u00a0\u00bb',
       '- Ex. VRAI\u00a0: {"message":"Veux-tu que je d\u00e9finisse l\'\u00e9ch\u00e9ance \u00e0 demain?","suggestions":["Oui","Non","Apr\u00e8s-demain"]}',
       '- Si l\'utilisateur a d\u00e9j\u00e0 donn\u00e9 la date clairement\u00a0: APPLIQUE set_due tout de suite (\u00ab\u00a0Okay, demain.\u00a0\u00bb) sans redemander.',
       'Tu peux expliquer la priorit\u00e9, l\'\u00e9ch\u00e9ance, le blocage et le progr\u00e8s, et proposer des changements.',
@@ -3187,6 +3310,205 @@
       .slice(0, 3);
   }
 
+  /** Minimum model confidence to surface a label suggestion (0–1). */
+  var LABEL_SUGGEST_MIN_CONFIDENCE = 0.7;
+
+  function normalizeBoardLabelRef(raw) {
+    if (!raw) return null;
+    if (typeof raw === 'string') {
+      var asId = raw.trim();
+      return asId ? { id: asId, name: '', confidence: null } : null;
+    }
+    if (typeof raw !== 'object') return null;
+    var id = raw.id != null ? String(raw.id).trim() : '';
+    var name =
+      typeof raw.name === 'string'
+        ? raw.name.trim()
+        : typeof raw.label === 'string'
+          ? raw.label.trim()
+          : '';
+    if (!id && !name) return null;
+    var confidence = Number(raw.confidence);
+    if (!isFinite(confidence)) {
+      confidence = Number(raw.score);
+    }
+    if (!isFinite(confidence)) confidence = null;
+    else {
+      if (confidence > 1 && confidence <= 100) confidence = confidence / 100;
+      confidence = Math.max(0, Math.min(1, confidence));
+    }
+    return { id: id, name: name, confidence: confidence };
+  }
+
+  /**
+   * Suggest existing board labels for a card (Information → Étiquettes).
+   * Returns only high-confidence matches resolved to board label objects.
+   * context: { cardName?, cardDesc?, priorityLabel?, existingLabels?, boardLabels? }
+   * @returns {Promise<Array<{id:string,name:string,color?:*,confidence:number}>>}
+   */
+  async function suggestLabels(provider, context, options) {
+    options = options || {};
+    var minConfidence =
+      typeof options.minConfidence === 'number' && isFinite(options.minConfidence)
+        ? options.minConfidence
+        : LABEL_SUGGEST_MIN_CONFIDENCE;
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) return [];
+    var ctx = context && typeof context === 'object' ? context : {};
+
+    var boardLabels = Array.isArray(ctx.boardLabels)
+      ? ctx.boardLabels.filter(function (label) {
+          return label && label.id;
+        })
+      : [];
+    if (!boardLabels.length) return [];
+
+    var existingIds = Object.create(null);
+    var existingNames = Object.create(null);
+    (Array.isArray(ctx.existingLabels) ? ctx.existingLabels : []).forEach(
+      function (label) {
+        if (!label) return;
+        if (label.id) existingIds[String(label.id)] = true;
+        var n =
+          typeof label.name === 'string' ? label.name.trim().toLocaleLowerCase('fr-FR') : '';
+        if (n) existingNames[n] = true;
+      }
+    );
+
+    var available = boardLabels
+      .filter(function (label) {
+        return !existingIds[String(label.id)];
+      })
+      .slice(0, 60)
+      .map(function (label) {
+        return {
+          id: String(label.id),
+          name: typeof label.name === 'string' ? label.name.trim().slice(0, 80) : '',
+          color: label.color != null ? String(label.color) : null
+        };
+      });
+    if (!available.length) return [];
+
+    var byId = Object.create(null);
+    var byName = Object.create(null);
+    available.forEach(function (label) {
+      byId[label.id] = label;
+      if (label.name) {
+        var key = label.name.toLocaleLowerCase('fr-FR');
+        if (!byName[key]) byName[key] = label;
+      }
+    });
+
+    var payload = {
+      cardName: typeof ctx.cardName === 'string' ? ctx.cardName.slice(0, 200) : '',
+      cardDesc:
+        typeof ctx.cardDesc === 'string'
+          ? ctx.cardDesc.trim().replace(/\s+/g, ' ').slice(0, 600)
+          : '',
+      priorityLabel:
+        typeof ctx.priorityLabel === 'string' ? ctx.priorityLabel.slice(0, 80) : '',
+      boardLabels: available
+    };
+
+    var title = String(payload.cardName || '').trim();
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu choisis les \u00e9tiquettes Trello les plus pertinentes pour une carte.',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":[{"id":"\u2026","confidence":0.0}]}',
+          'R\u00e8gles\u00a0:',
+          '- Choisis UNIQUEMENT parmi boardLabels (par id exact). N\u2019invente jamais une \u00e9tiquette.',
+          '- 0 \u00e0 3 suggestions. Pr\u00e9f\u00e8re 0 si le lien avec le titre/description est faible.',
+          '- confidence = probabilit\u00e9 0\u20131 que l\u2019\u00e9tiquette doive \u00eatre sur CETTE carte.',
+          '- N\u2019inclus une suggestion que si confidence \u2265 ' +
+            String(minConfidence) +
+            '.',
+          '- Si plusieurs couleurs sans nom, ne les propose que si le contexte couleur est \u00e9vident.',
+          '- INTERDIT\u00a0: ids hors liste\u00a0; \u00e9tiquettes d\u00e9j\u00e0 sur la carte\u00a0; suggestions g\u00e9n\u00e9riques sans lien.',
+          'Contexte\u00a0:',
+          JSON.stringify(payload)
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content: title
+          ? 'Quelles \u00e9tiquettes du tableau correspondent clairement \u00e0\u00a0: \u00ab\u00a0' +
+            title.slice(0, 200) +
+            '\u00a0\u00bb\u00a0? Seulement si la confiance est \u00e9lev\u00e9e.'
+          : 'Quelles \u00e9tiquettes du tableau correspondent clairement \u00e0 cette carte\u00a0? Seulement si la confiance est \u00e9lev\u00e9e.'
+      }
+    ];
+
+    var response;
+    try {
+      response = await chatCompletions(p, messages, {
+        jsonMode: true,
+        max_tokens: 220,
+        temperature: 0.25,
+        stream: false
+      });
+    } catch (err) {
+      if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+        response = await chatCompletions(p, messages, {
+          jsonMode: false,
+          max_tokens: 220,
+          temperature: 0.25,
+          stream: false
+        });
+      } else {
+        console.error('PriorityAgent.suggestLabels failed', err);
+        return [];
+      }
+    }
+
+    var rawList = [];
+    try {
+      var parsed = parseAssistantPayload(response.content);
+      rawList = parsed.suggestions || parsed.labels || [];
+    } catch (e) {
+      try {
+        var raw = JSON.parse(response.content);
+        rawList = raw.suggestions || raw.labels || [];
+      } catch (e2) {
+        rawList = [];
+      }
+    }
+    if (!Array.isArray(rawList)) rawList = [];
+
+    var out = [];
+    var seen = Object.create(null);
+    for (var i = 0; i < rawList.length; i++) {
+      var ref = normalizeBoardLabelRef(rawList[i]);
+      if (!ref) continue;
+      if (ref.confidence == null || ref.confidence < minConfidence) continue;
+      var match = null;
+      if (ref.id && byId[ref.id]) match = byId[ref.id];
+      else if (ref.name) {
+        match = byName[ref.name.toLocaleLowerCase('fr-FR')] || null;
+      }
+      if (!match || existingIds[match.id] || seen[match.id]) continue;
+      if (match.name && existingNames[match.name.toLocaleLowerCase('fr-FR')]) continue;
+      seen[match.id] = true;
+      var full = null;
+      for (var j = 0; j < boardLabels.length; j++) {
+        if (boardLabels[j] && String(boardLabels[j].id) === match.id) {
+          full = boardLabels[j];
+          break;
+        }
+      }
+      out.push({
+        id: match.id,
+        name: full && typeof full.name === 'string' ? full.name : match.name,
+        color: full && full.color != null ? full.color : match.color,
+        idBoard: full && full.idBoard != null ? full.idBoard : undefined,
+        confidence: ref.confidence
+      });
+      if (out.length >= 3) break;
+    }
+    return out;
+  }
+
   function normalizeMetricSuggestion(raw) {
     if (!raw || typeof raw !== 'object') return null;
     var name = typeof raw.name === 'string' ? raw.name.trim() : '';
@@ -3752,51 +4074,14 @@
 
     if (!blocked) return turn;
 
-    var priority = context && context.priority ? context.priority : {};
-    var trusted =
-      context &&
-      context.interview &&
-      context.interview.priorityAxesTrusted;
-    var missingUrgency =
-      !trusted && (priority.urgency == null || priority.urgency === '');
-    var missingImpact =
-      !trusted && (priority.impact == null || priority.impact === '');
-    var missingEase =
-      !trusted && (priority.ease == null || priority.ease === '');
-
-    var pivot = '';
-    var suggestions = [];
-    var suggestionsMulti = false;
-    if (missingUrgency) {
-      pivot =
-        'Si on ne le livre pas, c\'est [[a:grave]]?';
-      suggestions = [
-        { label: 'Pas grand-chose', heat: 0 },
-        { label: 'Un peu emb\u00eatant', heat: 2 },
-        { label: 'Oui, c\'est urgent', heat: 4 }
-      ];
-    } else if (missingImpact) {
-      pivot =
-        'Le plus impact\u00e9 si on ne le fait pas, c\'est [[a:toi]]?';
-      suggestions = ['Oui', 'Non'];
-      suggestionsMulti = false;
-    } else if (missingEase) {
-      pivot = 'Pour toi, c\'est plut\u00f4t [[g:simple]] ou [[r:costaud]]?';
-      suggestions = [
-        { label: 'C\'est facile', heat: 0 },
-        { label: 'C\'est faisable', heat: 2 },
-        { label: 'C\'est difficile', heat: 4 }
-      ];
-    } else {
-      pivot = 'C\'est pour [[a:quand]]?';
-      suggestions = ['Aujourd\'hui', 'Demain', 'Pas d\'\u00e9ch\u00e9ance'];
-    }
-
+    // Never fall through to "C'est pour quand?" when due is already set.
+    var next = buildInterviewNextPivot(context);
     return Object.assign({}, turn, {
-      message: pivot,
-      suggestions: suggestions,
-      suggestionsMulti: suggestionsMulti,
-      suggestionScale: true
+      message: next.message,
+      suggestions: next.suggestions,
+      suggestionsMulti: next.suggestionsMulti,
+      suggestionScale: next.suggestionScale,
+      completeInterview: !!next.completeInterview
     });
   }
 
@@ -4316,20 +4601,30 @@
       '- Maximise le gain d\'info\u00a0: POURQUOI d\'abord (sauf d\u00e9j\u00e0 connu), puis clarifie si le titre est vague, puis (plans / achats seulement) permission / qui / commenc\u00e9 / d\u00e9j\u00e0 fait / reste, puis inf\u00e8re axes\u00a0; pose seulement ce qui reste ambigu. Sur une corv\u00e9e perso solo\u00a0: saute permission/qui et passe aux axes utiles (urgence, effort) en mode assumer+Oui/Non quand possible.',
       '- N\'invente PAS d\'\u00e9ch\u00e9ance, projet, sous-t\u00e2ches ou description sans indice (titre, r\u00e9ponse, voisinage). La dur\u00e9e COURTE pour un achat / un clic / un mail\u00a0: OK \u00e0 inf\u00e9rer.',
       '- Si l\'utilisateur dit passer / plus tard / skip / non merci\u00a0: completeInterview:true, actions=[] (sauf ce que tu as d\u00e9j\u00e0 assez pour appliquer) + message de cl\u00f4ture malin (pas \u00ab\u00a0Okay.\u00a0\u00bb).',
-      '- Quand urgence+impact+ease sont fix\u00e9s\u00a0: tu peux encore poser UNE question courte utile (\u00e9ch\u00e9ance, projet, clarification) SANS dire que c\'est la derni\u00e8re\u00a0; sinon completeInterview:true + cl\u00f4ture maligne. Pas de question dur\u00e9e si d\u00e9j\u00e0 inf\u00e9r\u00e9e.',
-      '- Pour \u00e9ch\u00e9ance\u00a0: \u00ab\u00a0C\'est pour quand?\u00a0\u00bb (+ Aujourd\'hui / Demain / Pas d\'\u00e9ch\u00e9ance) \u2014 SEULEMENT si la t\u00e2che n\'est PAS d\u00e9j\u00e0 \u00e0 100% / termin\u00e9e.',
+      '- Quand urgence+impact+ease sont fix\u00e9s\u00a0: tu peux encore poser UNE question courte utile (projet, clarification, OU \u00e9ch\u00e9ance SEULEMENT si elle manque) SANS dire que c\'est la derni\u00e8re\u00a0; sinon completeInterview:true + cl\u00f4ture maligne. Pas de question dur\u00e9e si d\u00e9j\u00e0 inf\u00e9r\u00e9e.',
+      '- Pour \u00e9ch\u00e9ance\u00a0: \u00ab\u00a0C\'est pour quand?\u00a0\u00bb (+ Aujourd\'hui / Demain / Pas d\'\u00e9ch\u00e9ance) \u2014 SEULEMENT si due N\'EST PAS d\u00e9j\u00e0 active (voir alreadyKnown.dueActive / context.due) ET la t\u00e2che n\'est PAS d\u00e9j\u00e0 \u00e0 100% / termin\u00e9e.',
       '- INTERDIT d\'offrir / demander une \u00e9ch\u00e9ance si set_progress\u2192100, complete_all_subtasks, ou context.progress d\u00e9j\u00e0 \u00e0 100. F\u00e9licite \u00e0 la place.',
+      '- INTERDIT d\'offrir / demander une \u00e9ch\u00e9ance si alreadyKnown.dueActive=true (due.enabled + dueDate). L\'\u00e9ch\u00e9ance est d\u00e9j\u00e0 pos\u00e9e\u00a0: passe aux axes ou cl\u00f4ture.',
+      '- Ex. FAUX (due d\u00e9j\u00e0 l\u00e0)\u00a0: apr\u00e8s le POURQUOI, message \u00ab\u00a0C\'est pour quand?\u00a0\u00bb alors que context.due.dueDate est d\u00e9fini.',
+      '- Ex. VRAI (due d\u00e9j\u00e0 l\u00e0)\u00a0: apr\u00e8s le POURQUOI \u2192 urgence / impact / facilit\u00e9 (ou completeInterview si axes ok).',
       '- Pour dur\u00e9e\u00a0: seulement si incertaine \u2192 \u00ab\u00a0\u00c7a prend combien de temps?\u00a0\u00bb. Sinon set_priority.estimatedDurationMinutes sans demander. Pour projet\u00a0: \u00ab\u00a0Quel projet?\u00a0\u00bb.',
       '- completeInterview:true quand l\'interview est termin\u00e9e.',
       '- \u00c9vite de reposer les questions d\u00e9j\u00e0 pos\u00e9es.',
       '- INTERDIT\u00a0: \u00ab\u00a0Comment puis-je vous aider?\u00a0\u00bb / questions vagues ouvertes sans ancrage.',
+      '',
+      'Champs / faits d\u00e9j\u00e0 connus (critique \u2014 LIS before asking)\u00a0:',
+      '- Consulte alreadyKnown + context.due / cardMemory / asked / historique AVANT chaque question.',
+      '- INTERDIT de demander ce qui est d\u00e9j\u00e0 renseign\u00e9 ou \u00e9vident d\'apr\u00e8s le titre / la m\u00e9moire / le contexte carte.',
+      '- Si alreadyKnown.dueActive\u00a0: z\u00e9ro question d\'\u00e9ch\u00e9ance.',
+      '- Si alreadyKnown.whyKnown\u00a0: z\u00e9ro re-POURQUOI.',
+      '- Si tu peux setter un axe / une dur\u00e9e raisonnablement\u00a0: fais-le dans actions, ne pose pas la question.',
       '',
       'Anti-boucle avancement (runtime \u2014 OBLIGATOIRE)\u00a0:',
       '- Lis context.interview.progressScout avant de poser d\u00e9j\u00e0-fait / reste.',
       '- Si askedDone=true\u00a0: INTERDIT toute reformulation \u00ab\u00a0d\u00e9j\u00e0 fait\u00a0\u00bb.',
       '- Si askedRemaining=true\u00a0: INTERDIT toute reformulation \u00ab\u00a0reste \u00e0 faire\u00a0\u00bb.',
       '- Si askedRemaining=true et askedDone=false\u00a0: NE pose PAS \u00ab\u00a0d\u00e9j\u00e0 fait\u00a0\u00bb ensuite (ordre invers\u00e9 = boucle). Passe aux axes.',
-      '- Si blockFurtherScout=true OU (memoryHasDone et memoryHasRemaining)\u00a0: plus AUCUN rep\u00e9rage d\u00e9j\u00e0/reste\u00a0; axes / \u00e9ch\u00e9ance / cl\u00f4ture.',
+      '- Si blockFurtherScout=true OU (memoryHasDone et memoryHasRemaining)\u00a0: plus AUCUN rep\u00e9rage d\u00e9j\u00e0/reste\u00a0; axes / \u00e9ch\u00e9ance (si absente) / cl\u00f4ture.',
       '',
       'Outils autoris\u00e9s dans actions\u00a0:',
       '- set_priority: { urgency?, impact?, ease?, tier?, estimatedDurationMinutes?, priorityEnabled? }',
@@ -4367,7 +4662,8 @@
         surrounding: context.interview.surrounding,
         recentCards: context.interview.recentCards,
         priorityAxesTrusted: context.interview.priorityAxesTrusted,
-        progressScout: context.interview.progressScout
+        progressScout: context.interview.progressScout,
+        alreadyKnown: summarizeInterviewAlreadyKnown(context)
       })
     ].join('\n');
 
@@ -4535,6 +4831,32 @@
       suggestionScale = !!scoutGuard.suggestionScale || suggestionScale;
     }
 
+    var dueGuard = applyKnownDueGuards(
+      {
+        message: message,
+        suggestions: scoutRedirected
+          ? scoutGuard.suggestions
+          : (data && data.suggestions) || parsed.suggestions,
+        suggestionsMulti:
+          scoutRedirected
+            ? scoutGuard.suggestionsMulti
+            : wantsSuggestionsMulti(data) || wantsSuggestionsMulti(parsed),
+        suggestionScale: suggestionScale,
+        completeInterview: !!(
+          (data && data.completeInterview) ||
+          scoutGuard.completeInterview
+        )
+      },
+      context
+    );
+    var dueRedirected = dueGuard.message !== message;
+    message = dueGuard.message;
+    if (dueRedirected) {
+      suggestionScale = !!dueGuard.suggestionScale || suggestionScale;
+      scoutRedirected = true;
+      scoutGuard = dueGuard;
+    }
+
     if (onDelta && message) {
       try {
         onDelta(message, content);
@@ -4543,7 +4865,11 @@
       }
     }
 
-    var completeInterview = !!(data && data.completeInterview);
+    var completeInterview = !!(
+      (data && data.completeInterview) ||
+      scoutGuard.completeInterview ||
+      dueGuard.completeInterview
+    );
     var skipPhrase = /^\s*(passer|plus\s+tard|skip|non\s+merci|arr[eê]te|stop)\b/i.test(
       String(userText || '')
     );
@@ -6413,6 +6739,18 @@
     );
     message = progressGuard.message;
     actions = progressGuard.actions;
+    var dueGuardChat = applyKnownDueGuards(
+      {
+        message: message,
+        suggestions: progressGuard.suggestions,
+        emotion: progressGuard.emotion
+      },
+      context
+    );
+    message = dueGuardChat.message;
+    if (dueGuardChat.suggestions) {
+      progressGuard.suggestions = dueGuardChat.suggestions;
+    }
     var projectScope = isProjectScope(context && context.scope);
     if (projectScope) {
       var droppedForScope = [];
@@ -9758,6 +10096,10 @@
     listProgressSubtaskLabels: listProgressSubtaskLabels,
     actionsReachFullProgress: actionsReachFullProgress,
     looksLikeDueAskMessage: looksLikeDueAskMessage,
+    contextHasActiveDue: contextHasActiveDue,
+    summarizeInterviewAlreadyKnown: summarizeInterviewAlreadyKnown,
+    buildInterviewNextPivot: buildInterviewNextPivot,
+    applyKnownDueGuards: applyKnownDueGuards,
     polishMessageAfterProgressComplete: polishMessageAfterProgressComplete,
     ensureProgressCelebration: ensureProgressCelebration,
     applyProgressCompleteGuards: applyProgressCompleteGuards,
@@ -9796,6 +10138,7 @@
     cardSanityCheck: cardSanityCheck,
     suggestSubtasks: suggestSubtasks,
     suggestGoals: suggestGoals,
+    suggestLabels: suggestLabels,
     suggestMetrics: suggestMetrics,
     parseMetric: parseMetric,
     executeAction: executeAction,

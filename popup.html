@@ -8,20 +8,20 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=info-labels-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-3" />
-  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=info-priority-dot-1" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=info-members-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-scope-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/effects.js?v=fx-3"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=info-priority-dot-1"></script>
+  <script src="./components/priority/priority-ui.js?v=info-members-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
     }
   </script>
-  <script src="./components/priority/priority-trello.js?v=info-labels-2"></script>
+  <script src="./components/priority/priority-trello.js?v=info-members-1"></script>
   <script src="./components/statut/statut-match.js?v=section-glow-1"></script>
   <script src="./components/statut/statut-trello.js?v=section-glow-1"></script>
   <script src="./components/shared/tab-autocomplete.js?v=tab-complete-1"></script>
@@ -419,6 +419,24 @@
             return { ok: true, desc: cardDesc };
           });
         },
+        onMemberAdd: function (member) {
+          if (!member || !member.id || !PriorityTrello.addCardMember) {
+            return Promise.resolve({ ok: false, reason: 'unavailable', changed: false });
+          }
+          return PriorityTrello.addCardMember(t, member.id).then(function (result) {
+            if (result && result.ok === false) return result;
+            return { ok: true, memberId: member.id, changed: !!(result && result.changed) };
+          });
+        },
+        onMemberRemove: function (member) {
+          if (!member || !member.id || !PriorityTrello.removeCardMember) {
+            return Promise.resolve({ ok: false, reason: 'unavailable', changed: false });
+          }
+          return PriorityTrello.removeCardMember(t, member.id).then(function (result) {
+            if (result && result.ok === false) return result;
+            return { ok: true, memberId: member.id, changed: !!(result && result.changed) };
+          });
+        },
         onLabelAdd: function (label) {
           if (!label || !label.id || !PriorityTrello.addCardLabel) {
             return Promise.resolve({ ok: false, reason: 'unavailable', changed: false });
@@ -436,12 +454,62 @@
             if (result && result.ok === false) return result;
             return { ok: true, labelId: label.id, changed: !!(result && result.changed) };
           });
+        },
+        suggestLabels: function (opts) {
+          if (!window.PriorityAgent || typeof PriorityAgent.suggestLabels !== 'function') {
+            return Promise.resolve([]);
+          }
+          return resolveCardNameForAi().then(function (cardName) {
+            return PriorityAgent.getProvider(t).then(function (provider) {
+              if (!PriorityAgent.isConfigured(provider)) return [];
+              var state =
+                variant && typeof variant.getState === 'function' ? variant.getState() : {};
+              var priorityLabel = '';
+              try {
+                if (window.PriorityUI && PriorityUI.resolveDisplay && variant) {
+                  var formulaKey =
+                    typeof variant.getFormulaKey === 'function'
+                      ? variant.getFormulaKey()
+                      : 'baseline';
+                  var calc =
+                    PriorityUI.FORMULAS &&
+                    PriorityUI.FORMULAS[formulaKey] &&
+                    PriorityUI.FORMULAS[formulaKey].calc
+                      ? PriorityUI.FORMULAS[formulaKey].calc
+                      : null;
+                  if (calc) {
+                    var display = PriorityUI.resolveDisplay(calc(state), state);
+                    priorityLabel = display.label || '';
+                  }
+                }
+              } catch (e) {
+                /* ignore */
+              }
+              return PriorityAgent.suggestLabels(provider, {
+                cardName:
+                  (opts && opts.cardName) || cardName || readCardNameLabel() || '',
+                cardDesc:
+                  (opts && opts.cardDesc) ||
+                  (infoUi && typeof infoUi.getDesc === 'function'
+                    ? infoUi.getDesc()
+                    : '') ||
+                  cardDesc ||
+                  '',
+                priorityLabel: (opts && opts.priorityLabel) || priorityLabel || '',
+                existingLabels: (opts && opts.existingLabels) || [],
+                boardLabels: (opts && opts.boardLabels) || []
+              });
+            });
+          });
         }
       });
 
       return Promise.all([
         PriorityTrello.getCardMembers
           ? PriorityTrello.getCardMembers(t)
+          : Promise.resolve([]),
+        PriorityTrello.getBoardMembers
+          ? PriorityTrello.getBoardMembers(t)
           : Promise.resolve([]),
         PriorityTrello.getCardLabels
           ? PriorityTrello.getCardLabels(t)
@@ -455,13 +523,17 @@
       ])
         .then(function (results) {
           var members = results[0] || [];
-          var cardLabels = results[1] || [];
-          var boardLabels = results[2] || [];
-          var authorized = !!results[3];
+          var boardMembers = results[1] || [];
+          var cardLabels = results[2] || [];
+          var boardLabels = results[3] || [];
+          var authorized = !!results[4];
           var hasRest =
             PriorityTrello.restClientOptions && !!PriorityTrello.restClientOptions();
           if (infoUi && typeof infoUi.setMembers === 'function') {
             infoUi.setMembers(members);
+          }
+          if (infoUi && typeof infoUi.setBoardMembers === 'function') {
+            infoUi.setBoardMembers(boardMembers);
           }
           if (infoUi && typeof infoUi.setLabels === 'function') {
             infoUi.setLabels(cardLabels);

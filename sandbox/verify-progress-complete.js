@@ -115,5 +115,106 @@ check(
     keepCongrats.actions[0].args.effect === 'flowers'
 );
 
+// ── Already-set due date: never re-ask "C'est pour quand?" ───────────────────
+
+check(
+  'contextHasActiveDue true when enabled + date',
+  Agent.contextHasActiveDue({
+    due: { enabled: true, dueDate: '2026-07-20', dueTime: null }
+  })
+);
+check(
+  'contextHasActiveDue false when disabled',
+  !Agent.contextHasActiveDue({
+    due: { enabled: false, dueDate: '2026-07-20', dueTime: null }
+  })
+);
+check(
+  'contextHasActiveDue false when missing date',
+  !Agent.contextHasActiveDue({ due: { enabled: true, dueDate: null } })
+);
+
+var alreadyKnown = Agent.summarizeInterviewAlreadyKnown({
+  due: { enabled: true, dueDate: '2026-07-20', dueTime: '09:00' },
+  cardMemory: { facts: ['Pourquoi : ça fait pas professionnel'] },
+  interview: { priorityAxesTrusted: false },
+  progress: { percent: 0 }
+});
+check('alreadyKnown.dueActive', alreadyKnown.dueActive === true);
+check('alreadyKnown.whyKnown', alreadyKnown.whyKnown === true);
+check('alreadyKnown.dueDate', alreadyKnown.dueDate === '2026-07-20');
+
+var blockedDueAsk = Agent.applyKnownDueGuards(
+  {
+    message: "C'est pour quand?",
+    suggestions: ['Aujourd\'hui', 'Demain', 'Pas d\'échéance']
+  },
+  {
+    due: { enabled: true, dueDate: '2026-07-20' },
+    interview: { priorityAxesTrusted: false },
+    progress: { percent: 0 }
+  }
+);
+check(
+  'blocks c\'est pour quand when due already set',
+  !Agent.looksLikeDueAskMessage(blockedDueAsk.message) &&
+    /grave/i.test(blockedDueAsk.message)
+);
+check(
+  'pivots to urgency chips instead of due chips',
+  Array.isArray(blockedDueAsk.suggestions) &&
+    blockedDueAsk.suggestions.length >= 2 &&
+    !/aujourd/i.test(JSON.stringify(blockedDueAsk.suggestions))
+);
+
+var keepDueAsk = Agent.applyKnownDueGuards(
+  {
+    message: "C'est pour quand?",
+    suggestions: ['Aujourd\'hui', 'Demain']
+  },
+  {
+    due: { enabled: false, dueDate: null },
+    interview: { priorityAxesTrusted: true },
+    progress: { percent: 0 }
+  }
+);
+check(
+  'allows due ask when no active due',
+  Agent.looksLikeDueAskMessage(keepDueAsk.message)
+);
+
+var scoutPivot = Agent.applyInterviewProgressScoutGuards(
+  {
+    message: 'Qu\'est-ce qui reste à faire pour le logo?',
+    suggestions: ['A', 'B']
+  },
+  {
+    due: { enabled: true, dueDate: '2026-07-22' },
+    interview: {
+      asked: ['Qu\'est-ce qui reste à faire pour le logo?'],
+      priorityAxesTrusted: false
+    },
+    cardMemory: { facts: [] },
+    progress: { percent: 10 },
+    priority: { urgency: 2, impact: 2, ease: 3 }
+  },
+  []
+);
+check(
+  'scout guard does not pivot to due when due already set',
+  !Agent.looksLikeDueAskMessage(scoutPivot.message)
+);
+
+var trustedWithDue = Agent.buildInterviewNextPivot({
+  due: { enabled: true, dueDate: '2026-07-22' },
+  interview: { priorityAxesTrusted: true },
+  progress: { percent: 40 }
+});
+check(
+  'trusted+due pivot closes interview',
+  trustedWithDue.completeInterview === true &&
+    !Agent.looksLikeDueAskMessage(trustedWithDue.message)
+);
+
 console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll progress-complete checks passed');
 process.exit(bad ? 1 : 0);

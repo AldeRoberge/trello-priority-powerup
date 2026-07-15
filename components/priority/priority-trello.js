@@ -600,6 +600,18 @@
     }
   }
 
+  function normalizeMemberList(list) {
+    if (!Array.isArray(list)) return [];
+    return list.filter(function (member) {
+      return (
+        member &&
+        typeof member === 'object' &&
+        !isPowerUpRequestChain(member) &&
+        member.id
+      );
+    });
+  }
+
   /**
    * Members assigned to the current card (`t.card('members')`).
    * Each entry typically has id, fullName, username, initials, avatarHash/avatarUrl.
@@ -615,12 +627,29 @@
         if (Array.isArray(scalar)) list = scalar;
         else if (scalar && Array.isArray(scalar.members)) list = scalar.members;
       }
-      if (!list) return [];
-      return list.filter(function (m) {
-        return m && typeof m === 'object' && !isPowerUpRequestChain(m);
-      });
+      return normalizeMemberList(list);
     } catch (err) {
       console.error('Priority card members failed', err);
+      return [];
+    }
+  }
+
+  /**
+   * Board members available to assign (`t.board('members')`).
+   */
+  async function getBoardMembers(t) {
+    try {
+      if (!t || typeof t.board !== 'function') return [];
+      var board = await new Promise(function (resolve, reject) {
+        t.board('members').then(resolve, reject);
+      });
+      var list = null;
+      if (board && Array.isArray(board.members)) list = board.members;
+      else if (Array.isArray(board)) list = board;
+      if (isPowerUpRequestChain(list)) return [];
+      return normalizeMemberList(list);
+    } catch (err) {
+      console.error('Priority board members failed', err);
       return [];
     }
   }
@@ -775,6 +804,104 @@
       );
     }
     return { ok: true, changed: true, labelId: id };
+  }
+
+  /**
+   * Assign a board member to the card via REST POST /cards/{id}/idMembers.
+   * Requires OAuth (same as title / description edits).
+   */
+  async function addCardMember(t, memberId) {
+    var id = memberId != null ? String(memberId).trim() : '';
+    if (!id) return { ok: false, reason: 'no-member-id', changed: false };
+    if (!restClientOptions()) return { ok: false, reason: 'no-app-key', changed: false };
+
+    var cardId = await resolveCurrentCardId(t);
+    if (!cardId) return { ok: false, reason: 'no-card-id', changed: false };
+
+    var cfg = restClientOptions();
+    var api = await t.getRestApi();
+    var authorized = await api.isAuthorized();
+    if (!authorized) return { ok: false, reason: 'not-authorized', changed: false };
+    var token = await api.getToken();
+    if (!token) return { ok: false, reason: 'no-token', changed: false };
+
+    var url =
+      'https://api.trello.com/1/cards/' +
+      encodeURIComponent(cardId) +
+      '/idMembers?value=' +
+      encodeURIComponent(id) +
+      '&key=' +
+      encodeURIComponent(cfg.appKey) +
+      '&token=' +
+      encodeURIComponent(token);
+
+    var response = await fetch(url, { method: 'POST' });
+    if (!response.ok) {
+      var detail = '';
+      try {
+        detail = await response.text();
+      } catch (readErr) {
+        detail = readErr && readErr.message ? readErr.message : '';
+      }
+      throw new Error(
+        'Trello REST POST /cards/' +
+          cardId +
+          '/idMembers failed: ' +
+          response.status +
+          (detail ? ' ' + detail : '')
+      );
+    }
+    return { ok: true, changed: true, memberId: id };
+  }
+
+  /**
+   * Unassign a member from the card via REST DELETE /cards/{id}/idMembers/{idMember}.
+   * Requires OAuth (same as title / description edits).
+   */
+  async function removeCardMember(t, memberId) {
+    var id = memberId != null ? String(memberId).trim() : '';
+    if (!id) return { ok: false, reason: 'no-member-id', changed: false };
+    if (!restClientOptions()) return { ok: false, reason: 'no-app-key', changed: false };
+
+    var cardId = await resolveCurrentCardId(t);
+    if (!cardId) return { ok: false, reason: 'no-card-id', changed: false };
+
+    var cfg = restClientOptions();
+    var api = await t.getRestApi();
+    var authorized = await api.isAuthorized();
+    if (!authorized) return { ok: false, reason: 'not-authorized', changed: false };
+    var token = await api.getToken();
+    if (!token) return { ok: false, reason: 'no-token', changed: false };
+
+    var url =
+      'https://api.trello.com/1/cards/' +
+      encodeURIComponent(cardId) +
+      '/idMembers/' +
+      encodeURIComponent(id) +
+      '?key=' +
+      encodeURIComponent(cfg.appKey) +
+      '&token=' +
+      encodeURIComponent(token);
+
+    var response = await fetch(url, { method: 'DELETE' });
+    if (!response.ok) {
+      var detail = '';
+      try {
+        detail = await response.text();
+      } catch (readErr) {
+        detail = readErr && readErr.message ? readErr.message : '';
+      }
+      throw new Error(
+        'Trello REST DELETE /cards/' +
+          cardId +
+          '/idMembers/' +
+          id +
+          ' failed: ' +
+          response.status +
+          (detail ? ' ' + detail : '')
+      );
+    }
+    return { ok: true, changed: true, memberId: id };
   }
 
   /**
@@ -2037,10 +2164,13 @@
     getCardName: getCardName,
     getCardDesc: getCardDesc,
     getCardMembers: getCardMembers,
+    getBoardMembers: getBoardMembers,
     getCardLabels: getCardLabels,
     getBoardLabels: getBoardLabels,
     addCardLabel: addCardLabel,
     removeCardLabel: removeCardLabel,
+    addCardMember: addCardMember,
+    removeCardMember: removeCardMember,
     setCardDesc: setCardDesc,
     setCardName: setCardName,
     getCardDueComplete: getCardDueComplete,

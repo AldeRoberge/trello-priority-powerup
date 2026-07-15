@@ -2198,6 +2198,66 @@
     return null;
   }
 
+  function findDueTimePeriodById(id) {
+    if (!id || typeof id !== 'string') return null;
+    for (var i = 0; i < DUE_DATE_TIME_PERIODS.length; i++) {
+      if (DUE_DATE_TIME_PERIODS[i].id === id) return DUE_DATE_TIME_PERIODS[i];
+    }
+    return null;
+  }
+
+  /**
+   * Adaptive period chip / headline label for a day
+   * (Ce matin, Demain midi, Hier soir, Lundi après-midi, …).
+   * Falls back to the bare period label when no date is set.
+   */
+  function formatDueTimePeriodLabel(periodOrId, iso, now) {
+    var period =
+      periodOrId && typeof periodOrId === 'object'
+        ? periodOrId
+        : findDueTimePeriodById(periodOrId);
+    if (!period) return '';
+
+    var periodWord = period.label.toLocaleLowerCase('fr-FR');
+    var normalized = normalizeDueDate(iso);
+    if (!normalized) return period.label;
+
+    var days = daysUntilDue(normalized, now);
+    if (!isFinite(days)) return period.label;
+
+    if (days === 0) {
+      if (period.id === 'matin') return 'Ce matin';
+      if (period.id === 'midi') return 'Ce midi';
+      if (period.id === 'apres-midi') return 'Cet apr\u00e8s-midi';
+      if (period.id === 'soir') return 'Ce soir';
+      return period.label;
+    }
+    if (days === 1) {
+      return period.id === 'midi' ? 'Demain midi' : 'Demain ' + periodWord;
+    }
+    if (days === -1) {
+      return period.id === 'midi' ? 'Hier midi' : 'Hier ' + periodWord;
+    }
+    if (days === 2) {
+      return period.id === 'midi'
+        ? 'Apr\u00e8s-demain midi'
+        : 'Apr\u00e8s-demain ' + periodWord;
+    }
+
+    var due = dueDateToLocalDate(normalized);
+    if (!due) return period.label;
+
+    if ((days >= 3 && days <= 7) || (days <= -2 && days >= -7)) {
+      var weekday = capitalizeCountdownPhrase(
+        DUE_DATE_WEEKDAY_NAMES[sundayOffset(due)]
+      );
+      return period.id === 'midi' ? weekday + ' midi' : weekday + ' ' + periodWord;
+    }
+
+    var shortDay = formatDueDateDayMonthShort(normalized, now);
+    return period.id === 'midi' ? shortDay + ' midi' : shortDay + ' ' + periodWord;
+  }
+
   /** Short calendar day label, e.g. "20 juil." (adds year when not current). */
   function formatDueDateDayMonthShort(iso, now) {
     var date = dueDateToLocalDate(iso);
@@ -2298,38 +2358,30 @@
   /**
    * Human-readable due headline + remaining line for the Échéance body.
    * Ex. primary "6 jours restants", secondary "Lundi prochain à midi".
+   * Past dues use relative phrasing ("Il y a une heure") instead of
+   * calendar lines like "Aujourd'hui à 8 h".
    */
   function formatDueDateHumanReadable(iso, time, now) {
     var normalized = normalizeDueDate(iso);
     if (!normalized) return { primary: '', secondary: '' };
 
-    var days = daysUntilDue(normalized, now);
-    var dayPhrase = formatDueDateRelativeDay(normalized, now);
+    var dueTime = normalizeDueTime(time);
+    var at = now || new Date();
+
+    // Overdue: never show "Aujourd'hui à 8 h" — use "Il y a…".
+    if (isDuePast(normalized, dueTime, at)) {
+      var pastPrimary = dueTime
+        ? formatDueTimeTriggerTitle(normalized, dueTime, at)
+        : formatDueDateTriggerTitle(normalized, at);
+      return { primary: pastPrimary, secondary: '' };
+    }
+
+    var dayPhrase = formatDueDateRelativeDay(normalized, at);
     var period = matchDueTimePeriod(time);
     var whenPhrase = dayPhrase;
-    var dueTime = normalizeDueTime(time);
 
     if (period) {
-      var periodWord = period.label.toLocaleLowerCase('fr-FR');
-      if (days === 0) {
-        if (period.id === 'matin') whenPhrase = 'Ce matin';
-        else if (period.id === 'apres-midi') whenPhrase = 'Cet apr\u00e8s-midi';
-        else if (period.id === 'soir') whenPhrase = 'Ce soir';
-        else if (period.id === 'midi') whenPhrase = 'Midi';
-        else whenPhrase = 'Aujourd\'hui';
-      } else if (
-        days === 1 &&
-        (period.id === 'matin' ||
-          period.id === 'apres-midi' ||
-          period.id === 'soir' ||
-          period.id === 'midi')
-      ) {
-        whenPhrase = period.id === 'midi' ? 'Demain midi' : 'Demain ' + periodWord;
-      } else if (period.id === 'midi') {
-        whenPhrase = dayPhrase + ' midi';
-      } else {
-        whenPhrase = dayPhrase + ' ' + periodWord;
-      }
+      whenPhrase = formatDueTimePeriodLabel(period, normalized, at);
       // Keep period feel, but always name the clock ("Demain soir à 18 h").
       var periodClock = formatDueTimeCompactFr(dueTime || period.time);
       if (periodClock) whenPhrase += ' \u00e0 ' + periodClock;
@@ -2337,7 +2389,7 @@
       whenPhrase = dayPhrase + ' \u00e0 ' + formatDueTimeCompactFr(dueTime);
     }
 
-    var countdown = formatDueCountdown(normalized, now, time);
+    var countdown = formatDueCountdown(normalized, at, time);
     // Avoid "Demain matin" / "Demain" duplication when countdown is only the day name.
     var countdownKey = countdown ? countdown.toLocaleLowerCase('fr-FR') : '';
     var redundant =
@@ -5722,10 +5774,16 @@
       typeof config.onTitleChange === 'function' ? config.onTitleChange : null;
     var onDescChange =
       typeof config.onDescChange === 'function' ? config.onDescChange : null;
+    var onMemberAdd =
+      typeof config.onMemberAdd === 'function' ? config.onMemberAdd : null;
+    var onMemberRemove =
+      typeof config.onMemberRemove === 'function' ? config.onMemberRemove : null;
     var onLabelAdd =
       typeof config.onLabelAdd === 'function' ? config.onLabelAdd : null;
     var onLabelRemove =
       typeof config.onLabelRemove === 'function' ? config.onLabelRemove : null;
+    var suggestLabelsFn =
+      typeof config.suggestLabels === 'function' ? config.suggestLabels : null;
     var onAuthorize =
       typeof config.onAuthorize === 'function' ? config.onAuthorize : null;
     var onJump =
@@ -5734,6 +5792,9 @@
     var titleText = typeof config.title === 'string' ? config.title : '';
     var descText = typeof config.desc === 'string' ? config.desc : '';
     var members = Array.isArray(config.members) ? config.members.slice() : [];
+    var boardMembers = Array.isArray(config.boardMembers)
+      ? config.boardMembers.slice()
+      : [];
     var labels = Array.isArray(config.labels) ? config.labels.slice() : [];
     var boardLabels = Array.isArray(config.boardLabels)
       ? config.boardLabels.slice()
@@ -5755,8 +5816,15 @@
     var descSpellRevert = null;
     var authBusy = false;
     var authReason = config.authReason || '';
+    var membersBusy = false;
+    var membersPickerOpen = false;
     var labelsBusy = false;
     var labelsPickerOpen = false;
+    var labelSuggestions = [];
+    var labelSuggestionsLoading = false;
+    var labelSuggestionsSeq = 0;
+    var labelSuggestionsTimer = null;
+    var labelSuggestionsKey = '';
     var FIELD_SAVE_MS = 450;
 
     var field = document.createElement('div');
@@ -5915,10 +5983,40 @@
 
     // ── Assignees ──────────────────────────────────────────────────────
     var membersRow = makeRow('members', 'Assign\u00e9s', { icon: 'ti-users' });
+    var membersWrap = document.createElement('div');
+    membersWrap.className = 'info-members-wrap';
+
     var membersEl = document.createElement('div');
     membersEl.className = 'info-members';
     membersEl.setAttribute('aria-label', 'Membres assign\u00e9s');
-    membersRow.value.appendChild(membersEl);
+
+    var membersAddWrap = document.createElement('div');
+    membersAddWrap.className = 'info-members-add-wrap';
+
+    var membersAddBtn = document.createElement('button');
+    membersAddBtn.type = 'button';
+    membersAddBtn.className = 'info-members-add-btn';
+    membersAddBtn.setAttribute('aria-expanded', 'false');
+    membersAddBtn.setAttribute('aria-haspopup', 'listbox');
+    membersAddBtn.innerHTML =
+      '<i class="ti ti-plus" aria-hidden="true"></i><span>Ajouter</span>';
+
+    var membersPicker = document.createElement('div');
+    membersPicker.className = 'info-members-picker';
+    membersPicker.hidden = true;
+    membersPicker.setAttribute('role', 'listbox');
+    membersPicker.setAttribute('aria-label', 'Membres du tableau');
+
+    var membersStatus = document.createElement('span');
+    membersStatus.className = 'info-desc-status';
+    membersStatus.setAttribute('aria-live', 'polite');
+
+    membersAddWrap.appendChild(membersAddBtn);
+    membersAddWrap.appendChild(membersPicker);
+    membersWrap.appendChild(membersEl);
+    membersWrap.appendChild(membersAddWrap);
+    membersWrap.appendChild(membersStatus);
+    membersRow.value.appendChild(membersWrap);
     body.appendChild(membersRow.row);
 
     // ── Labels (Trello étiquettes) ─────────────────────────────────────
@@ -5951,11 +6049,29 @@
     labelsStatus.className = 'info-desc-status';
     labelsStatus.setAttribute('aria-live', 'polite');
 
+    var labelsSuggestSection = document.createElement('div');
+    labelsSuggestSection.className = 'info-labels-suggestions';
+    labelsSuggestSection.hidden = true;
+    labelsSuggestSection.innerHTML =
+      '<div class="info-labels-suggestions-head">' +
+      '<span class="info-labels-suggestions-label">Suggestions IA</span>' +
+      '<button type="button" class="info-labels-suggestions-refresh" ' +
+      'aria-label="Rafra\u00eechir les suggestions" title="Rafra\u00eechir">\u21bb</button>' +
+      '</div>' +
+      '<div class="info-labels-suggestions-list" role="list"></div>';
+    var labelsSuggestRefreshBtn = labelsSuggestSection.querySelector(
+      '.info-labels-suggestions-refresh'
+    );
+    var labelsSuggestListEl = labelsSuggestSection.querySelector(
+      '.info-labels-suggestions-list'
+    );
+
     labelsAddWrap.appendChild(labelsAddBtn);
     labelsAddWrap.appendChild(labelsPicker);
     labelsWrap.appendChild(labelsEl);
     labelsWrap.appendChild(labelsAddWrap);
     labelsWrap.appendChild(labelsStatus);
+    labelsWrap.appendChild(labelsSuggestSection);
     labelsRow.value.appendChild(labelsWrap);
     body.appendChild(labelsRow.row);
 
@@ -6175,52 +6291,257 @@
       return '';
     }
 
+    function appendMemberAvatar(chip, member) {
+      var avatarUrl = memberAvatarUrl(member);
+      if (avatarUrl) {
+        var img = document.createElement('img');
+        img.className = 'info-member-avatar';
+        img.src = avatarUrl;
+        img.alt = '';
+        img.width = 28;
+        img.height = 28;
+        img.loading = 'lazy';
+        img.addEventListener('error', function () {
+          img.remove();
+          var fallback = document.createElement('span');
+          fallback.className = 'info-member-initials';
+          fallback.textContent = memberInitials(member);
+          chip.insertBefore(fallback, chip.firstChild);
+        });
+        chip.appendChild(img);
+        return;
+      }
+      var initials = document.createElement('span');
+      initials.className = 'info-member-initials';
+      initials.textContent = memberInitials(member);
+      chip.appendChild(initials);
+    }
+
+    function setMembersStatus(text, kind) {
+      membersStatus.textContent = text || '';
+      membersStatus.classList.toggle('is-error', kind === 'error');
+      membersStatus.classList.toggle('is-ok', kind === 'ok');
+    }
+
+    function selectedMemberIds() {
+      var ids = Object.create(null);
+      for (var i = 0; i < members.length; i++) {
+        if (members[i] && members[i].id) ids[String(members[i].id)] = true;
+      }
+      return ids;
+    }
+
+    function availableBoardMembers() {
+      var selected = selectedMemberIds();
+      var out = [];
+      for (var i = 0; i < boardMembers.length; i++) {
+        var member = boardMembers[i];
+        if (!member || !member.id) continue;
+        if (selected[String(member.id)]) continue;
+        out.push(member);
+      }
+      return out;
+    }
+
+    function setMembersPickerOpen(open) {
+      membersPickerOpen = !!open;
+      membersPicker.hidden = !membersPickerOpen;
+      membersAddBtn.setAttribute(
+        'aria-expanded',
+        membersPickerOpen ? 'true' : 'false'
+      );
+      membersAddWrap.classList.toggle('is-open', membersPickerOpen);
+      if (membersPickerOpen) renderMembersPicker();
+      onLayoutChange();
+    }
+
+    function renderMembersPicker() {
+      membersPicker.replaceChildren();
+      var available = availableBoardMembers();
+      if (!available.length) {
+        var empty = document.createElement('div');
+        empty.className = 'info-members-picker-empty';
+        empty.textContent = boardMembers.length
+          ? 'Tous les membres sont d\u00e9j\u00e0 assign\u00e9s'
+          : 'Aucun membre sur ce tableau';
+        membersPicker.appendChild(empty);
+        return;
+      }
+      available.forEach(function (member) {
+        var name = memberDisplayName(member) || 'Membre';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'info-members-picker-option';
+        btn.setAttribute('role', 'option');
+        btn.title = name;
+        btn.disabled = membersBusy;
+        btn.dataset.memberId = String(member.id);
+
+        appendMemberAvatar(btn, member);
+
+        var text = document.createElement('span');
+        text.className = 'info-members-picker-option-text';
+        text.textContent = name;
+
+        btn.appendChild(text);
+        btn.addEventListener('click', function () {
+          addMemberFromPicker(member);
+        });
+        membersPicker.appendChild(btn);
+      });
+    }
+
     function renderMembers() {
       membersEl.replaceChildren();
+
       if (!members.length) {
         var empty = document.createElement('span');
         empty.className = 'info-recap-empty';
         empty.textContent = 'Personne';
         membersEl.appendChild(empty);
-        return;
+      } else {
+        members.forEach(function (member) {
+          var name = memberDisplayName(member) || 'Membre';
+          var chip = document.createElement('span');
+          chip.className = 'info-member';
+          chip.title = name;
+          chip.setAttribute('aria-label', name);
+
+          appendMemberAvatar(chip, member);
+
+          var nameEl = document.createElement('span');
+          nameEl.className = 'info-member-name';
+          nameEl.textContent = name;
+          chip.appendChild(nameEl);
+
+          if (onMemberRemove) {
+            var clearBtn = document.createElement('button');
+            clearBtn.type = 'button';
+            clearBtn.className = 'info-member-clear';
+            clearBtn.setAttribute(
+              'aria-label',
+              'Retirer\u00a0: ' + name
+            );
+            clearBtn.textContent = '\u00d7';
+            clearBtn.disabled = membersBusy;
+            clearBtn.addEventListener('click', function (event) {
+              event.preventDefault();
+              event.stopPropagation();
+              removeMemberFromCard(member);
+            });
+            chip.appendChild(clearBtn);
+          }
+
+          membersEl.appendChild(chip);
+        });
       }
-      members.forEach(function (member) {
-        var name = memberDisplayName(member) || 'Membre';
-        var chip = document.createElement('span');
-        chip.className = 'info-member';
-        chip.title = name;
-        chip.setAttribute('aria-label', name);
 
-        var avatarUrl = memberAvatarUrl(member);
-        if (avatarUrl) {
-          var img = document.createElement('img');
-          img.className = 'info-member-avatar';
-          img.src = avatarUrl;
-          img.alt = '';
-          img.width = 28;
-          img.height = 28;
-          img.loading = 'lazy';
-          img.addEventListener('error', function () {
-            img.remove();
-            var fallback = document.createElement('span');
-            fallback.className = 'info-member-initials';
-            fallback.textContent = memberInitials(member);
-            chip.appendChild(fallback);
+      var canAdd = !!onMemberAdd;
+      membersAddBtn.hidden = !onMemberAdd;
+      membersAddBtn.disabled = membersBusy || !canAdd;
+      if (membersPickerOpen) renderMembersPicker();
+    }
+
+    function addMemberFromPicker(member) {
+      if (!onMemberAdd || membersBusy || !member || !member.id) return;
+      var id = String(member.id);
+      if (selectedMemberIds()[id]) return;
+      membersBusy = true;
+      setMembersStatus('Enregistrement\u2026');
+      renderMembers();
+      Promise.resolve(onMemberAdd(member))
+        .then(function (result) {
+          membersBusy = false;
+          if (result && result.ok === false) {
+            if (result.reason === 'not-authorized' || result.reason === 'no-app-key') {
+              setAuthHint(result.reason);
+              setMembersStatus('', 'error');
+            } else {
+              setMembersStatus('\u00c9chec de l\u2019ajout', 'error');
+            }
+            renderMembers();
+            onLayoutChange();
+            return result;
+          }
+          if (!selectedMemberIds()[id]) {
+            members = members.concat([
+              {
+                id: member.id,
+                fullName:
+                  typeof member.fullName === 'string' ? member.fullName : '',
+                username:
+                  typeof member.username === 'string' ? member.username : '',
+                initials:
+                  typeof member.initials === 'string' ? member.initials : '',
+                avatarUrl:
+                  typeof member.avatarUrl === 'string' ? member.avatarUrl : '',
+                avatarHash:
+                  typeof member.avatarHash === 'string' ? member.avatarHash : ''
+              }
+            ]);
+          }
+          setAuthHint('');
+          setMembersStatus('Enregistr\u00e9', 'ok');
+          setMembersPickerOpen(false);
+          renderMembers();
+          setTimeout(function () {
+            if (membersStatus.textContent === 'Enregistr\u00e9') {
+              setMembersStatus('');
+            }
+          }, 1400);
+          onLayoutChange();
+          return result;
+        })
+        .catch(function (err) {
+          membersBusy = false;
+          console.error('Info member add failed', err);
+          setMembersStatus('\u00c9chec de l\u2019ajout', 'error');
+          renderMembers();
+          onLayoutChange();
+        });
+    }
+
+    function removeMemberFromCard(member) {
+      if (!onMemberRemove || membersBusy || !member || !member.id) return;
+      var id = String(member.id);
+      membersBusy = true;
+      setMembersStatus('Enregistrement\u2026');
+      renderMembers();
+      Promise.resolve(onMemberRemove(member))
+        .then(function (result) {
+          membersBusy = false;
+          if (result && result.ok === false) {
+            if (result.reason === 'not-authorized' || result.reason === 'no-app-key') {
+              setAuthHint(result.reason);
+              setMembersStatus('', 'error');
+            } else {
+              setMembersStatus('\u00c9chec du retrait', 'error');
+            }
+            renderMembers();
+            onLayoutChange();
+            return result;
+          }
+          members = members.filter(function (item) {
+            return !(item && String(item.id) === id);
           });
-          chip.appendChild(img);
-        } else {
-          var initials = document.createElement('span');
-          initials.className = 'info-member-initials';
-          initials.textContent = memberInitials(member);
-          chip.appendChild(initials);
-        }
-
-        var nameEl = document.createElement('span');
-        nameEl.className = 'info-member-name';
-        nameEl.textContent = name;
-        chip.appendChild(nameEl);
-        membersEl.appendChild(chip);
-      });
+          setAuthHint('');
+          setMembersStatus('Enregistr\u00e9', 'ok');
+          renderMembers();
+          setTimeout(function () {
+            if (membersStatus.textContent === 'Enregistr\u00e9') {
+              setMembersStatus('');
+            }
+          }, 1400);
+          onLayoutChange();
+          return result;
+        })
+        .catch(function (err) {
+          membersBusy = false;
+          console.error('Info member remove failed', err);
+          setMembersStatus('\u00c9chec du retrait', 'error');
+          renderMembers();
+          onLayoutChange();
+        });
     }
 
     var LABEL_COLOR_HEX = {
@@ -6290,6 +6611,144 @@
       labelsStatus.textContent = text || '';
       labelsStatus.classList.toggle('is-error', kind === 'error');
       labelsStatus.classList.toggle('is-ok', kind === 'ok');
+    }
+
+    function pruneLabelSuggestions() {
+      var selected = selectedLabelIds();
+      labelSuggestions = labelSuggestions.filter(function (label) {
+        return label && label.id && !selected[String(label.id)];
+      });
+    }
+
+    function renderLabelSuggestions() {
+      if (!labelsSuggestListEl || !labelsSuggestSection) return;
+      labelsSuggestListEl.replaceChildren();
+      pruneLabelSuggestions();
+      if (!suggestLabelsFn || !boardLabels.length || !labelSuggestions.length) {
+        labelsSuggestSection.hidden = true;
+        onLayoutChange();
+        return;
+      }
+      labelsSuggestSection.hidden = false;
+      labelSuggestions.forEach(function (label) {
+        var name = labelDisplayName(label);
+        var hex = labelColorHex(label.color);
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'info-labels-suggestion';
+        btn.setAttribute('role', 'listitem');
+        btn.style.setProperty('--label-color', hex);
+        btn.style.setProperty(
+          '--label-fg',
+          labelNeedsDarkText(hex) ? '#172b4d' : '#ffffff'
+        );
+        btn.title = 'Ajouter\u00a0: ' + name;
+        btn.disabled = labelsBusy;
+        btn.dataset.labelId = String(label.id);
+
+        var swatch = document.createElement('span');
+        swatch.className = 'info-label-swatch';
+        swatch.setAttribute('aria-hidden', 'true');
+
+        var text = document.createElement('span');
+        text.className = 'info-labels-suggestion-text';
+        text.textContent = name;
+
+        btn.appendChild(swatch);
+        btn.appendChild(text);
+        btn.addEventListener('click', function () {
+          addLabelFromPicker(label);
+        });
+        labelsSuggestListEl.appendChild(btn);
+      });
+      onLayoutChange();
+    }
+
+    function labelSuggestionsContextKey() {
+      var title = (titleInput.value || '').trim() || titleText || '';
+      var desc = (descInput.value || '').trim() || descText || '';
+      var existing = labels
+        .map(function (label) {
+          return label && label.id ? String(label.id) : '';
+        })
+        .filter(Boolean)
+        .sort()
+        .join(',');
+      var available = boardLabels
+        .map(function (label) {
+          return label && label.id ? String(label.id) : '';
+        })
+        .filter(Boolean)
+        .sort()
+        .join(',');
+      return title + '\u0001' + desc + '\u0001' + existing + '\u0001' + available;
+    }
+
+    function refreshLabelSuggestions(force) {
+      if (!suggestLabelsFn || !boardLabels.length || !availableBoardLabels().length) {
+        labelSuggestions = [];
+        labelSuggestionsLoading = false;
+        labelSuggestionsKey = '';
+        renderLabelSuggestions();
+        return Promise.resolve();
+      }
+      var key = labelSuggestionsContextKey();
+      if (!force && key === labelSuggestionsKey) {
+        renderLabelSuggestions();
+        return Promise.resolve();
+      }
+
+      var seq = ++labelSuggestionsSeq;
+      labelSuggestionsLoading = true;
+      labelSuggestionsKey = key;
+      return Promise.resolve()
+        .then(function () {
+          return suggestLabelsFn({
+            force: !!force,
+            cardName: (titleInput.value || '').trim() || titleText || '',
+            cardDesc: (descInput.value || '').trim() || descText || '',
+            priorityLabel: priorityLabel || '',
+            existingLabels: labels.slice(),
+            boardLabels: boardLabels.slice()
+          });
+        })
+        .then(function (list) {
+          if (seq !== labelSuggestionsSeq) return;
+          var selected = selectedLabelIds();
+          var seen = Object.create(null);
+          labelSuggestions = Array.isArray(list)
+            ? list
+                .filter(function (label) {
+                  if (!label || !label.id) return false;
+                  var id = String(label.id);
+                  if (selected[id] || seen[id]) return false;
+                  seen[id] = true;
+                  return true;
+                })
+                .slice(0, 3)
+            : [];
+          labelSuggestionsLoading = false;
+          renderLabelSuggestions();
+        })
+        .catch(function (err) {
+          console.error('Info label suggestions failed', err);
+          if (seq !== labelSuggestionsSeq) return;
+          labelSuggestionsLoading = false;
+          labelSuggestions = [];
+          renderLabelSuggestions();
+        });
+    }
+
+    function scheduleLabelSuggestions(force) {
+      if (!suggestLabelsFn) return;
+      if (labelSuggestionsTimer) {
+        clearTimeout(labelSuggestionsTimer);
+        labelSuggestionsTimer = null;
+      }
+      labelSuggestionsTimer = setTimeout(function () {
+        labelSuggestionsTimer = null;
+        refreshLabelSuggestions(!!force);
+      }, force ? 0 : 280);
     }
 
     function selectedLabelIds() {
@@ -6419,6 +6878,7 @@
       labelsAddBtn.hidden = !onLabelAdd;
       labelsAddBtn.disabled = labelsBusy || !canAdd;
       if (labelsPickerOpen) renderLabelsPicker();
+      renderLabelSuggestions();
     }
 
     function addLabelFromPicker(label) {
@@ -6452,6 +6912,9 @@
               }
             ]);
           }
+          labelSuggestions = labelSuggestions.filter(function (item) {
+            return !(item && String(item.id) === id);
+          });
           setAuthHint('');
           setLabelsStatus('Enregistr\u00e9', 'ok');
           setLabelsPickerOpen(false);
@@ -6618,6 +7081,7 @@
           setAuthHint('');
           setTitleStatus('Enregistr\u00e9', 'ok');
           collapse.refreshSummary();
+          scheduleLabelSuggestions(false);
           setTimeout(function () {
             if (titleStatus.textContent === 'Enregistr\u00e9') setTitleStatus('');
           }, 1400);
@@ -6792,6 +7256,7 @@
           descText = next;
           setAuthHint('');
           setDescStatus('Enregistr\u00e9', 'ok');
+          scheduleLabelSuggestions(false);
           setTimeout(function () {
             if (descStatus.textContent === 'Enregistr\u00e9') setDescStatus('');
           }, 1400);
@@ -6879,6 +7344,13 @@
         });
     });
 
+    membersAddBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (membersAddBtn.disabled) return;
+      setMembersPickerOpen(!membersPickerOpen);
+    });
+
     labelsAddBtn.addEventListener('click', function (event) {
       event.preventDefault();
       event.stopPropagation();
@@ -6886,10 +7358,21 @@
       setLabelsPickerOpen(!labelsPickerOpen);
     });
 
+    if (labelsSuggestRefreshBtn) {
+      labelsSuggestRefreshBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        refreshLabelSuggestions(true);
+      });
+    }
+
     document.addEventListener('click', function (event) {
-      if (!labelsPickerOpen) return;
-      if (labelsAddWrap.contains(event.target)) return;
-      setLabelsPickerOpen(false);
+      if (membersPickerOpen && !membersAddWrap.contains(event.target)) {
+        setMembersPickerOpen(false);
+      }
+      if (labelsPickerOpen && !labelsAddWrap.contains(event.target)) {
+        setLabelsPickerOpen(false);
+      }
     });
 
     var collapse = bindCollapsibleEnable({
@@ -6964,14 +7447,21 @@
         renderMembers();
         onLayoutChange();
       },
+      setBoardMembers: function (list) {
+        boardMembers = Array.isArray(list) ? list.slice() : [];
+        renderMembers();
+        onLayoutChange();
+      },
       setLabels: function (list) {
         labels = Array.isArray(list) ? list.slice() : [];
         renderLabels();
+        scheduleLabelSuggestions(false);
         onLayoutChange();
       },
       setBoardLabels: function (list) {
         boardLabels = Array.isArray(list) ? list.slice() : [];
         renderLabels();
+        scheduleLabelSuggestions(false);
         onLayoutChange();
       },
       setRecap: function (next) {
@@ -8475,7 +8965,12 @@
         var timeEl = chip.querySelector('.due-date-time-chip-time');
         if (timeEl) timeEl.textContent = display;
         var period = matchDueTimePeriod(hhmm);
-        var label = period ? period.label : '';
+        var labelIso = current || toIsoDate(startOfLocalDay(new Date()));
+        var label = period
+          ? formatDueTimePeriodLabel(period, labelIso)
+          : '';
+        var labelEl = chip.querySelector('.due-date-time-chip-label');
+        if (labelEl && label) labelEl.textContent = label;
         chip.setAttribute(
           'aria-label',
           label ? label + ', ' + display : display
@@ -11733,6 +12228,7 @@
     formatDueDateHumanReadable: formatDueDateHumanReadable,
     formatDueDateTriggerTitle: formatDueDateTriggerTitle,
     formatDueTimeTriggerTitle: formatDueTimeTriggerTitle,
+    formatDueTimePeriodLabel: formatDueTimePeriodLabel,
     formatDueBadgeText: formatDueBadgeText,
     dueBadgeSuffix: dueBadgeSuffix,
     isDueEnabled: isDueEnabled,
