@@ -2745,6 +2745,7 @@
       'Titre et description de la carte (context.cardName / context.cardDesc)\u00a0:',
       '- Renommer le titre de la carte\u00a0: rename_card avec name (nouveau titre complet).',
       '- Modifier la description\u00a0: set_description avec desc (texte complet \u00e0 \u00e9crire dans context.cardDesc\u00a0; "" pour effacer).',
+      '- Une phase R\u00caVE tourne en arri\u00e8re-plan entre les chats\u00a0: elle concat\u00e8ne les cardPatches importants dans la Description. Utilise set_description surtout si l\'utilisateur le demande, ou pour une maj imm\u00e9diate \u00e9vidente.',
       '- Distingue bien rename_card (titre), set_description (corps de la carte) et rename_subtask (une entr\u00e9e de progress.items).',
       '- Si l\'utilisateur dit d\'ajouter un suffixe (\u00ab\u00a0ajoute 2\u00a0\u00bb, \u00ab\u00a0ajoute WIP\u00a0\u00bb)\u00a0: construis le nouveau name \u00e0 partir de context.cardName + suffixe.',
       '- Si l\'utilisateur demande d\'ajouter / r\u00e9\u00e9crire / compl\u00e9ter la description\u00a0: construis le desc final \u00e0 partir de context.cardDesc + la demande, puis APPLIQUE set_description.',
@@ -7966,6 +7967,236 @@
     };
   }
 
+  var MAX_DREAM_DESC_LEN = 6000;
+  var MAX_DREAM_HISTORY_CHARS = 1800;
+
+  function normalizeDescForCompare(text) {
+    return String(text || '')
+      .replace(/\r\n/g, '\n')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  function buildDreamHistoryExcerpt(history) {
+    var list = Array.isArray(history) ? history : [];
+    var chunks = [];
+    var budget = MAX_DREAM_HISTORY_CHARS;
+    for (var i = list.length - 1; i >= 0 && budget > 0; i--) {
+      var entry = list[i];
+      if (!entry || (entry.role !== 'user' && entry.role !== 'assistant')) continue;
+      var content = String(entry.content || '').trim();
+      if (!content) continue;
+      if (/^\[Auto-revue\b/i.test(content) || /^\[R[eê]ve\b/i.test(content)) continue;
+      var line =
+        (entry.role === 'user' ? 'U: ' : 'A: ') +
+        content.replace(/\s+/g, ' ').slice(0, 280);
+      if (line.length > budget) line = line.slice(0, budget);
+      chunks.unshift(line);
+      budget -= line.length + 1;
+    }
+    return chunks.join('\n');
+  }
+
+  /**
+   * Dream stage: between chats, concatenate card learnings and distill important
+   * information into the Trello card Description. Silent consolidation pass —
+   * not a user-facing conversation turn.
+   *
+   * Returns { ok, skipped?, reason?, updated?, desc?, applied?, usage?, debug }.
+   */
+  async function cardDreamTurn(provider, bridge, options) {
+    options = options || {};
+    var onDebug = typeof options.onDebug === 'function' ? options.onDebug : null;
+    var context = buildContext(bridge);
+    var facts =
+      context.cardMemory && Array.isArray(context.cardMemory.facts)
+        ? context.cardMemory.facts.filter(Boolean)
+        : [];
+    if (!facts.length) {
+      return { ok: true, skipped: true, reason: 'no-facts' };
+    }
+
+    var currentDesc =
+      typeof context.cardDesc === 'string' ? context.cardDesc : '';
+    var historyExcerpt = buildDreamHistoryExcerpt(options.history);
+
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) {
+      return { ok: false, skipped: true, reason: 'not-configured' };
+    }
+
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu es en phase R\u00caVE (consolidation asynchrone entre conversations) pour une carte Trello (Power-Up Priorit\u00e9).',
+          'Mission\u00a0: concat\u00e9ner les apprentissages (cardMemory.facts + extraits de chat utiles) et en extraire l\'essentiel dans la Description de la carte.',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
+          '{"shouldUpdate":true,"desc":"\u2026","reason":"courte justification priv\u00e9e"}',
+          'ou {"shouldUpdate":false,"reason":"\u2026"} si la description actuelle couvre d\u00e9j\u00e0 l\'essentiel.',
+          'R\u00e8gles\u00a0:',
+          '- La Description = note de brief partag\u00e9e sur la carte (pas un log de chat, pas de questions).',
+          '- Distille les faits importants\u00a0: Pourquoi, Livrable/But, Qui, Contraintes, D\u00e9j\u00e0 fait, Reste, d\u00e9cisions.',
+          '- Markdown court et scannable (## titres et/ou listes). Pas de blabla, pas d\'emoji superflus.',
+          '- Conserve les infos d\u00e9j\u00e0 en description qui restent utiles et non contredites par les faits.',
+          '- N\'invente rien\u00a0: seulement ce qui est dans facts / cardDesc / historyExcerpt / titre.',
+          '- desc = texte COMPLET de remplacement (pas un diff). Max ~' +
+            MAX_DREAM_DESC_LEN +
+            ' caractères.',
+          '- shouldUpdate:false si les faits n\'ajoutent rien de net à la description actuelle.',
+          '- INTERDIT d\'émettre des actions outils\u00a0: tu proposes seulement le desc.',
+          'Contexte\u00a0:',
+          JSON.stringify({
+            cardName: context.cardName || '',
+            cardDesc: currentDesc.slice(0, MAX_DREAM_DESC_LEN),
+            facts: facts.slice(0, 8),
+            historyExcerpt: historyExcerpt
+          })
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content:
+          'Phase R\u00caVE\u00a0: consolide les apprentissages importants dans la Description si besoin. Sinon shouldUpdate:false.'
+      }
+    ];
+
+    var debug = {
+      id: 'dream-' + Date.now().toString(36),
+      kind: 'cardDreamTurn',
+      label: 'R\u00eave (consolidation description)',
+      startedAt: Date.now(),
+      attempts: []
+    };
+    function emitDebug() {
+      if (!onDebug) return;
+      try {
+        onDebug(debug);
+      } catch (cbErr) {
+        console.error('cardDreamTurn onDebug failed', cbErr);
+      }
+    }
+
+    var response;
+    var t0 = Date.now();
+    try {
+      try {
+        response = await chatCompletions(p, messages, {
+          jsonMode: true,
+          max_tokens: 900,
+          temperature: 0.25
+        });
+        if (response.meta) debug.attempts.push(Object.assign({ label: 'json' }, response.meta));
+      } catch (err) {
+        if (err && err.debugMeta) {
+          debug.attempts.push(Object.assign({ label: 'json' }, err.debugMeta));
+        }
+        if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+          response = await chatCompletions(p, messages, {
+            jsonMode: false,
+            max_tokens: 900,
+            temperature: 0.25
+          });
+          if (response.meta) {
+            debug.attempts.push(Object.assign({ label: 'sans json mode' }, response.meta));
+          }
+        } else {
+          throw err;
+        }
+      }
+    } catch (fatal) {
+      debug.endedAt = Date.now();
+      debug.latencyMs = Date.now() - t0;
+      debug.ok = false;
+      debug.error = (fatal && fatal.message) || String(fatal || 'Erreur');
+      debug.request = debug.attempts.length ? debug.attempts[debug.attempts.length - 1] : null;
+      emitDebug();
+      return {
+        ok: false,
+        skipped: false,
+        reason: 'llm-error',
+        error: debug.error,
+        debug: debug
+      };
+    }
+
+    var data = null;
+    try {
+      var text = typeof response.content === 'string' ? response.content.trim() : '';
+      var fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+      if (fence) text = fence[1].trim();
+      var start = text.indexOf('{');
+      var end = text.lastIndexOf('}');
+      if (start >= 0 && end > start) text = text.slice(start, end + 1);
+      data = JSON.parse(text);
+    } catch (parseErr) {
+      data = null;
+    }
+
+    var usage = extractUsageFromRaw(response.raw, messages, response.content, p.model);
+    usage.latencyMs = Date.now() - t0;
+    debug.endedAt = Date.now();
+    debug.latencyMs = usage.latencyMs;
+    debug.ok = true;
+    debug.request =
+      response.meta || (debug.attempts.length ? debug.attempts[debug.attempts.length - 1] : null);
+    debug.response = {
+      status: response.meta && response.meta.status,
+      content: response.content,
+      raw: cloneJsonSafe(response.raw),
+      parsed: data
+    };
+    debug.usage = usage;
+    emitDebug();
+
+    if (!data || data.shouldUpdate !== true) {
+      return {
+        ok: true,
+        skipped: true,
+        reason:
+          (data && typeof data.reason === 'string' && data.reason.trim()) ||
+          'no-update',
+        usage: usage,
+        debug: debug
+      };
+    }
+
+    var nextDesc =
+      typeof data.desc === 'string'
+        ? data.desc
+        : typeof data.description === 'string'
+          ? data.description
+          : '';
+    nextDesc = String(nextDesc).slice(0, MAX_DREAM_DESC_LEN);
+    if (normalizeDescForCompare(nextDesc) === normalizeDescForCompare(currentDesc)) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: 'unchanged',
+        usage: usage,
+        debug: debug
+      };
+    }
+
+    var applied = await executeActions(bridge, [
+      { tool: 'set_description', args: { desc: nextDesc } }
+    ]);
+    var updated = !!(applied && applied.ok);
+    return {
+      ok: updated,
+      skipped: false,
+      updated: updated,
+      desc: nextDesc,
+      reason:
+        (typeof data.reason === 'string' && data.reason.trim()) ||
+        (updated ? 'updated' : 'apply-failed'),
+      applied: applied || null,
+      usage: usage,
+      debug: debug
+    };
+  }
+
   /**
    * On-card-open sanity check: detect discontinuities (esp. Termin\u00e9 + pending tasks).
    * Returns null when nothing to ask; otherwise { message, suggestions, followUps, kind, mismatch }.
@@ -10217,6 +10448,7 @@
     isNoOpImprovementAction: isNoOpImprovementAction,
     addDaysIsoLocal: addDaysIsoLocal,
     cardSanityCheck: cardSanityCheck,
+    cardDreamTurn: cardDreamTurn,
     suggestSubtasks: suggestSubtasks,
     suggestGoals: suggestGoals,
     suggestLabels: suggestLabels,

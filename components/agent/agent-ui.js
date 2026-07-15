@@ -184,6 +184,10 @@
     var interviewPriorityTrusted = false;
     var interviewBootstrapped = false;
     var sanityBootstrapped = false;
+    var dreamDebounceTimer = null;
+    var dreamInFlight = false;
+    var dreamGen = 0;
+    var dreamDirty = false;
     var unreadAssistant = 0;
     var settleReady = false;
     var listeningActive = false;
@@ -1698,6 +1702,11 @@
       notifyLayout();
       scheduleFaceSleep();
       drainMessageQueue();
+      // After the chat settles, Dream consolidates learnings in the background.
+      // tryRunCardDream reschedules itself if another turn is still in flight.
+      if (!interviewActive && (dreamDirty || cardMemoryNeedsDream())) {
+        scheduleCardDream({ delay: 2500 });
+      }
     }
 
     function isSelfPromptHistoryText(text) {
@@ -1726,6 +1735,105 @@
         isSelfPrompt: true,
         silentUser: true
       });
+    }
+
+    /**
+     * Dream stage — async consolidation between chats.
+     * Concatenates card learnings and updates the Trello Description when idle.
+     */
+    function scheduleCardDream(options) {
+      options = options || {};
+      if (isProjectScope) return;
+      if (!Agent.isConfigured(provider) || typeof Agent.cardDreamTurn !== 'function') {
+        return;
+      }
+      if (options.force) dreamDirty = true;
+      var delay = options.delay != null ? options.delay : 4500;
+      if (dreamDebounceTimer) {
+        clearTimeout(dreamDebounceTimer);
+        dreamDebounceTimer = null;
+      }
+      dreamDebounceTimer = setTimeout(function () {
+        dreamDebounceTimer = null;
+        tryRunCardDream();
+      }, Math.max(0, delay));
+    }
+
+    function cardMemoryNeedsDream() {
+      var Mem = global.AgentMemory;
+      if (!Mem || typeof Mem.cardDreamNeedsRefresh !== 'function') return false;
+      var mem =
+        (typeof bridge.getCardMemory === 'function' && bridge.getCardMemory()) ||
+        null;
+      return !!Mem.cardDreamNeedsRefresh(mem);
+    }
+
+    async function tryRunCardDream() {
+      if (isProjectScope || dreamInFlight) return;
+      if (interviewActive || pending || messageQueue.length) {
+        scheduleCardDream({ delay: 3500 });
+        return;
+      }
+      if (!dreamDirty && !cardMemoryNeedsDream()) return;
+      if (!Agent.isConfigured(provider) || typeof Agent.cardDreamTurn !== 'function') {
+        return;
+      }
+      if (typeof bridge.setCardDesc !== 'function') return;
+
+      dreamInFlight = true;
+      dreamDirty = false;
+      var myDream = ++dreamGen;
+      try {
+        var result = await Agent.cardDreamTurn(provider, bridge, {
+          history: history,
+          onDebug: function (entry) {
+            pushDebugEntry(entry);
+          }
+        });
+        if (myDream !== dreamGen) return;
+        if (result && result.usage) updateSessionStats(result.usage);
+
+        var Mem = global.AgentMemory;
+        if (
+          result &&
+          result.ok &&
+          Mem &&
+          typeof Mem.markCardDreamed === 'function' &&
+          t &&
+          // Mark dreamed on successful apply OR deliberate skip (already good / unchanged).
+          (result.updated || result.skipped)
+        ) {
+          try {
+            var current =
+              (typeof bridge.getCardMemory === 'function' && bridge.getCardMemory()) ||
+              Mem.emptyCardMemory();
+            var updated = await Mem.markCardDreamed(t, current);
+            if (onCardMemoryUpdate) onCardMemoryUpdate(updated);
+            else {
+              bridge.getCardMemory = function () {
+                return updated;
+              };
+            }
+          } catch (markErr) {
+            console.error('AgentUI markCardDreamed failed', markErr);
+          }
+        }
+
+        if (result && result.updated && result.applied) {
+          muteListening();
+          appendChangeRecap(result.applied, {
+            ok: true
+          });
+          notifyLayout();
+        }
+      } catch (err) {
+        console.error('AgentUI cardDream failed', err);
+        // Retry later if facts still need consolidation.
+        dreamDirty = true;
+        scheduleCardDream({ delay: 12000 });
+      } finally {
+        if (myDream === dreamGen) dreamInFlight = false;
+      }
     }
 
     function ensureAudioCtx() {
@@ -6022,6 +6130,11 @@
             return updated;
           };
         }
+        // New learnings → schedule Dream to distill into Description between chats.
+        dreamDirty = true;
+        if (!interviewActive) {
+          scheduleCardDream({ delay: pending ? 6000 : 4500 });
+        }
         return updated;
       } catch (err) {
         console.error('AgentUI applyCardPatches failed', err);
@@ -6546,6 +6659,8 @@
       }
       refreshSuggestions({ animate: true });
       await runOpenSanityThenSuggestions({ animate: true });
+      // Post-interview: Dream consolidates learnings into the Description between chats.
+      scheduleCardDream({ delay: 3500, force: true });
       notifyLayout();
     }
 
@@ -6594,6 +6709,8 @@
     async function runOpenSanityThenSuggestions(options) {
       options = options || {};
       await bootstrapSanityCheck();
+      // Between sessions: if facts changed since last Dream, consolidate Description.
+      scheduleCardDream({ delay: 4000 });
       if (options.skipApplySuggestions) return;
       refreshApplySuggestions({ animate: options.animate !== false });
     }
@@ -6628,6 +6745,7 @@
         markSettleReady();
         if (chatRestored) {
           refreshApplySuggestions({ animate: true });
+          scheduleCardDream({ delay: 4000 });
         } else {
           await runOpenSanityThenSuggestions({ animate: true });
         }

@@ -342,7 +342,377 @@
 
   // Optional markdown link/image title. Input is HTML-escaped first, so Trello
   // titles like "smartCard-block" arrive as &quot;smartCard-block&quot;.
-  var MD_LINK_TITLE = '(?:\\s+(?:"[^"]*"|\'[^\']*\'|&quot;.*?&quot;|&#39;.*?&#39;))?';
+  // Capture groups: "…", '…', &quot;…&quot;, &#39;…&#39;
+  var MD_LINK_TITLE =
+    '(?:\\s+(?:"([^"]*)"|\'([^\']*)\'|&quot;(.*?)&quot;|&#39;(.*?)&#39;))?';
+
+  function firstCapture(a, b, c, d) {
+    if (a != null && a !== '') return a;
+    if (b != null && b !== '') return b;
+    if (c != null && c !== '') return c;
+    if (d != null && d !== '') return d;
+    return '';
+  }
+
+  function hostnameFromUrl(url) {
+    try {
+      return new URL(String(url)).hostname.replace(/^www\./i, '');
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function faviconUrlFor(url) {
+    var host = hostnameFromUrl(url);
+    if (!host) return '';
+    return (
+      'https://www.google.com/s2/favicons?domain=' +
+      encodeURIComponent(host) +
+      '&sz=128'
+    );
+  }
+
+  function normalizeComparableUrl(url) {
+    return String(url || '')
+      .trim()
+      .replace(/\/+$/, '')
+      .toLowerCase();
+  }
+
+  function labelLooksLikeUrl(label, href) {
+    var text = unescapeHtml(String(label || '')).trim();
+    if (!text) return false;
+    if (/^https?:\/\//i.test(text)) return true;
+    return normalizeComparableUrl(text) === normalizeComparableUrl(href);
+  }
+
+  /**
+   * Decide if a markdown link should render as a Trello-style smart preview.
+   * Returns 'block' | 'inline' | ''.
+   */
+  function smartCardModeForLink(label, href, title) {
+    var t = String(title || '').trim().toLowerCase();
+    if (t === 'smartcard-block') return 'block';
+    if (t === 'smartcard-inline') return 'inline';
+    if (!/^https?:\/\//i.test(href || '')) return '';
+    // Bare / pasted URLs (label is the URL itself).
+    if (labelLooksLikeUrl(label, href)) return 'block';
+    return '';
+  }
+
+  function renderSmartCardHtml(url, mode) {
+    var href = safeMarkdownHref(url);
+    if (!href) return '';
+    var host = hostnameFromUrl(href);
+    var favicon = faviconUrlFor(href);
+    var isInline = mode === 'inline';
+    var cls =
+      'info-md-smartcard' +
+      (isInline ? ' info-md-smartcard--inline' : ' info-md-smartcard--block');
+    return (
+      '<a class="' +
+      cls +
+      '" href="' +
+      escapeHtml(href) +
+      '" target="_blank" rel="noopener noreferrer" data-smart-url="' +
+      escapeHtml(href) +
+      '" data-smart-mode="' +
+      (isInline ? 'inline' : 'block') +
+      '">' +
+      '<span class="info-md-smartcard-media" aria-hidden="true">' +
+      (favicon
+        ? '<img class="info-md-smartcard-favicon" src="' +
+          escapeHtml(favicon) +
+          '" alt="" loading="lazy" referrerpolicy="no-referrer" decode="async">'
+        : '') +
+      '<img class="info-md-smartcard-image" alt="" hidden loading="lazy" referrerpolicy="no-referrer" decode="async">' +
+      '</span>' +
+      '<span class="info-md-smartcard-body">' +
+      '<span class="info-md-smartcard-title">' +
+      escapeHtml(host || href) +
+      '</span>' +
+      (host
+        ? '<span class="info-md-smartcard-host">' + escapeHtml(host) + '</span>'
+        : '') +
+      '</span>' +
+      '</a>'
+    );
+  }
+
+  function renderMarkdownLinkHtml(label, href, title) {
+    var url = safeMarkdownHref(href);
+    if (!url) return '';
+    if (/^mailto:/i.test(url)) {
+      return (
+        '<a class="info-md-link" href="' +
+        escapeHtml(url) +
+        '">' +
+        label +
+        '</a>'
+      );
+    }
+    var mode = smartCardModeForLink(label, url, title);
+    if (mode) return renderSmartCardHtml(url, mode);
+    return (
+      '<a class="info-md-link" href="' +
+      escapeHtml(url) +
+      '" target="_blank" rel="noopener noreferrer">' +
+      label +
+      '</a>'
+    );
+  }
+
+  // ── Link unfurl (title + image) ──────────────────────────────────────
+  var LINK_META_STORAGE_KEY = 'tp.linkMeta.v1';
+  var LINK_META_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+  var linkMetaMemory = Object.create(null);
+  var linkMetaInflight = Object.create(null);
+  var linkMetaStorageLoaded = false;
+
+  function readLinkMetaStorage() {
+    if (linkMetaStorageLoaded) return;
+    linkMetaStorageLoaded = true;
+    try {
+      if (typeof sessionStorage === 'undefined') return;
+      var raw = sessionStorage.getItem(LINK_META_STORAGE_KEY);
+      if (!raw) return;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return;
+      Object.keys(parsed).forEach(function (key) {
+        var entry = parsed[key];
+        if (!entry || typeof entry !== 'object') return;
+        if (entry.ts && Date.now() - entry.ts > LINK_META_TTL_MS) return;
+        linkMetaMemory[key] = entry;
+      });
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function writeLinkMetaStorage() {
+    try {
+      if (typeof sessionStorage === 'undefined') return;
+      var out = {};
+      var keys = Object.keys(linkMetaMemory);
+      // Cap cache size.
+      var max = 80;
+      var start = Math.max(0, keys.length - max);
+      for (var i = start; i < keys.length; i += 1) {
+        out[keys[i]] = linkMetaMemory[keys[i]];
+      }
+      sessionStorage.setItem(LINK_META_STORAGE_KEY, JSON.stringify(out));
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function absolutizeUrl(maybeRelative, baseUrl) {
+    var s = String(maybeRelative || '').trim();
+    if (!s) return '';
+    try {
+      return new URL(s, baseUrl).href;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function parseLinkMetaFromHtml(html, pageUrl) {
+    if (typeof DOMParser === 'undefined') return null;
+    var doc;
+    try {
+      doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+    } catch (e) {
+      return null;
+    }
+    function metaContent(selectors) {
+      for (var i = 0; i < selectors.length; i += 1) {
+        var el = doc.querySelector(selectors[i]);
+        if (!el) continue;
+        var content = el.getAttribute('content');
+        if (content && String(content).trim()) return String(content).trim();
+      }
+      return '';
+    }
+    var title =
+      metaContent([
+        'meta[property="og:title"]',
+        'meta[name="twitter:title"]',
+        'meta[name="title"]'
+      ]) ||
+      ((doc.querySelector('title') && doc.querySelector('title').textContent) ||
+        '').trim();
+    var description = metaContent([
+      'meta[property="og:description"]',
+      'meta[name="twitter:description"]',
+      'meta[name="description"]'
+    ]);
+    var image = metaContent([
+      'meta[property="og:image:secure_url"]',
+      'meta[property="og:image"]',
+      'meta[name="twitter:image"]',
+      'meta[name="twitter:image:src"]'
+    ]);
+    return {
+      title: title,
+      description: description,
+      image: absolutizeUrl(image, pageUrl),
+      logo: '',
+      ts: Date.now()
+    };
+  }
+
+  function fetchLinkMetaMicrolink(url) {
+    var endpoint =
+      'https://api.microlink.io?url=' +
+      encodeURIComponent(url) +
+      '&palette=false&audio=false&video=false&iframe=false';
+    return fetch(endpoint, { credentials: 'omit' }).then(function (res) {
+      if (!res.ok) throw new Error('microlink http ' + res.status);
+      return res.json().then(function (json) {
+        if (!json || json.status !== 'success' || !json.data) {
+          throw new Error('microlink status');
+        }
+        var data = json.data;
+        var image =
+          (data.image && (data.image.url || data.image)) ||
+          (data.logo && (data.logo.url || data.logo)) ||
+          '';
+        return {
+          title: data.title ? String(data.title) : '',
+          description: data.description ? String(data.description) : '',
+          image: image ? String(image) : '',
+          logo:
+            data.logo && (data.logo.url || data.logo)
+              ? String(data.logo.url || data.logo)
+              : '',
+          ts: Date.now()
+        };
+      });
+    });
+  }
+
+  function fetchLinkMetaHtmlProxy(url) {
+    var endpoint =
+      'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+    return fetch(endpoint, { credentials: 'omit' }).then(function (res) {
+      if (!res.ok) throw new Error('proxy http ' + res.status);
+      return res.text().then(function (html) {
+        var meta = parseLinkMetaFromHtml(html, url);
+        if (!meta || (!meta.title && !meta.image)) {
+          throw new Error('proxy empty meta');
+        }
+        return meta;
+      });
+    });
+  }
+
+  /**
+   * Fetch Open Graph-ish metadata for a URL (title + image).
+   * Cached in memory + sessionStorage. Never throws.
+   */
+  function fetchLinkPreviewMeta(url) {
+    var href = safeMarkdownHref(url);
+    if (!href || !/^https?:\/\//i.test(href)) {
+      return Promise.resolve(null);
+    }
+    readLinkMetaStorage();
+    if (linkMetaMemory[href]) {
+      return Promise.resolve(linkMetaMemory[href]);
+    }
+    if (linkMetaInflight[href]) return linkMetaInflight[href];
+
+    linkMetaInflight[href] = fetchLinkMetaMicrolink(href)
+      .catch(function () {
+        return fetchLinkMetaHtmlProxy(href);
+      })
+      .then(function (meta) {
+        var normalized = {
+          title: (meta && meta.title) || '',
+          description: (meta && meta.description) || '',
+          image: (meta && meta.image) || '',
+          logo: (meta && meta.logo) || '',
+          ts: Date.now()
+        };
+        linkMetaMemory[href] = normalized;
+        writeLinkMetaStorage();
+        return normalized;
+      })
+      .catch(function () {
+        var fallback = {
+          title: '',
+          description: '',
+          image: '',
+          logo: '',
+          ts: Date.now(),
+          failed: true
+        };
+        linkMetaMemory[href] = fallback;
+        writeLinkMetaStorage();
+        return fallback;
+      })
+      .then(function (meta) {
+        delete linkMetaInflight[href];
+        return meta;
+      });
+
+    return linkMetaInflight[href];
+  }
+
+  function applyLinkPreviewMetaToCard(card, meta) {
+    if (!card || !meta) return;
+    var titleEl = card.querySelector('.info-md-smartcard-title');
+    var hostEl = card.querySelector('.info-md-smartcard-host');
+    var imageEl = card.querySelector('.info-md-smartcard-image');
+    var faviconEl = card.querySelector('.info-md-smartcard-favicon');
+    var mediaEl = card.querySelector('.info-md-smartcard-media');
+    var host = hostnameFromUrl(card.getAttribute('data-smart-url') || card.href);
+    var title = String(meta.title || '').trim();
+    if (titleEl && title) {
+      titleEl.textContent = title;
+      card.setAttribute('title', title);
+    }
+    if (hostEl && host) hostEl.textContent = host;
+    var image = String(meta.image || meta.logo || '').trim();
+    if (imageEl && image && /^https?:\/\//i.test(image)) {
+      imageEl.hidden = false;
+      imageEl.src = image;
+      imageEl.alt = title || host || '';
+      if (mediaEl) mediaEl.classList.add('has-image');
+      if (faviconEl) faviconEl.hidden = true;
+      imageEl.onerror = function () {
+        imageEl.hidden = true;
+        if (mediaEl) mediaEl.classList.remove('has-image');
+        if (faviconEl) faviconEl.hidden = false;
+      };
+    }
+    card.classList.add('is-hydrated');
+    if (meta.failed) card.classList.add('is-fallback');
+  }
+
+  /**
+   * Fill smart-card shells inside a preview root with fetched title/image.
+   */
+  function hydrateSmartLinkPreviews(root, options) {
+    if (!root || !root.querySelectorAll) return Promise.resolve();
+    options = options || {};
+    var cards = root.querySelectorAll('a.info-md-smartcard[data-smart-url]');
+    if (!cards.length) return Promise.resolve();
+    var pending = [];
+    for (var i = 0; i < cards.length; i += 1) {
+      (function (card) {
+        if (card.classList.contains('is-hydrated') && !options.force) return;
+        var url = card.getAttribute('data-smart-url') || '';
+        pending.push(
+          fetchLinkPreviewMeta(url).then(function (meta) {
+            applyLinkPreviewMetaToCard(card, meta);
+          })
+        );
+      })(cards[i]);
+    }
+    return Promise.all(pending).then(function () {
+      if (typeof options.onDone === 'function') options.onDone();
+    });
+  }
 
   function renderMarkdownInline(escaped) {
     var s = String(escaped || '');
@@ -370,16 +740,11 @@
     );
     s = s.replace(
       new RegExp('\\[([^\\]]+)\\]\\(([^)\\s]+)' + MD_LINK_TITLE + '\\)', 'g'),
-      function (_, label, href) {
+      function (_, label, href, t1, t2, t3, t4) {
         var url = safeMarkdownHref(unescapeHtml(href));
         if (!url) return _;
-        return stash(
-          '<a class="info-md-link" href="' +
-            escapeHtml(url) +
-            '" target="_blank" rel="noopener noreferrer">' +
-            label +
-            '</a>'
-        );
+        var title = firstCapture(t1, t2, t3, t4);
+        return stash(renderMarkdownLinkHtml(label, url, title) || _);
       }
     );
     s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -391,6 +756,8 @@
       /(^|[\s(])((?:https?:\/\/)[^\s<]+[^\s<.,;:!?)])/gi,
       function (_, lead, url) {
         var href = unescapeHtml(url);
+        var card = renderSmartCardHtml(href, 'block');
+        if (card) return lead + stash(card);
         return (
           lead +
           '<a class="info-md-link" href="' +
@@ -530,6 +897,164 @@
     }
 
     return out.join('');
+  }
+
+  var MD_HEADING_PREFIX_RE = /^(#{1,6})\s+/;
+  var MD_CHECKLIST_PREFIX_RE = /^(\s*)([-*+])\s+\[([ xX])\]\s+/;
+  var MD_UL_PREFIX_RE = /^(\s*)([-*+])\s+(?!\[([ xX])\]\s)/;
+  var MD_OL_PREFIX_RE = /^(\s*)(\d+)\.\s+/;
+
+  function stripMarkdownLinePrefix(line) {
+    var s = String(line == null ? '' : line);
+    s = s.replace(MD_HEADING_PREFIX_RE, '');
+    s = s.replace(MD_CHECKLIST_PREFIX_RE, '');
+    s = s.replace(MD_OL_PREFIX_RE, '');
+    s = s.replace(MD_UL_PREFIX_RE, '');
+    return s;
+  }
+
+  function detectMarkdownLineFormat(line) {
+    var s = String(line == null ? '' : line);
+    var heading = /^(#{1,6})\s+/.exec(s);
+    if (heading) return 'h' + heading[1].length;
+    if (MD_CHECKLIST_PREFIX_RE.test(s)) return 'checklist';
+    if (MD_OL_PREFIX_RE.test(s)) return 'ol';
+    if (MD_UL_PREFIX_RE.test(s)) return 'ul';
+    return 'normal';
+  }
+
+  /** True when flanking markers are a clean pair (avoids treating ** as italic *). */
+  function markdownMarkersAreExclusive(value, start, end, open, close) {
+    if (open !== '*' || close !== '*') return true;
+    if (start > open.length && value.charAt(start - open.length - 1) === '*') return false;
+    if (end + close.length < value.length && value.charAt(end + close.length) === '*') {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Wrap or unwrap a selection with inline markdown markers.
+   * @returns {{ value: string, start: number, end: number }}
+   */
+  function wrapMarkdownInlineSelection(state, open, close) {
+    close = close == null ? open : close;
+    var value = String(state && state.value != null ? state.value : '');
+    var start = Math.max(0, Number(state && state.start) || 0);
+    var end = Math.max(start, Number(state && state.end) || 0);
+    if (end > value.length) end = value.length;
+    if (start > value.length) start = value.length;
+    var selected = value.slice(start, end);
+    var openLen = open.length;
+    var closeLen = close.length;
+
+    if (
+      start >= openLen &&
+      value.slice(start - openLen, start) === open &&
+      value.slice(end, end + closeLen) === close &&
+      markdownMarkersAreExclusive(value, start, end, open, close)
+    ) {
+      return {
+        value: value.slice(0, start - openLen) + selected + value.slice(end + closeLen),
+        start: start - openLen,
+        end: end - openLen
+      };
+    }
+
+    if (
+      selected.length >= openLen + closeLen &&
+      selected.slice(0, openLen) === open &&
+      selected.slice(selected.length - closeLen) === close &&
+      !(
+        open === '*' &&
+        close === '*' &&
+        selected.length >= 4 &&
+        selected.charAt(1) === '*' &&
+        selected.charAt(selected.length - 2) === '*'
+      )
+    ) {
+      var inner = selected.slice(openLen, selected.length - closeLen);
+      return {
+        value: value.slice(0, start) + inner + value.slice(end),
+        start: start,
+        end: start + inner.length
+      };
+    }
+
+    return {
+      value: value.slice(0, start) + open + selected + close + value.slice(end),
+      start: start + openLen,
+      end: start + openLen + selected.length
+    };
+  }
+
+  /**
+   * Apply a block-level markdown format to the lines covering the selection.
+   * kind: normal | h1..h6 | checklist | ul | ol
+   * @returns {{ value: string, start: number, end: number }}
+   */
+  function applyMarkdownBlockFormat(state, kind) {
+    var value = String(state && state.value != null ? state.value : '');
+    var start = Math.max(0, Number(state && state.start) || 0);
+    var end = Math.max(start, Number(state && state.end) || 0);
+    if (end > value.length) end = value.length;
+    if (start > value.length) start = value.length;
+
+    var blockStart = value.lastIndexOf('\n', start - 1) + 1;
+    var blockEnd = value.indexOf('\n', end);
+    if (blockEnd === -1) blockEnd = value.length;
+
+    var block = value.slice(blockStart, blockEnd);
+    var lines = block.length ? block.split('\n') : [''];
+    var target = String(kind || 'normal');
+
+    var nonEmpty = lines.filter(function (line) {
+      return String(line).trim().length > 0;
+    });
+    var allMatch =
+      nonEmpty.length > 0 &&
+      nonEmpty.every(function (line) {
+        return detectMarkdownLineFormat(line) === target;
+      });
+
+    var nextLines = lines.map(function (line) {
+      var body = stripMarkdownLinePrefix(line);
+      if (allMatch && target !== 'normal') {
+        return body;
+      }
+      if (target === 'normal') return body;
+      if (/^h[1-6]$/.test(target)) {
+        var level = Number(target.charAt(1));
+        return Array(level + 1).join('#') + ' ' + body;
+      }
+      if (target === 'checklist') return '- [ ] ' + body;
+      if (target === 'ul') return '- ' + body;
+      if (target === 'ol') return '1. ' + body;
+      return line;
+    });
+
+    var nextBlock = nextLines.join('\n');
+    var nextValue = value.slice(0, blockStart) + nextBlock + value.slice(blockEnd);
+    return {
+      value: nextValue,
+      start: blockStart,
+      end: blockStart + nextBlock.length
+    };
+  }
+
+  function applyMarkdownEditToTextarea(textarea, next) {
+    if (!textarea || !next) return;
+    textarea.value = next.value;
+    try {
+      textarea.setSelectionRange(next.start, next.end);
+    } catch (e) {
+      /* ignore */
+    }
+    if (typeof InputEvent === 'function') {
+      textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    } else {
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    }
   }
 
   function syncExpandableSurfaceHeight(el, options) {
@@ -5057,6 +5582,25 @@
       shell.appendChild(catcher);
     }
 
+    function applySummaryContent(content) {
+      if (content == null || content === '') {
+        chrome.summary.replaceChildren();
+        chrome.summary.hidden = true;
+        chrome.summary.setAttribute('aria-hidden', 'true');
+        return;
+      }
+      if (typeof content === 'string') {
+        chrome.summary.textContent = content;
+      } else if (content.nodeType) {
+        // Node / DocumentFragment — e.g. Statut icon + label
+        chrome.summary.replaceChildren(content);
+      } else {
+        chrome.summary.textContent = String(content);
+      }
+      chrome.summary.hidden = false;
+      chrome.summary.setAttribute('aria-hidden', 'false');
+    }
+
     function syncUi(shouldNotifyLayout) {
       var wasHidden = !!body.hidden;
       if (chrome.checkbox) {
@@ -5094,10 +5638,7 @@
         'aria-label',
         expanded ? chrome.collapseLabel : chrome.expandLabel
       );
-      var text = enabled ? (getSummary() || '') : '';
-      chrome.summary.textContent = text;
-      chrome.summary.hidden = !text;
-      chrome.summary.setAttribute('aria-hidden', text ? 'false' : 'true');
+      applySummaryContent(enabled ? getSummary() : '');
       if (shouldNotifyLayout !== false && wasHidden !== !!body.hidden) {
         onLayoutChange();
       }
@@ -5169,16 +5710,7 @@
     }
 
     function refreshSummary() {
-      if (!enabled) {
-        chrome.summary.hidden = true;
-        chrome.summary.textContent = '';
-        chrome.summary.setAttribute('aria-hidden', 'true');
-        return;
-      }
-      var text = getSummary() || '';
-      chrome.summary.textContent = text;
-      chrome.summary.hidden = !text;
-      chrome.summary.setAttribute('aria-hidden', text ? 'false' : 'true');
+      applySummaryContent(enabled ? getSummary() : '');
     }
 
     function focusControlAtPoint(clientX, clientY) {
@@ -5560,8 +6092,18 @@
       applySectionGlow(field, style && style.color);
     }
 
-    function summaryText() {
-      return currentListName() || (currentListId ? 'Liste inconnue' : '—');
+    function summaryContent() {
+      var name = currentListName() || (currentListId ? 'Liste inconnue' : '—');
+      var style = statutCategoryStyle(currentCategory() || '_none');
+      var wrap = document.createElement('span');
+      wrap.className = 'statut-summary';
+      wrap.style.setProperty('--statut-color', style.color || '#626f86');
+      wrap.appendChild(createStatutIcon(style.icon || 'dot'));
+      var label = document.createElement('span');
+      label.className = 'statut-summary-label';
+      label.textContent = name;
+      wrap.appendChild(label);
+      return wrap;
     }
 
     function buildGroups() {
@@ -5708,7 +6250,7 @@
         config.expanded != null
           ? !!config.expanded
           : true,
-      getSummary: summaryText,
+      getSummary: summaryContent,
       onLayoutChange: onLayoutChange,
       onExpandChange: config.onExpandChange || function () {},
       onEnableChange: function (on) {
@@ -5970,6 +6512,121 @@
     descInput.setAttribute('spellcheck', 'false');
     descInput.value = descText;
 
+    // Trello-style markdown toolbar (visible only while editing).
+    var descToolbar = document.createElement('div');
+    descToolbar.className = 'info-desc-toolbar';
+    descToolbar.hidden = true;
+    descToolbar.setAttribute('role', 'toolbar');
+    descToolbar.setAttribute('aria-label', 'Mise en forme de la description');
+
+    var DESC_FORMAT_OPTIONS = [
+      { kind: 'normal', label: 'Texte normal' },
+      { kind: 'h1', label: 'Titre 1' },
+      { kind: 'h2', label: 'Titre 2' },
+      { kind: 'h3', label: 'Titre 3' },
+      { kind: 'ul', label: 'Liste \u00e0 puces' },
+      { kind: 'ol', label: 'Liste num\u00e9rot\u00e9e' },
+      { kind: 'checklist', label: 'Liste de t\u00e2ches' }
+    ];
+    var DESC_FORMAT_LABELS = {};
+    DESC_FORMAT_OPTIONS.forEach(function (opt) {
+      DESC_FORMAT_LABELS[opt.kind] = opt.label;
+    });
+
+    var descFormatWrap = document.createElement('div');
+    descFormatWrap.className = 'info-desc-format-wrap';
+
+    var descFormatBtn = document.createElement('button');
+    descFormatBtn.type = 'button';
+    descFormatBtn.className = 'info-desc-toolbar-btn info-desc-format-btn';
+    descFormatBtn.setAttribute('aria-haspopup', 'listbox');
+    descFormatBtn.setAttribute('aria-expanded', 'false');
+    descFormatBtn.title = 'Format';
+    descFormatBtn.setAttribute('aria-label', 'Format');
+    var descFormatBtnLabel = document.createElement('span');
+    descFormatBtnLabel.className = 'info-desc-format-btn-label';
+    descFormatBtnLabel.textContent = 'Texte normal';
+    descFormatBtn.appendChild(descFormatBtnLabel);
+    descFormatBtn.appendChild(document.createTextNode(' '));
+    var descFormatChevron = document.createElement('i');
+    descFormatChevron.className = 'ti ti-chevron-down';
+    descFormatChevron.setAttribute('aria-hidden', 'true');
+    descFormatBtn.appendChild(descFormatChevron);
+
+    var descFormatMenu = document.createElement('div');
+    descFormatMenu.className = 'info-desc-format-menu';
+    descFormatMenu.hidden = true;
+    descFormatMenu.setAttribute('role', 'listbox');
+    descFormatMenu.setAttribute('aria-label', 'Formats');
+
+    DESC_FORMAT_OPTIONS.forEach(function (opt) {
+      var optBtn = document.createElement('button');
+      optBtn.type = 'button';
+      optBtn.className = 'info-desc-format-option';
+      optBtn.setAttribute('role', 'option');
+      optBtn.setAttribute('data-md-kind', opt.kind);
+      optBtn.textContent = opt.label;
+      if (opt.kind === 'h1') optBtn.classList.add('is-heading-1');
+      if (opt.kind === 'h2') optBtn.classList.add('is-heading-2');
+      if (opt.kind === 'h3') optBtn.classList.add('is-heading-3');
+      descFormatMenu.appendChild(optBtn);
+    });
+
+    descFormatWrap.appendChild(descFormatBtn);
+    descFormatWrap.appendChild(descFormatMenu);
+
+    function makeDescToolbarBtn(opts) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'info-desc-toolbar-btn';
+      if (opts.mod) btn.className += ' ' + opts.mod;
+      btn.title = opts.title;
+      btn.setAttribute('aria-label', opts.label || opts.title);
+      btn.setAttribute('data-md-action', opts.action);
+      btn.innerHTML =
+        '<i class="ti ' + opts.icon + '" aria-hidden="true"></i>';
+      return btn;
+    }
+
+    var descToolbarSep = document.createElement('span');
+    descToolbarSep.className = 'info-desc-toolbar-sep';
+    descToolbarSep.setAttribute('aria-hidden', 'true');
+
+    var descBoldBtn = makeDescToolbarBtn({
+      action: 'bold',
+      title: 'Gras (Ctrl+B)',
+      label: 'Gras',
+      icon: 'ti-bold',
+      mod: 'is-emphasis'
+    });
+    var descItalicBtn = makeDescToolbarBtn({
+      action: 'italic',
+      title: 'Italique (Ctrl+I)',
+      label: 'Italique',
+      icon: 'ti-italic',
+      mod: 'is-emphasis'
+    });
+    var descStrikeBtn = makeDescToolbarBtn({
+      action: 'strike',
+      title: 'Barr\u00e9',
+      label: 'Barr\u00e9',
+      icon: 'ti-strikethrough',
+      mod: 'is-emphasis'
+    });
+    var descChecklistBtn = makeDescToolbarBtn({
+      action: 'checklist',
+      title: 'Liste de t\u00e2ches',
+      label: 'Liste de t\u00e2ches',
+      icon: 'ti-list-check'
+    });
+
+    descToolbar.appendChild(descFormatWrap);
+    descToolbar.appendChild(descToolbarSep);
+    descToolbar.appendChild(descBoldBtn);
+    descToolbar.appendChild(descItalicBtn);
+    descToolbar.appendChild(descStrikeBtn);
+    descToolbar.appendChild(descChecklistBtn);
+
     var descMeta = document.createElement('div');
     descMeta.className = 'info-desc-meta';
     var descSpellSpinner = document.createElement('span');
@@ -5995,6 +6652,7 @@
     authBox.appendChild(authHint);
     authBox.appendChild(authBtn);
 
+    descWrap.appendChild(descToolbar);
     descWrap.appendChild(descPreview);
     descWrap.appendChild(descInput);
     descWrap.appendChild(descMeta);
@@ -6227,10 +6885,75 @@
       if (!descEditing) syncDescPreviewSize();
     }
 
+    function closeDescFormatMenu() {
+      descFormatMenu.hidden = true;
+      descFormatWrap.classList.remove('is-open');
+      descFormatBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    function openDescFormatMenu() {
+      descFormatMenu.hidden = false;
+      descFormatWrap.classList.add('is-open');
+      descFormatBtn.setAttribute('aria-expanded', 'true');
+      syncDescFormatMenuSelection();
+    }
+
+    function syncDescFormatMenuSelection() {
+      var lineStart =
+        descInput.value.lastIndexOf('\n', Math.max(0, descInput.selectionStart) - 1) + 1;
+      var lineEnd = descInput.value.indexOf('\n', descInput.selectionStart);
+      if (lineEnd === -1) lineEnd = descInput.value.length;
+      var kind = detectMarkdownLineFormat(descInput.value.slice(lineStart, lineEnd));
+      if (!DESC_FORMAT_LABELS[kind]) kind = 'normal';
+      descFormatBtnLabel.textContent = DESC_FORMAT_LABELS[kind] || 'Texte normal';
+      var options = descFormatMenu.querySelectorAll('[data-md-kind]');
+      for (var i = 0; i < options.length; i += 1) {
+        var opt = options[i];
+        var selected = opt.getAttribute('data-md-kind') === kind;
+        opt.classList.toggle('is-selected', selected);
+        opt.setAttribute('aria-selected', selected ? 'true' : 'false');
+      }
+    }
+
+    function getDescEditState() {
+      return {
+        value: descInput.value,
+        start: descInput.selectionStart,
+        end: descInput.selectionEnd
+      };
+    }
+
+    function applyDescMarkdownInline(open, close) {
+      applyMarkdownEditToTextarea(
+        descInput,
+        wrapMarkdownInlineSelection(getDescEditState(), open, close)
+      );
+      syncDescFormatMenuSelection();
+      try {
+        descInput.focus();
+      } catch (e) {
+        /* ignore */
+      }
+    }
+
+    function applyDescMarkdownBlock(kind) {
+      applyMarkdownEditToTextarea(
+        descInput,
+        applyMarkdownBlockFormat(getDescEditState(), kind)
+      );
+      syncDescFormatMenuSelection();
+      try {
+        descInput.focus();
+      } catch (e) {
+        /* ignore */
+      }
+    }
+
     function startDescEdit() {
       if (descEditing) return;
       descEditing = true;
       descPreview.hidden = true;
+      descToolbar.hidden = false;
       descInput.hidden = false;
       syncDescInputSize();
       try {
@@ -6240,12 +6963,15 @@
       } catch (e) {
         /* ignore */
       }
+      syncDescFormatMenuSelection();
       onLayoutChange();
     }
 
     function endDescEdit() {
       if (!descEditing) return;
       descEditing = false;
+      closeDescFormatMenu();
+      descToolbar.hidden = true;
       descInput.hidden = true;
       descPreview.hidden = false;
       renderDescPreview();
@@ -7323,13 +8049,40 @@
       clearDescSpellRevert();
       scheduleDescSave();
       syncDescInputSize();
+      syncDescFormatMenuSelection();
       onLayoutChange();
+    });
+    descInput.addEventListener('keyup', function () {
+      if (descEditing) syncDescFormatMenuSelection();
+    });
+    descInput.addEventListener('click', function () {
+      if (descEditing) syncDescFormatMenuSelection();
+    });
+    descInput.addEventListener('keydown', function (e) {
+      var key = e.key;
+      var mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      if (key === 'b' || key === 'B') {
+        e.preventDefault();
+        applyDescMarkdownInline('**');
+        return;
+      }
+      if (key === 'i' || key === 'I') {
+        e.preventDefault();
+        applyDescMarkdownInline('*');
+        return;
+      }
     });
     descInput.addEventListener('blur', function () {
       // Persist immediately; spellcheck runs async with a small spinner.
       flushDescSave();
       spellcheckDescAfterCommit();
-      endDescEdit();
+      // Defer exit so toolbar clicks (mousedown preventDefault) keep edit mode.
+      setTimeout(function () {
+        if (!descEditing) return;
+        if (descWrap.contains(document.activeElement)) return;
+        endDescEdit();
+      }, 0);
     });
     descPreview.addEventListener('click', function (e) {
       if (e.target && e.target.closest && e.target.closest('a, button, input')) return;
@@ -7339,6 +8092,47 @@
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         startDescEdit();
+      }
+    });
+
+    // Keep textarea focus when interacting with the markdown toolbar.
+    descToolbar.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+    });
+    descFormatBtn.addEventListener('click', function () {
+      if (descFormatMenu.hidden) openDescFormatMenu();
+      else closeDescFormatMenu();
+      try {
+        descInput.focus();
+      } catch (err) {
+        /* ignore */
+      }
+    });
+    descFormatMenu.addEventListener('click', function (e) {
+      var opt =
+        e.target && e.target.closest
+          ? e.target.closest('[data-md-kind]')
+          : null;
+      if (!opt) return;
+      var kind = opt.getAttribute('data-md-kind');
+      closeDescFormatMenu();
+      applyDescMarkdownBlock(kind);
+    });
+    descBoldBtn.addEventListener('click', function () {
+      applyDescMarkdownInline('**');
+    });
+    descItalicBtn.addEventListener('click', function () {
+      applyDescMarkdownInline('*');
+    });
+    descStrikeBtn.addEventListener('click', function () {
+      applyDescMarkdownInline('~~');
+    });
+    descChecklistBtn.addEventListener('click', function () {
+      applyDescMarkdownBlock('checklist');
+    });
+    document.addEventListener('mousedown', function (e) {
+      if (!descFormatMenu.hidden && !descFormatWrap.contains(e.target)) {
+        closeDescFormatMenu();
       }
     });
 
@@ -10398,10 +11192,8 @@
         ? { inutile: true, label: INUTILE_LABEL }
         : { i: d.tierI, label: d.label };
       var v = tierVisuals(visualSource);
+      // Priority name only — due countdown lives in the Échéance section / board badge.
       var nextLabel = d.eisenhowerLabel || classicTierLabel(d);
-      if (d.dueCountdown && !d.blocked) {
-        nextLabel += ' (' + d.dueCountdown + ')';
-      }
       var nextDescKey = tierDescriptionContentKey(d);
       var labelChanged = nextLabel !== lastPaintLabel;
       var descChanged = nextDescKey !== lastDescKey;
@@ -11459,13 +12251,42 @@
     );
 
     var priorityCollapse = null;
-    var lastPrioritySummary = '';
+    var lastPriorityDisplay = null;
     var durationControl = null;
+
+    function buildPrioritySummary() {
+      var d = lastPriorityDisplay;
+      var label = d && d.label ? d.label : '';
+      if (!label) return '';
+      var wrap = document.createElement('span');
+      wrap.className = 'priority-summary';
+      var visualSource = d.inutile
+        ? { inutile: true, label: INUTILE_LABEL }
+        : { i: d.tierI, label: d.label };
+      var v = tierVisuals(visualSource);
+      var dot = document.createElement('span');
+      dot.className = 'heat-tier-dot priority-summary-dot';
+      dot.setAttribute('aria-hidden', 'true');
+      dot.style.setProperty(
+        '--heat-tier-dot-size',
+        heatTierDotSizePx(d).toFixed(2) + 'px'
+      );
+      if (v.seg) dot.style.background = v.seg;
+      wrap.classList.toggle('is-inutile', !!d.inutile);
+      var text = document.createElement('span');
+      text.className = 'priority-summary-label';
+      text.textContent = label;
+      wrap.appendChild(dot);
+      wrap.appendChild(text);
+      return wrap;
+    }
 
     function persistSliderState(skipFieldSync) {
       if (!skipFieldSync) syncStateFromFields();
       if (typeof variantConfig.onStateChange === 'function') {
-        variantConfig.onStateChange(state);
+        // Copy so callers (popup save / Information recap) are not affected when
+        // animation frames or getState() later sync from in-flight slider DOM.
+        variantConfig.onStateChange(Object.assign({}, state));
       } else {
         saveSliderValues(state);
       }
@@ -11565,7 +12386,7 @@
         syncStateFromFields();
         var result = calcFn(state);
         var display = resolveDisplay(result, state);
-        lastPrioritySummary = display && display.label ? display.label : '';
+        lastPriorityDisplay = display;
         if (priorityCollapse) priorityCollapse.refreshSummary();
         var cardTier = display.cardTier;
         // Blocked/overdue red is section-scoped (Bloqué / Échéance), not a full-card wash.
@@ -11692,7 +12513,7 @@
       enabled: state.priorityEnabled !== false,
       expanded: sectionExpanded('priority', state.priorityEnabled !== false),
       getSummary: function () {
-        return lastPrioritySummary || '';
+        return buildPrioritySummary();
       },
       onLayoutChange: function () {
         if (typeof variantConfig.onLayoutChange === 'function') {
@@ -12256,6 +13077,10 @@
     withDueDateDisplay: withDueDateDisplay,
     createInfoField: createInfoField,
     renderMarkdownToHtml: renderMarkdownToHtml,
+    wrapMarkdownInlineSelection: wrapMarkdownInlineSelection,
+    applyMarkdownBlockFormat: applyMarkdownBlockFormat,
+    detectMarkdownLineFormat: detectMarkdownLineFormat,
+    stripMarkdownLinePrefix: stripMarkdownLinePrefix,
     createCollapsibleEnableChrome: createCollapsibleEnableChrome,
     bindCollapsibleEnable: bindCollapsibleEnable,
     wordFor: wordFor,

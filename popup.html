@@ -29,12 +29,12 @@
   <script src="./components/completion/completion-trello.js?v=progress-due-complete-1"></script>
   <script src="./components/goals/goals-trello.js?v=goals-1"></script>
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
-  <script src="./components/agent/agent.js?v=agent-scope-1"></script>
-  <script src="./components/agent/agent-memory.js?v=card-interview-1"></script>
+  <script src="./components/agent/agent.js?v=agent-dream-1"></script>
+  <script src="./components/agent/agent-memory.js?v=agent-dream-1"></script>
   <script src="./components/agent/memory-ui.js?v=memory-settings-1"></script>
   <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
-  <script src="./components/agent/agent-ui.js?v=agent-scope-1"></script>
+  <script src="./components/agent/agent-ui.js?v=agent-dream-1"></script>
 </head>
 <body class="tp-page tp-page--priority">
   <div class="compare-page">
@@ -92,13 +92,15 @@
 
     function saveState(state) {
       var wasBlocked = !!(latestState && latestState.enAttente);
-      latestState = state;
+      // Snapshot — variant state is mutated during slider animation / getState sync.
+      var snapshot = Object.assign({}, state || {});
+      latestState = snapshot;
       saveChain = saveChain
         .then(function () {
-          return PriorityTrello.saveCardInputs(t, state);
+          return PriorityTrello.saveCardInputs(t, snapshot);
         })
         .then(function () {
-          if (state && state.enAttente && !wasBlocked && statutUi && StatutTrello) {
+          if (snapshot.enAttente && !wasBlocked && statutUi && StatutTrello) {
             return StatutTrello.getCardStatut(t).then(function (statut) {
               if (statutUi && typeof statutUi.setData === 'function') {
                 statutUi.setData({
@@ -207,12 +209,19 @@
       });
     }
 
-    function syncInfoRecap() {
+    function syncInfoRecap(stateOverride) {
       if (!infoUi || typeof infoUi.setRecap !== 'function') return;
+      // Prefer an explicit snapshot from onStateChange. Calling getState() here
+      // re-syncs from slider DOM while heat-tier clicks still animate, which
+      // leaves Information one update behind.
       var state =
-        variant && typeof variant.getState === 'function'
-          ? variant.getState()
-          : latestState || {};
+        stateOverride != null
+          ? stateOverride
+          : latestState != null
+            ? latestState
+            : variant && typeof variant.getState === 'function'
+              ? variant.getState()
+              : {};
       var priorityLabel = '';
       var priorityVisual = null;
       try {
@@ -1797,7 +1806,7 @@
         },
         onStateChange: function (state) {
           saveState(state);
-          syncInfoRecap();
+          syncInfoRecap(latestState || state);
         },
         onLayoutChange: function () {
           resizePopup();

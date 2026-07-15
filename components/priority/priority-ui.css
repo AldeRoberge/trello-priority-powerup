@@ -596,6 +596,161 @@ body {
   width: 100%;
 }
 
+.info-desc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1, var(--surface-2));
+}
+
+.info-desc-toolbar[hidden] {
+  display: none !important;
+}
+
+.info-desc-toolbar-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 4px;
+  background: var(--border);
+}
+
+.info-desc-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary, var(--text-muted));
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.info-desc-toolbar-btn .ti {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.info-desc-toolbar-btn:hover {
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  color: var(--text-primary);
+}
+
+.info-desc-toolbar-btn:focus-visible {
+  outline: 2px solid var(--tp-primary, #0c66e4);
+  outline-offset: 0;
+}
+
+.info-desc-toolbar-btn.is-emphasis .ti-bold {
+  font-weight: 700;
+}
+
+.info-desc-format-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.info-desc-format-btn {
+  min-width: 0;
+  padding: 0 8px;
+  font-weight: 500;
+}
+
+.info-desc-format-btn-label {
+  max-width: 9.5em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.info-desc-format-btn .ti {
+  font-size: 14px;
+  opacity: 0.75;
+}
+
+.info-desc-format-wrap.is-open .info-desc-format-btn {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-primary);
+}
+
+.info-desc-format-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+  max-height: 260px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--border, color-mix(in srgb, var(--text-primary) 14%, transparent));
+  border-radius: 10px;
+  background: var(--surface-2, #fff);
+  box-shadow: 0 8px 20px color-mix(in srgb, #000 12%, transparent);
+}
+
+.info-desc-format-menu[hidden] {
+  display: none !important;
+}
+
+.info-desc-format-option {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.info-desc-format-option.is-heading-1 {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.info-desc-format-option.is-heading-2 {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.info-desc-format-option.is-heading-3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.info-desc-format-option:hover {
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+}
+
+.info-desc-format-option.is-selected {
+  background: color-mix(in srgb, var(--tp-primary, #0c66e4) 14%, transparent);
+  color: var(--tp-primary, #0c66e4);
+}
+
+.info-desc-format-option:focus-visible {
+  outline: 2px solid var(--tp-primary, #0c66e4);
+  outline-offset: 0;
+}
+
 .info-desc-preview,
 .info-desc-input {
   width: 100%;
@@ -1379,6 +1534,8 @@ body {
 
 .section-toggle-summary {
   flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
   min-width: 0;
   max-width: 46%;
   margin-top: 2px;
@@ -1392,6 +1549,55 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   transition: opacity 0.12s ease, color 0.12s ease;
+}
+
+.statut-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.statut-summary .statut-list-option-icon {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: var(--statut-color, #626f86);
+}
+
+.statut-summary-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.priority-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.priority-summary-dot {
+  flex-shrink: 0;
+}
+
+.priority-summary-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.priority-summary.is-inutile .priority-summary-dot {
+  opacity: 0.65;
+}
+
+.priority-summary.is-inutile .priority-summary-label {
+  opacity: 0.82;
 }
 
 /* Expanded: body content replaces the header summary */

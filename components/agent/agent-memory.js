@@ -780,7 +780,46 @@
   var MAX_CARD_FACT_LEN = 160;
 
   function emptyCardMemory() {
-    return { version: 1, facts: [], updatedAt: '' };
+    return {
+      version: 1,
+      facts: [],
+      updatedAt: '',
+      lastDreamAt: '',
+      dreamSignature: ''
+    };
+  }
+
+  /**
+   * Stable fingerprint of card facts — used to decide if a Dream pass is needed.
+   */
+  function cardFactsSignature(memory) {
+    var mem = normalizeCardMemory(memory);
+    if (!mem.facts.length) return '';
+    return mem.facts
+      .map(function (f) {
+        return f.key || factIdentityKey(f.text);
+      })
+      .filter(Boolean)
+      .sort()
+      .join('|');
+  }
+
+  /**
+   * True when card facts exist and have changed since the last Dream consolidation.
+   */
+  function cardDreamNeedsRefresh(memory) {
+    var mem = normalizeCardMemory(memory);
+    if (!mem.facts.length) return false;
+    var sig = cardFactsSignature(mem);
+    if (!sig) return false;
+    return !(mem.dreamSignature && mem.dreamSignature === sig && mem.lastDreamAt);
+  }
+
+  async function markCardDreamed(t, memory) {
+    var next = normalizeCardMemory(memory);
+    next.dreamSignature = cardFactsSignature(next);
+    next.lastDreamAt = new Date().toISOString();
+    return saveCardMemory(t, next);
   }
 
   function normalizeCardFact(raw) {
@@ -828,7 +867,9 @@
     return {
       version: 1,
       facts: deduped.slice(0, MAX_CARD_FACTS),
-      updatedAt: typeof src.updatedAt === 'string' ? src.updatedAt : ''
+      updatedAt: typeof src.updatedAt === 'string' ? src.updatedAt : '',
+      lastDreamAt: typeof src.lastDreamAt === 'string' ? src.lastDreamAt : '',
+      dreamSignature: typeof src.dreamSignature === 'string' ? src.dreamSignature : ''
     };
   }
 
@@ -950,6 +991,9 @@
     rememberCardFact: rememberCardFact,
     forgetCardFacts: forgetCardFacts,
     applyCardPatches: applyCardPatches,
-    buildCardPromptBlock: buildCardPromptBlock
+    buildCardPromptBlock: buildCardPromptBlock,
+    cardFactsSignature: cardFactsSignature,
+    cardDreamNeedsRefresh: cardDreamNeedsRefresh,
+    markCardDreamed: markCardDreamed
   };
 })(typeof window !== 'undefined' ? window : this);
