@@ -240,6 +240,23 @@
       // Back-compat: missing dueEnabled + dueDate ⇒ enabled.
       if (raw.dueEnabled === false) normalized.dueEnabled = false;
     }
+
+    // Multi-label task taxonomy (Information + AI); sidecar, not an axis.
+    var PUTypes = priorityUI();
+    var taskTypes =
+      PUTypes && typeof PUTypes.normalizeTaskTypes === 'function'
+        ? PUTypes.normalizeTaskTypes(raw.taskTypes)
+        : (function () {
+            if (!Array.isArray(raw.taskTypes)) return [];
+            return raw.taskTypes
+              .map(function (id) {
+                return typeof id === 'string' ? id.trim() : '';
+              })
+              .filter(Boolean);
+          })();
+    if (taskTypes.length) normalized.taskTypes = taskTypes;
+    if (raw.taskTypesLocked === true) normalized.taskTypesLocked = true;
+
     return normalized;
   }
 
@@ -268,6 +285,10 @@
       }
       if (inputs.dueEnabled === false) cleared.dueEnabled = false;
     }
+    if (Array.isArray(inputs.taskTypes) && inputs.taskTypes.length) {
+      cleared.taskTypes = inputs.taskTypes.slice();
+    }
+    if (inputs.taskTypesLocked === true) cleared.taskTypesLocked = true;
     return cleared;
   }
 

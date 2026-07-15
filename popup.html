@@ -1252,6 +1252,15 @@
         durationLabel: '',
         progressLabel: progressLabel
       });
+      if (typeof infoUi.setTaskTypes === 'function') {
+        var nextTypes =
+          PriorityUI && typeof PriorityUI.normalizeTaskTypes === 'function'
+            ? PriorityUI.normalizeTaskTypes(state.taskTypes)
+            : Array.isArray(state.taskTypes)
+              ? state.taskTypes
+              : [];
+        infoUi.setTaskTypes(nextTypes);
+      }
     }
 
     var silentEstimateBusy = false;
@@ -1997,6 +2006,33 @@
               }
             });
           }
+        },
+        onTaskTypesChange: function (nextTypes) {
+          var normalized =
+            PriorityUI && typeof PriorityUI.normalizeTaskTypes === 'function'
+              ? PriorityUI.normalizeTaskTypes(nextTypes)
+              : Array.isArray(nextTypes)
+                ? nextTypes.slice()
+                : [];
+          var base =
+            (variant && typeof variant.getState === 'function'
+              ? variant.getState()
+              : null) ||
+            latestState ||
+            {};
+          var next = Object.assign({}, base, {
+            taskTypes: normalized,
+            taskTypesLocked: true,
+          });
+          if (variant && typeof variant.setState === 'function') {
+            variant.setState(next, { preserveCollapse: true });
+          }
+          latestState = Object.assign({}, next);
+          return Promise.resolve(saveState(next)).then(function () {
+            return commitHistoryNow('Type de tâche modifié').then(function () {
+              return { ok: true, changed: true, taskTypes: normalized };
+            });
+          });
         },
       });
 

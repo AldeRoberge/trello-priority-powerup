@@ -45,6 +45,27 @@
     return word + ' ' + (count === 1 ? singular : plural);
   }
 
+  /**
+   * Repair common model typos before rendering:
+   * whitespace around [[g:…]], uppercase colors, single closing ].
+   */
+  function normalizeHighlightMarkup(text) {
+    if (typeof text !== 'string' || !text) return text || '';
+    return text
+      .replace(
+        /\[\[\s*([grya])\s*:\s*([^\]]{1,120}?)\s*\]\]/gi,
+        function (_m, color, phrase) {
+          return '[[' + String(color).toLowerCase() + ':' + phrase + ']]';
+        }
+      )
+      .replace(
+        /\[\[\s*([grya])\s*:\s*([^\]]{1,120}?)\s*\](?!\])/gi,
+        function (_m, color, phrase) {
+          return '[[' + String(color).toLowerCase() + ':' + phrase + ']]';
+        }
+      );
+  }
+
   /** Hide a trailing unfinished [[g:… / [[a:… marker so streaming does not flash raw syntax. */
   function hideIncompleteHighlightMarker(text) {
     if (typeof text !== 'string' || !text) return text || '';
@@ -54,11 +75,26 @@
       return text;
     }
     var after = text.slice(lastOpen);
-    if (after.indexOf(']]') !== -1) return text;
-    if (/^\[\[[grya]?(?::[^\]]*)?$/.test(after) || after === '[[') {
+    // Complete [[color:phrase]] — keep (even if more text follows).
+    if (/^\[\[[grya]:[^\]]{1,120}\]\]/i.test(after)) return text;
+    // Highlight-shaped but unfinished (incl. single ]) — hide until closed.
+    if (
+      after === '[[' ||
+      /^\[\[[grya]?(?::[^\]]*)?\]?$/i.test(after) ||
+      /^\[\[[grya]:/i.test(after)
+    ) {
       return text.slice(0, lastOpen);
     }
     return text;
+  }
+
+  /** Strip leftover highlight syntax so users never see [[g:…]]. */
+  function stripLeftoverHighlightMarkup(text) {
+    if (typeof text !== 'string' || !text) return text || '';
+    return text
+      .replace(/\[\[\s*[grya]\s*:\s*([^\]]{0,120}?)\s*\]\]?/gi, '$1')
+      .replace(/\[\[\s*[grya]?\s*:?\s*[^\]]{0,120}$/gi, '')
+      .replace(/\[\[[^\]]*$/g, '');
   }
 
   /**
@@ -70,29 +106,35 @@
     if (!bubble) return;
     bubble.replaceChildren();
     var raw = typeof text === 'string' ? text : '';
-    var display = hideIncompleteHighlightMarker(raw);
+    var display = hideIncompleteHighlightMarker(normalizeHighlightMarkup(raw));
     if (!display) return;
-    var re = /\[\[([grya]):([^\]]{1,120})\]\]/g;
+    var re = /\[\[([grya]):([^\]]{1,120})\]\]/gi;
     var last = 0;
     var m;
     var hasHighlight = false;
     while ((m = re.exec(display)) !== null) {
       hasHighlight = true;
       if (m.index > last) {
-        bubble.appendChild(document.createTextNode(display.slice(last, m.index)));
+        bubble.appendChild(
+          document.createTextNode(
+            stripLeftoverHighlightMarkup(display.slice(last, m.index))
+          )
+        );
       }
       var span = document.createElement('span');
-      span.className = 'agent-hl agent-hl--' + m[1];
+      span.className = 'agent-hl agent-hl--' + String(m[1]).toLowerCase();
       span.textContent = m[2];
       bubble.appendChild(span);
       last = m.index + m[0].length;
     }
     if (!hasHighlight) {
-      bubble.textContent = display;
+      bubble.textContent = stripLeftoverHighlightMarkup(display);
       return;
     }
     if (last < display.length) {
-      bubble.appendChild(document.createTextNode(display.slice(last)));
+      bubble.appendChild(
+        document.createTextNode(stripLeftoverHighlightMarkup(display.slice(last)))
+      );
     }
   }
 

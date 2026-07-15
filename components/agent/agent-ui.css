@@ -2660,13 +2660,18 @@ html[data-color-mode='dark'] .tp-page--priority .agent-hl--a {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 8px;
+  /* Room for chat-bubble tails pointing at the composer. */
+  margin-bottom: 11px;
+  /* Align under AI bubble: face 32px + gap 8px (not under the avatar). */
+  padding-left: 40px;
+  box-sizing: border-box;
 }
 
 /* Next-intent / starter chips sit under the composer. */
 .tp-page--priority .agent-suggestions.is-below-composer {
-  margin-top: 8px;
+  margin-top: 11px;
   margin-bottom: 0;
+  padding-left: 0;
 }
 
 .tp-page--priority .agent-suggestions[hidden] {
@@ -2674,6 +2679,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-hl--a {
 }
 
 .tp-page--priority .agent-suggestion-chip {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -2688,6 +2694,34 @@ html[data-color-mode='dark'] .tp-page--priority .agent-hl--a {
   cursor: pointer;
   text-align: left;
   animation: agent-suggestion-in 0.28s ease both;
+}
+
+/* Little chat-bubble tail → composer (inherits pill border style + color). */
+.tp-page--priority .agent-suggestion-chip::after {
+  content: '';
+  position: absolute;
+  left: 14px;
+  bottom: -4px;
+  width: 7px;
+  height: 7px;
+  box-sizing: border-box;
+  background: inherit;
+  border: 0;
+  border-right-width: 1px;
+  border-bottom-width: 1px;
+  border-right-style: inherit;
+  border-bottom-style: inherit;
+  border-right-color: inherit;
+  border-bottom-color: inherit;
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+/* Below the input: tip points up toward the text area. */
+.tp-page--priority .agent-suggestions.is-below-composer .agent-suggestion-chip::after {
+  bottom: auto;
+  top: -4px;
+  transform: rotate(225deg);
 }
 
 .tp-page--priority .agent-suggestion-chip-icon {

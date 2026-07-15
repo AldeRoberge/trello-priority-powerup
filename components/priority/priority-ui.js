@@ -53,6 +53,61 @@
   /** Member clock preference: '24' (default) or '12'. Canonical storage stays HH:MM. */
   var preferredTimeFormat = '24';
   var SCORE_MAX = 10;
+
+  /**
+   * Multi-label task taxonomy (Information + AI interview).
+   * Order here is picker display order; selection order is preserved on the card.
+   */
+  var TASK_TYPES = [
+    { id: 'action', label: 'Action', hint: 'Action concr\u00e8te unique' },
+    { id: 'project', label: 'Projet', hint: 'Partie d\u2019un effort multi-\u00e9tapes' },
+    { id: 'recurring', label: 'R\u00e9currente', hint: 'T\u00e2che r\u00e9p\u00e9titive / r\u00e9currente' },
+    { id: 'exploratory', label: 'Exploration', hint: 'D\u00e9couverte / recherche' },
+    { id: 'emotional', label: '\u00c9motionnel', hint: '\u00c9motionnel / psychologique' },
+    { id: 'communication', label: 'Communication', hint: 'Communication / relationnel' },
+    { id: 'deliverable', label: 'Livrable', hint: 'Livrable / produit' },
+    { id: 'process', label: 'Processus', hint: 'Processus / maintenance' },
+    { id: 'thinking', label: 'R\u00e9flexion', hint: 'R\u00e9flexion / d\u00e9cisions' }
+  ];
+  var TASK_TYPE_BY_ID = (function () {
+    var map = Object.create(null);
+    for (var i = 0; i < TASK_TYPES.length; i++) {
+      map[TASK_TYPES[i].id] = TASK_TYPES[i];
+    }
+    return map;
+  })();
+
+  function isValidTaskTypeId(id) {
+    return typeof id === 'string' && !!TASK_TYPE_BY_ID[id];
+  }
+
+  function taskTypeLabel(id) {
+    var entry = isValidTaskTypeId(id) ? TASK_TYPE_BY_ID[id] : null;
+    return entry ? entry.label : '';
+  }
+
+  function taskTypeHint(id) {
+    var entry = isValidTaskTypeId(id) ? TASK_TYPE_BY_ID[id] : null;
+    return entry ? entry.hint : '';
+  }
+
+  /** De-dupe + keep catalog-valid ids; preserve first-seen order. */
+  function normalizeTaskTypes(raw) {
+    var list = Array.isArray(raw)
+      ? raw
+      : typeof raw === 'string' && raw.trim()
+        ? [raw]
+        : [];
+    var out = [];
+    var seen = Object.create(null);
+    for (var i = 0; i < list.length; i++) {
+      var id = typeof list[i] === 'string' ? list[i].trim() : '';
+      if (!id || !isValidTaskTypeId(id) || seen[id]) continue;
+      seen[id] = true;
+      out.push(id);
+    }
+    return out;
+  }
   // Urgency / impact axis max (ease uses 1..5).
   var AXIS_UI_MAX = 4;
   // Tier indices — keep in sync with TIER_DEFS order (Critique → Optionnelle).
@@ -6453,6 +6508,10 @@
       typeof config.onParentChange === 'function' ? config.onParentChange : null;
     var onOpenParent =
       typeof config.onOpenParent === 'function' ? config.onOpenParent : null;
+    var onTaskTypesChange =
+      typeof config.onTaskTypesChange === 'function'
+        ? config.onTaskTypesChange
+        : null;
     var bodyId = 'info-section-body-' + Math.random().toString(36).slice(2, 9);
     var titleText = typeof config.title === 'string' ? config.title : '';
     var descText = typeof config.desc === 'string' ? config.desc : '';
@@ -6510,6 +6569,9 @@
     var parentBusy = false;
     var parentPickerOpen = false;
     var parentBoardCardsCache = null;
+    var taskTypes = normalizeTaskTypes(config.taskTypes);
+    var taskTypesBusy = false;
+    var taskTypesPickerOpen = false;
     var FIELD_SAVE_MS = 450;
 
     var field = document.createElement('div');
@@ -6917,6 +6979,49 @@
     labelsWrap.appendChild(labelsSuggestSection);
     labelsRow.value.appendChild(labelsWrap);
     body.appendChild(labelsRow.row);
+
+    // ── Type de tâche (multi-label catalog) ─────────────────────────────
+    var taskTypesRow = makeRow('task-types', 'Type de t\u00e2che', {
+      icon: 'ti-category',
+    });
+    var taskTypesWrap = document.createElement('div');
+    taskTypesWrap.className = 'info-task-types-wrap';
+
+    var taskTypesEl = document.createElement('div');
+    taskTypesEl.className = 'info-task-types';
+    taskTypesEl.setAttribute('aria-label', 'Types de t\u00e2che');
+
+    var taskTypesAddWrap = document.createElement('div');
+    taskTypesAddWrap.className = 'info-task-types-add-wrap';
+
+    var taskTypesAddBtn = document.createElement('button');
+    taskTypesAddBtn.type = 'button';
+    taskTypesAddBtn.className = 'info-task-types-add-btn';
+    taskTypesAddBtn.setAttribute('aria-expanded', 'false');
+    taskTypesAddBtn.setAttribute('aria-haspopup', 'listbox');
+    taskTypesAddBtn.innerHTML =
+      '<i class="ti ti-plus" aria-hidden="true"></i><span>Ajouter</span>';
+
+    var taskTypesPicker = document.createElement('div');
+    taskTypesPicker.className = 'info-task-types-picker';
+    taskTypesPicker.hidden = true;
+    taskTypesPicker.setAttribute('role', 'listbox');
+    taskTypesPicker.setAttribute('aria-label', 'Types de t\u00e2che disponibles');
+
+    var taskTypesStatus = document.createElement('span');
+    taskTypesStatus.className = 'info-desc-status';
+    taskTypesStatus.setAttribute('aria-live', 'polite');
+
+    taskTypesAddWrap.appendChild(taskTypesAddBtn);
+    taskTypesAddWrap.appendChild(taskTypesPicker);
+    var taskTypesInline = document.createElement('div');
+    taskTypesInline.className = 'info-task-types-inline';
+    taskTypesInline.appendChild(taskTypesEl);
+    taskTypesInline.appendChild(taskTypesAddWrap);
+    taskTypesWrap.appendChild(taskTypesInline);
+    taskTypesWrap.appendChild(taskTypesStatus);
+    taskTypesRow.value.appendChild(taskTypesWrap);
+    body.appendChild(taskTypesRow.row);
 
     // ── Parent task (via Progrès linkedCardId reverse lookup) ───────────
     var parentRow = makeRow('parent', 'T\u00e2che parente', {
@@ -8392,6 +8497,161 @@
       renderLabelSuggestions();
     }
 
+    function setTaskTypesStatus(text, tone) {
+      taskTypesStatus.textContent = text || '';
+      taskTypesStatus.classList.toggle('is-error', tone === 'error');
+      taskTypesStatus.classList.toggle('is-saving', tone === 'saving');
+    }
+
+    function setTaskTypesPickerOpen(open) {
+      taskTypesPickerOpen = !!open;
+      taskTypesPicker.hidden = !taskTypesPickerOpen;
+      taskTypesAddWrap.classList.toggle('is-open', taskTypesPickerOpen);
+      taskTypesAddBtn.setAttribute(
+        'aria-expanded',
+        taskTypesPickerOpen ? 'true' : 'false'
+      );
+      if (taskTypesPickerOpen) renderTaskTypesPicker();
+      onLayoutChange();
+    }
+
+    function availableTaskTypeEntries() {
+      var selected = Object.create(null);
+      for (var i = 0; i < taskTypes.length; i++) selected[taskTypes[i]] = true;
+      return TASK_TYPES.filter(function (entry) {
+        return !selected[entry.id];
+      });
+    }
+
+    function renderTaskTypesPicker() {
+      taskTypesPicker.replaceChildren();
+      var available = availableTaskTypeEntries();
+      if (!available.length) {
+        var empty = document.createElement('div');
+        empty.className = 'info-task-types-picker-empty';
+        empty.textContent = 'Tous les types sont d\u00e9j\u00e0 s\u00e9lectionn\u00e9s';
+        taskTypesPicker.appendChild(empty);
+        return;
+      }
+      available.forEach(function (entry) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'info-task-types-picker-option';
+        btn.setAttribute('role', 'option');
+        btn.disabled = taskTypesBusy;
+        btn.title = entry.hint || entry.label;
+        btn.dataset.taskTypeId = entry.id;
+
+        var text = document.createElement('span');
+        text.className = 'info-task-types-picker-option-text';
+        text.textContent = entry.label;
+        btn.appendChild(text);
+
+        if (entry.hint) {
+          var hint = document.createElement('span');
+          hint.className = 'info-task-types-picker-option-hint';
+          hint.textContent = entry.hint;
+          btn.appendChild(hint);
+        }
+
+        btn.addEventListener('click', function () {
+          addTaskType(entry.id);
+        });
+        taskTypesPicker.appendChild(btn);
+      });
+    }
+
+    function renderTaskTypes() {
+      taskTypesEl.replaceChildren();
+      taskTypes.forEach(function (id) {
+        var label = taskTypeLabel(id) || id;
+        var hint = taskTypeHint(id);
+        var chip = document.createElement('span');
+        chip.className = 'info-task-type';
+        chip.title = hint || label;
+        chip.setAttribute('aria-label', label);
+
+        var text = document.createElement('span');
+        text.className = 'info-task-type-name';
+        text.textContent = label;
+        chip.appendChild(text);
+
+        var clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'info-task-type-clear';
+        clearBtn.setAttribute('aria-label', 'Retirer\u00a0: ' + label);
+        clearBtn.title = 'Retirer';
+        clearBtn.innerHTML = '<i class="ti ti-x" aria-hidden="true"></i>';
+        clearBtn.disabled = taskTypesBusy;
+        clearBtn.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          removeTaskType(id);
+        });
+        chip.appendChild(clearBtn);
+        taskTypesEl.appendChild(chip);
+      });
+
+      var canAdd = !!onTaskTypesChange && availableTaskTypeEntries().length > 0;
+      taskTypesAddBtn.hidden = !onTaskTypesChange;
+      taskTypesAddBtn.disabled = taskTypesBusy || !canAdd;
+      if (taskTypesPickerOpen) {
+        if (!canAdd) setTaskTypesPickerOpen(false);
+        else renderTaskTypesPicker();
+      }
+    }
+
+    function persistTaskTypes(nextTypes) {
+      var previous = taskTypes.slice();
+      var normalized = normalizeTaskTypes(nextTypes);
+      taskTypes = normalized;
+      renderTaskTypes();
+      if (!onTaskTypesChange) {
+        onLayoutChange();
+        return;
+      }
+      taskTypesBusy = true;
+      setTaskTypesStatus('', 'saving');
+      Promise.resolve(onTaskTypesChange(normalized.slice()))
+        .then(function (result) {
+          taskTypesBusy = false;
+          if (result && result.ok === false) {
+            taskTypes = previous;
+            setTaskTypesStatus('\u00c9chec de l\u2019enregistrement', 'error');
+            renderTaskTypes();
+            onLayoutChange();
+            return;
+          }
+          setTaskTypesStatus('', '');
+          renderTaskTypes();
+          onLayoutChange();
+        })
+        .catch(function (err) {
+          console.error('Info task types save failed', err);
+          taskTypesBusy = false;
+          taskTypes = previous;
+          setTaskTypesStatus('\u00c9chec de l\u2019enregistrement', 'error');
+          renderTaskTypes();
+          onLayoutChange();
+        });
+    }
+
+    function addTaskType(id) {
+      if (taskTypesBusy || !isValidTaskTypeId(id)) return;
+      if (taskTypes.indexOf(id) >= 0) return;
+      persistTaskTypes(taskTypes.concat([id]));
+      setTaskTypesPickerOpen(false);
+    }
+
+    function removeTaskType(id) {
+      if (taskTypesBusy) return;
+      persistTaskTypes(
+        taskTypes.filter(function (entry) {
+          return entry !== id;
+        })
+      );
+    }
+
     function changeLabelColor(label, colorKey) {
       if (!onLabelColorChange || labelsBusy || !label || !label.id) return;
       var nextColor = labelBaseColor(colorKey);
@@ -9299,6 +9559,13 @@
       setLabelsPickerOpen(!labelsPickerOpen);
     });
 
+    taskTypesAddBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (taskTypesAddBtn.disabled) return;
+      setTaskTypesPickerOpen(!taskTypesPickerOpen);
+    });
+
     labelsSearchInput.addEventListener('input', function () {
       if (!labelsPickerOpen) return;
       renderLabelsPicker();
@@ -9414,6 +9681,9 @@
       if (labelsPickerOpen && !labelsAddWrap.contains(event.target)) {
         setLabelsPickerOpen(false);
       }
+      if (taskTypesPickerOpen && !taskTypesAddWrap.contains(event.target)) {
+        setTaskTypesPickerOpen(false);
+      }
       if (
         labelsColorEditId &&
         !labelsWrap.contains(event.target)
@@ -9439,6 +9709,7 @@
 
     renderMembers();
     renderLabels();
+    renderTaskTypes();
     renderParent();
     renderRecap();
     setAuthHint(authReason);
@@ -9524,6 +9795,14 @@
         renderLabels();
         scheduleLabelSuggestions(false);
         onLayoutChange();
+      },
+      setTaskTypes: function (list) {
+        taskTypes = normalizeTaskTypes(list);
+        renderTaskTypes();
+        onLayoutChange();
+      },
+      getTaskTypes: function () {
+        return taskTypes.slice();
       },
       setRecap: function (next) {
         if (!next) return;
@@ -14401,6 +14680,11 @@
     normalizeBlockedLink: normalizeBlockedLink,
     normalizeBlockedLinks: normalizeBlockedLinks,
     formatBlockedBadgeText: formatBlockedBadgeText,
+    TASK_TYPES: TASK_TYPES,
+    isValidTaskTypeId: isValidTaskTypeId,
+    taskTypeLabel: taskTypeLabel,
+    taskTypeHint: taskTypeHint,
+    normalizeTaskTypes: normalizeTaskTypes,
     MS_PER_DAY: MS_PER_DAY,
     MS_PER_HOUR: MS_PER_HOUR,
     MS_PER_MINUTE: MS_PER_MINUTE,

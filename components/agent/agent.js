@@ -91,6 +91,7 @@
     set_due: '\u00c9ch\u00e9ance mise \u00e0 jour.',
     set_blocked: 'Blocage mis \u00e0 jour.',
     set_progress: 'Progr\u00e8s mis \u00e0 jour.',
+    set_task_types: 'Type de t\u00e2che mis \u00e0 jour.',
     set_formula: 'Formule mise \u00e0 jour.',
     set_statut: 'Statut mis \u00e0 jour.',
     set_project: 'Projet li\u00e9.',
@@ -112,6 +113,77 @@
     set_agent_color: 'Couleur de l\'assistant mise \u00e0 jour.',
     set_agent_personality: 'Personnalit\u00e9 de l\'assistant mise \u00e0 jour.'
   };
+
+  var TASK_TYPE_IDS = [
+    'action',
+    'project',
+    'recurring',
+    'exploratory',
+    'emotional',
+    'communication',
+    'deliverable',
+    'process',
+    'thinking'
+  ];
+
+  function normalizeAgentTaskTypes(raw) {
+    if (
+      typeof PriorityUI !== 'undefined' &&
+      typeof PriorityUI.normalizeTaskTypes === 'function'
+    ) {
+      return PriorityUI.normalizeTaskTypes(raw);
+    }
+    var list = Array.isArray(raw)
+      ? raw
+      : typeof raw === 'string' && raw.trim()
+        ? [raw]
+        : [];
+    var out = [];
+    var seen = Object.create(null);
+    for (var i = 0; i < list.length; i++) {
+      var id = typeof list[i] === 'string' ? list[i].trim() : '';
+      if (!id || seen[id] || TASK_TYPE_IDS.indexOf(id) < 0) continue;
+      seen[id] = true;
+      out.push(id);
+    }
+    return out;
+  }
+
+  function taskTypesEqual(a, b) {
+    var left = normalizeAgentTaskTypes(a);
+    var right = normalizeAgentTaskTypes(b);
+    if (left.length !== right.length) return false;
+    for (var i = 0; i < left.length; i++) {
+      if (left[i] !== right[i]) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Urgency pivot wording adapted to task types (never assume a deliverable).
+   */
+  function urgencyAskForTaskTypes(types) {
+    var list = normalizeAgentTaskTypes(types);
+    var has = function (id) {
+      return list.indexOf(id) >= 0;
+    };
+    if (has('deliverable') && !has('emotional') && !has('communication')) {
+      return 'Si on ne le [[a:livre]] pas, c\'est grave?';
+    }
+    if (has('communication') && !has('deliverable')) {
+      return 'Si on n\'en [[a:parle]] pas, c\'est grave?';
+    }
+    if (has('exploratory') && !has('deliverable')) {
+      return 'Si on n\'[[a:explore]] pas, c\'est grave?';
+    }
+    if (has('thinking') && !has('deliverable')) {
+      return 'Si on ne [[a:d\u00e9cide]] pas, c\'est grave?';
+    }
+    if (has('emotional') && !has('deliverable')) {
+      return 'Si on ne s\'en [[a:occupe]] pas, c\'est grave?';
+    }
+    return 'Si on ne le [[a:fait]] pas, c\'est grave?';
+  }
 
   var POINT_SECTIONS = [
     'priority',
@@ -1258,11 +1330,15 @@
   function summarizeInterviewAlreadyKnown(context) {
     var due = context && context.due;
     var activeDue = contextHasActiveDue(context);
+    var types = normalizeAgentTaskTypes(context && context.taskTypes);
     return {
       dueActive: activeDue,
       dueDate: activeDue ? due.dueDate : null,
       dueTime: activeDue ? due.dueTime || null : null,
       whyKnown: cardMemoryHasWhyFact(context && context.cardMemory),
+      taskTypesKnown: types.length > 0,
+      taskTypes: types,
+      taskTypesLocked: !!(context && context.taskTypesLocked),
       priorityAxesTrusted: !!(
         context &&
         context.interview &&
@@ -1286,7 +1362,7 @@
     // Default axis values are unreliable until trusted — ask/confirm axes first.
     if (!trusted) {
       return {
-        message: 'Si on ne le livre pas, c\'est [[a:grave]]?',
+        message: urgencyAskForTaskTypes(context && context.taskTypes),
         suggestions: [
           { label: 'Pas grand-chose', heat: 0 },
           { label: 'Un peu emb\u00eatant', heat: 2 },
@@ -1470,11 +1546,13 @@
 
   /** Final message polish — always strip space-before-? after other rewrites. */
   function polishAssistantVisibleText(message) {
-    return stripSpaceBeforePunctuation(
-      stripEmDashes(
-        ensureContrastHighlights(
-          ensurePriorityHighlights(
-            stripInterviewConclusionFraming(rewriteWinkEmoticons(message))
+    return normalizeHighlightMarkup(
+      stripSpaceBeforePunctuation(
+        stripEmDashes(
+          ensureContrastHighlights(
+            ensurePriorityHighlights(
+              stripInterviewConclusionFraming(rewriteWinkEmoticons(message))
+            )
           )
         )
       )
@@ -1499,11 +1577,31 @@
     return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
+  /**
+   * Repair common model typos in highlight markers (spaces, case, single ]).
+   */
+  function normalizeHighlightMarkup(message) {
+    if (typeof message !== 'string' || !message) return message || '';
+    return message
+      .replace(
+        /\[\[\s*([grya])\s*:\s*([^\]]{1,120}?)\s*\]\]/gi,
+        function (_m, color, phrase) {
+          return '[[' + String(color).toLowerCase() + ':' + phrase + ']]';
+        }
+      )
+      .replace(
+        /\[\[\s*([grya])\s*:\s*([^\]]{1,120}?)\s*\](?!\])/gi,
+        function (_m, color, phrase) {
+          return '[[' + String(color).toLowerCase() + ':' + phrase + ']]';
+        }
+      );
+  }
+
   /** Pull [[g:/r:/y:/a:…]] spans from assistant copy (visible text only). */
   function extractHighlightSpans(message) {
     var out = [];
     if (typeof message !== 'string' || !message) return out;
-    var re = /\[\[(g|r|y|a):([^\]]{1,80})\]\]/gi;
+    var re = /\[\[\s*(g|r|y|a)\s*:\s*([^\]]{1,80}?)\s*\]\]/gi;
     var m;
     while ((m = re.exec(message))) {
       var text = String(m[2] || '').trim();
@@ -1955,6 +2053,8 @@
       due: null,
       blocked: null,
       progress: null,
+      taskTypes: [],
+      taskTypesLocked: false,
       memory: null,
       profile: null,
       boardDigest: '',
@@ -2172,12 +2272,17 @@
       var urgencyLvl = clampInt(state.urgency, 0, 4, 0);
       var impactLvl = clampInt(state.impact, 0, 4, 0);
       var easeLvl = clampInt(state.ease, 1, 5, 3);
+      var taskTypes = normalizeAgentTaskTypes(state.taskTypes);
+      ctx.taskTypes = taskTypes;
+      ctx.taskTypesLocked = state.taskTypesLocked === true;
       ctx.priority = {
         enabled: priorityEnabled,
         // Values below are inactive when enabled=false — do not treat as the live priority.
         urgency: state.urgency,
         impact: state.impact,
         ease: state.ease,
+        taskTypes: taskTypes,
+        taskTypesLocked: state.taskTypesLocked === true,
         // Qualitative labels (0–4 / 1–5 scales) — use these, never invent 0–10 axis scores.
         labels: priorityEnabled
           ? {
@@ -2500,7 +2605,7 @@
           '- Avant de dire que tu ne sais pas / qu\'il n\'y a rien\u00a0: SCANNE boardDigest (titres + listes). Cite les cartes qui matchent (ex. \u00ab\u00a0Achat de DaVinci Resolve Studio\u00a0\u00bb).',
           '- INTERDIT de r\u00e9pondre \u00ab\u00a0rien dans le contexte\u00a0\u00bb si boardDigest liste d\u00e9j\u00e0 des cartes pertinentes.',
           '- INTERDIT cardPatches (pas de m\u00e9moire locale de carte). Utilise seulement patches (m\u00e9moire tableau / projet).',
-          '- INTERDIT les outils carte\u00a0: set_priority, set_due, set_blocked, set_progress, add_subtask, rename_subtask, remove_subtask, toggle_subtask, set_subtask_progress, complete_all_subtasks, reset_progress, rename_card, set_description, set_statut, set_formula, set_project, point_at.',
+          '- INTERDIT les outils carte\u00a0: set_priority, set_due, set_blocked, set_progress, set_task_types, add_subtask, rename_subtask, remove_subtask, toggle_subtask, set_subtask_progress, complete_all_subtasks, reset_progress, rename_card, set_description, set_statut, set_formula, set_project, point_at.',
           '- Outils autoris\u00e9s\u00a0: set_agent_name, set_agent_color, set_agent_personality, trigger_effect (+ patches m\u00e9moire).',
           '- Aide sur\u00a0: vue d\'ensemble du tableau, m\u00e9moire projet, qui fait quoi, normes d\'\u00e9quipe, prochaines priorit\u00e9s transversales, discussions hors d\'une carte pr\u00e9cise.',
           '- Si l\'utilisateur parle d\'une carte pr\u00e9cise\u00a0: conseille d\'ouvrir cette carte pour l\'\u00e9diter\u00a0; tu peux quand m\u00eame discuter / m\u00e9moriser des faits projet.',
@@ -2681,7 +2786,7 @@
       '- Ne bloque JAMAIS une action pour un param\u00e8tre optionnel. Applique le minimum viable, puis adapte.',
       '- Ne pose une question AVANT d\'appeler un outil QUE si un param\u00e8tre OBLIGATOIRE manque et qu\'aucune action partielle n\'est possible.',
       '- Param\u00e8tres optionnels (ne jamais exiger avant d\'agir)\u00a0: dueTime, blockedReasons, axes priorit\u00e9 non fournis, progress pr\u00e9cis si on active seulement la section.',
-      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_blocked / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_subtask_estimate\u00a0: id OU matchText + estimatedMinutes\u00a0; set_progress_estimate.estimatedMinutes\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_project\u00a0: projectId OU matchText/name OU clear:true\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget ou priorityEnabled\u00a0; trigger_effect.effect\u00a0; point_at.section OU field\u00a0; set_agent_name.name\u00a0; set_agent_color.color\u00a0; set_agent_personality.personality.',
+      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_blocked / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_subtask_estimate\u00a0: id OU matchText + estimatedMinutes\u00a0; set_progress_estimate.estimatedMinutes\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_project\u00a0: projectId OU matchText/name OU clear:true\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget ou priorityEnabled\u00a0; set_task_types.types (tableau d\'ids connus)\u00a0; trigger_effect.effect\u00a0; point_at.section OU field\u00a0; set_agent_name.name\u00a0; set_agent_color.color\u00a0; set_agent_personality.personality.',
       '- Dates relatives (jours)\u00a0: r\u00e9sous avec context.today (aujourd\'hui / today \u2192 context.today\u00a0; demain \u2192 +1 jour). N\'invente pas d\'autre date.',
       '- Heures relatives (tr\u00e8s important)\u00a0: \u00ab\u00a0dans 15 minutes\u00a0\u00bb / \u00ab\u00a0in 15 minutes\u00a0\u00bb / \u00ab\u00a0dans 2 heures\u00a0\u00bb = D\u00c9LAI depuis maintenant, PAS une heure fixe du matin.',
       '- Pour un d\u00e9lai\u00a0: utilise set_due avec relativeMinutes (ou relativeHours). Le runtime calcule dueDate/dueTime \u00e0 partir de context.nowTime (' +
@@ -2765,6 +2870,11 @@
       '- Ex. statut\u00a0: user \u00ab\u00a0Passe en Terminé\u00a0\u00bb \u2192 {"message":"Okay, d\u00e9plac\u00e9e.","suggestions":["Quelle est la priorit\u00e9?","Ajouter une sous-t\u00e2che"],"followUps":[],"actions":[{"tool":"set_statut","args":{"category":"completed"}}]}',
       '- Ex. projet\u00a0: user \u00ab\u00a0Lie au projet Sport 2026\u00a0\u00bb \u2192 {"message":"Okay, li\u00e9e \u00e0 Sport 2026.","suggestions":["Quelle est la priorit\u00e9?","Ajouter une sous-t\u00e2che"],"followUps":[],"actions":[{"tool":"set_project","args":{"matchText":"Sport 2026"}}]}',
       '- Ex. d\u00e9lier projet\u00a0: user \u00ab\u00a0Enl\u00e8ve le projet\u00a0\u00bb \u2192 {"message":"Okay, projet d\u00e9li\u00e9.","suggestions":["Lier un projet","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_project","args":{"clear":true}}]}',
+      'Type de t\u00e2che (context.taskTypes, multi)\u00a0:',
+      '- Ids\u00a0: action|project|recurring|exploratory|emotional|communication|deliverable|process|thinking.',
+      '- Adapte ton langage\u00a0: ne parle PAS de \u00ab\u00a0livrer\u00a0\u00bb / produit final si deliverable n\'est pas dans context.taskTypes.',
+      '- Si types vides et unlocked\u00a0: tu peux classer en silence avec set_task_types. Si taskTypesLocked=true\u00a0: ne change que sur demande explicite (+ force:true).',
+      '',
       'Titre et description de la carte (context.cardName / context.cardDesc)\u00a0:',
       '- Renommer le titre de la carte\u00a0: rename_card avec name (nouveau titre complet).',
       '- Modifier la description\u00a0: set_description avec desc (texte complet \u00e0 \u00e9crire dans context.cardDesc\u00a0; "" pour effacer).',
@@ -2831,6 +2941,7 @@
       '- Pour marquer bloqu\u00e9\u00a0: set_blocked avec enAttente:true tout de suite (motifs ensuite si fournis). Ne dis jamais que c\'est d\u00e9j\u00e0 bloqu\u00e9 si enabled=false.',
       'Outils disponibles\u00a0:',
       '- set_priority: { urgency?:0-4, impact?:0-4, ease?:1-5, priorityEnabled?:boolean, tier?: string, heatTarget?: number } (tier = Critique|Urgente|Prioritaire|Importante|Flexible|Secondaire|Optionnelle\u00a0; impact 0\u20134 = port\u00e9e Personnel\u2026Global). Legacy estimatedDuration* \u2192 redirig\u00e9 vers set_progress_estimate.',
+      '- set_task_types: { types: string[], force?: boolean } (multi\u00a0; ids\u00a0: action|project|recurring|exploratory|emotional|communication|deliverable|process|thinking). Lit context.taskTypes. Si taskTypesLocked=true, n\'\u00e9crase PAS sauf demande explicite + force:true. Ne suppose PAS qu\'une carte est un livrable\u00a0; adapte ton langage (urgence / cadrage) aux types.',
       '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean, relativeMinutes?: number, relativeHours?: number } (dueTime OPTIONNEL pour une date\u00a0; d\u00e9lai \u00ab\u00a0dans N min/h\u00a0\u00bb \u2192 relativeMinutes/relativeHours, calcul\u00e9 depuis context.nowTime\u00a0; aujourd\'hui = context.today)',
       '- set_blocked: { enAttente?: boolean, blockedReasons?: string[], blockedLinks?: [{id?:string, matchText?:string, label?:string}] } (enAttente:true seul suffit\u00a0; motifs et liens optionnels\u00a0; synchronise Progr\u00e8s blocked\u00a0; si progr\u00e8s \u00e0 100%, le runtime le remet \u00e0 0% \u2014 ajoute aussi set_progress)',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (master sur sous-t\u00e2ches si items\u00a0; sinon progres carte)',
@@ -4525,7 +4636,7 @@
   /** Strip [[g:/r:/y:/a:…]] markers for question matching. */
   function stripInterviewMarkup(text) {
     return String(text || '')
-      .replace(/\[\[[a-z]:([^\]]*)\]\]/gi, '$1')
+      .replace(/\[\[\s*[a-z]\s*:\s*([^\]]*)\s*\]\]?/gi, '$1')
       .replace(/\s+/g, ' ')
       .trim();
   }
@@ -4992,13 +5103,31 @@
       '- D\u00e8s qu\'on a la / les raisons\u00a0: cardPatches remember OBLIGATOIRE au format \u00ab\u00a0Pourquoi\u00a0: \u2026\u00a0\u00bb (garde \u00e7a pour le reste de la carte). set_description seulement pour un r\u00e9sum\u00e9 court / misc \u2014 pas pour y coller le Pourquoi.',
       '- Apr\u00e8s le POURQUOI\u00a0: sers-t\'en pour inf\u00e9rer urgence/impact plus juste\u00a0; ne repose pas le pourquoi. Les tours suivants restent naturels et courts (1 question).',
       '',
+      'Type de t\u00e2che (critique \u2014 dynamique, multi-labels)\u00a0:',
+      '- Catalog ids\u00a0: action (action concr\u00e8te unique), project (partie d\'un effort multi-\u00e9tapes), recurring, exploratory (d\u00e9couverte/recherche), emotional (\u00e9motionnel/psycho), communication (relationnel), deliverable (livrable/produit), process (processus/maintenance), thinking (r\u00e9flexion/d\u00e9cisions).',
+      '- Une carte peut cumuler plusieurs types (ex. project+deliverable, action+emotional, communication+thinking).',
+      '- D\u00e8s le 1er tour utile (souvent avec le POURQUOI ou juste apr\u00e8s)\u00a0: classifie EN SILENCE via set_task_types {types:[...]} (1\u20133 ids aptes). INTERDIT de demander \u00ab\u00a0c\'est quel type?\u00a0\u00bb.',
+      '- Si alreadyKnown.taskTypesKnown / context.taskTypes non vide\u00a0: r\u00e9utilise\u00a0; ne reclasse que si la conversation change clairement la nature (et seulement si taskTypesLocked=false).',
+      '- Si taskTypesLocked=true\u00a0: ne touche PAS (sauf demande explicite user + force:true).',
+      '- Adapte TOUTES les questions au type\u00a0:',
+      '  \u00b7 deliverable\u00a0: format / produit final OK\u00a0; urgence peut dire \u00ab\u00a0livre\u00a0\u00bb.',
+      '  \u00b7 action / process / recurring\u00a0: urgence = \u00ab\u00a0Si on ne le fait pas\u2026\u00a0\u00bb. INTERDIT \u00ab\u00a0livre\u00a0\u00bb / \u00ab\u00a0produit final\u00a0\u00bb / diaporama.',
+      '  \u00b7 exploratory\u00a0: clarifie ce qu\'on cherche \u00e0 apprendre\u00a0; urgence \u00ab\u00a0Si on n\'explore pas\u2026\u00a0\u00bb. Pas de framing livrable sauf si deliverable aussi.',
+      '  \u00b7 emotional / communication\u00a0: enjeux relationnels / \u00e9motionnels\u00a0; PAS \u00ab\u00a0produit final\u00a0\u00bb. Urgence du genre \u00ab\u00a0Si on n\'en parle pas\u2026\u00a0\u00bb / \u00ab\u00a0Si on ne s\'en occupe pas\u2026\u00a0\u00bb.',
+      '  \u00b7 thinking\u00a0: clarifie la d\u00e9cision / le choix\u00a0; urgence \u00ab\u00a0Si on ne d\u00e9cide pas\u2026\u00a0\u00bb.',
+      '  \u00b7 project\u00a0: permission / qui / commenc\u00e9 / d\u00e9j\u00e0 fait / reste restent OK.',
+      '- Ex. FAUX (corv\u00e9e perso / action)\u00a0: \u00ab\u00a0Si on ne le livre pas, c\'est grave?\u00a0\u00bb / \u00ab\u00a0Le produit final, c\'est un document?\u00a0\u00bb',
+      '- Ex. VRAI (cable management = action+process)\u00a0: set_task_types {types:["action","process"]} + urgence \u00ab\u00a0Si on ne fait pas le m\u00e9nage des c\u00e2bles\u2026, c\'est grave?\u00a0\u00bb',
+      '- Ex. VRAI (plan strat\u00e9gie com = project+deliverable+communication)\u00a0: types inclus deliverable \u2192 format livrable OK ensuite.',
+      '',
       'Titre vague / technique / jargon (apr\u00e8s le POURQUOI, ou juste apr\u00e8s si le titre bloque)\u00a0:',
-      '- Si le titre sonne abstrait, corporate ou flou (plan, strat\u00e9gie, cadre, feuille de route, gouvernance, transform\u2026)\u00a0: challenge doucement + clarifie le livrable + confirme ton hypoth\u00e8se de but.',
+      '- Si le titre sonne abstrait, corporate ou flou (plan, strat\u00e9gie, cadre, feuille de route, gouvernance, transform\u2026)\u00a0: challenge doucement + clarifie le R\u00c9SULTAT selon le type + confirme ton hypoth\u00e8se de but.',
       '- Challenge vague (1 tour, avec?)\u00a0: \u00ab\u00a0[Sujet], \u00e7a sonne un peu technique et sans vouloir t\'offenser, un peu vague?\u00a0\u00bb',
-      '- Livrable (suggestionsMulti:true)\u00a0: \u00ab\u00a0Le produit final, c\'est un document texte? Un diaporama?\u00a0\u00bb (+ autres formats plausibles si pertinents\u00a0: PDF, atelier, checklist\u2026).',
+      '- Format livrable (suggestionsMulti:true) SEULEMENT si deliverable est parmi context.taskTypes (ou signal livrable \u00e9vident)\u00a0: \u00ab\u00a0Le produit final, c\'est un document texte? Un diaporama?\u00a0\u00bb (+ PDF, atelier, checklist\u2026).',
+      '- SINON (action / process / emotional / communication / exploratory / thinking / recurring sans deliverable)\u00a0: clarifie le r\u00e9sultat dans le langage du type (\u00ab\u00a0Au fond, tu veux que quoi soit vrai / fait / clarifi\u00e9?\u00a0\u00bb) \u2014 JAMAIS \u00ab\u00a0produit final / diaporama\u00a0\u00bb.',
       '- Hypoth\u00e8se de but (oui/non, suggestionsMulti:false)\u00a0: avance ton best guess en question. Ex. strat\u00e9gie com\u00a0: \u00ab\u00a0\u00c7a sert \u00e0 guider le service des communications pour offrir un meilleur service, c\'est \u00e7a?\u00a0\u00bb',
-      '- Sur r\u00e9ponse\u00a0: remember \u00ab\u00a0Livrable\u00a0: \u2026\u00a0\u00bb / \u00ab\u00a0But\u00a0: \u2026\u00a0\u00bb (+ rename_card si le titre devient plus clair\u00a0; set_description seulement pour un r\u00e9sum\u00e9 court, sans dump Livrable/But).',
-      '- Une id\u00e9e par tour\u00a0: d\'abord POURQUOI, puis vague?, puis livrable, puis confirmation de but \u2014 pas tout en une question.',
+      '- Sur r\u00e9ponse\u00a0: remember \u00ab\u00a0Livrable\u00a0: \u2026\u00a0\u00bb seulement si deliverable\u00a0; sinon \u00ab\u00a0But\u00a0: \u2026\u00a0\u00bb / \u00ab\u00a0R\u00e9sultat\u00a0: \u2026\u00a0\u00bb (+ rename_card si utile\u00a0; set_description court, sans dump).',
+      '- Une id\u00e9e par tour\u00a0: d\'abord POURQUOI (+ types silencieux), puis vague? si besoin, puis clarification r\u00e9sultat adapt\u00e9e au type, puis confirmation de but.',
       '',
       'Plans / strat\u00e9gies / projets larges (apr\u00e8s POURQUOI + cadrage si besoin)\u00a0:',
       '- Si le sujet est un plan, une strat\u00e9gie, une feuille de route, un cadre ou un gros chantier\u00a0: encha\u00eene naturellement ces questions (UNE par tour), dans un ordre qui a du sens selon ce qu\'on sait d\u00e9j\u00e0\u00a0:',
@@ -5107,9 +5236,10 @@
       '- Si la r\u00e9ponse est \u00ab\u00a0non\u00a0\u00bb / skip / \u00ab\u00a0pas d\'\u00e9ch\u00e9ance\u00a0\u00bb\u00a0: applique d\'abord tout set_progress / set_priority encore dus d\'apr\u00e8s l\'historique, puis passe \u00e0 autre chose OU close \u2014 JAMAIS un simple \u00ab\u00a0Okay.\u00a0\u00bb (voir cl\u00f4ture ci-dessous).',
       '- Les gens r\u00e9pondent avec des mots\u00a0; TOI tu traduis en axes + progr\u00e8s dans actions (set_priority, set_progress).',
       '- Ancre la question sur le SUJET reformul\u00e9 en fran\u00e7ais courant, PAS \u00ab\u00a0cette t\u00e2che\u00a0\u00bb / \u00ab\u00a0cette carte\u00a0\u00bb, PAS le titre anglais brut.',
-      '- Ex. titre \u00ab\u00a0Manger plus de pain avec Eiraul\u00a0\u00bb \u2192 1er tour POURQUOI\u00a0: \u00ab\u00a0Pourquoi tu veux manger plus de pain avec Eiraul?\u00a0\u00bb',
-      '- Ex. urgence (APR\u00c8S le pourquoi)\u00a0: \u00ab\u00a0Si on ne mange pas plus de pain avec Eiraul, c\'est grave?\u00a0\u00bb',
-      '- Ex. urgence (titre jargon)\u00a0: titre \u00ab\u00a0Cable management sur mon ordinateur\u00a0\u00bb \u2192 \u00ab\u00a0Si on ne fait pas le m\u00e9nage des c\u00e2bles sur ton ordinateur, c\'est grave?\u00a0\u00bb',
+      '- Ex. titre \u00ab\u00a0Manger plus de pain avec Eiraul\u00a0\u00bb \u2192 1er tour POURQUOI\u00a0: \u00ab\u00a0Pourquoi tu veux manger plus de pain avec Eiraul?\u00a0\u00bb (+ set_task_types action/recurring/communication selon le cas).',
+      '- Ex. urgence (APR\u00c8S le pourquoi, NON-livrable)\u00a0: \u00ab\u00a0Si on ne mange pas plus de pain avec Eiraul, c\'est grave?\u00a0\u00bb \u2014 pas \u00ab\u00a0livre\u00a0\u00bb.',
+      '- Ex. urgence (titre jargon / action)\u00a0: titre \u00ab\u00a0Cable management sur mon ordinateur\u00a0\u00bb \u2192 \u00ab\u00a0Si on ne fait pas le m\u00e9nage des c\u00e2bles sur ton ordinateur, c\'est grave?\u00a0\u00bb',
+      '- Ex. FAUX urgence (non-livrable)\u00a0: \u00ab\u00a0Si on ne le livre pas, c\'est grave?\u00a0\u00bb',
       '- Ex. FAUX urgence\u00a0: \u00ab\u00a0Si on skip le cable management, \u00e7a presse?\u00a0\u00bb',
       '- Ex. urgence (mauvais)\u00a0: \u00ab\u00a0Si cette t\u00e2che n\'\u00e9tait pas faite, quelles seraient les cons\u00e9quences?\u00a0\u00bb',
       '- Ex. FAUX (1er tour)\u00a0: \u00ab\u00a0Si on ne met pas en place cette strat\u00e9gie, \u00e7a change quoi?\u00a0\u00bb',
@@ -5158,10 +5288,10 @@
       '- Utilise \u2026 seulement pour une r\u00e9ponse \u00e0 compl\u00e9ter (ex. \u00ab\u00a0On risque de perdre\u2026\u00a0\u00bb).',
       '',
       'Inf\u00e9rence + clarification carte\u00a0:',
-      '- D\u00e8s le 1er tour\u00a0: pose le POURQUOI sauf s\'il est d\u00e9j\u00e0 connu. Si le titre suffit aussi pour d\u00e9duire un axe (ex. achat logiciel \u2192 dur\u00e9e courte), applique set_priority en m\u00eame temps.',
-      '- D\u00e8s qu\'une r\u00e9ponse laisse assez d\'indices\u00a0: set_priority IMM\u00c9DIATEMENT avec les axes d\u00e9duits + remember le POURQUOI / livrable / but, puis pose directement la question suivante (sans r\u00e9sumer).',
+      '- D\u00e8s le 1er tour\u00a0: pose le POURQUOI sauf s\'il est d\u00e9j\u00e0 connu. Si le titre suffit aussi pour d\u00e9duire un axe (ex. achat logiciel \u2192 dur\u00e9e courte), applique set_priority en m\u00eame temps. Classifie aussi via set_task_types si types encore vides.',
+      '- D\u00e8s qu\'une r\u00e9ponse laisse assez d\'indices\u00a0: set_priority IMM\u00c9DIATEMENT avec les axes d\u00e9duits + remember le POURQUOI / but (+ Livrable seulement si deliverable) + set_task_types si pas encore pos\u00e9 / \u00e0 raffiner (unlocked), puis pose directement la question suivante (sans r\u00e9sumer).',
       '- Mise \u00e0 jour des propri\u00e9t\u00e9s (TOUJOURS \u00e0 l\'\u0153il \u2014 c\'est le job)\u00a0:',
-      '  \u00b7 \u00c0 CHAQUE r\u00e9ponse utilisateur, demande-toi\u00a0: progr\u00e8s?\u00a0urgence?\u00a0impact?\u00a0facilit\u00e9?\u00a0blocage?\u00a0\u00e9ch\u00e9ance? Si oui \u2192 actions correspondantes ce tour-ci.',
+      '  \u00b7 \u00c0 CHAQUE r\u00e9ponse utilisateur, demande-toi\u00a0: types?\u00a0progr\u00e8s?\u00a0urgence?\u00a0impact?\u00a0facilit\u00e9?\u00a0blocage?\u00a0\u00e9ch\u00e9ance? Si oui \u2192 actions correspondantes ce tour-ci.',
       '  \u00b7 Chatter sans actions alors que l\'info change clairement un champ = \u00c9CHEC.',
       '  \u00b7 thinking DOIT lister bri\u00e8vement les champs \u00e0 mettre \u00e0 jour (ou \u00ab\u00a0aucun\u00a0\u00bb).',
       '- Une r\u00e9ponse peut combiner plusieurs suggestions (s\u00e9par\u00e9es par \u00ab\u00a0. \u00a0\u00bb)\u00a0: inf\u00e8re en tenant compte de TOUT le message.',
@@ -5234,7 +5364,8 @@
       '- INTERDIT de demander ce qui est d\u00e9j\u00e0 renseign\u00e9 ou \u00e9vident d\'apr\u00e8s le titre / la m\u00e9moire / le contexte carte.',
       '- Si alreadyKnown.dueActive\u00a0: z\u00e9ro question d\'\u00e9ch\u00e9ance.',
       '- Si alreadyKnown.whyKnown\u00a0: z\u00e9ro re-POURQUOI.',
-      '- Si tu peux setter un axe / une dur\u00e9e raisonnablement\u00a0: fais-le dans actions, ne pose pas la question.',
+      '- Si alreadyKnown.taskTypesKnown\u00a0: ne repose pas la classification\u00a0; adapte tes questions \u00e0 context.taskTypes.',
+      '- Si tu peux setter un axe / une dur\u00e9e / des types raisonnablement\u00a0: fais-le dans actions, ne pose pas la question.',
       '',
       'Anti-boucle avancement (runtime \u2014 OBLIGATOIRE)\u00a0:',
       '- Lis context.interview.progressScout avant de poser d\u00e9j\u00e0-fait / reste.',
@@ -5245,6 +5376,7 @@
       '',
       'Outils autoris\u00e9s dans actions\u00a0:',
       '- set_priority: { urgency?, impact?, ease?, tier?, priorityEnabled? }',
+      '- set_task_types: { types: string[], force?: boolean } (multi\u00a0; ids catalog\u00a0; silencieux\u00a0; respect taskTypesLocked)',
       '- set_due: { dueDate?: YYYY-MM-DD, dueTime?: HH:MM, relativeHours?, relativeMinutes?, clear? }',
       '- set_blocked: { enAttente?: boolean, blockedReasons?: string[] } (si l\'utilisateur attend quelque chose de concret\u00a0: enAttente:true + motif \u00ab\u00a0En attente de\u2026\u00a0\u00bb)',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (active le bloc Progr\u00e8s + % carte\u00a0; OBLIGATOIRE d\u00e8s qu\'on parle d\'avancement)',
@@ -5268,6 +5400,8 @@
         cardName: context.cardName,
         cardDesc: context.cardDesc,
         priority: context.priority,
+        taskTypes: context.taskTypes || [],
+        taskTypesLocked: !!context.taskTypesLocked,
         due: context.due || null,
         blocked: context.blocked || null,
         progress: context.progress || null,
@@ -5431,6 +5565,7 @@
     // Interview may only apply a subset of tools.
     var allowedTools = {
       set_priority: true,
+      set_task_types: true,
       set_due: true,
       set_blocked: true,
       set_progress: true,
@@ -5772,6 +5907,15 @@
         (typeof args.value === 'string' && !!args.value.trim())
       );
     }
+    if (action.tool === 'set_task_types') {
+      var typeArgs =
+        args.types != null
+          ? args.types
+          : args.taskTypes != null
+            ? args.taskTypes
+            : null;
+      return Array.isArray(typeArgs) || typeof typeArgs === 'string';
+    }
     return true;
   }
 
@@ -5826,6 +5970,11 @@
     }
     if (action.tool === 'set_agent_personality') {
       return 'set_agent_personality: personality requis';
+    }
+    if (action.tool === 'set_task_types') {
+      return (
+        'set_task_types: types requis (action|project|recurring|exploratory|emotional|communication|deliverable|process|thinking)'
+      );
     }
     return action.tool + ': args incomplets';
   }
@@ -8094,6 +8243,22 @@
       return true;
     }
 
+    if (tool === 'set_task_types') {
+      var proposedTypes = normalizeAgentTaskTypes(
+        args.types != null ? args.types : args.taskTypes
+      );
+      var curTypes = normalizeAgentTaskTypes(
+        (context && context.taskTypes) ||
+          (priority && priority.taskTypes) ||
+          []
+      );
+      if (taskTypesEqual(proposedTypes, curTypes)) return true;
+      if (context && context.taskTypesLocked && args.force !== true) {
+        return true;
+      }
+      return false;
+    }
+
     if (tool === 'set_priority') {
       if (!priority) return false;
       var wantPri =
@@ -9151,7 +9316,9 @@
         : s.blockedReason
           ? [s.blockedReason]
           : [],
-      blockedLinks: links
+      blockedLinks: links,
+      taskTypes: normalizeAgentTaskTypes(s.taskTypes),
+      taskTypesLocked: s.taskTypesLocked === true
     };
   }
 
@@ -9446,6 +9613,13 @@
         'estimatedDurationMinutes',
         beforeP.estimatedDurationMinutes,
         afterP.estimatedDurationMinutes
+      );
+    } else if (tool === 'set_task_types') {
+      pushChange(
+        parts,
+        'taskTypes',
+        (beforeP.taskTypes || []).join(','),
+        (afterP.taskTypes || []).join(',')
       );
     } else if (tool === 'set_due') {
       pushChange(parts, 'dueEnabled', beforeP.dueEnabled, afterP.dueEnabled);
@@ -9805,6 +9979,48 @@
             afterP,
             beforeCRedirect,
             afterCRedirect,
+            args
+          )
+        };
+      }
+      if (tool === 'set_task_types') {
+        if (typeof bridge.applyPriority !== 'function') {
+          return { ok: false, tool: tool, error: 'Bridge priorit\u00e9 indisponible' };
+        }
+        var beforeTypes = snapshotPriority(bridge);
+        var nextTypes = normalizeAgentTaskTypes(
+          args.types != null ? args.types : args.taskTypes
+        );
+        if (
+          beforeTypes.taskTypesLocked &&
+          args.force !== true &&
+          !taskTypesEqual(nextTypes, beforeTypes.taskTypes)
+        ) {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Types verrouill\u00e9s par l\'utilisateur (force requis)'
+          };
+        }
+        var typesPartial = { taskTypes: nextTypes };
+        // AI writes stay unlocked; user edits set the lock in Information.
+        // When forcing over a user lock, keep the lock so AI still cannot silently rewrite later.
+        if (beforeTypes.taskTypesLocked) {
+          typesPartial.taskTypesLocked = true;
+        }
+        bridge.applyPriority(typesPartial);
+        var afterTypes = snapshotPriority(bridge);
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.set_task_types,
+          detail: detailForTool(
+            tool,
+            beforeTypes,
+            afterTypes,
+            null,
+            null,
             args
           )
         };
@@ -11386,6 +11602,8 @@
     looksLikeDueAskMessage: looksLikeDueAskMessage,
     contextHasActiveDue: contextHasActiveDue,
     summarizeInterviewAlreadyKnown: summarizeInterviewAlreadyKnown,
+    urgencyAskForTaskTypes: urgencyAskForTaskTypes,
+    normalizeAgentTaskTypes: normalizeAgentTaskTypes,
     buildInterviewNextPivot: buildInterviewNextPivot,
     applyKnownDueGuards: applyKnownDueGuards,
     polishMessageAfterProgressComplete: polishMessageAfterProgressComplete,
