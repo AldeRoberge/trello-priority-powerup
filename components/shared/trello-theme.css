@@ -1221,9 +1221,12 @@ body.tp-page--priority {
   background: var(--tp-surface-subtle, var(--surface-1));
 }
 
-.tp-page--priority .info-labels-add-btn {
+.tp-page--priority .info-members-add-btn,
+.tp-page--priority .info-labels-add-btn,
+.tp-page--priority .info-parent-pick-btn {
   border-color: color-mix(in srgb, var(--tp-text, var(--text-primary)) 22%, transparent);
-  color: var(--tp-text-muted, var(--text-secondary));
+  color: var(--tp-text-subtle, var(--text-secondary));
+  background: var(--tp-surface-subtle, var(--surface-1));
 }
 
 .tp-page--priority .info-labels-picker {
@@ -2349,9 +2352,14 @@ span.tp-estimate-chip {
 }
 
 .tp-completion-encouragement .tp-completion-stage-icon {
-  width: 1.5em;
-  height: 1.5em;
-  font-size: 0.92em;
+  width: 1.85em;
+  height: 1.85em;
+  font-size: 1.05em;
+  border-width: 2px;
+}
+
+.tp-completion-encouragement .tp-completion-stage-icon .ti {
+  font-size: 0.78em;
 }
 
 .tp-completion-encouragement.is-complete {
@@ -3247,14 +3255,14 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
 }
 
 .tp-completion-link-btn {
-  flex: 0 0 auto;
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 36px;
-  padding: 0 10px;
   white-space: nowrap;
+  border-radius: var(--completion-control-radius, 8px);
+  padding: 8px 14px;
 }
 
 .tp-completion-link-btn .ti {
@@ -3262,9 +3270,19 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   line-height: 1;
 }
 
+.tp-completion-link-btn:focus {
+  outline: none;
+}
+
+.tp-completion-link-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--slider-focus-ring, 0 0 0 3px rgba(12, 102, 228, 0.28));
+}
+
 .tp-completion-link-btn[aria-expanded='true'] {
   background: color-mix(in srgb, var(--tp-focus, #0c66e4) 12%, var(--tp-surface));
   color: var(--tp-focus, #0c66e4);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tp-focus, #0c66e4) 35%, var(--tp-border));
 }
 
 .tp-completion-link-btn[hidden] {

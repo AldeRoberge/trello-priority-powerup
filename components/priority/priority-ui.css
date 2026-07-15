@@ -1274,7 +1274,9 @@ body {
 }
 
 .info-members-add-btn,
-.info-labels-add-btn {
+.info-labels-add-btn,
+.info-parent-pick-btn {
+  appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1295,34 +1297,44 @@ body {
 }
 
 .info-members-add-btn .ti,
-.info-labels-add-btn .ti {
+.info-labels-add-btn .ti,
+.info-parent-pick-btn .ti {
   font-size: 14px;
+  line-height: 1;
 }
 
 .info-members-add-btn:hover:not(:disabled),
-.info-labels-add-btn:hover:not(:disabled) {
+.info-labels-add-btn:hover:not(:disabled),
+.info-parent-pick-btn:hover:not(:disabled) {
   border-style: solid;
   background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-1));
   color: var(--text-primary);
 }
 
 .info-members-add-btn:focus-visible,
-.info-labels-add-btn:focus-visible {
+.info-labels-add-btn:focus-visible,
+.info-parent-pick-btn:focus-visible {
   outline: 2px solid var(--tp-primary, #0c66e4);
   outline-offset: 1px;
 }
 
 .info-members-add-btn:disabled,
-.info-labels-add-btn:disabled {
+.info-labels-add-btn:disabled,
+.info-parent-pick-btn:disabled {
   opacity: 0.45;
   cursor: default;
 }
 
 .info-members-add-wrap.is-open .info-members-add-btn,
-.info-labels-add-wrap.is-open .info-labels-add-btn {
+.info-labels-add-wrap.is-open .info-labels-add-btn,
+.info-parent-pick-wrap.is-open .info-parent-pick-btn {
   border-style: solid;
   color: var(--text-primary);
   background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-1));
+}
+
+.info-parent-pick-btn[hidden] {
+  display: none;
 }
 
 .info-members-picker {
@@ -2043,58 +2055,6 @@ body {
   align-items: flex-start;
   flex: 0 0 auto;
   gap: 6px;
-}
-
-.info-parent-pick-btn {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-height: 32px;
-  margin: 0;
-  padding: 4px 12px;
-  border: 1px dashed color-mix(in srgb, var(--text-primary) 22%, transparent);
-  border-radius: 999px;
-  background: var(--surface-1);
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.2;
-  cursor: pointer;
-  box-sizing: border-box;
-}
-
-.info-parent-pick-btn .ti {
-  font-size: 14px;
-  line-height: 1;
-}
-
-.info-parent-pick-btn:hover:not(:disabled) {
-  border-style: solid;
-  background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-1));
-  color: var(--text-primary);
-}
-
-.info-parent-pick-btn:focus-visible {
-  outline: 2px solid var(--tp-primary, #0c66e4);
-  outline-offset: 1px;
-}
-
-.info-parent-pick-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.info-parent-pick-btn[hidden] {
-  display: none;
-}
-
-.info-parent-pick-wrap.is-open .info-parent-pick-btn {
-  border-style: solid;
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-1));
 }
 
 .info-parent-picker {

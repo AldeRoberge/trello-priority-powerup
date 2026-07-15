@@ -1615,7 +1615,7 @@
       '<i class="ti ti-plus" aria-hidden="true"></i>' +
       '<span class="tp-completion-add-btn-label">Ajouter</span>' +
       '</button>' +
-      '<button type="button" class="tp-btn tp-completion-link-btn" id="completionLinkBtn" ' +
+      '<button type="button" class="tp-btn tp-btn--secondary tp-completion-link-btn" id="completionLinkBtn" ' +
       'aria-expanded="false" aria-controls="completionLinkPicker" title="Lier une carte du tableau">' +
       '<i class="ti ti-link" aria-hidden="true"></i>' +
       '<span class="tp-completion-link-btn-label">Lier</span>' +
