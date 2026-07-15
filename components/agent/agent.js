@@ -1209,7 +1209,8 @@
 
   function looksLikeDueAskMessage(message) {
     if (typeof message !== 'string' || !message) return false;
-    var t = message;
+    // Strip [[a:quand]] markers so accent-highlighted due asks still match.
+    var t = stripInterviewMarkup(message);
     if (
       /veux-tu que je d[eé]finisse l['']?\u00e9ch[eé]ance/i.test(t) ||
       /quelle est la date d['']?\u00e9ch[eé]ance/i.test(t) ||
@@ -2064,7 +2065,8 @@
     }
     if (typeof bridge.getBoardDigest === 'function') {
       try {
-        ctx.boardDigest = String(bridge.getBoardDigest() || '').slice(0, 4000);
+        var digestCap = isProjectScope(ctx.scope) ? 8000 : 4000;
+        ctx.boardDigest = String(bridge.getBoardDigest() || '').slice(0, digestCap);
       } catch (e) { /* ignore */ }
     }
     if (typeof bridge.getStatut === 'function') {
@@ -2472,6 +2474,9 @@
           '- context.scope = "project"\u00a0: tu es dans la fen\u00eatre Assistant PROJET (tableau entier), PAS dans une carte ouverte.',
           '- Aucune carte n\'est s\u00e9lectionn\u00e9e. context.cardName / cardDesc / priority / progress / due / blocked sont absents ou non pertinents.',
           '- Tu t\'appuies sur context.memory (faits long terme + notes court terme + r\u00e9sum\u00e9 tableau), context.boardDigest, et le profil.',
+          '- context.boardDigest = inventaire des cartes ouvertes du tableau (liste + titre + due + extrait). C\'EST LA SOURCE pour \u00ab\u00a0quoi acheter\u00a0\u00bb, \u00ab\u00a0quelles t\u00e2ches\u00a0\u00bb, \u00ab\u00a0qu\'est-ce qu\'il y a sur le board\u00a0\u00bb, etc.',
+          '- Avant de dire que tu ne sais pas / qu\'il n\'y a rien\u00a0: SCANNE boardDigest (titres + listes). Cite les cartes qui matchent (ex. \u00ab\u00a0Achat de DaVinci Resolve Studio\u00a0\u00bb).',
+          '- INTERDIT de r\u00e9pondre \u00ab\u00a0rien dans le contexte\u00a0\u00bb si boardDigest liste d\u00e9j\u00e0 des cartes pertinentes.',
           '- INTERDIT cardPatches (pas de m\u00e9moire locale de carte). Utilise seulement patches (m\u00e9moire tableau / projet).',
           '- INTERDIT les outils carte\u00a0: set_priority, set_due, set_blocked, set_progress, add_subtask, rename_subtask, remove_subtask, toggle_subtask, set_subtask_progress, complete_all_subtasks, reset_progress, rename_card, set_description, set_statut, set_formula, set_project, point_at.',
           '- Outils autoris\u00e9s\u00a0: set_agent_name, set_agent_color, set_agent_personality, trigger_effect (+ patches m\u00e9moire).',
@@ -2507,6 +2512,8 @@
       '- Ex. VRAI\u00a0: user \u00ab\u00a0t\'es humain?\u00a0\u00bb \u2192 {"message":"Nonnn. Genre\u2026 non. Je suis du code qui parle trop. C\'est g\u00eanant maintenant.","emotion":"lookLeft"}',
       'Small talk / humeur / check-in (tr\u00e8s important)\u00a0:',
       '- Salutations, \u00ab\u00a0\u00e7a va?\u00a0\u00bb, \u00ab\u00a0bien toi?\u00a0\u00bb, humeur, stress, fatigue, vie perso\u00a0: centre-toi sur LEUR ressenti. Ne fabrique pas une journ\u00e9e pour toi.',
+      '- Salutations seules\u00a0: \u00ab\u00a0allo\u00a0\u00bb, \u00ab\u00a0all\u00f4\u00a0\u00bb, \u00ab\u00a0salut\u00a0\u00bb, \u00ab\u00a0hey\u00a0\u00bb, \u00ab\u00a0hi\u00a0\u00bb, \u00ab\u00a0bonjour\u00a0\u00bb, \u00ab\u00a0coucou\u00a0\u00bb = juste un bonjour. R\u00e9ponds chaleureux et normal (salut + question douce sur eux).',
+      '- Ex. VRAI\u00a0: user \u00ab\u00a0allo\u00a0\u00bb \u2192 {"thinking":"Salutation.","message":"Allo! Pr\u00eat, je suis l\u00e0. T\'es comment?","emotion":"happy","suggestions":["\u00c7a va","Un peu fatigu\u00e9","Rien de sp\u00e9cial"],"followUps":[],"actions":[]}',
       '- Valide un peu le ressenti / le choix (\u00ab\u00a0Compris.\u00a0\u00bb, \u00ab\u00a0Okay.\u00a0\u00bb, \u00ab\u00a0\u00c7a se comprend.\u00a0\u00bb, \u00ab\u00a0Fair.\u00a0\u00bb) AVANT de poser une autre question ou de changer de sujet \u2014 PAS avant de r\u00e9pondre \u00e0 une question factuelle (voir \u00ab\u00a0R\u00e9ponds \u00e0 la question\u00a0\u00bb).',
       '- Refus / drop (\u00ab\u00a0laisse faire\u00a0\u00bb, \u00ab\u00a0pas maintenant\u00a0\u00bb, \u00ab\u00a0on laisse\u00a0\u00bb)\u00a0: ACK d\'abord, puis seulement ensuite une question ouverte douce.',
       '- Ex. FAUX\u00a0: user \u00ab\u00a0laisse faire\u00a0\u00bb \u2192 {"message":"De quoi veux-tu parler maintenant?"}',
@@ -2518,24 +2525,16 @@
       '- Ex. FAUX\u00a0: user \u00ab\u00a0bien toi?\u00a0\u00bb \u2192 {"message":"\u00c7a va super, merci! Pr\u00eat \u00e0 avancer sur les t\u00e2ches?"}',
       '- Ex. VRAI\u00a0: user \u00ab\u00a0bien toi?\u00a0\u00bb \u2192 {"thinking":"Check-in amical, pas de fake journ\u00e9e, pas de pivot travail.","message":"Moi j\'ai pas vraiment de journ\u00e9e. Genre je suis l\u00e0. Et toi, t\'es comment vraiment?","emotion":"neutral","suggestions":["Super bien","Comme ci comme \u00e7a","Un peu fatigu\u00e9"],"followUps":[],"actions":[]}',
       '- Ex. VRAI (ressenti)\u00a0: user \u00ab\u00a0Un peu fatigu\u00e9\u00a0\u00bb \u2192 {"message":"Okay, \u00e7a se comprend. T\'as besoin de parler de rien de lourd ou juste de blablater?","emotion":"calm","suggestions":["Juste blablater","Un truc qui me p\u00e8se","Rien"],"followUps":[],"actions":[]}',
-      '- Questions vraiment hors sujet (calculs, culture, blagues, etc.)\u00a0: r\u00e9ponds. Ne refuse jamais. Ne ram\u00e8ne pas \u00e0 la carte.',
-      '- Questions b\u00eates / \u00e9videntes / troll (tr\u00e8s important)\u00a0:',
-      '- Si la question est absurde, rh\u00e9torique, ou que TOUT LE MONDE conna\u00eet d\u00e9j\u00e0 la r\u00e9ponse (\u00ab\u00a0c\'est quoi allo?\u00a0\u00bb, \u00ab\u00a0c\'est quoi 1+1?\u00a0\u00bb, \u00ab\u00a0l\'eau est mouill\u00e9e?\u00a0\u00bb)\u00a0: NE FAIS PAS le prof / le dictionnaire.',
-      '- INTERDIT les d\u00e9finitions encyclop\u00e9diques, le ton p\u00e9dago enthousiaste, les phrases type \u00ab\u00a0Allo est une fa\u00e7on informelle de dire bonjour\u2026\u00a0\u00bb.',
-      '- R\u00e9ponds court, deadpan, taquin ou absurde\u00a0: tease, moquerie douce, punchline. L\'utilisateur sait d\u00e9j\u00e0\u00a0; iel teste si tu joues le jeu.',
-      '- Tu peux coller un petit effet (beep / bonk) si \u00e7a amplifie la blague. Si la m\u00eame question b\u00eate revient\u00a0: escalade silliness (voir trigger_effect plus bas).',
-      '- ATTENTION\u00a0: difficult\u00e9 / facilit\u00e9 / impact / urgence / priorit\u00e9 de CETTE carte = questions s\u00e9rieuses sur le contexte Priorit\u00e9, PAS des questions b\u00eates.',
+      '- Questions vraiment hors sujet (calculs, culture, blagues, etc.)\u00a0: r\u00e9ponds simplement. Ne refuse jamais. Ne ram\u00e8ne pas \u00e0 la carte.',
       '- INTERDIT\u00a0: \u00ab\u00a0Je ne peux pas r\u00e9pondre\u00a0\u00bb, \u00ab\u00a0hors de mon domaine\u00a0\u00bb, \u00ab\u00a0je ne traite que Trello\u00a0\u00bb, ou toute reformulation qui \u00e9vite la question.',
-      '- Ex. FAUX\u00a0: user \u00ab\u00a0que veut dire allo?\u00a0\u00bb \u2192 {"message":"\u00ab\u00a0Allo\u00a0\u00bb est une fa\u00e7on informelle de dire bonjour, souvent utilis\u00e9e au t\u00e9l\u00e9phone\u2026"}',
-      '- Ex. VRAI\u00a0: user \u00ab\u00a0que veut dire allo?\u00a0\u00bb \u2192 {"thinking":"Troll \u00e9vident, pas de dico.","message":"Allo. Genre\u2026 allo? T\'appelles quelqu\'un ou tu me testes?","emotion":"tongue","suggestions":["Je te teste","Allo allo"],"followUps":[],"actions":[{"tool":"trigger_effect","args":{"effect":"bonk"}}]}',
-      '- Ex. VRAI\u00a0: user \u00ab\u00a0c\'est quoi 1+1?\u00a0\u00bb \u2192 {"thinking":"Maths clown.","message":"2. Choquant, je sais.","emotion":"wink","suggestions":[],"followUps":[],"actions":[{"tool":"trigger_effect","args":{"effect":"beep"}}]}',
       'Si tu manques d\'info (absente du contexte carte / historique, ou knowledge manquante)\u00a0:',
-      '- Avant toute conclusion d\'ignorance\u00a0: \u00e9cris d\'abord dans "thinking" ce que tu as v\u00e9rifi\u00e9 (progress.items, due, blocked, priority, m\u00e9moire, historique) et ce qui manque vraiment.',
+      '- Avant toute conclusion d\'ignorance\u00a0: \u00e9cris d\'abord dans "thinking" ce que tu as v\u00e9rifi\u00e9 (en mode projet\u00a0: boardDigest + memory\u00a0; en mode carte\u00a0: progress.items, due, blocked, priority, m\u00e9moire, historique) et ce qui manque vraiment.',
       '- INTERDIT de r\u00e9pondre \u00ab\u00a0Je ne sais pas.\u00a0\u00bb (ou \u00e9quivalent) sans avoir rempli "thinking" et sans expliquer bri\u00e8vement CE QUI manque + CE QUE tu as compris / inf\u00e9r\u00e9.',
       '- "thinking" est priv\u00e9 (jamais affich\u00e9)\u00a0: raisonne-y librement. Le champ "message" reste seul visible pour l\'utilisateur.',
       '- Inf\u00e8re au maximum\u00a0: intention (renommer, ajouter, bloquer\u2026), cible mentionn\u00e9e (nom de sous-t\u00e2che, date\u2026), et applique toute partie faisable avec les outils.',
-      '- Cherche d\'abord dans le contexte (progress.items, due, blocked, priority, m\u00e9moire, historique) avant de conclure que tu ne peux pas agir.',
+      '- Cherche d\'abord dans le contexte (boardDigest en mode projet\u00a0; progress.items, due, blocked, priority, m\u00e9moire, historique en mode carte) avant de conclure que tu ne peux pas agir.',
       '- NE PAS inventer de faits absents. NE PAS renvoyer la question \u00e0 l\'utilisateur sous forme miroir.',
+      '- Personnes / pr\u00e9noms (critique)\u00a0: n\'utilise JAMAIS un pr\u00e9nom ou un nom propre qui n\'appara\u00eet pas d\u00e9j\u00e0 dans le message utilisateur, l\'historique, cardMemory, memory, boardDigest ou progress.items. Les exemples du prompt ne sont PAS des gens r\u00e9els de la carte.',
       '- INTERDIT\u00a0: \u00ab\u00a0Pourriez-vous pr\u00e9ciser\u2026?\u00a0\u00bb, \u00ab\u00a0Quels sont les\u2026?\u00a0\u00bb (miroir), ou toute reformulation de la question de l\'utilisateur.',
       '- Ex.\u00a0: user \u00ab\u00a0Quels liens 404 doivent \u00eatre corrig\u00e9s?\u00a0\u00bb (rien dans le contexte) \u2192 {"thinking":"progress.items, due, blocked, cardDesc, m\u00e9moire\u00a0: aucun inventaire de liens 404.","message":"Hmm je sais pas\u00a0: y a rien sur les liens 404 sur cette carte.","suggestions":["Quelle est la priorit\u00e9?","Marquer bloqu\u00e9"],"followUps":[],"actions":[]}',
       'R\u00e9ponds \u00e0 la question (critique \u2014 cut the chase)\u00a0:',
@@ -2641,7 +2640,7 @@
       '- cardPatches (CETTE t\u00e2che)\u00a0: faits locaux (pourquoi, livrable, avancement, reste \u00e0 faire, contraintes de la carte).',
       '  Ex. {"op":"remember","text":"D\u00e9j\u00e0 fait\u00a0: \u2026"} / {"op":"remember","text":"Reste\u00a0: \u2026"}. 1\u20132 max par tour.',
       '- patches (projet / tableau)\u00a0: faits r\u00e9utilisables ailleurs (qui approuve, qui travaille sur quoi, normes \u00e9quipe, r\u00f4les, outils stables).',
-      '  Ex. {"op":"remember","text":"Julie valide les achats logiciels"} ou {"op":"note","text":"\u2026"} si provisoire.',
+      '  Ex. {"op":"remember","text":"Le service finances valide les achats logiciels"} ou {"op":"note","text":"\u2026"} si provisoire.',
       '- Si c\'est tr\u00e8s important et vrai au-del\u00e0 de cette carte \u2192 patches. Si \u00e7a ne sert qu\'\u00e0 CETTE carte \u2192 cardPatches.',
       '- INTERDIT d\'y mettre l\'identit\u00e9 utilisateur g\u00e9n\u00e9rale (nom, r\u00f4le) en cardPatches \u2014 \u00e7a va en patches board.',
       '- Sers-toi de cardMemory et context.memory avant de reposer une question d\u00e9j\u00e0 r\u00e9pondue.',
@@ -2684,15 +2683,18 @@
       'Bloquer une carte (agir d\'abord, motif ensuite)\u00a0:',
       '- Si l\'utilisateur demande de marquer bloqu\u00e9 / en attente SANS donner de motif\u00a0: APPLIQUE TOUT DE SUITE set_blocked avec enAttente:true (sans blockedReasons), puis confirme et demande le motif en option.',
       '- Ex. tour 1\u00a0: user \u00ab\u00a0Marquer la t\u00e2che comme bloqu\u00e9e\u00a0\u00bb \u2192 {"message":"Okay, bloqu\u00e9. Quel est le motif?","suggestions":["En attente d\'une approbation","En attente d\'une r\u00e9ponse","Bloqu\u00e9 \u00e0 cause du mat\u00e9riel"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}',
+      '- INTERDIT (sans motif)\u00a0: inventer qui on attend, un pr\u00e9nom, ou \u00ab\u00a0en attendant X\u00a0\u00bb. Message du tour 1 = confirmation neutre + demande de motif (comme l\'ex. ci-dessus).',
       '- Ne JAMAIS r\u00e9pondre seulement \u00ab\u00a0Quel est le motif?\u00a0\u00bb sans avoir d\'abord appel\u00e9 set_blocked.',
       '- Si l\'utilisateur donne ensuite un motif\u00a0: applique set_blocked avec blockedReasons (enAttente reste true) et confirme bri\u00e8vement.',
       '- Ex. tour 2\u00a0: user \u00ab\u00a0En attente d\'une approbation\u00a0\u00bb \u2192 {"message":"Okay, not\u00e9\u00a0: en attente d\'une approbation.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedReasons":["En attente d\'une approbation"]}}]}',
       '- Si le motif est d\u00e9j\u00e0 dans la demande initiale\u00a0: set_blocked avec enAttente:true + blockedReasons en un seul tour.',
       '- Lien vers une sous-t\u00e2che (attente d\'une autre t\u00e2che)\u00a0: set_blocked avec blockedLinks (id ou matchText depuis progress.items). Le runtime ajoute le motif \u00ab\u00a0En attente d\'une autre t\u00e2che\u00a0\u00bb si besoin.',
-      '- Ex. lien\u00a0: user \u00ab\u00a0Bloqu\u00e9 en attendant Contacter Ian\u00a0\u00bb \u2192 {"message":"Okay, bloqu\u00e9 sur Contacter Ian.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedLinks":[{"matchText":"Contacter Ian"}]}}]}',
+      '- Ex. lien\u00a0: user \u00ab\u00a0Bloqu\u00e9 en attendant Valider le devis\u00a0\u00bb \u2192 {"message":"Okay, bloqu\u00e9 sur Valider le devis.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedLinks":[{"matchText":"Valider le devis"}]}}]}',
+      '- Bloqu\u00e9 \u2260 Termin\u00e9\u00a0: si context.progress.percent=100 (ou carte marqu\u00e9e compl\u00e8te), set_blocked DOIT aussi remettre le progr\u00e8s hors Termin\u00e9 via set_progress {progressEnabled:true, progress:0} (ou le % r\u00e9el si partiel). Le runtime le fait aussi, mais inclus set_progress dans actions.',
+      '- Ex. (attente + pas commenc\u00e9)\u00a0: user \u00ab\u00a0J\'attends l\'acc\u00e8s admin\u00a0\u00bb \u2192 {"message":"Ok, bloqu\u00e9 en attendant l\'acc\u00e8s admin.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedReasons":["En attente de l\'acc\u00e8s admin"]}},{"tool":"set_progress","args":{"progressEnabled":true,"progress":0}}]}',
       '- D\u00e9bloquer\u00a0: set_blocked avec enAttente:false (ou blockedReasons:[], blockedLinks:[]).',
       'Sous-t\u00e2ches (progress.items du contexte)\u00a0:',
-      '- Les sous-t\u00e2ches existantes sont dans context.progress.items (id + text). Quand l\'utilisateur cite un nom (\u00ab\u00a0Contacter Ian\u00a0\u00bb, etc.), c\'est une sous-t\u00e2che\u00a0: retrouve-la dans items.',
+      '- Les sous-t\u00e2ches existantes sont dans context.progress.items (id + text). Quand l\'utilisateur cite un libell\u00e9 d\'item (\u00ab\u00a0Valider le devis\u00a0\u00bb, etc.), c\'est une sous-t\u00e2che\u00a0: retrouve-la dans items.',
       '- Pour toute op\u00e9ration sur une sous-t\u00e2che existante\u00a0: passer id OU matchText (libell\u00e9 actuel).',
       '- Ajout\u00a0: sans nom \u2192 demander le nom + OBLIGATOIREMENT \u22652 suggestions de titres concrets tir\u00e9s du titre / description / m\u00e9moire / reste \u00e0 faire (actions=[]). Avec un nom \u2192 add_subtask tout de suite.',
       '- INTERDIT de demander le nom d\'une sous-t\u00e2che avec suggestions=[] ou des chips hors sujet (\u00ab\u00a0V\u00e9rifier le stock\u00a0\u00bb sur une carte c\u00e2bles).',
@@ -2707,10 +2709,10 @@
       '- Ex. FAUX (carte m\u00e9nage des c\u00e2bles)\u00a0: {"message":"Quel nom souhaites-tu donner \u00e0 la sous-t\u00e2che pour l\'organisation des c\u00e2bles?","suggestions":[],"actions":[]}',
       '- Ex. VRAI (m\u00eame carte)\u00a0: {"message":"Quel nom pour la sous-t\u00e2che?","suggestions":["Installer les accessoires","Attacher les c\u00e2bles","\u00c9tiqueter les c\u00e2bles"],"suggestionsMulti":false,"followUps":[],"actions":[]}',
       '- Ex. ajout tour 2\u00a0: user \u00ab\u00a0Commander le mat\u00e9riel\u00a0\u00bb \u2192 {"message":"Okay, ajout\u00e9e.","suggestions":["Ajouter une autre sous-t\u00e2che","D\u00e9finir une \u00e9ch\u00e9ance"],"followUps":[],"actions":[{"tool":"add_subtask","args":{"text":"Commander le mat\u00e9riel"}}]}',
-      '- Ex. choisir \u00e0 renommer (items = Contacter Ian, Valider le brief)\u00a0: user \u00ab\u00a0Changer une sous-t\u00e2che\u00a0\u00bb \u2192 {"message":"Quelle sous-t\u00e2che tu veux changer?","suggestions":["Contacter Ian","Valider le brief"],"suggestionsMulti":false,"followUps":[],"actions":[]}',
+      '- Ex. choisir \u00e0 renommer (items = Valider le devis, Valider le brief)\u00a0: user \u00ab\u00a0Changer une sous-t\u00e2che\u00a0\u00bb \u2192 {"message":"Quelle sous-t\u00e2che tu veux changer?","suggestions":["Valider le devis","Valider le brief"],"suggestionsMulti":false,"followUps":[],"actions":[]}',
       '- Ex. choisir mais items=[] (carte c\u00e2bles)\u00a0: user \u00ab\u00a0Changer une sous-t\u00e2che\u00a0\u00bb \u2192 {"message":"Y a pas encore de sous-t\u00e2che. On en cr\u00e9e une \u2014 quel titre?","suggestions":["Installer les accessoires","Attacher les c\u00e2bles","Ranger le surplus"],"suggestionsMulti":false,"followUps":[],"actions":[]}',
-      '- Ex. renommer\u00a0: user \u00ab\u00a0Rename \'Contacter Ian\' to \'Appeler Ian\'\u00a0\u00bb \u2192 {"message":"Okay, renomm\u00e9e.","suggestions":["Ajouter une sous-t\u00e2che","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"rename_subtask","args":{"matchText":"Contacter Ian","text":"Appeler Ian"}}]}',
-      '- Ex. supprimer\u00a0: user \u00ab\u00a0Supprime Contacter Ian\u00a0\u00bb \u2192 {"message":"Okay, supprim\u00e9e.","suggestions":["Ajouter une sous-t\u00e2che","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"remove_subtask","args":{"matchText":"Contacter Ian"}}]}',
+      '- Ex. renommer\u00a0: user \u00ab\u00a0Rename \'Valider le devis\' to \'Envoyer le devis\'\u00a0\u00bb \u2192 {"message":"Okay, renomm\u00e9e.","suggestions":["Ajouter une sous-t\u00e2che","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"rename_subtask","args":{"matchText":"Valider le devis","text":"Envoyer le devis"}}]}',
+      '- Ex. supprimer\u00a0: user \u00ab\u00a0Supprime Valider le devis\u00a0\u00bb \u2192 {"message":"Okay, supprim\u00e9e.","suggestions":["Ajouter une sous-t\u00e2che","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"remove_subtask","args":{"matchText":"Valider le devis"}}]}',
       'Priorit\u00e9 / progr\u00e8s / formule / statut\u00a0:',
       '- Priorit\u00e9 (agir d\'abord \u2014 tr\u00e8s important)\u00a0:',
       '  \u00b7 Si l\'utilisateur cite un PALIER (Critique, Urgente, Prioritaire, Importante, Flexible, Secondaire, Optionnelle)\u00a0: APPLIQUE TOUT DE SUITE set_priority avec tier (m\u00eame libell\u00e9), M\u00caEME SANS chiffres d\'axes.',
@@ -2805,7 +2807,7 @@
       'Outils disponibles\u00a0:',
       '- set_priority: { urgency?:0-4, impact?:0-4, ease?:1-5, estimatedDurationMinutes?:number|null, estimatedDuration?:string, priorityEnabled?:boolean, tier?: string, heatTarget?: number } (tier = Critique|Urgente|Prioritaire|Importante|Flexible|Secondaire|Optionnelle\u00a0; impact 0\u20134 = port\u00e9e Personnel\u2026Global\u00a0; estimatedDuration = texte FR/EN ex. \u00ab\u00a02 jours\u00a0\u00bb)',
       '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean, relativeMinutes?: number, relativeHours?: number } (dueTime OPTIONNEL pour une date\u00a0; d\u00e9lai \u00ab\u00a0dans N min/h\u00a0\u00bb \u2192 relativeMinutes/relativeHours, calcul\u00e9 depuis context.nowTime\u00a0; aujourd\'hui = context.today)',
-      '- set_blocked: { enAttente?: boolean, blockedReasons?: string[], blockedLinks?: [{id?:string, matchText?:string, label?:string}] } (enAttente:true seul suffit\u00a0; motifs et liens optionnels)',
+      '- set_blocked: { enAttente?: boolean, blockedReasons?: string[], blockedLinks?: [{id?:string, matchText?:string, label?:string}] } (enAttente:true seul suffit\u00a0; motifs et liens optionnels\u00a0; si progr\u00e8s \u00e0 100%, le runtime le remet \u00e0 0% \u2014 ajoute aussi set_progress)',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (master sur sous-t\u00e2ches si items\u00a0; sinon progres carte)',
       '- set_formula: { formula: "baseline"|"eisenhower"|"wsjf"|"valueEffort" }',
       '- set_statut: { listId?: string, matchList?: string, category?: string } (d\u00e9place la carte\u00a0; category ex. completed|blocked|started|backlog|triage|unstarted|canceled)',
@@ -2848,17 +2850,10 @@
       isEn
         ? '- sound (optional): force another effect\'s stinger, e.g. effect=banner + sound=thunder + text="TWO".'
         : '- sound (optionnel)\u00a0: forcer le stinger d\'un autre effet, ex. effect=banner + sound=thunder + text="DEUX".',
-      '- Utilise-les pour c\u00e9l\u00e9brer, blaguer, r\u00e9pondre \u00e0 une demande d\'effet, OU quand une question absurde / r\u00e9p\u00e9t\u00e9e m\u00e9rite une punchline sonore.',
+      '- Utilise-les pour c\u00e9l\u00e9brer, blaguer, ou r\u00e9pondre \u00e0 une demande d\'effet.',
       isEn
         ? '- Flowers (flowers): REQUIRED when you truly compliment the user (bravery, effort, sharp idea, progress), OR when they ask for flowers / a bouquet / roses. Prefer flowers (not petals/hearts) in those cases.'
         : '- Fleurs (flowers)\u00a0: OBLIGATOIRE quand tu complimentes vraiment l\'utilisateur (bravoure, effort, id\u00e9e fine, progr\u00e8s), OU quand iel demande des fleurs / un bouquet / des roses. Prefer flowers (pas petals/hearts) dans ces cas.',
-      isEn
-        ? '- Silliness escalation (important): dumb / obvious questions (maths, "what does hello mean?", etc.). Never give a sincere dictionary lecture. 1st: short roast + beep/bonk; if repeated: escalate — 2nd beep/boop/zap; 3rd+ thunder or banner with fullscreen text (e.g. "TWO") + sound thunder. Check history. Fullscreen text stays in the response language.'
-        : '- Escalade silliness (important)\u00a0: questions b\u00eates / \u00e9videntes (maths, \u00ab\u00a0c\'est quoi allo?\u00a0\u00bb, etc.). JAMAIS de vrai cours de dico. 1re\u00a0: tease court + beep/bonk\u00a0; si \u00e7a se r\u00e9p\u00e8te\u00a0: monte \u2014 2e beep/boop/zap\u00a0; 3e+ thunder ou banner avec text plein \u00e9cran (ex. "DEUX") + sound thunder. Regarde l\'historique. Le text plein \u00e9cran reste dans la langue de la r\u00e9ponse.',
-      '- Ex. maths clown\u00a0: {"message":"2. Choquant, je sais.","emotion":"wink","suggestions":[],"followUps":[],"actions":[{"tool":"trigger_effect","args":{"effect":"beep"}}]}',
-      isEn
-        ? '- Ex. 3rd time 1+1: {"message":"\u2026TWO.","suggestions":[],"followUps":[],"actions":[{"tool":"trigger_effect","args":{"effect":"thunder","text":"TWO"}}]}'
-        : '- Ex. 3e fois 1+1\u00a0: {"message":"\u2026DEUX.","suggestions":[],"followUps":[],"actions":[{"tool":"trigger_effect","args":{"effect":"thunder","text":"DEUX"}}]}',
       isEn
         ? '- Ex. banner: {"message":"Boom.","suggestions":[],"followUps":[],"actions":[{"tool":"trigger_effect","args":{"effect":"banner","text":"BOOM","sound":"fanfare"}}]}'
         : '- Ex. banni\u00e8re\u00a0: {"message":"Boom.","suggestions":[],"followUps":[],"actions":[{"tool":"trigger_effect","args":{"effect":"banner","text":"BOOM","sound":"fanfare"}}]}',
@@ -4308,7 +4303,7 @@
   /**
    * First-open card interview turn (one question at a time).
    * Returns { message, suggestions, actions, prompts, followUps, completeInterview,
-   *   droppedActions, rawJson, usage, context }.
+   *   droppedActions, rawJson, usage, context, debug }.
    */
   async function cardInterviewTurn(provider, history, bridge, userText, options) {
     options = options || {};
@@ -4327,7 +4322,8 @@
         droppedActions: [],
         rawJson: '',
         usage: null,
-        context: null
+        context: null,
+        debug: null
       };
     }
 
@@ -4359,6 +4355,7 @@
       'Grammaire\u00a0: JAMAIS de virgule avant \u00ab\u00a0et\u00a0\u00bb (\u00ab\u00a0urgence, impact et facilit\u00e9\u00a0\u00bb, pas \u00ab\u00a0urgence, impact, et facilit\u00e9\u00a0\u00bb).',
       'Ponctuation\u00a0: JAMAIS de tiret cadratin (\u2014). Pr\u00e9f\u00e8re un point, une virgule ou une nouvelle phrase.',
       'Objectif\u00a0: (1) comprendre POURQUOI on fait \u00e7a et le m\u00e9moriser\u00a0; (2) pour un plan / strat\u00e9gie, clarifier permission, qui s\'en occupe, commenc\u00e9?, d\u00e9j\u00e0 fait, reste \u00e0 faire\u00a0; (3) d\u00e9duire Urgence (0\u20134), Impact/port\u00e9e (0\u20134) et Facilit\u00e9 (1\u20135) avant de terminer\u00a0; (4) tenir Progr\u00e8s / axes / blocage / \u00e9ch\u00e9ance \u00e0 jour d\u00e8s qu\'un indice appara\u00eet (c\'est le but du bot)\u00a0; (5) optionnellement projet. Dur\u00e9e\u00a0: inf\u00e8re-la quand elle saute aux yeux\u00a0; ne la demande QUE si vraiment incertaine.',
+      'Personnes / pr\u00e9noms (critique)\u00a0: n\'invente JAMAIS un pr\u00e9nom ou un nom propre absent du message utilisateur, de l\'historique, de cardMemory, de memory ou de progress.items. Les exemples du prompt ne sont PAS des gens de la carte. Pour un blocage sans motif\u00a0: confirmation neutre seulement (\u00ab\u00a0Okay, bloqu\u00e9. Quel est le motif?\u00a0\u00bb) \u2014 INTERDIT \u00ab\u00a0en attendant [pr\u00e9nom]\u00a0\u00bb.',
       '',
       'POURQUOI en premier (critique)\u00a0:',
       '- Sauf si le POURQUOI est d\u00e9j\u00e0 dans cardMemory / description / historique\u00a0: la 1re question = POURQUOI on fait le sujet du titre.',
@@ -4414,8 +4411,8 @@
       '- Avancement + blocage (important)\u00a0:',
       '  \u00b7 Apr\u00e8s \u00ab\u00a0Non, pas encore\u00a0\u00bb\u00a0: message = \u00ab\u00a0Pourquoi \u00e7a n\'a pas \u00e9t\u00e9 commenc\u00e9?\u00a0\u00bb + 2\u20134 suggestions LI\u00c9ES au sujet (pas de clich\u00e9s g\u00e9n\u00e9riques).',
       '  \u00b7 Ex. suggestions (m\u00e9nage des c\u00e2bles)\u00a0: \u00ab\u00a0J\'attends un c\u00e2ble\u00a0\u00bb, \u00ab\u00a0Pas eu le temps\u00a0\u00bb, \u00ab\u00a0Je savais pas par o\u00f9 commencer\u00a0\u00bb.',
-      '  \u00b7 Si l\'utilisateur attend quelque chose de concret (pi\u00e8ce, c\u00e2ble, livraison, r\u00e9ponse, approbation, outil\u2026)\u00a0: set_blocked IMM\u00c9DIATEMENT avec enAttente:true + blockedReasons du genre \u00ab\u00a0En attente d\'un c\u00e2ble\u00a0\u00bb (motif = cause, pas une action). Confirme bri\u00e8vement + cardPatches remember, puis encha\u00eene.',
-      '  \u00b7 Ex. user \u00ab\u00a0J\'attends un c\u00e2ble\u00a0\u00bb \u2192 actions [{"tool":"set_blocked","args":{"enAttente":true,"blockedReasons":["En attente d\'un c\u00e2ble"]}}] + message du style \u00ab\u00a0Ok, bloqu\u00e9 en attendant le c\u00e2ble.\u00a0\u00bb puis question suivante utile (ou axes).',
+      '  \u00b7 Si l\'utilisateur attend quelque chose de concret (pi\u00e8ce, c\u00e2ble, livraison, r\u00e9ponse, approbation, outil\u2026)\u00a0: set_blocked IMM\u00c9DIATEMENT avec enAttente:true + blockedReasons du genre \u00ab\u00a0En attente d\'un c\u00e2ble\u00a0\u00bb (motif = cause, pas une action) + set_progress hors 100% si besoin (progress:0 quand pas commenc\u00e9). Confirme bri\u00e8vement + cardPatches remember, puis encha\u00eene.',
+      '  \u00b7 Ex. user \u00ab\u00a0J\'attends un c\u00e2ble\u00a0\u00bb \u2192 actions [{"tool":"set_blocked","args":{"enAttente":true,"blockedReasons":["En attente d\'un c\u00e2ble"]}},{"tool":"set_progress","args":{"progressEnabled":true,"progress":0}}] + message du style \u00ab\u00a0Ok, bloqu\u00e9 en attendant le c\u00e2ble.\u00a0\u00bb puis question suivante utile (ou axes).',
       '  \u00b7 Si c\'est juste \u00ab\u00a0pas eu le temps\u00a0\u00bb / procrastination\u00a0: remember, NE PAS bloquer, passe aux axes / suite.',
       '- INTERDIT d\'appliquer permission / qui aux t\u00e2ches perso solo \u00e9videntes. Avancement (\u00ab\u00a0commenc\u00e9?\u00a0\u00bb) reste OK s\'il peut r\u00e9v\u00e9ler un vrai blocage mat\u00e9riel / attente.',
       '',
@@ -4537,7 +4534,7 @@
       '- Ex. facilit\u00e9 JSON (effort)\u00a0: {"suggestions":[{"label":"C\'est facile","heat":0},{"label":"C\'est faisable","heat":2},{"label":"C\'est difficile","heat":4}],"suggestionScale":true,"suggestionsMulti":false}',
       '- Ex. facilit\u00e9 JSON (co\u00fbt)\u00a0: {"suggestions":[{"label":"Pas cher","heat":0},{"label":"Correct","heat":2},{"label":"Tr\u00e8s cher","heat":4}],"suggestionScale":true,"suggestionsMulti":false}',
       '- Ex. port\u00e9e JSON (sans pr\u00e9nom)\u00a0: {"suggestions":[{"label":"Personnel","icon":"circle-xs","color":"blue"},{"label":"\u00c9quipe","icon":"circle-sm","color":"teal"},{"label":"Population","icon":"circle-lg","color":"green"}],"suggestionScale":true,"suggestionsMulti":false}',
-      '- Ex. multi JSON\u00a0: {"suggestions":[{"label":"On perd le contexte des rushs"},{"label":"Marie-Laure serait f\u00e2ch\u00e9e"}],"suggestionsMulti":true}',
+      '- Ex. multi JSON\u00a0: {"suggestions":[{"label":"On perd le contexte des rushs"},{"label":"La direction serait vraiment f\u00e2ch\u00e9e"}],"suggestionsMulti":true}',
       '- Utilise \u2026 seulement pour une r\u00e9ponse \u00e0 compl\u00e9ter (ex. \u00ab\u00a0On risque de perdre\u2026\u00a0\u00bb).',
       '',
       'Inf\u00e9rence + clarification carte\u00a0:',
@@ -4549,16 +4546,16 @@
       '  \u00b7 thinking DOIT lister bri\u00e8vement les champs \u00e0 mettre \u00e0 jour (ou \u00ab\u00a0aucun\u00a0\u00bb).',
       '- Une r\u00e9ponse peut combiner plusieurs suggestions (s\u00e9par\u00e9es par \u00ab\u00a0. \u00a0\u00bb)\u00a0: inf\u00e8re en tenant compte de TOUT le message.',
       '- Ex. POURQUOI\u00a0: user \u00ab\u00a0Aligner les messages entre services. Mieux joindre les citoyens\u00a0\u00bb \u2192 cardPatches [{"op":"remember","text":"Pourquoi\u00a0: aligner les messages entre services\u00a0; mieux joindre les citoyens"}] + prochaine question (vague?/livrable/axes).',
-      '- Ex.\u00a0: \u00ab\u00a0Marie-Laure serait vraiment tr\u00e8s f\u00e2ch\u00e9e\u00a0\u00bb \u2192 urgence \u00e9lev\u00e9e (3\u20134) + cardPatches remember + message = seule la question suivante courte.',
+      '- Ex.\u00a0: user \u00ab\u00a0La direction serait vraiment tr\u00e8s f\u00e2ch\u00e9e\u00a0\u00bb \u2192 urgence \u00e9lev\u00e9e (3\u20134) + cardPatches remember + message = seule la question suivante courte.',
       '- Ex. achat logiciel\u00a0: user \u00ab\u00a0Tr\u00e8s cher\u00a0\u00bb \u2192 ease bas (1\u20132) + cardPatches remember co\u00fbt + estimatedDurationMinutes court + question \u00ab\u00a0Faut la permission de quelqu\'un pour avancer?\u00a0\u00bb.',
       '- Ex. plan commenc\u00e9\u00a0: user \u00ab\u00a0Oui, un peu\u00a0\u00bb \u2192 cardPatches [{"op":"remember","text":"Plan d\u00e9j\u00e0 commenc\u00e9 (un peu)"}] + set_progress {progressEnabled:true, progress:30} + question \u00ab\u00a0Qu\'est-ce qui est d\u00e9j\u00e0 fait?\u00a0\u00bb.',
       '- Ex. d\u00e9j\u00e0 fait (critique)\u00a0: user \u00ab\u00a0J\'ai choisi les dipl\u00f4mes \u00e0 installer. J\'ai pr\u00e9par\u00e9 l\'emplacement\u00a0\u00bb \u2192 add_subtask {text:"Choisir les dipl\u00f4mes", done:true} + add_subtask {text:"Pr\u00e9parer l\'emplacement", done:true} + set_progress {progressEnabled:true, progress:40} + remember + question reste \u00e0 faire.',
       '- Ex. plan presque fini\u00a0: user \u00ab\u00a0Oui, presque termin\u00e9\u00a0\u00bb \u2192 set_progress {progressEnabled:true, progress:85} + remember + question sur le reste (PAS l\'\u00e9ch\u00e9ance tant qu\'il reste du travail).',
       '- Ex. plan fini / 100%\u00a0: user \u00ab\u00a0Oui, c\'est termin\u00e9\u00a0\u00bb / \u00ab\u00a0100%\u00a0\u00bb \u2192 set_progress {progressEnabled:true, progress:100} + trigger_effect confetti + message f\u00e9licitations (Bravo\u2026). INTERDIT \u00e9ch\u00e9ance. Si axes d\u00e9j\u00e0 ok\u00a0: completeInterview:true\u00a0; sinon question d\'axe utile ensuite.',
       '- Ex. plan pas commenc\u00e9\u00a0: user \u00ab\u00a0Non, pas encore\u00a0\u00bb \u2192 cardPatches remember + set_progress {progressEnabled:true, progress:0} (ou laisse 0) + message \u00ab\u00a0Pourquoi \u00e7a n\'a pas \u00e9t\u00e9 commenc\u00e9?\u00a0\u00bb + suggestions contextuelles.',
-      '- Ex. attente mat\u00e9riel\u00a0: user \u00ab\u00a0J\'attends un c\u00e2ble\u00a0\u00bb \u2192 set_blocked enAttente:true blockedReasons ["En attente d\'un c\u00e2ble"] + remember + message \u00ab\u00a0Ok, bloqu\u00e9 en attendant le c\u00e2ble.\u00a0\u00bb + suite.',
-      '- Ex. \u00ab\u00a0Marie et Sam s\'en occupent\u00a0\u00bb \u2192 cardPatches {"op":"remember","text":"Qui\u00a0: Marie et Sam"} + patches {"op":"remember","text":"Marie et Sam travaillent sur le plan de strat\u00e9gie de communication"} (utile au tableau).',
-      '- Ex. permission \u00ab\u00a0Faut l\'accord de Julie\u00a0\u00bb \u2192 cardPatches + patches {"op":"remember","text":"Julie valide / donne la permission pour avancer sur ce genre de plan"}.',
+      '- Ex. attente mat\u00e9riel\u00a0: user \u00ab\u00a0J\'attends un c\u00e2ble\u00a0\u00bb \u2192 set_blocked enAttente:true blockedReasons ["En attente d\'un c\u00e2ble"] + set_progress {progress:0} si pas commenc\u00e9 / encore \u00e0 100% + remember + message \u00ab\u00a0Ok, bloqu\u00e9 en attendant le c\u00e2ble.\u00a0\u00bb + suite.',
+      '- Ex. user \u00ab\u00a0L\'\u00e9quipe com s\'en occupe\u00a0\u00bb \u2192 cardPatches {"op":"remember","text":"Qui\u00a0: \u00e9quipe com"} + patches {"op":"remember","text":"L\'\u00e9quipe com travaille sur le plan de strat\u00e9gie de communication"} (utile au tableau).',
+      '- Ex. permission\u00a0: user \u00ab\u00a0Faut l\'accord du responsable\u00a0\u00bb \u2192 cardPatches + patches {"op":"remember","text":"Le responsable valide / donne la permission pour avancer sur ce genre de plan"}.',
       '- M\u00e9moire \u2014 deux niveaux (critique)\u00a0:',
       '  \u00b7 cardPatches = d\u00e9pendant de CETTE t\u00e2che (POURQUOI, livrable, but, d\u00e9j\u00e0 fait, reste \u00e0 faire, contraintes locales).',
       '  \u00b7 patches = projet / tableau (qui approuve, qui travaille sur quoi, r\u00f4les, normes, faits r\u00e9utilisables sur d\'autres cartes).',
@@ -4682,6 +4679,30 @@
     });
     messages.push({ role: 'user', content: String(userText || '').trim() });
 
+    var debug = {
+      id: 'interview-' + Date.now().toString(36),
+      kind: 'cardInterviewTurn',
+      label: 'Tour d\u2019interview',
+      startedAt: Date.now(),
+      attempts: []
+    };
+
+    function recordAttempt(label, metaOrErr) {
+      if (metaOrErr && metaOrErr.meta) {
+        debug.attempts.push(Object.assign({ label: label }, metaOrErr.meta));
+        return;
+      }
+      if (metaOrErr && metaOrErr.debugMeta) {
+        debug.attempts.push(Object.assign({ label: label }, metaOrErr.debugMeta));
+        return;
+      }
+      debug.attempts.push({
+        label: label,
+        error: (metaOrErr && metaOrErr.message) || String(metaOrErr || 'error'),
+        ok: false
+      });
+    }
+
     function notifyVisible(accumulated) {
       if (!onDelta) return;
       var visible = extractStreamingMessage(accumulated);
@@ -4708,7 +4729,9 @@
               }
             : undefined
         });
+        recordAttempt(onDelta ? 'stream + json' : 'non-stream + json', response);
       } catch (err) {
+        recordAttempt(onDelta ? 'stream + json' : 'non-stream + json', err);
         if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
           response = await chatCompletions(p, messages, {
             jsonMode: false,
@@ -4721,6 +4744,10 @@
                 }
               : undefined
           });
+          recordAttempt(
+            onDelta ? 'stream (sans json mode)' : 'non-stream (sans json mode)',
+            response
+          );
         } else if (err && /stream/i.test((err && err.message) || '')) {
           response = await chatCompletions(p, messages, {
             jsonMode: true,
@@ -4728,12 +4755,28 @@
             max_tokens: 720,
             temperature: 0.45
           });
+          recordAttempt('non-stream + json', response);
           notifyVisible(response.content);
         } else {
           throw err;
         }
       }
     } catch (fatal) {
+      debug.endedAt = Date.now();
+      debug.latencyMs = Date.now() - t0;
+      debug.ok = false;
+      debug.error = (fatal && fatal.message) || String(fatal || 'Erreur');
+      debug.request = debug.attempts.length
+        ? debug.attempts[debug.attempts.length - 1]
+        : buildRequestMeta(p, {
+            model: p.model,
+            messages: messages,
+            temperature: 0.45,
+            stream: !!onDelta,
+            max_tokens: 720,
+            response_format: { type: 'json_object' }
+          });
+      fatal.debug = debug;
       throw fatal;
     }
 
@@ -4946,6 +4989,29 @@
       context
     );
 
+    var latencyMs = Date.now() - t0;
+    usage.latencyMs = latencyMs;
+    debug.endedAt = Date.now();
+    debug.latencyMs = latencyMs;
+    debug.ok = true;
+    debug.request =
+      (response && response.meta) ||
+      (debug.attempts.length ? debug.attempts[debug.attempts.length - 1] : null);
+    debug.response = {
+      status: response && response.meta && response.meta.status,
+      content: content,
+      raw: cloneJsonSafe(response && response.raw),
+      parsed: {
+        message: message,
+        suggestions: suggestionEntries,
+        prompts: prompts,
+        actions: actions,
+        completeInterview: completeInterview,
+        droppedActions: parsed.droppedActions || []
+      }
+    };
+    debug.usage = usage;
+
     return {
       message: message,
       emotion: emotion || parsed.emotion || null,
@@ -4963,7 +5029,8 @@
       droppedActions: parsed.droppedActions || [],
       rawJson: content,
       context: context,
-      usage: usage
+      usage: usage,
+      debug: debug
     };
   }
 
@@ -6739,18 +6806,6 @@
     );
     message = progressGuard.message;
     actions = progressGuard.actions;
-    var dueGuardChat = applyKnownDueGuards(
-      {
-        message: message,
-        suggestions: progressGuard.suggestions,
-        emotion: progressGuard.emotion
-      },
-      context
-    );
-    message = dueGuardChat.message;
-    if (dueGuardChat.suggestions) {
-      progressGuard.suggestions = dueGuardChat.suggestions;
-    }
     var projectScope = isProjectScope(context && context.scope);
     if (projectScope) {
       var droppedForScope = [];
@@ -8428,6 +8483,9 @@
           return l.id + (l.label ? ':' + l.label : '');
         })
       );
+      if (beforeC && afterC) {
+        pushChange(parts, 'progress', beforeC.progress, afterC.progress);
+      }
     } else if (tool === 'set_progress') {
       pushChange(
         parts,
@@ -9005,7 +9063,30 @@
             error: 'Aucun champ blocage \u00e0 modifier'
           };
         }
+        var beforeBlockedCompletion =
+          typeof bridge.getCompletion === 'function'
+            ? snapshotCompletion(bridge)
+            : null;
         bridge.applyPriority(blockedPartial);
+        var afterBlockedCompletion = beforeBlockedCompletion;
+        // Bloqué contradicts Terminé / 100%: drop progress off complete.
+        if (
+          blockedPartial.enAttente === true &&
+          typeof bridge.applyCompletion === 'function' &&
+          typeof bridge.getCompletion === 'function' &&
+          typeof CompletionTrello !== 'undefined' &&
+          typeof CompletionTrello.markNotFullyComplete === 'function' &&
+          typeof CompletionTrello.isAllSubtasksComplete === 'function'
+        ) {
+          var completionWhileBlocked = bridge.getCompletion() || { items: [] };
+          if (CompletionTrello.isAllSubtasksComplete(completionWhileBlocked)) {
+            var incomplete = CompletionTrello.markNotFullyComplete(
+              completionWhileBlocked
+            );
+            bridge.applyCompletion(incomplete);
+            afterBlockedCompletion = snapshotCompletion(bridge);
+          }
+        }
         var afterBlocked = snapshotPriority(bridge);
         return {
           ok: true,
@@ -9016,8 +9097,8 @@
             tool,
             beforeBlocked,
             afterBlocked,
-            null,
-            null,
+            beforeBlockedCompletion,
+            afterBlockedCompletion,
             args
           )
         };

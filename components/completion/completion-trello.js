@@ -234,6 +234,22 @@
     return normalizeCompletionData(next);
   }
 
+  /**
+   * Inverse of markFullyComplete when a card cannot stay "done"
+   * (e.g. marked Bloqué). No-op when already incomplete.
+   */
+  function markNotFullyComplete(data) {
+    var next = normalizeCompletionData(data || { items: [] });
+    if (!isAllSubtasksComplete(next)) return next;
+    if (next.items && next.items.length) {
+      next.items = applyMasterProgress(next.items, PROGRESS_MIN);
+    } else {
+      next.progress = PROGRESS_MIN;
+    }
+    delete next.progressEnabled;
+    return normalizeCompletionData(next);
+  }
+
   async function getMarkedDueCompleteFlag(t) {
     try {
       var flagged = await t.get('card', 'shared', COMPLETION_MARKED_DUE_COMPLETE_KEY);
@@ -859,6 +875,7 @@
     isAllSubtasksComplete: isAllSubtasksComplete,
     detectDonePendingMismatch: detectDonePendingMismatch,
     markFullyComplete: markFullyComplete,
+    markNotFullyComplete: markNotFullyComplete,
     setDueCompleteSuppressed: setDueCompleteSuppressed,
     getDueCompleteSuppressed: getDueCompleteSuppressed,
     syncCardDueCompleteFromProgress: syncCardDueCompleteFromProgress,

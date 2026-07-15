@@ -104,6 +104,10 @@
       getCardMemory: options.getCardMemory || function () { return null; },
       getProfile: options.getProfile || function () { return null; },
       getBoardDigest: options.getBoardDigest || function () { return ''; },
+      refreshBoardDigest:
+        typeof options.refreshBoardDigest === 'function'
+          ? options.refreshBoardDigest
+          : null,
       getGoals: options.getGoals || function () { return null; },
       setProject: options.setProject || function () {
         return Promise.resolve({ ok: false, reason: 'no-setProject' });
@@ -7078,6 +7082,17 @@
             }
           );
         } else {
+          if (
+            isProjectScope &&
+            typeof bridge.refreshBoardDigest === 'function'
+          ) {
+            try {
+              await bridge.refreshBoardDigest();
+            } catch (digestErr) {
+              /* keep cached digest */
+            }
+            if (myGen !== chatTurnGen) return;
+          }
           turn = await Agent.chatTurn(
             provider,
             history.slice(0, -1),
@@ -7103,6 +7118,8 @@
             }
           );
         }
+        // Capture exchange even if this turn is superseded (edit/resume).
+        if (turn && turn.debug) pushDebugEntry(turn.debug);
         if (myGen !== chatTurnGen) return;
         if (bubble) {
           if (!streamed) revealPendingBubble(bubble, turn.message);
@@ -7241,7 +7258,6 @@
         }
         if (turn.usage) updateSessionStats(turn.usage);
         else renderChatStats();
-        if (turn.debug) pushDebugEntry(turn.debug);
         renderFollowUps(interviewActive ? [] : turn.followUps);
         renderPrompts(turn.prompts);
         if (interviewActive && turn.completeInterview) {
@@ -7265,6 +7281,7 @@
           refreshSuggestions({ animate: true });
         }
       } catch (err) {
+        if (err && err.debug) pushDebugEntry(err.debug);
         if (myGen !== chatTurnGen) return;
         stopThinkingMotions();
         thinking.classList.remove('is-pending', 'is-streaming');
@@ -7272,7 +7289,6 @@
         if (thinking && thinking.parentNode) thinking.remove();
         appendChatError(errText);
         setError('');
-        if (err && err.debug) pushDebugEntry(err.debug);
         refreshSuggestions({ animate: true });
       } finally {
         if (myGen === chatTurnGen) {

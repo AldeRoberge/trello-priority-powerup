@@ -48,6 +48,10 @@ check(
   Agent.looksLikeDueAskMessage('C\'est pour quand?')
 );
 check(
+  'detects c\'est pour quand with accent markup',
+  Agent.looksLikeDueAskMessage('C\'est pour [[a:quand]]?')
+);
+check(
   'ignores unrelated question',
   !Agent.looksLikeDueAskMessage('Quelle est la priorité?')
 );
@@ -146,7 +150,7 @@ check('alreadyKnown.dueDate', alreadyKnown.dueDate === '2026-07-20');
 
 var blockedDueAsk = Agent.applyKnownDueGuards(
   {
-    message: "C'est pour quand?",
+    message: "C'est pour [[a:quand]]?",
     suggestions: ['Aujourd\'hui', 'Demain', 'Pas d\'échéance']
   },
   {

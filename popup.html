@@ -654,6 +654,21 @@
             variant.setState(
               Object.assign({}, variant.getState(), { enAttente: true })
             );
+            if (side.progressIncomplete && side.completion) {
+              latestCompletion = withProgressEnabledFlag(side.completion, true);
+              if (completionUi && typeof completionUi.setData === 'function') {
+                completionUi.setData(latestCompletion);
+              }
+              var blockedLive =
+                completionUi && typeof completionUi.getData === 'function'
+                  ? completionUi.getData()
+                  : latestCompletion;
+              saveCompletion(blockedLive);
+              if (progressCollapse) progressCollapse.refreshSummary();
+              syncBlockedSubtasks();
+              syncDueBlockedForProgress(blockedLive);
+              syncDueCompleteFromProgress(blockedLive, { clearSuppress: true });
+            }
             resizePopup();
           } else if (
             wasBlockedCat &&

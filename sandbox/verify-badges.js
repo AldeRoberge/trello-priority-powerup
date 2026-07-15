@@ -661,7 +661,7 @@ check(
   (function () {
     var human = PU.formatDueDateHumanReadable('2026-07-13', '13:00', nowAfternoon);
     return (
-      human.primary === 'Il y a une heure' &&
+      human.primary === 'Il y a une heure (En retard)' &&
       !human.secondary &&
       human.primary.indexOf('Aujourd') === -1
     );
@@ -675,7 +675,7 @@ check(
       '',
       nowAfternoon
     );
-    return human.primary === 'Hier' && !human.secondary;
+    return human.primary === 'Hier (En retard)' && !human.secondary;
   })()
 );
 check(

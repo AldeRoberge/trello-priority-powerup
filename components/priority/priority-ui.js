@@ -331,6 +331,19 @@
     return '';
   }
 
+  /** Reverse of escapeHtml for values extracted from already-escaped markdown. */
+  function unescapeHtml(s) {
+    return String(s || '')
+      .replace(/&quot;/g, '"')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&');
+  }
+
+  // Optional markdown link/image title. Input is HTML-escaped first, so Trello
+  // titles like "smartCard-block" arrive as &quot;smartCard-block&quot;.
+  var MD_LINK_TITLE = '(?:\\s+(?:"[^"]*"|\'[^\']*\'|&quot;.*?&quot;|&#39;.*?&#39;))?';
+
   function renderMarkdownInline(escaped) {
     var s = String(escaped || '');
     var slots = [];
@@ -341,28 +354,34 @@
     s = s.replace(/`([^`\n]+)`/g, function (_, code) {
       return stash('<code class="info-md-code">' + code + '</code>');
     });
-    s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, function (_, alt, href) {
-      var url = safeMarkdownHref(href);
-      if (!url) return _;
-      return stash(
-        '<img class="info-md-img" src="' +
-          escapeHtml(url) +
-          '" alt="' +
-          alt +
-          '" loading="lazy">'
-      );
-    });
-    s = s.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, function (_, label, href) {
-      var url = safeMarkdownHref(href);
-      if (!url) return _;
-      return stash(
-        '<a class="info-md-link" href="' +
-          escapeHtml(url) +
-          '" target="_blank" rel="noopener noreferrer">' +
-          label +
-          '</a>'
-      );
-    });
+    s = s.replace(
+      new RegExp('!\\[([^\\]]*)\\]\\(([^)\\s]+)' + MD_LINK_TITLE + '\\)', 'g'),
+      function (_, alt, href) {
+        var url = safeMarkdownHref(unescapeHtml(href));
+        if (!url) return _;
+        return stash(
+          '<img class="info-md-img" src="' +
+            escapeHtml(url) +
+            '" alt="' +
+            alt +
+            '" loading="lazy">'
+        );
+      }
+    );
+    s = s.replace(
+      new RegExp('\\[([^\\]]+)\\]\\(([^)\\s]+)' + MD_LINK_TITLE + '\\)', 'g'),
+      function (_, label, href) {
+        var url = safeMarkdownHref(unescapeHtml(href));
+        if (!url) return _;
+        return stash(
+          '<a class="info-md-link" href="' +
+            escapeHtml(url) +
+            '" target="_blank" rel="noopener noreferrer">' +
+            label +
+            '</a>'
+        );
+      }
+    );
     s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
     s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>');
@@ -371,10 +390,11 @@
     s = s.replace(
       /(^|[\s(])((?:https?:\/\/)[^\s<]+[^\s<.,;:!?)])/gi,
       function (_, lead, url) {
+        var href = unescapeHtml(url);
         return (
           lead +
           '<a class="info-md-link" href="' +
-          escapeHtml(url) +
+          escapeHtml(href) +
           '" target="_blank" rel="noopener noreferrer">' +
           url +
           '</a>'
@@ -2368,11 +2388,12 @@
     var dueTime = normalizeDueTime(time);
     var at = now || new Date();
 
-    // Overdue: never show "Aujourd'hui à 8 h" — use "Il y a…".
+    // Overdue: never show "Aujourd'hui à 8 h" — use "Il y a…" + (En retard).
     if (isDuePast(normalized, dueTime, at)) {
       var pastPrimary = dueTime
         ? formatDueTimeTriggerTitle(normalized, dueTime, at)
         : formatDueDateTriggerTitle(normalized, at);
+      if (pastPrimary) pastPrimary += ' (En retard)';
       return { primary: pastPrimary, secondary: '' };
     }
 
@@ -5936,7 +5957,7 @@
     descPreview.setAttribute('role', 'button');
     descPreview.setAttribute(
       'aria-label',
-      'Description de la carte (Markdown). Activer pour modifier.'
+      'Description de la carte. Activer pour modifier.'
     );
 
     var descInput = document.createElement('textarea');
@@ -5944,8 +5965,8 @@
     descInput.id = 'cardDesc';
     descInput.rows = 3;
     descInput.hidden = true;
-    descInput.placeholder = 'Ajouter une description (Markdown)\u2026';
-    descInput.setAttribute('aria-label', 'Description de la carte (Markdown)');
+    descInput.placeholder = 'Ajouter une description\u2026';
+    descInput.setAttribute('aria-label', 'Description de la carte');
     descInput.setAttribute('spellcheck', 'false');
     descInput.value = descText;
 
@@ -6199,7 +6220,7 @@
       descPreview.classList.toggle('is-empty', !trimmed);
       if (!trimmed) {
         descPreview.innerHTML =
-          '<span class="info-desc-placeholder">Ajouter une description (Markdown)\u2026</span>';
+          '<span class="info-desc-placeholder">Ajouter une description\u2026</span>';
       } else {
         descPreview.innerHTML = renderMarkdownToHtml(value);
       }

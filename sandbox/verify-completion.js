@@ -41,6 +41,8 @@ check('PriorityTrello.getCardDueComplete export', !!(PT && typeof PT.getCardDueC
   'computeCardProgress',
   'isAllSubtasksComplete',
   'detectDonePendingMismatch',
+  'markFullyComplete',
+  'markNotFullyComplete',
   'syncCardDueCompleteFromProgress',
   'applyMasterProgress',
   'clampProgress',
@@ -294,6 +296,28 @@ check(
   'markFullyComplete items',
   markedItems.items.every(function (i) { return i.progress === 100 && i.done; }) &&
     markedItems.progressEnabled !== false
+);
+
+check('markNotFullyComplete export', typeof CT.markNotFullyComplete === 'function');
+var clearedCard = CT.markNotFullyComplete({ items: [], progress: 100 });
+check(
+  'markNotFullyComplete card progress',
+  clearedCard.progress === 0 && !CT.isAllSubtasksComplete(clearedCard)
+);
+check(
+  'markNotFullyComplete noop when already incomplete',
+  CT.markNotFullyComplete({ items: [], progress: 40 }).progress === 40
+);
+var clearedItems = CT.markNotFullyComplete({
+  items: [
+    { id: 'a', text: 'A', progress: 100 },
+    { id: 'b', text: 'B', progress: 100 },
+  ],
+});
+check(
+  'markNotFullyComplete items',
+  clearedItems.items.every(function (i) { return i.progress === 0 && !i.done; }) &&
+    !CT.isAllSubtasksComplete(clearedItems)
 );
 
 check(

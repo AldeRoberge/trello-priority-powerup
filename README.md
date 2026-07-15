@@ -17,7 +17,7 @@ Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques
 - **Compatibilité** : les anciennes priorités P1–P5 sont lues pour l'affichage jusqu'à la prochaine sauvegarde
 - **Tri par colonne** : menu `…` d'une liste → **Trier par…** → **Priorité** (Critique en haut, cartes sans priorité en bas)
 - **Tri automatique** (optionnel) : après chaque changement de priorité, la carte se réordonne dans sa liste (nécessite clé API + autorisation OAuth ; voir ci-dessous)
-- **Profil** : préférences personnelles (identité, langue/ton de l’assistant, sections visibles dans l’éditeur), stockées en privé sur le compte Trello (`Mon profil`)
+- **Profil** : préférences personnelles (identité, langue/ton de l’assistant, sections visibles dans l’éditeur), stockées en privé sur le compte Trello — accessibles via **Paramètres de priorité** → **Mon profil**
 
 ---
 
@@ -158,7 +158,7 @@ Dépannage tri / capacités : voir [Trier une colonne par priorité](#trier-une-
 
 ### Infos et guide
 
-**Paramètres de priorité** (bouton du tableau) : version déployée, horodatage de build et lien vers le guide de configuration.
+**Paramètres de priorité** (bouton du tableau) : version déployée, horodatage de build, guide de configuration et **Mon profil**.
 
 ### Effacer une priorité
 

@@ -56,26 +56,84 @@
           });
         })
         .then(function () {
-          if (
-            typeof AgentMemory !== 'undefined' &&
-            typeof AgentMemory.scanAndRefresh === 'function'
-          ) {
-            return AgentMemory.scanAndRefresh(t, { force: false })
-              .then(function (memory) {
-                if (memory) cachedMemory = memory;
-                return memory;
+          var providerPromise =
+            typeof PriorityAgent !== 'undefined' &&
+            typeof PriorityAgent.getProvider === 'function'
+              ? PriorityAgent.getProvider(t).catch(function () {
+                  return PriorityAgent.normalizeProvider(null);
+                })
+              : Promise.resolve(null);
+
+          return providerPromise.then(function (provider) {
+            var digestPromise =
+              typeof PriorityTrello !== 'undefined' &&
+              typeof PriorityTrello.scanBoardCards === 'function'
+                ? PriorityTrello.scanBoardCards(t, {
+                    maxCards: 100,
+                    descMax: 40,
+                    includePriority: false,
+                    sortBy: 'activity'
+                  })
+                    .then(function (scan) {
+                      cachedDigest = (scan && scan.digest) || '';
+                      return cachedDigest;
+                    })
+                    .catch(function () {
+                      cachedDigest = '';
+                      return '';
+                    })
+                : Promise.resolve('');
+
+            var memoryPromise = Promise.resolve(cachedMemory);
+            if (
+              typeof AgentMemory !== 'undefined' &&
+              typeof AgentMemory.scanAndRefresh === 'function' &&
+              typeof PriorityAgent !== 'undefined' &&
+              PriorityAgent.isConfigured &&
+              PriorityAgent.isConfigured(provider)
+            ) {
+              memoryPromise = AgentMemory.scanAndRefresh(t, provider, {
+                force: false
               })
-              .catch(function () {
-                return cachedMemory;
-              });
-          }
-          return cachedMemory;
+                .then(function (memory) {
+                  if (memory) cachedMemory = memory;
+                  return memory;
+                })
+                .catch(function () {
+                  return cachedMemory;
+                });
+            }
+
+            return Promise.all([digestPromise, memoryPromise]);
+          });
         })
         .then(function () {
           var needsAlign =
             typeof AgentMemory !== 'undefined' &&
             AgentMemory.needsOnboarding &&
             AgentMemory.needsOnboarding(cachedMemory);
+
+          function refreshBoardDigest() {
+            if (
+              typeof PriorityTrello === 'undefined' ||
+              typeof PriorityTrello.scanBoardCards !== 'function'
+            ) {
+              return Promise.resolve(cachedDigest || '');
+            }
+            return PriorityTrello.scanBoardCards(t, {
+              maxCards: 100,
+              descMax: 40,
+              includePriority: false,
+              sortBy: 'activity'
+            })
+              .then(function (scan) {
+                cachedDigest = (scan && scan.digest) || '';
+                return cachedDigest;
+              })
+              .catch(function () {
+                return cachedDigest || '';
+              });
+          }
 
           AgentUI.mount(mount, {
             t: t,
@@ -96,6 +154,7 @@
             getBoardDigest: function () {
               return cachedDigest || '';
             },
+            refreshBoardDigest: refreshBoardDigest,
             onMemoryUpdate: function (next) {
               cachedMemory = next;
             },

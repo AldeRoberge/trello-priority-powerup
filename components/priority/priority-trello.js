@@ -1453,6 +1453,7 @@
     var maxCards = typeof options.maxCards === 'number' ? options.maxCards : 40;
     var descMax = typeof options.descMax === 'number' ? options.descMax : 200;
     var includePriority = options.includePriority !== false;
+    var sortBy = options.sortBy === 'activity' ? 'activity' : '';
 
     var lists = [];
     var cards = [];
@@ -1476,6 +1477,14 @@
     } catch (err) {
       console.error('PriorityTrello.scanBoardCards cards failed', err);
       cards = [];
+    }
+
+    if (sortBy === 'activity' && cards.length > 1) {
+      cards = cards.slice().sort(function (a, b) {
+        var ta = a && a.dateLastActivity ? Date.parse(a.dateLastActivity) || 0 : 0;
+        var tb = b && b.dateLastActivity ? Date.parse(b.dateLastActivity) || 0 : 0;
+        return tb - ta;
+      });
     }
 
     var listNameById = {};

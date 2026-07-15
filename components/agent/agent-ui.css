@@ -3543,6 +3543,17 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
   gap: 6px;
   flex: 0 0 auto;
   align-self: stretch;
+  transition: background-color 0.18s ease, filter 0.18s ease;
+}
+
+/* Auto-send countdown (suggestion confirm) — distinct from idle Envoyer blue. */
+.tp-page--priority .agent-send-btn.is-confirming {
+  background: #22a06b;
+  color: #fff;
+}
+
+.tp-page--priority .agent-send-btn.is-confirming:hover {
+  filter: brightness(1.08);
 }
 
 .tp-page--priority .agent-send-btn-count {

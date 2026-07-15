@@ -329,6 +329,33 @@
       }
       side.enAttenteSet = true;
       side.enAttente = true;
+
+      // Bloqué contradicts Terminé / 100%: drop progress off complete.
+      var CTb = global.CompletionTrello;
+      if (
+        CTb &&
+        typeof CTb.getCardCompletion === 'function' &&
+        typeof CTb.markNotFullyComplete === 'function' &&
+        typeof CTb.isAllSubtasksComplete === 'function'
+      ) {
+        try {
+          var blockedCompletion = await CTb.getCardCompletion(t);
+          if (CTb.isAllSubtasksComplete(blockedCompletion)) {
+            var incompleteData = CTb.markNotFullyComplete(blockedCompletion);
+            await CTb.saveCardCompletion(t, incompleteData);
+            side.progressIncomplete = true;
+            side.completion = incompleteData;
+            if (typeof CTb.setDueCompleteSuppressed === 'function') {
+              await CTb.setDueCompleteSuppressed(t, false);
+            }
+          }
+        } catch (progressErr) {
+          console.error(
+            'StatutTrello.applyStatutSideEffects clear progress complete failed',
+            progressErr
+          );
+        }
+      }
     }
 
     if (isCompleted) {
