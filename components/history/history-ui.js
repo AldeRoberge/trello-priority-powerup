@@ -141,27 +141,36 @@
       }
     });
 
-    function buildDetailPanel(entryId) {
-      var details = getEntryDetails(entryId);
+    function buildDetailPanel(entry) {
+      var details =
+        (entry && entry.details) ||
+        (entry && entry.id ? getEntryDetails(entry.id) : null) ||
+        null;
+
       var detail = el('div', 'historique-item-detail');
-      if (!details) {
-        detail.appendChild(
-          el('p', 'historique-detail-empty', {
-            text: 'Détails indisponibles'
-          })
-        );
-        return detail;
-      }
 
-      if (details.absoluteTime) {
+      var absoluteTime =
+        (details && details.absoluteTime) ||
+        (entry && entry.at ? formatRelativeTime(entry.at) : '');
+      if (absoluteTime) {
         detail.appendChild(
-          el('p', 'historique-detail-time', { text: details.absoluteTime })
+          el('p', 'historique-detail-time', { text: absoluteTime })
         );
       }
 
-      if (details.domainLabels && details.domainLabels.length) {
+      var domainLabels =
+        (details && details.domainLabels) ||
+        ((entry && entry.domains) || []).map(function (key) {
+          if (key === 'priority') return 'Priorité';
+          if (key === 'completion') return 'Progrès';
+          if (key === 'statut') return 'Statut';
+          if (key === 'info') return 'Information';
+          if (key === 'goals') return 'Objectifs';
+          return key;
+        });
+      if (domainLabels && domainLabels.length) {
         var domainsRow = el('div', 'historique-detail-domains');
-        details.domainLabels.forEach(function (name) {
+        domainLabels.forEach(function (name) {
           domainsRow.appendChild(
             el('span', 'historique-detail-domain', { text: name })
           );
@@ -169,14 +178,14 @@
         detail.appendChild(domainsRow);
       }
 
-      var lines = details.lines || [];
-      if (lines.length) {
-        var ul = el('ul', 'historique-detail-lines');
-        lines.forEach(function (line) {
-          ul.appendChild(el('li', 'historique-detail-line', { text: line }));
-        });
-        detail.appendChild(ul);
-      }
+      var lines =
+        (details && details.lines && details.lines.length && details.lines) ||
+        (entry && entry.label ? [entry.label] : ['Modification']);
+      var ul = el('ul', 'historique-detail-lines');
+      lines.forEach(function (line) {
+        ul.appendChild(el('li', 'historique-detail-line', { text: line }));
+      });
+      detail.appendChild(ul);
 
       return detail;
     }
@@ -265,7 +274,7 @@
           item.appendChild(row);
 
           if (isOpen) {
-            item.appendChild(buildDetailPanel(entry.id));
+            item.appendChild(buildDetailPanel(entry));
           }
 
           listEl.appendChild(item);

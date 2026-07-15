@@ -8,11 +8,11 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=info-labels-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-3" />
-  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=save-spin-1" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=save-spin-2" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-scope-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
-  <link rel="stylesheet" href="./components/history/history-ui.css?v=history-4" />
+  <link rel="stylesheet" href="./components/history/history-ui.css?v=history-6" />
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/effects.js?v=fx-3"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
@@ -36,8 +36,8 @@
   <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
   <script src="./components/agent/agent-ui.js?v=attente-hourglass-1"></script>
-  <script src="./components/history/card-history.js?v=history-4"></script>
-  <script src="./components/history/history-ui.js?v=history-4"></script>
+  <script src="./components/history/card-history.js?v=history-5"></script>
+  <script src="./components/history/history-ui.js?v=history-5"></script>
 </head>
 <body class="tp-page tp-page--priority">
   <div class="compare-page">
@@ -1592,7 +1592,115 @@
               });
             });
           });
-        }
+        },
+        getBoardCards: function () {
+          return Promise.all([
+            t.card('id').catch(function () {
+              return null;
+            }),
+            PriorityTrello.scanBoardCards
+              ? PriorityTrello.scanBoardCards(t, {
+                  maxCards: 100,
+                  includePriority: false,
+                })
+              : t.cards('id', 'name', 'idList').then(function (cards) {
+                  return { cards: cards || [], lists: [] };
+                }),
+          ]).then(function (parts) {
+            var me = parts[0];
+            var sid = me && me.id ? String(me.id) : '';
+            var scan = parts[1] || {};
+            var listNameById = {};
+            (scan.lists || []).forEach(function (list) {
+              if (list && list.id) listNameById[list.id] = list.name || '';
+            });
+            return (scan.cards || [])
+              .filter(function (card) {
+                return card && card.id && String(card.id) !== sid;
+              })
+              .map(function (card) {
+                return {
+                  id: card.id,
+                  name: card.name || '',
+                  list: card.list || listNameById[card.idList] || '',
+                };
+              });
+          });
+        },
+        onParentChange: function (nextParent) {
+          if (
+            !window.CompletionTrello ||
+            typeof CompletionTrello.setParentCard !== 'function'
+          ) {
+            return Promise.resolve({ ok: false, reason: 'unavailable' });
+          }
+          return Promise.all([
+            t.card('id', 'name').catch(function () {
+              return null;
+            }),
+            window.CompletionTrello.getCardCompletion
+              ? CompletionTrello.getCardCompletion(t)
+              : Promise.resolve({ items: [] }),
+          ]).then(function (parts) {
+            var me = parts[0];
+            var childId = me && me.id ? String(me.id) : '';
+            if (!childId) {
+              return { ok: false, reason: 'no-child' };
+            }
+            var childName =
+              (me && me.name) ||
+              (infoUi && typeof infoUi.getTitle === 'function'
+                ? infoUi.getTitle()
+                : '') ||
+              readCardNameLabel() ||
+              'Carte li\u00e9e';
+            var childProgress = CompletionTrello.computeCardProgress(parts[1] || {})
+              .percent;
+            var parentId = nextParent && nextParent.id ? String(nextParent.id) : null;
+            return CompletionTrello.setParentCard(t, childId, parentId, {
+              childName: childName,
+              childProgress: childProgress,
+              parentName: nextParent && nextParent.name ? nextParent.name : '',
+              parentList: nextParent && nextParent.list ? nextParent.list : '',
+            }).then(function (result) {
+              if (result && result.ok === false) return result;
+              if (infoUi && typeof infoUi.setParent === 'function') {
+                infoUi.setParent(
+                  result && result.parent
+                    ? result.parent
+                    : parentId
+                      ? nextParent
+                      : null
+                );
+              }
+              return commitHistoryNow(
+                parentId ? 'T\u00e2che parente d\u00e9finie' : 'T\u00e2che parente retir\u00e9e'
+              ).then(function () {
+                return result || { ok: true, parent: parentId ? nextParent : null };
+              });
+            });
+          });
+        },
+        onOpenParent: function (cardId) {
+          if (!cardId) return;
+          if (typeof t.showCard === 'function') {
+            return t.showCard(cardId);
+          }
+          if (typeof t.navigate === 'function') {
+            return t.cards('id', 'url').then(function (cards) {
+              var match = null;
+              for (var i = 0; i < (cards || []).length; i++) {
+                if (cards[i] && cards[i].id === cardId) {
+                  match = cards[i];
+                  break;
+                }
+              }
+              if (match && match.url) {
+                return t.navigate({ url: match.url });
+              }
+            });
+          }
+        },
       });
 
       return Promise.all([
@@ -1611,6 +1719,9 @@
         PriorityTrello.isRestAuthorized
           ? PriorityTrello.isRestAuthorized(t)
           : Promise.resolve(false),
+        t.card('id').catch(function () {
+          return null;
+        }),
       ])
         .then(function (results) {
           var members = results[0] || [];
@@ -1618,6 +1729,8 @@
           var cardLabels = results[2] || [];
           var boardLabels = results[3] || [];
           var authorized = !!results[4];
+          var meCard = results[5];
+          var childId = meCard && meCard.id ? String(meCard.id) : '';
           var hasRest =
             PriorityTrello.restClientOptions && !!PriorityTrello.restClientOptions();
           if (infoUi && typeof infoUi.setMembers === 'function') {
@@ -1648,15 +1761,33 @@
           syncInfoRecap();
           resizePopup();
 
-          if (!PriorityTrello.getCardCreator || !infoUi || typeof infoUi.setCreator !== 'function') {
-            return;
-          }
-          return PriorityTrello.getCardCreator(t, boardMembers).then(function (creator) {
-            if (infoUi && typeof infoUi.setCreator === 'function') {
-              infoUi.setCreator(creator);
-            }
-            resizePopup();
-          });
+          var creatorPromise =
+            PriorityTrello.getCardCreator && infoUi && typeof infoUi.setCreator === 'function'
+              ? PriorityTrello.getCardCreator(t, boardMembers).then(function (creator) {
+                  if (infoUi && typeof infoUi.setCreator === 'function') {
+                    infoUi.setCreator(creator);
+                  }
+                  resizePopup();
+                })
+              : Promise.resolve();
+
+          var parentPromise =
+            childId &&
+            window.CompletionTrello &&
+            typeof CompletionTrello.findParentCards === 'function' &&
+            infoUi &&
+            typeof infoUi.setParent === 'function'
+              ? CompletionTrello.findParentCards(t, childId, { maxCards: 100 }).then(
+                  function (parents) {
+                    var first =
+                      Array.isArray(parents) && parents.length ? parents[0] : null;
+                    infoUi.setParent(first);
+                    resizePopup();
+                  }
+                )
+              : Promise.resolve();
+
+          return Promise.all([creatorPromise, parentPromise]);
         })
         .catch(function (err) {
           console.error('Info section mount failed', err);

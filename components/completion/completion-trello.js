@@ -758,6 +758,317 @@
     return normalized;
   }
 
+  async function saveCardCompletionById(t, cardId, data) {
+    var id = typeof cardId === 'string' ? cardId.trim() : '';
+    if (!id) {
+      throw new Error('saveCardCompletionById requires cardId');
+    }
+    var normalized = normalizeCompletionData(data);
+    await t.set(id, 'shared', CARD_COMPLETION_KEY, normalized);
+    return normalized;
+  }
+
+  /**
+   * Remove all items that link to childCardId from a completion payload.
+   * Pure helper (no I/O) for reparenting / tests.
+   */
+  function removeLinkedChildFromCompletion(data, childCardId) {
+    var childId = typeof childCardId === 'string' ? childCardId.trim() : '';
+    var normalized = normalizeCompletionData(data);
+    if (!childId) return { data: normalized, removed: 0 };
+    var nextItems = [];
+    var removed = 0;
+    for (var i = 0; i < normalized.items.length; i++) {
+      var item = normalized.items[i];
+      if (itemLinkedCardId(item) === childId) {
+        removed += 1;
+        continue;
+      }
+      nextItems.push(item);
+    }
+    if (!removed) return { data: normalized, removed: 0 };
+    return {
+      data: normalizeCompletionData(
+        Object.assign({}, normalized, { items: nextItems })
+      ),
+      removed: removed,
+    };
+  }
+
+  /**
+   * Ensure completion has a linked item pointing at childCardId.
+   * Pure helper (no I/O) for reparenting / tests.
+   */
+  function ensureLinkedChildInCompletion(data, childCardId, opts) {
+    opts = opts || {};
+    var childId = typeof childCardId === 'string' ? childCardId.trim() : '';
+    var normalized = normalizeCompletionData(data);
+    if (!childId) return { data: normalized, added: false, changed: false };
+    for (var i = 0; i < normalized.items.length; i++) {
+      if (itemLinkedCardId(normalized.items[i]) === childId) {
+        return { data: normalized, added: false, changed: false };
+      }
+    }
+    var text =
+      typeof opts.text === 'string' && opts.text.trim()
+        ? opts.text.trim()
+        : 'Carte li\u00e9e';
+    var progress =
+      typeof opts.progress === 'number' && isFinite(opts.progress)
+        ? clampProgress(opts.progress)
+        : 0;
+    var item = normalizeItem({
+      id: generateId(),
+      text: text,
+      progress: progress,
+      linkedCardId: childId,
+    });
+    if (!item) return { data: normalized, added: false, changed: false };
+    return {
+      data: normalizeCompletionData(
+        Object.assign({}, normalized, {
+          items: normalized.items.concat([item]),
+        })
+      ),
+      added: true,
+      changed: true,
+    };
+  }
+
+  /** True if data directly links to targetCardId. */
+  function completionLinksToCard(data, targetCardId) {
+    var target = typeof targetCardId === 'string' ? targetCardId.trim() : '';
+    if (!target) return false;
+    var items = normalizeCompletionData(data).items;
+    for (var i = 0; i < items.length; i++) {
+      if (itemLinkedCardId(items[i]) === target) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Whether startCardId eventually links to targetCardId within maxDepth hops.
+   * Used to reject parent picks that would create a cycle.
+   */
+  async function isLinkedDescendantOf(t, startCardId, targetCardId, maxDepth) {
+    var start = typeof startCardId === 'string' ? startCardId.trim() : '';
+    var target = typeof targetCardId === 'string' ? targetCardId.trim() : '';
+    if (!start || !target || start === target) return start === target;
+    var depthCap =
+      typeof maxDepth === 'number' && maxDepth > 0
+        ? Math.min(maxDepth, LINK_NEST_MAX_DEPTH)
+        : LINK_NEST_MAX_DEPTH;
+    var visited = Object.create(null);
+
+    async function walk(cardId, depth) {
+      if (!cardId || depth > depthCap) return false;
+      if (visited[cardId]) return false;
+      visited[cardId] = true;
+      var completion = await getCardCompletionById(t, cardId);
+      var items = completion.items || [];
+      for (var i = 0; i < items.length; i++) {
+        var linkedId = itemLinkedCardId(items[i]);
+        if (!linkedId) continue;
+        if (linkedId === target) return true;
+        if (depth < depthCap && (await walk(linkedId, depth + 1))) return true;
+      }
+      return false;
+    }
+
+    return walk(start, 1);
+  }
+
+  /**
+   * Scan board cards for parents that link to childCardId via linkedCardId.
+   * @returns {Promise<Array<{ id: string, name: string, list: string }>>}
+   */
+  async function findParentCards(t, childCardId, options) {
+    options = options || {};
+    var childId = typeof childCardId === 'string' ? childCardId.trim() : '';
+    if (!childId) return [];
+    var maxCards =
+      typeof options.maxCards === 'number' && options.maxCards > 0
+        ? options.maxCards
+        : 100;
+
+    var cards = [];
+    if (Array.isArray(options.cards) && options.cards.length) {
+      cards = options.cards;
+    } else if (
+      global.PriorityTrello &&
+      typeof global.PriorityTrello.scanBoardCards === 'function'
+    ) {
+      try {
+        var scan = await global.PriorityTrello.scanBoardCards(t, {
+          maxCards: maxCards,
+          includePriority: false,
+        });
+        cards = (scan && scan.cards) || [];
+      } catch (err) {
+        console.error('findParentCards scanBoardCards failed', err);
+        cards = [];
+      }
+    } else if (t && typeof t.cards === 'function') {
+      try {
+        var raw = (await t.cards('id', 'name', 'idList')) || [];
+        cards = raw.map(function (c) {
+          return {
+            id: c && c.id,
+            name: (c && c.name) || '',
+            list: '',
+          };
+        });
+      } catch (err) {
+        console.error('findParentCards t.cards failed', err);
+        cards = [];
+      }
+    }
+
+    var candidates = cards
+      .filter(function (card) {
+        return card && card.id && String(card.id) !== childId;
+      })
+      .slice(0, maxCards);
+
+    var parents = [];
+    await Promise.all(
+      candidates.map(function (card) {
+        return getCardCompletionById(t, card.id).then(function (completion) {
+          if (completionLinksToCard(completion, childId)) {
+            parents.push({
+              id: String(card.id),
+              name: typeof card.name === 'string' ? card.name : '',
+              list: typeof card.list === 'string' ? card.list : '',
+            });
+          }
+        });
+      })
+    );
+    return parents;
+  }
+
+  /**
+   * Set or clear the parent of childCardId by mutating parents' cardCompletion
+   * linked items. At most one parent is kept after the operation.
+   *
+   * @param {object} t
+   * @param {string} childCardId
+   * @param {string|null} parentCardId - null/'' clears all parents
+   * @param {{ childName?: string, childProgress?: number, maxCards?: number }} [opts]
+   * @returns {Promise<{ ok: boolean, reason?: string, parent?: object|null, parentsRemoved?: number }>}
+   */
+  async function setParentCard(t, childCardId, parentCardId, opts) {
+    opts = opts || {};
+    var childId = typeof childCardId === 'string' ? childCardId.trim() : '';
+    var nextParentId =
+      parentCardId == null || parentCardId === ''
+        ? ''
+        : String(parentCardId).trim();
+    if (!childId) return { ok: false, reason: 'no-child' };
+    if (nextParentId && nextParentId === childId) {
+      return { ok: false, reason: 'self' };
+    }
+
+    if (nextParentId) {
+      var cycle = await isLinkedDescendantOf(
+        t,
+        childId,
+        nextParentId,
+        LINK_NEST_MAX_DEPTH
+      );
+      if (cycle) return { ok: false, reason: 'cycle' };
+    }
+
+    var existingParents = await findParentCards(t, childId, {
+      maxCards: opts.maxCards,
+      cards: opts.cards,
+    });
+    var parentsRemoved = 0;
+    var touchIds = Object.create(null);
+    existingParents.forEach(function (p) {
+      if (p && p.id) touchIds[p.id] = true;
+    });
+    if (nextParentId) touchIds[nextParentId] = true;
+
+    var childName =
+      typeof opts.childName === 'string' && opts.childName.trim()
+        ? opts.childName.trim()
+        : 'Carte li\u00e9e';
+    var childProgress =
+      typeof opts.childProgress === 'number' && isFinite(opts.childProgress)
+        ? clampProgress(opts.childProgress)
+        : null;
+    if (childProgress == null) {
+      try {
+        var childCompletion = await getCardCompletionById(t, childId);
+        childProgress = computeCardProgress(childCompletion).percent;
+      } catch (e) {
+        childProgress = 0;
+      }
+    }
+
+    var idList = Object.keys(touchIds);
+    for (var i = 0; i < idList.length; i++) {
+      var pid = idList[i];
+      var data = await getCardCompletionById(t, pid);
+      var stripped = removeLinkedChildFromCompletion(data, childId);
+      var nextData = stripped.data;
+      if (stripped.removed) parentsRemoved += stripped.removed;
+      if (pid === nextParentId) {
+        var ensured = ensureLinkedChildInCompletion(nextData, childId, {
+          text: childName,
+          progress: childProgress,
+        });
+        nextData = ensured.data;
+      }
+      if (
+        stripped.removed ||
+        (pid === nextParentId &&
+          JSON.stringify(normalizeCompletionData(data)) !==
+            JSON.stringify(nextData))
+      ) {
+        await saveCardCompletionById(t, pid, nextData);
+      }
+    }
+
+    var parentMeta = null;
+    if (nextParentId) {
+      var parentName =
+        typeof opts.parentName === 'string' ? opts.parentName.trim() : '';
+      var parentList =
+        typeof opts.parentList === 'string' ? opts.parentList : '';
+      if (!parentName || !parentList) {
+        for (var j = 0; j < existingParents.length; j++) {
+          if (existingParents[j] && existingParents[j].id === nextParentId) {
+            if (!parentName) parentName = existingParents[j].name || '';
+            if (!parentList) parentList = existingParents[j].list || '';
+            break;
+          }
+        }
+      }
+      if ((!parentName || !parentList) && Array.isArray(opts.cards)) {
+        for (var k = 0; k < opts.cards.length; k++) {
+          if (opts.cards[k] && String(opts.cards[k].id) === nextParentId) {
+            if (!parentName) parentName = opts.cards[k].name || '';
+            if (!parentList) parentList = opts.cards[k].list || '';
+            break;
+          }
+        }
+      }
+      parentMeta = {
+        id: nextParentId,
+        name: parentName,
+        list: parentList,
+      };
+    }
+
+    return {
+      ok: true,
+      parent: parentMeta,
+      parentsRemoved: parentsRemoved,
+    };
+  }
+
   /**
    * Apply resolved remote progress / titles onto local linked items (mutates copy).
    * Used so badges and weighted average reflect linked cards without editing them.
@@ -1208,6 +1519,13 @@
     getCardCompletion: getCardCompletion,
     getCardCompletionById: getCardCompletionById,
     saveCardCompletion: saveCardCompletion,
+    saveCardCompletionById: saveCardCompletionById,
+    removeLinkedChildFromCompletion: removeLinkedChildFromCompletion,
+    ensureLinkedChildInCompletion: ensureLinkedChildInCompletion,
+    completionLinksToCard: completionLinksToCard,
+    isLinkedDescendantOf: isLinkedDescendantOf,
+    findParentCards: findParentCards,
+    setParentCard: setParentCard,
     getBoardCompletionColorScheme: getBoardCompletionColorScheme,
     saveBoardCompletionColorScheme: saveBoardCompletionColorScheme,
     getBoardCompletionGradient: getBoardCompletionGradient,

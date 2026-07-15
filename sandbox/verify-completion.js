@@ -420,6 +420,17 @@ check('itemLinkedCardId export', typeof CT.itemLinkedCardId === 'function');
 check('resolveLinkedCompletionTree export', typeof CT.resolveLinkedCompletionTree === 'function');
 check('applyLinkedSnapshots export', typeof CT.applyLinkedSnapshots === 'function');
 check('getCardCompletionById export', typeof CT.getCardCompletionById === 'function');
+[
+  'saveCardCompletionById',
+  'removeLinkedChildFromCompletion',
+  'ensureLinkedChildInCompletion',
+  'completionLinksToCard',
+  'isLinkedDescendantOf',
+  'findParentCards',
+  'setParentCard',
+].forEach(function (name) {
+  check('export ' + name, typeof CT[name] === 'function');
+});
 
 var linkedItem = CT.normalizeItem({
   id: 'link-1',
@@ -432,6 +443,50 @@ check('isLinkedItem true for linked', CT.isLinkedItem(linkedItem));
 check(
   'normalize linked placeholder without text',
   CT.normalizeItem({ id: 'l2', linkedCardId: 'card-c', progress: 0 }).text === 'Carte li\u00e9e'
+);
+
+var parentWithChild = CT.normalizeCompletionData({
+  items: [
+    { id: 'local', text: 'Local', progress: 0 },
+    { id: 'link', text: 'Enfant', progress: 25, linkedCardId: 'card-child' },
+  ],
+});
+check(
+  'completionLinksToCard true',
+  CT.completionLinksToCard(parentWithChild, 'card-child')
+);
+check(
+  'completionLinksToCard false',
+  !CT.completionLinksToCard(parentWithChild, 'card-other')
+);
+var stripped = CT.removeLinkedChildFromCompletion(parentWithChild, 'card-child');
+check(
+  'removeLinkedChildFromCompletion removes link',
+  stripped.removed === 1 &&
+    stripped.data.items.length === 1 &&
+    stripped.data.items[0].id === 'local' &&
+    !CT.completionLinksToCard(stripped.data, 'card-child')
+);
+var ensured = CT.ensureLinkedChildInCompletion(stripped.data, 'card-child', {
+  text: 'Enfant',
+  progress: 40,
+});
+check(
+  'ensureLinkedChildInCompletion adds link',
+  ensured.added &&
+    ensured.changed &&
+    ensured.data.items.length === 2 &&
+    CT.completionLinksToCard(ensured.data, 'card-child')
+);
+var ensuredAgain = CT.ensureLinkedChildInCompletion(ensured.data, 'card-child', {
+  text: 'Autre',
+  progress: 99,
+});
+check(
+  'ensureLinkedChildInCompletion idempotent',
+  !ensuredAgain.added &&
+    !ensuredAgain.changed &&
+    ensuredAgain.data.items.length === 2
 );
 
 var mixedMaster = CT.applyMasterProgress(
@@ -473,11 +528,28 @@ var store = {
       { id: 'b2', text: 'Retour A', progress: 0, linkedCardId: 'card-a' },
     ],
   },
+  'card-parent': {
+    items: [
+      { id: 'p1', text: 'Local', progress: 0 },
+      { id: 'p2', text: 'Enfant', progress: 10, linkedCardId: 'card-child' },
+    ],
+  },
+  'card-child': {
+    items: [{ id: 'c1', text: 'Travail', progress: 30 }],
+  },
+  'card-other': {
+    items: [],
+  },
 };
 var fakeT = {
   get: function (scope, vis, key) {
     if (key !== CT.CARD_COMPLETION_KEY) return Promise.resolve(null);
     return Promise.resolve(store[scope] || null);
+  },
+  set: function (scope, vis, key, value) {
+    if (key !== CT.CARD_COMPLETION_KEY) return Promise.resolve();
+    store[scope] = value;
+    return Promise.resolve();
   },
 };
 

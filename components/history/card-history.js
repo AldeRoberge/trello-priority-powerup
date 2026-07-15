@@ -14,16 +14,29 @@
     try {
       return JSON.parse(JSON.stringify(value));
     } catch (e) {
-      return null;
+      return value;
     }
   }
 
   function stableStringify(value) {
     try {
-      return JSON.stringify(value == null ? null : value);
+      return JSON.stringify(canonicalize(value));
     } catch (e) {
       return '';
     }
+  }
+
+  function canonicalize(value) {
+    if (value == null || typeof value !== 'object') return value;
+    if (Array.isArray(value)) {
+      return value.map(canonicalize);
+    }
+    var keys = Object.keys(value).sort();
+    var out = {};
+    for (var i = 0; i < keys.length; i++) {
+      out[keys[i]] = canonicalize(value[keys[i]]);
+    }
+    return out;
   }
 
   function deepEqual(a, b) {
@@ -272,6 +285,26 @@
     return { added: added, removed: removed };
   }
 
+  function itemProgressPercent(item) {
+    if (!item || typeof item !== 'object') return 0;
+    var p = Number(item.progress);
+    if (isFinite(p)) return Math.max(0, Math.min(100, Math.round(p)));
+    return item.done === true ? 100 : 0;
+  }
+
+  function overallCompletionPercent(completion) {
+    var items = (completion && completion.items) || [];
+    if (items.length) {
+      var sum = 0;
+      for (var i = 0; i < items.length; i++) {
+        sum += itemProgressPercent(items[i]);
+      }
+      return Math.round(sum / items.length);
+    }
+    var p = Number(completion && completion.progress);
+    return isFinite(p) ? Math.max(0, Math.min(100, Math.round(p))) : 0;
+  }
+
   function describeCompletion(before, after, quoteMax) {
     quoteMax = quoteMax == null ? 36 : quoteMax;
     var renameMax = quoteMax > 0 ? Math.min(quoteMax, 48) : 0;
@@ -280,15 +313,29 @@
     var bMap = itemMap(bItems);
     var aMap = itemMap(aItems);
     var parts = [];
+    var bPct = overallCompletionPercent(before);
+    var aPct = overallCompletionPercent(after);
 
     Object.keys(aMap).forEach(function (id) {
       if (!bMap[id]) {
-        parts.push('T\u00e2che ajout\u00e9e : ' + quoteText(aMap[id].text, quoteMax));
+        parts.push(
+          'T\u00e2che ajout\u00e9e : ' +
+            quoteText(aMap[id].text, quoteMax) +
+            ' (' +
+            itemProgressPercent(aMap[id]) +
+            '\u00a0%)'
+        );
       }
     });
     Object.keys(bMap).forEach(function (id) {
       if (!aMap[id]) {
-        parts.push('T\u00e2che supprim\u00e9e : ' + quoteText(bMap[id].text, quoteMax));
+        parts.push(
+          'T\u00e2che supprim\u00e9e : ' +
+            quoteText(bMap[id].text, quoteMax) +
+            ' (' +
+            itemProgressPercent(bMap[id]) +
+            '\u00a0%)'
+        );
       }
     });
     Object.keys(aMap).forEach(function (id) {
@@ -302,41 +349,121 @@
             ' \u2192 ' +
             quoteText(a.text, renameMax || 24)
         );
-        return;
       }
-      var bDone = !!b.done || Number(b.progress) >= 100;
-      var aDone = !!a.done || Number(a.progress) >= 100;
-      if (bDone !== aDone) {
-        parts.push(
-          (aDone ? 'T\u00e2che coch\u00e9e : ' : 'T\u00e2che d\u00e9coch\u00e9e : ') +
-            quoteText(a.text, quoteMax)
-        );
-        return;
+      var bp = itemProgressPercent(b);
+      var ap = itemProgressPercent(a);
+      if (bp !== ap) {
+        if ((bp < 100 && ap >= 100) || (!b.done && a.done && ap >= 100)) {
+          parts.push(
+            'T\u00e2che coch\u00e9e : ' + quoteText(a.text || b.text, quoteMax)
+          );
+        } else if ((bp >= 100 && ap < 100) || (b.done && !a.done && bp >= 100)) {
+          parts.push(
+            'T\u00e2che d\u00e9coch\u00e9e : ' +
+              quoteText(a.text || b.text, quoteMax) +
+              ' (' +
+              ap +
+              '\u00a0%)'
+          );
+        } else {
+          parts.push(
+            'T\u00e2che ' +
+              quoteText(a.text || b.text, renameMax || 28) +
+              ' : ' +
+              bp +
+              '\u00a0% \u2192 ' +
+              ap +
+              '\u00a0%'
+          );
+        }
       }
-      var bp = Number(b.progress);
-      var ap = Number(a.progress);
-      if (isFinite(bp) && isFinite(ap) && bp !== ap) {
+      var bEst = b.estimatedMinutes;
+      var aEst = a.estimatedMinutes;
+      if (bEst !== aEst && (bEst != null || aEst != null)) {
         parts.push(
-          'T\u00e2che ' +
-            quoteText(a.text, renameMax || 28) +
+          'Dur\u00e9e ' +
+            quoteText(a.text || b.text, renameMax || 28) +
             ' : ' +
-            bp +
-            '\u00a0% \u2192 ' +
-            ap +
-            '\u00a0%'
+            formatMinutesFr(bEst) +
+            ' \u2192 ' +
+            formatMinutesFr(aEst)
         );
       }
     });
 
-    if (!bItems.length && !aItems.length) {
-      var bProg = before && before.progress != null ? Number(before.progress) : null;
-      var aProg = after && after.progress != null ? Number(after.progress) : null;
-      if (isFinite(bProg) && isFinite(aProg) && bProg !== aProg) {
-        parts.push('Progr\u00e8s : ' + bProg + '\u00a0% \u2192 ' + aProg + '\u00a0%');
+    if (bPct !== aPct) {
+      parts.push('Progr\u00e8s global : ' + bPct + '\u00a0% \u2192 ' + aPct + '\u00a0%');
+    }
+
+    if (bItems.length !== aItems.length && !parts.length) {
+      parts.push(
+        'Nombre de t\u00e2ches : ' + bItems.length + ' \u2192 ' + aItems.length
+      );
+    }
+
+    // Detect reorder when membership unchanged.
+    if (
+      bItems.length > 1 &&
+      bItems.length === aItems.length &&
+      Object.keys(bMap).length === Object.keys(aMap).length
+    ) {
+      var sameMembership = Object.keys(bMap).every(function (id) {
+        return !!aMap[id];
+      });
+      if (sameMembership) {
+        var orderChanged = bItems.some(function (item, idx) {
+          return !aItems[idx] || String(aItems[idx].id) !== String(item.id);
+        });
+        if (orderChanged) {
+          parts.push('Ordre des t\u00e2ches modifi\u00e9');
+        }
       }
     }
 
-    if (!parts.length) parts.push('Progr\u00e8s modifi\u00e9');
+    var bOff = before && before.estimatedMinutesOffset;
+    var aOff = after && after.estimatedMinutesOffset;
+    if (bOff !== aOff && (bOff != null || aOff != null)) {
+      parts.push(
+        'Ajustement de dur\u00e9e : ' +
+          formatMinutesFr(bOff) +
+          ' \u2192 ' +
+          formatMinutesFr(aOff)
+      );
+    }
+
+    var bCardEst = before && before.estimatedMinutes;
+    var aCardEst = after && after.estimatedMinutes;
+    if (
+      !bItems.length &&
+      !aItems.length &&
+      bCardEst !== aCardEst &&
+      (bCardEst != null || aCardEst != null)
+    ) {
+      parts.push(
+        'Dur\u00e9e estim\u00e9e : ' +
+          formatMinutesFr(bCardEst) +
+          ' \u2192 ' +
+          formatMinutesFr(aCardEst)
+      );
+    }
+
+    if (!parts.length) {
+      parts.push(
+        'Progr\u00e8s : ' +
+          bItems.length +
+          ' t\u00e2che' +
+          (bItems.length === 1 ? '' : 's') +
+          ' \u00b7 ' +
+          bPct +
+          '\u00a0% \u2192 ' +
+          aItems.length +
+          ' t\u00e2che' +
+          (aItems.length === 1 ? '' : 's') +
+          ' \u00b7 ' +
+          aPct +
+          '\u00a0%'
+      );
+    }
     return parts;
   }
 
@@ -689,11 +816,13 @@
         .slice()
         .reverse()
         .map(function (e) {
+          var details = describeEntry(e);
           return {
             id: e.id,
             at: e.at,
             label: e.label,
-            domains: e.domains.slice()
+            domains: (e.domains || []).slice(),
+            details: details
           };
         });
     }
@@ -703,14 +832,27 @@
       for (var i = 0; i < store.cursor; i++) {
         var e = store.entries[i];
         if (e && e.id === entryId) {
-          return clone(e);
+          var copied = clone(e);
+          return copied != null ? copied : e;
         }
       }
       return null;
     }
 
     function getEntryDetails(entryId) {
-      return describeEntry(getEntry(entryId));
+      var entry = getEntry(entryId);
+      if (!entry) return null;
+      return describeEntry(entry) || {
+        id: entryId,
+        at: entry.at || '',
+        absoluteTime: formatAbsoluteTime(entry.at),
+        label: entry.label || 'Modification',
+        domains: entry.domains || [],
+        domainLabels: (entry.domains || []).map(function (key) {
+          return DOMAIN_LABELS[key] || key;
+        }),
+        lines: entry.label ? [entry.label] : ['Modification']
+      };
     }
 
     function canUndo() {

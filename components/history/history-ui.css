@@ -65,7 +65,7 @@
 
 .tp-page--priority .historique-item-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   padding: 8px 10px;
 }
@@ -74,7 +74,7 @@
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 6px;
   margin: 0;
   padding: 0;
@@ -99,7 +99,7 @@
 
 .tp-page--priority .historique-item-chevron {
   flex: 0 0 auto;
-  margin-top: 2px;
+  margin: 0 0 0 auto;
   font-size: 14px;
   line-height: 1;
   color: var(--text-muted, var(--tp-text-muted));

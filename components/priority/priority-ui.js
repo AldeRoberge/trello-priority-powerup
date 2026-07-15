@@ -6360,6 +6360,12 @@
       typeof config.onAuthorize === 'function' ? config.onAuthorize : null;
     var onJump =
       typeof config.onJump === 'function' ? config.onJump : null;
+    var getBoardCards =
+      typeof config.getBoardCards === 'function' ? config.getBoardCards : null;
+    var onParentChange =
+      typeof config.onParentChange === 'function' ? config.onParentChange : null;
+    var onOpenParent =
+      typeof config.onOpenParent === 'function' ? config.onOpenParent : null;
     var bodyId = 'info-section-body-' + Math.random().toString(36).slice(2, 9);
     var titleText = typeof config.title === 'string' ? config.title : '';
     var descText = typeof config.desc === 'string' ? config.desc : '';
@@ -6401,6 +6407,19 @@
     var labelSuggestionsSeq = 0;
     var labelSuggestionsTimer = null;
     var labelSuggestionsKey = '';
+    var parentCard =
+      config.parent && typeof config.parent === 'object' && config.parent.id
+        ? {
+            id: String(config.parent.id),
+            name:
+              typeof config.parent.name === 'string' ? config.parent.name : '',
+            list:
+              typeof config.parent.list === 'string' ? config.parent.list : '',
+          }
+        : null;
+    var parentBusy = false;
+    var parentPickerOpen = false;
+    var parentBoardCardsCache = null;
     var FIELD_SAVE_MS = 450;
 
     var field = document.createElement('div');
@@ -6780,6 +6799,81 @@
     labelsWrap.appendChild(labelsSuggestSection);
     labelsRow.value.appendChild(labelsWrap);
     body.appendChild(labelsRow.row);
+
+    // ── Parent task (via Progrès linkedCardId reverse lookup) ───────────
+    var parentRow = makeRow('parent', 'T\u00e2che parente', {
+      icon: 'ti-hierarchy-3',
+    });
+    var parentWrap = document.createElement('div');
+    parentWrap.className = 'info-parent-wrap';
+
+    var parentInline = document.createElement('div');
+    parentInline.className = 'info-parent-inline';
+
+    var parentChip = document.createElement('button');
+    parentChip.type = 'button';
+    parentChip.className = 'info-parent-chip';
+    parentChip.hidden = true;
+
+    var parentChipName = document.createElement('span');
+    parentChipName.className = 'info-parent-chip-name';
+    var parentChipList = document.createElement('span');
+    parentChipList.className = 'info-parent-chip-list';
+    parentChip.appendChild(parentChipName);
+    parentChip.appendChild(parentChipList);
+
+    var parentClearBtn = document.createElement('button');
+    parentClearBtn.type = 'button';
+    parentClearBtn.className = 'info-parent-clear';
+    parentClearBtn.setAttribute('aria-label', 'Retirer la t\u00e2che parente');
+    parentClearBtn.title = 'Retirer';
+    parentClearBtn.innerHTML = '<i class="ti ti-x" aria-hidden="true"></i>';
+    parentClearBtn.hidden = true;
+
+    var parentPickWrap = document.createElement('div');
+    parentPickWrap.className = 'info-parent-pick-wrap';
+
+    var parentPickBtn = document.createElement('button');
+    parentPickBtn.type = 'button';
+    parentPickBtn.className = 'info-parent-pick-btn';
+    parentPickBtn.setAttribute('aria-expanded', 'false');
+    parentPickBtn.setAttribute('aria-haspopup', 'listbox');
+    parentPickBtn.innerHTML =
+      '<i class="ti ti-link" aria-hidden="true"></i><span class="info-parent-pick-label">Choisir\u2026</span>';
+
+    var parentPicker = document.createElement('div');
+    parentPicker.className = 'info-parent-picker';
+    parentPicker.hidden = true;
+    parentPicker.setAttribute('role', 'listbox');
+    parentPicker.setAttribute('aria-label', 'Choisir une t\u00e2che parente');
+
+    var parentSearchInput = document.createElement('input');
+    parentSearchInput.type = 'search';
+    parentSearchInput.className = 'tp-input info-parent-search';
+    parentSearchInput.placeholder = 'Rechercher une carte\u2026';
+    parentSearchInput.setAttribute('aria-label', 'Rechercher une carte');
+
+    var parentStatus = document.createElement('p');
+    parentStatus.className = 'info-parent-status';
+    parentStatus.setAttribute('aria-live', 'polite');
+    parentStatus.hidden = true;
+
+    var parentListEl = document.createElement('div');
+    parentListEl.className = 'info-parent-list';
+    parentListEl.setAttribute('role', 'list');
+
+    parentPicker.appendChild(parentSearchInput);
+    parentPicker.appendChild(parentStatus);
+    parentPicker.appendChild(parentListEl);
+    parentPickWrap.appendChild(parentPickBtn);
+    parentPickWrap.appendChild(parentPicker);
+
+    parentInline.appendChild(parentChip);
+    parentInline.appendChild(parentClearBtn);
+    parentInline.appendChild(parentPickWrap);
+    parentWrap.appendChild(parentInline);
+    parentRow.value.appendChild(parentWrap);
+    body.appendChild(parentRow.row);
 
     // ── Objectif (project / mission link) ───────────────────────────────
     var objectifRow = makeRow('objectif', 'Objectif', { icon: 'ti-hierarchy-2' });
@@ -7815,6 +7909,197 @@
         });
     }
 
+    function setParentStatus(text, visible) {
+      if (!visible || !text) {
+        parentStatus.hidden = true;
+        parentStatus.textContent = '';
+        return;
+      }
+      parentStatus.hidden = false;
+      parentStatus.textContent = text;
+    }
+
+    function setParentPickerOpen(open) {
+      parentPickerOpen = !!open;
+      parentPicker.hidden = !parentPickerOpen;
+      parentPickWrap.classList.toggle('is-open', parentPickerOpen);
+      parentPickBtn.setAttribute('aria-expanded', parentPickerOpen ? 'true' : 'false');
+      if (!parentPickerOpen) {
+        parentSearchInput.value = '';
+        setParentStatus('', false);
+        parentListEl.replaceChildren();
+      }
+      onLayoutChange();
+    }
+
+    function ensureParentBoardCards() {
+      if (parentBoardCardsCache) return Promise.resolve(parentBoardCardsCache);
+      if (!getBoardCards) return Promise.resolve([]);
+      return Promise.resolve()
+        .then(function () {
+          return getBoardCards();
+        })
+        .then(function (cards) {
+          parentBoardCardsCache = Array.isArray(cards) ? cards : [];
+          return parentBoardCardsCache;
+        })
+        .catch(function (err) {
+          console.error('Info parent board cards load failed', err);
+          parentBoardCardsCache = [];
+          return parentBoardCardsCache;
+        });
+    }
+
+    function renderParentPickerList(cards, query) {
+      parentListEl.replaceChildren();
+      var q = String(query || '')
+        .trim()
+        .toLowerCase();
+      var parentId = parentCard && parentCard.id ? String(parentCard.id) : '';
+      var filtered = (cards || []).filter(function (card) {
+        if (!card || !card.id) return false;
+        if (parentId && String(card.id) === parentId) return false;
+        if (!q) return true;
+        var name = String(card.name || '').toLowerCase();
+        var list = String(card.list || '').toLowerCase();
+        return name.indexOf(q) !== -1 || list.indexOf(q) !== -1;
+      });
+      if (!filtered.length) {
+        setParentStatus(
+          q ? 'Aucune carte correspondante' : 'Aucune carte disponible',
+          true
+        );
+        return;
+      }
+      setParentStatus('', false);
+      filtered.slice(0, 40).forEach(function (card) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'info-parent-option';
+        btn.setAttribute('role', 'option');
+        var nameEl = document.createElement('span');
+        nameEl.className = 'info-parent-option-name';
+        nameEl.textContent = card.name || 'Carte sans titre';
+        btn.appendChild(nameEl);
+        if (card.list) {
+          var meta = document.createElement('span');
+          meta.className = 'info-parent-option-list';
+          meta.textContent = card.list;
+          btn.appendChild(meta);
+        }
+        btn.title = 'Lier \u00e0\u00a0: ' + (card.name || 'Carte');
+        btn.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          applyParentChange(card);
+        });
+        parentListEl.appendChild(btn);
+      });
+    }
+
+    function openParentPicker() {
+      if (!getBoardCards || parentBusy) return;
+      setParentPickerOpen(true);
+      setParentStatus('Chargement des cartes\u2026', true);
+      parentListEl.replaceChildren();
+      ensureParentBoardCards().then(function (cards) {
+        if (!parentPickerOpen) return;
+        renderParentPickerList(cards, parentSearchInput.value);
+        try {
+          parentSearchInput.focus();
+        } catch (e) {
+          /* ignore */
+        }
+        onLayoutChange();
+      });
+    }
+
+    function renderParent() {
+      var hasParent = !!(parentCard && parentCard.id);
+      var canPick = !!getBoardCards && !!onParentChange;
+      parentChip.hidden = !hasParent;
+      parentClearBtn.hidden = !hasParent || !onParentChange;
+      parentPickBtn.hidden = !canPick;
+      var pickLabelEl = parentPickBtn.querySelector('.info-parent-pick-label');
+      if (pickLabelEl) {
+        pickLabelEl.textContent = hasParent ? 'Changer\u2026' : 'Choisir\u2026';
+      }
+      parentPickBtn.disabled = parentBusy;
+      parentClearBtn.disabled = parentBusy;
+      parentChip.disabled = parentBusy || !onOpenParent;
+      if (hasParent) {
+        parentChipName.textContent = parentCard.name || 'Carte sans titre';
+        if (parentCard.list) {
+          parentChipList.hidden = false;
+          parentChipList.textContent = parentCard.list;
+        } else {
+          parentChipList.hidden = true;
+          parentChipList.textContent = '';
+        }
+        parentChip.title = onOpenParent
+          ? 'Ouvrir la t\u00e2che parente'
+          : parentCard.name || '';
+      }
+      if (!canPick && !hasParent) {
+        setParentStatus('', false);
+      }
+    }
+
+    function applyParentChange(nextParent) {
+      if (!onParentChange || parentBusy) return;
+      parentBusy = true;
+      renderParent();
+      Promise.resolve(onParentChange(nextParent || null))
+        .then(function (result) {
+          if (result && result.ok === false) {
+            var reason = result.reason || 'error';
+            var msg =
+              reason === 'self'
+                ? 'Impossible de lier la carte \u00e0 elle-m\u00eame'
+                : reason === 'cycle'
+                  ? 'Ce lien cr\u00e9erait une boucle'
+                  : 'Impossible de mettre \u00e0 jour la t\u00e2che parente';
+            setParentStatus(msg, true);
+            return;
+          }
+          if (nextParent && nextParent.id) {
+            parentCard = {
+              id: String(nextParent.id),
+              name:
+                typeof nextParent.name === 'string' ? nextParent.name : '',
+              list:
+                typeof nextParent.list === 'string' ? nextParent.list : '',
+            };
+          } else if (result && result.parent && result.parent.id) {
+            parentCard = {
+              id: String(result.parent.id),
+              name:
+                typeof result.parent.name === 'string'
+                  ? result.parent.name
+                  : '',
+              list:
+                typeof result.parent.list === 'string'
+                  ? result.parent.list
+                  : '',
+            };
+          } else {
+            parentCard = null;
+          }
+          setParentPickerOpen(false);
+          setParentStatus('', false);
+          parentBoardCardsCache = null;
+        })
+        .catch(function (err) {
+          console.error('Info parent change failed', err);
+          setParentStatus('Impossible de mettre \u00e0 jour la t\u00e2che parente', true);
+        })
+        .then(function () {
+          parentBusy = false;
+          renderParent();
+          onLayoutChange();
+        });
+    }
+
     function setRecapText(node, text, emptyLabel) {
       var value = (text || '').trim();
       node.textContent = value || emptyLabel;
@@ -8234,12 +8519,51 @@
       });
     }
 
+    parentPickBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (parentPickBtn.disabled || !getBoardCards) return;
+      if (parentPickerOpen) setParentPickerOpen(false);
+      else openParentPicker();
+    });
+
+    parentClearBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (parentClearBtn.disabled || !parentCard) return;
+      applyParentChange(null);
+    });
+
+    parentChip.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!parentCard || !parentCard.id || !onOpenParent || parentBusy) return;
+      Promise.resolve(onOpenParent(parentCard.id)).catch(function (err) {
+        console.error('Info open parent failed', err);
+      });
+    });
+
+    parentSearchInput.addEventListener('input', function () {
+      ensureParentBoardCards().then(function (cards) {
+        if (!parentPickerOpen) return;
+        renderParentPickerList(cards, parentSearchInput.value);
+        onLayoutChange();
+      });
+    });
+
+    parentSearchInput.addEventListener('click', function (event) {
+      event.stopPropagation();
+    });
+
     document.addEventListener('click', function (event) {
       if (membersPickerOpen && !membersAddWrap.contains(event.target)) {
         setMembersPickerOpen(false);
       }
       if (labelsPickerOpen && !labelsAddWrap.contains(event.target)) {
         setLabelsPickerOpen(false);
+      }
+      if (parentPickerOpen && !parentPickWrap.contains(event.target)) {
+        setParentPickerOpen(false);
       }
     });
 
@@ -8257,6 +8581,7 @@
 
     renderMembers();
     renderLabels();
+    renderParent();
     renderRecap();
     setAuthHint(authReason);
     syncTitleInputSize();
@@ -8351,6 +8676,28 @@
       setAuthReason: function (reason) {
         setAuthHint(reason || '');
         onLayoutChange();
+      },
+      setParent: function (next) {
+        if (next && typeof next === 'object' && next.id) {
+          parentCard = {
+            id: String(next.id),
+            name: typeof next.name === 'string' ? next.name : '',
+            list: typeof next.list === 'string' ? next.list : '',
+          };
+        } else {
+          parentCard = null;
+        }
+        renderParent();
+        onLayoutChange();
+      },
+      getParent: function () {
+        return parentCard
+          ? {
+              id: parentCard.id,
+              name: parentCard.name || '',
+              list: parentCard.list || '',
+            }
+          : null;
       },
       getObjectifMount: function () {
         return objectifMount;
