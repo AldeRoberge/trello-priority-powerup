@@ -13,10 +13,10 @@
   var MAX_INTERVIEW_ASKED = 24;
   var MAX_CHAT_MESSAGES = 16;
   var MAX_CHAT_CONTENT = 400;
-  // Trello plugin data limit is 4096 chars (shared) / often enforced similarly for private.
-  // Stay well under — JSON escaping + non-ASCII inflate stored size vs JS .length.
-  var MAX_CHAT_SERIALIZED = 2800;
-  var MAX_CHAT_SERIALIZED_HARD = 2400;
+  // Trello plugin data limit is 4096 chars per scope/visibility (ALL keys combined).
+  // card/private is shared with cardEditHistory — keep chat well under the rest.
+  var MAX_CHAT_SERIALIZED = 2200;
+  var MAX_CHAT_SERIALIZED_HARD = 1600;
 
   /** Where the assistant UI is hosted — shapes prompts, tools, and chat storage. */
   var ASSISTANT_SCOPES = {
@@ -3347,27 +3347,111 @@
             return isFinite(n) && n > 0 ? Math.round(n) : null;
           };
 
-    var out = [];
-    list.forEach(function (row) {
-      if (!row || typeof row !== 'object') return;
-      var mins = clamp(
+    function minutesFromRow(row) {
+      if (!row || typeof row !== 'object') return null;
+      return clamp(
         row.estimatedMinutes != null
           ? row.estimatedMinutes
           : row.minutes != null
             ? row.minutes
             : row.durationMinutes
       );
+    }
+
+    // Index AI rows by id / matchText for robust lookups.
+    var byId = Object.create(null);
+    var byText = Object.create(null);
+    list.forEach(function (row) {
+      var mins = minutesFromRow(row);
       if (mins == null) return;
-      var est = { estimatedMinutes: mins };
-      if (typeof row.id === 'string' && row.id.trim()) est.id = row.id.trim();
+      if (typeof row.id === 'string' && row.id.trim()) {
+        byId[row.id.trim()] = mins;
+      }
       var match =
         typeof row.matchText === 'string'
-          ? row.matchText.trim()
+          ? row.matchText.trim().toLowerCase()
           : typeof row.text === 'string'
-            ? row.text.trim()
+            ? row.text.trim().toLowerCase()
             : '';
-      if (match) est.matchText = match;
-      if (!est.id && !est.matchText) return;
+      if (match) byText[match] = mins;
+    });
+
+    // Always emit one estimate per requested item — attach our known ids so
+    // applyItemEstimates cannot miss due to hallucinated ids / wording drift.
+    var out = [];
+    items.forEach(function (item, index) {
+      var mins = null;
+      if (item.id && byId[item.id] != null) mins = byId[item.id];
+      if (mins == null) {
+        mins = byText[String(item.text || '').trim().toLowerCase()];
+      }
+      // Positional fallback when the model omits / muddles ids.
+      if (mins == null && list[index]) mins = minutesFromRow(list[index]);
+      if (mins == null) return;
+      var est = { estimatedMinutes: mins, matchText: item.text };
+      if (item.id) est.id = item.id;
+      out.push(est);
+    });
+    return out;
+  }
+
+  /**
+   * Fast offline guesses when the AI provider is unavailable / times out.
+   * context.items: [{id?, text}]
+   */
+  function heuristicSubtaskEstimates(context) {
+    var ctx = context && typeof context === 'object' ? context : {};
+    var itemsRaw = Array.isArray(ctx.items) ? ctx.items : [];
+    var out = [];
+    itemsRaw.forEach(function (it) {
+      if (!it) return;
+      var text =
+        typeof it === 'string'
+          ? it.trim()
+          : typeof it.text === 'string'
+            ? it.text.trim()
+            : '';
+      if (!text) return;
+      var lower = text.toLowerCase();
+      var mins = 30;
+      if (
+        /achat|acheter|buy|commande|license|licence|abonnement|signup|inscription/.test(
+          lower
+        )
+      ) {
+        mins = 5;
+      } else if (
+        /email|courriel|mail|message|sms|appeler|call|ping|relance/.test(lower)
+      ) {
+        mins = 15;
+      } else if (/r[eé]union|meeting|sync|1:?1|atelier|workshop/.test(lower)) {
+        mins = 60;
+      } else if (
+        /r[eé]dig|écrire|ecrire|write|doc|brief|spec|compte[- ]rendu/.test(lower)
+      ) {
+        mins = 90;
+      } else if (
+        /audit|migration|refonte|refactor|overhaul|investigation/.test(lower)
+      ) {
+        mins = 480;
+      } else if (text.length > 80) {
+        mins = 60;
+      } else if (text.length < 18) {
+        mins = 20;
+      }
+      var clamp =
+        typeof CompletionTrello !== 'undefined' &&
+        typeof CompletionTrello.clampEstimatedMinutes === 'function'
+          ? CompletionTrello.clampEstimatedMinutes
+          : function (m) {
+              return isFinite(+m) && +m > 0 ? Math.round(+m) : null;
+            };
+      var clamped = clamp(mins);
+      if (clamped == null) return;
+      var est = { estimatedMinutes: clamped, matchText: text };
+      if (typeof it === 'object' && typeof it.id === 'string' && it.id) {
+        est.id = it.id;
+      }
       out.push(est);
     });
     return out;

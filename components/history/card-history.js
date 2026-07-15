@@ -9,7 +9,7 @@
   // card/private is ONE 4096 budget shared with cardAgentChat etc.
   // Keep history tiny so chat + history can coexist.
   var MAX_ENTRIES = 8;
-  var MAX_SERIALIZED = 1400;
+  var MAX_SERIALIZED = 1000;
   var PLUGIN_PRIVATE_BUDGET = 3900;
 
   function clone(value) {
@@ -270,28 +270,29 @@
     var out = {};
     for (var i = 0; i < domains.length; i++) {
       var key = domains[i];
-      out[key] = slimPayload({
-        placeholder: domainSlice(snapshot, key)
-      }).placeholder;
-      // domainSlice already returns a compact slice; still run through slim for
-      // completion/priority/info embedded in full snapshots when clones are used.
-      if (key === 'completion') out[key] = slimCompletion(snapshot && snapshot.completion);
-      else if (key === 'priority') out[key] = slimPriority(snapshot && snapshot.priority);
-      else if (key === 'info') {
+      if (key === 'completion') {
+        out[key] = slimCompletion(snapshot && snapshot.completion);
+      } else if (key === 'priority') {
+        out[key] = slimPriority(snapshot && snapshot.priority);
+      } else if (key === 'info') {
         var info = snapshot && snapshot.info;
         out[key] = info
           ? {
               name: String(info.name || '').slice(0, 80),
               desc: String(info.desc || '').slice(0, 120),
-              memberIds: Array.isArray(info.memberIds) ? info.memberIds.slice(0, 8) : [],
-              labelIds: Array.isArray(info.labelIds) ? info.labelIds.slice(0, 8) : []
+              memberIds: Array.isArray(info.memberIds)
+                ? info.memberIds.slice(0, 8)
+                : [],
+              labelIds: Array.isArray(info.labelIds)
+                ? info.labelIds.slice(0, 8)
+                : []
             }
           : info;
       } else {
         out[key] = clone(domainSlice(snapshot, key));
       }
     }
-    return out;
+    return slimPayload(out);
   }
 
   var MONTHS_FR = [
@@ -864,18 +865,51 @@
       if (!t || typeof t.set !== 'function') return Promise.resolve(store);
       saveChain = saveChain
         .then(function () {
-          return t.set('card', 'private', HISTORY_KEY, store);
+          // Reserve room for other card/private keys (chat, etc.): 4096 shared.
+          if (typeof t.get !== 'function') {
+            return t.set('card', 'private', HISTORY_KEY, store);
+          }
+          return Promise.resolve(t.get('card', 'private'))
+            .then(function (all) {
+              var bag = all && typeof all === 'object' ? all : {};
+              var others = {};
+              Object.keys(bag).forEach(function (key) {
+                if (key !== HISTORY_KEY) others[key] = bag[key];
+              });
+              var otherSize = 0;
+              try {
+                otherSize = JSON.stringify(others).length;
+              } catch (e) {
+                otherSize = 0;
+              }
+              var room = Math.max(
+                350,
+                PLUGIN_PRIVATE_BUDGET - otherSize - HISTORY_KEY.length - 24
+              );
+              store = trimStoreToBudget(store, Math.min(MAX_SERIALIZED, room));
+              return t.set('card', 'private', HISTORY_KEY, store);
+            })
+            .catch(function () {
+              store = trimStore(store);
+              return t.set('card', 'private', HISTORY_KEY, store);
+            });
         })
         .catch(function (err) {
           console.error('CardHistory.save failed', err);
+          // Drop entries until empty — card/private is shared with chat.
           while (store.entries.length > 0) {
             store.entries.shift();
             store.cursor = Math.max(0, store.cursor - 1);
-            store = trimStore(store);
-            if (serializedSize(store) <= Math.floor(MAX_SERIALIZED * 0.85)) break;
+            store = trimStoreToBudget(store, Math.floor(MAX_SERIALIZED * 0.5));
+            if (serializedSize(store) <= 400) break;
+          }
+          if (!store.entries.length) {
+            store = emptyStore();
           }
           return t.set('card', 'private', HISTORY_KEY, store).catch(function (retryErr) {
             console.error('CardHistory.save retry failed', retryErr);
+            // Last resort: leave empty in memory so we stop thrashing.
+            store = emptyStore();
           });
         });
       return saveChain;
