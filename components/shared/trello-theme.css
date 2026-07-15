@@ -2290,8 +2290,11 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
 
 .tp-completion-progress-slider::-webkit-slider-runnable-track,
 .tp-completion-item-slider::-webkit-slider-runnable-track {
-  height: var(--completion-track-h);
+  /* Match thumb height so the whole control is clickable (WebKit: a short track +
+     thumb margin-top only lets the handle receive pointer hits). */
+  height: var(--completion-thumb-size);
   border-radius: calc(var(--completion-track-h) / 2);
+  cursor: pointer;
   /* No background transition — animating the gradient stop lag the thumb while dragging. */
   background: linear-gradient(
     to right,
@@ -2300,6 +2303,9 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
     var(--completion-track) var(--completion-pct, 0%),
     var(--completion-track) 100%
   );
+  background-size: 100% var(--completion-track-h);
+  background-repeat: no-repeat;
+  background-position: center;
 }
 
 .tp-completion-progress-slider::-webkit-slider-thumb,
@@ -2308,11 +2314,12 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
   appearance: none;
   width: var(--completion-thumb-size);
   height: var(--completion-thumb-size);
-  margin-top: calc((var(--completion-track-h) - var(--completion-thumb-size)) / 2);
+  margin-top: 0;
   border-radius: 50%;
   background: var(--slider-thumb-bg);
   border: 1.5px solid var(--completion-fill, var(--slider-thumb-border));
   box-shadow: var(--slider-thumb-shadow);
+  cursor: pointer;
 }
 
 .tp-completion-progress-slider:focus {
@@ -2329,6 +2336,7 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
   height: var(--completion-track-h);
   border-radius: calc(var(--completion-track-h) / 2);
   background: var(--completion-track);
+  cursor: pointer;
 }
 
 .tp-completion-progress-slider::-moz-range-progress,
@@ -2427,14 +2435,14 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
     transform 0.12s ease;
 }
 
-/* Clock-style pie: starts at 12 o'clock, fills clockwise. */
+/* Clock-style pie: CSS conic 0deg is 12 o'clock; fills clockwise. */
 .tp-completion-check::before {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: 50%;
   background: conic-gradient(
-    from -90deg,
+    from 0deg,
     var(--completion-check-fill) calc(var(--completion-progress) * 1%),
     transparent 0
   );
