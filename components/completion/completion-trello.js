@@ -26,6 +26,85 @@
   var LINK_NEST_MAX_DEPTH = 2;
   var ESTIMATE_MIN_MINUTES = 1;
   var ESTIMATE_MAX_MINUTES = Math.round(2 * 365.25 * 24 * 60);
+  var DEFAULT_ESTIMATE_SCALE = 'time';
+
+  /**
+   * Estimation display systems. Values stay as minutes under the hood so
+   * Progrès weighting and remaining-effort math stay consistent across scales.
+   */
+  var ESTIMATE_SCALES = {
+    time: {
+      id: 'time',
+      label: 'Temps',
+      shortLabel: 'temps',
+      emptyLabel: 'Estimer',
+      emptyTitle: 'D\u00e9finir une dur\u00e9e estim\u00e9e',
+      popoverLabel: 'Choisir une dur\u00e9e',
+      freeform: true,
+      freeformPlaceholder: 'ex. 2 h',
+      freeformAria: 'Dur\u00e9e personnalis\u00e9e',
+      ticks: null, // filled at runtime from PriorityUI duration ticks
+    },
+    tshirt: {
+      id: 'tshirt',
+      label: 'Tailles',
+      shortLabel: 'taille',
+      emptyLabel: 'Taille',
+      emptyTitle: 'Choisir une taille (XS\u2013XL)',
+      popoverLabel: 'Choisir une taille',
+      freeform: false,
+      ticks: [
+        { id: 'XS', label: 'XS', title: 'XS \u2014 tr\u00e8s petite', minutes: 15 },
+        { id: 'S', label: 'S', title: 'S \u2014 petite', minutes: 60 },
+        { id: 'M', label: 'M', title: 'M \u2014 moyenne', minutes: 4 * 60 },
+        { id: 'L', label: 'L', title: 'L \u2014 grande', minutes: 2 * 24 * 60 },
+        { id: 'XL', label: 'XL', title: 'XL \u2014 tr\u00e8s grande', minutes: 5 * 24 * 60 },
+      ],
+    },
+    coffee: {
+      id: 'coffee',
+      label: 'Caf\u00e9s',
+      shortLabel: 'caf\u00e9',
+      emptyLabel: 'Caf\u00e9',
+      emptyTitle: 'Choisir une taille caf\u00e9',
+      popoverLabel: 'Choisir une taille caf\u00e9',
+      freeform: false,
+      ticks: [
+        {
+          id: 'espresso',
+          label: 'Expresso',
+          title: 'Expresso \u2014 un trait rapide',
+          minutes: 15,
+        },
+        {
+          id: 'court',
+          label: 'Court',
+          title: 'Court \u2014 petite tasse',
+          minutes: 60,
+        },
+        {
+          id: 'mug',
+          label: 'Mug',
+          title: 'Mug \u2014 une bonne dose',
+          minutes: 4 * 60,
+        },
+        {
+          id: 'bol',
+          label: 'Bol',
+          title: 'Bol \u2014 session soutenue',
+          minutes: 2 * 24 * 60,
+        },
+        {
+          id: 'pot',
+          label: 'Cafeti\u00e8re',
+          title: 'Cafeti\u00e8re \u2014 chantier long',
+          minutes: 5 * 24 * 60,
+        },
+      ],
+    },
+  };
+
+  var ESTIMATE_SCALE_ORDER = ['time', 'tshirt', 'coffee'];
 
   function asNumber(value) {
     if (typeof value === 'number' && isFinite(value)) return value;
@@ -54,6 +133,82 @@
     return Math.max(ESTIMATE_MIN_MINUTES, Math.min(max, Math.round(n)));
   }
 
+  function normalizeEstimateScale(value) {
+    var key = typeof value === 'string' ? value.trim().toLowerCase() : '';
+    if (key === 'temps') key = 'time';
+    if (key === 'taille' || key === 'tailles' || key === 'size') key = 'tshirt';
+    if (key === 'cafe' || key === 'cafes' || key === 'caf\u00e9' || key === 'caf\u00e9s') {
+      key = 'coffee';
+    }
+    return ESTIMATE_SCALES[key] ? key : DEFAULT_ESTIMATE_SCALE;
+  }
+
+  function getEstimateScale(scaleId) {
+    return ESTIMATE_SCALES[normalizeEstimateScale(scaleId)] || ESTIMATE_SCALES.time;
+  }
+
+  function getEstimateScaleTicks(scaleId) {
+    var scale = getEstimateScale(scaleId);
+    if (scale.id === 'time') {
+      var PU = global.PriorityUI;
+      if (PU && Array.isArray(PU.DURATION_TICKS) && PU.DURATION_TICKS.length) {
+        return PU.DURATION_TICKS.map(function (tick) {
+          return {
+            id: 't' + tick.minutes,
+            label: String(tick.label || '').replace(/^Quelques\s+/i, '') || String(tick.minutes),
+            title: tick.label || '',
+            minutes: tick.minutes,
+          };
+        });
+      }
+      return [
+        { id: 't15', label: 'minutes', title: 'Quelques minutes', minutes: 15 },
+        { id: 't180', label: 'heures', title: 'Quelques heures', minutes: 3 * 60 },
+        { id: 't4320', label: 'jours', title: 'Quelques jours', minutes: 3 * 24 * 60 },
+        {
+          id: 't30240',
+          label: 'semaines',
+          title: 'Quelques semaines',
+          minutes: 3 * 7 * 24 * 60,
+        },
+        {
+          id: 't129600',
+          label: 'mois',
+          title: 'Quelques mois',
+          minutes: 3 * 30 * 24 * 60,
+        },
+        {
+          id: 't2y',
+          label: 'ann\u00e9es',
+          title: 'Quelques ann\u00e9es',
+          minutes: ESTIMATE_MAX_MINUTES,
+        },
+      ];
+    }
+    return (scale.ticks || []).slice();
+  }
+
+  /** Nearest discrete tick for a minute value (log distance). */
+  function nearestEstimateTick(minutes, scaleId) {
+    var m = clampEstimatedMinutes(minutes);
+    if (m == null) return null;
+    var ticks = getEstimateScaleTicks(scaleId);
+    if (!ticks.length) return null;
+    var best = ticks[0];
+    var bestDist = Infinity;
+    var logM = Math.log(Math.max(m, 1));
+    for (var i = 0; i < ticks.length; i++) {
+      var tm = clampEstimatedMinutes(ticks[i].minutes);
+      if (tm == null) continue;
+      var dist = Math.abs(logM - Math.log(Math.max(tm, 1)));
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = ticks[i];
+      }
+    }
+    return best;
+  }
+
   function formatEstimatedMinutesCompact(minutes) {
     var m = clampEstimatedMinutes(minutes);
     if (m == null) return '';
@@ -80,12 +235,28 @@
     return '~' + d + ' j';
   }
 
-  function formatEstimatedRemainingLabel(remainingMinutes) {
+  function formatEstimateForScale(minutes, scaleId) {
+    var m = clampEstimatedMinutes(minutes);
+    if (m == null) return '';
+    var scale = getEstimateScale(scaleId);
+    if (scale.id === 'time') return formatEstimatedMinutesCompact(m);
+    var tick = nearestEstimateTick(m, scale.id);
+    return tick ? tick.label : formatEstimatedMinutesCompact(m);
+  }
+
+  function formatEstimatedRemainingLabel(remainingMinutes, scaleId) {
     if (remainingMinutes === 0) return 'Termin\u00e9';
     var m = clampEstimatedMinutes(remainingMinutes);
     if (m == null) return '';
-    var compact = formatEstimatedMinutesCompact(m).replace(/^~/, '');
-    return compact + ' restantes';
+    var scale = getEstimateScale(scaleId);
+    if (scale.id === 'time') {
+      var compact = formatEstimatedMinutesCompact(m).replace(/^~/, '');
+      return compact + ' restantes';
+    }
+    var tick = nearestEstimateTick(m, scale.id);
+    if (!tick) return formatEstimatedMinutesCompact(m) + ' restantes';
+    if (scale.id === 'tshirt') return '~' + tick.label + ' restantes';
+    return '~' + tick.label + ' restant';
   }
 
   function itemEstimatedMinutes(item, snapshotsByCardId) {
@@ -403,6 +574,8 @@
     }
     if (raw.estimatedMinutesLocked === true) out.estimatedMinutesLocked = true;
     if (raw.progressEnabled === false) out.progressEnabled = false;
+    var scale = normalizeEstimateScale(raw.estimateScale);
+    if (scale !== DEFAULT_ESTIMATE_SCALE) out.estimateScale = scale;
     return out;
   }
 
@@ -1541,6 +1714,14 @@
     generateId: generateId,
     normalizeItem: normalizeItem,
     normalizeCompletionData: normalizeCompletionData,
+    ESTIMATE_SCALES: ESTIMATE_SCALES,
+    ESTIMATE_SCALE_ORDER: ESTIMATE_SCALE_ORDER,
+    DEFAULT_ESTIMATE_SCALE: DEFAULT_ESTIMATE_SCALE,
+    normalizeEstimateScale: normalizeEstimateScale,
+    getEstimateScale: getEstimateScale,
+    getEstimateScaleTicks: getEstimateScaleTicks,
+    nearestEstimateTick: nearestEstimateTick,
+    formatEstimateForScale: formatEstimateForScale,
     clampEstimatedMinutes: clampEstimatedMinutes,
     formatEstimatedMinutesCompact: formatEstimatedMinutesCompact,
     formatEstimatedRemainingLabel: formatEstimatedRemainingLabel,

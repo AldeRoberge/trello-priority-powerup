@@ -605,9 +605,68 @@ var fakeT = {
   'migrateEstimateFromPriority',
   'formatEstimatedMinutesCompact',
   'formatEstimatedRemainingLabel',
+  'formatEstimateForScale',
+  'normalizeEstimateScale',
+  'getEstimateScale',
+  'getEstimateScaleTicks',
+  'nearestEstimateTick',
 ].forEach(function (name) {
   check('export ' + name, typeof CT[name] === 'function');
 });
+
+check('default estimate scale is time', CT.DEFAULT_ESTIMATE_SCALE === 'time');
+check(
+  'three estimate scales',
+  CT.ESTIMATE_SCALE_ORDER.length === 3 &&
+    !!CT.ESTIMATE_SCALES.time &&
+    !!CT.ESTIMATE_SCALES.tshirt &&
+    !!CT.ESTIMATE_SCALES.coffee
+);
+check('normalize unknown scale → time', CT.normalizeEstimateScale('nope') === 'time');
+check('normalize tailles → tshirt', CT.normalizeEstimateScale('tailles') === 'tshirt');
+check('normalize cafés → coffee', CT.normalizeEstimateScale('cafés') === 'coffee');
+check(
+  'tshirt ticks XS–XL',
+  CT.getEstimateScaleTicks('tshirt')
+    .map(function (t) {
+      return t.label;
+    })
+    .join(',') === 'XS,S,M,L,XL'
+);
+check(
+  'coffee ticks five cups',
+  CT.getEstimateScaleTicks('coffee').length === 5
+);
+check(
+  'format tshirt M',
+  CT.formatEstimateForScale(4 * 60, 'tshirt') === 'M'
+);
+check(
+  'format coffee Mug',
+  CT.formatEstimateForScale(4 * 60, 'coffee') === 'Mug'
+);
+check(
+  'nearest tshirt for 50 min → S',
+  CT.nearestEstimateTick(50, 'tshirt').label === 'S'
+);
+check(
+  'remaining label tshirt',
+  CT.formatEstimatedRemainingLabel(60, 'tshirt') === '~S restantes'
+);
+check(
+  'remaining label coffee',
+  CT.formatEstimatedRemainingLabel(15, 'coffee') === '~Expresso restant'
+);
+check(
+  'normalize keeps estimateScale',
+  CT.normalizeCompletionData({ items: [], estimateScale: 'tshirt' }).estimateScale ===
+    'tshirt'
+);
+check(
+  'normalize omits default time scale',
+  CT.normalizeCompletionData({ items: [], estimateScale: 'time' }).estimateScale ===
+    undefined
+);
 
 var estItems = CT.normalizeCompletionData({
   items: [

@@ -323,6 +323,8 @@
   /** Max height for Information description preview/editor before scrolling. */
   var INFO_DESC_MAX_HEIGHT_PX = 360;
   var INFO_DESC_MIN_HEIGHT_PX = 72;
+  /** Compact empty placeholder / empty editor height (one line + padding). */
+  var INFO_DESC_EMPTY_MIN_HEIGHT_PX = 40;
 
   function safeMarkdownHref(href) {
     var u = String(href || '').trim();
@@ -6978,16 +6980,18 @@
     }
 
     function syncDescInputSize() {
+      var empty = !(descInput.value || '').trim();
       syncExpandableSurfaceHeight(descInput, {
         maxHeight: INFO_DESC_MAX_HEIGHT_PX,
-        minHeight: INFO_DESC_MIN_HEIGHT_PX
+        minHeight: empty ? INFO_DESC_EMPTY_MIN_HEIGHT_PX : INFO_DESC_MIN_HEIGHT_PX
       });
     }
 
     function syncDescPreviewSize() {
+      var empty = descPreview.classList.contains('is-empty');
       syncExpandableSurfaceHeight(descPreview, {
         maxHeight: INFO_DESC_MAX_HEIGHT_PX,
-        minHeight: INFO_DESC_MIN_HEIGHT_PX
+        minHeight: empty ? INFO_DESC_EMPTY_MIN_HEIGHT_PX : INFO_DESC_MIN_HEIGHT_PX
       });
     }
 
@@ -7104,16 +7108,9 @@
     }
 
     function syncTitleInputSize() {
-      var maxHeight = 96;
       titleInput.style.overflowY = 'hidden';
       titleInput.style.height = 'auto';
-      var next = titleInput.scrollHeight;
-      if (next > maxHeight) {
-        titleInput.style.height = maxHeight + 'px';
-        titleInput.style.overflowY = 'auto';
-      } else {
-        titleInput.style.height = next + 'px';
-      }
+      titleInput.style.height = titleInput.scrollHeight + 'px';
     }
 
     function memberDisplayName(member) {

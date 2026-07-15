@@ -483,9 +483,9 @@ body {
 .info-title-input {
   width: 100%;
   min-height: calc(1.3em + 4px);
-  max-height: 96px;
   resize: none;
   overflow-y: hidden;
+  overflow-x: hidden;
   padding: 2px 8px;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -721,7 +721,7 @@ body {
 .info-desc-preview,
 .info-desc-input {
   width: 100%;
-  min-height: 72px;
+  min-height: 40px;
   max-height: 360px;
   padding: 8px 10px;
   border: 1px solid var(--border);

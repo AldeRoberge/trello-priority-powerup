@@ -2054,6 +2054,54 @@ input.tp-completion-master-title.is-empty:not(:focus) {
   min-width: 0;
 }
 
+.tp-estimate-scale-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--tp-border);
+  background: color-mix(in srgb, var(--tp-text) 4%, var(--tp-surface-2, transparent));
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+
+.tp-estimate-scale-btn {
+  margin: 0;
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 0.14s ease,
+    color 0.14s ease,
+    box-shadow 0.14s ease;
+}
+
+.tp-estimate-scale-btn:hover {
+  color: var(--tp-text);
+  background: color-mix(in srgb, var(--tp-text) 6%, transparent);
+}
+
+.tp-estimate-scale-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--tp-focus-ring, rgba(12, 102, 228, 0.28));
+}
+
+.tp-estimate-scale-btn.is-active {
+  color: var(--tp-text);
+  background: var(--tp-surface, #fff);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--tp-text) 14%, transparent);
+}
+
 .tp-estimate-chip-wrap {
   position: relative;
   display: inline-flex;
@@ -2238,6 +2286,16 @@ span.tp-estimate-chip {
   outline: none;
   background: color-mix(in srgb, var(--estimate-accent, var(--tp-primary, #0c66e4)) 14%, transparent);
   border-color: color-mix(in srgb, var(--estimate-accent, var(--tp-primary, #0c66e4)) 35%, var(--tp-border));
+}
+
+.tp-estimate-tick.is-selected {
+  background: color-mix(in srgb, var(--estimate-accent, var(--tp-primary, #0c66e4)) 18%, transparent);
+  border-color: color-mix(in srgb, var(--estimate-accent, var(--tp-primary, #0c66e4)) 55%, var(--tp-border));
+  font-weight: 700;
+}
+
+.tp-estimate-popover.is-scale-discrete .tp-estimate-ticks {
+  grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr));
 }
 
 .tp-estimate-free {

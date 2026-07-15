@@ -632,9 +632,9 @@
   }
 
   function durationTicks() {
-    var PU = global.PriorityUI;
-    if (PU && Array.isArray(PU.DURATION_TICKS) && PU.DURATION_TICKS.length) {
-      return PU.DURATION_TICKS;
+    var CT = getCompletionTrello();
+    if (CT && typeof CT.getEstimateScaleTicks === 'function') {
+      return CT.getEstimateScaleTicks('time');
     }
     return [
       { label: 'Quelques minutes', minutes: 15 },
@@ -745,8 +745,11 @@
   }
 
   /**
-   * Compact duration chip + popover (ticks + freeform).
-   * config: { minutes, readOnly, adjusted, compact, ariaLabel, onChange(minutes|null), t }
+   * Compact estimate chip + popover (ticks + optional freeform).
+   * config: {
+   *   minutes, scale, readOnly, adjusted, compact, ariaLabel,
+   *   onChange(minutes|null), t
+   * }
    */
   function createEstimateChip(CT, config) {
     config = config || {};
@@ -756,6 +759,10 @@
         : config.minutes != null
           ? Math.round(config.minutes)
           : null;
+    var scaleId =
+      typeof CT.normalizeEstimateScale === 'function'
+        ? CT.normalizeEstimateScale(config.scale)
+        : config.scale || 'time';
     var readOnly = !!config.readOnly;
     var onChange = typeof config.onChange === 'function' ? config.onChange : null;
     var trelloT = config.t || null;
@@ -767,10 +774,6 @@
     var chip = document.createElement(readOnly ? 'span' : 'button');
     if (!readOnly) chip.type = 'button';
     chip.className = 'tp-estimate-chip';
-    chip.setAttribute(
-      'aria-label',
-      config.ariaLabel || 'Dur\u00e9e estim\u00e9e'
-    );
 
     var sand = document.createElement('span');
     sand.className = 'tp-estimate-chip-sand';
@@ -782,43 +785,102 @@
     wrap.appendChild(chip);
 
     var popover = null;
+    var ticksEl = null;
+    var freeRow = null;
     var freeInput = null;
 
+    function scaleMeta() {
+      if (typeof CT.getEstimateScale === 'function') {
+        return CT.getEstimateScale(scaleId);
+      }
+      return {
+        id: scaleId,
+        emptyLabel: 'Estimer',
+        emptyTitle: 'D\u00e9finir une estim\u00e9e',
+        popoverLabel: 'Choisir une estim\u00e9e',
+        freeform: scaleId === 'time',
+      };
+    }
+
+    function ticksForScale() {
+      if (typeof CT.getEstimateScaleTicks === 'function') {
+        return CT.getEstimateScaleTicks(scaleId);
+      }
+      return durationTicks();
+    }
+
+    function formatCurrent() {
+      if (minutes == null) return '';
+      if (typeof CT.formatEstimateForScale === 'function') {
+        return CT.formatEstimateForScale(minutes, scaleId);
+      }
+      if (typeof CT.formatEstimatedMinutesCompact === 'function') {
+        return CT.formatEstimatedMinutesCompact(minutes);
+      }
+      return String(minutes) + ' min';
+    }
+
+    function sandFillRatio() {
+      if (minutes == null) return 0;
+      var ticks = ticksForScale();
+      if (scaleId !== 'time' && ticks.length > 1) {
+        var nearest =
+          typeof CT.nearestEstimateTick === 'function'
+            ? CT.nearestEstimateTick(minutes, scaleId)
+            : null;
+        var idx = 0;
+        if (nearest) {
+          for (var i = 0; i < ticks.length; i++) {
+            if (ticks[i].id === nearest.id || ticks[i].minutes === nearest.minutes) {
+              idx = i;
+              break;
+            }
+          }
+        }
+        return idx / (ticks.length - 1);
+      }
+      return Math.min(
+        1,
+        Math.log(Math.max(minutes, 5)) / Math.log(ESTIMATE_LOG_MAX)
+      );
+    }
+
     function paint() {
+      var meta = scaleMeta();
       var estimating = !!config.estimating && minutes == null;
       var text = estimating
         ? 'Estimation'
         : minutes == null
-          ? 'Estimer'
-          : typeof CT.formatEstimatedMinutesCompact === 'function'
-            ? CT.formatEstimatedMinutesCompact(minutes)
-            : String(minutes) + ' min';
+          ? meta.emptyLabel || 'Estimer'
+          : formatCurrent();
       label.textContent = text;
       chip.classList.toggle('is-empty', minutes == null);
       chip.classList.toggle('is-set', minutes != null);
       chip.classList.toggle('is-estimating', estimating);
       chip.classList.toggle('is-adjusted', !!config.adjusted && minutes != null);
+      chip.classList.toggle('is-scale-time', scaleId === 'time');
+      chip.classList.toggle('is-scale-tshirt', scaleId === 'tshirt');
+      chip.classList.toggle('is-scale-coffee', scaleId === 'coffee');
       chip.setAttribute('aria-busy', estimating ? 'true' : 'false');
+      chip.setAttribute(
+        'aria-label',
+        config.ariaLabel || meta.emptyTitle || 'Estimation'
+      );
       chip.title = estimating
         ? 'Estimation en cours\u00a0\u2014 vous pouvez encore la modifier'
         : minutes == null
-          ? 'D\u00e9finir une dur\u00e9e estim\u00e9e'
+          ? meta.emptyTitle || 'D\u00e9finir une estim\u00e9e'
           : config.adjusted
             ? 'Total ajust\u00e9\u00a0: ' + text
             : text;
-      var fill =
-        minutes == null
-          ? 0
-          : Math.min(
-              1,
-              Math.log(Math.max(minutes, 5)) / Math.log(ESTIMATE_LOG_MAX)
-            );
+      var fill = sandFillRatio();
       sand.style.transform = estimating
         ? ''
         : 'scaleY(' + (0.12 + fill * 0.88).toFixed(3) + ')';
       var accent = completionColorForEstimate(minutes);
       if (accent) wrap.style.setProperty('--estimate-accent', accent);
       else wrap.style.removeProperty('--estimate-accent');
+      syncTickSelection();
     }
 
     function setMinutes(next, notify) {
@@ -835,6 +897,16 @@
 
     function setEstimating(on) {
       config.estimating = !!on && minutes == null;
+      paint();
+    }
+
+    function setScale(nextScale) {
+      scaleId =
+        typeof CT.normalizeEstimateScale === 'function'
+          ? CT.normalizeEstimateScale(nextScale)
+          : nextScale || 'time';
+      config.scale = scaleId;
+      rebuildPopoverBody();
       paint();
     }
 
@@ -867,7 +939,6 @@
       popover.style.right = 'auto';
       popover.style.bottom = 'auto';
       popover.style.maxWidth = Math.max(160, viewW - margin * 2) + 'px';
-      // Tentative anchor before measuring (avoids a 0,0 flash with position:fixed).
       popover.style.left = Math.round(chipRect.left) + 'px';
       popover.style.top = Math.round(chipRect.bottom + gap) + 'px';
       popover.classList.add('is-fixed');
@@ -875,7 +946,6 @@
       var popW = popover.offsetWidth;
       var popH = popover.offsetHeight;
 
-      // Prefer right-align to chip (matches CSS default).
       var left = chipRect.right - popW;
       var top = chipRect.bottom + gap;
 
@@ -924,9 +994,122 @@
 
     wrap._tpCloseEstimate = closePopover;
 
+    function syncTickSelection() {
+      if (!ticksEl) return;
+      var nearest =
+        minutes != null && typeof CT.nearestEstimateTick === 'function'
+          ? CT.nearestEstimateTick(minutes, scaleId)
+          : null;
+      var buttons = ticksEl.querySelectorAll('.tp-estimate-tick');
+      for (var i = 0; i < buttons.length; i++) {
+        var btn = buttons[i];
+        var btnMins = Number(btn.dataset.minutes);
+        var selected =
+          nearest &&
+          minutes != null &&
+          (btn.dataset.tickId === nearest.id ||
+            (isFinite(btnMins) && btnMins === nearest.minutes));
+        btn.classList.toggle('is-selected', !!selected);
+        btn.setAttribute('aria-selected', selected ? 'true' : 'false');
+      }
+    }
+
+    function rebuildPopoverBody() {
+      if (!popover) return;
+      var meta = scaleMeta();
+      popover.setAttribute('aria-label', meta.popoverLabel || 'Choisir une estim\u00e9e');
+      popover.classList.toggle('is-scale-time', scaleId === 'time');
+      popover.classList.toggle('is-scale-discrete', scaleId !== 'time');
+
+      if (!ticksEl) {
+        ticksEl = document.createElement('div');
+        ticksEl.className = 'tp-estimate-ticks';
+        ticksEl.setAttribute('role', 'listbox');
+        popover.insertBefore(ticksEl, popover.firstChild);
+      }
+      ticksEl.textContent = '';
+      ticksForScale().forEach(function (tick) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tp-estimate-tick';
+        btn.setAttribute('role', 'option');
+        btn.textContent = tick.label;
+        btn.title = tick.title || tick.label;
+        btn.dataset.minutes = String(tick.minutes);
+        if (tick.id) btn.dataset.tickId = String(tick.id);
+        btn.addEventListener('click', function () {
+          setMinutes(tick.minutes, true);
+          closePopover();
+        });
+        ticksEl.appendChild(btn);
+      });
+
+      if (meta.freeform) {
+        if (!freeRow) {
+          freeRow = document.createElement('div');
+          freeRow.className = 'tp-estimate-free';
+          freeInput = document.createElement('input');
+          freeInput.type = 'text';
+          freeInput.className = 'tp-input tp-estimate-free-input';
+          freeInput.placeholder = meta.freeformPlaceholder || 'ex. 2 h';
+          freeInput.setAttribute(
+            'aria-label',
+            meta.freeformAria || 'Dur\u00e9e personnalis\u00e9e'
+          );
+          var applyBtn = document.createElement('button');
+          applyBtn.type = 'button';
+          applyBtn.className = 'tp-estimate-free-apply';
+          applyBtn.textContent = 'OK';
+
+          var applyBusy = false;
+          function applyFreeformEstimate() {
+            if (applyBusy) return Promise.resolve();
+            var typed = freeInput.value;
+            applyBusy = true;
+            applyBtn.disabled = true;
+            freeInput.disabled = true;
+            return resolveEstimateInput(typed, CT, trelloT)
+              .then(function (parsed) {
+                if (parsed != null) {
+                  setMinutes(parsed, true);
+                  closePopover();
+                }
+              })
+              .finally(function () {
+                applyBusy = false;
+                applyBtn.disabled = false;
+                freeInput.disabled = false;
+              });
+          }
+
+          freeInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              applyFreeformEstimate();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              closePopover();
+            }
+          });
+          applyBtn.addEventListener('click', function () {
+            applyFreeformEstimate();
+          });
+          freeRow.appendChild(freeInput);
+          freeRow.appendChild(applyBtn);
+          popover.appendChild(freeRow);
+        }
+        freeRow.hidden = false;
+        freeInput.placeholder = meta.freeformPlaceholder || 'ex. 2 h';
+      } else if (freeRow) {
+        freeRow.hidden = true;
+      }
+      syncTickSelection();
+    }
+
     function openPopover() {
       if (readOnly || !popover) return;
       closeOpenEstimatePopovers(popover);
+      rebuildPopoverBody();
       popover.hidden = false;
       popover.classList.add('is-open');
       chip.setAttribute('aria-expanded', 'true');
@@ -938,7 +1121,8 @@
         };
         document.addEventListener('click', onDocClose, true);
       }
-      if (freeInput) {
+      var meta = scaleMeta();
+      if (freeInput && meta.freeform) {
         freeInput.value =
           minutes != null
             ? typeof CT.formatEstimatedMinutesCompact === 'function'
@@ -959,76 +1143,7 @@
       popover.className = 'tp-estimate-popover';
       popover.hidden = true;
       popover.setAttribute('role', 'dialog');
-      popover.setAttribute('aria-label', 'Choisir une dur\u00e9e');
-
-      var ticks = document.createElement('div');
-      ticks.className = 'tp-estimate-ticks';
-      ticks.setAttribute('role', 'listbox');
-      durationTicks().forEach(function (tick) {
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'tp-estimate-tick';
-        btn.setAttribute('role', 'option');
-        btn.textContent = tick.label.replace(/^Quelques\s+/i, '');
-        btn.title = tick.label;
-        btn.dataset.minutes = String(tick.minutes);
-        btn.addEventListener('click', function () {
-          setMinutes(tick.minutes, true);
-          closePopover();
-        });
-        ticks.appendChild(btn);
-      });
-      popover.appendChild(ticks);
-
-      var freeRow = document.createElement('div');
-      freeRow.className = 'tp-estimate-free';
-      freeInput = document.createElement('input');
-      freeInput.type = 'text';
-      freeInput.className = 'tp-input tp-estimate-free-input';
-      freeInput.placeholder = 'ex. 2 h';
-      freeInput.setAttribute('aria-label', 'Dur\u00e9e personnalis\u00e9e');
-      var applyBtn = document.createElement('button');
-      applyBtn.type = 'button';
-      applyBtn.className = 'tp-estimate-free-apply';
-      applyBtn.textContent = 'OK';
-
-      var applyBusy = false;
-      function applyFreeformEstimate() {
-        if (applyBusy) return Promise.resolve();
-        var typed = freeInput.value;
-        applyBusy = true;
-        applyBtn.disabled = true;
-        freeInput.disabled = true;
-        return resolveEstimateInput(typed, CT, trelloT)
-          .then(function (parsed) {
-            if (parsed != null) {
-              setMinutes(parsed, true);
-              closePopover();
-            }
-          })
-          .finally(function () {
-            applyBusy = false;
-            applyBtn.disabled = false;
-            freeInput.disabled = false;
-          });
-      }
-
-      freeInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          applyFreeformEstimate();
-        } else if (e.key === 'Escape') {
-          e.preventDefault();
-          closePopover();
-        }
-      });
-      applyBtn.addEventListener('click', function () {
-        applyFreeformEstimate();
-      });
-      freeRow.appendChild(freeInput);
-      freeRow.appendChild(applyBtn);
-      popover.appendChild(freeRow);
-
+      rebuildPopoverBody();
       wrap.appendChild(popover);
       chip.addEventListener('click', function (e) {
         e.preventDefault();
@@ -1049,6 +1164,10 @@
       setMinutes: function (next) {
         setMinutes(next, false);
       },
+      getScale: function () {
+        return scaleId;
+      },
+      setScale: setScale,
       setEstimating: setEstimating,
       setAdjusted: function (adjusted) {
         config.adjusted = !!adjusted;
@@ -1183,14 +1302,70 @@
     percentRow.appendChild(percentEl);
 
     var linkedSnapshots = Object.create(null);
+
+    function currentEstimateScale() {
+      return CT.normalizeEstimateScale(data.estimateScale);
+    }
+
+    function applyEstimateScale(nextScale, opts) {
+      opts = opts || {};
+      var scale = CT.normalizeEstimateScale(nextScale);
+      if (scale === CT.DEFAULT_ESTIMATE_SCALE) delete data.estimateScale;
+      else data.estimateScale = scale;
+      syncEstimateScaleUi();
+      if (masterEstimateChip && typeof masterEstimateChip.setScale === 'function') {
+        masterEstimateChip.setScale(scale);
+      }
+      if (opts.rerender !== false) renderList();
+      updateProgressUi();
+      if (opts.persist !== false) emitChange();
+      onResize();
+    }
+
+    var estimateScaleSwitch = document.createElement('div');
+    estimateScaleSwitch.className = 'tp-estimate-scale-switch';
+    estimateScaleSwitch.setAttribute('role', 'radiogroup');
+    estimateScaleSwitch.setAttribute('aria-label', 'Syst\u00e8me d\u2019estimation');
+    var estimateScaleButtons = Object.create(null);
+    (CT.ESTIMATE_SCALE_ORDER || ['time', 'tshirt', 'coffee']).forEach(function (scaleKey) {
+      var meta = CT.getEstimateScale(scaleKey);
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tp-estimate-scale-btn';
+      btn.dataset.scale = scaleKey;
+      btn.setAttribute('role', 'radio');
+      btn.textContent = meta.label;
+      btn.title = meta.emptyTitle || meta.label;
+      btn.addEventListener('click', function () {
+        if (currentEstimateScale() === scaleKey) return;
+        applyEstimateScale(scaleKey);
+      });
+      estimateScaleButtons[scaleKey] = btn;
+      estimateScaleSwitch.appendChild(btn);
+    });
+
+    function syncEstimateScaleUi() {
+      var active = currentEstimateScale();
+      Object.keys(estimateScaleButtons).forEach(function (key) {
+        var btn = estimateScaleButtons[key];
+        var on = key === active;
+        btn.classList.toggle('is-active', on);
+        btn.setAttribute('aria-checked', on ? 'true' : 'false');
+      });
+      if (progressPanel) {
+        progressPanel.dataset.estimateScale = active;
+      }
+    }
+
     var masterEstimateChip = createEstimateChip(CT, {
       t: trelloT,
+      scale: currentEstimateScale(),
       minutes: CT.computeEstimatedTotal(data),
       adjusted:
         data.items.length &&
         typeof data.estimatedMinutesOffset === 'number' &&
         data.estimatedMinutesOffset !== 0,
-      ariaLabel: 'Dur\u00e9e totale estim\u00e9e',
+      ariaLabel: 'Estimation totale',
       onChange: function (mins) {
         data = CT.applyMasterEstimate(data, mins, {
           lock: true,
@@ -1202,6 +1377,8 @@
     });
     masterEstimateChip.el.classList.add('tp-completion-master-estimate');
     percentRow.appendChild(masterEstimateChip.el);
+    percentRow.appendChild(estimateScaleSwitch);
+    syncEstimateScaleUi();
 
     var encouragementEl = document.createElement('p');
     encouragementEl.className = 'tp-completion-encouragement';
@@ -1542,7 +1719,7 @@
     }
 
     var CHECK_ICON_SVG =
-      '<svg class="tp-completion-check-icon" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">' +
+      '<svg class="tp-completion-check-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
       '<path fill="currentColor" d="M13.2 4.3 6.5 11 2.8 7.3l1.1-1.1 2.6 2.6 5.6-5.6z"/>' +
       '</svg>';
     var TRASH_ICON_SVG =
@@ -1747,6 +1924,11 @@
       if (normalized.estimatedMinutesLocked === true) {
         data.estimatedMinutesLocked = true;
       }
+      if (normalized.estimateScale) {
+        data.estimateScale = normalized.estimateScale;
+      } else {
+        delete data.estimateScale;
+      }
       return normalized;
     }
 
@@ -1908,8 +2090,12 @@
     resetAllBtn.addEventListener('click', resetAllTasks);
 
     function syncMasterEstimateChip() {
+      var scale = currentEstimateScale();
       var total = CT.computeEstimatedTotal(data, linkedSnapshots);
       var remaining = CT.computeEstimatedRemaining(data, linkedSnapshots);
+      if (typeof masterEstimateChip.setScale === 'function') {
+        masterEstimateChip.setScale(scale);
+      }
       masterEstimateChip.setMinutes(total);
       masterEstimateChip.setAdjusted(
         !!(
@@ -1918,14 +2104,21 @@
           data.estimatedMinutesOffset !== 0
         )
       );
+      var totalLabel =
+        total == null
+          ? ''
+          : CT.formatEstimateForScale
+            ? CT.formatEstimateForScale(total, scale)
+            : CT.formatEstimatedMinutesCompact(total);
       masterEstimateChip.chip.title =
         total == null
-          ? 'D\u00e9finir une dur\u00e9e estim\u00e9e'
+          ? CT.getEstimateScale(scale).emptyTitle || 'D\u00e9finir une estim\u00e9e'
           : remaining != null && remaining !== total
-            ? CT.formatEstimatedMinutesCompact(total) +
+            ? totalLabel +
               ' au total \u00b7 ' +
-              CT.formatEstimatedRemainingLabel(remaining)
-            : CT.formatEstimatedMinutesCompact(total) + ' au total';
+              CT.formatEstimatedRemainingLabel(remaining, scale)
+            : totalLabel + ' au total';
+      syncEstimateScaleUi();
     }
 
     function updateProgressUi(opts) {
@@ -2633,10 +2826,11 @@
 
         var itemEstimate = createEstimateChip(CT, {
           t: trelloT,
+          scale: currentEstimateScale(),
           minutes: CT.itemEstimatedMinutes(item, linkedSnapshots),
           compact: true,
           estimating: !!estimatingItemIds[item.id],
-          ariaLabel: 'Dur\u00e9e estim\u00e9e de la sous-t\u00e2che',
+          ariaLabel: 'Estimation de la sous-t\u00e2che',
           onChange: function (mins) {
             delete estimatingItemIds[item.id];
             data = CT.applyItemEstimate(data, item.id, mins, { lock: true });
@@ -2672,10 +2866,11 @@
         var linkMins = CT.itemEstimatedMinutes(item, linkedSnapshots);
         if (linkMins != null) {
           var linkEstimate = createEstimateChip(CT, {
+            scale: currentEstimateScale(),
             minutes: linkMins,
             compact: true,
             readOnly: true,
-            ariaLabel: 'Dur\u00e9e estim\u00e9e de la carte li\u00e9e'
+            ariaLabel: 'Estimation de la carte li\u00e9e'
           });
           linkMeta.appendChild(linkEstimate.el);
         }
@@ -2992,14 +3187,22 @@
           if (row.estimatedMinutes != null) {
             sugLabel +=
               ' · ' +
-              (CT.formatEstimatedMinutesCompact(row.estimatedMinutes) || '');
+              (CT.formatEstimateForScale(
+                row.estimatedMinutes,
+                currentEstimateScale()
+              ) || '');
           }
           btn.textContent = sugLabel;
           btn.title =
             'Ajouter\u00a0: ' +
             row.text +
             (row.estimatedMinutes != null
-              ? ' (' + CT.formatEstimatedMinutesCompact(row.estimatedMinutes) + ')'
+              ? ' (' +
+                CT.formatEstimateForScale(
+                  row.estimatedMinutes,
+                  currentEstimateScale()
+                ) +
+                ')'
               : '');
         }
         btn.addEventListener('click', function () {
@@ -3277,6 +3480,10 @@
       },
       getEstimateSummary: function () {
         var progress = CT.computeCardProgress(data, linkedSnapshots);
+        return {
+          percent: progress.percent,
+          totalMinutes: CT.computeEstimatedTotal(data, linkedSnapshots),
+          remainingMinutes: CT.computeEstimatedRemaining(data, linkedSnapshots),
           needingEstimate: CT.itemsNeedingEstimate(data),
           hasOffset: !!(
             data.items.length &&
