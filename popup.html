@@ -2748,25 +2748,32 @@
             }
             hasBlocked = true;
           }
-          // Motifs: seed legacy card reasons, or write Statut Motif onto entities.
+          // Motifs: seed legacy card reasons, or write Statut Motif onto entities
+          // only when Statut differs from the completion aggregate.
           var afterBlock =
             (completionUi &&
               typeof completionUi.getData === 'function' &&
               completionUi.getData()) ||
             latestCompletion;
-          var withReasons;
-          if (!completionHasEntityBlockedReasons(afterBlock)) {
-            withReasons = applyPriorityReasonsToCompletion(
-              afterBlock,
-              priorityReasons
-            );
-          } else if (priorityReasons.length || completionHasEntityBlockedReasons(afterBlock)) {
-            withReasons = writeStatutReasonsOntoCompletion(
-              afterBlock,
-              priorityReasons
-            );
-          } else {
-            withReasons = afterBlock;
+          var aggReasons = CompletionTrello.aggregateBlockedReasons
+            ? CompletionTrello.aggregateBlockedReasons(afterBlock)
+            : [];
+          var withReasons = afterBlock;
+          if (
+            blockedReasonsFingerprint(priorityReasons) !==
+            blockedReasonsFingerprint(aggReasons)
+          ) {
+            if (!completionHasEntityBlockedReasons(afterBlock)) {
+              withReasons = applyPriorityReasonsToCompletion(
+                afterBlock,
+                priorityReasons
+              );
+            } else {
+              withReasons = writeStatutReasonsOntoCompletion(
+                afterBlock,
+                priorityReasons
+              );
+            }
           }
           if (
             JSON.stringify(CompletionTrello.normalizeCompletionData(afterBlock)) !==
