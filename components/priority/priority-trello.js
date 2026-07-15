@@ -1047,12 +1047,12 @@
   }
 
   /**
-   * Update a board label's color via REST PUT /labels/{id}.
-   * Requires OAuth (same as title / description edits).
+   * Update a board label via REST PUT /labels/{id}.
+   * Accepts name and/or color. Requires OAuth (same as title / description edits).
    *
    * @param {object} t Power-Up client
    * @param {string} labelId
-   * @param {{ color: string }} options
+   * @param {{ color?: string|null, name?: string }} options
    */
   async function updateBoardLabel(t, labelId, options) {
     options = options || {};
@@ -1060,8 +1060,24 @@
     if (!id) return { ok: false, reason: 'no-label-id', changed: false };
     if (!restClientOptions()) return { ok: false, reason: 'no-app-key', changed: false };
 
-    var color = normalizeBoardLabelColor(options.color);
-    if (!color) return { ok: false, reason: 'invalid-color', changed: false };
+    var hasColor = Object.prototype.hasOwnProperty.call(options, 'color');
+    var hasName = Object.prototype.hasOwnProperty.call(options, 'name');
+    if (!hasColor && !hasName) {
+      return { ok: false, reason: 'no-changes', changed: false };
+    }
+
+    var color = null;
+    if (hasColor) {
+      color = normalizeBoardLabelColor(options.color);
+      if (!color) return { ok: false, reason: 'invalid-color', changed: false };
+    }
+    var name = null;
+    if (hasName) {
+      name = typeof options.name === 'string' ? options.name.trim() : '';
+      if (name.length > 16384) {
+        return { ok: false, reason: 'name-too-long', changed: false };
+      }
+    }
 
     var cfg = restClientOptions();
     var api = await t.getRestApi();
@@ -1070,15 +1086,18 @@
     var token = await api.getToken();
     if (!token) return { ok: false, reason: 'no-token', changed: false };
 
+    var params = [
+      'key=' + encodeURIComponent(cfg.appKey),
+      'token=' + encodeURIComponent(token)
+    ];
+    if (hasColor) params.push('color=' + encodeURIComponent(color));
+    if (hasName) params.push('name=' + encodeURIComponent(name));
+
     var url =
       'https://api.trello.com/1/labels/' +
       encodeURIComponent(id) +
-      '?color=' +
-      encodeURIComponent(color) +
-      '&key=' +
-      encodeURIComponent(cfg.appKey) +
-      '&token=' +
-      encodeURIComponent(token);
+      '?' +
+      params.join('&');
 
     var response = await fetch(url, { method: 'PUT' });
     if (!response.ok) {
@@ -1109,16 +1128,27 @@
       name:
         updated && typeof updated.name === 'string'
           ? updated.name
-          : undefined,
+          : hasName
+            ? name
+            : undefined,
       color:
         updated && Object.prototype.hasOwnProperty.call(updated, 'color')
           ? updated.color
-          : color,
+          : hasColor
+            ? color
+            : undefined,
       idBoard:
         updated && updated.idBoard != null ? String(updated.idBoard) : undefined
     };
 
-    return { ok: true, changed: true, label: label, labelId: id, color: label.color };
+    return {
+      ok: true,
+      changed: true,
+      label: label,
+      labelId: id,
+      color: label.color,
+      name: label.name
+    };
   }
 
   /**
@@ -1210,6 +1240,49 @@
         'Trello REST DELETE /cards/' +
           cardId +
           '/idLabels/' +
+          id +
+          ' failed: ' +
+          response.status +
+          (detail ? ' ' + detail : '')
+      );
+    }
+    return { ok: true, changed: true, labelId: id };
+  }
+
+  /**
+   * Permanently delete a board label via REST DELETE /labels/{id}.
+   * Removes it from every card on the board. Requires OAuth.
+   */
+  async function deleteBoardLabel(t, labelId) {
+    var id = labelId != null ? String(labelId).trim() : '';
+    if (!id) return { ok: false, reason: 'no-label-id', changed: false };
+    if (!restClientOptions()) return { ok: false, reason: 'no-app-key', changed: false };
+
+    var cfg = restClientOptions();
+    var api = await t.getRestApi();
+    var authorized = await api.isAuthorized();
+    if (!authorized) return { ok: false, reason: 'not-authorized', changed: false };
+    var token = await api.getToken();
+    if (!token) return { ok: false, reason: 'no-token', changed: false };
+
+    var url =
+      'https://api.trello.com/1/labels/' +
+      encodeURIComponent(id) +
+      '?key=' +
+      encodeURIComponent(cfg.appKey) +
+      '&token=' +
+      encodeURIComponent(token);
+
+    var response = await fetch(url, { method: 'DELETE' });
+    if (!response.ok) {
+      var detail = '';
+      try {
+        detail = await response.text();
+      } catch (readErr) {
+        detail = readErr && readErr.message ? readErr.message : '';
+      }
+      throw new Error(
+        'Trello REST DELETE /labels/' +
           id +
           ' failed: ' +
           response.status +
@@ -2595,6 +2668,7 @@
     updateBoardLabel: updateBoardLabel,
     addCardLabel: addCardLabel,
     removeCardLabel: removeCardLabel,
+    deleteBoardLabel: deleteBoardLabel,
     addCardMember: addCardMember,
     removeCardMember: removeCardMember,
     setCardDesc: setCardDesc,

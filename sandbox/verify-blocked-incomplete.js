@@ -59,6 +59,20 @@ check(
   Agent.fallbackUnblockSubtaskText("En attente d'une approbation") ===
     "Obtenir l'approbation"
 );
+check(
+  'fallbackBlockedReasonText export',
+  typeof Agent.fallbackBlockedReasonText === 'function'
+);
+check(
+  'fallbackBlockedReasonText action → en attente de',
+  Agent.fallbackBlockedReasonText('Manger un hot-dog') ===
+    'En attente de manger un hot-dog'
+);
+check(
+  'fallbackBlockedReasonText keeps existing cause',
+  Agent.fallbackBlockedReasonText("En attente d'une r\u00e9ponse") ===
+    "En attente d'une r\u00e9ponse"
+);
 
 var priority = { enAttente: false, blockedReasons: [] };
 var completion = { items: [], progress: 100 };

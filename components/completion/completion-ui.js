@@ -2162,7 +2162,8 @@
       if (!live) return;
       var nextBlocked = !CT.isItemBlocked(live);
       data = CT.setItemBlocked(data, itemId, nextBlocked);
-      emitChange({ animateItemId: itemId, flipWasDone: !!live.done });
+      // Do not use done-list FLIP — blocked toggle is not a done transition.
+      emitChange();
       notifyBlockedChange('item');
       onResize();
     }

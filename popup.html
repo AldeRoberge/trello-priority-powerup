@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=estimate-time-ticks-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-3" />
-  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=parent-clear-2" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=label-delete-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-scope-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
@@ -16,13 +16,13 @@
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/effects.js?v=fx-3"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=parent-clear-1"></script>
+  <script src="./components/priority/priority-ui.js?v=label-delete-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
     }
   </script>
-  <script src="./components/priority/priority-trello.js?v=creator-rest-1"></script>
+  <script src="./components/priority/priority-trello.js?v=label-delete-1"></script>
   <script src="./components/statut/statut-match.js?v=attente-hourglass-1"></script>
   <script src="./components/statut/statut-trello.js?v=section-glow-1"></script>
   <script src="./components/shared/tab-autocomplete.js?v=tab-complete-1"></script>
@@ -1740,6 +1740,54 @@
             }
           );
         },
+        onLabelRename: function (payload) {
+          if (!PriorityTrello.updateBoardLabel) {
+            return Promise.resolve({ ok: false, reason: 'unavailable', changed: false });
+          }
+          var labelId =
+            payload && payload.id != null
+              ? String(payload.id)
+              : payload && payload.label && payload.label.id != null
+                ? String(payload.label.id)
+                : '';
+          var name =
+            payload && typeof payload.name === 'string' ? payload.name : '';
+          if (!labelId) {
+            return Promise.resolve({ ok: false, reason: 'no-label-id', changed: false });
+          }
+          markLabelsDirty();
+          return PriorityTrello.updateBoardLabel(t, labelId, { name: name }).then(
+            function (result) {
+              if (result && result.ok === false) return result;
+              return Promise.all([
+                PriorityTrello.getCardLabels(t),
+                PriorityTrello.getBoardLabels
+                  ? PriorityTrello.getBoardLabels(t)
+                  : Promise.resolve([])
+              ]).then(function (parts) {
+                var labels = parts[0] || [];
+                var boardLabels = parts[1] || [];
+                latestLabelsFp = fingerprintIds(labels);
+                appliedLabelsFp = latestLabelsFp;
+                if (infoUi && typeof infoUi.setLabels === 'function') {
+                  infoUi.setLabels(labels);
+                }
+                if (infoUi && typeof infoUi.setBoardLabels === 'function') {
+                  infoUi.setBoardLabels(boardLabels);
+                }
+                return commitHistoryNow('Étiquette renommée').then(function () {
+                  return {
+                    ok: true,
+                    changed: true,
+                    label: (result && result.label) || null,
+                    name: result && result.name,
+                    labelId: labelId
+                  };
+                });
+              });
+            }
+          );
+        },
         onLabelRemove: function (label) {
           if (!label || !label.id || !PriorityTrello.removeCardLabel) {
             return Promise.resolve({ ok: false, reason: 'unavailable', changed: false });
@@ -1760,6 +1808,39 @@
                   return { ok: true, labelId: label.id, changed: !!(result && result.changed) };
                 });
               });
+          });
+        },
+        onLabelDelete: function (label) {
+          if (!label || !label.id || !PriorityTrello.deleteBoardLabel) {
+            return Promise.resolve({ ok: false, reason: 'unavailable', changed: false });
+          }
+          markLabelsDirty();
+          return PriorityTrello.deleteBoardLabel(t, label.id).then(function (result) {
+            if (result && result.ok === false) return result;
+            return Promise.all([
+              PriorityTrello.getCardLabels(t),
+              PriorityTrello.getBoardLabels
+                ? PriorityTrello.getBoardLabels(t)
+                : Promise.resolve([])
+            ]).then(function (parts) {
+              var labels = parts[0] || [];
+              var boardLabels = parts[1] || [];
+              latestLabelsFp = fingerprintIds(labels);
+              appliedLabelsFp = latestLabelsFp;
+              if (infoUi && typeof infoUi.setLabels === 'function') {
+                infoUi.setLabels(labels);
+              }
+              if (infoUi && typeof infoUi.setBoardLabels === 'function') {
+                infoUi.setBoardLabels(boardLabels);
+              }
+              return commitHistoryNow('Étiquette supprimée').then(function () {
+                return {
+                  ok: true,
+                  labelId: label.id,
+                  changed: !!(result && result.changed)
+                };
+              });
+            });
           });
         },
         suggestLabels: function (opts) {
@@ -2103,9 +2184,123 @@
         .join(',');
     }
 
+    function blockedReasonsFingerprint(reasons) {
+      if (!Array.isArray(reasons) || !reasons.length) return '';
+      return reasons
+        .map(function (r) {
+          return typeof r === 'string' ? reasonKeyFr(r) : '';
+        })
+        .filter(Boolean)
+        .sort()
+        .join('|');
+    }
+
+    /** True when a Motif string is clearly about this subtask title. */
+    function blockedReasonMatchesTask(reason, taskName) {
+      var r = reasonKeyFr(reason);
+      var name = String(taskName || '').trim();
+      if (!r || !name) return false;
+      var nameKey = reasonKeyFr(name);
+      if (r === nameKey) return true;
+      var lower = name.charAt(0).toLocaleLowerCase('fr-FR') + name.slice(1);
+      var lowerKey = reasonKeyFr(lower);
+      if (r === reasonKeyFr('En attente de (' + name + ')')) return true;
+      if (r === reasonKeyFr('En attente de (' + lower + ')')) return true;
+      if (r === reasonKeyFr('En attente de ' + lower)) return true;
+      if (r === reasonKeyFr("En attente d'" + lower)) return true;
+      if (r === reasonKeyFr('En attente de ' + name)) return true;
+      // "En attente de manger un hot-dog" ↔ subtask "Manger un hot-dog"
+      var rest = r.replace(/^en\s+attente\s+(de|d\')\s*/i, '').trim();
+      if (rest === lowerKey || rest === nameKey) return true;
+      rest = rest.replace(/^\(|\)$/g, '').trim();
+      if (rest === lowerKey || rest === nameKey) return true;
+      return false;
+    }
+
     /**
-     * Progrès blocked → Statut enAttente + blockedLinks.
+     * Drop Motif entries / links for subtasks that are no longer blocked
+     * (completed, deleted, or unblocked).
+     */
+    function pruneBlockedReasonsForCompletion(state, data) {
+      var WAITING_OTHER =
+        (window.PriorityUI && PriorityUI.BLOCKED_REASON_WAITING_OTHER_TASK) ||
+        "En attente d'une autre t\u00e2che";
+      var items =
+        data && Array.isArray(data.items) ? data.items : [];
+      var byId = Object.create(null);
+      for (var i = 0; i < items.length; i++) {
+        if (items[i] && items[i].id) byId[String(items[i].id)] = items[i];
+      }
+
+      var prevLinks = Array.isArray(state && state.blockedLinks)
+        ? state.blockedLinks
+        : [];
+      var liveLinks = CompletionTrello.blockedLinksFromCompletion
+        ? CompletionTrello.blockedLinksFromCompletion(data)
+        : [];
+      var liveIds = Object.create(null);
+      for (var li = 0; li < liveLinks.length; li++) {
+        if (liveLinks[li] && liveLinks[li].id) {
+          liveIds[String(liveLinks[li].id)] = true;
+        }
+      }
+
+      var removedNames = [];
+      var seenName = Object.create(null);
+      function rememberRemovedName(label) {
+        var key = reasonKeyFr(label);
+        if (!key || seenName[key]) return;
+        seenName[key] = true;
+        removedNames.push(String(label).trim());
+      }
+
+      for (var p = 0; p < prevLinks.length; p++) {
+        var link = prevLinks[p];
+        if (!link || !link.id) continue;
+        var id = String(link.id);
+        if (liveIds[id]) continue;
+        var item = byId[id];
+        // Gone from blocked set: completed, unblocked, or removed.
+        var label =
+          (item && item.text) ||
+          (typeof link.label === 'string' ? link.label : '') ||
+          '';
+        if (label) rememberRemovedName(label);
+      }
+
+      var reasons = Array.isArray(state && state.blockedReasons)
+        ? state.blockedReasons.slice()
+        : [];
+      if (removedNames.length && reasons.length) {
+        reasons = reasons.filter(function (reason) {
+          if (typeof reason !== 'string') return false;
+          if (reasonKeyFr(reason) === reasonKeyFr(WAITING_OTHER)) {
+            return liveLinks.length > 0;
+          }
+          for (var n = 0; n < removedNames.length; n++) {
+            if (blockedReasonMatchesTask(reason, removedNames[n])) {
+              return false;
+            }
+          }
+          return true;
+        });
+      } else if (!liveLinks.length && reasons.length) {
+        // No remaining linked blockers: drop the generic waiting-other motif.
+        reasons = reasons.filter(function (reason) {
+          return reasonKeyFr(reason) !== reasonKeyFr(WAITING_OTHER);
+        });
+      }
+
+      return {
+        blockedLinks: liveLinks,
+        blockedReasons: reasons,
+      };
+    }
+
+    /**
+     * Progrès blocked → Statut enAttente + blockedLinks (+ prune Motifs).
      * Card is Bloqué iff master or any item is blocked.
+     * Completing a subtask clears its block and removes it from Motif/links.
      */
     function syncPriorityFromProgressBlocked(data) {
       if (syncingBlockedBridge) return;
@@ -2114,22 +2309,23 @@
         return;
       }
       var hasBlocked = CompletionTrello.hasAnyBlocked(data);
-      var progressLinks = CompletionTrello.blockedLinksFromCompletion
-        ? CompletionTrello.blockedLinksFromCompletion(data)
-        : [];
       var st =
         typeof variant.getState === 'function' ? variant.getState() || {} : {};
+      var pruned = pruneBlockedReasonsForCompletion(st, data);
+      var nextLinks = pruned.blockedLinks;
+      var nextReasons = pruned.blockedReasons;
       var curEnAttente = !!st.enAttente;
       var curLinksFp = blockedLinksFingerprint(st.blockedLinks);
-      var nextLinks = hasBlocked
-        ? progressLinks.length
-          ? progressLinks
-          : Array.isArray(st.blockedLinks)
-            ? st.blockedLinks
-            : []
-        : [];
       var nextLinksFp = blockedLinksFingerprint(nextLinks);
-      if (hasBlocked === curEnAttente && nextLinksFp === curLinksFp) return;
+      var curReasonsFp = blockedReasonsFingerprint(st.blockedReasons);
+      var nextReasonsFp = blockedReasonsFingerprint(nextReasons);
+      if (
+        hasBlocked === curEnAttente &&
+        nextLinksFp === curLinksFp &&
+        nextReasonsFp === curReasonsFp
+      ) {
+        return;
+      }
 
       syncingBlockedBridge = true;
       try {
@@ -2137,6 +2333,7 @@
           Object.assign({}, st, {
             enAttente: hasBlocked,
             blockedLinks: nextLinks,
+            blockedReasons: nextReasons,
           })
         );
         if (
@@ -2154,49 +2351,116 @@
     }
 
     /**
-     * Statut / enAttente → Progrès master.blocked (or clear all).
+     * Apply priority blockedLinks onto matching Progrès items (item.blocked).
+     * Returns next completion data (normalized).
+     */
+    function applyBlockedLinksToCompletion(data, links) {
+      var CT = CompletionTrello;
+      var next = CT.normalizeCompletionData(data || { items: [] });
+      var ids = Object.create(null);
+      var list = Array.isArray(links) ? links : [];
+      for (var i = 0; i < list.length; i++) {
+        var link = list[i];
+        if (link && link.id) ids[String(link.id)] = true;
+      }
+      var linkCount = 0;
+      for (var key in ids) {
+        if (Object.prototype.hasOwnProperty.call(ids, key)) linkCount++;
+      }
+      if (!linkCount) return next;
+
+      var known = Object.create(null);
+      for (var j = 0; j < next.items.length; j++) {
+        known[next.items[j].id] = true;
+      }
+      for (var id in ids) {
+        if (!Object.prototype.hasOwnProperty.call(ids, id)) continue;
+        if (!known[id]) continue;
+        next = CT.setItemBlocked(next, id, true);
+      }
+      return CT.normalizeCompletionData(next);
+    }
+
+    /**
+     * Statut / enAttente → Progrès blocked flags.
+     * Prefer marking linked subtasks; only use master.blocked when there are
+     * no blockedLinks and nothing is blocked yet.
      */
     function syncProgressFromPriorityBlocked(state) {
       if (syncingBlockedBridge) return;
       if (!completionUi || typeof CompletionTrello === 'undefined') return;
       if (!CompletionTrello.hasAnyBlocked) return;
       var enAttente = !!(state && state.enAttente);
+      var links = Array.isArray(state && state.blockedLinks)
+        ? state.blockedLinks
+        : [];
       var live =
         typeof completionUi.getData === 'function'
           ? completionUi.getData()
           : latestCompletion || { items: [] };
       var hasBlocked = CompletionTrello.hasAnyBlocked(live);
-      if (enAttente === hasBlocked) return;
 
       syncingBlockedBridge = true;
       try {
-        if (enAttente && !hasBlocked) {
-          if (typeof completionUi.setMasterBlocked === 'function') {
-            latestCompletion = withProgressEnabledFlag(
-              completionUi.setMasterBlocked(true)
-            );
-          } else {
-            latestCompletion = withProgressEnabledFlag(
-              CompletionTrello.setMasterBlocked(live, true)
-            );
-            if (typeof completionUi.setData === 'function') {
-              completionUi.setData(latestCompletion);
+        if (!enAttente) {
+          if (hasBlocked) {
+            if (typeof completionUi.clearAllBlocked === 'function') {
+              latestCompletion = withProgressEnabledFlag(
+                completionUi.clearAllBlocked()
+              );
+            } else {
+              latestCompletion = withProgressEnabledFlag(
+                CompletionTrello.clearAllBlocked(live)
+              );
+              if (typeof completionUi.setData === 'function') {
+                completionUi.setData(latestCompletion);
+              }
+              saveCompletion(latestCompletion);
             }
-            saveCompletion(latestCompletion);
           }
-        } else if (!enAttente && hasBlocked) {
-          if (typeof completionUi.clearAllBlocked === 'function') {
-            latestCompletion = withProgressEnabledFlag(
-              completionUi.clearAllBlocked()
-            );
-          } else {
-            latestCompletion = withProgressEnabledFlag(
-              CompletionTrello.clearAllBlocked(live)
-            );
+        } else {
+          // Card Bloqué: mirror blockedLinks onto items first.
+          var withLinks = applyBlockedLinksToCompletion(live, links);
+          // Links/items carry the block — drop an auto master flag so the
+          // specific subtask is what shows as blocked in Progrès.
+          if (
+            links.length &&
+            CompletionTrello.hasAnyBlocked(withLinks) &&
+            withLinks.blocked
+          ) {
+            withLinks = CompletionTrello.setMasterBlocked(withLinks, false);
+          }
+          var linksApplied =
+            JSON.stringify(CompletionTrello.normalizeCompletionData(live)) !==
+            JSON.stringify(withLinks);
+          if (linksApplied) {
+            latestCompletion = withProgressEnabledFlag(withLinks);
             if (typeof completionUi.setData === 'function') {
               completionUi.setData(latestCompletion);
             }
             saveCompletion(latestCompletion);
+            hasBlocked = CompletionTrello.hasAnyBlocked(latestCompletion);
+          } else {
+            hasBlocked = CompletionTrello.hasAnyBlocked(withLinks);
+          }
+          // No linked/item blocked yet → master task is the block source.
+          if (!hasBlocked) {
+            if (typeof completionUi.setMasterBlocked === 'function') {
+              latestCompletion = withProgressEnabledFlag(
+                completionUi.setMasterBlocked(true)
+              );
+            } else {
+              latestCompletion = withProgressEnabledFlag(
+                CompletionTrello.setMasterBlocked(
+                  (completionUi.getData && completionUi.getData()) || live,
+                  true
+                )
+              );
+              if (typeof completionUi.setData === 'function') {
+                completionUi.setData(latestCompletion);
+              }
+              saveCompletion(latestCompletion);
+            }
           }
         }
         if (progressCollapse) progressCollapse.refreshSummary();
@@ -2214,6 +2478,65 @@
 
     /**
      * After a new Statut motif: AI (or fallback) creates a blocked Progrès subtask.
+     */
+    function reasonKeyFr(value) {
+      return String(value || '')
+        .trim()
+        .toLocaleLowerCase('fr-FR');
+    }
+
+    function looksLikeActionReason(value) {
+      var text = String(value || '').trim();
+      if (!text) return false;
+      if (/^en\s+attente\s+(de|d\')/i.test(text)) return false;
+      if (/^bloqu\u00e9\s+\u00e0\s+cause\s+de\s+/i.test(text)) return false;
+      return (
+        /^[A-Za-z\u00C0-\u024F]+(er|ir|re)\b/i.test(text) ||
+        /^(mettre|faire|ouvrir|fermer|manger|obtenir|relancer)\b/i.test(text)
+      );
+    }
+
+    /** Replace a typed motif chip with the AI-polished "En attente de …" form. */
+    function replaceBlockedReasonChip(fromReason, toReason) {
+      if (!variant || typeof variant.getState !== 'function') return toReason;
+      var from = String(fromReason || '').trim();
+      var to = String(toReason || '').trim();
+      if (!from || !to || reasonKeyFr(from) === reasonKeyFr(to)) return to || from;
+      var st = variant.getState() || {};
+      var reasons = Array.isArray(st.blockedReasons) ? st.blockedReasons.slice() : [];
+      var replaced = false;
+      var next = [];
+      var seen = Object.create(null);
+      for (var i = 0; i < reasons.length; i++) {
+        var r = typeof reasons[i] === 'string' ? reasons[i].trim() : '';
+        if (!r) continue;
+        if (reasonKeyFr(r) === reasonKeyFr(from)) {
+          r = to;
+          replaced = true;
+        }
+        var key = reasonKeyFr(r);
+        if (seen[key]) continue;
+        seen[key] = true;
+        next.push(r);
+      }
+      if (!replaced && !seen[reasonKeyFr(to)]) next.push(to);
+      syncingBlockedBridge = true;
+      try {
+        variant.setState(
+          Object.assign({}, st, {
+            enAttente: true,
+            blockedReasons: next,
+          })
+        );
+      } finally {
+        syncingBlockedBridge = false;
+      }
+      return to;
+    }
+
+    /**
+     * Motif commit: polish to a single "En attente de …" cause, then create
+     * an actionable blocked Progrès subtask (not a second motif chip).
      */
     function createBlockedSubtaskFromReason(reason) {
       var text = typeof reason === 'string' ? reason.trim() : '';
@@ -2309,34 +2632,70 @@
         return item;
       }
 
-      function finishWithTitle(suggested) {
-        var title =
-          typeof suggested === 'string' && suggested.trim()
-            ? suggested.trim()
-            : window.PriorityAgent &&
-                typeof PriorityAgent.fallbackUnblockSubtaskText === 'function'
-              ? PriorityAgent.fallbackUnblockSubtaskText(text)
-              : text;
-        if (!title) title = text;
-        return applyBlockedItem(title);
+      function resolveSubtaskTitle(polishedReason, suggestedAction) {
+        if (typeof suggestedAction === 'string' && suggestedAction.trim()) {
+          return suggestedAction.trim();
+        }
+        if (looksLikeActionReason(text)) return text;
+        if (
+          window.PriorityAgent &&
+          typeof PriorityAgent.fallbackUnblockSubtaskText === 'function'
+        ) {
+          return PriorityAgent.fallbackUnblockSubtaskText(polishedReason || text);
+        }
+        return text;
       }
 
-      if (
-        !window.PriorityAgent ||
-        typeof PriorityAgent.suggestUnblockSubtaskText !== 'function' ||
-        typeof PriorityAgent.getProvider !== 'function'
-      ) {
-        return Promise.resolve(finishWithTitle(null));
+      function polishReasonThenCreate() {
+        var polishPromise =
+          window.PriorityAgent &&
+          typeof PriorityAgent.getProvider === 'function' &&
+          typeof PriorityAgent.suggestBlockedReasonText === 'function'
+            ? PriorityAgent.getProvider(t)
+                .then(function (provider) {
+                  return PriorityAgent.suggestBlockedReasonText(provider, text);
+                })
+                .catch(function () {
+                  return null;
+                })
+            : Promise.resolve(null);
+
+        return polishPromise.then(function (suggestedReason) {
+          var polished =
+            typeof suggestedReason === 'string' && suggestedReason.trim()
+              ? suggestedReason.trim()
+              : window.PriorityAgent &&
+                  typeof PriorityAgent.fallbackBlockedReasonText === 'function'
+                ? PriorityAgent.fallbackBlockedReasonText(text)
+                : text;
+          if (!polished) polished = text;
+          replaceBlockedReasonChip(text, polished);
+
+          var actionPromise =
+            window.PriorityAgent &&
+            typeof PriorityAgent.suggestUnblockSubtaskText === 'function' &&
+            typeof PriorityAgent.getProvider === 'function'
+              ? PriorityAgent.getProvider(t)
+                  .then(function (provider) {
+                    return PriorityAgent.suggestUnblockSubtaskText(
+                      provider,
+                      polished
+                    );
+                  })
+                  .catch(function () {
+                    return null;
+                  })
+              : Promise.resolve(null);
+
+          return actionPromise.then(function (suggestedAction) {
+            var title = resolveSubtaskTitle(polished, suggestedAction);
+            if (!title) title = text;
+            return applyBlockedItem(title);
+          });
+        });
       }
 
-      return PriorityAgent.getProvider(t)
-        .then(function (provider) {
-          return PriorityAgent.suggestUnblockSubtaskText(provider, text);
-        })
-        .catch(function () {
-          return null;
-        })
-        .then(finishWithTitle);
+      return polishReasonThenCreate();
     }
 
     /** Mirror Terminé → Progrès 100% in the open popup (persistence already done in side effects). */

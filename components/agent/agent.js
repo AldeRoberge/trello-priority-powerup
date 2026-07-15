@@ -3405,6 +3405,118 @@
   }
 
   /**
+   * Deterministic fallback: turn a free-typed motif / action into a cause phrase.
+   * "Manger un hot-dog" → "En attente de manger un hot-dog"
+   */
+  function fallbackBlockedReasonText(reason) {
+    var trimmed = typeof reason === 'string' ? reason.trim() : '';
+    if (!trimmed) return '';
+    if (/^en\s+attente\s+(de|d\')/i.test(trimmed)) return trimmed;
+    if (/^bloqu\u00e9\s+\u00e0\s+cause\s+de\s+/i.test(trimmed)) return trimmed;
+    var known = normalizeAgentBlockedReason(trimmed);
+    if (known && known !== trimmed && /^en\s+attente|^bloqu\u00e9/i.test(known)) {
+      return known;
+    }
+    var body = trimmed.replace(/\.+$/, '');
+    // Prefer lowercase after "de" for infinitives / mid-sentence phrasing.
+    var lower =
+      body.charAt(0).toLocaleLowerCase('fr-FR') + body.slice(1);
+    if (/^(une?|des)\s+/i.test(lower)) {
+      return ('En attente d\'' + lower).slice(0, 500);
+    }
+    if (/^([aeiou\u00e0\u00e2\u00e4\u00e9\u00e8\u00ea\u00eb\u00ee\u00ef\u00f4\u00f6\u00f9\u00fb\u00fc]|h)/i.test(lower)) {
+      return ('En attente d\'' + lower).slice(0, 500);
+    }
+    return ('En attente de ' + lower).slice(0, 500);
+  }
+
+  /**
+   * AI-assisted polish for a typed block motif → single "En attente de …" cause.
+   */
+  async function suggestBlockedReasonText(provider, reason) {
+    var trimmed = typeof reason === 'string' ? reason.trim() : '';
+    if (!trimmed) return '';
+    var fallback = fallbackBlockedReasonText(trimmed);
+    if (/^en\s+attente\s+(de|d\')/i.test(trimmed) || /^bloqu\u00e9\s+\u00e0\s+cause\s+de\s+/i.test(trimmed)) {
+      return trimmed;
+    }
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) return fallback;
+
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu transformes un motif de blocage Trello en une seule cause en fran\u00e7ais.',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"text":"\u2026"}',
+          'R\u00e8gles\u00a0:',
+          '- text = UN motif de cause, pas une action \u00e0 faire (sauf si d\u00e9j\u00e0 une cause).',
+          '- Pr\u00e9f\u00e8re \u00ab\u00a0En attente de \u2026\u00a0\u00bb (ou \u00ab\u00a0En attente d\'\u2026\u00a0\u00bb) pour une attente / action pas encore faite.',
+          '- Utilise \u00ab\u00a0Bloqu\u00e9 \u00e0 cause de \u2026\u00a0\u00bb seulement pour un obstacle physique / permission / mat\u00e9riel.',
+          '- Si l\'entr\u00e9e est un infinitif (ex. Manger un hot-dog)\u00a0: \u00ab\u00a0En attente de manger un hot-dog\u00a0\u00bb (minuscule apr\u00e8s de).',
+          '- PAS de parenth\u00e8ses, PAS de num\u00e9rotation, PAS de second motif.',
+          '- Max ~100 caract\u00e8res.',
+          'Ex.\u00a0: \u00ab\u00a0Manger un hot-dog\u00a0\u00bb \u2192 {"text":"En attente de manger un hot-dog"}',
+          'Ex.\u00a0: \u00ab\u00a0r\u00e9ponse du client\u00a0\u00bb \u2192 {"text":"En attente d\'une r\u00e9ponse du client"}',
+          'Ex.\u00a0: \u00ab\u00a0En attente d\'une approbation\u00a0\u00bb \u2192 {"text":"En attente d\'une approbation"}'
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content: 'Motif saisi\u00a0: «' + trimmed.slice(0, 200) + '»'
+      }
+    ];
+
+    var response;
+    try {
+      response = await chatCompletions(p, messages, {
+        jsonMode: true,
+        max_tokens: 100,
+        temperature: 0.3,
+        stream: false
+      });
+    } catch (err) {
+      if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+        try {
+          response = await chatCompletions(p, messages, {
+            jsonMode: false,
+            max_tokens: 100,
+            temperature: 0.3,
+            stream: false
+          });
+        } catch (err2) {
+          console.error('PriorityAgent.suggestBlockedReasonText failed', err2);
+          return fallback;
+        }
+      } else {
+        console.error('PriorityAgent.suggestBlockedReasonText failed', err);
+        return fallback;
+      }
+    }
+
+    var text = '';
+    try {
+      var parsed = parseAssistantPayload(response.content);
+      text = typeof parsed.text === 'string' ? parsed.text : '';
+      if (!text && parsed.reason) text = String(parsed.reason);
+      if (!text && parsed.motif) text = String(parsed.motif);
+    } catch (e) {
+      try {
+        var raw = JSON.parse(response.content);
+        text = typeof raw.text === 'string' ? raw.text : '';
+      } catch (e2) {
+        text = '';
+      }
+    }
+    text = String(text || '')
+      .trim()
+      .replace(/^["«]\s*|\s*["»]$/g, '')
+      .slice(0, 500);
+    if (!text) return fallback;
+    return fallbackBlockedReasonText(text) || text;
+  }
+
+  /**
    * Deterministic fallback: turn a block motif into an actionable Progrès title.
    * "En attente d'un câble" → "Obtenir un câble"
    */
@@ -11316,6 +11428,8 @@
     isVerboseStructuredDesc: isVerboseStructuredDesc,
     suggestSubtasks: suggestSubtasks,
     estimateSubtaskDurations: estimateSubtaskDurations,
+    fallbackBlockedReasonText: fallbackBlockedReasonText,
+    suggestBlockedReasonText: suggestBlockedReasonText,
     fallbackUnblockSubtaskText: fallbackUnblockSubtaskText,
     suggestUnblockSubtaskText: suggestUnblockSubtaskText,
     heuristicSubtaskEstimates: heuristicSubtaskEstimates,

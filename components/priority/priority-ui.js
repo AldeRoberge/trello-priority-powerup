@@ -2170,12 +2170,21 @@
    * Expand reasons for display: replace the generic waiting-other reason with
    * one label per linked task (`En attente de (Name)`), using stored labels
    * when live subtask text is unavailable.
+   * When the user already typed an explicit motif, do not also append link
+   * chips — avoids "Manger…" + "En attente de (Manger…)".
    */
   function expandBlockedReasonsForDisplay(reasons, links, items) {
     var list = normalizeBlockedReasons(reasons);
     var linkList = normalizeBlockedLinks(links);
     var out = [];
     var waitingExpanded = false;
+    var hasExplicitReason = false;
+    for (var e = 0; e < list.length; e++) {
+      if (list[e] !== BLOCKED_REASON_WAITING_OTHER_TASK) {
+        hasExplicitReason = true;
+        break;
+      }
+    }
     for (var i = 0; i < list.length; i++) {
       if (list[i] === BLOCKED_REASON_WAITING_OTHER_TASK) {
         waitingExpanded = true;
@@ -2192,7 +2201,8 @@
         out.push(list[i]);
       }
     }
-    if (!waitingExpanded && linkList.length) {
+    // Only auto-surface link labels when there is no typed motif yet.
+    if (!waitingExpanded && linkList.length && !hasExplicitReason) {
       for (var k = 0; k < linkList.length; k++) {
         out.push(
           formatBlockedWaitingOnLabel(resolveBlockedLinkLabel(linkList[k], items))
@@ -6384,12 +6394,16 @@
       typeof config.onLabelAdd === 'function' ? config.onLabelAdd : null;
     var onLabelRemove =
       typeof config.onLabelRemove === 'function' ? config.onLabelRemove : null;
+    var onLabelDelete =
+      typeof config.onLabelDelete === 'function' ? config.onLabelDelete : null;
     var onLabelCreate =
       typeof config.onLabelCreate === 'function' ? config.onLabelCreate : null;
     var onLabelColorChange =
       typeof config.onLabelColorChange === 'function'
         ? config.onLabelColorChange
         : null;
+    var onLabelRename =
+      typeof config.onLabelRename === 'function' ? config.onLabelRename : null;
     var suggestLabelsFn =
       typeof config.suggestLabels === 'function' ? config.suggestLabels : null;
     var onAuthorize =
@@ -6439,6 +6453,8 @@
     var labelsBusy = false;
     var labelsPickerOpen = false;
     var labelsColorEditId = '';
+    var labelsRenameId = '';
+    var labelsRenameDraft = '';
     var labelSuggestions = [];
     var labelSuggestionsLoading = false;
     var labelSuggestionsSeq = 0;
@@ -7617,6 +7633,155 @@
       });
     }
 
+    function applyLabelNameLocally(labelId, name) {
+      var id = labelId != null ? String(labelId) : '';
+      if (!id) return;
+      var nextName = typeof name === 'string' ? name : '';
+      labels = labels.map(function (item) {
+        if (!item || String(item.id) !== id) return item;
+        return Object.assign({}, item, { name: nextName });
+      });
+      boardLabels = boardLabels.map(function (item) {
+        if (!item || String(item.id) !== id) return item;
+        return Object.assign({}, item, { name: nextName });
+      });
+    }
+
+    function cancelLabelRename(options) {
+      options = options || {};
+      if (!labelsRenameId) return;
+      labelsRenameId = '';
+      labelsRenameDraft = '';
+      if (options.render !== false) {
+        renderLabels();
+        onLayoutChange();
+      }
+    }
+
+    function startLabelRename(label) {
+      if (!onLabelRename || labelsBusy || !label || !label.id) return;
+      var id = String(label.id);
+      if (labelsRenameId === id) return;
+      if (labelsRenameId) cancelLabelRename({ render: false });
+      if (labelsColorEditId) setLabelsColorPickerOpen('');
+      if (labelsPickerOpen) setLabelsPickerOpen(false);
+      labelsRenameId = id;
+      labelsRenameDraft =
+        typeof label.name === 'string' ? label.name : '';
+      renderLabels();
+      onLayoutChange();
+      setTimeout(function () {
+        var input = labelsEl.querySelector(
+          '.info-label-name-input[data-label-id="' + id + '"]'
+        );
+        if (!input) return;
+        input.focus();
+        input.select();
+      }, 0);
+    }
+
+    function spellcheckLabelName(text) {
+      var trimmed = typeof text === 'string' ? text.trim() : '';
+      if (
+        !trimmed ||
+        typeof global.Spellcheck === 'undefined' ||
+        typeof global.Spellcheck.correct !== 'function'
+      ) {
+        return Promise.resolve(trimmed);
+      }
+      return global.Spellcheck.correct(trimmed).then(
+        function (corrected) {
+          return typeof corrected === 'string' ? corrected.trim() : trimmed;
+        },
+        function () {
+          return trimmed;
+        }
+      );
+    }
+
+    function commitLabelRename(label, rawName) {
+      if (!onLabelRename || labelsBusy || !label || !label.id) return;
+      var id = String(label.id);
+      var previousName = typeof label.name === 'string' ? label.name : '';
+      var typed =
+        typeof rawName === 'string' ? rawName : labelsRenameDraft || '';
+      labelsBusy = true;
+      setLabelsStatus('', 'saving');
+      renderLabels();
+      spellcheckLabelName(typed)
+        .then(function (nextName) {
+          if (nextName === previousName) {
+            labelsBusy = false;
+            cancelLabelRename();
+            setLabelsStatus('');
+            return { ok: true, changed: false, name: nextName };
+          }
+          applyLabelNameLocally(id, nextName);
+          labelsRenameDraft = nextName;
+          renderLabels();
+          return Promise.resolve(
+            onLabelRename({
+              id: id,
+              name: nextName,
+              label: label
+            })
+          ).then(function (result) {
+            return { result: result, nextName: nextName };
+          });
+        })
+        .then(function (payload) {
+          if (!payload || payload.ok === true) {
+            // Unchanged early exit.
+            return payload;
+          }
+          var result = payload.result;
+          var nextName = payload.nextName;
+          labelsBusy = false;
+          if (result && result.ok === false) {
+            applyLabelNameLocally(id, previousName);
+            if (result.reason === 'not-authorized' || result.reason === 'no-app-key') {
+              setAuthHint(result.reason);
+              setLabelsStatus('', 'error');
+            } else if (result.reason === 'name-too-long') {
+              setLabelsStatus('Nom trop long', 'error');
+            } else {
+              setLabelsStatus('\u00c9chec du renommage', 'error');
+            }
+            labelsRenameId = id;
+            labelsRenameDraft = previousName;
+            renderLabels();
+            onLayoutChange();
+            return result;
+          }
+          var savedName =
+            result && result.label && typeof result.label.name === 'string'
+              ? result.label.name
+              : result && typeof result.name === 'string'
+                ? result.name
+                : nextName;
+          applyLabelNameLocally(id, savedName);
+          setAuthHint('');
+          setLabelsStatus('', 'ok');
+          cancelLabelRename({ render: false });
+          renderLabels();
+          setTimeout(function () {
+            if (labelsStatus.classList.contains('is-ok')) setLabelsStatus('');
+          }, 1400);
+          onLayoutChange();
+          return result;
+        })
+        .catch(function (err) {
+          labelsBusy = false;
+          applyLabelNameLocally(id, previousName);
+          console.error('Info label rename failed', err);
+          setLabelsStatus('\u00c9chec du renommage', 'error');
+          labelsRenameId = id;
+          labelsRenameDraft = previousName;
+          renderLabels();
+          onLayoutChange();
+        });
+    }
+
     function setLabelsColorPickerOpen(labelId) {
       var nextId = labelId != null ? String(labelId) : '';
       if (!nextId || nextId === labelsColorEditId) {
@@ -8014,15 +8179,19 @@
         labels.forEach(function (label) {
           var name = labelDisplayName(label);
           var hex = labelColorHex(label.color);
+          var labelId = label && label.id != null ? String(label.id) : '';
+          var isRenaming =
+            !!labelsRenameId && labelId && labelsRenameId === labelId;
           var chip = document.createElement('span');
           chip.className = 'info-label';
           if (
             labelsColorEditId &&
-            label &&
-            String(label.id) === String(labelsColorEditId)
+            labelId &&
+            String(labelsColorEditId) === labelId
           ) {
             chip.classList.add('is-editing-color');
           }
+          if (isRenaming) chip.classList.add('is-renaming');
           chip.style.setProperty('--label-color', hex);
           chip.style.setProperty(
             '--label-fg',
@@ -8031,15 +8200,72 @@
           chip.title = name;
           chip.setAttribute('aria-label', name);
 
-          var text = document.createElement('span');
-          text.className = 'info-label-name';
-          text.textContent = name;
-          chip.appendChild(text);
+          if (isRenaming) {
+            var input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'info-label-name-input';
+            input.dataset.labelId = labelId;
+            input.value = labelsRenameDraft;
+            input.maxLength = 16384;
+            input.setAttribute('aria-label', 'Renommer l\u2019\u00e9tiquette');
+            input.placeholder = 'Nom de l\u2019\u00e9tiquette';
+            input.disabled = labelsBusy;
+            input.addEventListener('click', function (event) {
+              event.stopPropagation();
+            });
+            input.addEventListener('input', function () {
+              labelsRenameDraft = input.value;
+            });
+            input.addEventListener('keydown', function (event) {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                event.stopPropagation();
+                commitLabelRename(label, input.value);
+              } else if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                cancelLabelRename();
+              }
+            });
+            input.addEventListener('blur', function () {
+              if (!labelsRenameId || labelsRenameId !== labelId || labelsBusy) {
+                return;
+              }
+              commitLabelRename(label, input.value);
+            });
+            chip.appendChild(input);
+          } else {
+            var text = document.createElement('span');
+            text.className = 'info-label-name';
+            text.textContent = name;
+            if (onLabelRename && labelId) {
+              text.classList.add('info-label-name--editable');
+              text.tabIndex = labelsBusy ? -1 : 0;
+              text.setAttribute(
+                'aria-label',
+                'Renommer l\u2019\u00e9tiquette\u00a0: ' + name
+              );
+              text.title = 'Cliquer pour renommer';
+              text.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                startLabelRename(label);
+              });
+              text.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  startLabelRename(label);
+                }
+              });
+            }
+            chip.appendChild(text);
+          }
 
           var actions = document.createElement('span');
           actions.className = 'info-label-actions';
 
-          if (onLabelColorChange && label && label.id) {
+          if (onLabelColorChange && labelId) {
             var editBtn = document.createElement('button');
             editBtn.type = 'button';
             editBtn.className = 'info-label-edit';
@@ -8049,7 +8275,7 @@
             );
             editBtn.title = 'Modifier la couleur';
             editBtn.innerHTML = '<i class="ti ti-pencil" aria-hidden="true"></i>';
-            editBtn.disabled = labelsBusy;
+            editBtn.disabled = labelsBusy || isRenaming;
             editBtn.setAttribute(
               'aria-expanded',
               labelsColorEditId && String(label.id) === String(labelsColorEditId)
@@ -8059,6 +8285,7 @@
             editBtn.addEventListener('click', function (event) {
               event.preventDefault();
               event.stopPropagation();
+              if (labelsRenameId) cancelLabelRename({ render: false });
               setLabelsColorPickerOpen(label.id);
             });
             actions.appendChild(editBtn);
@@ -8072,15 +8299,38 @@
               'aria-label',
               'Retirer l\u2019\u00e9tiquette\u00a0: ' + name
             );
+            clearBtn.title = 'Retirer de cette carte';
             clearBtn.innerHTML = '<i class="ti ti-x" aria-hidden="true"></i>';
-            clearBtn.disabled = labelsBusy;
+            clearBtn.disabled = labelsBusy || isRenaming;
             clearBtn.addEventListener('click', function (event) {
               event.preventDefault();
               event.stopPropagation();
+              if (labelsRenameId) cancelLabelRename({ render: false });
               if (labelsColorEditId) setLabelsColorPickerOpen('');
               removeLabelFromCard(label);
             });
             actions.appendChild(clearBtn);
+          }
+
+          if (onLabelDelete && labelId) {
+            var deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'info-label-delete';
+            deleteBtn.setAttribute(
+              'aria-label',
+              'Supprimer l\u2019\u00e9tiquette\u00a0: ' + name
+            );
+            deleteBtn.title = 'Supprimer du tableau';
+            deleteBtn.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
+            deleteBtn.disabled = labelsBusy || isRenaming;
+            deleteBtn.addEventListener('click', function (event) {
+              event.preventDefault();
+              event.stopPropagation();
+              if (labelsRenameId) cancelLabelRename({ render: false });
+              if (labelsColorEditId) setLabelsColorPickerOpen('');
+              deleteLabelFromBoard(label);
+            });
+            actions.appendChild(deleteBtn);
           }
 
           if (actions.childNodes.length) chip.appendChild(actions);
@@ -8090,7 +8340,7 @@
 
       var canAdd = !!onLabelAdd || !!onLabelCreate;
       labelsAddBtn.hidden = !canAdd;
-      labelsAddBtn.disabled = labelsBusy || !canAdd;
+      labelsAddBtn.disabled = labelsBusy || !canAdd || !!labelsRenameId;
       if (labelsPickerOpen) renderLabelsPicker();
       if (labelsColorEditId) renderLabelsColorPicker();
       else {
@@ -8334,6 +8584,67 @@
           labelsBusy = false;
           console.error('Info label remove failed', err);
           setLabelsStatus('\u00c9chec du retrait', 'error');
+          renderLabels();
+          onLayoutChange();
+        });
+    }
+
+    function deleteLabelFromBoard(label) {
+      if (!onLabelDelete || labelsBusy || !label || !label.id) return;
+      var id = String(label.id);
+      var name = labelDisplayName(label);
+      if (
+        !window.confirm(
+          'Supprimer d\u00e9finitivement l\u2019\u00e9tiquette \u00ab\u00a0' +
+            name +
+            '\u00a0\u00bb du tableau\u00a0?\nElle sera retir\u00e9e de toutes les cartes.'
+        )
+      ) {
+        return;
+      }
+      labelsBusy = true;
+      setLabelsStatus('', 'saving');
+      renderLabels();
+      Promise.resolve(onLabelDelete(label))
+        .then(function (result) {
+          labelsBusy = false;
+          if (result && result.ok === false) {
+            if (result.reason === 'not-authorized' || result.reason === 'no-app-key') {
+              setAuthHint(result.reason);
+              setLabelsStatus('', 'error');
+            } else {
+              setLabelsStatus('\u00c9chec de la suppression', 'error');
+            }
+            renderLabels();
+            onLayoutChange();
+            return result;
+          }
+          labels = labels.filter(function (item) {
+            return !(item && String(item.id) === id);
+          });
+          boardLabels = boardLabels.filter(function (item) {
+            return !(item && String(item.id) === id);
+          });
+          if (labelsColorEditId === id) {
+            labelsColorEditId = '';
+          }
+          if (labelsRenameId === id) {
+            labelsRenameId = '';
+            labelsRenameDraft = '';
+          }
+          setAuthHint('');
+          setLabelsStatus('', 'ok');
+          renderLabels();
+          setTimeout(function () {
+            if (labelsStatus.classList.contains('is-ok')) setLabelsStatus('');
+          }, 1400);
+          onLayoutChange();
+          return result;
+        })
+        .catch(function (err) {
+          labelsBusy = false;
+          console.error('Info label delete failed', err);
+          setLabelsStatus('\u00c9chec de la suppression', 'error');
           renderLabels();
           onLayoutChange();
         });
@@ -9063,6 +9374,17 @@
       ) {
         setLabelsColorPickerOpen('');
       }
+      if (
+        labelsRenameId &&
+        !labelsWrap.contains(event.target)
+      ) {
+        var renamingLabel = findLabelById(labels, labelsRenameId);
+        if (renamingLabel) {
+          commitLabelRename(renamingLabel, labelsRenameDraft);
+        } else {
+          cancelLabelRename();
+        }
+      }
       if (parentPickerOpen && !parentPickWrap.contains(event.target)) {
         setParentPickerOpen(false);
       }
@@ -9155,6 +9477,9 @@
       },
       setLabels: function (list) {
         labels = Array.isArray(list) ? list.slice() : [];
+        if (labelsRenameId && !findLabelById(labels, labelsRenameId)) {
+          cancelLabelRename({ render: false });
+        }
         renderLabels();
         scheduleLabelSuggestions(false);
         onLayoutChange();
@@ -9558,6 +9883,11 @@
       }
       ensureWaitingReason();
       currentLinks = currentLinks.concat([next]);
+      // Linking a blocking subtask implies the card is blocked.
+      if (embedded && !checked) {
+        checked = true;
+        field.classList.add('is-enabled');
+      }
       refreshSelected();
       refreshSuggestions();
       refreshSubtaskUi();
@@ -9916,7 +10246,18 @@
         })(currentReasons[i]);
       }
 
+      // Link chips double typed motifs (reason create → blocked subtask → link).
+      // Show them only when Motif has no explicit cause beyond waiting-other.
+      var hasExplicitReasonChip = false;
+      for (var er = 0; er < currentReasons.length; er++) {
+        if (currentReasons[er] !== BLOCKED_REASON_WAITING_OTHER_TASK) {
+          hasExplicitReasonChip = true;
+          break;
+        }
+      }
+
       for (var li = 0; li < currentLinks.length; li++) {
+        if (hasExplicitReasonChip) break;
         (function (link) {
           hasAny = true;
           var taskName = resolveBlockedLinkLabel(link, items);
@@ -13736,19 +14077,8 @@
             priorityCollapse.setEnabled(true, priorityOpts);
             state.priorityEnabled = true;
           }
-          if (next.enAttente != null && enAttenteField) {
-            if (next.enAttente && enAttenteField.setEnableAllowed) {
-              enAttenteField.setEnableAllowed(true);
-            }
-            if (preserveCollapse) {
-              enAttenteField.setValue(next.enAttente, { preserveCollapse: true });
-            } else {
-              enAttenteField.setValue(next.enAttente);
-              if (next.enAttente && enAttenteField.setExpanded) {
-                enAttenteField.setExpanded(true);
-              }
-            }
-          }
+          // Apply links/reasons BEFORE enAttente so setValue→onChange→syncStateFromFields
+          // does not wipe freshly-written blockedLinks (item block → Statut sync).
           if (
             (next.blockedReasons != null || next.blockedReason != null) &&
             enAttenteField
@@ -13783,6 +14113,19 @@
                   ? next.blockedLinks[0]
                   : next.blockedLink
               );
+            }
+          }
+          if (next.enAttente != null && enAttenteField) {
+            if (next.enAttente && enAttenteField.setEnableAllowed) {
+              enAttenteField.setEnableAllowed(true);
+            }
+            if (preserveCollapse) {
+              enAttenteField.setValue(next.enAttente, { preserveCollapse: true });
+            } else {
+              enAttenteField.setValue(next.enAttente);
+              if (next.enAttente && enAttenteField.setExpanded) {
+                enAttenteField.setExpanded(true);
+              }
             }
           }
           if ((next.dueDate != null || next.dueTime != null || next.dueEnabled != null) && dueDateField) {

@@ -1435,6 +1435,53 @@ body {
   white-space: nowrap;
 }
 
+.info-label-name--editable {
+  cursor: text;
+  border-radius: 4px;
+}
+
+.info-label-name--editable:hover {
+  background: color-mix(in srgb, #000 12%, transparent);
+}
+
+.info-label-name--editable:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--label-fg, #fff) 70%, transparent);
+  outline-offset: 1px;
+}
+
+.info-label.is-renaming {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--label-fg, #fff) 55%, transparent);
+  padding-left: 6px;
+}
+
+.info-label-name-input {
+  box-sizing: border-box;
+  min-width: 72px;
+  max-width: 180px;
+  width: 12ch;
+  margin: 0;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 6px;
+  background: color-mix(in srgb, #fff 22%, transparent);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: inherit;
+  outline: none;
+  field-sizing: content;
+}
+
+.info-label-name-input:focus {
+  background: color-mix(in srgb, #fff 32%, transparent);
+}
+
+.info-label-name-input:disabled {
+  opacity: 0.72;
+  cursor: progress;
+}
+
 .info-label-actions {
   display: inline-flex;
   align-items: center;
@@ -1448,7 +1495,8 @@ body {
 }
 
 .info-label-edit,
-.info-label-clear {
+.info-label-clear,
+.info-label-delete {
   flex: 0 0 auto;
   box-sizing: border-box;
   width: 20px;
@@ -1471,26 +1519,30 @@ body {
 }
 
 .info-label-edit .ti,
-.info-label-clear .ti {
+.info-label-clear .ti,
+.info-label-delete .ti {
   display: block;
   font-size: 12px;
   line-height: 1;
 }
 
 .info-label-edit:hover:not(:disabled),
-.info-label-clear:hover:not(:disabled) {
+.info-label-clear:hover:not(:disabled),
+.info-label-delete:hover:not(:disabled) {
   background: color-mix(in srgb, #000 18%, transparent);
   opacity: 1;
 }
 
 .info-label-edit:focus-visible,
-.info-label-clear:focus-visible {
+.info-label-clear:focus-visible,
+.info-label-delete:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--label-fg, #fff) 70%, transparent);
   outline-offset: 1px;
 }
 
 .info-label-edit:disabled,
-.info-label-clear:disabled {
+.info-label-clear:disabled,
+.info-label-delete:disabled {
   opacity: 0.45;
   cursor: default;
 }
