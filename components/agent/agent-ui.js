@@ -511,6 +511,7 @@
           mode: mode === 'onboarding' ? 'onboarding' : 'ongoing',
           showSkip: mode === 'onboarding',
           showSummary: true,
+          embedded: true,
           onLayoutChange: notifyLayout,
           onSkip: function () {
             memoryMountEl.hidden = true;
@@ -2351,36 +2352,30 @@
       var mood = base || 'neutral';
       var roll = Math.random();
       if (mood === 'happy') {
-        if (roll < 0.22) return 'excited';
-        if (roll < 0.4) return 'tongue';
-        if (roll < 0.55) return 'wink';
+        if (roll < 0.12) return 'excited';
+        if (roll < 0.18) return 'tongue';
         return 'happy';
       }
       if (mood === 'surprised') {
-        if (roll < 0.45) return 'wideEyed';
-        if (roll < 0.6) return 'excited';
+        if (roll < 0.35) return 'wideEyed';
+        if (roll < 0.45) return 'excited';
         return 'surprised';
       }
       if (mood === 'curious') {
-        if (roll < 0.28) return 'lookUp';
-        if (roll < 0.5) return 'lookDown';
-        if (roll < 0.62) return 'wink';
+        if (roll < 0.2) return 'lookUp';
         return 'curious';
       }
       if (mood === 'thinking') {
-        if (roll < 0.2) return 'lookUp';
-        if (roll < 0.35) return 'lookDown';
+        if (roll < 0.15) return 'lookUp';
         return 'thinking';
       }
       if (mood === 'neutral') {
-        if (roll < 0.18) return 'lookDown';
-        if (roll < 0.3) return 'lookUp';
-        if (roll < 0.4) return 'wink';
-        if (roll < 0.48) return 'tongue';
+        if (roll < 0.12) return 'lookDown';
+        if (roll < 0.2) return 'lookUp';
         return 'neutral';
       }
       if (mood === 'sad') {
-        if (roll < 0.25) return 'lookDown';
+        if (roll < 0.2) return 'lookDown';
         return 'sad';
       }
       return mood;
@@ -2950,152 +2945,76 @@
     /**
      * Idle face choreography state machine.
      *
-     * Weighted graph + optional queued mini-sequences. Each digression
-     * has a start/hold/end (usually back toward smile). One-shot fx ride
-     * on data-idle-fx. Typing forces lookDown until the draft clears.
+     * Stay on smile most of the time. Prefer same-emotion micro-fx
+     * (nod/bounce/breathe) over emotion swaps — morphing faces is what
+     * reads as jitter. Digressions are rare and always return to smile.
+     * Typing forces lookDown until the draft clears.
      */
-    var FACE_SM_MAX_AWAY = 3;
+    var FACE_SM_MAX_AWAY = 1;
     var FACE_MORPH_SETTLE_MS = 160;
     var FACE_POSE_TWEEN_MS = 260;
     var FACE_POSE_TWEEN_FAST_MS = 90;
+    /** Never advance mid-morph; digressions need time on-screen after settle. */
+    var FACE_SM_MIN_HOLD_MS = FACE_MORPH_SETTLE_MS + FACE_POSE_TWEEN_MS + 280;
     var FACE_FEATURE_SEL =
       '.agent-face-eyes, .agent-face-eye, .agent-face-brow, .agent-face-cheek, .agent-face-shine';
 
     var FACE_SM_STATES = {
-      wink: { emotion: 'wink', holdMin: 260, holdMax: 340 },
-      winkAlt: { emotion: 'wink', holdMin: 240, holdMax: 320, fx: 'winkRight' },
-      smile: { emotion: 'happy', holdMin: 1600, holdMax: 3600 },
-      grin: { emotion: 'excited', holdMin: 650, holdMax: 1150, fx: 'bounce' },
-      tongue: { emotion: 'tongue', holdMin: 850, holdMax: 1450, fx: 'wiggle' },
-      curious: { emotion: 'curious', holdMin: 1000, holdMax: 1900, fx: 'tip' },
-      lookLeft: { emotion: 'lookLeft', holdMin: 750, holdMax: 1500 },
-      lookRight: { emotion: 'lookRight', holdMin: 750, holdMax: 1500 },
-      lookUp: { emotion: 'lookUp', holdMin: 850, holdMax: 1550 },
-      peek: { emotion: 'lookLeft', holdMin: 320, holdMax: 520, fx: 'pop' },
-      bounce: { emotion: 'happy', holdMin: 550, holdMax: 950, fx: 'bounce' },
-      nod: { emotion: 'happy', holdMin: 650, holdMax: 1050, fx: 'nod' },
-      squint: { emotion: 'curious', holdMin: 750, holdMax: 1300, fx: 'squint' },
-      sparkle: { emotion: 'happy', holdMin: 850, holdMax: 1350, fx: 'sparkle' },
-      rest: { emotion: 'neutral', holdMin: 1200, holdMax: 2400, fx: 'breathe' },
-      shake: { emotion: 'surprised', holdMin: 450, holdMax: 700, fx: 'shake' },
+      wink: { emotion: 'wink', holdMin: 700, holdMax: 950 },
+      winkAlt: { emotion: 'wink', holdMin: 700, holdMax: 950, fx: 'winkRight' },
+      smile: { emotion: 'happy', holdMin: 5200, holdMax: 11000 },
+      grin: { emotion: 'excited', holdMin: 900, holdMax: 1400, fx: 'bounce' },
+      tongue: { emotion: 'tongue', holdMin: 1100, holdMax: 1600, fx: 'wiggle' },
+      curious: { emotion: 'curious', holdMin: 1400, holdMax: 2200, fx: 'tip' },
+      lookLeft: { emotion: 'lookLeft', holdMin: 1100, holdMax: 1800 },
+      lookRight: { emotion: 'lookRight', holdMin: 1100, holdMax: 1800 },
+      lookUp: { emotion: 'lookUp', holdMin: 1200, holdMax: 1900 },
+      bounce: { emotion: 'happy', holdMin: 700, holdMax: 1100, fx: 'bounce' },
+      nod: { emotion: 'happy', holdMin: 800, holdMax: 1200, fx: 'nod' },
+      sparkle: { emotion: 'happy', holdMin: 900, holdMax: 1300, fx: 'sparkle' },
+      rest: { emotion: 'happy', holdMin: 1800, holdMax: 2800, fx: 'breathe' },
       lookDown: { emotion: 'lookDown', holdMin: 0, holdMax: 0 }
     };
 
-    /** Weighted edges; `seq` enqueues a mini-script instead of a single hop. */
+    /** Weighted edges — digressions are soft & rare; most weight is stay/smile-fx. */
     var FACE_SM_TRANSITIONS = {
       smile: [
-        { to: 'lookLeft', w: 12 },
-        { to: 'lookRight', w: 12 },
-        { to: 'lookUp', w: 9 },
-        { to: 'wink', w: 10 },
-        { to: 'winkAlt', w: 6 },
-        { to: 'curious', w: 9 },
-        { to: 'peek', w: 8 },
-        { to: 'bounce', w: 6 },
-        { to: 'nod', w: 7 },
-        { to: 'tongue', w: 5 },
-        { to: 'grin', w: 5 },
-        { to: 'sparkle', w: 5 },
-        { to: 'squint', w: 4 },
-        { to: 'rest', w: 6 },
-        { to: 'shake', w: 2 },
-        { to: 'smile', w: 8 },
-        { seq: ['lookLeft', 'lookRight', 'smile'], w: 7 },
-        { seq: ['lookRight', 'lookLeft', 'smile'], w: 5 },
-        { seq: ['lookUp', 'curious', 'smile'], w: 4 },
-        { seq: ['peek', 'lookRight', 'wink', 'smile'], w: 4 },
-        { seq: ['bounce', 'grin', 'smile'], w: 3 },
-        { seq: ['sparkle', 'wink', 'smile'], w: 3 }
-      ],
-      wink: [
-        { to: 'smile', w: 14 },
-        { to: 'winkAlt', w: 2 },
-        { to: 'tongue', w: 1 }
-      ],
-      winkAlt: [
-        { to: 'smile', w: 14 },
-        { to: 'wink', w: 2 }
-      ],
-      grin: [
-        { to: 'smile', w: 12 },
-        { to: 'wink', w: 3 },
-        { to: 'bounce', w: 2 }
-      ],
-      tongue: [
-        { to: 'smile', w: 10 },
-        { to: 'wink', w: 7 },
-        { to: 'winkAlt', w: 2 }
-      ],
-      curious: [
-        { to: 'smile', w: 8 },
-        { to: 'lookUp', w: 6 },
-        { to: 'squint', w: 3 },
-        { to: 'wink', w: 3 }
-      ],
-      lookLeft: [
-        { to: 'smile', w: 10 },
-        { to: 'lookRight', w: 5 },
-        { to: 'lookUp', w: 3 },
-        { to: 'peek', w: 2 }
-      ],
-      lookRight: [
-        { to: 'smile', w: 10 },
-        { to: 'lookLeft', w: 5 },
-        { to: 'lookUp', w: 3 },
-        { to: 'wink', w: 2 }
-      ],
-      lookUp: [
-        { to: 'smile', w: 10 },
-        { to: 'curious', w: 5 },
-        { to: 'lookLeft', w: 2 },
-        { to: 'lookRight', w: 2 }
-      ],
-      peek: [
-        { to: 'smile', w: 8 },
+        { to: 'smile', w: 40 },
+        { to: 'nod', w: 14 },
+        { to: 'rest', w: 12 },
+        { to: 'bounce', w: 8 },
+        { to: 'lookLeft', w: 6 },
         { to: 'lookRight', w: 6 },
-        { to: 'lookLeft', w: 2 }
+        { to: 'lookUp', w: 5 },
+        { to: 'sparkle', w: 3 },
+        { to: 'curious', w: 2 },
+        { to: 'wink', w: 1 },
+        { to: 'tongue', w: 1 },
+        { to: 'grin', w: 1 }
       ],
-      bounce: [
-        { to: 'smile', w: 10 },
-        { to: 'grin', w: 4 },
-        { to: 'sparkle', w: 2 }
-      ],
-      nod: [
-        { to: 'smile', w: 12 },
-        { to: 'wink', w: 3 }
-      ],
-      squint: [
-        { to: 'smile', w: 8 },
-        { to: 'curious', w: 4 },
-        { to: 'lookUp', w: 3 }
-      ],
-      sparkle: [
-        { to: 'smile', w: 10 },
-        { to: 'wink', w: 4 },
-        { to: 'grin', w: 2 }
-      ],
-      rest: [
-        { to: 'smile', w: 12 },
-        { to: 'lookUp', w: 4 },
-        { to: 'curious', w: 3 }
-      ],
-      shake: [
-        { to: 'smile', w: 10 },
-        { to: 'curious', w: 3 },
-        { to: 'wink', w: 2 }
-      ]
+      wink: [{ to: 'smile', w: 1 }],
+      winkAlt: [{ to: 'smile', w: 1 }],
+      grin: [{ to: 'smile', w: 1 }],
+      tongue: [{ to: 'smile', w: 1 }],
+      curious: [{ to: 'smile', w: 1 }],
+      lookLeft: [{ to: 'smile', w: 1 }],
+      lookRight: [{ to: 'smile', w: 1 }],
+      lookUp: [{ to: 'smile', w: 1 }],
+      bounce: [{ to: 'smile', w: 1 }],
+      nod: [{ to: 'smile', w: 1 }],
+      sparkle: [{ to: 'smile', w: 1 }],
+      rest: [{ to: 'smile', w: 1 }]
     };
 
+    /** Arrival flourishes only when a new reply lands (enter: true). */
     var FACE_SM_ARRIVALS = [
-      ['wink', 'smile'],
-      ['winkAlt', 'smile'],
+      ['smile'],
+      ['smile'],
+      ['smile'],
+      ['nod', 'smile'],
       ['bounce', 'smile'],
       ['sparkle', 'smile'],
-      ['curious', 'wink', 'smile'],
-      ['peek', 'lookRight', 'smile'],
-      ['nod', 'smile'],
-      ['grin', 'wink', 'smile'],
-      ['tongue', 'smile']
+      ['wink', 'smile']
     ];
 
     var faceSm = {
@@ -3264,10 +3183,14 @@
       var face = row.querySelector('.agent-face');
       var prevMood = face && face.getAttribute('data-emotion');
       var sameMood = prevMood === def.emotion;
-      // Same emotion (e.g. smile → bounce): only swap the one-shot fx.
-      if (sameMood && !options.enter && face && !face.classList.contains('is-frozen')) {
+      // Same emotion (smile → nod / arrival smile): never re-commit the emotion
+      // class — that restarts bob/glow and read as jitter.
+      if (sameMood && face && !face.classList.contains('is-frozen')) {
+        if (options.enter) {
+          applyFaceEnterMotion(face, def.emotion);
+        }
         if (def.fx) faceSmPlayFx(def.fx);
-        else faceSmClearFx();
+        else if (!options.enter) faceSmClearFx();
         return;
       }
       var fastPose =
@@ -3291,18 +3214,8 @@
       var def = FACE_SM_STATES[fromState];
       if (!def || !def.holdMax) return;
       var delay = faceSmRand(def.holdMin, def.holdMax);
-      if (fromState === 'wink' || fromState === 'winkAlt') {
-        delay = Math.max(FACE_POSE_TWEEN_FAST_MS * 2 + 40, delay);
-      } else if (faceSm.queue && faceSm.queue.length) {
-        // Slightly shorten holds when a queue is mid-flight so scans feel snappy,
-        // but always leave room for the settle morph.
-        delay = Math.max(
-          FACE_MORPH_SETTLE_MS + FACE_POSE_TWEEN_MS,
-          Math.round(delay * 0.72)
-        );
-      } else {
-        delay = Math.max(FACE_MORPH_SETTLE_MS + FACE_POSE_TWEEN_MS, delay);
-      }
+      // Never cut a pose short of the morph window — that was the jitter.
+      delay = Math.max(FACE_SM_MIN_HOLD_MS, delay);
       var seq = faceSm.seq;
       faceSm.timer = setTimeout(function () {
         if (seq !== faceSm.seq) return;
@@ -3351,7 +3264,7 @@
     }
 
     function faceSmPickArrival() {
-      var script = pickOne(FACE_SM_ARRIVALS) || ['wink', 'smile'];
+      var script = pickOne(FACE_SM_ARRIVALS) || ['smile'];
       return script.slice();
     }
 
@@ -3373,17 +3286,24 @@
         return;
       }
 
-      // Arrival: play a short start→end script, then free roam from smile.
+      // Explicit start, or quiet resume (wake / typing end): settle on smile.
+      // Flashy arrivals only when a new reply just landed (enter: true).
       if (options.startState) {
         faceSmApply(options.startState, { enter: options.enter !== false });
         faceSmScheduleNext(options.startState);
         scheduleFaceSleep();
         return;
       }
+      if (options.enter === false) {
+        faceSmApply('smile', { enter: false });
+        faceSmScheduleNext('smile');
+        scheduleFaceSleep();
+        return;
+      }
       var arrival = faceSmPickArrival();
       var first = arrival.shift();
       if (arrival.length) faceSmEnqueue(arrival);
-      faceSmApply(first, { enter: options.enter !== false });
+      faceSmApply(first, { enter: true });
       faceSmScheduleNext(first);
       scheduleFaceSleep();
     }
@@ -6284,17 +6204,41 @@
       var ta = document.createElement('textarea');
       ta.value = text;
       ta.setAttribute('readonly', '');
-      ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+      ta.setAttribute('aria-hidden', 'true');
+      ta.tabIndex = -1;
+      // Keep the node in-document for execCommand, but avoid scroll-into-view.
+      ta.style.cssText =
+        'position:fixed;top:0;left:0;width:1px;height:1px;margin:0;padding:0;' +
+        'border:0;outline:none;opacity:0;pointer-events:none;';
+      var scrollX = window.scrollX || window.pageXOffset || 0;
+      var scrollY = window.scrollY || window.pageYOffset || 0;
+      var messagesScroll =
+        messagesEl && typeof messagesEl.scrollTop === 'number'
+          ? messagesEl.scrollTop
+          : null;
       document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
       var ok = false;
       try {
+        try {
+          ta.focus({ preventScroll: true });
+        } catch (focusErr) {
+          ta.focus();
+        }
+        ta.select();
+        if (typeof ta.setSelectionRange === 'function') {
+          ta.setSelectionRange(0, ta.value.length);
+        }
         ok = document.execCommand('copy');
       } catch (e) {
         ok = false;
       }
       if (ta.parentNode) ta.parentNode.removeChild(ta);
+      if (typeof window.scrollTo === 'function') {
+        window.scrollTo(scrollX, scrollY);
+      }
+      if (messagesEl && messagesScroll != null) {
+        messagesEl.scrollTop = messagesScroll;
+      }
       return ok;
     }
 
@@ -6877,6 +6821,9 @@
           setSettingsOpen(true);
           memoryDetails.open = true;
           syncMemoryBadge();
+          if (needsMemoryAlign()) {
+            mountMemoryUi('onboarding');
+          }
         }
       } catch (err) {
         console.error('AgentUI load provider failed', err);

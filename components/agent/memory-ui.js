@@ -90,7 +90,8 @@
    * options: {
    *   t, mode: 'onboarding'|'ongoing',
    *   onLayoutChange, onComplete, onSkip,
-   *   showSkip: boolean, showSummary: boolean
+   *   showSkip: boolean, showSummary: boolean,
+   *   embedded: boolean
    * }
    */
   function mount(containerEl, options) {
@@ -98,6 +99,7 @@
     options = options || {};
     var t = options.t;
     var mode = options.mode === 'onboarding' ? 'onboarding' : 'ongoing';
+    var embedded = !!options.embedded;
     var onLayoutChange =
       typeof options.onLayoutChange === 'function' ? options.onLayoutChange : function () {};
     var onComplete =
@@ -119,18 +121,21 @@
 
     containerEl.innerHTML = '';
     containerEl.classList.add('memory-ui');
+    if (embedded) containerEl.classList.add('memory-ui--embedded');
 
     var header = el('div', 'memory-ui-header');
-    var title = el('h2', 'memory-ui-title', {
-      text: mode === 'onboarding' ? 'Aligner l\'assistant' : 'M\u00e9moire de l\'assistant'
-    });
+    if (!embedded) {
+      var title = el('h2', 'memory-ui-title', {
+        text: mode === 'onboarding' ? 'Aligner l\'assistant' : 'M\u00e9moire de l\'assistant'
+      });
+      header.appendChild(title);
+    }
     var subtitle = el('p', 'memory-ui-subtitle', {
       text:
         mode === 'onboarding'
           ? 'Quelques questions pour mieux cadrer tes cartes et suggestions.'
           : 'Ajoute ou corrige les faits importants (bas du tableau).'
     });
-    header.appendChild(title);
     header.appendChild(subtitle);
     containerEl.appendChild(header);
 

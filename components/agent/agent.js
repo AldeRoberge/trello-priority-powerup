@@ -6507,6 +6507,7 @@
     var p = normalizeProvider(provider);
     if (!isConfigured(p)) return [];
     var context = buildContext(bridge);
+    var projectScope = isProjectScope(context && context.scope);
     var historyHint = '';
     if (options.history && options.history.length) {
       var last = options.history[options.history.length - 1];
@@ -6539,7 +6540,9 @@
       {
         role: 'user',
         content:
-          'Propose des questions utiles que l\'utilisateur pourrait poser maintenant sur cette carte.'
+          projectScope
+            ? 'Propose des questions utiles que l\'utilisateur pourrait poser maintenant au niveau projet / tableau (m\u00e9moire, vue d\'ensemble, \u00e9quipe). Pas de questions propres \u00e0 une seule carte.'
+            : 'Propose des questions utiles que l\'utilisateur pourrait poser maintenant sur cette carte.'
       }
     ];
     var debug = {
