@@ -6396,8 +6396,7 @@
     var chrome = createCollapsibleEnableChrome({
       title: 'Information',
       bodyId: bodyId,
-      checkboxClass: 'info-enable-checkbox',
-      labelClass: 'info-enable-label',
+      hideEnable: true,
       leadingIcon: 'ti-info-circle',
       iconClass: 'info-leading-icon',
       titleClass: 'info-enable-title',
@@ -12376,7 +12375,10 @@
       return wrap;
     }
 
+    var suppressPersist = false;
+
     function persistSliderState(skipFieldSync) {
+      if (suppressPersist) return;
       if (!skipFieldSync) syncStateFromFields();
       if (typeof variantConfig.onStateChange === 'function') {
         // Copy so callers (popup save / Information recap) are not affected when
@@ -12842,89 +12844,100 @@
       setState: function (next, options) {
         options = options || {};
         var preserveCollapse = options.preserveCollapse === true;
-        Object.keys(next).forEach(function (key) {
-          state[key] = next[key];
-          if (fields[key]) fields[key].setValue(next[key]);
-        });
-        if (next.priorityEnabled != null && priorityCollapse) {
-          var priorityOpts = { notifyLayout: false };
-          if (preserveCollapse) priorityOpts.preserveCollapse = true;
-          else if (next.priorityEnabled) priorityOpts.expand = true;
-          // Priorité cannot be disabled — ignore priorityEnabled:false.
-          priorityCollapse.setEnabled(true, priorityOpts);
-          state.priorityEnabled = true;
-        }
-        if (next.enAttente != null && enAttenteField) {
-          if (next.enAttente && enAttenteField.setEnableAllowed) {
-            enAttenteField.setEnableAllowed(true);
+        // silent: apply UI state without notifying onStateChange (live remote sync).
+        var silent = options.silent === true;
+        if (silent) suppressPersist = true;
+        try {
+          Object.keys(next).forEach(function (key) {
+            state[key] = next[key];
+            if (fields[key]) fields[key].setValue(next[key]);
+          });
+          if (next.priorityEnabled != null && priorityCollapse) {
+            var priorityOpts = { notifyLayout: false };
+            if (preserveCollapse) priorityOpts.preserveCollapse = true;
+            else if (next.priorityEnabled) priorityOpts.expand = true;
+            // Priorité cannot be disabled — ignore priorityEnabled:false.
+            priorityCollapse.setEnabled(true, priorityOpts);
+            state.priorityEnabled = true;
           }
-          if (preserveCollapse) {
-            enAttenteField.setValue(next.enAttente, { preserveCollapse: true });
-          } else {
-            enAttenteField.setValue(next.enAttente);
-            if (next.enAttente && enAttenteField.setExpanded) {
-              enAttenteField.setExpanded(true);
+          if (next.enAttente != null && enAttenteField) {
+            if (next.enAttente && enAttenteField.setEnableAllowed) {
+              enAttenteField.setEnableAllowed(true);
+            }
+            if (preserveCollapse) {
+              enAttenteField.setValue(next.enAttente, { preserveCollapse: true });
+            } else {
+              enAttenteField.setValue(next.enAttente);
+              if (next.enAttente && enAttenteField.setExpanded) {
+                enAttenteField.setExpanded(true);
+              }
             }
           }
-        }
-        if (
-          (next.blockedReasons != null || next.blockedReason != null) &&
-          enAttenteField
-        ) {
-          if (enAttenteField.setBlockedReasons) {
-            enAttenteField.setBlockedReasons(
-              next.blockedReasons != null ? next.blockedReasons : next.blockedReason
+          if (
+            (next.blockedReasons != null || next.blockedReason != null) &&
+            enAttenteField
+          ) {
+            if (enAttenteField.setBlockedReasons) {
+              enAttenteField.setBlockedReasons(
+                next.blockedReasons != null ? next.blockedReasons : next.blockedReason
+              );
+            } else {
+              enAttenteField.setBlockedReason(
+                next.blockedReason != null
+                  ? next.blockedReason
+                  : (next.blockedReasons && next.blockedReasons[0]) || ''
+              );
+            }
+          }
+          if (
+            (next.blockedLinks !== undefined || next.blockedLink !== undefined) &&
+            enAttenteField
+          ) {
+            if (enAttenteField.setBlockedLinks) {
+              enAttenteField.setBlockedLinks(
+                next.blockedLinks != null
+                  ? next.blockedLinks
+                  : next.blockedLink != null
+                    ? [next.blockedLink]
+                    : []
+              );
+            } else if (enAttenteField.setBlockedLink) {
+              enAttenteField.setBlockedLink(
+                next.blockedLinks && next.blockedLinks[0]
+                  ? next.blockedLinks[0]
+                  : next.blockedLink
+              );
+            }
+          }
+          if ((next.dueDate != null || next.dueTime != null || next.dueEnabled != null) && dueDateField) {
+            var duePayload = {
+              dueDate: next.dueDate != null ? next.dueDate : state.dueDate,
+              dueTime: next.dueTime != null ? next.dueTime : state.dueTime,
+              dueEnabled: next.dueEnabled != null ? next.dueEnabled : state.dueEnabled
+            };
+            if (preserveCollapse) {
+              dueDateField.setValue(duePayload, { preserveCollapse: true });
+            } else {
+              dueDateField.setValue(duePayload);
+            }
+          }
+          if (next.estimatedDurationMinutes !== undefined) {
+            state.estimatedDurationMinutes = clampDurationMinutes(
+              next.estimatedDurationMinutes
             );
+            if (durationControl) {
+              durationControl.setMinutes(state.estimatedDurationMinutes);
+            }
+          }
+          repaint();
+          if (silent) {
+            syncStateFromFields();
           } else {
-            enAttenteField.setBlockedReason(
-              next.blockedReason != null
-                ? next.blockedReason
-                : (next.blockedReasons && next.blockedReasons[0]) || ''
-            );
+            persistSliderState();
           }
+        } finally {
+          if (silent) suppressPersist = false;
         }
-        if (
-          (next.blockedLinks !== undefined || next.blockedLink !== undefined) &&
-          enAttenteField
-        ) {
-          if (enAttenteField.setBlockedLinks) {
-            enAttenteField.setBlockedLinks(
-              next.blockedLinks != null
-                ? next.blockedLinks
-                : next.blockedLink != null
-                  ? [next.blockedLink]
-                  : []
-            );
-          } else if (enAttenteField.setBlockedLink) {
-            enAttenteField.setBlockedLink(
-              next.blockedLinks && next.blockedLinks[0]
-                ? next.blockedLinks[0]
-                : next.blockedLink
-            );
-          }
-        }
-        if ((next.dueDate != null || next.dueTime != null || next.dueEnabled != null) && dueDateField) {
-          var duePayload = {
-            dueDate: next.dueDate != null ? next.dueDate : state.dueDate,
-            dueTime: next.dueTime != null ? next.dueTime : state.dueTime,
-            dueEnabled: next.dueEnabled != null ? next.dueEnabled : state.dueEnabled
-          };
-          if (preserveCollapse) {
-            dueDateField.setValue(duePayload, { preserveCollapse: true });
-          } else {
-            dueDateField.setValue(duePayload);
-          }
-        }
-        if (next.estimatedDurationMinutes !== undefined) {
-          state.estimatedDurationMinutes = clampDurationMinutes(
-            next.estimatedDurationMinutes
-          );
-          if (durationControl) {
-            durationControl.setMinutes(state.estimatedDurationMinutes);
-          }
-        }
-        repaint();
-        persistSliderState();
       },
       refreshBlockedSubtasks: function () {
         if (enAttenteField && enAttenteField.refreshSubtasks) {

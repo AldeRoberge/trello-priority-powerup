@@ -15,7 +15,7 @@
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/effects.js?v=fx-3"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=info-member-avatar-1"></script>
+  <script src="./components/priority/priority-ui.js?v=live-sync-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
@@ -74,8 +74,141 @@
     let cachedProfile = null;
     let boardDigestCache = '';
 
-    t.render(function () {
-      PriorityTrello.getBoardColorScheme(t)
+    // Cross-user live sync: re-read shared plugin data on t.render + light poll.
+    var LIVE_SYNC_POLL_MS = 3000;
+    var LOCAL_DIRTY_MS = 2500;
+    var applyingRemote = false;
+    var priorityDirtyUntil = 0;
+    var completionDirtyUntil = 0;
+    var prioritySavePending = false;
+    var completionSavePending = false;
+    var appliedPriorityFp = '';
+    var appliedCompletionFp = '';
+    var appliedStatutListId = undefined;
+    var appliedGoalsProjectId = undefined;
+    var liveSyncTimer = null;
+    var syncFromRemoteChain = Promise.resolve();
+    var liveSyncStarted = false;
+
+    function stableFp(value) {
+      try {
+        return JSON.stringify(value == null ? null : value);
+      } catch (e) {
+        return '';
+      }
+    }
+
+    function fingerprintPriority(inputs) {
+      var n =
+        PriorityTrello.normalizeInputs
+          ? PriorityTrello.normalizeInputs(inputs)
+          : inputs;
+      return stableFp(n);
+    }
+
+    function fingerprintCompletion(data) {
+      var n =
+        typeof CompletionTrello !== 'undefined' &&
+        CompletionTrello.normalizeCompletionData
+          ? CompletionTrello.normalizeCompletionData(data)
+          : data;
+      return stableFp(withProgressEnabledFlag(n));
+    }
+
+    function markPriorityDirty() {
+      priorityDirtyUntil = Date.now() + LOCAL_DIRTY_MS;
+    }
+
+    function markCompletionDirty() {
+      completionDirtyUntil = Date.now() + LOCAL_DIRTY_MS;
+    }
+
+    function isPriorityDirty() {
+      return prioritySavePending || Date.now() < priorityDirtyUntil;
+    }
+
+    function isCompletionDirty() {
+      return completionSavePending || Date.now() < completionDirtyUntil;
+    }
+
+    function buildLatestStatut(statut, fallbackListId) {
+      statut = statut || {};
+      return {
+        listId: statut.listId || fallbackListId || null,
+        listName: statut.listName || '',
+        category: statut.category || null,
+        lists: (statut.lists || []).map(function (list) {
+          return {
+            id: list.id,
+            name: list.name,
+            category:
+              (statut.settings &&
+                statut.settings.listCategories &&
+                statut.settings.listCategories[list.id]) ||
+              null,
+          };
+        }),
+        roleLists: (statut.settings && statut.settings.roleLists) || {},
+      };
+    }
+
+    function applyRemotePriority(remote) {
+      if (!variant || typeof variant.setState !== 'function') return;
+      var normalized =
+        PriorityTrello.normalizeInputs
+          ? PriorityTrello.normalizeInputs(remote)
+          : Object.assign({}, remote || {});
+      if (!normalized) return;
+      applyingRemote = true;
+      try {
+        variant.setState(Object.assign({}, normalized), {
+          preserveCollapse: true,
+          silent: true,
+        });
+      } finally {
+        applyingRemote = false;
+      }
+      latestState = Object.assign({}, normalized);
+      appliedPriorityFp = fingerprintPriority(latestState);
+      syncInfoRecap(latestState);
+      attachBlockedIntoStatut();
+      resizePopup();
+    }
+
+    function applyRemoteCompletion(remote) {
+      var next = withProgressEnabledFlag(remote);
+      latestCompletion = next;
+      if (completionUi && typeof completionUi.setData === 'function') {
+        completionUi.setData(next);
+      }
+      appliedCompletionFp = fingerprintCompletion(next);
+      if (progressCollapse) progressCollapse.refreshSummary();
+      syncBlockedSubtasks();
+      syncDueBlockedForProgress(next);
+      syncDueCompleteFromProgress(next);
+      syncInfoRecap();
+      resizePopup();
+    }
+
+    function applyRemoteStatut(statut) {
+      if (!statutUi) return;
+      latestStatut = buildLatestStatut(statut);
+      appliedStatutListId = latestStatut.listId || null;
+      if (typeof statutUi.setData === 'function') {
+        statutUi.setData({
+          listId: statut.listId,
+          lists: statut.lists,
+          settings: statut.settings,
+        });
+      } else if (typeof statutUi.syncBlockedPanel === 'function') {
+        statutUi.syncBlockedPanel();
+      }
+      attachBlockedIntoStatut();
+      resizePopup();
+    }
+
+    function syncFromRemote() {
+      var colorPromise = PriorityTrello.getBoardColorScheme(t)
         .then(function () {
           if (variant && typeof variant.repaint === 'function') variant.repaint();
         })
@@ -88,6 +221,105 @@
           console.error('Completion color scheme refresh failed', err);
         });
       }
+
+      if (!liveSyncStarted || !variant) return colorPromise;
+
+      syncFromRemoteChain = syncFromRemoteChain
+        .then(function () {
+          return Promise.all([
+            PriorityTrello.getCardInputs(t),
+            typeof CompletionTrello !== 'undefined' &&
+              CompletionTrello.getCardCompletion
+              ? CompletionTrello.getCardCompletion(t)
+              : Promise.resolve(null),
+            window.StatutTrello && statutUi
+              ? StatutTrello.getCardStatut(t)
+              : Promise.resolve(null),
+            window.GoalsTrello && objectifUi
+              ? GoalsTrello.getCardProjectId(t)
+              : Promise.resolve(undefined),
+          ]);
+        })
+        .then(function (results) {
+          var remotePriority = results[0];
+          var remoteCompletion = results[1];
+          var remoteStatut = results[2];
+          var remoteProjectId = results[3];
+
+          if (remotePriority) {
+            var remotePriorityFp = fingerprintPriority(remotePriority);
+            if (remotePriorityFp !== appliedPriorityFp && !isPriorityDirty()) {
+              applyRemotePriority(remotePriority);
+            }
+          }
+
+          if (remoteCompletion && completionUi) {
+            var remoteCompletionFp = fingerprintCompletion(remoteCompletion);
+            if (
+              remoteCompletionFp !== appliedCompletionFp &&
+              !isCompletionDirty()
+            ) {
+              applyRemoteCompletion(remoteCompletion);
+            }
+          }
+
+          if (remoteStatut && statutUi) {
+            var listId = remoteStatut.listId || null;
+            if (listId !== appliedStatutListId) {
+              applyRemoteStatut(remoteStatut);
+            }
+          }
+
+          if (objectifUi && remoteProjectId !== appliedGoalsProjectId) {
+            appliedGoalsProjectId = remoteProjectId;
+            return refreshObjectifData();
+          }
+        })
+        .catch(function (err) {
+          console.error('Priority popup live sync failed', err);
+        });
+
+      return syncFromRemoteChain;
+    }
+
+    function startLiveSync() {
+      if (liveSyncStarted) return;
+      liveSyncStarted = true;
+      appliedPriorityFp = fingerprintPriority(
+        latestState ||
+          (variant && typeof variant.getState === 'function'
+            ? variant.getState()
+            : null)
+      );
+      if (latestCompletion || completionUi) {
+        appliedCompletionFp = fingerprintCompletion(
+          (completionUi && typeof completionUi.getData === 'function'
+            ? completionUi.getData()
+            : null) || latestCompletion
+        );
+      }
+      if (latestStatut) {
+        appliedStatutListId = latestStatut.listId || null;
+      }
+      if (latestGoals) {
+        appliedGoalsProjectId = latestGoals.projectId || null;
+      }
+      if (liveSyncTimer) clearInterval(liveSyncTimer);
+      liveSyncTimer = setInterval(function () {
+        if (document.visibilityState === 'hidden') return;
+        syncFromRemote();
+      }, LIVE_SYNC_POLL_MS);
+      syncFromRemote();
+    }
+
+    t.render(function () {
+      syncFromRemote();
+    });
+
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && liveSyncStarted) {
+        syncFromRemote();
+      }
     });
 
     function saveState(state) {
@@ -95,6 +327,12 @@
       // Snapshot — variant state is mutated during slider animation / getState sync.
       var snapshot = Object.assign({}, state || {});
       latestState = snapshot;
+      appliedPriorityFp = fingerprintPriority(snapshot);
+      if (applyingRemote) {
+        return Promise.resolve();
+      }
+      markPriorityDirty();
+      prioritySavePending = true;
       saveChain = saveChain
         .then(function () {
           return PriorityTrello.saveCardInputs(t, snapshot);
@@ -109,11 +347,16 @@
                   settings: statut.settings,
                 });
               }
+              appliedStatutListId = (statut && statut.listId) || null;
+              if (statut) latestStatut = buildLatestStatut(statut);
             });
           }
         })
         .catch(function (err) {
           console.error('Priority save failed', err);
+        })
+        .then(function () {
+          prioritySavePending = false;
         });
       return saveChain;
     }
@@ -127,12 +370,18 @@
 
     function saveCompletion(data) {
       latestCompletion = withProgressEnabledFlag(data);
+      appliedCompletionFp = fingerprintCompletion(latestCompletion);
+      markCompletionDirty();
+      completionSavePending = true;
       completionSaveChain = completionSaveChain
         .then(function () {
           return CompletionTrello.saveCardCompletion(t, latestCompletion);
         })
         .catch(function (err) {
           console.error('Completion save failed', err);
+        })
+        .then(function () {
+          completionSavePending = false;
         });
       return completionSaveChain;
     }
@@ -704,24 +953,8 @@
         }
         if (result && result.ok) {
           return StatutTrello.getCardStatut(t).then(function (statut) {
-            latestStatut = {
-              listId: (statut && statut.listId) || listId || null,
-              listName: (statut && statut.listName) || '',
-              category: (statut && statut.category) || null,
-              lists: ((statut && statut.lists) || []).map(function (list) {
-                return {
-                  id: list.id,
-                  name: list.name,
-                  category:
-                    (statut.settings &&
-                      statut.settings.listCategories &&
-                      statut.settings.listCategories[list.id]) ||
-                    null
-                };
-              }),
-              roleLists:
-                (statut && statut.settings && statut.settings.roleLists) || {}
-            };
+            latestStatut = buildLatestStatut(statut, listId);
+            appliedStatutListId = latestStatut.listId || null;
             if (statutUi && typeof statutUi.setData === 'function') {
               statutUi.setData({
                 listId: latestStatut.listId,
@@ -836,24 +1069,8 @@
               return applyStatutListSelection(listId);
             },
           });
-          latestStatut = {
-            listId: statut.listId || null,
-            listName: statut.listName || '',
-            category: statut.category || null,
-            lists: (statut.lists || []).map(function (list) {
-              return {
-                id: list.id,
-                name: list.name,
-                category:
-                  (statut.settings &&
-                    statut.settings.listCategories &&
-                    statut.settings.listCategories[list.id]) ||
-                  null
-              };
-            }),
-            roleLists:
-              (statut.settings && statut.settings.roleLists) || {}
-          };
+          latestStatut = buildLatestStatut(statut);
+          appliedStatutListId = latestStatut.listId || null;
           attachBlockedIntoStatut();
           resizePopup();
         })
@@ -1254,6 +1471,7 @@
           projects: cache.projects,
           metrics: cache.metrics,
         };
+        appliedGoalsProjectId = projectId || null;
         renderObjectifBody();
         resizePopup();
         return latestGoals;
@@ -1604,33 +1822,36 @@
                 (meta && meta.data) ||
                 latestCompletion;
               syncDueBlockedForProgress(live);
-              // Hit/leave 100%: sync Trello Done. Entering 100% clears Terminé-leave suppress.
+              // Hit/leave 100%: sync Trello Done (+ restore previous Statut when leaving).
+              // Entering 100% clears Terminé-leave suppress.
               var syncPromise = syncDueCompleteFromProgress(live, {
                 clearSuppress: !!allComplete,
               });
-              if (
-                allComplete &&
-                syncPromise &&
-                typeof PriorityTrello.clearBlockedIfComplete === 'function'
-              ) {
-                syncPromise.then(function () {
-                  return PriorityTrello.clearBlockedIfComplete(t);
-                }).then(function () {
-                  if (allComplete && statutUi && typeof StatutTrello !== 'undefined') {
-                    return StatutTrello.getCardStatut(t).then(function (statut) {
-                      if (statutUi && typeof statutUi.setData === 'function') {
-                        statutUi.setData({
-                          listId: statut.listId,
-                          lists: statut.lists,
-                          settings: statut.settings,
-                        });
-                      }
-                    });
+              if (!syncPromise || typeof syncPromise.then !== 'function') return;
+              syncPromise
+                .then(function () {
+                  if (
+                    allComplete &&
+                    typeof PriorityTrello.clearBlockedIfComplete === 'function'
+                  ) {
+                    return PriorityTrello.clearBlockedIfComplete(t);
                   }
-                }).catch(function (err) {
-                  console.error('clearBlockedIfComplete after Done failed', err);
+                })
+                .then(function () {
+                  if (!statutUi || typeof StatutTrello === 'undefined') return;
+                  return StatutTrello.getCardStatut(t).then(function (statut) {
+                    if (statutUi && typeof statutUi.setData === 'function') {
+                      statutUi.setData({
+                        listId: statut.listId,
+                        lists: statut.lists,
+                        settings: statut.settings,
+                      });
+                    }
+                  });
+                })
+                .catch(function (err) {
+                  console.error('Statut sync after progress complete change failed', err);
                 });
-              }
             },
             onResize: function () {
               resizePopup();
@@ -2171,9 +2392,14 @@
         window.scrollTo(0, 0);
       }
       resizePopup();
+      startLiveSync();
     }
 
     window.addEventListener('pagehide', function () {
+      if (liveSyncTimer) {
+        clearInterval(liveSyncTimer);
+        liveSyncTimer = null;
+      }
       if (infoUi && typeof infoUi.flushDesc === 'function') {
         infoUi.flushDesc();
       }

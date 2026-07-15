@@ -342,6 +342,22 @@
     if (!allComplete) {
       await setDueCompleteSuppressed(t, false);
     }
+
+    var statutRestore = null;
+    // Leaving 100%: move off Terminé back to the previous Statut list when possible.
+    if (
+      !allComplete &&
+      global.StatutTrello &&
+      typeof global.StatutTrello.restorePreviousStatutFromIncomplete === 'function'
+    ) {
+      try {
+        statutRestore = await global.StatutTrello.restorePreviousStatutFromIncomplete(t);
+      } catch (restoreErr) {
+        console.error('Completion restore previous Statut failed', restoreErr);
+        statutRestore = { ok: false, restored: false, reason: 'restore-threw' };
+      }
+    }
+
     return {
       allComplete: false,
       synced: !!(unmarkResult && unmarkResult.ok),
@@ -349,6 +365,8 @@
       dueComplete: false,
       suppressed: suppressed,
       reason: unmarkResult && !unmarkResult.ok ? unmarkResult.reason : undefined,
+      statutRestored: !!(statutRestore && statutRestore.restored),
+      statutRestore: statutRestore,
     };
   }
 

@@ -3,6 +3,9 @@
   'use strict';
 
   var STATUT_SETTINGS_KEY = 'statutSettings';
+  // Card shared: listId before the card entered Terminé (for restore when Progrès leaves 100%).
+  var STATUT_PREVIOUS_LIST_KEY = 'statutPreviousListId';
+  var FALLBACK_RESTORE_CATEGORIES = ['started', 'unstarted', 'backlog'];
 
   function matchApi() {
     return global.StatutMatch || null;
@@ -10,6 +13,190 @@
 
   function priorityTrello() {
     return global.PriorityTrello || null;
+  }
+
+  function isCompletedListId(listId, settings) {
+    if (!listId || !settings) return false;
+    var id = String(listId);
+    var cats = settings.listCategories || {};
+    if (cats[id] === 'completed') return true;
+    var role =
+      settings.roleLists && settings.roleLists.completed
+        ? String(settings.roleLists.completed)
+        : null;
+    return !!(role && role === id);
+  }
+
+  /**
+   * First board list mapped to started → unstarted → backlog (never blocked/completed).
+   * Scans in board list order within each category preference.
+   */
+  function firstFallbackIncompleteListId(lists, settings) {
+    var cats = (settings && settings.listCategories) || {};
+    for (var c = 0; c < FALLBACK_RESTORE_CATEGORIES.length; c++) {
+      var want = FALLBACK_RESTORE_CATEGORIES[c];
+      for (var j = 0; j < (lists || []).length; j++) {
+        var lid = lists[j] && lists[j].id ? String(lists[j].id) : null;
+        if (lid && cats[lid] === want) return lid;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Whether capturePreviousListBeforeCompleted should persist currentListId.
+   * Never saves a completed/Terminé list (preserves any existing previous).
+   */
+  function shouldCapturePreviousListId(currentListId, settings) {
+    if (!currentListId) return false;
+    return !isCompletedListId(currentListId, settings);
+  }
+
+  /**
+   * Resolve which list to restore when leaving completed.
+   * @returns {string|null} target listId, or null if no restore / already not completed.
+   */
+  function resolvePreviousListRestoreTarget(currentListId, storedPreviousListId, lists, settings) {
+    if (!isCompletedListId(currentListId, settings)) return null;
+
+    var byId = {};
+    (lists || []).forEach(function (list) {
+      if (list && list.id) byId[String(list.id)] = true;
+    });
+
+    if (storedPreviousListId && byId[String(storedPreviousListId)]) {
+      var stored = String(storedPreviousListId);
+      if (!isCompletedListId(stored, settings)) return stored;
+    }
+
+    return firstFallbackIncompleteListId(lists, settings);
+  }
+
+  async function getPreviousListId(t) {
+    try {
+      var raw = await t.get('card', 'shared', STATUT_PREVIOUS_LIST_KEY);
+      if (raw == null || raw === '') return null;
+      return String(raw);
+    } catch (err) {
+      console.error('StatutTrello.getPreviousListId failed', err);
+      return null;
+    }
+  }
+
+  async function setPreviousListId(t, listId) {
+    try {
+      if (!listId) {
+        await t.set('card', 'shared', STATUT_PREVIOUS_LIST_KEY, null);
+        return null;
+      }
+      await t.set('card', 'shared', STATUT_PREVIOUS_LIST_KEY, String(listId));
+      return String(listId);
+    } catch (err) {
+      console.error('StatutTrello.setPreviousListId failed', err);
+      return null;
+    }
+  }
+
+  async function clearPreviousListId(t) {
+    return setPreviousListId(t, null);
+  }
+
+  async function readCurrentCardListId(t) {
+    var PT = priorityTrello();
+    try {
+      if (PT && typeof PT.readCardIdAndListId === 'function') {
+        var ids = await PT.readCardIdAndListId(t);
+        if (ids && ids.listId) return String(ids.listId);
+      }
+      var card = await t.card('idList');
+      if (card && card.idList) return String(card.idList);
+      if (typeof card === 'string' && card) return String(card);
+    } catch (err) {
+      console.error('StatutTrello.readCurrentCardListId failed', err);
+    }
+    return null;
+  }
+
+  /**
+   * Remember the card's list before it enters Terminé (auto-move or manual Statut).
+   */
+  async function capturePreviousListBeforeCompleted(t) {
+    var ensured = await ensureStatutSettings(t);
+    var settings = ensured.settings;
+    var currentListId = await readCurrentCardListId(t);
+    if (!shouldCapturePreviousListId(currentListId, settings)) {
+      return {
+        ok: true,
+        captured: false,
+        reason: currentListId ? 'already-completed' : 'no-list-id',
+        listId: currentListId,
+      };
+    }
+    await setPreviousListId(t, currentListId);
+    return { ok: true, captured: true, listId: String(currentListId) };
+  }
+
+  /**
+   * When Progrès leaves 100% and the card is still on Terminé, move it back
+   * to the stored previous list (or started → unstarted → backlog fallback).
+   */
+  async function restorePreviousStatutFromIncomplete(t) {
+    var ensured = await ensureStatutSettings(t);
+    var settings = ensured.settings;
+    var lists = ensured.lists || (await getBoardLists(t));
+    var currentListId = await readCurrentCardListId(t);
+    if (!isCompletedListId(currentListId, settings)) {
+      return {
+        ok: true,
+        restored: false,
+        reason: 'not-on-completed',
+        listId: currentListId,
+      };
+    }
+
+    var stored = await getPreviousListId(t);
+    var target = resolvePreviousListRestoreTarget(
+      currentListId,
+      stored,
+      lists,
+      settings
+    );
+    if (!target) {
+      return {
+        ok: true,
+        restored: false,
+        reason: 'no-restore-target',
+        listId: currentListId,
+      };
+    }
+    if (String(target) === String(currentListId)) {
+      await clearPreviousListId(t);
+      return {
+        ok: true,
+        restored: false,
+        reason: 'already-there',
+        listId: currentListId,
+      };
+    }
+
+    var move = await setCardList(t, target, { pos: 'bottom' });
+    if (!move || !move.ok) {
+      return Object.assign(
+        { restored: false, reason: (move && move.reason) || 'move-failed' },
+        move || { ok: false }
+      );
+    }
+
+    var side = await applyStatutSideEffects(t, target, settings);
+    await clearPreviousListId(t);
+    return {
+      ok: true,
+      restored: !!move.moved || !!move.alreadyThere,
+      moved: !!move.moved,
+      listId: String(target),
+      previousListId: stored,
+      sideEffects: side,
+    };
   }
 
   function defaultSettings() {
@@ -272,6 +459,11 @@
   }
 
   async function maybeAutoMoveForCompleted(t) {
+    try {
+      await capturePreviousListBeforeCompleted(t);
+    } catch (captureErr) {
+      console.error('StatutTrello capture before completed auto-move failed', captureErr);
+    }
     var ensured = await ensureStatutSettings(t);
     var settings = ensured.settings;
     if (!settings.autoMoveCompleted) {
@@ -418,9 +610,18 @@
   }
 
   async function selectCardStatut(t, listId) {
+    var ensured = await ensureStatutSettings(t);
+    var settings = ensured.settings;
+    if (isCompletedListId(listId, settings)) {
+      try {
+        await capturePreviousListBeforeCompleted(t);
+      } catch (captureErr) {
+        console.error('StatutTrello capture before Terminé select failed', captureErr);
+      }
+    }
     var move = await setCardList(t, listId, { pos: 'bottom' });
     if (!move.ok) return move;
-    var side = await applyStatutSideEffects(t, listId);
+    var side = await applyStatutSideEffects(t, listId, settings);
     return Object.assign({}, move, { sideEffects: side });
   }
 
@@ -477,6 +678,8 @@
 
   global.StatutTrello = {
     STATUT_SETTINGS_KEY: STATUT_SETTINGS_KEY,
+    STATUT_PREVIOUS_LIST_KEY: STATUT_PREVIOUS_LIST_KEY,
+    FALLBACK_RESTORE_CATEGORIES: FALLBACK_RESTORE_CATEGORIES,
     defaultSettings: defaultSettings,
     normalizeSettings: normalizeSettings,
     getBoardLists: getBoardLists,
@@ -491,5 +694,14 @@
     applyStatutSideEffects: applyStatutSideEffects,
     groupListsByCategory: groupListsByCategory,
     roleTargetListId: roleTargetListId,
+    isCompletedListId: isCompletedListId,
+    shouldCapturePreviousListId: shouldCapturePreviousListId,
+    firstFallbackIncompleteListId: firstFallbackIncompleteListId,
+    resolvePreviousListRestoreTarget: resolvePreviousListRestoreTarget,
+    getPreviousListId: getPreviousListId,
+    setPreviousListId: setPreviousListId,
+    clearPreviousListId: clearPreviousListId,
+    capturePreviousListBeforeCompleted: capturePreviousListBeforeCompleted,
+    restorePreviousStatutFromIncomplete: restorePreviousStatutFromIncomplete,
   };
 })(typeof window !== 'undefined' ? window : this);
