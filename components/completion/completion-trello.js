@@ -6,6 +6,7 @@
   var COMPLETION_COLOR_SCHEME_SETTINGS_KEY = 'completionColorScheme';
   var COMPLETION_COLOR_SCHEME_REV_KEY = 'completionColorSchemeRev';
   var COMPLETION_COLOR_GRADIENT_SETTINGS_KEY = 'completionColorGradient';
+  var ESTIMATE_SCALES_SETTINGS_KEY = 'estimateScales';
   // Set when this Power-Up marks the card dueComplete from all-subtasks-done.
   // Used to reverse Done only when we own the mark (not a user/manual Done).
   var COMPLETION_MARKED_DUE_COMPLETE_KEY = 'completionMarkedDueComplete';
@@ -27,10 +28,14 @@
   var ESTIMATE_MIN_MINUTES = 1;
   var ESTIMATE_MAX_MINUTES = Math.round(2 * 365.25 * 24 * 60);
   var DEFAULT_ESTIMATE_SCALE = 'time';
+  /** Board default: show time and t-shirt size together (not mutually exclusive). */
+  var DEFAULT_ESTIMATE_SCALES = ['time', 'tshirt'];
+  var boardEstimateScales = DEFAULT_ESTIMATE_SCALES.slice();
 
   /**
    * Estimation display systems. Values stay as minutes under the hood so
    * Progrès weighting and remaining-effort math stay consistent across scales.
+   * Multiple scales may be enabled at once (board customize setting).
    */
   var ESTIMATE_SCALES = {
     time: {
@@ -61,50 +66,9 @@
         { id: 'XL', label: 'XL', title: 'XL \u2014 tr\u00e8s grande', minutes: 5 * 24 * 60 },
       ],
     },
-    coffee: {
-      id: 'coffee',
-      label: 'Caf\u00e9s',
-      shortLabel: 'caf\u00e9',
-      emptyLabel: 'Caf\u00e9',
-      emptyTitle: 'Choisir une taille caf\u00e9',
-      popoverLabel: 'Choisir une taille caf\u00e9',
-      freeform: false,
-      ticks: [
-        {
-          id: 'espresso',
-          label: 'Expresso',
-          title: 'Expresso \u2014 un trait rapide',
-          minutes: 15,
-        },
-        {
-          id: 'court',
-          label: 'Court',
-          title: 'Court \u2014 petite tasse',
-          minutes: 60,
-        },
-        {
-          id: 'mug',
-          label: 'Mug',
-          title: 'Mug \u2014 une bonne dose',
-          minutes: 4 * 60,
-        },
-        {
-          id: 'bol',
-          label: 'Bol',
-          title: 'Bol \u2014 session soutenue',
-          minutes: 2 * 24 * 60,
-        },
-        {
-          id: 'pot',
-          label: 'Cafeti\u00e8re',
-          title: 'Cafeti\u00e8re \u2014 chantier long',
-          minutes: 5 * 24 * 60,
-        },
-      ],
-    },
   };
 
-  var ESTIMATE_SCALE_ORDER = ['time', 'tshirt', 'coffee'];
+  var ESTIMATE_SCALE_ORDER = ['time', 'tshirt'];
 
   function asNumber(value) {
     if (typeof value === 'number' && isFinite(value)) return value;
