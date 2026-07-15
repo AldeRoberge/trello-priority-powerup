@@ -1528,6 +1528,7 @@
       updateComposerEnabled();
       setSuggestionsBusy(false);
       notifyLayout();
+      scheduleFaceSleep();
       drainMessageQueue();
     }
 
@@ -2376,6 +2377,10 @@
         if (face.classList.contains('is-frozen') || face.classList.contains('is-sick')) {
           return;
         }
+        if (face.classList.contains('is-asleep')) {
+          wakeFaceFromSleep({ resume: true });
+          return;
+        }
         var clicks = noteFaceSpinClick(face);
         if (clicks >= FACE_SPIN_PUKE_AT) {
           makeAssistantFaceSick(face);
@@ -2389,6 +2394,9 @@
     var FACE_SPIN_PUKE_AT = 5;
     var FACE_SPIN_CLICK_WINDOW_MS = 3500;
     var FACE_SICK_RECOVER_MS = 5000;
+    /** Blank orb + zzzz after the chat goes quiet. */
+    var FACE_SLEEP_IDLE_MS = 60000;
+    var faceSleepTimer = null;
     /** Bile / vomit yellow-green (not identity green). */
     var FACE_SICK_PALETTE = { hi: '#f2f6a8', mid: '#c9d83a', lo: '#9aa820' };
     var FACE_PUKE_COLORS = [
@@ -2496,6 +2504,7 @@
     function makeAssistantFaceSick(face) {
       if (!face || !face.classList || face.classList.contains('is-sick')) return;
       clearSickRecoverTimer(face);
+      clearFaceAsleepVisual(face);
       cancelFaceMorph(face);
       clearFaceMotionClasses(face);
       suppressFaceIdleMachine();
@@ -2523,12 +2532,140 @@
       }, FACE_SICK_RECOVER_MS);
     }
 
+    function clearFaceSleepTimer() {
+      if (faceSleepTimer != null) {
+        clearTimeout(faceSleepTimer);
+        faceSleepTimer = null;
+      }
+    }
+
+    function removeFaceZzz(face) {
+      if (!face) return;
+      var layer = face.querySelector('.agent-face-zzz-layer');
+      if (layer && layer.parentNode) layer.parentNode.removeChild(layer);
+    }
+
+    function clearFaceAsleepVisual(face) {
+      if (!face || !face.classList) return;
+      if (!face.classList.contains('is-asleep')) {
+        removeFaceZzz(face);
+        return;
+      }
+      face.classList.remove('is-asleep');
+      if (face.getAttribute('title') === 'Zzz\u2026') {
+        face.removeAttribute('title');
+      }
+      removeFaceZzz(face);
+    }
+
+    function ensureFaceZzz(face) {
+      if (!face) return null;
+      var layer = face.querySelector('.agent-face-zzz-layer');
+      if (layer) return layer;
+      layer = el('span', 'agent-face-zzz-layer');
+      layer.setAttribute('aria-hidden', 'true');
+      for (var i = 0; i < 4; i++) {
+        var z = el('span', 'agent-face-zzz', { text: 'z' });
+        z.style.setProperty('--i', String(i));
+        layer.appendChild(z);
+      }
+      face.appendChild(layer);
+      return layer;
+    }
+
+    function canLiveFaceSleep() {
+      if (pending || faceSm.typing || interviewActive || listeningAnalyzing) {
+        return false;
+      }
+      if (
+        thinkingMotionRow &&
+        thinkingMotionRow.isConnected &&
+        thinkingMotionRow.classList.contains('is-pending')
+      ) {
+        return false;
+      }
+      var face = getLiveAssistantFace();
+      if (!face || face.classList.contains('is-sick')) return false;
+      return true;
+    }
+
+    function putLiveFaceToSleep() {
+      var face = getLiveAssistantFace();
+      if (!face) return;
+      if (face.classList.contains('is-asleep')) return;
+      if (!canLiveFaceSleep()) {
+        scheduleFaceSleep();
+        return;
+      }
+      cancelFaceMorph(face);
+      clearFaceMotionClasses(face);
+      faceSmClearFx();
+      suppressFaceIdleMachine();
+      face.classList.add('is-asleep');
+      face.setAttribute('title', 'Zzz\u2026');
+      face.removeAttribute('data-listen');
+      face.removeAttribute('data-think');
+      var badge = face.querySelector('.agent-face-status');
+      if (badge) badge.remove();
+      ensureFaceZzz(face);
+    }
+
+    function wakeFaceFromSleep(options) {
+      options = options || {};
+      clearFaceSleepTimer();
+      var asleep = messagesEl.querySelector(
+        '.agent-msg--assistant .agent-face.is-asleep'
+      );
+      if (asleep) {
+        clearFaceAsleepVisual(asleep);
+        if (
+          options.resume !== false &&
+          !faceSm.typing &&
+          !pending &&
+          !asleep.classList.contains('is-frozen') &&
+          !asleep.classList.contains('is-sick')
+        ) {
+          var row = asleep.closest('.agent-msg--assistant');
+          var mood = asleep.getAttribute('data-emotion') || 'happy';
+          if (row && FACE_IDLE_ELIGIBLE[mood]) {
+            handOffToFaceIdleMachine(row, mood, { enter: false });
+          }
+        }
+        if (
+          listeningActive &&
+          listenFaceMode &&
+          listenFaceMode !== 'offer' &&
+          !pending &&
+          !interviewActive
+        ) {
+          setListenBarState(listenFaceMode);
+        }
+      }
+      if (options.reschedule !== false) {
+        scheduleFaceSleep();
+      }
+    }
+
+    function scheduleFaceSleep() {
+      clearFaceSleepTimer();
+      faceSleepTimer = global.setTimeout(function () {
+        faceSleepTimer = null;
+        putLiveFaceToSleep();
+      }, FACE_SLEEP_IDLE_MS);
+    }
+
+    /** Reset the quiet timer; wake if the face already dozed off. */
+    function noteFaceChatActivity(options) {
+      wakeFaceFromSleep(options || { resume: true });
+    }
+
     function spinAssistantFace(face) {
       if (
         !face ||
         !face.classList ||
         face.classList.contains('is-frozen') ||
-        face.classList.contains('is-sick')
+        face.classList.contains('is-sick') ||
+        face.classList.contains('is-asleep')
       ) {
         return;
       }
@@ -3081,6 +3218,7 @@
       if (options.startState) {
         faceSmApply(options.startState, { enter: options.enter !== false });
         faceSmScheduleNext(options.startState);
+        scheduleFaceSleep();
         return;
       }
       var arrival = faceSmPickArrival();
@@ -3088,6 +3226,7 @@
       if (arrival.length) faceSmEnqueue(arrival);
       faceSmApply(first, { enter: options.enter !== false });
       faceSmScheduleNext(first);
+      scheduleFaceSleep();
     }
 
     function setFaceIdleTyping(isTyping) {
@@ -3116,6 +3255,7 @@
       faceSm.row = row;
 
       if (faceSm.typing) {
+        wakeFaceFromSleep({ resume: false, reschedule: false });
         clearFaceIdleTimer();
         faceSm.queue = null;
         faceSmClearFx();
@@ -3152,6 +3292,7 @@
           });
         }
         faceSm.resumeEmotion = null;
+        scheduleFaceSleep();
         return;
       }
 
@@ -3160,6 +3301,7 @@
       faceSm.awayCount = 0;
       faceSmApply('smile');
       faceSmScheduleNext('smile');
+      scheduleFaceSleep();
     }
 
     function refreshComposerTypingGaze() {
@@ -3320,6 +3462,7 @@
         applyFaceAura(face, aura);
         face.classList.remove('is-frozen');
         face.classList.remove('is-sick');
+        clearFaceAsleepVisual(face);
         row.setAttribute('data-emotion', mood);
         row.setAttribute('data-aura', aura);
         if (mood !== 'thinking') {
@@ -3772,6 +3915,7 @@
           cancelFaceMorph(face);
           clearFaceMotionClasses(face);
           clearSickRecoverTimer(face);
+          clearFaceAsleepVisual(face);
           face.removeAttribute('data-listen');
           face.removeAttribute('title');
           var badge = face.querySelector('.agent-face-status');
@@ -3896,8 +4040,11 @@
       listenFaceMode = mode;
       clearListenStatusFromFaces();
       if (show) {
+        if (mode === 'analyzing') {
+          wakeFaceFromSleep({ resume: true, reschedule: false });
+        }
         var face = getLiveAssistantFace();
-        if (face) {
+        if (face && !face.classList.contains('is-asleep')) {
           var listenKind = mode === 'analyzing' ? 'analyzing' : 'listening';
           face.setAttribute('data-listen', listenKind);
           face.title = label;
@@ -4228,6 +4375,7 @@
     }
 
     function appendMessage(role, text, meta) {
+      noteFaceChatActivity({ resume: role !== 'assistant' });
       emptyState.classList.add('is-hidden');
       var row = el('div', 'agent-msg agent-msg--' + role);
       if (meta && meta.recap) {
@@ -4297,6 +4445,7 @@
     }
 
     function appendPendingMessage() {
+      noteFaceChatActivity({ resume: false, reschedule: false });
       emptyState.classList.add('is-hidden');
       var row = el('div', 'agent-msg agent-msg--assistant is-pending is-streaming');
       row.setAttribute('aria-busy', 'true');
@@ -4359,6 +4508,7 @@
       ) {
         setListenBarState(listenFaceMode);
       }
+      scheduleFaceSleep();
       return emotion;
     }
 
@@ -5617,6 +5767,7 @@
 
     function setInterviewMode(active) {
       interviewActive = !!active;
+      if (!interviewActive) scheduleFaceSleep();
       interviewBar.hidden = !interviewActive;
       if (interviewActive) {
         applySection.hidden = true;

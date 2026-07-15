@@ -1160,6 +1160,87 @@
   display: none;
 }
 
+/* Quiet chat: blank orb + floating zzzz. */
+.tp-page--priority .agent-face.is-asleep {
+  cursor: pointer;
+  animation: agent-face-sleep-breathe 3.2s ease-in-out infinite !important;
+  filter: saturate(0.82) brightness(0.97);
+  opacity: 0.96;
+  box-shadow:
+    0 0 0 1.5px color-mix(in srgb, #fff 55%, transparent),
+    0 0 10px 2px color-mix(in srgb, var(--agent-face-glow) 30%, transparent),
+    0 2px 8px color-mix(in srgb, var(--agent-face-glow) 18%, transparent);
+}
+
+.tp-page--priority .agent-face.is-asleep .agent-face-features {
+  display: none;
+}
+
+.tp-page--priority .agent-face.is-asleep .agent-face-status {
+  display: none;
+}
+
+.tp-page--priority .agent-face-zzz-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 3;
+}
+
+.tp-page--priority .agent-face-zzz {
+  position: absolute;
+  left: 58%;
+  top: 12%;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--agent-face-glow) 48%, #4a3b32);
+  text-shadow: 0 1px 0 color-mix(in srgb, #fff 35%, transparent);
+  opacity: 0;
+  animation: agent-face-zzz-rise 2.6s ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * 0.55s);
+  will-change: transform, opacity;
+}
+
+@keyframes agent-face-sleep-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.93);
+  }
+}
+
+@keyframes agent-face-zzz-rise {
+  0% {
+    opacity: 0;
+    transform: translate(0, 4px) scale(0.65);
+  }
+  18% {
+    opacity: 0.92;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(10px, -18px) scale(1.2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tp-page--priority .agent-face.is-asleep {
+    animation: none !important;
+  }
+
+  .tp-page--priority .agent-face-zzz {
+    animation: none;
+    opacity: 0.7;
+    transform: translate(calc(var(--i, 0) * 4px), calc(var(--i, 0) * -5px));
+  }
+}
+
 /* Full-viewport puke spray from the face. */
 .agent-face-puke-layer {
   position: fixed;
