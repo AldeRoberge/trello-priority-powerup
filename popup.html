@@ -28,7 +28,7 @@
   <script src="./components/completion/completion-trello.js?v=progress-due-complete-1"></script>
   <script src="./components/goals/goals-trello.js?v=goals-1"></script>
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
-  <script src="./components/agent/agent.js?v=progress-suggest-ai-1"></script>
+  <script src="./components/agent/agent.js?v=answer-direct-1"></script>
   <script src="./components/agent/agent-memory.js?v=card-interview-1"></script>
   <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
@@ -1323,13 +1323,26 @@
               return resolveCardNameForAi().then(function (cardName) {
                 return PriorityAgent.getProvider(t).then(function (provider) {
                   if (!PriorityAgent.isConfigured(provider)) return [];
-                  var existing =
+                  var existingItems =
                     (opts && opts.items) ||
                     (completionUi && completionUi.getData && completionUi.getData().items
-                      ? completionUi.getData().items.map(function (it) {
-                          return it.text;
-                        })
+                      ? completionUi.getData().items
                       : []);
+                  var existing = (existingItems || []).map(function (it) {
+                    if (typeof it === 'string') return { text: it };
+                    if (!it || typeof it !== 'object') return { text: '' };
+                    var linked =
+                      it.linkedCardId != null
+                        ? String(it.linkedCardId).trim()
+                        : window.CompletionTrello &&
+                            typeof CompletionTrello.itemLinkedCardId === 'function'
+                          ? CompletionTrello.itemLinkedCardId(it)
+                          : '';
+                    return {
+                      text: it.text || '',
+                      linkedCardId: linked || undefined
+                    };
+                  });
                   var memPromise =
                     cachedMemory != null
                       ? Promise.resolve(cachedMemory)
@@ -1343,20 +1356,45 @@
                               return null;
                             })
                         : Promise.resolve(null);
-                  var digestPromise = boardDigestCache
-                    ? Promise.resolve(boardDigestCache)
-                    : PriorityTrello.scanBoardCards
-                      ? PriorityTrello.scanBoardCards(t, {
-                          maxCards: 25,
-                          includePriority: false
-                        }).then(function (scan) {
-                          boardDigestCache = (scan && scan.digest) || '';
-                          return boardDigestCache;
-                        })
-                      : Promise.resolve('');
-                  return Promise.all([memPromise, digestPromise]).then(function (pair) {
+                  var scanPromise = PriorityTrello.scanBoardCards
+                    ? PriorityTrello.scanBoardCards(t, {
+                        maxCards: 80,
+                        includePriority: false,
+                        descMax: 100
+                      }).then(function (scan) {
+                        if (scan && scan.digest) boardDigestCache = scan.digest;
+                        return scan || { digest: boardDigestCache || '', cards: [], lists: [] };
+                      })
+                    : Promise.resolve({
+                        digest: boardDigestCache || '',
+                        cards: [],
+                        lists: []
+                      });
+                  return Promise.all([memPromise, scanPromise]).then(function (pair) {
                     var memory = pair[0];
-                    var digest = pair[1];
+                    var scan = pair[1] || {};
+                    var digest = boardDigestCache || (scan && scan.digest) || '';
+                    var listNameById = {};
+                    (scan.lists || []).forEach(function (list) {
+                      if (list && list.id) listNameById[list.id] = list.name || '';
+                    });
+                    var linkedUsed = Object.create(null);
+                    if (selfCardId) linkedUsed[selfCardId] = true;
+                    existing.forEach(function (it) {
+                      if (it && it.linkedCardId) linkedUsed[it.linkedCardId] = true;
+                    });
+                    var boardCards = (scan.cards || [])
+                      .filter(function (card) {
+                        return card && card.id && !linkedUsed[String(card.id)];
+                      })
+                      .map(function (card) {
+                        return {
+                          id: card.id,
+                          name: card.name || '',
+                          list: card.list || listNameById[card.listId || card.idList] || '',
+                          desc: card.desc || ''
+                        };
+                      });
                     var state =
                       variant && typeof variant.getState === 'function'
                         ? variant.getState()
@@ -1392,8 +1430,10 @@
                         '',
                       priorityLabel: priorityLabel,
                       existingSubtasks: existing,
+                      currentCardId: selfCardId || '',
                       memory: memory,
-                      boardDigest: digest
+                      boardDigest: digest,
+                      boardCards: boardCards
                     });
                   });
                 });

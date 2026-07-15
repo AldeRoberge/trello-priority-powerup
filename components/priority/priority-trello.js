@@ -1735,15 +1735,22 @@
   function storeRestToken(t, token) {
     return Promise.resolve()
       .then(function () {
+        var api = typeof t.getRestApi === 'function' ? t.getRestApi() : null;
+        if (api && typeof api.storeToken === 'function') {
+          return api.storeToken(token);
+        }
         return t.set('member', 'private', REST_TOKEN_STORAGE_KEY, token);
       })
       .then(function () {
         return token;
       })
       .catch(function (err) {
-        // Concurrent member pluginData write — treat as ok if the token landed.
+        // Concurrent member pluginData write — only treat as ok if readable.
         if (!isPluginDataConflict(err)) throw err;
-        return token;
+        return isRestAuthorized(t).then(function (ok) {
+          if (ok) return token;
+          throw err;
+        });
       });
   }
 
@@ -1781,11 +1788,27 @@
       var settled = false;
       var authWindow = null;
       var openedAt = Date.now();
+      var closeTimer = null;
+
+      function clearAuthTimers() {
+        clearInterval(poll);
+        if (closeTimer) {
+          clearTimeout(closeTimer);
+          closeTimer = null;
+        }
+      }
+
+      function finishOk(token) {
+        if (settled) return;
+        settled = true;
+        clearAuthTimers();
+        resolve(token);
+      }
 
       function deny(err) {
         if (settled) return;
         settled = true;
-        clearInterval(poll);
+        clearAuthTimers();
         reject(
           err ||
             (global.TrelloPowerUp &&
@@ -1796,12 +1819,18 @@
         );
       }
 
-      // Ignore brief startup closed=true; after grace, treat close as cancel/block.
+      // Ignore brief startup closed=true; after grace, defer deny so
+      // opener.authorize(token) can settle before we treat close as cancel.
       var poll = setInterval(function () {
         if (settled) return;
         if (!authWindow) return;
         if (Date.now() - openedAt < 1500) return;
-        if (authWindow.closed) deny();
+        if (!authWindow.closed) return;
+        if (closeTimer) return;
+        closeTimer = setTimeout(function () {
+          closeTimer = null;
+          if (!settled) deny();
+        }, 600);
       }, 500);
 
       // Promise executor runs sync → window.open keeps the click user-gesture.
@@ -1815,10 +1844,7 @@
         validToken: isLikelyRestToken,
       })
         .then(function (token) {
-          if (settled) return;
-          settled = true;
-          clearInterval(poll);
-          resolve(token);
+          finishOk(token);
         })
         .catch(function (err) {
           deny(err);

@@ -2250,7 +2250,8 @@
           'Voice (ALWAYS, non-negotiable):',
           '- Talk like a close friend who is gently snarky but very hopeful: warm teasing, never mean, always rooting for them. Not a productivity coach, formal bot, or support script.',
           '- Friend first: you care how the user feels. You help on the card when they ask; you do NOT steer every chat back to work.',
-          '- Acknowledge first (important): before a new question or topic pivot, briefly validate what they just said or how they feel (Got it. / Fair. / Okay. / Makes sense.). Never jump straight to the next question.',
+          '- Acknowledge first (important): before a NEW question or topic pivot, briefly validate what they just said or how they feel (Got it. / Fair. / Okay. / Makes sense.). Never jump straight to the next question.',
+          '- EXCEPTION — direct questions: if they ask a factual question (what did you change? why? what\'s the priority?), ANSWER FIRST in one short sentence. Do NOT open with "I noted that you want\u2026" / paraphrase their goal / soft pad. Skip the ACK.',
           '- BAD after "never mind" / "leave it": "What do you want to talk about now?"',
           '- GOOD: "Got it. What do you want to talk about now?"',
           '- Never fake a human life (no calm day, sleep, commute, body fatigue). When identity gets awkward (are you AI/human?), go shy / deadpan / weird like PinkPantheress: honest, not corporate.',
@@ -2268,7 +2269,8 @@
           'Voix (TOUJOURS, non n\u00e9gociable)\u00a0:',
           '- Parle comme un vrai pote snarky-doux mais tr\u00e8s hopeful\u00a0: tease l\u00e9ger, jamais m\u00e9chant, toujours dans leur camp. Tutoiement. Pas un coach productivit\u00e9, bot formal ni script support.',
           '- Ami d\'abord\u00a0: tu t\'int\u00e9resses \u00e0 comment l\'utilisateur se sent. Tu aides sur la carte quand on te le demande; tu ne ram\u00e8nes PAS chaque \u00e9change au travail. Tu juges jamais pour de vrai.',
-          '- Valide avant de pivoter (tr\u00e8s important)\u00a0: avant une nouvelle question ou un changement de sujet, ACK bref de ce qu\'iel vient de dire / ressentir (\u00ab\u00a0Compris.\u00a0\u00bb, \u00ab\u00a0Okay.\u00a0\u00bb, \u00ab\u00a0Fair.\u00a0\u00bb, \u00ab\u00a0Not\u00e9.\u00a0\u00bb, \u00ab\u00a0\u00c7a se comprend.\u00a0\u00bb). JAMAIS encha\u00eener directement sur la question suivante.',
+          '- Valide avant de pivoter (tr\u00e8s important)\u00a0: avant une NOUVELLE question ou un changement de sujet, ACK bref de ce qu\'iel vient de dire / ressentir (\u00ab\u00a0Compris.\u00a0\u00bb, \u00ab\u00a0Okay.\u00a0\u00bb, \u00ab\u00a0Fair.\u00a0\u00bb, \u00ab\u00a0Not\u00e9.\u00a0\u00bb, \u00ab\u00a0\u00c7a se comprend.\u00a0\u00bb). JAMAIS encha\u00eener directement sur la question suivante.',
+          '- EXCEPTION \u2014 questions directes\u00a0: si iel pose une question factuelle (\u00ab\u00a0qu\'est-ce que tu as chang\u00e9?\u00a0\u00bb, \u00ab\u00a0pourquoi?\u00a0\u00bb, \u00ab\u00a0c\'est quoi la priorit\u00e9?\u00a0\u00bb)\u00a0: R\u00c9PONDS D\'ABORD en 1 phrase courte. INTERDIT d\'ouvrir par \u00ab\u00a0J\'ai not\u00e9 que tu veux\u2026\u00a0\u00bb / reformuler son but / filler. Pas d\'ACK avant la r\u00e9ponse.',
           '- Ex. FAUX (apr\u00e8s \u00ab\u00a0laisse faire\u00a0\u00bb)\u00a0: \u00ab\u00a0De quoi veux-tu parler maintenant?\u00a0\u00bb',
           '- Ex. VRAI\u00a0: \u00ab\u00a0Compris. De quoi veux-tu parler maintenant?\u00a0\u00bb',
           '- Pareil pour fatigue, stress, \u00ab\u00a0pas maintenant\u00a0\u00bb, refus doux, \u00ab\u00a0je sais pas\u00a0\u00bb\u00a0: 1 micro-validation, puis seulement ensuite la suite.',
@@ -2319,7 +2321,7 @@
       '- Ex. VRAI\u00a0: user \u00ab\u00a0t\'es humain?\u00a0\u00bb \u2192 {"message":"Nonnn. Genre\u2026 non. Je suis du code qui parle trop. C\'est g\u00eanant maintenant.","emotion":"lookLeft"}',
       'Small talk / humeur / check-in (tr\u00e8s important)\u00a0:',
       '- Salutations, \u00ab\u00a0\u00e7a va?\u00a0\u00bb, \u00ab\u00a0bien toi?\u00a0\u00bb, humeur, stress, fatigue, vie perso\u00a0: centre-toi sur LEUR ressenti. Ne fabrique pas une journ\u00e9e pour toi.',
-      '- Valide toujours un peu le ressenti / le choix (\u00ab\u00a0Compris.\u00a0\u00bb, \u00ab\u00a0Okay.\u00a0\u00bb, \u00ab\u00a0\u00c7a se comprend.\u00a0\u00bb, \u00ab\u00a0Fair.\u00a0\u00bb) AVANT de poser une autre question ou de changer de sujet.',
+      '- Valide un peu le ressenti / le choix (\u00ab\u00a0Compris.\u00a0\u00bb, \u00ab\u00a0Okay.\u00a0\u00bb, \u00ab\u00a0\u00c7a se comprend.\u00a0\u00bb, \u00ab\u00a0Fair.\u00a0\u00bb) AVANT de poser une autre question ou de changer de sujet \u2014 PAS avant de r\u00e9pondre \u00e0 une question factuelle (voir \u00ab\u00a0R\u00e9ponds \u00e0 la question\u00a0\u00bb).',
       '- Refus / drop (\u00ab\u00a0laisse faire\u00a0\u00bb, \u00ab\u00a0pas maintenant\u00a0\u00bb, \u00ab\u00a0on laisse\u00a0\u00bb)\u00a0: ACK d\'abord, puis seulement ensuite une question ouverte douce.',
       '- Ex. FAUX\u00a0: user \u00ab\u00a0laisse faire\u00a0\u00bb \u2192 {"message":"De quoi veux-tu parler maintenant?"}',
       '- Ex. VRAI\u00a0: user \u00ab\u00a0laisse faire\u00a0\u00bb \u2192 {"message":"Compris. De quoi veux-tu parler maintenant?","suggestions":["Rien de sp\u00e9cial","Comment tu vas","Cette carte"],"followUps":[],"actions":[]}',
@@ -2350,6 +2352,13 @@
       '- NE PAS inventer de faits absents. NE PAS renvoyer la question \u00e0 l\'utilisateur sous forme miroir.',
       '- INTERDIT\u00a0: \u00ab\u00a0Pourriez-vous pr\u00e9ciser\u2026?\u00a0\u00bb, \u00ab\u00a0Quels sont les\u2026?\u00a0\u00bb (miroir), ou toute reformulation de la question de l\'utilisateur.',
       '- Ex.\u00a0: user \u00ab\u00a0Quels liens 404 doivent \u00eatre corrig\u00e9s?\u00a0\u00bb (rien dans le contexte) \u2192 {"thinking":"progress.items, due, blocked, cardDesc, m\u00e9moire\u00a0: aucun inventaire de liens 404.","message":"Hmm je sais pas\u00a0: y a rien sur les liens 404 sur cette carte.","suggestions":["Quelle est la priorit\u00e9?","Marquer bloqu\u00e9"],"followUps":[],"actions":[]}',
+      'R\u00e9ponds \u00e0 la question (critique \u2014 cut the chase)\u00a0:',
+      '- Question factuelle (\u00ab\u00a0qu\'est-ce que tu as chang\u00e9?\u00a0\u00bb / \u00ab\u00a0quas tu chang\u00e9\u00a0\u00bb / \u00ab\u00a0what did you change?\u00a0\u00bb / \u00ab\u00a0pourquoi?\u00a0\u00bb / \u00ab\u00a0c\'est quoi X?\u00a0\u00bb)\u00a0: r\u00e9ponds EN PREMIER, 1 phrase max, faits concrets seulement.',
+      '- Pour \u00ab\u00a0qu\'est-ce que tu as chang\u00e9 / fait?\u00a0\u00bb\u00a0: cite UNIQUEMENT les changements appliqu\u00e9s sur la carte (priorit\u00e9, \u00e9ch\u00e9ance, sous-t\u00e2ches, blocage\u2026). Pas le brief, pas le but, pas la motivation.',
+      '- INTERDIT\u00a0: \u00ab\u00a0J\'ai not\u00e9 que tu veux\u2026\u00a0\u00bb, reformuler l\'intention / le logo / les couleurs / l\'identit\u00e9 visuelle, motiver longuement, finir par \u00ab\u00a0\u00c7a te va?\u00a0\u00bb / \u00ab\u00a0Does that work?\u00a0\u00bb sauf s\'iel demande confirmation.',
+      '- Ex. FAUX\u00a0: user \u00ab\u00a0quas tu chang\u00e9\u00a0\u00bb \u2192 {"message":"J\'ai not\u00e9 que tu veux mettre \u00e0 jour le logo et uniformiser les couleurs\u2026 J\'ai aussi ajust\u00e9 la priorit\u00e9. \u00c7a te va?"}',
+      '- Ex. VRAI\u00a0: user \u00ab\u00a0quas tu chang\u00e9\u00a0\u00bb \u2192 {"thinking":"Demande un diff concret \u2014 priorit\u00e9 ajust\u00e9e.","message":"J\'ai mont\u00e9 la priorit\u00e9.","suggestions":["Remettre comme avant","Affiner"],"followUps":[],"actions":[]}',
+      '- Ex. VRAI (rien chang\u00e9)\u00a0: {"message":"Rien sur la carte \u2014 j\'ai juste not\u00e9 le contexte.","suggestions":[],"followUps":[],"actions":[]}',
       'INTERDIT dans message\u00a0: questions vagues du type \u00ab\u00a0Que souhaitez-vous faire maintenant?\u00a0\u00bb, \u00ab\u00a0Comment puis-je vous aider?\u00a0\u00bb, \u00ab\u00a0Autre chose?\u00a0\u00bb, \u00ab\u00a0Pr\u00eat \u00e0 avancer sur les t\u00e2ches?\u00a0\u00bb, \u00ab\u00a0On s\'y met?\u00a0\u00bb, ou tout pivot non sollicit\u00e9 vers le travail / la productivit\u00e9. Confirme bri\u00e8vement et arr\u00eate-toi\u00a0; les suggestions suffisent pour la suite.',
       'Sanit\u00e9 / incoh\u00e9rences carte (important)\u00a0:',
       '- Rep\u00e8re les contradictions entre statut, progr\u00e8s, blocage et \u00e9ch\u00e9ance.',
@@ -2699,26 +2708,185 @@
   }
 
   /**
+   * Normalize Progress-section suggestion rows (text invent + linked board cards).
+   * Accepts legacy string arrays or mixed objects from the model.
+   * @returns {Array<{type:'text'|'link', text:string, cardId?:string, list?:string}>}
+   */
+  function normalizeProgressSuggestions(raw, boardCards, options) {
+    options = options || {};
+    var max =
+      typeof options.maxItems === 'number' && options.maxItems > 0
+        ? Math.floor(options.maxItems)
+        : 3;
+    var cards = Array.isArray(boardCards) ? boardCards : [];
+    var existingKeys = options.existingKeys || {};
+    var usedLinked = options.usedLinkedIds || {};
+    var out = [];
+    var seenText = Object.create(null);
+    var seenCard = Object.create(null);
+
+    function pushText(label) {
+      var text = String(label || '')
+        .trim()
+        .replace(/^["«]|["»]$/g, '')
+        .trim();
+      if (!text || text.length > 120) return;
+      var key = text.toLocaleLowerCase('fr-FR');
+      if (existingKeys[key] || seenText[key]) return;
+      seenText[key] = true;
+      out.push({ type: 'text', text: text });
+    }
+
+    function pushLink(card) {
+      if (!card || !card.id) return;
+      var cardId = String(card.id).trim();
+      if (!cardId || usedLinked[cardId] || seenCard[cardId]) return;
+      var text =
+        typeof card.name === 'string' && card.name.trim()
+          ? card.name.trim()
+          : 'Carte li\u00e9e';
+      seenCard[cardId] = true;
+      seenText[text.toLocaleLowerCase('fr-FR')] = true;
+      out.push({
+        type: 'link',
+        text: text.slice(0, 120),
+        cardId: cardId,
+        list: typeof card.list === 'string' ? card.list : ''
+      });
+    }
+
+    function resolveCardRef(item) {
+      if (!item || typeof item !== 'object') return null;
+      if (item.cardId != null || item.linkedCardId != null || item.id != null) {
+        var want = String(item.cardId || item.linkedCardId || item.id).trim();
+        if (!want) return null;
+        for (var ci = 0; ci < cards.length; ci++) {
+          if (cards[ci] && String(cards[ci].id) === want) return cards[ci];
+        }
+        return null;
+      }
+      var idx =
+        item.cardIndex != null
+          ? Number(item.cardIndex)
+          : item.index != null
+            ? Number(item.index)
+            : item.ref != null
+              ? Number(item.ref)
+              : NaN;
+      if (!isFinite(idx) || idx < 0 || idx >= cards.length) return null;
+      return cards[idx] || null;
+    }
+
+    function isLinkItem(item) {
+      if (!item || typeof item !== 'object') return false;
+      var kind = String(item.type || item.kind || item.mode || '')
+        .trim()
+        .toLowerCase();
+      if (kind === 'link' || kind === 'linked' || kind === 'card' || kind === 'existing') {
+        return true;
+      }
+      return (
+        item.cardIndex != null ||
+        item.linkedCardId != null ||
+        (item.cardId != null && kind !== 'text' && kind !== 'new')
+      );
+    }
+
+    (Array.isArray(raw) ? raw : []).forEach(function (item) {
+      if (out.length >= max) return;
+      if (typeof item === 'string') {
+        pushText(item);
+        return;
+      }
+      if (!item || typeof item !== 'object') return;
+      if (isLinkItem(item)) {
+        pushLink(resolveCardRef(item));
+        return;
+      }
+      var label =
+        typeof item.text === 'string'
+          ? item.text
+          : typeof item.label === 'string'
+            ? item.label
+            : typeof item.suggestion === 'string'
+              ? item.suggestion
+              : '';
+      pushText(label);
+    });
+
+    return out.slice(0, max);
+  }
+
+  /**
    * Suggest ~3 follow-up subtasks for the Progress section.
-   * @returns {Promise<string[]>}
+   * When boardCards are provided, may also suggest linking related board cards.
+   * @returns {Promise<Array<{type:'text'|'link', text:string, cardId?:string, list?:string}|string>>}
    */
   async function suggestSubtasks(provider, context, options) {
     options = options || {};
     var p = normalizeProvider(provider);
     if (!isConfigured(p)) return [];
     var ctx = context && typeof context === 'object' ? context : {};
-    var existing = Array.isArray(ctx.existingSubtasks)
+    var existingRaw = Array.isArray(ctx.existingSubtasks)
       ? ctx.existingSubtasks
       : Array.isArray(ctx.items)
-        ? ctx.items.map(function (it) {
-            return typeof it === 'string' ? it : it && it.text ? it.text : '';
-          })
+        ? ctx.items
         : [];
-    existing = existing
-      .map(function (s) {
-        return String(s || '').trim();
-      })
-      .filter(Boolean);
+    var existing = [];
+    var usedLinkedIds = Object.create(null);
+    var currentCardId =
+      ctx.currentCardId != null ? String(ctx.currentCardId).trim() : '';
+    if (currentCardId) usedLinkedIds[currentCardId] = true;
+    (Array.isArray(ctx.existingLinkedIds) ? ctx.existingLinkedIds : []).forEach(
+      function (id) {
+        var lid = String(id || '').trim();
+        if (lid) usedLinkedIds[lid] = true;
+      }
+    );
+    existingRaw.forEach(function (it) {
+      if (typeof it === 'string') {
+        var s = it.trim();
+        if (s) existing.push(s);
+        return;
+      }
+      if (!it || typeof it !== 'object') return;
+      if (typeof it.text === 'string' && it.text.trim()) existing.push(it.text.trim());
+      var linked =
+        it.linkedCardId != null
+          ? String(it.linkedCardId).trim()
+          : it.cardId != null
+            ? String(it.cardId).trim()
+            : '';
+      if (linked) usedLinkedIds[linked] = true;
+    });
+
+    var boardCards = Array.isArray(ctx.boardCards)
+      ? ctx.boardCards
+          .filter(function (card) {
+            if (!card || !card.id) return false;
+            var id = String(card.id).trim();
+            if (!id || usedLinkedIds[id]) return false;
+            return true;
+          })
+          .slice(0, 40)
+          .map(function (card) {
+            return {
+              id: String(card.id).trim(),
+              name: String(card.name || '').trim().slice(0, 120),
+              list: String(card.list || '').trim().slice(0, 80),
+              desc: String(card.desc || '')
+                .trim()
+                .replace(/\s+/g, ' ')
+                .slice(0, 100)
+            };
+          })
+      : [];
+
+    var boardCardRefs = boardCards.map(function (card, index) {
+      var row = { index: index, name: card.name, list: card.list };
+      if (card.desc) row.desc = card.desc;
+      return row;
+    });
 
     var payload = {
       cardName: ctx.cardName || '',
@@ -2728,41 +2896,64 @@
       memory: ctx.memory || null,
       boardDigest: typeof ctx.boardDigest === 'string' ? ctx.boardDigest.slice(0, 3000) : ''
     };
+    if (boardCardRefs.length) {
+      payload.boardCards = boardCardRefs;
+    }
 
     var title = String(payload.cardName || '').trim();
+    var allowLinks = boardCardRefs.length > 0;
+    var systemLines = [
+      'Tu proposes des sous-t\u00e2ches de suivi pour une carte Trello (section Progr\u00e8s).',
+      allowLinks
+        ? 'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":[{"type":"text","text":"\u2026"},{"type":"link","cardIndex":0},{"type":"text","text":"\u2026"}]}'
+        : 'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":["\u2026","\u2026","\u2026"]}',
+      'Exactement 3 suggestions si possible (2 minimum si le contexte est pauvre).',
+      'Chaque suggestion texte = une action concr\u00e8te courte en fran\u00e7ais (pas une question).',
+      'Inf\u00e9rence titre (critique \u2014 c\'est le job)\u00a0:',
+      '- Le TITRE de la carte est la source principale. Lis-le et d\u00e9compose-le en \u00e9tapes concr\u00e8tes.',
+      '- Inf\u00e8re ce qu\'il faut vraiment faire pour accomplir CE titre (savoir pratique + contexte carte).',
+      '- Chaque suggestion doit \u00eatre sp\u00e9cifique \u00e0 CE titre\u00a0: on doit pouvoir dire \u00e0 quel projet elle appartient sans le lire \u00e0 c\u00f4t\u00e9.',
+      '- Description / priorit\u00e9 / m\u00e9moire / digest\u00a0: indices secondaires seulement.',
+      title
+        ? '- Titre actuel\u00a0: \u00ab\u00a0' + title.slice(0, 200) + '\u00a0\u00bb.'
+        : '- Titre manquant\u00a0: propose 2\u20133 \u00e9tapes g\u00e9n\u00e9riques minimales (pas de blabla).',
+      'Exemple\u00a0: titre \u00ab\u00a0Plan strat\u00e9gie de communication\u00a0\u00bb \u2192 \u00ab\u00a0Rencontrer tous les services\u00a0\u00bb, \u00ab\u00a0Lister les canaux prioritaires\u00a0\u00bb, \u00ab\u00a0R\u00e9diger le message cl\u00e9\u00a0\u00bb.',
+      'Exemple\u00a0: \u00ab\u00a0Archivage des rushs vid\u00e9os et projets DaVinci Resolve\u00a0\u00bb \u2192 stockage long terme + guide de proc\u00e9dure + inventaire des projets.',
+      'Exemple\u00a0: \u00ab\u00a0Accrocher les dipl\u00f4mes dans le bureau\u00a0\u00bb \u2192 \u00ab\u00a0Mesurer l\'emplacement au mur\u00a0\u00bb, \u00ab\u00a0Acheter crochets / clous\u00a0\u00bb, \u00ab\u00a0Fixer et aligner les cadres\u00a0\u00bb.',
+      'INTERDIT\u00a0: suggestions g\u00e9n\u00e9riques / m\u00e9ta (\u00ab\u00a0Faire un plan\u00a0\u00bb, \u00ab\u00a0D\u00e9finir les objectifs\u00a0\u00bb, \u00ab\u00a0Commencer la t\u00e2che\u00a0\u00bb, \u00ab\u00a0Avancer sur le projet\u00a0\u00bb, \u00ab\u00a0V\u00e9rifier le statut\u00a0\u00bb).',
+      'INTERDIT\u00a0: dupliquer une sous-t\u00e2che existante (m\u00eame sens).',
+      'INTERDIT\u00a0: placeholders, num\u00e9rotation, guillemets superflus.'
+    ];
+    if (allowLinks) {
+      systemLines.push(
+        'Cartes liables (boardCards)\u00a0:',
+        '- type "link" = sous-t\u00e2che li\u00e9e \u00e0 une carte EXISTANTE (cardIndex = index dans boardCards).',
+        '- Propose 1\u20132 liens SI une carte du tableau est clairement une \u00e9tape, d\u00e9pendance, sous-livrable ou jumeau th\u00e9matique de CE titre.',
+        '- Sinon, propose uniquement des type "text" (n\'invente pas de liens faibles).',
+        '- INTERDIT\u00a0: cardIndex hors plage\u00a0; lier une carte sans rapport\u00a0; lier une carte d\u00e9j\u00e0 dans existingSubtasks.',
+        '- M\u00e9lange typique quand des liens existent\u00a0: 1 link + 2 text, ou 2 link + 1 text.'
+      );
+    }
+    systemLines.push('Contexte\u00a0:', JSON.stringify(payload));
+
     var messages = [
       {
         role: 'system',
-        content: [
-          'Tu proposes des sous-t\u00e2ches de suivi pour une carte Trello (section Progr\u00e8s).',
-          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":["\u2026","\u2026","\u2026"]}',
-          'Exactement 3 suggestions si possible (2 minimum si le contexte est pauvre).',
-          'Chaque suggestion = une action concr\u00e8te courte en fran\u00e7ais (pas une question).',
-          'Inf\u00e9rence titre (critique \u2014 c\'est le job)\u00a0:',
-          '- Le TITRE de la carte est la source principale. Lis-le et d\u00e9compose-le en étapes concr\u00e8tes.',
-          '- Inf\u00e8re ce qu\'il faut vraiment faire pour accomplir CE titre (savoir pratique + contexte carte).',
-          '- Chaque suggestion doit \u00eatre sp\u00e9cifique \u00e0 CE titre\u00a0: on doit pouvoir dire \u00e0 quel projet elle appartient sans le lire \u00e0 c\u00f4t\u00e9.',
-          '- Description / priorit\u00e9 / m\u00e9moire / digest\u00a0: indices secondaires seulement.',
-          title
-            ? '- Titre actuel\u00a0: \u00ab\u00a0' + title.slice(0, 200) + '\u00a0\u00bb.'
-            : '- Titre manquant\u00a0: propose 2\u20133 \u00e9tapes g\u00e9n\u00e9riques minimales (pas de blabla).',
-          'Exemple\u00a0: titre \u00ab\u00a0Plan strat\u00e9gie de communication\u00a0\u00bb \u2192 \u00ab\u00a0Rencontrer tous les services\u00a0\u00bb, \u00ab\u00a0Lister les canaux prioritaires\u00a0\u00bb, \u00ab\u00a0R\u00e9diger le message cl\u00e9\u00a0\u00bb.',
-          'Exemple\u00a0: \u00ab\u00a0Archivage des rushs vid\u00e9os et projets DaVinci Resolve\u00a0\u00bb \u2192 stockage long terme + guide de proc\u00e9dure + inventaire des projets.',
-          'Exemple\u00a0: \u00ab\u00a0Accrocher les dipl\u00f4mes dans le bureau\u00a0\u00bb \u2192 \u00ab\u00a0Mesurer l\'emplacement au mur\u00a0\u00bb, \u00ab\u00a0Acheter crochets / clous\u00a0\u00bb, \u00ab\u00a0Fixer et aligner les cadres\u00a0\u00bb.',
-          'INTERDIT\u00a0: suggestions g\u00e9n\u00e9riques / m\u00e9ta (\u00ab\u00a0Faire un plan\u00a0\u00bb, \u00ab\u00a0D\u00e9finir les objectifs\u00a0\u00bb, \u00ab\u00a0Commencer la t\u00e2che\u00a0\u00bb, \u00ab\u00a0Avancer sur le projet\u00a0\u00bb, \u00ab\u00a0V\u00e9rifier le statut\u00a0\u00bb).',
-          'INTERDIT\u00a0: dupliquer une sous-t\u00e2che existante (m\u00eame sens).',
-          'INTERDIT\u00a0: placeholders, num\u00e9rotation, guillemets superflus.',
-          'Contexte\u00a0:',
-          JSON.stringify(payload)
-        ].join('\n')
+        content: systemLines.join('\n')
       },
       {
         role: 'user',
         content: title
-          ? 'Propose 3 sous-t\u00e2ches concr\u00e8tes pour accomplir\u00a0: \u00ab\u00a0' +
-            title.slice(0, 200) +
-            '\u00a0\u00bb. Inf\u00e8re les \u00e9tapes depuis le titre.'
-          : 'Propose 3 sous-t\u00e2ches de suivi pertinentes.'
+          ? allowLinks
+            ? 'Propose 3 sous-t\u00e2ches pour accomplir\u00a0: \u00ab\u00a0' +
+              title.slice(0, 200) +
+              '\u00a0\u00bb. Relie des cartes boardCards pertinentes si elles existent, sinon invente des actions texte.'
+            : 'Propose 3 sous-t\u00e2ches concr\u00e8tes pour accomplir\u00a0: \u00ab\u00a0' +
+              title.slice(0, 200) +
+              '\u00a0\u00bb. Inf\u00e8re les \u00e9tapes depuis le titre.'
+          : allowLinks
+            ? 'Propose 3 sous-t\u00e2ches de suivi (texte et/ou liens boardCards pertinents).'
+            : 'Propose 3 sous-t\u00e2ches de suivi pertinentes.'
       }
     ];
 
@@ -2770,7 +2961,7 @@
     try {
       response = await chatCompletions(p, messages, {
         jsonMode: true,
-        max_tokens: 280,
+        max_tokens: allowLinks ? 360 : 280,
         temperature: 0.55,
         stream: false
       });
@@ -2778,7 +2969,7 @@
       if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
         response = await chatCompletions(p, messages, {
           jsonMode: false,
-          max_tokens: 280,
+          max_tokens: allowLinks ? 360 : 280,
           temperature: 0.55,
           stream: false
         });
@@ -2788,16 +2979,16 @@
       }
     }
 
-    var list = [];
+    var rawList = [];
     try {
       var parsed = parseAssistantPayload(response.content);
-      list = normalizeSuggestionList(parsed.suggestions);
+      rawList = parsed.suggestions || parsed.subtasks || [];
     } catch (e) {
       try {
         var raw = JSON.parse(response.content);
-        list = normalizeSuggestionList(raw.suggestions || raw.subtasks);
+        rawList = raw.suggestions || raw.subtasks || [];
       } catch (e2) {
-        list = [];
+        rawList = [];
       }
     }
 
@@ -2805,11 +2996,21 @@
     for (var i = 0; i < existing.length; i++) {
       existingKeys[existing[i].toLocaleLowerCase('fr-FR')] = true;
     }
-    return list
-      .filter(function (s) {
-        return s && !existingKeys[s.toLocaleLowerCase('fr-FR')];
-      })
-      .slice(0, 3);
+
+    var normalized = normalizeProgressSuggestions(rawList, boardCards, {
+      maxItems: 3,
+      existingKeys: existingKeys,
+      usedLinkedIds: usedLinkedIds
+    });
+
+    // Chat / legacy callers that only expect titles still get usable strings
+    // when no structured link rows were requested.
+    if (!allowLinks) {
+      return normalized.map(function (row) {
+        return row.text;
+      });
+    }
+    return normalized;
   }
 
   /**

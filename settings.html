@@ -790,17 +790,31 @@
 
     document.getElementById('authorizeAutoSort').addEventListener('click', function () {
       var statusEl = document.getElementById('autoSortStatus');
+      var authBtn = document.getElementById('authorizeAutoSort');
+      if (authBtn) authBtn.disabled = true;
       PriorityTrello.authorizeRestForAutoSort(t)
-        .then(function () { return refreshAutoSortUi(); })
+        .then(function () {
+          // Hide immediately so a delayed isAuthorized check cannot leave the CTA up.
+          if (authBtn) authBtn.hidden = true;
+          if (statusEl) {
+            statusEl.textContent =
+              'Déplacement de cartes / tri auto : activé (autorisation lecture + écriture).';
+          }
+          return refreshAutoSortUi();
+        })
         .catch(function (err) {
           console.error('Priority REST authorize failed', err);
           var msg = String((err && (err.name || err.message)) || err || '');
           var denied = /AuthDenied|annul|blocked|popup/i.test(msg);
+          if (authBtn) authBtn.hidden = false;
           if (statusEl) {
             statusEl.textContent = denied
               ? 'Autorisation annulée ou fenêtre bloquée. Autorisez les popups pour trello.com, vérifiez Allowed Origins (https://VOTRE-UTILISATEUR.github.io) dans l’admin Power-Up, puis réessayez.'
               : 'Autorisation échouée. Vérifiez la clé API et Allowed Origins dans l’admin Power-Up, puis réessayez.';
           }
+        })
+        .then(function () {
+          if (authBtn) authBtn.disabled = false;
         });
     });
 

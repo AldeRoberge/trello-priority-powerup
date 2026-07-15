@@ -894,7 +894,14 @@
         wrapEl: addWrapped.wrap,
         ghostEl: addWrapped.ghost,
         getCandidates: function () {
-          return currentSuggestions.slice();
+          return currentSuggestions
+            .filter(function (s) {
+              return !(s && typeof s === 'object' && s.type === 'link');
+            })
+            .map(function (s) {
+              return typeof s === 'string' ? s : s && s.text ? s.text : '';
+            })
+            .filter(Boolean);
         },
         isEnabled: function () {
           return !addInput.disabled && !spellcheckBusy;
@@ -906,6 +913,12 @@
           Array.prototype.forEach.call(
             suggestListEl.querySelectorAll('.tp-completion-suggestion'),
             function (btn) {
+              if (btn.classList.contains('is-link')) {
+                btn.classList.remove('is-tab-target');
+                var linkHint = btn.querySelector('.tp-tab-hint');
+                if (linkHint) linkHint.remove();
+                return;
+              }
               var label = String(btn.getAttribute('data-suggestion') || btn.textContent || '');
               var on = !!(target && label === target);
               btn.classList.toggle('is-tab-target', on);
@@ -2075,13 +2088,56 @@
       suggestStatusEl.textContent = text;
     }
 
-    function removeSuggestionMatch(text) {
-      var key = String(text || '')
-        .trim()
-        .toLocaleLowerCase('fr-FR');
-      if (!key) return;
+    function normalizeSuggestionRow(raw) {
+      if (typeof raw === 'string') {
+        var textOnly = raw.trim();
+        return textOnly ? { type: 'text', text: textOnly } : null;
+      }
+      if (!raw || typeof raw !== 'object') return null;
+      var text =
+        typeof raw.text === 'string'
+          ? raw.text.trim()
+          : typeof raw.label === 'string'
+            ? raw.label.trim()
+            : '';
+      var cardId =
+        raw.cardId != null
+          ? String(raw.cardId).trim()
+          : raw.linkedCardId != null
+            ? String(raw.linkedCardId).trim()
+            : '';
+      var type =
+        raw.type === 'link' || raw.kind === 'link' || cardId ? 'link' : 'text';
+      if (type === 'link') {
+        if (!cardId || (currentCardId && cardId === currentCardId)) return null;
+        if (linkedIdsAlreadyUsed()[cardId]) return null;
+        return {
+          type: 'link',
+          text: text || 'Carte li\u00e9e',
+          cardId: cardId,
+          list: typeof raw.list === 'string' ? raw.list : ''
+        };
+      }
+      if (!text) return null;
+      return { type: 'text', text: text };
+    }
+
+    function suggestionKey(row) {
+      if (!row) return '';
+      if (row.type === 'link' && row.cardId) return 'link:' + row.cardId;
+      return 'text:' + String(row.text || '').trim().toLocaleLowerCase('fr-FR');
+    }
+
+    function removeSuggestionMatch(match) {
+      var dropKey = '';
+      if (typeof match === 'string') {
+        dropKey = 'text:' + match.trim().toLocaleLowerCase('fr-FR');
+      } else if (match && typeof match === 'object') {
+        dropKey = suggestionKey(normalizeSuggestionRow(match) || match);
+      }
+      if (!dropKey) return;
       currentSuggestions = currentSuggestions.filter(function (s) {
-        return String(s || '').trim().toLocaleLowerCase('fr-FR') !== key;
+        return suggestionKey(s) !== dropKey;
       });
       renderSuggestions();
     }
@@ -2103,22 +2159,64 @@
         return;
       }
       setSuggestStatus('', false);
-      currentSuggestions.forEach(function (label) {
+      currentSuggestions.forEach(function (suggestion) {
+        var row = normalizeSuggestionRow(suggestion);
+        if (!row || !row.text) return;
+        var isLink = row.type === 'link' && row.cardId;
         var btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'tp-completion-suggestion';
+        btn.className =
+          'tp-completion-suggestion' + (isLink ? ' is-link' : '');
         btn.setAttribute('role', 'listitem');
-        btn.setAttribute('data-suggestion', label);
-        btn.textContent = label;
-        btn.title = 'Ajouter\u00a0: ' + label;
+        btn.setAttribute('data-suggestion', row.text);
+        if (isLink) btn.setAttribute('data-linked-card-id', row.cardId);
+        if (isLink) {
+          var icon = document.createElement('i');
+          icon.className = 'ti ti-link';
+          icon.setAttribute('aria-hidden', 'true');
+          var labelEl = document.createElement('span');
+          labelEl.className = 'tp-completion-suggestion-label';
+          labelEl.textContent = row.text;
+          btn.appendChild(icon);
+          btn.appendChild(labelEl);
+          if (row.list) {
+            var listEl = document.createElement('span');
+            listEl.className = 'tp-completion-suggestion-list';
+            listEl.textContent = row.list;
+            btn.appendChild(listEl);
+          }
+          btn.title =
+            'Lier la carte\u00a0: ' +
+            row.text +
+            (row.list ? ' (' + row.list + ')' : '');
+        } else {
+          btn.textContent = row.text;
+          btn.title = 'Ajouter\u00a0: ' + row.text;
+        }
         btn.addEventListener('click', function () {
           if (spellcheckBusy) return;
+          if (isLink) {
+            btn.disabled = true;
+            var added = addLinkedCard({
+              id: row.cardId,
+              name: row.text,
+              list: row.list || ''
+            });
+            if (added) {
+              removeSuggestionMatch(row);
+            } else {
+              btn.disabled = false;
+              removeSuggestionMatch(row);
+            }
+            return;
+          }
           spellcheckBusy = true;
           btn.disabled = true;
-          spellcheckText(label)
+          spellcheckText(row.text)
             .then(function (corrected) {
-              var ok = addItem(corrected || label);
-              if (!ok) removeSuggestionMatch(label);
+              addItem(corrected || row.text);
+              // Always drop this chip (addItem may only clear by corrected text).
+              removeSuggestionMatch(row);
             })
             .finally(function () {
               spellcheckBusy = false;
@@ -2143,18 +2241,26 @@
           return suggestSubtasksFn({
             force: !!force,
             items: (data.items || []).map(function (it) {
-              return it.text;
+              return {
+                text: it.text,
+                linkedCardId: CT.itemLinkedCardId(it) || undefined
+              };
             })
           });
         })
         .then(function (list) {
           if (seq !== suggestionsSeq) return;
+          var seen = Object.create(null);
           currentSuggestions = Array.isArray(list)
             ? list
-                .map(function (s) {
-                  return String(s || '').trim();
-                })
+                .map(normalizeSuggestionRow)
                 .filter(Boolean)
+                .filter(function (row) {
+                  var key = suggestionKey(row);
+                  if (!key || seen[key]) return false;
+                  seen[key] = true;
+                  return true;
+                })
                 .slice(0, 3)
             : [];
           suggestionsLoading = false;

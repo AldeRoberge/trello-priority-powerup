@@ -314,6 +314,11 @@ html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
   cursor: pointer;
 }
 
+/* Author display overrides UA [hidden] without !important */
+.tp-button[hidden] {
+  display: none !important;
+}
+
 .tp-button:hover { filter: brightness(1.05); }
 
 .tp-button--secondary {
@@ -2951,8 +2956,50 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   transition: background-color 0.15s ease;
 }
 
+.tp-completion-suggestion.is-link {
+  gap: 6px;
+  background: color-mix(in srgb, var(--tp-focus, #0c66e4) 10%, var(--surface-1, var(--surface-2, #f1f2f4)));
+  color: var(--tp-focus, #0c66e4);
+}
+
+.tp-completion-suggestion.is-link .ti {
+  font-size: 14px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.tp-completion-suggestion-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-completion-suggestion-list {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.75;
+  max-width: 9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-color-mode='dark'] .tp-completion-suggestion.is-link {
+  background: color-mix(in srgb, var(--tp-focus, #579dff) 16%, var(--tp-elev-0, #1d2125));
+  color: var(--tp-focus, #579dff);
+}
+
 .tp-completion-suggestion:hover {
   background: var(--surface-hover, #e2e4e9);
+}
+
+.tp-completion-suggestion.is-link:hover {
+  background: color-mix(in srgb, var(--tp-focus, #0c66e4) 16%, var(--surface-1, var(--surface-2, #f1f2f4)));
+}
+
+html[data-color-mode='dark'] .tp-completion-suggestion.is-link:hover {
+  background: color-mix(in srgb, var(--tp-focus, #579dff) 22%, var(--tp-elev-0, #1d2125));
 }
 
 .tp-completion-suggestion:focus-visible {
