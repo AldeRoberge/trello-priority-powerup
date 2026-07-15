@@ -484,8 +484,14 @@
     });
     var sendBtn = el('button', 'tp-button agent-send-btn', {
       type: 'button',
-      text: 'Envoyer'
+      'aria-label': 'Envoyer'
     });
+    var sendBtnLabel = el('span', 'agent-send-btn-label');
+    sendBtnLabel.textContent = 'Envoyer';
+    var sendConfirmCount = el('span', 'agent-send-btn-count');
+    sendConfirmCount.hidden = true;
+    sendBtn.appendChild(sendBtnLabel);
+    sendBtn.appendChild(sendConfirmCount);
     var composerSuggestions = [];
     var tabComplete = null;
     if (global.TabAutocomplete && typeof global.TabAutocomplete.wrapField === 'function') {
@@ -4832,6 +4838,13 @@
       notifyLayout();
     }
 
+    function clearSendConfirmCountdown() {
+      sendConfirmCount.textContent = '';
+      sendConfirmCount.hidden = true;
+      sendBtn.classList.remove('is-confirming');
+      sendBtn.setAttribute('aria-label', 'Envoyer');
+    }
+
     function stopSuggestionConfirmTimer() {
       if (suggestionConfirmTimer) {
         clearInterval(suggestionConfirmTimer);
@@ -4842,6 +4855,7 @@
 
     function clearSuggestions() {
       stopSuggestionConfirmTimer();
+      clearSendConfirmCountdown();
       suggestionsMultiSelect = false;
       composerSuggestions = [];
       suggestionsEl.replaceChildren();
@@ -5144,32 +5158,34 @@
 
     function syncSuggestionConfirmUi() {
       var confirmEl = suggestionsEl.querySelector('.agent-suggestion-confirm');
-      if (!confirmEl) return;
       var selected = getSelectedSuggestionTexts();
-      var countEl = confirmEl.querySelector('.agent-suggestion-confirm-count');
-      var btn = confirmEl.querySelector('.agent-suggestion-confirm-btn');
       var composerHasText = !!(input.value || '').trim();
       if (!selected.length || composerHasText) {
-        confirmEl.hidden = true;
+        if (confirmEl) confirmEl.hidden = true;
         stopSuggestionConfirmTimer();
-        if (countEl) countEl.textContent = '';
-        if (btn) btn.disabled = true;
+        clearSendConfirmCountdown();
         notifyLayout();
         return;
       }
-      confirmEl.hidden = false;
-      if (btn) btn.disabled = !!pending;
-      var promptText =
-        (confirmEl.querySelector('.agent-suggestion-confirm-prompt') || {})
-          .textContent || 'C\'est tout?';
+      if (confirmEl) {
+        confirmEl.hidden = false;
+        var promptText =
+          (confirmEl.querySelector('.agent-suggestion-confirm-prompt') || {})
+            .textContent || 'C\'est tout?';
+        confirmEl.setAttribute('aria-label', promptText);
+      }
       if (suggestionConfirmDeadline) {
         var leftMs = Math.max(0, suggestionConfirmDeadline - Date.now());
         var leftSec = Math.max(1, Math.ceil(leftMs / 1000));
-        if (countEl) countEl.textContent = String(leftSec);
-        confirmEl.setAttribute('aria-label', promptText + ' ' + leftSec + ' s');
+        sendConfirmCount.textContent = String(leftSec);
+        sendConfirmCount.hidden = false;
+        sendBtn.classList.add('is-confirming');
+        sendBtn.setAttribute(
+          'aria-label',
+          'Envoyer' + ' (' + leftSec + ' s)'
+        );
       } else {
-        if (countEl) countEl.textContent = '';
-        confirmEl.setAttribute('aria-label', promptText);
+        clearSendConfirmCountdown();
       }
       notifyLayout();
     }
@@ -5208,6 +5224,7 @@
       if (!labels.length) return;
       var msg = formatSelectedSuggestions(labels);
       stopSuggestionConfirmTimer();
+      clearSendConfirmCountdown();
       clearSuggestions();
       sendUserMessage(msg);
     }
@@ -5619,6 +5636,7 @@
         return item.text;
       });
       stopSuggestionConfirmTimer();
+      clearSendConfirmCountdown();
       suggestionsEl.replaceChildren();
       suggestionsMultiSelect = false;
       suggestionsEl.classList.remove('is-multi');
@@ -5673,21 +5691,7 @@
         confirmEl.hidden = true;
         var promptEl = el('span', 'agent-suggestion-confirm-prompt');
         promptEl.textContent = SUGGESTION_CONFIRM_PROMPTS[0];
-        var confirmBtn = el('button', 'agent-suggestion-confirm-btn', {
-          type: 'button',
-          'aria-label': 'Confirmer les r\u00e9ponses s\u00e9lectionn\u00e9es'
-        });
-        confirmBtn.disabled = true;
-        var checkIcon = el('i', 'ti ti-check');
-        checkIcon.setAttribute('aria-hidden', 'true');
-        var countEl = el('span', 'agent-suggestion-confirm-count');
-        confirmBtn.appendChild(checkIcon);
-        confirmBtn.appendChild(countEl);
-        confirmBtn.addEventListener('click', function () {
-          commitSelectedSuggestions();
-        });
         confirmEl.appendChild(promptEl);
-        confirmEl.appendChild(confirmBtn);
         suggestionsEl.appendChild(confirmEl);
       }
       if (tabComplete) tabComplete.refresh();
@@ -5701,12 +5705,12 @@
           chip.disabled = !!isBusy || pending;
         }
       );
-      var confirmBtn = suggestionsEl.querySelector('.agent-suggestion-confirm-btn');
-      if (confirmBtn) {
-        confirmBtn.disabled =
-          !!isBusy || pending || !getSelectedSuggestionTexts().length;
+      if (isBusy || pending) {
+        stopSuggestionConfirmTimer();
+        clearSendConfirmCountdown();
+      } else {
+        syncSuggestionConfirmUi();
       }
-      if (isBusy || pending) stopSuggestionConfirmTimer();
     }
 
     async function refreshSuggestions(options) {
@@ -7121,10 +7125,11 @@
     function onSend() {
       var typed = (input.value || '').trim();
       var selected = getSelectedSuggestionTexts();
-      var msg = typed;
-      if (typed && selected.length) {
-        msg = formatSelectedSuggestions(selected.concat([typed]));
-      }
+      var msg = selected.length
+        ? formatSelectedSuggestions(typed ? selected.concat([typed]) : selected)
+        : typed;
+      stopSuggestionConfirmTimer();
+      clearSendConfirmCountdown();
       sendUserMessage(msg, { fromComposer: true });
     }
 

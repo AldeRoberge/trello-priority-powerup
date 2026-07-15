@@ -2623,44 +2623,6 @@ html[data-color-mode='dark'] .tp-page--priority .agent-hl--a {
   white-space: nowrap;
 }
 
-.tp-page--priority .agent-suggestion-confirm-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-width: 36px;
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid var(--tp-primary);
-  border-radius: 15px;
-  background: var(--tp-primary);
-  color: var(--tp-primary-text, #fff);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.tp-page--priority .agent-suggestion-confirm-btn:hover:not(:disabled) {
-  filter: brightness(1.05);
-}
-
-.tp-page--priority .agent-suggestion-confirm-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.tp-page--priority .agent-suggestion-confirm-btn .ti {
-  font-size: 14px;
-  line-height: 1;
-}
-
-.tp-page--priority .agent-suggestion-confirm-count {
-  min-width: 0.9em;
-  font-variant-numeric: tabular-nums;
-}
-
 /* Axis / ranked-answer chips: green → red (calm → intense).
    Outline only until selected; fill appears with .is-selected. */
 .tp-page--priority .agent-suggestion-chip--scale {
@@ -3445,8 +3407,22 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
 }
 
 .tp-page--priority .agent-send-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   flex: 0 0 auto;
   align-self: stretch;
+}
+
+.tp-page--priority .agent-send-btn-count {
+  min-width: 0.9em;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.tp-page--priority .agent-send-btn-count[hidden] {
+  display: none !important;
 }
 
 .tp-page--priority .agent-send-btn:disabled {

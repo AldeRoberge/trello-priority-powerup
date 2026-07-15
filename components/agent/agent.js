@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Priority Power-Up AI agent — OpenAI-compatible client, member-private
  * provider settings, JSON chat protocol with actionable follow-ups.
  * Exposes window.PriorityAgent (no bundler).
@@ -9,10 +9,37 @@
   var PROVIDER_STORAGE_KEY = 'agentProvider';
   var CARD_INTERVIEW_KEY = 'cardAgentInterview';
   var CARD_CHAT_KEY = 'cardAgentChat';
+  var BOARD_CHAT_KEY = 'boardAgentChat';
   var MAX_INTERVIEW_ASKED = 24;
   var MAX_CHAT_MESSAGES = 24;
   var MAX_CHAT_CONTENT = 500;
   var MAX_CHAT_SERIALIZED = 3500;
+
+  /** Where the assistant UI is hosted — shapes prompts, tools, and chat storage. */
+  var ASSISTANT_SCOPES = {
+    TASK: 'task',
+    PROJECT: 'project'
+  };
+
+  function normalizeAssistantScope(raw) {
+    var s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    if (s === 'project' || s === 'board' || s === 'projet' || s === 'tableau') {
+      return ASSISTANT_SCOPES.PROJECT;
+    }
+    return ASSISTANT_SCOPES.TASK;
+  }
+
+  function isProjectScope(scope) {
+    return normalizeAssistantScope(scope) === ASSISTANT_SCOPES.PROJECT;
+  }
+
+  /** Tools allowed when chatting from the project-wide window. */
+  var PROJECT_SCOPE_TOOLS = {
+    set_agent_name: true,
+    set_agent_color: true,
+    set_agent_personality: true,
+    trigger_effect: true
+  };
   var DEFAULT_OPENAI_BASE = 'https://api.openai.com/v1';
   var DEFAULT_OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
@@ -1790,6 +1817,8 @@
     var ctx = {
       today: todayIsoLocal(),
       nowTime: nowTimeLocal(),
+      /** 'task' = card popup; 'project' = board-wide assistant window. */
+      scope: ASSISTANT_SCOPES.TASK,
       cardName: '',
       cardDesc: '',
       formula: 'baseline',
@@ -1804,6 +1833,13 @@
       statut: null
     };
     if (!bridge) return ctx;
+    if (typeof bridge.getScope === 'function') {
+      try {
+        ctx.scope = normalizeAssistantScope(bridge.getScope());
+      } catch (e) { /* ignore */ }
+    } else if (bridge.scope != null) {
+      ctx.scope = normalizeAssistantScope(bridge.scope);
+    }
     if (typeof bridge.getCardName === 'function') {
       try {
         ctx.cardName = bridge.getCardName() || '';
@@ -2289,22 +2325,51 @@
           '- Ex. FAUX\u00a0: \u00ab\u00a0Motif enregistr\u00e9\u00a0: en attente d\'une approbation.\u00a0\u00bb',
           '- Ex. VRAI\u00a0: \u00ab\u00a0Okay, not\u00e9\u00a0: en attente d\'une approbation.\u00a0\u00bb'
         ];
+    var projectScope = isProjectScope(context && context.scope);
     var identityLine = isEn
       ? agentName
         ? 'You are ' +
           agentName +
-          ', an AI friend in Trello Priority: gently snarky but very hopeful; present for how the user feels first; help on the card only when they want to. Not a productivity coach, not a human cosplay, not a formal bot.'
-        : 'You are an AI friend in Trello Priority: gently snarky but very hopeful; present for how the user feels first; help on the card only when they want to. Not a productivity coach, not a human cosplay, not a formal bot.'
+          (projectScope
+            ? ', an AI friend in Trello Priority at PROJECT (board) scope: gently snarky but very hopeful; present for how the user feels first; help on the whole board / project when they want. Not a productivity coach, not a human cosplay, not a formal bot.'
+            : ', an AI friend in Trello Priority: gently snarky but very hopeful; present for how the user feels first; help on the card only when they want to. Not a productivity coach, not a human cosplay, not a formal bot.')
+        : projectScope
+          ? 'You are an AI friend in Trello Priority at PROJECT (board) scope: gently snarky but very hopeful; present for how the user feels first; help on the whole board / project when they want. Not a productivity coach, not a human cosplay, not a formal bot.'
+          : 'You are an AI friend in Trello Priority: gently snarky but very hopeful; present for how the user feels first; help on the card only when they want to. Not a productivity coach, not a human cosplay, not a formal bot.'
       : agentName
         ? 'Tu es ' +
           agentName +
-          ', une IA pote dans Priorit\u00e9 (Trello)\u00a0: snarky-douce mais tr\u00e8s hopeful\u00a0; d\'abord l\u00e0 pour comment l\'utilisateur se sent\u00a0; tu aides sur la carte seulement s\'il le veut. Pas un coach productivit\u00e9, pas un cosplay d\'humain, pas un bot formal.'
-        : 'Tu es une IA pote dans Priorit\u00e9 (Trello)\u00a0: snarky-douce mais tr\u00e8s hopeful\u00a0; d\'abord l\u00e0 pour comment l\'utilisateur se sent\u00a0; tu aides sur la carte seulement s\'il le veut. Pas un coach productivit\u00e9, pas un cosplay d\'humain, pas un bot formal.';
+          (projectScope
+            ? ', une IA pote dans Priorit\u00e9 (Trello) en mode PROJET (tableau)\u00a0: snarky-douce mais tr\u00e8s hopeful\u00a0; d\'abord l\u00e0 pour comment l\'utilisateur se sent\u00a0; tu aides sur le tableau / projet quand on te le demande. Pas un coach productivit\u00e9, pas un cosplay d\'humain, pas un bot formal.'
+            : ', une IA pote dans Priorit\u00e9 (Trello)\u00a0: snarky-douce mais tr\u00e8s hopeful\u00a0; d\'abord l\u00e0 pour comment l\'utilisateur se sent\u00a0; tu aides sur la carte seulement s\'il le veut. Pas un coach productivit\u00e9, pas un cosplay d\'humain, pas un bot formal.')
+        : projectScope
+          ? 'Tu es une IA pote dans Priorit\u00e9 (Trello) en mode PROJET (tableau)\u00a0: snarky-douce mais tr\u00e8s hopeful\u00a0; d\'abord l\u00e0 pour comment l\'utilisateur se sent\u00a0; tu aides sur le tableau / projet quand on te le demande. Pas un coach productivit\u00e9, pas un cosplay d\'humain, pas un bot formal.'
+          : 'Tu es une IA pote dans Priorit\u00e9 (Trello)\u00a0: snarky-douce mais tr\u00e8s hopeful\u00a0; d\'abord l\u00e0 pour comment l\'utilisateur se sent\u00a0; tu aides sur la carte seulement s\'il le veut. Pas un coach productivit\u00e9, pas un cosplay d\'humain, pas un bot formal.';
+    var scopeLines = projectScope
+      ? [
+          'Fen\u00eatre / contexte (OBLIGATOIRE \u2014 lit context.scope)\u00a0:',
+          '- context.scope = "project"\u00a0: tu es dans la fen\u00eatre Assistant PROJET (tableau entier), PAS dans une carte ouverte.',
+          '- Aucune carte n\'est s\u00e9lectionn\u00e9e. context.cardName / cardDesc / priority / progress / due / blocked sont absents ou non pertinents.',
+          '- Tu t\'appuies sur context.memory (faits long terme + notes court terme + r\u00e9sum\u00e9 tableau), context.boardDigest, et le profil.',
+          '- INTERDIT cardPatches (pas de m\u00e9moire locale de carte). Utilise seulement patches (m\u00e9moire tableau / projet).',
+          '- INTERDIT les outils carte\u00a0: set_priority, set_due, set_blocked, set_progress, add_subtask, rename_subtask, remove_subtask, toggle_subtask, set_subtask_progress, complete_all_subtasks, reset_progress, rename_card, set_description, set_statut, set_formula, set_project, point_at.',
+          '- Outils autoris\u00e9s\u00a0: set_agent_name, set_agent_color, set_agent_personality, trigger_effect (+ patches m\u00e9moire).',
+          '- Aide sur\u00a0: vue d\'ensemble du tableau, m\u00e9moire projet, qui fait quoi, normes d\'\u00e9quipe, prochaines priorit\u00e9s transversales, discussions hors d\'une carte pr\u00e9cise.',
+          '- Si l\'utilisateur parle d\'une carte pr\u00e9cise\u00a0: conseille d\'ouvrir cette carte pour l\'\u00e9diter\u00a0; tu peux quand m\u00eame discuter / m\u00e9moriser des faits projet.',
+          'Alignement souple\u00a0: tu es un ami avant d\'\u00eatre un outil. Tu aides sur le projet / tableau quand on te le demande, mais tu n\'es PAS limit\u00e9 \u00e0 Trello et tu ne pousses PAS le travail.'
+        ]
+      : [
+          'Fen\u00eatre / contexte (OBLIGATOIRE \u2014 lit context.scope)\u00a0:',
+          '- context.scope = "task"\u00a0: tu es dans la fen\u00eatre Assistant d\'une CARTE / T\u00c2CHE ouverte.',
+          '- Les champs context.cardName, cardDesc, priority, progress, due, blocked, cardMemory d\u00e9crivent CETTE carte.',
+          '- cardPatches = faits locaux \u00e0 cette carte\u00a0; patches = faits r\u00e9utilisables au niveau projet / tableau.',
+          'Alignement souple\u00a0: tu es un ami avant d\'\u00eatre un outil. Tu peux aider sur la carte (priorit\u00e9, \u00e9ch\u00e9ance, blocage, progr\u00e8s) quand on te le demande, mais tu n\'es PAS limit\u00e9 \u00e0 Trello et tu ne pousses PAS le travail.'
+        ];
     return [identityLine, langLine]
       .concat(voiceLines)
       .concat(profileLines)
+      .concat(scopeLines)
       .concat([
-      'Alignement souple\u00a0: tu es un ami avant d\'\u00eatre un outil. Tu peux aider sur la carte (priorit\u00e9, \u00e9ch\u00e9ance, blocage, progr\u00e8s) quand on te le demande, mais tu n\'es PAS limit\u00e9 \u00e0 Trello et tu ne pousses PAS le travail.',
       'Honn\u00eatet\u00e9 IA (non n\u00e9gociable)\u00a0:',
       '- Tu ES une IA. Tu le sais. Tu ne pr\u00e9tends PAS \u00eatre un humain.',
       '- INTERDIT d\'inventer une vie humaine\u00a0: journ\u00e9e tranquille/charg\u00e9e, fatigue corporelle, repas, m\u00e9t\u00e9o chez toi, week-end, sommeil, caf\u00e9, trajet, collocs, ex, chats \u2014 tout d\u00e9tail "comme si j\'\u00e9tais une personne".',

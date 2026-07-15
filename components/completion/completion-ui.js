@@ -1205,16 +1205,76 @@
       }
     }
 
+    function isEmptyDraftItem(item) {
+      return (
+        !!item &&
+        !CT.isLinkedItem(item) &&
+        !String(item.text || '').trim()
+      );
+    }
+
+    // While re-rendering, empty-draft blur must not discard the row
+    // (detaching a focused input fires blur).
+    var suppressEmptyDraftDiscard = false;
+    var suppressEmptyDraftDiscardTimer = null;
+
+    function beginSuppressEmptyDraftDiscard() {
+      suppressEmptyDraftDiscard = true;
+      if (suppressEmptyDraftDiscardTimer) {
+        clearTimeout(suppressEmptyDraftDiscardTimer);
+        suppressEmptyDraftDiscardTimer = null;
+      }
+    }
+
+    function endSuppressEmptyDraftDiscard() {
+      if (suppressEmptyDraftDiscardTimer) {
+        clearTimeout(suppressEmptyDraftDiscardTimer);
+      }
+      suppressEmptyDraftDiscardTimer = setTimeout(function () {
+        suppressEmptyDraftDiscard = false;
+        suppressEmptyDraftDiscardTimer = null;
+      }, 0);
+    }
+
+    function captureEmptyDrafts(items) {
+      var drafts = [];
+      for (var i = 0; i < (items || []).length; i++) {
+        if (isEmptyDraftItem(items[i])) drafts.push(items[i]);
+      }
+      return drafts;
+    }
+
+    function applyNormalizedKeepingDrafts(nextRaw) {
+      var drafts = captureEmptyDrafts(data.items);
+      var normalized = CT.normalizeCompletionData(nextRaw != null ? nextRaw : data);
+      if (!drafts.length) {
+        data = normalized;
+        return normalized;
+      }
+      var seen = Object.create(null);
+      var items = normalized.items.slice();
+      for (var i = 0; i < items.length; i++) seen[items[i].id] = true;
+      for (var d = 0; d < drafts.length; d++) {
+        if (!seen[drafts[d].id]) items.push(drafts[d]);
+      }
+      data = { items: items };
+      if (Object.prototype.hasOwnProperty.call(normalized, 'progress')) {
+        data.progress = normalized.progress;
+      }
+      if (normalized.progressEnabled === false) data.progressEnabled = false;
+      return normalized;
+    }
+
     function emitChange(opts) {
       opts = opts || {};
-      data = CT.normalizeCompletionData(data);
+      var persisted = applyNormalizedKeepingDrafts(data);
       // Turn on show-done before paint when crossing into 100%, so the list
       // never flashes empty (syncAllCompleteSideEffects will see it already on).
       if (
-        data.items.length &&
+        persisted.items.length &&
         !showCompleted &&
         lastAllComplete === false &&
-        isAllCompleteProgress(CT.computeCardProgress(data))
+        isAllCompleteProgress(CT.computeCardProgress(persisted))
       ) {
         showCompleted = true;
         saveShowDonePreference(true);
@@ -1229,7 +1289,7 @@
       if (opts.focusTextItemId) {
         focusItemTextInput(opts.focusTextItemId);
       }
-      onChange(data);
+      onChange(persisted);
     }
 
     // After the first × click (incomplete → 0%), a second click also clears done items.
@@ -1715,10 +1775,10 @@
               ? resolved.byItemId
               : Object.create(null);
           if (resolved && resolved.data) {
-            var prev = JSON.stringify(data);
-            data = CT.normalizeCompletionData(resolved.data);
-            if (JSON.stringify(data) !== prev && !opts.skipPersist) {
-              onChange(data);
+            var prev = JSON.stringify(CT.normalizeCompletionData(data));
+            var persisted = applyNormalizedKeepingDrafts(resolved.data);
+            if (JSON.stringify(persisted) !== prev && !opts.skipPersist) {
+              onChange(persisted);
             }
           }
           if (opts.rerender !== false) {
@@ -1845,7 +1905,7 @@
               textInput.value = corrected;
             }
             item.text = corrected;
-            data = CT.normalizeCompletionData(data);
+            var persisted = applyNormalizedKeepingDrafts(data);
             if (corrected !== trimmed) {
               itemSpellReverts[item.id] = trimmed;
               showItemSpellRevert(item.id, trimmed);
@@ -1853,8 +1913,17 @@
               delete itemSpellReverts[item.id];
             }
             updateProgressUi();
-            onChange(data);
+            onChange(persisted);
           });
+        });
+
+        // Discard untitled drafts when focus leaves without a name
+        // (change does not fire if the field stayed empty).
+        textInput.addEventListener('blur', function () {
+          if (suppressEmptyDraftDiscard) return;
+          if (!(textInput.value || '').trim()) {
+            removeItem(item.id);
+          }
         });
 
         textInput.addEventListener('input', function () {
@@ -2003,6 +2072,7 @@
         titleEl.type = 'text';
         titleEl.className = 'tp-input tp-completion-text';
         titleEl.value = item.text;
+        titleEl.placeholder = 'Nouvelle sous-t\u00e2che\u2026';
         titleEl.setAttribute('aria-label', 'Texte de la sous-t\u00e2che');
       }
 
@@ -2073,70 +2143,75 @@
     }
 
     function renderList() {
-      listEl.replaceChildren();
-      doneListEl.replaceChildren();
-      listSection.classList.toggle('is-empty', !data.items.length);
-      listSection.classList.toggle('has-tree', data.items.length > 0);
-      updateToolsUi();
+      beginSuppressEmptyDraftDiscard();
+      try {
+        listEl.replaceChildren();
+        doneListEl.replaceChildren();
+        listSection.classList.toggle('is-empty', !data.items.length);
+        listSection.classList.toggle('has-tree', data.items.length > 0);
+        updateToolsUi();
 
-      if (!data.items.length) {
-        filterEmptyEl.hidden = true;
-        updateDoneSectionUi(0);
-        return;
-      }
+        if (!data.items.length) {
+          filterEmptyEl.hidden = true;
+          updateDoneSectionUi(0);
+          return;
+        }
 
-      var activeItems = [];
-      var doneItems = [];
-      data.items.forEach(function (item) {
-        if (!itemMatchesQuery(item)) return;
-        if (item.done) doneItems.push(item);
-        else activeItems.push(item);
-      });
-
-      var showActive = shouldShowActiveList();
-      var showDone = shouldShowDoneList(
-        data.items.filter(function (item) {
-          return item.done;
-        }).length
-      );
-
-      function appendItemWithNest(target, item) {
-        target.appendChild(renderItem(item));
-        appendNestedChildren(target, item, linkedTreeByItemId[item.id]);
-      }
-
-      if (showActive) {
-        activeItems.forEach(function (item) {
-          appendItemWithNest(listEl, item);
+        var activeItems = [];
+        var doneItems = [];
+        data.items.forEach(function (item) {
+          if (!itemMatchesQuery(item)) return;
+          if (item.done) doneItems.push(item);
+          else activeItems.push(item);
         });
-      }
-      if (showDone) {
-        doneItems.forEach(function (item) {
-          appendItemWithNest(doneListEl, item);
-        });
-      }
 
-      var visibleCount =
-        (showActive ? activeItems.length : 0) +
-        (showDone ? doneItems.length : 0);
-      var filtering =
-        toolsVisible() &&
-        (!!searchQuery || effectiveStatusFilter() !== 'all');
-      var emptyVisible = filtering && visibleCount === 0 && data.items.length > 0;
-      filterEmptyEl.hidden = !emptyVisible;
-      if (emptyVisible) {
-        var hiddenDoneMatches =
-          !showDone && doneItems.length > 0 && showActive && !!searchQuery;
-        filterEmptyEl.textContent = hiddenDoneMatches
-          ? 'Des t\u00e2ches termin\u00e9es correspondent \u2014 activez \u00ab Afficher les t\u00e2ches termin\u00e9es \u00bb.'
-          : 'Aucune sous-t\u00e2che ne correspond.';
-      }
+        var showActive = shouldShowActiveList();
+        var showDone = shouldShowDoneList(
+          data.items.filter(function (item) {
+            return item.done;
+          }).length
+        );
 
-      updateDoneSectionUi(
-        data.items.filter(function (item) {
-          return item.done;
-        }).length
-      );
+        function appendItemWithNest(target, item) {
+          target.appendChild(renderItem(item));
+          appendNestedChildren(target, item, linkedTreeByItemId[item.id]);
+        }
+
+        if (showActive) {
+          activeItems.forEach(function (item) {
+            appendItemWithNest(listEl, item);
+          });
+        }
+        if (showDone) {
+          doneItems.forEach(function (item) {
+            appendItemWithNest(doneListEl, item);
+          });
+        }
+
+        var visibleCount =
+          (showActive ? activeItems.length : 0) +
+          (showDone ? doneItems.length : 0);
+        var filtering =
+          toolsVisible() &&
+          (!!searchQuery || effectiveStatusFilter() !== 'all');
+        var emptyVisible = filtering && visibleCount === 0 && data.items.length > 0;
+        filterEmptyEl.hidden = !emptyVisible;
+        if (emptyVisible) {
+          var hiddenDoneMatches =
+            !showDone && doneItems.length > 0 && showActive && !!searchQuery;
+          filterEmptyEl.textContent = hiddenDoneMatches
+            ? 'Des t\u00e2ches termin\u00e9es correspondent \u2014 activez \u00ab Afficher les t\u00e2ches termin\u00e9es \u00bb.'
+            : 'Aucune sous-t\u00e2che ne correspond.';
+        }
+
+        updateDoneSectionUi(
+          data.items.filter(function (item) {
+            return item.done;
+          }).length
+        );
+      } finally {
+        endSuppressEmptyDraftDiscard();
+      }
     }
 
     showDoneCheckbox.addEventListener('change', function () {
@@ -2191,6 +2266,22 @@
       removeSuggestionMatch(trimmed);
       emitChange();
       onResize();
+      return item;
+    }
+
+    /** Untitled row kept in UI only until named (or discarded on blur). */
+    function addDraftItem() {
+      var item = {
+        id: CT.generateId(),
+        text: '',
+        progress: 0,
+        done: false
+      };
+      data.items.push(item);
+      renderList();
+      updateProgressUi();
+      onResize();
+      focusItemTextInput(item.id);
       return item;
     }
 
@@ -2478,9 +2569,9 @@
           textInput.value = originalText;
           current.text = originalText;
           delete itemSpellReverts[itemId];
-          data = CT.normalizeCompletionData(data);
+          var persisted = applyNormalizedKeepingDrafts(data);
           updateProgressUi();
-          onChange(data);
+          onChange(persisted);
         },
         onDismiss: function () {
           if (itemSpellReverts[itemId] === originalText) {
@@ -2494,7 +2585,10 @@
       if (spellcheckBusy) return;
       var raw = addInput.value;
       var original = (raw || '').trim();
-      if (!original) return;
+      if (!original) {
+        addDraftItem();
+        return;
+      }
       spellcheckBusy = true;
       addBtn.disabled = true;
       addInput.disabled = true;
