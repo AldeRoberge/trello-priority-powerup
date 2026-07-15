@@ -134,7 +134,7 @@
     triage: { color: '#5e6ad2', icon: 'inbox' },
     backlog: { color: '#6b778c', icon: 'hourglass' },
     unstarted: { color: '#44546f', icon: 'circle' },
-    started: { color: '#0c66e4', icon: 'hammer' },
+    started: { color: '#0c66e4', icon: 'play' },
     blocked: { color: '#e34935', icon: 'ban' },
     completed: { color: '#22a06b', icon: 'check' },
     canceled: { color: '#8590a2', icon: 'x' },

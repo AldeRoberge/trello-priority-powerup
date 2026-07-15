@@ -112,7 +112,7 @@ check('includeUnassigned false hides uncategorized', !uncatHidden);
 
 check('categoryStyle completed green', !!(SM.categoryStyle && SM.categoryStyle('completed').icon === 'check'));
 check('categoryStyle blocked ban', SM.categoryStyle('blocked').icon === 'ban');
-check('categoryStyle started hammer', SM.categoryStyle('started').icon === 'hammer');
+check('categoryStyle started play', SM.categoryStyle('started').icon === 'play');
 
 // --- Previous Statut restore (Progrès leaves 100%) ---
 check('STATUT_PREVIOUS_LIST_KEY export', ST.STATUT_PREVIOUS_LIST_KEY === 'statutPreviousListId');

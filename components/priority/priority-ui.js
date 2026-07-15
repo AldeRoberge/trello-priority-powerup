@@ -5864,19 +5864,10 @@
     } else if (iconKey === 'ban') {
       svg.appendChild(circle(8, 8, 5.5));
       svg.appendChild(line(4.2, 4.2, 11.8, 11.8));
-    } else if (iconKey === 'hammer') {
-      // Claw hammer: diagonal handle + rectangular head
+    } else if (iconKey === 'play') {
+      // Play arrow (En cours)
       svg.appendChild(
-        path('M6.8 7.6 L12.8 13.6', { 'stroke-width': '2' })
-      );
-      svg.appendChild(
-        path('M2.4 5.2 L8.2 2.8 L9.6 5.8 L3.8 8.2 Z', {
-          fill: 'currentColor',
-          stroke: 'none',
-        })
-      );
-      svg.appendChild(
-        path('M8.2 2.8 L10.4 1.8 L12 5.2 L9.6 5.8 Z', {
+        path('M5.2 3.6 L12.4 8 L5.2 12.4 Z', {
           fill: 'currentColor',
           stroke: 'none',
         })
@@ -6235,6 +6226,14 @@
 
       if (!groups.length) return;
 
+      function statutTitleKey(s) {
+        return String(s || '')
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]+/g, '');
+      }
+
       var chipRow = document.createElement('div');
       chipRow.className = 'statut-chip-row';
       chipRow.setAttribute('role', 'group');
@@ -6257,7 +6256,15 @@
           btn.classList.toggle('is-selected', selected);
           btn.setAttribute('aria-selected', selected ? 'true' : 'false');
           btn.disabled = busy;
-          btn.title = group.label + ' — ' + list.name;
+          // Avoid "En cours — En cours" when the list name already matches the category.
+          var groupLabel = String(group.label || '').trim();
+          var listName = String(list.name || '').trim();
+          btn.title =
+            groupLabel &&
+            listName &&
+            statutTitleKey(groupLabel) !== statutTitleKey(listName)
+              ? groupLabel + ' — ' + listName
+              : '';
 
           btn.appendChild(createStatutIcon(iconKey));
           var nameSpan = document.createElement('span');
@@ -6901,8 +6908,8 @@
     var labelsColorPicker = document.createElement('div');
     labelsColorPicker.className = 'info-labels-color-picker';
     labelsColorPicker.hidden = true;
-    labelsColorPicker.setAttribute('role', 'listbox');
-    labelsColorPicker.setAttribute('aria-label', 'Couleur de l\u2019\u00e9tiquette');
+    labelsColorPicker.setAttribute('role', 'dialog');
+    labelsColorPicker.setAttribute('aria-label', 'Modifier l\u2019\u00e9tiquette');
 
     labelsWrap.appendChild(labelsInline);
     labelsWrap.appendChild(labelsColorPicker);
@@ -6958,7 +6965,7 @@
     parentPickBtn.setAttribute('aria-expanded', 'false');
     parentPickBtn.setAttribute('aria-haspopup', 'listbox');
     parentPickBtn.innerHTML =
-      '<i class="ti ti-link" aria-hidden="true"></i><span class="info-parent-pick-label">Choisir\u2026</span>';
+      '<i class="ti ti-plus" aria-hidden="true"></i><span class="info-parent-pick-label">Ajouter</span>';
 
     var parentPicker = document.createElement('div');
     parentPicker.className = 'info-parent-picker';
@@ -7688,26 +7695,32 @@
       }
     }
 
-    function startLabelRename(label) {
-      if (!onLabelRename || labelsBusy || !label || !label.id) return;
+    function beginLabelRenameDraft(label) {
+      if (!onLabelRename || !label || !label.id) return;
       var id = String(label.id);
-      if (labelsRenameId === id) return;
-      if (labelsRenameId) cancelLabelRename({ render: false });
-      if (labelsColorEditId) setLabelsColorPickerOpen('');
-      if (labelsPickerOpen) setLabelsPickerOpen(false);
       labelsRenameId = id;
       labelsRenameDraft =
         typeof label.name === 'string' ? label.name : '';
-      renderLabels();
-      onLayoutChange();
-      setTimeout(function () {
-        var input = labelsEl.querySelector(
-          '.info-label-name-input[data-label-id="' + id + '"]'
-        );
-        if (!input) return;
-        input.focus();
-        input.select();
-      }, 0);
+    }
+
+    function flushLabelRenameIfNeeded(labelId) {
+      var id = labelId != null ? String(labelId) : '';
+      if (!id || !labelsRenameId || labelsRenameId !== id) return;
+      var renamingLabel =
+        findLabelById(labels, id) || findLabelById(boardLabels, id);
+      if (!renamingLabel) {
+        cancelLabelRename({ render: false });
+        return;
+      }
+      var previousName =
+        typeof renamingLabel.name === 'string' ? renamingLabel.name : '';
+      var draft =
+        typeof labelsRenameDraft === 'string' ? labelsRenameDraft.trim() : '';
+      if (draft === previousName) {
+        cancelLabelRename({ render: false });
+        return;
+      }
+      commitLabelRename(renamingLabel, labelsRenameDraft);
     }
 
     function spellcheckLabelName(text) {
@@ -7812,17 +7825,33 @@
         });
     }
 
-    function setLabelsColorPickerOpen(labelId) {
+    function setLabelsColorPickerOpen(labelId, options) {
+      options = options || {};
       var nextId = labelId != null ? String(labelId) : '';
       if (!nextId || nextId === labelsColorEditId) {
+        var closingId = labelsColorEditId;
         labelsColorEditId = '';
         labelsColorPicker.hidden = true;
         labelsColorPicker.replaceChildren();
+        if (closingId) {
+          if (options.discardRename) {
+            cancelLabelRename({ render: false });
+          } else {
+            flushLabelRenameIfNeeded(closingId);
+          }
+        }
         renderLabels();
         onLayoutChange();
         return;
       }
+      if (labelsRenameId && labelsRenameId !== nextId) {
+        flushLabelRenameIfNeeded(labelsRenameId);
+      }
+      if (labelsPickerOpen) setLabelsPickerOpen(false);
       labelsColorEditId = nextId;
+      var label =
+        findLabelById(labels, nextId) || findLabelById(boardLabels, nextId);
+      if (label) beginLabelRenameDraft(label);
       renderLabelsColorPicker();
       renderLabels();
       onLayoutChange();
@@ -7830,7 +7859,10 @@
 
     function renderLabelsColorPicker() {
       labelsColorPicker.replaceChildren();
-      if (!labelsColorEditId || !onLabelColorChange) {
+      var canEditLabel =
+        !!labelsColorEditId &&
+        !!(onLabelColorChange || onLabelRename || onLabelDelete);
+      if (!canEditLabel) {
         labelsColorPicker.hidden = true;
         return;
       }
@@ -7848,7 +7880,7 @@
 
       var title = document.createElement('div');
       title.className = 'info-labels-color-picker-title';
-      title.textContent = 'Couleur\u00a0: ' + labelDisplayName(label);
+      title.textContent = 'Modifier l\u2019\u00e9tiquette';
 
       var closeBtn = document.createElement('button');
       closeBtn.type = 'button';
@@ -7866,32 +7898,99 @@
       head.appendChild(closeBtn);
       labelsColorPicker.appendChild(head);
 
-      var grid = document.createElement('div');
-      grid.className = 'info-labels-color-picker-grid';
-      LABEL_COLOR_KEYS.forEach(function (key) {
-        var hex = LABEL_COLOR_HEX[key];
-        var fr = LABEL_COLOR_NAMES_FR[key] || key;
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'info-labels-color-swatch';
-        if (current === key) btn.classList.add('is-selected');
-        btn.style.setProperty('--label-color', hex);
-        btn.setAttribute('role', 'option');
-        btn.setAttribute('aria-label', fr);
-        btn.title = fr;
-        btn.disabled = labelsBusy;
-        btn.dataset.color = key;
-        if (current === key) {
-          btn.innerHTML = '<i class="ti ti-check" aria-hidden="true"></i>';
-        }
-        btn.addEventListener('click', function (event) {
+      if (onLabelRename) {
+        var renameField = document.createElement('div');
+        renameField.className = 'info-labels-color-picker-rename';
+
+        var renameInput = document.createElement('input');
+        renameInput.type = 'text';
+        renameInput.className = 'info-labels-color-picker-name-input';
+        renameInput.dataset.labelId = String(label.id);
+        renameInput.value =
+          labelsRenameId === String(label.id)
+            ? labelsRenameDraft
+            : typeof label.name === 'string'
+              ? label.name
+              : '';
+        renameInput.maxLength = 16384;
+        renameInput.setAttribute('aria-label', 'Nom de l\u2019\u00e9tiquette');
+        renameInput.placeholder = 'Nom de l\u2019\u00e9tiquette';
+        renameInput.disabled = labelsBusy;
+        renameInput.addEventListener('click', function (event) {
+          event.stopPropagation();
+        });
+        renameInput.addEventListener('input', function () {
+          labelsRenameId = String(label.id);
+          labelsRenameDraft = renameInput.value;
+        });
+        renameInput.addEventListener('keydown', function (event) {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            event.stopPropagation();
+            commitLabelRename(label, renameInput.value);
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            setLabelsColorPickerOpen('', { discardRename: true });
+          }
+        });
+        renameField.appendChild(renameInput);
+        labelsColorPicker.appendChild(renameField);
+      }
+
+      if (onLabelColorChange) {
+        var grid = document.createElement('div');
+        grid.className = 'info-labels-color-picker-grid';
+        grid.setAttribute('role', 'listbox');
+        grid.setAttribute('aria-label', 'Couleur de l\u2019\u00e9tiquette');
+        LABEL_COLOR_KEYS.forEach(function (key) {
+          var hex = LABEL_COLOR_HEX[key];
+          var fr = LABEL_COLOR_NAMES_FR[key] || key;
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'info-labels-color-swatch';
+          if (current === key) btn.classList.add('is-selected');
+          btn.style.setProperty('--label-color', hex);
+          btn.setAttribute('role', 'option');
+          btn.setAttribute('aria-label', fr);
+          btn.title = fr;
+          btn.disabled = labelsBusy;
+          btn.dataset.color = key;
+          if (current === key) {
+            btn.innerHTML = '<i class="ti ti-check" aria-hidden="true"></i>';
+          }
+          btn.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            changeLabelColor(label, key);
+          });
+          grid.appendChild(btn);
+        });
+        labelsColorPicker.appendChild(grid);
+      }
+
+      if (onLabelDelete) {
+        var deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'info-labels-color-picker-delete';
+        deleteBtn.setAttribute(
+          'aria-label',
+          'Supprimer l\u2019\u00e9tiquette du tableau\u00a0: ' +
+            labelDisplayName(label)
+        );
+        deleteBtn.title = 'Supprimer du tableau';
+        deleteBtn.disabled = labelsBusy;
+        deleteBtn.innerHTML =
+          '<i class="ti ti-trash" aria-hidden="true"></i>' +
+          '<span>Supprimer du tableau</span>';
+        deleteBtn.addEventListener('click', function (event) {
           event.preventDefault();
           event.stopPropagation();
-          changeLabelColor(label, key);
+          deleteLabelFromBoard(label);
         });
-        grid.appendChild(btn);
-      });
-      labelsColorPicker.appendChild(grid);
+        labelsColorPicker.appendChild(deleteBtn);
+      }
+
       labelsColorPicker.hidden = false;
     }
 
@@ -8210,18 +8309,16 @@
           var name = labelDisplayName(label);
           var hex = labelColorHex(label.color);
           var labelId = label && label.id != null ? String(label.id) : '';
-          var isRenaming =
-            !!labelsRenameId && labelId && labelsRenameId === labelId;
+          var isEditing =
+            !!labelsColorEditId &&
+            labelId &&
+            String(labelsColorEditId) === labelId;
+          var canEditLabel =
+            !!labelId &&
+            !!(onLabelColorChange || onLabelRename || onLabelDelete);
           var chip = document.createElement('span');
           chip.className = 'info-label';
-          if (
-            labelsColorEditId &&
-            labelId &&
-            String(labelsColorEditId) === labelId
-          ) {
-            chip.classList.add('is-editing-color');
-          }
-          if (isRenaming) chip.classList.add('is-renaming');
+          if (isEditing) chip.classList.add('is-editing-color');
           chip.style.setProperty('--label-color', hex);
           chip.style.setProperty(
             '--label-fg',
@@ -8230,92 +8327,29 @@
           chip.title = name;
           chip.setAttribute('aria-label', name);
 
-          if (isRenaming) {
-            var input = document.createElement('input');
-            input.type = 'text';
-            input.className = 'info-label-name-input';
-            input.dataset.labelId = labelId;
-            input.value = labelsRenameDraft;
-            input.maxLength = 16384;
-            input.setAttribute('aria-label', 'Renommer l\u2019\u00e9tiquette');
-            input.placeholder = 'Nom de l\u2019\u00e9tiquette';
-            input.disabled = labelsBusy;
-            input.addEventListener('click', function (event) {
-              event.stopPropagation();
-            });
-            input.addEventListener('input', function () {
-              labelsRenameDraft = input.value;
-            });
-            input.addEventListener('keydown', function (event) {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                event.stopPropagation();
-                commitLabelRename(label, input.value);
-              } else if (event.key === 'Escape') {
-                event.preventDefault();
-                event.stopPropagation();
-                cancelLabelRename();
-              }
-            });
-            input.addEventListener('blur', function () {
-              if (!labelsRenameId || labelsRenameId !== labelId || labelsBusy) {
-                return;
-              }
-              commitLabelRename(label, input.value);
-            });
-            chip.appendChild(input);
-          } else {
-            var text = document.createElement('span');
-            text.className = 'info-label-name';
-            text.textContent = name;
-            if (onLabelRename && labelId) {
-              text.classList.add('info-label-name--editable');
-              text.tabIndex = labelsBusy ? -1 : 0;
-              text.setAttribute(
-                'aria-label',
-                'Renommer l\u2019\u00e9tiquette\u00a0: ' + name
-              );
-              text.title = 'Cliquer pour renommer';
-              text.addEventListener('click', function (event) {
-                event.preventDefault();
-                event.stopPropagation();
-                startLabelRename(label);
-              });
-              text.addEventListener('keydown', function (event) {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  startLabelRename(label);
-                }
-              });
-            }
-            chip.appendChild(text);
-          }
+          var text = document.createElement('span');
+          text.className = 'info-label-name';
+          text.textContent = name;
+          chip.appendChild(text);
 
           var actions = document.createElement('span');
           actions.className = 'info-label-actions';
 
-          if (onLabelColorChange && labelId) {
+          if (canEditLabel) {
             var editBtn = document.createElement('button');
             editBtn.type = 'button';
             editBtn.className = 'info-label-edit';
             editBtn.setAttribute(
               'aria-label',
-              'Modifier la couleur\u00a0: ' + name
+              'Modifier l\u2019\u00e9tiquette\u00a0: ' + name
             );
-            editBtn.title = 'Modifier la couleur';
+            editBtn.title = 'Modifier l\u2019\u00e9tiquette';
             editBtn.innerHTML = '<i class="ti ti-pencil" aria-hidden="true"></i>';
-            editBtn.disabled = labelsBusy || isRenaming;
-            editBtn.setAttribute(
-              'aria-expanded',
-              labelsColorEditId && String(label.id) === String(labelsColorEditId)
-                ? 'true'
-                : 'false'
-            );
+            editBtn.disabled = labelsBusy;
+            editBtn.setAttribute('aria-expanded', isEditing ? 'true' : 'false');
             editBtn.addEventListener('click', function (event) {
               event.preventDefault();
               event.stopPropagation();
-              if (labelsRenameId) cancelLabelRename({ render: false });
               setLabelsColorPickerOpen(label.id);
             });
             actions.appendChild(editBtn);
@@ -8331,36 +8365,14 @@
             );
             clearBtn.title = 'Retirer de cette carte';
             clearBtn.innerHTML = '<i class="ti ti-x" aria-hidden="true"></i>';
-            clearBtn.disabled = labelsBusy || isRenaming;
+            clearBtn.disabled = labelsBusy;
             clearBtn.addEventListener('click', function (event) {
               event.preventDefault();
               event.stopPropagation();
-              if (labelsRenameId) cancelLabelRename({ render: false });
               if (labelsColorEditId) setLabelsColorPickerOpen('');
               removeLabelFromCard(label);
             });
             actions.appendChild(clearBtn);
-          }
-
-          if (onLabelDelete && labelId) {
-            var deleteBtn = document.createElement('button');
-            deleteBtn.type = 'button';
-            deleteBtn.className = 'info-label-delete';
-            deleteBtn.setAttribute(
-              'aria-label',
-              'Supprimer l\u2019\u00e9tiquette\u00a0: ' + name
-            );
-            deleteBtn.title = 'Supprimer du tableau';
-            deleteBtn.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
-            deleteBtn.disabled = labelsBusy || isRenaming;
-            deleteBtn.addEventListener('click', function (event) {
-              event.preventDefault();
-              event.stopPropagation();
-              if (labelsRenameId) cancelLabelRename({ render: false });
-              if (labelsColorEditId) setLabelsColorPickerOpen('');
-              deleteLabelFromBoard(label);
-            });
-            actions.appendChild(deleteBtn);
           }
 
           if (actions.childNodes.length) chip.appendChild(actions);
@@ -8370,7 +8382,7 @@
 
       var canAdd = !!onLabelAdd || !!onLabelCreate;
       labelsAddBtn.hidden = !canAdd;
-      labelsAddBtn.disabled = labelsBusy || !canAdd || !!labelsRenameId;
+      labelsAddBtn.disabled = labelsBusy || !canAdd || !!labelsColorEditId;
       if (labelsPickerOpen) renderLabelsPicker();
       if (labelsColorEditId) renderLabelsColorPicker();
       else {
@@ -8390,6 +8402,7 @@
         setLabelsColorPickerOpen('');
         return;
       }
+      flushLabelRenameIfNeeded(label.id);
       var previousColor = label.color;
       labelsBusy = true;
       setLabelsStatus('', 'saving');
@@ -8426,6 +8439,9 @@
           setAuthHint('');
           setLabelsStatus('', 'ok');
           labelsColorEditId = '';
+          if (labelsRenameId === String(label.id)) {
+            cancelLabelRename({ render: false });
+          }
           renderLabels();
           setTimeout(function () {
             if (labelsStatus.classList.contains('is-ok')) setLabelsStatus('');
@@ -8794,7 +8810,7 @@
       parentPickBtn.hidden = !canPick;
       var pickLabelEl = parentPickBtn.querySelector('.info-parent-pick-label');
       if (pickLabelEl) {
-        pickLabelEl.textContent = hasParent ? 'Changer\u2026' : 'Choisir\u2026';
+        pickLabelEl.textContent = hasParent ? 'Changer\u2026' : 'Ajouter';
       }
       parentPickBtn.disabled = parentBusy;
       parentClearBtn.disabled = parentBusy;
@@ -9403,17 +9419,6 @@
         !labelsWrap.contains(event.target)
       ) {
         setLabelsColorPickerOpen('');
-      }
-      if (
-        labelsRenameId &&
-        !labelsWrap.contains(event.target)
-      ) {
-        var renamingLabel = findLabelById(labels, labelsRenameId);
-        if (renamingLabel) {
-          commitLabelRename(renamingLabel, labelsRenameDraft);
-        } else {
-          cancelLabelRename();
-        }
       }
       if (parentPickerOpen && !parentPickWrap.contains(event.target)) {
         setParentPickerOpen(false);

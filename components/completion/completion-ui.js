@@ -460,8 +460,7 @@
     return global.CompletionTrello;
   }
 
-  // Stage icons sit in a circle. Tone: idle gray → amber in-progress → green
-  // near-done / done so “Termin\u00e9” reads finished before the label.
+  // Stage icons sit in a circle. Color follows the progress scheme (same as %).
   var COMPLETION_ENCOURAGEMENT_TIERS = [
     { max: 0, text: 'En attente', icon: 'ti-player-pause', tone: 'idle' },
     { max: 10, text: 'Amorc\u00e9e', icon: 'ti-player-play', tone: 'active' },
@@ -490,9 +489,11 @@
   function applyProgressEncouragement(el, percent) {
     if (!el) return;
     var meta = progressEncouragementMeta(percent);
+    var p = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
     el.dataset.tone = meta.tone;
     el.classList.toggle('is-complete', meta.tone === 'done');
-    el.style.color = '';
+    // Match % / bar accent from the active completion color scheme.
+    el.style.color = p > 0 ? completionColorForProgress(p) : '';
     el.innerHTML =
       '<span class="tp-completion-stage-icon" aria-hidden="true">' +
       '<i class="ti ' +
