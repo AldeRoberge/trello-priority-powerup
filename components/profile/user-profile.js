@@ -104,6 +104,13 @@
     en: 'English'
   };
 
+  /** Clock face preference for due times / picker (member-scoped). */
+  var TIME_FORMAT_KEYS = ['24', '12'];
+  var TIME_FORMAT_LABELS = {
+    '24': '24 heures',
+    '12': '12 heures (AM/PM)'
+  };
+
   var AGENT_STATUS_KEYS = ['none', 'standard', 'full'];
   var AGENT_STATUS_LABELS = {
     none: 'Aucun',
@@ -143,6 +150,13 @@
     return out;
   }
 
+  function normalizeTimeFormat(raw) {
+    if (raw === 12 || raw === true) return '12';
+    var s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    if (s === '12' || s === '12h' || s === 'hour12' || s === 'h12') return '12';
+    return '24';
+  }
+
   function emptyProfile() {
     return {
       version: 1,
@@ -151,6 +165,7 @@
       notes: '',
       tone: 'concise',
       language: 'fr',
+      timeFormat: '24',
       features: defaultFeatures(),
       experimental: defaultExperimental(),
       agentStatus: 'standard',
@@ -268,6 +283,7 @@
       notes: trimStr(src.notes, MAX_NOTES),
       tone: normalizeTone(src.tone),
       language: normalizeLanguage(src.language),
+      timeFormat: normalizeTimeFormat(src.timeFormat),
       features: normalizeFeatures(src.features),
       experimental: normalizeExperimental(src.experimental),
       agentStatus: normalizeAgentStatus(src.agentStatus, src.agentDebug),
@@ -340,6 +356,16 @@
         objectifNodes[j].hidden = !objectifOn;
       }
     }
+    var porteOn = p.experimental.impactGlobe === true;
+    var porteNodes = cardEl.querySelectorAll('.info-row--porte');
+    for (var pIdx = 0; pIdx < porteNodes.length; pIdx++) {
+      porteNodes[pIdx].hidden = !porteOn;
+    }
+    var dureeOn = p.experimental.easeHourglass === true;
+    var dureeNodes = cardEl.querySelectorAll('.info-row--duree');
+    for (var d = 0; d < dureeNodes.length; d++) {
+      dureeNodes[d].hidden = !dureeOn;
+    }
   }
 
   /** Compact object for LLM context (no storage metadata). */
@@ -351,6 +377,7 @@
       notes: p.notes || null,
       tone: p.tone,
       language: p.language,
+      timeFormat: p.timeFormat,
       features: p.features,
       experimental: p.experimental,
       agentName: p.agentName || null,
@@ -505,6 +532,8 @@
     TONE_LABELS: TONE_LABELS,
     LANGUAGE_KEYS: LANGUAGE_KEYS,
     LANGUAGE_LABELS: LANGUAGE_LABELS,
+    TIME_FORMAT_KEYS: TIME_FORMAT_KEYS,
+    TIME_FORMAT_LABELS: TIME_FORMAT_LABELS,
     AGENT_STATUS_KEYS: AGENT_STATUS_KEYS,
     AGENT_STATUS_LABELS: AGENT_STATUS_LABELS,
     AGENT_COLOR_KEYS: AGENT_COLOR_KEYS,
@@ -516,6 +545,7 @@
     normalizeAgentStatus: normalizeAgentStatus,
     normalizeAgentColor: normalizeAgentColor,
     normalizeProfile: normalizeProfile,
+    normalizeTimeFormat: normalizeTimeFormat,
     normalizeExperimental: normalizeExperimental,
     pickRandomAgentColor: pickRandomAgentColor,
     pickAgentNameForColor: pickAgentNameForColor,

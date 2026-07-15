@@ -6638,6 +6638,273 @@
   }
 
   /**
+   * Real gaps on the card worth a Coup de pouce / apply suggestion.
+   * Ordered by usefulness so the model can prioritize.
+   */
+  function listCardImprovementGaps(context) {
+    var gaps = [];
+    if (!context) return gaps;
+    var due = context.due;
+    var priority = context.priority;
+    var blocked = context.blocked;
+    var progress = context.progress;
+    var goals = context.goals;
+    var statut = context.statut;
+    var display = context.display;
+    var items = progress && Array.isArray(progress.items) ? progress.items : [];
+    var pendingItems = items.filter(function (item) {
+      return (
+        item &&
+        !item.done &&
+        !(item.progress != null && +item.progress >= 100)
+      );
+    });
+
+    if (statut && statut.category === 'completed' && pendingItems.length) {
+      gaps.push(
+        'statut Terminé alors que ' +
+          pendingItems.length +
+          ' sous-tâche(s) restent ouvertes'
+      );
+    }
+    if (!due || !due.enabled || !due.dueDate) {
+      gaps.push('échéance absente');
+    } else if (display && display.duePast) {
+      gaps.push('échéance passée (' + due.dueDate + ')');
+    }
+    if (!priority || !priority.enabled) {
+      gaps.push('priorité non définie');
+    }
+    if (blocked && blocked.enabled) {
+      var reasons = Array.isArray(blocked.blockedReasons)
+        ? blocked.blockedReasons
+        : [];
+      var links = Array.isArray(blocked.blockedLinks) ? blocked.blockedLinks : [];
+      if (!reasons.length && !links.length) {
+        gaps.push('bloqué sans motif');
+      }
+    }
+    if (
+      goals &&
+      !goals.projectId &&
+      Array.isArray(goals.projects) &&
+      goals.projects.length
+    ) {
+      gaps.push('aucun projet lié');
+    }
+    if (progress && progress.enabled && !items.length) {
+      var desc = typeof context.cardDesc === 'string' ? context.cardDesc.trim() : '';
+      if (desc.length >= 40) {
+        gaps.push('progrès activé sans sous-tâches');
+      }
+    }
+    if (
+      progress &&
+      progress.enabled &&
+      pendingItems.length &&
+      statut &&
+      (statut.category === 'unstarted' || statut.category === 'backlog')
+    ) {
+      gaps.push('sous-tâches en cours mais statut encore « à faire »');
+    }
+    return gaps;
+  }
+
+  /**
+   * Which top-level card fields differ between two buildContext snapshots.
+   * Used so Coup de pouce does not re-offer what the user just changed.
+   */
+  function listRecentCardChanges(previousContext, currentContext) {
+    var changes = [];
+    if (!previousContext || !currentContext) return changes;
+
+    function dueKey(due) {
+      if (!due) return '';
+      return [
+        due.enabled ? '1' : '0',
+        due.dueDate || '',
+        due.dueTime || ''
+      ].join('|');
+    }
+    function priorityKey(priority) {
+      if (!priority) return '';
+      return [
+        priority.enabled ? '1' : '0',
+        priority.urgency,
+        priority.impact,
+        priority.ease,
+        priority.estimatedDurationMinutes != null
+          ? priority.estimatedDurationMinutes
+          : ''
+      ].join('|');
+    }
+    function blockedKey(blocked) {
+      if (!blocked) return '';
+      var reasons = Array.isArray(blocked.blockedReasons)
+        ? blocked.blockedReasons.slice()
+        : [];
+      var links = Array.isArray(blocked.blockedLinks)
+        ? blocked.blockedLinks
+            .map(function (link) {
+              if (!link) return '';
+              if (typeof link === 'string') return link;
+              return link.id != null ? String(link.id) : '';
+            })
+            .filter(Boolean)
+            .sort()
+        : [];
+      return [
+        blocked.enabled ? '1' : '0',
+        JSON.stringify(reasons),
+        JSON.stringify(links)
+      ].join('|');
+    }
+    function progressKey(progress) {
+      if (!progress) return '';
+      var items = Array.isArray(progress.items)
+        ? progress.items.map(function (item) {
+            if (!item) return '';
+            return [
+              item.id || '',
+              item.text || '',
+              item.done ? '1' : '0',
+              item.progress != null ? item.progress : ''
+            ].join(':');
+          })
+        : [];
+      return [
+        progress.enabled ? '1' : '0',
+        progress.percent != null ? progress.percent : '',
+        items.join(';')
+      ].join('|');
+    }
+    function statutKey(statut) {
+      if (!statut) return '';
+      return [statut.listId || '', statut.category || '', statut.listName || ''].join(
+        '|'
+      );
+    }
+    function goalsKey(goals) {
+      if (!goals) return '';
+      return String(goals.projectId || '');
+    }
+
+    if (dueKey(previousContext.due) !== dueKey(currentContext.due)) {
+      changes.push('due');
+    }
+    if (
+      priorityKey(previousContext.priority) !== priorityKey(currentContext.priority)
+    ) {
+      changes.push('priority');
+    }
+    if (
+      blockedKey(previousContext.blocked) !== blockedKey(currentContext.blocked)
+    ) {
+      changes.push('blocked');
+    }
+    if (
+      progressKey(previousContext.progress) !==
+      progressKey(currentContext.progress)
+    ) {
+      changes.push('progress');
+    }
+    if (
+      statutKey(previousContext.statut) !== statutKey(currentContext.statut)
+    ) {
+      changes.push('statut');
+    }
+    if (goalsKey(previousContext.goals) !== goalsKey(currentContext.goals)) {
+      changes.push('project');
+    }
+    if (
+      String(previousContext.cardName || '') !== String(currentContext.cardName || '') ||
+      String(previousContext.cardDesc || '') !== String(currentContext.cardDesc || '')
+    ) {
+      changes.push('card');
+    }
+    return changes;
+  }
+
+  function describeRecentCardChanges(previousContext, currentContext) {
+    var keys = listRecentCardChanges(previousContext, currentContext);
+    if (!keys.length) return [];
+    var lines = [];
+    var i;
+    for (i = 0; i < keys.length; i++) {
+      var key = keys[i];
+      if (key === 'due') {
+        var due = currentContext.due;
+        if (due && due.enabled && due.dueDate) {
+          lines.push(
+            'échéance définie à ' +
+              due.dueDate +
+              (due.dueTime ? ' ' + due.dueTime : '') +
+              ' — NE PAS redemander / redéfinir une échéance'
+          );
+        } else if (due && !due.enabled) {
+          lines.push('échéance désactivée — ne pas la réactiver sauf vraie raison');
+        } else {
+          lines.push('échéance modifiée');
+        }
+      } else if (key === 'priority') {
+        lines.push('priorité / axes modifiés — ne pas les remettre à l\'identique');
+      } else if (key === 'blocked') {
+        var blocked = currentContext.blocked;
+        if (blocked && blocked.enabled) {
+          lines.push('carte marquée bloquée — ne pas re-bloquer');
+        } else {
+          lines.push('blocage retiré — ne pas re-bloquer');
+        }
+      } else if (key === 'progress') {
+        lines.push('progrès / sous-tâches modifiés');
+      } else if (key === 'statut') {
+        var statut = currentContext.statut;
+        lines.push(
+          'statut / liste modifié' +
+            (statut && statut.listName ? ' (' + statut.listName + ')' : '')
+        );
+      } else if (key === 'project') {
+        lines.push('lien projet modifié');
+      } else if (key === 'card') {
+        lines.push('titre ou description modifié');
+      }
+    }
+    return lines;
+  }
+
+  /**
+   * Drop improvement suggestions that redo a field the user just changed.
+   * (e.g. set_due right after they set due to tomorrow.)
+   */
+  function filterImprovementsAgainstRecentChanges(
+    list,
+    previousContext,
+    currentContext
+  ) {
+    if (!Array.isArray(list) || !list.length) return [];
+    var recent = listRecentCardChanges(previousContext, currentContext);
+    if (!recent.length) return list;
+    var blockedTools = {};
+    if (recent.indexOf('due') >= 0) blockedTools.set_due = true;
+    if (recent.indexOf('priority') >= 0) blockedTools.set_priority = true;
+    if (recent.indexOf('blocked') >= 0) blockedTools.set_blocked = true;
+    if (recent.indexOf('statut') >= 0) blockedTools.set_statut = true;
+    if (recent.indexOf('project') >= 0) blockedTools.set_project = true;
+    if (!Object.keys(blockedTools).length) return list;
+
+    return list.filter(function (item) {
+      if (!item || !Array.isArray(item.actions) || !item.actions.length) {
+        return false;
+      }
+      for (var i = 0; i < item.actions.length; i++) {
+        var tool = item.actions[i] && item.actions[i].tool;
+        if (tool && blockedTools[tool]) return false;
+      }
+      return true;
+    });
+  }
+
+  /**
    * Resolve proposed dueDate/dueTime from set_due args (absolute or relative).
    * @returns {{dueDate:?string, dueTime:?string, hasDate:boolean, hasTime:boolean}|null}
    */
@@ -6719,7 +6986,8 @@
     if (tool === 'set_due') {
       if (!due) return false;
       var proposed = resolveImprovementDueArgs(args, context);
-      if (!proposed) return false;
+      // Bad/unresolvable args are noise — treat as no-op when a due already exists.
+      if (!proposed) return !!(due.enabled && due.dueDate);
       var wantEnabled =
         args.dueEnabled != null
           ? !!args.dueEnabled
@@ -6732,6 +7000,17 @@
       var nextTime = proposed.hasTime ? proposed.dueTime : due.dueTime || null;
       var curDate = due.dueDate || null;
       var curTime = due.dueTime || null;
+      // Same calendar day, suggestion only restates the date (no new time) → no-op.
+      if (
+        proposed.hasDate &&
+        !proposed.hasTime &&
+        nextDate &&
+        curDate &&
+        nextDate === curDate &&
+        wantEnabled
+      ) {
+        return true;
+      }
       if ((nextDate || null) !== (curDate || null)) return false;
       if ((nextTime || null) !== (curTime || null)) return false;
       return true;
@@ -6953,13 +7232,66 @@
   }
 
   /**
-   * On-card-open: AI proposes applyable improvements (set_due, set_priority…).
-   * Returns [] when nothing useful to change.
+   * Few-shot JSON shaped by real gaps — avoids always teaching "set due tomorrow".
+   */
+  function buildImprovementExampleJson(context, gaps, today, tomorrow) {
+    var first = gaps && gaps.length ? gaps[0] : '';
+    if (!first) {
+      return '{"suggestions":[]}';
+    }
+    if (first.indexOf('échéance absente') === 0) {
+      return (
+        '{"suggestions":[{"label":"D\u00e9finir l\'\u00e9ch\u00e9ance \u00e0 demain","actions":[{"tool":"set_due","args":{"dueDate":"' +
+        tomorrow +
+        '","dueEnabled":true}}]}]}'
+      );
+    }
+    if (first.indexOf('échéance passée') === 0) {
+      return (
+        '{"suggestions":[{"label":"Reporter l\'\u00e9ch\u00e9ance \u00e0 demain","actions":[{"tool":"set_due","args":{"dueDate":"' +
+        tomorrow +
+        '","dueEnabled":true}}]}]}'
+      );
+    }
+    if (first.indexOf('priorité') === 0) {
+      return '{"suggestions":[{"label":"D\u00e9finir la priorit\u00e9","actions":[{"tool":"set_priority","args":{"priorityEnabled":true,"urgency":2,"impact":2,"ease":3}}]}]}';
+    }
+    if (first.indexOf('statut Terminé') === 0) {
+      return '{"suggestions":[{"label":"Marquer les sous-t\u00e2ches termin\u00e9es","actions":[{"tool":"complete_all_subtasks","args":{}}]}]}';
+    }
+    if (first.indexOf('projet') >= 0 && context.goals && context.goals.projects && context.goals.projects[0]) {
+      var proj = context.goals.projects[0];
+      var match = proj.name || proj.id || '';
+      return (
+        '{"suggestions":[{"label":"Lier au projet ' +
+        String(match).replace(/"/g, '') +
+        '","actions":[{"tool":"set_project","args":{"matchText":"' +
+        String(match).replace(/"/g, '') +
+        '"}}]}]}'
+      );
+    }
+    if (first.indexOf('bloqué sans motif') === 0) {
+      return '{"suggestions":[{"label":"Pr\u00e9ciser le motif de blocage","actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedReasons":["En attente d\'une r\u00e9ponse"]}}]}]}';
+    }
+    if (first.indexOf('sous-tâches') >= 0 || first.indexOf('progrès') >= 0) {
+      return '{"suggestions":[{"label":"Ajouter une sous-t\u00e2che concr\u00e8te","actions":[{"tool":"add_subtask","args":{"text":"Clarifier la prochaine \u00e9tape"}}]}]}';
+    }
+    return '{"suggestions":[]}';
+  }
+
+  /**
+   * On-card-open / Coup de pouce: AI proposes applyable improvements.
+   * Pass options.previousContext when reacting to a user edit so we never
+   * re-offer the field they just changed.
    * @returns {Promise<Array<{label:string, actions:Array}>>}
    */
   async function suggestCardImprovements(provider, bridge, options) {
     options = options || {};
     var onDebug = typeof options.onDebug === 'function' ? options.onDebug : null;
+    var previousContext =
+      options.previousContext && typeof options.previousContext === 'object'
+        ? options.previousContext
+        : null;
     var p = normalizeProvider(provider);
     if (!isConfigured(p)) return [];
     var context = buildContext(bridge);
@@ -6967,44 +7299,84 @@
     var tomorrow = addDaysIsoLocal(today, 1);
     var nowTime = (context && context.nowTime) || nowTimeLocal();
     var dueAlready = context.due && context.due.enabled && context.due.dueDate;
+    var gaps = listCardImprovementGaps(context);
+    var recentLines = describeRecentCardChanges(previousContext, context);
+    var recentKeys = listRecentCardChanges(previousContext, context);
+    // Gaps the model should ignore because the user just handled that field.
+    var gapsForPrompt = gaps.filter(function (gap) {
+      if (recentKeys.indexOf('due') >= 0 && /échéance/i.test(gap)) return false;
+      if (recentKeys.indexOf('priority') >= 0 && /priorité/i.test(gap)) return false;
+      if (recentKeys.indexOf('blocked') >= 0 && /bloqu/i.test(gap)) return false;
+      if (recentKeys.indexOf('project') >= 0 && /projet/i.test(gap)) return false;
+      if (recentKeys.indexOf('statut') >= 0 && /statut/i.test(gap)) return false;
+      return true;
+    });
+    var exampleJson = buildImprovementExampleJson(
+      context,
+      gapsForPrompt,
+      today,
+      tomorrow
+    );
+    var systemLines = [
+      'Tu analyses une carte Trello (Power-Up Priorit\u00e9) et proposes le PROCHAIN coup de pouce utile.',
+      'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
+      exampleJson,
+      'R\u00e8gles\u00a0:',
+      '- 0 \u00e0 3 suggestions max. Si rien d\'utile (carte d\u00e9j\u00e0 en ordre, ou seul le champ que l\'utilisateur vient de changer)\u00a0: {"suggestions":[]}.',
+      '- Chaque suggestion DOIT avoir actions non vides (outils ex\u00e9cutables), pas seulement une question.',
+      '- label\u00a0: verbe \u00e0 l\'infinitif, court, en fran\u00e7ais.',
+      '- Outils autoris\u00e9s\u00a0: set_due, set_priority, set_blocked, set_progress, add_subtask, set_project, set_statut, complete_all_subtasks.',
+      '- Priorise les vrais manques / incoh\u00e9rences list\u00e9s ci-dessous. Ne propose PAS un changement cosm\u00e9tique si un vrai trou existe.',
+      '- Si context.goals.projectId est null et context.goals.projects n\'est pas vide, tu PEUX proposer de lier un projet pertinent (set_project avec matchText ou projectId).',
+      '- Incoh\u00e9rence\u00a0: si statut.category=completed et sous-t\u00e2ches ouvertes, propose complete_all_subtasks OU set_statut vers started/unstarted/backlog.',
+      '- Dates\u00a0: aujourd\'hui = ' +
+        today +
+        ', demain = ' +
+        tomorrow +
+        ', heure actuelle = ' +
+        nowTime +
+        '.',
+      '- INTERDIT noop\u00a0: ne re-bloque pas si d\u00e9j\u00e0 bloqu\u00e9\u00a0; ne red\u00e9finis pas priorit\u00e9/statut/projet identiques\u00a0; ne propose pas complete_all_subtasks si tout est \u00e0 100%.',
+      '- \u00c9ch\u00e9ance\u00a0: INTERDIT set_due vers une date d\u00e9j\u00e0 active' +
+        (dueAlready ? ' (active\u00a0: ' + dueAlready + ')' : '') +
+        '. Propose set_due SEULEMENT si absente, d\u00e9sactiv\u00e9e, pass\u00e9e, ou clairement \u00e0 d\u00e9caler \u2014 jamais pour redire «\u00a0demain\u00a0» juste apr\u00e8s que l\'utilisateur l\'ait mis.',
+      '- L\'exemple JSON n\'est un mod\u00e8le de format que s\'il correspond aux manques restants\u00a0; sinon adapte ou renvoie [].',
+      '- add_subtask.text obligatoire et concret si utilis\u00e9.'
+    ];
+    if (gapsForPrompt.length) {
+      systemLines.push('Manques / incoh\u00e9rences \u00e0 combler (dans l\'ordre)\u00a0:');
+      gapsForPrompt.forEach(function (gap, idx) {
+        systemLines.push((idx + 1) + '. ' + gap);
+      });
+    } else {
+      systemLines.push(
+        'Aucun manque prioritaires d\u00e9tect\u00e9 \u2014 renvoie {"suggestions":[]} sauf vraie incoh\u00e9rence absente de cette liste.'
+      );
+    }
+    if (recentLines.length) {
+      systemLines.push(
+        'CHANGEMENTS TOUT JUSTE FAITS PAR L\'UTILISATEUR (ne pas les refaire, ni les redemander)\u00a0:'
+      );
+      recentLines.forEach(function (line) {
+        systemLines.push('- ' + line);
+      });
+      systemLines.push(
+        'Propose plut\u00f4t le prochain compl\u00e9ment utile (autre section), ou [].'
+      );
+    }
+    systemLines.push('Contexte carte\u00a0:');
+    systemLines.push(JSON.stringify(context));
+
     var messages = [
       {
         role: 'system',
-        content: [
-          'Tu analyses une carte Trello (Power-Up Priorit\u00e9) et proposes des am\u00e9liorations APPLIQUABLES.',
-          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
-          '{"suggestions":[{"label":"D\u00e9finir l\'\u00e9ch\u00e9ance \u00e0 demain","actions":[{"tool":"set_due","args":{"dueDate":"' +
-            tomorrow +
-            '","dueEnabled":true}}]}]}',
-          'R\u00e8gles\u00a0:',
-          '- 0 \u00e0 3 suggestions max. Si la carte est d\u00e9j\u00e0 bien remplie / rien d\'utile\u00a0: {"suggestions":[]}.',
-          '- Chaque suggestion DOIT avoir actions non vides (outils ex\u00e9cutables), pas seulement une question.',
-          '- label\u00a0: verbe \u00e0 l\'infinitif, court, en fran\u00e7ais (ex. \u00ab\u00a0D\u00e9finir l\'\u00e9ch\u00e9ance\u00a0\u00bb, \u00ab\u00a0Marquer bloqu\u00e9\u00a0\u00bb).',
-          '- Outils autoris\u00e9s\u00a0: set_due, set_priority, set_blocked, set_progress, add_subtask, set_project, set_statut, complete_all_subtasks.',
-          '- Si context.goals.projectId est null et context.goals.projects n\'est pas vide, tu PEUX proposer de lier un projet pertinent (set_project avec matchText ou projectId).',
-          '- Incoh\u00e9rence\u00a0: si statut.category=completed (ou liste Terminé) et progress.items avec done:false / progress<100, propose soit complete_all_subtasks (t\u00e2ches obsol\u00e8tes), soit set_statut vers started/unstarted/backlog (statut incorrect).',
-          '- Ne propose que des changements pertinents au contexte actuel (sections enabled, \u00e9ch\u00e9ance manquante/pass\u00e9e, priorit\u00e9 absente, progr\u00e8s vide, projet non li\u00e9, incoh\u00e9rences\u2026).',
-          '- Dates\u00a0: aujourd\'hui = ' +
-            today +
-            ', demain = ' +
-            tomorrow +
-            ', heure actuelle = ' +
-            nowTime +
-            '. D\u00e9lais \u00ab\u00a0dans N min\u00a0\u00bb \u2192 relativeMinutes.',
-          '- INTERDIT de proposer un \u00e9tat d\u00e9j\u00e0 actif (noop)\u00a0: ne re-bloque pas si d\u00e9j\u00e0 bloqu\u00e9\u00a0; ne red\u00e9finis pas la priorit\u00e9/statut/projet identiques\u00a0; ne propose pas complete_all_subtasks si tout est d\u00e9j\u00e0 \u00e0 100%.',
-          '- \u00c9ch\u00e9ance\u00a0: INTERDIT de proposer set_due vers une date d\u00e9j\u00e0 active. Si context.due.enabled=true et context.due.dueDate est renseign\u00e9e, ne propose PAS de la remettre \u00e0 la m\u00eame date (ex. d\u00e9j\u00e0 demain/' +
-            (dueAlready || 'YYYY-MM-DD') +
-            ' \u2192 ne pas redemander demain/aujourd\'hui pour cette date). Propose set_due seulement si l\'\u00e9ch\u00e9ance est absente, d\u00e9sactiv\u00e9e, pass\u00e9e, ou clairement \u00e0 d\u00e9caler.',
-          '- L\'exemple JSON ci-dessus (demain) n\'est valable QUE si l\'\u00e9ch\u00e9ance est manquante/d\u00e9sactiv\u00e9e.',
-          '- add_subtask.text obligatoire et concret si utilis\u00e9.',
-          'Contexte carte\u00a0:',
-          JSON.stringify(context)
-        ].join('\n')
+        content: systemLines.join('\n')
       },
       {
         role: 'user',
-        content:
-          'Y a-t-il des am\u00e9liorations \u00e0 appliquer sur cette carte? Sinon renvoie suggestions vides.'
+        content: recentLines.length
+          ? 'L\'utilisateur vient de modifier la carte. Quel prochain coup de pouce utile (sans refaire ce qu\'il vient de faire)? Sinon suggestions vides.'
+          : 'Y a-t-il une am\u00e9lioration concr\u00e8te \u00e0 appliquer sur cette carte? Sinon renvoie suggestions vides.'
       }
     ];
     var debug = {
@@ -7012,7 +7384,9 @@
       kind: 'suggestCardImprovements',
       label: 'Suggestions applicables',
       startedAt: Date.now(),
-      attempts: []
+      attempts: [],
+      gaps: gapsForPrompt.slice(),
+      recentChanges: recentKeys.slice()
     };
     function emitDebug() {
       if (!onDebug) return;
@@ -7022,6 +7396,18 @@
         console.error('suggestCardImprovements onDebug failed', cbErr);
       }
     }
+
+    // Fast path: user just edited the only meaningful surface and nothing else to do.
+    if (recentKeys.length && !gapsForPrompt.length) {
+      debug.endedAt = Date.now();
+      debug.latencyMs = 0;
+      debug.ok = true;
+      debug.skippedApi = true;
+      debug.response = { suggestions: [] };
+      emitDebug();
+      return [];
+    }
+
     var response;
     var t0 = Date.now();
     try {
@@ -7029,7 +7415,7 @@
         response = await chatCompletions(p, messages, {
           jsonMode: true,
           max_tokens: 420,
-          temperature: 0.4
+          temperature: 0.35
         });
         if (response.meta) debug.attempts.push(Object.assign({ label: 'json' }, response.meta));
       } catch (err) {
@@ -7040,7 +7426,7 @@
           response = await chatCompletions(p, messages, {
             jsonMode: false,
             max_tokens: 420,
-            temperature: 0.4
+            temperature: 0.35
           });
           if (response.meta) {
             debug.attempts.push(Object.assign({ label: 'sans json mode' }, response.meta));
@@ -7090,7 +7476,16 @@
       label = ensureFollowUpActionVerb(label, actions);
       list.push({ label: label, actions: actions });
     });
-    list = filterNoOpImprovementSuggestions(list, context).slice(0, 3);
+
+    // Re-read live card state: user may have finished editing during the API round-trip.
+    var liveContext = buildContext(bridge);
+    list = filterNoOpImprovementSuggestions(list, liveContext);
+    list = filterImprovementsAgainstRecentChanges(
+      list,
+      previousContext,
+      liveContext
+    );
+    list = list.slice(0, 3);
 
     var usage = extractUsageFromRaw(response.raw, messages, response.content, p.model);
     usage.latencyMs = Date.now() - t0;
@@ -9393,6 +9788,9 @@
     suggestQuestions: suggestQuestions,
     suggestCardImprovements: suggestCardImprovements,
     filterNoOpImprovementSuggestions: filterNoOpImprovementSuggestions,
+    filterImprovementsAgainstRecentChanges: filterImprovementsAgainstRecentChanges,
+    listCardImprovementGaps: listCardImprovementGaps,
+    listRecentCardChanges: listRecentCardChanges,
     isNoOpImprovementAction: isNoOpImprovementAction,
     addDaysIsoLocal: addDaysIsoLocal,
     cardSanityCheck: cardSanityCheck,

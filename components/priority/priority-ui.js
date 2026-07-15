@@ -50,6 +50,8 @@
   // 'blocked' kept for legacy prefs; Bloqué is nested under Statut (not collapsible).
   var SECTION_COLLAPSE_KEYS = ['info', 'statut', 'objectif', 'priority', 'graph', 'progress', 'due', 'blocked', 'chat'];
   var DEFAULT_COLOR_SCHEME_KEY = 'blue';
+  /** Member clock preference: '24' (default) or '12'. Canonical storage stays HH:MM. */
+  var preferredTimeFormat = '24';
   var SCORE_MAX = 10;
   // Urgency / impact axis max (ease uses 1..5).
   var AXIS_UI_MAX = 4;
@@ -316,6 +318,217 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  /** Max height for Information description preview/editor before scrolling. */
+  var INFO_DESC_MAX_HEIGHT_PX = 360;
+  var INFO_DESC_MIN_HEIGHT_PX = 72;
+
+  function safeMarkdownHref(href) {
+    var u = String(href || '').trim();
+    if (!u) return '';
+    if (/^(https?:|mailto:)/i.test(u)) return u;
+    return '';
+  }
+
+  function renderMarkdownInline(escaped) {
+    var s = String(escaped || '');
+    var slots = [];
+    function stash(html) {
+      slots.push(html);
+      return '\u0000MD' + (slots.length - 1) + '\u0000';
+    }
+    s = s.replace(/`([^`\n]+)`/g, function (_, code) {
+      return stash('<code class="info-md-code">' + code + '</code>');
+    });
+    s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, function (_, alt, href) {
+      var url = safeMarkdownHref(href);
+      if (!url) return _;
+      return stash(
+        '<img class="info-md-img" src="' +
+          escapeHtml(url) +
+          '" alt="' +
+          alt +
+          '" loading="lazy">'
+      );
+    });
+    s = s.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, function (_, label, href) {
+      var url = safeMarkdownHref(href);
+      if (!url) return _;
+      return stash(
+        '<a class="info-md-link" href="' +
+          escapeHtml(url) +
+          '" target="_blank" rel="noopener noreferrer">' +
+          label +
+          '</a>'
+      );
+    });
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+    s = s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+    s = s.replace(/(^|[^_])_([^_\n]+)_(?!_)/g, '$1<em>$2</em>');
+    s = s.replace(
+      /(^|[\s(])((?:https?:\/\/)[^\s<]+[^\s<.,;:!?)])/gi,
+      function (_, lead, url) {
+        return (
+          lead +
+          '<a class="info-md-link" href="' +
+          escapeHtml(url) +
+          '" target="_blank" rel="noopener noreferrer">' +
+          url +
+          '</a>'
+        );
+      }
+    );
+    s = s.replace(/\u0000MD(\d+)\u0000/g, function (_, idx) {
+      return slots[Number(idx)] || '';
+    });
+    return s;
+  }
+
+  /**
+   * Lightweight Markdown → HTML for card descriptions (GFM-ish, HTML-escaped).
+   * Supports headings, lists, checkboxes, quotes, code, links, emphasis, HR.
+   */
+  function renderMarkdownToHtml(md) {
+    var src = String(md == null ? '' : md).replace(/\r\n?/g, '\n');
+    if (!src.trim()) return '';
+
+    var fences = [];
+    src = src.replace(/```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g, function (_, _lang, body) {
+      var code = escapeHtml(String(body || '').replace(/^\n/, '').replace(/\n$/, ''));
+      fences.push('<pre class="info-md-pre"><code>' + code + '</code></pre>');
+      return '\n\u0000FENCE' + (fences.length - 1) + '\u0000\n';
+    });
+
+    var lines = src.split('\n');
+    var out = [];
+    var i = 0;
+
+    function flushParagraph(buf) {
+      if (!buf.length) return;
+      out.push(
+        '<p class="info-md-p">' +
+          renderMarkdownInline(escapeHtml(buf.join('\n')).replace(/\n/g, '<br>')) +
+          '</p>'
+      );
+      buf.length = 0;
+    }
+
+    while (i < lines.length) {
+      var line = lines[i];
+      var fenceMatch = /^\u0000FENCE(\d+)\u0000$/.exec(line);
+      if (fenceMatch) {
+        out.push(fences[Number(fenceMatch[1])] || '');
+        i += 1;
+        continue;
+      }
+      if (/^\s*$/.test(line)) {
+        i += 1;
+        continue;
+      }
+      if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+        out.push('<hr class="info-md-hr">');
+        i += 1;
+        continue;
+      }
+      var heading = /^(#{1,6})\s+(.+)$/.exec(line);
+      if (heading) {
+        var level = Math.min(6, heading[1].length);
+        out.push(
+          '<h' +
+            level +
+            ' class="info-md-h">' +
+            renderMarkdownInline(escapeHtml(heading[2])) +
+            '</h' +
+            level +
+            '>'
+        );
+        i += 1;
+        continue;
+      }
+      if (/^>\s?/.test(line)) {
+        var quote = [];
+        while (i < lines.length && /^>\s?/.test(lines[i])) {
+          quote.push(lines[i].replace(/^>\s?/, ''));
+          i += 1;
+        }
+        out.push(
+          '<blockquote class="info-md-quote">' +
+            renderMarkdownInline(escapeHtml(quote.join('\n')).replace(/\n/g, '<br>')) +
+            '</blockquote>'
+        );
+        continue;
+      }
+      var listMatch = /^(\s*)([-*+]|\d+\.)\s+(.*)$/.exec(line);
+      if (listMatch) {
+        var ordered = /^\d+\./.test(listMatch[2]);
+        var tag = ordered ? 'ol' : 'ul';
+        out.push('<' + tag + ' class="info-md-list">');
+        while (i < lines.length) {
+          var item = /^(\s*)([-*+]|\d+\.)\s+(.*)$/.exec(lines[i]);
+          if (!item) break;
+          if (/^\d+\./.test(item[2]) !== ordered) break;
+          var itemBody = item[3];
+          var check = /^\[([ xX])\]\s+(.*)$/.exec(itemBody);
+          if (check) {
+            var checked = check[1] !== ' ';
+            out.push(
+              '<li class="info-md-li info-md-li--check">' +
+                '<input type="checkbox" disabled' +
+                (checked ? ' checked' : '') +
+                '> ' +
+                renderMarkdownInline(escapeHtml(check[2])) +
+                '</li>'
+            );
+          } else {
+            out.push(
+              '<li class="info-md-li">' +
+                renderMarkdownInline(escapeHtml(itemBody)) +
+                '</li>'
+            );
+          }
+          i += 1;
+        }
+        out.push('</' + tag + '>');
+        continue;
+      }
+      var para = [];
+      while (i < lines.length) {
+        var next = lines[i];
+        if (/^\s*$/.test(next)) break;
+        if (/^\u0000FENCE\d+\u0000$/.test(next)) break;
+        if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(next)) break;
+        if (/^#{1,6}\s+/.test(next)) break;
+        if (/^>\s?/.test(next)) break;
+        if (/^(\s*)([-*+]|\d+\.)\s+/.test(next)) break;
+        para.push(next);
+        i += 1;
+      }
+      flushParagraph(para);
+    }
+
+    return out.join('');
+  }
+
+  function syncExpandableSurfaceHeight(el, options) {
+    if (!el) return;
+    options = options || {};
+    var maxHeight =
+      typeof options.maxHeight === 'number' ? options.maxHeight : INFO_DESC_MAX_HEIGHT_PX;
+    var minHeight =
+      typeof options.minHeight === 'number' ? options.minHeight : INFO_DESC_MIN_HEIGHT_PX;
+    el.style.overflowY = 'hidden';
+    el.style.height = 'auto';
+    var next = Math.max(el.scrollHeight, minHeight);
+    if (next > maxHeight) {
+      el.style.height = maxHeight + 'px';
+      el.style.overflowY = 'auto';
+    } else {
+      el.style.height = next + 'px';
+      el.style.overflowY = 'hidden';
+    }
   }
 
   var KEYWORDS = {
@@ -1802,12 +2015,62 @@
     }
   }
 
+  function normalizeTimeFormatPref(raw) {
+    if (raw === 12 || raw === true) return '12';
+    var s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    if (s === '12' || s === '12h' || s === 'hour12' || s === 'h12') return '12';
+    return '24';
+  }
+
+  function setTimeFormat(format) {
+    preferredTimeFormat = normalizeTimeFormatPref(format);
+    return preferredTimeFormat;
+  }
+
+  function getTimeFormat() {
+    return preferredTimeFormat === '12' ? '12' : '24';
+  }
+
+  function isHour12() {
+    return getTimeFormat() === '12';
+  }
+
+  function hour24ToHour12Parts(hour24) {
+    var h = ((Number(hour24) % 24) + 24) % 24;
+    var isPm = h >= 12;
+    var hour12 = h % 12;
+    if (hour12 === 0) hour12 = 12;
+    return { hour12: hour12, isPm: isPm };
+  }
+
+  function hour12PartsToHour24(hour12, isPm) {
+    var n = Number(hour12);
+    if (!isFinite(n) || n < 1) n = 12;
+    if (n > 12) n = 12;
+    var h24 = n % 12;
+    if (isPm) h24 += 12;
+    return h24;
+  }
+
+  /** Clock label for triggers / chips: "14:30" or "2:30 PM". */
+  function formatDueTimeDisplay(time) {
+    var normalized = normalizeDueTime(time);
+    if (!normalized) return '';
+    var parts = normalized.split(':');
+    var hours = +parts[0];
+    var minutes = +parts[1];
+    if (!isHour12()) return pad2(hours) + ':' + pad2(minutes);
+    var conv = hour24ToHour12Parts(hours);
+    var suffix = conv.isPm ? DUE_DATE_TIME_PM_LABEL : DUE_DATE_TIME_AM_LABEL;
+    return conv.hour12 + ':' + pad2(minutes) + ' ' + suffix;
+  }
+
   function formatDueDateDisplay(iso, time) {
     var dateText = formatDueDateBoxDisplay(iso);
     if (!dateText) return '';
-    var normalizedTime = normalizeDueTime(time);
-    if (!normalizedTime) return dateText;
-    return dateText + ' \u00b7 ' + normalizedTime;
+    var timeText = formatDueTimeDisplay(time);
+    if (!timeText) return dateText;
+    return dateText + ' \u00b7 ' + timeText;
   }
 
   /** Column index in a Sunday-first week (JS getDay(): Sun=0 … Sat=6). */
@@ -1908,15 +2171,21 @@
     return upper === first ? text : upper + text.slice(1);
   }
 
-  /** French compact clock for collapsed section summaries (e.g. "9 h", "14 h 30"). */
+  /** French compact clock for collapsed section summaries (e.g. "9 h", "14 h 30", "2 h 30 PM"). */
   function formatDueTimeCompactFr(time) {
     var normalized = normalizeDueTime(time);
     if (!normalized) return '';
     var parts = normalized.split(':');
     var hours = +parts[0];
     var minutes = +parts[1];
-    if (minutes === 0) return String(hours) + ' h';
-    return String(hours) + ' h ' + pad2(minutes);
+    if (!isHour12()) {
+      if (minutes === 0) return String(hours) + ' h';
+      return String(hours) + ' h ' + pad2(minutes);
+    }
+    var conv = hour24ToHour12Parts(hours);
+    var suffix = conv.isPm ? DUE_DATE_TIME_PM_LABEL : DUE_DATE_TIME_AM_LABEL;
+    if (minutes === 0) return conv.hour12 + ' h ' + suffix;
+    return conv.hour12 + ' h ' + pad2(minutes) + ' ' + suffix;
   }
 
   /** Match a due time to a period chip (matin / midi / après-midi / soir). */
@@ -1967,6 +2236,65 @@
     return weekday + ' ' + formatDueDateDayMonthShort(normalized, now);
   }
 
+  /** French "une"/"deux"/digit counts for relative trigger titles. */
+  function frRelativeCount(n, singular, plural) {
+    if (n === 1) return 'une ' + singular;
+    if (n === 2) return 'deux ' + plural;
+    return n + ' ' + plural;
+  }
+
+  /**
+   * Humanized label for due-date-trigger-title when a day is selected
+   * (Hier, Demain, Dans deux jours, …). Falls back to "Date".
+   */
+  function formatDueDateTriggerTitle(iso, now) {
+    var normalized = normalizeDueDate(iso);
+    if (!normalized) return DUE_DATE_BOX_LABEL;
+    var days = daysUntilDue(normalized, now);
+    if (!isFinite(days)) return DUE_DATE_BOX_LABEL;
+    if (days === 0) return 'Aujourd\'hui';
+    if (days === 1) return 'Demain';
+    if (days === -1) return 'Hier';
+    if (days === 2) return 'Dans deux jours';
+    if (days === -2) return 'Il y a deux jours';
+    if (days >= 3 && days <= 6) return 'Dans ' + days + ' jours';
+    if (days <= -3 && days >= -6) return 'Il y a ' + (-days) + ' jours';
+    return formatDueDateRelativeDay(normalized, now) || DUE_DATE_BOX_LABEL;
+  }
+
+  /**
+   * Humanized label for due-date-time-title when a time is selected
+   * (Dans une heure, Dans 15 minutes, Il y a une heure, …). Falls back to "Heure".
+   */
+  function formatDueTimeTriggerTitle(iso, time, now) {
+    var dueTime = normalizeDueTime(time);
+    if (!dueTime) return DUE_DATE_TIME_LABEL;
+    var normalized = normalizeDueDate(iso);
+    if (!normalized) return DUE_DATE_TIME_LABEL;
+
+    var ms = msUntilDue(normalized, dueTime, now);
+    if (!isFinite(ms)) return DUE_DATE_TIME_LABEL;
+
+    var past = ms < 0;
+    var abs = Math.abs(ms);
+    var prefix = past ? 'Il y a ' : 'Dans ';
+
+    if (abs < MS_PER_MINUTE / 2) return past ? '\u00c0 l\'instant' : 'Maintenant';
+
+    var minutes = Math.max(1, Math.round(abs / MS_PER_MINUTE));
+    if (minutes < 60) {
+      return prefix + frRelativeCount(minutes, 'minute', 'minutes');
+    }
+
+    var hours = Math.max(1, Math.round(abs / MS_PER_HOUR));
+    if (hours < 36) {
+      return prefix + frRelativeCount(hours, 'heure', 'heures');
+    }
+
+    // Farther than ~1.5 days: reuse the day-scale trigger phrasing.
+    return formatDueDateTriggerTitle(normalized, now);
+  }
+
   /**
    * Human-readable due headline + remaining line for the Échéance body.
    * Ex. primary "6 jours restants", secondary "Lundi prochain à midi".
@@ -1987,12 +2315,24 @@
         if (period.id === 'matin') whenPhrase = 'Ce matin';
         else if (period.id === 'apres-midi') whenPhrase = 'Cet apr\u00e8s-midi';
         else if (period.id === 'soir') whenPhrase = 'Ce soir';
-        else whenPhrase = 'Aujourd\'hui \u00e0 ' + periodWord;
-      } else if (days === 1 && (period.id === 'matin' || period.id === 'apres-midi' || period.id === 'soir')) {
-        whenPhrase = 'Demain ' + periodWord;
+        else if (period.id === 'midi') whenPhrase = 'Midi';
+        else whenPhrase = 'Aujourd\'hui';
+      } else if (
+        days === 1 &&
+        (period.id === 'matin' ||
+          period.id === 'apres-midi' ||
+          period.id === 'soir' ||
+          period.id === 'midi')
+      ) {
+        whenPhrase = period.id === 'midi' ? 'Demain midi' : 'Demain ' + periodWord;
+      } else if (period.id === 'midi') {
+        whenPhrase = dayPhrase + ' midi';
       } else {
-        whenPhrase = dayPhrase + ' \u00e0 ' + periodWord;
+        whenPhrase = dayPhrase + ' ' + periodWord;
       }
+      // Keep period feel, but always name the clock ("Demain soir à 18 h").
+      var periodClock = formatDueTimeCompactFr(dueTime || period.time);
+      if (periodClock) whenPhrase += ' \u00e0 ' + periodClock;
     } else if (dueTime) {
       whenPhrase = dayPhrase + ' \u00e0 ' + formatDueTimeCompactFr(dueTime);
     }
@@ -5516,17 +5856,28 @@
     titleRow.value.appendChild(titleWrap);
     body.appendChild(titleRow.row);
 
-    // ── Description ────────────────────────────────────────────────────
+    // ── Description (Markdown preview + expandable editor) ─────────────
     var descRow = makeRow('desc', 'Description', { icon: 'ti-notes' });
     var descWrap = document.createElement('div');
     descWrap.className = 'info-desc-wrap';
+    var descEditing = false;
+
+    var descPreview = document.createElement('div');
+    descPreview.className = 'info-desc-preview';
+    descPreview.tabIndex = 0;
+    descPreview.setAttribute('role', 'button');
+    descPreview.setAttribute(
+      'aria-label',
+      'Description de la carte (Markdown). Activer pour modifier.'
+    );
 
     var descInput = document.createElement('textarea');
     descInput.className = 'info-desc-input';
     descInput.id = 'cardDesc';
     descInput.rows = 3;
-    descInput.placeholder = 'Ajouter une description\u2026';
-    descInput.setAttribute('aria-label', 'Description de la carte');
+    descInput.hidden = true;
+    descInput.placeholder = 'Ajouter une description (Markdown)\u2026';
+    descInput.setAttribute('aria-label', 'Description de la carte (Markdown)');
     descInput.setAttribute('spellcheck', 'false');
     descInput.value = descText;
 
@@ -5555,6 +5906,7 @@
     authBox.appendChild(authHint);
     authBox.appendChild(authBtn);
 
+    descWrap.appendChild(descPreview);
     descWrap.appendChild(descInput);
     descWrap.appendChild(descMeta);
     descWrap.appendChild(authBox);
@@ -5622,10 +5974,20 @@
       interactive: true,
       icon: 'ti-flame'
     });
+    var priorityRecapEl = document.createElement('div');
+    priorityRecapEl.className = 'info-priority-recap';
+    var priorityDotEl = document.createElement('span');
+    priorityDotEl.className = 'heat-tier-dot info-priority-dot';
+    priorityDotEl.setAttribute('aria-hidden', 'true');
+    priorityDotEl.hidden = true;
     var priorityValueEl = document.createElement('span');
     priorityValueEl.className = 'info-recap-text';
-    priorityRow.value.appendChild(priorityValueEl);
+    priorityRecapEl.appendChild(priorityDotEl);
+    priorityRecapEl.appendChild(priorityValueEl);
+    priorityRow.value.appendChild(priorityRecapEl);
     body.appendChild(priorityRow.row);
+    // Visual meta for the heat-tier circle (same palette as Priorité).
+    var priorityVisual = null;
 
     var porteRow = makeRow('porte', 'Port\u00e9e', {
       interactive: true,
@@ -5633,6 +5995,8 @@
     });
     var porteValueEl = document.createElement('span');
     porteValueEl.className = 'info-recap-text';
+    // Shown only when experimental.impactGlobe is enabled (applyFeaturesToCard).
+    porteRow.row.hidden = true;
     porteRow.value.appendChild(porteValueEl);
     body.appendChild(porteRow.row);
 
@@ -5642,6 +6006,8 @@
     });
     var dureeValueEl = document.createElement('span');
     dureeValueEl.className = 'info-recap-text';
+    // Shown only when experimental.easeHourglass is enabled (applyFeaturesToCard).
+    dureeRow.row.hidden = true;
     dureeRow.value.appendChild(dureeValueEl);
     body.appendChild(dureeRow.row);
 
@@ -5695,6 +6061,58 @@
       descStatus.textContent = text || '';
       descStatus.classList.toggle('is-error', kind === 'error');
       descStatus.classList.toggle('is-ok', kind === 'ok');
+    }
+
+    function syncDescInputSize() {
+      syncExpandableSurfaceHeight(descInput, {
+        maxHeight: INFO_DESC_MAX_HEIGHT_PX,
+        minHeight: INFO_DESC_MIN_HEIGHT_PX
+      });
+    }
+
+    function syncDescPreviewSize() {
+      syncExpandableSurfaceHeight(descPreview, {
+        maxHeight: INFO_DESC_MAX_HEIGHT_PX,
+        minHeight: INFO_DESC_MIN_HEIGHT_PX
+      });
+    }
+
+    function renderDescPreview() {
+      var value = descInput.value;
+      var trimmed = value.trim();
+      descPreview.classList.toggle('is-empty', !trimmed);
+      if (!trimmed) {
+        descPreview.innerHTML =
+          '<span class="info-desc-placeholder">Ajouter une description (Markdown)\u2026</span>';
+      } else {
+        descPreview.innerHTML = renderMarkdownToHtml(value);
+      }
+      if (!descEditing) syncDescPreviewSize();
+    }
+
+    function startDescEdit() {
+      if (descEditing) return;
+      descEditing = true;
+      descPreview.hidden = true;
+      descInput.hidden = false;
+      syncDescInputSize();
+      try {
+        descInput.focus();
+        var len = descInput.value.length;
+        descInput.setSelectionRange(len, len);
+      } catch (e) {
+        /* ignore */
+      }
+      onLayoutChange();
+    }
+
+    function endDescEdit() {
+      if (!descEditing) return;
+      descEditing = false;
+      descInput.hidden = true;
+      descPreview.hidden = false;
+      renderDescPreview();
+      onLayoutChange();
     }
 
     function syncTitleInputSize() {
@@ -6100,8 +6518,35 @@
       node.classList.toggle('is-empty', !value);
     }
 
-    function renderRecap() {
+    function paintPriorityRecap() {
+      var hasPriority = !!(priorityLabel || '').trim() && priorityVisual;
       setRecapText(priorityValueEl, priorityLabel, 'Non d\u00e9finie');
+      if (!hasPriority) {
+        priorityDotEl.hidden = true;
+        priorityDotEl.style.removeProperty('background');
+        priorityDotEl.style.removeProperty('--heat-tier-dot-size');
+        priorityDotEl.classList.remove('is-inutile');
+        priorityRecapEl.classList.remove('is-inutile');
+        priorityValueEl.style.removeProperty('color');
+        return;
+      }
+      var visualSource = priorityVisual.inutile
+        ? { inutile: true, label: INUTILE_LABEL }
+        : { i: priorityVisual.tierI, label: priorityLabel };
+      var v = tierVisuals(visualSource);
+      priorityDotEl.hidden = false;
+      priorityDotEl.style.setProperty(
+        '--heat-tier-dot-size',
+        heatTierDotSizePx(priorityVisual).toFixed(2) + 'px'
+      );
+      priorityDotEl.style.background = v.seg;
+      priorityDotEl.classList.toggle('is-inutile', !!priorityVisual.inutile);
+      priorityRecapEl.classList.toggle('is-inutile', !!priorityVisual.inutile);
+      priorityValueEl.style.color = v.text;
+    }
+
+    function renderRecap() {
+      paintPriorityRecap();
       setRecapText(porteValueEl, impactReachLabel, 'Non d\u00e9finie');
       setRecapText(dureeValueEl, durationLabel, 'Non d\u00e9finie');
       setRecapText(dueValueEl, dueLabel, 'Aucune');
@@ -6233,6 +6678,8 @@
           descInput.value = original;
           descSpellcheckedText = original.trim() || null;
           descDirty = true;
+          if (descEditing) syncDescInputSize();
+          else renderDescPreview();
           onLayoutChange();
           flushDescSave();
         },
@@ -6302,6 +6749,8 @@
         descSpellcheckedText = corrected.trim();
         descDirty = true;
         showDescSpellRevert(snapshot, corrected);
+        if (descEditing) syncDescInputSize();
+        else renderDescPreview();
         onLayoutChange();
         flushDescSave();
       }).catch(function () {
@@ -6387,12 +6836,24 @@
       setDescSpellchecking(false);
       clearDescSpellRevert();
       scheduleDescSave();
+      syncDescInputSize();
       onLayoutChange();
     });
     descInput.addEventListener('blur', function () {
       // Persist immediately; spellcheck runs async with a small spinner.
       flushDescSave();
       spellcheckDescAfterCommit();
+      endDescEdit();
+    });
+    descPreview.addEventListener('click', function (e) {
+      if (e.target && e.target.closest && e.target.closest('a, button, input')) return;
+      startDescEdit();
+    });
+    descPreview.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        startDescEdit();
+      }
     });
 
     authBtn.addEventListener('click', function () {
@@ -6448,6 +6909,7 @@
     renderRecap();
     setAuthHint(authReason);
     syncTitleInputSize();
+    renderDescPreview();
     collapse.refreshSummary();
 
     return {
@@ -6488,6 +6950,11 @@
         descInput.value = value;
         descDirty = false;
         descSpellcheckedText = value.trim() || null;
+        if (descEditing) {
+          syncDescInputSize();
+        } else {
+          renderDescPreview();
+        }
       },
       getDesc: function () {
         return descInput.value;
@@ -6510,6 +6977,18 @@
       setRecap: function (next) {
         if (!next) return;
         if (next.priorityLabel != null) priorityLabel = String(next.priorityLabel || '');
+        if (Object.prototype.hasOwnProperty.call(next, 'priorityVisual')) {
+          var pv = next.priorityVisual;
+          if (pv && typeof pv === 'object') {
+            priorityVisual = {
+              tierI: pv.tierI != null ? pv.tierI : null,
+              score: typeof pv.score === 'number' ? pv.score : null,
+              inutile: !!pv.inutile
+            };
+          } else {
+            priorityVisual = null;
+          }
+        }
         if (next.impactReach != null) impactReachLabel = String(next.impactReach || '');
         if (next.durationLabel != null) durationLabel = String(next.durationLabel || '');
         if (next.dueLabel != null) dueLabel = String(next.dueLabel || '');
@@ -7713,7 +8192,10 @@
       if (item.hint) {
         var chipHint = document.createElement('span');
         chipHint.className = 'due-date-suggestion-hint';
-        chipHint.textContent = item.hint;
+        chipHint.dataset.hint = item.hint;
+        chipHint.textContent = normalizeDueTime(item.hint)
+          ? formatDueTimeDisplay(item.hint)
+          : item.hint;
         chipBody.appendChild(chipHint);
       }
       chip.appendChild(chipBody);
@@ -7749,7 +8231,6 @@
       chip.dataset.time = period.time;
       chip.dataset.period = period.id;
       chip.setAttribute('aria-pressed', 'false');
-      chip.setAttribute('aria-label', period.label + ', ' + period.time);
       chip.innerHTML = dueTimePeriodIconSvg(period.id);
       var chipBody = document.createElement('span');
       chipBody.className = 'due-date-time-chip-body';
@@ -7758,7 +8239,6 @@
       chipLabel.textContent = period.label;
       var chipTime = document.createElement('span');
       chipTime.className = 'due-date-time-chip-time';
-      chipTime.textContent = period.time;
       chipBody.appendChild(chipLabel);
       chipBody.appendChild(chipTime);
       chip.appendChild(chipBody);
@@ -7986,13 +8466,47 @@
       return true;
     }
 
+    function refreshPeriodChipLabels() {
+      var periodChips = timePeriods.querySelectorAll('[data-time]');
+      for (var i = 0; i < periodChips.length; i++) {
+        var chip = periodChips[i];
+        var hhmm = chip.dataset.time || '';
+        var display = formatDueTimeDisplay(hhmm) || hhmm;
+        var timeEl = chip.querySelector('.due-date-time-chip-time');
+        if (timeEl) timeEl.textContent = display;
+        var period = matchDueTimePeriod(hhmm);
+        var label = period ? period.label : '';
+        chip.setAttribute(
+          'aria-label',
+          label ? label + ', ' + display : display
+        );
+      }
+      var hintEls = suggestions.querySelectorAll('.due-date-suggestion-hint[data-hint]');
+      for (var h = 0; h < hintEls.length; h++) {
+        var rawHint = hintEls[h].dataset.hint || '';
+        hintEls[h].textContent = normalizeDueTime(rawHint)
+          ? formatDueTimeDisplay(rawHint)
+          : rawHint;
+      }
+    }
+
+    function applyClockFormatUi() {
+      var h12 = isHour12();
+      meridiemGroup.hidden = !h12;
+      clockFace.classList.toggle('is-hour12', h12);
+      timePopover.classList.toggle('is-hour12', h12);
+      refreshPeriodChipLabels();
+    }
+
     function refreshTimeRow() {
       /* Date + Heure stay fully enabled/visible whenever Échéance is on. */
       pickers.classList.toggle('has-time', !!currentTime);
       pickers.classList.toggle('has-date', !!current);
       field.classList.toggle('is-time-open', timeOpen);
+      applyClockFormatUi();
+      timeTitle.textContent = formatDueTimeTriggerTitle(current, currentTime);
       if (currentTime) {
-        timeValue.textContent = currentTime;
+        timeValue.textContent = formatDueTimeDisplay(currentTime);
         timeValue.classList.remove('is-placeholder');
         timeTrigger.classList.add('has-value');
         timeTrashBtn.hidden = false;
@@ -8042,11 +8556,26 @@
       return n;
     }
 
+    function digitalHourDisplayValue() {
+      if (!isHour12()) return pad2(dialHour);
+      return pad2(hour24ToHour12Parts(dialHour).hour12);
+    }
+
     function commitDigitalHour(opts) {
       var advance = !!(opts && opts.advance);
-      var next = parseDigitalPart(digitalHourInput.value, 0, 23, dialHour);
-      dialHour = next;
-      digitalHourInput.value = pad2(dialHour);
+      if (isHour12()) {
+        var hour12 = parseDigitalPart(
+          digitalHourInput.value,
+          1,
+          12,
+          hour24ToHour12Parts(dialHour).hour12
+        );
+        dialHour = hour12PartsToHour24(hour12, dialHour >= 12);
+        digitalHourInput.value = pad2(hour12);
+      } else {
+        dialHour = parseDigitalPart(digitalHourInput.value, 0, 23, dialHour);
+        digitalHourInput.value = pad2(dialHour);
+      }
       commitDialTime(false);
       if (advance) {
         setDialMode('minute');
@@ -8085,36 +8614,87 @@
     function renderClockFace() {
       clockNums.textContent = '';
       var cx = DUE_DATE_TIME_CLOCK_SIZE / 2;
+      var h12Mode = isHour12();
       var selected = dialMode === 'hour' ? dialHour : dialMinute;
       var angle;
       var radius;
+      var valueText;
 
       if (dialMode === 'hour') {
-        for (var h = 0; h < 24; h++) {
-          var hourBtn = document.createElement('button');
-          hourBtn.type = 'button';
-          hourBtn.className = 'due-date-time-clock-num' +
-            (h >= 12 ? ' due-date-time-clock-num--outer' : ' due-date-time-clock-num--inner');
-          hourBtn.textContent = pad2(h);
-          hourBtn.dataset.value = String(h);
-          hourBtn.setAttribute('aria-label', pad2(h) + ' h');
-          if (h === dialHour) hourBtn.classList.add('is-selected');
-          var hourAngle = clockAngleDeg(h % 12, 12);
-          var hourRadius = h >= 12 ? DUE_DATE_TIME_CLOCK_OUTER_R : DUE_DATE_TIME_CLOCK_INNER_R;
-          hourBtn.style.left = cx + 'px';
-          hourBtn.style.top = cx + 'px';
-          hourBtn.style.transform =
-            'rotate(' + hourAngle + 'deg) translateY(-' + hourRadius + 'px) rotate(-' + hourAngle + 'deg)';
-          hourBtn.addEventListener('click', function (ev) {
-            ev.stopPropagation();
-            dialHour = +this.dataset.value;
-            commitDialTime(false);
-            setDialMode('minute');
-          });
-          clockNums.appendChild(hourBtn);
+        if (h12Mode) {
+          var selected12 = hour24ToHour12Parts(dialHour).hour12;
+          for (var n = 1; n <= 12; n++) {
+            var hour12Btn = document.createElement('button');
+            hour12Btn.type = 'button';
+            hour12Btn.className =
+              'due-date-time-clock-num due-date-time-clock-num--outer due-date-time-clock-num--h12';
+            hour12Btn.textContent = String(n);
+            hour12Btn.dataset.hour12 = String(n);
+            hour12Btn.setAttribute('aria-label', n + ' h');
+            if (n === selected12) hour12Btn.classList.add('is-selected');
+            var h12Angle = clockAngleDeg(n % 12, 12);
+            hour12Btn.style.left = cx + 'px';
+            hour12Btn.style.top = cx + 'px';
+            hour12Btn.style.transform =
+              'rotate(' +
+              h12Angle +
+              'deg) translateY(-' +
+              DUE_DATE_TIME_CLOCK_OUTER_R +
+              'px) rotate(-' +
+              h12Angle +
+              'deg)';
+            hour12Btn.addEventListener('click', function (ev) {
+              ev.stopPropagation();
+              dialHour = hour12PartsToHour24(+this.dataset.hour12, dialHour >= 12);
+              commitDialTime(false);
+              setDialMode('minute');
+            });
+            clockNums.appendChild(hour12Btn);
+          }
+          angle = clockAngleDeg(selected12 % 12, 12);
+          radius = DUE_DATE_TIME_CLOCK_OUTER_R;
+          valueText = selected12 + ' heures';
+        } else {
+          for (var h = 0; h < 24; h++) {
+            var hourBtn = document.createElement('button');
+            hourBtn.type = 'button';
+            hourBtn.className =
+              'due-date-time-clock-num' +
+              (h >= 12
+                ? ' due-date-time-clock-num--outer'
+                : ' due-date-time-clock-num--inner');
+            hourBtn.textContent = pad2(h);
+            hourBtn.dataset.value = String(h);
+            hourBtn.setAttribute('aria-label', pad2(h) + ' h');
+            if (h === dialHour) hourBtn.classList.add('is-selected');
+            var hourAngle = clockAngleDeg(h % 12, 12);
+            var hourRadius =
+              h >= 12 ? DUE_DATE_TIME_CLOCK_OUTER_R : DUE_DATE_TIME_CLOCK_INNER_R;
+            hourBtn.style.left = cx + 'px';
+            hourBtn.style.top = cx + 'px';
+            hourBtn.style.transform =
+              'rotate(' +
+              hourAngle +
+              'deg) translateY(-' +
+              hourRadius +
+              'px) rotate(-' +
+              hourAngle +
+              'deg)';
+            hourBtn.addEventListener('click', function (ev) {
+              ev.stopPropagation();
+              dialHour = +this.dataset.value;
+              commitDialTime(false);
+              setDialMode('minute');
+            });
+            clockNums.appendChild(hourBtn);
+          }
+          angle = clockAngleDeg(dialHour % 12, 12);
+          radius =
+            dialHour >= 12
+              ? DUE_DATE_TIME_CLOCK_OUTER_R
+              : DUE_DATE_TIME_CLOCK_INNER_R;
+          valueText = pad2(dialHour) + ' heures';
         }
-        angle = clockAngleDeg(dialHour % 12, 12);
-        radius = dialHour >= 12 ? DUE_DATE_TIME_CLOCK_OUTER_R : DUE_DATE_TIME_CLOCK_INNER_R;
       } else {
         DUE_DATE_TIME_MINUTE_STEPS.forEach(function (m) {
           var minuteBtn = document.createElement('button');
@@ -8139,18 +8719,16 @@
         });
         angle = clockAngleDeg(dialMinute, 60);
         radius = DUE_DATE_TIME_CLOCK_MINUTE_R;
+        valueText = pad2(dialMinute) + ' minutes';
       }
 
       clockHand.style.transform = 'rotate(' + angle + 'deg)';
       clockHand.style.setProperty('--hand-length', radius + 'px');
       clockFace.setAttribute('aria-valuenow', String(selected));
-      clockFace.setAttribute(
-        'aria-valuetext',
-        dialMode === 'hour' ? pad2(dialHour) + ' heures' : pad2(dialMinute) + ' minutes'
-      );
+      clockFace.setAttribute('aria-valuetext', valueText);
 
       if (document.activeElement !== digitalHourInput) {
-        digitalHourInput.value = pad2(dialHour);
+        digitalHourInput.value = digitalHourDisplayValue();
       }
       if (document.activeElement !== digitalMinuteInput) {
         digitalMinuteInput.value = pad2(dialMinute);
@@ -8175,6 +8753,10 @@
 
       if (dialMode === 'hour') {
         var slot = Math.round(deg / 30) % 12;
+        if (isHour12()) {
+          var hour12 = slot === 0 ? 12 : slot;
+          return hour12PartsToHour24(hour12, dialHour >= 12);
+        }
         var mid = (DUE_DATE_TIME_CLOCK_INNER_R + DUE_DATE_TIME_CLOCK_OUTER_R) / 2;
         var scale = rect.width / DUE_DATE_TIME_CLOCK_SIZE;
         var useOuter = dist > mid * scale;
@@ -8263,6 +8845,7 @@
 
     function refreshTrigger() {
       var display = formatDueDateBoxDisplay(current);
+      triggerTitle.textContent = formatDueDateTriggerTitle(current);
       if (display) {
         triggerValue.textContent = display;
         triggerValue.classList.remove('is-placeholder');
@@ -8477,13 +9060,6 @@
 
     function selectMonth(monthIndex) {
       if (monthIndex < 0 || monthIndex > 11) return;
-      var now = new Date();
-      if (
-        viewYear < now.getFullYear() ||
-        (viewYear === now.getFullYear() && monthIndex < now.getMonth())
-      ) {
-        return;
-      }
       viewMonth = monthIndex;
       clampFocusToViewMonth();
       calendarMode = 'day';
@@ -8495,8 +9071,6 @@
       var daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
       var day = Math.min(Math.floor(dayNum), daysInMonth);
       var iso = toIsoDate(new Date(viewYear, viewMonth, day));
-      var todayIso = toIsoDate(startOfLocalDay(new Date()));
-      if (iso < todayIso) return;
       selectIso(iso);
     }
 
@@ -8515,8 +9089,6 @@
       if (!enabled) return;
       var next = normalizeDueDate(iso);
       if (!next) return;
-      var todayIso = toIsoDate(startOfLocalDay(new Date()));
-      if (next < todayIso) return;
       if (!currentTime) {
         currentTime = rememberedTime || DUE_DATE_TIME_DEFAULT;
       }
@@ -8578,15 +9150,11 @@
         if (d === todayDay) dateBtn.classList.add('is-today');
         if (d === selectedDay) dateBtn.classList.add('is-current');
         if (daySelected) dateBtn.classList.add('is-selected');
-        if (isPast) {
-          dateBtn.classList.add('is-past');
-          dateBtn.disabled = true;
-        } else {
-          dateBtn.addEventListener('click', function (ev) {
-            ev.preventDefault();
-            selectDayOfMonth(+ev.currentTarget.dataset.day);
-          });
-        }
+        if (isPast) dateBtn.classList.add('is-past');
+        dateBtn.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          selectDayOfMonth(+ev.currentTarget.dataset.day);
+        });
         grid.appendChild(dateBtn);
       }
     }
@@ -8623,15 +9191,11 @@
         if (m === thisMonth) monthBtn.classList.add('is-today');
         if (m === selectedMonth) monthBtn.classList.add('is-current');
         if (monthSelected) monthBtn.classList.add('is-selected');
-        if (isPast) {
-          monthBtn.classList.add('is-past');
-          monthBtn.disabled = true;
-        } else {
-          monthBtn.addEventListener('click', function (ev) {
-            ev.preventDefault();
-            selectMonth(+ev.currentTarget.dataset.month);
-          });
-        }
+        if (isPast) monthBtn.classList.add('is-past');
+        monthBtn.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          selectMonth(+ev.currentTarget.dataset.month);
+        });
         grid.appendChild(monthBtn);
       }
     }
@@ -8723,21 +9287,17 @@
             cellDate.getFullYear()
         );
         dayBtn.setAttribute('aria-selected', isSelected ? 'true' : 'false');
-        dayBtn.tabIndex = isFocused && !isPast ? 0 : -1;
+        dayBtn.tabIndex = isFocused ? 0 : -1;
 
         if (!inMonth) dayBtn.classList.add('is-outside');
         if (isToday) dayBtn.classList.add('is-today');
         if (isPast) dayBtn.classList.add('is-past');
         if (isSelected) dayBtn.classList.add('is-selected');
 
-        if (isPast) {
-          dayBtn.disabled = true;
-        } else {
-          dayBtn.addEventListener('click', function (ev) {
-            ev.preventDefault();
-            selectIso(ev.currentTarget.dataset.iso);
-          });
-        }
+        dayBtn.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          selectIso(ev.currentTarget.dataset.iso);
+        });
 
         cell.appendChild(dayBtn);
         row.appendChild(cell);
@@ -8946,7 +9506,7 @@
         if (document.activeElement === digitalHourInput) return;
         if (!timeOpen) return;
         if (digitalHourInput.value.length) commitDigitalHour();
-        else digitalHourInput.value = pad2(dialHour);
+        else digitalHourInput.value = digitalHourDisplayValue();
       }, 0);
     });
 
@@ -9080,6 +9640,9 @@
       getValues: getValues,
       setValue: setValue,
       setEnabled: setEnabled,
+      refreshTimeFormat: function () {
+        refreshCountdown();
+      },
       setEnableAllowed: collapseApi.setEnableAllowed,
       isEnableAllowed: collapseApi.isEnableAllowed,
       setExpanded: collapseApi.setExpanded,
@@ -11159,15 +11722,23 @@
     daysUntilDue: daysUntilDue,
     msUntilDue: msUntilDue,
     isDuePast: isDuePast,
+    setTimeFormat: setTimeFormat,
+    getTimeFormat: getTimeFormat,
+    isHour12: isHour12,
     formatDueCountdown: formatDueCountdown,
+    formatDueTimeDisplay: formatDueTimeDisplay,
+    formatDueTimeCompactFr: formatDueTimeCompactFr,
     formatDueDateDisplay: formatDueDateDisplay,
     formatDueDateCompactSummary: formatDueDateCompactSummary,
     formatDueDateHumanReadable: formatDueDateHumanReadable,
+    formatDueDateTriggerTitle: formatDueDateTriggerTitle,
+    formatDueTimeTriggerTitle: formatDueTimeTriggerTitle,
     formatDueBadgeText: formatDueBadgeText,
     dueBadgeSuffix: dueBadgeSuffix,
     isDueEnabled: isDueEnabled,
     withDueDateDisplay: withDueDateDisplay,
     createInfoField: createInfoField,
+    renderMarkdownToHtml: renderMarkdownToHtml,
     createCollapsibleEnableChrome: createCollapsibleEnableChrome,
     bindCollapsibleEnable: bindCollapsibleEnable,
     wordFor: wordFor,

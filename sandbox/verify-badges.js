@@ -546,6 +546,107 @@ check(
   PU.formatDueCountdown('2026-07-13', nowAfternoon) === 'Aujourd\'hui'
 );
 check(
+  'date trigger title empty falls back to Date',
+  PU.formatDueDateTriggerTitle('', nowFixed) === 'Date'
+);
+check(
+  'date trigger title today',
+  PU.formatDueDateTriggerTitle('2026-07-13', nowFixed) === 'Aujourd\'hui'
+);
+check(
+  'date trigger title tomorrow',
+  PU.formatDueDateTriggerTitle(addDaysIso('2026-07-13', 1), nowFixed) === 'Demain'
+);
+check(
+  'date trigger title yesterday',
+  PU.formatDueDateTriggerTitle(addDaysIso('2026-07-13', -1), nowFixed) === 'Hier'
+);
+check(
+  'date trigger title in two days',
+  PU.formatDueDateTriggerTitle(addDaysIso('2026-07-13', 2), nowFixed) ===
+    'Dans deux jours'
+);
+check(
+  'date trigger title in three days',
+  PU.formatDueDateTriggerTitle(addDaysIso('2026-07-13', 3), nowFixed) ===
+    'Dans 3 jours'
+);
+check(
+  'time trigger title empty falls back to Heure',
+  PU.formatDueTimeTriggerTitle('2026-07-13', '', nowAfternoon) === 'Heure'
+);
+check(
+  'time trigger title in one hour',
+  PU.formatDueTimeTriggerTitle('2026-07-13', '15:00', nowAfternoon) ===
+    'Dans une heure'
+);
+check(
+  'time trigger title in two hours',
+  PU.formatDueTimeTriggerTitle('2026-07-13', '16:00', nowAfternoon) ===
+    'Dans deux heures'
+);
+check(
+  'time trigger title in minutes',
+  PU.formatDueTimeTriggerTitle('2026-07-13', '14:45', nowAfternoon) ===
+    'Dans 45 minutes'
+);
+check(
+  'time trigger title past hour',
+  PU.formatDueTimeTriggerTitle('2026-07-13', '13:00', nowAfternoon) ===
+    'Il y a une heure'
+);
+check(
+  'time trigger title far falls back to day phrase',
+  PU.formatDueTimeTriggerTitle(addDaysIso('2026-07-13', 2), '09:00', nowAfternoon) ===
+    'Dans deux jours'
+);
+check(
+  'human readable includes period clock time',
+  (function () {
+    var human = PU.formatDueDateHumanReadable(
+      addDaysIso('2026-07-13', 1),
+      '18:00',
+      nowAfternoon
+    );
+    return human.primary === 'Demain soir \u00e0 18 h' || human.secondary === 'Demain soir \u00e0 18 h';
+  })()
+);
+check(
+  'human readable this evening includes clock',
+  (function () {
+    var human = PU.formatDueDateHumanReadable('2026-07-13', '18:00', nowAfternoon);
+    return (
+      human.primary.indexOf('18 h') !== -1 ||
+      (human.secondary && human.secondary.indexOf('18 h') !== -1)
+    );
+  })()
+);
+check(
+  'time display defaults to 24h',
+  (function () {
+    PU.setTimeFormat('24');
+    return (
+      PU.getTimeFormat() === '24' &&
+      PU.formatDueTimeDisplay('14:30') === '14:30' &&
+      PU.formatDueTimeCompactFr('14:30') === '14 h 30'
+    );
+  })()
+);
+check(
+  'time display 12h mode',
+  (function () {
+    PU.setTimeFormat('12');
+    var ok =
+      PU.isHour12() === true &&
+      PU.formatDueTimeDisplay('14:30') === '2:30 PM' &&
+      PU.formatDueTimeDisplay('09:00') === '9:00 AM' &&
+      PU.formatDueTimeDisplay('00:15') === '12:15 AM' &&
+      PU.formatDueTimeCompactFr('18:00') === '6 h PM';
+    PU.setTimeFormat('24');
+    return ok;
+  })()
+);
+check(
   'due badge text includes countdown',
   PT.formatBadgeText(
     {

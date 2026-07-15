@@ -187,6 +187,10 @@
     var listenTimer = null;
     var listenDebounceTimer = null;
     var listenFingerprint = '';
+    /** buildContext snapshot at last fingerprint sync — used to detect what the user just changed. */
+    var listenBaselineContext = null;
+    /** Context before the change that triggered the pending listen scan. */
+    var listenScanPreviousContext = null;
     var listenMutedUntil = 0;
     var listenCooldownUntil = 0;
     var listenScanSeq = 0;
@@ -4041,16 +4045,11 @@
 
     function muteListening(ms) {
       listenMutedUntil = Date.now() + (ms != null ? ms : LISTEN_MUTE_MS);
-      try {
-        listenFingerprint = fingerprintCard();
-      } catch (e) {
-        /* ignore */
-      }
+      syncListenBaseline();
     }
 
-    function fingerprintCard() {
-      if (!Agent || typeof Agent.buildContext !== 'function') return '';
-      var ctx = Agent.buildContext(bridge) || {};
+    function fingerprintFromContext(ctx) {
+      if (!ctx || typeof ctx !== 'object') return '';
       var slim = {
         cardName: ctx.cardName || '',
         cardDesc: ctx.cardDesc || '',
@@ -4068,6 +4067,52 @@
       } catch (e) {
         return String(Date.now());
       }
+    }
+
+    function fingerprintCard() {
+      if (!Agent || typeof Agent.buildContext !== 'function') return '';
+      return fingerprintFromContext(Agent.buildContext(bridge) || {});
+    }
+
+    function syncListenBaseline() {
+      if (!Agent || typeof Agent.buildContext !== 'function') {
+        listenFingerprint = '';
+        listenBaselineContext = null;
+        return;
+      }
+      try {
+        listenBaselineContext = Agent.buildContext(bridge) || {};
+        listenFingerprint = fingerprintFromContext(listenBaselineContext);
+      } catch (e) {
+        listenFingerprint = '';
+        listenBaselineContext = null;
+      }
+    }
+
+    /** Drop stale Coup de pouce candidates against the live card + recent edit. */
+    function filterListenSuggestionsLive(list, previousContext) {
+      var items = Array.isArray(list) ? list.slice() : [];
+      if (!items.length || !Agent) return [];
+      var live = null;
+      try {
+        live = Agent.buildContext(bridge);
+      } catch (e) {
+        return items;
+      }
+      if (typeof Agent.filterNoOpImprovementSuggestions === 'function') {
+        items = Agent.filterNoOpImprovementSuggestions(items, live);
+      }
+      if (
+        previousContext &&
+        typeof Agent.filterImprovementsAgainstRecentChanges === 'function'
+      ) {
+        items = Agent.filterImprovementsAgainstRecentChanges(
+          items,
+          previousContext,
+          live
+        );
+      }
+      return items;
     }
 
     function clearListenStatusFromFaces() {
@@ -4269,6 +4314,10 @@
         'Ok, on passe.'
       ];
       var soft = softReplies[Math.floor(Math.random() * softReplies.length)];
+      lastListenSuggestions = filterListenSuggestionsLive(
+        lastListenSuggestions,
+        listenScanPreviousContext
+      );
       var next = pickListenSuggestion(lastListenSuggestions);
 
       if (next) {
@@ -4334,16 +4383,21 @@
       if (activeOffer) return;
       if (typeof Agent.suggestCardImprovements !== 'function') return;
       var seq = ++listenScanSeq;
+      var previousContext = listenScanPreviousContext;
       listeningAnalyzing = true;
       setListenBarState('analyzing');
       try {
         var list = await Agent.suggestCardImprovements(provider, bridge, {
+          previousContext: previousContext,
           onDebug: function (entry) {
             pushDebugEntry(entry);
           }
         });
         if (seq !== listenScanSeq) return;
-        lastListenSuggestions = Array.isArray(list) ? list.slice() : [];
+        lastListenSuggestions = filterListenSuggestionsLive(
+          Array.isArray(list) ? list : [],
+          previousContext
+        );
         var pick = pickListenSuggestion(lastListenSuggestions);
         if (pick) {
           appendOfferMessage(pick);
@@ -4359,11 +4413,7 @@
         if (seq === listenScanSeq) {
           listeningAnalyzing = false;
           listenCooldownUntil = Date.now() + LISTEN_COOLDOWN_MS;
-          try {
-            listenFingerprint = fingerprintCard();
-          } catch (e2) {
-            /* ignore */
-          }
+          syncListenBaseline();
           syncApplySummary();
         }
       }
@@ -4389,13 +4439,16 @@
       if (activeOffer || listeningAnalyzing) return;
       if (Date.now() < listenMutedUntil) return;
       if (Date.now() < listenCooldownUntil) return;
+      var nextCtx;
       var nextFp;
       try {
-        nextFp = fingerprintCard();
+        nextCtx = Agent.buildContext(bridge) || {};
+        nextFp = fingerprintFromContext(nextCtx);
       } catch (e) {
         return;
       }
       if (!listenFingerprint) {
+        listenBaselineContext = nextCtx;
         listenFingerprint = nextFp;
         setListenBarState('idle');
         return;
@@ -4404,6 +4457,9 @@
         setListenBarState('idle');
         return;
       }
+      // Snapshot what the card looked like before this edit.
+      listenScanPreviousContext = listenBaselineContext;
+      listenBaselineContext = nextCtx;
       listenFingerprint = nextFp;
       scheduleListenScan();
     }
@@ -4416,11 +4472,7 @@
       }
       if (!Agent.isConfigured(provider)) return;
       listeningActive = true;
-      try {
-        listenFingerprint = fingerprintCard();
-      } catch (e) {
-        listenFingerprint = '';
-      }
+      syncListenBaseline();
       setListenBarState('idle');
       if (listenTimer) clearInterval(listenTimer);
       listenTimer = setInterval(tickListen, LISTEN_POLL_MS);
@@ -4444,11 +4496,7 @@
     function markSettleReady() {
       if (settleReady) return;
       settleReady = true;
-      try {
-        listenFingerprint = fingerprintCard();
-      } catch (e) {
-        listenFingerprint = '';
-      }
+      syncListenBaseline();
       if (Agent.isConfigured(provider) && !interviewActive) {
         startListening();
       }

@@ -151,6 +151,27 @@
     </div>
   </details>
 
+  <details class="tp-settings-section" id="displaySettingsSection">
+    <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-clock"></i></span>
+      <span class="tp-settings-summary-title">Affichage</span>
+      <span class="tp-settings-summary-hint">Format d’heure (par membre)</span>
+    </summary>
+    <div class="tp-settings-body">
+      <p class="tp-color-scheme-hint">Choisissez comment les heures s’affichent dans l’échéance et le sélecteur. Préférence personnelle (membre).</p>
+      <div class="tp-time-format" id="timeFormatOptions" role="radiogroup" aria-label="Format d’heure">
+        <label class="tp-statut-toggle">
+          <input type="radio" name="timeFormat" value="24" id="timeFormat24" />
+          <span>24 heures (14:30)</span>
+        </label>
+        <label class="tp-statut-toggle">
+          <input type="radio" name="timeFormat" value="12" id="timeFormat12" />
+          <span>12 heures (2:30 PM)</span>
+        </label>
+      </div>
+    </div>
+  </details>
+
   <details class="tp-settings-section" id="experimentalSettingsSection">
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-flask"></i></span>
@@ -395,6 +416,64 @@
       });
 
       setActiveColorSchemeUi(activeKey);
+    }
+
+    async function initDisplaySettings() {
+      var section = document.getElementById('displaySettingsSection');
+      var wrap = document.getElementById('timeFormatOptions');
+      var Profile = window.UserProfile;
+      if (!section || !wrap || !Profile) {
+        if (section) section.hidden = true;
+        return;
+      }
+
+      var profileState = null;
+      var saveTimer = null;
+      var radio24 = document.getElementById('timeFormat24');
+      var radio12 = document.getElementById('timeFormat12');
+
+      function applyTimeFormatUi(format) {
+        var next = Profile.normalizeTimeFormat
+          ? Profile.normalizeTimeFormat(format)
+          : format === '12'
+            ? '12'
+            : '24';
+        if (radio24) radio24.checked = next === '24';
+        if (radio12) radio12.checked = next === '12';
+        if (window.PriorityUI && typeof PriorityUI.setTimeFormat === 'function') {
+          PriorityUI.setTimeFormat(next);
+        }
+      }
+
+      function persistTimeFormat() {
+        if (!profileState) return;
+        var selected = wrap.querySelector('input[name="timeFormat"]:checked');
+        var nextFormat = selected ? selected.value : '24';
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(function () {
+          var next = Profile.normalizeProfile(
+            Object.assign({}, profileState, { timeFormat: nextFormat })
+          );
+          Profile.save(t, next)
+            .then(function (saved) {
+              profileState = saved;
+              applyTimeFormatUi(saved.timeFormat);
+            })
+            .catch(function (err) {
+              console.error('Time format save failed', err);
+            });
+        }, 180);
+      }
+
+      try {
+        profileState = await Profile.load(t);
+        applyTimeFormatUi(profileState.timeFormat);
+        wrap.addEventListener('change', persistTimeFormat);
+        resizeSettingsPopup();
+      } catch (err) {
+        console.error('Display settings init failed', err);
+        section.hidden = true;
+      }
     }
 
     async function initExperimentalSettings() {
@@ -849,6 +928,7 @@
       initColorSchemePicker(),
       initCompletionSchemePicker(),
       refreshAutoSortUi(),
+      initDisplaySettings(),
       initExperimentalSettings(),
     ]).then(function () {
       resizeSettingsPopup();

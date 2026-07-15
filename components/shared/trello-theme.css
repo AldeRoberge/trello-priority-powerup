@@ -1521,7 +1521,8 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .due-date-time-chip--period {
-  min-height: 54px;
+  min-height: 32px;
+  padding: 4px 6px;
 }
 
 .tp-page--priority .due-date-time-chip-label {
