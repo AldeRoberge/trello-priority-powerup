@@ -390,5 +390,105 @@ check(
   CT.detectDonePendingMismatch({ category: 'completed' }, { items: [], progress: 40 }) === null
 );
 
-console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll completion checks passed');
-process.exit(bad ? 1 : 0);
+check('LINK_NEST_MAX_DEPTH is 2', CT.LINK_NEST_MAX_DEPTH === 2);
+check('isLinkedItem export', typeof CT.isLinkedItem === 'function');
+check('itemLinkedCardId export', typeof CT.itemLinkedCardId === 'function');
+check('resolveLinkedCompletionTree export', typeof CT.resolveLinkedCompletionTree === 'function');
+check('applyLinkedSnapshots export', typeof CT.applyLinkedSnapshots === 'function');
+check('getCardCompletionById export', typeof CT.getCardCompletionById === 'function');
+
+var linkedItem = CT.normalizeItem({
+  id: 'link-1',
+  text: 'D\u00e9pendance',
+  progress: 40,
+  linkedCardId: 'card-b',
+});
+check('normalize keeps linkedCardId', linkedItem && linkedItem.linkedCardId === 'card-b');
+check('isLinkedItem true for linked', CT.isLinkedItem(linkedItem));
+check(
+  'normalize linked placeholder without text',
+  CT.normalizeItem({ id: 'l2', linkedCardId: 'card-c', progress: 0 }).text === 'Carte li\u00e9e'
+);
+
+var mixedMaster = CT.applyMasterProgress(
+  [
+    { id: 'a', text: 'Local', progress: 0 },
+    { id: 'b', text: 'Linked', progress: 50, linkedCardId: 'card-b' },
+  ],
+  100
+);
+check(
+  'applyMasterProgress completes local only',
+  mixedMaster[0].progress === 100 && mixedMaster[1].progress === 50 && mixedMaster[1].linkedCardId === 'card-b'
+);
+
+var snapped = CT.applyLinkedSnapshots(
+  {
+    items: [
+      { id: 'a', text: 'Old', progress: 10, linkedCardId: 'card-b' },
+      { id: 'b', text: 'Local', progress: 20 },
+    ],
+  },
+  { 'card-b': { name: 'Nouveau titre', percent: 75 } }
+);
+check(
+  'applyLinkedSnapshots updates title + progress',
+  snapped.items[0].text === 'Nouveau titre' &&
+    snapped.items[0].progress === 75 &&
+    snapped.items[1].progress === 20
+);
+
+// Async tree resolve with cycle A ↔ B
+var store = {
+  'card-a': {
+    items: [{ id: 'a1', text: 'Vers B', progress: 0, linkedCardId: 'card-b' }],
+  },
+  'card-b': {
+    items: [
+      { id: 'b1', text: 'Sous-t\u00e2che B', progress: 50 },
+      { id: 'b2', text: 'Retour A', progress: 0, linkedCardId: 'card-a' },
+    ],
+  },
+};
+var fakeT = {
+  get: function (scope, vis, key) {
+    if (key !== CT.CARD_COMPLETION_KEY) return Promise.resolve(null);
+    return Promise.resolve(store[scope] || null);
+  },
+};
+
+CT.resolveLinkedCompletionTree(fakeT, store['card-a'], {
+  currentCardId: 'card-a',
+  cardNameById: { 'card-a': 'Carte A', 'card-b': 'Carte B' },
+  maxDepth: 2,
+}).then(function (resolved) {
+  var node = resolved && resolved.byItemId && resolved.byItemId.a1;
+  check('resolve tree loads linked title', node && node.text === 'Carte B');
+  check('resolve tree shows depth-2 children', node && node.children && node.children.length === 2);
+  check(
+    'resolve tree marks cycle on back-link',
+    node &&
+      node.children.some(function (c) {
+        return c.linkedCardId === 'card-a' && c.isCycle;
+      })
+  );
+  check(
+    'resolve tree does not nest past cycle',
+    node &&
+      node.children.every(function (c) {
+        return !c.children || !c.children.length;
+      })
+  );
+  check(
+    'resolve tree caches linked progress on item',
+    resolved.data.items[0].progress ===
+      CT.computeCardProgress(CT.normalizeCompletionData(store['card-b'])).percent
+  );
+
+  console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll completion checks passed');
+  process.exit(bad ? 1 : 0);
+}).catch(function (err) {
+  console.error(err);
+  console.log('\nFAIL resolveLinkedCompletionTree threw');
+  process.exit(1);
+});

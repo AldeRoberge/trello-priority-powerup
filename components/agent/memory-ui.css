@@ -362,14 +362,14 @@
   font-weight: 500;
 }
 
-/* Dark modal chrome is near --tp-surface; lift the field so it reads clearly. */
+/* Raise composer / chips one step above the modal canvas. */
 html[data-color-mode='dark'] .memory-ui-input-wrap {
-  background: var(--tp-surface-subtle);
+  background: var(--tp-elev-3, var(--tp-surface));
   border-color: var(--tp-border-strong);
 }
 
 html[data-color-mode='dark'] .memory-ui-chip {
-  background: var(--tp-surface-subtle);
+  background: var(--tp-elev-3, var(--tp-surface));
 }
 
 html[data-color-mode='dark'] .memory-ui-hole {

@@ -25,14 +25,19 @@ html[data-color-mode="light"] {
 
 html[data-color-mode="dark"] {
   color-scheme: dark;
-  --tp-bg: transparent;
-  --tp-surface: #22272b;
-  --tp-surface-subtle: #282e33;
-  --tp-surface-hover: #a6c5e71f;
-  --tp-surface-active: #a6c5e733;
-  --tp-text: #ffffff;
-  --tp-text-subtle: #ffffff;
-  --tp-text-muted: #ffffff;
+  /* Elevation: dark canvas → lighter as layers rise */
+  --tp-elev-0: #1d2125;
+  --tp-elev-1: #282e33;
+  --tp-elev-2: #333c43;
+  --tp-elev-3: #3d464f;
+  --tp-bg: var(--tp-elev-0);
+  --tp-surface-subtle: var(--tp-elev-1);
+  --tp-surface: var(--tp-elev-2);
+  --tp-surface-hover: #a6c5e729;
+  --tp-surface-active: #a6c5e73d;
+  --tp-text: #f7f8f9;
+  --tp-text-subtle: #b6c2cf;
+  --tp-text-muted: #8c9bab;
   --tp-border: #a6c5e75c;
   --tp-border-strong: #a6c5e799;
   --tp-primary: #579dff;
@@ -43,7 +48,7 @@ html[data-color-mode="dark"] {
   --tp-success-bg: #1c3329;
   --tp-danger-text: #fd9891;
   --tp-shadow: none;
-  --tp-input-bg: #22272b;
+  --tp-input-bg: var(--tp-elev-2);
 }
 
 /* Standalone pages (landing) — no data-color-mode from Trello */
@@ -369,11 +374,6 @@ html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
 
 html[data-color-mode] .tp-page--settings {
   padding: 14px 14px 16px;
-}
-
-html[data-color-mode="dark"] .tp-page--settings {
-  --tp-text-subtle: #b6c2cf;
-  --tp-text-muted: #8c9bab;
 }
 
 .tp-settings-section {
@@ -1668,6 +1668,12 @@ html[data-color-mode="dark"] .tp-page--priority {
   --due-accent-text: var(--tp-primary-text);
 }
 
+html[data-color-mode="dark"] .tp-page--priority {
+  --surface-0: var(--tp-elev-0);
+  --surface-1: var(--tp-elev-1);
+  --surface-2: var(--tp-elev-2);
+}
+
 /* Bridge the same tokens for memory align / board-bar pages */
 html[data-color-mode="light"] .memory-page,
 html[data-color-mode="dark"] .memory-page {
@@ -1679,6 +1685,12 @@ html[data-color-mode="dark"] .memory-page {
   --text-secondary: var(--tp-text-subtle);
   --text-muted: var(--tp-text-muted);
   --surface-hover: var(--tp-surface-hover);
+}
+
+html[data-color-mode="dark"] .memory-page {
+  --surface-0: var(--tp-elev-0);
+  --surface-1: var(--tp-elev-1);
+  --surface-2: var(--tp-elev-2);
 }
 
 /* Completion editor — modal iframe (legacy) + embedded in priority popup */
@@ -1723,9 +1735,12 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 
 html[data-color-mode="dark"] .tp-page--completion,
 html[data-color-mode="dark"] .tp-page--priority .tp-completion {
+  --surface-0: var(--tp-elev-0);
+  --surface-1: var(--tp-elev-1);
+  --surface-2: var(--tp-elev-2);
   --slider-track: #596773;
-  --slider-thumb-bg: #ffffff;
-  --slider-thumb-border: #738496;
+  --slider-thumb-bg: #f7f8f9;
+  --slider-thumb-border: #8c9bab;
   --slider-thumb-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
   --slider-focus-ring: 0 0 0 3px rgba(166, 197, 231, 0.35);
 }
@@ -1894,8 +1909,8 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-completion-complete-all:hover {
-  background: color-mix(in srgb, var(--completion-hero-accent) 14%, transparent);
-  color: var(--tp-text);
+  background: color-mix(in srgb, var(--tp-success, #216e4e) 12%, transparent);
+  color: var(--tp-success, #216e4e);
 }
 
 .tp-completion-reset-all:hover {
@@ -1937,6 +1952,22 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   flex: 1 1 auto;
 }
 
+.tp-completion-master-title {
+  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  color: var(--tp-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-completion-master-title[hidden] {
+  display: none;
+}
+
 .tp-completion-percent {
   font-size: 34px;
   font-weight: 500;
@@ -1964,6 +1995,12 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.tp-completion-list-section.has-tree .tp-completion-list,
+.tp-completion-list-section.has-tree .tp-completion-done-list {
+  --completion-tree-gutter: 14px;
+  --completion-tree-line: color-mix(in srgb, var(--tp-border-strong) 70%, var(--tp-text-muted));
 }
 
 .tp-completion-list-head {
@@ -2017,9 +2054,10 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  position: relative;
 }
 
-/* Subtask rows — darker pads so each item reads as its own section */
+/* Subtask rows — recessed well so each item reads as its own layer */
 .tp-completion-item {
   display: flex;
   flex-direction: column;
@@ -2028,10 +2066,96 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   border-radius: var(--completion-radius, 10px);
   background: color-mix(in srgb, #000 12%, var(--tp-surface-subtle));
   transition: background 0.15s ease;
+  position: relative;
+}
+
+.tp-completion-item--depth1 {
+  margin-left: var(--completion-tree-gutter, 14px);
+}
+
+.tp-completion-item--depth1::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--completion-tree-gutter, 14px) * -1 + 5px);
+  top: -6px;
+  bottom: 50%;
+  width: 0;
+  border-left: 1.5px solid var(--completion-tree-line, var(--tp-border-strong));
+  pointer-events: none;
+}
+
+.tp-completion-item--depth1::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--completion-tree-gutter, 14px) * -1 + 5px);
+  top: 50%;
+  width: calc(var(--completion-tree-gutter, 14px) - 7px);
+  border-top: 1.5px solid var(--completion-tree-line, var(--tp-border-strong));
+  pointer-events: none;
+}
+
+.tp-completion-list > .tp-completion-item--depth1:first-child::before,
+.tp-completion-done-list > .tp-completion-item--depth1:first-child::before {
+  top: 50%;
+}
+
+.tp-completion-item--nested {
+  margin-left: calc(var(--completion-tree-gutter, 14px) * 2 + 6px);
+  padding: 8px 10px;
+  background: color-mix(in srgb, #000 8%, var(--tp-surface-subtle));
+}
+
+.tp-completion-item--nested::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--completion-tree-gutter, 14px) * -1 + 5px);
+  top: -6px;
+  bottom: 50%;
+  width: 0;
+  border-left: 1.5px solid var(--completion-tree-line, var(--tp-border-strong));
+  pointer-events: none;
+}
+
+.tp-completion-item--nested::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--completion-tree-gutter, 14px) * -1 + 5px);
+  top: 50%;
+  width: calc(var(--completion-tree-gutter, 14px) - 7px);
+  border-top: 1.5px solid var(--completion-tree-line, var(--tp-border-strong));
+  pointer-events: none;
+}
+
+.tp-completion-item.is-linked {
+  background: color-mix(in srgb, var(--tp-focus, #0c66e4) 8%, var(--tp-surface-subtle));
+}
+
+.tp-completion-item.is-cycle {
+  opacity: 0.85;
 }
 
 .tp-completion-item:hover {
   background: color-mix(in srgb, #000 16%, var(--tp-surface-subtle));
+}
+
+.tp-completion-item.is-linked:hover {
+  background: color-mix(in srgb, var(--tp-focus, #0c66e4) 12%, var(--tp-surface-subtle));
+}
+
+html[data-color-mode="dark"] .tp-completion-item {
+  background: color-mix(in srgb, var(--tp-elev-0, #1d2125) 55%, var(--tp-surface-subtle));
+}
+
+html[data-color-mode="dark"] .tp-completion-item:hover {
+  background: color-mix(in srgb, var(--tp-elev-0, #1d2125) 35%, var(--tp-surface-subtle));
+}
+
+html[data-color-mode="dark"] .tp-completion-item.is-linked {
+  background: color-mix(in srgb, var(--tp-focus, #579dff) 14%, var(--tp-elev-0, #1d2125));
+}
+
+html[data-color-mode="dark"] .tp-completion-item--nested {
+  background: color-mix(in srgb, var(--tp-elev-0, #1d2125) 70%, var(--tp-surface-subtle));
 }
 
 .tp-completion-item.is-flipping {
@@ -2044,6 +2168,86 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   grid-template-columns: 28px minmax(0, 1fr) 32px;
   align-items: center;
   gap: 6px;
+}
+
+.tp-completion-item--nested .tp-completion-item-main {
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+}
+
+.tp-completion-text-link {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-focus, #0c66e4);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--tp-focus, #0c66e4) 35%, transparent);
+  text-underline-offset: 2px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-completion-text-link:hover {
+  background: color-mix(in srgb, var(--tp-focus, #0c66e4) 8%, transparent);
+  text-decoration-color: var(--tp-focus, #0c66e4);
+}
+
+.tp-completion-text-link:focus {
+  outline: none;
+}
+
+.tp-completion-text-link:focus-visible {
+  box-shadow: 0 0 0 2px var(--tp-surface), 0 0 0 4px var(--tp-focus, #0c66e4);
+}
+
+.tp-completion-text--readonly {
+  display: block;
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 14px;
+  color: var(--tp-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-completion-link-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px 0 34px;
+  font-size: 12px;
+}
+
+.tp-completion-link-hint {
+  color: var(--tp-text-muted);
+}
+
+.tp-completion-link-pct,
+.tp-completion-nested-pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.tp-completion-cycle-hint {
+  margin: 0;
+  padding: 0 2px 0 34px;
+  font-size: 11px;
+  color: var(--tp-text-muted);
+  font-style: italic;
 }
 
 .tp-completion-item-slider-row,
@@ -2086,8 +2290,11 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 
 .tp-completion-progress-slider::-webkit-slider-runnable-track,
 .tp-completion-item-slider::-webkit-slider-runnable-track {
-  height: var(--completion-track-h);
+  /* Match thumb height so the whole control is clickable (WebKit: a short track +
+     thumb margin-top only lets the handle receive pointer hits). */
+  height: var(--completion-thumb-size);
   border-radius: calc(var(--completion-track-h) / 2);
+  cursor: pointer;
   /* No background transition — animating the gradient stop lag the thumb while dragging. */
   background: linear-gradient(
     to right,
@@ -2096,6 +2303,9 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
     var(--completion-track) var(--completion-pct, 0%),
     var(--completion-track) 100%
   );
+  background-size: 100% var(--completion-track-h);
+  background-repeat: no-repeat;
+  background-position: center;
 }
 
 .tp-completion-progress-slider::-webkit-slider-thumb,
@@ -2104,11 +2314,12 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   appearance: none;
   width: var(--completion-thumb-size);
   height: var(--completion-thumb-size);
-  margin-top: calc((var(--completion-track-h) - var(--completion-thumb-size)) / 2);
+  margin-top: 0;
   border-radius: 50%;
   background: var(--slider-thumb-bg);
   border: 1.5px solid var(--completion-fill, var(--slider-thumb-border));
   box-shadow: var(--slider-thumb-shadow);
+  cursor: pointer;
 }
 
 .tp-completion-progress-slider:focus {
@@ -2125,6 +2336,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   height: var(--completion-track-h);
   border-radius: calc(var(--completion-track-h) / 2);
   background: var(--completion-track);
+  cursor: pointer;
 }
 
 .tp-completion-progress-slider::-moz-range-progress,
@@ -2199,7 +2411,11 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 .tp-completion-check {
   --completion-check-size: 22px;
   --completion-check-green: #2a9b82;
+  --completion-check-fill: var(--completion-check-green);
+  --completion-progress: 0;
   box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
   width: var(--completion-check-size);
   height: var(--completion-check-size);
   padding: 0;
@@ -2219,9 +2435,28 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
     transform 0.12s ease;
 }
 
+/* Clock-style pie: CSS conic 0deg is 12 o'clock; fills clockwise. */
+.tp-completion-check::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    var(--completion-check-fill) calc(var(--completion-progress) * 1%),
+    transparent 0
+  );
+  pointer-events: none;
+  transition: background 0.15s ease;
+}
+
 .tp-completion-check:hover {
-  border-color: var(--completion-check-green);
-  background: color-mix(in srgb, var(--completion-check-green) 8%, transparent);
+  border-color: var(--completion-check-fill);
+  background: color-mix(in srgb, var(--completion-check-fill) 8%, transparent);
+}
+
+.tp-completion-check.has-progress {
+  border-color: var(--completion-check-fill);
 }
 
 .tp-completion-check:focus {
@@ -2234,15 +2469,19 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-completion-check.is-checked {
-  background: var(--completion-check-green);
-  border-color: var(--completion-check-green);
+  background: var(--completion-check-fill);
+  border-color: var(--completion-check-fill);
   color: #fff;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--completion-check-green) 35%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--completion-check-fill) 35%, transparent);
+}
+
+.tp-completion-check.is-checked::before {
+  background: transparent;
 }
 
 .tp-completion-check.is-checked:hover {
-  background: color-mix(in srgb, var(--completion-check-green) 88%, #000);
-  border-color: color-mix(in srgb, var(--completion-check-green) 88%, #000);
+  background: color-mix(in srgb, var(--completion-check-fill) 88%, #000);
+  border-color: color-mix(in srgb, var(--completion-check-fill) 88%, #000);
   color: #fff;
 }
 
@@ -2251,6 +2490,8 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-completion-check-icon {
+  position: relative;
+  z-index: 1;
   display: block;
   flex: none;
   opacity: 0;
@@ -2343,26 +2584,31 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 
 html[data-color-mode="dark"] .tp-completion-check {
   --completion-check-green: #5dd4b1;
+  --completion-check-fill: var(--completion-check-green);
   border-color: color-mix(in srgb, var(--tp-border-strong) 55%, var(--tp-text-muted));
   background: transparent;
   color: transparent;
 }
 
 html[data-color-mode="dark"] .tp-completion-check:hover {
-  border-color: var(--completion-check-green);
-  background: color-mix(in srgb, var(--completion-check-green) 12%, transparent);
+  border-color: var(--completion-check-fill);
+  background: color-mix(in srgb, var(--completion-check-fill) 12%, transparent);
 }
 
 html[data-color-mode="dark"] .tp-completion-check.is-checked,
 html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
-  background: var(--completion-check-green);
-  border-color: var(--completion-check-green);
+  background: var(--completion-check-fill);
+  border-color: var(--completion-check-fill);
   color: #fff;
 }
 
+html[data-color-mode="dark"] .tp-completion-check.is-checked::before {
+  background: transparent;
+}
+
 html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
-  background: color-mix(in srgb, var(--completion-check-green) 88%, #fff);
-  border-color: color-mix(in srgb, var(--completion-check-green) 88%, #fff);
+  background: color-mix(in srgb, var(--completion-check-fill) 88%, #fff);
+  border-color: color-mix(in srgb, var(--completion-check-fill) 88%, #fff);
 }
 
 /* Soft inputs inside completion — kill 2px gray cages from .tp-input */
@@ -2454,9 +2700,104 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
 
 .tp-completion-add-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
   align-items: center;
+}
+
+.tp-completion-link-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.tp-completion-link-btn .ti {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.tp-completion-link-btn[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--tp-focus, #0c66e4) 12%, var(--tp-surface));
+  color: var(--tp-focus, #0c66e4);
+}
+
+.tp-completion-link-btn[hidden] {
+  display: none;
+}
+
+.tp-completion-link-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: var(--completion-radius, 10px);
+  background: color-mix(in srgb, #000 10%, var(--tp-surface-subtle));
+}
+
+.tp-completion-link-picker[hidden] {
+  display: none;
+}
+
+.tp-completion-link-status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--tp-text-muted);
+}
+
+.tp-completion-link-status[hidden] {
+  display: none;
+}
+
+.tp-completion-link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.tp-completion-link-option {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tp-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tp-completion-link-option:hover {
+  background: color-mix(in srgb, var(--tp-focus, #0c66e4) 10%, transparent);
+}
+
+.tp-completion-link-option:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--tp-surface), 0 0 0 4px var(--tp-focus, #0c66e4);
+}
+
+.tp-completion-link-option-name {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.tp-completion-link-option-list {
+  font-size: 11px;
+  color: var(--tp-text-muted);
 }
 
 .tp-completion-add-row .tp-tab-complete-wrap {

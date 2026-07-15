@@ -63,7 +63,7 @@
   padding: 10px;
   border: 1px solid var(--tp-border);
   border-radius: 6px;
-  background: var(--tp-surface-subtle);
+  background: var(--tp-elev-2, var(--tp-surface-subtle));
 }
 
 .tp-page--priority .agent-settings-title {
@@ -91,7 +91,7 @@
   padding: 4px 10px;
   border: 1px solid var(--tp-border-strong);
   border-radius: 3px;
-  background: var(--tp-surface);
+  background: var(--tp-elev-3, var(--tp-surface));
   color: var(--tp-text);
   font: inherit;
   font-size: 12px;
@@ -316,7 +316,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 260px;
+  max-height: 320px;
   overflow-x: hidden;
   overflow-y: auto;
   /* Fit glow-pulse peak (blur 16px + spread 5px) plus face scale/rotate. */
@@ -1058,19 +1058,22 @@
   transform: translateY(1px) rotate(-12deg);
 }
 
-/* Floating sparkles spawned by the idle sparkle state */
+/* Floating sparkles spawned by the idle sparkle state (anchored to face) */
 .agent-face-sparkle-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 9998;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  z-index: 2;
   pointer-events: none;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .agent-face-sparkle {
-  position: fixed;
-  left: var(--sx);
-  top: var(--sy);
+  position: absolute;
+  left: 0;
+  top: 0;
   width: 5px;
   height: 5px;
   margin: -2px 0 0 -2px;
@@ -1775,7 +1778,7 @@
   flex: 0 1 auto;
   min-width: 0;
   max-width: calc(100% - 40px);
-  background: var(--tp-surface-subtle);
+  background: var(--tp-elev-3, var(--tp-surface-subtle));
   color: var(--tp-text);
   border: 1px solid var(--tp-border);
   border-bottom-left-radius: 2px;
@@ -3236,15 +3239,15 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-empty {
 
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-list-item,
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-section {
-  background: color-mix(in srgb, var(--tp-surface-subtle) 92%, #000 8%);
+  background: var(--tp-elev-1, var(--tp-surface-subtle));
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-list-item.is-active {
-  background: color-mix(in srgb, var(--tp-surface-subtle) 78%, #000 12%);
+  background: var(--tp-elev-2, var(--tp-surface));
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
-  background: color-mix(in srgb, var(--tp-surface-subtle) 55%, #000 45%);
+  background: var(--tp-elev-0, #1d2125);
   color: color-mix(in srgb, #9fadbc 82%, #738496);
 }
 
@@ -3315,7 +3318,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
   min-width: 0;
   border: 1px solid var(--tp-border-strong);
   border-radius: 3px;
-  background: var(--tp-input-bg);
+  background: var(--tp-elev-3, var(--tp-input-bg));
 }
 
 .tp-page--priority .agent-composer .tp-tab-complete-wrap:focus-within {
@@ -3337,7 +3340,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
   padding: 7px 8px;
   border: 1px solid var(--tp-border-strong);
   border-radius: 3px;
-  background: var(--tp-input-bg);
+  background: var(--tp-elev-3, var(--tp-input-bg));
   color: var(--tp-text);
   font: inherit;
   font-size: 13px;

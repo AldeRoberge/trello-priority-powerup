@@ -635,6 +635,12 @@
           unreadAssistant = 0;
           syncApplySummary();
         }
+        if (isExpanded && messagesEl) {
+          // Body was just unhidden — wait a frame so scrollHeight is correct.
+          requestAnimationFrame(function () {
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+          });
+        }
         if (typeof PriorityUI.saveSectionCollapseState === 'function') {
           PriorityUI.saveSectionCollapseState({ chat: !!isExpanded });
         }
@@ -2908,10 +2914,13 @@
     }
 
     function faceSmSpawnSparkles(face) {
-      if (!face || !document.body) return;
-      var rect = face.getBoundingClientRect();
-      var cx = rect.left + rect.width / 2;
-      var cy = rect.top + rect.height / 2;
+      if (!face) return;
+      // Anchor to the face (not viewport coords). getBoundingClientRect can be
+      // 0×0 at top-left when the face was just mounted / not laid out yet.
+      var stale = face.querySelectorAll('.agent-face-sparkle-layer');
+      for (var s = 0; s < stale.length; s++) {
+        if (stale[s].parentNode) stale[s].parentNode.removeChild(stale[s]);
+      }
       var layer = el('span', 'agent-face-sparkle-layer');
       layer.setAttribute('aria-hidden', 'true');
       var count = 5 + Math.floor(Math.random() * 3);
@@ -2919,14 +2928,12 @@
         var speck = el('span', 'agent-face-sparkle');
         var ang = (Math.PI * 2 * i) / count + Math.random() * 0.4;
         var dist = 14 + Math.random() * 18;
-        speck.style.setProperty('--sx', cx + 'px');
-        speck.style.setProperty('--sy', cy + 'px');
         speck.style.setProperty('--dx', Math.cos(ang) * dist + 'px');
         speck.style.setProperty('--dy', Math.sin(ang) * dist - 6 + 'px');
         speck.style.animationDelay = Math.random() * 0.12 + 's';
         layer.appendChild(speck);
       }
-      document.body.appendChild(layer);
+      face.appendChild(layer);
       global.setTimeout(function () {
         if (layer.parentNode) layer.parentNode.removeChild(layer);
       }, 900);

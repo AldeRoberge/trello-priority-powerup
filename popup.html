@@ -6,11 +6,11 @@
   <title>Définir la priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=section-glow-3" />
+  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=slider-seek-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-3" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css?v=section-glow-2" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
-  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-point-1" />
+  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-sparkle-1" />
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/effects.js?v=fx-3"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
@@ -32,7 +32,7 @@
   <script src="./components/agent/agent-memory.js?v=card-interview-1"></script>
   <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
-  <script src="./components/agent/agent-ui.js?v=agent-point-1"></script>
+  <script src="./components/agent/agent-ui.js?v=agent-sparkle-1"></script>
 </head>
 <body class="tp-page tp-page--priority">
   <div class="compare-page">
@@ -156,21 +156,24 @@
       if (trimmed) cardNameCache = trimmed;
       if (infoUi && typeof infoUi.setTitle === 'function') {
         infoUi.setTitle(name || '');
-        resizePopup();
-        return;
-      }
-      var el = document.getElementById('cardName');
-      if (!el) return;
-      var label = trimmed || 'Carte';
-      if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
-        el.value = label;
-        el.readOnly = false;
-        el.classList.remove('is-loading');
       } else {
-        el.textContent = label;
-        el.title = trimmed ? trimmed : '';
-        el.classList.remove('is-loading');
-        el.removeAttribute('hidden');
+        var el = document.getElementById('cardName');
+        if (el) {
+          var label = trimmed || 'Carte';
+          if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+            el.value = label;
+            el.readOnly = false;
+            el.classList.remove('is-loading');
+          } else {
+            el.textContent = label;
+            el.title = trimmed ? trimmed : '';
+            el.classList.remove('is-loading');
+            el.removeAttribute('hidden');
+          }
+        }
+      }
+      if (completionUi && typeof completionUi.setCardName === 'function') {
+        completionUi.setCardName(name || '');
       }
       resizePopup();
     }
@@ -1220,14 +1223,99 @@
 
       return CompletionTrello.getBoardCompletionColorScheme(t)
         .then(function () {
-          return CompletionTrello.getCardCompletion(t);
+          return Promise.all([
+            CompletionTrello.getCardCompletion(t),
+            t.card('id', 'name').catch(function () {
+              return null;
+            }),
+          ]);
         })
-        .then(function (stored) {
+        .then(function (pair) {
+          var stored = pair[0];
+          var cardInfo = pair[1];
+          var selfCardId = cardInfo && cardInfo.id ? String(cardInfo.id) : '';
+          var initialName =
+            (cardInfo && typeof cardInfo.name === 'string' && cardInfo.name.trim()) ||
+            readCardNameLabel() ||
+            '';
           completionUi = CompletionUI.mountCompletionUI(completionMount, {
             data: stored,
             showCardHeader: false,
+            cardName: initialName,
+            currentCardId: selfCardId,
             shellEl: progressPanel,
             celebrateRoot: document.body,
+            getBoardCards: function () {
+              return Promise.all([
+                Promise.resolve(selfCardId),
+                PriorityTrello.scanBoardCards
+                  ? PriorityTrello.scanBoardCards(t, {
+                      maxCards: 100,
+                      includePriority: false,
+                    })
+                  : t.cards('id', 'name', 'idList').then(function (cards) {
+                      return { cards: cards || [], lists: [] };
+                    }),
+              ]).then(function (parts) {
+                var sid = parts[0];
+                var scan = parts[1] || {};
+                var listNameById = {};
+                (scan.lists || []).forEach(function (list) {
+                  if (list && list.id) listNameById[list.id] = list.name || '';
+                });
+                return (scan.cards || [])
+                  .filter(function (card) {
+                    return card && card.id && String(card.id) !== sid;
+                  })
+                  .map(function (card) {
+                    return {
+                      id: card.id,
+                      name: card.name || '',
+                      list: card.list || listNameById[card.idList] || '',
+                    };
+                  });
+              });
+            },
+            resolveLinkedTree: function (completionData) {
+              return (
+                PriorityTrello.scanBoardCards
+                  ? PriorityTrello.scanBoardCards(t, {
+                      maxCards: 100,
+                      includePriority: false,
+                    })
+                  : Promise.resolve({ cards: [] })
+              ).then(function (scan) {
+                var nameById = {};
+                ((scan && scan.cards) || []).forEach(function (card) {
+                  if (card && card.id) nameById[card.id] = card.name || '';
+                });
+                return CompletionTrello.resolveLinkedCompletionTree(t, completionData, {
+                  currentCardId: selfCardId,
+                  cardNameById: nameById,
+                  maxDepth: CompletionTrello.LINK_NEST_MAX_DEPTH || 2,
+                });
+              });
+            },
+            onOpenLinkedCard: function (cardId) {
+              if (!cardId) return;
+              if (typeof t.showCard === 'function') {
+                return t.showCard(cardId);
+              }
+              if (typeof t.navigate === 'function') {
+                return t.cards('id', 'url').then(function (cards) {
+                  var match = null;
+                  for (var i = 0; i < (cards || []).length; i++) {
+                    if (cards[i] && cards[i].id === cardId) {
+                      match = cards[i];
+                      break;
+                    }
+                  }
+                  if (match && match.url) {
+                    return t.navigate({ url: match.url });
+                  }
+                });
+              }
+            },
             suggestSubtasks: function (opts) {
               if (!window.PriorityAgent) {
                 return Promise.resolve([]);
