@@ -1121,35 +1121,17 @@ body {
   font-size: 12px;
 }
 
-.info-row--members,
-.info-row--labels {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.info-row--members .info-row-label,
-.info-row--labels .info-row-label {
-  width: 100%;
-  padding-top: 0;
-  align-items: flex-start;
-  justify-content: flex-start;
-  gap: 8px;
-}
-
-.info-row--members .info-row-label-text,
-.info-row--labels .info-row-label-text {
-  flex: 1 1 auto;
-}
-
-.info-row--members .info-row-value,
-.info-row--labels .info-row-value {
-  width: 100%;
-}
-
 .info-members-wrap {
   display: flex;
   flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.info-members-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: 8px;
   min-width: 0;
 }
@@ -1159,6 +1141,8 @@ body {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .info-member {
@@ -1242,9 +1226,8 @@ body {
   position: relative;
   display: inline-flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
   flex: 0 0 auto;
-  margin-left: auto;
   gap: 6px;
 }
 
@@ -1366,11 +1349,21 @@ body {
   min-width: 0;
 }
 
+.info-labels-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
 .info-labels {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .info-label {
@@ -1433,9 +1426,8 @@ body {
   position: relative;
   display: inline-flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
   flex: 0 0 auto;
-  margin-left: auto;
   gap: 6px;
 }
 
@@ -2122,18 +2114,22 @@ body {
 }
 
 .field--due-date.is-enabled {
-  background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
+  /* Always-on section: quiet shell until a date is set (or picker is open). */
+  background: transparent;
 }
 
-.field--due-date.has-due-date {
-  background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
+.field--due-date.is-collapsed:not(.has-due-date) .section-enable-title,
+.field--due-date.is-collapsed:not(.has-due-date) .section-leading-icon,
+.field--due-date.is-collapsed:not(.has-due-date) .section-collapse-chevron {
+  color: var(--text-muted);
+  opacity: 0.72;
 }
 
+.field--due-date.has-due-date,
 .field--due-date.is-open {
   background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
 }
 
-.field--due-date.has-section-glow.is-enabled,
 .field--due-date.has-section-glow.has-due-date,
 .field--due-date.has-section-glow.is-open {
   background-color: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));

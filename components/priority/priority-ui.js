@@ -2954,9 +2954,9 @@
   /** Compact header summary when an enabled due-date section is collapsed. */
   function formatDueDateCompactSummary(iso, time, now) {
     var human = formatDueDateHumanReadable(iso, time, now);
-    if (!normalizeDueDate(iso)) return 'Aucune date d\'\u00e9ch\u00e9ance';
+    if (!normalizeDueDate(iso)) return 'Aucune';
     if (human.secondary && human.primary) {
-      return human.primary + ' \u00b7 ' + human.secondary;
+      return human.secondary + ' (' + human.primary + ')';
     }
     return human.primary || formatDueCountdown(iso, now, time) || '';
   }
@@ -6450,7 +6450,7 @@
         });
       }
 
-      return { row: row, label: label, value: value };
+      return { row: row, value: value };
     }
 
     // ── Title ──────────────────────────────────────────────────────────
@@ -6690,8 +6690,11 @@
 
     membersAddWrap.appendChild(membersAddBtn);
     membersAddWrap.appendChild(membersPicker);
-    membersRow.label.appendChild(membersAddWrap);
-    membersWrap.appendChild(membersEl);
+    var membersInline = document.createElement('div');
+    membersInline.className = 'info-members-inline';
+    membersInline.appendChild(membersEl);
+    membersInline.appendChild(membersAddWrap);
+    membersWrap.appendChild(membersInline);
     membersWrap.appendChild(membersStatus);
     membersRow.value.appendChild(membersWrap);
     body.appendChild(membersRow.row);
@@ -6745,8 +6748,11 @@
 
     labelsAddWrap.appendChild(labelsAddBtn);
     labelsAddWrap.appendChild(labelsPicker);
-    labelsRow.label.appendChild(labelsAddWrap);
-    labelsWrap.appendChild(labelsEl);
+    var labelsInline = document.createElement('div');
+    labelsInline.className = 'info-labels-inline';
+    labelsInline.appendChild(labelsEl);
+    labelsInline.appendChild(labelsAddWrap);
+    labelsWrap.appendChild(labelsInline);
     labelsWrap.appendChild(labelsStatus);
     labelsWrap.appendChild(labelsSuggestSection);
     labelsRow.value.appendChild(labelsWrap);
@@ -10904,8 +10910,9 @@
       field: field,
       body: body,
       chrome: chrome,
-      enabled: enabled,
-      expanded: config.expanded != null ? !!config.expanded : enabled,
+      alwaysEnabled: true,
+      enabled: true,
+      expanded: config.expanded != null ? !!config.expanded : !!current,
       getSummary: function () {
         return formatDueDateCompactSummary(current, currentTime);
       },
@@ -10915,24 +10922,10 @@
         if (typeof config.onExpandChange === 'function') {
           config.onExpandChange(expanded, options);
         }
-      },
-      onBeforeDisable: function () {
-        hidePickers();
-        field.classList.remove('has-due-date');
-        clearDueProximityBand(field);
-      },
-      onAfterEnable: function () {
-        enabled = true;
-        showPickers();
-      },
-      onEnableChange: function (on) {
-        enabled = on;
-        refreshCountdown();
-        emitChange();
       }
     });
     refreshCountdown();
-    if (enabled) showPickers();
+    showPickers();
 
     return {
       el: field,
@@ -10946,7 +10939,9 @@
       setEnableAllowed: collapseApi.setEnableAllowed,
       isEnableAllowed: collapseApi.isEnableAllowed,
       setExpanded: collapseApi.setExpanded,
-      isEnabled: collapseApi.isEnabled,
+      isEnabled: function () {
+        return !!current;
+      },
       isExpanded: collapseApi.isExpanded
     };
   }
@@ -12229,11 +12224,8 @@
       state.dueEnabled = state.dueDate ? true : (defaults.dueEnabled !== false);
       if (!state.dueDate) state.dueEnabled = false;
     }
-    if (defaults.priorityEnabled === false || state.priorityEnabled === false) {
-      state.priorityEnabled = false;
-    } else {
-      state.priorityEnabled = true;
-    }
+    // Priorité is always on (no enable checkbox).
+    state.priorityEnabled = true;
     state.estimatedDurationMinutes = clampDurationMinutes(
       state.estimatedDurationMinutes != null
         ? state.estimatedDurationMinutes
@@ -12287,7 +12279,7 @@
         state[key] = fields[key].getValue();
       });
       if (priorityCollapse) {
-        state.priorityEnabled = priorityCollapse.isEnabled();
+        state.priorityEnabled = true;
       }
       if (enAttenteField) {
         state.enAttente = enAttenteField.getValue();
@@ -12444,8 +12436,7 @@
     var priorityChrome = createCollapsibleEnableChrome({
       title: 'Priorit\u00e9',
       bodyId: priorityBodyId,
-      checkboxClass: 'priority-enable-checkbox',
-      labelClass: 'priority-enable-label',
+      hideEnable: true,
       leadingIcon: 'ti-flame',
       iconClass: 'priority-leading-icon',
       titleClass: 'priority-enable-title',
@@ -12500,8 +12491,9 @@
       field: priorityField,
       body: priorityBody,
       chrome: priorityChrome,
-      enabled: state.priorityEnabled !== false,
-      expanded: sectionExpanded('priority', state.priorityEnabled !== false),
+      alwaysEnabled: true,
+      enabled: true,
+      expanded: sectionExpanded('priority', true),
       getSummary: function () {
         return buildPrioritySummary();
       },
@@ -12511,8 +12503,8 @@
         }
       },
       onExpandChange: persistSectionExpanded('priority'),
-      onEnableChange: function (on) {
-        state.priorityEnabled = on;
+      onEnableChange: function () {
+        state.priorityEnabled = true;
         cancelSliderAnim();
         persistSliderState(true);
         repaint();
@@ -12744,9 +12736,10 @@
         if (next.priorityEnabled != null && priorityCollapse) {
           var priorityOpts = { notifyLayout: false };
           if (preserveCollapse) priorityOpts.preserveCollapse = true;
-          else priorityOpts.expand = !!next.priorityEnabled;
-          priorityCollapse.setEnabled(!!next.priorityEnabled, priorityOpts);
-          state.priorityEnabled = !!next.priorityEnabled;
+          else if (next.priorityEnabled) priorityOpts.expand = true;
+          // Priorité cannot be disabled — ignore priorityEnabled:false.
+          priorityCollapse.setEnabled(true, priorityOpts);
+          state.priorityEnabled = true;
         }
         if (next.enAttente != null && enAttenteField) {
           if (next.enAttente && enAttenteField.setEnableAllowed) {
@@ -13071,6 +13064,10 @@
     applyMarkdownBlockFormat: applyMarkdownBlockFormat,
     detectMarkdownLineFormat: detectMarkdownLineFormat,
     stripMarkdownLinePrefix: stripMarkdownLinePrefix,
+    smartCardModeForLink: smartCardModeForLink,
+    renderSmartCardHtml: renderSmartCardHtml,
+    fetchLinkPreviewMeta: fetchLinkPreviewMeta,
+    hydrateSmartLinkPreviews: hydrateSmartLinkPreviews,
     createCollapsibleEnableChrome: createCollapsibleEnableChrome,
     bindCollapsibleEnable: bindCollapsibleEnable,
     wordFor: wordFor,

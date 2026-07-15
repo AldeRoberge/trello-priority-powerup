@@ -8,14 +8,14 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=info-labels-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-3" />
-  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=info-add-right-1" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=info-add-inline-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-scope-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/effects.js?v=fx-3"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=info-add-right-1"></script>
+  <script src="./components/priority/priority-ui.js?v=info-add-inline-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
@@ -50,7 +50,7 @@
     let latestCompletion = null;
     let saveChain = Promise.resolve();
     let completionSaveChain = Promise.resolve();
-    let progressEnabled = false;
+    let progressEnabled = true;
     let progressExpanded = false;
     let progressPanel = null;
     let progressField = null;
@@ -118,15 +118,15 @@
       return saveChain;
     }
 
-    function withProgressEnabledFlag(data, enabled) {
+    function withProgressEnabledFlag(data) {
       var next = Object.assign({}, data || {});
-      if (enabled === false) next.progressEnabled = false;
-      else delete next.progressEnabled;
+      // Progrès is always on — drop any legacy progressEnabled:false.
+      delete next.progressEnabled;
       return next;
     }
 
     function saveCompletion(data) {
-      latestCompletion = withProgressEnabledFlag(data, progressEnabled);
+      latestCompletion = withProgressEnabledFlag(data);
       completionSaveChain = completionSaveChain
         .then(function () {
           return CompletionTrello.saveCardCompletion(t, latestCompletion);
@@ -611,7 +611,7 @@
           : null);
       if (!next) return;
 
-      latestCompletion = withProgressEnabledFlag(next, true);
+      latestCompletion = withProgressEnabledFlag(next);
       if (completionUi && typeof completionUi.setData === 'function') {
         completionUi.setData(latestCompletion);
       }
@@ -652,7 +652,7 @@
               Object.assign({}, variant.getState(), { enAttente: true })
             );
             if (side.progressIncomplete && side.completion) {
-              latestCompletion = withProgressEnabledFlag(side.completion, true);
+              latestCompletion = withProgressEnabledFlag(side.completion);
               if (completionUi && typeof completionUi.setData === 'function') {
                 completionUi.setData(latestCompletion);
               }
@@ -735,6 +735,7 @@
 
     function setProgressEnabled(enabled, options) {
       options = options || {};
+      progressEnabled = true;
       if (progressCollapse) {
         var enableOpts = {
           persist: options.persist,
@@ -742,14 +743,16 @@
         };
         if (options.preserveCollapse) {
           enableOpts.preserveCollapse = true;
-        } else {
-          enableOpts.expand = options.expand !== false && !!enabled;
+        } else if (options.expand != null) {
+          enableOpts.expand = !!options.expand;
+        } else if (enabled) {
+          enableOpts.expand = true;
         }
-        progressCollapse.setEnabled(!!enabled, enableOpts);
+        // Progrès cannot be disabled — only expand/collapse.
+        progressCollapse.setEnabled(true, enableOpts);
         return;
       }
-      progressEnabled = !!enabled;
-      progressExpanded = !!enabled;
+      progressExpanded = options.expand != null ? !!options.expand : progressExpanded;
     }
 
     function mountStatutSection(cardEl) {
@@ -1293,8 +1296,7 @@
       var chrome = PriorityUI.createCollapsibleEnableChrome({
         title: 'Progr\u00e8s',
         bodyId: 'progress-section-body',
-        checkboxClass: 'progress-enable-checkbox',
-        labelClass: 'progress-enable-label',
+        hideEnable: true,
         leadingIcon: 'ti-check',
         iconClass: 'progress-leading-icon',
         titleClass: 'progress-enable-title',
@@ -1327,17 +1329,18 @@
         field: progressField,
         body: progressBody,
         chrome: chrome,
-        enabled: false,
+        alwaysEnabled: true,
+        enabled: true,
         expanded: false,
         getSummary: progressSummaryText,
         onLayoutChange: resizePopup,
         onExpandChange: function (isExpanded) {
-          progressExpanded = !!isExpanded && progressCollapse.isEnabled();
+          progressExpanded = !!isExpanded;
           PriorityUI.saveSectionCollapseState({ progress: !!isExpanded });
         },
         onEnableChange: function (on, opts) {
-          progressEnabled = on;
-          progressExpanded = on && progressCollapse.isExpanded();
+          progressEnabled = true;
+          progressExpanded = progressCollapse.isExpanded();
           // persist:false = programmatic defaults on open; do not write card data yet.
           if (!(opts && opts.persist === false) && (latestCompletion || completionUi)) {
             var data = completionUi ? completionUi.getData() : latestCompletion;
@@ -1632,14 +1635,12 @@
           syncDueBlockedForProgress(latestCompletion);
           // Initial paint may already be all-complete — sync Done without fireworks.
           syncDueCompleteFromProgress(latestCompletion);
-          // Mirror priorityEnabled: on unless explicitly disabled (empty/new cards default on).
-          var shouldEnable =
-            !!initiallyOpen || !(stored && stored.progressEnabled === false);
-          var expandFallback = initiallyOpen ? false : shouldEnable;
+          // Progrès is always on; only expand follows stored prefs / focus entry.
+          var expandFallback = initiallyOpen ? false : true;
           var expandProgress = initiallyOpen
             ? true
             : PriorityUI.resolveSectionExpanded('progress', expandFallback);
-          setProgressEnabled(shouldEnable, {
+          setProgressEnabled(true, {
             focusAdd: shouldFocusAdd,
             expand: expandProgress,
             // Initial open defaults: do not overwrite collapse prefs or seed empty completion.

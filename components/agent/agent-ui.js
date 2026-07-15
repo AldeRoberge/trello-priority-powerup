@@ -235,14 +235,12 @@
     var chrome = PriorityUI.createCollapsibleEnableChrome({
       title: 'Assistant',
       bodyId: 'agent-chat-body',
-      checkboxClass: 'chat-enable-checkbox',
-      labelClass: 'chat-enable-label',
+      hideEnable: true,
       leadingIcon: 'ti-message-chatbot',
       iconClass: 'chat-leading-icon',
       titleClass: 'chat-enable-title',
       collapseLabel: 'Replier Assistant',
-      expandLabel: 'D\u00e9velopper Assistant',
-      hideEnable: standalone
+      expandLabel: 'D\u00e9velopper Assistant'
     });
     field.appendChild(chrome.head);
 
@@ -776,7 +774,7 @@
       field: field,
       body: body,
       chrome: chrome,
-      alwaysEnabled: standalone,
+      alwaysEnabled: true,
       enabled: true,
       expanded: expandChat,
       getSummary: function () {
