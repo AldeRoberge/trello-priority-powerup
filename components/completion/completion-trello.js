@@ -70,6 +70,24 @@
 
   var ESTIMATE_SCALE_ORDER = ['time', 'tshirt'];
 
+  /**
+   * Discrete Temps picker ticks (Progrès estimate chip). Full phrases — not the
+   * Facilité duration grid, which shortens labels.
+   */
+  var ESTIMATE_TIME_TICKS = [
+    { id: 't15', label: 'Quelques minutes', minutes: 15 },
+    { id: 't60', label: 'Une heure', minutes: 60 },
+    { id: 't180', label: 'Quelques heures', minutes: 3 * 60 },
+    { id: 't1440', label: 'Un jour', minutes: 24 * 60 },
+    { id: 't4320', label: 'Quelques jours', minutes: 3 * 24 * 60 },
+    { id: 't10080', label: 'Une semaine', minutes: 7 * 24 * 60 },
+    {
+      id: 't30240',
+      label: 'Plusieurs semaines (maximum)',
+      minutes: 3 * 7 * 24 * 60,
+    },
+  ];
+
   function asNumber(value) {
     if (typeof value === 'number' && isFinite(value)) return value;
     if (typeof value === 'string' && value !== '') {
@@ -189,40 +207,14 @@
   function getEstimateScaleTicks(scaleId) {
     var scale = getEstimateScale(scaleId);
     if (scale.id === 'time') {
-      var PU = global.PriorityUI;
-      if (PU && Array.isArray(PU.DURATION_TICKS) && PU.DURATION_TICKS.length) {
-        return PU.DURATION_TICKS.map(function (tick) {
-          return {
-            id: 't' + tick.minutes,
-            label: String(tick.label || '').replace(/^Quelques\s+/i, '') || String(tick.minutes),
-            title: tick.label || '',
-            minutes: tick.minutes,
-          };
-        });
-      }
-      return [
-        { id: 't15', label: 'minutes', title: 'Quelques minutes', minutes: 15 },
-        { id: 't180', label: 'heures', title: 'Quelques heures', minutes: 3 * 60 },
-        { id: 't4320', label: 'jours', title: 'Quelques jours', minutes: 3 * 24 * 60 },
-        {
-          id: 't30240',
-          label: 'semaines',
-          title: 'Quelques semaines',
-          minutes: 3 * 7 * 24 * 60,
-        },
-        {
-          id: 't129600',
-          label: 'mois',
-          title: 'Quelques mois',
-          minutes: 3 * 30 * 24 * 60,
-        },
-        {
-          id: 't2y',
-          label: 'ann\u00e9es',
-          title: 'Quelques ann\u00e9es',
-          minutes: ESTIMATE_MAX_MINUTES,
-        },
-      ];
+      return ESTIMATE_TIME_TICKS.map(function (tick) {
+        return {
+          id: tick.id,
+          label: tick.label,
+          title: tick.label,
+          minutes: tick.minutes,
+        };
+      });
     }
     return (scale.ticks || []).slice();
   }
@@ -565,6 +557,8 @@
   function syncDoneFromProgress(item) {
     item.progress = clampProgress(item.progress);
     item.done = item.progress >= PROGRESS_MAX;
+    // Done and blocked are mutually exclusive.
+    if (item.done && item.blocked) delete item.blocked;
     return item;
   }
 
@@ -573,6 +567,103 @@
       return crypto.randomUUID();
     }
     return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+  }
+
+  function isItemBlocked(item) {
+    return !!(item && item.blocked === true && item.done !== true);
+  }
+
+  function isMasterBlocked(data) {
+    var normalized = data && typeof data === 'object' ? data : null;
+    if (!normalized) return false;
+    return normalized.blocked === true;
+  }
+
+  /** True when the master task or any incomplete subtask is blocked. */
+  function hasAnyBlocked(data) {
+    var normalized = normalizeCompletionData(data || { items: [] });
+    if (isMasterBlocked(normalized)) return true;
+    for (var i = 0; i < normalized.items.length; i++) {
+      if (isItemBlocked(normalized.items[i])) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Set/clear master blocked. When enabling at 100% (no items or all done),
+   * drop progress off complete first.
+   */
+  function setMasterBlocked(data, blocked) {
+    var next = normalizeCompletionData(data || { items: [] });
+    if (blocked === true) {
+      if (isAllSubtasksComplete(next)) {
+        next = markNotFullyComplete(next);
+      }
+      next.blocked = true;
+    } else {
+      delete next.blocked;
+    }
+    return normalizeCompletionData(next);
+  }
+
+  /**
+   * Set/clear blocked on a single item by id. Enabling clears done/100% on
+   * that item; disabling only clears the flag.
+   */
+  function setItemBlocked(data, itemId, blocked) {
+    var next = normalizeCompletionData(data || { items: [] });
+    var id = typeof itemId === 'string' ? itemId : '';
+    if (!id) return next;
+    var found = false;
+    next.items = next.items.map(function (item) {
+      if (item.id !== id) return item;
+      found = true;
+      var copy = Object.assign({}, item);
+      if (blocked === true) {
+        if (itemProgress(copy) >= PROGRESS_MAX) {
+          copy.progress = PROGRESS_MIN;
+          syncDoneFromProgress(copy);
+        }
+        copy.blocked = true;
+      } else {
+        delete copy.blocked;
+      }
+      return copy;
+    });
+    if (!found) return next;
+    return normalizeCompletionData(next);
+  }
+
+  /** Clear master + all item blocked flags. */
+  function clearAllBlocked(data) {
+    var next = normalizeCompletionData(data || { items: [] });
+    delete next.blocked;
+    next.items = next.items.map(function (item) {
+      if (!item.blocked) return item;
+      var copy = Object.assign({}, item);
+      delete copy.blocked;
+      return copy;
+    });
+    return normalizeCompletionData(next);
+  }
+
+  /**
+   * Build priority blockedLinks entries from currently blocked local items.
+   * Master-only blocked (no item flags) yields an empty list.
+   */
+  function blockedLinksFromCompletion(data) {
+    var normalized = normalizeCompletionData(data || { items: [] });
+    var links = [];
+    for (var i = 0; i < normalized.items.length; i++) {
+      var item = normalized.items[i];
+      if (!isItemBlocked(item)) continue;
+      links.push({
+        type: 'subtask',
+        id: item.id,
+        label: item.text,
+      });
+    }
+    return links;
   }
 
   function normalizeItem(raw) {
@@ -601,6 +692,8 @@
     });
     if (linkedCardId) out.linkedCardId = linkedCardId;
     copyEstimateFields(raw, out);
+    // Persist blocked only when true; cleared when done/100%.
+    if (raw.blocked === true && !out.done) out.blocked = true;
     return out;
   }
 
@@ -630,6 +723,19 @@
     }
     if (raw.estimatedMinutesLocked === true) out.estimatedMinutesLocked = true;
     if (raw.progressEnabled === false) out.progressEnabled = false;
+    // Master blocked: omit when false; drop when fully complete.
+    // Inline completeness check — avoid isAllSubtasksComplete (re-enters normalize).
+    var masterComplete = false;
+    if (out.items.length) {
+      masterComplete = out.items.every(function (item) {
+        return itemProgress(item) >= PROGRESS_MAX;
+      });
+    } else {
+      masterComplete = clampProgress(out.progress) >= PROGRESS_MAX;
+    }
+    if (raw.blocked === true && !masterComplete) {
+      out.blocked = true;
+    }
     // estimateScale is board-level now; drop any legacy per-card value.
     return out;
   }
@@ -1774,10 +1880,18 @@
     isLinkedItem: isLinkedItem,
     syncDoneFromProgress: syncDoneFromProgress,
     generateId: generateId,
+    isItemBlocked: isItemBlocked,
+    isMasterBlocked: isMasterBlocked,
+    hasAnyBlocked: hasAnyBlocked,
+    setMasterBlocked: setMasterBlocked,
+    setItemBlocked: setItemBlocked,
+    clearAllBlocked: clearAllBlocked,
+    blockedLinksFromCompletion: blockedLinksFromCompletion,
     normalizeItem: normalizeItem,
     normalizeCompletionData: normalizeCompletionData,
     ESTIMATE_SCALES: ESTIMATE_SCALES,
     ESTIMATE_SCALE_ORDER: ESTIMATE_SCALE_ORDER,
+    ESTIMATE_TIME_TICKS: ESTIMATE_TIME_TICKS,
     DEFAULT_ESTIMATE_SCALE: DEFAULT_ESTIMATE_SCALE,
     DEFAULT_ESTIMATE_SCALES: DEFAULT_ESTIMATE_SCALES,
     normalizeEstimateScale: normalizeEstimateScale,

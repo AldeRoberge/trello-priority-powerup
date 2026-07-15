@@ -2244,6 +2244,15 @@ span.tp-estimate-chip {
   gap: 4px;
 }
 
+.tp-estimate-popover.is-scale-time .tp-estimate-ticks,
+.tp-estimate-scale-section[data-estimate-scale='time'] .tp-estimate-ticks {
+  grid-template-columns: 1fr;
+}
+
+.tp-estimate-popover.is-scale-time {
+  min-width: 220px;
+}
+
 .tp-estimate-tick {
   margin: 0;
   padding: 6px 8px;

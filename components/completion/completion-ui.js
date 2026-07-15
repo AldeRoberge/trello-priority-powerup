@@ -659,13 +659,17 @@
     if (CT && typeof CT.getEstimateScaleTicks === 'function') {
       return CT.getEstimateScaleTicks('time');
     }
+    if (CT && Array.isArray(CT.ESTIMATE_TIME_TICKS) && CT.ESTIMATE_TIME_TICKS.length) {
+      return CT.ESTIMATE_TIME_TICKS.slice();
+    }
     return [
       { label: 'Quelques minutes', minutes: 15 },
+      { label: 'Une heure', minutes: 60 },
       { label: 'Quelques heures', minutes: 3 * 60 },
+      { label: 'Un jour', minutes: 24 * 60 },
       { label: 'Quelques jours', minutes: 3 * 24 * 60 },
-      { label: 'Quelques semaines', minutes: 3 * 7 * 24 * 60 },
-      { label: 'Quelques mois', minutes: 3 * 30 * 24 * 60 },
-      { label: 'Quelques ann\u00e9es', minutes: Math.round(2 * 365.25 * 24 * 60) }
+      { label: 'Une semaine', minutes: 7 * 24 * 60 },
+      { label: 'Plusieurs semaines (maximum)', minutes: 3 * 7 * 24 * 60 }
     ];
   }
 
@@ -1305,6 +1309,8 @@
       typeof options.onAllCompleteChange === 'function' ? options.onAllCompleteChange : null;
     var onOpenLinkedCard =
       typeof options.onOpenLinkedCard === 'function' ? options.onOpenLinkedCard : null;
+    var onBlockedChange =
+      typeof options.onBlockedChange === 'function' ? options.onBlockedChange : null;
     var getBoardCards =
       typeof options.getBoardCards === 'function' ? options.getBoardCards : null;
     var resolveLinkedTree =
@@ -1508,8 +1514,18 @@
     resetAllBtn.title = 'Tout invalider';
     resetAllBtn.hidden = true;
 
+    var masterBlockedBtn = document.createElement('button');
+    masterBlockedBtn.type = 'button';
+    masterBlockedBtn.className = 'tp-completion-blocked-btn';
+    masterBlockedBtn.id = 'completionMasterBlocked';
+    masterBlockedBtn.innerHTML = '<i class="ti ti-player-pause" aria-hidden="true"></i>';
+    masterBlockedBtn.setAttribute('aria-pressed', 'false');
+    masterBlockedBtn.setAttribute('aria-label', 'Marquer la t\u00e2che comme bloqu\u00e9e');
+    masterBlockedBtn.title = 'Bloqu\u00e9';
+
     var progressActions = document.createElement('div');
     progressActions.className = 'tp-completion-progress-actions';
+    progressActions.appendChild(masterBlockedBtn);
     progressActions.appendChild(completeAllBtn);
     progressActions.appendChild(resetAllBtn);
 
@@ -1959,6 +1975,14 @@
         syncItemProgressLabel(labelEl, p);
         syncCheckButton(checkBtn, item.done, p);
         li.classList.toggle('is-done', item.done);
+        li.classList.toggle('is-blocked', CT.isItemBlocked(item));
+        var blockedBtn = li.querySelector('.tp-completion-blocked-btn');
+        if (blockedBtn) {
+          var itemBlocked = CT.isItemBlocked(item);
+          blockedBtn.classList.toggle('is-blocked', itemBlocked);
+          blockedBtn.setAttribute('aria-pressed', itemBlocked ? 'true' : 'false');
+          blockedBtn.disabled = !!item.done;
+        }
       });
     }
 
@@ -2082,7 +2106,65 @@
       if (normalized.estimatedMinutesLocked === true) {
         data.estimatedMinutesLocked = true;
       }
+      if (normalized.blocked === true) {
+        data.blocked = true;
+      } else {
+        delete data.blocked;
+      }
       return normalized;
+    }
+
+    function syncMasterBlockedBtn() {
+      var blocked = CT.isMasterBlocked(data);
+      masterBlockedBtn.classList.toggle('is-blocked', blocked);
+      masterBlockedBtn.setAttribute('aria-pressed', blocked ? 'true' : 'false');
+      masterBlockedBtn.setAttribute(
+        'aria-label',
+        blocked
+          ? 'D\u00e9bloquer la t\u00e2che'
+          : 'Marquer la t\u00e2che comme bloqu\u00e9e'
+      );
+      masterBlockedBtn.title = blocked ? 'D\u00e9bloquer' : 'Bloqu\u00e9';
+      progressPanel.classList.toggle('is-master-blocked', blocked);
+      containerEl.classList.toggle('has-blocked', CT.hasAnyBlocked(data));
+    }
+
+    function notifyBlockedChange(source) {
+      if (!onBlockedChange) return;
+      try {
+        onBlockedChange(CT.normalizeCompletionData(data), {
+          source: source || 'toggle',
+          hasAnyBlocked: CT.hasAnyBlocked(data),
+        });
+      } catch (err) {
+        console.error('Completion onBlockedChange failed', err);
+      }
+    }
+
+    function toggleMasterBlocked() {
+      var nextBlocked = !CT.isMasterBlocked(data);
+      data = CT.setMasterBlocked(data, nextBlocked);
+      syncMasterBlockedBtn();
+      updateProgressUi();
+      emitChange();
+      notifyBlockedChange('master');
+      onResize();
+    }
+
+    function toggleItemBlocked(itemId) {
+      var live = null;
+      for (var i = 0; i < data.items.length; i++) {
+        if (data.items[i].id === itemId) {
+          live = data.items[i];
+          break;
+        }
+      }
+      if (!live) return;
+      var nextBlocked = !CT.isItemBlocked(live);
+      data = CT.setItemBlocked(data, itemId, nextBlocked);
+      emitChange({ animateItemId: itemId, flipWasDone: !!live.done });
+      notifyBlockedChange('item');
+      onResize();
     }
 
     function emitChange(opts) {
@@ -2241,6 +2323,7 @@
 
     completeAllBtn.addEventListener('click', completeAllTasks);
     resetAllBtn.addEventListener('click', resetAllTasks);
+    masterBlockedBtn.addEventListener('click', toggleMasterBlocked);
 
     function syncMasterEstimateChip() {
       var scales = currentEstimateScales();
@@ -2308,6 +2391,7 @@
       progressPanel.classList.toggle('has-progress', progress.percent > 0);
       applyProgressSectionTint(progressShellEl, accent);
       syncMasterEstimateChip();
+      syncMasterBlockedBtn();
       syncCompleteAllButton(progress);
       syncResetAllButton(progress);
       if (!opts.skipMasterSync && !masterDragging) {
@@ -2688,6 +2772,8 @@
       var itemLabelEl = li.querySelector('.tp-completion-item-progress-lbl');
       var isLinked = CT.isLinkedItem(item);
 
+      var blockedBtn = li.querySelector('.tp-completion-blocked-btn');
+
       function syncItemProgressUi() {
         var p = CT.itemProgress(item);
         if (itemSlider) applySliderProgressTrack(itemSlider, p);
@@ -2695,12 +2781,27 @@
         syncItemProgressLabel(itemLabelEl, p);
         syncCheckButton(checkBtn, item.done, p);
         li.classList.toggle('is-done', item.done);
+        var itemBlocked = CT.isItemBlocked(item);
+        li.classList.toggle('is-blocked', itemBlocked);
+        if (blockedBtn) {
+          blockedBtn.classList.toggle('is-blocked', itemBlocked);
+          blockedBtn.setAttribute('aria-pressed', itemBlocked ? 'true' : 'false');
+          blockedBtn.setAttribute(
+            'aria-label',
+            itemBlocked
+              ? 'D\u00e9bloquer la sous-t\u00e2che'
+              : 'Marquer la sous-t\u00e2che comme bloqu\u00e9e'
+          );
+          blockedBtn.title = itemBlocked ? 'D\u00e9bloquer' : 'Bloqu\u00e9';
+          blockedBtn.disabled = !!item.done;
+        }
       }
 
       if (readOnly) {
         if (checkBtn) checkBtn.disabled = true;
         if (itemSlider) itemSlider.disabled = true;
         if (deleteBtn) deleteBtn.hidden = true;
+        if (blockedBtn) blockedBtn.disabled = true;
         if (textLink) {
           textLink.addEventListener('click', function (e) {
             e.preventDefault();
@@ -2835,6 +2936,15 @@
         });
       }
 
+      if (blockedBtn) {
+        blockedBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (item.done) return;
+          toggleItemBlocked(item.id);
+        });
+      }
+
       syncItemProgressUi();
 
       if (
@@ -2925,10 +3035,12 @@
       opts = opts || {};
       var isLinked = CT.isLinkedItem(item);
       var treeNode = linkedTreeByItemId[item.id] || null;
+      var itemBlocked = CT.isItemBlocked(item);
       var li = document.createElement('li');
       li.className =
         'tp-completion-item tp-completion-item--depth1' +
         (item.done ? ' is-done' : '') +
+        (itemBlocked ? ' is-blocked' : '') +
         (isLinked ? ' is-linked' : '');
       li.dataset.id = item.id;
       li.dataset.depth = '1';
@@ -2967,6 +3079,21 @@
         }
       }
 
+      var blockedBtn = document.createElement('button');
+      blockedBtn.type = 'button';
+      blockedBtn.className =
+        'tp-completion-blocked-btn' + (itemBlocked ? ' is-blocked' : '');
+      blockedBtn.innerHTML = '<i class="ti ti-player-pause" aria-hidden="true"></i>';
+      blockedBtn.setAttribute('aria-pressed', itemBlocked ? 'true' : 'false');
+      blockedBtn.setAttribute(
+        'aria-label',
+        itemBlocked
+          ? 'D\u00e9bloquer la sous-t\u00e2che'
+          : 'Marquer la sous-t\u00e2che comme bloqu\u00e9e'
+      );
+      blockedBtn.title = itemBlocked ? 'D\u00e9bloquer' : 'Bloqu\u00e9';
+      if (item.done) blockedBtn.disabled = true;
+
       var deleteBtn = document.createElement('button');
       deleteBtn.type = 'button';
       deleteBtn.className = 'tp-completion-delete';
@@ -2983,6 +3110,7 @@
         spellSpinner.innerHTML = '<i class="ti ti-loader-2" aria-hidden="true"></i>';
         mainRow.appendChild(spellSpinner);
       }
+      mainRow.appendChild(blockedBtn);
       mainRow.appendChild(deleteBtn);
 
       li.appendChild(mainRow);
@@ -3173,6 +3301,9 @@
 
     function removeItem(id) {
       delete itemSpellReverts[id];
+      delete spellcheckingItemIds[id];
+      delete itemSpellTokens[id];
+      delete estimatingItemIds[id];
       var nextItems = data.items.filter(function (item) {
         return item.id !== id;
       });
@@ -3200,11 +3331,13 @@
         rawItem.estimatedMinutes = est;
         if (estimateOpts.lock) rawItem.estimatedMinutesLocked = true;
       }
+      if (estimateOpts.blocked === true) rawItem.blocked = true;
       var item = CT.normalizeItem(rawItem);
       if (!item) return null;
       data.items.push(item);
       removeSuggestionMatch(trimmed);
       emitChange();
+      if (estimateOpts.blocked === true) notifyBlockedChange('add');
       onResize();
       return item;
     }
@@ -3613,6 +3746,36 @@
         updateProgressUi();
         refreshLinkedTree({ skipPersist: true });
         onResize();
+      },
+      addItem: function (text, estimateOpts) {
+        return addItem(text, estimateOpts);
+      },
+      setMasterBlocked: function (blocked) {
+        data = CT.setMasterBlocked(data, !!blocked);
+        syncMasterBlockedBtn();
+        updateProgressUi();
+        emitChange();
+        notifyBlockedChange('api');
+        onResize();
+        return CT.normalizeCompletionData(data);
+      },
+      setItemBlocked: function (itemId, blocked) {
+        data = CT.setItemBlocked(data, itemId, !!blocked);
+        emitChange();
+        notifyBlockedChange('api');
+        onResize();
+        return CT.normalizeCompletionData(data);
+      },
+      clearAllBlocked: function () {
+        data = CT.clearAllBlocked(data);
+        syncMasterBlockedBtn();
+        emitChange();
+        notifyBlockedChange('api');
+        onResize();
+        return CT.normalizeCompletionData(data);
+      },
+      hasAnyBlocked: function () {
+        return CT.hasAnyBlocked(data);
       },
       applyItemEstimates: function (estimates, options) {
         var next = CT.applyItemEstimates(data, estimates, options || {});

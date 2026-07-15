@@ -671,6 +671,23 @@ check(
     .join(',') === 'XS,S,M,L,XL'
 );
 check(
+  'time estimate ticks',
+  CT.getEstimateScaleTicks('time')
+    .map(function (t) {
+      return t.label;
+    })
+    .join('|') ===
+    [
+      'Quelques minutes',
+      'Une heure',
+      'Quelques heures',
+      'Un jour',
+      'Quelques jours',
+      'Une semaine',
+      'Plusieurs semaines (maximum)',
+    ].join('|')
+);
+check(
   'format tshirt M',
   CT.formatEstimateForScale(4 * 60, 'tshirt') === 'M'
 );
