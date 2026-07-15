@@ -2611,9 +2611,9 @@
       '- Ex. moyen\u00a0: labels.ease=Moyen \u2192 \u00ab\u00a0Ni super dur ni trivial\u00a0: plut\u00f4t [[y:moyen]].\u00a0\u00bb',
       '- M\u00eame logique pour Impact (labels.impact / impactReach) et Urgence (labels.urgency) quand on pose la question sur ces axes.',
       '- Port\u00e9e / impact (Personnel \u2192 \u00c9quipe \u2192 Interne \u2192 Population \u2192 Global)\u00a0: answers via context.priority.impactReach (ou labels.impact). Qui est touch\u00e9?',
-      '- Dur\u00e9e estim\u00e9e (Facilit\u00e9)\u00a0: context.priority.estimatedDurationLabel / estimatedDurationMinutes. Distingue dur\u00e9e (temps) vs Facilit\u00e9 (difficult\u00e9).',
+      '- Dur\u00e9e estim\u00e9e (Progr\u00e8s)\u00a0: context.progress.estimatedTotalMinutes / estimatedRemainingMinutes et items[].estimatedMinutes. Distingue dur\u00e9e (temps) vs Facilit\u00e9 (difficult\u00e9 / ease).',
       '- Ex. port\u00e9e\u00a0: user \u00ab\u00a0qui est impact\u00e9?\u00a0\u00bb, impactReach=\u00c9quipe \u2192 message du type \u00ab\u00a0La port\u00e9e est \u00c9quipe\u00a0: effet sur l\'\u00e9quipe imm\u00e9diate.\u00a0\u00bb',
-      '- Ex. dur\u00e9e\u00a0: user \u00ab\u00a0combien de temps?\u00a0\u00bb, estimatedDurationLabel=\u00ab\u00a0environ 2 jours\u00a0\u00bb \u2192 cite ce libell\u00e9.',
+      '- Ex. dur\u00e9e\u00a0: user \u00ab\u00a0combien de temps?\u00a0\u00bb \u2192 cite le total / restant Progr\u00e8s.',
       '- Si priority.enabled=false\u00a0: dis qu\'aucune Facilit\u00e9 / priorit\u00e9 n\'est d\u00e9finie (ne sors pas d\'anciennes valeurs).',
       'Expliquer la priorit\u00e9 actuelle (tr\u00e8s important)\u00a0:',
       '- Quand l\'utilisateur demande la priorit\u00e9 (\u00ab\u00a0Quelle est la priorit\u00e9?\u00a0\u00bb, \u00ab\u00a0pourquoi ce palier?\u00a0\u00bb, etc.)\u00a0: une phrase simple, style pote.',
@@ -2737,7 +2737,7 @@
       '  \u00b7 Ex. palier\u00a0: user \u00ab\u00a0change priority for flexible\u00a0\u00bb / \u00ab\u00a0Mets Flexible\u00a0\u00bb \u2192 {"message":"Okay, Flexible. Tu peux encore peaufiner urgence / impact / facilit\u00e9 si tu veux.","suggestions":["C\'est bon","D\u00e9finir une \u00e9ch\u00e9ance"],"followUps":[],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}]}',
       '  \u00b7 Ex. Critique\u00a0: user \u00ab\u00a0Mets Critique\u00a0\u00bb \u2192 {"message":"Okay, Critique.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Marquer bloqu\u00e9"],"followUps":[],"prompts":[{"type":"priority_axes","urgency":4,"impact":4,"ease":5}],"actions":[{"tool":"set_priority","args":{"tier":"Critique"}}]}',
       '  \u00b7 Axes fournis explicitement (urgence/impact/facilit\u00e9)\u00a0: applique set_priority avec ces valeurs tout de suite (prompts=[]).',
-      '  \u00b7 Dur\u00e9e estim\u00e9e\u00a0: set_priority avec estimatedDurationMinutes (nombre) ou estimatedDuration (texte FR/EN). Ind\u00e9pendant de ease.',
+      '  \u00b7 Dur\u00e9e estim\u00e9e\u00a0: set_subtask_estimate (par sous-t\u00e2che) ou set_progress_estimate (total master). Ind\u00e9pendant de ease. (Legacy set_priority.estimatedDuration* est redirig\u00e9 vers Progr\u00e8s.)',
       '  \u00b7 Port\u00e9e\u00a0: impact 0\u20134 = Personnel / \u00c9quipe / Interne / Population / Global.',
       '  \u00b7 Demande vraiment vague SANS palier NI axes (\u00ab\u00a0mettre \u00e0 jour la priorit\u00e9\u00a0\u00bb)\u00a0: alors seulement propose prompts priority_axes (pr\u00e9rempli avec context.priority) OU une courte question de palier\u00a0; n\'invente pas de palier.',
       '- Si l\'utilisateur active le progr\u00e8s sans chiffre\u00a0: set_progress avec progressEnabled:true tout de suite, puis demande le % en option.',
@@ -2822,16 +2822,18 @@
       '- Pour activer/d\u00e9sactiver\u00a0: priorityEnabled, dueEnabled, enAttente (Bloqu\u00e9), progressEnabled.',
       '- Pour marquer bloqu\u00e9\u00a0: set_blocked avec enAttente:true tout de suite (motifs ensuite si fournis). Ne dis jamais que c\'est d\u00e9j\u00e0 bloqu\u00e9 si enabled=false.',
       'Outils disponibles\u00a0:',
-      '- set_priority: { urgency?:0-4, impact?:0-4, ease?:1-5, estimatedDurationMinutes?:number|null, estimatedDuration?:string, priorityEnabled?:boolean, tier?: string, heatTarget?: number } (tier = Critique|Urgente|Prioritaire|Importante|Flexible|Secondaire|Optionnelle\u00a0; impact 0\u20134 = port\u00e9e Personnel\u2026Global\u00a0; estimatedDuration = texte FR/EN ex. \u00ab\u00a02 jours\u00a0\u00bb)',
+      '- set_priority: { urgency?:0-4, impact?:0-4, ease?:1-5, priorityEnabled?:boolean, tier?: string, heatTarget?: number } (tier = Critique|Urgente|Prioritaire|Importante|Flexible|Secondaire|Optionnelle\u00a0; impact 0\u20134 = port\u00e9e Personnel\u2026Global). Legacy estimatedDuration* \u2192 redirig\u00e9 vers set_progress_estimate.',
       '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean, relativeMinutes?: number, relativeHours?: number } (dueTime OPTIONNEL pour une date\u00a0; d\u00e9lai \u00ab\u00a0dans N min/h\u00a0\u00bb \u2192 relativeMinutes/relativeHours, calcul\u00e9 depuis context.nowTime\u00a0; aujourd\'hui = context.today)',
       '- set_blocked: { enAttente?: boolean, blockedReasons?: string[], blockedLinks?: [{id?:string, matchText?:string, label?:string}] } (enAttente:true seul suffit\u00a0; motifs et liens optionnels\u00a0; si progr\u00e8s \u00e0 100%, le runtime le remet \u00e0 0% \u2014 ajoute aussi set_progress)',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (master sur sous-t\u00e2ches si items\u00a0; sinon progres carte)',
+      '- set_subtask_estimate: { id?: string, matchText?: string, estimatedMinutes: number|null, estimatedDuration?: string }',
+      '- set_progress_estimate: { estimatedMinutes: number|null, estimatedDuration?: string } (total master)',
       '- set_formula: { formula: "baseline"|"eisenhower"|"wsjf"|"valueEffort" }',
       '- set_statut: { listId?: string, matchList?: string, category?: string } (d\u00e9place la carte\u00a0; category ex. completed|blocked|started|backlog|triage|unstarted|canceled)',
       '- set_project: { projectId?: string, matchText?: string, name?: string, clear?: boolean } (lie la carte \u00e0 un projet Objectif\u00a0; clear:true d\u00e9lie\u00a0; matchText/name parmi context.goals.projects)',
       '- rename_card: { name: string } (nouveau titre de la carte\u00a0; name obligatoire, non vide)',
       '- set_description: { desc: string } (nouvelle description compl\u00e8te\u00a0; desc obligatoire en string, "" pour effacer)',
-      '- add_subtask: { text: string, done?: boolean } (text obligatoire, non vide\u00a0; done:true = cr\u00e9er d\u00e9j\u00e0 coch\u00e9e)',
+      '- add_subtask: { text: string, done?: boolean, estimatedMinutes?: number } (text obligatoire, non vide\u00a0; done:true = cr\u00e9er d\u00e9j\u00e0 coch\u00e9e)',
       '- rename_subtask: { text: string, id?: string, matchText?: string } (nouveau text\u00a0; id OU matchText)',
       '- remove_subtask: { id?: string, matchText?: string } (id OU matchText)',
       '- toggle_subtask: { id?: string, matchText?: string, done?: boolean }',
@@ -3230,14 +3232,142 @@
       usedLinkedIds: usedLinkedIds
     });
 
-    // Chat / legacy callers that only expect titles still get usable strings
-    // when no structured link rows were requested.
-    if (!allowLinks) {
-      return normalized.map(function (row) {
-        return row.text;
-      });
-    }
+    // Prefer structured rows (with optional estimatedMinutes) for the Progrès UI.
     return normalized;
+  }
+
+  /**
+   * Silently estimate missing subtask durations (unlocked items without times).
+   * context: { cardName, cardDesc?, items: [{id,text}] }
+   * @returns {Promise<Array<{id?:string, matchText?:string, estimatedMinutes:number}>>}
+   */
+  async function estimateSubtaskDurations(provider, context, options) {
+    options = options || {};
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) return [];
+    var ctx = context && typeof context === 'object' ? context : {};
+    var itemsRaw = Array.isArray(ctx.items)
+      ? ctx.items
+      : Array.isArray(ctx.existingSubtasks)
+        ? ctx.existingSubtasks
+        : [];
+    var items = [];
+    itemsRaw.forEach(function (it) {
+      if (!it) return;
+      if (typeof it === 'string') {
+        var s = it.trim();
+        if (s) items.push({ text: s });
+        return;
+      }
+      if (typeof it !== 'object') return;
+      var text = typeof it.text === 'string' ? it.text.trim() : '';
+      if (!text) return;
+      var row = { text: text };
+      if (typeof it.id === 'string' && it.id) row.id = it.id;
+      items.push(row);
+    });
+    if (!items.length) return [];
+
+    var payload = {
+      cardName: ctx.cardName || '',
+      cardDesc: typeof ctx.cardDesc === 'string' ? ctx.cardDesc.slice(0, 400) : '',
+      items: items
+    };
+
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu estimes la dur\u00e9e (effort) de sous-t\u00e2ches Trello (section Progr\u00e8s).',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"estimates":[{"id":"\u2026","estimatedMinutes":30},{"matchText":"\u2026","estimatedMinutes":15}]}',
+          'Une entr\u00e9e par item fourni. Pr\u00e9f\u00e8re id quand fourni, sinon matchText = texte exact.',
+          'estimatedMinutes = entier > 0 = effort r\u00e9aliste pour CETTE \u00e9tape seule (minutes).',
+          'Ex. achat logiciel ~5, r\u00e9union ~60, r\u00e9daction courte ~90, audit/migration ~480+.',
+          'INTERDIT\u00a0: inventer des sous-t\u00e2ches; omettre un item; dur\u00e9es absurdes.',
+          'Contexte\u00a0:',
+          JSON.stringify(payload)
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content: 'Estime la dur\u00e9e de chaque sous-t\u00e2che list\u00e9e.'
+      }
+    ];
+
+    var response;
+    try {
+      response = await chatCompletions(p, messages, {
+        jsonMode: true,
+        max_tokens: 320,
+        temperature: 0.35,
+        stream: false
+      });
+    } catch (err) {
+      if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+        try {
+          response = await chatCompletions(p, messages, {
+            jsonMode: false,
+            max_tokens: 320,
+            temperature: 0.35,
+            stream: false
+          });
+        } catch (err2) {
+          console.error('PriorityAgent.estimateSubtaskDurations failed', err2);
+          return [];
+        }
+      } else {
+        console.error('PriorityAgent.estimateSubtaskDurations failed', err);
+        return [];
+      }
+    }
+
+    var list = [];
+    try {
+      var parsed = parseAssistantPayload(response.content);
+      list = parsed.estimates || parsed.durations || parsed.items || [];
+    } catch (e) {
+      try {
+        var raw = JSON.parse(response.content);
+        list = raw.estimates || raw.durations || raw.items || [];
+      } catch (e2) {
+        list = [];
+      }
+    }
+    if (!Array.isArray(list)) return [];
+
+    var clamp =
+      typeof CompletionTrello !== 'undefined' &&
+      typeof CompletionTrello.clampEstimatedMinutes === 'function'
+        ? CompletionTrello.clampEstimatedMinutes
+        : function (m) {
+            var n = Number(m);
+            return isFinite(n) && n > 0 ? Math.round(n) : null;
+          };
+
+    var out = [];
+    list.forEach(function (row) {
+      if (!row || typeof row !== 'object') return;
+      var mins = clamp(
+        row.estimatedMinutes != null
+          ? row.estimatedMinutes
+          : row.minutes != null
+            ? row.minutes
+            : row.durationMinutes
+      );
+      if (mins == null) return;
+      var est = { estimatedMinutes: mins };
+      if (typeof row.id === 'string' && row.id.trim()) est.id = row.id.trim();
+      var match =
+        typeof row.matchText === 'string'
+          ? row.matchText.trim()
+          : typeof row.text === 'string'
+            ? row.text.trim()
+            : '';
+      if (match) est.matchText = match;
+      if (!est.id && !est.matchText) return;
+      out.push(est);
+    });
+    return out;
   }
 
   /**
@@ -4668,16 +4798,17 @@
       '- Si blockFurtherScout=true OU (memoryHasDone et memoryHasRemaining)\u00a0: plus AUCUN rep\u00e9rage d\u00e9j\u00e0/reste\u00a0; axes / \u00e9ch\u00e9ance (si absente) / cl\u00f4ture.',
       '',
       'Outils autoris\u00e9s dans actions\u00a0:',
-      '- set_priority: { urgency?, impact?, ease?, tier?, estimatedDurationMinutes?, priorityEnabled? }',
+      '- set_priority: { urgency?, impact?, ease?, tier?, priorityEnabled? }',
       '- set_due: { dueDate?: YYYY-MM-DD, dueTime?: HH:MM, relativeHours?, relativeMinutes?, clear? }',
       '- set_blocked: { enAttente?: boolean, blockedReasons?: string[] } (si l\'utilisateur attend quelque chose de concret\u00a0: enAttente:true + motif \u00ab\u00a0En attente de\u2026\u00a0\u00bb)',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (active le bloc Progr\u00e8s + % carte\u00a0; OBLIGATOIRE d\u00e8s qu\'on parle d\'avancement)',
       '- set_project: { projectId?, matchText?, name?, clear? }',
       '- rename_card: { name } (titre plus clair / plus court si la r\u00e9ponse le justifie)',
       '- set_description: { desc } (clarifier le process / p\u00e9rim\u00e8tre / pourquoi\u00a0; desc = texte complet)',
-      '- add_subtask: { text } (quand une \u00e9tape concr\u00e8te \u00e9merge clairement\u00a0; done:true si d\u00e9j\u00e0 faite)',
+      '- add_subtask: { text, estimatedMinutes? } (quand une \u00e9tape concr\u00e8te \u00e9merge clairement\u00a0; done:true si d\u00e9j\u00e0 faite)',
       '- toggle_subtask: { id?|matchText?, done?: boolean } (cocher une \u00e9tape d\u00e9j\u00e0 dans progress.items)',
       '- set_subtask_progress: { id?|matchText?, progress: 0-100 }',
+      '- set_subtask_estimate / set_progress_estimate: dur\u00e9es Progr\u00e8s',
       '- trigger_effect: { effect } (confetti / flowers quand progress=100 \u2014 f\u00e9licitations)',
       '- set_agent_color: { color } (apart\u00e9 couleur\u00a0: orange|yellow|green|purple|blue|pink|red|teal|coral|sky\u00a0; dor\u00e9/gold \u2192 yellow)',
       '- set_agent_name: { name } (apart\u00e9 nom)',
@@ -4861,6 +4992,8 @@
       add_subtask: true,
       toggle_subtask: true,
       set_subtask_progress: true,
+      set_subtask_estimate: true,
+      set_progress_estimate: true,
       rename_card: true,
       set_description: true,
       trigger_effect: true,
@@ -10493,6 +10626,7 @@
     cardSanityCheck: cardSanityCheck,
     cardDreamTurn: cardDreamTurn,
     suggestSubtasks: suggestSubtasks,
+    estimateSubtaskDurations: estimateSubtaskDurations,
     suggestGoals: suggestGoals,
     suggestLabels: suggestLabels,
     suggestMetrics: suggestMetrics,

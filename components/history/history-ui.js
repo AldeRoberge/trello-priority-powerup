@@ -55,6 +55,7 @@
    * @param {HTMLElement} cardEl
    * @param {object} options
    * @param {function(): Array} options.getEntries
+   * @param {function(string): object|null} [options.getEntryDetails]
    * @param {function(string): Promise} options.onRevert
    * @param {function()} [options.onLayoutChange]
    * @param {boolean} [options.initiallyOpen]
@@ -68,11 +69,16 @@
 
     var getEntries =
       typeof options.getEntries === 'function' ? options.getEntries : function () { return []; };
+    var getEntryDetails =
+      typeof options.getEntryDetails === 'function'
+        ? options.getEntryDetails
+        : function () { return null; };
     var onRevert =
       typeof options.onRevert === 'function' ? options.onRevert : function () { return Promise.resolve(); };
     var onLayoutChange =
       typeof options.onLayoutChange === 'function' ? options.onLayoutChange : function () {};
     var applying = false;
+    var expandedId = null;
 
     var section = el('div', 'variant-historique-section');
     var field = el('div', 'field field--historique');
@@ -135,9 +141,55 @@
       }
     });
 
+    function buildDetailPanel(entryId) {
+      var details = getEntryDetails(entryId);
+      var detail = el('div', 'historique-item-detail');
+      if (!details) {
+        detail.appendChild(
+          el('p', 'historique-detail-empty', {
+            text: 'Détails indisponibles'
+          })
+        );
+        return detail;
+      }
+
+      if (details.absoluteTime) {
+        detail.appendChild(
+          el('p', 'historique-detail-time', { text: details.absoluteTime })
+        );
+      }
+
+      if (details.domainLabels && details.domainLabels.length) {
+        var domainsRow = el('div', 'historique-detail-domains');
+        details.domainLabels.forEach(function (name) {
+          domainsRow.appendChild(
+            el('span', 'historique-detail-domain', { text: name })
+          );
+        });
+        detail.appendChild(domainsRow);
+      }
+
+      var lines = details.lines || [];
+      if (lines.length) {
+        var ul = el('ul', 'historique-detail-lines');
+        lines.forEach(function (line) {
+          ul.appendChild(el('li', 'historique-detail-line', { text: line }));
+        });
+        detail.appendChild(ul);
+      }
+
+      return detail;
+    }
+
     function render() {
       var entries = getEntries() || [];
       listEl.textContent = '';
+      if (expandedId) {
+        var stillThere = entries.some(function (e) {
+          return e && e.id === expandedId;
+        });
+        if (!stillThere) expandedId = null;
+      }
       if (!entries.length) {
         emptyEl.hidden = false;
         listEl.hidden = true;
@@ -145,18 +197,42 @@
         emptyEl.hidden = true;
         listEl.hidden = false;
         entries.forEach(function (entry) {
-          var item = el('li', 'historique-item');
+          var isOpen = expandedId && entry.id === expandedId;
+          var item = el(
+            'li',
+            'historique-item' + (isOpen ? ' is-expanded' : '')
+          );
           item.setAttribute('data-history-id', entry.id || '');
 
-          var main = el('div', 'historique-item-main');
-          var label = el('p', 'historique-item-label', {
-            text: entry.label || 'Modification'
+          var row = el('div', 'historique-item-row');
+
+          var main = el('button', 'historique-item-main', {
+            type: 'button',
+            'aria-expanded': isOpen ? 'true' : 'false'
           });
-          var time = el('p', 'historique-item-time', {
-            text: formatRelativeTime(entry.at)
+          var mainText = el('div', 'historique-item-main-text');
+          mainText.appendChild(
+            el('p', 'historique-item-label', {
+              text: entry.label || 'Modification'
+            })
+          );
+          mainText.appendChild(
+            el('p', 'historique-item-time', {
+              text: formatRelativeTime(entry.at)
+            })
+          );
+          var chevron = el(
+            'i',
+            'ti ti-chevron-down historique-item-chevron'
+          );
+          chevron.setAttribute('aria-hidden', 'true');
+          main.appendChild(mainText);
+          main.appendChild(chevron);
+          main.addEventListener('click', function () {
+            if (!entry.id) return;
+            expandedId = expandedId === entry.id ? null : entry.id;
+            render();
           });
-          main.appendChild(label);
-          main.appendChild(time);
 
           var btn = el('button', 'historique-revert-btn', {
             type: 'button',
@@ -168,7 +244,8 @@
           btn.appendChild(btnIcon);
           btn.appendChild(document.createTextNode('Revenir'));
           btn.disabled = applying;
-          btn.addEventListener('click', function () {
+          btn.addEventListener('click', function (ev) {
+            ev.stopPropagation();
             if (applying || !entry.id) return;
             applying = true;
             btn.disabled = true;
@@ -178,12 +255,19 @@
               })
               .then(function () {
                 applying = false;
+                expandedId = null;
                 render();
               });
           });
 
-          item.appendChild(main);
-          item.appendChild(btn);
+          row.appendChild(main);
+          row.appendChild(btn);
+          item.appendChild(row);
+
+          if (isOpen) {
+            item.appendChild(buildDetailPanel(entry.id));
+          }
+
           listEl.appendChild(item);
         });
       }

@@ -272,7 +272,9 @@
     return { added: added, removed: removed };
   }
 
-  function describeCompletion(before, after) {
+  function describeCompletion(before, after, quoteMax) {
+    quoteMax = quoteMax == null ? 36 : quoteMax;
+    var renameMax = quoteMax > 0 ? Math.min(quoteMax, 48) : 0;
     var bItems = (before && before.items) || [];
     var aItems = (after && after.items) || [];
     var bMap = itemMap(bItems);
@@ -281,12 +283,12 @@
 
     Object.keys(aMap).forEach(function (id) {
       if (!bMap[id]) {
-        parts.push('T\u00e2che ajout\u00e9e : ' + quoteText(aMap[id].text));
+        parts.push('T\u00e2che ajout\u00e9e : ' + quoteText(aMap[id].text, quoteMax));
       }
     });
     Object.keys(bMap).forEach(function (id) {
       if (!aMap[id]) {
-        parts.push('T\u00e2che supprim\u00e9e : ' + quoteText(bMap[id].text));
+        parts.push('T\u00e2che supprim\u00e9e : ' + quoteText(bMap[id].text, quoteMax));
       }
     });
     Object.keys(aMap).forEach(function (id) {
@@ -296,9 +298,9 @@
       if ((b.text || '') !== (a.text || '')) {
         parts.push(
           'T\u00e2che renomm\u00e9e : ' +
-            quoteText(b.text, 24) +
+            quoteText(b.text, renameMax || 24) +
             ' \u2192 ' +
-            quoteText(a.text, 24)
+            quoteText(a.text, renameMax || 24)
         );
         return;
       }
@@ -307,7 +309,7 @@
       if (bDone !== aDone) {
         parts.push(
           (aDone ? 'T\u00e2che coch\u00e9e : ' : 'T\u00e2che d\u00e9coch\u00e9e : ') +
-            quoteText(a.text)
+            quoteText(a.text, quoteMax)
         );
         return;
       }
@@ -316,7 +318,7 @@
       if (isFinite(bp) && isFinite(ap) && bp !== ap) {
         parts.push(
           'T\u00e2che ' +
-            quoteText(a.text, 28) +
+            quoteText(a.text, renameMax || 28) +
             ' : ' +
             bp +
             '\u00a0% \u2192 ' +
@@ -338,18 +340,19 @@
     return parts;
   }
 
-  function describeBlocked(bp, ap) {
+  function describeBlocked(bp, ap, quoteMax) {
+    quoteMax = quoteMax == null ? 40 : quoteMax;
     var bReasons = Array.isArray(bp.blockedReasons) ? bp.blockedReasons : [];
     var aReasons = Array.isArray(ap.blockedReasons) ? ap.blockedReasons : [];
     if (!deepEqual(bReasons, aReasons)) {
       if (!bReasons.length && aReasons.length) {
-        return 'Motif de blocage : ' + quoteText(aReasons[0], 40);
+        return 'Motif de blocage : ' + quoteText(aReasons[0], quoteMax);
       }
       if (bReasons.length && !aReasons.length) {
         return 'Motifs de blocage effac\u00e9s';
       }
       if (aReasons.length) {
-        return 'Motif de blocage : ' + quoteText(aReasons.join(', '), 40);
+        return 'Motif de blocage : ' + quoteText(aReasons.join(', '), quoteMax);
       }
     }
     if (!deepEqual(bp.blockedLinks, ap.blockedLinks)) {
@@ -358,7 +361,16 @@
     return '';
   }
 
-  function buildLabel(before, after, domains, hint) {
+  /**
+   * Collect human-readable change lines.
+   * @param {object} [options]
+   * @param {boolean} [options.detail] — full text, no truncation
+   */
+  function collectChangeParts(before, after, domains, options) {
+    options = options || {};
+    var detail = !!options.detail;
+    var quoteMax = detail ? 0 : 36;
+    var titleMax = detail ? 0 : 28;
     var parts = [];
     var d = domains || [];
 
@@ -381,7 +393,7 @@
             formatDueFr(ap.dueDate, ap.dueTime)
         );
       }
-      var blockedLabel = describeBlocked(bp, ap);
+      var blockedLabel = describeBlocked(bp, ap, detail ? 0 : 40);
       if (blockedLabel) parts.push(blockedLabel);
       if (bp.estimatedDurationMinutes !== ap.estimatedDurationMinutes) {
         parts.push(
@@ -398,7 +410,8 @@
       parts = parts.concat(
         describeCompletion(
           (before && before.completion) || {},
-          (after && after.completion) || {}
+          (after && after.completion) || {},
+          quoteMax
         )
       );
     }
@@ -430,15 +443,27 @@
       if (bInfo.name !== aInfo.name) {
         parts.push(
           'Titre : ' +
-            quoteText(bInfo.name, 28) +
+            quoteText(bInfo.name, titleMax) +
             ' \u2192 ' +
-            quoteText(aInfo.name, 28)
+            quoteText(aInfo.name, titleMax)
         );
       }
       if (bInfo.desc !== aInfo.desc) {
-        var bDesc = String(bInfo.desc || '').trim();
-        var aDesc = String(aInfo.desc || '').trim();
-        if (!bDesc && aDesc) {
+        var bDesc = fullText(bInfo.desc);
+        var aDesc = fullText(aInfo.desc);
+        if (detail) {
+          if (!bDesc && aDesc) {
+            parts.push('Description ajout\u00e9e');
+            parts.push('Apr\u00e8s : ' + aDesc);
+          } else if (bDesc && !aDesc) {
+            parts.push('Description effac\u00e9e');
+            parts.push('Avant : ' + bDesc);
+          } else {
+            parts.push('Description modifi\u00e9e');
+            parts.push('Avant : ' + bDesc);
+            parts.push('Apr\u00e8s : ' + aDesc);
+          }
+        } else if (!bDesc && aDesc) {
           parts.push('Description ajout\u00e9e : ' + quoteText(aDesc, 40));
         } else if (bDesc && !aDesc) {
           parts.push('Description effac\u00e9e');
@@ -476,10 +501,10 @@
           aInfo.labels
         );
         lab.added.forEach(function (n) {
-          parts.push('\u00c9tiquette ajout\u00e9e : ' + quoteText(n, 28));
+          parts.push('\u00c9tiquette ajout\u00e9e : ' + quoteText(n, titleMax || 28));
         });
         lab.removed.forEach(function (n) {
-          parts.push('\u00c9tiquette retir\u00e9e : ' + quoteText(n, 28));
+          parts.push('\u00c9tiquette retir\u00e9e : ' + quoteText(n, titleMax || 28));
         });
         if (!lab.added.length && !lab.removed.length) {
           parts.push('\u00c9tiquettes modifi\u00e9es');
@@ -502,14 +527,64 @@
       }
     }
 
+    return parts;
+  }
+
+  function buildLabel(before, after, domains, hint) {
+    var parts = collectChangeParts(before, after, domains, { detail: false });
     if (!parts.length) {
       if (typeof hint === 'string' && hint.trim()) return hint.trim().slice(0, LABEL_MAX);
       return 'Modification';
     }
+    return parts.slice(0, 2).join(' · ').slice(0, LABEL_MAX);
+  }
 
-    // Prefer concrete diffs; ignore vague generic hints.
-    var label = parts.slice(0, 2).join(' · ');
-    return label.slice(0, LABEL_MAX);
+  function formatAbsoluteTime(iso) {
+    if (!iso) return '';
+    var then = Date.parse(iso);
+    if (!isFinite(then)) return String(iso);
+    try {
+      return new Date(then).toLocaleString('fr-FR', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (e) {
+      return String(iso);
+    }
+  }
+
+  var DOMAIN_LABELS = {
+    priority: 'Priorit\u00e9',
+    completion: 'Progr\u00e8s',
+    statut: 'Statut',
+    info: 'Information',
+    goals: 'Objectifs'
+  };
+
+  function describeEntry(entry) {
+    if (!entry) return null;
+    var domains = Array.isArray(entry.domains)
+      ? entry.domains
+      : changedDomains(entry.before, entry.after);
+    var lines = collectChangeParts(entry.before, entry.after, domains, {
+      detail: true
+    });
+    if (!lines.length) lines = [entry.label || 'Modification'];
+    return {
+      id: entry.id,
+      at: entry.at,
+      absoluteTime: formatAbsoluteTime(entry.at),
+      label: entry.label || '',
+      domains: domains.slice(),
+      domainLabels: domains.map(function (key) {
+        return DOMAIN_LABELS[key] || key;
+      }),
+      lines: lines
+    };
   }
 
   function create(options) {
@@ -623,6 +698,21 @@
         });
     }
 
+    function getEntry(entryId) {
+      if (!entryId) return null;
+      for (var i = 0; i < store.cursor; i++) {
+        var e = store.entries[i];
+        if (e && e.id === entryId) {
+          return clone(e);
+        }
+      }
+      return null;
+    }
+
+    function getEntryDetails(entryId) {
+      return describeEntry(getEntry(entryId));
+    }
+
     function canUndo() {
       return store.cursor > 0;
     }
@@ -718,13 +808,16 @@
       redo: redo,
       revertTo: revertTo,
       list: listEntries,
+      getEntry: getEntry,
+      getEntryDetails: getEntryDetails,
       canUndo: canUndo,
       canRedo: canRedo,
       beginMute: beginMute,
       endMute: endMute,
       isMuted: isMuted,
       changedDomains: changedDomains,
-      buildLabel: buildLabel
+      buildLabel: buildLabel,
+      describeEntry: describeEntry
     };
   }
 
@@ -733,6 +826,8 @@
     create: create,
     changedDomains: changedDomains,
     buildLabel: buildLabel,
+    describeEntry: describeEntry,
+    collectChangeParts: collectChangeParts,
     deepEqual: deepEqual,
     clone: clone
   };
