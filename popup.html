@@ -6,9 +6,9 @@
   <title>Définir la priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=due-countdown-bg-1" />
+  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=due-countdown-bg-2" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-3" />
-  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=due-countdown-bg-1" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=due-countdown-bg-2" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-scope-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
@@ -2485,9 +2485,9 @@
     }
 
     /**
-     * Progrès blocked → Statut enAttente + blockedLinks (+ prune Motifs).
+     * Progrès blocked → Statut enAttente + blockedLinks + aggregated Motifs.
      * Card is Bloqué iff master or any item is blocked.
-     * Completing a subtask clears its block and removes it from Motif/links.
+     * Entity Motifs (completion) are the source of truth for blockedReasons.
      */
     function syncPriorityFromProgressBlocked(data) {
       if (syncingBlockedBridge) return;
@@ -2501,7 +2501,18 @@
       var prevLinks = Array.isArray(st.blockedLinks) ? st.blockedLinks : [];
       var pruned = pruneBlockedReasonsForCompletion(st, data);
       var nextLinks = pruned.blockedLinks;
-      var nextReasons = pruned.blockedReasons;
+      var nextReasons = CompletionTrello.aggregateBlockedReasons
+        ? CompletionTrello.aggregateBlockedReasons(data)
+        : pruned.blockedReasons;
+      // Keep waiting-other only while linked blockers remain.
+      if (!nextLinks.length && nextReasons.length) {
+        var WAITING_OTHER =
+          (window.PriorityUI && PriorityUI.BLOCKED_REASON_WAITING_OTHER_TASK) ||
+          "En attente d'une autre t\u00e2che";
+        nextReasons = nextReasons.filter(function (reason) {
+          return reasonKeyFr(reason) !== reasonKeyFr(WAITING_OTHER);
+        });
+      }
       var curEnAttente = !!st.enAttente;
       var curLinksFp = blockedLinksFingerprint(st.blockedLinks);
       var nextLinksFp = blockedLinksFingerprint(nextLinks);
@@ -2541,6 +2552,85 @@
       }
     }
 
+    function completionHasEntityBlockedReasons(data) {
+      var CT = CompletionTrello;
+      var next = CT.normalizeCompletionData(data || { items: [] });
+      if (
+        CT.isMasterBlocked(next) &&
+        Array.isArray(next.blockedReasons) &&
+        next.blockedReasons.length
+      ) {
+        return true;
+      }
+      for (var i = 0; i < next.items.length; i++) {
+        var item = next.items[i];
+        if (
+          CT.isItemBlocked(item) &&
+          Array.isArray(item.blockedReasons) &&
+          item.blockedReasons.length
+        ) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    /**
+     * Write card-level Motifs onto completion entities (seed / sole blocker).
+     */
+    function applyPriorityReasonsToCompletion(data, reasons) {
+      var CT = CompletionTrello;
+      var next = CT.normalizeCompletionData(data || { items: [] });
+      var list = CT.normalizeBlockedReasons
+        ? CT.normalizeBlockedReasons(reasons)
+        : Array.isArray(reasons)
+          ? reasons.slice()
+          : [];
+      if (completionHasEntityBlockedReasons(next)) {
+        return next;
+      }
+      if (CT.seedBlockedReasonsFromPriority) {
+        return CT.seedBlockedReasonsFromPriority(next, list);
+      }
+      return next;
+    }
+
+    /**
+     * When Statut Motif is edited: map onto master (self-blocked), the sole
+     * blocked item, or master when several blockers exist.
+     */
+    function writeStatutReasonsOntoCompletion(data, reasons) {
+      var CT = CompletionTrello;
+      var next = CT.normalizeCompletionData(data || { items: [] });
+      var list = CT.normalizeBlockedReasons
+        ? CT.normalizeBlockedReasons(reasons)
+        : Array.isArray(reasons)
+          ? reasons.slice()
+          : [];
+      var blockedItems = [];
+      for (var i = 0; i < next.items.length; i++) {
+        if (CT.isItemBlocked(next.items[i])) blockedItems.push(next.items[i]);
+      }
+      var masterOnly =
+        CT.isMasterBlocked(next) && blockedItems.length === 0;
+      var singleItem =
+        !CT.isMasterBlocked(next) && blockedItems.length === 1;
+      if (masterOnly || (!blockedItems.length && !CT.isMasterBlocked(next))) {
+        return CT.setMasterBlockedReasons(next, list);
+      }
+      if (singleItem) {
+        return CT.setItemBlockedReasons(next, blockedItems[0].id, list);
+      }
+      // Multiple blockers: Statut list replaces per-item Motifs on master.
+      next.items = next.items.map(function (item) {
+        if (!item.blockedReasons) return item;
+        var copy = Object.assign({}, item);
+        delete copy.blockedReasons;
+        return copy;
+      });
+      return CT.setMasterBlockedReasons(next, list);
+    }
+
     /**
      * Apply priority blockedLinks onto matching Progrès items (item.blocked).
      * Returns next completion data (normalized).
@@ -2573,7 +2663,7 @@
     }
 
     /**
-     * Statut / enAttente → Progrès blocked flags.
+     * Statut / enAttente → Progrès blocked flags (+ Motif seed / write-back).
      * Prefer marking linked subtasks; only use master.blocked when there are
      * no blockedLinks and nothing is blocked yet.
      */
@@ -2584,6 +2674,9 @@
       var enAttente = !!(state && state.enAttente);
       var links = Array.isArray(state && state.blockedLinks)
         ? state.blockedLinks
+        : [];
+      var priorityReasons = Array.isArray(state && state.blockedReasons)
+        ? state.blockedReasons
         : [];
       var live =
         typeof completionUi.getData === 'function'
@@ -2633,6 +2726,7 @@
             hasBlocked = CompletionTrello.hasAnyBlocked(latestCompletion);
           } else {
             hasBlocked = CompletionTrello.hasAnyBlocked(withLinks);
+            latestCompletion = withProgressEnabledFlag(withLinks);
           }
           // No linked/item blocked yet → master task is the block source.
           if (!hasBlocked) {
@@ -2652,6 +2746,37 @@
               }
               saveCompletion(latestCompletion);
             }
+            hasBlocked = true;
+          }
+          // Motifs: seed legacy card reasons, or write Statut Motif onto entities.
+          var afterBlock =
+            (completionUi &&
+              typeof completionUi.getData === 'function' &&
+              completionUi.getData()) ||
+            latestCompletion;
+          var withReasons;
+          if (!completionHasEntityBlockedReasons(afterBlock)) {
+            withReasons = applyPriorityReasonsToCompletion(
+              afterBlock,
+              priorityReasons
+            );
+          } else if (priorityReasons.length || completionHasEntityBlockedReasons(afterBlock)) {
+            withReasons = writeStatutReasonsOntoCompletion(
+              afterBlock,
+              priorityReasons
+            );
+          } else {
+            withReasons = afterBlock;
+          }
+          if (
+            JSON.stringify(CompletionTrello.normalizeCompletionData(afterBlock)) !==
+            JSON.stringify(CompletionTrello.normalizeCompletionData(withReasons))
+          ) {
+            latestCompletion = withProgressEnabledFlag(withReasons);
+            if (typeof completionUi.setData === 'function') {
+              completionUi.setData(latestCompletion);
+            }
+            saveCompletion(latestCompletion);
           }
         }
         if (progressCollapse) progressCollapse.refreshSummary();

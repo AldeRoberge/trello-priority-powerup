@@ -613,7 +613,10 @@
     item.progress = clampProgress(item.progress);
     item.done = item.progress >= PROGRESS_MAX;
     // Done and blocked are mutually exclusive.
-    if (item.done && item.blocked) delete item.blocked;
+    if (item.done && item.blocked) {
+      delete item.blocked;
+      delete item.blockedReasons;
+    }
     return item;
   }
 
@@ -622,6 +625,54 @@
       return crypto.randomUUID();
     }
     return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+  }
+
+  function normalizeBlockedReason(reason) {
+    if (typeof reason !== 'string') return '';
+    return reason.trim() || '';
+  }
+
+  function blockedReasonKey(reason) {
+    return normalizeBlockedReason(reason).toLocaleLowerCase('fr-FR');
+  }
+
+  /**
+   * Normalize blocked Motifs to a de-duplicated string[].
+   * Accepts string[], a single string, or an object with blockedReasons /
+   * legacy blockedReason.
+   */
+  function normalizeBlockedReasons(raw) {
+    var list = [];
+    if (Array.isArray(raw)) {
+      list = raw;
+    } else if (typeof raw === 'string') {
+      list = [raw];
+    } else if (raw && typeof raw === 'object') {
+      if (Array.isArray(raw.blockedReasons)) {
+        list = raw.blockedReasons;
+      } else if (typeof raw.blockedReason === 'string' && raw.blockedReason.trim()) {
+        list = [raw.blockedReason];
+      }
+    }
+    var out = [];
+    var seen = Object.create(null);
+    for (var i = 0; i < list.length; i++) {
+      var reason = normalizeBlockedReason(list[i]);
+      if (!reason) continue;
+      var key = blockedReasonKey(reason);
+      if (seen[key]) continue;
+      seen[key] = true;
+      out.push(reason);
+    }
+    return out;
+  }
+
+  function copyBlockedReasons(raw, out) {
+    var reasons = normalizeBlockedReasons(
+      raw && raw.blockedReasons != null ? raw.blockedReasons : raw
+    );
+    if (reasons.length) out.blockedReasons = reasons;
+    else delete out.blockedReasons;
   }
 
   function isItemBlocked(item) {
@@ -645,6 +696,35 @@
   }
 
   /**
+   * Unique ordered union of master + blocked-item Motifs.
+   */
+  function aggregateBlockedReasons(data) {
+    var normalized = normalizeCompletionData(data || { items: [] });
+    var out = [];
+    var seen = Object.create(null);
+    function pushAll(list) {
+      if (!list || !list.length) return;
+      for (var i = 0; i < list.length; i++) {
+        var reason = normalizeBlockedReason(list[i]);
+        if (!reason) continue;
+        var key = blockedReasonKey(reason);
+        if (seen[key]) continue;
+        seen[key] = true;
+        out.push(reason);
+      }
+    }
+    if (isMasterBlocked(normalized)) {
+      pushAll(normalized.blockedReasons);
+    }
+    for (var j = 0; j < normalized.items.length; j++) {
+      var item = normalized.items[j];
+      if (!isItemBlocked(item)) continue;
+      pushAll(item.blockedReasons);
+    }
+    return out;
+  }
+
+  /**
    * Set/clear master blocked. When enabling at 100% (no items or all done),
    * drop progress off complete first.
    */
@@ -657,6 +737,24 @@
       next.blocked = true;
     } else {
       delete next.blocked;
+      delete next.blockedReasons;
+    }
+    return normalizeCompletionData(next);
+  }
+
+  /**
+   * Replace master Motifs. Non-empty reasons enable master blocked; clearing
+   * reasons alone does not unblock (use setMasterBlocked(false)).
+   */
+  function setMasterBlockedReasons(data, reasons) {
+    var list = normalizeBlockedReasons(reasons);
+    var next;
+    if (list.length) {
+      next = setMasterBlocked(data, true);
+      next.blockedReasons = list;
+    } else {
+      next = normalizeCompletionData(data || { items: [] });
+      delete next.blockedReasons;
     }
     return normalizeCompletionData(next);
   }
@@ -682,6 +780,7 @@
         copy.blocked = true;
       } else {
         delete copy.blocked;
+        delete copy.blockedReasons;
       }
       return copy;
     });
@@ -689,14 +788,37 @@
     return normalizeCompletionData(next);
   }
 
+  /**
+   * Replace Motifs on a blocked item. Non-empty reasons enable blocked;
+   * clearing reasons alone does not unblock.
+   */
+  function setItemBlockedReasons(data, itemId, reasons) {
+    var id = typeof itemId === 'string' ? itemId : '';
+    if (!id) return normalizeCompletionData(data || { items: [] });
+    var list = normalizeBlockedReasons(reasons);
+    var next = list.length
+      ? setItemBlocked(data, id, true)
+      : normalizeCompletionData(data || { items: [] });
+    next.items = next.items.map(function (item) {
+      if (item.id !== id) return item;
+      var copy = Object.assign({}, item);
+      if (list.length) copy.blockedReasons = list;
+      else delete copy.blockedReasons;
+      return copy;
+    });
+    return normalizeCompletionData(next);
+  }
+
   /** Clear master + all item blocked flags. */
   function clearAllBlocked(data) {
     var next = normalizeCompletionData(data || { items: [] });
     delete next.blocked;
+    delete next.blockedReasons;
     next.items = next.items.map(function (item) {
-      if (!item.blocked) return item;
+      if (!item.blocked && !item.blockedReasons) return item;
       var copy = Object.assign({}, item);
       delete copy.blocked;
+      delete copy.blockedReasons;
       return copy;
     });
     return normalizeCompletionData(next);
@@ -719,6 +841,46 @@
       });
     }
     return links;
+  }
+
+  /**
+   * Seed card-level Motifs onto completion entities that are blocked but have
+   * no per-entity reasons yet (migration from legacy cardPriority Motifs).
+   */
+  function seedBlockedReasonsFromPriority(data, priorityReasons) {
+    var next = normalizeCompletionData(data || { items: [] });
+    var seed = normalizeBlockedReasons(priorityReasons);
+    if (!seed.length || !hasAnyBlocked(next)) return next;
+
+    var masterHas = isMasterBlocked(next) && (next.blockedReasons || []).length > 0;
+    var blockedItems = [];
+    for (var i = 0; i < next.items.length; i++) {
+      if (isItemBlocked(next.items[i])) blockedItems.push(next.items[i]);
+    }
+    var anyItemHas = false;
+    for (var b = 0; b < blockedItems.length; b++) {
+      if ((blockedItems[b].blockedReasons || []).length) {
+        anyItemHas = true;
+        break;
+      }
+    }
+    if (masterHas || anyItemHas) return next;
+
+    if (isMasterBlocked(next)) {
+      next.blockedReasons = seed.slice();
+      return normalizeCompletionData(next);
+    }
+    if (blockedItems.length === 1) {
+      return setItemBlockedReasons(next, blockedItems[0].id, seed);
+    }
+    // Multiple item blockers: copy shared Motifs onto each (aggregate dedupes).
+    next.items = next.items.map(function (item) {
+      if (!isItemBlocked(item)) return item;
+      var copy = Object.assign({}, item);
+      copy.blockedReasons = seed.slice();
+      return copy;
+    });
+    return normalizeCompletionData(next);
   }
 
   function normalizeItem(raw) {
@@ -748,7 +910,10 @@
     if (linkedCardId) out.linkedCardId = linkedCardId;
     copyEstimateFields(raw, out);
     // Persist blocked only when true; cleared when done/100%.
-    if (raw.blocked === true && !out.done) out.blocked = true;
+    if (raw.blocked === true && !out.done) {
+      out.blocked = true;
+      copyBlockedReasons(raw, out);
+    }
     return out;
   }
 
@@ -790,6 +955,7 @@
     }
     if (raw.blocked === true && !masterComplete) {
       out.blocked = true;
+      copyBlockedReasons(raw, out);
     }
     // estimateScale is board-level now; drop any legacy per-card value.
     return out;
@@ -1938,10 +2104,16 @@
     isItemBlocked: isItemBlocked,
     isMasterBlocked: isMasterBlocked,
     hasAnyBlocked: hasAnyBlocked,
+    normalizeBlockedReason: normalizeBlockedReason,
+    normalizeBlockedReasons: normalizeBlockedReasons,
+    aggregateBlockedReasons: aggregateBlockedReasons,
     setMasterBlocked: setMasterBlocked,
+    setMasterBlockedReasons: setMasterBlockedReasons,
     setItemBlocked: setItemBlocked,
+    setItemBlockedReasons: setItemBlockedReasons,
     clearAllBlocked: clearAllBlocked,
     blockedLinksFromCompletion: blockedLinksFromCompletion,
+    seedBlockedReasonsFromPriority: seedBlockedReasonsFromPriority,
     normalizeItem: normalizeItem,
     normalizeCompletionData: normalizeCompletionData,
     ESTIMATE_SCALES: ESTIMATE_SCALES,

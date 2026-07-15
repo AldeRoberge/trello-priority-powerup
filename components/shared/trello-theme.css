@@ -1440,27 +1440,27 @@ body.tp-page--priority {
   color: color-mix(in srgb, var(--section-glow, var(--blocked-muted-text)) 55%, var(--text-muted, var(--tp-text-muted)));
 }
 
-.tp-page--priority .field--due-date[data-due-band='overdue'] .due-date-countdown-primary-row {
+.tp-page--priority .field--due-date[data-due-band='overdue'] .due-date-countdown {
   background: var(--due-band-overdue-fill, var(--blocked-fill, #fce8e8));
 }
 
-.tp-page--priority .field--due-date[data-due-band='imminent'] .due-date-countdown-primary-row {
+.tp-page--priority .field--due-date[data-due-band='imminent'] .due-date-countdown {
   background: var(--due-band-imminent-fill, #fff1e0);
 }
 
-.tp-page--priority .field--due-date[data-due-band='soon'] .due-date-countdown-primary-row {
+.tp-page--priority .field--due-date[data-due-band='soon'] .due-date-countdown {
   background: var(--due-band-soon-fill, #fff8d6);
 }
 
-.tp-page--priority .field--due-date[data-due-band='weeks'] .due-date-countdown-primary-row {
+.tp-page--priority .field--due-date[data-due-band='weeks'] .due-date-countdown {
   background: var(--due-band-weeks-fill, #e3f5e8);
 }
 
-.tp-page--priority .field--due-date[data-due-band='month'] .due-date-countdown-primary-row {
+.tp-page--priority .field--due-date[data-due-band='month'] .due-date-countdown {
   background: var(--due-band-month-fill, #e6f0fb);
 }
 
-.tp-page--priority .field--due-date[data-due-band='far'] .due-date-countdown-primary-row {
+.tp-page--priority .field--due-date[data-due-band='far'] .due-date-countdown {
   background: var(--due-band-far-fill, #f0f1f4);
 }
 
@@ -1479,7 +1479,10 @@ body.tp-page--priority {
   font-weight: 600;
   border: none;
   background: transparent;
-  padding: 0;
+  padding: 8px 12px;
+  width: 100%;
+  align-self: stretch;
+  border-radius: 10px;
 }
 
 .tp-page--priority .due-date-countdown-primary {
@@ -2700,9 +2703,52 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
   cursor: default;
 }
 
+.tp-completion-progress-slider.is-blocked,
+.tp-completion-item-slider.is-blocked {
+  --completion-fill: color-mix(in srgb, var(--tp-text-muted) 35%, var(--tp-border));
+  --completion-accent: color-mix(in srgb, var(--tp-text-muted) 45%, var(--tp-border));
+  --completion-track: color-mix(in srgb, var(--tp-border) 55%, var(--tp-surface-subtle));
+  opacity: 0.72;
+}
+
 .tp-completion-item.is-blocked {
   border-color: color-mix(in srgb, var(--blocked-accent, #ae2e24) 35%, var(--tp-border, #dcdfe4));
   background: color-mix(in srgb, var(--blocked-fill, #fce8e8) 55%, transparent);
+}
+
+.tp-completion-item-motif,
+.tp-completion-master-motif {
+  margin: 4px 0 0;
+  padding: 0 2px;
+}
+
+.tp-completion-item-motif .field--en-attente-embedded,
+.tp-completion-master-motif .field--en-attente-embedded {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--blocked-fill, #fce8e8) 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blocked-accent, #ae2e24) 18%, transparent);
+}
+
+.tp-completion-item-motif .blocked-embedded-head,
+.tp-completion-master-motif .blocked-embedded-head {
+  margin-bottom: 4px;
+}
+
+.tp-completion-item-motif .blocked-embedded-title,
+.tp-completion-master-motif .blocked-embedded-title {
+  font-size: 12px;
+}
+
+.tp-completion-master-check-wrap {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.tp-completion-master-check {
+  --completion-check-size: 28px;
 }
 
 .tp-completion-progress-panel.is-master-blocked {
@@ -3073,6 +3119,21 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
 
 .tp-completion-check.is-checked .tp-completion-check-icon {
   opacity: 1;
+}
+
+.tp-completion-check.is-blocked:not(.is-checked) {
+  --completion-check-fill: var(--blocked-accent, #ae2e24);
+  border-color: var(--blocked-accent, #ae2e24);
+  color: var(--blocked-accent, #ae2e24);
+  background: color-mix(in srgb, var(--blocked-accent, #ae2e24) 10%, transparent);
+}
+
+.tp-completion-check.is-blocked:not(.is-checked) .tp-completion-check-icon {
+  opacity: 1;
+}
+
+.tp-completion-check.is-blocked.has-progress:not(.is-checked) {
+  background: transparent;
 }
 
 .tp-completion-done-section {
@@ -3540,8 +3601,9 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
 
 .tp-completion-suggestions-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-flow: row wrap;
   justify-content: center;
+  align-items: center;
   gap: 6px;
 }
 
@@ -3552,7 +3614,9 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   justify-content: center;
   gap: 4px;
   flex: 0 1 auto;
+  min-width: 0;
   max-width: 100%;
+  width: max-content;
   padding: 7px 10px;
   border: 1px dotted color-mix(in srgb, var(--tp-text-muted, #626f86) 65%, transparent);
   border-radius: 999px;
@@ -3564,6 +3628,9 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   letter-spacing: -0.01em;
   line-height: 1.25;
   text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease, border-style 0.15s ease;
 }

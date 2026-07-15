@@ -505,14 +505,19 @@
       '</span>';
   }
 
-  function applySliderProgressTrack(input, percent) {
+  function applySliderProgressTrack(input, percent, opts) {
     if (!input) return;
+    opts = opts || {};
     var p = Math.max(0, Math.min(100, Number(percent) || 0));
-    var color = completionColorForProgress(p);
+    var blocked = !!opts.blocked;
+    var color = blocked
+      ? 'color-mix(in srgb, var(--tp-text-muted) 35%, var(--tp-border))'
+      : completionColorForProgress(p);
     input.style.setProperty('--completion-pct', p + '%');
     input.style.setProperty('--completion-fill', color);
     input.style.setProperty('--completion-accent', color);
     input.classList.toggle('is-complete', p >= 100);
+    input.classList.toggle('is-blocked', blocked);
   }
 
   function playSliderProgressTick(percent) {
@@ -1473,8 +1478,17 @@
     percentEl.id = 'completionPercent';
     percentEl.textContent = '0\u00a0%';
 
+    var masterCheckWrap = document.createElement('div');
+    masterCheckWrap.className = 'tp-completion-check-wrap tp-completion-master-check-wrap';
+    var masterCheckBtn = document.createElement('button');
+    masterCheckBtn.type = 'button';
+    masterCheckBtn.className = 'tp-completion-check tp-completion-master-check';
+    masterCheckBtn.id = 'completionMasterCheck';
+    masterCheckWrap.appendChild(masterCheckBtn);
+
     var percentRow = document.createElement('div');
     percentRow.className = 'tp-completion-percent-row';
+    percentRow.appendChild(masterCheckWrap);
     percentRow.appendChild(percentEl);
 
     var linkedSnapshots = Object.create(null);
@@ -1616,6 +1630,10 @@
       }
     });
     progressPanel.appendChild(masterSlider.el);
+
+    var masterMotifHost = document.createElement('div');
+    masterMotifHost.className = 'tp-completion-master-motif-host';
+    progressPanel.appendChild(masterMotifHost);
 
     progressSection.appendChild(progressPanel);
     containerEl.appendChild(progressSection);
@@ -1894,10 +1912,72 @@
       '<svg class="tp-completion-check-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
       '<path fill="currentColor" d="M13.2 4.3 6.5 11 2.8 7.3l1.1-1.1 2.6 2.6 5.6-5.6z"/>' +
       '</svg>';
+    var PAUSE_ICON_SVG =
+      '<svg class="tp-completion-check-icon tp-completion-pause-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
+      '<rect x="3.75" y="3" width="2.75" height="10" rx="0.6" fill="currentColor"/>' +
+      '<rect x="9.5" y="3" width="2.75" height="10" rx="0.6" fill="currentColor"/>' +
+      '</svg>';
+    var BLOCKED_ACCENT = 'var(--blocked-accent, #ae2e24)';
     var TRASH_ICON_SVG =
       '<svg class="tp-completion-delete-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">' +
       '<path fill="currentColor" d="M6 2.25A.75.75 0 0 1 6.75 1.5h2.5a.75.75 0 0 1 .75.75V3.5h3.25a.75.75 0 0 1 0 1.5h-.46l-.54 8.05A1.75 1.75 0 0 1 10.51 14.5H5.49a1.75 1.75 0 0 1-1.74-1.45L3.21 5H2.75a.75.75 0 0 1 0-1.5H6V2.25zM7.5 3.5h1V3h-1v.5zM4.72 5l.52 7.8a.25.25 0 0 0 .25.2h5.02a.25.25 0 0 0 .25-.2L11.28 5H4.72zM6.5 6.75a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5a.75.75 0 0 1 .75-.75zm3 0a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5a.75.75 0 0 1 .75-.75z"/>' +
       '</svg>';
+
+    function createBlockedMotifField(opts) {
+      opts = opts || {};
+      if (
+        !global.PriorityUI ||
+        typeof global.PriorityUI.createEnAttenteField !== 'function'
+      ) {
+        return null;
+      }
+      var mount = document.createElement('div');
+      mount.className = opts.className || 'tp-completion-item-motif';
+      var fieldApi = global.PriorityUI.createEnAttenteField({
+        el: mount,
+        embedded: true,
+        hideSubtaskPicker: true,
+        value: true,
+        blockedReasons: opts.blockedReasons || [],
+        blockedLinks: [],
+        getSubtasks: function () {
+          return [];
+        },
+        onChange: function () {
+          if (typeof opts.onChange !== 'function') return;
+          opts.onChange(fieldApi.getBlockedReasons());
+        },
+        onLayoutChange: function () {
+          onResize();
+        }
+      });
+      mount._motifField = fieldApi;
+      return { el: mount, api: fieldApi };
+    }
+
+    function syncBlockedMotifMount(host, visible, reasons, onReasonsChange, className) {
+      if (!host) return;
+      var existing = host.querySelector(
+        className === 'tp-completion-master-motif'
+          ? '.tp-completion-master-motif'
+          : '.tp-completion-item-motif'
+      );
+      if (!visible) {
+        if (existing) existing.remove();
+        return;
+      }
+      if (existing && existing._motifField) {
+        existing._motifField.setBlockedReasons(reasons || []);
+        return;
+      }
+      if (existing) existing.remove();
+      var created = createBlockedMotifField({
+        className: className || 'tp-completion-item-motif',
+        blockedReasons: reasons || [],
+        onChange: onReasonsChange
+      });
+      if (created) host.appendChild(created.el);
+    }
 
     function findItemRow(id) {
       return containerEl.querySelector('.tp-completion-item[data-id="' + id + '"]');
@@ -1987,31 +2067,47 @@
       });
     }
 
-    function syncCheckButton(btn, done, progress) {
+    function syncCheckButton(btn, done, progress, opts) {
       if (!btn) return;
+      opts = opts || {};
+      var blocked = !!opts.blocked && !done;
       var p =
         typeof progress === 'number' && isFinite(progress)
           ? CT.clampProgress(progress)
           : done
             ? 100
             : 0;
-      var fill = p > 0 ? completionColorForProgress(p) : '';
+      var fill = blocked
+        ? BLOCKED_ACCENT
+        : p > 0
+          ? completionColorForProgress(p)
+          : '';
       btn.style.setProperty('--completion-progress', String(p));
       if (fill) {
         btn.style.setProperty('--completion-check-fill', fill);
       } else {
         btn.style.removeProperty('--completion-check-fill');
       }
+      var iconMode = blocked ? 'pause' : 'check';
+      if (btn.getAttribute('data-icon-mode') !== iconMode) {
+        btn.setAttribute('data-icon-mode', iconMode);
+        btn.innerHTML = blocked ? PAUSE_ICON_SVG : CHECK_ICON_SVG;
+      }
       btn.classList.toggle('is-checked', done);
       btn.classList.toggle('has-progress', p > 0 && !done);
+      btn.classList.toggle('is-blocked', blocked);
       btn.setAttribute('aria-pressed', done ? 'true' : 'false');
       btn.setAttribute(
         'aria-label',
-        done
-          ? 'Marquer comme non termin\u00e9'
-          : p > 0
-            ? 'Marquer comme termin\u00e9 (100\u00a0%) — ' + p + '\u00a0%'
-            : 'Marquer comme termin\u00e9 (100\u00a0%)'
+        blocked
+          ? p > 0
+            ? 'Sous-t\u00e2che bloqu\u00e9e — ' + p + '\u00a0%'
+            : 'Sous-t\u00e2che bloqu\u00e9e'
+          : done
+            ? 'Marquer comme non termin\u00e9'
+            : p > 0
+              ? 'Marquer comme termin\u00e9 (100\u00a0%) — ' + p + '\u00a0%'
+              : 'Marquer comme termin\u00e9 (100\u00a0%)'
       );
     }
 
@@ -2025,26 +2121,41 @@
         var li = findItemRow(item.id);
         if (!li) return;
         var p = CT.itemProgress(item);
+        var itemBlocked = CT.isItemBlocked(item);
         var slider = li.querySelector('.tp-completion-item-slider');
         var valEl = li.querySelector('.tp-completion-item-val');
         var labelEl = li.querySelector('.tp-completion-item-progress-lbl');
         var checkBtn = li.querySelector('.tp-completion-check');
         if (slider) {
           slider.value = String(p);
-          applySliderProgressTrack(slider, p);
+          applySliderProgressTrack(slider, p, { blocked: itemBlocked });
         }
-        if (valEl) valEl.textContent = p + '\u00a0%';
+        if (valEl) {
+          valEl.textContent = p + '\u00a0%';
+          valEl.style.color = itemBlocked ? BLOCKED_ACCENT : '';
+        }
         syncItemProgressLabel(labelEl, p);
-        syncCheckButton(checkBtn, item.done, p);
+        syncCheckButton(checkBtn, item.done, p, { blocked: itemBlocked });
         li.classList.toggle('is-done', item.done);
-        li.classList.toggle('is-blocked', CT.isItemBlocked(item));
+        li.classList.toggle('is-blocked', itemBlocked);
         var blockedBtn = li.querySelector('.tp-completion-blocked-btn');
         if (blockedBtn) {
-          var itemBlocked = CT.isItemBlocked(item);
           blockedBtn.classList.toggle('is-blocked', itemBlocked);
           blockedBtn.setAttribute('aria-pressed', itemBlocked ? 'true' : 'false');
           blockedBtn.disabled = !!item.done;
         }
+        syncBlockedMotifMount(
+          li,
+          itemBlocked && !CT.isLinkedItem(item),
+          item.blockedReasons || [],
+          function (reasons) {
+            data = CT.setItemBlockedReasons(data, item.id, reasons);
+            emitChange();
+            notifyBlockedChange('item-reason');
+            onResize();
+          },
+          'tp-completion-item-motif'
+        );
       });
     }
 
@@ -2170,14 +2281,24 @@
       }
       if (normalized.blocked === true) {
         data.blocked = true;
+        if (
+          Array.isArray(normalized.blockedReasons) &&
+          normalized.blockedReasons.length
+        ) {
+          data.blockedReasons = normalized.blockedReasons.slice();
+        } else {
+          delete data.blockedReasons;
+        }
       } else {
         delete data.blocked;
+        delete data.blockedReasons;
       }
       return normalized;
     }
 
     function syncMasterBlockedBtn() {
       var blocked = CT.isMasterBlocked(data);
+      var anyBlocked = CT.hasAnyBlocked(data);
       masterBlockedBtn.classList.toggle('is-blocked', blocked);
       masterBlockedBtn.setAttribute('aria-pressed', blocked ? 'true' : 'false');
       masterBlockedBtn.setAttribute(
@@ -2188,7 +2309,64 @@
       );
       masterBlockedBtn.title = blocked ? 'D\u00e9bloquer' : 'Bloqu\u00e9';
       progressPanel.classList.toggle('is-master-blocked', blocked);
-      containerEl.classList.toggle('has-blocked', CT.hasAnyBlocked(data));
+      containerEl.classList.toggle('has-blocked', anyBlocked);
+      syncBlockedMotifMount(
+        masterMotifHost,
+        blocked,
+        data.blockedReasons || [],
+        function (reasons) {
+          data = CT.setMasterBlockedReasons(data, reasons);
+          // Keep master blocked even if reasons cleared.
+          if (!CT.isMasterBlocked(data)) {
+            data = CT.setMasterBlocked(data, true);
+          }
+          emitChange();
+          notifyBlockedChange('master-reason');
+          onResize();
+        },
+        'tp-completion-master-motif'
+      );
+    }
+
+    function syncMasterCheckButton(progress) {
+      var pct =
+        progress && typeof progress.percent === 'number' ? progress.percent : 0;
+      var done = pct >= 100;
+      var anyBlocked = CT.hasAnyBlocked(data);
+      syncCheckButton(masterCheckBtn, done, pct, { blocked: anyBlocked });
+      masterCheckBtn.setAttribute(
+        'aria-label',
+        anyBlocked
+          ? done
+            ? 'T\u00e2che bloqu\u00e9e'
+            : 'T\u00e2che bloqu\u00e9e — ' + pct + '\u00a0%'
+          : done
+            ? 'Remettre le progr\u00e8s \u00e0 0\u00a0%'
+            : 'Marquer comme termin\u00e9 (100\u00a0%)'
+      );
+    }
+
+    function toggleMasterComplete() {
+      var progress = CT.computeCardProgress(data, linkedSnapshots);
+      if (progress.percent >= 100) {
+        if (data.items.length) {
+          for (var i = 0; i < data.items.length; i++) {
+            setItemProgress(data.items[i], 0);
+          }
+        } else {
+          data.progress = 0;
+        }
+        resetAllClearsCompleted = false;
+      } else {
+        if (data.items.length) {
+          data.items = CT.applyMasterProgress(data.items, 100, linkedSnapshots);
+        } else {
+          data.progress = 100;
+        }
+        resetAllClearsCompleted = false;
+      }
+      emitChange();
+      onResize();
     }
 
     function notifyBlockedChange(source) {
@@ -2387,6 +2565,7 @@
     completeAllBtn.addEventListener('click', completeAllTasks);
     resetAllBtn.addEventListener('click', resetAllTasks);
     masterBlockedBtn.addEventListener('click', toggleMasterBlocked);
+    masterCheckBtn.addEventListener('click', toggleMasterComplete);
 
     function syncMasterEstimateChip() {
       var scales = currentEstimateScales();
@@ -2440,19 +2619,29 @@
     function updateProgressUi(opts) {
       opts = opts || {};
       var progress = CT.computeCardProgress(data, linkedSnapshots);
-      var accent = completionColorForProgress(progress.percent);
+      var anyBlocked = CT.hasAnyBlocked(data);
+      var accent = anyBlocked
+        ? BLOCKED_ACCENT
+        : completionColorForProgress(progress.percent);
       percentEl.textContent = progress.percent + '\u00a0%';
-      percentEl.style.color = progress.percent > 0 ? accent : '';
+      percentEl.style.color =
+        anyBlocked || progress.percent > 0 ? accent : '';
       applyProgressEncouragement(encouragementEl, progress.percent);
       progressPanel.style.setProperty(
         '--completion-hero-accent',
-        progress.percent > 0 ? accent : 'var(--tp-border-strong)'
+        anyBlocked || progress.percent > 0
+          ? accent
+          : 'var(--tp-border-strong)'
       );
       progressPanel.classList.toggle('is-complete', progress.percent === 100);
       progressPanel.classList.toggle('has-progress', progress.percent > 0);
-      applyProgressSectionTint(progressShellEl, accent);
+      applyProgressSectionTint(
+        progressShellEl,
+        anyBlocked ? BLOCKED_ACCENT : accent
+      );
       syncMasterEstimateChip();
       syncMasterBlockedBtn();
+      syncMasterCheckButton(progress);
       syncCompleteAllButton(progress);
       syncResetAllButton(progress);
       if (!opts.skipMasterSync && !masterDragging) {
@@ -2462,9 +2651,13 @@
         // applyMasterProgress can round/clamp away from the pointer value.
         applySliderProgressTrack(
           masterSlider.input,
-          Number(masterSlider.input.value)
+          Number(masterSlider.input.value),
+          { blocked: anyBlocked }
         );
       }
+      applySliderProgressTrack(masterSlider.input, Number(masterSlider.input.value), {
+        blocked: anyBlocked
+      });
       masterSlider.input.classList.toggle(
         'is-complete',
         Number(masterSlider.input.value) >= 100
@@ -2837,12 +3030,15 @@
 
       function syncItemProgressUi() {
         var p = CT.itemProgress(item);
-        if (itemSlider) applySliderProgressTrack(itemSlider, p);
-        if (itemValEl) itemValEl.textContent = p + '\u00a0%';
-        syncItemProgressLabel(itemLabelEl, p);
-        syncCheckButton(checkBtn, item.done, p);
-        li.classList.toggle('is-done', item.done);
         var itemBlocked = CT.isItemBlocked(item);
+        if (itemSlider) applySliderProgressTrack(itemSlider, p, { blocked: itemBlocked });
+        if (itemValEl) {
+          itemValEl.textContent = p + '\u00a0%';
+          itemValEl.style.color = itemBlocked ? BLOCKED_ACCENT : '';
+        }
+        syncItemProgressLabel(itemLabelEl, p);
+        syncCheckButton(checkBtn, item.done, p, { blocked: itemBlocked });
+        li.classList.toggle('is-done', item.done);
         li.classList.toggle('is-blocked', itemBlocked);
         if (blockedBtn) {
           blockedBtn.classList.toggle('is-blocked', itemBlocked);
@@ -2855,6 +3051,22 @@
           );
           blockedBtn.title = itemBlocked ? 'D\u00e9bloquer' : 'Bloqu\u00e9';
           blockedBtn.disabled = !!item.done;
+        }
+        if (!isLinked) {
+          syncBlockedMotifMount(
+            li,
+            itemBlocked,
+            item.blockedReasons || [],
+            function (reasons) {
+              data = CT.setItemBlockedReasons(data, item.id, reasons);
+              var live = findLiveItem(item.id);
+              if (live) item.blockedReasons = live.blockedReasons;
+              emitChange();
+              notifyBlockedChange('item-reason');
+              onResize();
+            },
+            'tp-completion-item-motif'
+          );
         }
       }
 
@@ -3117,7 +3329,9 @@
       checkBtn.type = 'button';
       checkBtn.className = 'tp-completion-check' + (item.done ? ' is-checked' : '');
       checkBtn.innerHTML = CHECK_ICON_SVG;
-      syncCheckButton(checkBtn, item.done, CT.itemProgress(item));
+      syncCheckButton(checkBtn, item.done, CT.itemProgress(item), {
+        blocked: itemBlocked
+      });
       checkWrap.appendChild(checkBtn);
 
       var titleEl;
@@ -3198,10 +3412,14 @@
         itemSlider.step = '1';
         itemSlider.value = String(itemProgress);
         itemSlider.setAttribute('aria-label', 'Progr\u00e8s de la sous-t\u00e2che');
+        applySliderProgressTrack(itemSlider, itemProgress, {
+          blocked: itemBlocked
+        });
 
         var itemValEl = document.createElement('span');
         itemValEl.className = 'tp-completion-item-val tp-completion-field-val';
         itemValEl.textContent = itemProgress + '\u00a0%';
+        if (itemBlocked) itemValEl.style.color = BLOCKED_ACCENT;
 
         sliderWrap.appendChild(itemSlider);
         sliderRow.appendChild(sliderLbl);
@@ -3232,6 +3450,22 @@
         itemEstimate.el.classList.add('tp-completion-item-estimate');
         sliderRow.appendChild(itemEstimate.el);
         li.appendChild(sliderRow);
+
+        if (itemBlocked) {
+          var motif = createBlockedMotifField({
+            className: 'tp-completion-item-motif',
+            blockedReasons: item.blockedReasons || [],
+            onChange: function (reasons) {
+              data = CT.setItemBlockedReasons(data, item.id, reasons);
+              var live = findLiveItem(item.id);
+              if (live) item.blockedReasons = live.blockedReasons;
+              emitChange();
+              notifyBlockedChange('item-reason');
+              onResize();
+            }
+          });
+          if (motif) li.appendChild(motif.el);
+        }
       } else {
         var linkMeta = document.createElement('div');
         linkMeta.className = 'tp-completion-link-meta';
@@ -3821,8 +4055,31 @@
         onResize();
         return CT.normalizeCompletionData(data);
       },
+      setMasterBlockedReasons: function (reasons) {
+        data = CT.setMasterBlockedReasons(data, reasons);
+        if (
+          Array.isArray(reasons) &&
+          reasons.length === 0 &&
+          !CT.isMasterBlocked(data)
+        ) {
+          /* no-op */
+        }
+        syncMasterBlockedBtn();
+        updateProgressUi();
+        emitChange();
+        notifyBlockedChange('api');
+        onResize();
+        return CT.normalizeCompletionData(data);
+      },
       setItemBlocked: function (itemId, blocked) {
         data = CT.setItemBlocked(data, itemId, !!blocked);
+        emitChange();
+        notifyBlockedChange('api');
+        onResize();
+        return CT.normalizeCompletionData(data);
+      },
+      setItemBlockedReasons: function (itemId, reasons) {
+        data = CT.setItemBlockedReasons(data, itemId, reasons);
         emitChange();
         notifyBlockedChange('api');
         onResize();
@@ -3838,6 +4095,17 @@
       },
       hasAnyBlocked: function () {
         return CT.hasAnyBlocked(data);
+      },
+      aggregateBlockedReasons: function () {
+        return CT.aggregateBlockedReasons(data);
+      },
+      seedBlockedReasonsFromPriority: function (priorityReasons) {
+        data = CT.seedBlockedReasonsFromPriority(data, priorityReasons);
+        syncMasterBlockedBtn();
+        emitChange();
+        notifyBlockedChange('api');
+        onResize();
+        return CT.normalizeCompletionData(data);
       },
       applyItemEstimates: function (estimates, options) {
         var next = CT.applyItemEstimates(data, estimates, options || {});

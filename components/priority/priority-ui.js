@@ -9896,6 +9896,8 @@
       typeof config.getSubtasks === 'function' ? config.getSubtasks : function () { return []; };
     // Nested under Progrès (via Statut): no collapse chrome / enable checkbox.
     var embedded = !!config.embedded;
+    // Per-subtask Motif editors: no "waiting on another task" link picker.
+    var hideSubtaskPicker = !!config.hideSubtaskPicker;
     var bodyId = 'blocked-section-body-' + Math.random().toString(36).slice(2, 9);
     var currentReasons = normalizeBlockedReasons(
       config.blockedReasons != null ? config.blockedReasons : config
@@ -10667,6 +10669,12 @@
     }
 
     function refreshSubtaskUi() {
+      if (hideSubtaskPicker) {
+        subtaskWrap.hidden = true;
+        subtaskPicker.hidden = true;
+        field.classList.remove('has-blocked-subtask-link');
+        return;
+      }
       var waiting = isWaitingOnTasks();
       var wasHidden = subtaskWrap.hidden;
       subtaskWrap.hidden = !waiting;
