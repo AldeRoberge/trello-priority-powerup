@@ -1431,7 +1431,7 @@ body.tp-page--priority {
 
 .tp-page--priority .due-date-title {
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .tp-page--priority .due-date-desc {
@@ -1584,7 +1584,7 @@ body.tp-page--priority {
 .tp-page--priority .section-enable-title,
 .tp-page--priority .priority-enable-title {
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .tp-page--priority .en-attente-desc {
@@ -1824,7 +1824,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 
 .tp-page--priority .progress-enable-title {
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary, var(--tp-text));
   line-height: 1.45;
   letter-spacing: -0.01em;
