@@ -337,52 +337,79 @@
   }
 
   /**
-   * Master slider: proportionally scale each item's progress so the average
-   * approaches targetPercent. Items at 0% when current is 0 are set
-   * uniformly to the target. Caps at 100% per item; done syncs from progress.
+   * Master slider: proportionally scale each local item's progress so the
+   * overall average approaches targetPercent. Linked board-card items keep
+   * their cached remote progress (not scaled here).
    */
   function applyMasterProgress(items, targetPercent) {
     if (!items || !items.length) return [];
     var target = clampProgress(targetPercent);
     var working = items.map(function (item) {
-      return syncDoneFromProgress({
+      var copy = syncDoneFromProgress({
         id: item.id,
         text: item.text,
         progress: itemProgress(item),
         done: item.done === true,
       });
+      var linkedId = itemLinkedCardId(item);
+      if (linkedId) copy.linkedCardId = linkedId;
+      return copy;
     });
 
+    var localIndexes = [];
+    for (var i = 0; i < working.length; i++) {
+      if (!isLinkedItem(working[i])) localIndexes.push(i);
+    }
+
+    if (!localIndexes.length) {
+      // Only linked items — progress is remote; leave cache as-is.
+      return working;
+    }
+
     if (target === PROGRESS_MAX) {
-      working.forEach(function (item) {
-        item.progress = PROGRESS_MAX;
-        syncDoneFromProgress(item);
+      localIndexes.forEach(function (idx) {
+        working[idx].progress = PROGRESS_MAX;
+        syncDoneFromProgress(working[idx]);
       });
       return working;
     }
     if (target === PROGRESS_MIN) {
-      working.forEach(function (item) {
-        item.progress = PROGRESS_MIN;
-        syncDoneFromProgress(item);
+      localIndexes.forEach(function (idx) {
+        working[idx].progress = PROGRESS_MIN;
+        syncDoneFromProgress(working[idx]);
       });
       return working;
     }
 
-    var current = computeWeightedProgress(working).percent;
-    if (current === target) return working;
+    var n = working.length;
+    var linkedSum = 0;
+    for (var li = 0; li < working.length; li++) {
+      if (isLinkedItem(working[li])) linkedSum += itemProgress(working[li]);
+    }
+    // Solve for local average so overall average ≈ target.
+    var desiredLocalSum = target * n - linkedSum;
+    var localCount = localIndexes.length;
+    var localTarget = clampProgress(desiredLocalSum / localCount);
 
-    if (current === 0) {
-      working.forEach(function (item) {
-        item.progress = target;
-        syncDoneFromProgress(item);
+    var localCurrentSum = 0;
+    localIndexes.forEach(function (idx) {
+      localCurrentSum += itemProgress(working[idx]);
+    });
+    var localCurrent = Math.round(localCurrentSum / localCount);
+    if (localCurrent === localTarget) return working;
+
+    if (localCurrent === 0) {
+      localIndexes.forEach(function (idx) {
+        working[idx].progress = localTarget;
+        syncDoneFromProgress(working[idx]);
       });
       return working;
     }
 
-    var scale = target / current;
-    working.forEach(function (item) {
-      item.progress = clampProgress(item.progress * scale);
-      syncDoneFromProgress(item);
+    var scale = localTarget / localCurrent;
+    localIndexes.forEach(function (idx) {
+      working[idx].progress = clampProgress(working[idx].progress * scale);
+      syncDoneFromProgress(working[idx]);
     });
 
     return working;
@@ -393,10 +420,185 @@
     return normalizeCompletionData(stored);
   }
 
+  async function getCardCompletionById(t, cardId) {
+    var id = typeof cardId === 'string' ? cardId.trim() : '';
+    if (!id) return normalizeCompletionData({ items: [] });
+    try {
+      var stored = await t.get(id, 'shared', CARD_COMPLETION_KEY);
+      return normalizeCompletionData(stored);
+    } catch (err) {
+      console.error('Completion getCardCompletionById failed', err);
+      return normalizeCompletionData({ items: [] });
+    }
+  }
+
   async function saveCardCompletion(t, data) {
     var normalized = normalizeCompletionData(data);
     await t.set('card', 'shared', CARD_COMPLETION_KEY, normalized);
     return normalized;
+  }
+
+  /**
+   * Apply resolved remote progress / titles onto local linked items (mutates copy).
+   * Used so badges and weighted average reflect linked cards without editing them.
+   */
+  function applyLinkedSnapshots(data, snapshotsByCardId) {
+    var normalized = normalizeCompletionData(data);
+    if (!snapshotsByCardId || typeof snapshotsByCardId !== 'object') return normalized;
+    var changed = false;
+    normalized.items = normalized.items.map(function (item) {
+      var linkedId = itemLinkedCardId(item);
+      if (!linkedId) return item;
+      var snap = snapshotsByCardId[linkedId];
+      if (!snap || typeof snap !== 'object') return item;
+      var next = {
+        id: item.id,
+        text: item.text,
+        progress: item.progress,
+        done: item.done,
+        linkedCardId: linkedId,
+      };
+      if (typeof snap.name === 'string' && snap.name.trim() && snap.name.trim() !== item.text) {
+        next.text = snap.name.trim().slice(0, ITEM_TEXT_MAX);
+        changed = true;
+      }
+      if (typeof snap.percent === 'number' && isFinite(snap.percent)) {
+        var p = clampProgress(snap.percent);
+        if (p !== itemProgress(item)) {
+          next.progress = p;
+          syncDoneFromProgress(next);
+          changed = true;
+        }
+      }
+      return next;
+    });
+    return changed ? normalizeCompletionData(normalized) : normalized;
+  }
+
+  /**
+   * Load linked-card completion trees for UI nesting.
+   * Depth 1 = direct items; depth 2 = nested under a link. Cycles are marked
+   * (isCycle) and not expanded further.
+   *
+   * @returns {Promise<{
+   *   data: object,
+   *   snapshots: Object.<string, { name: string, percent: number, items: Array }>,
+   *   byItemId: Object.<string, { children: Array, isCycle?: boolean, missing?: boolean }>
+   * }>}
+   */
+  async function resolveLinkedCompletionTree(t, data, options) {
+    options = options || {};
+    var maxDepth =
+      typeof options.maxDepth === 'number' && options.maxDepth > 0
+        ? Math.min(options.maxDepth, LINK_NEST_MAX_DEPTH)
+        : LINK_NEST_MAX_DEPTH;
+    var currentCardId =
+      typeof options.currentCardId === 'string' ? options.currentCardId.trim() : '';
+    var cardNameById =
+      options.cardNameById && typeof options.cardNameById === 'object'
+        ? options.cardNameById
+        : {};
+    var normalized = normalizeCompletionData(data);
+    var snapshots = Object.create(null);
+    var byItemId = Object.create(null);
+    var loading = Object.create(null);
+
+    async function loadCardSnapshot(cardId) {
+      if (!cardId) return null;
+      if (snapshots[cardId]) return snapshots[cardId];
+      if (loading[cardId]) return loading[cardId];
+      loading[cardId] = (async function () {
+        var completion = await getCardCompletionById(t, cardId);
+        var progress = computeCardProgress(completion);
+        var name =
+          (typeof cardNameById[cardId] === 'string' && cardNameById[cardId].trim()) ||
+          '';
+        var snap = {
+          name: name,
+          percent: progress.percent,
+          items: completion.items.slice(),
+          progressEnabled: completion.progressEnabled !== false,
+        };
+        snapshots[cardId] = snap;
+        return snap;
+      })();
+      try {
+        return await loading[cardId];
+      } finally {
+        delete loading[cardId];
+      }
+    }
+
+    function mapNestedItem(item, depth, ancestors) {
+      var linkedId = itemLinkedCardId(item);
+      var node = {
+        id: item.id,
+        text: item.text,
+        progress: itemProgress(item),
+        done: !!item.done,
+        linkedCardId: linkedId || undefined,
+        depth: depth,
+        children: [],
+        isCycle: false,
+        missing: false,
+      };
+      if (!linkedId) return node;
+      if (ancestors[linkedId]) {
+        node.isCycle = true;
+        return node;
+      }
+      // Resolve title/progress for links; expand children only below maxDepth.
+      node._expandCardId = linkedId;
+      return node;
+    }
+
+    async function expandNode(node, ancestors) {
+      if (!node || !node._expandCardId) return;
+      var cardId = node._expandCardId;
+      delete node._expandCardId;
+      if (ancestors[cardId]) {
+        node.isCycle = true;
+        return;
+      }
+      var nextAncestors = Object.assign(Object.create(null), ancestors);
+      nextAncestors[cardId] = true;
+      var snap = await loadCardSnapshot(cardId);
+      if (!snap) {
+        node.missing = true;
+        return;
+      }
+      if (snap.name) node.text = snap.name;
+      node.progress = snap.percent;
+      node.done = snap.percent >= PROGRESS_MAX;
+      // Nested children only when this node is above the depth cap.
+      if (node.depth >= maxDepth) return;
+      var childDepth = node.depth + 1;
+      node.children = (snap.items || []).map(function (item) {
+        return mapNestedItem(item, childDepth, nextAncestors);
+      });
+      for (var i = 0; i < node.children.length; i++) {
+        await expandNode(node.children[i], nextAncestors);
+      }
+    }
+
+    var rootAncestors = Object.create(null);
+    if (currentCardId) rootAncestors[currentCardId] = true;
+
+    for (var i = 0; i < normalized.items.length; i++) {
+      var item = normalized.items[i];
+      var linkedId = itemLinkedCardId(item);
+      if (!linkedId) continue;
+      var rootNode = mapNestedItem(item, 1, rootAncestors);
+      await expandNode(rootNode, rootAncestors);
+      byItemId[item.id] = rootNode;
+    }
+
+    var synced = applyLinkedSnapshots(normalized, snapshots);
+    return {
+      data: synced,
+      snapshots: snapshots,
+      byItemId: byItemId,
+    };
   }
 
   function formatFaceBadgeText(progress) {
@@ -643,8 +845,11 @@
     ITEM_TEXT_MAX: ITEM_TEXT_MAX,
     PROGRESS_MIN: PROGRESS_MIN,
     PROGRESS_MAX: PROGRESS_MAX,
+    LINK_NEST_MAX_DEPTH: LINK_NEST_MAX_DEPTH,
     clampProgress: clampProgress,
     itemProgress: itemProgress,
+    itemLinkedCardId: itemLinkedCardId,
+    isLinkedItem: isLinkedItem,
     syncDoneFromProgress: syncDoneFromProgress,
     generateId: generateId,
     normalizeItem: normalizeItem,
@@ -658,7 +863,10 @@
     getDueCompleteSuppressed: getDueCompleteSuppressed,
     syncCardDueCompleteFromProgress: syncCardDueCompleteFromProgress,
     applyMasterProgress: applyMasterProgress,
+    applyLinkedSnapshots: applyLinkedSnapshots,
+    resolveLinkedCompletionTree: resolveLinkedCompletionTree,
     getCardCompletion: getCardCompletion,
+    getCardCompletionById: getCardCompletionById,
     saveCardCompletion: saveCardCompletion,
     getBoardCompletionColorScheme: getBoardCompletionColorScheme,
     saveBoardCompletionColorScheme: saveBoardCompletionColorScheme,

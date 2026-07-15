@@ -63,7 +63,7 @@
   padding: 10px;
   border: 1px solid var(--tp-border);
   border-radius: 6px;
-  background: var(--tp-surface-subtle);
+  background: var(--tp-elev-2, var(--tp-surface-subtle));
 }
 
 .tp-page--priority .agent-settings-title {
@@ -91,7 +91,7 @@
   padding: 4px 10px;
   border: 1px solid var(--tp-border-strong);
   border-radius: 3px;
-  background: var(--tp-surface);
+  background: var(--tp-elev-3, var(--tp-surface));
   color: var(--tp-text);
   font: inherit;
   font-size: 12px;
@@ -3235,15 +3235,15 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-empty {
 
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-list-item,
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-section {
-  background: color-mix(in srgb, var(--tp-surface-subtle) 92%, #000 8%);
+  background: var(--tp-elev-1, var(--tp-surface-subtle));
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-list-item.is-active {
-  background: color-mix(in srgb, var(--tp-surface-subtle) 78%, #000 12%);
+  background: var(--tp-elev-2, var(--tp-surface));
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
-  background: color-mix(in srgb, var(--tp-surface-subtle) 55%, #000 45%);
+  background: var(--tp-elev-0, #1d2125);
   color: color-mix(in srgb, #9fadbc 82%, #738496);
 }
 
@@ -3314,7 +3314,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
   min-width: 0;
   border: 1px solid var(--tp-border-strong);
   border-radius: 3px;
-  background: var(--tp-input-bg);
+  background: var(--tp-elev-3, var(--tp-input-bg));
 }
 
 .tp-page--priority .agent-composer .tp-tab-complete-wrap:focus-within {
@@ -3336,7 +3336,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
   padding: 7px 8px;
   border: 1px solid var(--tp-border-strong);
   border-radius: 3px;
-  background: var(--tp-input-bg);
+  background: var(--tp-elev-3, var(--tp-input-bg));
   color: var(--tp-text);
   font: inherit;
   font-size: 13px;

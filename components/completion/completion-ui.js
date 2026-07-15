@@ -630,9 +630,21 @@
     var onResize = typeof options.onResize === 'function' ? options.onResize : function () {};
     var onAllCompleteChange =
       typeof options.onAllCompleteChange === 'function' ? options.onAllCompleteChange : null;
+    var onOpenLinkedCard =
+      typeof options.onOpenLinkedCard === 'function' ? options.onOpenLinkedCard : null;
+    var getBoardCards =
+      typeof options.getBoardCards === 'function' ? options.getBoardCards : null;
+    var resolveLinkedTree =
+      typeof options.resolveLinkedTree === 'function' ? options.resolveLinkedTree : null;
     var progressShellEl = options.shellEl || null;
     var celebrateRootEl = options.celebrateRoot || null;
     var showCardHeader = options.showCardHeader !== false;
+    var masterTitle =
+      typeof options.cardName === 'string' && options.cardName.trim()
+        ? options.cardName.trim()
+        : '';
+    var currentCardId =
+      typeof options.currentCardId === 'string' ? options.currentCardId.trim() : '';
     var masterDragging = false;
     var flipAnimToken = 0;
     // null = not yet painted — avoid fireworks on initial mount when already complete.
@@ -640,6 +652,11 @@
     var spellcheckBusy = false;
     // itemId → original text before AI spell fix (kept until popup closes / revert / edit)
     var itemSpellReverts = Object.create(null);
+    // itemId → nested tree node from resolveLinkedCompletionTree
+    var linkedTreeByItemId = Object.create(null);
+    var linkedResolveSeq = 0;
+    var boardCardsCache = null;
+    var linkPickerOpen = false;
 
     function spellcheckText(text) {
       var trimmed = (text || '').trim();
@@ -689,6 +706,7 @@
     var progressHero = document.createElement('div');
     progressHero.className = 'tp-completion-progress-hero';
     progressHero.innerHTML =
+      '<p class="tp-completion-master-title" id="completionMasterTitle" hidden></p>' +
       '<span class="tp-completion-percent" id="completionPercent">0\u00a0%</span>' +
       '<p class="tp-completion-encouragement" id="completionEncouragement" aria-live="polite">' +
       progressEncouragementText(0) +
@@ -791,6 +809,18 @@
       '<input type="text" class="tp-input tp-completion-add-input" id="completionAddInput" ' +
       'placeholder="Ajouter une sous-t\u00e2che\u2026" maxlength="500" autocomplete="off" />' +
       '<button type="button" class="tp-btn tp-btn--primary tp-completion-add-btn" id="completionAddBtn">Ajouter</button>' +
+      '<button type="button" class="tp-btn tp-completion-link-btn" id="completionLinkBtn" ' +
+      'aria-expanded="false" aria-controls="completionLinkPicker" title="Lier une carte du tableau">' +
+      '<i class="ti ti-link" aria-hidden="true"></i>' +
+      '<span class="tp-completion-link-btn-label">Lier</span>' +
+      '</button>' +
+      '</div>' +
+      '<div class="tp-completion-link-picker" id="completionLinkPicker" hidden>' +
+      '<input type="search" class="tp-input tp-completion-link-search" id="completionLinkSearch" ' +
+      'placeholder="Rechercher une carte\u2026" maxlength="200" autocomplete="off" ' +
+      'aria-label="Rechercher une carte du tableau" />' +
+      '<p class="tp-completion-link-status" id="completionLinkStatus" hidden></p>' +
+      '<div class="tp-completion-link-list" id="completionLinkList" role="list"></div>' +
       '</div>';
     containerEl.appendChild(addSection);
 
@@ -817,8 +847,14 @@
     var showDoneLabel = containerEl.querySelector('#completionShowDoneLabel');
     var percentEl = containerEl.querySelector('#completionPercent');
     var encouragementEl = containerEl.querySelector('#completionEncouragement');
+    var masterTitleEl = containerEl.querySelector('#completionMasterTitle');
     var addInput = containerEl.querySelector('#completionAddInput');
     var addBtn = containerEl.querySelector('#completionAddBtn');
+    var linkBtn = containerEl.querySelector('#completionLinkBtn');
+    var linkPickerEl = containerEl.querySelector('#completionLinkPicker');
+    var linkSearchInput = containerEl.querySelector('#completionLinkSearch');
+    var linkStatusEl = containerEl.querySelector('#completionLinkStatus');
+    var linkListEl = containerEl.querySelector('#completionLinkList');
     var suggestStatusEl = containerEl.querySelector('#completionSuggestStatus');
     var suggestListEl = containerEl.querySelector('#completionSuggestList');
     var suggestRefreshBtn = containerEl.querySelector('#completionSuggestRefresh');
@@ -831,6 +867,20 @@
     var searchQuery = '';
     var statusFilter = 'all';
     showDoneCheckbox.checked = showCompleted;
+
+    function syncMasterTitleUi() {
+      if (!masterTitleEl) return;
+      if (masterTitle) {
+        masterTitleEl.hidden = false;
+        masterTitleEl.textContent = masterTitle;
+        masterTitleEl.title = masterTitle;
+      } else {
+        masterTitleEl.hidden = true;
+        masterTitleEl.textContent = '';
+        masterTitleEl.removeAttribute('title');
+      }
+    }
+    syncMasterTitleUi();
 
     var addTabComplete = null;
     if (
@@ -891,7 +941,7 @@
       var row = findItemRow(id);
       if (!row) return;
       var input = row.querySelector('.tp-completion-text');
-      if (!input) return;
+      if (!input || typeof input.focus !== 'function') return;
       input.focus();
       var len = String(input.value || '').length;
       if (typeof input.setSelectionRange === 'function') {
@@ -1340,12 +1390,206 @@
       CT.syncDoneFromProgress(item);
     }
 
-    function bindItemRow(li, item) {
+    function openLinkedCard(cardId) {
+      if (!cardId || !onOpenLinkedCard) return;
+      try {
+        onOpenLinkedCard(cardId);
+      } catch (err) {
+        console.error('Completion open linked card failed', err);
+      }
+    }
+
+    function linkedIdsAlreadyUsed() {
+      var used = Object.create(null);
+      if (currentCardId) used[currentCardId] = true;
+      data.items.forEach(function (item) {
+        var id = CT.itemLinkedCardId(item);
+        if (id) used[id] = true;
+      });
+      return used;
+    }
+
+    function setLinkStatus(text, visible) {
+      if (!linkStatusEl) return;
+      if (!visible || !text) {
+        linkStatusEl.hidden = true;
+        linkStatusEl.textContent = '';
+        return;
+      }
+      linkStatusEl.hidden = false;
+      linkStatusEl.textContent = text;
+    }
+
+    function renderLinkPickerList(cards, query) {
+      if (!linkListEl) return;
+      linkListEl.replaceChildren();
+      var used = linkedIdsAlreadyUsed();
+      var q = String(query || '')
+        .trim()
+        .toLowerCase();
+      var matches = (cards || []).filter(function (card) {
+        if (!card || !card.id || used[card.id]) return false;
+        if (!q) return true;
+        var name = String(card.name || '').toLowerCase();
+        var list = String(card.list || '').toLowerCase();
+        return name.indexOf(q) !== -1 || list.indexOf(q) !== -1;
+      });
+      if (!matches.length) {
+        setLinkStatus(
+          q ? 'Aucune carte ne correspond.' : 'Aucune autre carte disponible.',
+          true
+        );
+        return;
+      }
+      setLinkStatus('', false);
+      matches.slice(0, 40).forEach(function (card) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tp-completion-link-option';
+        btn.setAttribute('role', 'listitem');
+        btn.dataset.cardId = card.id;
+        var label = document.createElement('span');
+        label.className = 'tp-completion-link-option-name';
+        label.textContent = card.name || 'Carte';
+        btn.appendChild(label);
+        if (card.list) {
+          var meta = document.createElement('span');
+          meta.className = 'tp-completion-link-option-list';
+          meta.textContent = card.list;
+          btn.appendChild(meta);
+        }
+        btn.title = 'Lier\u00a0: ' + (card.name || 'Carte');
+        btn.addEventListener('click', function () {
+          addLinkedCard(card);
+        });
+        linkListEl.appendChild(btn);
+      });
+    }
+
+    function ensureBoardCards() {
+      if (boardCardsCache) return Promise.resolve(boardCardsCache);
+      if (!getBoardCards) return Promise.resolve([]);
+      return Promise.resolve()
+        .then(function () {
+          return getBoardCards();
+        })
+        .then(function (cards) {
+          boardCardsCache = Array.isArray(cards) ? cards : [];
+          return boardCardsCache;
+        })
+        .catch(function (err) {
+          console.error('Completion board cards load failed', err);
+          boardCardsCache = [];
+          return boardCardsCache;
+        });
+    }
+
+    function openLinkPicker() {
+      if (!linkPickerEl || !getBoardCards) return;
+      linkPickerOpen = true;
+      linkPickerEl.hidden = false;
+      if (linkBtn) linkBtn.setAttribute('aria-expanded', 'true');
+      setLinkStatus('Chargement des cartes\u2026', true);
+      if (linkListEl) linkListEl.replaceChildren();
+      ensureBoardCards().then(function (cards) {
+        if (!linkPickerOpen) return;
+        renderLinkPickerList(cards, linkSearchInput ? linkSearchInput.value : '');
+        onResize();
+        if (linkSearchInput) {
+          try {
+            linkSearchInput.focus();
+          } catch (e) { /* ignore */ }
+        }
+      });
+      onResize();
+    }
+
+    function closeLinkPicker() {
+      linkPickerOpen = false;
+      if (linkPickerEl) linkPickerEl.hidden = true;
+      if (linkBtn) linkBtn.setAttribute('aria-expanded', 'false');
+      if (linkSearchInput) linkSearchInput.value = '';
+      setLinkStatus('', false);
+      if (linkListEl) linkListEl.replaceChildren();
+      onResize();
+    }
+
+    function toggleLinkPicker() {
+      if (linkPickerOpen) closeLinkPicker();
+      else openLinkPicker();
+    }
+
+    if (linkBtn) {
+      if (!getBoardCards) {
+        linkBtn.hidden = true;
+      } else {
+        linkBtn.addEventListener('click', function () {
+          toggleLinkPicker();
+        });
+      }
+    }
+    if (linkSearchInput) {
+      linkSearchInput.addEventListener('input', function () {
+        ensureBoardCards().then(function (cards) {
+          if (!linkPickerOpen) return;
+          renderLinkPickerList(cards, linkSearchInput.value);
+          onResize();
+        });
+      });
+    }
+
+    function refreshLinkedTree(opts) {
+      opts = opts || {};
+      if (!resolveLinkedTree) {
+        linkedTreeByItemId = Object.create(null);
+        if (opts.rerender !== false) {
+          renderList();
+          updateProgressUi();
+        }
+        return Promise.resolve(null);
+      }
+      var seq = ++linkedResolveSeq;
+      return Promise.resolve()
+        .then(function () {
+          return resolveLinkedTree(CT.normalizeCompletionData(data));
+        })
+        .then(function (resolved) {
+          if (seq !== linkedResolveSeq) return null;
+          linkedTreeByItemId =
+            resolved && resolved.byItemId
+              ? resolved.byItemId
+              : Object.create(null);
+          if (resolved && resolved.data) {
+            var prev = JSON.stringify(data);
+            data = CT.normalizeCompletionData(resolved.data);
+            if (JSON.stringify(data) !== prev && !opts.skipPersist) {
+              onChange(data);
+            }
+          }
+          if (opts.rerender !== false) {
+            renderList();
+            updateProgressUi();
+            onResize();
+          }
+          return resolved;
+        })
+        .catch(function (err) {
+          console.error('Completion linked tree resolve failed', err);
+          return null;
+        });
+    }
+
+    function bindItemRow(li, item, opts) {
+      opts = opts || {};
+      var readOnly = !!opts.readOnly;
       var checkBtn = li.querySelector('.tp-completion-check');
       var textInput = li.querySelector('.tp-completion-text');
+      var textLink = li.querySelector('.tp-completion-text-link');
       var deleteBtn = li.querySelector('.tp-completion-delete');
       var itemSlider = li.querySelector('.tp-completion-item-slider');
       var itemValEl = li.querySelector('.tp-completion-item-val');
+      var isLinked = CT.isLinkedItem(item);
+
       function syncItemProgressUi() {
         var p = CT.itemProgress(item);
         if (itemSlider) applySliderProgressTrack(itemSlider, p);
@@ -1353,109 +1597,136 @@
         li.classList.toggle('is-done', item.done);
       }
 
+      if (readOnly) {
+        if (checkBtn) checkBtn.disabled = true;
+        if (itemSlider) itemSlider.disabled = true;
+        if (deleteBtn) deleteBtn.hidden = true;
+        if (textLink) {
+          textLink.addEventListener('click', function (e) {
+            e.preventDefault();
+            openLinkedCard(CT.itemLinkedCardId(item));
+          });
+        }
+        syncItemProgressUi();
+        return;
+      }
+
       checkBtn.addEventListener('click', function () {
+        if (isLinked) {
+          openLinkedCard(CT.itemLinkedCardId(item));
+          return;
+        }
         var wasDone = !!item.done;
         setItemProgress(item, item.done ? 0 : 100);
-        itemSlider.value = String(item.progress);
-        itemValEl.textContent = item.progress + '\u00a0%';
+        if (itemSlider) itemSlider.value = String(item.progress);
+        if (itemValEl) itemValEl.textContent = item.progress + '\u00a0%';
         syncItemProgressUi();
         emitChange({
           animateItemId: item.id,
           flipWasDone: wasDone,
-          // Keep caret in the name field after checkbox toggle re-render
-          // (including when completed-item progress UI is hidden).
           focusTextItemId: item.id,
         });
         onResize();
       });
 
-      function handleItemSlider() {
-        var v = Number(itemSlider.value);
-        setItemProgress(item, v);
-        itemValEl.textContent = v + '\u00a0%';
-        syncItemProgressUi();
-        updateProgressUi({ deferDoneListReveal: true });
-        onChange(CT.normalizeCompletionData(data));
+      if (itemSlider && !isLinked) {
+        function handleItemSlider() {
+          var v = Number(itemSlider.value);
+          setItemProgress(item, v);
+          itemValEl.textContent = v + '\u00a0%';
+          syncItemProgressUi();
+          updateProgressUi({ deferDoneListReveal: true });
+          onChange(CT.normalizeCompletionData(data));
+        }
+
+        itemSlider.addEventListener('input', handleItemSlider);
+        itemSlider.addEventListener('change', function () {
+          var wasDone = li.classList.contains('is-done');
+          handleItemSlider();
+          var nowDone = !!item.done;
+          if (wasDone !== nowDone) {
+            emitChange({
+              animateItemId: item.id,
+              flipWasDone: wasDone,
+              focusTextItemId: item.id,
+            });
+          } else {
+            renderList();
+          }
+          onResize();
+        });
       }
 
-      itemSlider.addEventListener('input', handleItemSlider);
-      itemSlider.addEventListener('change', function () {
-        var wasDone = li.classList.contains('is-done');
-        handleItemSlider();
-        var nowDone = !!item.done;
-        if (wasDone !== nowDone) {
-          emitChange({
-            animateItemId: item.id,
-            flipWasDone: wasDone,
-            // Done flip hides per-row progress; keep caret on the name field.
-            focusTextItemId: item.id,
-          });
-        } else {
-          renderList();
-        }
-        onResize();
-      });
+      if (textLink) {
+        textLink.addEventListener('click', function (e) {
+          e.preventDefault();
+          openLinkedCard(CT.itemLinkedCardId(item));
+        });
+      }
 
-      textInput.addEventListener('change', function () {
-        var trimmed = textInput.value.trim();
-        if (!trimmed) {
-          removeItem(item.id);
-          return;
-        }
-        var editToken = (item._spellToken || 0) + 1;
-        item._spellToken = editToken;
-        textInput.classList.add('is-spellchecking');
-        spellcheckText(trimmed).then(function (corrected) {
-          if (item._spellToken !== editToken) return;
-          textInput.classList.remove('is-spellchecking');
-          var stillPresent = data.items.some(function (row) {
-            return row.id === item.id;
-          });
-          if (!stillPresent) return;
-          if (!corrected) {
+      if (textInput && !isLinked) {
+        textInput.addEventListener('change', function () {
+          var trimmed = textInput.value.trim();
+          if (!trimmed) {
             removeItem(item.id);
             return;
           }
-          if (corrected !== textInput.value.trim()) {
-            textInput.value = corrected;
-          }
-          item.text = corrected;
-          // Persist without re-rendering so a following checkbox click (complete
-          // while editing) is not destroyed by replacing the row DOM.
-          data = CT.normalizeCompletionData(data);
-          if (corrected !== trimmed) {
-            itemSpellReverts[item.id] = trimmed;
-            showItemSpellRevert(item.id, trimmed);
-          } else {
-            delete itemSpellReverts[item.id];
-          }
-          updateProgressUi();
-          onChange(data);
+          var editToken = (item._spellToken || 0) + 1;
+          item._spellToken = editToken;
+          textInput.classList.add('is-spellchecking');
+          spellcheckText(trimmed).then(function (corrected) {
+            if (item._spellToken !== editToken) return;
+            textInput.classList.remove('is-spellchecking');
+            var stillPresent = data.items.some(function (row) {
+              return row.id === item.id;
+            });
+            if (!stillPresent) return;
+            if (!corrected) {
+              removeItem(item.id);
+              return;
+            }
+            if (corrected !== textInput.value.trim()) {
+              textInput.value = corrected;
+            }
+            item.text = corrected;
+            data = CT.normalizeCompletionData(data);
+            if (corrected !== trimmed) {
+              itemSpellReverts[item.id] = trimmed;
+              showItemSpellRevert(item.id, trimmed);
+            } else {
+              delete itemSpellReverts[item.id];
+            }
+            updateProgressUi();
+            onChange(data);
+          });
         });
-      });
 
-      textInput.addEventListener('input', function () {
-        delete itemSpellReverts[item.id];
-        var existing = li.querySelector('.tp-spell-revert');
-        if (existing && typeof existing._spellRevertDismiss === 'function') {
-          existing._spellRevertDismiss();
-        }
-      });
+        textInput.addEventListener('input', function () {
+          delete itemSpellReverts[item.id];
+          var existing = li.querySelector('.tp-spell-revert');
+          if (existing && typeof existing._spellRevertDismiss === 'function') {
+            existing._spellRevertDismiss();
+          }
+        });
 
-      textInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          textInput.blur();
-        }
-      });
+        textInput.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            textInput.blur();
+          }
+        });
+      }
 
-      deleteBtn.addEventListener('click', function () {
-        removeItem(item.id);
-      });
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', function () {
+          removeItem(item.id);
+        });
+      }
 
       syncItemProgressUi();
 
       if (
+        !isLinked &&
         itemSpellReverts[item.id] &&
         itemSpellReverts[item.id] !== (item.text || '').trim()
       ) {
@@ -1465,10 +1736,91 @@
       }
     }
 
-    function renderItem(item) {
+    function renderNestedNode(node, depth) {
       var li = document.createElement('li');
-      li.className = 'tp-completion-item' + (item.done ? ' is-done' : '');
+      li.className =
+        'tp-completion-item tp-completion-item--nested' +
+        (node.done ? ' is-done' : '') +
+        (node.linkedCardId ? ' is-linked' : '') +
+        (node.isCycle ? ' is-cycle' : '');
+      li.dataset.depth = String(depth);
+      if (node.id) li.dataset.id = 'nested-' + node.id;
+      if (node.linkedCardId) li.dataset.linkedCardId = node.linkedCardId;
+
+      var mainRow = document.createElement('div');
+      mainRow.className = 'tp-completion-item-main';
+
+      var checkWrap = document.createElement('div');
+      checkWrap.className = 'tp-completion-check-wrap';
+      var checkBtn = document.createElement('button');
+      checkBtn.type = 'button';
+      checkBtn.className =
+        'tp-completion-check' + (node.done ? ' is-checked' : '');
+      checkBtn.innerHTML = CHECK_ICON_SVG;
+      checkBtn.disabled = true;
+      syncCheckButton(checkBtn, !!node.done, node.progress);
+      checkWrap.appendChild(checkBtn);
+
+      var titleEl;
+      if (node.linkedCardId && !node.isCycle) {
+        titleEl = document.createElement('button');
+        titleEl.type = 'button';
+        titleEl.className = 'tp-completion-text-link';
+        titleEl.textContent = node.text || 'Carte li\u00e9e';
+        titleEl.title = 'Ouvrir la carte';
+        titleEl.addEventListener('click', function () {
+          openLinkedCard(node.linkedCardId);
+        });
+      } else {
+        titleEl = document.createElement('span');
+        titleEl.className = 'tp-completion-text tp-completion-text--readonly';
+        titleEl.textContent = node.text || '';
+        if (node.isCycle) {
+          titleEl.title = 'Lien circulaire \u2014 d\u00e9j\u00e0 affich\u00e9 plus haut';
+        }
+      }
+
+      var pctEl = document.createElement('span');
+      pctEl.className = 'tp-completion-nested-pct';
+      pctEl.textContent = CT.clampProgress(node.progress) + '\u00a0%';
+      pctEl.style.color = completionColorForProgress(node.progress);
+
+      mainRow.appendChild(checkWrap);
+      mainRow.appendChild(titleEl);
+      mainRow.appendChild(pctEl);
+      li.appendChild(mainRow);
+
+      if (node.isCycle) {
+        var cycleHint = document.createElement('p');
+        cycleHint.className = 'tp-completion-cycle-hint';
+        cycleHint.textContent = 'Lien circulaire';
+        li.appendChild(cycleHint);
+      }
+
+      return li;
+    }
+
+    function appendNestedChildren(listTarget, parentItem, treeNode) {
+      if (!treeNode || !Array.isArray(treeNode.children) || !treeNode.children.length) {
+        return;
+      }
+      treeNode.children.forEach(function (child) {
+        listTarget.appendChild(renderNestedNode(child, 2));
+      });
+    }
+
+    function renderItem(item, opts) {
+      opts = opts || {};
+      var isLinked = CT.isLinkedItem(item);
+      var treeNode = linkedTreeByItemId[item.id] || null;
+      var li = document.createElement('li');
+      li.className =
+        'tp-completion-item tp-completion-item--depth1' +
+        (item.done ? ' is-done' : '') +
+        (isLinked ? ' is-linked' : '');
       li.dataset.id = item.id;
+      li.dataset.depth = '1';
+      if (isLinked) li.dataset.linkedCardId = CT.itemLinkedCardId(item);
 
       var mainRow = document.createElement('div');
       mainRow.className = 'tp-completion-item-main';
@@ -1482,54 +1834,83 @@
       syncCheckButton(checkBtn, item.done, CT.itemProgress(item));
       checkWrap.appendChild(checkBtn);
 
-      var textInput = document.createElement('input');
-      textInput.type = 'text';
-      textInput.className = 'tp-input tp-completion-text';
-      textInput.value = item.text;
-      textInput.setAttribute('aria-label', 'Texte de la sous-t\u00e2che');
+      var titleEl;
+      if (isLinked) {
+        titleEl = document.createElement('button');
+        titleEl.type = 'button';
+        titleEl.className = 'tp-completion-text-link';
+        titleEl.textContent = item.text;
+        titleEl.title = 'Ouvrir la carte li\u00e9e';
+        titleEl.setAttribute('aria-label', 'Ouvrir\u00a0: ' + item.text);
+      } else {
+        titleEl = document.createElement('input');
+        titleEl.type = 'text';
+        titleEl.className = 'tp-input tp-completion-text';
+        titleEl.value = item.text;
+        titleEl.setAttribute('aria-label', 'Texte de la sous-t\u00e2che');
+      }
 
       var deleteBtn = document.createElement('button');
       deleteBtn.type = 'button';
       deleteBtn.className = 'tp-completion-delete';
-      deleteBtn.setAttribute('aria-label', 'Supprimer');
-      deleteBtn.title = 'Supprimer';
+      deleteBtn.setAttribute('aria-label', isLinked ? 'Retirer le lien' : 'Supprimer');
+      deleteBtn.title = isLinked ? 'Retirer le lien' : 'Supprimer';
       deleteBtn.innerHTML = TRASH_ICON_SVG;
 
       mainRow.appendChild(checkWrap);
-      mainRow.appendChild(textInput);
+      mainRow.appendChild(titleEl);
       mainRow.appendChild(deleteBtn);
 
-      var sliderRow = document.createElement('div');
-      sliderRow.className = 'tp-completion-item-slider-row';
-
-      var sliderLbl = document.createElement('span');
-      sliderLbl.className = 'tp-completion-field-lbl';
-      sliderLbl.textContent = 'Progr\u00e8s';
-
-      var sliderWrap = document.createElement('div');
-      sliderWrap.className = 'field-slider';
-
-      var itemSlider = document.createElement('input');
-      itemSlider.type = 'range';
-      itemSlider.className = 'field-range tp-completion-item-slider';
-      itemSlider.min = '0';
-      itemSlider.max = '100';
-      itemSlider.step = '1';
-      itemSlider.value = String(CT.itemProgress(item));
-      itemSlider.setAttribute('aria-label', 'Progr\u00e8s de la sous-t\u00e2che');
-
-      var itemValEl = document.createElement('span');
-      itemValEl.className = 'tp-completion-item-val tp-completion-field-val';
-      itemValEl.textContent = CT.itemProgress(item) + '\u00a0%';
-
-      sliderWrap.appendChild(itemSlider);
-      sliderRow.appendChild(sliderLbl);
-      sliderRow.appendChild(sliderWrap);
-      sliderRow.appendChild(itemValEl);
-
       li.appendChild(mainRow);
-      li.appendChild(sliderRow);
-      bindItemRow(li, item);
+
+      if (!isLinked) {
+        var sliderRow = document.createElement('div');
+        sliderRow.className = 'tp-completion-item-slider-row';
+
+        var sliderLbl = document.createElement('span');
+        sliderLbl.className = 'tp-completion-field-lbl';
+        sliderLbl.textContent = 'Progr\u00e8s';
+
+        var sliderWrap = document.createElement('div');
+        sliderWrap.className = 'field-slider';
+
+        var itemSlider = document.createElement('input');
+        itemSlider.type = 'range';
+        itemSlider.className = 'field-range tp-completion-item-slider';
+        itemSlider.min = '0';
+        itemSlider.max = '100';
+        itemSlider.step = '1';
+        itemSlider.value = String(CT.itemProgress(item));
+        itemSlider.setAttribute('aria-label', 'Progr\u00e8s de la sous-t\u00e2che');
+
+        var itemValEl = document.createElement('span');
+        itemValEl.className = 'tp-completion-item-val tp-completion-field-val';
+        itemValEl.textContent = CT.itemProgress(item) + '\u00a0%';
+
+        sliderWrap.appendChild(itemSlider);
+        sliderRow.appendChild(sliderLbl);
+        sliderRow.appendChild(sliderWrap);
+        sliderRow.appendChild(itemValEl);
+        li.appendChild(sliderRow);
+      } else {
+        var linkMeta = document.createElement('div');
+        linkMeta.className = 'tp-completion-link-meta';
+        var linkPct = document.createElement('span');
+        linkPct.className = 'tp-completion-link-pct';
+        linkPct.textContent = CT.itemProgress(item) + '\u00a0%';
+        linkPct.style.color = completionColorForProgress(CT.itemProgress(item));
+        var linkHint = document.createElement('span');
+        linkHint.className = 'tp-completion-link-hint';
+        linkHint.textContent =
+          treeNode && treeNode.isCycle
+            ? 'Lien circulaire'
+            : 'Carte li\u00e9e';
+        linkMeta.appendChild(linkHint);
+        linkMeta.appendChild(linkPct);
+        li.appendChild(linkMeta);
+      }
+
+      bindItemRow(li, item, { readOnly: !!opts.readOnly });
       return li;
     }
 
@@ -1537,6 +1918,7 @@
       listEl.replaceChildren();
       doneListEl.replaceChildren();
       listSection.classList.toggle('is-empty', !data.items.length);
+      listSection.classList.toggle('has-tree', data.items.length > 0);
       updateToolsUi();
 
       if (!data.items.length) {
@@ -1560,14 +1942,19 @@
         }).length
       );
 
+      function appendItemWithNest(target, item) {
+        target.appendChild(renderItem(item));
+        appendNestedChildren(target, item, linkedTreeByItemId[item.id]);
+      }
+
       if (showActive) {
         activeItems.forEach(function (item) {
-          listEl.appendChild(renderItem(item));
+          appendItemWithNest(listEl, item);
         });
       }
       if (showDone) {
         doneItems.forEach(function (item) {
-          doneListEl.appendChild(renderItem(item));
+          appendItemWithNest(doneListEl, item);
         });
       }
 
@@ -1627,7 +2014,9 @@
         data.progress = CT.computeCardProgress(data).percent;
       }
       data.items = nextItems;
+      delete linkedTreeByItemId[id];
       emitChange();
+      refreshLinkedTree({ skipPersist: true });
       onResize();
     }
 
@@ -1645,6 +2034,34 @@
       data.items.push(item);
       removeSuggestionMatch(trimmed);
       emitChange();
+      onResize();
+      return item;
+    }
+
+    function addLinkedCard(card) {
+      if (!card || !card.id) return null;
+      var cardId = String(card.id).trim();
+      if (!cardId || (currentCardId && cardId === currentCardId)) return null;
+      if (linkedIdsAlreadyUsed()[cardId]) return null;
+      var name =
+        typeof card.name === 'string' && card.name.trim()
+          ? card.name.trim()
+          : 'Carte li\u00e9e';
+      var progress =
+        typeof card.progress === 'number' && isFinite(card.progress)
+          ? CT.clampProgress(card.progress)
+          : 0;
+      var item = CT.normalizeItem({
+        id: CT.generateId(),
+        text: name,
+        progress: progress,
+        linkedCardId: cardId,
+      });
+      if (!item) return null;
+      data.items.push(item);
+      closeLinkPicker();
+      emitChange();
+      refreshLinkedTree();
       onResize();
       return item;
     }
@@ -1864,17 +2281,18 @@
 
     renderList();
     updateProgressUi();
+    refreshLinkedTree({ skipPersist: false });
 
     return {
       setCardName: function (name) {
-        if (!cardNameEl) {
-          onResize();
-          return;
+        masterTitle = typeof name === 'string' ? name.trim() : '';
+        syncMasterTitleUi();
+        if (cardNameEl) {
+          var label = masterTitle || 'Carte';
+          cardNameEl.textContent = label;
+          cardNameEl.title = masterTitle ? masterTitle : '';
+          cardNameEl.classList.remove('is-loading');
         }
-        var label = name || 'Carte';
-        cardNameEl.textContent = label;
-        cardNameEl.title = name ? name : '';
-        cardNameEl.classList.remove('is-loading');
         onResize();
       },
       getData: function () {
@@ -1884,9 +2302,12 @@
         data = CT.normalizeCompletionData(next);
         renderList();
         updateProgressUi();
+        refreshLinkedTree({ skipPersist: true });
         onResize();
       },
       addItem: addItem,
+      addLinkedCard: addLinkedCard,
+      refreshLinkedTree: refreshLinkedTree,
       refreshSuggestions: refreshSuggestions,
       focusAddInput: function () {
         addInput.focus();

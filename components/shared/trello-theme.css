@@ -1668,6 +1668,12 @@ html[data-color-mode="dark"] .tp-page--priority {
   --due-accent-text: var(--tp-primary-text);
 }
 
+html[data-color-mode="dark"] .tp-page--priority {
+  --surface-0: var(--tp-elev-0);
+  --surface-1: var(--tp-elev-1);
+  --surface-2: var(--tp-elev-2);
+}
+
 /* Bridge the same tokens for memory align / board-bar pages */
 html[data-color-mode="light"] .memory-page,
 html[data-color-mode="dark"] .memory-page {
@@ -1679,6 +1685,12 @@ html[data-color-mode="dark"] .memory-page {
   --text-secondary: var(--tp-text-subtle);
   --text-muted: var(--tp-text-muted);
   --surface-hover: var(--tp-surface-hover);
+}
+
+html[data-color-mode="dark"] .memory-page {
+  --surface-0: var(--tp-elev-0);
+  --surface-1: var(--tp-elev-1);
+  --surface-2: var(--tp-elev-2);
 }
 
 /* Completion editor — modal iframe (legacy) + embedded in priority popup */
@@ -1723,6 +1735,9 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 
 html[data-color-mode="dark"] .tp-page--completion,
 html[data-color-mode="dark"] .tp-page--priority .tp-completion {
+  --surface-0: var(--tp-elev-0);
+  --surface-1: var(--tp-elev-1);
+  --surface-2: var(--tp-elev-2);
   --slider-track: #596773;
   --slider-thumb-bg: #f7f8f9;
   --slider-thumb-border: #8c9bab;
@@ -2019,27 +2034,27 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   gap: 6px;
 }
 
-/* Subtask rows — recessed relative to the raised progress shell */
+/* Subtask rows — recessed well so each item reads as its own layer */
 .tp-completion-item {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 10px 10px;
   border-radius: var(--completion-radius, 10px);
-  background: color-mix(in srgb, var(--tp-bg, #1d2125) 55%, var(--tp-surface-subtle));
+  background: color-mix(in srgb, #000 12%, var(--tp-surface-subtle));
   transition: background 0.15s ease;
 }
 
 .tp-completion-item:hover {
-  background: color-mix(in srgb, var(--tp-bg, #1d2125) 40%, var(--tp-surface-subtle));
-}
-
-html[data-color-mode="light"] .tp-completion-item {
-  background: color-mix(in srgb, #000 12%, var(--tp-surface-subtle));
-}
-
-html[data-color-mode="light"] .tp-completion-item:hover {
   background: color-mix(in srgb, #000 16%, var(--tp-surface-subtle));
+}
+
+html[data-color-mode="dark"] .tp-completion-item {
+  background: color-mix(in srgb, var(--tp-elev-0, #1d2125) 55%, var(--tp-surface-subtle));
+}
+
+html[data-color-mode="dark"] .tp-completion-item:hover {
+  background: color-mix(in srgb, var(--tp-elev-0, #1d2125) 35%, var(--tp-surface-subtle));
 }
 
 .tp-completion-item.is-flipping {
