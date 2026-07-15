@@ -9,6 +9,45 @@
   var ROOT_ATTR = 'data-tp-fx';
   var audioCtx = null;
 
+  /**
+   * Melodic SFX stay in F# major so layered / sequential stingers stay consonant.
+   * Scale degrees: F# G# A# B C# D# E#(F) — A4 = 440 Hz.
+   */
+  var FS = {
+    Fs2: 92.5,
+    Cs3: 138.59,
+    Ds3: 155.56,
+    Fs3: 185.0,
+    Gs3: 207.65,
+    As3: 233.08,
+    B3: 246.94,
+    Cs4: 277.18,
+    Ds4: 311.13,
+    F4: 349.23,
+    Fs4: 369.99,
+    Gs4: 415.3,
+    As4: 466.16,
+    B4: 493.88,
+    Cs5: 554.37,
+    Ds5: 622.25,
+    F5: 698.46,
+    Fs5: 739.99,
+    Gs5: 830.61,
+    As5: 932.33,
+    B5: 987.77,
+    Cs6: 1108.73,
+    Ds6: 1244.51,
+    F6: 1396.91,
+    Fs6: 1479.98,
+    Gs6: 1661.22,
+    As6: 1864.66,
+    B6: 1975.53,
+    Cs7: 2217.46,
+    Ds7: 2489.02,
+    F7: 2793.83,
+    Fs7: 2959.96
+  };
+
   var EFFECT_META = {
     fireworks: { label: 'Feux d\'artifice', ms: 1900 },
     confetti: { label: 'Confettis', ms: 2600 },
@@ -178,7 +217,12 @@
       if (!ctx) return;
       var t0 = ctx.currentTime;
       var dest = ctx.destination;
-      var fMul = 1 + rand(-(options.freqJitter != null ? options.freqJitter : 0.03), options.freqJitter != null ? options.freqJitter : 0.03);
+      // Melodic tones: no pitch jitter (keeps F# major in tune across effects).
+      // Non-melodic rumbles may still opt in via options.freqJitter.
+      var freqJitter = options.freqJitter != null ? options.freqJitter : 0;
+      var fMul = freqJitter
+        ? 1 + rand(-freqJitter, freqJitter)
+        : 1;
       var tMul = 1 + rand(-(options.timeJitter != null ? options.timeJitter : 0.05), options.timeJitter != null ? options.timeJitter : 0.05);
       if (options.lowpass) {
         var filter = ctx.createBiquadFilter();
@@ -270,45 +314,52 @@
     playTones(typeof chosen === 'function' ? chosen() : chosen, options);
   }
 
+  /** Random phrase variant, but always F# major and in tune (no pitch jitter). */
+  function playMelodySet(variants, options) {
+    options = options || {};
+    if (options.freqJitter == null) options.freqJitter = 0;
+    playRandomToneSet(variants, options);
+  }
+
   function soundBeep() {
     var variants = [
       [
-        { freq: 880, delay: 0, dur: 0.11, peak: 0.07, type: 'square', attack: 0.004 },
-        { freq: 880, delay: 0.16, dur: 0.14, peak: 0.07, type: 'square', attack: 0.004 }
+        { freq: FS.Cs6, delay: 0, dur: 0.11, peak: 0.07, type: 'square', attack: 0.004 },
+        { freq: FS.Cs6, delay: 0.16, dur: 0.14, peak: 0.07, type: 'square', attack: 0.004 }
       ],
       [
-        { freq: 988, delay: 0, dur: 0.09, peak: 0.065, type: 'square', attack: 0.003 },
-        { freq: 1175, delay: 0.13, dur: 0.12, peak: 0.06, type: 'square', attack: 0.003 }
+        { freq: FS.B5, delay: 0, dur: 0.09, peak: 0.065, type: 'square', attack: 0.003 },
+        { freq: FS.Ds6, delay: 0.13, dur: 0.12, peak: 0.06, type: 'square', attack: 0.003 }
       ],
       [
-        { freq: 740, delay: 0, dur: 0.1, peak: 0.068, type: 'triangle', attack: 0.004 },
-        { freq: 740, delay: 0.14, dur: 0.1, peak: 0.068, type: 'triangle', attack: 0.004 },
-        { freq: 990, delay: 0.28, dur: 0.16, peak: 0.055, type: 'square', attack: 0.004 }
+        { freq: FS.Fs5, delay: 0, dur: 0.1, peak: 0.068, type: 'triangle', attack: 0.004 },
+        { freq: FS.Fs5, delay: 0.14, dur: 0.1, peak: 0.068, type: 'triangle', attack: 0.004 },
+        { freq: FS.B5, delay: 0.28, dur: 0.16, peak: 0.055, type: 'square', attack: 0.004 }
       ],
       [
-        { freq: 1046, delay: 0, dur: 0.08, peak: 0.06, type: 'square', attack: 0.003 },
-        { freq: 784, delay: 0.1, dur: 0.08, peak: 0.055, type: 'square', attack: 0.003 },
-        { freq: 1046, delay: 0.2, dur: 0.12, peak: 0.062, type: 'square', attack: 0.003 }
+        { freq: FS.Cs6, delay: 0, dur: 0.08, peak: 0.06, type: 'square', attack: 0.003 },
+        { freq: FS.Gs5, delay: 0.1, dur: 0.08, peak: 0.055, type: 'square', attack: 0.003 },
+        { freq: FS.Cs6, delay: 0.2, dur: 0.12, peak: 0.062, type: 'square', attack: 0.003 }
       ],
       [
-        { freq: 660, delay: 0, dur: 0.12, peak: 0.06, type: 'square', attack: 0.005 },
-        { freq: 880, delay: 0.15, dur: 0.12, peak: 0.065, type: 'square', attack: 0.005 },
-        { freq: 1100, delay: 0.3, dur: 0.1, peak: 0.05, type: 'triangle', attack: 0.004 }
+        { freq: FS.As5, delay: 0, dur: 0.12, peak: 0.06, type: 'square', attack: 0.005 },
+        { freq: FS.Cs6, delay: 0.15, dur: 0.12, peak: 0.065, type: 'square', attack: 0.005 },
+        { freq: FS.Fs6, delay: 0.3, dur: 0.1, peak: 0.05, type: 'triangle', attack: 0.004 }
       ]
     ];
-    playRandomToneSet(variants, { freqJitter: 0.02, timeJitter: 0.04 });
+    playMelodySet(variants, { timeJitter: 0.04 });
   }
 
   function soundBoop() {
-    playRandomToneSet(
+    playMelodySet(
       [
-        [{ freq: 420, delay: 0, dur: 0.18, peak: 0.055, type: 'sine', freqEnd: 280, attack: 0.01 }],
-        [{ freq: 520, delay: 0, dur: 0.14, peak: 0.05, type: 'triangle', freqEnd: 360, attack: 0.008 }],
+        [{ freq: FS.Gs4, delay: 0, dur: 0.18, peak: 0.055, type: 'sine', freqEnd: FS.Cs4, attack: 0.01 }],
+        [{ freq: FS.Cs5, delay: 0, dur: 0.14, peak: 0.05, type: 'triangle', freqEnd: FS.Fs4, attack: 0.008 }],
         [
-          { freq: 380, delay: 0, dur: 0.1, peak: 0.048, type: 'sine', freqEnd: 300 },
-          { freq: 300, delay: 0.12, dur: 0.16, peak: 0.04, type: 'triangle', freqEnd: 220 }
+          { freq: FS.Fs4, delay: 0, dur: 0.1, peak: 0.048, type: 'sine', freqEnd: FS.Ds4 },
+          { freq: FS.Ds4, delay: 0.12, dur: 0.16, peak: 0.04, type: 'triangle', freqEnd: FS.As3 }
         ],
-        [{ freq: 600, delay: 0, dur: 0.2, peak: 0.05, type: 'sine', freqEnd: 180, attack: 0.012 }]
+        [{ freq: FS.Ds5, delay: 0, dur: 0.2, peak: 0.05, type: 'sine', freqEnd: FS.Fs3, attack: 0.012 }]
       ],
       { lowpass: 2200 }
     );
@@ -328,12 +379,12 @@
         power: 0.7
       });
     }
-    playRandomToneSet([
-      [{ freq: 1400, delay: 0, dur: 0.18, peak: 0.035, type: 'sawtooth', freqEnd: 220, attack: 0.005 }],
-      [{ freq: 2100, delay: 0.02, dur: 0.14, peak: 0.03, type: 'square', freqEnd: 180, attack: 0.004 }],
+    playMelodySet([
+      [{ freq: FS.F6, delay: 0, dur: 0.18, peak: 0.035, type: 'sawtooth', freqEnd: FS.As3, attack: 0.005 }],
+      [{ freq: FS.Cs7, delay: 0.02, dur: 0.14, peak: 0.03, type: 'square', freqEnd: FS.Fs3, attack: 0.004 }],
       [
-        { freq: 1600, delay: 0, dur: 0.08, peak: 0.032, type: 'sawtooth', freqEnd: 600 },
-        { freq: 900, delay: 0.1, dur: 0.12, peak: 0.028, type: 'triangle', freqEnd: 160 }
+        { freq: FS.Gs6, delay: 0, dur: 0.08, peak: 0.032, type: 'sawtooth', freqEnd: FS.Ds5 },
+        { freq: FS.As5, delay: 0.1, dur: 0.12, peak: 0.028, type: 'triangle', freqEnd: FS.Fs3 }
       ]
     ]);
   }
@@ -381,68 +432,68 @@
   }
 
   function soundFanfare() {
-    playRandomToneSet([
+    playMelodySet([
       [
-        { freq: 392, delay: 0, dur: 0.16, peak: 0.045, type: 'triangle' },
-        { freq: 523.25, delay: 0.14, dur: 0.16, peak: 0.048, type: 'triangle' },
-        { freq: 659.25, delay: 0.28, dur: 0.16, peak: 0.05, type: 'triangle' },
-        { freq: 784, delay: 0.42, dur: 0.35, peak: 0.055, type: 'triangle' },
-        { freq: 1046.5, delay: 0.55, dur: 0.45, peak: 0.04, type: 'sine' }
+        { freq: FS.Fs4, delay: 0, dur: 0.16, peak: 0.045, type: 'triangle' },
+        { freq: FS.As4, delay: 0.14, dur: 0.16, peak: 0.048, type: 'triangle' },
+        { freq: FS.Cs5, delay: 0.28, dur: 0.16, peak: 0.05, type: 'triangle' },
+        { freq: FS.Fs5, delay: 0.42, dur: 0.35, peak: 0.055, type: 'triangle' },
+        { freq: FS.Cs6, delay: 0.55, dur: 0.45, peak: 0.04, type: 'sine' }
       ],
       [
-        { freq: 440, delay: 0, dur: 0.12, peak: 0.045, type: 'square', attack: 0.01 },
-        { freq: 554, delay: 0.12, dur: 0.12, peak: 0.045, type: 'square', attack: 0.01 },
-        { freq: 659, delay: 0.24, dur: 0.12, peak: 0.048, type: 'square', attack: 0.01 },
-        { freq: 880, delay: 0.36, dur: 0.4, peak: 0.05, type: 'triangle' }
+        { freq: FS.Gs4, delay: 0, dur: 0.12, peak: 0.045, type: 'square', attack: 0.01 },
+        { freq: FS.As4, delay: 0.12, dur: 0.12, peak: 0.045, type: 'square', attack: 0.01 },
+        { freq: FS.Cs5, delay: 0.24, dur: 0.12, peak: 0.048, type: 'square', attack: 0.01 },
+        { freq: FS.Fs5, delay: 0.36, dur: 0.4, peak: 0.05, type: 'triangle' }
       ],
       [
-        { freq: 523.25, delay: 0, dur: 0.2, peak: 0.04 },
-        { freq: 659.25, delay: 0.1, dur: 0.2, peak: 0.04 },
-        { freq: 783.99, delay: 0.2, dur: 0.2, peak: 0.042 },
-        { freq: 1046.5, delay: 0.35, dur: 0.5, peak: 0.048, type: 'triangle' },
-        { freq: 1318.5, delay: 0.55, dur: 0.4, peak: 0.03 }
+        { freq: FS.Cs5, delay: 0, dur: 0.2, peak: 0.04 },
+        { freq: FS.Ds5, delay: 0.1, dur: 0.2, peak: 0.04 },
+        { freq: FS.Fs5, delay: 0.2, dur: 0.2, peak: 0.042 },
+        { freq: FS.As5, delay: 0.35, dur: 0.5, peak: 0.048, type: 'triangle' },
+        { freq: FS.Cs6, delay: 0.55, dur: 0.4, peak: 0.03 }
       ]
     ]);
   }
 
   function soundBonk() {
-    playRandomToneSet([
-      [{ freq: 180, delay: 0, dur: 0.22, peak: 0.07, type: 'sine', freqEnd: 90, attack: 0.005 }],
-      [{ freq: 220, delay: 0, dur: 0.18, peak: 0.065, type: 'triangle', freqEnd: 80, attack: 0.004 }],
+    playMelodySet([
+      [{ freq: FS.Fs3, delay: 0, dur: 0.22, peak: 0.07, type: 'sine', freqEnd: FS.Fs2, attack: 0.005 }],
+      [{ freq: FS.As3, delay: 0, dur: 0.18, peak: 0.065, type: 'triangle', freqEnd: FS.Fs2, attack: 0.004 }],
       [
-        { freq: 160, delay: 0, dur: 0.14, peak: 0.07, type: 'sine', freqEnd: 100 },
-        { freq: 90, delay: 0.08, dur: 0.2, peak: 0.04, type: 'triangle', freqEnd: 50 }
+        { freq: FS.Gs3, delay: 0, dur: 0.14, peak: 0.07, type: 'sine', freqEnd: FS.Cs3 },
+        { freq: FS.Fs2, delay: 0.08, dur: 0.2, peak: 0.04, type: 'triangle', freqEnd: 46.25 }
       ]
     ]);
     playNoiseBurst({ delay: 0, dur: 0.08, freq: 400, peak: 0.035, filterType: 'lowpass', q: 1 });
   }
 
   function soundLaser() {
-    playRandomToneSet([
-      [{ freq: 1600, delay: 0, dur: 0.35, peak: 0.045, type: 'sawtooth', freqEnd: 220, attack: 0.005 }],
-      [{ freq: 2200, delay: 0, dur: 0.28, peak: 0.04, type: 'square', freqEnd: 180, attack: 0.004 }],
+    playMelodySet([
+      [{ freq: FS.Gs6, delay: 0, dur: 0.35, peak: 0.045, type: 'sawtooth', freqEnd: FS.As3, attack: 0.005 }],
+      [{ freq: FS.Cs7, delay: 0, dur: 0.28, peak: 0.04, type: 'square', freqEnd: FS.Fs3, attack: 0.004 }],
       [
-        { freq: 1400, delay: 0, dur: 0.2, peak: 0.042, type: 'sawtooth', freqEnd: 400 },
-        { freq: 900, delay: 0.18, dur: 0.25, peak: 0.03, type: 'triangle', freqEnd: 120 }
+        { freq: FS.F6, delay: 0, dur: 0.2, peak: 0.042, type: 'sawtooth', freqEnd: FS.Gs4 },
+        { freq: FS.As5, delay: 0.18, dur: 0.25, peak: 0.03, type: 'triangle', freqEnd: FS.Cs4 }
       ],
-      [{ freq: 2800, delay: 0, dur: 0.22, peak: 0.038, type: 'sine', freqEnd: 300, attack: 0.003 }]
+      [{ freq: FS.Fs7, delay: 0, dur: 0.22, peak: 0.038, type: 'sine', freqEnd: FS.Ds4, attack: 0.003 }]
     ]);
   }
 
   function soundCoin() {
-    playRandomToneSet([
+    playMelodySet([
       [
-        { freq: 988, delay: 0, dur: 0.08, peak: 0.05, type: 'square', attack: 0.003 },
-        { freq: 1318, delay: 0.08, dur: 0.28, peak: 0.045, type: 'square', attack: 0.003 }
+        { freq: FS.B5, delay: 0, dur: 0.08, peak: 0.05, type: 'square', attack: 0.003 },
+        { freq: FS.Cs6, delay: 0.08, dur: 0.28, peak: 0.045, type: 'square', attack: 0.003 }
       ],
       [
-        { freq: 1046, delay: 0, dur: 0.07, peak: 0.048, type: 'square', attack: 0.003 },
-        { freq: 1568, delay: 0.07, dur: 0.32, peak: 0.042, type: 'triangle', attack: 0.004 }
+        { freq: FS.Cs6, delay: 0, dur: 0.07, peak: 0.048, type: 'square', attack: 0.003 },
+        { freq: FS.Fs6, delay: 0.07, dur: 0.32, peak: 0.042, type: 'triangle', attack: 0.004 }
       ],
       [
-        { freq: 880, delay: 0, dur: 0.06, peak: 0.05, type: 'square', attack: 0.002 },
-        { freq: 1175, delay: 0.06, dur: 0.08, peak: 0.045, type: 'square', attack: 0.002 },
-        { freq: 1760, delay: 0.14, dur: 0.25, peak: 0.038, type: 'sine', attack: 0.003 }
+        { freq: FS.As5, delay: 0, dur: 0.06, peak: 0.05, type: 'square', attack: 0.002 },
+        { freq: FS.Ds6, delay: 0.06, dur: 0.08, peak: 0.045, type: 'square', attack: 0.002 },
+        { freq: FS.As6, delay: 0.14, dur: 0.25, peak: 0.038, type: 'sine', attack: 0.003 }
       ]
     ]);
   }
@@ -469,7 +520,7 @@
       q: 0.8,
       power: 0.5
     });
-    playTones([{ freq: 140, delay: 0.85, dur: 0.35, peak: 0.05, type: 'sine', freqEnd: 70, attack: 0.01 }]);
+    playTones([{ freq: FS.Cs3, delay: 0.85, dur: 0.35, peak: 0.05, type: 'sine', freqEnd: FS.Fs2, attack: 0.01 }]);
   }
 
   function playEffectSound(id) {

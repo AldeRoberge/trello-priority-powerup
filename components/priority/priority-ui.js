@@ -5372,7 +5372,7 @@
   }
 
   /**
-   * Top-of-popup recap: title, description (editable), assignees, priority, due, blocked.
+   * Top-of-popup recap: title, description (editable), assignees, labels, priority, due, blocked.
    * Priority / due / blocked are read-only mirrors of the sections below.
    */
   function createInfoField(config) {
@@ -5382,6 +5382,10 @@
       typeof config.onTitleChange === 'function' ? config.onTitleChange : null;
     var onDescChange =
       typeof config.onDescChange === 'function' ? config.onDescChange : null;
+    var onLabelAdd =
+      typeof config.onLabelAdd === 'function' ? config.onLabelAdd : null;
+    var onLabelRemove =
+      typeof config.onLabelRemove === 'function' ? config.onLabelRemove : null;
     var onAuthorize =
       typeof config.onAuthorize === 'function' ? config.onAuthorize : null;
     var onJump =
@@ -5390,6 +5394,10 @@
     var titleText = typeof config.title === 'string' ? config.title : '';
     var descText = typeof config.desc === 'string' ? config.desc : '';
     var members = Array.isArray(config.members) ? config.members.slice() : [];
+    var labels = Array.isArray(config.labels) ? config.labels.slice() : [];
+    var boardLabels = Array.isArray(config.boardLabels)
+      ? config.boardLabels.slice()
+      : [];
     var priorityLabel = typeof config.priorityLabel === 'string' ? config.priorityLabel : '';
     var impactReachLabel = typeof config.impactReach === 'string' ? config.impactReach : '';
     var durationLabel = typeof config.durationLabel === 'string' ? config.durationLabel : '';
@@ -5407,6 +5415,8 @@
     var descSpellRevert = null;
     var authBusy = false;
     var authReason = config.authReason || '';
+    var labelsBusy = false;
+    var labelsPickerOpen = false;
     var FIELD_SAVE_MS = 450;
 
     var field = document.createElement('div');
@@ -5558,6 +5568,44 @@
     membersEl.setAttribute('aria-label', 'Membres assign\u00e9s');
     membersRow.value.appendChild(membersEl);
     body.appendChild(membersRow.row);
+
+    // ── Labels (Trello étiquettes) ─────────────────────────────────────
+    var labelsRow = makeRow('labels', '\u00c9tiquettes', { icon: 'ti-tag' });
+    var labelsWrap = document.createElement('div');
+    labelsWrap.className = 'info-labels-wrap';
+
+    var labelsEl = document.createElement('div');
+    labelsEl.className = 'info-labels';
+    labelsEl.setAttribute('aria-label', '\u00c9tiquettes de la carte');
+
+    var labelsAddWrap = document.createElement('div');
+    labelsAddWrap.className = 'info-labels-add-wrap';
+
+    var labelsAddBtn = document.createElement('button');
+    labelsAddBtn.type = 'button';
+    labelsAddBtn.className = 'info-labels-add-btn';
+    labelsAddBtn.setAttribute('aria-expanded', 'false');
+    labelsAddBtn.setAttribute('aria-haspopup', 'listbox');
+    labelsAddBtn.innerHTML =
+      '<i class="ti ti-plus" aria-hidden="true"></i><span>Ajouter</span>';
+
+    var labelsPicker = document.createElement('div');
+    labelsPicker.className = 'info-labels-picker';
+    labelsPicker.hidden = true;
+    labelsPicker.setAttribute('role', 'listbox');
+    labelsPicker.setAttribute('aria-label', '\u00c9tiquettes du tableau');
+
+    var labelsStatus = document.createElement('span');
+    labelsStatus.className = 'info-desc-status';
+    labelsStatus.setAttribute('aria-live', 'polite');
+
+    labelsAddWrap.appendChild(labelsAddBtn);
+    labelsAddWrap.appendChild(labelsPicker);
+    labelsWrap.appendChild(labelsEl);
+    labelsWrap.appendChild(labelsAddWrap);
+    labelsWrap.appendChild(labelsStatus);
+    labelsRow.value.appendChild(labelsWrap);
+    body.appendChild(labelsRow.row);
 
     // ── Objectif (project / mission link) ───────────────────────────────
     var objectifRow = makeRow('objectif', 'Objectif', { icon: 'ti-hierarchy-2' });

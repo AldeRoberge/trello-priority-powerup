@@ -625,6 +625,155 @@
     }
   }
 
+  function normalizeLabelList(list) {
+    if (!Array.isArray(list)) return [];
+    return list.filter(function (label) {
+      return (
+        label &&
+        typeof label === 'object' &&
+        !isPowerUpRequestChain(label) &&
+        label.id
+      );
+    });
+  }
+
+  /**
+   * Labels on the current card (`t.card('labels')`).
+   * Each entry typically has id, name, color, idBoard.
+   */
+  async function getCardLabels(t) {
+    try {
+      var card = await cardDataPromise(t, 'labels');
+      var list = null;
+      if (card && Array.isArray(card.labels)) list = card.labels;
+      else if (Array.isArray(card)) list = card;
+      else {
+        var scalar = await cardFieldPromise(t, 'labels');
+        if (Array.isArray(scalar)) list = scalar;
+        else if (scalar && Array.isArray(scalar.labels)) list = scalar.labels;
+      }
+      return normalizeLabelList(list);
+    } catch (err) {
+      console.error('Priority card labels failed', err);
+      return [];
+    }
+  }
+
+  /**
+   * All labels available on the board (`t.labels('all')`).
+   */
+  async function getBoardLabels(t) {
+    try {
+      if (!t || typeof t.labels !== 'function') return [];
+      var labels = await new Promise(function (resolve, reject) {
+        t.labels('all').then(resolve, reject);
+      });
+      if (isPowerUpRequestChain(labels)) return [];
+      return normalizeLabelList(labels);
+    } catch (err) {
+      console.error('Priority board labels failed', err);
+      return [];
+    }
+  }
+
+  /**
+   * Add an existing board label to the card via REST POST /cards/{id}/idLabels.
+   * Requires OAuth (same as title / description edits).
+   */
+  async function addCardLabel(t, labelId) {
+    var id = labelId != null ? String(labelId).trim() : '';
+    if (!id) return { ok: false, reason: 'no-label-id', changed: false };
+    if (!restClientOptions()) return { ok: false, reason: 'no-app-key', changed: false };
+
+    var cardId = await resolveCurrentCardId(t);
+    if (!cardId) return { ok: false, reason: 'no-card-id', changed: false };
+
+    var cfg = restClientOptions();
+    var api = await t.getRestApi();
+    var authorized = await api.isAuthorized();
+    if (!authorized) return { ok: false, reason: 'not-authorized', changed: false };
+    var token = await api.getToken();
+    if (!token) return { ok: false, reason: 'no-token', changed: false };
+
+    var url =
+      'https://api.trello.com/1/cards/' +
+      encodeURIComponent(cardId) +
+      '/idLabels?value=' +
+      encodeURIComponent(id) +
+      '&key=' +
+      encodeURIComponent(cfg.appKey) +
+      '&token=' +
+      encodeURIComponent(token);
+
+    var response = await fetch(url, { method: 'POST' });
+    if (!response.ok) {
+      var detail = '';
+      try {
+        detail = await response.text();
+      } catch (readErr) {
+        detail = readErr && readErr.message ? readErr.message : '';
+      }
+      throw new Error(
+        'Trello REST POST /cards/' +
+          cardId +
+          '/idLabels failed: ' +
+          response.status +
+          (detail ? ' ' + detail : '')
+      );
+    }
+    return { ok: true, changed: true, labelId: id };
+  }
+
+  /**
+   * Remove a label from the card via REST DELETE /cards/{id}/idLabels/{idLabel}.
+   * Requires OAuth (same as title / description edits).
+   */
+  async function removeCardLabel(t, labelId) {
+    var id = labelId != null ? String(labelId).trim() : '';
+    if (!id) return { ok: false, reason: 'no-label-id', changed: false };
+    if (!restClientOptions()) return { ok: false, reason: 'no-app-key', changed: false };
+
+    var cardId = await resolveCurrentCardId(t);
+    if (!cardId) return { ok: false, reason: 'no-card-id', changed: false };
+
+    var cfg = restClientOptions();
+    var api = await t.getRestApi();
+    var authorized = await api.isAuthorized();
+    if (!authorized) return { ok: false, reason: 'not-authorized', changed: false };
+    var token = await api.getToken();
+    if (!token) return { ok: false, reason: 'no-token', changed: false };
+
+    var url =
+      'https://api.trello.com/1/cards/' +
+      encodeURIComponent(cardId) +
+      '/idLabels/' +
+      encodeURIComponent(id) +
+      '?key=' +
+      encodeURIComponent(cfg.appKey) +
+      '&token=' +
+      encodeURIComponent(token);
+
+    var response = await fetch(url, { method: 'DELETE' });
+    if (!response.ok) {
+      var detail = '';
+      try {
+        detail = await response.text();
+      } catch (readErr) {
+        detail = readErr && readErr.message ? readErr.message : '';
+      }
+      throw new Error(
+        'Trello REST DELETE /cards/' +
+          cardId +
+          '/idLabels/' +
+          id +
+          ' failed: ' +
+          response.status +
+          (detail ? ' ' + detail : '')
+      );
+    }
+    return { ok: true, changed: true, labelId: id };
+  }
+
   /**
    * Update the card description via REST PUT. Requires OAuth (same as due sync).
    */
@@ -1885,6 +2034,10 @@
     getCardName: getCardName,
     getCardDesc: getCardDesc,
     getCardMembers: getCardMembers,
+    getCardLabels: getCardLabels,
+    getBoardLabels: getBoardLabels,
+    addCardLabel: addCardLabel,
+    removeCardLabel: removeCardLabel,
     setCardDesc: setCardDesc,
     setCardName: setCardName,
     getCardDueComplete: getCardDueComplete,

@@ -2388,6 +2388,11 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
   white-space: nowrap;
 }
 
+.tp-completion-item-progress-lbl {
+  min-width: 7.5em;
+  transition: color 0.2s ease;
+}
+
 .tp-completion-field-val,
 .tp-completion-item-val {
   font-size: 13px;

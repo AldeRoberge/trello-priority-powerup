@@ -994,6 +994,15 @@
       );
     }
 
+    function syncItemProgressLabel(labelEl, percent) {
+      if (!labelEl) return;
+      var p = CT.clampProgress(percent);
+      var accent = p > 0 ? completionColorForProgress(p) : '';
+      labelEl.textContent = progressEncouragementText(p);
+      labelEl.style.color = accent;
+      labelEl.classList.toggle('is-complete', p >= 100);
+    }
+
     function syncItemSlidersFromData() {
       data.items.forEach(function (item) {
         var li = findItemRow(item.id);
@@ -1001,12 +1010,14 @@
         var p = CT.itemProgress(item);
         var slider = li.querySelector('.tp-completion-item-slider');
         var valEl = li.querySelector('.tp-completion-item-val');
+        var labelEl = li.querySelector('.tp-completion-item-progress-lbl');
         var checkBtn = li.querySelector('.tp-completion-check');
         if (slider) {
           slider.value = String(p);
           applySliderProgressTrack(slider, p);
         }
         if (valEl) valEl.textContent = p + '\u00a0%';
+        syncItemProgressLabel(labelEl, p);
         syncCheckButton(checkBtn, item.done, p);
         li.classList.toggle('is-done', item.done);
       });
@@ -1601,11 +1612,14 @@
       var deleteBtn = li.querySelector('.tp-completion-delete');
       var itemSlider = li.querySelector('.tp-completion-item-slider');
       var itemValEl = li.querySelector('.tp-completion-item-val');
+      var itemLabelEl = li.querySelector('.tp-completion-item-progress-lbl');
       var isLinked = CT.isLinkedItem(item);
 
       function syncItemProgressUi() {
         var p = CT.itemProgress(item);
         if (itemSlider) applySliderProgressTrack(itemSlider, p);
+        if (itemValEl) itemValEl.textContent = p + '\u00a0%';
+        syncItemProgressLabel(itemLabelEl, p);
         syncCheckButton(checkBtn, item.done, p);
         li.classList.toggle('is-done', item.done);
       }
@@ -1632,7 +1646,6 @@
         var wasDone = !!item.done;
         setItemProgress(item, item.done ? 0 : 100);
         if (itemSlider) itemSlider.value = String(item.progress);
-        if (itemValEl) itemValEl.textContent = item.progress + '\u00a0%';
         syncItemProgressUi();
         emitChange({
           animateItemId: item.id,
@@ -1646,7 +1659,6 @@
         function handleItemSlider() {
           var v = Number(itemSlider.value);
           setItemProgress(item, v);
-          itemValEl.textContent = v + '\u00a0%';
           syncItemProgressUi();
           updateProgressUi({ deferDoneListReveal: true });
           onChange(CT.normalizeCompletionData(data));
@@ -1880,9 +1892,11 @@
         var sliderRow = document.createElement('div');
         sliderRow.className = 'tp-completion-item-slider-row';
 
+        var itemProgress = CT.itemProgress(item);
         var sliderLbl = document.createElement('span');
-        sliderLbl.className = 'tp-completion-field-lbl';
-        sliderLbl.textContent = 'Progr\u00e8s';
+        sliderLbl.className =
+          'tp-completion-field-lbl tp-completion-item-progress-lbl';
+        syncItemProgressLabel(sliderLbl, itemProgress);
 
         var sliderWrap = document.createElement('div');
         sliderWrap.className = 'field-slider';
@@ -1893,12 +1907,12 @@
         itemSlider.min = '0';
         itemSlider.max = '100';
         itemSlider.step = '1';
-        itemSlider.value = String(CT.itemProgress(item));
+        itemSlider.value = String(itemProgress);
         itemSlider.setAttribute('aria-label', 'Progr\u00e8s de la sous-t\u00e2che');
 
         var itemValEl = document.createElement('span');
         itemValEl.className = 'tp-completion-item-val tp-completion-field-val';
-        itemValEl.textContent = CT.itemProgress(item) + '\u00a0%';
+        itemValEl.textContent = itemProgress + '\u00a0%';
 
         sliderWrap.appendChild(itemSlider);
         sliderRow.appendChild(sliderLbl);
