@@ -614,7 +614,8 @@
 
   /**
    * Members assigned to the current card (`t.card('members')`).
-   * Each entry typically has id, fullName, username, initials, avatarHash/avatarUrl.
+   * Each entry typically has id, fullName, username, initials,
+   * and avatar (ready URL) and/or avatarHash/avatarUrl.
    */
   async function getCardMembers(t) {
     try {

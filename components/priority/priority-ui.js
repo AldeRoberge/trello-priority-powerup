@@ -6366,6 +6366,8 @@
     var impactReachLabel = typeof config.impactReach === 'string' ? config.impactReach : '';
     var durationLabel = typeof config.durationLabel === 'string' ? config.durationLabel : '';
     var dueLabel = typeof config.dueLabel === 'string' ? config.dueLabel : '';
+    // Visual meta for the proximity circle (same palette as Échéance section glow).
+    var dueBand = typeof config.dueBand === 'string' ? config.dueBand : '';
     var titleDirty = false;
     var titleSaveTimer = null;
     var titleBusy = false;
@@ -6814,9 +6816,17 @@
       interactive: true,
       icon: 'ti-calendar'
     });
+    var dueRecapEl = document.createElement('div');
+    dueRecapEl.className = 'info-due-recap';
+    var dueDotEl = document.createElement('span');
+    dueDotEl.className = 'heat-tier-dot info-due-dot';
+    dueDotEl.setAttribute('aria-hidden', 'true');
+    dueDotEl.hidden = true;
     var dueValueEl = document.createElement('span');
     dueValueEl.className = 'info-recap-text';
-    dueRow.value.appendChild(dueValueEl);
+    dueRecapEl.appendChild(dueDotEl);
+    dueRecapEl.appendChild(dueValueEl);
+    dueRow.value.appendChild(dueRecapEl);
     body.appendChild(dueRow.row);
 
     field.appendChild(body);
@@ -7019,8 +7029,14 @@
 
     function memberAvatarUrl(member) {
       if (!member || typeof member !== 'object') return '';
+      // Power-Up client: ready-to-use 50px URL (t.member / card members).
+      if (typeof member.avatar === 'string' && member.avatar.trim()) {
+        return member.avatar.trim();
+      }
+      // REST API: avatarUrl is a prefix; append size unless already a .png.
       if (typeof member.avatarUrl === 'string' && member.avatarUrl.trim()) {
         var base = member.avatarUrl.trim().replace(/\/$/, '');
+        if (/\.png($|\?)/i.test(base)) return base;
         return base + '/50.png';
       }
       if (
@@ -7030,7 +7046,7 @@
       ) {
         return (
           'https://trello-members.s3.amazonaws.com/' +
-          encodeURIComponent(member.id) +
+          encodeURIComponent(String(member.id)) +
           '/' +
           encodeURIComponent(member.avatarHash.trim()) +
           '/50.png'
@@ -7039,13 +7055,44 @@
       return '';
     }
 
+    function enrichMemberAvatar(member) {
+      if (!member || typeof member !== 'object') return member;
+      if (memberAvatarUrl(member)) return member;
+      if (!member.id || !boardMembers.length) return member;
+      var id = String(member.id);
+      for (var i = 0; i < boardMembers.length; i++) {
+        var boardMember = boardMembers[i];
+        if (!boardMember || String(boardMember.id) !== id) continue;
+        if (!memberAvatarUrl(boardMember)) return member;
+        return {
+          id: member.id,
+          fullName: member.fullName || boardMember.fullName || '',
+          username: member.username || boardMember.username || '',
+          initials: member.initials || boardMember.initials || '',
+          avatar:
+            typeof boardMember.avatar === 'string' ? boardMember.avatar : '',
+          avatarUrl:
+            typeof boardMember.avatarUrl === 'string'
+              ? boardMember.avatarUrl
+              : '',
+          avatarHash:
+            typeof boardMember.avatarHash === 'string'
+              ? boardMember.avatarHash
+              : ''
+        };
+      }
+      return member;
+    }
+
     function appendMemberAvatar(chip, member) {
-      var avatarUrl = memberAvatarUrl(member);
+      var resolved = enrichMemberAvatar(member);
+      var avatarUrl = memberAvatarUrl(resolved);
       if (avatarUrl) {
         var img = document.createElement('img');
         img.className = 'info-member-avatar';
         img.src = avatarUrl;
         img.alt = '';
+        img.referrerPolicy = 'no-referrer';
         img.width = 28;
         img.height = 28;
         img.loading = 'lazy';
@@ -7053,7 +7100,7 @@
           img.remove();
           var fallback = document.createElement('span');
           fallback.className = 'info-member-initials';
-          fallback.textContent = memberInitials(member);
+          fallback.textContent = memberInitials(resolved);
           chip.insertBefore(fallback, chip.firstChild);
         });
         chip.appendChild(img);
@@ -7061,7 +7108,7 @@
       }
       var initials = document.createElement('span');
       initials.className = 'info-member-initials';
-      initials.textContent = memberInitials(member);
+      initials.textContent = memberInitials(resolved);
       chip.appendChild(initials);
     }
 
@@ -7221,6 +7268,8 @@
                   typeof member.username === 'string' ? member.username : '',
                 initials:
                   typeof member.initials === 'string' ? member.initials : '',
+                avatar:
+                  typeof member.avatar === 'string' ? member.avatar : '',
                 avatarUrl:
                   typeof member.avatarUrl === 'string' ? member.avatarUrl : '',
                 avatarHash:
@@ -7756,11 +7805,29 @@
       priorityValueEl.style.color = v.text;
     }
 
+    function paintDueRecap() {
+      var hasDue = !!(dueLabel || '').trim() && !!dueBand;
+      setRecapText(dueValueEl, dueLabel, 'Aucune');
+      if (!hasDue) {
+        dueDotEl.hidden = true;
+        dueDotEl.style.removeProperty('background');
+        dueValueEl.style.removeProperty('color');
+        if (dueRecapEl.dataset) delete dueRecapEl.dataset.dueBand;
+        return;
+      }
+      var accent = dueBandAccent(dueBand);
+      dueDotEl.hidden = !accent;
+      if (accent) dueDotEl.style.background = accent;
+      else dueDotEl.style.removeProperty('background');
+      dueValueEl.style.color = 'var(--due-band-' + dueBand + '-text)';
+      if (dueRecapEl.dataset) dueRecapEl.dataset.dueBand = dueBand;
+    }
+
     function renderRecap() {
       paintPriorityRecap();
       setRecapText(porteValueEl, impactReachLabel, 'Non d\u00e9finie');
       setRecapText(dureeValueEl, durationLabel, 'Non d\u00e9finie');
-      setRecapText(dueValueEl, dueLabel, 'Aucune');
+      paintDueRecap();
     }
 
     function summaryText() {
@@ -8288,6 +8355,9 @@
         if (next.impactReach != null) impactReachLabel = String(next.impactReach || '');
         if (next.durationLabel != null) durationLabel = String(next.durationLabel || '');
         if (next.dueLabel != null) dueLabel = String(next.dueLabel || '');
+        if (Object.prototype.hasOwnProperty.call(next, 'dueBand')) {
+          dueBand = typeof next.dueBand === 'string' ? next.dueBand : '';
+        }
         renderRecap();
         collapse.refreshSummary();
       },
@@ -9372,13 +9442,21 @@
     countdown.setAttribute('aria-live', 'polite');
     countdown.hidden = true;
 
+    var countdownPrimaryRow = document.createElement('div');
+    countdownPrimaryRow.className = 'due-date-countdown-primary-row';
+    var countdownDot = document.createElement('span');
+    countdownDot.className = 'heat-tier-dot due-date-countdown-dot';
+    countdownDot.setAttribute('aria-hidden', 'true');
+    countdownDot.hidden = true;
     var countdownPrimary = document.createElement('div');
     countdownPrimary.className = 'due-date-countdown-primary';
+    countdownPrimaryRow.appendChild(countdownDot);
+    countdownPrimaryRow.appendChild(countdownPrimary);
 
     var countdownSecondary = document.createElement('div');
     countdownSecondary.className = 'due-date-countdown-secondary';
 
-    countdown.appendChild(countdownPrimary);
+    countdown.appendChild(countdownPrimaryRow);
     countdown.appendChild(countdownSecondary);
 
     var pickers = document.createElement('div');
@@ -10173,6 +10251,17 @@
       footer.hidden = hideToday;
     }
 
+    function paintCountdownDot(band) {
+      var accent = dueBandAccent(band);
+      if (!accent) {
+        countdownDot.hidden = true;
+        countdownDot.style.removeProperty('background');
+        return;
+      }
+      countdownDot.hidden = false;
+      countdownDot.style.background = accent;
+    }
+
     function refreshCountdown() {
       if (!current) {
         countdownPrimary.textContent = '';
@@ -10181,6 +10270,7 @@
         countdown.hidden = true;
         countdown.classList.remove('is-past');
         field.classList.remove('has-due-date');
+        paintCountdownDot('');
         clearDueProximityBand(field);
         refreshTimeRow();
         refreshTrigger();
@@ -10200,6 +10290,7 @@
         countdown.hidden = true;
         countdown.classList.remove('is-past');
         field.classList.remove('has-due-date');
+        paintCountdownDot('');
         clearDueProximityBand(field);
         if (collapseApi) collapseApi.refreshSummary();
         return;
@@ -10214,7 +10305,31 @@
       countdown.classList.toggle('is-past', past);
       field.classList.add('has-due-date');
       applyDueProximityBand(field, band);
+      paintCountdownDot(band);
       if (collapseApi) collapseApi.refreshSummary();
+    }
+
+    function buildDueSummary() {
+      if (!current) return formatDueDateCompactSummary(current, currentTime);
+      var label = formatDueDateCompactSummary(current, currentTime);
+      if (!label) return '';
+      var band = dueProximityBand(current, currentTime);
+      var accent = dueBandAccent(band);
+      var wrap = document.createElement('span');
+      wrap.className = 'due-summary';
+      if (band && wrap.dataset) wrap.dataset.dueBand = band;
+      if (accent) {
+        var dot = document.createElement('span');
+        dot.className = 'heat-tier-dot due-summary-dot';
+        dot.setAttribute('aria-hidden', 'true');
+        dot.style.background = accent;
+        wrap.appendChild(dot);
+      }
+      var text = document.createElement('span');
+      text.className = 'due-summary-label';
+      text.textContent = label;
+      wrap.appendChild(text);
+      return wrap;
     }
 
     function emitChange() {
@@ -10913,9 +11028,7 @@
       alwaysEnabled: true,
       enabled: true,
       expanded: config.expanded != null ? !!config.expanded : !!current,
-      getSummary: function () {
-        return formatDueDateCompactSummary(current, currentTime);
-      },
+      getSummary: buildDueSummary,
       onLayoutChange: notifyLayout,
       onExpandChange: function (expanded, options) {
         refreshSuggestions();
@@ -13050,6 +13163,8 @@
     formatDueTimeCompactFr: formatDueTimeCompactFr,
     formatDueDateDisplay: formatDueDateDisplay,
     formatDueDateCompactSummary: formatDueDateCompactSummary,
+    dueProximityBand: dueProximityBand,
+    dueBandAccent: dueBandAccent,
     formatDueDateHumanReadable: formatDueDateHumanReadable,
     formatDueDateTriggerTitle: formatDueDateTriggerTitle,
     formatDueTimeTriggerTitle: formatDueTimeTriggerTitle,

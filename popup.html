@@ -15,7 +15,7 @@
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/effects.js?v=fx-3"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=info-add-inline-1"></script>
+  <script src="./components/priority/priority-ui.js?v=info-member-avatar-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
@@ -251,8 +251,12 @@
       } catch (e) { /* ignore */ }
 
       var dueLabel = '';
+      var dueBand = '';
       if (state.dueEnabled !== false && state.dueDate && PriorityUI.formatDueDateCompactSummary) {
         dueLabel = PriorityUI.formatDueDateCompactSummary(state.dueDate, state.dueTime) || '';
+        if (dueLabel && typeof PriorityUI.dueProximityBand === 'function') {
+          dueBand = PriorityUI.dueProximityBand(state.dueDate, state.dueTime) || '';
+        }
       }
 
       var impactReach = '';
@@ -275,7 +279,8 @@
         priorityVisual: priorityVisual,
         impactReach: impactReach,
         durationLabel: durationLabel,
-        dueLabel: dueLabel
+        dueLabel: dueLabel,
+        dueBand: dueBand
       });
     }
 

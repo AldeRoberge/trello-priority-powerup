@@ -583,6 +583,28 @@ body {
   opacity: 0.82;
 }
 
+/* Match Priorité: colored proximity circle + due label. */
+.info-due-recap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.info-due-recap .info-due-dot {
+  flex-shrink: 0;
+}
+
+.info-due-recap .info-recap-text {
+  min-width: 0;
+  font-weight: 600;
+}
+
+.info-due-recap .info-recap-text.is-empty {
+  font-weight: 400;
+}
+
 .info-desc-wrap {
   display: flex;
   flex-direction: column;
@@ -1128,10 +1150,11 @@ body {
   min-width: 0;
 }
 
-.info-members-inline {
+.info-members-inline,
+.info-labels-inline {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   min-width: 0;
 }
@@ -1151,9 +1174,11 @@ body {
   gap: 6px;
   max-width: 100%;
   min-width: 0;
+  min-height: 32px;
   padding: 2px 4px 2px 2px;
   border-radius: 999px;
   background: var(--surface-1);
+  box-sizing: border-box;
 }
 
 .info-member-avatar,
@@ -1222,7 +1247,8 @@ body {
   cursor: default;
 }
 
-.info-members-add-wrap {
+.info-members-add-wrap,
+.info-labels-add-wrap {
   position: relative;
   display: inline-flex;
   flex-direction: column;
@@ -1231,47 +1257,56 @@ body {
   gap: 6px;
 }
 
-.info-members-add-btn {
+.info-members-add-btn,
+.info-labels-add-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   margin: 0;
-  padding: 4px 10px;
+  min-height: 32px;
+  padding: 4px 12px;
   border: 1px dashed color-mix(in srgb, var(--text-primary) 22%, transparent);
-  border-radius: 8px;
-  background: transparent;
+  border-radius: 999px;
+  background: var(--surface-1);
   color: var(--text-secondary);
   font: inherit;
   font-size: 12px;
   font-weight: 500;
   line-height: 1.2;
   cursor: pointer;
+  box-sizing: border-box;
 }
 
-.info-members-add-btn .ti {
+.info-members-add-btn .ti,
+.info-labels-add-btn .ti {
   font-size: 14px;
 }
 
-.info-members-add-btn:hover:not(:disabled) {
+.info-members-add-btn:hover:not(:disabled),
+.info-labels-add-btn:hover:not(:disabled) {
   border-style: solid;
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-1));
   color: var(--text-primary);
 }
 
-.info-members-add-btn:focus-visible {
+.info-members-add-btn:focus-visible,
+.info-labels-add-btn:focus-visible {
   outline: 2px solid var(--tp-primary, #0c66e4);
   outline-offset: 1px;
 }
 
-.info-members-add-btn:disabled {
+.info-members-add-btn:disabled,
+.info-labels-add-btn:disabled {
   opacity: 0.45;
   cursor: default;
 }
 
-.info-members-add-wrap.is-open .info-members-add-btn {
+.info-members-add-wrap.is-open .info-members-add-btn,
+.info-labels-add-wrap.is-open .info-labels-add-btn {
   border-style: solid;
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-1));
 }
 
 .info-members-picker {
@@ -1349,18 +1384,10 @@ body {
   min-width: 0;
 }
 
-.info-labels-inline {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 6px;
-  min-width: 0;
-}
-
 .info-labels {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
   flex: 0 1 auto;
   min-width: 0;
@@ -1372,14 +1399,16 @@ body {
   gap: 2px;
   max-width: 100%;
   min-width: 0;
-  padding: 4px 4px 4px 10px;
-  border-radius: 4px;
+  min-height: 32px;
+  padding: 2px 4px 2px 12px;
+  border-radius: 999px;
   background: var(--label-color, #b3bac5);
   color: var(--label-fg, #ffffff);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.01em;
+  box-sizing: border-box;
 }
 
 .info-label-name {
@@ -1397,7 +1426,7 @@ body {
   margin: 0;
   padding: 0;
   border: none;
-  border-radius: 4px;
+  border-radius: 50%;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -1420,58 +1449,6 @@ body {
 .info-label-clear:disabled {
   opacity: 0.45;
   cursor: default;
-}
-
-.info-labels-add-wrap {
-  position: relative;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  flex: 0 0 auto;
-  gap: 6px;
-}
-
-.info-labels-add-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin: 0;
-  padding: 4px 10px;
-  border: 1px dashed color-mix(in srgb, var(--text-primary) 22%, transparent);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.2;
-  cursor: pointer;
-}
-
-.info-labels-add-btn .ti {
-  font-size: 14px;
-}
-
-.info-labels-add-btn:hover:not(:disabled) {
-  border-style: solid;
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-  color: var(--text-primary);
-}
-
-.info-labels-add-btn:focus-visible {
-  outline: 2px solid var(--tp-primary, #0c66e4);
-  outline-offset: 1px;
-}
-
-.info-labels-add-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.info-labels-add-wrap.is-open .info-labels-add-btn {
-  border-style: solid;
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 
 .info-labels-picker {
@@ -1759,6 +1736,27 @@ body {
 
 .priority-summary.is-inutile .priority-summary-label {
   opacity: 0.82;
+}
+
+.due-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.due-summary-dot {
+  flex-shrink: 0;
+}
+
+.due-summary-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 /* Expanded: body content replaces the header summary */
@@ -3210,6 +3208,18 @@ html[data-color-mode="dark"] .due-date-time-clock {
   background: transparent;
   border: none;
   line-height: 1.3;
+}
+
+.due-date-countdown-primary-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.due-date-countdown-dot {
+  flex-shrink: 0;
 }
 
 .due-date-countdown-primary {

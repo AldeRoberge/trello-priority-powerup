@@ -782,7 +782,7 @@
         if (activeOffer) return 'Suggestion';
         if (applySuggestions.length) {
           return applySuggestions.length === 1
-            ? '1 suggestion'
+            ? 'Une suggestion'
             : applySuggestions.length + ' suggestions';
         }
         if (unreadAssistant > 0) {
