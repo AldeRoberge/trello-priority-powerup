@@ -596,6 +596,122 @@
     );
   }
 
+  /** Soft F# tick used when a single subtask is checked (smaller than full fireworks). */
+  function playSubtaskPopSound() {
+    playTones(
+      [
+        {
+          freq: FS.As5,
+          delay: 0,
+          dur: 0.045,
+          peak: 0.034,
+          type: 'triangle',
+          attack: 0.002
+        },
+        {
+          freq: FS.Cs6,
+          delay: 0.028,
+          dur: 0.1,
+          peak: 0.03,
+          type: 'sine',
+          attack: 0.003
+        }
+      ],
+      { lowpass: 4800 }
+    );
+  }
+
+  /**
+   * Tiny fireworks-style pop anchored to a checkbox / point.
+   * Uses data-tp-fx-local so full-screen clearEffects() does not wipe it.
+   *
+   * @param {Element|{x:number,y:number}|null} anchor
+   * @param {{ sound?: boolean, root?: Element }} [options]
+   * @returns {{ ok: boolean, error?: string }}
+   */
+  function playSubtaskPop(anchor, options) {
+    options = options || {};
+    if (typeof document === 'undefined') {
+      return { ok: false, error: 'DOM indisponible' };
+    }
+
+    var cx = null;
+    var cy = null;
+    if (anchor && typeof anchor.getBoundingClientRect === 'function') {
+      var rect = anchor.getBoundingClientRect();
+      if (rect && (rect.width || rect.height || rect.left || rect.top)) {
+        cx = rect.left + rect.width / 2;
+        cy = rect.top + rect.height / 2;
+      }
+    } else if (anchor && typeof anchor.x === 'number' && typeof anchor.y === 'number') {
+      cx = anchor.x;
+      cy = anchor.y;
+    }
+
+    if (cx == null || cy == null || !isFinite(cx) || !isFinite(cy)) {
+      return { ok: false, error: 'Ancre invalide' };
+    }
+
+    if (options.sound !== false) {
+      try {
+        playSubtaskPopSound();
+      } catch (e) {
+        /* ignore */
+      }
+    }
+
+    if (prefersReducedMotion()) {
+      return { ok: true, reducedMotion: true };
+    }
+
+    var mount = options.root || document.body;
+    if (!mount || !mount.appendChild) {
+      return { ok: false, error: 'Root invalide' };
+    }
+
+    var overlay = document.createElement('div');
+    overlay.className = 'tp-fx-root tp-fx--subtask-pop is-local';
+    overlay.setAttribute('data-tp-fx-local', 'subtask-pop');
+    overlay.setAttribute('aria-hidden', 'true');
+    mount.appendChild(overlay);
+
+    var colors = ['#2a9b82', '#4bce97', '#f5cd47', '#579dff', '#fff'];
+    var burst = document.createElement('div');
+    burst.className = 'tp-fx-firework-burst tp-fx-subtask-burst';
+    burst.style.left = Math.round(cx) + 'px';
+    burst.style.top = Math.round(cy) + 'px';
+    burst.style.setProperty('--burst-delay', '0s');
+
+    var sparks = 10;
+    for (var s = 0; s < sparks; s++) {
+      var spark = document.createElement('span');
+      spark.className = 'tp-fx-firework-spark tp-fx-subtask-spark';
+      spark.style.setProperty('--spark-angle', (360 / sparks) * s + 8 + 'deg');
+      spark.style.setProperty('--spark-dist', 22 + (s % 3) * 8 + 'px');
+      spark.style.setProperty('--spark-color', pick(colors, s));
+      spark.style.setProperty('--spark-delay', s * 0.008 + 's');
+      burst.appendChild(spark);
+    }
+    overlay.appendChild(burst);
+
+    if (anchor && anchor.classList && anchor.classList.contains('tp-completion-check')) {
+      anchor.classList.remove('is-pop');
+      // Retrigger CSS animation if the class was already present.
+      void anchor.offsetWidth;
+      anchor.classList.add('is-pop');
+      setTimeout(function () {
+        try {
+          anchor.classList.remove('is-pop');
+        } catch (e2) {
+          /* ignore */
+        }
+      }, 480);
+    }
+
+    scheduleClear(overlay, 900);
+    return { ok: true };
+  }
+
   function playEffectSound(id) {
     switch (id) {
       case 'fireworks':
@@ -1352,5 +1468,6 @@
     clear: clearEffects,
     playSound: playEffectSound,
     playProgressTick: playProgressTick,
+    playSubtaskPop: playSubtaskPop,
   };
 })(typeof window !== 'undefined' ? window : this);

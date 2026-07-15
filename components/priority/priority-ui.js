@@ -6281,7 +6281,7 @@
 
       var iconWrap = document.createElement('div');
       iconWrap.className = 'statut-hero-icon';
-      iconWrap.appendChild(createStatutIcon(style.icon || 'dot', 36));
+      iconWrap.appendChild(createStatutIcon(style.icon || 'dot', 56));
 
       var nameEl = document.createElement('div');
       nameEl.className = 'statut-hero-name';

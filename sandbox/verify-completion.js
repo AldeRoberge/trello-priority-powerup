@@ -51,10 +51,15 @@ check('PriorityTrello.getCardDueComplete export', !!(PT && typeof PT.getCardDueC
   'isItemBlocked',
   'isMasterBlocked',
   'hasAnyBlocked',
+  'normalizeBlockedReasons',
+  'aggregateBlockedReasons',
   'setMasterBlocked',
+  'setMasterBlockedReasons',
   'setItemBlocked',
+  'setItemBlockedReasons',
   'clearAllBlocked',
   'blockedLinksFromCompletion',
+  'seedBlockedReasonsFromPriority',
   'getCardCompletion',
   'saveCardCompletion',
   'formatFaceBadgeText',
@@ -880,6 +885,137 @@ check(
       return !i.blocked;
     }) &&
     !CT.hasAnyBlocked(clearedBlocked)
+);
+
+// --- Per-entity blockedReasons ---
+var reasonsNorm = CT.normalizeCompletionData({
+  blocked: true,
+  blockedReasons: ['En attente d\'une approbation', 'En attente d\'une approbation'],
+  items: [
+    {
+      id: 'r1',
+      text: 'Obtenir OK',
+      progress: 10,
+      blocked: true,
+      blockedReasons: ['En attente de budget', ''],
+    },
+    { id: 'r2', text: 'Suite', progress: 0 },
+  ],
+});
+check(
+  'normalize keeps deduped master blockedReasons',
+  reasonsNorm.blocked === true &&
+    reasonsNorm.blockedReasons &&
+    reasonsNorm.blockedReasons.length === 1 &&
+    reasonsNorm.blockedReasons[0] === 'En attente d\'une approbation'
+);
+check(
+  'normalize keeps item blockedReasons',
+  reasonsNorm.items[0].blockedReasons &&
+    reasonsNorm.items[0].blockedReasons.length === 1 &&
+    reasonsNorm.items[0].blockedReasons[0] === 'En attente de budget'
+);
+check(
+  'normalize omits blockedReasons on unblocked item',
+  !reasonsNorm.items[1].blockedReasons
+);
+
+var doneClearsReasons = CT.normalizeItem({
+  id: 'x',
+  text: 'Done',
+  progress: 100,
+  blocked: true,
+  blockedReasons: ['motif'],
+});
+check(
+  'normalizeItem clears blockedReasons when done',
+  doneClearsReasons &&
+    doneClearsReasons.done &&
+    !doneClearsReasons.blocked &&
+    !doneClearsReasons.blockedReasons
+);
+
+var setMasterReasons = CT.setMasterBlockedReasons(
+  { items: [], progress: 20 },
+  ['En attente d\'un c\u00e2ble']
+);
+check(
+  'setMasterBlockedReasons enables master + stores Motif',
+  setMasterReasons.blocked === true &&
+    setMasterReasons.blockedReasons &&
+    setMasterReasons.blockedReasons[0] === 'En attente d\'un c\u00e2ble'
+);
+
+var setItemReasons = CT.setItemBlockedReasons(
+  {
+    items: [{ id: 'r1', text: 'A', progress: 5 }],
+  },
+  'r1',
+  ['En attente de budget']
+);
+check(
+  'setItemBlockedReasons enables item + stores Motif',
+  setItemReasons.items[0].blocked === true &&
+    setItemReasons.items[0].blockedReasons[0] === 'En attente de budget'
+);
+
+var unblockClearsReasons = CT.setItemBlocked(setItemReasons, 'r1', false);
+check(
+  'setItemBlocked(false) clears item Motifs',
+  !unblockClearsReasons.items[0].blocked &&
+    !unblockClearsReasons.items[0].blockedReasons
+);
+
+var aggregated = CT.aggregateBlockedReasons({
+  blocked: true,
+  blockedReasons: ['Motif ma\u00eetre'],
+  items: [
+    {
+      id: 'a',
+      text: 'A',
+      progress: 0,
+      blocked: true,
+      blockedReasons: ['Motif item', 'Motif ma\u00eetre'],
+    },
+  ],
+});
+check(
+  'aggregateBlockedReasons unions unique Motifs',
+  aggregated.length === 2 &&
+    aggregated[0] === 'Motif ma\u00eetre' &&
+    aggregated[1] === 'Motif item'
+);
+
+var seeded = CT.seedBlockedReasonsFromPriority(
+  {
+    items: [{ id: 's1', text: 'Seul', progress: 0, blocked: true }],
+  },
+  ['En attente d\'une r\u00e9ponse']
+);
+check(
+  'seedBlockedReasonsFromPriority onto sole blocked item',
+  seeded.items[0].blockedReasons &&
+    seeded.items[0].blockedReasons[0] === 'En attente d\'une r\u00e9ponse'
+);
+
+var clearReasonsToo = CT.clearAllBlocked({
+  blocked: true,
+  blockedReasons: ['x'],
+  items: [
+    {
+      id: 'c1',
+      text: 'A',
+      progress: 10,
+      blocked: true,
+      blockedReasons: ['y'],
+    },
+  ],
+});
+check(
+  'clearAllBlocked removes Motifs',
+  !clearReasonsToo.blocked &&
+    !clearReasonsToo.blockedReasons &&
+    !clearReasonsToo.items[0].blockedReasons
 );
 
 var linksFromBlocked = CT.blockedLinksFromCompletion({

@@ -654,6 +654,28 @@
     }, 1900);
   }
 
+  /**
+   * Small fireworks-style pop when a single subtask is marked done.
+   * @param {Element|{x:number,y:number}|null} anchor
+   * @param {{ sound?: boolean }} [opts]
+   */
+  function playSubtaskCompletePop(anchor, opts) {
+    opts = opts || {};
+    try {
+      if (
+        global.CelebrationEffects &&
+        typeof global.CelebrationEffects.playSubtaskPop === 'function'
+      ) {
+        global.CelebrationEffects.playSubtaskPop(anchor, {
+          sound: opts.sound !== false,
+          root: opts.root || (typeof document !== 'undefined' ? document.body : null)
+        });
+      }
+    } catch (e) {
+      /* ignore celebration failures */
+    }
+  }
+
   function isAllCompleteProgress(progress) {
     return !!(progress && percentIsComplete(progress.percent));
   }
@@ -3094,11 +3116,26 @@
         setItemProgress(item, item.done ? 0 : 100);
         if (itemSlider) itemSlider.value = String(item.progress);
         syncItemProgressUi();
+        var becomingDone = !wasDone && !!item.done;
+        var popOrigin = null;
+        if (becomingDone && checkBtn.getBoundingClientRect) {
+          var checkRect = checkBtn.getBoundingClientRect();
+          popOrigin = {
+            x: checkRect.left + checkRect.width / 2,
+            y: checkRect.top + checkRect.height / 2
+          };
+        }
         emitChange({
           animateItemId: item.id,
           flipWasDone: wasDone,
           focusTextItemId: item.id,
         });
+        if (becomingDone) {
+          // Prefer the rebuilt checkbox so the scale pop lands on the new node.
+          var nextRow = findItemRow(item.id);
+          var nextCheck = nextRow && nextRow.querySelector('.tp-completion-check');
+          playSubtaskCompletePop(nextCheck || popOrigin, { sound: true });
+        }
         onResize();
       });
 
@@ -3118,11 +3155,26 @@
           handleItemSlider();
           var nowDone = !!item.done;
           if (wasDone !== nowDone) {
+            var becomingDone = !wasDone && nowDone;
+            var popOrigin = null;
+            if (becomingDone && checkBtn.getBoundingClientRect) {
+              var sliderCheckRect = checkBtn.getBoundingClientRect();
+              popOrigin = {
+                x: sliderCheckRect.left + sliderCheckRect.width / 2,
+                y: sliderCheckRect.top + sliderCheckRect.height / 2
+              };
+            }
             emitChange({
               animateItemId: item.id,
               flipWasDone: wasDone,
               focusTextItemId: item.id,
             });
+            if (becomingDone) {
+              var nextRow = findItemRow(item.id);
+              var nextCheck = nextRow && nextRow.querySelector('.tp-completion-check');
+              // Slider already played the 100% tick — silent visual pop only.
+              playSubtaskCompletePop(nextCheck || popOrigin, { sound: false });
+            }
           } else {
             renderList();
           }

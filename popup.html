@@ -7,7 +7,7 @@
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=due-countdown-bg-2" />
-  <link rel="stylesheet" href="./components/shared/effects.css?v=fx-3" />
+  <link rel="stylesheet" href="./components/shared/effects.css?v=fx-5" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css?v=due-countdown-bg-2" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-scope-1" />
@@ -2381,6 +2381,15 @@
             break;
           }
         }
+        // Also skip if the item already has Motifs.
+        var itemRow = byId[fresh[f].id];
+        if (
+          itemRow &&
+          Array.isArray(itemRow.blockedReasons) &&
+          itemRow.blockedReasons.length
+        ) {
+          already = true;
+        }
         if (already) continue;
         var provisional =
           window.PriorityAgent &&
@@ -2405,15 +2414,51 @@
           reasons0.push(provisional);
           seeded = true;
         }
-        provisionals.push({ from: provisional, taskName: name });
+        fresh[f].provisional = provisional;
+        provisionals.push({
+          from: provisional,
+          taskName: name,
+          id: fresh[f].id
+        });
       }
-      if (seeded) {
+      if (seeded || provisionals.length) {
+        // Persist Motifs onto the newly blocked items (completion source of truth).
+        var liveComp =
+          (completionUi &&
+            typeof completionUi.getData === 'function' &&
+            completionUi.getData()) ||
+          data ||
+          latestCompletion ||
+          { items: [] };
+        var nextComp = CompletionTrello.normalizeCompletionData(liveComp);
+        for (var fi = 0; fi < provisionals.length; fi++) {
+          var entry = provisionals[fi];
+          if (
+            entry.id &&
+            typeof CompletionTrello.setItemBlockedReasons === 'function'
+          ) {
+            nextComp = CompletionTrello.setItemBlockedReasons(nextComp, entry.id, [
+              entry.from
+            ]);
+          }
+        }
+        if (completionUi && typeof completionUi.setData === 'function') {
+          latestCompletion = withProgressEnabledFlag(nextComp);
+          completionUi.setData(latestCompletion);
+          saveCompletion(latestCompletion);
+        } else {
+          latestCompletion = withProgressEnabledFlag(nextComp);
+          saveCompletion(latestCompletion);
+        }
+
         syncingBlockedBridge = true;
         try {
           variant.setState(
             Object.assign({}, st0, {
               enAttente: true,
-              blockedReasons: reasons0,
+              blockedReasons: CompletionTrello.aggregateBlockedReasons
+                ? CompletionTrello.aggregateBlockedReasons(nextComp)
+                : reasons0,
             })
           );
           if (
@@ -2853,6 +2898,54 @@
         );
       } finally {
         syncingBlockedBridge = false;
+      }
+      // Mirror chip rename onto completion entity Motifs.
+      if (
+        typeof CompletionTrello !== 'undefined' &&
+        CompletionTrello.normalizeCompletionData
+      ) {
+        var live =
+          (completionUi &&
+            typeof completionUi.getData === 'function' &&
+            completionUi.getData()) ||
+          latestCompletion ||
+          { items: [] };
+        var nextComp = CompletionTrello.normalizeCompletionData(live);
+        var changed = false;
+        if (
+          nextComp.blocked &&
+          Array.isArray(nextComp.blockedReasons)
+        ) {
+          var masterNext = nextComp.blockedReasons.map(function (reason) {
+            return reasonKeyFr(reason) === reasonKeyFr(from) ? to : reason;
+          });
+          if (masterNext.join('\0') !== nextComp.blockedReasons.join('\0')) {
+            nextComp = CompletionTrello.setMasterBlockedReasons(nextComp, masterNext);
+            changed = true;
+          }
+        }
+        for (var ii = 0; ii < nextComp.items.length; ii++) {
+          var it = nextComp.items[ii];
+          if (!CompletionTrello.isItemBlocked(it) || !it.blockedReasons) continue;
+          var itemNext = it.blockedReasons.map(function (reason) {
+            return reasonKeyFr(reason) === reasonKeyFr(from) ? to : reason;
+          });
+          if (itemNext.join('\0') !== it.blockedReasons.join('\0')) {
+            nextComp = CompletionTrello.setItemBlockedReasons(
+              nextComp,
+              it.id,
+              itemNext
+            );
+            changed = true;
+          }
+        }
+        if (changed) {
+          latestCompletion = withProgressEnabledFlag(nextComp);
+          if (completionUi && typeof completionUi.setData === 'function') {
+            completionUi.setData(latestCompletion);
+          }
+          saveCompletion(latestCompletion);
+        }
       }
       return to;
     }

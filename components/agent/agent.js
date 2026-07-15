@@ -2426,6 +2426,10 @@
             done: !!item.done,
             progress: item.progress,
             blocked: item.blocked === true,
+            blockedReasons:
+              item.blocked === true && Array.isArray(item.blockedReasons)
+                ? item.blockedReasons.slice()
+                : undefined,
             estimatedMinutes:
               item.estimatedMinutes != null && isFinite(+item.estimatedMinutes)
                 ? +item.estimatedMinutes
@@ -2434,6 +2438,11 @@
           };
         }),
         blocked: completion.blocked === true,
+        blockedReasons:
+          completion.blocked === true &&
+          Array.isArray(completion.blockedReasons)
+            ? completion.blockedReasons.slice()
+            : undefined,
         estimatedTotalMinutes: null,
         estimatedRemainingMinutes: null,
         estimatedMinutesOffset:
@@ -2953,7 +2962,7 @@
       '- rename_card: { name: string } (nouveau titre de la carte\u00a0; name obligatoire, non vide)',
       '- set_description: { desc: string } (nouvelle description compl\u00e8te\u00a0; r\u00e9sum\u00e9 court + misc\u00a0; desc obligatoire en string, "" pour effacer)',
       '- add_subtask: { text: string, done?: boolean, blocked?: boolean, estimatedMinutes?: number } (text obligatoire, non vide\u00a0; done:true = cr\u00e9er d\u00e9j\u00e0 coch\u00e9e\u00a0; blocked:true = sous-t\u00e2che bloquante + Statut Bloqu\u00e9)',
-      '- set_subtask_blocked: { id?|matchText?, blocked?: boolean } (marquer / d\u00e9marquer une sous-t\u00e2che bloqu\u00e9e\u00a0; synchronise enAttente)',
+      '- set_subtask_blocked: { id?|matchText?, blocked?: boolean, blockedReasons?: string[] } (marquer / d\u00e9marquer une sous-t\u00e2che bloqu\u00e9e\u00a0; motifs optionnels par sous-t\u00e2che\u00a0; synchronise enAttente)',
       '- rename_subtask: { text: string, id?: string, matchText?: string } (nouveau text\u00a0; id OU matchText)',
       '- remove_subtask: { id?: string, matchText?: string } (id OU matchText)',
       '- toggle_subtask: { id?: string, matchText?: string, done?: boolean }',
@@ -10334,6 +10343,16 @@
                 true
               );
             }
+            if (
+              Array.isArray(blockedPartial.blockedReasons) &&
+              typeof CompletionTrello.setMasterBlockedReasons === 'function'
+            ) {
+              // Card Motifs from set_blocked → master entity Motifs.
+              nextBlockedCompletion = CompletionTrello.setMasterBlockedReasons(
+                nextBlockedCompletion,
+                blockedPartial.blockedReasons
+              );
+            }
           }
           if (
             JSON.stringify(
@@ -10591,11 +10610,24 @@
         }
         var wantBlocked =
           args.blocked != null ? !!args.blocked : !itemBlockedTarget.blocked;
-        var nextItemBlocked = CompletionTrello.setItemBlocked(
-          itemBlockedBase,
-          itemBlockedTarget.id,
-          wantBlocked
-        );
+        var nextItemBlocked;
+        if (
+          wantBlocked &&
+          Array.isArray(args.blockedReasons) &&
+          typeof CompletionTrello.setItemBlockedReasons === 'function'
+        ) {
+          nextItemBlocked = CompletionTrello.setItemBlockedReasons(
+            itemBlockedBase,
+            itemBlockedTarget.id,
+            args.blockedReasons
+          );
+        } else {
+          nextItemBlocked = CompletionTrello.setItemBlocked(
+            itemBlockedBase,
+            itemBlockedTarget.id,
+            wantBlocked
+          );
+        }
         bridge.applyCompletion(nextItemBlocked);
         if (typeof bridge.applyPriority === 'function') {
           if (wantBlocked) {
@@ -10604,6 +10636,9 @@
               blockedLinks: CompletionTrello.blockedLinksFromCompletion(
                 nextItemBlocked
               ),
+              blockedReasons: CompletionTrello.aggregateBlockedReasons
+                ? CompletionTrello.aggregateBlockedReasons(nextItemBlocked)
+                : undefined,
             });
           } else if (
             typeof CompletionTrello.hasAnyBlocked === 'function' &&
@@ -10615,6 +10650,9 @@
               blockedLinks: CompletionTrello.blockedLinksFromCompletion(
                 nextItemBlocked
               ),
+              blockedReasons: CompletionTrello.aggregateBlockedReasons
+                ? CompletionTrello.aggregateBlockedReasons(nextItemBlocked)
+                : undefined,
             });
           }
         }

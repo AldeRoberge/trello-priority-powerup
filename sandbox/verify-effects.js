@@ -69,6 +69,11 @@ check('unknown effect', FX.normalize('lava') == null);
 check('label fireworks', typeof FX.label('fireworks') === 'string' && FX.label('fireworks').length > 0);
 check('play export', typeof FX.play === 'function');
 check('clear export', typeof FX.clear === 'function');
+check('playSubtaskPop export', typeof FX.playSubtaskPop === 'function');
+check(
+  'playSubtaskPop rejects missing anchor',
+  FX.playSubtaskPop(null, { sound: false }).ok === false
+);
 check('banner without text fails', FX.play('banner', { sound: false }).ok === false);
 check(
   'beep play ok without DOM visuals path',

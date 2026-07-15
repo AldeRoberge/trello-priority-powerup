@@ -1204,7 +1204,7 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .field--statut-embedded.has-section-glow {
-  padding: 10px 12px;
+  padding: 4px 10px 10px;
 }
 
 .tp-page--priority .field--info .info-row-label {
@@ -1877,6 +1877,10 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 .tp-page--priority .progress-section-body {
   padding-top: 12px;
   padding-left: 26px;
+}
+
+.tp-page--priority .progress-section-body:has(.statut-in-progress-mount:not(:empty)) {
+  padding-top: 4px;
 }
 
 .tp-page--priority .progress-section-body[hidden] {
@@ -3119,6 +3123,22 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
 
 .tp-completion-check.is-checked .tp-completion-check-icon {
   opacity: 1;
+}
+
+.tp-completion-check.is-pop {
+  animation: tp-completion-check-pop 0.45s cubic-bezier(0.2, 1.35, 0.4, 1);
+}
+
+@keyframes tp-completion-check-pop {
+  0% { transform: scale(0.88); }
+  55% { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tp-completion-check.is-pop {
+    animation: none;
+  }
 }
 
 .tp-completion-check.is-blocked:not(.is-checked) {

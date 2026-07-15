@@ -71,6 +71,52 @@
   }
 }
 
+/* ── Subtask pop (mini fireworks at checkbox) ──────────────────────────── */
+
+.tp-fx-root.is-local {
+  /* Keep above completion chrome but below fullscreen celebrations if stacked. */
+  z-index: 9998;
+}
+
+.tp-fx-subtask-burst::before {
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  background: radial-gradient(
+    circle,
+    #fff 0%,
+    color-mix(in srgb, #2a9b82 85%, transparent) 45%,
+    transparent 70%
+  );
+  animation-duration: 0.42s;
+}
+
+.tp-fx-subtask-spark {
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  box-shadow:
+    0 0 6px color-mix(in srgb, var(--spark-color, #2a9b82) 90%, transparent),
+    0 0 12px color-mix(in srgb, var(--spark-color, #2a9b82) 50%, transparent),
+    0 0 1px rgba(255, 255, 255, 0.9);
+  animation-name: tp-fx-subtask-spark;
+  animation-duration: 0.62s;
+  animation-timing-function: cubic-bezier(0.16, 0.84, 0.28, 1);
+}
+
+@keyframes tp-fx-subtask-spark {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--spark-angle, 0deg)) translateY(0) scale(0.4);
+  }
+  14% { opacity: 1; }
+  72% { opacity: 0.8; }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--spark-angle, 0deg)) translateY(calc(var(--spark-dist, 26px) * -1)) scale(0.12);
+  }
+}
+
 /* ── Confetti ──────────────────────────────────────────────────────────── */
 
 .tp-fx-confetti-piece {

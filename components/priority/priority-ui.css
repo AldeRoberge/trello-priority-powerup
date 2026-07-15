@@ -2595,6 +2595,7 @@ body {
 }
 
 .field--statut-embedded {
+  position: relative;
   padding: 0;
   background: transparent;
 }
@@ -2604,7 +2605,7 @@ body {
 }
 
 .field--statut-embedded.has-section-glow {
-  padding: 10px 12px;
+  padding: 4px 10px 10px;
   border-radius: var(--radius);
 }
 
@@ -2617,11 +2618,15 @@ body {
 }
 
 .statut-embedded-bar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  margin: 0 0 2px;
-  min-height: 28px;
+  margin: 0;
+  min-height: 0;
 }
 
 .statut-hero {
@@ -2630,8 +2635,8 @@ body {
   align-items: center;
   justify-content: center;
   text-align: center;
-  gap: 10px;
-  margin: 2px 0 14px;
+  gap: 8px;
+  margin: 0 0 12px;
   color: var(--statut-color, #626f86);
 }
 
@@ -2639,8 +2644,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 64px;
-  height: 64px;
+  width: 96px;
+  height: 96px;
   border-radius: 50%;
   color: var(--statut-color, #626f86);
   background: color-mix(in srgb, var(--statut-color, #626f86) 16%, transparent);
@@ -2648,8 +2653,8 @@ body {
 }
 
 .statut-hero-icon .statut-list-option-icon {
-  width: 36px;
-  height: 36px;
+  width: 56px;
+  height: 56px;
   color: inherit;
 }
 
