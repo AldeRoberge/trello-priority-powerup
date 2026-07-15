@@ -47,9 +47,19 @@
     var store = emptyStore();
     if (!raw || typeof raw !== 'object') return store;
     if (Array.isArray(raw.entries)) {
-      store.entries = raw.entries.filter(function (e) {
-        return e && typeof e === 'object' && e.id && e.before && e.after;
-      });
+      store.entries = raw.entries
+        .filter(function (e) {
+          return e && typeof e === 'object' && e.id && e.before && e.after;
+        })
+        .map(function (e) {
+          var domains = Array.isArray(e.domains) ? e.domains : changedDomains(e.before, e.after);
+          var relabeled = buildLabel(e.before, e.after, domains, e.label);
+          return Object.assign({}, e, {
+            domains: domains,
+            // Refresh vague legacy labels when diffs are still available.
+            label: relabeled || e.label || 'Modification'
+          });
+        });
     }
     var cursor = Number(raw.cursor);
     if (!isFinite(cursor) || cursor < 0) cursor = store.entries.length;
@@ -113,12 +123,35 @@
     return out;
   }
 
+  function domainSlice(snapshot, key) {
+    var value = snapshot && snapshot[key];
+    if (!value || typeof value !== 'object') return value;
+    if (key === 'statut') {
+      return {
+        listId: value.listId || null,
+        dueComplete: !!value.dueComplete
+      };
+    }
+    if (key === 'info') {
+      return {
+        name: value.name || '',
+        desc: value.desc || '',
+        memberIds: value.memberIds || [],
+        labelIds: value.labelIds || []
+      };
+    }
+    if (key === 'goals') {
+      return { projectId: value.projectId || null };
+    }
+    return value;
+  }
+
   function changedDomains(before, after) {
     var domains = [];
     var keys = ['priority', 'completion', 'statut', 'info', 'goals'];
     for (var i = 0; i < keys.length; i++) {
       var key = keys[i];
-      if (!deepEqual(before && before[key], after && after[key])) {
+      if (!deepEqual(domainSlice(before, key), domainSlice(after, key))) {
         domains.push(key);
       }
     }
@@ -134,6 +167,23 @@
     return out;
   }
 
+  var MONTHS_FR = [
+    'janv.',
+    'f\u00e9vr.',
+    'mars',
+    'avr.',
+    'mai',
+    'juin',
+    'juil.',
+    'ao\u00fbt',
+    'sept.',
+    'oct.',
+    'nov.',
+    'd\u00e9c.'
+  ];
+
+  var LABEL_MAX = 160;
+
   function axisLabel(key) {
     if (key === 'urgency') return 'Urgence';
     if (key === 'impact') return 'Impact';
@@ -141,11 +191,168 @@
     return key;
   }
 
-  function buildLabel(before, after, domains, hint) {
-    if (typeof hint === 'string' && hint.trim() && hint.indexOf(':') !== -1) {
-      return hint.trim().slice(0, 120);
+  function quoteText(value, maxLen) {
+    var s = String(value == null ? '' : value).trim().replace(/\s+/g, ' ');
+    maxLen = maxLen || 36;
+    if (!s) return '« »';
+    if (s.length > maxLen) s = s.slice(0, Math.max(1, maxLen - 1)) + '\u2026';
+    return '\u00ab ' + s + ' \u00bb';
+  }
+
+  function formatDueFr(date, time) {
+    if (!date) return 'aucune';
+    var m = String(date).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    var out = String(date);
+    if (m) {
+      var monthIdx = Number(m[2]) - 1;
+      var day = Number(m[3]);
+      var month = MONTHS_FR[monthIdx] || m[2];
+      out = day + ' ' + month + ' ' + m[1];
+    }
+    if (time) out += ' \u00b7 ' + String(time).slice(0, 5);
+    return out;
+  }
+
+  function formatMinutesFr(mins) {
+    if (mins == null || mins === '') return 'aucune';
+    var n = Number(mins);
+    if (!isFinite(n)) return String(mins);
+    if (n < 60) return n + ' min';
+    var h = Math.floor(n / 60);
+    var rem = n % 60;
+    if (!rem) return h + ' h';
+    return h + ' h ' + rem + ' min';
+  }
+
+  function itemMap(items) {
+    var map = Object.create(null);
+    (items || []).forEach(function (item) {
+      if (item && item.id) map[String(item.id)] = item;
+    });
+    return map;
+  }
+
+  function displayNameForId(summaries, id, fallback) {
+    var list = summaries || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && String(list[i].id) === String(id)) {
+        return list[i].name || list[i].text || fallback || String(id);
+      }
+    }
+    return fallback || String(id);
+  }
+
+  function idDiffLabels(beforeIds, afterIds, beforeSummaries, afterSummaries) {
+    var beforeSet = Object.create(null);
+    var afterSet = Object.create(null);
+    (beforeIds || []).forEach(function (id) {
+      beforeSet[String(id)] = true;
+    });
+    (afterIds || []).forEach(function (id) {
+      afterSet[String(id)] = true;
+    });
+    var added = [];
+    var removed = [];
+    (afterIds || []).forEach(function (id) {
+      if (!beforeSet[String(id)]) {
+        added.push(displayNameForId(afterSummaries, id, id));
+      }
+    });
+    (beforeIds || []).forEach(function (id) {
+      if (!afterSet[String(id)]) {
+        removed.push(displayNameForId(beforeSummaries, id, id));
+      }
+    });
+    return { added: added, removed: removed };
+  }
+
+  function describeCompletion(before, after) {
+    var bItems = (before && before.items) || [];
+    var aItems = (after && after.items) || [];
+    var bMap = itemMap(bItems);
+    var aMap = itemMap(aItems);
+    var parts = [];
+
+    Object.keys(aMap).forEach(function (id) {
+      if (!bMap[id]) {
+        parts.push('T\u00e2che ajout\u00e9e : ' + quoteText(aMap[id].text));
+      }
+    });
+    Object.keys(bMap).forEach(function (id) {
+      if (!aMap[id]) {
+        parts.push('T\u00e2che supprim\u00e9e : ' + quoteText(bMap[id].text));
+      }
+    });
+    Object.keys(aMap).forEach(function (id) {
+      if (!bMap[id]) return;
+      var b = bMap[id];
+      var a = aMap[id];
+      if ((b.text || '') !== (a.text || '')) {
+        parts.push(
+          'T\u00e2che renomm\u00e9e : ' +
+            quoteText(b.text, 24) +
+            ' \u2192 ' +
+            quoteText(a.text, 24)
+        );
+        return;
+      }
+      var bDone = !!b.done || Number(b.progress) >= 100;
+      var aDone = !!a.done || Number(a.progress) >= 100;
+      if (bDone !== aDone) {
+        parts.push(
+          (aDone ? 'T\u00e2che coch\u00e9e : ' : 'T\u00e2che d\u00e9coch\u00e9e : ') +
+            quoteText(a.text)
+        );
+        return;
+      }
+      var bp = Number(b.progress);
+      var ap = Number(a.progress);
+      if (isFinite(bp) && isFinite(ap) && bp !== ap) {
+        parts.push(
+          'T\u00e2che ' +
+            quoteText(a.text, 28) +
+            ' : ' +
+            bp +
+            '\u00a0% \u2192 ' +
+            ap +
+            '\u00a0%'
+        );
+      }
+    });
+
+    if (!bItems.length && !aItems.length) {
+      var bProg = before && before.progress != null ? Number(before.progress) : null;
+      var aProg = after && after.progress != null ? Number(after.progress) : null;
+      if (isFinite(bProg) && isFinite(aProg) && bProg !== aProg) {
+        parts.push('Progr\u00e8s : ' + bProg + '\u00a0% \u2192 ' + aProg + '\u00a0%');
+      }
     }
 
+    if (!parts.length) parts.push('Progr\u00e8s modifi\u00e9');
+    return parts;
+  }
+
+  function describeBlocked(bp, ap) {
+    var bReasons = Array.isArray(bp.blockedReasons) ? bp.blockedReasons : [];
+    var aReasons = Array.isArray(ap.blockedReasons) ? ap.blockedReasons : [];
+    if (!deepEqual(bReasons, aReasons)) {
+      if (!bReasons.length && aReasons.length) {
+        return 'Motif de blocage : ' + quoteText(aReasons[0], 40);
+      }
+      if (bReasons.length && !aReasons.length) {
+        return 'Motifs de blocage effac\u00e9s';
+      }
+      if (aReasons.length) {
+        return 'Motif de blocage : ' + quoteText(aReasons.join(', '), 40);
+      }
+    }
+    if (!deepEqual(bp.blockedLinks, ap.blockedLinks)) {
+      return 'Lien de blocage modifi\u00e9';
+    }
+    return '';
+  }
+
+  function buildLabel(before, after, domains, hint) {
     var parts = [];
     var d = domains || [];
 
@@ -161,60 +368,142 @@
         parts.push(ap.enAttente ? 'Bloqu\u00e9 activ\u00e9' : 'Bloqu\u00e9 d\u00e9sactiv\u00e9');
       }
       if (bp.dueDate !== ap.dueDate || bp.dueTime !== ap.dueTime) {
-        parts.push('\u00c9ch\u00e9ance modifi\u00e9e');
+        parts.push(
+          '\u00c9ch\u00e9ance : ' +
+            formatDueFr(bp.dueDate, bp.dueTime) +
+            ' \u2192 ' +
+            formatDueFr(ap.dueDate, ap.dueTime)
+        );
       }
-      if (
-        !deepEqual(bp.blockedReasons, ap.blockedReasons) ||
-        !deepEqual(bp.blockedLinks, ap.blockedLinks)
-      ) {
-        parts.push('Motifs de blocage');
+      var blockedLabel = describeBlocked(bp, ap);
+      if (blockedLabel) parts.push(blockedLabel);
+      if (bp.estimatedDurationMinutes !== ap.estimatedDurationMinutes) {
+        parts.push(
+          'Dur\u00e9e : ' +
+            formatMinutesFr(bp.estimatedDurationMinutes) +
+            ' \u2192 ' +
+            formatMinutesFr(ap.estimatedDurationMinutes)
+        );
       }
-      if (
-        bp.estimatedDurationMinutes !== ap.estimatedDurationMinutes &&
-        parts.length === 0
-      ) {
-        parts.push('Dur\u00e9e estim\u00e9e');
-      }
-      if (parts.length === 0) parts.push('Priorit\u00e9');
+      if (!parts.length) parts.push('Priorit\u00e9');
     }
 
     if (d.indexOf('completion') !== -1) {
-      var bi = ((before && before.completion && before.completion.items) || []).length;
-      var ai = ((after && after.completion && after.completion.items) || []).length;
-      if (bi !== ai) {
-        parts.push('Progr\u00e8s : ' + bi + ' \u2192 ' + ai + ' t\u00e2ches');
-      } else {
-        parts.push('Progr\u00e8s modifi\u00e9');
-      }
+      parts = parts.concat(
+        describeCompletion(
+          (before && before.completion) || {},
+          (after && after.completion) || {}
+        )
+      );
     }
 
     if (d.indexOf('statut') !== -1) {
-      parts.push('Statut / liste');
+      var bs = (before && before.statut) || {};
+      var as_ = (after && after.statut) || {};
+      if (String(bs.listId || '') !== String(as_.listId || '')) {
+        var fromList = bs.listName || 'liste inconnue';
+        var toList = as_.listName || 'liste inconnue';
+        parts.push('Liste : ' + fromList + ' \u2192 ' + toList);
+      }
+      if (!!bs.dueComplete !== !!as_.dueComplete) {
+        parts.push(
+          as_.dueComplete ? 'Carte marqu\u00e9e termin\u00e9e' : 'Carte rouverte'
+        );
+      }
+      if (
+        String(bs.listId || '') === String(as_.listId || '') &&
+        !!bs.dueComplete === !!as_.dueComplete
+      ) {
+        parts.push('Statut modifi\u00e9');
+      }
     }
 
     if (d.indexOf('info') !== -1) {
       var bInfo = (before && before.info) || {};
       var aInfo = (after && after.info) || {};
-      var infoParts = [];
-      if (bInfo.name !== aInfo.name) infoParts.push('Titre');
-      if (bInfo.desc !== aInfo.desc) infoParts.push('Description');
-      if (!deepEqual(bInfo.memberIds, aInfo.memberIds)) infoParts.push('Membres');
-      if (!deepEqual(bInfo.labelIds, aInfo.labelIds)) infoParts.push('\u00c9tiquettes');
-      if (!infoParts.length) infoParts.push('Information');
-      parts = parts.concat(infoParts);
+      if (bInfo.name !== aInfo.name) {
+        parts.push(
+          'Titre : ' +
+            quoteText(bInfo.name, 28) +
+            ' \u2192 ' +
+            quoteText(aInfo.name, 28)
+        );
+      }
+      if (bInfo.desc !== aInfo.desc) {
+        var bDesc = String(bInfo.desc || '').trim();
+        var aDesc = String(aInfo.desc || '').trim();
+        if (!bDesc && aDesc) {
+          parts.push('Description ajout\u00e9e : ' + quoteText(aDesc, 40));
+        } else if (bDesc && !aDesc) {
+          parts.push('Description effac\u00e9e');
+        } else {
+          parts.push(
+            'Description : ' +
+              quoteText(bDesc, 24) +
+              ' \u2192 ' +
+              quoteText(aDesc, 24)
+          );
+        }
+      }
+      if (!deepEqual(bInfo.memberIds, aInfo.memberIds)) {
+        var mem = idDiffLabels(
+          bInfo.memberIds,
+          aInfo.memberIds,
+          bInfo.members,
+          aInfo.members
+        );
+        mem.added.forEach(function (n) {
+          parts.push('Membre ajout\u00e9 : ' + n);
+        });
+        mem.removed.forEach(function (n) {
+          parts.push('Membre retir\u00e9 : ' + n);
+        });
+        if (!mem.added.length && !mem.removed.length) {
+          parts.push('Membres modifi\u00e9s');
+        }
+      }
+      if (!deepEqual(bInfo.labelIds, aInfo.labelIds)) {
+        var lab = idDiffLabels(
+          bInfo.labelIds,
+          aInfo.labelIds,
+          bInfo.labels,
+          aInfo.labels
+        );
+        lab.added.forEach(function (n) {
+          parts.push('\u00c9tiquette ajout\u00e9e : ' + quoteText(n, 28));
+        });
+        lab.removed.forEach(function (n) {
+          parts.push('\u00c9tiquette retir\u00e9e : ' + quoteText(n, 28));
+        });
+        if (!lab.added.length && !lab.removed.length) {
+          parts.push('\u00c9tiquettes modifi\u00e9es');
+        }
+      }
+      if (!parts.length) parts.push('Information');
     }
 
     if (d.indexOf('goals') !== -1) {
-      parts.push('Projet li\u00e9');
+      var bg = (before && before.goals) || {};
+      var ag = (after && after.goals) || {};
+      var fromProj = bg.projectName || (bg.projectId ? 'projet' : 'aucun');
+      var toProj = ag.projectName || (ag.projectId ? 'projet' : 'aucun');
+      if (!bg.projectId && ag.projectId) {
+        parts.push('Projet li\u00e9 : ' + toProj);
+      } else if (bg.projectId && !ag.projectId) {
+        parts.push('Projet d\u00e9li\u00e9 : ' + fromProj);
+      } else {
+        parts.push('Projet : ' + fromProj + ' \u2192 ' + toProj);
+      }
     }
 
     if (!parts.length) {
-      if (typeof hint === 'string' && hint.trim()) return hint.trim().slice(0, 120);
+      if (typeof hint === 'string' && hint.trim()) return hint.trim().slice(0, LABEL_MAX);
       return 'Modification';
     }
 
-    var label = parts.slice(0, 3).join(' · ');
-    return label.slice(0, 120);
+    // Prefer concrete diffs; ignore vague generic hints.
+    var label = parts.slice(0, 2).join(' · ');
+    return label.slice(0, LABEL_MAX);
   }
 
   function create(options) {

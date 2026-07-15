@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-scope-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
-  <link rel="stylesheet" href="./components/history/history-ui.css?v=history-1" />
+  <link rel="stylesheet" href="./components/history/history-ui.css?v=history-3" />
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/effects.js?v=fx-3"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
@@ -36,8 +36,8 @@
   <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
   <script src="./components/agent/agent-ui.js?v=agent-dream-1"></script>
-  <script src="./components/history/card-history.js?v=history-1"></script>
-  <script src="./components/history/history-ui.js?v=history-1"></script>
+  <script src="./components/history/card-history.js?v=history-2"></script>
+  <script src="./components/history/history-ui.js?v=history-3"></script>
 </head>
 <body class="tp-page tp-page--priority">
   <div class="compare-page">
@@ -234,6 +234,11 @@
 
     function applyRemoteTitle(name) {
       var trimmed = typeof name === 'string' ? name.trim() : '';
+      if (infoUi && typeof infoUi.setTitle === 'function') {
+        infoUi.setTitle(trimmed);
+        // setTitle no-ops while dirty/focused — retry next poll.
+        if ((infoUi.getTitle() || '').trim() !== trimmed) return;
+      }
       appliedTitleFp = trimmed;
       setCardNameLabel(trimmed);
       resizePopup();
@@ -242,11 +247,14 @@
 
     function applyRemoteDesc(desc) {
       var next = typeof desc === 'string' ? desc : '';
-      cardDesc = next;
-      appliedDescFp = next;
       if (infoUi && typeof infoUi.setDesc === 'function') {
         infoUi.setDesc(next);
+        if (typeof infoUi.getDesc === 'function' && infoUi.getDesc() !== next) {
+          return;
+        }
       }
+      cardDesc = next;
+      appliedDescFp = next;
       resizePopup();
       refreshHistoryBaseline();
     }
@@ -642,10 +650,32 @@
         '';
 
       var listId = (latestStatut && latestStatut.listId) || null;
+      var listName = '';
+      if (latestStatut) {
+        listName = latestStatut.listName || '';
+        if (!listName && listId && Array.isArray(latestStatut.lists)) {
+          for (var li = 0; li < latestStatut.lists.length; li++) {
+            var list = latestStatut.lists[li];
+            if (list && String(list.id) === String(listId)) {
+              listName = list.name || '';
+              break;
+            }
+          }
+        }
+      }
       var projectId =
         latestGoals && latestGoals.projectId != null
           ? latestGoals.projectId
           : null;
+      var projectName = '';
+      if (
+        latestGoals &&
+        latestGoals.hierarchy &&
+        latestGoals.hierarchy.project &&
+        latestGoals.hierarchy.project.name
+      ) {
+        projectName = latestGoals.hierarchy.project.name;
+      }
 
       var dueCompletePromise =
         PriorityTrello && typeof PriorityTrello.getCardDueComplete === 'function'
@@ -662,21 +692,39 @@
 
       return Promise.all([dueCompletePromise, membersPromise, labelsPromise]).then(
         function (results) {
+          var members = results[1] || [];
+          var labels = results[2] || [];
           return {
             priority: normalizePriorityForHistory(priorityRaw),
             completion: normalizeCompletionForHistory(completionRaw),
             statut: {
               listId: listId ? String(listId) : null,
+              listName: listName || '',
               dueComplete: !!results[0]
             },
             info: {
               name: typeof name === 'string' ? name : '',
               desc: typeof desc === 'string' ? desc : '',
-              memberIds: idListFromMembersOrLabels(results[1]),
-              labelIds: idListFromMembersOrLabels(results[2])
+              memberIds: idListFromMembersOrLabels(members),
+              labelIds: idListFromMembersOrLabels(labels),
+              members: members.map(function (m) {
+                return {
+                  id: m && m.id ? String(m.id) : '',
+                  name:
+                    (m && (m.fullName || m.username || m.initials)) ||
+                    'membre'
+                };
+              }).filter(function (m) { return m.id; }),
+              labels: labels.map(function (l) {
+                return {
+                  id: l && l.id ? String(l.id) : '',
+                  name: (l && (l.name || l.color)) || 'étiquette'
+                };
+              }).filter(function (l) { return l.id; })
             },
             goals: {
-              projectId: projectId ? String(projectId) : null
+              projectId: projectId ? String(projectId) : null,
+              projectName: projectName || ''
             }
           };
         }
@@ -836,6 +884,8 @@
             var nextName = String(info.name || '').trim();
             if (!nextName) return null;
             return PriorityTrello.setCardName(t, nextName).then(function () {
+              markTitleDirty();
+              appliedTitleFp = nextName;
               setCardNameLabel(nextName);
               if (infoUi && typeof infoUi.setTitle === 'function') {
                 infoUi.setTitle(nextName, { force: true });
@@ -847,6 +897,8 @@
           chain = chain.then(function () {
             var nextDesc = String(info.desc || '');
             return PriorityTrello.setCardDesc(t, nextDesc).then(function () {
+              markDescDirty();
+              appliedDescFp = nextDesc;
               cardDesc = nextDesc;
               if (infoUi && typeof infoUi.setDesc === 'function') {
                 infoUi.setDesc(nextDesc, { force: true });
@@ -856,6 +908,7 @@
         }
         if (info.memberIds && PriorityTrello.getCardMembers) {
           chain = chain.then(function () {
+            markMembersDirty();
             return syncIdsViaAddRemove(
               info.memberIds,
               function () {
@@ -869,6 +922,8 @@
               }
             ).then(function () {
               return PriorityTrello.getCardMembers(t).then(function (members) {
+                latestMembersFp = fingerprintIds(members);
+                appliedMembersFp = latestMembersFp;
                 if (infoUi && typeof infoUi.setMembers === 'function') {
                   infoUi.setMembers(members || []);
                 }
@@ -878,6 +933,7 @@
         }
         if (info.labelIds && PriorityTrello.getCardLabels) {
           chain = chain.then(function () {
+            markLabelsDirty();
             return syncIdsViaAddRemove(
               info.labelIds,
               function () {
@@ -891,6 +947,8 @@
               }
             ).then(function () {
               return PriorityTrello.getCardLabels(t).then(function (labels) {
+                latestLabelsFp = fingerprintIds(labels);
+                appliedLabelsFp = latestLabelsFp;
                 if (infoUi && typeof infoUi.setLabels === 'function') {
                   infoUi.setLabels(labels || []);
                 }
@@ -2339,6 +2397,8 @@
               }
               return PriorityTrello.setCardName(t, next).then(function (result) {
                 if (result && result.ok === false) return result;
+                markTitleDirty();
+                appliedTitleFp = next;
                 setCardNameLabel(next);
                 if (infoUi && typeof infoUi.setTitle === 'function') {
                   infoUi.setTitle(next, { force: true });
@@ -2859,6 +2919,8 @@
             }
             return PriorityTrello.setCardName(t, next).then(function (result) {
               if (result && result.ok) {
+                markTitleDirty();
+                appliedTitleFp = next;
                 setCardNameLabel(next);
                 if (infoUi && typeof infoUi.setTitle === 'function') {
                   infoUi.setTitle(next, { force: true });
@@ -2877,6 +2939,8 @@
             }
             return PriorityTrello.setCardDesc(t, next).then(function (result) {
               if (result && result.ok) {
+                markDescDirty();
+                appliedDescFp = next;
                 cardDesc = next;
                 if (infoUi && typeof infoUi.setDesc === 'function') {
                   infoUi.setDesc(next, { force: true });

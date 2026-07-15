@@ -160,8 +160,13 @@
 
           var btn = el('button', 'historique-revert-btn', {
             type: 'button',
-            text: 'Revenir'
+            title: 'Revenir',
+            'aria-label': 'Revenir'
           });
+          var btnIcon = el('i', 'ti ti-circle-arrow-left');
+          btnIcon.setAttribute('aria-hidden', 'true');
+          btn.appendChild(btnIcon);
+          btn.appendChild(document.createTextNode('Revenir'));
           btn.disabled = applying;
           btn.addEventListener('click', function () {
             if (applying || !entry.id) return;

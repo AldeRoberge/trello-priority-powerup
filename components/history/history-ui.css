@@ -78,6 +78,9 @@
 .tp-page--priority .historique-revert-btn {
   flex: 0 0 auto;
   align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   margin: 0;
   padding: 4px 8px;
   border: 1px solid var(--tp-border, rgba(0, 0, 0, 0.12));
@@ -87,6 +90,11 @@
   font-size: 12px;
   line-height: 1.2;
   cursor: pointer;
+}
+
+.tp-page--priority .historique-revert-btn .ti {
+  font-size: 15px;
+  line-height: 1;
 }
 
 .tp-page--priority .historique-revert-btn:hover:not(:disabled) {
