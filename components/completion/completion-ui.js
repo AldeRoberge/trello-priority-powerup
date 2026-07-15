@@ -2123,14 +2123,19 @@
         'aria-label',
         blocked
           ? p > 0
-            ? 'Sous-t\u00e2che bloqu\u00e9e — ' + p + '\u00a0%'
-            : 'Sous-t\u00e2che bloqu\u00e9e'
+            ? 'D\u00e9bloquer — ' + p + '\u00a0%'
+            : 'D\u00e9bloquer'
           : done
             ? 'Marquer comme non termin\u00e9'
             : p > 0
               ? 'Marquer comme termin\u00e9 (100\u00a0%) — ' + p + '\u00a0%'
               : 'Marquer comme termin\u00e9 (100\u00a0%)'
       );
+      btn.title = blocked
+        ? 'D\u00e9bloquer'
+        : done
+          ? 'Marquer comme non termin\u00e9'
+          : 'Marquer comme termin\u00e9';
     }
 
     function syncItemProgressLabel(labelEl, percent) {
@@ -2369,6 +2374,16 @@
     }
 
     function toggleMasterComplete() {
+      // Pause icon means blocked — unblock instead of marking complete.
+      if (CT.hasAnyBlocked(data)) {
+        data = CT.clearAllBlocked(data);
+        syncMasterBlockedBtn();
+        updateProgressUi();
+        emitChange();
+        notifyBlockedChange('master-check');
+        onResize();
+        return;
+      }
       var progress = CT.computeCardProgress(data, linkedSnapshots);
       if (progress.percent >= 100) {
         if (data.items.length) {
@@ -3110,6 +3125,14 @@
       checkBtn.addEventListener('click', function () {
         if (isLinked) {
           openLinkedCard(CT.itemLinkedCardId(item));
+          return;
+        }
+        // Pause icon means blocked — unblock instead of marking complete.
+        if (CT.isItemBlocked(item)) {
+          data = CT.setItemBlocked(data, item.id, false);
+          emitChange();
+          notifyBlockedChange('item-check');
+          onResize();
           return;
         }
         var wasDone = !!item.done;

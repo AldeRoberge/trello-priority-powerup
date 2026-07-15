@@ -10345,13 +10345,30 @@
             }
             if (
               Array.isArray(blockedPartial.blockedReasons) &&
-              typeof CompletionTrello.setMasterBlockedReasons === 'function'
+              blockedPartial.blockedReasons.length
             ) {
-              // Card Motifs from set_blocked → master entity Motifs.
-              nextBlockedCompletion = CompletionTrello.setMasterBlockedReasons(
-                nextBlockedCompletion,
-                blockedPartial.blockedReasons
-              );
+              if (
+                linkIds.length &&
+                typeof CompletionTrello.setItemBlockedReasons === 'function'
+              ) {
+                linkIds.forEach(function (id) {
+                  nextBlockedCompletion =
+                    CompletionTrello.setItemBlockedReasons(
+                      nextBlockedCompletion,
+                      id,
+                      blockedPartial.blockedReasons
+                    );
+                });
+              } else if (
+                typeof CompletionTrello.setMasterBlockedReasons === 'function'
+              ) {
+                // Card Motifs from set_blocked → master entity Motifs.
+                nextBlockedCompletion =
+                  CompletionTrello.setMasterBlockedReasons(
+                    nextBlockedCompletion,
+                    blockedPartial.blockedReasons
+                  );
+              }
             }
           }
           if (
