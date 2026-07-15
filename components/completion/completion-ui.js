@@ -2645,6 +2645,7 @@
               item.estimatedMinutes = live.estimatedMinutes;
               item.estimatedMinutesLocked = live.estimatedMinutesLocked;
             }
+            updateProgressUi();
             emitChange();
             onResize();
           }
@@ -3275,11 +3276,7 @@
         }
       },
       getEstimateSummary: function () {
-        var progress = CT.computeCardProgress(data);
-        return {
-          percent: progress.percent,
-          totalMinutes: CT.computeEstimatedTotal(data, linkedSnapshots),
-          remainingMinutes: CT.computeEstimatedRemaining(data, linkedSnapshots),
+        var progress = CT.computeCardProgress(data, linkedSnapshots);
           needingEstimate: CT.itemsNeedingEstimate(data),
           hasOffset: !!(
             data.items.length &&

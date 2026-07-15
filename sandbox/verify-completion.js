@@ -194,6 +194,45 @@ check('100 percent when all at 100', allDone.percent === 100);
 var empty = CT.computeWeightedProgress([]);
 check('empty has no items', empty.hasItems === false && empty.percent === 0);
 
+// Estimate-weighted Progrès
+var estimateWeighted = CT.computeWeightedProgress([
+  { id: 'a', text: 'Quick', progress: 100, estimatedMinutes: 30 },
+  { id: 'b', text: 'Long', progress: 0, estimatedMinutes: 90 },
+]);
+check(
+  'estimate weights progress (30 done of 120 = 25%)',
+  estimateWeighted.percent === 25 &&
+    estimateWeighted.doneWeight === 30 &&
+    estimateWeighted.totalWeight === 120
+);
+var estimateHalf = CT.computeWeightedProgress([
+  { id: 'a', text: 'A', progress: 0, estimatedMinutes: 60 },
+  { id: 'b', text: 'B', progress: 50, estimatedMinutes: 120 },
+]);
+check(
+  'estimate weights partial (0*60 + 50*120)/180 = 33%',
+  estimateHalf.percent === 33
+);
+var mixedEstimate = CT.computeWeightedProgress([
+  { id: 'a', text: 'Estimated', progress: 100, estimatedMinutes: 120 },
+  { id: 'b', text: 'Missing', progress: 0 },
+]);
+check(
+  'missing estimate uses sibling average',
+  mixedEstimate.percent === 50 && mixedEstimate.totalWeight === 240
+);
+var masterEst = CT.applyMasterProgress(
+  [
+    { id: 'a', text: 'A', progress: 0, estimatedMinutes: 30 },
+    { id: 'b', text: 'B', progress: 0, estimatedMinutes: 90 },
+  ],
+  50
+);
+check(
+  'master with estimates reaches ~50%',
+  CT.computeWeightedProgress(masterEst).percent === 50
+);
+
 check(
   'isAllSubtasksComplete false when empty',
   CT.isAllSubtasksComplete({ items: [] }) === false
