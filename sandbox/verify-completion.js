@@ -50,6 +50,9 @@ check('PriorityTrello.getCardDueComplete export', !!(PT && typeof PT.getCardDueC
   'syncDoneFromProgress',
   'isItemBlocked',
   'isMasterBlocked',
+  'masterBlockedOrigin',
+  'isMasterBlockedByUser',
+  'hasBlockedSubtasks',
   'hasAnyBlocked',
   'normalizeBlockedReasons',
   'aggregateBlockedReasons',
@@ -872,6 +875,81 @@ var setMaster = CT.setMasterBlocked({ items: [], progress: 100 }, true);
 check(
   'setMasterBlocked drops card progress off 100%',
   setMaster.blocked === true && setMaster.progress === 0
+);
+check(
+  'setMasterBlocked defaults origin to user',
+  setMaster.blockedOrigin === 'user' && CT.isMasterBlockedByUser(setMaster)
+);
+
+var statusOrigin = CT.setMasterBlocked({ items: [], progress: 0 }, true, {
+  origin: 'status',
+});
+check(
+  'setMasterBlocked status origin',
+  statusOrigin.blockedOrigin === 'status' &&
+    !CT.isMasterBlockedByUser(statusOrigin)
+);
+
+var promoteUser = CT.setMasterBlocked(statusOrigin, true, { origin: 'user' });
+check(
+  'setMasterBlocked user overrides status',
+  promoteUser.blockedOrigin === 'user'
+);
+
+var keepUser = CT.setMasterBlocked(promoteUser, true, { origin: 'status' });
+check(
+  'setMasterBlocked status does not demote user',
+  keepUser.blockedOrigin === 'user'
+);
+
+var lastSubUnblock = CT.setItemBlocked(
+  {
+    blocked: true,
+    blockedOrigin: 'status',
+    items: [{ id: 'only', text: 'A', progress: 0, blocked: true }],
+  },
+  'only',
+  false
+);
+check(
+  'unblocking last subtask clears status-origin master',
+  !lastSubUnblock.blocked &&
+    !lastSubUnblock.blockedOrigin &&
+    !CT.hasAnyBlocked(lastSubUnblock)
+);
+
+var keepUserMaster = CT.setItemBlocked(
+  {
+    blocked: true,
+    blockedOrigin: 'user',
+    items: [{ id: 'only', text: 'A', progress: 0, blocked: true }],
+  },
+  'only',
+  false
+);
+check(
+  'unblocking last subtask keeps user-origin master',
+  keepUserMaster.blocked === true &&
+    keepUserMaster.blockedOrigin === 'user' &&
+    CT.hasAnyBlocked(keepUserMaster) &&
+    !CT.hasBlockedSubtasks(keepUserMaster)
+);
+
+var unblockMasterClears = CT.setMasterBlocked(
+  {
+    blocked: true,
+    blockedOrigin: 'user',
+    blockedReasons: ['motif'],
+    items: [{ id: 'x', text: 'A', progress: 0 }],
+  },
+  false
+);
+check(
+  'unblocking master clears origin + Motifs',
+  !unblockMasterClears.blocked &&
+    !unblockMasterClears.blockedOrigin &&
+    !unblockMasterClears.blockedReasons &&
+    !CT.hasAnyBlocked(unblockMasterClears)
 );
 
 var clearedBlocked = CT.clearAllBlocked({

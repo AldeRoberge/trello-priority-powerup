@@ -2321,6 +2321,8 @@
       }
       if (normalized.blocked === true) {
         data.blocked = true;
+        data.blockedOrigin =
+          normalized.blockedOrigin === 'status' ? 'status' : 'user';
         if (
           Array.isArray(normalized.blockedReasons) &&
           normalized.blockedReasons.length
@@ -2332,6 +2334,7 @@
       } else {
         delete data.blocked;
         delete data.blockedReasons;
+        delete data.blockedOrigin;
       }
       return normalized;
     }
@@ -2355,10 +2358,10 @@
         blocked,
         data.blockedReasons || [],
         function (reasons) {
-          data = CT.setMasterBlockedReasons(data, reasons);
+          data = CT.setMasterBlockedReasons(data, reasons, { origin: 'user' });
           // Keep master blocked even if reasons cleared.
           if (!CT.isMasterBlocked(data)) {
-            data = CT.setMasterBlocked(data, true);
+            data = CT.setMasterBlocked(data, true, { origin: 'user' });
           }
           emitChange();
           notifyBlockedChange('master-reason');
@@ -2436,7 +2439,8 @@
 
     function toggleMasterBlocked() {
       var nextBlocked = !CT.isMasterBlocked(data);
-      data = CT.setMasterBlocked(data, nextBlocked);
+      // Pause button is always an explicit user action.
+      data = CT.setMasterBlocked(data, nextBlocked, { origin: 'user' });
       playCompletionUiSound(nextBlocked ? 'block' : 'unblock');
       syncMasterBlockedBtn();
       updateProgressUi();
@@ -4156,8 +4160,11 @@
       addItem: function (text, estimateOpts) {
         return addItem(text, estimateOpts);
       },
-      setMasterBlocked: function (blocked) {
-        data = CT.setMasterBlocked(data, !!blocked);
+      setMasterBlocked: function (blocked, opts) {
+        opts = opts || {};
+        data = CT.setMasterBlocked(data, !!blocked, {
+          origin: opts.origin === 'status' ? 'status' : 'user'
+        });
         syncMasterBlockedBtn();
         updateProgressUi();
         emitChange();
@@ -4165,21 +4172,23 @@
         onResize();
         return CT.normalizeCompletionData(data);
       },
-      setMasterBlockedReasons: function (reasons) {
-        data = CT.setMasterBlockedReasons(data, reasons);
-        if (
-          Array.isArray(reasons) &&
-          reasons.length === 0 &&
-          !CT.isMasterBlocked(data)
-        ) {
-          /* no-op */
-        }
+      setMasterBlockedReasons: function (reasons, opts) {
+        data = CT.setMasterBlockedReasons(data, reasons, opts);
         syncMasterBlockedBtn();
         updateProgressUi();
         emitChange();
         notifyBlockedChange('api');
         onResize();
         return CT.normalizeCompletionData(data);
+      },
+      isMasterBlockedByUser: function () {
+        return CT.isMasterBlockedByUser(data);
+      },
+      hasBlockedSubtasks: function () {
+        return CT.hasBlockedSubtasks(data);
+      },
+      masterBlockedOrigin: function () {
+        return CT.masterBlockedOrigin(data);
       },
       setItemBlocked: function (itemId, blocked) {
         data = CT.setItemBlocked(data, itemId, !!blocked);

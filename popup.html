@@ -2661,7 +2661,12 @@
       var singleItem =
         !CT.isMasterBlocked(next) && blockedItems.length === 1;
       if (masterOnly || (!blockedItems.length && !CT.isMasterBlocked(next))) {
-        return CT.setMasterBlockedReasons(next, list);
+        // Statut Motif on a status/no-subtask block — keep status origin unless user.
+        var origin =
+          CT.isMasterBlockedByUser && CT.isMasterBlockedByUser(next)
+            ? 'user'
+            : 'status';
+        return CT.setMasterBlockedReasons(next, list, { origin: origin });
       }
       if (singleItem) {
         return CT.setItemBlockedReasons(next, blockedItems[0].id, list);
@@ -2673,7 +2678,11 @@
         delete copy.blockedReasons;
         return copy;
       });
-      return CT.setMasterBlockedReasons(next, list);
+      var multiOrigin =
+        CT.isMasterBlockedByUser && CT.isMasterBlockedByUser(next)
+          ? 'user'
+          : 'status';
+      return CT.setMasterBlockedReasons(next, list, { origin: multiOrigin });
     }
 
     /**
@@ -2750,12 +2759,14 @@
         } else {
           // Card Bloqué: mirror blockedLinks onto items first.
           var withLinks = applyBlockedLinksToCompletion(live, links);
-          // Links/items carry the block — drop an auto master flag so the
-          // specific subtask is what shows as blocked in Progrès.
+          // Links/items carry the block — drop a status-origin master flag so the
+          // specific subtask shows as blocked. Keep an explicit user-pressed master.
           if (
             links.length &&
             CompletionTrello.hasAnyBlocked(withLinks) &&
-            withLinks.blocked
+            withLinks.blocked &&
+            (!CompletionTrello.isMasterBlockedByUser ||
+              !CompletionTrello.isMasterBlockedByUser(withLinks))
           ) {
             withLinks = CompletionTrello.setMasterBlocked(withLinks, false);
           }
@@ -2773,17 +2784,18 @@
             hasBlocked = CompletionTrello.hasAnyBlocked(withLinks);
             latestCompletion = withProgressEnabledFlag(withLinks);
           }
-          // No linked/item blocked yet → master task is the block source.
+          // No linked/item blocked yet → status-origin master is the block source.
           if (!hasBlocked) {
             if (typeof completionUi.setMasterBlocked === 'function') {
               latestCompletion = withProgressEnabledFlag(
-                completionUi.setMasterBlocked(true)
+                completionUi.setMasterBlocked(true, { origin: 'status' })
               );
             } else {
               latestCompletion = withProgressEnabledFlag(
                 CompletionTrello.setMasterBlocked(
                   (completionUi.getData && completionUi.getData()) || live,
-                  true
+                  true,
+                  { origin: 'status' }
                 )
               );
               if (typeof completionUi.setData === 'function') {

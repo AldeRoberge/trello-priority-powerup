@@ -685,14 +685,38 @@
     return normalized.blocked === true;
   }
 
+  /**
+   * Why master.blocked is set:
+   * - 'user'   — user pressed the Progrès pause on the master task
+   * - 'status' — Statut Bloqué (or bridge) with no blocking subtasks yet
+   * Missing origin on legacy data is treated as 'user'.
+   */
+  function masterBlockedOrigin(data) {
+    if (!isMasterBlocked(data)) return null;
+    return data.blockedOrigin === 'status' ? 'status' : 'user';
+  }
+
+  function isMasterBlockedByUser(data) {
+    return masterBlockedOrigin(data) === 'user';
+  }
+
+  /** True when any incomplete subtask is blocked (ignores master flag). */
+  function hasBlockedSubtasks(data) {
+    var items =
+      data && Array.isArray(data.items)
+        ? data.items
+        : normalizeCompletionData(data || { items: [] }).items;
+    for (var i = 0; i < items.length; i++) {
+      if (isItemBlocked(items[i])) return true;
+    }
+    return false;
+  }
+
   /** True when the master task or any incomplete subtask is blocked. */
   function hasAnyBlocked(data) {
     var normalized = normalizeCompletionData(data || { items: [] });
     if (isMasterBlocked(normalized)) return true;
-    for (var i = 0; i < normalized.items.length; i++) {
-      if (isItemBlocked(normalized.items[i])) return true;
-    }
-    return false;
+    return hasBlockedSubtasks(normalized);
   }
 
   /**
@@ -727,17 +751,30 @@
   /**
    * Set/clear master blocked. When enabling at 100% (no items or all done),
    * drop progress off complete first.
+   *
+   * opts.origin: 'user' (default) | 'status'
+   *   'user'   — explicit pause on the master task
+   *   'status' — mirror of Statut Bloqué (no subtask blockers yet)
    */
-  function setMasterBlocked(data, blocked) {
+  function setMasterBlocked(data, blocked, opts) {
+    opts = opts || {};
     var next = normalizeCompletionData(data || { items: [] });
     if (blocked === true) {
       if (isAllSubtasksComplete(next)) {
         next = markNotFullyComplete(next);
       }
+      var prevOrigin = next.blocked === true ? masterBlockedOrigin(next) : null;
       next.blocked = true;
+      // Explicit user pause wins over a later status-only mirror.
+      if (prevOrigin === 'user' && opts.origin === 'status') {
+        next.blockedOrigin = 'user';
+      } else {
+        next.blockedOrigin = opts.origin === 'status' ? 'status' : 'user';
+      }
     } else {
       delete next.blocked;
       delete next.blockedReasons;
+      delete next.blockedOrigin;
     }
     return normalizeCompletionData(next);
   }
@@ -746,11 +783,11 @@
    * Replace master Motifs. Non-empty reasons enable master blocked; clearing
    * reasons alone does not unblock (use setMasterBlocked(false)).
    */
-  function setMasterBlockedReasons(data, reasons) {
+  function setMasterBlockedReasons(data, reasons, opts) {
     var list = normalizeBlockedReasons(reasons);
     var next;
     if (list.length) {
-      next = setMasterBlocked(data, true);
+      next = setMasterBlocked(data, true, opts);
       next.blockedReasons = list;
     } else {
       next = normalizeCompletionData(data || { items: [] });
@@ -762,6 +799,8 @@
   /**
    * Set/clear blocked on a single item by id. Enabling clears done/100% on
    * that item; disabling only clears the flag.
+   * When the last subtask unblocks, drops a status-origin master block so
+   * Statut can clear (user-origin master block is kept).
    */
   function setItemBlocked(data, itemId, blocked) {
     var next = normalizeCompletionData(data || { items: [] });
@@ -785,7 +824,16 @@
       return copy;
     });
     if (!found) return next;
-    return normalizeCompletionData(next);
+    next = normalizeCompletionData(next);
+    // Last subtask unblocked: clear auto/status master so Statut can drop.
+    if (
+      blocked !== true &&
+      !hasBlockedSubtasks(next) &&
+      masterBlockedOrigin(next) === 'status'
+    ) {
+      next = setMasterBlocked(next, false);
+    }
+    return next;
   }
 
   /**
@@ -814,6 +862,7 @@
     var next = normalizeCompletionData(data || { items: [] });
     delete next.blocked;
     delete next.blockedReasons;
+    delete next.blockedOrigin;
     next.items = next.items.map(function (item) {
       if (!item.blocked && !item.blockedReasons) return item;
       var copy = Object.assign({}, item);
@@ -956,6 +1005,32 @@
     if (raw.blocked === true && !masterComplete) {
       out.blocked = true;
       copyBlockedReasons(raw, out);
+      // Persist origin only while blocked; legacy/missing → 'user'.
+      out.blockedOrigin = raw.blockedOrigin === 'status' ? 'status' : 'user';
+    }
+    // Status-origin master is only a stand-in until subtasks carry the block
+    // (or until the user presses pause). If raw still had blocked items that
+    // are now clear (completed/unblocked), drop the leftover status mirror so
+    // Statut can clear via hasAnyBlocked.
+    if (
+      out.blocked === true &&
+      out.blockedOrigin === 'status' &&
+      out.items.length > 0 &&
+      !hasBlockedSubtasks(out)
+    ) {
+      var rawHadBlockedItem = false;
+      var rawItems = Array.isArray(raw.items) ? raw.items : [];
+      for (var ri = 0; ri < rawItems.length; ri++) {
+        if (rawItems[ri] && rawItems[ri].blocked === true) {
+          rawHadBlockedItem = true;
+          break;
+        }
+      }
+      if (rawHadBlockedItem) {
+        delete out.blocked;
+        delete out.blockedReasons;
+        delete out.blockedOrigin;
+      }
     }
     // estimateScale is board-level now; drop any legacy per-card value.
     return out;
@@ -2103,6 +2178,9 @@
     generateId: generateId,
     isItemBlocked: isItemBlocked,
     isMasterBlocked: isMasterBlocked,
+    masterBlockedOrigin: masterBlockedOrigin,
+    isMasterBlockedByUser: isMasterBlockedByUser,
+    hasBlockedSubtasks: hasBlockedSubtasks,
     hasAnyBlocked: hasAnyBlocked,
     normalizeBlockedReason: normalizeBlockedReason,
     normalizeBlockedReasons: normalizeBlockedReasons,

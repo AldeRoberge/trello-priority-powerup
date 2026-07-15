@@ -2438,10 +2438,21 @@
           };
         }),
         blocked: completion.blocked === true,
+        blockedOrigin:
+          completion.blocked === true
+            ? completion.blockedOrigin === 'status'
+              ? 'status'
+              : 'user'
+            : undefined,
         blockedReasons:
           completion.blocked === true &&
           Array.isArray(completion.blockedReasons)
             ? completion.blockedReasons.slice()
+            : undefined,
+        hasBlockedSubtasks:
+          typeof CompletionTrello !== 'undefined' &&
+          CompletionTrello.hasBlockedSubtasks
+            ? CompletionTrello.hasBlockedSubtasks(completion)
             : undefined,
         estimatedTotalMinutes: null,
         estimatedRemainingMinutes: null,
@@ -10340,7 +10351,8 @@
             ) {
               nextBlockedCompletion = CompletionTrello.setMasterBlocked(
                 nextBlockedCompletion,
-                true
+                true,
+                { origin: 'status' }
               );
             }
             if (
@@ -10366,7 +10378,8 @@
                 nextBlockedCompletion =
                   CompletionTrello.setMasterBlockedReasons(
                     nextBlockedCompletion,
-                    blockedPartial.blockedReasons
+                    blockedPartial.blockedReasons,
+                    { origin: 'status' }
                   );
               }
             }
