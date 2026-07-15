@@ -598,27 +598,335 @@
 
   /** Soft F# tick used when a single subtask is checked (smaller than full fireworks). */
   function playSubtaskPopSound() {
-    playTones(
-      [
-        {
-          freq: FS.As5,
+    playUiSound('done');
+  }
+
+  /**
+   * Short UI stingers for completion chrome (trash, block, bulk actions…).
+   * Kept in F# major so they sit well beside progress ticks / fireworks.
+   *
+   * @param {string} name
+   * @returns {{ ok: boolean, sound?: string, error?: string }}
+   */
+  function playUiSound(name) {
+    var id = String(name || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, '_');
+    var aliases = {
+      delete: 'trash',
+      remove: 'trash',
+      crumble: 'trash',
+      blocked: 'block',
+      lock: 'block',
+      unblocked: 'unblock',
+      unlock: 'unblock',
+      clear_blocked: 'unblock',
+      complete_all: 'complete_all',
+      mark_all: 'complete_all',
+      resolve_all: 'complete_all',
+      tout_completer: 'complete_all',
+      reset: 'reset',
+      invalidate: 'reset',
+      reset_arm: 'reset_arm',
+      arm_reset: 'reset_arm',
+      reset_all: 'reset_all',
+      wipe: 'reset_all',
+      uncheck: 'uncomplete',
+      undo_done: 'uncomplete',
+      incomplete: 'uncomplete',
+      new_item: 'add',
+      draft: 'add',
+      subtask_done: 'done',
+      check: 'done'
+    };
+    if (aliases[id]) id = aliases[id];
+
+    switch (id) {
+      case 'done':
+        playTones(
+          [
+            {
+              freq: FS.As5,
+              delay: 0,
+              dur: 0.045,
+              peak: 0.034,
+              type: 'triangle',
+              attack: 0.002
+            },
+            {
+              freq: FS.Cs6,
+              delay: 0.028,
+              dur: 0.1,
+              peak: 0.03,
+              type: 'sine',
+              attack: 0.003
+            }
+          ],
+          { lowpass: 4800 }
+        );
+        return { ok: true, sound: id };
+
+      case 'uncomplete':
+        playTones(
+          [
+            {
+              freq: FS.Cs6,
+              delay: 0,
+              dur: 0.05,
+              peak: 0.028,
+              type: 'triangle',
+              attack: 0.002,
+              freqEnd: FS.Gs5
+            },
+            {
+              freq: FS.Fs5,
+              delay: 0.04,
+              dur: 0.09,
+              peak: 0.024,
+              type: 'sine',
+              attack: 0.003,
+              freqEnd: FS.Cs5
+            }
+          ],
+          { lowpass: 3600 }
+        );
+        return { ok: true, sound: id };
+
+      case 'trash':
+        playNoiseBurst({
           delay: 0,
-          dur: 0.045,
-          peak: 0.034,
-          type: 'triangle',
-          attack: 0.002
-        },
-        {
-          freq: FS.Cs6,
-          delay: 0.028,
-          dur: 0.1,
+          dur: 0.09,
+          freq: 1400,
+          freqEnd: 280,
+          peak: 0.038,
+          filterType: 'bandpass',
+          q: 1.4,
+          power: 0.75,
+          attack: 0.004
+        });
+        playNoiseBurst({
+          delay: 0.03,
+          dur: 0.12,
+          freq: 520,
+          freqEnd: 90,
           peak: 0.03,
-          type: 'sine',
+          filterType: 'lowpass',
+          q: 0.8,
+          power: 0.9
+        });
+        playTones(
+          [
+            {
+              freq: FS.As4,
+              delay: 0.01,
+              dur: 0.12,
+              peak: 0.028,
+              type: 'triangle',
+              freqEnd: FS.Fs3,
+              attack: 0.004
+            }
+          ],
+          { lowpass: 1800 }
+        );
+        return { ok: true, sound: id };
+
+      case 'block':
+        playNoiseBurst({
+          delay: 0,
+          dur: 0.07,
+          freq: 240,
+          peak: 0.04,
+          filterType: 'lowpass',
+          q: 1.1,
+          power: 0.7,
           attack: 0.003
-        }
-      ],
-      { lowpass: 4800 }
-    );
+        });
+        playTones(
+          [
+            {
+              freq: FS.Cs4,
+              delay: 0,
+              dur: 0.08,
+              peak: 0.036,
+              type: 'triangle',
+              attack: 0.003
+            },
+            {
+              freq: FS.Fs3,
+              delay: 0.07,
+              dur: 0.14,
+              peak: 0.032,
+              type: 'sine',
+              attack: 0.004,
+              freqEnd: FS.Cs3
+            }
+          ],
+          { lowpass: 1600 }
+        );
+        return { ok: true, sound: id };
+
+      case 'unblock':
+        playTones(
+          [
+            {
+              freq: FS.Fs4,
+              delay: 0,
+              dur: 0.06,
+              peak: 0.03,
+              type: 'triangle',
+              attack: 0.003,
+              freqEnd: FS.As4
+            },
+            {
+              freq: FS.Cs5,
+              delay: 0.05,
+              dur: 0.12,
+              peak: 0.034,
+              type: 'sine',
+              attack: 0.004
+            }
+          ],
+          { lowpass: 4200 }
+        );
+        return { ok: true, sound: id };
+
+      case 'complete_all':
+        // Quick rising cascade — sits under the full fireworks stinger.
+        playTones(
+          [
+            { freq: FS.Fs5, delay: 0, dur: 0.05, peak: 0.03, type: 'triangle', attack: 0.002 },
+            { freq: FS.As5, delay: 0.05, dur: 0.05, peak: 0.032, type: 'triangle', attack: 0.002 },
+            { freq: FS.Cs6, delay: 0.1, dur: 0.05, peak: 0.034, type: 'triangle', attack: 0.002 },
+            { freq: FS.Fs6, delay: 0.15, dur: 0.14, peak: 0.036, type: 'sine', attack: 0.003 }
+          ],
+          { lowpass: 5400 }
+        );
+        return { ok: true, sound: id };
+
+      case 'reset':
+        playTones(
+          [
+            {
+              freq: FS.As5,
+              delay: 0,
+              dur: 0.05,
+              peak: 0.03,
+              type: 'triangle',
+              attack: 0.002,
+              freqEnd: FS.Fs5
+            },
+            {
+              freq: FS.Cs5,
+              delay: 0.045,
+              dur: 0.1,
+              peak: 0.028,
+              type: 'sine',
+              attack: 0.003,
+              freqEnd: FS.Fs4
+            }
+          ],
+          { lowpass: 3200 }
+        );
+        playNoiseBurst({
+          delay: 0.02,
+          dur: 0.08,
+          freq: 700,
+          freqEnd: 180,
+          peak: 0.022,
+          filterType: 'lowpass',
+          q: 0.9,
+          power: 0.8
+        });
+        return { ok: true, sound: id };
+
+      case 'reset_arm':
+        playTones(
+          [
+            {
+              freq: FS.Fs5,
+              delay: 0,
+              dur: 0.045,
+              peak: 0.03,
+              type: 'square',
+              attack: 0.002
+            },
+            {
+              freq: FS.Fs5,
+              delay: 0.09,
+              dur: 0.08,
+              peak: 0.034,
+              type: 'square',
+              attack: 0.002
+            }
+          ],
+          { lowpass: 3800 }
+        );
+        return { ok: true, sound: id };
+
+      case 'reset_all':
+        playNoiseBurst({
+          delay: 0,
+          dur: 0.1,
+          freq: 900,
+          freqEnd: 120,
+          peak: 0.036,
+          filterType: 'lowpass',
+          q: 0.85,
+          power: 0.85
+        });
+        playTones(
+          [
+            {
+              freq: FS.Cs6,
+              delay: 0,
+              dur: 0.05,
+              peak: 0.03,
+              type: 'triangle',
+              attack: 0.002,
+              freqEnd: FS.As4
+            },
+            {
+              freq: FS.Fs4,
+              delay: 0.06,
+              dur: 0.14,
+              peak: 0.028,
+              type: 'sine',
+              attack: 0.004,
+              freqEnd: FS.Cs3
+            }
+          ],
+          { lowpass: 2400 }
+        );
+        return { ok: true, sound: id };
+
+      case 'add':
+        playTones(
+          [
+            {
+              freq: FS.Cs5,
+              delay: 0,
+              dur: 0.04,
+              peak: 0.024,
+              type: 'triangle',
+              attack: 0.002
+            },
+            {
+              freq: FS.Fs5,
+              delay: 0.03,
+              dur: 0.08,
+              peak: 0.026,
+              type: 'sine',
+              attack: 0.002
+            }
+          ],
+          { lowpass: 4000 }
+        );
+        return { ok: true, sound: id };
+
+      default:
+        return { ok: false, error: 'Son UI inconnu' };
+    }
   }
 
   /**
@@ -1469,5 +1777,6 @@
     playSound: playEffectSound,
     playProgressTick: playProgressTick,
     playSubtaskPop: playSubtaskPop,
+    playUiSound: playUiSound,
   };
 })(typeof window !== 'undefined' ? window : this);

@@ -74,6 +74,24 @@ check(
   'playSubtaskPop rejects missing anchor',
   FX.playSubtaskPop(null, { sound: false }).ok === false
 );
+check('playUiSound export', typeof FX.playUiSound === 'function');
+[
+  'trash',
+  'block',
+  'unblock',
+  'complete_all',
+  'reset',
+  'reset_arm',
+  'reset_all',
+  'uncomplete',
+  'add',
+  'done'
+].forEach(function (id) {
+  var once = FX.playUiSound(id);
+  check('playUiSound ' + id, !!(once && once.ok && once.sound === id));
+});
+check('playUiSound alias delete→trash', FX.playUiSound('delete').sound === 'trash');
+check('playUiSound unknown fails', FX.playUiSound('nope').ok === false);
 check('banner without text fails', FX.play('banner', { sound: false }).ok === false);
 check(
   'beep play ok without DOM visuals path',

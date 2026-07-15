@@ -533,6 +533,19 @@
     }
   }
 
+  function playCompletionUiSound(name) {
+    try {
+      if (
+        global.CelebrationEffects &&
+        typeof global.CelebrationEffects.playUiSound === 'function'
+      ) {
+        global.CelebrationEffects.playUiSound(name);
+      }
+    } catch (e) {
+      /* ignore audio failures */
+    }
+  }
+
   function createProgressSlider(label, value, onInput, id) {
     var field = document.createElement('div');
     field.className = 'tp-completion-field';
@@ -2377,6 +2390,7 @@
       // Pause icon means blocked — unblock instead of marking complete.
       if (CT.hasAnyBlocked(data)) {
         data = CT.clearAllBlocked(data);
+        playCompletionUiSound('unblock');
         syncMasterBlockedBtn();
         updateProgressUi();
         emitChange();
@@ -2394,6 +2408,7 @@
           data.progress = 0;
         }
         resetAllClearsCompleted = false;
+        playCompletionUiSound('uncomplete');
       } else {
         if (data.items.length) {
           data.items = CT.applyMasterProgress(data.items, 100, linkedSnapshots);
@@ -2401,6 +2416,7 @@
           data.progress = 100;
         }
         resetAllClearsCompleted = false;
+        playCompletionUiSound('complete_all');
       }
       emitChange();
       onResize();
@@ -2421,6 +2437,7 @@
     function toggleMasterBlocked() {
       var nextBlocked = !CT.isMasterBlocked(data);
       data = CT.setMasterBlocked(data, nextBlocked);
+      playCompletionUiSound(nextBlocked ? 'block' : 'unblock');
       syncMasterBlockedBtn();
       updateProgressUi();
       emitChange();
@@ -2439,6 +2456,7 @@
       if (!live) return;
       var nextBlocked = !CT.isItemBlocked(live);
       data = CT.setItemBlocked(data, itemId, nextBlocked);
+      playCompletionUiSound(nextBlocked ? 'block' : 'unblock');
       // Do not use done-list FLIP — blocked toggle is not a done transition.
       emitChange();
       notifyBlockedChange('item');
@@ -2543,6 +2561,7 @@
       } else {
         data.progress = 100;
       }
+      playCompletionUiSound('complete_all');
       emitChange();
       onResize();
     }
@@ -2566,15 +2585,18 @@
           if (!changed && !resetAllClearsCompleted) return;
           if (!changed && resetAllClearsCompleted) {
             // Armed for a second click; no data change yet.
+            playCompletionUiSound('reset_arm');
             syncResetAllButton(CT.computeCardProgress(data, linkedSnapshots));
             return;
           }
+          playCompletionUiSound('reset');
         } else {
           // Pass 2: also clear completed tasks.
           for (var j = 0; j < data.items.length; j++) {
             setItemProgress(data.items[j], 0);
           }
           resetAllClearsCompleted = false;
+          playCompletionUiSound('reset_all');
         }
       } else {
         var cardProgress = CT.clampProgress(data.progress);
@@ -2582,8 +2604,10 @@
           if (cardProgress > 0 && cardProgress < 100) {
             data.progress = 0;
             resetAllClearsCompleted = false;
+            playCompletionUiSound('reset');
           } else if (cardProgress >= 100) {
             resetAllClearsCompleted = true;
+            playCompletionUiSound('reset_arm');
             syncResetAllButton(progress);
             return;
           } else {
@@ -2592,6 +2616,7 @@
         } else {
           data.progress = 0;
           resetAllClearsCompleted = false;
+          playCompletionUiSound('reset_all');
         }
       }
 
@@ -3140,6 +3165,7 @@
         if (itemSlider) itemSlider.value = String(item.progress);
         syncItemProgressUi();
         var becomingDone = !wasDone && !!item.done;
+        var becomingUndone = wasDone && !item.done;
         var popOrigin = null;
         if (becomingDone && checkBtn.getBoundingClientRect) {
           var checkRect = checkBtn.getBoundingClientRect();
@@ -3158,6 +3184,8 @@
           var nextRow = findItemRow(item.id);
           var nextCheck = nextRow && nextRow.querySelector('.tp-completion-check');
           playSubtaskCompletePop(nextCheck || popOrigin, { sound: true });
+        } else if (becomingUndone) {
+          playCompletionUiSound('uncomplete');
         }
         onResize();
       });
@@ -3197,6 +3225,8 @@
               var nextCheck = nextRow && nextRow.querySelector('.tp-completion-check');
               // Slider already played the 100% tick — silent visual pop only.
               playSubtaskCompletePop(nextCheck || popOrigin, { sound: false });
+            } else if (wasDone && !nowDone) {
+              playCompletionUiSound('uncomplete');
             }
           } else {
             renderList();
@@ -3216,7 +3246,7 @@
         textInput.addEventListener('change', function () {
           var trimmed = textInput.value.trim();
           if (!trimmed) {
-            removeItem(item.id);
+            removeItem(item.id, { silent: true });
             return;
           }
           var editToken = (item._spellToken || 0) + 1;
@@ -3230,7 +3260,7 @@
             });
             if (!stillPresent) return;
             if (!corrected) {
-              removeItem(item.id);
+              removeItem(item.id, { silent: true });
               return;
             }
             if (corrected !== textInput.value.trim()) {
@@ -3254,7 +3284,7 @@
         textInput.addEventListener('blur', function () {
           if (suppressEmptyDraftDiscard) return;
           if (!(textInput.value || '').trim()) {
-            removeItem(item.id);
+            removeItem(item.id, { silent: true });
           }
         });
 
@@ -3670,7 +3700,8 @@
       onResize();
     });
 
-    function removeItem(id) {
+    function removeItem(id, opts) {
+      opts = opts || {};
       delete itemSpellReverts[id];
       delete spellcheckingItemIds[id];
       delete itemSpellTokens[id];
@@ -3683,6 +3714,7 @@
       }
       data.items = nextItems;
       delete linkedTreeByItemId[id];
+      if (!opts.silent) playCompletionUiSound('trash');
       emitChange();
       refreshLinkedTree({ skipPersist: true });
       onResize();
@@ -3707,6 +3739,7 @@
       if (!item) return null;
       data.items.push(item);
       removeSuggestionMatch(trimmed);
+      playCompletionUiSound(estimateOpts.blocked === true ? 'block' : 'add');
       emitChange();
       if (estimateOpts.blocked === true) notifyBlockedChange('add');
       onResize();
@@ -3722,6 +3755,7 @@
         done: false
       };
       data.items.push(item);
+      playCompletionUiSound('add');
       renderList();
       updateProgressUi();
       onResize();
@@ -3750,6 +3784,7 @@
       });
       if (!item) return null;
       data.items.push(item);
+      playCompletionUiSound('add');
       closeLinkPicker();
       emitChange();
       refreshLinkedTree();
