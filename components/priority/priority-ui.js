@@ -48,7 +48,7 @@
   var COLOR_SCHEME_STORAGE_KEY = 'trello-priority-powerup/color-scheme';
   var SECTION_COLLAPSE_STORAGE_KEY = 'trello-priority-powerup/section-collapse';
   // 'blocked' kept for legacy prefs; Bloqué is nested under Statut (not collapsible).
-  var SECTION_COLLAPSE_KEYS = ['info', 'statut', 'objectif', 'priority', 'graph', 'progress', 'due', 'blocked', 'chat'];
+  var SECTION_COLLAPSE_KEYS = ['info', 'statut', 'objectif', 'priority', 'graph', 'progress', 'due', 'blocked', 'chat', 'historique'];
   var DEFAULT_COLOR_SCHEME_KEY = 'blue';
   /** Member clock preference: '24' (default) or '12'. Canonical storage stays HH:MM. */
   var preferredTimeFormat = '24';
