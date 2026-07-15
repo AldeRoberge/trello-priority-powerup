@@ -5805,12 +5805,13 @@
     return { color: '#626f86', icon: 'dot' };
   }
 
-  function createStatutIcon(iconKey) {
+  function createStatutIcon(iconKey, size) {
     var ns = 'http://www.w3.org/2000/svg';
+    var dim = size > 0 ? Number(size) : 16;
     var svg = document.createElementNS(ns, 'svg');
     svg.setAttribute('viewBox', '0 0 16 16');
-    svg.setAttribute('width', '16');
-    svg.setAttribute('height', '16');
+    svg.setAttribute('width', String(dim));
+    svg.setAttribute('height', String(dim));
     svg.setAttribute('aria-hidden', 'true');
     svg.classList.add('statut-list-option-icon');
 
@@ -5994,11 +5995,17 @@
     body.id = bodyId;
 
     var embeddedBar = null;
+    var heroEl = null;
     if (embedded) {
       embeddedBar = document.createElement('div');
       embeddedBar.className = 'statut-embedded-bar';
       embeddedBar.appendChild(settingsBtn);
       body.appendChild(embeddedBar);
+
+      heroEl = document.createElement('div');
+      heroEl.className = 'statut-hero';
+      heroEl.setAttribute('aria-live', 'polite');
+      body.appendChild(heroEl);
     }
 
     var authBox = document.createElement('div');
@@ -6196,12 +6203,35 @@
       return next;
     }
 
+    function renderHero() {
+      if (!heroEl) return;
+      heroEl.replaceChildren();
+      var cat = currentCategory() || '_none';
+      var style = statutCategoryStyle(cat);
+      var color = style.color || '#626f86';
+      var name = currentListName() || (currentListId ? 'Liste inconnue' : '—');
+      heroEl.style.setProperty('--statut-color', color);
+      heroEl.dataset.category = cat;
+
+      var iconWrap = document.createElement('div');
+      iconWrap.className = 'statut-hero-icon';
+      iconWrap.appendChild(createStatutIcon(style.icon || 'dot', 36));
+
+      var nameEl = document.createElement('div');
+      nameEl.className = 'statut-hero-name';
+      nameEl.textContent = name;
+
+      heroEl.appendChild(iconWrap);
+      heroEl.appendChild(nameEl);
+    }
+
     function renderOptions() {
       groupsEl.replaceChildren();
       var groups = ensureCurrentListVisible(buildGroups());
       emptyEl.hidden = lists.length > 0;
       settingsBtn.hidden = !onOpenSettings;
       if (embeddedBar) embeddedBar.hidden = !onOpenSettings;
+      renderHero();
 
       if (!groups.length) return;
 
