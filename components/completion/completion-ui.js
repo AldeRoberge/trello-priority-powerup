@@ -678,13 +678,45 @@
       return CT.ESTIMATE_TIME_TICKS.slice();
     }
     return [
-      { label: 'Quelques minutes', minutes: 15 },
-      { label: 'Une heure', minutes: 60 },
-      { label: 'Quelques heures', minutes: 3 * 60 },
-      { label: 'Un jour', minutes: 24 * 60 },
-      { label: 'Quelques jours', minutes: 3 * 24 * 60 },
-      { label: 'Une semaine', minutes: 7 * 24 * 60 },
-      { label: 'Plusieurs semaines (maximum)', minutes: 3 * 7 * 24 * 60 }
+      { label: 'Quelques minutes', minutes: 15, icon: 'bolt', color: '#61BD4F' },
+      { label: 'Une heure', minutes: 60, icon: 'clock', color: '#7BC86C' },
+      {
+        label: 'Quelques heures',
+        minutes: 3 * 60,
+        icon: 'clocks',
+        color: '#B5D033',
+      },
+      { label: 'Un jour', minutes: 24 * 60, icon: 'sun', color: '#F2D600' },
+      {
+        label: 'Quelques jours',
+        minutes: 3 * 24 * 60,
+        icon: 'calendar',
+        color: '#FFAF3F',
+      },
+      {
+        label: 'Une semaine',
+        minutes: 7 * 24 * 60,
+        icon: 'calendar-week',
+        color: '#FF9F1A',
+      },
+      {
+        label: 'Plusieurs semaines',
+        minutes: 3 * 7 * 24 * 60,
+        icon: 'calendar-stats',
+        color: '#EB5A46',
+      },
+      {
+        label: 'Un mois',
+        minutes: 30 * 24 * 60,
+        icon: 'moon',
+        color: '#C25100',
+      },
+      {
+        label: 'Plus d\u2019un mois',
+        minutes: 2 * 30 * 24 * 60,
+        icon: 'hourglass-high',
+        color: '#C377E0',
+      },
     ];
   }
 
@@ -792,7 +824,7 @@
    *   minutes, scales|scale, readOnly, adjusted, compact, ariaLabel,
    *   onChange(minutes|null), t
    * }
-   * Multiple scales (Temps + Tailles) can be active; values stay in minutes.
+   * Scales stay in minutes; Progrès / subtasks use Temps.
    */
   function createEstimateChip(CT, config) {
     config = config || {};
@@ -862,7 +894,7 @@
       if (scaleIds.length > 1) {
         return {
           emptyLabel: 'Estimer',
-          emptyTitle: 'D\u00e9finir une estim\u00e9e (temps et taille)',
+          emptyTitle: 'D\u00e9finir une dur\u00e9e estim\u00e9e',
           popoverLabel: 'Choisir une estim\u00e9e',
         };
       }
@@ -1150,10 +1182,22 @@
           btn.type = 'button';
           btn.className = 'tp-estimate-tick';
           btn.setAttribute('role', 'option');
-          btn.textContent = tick.label;
           btn.title = tick.title || tick.label;
           btn.dataset.minutes = String(tick.minutes);
           if (tick.id) btn.dataset.tickId = String(tick.id);
+          if (tick.color) {
+            btn.style.setProperty('--tick-color', tick.color);
+          }
+          if (tick.icon) {
+            var iconEl = document.createElement('i');
+            iconEl.className = 'ti ti-' + tick.icon + ' tp-estimate-tick-icon';
+            iconEl.setAttribute('aria-hidden', 'true');
+            btn.appendChild(iconEl);
+          }
+          var labelEl = document.createElement('span');
+          labelEl.className = 'tp-estimate-tick-label';
+          labelEl.textContent = tick.label;
+          btn.appendChild(labelEl);
           btn.addEventListener('click', function () {
             setMinutes(tick.minutes, true);
             closePopover();
@@ -1444,7 +1488,7 @@
                 ? CT.getCachedBoardEstimateScales()
                 : CT.DEFAULT_ESTIMATE_SCALES
           )
-        : ['time', 'tshirt'];
+        : ['time'];
 
     function currentEstimateScales() {
       return estimateScales.slice();
@@ -2382,9 +2426,7 @@
               ? CT.formatEstimateForScale(total, scales[0])
               : CT.formatEstimatedMinutesCompact(total);
       var emptyTitle =
-        scales.length > 1
-          ? 'D\u00e9finir une estim\u00e9e (temps et taille)'
-          : (CT.getEstimateScale(scales[0]).emptyTitle || 'D\u00e9finir une estim\u00e9e');
+        CT.getEstimateScale(scales[0]).emptyTitle || 'D\u00e9finir une dur\u00e9e estim\u00e9e';
       masterEstimateChip.chip.title =
         total == null
           ? emptyTitle

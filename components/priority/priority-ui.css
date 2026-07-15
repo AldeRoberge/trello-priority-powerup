@@ -3836,6 +3836,34 @@ html[data-color-mode="dark"] .due-date-time-clock {
   gap: 8px;
   min-width: 0;
   max-width: 100%;
+  padding: 5px 10px 5px 8px;
+  border-radius: 8px;
+  background: transparent;
+  transition: background-color 0.15s ease;
+}
+
+.field--due-date[data-due-band='overdue'] .due-date-countdown-primary-row {
+  background: var(--due-band-overdue-fill);
+}
+
+.field--due-date[data-due-band='imminent'] .due-date-countdown-primary-row {
+  background: var(--due-band-imminent-fill);
+}
+
+.field--due-date[data-due-band='soon'] .due-date-countdown-primary-row {
+  background: var(--due-band-soon-fill);
+}
+
+.field--due-date[data-due-band='weeks'] .due-date-countdown-primary-row {
+  background: var(--due-band-weeks-fill);
+}
+
+.field--due-date[data-due-band='month'] .due-date-countdown-primary-row {
+  background: var(--due-band-month-fill);
+}
+
+.field--due-date[data-due-band='far'] .due-date-countdown-primary-row {
+  background: var(--due-band-far-fill);
 }
 
 .due-date-countdown-dot {

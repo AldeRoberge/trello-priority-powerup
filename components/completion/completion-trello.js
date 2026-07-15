@@ -28,14 +28,14 @@
   var ESTIMATE_MIN_MINUTES = 1;
   var ESTIMATE_MAX_MINUTES = Math.round(2 * 365.25 * 24 * 60);
   var DEFAULT_ESTIMATE_SCALE = 'time';
-  /** Board default: show time and t-shirt size together (not mutually exclusive). */
-  var DEFAULT_ESTIMATE_SCALES = ['time', 'tshirt'];
+  /** Board default: time-based estimates only. */
+  var DEFAULT_ESTIMATE_SCALES = ['time'];
   var boardEstimateScales = DEFAULT_ESTIMATE_SCALES.slice();
 
   /**
    * Estimation display systems. Values stay as minutes under the hood so
    * Progrès weighting and remaining-effort math stay consistent across scales.
-   * Multiple scales may be enabled at once (board customize setting).
+   * Subtask / Progrès estimates use Temps only (Tailles kept for legacy lookup).
    */
   var ESTIMATE_SCALES = {
     time: {
@@ -68,23 +68,76 @@
     },
   };
 
-  var ESTIMATE_SCALE_ORDER = ['time', 'tshirt'];
+  var ESTIMATE_SCALE_ORDER = ['time'];
 
   /**
    * Discrete Temps picker ticks (Progrès estimate chip). Full phrases — not the
    * Facilité duration grid, which shortens labels.
+   * icon = Tabler class suffix; color = always-visible accent (dim when idle).
    */
   var ESTIMATE_TIME_TICKS = [
-    { id: 't15', label: 'Quelques minutes', minutes: 15 },
-    { id: 't60', label: 'Une heure', minutes: 60 },
-    { id: 't180', label: 'Quelques heures', minutes: 3 * 60 },
-    { id: 't1440', label: 'Un jour', minutes: 24 * 60 },
-    { id: 't4320', label: 'Quelques jours', minutes: 3 * 24 * 60 },
-    { id: 't10080', label: 'Une semaine', minutes: 7 * 24 * 60 },
+    {
+      id: 't15',
+      label: 'Quelques minutes',
+      minutes: 15,
+      icon: 'bolt',
+      color: '#61BD4F',
+    },
+    {
+      id: 't60',
+      label: 'Une heure',
+      minutes: 60,
+      icon: 'clock',
+      color: '#7BC86C',
+    },
+    {
+      id: 't180',
+      label: 'Quelques heures',
+      minutes: 3 * 60,
+      icon: 'clocks',
+      color: '#B5D033',
+    },
+    {
+      id: 't1440',
+      label: 'Un jour',
+      minutes: 24 * 60,
+      icon: 'sun',
+      color: '#F2D600',
+    },
+    {
+      id: 't4320',
+      label: 'Quelques jours',
+      minutes: 3 * 24 * 60,
+      icon: 'calendar',
+      color: '#FFAF3F',
+    },
+    {
+      id: 't10080',
+      label: 'Une semaine',
+      minutes: 7 * 24 * 60,
+      icon: 'calendar-week',
+      color: '#FF9F1A',
+    },
     {
       id: 't30240',
-      label: 'Plusieurs semaines (maximum)',
+      label: 'Plusieurs semaines',
       minutes: 3 * 7 * 24 * 60,
+      icon: 'calendar-stats',
+      color: '#EB5A46',
+    },
+    {
+      id: 't43200',
+      label: 'Un mois',
+      minutes: 30 * 24 * 60,
+      icon: 'moon',
+      color: '#C25100',
+    },
+    {
+      id: 't86400',
+      label: 'Plus d\u2019un mois',
+      minutes: 2 * 30 * 24 * 60,
+      icon: 'hourglass-high',
+      color: '#C377E0',
     },
   ];
 
@@ -134,7 +187,7 @@
 
   /**
    * Normalize one or more enabled scales. Order follows ESTIMATE_SCALE_ORDER.
-   * At least one scale is always returned (defaults to Temps + Tailles).
+   * At least one scale is always returned (defaults to Temps).
    */
   function normalizeEstimateScales(value) {
     var seen = Object.create(null);
@@ -213,6 +266,8 @@
           label: tick.label,
           title: tick.label,
           minutes: tick.minutes,
+          icon: tick.icon || '',
+          color: tick.color || '',
         };
       });
     }

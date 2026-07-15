@@ -1440,6 +1440,30 @@ body.tp-page--priority {
   color: color-mix(in srgb, var(--section-glow, var(--blocked-muted-text)) 55%, var(--text-muted, var(--tp-text-muted)));
 }
 
+.tp-page--priority .field--due-date[data-due-band='overdue'] .due-date-countdown-primary-row {
+  background: var(--due-band-overdue-fill, var(--blocked-fill, #fce8e8));
+}
+
+.tp-page--priority .field--due-date[data-due-band='imminent'] .due-date-countdown-primary-row {
+  background: var(--due-band-imminent-fill, #fff1e0);
+}
+
+.tp-page--priority .field--due-date[data-due-band='soon'] .due-date-countdown-primary-row {
+  background: var(--due-band-soon-fill, #fff8d6);
+}
+
+.tp-page--priority .field--due-date[data-due-band='weeks'] .due-date-countdown-primary-row {
+  background: var(--due-band-weeks-fill, #e3f5e8);
+}
+
+.tp-page--priority .field--due-date[data-due-band='month'] .due-date-countdown-primary-row {
+  background: var(--due-band-month-fill, #e6f0fb);
+}
+
+.tp-page--priority .field--due-date[data-due-band='far'] .due-date-countdown-primary-row {
+  background: var(--due-band-far-fill, #f0f1f4);
+}
+
 .tp-page--priority .due-date-title {
   font-size: 15px;
   font-weight: 600;
@@ -2265,12 +2289,16 @@ span.tp-estimate-chip {
 }
 
 .tp-estimate-tick {
+  --tick-color: var(--tp-text-muted, #6b778c);
   margin: 0;
-  padding: 6px 8px;
-  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--tick-color) 28%, transparent);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--tp-text) 4%, transparent);
-  color: var(--tp-text);
+  background: color-mix(in srgb, var(--tick-color) 10%, transparent);
+  color: color-mix(in srgb, var(--tick-color) 42%, var(--tp-text));
   font: inherit;
   font-size: 12px;
   font-weight: 500;
@@ -2278,20 +2306,46 @@ span.tp-estimate-chip {
   cursor: pointer;
   transition:
     background-color 0.12s ease,
-    border-color 0.12s ease;
+    border-color 0.12s ease,
+    color 0.12s ease,
+    opacity 0.12s ease;
+}
+
+.tp-estimate-tick-icon {
+  flex: 0 0 auto;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--tick-color);
+  opacity: 0.55;
+}
+
+.tp-estimate-tick-label {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .tp-estimate-tick:hover,
 .tp-estimate-tick:focus-visible {
   outline: none;
-  background: color-mix(in srgb, var(--estimate-accent, var(--tp-primary, #0c66e4)) 14%, transparent);
-  border-color: color-mix(in srgb, var(--estimate-accent, var(--tp-primary, #0c66e4)) 35%, var(--tp-border));
+  background: color-mix(in srgb, var(--tick-color) 18%, transparent);
+  border-color: color-mix(in srgb, var(--tick-color) 48%, var(--tp-border));
+  color: color-mix(in srgb, var(--tick-color) 28%, var(--tp-text));
+}
+
+.tp-estimate-tick:hover .tp-estimate-tick-icon,
+.tp-estimate-tick:focus-visible .tp-estimate-tick-icon {
+  opacity: 0.85;
 }
 
 .tp-estimate-tick.is-selected {
-  background: color-mix(in srgb, var(--estimate-accent, var(--tp-primary, #0c66e4)) 18%, transparent);
-  border-color: color-mix(in srgb, var(--estimate-accent, var(--tp-primary, #0c66e4)) 55%, var(--tp-border));
+  background: color-mix(in srgb, var(--tick-color) 22%, transparent);
+  border-color: color-mix(in srgb, var(--tick-color) 62%, var(--tp-border));
+  color: color-mix(in srgb, var(--tick-color) 18%, var(--tp-text));
   font-weight: 700;
+}
+
+.tp-estimate-tick.is-selected .tp-estimate-tick-icon {
+  opacity: 1;
 }
 
 .tp-estimate-popover.is-scale-discrete .tp-estimate-ticks {

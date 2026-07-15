@@ -647,30 +647,30 @@ var fakeT = {
 
 check('default estimate scale is time', CT.DEFAULT_ESTIMATE_SCALE === 'time');
 check(
-  'two estimate scales (no cafés)',
-  CT.ESTIMATE_SCALE_ORDER.length === 2 &&
+  'estimate scale order is time only (no cafés)',
+  CT.ESTIMATE_SCALE_ORDER.length === 1 &&
+    CT.ESTIMATE_SCALE_ORDER[0] === 'time' &&
     !!CT.ESTIMATE_SCALES.time &&
-    !!CT.ESTIMATE_SCALES.tshirt &&
     !CT.ESTIMATE_SCALES.coffee
 );
 check(
-  'default board scales are time + tshirt',
+  'default board scales are time only',
   Array.isArray(CT.DEFAULT_ESTIMATE_SCALES) &&
-    CT.DEFAULT_ESTIMATE_SCALES.join(',') === 'time,tshirt'
+    CT.DEFAULT_ESTIMATE_SCALES.join(',') === 'time'
 );
 check('normalize unknown scale → time', CT.normalizeEstimateScale('nope') === 'time');
-check('normalize tailles → tshirt', CT.normalizeEstimateScale('tailles') === 'tshirt');
+check('normalize tailles → tshirt (legacy)', CT.normalizeEstimateScale('tailles') === 'tshirt');
 check('normalize legacy cafés → time', CT.normalizeEstimateScale('cafés') === 'time');
 check(
-  'normalizeEstimateScales accepts both',
-  CT.normalizeEstimateScales(['tshirt', 'time']).join(',') === 'time,tshirt'
+  'normalizeEstimateScales drops Tailles',
+  CT.normalizeEstimateScales(['tshirt', 'time']).join(',') === 'time'
 );
 check(
   'normalizeEstimateScales empty → defaults',
-  CT.normalizeEstimateScales([]).join(',') === 'time,tshirt'
+  CT.normalizeEstimateScales([]).join(',') === 'time'
 );
 check(
-  'tshirt ticks XS–XL',
+  'legacy tshirt ticks XS–XL',
   CT.getEstimateScaleTicks('tshirt')
     .map(function (t) {
       return t.label;
@@ -691,24 +691,25 @@ check(
       'Un jour',
       'Quelques jours',
       'Une semaine',
-      'Plusieurs semaines (maximum)',
+      'Plusieurs semaines',
+      'Un mois',
+      'Plus d\u2019un mois',
     ].join('|')
 );
 check(
-  'format tshirt M',
+  'format tshirt M (legacy)',
   CT.formatEstimateForScale(4 * 60, 'tshirt') === 'M'
 );
 check(
-  'format dual scales',
-  CT.formatEstimateForScales(4 * 60, ['time', 'tshirt']).indexOf('M') !== -1 &&
-    CT.formatEstimateForScales(4 * 60, ['time', 'tshirt']).indexOf('h') !== -1
+  'format time scale',
+  CT.formatEstimateForScales(4 * 60, ['time']).indexOf('h') !== -1
 );
 check(
-  'nearest tshirt for 50 min → S',
+  'nearest tshirt for 50 min → S (legacy)',
   CT.nearestEstimateTick(50, 'tshirt').label === 'S'
 );
 check(
-  'remaining label tshirt',
+  'remaining label tshirt (legacy)',
   CT.formatEstimatedRemainingLabel(60, 'tshirt') === '~S restantes'
 );
 check(

@@ -137,27 +137,6 @@
     </div>
   </details>
 
-  <details class="tp-settings-section" id="estimateScalesSection">
-    <summary class="tp-settings-summary">
-      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-hourglass"></i></span>
-      <span class="tp-settings-summary-title">Estimation</span>
-      <span class="tp-settings-summary-hint">Temps et/ou tailles (tableau)</span>
-    </summary>
-    <div class="tp-settings-body">
-      <p class="tp-color-scheme-hint">Choisissez comment afficher l’effort estimé sur Progrès. Les valeurs restent en minutes&nbsp;; vous pouvez activer Temps et Tailles en même temps. L’assistant essaie d’inférer les deux.</p>
-      <div class="tp-estimate-scales-options" id="estimateScalesOptions" role="group" aria-label="Systèmes d’estimation">
-        <label class="tp-statut-toggle">
-          <input type="checkbox" id="estimateScaleTime" value="time" />
-          <span>Temps (minutes, heures, jours…)</span>
-        </label>
-        <label class="tp-statut-toggle">
-          <input type="checkbox" id="estimateScaleTshirt" value="tshirt" />
-          <span>Tailles (XS–XL)</span>
-        </label>
-      </div>
-    </div>
-  </details>
-
   <details class="tp-settings-section" id="autoSortSection">
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-lock"></i></span>
@@ -404,75 +383,6 @@
       } catch (err) {
         console.error('Completion scheme picker init failed', err);
         if (section) section.hidden = true;
-      }
-    }
-
-    async function initEstimateScalesSettings() {
-      var section = document.getElementById('estimateScalesSection');
-      var wrap = document.getElementById('estimateScalesOptions');
-      var checkTime = document.getElementById('estimateScaleTime');
-      var checkTshirt = document.getElementById('estimateScaleTshirt');
-      if (
-        !section ||
-        !wrap ||
-        !checkTime ||
-        !checkTshirt ||
-        typeof CompletionTrello === 'undefined' ||
-        typeof CompletionTrello.getBoardEstimateScales !== 'function'
-      ) {
-        if (section) section.hidden = true;
-        return;
-      }
-
-      var saveTimer = null;
-
-      function applyScalesUi(scales) {
-        var next =
-          typeof CompletionTrello.normalizeEstimateScales === 'function'
-            ? CompletionTrello.normalizeEstimateScales(scales)
-            : scales;
-        var hasTime = next.indexOf('time') !== -1;
-        var hasTshirt = next.indexOf('tshirt') !== -1;
-        checkTime.checked = hasTime;
-        checkTshirt.checked = hasTshirt;
-        // Keep at least one scale enabled.
-        checkTime.disabled = hasTime && !hasTshirt;
-        checkTshirt.disabled = hasTshirt && !hasTime;
-      }
-
-      function persistScales() {
-        var next = [];
-        if (checkTime.checked) next.push('time');
-        if (checkTshirt.checked) next.push('tshirt');
-        if (!next.length) {
-          applyScalesUi(
-            CompletionTrello.getCachedBoardEstimateScales
-              ? CompletionTrello.getCachedBoardEstimateScales()
-              : ['time', 'tshirt']
-          );
-          return;
-        }
-        applyScalesUi(next);
-        clearTimeout(saveTimer);
-        saveTimer = setTimeout(function () {
-          CompletionTrello.saveBoardEstimateScales(t, next)
-            .then(function (saved) {
-              applyScalesUi(saved);
-            })
-            .catch(function (err) {
-              console.error('Estimate scales save failed', err);
-            });
-        }, 180);
-      }
-
-      try {
-        var active = await CompletionTrello.getBoardEstimateScales(t);
-        applyScalesUi(active);
-        wrap.addEventListener('change', persistScales);
-        resizeSettingsPopup();
-      } catch (err) {
-        console.error('Estimate scales settings init failed', err);
-        section.hidden = true;
       }
     }
 
@@ -1028,7 +938,6 @@
       initStatutSettings(),
       initColorSchemePicker(),
       initCompletionSchemePicker(),
-      initEstimateScalesSettings(),
       refreshAutoSortUi(),
       initDisplaySettings(),
       initExperimentalSettings(),
