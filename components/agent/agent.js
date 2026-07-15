@@ -3564,10 +3564,12 @@
           '- text = UN motif de cause, pas une action \u00e0 faire (sauf si d\u00e9j\u00e0 une cause).',
           '- Pr\u00e9f\u00e8re \u00ab\u00a0En attente de \u2026\u00a0\u00bb (ou \u00ab\u00a0En attente d\'\u2026\u00a0\u00bb) pour une attente / action pas encore faite.',
           '- Utilise \u00ab\u00a0Bloqu\u00e9 \u00e0 cause de \u2026\u00a0\u00bb seulement pour un obstacle physique / permission / mat\u00e9riel.',
-          '- Si l\'entr\u00e9e est un infinitif (ex. Manger un hot-dog)\u00a0: \u00ab\u00a0En attente de manger un hot-dog\u00a0\u00bb (minuscule apr\u00e8s de).',
-          '- PAS de parenth\u00e8ses, PAS de num\u00e9rotation, PAS de second motif.',
+          '- Si l\'entr\u00e9e est un infinitif (ex. Manger un hot-dog / Essayer le connecteur)\u00a0: \u00ab\u00a0En attente de manger\u2026\u00a0\u00bb / \u00ab\u00a0En attente d\'essayer\u2026\u00a0\u00bb (minuscule apr\u00e8s de/d\', \u00e9lision devant voyelle).',
+          '- PAS de parenth\u00e8ses autour du titre, PAS de num\u00e9rotation, PAS de second motif.',
+          '- INTERDIT\u00a0: \u00ab\u00a0En attente de (Essayer\u2026)\u00a0\u00bb \u2014 int\u00e8gre le verbe naturellement.',
           '- Max ~100 caract\u00e8res.',
           'Ex.\u00a0: \u00ab\u00a0Manger un hot-dog\u00a0\u00bb \u2192 {"text":"En attente de manger un hot-dog"}',
+          'Ex.\u00a0: \u00ab\u00a0Essayer le connecteur Antidote\u00a0\u00bb \u2192 {"text":"En attente d\'essayer le connecteur Antidote"}',
           'Ex.\u00a0: \u00ab\u00a0r\u00e9ponse du client\u00a0\u00bb \u2192 {"text":"En attente d\'une r\u00e9ponse du client"}',
           'Ex.\u00a0: \u00ab\u00a0En attente d\'une approbation\u00a0\u00bb \u2192 {"text":"En attente d\'une approbation"}'
         ].join('\n')

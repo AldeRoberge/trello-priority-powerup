@@ -2334,6 +2334,157 @@
     }
 
     /**
+     * For newly blocked Progrès subtasks: seed a humanized Motif immediately
+     * (fallback), then polish with a quick AI call → "En attente d'essayer…".
+     */
+    function humanizeMotifsForNewBlockedLinks(prevLinks, nextLinks, data) {
+      var prevIds = Object.create(null);
+      var prev = Array.isArray(prevLinks) ? prevLinks : [];
+      for (var p = 0; p < prev.length; p++) {
+        if (prev[p] && prev[p].id) prevIds[String(prev[p].id)] = true;
+      }
+      var items =
+        data && Array.isArray(data.items) ? data.items : [];
+      var byId = Object.create(null);
+      for (var i = 0; i < items.length; i++) {
+        if (items[i] && items[i].id) byId[String(items[i].id)] = items[i];
+      }
+      var fresh = [];
+      var list = Array.isArray(nextLinks) ? nextLinks : [];
+      for (var n = 0; n < list.length; n++) {
+        var link = list[n];
+        if (!link || !link.id || prevIds[String(link.id)]) continue;
+        var item = byId[String(link.id)];
+        var taskName =
+          (item && item.text) ||
+          (typeof link.label === 'string' ? link.label : '') ||
+          '';
+        taskName = String(taskName || '').trim();
+        if (!taskName) continue;
+        fresh.push({ id: String(link.id), taskName: taskName });
+      }
+      if (!fresh.length) return;
+
+      var st0 =
+        typeof variant.getState === 'function' ? variant.getState() || {} : {};
+      var reasons0 = Array.isArray(st0.blockedReasons)
+        ? st0.blockedReasons.slice()
+        : [];
+      var seeded = false;
+      var provisionals = [];
+      for (var f = 0; f < fresh.length; f++) {
+        var name = fresh[f].taskName;
+        var already = false;
+        for (var r = 0; r < reasons0.length; r++) {
+          if (blockedReasonMatchesTask(reasons0[r], name)) {
+            already = true;
+            break;
+          }
+        }
+        if (already) continue;
+        var provisional =
+          window.PriorityAgent &&
+          typeof PriorityAgent.fallbackBlockedReasonText === 'function'
+            ? PriorityAgent.fallbackBlockedReasonText(name)
+            : window.PriorityUI &&
+                typeof PriorityUI.formatBlockedWaitingOnLabel === 'function'
+              ? PriorityUI.formatBlockedWaitingOnLabel(name)
+              : 'En attente de ' +
+                name.charAt(0).toLocaleLowerCase('fr-FR') +
+                name.slice(1);
+        if (!provisional) continue;
+        var pKey = reasonKeyFr(provisional);
+        var exists = false;
+        for (var e = 0; e < reasons0.length; e++) {
+          if (reasonKeyFr(reasons0[e]) === pKey) {
+            exists = true;
+            break;
+          }
+        }
+        if (!exists) {
+          reasons0.push(provisional);
+          seeded = true;
+        }
+        provisionals.push({ from: provisional, taskName: name });
+      }
+      if (seeded) {
+        syncingBlockedBridge = true;
+        try {
+          variant.setState(
+            Object.assign({}, st0, {
+              enAttente: true,
+              blockedReasons: reasons0,
+            })
+          );
+          if (
+            typeof statutUi !== 'undefined' &&
+            statutUi &&
+            typeof statutUi.syncBlockedPanel === 'function'
+          ) {
+            statutUi.syncBlockedPanel();
+          }
+          attachBlockedIntoStatut();
+        } finally {
+          syncingBlockedBridge = false;
+        }
+      }
+
+      if (
+        !window.PriorityAgent ||
+        typeof PriorityAgent.getProvider !== 'function' ||
+        typeof PriorityAgent.suggestBlockedReasonText !== 'function'
+      ) {
+        return;
+      }
+      PriorityAgent.getProvider(t)
+        .then(function (provider) {
+          return Promise.all(
+            provisionals.map(function (entry) {
+              return PriorityAgent.suggestBlockedReasonText(
+                provider,
+                entry.taskName
+              ).then(
+                function (polished) {
+                  return {
+                    from: entry.from,
+                    to:
+                      typeof polished === 'string' && polished.trim()
+                        ? polished.trim()
+                        : entry.from,
+                  };
+                },
+                function () {
+                  return { from: entry.from, to: entry.from };
+                }
+              );
+            })
+          );
+        })
+        .then(function (updates) {
+          if (!updates || !updates.length) return;
+          for (var u = 0; u < updates.length; u++) {
+            if (
+              updates[u].to &&
+              reasonKeyFr(updates[u].to) !== reasonKeyFr(updates[u].from)
+            ) {
+              replaceBlockedReasonChip(updates[u].from, updates[u].to);
+            }
+          }
+          if (
+            typeof statutUi !== 'undefined' &&
+            statutUi &&
+            typeof statutUi.syncBlockedPanel === 'function'
+          ) {
+            statutUi.syncBlockedPanel();
+          }
+          attachBlockedIntoStatut();
+        })
+        .catch(function (err) {
+          console.error('humanizeMotifsForNewBlockedLinks failed', err);
+        });
+    }
+
+    /**
      * Progrès blocked → Statut enAttente + blockedLinks (+ prune Motifs).
      * Card is Bloqué iff master or any item is blocked.
      * Completing a subtask clears its block and removes it from Motif/links.
@@ -2347,6 +2498,7 @@
       var hasBlocked = CompletionTrello.hasAnyBlocked(data);
       var st =
         typeof variant.getState === 'function' ? variant.getState() || {} : {};
+      var prevLinks = Array.isArray(st.blockedLinks) ? st.blockedLinks : [];
       var pruned = pruneBlockedReasonsForCompletion(st, data);
       var nextLinks = pruned.blockedLinks;
       var nextReasons = pruned.blockedReasons;
@@ -2383,6 +2535,9 @@
         attachBlockedIntoStatut();
       } finally {
         syncingBlockedBridge = false;
+      }
+      if (hasBlocked) {
+        humanizeMotifsForNewBlockedLinks(prevLinks, nextLinks, data);
       }
     }
 

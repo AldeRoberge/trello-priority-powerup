@@ -2203,14 +2203,32 @@
   }
 
   /**
-   * Chip / badge label for a waiting-on-task link: `En attente de (TASK_NAME)`.
+   * Chip / badge label for a waiting-on-task link.
+   * Humanized cause phrase (no parentheses): "Essayer X" → "En attente d'essayer X".
    */
   function formatBlockedWaitingOnLabel(taskName) {
     var name =
       typeof taskName === 'string' && taskName.trim()
         ? taskName.trim()
         : BLOCKED_SUBTASK_FALLBACK_LABEL;
-    return BLOCKED_WAITING_ON_PREFIX + ' (' + name + ')';
+    if (
+      global.PriorityAgent &&
+      typeof global.PriorityAgent.fallbackBlockedReasonText === 'function'
+    ) {
+      return global.PriorityAgent.fallbackBlockedReasonText(name);
+    }
+    var body = name.replace(/\.+$/, '');
+    var lower =
+      body.charAt(0).toLocaleLowerCase('fr-FR') + body.slice(1);
+    if (
+      /^(une?|des)\s+/i.test(lower) ||
+      /^([aeiou\u00e0\u00e2\u00e4\u00e9\u00e8\u00ea\u00eb\u00ee\u00ef\u00f4\u00f6\u00f9\u00fb\u00fc]|h)/i.test(
+        lower
+      )
+    ) {
+      return ('En attente d\'' + lower).slice(0, 500);
+    }
+    return (BLOCKED_WAITING_ON_PREFIX + ' ' + lower).slice(0, 500);
   }
 
   function resolveBlockedLinkLabel(link, items) {
@@ -2223,10 +2241,10 @@
 
   /**
    * Expand reasons for display: replace the generic waiting-other reason with
-   * one label per linked task (`En attente de (Name)`), using stored labels
+   * one label per linked task (humanized "En attente de …"), using stored labels
    * when live subtask text is unavailable.
-   * When the user already typed an explicit motif, do not also append link
-   * chips — avoids "Manger…" + "En attente de (Manger…)".
+   * When the user already has an explicit motif, do not also append link
+   * chips — avoids "Manger…" + "En attente de manger…".
    */
   function expandBlockedReasonsForDisplay(reasons, links, items) {
     var list = normalizeBlockedReasons(reasons);
@@ -2243,6 +2261,8 @@
     for (var i = 0; i < list.length; i++) {
       if (list[i] === BLOCKED_REASON_WAITING_OTHER_TASK) {
         waitingExpanded = true;
+        // Explicit motifs already describe the wait — skip named link expansion.
+        if (hasExplicitReason) continue;
         if (linkList.length) {
           for (var j = 0; j < linkList.length; j++) {
             out.push(
@@ -6867,10 +6887,11 @@
     var membersAddBtn = document.createElement('button');
     membersAddBtn.type = 'button';
     membersAddBtn.className = 'info-members-add-btn';
+    membersAddBtn.setAttribute('aria-label', 'Ajouter un membre');
+    membersAddBtn.title = 'Ajouter un membre';
     membersAddBtn.setAttribute('aria-expanded', 'false');
     membersAddBtn.setAttribute('aria-haspopup', 'listbox');
-    membersAddBtn.innerHTML =
-      '<i class="ti ti-plus" aria-hidden="true"></i><span>Ajouter</span>';
+    membersAddBtn.innerHTML = '<i class="ti ti-plus" aria-hidden="true"></i>';
 
     var membersPicker = document.createElement('div');
     membersPicker.className = 'info-members-picker';
@@ -6908,10 +6929,11 @@
     var labelsAddBtn = document.createElement('button');
     labelsAddBtn.type = 'button';
     labelsAddBtn.className = 'info-labels-add-btn';
+    labelsAddBtn.setAttribute('aria-label', 'Ajouter une \u00e9tiquette');
+    labelsAddBtn.title = 'Ajouter une \u00e9tiquette';
     labelsAddBtn.setAttribute('aria-expanded', 'false');
     labelsAddBtn.setAttribute('aria-haspopup', 'listbox');
-    labelsAddBtn.innerHTML =
-      '<i class="ti ti-plus" aria-hidden="true"></i><span>Ajouter</span>';
+    labelsAddBtn.innerHTML = '<i class="ti ti-plus" aria-hidden="true"></i>';
 
     var labelsPicker = document.createElement('div');
     labelsPicker.className = 'info-labels-picker';
@@ -6997,10 +7019,11 @@
     var taskTypesAddBtn = document.createElement('button');
     taskTypesAddBtn.type = 'button';
     taskTypesAddBtn.className = 'info-task-types-add-btn';
+    taskTypesAddBtn.setAttribute('aria-label', 'Ajouter un type de t\u00e2che');
+    taskTypesAddBtn.title = 'Ajouter un type de t\u00e2che';
     taskTypesAddBtn.setAttribute('aria-expanded', 'false');
     taskTypesAddBtn.setAttribute('aria-haspopup', 'listbox');
-    taskTypesAddBtn.innerHTML =
-      '<i class="ti ti-plus" aria-hidden="true"></i><span>Ajouter</span>';
+    taskTypesAddBtn.innerHTML = '<i class="ti ti-plus" aria-hidden="true"></i>';
 
     var taskTypesPicker = document.createElement('div');
     taskTypesPicker.className = 'info-task-types-picker';

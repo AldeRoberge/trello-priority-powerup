@@ -1276,7 +1276,26 @@ body {
 
 .info-members-add-btn,
 .info-labels-add-btn,
-.info-task-types-add-btn,
+.info-task-types-add-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 1px dashed color-mix(in srgb, var(--text-primary) 22%, transparent);
+  border-radius: 999px;
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
 .info-parent-pick-btn {
   appearance: none;
   display: inline-flex;
@@ -1300,7 +1319,11 @@ body {
 
 .info-members-add-btn .ti,
 .info-labels-add-btn .ti,
-.info-task-types-add-btn .ti,
+.info-task-types-add-btn .ti {
+  font-size: 16px;
+  line-height: 1;
+}
+
 .info-parent-pick-btn .ti {
   font-size: 14px;
   line-height: 1;

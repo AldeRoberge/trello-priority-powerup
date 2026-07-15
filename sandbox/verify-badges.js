@@ -914,12 +914,14 @@ check(
   })()
 );
 check(
-  'formatBlockedWaitingOnLabel wraps task name',
+  'formatBlockedWaitingOnLabel humanizes task name',
   (function () {
     return (
       PU.formatBlockedWaitingOnLabel('Brief client') ===
-        'En attente de (Brief client)' &&
-      PU.formatBlockedWaitingOnLabel('') === 'En attente de (T\u00e2che inconnue)'
+        'En attente de brief client' &&
+      PU.formatBlockedWaitingOnLabel('Essayer le connecteur Antidote') ===
+        'En attente d\'essayer le connecteur Antidote' &&
+      PU.formatBlockedWaitingOnLabel('') === 'En attente de t\u00e2che inconnue'
     );
   })()
 );
@@ -927,6 +929,13 @@ check(
   'formatBlockedReasonsSummary expands waiting links with labels',
   (function () {
     var summary = PU.formatBlockedReasonsSummary(
+      ['En attente d\'une autre t\u00e2che'],
+      {
+        links: [{ type: 'subtask', id: 'a', label: 'QA' }],
+        maxLength: 80
+      }
+    );
+    var withExplicit = PU.formatBlockedReasonsSummary(
       ['En attente d\'une autre t\u00e2che', 'Budget'],
       {
         links: [{ type: 'subtask', id: 'a', label: 'QA' }],
@@ -934,9 +943,11 @@ check(
       }
     );
     return (
-      summary.indexOf('En attente de (QA)') !== -1 &&
-      summary.indexOf('Budget') !== -1 &&
-      summary.indexOf('En attente d\'une autre t\u00e2che') === -1
+      /en attente de qa/i.test(summary) &&
+      summary.indexOf('En attente d\'une autre t\u00e2che') === -1 &&
+      summary.indexOf('En attente de (') === -1 &&
+      withExplicit.indexOf('Budget') !== -1 &&
+      !/en attente de qa/i.test(withExplicit)
     );
   })()
 );
@@ -1169,8 +1180,9 @@ check(
       false
     );
     return (
-      text.indexOf('En attente de (Revue code)') !== -1 &&
-      text.indexOf('En attente d\'une autre t\u00e2che') === -1
+      /en attente de revue code/i.test(text) &&
+      text.indexOf('En attente d\'une autre t\u00e2che') === -1 &&
+      text.indexOf('En attente de (') === -1
     );
   })()
 );
