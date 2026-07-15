@@ -660,16 +660,19 @@
   }
 
   /**
-   * All labels available on the board (`t.labels('all')`).
+   * All labels available on the board (`t.board('labels')`).
    */
   async function getBoardLabels(t) {
     try {
-      if (!t || typeof t.labels !== 'function') return [];
-      var labels = await new Promise(function (resolve, reject) {
-        t.labels('all').then(resolve, reject);
+      if (!t || typeof t.board !== 'function') return [];
+      var board = await new Promise(function (resolve, reject) {
+        t.board('labels').then(resolve, reject);
       });
-      if (isPowerUpRequestChain(labels)) return [];
-      return normalizeLabelList(labels);
+      var list = null;
+      if (board && Array.isArray(board.labels)) list = board.labels;
+      else if (Array.isArray(board)) list = board;
+      if (isPowerUpRequestChain(list)) return [];
+      return normalizeLabelList(list);
     } catch (err) {
       console.error('Priority board labels failed', err);
       return [];

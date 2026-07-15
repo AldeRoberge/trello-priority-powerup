@@ -81,7 +81,20 @@
     if (!cardEl) throw new Error('AgentUI.mount: cardEl required');
     options = options || {};
     var t = options.t;
+    var Agent = global.PriorityAgent;
+    if (!Agent) throw new Error('PriorityAgent is required');
+    if (!global.PriorityUI) throw new Error('PriorityUI is required');
+
+    var assistantScope = Agent.normalizeAssistantScope
+      ? Agent.normalizeAssistantScope(options.scope)
+      : options.scope === 'project'
+        ? 'project'
+        : 'task';
+    var isProjectScope = assistantScope === 'project';
+    var standalone = !!options.standalone || isProjectScope;
+
     var bridge = {
+      getScope: options.getScope || function () { return assistantScope; },
       getCardName: options.getCardName || function () { return ''; },
       getCardDesc: options.getCardDesc || function () { return ''; },
       getFormulaKey: options.getFormulaKey || function () { return 'baseline'; },
@@ -125,13 +138,14 @@
     var onCardMemoryUpdate =
       typeof options.onCardMemoryUpdate === 'function' ? options.onCardMemoryUpdate : null;
     var onLayoutChange = options.onLayoutChange || function () {};
-    var initiallyOpen = !!options.initiallyOpen;
+    var initiallyOpen = standalone ? true : !!options.initiallyOpen;
     var shouldFocusComposer = options.focusComposer != null
       ? !!options.focusComposer
       : initiallyOpen;
-    var Agent = global.PriorityAgent;
-    if (!Agent) throw new Error('PriorityAgent is required');
-    if (!global.PriorityUI) throw new Error('PriorityUI is required');
+    var openMemoryOnSettings =
+      options.openMemoryOnSettings != null
+        ? !!options.openMemoryOnSettings
+        : false;
 
     var provider = Agent.normalizeProvider(null);
     var savedProvider = Agent.normalizeProvider(null);
@@ -197,7 +211,7 @@
       lastUsage: null
     };
 
-    var section = el('div', 'variant-chat-section');
+    var section = el('div', 'variant-chat-section' + (standalone ? ' variant-chat-section--standalone' : ''));
     var field = el('div', 'field field--chat');
 
     var agentIdentity = {
@@ -215,7 +229,8 @@
       iconClass: 'chat-leading-icon',
       titleClass: 'chat-enable-title',
       collapseLabel: 'Replier Assistant',
-      expandLabel: 'D\u00e9velopper Assistant'
+      expandLabel: 'D\u00e9velopper Assistant',
+      hideEnable: standalone
     });
     field.appendChild(chrome.head);
 
@@ -413,6 +428,139 @@
     statusSelect.value = statusLevel;
     settingsPanel.appendChild(labeledInput('Afficher le statut', statusSelect));
 
+    // ── Mémoire (settings submenu) ───────────────────────────────────────
+    var memoryDetails = el('details', 'agent-settings-memory');
+    var memorySummary = el('summary', 'agent-settings-memory-summary');
+    memorySummary.appendChild(el('span', 'agent-settings-memory-title', { text: 'M\u00e9moire' }));
+    var memoryBadge = el('span', 'agent-settings-memory-badge');
+    memoryBadge.hidden = true;
+    memorySummary.appendChild(memoryBadge);
+    memoryDetails.appendChild(memorySummary);
+
+    var memoryBody = el('div', 'agent-settings-memory-body');
+    memoryBody.appendChild(
+      el('p', 'agent-settings-hint', {
+        text:
+          'Faits durables et notes de tableau partag\u00e9s entre toutes les fen\u00eatres Assistant. Alignement guid\u00e9 ou conversation libre.'
+      })
+    );
+    var memoryActions = el('div', 'agent-settings-actions agent-memory-actions');
+    var memoryAlignBtn = el('button', 'tp-button agent-btn agent-btn--secondary', {
+      type: 'button',
+      text: 'Aligner la m\u00e9moire'
+    });
+    var memoryChatBtn = el('button', 'tp-button agent-btn', {
+      type: 'button',
+      text: 'Ouvrir la m\u00e9moire'
+    });
+    memoryActions.appendChild(memoryAlignBtn);
+    memoryActions.appendChild(memoryChatBtn);
+    memoryBody.appendChild(memoryActions);
+    var memoryMountEl = el('div', 'agent-settings-memory-mount');
+    memoryMountEl.hidden = true;
+    memoryBody.appendChild(memoryMountEl);
+    memoryDetails.appendChild(memoryBody);
+    settingsPanel.appendChild(memoryDetails);
+
+    var memoryUiMounted = false;
+    var memoryUiBusy = false;
+
+    function syncMemoryBadge() {
+      var Mem = global.AgentMemory;
+      var mem =
+        typeof bridge.getMemory === 'function' ? bridge.getMemory() : null;
+      var needs =
+        Mem && typeof Mem.needsOnboarding === 'function' && Mem.needsOnboarding(mem);
+      if (needs) {
+        memoryBadge.hidden = false;
+        memoryBadge.textContent = '\u00c0 aligner';
+      } else {
+        memoryBadge.hidden = true;
+        memoryBadge.textContent = '';
+      }
+    }
+
+    function needsMemoryAlign() {
+      var Mem = global.AgentMemory;
+      var mem =
+        typeof bridge.getMemory === 'function' ? bridge.getMemory() : null;
+      return !!(
+        Mem &&
+        typeof Mem.needsOnboarding === 'function' &&
+        Mem.needsOnboarding(mem)
+      );
+    }
+
+    function mountMemoryUi(mode) {
+      if (memoryUiBusy) return;
+      var MemUI = global.MemoryUI;
+      if (!MemUI || typeof MemUI.mount !== 'function') {
+        setSettingsStatus(
+          'Module m\u00e9moire indisponible sur cette page.',
+          'fail'
+        );
+        return;
+      }
+      memoryUiBusy = true;
+      memoryMountEl.hidden = false;
+      memoryMountEl.innerHTML = '';
+      memoryDetails.open = true;
+      try {
+        MemUI.mount(memoryMountEl, {
+          t: t,
+          mode: mode === 'onboarding' ? 'onboarding' : 'ongoing',
+          showSkip: mode === 'onboarding',
+          showSummary: true,
+          onLayoutChange: notifyLayout,
+          onSkip: function () {
+            memoryMountEl.hidden = true;
+            memoryMountEl.innerHTML = '';
+            memoryUiMounted = false;
+            syncMemoryBadge();
+            notifyLayout();
+          },
+          onComplete: function (updated) {
+            if (updated && onMemoryUpdate) onMemoryUpdate(updated);
+            else if (updated) {
+              bridge.getMemory = function () {
+                return updated;
+              };
+            }
+            memoryMountEl.hidden = true;
+            memoryMountEl.innerHTML = '';
+            memoryUiMounted = false;
+            syncMemoryBadge();
+            notifyLayout();
+          }
+        });
+        memoryUiMounted = true;
+      } catch (err) {
+        console.error('AgentUI memory mount failed', err);
+        setSettingsStatus('Impossible d\'ouvrir la m\u00e9moire.', 'fail');
+      }
+      memoryUiBusy = false;
+      notifyLayout();
+    }
+
+    memoryAlignBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      mountMemoryUi('onboarding');
+    });
+    memoryChatBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      var Mem = global.AgentMemory;
+      var mem =
+        typeof bridge.getMemory === 'function' ? bridge.getMemory() : null;
+      var needs =
+        Mem && typeof Mem.needsOnboarding === 'function' && Mem.needsOnboarding(mem);
+      mountMemoryUi(needs ? 'onboarding' : 'ongoing');
+    });
+    memoryDetails.addEventListener('toggle', function () {
+      syncMemoryBadge();
+      notifyLayout();
+    });
+    syncMemoryBadge();
+
     var settingsActions = el('div', 'agent-settings-actions');
     var saveBtn = el('button', 'tp-button agent-btn', { type: 'button', text: 'Enregistrer' });
     var testBtn = el('button', 'tp-button agent-btn agent-btn--secondary', {
@@ -535,6 +683,9 @@
 
     var applySection = el('div', 'agent-apply-suggestions');
     applySection.hidden = true;
+    if (isProjectScope) {
+      applySection.style.display = 'none';
+    }
     var applyHead = el('div', 'agent-apply-suggestions-head');
     var applyRefreshBtn = el('button', 'agent-apply-suggestions-refresh', {
       type: 'button',
@@ -612,6 +763,7 @@
       field: field,
       body: body,
       chrome: chrome,
+      alwaysEnabled: standalone,
       enabled: true,
       expanded: expandChat,
       getSummary: function () {
@@ -630,6 +782,7 @@
         if (!Agent.isConfigured(provider)) return 'Non configur\u00e9';
         if (!Agent.isVerified(provider)) return 'Non v\u00e9rifi\u00e9';
         if (listeningActive) return 'À l\u2019écoute';
+        if (isProjectScope) return 'Projet';
         return '';
       },
       onLayoutChange: onLayoutChange,
@@ -647,7 +800,7 @@
             messagesEl.scrollTop = messagesEl.scrollHeight;
           });
         }
-        if (typeof PriorityUI.saveSectionCollapseState === 'function') {
+        if (!standalone && typeof PriorityUI.saveSectionCollapseState === 'function') {
           PriorityUI.saveSectionCollapseState({ chat: !!isExpanded });
         }
       }
@@ -1478,7 +1631,7 @@
       } else {
         setSuggestionsBusy(pending);
         setApplySuggestionsBusy(pending);
-        if (settleReady && !interviewActive) startListening();
+        if (settleReady && !interviewActive && !isProjectScope) startListening();
       }
     }
 
@@ -4336,6 +4489,7 @@
     }
 
     function startListening() {
+      if (isProjectScope) return;
       if (listeningActive) {
         setListenBarState(activeOffer ? 'offer' : listeningAnalyzing ? 'analyzing' : 'idle');
         return;
@@ -4975,6 +5129,11 @@
 
     async function refreshApplySuggestions(options) {
       options = options || {};
+      if (isProjectScope) {
+        clearApplySuggestions();
+        applySection.hidden = true;
+        return;
+      }
       if (!Agent.isConfigured(provider) || pending) return;
       if (typeof Agent.suggestCardImprovements !== 'function') return;
       var seq = ++applySuggestionsSeq;
@@ -5807,17 +5966,30 @@
     }
 
     async function persistChatHistory() {
-      if (!t || typeof Agent.saveCardChat !== 'function') return null;
+      if (!t) return null;
       try {
-        return await Agent.saveCardChat(t, { messages: history });
+        if (isProjectScope && typeof Agent.saveBoardChat === 'function') {
+          return await Agent.saveBoardChat(t, { messages: history });
+        }
+        if (typeof Agent.saveCardChat === 'function') {
+          return await Agent.saveCardChat(t, { messages: history });
+        }
+        return null;
       } catch (err) {
-        console.error('AgentUI saveCardChat failed', err);
+        console.error('AgentUI saveChat failed', err);
         return null;
       }
     }
 
     function schedulePersistChatHistory() {
-      if (!t || typeof Agent.saveCardChat !== 'function') return;
+      if (!t) return;
+      if (
+        !(isProjectScope
+          ? typeof Agent.saveBoardChat === 'function'
+          : typeof Agent.saveCardChat === 'function')
+      ) {
+        return;
+      }
       if (chatPersistTimer) clearTimeout(chatPersistTimer);
       chatPersistTimer = setTimeout(function () {
         chatPersistTimer = null;
@@ -5826,9 +5998,11 @@
     }
 
     async function restoreChatHistory() {
-      if (!t || typeof Agent.loadCardChat !== 'function') return false;
+      if (!t) return false;
+      var loader = isProjectScope ? Agent.loadBoardChat : Agent.loadCardChat;
+      if (typeof loader !== 'function') return false;
       try {
-        var stored = await Agent.loadCardChat(t);
+        var stored = await loader.call(Agent, t);
         var msgs = (stored && stored.messages) || [];
         if (!msgs.length) return false;
         history.length = 0;
@@ -5855,12 +6029,13 @@
         notifyLayout();
         return true;
       } catch (err) {
-        console.error('AgentUI loadCardChat failed', err);
+        console.error('AgentUI loadChat failed', err);
         return false;
       }
     }
 
     async function applyCardPatchesFromTurn(patches) {
+      if (isProjectScope) return null;
       if (!patches || !patches.length || !t) return null;
       var Mem = global.AgentMemory;
       if (!Mem || typeof Mem.applyCardPatches !== 'function') return null;
@@ -6428,6 +6603,12 @@
     }
 
     async function bootstrapCardInterview() {
+      if (isProjectScope) {
+        interviewBootstrapped = true;
+        markSettleReady();
+        refreshSuggestions({ animate: true });
+        return;
+      }
       if (!t || interviewBootstrapped || pending) return;
       if (!Agent.isConfigured(provider) || typeof Agent.cardInterviewTurn !== 'function') {
         markSettleReady();
@@ -6666,7 +6847,15 @@
         }
         if (Agent.isConfigured(provider)) {
           await restoreChatHistory();
-          if (!interviewBootstrapped) {
+          if (isProjectScope) {
+            interviewBootstrapped = true;
+            markSettleReady();
+            if (chatRestored) {
+              refreshSuggestions({ animate: true });
+            } else {
+              refreshSuggestions({ animate: true });
+            }
+          } else if (!interviewBootstrapped) {
             await bootstrapCardInterview();
           } else {
             markSettleReady();
@@ -6683,6 +6872,11 @@
             animate: true,
             skipApplySuggestions: true
           });
+        }
+        if (openMemoryOnSettings || (isProjectScope && needsMemoryAlign())) {
+          setSettingsOpen(true);
+          memoryDetails.open = true;
+          syncMemoryBadge();
         }
       } catch (err) {
         console.error('AgentUI load provider failed', err);
@@ -7259,9 +7453,20 @@
 
     return {
       el: section,
+      scope: assistantScope,
       refreshProvider: ensureProviderLoaded,
       collapse: collapse,
-      focusComposer: openAndFocusComposer
+      focusComposer: openAndFocusComposer,
+      openSettings: function (opts) {
+        setSettingsOpen(true);
+        if (opts && opts.memory) {
+          memoryDetails.open = true;
+          syncMemoryBadge();
+          if (opts.mountMemory) {
+            mountMemoryUi(opts.mountMemory === 'onboarding' ? 'onboarding' : 'ongoing');
+          }
+        }
+      }
     };
   }
 

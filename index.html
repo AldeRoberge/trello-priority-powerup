@@ -299,31 +299,15 @@
           },
           {
             icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/bot.svg',
-            text: 'Assistant (mémoire)',
+            text: 'Assistant',
             callback: function(t) {
-              return Promise.resolve()
-                .then(function () {
-                  if (typeof AgentMemory === 'undefined') return null;
-                  return AgentMemory.load(t);
-                })
-                .then(function (memory) {
-                  if (memory && AgentMemory.needsOnboarding(memory)) {
-                    return t.modal({
-                      title: 'Aligner l\'assistant',
-                      url: PriorityTrello.pageUrl('./memory-align.html'),
-                      height: 560,
-                      fullscreen: false,
-                      accentColor: '#22272B',
-                    });
-                  }
-                  return t.boardBar({
-                    url: PriorityTrello.pageUrl('./memory-chat.html'),
-                    title: 'Assistant',
-                    height: 280,
-                    resizable: true,
-                    accentColor: '#22272B',
-                  });
-                });
+              return t.boardBar({
+                url: PriorityTrello.pageUrl('./assistant.html'),
+                title: 'Assistant',
+                height: 440,
+                resizable: true,
+                accentColor: '#22272B',
+              });
             },
           },
         ];

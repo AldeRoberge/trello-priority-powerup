@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Assistant</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="./components/shared/trello-theme.css" />
+  <link rel="stylesheet" href="./components/shared/effects.css" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css" />
+  <link rel="stylesheet" href="./components/agent/agent-ui.css" />
+  <link rel="stylesheet" href="./components/agent/memory-ui.css" />
+  <script src="./components/shared/rest-config.js"></script>
+  <script src="./components/shared/effects.js"></script>
+  <script src="./components/priority/priority-matrix.js"></script>
+  <script src="./components/priority/priority-ui.js"></script>
+  <script src="./components/priority/priority-trello.js"></script>
+  <script src="./components/shared/tab-autocomplete.js"></script>
+  <script src="./components/agent/agent.js"></script>
+  <script src="./components/agent/agent-memory.js"></script>
+  <script src="./components/profile/user-profile.js"></script>
+  <script src="./components/agent/memory-ui.js"></script>
+  <script src="./components/agent/agent-ui.js"></script>
+</head>
+<body class="tp-page tp-page--priority tp-page--assistant">
+  <div id="assistantMount"></div>
+  <script>
+    PriorityTrello.initIframePage(function (t) {
+      var mount = document.getElementById('assistantMount');
+      var cachedMemory = null;
+      var cachedProfile = null;
+      var cachedDigest = '';
+
+      function resize() {
+        if (typeof t.sizeTo === 'function') {
+          try {
+            t.sizeTo(document.body);
+          } catch (e) { /* ignore */ }
+        }
+      }
+
+      return Promise.resolve()
+        .then(function () {
+          if (typeof AgentMemory === 'undefined') return null;
+          return AgentMemory.load(t).then(function (memory) {
+            cachedMemory = memory;
+            return memory;
+          });
+        })
+        .then(function () {
+          if (typeof UserProfile === 'undefined' || !UserProfile.load) return null;
+          return UserProfile.load(t).then(function (profile) {
+            cachedProfile = profile;
+            return profile;
+          });
+        })
+        .then(function () {
+          if (
+            typeof AgentMemory !== 'undefined' &&
+            typeof AgentMemory.scanAndRefresh === 'function'
+          ) {
+            return AgentMemory.scanAndRefresh(t, { force: false })
+              .then(function (memory) {
+                if (memory) cachedMemory = memory;
+                return memory;
+              })
+              .catch(function () {
+                return cachedMemory;
+              });
+          }
+          return cachedMemory;
+        })
+        .then(function () {
+          var needsAlign =
+            typeof AgentMemory !== 'undefined' &&
+            AgentMemory.needsOnboarding &&
+            AgentMemory.needsOnboarding(cachedMemory);
+
+          AgentUI.mount(mount, {
+            t: t,
+            scope: 'project',
+            standalone: true,
+            initiallyOpen: true,
+            focusComposer: true,
+            openMemoryOnSettings: !!needsAlign,
+            getScope: function () {
+              return 'project';
+            },
+            getMemory: function () {
+              return cachedMemory;
+            },
+            getProfile: function () {
+              return cachedProfile;
+            },
+            getBoardDigest: function () {
+              return cachedDigest || '';
+            },
+            onMemoryUpdate: function (next) {
+              cachedMemory = next;
+            },
+            onLayoutChange: resize,
+            playEffect: function (name, opts) {
+              if (
+                window.CelebrationEffects &&
+                typeof CelebrationEffects.play === 'function'
+              ) {
+                return CelebrationEffects.play(name, opts || {});
+              }
+              return { ok: false, error: 'CelebrationEffects indisponible' };
+            }
+          });
+          resize();
+        });
+    }).catch(function (err) {
+      console.error('assistant init failed', err);
+    });
+  </script>
+</body>
+</html>

@@ -10,17 +10,18 @@
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-3" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css?v=info-labels-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
-  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-sparkle-1" />
+  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-scope-1" />
+  <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/effects.js?v=fx-3"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=info-labels-1"></script>
+  <script src="./components/priority/priority-ui.js?v=info-labels-2"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
     }
   </script>
-  <script src="./components/priority/priority-trello.js?v=info-labels-1"></script>
+  <script src="./components/priority/priority-trello.js?v=info-labels-2"></script>
   <script src="./components/statut/statut-match.js?v=section-glow-1"></script>
   <script src="./components/statut/statut-trello.js?v=section-glow-1"></script>
   <script src="./components/shared/tab-autocomplete.js?v=tab-complete-1"></script>
@@ -28,11 +29,12 @@
   <script src="./components/completion/completion-trello.js?v=progress-due-complete-1"></script>
   <script src="./components/goals/goals-trello.js?v=goals-1"></script>
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
-  <script src="./components/agent/agent.js?v=answer-direct-1"></script>
+  <script src="./components/agent/agent.js?v=agent-scope-1"></script>
   <script src="./components/agent/agent-memory.js?v=card-interview-1"></script>
+  <script src="./components/agent/memory-ui.js?v=memory-settings-1"></script>
   <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
-  <script src="./components/agent/agent-ui.js?v=agent-sparkle-1"></script>
+  <script src="./components/agent/agent-ui.js?v=agent-scope-1"></script>
 </head>
 <body class="tp-page tp-page--priority">
   <div class="compare-page">
@@ -1771,8 +1773,12 @@
       if (featureOn('assistant') && window.AgentUI && window.PriorityAgent) {
         agentUi = AgentUI.mount(variant.card, {
           t: t,
+          scope: 'task',
           initiallyOpen: focusProgress,
           focusComposer: focusProgress,
+          getScope: function () {
+            return 'task';
+          },
           getCardName: function () {
             return readCardNameLabel();
           },

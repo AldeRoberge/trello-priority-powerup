@@ -80,6 +80,136 @@
   color: var(--tp-text-muted);
 }
 
+.tp-page--priority .agent-settings-memory {
+  margin: 12px 0 4px;
+  padding: 0;
+  border: 1px solid var(--tp-border);
+  border-radius: 6px;
+  background: var(--tp-surface, var(--tp-bg));
+}
+
+.tp-page--priority .agent-settings-memory > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tp-text);
+  user-select: none;
+}
+
+.tp-page--priority .agent-settings-memory > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tp-page--priority .agent-settings-memory > summary::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--tp-text-muted);
+  transition: transform 0.15s ease;
+}
+
+.tp-page--priority .agent-settings-memory[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.tp-page--priority .agent-settings-memory-title {
+  flex: 1 1 auto;
+}
+
+.tp-page--priority .agent-settings-memory-badge {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 650;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--tp-warning, #f5cd47) 22%, transparent);
+  color: var(--tp-text);
+}
+
+.tp-page--priority .agent-settings-memory-body {
+  padding: 0 10px 10px;
+}
+
+.tp-page--priority .agent-memory-actions {
+  margin-bottom: 8px;
+}
+
+.tp-page--priority .agent-settings-memory-mount {
+  margin-top: 6px;
+  max-height: 360px;
+  overflow: auto;
+  border-top: 1px solid var(--tp-border);
+  padding-top: 8px;
+}
+
+.tp-page--priority .agent-settings-memory-mount .memory-ui {
+  max-width: none;
+  margin: 0;
+}
+
+.tp-page--priority .agent-settings-memory-mount .memory-ui-title {
+  font-size: 15px;
+}
+
+.tp-page--priority .variant-chat-section--standalone {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tp-page--priority .variant-chat-section--standalone .field--chat {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+  padding: 10px 12px 12px;
+}
+
+.tp-page--priority .variant-chat-section--standalone .agent-chat-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tp-page--priority .variant-chat-section--standalone .agent-chat-panel {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tp-page--priority .variant-chat-section--standalone .agent-messages {
+  flex: 1 1 auto;
+  min-height: 140px;
+  max-height: none;
+}
+
+.tp-page--assistant {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  min-height: 240px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.tp-page--assistant #assistantMount {
+  height: 100%;
+  min-height: inherit;
+}
+
 .tp-page--priority .agent-preset-row {
   display: flex;
   flex-wrap: wrap;

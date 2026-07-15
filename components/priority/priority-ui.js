@@ -5997,11 +5997,10 @@
         });
       }
 
-      var canAdd = !!onLabelAdd && availableBoardLabels().length > 0;
+      var canAdd = !!onLabelAdd;
       labelsAddBtn.hidden = !onLabelAdd;
       labelsAddBtn.disabled = labelsBusy || !canAdd;
-      if (!canAdd && labelsPickerOpen) setLabelsPickerOpen(false);
-      else if (labelsPickerOpen) renderLabelsPicker();
+      if (labelsPickerOpen) renderLabelsPicker();
     }
 
     function addLabelFromPicker(label) {

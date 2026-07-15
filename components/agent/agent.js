@@ -3604,6 +3604,202 @@
 
   // ── Card first-open interview (Akinator / Q20) ────────────────────────────
 
+  /** Strip [[g:/r:/y:/a:…]] markers for question matching. */
+  function stripInterviewMarkup(text) {
+    return String(text || '')
+      .replace(/\[\[[a-z]:([^\]]*)\]\]/gi, '$1')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /**
+   * Classify progress-scout interview questions so we can block
+   * déjà-fait ↔ reste-à-faire loops (same topic, oscillating wording).
+   * Returns 'done' | 'remaining' | 'both' | 'started' | ''.
+   */
+  function interviewProgressScoutKind(text) {
+    var t = stripInterviewMarkup(text).toLocaleLowerCase('fr-FR');
+    if (!t || t.indexOf('?') < 0) return '';
+    var isRemaining =
+      /reste\s*[àa]\s*faire/.test(t) ||
+      /qu['']?est[- ]ce\s+qui\s+reste/.test(t) ||
+      /il\s+reste\s+quoi/.test(t) ||
+      /quoi\s+reste/.test(t) ||
+      /ce\s+qui\s+reste/.test(t);
+    var isDone =
+      /d[ée]j[àa]\s+fait/.test(t) ||
+      /qu['']?est[- ]ce\s+qui\s+(?:est|a\s+[ée]t[ée])\s+(?:d[ée]j[àa]\s+)?fait/.test(
+        t
+      ) ||
+      /ce\s+qui\s+est\s+(?:d[ée]j[àa]\s+)?fait/.test(t) ||
+      /qu['']?est[- ]ce\s+qui\s+a\s+[ée]t[ée]\s+fait/.test(t);
+    if (isRemaining && isDone) return 'both';
+    if (isRemaining) return 'remaining';
+    if (isDone) return 'done';
+    if (
+      (/commenc/.test(t) || /pas\s+encore/.test(t)) &&
+      (/d[ée]j[àa]/.test(t) || /pas\s+encore/.test(t) || /avanc/.test(t))
+    ) {
+      return 'started';
+    }
+    return '';
+  }
+
+  function cardMemoryHasProgressFact(cardMemory, kind) {
+    var facts =
+      cardMemory && Array.isArray(cardMemory.facts) ? cardMemory.facts : [];
+    var re =
+      kind === 'remaining'
+        ? /^\s*reste\b/i
+        : kind === 'done'
+          ? /^\s*d[ée]j[àa]\s+fait\b/i
+          : null;
+    if (!re) return false;
+    for (var i = 0; i < facts.length; i++) {
+      var f = facts[i];
+      var text =
+        typeof f === 'string'
+          ? f
+          : f && typeof f === 'object'
+            ? String(f.text || f.fact || '')
+            : '';
+      if (re.test(text)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Summarize which progress-scout angles were already covered
+   * (asked[], cardMemory, or recent assistant history).
+   */
+  function summarizeInterviewProgressScout(context, history) {
+    var asked =
+      context && context.interview && Array.isArray(context.interview.asked)
+        ? context.interview.asked
+        : [];
+    var state = {
+      askedDone: false,
+      askedRemaining: false,
+      askedStarted: false,
+      memoryHasDone: cardMemoryHasProgressFact(
+        context && context.cardMemory,
+        'done'
+      ),
+      memoryHasRemaining: cardMemoryHasProgressFact(
+        context && context.cardMemory,
+        'remaining'
+      )
+    };
+    function absorb(text) {
+      var kind = interviewProgressScoutKind(text);
+      if (kind === 'both') {
+        state.askedDone = true;
+        state.askedRemaining = true;
+      } else if (kind === 'done') state.askedDone = true;
+      else if (kind === 'remaining') state.askedRemaining = true;
+      else if (kind === 'started') state.askedStarted = true;
+    }
+    asked.forEach(absorb);
+    (Array.isArray(history) ? history : []).forEach(function (entry) {
+      if (!entry || entry.role !== 'assistant') return;
+      absorb(entry.content || '');
+    });
+    state.doneCovered = state.askedDone || state.memoryHasDone;
+    state.remainingCovered = state.askedRemaining || state.memoryHasRemaining;
+    state.blockScout =
+      (state.doneCovered && state.remainingCovered) ||
+      (state.askedDone && state.askedRemaining);
+    return state;
+  }
+
+  /**
+   * If the model re-asks déjà-fait / reste (or oscillates), pivot off
+   * progress scouting so the interview cannot stall in a repérage loop.
+   * Allowed once: déjà-fait → reste. Blocked: same kind twice, reste→déjà-fait,
+   * or any scout once both angles (or memory) already cover progress.
+   */
+  function applyInterviewProgressScoutGuards(turn, context, history) {
+    turn = turn && typeof turn === 'object' ? turn : {};
+    var message = typeof turn.message === 'string' ? turn.message : '';
+    var kind = interviewProgressScoutKind(message);
+    if (kind !== 'done' && kind !== 'remaining' && kind !== 'both') return turn;
+
+    var scout = summarizeInterviewProgressScout(context, history);
+    var blocked = false;
+    if (kind === 'both') {
+      // Combined ask is fine once; never after either angle was already used.
+      if (
+        scout.askedDone ||
+        scout.askedRemaining ||
+        scout.memoryHasDone ||
+        scout.memoryHasRemaining
+      ) {
+        blocked = true;
+      }
+    } else {
+      // Same angle again (any wording).
+      if (kind === 'done' && scout.askedDone) blocked = true;
+      if (kind === 'remaining' && scout.askedRemaining) blocked = true;
+      // Fact already memorized — no need to re-scout.
+      if (kind === 'done' && scout.memoryHasDone) blocked = true;
+      if (kind === 'remaining' && scout.memoryHasRemaining) blocked = true;
+      // Reverse / ping-pong: "déjà fait" after "reste" was already asked.
+      if (kind === 'done' && scout.askedRemaining) blocked = true;
+      // Both angles already spent — leave progress scouting entirely.
+      if (scout.askedDone && scout.askedRemaining) blocked = true;
+      if (scout.memoryHasDone && scout.memoryHasRemaining) blocked = true;
+    }
+
+    if (!blocked) return turn;
+
+    var priority = context && context.priority ? context.priority : {};
+    var trusted =
+      context &&
+      context.interview &&
+      context.interview.priorityAxesTrusted;
+    var missingUrgency =
+      !trusted && (priority.urgency == null || priority.urgency === '');
+    var missingImpact =
+      !trusted && (priority.impact == null || priority.impact === '');
+    var missingEase =
+      !trusted && (priority.ease == null || priority.ease === '');
+
+    var pivot = '';
+    var suggestions = [];
+    var suggestionsMulti = false;
+    if (missingUrgency) {
+      pivot =
+        'Si on ne le livre pas, c\'est [[a:grave]]?';
+      suggestions = [
+        { label: 'Pas grand-chose', heat: 0 },
+        { label: 'Un peu emb\u00eatant', heat: 2 },
+        { label: 'Oui, c\'est urgent', heat: 4 }
+      ];
+    } else if (missingImpact) {
+      pivot =
+        'Le plus impact\u00e9 si on ne le fait pas, c\'est [[a:toi]]?';
+      suggestions = ['Oui', 'Non'];
+      suggestionsMulti = false;
+    } else if (missingEase) {
+      pivot = 'Pour toi, c\'est plut\u00f4t [[g:simple]] ou [[r:costaud]]?';
+      suggestions = [
+        { label: 'C\'est facile', heat: 0 },
+        { label: 'C\'est faisable', heat: 2 },
+        { label: 'C\'est difficile', heat: 4 }
+      ];
+    } else {
+      pivot = 'C\'est pour [[a:quand]]?';
+      suggestions = ['Aujourd\'hui', 'Demain', 'Pas d\'\u00e9ch\u00e9ance'];
+    }
+
+    return Object.assign({}, turn, {
+      message: pivot,
+      suggestions: suggestions,
+      suggestionsMulti: suggestionsMulti,
+      suggestionScale: true
+    });
+  }
+
   function emptyCardInterview() {
     return {
       complete: false,
@@ -3790,6 +3986,40 @@
     return next;
   }
 
+  async function loadBoardChat(t) {
+    if (!t || typeof t.get !== 'function') return emptyCardChat();
+    try {
+      var stored = await t.get('board', 'private', BOARD_CHAT_KEY);
+      return normalizeCardChat(stored);
+    } catch (err) {
+      console.error('PriorityAgent.loadBoardChat failed', err);
+      return emptyCardChat();
+    }
+  }
+
+  async function saveBoardChat(t, chat) {
+    var next = normalizeCardChat(chat);
+    next.updatedAt = new Date().toISOString();
+    next = enforceCardChatBudget(next);
+    if (!t || typeof t.set !== 'function') return next;
+    try {
+      await t.set('board', 'private', BOARD_CHAT_KEY, next);
+    } catch (err) {
+      console.error('PriorityAgent.saveBoardChat failed', err);
+      try {
+        while (next.messages.length > 0) {
+          next.messages.shift();
+          if (chatSerializedSize(next) <= Math.floor(MAX_CHAT_SERIALIZED * 0.85)) break;
+        }
+        next.updatedAt = new Date().toISOString();
+        await t.set('board', 'private', BOARD_CHAT_KEY, next);
+      } catch (retryErr) {
+        console.error('PriorityAgent.saveBoardChat retry failed', retryErr);
+      }
+    }
+    return next;
+  }
+
   /**
    * First-open card interview turn (one question at a time).
    * Returns { message, suggestions, actions, prompts, followUps, completeInterview,
@@ -3824,6 +4054,17 @@
         ? options.recentCards
         : (context.memory && context.memory.recentCards) || [],
       priorityAxesTrusted: !!options.priorityAxesTrusted
+    };
+    var progressScout = summarizeInterviewProgressScout(context, history);
+    context.interview.progressScout = {
+      askedDone: progressScout.askedDone,
+      askedRemaining: progressScout.askedRemaining,
+      memoryHasDone: progressScout.memoryHasDone,
+      memoryHasRemaining: progressScout.memoryHasRemaining,
+      blockFurtherScout: !!(
+        (progressScout.askedDone && progressScout.askedRemaining) ||
+        (progressScout.memoryHasDone && progressScout.memoryHasRemaining)
+      )
     };
 
     var system = [
@@ -3862,8 +4103,15 @@
       '  1) Permission\u00a0: \u00ab\u00a0Faut la permission de quelqu\'un pour avancer dans ce plan?\u00a0\u00bb',
       '  2) Qui\u00a0: si tu peux suppose que c\'est l\'utilisateur \u2192 \u00ab\u00a0C\'est [[a:toi]] qui travailles dessus?\u00a0\u00bb + Oui/Non. Sinon \u00ab\u00a0Qui travaille sur ce plan?\u00a0\u00bb.',
       '  3) Avancement\u00a0: \u00ab\u00a0\u00c7a a [[g:d\u00e9j\u00e0 \u00e9t\u00e9 commenc\u00e9]] ou [[r:pas encore]]?\u00a0\u00bb (varie le wording, garde le surlignage vert/rouge).',
-      '  4) Si oui / un peu / presque termin\u00e9 \u2192 \u00ab\u00a0Qu\'est-ce qui est d\u00e9j\u00e0 fait?\u00a0\u00bb puis \u00ab\u00a0Qu\'est-ce qui reste \u00e0 faire, de mani\u00e8re g\u00e9n\u00e9rale?\u00a0\u00bb',
-      '  5) Si non / pas encore \u2192 d\'abord \u00ab\u00a0Pourquoi \u00e7a n\'a pas \u00e9t\u00e9 commenc\u00e9?\u00a0\u00bb (suggestions contextuelles), PUIS seulement ensuite reste \u00e0 faire / axes.',
+      '  4) Si oui / un peu / presque termin\u00e9 \u2192 UNE seule question combin\u00e9e\u00a0: \u00ab\u00a0Qu\'est-ce qui est d\u00e9j\u00e0 fait, et qu\'est-ce qui reste?\u00a0\u00bb (suggestionsMulti:true avec \u00e9tapes plausibles). Pr\u00e9f\u00e8re \u00e7a plut\u00f4t que deux tours s\u00e9par\u00e9s.',
+      '  5) Si tu d\u00e9coupes quand m\u00eame\u00a0: ordre STRICT d\u00e9j\u00e0-fait PUIS reste (une fois chacun). JAMAIS l\'inverse. JAMAIS reformuler pour reposer le m\u00eame angle.',
+      '  6) Si non / pas encore \u2192 d\'abord \u00ab\u00a0Pourquoi \u00e7a n\'a pas \u00e9t\u00e9 commenc\u00e9?\u00a0\u00bb (suggestions contextuelles), PUIS seulement ensuite axes (pas une boucle d\u00e9j\u00e0/reste).',
+      '- Anti-boucle avancement / rep\u00e9rage (critique \u2014 NE PAS tourner en rond)\u00a0:',
+      '  \u00b7 INTERDIT d\'alterner \u00ab\u00a0Qu\'est-ce qui reste \u00e0 faire pour [sujet]?\u00a0\u00bb et \u00ab\u00a0Qu\'est-ce qui est d\u00e9j\u00e0 fait pour [sujet]?\u00a0\u00bb (m\u00eame reformul\u00e9s).',
+      '  \u00b7 D\u00e8s qu\'une question d\u00e9j\u00e0-fait OU reste a \u00e9t\u00e9 pos\u00e9e (voir asked / historique) ET qu\'une r\u00e9ponse exploitable est l\u00e0\u00a0: applique les outils, puis PIVOTE (axes / \u00e9ch\u00e9ance). Pas un 2e rep\u00e9rage.',
+      '  \u00b7 Si cardMemory a d\u00e9j\u00e0 \u00ab\u00a0D\u00e9j\u00e0 fait\u00a0:\u00a0\u00bb / \u00ab\u00a0Reste\u00a0:\u00a0\u00bb ou progress.items non vide\u00a0: SKIP le bloc d\u00e9j\u00e0/reste.',
+      '  \u00b7 Ex. FAUX (boucle)\u00a0: \u00ab\u00a0Qu\'est-ce qui reste \u00e0 faire pour le guide\u2026?\u00a0\u00bb puis \u00ab\u00a0Qu\'est-ce qui est d\u00e9j\u00e0 fait pour le guide\u2026?\u00a0\u00bb.',
+      '  \u00b7 Ex. VRAI\u00a0: une question combin\u00e9e, outils sur la r\u00e9ponse, puis urgence/impact.',
       '- Skip une question si la r\u00e9ponse est d\u00e9j\u00e0 dans cardMemory / historique / description.',
       '- Sur r\u00e9ponses avancement (critique \u2014 NE PAS seulement chatter)\u00a0:',
       '  \u00b7 M\u00e9morise (cardPatches) + APPLIQUE les outils\u00a0: set_progress, add_subtask, set_priority / set_blocked si l\'indice le justifie.',
@@ -4076,6 +4324,13 @@
       '- \u00c9vite de reposer les questions d\u00e9j\u00e0 pos\u00e9es.',
       '- INTERDIT\u00a0: \u00ab\u00a0Comment puis-je vous aider?\u00a0\u00bb / questions vagues ouvertes sans ancrage.',
       '',
+      'Anti-boucle avancement (runtime \u2014 OBLIGATOIRE)\u00a0:',
+      '- Lis context.interview.progressScout avant de poser d\u00e9j\u00e0-fait / reste.',
+      '- Si askedDone=true\u00a0: INTERDIT toute reformulation \u00ab\u00a0d\u00e9j\u00e0 fait\u00a0\u00bb.',
+      '- Si askedRemaining=true\u00a0: INTERDIT toute reformulation \u00ab\u00a0reste \u00e0 faire\u00a0\u00bb.',
+      '- Si askedRemaining=true et askedDone=false\u00a0: NE pose PAS \u00ab\u00a0d\u00e9j\u00e0 fait\u00a0\u00bb ensuite (ordre invers\u00e9 = boucle). Passe aux axes.',
+      '- Si blockFurtherScout=true OU (memoryHasDone et memoryHasRemaining)\u00a0: plus AUCUN rep\u00e9rage d\u00e9j\u00e0/reste\u00a0; axes / \u00e9ch\u00e9ance / cl\u00f4ture.',
+      '',
       'Outils autoris\u00e9s dans actions\u00a0:',
       '- set_priority: { urgency?, impact?, ease?, tier?, estimatedDurationMinutes?, priorityEnabled? }',
       '- set_due: { dueDate?: YYYY-MM-DD, dueTime?: HH:MM, relativeHours?, relativeMinutes?, clear? }',
@@ -4111,7 +4366,8 @@
         asked: context.interview.asked,
         surrounding: context.interview.surrounding,
         recentCards: context.interview.recentCards,
-        priorityAxesTrusted: context.interview.priorityAxesTrusted
+        priorityAxesTrusted: context.interview.priorityAxesTrusted,
+        progressScout: context.interview.progressScout
       })
     ].join('\n');
 
@@ -4260,6 +4516,25 @@
       actions,
       context
     );
+
+    var suggestionScale = wantsSuggestionScale(data) || wantsSuggestionScale(parsed);
+    var scoutGuard = applyInterviewProgressScoutGuards(
+      {
+        message: message,
+        suggestions: (data && data.suggestions) || parsed.suggestions,
+        suggestionsMulti:
+          wantsSuggestionsMulti(data) || wantsSuggestionsMulti(parsed),
+        suggestionScale: suggestionScale
+      },
+      context,
+      history
+    );
+    var scoutRedirected = scoutGuard.message !== message;
+    message = scoutGuard.message;
+    if (scoutRedirected) {
+      suggestionScale = !!scoutGuard.suggestionScale || suggestionScale;
+    }
+
     if (onDelta && message) {
       try {
         onDelta(message, content);
@@ -4285,9 +4560,10 @@
       (data && data.patches) || (parsed && parsed.patches)
     );
 
-    var suggestionScale = wantsSuggestionScale(data) || wantsSuggestionScale(parsed);
     var suggestionEntries = normalizeSuggestionEntries(
-      (data && data.suggestions) || parsed.suggestions,
+      scoutRedirected
+        ? scoutGuard.suggestions
+        : (data && data.suggestions) || parsed.suggestions,
       5,
       {
         scale: suggestionScale,
@@ -4349,7 +4625,9 @@
       emotion: emotion || parsed.emotion || null,
       color: replyColor,
       suggestions: suggestionEntries,
-      suggestionsMulti: wantsSuggestionsMulti(data) || wantsSuggestionsMulti(parsed),
+      suggestionsMulti: scoutRedirected
+        ? !!scoutGuard.suggestionsMulti
+        : wantsSuggestionsMulti(data) || wantsSuggestionsMulti(parsed),
       actions: actions,
       prompts: prompts,
       followUps: parsed.followUps || [],
@@ -6135,6 +6413,20 @@
     );
     message = progressGuard.message;
     actions = progressGuard.actions;
+    var projectScope = isProjectScope(context && context.scope);
+    if (projectScope) {
+      var droppedForScope = [];
+      actions = (actions || []).filter(function (a) {
+        if (a && PROJECT_SCOPE_TOOLS[a.tool]) return true;
+        if (a && a.tool) droppedForScope.push({ tool: a.tool, reason: 'project-scope' });
+        return false;
+      });
+      parsed.droppedActions = (parsed.droppedActions || []).concat(droppedForScope);
+      parsed.cardPatches = [];
+      // Project window: no card self-review cycle.
+      parsed.selfPrompt = false;
+      parsed.selfPromptFocus = '';
+    }
     parsed.suggestions = linkSuggestionColorsToHighlights(
       progressGuard.suggestions || parsed.suggestions,
       message
@@ -6146,11 +6438,13 @@
     var replyEmotion = progressGuard.emotion;
     var replyColor =
       colorRewrite.color || parsed.color || null;
-    var prompts = ensurePriorityAxesPrompt(
-      normalizePrompts(parsed.prompts, context),
-      actions,
-      context
-    );
+    var prompts = projectScope
+      ? []
+      : ensurePriorityAxesPrompt(
+          normalizePrompts(parsed.prompts, context),
+          actions,
+          context
+        );
     if (onDelta && message) {
       try {
         onDelta(message, response.content);
@@ -6177,7 +6471,8 @@
         actions: actions,
         droppedActions: parsed.droppedActions || [],
         tierInjected: !!tierRewrite.injected,
-        colorInjected: !!colorRewrite.injected
+        colorInjected: !!colorRewrite.injected,
+        scope: (context && context.scope) || ASSISTANT_SCOPES.TASK
       }
     };
     debug.usage = usage;
@@ -6191,10 +6486,10 @@
       prompts: prompts,
       actions: actions,
       droppedActions: parsed.droppedActions || [],
-      cardPatches: parsed.cardPatches || [],
+      cardPatches: projectScope ? [] : parsed.cardPatches || [],
       patches: parsed.patches || [],
-      selfPrompt: !!parsed.selfPrompt,
-      selfPromptFocus: parsed.selfPromptFocus || '',
+      selfPrompt: projectScope ? false : !!parsed.selfPrompt,
+      selfPromptFocus: projectScope ? '' : parsed.selfPromptFocus || '',
       rawJson: response.content,
       context: context,
       usage: usage,
@@ -9080,8 +9375,16 @@
     emptyCardInterview: emptyCardInterview,
     markInterviewQuestionAsked: markInterviewQuestionAsked,
     markInterviewComplete: markInterviewComplete,
+    interviewProgressScoutKind: interviewProgressScoutKind,
+    summarizeInterviewProgressScout: summarizeInterviewProgressScout,
+    applyInterviewProgressScoutGuards: applyInterviewProgressScoutGuards,
     loadCardChat: loadCardChat,
     saveCardChat: saveCardChat,
+    loadBoardChat: loadBoardChat,
+    saveBoardChat: saveBoardChat,
+    ASSISTANT_SCOPES: ASSISTANT_SCOPES,
+    normalizeAssistantScope: normalizeAssistantScope,
+    isProjectScope: isProjectScope,
     normalizeCardChat: normalizeCardChat,
     emptyCardChat: emptyCardChat,
     suggestQuestions: suggestQuestions,
