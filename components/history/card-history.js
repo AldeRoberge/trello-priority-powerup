@@ -6,8 +6,11 @@
   'use strict';
 
   var HISTORY_KEY = 'cardEditHistory';
-  var MAX_ENTRIES = 20;
-  var MAX_SERIALIZED = 3800;
+  // card/private is ONE 4096 budget shared with cardAgentChat etc.
+  // Keep history tiny so chat + history can coexist.
+  var MAX_ENTRIES = 8;
+  var MAX_SERIALIZED = 1400;
+  var PLUGIN_PRIVATE_BUDGET = 3900;
 
   function clone(value) {
     if (value == null) return value;
@@ -85,7 +88,94 @@
     return stableStringify(store).length;
   }
 
-  function trimStore(store) {
+  function slimCompletion(completion) {
+    if (!completion || typeof completion !== 'object') return completion;
+    var items = Array.isArray(completion.items) ? completion.items : [];
+    var slimItems = items.slice(0, 5).map(function (item) {
+      if (!item || typeof item !== 'object') return item;
+      var row = {
+        id: item.id,
+        text: String(item.text || '').slice(0, 48),
+        progress: item.progress,
+        done: !!item.done
+      };
+      if (item.estimatedMinutes != null) row.estimatedMinutes = item.estimatedMinutes;
+      if (item.linkedCardId) row.linkedCardId = item.linkedCardId;
+      return row;
+    });
+    var out = { items: slimItems };
+    if (slimItems.length === 0 && completion.progress != null) {
+      out.progress = completion.progress;
+    }
+    if (completion.estimatedMinutes != null) {
+      out.estimatedMinutes = completion.estimatedMinutes;
+    }
+    if (
+      typeof completion.estimatedMinutesOffset === 'number' &&
+      completion.estimatedMinutesOffset !== 0
+    ) {
+      out.estimatedMinutesOffset = completion.estimatedMinutesOffset;
+    }
+    if (items.length > slimItems.length) out._truncated = true;
+    return out;
+  }
+
+  function slimPriority(priority) {
+    if (!priority || typeof priority !== 'object') return priority;
+    var out = {
+      urgency: priority.urgency,
+      impact: priority.impact,
+      ease: priority.ease,
+      enAttente: !!priority.enAttente,
+      priorityEnabled: priority.priorityEnabled !== false
+    };
+    if (Array.isArray(priority.blockedReasons) && priority.blockedReasons.length) {
+      out.blockedReasons = priority.blockedReasons.slice(0, 3).map(function (r) {
+        if (typeof r === 'string') return r.slice(0, 60);
+        if (r && typeof r === 'object') {
+          return {
+            text: String(r.text || r.reason || '').slice(0, 60)
+          };
+        }
+        return r;
+      });
+    }
+    return out;
+  }
+
+  function slimPayload(partial) {
+    var out = clone(partial) || {};
+    if (out.completion) out.completion = slimCompletion(out.completion);
+    if (out.priority) out.priority = slimPriority(out.priority);
+    if (out.info && typeof out.info === 'object') {
+      out.info = {
+        name: String(out.info.name || '').slice(0, 80),
+        desc: String(out.info.desc || '').slice(0, 120),
+        memberIds: Array.isArray(out.info.memberIds)
+          ? out.info.memberIds.slice(0, 8)
+          : [],
+        labelIds: Array.isArray(out.info.labelIds)
+          ? out.info.labelIds.slice(0, 8)
+          : []
+      };
+    }
+    if (out.goals && typeof out.goals === 'object') {
+      out.goals = { projectId: out.goals.projectId || null };
+    }
+    if (out.statut && typeof out.statut === 'object') {
+      out.statut = {
+        listId: out.statut.listId || null,
+        dueComplete: !!out.statut.dueComplete
+      };
+    }
+    return out;
+  }
+
+  function trimStoreToBudget(store, budget) {
+    var limit =
+      typeof budget === 'number' && isFinite(budget) && budget > 200
+        ? Math.floor(budget)
+        : MAX_SERIALIZED;
     var next = {
       version: 1,
       entries: (store.entries || []).slice(),
@@ -95,45 +185,50 @@
       next.entries.shift();
       next.cursor = Math.max(0, next.cursor - 1);
     }
-    while (
-      serializedSize(next) > MAX_SERIALIZED &&
-      next.entries.length > 1
-    ) {
+    // Always slim payloads — full card snapshots blow the shared private budget.
+    next.entries = next.entries.map(function (e) {
+      if (!e || typeof e !== 'object') return e;
+      return {
+        id: e.id,
+        at: e.at,
+        label: String(e.label || '').slice(0, 80),
+        domains: Array.isArray(e.domains) ? e.domains.slice(0, 5) : [],
+        before: slimPayload(e.before),
+        after: slimPayload(e.after)
+      };
+    });
+    while (serializedSize(next) > limit && next.entries.length > 1) {
       next.entries.shift();
       next.cursor = Math.max(0, next.cursor - 1);
     }
-    if (serializedSize(next) > MAX_SERIALIZED && next.entries.length === 1) {
+    while (serializedSize(next) > limit && next.entries.length === 1) {
       var only = next.entries[0];
       next.entries = [
         {
           id: only.id,
           at: only.at,
-          label: only.label,
-          domains: only.domains,
+          label: String(only.label || '').slice(0, 40),
+          domains: (only.domains || []).slice(0, 2),
           before: slimPayload(only.before),
           after: slimPayload(only.after)
         }
       ];
       next.cursor = Math.min(next.cursor, 1);
+      if (serializedSize(next) > limit) {
+        next.entries = [];
+        next.cursor = 0;
+      }
+      break;
+    }
+    if (serializedSize(next) > limit) {
+      next.entries = [];
+      next.cursor = 0;
     }
     return next;
   }
 
-  function slimPayload(partial) {
-    var out = clone(partial) || {};
-    if (out.completion && out.completion.items && out.completion.items.length > 8) {
-      out.completion = {
-        items: out.completion.items.slice(0, 8),
-        progress: out.completion.progress,
-        _truncated: true
-      };
-    }
-    if (out.priority && Array.isArray(out.priority.blockedReasons)) {
-      out.priority = Object.assign({}, out.priority, {
-        blockedReasons: out.priority.blockedReasons.slice(0, 5)
-      });
-    }
-    return out;
+  function trimStore(store) {
+    return trimStoreToBudget(store, MAX_SERIALIZED);
   }
 
   function domainSlice(snapshot, key) {
@@ -175,7 +270,26 @@
     var out = {};
     for (var i = 0; i < domains.length; i++) {
       var key = domains[i];
-      out[key] = clone(snapshot && snapshot[key]);
+      out[key] = slimPayload({
+        placeholder: domainSlice(snapshot, key)
+      }).placeholder;
+      // domainSlice already returns a compact slice; still run through slim for
+      // completion/priority/info embedded in full snapshots when clones are used.
+      if (key === 'completion') out[key] = slimCompletion(snapshot && snapshot.completion);
+      else if (key === 'priority') out[key] = slimPriority(snapshot && snapshot.priority);
+      else if (key === 'info') {
+        var info = snapshot && snapshot.info;
+        out[key] = info
+          ? {
+              name: String(info.name || '').slice(0, 80),
+              desc: String(info.desc || '').slice(0, 120),
+              memberIds: Array.isArray(info.memberIds) ? info.memberIds.slice(0, 8) : [],
+              labelIds: Array.isArray(info.labelIds) ? info.labelIds.slice(0, 8) : []
+            }
+          : info;
+      } else {
+        out[key] = clone(domainSlice(snapshot, key));
+      }
     }
     return out;
   }
