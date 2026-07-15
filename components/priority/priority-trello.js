@@ -1047,6 +1047,81 @@
   }
 
   /**
+   * Update a board label's color via REST PUT /labels/{id}.
+   * Requires OAuth (same as title / description edits).
+   *
+   * @param {object} t Power-Up client
+   * @param {string} labelId
+   * @param {{ color: string }} options
+   */
+  async function updateBoardLabel(t, labelId, options) {
+    options = options || {};
+    var id = labelId != null ? String(labelId).trim() : '';
+    if (!id) return { ok: false, reason: 'no-label-id', changed: false };
+    if (!restClientOptions()) return { ok: false, reason: 'no-app-key', changed: false };
+
+    var color = normalizeBoardLabelColor(options.color);
+    if (!color) return { ok: false, reason: 'invalid-color', changed: false };
+
+    var cfg = restClientOptions();
+    var api = await t.getRestApi();
+    var authorized = await api.isAuthorized();
+    if (!authorized) return { ok: false, reason: 'not-authorized', changed: false };
+    var token = await api.getToken();
+    if (!token) return { ok: false, reason: 'no-token', changed: false };
+
+    var url =
+      'https://api.trello.com/1/labels/' +
+      encodeURIComponent(id) +
+      '?color=' +
+      encodeURIComponent(color) +
+      '&key=' +
+      encodeURIComponent(cfg.appKey) +
+      '&token=' +
+      encodeURIComponent(token);
+
+    var response = await fetch(url, { method: 'PUT' });
+    if (!response.ok) {
+      var detail = '';
+      try {
+        detail = await response.text();
+      } catch (readErr) {
+        detail = readErr && readErr.message ? readErr.message : '';
+      }
+      throw new Error(
+        'Trello REST PUT /labels/' +
+          id +
+          ' failed: ' +
+          response.status +
+          (detail ? ' ' + detail : '')
+      );
+    }
+
+    var updated = null;
+    try {
+      updated = await response.json();
+    } catch (parseErr) {
+      updated = null;
+    }
+
+    var label = {
+      id: id,
+      name:
+        updated && typeof updated.name === 'string'
+          ? updated.name
+          : undefined,
+      color:
+        updated && Object.prototype.hasOwnProperty.call(updated, 'color')
+          ? updated.color
+          : color,
+      idBoard:
+        updated && updated.idBoard != null ? String(updated.idBoard) : undefined
+    };
+
+    return { ok: true, changed: true, label: label, labelId: id, color: label.color };
+  }
+
+  /**
    * Add an existing board label to the card via REST POST /cards/{id}/idLabels.
    * Requires OAuth (same as title / description edits).
    */
@@ -2517,6 +2592,7 @@
     getCardLabels: getCardLabels,
     getBoardLabels: getBoardLabels,
     createBoardLabel: createBoardLabel,
+    updateBoardLabel: updateBoardLabel,
     addCardLabel: addCardLabel,
     removeCardLabel: removeCardLabel,
     addCardMember: addCardMember,

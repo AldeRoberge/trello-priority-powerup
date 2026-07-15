@@ -6359,6 +6359,10 @@
       typeof config.onLabelRemove === 'function' ? config.onLabelRemove : null;
     var onLabelCreate =
       typeof config.onLabelCreate === 'function' ? config.onLabelCreate : null;
+    var onLabelColorChange =
+      typeof config.onLabelColorChange === 'function'
+        ? config.onLabelColorChange
+        : null;
     var suggestLabelsFn =
       typeof config.suggestLabels === 'function' ? config.suggestLabels : null;
     var onAuthorize =
@@ -6407,6 +6411,7 @@
     var membersPickerOpen = false;
     var labelsBusy = false;
     var labelsPickerOpen = false;
+    var labelsColorEditId = '';
     var labelSuggestions = [];
     var labelSuggestionsLoading = false;
     var labelSuggestionsSeq = 0;
@@ -6819,7 +6824,15 @@
     labelsInline.className = 'info-labels-inline';
     labelsInline.appendChild(labelsEl);
     labelsInline.appendChild(labelsAddWrap);
+
+    var labelsColorPicker = document.createElement('div');
+    labelsColorPicker.className = 'info-labels-color-picker';
+    labelsColorPicker.hidden = true;
+    labelsColorPicker.setAttribute('role', 'listbox');
+    labelsColorPicker.setAttribute('aria-label', 'Couleur de l\u2019\u00e9tiquette');
+
     labelsWrap.appendChild(labelsInline);
+    labelsWrap.appendChild(labelsColorPicker);
     labelsWrap.appendChild(labelsStatus);
     labelsWrap.appendChild(labelsSuggestSection);
     labelsRow.value.appendChild(labelsWrap);
@@ -7514,6 +7527,7 @@
       pink: '#FF78CB',
       black: '#344563'
     };
+    var LABEL_COLOR_KEYS = Object.keys(LABEL_COLOR_HEX);
     var LABEL_COLOR_NAMES_FR = {
       green: 'Vert',
       yellow: 'Jaune',
@@ -7551,6 +7565,95 @@
         return LABEL_COLOR_NAMES_FR[base];
       }
       return 'Sans nom';
+    }
+
+    function findLabelById(list, id) {
+      var needle = id != null ? String(id) : '';
+      if (!needle) return null;
+      var arr = Array.isArray(list) ? list : [];
+      for (var i = 0; i < arr.length; i++) {
+        if (arr[i] && String(arr[i].id) === needle) return arr[i];
+      }
+      return null;
+    }
+
+    function applyLabelColorLocally(labelId, color) {
+      var id = labelId != null ? String(labelId) : '';
+      if (!id) return;
+      labels = labels.map(function (item) {
+        if (!item || String(item.id) !== id) return item;
+        return Object.assign({}, item, { color: color });
+      });
+      boardLabels = boardLabels.map(function (item) {
+        if (!item || String(item.id) !== id) return item;
+        return Object.assign({}, item, { color: color });
+      });
+    }
+
+    function setLabelsColorPickerOpen(labelId) {
+      var nextId = labelId != null ? String(labelId) : '';
+      if (!nextId || nextId === labelsColorEditId) {
+        labelsColorEditId = '';
+        labelsColorPicker.hidden = true;
+        labelsColorPicker.replaceChildren();
+        renderLabels();
+        onLayoutChange();
+        return;
+      }
+      labelsColorEditId = nextId;
+      renderLabelsColorPicker();
+      renderLabels();
+      onLayoutChange();
+    }
+
+    function renderLabelsColorPicker() {
+      labelsColorPicker.replaceChildren();
+      if (!labelsColorEditId || !onLabelColorChange) {
+        labelsColorPicker.hidden = true;
+        return;
+      }
+      var label =
+        findLabelById(labels, labelsColorEditId) ||
+        findLabelById(boardLabels, labelsColorEditId);
+      if (!label) {
+        labelsColorEditId = '';
+        labelsColorPicker.hidden = true;
+        return;
+      }
+      var current = labelBaseColor(label.color);
+      var title = document.createElement('div');
+      title.className = 'info-labels-color-picker-title';
+      title.textContent =
+        'Couleur\u00a0: ' + labelDisplayName(label);
+      labelsColorPicker.appendChild(title);
+
+      var grid = document.createElement('div');
+      grid.className = 'info-labels-color-picker-grid';
+      LABEL_COLOR_KEYS.forEach(function (key) {
+        var hex = LABEL_COLOR_HEX[key];
+        var fr = LABEL_COLOR_NAMES_FR[key] || key;
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'info-labels-color-swatch';
+        if (current === key) btn.classList.add('is-selected');
+        btn.style.setProperty('--label-color', hex);
+        btn.setAttribute('role', 'option');
+        btn.setAttribute('aria-label', fr);
+        btn.title = fr;
+        btn.disabled = labelsBusy;
+        btn.dataset.color = key;
+        if (current === key) {
+          btn.innerHTML = '<i class="ti ti-check" aria-hidden="true"></i>';
+        }
+        btn.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          changeLabelColor(label, key);
+        });
+        grid.appendChild(btn);
+      });
+      labelsColorPicker.appendChild(grid);
+      labelsColorPicker.hidden = false;
     }
 
     function labelNeedsDarkText(hex) {
@@ -7869,6 +7972,13 @@
           var hex = labelColorHex(label.color);
           var chip = document.createElement('span');
           chip.className = 'info-label';
+          if (
+            labelsColorEditId &&
+            label &&
+            String(label.id) === String(labelsColorEditId)
+          ) {
+            chip.classList.add('is-editing-color');
+          }
           chip.style.setProperty('--label-color', hex);
           chip.style.setProperty(
             '--label-fg',
@@ -7881,6 +7991,31 @@
           text.className = 'info-label-name';
           text.textContent = name;
           chip.appendChild(text);
+
+          if (onLabelColorChange && label && label.id) {
+            var editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'info-label-edit';
+            editBtn.setAttribute(
+              'aria-label',
+              'Modifier la couleur\u00a0: ' + name
+            );
+            editBtn.title = 'Modifier la couleur';
+            editBtn.innerHTML = '<i class="ti ti-pencil" aria-hidden="true"></i>';
+            editBtn.disabled = labelsBusy;
+            editBtn.setAttribute(
+              'aria-expanded',
+              labelsColorEditId && String(label.id) === String(labelsColorEditId)
+                ? 'true'
+                : 'false'
+            );
+            editBtn.addEventListener('click', function (event) {
+              event.preventDefault();
+              event.stopPropagation();
+              setLabelsColorPickerOpen(label.id);
+            });
+            chip.appendChild(editBtn);
+          }
 
           if (onLabelRemove) {
             var clearBtn = document.createElement('button');
@@ -7895,6 +8030,7 @@
             clearBtn.addEventListener('click', function (event) {
               event.preventDefault();
               event.stopPropagation();
+              if (labelsColorEditId) setLabelsColorPickerOpen('');
               removeLabelFromCard(label);
             });
             chip.appendChild(clearBtn);
@@ -7908,7 +8044,75 @@
       labelsAddBtn.hidden = !canAdd;
       labelsAddBtn.disabled = labelsBusy || !canAdd;
       if (labelsPickerOpen) renderLabelsPicker();
+      if (labelsColorEditId) renderLabelsColorPicker();
+      else {
+        labelsColorPicker.hidden = true;
+        labelsColorPicker.replaceChildren();
+      }
       renderLabelSuggestions();
+    }
+
+    function changeLabelColor(label, colorKey) {
+      if (!onLabelColorChange || labelsBusy || !label || !label.id) return;
+      var nextColor = labelBaseColor(colorKey);
+      if (!nextColor || !Object.prototype.hasOwnProperty.call(LABEL_COLOR_HEX, nextColor)) {
+        return;
+      }
+      if (labelBaseColor(label.color) === nextColor) {
+        setLabelsColorPickerOpen('');
+        return;
+      }
+      var previousColor = label.color;
+      labelsBusy = true;
+      setLabelsStatus('', 'saving');
+      applyLabelColorLocally(label.id, nextColor);
+      renderLabels();
+      Promise.resolve(
+        onLabelColorChange({
+          id: label.id,
+          color: nextColor,
+          label: label
+        })
+      )
+        .then(function (result) {
+          labelsBusy = false;
+          if (result && result.ok === false) {
+            applyLabelColorLocally(label.id, previousColor);
+            if (result.reason === 'not-authorized' || result.reason === 'no-app-key') {
+              setAuthHint(result.reason);
+              setLabelsStatus('', 'error');
+            } else {
+              setLabelsStatus('\u00c9chec de la couleur', 'error');
+            }
+            renderLabels();
+            onLayoutChange();
+            return result;
+          }
+          var savedColor =
+            result && result.label && result.label.color != null
+              ? result.label.color
+              : result && result.color != null
+                ? result.color
+                : nextColor;
+          applyLabelColorLocally(label.id, savedColor);
+          setAuthHint('');
+          setLabelsStatus('', 'ok');
+          labelsColorEditId = '';
+          renderLabels();
+          setTimeout(function () {
+            if (labelsStatus.classList.contains('is-ok')) setLabelsStatus('');
+          }, 1400);
+          onLayoutChange();
+          return result;
+        })
+        .catch(function (err) {
+          labelsBusy = false;
+          applyLabelColorLocally(label.id, previousColor);
+          console.error('Info label color change failed', err);
+          setLabelsStatus('\u00c9chec de la couleur', 'error');
+          renderLabels();
+          onLayoutChange();
+        });
     }
 
     function createLabelFromPicker() {
@@ -8804,6 +9008,12 @@
       }
       if (labelsPickerOpen && !labelsAddWrap.contains(event.target)) {
         setLabelsPickerOpen(false);
+      }
+      if (
+        labelsColorEditId &&
+        !labelsWrap.contains(event.target)
+      ) {
+        setLabelsColorPickerOpen('');
       }
       if (parentPickerOpen && !parentPickWrap.contains(event.target)) {
         setParentPickerOpen(false);

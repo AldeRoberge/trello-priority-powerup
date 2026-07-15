@@ -1327,9 +1327,12 @@
     var flipAnimToken = 0;
     // null = not yet painted — avoid fireworks on initial mount when already complete.
     var lastAllComplete = null;
-    var spellcheckBusy = false;
     // itemId → original text before AI spell fix (kept until popup closes / revert / edit)
     var itemSpellReverts = Object.create(null);
+    // itemId → true while post-add / edit AI spellcheck is in flight
+    var spellcheckingItemIds = Object.create(null);
+    // itemId → generation token to ignore stale spellcheck responses
+    var itemSpellTokens = Object.create(null);
     // itemId → true while silent AI estimate is in flight
     var estimatingItemIds = Object.create(null);
     // itemId → nested tree node from resolveLinkedCompletionTree
@@ -1776,7 +1779,7 @@
             .filter(Boolean);
         },
         isEnabled: function () {
-          return !addInput.disabled && !spellcheckBusy;
+          return !addInput.disabled;
         },
         onProposal: function (proposal) {
           var target =
@@ -1836,6 +1839,74 @@
           /* ignore — some input types reject selection */
         }
       }
+    }
+
+    function paintItemSpellchecking(itemId) {
+      var li = findItemRow(itemId);
+      if (!li) return;
+      var on = !!spellcheckingItemIds[itemId];
+      var textInput = li.querySelector('.tp-completion-text');
+      if (textInput) {
+        textInput.classList.toggle('is-spellchecking', on);
+        textInput.setAttribute('aria-busy', on ? 'true' : 'false');
+      }
+      var mainRow = li.querySelector('.tp-completion-item-main');
+      var spinner = li.querySelector('.tp-completion-spell-spinner');
+      if (on) {
+        if (!spinner && mainRow) {
+          spinner = document.createElement('span');
+          spinner.className = 'tp-completion-spell-spinner';
+          spinner.setAttribute('aria-hidden', 'true');
+          spinner.innerHTML = '<i class="ti ti-loader-2" aria-hidden="true"></i>';
+          var del = li.querySelector('.tp-completion-delete');
+          mainRow.insertBefore(spinner, del || null);
+        }
+      } else if (spinner && spinner.parentNode) {
+        spinner.parentNode.removeChild(spinner);
+      }
+    }
+
+    /**
+     * Create/keep the subtask immediately; refine orthography asynchronously.
+     * Enter must never wait on AI.
+     */
+    function spellcheckItemAfterCommit(itemId, originalText) {
+      var original = typeof originalText === 'string' ? originalText.trim() : '';
+      if (!itemId || !original) return;
+      if (
+        typeof global.Spellcheck === 'undefined' ||
+        typeof global.Spellcheck.correct !== 'function'
+      ) {
+        return;
+      }
+      var token = (itemSpellTokens[itemId] || 0) + 1;
+      itemSpellTokens[itemId] = token;
+      spellcheckingItemIds[itemId] = true;
+      paintItemSpellchecking(itemId);
+      onResize();
+      spellcheckText(original).then(function (corrected) {
+        if (itemSpellTokens[itemId] !== token) return;
+        delete spellcheckingItemIds[itemId];
+        delete itemSpellTokens[itemId];
+        var live = findLiveItem(itemId);
+        if (!live) return;
+        var next = (corrected || '').trim() || original;
+        if (next === live.text) {
+          paintItemSpellchecking(itemId);
+          onResize();
+          return;
+        }
+        live.text = next;
+        var persisted = applyNormalizedKeepingDrafts(data);
+        renderList();
+        updateProgressUi();
+        onChange(persisted);
+        onResize();
+        if (next !== original) {
+          itemSpellReverts[itemId] = original;
+          showItemSpellRevert(itemId, original);
+        }
+      });
     }
 
     function syncCheckButton(btn, done, progress) {
@@ -2175,10 +2246,22 @@
       var scales = currentEstimateScales();
       var total = CT.computeEstimatedTotal(data, linkedSnapshots);
       var remaining = CT.computeEstimatedRemaining(data, linkedSnapshots);
-      if (typeof masterEstimateChip.setScales === 'function') {
-        masterEstimateChip.setScales(scales);
-      } else if (typeof masterEstimateChip.setScale === 'function') {
-        masterEstimateChip.setScale(scales[0]);
+      var chipScales =
+        typeof masterEstimateChip.getScales === 'function'
+          ? masterEstimateChip.getScales()
+          : null;
+      var scalesChanged =
+        !chipScales ||
+        chipScales.length !== scales.length ||
+        scales.some(function (id, i) {
+          return chipScales[i] !== id;
+        });
+      if (scalesChanged) {
+        if (typeof masterEstimateChip.setScales === 'function') {
+          masterEstimateChip.setScales(scales);
+        } else if (typeof masterEstimateChip.setScale === 'function') {
+          masterEstimateChip.setScale(scales[0]);
+        }
       }
       masterEstimateChip.setMinutes(total);
       masterEstimateChip.setAdjusted(
@@ -2565,9 +2648,17 @@
             resolved && resolved.snapshots
               ? resolved.snapshots
               : Object.create(null);
-          if (resolved && resolved.data) {
+          // Always re-apply snapshots onto CURRENT data. resolved.data is a
+          // snapshot from resolve start — using it would wipe estimates (or
+          // other local edits) applied while the board scan was in flight.
+          if (
+            resolved &&
+            typeof CT.applyLinkedSnapshots === 'function' &&
+            linkedSnapshots
+          ) {
             var prev = JSON.stringify(CT.normalizeCompletionData(data));
-            var persisted = applyNormalizedKeepingDrafts(resolved.data);
+            var merged = CT.applyLinkedSnapshots(data, linkedSnapshots);
+            var persisted = applyNormalizedKeepingDrafts(merged);
             if (JSON.stringify(persisted) !== prev && !opts.skipPersist) {
               onChange(persisted);
             }
@@ -2719,6 +2810,11 @@
 
         textInput.addEventListener('input', function () {
           delete itemSpellReverts[item.id];
+          if (spellcheckingItemIds[item.id]) {
+            itemSpellTokens[item.id] = (itemSpellTokens[item.id] || 0) + 1;
+            delete spellcheckingItemIds[item.id];
+            paintItemSpellchecking(item.id);
+          }
           var existing = li.querySelector('.tp-spell-revert');
           if (existing && typeof existing._spellRevertDismiss === 'function') {
             existing._spellRevertDismiss();
@@ -2865,6 +2961,10 @@
         titleEl.value = item.text;
         titleEl.placeholder = 'Nouvelle sous-t\u00e2che\u2026';
         titleEl.setAttribute('aria-label', 'Texte de la sous-t\u00e2che');
+        if (spellcheckingItemIds[item.id]) {
+          titleEl.classList.add('is-spellchecking');
+          titleEl.setAttribute('aria-busy', 'true');
+        }
       }
 
       var deleteBtn = document.createElement('button');
@@ -2876,6 +2976,13 @@
 
       mainRow.appendChild(checkWrap);
       mainRow.appendChild(titleEl);
+      if (!isLinked && spellcheckingItemIds[item.id]) {
+        var spellSpinner = document.createElement('span');
+        spellSpinner.className = 'tp-completion-spell-spinner';
+        spellSpinner.setAttribute('aria-hidden', 'true');
+        spellSpinner.innerHTML = '<i class="ti ti-loader-2" aria-hidden="true"></i>';
+        mainRow.appendChild(spellSpinner);
+      }
       mainRow.appendChild(deleteBtn);
 
       li.appendChild(mainRow);
@@ -3305,7 +3412,6 @@
               : '');
         }
         btn.addEventListener('click', function () {
-          if (spellcheckBusy) return;
           if (isLink) {
             btn.disabled = true;
             var added = addLinkedCard({
@@ -3321,19 +3427,12 @@
             }
             return;
           }
-          spellcheckBusy = true;
-          btn.disabled = true;
-          spellcheckText(row.text)
-            .then(function (corrected) {
-              addItem(corrected || row.text, {
-                estimatedMinutes: row.estimatedMinutes
-              });
-              // Always drop this chip (addItem may only clear by corrected text).
-              removeSuggestionMatch(row);
-            })
-            .finally(function () {
-              spellcheckBusy = false;
-            });
+          var typed = row.text;
+          var item = addItem(typed, {
+            estimatedMinutes: row.estimatedMinutes
+          });
+          removeSuggestionMatch(row);
+          if (item) spellcheckItemAfterCommit(item.id, typed);
         });
         suggestListEl.appendChild(btn);
       });
@@ -3459,36 +3558,16 @@
     }
 
     function addFromInput() {
-      if (spellcheckBusy) return;
-      var raw = addInput.value;
-      var original = (raw || '').trim();
+      var original = (addInput.value || '').trim();
       if (!original) {
         addDraftItem();
         return;
       }
-      spellcheckBusy = true;
-      addBtn.disabled = true;
-      addInput.disabled = true;
-      addInput.classList.add('is-spellchecking');
-      spellcheckText(raw).then(function (corrected) {
-        if (corrected !== original) {
-          addInput.value = corrected;
-        }
-        var item = addItem(corrected);
-        if (item) {
-          addInput.value = '';
-          if (corrected !== original) {
-            itemSpellReverts[item.id] = original;
-            showItemSpellRevert(item.id, original);
-          }
-        }
-      }).finally(function () {
-        spellcheckBusy = false;
-        addBtn.disabled = false;
-        addInput.disabled = false;
-        addInput.classList.remove('is-spellchecking');
-        addInput.focus();
-      });
+      // Commit immediately — spellcheck / estimate refine asynchronously with spinners.
+      addInput.value = '';
+      var item = addItem(original);
+      addInput.focus();
+      if (item) spellcheckItemAfterCommit(item.id, original);
     }
 
     addBtn.addEventListener('click', addFromInput);
