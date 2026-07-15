@@ -514,6 +514,19 @@
     input.classList.toggle('is-complete', p >= 100);
   }
 
+  function playSliderProgressTick(percent) {
+    try {
+      if (
+        global.CelebrationEffects &&
+        typeof global.CelebrationEffects.playProgressTick === 'function'
+      ) {
+        global.CelebrationEffects.playProgressTick(percent);
+      }
+    } catch (e) {
+      /* ignore audio failures */
+    }
+  }
+
   function createProgressSlider(label, value, onInput, id) {
     var field = document.createElement('div');
     field.className = 'tp-completion-field';
@@ -550,6 +563,7 @@
     function handleInput() {
       var v = Number(input.value);
       updateVal(v);
+      playSliderProgressTick(v);
       onInput(v);
     }
 
@@ -1596,7 +1610,10 @@
       '<div class="tp-completion-add-row">' +
       '<input type="text" class="tp-input tp-completion-add-input" id="completionAddInput" ' +
       'placeholder="Ajouter une sous-t\u00e2che\u2026" maxlength="500" autocomplete="off" />' +
-      '<button type="button" class="tp-btn tp-btn--primary tp-completion-add-btn" id="completionAddBtn">Ajouter</button>' +
+      '<button type="button" class="tp-btn tp-btn--primary tp-completion-add-btn" id="completionAddBtn">' +
+      '<i class="ti ti-plus" aria-hidden="true"></i>' +
+      '<span class="tp-completion-add-btn-label">Ajouter</span>' +
+      '</button>' +
       '<button type="button" class="tp-btn tp-completion-link-btn" id="completionLinkBtn" ' +
       'aria-expanded="false" aria-controls="completionLinkPicker" title="Lier une carte du tableau">' +
       '<i class="ti ti-link" aria-hidden="true"></i>' +
@@ -2834,6 +2851,7 @@
         function handleItemSlider() {
           var v = Number(itemSlider.value);
           setItemProgress(item, v);
+          playSliderProgressTick(v);
           syncItemProgressUi();
           updateProgressUi({ deferDoneListReveal: true });
           onChange(CT.normalizeCompletionData(data));

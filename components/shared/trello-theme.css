@@ -3395,9 +3395,18 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
 
 .tp-completion-add-btn {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   white-space: nowrap;
   border-radius: var(--completion-control-radius, 8px);
   padding: 8px 14px;
+}
+
+.tp-completion-add-btn .ti {
+  font-size: 16px;
+  line-height: 1;
 }
 
 .tp-completion-add-btn:focus {

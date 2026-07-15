@@ -523,6 +523,79 @@
     playTones([{ freq: FS.Cs3, delay: 0.85, dur: 0.35, peak: 0.05, type: 'sine', freqEnd: FS.Fs2, attack: 0.01 }]);
   }
 
+  var lastProgressTickAt = 0;
+  var lastProgressTickPct = -1;
+
+  /**
+   * Short UI tick for progress scrubbing. Pitch rises with percent (0–100).
+   * Throttled so fast drags stay crisp instead of muddy.
+   */
+  function playProgressTick(percent) {
+    percent = Math.max(0, Math.min(100, Number(percent) || 0));
+    var now =
+      typeof performance !== 'undefined' && performance.now
+        ? performance.now()
+        : Date.now();
+    if (percent === lastProgressTickPct) return;
+    var jump = Math.abs(percent - lastProgressTickPct);
+    var minGap = jump >= 4 ? 14 : jump >= 2 ? 22 : 30;
+    if (now - lastProgressTickAt < minGap) return;
+    lastProgressTickAt = now;
+    lastProgressTickPct = percent;
+
+    var t = percent / 100;
+    // ~Fs4 → ~Fs6 — bright rise that stays consonant with other F# major SFX.
+    var freq = FS.Fs4 * Math.pow(FS.Fs6 / FS.Fs4, t);
+    var peak = 0.026 + t * 0.02;
+
+    if (percent >= 100) {
+      playTones(
+        [
+          {
+            freq: FS.Cs6,
+            delay: 0,
+            dur: 0.06,
+            peak: 0.042,
+            type: 'triangle',
+            attack: 0.002,
+          },
+          {
+            freq: FS.Fs6,
+            delay: 0.035,
+            dur: 0.14,
+            peak: 0.038,
+            type: 'sine',
+            attack: 0.004,
+          },
+        ],
+        { lowpass: 5200 }
+      );
+      return;
+    }
+
+    playTones(
+      [
+        {
+          freq: freq,
+          delay: 0,
+          dur: 0.038,
+          peak: peak,
+          type: 'triangle',
+          attack: 0.0015,
+        },
+        {
+          freq: Math.min(FS.Fs6 * 1.35, freq * 2),
+          delay: 0,
+          dur: 0.026,
+          peak: peak * 0.32,
+          type: 'sine',
+          attack: 0.001,
+        },
+      ],
+      { lowpass: 4800 + t * 800 }
+    );
+  }
+
   function playEffectSound(id) {
     switch (id) {
       case 'fireworks':
@@ -1277,6 +1350,7 @@
     label: effectLabel,
     play: play,
     clear: clearEffects,
-    playSound: playEffectSound
+    playSound: playEffectSound,
+    playProgressTick: playProgressTick,
   };
 })(typeof window !== 'undefined' ? window : this);
