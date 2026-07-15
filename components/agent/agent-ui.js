@@ -18,6 +18,33 @@
     return node;
   }
 
+  /** French count words for short UI labels (1–16); falls back to digits. */
+  var FR_COUNT_WORDS = [
+    '',
+    'Une',
+    'Deux',
+    'Trois',
+    'Quatre',
+    'Cinq',
+    'Six',
+    'Sept',
+    'Huit',
+    'Neuf',
+    'Dix',
+    'Onze',
+    'Douze',
+    'Treize',
+    'Quatorze',
+    'Quinze',
+    'Seize'
+  ];
+
+  function formatFrCountLabel(n, singular, plural) {
+    var count = Math.max(0, Number(n) || 0);
+    var word = FR_COUNT_WORDS[count] || String(count);
+    return word + ' ' + (count === 1 ? singular : plural);
+  }
+
   /** Hide a trailing unfinished [[g:… / [[a:… marker so streaming does not flash raw syntax. */
   function hideIncompleteHighlightMarker(text) {
     if (typeof text !== 'string' || !text) return text || '';
@@ -781,14 +808,16 @@
         if (applySuggestionsLoading || listeningAnalyzing) return 'Analyse\u2026';
         if (activeOffer) return 'Suggestion';
         if (applySuggestions.length) {
-          return applySuggestions.length === 1
-            ? 'Une suggestion'
-            : applySuggestions.length + ' suggestions';
+          return formatFrCountLabel(
+            applySuggestions.length,
+            'suggestion',
+            'suggestions'
+          );
         }
         if (unreadAssistant > 0) {
           return unreadAssistant === 1
             ? 'Nouveau message'
-            : unreadAssistant + ' nouveaux';
+            : formatFrCountLabel(unreadAssistant, 'nouveau', 'nouveaux');
         }
         if (!Agent.isConfigured(provider)) return 'Non configur\u00e9';
         if (!Agent.isVerified(provider)) return 'Non v\u00e9rifi\u00e9';
