@@ -1058,19 +1058,22 @@
   transform: translateY(1px) rotate(-12deg);
 }
 
-/* Floating sparkles spawned by the idle sparkle state */
+/* Floating sparkles spawned by the idle sparkle state (anchored to face) */
 .agent-face-sparkle-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 9998;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  z-index: 2;
   pointer-events: none;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .agent-face-sparkle {
-  position: fixed;
-  left: var(--sx);
-  top: var(--sy);
+  position: absolute;
+  left: 0;
+  top: 0;
   width: 5px;
   height: 5px;
   margin: -2px 0 0 -2px;

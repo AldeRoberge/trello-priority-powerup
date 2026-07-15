@@ -1952,6 +1952,22 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   flex: 1 1 auto;
 }
 
+.tp-completion-master-title {
+  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  color: var(--tp-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-completion-master-title[hidden] {
+  display: none;
+}
+
 .tp-completion-percent {
   font-size: 34px;
   font-weight: 500;
@@ -1979,6 +1995,12 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.tp-completion-list-section.has-tree .tp-completion-list,
+.tp-completion-list-section.has-tree .tp-completion-done-list {
+  --completion-tree-gutter: 14px;
+  --completion-tree-line: color-mix(in srgb, var(--tp-border-strong) 70%, var(--tp-text-muted));
 }
 
 .tp-completion-list-head {
@@ -2032,6 +2054,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  position: relative;
 }
 
 /* Subtask rows — recessed well so each item reads as its own layer */
@@ -2043,10 +2066,80 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   border-radius: var(--completion-radius, 10px);
   background: color-mix(in srgb, #000 12%, var(--tp-surface-subtle));
   transition: background 0.15s ease;
+  position: relative;
+}
+
+.tp-completion-item--depth1 {
+  margin-left: var(--completion-tree-gutter, 14px);
+}
+
+.tp-completion-item--depth1::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--completion-tree-gutter, 14px) * -1 + 5px);
+  top: -6px;
+  bottom: 50%;
+  width: 0;
+  border-left: 1.5px solid var(--completion-tree-line, var(--tp-border-strong));
+  pointer-events: none;
+}
+
+.tp-completion-item--depth1::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--completion-tree-gutter, 14px) * -1 + 5px);
+  top: 50%;
+  width: calc(var(--completion-tree-gutter, 14px) - 7px);
+  border-top: 1.5px solid var(--completion-tree-line, var(--tp-border-strong));
+  pointer-events: none;
+}
+
+.tp-completion-list > .tp-completion-item--depth1:first-child::before,
+.tp-completion-done-list > .tp-completion-item--depth1:first-child::before {
+  top: 50%;
+}
+
+.tp-completion-item--nested {
+  margin-left: calc(var(--completion-tree-gutter, 14px) * 2 + 6px);
+  padding: 8px 10px;
+  background: color-mix(in srgb, #000 8%, var(--tp-surface-subtle));
+}
+
+.tp-completion-item--nested::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--completion-tree-gutter, 14px) * -1 + 5px);
+  top: -6px;
+  bottom: 50%;
+  width: 0;
+  border-left: 1.5px solid var(--completion-tree-line, var(--tp-border-strong));
+  pointer-events: none;
+}
+
+.tp-completion-item--nested::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--completion-tree-gutter, 14px) * -1 + 5px);
+  top: 50%;
+  width: calc(var(--completion-tree-gutter, 14px) - 7px);
+  border-top: 1.5px solid var(--completion-tree-line, var(--tp-border-strong));
+  pointer-events: none;
+}
+
+.tp-completion-item.is-linked {
+  background: color-mix(in srgb, var(--tp-focus, #0c66e4) 8%, var(--tp-surface-subtle));
+}
+
+.tp-completion-item.is-cycle {
+  opacity: 0.85;
 }
 
 .tp-completion-item:hover {
   background: color-mix(in srgb, #000 16%, var(--tp-surface-subtle));
+}
+
+.tp-completion-item.is-linked:hover {
+  background: color-mix(in srgb, var(--tp-focus, #0c66e4) 12%, var(--tp-surface-subtle));
 }
 
 html[data-color-mode="dark"] .tp-completion-item {
@@ -2055,6 +2148,14 @@ html[data-color-mode="dark"] .tp-completion-item {
 
 html[data-color-mode="dark"] .tp-completion-item:hover {
   background: color-mix(in srgb, var(--tp-elev-0, #1d2125) 35%, var(--tp-surface-subtle));
+}
+
+html[data-color-mode="dark"] .tp-completion-item.is-linked {
+  background: color-mix(in srgb, var(--tp-focus, #579dff) 14%, var(--tp-elev-0, #1d2125));
+}
+
+html[data-color-mode="dark"] .tp-completion-item--nested {
+  background: color-mix(in srgb, var(--tp-elev-0, #1d2125) 70%, var(--tp-surface-subtle));
 }
 
 .tp-completion-item.is-flipping {
@@ -2067,6 +2168,86 @@ html[data-color-mode="dark"] .tp-completion-item:hover {
   grid-template-columns: 28px minmax(0, 1fr) 32px;
   align-items: center;
   gap: 6px;
+}
+
+.tp-completion-item--nested .tp-completion-item-main {
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+}
+
+.tp-completion-text-link {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-focus, #0c66e4);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--tp-focus, #0c66e4) 35%, transparent);
+  text-underline-offset: 2px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-completion-text-link:hover {
+  background: color-mix(in srgb, var(--tp-focus, #0c66e4) 8%, transparent);
+  text-decoration-color: var(--tp-focus, #0c66e4);
+}
+
+.tp-completion-text-link:focus {
+  outline: none;
+}
+
+.tp-completion-text-link:focus-visible {
+  box-shadow: 0 0 0 2px var(--tp-surface), 0 0 0 4px var(--tp-focus, #0c66e4);
+}
+
+.tp-completion-text--readonly {
+  display: block;
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 14px;
+  color: var(--tp-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-completion-link-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px 0 34px;
+  font-size: 12px;
+}
+
+.tp-completion-link-hint {
+  color: var(--tp-text-muted);
+}
+
+.tp-completion-link-pct,
+.tp-completion-nested-pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.tp-completion-cycle-hint {
+  margin: 0;
+  padding: 0 2px 0 34px;
+  font-size: 11px;
+  color: var(--tp-text-muted);
+  font-style: italic;
 }
 
 .tp-completion-item-slider-row,
@@ -2511,9 +2692,104 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
 
 .tp-completion-add-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
   align-items: center;
+}
+
+.tp-completion-link-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.tp-completion-link-btn .ti {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.tp-completion-link-btn[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--tp-focus, #0c66e4) 12%, var(--tp-surface));
+  color: var(--tp-focus, #0c66e4);
+}
+
+.tp-completion-link-btn[hidden] {
+  display: none;
+}
+
+.tp-completion-link-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: var(--completion-radius, 10px);
+  background: color-mix(in srgb, #000 10%, var(--tp-surface-subtle));
+}
+
+.tp-completion-link-picker[hidden] {
+  display: none;
+}
+
+.tp-completion-link-status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--tp-text-muted);
+}
+
+.tp-completion-link-status[hidden] {
+  display: none;
+}
+
+.tp-completion-link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.tp-completion-link-option {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tp-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tp-completion-link-option:hover {
+  background: color-mix(in srgb, var(--tp-focus, #0c66e4) 10%, transparent);
+}
+
+.tp-completion-link-option:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--tp-surface), 0 0 0 4px var(--tp-focus, #0c66e4);
+}
+
+.tp-completion-link-option-name {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.tp-completion-link-option-list {
+  font-size: 11px;
+  color: var(--tp-text-muted);
 }
 
 .tp-completion-add-row .tp-tab-complete-wrap {

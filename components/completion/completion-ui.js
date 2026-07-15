@@ -2023,12 +2023,10 @@
     function addItem(text) {
       var trimmed = (text || '').trim();
       if (!trimmed) return null;
-      var hadNoItems = !data.items.length;
-      var cardProgress = hadNoItems ? CT.computeCardProgress(data).percent : 0;
       var item = CT.normalizeItem({
         id: CT.generateId(),
         text: trimmed,
-        progress: hadNoItems && cardProgress > 0 ? cardProgress : 0,
+        progress: 0,
       });
       if (!item) return null;
       data.items.push(item);
