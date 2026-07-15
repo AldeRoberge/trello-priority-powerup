@@ -1700,8 +1700,8 @@ body {
   margin-top: 2px;
   padding-left: 0;
   font-size: 13px;
-  font-weight: 400;
-  color: var(--text-muted);
+  font-weight: 600;
+  color: var(--text-primary);
   line-height: 1.35;
   text-align: left;
   overflow: hidden;
@@ -1749,6 +1749,8 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .priority-summary.is-inutile .priority-summary-dot {
