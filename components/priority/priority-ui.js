@@ -2455,10 +2455,10 @@
   var DUE_DATE_QUICK_MORNING_TIME = '09:00';
   var DUE_DATE_QUICK_AFTERNOON_TIME = '14:00';
   var DUE_DATE_TIME_MINUTE_STEPS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
-  var DUE_DATE_TIME_CLOCK_SIZE = 148;
-  var DUE_DATE_TIME_CLOCK_INNER_R = 38;
-  var DUE_DATE_TIME_CLOCK_OUTER_R = 60;
-  var DUE_DATE_TIME_CLOCK_MINUTE_R = 54;
+  var DUE_DATE_TIME_CLOCK_SIZE = 200;
+  var DUE_DATE_TIME_CLOCK_INNER_R = 52;
+  var DUE_DATE_TIME_CLOCK_OUTER_R = 82;
+  var DUE_DATE_TIME_CLOCK_MINUTE_R = 74;
   var DUE_DATE_MONTH_NAMES = [
     'janvier',
     'f\u00e9vrier',
@@ -12688,9 +12688,9 @@
     clockModeLabel.setAttribute('aria-live', 'polite');
     clockModeLabel.textContent = DUE_DATE_TIME_MODE_HOUR_LABEL;
 
-    timeDialSection.appendChild(timeDialHeader);
     timeDialSection.appendChild(clockFace);
     timeDialSection.appendChild(clockModeLabel);
+    timeDialSection.appendChild(timeDialHeader);
     timePopover.appendChild(timeDialSection);
 
     var popover = document.createElement('div');
