@@ -15723,6 +15723,12 @@
     function setProgressCompleteLock(locked) {
       locked = !!locked;
       if (locked === progressCompleteLock) return;
+      console.debug('[tp-blocked] setProgressCompleteLock', {
+        locked: locked,
+        wasLocked: progressCompleteLock,
+        savedBlockedEnabledBeforeLock: savedBlockedEnabledBeforeLock,
+        enAttenteNow: enAttenteField ? !!enAttenteField.getValue() : !!state.enAttente,
+      });
       progressCompleteLock = locked;
       if (locked) {
         savedDueEnabledBeforeLock = dueDateField && dueDateField.isEnabled
