@@ -841,6 +841,39 @@ check(
   preserved[0].estimatedMinutes === 40 && preserved[0].estimatedMinutesLocked === true
 );
 
+var preservedBlocked = CT.applyMasterProgress(
+  [
+    {
+      id: 'pb1',
+      text: 'Bloqu\u00e9e',
+      progress: 20,
+      blocked: true,
+      blockedReasons: ["En attente d'un c\u00e2ble"],
+    },
+    { id: 'pb2', text: 'Libre', progress: 40 },
+  ],
+  50
+);
+check(
+  'applyMasterProgress keeps item.blocked',
+  preservedBlocked[0].blocked === true && !preservedBlocked[1].blocked
+);
+check(
+  'applyMasterProgress keeps item.blockedReasons',
+  preservedBlocked[0].blockedReasons &&
+    preservedBlocked[0].blockedReasons[0] === "En attente d'un c\u00e2ble"
+);
+check(
+  'applyMasterProgress still clears blocked at 100%',
+  (function () {
+    var atMax = CT.applyMasterProgress(
+      [{ id: 'done-block', text: 'X', progress: 50, blocked: true }],
+      100
+    );
+    return atMax[0].done === true && !atMax[0].blocked && !atMax[0].blockedReasons;
+  })()
+);
+
 check(
   'remaining label compact',
   typeof CT.formatEstimatedRemainingLabel(60) === 'string' &&

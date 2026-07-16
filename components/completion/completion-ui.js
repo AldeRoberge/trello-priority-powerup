@@ -1647,15 +1647,17 @@
       function (v) {
         masterDragging = true;
         var blockedBefore = CT.hasAnyBlocked(data);
-        console.debug('[tp-blocked] masterSlider input', {
-          value: v,
-          hasItems: data.items.length > 0,
-          blockedBefore: blockedBefore,
-          masterBlocked: !!data.blocked,
-          blockedItems: (data.items || []).filter(function (it) {
-            return it && it.blocked === true;
-          }).length,
-        });
+        if (blockedBefore) {
+          console.debug('[tp-blocked] masterSlider input', {
+            value: v,
+            hasItems: data.items.length > 0,
+            blockedBefore: blockedBefore,
+            masterBlocked: !!data.blocked,
+            blockedItems: (data.items || []).filter(function (it) {
+              return it && it.blocked === true;
+            }).length,
+          });
+        }
         if (data.items.length) {
           data.items = CT.applyMasterProgress(data.items, v, linkedSnapshots);
           syncItemSlidersFromData();
@@ -1663,9 +1665,10 @@
           data.progress = v;
         }
         var blockedAfter = CT.hasAnyBlocked(data);
-        if (blockedBefore !== blockedAfter || blockedAfter) {
-          console.debug('[tp-blocked] masterSlider after apply', {
+        if (blockedBefore !== blockedAfter) {
+          console.debug('[tp-blocked] masterSlider blocked changed', {
             value: v,
+            blockedBefore: blockedBefore,
             blockedAfter: blockedAfter,
             masterBlocked: !!data.blocked,
             blockedItems: (data.items || []).filter(function (it) {
@@ -2473,6 +2476,10 @@
 
     function toggleMasterBlocked() {
       var nextBlocked = !CT.isMasterBlocked(data);
+      console.debug('[tp-blocked] toggleMasterBlocked', {
+        nextBlocked: nextBlocked,
+        progress: CT.computeCardProgress(data).percent,
+      });
       // Pause button is always an explicit user action.
       data = CT.setMasterBlocked(data, nextBlocked, { origin: 'user' });
       playCompletionUiSound(nextBlocked ? 'block' : 'unblock');

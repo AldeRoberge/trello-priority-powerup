@@ -118,4 +118,32 @@ describe('Completion progress', () => {
     const out = CT.restoreProgressLeavingComplete(mid, null);
     assert.equal(out.progress, 55);
   });
+
+  it('applyMasterProgress preserves item blocked flags (not done)', () => {
+    const scaled = CT.applyMasterProgress(
+      [
+        {
+          id: 'pb1',
+          text: 'Bloquée',
+          progress: 20,
+          blocked: true,
+          blockedReasons: ["En attente d'un câble"],
+        },
+        { id: 'pb2', text: 'Libre', progress: 40 },
+      ],
+      50
+    );
+    assert.equal(scaled[0].blocked, true);
+    assert.deepEqual(scaled[0].blockedReasons, ["En attente d'un câble"]);
+    assert.equal(!!scaled[1].blocked, false);
+  });
+
+  it('applyMasterProgress clears blocked when scaling to 100%', () => {
+    const atMax = CT.applyMasterProgress(
+      [{ id: 'done-block', text: 'X', progress: 50, blocked: true }],
+      100
+    );
+    assert.equal(atMax[0].done, true);
+    assert.equal(!!atMax[0].blocked, false);
+  });
 });
