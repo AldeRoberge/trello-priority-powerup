@@ -7346,6 +7346,7 @@
 
       var label = document.createElement('div');
       label.className = 'info-row-label';
+      label.title = labelText;
       if (options.icon) {
         var labelIcon = document.createElement('i');
         labelIcon.className = 'ti ' + options.icon + ' info-row-icon';
