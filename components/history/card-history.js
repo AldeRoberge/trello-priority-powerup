@@ -812,13 +812,13 @@
     var aReasons = Array.isArray(ap.blockedReasons) ? ap.blockedReasons : [];
     if (!deepEqual(bReasons, aReasons)) {
       if (!bReasons.length && aReasons.length) {
-        return 'Motif de blocage : ' + quoteText(aReasons[0], quoteMax);
+        return 'Cause de blocage : ' + quoteText(aReasons[0], quoteMax);
       }
       if (bReasons.length && !aReasons.length) {
-        return 'Motifs de blocage effac\u00e9s';
+        return 'Causes de blocage effac\u00e9es';
       }
       if (aReasons.length) {
-        return 'Motif de blocage : ' + quoteText(aReasons.join(', '), quoteMax);
+        return 'Cause de blocage : ' + quoteText(aReasons.join(', '), quoteMax);
       }
     }
     if (!deepEqual(bp.blockedLinks, ap.blockedLinks)) {

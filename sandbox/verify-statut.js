@@ -225,5 +225,126 @@ check(
   ST.resolvePreviousListRestoreTarget('5', '5', restoreLists, restoreSettings) === '3'
 );
 
+// --- Previous Statut restore after leaving Bloqué (subtask unblock) ---
+check(
+  'STATUT_PREVIOUS_BLOCKED_LIST_KEY export',
+  ST.STATUT_PREVIOUS_BLOCKED_LIST_KEY === 'statutPreviousListBeforeBlocked'
+);
+check('isBlockedListId export', typeof ST.isBlockedListId === 'function');
+check(
+  'shouldCapturePreviousListBeforeBlocked export',
+  typeof ST.shouldCapturePreviousListBeforeBlocked === 'function'
+);
+check(
+  'resolvePreviousListRestoreTargetFromBlocked export',
+  typeof ST.resolvePreviousListRestoreTargetFromBlocked === 'function'
+);
+check(
+  'capturePreviousListBeforeBlocked export',
+  typeof ST.capturePreviousListBeforeBlocked === 'function'
+);
+check(
+  'restorePreviousStatutFromUnblocked export',
+  typeof ST.restorePreviousStatutFromUnblocked === 'function'
+);
+
+check('isBlockedListId by category', ST.isBlockedListId('4', restoreSettings) === true);
+check('isBlockedListId by role', ST.isBlockedListId('4', {
+  listCategories: {},
+  roleLists: { blocked: '4' },
+}) === true);
+check('isBlockedListId started false', ST.isBlockedListId('3', restoreSettings) === false);
+check('isBlockedListId completed false', ST.isBlockedListId('5', restoreSettings) === false);
+
+check(
+  'blocked-capture allows started',
+  ST.shouldCapturePreviousListBeforeBlocked('3', restoreSettings) === true
+);
+check(
+  'blocked-capture allows unstarted',
+  ST.shouldCapturePreviousListBeforeBlocked('2', restoreSettings) === true
+);
+check(
+  'blocked-capture skips already Bloqué',
+  ST.shouldCapturePreviousListBeforeBlocked('4', restoreSettings) === false
+);
+check(
+  'blocked-capture skips Terminé',
+  ST.shouldCapturePreviousListBeforeBlocked('5', restoreSettings) === false
+);
+check(
+  'blocked-capture skips empty list id',
+  ST.shouldCapturePreviousListBeforeBlocked(null, restoreSettings) === false
+);
+
+check(
+  'blocked-restore no-ops when current list is not blocked',
+  ST.resolvePreviousListRestoreTargetFromBlocked(
+    '3',
+    '2',
+    restoreLists,
+    restoreSettings
+  ) === null
+);
+check(
+  'blocked-restore uses stored previous when valid',
+  ST.resolvePreviousListRestoreTargetFromBlocked(
+    '4',
+    '3',
+    restoreLists,
+    restoreSettings
+  ) === '3'
+);
+check(
+  'blocked-restore rejects stored Bloqué id',
+  ST.resolvePreviousListRestoreTargetFromBlocked(
+    '4',
+    '4',
+    restoreLists,
+    restoreSettings
+  ) === '3'
+);
+check(
+  'blocked-restore rejects stored Terminé id',
+  ST.resolvePreviousListRestoreTargetFromBlocked(
+    '4',
+    '5',
+    restoreLists,
+    restoreSettings
+  ) === '3'
+);
+check(
+  'blocked-restore falls back when stored missing',
+  ST.resolvePreviousListRestoreTargetFromBlocked(
+    '4',
+    null,
+    restoreLists,
+    restoreSettings
+  ) === '3'
+);
+check(
+  'blocked-restore falls back when stored list deleted',
+  ST.resolvePreviousListRestoreTargetFromBlocked(
+    '4',
+    'gone',
+    restoreLists,
+    restoreSettings
+  ) === '3'
+);
+
+// Terminé previous-list key must stay distinct from Bloqué key.
+check(
+  'Terminé and Bloqué previous keys differ',
+  ST.STATUT_PREVIOUS_LIST_KEY !== ST.STATUT_PREVIOUS_BLOCKED_LIST_KEY
+);
+check(
+  'Terminé capture still allows blocked list as previous',
+  ST.shouldCapturePreviousListId('4', restoreSettings) === true
+);
+check(
+  'Terminé restore still accepts stored blocked previous',
+  ST.resolvePreviousListRestoreTarget('5', '4', restoreLists, restoreSettings) === '4'
+);
+
 console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll statut checks passed');
 process.exit(bad ? 1 : 0);

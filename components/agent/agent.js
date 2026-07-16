@@ -2592,7 +2592,7 @@
           '- Grammaire\u00a0: JAMAIS de virgule avant \u00ab\u00a0et\u00a0\u00bb dans une \u00e9num\u00e9ration ou une coordination (\u00ab\u00a0urgence, impact et facilit\u00e9\u00a0\u00bb, pas \u00ab\u00a0urgence, impact, et facilit\u00e9\u00a0\u00bb).',
           '- Ex. FAUX\u00a0: \u00ab\u00a0Okay, Flexible. Affinez les axes si besoin.\u00a0\u00bb',
           '- Ex. VRAI\u00a0: \u00ab\u00a0Okay, Flexible. Tu peux encore peaufiner urgence / impact / facilit\u00e9 si tu veux.\u00a0\u00bb',
-          '- Ex. FAUX\u00a0: \u00ab\u00a0Motif enregistr\u00e9\u00a0: en attente d\'une approbation.\u00a0\u00bb',
+          '- Ex. FAUX\u00a0: \u00ab\u00a0Cause enregistr\u00e9e\u00a0: en attente d\'une approbation.\u00a0\u00bb',
           '- Ex. VRAI\u00a0: \u00ab\u00a0Okay, not\u00e9\u00a0: en attente d\'une approbation.\u00a0\u00bb'
         ];
     var projectScope = isProjectScope(context && context.scope);
@@ -2827,15 +2827,15 @@
       '- Ex. refus heure\u00a0: user \u00ab\u00a0pas d\'heure\u00a0\u00bb \u2192 {"message":"Okay.","suggestions":["Marquer bloqu\u00e9","Ajouter une sous-t\u00e2che"],"followUps":[],"actions":[]}',
       '- Si \u00ab\u00a0d\u00e9finir une \u00e9ch\u00e9ance\u00a0\u00bb SANS aucune date\u00a0: alors seulement demander la date (obligatoire). actions=[].',
       '- Ex. sans date\u00a0: user \u00ab\u00a0D\u00e9finir une \u00e9ch\u00e9ance\u00a0\u00bb \u2192 {"message":"Pour quelle date?","suggestions":["Aujourd\'hui","Demain","Vendredi"],"followUps":[],"actions":[]}',
-      'Bloquer une carte (agir d\'abord, motif ensuite)\u00a0:',
-      '- Si l\'utilisateur demande de marquer bloqu\u00e9 / en attente SANS donner de motif\u00a0: APPLIQUE TOUT DE SUITE set_blocked avec enAttente:true (sans blockedReasons), puis confirme et demande le motif en option.',
-      '- Ex. tour 1\u00a0: user \u00ab\u00a0Marquer la t\u00e2che comme bloqu\u00e9e\u00a0\u00bb \u2192 {"message":"Okay, bloqu\u00e9. Quel est le motif?","suggestions":["En attente d\'une approbation","En attente d\'une r\u00e9ponse","Bloqu\u00e9 \u00e0 cause du mat\u00e9riel"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}',
-      '- INTERDIT (sans motif)\u00a0: inventer qui on attend, un pr\u00e9nom, ou \u00ab\u00a0en attendant X\u00a0\u00bb. Message du tour 1 = confirmation neutre + demande de motif (comme l\'ex. ci-dessus).',
-      '- Ne JAMAIS r\u00e9pondre seulement \u00ab\u00a0Quel est le motif?\u00a0\u00bb sans avoir d\'abord appel\u00e9 set_blocked.',
-      '- Si l\'utilisateur donne ensuite un motif\u00a0: applique set_blocked avec blockedReasons (enAttente reste true) ET cr\u00e9e une sous-t\u00e2che d\u00e9blocage via add_subtask {text:"\u2026", blocked:true} (titre = action \u00e0 l\'infinitif, ex. Obtenir l\'approbation). Ne recr\u00e9e pas si progress.items a d\u00e9j\u00e0 l\'\u00e9quivalent.',
+      'Bloquer une carte (agir d\'abord, cause ensuite)\u00a0:',
+      '- Si l\'utilisateur demande de marquer bloqu\u00e9 / en attente SANS donner de cause\u00a0: APPLIQUE TOUT DE SUITE set_blocked avec enAttente:true (sans blockedReasons), puis confirme et demande la cause en option.',
+      '- Ex. tour 1\u00a0: user \u00ab\u00a0Marquer la t\u00e2che comme bloqu\u00e9e\u00a0\u00bb \u2192 {"message":"Okay, bloqu\u00e9. Quelle est la cause?","suggestions":["En attente d\'une approbation","En attente d\'une r\u00e9ponse","Bloqu\u00e9 \u00e0 cause du mat\u00e9riel"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}',
+      '- INTERDIT (sans cause)\u00a0: inventer qui on attend, un pr\u00e9nom, ou \u00ab\u00a0en attendant X\u00a0\u00bb. Message du tour 1 = confirmation neutre + demande de cause (comme l\'ex. ci-dessus).',
+      '- Ne JAMAIS r\u00e9pondre seulement \u00ab\u00a0Quelle est la cause?\u00a0\u00bb sans avoir d\'abord appel\u00e9 set_blocked.',
+      '- Si l\'utilisateur donne ensuite une cause\u00a0: applique set_blocked avec blockedReasons (enAttente reste true) ET cr\u00e9e une sous-t\u00e2che d\u00e9blocage via add_subtask {text:"\u2026", blocked:true} (titre = action \u00e0 l\'infinitif, ex. Obtenir l\'approbation). Ne recr\u00e9e pas si progress.items a d\u00e9j\u00e0 l\'\u00e9quivalent.',
       '- Ex. tour 2\u00a0: user \u00ab\u00a0En attente d\'une approbation\u00a0\u00bb \u2192 {"message":"Okay, not\u00e9\u00a0: en attente d\'une approbation.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedReasons":["En attente d\'une approbation"]}},{"tool":"add_subtask","args":{"text":"Obtenir l\'approbation","blocked":true}}]}',
-      '- Si le motif est d\u00e9j\u00e0 dans la demande initiale\u00a0: set_blocked avec enAttente:true + blockedReasons + add_subtask blocked:true en un seul tour.',
-      '- Lien vers une sous-t\u00e2che (attente d\'une autre t\u00e2che)\u00a0: set_blocked avec blockedLinks (id ou matchText depuis progress.items) ET set_subtask_blocked {matchText|\u00a0id, blocked:true}. Le runtime ajoute le motif \u00ab\u00a0En attente d\'une autre t\u00e2che\u00a0\u00bb si besoin.',
+      '- Si la cause est d\u00e9j\u00e0 dans la demande initiale\u00a0: set_blocked avec enAttente:true + blockedReasons + add_subtask blocked:true en un seul tour.',
+      '- Lien vers une sous-t\u00e2che (attente d\'une autre t\u00e2che)\u00a0: set_blocked avec blockedLinks (id ou matchText depuis progress.items) ET set_subtask_blocked {matchText|\u00a0id, blocked:true}. Le runtime ajoute la cause \u00ab\u00a0En attente d\'une autre t\u00e2che\u00a0\u00bb si besoin.',
       '- Ex. lien\u00a0: user \u00ab\u00a0Bloqu\u00e9 en attendant Valider le devis\u00a0\u00bb \u2192 {"message":"Okay, bloqu\u00e9 sur Valider le devis.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedLinks":[{"matchText":"Valider le devis"}]}},{"tool":"set_subtask_blocked","args":{"matchText":"Valider le devis","blocked":true}}]}',
       '- Marquer une sous-t\u00e2che (ou la t\u00e2che ma\u00eetre via progress.blocked) bloqu\u00e9e implique Statut Bloqu\u00e9\u00a0: utilise set_subtask_blocked ou set_blocked; le runtime synchronise les deux.',
       '- Bloqu\u00e9 \u2260 Termin\u00e9\u00a0: si context.progress.percent=100 (ou carte marqu\u00e9e compl\u00e8te), set_blocked DOIT aussi remettre le progr\u00e8s hors Termin\u00e9 via set_progress {progressEnabled:true, progress:0} (ou le % r\u00e9el si partiel). Le runtime le fait aussi, mais inclus set_progress dans actions.',
@@ -2918,7 +2918,7 @@
       '- Si tu poses une question\u00a0: les suggestions = r\u00e9ponses concr\u00e8tes \u00e0 CETTE question (li\u00e9es au sujet). Invente de bons best-guess \u00e0 partir du titre / historique / cardMemory.',
       '- Si la question est DIFFICILE / externe / incertaine (permission, budget, qui valide, impact org, d\u00e9pendance hors contr\u00f4le)\u00a0: ajoute parfois \u00ab\u00a0Je ne sais pas\u00a0\u00bb en DERNI\u00c8RE suggestion. Pas sur les questions \u00e9videntes / perso (POURQUOI, ressenti, \u00ab\u00a0c\'est toi?\u00a0\u00bb).',
       '- Si l\'utilisateur choisit \u00ab\u00a0Je ne sais pas\u00a0\u00bb\u00a0: accepte, ne m\u00e9morise pas \u00e7a comme fait, ne repose pas\u00a0; passe \u00e0 autre chose utile.',
-      '- Demande de nom (sous-t\u00e2che, projet, motif\u2026)\u00a0: propose \u22652 bons candidats ancr\u00e9s dans LE sujet (pas \u00ab\u00a0Option A\u00a0\u00bb / pas hors carte).',
+      '- Demande de nom (sous-t\u00e2che, projet, cause\u2026)\u00a0: propose \u22652 bons candidats ancr\u00e9s dans LE sujet (pas \u00ab\u00a0Option A\u00a0\u00bb / pas hors carte).',
       '- suggestionsMulti (bool, obligatoire quand tu proposes des r\u00e9ponses)\u00a0: true si plusieurs r\u00e9ponses peuvent \u00eatre combin\u00e9es (causes, cons\u00e9quences cumulables)\u00a0; false si un seul choix (facilit\u00e9, port\u00e9e, oui/non, date, palier, nom de sous-t\u00e2che\u2026).',
       '- Ex. multi\u00a0: causes d\'urgence \u2192 suggestionsMulti:true. Ex. mono\u00a0: Personnel/\u00c9quipe/Global ou facile/difficile \u2192 suggestionsMulti:false.',
       '- INTERDIT comme r\u00e9ponses stock\u00a0: \u00ab\u00a0Quelqu\'un attend\u00a0\u00bb, \u00ab\u00a0\u00c7a bloque d\'autres trucs\u00a0\u00bb, \u00ab\u00a0Cons\u00e9quences graves\u00a0\u00bb hors sujet.',
@@ -2944,26 +2944,26 @@
       '- Si actions (du followUp) est non vide\u00a0: le label EST une action \u2192 commence toujours par un verbe \u00e0 l\'infinitif (Marquer, D\u00e9finir, Ajouter\u2026). Ex.\u00a0: "Marquer bloqu\u00e9 (mat\u00e9riel)". Jamais un nom seul ni une question.',
       '- Pr\u00e9f\u00e8re le champ actions (auto) quand tu viens de recevoir la r\u00e9ponse \u00e0 ta question\u00a0; followUps pour des choix encore optionnels.',
       '- Si actions est [] , le label est renvoy\u00e9 comme message utilisateur (pr\u00e9f\u00e8re suggestions pour \u00e7a).',
-      'Motifs de blocage (blockedReasons) \u2014 tr\u00e8s important\u00a0:',
-      '- Un motif d\u00e9crit POURQUOI la carte est bloqu\u00e9e (cause / \u00e9tat), pas une t\u00e2che \u00e0 faire.',
+      'Causes de blocage (blockedReasons) \u2014 tr\u00e8s important\u00a0:',
+      '- Une cause d\u00e9crit POURQUOI la carte est bloqu\u00e9e (\u00e9tat / raison), pas une t\u00e2che \u00e0 faire.',
       '- Formule pr\u00e9f\u00e9r\u00e9e\u00a0: "Bloqu\u00e9 \u00e0 cause de \u2026" ou "En attente de \u2026".',
       '- INTERDIT\u00a0: infinitifs d\'action comme "V\u00e9rifier le mat\u00e9riel", "Contacter le client", "Commander du stock".',
-      '- Exemple mat\u00e9riel\u00a0: label d\'action "Marquer bloqu\u00e9 (mat\u00e9riel)" + motif "Bloqu\u00e9 \u00e0 cause de la disponibilit\u00e9 du mat\u00e9riel" (PAS "V\u00e9rifier le mat\u00e9riel" comme motif).',
-      '- Le motif est optionnel\u00a0: on peut bloquer sans blockedReasons. Ne jamais exiger un motif ni boucler dessus.',
+      '- Exemple mat\u00e9riel\u00a0: label d\'action "Marquer bloqu\u00e9 (mat\u00e9riel)" + cause "Bloqu\u00e9 \u00e0 cause de la disponibilit\u00e9 du mat\u00e9riel" (PAS "V\u00e9rifier le mat\u00e9riel" comme cause).',
+      '- La cause est optionnelle\u00a0: on peut bloquer sans blockedReasons. Ne jamais exiger une cause ni boucler dessus.',
       'Sections activables (tr\u00e8s important)\u00a0:',
       '- Chaque bloc a un champ enabled. Si enabled=false, la section est d\u00e9sactiv\u00e9e\u00a0: les valeurs saved* / latentes NE comptent PAS.',
       '- Priorit\u00e9 active seulement si priority.enabled=true.',
       '- \u00c9ch\u00e9ance active seulement si due.enabled=true (sinon dueDate/dueTime actifs sont null).',
-      '- Bloqu\u00e9 / en attente actif SEULEMENT si blocked.enabled=true (identique \u00e0 enAttente\u00a0; le motif s\u2019\u00e9dite sous Statut quand la carte est en Bloqu\u00e9).',
-      '- Si blocked.enabled=false, la carte N\'EST PAS bloqu\u00e9e, m\u00eame si savedReasons contient d\'anciens motifs.',
+      '- Bloqu\u00e9 / en attente actif SEULEMENT si blocked.enabled=true (identique \u00e0 enAttente\u00a0; la cause s\u2019\u00e9dite sous Statut quand la carte est en Bloqu\u00e9).',
+      '- Si blocked.enabled=false, la carte N\'EST PAS bloqu\u00e9e, m\u00eame si savedReasons contient d\'anciennes causes.',
       '- Progr\u00e8s actif seulement si progress.enabled=true.',
       '- Pour activer/d\u00e9sactiver\u00a0: priorityEnabled, dueEnabled, enAttente (Bloqu\u00e9), progressEnabled.',
-      '- Pour marquer bloqu\u00e9\u00a0: set_blocked avec enAttente:true tout de suite (motifs ensuite si fournis). Ne dis jamais que c\'est d\u00e9j\u00e0 bloqu\u00e9 si enabled=false.',
+      '- Pour marquer bloqu\u00e9\u00a0: set_blocked avec enAttente:true tout de suite (causes ensuite si fournies). Ne dis jamais que c\'est d\u00e9j\u00e0 bloqu\u00e9 si enabled=false.',
       'Outils disponibles\u00a0:',
       '- set_priority: { urgency?:0-4, impact?:0-4, ease?:1-5, priorityEnabled?:boolean, tier?: string, heatTarget?: number } (tier = Critique|Urgente|Prioritaire|Importante|Flexible|Secondaire|Optionnelle\u00a0; impact 0\u20134 = port\u00e9e Personnel\u2026Global). Legacy estimatedDuration* \u2192 redirig\u00e9 vers set_progress_estimate.',
       '- set_task_types: { types: string[], force?: boolean } (multi\u00a0; ids\u00a0: action|project|recurring|exploratory|emotional|communication|deliverable|process|thinking). Lit context.taskTypes. Si taskTypesLocked=true, n\'\u00e9crase PAS sauf demande explicite + force:true. Ne suppose PAS qu\'une carte est un livrable\u00a0; adapte ton langage (urgence / cadrage) aux types.',
       '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean, relativeMinutes?: number, relativeHours?: number } (dueTime OPTIONNEL pour une date\u00a0; d\u00e9lai \u00ab\u00a0dans N min/h\u00a0\u00bb \u2192 relativeMinutes/relativeHours, calcul\u00e9 depuis context.nowTime\u00a0; aujourd\'hui = context.today)',
-      '- set_blocked: { enAttente?: boolean, blockedReasons?: string[], blockedLinks?: [{id?:string, matchText?:string, label?:string}] } (enAttente:true seul suffit\u00a0; motifs et liens optionnels\u00a0; synchronise Progr\u00e8s blocked\u00a0; si progr\u00e8s \u00e0 100%, le runtime le remet \u00e0 0% \u2014 ajoute aussi set_progress)',
+      '- set_blocked: { enAttente?: boolean, blockedReasons?: string[], blockedLinks?: [{id?:string, matchText?:string, label?:string}] } (enAttente:true seul suffit\u00a0; causes et liens optionnels\u00a0; synchronise Progr\u00e8s blocked\u00a0; si progr\u00e8s \u00e0 100%, le runtime le remet \u00e0 0% \u2014 ajoute aussi set_progress)',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (master sur sous-t\u00e2ches si items\u00a0; sinon progres carte)',
       '- set_subtask_estimate: { id?: string, matchText?: string, estimatedMinutes: number|null, estimatedDuration?: string }',
       '- set_progress_estimate: { estimatedMinutes: number|null, estimatedDuration?: string } (total master)',
@@ -2973,7 +2973,7 @@
       '- rename_card: { name: string } (nouveau titre de la carte\u00a0; name obligatoire, non vide)',
       '- set_description: { desc: string } (nouvelle description compl\u00e8te\u00a0; r\u00e9sum\u00e9 court + misc\u00a0; desc obligatoire en string, "" pour effacer)',
       '- add_subtask: { text: string, done?: boolean, blocked?: boolean, estimatedMinutes?: number } (text obligatoire, non vide\u00a0; done:true = cr\u00e9er d\u00e9j\u00e0 coch\u00e9e\u00a0; blocked:true = sous-t\u00e2che bloquante + Statut Bloqu\u00e9)',
-      '- set_subtask_blocked: { id?|matchText?, blocked?: boolean, blockedReasons?: string[] } (marquer / d\u00e9marquer une sous-t\u00e2che bloqu\u00e9e\u00a0; motifs optionnels par sous-t\u00e2che\u00a0; synchronise enAttente)',
+      '- set_subtask_blocked: { id?|matchText?, blocked?: boolean, blockedReasons?: string[] } (marquer / d\u00e9marquer une sous-t\u00e2che bloqu\u00e9e\u00a0; causes optionnelles par sous-t\u00e2che\u00a0; synchronise enAttente)',
       '- rename_subtask: { text: string, id?: string, matchText?: string } (nouveau text\u00a0; id OU matchText)',
       '- remove_subtask: { id?: string, matchText?: string } (id OU matchText)',
       '- toggle_subtask: { id?: string, matchText?: string, done?: boolean }',
@@ -3578,14 +3578,14 @@
       {
         role: 'system',
         content: [
-          'Tu transformes un motif de blocage Trello en une seule cause en fran\u00e7ais.',
+          'Tu transformes une cause de blocage Trello en une seule cause en fran\u00e7ais.',
           'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"text":"\u2026"}',
           'R\u00e8gles\u00a0:',
-          '- text = UN motif de cause, pas une action \u00e0 faire (sauf si d\u00e9j\u00e0 une cause).',
+          '- text = UNE cause, pas une action \u00e0 faire (sauf si d\u00e9j\u00e0 une cause).',
           '- Pr\u00e9f\u00e8re \u00ab\u00a0En attente de \u2026\u00a0\u00bb (ou \u00ab\u00a0En attente d\'\u2026\u00a0\u00bb) pour une attente / action pas encore faite.',
           '- Utilise \u00ab\u00a0Bloqu\u00e9 \u00e0 cause de \u2026\u00a0\u00bb seulement pour un obstacle physique / permission / mat\u00e9riel.',
           '- Si l\'entr\u00e9e est un infinitif (ex. Manger un hot-dog / Essayer le connecteur)\u00a0: \u00ab\u00a0En attente de manger\u2026\u00a0\u00bb / \u00ab\u00a0En attente d\'essayer\u2026\u00a0\u00bb (minuscule apr\u00e8s de/d\', \u00e9lision devant voyelle).',
-          '- PAS de parenth\u00e8ses autour du titre, PAS de num\u00e9rotation, PAS de second motif.',
+          '- PAS de parenth\u00e8ses autour du titre, PAS de num\u00e9rotation, PAS de seconde cause.',
           '- INTERDIT\u00a0: \u00ab\u00a0En attente de (Essayer\u2026)\u00a0\u00bb \u2014 int\u00e8gre le verbe naturellement.',
           '- Max ~100 caract\u00e8res.',
           'Ex.\u00a0: \u00ab\u00a0Manger un hot-dog\u00a0\u00bb \u2192 {"text":"En attente de manger un hot-dog"}',
@@ -3596,7 +3596,7 @@
       },
       {
         role: 'user',
-        content: 'Motif saisi\u00a0: «' + trimmed.slice(0, 200) + '»'
+        content: 'Cause saisie\u00a0: «' + trimmed.slice(0, 200) + '»'
       }
     ];
 
@@ -3707,12 +3707,12 @@
       {
         role: 'system',
         content: [
-          'Tu transformes un motif de blocage Trello en titre de sous-t\u00e2che actionable.',
+          'Tu transformes une cause de blocage Trello en titre de sous-t\u00e2che actionable.',
           'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"text":"\u2026"}',
           'R\u00e8gles\u00a0:',
           '- text = une action courte en fran\u00e7ais, \u00e0 l\'infinitif (ex. Obtenir le c\u00e2ble, Relancer Marie).',
-          '- Le titre doit d\u00e9bloquer la carte / avancer malgr\u00e9 le motif.',
-          '- PAS de question, PAS de motif recopié tel quel (sauf s\'il est d\u00e9j\u00e0 une action).',
+          '- Le titre doit d\u00e9bloquer la carte / avancer malgr\u00e9 la cause.',
+          '- PAS de question, PAS de cause recopi\u00e9e telle quelle (sauf si d\u00e9j\u00e0 une action).',
           '- Max ~80 caract\u00e8res, pas de guillemets superflus ni de num\u00e9rotation.',
           'Ex.\u00a0: \u00ab\u00a0En attente d\'un c\u00e2ble\u00a0\u00bb \u2192 {"text":"Obtenir le c\u00e2ble"}',
           'Ex.\u00a0: \u00ab\u00a0En attente d\'une approbation\u00a0\u00bb \u2192 {"text":"Obtenir l\'approbation"}',
@@ -3721,7 +3721,7 @@
       },
       {
         role: 'user',
-        content: 'Motif de blocage\u00a0: «' + trimmed.slice(0, 200) + '»'
+        content: 'Cause de blocage\u00a0: «' + trimmed.slice(0, 200) + '»'
       }
     ];
 
@@ -5400,7 +5400,7 @@
       'Grammaire\u00a0: JAMAIS de virgule avant \u00ab\u00a0et\u00a0\u00bb (\u00ab\u00a0urgence, impact et facilit\u00e9\u00a0\u00bb, pas \u00ab\u00a0urgence, impact, et facilit\u00e9\u00a0\u00bb).',
       'Ponctuation\u00a0: JAMAIS de tiret cadratin (\u2014). Pr\u00e9f\u00e8re un point, une virgule ou une nouvelle phrase.',
       'Objectif\u00a0: (1) comprendre POURQUOI on fait \u00e7a et le m\u00e9moriser\u00a0; (2) pour un plan / strat\u00e9gie, clarifier permission, qui s\'en occupe, commenc\u00e9?, d\u00e9j\u00e0 fait, reste \u00e0 faire\u00a0; (3) d\u00e9duire Urgence (0\u20134), Impact/port\u00e9e (0\u20134) et Facilit\u00e9 (1\u20135) avant de terminer\u00a0; (4) tenir Progr\u00e8s / axes / blocage / \u00e9ch\u00e9ance \u00e0 jour d\u00e8s qu\'un indice appara\u00eet (c\'est le but du bot)\u00a0; (5) optionnellement projet. Dur\u00e9e\u00a0: inf\u00e8re-la quand elle saute aux yeux\u00a0; ne la demande QUE si vraiment incertaine.',
-      'Personnes / pr\u00e9noms (critique)\u00a0: n\'invente JAMAIS un pr\u00e9nom ou un nom propre absent du message utilisateur, de l\'historique, de cardMemory, de memory ou de progress.items. Les exemples du prompt ne sont PAS des gens de la carte. Pour un blocage sans motif\u00a0: confirmation neutre seulement (\u00ab\u00a0Okay, bloqu\u00e9. Quel est le motif?\u00a0\u00bb) \u2014 INTERDIT \u00ab\u00a0en attendant [pr\u00e9nom]\u00a0\u00bb.',
+      'Personnes / pr\u00e9noms (critique)\u00a0: n\'invente JAMAIS un pr\u00e9nom ou un nom propre absent du message utilisateur, de l\'historique, de cardMemory, de memory ou de progress.items. Les exemples du prompt ne sont PAS des gens de la carte. Pour un blocage sans cause\u00a0: confirmation neutre seulement (\u00ab\u00a0Okay, bloqu\u00e9. Quelle est la cause?\u00a0\u00bb) \u2014 INTERDIT \u00ab\u00a0en attendant [pr\u00e9nom]\u00a0\u00bb.',
       '',
       'POURQUOI en premier (critique)\u00a0:',
       '- Sauf si le POURQUOI est d\u00e9j\u00e0 dans cardMemory / description / historique\u00a0: la 1re question = POURQUOI on fait le sujet du titre.',
@@ -5474,7 +5474,7 @@
       '- Avancement + blocage (important)\u00a0:',
       '  \u00b7 Apr\u00e8s \u00ab\u00a0Non, pas encore\u00a0\u00bb\u00a0: message = \u00ab\u00a0Pourquoi \u00e7a n\'a pas \u00e9t\u00e9 commenc\u00e9?\u00a0\u00bb + 2\u20134 suggestions LI\u00c9ES au sujet (pas de clich\u00e9s g\u00e9n\u00e9riques).',
       '  \u00b7 Ex. suggestions (m\u00e9nage des c\u00e2bles)\u00a0: \u00ab\u00a0J\'attends un c\u00e2ble\u00a0\u00bb, \u00ab\u00a0Pas eu le temps\u00a0\u00bb, \u00ab\u00a0Je savais pas par o\u00f9 commencer\u00a0\u00bb.',
-      '  \u00b7 Si l\'utilisateur attend quelque chose de concret (pi\u00e8ce, c\u00e2ble, livraison, r\u00e9ponse, approbation, outil\u2026)\u00a0: set_blocked IMM\u00c9DIATEMENT avec enAttente:true + blockedReasons du genre \u00ab\u00a0En attente d\'un c\u00e2ble\u00a0\u00bb (motif = cause, pas une action) + set_progress hors 100% si besoin (progress:0 quand pas commenc\u00e9). Confirme bri\u00e8vement + cardPatches remember, puis encha\u00eene.',
+      '  \u00b7 Si l\'utilisateur attend quelque chose de concret (pi\u00e8ce, c\u00e2ble, livraison, r\u00e9ponse, approbation, outil\u2026)\u00a0: set_blocked IMM\u00c9DIATEMENT avec enAttente:true + blockedReasons du genre \u00ab\u00a0En attente d\'un c\u00e2ble\u00a0\u00bb (cause = pourquoi, pas une action) + set_progress hors 100% si besoin (progress:0 quand pas commenc\u00e9). Confirme bri\u00e8vement + cardPatches remember, puis encha\u00eene.',
       '  \u00b7 Ex. user \u00ab\u00a0J\'attends un c\u00e2ble\u00a0\u00bb \u2192 actions [{"tool":"set_blocked","args":{"enAttente":true,"blockedReasons":["En attente d\'un c\u00e2ble"]}},{"tool":"set_progress","args":{"progressEnabled":true,"progress":0}}] + message du style \u00ab\u00a0Ok, bloqu\u00e9 en attendant le c\u00e2ble.\u00a0\u00bb puis question suivante utile (ou axes).',
       '  \u00b7 Si c\'est juste \u00ab\u00a0pas eu le temps\u00a0\u00bb / procrastination\u00a0: remember, NE PAS bloquer, passe aux axes / suite.',
       '- INTERDIT d\'appliquer permission / qui aux t\u00e2ches perso solo \u00e9videntes. Avancement (\u00ab\u00a0commenc\u00e9?\u00a0\u00bb) reste OK s\'il peut r\u00e9v\u00e9ler un vrai blocage mat\u00e9riel / attente.',
@@ -5692,7 +5692,7 @@
       '- set_priority: { urgency?, impact?, ease?, tier?, priorityEnabled? }',
       '- set_task_types: { types: string[], force?: boolean } (multi\u00a0; ids catalog\u00a0; silencieux\u00a0; respect taskTypesLocked)',
       '- set_due: { dueDate?: YYYY-MM-DD, dueTime?: HH:MM, relativeHours?, relativeMinutes?, clear? }',
-      '- set_blocked: { enAttente?: boolean, blockedReasons?: string[] } (si l\'utilisateur attend quelque chose de concret\u00a0: enAttente:true + motif \u00ab\u00a0En attente de\u2026\u00a0\u00bb)',
+      '- set_blocked: { enAttente?: boolean, blockedReasons?: string[] } (si l\'utilisateur attend quelque chose de concret\u00a0: enAttente:true + cause \u00ab\u00a0En attente de\u2026\u00a0\u00bb)',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (active le bloc Progr\u00e8s + % carte\u00a0; OBLIGATOIRE d\u00e8s qu\'on parle d\'avancement)',
       '- set_project: { projectId?, matchText?, name?, clear? }',
       '- rename_card: { name } (titre plus clair / plus court si la r\u00e9ponse le justifie)',
@@ -8166,7 +8166,7 @@
         : [];
       var links = Array.isArray(blocked.blockedLinks) ? blocked.blockedLinks : [];
       if (!reasons.length && !links.length) {
-        gaps.push('bloqué sans motif');
+        gaps.push('bloqué sans cause');
       }
     }
     if (
@@ -8771,8 +8771,8 @@
         '"}}]}]}'
       );
     }
-    if (first.indexOf('bloqué sans motif') === 0) {
-      return '{"suggestions":[{"label":"Pr\u00e9ciser le motif de blocage","actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedReasons":["En attente d\'une r\u00e9ponse"]}}]}]}';
+    if (first.indexOf('bloqué sans cause') === 0) {
+      return '{"suggestions":[{"label":"Pr\u00e9ciser la cause de blocage","actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedReasons":["En attente d\'une r\u00e9ponse"]}}]}]}';
     }
     if (first.indexOf('sous-tâches') >= 0 || first.indexOf('progrès') >= 0) {
       return '{"suggestions":[{"label":"Ajouter une sous-t\u00e2che concr\u00e8te","actions":[{"tool":"add_subtask","args":{"text":"Clarifier la prochaine \u00e9tape"}}]}]}';

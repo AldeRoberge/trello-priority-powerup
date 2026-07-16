@@ -22,9 +22,9 @@
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
     }
   </script>
-  <script src="./components/priority/priority-trello.js?v=echeance-recurring-1"></script>
+  <script src="./components/priority/priority-trello.js?v=unblock-restore-1"></script>
   <script src="./components/statut/statut-match.js?v=attente-hourglass-1"></script>
-  <script src="./components/statut/statut-trello.js?v=section-glow-1"></script>
+  <script src="./components/statut/statut-trello.js?v=unblock-restore-1"></script>
   <script src="./components/shared/tab-autocomplete.js?v=tab-complete-1"></script>
   <script
     src="./components/completion/completion-ui.js?v=ui-sfx-1"
@@ -547,7 +547,12 @@
           return PriorityTrello.saveCardInputs(t, snapshot);
         })
         .then(function () {
-          if (snapshot.enAttente && !wasBlocked && statutUi && StatutTrello) {
+          if (
+            ((snapshot.enAttente && !wasBlocked) ||
+              (wasBlocked && !snapshot.enAttente)) &&
+            statutUi &&
+            StatutTrello
+          ) {
             return StatutTrello.getCardStatut(t).then(function (statut) {
               if (statutUi && typeof statutUi.setData === 'function') {
                 statutUi.setData({

@@ -1905,9 +1905,9 @@
   var BLOCKED_DISPLAY = BLOCKED_SYMBOL + ' ' + BLOCKED_LABEL;
   var BLOCKED_REASON_PLACEHOLDER = 'Pr\u00e9ciser la raison du blocage\u2026';
   var BLOCKED_REASON_SUGGESTIONS_LABEL = 'Suggestions';
-  var BLOCKED_REASON_CLEAR_LABEL = 'Effacer le motif';
-  var BLOCKED_REASON_EDIT_LABEL = 'Modifier le motif';
-  var BLOCKED_REASON_DONE_LABEL = 'Valider le motif';
+  var BLOCKED_REASON_CLEAR_LABEL = 'Effacer la cause';
+  var BLOCKED_REASON_EDIT_LABEL = 'Modifier la cause';
+  var BLOCKED_REASON_DONE_LABEL = 'Valider la cause';
   var BLOCKED_REASON_WAITING_OTHER_TASK = 'En attente d\'une autre t\u00e2che';
   var BLOCKED_LINK_TYPE_SUBTASK = 'subtask';
   var BLOCKED_SUBTASK_PICKER_LABEL = 'T\u00e2ches bloquantes';
@@ -10507,7 +10507,7 @@
       embeddedIcon.appendChild(embeddedGlyph);
       var embeddedTitle = document.createElement('span');
       embeddedTitle.className = 'blocked-embedded-title';
-      embeddedTitle.textContent = 'Motif';
+      embeddedTitle.textContent = 'Cause';
       embeddedHead.appendChild(embeddedIcon);
       embeddedHead.appendChild(embeddedTitle);
       field.appendChild(embeddedHead);
@@ -10551,7 +10551,7 @@
     reasonInput.type = 'text';
     reasonInput.className = 'blocked-reason-input';
     reasonInput.placeholder = BLOCKED_REASON_PLACEHOLDER;
-    reasonInput.setAttribute('aria-label', 'Motif du blocage');
+    reasonInput.setAttribute('aria-label', 'Cause du blocage');
     reasonInput.setAttribute('autocomplete', 'off');
     reasonInput.setAttribute('spellcheck', 'false');
 

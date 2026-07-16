@@ -5,6 +5,8 @@
   var STATUT_SETTINGS_KEY = 'statutSettings';
   // Card shared: listId before the card entered Terminé (for restore when Progrès leaves 100%).
   var STATUT_PREVIOUS_LIST_KEY = 'statutPreviousListId';
+  // Card shared: listId before the card entered Bloqué (for restore when last subtask unblocks).
+  var STATUT_PREVIOUS_BLOCKED_LIST_KEY = 'statutPreviousListBeforeBlocked';
   var FALLBACK_RESTORE_CATEGORIES = ['started', 'unstarted', 'backlog'];
 
   function matchApi() {
@@ -23,6 +25,18 @@
     var role =
       settings.roleLists && settings.roleLists.completed
         ? String(settings.roleLists.completed)
+        : null;
+    return !!(role && role === id);
+  }
+
+  function isBlockedListId(listId, settings) {
+    if (!listId || !settings) return false;
+    var id = String(listId);
+    var cats = settings.listCategories || {};
+    if (cats[id] === 'blocked') return true;
+    var role =
+      settings.roleLists && settings.roleLists.blocked
+        ? String(settings.roleLists.blocked)
         : null;
     return !!(role && role === id);
   }
@@ -53,6 +67,17 @@
   }
 
   /**
+   * Whether capturePreviousListBeforeBlocked should persist currentListId.
+   * Never saves Bloqué or Terminé (preserves any existing previous).
+   */
+  function shouldCapturePreviousListBeforeBlocked(currentListId, settings) {
+    if (!currentListId) return false;
+    if (isBlockedListId(currentListId, settings)) return false;
+    if (isCompletedListId(currentListId, settings)) return false;
+    return true;
+  }
+
+  /**
    * Resolve which list to restore when leaving completed.
    * @returns {string|null} target listId, or null if no restore / already not completed.
    */
@@ -67,6 +92,37 @@
     if (storedPreviousListId && byId[String(storedPreviousListId)]) {
       var stored = String(storedPreviousListId);
       if (!isCompletedListId(stored, settings)) return stored;
+    }
+
+    return firstFallbackIncompleteListId(lists, settings);
+  }
+
+  /**
+   * Resolve which list to restore when leaving Bloqué.
+   * Stored target must not be Bloqué or Terminé.
+   * @returns {string|null} target listId, or null if no restore / already not blocked.
+   */
+  function resolvePreviousListRestoreTargetFromBlocked(
+    currentListId,
+    storedPreviousListId,
+    lists,
+    settings
+  ) {
+    if (!isBlockedListId(currentListId, settings)) return null;
+
+    var byId = {};
+    (lists || []).forEach(function (list) {
+      if (list && list.id) byId[String(list.id)] = true;
+    });
+
+    if (storedPreviousListId && byId[String(storedPreviousListId)]) {
+      var stored = String(storedPreviousListId);
+      if (
+        !isBlockedListId(stored, settings) &&
+        !isCompletedListId(stored, settings)
+      ) {
+        return stored;
+      }
     }
 
     return firstFallbackIncompleteListId(lists, settings);
@@ -99,6 +155,35 @@
 
   async function clearPreviousListId(t) {
     return setPreviousListId(t, null);
+  }
+
+  async function getPreviousBlockedListId(t) {
+    try {
+      var raw = await t.get('card', 'shared', STATUT_PREVIOUS_BLOCKED_LIST_KEY);
+      if (raw == null || raw === '') return null;
+      return String(raw);
+    } catch (err) {
+      console.error('StatutTrello.getPreviousBlockedListId failed', err);
+      return null;
+    }
+  }
+
+  async function setPreviousBlockedListId(t, listId) {
+    try {
+      if (!listId) {
+        await t.set('card', 'shared', STATUT_PREVIOUS_BLOCKED_LIST_KEY, null);
+        return null;
+      }
+      await t.set('card', 'shared', STATUT_PREVIOUS_BLOCKED_LIST_KEY, String(listId));
+      return String(listId);
+    } catch (err) {
+      console.error('StatutTrello.setPreviousBlockedListId failed', err);
+      return null;
+    }
+  }
+
+  async function clearPreviousBlockedListId(t) {
+    return setPreviousBlockedListId(t, null);
   }
 
   async function readCurrentCardListId(t) {
@@ -189,6 +274,95 @@
 
     var side = await applyStatutSideEffects(t, target, settings);
     await clearPreviousListId(t);
+    return {
+      ok: true,
+      restored: !!move.moved || !!move.alreadyThere,
+      moved: !!move.moved,
+      listId: String(target),
+      previousListId: stored,
+      sideEffects: side,
+    };
+  }
+
+  /**
+   * Remember the card's list before it enters Bloqué (auto-move or manual Statut).
+   */
+  async function capturePreviousListBeforeBlocked(t) {
+    var ensured = await ensureStatutSettings(t);
+    var settings = ensured.settings;
+    var currentListId = await readCurrentCardListId(t);
+    if (!shouldCapturePreviousListBeforeBlocked(currentListId, settings)) {
+      return {
+        ok: true,
+        captured: false,
+        reason: currentListId
+          ? isBlockedListId(currentListId, settings)
+            ? 'already-blocked'
+            : isCompletedListId(currentListId, settings)
+              ? 'on-completed'
+              : 'skip'
+          : 'no-list-id',
+        listId: currentListId,
+      };
+    }
+    await setPreviousBlockedListId(t, currentListId);
+    return { ok: true, captured: true, listId: String(currentListId) };
+  }
+
+  /**
+   * When Bloqué clears (last status-origin subtask unblocked) and the card is
+   * still on Bloqué, move it back to the stored previous list (or started →
+   * unstarted → backlog fallback).
+   */
+  async function restorePreviousStatutFromUnblocked(t) {
+    var ensured = await ensureStatutSettings(t);
+    var settings = ensured.settings;
+    var lists = ensured.lists || (await getBoardLists(t));
+    var currentListId = await readCurrentCardListId(t);
+    if (!isBlockedListId(currentListId, settings)) {
+      return {
+        ok: true,
+        restored: false,
+        reason: 'not-on-blocked',
+        listId: currentListId,
+      };
+    }
+
+    var stored = await getPreviousBlockedListId(t);
+    var target = resolvePreviousListRestoreTargetFromBlocked(
+      currentListId,
+      stored,
+      lists,
+      settings
+    );
+    if (!target) {
+      return {
+        ok: true,
+        restored: false,
+        reason: 'no-restore-target',
+        listId: currentListId,
+      };
+    }
+    if (String(target) === String(currentListId)) {
+      await clearPreviousBlockedListId(t);
+      return {
+        ok: true,
+        restored: false,
+        reason: 'already-there',
+        listId: currentListId,
+      };
+    }
+
+    var move = await setCardList(t, target, { pos: 'bottom' });
+    if (!move || !move.ok) {
+      return Object.assign(
+        { restored: false, reason: (move && move.reason) || 'move-failed' },
+        move || { ok: false }
+      );
+    }
+
+    var side = await applyStatutSideEffects(t, target, settings);
+    await clearPreviousBlockedListId(t);
     return {
       ok: true,
       restored: !!move.moved || !!move.alreadyThere,
@@ -448,6 +622,11 @@
   }
 
   async function maybeAutoMoveForBlocked(t) {
+    try {
+      await capturePreviousListBeforeBlocked(t);
+    } catch (captureErr) {
+      console.error('StatutTrello capture before blocked auto-move failed', captureErr);
+    }
     var ensured = await ensureStatutSettings(t);
     var settings = ensured.settings;
     if (!settings.autoMoveBlocked) {
@@ -618,6 +797,12 @@
       } catch (captureErr) {
         console.error('StatutTrello capture before Terminé select failed', captureErr);
       }
+    } else if (isBlockedListId(listId, settings)) {
+      try {
+        await capturePreviousListBeforeBlocked(t);
+      } catch (captureErr) {
+        console.error('StatutTrello capture before Bloqué select failed', captureErr);
+      }
     }
     var move = await setCardList(t, listId, { pos: 'bottom' });
     if (!move.ok) return move;
@@ -679,6 +864,7 @@
   global.StatutTrello = {
     STATUT_SETTINGS_KEY: STATUT_SETTINGS_KEY,
     STATUT_PREVIOUS_LIST_KEY: STATUT_PREVIOUS_LIST_KEY,
+    STATUT_PREVIOUS_BLOCKED_LIST_KEY: STATUT_PREVIOUS_BLOCKED_LIST_KEY,
     FALLBACK_RESTORE_CATEGORIES: FALLBACK_RESTORE_CATEGORIES,
     defaultSettings: defaultSettings,
     normalizeSettings: normalizeSettings,
@@ -695,13 +881,21 @@
     groupListsByCategory: groupListsByCategory,
     roleTargetListId: roleTargetListId,
     isCompletedListId: isCompletedListId,
+    isBlockedListId: isBlockedListId,
     shouldCapturePreviousListId: shouldCapturePreviousListId,
+    shouldCapturePreviousListBeforeBlocked: shouldCapturePreviousListBeforeBlocked,
     firstFallbackIncompleteListId: firstFallbackIncompleteListId,
     resolvePreviousListRestoreTarget: resolvePreviousListRestoreTarget,
+    resolvePreviousListRestoreTargetFromBlocked: resolvePreviousListRestoreTargetFromBlocked,
     getPreviousListId: getPreviousListId,
     setPreviousListId: setPreviousListId,
     clearPreviousListId: clearPreviousListId,
+    getPreviousBlockedListId: getPreviousBlockedListId,
+    setPreviousBlockedListId: setPreviousBlockedListId,
+    clearPreviousBlockedListId: clearPreviousBlockedListId,
     capturePreviousListBeforeCompleted: capturePreviousListBeforeCompleted,
+    capturePreviousListBeforeBlocked: capturePreviousListBeforeBlocked,
     restorePreviousStatutFromIncomplete: restorePreviousStatutFromIncomplete,
+    restorePreviousStatutFromUnblocked: restorePreviousStatutFromUnblocked,
   };
 })(typeof window !== 'undefined' ? window : this);

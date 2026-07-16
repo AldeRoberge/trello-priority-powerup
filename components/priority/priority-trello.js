@@ -2203,6 +2203,20 @@
         console.error('Statut auto-move (blocked) failed', moveErr);
       }
     }
+    // Unblocked → restore previous Statut list (En cours, etc.) when still on Bloqué.
+    if (
+      options.skipStatutAutoMove !== true &&
+      wasBlocked &&
+      !normalized.enAttente &&
+      global.StatutTrello &&
+      typeof global.StatutTrello.restorePreviousStatutFromUnblocked === 'function'
+    ) {
+      try {
+        await global.StatutTrello.restorePreviousStatutFromUnblocked(t);
+      } catch (restoreErr) {
+        console.error('Statut restore after unblock failed', restoreErr);
+      }
+    }
   }
 
   async function getCardInputsById(t, cardId) {

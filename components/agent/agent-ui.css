@@ -2696,24 +2696,18 @@ html[data-color-mode='dark'] .tp-page--priority .agent-hl--a {
   animation: agent-suggestion-in 0.28s ease both;
 }
 
-/* Little chat-bubble tail → composer (inherits pill border style + color). */
+/* Little chat-bubble tail → composer (solid tip matching chip border color). */
 .tp-page--priority .agent-suggestion-chip::after {
   content: '';
   position: absolute;
-  left: 14px;
+  left: 50%;
   bottom: -4px;
-  width: 7px;
-  height: 7px;
+  width: 0;
+  height: 0;
   box-sizing: border-box;
-  background: inherit;
-  border: 0;
-  border-right-width: 1px;
-  border-bottom-width: 1px;
-  border-right-style: inherit;
-  border-bottom-style: inherit;
-  border-right-color: inherit;
-  border-bottom-color: inherit;
-  transform: rotate(45deg);
+  border: 3.5px solid;
+  border-color: inherit;
+  transform: translateX(-50%) rotate(45deg);
   pointer-events: none;
 }
 
@@ -2721,7 +2715,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-hl--a {
 .tp-page--priority .agent-suggestions.is-below-composer .agent-suggestion-chip::after {
   bottom: auto;
   top: -4px;
-  transform: rotate(225deg);
+  transform: translateX(-50%) rotate(225deg);
 }
 
 .tp-page--priority .agent-suggestion-chip-icon {
