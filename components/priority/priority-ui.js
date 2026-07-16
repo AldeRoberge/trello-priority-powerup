@@ -125,7 +125,7 @@
     if (typeof id !== 'string' || !id) return null;
     if (TASK_TYPE_BY_ID[id]) return TASK_TYPE_BY_ID[id];
     if (isCustomTaskTypeId(id)) {
-      return { id: id, label: id, hint: '', icon: 'custom', custom: true };
+      return { id: id, label: id, hint: '', icon: 'tag', custom: true };
     }
     return null;
   }
@@ -171,27 +171,158 @@
     return 'custom-' + slug + '-' + suffix;
   }
 
-  /** Allowed icon keys for custom types (subset of TASK_TYPE_ICON_SVG). */
-  var CUSTOM_TASK_TYPE_ICON_KEYS = [
-    'custom',
-    'action',
-    'project',
-    'material',
-    'learning',
-    'admin',
-    'creative',
-    'finance',
-    'communication',
-    'thinking',
-    'process',
-    'deliverable'
+  /**
+   * Tabler icon names available for custom task types (ti ti-*).
+   * Built-in types keep stroke SVG keys in TASK_TYPE_ICON_SVG.
+   */
+  var TASK_TYPE_TABLER_ICONS = [
+    'tag',
+    'box',
+    'package',
+    'tools',
+    'wrench',
+    'hammer',
+    'shopping-cart',
+    'cash',
+    'coin',
+    'receipt',
+    'credit-card',
+    'book',
+    'school',
+    'certificate',
+    'bulb',
+    'brain',
+    'heart',
+    'mood-smile',
+    'message',
+    'mail',
+    'phone',
+    'users',
+    'user',
+    'flag',
+    'star',
+    'bookmark',
+    'target',
+    'rocket',
+    'plane',
+    'car',
+    'bike',
+    'home',
+    'building',
+    'map-pin',
+    'world',
+    'calendar',
+    'clock',
+    'alarm',
+    'checklist',
+    'list-check',
+    'subtask',
+    'code',
+    'bug',
+    'database',
+    'cloud',
+    'device-desktop',
+    'device-mobile',
+    'palette',
+    'photo',
+    'music',
+    'video',
+    'microphone',
+    'speakerphone',
+    'leaf',
+    'flame',
+    'droplet',
+    'sun',
+    'moon',
+    'snowflake',
+    'lock',
+    'key',
+    'shield',
+    'alert-triangle',
+    'info-circle',
+    'help',
+    'gift',
+    'trophy',
+    'medal',
+    'run',
+    'dumbbell',
+    'first-aid-kit',
+    'activity',
+    'scissors',
+    'printer',
+    'folder',
+    'file',
+    'notes',
+    'pencil',
+    'paint',
+    'brush',
+    'camera',
+    'eye',
+    'search',
+    'filter',
+    'settings',
+    'adjustments',
+    'plug',
+    'battery',
+    'wifi',
+    'antenna',
+    'cpu',
+    'server',
+    'briefcase',
+    'building-store',
+    'truck',
+    'ship',
+    'anchor',
+    'mountain',
+    'trees',
+    'paw',
+    'coffee',
+    'pizza',
+    'bottle',
+    'glass'
   ];
+
+  /** @deprecated use TASK_TYPE_TABLER_ICONS — kept for callers reading the old export. */
+  var CUSTOM_TASK_TYPE_ICON_KEYS = TASK_TYPE_TABLER_ICONS;
+
+  function isTaskTypeSvgIconKey(key) {
+    return !!(
+      key &&
+      typeof TASK_TYPE_ICON_SVG !== 'undefined' &&
+      TASK_TYPE_ICON_SVG &&
+      TASK_TYPE_ICON_SVG[key]
+    );
+  }
+
+  function isTaskTypeTablerIconKey(key) {
+    if (typeof key !== 'string' || !key) return false;
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key)) return false;
+    if (isTaskTypeSvgIconKey(key)) return false;
+    return TASK_TYPE_TABLER_ICONS.indexOf(key) >= 0;
+  }
 
   function normalizeTaskTypeIconKey(raw, fallback) {
     var key = typeof raw === 'string' ? raw.trim() : '';
-    if (key && CUSTOM_TASK_TYPE_ICON_KEYS.indexOf(key) >= 0) return key;
-    if (key && TASK_TYPE_ICON_SVG && TASK_TYPE_ICON_SVG[key]) return key;
-    return fallback || 'custom';
+    if (key.indexOf('ti-') === 0) key = key.slice(3);
+    if (isTaskTypeSvgIconKey(key) || isTaskTypeTablerIconKey(key)) return key;
+    if (key && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key) && key.length <= 40) {
+      // Keep persisted Tabler names if the curated list later shrinks.
+      return key;
+    }
+    if (fallback && (isTaskTypeSvgIconKey(fallback) || isTaskTypeTablerIconKey(fallback))) {
+      return fallback;
+    }
+    return randomTaskTypeIconKey();
+  }
+
+  function randomTaskTypeIconKey() {
+    var list = TASK_TYPE_TABLER_ICONS;
+    if (!list.length) return 'tag';
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  function getTaskTypeIconKeys() {
+    return TASK_TYPE_TABLER_ICONS.slice();
   }
 
   function normalizeCustomTaskTypeEntry(raw) {
@@ -214,7 +345,7 @@
       typeof raw.hint === 'string'
         ? raw.hint.trim().slice(0, MAX_TASK_TYPE_HINT_LEN)
         : '';
-    var icon = normalizeTaskTypeIconKey(raw.icon, 'custom');
+    var icon = normalizeTaskTypeIconKey(raw.icon, 'tag');
     return { id: id, label: label, hint: hint, icon: icon, custom: true };
   }
 
@@ -268,7 +399,10 @@
     var draft = normalizeCustomTaskTypeEntry({
       label: label,
       hint: input && typeof input === 'object' ? input.hint : '',
-      icon: input && typeof input === 'object' ? input.icon : 'custom'
+      icon:
+        input && typeof input === 'object' && input.icon
+          ? input.icon
+          : randomTaskTypeIconKey()
     });
     if (!draft) return null;
     var labelKey = draft.label.toLocaleLowerCase('fr-FR');
@@ -557,15 +691,25 @@
     if (TASK_TYPE_BY_ID[key] || isCustomTaskTypeId(key)) {
       key = taskTypeIconKey(key);
     }
-    var inner = TASK_TYPE_ICON_SVG[key] || TASK_TYPE_ICON_SVG.custom;
-    if (!inner) return '';
+    if (key.indexOf('ti-') === 0) key = key.slice(3);
     var cls = className || 'info-task-type-icon';
+    var inner = TASK_TYPE_ICON_SVG[key];
+    if (inner) {
+      return (
+        '<svg class="' +
+        cls +
+        '" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
+        inner +
+        '</svg>'
+      );
+    }
+    var tabler = key && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key) ? key : 'tag';
     return (
-      '<svg class="' +
+      '<i class="ti ti-' +
+      tabler +
+      ' ' +
       cls +
-      '" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
-      inner +
-      '</svg>'
+      '" aria-hidden="true"></i>'
     );
   }
 
@@ -8412,42 +8556,95 @@
     taskTypesCreateWrap.className = 'info-task-types-create';
     taskTypesCreateWrap.hidden = !onCustomTaskTypesChange;
 
-    var taskTypesCreateIcons = document.createElement('div');
-    taskTypesCreateIcons.className = 'info-task-types-create-icons';
-    taskTypesCreateIcons.setAttribute('role', 'group');
-    taskTypesCreateIcons.setAttribute('aria-label', 'Ic\u00f4ne du nouveau type');
-
-    var taskTypesCreateIconKey = 'custom';
-    CUSTOM_TASK_TYPE_ICON_KEYS.forEach(function (iconKey) {
-      var iconBtn = document.createElement('button');
-      iconBtn.type = 'button';
-      iconBtn.className = 'info-task-types-create-icon-btn';
-      iconBtn.dataset.iconKey = iconKey;
-      iconBtn.title = iconKey;
-      iconBtn.setAttribute('aria-label', 'Ic\u00f4ne\u00a0: ' + iconKey);
-      iconBtn.setAttribute('aria-pressed', iconKey === taskTypesCreateIconKey ? 'true' : 'false');
-      if (iconKey === taskTypesCreateIconKey) {
-        iconBtn.classList.add('is-selected');
-      }
-      iconBtn.innerHTML = taskTypeIconSvg(iconKey);
-      iconBtn.addEventListener('click', function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        taskTypesCreateIconKey = iconKey;
-        var buttons = taskTypesCreateIcons.querySelectorAll(
-          '.info-task-types-create-icon-btn'
-        );
-        for (var bi = 0; bi < buttons.length; bi++) {
-          var selected = buttons[bi].dataset.iconKey === taskTypesCreateIconKey;
-          buttons[bi].classList.toggle('is-selected', selected);
-          buttons[bi].setAttribute('aria-pressed', selected ? 'true' : 'false');
-        }
-      });
-      taskTypesCreateIcons.appendChild(iconBtn);
-    });
-
     var taskTypesCreateRow = document.createElement('div');
     taskTypesCreateRow.className = 'info-task-types-create-row';
+
+    var taskTypesCreateIconWrap = document.createElement('div');
+    taskTypesCreateIconWrap.className = 'info-task-types-create-icon-wrap';
+
+    var taskTypesCreateIconKey = randomTaskTypeIconKey();
+    var taskTypesIconPickerOpen = false;
+
+    var taskTypesCreateIconBtn = document.createElement('button');
+    taskTypesCreateIconBtn.type = 'button';
+    taskTypesCreateIconBtn.className = 'info-task-types-create-icon-trigger';
+    taskTypesCreateIconBtn.title = 'Choisir une ic\u00f4ne';
+    taskTypesCreateIconBtn.setAttribute('aria-label', 'Choisir une ic\u00f4ne');
+    taskTypesCreateIconBtn.setAttribute('aria-expanded', 'false');
+    taskTypesCreateIconBtn.setAttribute('aria-haspopup', 'listbox');
+
+    var taskTypesIconPicker = document.createElement('div');
+    taskTypesIconPicker.className = 'info-task-types-icon-picker';
+    taskTypesIconPicker.hidden = true;
+    taskTypesIconPicker.setAttribute('role', 'listbox');
+    taskTypesIconPicker.setAttribute('aria-label', 'Ic\u00f4nes disponibles');
+
+    function syncTaskTypesCreateIconBtn() {
+      taskTypesCreateIconBtn.innerHTML = taskTypeIconSvg(
+        taskTypesCreateIconKey,
+        'info-task-type-icon'
+      );
+      taskTypesCreateIconBtn.setAttribute(
+        'aria-expanded',
+        taskTypesIconPickerOpen ? 'true' : 'false'
+      );
+      taskTypesCreateIconWrap.classList.toggle(
+        'is-open',
+        taskTypesIconPickerOpen
+      );
+    }
+
+    function setTaskTypesIconPickerOpen(open) {
+      taskTypesIconPickerOpen = !!open;
+      taskTypesIconPicker.hidden = !taskTypesIconPickerOpen;
+      if (taskTypesIconPickerOpen) renderTaskTypesIconPicker();
+      syncTaskTypesCreateIconBtn();
+      onLayoutChange();
+      if (taskTypesPickerOpen) {
+        requestAnimationFrame(positionTaskTypesPicker);
+      }
+    }
+
+    function setTaskTypesCreateIconKey(key, options) {
+      options = options || {};
+      taskTypesCreateIconKey = normalizeTaskTypeIconKey(key, taskTypesCreateIconKey);
+      syncTaskTypesCreateIconBtn();
+      if (taskTypesIconPickerOpen) renderTaskTypesIconPicker();
+      if (options.close !== false) setTaskTypesIconPickerOpen(false);
+    }
+
+    function randomizeTaskTypesCreateIcon() {
+      setTaskTypesCreateIconKey(randomTaskTypeIconKey(), { close: true });
+    }
+
+    function renderTaskTypesIconPicker() {
+      taskTypesIconPicker.replaceChildren();
+      getTaskTypeIconKeys().forEach(function (iconKey) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'info-task-types-icon-picker-option';
+        btn.setAttribute('role', 'option');
+        btn.dataset.iconKey = iconKey;
+        btn.title = iconKey;
+        btn.setAttribute('aria-label', 'Ic\u00f4ne\u00a0: ' + iconKey);
+        btn.setAttribute(
+          'aria-selected',
+          iconKey === taskTypesCreateIconKey ? 'true' : 'false'
+        );
+        if (iconKey === taskTypesCreateIconKey) {
+          btn.classList.add('is-selected');
+        }
+        btn.innerHTML = taskTypeIconSvg(iconKey);
+        btn.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          setTaskTypesCreateIconKey(iconKey);
+        });
+        taskTypesIconPicker.appendChild(btn);
+      });
+    }
+
+    syncTaskTypesCreateIconBtn();
 
     var taskTypesCreateInput = document.createElement('input');
     taskTypesCreateInput.type = 'text';
@@ -8464,10 +8661,12 @@
     taskTypesCreateBtn.title = 'Cr\u00e9er un type de t\u00e2che';
     taskTypesCreateBtn.disabled = true;
 
+    taskTypesCreateIconWrap.appendChild(taskTypesCreateIconBtn);
+    taskTypesCreateRow.appendChild(taskTypesCreateIconWrap);
     taskTypesCreateRow.appendChild(taskTypesCreateInput);
     taskTypesCreateRow.appendChild(taskTypesCreateBtn);
-    taskTypesCreateWrap.appendChild(taskTypesCreateIcons);
     taskTypesCreateWrap.appendChild(taskTypesCreateRow);
+    taskTypesCreateWrap.appendChild(taskTypesIconPicker);
 
     taskTypesPicker.appendChild(taskTypesPickerList);
     taskTypesPicker.appendChild(taskTypesCreateWrap);
@@ -10192,6 +10391,74 @@
       taskTypesStatus.classList.toggle('is-saving', tone === 'saving');
     }
 
+    function clearTaskTypesPickerPosition() {
+      taskTypesPicker.classList.remove('is-viewport-fixed');
+      taskTypesPicker.style.position = '';
+      taskTypesPicker.style.top = '';
+      taskTypesPicker.style.left = '';
+      taskTypesPicker.style.right = '';
+      taskTypesPicker.style.bottom = '';
+      taskTypesPicker.style.maxHeight = '';
+      taskTypesPicker.style.width = '';
+    }
+
+    /**
+     * Keep the type picker inside the iframe viewport.
+     * Prefer below the + button; shift left / lower when edges overflow.
+     */
+    function positionTaskTypesPicker() {
+      if (!taskTypesPickerOpen || taskTypesPicker.hidden) return;
+      var margin = 8;
+      var gap = 4;
+      var vw = window.innerWidth || document.documentElement.clientWidth || 0;
+      var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+      if (vw < 40 || vh < 40) return;
+
+      clearTaskTypesPickerPosition();
+      taskTypesPicker.classList.add('is-viewport-fixed');
+      taskTypesPicker.style.position = 'fixed';
+      taskTypesPicker.style.visibility = 'hidden';
+      taskTypesPicker.style.top = '0';
+      taskTypesPicker.style.left = '0';
+
+      var anchor = taskTypesAddBtn.getBoundingClientRect();
+      var maxW = Math.min(280, Math.max(160, vw - margin * 2));
+      taskTypesPicker.style.width = maxW + 'px';
+
+      var spaceBelow = Math.max(0, vh - anchor.bottom - gap - margin);
+      var spaceAbove = Math.max(0, anchor.top - gap - margin);
+      var preferBelow =
+        spaceBelow >= 160 || spaceBelow >= spaceAbove || spaceAbove < 120;
+      var availableH = preferBelow ? spaceBelow : spaceAbove;
+      var maxH = Math.max(120, Math.min(320, availableH || vh - margin * 2));
+      taskTypesPicker.style.maxHeight = maxH + 'px';
+
+      var pw = taskTypesPicker.offsetWidth || maxW;
+      var ph = taskTypesPicker.offsetHeight || Math.min(maxH, 240);
+
+      var top = preferBelow ? anchor.bottom + gap : anchor.top - gap - ph;
+      // If above would clip the top, move lower; always clamp into the viewport.
+      if (top < margin) top = margin;
+      if (top + ph > vh - margin) {
+        top = Math.max(margin, vh - ph - margin);
+      }
+
+      // Prefer aligning to the button; shift left when the right edge overflows.
+      var left = anchor.left;
+      if (left + pw > vw - margin) {
+        left = vw - pw - margin;
+      }
+      // Prefer growing left from the button's right edge when still overflowing.
+      if (left < margin) {
+        left = Math.max(margin, Math.min(anchor.right - pw, vw - pw - margin));
+      }
+      left = Math.max(margin, Math.min(left, vw - pw - margin));
+
+      taskTypesPicker.style.top = Math.round(top) + 'px';
+      taskTypesPicker.style.left = Math.round(left) + 'px';
+      taskTypesPicker.style.visibility = '';
+    }
+
     function setTaskTypesPickerOpen(open) {
       taskTypesPickerOpen = !!open;
       taskTypesPicker.hidden = !taskTypesPickerOpen;
@@ -10200,8 +10467,20 @@
         'aria-expanded',
         taskTypesPickerOpen ? 'true' : 'false'
       );
-      if (taskTypesPickerOpen) renderTaskTypesPicker();
+      if (taskTypesPickerOpen) {
+        randomizeTaskTypesCreateIcon();
+        setTaskTypesIconPickerOpen(false);
+        renderTaskTypesPicker();
+        positionTaskTypesPicker();
+        requestAnimationFrame(positionTaskTypesPicker);
+      } else {
+        setTaskTypesIconPickerOpen(false);
+        clearTaskTypesPickerPosition();
+      }
       onLayoutChange();
+      if (taskTypesPickerOpen) {
+        requestAnimationFrame(positionTaskTypesPicker);
+      }
     }
 
     function availableTaskTypeEntries() {
@@ -10314,7 +10593,10 @@
       taskTypesAddBtn.disabled = taskTypesBusy || !canAdd;
       if (taskTypesPickerOpen) {
         if (!canAdd) setTaskTypesPickerOpen(false);
-        else renderTaskTypesPicker();
+        else {
+          renderTaskTypesPicker();
+          requestAnimationFrame(positionTaskTypesPicker);
+        }
       }
       renderTaskTypeSuggestions();
     }
@@ -10372,7 +10654,14 @@
       }
       taskTypesCreateInput.value = '';
       syncTaskTypesCreateBtn();
-      persistCustomTaskTypes(getCustomTaskTypes().concat([draft]), draft);
+      setTaskTypesIconPickerOpen(false);
+      persistCustomTaskTypes(getCustomTaskTypes().concat([draft]), draft).then(
+        function (result) {
+          if (!result || result.ok !== false) {
+            randomizeTaskTypesCreateIcon();
+          }
+        }
+      );
     }
 
     function persistTaskTypes(nextTypes) {
@@ -11671,6 +11960,13 @@
       setTaskTypesPickerOpen(!taskTypesPickerOpen);
     });
 
+    taskTypesCreateIconBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (taskTypesBusy) return;
+      setTaskTypesIconPickerOpen(!taskTypesIconPickerOpen);
+    });
+
     taskTypesCreateInput.addEventListener('input', function () {
       syncTaskTypesCreateBtn();
     });
@@ -11686,6 +11982,17 @@
       event.stopPropagation();
       submitCreateTaskType();
     });
+
+    window.addEventListener('resize', function () {
+      if (taskTypesPickerOpen) positionTaskTypesPicker();
+    });
+    document.addEventListener(
+      'scroll',
+      function () {
+        if (taskTypesPickerOpen) positionTaskTypesPicker();
+      },
+      true
+    );
 
     labelsSearchInput.addEventListener('input', function () {
       if (!labelsPickerOpen) return;
@@ -11796,6 +12103,11 @@
       }
       if (taskTypesPickerOpen && !taskTypesAddWrap.contains(event.target)) {
         setTaskTypesPickerOpen(false);
+      } else if (
+        taskTypesIconPickerOpen &&
+        !taskTypesCreateWrap.contains(event.target)
+      ) {
+        setTaskTypesIconPickerOpen(false);
       }
       if (
         labelsColorEditId &&
@@ -17407,6 +17719,9 @@
     TASK_TYPES: TASK_TYPES,
     BUILTIN_TASK_TYPES: BUILTIN_TASK_TYPES,
     CUSTOM_TASK_TYPE_ICON_KEYS: CUSTOM_TASK_TYPE_ICON_KEYS,
+    TASK_TYPE_TABLER_ICONS: TASK_TYPE_TABLER_ICONS,
+    randomTaskTypeIconKey: randomTaskTypeIconKey,
+    getTaskTypeIconKeys: getTaskTypeIconKeys,
     isValidTaskTypeId: isValidTaskTypeId,
     isCustomTaskTypeId: isCustomTaskTypeId,
     taskTypeLabel: taskTypeLabel,

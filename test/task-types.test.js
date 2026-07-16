@@ -54,14 +54,16 @@ describe('task types catalog', () => {
 
   it('creates and merges board custom types', () => {
     const created = PriorityUI.createCustomTaskType(
-      { label: 'Outils', icon: 'material' },
+      { label: 'Outils', icon: 'tools' },
       { apply: true }
     );
     assert.ok(created);
     assert.ok(created.id.startsWith('custom-outils-'));
-    assert.equal(created.icon, 'material');
+    assert.equal(created.icon, 'tools');
     assert.ok(PriorityUI.isValidTaskTypeId(created.id));
     assert.equal(PriorityUI.taskTypeLabel(created.id), 'Outils');
+    const html = PriorityUI.taskTypeIconSvg(created.id);
+    assert.ok(html.includes('ti-tools'), 'custom types use Tabler icons');
 
     const catalog = PriorityUI.getTaskTypeCatalog();
     assert.ok(catalog.some((e) => e.id === created.id));
@@ -69,6 +71,17 @@ describe('task types catalog', () => {
       created.id,
       'action',
     ]);
+  });
+
+  it('randomizes icon keys from the Tabler catalog', () => {
+    const keys = new Set();
+    for (let i = 0; i < 40; i++) {
+      keys.add(PriorityUI.randomTaskTypeIconKey());
+    }
+    assert.ok(keys.size > 1);
+    for (const key of keys) {
+      assert.ok(PriorityUI.TASK_TYPE_TABLER_ICONS.includes(key));
+    }
   });
 
   it('rejects duplicate custom labels (case-insensitive)', () => {
@@ -82,16 +95,16 @@ describe('task types catalog', () => {
 
   it('normalizeCustomTaskTypes de-dupes and caps structure', () => {
     const list = PriorityUI.normalizeCustomTaskTypes([
-      { id: 'custom-a-aaaa', label: 'Alpha', icon: 'finance' },
+      { id: 'custom-a-aaaa', label: 'Alpha', icon: 'cash' },
       { id: 'custom-a-aaaa', label: 'Alpha again' },
-      { label: 'Beta', icon: 'not-a-real-icon' },
+      { label: 'Beta', icon: '!!!bad' },
       { label: '' },
       null,
     ]);
     assert.equal(list.length, 2);
     assert.equal(list[0].label, 'Alpha');
-    assert.equal(list[0].icon, 'finance');
+    assert.equal(list[0].icon, 'cash');
     assert.equal(list[1].label, 'Beta');
-    assert.equal(list[1].icon, 'custom');
+    assert.equal(list[1].icon, 'tag');
   });
 });

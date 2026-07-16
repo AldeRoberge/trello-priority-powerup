@@ -2549,7 +2549,6 @@
       playCompletionUiSound('add');
       emitChange();
       onResize();
-      showItemSplitRevert(newIds[0]);
       return newIds;
     }
 
