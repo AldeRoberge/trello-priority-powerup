@@ -385,6 +385,16 @@
     return to;
   }
 
+  /** Copy blocked flag + Motifs onto a working item (before syncDoneFromProgress). */
+  function copyBlockedFields(from, to) {
+    if (!from || !to) return to;
+    if (from.blocked === true) {
+      to.blocked = true;
+      copyBlockedReasons(from, to);
+    }
+    return to;
+  }
+
   function computeItemsEstimateBase(items, snapshotsByCardId) {
     if (!items || !items.length) return 0;
     var sum = 0;
@@ -1398,22 +1408,46 @@
    * Master slider: proportionally scale each local item's progress so the
    * estimate-weighted overall approaches targetPercent. Linked board-card
    * items keep their cached remote progress (not scaled here).
+   *
+   * Must preserve item.blocked / blockedReasons — dropping them mid-drag lets
+   * the Statut bridge re-apply the block onto the master task instead.
    */
   function applyMasterProgress(items, targetPercent, snapshotsByCardId) {
     if (!items || !items.length) return [];
     var target = clampProgress(targetPercent);
     var working = items.map(function (item) {
-      var copy = syncDoneFromProgress({
+      var copy = {
         id: item.id,
         text: item.text,
         progress: itemProgress(item),
         done: item.done === true,
-      });
+      };
       var linkedId = itemLinkedCardId(item);
       if (linkedId) copy.linkedCardId = linkedId;
       copyEstimateFields(item, copy);
+      copyBlockedFields(item, copy);
+      syncDoneFromProgress(copy);
       return copy;
     });
+
+    if (typeof console !== 'undefined' && console.debug) {
+      var blockedBefore = 0;
+      var blockedAfter = 0;
+      for (var bi = 0; bi < items.length; bi++) {
+        if (items[bi] && items[bi].blocked === true) blockedBefore++;
+      }
+      for (var ba = 0; ba < working.length; ba++) {
+        if (working[ba] && working[ba].blocked === true) blockedAfter++;
+      }
+      if (blockedBefore || blockedAfter) {
+        console.debug('[tp-blocked] applyMasterProgress', {
+          target: target,
+          blockedBefore: blockedBefore,
+          blockedAfter: blockedAfter,
+          itemCount: items.length,
+        });
+      }
+    }
 
     var localIndexes = [];
     for (var i = 0; i < working.length; i++) {
@@ -1900,6 +1934,7 @@
         linkedCardId: linkedId,
       };
       copyEstimateFields(item, next);
+      copyBlockedFields(item, next);
       if (typeof snap.name === 'string' && snap.name.trim() && snap.name.trim() !== item.text) {
         next.text = snap.name.trim().slice(0, ITEM_TEXT_MAX);
         changed = true;

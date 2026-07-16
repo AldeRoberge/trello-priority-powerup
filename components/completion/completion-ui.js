@@ -1646,11 +1646,32 @@
       0,
       function (v) {
         masterDragging = true;
+        var blockedBefore = CT.hasAnyBlocked(data);
+        console.debug('[tp-blocked] masterSlider input', {
+          value: v,
+          hasItems: data.items.length > 0,
+          blockedBefore: blockedBefore,
+          masterBlocked: !!data.blocked,
+          blockedItems: (data.items || []).filter(function (it) {
+            return it && it.blocked === true;
+          }).length,
+        });
         if (data.items.length) {
           data.items = CT.applyMasterProgress(data.items, v, linkedSnapshots);
           syncItemSlidersFromData();
         } else {
           data.progress = v;
+        }
+        var blockedAfter = CT.hasAnyBlocked(data);
+        if (blockedBefore !== blockedAfter || blockedAfter) {
+          console.debug('[tp-blocked] masterSlider after apply', {
+            value: v,
+            blockedAfter: blockedAfter,
+            masterBlocked: !!data.blocked,
+            blockedItems: (data.items || []).filter(function (it) {
+              return it && it.blocked === true;
+            }).length,
+          });
         }
         updateProgressUi({ skipMasterSync: true, deferDoneListReveal: true });
         onChange(CT.normalizeCompletionData(data));
@@ -2426,6 +2447,19 @@
     }
 
     function notifyBlockedChange(source) {
+      console.debug('[tp-blocked] notifyBlockedChange', {
+        source: source,
+        masterBlocked: CT.isMasterBlocked(data),
+        masterOrigin: CT.masterBlockedOrigin ? CT.masterBlockedOrigin(data) : null,
+        hasAnyBlocked: CT.hasAnyBlocked(data),
+        blockedItems: (data.items || [])
+          .filter(function (it) {
+            return CT.isItemBlocked(it);
+          })
+          .map(function (it) {
+            return it.id;
+          }),
+      });
       if (!onBlockedChange) return;
       try {
         onBlockedChange(CT.normalizeCompletionData(data), {
