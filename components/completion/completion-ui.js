@@ -4,61 +4,12 @@
 
   var COMPLETION_SCHEME_STORAGE_KEY = 'trello-priority-powerup/completion-color-scheme';
   var COMPLETION_GRADIENT_STORAGE_KEY = 'trello-priority-powerup/completion-color-gradient';
-  var MASTER_DETAILS_STORAGE_KEY =
-    'trello-priority-powerup/completion-master-details-expanded';
   var DEFAULT_COMPLETION_SCHEME_KEY = 'traffic';
   var CUSTOM_COMPLETION_SCHEME_KEY = 'custom';
   var MIN_GRADIENT_STOPS = 2;
   var MAX_GRADIENT_STOPS = 8;
-
-  /** Default expanded so first-time users see title / Motifs / actions. */
-  function loadMasterDetailsExpanded() {
-    try {
-      if (typeof localStorage === 'undefined') return true;
-      var raw = localStorage.getItem(MASTER_DETAILS_STORAGE_KEY);
-      if (raw === '0' || raw === 'false') return false;
-      if (raw === '1' || raw === 'true') return true;
-      return true;
-    } catch (e) {
-      return true;
-    }
-  }
-
-  function saveMasterDetailsExpanded(expanded) {
-    try {
-      if (typeof localStorage === 'undefined') return;
-      localStorage.setItem(MASTER_DETAILS_STORAGE_KEY, expanded ? '1' : '0');
-    } catch (e) {
-      /* ignore quota / private mode */
-    }
-  }
-
-  /**
-   * Compact Motifs line for the collapsed master progress panel.
-   * Prefers PriorityUI.formatBlockedReasonsSummary when available.
-   */
-  function formatMasterReasonsSummary(reasons) {
-    var PU = global.PriorityUI;
-    if (PU && typeof PU.formatBlockedReasonsSummary === 'function') {
-      return PU.formatBlockedReasonsSummary(reasons, {
-        empty: PU.BLOCKED_LABEL || 'Bloqu\u00e9'
-      });
-    }
-    var list = [];
-    if (Array.isArray(reasons)) {
-      for (var i = 0; i < reasons.length; i++) {
-        var text = typeof reasons[i] === 'string' ? reasons[i].trim() : '';
-        if (text) list.push(text);
-      }
-    } else if (typeof reasons === 'string' && reasons.trim()) {
-      list.push(reasons.trim());
-    }
-    if (!list.length) return 'Bloqu\u00e9';
-    if (list.length === 1) return list[0];
-    var comma = list.join(', ');
-    if (comma.length <= 42) return comma;
-    return list[0] + ' +' + (list.length - 1);
-  }
+  var ENCOURAGEMENT_BUBBLE_OFFSET_X = 14;
+  var ENCOURAGEMENT_BUBBLE_OFFSET_Y = 12;
 
   // Perceptual color helpers (OKLab / OKLCH) — same approach as priority-ui.js.
   function srgbToLinear(c) {
@@ -547,6 +498,16 @@
       '</span>';
   }
 
+  function positionEncouragementBubble(el, clientX, clientY) {
+    if (!el || clientX == null || clientY == null) return;
+    var x = Number(clientX);
+    var y = Number(clientY);
+    if (!isFinite(x) || !isFinite(y)) return;
+    // Anchor near the cursor; CSS translateY(-100%) keeps the bubble above it.
+    el.style.left = Math.round(x + ENCOURAGEMENT_BUBBLE_OFFSET_X) + 'px';
+    el.style.top = Math.round(y - ENCOURAGEMENT_BUBBLE_OFFSET_Y) + 'px';
+  }
+
   function applySliderProgressTrack(input, percent, opts) {
     if (!input) return;
     opts = opts || {};
@@ -586,6 +547,286 @@
     } catch (e) {
       /* ignore audio failures */
     }
+  }
+
+  /** Ableton-style vertical fader: ~2px per 1% (200px full travel). */
+  var FADER_LONG_PRESS_MS = 280;
+  var FADER_PIXELS_PER_PERCENT = 2;
+  var FADER_MOVE_CANCEL_PX = 8;
+  var FADER_FINE_SCALE = 4;
+
+  /**
+   * Map vertical pointer delta to progress. Drag up (clientY decreases) raises %.
+   * Hold Shift/Alt for finer scrubbing (FADER_FINE_SCALE×).
+   */
+  function progressFromFaderDelta(startProgress, startY, clientY, opts) {
+    opts = opts || {};
+    var px =
+      typeof opts.pixelsPerPercent === 'number' && opts.pixelsPerPercent > 0
+        ? opts.pixelsPerPercent
+        : FADER_PIXELS_PER_PERCENT;
+    if (opts.fine) px *= FADER_FINE_SCALE;
+    var start =
+      typeof startProgress === 'number' && isFinite(startProgress)
+        ? startProgress
+        : 0;
+    var delta = (startY - clientY) / px;
+    var next = Math.round(start + delta);
+    if (next < 0) return 0;
+    if (next > 100) return 100;
+    return next;
+  }
+
+  function ensureFaderHud(anchorEl) {
+    if (!anchorEl) return null;
+    var host =
+      anchorEl.classList &&
+      typeof anchorEl.classList.contains === 'function' &&
+      anchorEl.classList.contains('tp-completion-check-wrap')
+        ? anchorEl
+        : anchorEl.parentNode;
+    if (!host) return null;
+    var existing =
+      typeof host.querySelector === 'function'
+        ? host.querySelector('.tp-completion-fader-hud')
+        : null;
+    if (existing) return existing;
+    var hud = document.createElement('span');
+    hud.className = 'tp-completion-fader-hud';
+    hud.setAttribute('aria-hidden', 'true');
+    hud.hidden = true;
+    host.appendChild(hud);
+    return hud;
+  }
+
+  function updateFaderHud(hud, percent) {
+    if (!hud) return;
+    hud.textContent = Math.round(percent) + '\u00a0%';
+    hud.hidden = false;
+  }
+
+  function hideFaderHud(hud) {
+    if (!hud) return;
+    hud.hidden = true;
+  }
+
+  /**
+   * Long-press then drag vertically to scrub 0–100% (Ableton fader).
+   * Short click still fires the element's normal click handler unless a fader
+   * session armed or the press was cancelled by early movement.
+   *
+   * opts.getProgress(): number
+   * opts.setProgress(percent, meta): void — meta.dragging / meta.commit
+   * opts.isEnabled?: () => boolean
+   * opts.visualEls?: HTMLElement[] — extra nodes to toggle .is-fading on
+   * opts.hudAnchor?: HTMLElement — where to dock the % HUD (defaults to el)
+   */
+  function bindProgressFader(el, opts) {
+    if (!el || !opts || typeof opts.getProgress !== 'function') return;
+    if (typeof opts.setProgress !== 'function') return;
+
+    var longPressMs =
+      typeof opts.longPressMs === 'number' && opts.longPressMs >= 0
+        ? opts.longPressMs
+        : FADER_LONG_PRESS_MS;
+    var pixelsPerPercent =
+      typeof opts.pixelsPerPercent === 'number' && opts.pixelsPerPercent > 0
+        ? opts.pixelsPerPercent
+        : FADER_PIXELS_PER_PERCENT;
+
+    var session = null;
+    var suppressClick = false;
+    var hud = null;
+
+    function visualTargets() {
+      var list = [el];
+      if (opts.visualEls && opts.visualEls.length) {
+        for (var i = 0; i < opts.visualEls.length; i++) {
+          if (opts.visualEls[i] && list.indexOf(opts.visualEls[i]) === -1) {
+            list.push(opts.visualEls[i]);
+          }
+        }
+      }
+      return list;
+    }
+
+    function setFading(active) {
+      var targets = visualTargets();
+      for (var i = 0; i < targets.length; i++) {
+        targets[i].classList.toggle('is-fading', active);
+      }
+    }
+
+    function enabled() {
+      if (typeof opts.isEnabled === 'function') {
+        try {
+          return !!opts.isEnabled();
+        } catch (err) {
+          return false;
+        }
+      }
+      return !el.disabled;
+    }
+
+    function clearArmTimer() {
+      if (session && session.timer != null) {
+        clearTimeout(session.timer);
+        session.timer = null;
+      }
+    }
+
+    function armFader() {
+      if (!session || session.armed) return;
+      session.armed = true;
+      session.lastProgress = session.startProgress;
+      setFading(true);
+      hud = ensureFaderHud(opts.hudAnchor || el);
+      updateFaderHud(hud, session.startProgress);
+      try {
+        el.setPointerCapture(session.pointerId);
+      } catch (err) {
+        /* ignore — some environments lack capture */
+      }
+      try {
+        if (typeof el.setAttribute === 'function') {
+          el.setAttribute('aria-valuenow', String(session.startProgress));
+        }
+      } catch (err2) {
+        /* ignore */
+      }
+    }
+
+    function applySessionProgress(clientY, fine, commit) {
+      if (!session) return;
+      var next = progressFromFaderDelta(
+        session.startProgress,
+        session.startY,
+        clientY,
+        { pixelsPerPercent: pixelsPerPercent, fine: fine }
+      );
+      if (!commit && next === session.lastProgress) return;
+      session.lastProgress = next;
+      updateFaderHud(hud, next);
+      opts.setProgress(next, {
+        dragging: !commit,
+        commit: !!commit,
+        startProgress: session.startProgress,
+      });
+      try {
+        if (typeof el.setAttribute === 'function') {
+          el.setAttribute('aria-valuenow', String(next));
+        }
+      } catch (err) {
+        /* ignore */
+      }
+    }
+
+    function endSession(e, commit) {
+      if (!session) return;
+      var wasArmed = session.armed;
+      var pointerId = session.pointerId;
+      clearArmTimer();
+      if (wasArmed && e && typeof e.clientY === 'number') {
+        applySessionProgress(
+          e.clientY,
+          !!(e.shiftKey || e.altKey),
+          !!commit
+        );
+      } else if (wasArmed && commit) {
+        opts.setProgress(session.lastProgress, {
+          dragging: false,
+          commit: true,
+          startProgress: session.startProgress,
+        });
+      }
+      setFading(false);
+      hideFaderHud(hud);
+      hud = null;
+      try {
+        if (wasArmed && typeof el.releasePointerCapture === 'function') {
+          el.releasePointerCapture(pointerId);
+        }
+      } catch (err) {
+        /* ignore */
+      }
+      if (wasArmed || session.cancelled) suppressClick = true;
+      session = null;
+    }
+
+    el.addEventListener(
+      'click',
+      function (e) {
+        if (!suppressClick) return;
+        suppressClick = false;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      },
+      true
+    );
+
+    el.addEventListener('pointerdown', function (e) {
+      if (e.button != null && e.button !== 0) return;
+      if (e.pointerType === 'mouse' && e.buttons !== 1) return;
+      if (!enabled()) return;
+      if (session) endSession(null, false);
+      suppressClick = false;
+      var startProgress = 0;
+      try {
+        startProgress = opts.getProgress();
+      } catch (err) {
+        return;
+      }
+      if (typeof startProgress !== 'number' || !isFinite(startProgress)) {
+        startProgress = 0;
+      }
+      session = {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        startProgress: startProgress,
+        lastProgress: startProgress,
+        armed: false,
+        cancelled: false,
+        timer: null,
+      };
+      session.timer = setTimeout(function () {
+        if (!session) return;
+        armFader();
+      }, longPressMs);
+    });
+
+    el.addEventListener('pointermove', function (e) {
+      if (!session || session.pointerId !== e.pointerId) return;
+      if (!session.armed) {
+        var dx = e.clientX - session.startX;
+        var dy = e.clientY - session.startY;
+        if (dx * dx + dy * dy > FADER_MOVE_CANCEL_PX * FADER_MOVE_CANCEL_PX) {
+          clearArmTimer();
+          session.cancelled = true;
+          suppressClick = true;
+          session = null;
+        }
+        return;
+      }
+      e.preventDefault();
+      applySessionProgress(e.clientY, !!(e.shiftKey || e.altKey), false);
+    });
+
+    function onPointerEnd(e) {
+      if (!session || session.pointerId !== e.pointerId) return;
+      endSession(e, true);
+    }
+
+    el.addEventListener('pointerup', onPointerEnd);
+    el.addEventListener('pointercancel', function (e) {
+      if (!session || session.pointerId !== e.pointerId) return;
+      endSession(e, true);
+    });
+
+    el.addEventListener('lostpointercapture', function () {
+      if (!session || !session.armed) return;
+      endSession(null, true);
+    });
   }
 
   function createProgressSlider(label, value, onInput, id) {
@@ -1481,6 +1722,8 @@
     var lastAllComplete = null;
     // itemId → original text before AI spell fix (kept until popup closes / revert / edit)
     var itemSpellReverts = Object.create(null);
+    // firstSplitItemId → { originalText, itemIds } after an AI multi-task split
+    var itemSplitReverts = Object.create(null);
     // itemId → true while post-add / edit AI spellcheck is in flight
     var spellcheckingItemIds = Object.create(null);
     // itemId → generation token to ignore stale spellcheck responses
@@ -1560,18 +1803,6 @@
     masterCheckBtn.id = 'completionMasterCheck';
     masterCheckWrap.appendChild(masterCheckBtn);
 
-    var masterDetailsExpanded = loadMasterDetailsExpanded();
-
-    var detailsToggleBtn = document.createElement('button');
-    detailsToggleBtn.type = 'button';
-    detailsToggleBtn.className = 'tp-completion-details-toggle';
-    detailsToggleBtn.id = 'completionMasterDetailsToggle';
-
-    var detailsChevron = document.createElement('i');
-    detailsChevron.className = 'ti ti-chevron-down tp-completion-details-chevron';
-    detailsChevron.setAttribute('aria-hidden', 'true');
-    detailsToggleBtn.appendChild(detailsChevron);
-
     var linkedSnapshots = Object.create(null);
 
     var estimateScales =
@@ -1633,14 +1864,85 @@
       progressPanel.dataset.estimateScales = estimateScales.join(',');
     }
 
-    var encouragementEl = document.createElement('p');
-    encouragementEl.className = 'tp-completion-encouragement';
-    encouragementEl.id = 'completionEncouragement';
+    var existingEncouragementBubble = document.getElementById(
+      'completionEncouragementBubble'
+    );
+    if (existingEncouragementBubble && existingEncouragementBubble.parentNode) {
+      existingEncouragementBubble.parentNode.removeChild(existingEncouragementBubble);
+    }
+    var encouragementEl = document.createElement('div');
+    encouragementEl.className = 'tp-completion-encouragement-bubble';
+    encouragementEl.id = 'completionEncouragementBubble';
+    encouragementEl.setAttribute('role', 'status');
     encouragementEl.setAttribute('aria-live', 'polite');
+    encouragementEl.hidden = true;
+    encouragementEl.setAttribute('aria-hidden', 'true');
     applyProgressEncouragement(encouragementEl, 0);
+    document.body.appendChild(encouragementEl);
 
-    // Compact header hit target: chevron + title only (not the whole hero).
-    detailsToggleBtn.appendChild(masterTitleEl);
+    var encouragementBubbleVisible = false;
+    var encouragementPointerId = null;
+
+    function showEncouragementBubble(clientX, clientY, percent) {
+      if (percent != null) applyProgressEncouragement(encouragementEl, percent);
+      encouragementEl.hidden = false;
+      encouragementEl.setAttribute('aria-hidden', 'false');
+      encouragementBubbleVisible = true;
+      if (clientX != null && clientY != null) {
+        positionEncouragementBubble(encouragementEl, clientX, clientY);
+      }
+    }
+
+    function moveEncouragementBubble(clientX, clientY) {
+      if (!encouragementBubbleVisible) return;
+      positionEncouragementBubble(encouragementEl, clientX, clientY);
+    }
+
+    function hideEncouragementBubble() {
+      encouragementBubbleVisible = false;
+      encouragementPointerId = null;
+      encouragementEl.hidden = true;
+      encouragementEl.setAttribute('aria-hidden', 'true');
+    }
+
+    function onEncouragementPointerMove(event) {
+      if (
+        encouragementPointerId != null &&
+        event.pointerId !== encouragementPointerId
+      ) {
+        return;
+      }
+      moveEncouragementBubble(event.clientX, event.clientY);
+    }
+
+    function onEncouragementPointerEnd(event) {
+      if (
+        encouragementPointerId != null &&
+        event.pointerId !== encouragementPointerId
+      ) {
+        return;
+      }
+      hideEncouragementBubble();
+      window.removeEventListener('pointermove', onEncouragementPointerMove, true);
+      window.removeEventListener('pointerup', onEncouragementPointerEnd, true);
+      window.removeEventListener('pointercancel', onEncouragementPointerEnd, true);
+    }
+
+    function armEncouragementBubbleFollow(event, percent) {
+      window.removeEventListener('pointermove', onEncouragementPointerMove, true);
+      window.removeEventListener('pointerup', onEncouragementPointerEnd, true);
+      window.removeEventListener('pointercancel', onEncouragementPointerEnd, true);
+      encouragementPointerId =
+        event && event.pointerId != null ? event.pointerId : null;
+      showEncouragementBubble(
+        event ? event.clientX : null,
+        event ? event.clientY : null,
+        percent
+      );
+      window.addEventListener('pointermove', onEncouragementPointerMove, true);
+      window.addEventListener('pointerup', onEncouragementPointerEnd, true);
+      window.addEventListener('pointercancel', onEncouragementPointerEnd, true);
+    }
 
     var completeAllBtn = document.createElement('button');
     completeAllBtn.type = 'button';
@@ -1682,10 +1984,9 @@
     progressActions.appendChild(completeAllBtn);
     progressActions.appendChild(resetAllBtn);
 
-    progressHead.appendChild(detailsToggleBtn);
+    progressHead.appendChild(masterTitleEl);
     progressHead.appendChild(progressActions);
     progressPanel.appendChild(progressHead);
-    progressPanel.appendChild(encouragementEl);
 
     var masterSlider = createProgressSlider(
       'Ajuster le progr\u00e8s',
@@ -1722,6 +2023,9 @@
             }).length,
           });
         }
+        if (encouragementBubbleVisible) {
+          applyProgressEncouragement(encouragementEl, v);
+        }
         updateProgressUi({ skipMasterSync: true, deferDoneListReveal: true });
         onChange(CT.normalizeCompletionData(data));
       },
@@ -1732,7 +2036,12 @@
     if (masterFieldHead) {
       masterFieldHead.insertBefore(masterCheckWrap, masterFieldHead.firstChild);
     }
+    masterSlider.input.addEventListener('pointerdown', function (event) {
+      if (event.button != null && event.button !== 0) return;
+      armEncouragementBubbleFollow(event, Number(masterSlider.input.value));
+    });
     masterSlider.input.addEventListener('change', function () {
+      hideEncouragementBubble();
       if (data.items.length) {
         renderList();
         onResize();
@@ -1740,78 +2049,9 @@
     });
     progressPanel.appendChild(masterSlider.el);
 
-    var reasonsSummaryEl = document.createElement('p');
-    reasonsSummaryEl.className = 'tp-completion-reasons-summary';
-    reasonsSummaryEl.id = 'completionMasterReasonsSummary';
-    reasonsSummaryEl.hidden = true;
-    reasonsSummaryEl.setAttribute('aria-live', 'polite');
-    progressPanel.appendChild(reasonsSummaryEl);
-
     var masterMotifHost = document.createElement('div');
     masterMotifHost.className = 'tp-completion-master-motif-host';
     progressPanel.appendChild(masterMotifHost);
-
-    function refreshMasterReasonsSummary() {
-      var blocked = CT.isMasterBlocked(data);
-      var text = formatMasterReasonsSummary(data.blockedReasons || []);
-      reasonsSummaryEl.textContent = text;
-      reasonsSummaryEl.title = text;
-      // Collapsed + blocked: compact Motifs line; expanded uses the full editor.
-      reasonsSummaryEl.hidden = !blocked || masterDetailsExpanded;
-    }
-
-    function setMasterDetailsExpanded(expanded, opts) {
-      opts = opts || {};
-      masterDetailsExpanded = !!expanded;
-      progressPanel.classList.toggle('is-collapsed', !masterDetailsExpanded);
-      detailsToggleBtn.setAttribute(
-        'aria-expanded',
-        masterDetailsExpanded ? 'true' : 'false'
-      );
-      detailsToggleBtn.setAttribute(
-        'aria-label',
-        masterDetailsExpanded
-          ? 'Replier les d\u00e9tails de la t\u00e2che'
-          : 'D\u00e9velopper les d\u00e9tails de la t\u00e2che'
-      );
-      detailsToggleBtn.title = masterDetailsExpanded
-        ? 'Replier les d\u00e9tails'
-        : 'D\u00e9velopper les d\u00e9tails';
-      refreshMasterReasonsSummary();
-      // Remount Motifs editor when expanding while blocked.
-      if (typeof syncMasterBlockedBtn === 'function') {
-        syncMasterBlockedBtn();
-      }
-      if (opts.persist !== false) saveMasterDetailsExpanded(masterDetailsExpanded);
-      if (opts.notifyLayout !== false) onResize();
-    }
-
-    detailsToggleBtn.addEventListener('click', function (event) {
-      // Keep interactive controls inside the header from toggling collapse.
-      var interactive = event.target.closest
-        ? event.target.closest(
-            'input, button, a, .tp-estimate-chip, .tp-estimate-chip-wrap, .tp-completion-check'
-          )
-        : null;
-      if (interactive && interactive !== detailsToggleBtn) return;
-      event.preventDefault();
-      setMasterDetailsExpanded(!masterDetailsExpanded);
-    });
-    // Nested controls must not bubble into the header toggle.
-    masterEstimateChip.el.addEventListener('click', function (event) {
-      event.stopPropagation();
-    });
-    if (onTitleChange) {
-      masterTitleEl.addEventListener('click', function (event) {
-        event.stopPropagation();
-      });
-      masterTitleEl.addEventListener('mousedown', function (event) {
-        event.stopPropagation();
-      });
-    }
-    reasonsSummaryEl.addEventListener('click', function () {
-      if (!masterDetailsExpanded) setMasterDetailsExpanded(true);
-    });
 
     progressSection.appendChild(progressPanel);
     containerEl.appendChild(progressSection);
@@ -1890,7 +2130,7 @@
     var filterEmptyEl = containerEl.querySelector('#completionFilterEmpty');
     var showDoneCheckbox = containerEl.querySelector('#completionShowDone');
     var showDoneLabel = containerEl.querySelector('#completionShowDoneLabel');
-    // encouragementEl / masterTitleEl created above in progress panel
+    // masterTitleEl created above in progress panel
     var addInput = containerEl.querySelector('#completionAddInput');
     var addBtn = containerEl.querySelector('#completionAddBtn');
     var linkBtn = containerEl.querySelector('#completionLinkBtn');
@@ -1903,6 +2143,8 @@
     var suggestRefreshBtn = containerEl.querySelector('#completionSuggestRefresh');
     var suggestSubtasksFn =
       typeof options.suggestSubtasks === 'function' ? options.suggestSubtasks : null;
+    var splitTaskTitleFn =
+      typeof options.splitTaskTitle === 'function' ? options.splitTaskTitle : null;
     var currentSuggestions = [];
     var suggestionsLoading = false;
     var suggestionsSeq = 0;
@@ -2210,22 +2452,23 @@
      * Create/keep the subtask immediately; refine orthography asynchronously.
      * Enter must never wait on AI.
      */
-    function spellcheckItemAfterCommit(itemId, originalText) {
+    function spellcheckItemAfterCommit(itemId, originalText, token) {
       var original = typeof originalText === 'string' ? originalText.trim() : '';
       if (!itemId || !original) return;
       if (
         typeof global.Spellcheck === 'undefined' ||
         typeof global.Spellcheck.correct !== 'function'
       ) {
+        if (itemSpellTokens[itemId] === token) {
+          delete spellcheckingItemIds[itemId];
+          delete itemSpellTokens[itemId];
+          paintItemSpellchecking(itemId);
+          onResize();
+        }
         return;
       }
-      var token = (itemSpellTokens[itemId] || 0) + 1;
-      itemSpellTokens[itemId] = token;
-      spellcheckingItemIds[itemId] = true;
-      paintItemSpellchecking(itemId);
-      onResize();
       spellcheckText(original).then(function (corrected) {
-        if (itemSpellTokens[itemId] !== token) return;
+        if (token != null && itemSpellTokens[itemId] !== token) return;
         delete spellcheckingItemIds[itemId];
         delete itemSpellTokens[itemId];
         var live = findLiveItem(itemId);
@@ -2246,6 +2489,195 @@
           itemSpellReverts[itemId] = original;
           showItemSpellRevert(itemId, original);
         }
+      });
+    }
+
+    function clearSplitRevertTracking(itemIds) {
+      Object.keys(itemSplitReverts).forEach(function (key) {
+        var entry = itemSplitReverts[key];
+        if (!entry || !Array.isArray(entry.itemIds)) return;
+        var overlap = (itemIds || []).some(function (id) {
+          return entry.itemIds.indexOf(id) >= 0 || key === id;
+        });
+        if (overlap) delete itemSplitReverts[key];
+      });
+    }
+
+    /**
+     * Replace one committed item with several polished titles from AI split.
+     * @returns {string[]|null} new item ids
+     */
+    function applySplitReplace(sourceItemId, originalText, titles) {
+      var idx = -1;
+      for (var i = 0; i < data.items.length; i++) {
+        if (data.items[i].id === sourceItemId) {
+          idx = i;
+          break;
+        }
+      }
+      if (idx < 0 || !titles || titles.length < 2) return null;
+      var newItems = [];
+      for (var t = 0; t < titles.length; t++) {
+        var text = String(titles[t] || '').trim();
+        if (!text) continue;
+        var rawItem = {
+          id: CT.generateId(),
+          text: text,
+          progress: 0
+        };
+        var item = CT.normalizeItem(rawItem);
+        if (item) newItems.push(item);
+      }
+      if (newItems.length < 2) return null;
+      delete itemSpellReverts[sourceItemId];
+      delete spellcheckingItemIds[sourceItemId];
+      delete itemSpellTokens[sourceItemId];
+      delete estimatingItemIds[sourceItemId];
+      delete linkedTreeByItemId[sourceItemId];
+      clearSplitRevertTracking([sourceItemId]);
+      data.items.splice.apply(data.items, [idx, 1].concat(newItems));
+      newItems.forEach(function (row) {
+        removeSuggestionMatch(row.text);
+      });
+      var newIds = newItems.map(function (row) {
+        return row.id;
+      });
+      itemSplitReverts[newIds[0]] = {
+        originalText: originalText,
+        itemIds: newIds.slice()
+      };
+      playCompletionUiSound('add');
+      emitChange();
+      onResize();
+      showItemSplitRevert(newIds[0]);
+      return newIds;
+    }
+
+    function showItemSplitRevert(anchorItemId) {
+      var entry = itemSplitReverts[anchorItemId];
+      if (
+        !entry ||
+        !entry.originalText ||
+        !Array.isArray(entry.itemIds) ||
+        typeof global.Spellcheck === 'undefined' ||
+        typeof global.Spellcheck.attachRevert !== 'function'
+      ) {
+        return;
+      }
+      var li = findItemRow(anchorItemId);
+      if (!li) return;
+      var mainRow = li.querySelector('.tp-completion-item-main');
+      var del = li.querySelector('.tp-completion-delete');
+      if (!mainRow) return;
+      var count = entry.itemIds.length;
+      global.Spellcheck.attachRevert(mainRow, {
+        className: 'tp-completion-spell-revert tp-completion-split-revert',
+        before: del,
+        previous: entry.originalText,
+        ariaLabel:
+          'Annuler la s\u00e9paration en ' +
+          count +
+          ' t\u00e2ches',
+        title:
+          'Annuler la s\u00e9paration \u2014 restaurer\u00a0: ' +
+          (typeof global.Spellcheck.revertLabel === 'function'
+            ? global.Spellcheck.revertLabel(entry.originalText)
+            : entry.originalText),
+        onRevert: function () {
+          if (itemSplitReverts[anchorItemId] !== entry) return;
+          var still = entry.itemIds.filter(function (id) {
+            return !!findLiveItem(id);
+          });
+          if (!still.length) {
+            delete itemSplitReverts[anchorItemId];
+            return;
+          }
+          var insertAt = data.items.length;
+          for (var i = 0; i < data.items.length; i++) {
+            if (still.indexOf(data.items[i].id) >= 0) {
+              insertAt = i;
+              break;
+            }
+          }
+          data.items = data.items.filter(function (row) {
+            return still.indexOf(row.id) < 0;
+          });
+          var restored = CT.normalizeItem({
+            id: CT.generateId(),
+            text: entry.originalText,
+            progress: 0
+          });
+          if (restored) {
+            data.items.splice(insertAt, 0, restored);
+          }
+          delete itemSplitReverts[anchorItemId];
+          emitChange();
+          onResize();
+        },
+        onDismiss: function () {
+          if (itemSplitReverts[anchorItemId] === entry) {
+            delete itemSplitReverts[anchorItemId];
+          }
+        }
+      });
+    }
+
+    /**
+     * After commit: ask AI whether the title is several tasks; else spellcheck.
+     * Enter must never wait on AI.
+     */
+    function refineItemAfterCommit(itemId, originalText) {
+      var original = typeof originalText === 'string' ? originalText.trim() : '';
+      if (!itemId || !original) return;
+      var token = (itemSpellTokens[itemId] || 0) + 1;
+      itemSpellTokens[itemId] = token;
+      spellcheckingItemIds[itemId] = true;
+      paintItemSpellchecking(itemId);
+      onResize();
+
+      var splitPromise =
+        splitTaskTitleFn &&
+        (typeof global.PriorityAgent === 'undefined' ||
+          typeof global.PriorityAgent.titleMayBeCompound !== 'function' ||
+          global.PriorityAgent.titleMayBeCompound(original))
+          ? Promise.resolve()
+              .then(function () {
+                return splitTaskTitleFn(original);
+              })
+              .catch(function (err) {
+                console.error('splitTaskTitle failed', err);
+                return null;
+              })
+          : Promise.resolve(null);
+
+      splitPromise.then(function (splitResult) {
+        if (itemSpellTokens[itemId] !== token) return;
+        var live = findLiveItem(itemId);
+        if (!live) {
+          delete spellcheckingItemIds[itemId];
+          delete itemSpellTokens[itemId];
+          return;
+        }
+        // User already edited away from the committed text — don't split.
+        if ((live.text || '').trim() !== original) {
+          delete spellcheckingItemIds[itemId];
+          delete itemSpellTokens[itemId];
+          paintItemSpellchecking(itemId);
+          onResize();
+          return;
+        }
+        if (
+          splitResult &&
+          splitResult.shouldSplit === true &&
+          Array.isArray(splitResult.tasks) &&
+          splitResult.tasks.length >= 2
+        ) {
+          delete spellcheckingItemIds[itemId];
+          delete itemSpellTokens[itemId];
+          applySplitReplace(itemId, original, splitResult.tasks);
+          return;
+        }
+        spellcheckItemAfterCommit(itemId, original, token);
       });
     }
 
@@ -2294,8 +2726,8 @@
       btn.title = blocked
         ? 'D\u00e9bloquer'
         : done
-          ? 'Marquer comme non termin\u00e9'
-          : 'Marquer comme termin\u00e9';
+          ? 'Marquer comme non termin\u00e9 \u2014 maintenir + glisser pour ajuster'
+          : 'Marquer comme termin\u00e9 \u2014 maintenir + glisser pour ajuster';
     }
 
     function syncItemSlidersFromData() {
@@ -2495,7 +2927,7 @@
       containerEl.classList.toggle('has-blocked', anyBlocked);
       syncBlockedMotifMount(
         masterMotifHost,
-        blocked && masterDetailsExpanded,
+        blocked,
         data.blockedReasons || [],
         function (reasons) {
           data = CT.setMasterBlockedReasons(data, reasons, { origin: 'user' });
@@ -2505,12 +2937,10 @@
           }
           emitChange();
           notifyBlockedChange('master-reason');
-          refreshMasterReasonsSummary();
           onResize();
         },
         'tp-completion-master-motif'
       );
-      refreshMasterReasonsSummary();
     }
 
     function syncMasterCheckButton(progress) {
@@ -2601,10 +3031,6 @@
       // Pause button is always an explicit user action.
       data = CT.setMasterBlocked(data, nextBlocked, { origin: 'user' });
       playCompletionUiSound(nextBlocked ? 'block' : 'unblock');
-      // Expand so Motifs can be edited right after blocking.
-      if (nextBlocked && !masterDetailsExpanded) {
-        setMasterDetailsExpanded(true, { notifyLayout: false });
-      }
       syncMasterBlockedBtn();
       updateProgressUi();
       emitChange();
@@ -2795,6 +3221,40 @@
     resetAllBtn.addEventListener('click', resetAllTasks);
     masterBlockedBtn.addEventListener('click', toggleMasterBlocked);
     masterCheckBtn.addEventListener('click', toggleMasterComplete);
+    bindProgressFader(masterCheckBtn, {
+      getProgress: function () {
+        return CT.computeCardProgress(data, linkedSnapshots).percent;
+      },
+      setProgress: function (p, meta) {
+        masterDragging = !meta.commit;
+        if (data.items.length) {
+          data.items = CT.applyMasterProgress(data.items, p, linkedSnapshots);
+          syncItemSlidersFromData();
+        } else {
+          data.progress = p;
+        }
+        playSliderProgressTick(p);
+        if (encouragementBubbleVisible) {
+          applyProgressEncouragement(encouragementEl, p);
+        }
+        updateProgressUi({ skipMasterSync: true, deferDoneListReveal: true });
+        onChange(CT.normalizeCompletionData(data));
+        if (meta.commit) {
+          masterDragging = false;
+          hideEncouragementBubble();
+          var start = meta.startProgress;
+          if (p >= 100 && start < 100) {
+            playCompletionUiSound('complete_all');
+          } else if (p < 100 && start >= 100) {
+            playCompletionUiSound('uncomplete');
+          }
+          if (data.items.length) {
+            renderList();
+            onResize();
+          }
+        }
+      },
+    });
 
     function syncMasterEstimateChip() {
       var scales = currentEstimateScales();
@@ -2856,7 +3316,9 @@
         masterSlider.valEl.style.color =
           anyBlocked || progress.percent > 0 ? accent : '';
       }
-      applyProgressEncouragement(encouragementEl, progress.percent);
+      if (encouragementBubbleVisible) {
+        applyProgressEncouragement(encouragementEl, progress.percent);
+      }
       progressPanel.style.setProperty(
         '--completion-hero-accent',
         anyBlocked || progress.percent > 0
@@ -3269,6 +3731,10 @@
       var checkBtn = li.querySelector(
         ':scope > .tp-completion-item-main .tp-completion-check, :scope > .tp-completion-item-slider-row .tp-completion-check'
       );
+      var checkWrap =
+        (checkBtn && checkBtn.closest && checkBtn.closest('.tp-completion-check-wrap')) ||
+        (checkBtn && checkBtn.parentNode) ||
+        null;
       var textInput = li.querySelector(
         ':scope > .tp-completion-item-main .tp-completion-text'
       );
@@ -3334,7 +3800,9 @@
               ? 'Marquer comme non termin\u00e9'
               : 'Marquer comme termin\u00e9'
           );
-          completeBtn.title = item.done ? 'Non termin\u00e9' : 'Terminer';
+          completeBtn.title = item.done
+            ? 'Non termin\u00e9 \u2014 maintenir + glisser pour ajuster'
+            : 'Terminer \u2014 maintenir + glisser pour ajuster';
           completeBtn.disabled = !!itemBlocked;
         }
         if (!isLinked) {
@@ -3434,12 +3902,66 @@
         toggleItemDone(checkBtn);
       });
 
+      function setItemProgressFromFader(p, meta) {
+        setItemProgress(item, p);
+        if (itemSlider) itemSlider.value = String(item.progress);
+        playSliderProgressTick(p);
+        syncItemProgressUi();
+        updateProgressUi({ deferDoneListReveal: true });
+        onChange(CT.normalizeCompletionData(data));
+        if (!meta.commit) return;
+        var wasDone = meta.startProgress >= 100;
+        var nowDone = !!item.done;
+        if (wasDone !== nowDone) {
+          var becomingDone = !wasDone && nowDone;
+          emitChange({
+            animateItemId: item.id,
+            flipWasDone: wasDone,
+            focusTextItemId: item.id,
+          });
+          if (becomingDone) {
+            var nextRow = findItemRow(item.id);
+            var nextCheck =
+              nextRow && nextRow.querySelector('.tp-completion-check');
+            playSubtaskCompletePop(nextCheck || checkBtn, { sound: true });
+          } else {
+            playCompletionUiSound('uncomplete');
+          }
+        } else {
+          renderList();
+        }
+        onResize();
+      }
+
+      bindProgressFader(checkBtn, {
+        getProgress: function () {
+          return CT.itemProgress(item);
+        },
+        setProgress: setItemProgressFromFader,
+        isEnabled: function () {
+          return !isLinked && !CT.isItemBlocked(item);
+        },
+        visualEls: completeBtn ? [completeBtn] : null,
+        hudAnchor: checkWrap,
+      });
+
       if (completeBtn) {
         completeBtn.addEventListener('click', function (e) {
           e.preventDefault();
           e.stopPropagation();
           if (completeBtn.disabled) return;
           toggleItemDone(completeBtn);
+        });
+        bindProgressFader(completeBtn, {
+          getProgress: function () {
+            return CT.itemProgress(item);
+          },
+          setProgress: setItemProgressFromFader,
+          isEnabled: function () {
+            return !completeBtn.disabled && !CT.isItemBlocked(item);
+          },
+          visualEls: [checkBtn],
+          hudAnchor: checkWrap,
         });
       }
 
@@ -3502,34 +4024,13 @@
             removeItem(item.id, { silent: true });
             return;
           }
-          var editToken = (item._spellToken || 0) + 1;
-          item._spellToken = editToken;
-          textInput.classList.add('is-spellchecking');
-          spellcheckText(trimmed).then(function (corrected) {
-            if (item._spellToken !== editToken) return;
-            textInput.classList.remove('is-spellchecking');
-            var stillPresent = data.items.some(function (row) {
-              return row.id === item.id;
-            });
-            if (!stillPresent) return;
-            if (!corrected) {
-              removeItem(item.id, { silent: true });
-              return;
-            }
-            if (corrected !== textInput.value.trim()) {
-              textInput.value = corrected;
-            }
-            item.text = corrected;
-            var persisted = applyNormalizedKeepingDrafts(data);
-            if (corrected !== trimmed) {
-              itemSpellReverts[item.id] = trimmed;
-              showItemSpellRevert(item.id, trimmed);
-            } else {
-              delete itemSpellReverts[item.id];
-            }
-            updateProgressUi();
-            onChange(persisted);
-          });
+          item.text = trimmed;
+          delete itemSpellReverts[item.id];
+          clearSplitRevertTracking([item.id]);
+          var persisted = applyNormalizedKeepingDrafts(data);
+          updateProgressUi();
+          onChange(persisted);
+          refineItemAfterCommit(item.id, trimmed);
         });
 
         // Discard untitled drafts when focus leaves without a name
@@ -3543,6 +4044,7 @@
 
         textInput.addEventListener('input', function () {
           delete itemSpellReverts[item.id];
+          clearSplitRevertTracking([item.id]);
           if (spellcheckingItemIds[item.id]) {
             itemSpellTokens[item.id] = (itemSpellTokens[item.id] || 0) + 1;
             delete spellcheckingItemIds[item.id];
@@ -3587,6 +4089,9 @@
         showItemSpellRevert(item.id, itemSpellReverts[item.id]);
       } else if (itemSpellReverts[item.id]) {
         delete itemSpellReverts[item.id];
+      }
+      if (!isLinked && itemSplitReverts[item.id]) {
+        showItemSplitRevert(item.id);
       }
     }
 
@@ -3749,7 +4254,9 @@
             ? 'Marquer comme non termin\u00e9'
             : 'Marquer comme termin\u00e9'
         );
-        completeBtn.title = item.done ? 'Non termin\u00e9' : 'Terminer';
+        completeBtn.title = item.done
+          ? 'Non termin\u00e9 \u2014 maintenir + glisser pour ajuster'
+          : 'Terminer \u2014 maintenir + glisser pour ajuster';
         if (itemBlocked) completeBtn.disabled = true;
       }
 
@@ -4106,6 +4613,42 @@
         onResize();
       });
 
+      bindProgressFader(checkBtn, {
+        getProgress: function () {
+          return CT.itemProgress(nested);
+        },
+        setProgress: function (p, meta) {
+          data = CT.applyChecklistItemProgress(
+            data,
+            parentItem.id,
+            nested.id,
+            p
+          );
+          playSliderProgressTick(p);
+          syncNestedUi();
+          updateProgressUi({ deferDoneListReveal: true });
+          onChange(CT.normalizeCompletionData(data));
+          if (!meta.commit) return;
+          var wasDone = meta.startProgress >= 100;
+          var nowDone = !!nested.done;
+          if (wasDone !== nowDone) {
+            emitChange({
+              animateItemId: parentItem.id,
+              flipWasDone: wasDone,
+            });
+            if (nowDone) {
+              playSubtaskCompletePop(checkBtn, { sound: true });
+            } else {
+              playCompletionUiSound('uncomplete');
+            }
+          } else {
+            renderList();
+          }
+          onResize();
+        },
+        hudAnchor: checkWrap,
+      });
+
       function handleNestedSlider() {
         var v = Number(itemSlider.value);
         data = CT.applyChecklistItemProgress(
@@ -4305,6 +4848,7 @@
       delete spellcheckingItemIds[id];
       delete itemSpellTokens[id];
       delete estimatingItemIds[id];
+      clearSplitRevertTracking([id]);
       var nextItems = data.items.filter(function (item) {
         return item.id !== id;
       });
@@ -4570,7 +5114,7 @@
             estimatedMinutes: row.estimatedMinutes
           });
           removeSuggestionMatch(row);
-          if (item) spellcheckItemAfterCommit(item.id, typed);
+          if (item) refineItemAfterCommit(item.id, typed);
         });
         suggestListEl.appendChild(btn);
       });
@@ -4701,11 +5245,11 @@
         addDraftItem();
         return;
       }
-      // Commit immediately — spellcheck / estimate refine asynchronously with spinners.
+      // Commit immediately — split / spellcheck / estimate refine asynchronously.
       addInput.value = '';
       var item = addItem(original);
       addInput.focus();
-      if (item) spellcheckItemAfterCommit(item.id, original);
+      if (item) refineItemAfterCommit(item.id, original);
     }
 
     addBtn.addEventListener('click', addFromInput);
@@ -4717,10 +5261,6 @@
     });
 
     renderList();
-    setMasterDetailsExpanded(masterDetailsExpanded, {
-      persist: false,
-      notifyLayout: false
-    });
     updateProgressUi();
     refreshLinkedTree({ skipPersist: false });
 
@@ -4779,12 +5319,6 @@
         notifyBlockedChange('api');
         onResize();
         return CT.normalizeCompletionData(data);
-      },
-      setMasterDetailsExpanded: function (expanded) {
-        setMasterDetailsExpanded(!!expanded);
-      },
-      isMasterDetailsExpanded: function () {
-        return !!masterDetailsExpanded;
       },
       isMasterBlockedByUser: function () {
         return CT.isMasterBlockedByUser(data);
@@ -5313,7 +5847,6 @@
     COMPLETION_SCHEME_OPTIONS: COMPLETION_SCHEME_OPTIONS,
     DEFAULT_COMPLETION_SCHEME_KEY: DEFAULT_COMPLETION_SCHEME_KEY,
     CUSTOM_COMPLETION_SCHEME_KEY: CUSTOM_COMPLETION_SCHEME_KEY,
-    MASTER_DETAILS_STORAGE_KEY: MASTER_DETAILS_STORAGE_KEY,
     normalizeCompletionSchemeKey: normalizeCompletionSchemeKey,
     normalizeGradientStops: normalizeGradientStops,
     applyCompletionColorScheme: applyCompletionColorScheme,
@@ -5324,9 +5857,6 @@
     saveStoredCompletionSchemeKey: saveStoredCompletionSchemeKey,
     loadStoredCompletionGradient: loadStoredCompletionGradient,
     saveStoredCompletionGradient: saveStoredCompletionGradient,
-    loadMasterDetailsExpanded: loadMasterDetailsExpanded,
-    saveMasterDetailsExpanded: saveMasterDetailsExpanded,
-    formatMasterReasonsSummary: formatMasterReasonsSummary,
     colorAtProgress: colorAtProgress,
     completionColorForProgress: completionColorForProgress,
     completionColorForEstimate: completionColorForEstimate,
@@ -5340,5 +5870,9 @@
     clearAllCompleteCelebration: clearAllCompleteCelebration,
     mountCompletionUI: mountCompletionUI,
     mountProgressGradientEditor: mountProgressGradientEditor,
+    progressFromFaderDelta: progressFromFaderDelta,
+    bindProgressFader: bindProgressFader,
+    FADER_LONG_PRESS_MS: FADER_LONG_PRESS_MS,
+    FADER_PIXELS_PER_PERCENT: FADER_PIXELS_PER_PERCENT,
   };
 })(typeof window !== 'undefined' ? window : this);

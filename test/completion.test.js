@@ -119,45 +119,6 @@ describe('Completion progress', () => {
     assert.equal(out.progress, 55);
   });
 
-  it('syncCardDueCompleteFromProgress reopens rolled recurring tasks', async () => {
-    const previousPT = global.PriorityTrello;
-    const previousStatut = global.StatutTrello;
-    const store = new Map();
-    const t = {
-      async get(_scope, _vis, key) {
-        return store.get(key);
-      },
-      async set(_scope, _vis, key, value) {
-        store.set(key, value);
-      },
-    };
-
-    global.PriorityTrello = {
-      setCardDueComplete: async () => ({
-        ok: true,
-        changed: true,
-        rolled: true,
-        dueComplete: false,
-        inputs: { dueDate: '2026-07-17', dueTime: '08:00' },
-      }),
-    };
-    global.StatutTrello = {
-      restorePreviousStatutFromIncomplete: async () => ({ ok: true, restored: true }),
-    };
-
-    try {
-      const result = await CT.syncCardDueCompleteFromProgress(t, { items: [], progress: 100 });
-      assert.equal(result.rolled, true);
-      assert.equal(result.dueComplete, false);
-      assert.equal(result.completion.progress, 0);
-      assert.equal(store.get(CT.CARD_COMPLETION_KEY).progress, 0);
-      assert.equal(store.get(CT.COMPLETION_MARKED_DUE_COMPLETE_KEY), false);
-    } finally {
-      global.PriorityTrello = previousPT;
-      global.StatutTrello = previousStatut;
-    }
-  });
-
   it('applyMasterProgress preserves item blocked flags (not done)', () => {
     const scaled = CT.applyMasterProgress(
       [
@@ -184,38 +145,6 @@ describe('Completion progress', () => {
     );
     assert.equal(atMax[0].done, true);
     assert.equal(!!atMax[0].blocked, false);
-  });
-
-  it('formatMasterReasonsSummary compact Motifs line', () => {
-    assert.equal(typeof CUI.formatMasterReasonsSummary, 'function');
-    assert.equal(CUI.formatMasterReasonsSummary([]), 'Bloqué');
-    assert.equal(
-      CUI.formatMasterReasonsSummary(["En attente d'une réponse"]),
-      "En attente d'une réponse"
-    );
-    assert.equal(
-      CUI.formatMasterReasonsSummary(['Court A', 'Court B']),
-      'Court A, Court B'
-    );
-    const long = CUI.formatMasterReasonsSummary([
-      'Une raison assez longue pour dépasser',
-      'Deuxième',
-      'Troisième',
-    ]);
-    assert.match(long, /^Une raison assez longue pour dépasser \+2$/);
-  });
-
-  it('master details expand preference persists', () => {
-    assert.equal(typeof CUI.loadMasterDetailsExpanded, 'function');
-    assert.equal(typeof CUI.saveMasterDetailsExpanded, 'function');
-    const key = CUI.MASTER_DETAILS_STORAGE_KEY;
-    assert.ok(key);
-    localStorage.removeItem(key);
-    assert.equal(CUI.loadMasterDetailsExpanded(), true);
-    CUI.saveMasterDetailsExpanded(false);
-    assert.equal(CUI.loadMasterDetailsExpanded(), false);
-    CUI.saveMasterDetailsExpanded(true);
-    assert.equal(CUI.loadMasterDetailsExpanded(), true);
   });
 
   it('normalizeItem derives subtask progress from nested checklist', () => {
@@ -396,5 +325,24 @@ describe('Completion progress', () => {
       ],
     });
     assert.equal(CT.itemEstimatedMinutes(locked), 999);
+  });
+
+  it('progressFromFaderDelta maps vertical drag like an Ableton fader', () => {
+    assert.equal(typeof CUI.progressFromFaderDelta, 'function');
+    assert.equal(typeof CUI.bindProgressFader, 'function');
+    assert.equal(CUI.FADER_PIXELS_PER_PERCENT, 2);
+
+    // Drag up 40px from 50% → +20%
+    assert.equal(CUI.progressFromFaderDelta(50, 200, 160), 70);
+    // Drag down 40px from 50% → -20%
+    assert.equal(CUI.progressFromFaderDelta(50, 200, 240), 30);
+    // Clamp at bounds
+    assert.equal(CUI.progressFromFaderDelta(5, 100, 200), 0);
+    assert.equal(CUI.progressFromFaderDelta(95, 100, 0), 100);
+    // Fine mode (Shift/Alt) is 4× less sensitive
+    assert.equal(
+      CUI.progressFromFaderDelta(50, 200, 160, { fine: true }),
+      55
+    );
   });
 });

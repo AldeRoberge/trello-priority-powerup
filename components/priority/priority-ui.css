@@ -2098,10 +2098,10 @@ body {
   z-index: 20;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
   width: min(280px, 78vw);
-  max-height: 320px;
-  overflow: auto;
+  max-height: min(320px, 70vh);
+  overflow: hidden;
   padding: 6px;
   border: 1px solid var(--border, color-mix(in srgb, var(--text-primary) 14%, transparent));
   border-radius: 8px;
@@ -2119,6 +2119,8 @@ body {
   flex-direction: column;
   gap: 2px;
   min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
 }
 
 .info-task-types-picker-empty {
@@ -2186,11 +2188,14 @@ body {
 }
 
 .info-task-types-create {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding-top: 6px;
+  margin-top: 4px;
+  padding: 8px 4px 2px;
   border-top: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+  background: var(--surface-1, var(--surface-2));
 }
 
 .info-task-types-create[hidden] {
@@ -2206,8 +2211,8 @@ body {
 .info-task-types-create-icon-btn {
   appearance: none;
   box-sizing: border-box;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   margin: 0;
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--text-primary) 14%, transparent);

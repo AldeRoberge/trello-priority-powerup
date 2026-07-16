@@ -84,30 +84,4 @@ describe('PriorityUI scoring (baseline)', () => {
     PriorityUI.saveStatutEmbeddedDetailsExpanded(true);
     assert.equal(PriorityUI.loadStatutEmbeddedDetailsExpanded(), true);
   });
-
-  it('rolls overdue daily recurrence to the next future time', () => {
-    const next = PriorityUI.nextOccurrenceParts(
-      { dueDate: '2026-07-14', dueTime: '08:00' },
-      { frequency: 'daily', interval: 1 },
-      { now: new Date(2026, 6, 16, 9, 0, 0) }
-    );
-    assert.equal(next.dueDate, '2026-07-17');
-    assert.equal(next.dueTime, '08:00');
-  });
-
-  it('keeps same-day recurrence when the next time is still ahead', () => {
-    const next = PriorityUI.nextOccurrenceParts(
-      { dueDate: '2026-07-15', dueTime: '08:00' },
-      { frequency: 'daily', interval: 1 },
-      { now: new Date(2026, 6, 15, 20, 0, 0) }
-    );
-    assert.equal(next.dueDate, '2026-07-16');
-  });
-
-  it('formats recurring labels with a concrete time', () => {
-    assert.equal(
-      PriorityUI.formatRecurrenceLabelFr({ frequency: 'daily', interval: 1 }, '08:00'),
-      'Chaque jour \u00e0 08:00'
-    );
-  });
 });

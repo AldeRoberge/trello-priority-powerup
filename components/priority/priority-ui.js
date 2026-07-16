@@ -10014,10 +10014,10 @@
         labelsCreateBtn.disabled = !!labelsBusy;
         labelsCreateBtn.innerHTML =
           '<i class="ti ti-plus" aria-hidden="true"></i>' +
-          '<span>Cr\u00e9er une nouvelle \u00e9tiquette</span>';
+          '<span>Tapez le nom souhait\u00e9</span>';
         labelsCreateBtn.title = labelsBusy
           ? 'Cr\u00e9ation en cours\u2026'
-          : 'Cliquez puis tapez un nom pour cr\u00e9er une nouvelle \u00e9tiquette';
+          : 'Tapez le nom de la nouvelle \u00e9tiquette';
         return;
       }
       if (boardHasLabelName(q) || labelsBusy) {

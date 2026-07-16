@@ -2995,6 +2995,8 @@
       '- Les sous-t\u00e2ches existantes sont dans context.progress.items (id + text). Quand l\'utilisateur cite un libell\u00e9 d\'item (\u00ab\u00a0Valider le devis\u00a0\u00bb, etc.), c\'est une sous-t\u00e2che\u00a0: retrouve-la dans items.',
       '- Pour toute op\u00e9ration sur une sous-t\u00e2che existante\u00a0: passer id OU matchText (libell\u00e9 actuel).',
       '- Ajout\u00a0: sans nom \u2192 demander le nom + OBLIGATOIREMENT \u22652 suggestions de titres concrets tir\u00e9s du titre / description / m\u00e9moire / reste \u00e0 faire (actions=[]). Avec un nom \u2192 add_subtask tout de suite.',
+      '- Titre compos\u00e9 (critique)\u00a0: si le nom d\u00e9crit PLUSIEURS travaux ind\u00e9pendants (slash portrait/landscape, also/aussi, ;, plusieurs phrases)\u00a0: \u00e9mets UN add_subtask par travail, titres polis/corrig\u00e9s. Ne fusionne pas. Ex. \u00ab\u00a0test portrait/landscape OpenGate + exporter la vid\u00e9o + \u00e9valuer top-down shooter\u00a0\u00bb \u2192 4 add_subtask.',
+      '- Une seule action avec qualificatifs (4K, ProRes, outil)\u00a0: UN seul add_subtask.',
       '- INTERDIT de demander le nom d\'une sous-t\u00e2che avec suggestions=[] ou des chips hors sujet (\u00ab\u00a0V\u00e9rifier le stock\u00a0\u00bb sur une carte c\u00e2bles).',
       '- Renommer / changer / supprimer / cocher SANS nom\u00a0:',
       '  \u00b7 Si progress.items est NON VIDE\u00a0: demande laquelle, et mets EXACTEMENT les textes de progress.items dans suggestions (suggestionsMulti:false). Ne propose PAS des titres invent\u00e9s \u00e0 la place des vraies sous-t\u00e2ches.',
@@ -3524,6 +3526,175 @@
 
     // Prefer structured rows (with optional estimatedMinutes) for the Progrès UI.
     return normalized;
+  }
+
+  /**
+   * Cheap gate: skip the split model call for short, single-clause titles.
+   * False negatives are fine — spellcheck still runs; false positives only cost a call.
+   * @param {string} title
+   * @returns {boolean}
+   */
+  function titleMayBeCompound(title) {
+    var t = String(title || '').trim();
+    if (!t) return false;
+    if (t.length >= 90) return true;
+    if (/[;/]/.test(t)) return true;
+    if (/\w\/\w/.test(t)) return true;
+    if (
+      /\b(also|aussi|and also|et aussi|en plus|de plus|puis|ensuite|as well|par ailleurs)\b/i.test(
+        t
+      )
+    ) {
+      return true;
+    }
+    if ((t.match(/\.\s+/g) || []).length >= 1 && t.length >= 50) return true;
+    if (/,.*\b(and|et|also|aussi)\b/i.test(t) && t.length >= 40) return true;
+    return false;
+  }
+
+  /**
+   * Normalize a splitTaskTitle model payload into { shouldSplit, tasks }.
+   * @param {*} raw
+   * @param {string} original
+   * @returns {{ shouldSplit: boolean, tasks: string[] }}
+   */
+  function normalizeSplitTaskResult(raw, original) {
+    var fallback = {
+      shouldSplit: false,
+      tasks: [String(original || '').trim()].filter(Boolean)
+    };
+    if (!raw || typeof raw !== 'object') return fallback;
+    var list = Array.isArray(raw.tasks)
+      ? raw.tasks
+      : Array.isArray(raw.titles)
+        ? raw.titles
+        : Array.isArray(raw.items)
+          ? raw.items
+          : [];
+    var tasks = [];
+    var seen = Object.create(null);
+    list.forEach(function (row) {
+      var text =
+        typeof row === 'string'
+          ? row.trim()
+          : row && typeof row === 'object' && typeof row.text === 'string'
+            ? row.text.trim()
+            : row && typeof row === 'object' && typeof row.title === 'string'
+              ? row.title.trim()
+              : '';
+      if (!text || text.length > 240) return;
+      var key = text.toLocaleLowerCase('fr-FR');
+      if (seen[key]) return;
+      seen[key] = true;
+      tasks.push(text);
+    });
+    if (tasks.length < 2) return fallback;
+    // Cap runaway splits — a typed title rarely needs more than 8 discrete tasks.
+    if (tasks.length > 8) tasks = tasks.slice(0, 8);
+    var shouldSplit = raw.shouldSplit !== false && raw.split !== false;
+    if (!shouldSplit) return fallback;
+    return { shouldSplit: true, tasks: tasks };
+  }
+
+  /**
+   * Ask the model whether a typed title is several independent tasks, and
+   * return polished titles when it should be split (slash alternatives, "also", etc.).
+   * @param {*} provider
+   * @param {string} title
+   * @param {{ force?: boolean }} [options]
+   * @returns {Promise<{ shouldSplit: boolean, tasks: string[] }>}
+   */
+  async function splitTaskTitle(provider, title, options) {
+    options = options || {};
+    var original = typeof title === 'string' ? title.trim() : '';
+    var empty = { shouldSplit: false, tasks: original ? [original] : [] };
+    if (!original) return empty;
+    if (!options.force && !titleMayBeCompound(original)) return empty;
+
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) return empty;
+
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu analyses un titre de t\u00e2che / sous-t\u00e2che saisi par l\u2019utilisateur.',
+          'D\u00e9cide s\u2019il d\u00e9crit PLUSIEURS travaux ind\u00e9pendants, puis d\u00e9coupe et reformule chaque titre.',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"shouldSplit":true|false,"tasks":["\u2026","\u2026"]}',
+          '',
+          'D\u00e9coupe (shouldSplit=true) quand\u00a0:',
+          '- Alternatives slash (portrait/landscape, A/B) = une t\u00e2che par variante.',
+          '- Plusieurs actions reli\u00e9es par also / aussi / ; / et aussi / puis / en plus.',
+          '- Plusieurs phrases ou clauses = travaux s\u00e9par\u00e9ment compl\u00e9tables.',
+          '',
+          'Ne d\u00e9coupe PAS (shouldSplit=false, tasks=[titre unique poli si besoin]) quand\u00a0:',
+          '- Une seule action avec des qualificatifs (format, r\u00e9solution, outil, lieu).',
+          '- Une liste d\u2019objets pour LA M\u00caME action (\u00ab\u00a0Acheter lait, pain et beurre\u00a0\u00bb).',
+          '- Tu n\u2019es pas s\u00fbr\u00a0: shouldSplit=false.',
+          '',
+          'Chaque entr\u00e9e de tasks\u00a0:',
+          '- Une action concr\u00e8te, courte, autonome (1 ligne).',
+          '- Corrige fautes \u00e9videntes / typos (\u00ab\u00a0Apple Pro Res\u00a0\u00bb \u2192 \u00ab\u00a0Apple ProRes\u00a0\u00bb,',
+          '  \u00ab\u00a0opengate\u00a0\u00bb \u2192 \u00ab\u00a0OpenGate\u00a0\u00bb, sens approximatif si clair).',
+          '- Garde la langue du texte d\u2019origine (FR ou EN).',
+          '- INTERDIT\u00a0: inventer du travail absent du texte\u00a0; num\u00e9rotation\u00a0; guillemets superflus.',
+          '',
+          'Exemple\u00a0:',
+          'Entr\u00e9e\u00a0: \u00ab\u00a0Do single portrait/landscape video test with opengate, 4K, Apple Pro Res HQ. Also, we should export the video I\'ve been working on as a test to see the changes; also, we should see what benefits it a pour shooter in portrait mode.\u00a0\u00bb',
+          'Sortie\u00a0: {"shouldSplit":true,"tasks":["Do a single portrait video test with OpenGate, 4K, Apple ProRes HQ.","Do a single landscape video test with OpenGate, 4K, Apple ProRes HQ.","Export the current video as a test to review the changes.","Evaluate the benefits of a top-down shooter in portrait mode."]}'
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content: original.slice(0, 1200)
+      }
+    ];
+
+    var response;
+    try {
+      response = await chatCompletions(p, messages, {
+        jsonMode: true,
+        max_tokens: 500,
+        temperature: 0.2,
+        stream: false
+      });
+    } catch (err) {
+      if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+        try {
+          response = await chatCompletions(p, messages, {
+            jsonMode: false,
+            max_tokens: 500,
+            temperature: 0.2,
+            stream: false
+          });
+        } catch (err2) {
+          console.error('PriorityAgent.splitTaskTitle failed', err2);
+          return empty;
+        }
+      } else {
+        console.error('PriorityAgent.splitTaskTitle failed', err);
+        return empty;
+      }
+    }
+
+    var raw = null;
+    try {
+      var content =
+        response && typeof response.content === 'string' ? response.content : '';
+      var fence = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
+      var jsonText = fence ? fence[1].trim() : content.trim();
+      var start = jsonText.indexOf('{');
+      var end = jsonText.lastIndexOf('}');
+      if (start >= 0 && end > start) jsonText = jsonText.slice(start, end + 1);
+      raw = JSON.parse(jsonText);
+    } catch (e) {
+      try {
+        raw = parseAssistantPayload(response && response.content);
+      } catch (e2) {
+        raw = null;
+      }
+    }
+    return normalizeSplitTaskResult(raw, original);
   }
 
   /**
@@ -13848,6 +14019,9 @@
     cardProgressSummaryTurn: cardProgressSummaryTurn,
     isVerboseStructuredDesc: isVerboseStructuredDesc,
     suggestSubtasks: suggestSubtasks,
+    titleMayBeCompound: titleMayBeCompound,
+    normalizeSplitTaskResult: normalizeSplitTaskResult,
+    splitTaskTitle: splitTaskTitle,
     estimateSubtaskDurations: estimateSubtaskDurations,
     fallbackBlockedReasonText: fallbackBlockedReasonText,
     suggestBlockedReasonText: suggestBlockedReasonText,

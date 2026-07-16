@@ -175,4 +175,75 @@ describe('StatutMatch / StatutTrello', () => {
       if (prevClearBlocked) PT.clearBlockedIfComplete = prevClearBlocked;
     }
   });
+
+  it('Terminé with rolled recurrence reopens progress instead of staying done', async () => {
+    loadComponent('priority/priority-trello.js');
+    loadComponent('completion/completion-trello.js');
+    const CT = global.CompletionTrello;
+    assert.ok(CT);
+
+    const store = Object.create(null);
+    const t = {
+      get(_scope, _visibility, key) {
+        return Promise.resolve(store[key]);
+      },
+      set(_scope, _visibility, key, value) {
+        store[key] = value;
+        return Promise.resolve();
+      },
+    };
+
+    const PT = global.PriorityTrello;
+    const prevSetDue = PT && PT.setCardDueComplete;
+    const prevClearBlocked = PT && PT.clearBlockedIfComplete;
+    const prevRestore = ST.restorePreviousStatutFromIncomplete;
+    if (PT) {
+      PT.setCardDueComplete = async () => ({
+        ok: true,
+        changed: true,
+        rolled: true,
+        dueComplete: false,
+        inputs: {
+          dueDate: '2026-07-17',
+          dueTime: '08:00',
+          recurrence: { frequency: 'daily', interval: 1 },
+        },
+      });
+      PT.clearBlockedIfComplete = async () => ({ ok: true, cleared: false });
+    }
+    ST.restorePreviousStatutFromIncomplete = async () => ({
+      ok: true,
+      restored: true,
+      reason: 'test',
+    });
+
+    const settings = {
+      listCategories: { done: 'completed', wip: 'started' },
+      roleLists: { completed: 'done' },
+      autoMoveCompleted: false,
+      autoMoveBlocked: false,
+    };
+
+    store[CT.CARD_COMPLETION_KEY] = CT.normalizeCompletionData({
+      items: [],
+      progress: 40,
+    });
+
+    try {
+      const side = await ST.applyStatutSideEffects(t, 'done', settings);
+      assert.equal(side.category, 'completed');
+      assert.equal(side.dueComplete && side.dueComplete.rolled, true);
+      assert.equal(side.progressIncomplete, true);
+      assert.equal(side.progressComplete, false);
+      assert.equal(store[CT.CARD_COMPLETION_KEY].progress, 0);
+      assert.ok(side.completion);
+      assert.equal(side.completion.progress, 0);
+    } finally {
+      if (PT) {
+        if (prevSetDue) PT.setCardDueComplete = prevSetDue;
+        if (prevClearBlocked) PT.clearBlockedIfComplete = prevClearBlocked;
+      }
+      ST.restorePreviousStatutFromIncomplete = prevRestore;
+    }
+  });
 });

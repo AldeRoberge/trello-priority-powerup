@@ -99,4 +99,91 @@ describe('Card history labels', () => {
     assert.notEqual(details.lines[0], 'Priorité');
     assert.match(details.lines[0], /activ/i);
   });
+
+  it('describes enabling daily recurrence', () => {
+    const label = CH.buildLabel(
+      {
+        priority: {
+          urgency: 2,
+          impact: 2,
+          ease: 2,
+          dueDate: '2026-07-16',
+          dueTime: '08:00',
+        },
+      },
+      {
+        priority: {
+          urgency: 2,
+          impact: 2,
+          ease: 2,
+          dueDate: '2026-07-16',
+          dueTime: '08:00',
+          recurrence: { frequency: 'daily', interval: 1 },
+        },
+      },
+      ['priority']
+    );
+    assert.match(label, /[Rr][ée]p[ée]tition/i);
+    assert.match(label, /chaque jour/i);
+  });
+
+  it('describes clearing recurrence', () => {
+    const label = CH.buildLabel(
+      {
+        priority: {
+          urgency: 2,
+          impact: 2,
+          ease: 2,
+          dueDate: '2026-07-16',
+          dueTime: '08:00',
+          recurrence: { frequency: 'weekly', interval: 1, weekdays: [1] },
+        },
+      },
+      {
+        priority: {
+          urgency: 2,
+          impact: 2,
+          ease: 2,
+          dueDate: '2026-07-16',
+          dueTime: '08:00',
+        },
+      },
+      ['priority']
+    );
+    assert.match(label, /[Rr][ée]p[ée]tition d[ée]sactiv/i);
+  });
+
+  it('records recurrence change through history slim', () => {
+    const history = CH.create({});
+    const recorded = history.record(
+      {
+        priority: {
+          urgency: 2,
+          impact: 2,
+          ease: 2,
+          dueDate: '2026-07-16',
+          dueTime: '08:00',
+        },
+      },
+      {
+        priority: {
+          urgency: 2,
+          impact: 2,
+          ease: 2,
+          dueDate: '2026-07-16',
+          dueTime: '08:00',
+          recurrence: { frequency: 'daily', interval: 2 },
+        },
+      }
+    );
+    assert.ok(recorded);
+    const entries = history.list();
+    assert.equal(entries.length, 1);
+    assert.match(entries[0].label, /[Rr][ée]p[ée]tition|tous les 2 jours/i);
+    const entry = history.getEntry(recorded.id);
+    assert.ok(entry);
+    assert.ok(entry.after.priority.recurrence);
+    assert.equal(entry.after.priority.recurrence.frequency, 'daily');
+    assert.equal(entry.after.priority.recurrence.interval, 2);
+  });
 });

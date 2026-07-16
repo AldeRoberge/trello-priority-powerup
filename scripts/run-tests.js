@@ -19,6 +19,7 @@ const UNIT_FILES = [
   'version.test.js',
   'priority-matrix.test.js',
   'priority-scoring.test.js',
+  'recurrence.test.js',
   'statut.test.js',
   'effects.test.js',
   'completion.test.js',
@@ -29,6 +30,9 @@ const UNIT_FILES = [
   'status-brief.test.js',
   'progress-summary.test.js',
   'task-types.test.js',
+  'task-split.test.js',
+  'history.test.js',
+  'debug-log.test.js',
 ];
 
 function listTests() {
