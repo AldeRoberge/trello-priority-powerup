@@ -2717,6 +2717,7 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble[data-tone='acti
 .tp-completion-checklist-add {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 6px;
 }
 
@@ -2724,6 +2725,10 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble[data-tone='acti
   flex: 1 1 auto;
   min-width: 0;
   font-size: 12px;
+}
+
+.tp-completion-checklist-add:not(.is-open) .tp-completion-checklist-add-input {
+  display: none;
 }
 
 .tp-completion-checklist-add-btn {

@@ -12360,6 +12360,12 @@
     var reasonSpellcheckGen = 0;
     // reasonKey(corrected) → { original } kept until popup closes / revert / edit
     var reasonSpellReverts = Object.create(null);
+    // reasonKey(first split chip) → { original, reasons: string[] }
+    var reasonSplitReverts = Object.create(null);
+    var splitBlockedReasonFn =
+      typeof config.splitBlockedReason === 'function'
+        ? config.splitBlockedReason
+        : null;
 
     function spellcheckReasonText(text) {
       var trimmed = normalizeBlockedReason(text);
@@ -12379,6 +12385,62 @@
         function () {
           return trimmed;
         }
+      );
+    }
+
+    function emptyBlockedSplitResult(original) {
+      var text = normalizeBlockedReason(original);
+      return { shouldSplit: false, reasons: text ? [text] : [] };
+    }
+
+    function callSplitBlockedReason(text) {
+      var original = normalizeBlockedReason(text);
+      var empty = emptyBlockedSplitResult(original);
+      if (!original) return Promise.resolve(empty);
+      if (splitBlockedReasonFn) {
+        return Promise.resolve()
+          .then(function () {
+            return splitBlockedReasonFn(original);
+          })
+          .catch(function (err) {
+            console.error('splitBlockedReason failed', err);
+            return empty;
+          });
+      }
+      var Agent = global.PriorityAgent;
+      if (
+        !Agent ||
+        typeof Agent.splitBlockedReason !== 'function' ||
+        typeof Agent.getProvider !== 'function'
+      ) {
+        return Promise.resolve(empty);
+      }
+      var t =
+        global.Spellcheck && typeof global.Spellcheck.getT === 'function'
+          ? global.Spellcheck.getT()
+          : null;
+      if (!t) return Promise.resolve(empty);
+      return Agent.getProvider(t)
+        .then(function (provider) {
+          if (
+            typeof Agent.isConfigured === 'function' &&
+            !Agent.isConfigured(provider)
+          ) {
+            return empty;
+          }
+          return Agent.splitBlockedReason(provider, original);
+        })
+        .catch(function (err) {
+          console.error('splitBlockedReason failed', err);
+          return empty;
+        });
+    }
+
+    function reasonMayBeCompound(text) {
+      return (
+        typeof global.PriorityAgent !== 'undefined' &&
+        typeof global.PriorityAgent.titleMayBeCompound === 'function' &&
+        global.PriorityAgent.titleMayBeCompound(text)
       );
     }
 
@@ -12415,7 +12477,115 @@
       reasonSpellReverts[key] = { original: originalNorm };
     }
 
-    function applySpellcheckCorrection(original, corrected, gen) {
+    function clearReasonSplitRevert(reason) {
+      var key = reasonKey(reason);
+      if (!key) return;
+      Object.keys(reasonSplitReverts).forEach(function (anchorKey) {
+        var entry = reasonSplitReverts[anchorKey];
+        if (!entry || !Array.isArray(entry.reasons)) return;
+        var overlap =
+          anchorKey === key ||
+          entry.reasons.some(function (r) {
+            return reasonKey(r) === key;
+          });
+        if (overlap) delete reasonSplitReverts[anchorKey];
+      });
+    }
+
+    function fireBlockedReasonAdded(reason) {
+      var next = normalizeBlockedReason(reason);
+      if (
+        !next ||
+        !onBlockedReasonAdded ||
+        next === BLOCKED_REASON_WAITING_OTHER_TASK
+      ) {
+        return;
+      }
+      try {
+        onBlockedReasonAdded(next);
+      } catch (err) {
+        console.error('onBlockedReasonAdded failed', err);
+      }
+    }
+
+    /**
+     * Replace one committed Motif with several polished Motifs from AI split.
+     * @returns {string[]|null} added reasons
+     */
+    function applyReasonSplitReplace(originalText, reasons) {
+      var original = normalizeBlockedReason(originalText);
+      if (!original || !reasons || reasons.length < 2 || !hasReason(original)) {
+        return null;
+      }
+      var polished = [];
+      var seen = Object.create(null);
+      for (var i = 0; i < reasons.length; i++) {
+        var text = normalizeBlockedReason(reasons[i]);
+        if (!text) continue;
+        var key = reasonKey(text);
+        if (!key || seen[key]) continue;
+        seen[key] = true;
+        polished.push(text);
+      }
+      if (polished.length < 2) return null;
+
+      clearReasonSpellchecking(original);
+      clearReasonSpellRevert(original);
+      clearReasonSplitRevert(original);
+
+      // Drop the provisional compound chip without notifying (batch below).
+      var nextReasons = [];
+      var originalKey = reasonKey(original);
+      for (var r = 0; r < currentReasons.length; r++) {
+        if (reasonKey(currentReasons[r]) !== originalKey) {
+          nextReasons.push(currentReasons[r]);
+        }
+      }
+      currentReasons = nextReasons;
+      if (!isBlockedWaitingOtherTask(currentReasons)) {
+        currentLinks = [];
+      }
+
+      var added = [];
+      for (var p = 0; p < polished.length; p++) {
+        var piece = polished[p];
+        if (hasReason(piece)) continue;
+        bumpBlockedReasonFreq(piece);
+        currentReasons = currentReasons.concat([piece]);
+        added.push(piece);
+        fireBlockedReasonAdded(piece);
+      }
+      if (added.length < 2) {
+        // Restore original if we somehow collapsed to <2 new chips.
+        if (!hasReason(original)) {
+          currentReasons = currentReasons.concat([original]);
+        }
+        refreshSelected();
+        refreshSuggestions();
+        refreshSubtaskUi();
+        notifyReasonChange();
+        onLayoutChange();
+        return null;
+      }
+
+      reasonSplitReverts[reasonKey(added[0])] = {
+        original: original,
+        reasons: added.slice()
+      };
+      if (embedded && !checked) {
+        checked = true;
+        field.classList.add('is-enabled');
+      }
+      refreshSelected();
+      refreshSuggestions();
+      refreshSubtaskUi();
+      notifyReasonChange();
+      onLayoutChange();
+      return added;
+    }
+
+    function applySpellcheckCorrection(original, corrected, gen, opts) {
+      opts = opts || {};
       var key = reasonKey(original);
       if (!key || reasonSpellcheckPending[key] !== gen) return;
       clearReasonSpellchecking(original, gen);
@@ -12426,35 +12596,62 @@
         if (renamed && !hadFinalBefore && hasReason(finalText)) {
           rememberReasonSpellRevert(finalText, original);
         }
+        if (opts.deferredTaskCreate) {
+          fireBlockedReasonAdded(hasReason(finalText) ? finalText : original);
+        }
         refreshSelected();
         onLayoutChange();
       } else {
+        if (opts.deferredTaskCreate && hasReason(original)) {
+          fireBlockedReasonAdded(original);
+        }
         refreshSelected();
         onLayoutChange();
       }
     }
 
-    /** Show the reason immediately, then swap in AI spelling fixes when ready. */
-    function spellcheckAfterCommit(original) {
+    /**
+     * After commit: ask AI whether the Motif is several causes; else spellcheck.
+     * Enter must never wait on AI.
+     */
+    function refineReasonAfterCommit(original, opts) {
+      opts = opts || {};
       var typed = normalizeBlockedReason(original);
       if (!typed || !hasReason(typed)) return;
-      if (
-        typeof global.Spellcheck === 'undefined' ||
-        typeof global.Spellcheck.correct !== 'function'
-      ) {
-        return;
-      }
       var gen = markReasonSpellchecking(typed);
       refreshSelected();
       onLayoutChange();
-      spellcheckReasonText(typed).then(
-        function (corrected) {
-          applySpellcheckCorrection(typed, corrected, gen);
-        },
-        function () {
-          applySpellcheckCorrection(typed, typed, gen);
+
+      var splitPromise = reasonMayBeCompound(typed)
+        ? callSplitBlockedReason(typed)
+        : Promise.resolve(null);
+
+      splitPromise.then(function (splitResult) {
+        if (reasonSpellcheckPending[reasonKey(typed)] !== gen) return;
+        if (!hasReason(typed)) {
+          clearReasonSpellchecking(typed, gen);
+          return;
         }
-      );
+        if (
+          splitResult &&
+          splitResult.shouldSplit === true &&
+          Array.isArray(splitResult.reasons) &&
+          splitResult.reasons.length >= 2
+        ) {
+          clearReasonSpellchecking(typed, gen);
+          var added = applyReasonSplitReplace(typed, splitResult.reasons);
+          if (added) return;
+        }
+        // No split (or failed replace): continue with orthography polish.
+        spellcheckReasonText(typed).then(
+          function (corrected) {
+            applySpellcheckCorrection(typed, corrected, gen, opts);
+          },
+          function () {
+            applySpellcheckCorrection(typed, typed, gen, opts);
+          }
+        );
+      });
     }
 
     var field = document.createElement('div');
@@ -12726,6 +12923,7 @@
       if (!key) return;
       clearReasonSpellchecking(value);
       clearReasonSpellRevert(value);
+      clearReasonSplitRevert(value);
       var next = [];
       for (var i = 0; i < currentReasons.length; i++) {
         if (reasonKey(currentReasons[i]) !== key) next.push(currentReasons[i]);
@@ -12807,6 +13005,7 @@
 
       clearReasonSpellchecking(reason);
       clearReasonSpellRevert(reason);
+      clearReasonSplitRevert(reason);
 
       var chip = null;
       var chips = selectedWrap.querySelectorAll('.blocked-reason-chip:not(.blocked-subtask-chip)');
@@ -12869,13 +13068,14 @@
           onLayoutChange();
           return;
         }
-        // Commit immediately; spellcheck may refine orthography asynchronously.
-        // Skip spellcheck when renaming onto an existing chip (merge/drop).
+        // Commit immediately; split / spellcheck may refine asynchronously.
+        // Skip refine when renaming onto an existing chip (merge/drop).
+        // Do not defer/create unblock subtasks on rename — only fresh adds do.
         var mergingIntoExisting =
           reasonKey(pending) !== reasonKey(reason) && hasReason(pending);
         renameReason(reason, pending);
         if (!mergingIntoExisting && hasReason(pending)) {
-          spellcheckAfterCommit(pending);
+          refineReasonAfterCommit(pending);
         }
       }
       finishReasonEdit = finish;
@@ -12974,8 +13174,84 @@
             spinner.innerHTML = '<i class="ti ti-loader-2" aria-hidden="true"></i>';
             chip.appendChild(spinner);
           } else {
-            var revertInfo = reasonSpellReverts[reasonKey(reason)];
-            if (revertInfo && revertInfo.original) {
+            var splitInfo = null;
+            var splitAnchorKey = null;
+            var splitKeys = Object.keys(reasonSplitReverts);
+            for (var sk = 0; sk < splitKeys.length; sk++) {
+              var splitEntry = reasonSplitReverts[splitKeys[sk]];
+              if (
+                splitEntry &&
+                Array.isArray(splitEntry.reasons) &&
+                reasonKey(splitEntry.reasons[0]) === reasonKey(reason)
+              ) {
+                splitInfo = splitEntry;
+                splitAnchorKey = splitKeys[sk];
+                break;
+              }
+            }
+            var revertInfo =
+              !splitInfo && reasonSpellReverts[reasonKey(reason)]
+                ? reasonSpellReverts[reasonKey(reason)]
+                : null;
+            if (
+              splitInfo &&
+              splitAnchorKey &&
+              splitInfo.original &&
+              Array.isArray(splitInfo.reasons)
+            ) {
+              var splitCount = splitInfo.reasons.length;
+              var splitPrevious = splitInfo.original;
+              var splitTitle =
+                'Annuler la s\u00e9paration \u2014 restaurer\u00a0: ' +
+                (global.Spellcheck && typeof global.Spellcheck.revertLabel === 'function'
+                  ? global.Spellcheck.revertLabel(splitPrevious)
+                  : splitPrevious);
+              var splitRevertBtn = document.createElement('button');
+              splitRevertBtn.type = 'button';
+              splitRevertBtn.className =
+                'blocked-reason-chip-revert tp-spell-revert blocked-reason-chip-split-revert';
+              splitRevertBtn.setAttribute(
+                'aria-label',
+                'Annuler la s\u00e9paration en ' + splitCount + ' causes'
+              );
+              splitRevertBtn.title = splitTitle;
+              splitRevertBtn.innerHTML =
+                '<i class="ti ti-arrow-back-up" aria-hidden="true"></i>';
+              splitRevertBtn.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                var still = (splitInfo.reasons || []).filter(function (r) {
+                  return hasReason(r);
+                });
+                if (reasonSplitReverts[splitAnchorKey] === splitInfo) {
+                  delete reasonSplitReverts[splitAnchorKey];
+                }
+                if (!still.length) {
+                  refreshSelected();
+                  onLayoutChange();
+                  return;
+                }
+                for (var si = 0; si < still.length; si++) {
+                  var stillKey = reasonKey(still[si]);
+                  currentReasons = currentReasons.filter(function (r) {
+                    return reasonKey(r) !== stillKey;
+                  });
+                }
+                if (!hasReason(splitPrevious)) {
+                  bumpBlockedReasonFreq(splitPrevious);
+                  currentReasons = currentReasons.concat([splitPrevious]);
+                }
+                if (!isBlockedWaitingOtherTask(currentReasons)) {
+                  currentLinks = [];
+                }
+                refreshSelected();
+                refreshSuggestions();
+                refreshSubtaskUi();
+                notifyReasonChange();
+                onLayoutChange();
+              });
+              chip.appendChild(splitRevertBtn);
+            } else if (revertInfo && revertInfo.original) {
               var previousText = revertInfo.original;
               var revertTitle =
                 global.Spellcheck && typeof global.Spellcheck.revertLabel === 'function'
@@ -13279,12 +13555,13 @@
       event.preventDefault();
       var typed = normalizeBlockedReason(reasonInput.value);
       if (!typed) return;
-      // Ingest immediately so Enter never freezes on spellcheck.
+      // Ingest immediately so Enter never freezes on AI refine.
       reasonInput.value = '';
       refreshSuggestions();
       if (!hasReason(typed)) {
-        addReason(typed);
-        spellcheckAfterCommit(typed);
+        var deferTask = reasonMayBeCompound(typed);
+        addReason(typed, { skipTaskCreate: deferTask });
+        refineReasonAfterCommit(typed, { deferredTaskCreate: deferTask });
       }
       reasonInput.focus();
     });
@@ -13477,12 +13754,16 @@
     var triggerTitle = document.createElement('span');
     triggerTitle.className = 'due-date-trigger-title';
     triggerTitle.textContent = DUE_DATE_BOX_LABEL;
+    var triggerRecurringHint = document.createElement('span');
+    triggerRecurringHint.className = 'due-date-trigger-hint';
+    triggerRecurringHint.hidden = true;
 
     var triggerValue = document.createElement('span');
     triggerValue.className = 'due-date-trigger-value';
 
     triggerText.appendChild(triggerValue);
     triggerText.appendChild(triggerTitle);
+    triggerText.appendChild(triggerRecurringHint);
 
     var dateTrashBtn = document.createElement('button');
     dateTrashBtn.type = 'button';
@@ -13516,12 +13797,16 @@
     var timeTitle = document.createElement('span');
     timeTitle.className = 'due-date-time-title';
     timeTitle.textContent = DUE_DATE_TIME_LABEL;
+    var timeRecurringHint = document.createElement('span');
+    timeRecurringHint.className = 'due-date-time-hint';
+    timeRecurringHint.hidden = true;
 
     var timeValue = document.createElement('span');
     timeValue.className = 'due-date-time-value';
 
     timeTriggerText.appendChild(timeValue);
     timeTriggerText.appendChild(timeTitle);
+    timeTriggerText.appendChild(timeRecurringHint);
 
     var timeTrashBtn = document.createElement('button');
     timeTrashBtn.type = 'button';
@@ -14558,6 +14843,9 @@
 
     function refreshRecurrenceUi() {
       var rule = currentRecurrence;
+      var recurrenceHint = rule
+        ? formatRecurrenceLabelFr(rule, currentTime || rememberedTime || DUE_DATE_TIME_DEFAULT)
+        : '';
       recurringSelect.value = rule ? rule.frequency : '';
       recurringClearBtn.hidden = !rule;
       recurringWeekdays.hidden = !rule || rule.frequency !== 'weekly';
@@ -14566,6 +14854,10 @@
       recurringIntervalWrap.hidden = !rule;
       recurringTimeWrap.hidden = !rule;
       recurringTimeInput.value = currentTime || rememberedTime || DUE_DATE_TIME_DEFAULT;
+      triggerRecurringHint.hidden = !rule;
+      timeRecurringHint.hidden = !rule;
+      triggerRecurringHint.textContent = recurrenceHint;
+      timeRecurringHint.textContent = recurrenceHint;
       var selected = rule && rule.weekdays ? rule.weekdays : [];
       var chips = recurringWeekdays.querySelectorAll('.due-date-recurring-weekday');
       for (var i = 0; i < chips.length; i++) {

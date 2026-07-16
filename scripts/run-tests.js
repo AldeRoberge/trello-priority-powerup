@@ -24,6 +24,7 @@ const UNIT_FILES = [
   'effects.test.js',
   'completion.test.js',
   'blocked-motifs.test.js',
+  'blocked-reason-split.test.js',
   'brand.test.js',
   'overview.test.js',
   'markdown-rich.test.js',

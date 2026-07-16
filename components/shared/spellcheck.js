@@ -40,6 +40,11 @@
     }
   }
 
+  /** Power-Up `t` from configure — used by other modules that share the AI provider. */
+  function getT() {
+    return context.t;
+  }
+
   function wordCount(text) {
     var parts = String(text || '')
       .trim()
@@ -257,6 +262,7 @@
 
   global.Spellcheck = {
     configure: configure,
+    getT: getT,
     correct: correct,
     attachRevert: attachRevert,
     revertLabel: revertLabel

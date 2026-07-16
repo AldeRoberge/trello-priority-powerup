@@ -4424,12 +4424,28 @@
       addBtn.type = 'button';
       addBtn.className = 'tp-completion-checklist-add-btn';
       addBtn.innerHTML = '<i class="ti ti-plus" aria-hidden="true"></i>';
-      addBtn.setAttribute('aria-label', 'Ajouter');
-      addBtn.title = 'Ajouter';
+      addBtn.setAttribute('aria-label', 'Ajouter une sous-sous-t\u00e2che');
+      addBtn.setAttribute('aria-expanded', 'false');
+      addBtn.title = 'Ajouter une sous-sous-t\u00e2che';
+
+      function setChecklistAddOpen(open) {
+        var nextOpen = !!open;
+        addRow.classList.toggle('is-open', nextOpen);
+        addBtn.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+        if (nextOpen) {
+          setTimeout(function () {
+            addInput.focus();
+          }, 0);
+        }
+        onResize();
+      }
 
       function submitChecklistAdd() {
         var text = addInput.value.trim();
-        if (!text) return;
+        if (!text) {
+          setChecklistAddOpen(true);
+          return;
+        }
         var result = CT.addChecklistItem(data, parentItem.id, text);
         if (!result || !result.item) return;
         data = result.data;
@@ -4441,13 +4457,28 @@
 
       addBtn.addEventListener('click', function (e) {
         e.preventDefault();
+        if (!addRow.classList.contains('is-open')) {
+          setChecklistAddOpen(true);
+          return;
+        }
         submitChecklistAdd();
       });
       addInput.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') {
           e.preventDefault();
           submitChecklistAdd();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          addInput.value = '';
+          setChecklistAddOpen(false);
         }
+      });
+      addInput.addEventListener('blur', function () {
+        setTimeout(function () {
+          if (!addInput.value.trim() && document.activeElement !== addBtn) {
+            setChecklistAddOpen(false);
+          }
+        }, 0);
       });
 
       addRow.appendChild(addInput);

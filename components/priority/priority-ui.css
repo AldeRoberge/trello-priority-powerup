@@ -818,6 +818,13 @@ body {
   display: grid;
   grid-template-columns: 132px minmax(0, 1fr);
   gap: 10px 12px;
+  align-items: center;
+}
+
+/* Tall multi-line values: keep labels on the first line, not mid-block. */
+.info-row--title,
+.info-row--desc,
+.info-row--objectif {
   align-items: start;
 }
 
@@ -831,12 +838,17 @@ body {
   align-items: center;
   gap: 6px;
   margin: 0;
-  padding-top: 2px;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--text-muted);
   line-height: 1.35;
+}
+
+.info-row--title .info-row-label,
+.info-row--desc .info-row-label,
+.info-row--objectif .info-row-label {
+  padding-top: 6px;
 }
 
 .info-row-icon {
@@ -4306,6 +4318,23 @@ body {
   color: var(--due-accent);
   line-height: 1.2;
   letter-spacing: -0.01em;
+}
+
+.due-date-trigger-hint,
+.due-date-time-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.due-date-trigger-hint[hidden],
+.due-date-time-hint[hidden] {
+  display: none;
 }
 
 .due-date-trigger-value,

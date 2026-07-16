@@ -3698,6 +3698,155 @@
   }
 
   /**
+   * Normalize a splitBlockedReason model payload into { shouldSplit, reasons }.
+   * @param {*} raw
+   * @param {string} original
+   * @returns {{ shouldSplit: boolean, reasons: string[] }}
+   */
+  function normalizeSplitBlockedReasonResult(raw, original) {
+    var fallback = {
+      shouldSplit: false,
+      reasons: [String(original || '').trim()].filter(Boolean)
+    };
+    if (!raw || typeof raw !== 'object') return fallback;
+    var list = Array.isArray(raw.reasons)
+      ? raw.reasons
+      : Array.isArray(raw.tasks)
+        ? raw.tasks
+        : Array.isArray(raw.titles)
+          ? raw.titles
+          : Array.isArray(raw.items)
+            ? raw.items
+            : [];
+    var reasons = [];
+    var seen = Object.create(null);
+    list.forEach(function (row) {
+      var text =
+        typeof row === 'string'
+          ? row.trim()
+          : row && typeof row === 'object' && typeof row.text === 'string'
+            ? row.text.trim()
+            : row && typeof row === 'object' && typeof row.reason === 'string'
+              ? row.reason.trim()
+              : row && typeof row === 'object' && typeof row.title === 'string'
+                ? row.title.trim()
+                : '';
+      if (!text || text.length > 240) return;
+      var key = text.toLocaleLowerCase('fr-FR');
+      if (seen[key]) return;
+      seen[key] = true;
+      reasons.push(text);
+    });
+    if (reasons.length < 2) return fallback;
+    if (reasons.length > 8) reasons = reasons.slice(0, 8);
+    var shouldSplit = raw.shouldSplit !== false && raw.split !== false;
+    if (!shouldSplit) return fallback;
+    return { shouldSplit: true, reasons: reasons };
+  }
+
+  /**
+   * Ask the model whether a typed Motif / blocking cause is several independent
+   * reasons, and return polished Motifs when it should be split.
+   * @param {*} provider
+   * @param {string} reason
+   * @param {{ force?: boolean }} [options]
+   * @returns {Promise<{ shouldSplit: boolean, reasons: string[] }>}
+   */
+  async function splitBlockedReason(provider, reason, options) {
+    options = options || {};
+    var original = typeof reason === 'string' ? reason.trim() : '';
+    var empty = { shouldSplit: false, reasons: original ? [original] : [] };
+    if (!original) return empty;
+    if (!options.force && !titleMayBeCompound(original)) return empty;
+
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) return empty;
+
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu analyses une cause de blocage (Motif) saisie par l\u2019utilisateur.',
+          'D\u00e9cide si elle d\u00e9crit PLUSIEURS causes ind\u00e9pendantes, puis d\u00e9coupe et reformule chaque Motif.',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"shouldSplit":true|false,"reasons":["\u2026","\u2026"]}',
+          '',
+          'D\u00e9coupe (shouldSplit=true) quand\u00a0:',
+          '- Plusieurs causes reli\u00e9es par also / aussi / ; / et aussi / puis / en plus / as well.',
+          '- Plusieurs phrases ou clauses = obstacles s\u00e9par\u00e9ment r\u00e9solvables.',
+          '- Deux attentes distinctes (ex. approbation client ET mat\u00e9riel manquant).',
+          '',
+          'Ne d\u00e9coupe PAS (shouldSplit=false, reasons=[Motif unique poli si besoin]) quand\u00a0:',
+          '- Une seule cause avec des qualificatifs (qui, quoi, format, lieu).',
+          '- Une liste d\u2019objets pour LA M\u00caME attente (\u00ab\u00a0En attente du lait, du pain et du beurre\u00a0\u00bb).',
+          '- Slash / alternatives qui pr\u00e9cisent UN seul blocage (portrait/landscape dans la m\u00eame demande).',
+          '- Tu n\u2019es pas s\u00fbr\u00a0: shouldSplit=false.',
+          '',
+          'Chaque entr\u00e9e de reasons\u00a0:',
+          '- UNE cause courte, autonome (1 ligne), pr\u00e9f\u00e9rer \u00ab\u00a0En attente de \u2026\u00a0\u00bb / \u00ab\u00a0En attente d\'\u2026\u00a0\u00bb',
+          '  ou \u00ab\u00a0Bloqu\u00e9 \u00e0 cause de \u2026\u00a0\u00bb pour un obstacle mat\u00e9riel / permission.',
+          '- Corrige fautes \u00e9videntes / typos.',
+          '- Garde la langue du texte d\u2019origine (FR ou EN).',
+          '- INTERDIT\u00a0: inventer des causes absentes\u00a0; num\u00e9rotation\u00a0; guillemets superflus\u00a0; actions \u00e0 faire (\u00ab\u00a0Obtenir\u2026\u00a0\u00bb).',
+          '',
+          'Exemple\u00a0:',
+          'Entr\u00e9e\u00a0: \u00ab\u00a0En attente de l\'approbation du client; aussi, le tr\u00e9pied n\'est pas arriv\u00e9. Also waiting on staging access.\u00a0\u00bb',
+          'Sortie\u00a0: {"shouldSplit":true,"reasons":["En attente de l\'approbation du client","En attente du tr\u00e9pied","En attente de l\'acc\u00e8s staging"]}'
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content: original.slice(0, 1200)
+      }
+    ];
+
+    var response;
+    try {
+      response = await chatCompletions(p, messages, {
+        jsonMode: true,
+        max_tokens: 500,
+        temperature: 0.2,
+        stream: false
+      });
+    } catch (err) {
+      if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+        try {
+          response = await chatCompletions(p, messages, {
+            jsonMode: false,
+            max_tokens: 500,
+            temperature: 0.2,
+            stream: false
+          });
+        } catch (err2) {
+          console.error('PriorityAgent.splitBlockedReason failed', err2);
+          return empty;
+        }
+      } else {
+        console.error('PriorityAgent.splitBlockedReason failed', err);
+        return empty;
+      }
+    }
+
+    var raw = null;
+    try {
+      var content =
+        response && typeof response.content === 'string' ? response.content : '';
+      var fence = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
+      var jsonText = fence ? fence[1].trim() : content.trim();
+      var start = jsonText.indexOf('{');
+      var end = jsonText.lastIndexOf('}');
+      if (start >= 0 && end > start) jsonText = jsonText.slice(start, end + 1);
+      raw = JSON.parse(jsonText);
+    } catch (e) {
+      try {
+        raw = parseAssistantPayload(response && response.content);
+      } catch (e2) {
+        raw = null;
+      }
+    }
+    return normalizeSplitBlockedReasonResult(raw, original);
+  }
+
+  /**
    * Silently estimate missing subtask durations (unlocked items without times).
    * context: { cardName, cardDesc?, items: [{id,text}] }
    * @returns {Promise<Array<{id?:string, matchText?:string, estimatedMinutes:number}>>}
@@ -14022,6 +14171,8 @@
     titleMayBeCompound: titleMayBeCompound,
     normalizeSplitTaskResult: normalizeSplitTaskResult,
     splitTaskTitle: splitTaskTitle,
+    normalizeSplitBlockedReasonResult: normalizeSplitBlockedReasonResult,
+    splitBlockedReason: splitBlockedReason,
     estimateSubtaskDurations: estimateSubtaskDurations,
     fallbackBlockedReasonText: fallbackBlockedReasonText,
     suggestBlockedReasonText: suggestBlockedReasonText,
