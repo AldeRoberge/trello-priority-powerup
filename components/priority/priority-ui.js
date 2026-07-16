@@ -6264,14 +6264,18 @@
       embeddedToggleBtn = document.createElement('button');
       embeddedToggleBtn.type = 'button';
       embeddedToggleBtn.className = 'statut-embedded-collapse-btn';
-      embeddedToggleBtn.innerHTML =
-        '<i class="ti ti-chevron-down statut-embedded-collapse-chevron" aria-hidden="true"></i>';
-      embeddedHead.appendChild(embeddedToggleBtn);
+
+      var embeddedChevron = document.createElement('i');
+      embeddedChevron.className =
+        'ti ti-chevron-down statut-embedded-collapse-chevron';
+      embeddedChevron.setAttribute('aria-hidden', 'true');
+      embeddedToggleBtn.appendChild(embeddedChevron);
 
       heroEl = document.createElement('div');
       heroEl.className = 'statut-hero';
       heroEl.setAttribute('aria-live', 'polite');
-      embeddedHead.appendChild(heroEl);
+      embeddedToggleBtn.appendChild(heroEl);
+      embeddedHead.appendChild(embeddedToggleBtn);
 
       embeddedSummaryEl = document.createElement('p');
       embeddedSummaryEl.className = 'statut-embedded-summary';

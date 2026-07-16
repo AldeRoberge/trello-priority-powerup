@@ -1955,17 +1955,15 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   );
 }
 
-/* Collapsed: keep % + slider (+ Motifs summary when blocked). */
+/* Collapsed: keep title + circle check + % + estimate + slider
+   (+ Motifs summary when blocked). Hide encouragement, actions, Motifs editor. */
 .tp-completion-progress-panel.is-collapsed {
   gap: 8px;
   padding: 12px 14px 10px;
 }
 
-.tp-completion-progress-panel.is-collapsed .tp-completion-master-title,
 .tp-completion-progress-panel.is-collapsed .tp-completion-encouragement,
 .tp-completion-progress-panel.is-collapsed .tp-completion-progress-actions,
-.tp-completion-progress-panel.is-collapsed .tp-completion-master-check-wrap,
-.tp-completion-progress-panel.is-collapsed .tp-completion-master-estimate,
 .tp-completion-progress-panel.is-collapsed .tp-completion-master-motif-host {
   display: none !important;
 }
@@ -1975,7 +1973,12 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-completion-progress-panel.is-collapsed .tp-completion-progress-hero {
-  gap: 0;
+  gap: 6px;
+}
+
+.tp-completion-progress-panel.is-collapsed .tp-completion-master-title {
+  margin: 0;
+  font-size: 14px;
 }
 
 .tp-completion-progress-panel.is-collapsed .tp-completion-percent {
@@ -1987,28 +1990,31 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   gap: 8px;
 }
 
+/* Push the estimated time to the right edge of the collapsed row. */
+.tp-completion-progress-panel.is-collapsed .tp-completion-master-estimate {
+  margin-left: auto;
+}
+
 .tp-completion-details-toggle {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin: 0;
-  padding: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: -4px -6px;
+  padding: 4px 6px;
   border: none;
   border-radius: var(--completion-control-radius, 8px);
   background: transparent;
-  color: var(--tp-text-muted);
-  font-size: 15px;
-  line-height: 1;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: background-color 0.12s ease;
 }
 
 .tp-completion-details-toggle:hover {
-  background: color-mix(in srgb, var(--tp-text) 8%, transparent);
-  color: var(--tp-text);
+  background: color-mix(in srgb, var(--tp-text) 6%, transparent);
 }
 
 .tp-completion-details-toggle:focus {
@@ -2016,16 +2022,35 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-completion-details-toggle:focus-visible {
-  box-shadow: 0 0 0 2px var(--tp-surface), 0 0 0 4px var(--tp-focus, #0c66e4);
+  outline: 2px solid var(--tp-focus, #0c66e4);
+  outline-offset: 1px;
+}
+
+.tp-completion-details-toggle .tp-completion-progress-hero {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .tp-completion-details-chevron {
+  flex: 0 0 auto;
   display: block;
-  transition: transform 0.18s ease;
+  margin-top: 6px;
+  font-size: 14px;
+  line-height: 1;
+  color: color-mix(in srgb, var(--tp-text-muted) 72%, transparent);
+  transition: transform 0.18s ease, color 0.12s ease;
+}
+
+.tp-completion-details-toggle:hover .tp-completion-details-chevron {
+  color: var(--tp-text-muted);
 }
 
 .tp-completion-progress-panel:not(.is-collapsed) .tp-completion-details-chevron {
   transform: rotate(180deg);
+}
+
+.tp-completion-progress-panel.is-collapsed .tp-completion-details-chevron {
+  margin-top: 4px;
 }
 
 .tp-completion-reasons-summary {

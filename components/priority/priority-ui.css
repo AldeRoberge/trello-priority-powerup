@@ -2986,34 +2986,33 @@ body {
 
 .statut-embedded-head {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
+  justify-content: flex-start;
   gap: 8px;
+  width: 100%;
   min-width: 0;
 }
 
 .statut-embedded-collapse-btn {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin: 0;
-  padding: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: -4px -6px;
+  padding: 4px 6px;
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: var(--tp-text-muted, var(--text-muted));
-  font-size: 15px;
-  line-height: 1;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: background-color 0.12s ease;
 }
 
 .statut-embedded-collapse-btn:hover {
-  background: color-mix(in srgb, var(--tp-text, var(--text-primary)) 8%, transparent);
-  color: var(--tp-text, var(--text-primary));
+  background: color-mix(in srgb, var(--tp-text, var(--text-primary)) 6%, transparent);
 }
 
 .statut-embedded-collapse-btn:focus {
@@ -3021,16 +3020,39 @@ body {
 }
 
 .statut-embedded-collapse-btn:focus-visible {
-  box-shadow: 0 0 0 2px var(--tp-surface, var(--surface-1)), 0 0 0 4px var(--tp-focus, #0c66e4);
+  outline: 2px solid var(--tp-focus, #0c66e4);
+  outline-offset: 1px;
+}
+
+.statut-embedded-collapse-btn .statut-hero {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .statut-embedded-collapse-chevron {
+  flex: 0 0 auto;
   display: block;
-  transition: transform 0.18s ease;
+  margin-top: 18px;
+  font-size: 14px;
+  line-height: 1;
+  color: color-mix(in srgb, var(--tp-text-muted, var(--text-muted)) 72%, transparent);
+  transition: transform 0.18s ease, color 0.12s ease;
+}
+
+.statut-embedded-collapse-btn:hover .statut-embedded-collapse-chevron {
+  color: var(--tp-text-muted, var(--text-muted));
 }
 
 .field--statut-embedded:not(.is-collapsed) .statut-embedded-collapse-chevron {
   transform: rotate(180deg);
+}
+
+.field--statut-embedded.is-collapsed .statut-embedded-collapse-btn {
+  align-items: center;
+}
+
+.field--statut-embedded.is-collapsed .statut-embedded-collapse-chevron {
+  margin-top: 0;
 }
 
 .statut-hero {
@@ -3106,7 +3128,7 @@ body {
 }
 
 .statut-embedded-summary {
-  margin: 6px 0 0 36px;
+  margin: 6px 0 0 28px;
   font-size: 13px;
   font-weight: 500;
   line-height: 1.35;

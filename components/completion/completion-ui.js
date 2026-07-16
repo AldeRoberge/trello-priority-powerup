@@ -1578,12 +1578,14 @@
     detailsToggleBtn.type = 'button';
     detailsToggleBtn.className = 'tp-completion-details-toggle';
     detailsToggleBtn.id = 'completionMasterDetailsToggle';
-    detailsToggleBtn.innerHTML =
-      '<i class="ti ti-chevron-down tp-completion-details-chevron" aria-hidden="true"></i>';
+
+    var detailsChevron = document.createElement('i');
+    detailsChevron.className = 'ti ti-chevron-down tp-completion-details-chevron';
+    detailsChevron.setAttribute('aria-hidden', 'true');
+    detailsToggleBtn.appendChild(detailsChevron);
 
     var percentRow = document.createElement('div');
     percentRow.className = 'tp-completion-percent-row';
-    percentRow.appendChild(detailsToggleBtn);
     percentRow.appendChild(masterCheckWrap);
     percentRow.appendChild(percentEl);
 
@@ -1659,6 +1661,9 @@
     progressHero.appendChild(percentRow);
     progressHero.appendChild(encouragementEl);
 
+    // Full-width header hit target (chevron left), matching section-collapse-btn.
+    detailsToggleBtn.appendChild(progressHero);
+
     var completeAllBtn = document.createElement('button');
     completeAllBtn.type = 'button';
     completeAllBtn.className = 'tp-completion-complete-all';
@@ -1698,7 +1703,7 @@
     progressActions.appendChild(completeAllBtn);
     progressActions.appendChild(resetAllBtn);
 
-    progressHead.appendChild(progressHero);
+    progressHead.appendChild(detailsToggleBtn);
     progressHead.appendChild(progressActions);
     progressPanel.appendChild(progressHead);
 
@@ -1798,9 +1803,31 @@
     }
 
     detailsToggleBtn.addEventListener('click', function (event) {
+      // Keep interactive controls inside the header from toggling collapse.
+      var interactive = event.target.closest
+        ? event.target.closest(
+            'input, button, a, .tp-estimate-chip, .tp-estimate-chip-wrap, .tp-completion-check'
+          )
+        : null;
+      if (interactive && interactive !== detailsToggleBtn) return;
       event.preventDefault();
       setMasterDetailsExpanded(!masterDetailsExpanded);
     });
+    // Nested controls must not bubble into the header toggle.
+    masterCheckWrap.addEventListener('click', function (event) {
+      event.stopPropagation();
+    });
+    masterEstimateChip.el.addEventListener('click', function (event) {
+      event.stopPropagation();
+    });
+    if (onTitleChange) {
+      masterTitleEl.addEventListener('click', function (event) {
+        event.stopPropagation();
+      });
+      masterTitleEl.addEventListener('mousedown', function (event) {
+        event.stopPropagation();
+      });
+    }
     reasonsSummaryEl.addEventListener('click', function () {
       if (!masterDetailsExpanded) setMasterDetailsExpanded(true);
     });
