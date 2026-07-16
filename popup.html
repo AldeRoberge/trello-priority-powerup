@@ -338,6 +338,7 @@
           ? PriorityTrello.normalizeInputs(remote)
           : Object.assign({}, remote || {});
       if (!normalized) return;
+      if (window.TpDebug) TpDebug.log('popup', 'liveSync.applyPriority');
       applyingRemote = true;
       try {
         variant.setState(Object.assign({}, normalized), {
@@ -356,6 +357,7 @@
     }
 
     function applyRemoteCompletion(remote) {
+      if (window.TpDebug) TpDebug.log('popup', 'liveSync.applyCompletion');
       var next = withProgressEnabledFlag(remote);
       latestCompletion = next;
       if (completionUi && typeof completionUi.setData === 'function') {

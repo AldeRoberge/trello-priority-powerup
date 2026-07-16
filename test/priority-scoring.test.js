@@ -71,4 +71,17 @@ describe('PriorityUI scoring (baseline)', () => {
     assert.ok(PriorityUI.TIERS.length >= 7);
     assert.ok(Array.isArray(PriorityUI.HEAT_SEGMENTS));
   });
+
+  it('persists embedded Statut detail collapse preference', () => {
+    assert.equal(typeof PriorityUI.loadStatutEmbeddedDetailsExpanded, 'function');
+    assert.equal(typeof PriorityUI.saveStatutEmbeddedDetailsExpanded, 'function');
+    const key = PriorityUI.STATUT_EMBEDDED_DETAILS_STORAGE_KEY;
+    assert.ok(key);
+    localStorage.removeItem(key);
+    assert.equal(PriorityUI.loadStatutEmbeddedDetailsExpanded(), true);
+    PriorityUI.saveStatutEmbeddedDetailsExpanded(false);
+    assert.equal(PriorityUI.loadStatutEmbeddedDetailsExpanded(), false);
+    PriorityUI.saveStatutEmbeddedDetailsExpanded(true);
+    assert.equal(PriorityUI.loadStatutEmbeddedDetailsExpanded(), true);
+  });
 });
