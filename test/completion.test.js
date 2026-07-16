@@ -178,4 +178,184 @@ describe('Completion progress', () => {
     CUI.saveMasterDetailsExpanded(true);
     assert.equal(CUI.loadMasterDetailsExpanded(), true);
   });
+
+  it('normalizeItem derives subtask progress from nested checklist', () => {
+    const item = CT.normalizeItem({
+      id: 'parent',
+      text: 'Parent',
+      progress: 0,
+      items: [
+        { id: 'c1', text: 'Check A', progress: 100 },
+        { id: 'c2', text: 'Check B', progress: 0 },
+      ],
+    });
+    assert.ok(item);
+    assert.equal(item.items.length, 2);
+    assert.equal(item.progress, 50);
+    assert.equal(item.done, false);
+  });
+
+  it('normalizeItem strips checklist nesting and links on depth-2 items', () => {
+    const item = CT.normalizeItem({
+      id: 'parent',
+      text: 'Parent',
+      items: [
+        {
+          id: 'c1',
+          text: 'Nested',
+          progress: 0,
+          linkedCardId: 'should-strip',
+          blocked: true,
+          items: [{ id: 'too-deep', text: 'No', progress: 100 }],
+        },
+      ],
+    });
+    assert.equal(item.items.length, 1);
+    assert.equal(!!item.items[0].linkedCardId, false);
+    assert.equal(!!item.items[0].blocked, false);
+    assert.equal(Array.isArray(item.items[0].items), false);
+  });
+
+  it('checklist weights roll up into card progress', () => {
+    const data = CT.normalizeCompletionData({
+      items: [
+        {
+          id: 's1',
+          text: 'Sub',
+          items: [
+            { id: 'a', text: 'A', progress: 100, estimatedMinutes: 60 },
+            { id: 'b', text: 'B', progress: 0, estimatedMinutes: 60 },
+          ],
+        },
+        { id: 's2', text: 'Other', progress: 0, estimatedMinutes: 120 },
+      ],
+    });
+    // s1 derived 50% weight 120; s2 0% weight 120 → overall 25%
+    const progress = CT.computeCardProgress(data);
+    assert.equal(data.items[0].progress, 50);
+    assert.equal(progress.percent, 25);
+  });
+
+  it('applyMasterProgress scales nested checklist and preserves structure', () => {
+    const scaled = CT.applyMasterProgress(
+      [
+        {
+          id: 's1',
+          text: 'With checklist',
+          progress: 50,
+          items: [
+            { id: 'a', text: 'A', progress: 100 },
+            { id: 'b', text: 'B', progress: 0 },
+          ],
+        },
+      ],
+      100
+    );
+    assert.equal(scaled[0].items.length, 2);
+    assert.equal(scaled[0].items[0].progress, 100);
+    assert.equal(scaled[0].items[1].progress, 100);
+    assert.equal(scaled[0].progress, 100);
+    assert.equal(scaled[0].done, true);
+  });
+
+  it('applyItemProgress scales checklist when parent slider moves', () => {
+    const start = CT.normalizeCompletionData({
+      items: [
+        {
+          id: 's1',
+          text: 'Sub',
+          items: [
+            { id: 'a', text: 'A', progress: 0 },
+            { id: 'b', text: 'B', progress: 0 },
+          ],
+        },
+      ],
+    });
+    const next = CT.applyItemProgress(start, 's1', 100);
+    assert.equal(next.items[0].progress, 100);
+    assert.equal(next.items[0].items[0].progress, 100);
+    assert.equal(next.items[0].items[1].progress, 100);
+  });
+
+  it('addChecklistItem and removeChecklistItem update derived progress', () => {
+    let data = CT.normalizeCompletionData({
+      items: [{ id: 's1', text: 'Sub', progress: 0 }],
+    });
+    const added = CT.addChecklistItem(data, 's1', 'Step one');
+    data = added.data;
+    assert.ok(added.item);
+    assert.equal(data.items[0].items.length, 1);
+    assert.equal(data.items[0].progress, 0);
+
+    data = CT.applyChecklistItemProgress(data, 's1', added.item.id, 100);
+    assert.equal(data.items[0].progress, 100);
+    assert.equal(data.items[0].done, true);
+
+    data = CT.removeChecklistItem(data, 's1', added.item.id);
+    assert.equal(Array.isArray(data.items[0].items), false);
+    assert.equal(data.items[0].progress, 100);
+  });
+
+  it('buildChildCompletionFromSubtask and replaceSubtaskWithLinkedCard', () => {
+    const withChecklist = CT.normalizeItem({
+      id: 's1',
+      text: 'Promote me',
+      items: [
+        { id: 'a', text: 'A', progress: 100 },
+        { id: 'b', text: 'B', progress: 0 },
+      ],
+    });
+    const child = CT.buildChildCompletionFromSubtask(withChecklist);
+    assert.equal(child.items.length, 2);
+    assert.equal(child.items[0].text, 'A');
+
+    const leaf = CT.normalizeItem({
+      id: 's2',
+      text: 'Leaf',
+      progress: 40,
+      estimatedMinutes: 30,
+    });
+    const leafChild = CT.buildChildCompletionFromSubtask(leaf);
+    assert.equal(leafChild.items.length, 0);
+    assert.equal(leafChild.progress, 40);
+    assert.equal(leafChild.estimatedMinutes, 30);
+
+    const parentData = CT.normalizeCompletionData({
+      items: [withChecklist, { id: 'keep', text: 'Keep', progress: 10 }],
+    });
+    const replaced = CT.replaceSubtaskWithLinkedCard(
+      parentData,
+      's1',
+      'card-new-1'
+    );
+    assert.equal(replaced.ok, true);
+    assert.equal(CT.itemLinkedCardId(replaced.data.items[0]), 'card-new-1');
+    assert.equal(Array.isArray(replaced.data.items[0].items), false);
+    assert.equal(replaced.data.items[1].id, 'keep');
+  });
+
+  it('itemEstimatedMinutes prefers checklist sum unless parent estimate locked', () => {
+    const unlocked = CT.normalizeItem({
+      id: 's1',
+      text: 'Sub',
+      estimatedMinutes: 999,
+      items: [
+        { id: 'a', text: 'A', progress: 0, estimatedMinutes: 30 },
+        { id: 'b', text: 'B', progress: 0, estimatedMinutes: 30 },
+      ],
+    });
+    assert.equal(CT.itemEstimatedMinutes(unlocked), 60);
+
+    const locked = CT.normalizeItem({
+      id: 's2',
+      text: 'Sub',
+      estimatedMinutes: 999,
+      estimatedMinutesLocked: true,
+      items: [
+        { id: 'a', text: 'A', progress: 0, estimatedMinutes: 30 },
+        { id: 'b', text: 'B', progress: 0, estimatedMinutes: 30 },
+      ],
+    });
+    assert.equal(CT.itemEstimatedMinutes(locked), 999);
+  });
 });

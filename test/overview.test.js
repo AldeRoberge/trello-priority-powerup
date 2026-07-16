@@ -399,4 +399,29 @@ describe('PriorityUI createOverviewField', () => {
       /#ae2e24|#e34935|#C9372C/i
     );
   });
+
+  it('setData renders statusBrief and hides when empty', () => {
+    const ui = PriorityUI.createOverviewField({
+      title: 'Card',
+      statusBrief: 'Tu es dessus, mais sans échéance claire.',
+    });
+
+    const brief = ui.el.querySelector('.overview-status-brief');
+    assert.ok(brief);
+    assert.equal(brief.hidden, false);
+    assert.match(brief.textContent, /Tu es dessus/);
+    assert.equal(ui.getData().statusBrief, 'Tu es dessus, mais sans échéance claire.');
+
+    ui.setData({ statusBrief: '', statusBriefPending: false });
+    assert.equal(brief.hidden, true);
+    assert.equal(brief.textContent, '');
+
+    ui.setData({
+      statusBrief: 'C’est bloqué de ton côté.',
+      statusBriefPending: true,
+    });
+    assert.equal(brief.hidden, false);
+    assert.ok(brief.classList.contains('is-pending'));
+    assert.match(brief.textContent, /bloqu/i);
+  });
 });

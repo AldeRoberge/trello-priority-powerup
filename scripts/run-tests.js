@@ -22,8 +22,10 @@ const UNIT_FILES = [
   'statut.test.js',
   'effects.test.js',
   'completion.test.js',
+  'blocked-motifs.test.js',
   'brand.test.js',
   'overview.test.js',
+  'status-brief.test.js',
 ];
 
 function listTests() {

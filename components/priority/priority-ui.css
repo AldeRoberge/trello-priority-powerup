@@ -416,15 +416,8 @@ body {
   margin-bottom: 0;
   padding: 12px 14px 14px;
   border-radius: var(--radius);
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  background:
-    linear-gradient(
-      165deg,
-      color-mix(in srgb, var(--tp-primary, #0c66e4) 7%, var(--surface-1)) 0%,
-      color-mix(in srgb, var(--surface-1) 88%, var(--surface-2)) 48%,
-      var(--surface-1) 100%
-    );
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--text-primary) 4%, transparent);
+  border: none;
+  background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
 }
 
 .overview-title {
@@ -482,6 +475,23 @@ body {
   color: var(--text-muted);
 }
 
+.overview-status-brief {
+  margin: -2px 0 12px;
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 450;
+  line-height: 1.4;
+  color: var(--text-secondary, var(--text-muted));
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.overview-status-brief.is-pending {
+  opacity: 0.72;
+}
+
 .overview-metrics {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -508,6 +518,23 @@ body {
 .overview-cell:hover {
   background: color-mix(in srgb, var(--surface-2) 92%, var(--tp-primary, #0c66e4));
   border-color: color-mix(in srgb, var(--tp-primary, #0c66e4) 28%, var(--border));
+}
+
+.overview-cell--status.is-blocked:hover,
+.overview-cell--progress.is-blocked:hover,
+.overview-cell--due[data-due-band]:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--overview-cell-glow, var(--tp-primary, #0c66e4)) 48%,
+    var(--border)
+  );
+  background-color: color-mix(in srgb, var(--surface-1) 64%, var(--surface-2));
+  background-image: radial-gradient(
+    ellipse 140% 95% at 50% -5%,
+    color-mix(in srgb, var(--overview-cell-glow, transparent) 54%, transparent) 0%,
+    color-mix(in srgb, var(--overview-cell-glow, transparent) 22%, transparent) 42%,
+    transparent 72%
+  );
 }
 
 .overview-cell:focus-visible {
@@ -561,39 +588,55 @@ body {
   color: var(--text-muted);
 }
 
-.overview-cell--status {
+/* Soft top radial glow — same language as Statut blocked / Échéance bands. */
+.overview-cell--status.is-blocked,
+.overview-cell--progress.is-blocked,
+.overview-cell--due[data-due-band] {
   border-color: color-mix(
     in srgb,
-    var(--overview-status-accent, var(--border)) 42%,
+    var(--overview-cell-glow, var(--border)) 42%,
     var(--border)
   );
-  background: color-mix(
-    in srgb,
-    var(--overview-status-accent, transparent) 8%,
-    color-mix(in srgb, var(--surface-2) 78%, transparent)
+  background-color: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
+  background-image: radial-gradient(
+    ellipse 140% 95% at 50% -5%,
+    color-mix(in srgb, var(--overview-cell-glow, transparent) 46%, transparent) 0%,
+    color-mix(in srgb, var(--overview-cell-glow, transparent) 18%, transparent) 42%,
+    transparent 72%
   );
+  background-repeat: no-repeat;
 }
 
 .overview-cell--status .overview-cell-icon,
 .overview-cell--status .overview-status-icon {
-  color: var(--overview-status-accent, var(--text-secondary, var(--text-muted)));
+  color: color-mix(
+    in srgb,
+    var(--overview-status-accent, var(--text-secondary, var(--text-muted))) 80%,
+    var(--text-primary)
+  );
   opacity: 1;
 }
 
+.overview-cell--status .overview-cell-label {
+  color: color-mix(
+    in srgb,
+    var(--overview-status-accent, var(--text-muted)) 55%,
+    var(--text-muted)
+  );
+}
+
 .overview-cell--status .overview-cell-value:not(.is-empty) {
-  color: var(--overview-status-accent, var(--text-primary));
+  color: color-mix(
+    in srgb,
+    var(--overview-status-accent, var(--text-primary)) 80%,
+    var(--text-primary)
+  );
 }
 
 .overview-cell--status.is-blocked {
-  border-color: color-mix(
-    in srgb,
-    var(--overview-status-accent, var(--blocked-accent, #ae2e24)) 55%,
-    var(--border)
-  );
-  background: color-mix(
-    in srgb,
-    var(--overview-status-accent, var(--blocked-accent, #ae2e24)) 12%,
-    color-mix(in srgb, var(--surface-2) 78%, transparent)
+  --overview-cell-glow: var(
+    --overview-status-accent,
+    var(--blocked-accent, #ae2e24)
   );
 }
 
@@ -624,7 +667,7 @@ body {
   background: var(--overview-progress-accent);
 }
 
-.overview-cell--progress {
+.overview-cell--progress.has-progress-accent:not(.is-blocked) {
   border-color: color-mix(
     in srgb,
     var(--overview-progress-accent, var(--border)) 38%,
@@ -633,19 +676,34 @@ body {
 }
 
 .overview-cell--progress .overview-cell-value:not(.is-empty) {
-  color: var(--overview-progress-accent, var(--text-primary));
+  color: color-mix(
+    in srgb,
+    var(--overview-progress-accent, var(--text-primary)) 80%,
+    var(--text-primary)
+  );
 }
 
 .overview-cell--progress.is-blocked {
-  border-color: color-mix(
-    in srgb,
-    var(--overview-progress-accent, var(--blocked-accent, #ae2e24)) 50%,
-    var(--border)
+  --overview-cell-glow: var(
+    --overview-progress-accent,
+    var(--blocked-accent, #ae2e24)
   );
-  background: color-mix(
+}
+
+.overview-cell--progress.is-blocked .overview-cell-icon {
+  color: color-mix(
     in srgb,
-    var(--overview-progress-accent, var(--blocked-accent, #ae2e24)) 10%,
-    color-mix(in srgb, var(--surface-2) 78%, transparent)
+    var(--overview-progress-accent, var(--blocked-accent, #ae2e24)) 80%,
+    var(--text-primary)
+  );
+  opacity: 1;
+}
+
+.overview-cell--progress.is-blocked .overview-cell-label {
+  color: color-mix(
+    in srgb,
+    var(--overview-progress-accent, var(--blocked-accent, #ae2e24)) 55%,
+    var(--text-muted)
   );
 }
 
@@ -689,17 +747,32 @@ body {
 }
 
 .overview-cell--due[data-due-band] {
-  border-color: color-mix(
-    in srgb,
-    var(--overview-due-accent, var(--border)) 42%,
-    var(--border)
-  );
-  box-shadow: inset 0 0 0 1px
-    color-mix(in srgb, var(--overview-due-accent, transparent) 18%, transparent);
+  --overview-cell-glow: var(--overview-due-accent, transparent);
 }
 
-.overview-cell--due.is-overdue .overview-cell-value:not(.is-empty) {
-  color: var(--overview-due-accent, #c9372c);
+.overview-cell--due[data-due-band] .overview-cell-icon {
+  color: color-mix(
+    in srgb,
+    var(--overview-due-accent, var(--text-secondary, var(--text-muted))) 80%,
+    var(--text-primary)
+  );
+  opacity: 1;
+}
+
+.overview-cell--due[data-due-band] .overview-cell-label {
+  color: color-mix(
+    in srgb,
+    var(--overview-due-accent, var(--text-muted)) 55%,
+    var(--text-muted)
+  );
+}
+
+.overview-cell--due[data-due-band] .overview-cell-value:not(.is-empty) {
+  color: color-mix(
+    in srgb,
+    var(--overview-due-accent, var(--text-primary)) 80%,
+    var(--text-primary)
+  );
 }
 
 @media (max-width: 560px) {

@@ -105,6 +105,22 @@
       };
       if (item.estimatedMinutes != null) row.estimatedMinutes = item.estimatedMinutes;
       if (item.linkedCardId) row.linkedCardId = item.linkedCardId;
+      if (Array.isArray(item.items) && item.items.length) {
+        row.items = item.items.slice(0, 5).map(function (nested) {
+          if (!nested || typeof nested !== 'object') return nested;
+          var child = {
+            id: nested.id,
+            text: String(nested.text || '').slice(0, 48),
+            progress: nested.progress,
+            done: !!nested.done
+          };
+          if (nested.estimatedMinutes != null) {
+            child.estimatedMinutes = nested.estimatedMinutes;
+          }
+          return child;
+        });
+        if (item.items.length > row.items.length) row._itemsTruncated = true;
+      }
       return row;
     });
     var out = { items: slimItems };

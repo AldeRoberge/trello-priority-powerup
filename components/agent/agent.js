@@ -2105,7 +2105,8 @@
       memory: null,
       profile: null,
       boardDigest: '',
-      statut: null
+      statut: null,
+      ownership: null
     };
     if (!bridge) return ctx;
     if (typeof bridge.getScope === 'function') {
@@ -2250,6 +2251,66 @@
           };
         }
       } catch (e) { /* ignore */ }
+    }
+    if (typeof bridge.getOwnership === 'function') {
+      try {
+        var ownRaw = bridge.getOwnership();
+        if (ownRaw && typeof ownRaw === 'object') {
+          var youRaw = ownRaw.you && typeof ownRaw.you === 'object' ? ownRaw.you : null;
+          var youId =
+            youRaw && youRaw.id != null ? String(youRaw.id) : '';
+          var membersList = Array.isArray(ownRaw.members)
+            ? ownRaw.members
+                .map(function (m) {
+                  if (!m || m.id == null) return null;
+                  var id = String(m.id);
+                  var fullName =
+                    typeof m.fullName === 'string' && m.fullName.trim()
+                      ? m.fullName.trim()
+                      : typeof m.username === 'string' && m.username.trim()
+                        ? m.username.trim()
+                        : '';
+                  return {
+                    id: id,
+                    fullName: fullName,
+                    username:
+                      typeof m.username === 'string' ? m.username : ''
+                  };
+                })
+                .filter(Boolean)
+                .slice(0, 12)
+            : [];
+          var assigneeCount = membersList.length;
+          var youAssigned =
+            !!youId &&
+            membersList.some(function (m) {
+              return m.id === youId;
+            });
+          if (ownRaw.youAssigned === true || ownRaw.youAssigned === false) {
+            youAssigned = !!ownRaw.youAssigned;
+          }
+          ctx.ownership = {
+            members: membersList,
+            you: youId
+              ? {
+                  id: youId,
+                  fullName:
+                    (youRaw &&
+                      typeof youRaw.fullName === 'string' &&
+                      youRaw.fullName.trim()) ||
+                    '',
+                  username:
+                    (youRaw && typeof youRaw.username === 'string'
+                      ? youRaw.username
+                      : '') || ''
+                }
+              : null,
+            youAssigned: youAssigned,
+            assigneeCount: assigneeCount,
+            unassigned: assigneeCount === 0
+          };
+        }
+      } catch (eOwn) { /* ignore */ }
     }
     if (typeof bridge.getGoals === 'function') {
       try {
@@ -3694,6 +3755,257 @@
       .slice(0, 500);
     if (!text) return fallback;
     return fallbackBlockedReasonText(text) || text;
+  }
+
+  /**
+   * True when `reason` is a pure "En attente de [taskTitle]" Motif
+   * (not a woven cause like "… pour [taskTitle]").
+   */
+  function isPureWaitingOnTaskReason(reason, taskTitle) {
+    var r = String(reason || '')
+      .trim()
+      .toLocaleLowerCase('fr-FR');
+    var name = String(taskTitle || '').trim();
+    if (!r || !name) return false;
+    var nameKey = name.toLocaleLowerCase('fr-FR');
+    var lower =
+      name.charAt(0).toLocaleLowerCase('fr-FR') + name.slice(1);
+    var lowerKey = lower.toLocaleLowerCase('fr-FR');
+    if (r === nameKey || r === lowerKey) return true;
+    if (r === ('en attente de (' + nameKey + ')').toLocaleLowerCase('fr-FR')) {
+      return true;
+    }
+    if (r === ('en attente de (' + lowerKey + ')').toLocaleLowerCase('fr-FR')) {
+      return true;
+    }
+    var rest = r
+      .replace(/^en\s+attente\s+(de|d')\s*/i, '')
+      .replace(/^\(|\)$/g, '')
+      .trim();
+    return rest === nameKey || rest === lowerKey;
+  }
+
+  function stripWhyLeadIn(why) {
+    return String(why || '')
+      .trim()
+      .replace(/^en\s+attente\s+(de|d')\s*/i, '')
+      .replace(/^bloqu\u00e9\s+\u00e0\s+cause\s+de\s+/i, '')
+      .replace(
+        /^(il\s+faut|on\s+a\s+besoin\s+(de|d')|besoin\s+(de|d')|we\s+need(\s+to)?)\s+/i,
+        ''
+      )
+      .trim();
+  }
+
+  /**
+   * Deterministic dual Motifs when a blocked subtask gets a WHY:
+   * - subtaskReason: direct cause for that subtask
+   * - cardReason: parent wait weaving cause + subtask goal
+   */
+  function fallbackBlockedReasonPair(opts) {
+    opts = opts || {};
+    var subtaskTitle = String(opts.subtaskTitle || '').trim();
+    var why = String(opts.why || '').trim();
+    if (!why && !subtaskTitle) {
+      return { subtaskReason: '', cardReason: '' };
+    }
+    if (!why) {
+      return {
+        subtaskReason: '',
+        cardReason: fallbackBlockedReasonText(subtaskTitle)
+      };
+    }
+
+    var whyCore = stripWhyLeadIn(why);
+    var afterWaitingOnly = why
+      .replace(/^en\s+attente\s+(de|d')\s*/i, '')
+      .replace(/^bloqu\u00e9\s+\u00e0\s+cause\s+de\s+/i, '')
+      .trim();
+    var hadNeedLeadIn =
+      /^(il\s+faut|on\s+a\s+besoin\s+(de|d')|besoin\s+(de|d')|we\s+need(\s+to)?)\s+/i.test(
+        afterWaitingOnly
+      );
+    // "Il faut le trépied" → subtask Motif around having that thing.
+    var subtaskSeed =
+      hadNeedLeadIn && whyCore
+        ? /^avoir\b/i.test(whyCore)
+          ? whyCore
+          : 'avoir ' + whyCore
+        : whyCore || why;
+    var subtaskReason = fallbackBlockedReasonText(subtaskSeed);
+    if (
+      subtaskTitle &&
+      isPureWaitingOnTaskReason(subtaskReason, subtaskTitle)
+    ) {
+      subtaskReason = '';
+    }
+
+    var taskLower = subtaskTitle
+      ? subtaskTitle.charAt(0).toLocaleLowerCase('fr-FR') +
+        subtaskTitle.slice(1)
+      : '';
+    var cardReason = '';
+    if (taskLower && whyCore) {
+      var coreLower =
+        whyCore.charAt(0).toLocaleLowerCase('fr-FR') + whyCore.slice(1);
+      if (/^la\s+/i.test(coreLower)) {
+        cardReason =
+          'En attente de la ' +
+          coreLower.replace(/^la\s+/i, '') +
+          ' pour ' +
+          taskLower;
+      } else if (/^le\s+/i.test(coreLower)) {
+        var afterLe = coreLower.replace(/^le\s+/i, '');
+        cardReason =
+          (/^([aeiou\u00e0\u00e2\u00e4\u00e9\u00e8\u00ea\u00eb\u00ee\u00ef\u00f4\u00f6\u00f9\u00fb\u00fc]|h)/i.test(
+            afterLe
+          )
+            ? "En attente de l'"
+            : 'En attente du ') +
+          afterLe +
+          ' pour ' +
+          taskLower;
+      } else if (/^l'/i.test(coreLower)) {
+        cardReason =
+          "En attente de l'" +
+          coreLower.replace(/^l'/i, '') +
+          ' pour ' +
+          taskLower;
+      } else {
+        cardReason = fallbackBlockedReasonText(
+          coreLower + ' pour ' + taskLower
+        );
+      }
+    } else {
+      cardReason = fallbackBlockedReasonText(why);
+    }
+
+    return {
+      subtaskReason: String(subtaskReason || '').slice(0, 500),
+      cardReason: String(cardReason || '').slice(0, 500)
+    };
+  }
+
+  /**
+   * AI dual Motifs: WHY for a blocked subtask → distinct card + subtask reasons.
+   */
+  async function suggestBlockedReasonPair(provider, opts) {
+    opts = opts || {};
+    var subtaskTitle = String(opts.subtaskTitle || '').trim();
+    var why = String(opts.why || '').trim();
+    var cardTitle = String(opts.cardTitle || '').trim();
+    var fallback = fallbackBlockedReasonPair({
+      subtaskTitle: subtaskTitle,
+      why: why
+    });
+    if (!why) return fallback;
+
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) return fallback;
+
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu r\u00e9diges DEUX motifs de blocage Trello en fran\u00e7ais \u00e0 partir d\'une sous-t\u00e2che bloqu\u00e9e et d\'une cause (WHY).',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"subtaskReason":"\u2026","cardReason":"\u2026"}',
+          'R\u00e8gles\u00a0:',
+          '- subtaskReason = pourquoi CETTE sous-t\u00e2che ne peut pas avancer (cause directe\u00a0: mat\u00e9riel, permission, r\u00e9ponse\u2026).',
+          '- cardReason = pourquoi la t\u00e2che parente / carte attend\u00a0: relie la cause au but de la sous-t\u00e2che.',
+          '- INTERDIT sur subtaskReason\u00a0: \u00ab\u00a0En attente de [titre exact de la sous-t\u00e2che]\u00a0\u00bb (auto-r\u00e9f\u00e9rence).',
+          '- Pr\u00e9f\u00e8re \u00ab\u00a0En attente de/d\'\u2026\u00a0\u00bb\u00a0; \u00ab\u00a0Bloqu\u00e9 \u00e0 cause de\u00a0\u00bb seulement pour un obstacle mat\u00e9riel / permission.',
+          '- Minuscule apr\u00e8s de/d\'\u00a0; max ~100 caract\u00e8res par champ\u00a0; PAS de parenth\u00e8ses ni num\u00e9rotation.',
+          'Ex.\u00a0: sous-t\u00e2che \u00ab\u00a0Tester en mode portrait\u00a0\u00bb, cause \u00ab\u00a0Il faut le tr\u00e9pied\u00a0\u00bb',
+          '  \u2192 {"subtaskReason":"En attente d\'avoir le tr\u00e9pied requis","cardReason":"En attente du tr\u00e9pied pour tester en mode portrait"}',
+          'Ex.\u00a0: sous-t\u00e2che \u00ab\u00a0Valider le devis\u00a0\u00bb, cause \u00ab\u00a0r\u00e9ponse du client\u00a0\u00bb',
+          '  \u2192 {"subtaskReason":"En attente d\'une r\u00e9ponse du client","cardReason":"En attente de la r\u00e9ponse du client pour valider le devis"}'
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content: [
+          cardTitle ? 'Carte\u00a0: \u00ab' + cardTitle.slice(0, 120) + '\u00bb' : '',
+          'Sous-t\u00e2che bloqu\u00e9e\u00a0: \u00ab' + subtaskTitle.slice(0, 160) + '\u00bb',
+          'Cause saisie\u00a0: \u00ab' + why.slice(0, 200) + '\u00bb'
+        ]
+          .filter(Boolean)
+          .join('\n')
+      }
+    ];
+
+    var response;
+    try {
+      response = await chatCompletions(p, messages, {
+        jsonMode: true,
+        max_tokens: 180,
+        temperature: 0.3,
+        stream: false
+      });
+    } catch (err) {
+      if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+        try {
+          response = await chatCompletions(p, messages, {
+            jsonMode: false,
+            max_tokens: 180,
+            temperature: 0.3,
+            stream: false
+          });
+        } catch (err2) {
+          console.error('PriorityAgent.suggestBlockedReasonPair failed', err2);
+          return fallback;
+        }
+      } else {
+        console.error('PriorityAgent.suggestBlockedReasonPair failed', err);
+        return fallback;
+      }
+    }
+
+    var subtaskOut = '';
+    var cardOut = '';
+    try {
+      var parsed = parseAssistantPayload(response.content);
+      subtaskOut =
+        typeof parsed.subtaskReason === 'string' ? parsed.subtaskReason : '';
+      cardOut = typeof parsed.cardReason === 'string' ? parsed.cardReason : '';
+    } catch (e) {
+      try {
+        var raw = JSON.parse(response.content);
+        subtaskOut =
+          typeof raw.subtaskReason === 'string' ? raw.subtaskReason : '';
+        cardOut = typeof raw.cardReason === 'string' ? raw.cardReason : '';
+      } catch (e2) {
+        subtaskOut = '';
+        cardOut = '';
+      }
+    }
+    subtaskOut = String(subtaskOut || '')
+      .trim()
+      .replace(/^["«]\s*|\s*["»]$/g, '')
+      .slice(0, 500);
+    cardOut = String(cardOut || '')
+      .trim()
+      .replace(/^["«]\s*|\s*["»]$/g, '')
+      .slice(0, 500);
+
+    if (subtaskOut) {
+      subtaskOut = fallbackBlockedReasonText(subtaskOut) || subtaskOut;
+    }
+    if (cardOut) {
+      cardOut = fallbackBlockedReasonText(cardOut) || cardOut;
+    }
+    if (
+      subtaskTitle &&
+      subtaskOut &&
+      isPureWaitingOnTaskReason(subtaskOut, subtaskTitle)
+    ) {
+      subtaskOut = fallback.subtaskReason;
+    }
+    if (!subtaskOut) subtaskOut = fallback.subtaskReason;
+    if (!cardOut) cardOut = fallback.cardReason;
+    return {
+      subtaskReason: subtaskOut,
+      cardReason: cardOut
+    };
   }
 
   /**
@@ -9231,6 +9543,533 @@
     return hits >= 2;
   }
 
+  var MAX_STATUS_BRIEF_LEN = 140;
+
+  function firstNameFromFullName(fullName) {
+    var s = String(fullName || '').trim();
+    if (!s) return '';
+    var part = s.split(/\s+/)[0] || '';
+    return part.length > 24 ? part.slice(0, 24) : part;
+  }
+
+  /**
+   * Compact facts for the Overview "what's going on" sentence
+   * (boss-style status brief).
+   */
+  function buildStatusBriefSnapshot(context) {
+    var due = context && context.due;
+    var progress = context && context.progress;
+    var blocked = context && context.blocked;
+    var statut = context && context.statut;
+    var priority = context && context.priority;
+    var display = context && context.display;
+    var ownership = context && context.ownership;
+
+    var category =
+      statut && typeof statut.category === 'string' ? statut.category : '';
+    var listName =
+      statut && typeof statut.listName === 'string' ? statut.listName : '';
+    var stuck = !!(
+      (blocked && blocked.enabled) ||
+      category === 'blocked' ||
+      (progress && progress.blocked)
+    );
+    var reasons = [];
+    if (blocked && blocked.enabled && Array.isArray(blocked.blockedReasons)) {
+      reasons = blocked.blockedReasons
+        .map(function (r) {
+          return typeof r === 'string' ? r.trim() : '';
+        })
+        .filter(Boolean)
+        .slice(0, 2);
+    } else if (
+      progress &&
+      progress.blocked &&
+      Array.isArray(progress.blockedReasons)
+    ) {
+      reasons = progress.blockedReasons
+        .map(function (r) {
+          return typeof r === 'string' ? r.trim() : '';
+        })
+        .filter(Boolean)
+        .slice(0, 2);
+    }
+
+    var percent = null;
+    if (progress) {
+      if (typeof progress.percent === 'number' && isFinite(progress.percent)) {
+        percent = Math.max(0, Math.min(100, Math.round(progress.percent)));
+      } else if (
+        typeof progress.cardProgress === 'number' &&
+        isFinite(progress.cardProgress)
+      ) {
+        percent = Math.max(0, Math.min(100, Math.round(progress.cardProgress)));
+      }
+    }
+    var doneCount =
+      progress && typeof progress.doneCount === 'number'
+        ? progress.doneCount
+        : 0;
+    var totalCount =
+      progress && typeof progress.totalCount === 'number'
+        ? progress.totalCount
+        : Array.isArray(progress && progress.items)
+          ? progress.items.length
+          : 0;
+    var remainingMinutes =
+      progress &&
+      typeof progress.estimatedRemainingMinutes === 'number' &&
+      isFinite(progress.estimatedRemainingMinutes)
+        ? progress.estimatedRemainingMinutes
+        : null;
+
+    var dueEnabled = !(due && due.enabled === false);
+    var dueDate = due && due.dueDate ? String(due.dueDate) : '';
+    var dueMissing = dueEnabled && !dueDate;
+    var duePast = !!(display && display.duePast);
+    var dueCountdown =
+      display && typeof display.dueCountdown === 'string'
+        ? display.dueCountdown
+        : '';
+
+    var ease =
+      priority && priority.enabled !== false && priority.ease != null
+        ? clampInt(priority.ease, 1, 5, 3)
+        : null;
+    var tier =
+      (display && (display.label || display.tier)) ||
+      (priority && priority.labels && priority.labels.urgency) ||
+      '';
+
+    var scale = 'medium';
+    if (
+      (ease != null && ease >= 4 && totalCount <= 2 && (remainingMinutes == null || remainingMinutes < 60)) ||
+      (totalCount <= 1 && (remainingMinutes == null || remainingMinutes < 45) && (ease == null || ease >= 3))
+    ) {
+      scale = 'quick';
+    }
+    if (
+      totalCount >= 5 ||
+      (remainingMinutes != null && remainingMinutes >= 240) ||
+      (ease != null && ease <= 2 && totalCount >= 3)
+    ) {
+      scale = 'project';
+    }
+
+    var phase = 'idle';
+    if (category === 'completed' || (percent != null && percent >= 100)) {
+      phase = 'done';
+    } else if (stuck) {
+      phase = 'stuck';
+    } else if (
+      category === 'started' ||
+      (percent != null && percent > 0) ||
+      doneCount > 0
+    ) {
+      phase = 'in_progress';
+    } else if (category === 'todo' || category === 'backlog' || !category) {
+      phase = 'not_started';
+    }
+
+    var members = ownership && Array.isArray(ownership.members)
+      ? ownership.members
+      : [];
+    var youId =
+      ownership && ownership.you && ownership.you.id
+        ? String(ownership.you.id)
+        : '';
+    var youAssigned = !!(ownership && ownership.youAssigned);
+    var unassigned = members.length === 0;
+    if (ownership && typeof ownership.unassigned === 'boolean') {
+      unassigned = ownership.unassigned;
+    }
+
+    var otherNames = members
+      .filter(function (m) {
+        return !youId || m.id !== youId;
+      })
+      .map(function (m) {
+        return firstNameFromFullName(m.fullName || m.username);
+      })
+      .filter(Boolean)
+      .slice(0, 3);
+
+    return {
+      cardName: context && context.cardName ? String(context.cardName) : '',
+      phase: phase,
+      stuck: stuck,
+      statutCategory: category || null,
+      statutListName: listName || null,
+      blockedReasons: reasons,
+      progressPercent: percent,
+      subtasksDone: doneCount,
+      subtasksTotal: totalCount,
+      estimatedRemainingMinutes: remainingMinutes,
+      dueMissing: dueMissing,
+      duePast: duePast,
+      dueCountdown: dueCountdown || null,
+      dueDate: dueDate || null,
+      priorityTier: typeof tier === 'string' ? tier : '',
+      ease: ease,
+      scale: scale,
+      youAssigned: youAssigned,
+      unassigned: unassigned,
+      otherNames: otherNames,
+      assigneeCount: members.length
+    };
+  }
+
+  function fingerprintStatusBriefSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') return '';
+    try {
+      return JSON.stringify({
+        phase: snapshot.phase,
+        stuck: !!snapshot.stuck,
+        statutCategory: snapshot.statutCategory || null,
+        blockedReasons: snapshot.blockedReasons || [],
+        progressPercent: snapshot.progressPercent,
+        subtasksDone: snapshot.subtasksDone,
+        subtasksTotal: snapshot.subtasksTotal,
+        estimatedRemainingMinutes: snapshot.estimatedRemainingMinutes,
+        dueMissing: !!snapshot.dueMissing,
+        duePast: !!snapshot.duePast,
+        dueDate: snapshot.dueDate || null,
+        priorityTier: snapshot.priorityTier || '',
+        ease: snapshot.ease,
+        scale: snapshot.scale,
+        youAssigned: !!snapshot.youAssigned,
+        unassigned: !!snapshot.unassigned,
+        otherNames: snapshot.otherNames || [],
+        assigneeCount: snapshot.assigneeCount || 0
+      });
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function clampStatusBriefSentence(text) {
+    var s = String(text || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!s) return '';
+    if (s.length <= MAX_STATUS_BRIEF_LEN) return s;
+    var cut = s.slice(0, MAX_STATUS_BRIEF_LEN - 1);
+    var lastSpace = cut.lastIndexOf(' ');
+    if (lastSpace > 80) cut = cut.slice(0, lastSpace);
+    return cut.replace(/[,:;.\-–—\s]+$/, '') + '\u2026';
+  }
+
+  /**
+   * Deterministic French boss-style status sentence when AI is unavailable.
+   */
+  function buildHeuristicStatusBrief(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') return '';
+    var you = !!snapshot.youAssigned;
+    var unassigned = !!snapshot.unassigned;
+    var other =
+      Array.isArray(snapshot.otherNames) && snapshot.otherNames.length
+        ? snapshot.otherNames[0]
+        : '';
+    var reason =
+      Array.isArray(snapshot.blockedReasons) && snapshot.blockedReasons[0]
+        ? String(snapshot.blockedReasons[0]).trim()
+        : '';
+    if (reason.length > 48) reason = reason.slice(0, 45) + '\u2026';
+    var scale = snapshot.scale || 'medium';
+    var scaleHint =
+      scale === 'quick'
+        ? 'c\'est un truc rapide'
+        : scale === 'project'
+          ? 'c\'est un gros chantier'
+          : '';
+
+    var ownershipBit = '';
+    if (you) ownershipBit = 'c\'est \u00e0 toi';
+    else if (unassigned) ownershipBit = 'personne n\'est assign\u00e9';
+    else if (other) ownershipBit = 'c\'est chez ' + other;
+    else ownershipBit = 'c\'est pas toi le porteur';
+
+    var sentence = '';
+    if (snapshot.phase === 'done') {
+      sentence = you
+        ? 'C\'est termin\u00e9 de ton c\u00f4t\u00e9 \u2014 rien d\'urgent \u00e0 remonter.'
+        : 'C\'est marqu\u00e9 termin\u00e9 \u2014 ' + ownershipBit + '.';
+    } else if (snapshot.stuck || snapshot.phase === 'stuck') {
+      if (you) {
+        sentence = reason
+          ? 'C\'est bloqu\u00e9 de ton c\u00f4t\u00e9 \u2014 ' +
+            reason +
+            ' ; rien n\'avance tant que \u00e7a n\'est pas lev\u00e9.'
+          : 'C\'est bloqu\u00e9 de ton c\u00f4t\u00e9 \u2014 rien n\'avance tant que le blocage n\'est pas lev\u00e9.';
+      } else if (other) {
+        sentence = reason
+          ? 'C\'est chez ' + other + ' \u2014 bloqu\u00e9 (' + reason + ').'
+          : 'C\'est chez ' + other + ' \u2014 on ne peut pas avancer tant que c\'est bloqu\u00e9.';
+      } else if (unassigned) {
+        sentence =
+          'C\'est bloqu\u00e9 et personne n\'est assign\u00e9 \u2014 \u00e7a va rester plant\u00e9.';
+      } else {
+        sentence = reason
+          ? 'C\'est bloqu\u00e9 \u2014 ' + reason + '.'
+          : 'C\'est bloqu\u00e9 \u2014 on ne peut pas avancer.';
+      }
+    } else if (snapshot.phase === 'in_progress') {
+      var pct =
+        snapshot.progressPercent != null ? snapshot.progressPercent + '\u00a0%' : '';
+      if (you) {
+        if (snapshot.dueMissing) {
+          sentence =
+            'Tu es dessus' +
+            (pct ? ' (' + pct + ')' : '') +
+            ', mais sans \u00e9ch\u00e9ance claire.';
+        } else if (snapshot.duePast) {
+          sentence =
+            'Tu es dessus' +
+            (pct ? ' (' + pct + ')' : '') +
+            ', et c\'est en retard.';
+        } else {
+          sentence =
+            'Tu es dessus' +
+            (pct ? ' (' + pct + ')' : '') +
+            (scaleHint ? ' \u2014 ' + scaleHint : '') +
+            '.';
+        }
+      } else if (other) {
+        sentence =
+          'C\'est en cours chez ' +
+          other +
+          (pct ? ' (' + pct + ')' : '') +
+          (snapshot.dueMissing ? ', sans \u00e9ch\u00e9ance' : '') +
+          '.';
+      } else if (unassigned) {
+        sentence =
+          '\u00c7a avance' +
+          (pct ? ' (' + pct + ')' : '') +
+          ', mais personne n\'est assign\u00e9.';
+      } else {
+        sentence =
+          'C\'est en cours' +
+          (pct ? ' (' + pct + ')' : '') +
+          (snapshot.dueMissing ? ', sans \u00e9ch\u00e9ance claire' : '') +
+          '.';
+      }
+    } else {
+      // not_started / idle
+      if (you) {
+        if (snapshot.dueMissing) {
+          sentence =
+            'C\'est \u00e0 toi et \u00e7a n\'a pas d\u00e9marr\u00e9 \u2014 il manque surtout une \u00e9ch\u00e9ance.';
+        } else if (scale === 'quick') {
+          sentence = 'C\'est \u00e0 toi \u2014 un petit fix rapide, pas encore commenc\u00e9.';
+        } else if (scale === 'project') {
+          sentence =
+            'C\'est \u00e0 toi \u2014 gros chantier pas encore lanc\u00e9' +
+            (snapshot.duePast ? ', et d\u00e9j\u00e0 en retard' : '') +
+            '.';
+        } else {
+          sentence =
+            'C\'est \u00e0 toi et \u00e7a n\'a pas encore d\u00e9marr\u00e9.';
+        }
+      } else if (other) {
+        sentence =
+          'C\'est chez ' +
+          other +
+          ' et \u00e7a n\'a pas encore d\u00e9marr\u00e9' +
+          (snapshot.dueMissing ? ' (pas d\'\u00e9ch\u00e9ance)' : '') +
+          '.';
+      } else if (unassigned) {
+        sentence = snapshot.dueMissing
+          ? 'Personne n\'est assign\u00e9 et il n\'y a pas d\'\u00e9ch\u00e9ance \u2014 \u00e7a risque de dormir.'
+          : 'Personne n\'est assign\u00e9 \u2014 \u00e7a n\'a pas encore d\u00e9marr\u00e9.';
+      } else {
+        sentence =
+          'Pas encore commenc\u00e9' +
+          (snapshot.dueMissing ? ', et sans \u00e9ch\u00e9ance' : '') +
+          '.';
+      }
+    }
+
+    return clampStatusBriefSentence(sentence);
+  }
+
+  /**
+   * AI Overview status brief: one boss-style sentence about what's going on.
+   * Returns { ok, skipped?, reason?, sentence?, usage?, debug }.
+   */
+  async function cardStatusBriefTurn(provider, bridge, options) {
+    options = options || {};
+    var onDebug = typeof options.onDebug === 'function' ? options.onDebug : null;
+    var context = options.context || buildContext(bridge);
+    var snapshot =
+      options.snapshot || buildStatusBriefSnapshot(context);
+    var heuristic = buildHeuristicStatusBrief(snapshot);
+
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: 'not-configured',
+        sentence: heuristic,
+        source: 'heuristic'
+      };
+    }
+
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu r\u00e9diges UNE phrase de statut pour le r\u00e9sum\u00e9 d\'une carte Trello (Power-Up Cerveau).',
+          'Imagine que le boss r\u00e9pond \u00e0\u00a0: \u00ab\u00a0Hey, \u00e0 propos de cette t\u00e2che\u2026 qu\'est-ce qui se passe\u00a0?\u00a0\u00bb',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"sentence":"\u2026"}',
+          'R\u00e8gles\u00a0:',
+          '- Une seule phrase, fran\u00e7ais, ton managerial direct (pas de blabla, pas d\'emoji).',
+          '- Max ~' + MAX_STATUS_BRIEF_LEN + ' caract\u00e8res.',
+          '- Branche OBLIGATOIREMENT selon snapshot\u00a0: phase (stuck / in_progress / not_started / done), youAssigned vs otherNames / unassigned, dueMissing / duePast, scale (quick vs project).',
+          '- Dis le plus important \u00e0 savoir MAINTENANT (blocage, qui porte, manque d\'\u00e9ch\u00e9ance, taille).',
+          '- N\'invente rien\u00a0: seulement le snapshot. Pas de pr\u00e9noms absents de otherNames.',
+          '- Ne recopie pas b\u00eatement les m\u00e9triques (pas \u00ab\u00a0Statut X, priorit\u00e9 Y\u00a0\u00bb)\u00a0: synth\u00e9tise.',
+          '- Ex. stuck+toi\u00a0: "C\'est bloqu\u00e9 de ton c\u00f4t\u00e9 \u2014 [raison]\u00a0; rien n\'avance tant que \u00e7a n\'est pas lev\u00e9."',
+          '- Ex. en cours+autre+sans due\u00a0: "C\'est en cours chez Sam, mais sans \u00e9ch\u00e9ance claire."',
+          'Snapshot\u00a0:',
+          JSON.stringify(snapshot)
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content:
+          'Donne la phrase de statut (JSON {"sentence":"\u2026"}). Heuristique de secours\u00a0: ' +
+          heuristic
+      }
+    ];
+
+    var debug = {
+      id: 'status-brief-' + Date.now().toString(36),
+      kind: 'cardStatusBriefTurn',
+      label: 'R\u00e9sum\u00e9 statut (overview)',
+      startedAt: Date.now(),
+      attempts: []
+    };
+    function emitDebug() {
+      if (!onDebug) return;
+      try {
+        onDebug(debug);
+      } catch (cbErr) {
+        console.error('cardStatusBriefTurn onDebug failed', cbErr);
+      }
+    }
+
+    var response;
+    var t0 = Date.now();
+    try {
+      try {
+        response = await chatCompletions(p, messages, {
+          jsonMode: true,
+          max_tokens: 120,
+          temperature: 0.35
+        });
+        if (response.meta) {
+          debug.attempts.push(Object.assign({ label: 'json' }, response.meta));
+        }
+      } catch (err) {
+        if (err && err.debugMeta) {
+          debug.attempts.push(Object.assign({ label: 'json' }, err.debugMeta));
+        }
+        if (
+          err &&
+          err.message &&
+          /response_format|json_object|json mode/i.test(err.message)
+        ) {
+          response = await chatCompletions(p, messages, {
+            jsonMode: false,
+            max_tokens: 120,
+            temperature: 0.35
+          });
+          if (response.meta) {
+            debug.attempts.push(
+              Object.assign({ label: 'sans json mode' }, response.meta)
+            );
+          }
+        } else {
+          throw err;
+        }
+      }
+    } catch (fatal) {
+      debug.endedAt = Date.now();
+      debug.latencyMs = Date.now() - t0;
+      debug.ok = false;
+      debug.error = (fatal && fatal.message) || String(fatal || 'Erreur');
+      debug.request = debug.attempts.length
+        ? debug.attempts[debug.attempts.length - 1]
+        : null;
+      emitDebug();
+      return {
+        ok: true,
+        skipped: false,
+        reason: 'llm-error',
+        sentence: heuristic,
+        source: 'heuristic',
+        error: debug.error,
+        debug: debug
+      };
+    }
+
+    var data = null;
+    try {
+      var text = typeof response.content === 'string' ? response.content.trim() : '';
+      var fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+      if (fence) text = fence[1].trim();
+      var start = text.indexOf('{');
+      var end = text.lastIndexOf('}');
+      if (start >= 0 && end > start) text = text.slice(start, end + 1);
+      data = JSON.parse(text);
+    } catch (parseErr) {
+      data = null;
+    }
+
+    var usage = extractUsageFromRaw(response.raw, messages, response.content, p.model);
+    usage.latencyMs = Date.now() - t0;
+    debug.endedAt = Date.now();
+    debug.latencyMs = usage.latencyMs;
+    debug.ok = true;
+    debug.request =
+      response.meta ||
+      (debug.attempts.length ? debug.attempts[debug.attempts.length - 1] : null);
+    debug.response = {
+      status: response.meta && response.meta.status,
+      content: response.content,
+      raw: cloneJsonSafe(response.raw),
+      parsed: data
+    };
+    debug.usage = usage;
+    emitDebug();
+
+    var aiSentence =
+      data && typeof data.sentence === 'string'
+        ? clampStatusBriefSentence(data.sentence)
+        : '';
+    if (!aiSentence) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: 'empty-sentence',
+        sentence: heuristic,
+        source: 'heuristic',
+        usage: usage,
+        debug: debug
+      };
+    }
+
+    return {
+      ok: true,
+      skipped: false,
+      sentence: aiSentence,
+      source: 'ai',
+      usage: usage,
+      debug: debug
+    };
+  }
+
   /** Compact snapshot of fields already visible on the card (so dream does not repeat them). */
   function buildDreamCardSnapshot(context) {
     var due = context && context.due;
@@ -10761,6 +11600,75 @@
               blockedPartial.blockedReasons.length
             ) {
               if (
+                linkIds.length === 1 &&
+                typeof CompletionTrello.setItemBlockedReasons === 'function'
+              ) {
+                var linkItem = null;
+                var linkItems =
+                  (nextBlockedCompletion && nextBlockedCompletion.items) || [];
+                for (var li = 0; li < linkItems.length; li++) {
+                  if (
+                    linkItems[li] &&
+                    String(linkItems[li].id) === String(linkIds[0])
+                  ) {
+                    linkItem = linkItems[li];
+                    break;
+                  }
+                }
+                var linkHadReasons =
+                  linkItem &&
+                  Array.isArray(linkItem.blockedReasons) &&
+                  linkItem.blockedReasons.length > 0;
+                var whyText = blockedPartial.blockedReasons[
+                  blockedPartial.blockedReasons.length - 1
+                ];
+                var canPair =
+                  !linkHadReasons &&
+                  linkItem &&
+                  whyText &&
+                  typeof fallbackBlockedReasonPair === 'function' &&
+                  !isPureWaitingOnTaskReason(whyText, linkItem.text);
+                if (canPair) {
+                  var pair =
+                    typeof suggestBlockedReasonPair === 'function'
+                      ? await suggestBlockedReasonPair(
+                          bridge.provider || null,
+                          {
+                            subtaskTitle: linkItem.text,
+                            why: whyText,
+                            cardTitle:
+                              (bridge.getCardName && bridge.getCardName()) ||
+                              '',
+                          }
+                        )
+                      : fallbackBlockedReasonPair({
+                          subtaskTitle: linkItem.text,
+                          why: whyText,
+                        });
+                  nextBlockedCompletion =
+                    CompletionTrello.setItemBlockedReasons(
+                      nextBlockedCompletion,
+                      linkIds[0],
+                      pair.subtaskReason ? [pair.subtaskReason] : []
+                    );
+                  if (pair.cardReason) {
+                    blockedPartial.blockedReasons = [pair.cardReason];
+                    bridge.applyPriority({
+                      blockedReasons: [pair.cardReason],
+                      enAttente: true,
+                    });
+                  }
+                } else {
+                  linkIds.forEach(function (id) {
+                    nextBlockedCompletion =
+                      CompletionTrello.setItemBlockedReasons(
+                        nextBlockedCompletion,
+                        id,
+                        blockedPartial.blockedReasons
+                      );
+                  });
+                }
+              } else if (
                 linkIds.length &&
                 typeof CompletionTrello.setItemBlockedReasons === 'function'
               ) {
@@ -11042,16 +11950,54 @@
         var wantBlocked =
           args.blocked != null ? !!args.blocked : !itemBlockedTarget.blocked;
         var nextItemBlocked;
+        var pairCardReason = null;
         if (
           wantBlocked &&
           Array.isArray(args.blockedReasons) &&
           typeof CompletionTrello.setItemBlockedReasons === 'function'
         ) {
-          nextItemBlocked = CompletionTrello.setItemBlockedReasons(
-            itemBlockedBase,
-            itemBlockedTarget.id,
-            args.blockedReasons
-          );
+          var whyArg = args.blockedReasons
+            .filter(function (r) {
+              return typeof r === 'string' && r.trim();
+            })
+            .map(function (r) {
+              return normalizeAgentBlockedReason(r) || String(r).trim();
+            })
+            .filter(Boolean);
+          var itemHadMotifs =
+            Array.isArray(itemBlockedTarget.blockedReasons) &&
+            itemBlockedTarget.blockedReasons.length > 0;
+          var whyText = whyArg.length ? whyArg[whyArg.length - 1] : '';
+          if (
+            !itemHadMotifs &&
+            whyText &&
+            !isPureWaitingOnTaskReason(whyText, itemBlockedTarget.text)
+          ) {
+            var itemPair = fallbackBlockedReasonPair({
+              subtaskTitle: itemBlockedTarget.text,
+              why: whyText,
+            });
+            try {
+              itemPair = await suggestBlockedReasonPair(null, {
+                subtaskTitle: itemBlockedTarget.text,
+                why: whyText,
+              });
+            } catch (pairErr) {
+              /* keep fallback */
+            }
+            nextItemBlocked = CompletionTrello.setItemBlockedReasons(
+              itemBlockedBase,
+              itemBlockedTarget.id,
+              itemPair.subtaskReason ? [itemPair.subtaskReason] : whyArg
+            );
+            pairCardReason = itemPair.cardReason || null;
+          } else {
+            nextItemBlocked = CompletionTrello.setItemBlockedReasons(
+              itemBlockedBase,
+              itemBlockedTarget.id,
+              whyArg.length ? whyArg : args.blockedReasons
+            );
+          }
         } else {
           nextItemBlocked = CompletionTrello.setItemBlocked(
             itemBlockedBase,
@@ -11062,15 +12008,19 @@
         bridge.applyCompletion(nextItemBlocked);
         if (typeof bridge.applyPriority === 'function') {
           if (wantBlocked) {
-            bridge.applyPriority({
+            var priPartial = {
               enAttente: true,
               blockedLinks: CompletionTrello.blockedLinksFromCompletion(
                 nextItemBlocked
               ),
-              blockedReasons: CompletionTrello.aggregateBlockedReasons
-                ? CompletionTrello.aggregateBlockedReasons(nextItemBlocked)
-                : undefined,
-            });
+            };
+            if (pairCardReason) {
+              priPartial.blockedReasons = [pairCardReason];
+            } else if (CompletionTrello.aggregateBlockedReasons) {
+              priPartial.blockedReasons =
+                CompletionTrello.aggregateBlockedReasons(nextItemBlocked);
+            }
+            bridge.applyPriority(priPartial);
           } else if (
             typeof CompletionTrello.hasAnyBlocked === 'function' &&
             !CompletionTrello.hasAnyBlocked(nextItemBlocked)
@@ -12127,11 +13077,18 @@
     addDaysIsoLocal: addDaysIsoLocal,
     cardSanityCheck: cardSanityCheck,
     cardDreamTurn: cardDreamTurn,
+    buildStatusBriefSnapshot: buildStatusBriefSnapshot,
+    fingerprintStatusBriefSnapshot: fingerprintStatusBriefSnapshot,
+    buildHeuristicStatusBrief: buildHeuristicStatusBrief,
+    cardStatusBriefTurn: cardStatusBriefTurn,
     isVerboseStructuredDesc: isVerboseStructuredDesc,
     suggestSubtasks: suggestSubtasks,
     estimateSubtaskDurations: estimateSubtaskDurations,
     fallbackBlockedReasonText: fallbackBlockedReasonText,
     suggestBlockedReasonText: suggestBlockedReasonText,
+    isPureWaitingOnTaskReason: isPureWaitingOnTaskReason,
+    fallbackBlockedReasonPair: fallbackBlockedReasonPair,
+    suggestBlockedReasonPair: suggestBlockedReasonPair,
     fallbackUnblockSubtaskText: fallbackUnblockSubtaskText,
     suggestUnblockSubtaskText: suggestUnblockSubtaskText,
     heuristicSubtaskEstimates: heuristicSubtaskEstimates,

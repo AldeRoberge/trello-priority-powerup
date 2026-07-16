@@ -216,6 +216,7 @@
         return Promise.resolve({ ok: false, reason: 'no-setCardDesc' });
       },
       getStatut: options.getStatut || function () { return null; },
+      getOwnership: options.getOwnership || function () { return null; },
       selectStatut: options.selectStatut || function () {
         return Promise.resolve({ ok: false, reason: 'no-selectStatut' });
       }

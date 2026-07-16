@@ -6826,6 +6826,9 @@
       typeof config.priorityLabel === 'string' ? config.priorityLabel : '';
     var priorityColor =
       typeof config.priorityColor === 'string' ? config.priorityColor : '';
+    var statusBrief =
+      typeof config.statusBrief === 'string' ? config.statusBrief : '';
+    var statusBriefPending = !!config.statusBriefPending;
     var features =
       config.features && typeof config.features === 'object'
         ? Object.assign({}, config.features)
@@ -6879,6 +6882,12 @@
     titleBtn.appendChild(titleChevron);
 
     field.appendChild(titleBtn);
+
+    // ── Status brief (boss-style one-liner) ─────────────────────────────
+    var statusBriefEl = document.createElement('p');
+    statusBriefEl.className = 'overview-status-brief';
+    statusBriefEl.hidden = true;
+    field.appendChild(statusBriefEl);
 
     // ── Metrics grid ───────────────────────────────────────────────────
     var metrics = document.createElement('div');
@@ -6978,6 +6987,17 @@
         titleValue.textContent = 'Sans titre';
         titleValue.classList.add('is-empty');
         titleBtn.classList.add('is-empty');
+      }
+
+      var brief = (statusBrief || '').trim();
+      if (brief) {
+        statusBriefEl.textContent = brief;
+        statusBriefEl.hidden = false;
+        statusBriefEl.classList.toggle('is-pending', !!statusBriefPending);
+      } else {
+        statusBriefEl.textContent = '';
+        statusBriefEl.hidden = true;
+        statusBriefEl.classList.remove('is-pending');
       }
 
       setFeatureVisible(statusCell.cell, features.statut !== false);
@@ -7168,6 +7188,12 @@
       if (next.priorityColor != null) {
         priorityColor = String(next.priorityColor || '');
       }
+      if (next.statusBrief != null) {
+        statusBrief = String(next.statusBrief || '');
+      }
+      if (next.statusBriefPending != null) {
+        statusBriefPending = !!next.statusBriefPending;
+      }
       if (next.features && typeof next.features === 'object') {
         features = Object.assign({}, features, next.features);
       }
@@ -7193,6 +7219,8 @@
           dueBand: dueBand,
           priorityLabel: priorityLabel,
           priorityColor: priorityColor,
+          statusBrief: statusBrief,
+          statusBriefPending: statusBriefPending,
           features: Object.assign({}, features)
         };
       }

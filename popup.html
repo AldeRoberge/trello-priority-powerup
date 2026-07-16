@@ -107,6 +107,177 @@
     let boardDigestCache = '';
     let latestMembersFp = '';
     let latestLabelsFp = '';
+    let latestCardMembers = [];
+    let currentMemberCache = null;
+    var statusBriefTimer = null;
+    var statusBriefGen = 0;
+    var statusBriefFp = '';
+    var statusBriefAiCache = { fp: '', sentence: '' };
+    var STATUS_BRIEF_DEBOUNCE_MS = 800;
+
+    function rememberCardMembers(members) {
+      latestCardMembers = Array.isArray(members) ? members.slice() : [];
+    }
+
+    function getOwnershipSnapshot() {
+      var members = latestCardMembers || [];
+      var you = currentMemberCache;
+      var youId = you && you.id != null ? String(you.id) : '';
+      var youAssigned =
+        !!youId &&
+        members.some(function (m) {
+          return m && m.id != null && String(m.id) === youId;
+        });
+      return {
+        members: members,
+        you: you,
+        youAssigned: youAssigned,
+        assigneeCount: members.length,
+        unassigned: members.length === 0
+      };
+    }
+
+    function buildStatusBriefBridge() {
+      return {
+        getScope: function () {
+          return 'task';
+        },
+        getCardName: function () {
+          return readCardNameLabel() || cardNameCache || '';
+        },
+        getCardDesc: function () {
+          if (infoUi && typeof infoUi.getDesc === 'function') {
+            return infoUi.getDesc() || '';
+          }
+          return cardDesc || '';
+        },
+        getFormulaKey: function () {
+          if (variant && typeof variant.getFormulaKey === 'function') {
+            return variant.getFormulaKey();
+          }
+          return boardFormula || 'baseline';
+        },
+        getPriorityState: function () {
+          return variant && typeof variant.getState === 'function'
+            ? variant.getState()
+            : latestState || {};
+        },
+        getCompletion: function () {
+          if (completionUi && typeof completionUi.getData === 'function') {
+            return completionUi.getData();
+          }
+          return latestCompletion || { items: [] };
+        },
+        getStatut: function () {
+          return latestStatut;
+        },
+        getOwnership: getOwnershipSnapshot,
+        getProfile: function () {
+          return cachedProfile;
+        },
+        getMemory: function () {
+          return cachedMemory;
+        },
+        getCardMemory: function () {
+          return cachedCardMemory;
+        }
+      };
+    }
+
+    function paintOverviewStatusBrief(sentence, pending) {
+      if (!overviewUi || typeof overviewUi.setData !== 'function') return;
+      overviewUi.setData({
+        statusBrief: sentence || '',
+        statusBriefPending: !!pending
+      });
+    }
+
+    function scheduleOverviewStatusBrief() {
+      if (
+        !window.PriorityAgent ||
+        typeof PriorityAgent.buildContext !== 'function' ||
+        typeof PriorityAgent.buildStatusBriefSnapshot !== 'function' ||
+        typeof PriorityAgent.buildHeuristicStatusBrief !== 'function'
+      ) {
+        return;
+      }
+      var bridge = buildStatusBriefBridge();
+      var context = PriorityAgent.buildContext(bridge);
+      var snapshot = PriorityAgent.buildStatusBriefSnapshot(context);
+      var heuristic = PriorityAgent.buildHeuristicStatusBrief(snapshot);
+      var fp =
+        typeof PriorityAgent.fingerprintStatusBriefSnapshot === 'function'
+          ? PriorityAgent.fingerprintStatusBriefSnapshot(snapshot)
+          : '';
+
+      if (statusBriefAiCache.fp && statusBriefAiCache.fp === fp && statusBriefAiCache.sentence) {
+        paintOverviewStatusBrief(statusBriefAiCache.sentence, false);
+        statusBriefFp = fp;
+        return;
+      }
+
+      paintOverviewStatusBrief(heuristic, false);
+      statusBriefFp = fp;
+
+      if (typeof PriorityAgent.cardStatusBriefTurn !== 'function') return;
+      if (typeof PriorityAgent.getProvider !== 'function') return;
+
+      if (statusBriefTimer) {
+        clearTimeout(statusBriefTimer);
+        statusBriefTimer = null;
+      }
+      statusBriefTimer = setTimeout(function () {
+        statusBriefTimer = null;
+        refreshOverviewStatusBriefAi(bridge, snapshot, fp, heuristic);
+      }, STATUS_BRIEF_DEBOUNCE_MS);
+    }
+
+    function refreshOverviewStatusBriefAi(bridge, snapshot, fp, heuristic) {
+      var gen = ++statusBriefGen;
+      if (
+        !window.PriorityAgent ||
+        typeof PriorityAgent.getProvider !== 'function' ||
+        typeof PriorityAgent.cardStatusBriefTurn !== 'function'
+      ) {
+        return;
+      }
+      paintOverviewStatusBrief(
+        (statusBriefAiCache.fp === fp && statusBriefAiCache.sentence) ||
+          heuristic,
+        true
+      );
+      PriorityAgent.getProvider(t)
+        .then(function (provider) {
+          if (gen !== statusBriefGen) return null;
+          if (!PriorityAgent.isConfigured(provider)) {
+            return {
+              ok: true,
+              skipped: true,
+              reason: 'not-configured',
+              sentence: heuristic,
+              source: 'heuristic'
+            };
+          }
+          return PriorityAgent.cardStatusBriefTurn(provider, bridge, {
+            snapshot: snapshot
+          });
+        })
+        .then(function (result) {
+          if (gen !== statusBriefGen) return;
+          if (!result) return;
+          var sentence =
+            (result.sentence && String(result.sentence).trim()) || heuristic;
+          if (result.source === 'ai' && sentence) {
+            statusBriefAiCache = { fp: fp, sentence: sentence };
+          }
+          paintOverviewStatusBrief(sentence, false);
+        })
+        .catch(function (err) {
+          if (gen !== statusBriefGen) return;
+          console.error('Overview status brief failed', err);
+          paintOverviewStatusBrief(heuristic, false);
+        });
+    }
 
     // Cross-user live sync: re-read shared plugin data on t.render + light poll.
     var LIVE_SYNC_POLL_MS = 3000;
@@ -290,11 +461,13 @@
 
     function applyRemoteMembers(members) {
       var list = Array.isArray(members) ? members : [];
+      rememberCardMembers(list);
       appliedMembersFp = fingerprintIds(list);
       latestMembersFp = appliedMembersFp;
       if (infoUi && typeof infoUi.setMembers === 'function') {
         infoUi.setMembers(list);
       }
+      scheduleOverviewStatusBrief();
       resizePopup();
       refreshHistoryBaseline();
     }
@@ -961,6 +1134,7 @@
               }
             ).then(function () {
               return PriorityTrello.getCardMembers(t).then(function (members) {
+                rememberCardMembers(members);
                 latestMembersFp = fingerprintIds(members);
                 appliedMembersFp = latestMembersFp;
                 if (infoUi && typeof infoUi.setMembers === 'function') {
@@ -1394,6 +1568,7 @@
           priority: overviewFeatureOn('priority')
         }
       });
+      scheduleOverviewStatusBrief();
     }
 
     function syncInfoRecap(stateOverride) {
@@ -1924,11 +2099,13 @@
             if (result && result.ok === false) return result;
             return PriorityTrello.getCardMembers(t)
               .then(function (members) {
+                rememberCardMembers(members);
                 latestMembersFp = fingerprintIds(members);
                 appliedMembersFp = latestMembersFp;
                 if (infoUi && typeof infoUi.setMembers === 'function') {
                   infoUi.setMembers(members || []);
                 }
+                scheduleOverviewStatusBrief();
               })
               .then(function () {
                 return commitHistoryNow('Membre ajouté').then(function () {
@@ -1946,11 +2123,13 @@
             if (result && result.ok === false) return result;
             return PriorityTrello.getCardMembers(t)
               .then(function (members) {
+                rememberCardMembers(members);
                 latestMembersFp = fingerprintIds(members);
                 appliedMembersFp = latestMembersFp;
                 if (infoUi && typeof infoUi.setMembers === 'function') {
                   infoUi.setMembers(members || []);
                 }
+                scheduleOverviewStatusBrief();
               })
               .then(function () {
                 return commitHistoryNow('Membre retiré').then(function () {
@@ -2466,6 +2645,9 @@
         t.card('id').catch(function () {
           return null;
         }),
+        PriorityTrello.getCurrentMember
+          ? PriorityTrello.getCurrentMember(t)
+          : Promise.resolve(null),
       ])
         .then(function (results) {
           var members = results[0] || [];
@@ -2474,12 +2656,14 @@
           var boardLabels = results[3] || [];
           var authorized = !!results[4];
           var meCard = results[5];
+          currentMemberCache = results[6] || null;
           var childId = meCard && meCard.id ? String(meCard.id) : '';
           var hasRest =
             PriorityTrello.restClientOptions && !!PriorityTrello.restClientOptions();
           if (infoUi && typeof infoUi.setMembers === 'function') {
             infoUi.setMembers(members);
           }
+          rememberCardMembers(members);
           latestMembersFp = fingerprintIds(members);
           appliedMembersFp = latestMembersFp;
           if (infoUi && typeof infoUi.setBoardMembers === 'function') {
@@ -2535,6 +2719,7 @@
                 if (!result || !result.changed) return result;
                 markMembersDirty();
                 var next = Array.isArray(result.members) ? result.members : [];
+                rememberCardMembers(next);
                 latestMembersFp = fingerprintIds(next);
                 appliedMembersFp = latestMembersFp;
                 if (infoUi && typeof infoUi.setMembers === 'function') {
@@ -2749,8 +2934,9 @@
     }
 
     /**
-     * For newly blocked Progrès subtasks: seed a humanized Motif immediately
-     * (fallback), then polish with a quick AI call → "En attente d'essayer…".
+     * For newly blocked Progrès subtasks: seed a humanized Motif on the card
+     * only (temporary "En attente de [subtask]"). Do not write it onto the
+     * subtask itself — that waits for an explicit WHY refine.
      */
     function humanizeMotifsForNewBlockedLinks(prevLinks, nextLinks, data) {
       var prevIds = Object.create(null);
@@ -2796,7 +2982,7 @@
             break;
           }
         }
-        // Also skip if the item already has Motifs.
+        // Also skip if the item already has Motifs (user/agent WHY already set).
         var itemRow = byId[fresh[f].id];
         if (
           itemRow &&
@@ -2837,43 +3023,13 @@
         });
       }
       if (seeded || provisionals.length) {
-        // Persist Motifs onto the newly blocked items (completion source of truth).
-        var liveComp =
-          (completionUi &&
-            typeof completionUi.getData === 'function' &&
-            completionUi.getData()) ||
-          data ||
-          latestCompletion ||
-          { items: [] };
-        var nextComp = CompletionTrello.normalizeCompletionData(liveComp);
-        for (var fi = 0; fi < provisionals.length; fi++) {
-          var entry = provisionals[fi];
-          if (
-            entry.id &&
-            typeof CompletionTrello.setItemBlockedReasons === 'function'
-          ) {
-            nextComp = CompletionTrello.setItemBlockedReasons(nextComp, entry.id, [
-              entry.from
-            ]);
-          }
-        }
-        if (completionUi && typeof completionUi.setData === 'function') {
-          latestCompletion = withProgressEnabledFlag(nextComp);
-          completionUi.setData(latestCompletion);
-          saveCompletion(latestCompletion);
-        } else {
-          latestCompletion = withProgressEnabledFlag(nextComp);
-          saveCompletion(latestCompletion);
-        }
-
+        // Card-only provisional Motifs — leave item.blockedReasons empty.
         syncingBlockedBridge = true;
         try {
           variant.setState(
             Object.assign({}, st0, {
               enAttente: true,
-              blockedReasons: CompletionTrello.aggregateBlockedReasons
-                ? CompletionTrello.aggregateBlockedReasons(nextComp)
-                : reasons0,
+              blockedReasons: reasons0,
             })
           );
           if (
@@ -2945,9 +3101,76 @@
     }
 
     /**
+     * When completion has no entity Motifs yet, keep/reseed card provisional
+     * "En attente de [linked subtask]" Motifs so sync does not wipe them.
+     */
+    function preserveOrReseedProvisionalReasons(cardReasons, links, data) {
+      var items =
+        data && Array.isArray(data.items) ? data.items : [];
+      var byId = Object.create(null);
+      for (var i = 0; i < items.length; i++) {
+        if (items[i] && items[i].id) byId[String(items[i].id)] = items[i];
+      }
+      var out = [];
+      var seen = Object.create(null);
+      function push(reason) {
+        var text = typeof reason === 'string' ? reason.trim() : '';
+        if (!text) return;
+        var key = reasonKeyFr(text);
+        if (seen[key]) return;
+        seen[key] = true;
+        out.push(text);
+      }
+      var reasons = Array.isArray(cardReasons) ? cardReasons : [];
+      for (var r = 0; r < reasons.length; r++) {
+        push(reasons[r]);
+      }
+      var list = Array.isArray(links) ? links : [];
+      for (var li = 0; li < list.length; li++) {
+        var link = list[li];
+        if (!link || !link.id) continue;
+        var item = byId[String(link.id)];
+        if (
+          item &&
+          Array.isArray(item.blockedReasons) &&
+          item.blockedReasons.length
+        ) {
+          continue;
+        }
+        var label =
+          (item && item.text) ||
+          (typeof link.label === 'string' ? link.label : '') ||
+          '';
+        label = String(label || '').trim();
+        if (!label) continue;
+        var hasMatch = false;
+        for (var j = 0; j < out.length; j++) {
+          if (blockedReasonMatchesTask(out[j], label)) {
+            hasMatch = true;
+            break;
+          }
+        }
+        if (hasMatch) continue;
+        var provisional =
+          window.PriorityAgent &&
+          typeof PriorityAgent.fallbackBlockedReasonText === 'function'
+            ? PriorityAgent.fallbackBlockedReasonText(label)
+            : window.PriorityUI &&
+                typeof PriorityUI.formatBlockedWaitingOnLabel === 'function'
+              ? PriorityUI.formatBlockedWaitingOnLabel(label)
+              : 'En attente de ' +
+                label.charAt(0).toLocaleLowerCase('fr-FR') +
+                label.slice(1);
+        if (provisional) push(provisional);
+      }
+      return out;
+    }
+
+    /**
      * Progrès blocked → Statut enAttente + blockedLinks + aggregated Motifs.
      * Card is Bloqué iff master or any item is blocked.
-     * Entity Motifs (completion) are the source of truth for blockedReasons.
+     * Entity Motifs (completion) are the source of truth when present; otherwise
+     * card-only provisional waiting-on Motifs are preserved.
      */
     function syncPriorityFromProgressBlocked(data) {
       if (syncingBlockedBridge) {
@@ -2964,9 +3187,54 @@
       var prevLinks = Array.isArray(st.blockedLinks) ? st.blockedLinks : [];
       var pruned = pruneBlockedReasonsForCompletion(st, data);
       var nextLinks = pruned.blockedLinks;
-      var nextReasons = CompletionTrello.aggregateBlockedReasons
+      var aggReasons = CompletionTrello.aggregateBlockedReasons
         ? CompletionTrello.aggregateBlockedReasons(data)
-        : pruned.blockedReasons;
+        : [];
+      var nextReasons;
+      if (aggReasons.length) {
+        // Keep distinct card-level Motifs (woven parent WHY) that are not
+        // pure provisionals and not already present on entities.
+        var preservedCard = [];
+        var aggKeys = Object.create(null);
+        for (var ai = 0; ai < aggReasons.length; ai++) {
+          aggKeys[reasonKeyFr(aggReasons[ai])] = true;
+        }
+        var cardPrev = Array.isArray(pruned.blockedReasons)
+          ? pruned.blockedReasons
+          : [];
+        var itemsForProv =
+          data && Array.isArray(data.items) ? data.items : [];
+        for (var ci = 0; ci < cardPrev.length; ci++) {
+          var cr = cardPrev[ci];
+          if (typeof cr !== 'string' || !cr.trim()) continue;
+          if (aggKeys[reasonKeyFr(cr)]) continue;
+          var isProv = false;
+          for (var ii = 0; ii < itemsForProv.length; ii++) {
+            var it = itemsForProv[ii];
+            if (!it || !CompletionTrello.isItemBlocked(it)) continue;
+            var pure =
+              window.PriorityAgent &&
+              typeof PriorityAgent.isPureWaitingOnTaskReason === 'function'
+                ? PriorityAgent.isPureWaitingOnTaskReason(cr, it.text)
+                : blockedReasonMatchesTask(cr, it.text);
+            if (pure) {
+              isProv = true;
+              break;
+            }
+          }
+          if (isProv) continue;
+          preservedCard.push(cr);
+        }
+        nextReasons = preservedCard.length ? preservedCard : aggReasons;
+      } else if (nextLinks.length) {
+        nextReasons = preserveOrReseedProvisionalReasons(
+          pruned.blockedReasons,
+          nextLinks,
+          data
+        );
+      } else {
+        nextReasons = pruned.blockedReasons;
+      }
       // Keep waiting-other only while linked blockers remain.
       if (!nextLinks.length && nextReasons.length) {
         var WAITING_OTHER =
@@ -3077,6 +3345,7 @@
     /**
      * When Statut Motif is edited: map onto master (self-blocked), the sole
      * blocked item, or master when several blockers exist.
+     * Pure provisional "En attente de [this item]" Motifs stay card-only.
      */
     function writeStatutReasonsOntoCompletion(data, reasons) {
       var CT = CompletionTrello;
@@ -3103,7 +3372,16 @@
         return CT.setMasterBlockedReasons(next, list, { origin: origin });
       }
       if (singleItem) {
-        return CT.setItemBlockedReasons(next, blockedItems[0].id, list);
+        var only = blockedItems[0];
+        var filtered = list.filter(function (reason) {
+          return !blockedReasonMatchesTask(reason, only.text);
+        });
+        if (!filtered.length) {
+          // Card-only provisional — do not dump onto the subtask.
+          return next;
+        }
+        // Prefer writing only non-provisional Motifs (WHY / woven causes).
+        return CT.setItemBlockedReasons(next, only.id, filtered);
       }
       // Multiple blockers: Statut list replaces per-item Motifs on master.
       next.items = next.items.map(function (item) {
@@ -3409,6 +3687,298 @@
         }
       }
       return to;
+    }
+
+    /**
+     * Sole blocked subtask with empty Motifs (card may still hold provisional).
+     */
+    function findRefineWhyTarget(data) {
+      if (typeof CompletionTrello === 'undefined') return null;
+      var next = CompletionTrello.normalizeCompletionData(data || { items: [] });
+      if (CompletionTrello.isMasterBlocked(next)) return null;
+      var emptyBlocked = [];
+      for (var i = 0; i < next.items.length; i++) {
+        var item = next.items[i];
+        if (!CompletionTrello.isItemBlocked(item)) continue;
+        if (item.done) continue;
+        var hasReasons =
+          Array.isArray(item.blockedReasons) && item.blockedReasons.length > 0;
+        if (!hasReasons) emptyBlocked.push(item);
+      }
+      if (emptyBlocked.length === 1) return emptyBlocked[0];
+      return null;
+    }
+
+    /**
+     * Card still shows a pure provisional waiting-on Motif for this subtask.
+     */
+    function cardHasProvisionalForTask(taskName) {
+      if (!variant || typeof variant.getState !== 'function') return false;
+      var st = variant.getState() || {};
+      var reasons = Array.isArray(st.blockedReasons) ? st.blockedReasons : [];
+      for (var i = 0; i < reasons.length; i++) {
+        if (
+          window.PriorityAgent &&
+          typeof PriorityAgent.isPureWaitingOnTaskReason === 'function'
+            ? PriorityAgent.isPureWaitingOnTaskReason(reasons[i], taskName)
+            : blockedReasonMatchesTask(reasons[i], taskName)
+        ) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    var refiningBlockedWhy = false;
+
+    /**
+     * Apply dual Motifs after the user explains WHY a linked subtask is blocked.
+     */
+    function applyBlockedWhyPair(itemId, why) {
+      var text = typeof why === 'string' ? why.trim() : '';
+      if (!text || !itemId) return Promise.resolve(null);
+      if (typeof CompletionTrello === 'undefined') return Promise.resolve(null);
+
+      var live =
+        (completionUi &&
+          typeof completionUi.getData === 'function' &&
+          completionUi.getData()) ||
+        latestCompletion ||
+        { items: [] };
+      var next = CompletionTrello.normalizeCompletionData(live);
+      var target = null;
+      for (var i = 0; i < next.items.length; i++) {
+        if (next.items[i] && String(next.items[i].id) === String(itemId)) {
+          target = next.items[i];
+          break;
+        }
+      }
+      if (!target) return Promise.resolve(null);
+      var subtaskTitle = String(target.text || '').trim();
+      if (!subtaskTitle) return Promise.resolve(null);
+
+      refiningBlockedWhy = true;
+      var cardTitle =
+        (typeof readCardNameLabel === 'function' && readCardNameLabel()) ||
+        cardNameCache ||
+        '';
+
+      function applyPair(pair) {
+        var subtaskReason =
+          pair && typeof pair.subtaskReason === 'string'
+            ? pair.subtaskReason.trim()
+            : '';
+        var cardReason =
+          pair && typeof pair.cardReason === 'string'
+            ? pair.cardReason.trim()
+            : '';
+        if (!subtaskReason && !cardReason) return null;
+
+        var withItem = CompletionTrello.setItemBlockedReasons(
+          next,
+          itemId,
+          subtaskReason ? [subtaskReason] : []
+        );
+        latestCompletion = withProgressEnabledFlag(withItem);
+        if (completionUi && typeof completionUi.setData === 'function') {
+          completionUi.setData(latestCompletion);
+        }
+        saveCompletion(latestCompletion);
+
+        if (variant && typeof variant.getState === 'function') {
+          var st = variant.getState() || {};
+          var prevReasons = Array.isArray(st.blockedReasons)
+            ? st.blockedReasons.slice()
+            : [];
+          var nextCardReasons = [];
+          var seen = Object.create(null);
+          function pushCard(reason) {
+            var r = typeof reason === 'string' ? reason.trim() : '';
+            if (!r) return;
+            var key = reasonKeyFr(r);
+            if (seen[key]) return;
+            seen[key] = true;
+            nextCardReasons.push(r);
+          }
+          for (var p = 0; p < prevReasons.length; p++) {
+            var reason = prevReasons[p];
+            // Drop provisional waiting-on-[this subtask] and the raw WHY chip.
+            if (blockedReasonMatchesTask(reason, subtaskTitle)) continue;
+            if (
+              window.PriorityAgent &&
+              typeof PriorityAgent.isPureWaitingOnTaskReason === 'function' &&
+              PriorityAgent.isPureWaitingOnTaskReason(reason, subtaskTitle)
+            ) {
+              continue;
+            }
+            if (reasonKeyFr(reason) === reasonKeyFr(text)) continue;
+            pushCard(reason);
+          }
+          if (cardReason) pushCard(cardReason);
+          else if (subtaskReason) pushCard(subtaskReason);
+
+          syncingBlockedBridge = true;
+          try {
+            variant.setState(
+              Object.assign({}, st, {
+                enAttente: true,
+                blockedReasons: nextCardReasons,
+                blockedLinks: CompletionTrello.blockedLinksFromCompletion
+                  ? CompletionTrello.blockedLinksFromCompletion(latestCompletion)
+                  : st.blockedLinks,
+              })
+            );
+            if (
+              typeof statutUi !== 'undefined' &&
+              statutUi &&
+              typeof statutUi.syncBlockedPanel === 'function'
+            ) {
+              statutUi.syncBlockedPanel();
+            }
+            attachBlockedIntoStatut();
+          } finally {
+            syncingBlockedBridge = false;
+          }
+        }
+        if (progressCollapse) progressCollapse.refreshSummary();
+        syncBlockedSubtasks();
+        resizePopup();
+        return { subtaskReason: subtaskReason, cardReason: cardReason };
+      }
+
+      var pairPromise =
+        window.PriorityAgent &&
+        typeof PriorityAgent.getProvider === 'function' &&
+        typeof PriorityAgent.suggestBlockedReasonPair === 'function'
+          ? PriorityAgent.getProvider(t)
+              .then(function (provider) {
+                return PriorityAgent.suggestBlockedReasonPair(provider, {
+                  subtaskTitle: subtaskTitle,
+                  why: text,
+                  cardTitle: cardTitle,
+                });
+              })
+              .catch(function () {
+                return PriorityAgent.fallbackBlockedReasonPair({
+                  subtaskTitle: subtaskTitle,
+                  why: text,
+                });
+              })
+          : Promise.resolve(
+              window.PriorityAgent &&
+                typeof PriorityAgent.fallbackBlockedReasonPair === 'function'
+                ? PriorityAgent.fallbackBlockedReasonPair({
+                    subtaskTitle: subtaskTitle,
+                    why: text,
+                  })
+                : {
+                    subtaskReason: text,
+                    cardReason: text,
+                  }
+            );
+
+      return pairPromise
+        .then(function (pair) {
+          return applyPair(pair);
+        })
+        .finally(function () {
+          refiningBlockedWhy = false;
+        });
+    }
+
+    /**
+     * If a linked subtask is blocked without Motifs, treat the new Motif as WHY
+     * and dual-rewrite card + subtask. Returns a Promise when handled, else null.
+     */
+    function tryRefineBlockedWhy(why) {
+      var text = typeof why === 'string' ? why.trim() : '';
+      if (!text) return null;
+      if (refiningBlockedWhy) return null;
+      var live =
+        (completionUi &&
+          typeof completionUi.getData === 'function' &&
+          completionUi.getData()) ||
+        latestCompletion ||
+        { items: [] };
+      var target = findRefineWhyTarget(live);
+      if (!target) return null;
+      // Prefer refine when card still shows provisional, or when there is a
+      // single empty-reason blocker (pause-then-WHY flow).
+      if (
+        !cardHasProvisionalForTask(target.text) &&
+        !CompletionTrello.hasAnyBlocked(live)
+      ) {
+        return null;
+      }
+      return applyBlockedWhyPair(target.id, text);
+    }
+
+    /**
+     * After a Motif is typed on a previously empty blocked subtask row,
+     * dual-rewrite card + item Motifs.
+     */
+    function maybeRefineFromItemMotifs(data) {
+      if (refiningBlockedWhy) return;
+      if (!variant || typeof variant.getState !== 'function') return;
+      if (typeof CompletionTrello === 'undefined') return;
+      var next = CompletionTrello.normalizeCompletionData(data || { items: [] });
+      if (CompletionTrello.isMasterBlocked(next)) return;
+      var withReasons = [];
+      var emptyBlocked = 0;
+      for (var i = 0; i < next.items.length; i++) {
+        var item = next.items[i];
+        if (!CompletionTrello.isItemBlocked(item) || item.done) continue;
+        if (
+          Array.isArray(item.blockedReasons) &&
+          item.blockedReasons.length
+        ) {
+          withReasons.push(item);
+        } else {
+          emptyBlocked++;
+        }
+      }
+      if (withReasons.length !== 1 || emptyBlocked > 0) return;
+      var only = withReasons[0];
+      var why = only.blockedReasons[only.blockedReasons.length - 1];
+      if (
+        window.PriorityAgent &&
+        typeof PriorityAgent.isPureWaitingOnTaskReason === 'function' &&
+        PriorityAgent.isPureWaitingOnTaskReason(why, only.text)
+      ) {
+        return;
+      }
+      if (blockedReasonMatchesTask(why, only.text)) return;
+
+      var st = variant.getState() || {};
+      var cardReasons = Array.isArray(st.blockedReasons)
+        ? st.blockedReasons
+        : [];
+      var hasProvisional = cardHasProvisionalForTask(only.text);
+      var cardMatchesItem =
+        blockedReasonsFingerprint(cardReasons) ===
+        blockedReasonsFingerprint(only.blockedReasons);
+      var taskLower =
+        String(only.text || '')
+          .charAt(0)
+          .toLocaleLowerCase('fr-FR') + String(only.text || '').slice(1);
+      var alreadyWoven = false;
+      for (var c = 0; c < cardReasons.length; c++) {
+        var cr = String(cardReasons[c] || '');
+        if (
+          /\spour\s+/i.test(cr) &&
+          reasonKeyFr(cr).indexOf(reasonKeyFr(taskLower)) >= 0 &&
+          reasonKeyFr(cr) !== reasonKeyFr(why)
+        ) {
+          alreadyWoven = true;
+          break;
+        }
+      }
+      if (alreadyWoven && !hasProvisional) return;
+      if (!hasProvisional && !cardMatchesItem) return;
+
+      applyBlockedWhyPair(only.id, why).catch(function (err) {
+        console.error('maybeRefineFromItemMotifs failed', err);
+      });
     }
 
     /**
@@ -4506,6 +5076,12 @@
                 });
               }
             },
+            onPromoteSubtask: function (itemId) {
+              if (!CompletionTrello || typeof CompletionTrello.promoteSubtaskToCard !== 'function') {
+                return Promise.resolve({ ok: false, reason: 'no-promote' });
+              }
+              return CompletionTrello.promoteSubtaskToCard(t, itemId);
+            },
             suggestSubtasks: function (opts) {
               if (!window.PriorityAgent) {
                 return Promise.resolve([]);
@@ -4630,13 +5206,16 @@
               });
             },
             onBlockedChange: function (data) {
-              syncPriorityFromProgressBlocked(data || completionUi.getData());
+              var live = data || completionUi.getData();
+              maybeRefineFromItemMotifs(live);
+              syncPriorityFromProgressBlocked(live);
             },
             onChange: function (data) {
               saveCompletion(data);
               if (progressCollapse) progressCollapse.refreshSummary();
               syncBlockedSubtasks();
               syncDueBlockedForProgress(data);
+              maybeRefineFromItemMotifs(data);
               syncPriorityFromProgressBlocked(data);
               syncInfoRecap();
               maybeSilentEstimateDurations();
@@ -4890,6 +5469,13 @@
         experimental: experimentalFlags,
         getBlockedSubtasks: getBlockedSubtasks,
         onBlockedReasonAdded: function (reason) {
+          var refined = tryRefineBlockedWhy(reason);
+          if (refined && typeof refined.then === 'function') {
+            refined.catch(function (err) {
+              console.error('Blocked WHY refine failed', err);
+            });
+            return;
+          }
           createBlockedSubtaskFromReason(reason).catch(function (err) {
             console.error('Blocked reason → subtask failed', err);
           });
@@ -5248,6 +5834,7 @@
           getStatut: function () {
             return latestStatut;
           },
+          getOwnership: getOwnershipSnapshot,
           selectStatut: function (listId) {
             return applyStatutListSelection(listId);
           },

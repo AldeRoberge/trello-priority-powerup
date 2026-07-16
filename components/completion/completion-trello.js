@@ -932,6 +932,7 @@
   /**
    * Seed card-level Motifs onto completion entities that are blocked but have
    * no per-entity reasons yet (migration from legacy cardPriority Motifs).
+   * Skips pure "En attente de [this item]" provisionals — those stay card-only.
    */
   function seedBlockedReasonsFromPriority(data, priorityReasons) {
     var next = normalizeCompletionData(data || { items: [] });
@@ -952,18 +953,52 @@
     }
     if (masterHas || anyItemHas) return next;
 
+    function isSelfWaiting(reason, title) {
+      if (
+        global.PriorityAgent &&
+        typeof global.PriorityAgent.isPureWaitingOnTaskReason === 'function'
+      ) {
+        return global.PriorityAgent.isPureWaitingOnTaskReason(reason, title);
+      }
+      var r = String(reason || '')
+        .trim()
+        .toLocaleLowerCase('fr-FR');
+      var name = String(title || '').trim();
+      if (!r || !name) return false;
+      var lower =
+        name.charAt(0).toLocaleLowerCase('fr-FR') + name.slice(1);
+      var rest = r
+        .replace(/^en\s+attente\s+(de|d')\s*/i, '')
+        .replace(/^\(|\)$/g, '')
+        .trim();
+      return (
+        rest === name.toLocaleLowerCase('fr-FR') ||
+        rest === lower.toLocaleLowerCase('fr-FR')
+      );
+    }
+
     if (isMasterBlocked(next)) {
       next.blockedReasons = seed.slice();
       return normalizeCompletionData(next);
     }
     if (blockedItems.length === 1) {
-      return setItemBlockedReasons(next, blockedItems[0].id, seed);
+      var only = blockedItems[0];
+      var filtered = seed.filter(function (reason) {
+        return !isSelfWaiting(reason, only.text);
+      });
+      if (!filtered.length) return next;
+      return setItemBlockedReasons(next, only.id, filtered);
     }
-    // Multiple item blockers: copy shared Motifs onto each (aggregate dedupes).
+    // Multiple item blockers: copy shared Motifs onto each (aggregate dedupes),
+    // but never copy a pure waiting-on-[that item] provisional onto itself.
     next.items = next.items.map(function (item) {
       if (!isItemBlocked(item)) return item;
+      var itemSeed = seed.filter(function (reason) {
+        return !isSelfWaiting(reason, item.text);
+      });
+      if (!itemSeed.length) return item;
       var copy = Object.assign({}, item);
-      copy.blockedReasons = seed.slice();
+      copy.blockedReasons = itemSeed.slice();
       return copy;
     });
     return normalizeCompletionData(next);

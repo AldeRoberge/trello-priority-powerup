@@ -732,6 +732,27 @@
   }
 
   /**
+   * The member viewing the Power-Up (`t.member(...)`).
+   * Used to distinguish "me" vs other assignees on a card.
+   */
+  async function getCurrentMember(t) {
+    try {
+      if (!t || typeof t.member !== 'function') return null;
+      var member = await new Promise(function (resolve, reject) {
+        t.member('id', 'fullName', 'username', 'initials').then(resolve, reject);
+      });
+      if (!member || typeof member !== 'object' || isPowerUpRequestChain(member)) {
+        return null;
+      }
+      if (!member.id) return null;
+      return member;
+    } catch (err) {
+      console.error('Priority current member failed', err);
+      return null;
+    }
+  }
+
+  /**
    * Board members available to assign (`t.board('members')`).
    */
   async function getBoardMembers(t) {
@@ -2667,6 +2688,82 @@
     return { cardId: String(cardId), listId: String(listId) };
   }
 
+  /**
+   * Create a board card via REST POST /cards.
+   * Defaults idList to the current card's list when omitted.
+   */
+  async function createCard(t, options) {
+    options = options || {};
+    var name = typeof options.name === 'string' ? options.name.trim() : '';
+    if (!name) return { ok: false, reason: 'no-name', changed: false };
+    if (!restClientOptions()) return { ok: false, reason: 'no-app-key', changed: false };
+
+    var idList = options.idList != null ? String(options.idList).trim() : '';
+    if (!idList) {
+      var ids = await readCardIdAndListId(t);
+      idList = ids && ids.listId ? String(ids.listId) : '';
+    }
+    if (!idList) return { ok: false, reason: 'no-list-id', changed: false };
+
+    var cfg = restClientOptions();
+    var api = await t.getRestApi();
+    var authorized = await api.isAuthorized();
+    if (!authorized) return { ok: false, reason: 'not-authorized', changed: false };
+    var token = await api.getToken();
+    if (!token) return { ok: false, reason: 'no-token', changed: false };
+
+    var pos =
+      options.pos != null && String(options.pos).trim()
+        ? String(options.pos).trim()
+        : 'bottom';
+
+    var url =
+      'https://api.trello.com/1/cards' +
+      '?name=' +
+      encodeURIComponent(name) +
+      '&idList=' +
+      encodeURIComponent(idList) +
+      '&pos=' +
+      encodeURIComponent(pos) +
+      '&key=' +
+      encodeURIComponent(cfg.appKey) +
+      '&token=' +
+      encodeURIComponent(token);
+
+    var response = await fetch(url, { method: 'POST' });
+    if (!response.ok) {
+      var detail = '';
+      try {
+        detail = await response.text();
+      } catch (readErr) {
+        detail = readErr && readErr.message ? readErr.message : '';
+      }
+      throw new Error(
+        'Trello REST POST /cards failed: ' +
+          response.status +
+          (detail ? ' ' + detail : '')
+      );
+    }
+
+    var created = await response.json();
+    if (!created || !created.id) {
+      return { ok: false, reason: 'no-card', changed: false };
+    }
+
+    return {
+      ok: true,
+      changed: true,
+      cardId: String(created.id),
+      card: {
+        id: String(created.id),
+        name: typeof created.name === 'string' ? created.name : name,
+        idList: created.idList != null ? String(created.idList) : idList,
+        url: typeof created.url === 'string' ? created.url : undefined,
+        shortUrl: typeof created.shortUrl === 'string' ? created.shortUrl : undefined,
+      },
+    };
+  }
+
   async function buildListPriorityEntries(t, listId, settings) {
     var cards = await t.cards('id', 'idList', 'pos');
     if (!Array.isArray(cards)) return [];
@@ -3117,6 +3214,7 @@
     getCardName: getCardName,
     getCardDesc: getCardDesc,
     getCardMembers: getCardMembers,
+    getCurrentMember: getCurrentMember,
     getBoardMembers: getBoardMembers,
     getCardCreator: getCardCreator,
     ensureCreatorAssigned: ensureCreatorAssigned,
@@ -3131,6 +3229,7 @@
     removeCardMember: removeCardMember,
     setCardDesc: setCardDesc,
     setCardName: setCardName,
+    createCard: createCard,
     getCardDueComplete: getCardDueComplete,
     setCardDueComplete: setCardDueComplete,
     getCardDue: getCardDue,
