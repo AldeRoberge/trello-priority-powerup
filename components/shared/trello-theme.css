@@ -1298,6 +1298,12 @@ body.tp-page--priority {
   container-name: priority-popup;
 }
 
+.tp-page--priority .tp-popup-build-info {
+  margin: 0 12px 10px;
+  padding-top: 10px;
+  text-align: center;
+}
+
 .tp-page--priority .compare-grid {
   display: block;
   width: 100%;
