@@ -6,6 +6,41 @@
 (function (global) {
   'use strict';
 
+  function dbg() {
+    return global.TpDebug || null;
+  }
+  function dbgLog(domain, event, meta) {
+    var d = dbg();
+    if (d && d.log) d.log(domain, event, meta);
+  }
+  function dbgError(domain, event, err, meta) {
+    var d = dbg();
+    if (d && d.error) d.error(domain, event, err, meta);
+    else if (err) console.error(domain + '.' + event, err);
+  }
+  function dbgFetchMeta(label, metaOrErr, extra) {
+    var meta = { attempt: label };
+    if (metaOrErr && metaOrErr.meta) {
+      if (metaOrErr.meta.status != null) meta.status = metaOrErr.meta.status;
+      meta.ok = metaOrErr.meta.ok !== false;
+      if (metaOrErr.meta.model) meta.model = metaOrErr.meta.model;
+      if (metaOrErr.meta.stream != null) meta.stream = !!metaOrErr.meta.stream;
+    } else if (metaOrErr && metaOrErr.debugMeta) {
+      if (metaOrErr.debugMeta.status != null) meta.status = metaOrErr.debugMeta.status;
+      meta.ok = false;
+      var reason = String((metaOrErr.message || metaOrErr.debugMeta.error || '')).trim();
+      if (reason) meta.reason = reason.slice(0, 80);
+    } else if (metaOrErr) {
+      meta.ok = false;
+      meta.reason = String((metaOrErr && metaOrErr.message) || metaOrErr || 'error').slice(0, 80);
+    }
+    if (extra) {
+      if (extra.latencyMs != null) meta.latencyMs = extra.latencyMs;
+      if (extra.fallback) meta.fallback = extra.fallback;
+    }
+    return meta;
+  }
+
   var PROVIDER_STORAGE_KEY = 'agentProvider';
   var CARD_INTERVIEW_KEY = 'cardAgentInterview';
   var CARD_CHAT_KEY = 'cardAgentChat';
@@ -805,11 +840,17 @@
   }
 
   async function getProvider(t) {
-    if (!t || typeof t.get !== 'function') return normalizeProvider(null);
+    if (!t || typeof t.get !== 'function') {
+      dbgLog('agent', 'provider.load', { configured: false });
+      return normalizeProvider(null);
+    }
     try {
       var stored = await t.get('member', 'private', PROVIDER_STORAGE_KEY);
-      return normalizeProvider(stored);
+      var normalized = normalizeProvider(stored);
+      dbgLog('agent', 'provider.load', { configured: isConfigured(normalized) });
+      return normalized;
     } catch (err) {
+      dbgError('agent', 'provider.load', err);
       console.error('PriorityAgent.getProvider failed', err);
       return normalizeProvider(null);
     }
@@ -818,6 +859,7 @@
   async function saveProvider(t, provider) {
     var normalized = normalizeProvider(provider);
     await t.set('member', 'private', PROVIDER_STORAGE_KEY, normalized);
+    dbgLog('agent', 'provider.save', { configured: isConfigured(normalized) });
     return normalized;
   }
 
@@ -4795,8 +4837,10 @@
   async function memoryTurn(provider, history, memory, userText, options) {
     options = options || {};
     var mode = options.mode === 'onboarding' ? 'onboarding' : 'ongoing';
+    dbgLog('agent', 'memoryTurn.start', { mode: mode });
     var p = normalizeProvider(provider);
     if (!isConfigured(p)) {
+      dbgLog('agent', 'memoryTurn.end', { ok: false, reason: 'not-configured' });
       return {
         message: 'Configurez d\'abord un fournisseur IA dans les param\u00e8tres.',
         suggestions: [],
@@ -4887,6 +4931,7 @@
     });
     messages.push({ role: 'user', content: String(userText || '').trim() });
 
+    var t0 = Date.now();
     var response;
     try {
       response = await chatCompletions(p, messages, {
@@ -4895,15 +4940,34 @@
         temperature: 0.5,
         stream: false
       });
+      dbgLog(
+        'agent',
+        'memoryTurn.fetch',
+        dbgFetchMeta('non-stream + json', response, { latencyMs: Date.now() - t0 })
+      );
     } catch (err) {
       if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+        dbgLog(
+          'agent',
+          'memoryTurn.fetch',
+          dbgFetchMeta('non-stream + json', err, {
+            latencyMs: Date.now() - t0,
+            fallback: 'json-mode-retry'
+          })
+        );
         response = await chatCompletions(p, messages, {
           jsonMode: false,
           max_tokens: 420,
           temperature: 0.5,
           stream: false
         });
+        dbgLog(
+          'agent',
+          'memoryTurn.fetch',
+          dbgFetchMeta('non-stream (sans json mode)', response, { latencyMs: Date.now() - t0 })
+        );
       } else {
+        dbgError('agent', 'memoryTurn.fetch', err, { latencyMs: Date.now() - t0 });
         throw err;
       }
     }
@@ -4939,6 +5003,11 @@
         })
       : [];
 
+    dbgLog('agent', 'memoryTurn.end', {
+      ok: true,
+      latencyMs: Date.now() - t0,
+      patchCount: patches.length
+    });
     return {
       message: stripSpaceBeforePunctuation(
         typeof data.message === 'string' ? data.message.trim() : ''
@@ -5357,9 +5426,11 @@
    */
   async function cardInterviewTurn(provider, history, bridge, userText, options) {
     options = options || {};
+    dbgLog('agent', 'cardInterviewTurn.start', {});
     var onDelta = typeof options.onDelta === 'function' ? options.onDelta : null;
     var p = normalizeProvider(provider);
     if (!isConfigured(p)) {
+      dbgLog('agent', 'cardInterviewTurn.end', { ok: false, reason: 'not-configured' });
       return {
         message: 'Configurez d\'abord un fournisseur IA dans les param\u00e8tres.',
         suggestions: [],
@@ -5823,6 +5894,11 @@
             response
           );
         } else if (err && /stream/i.test((err && err.message) || '')) {
+          dbgLog('agent', 'cardInterviewTurn.fetch', {
+            attempt: onDelta ? 'stream + json' : 'non-stream + json',
+            ok: false,
+            fallback: 'stream-rejected'
+          });
           response = await chatCompletions(p, messages, {
             jsonMode: true,
             stream: false,
@@ -6089,6 +6165,14 @@
       }
     };
     debug.usage = usage;
+
+    dbgLog('agent', 'cardInterviewTurn.end', {
+      ok: true,
+      latencyMs: latencyMs,
+      actionCount: (actions || []).length,
+      droppedCount: (parsed.droppedActions || []).length,
+      completeInterview: completeInterview
+    });
 
     return {
       message: message,
@@ -7737,6 +7821,7 @@
    */
   async function chatTurn(provider, history, bridge, userText, options) {
     options = options || {};
+    dbgLog('agent', 'chatTurn.start', {});
     var onDelta = typeof options.onDelta === 'function' ? options.onDelta : null;
     var p = normalizeProvider(provider);
     var context = buildContext(bridge);

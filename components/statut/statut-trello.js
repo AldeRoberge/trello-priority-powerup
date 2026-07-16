@@ -2,6 +2,10 @@
 (function (global) {
   'use strict';
 
+  function dbg() { return global.TpDebug || null; }
+  function dbgLog(domain, event, meta) { var d = dbg(); if (d && d.log) d.log(domain, event, meta); }
+  function dbgError(domain, event, err, meta) { var d = dbg(); if (d && d.error) d.error(domain, event, err, meta); else if (err) console.error(domain + '.' + event, err); }
+
   var STATUT_SETTINGS_KEY = 'statutSettings';
   // Card shared: listId before the card entered Terminé (for restore when Progrès leaves 100%).
   var STATUT_PREVIOUS_LIST_KEY = 'statutPreviousListId';
@@ -134,7 +138,7 @@
       if (raw == null || raw === '') return null;
       return String(raw);
     } catch (err) {
-      console.error('StatutTrello.getPreviousListId failed', err);
+      dbgError('statutTrello', 'getPreviousListId', err);
       return null;
     }
   }
@@ -148,7 +152,7 @@
       await t.set('card', 'shared', STATUT_PREVIOUS_LIST_KEY, String(listId));
       return String(listId);
     } catch (err) {
-      console.error('StatutTrello.setPreviousListId failed', err);
+      dbgError('statutTrello', 'setPreviousListId', err);
       return null;
     }
   }
@@ -163,7 +167,7 @@
       if (raw == null || raw === '') return null;
       return String(raw);
     } catch (err) {
-      console.error('StatutTrello.getPreviousBlockedListId failed', err);
+      dbgError('statutTrello', 'getPreviousBlockedListId', err);
       return null;
     }
   }
@@ -177,7 +181,7 @@
       await t.set('card', 'shared', STATUT_PREVIOUS_BLOCKED_LIST_KEY, String(listId));
       return String(listId);
     } catch (err) {
-      console.error('StatutTrello.setPreviousBlockedListId failed', err);
+      dbgError('statutTrello', 'setPreviousBlockedListId', err);
       return null;
     }
   }
@@ -197,7 +201,7 @@
       if (card && card.idList) return String(card.idList);
       if (typeof card === 'string' && card) return String(card);
     } catch (err) {
-      console.error('StatutTrello.readCurrentCardListId failed', err);
+      dbgError('statutTrello', 'readCurrentCardListId', err);
     }
     return null;
   }
@@ -231,6 +235,7 @@
     var lists = ensured.lists || (await getBoardLists(t));
     var currentListId = await readCurrentCardListId(t);
     if (!isCompletedListId(currentListId, settings)) {
+      dbgLog('statutTrello', 'restore.incomplete', { restored: false, reason: 'not-on-completed' });
       return {
         ok: true,
         restored: false,
@@ -247,6 +252,7 @@
       settings
     );
     if (!target) {
+      dbgLog('statutTrello', 'restore.incomplete', { restored: false, reason: 'no-restore-target' });
       return {
         ok: true,
         restored: false,
@@ -256,6 +262,7 @@
     }
     if (String(target) === String(currentListId)) {
       await clearPreviousListId(t);
+      dbgLog('statutTrello', 'restore.incomplete', { restored: false, reason: 'already-there' });
       return {
         ok: true,
         restored: false,
@@ -266,14 +273,22 @@
 
     var move = await setCardList(t, target, { pos: 'bottom' });
     if (!move || !move.ok) {
+      var failReason = (move && move.reason) || 'move-failed';
+      dbgLog('statutTrello', 'restore.incomplete', { restored: false, reason: failReason });
       return Object.assign(
-        { restored: false, reason: (move && move.reason) || 'move-failed' },
+        { restored: false, reason: failReason },
         move || { ok: false }
       );
     }
 
     var side = await applyStatutSideEffects(t, target, settings);
     await clearPreviousListId(t);
+    var restored = !!move.moved || !!move.alreadyThere;
+    dbgLog('statutTrello', 'restore.incomplete', {
+      restored: restored,
+      reason: move.moved ? 'moved' : 'already-there',
+      moved: !!move.moved,
+    });
     return {
       ok: true,
       restored: !!move.moved || !!move.alreadyThere,
@@ -320,6 +335,7 @@
     var lists = ensured.lists || (await getBoardLists(t));
     var currentListId = await readCurrentCardListId(t);
     if (!isBlockedListId(currentListId, settings)) {
+      dbgLog('statutTrello', 'restore.unblocked', { restored: false, reason: 'not-on-blocked' });
       return {
         ok: true,
         restored: false,
@@ -336,6 +352,7 @@
       settings
     );
     if (!target) {
+      dbgLog('statutTrello', 'restore.unblocked', { restored: false, reason: 'no-restore-target' });
       return {
         ok: true,
         restored: false,
@@ -345,6 +362,7 @@
     }
     if (String(target) === String(currentListId)) {
       await clearPreviousBlockedListId(t);
+      dbgLog('statutTrello', 'restore.unblocked', { restored: false, reason: 'already-there' });
       return {
         ok: true,
         restored: false,
@@ -355,14 +373,22 @@
 
     var move = await setCardList(t, target, { pos: 'bottom' });
     if (!move || !move.ok) {
+      var unblockFailReason = (move && move.reason) || 'move-failed';
+      dbgLog('statutTrello', 'restore.unblocked', { restored: false, reason: unblockFailReason });
       return Object.assign(
-        { restored: false, reason: (move && move.reason) || 'move-failed' },
+        { restored: false, reason: unblockFailReason },
         move || { ok: false }
       );
     }
 
     var side = await applyStatutSideEffects(t, target, settings);
     await clearPreviousBlockedListId(t);
+    var unblockedRestored = !!move.moved || !!move.alreadyThere;
+    dbgLog('statutTrello', 'restore.unblocked', {
+      restored: unblockedRestored,
+      reason: move.moved ? 'moved' : 'already-there',
+      moved: !!move.moved,
+    });
     return {
       ok: true,
       restored: !!move.moved || !!move.alreadyThere,
@@ -449,7 +475,7 @@
       applySettingsColors(settings);
       return settings;
     } catch (err) {
-      console.error('StatutTrello.readStatutSettings failed', err);
+      dbgError('statutTrello', 'readStatutSettings', err);
       var fallback = defaultSettings();
       applySettingsColors(fallback);
       return fallback;
@@ -471,7 +497,7 @@
           };
         });
     } catch (err) {
-      console.error('StatutTrello.getBoardLists failed', err);
+      dbgError('statutTrello', 'getBoardLists', err);
       return [];
     }
   }
@@ -516,20 +542,27 @@
     if (current.initialized && !options.forceRedetect) {
       // Merge newly appeared lists as uncategorized so settings UI can show them.
       var changed = false;
+      var newListCount = 0;
       lists.forEach(function (list) {
         if (!(list.id in current.listCategories)) {
           current.listCategories[list.id] = null;
           changed = true;
+          newListCount += 1;
         }
       });
       if (changed) {
         current = await saveStatutSettings(t, current);
       }
+      dbgLog('statutTrello', 'ensureSettings.loaded', {
+        listCount: lists.length,
+        newListCount: newListCount,
+      });
       return { settings: current, lists: lists, detected: false };
     }
 
     var next = applyDetection(lists, current);
     next = await saveStatutSettings(t, next);
+    dbgLog('statutTrello', 'ensureSettings.defaulted', { listCount: lists.length });
     return { settings: next, lists: lists, detected: true };
   }
 
@@ -625,32 +658,54 @@
     try {
       await capturePreviousListBeforeBlocked(t);
     } catch (captureErr) {
-      console.error('StatutTrello capture before blocked auto-move failed', captureErr);
+      dbgError('statutTrello', 'autoMove.blocked.capture', captureErr);
     }
     var ensured = await ensureStatutSettings(t);
     var settings = ensured.settings;
     if (!settings.autoMoveBlocked) {
+      dbgLog('statutTrello', 'autoMove.blocked', { moved: false, reason: 'auto-move-disabled' });
       return { ok: true, moved: false, reason: 'auto-move-disabled' };
     }
     var target = settings.roleLists && settings.roleLists.blocked;
-    if (!target) return { ok: true, moved: false, reason: 'no-blocked-list' };
-    return setCardList(t, target, { pos: 'bottom' });
+    if (!target) {
+      dbgLog('statutTrello', 'autoMove.blocked', { moved: false, reason: 'no-blocked-list' });
+      return { ok: true, moved: false, reason: 'no-blocked-list' };
+    }
+    var blockedMove = await setCardList(t, target, { pos: 'bottom' });
+    dbgLog('statutTrello', 'autoMove.blocked', {
+      moved: !!(blockedMove && blockedMove.moved),
+      reason: blockedMove && blockedMove.moved
+        ? 'moved'
+        : (blockedMove && blockedMove.reason) || 'no-move',
+    });
+    return blockedMove;
   }
 
   async function maybeAutoMoveForCompleted(t) {
     try {
       await capturePreviousListBeforeCompleted(t);
     } catch (captureErr) {
-      console.error('StatutTrello capture before completed auto-move failed', captureErr);
+      dbgError('statutTrello', 'autoMove.completed.capture', captureErr);
     }
     var ensured = await ensureStatutSettings(t);
     var settings = ensured.settings;
     if (!settings.autoMoveCompleted) {
+      dbgLog('statutTrello', 'autoMove.completed', { moved: false, reason: 'auto-move-disabled' });
       return { ok: true, moved: false, reason: 'auto-move-disabled' };
     }
     var target = settings.roleLists && settings.roleLists.completed;
-    if (!target) return { ok: true, moved: false, reason: 'no-completed-list' };
-    return setCardList(t, target, { pos: 'bottom' });
+    if (!target) {
+      dbgLog('statutTrello', 'autoMove.completed', { moved: false, reason: 'no-completed-list' });
+      return { ok: true, moved: false, reason: 'no-completed-list' };
+    }
+    var completedMove = await setCardList(t, target, { pos: 'bottom' });
+    dbgLog('statutTrello', 'autoMove.completed', {
+      moved: !!(completedMove && completedMove.moved),
+      reason: completedMove && completedMove.moved
+        ? 'moved'
+        : (completedMove && completedMove.reason) || 'no-move',
+    });
+    return completedMove;
   }
 
   /**
@@ -688,7 +743,7 @@
       try {
         inputs = await PT.getCardInputs(t);
       } catch (err) {
-        console.error('StatutTrello.applyStatutSideEffects getCardInputs failed', err);
+        dbgError('statutTrello', 'sideEffects.getCardInputs', err);
       }
       if (!inputs || !inputs.enAttente) {
         var blocked = Object.assign({}, inputs || {}, { enAttente: true });
@@ -721,10 +776,7 @@
             }
           }
         } catch (progressErr) {
-          console.error(
-            'StatutTrello.applyStatutSideEffects clear progress complete failed',
-            progressErr
-          );
+          dbgError('statutTrello', 'sideEffects.clearProgressComplete', progressErr);
         }
       }
     }
@@ -742,14 +794,14 @@
           side.progressComplete = true;
           side.completion = completeData;
         } catch (err) {
-          console.error('StatutTrello.applyStatutSideEffects mark progress complete failed', err);
+          dbgError('statutTrello', 'sideEffects.markProgressComplete', err);
         }
       }
       if (CT && typeof CT.setDueCompleteSuppressed === 'function') {
         try {
           await CT.setDueCompleteSuppressed(t, false);
         } catch (suppressErr) {
-          console.error('StatutTrello clear dueComplete suppress failed', suppressErr);
+          dbgError('statutTrello', 'sideEffects.clearDueCompleteSuppress', suppressErr);
         }
       }
 
@@ -806,33 +858,56 @@
             await CTu.setDueCompleteSuppressed(t, !!stillComplete);
           }
         } catch (err) {
-          console.error('StatutTrello.applyStatutSideEffects unmark complete failed', err);
+          dbgError('statutTrello', 'sideEffects.unmarkComplete', err);
         }
       }
     }
 
+    dbgLog('statutTrello', 'sideEffects', {
+      category: category || null,
+      blocked: !!isBlocked,
+      completed: !!isCompleted,
+      enAttenteSet: !!side.enAttenteSet,
+      progressComplete: !!side.progressComplete,
+      progressIncomplete: !!side.progressIncomplete,
+      dueCompleteCleared: !!side.dueCompleteCleared,
+    });
     return side;
   }
 
   async function selectCardStatut(t, listId) {
     var ensured = await ensureStatutSettings(t);
     var settings = ensured.settings;
+    var currentListId = await readCurrentCardListId(t);
+    var fromCategory =
+      currentListId && settings.listCategories
+        ? settings.listCategories[String(currentListId)] || null
+        : null;
     if (isCompletedListId(listId, settings)) {
       try {
         await capturePreviousListBeforeCompleted(t);
       } catch (captureErr) {
-        console.error('StatutTrello capture before Terminé select failed', captureErr);
+        dbgError('statutTrello', 'selectStatut.captureCompleted', captureErr);
       }
     } else if (isBlockedListId(listId, settings)) {
       try {
         await capturePreviousListBeforeBlocked(t);
       } catch (captureErr) {
-        console.error('StatutTrello capture before Bloqué select failed', captureErr);
+        dbgError('statutTrello', 'selectStatut.captureBlocked', captureErr);
       }
     }
     var move = await setCardList(t, listId, { pos: 'bottom' });
     if (!move.ok) return move;
     var side = await applyStatutSideEffects(t, listId, settings);
+    var toCategory =
+      settings.listCategories && listId
+        ? settings.listCategories[String(listId)] || null
+        : null;
+    dbgLog('statutTrello', 'selectStatut', {
+      fromCategory: fromCategory,
+      toCategory: toCategory,
+      moved: !!move.moved,
+    });
     return Object.assign({}, move, { sideEffects: side });
   }
 

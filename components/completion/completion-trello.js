@@ -2,6 +2,10 @@
 (function (global) {
   'use strict';
 
+  function dbg() { return global.TpDebug || null; }
+  function dbgLog(domain, event, meta) { var d = dbg(); if (d && d.log) d.log(domain, event, meta); }
+  function dbgError(domain, event, err, meta) { var d = dbg(); if (d && d.error) d.error(domain, event, err, meta); else if (err) console.error(domain + '.' + event, err); }
+
   var CARD_COMPLETION_KEY = 'cardCompletion';
   var COMPLETION_COLOR_SCHEME_SETTINGS_KEY = 'completionColorScheme';
   var COMPLETION_COLOR_SCHEME_REV_KEY = 'completionColorSchemeRev';
@@ -1342,6 +1346,12 @@
     var suppressed = await getDueCompleteSuppressed(t);
 
     if (!PT || typeof PT.setCardDueComplete !== 'function') {
+      dbgLog('completionTrello', 'syncDueComplete', {
+        outcome: 'no-op',
+        reason: 'no-setCardDueComplete',
+        allComplete: allComplete,
+        suppressed: suppressed,
+      });
       return {
         allComplete: allComplete,
         synced: false,
@@ -1354,6 +1364,12 @@
       var markResult = await PT.setCardDueComplete(t, true);
       if (markResult && markResult.ok) {
         await setMarkedDueCompleteFlag(t, true);
+        dbgLog('completionTrello', 'syncDueComplete', {
+          outcome: markResult.changed ? 'marked' : 'no-op',
+          reason: markResult.changed ? 'marked' : 'already-complete',
+          allComplete: true,
+          changed: !!markResult.changed,
+        });
         return {
           allComplete: true,
           synced: true,
@@ -1362,6 +1378,11 @@
           alreadyComplete: !markResult.changed,
         };
       }
+      dbgLog('completionTrello', 'syncDueComplete', {
+        outcome: 'no-op',
+        reason: (markResult && markResult.reason) || 'mark-failed',
+        allComplete: true,
+      });
       return {
         allComplete: true,
         synced: false,
@@ -1387,11 +1408,19 @@
       try {
         statutRestore = await global.StatutTrello.restorePreviousStatutFromIncomplete(t);
       } catch (restoreErr) {
-        console.error('Completion restore previous Statut failed', restoreErr);
+        dbgError('completionTrello', 'syncDueComplete.restoreStatut', restoreErr);
         statutRestore = { ok: false, restored: false, reason: 'restore-threw' };
       }
     }
 
+    var unmarkOutcome = allComplete && suppressed ? 'suppressed' : 'unmarked';
+    dbgLog('completionTrello', 'syncDueComplete', {
+      outcome: unmarkOutcome,
+      reason: unmarkResult && !unmarkResult.ok ? unmarkResult.reason : undefined,
+      allComplete: allComplete,
+      changed: !!(unmarkResult && unmarkResult.changed),
+      statutRestored: !!(statutRestore && statutRestore.restored),
+    });
     return {
       allComplete: false,
       synced: !!(unmarkResult && unmarkResult.ok),
@@ -1535,13 +1564,18 @@
       var stored = await t.get(id, 'shared', CARD_COMPLETION_KEY);
       return normalizeCompletionData(stored);
     } catch (err) {
-      console.error('Completion getCardCompletionById failed', err);
+      dbgError('completionTrello', 'getCardCompletionById', err);
       return normalizeCompletionData({ items: [] });
     }
   }
 
   async function saveCardCompletion(t, data) {
     var normalized = normalizeCompletionData(data);
+    var progress = computeCardProgress(normalized);
+    dbgLog('completionTrello', 'save', {
+      itemCount: normalized.items.length,
+      progress: progress.percent,
+    });
     await t.set('card', 'shared', CARD_COMPLETION_KEY, normalized);
     return normalized;
   }
@@ -1693,7 +1727,7 @@
         });
         cards = (scan && scan.cards) || [];
       } catch (err) {
-        console.error('findParentCards scanBoardCards failed', err);
+        dbgError('completionTrello', 'findParentCards.scan', err);
         cards = [];
       }
     } else if (t && typeof t.cards === 'function') {
@@ -1707,7 +1741,7 @@
           };
         });
       } catch (err) {
-        console.error('findParentCards t.cards failed', err);
+        dbgError('completionTrello', 'findParentCards.cards', err);
         cards = [];
       }
     }
@@ -1777,8 +1811,12 @@
         ? opts.removeParentId.trim()
         : '';
     var replaceAll = !!opts.replace;
-    if (!childId) return { ok: false, reason: 'no-child' };
+    if (!childId) {
+      dbgLog('completionTrello', 'setParentCard', { outcome: 'reject', reason: 'no-child' });
+      return { ok: false, reason: 'no-child' };
+    }
     if (nextParentId && nextParentId === childId) {
+      dbgLog('completionTrello', 'setParentCard', { outcome: 'reject', reason: 'self' });
       return { ok: false, reason: 'self' };
     }
 
@@ -1789,7 +1827,10 @@
         nextParentId,
         LINK_NEST_MAX_DEPTH
       );
-      if (cycle) return { ok: false, reason: 'cycle' };
+      if (cycle) {
+        dbgLog('completionTrello', 'setParentCard', { outcome: 'cycle-reject' });
+        return { ok: false, reason: 'cycle' };
+      }
     }
 
     var existingParents = await findParentCards(t, childId, {
@@ -1905,6 +1946,20 @@
       cards: opts.cards,
     });
 
+    var parentOutcome;
+    if (nextParentId) {
+      parentOutcome = replaceAll ? 'replace' : 'add';
+    } else if (removeOnlyId) {
+      parentOutcome = 'remove';
+    } else {
+      parentOutcome = 'clear';
+    }
+    dbgLog('completionTrello', 'setParentCard', {
+      outcome: parentOutcome,
+      parentsAfterCount: parentsAfter.length,
+      parentsRemoved: parentsRemoved,
+    });
+
     return {
       ok: true,
       parent: parentMeta,
@@ -1969,6 +2024,7 @@
    * }>}
    */
   async function resolveLinkedCompletionTree(t, data, options) {
+    var startMs = Date.now();
     options = options || {};
     var maxDepth =
       typeof options.maxDepth === 'number' && options.maxDepth > 0
@@ -2077,6 +2133,27 @@
     }
 
     var synced = applyLinkedSnapshots(normalized, snapshots);
+    var cycleCount = 0;
+    var missingCount = 0;
+    function countTreeFlags(node) {
+      if (!node) return;
+      if (node.isCycle) cycleCount += 1;
+      if (node.missing) missingCount += 1;
+      var children = node.children || [];
+      for (var ci = 0; ci < children.length; ci++) {
+        countTreeFlags(children[ci]);
+      }
+    }
+    Object.keys(byItemId).forEach(function (itemId) {
+      countTreeFlags(byItemId[itemId]);
+    });
+    dbgLog('completionTrello', 'resolveLinkedTree', {
+      cardCount: Object.keys(snapshots).length,
+      maxDepth: maxDepth,
+      cycleCount: cycleCount,
+      missingCount: missingCount,
+      durationMs: Date.now() - startMs,
+    });
     return {
       data: synced,
       snapshots: snapshots,

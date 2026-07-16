@@ -78,17 +78,28 @@
   }
 
   function initPowerUp() {
-    function withBoardContext(capabilityFn) {
+    if (window.TpDebug) TpDebug.log('index', 'powerUp.init');
+
+    function withBoardContext(capabilityFn, capabilityName) {
       return function (t, opts) {
+        var timer =
+          window.TpDebug && TpDebug.isEnabled()
+            ? TpDebug.start('index', 'capability.' + (capabilityName || 'unknown'))
+            : null;
+        if (window.TpDebug && typeof TpDebug.configureFromProfile === 'function') {
+          TpDebug.configureFromProfile(t).catch(function () {});
+        }
         var preloads = [
           PriorityTrello.preloadBoardPriorityContext(t).catch(function (err) {
-            console.error('Priority board context preload failed', err);
+            if (window.TpDebug) TpDebug.error('index', 'priority.preload', err);
+            else console.error('Priority board context preload failed', err);
           }),
         ];
         if (typeof CompletionTrello !== 'undefined' && CompletionTrello.preloadBoardCompletionContext) {
           preloads.push(
             CompletionTrello.preloadBoardCompletionContext(t).catch(function (err) {
-              console.error('Completion board context preload failed', err);
+              if (window.TpDebug) TpDebug.error('index', 'completion.preload', err);
+              else console.error('Completion board context preload failed', err);
             })
           );
         }
@@ -111,13 +122,23 @@
                 return GoalsTrello.preloadBoardGoalsContext(t);
               })
               .catch(function (err) {
-                console.error('Goals board context preload failed', err);
+                if (window.TpDebug) TpDebug.error('index', 'goals.preload', err);
+                else console.error('Goals board context preload failed', err);
               })
           );
         }
         return Promise.all(preloads).then(function () {
           return capabilityFn(t, opts);
-        });
+        }).then(
+          function (result) {
+            if (timer) timer.end({ ok: true });
+            return result;
+          },
+          function (err) {
+            if (timer) timer.fail(err);
+            throw err;
+          }
+        );
       };
     }
 
@@ -144,6 +165,12 @@
         : focusObjectif
           ? 'Objectif'
           : appName;
+      if (window.TpDebug) {
+        TpDebug.log('index', 'modal.open', {
+          section: openSection,
+          hasName: !!cardName
+        });
+      }
       return t.modal({
         title: title,
         url: PriorityTrello.pageUrl('./popup.html'),
@@ -197,7 +224,7 @@
               return acc.concat(list || []);
             }, []);
           });
-      }),
+      }, 'card-badges'),
 
       // card-buttons is not used (priority is opened via card-detail-badges).
       // list-actions / on-disable: stubs if enabled in admin (avoids IFrameIO "not implemented").
@@ -243,9 +270,13 @@
               return acc.concat(list || []);
             }, []);
           });
-      }),
+      }, 'card-detail-badges'),
 
       'on-enable': function(t) {
+        if (window.TpDebug) {
+          TpDebug.configureFromProfile(t).catch(function () {});
+          TpDebug.log('index', 'on-enable');
+        }
         return PriorityTrello.preloadBoardPriorityContext(t)
           .then(function () {
             if (typeof StatutTrello !== 'undefined' && StatutTrello.ensureStatutSettings) {
@@ -273,6 +304,7 @@
             if (typeof AgentMemory === 'undefined') return;
             return AgentMemory.load(t).then(function (memory) {
               if (!AgentMemory.needsOnboarding(memory)) return;
+              if (window.TpDebug) TpDebug.log('index', 'memory.onboarding.open');
               return t.modal({
                 title: 'Aligner l\'assistant',
                 url: PriorityTrello.pageUrl('./memory-align.html'),
@@ -323,7 +355,7 @@
 
       'list-sorters': withBoardContext(function (t) {
         return PriorityTrello.listPrioritySorters(t);
-      }),
+      }, 'list-sorters'),
 
     }, (function () {
       var restOpts = PriorityTrello.restClientOptions && PriorityTrello.restClientOptions();

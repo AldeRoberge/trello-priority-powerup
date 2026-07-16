@@ -68,6 +68,11 @@
 
   <script>
     PriorityTrello.initIframePage(function (t) {
+    if (window.TpDebug && typeof TpDebug.configureFromProfile === 'function') {
+      TpDebug.configureFromProfile(t).then(function (on) {
+        if (on) TpDebug.log('popup', 'page.init');
+      });
+    }
     const mountEl = document.getElementById('priorityMount');
     let variant = null;
     let completionUi = null;
@@ -485,7 +490,8 @@
           }
         })
         .catch(function (err) {
-          console.error('Priority popup live sync failed', err);
+          if (window.TpDebug) TpDebug.error('popup', 'liveSync', err);
+          else console.error('Priority popup live sync failed', err);
         });
 
       return syncFromRemoteChain;
@@ -494,6 +500,7 @@
     function startLiveSync() {
       if (liveSyncStarted) return;
       liveSyncStarted = true;
+      if (window.TpDebug) TpDebug.log('popup', 'liveSync.start');
       appliedPriorityFp = fingerprintPriority(
         latestState ||
           (variant && typeof variant.getState === 'function'
@@ -4606,6 +4613,7 @@
     }
 
     async function init() {
+      if (window.TpDebug) TpDebug.log('popup', 'init.start');
       if (!window.PriorityUI) {
         throw new Error('PriorityUI is not available — priority-ui.js failed to load or initialize');
       }
@@ -5188,9 +5196,11 @@
       }
       resizePopup();
       startLiveSync();
+      if (window.TpDebug) TpDebug.log('popup', 'init.ready');
     }
 
     window.addEventListener('pagehide', function () {
+      if (window.TpDebug) TpDebug.log('popup', 'pagehide');
       if (liveSyncTimer) {
         clearInterval(liveSyncTimer);
         liveSyncTimer = null;
@@ -5213,7 +5223,8 @@
 
     return init();
     }).catch(function (err) {
-      console.error('Priority popup init failed', err);
+      if (window.TpDebug) TpDebug.error('popup', 'init', err);
+      else console.error('Priority popup init failed', err);
     });
   </script>
 </body>

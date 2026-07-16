@@ -5,6 +5,10 @@
 (function (global) {
   'use strict';
 
+  function dbg() { return global.TpDebug || null; }
+  function dbgLog(domain, event, meta) { var d = dbg(); if (d && d.log) d.log(domain, event, meta); }
+  function dbgError(domain, event, err, meta) { var d = dbg(); if (d && d.error) d.error(domain, event, err, meta); else if (err) console.error(domain + '.' + event, err); }
+
   var HISTORY_KEY = 'cardEditHistory';
   // card/private is ONE 4096 budget shared with cardAgentChat etc.
   // Keep history tiny so chat + history can coexist.
@@ -1146,6 +1150,7 @@
     function persist() {
       store = trimStore(store);
       if (!t || typeof t.set !== 'function') return Promise.resolve(store);
+      var entryCountBefore = store.entries.length;
       saveChain = saveChain
         .then(function () {
           // Reserve room for other card/private keys (chat, etc.): 4096 shared.
@@ -1177,8 +1182,15 @@
               return t.set('card', 'private', HISTORY_KEY, store);
             });
         })
+        .then(function () {
+          dbgLog('cardHistory', 'persist', {
+            entryCount: store.entries.length,
+            trimmed: store.entries.length < entryCountBefore,
+          });
+          return store;
+        })
         .catch(function (err) {
-          console.error('CardHistory.save failed', err);
+          dbgError('cardHistory', 'persist', err, { entryCount: store.entries.length });
           // Drop entries until empty — card/private is shared with chat.
           while (store.entries.length > 0) {
             store.entries.shift();
@@ -1190,7 +1202,7 @@
             store = emptyStore();
           }
           return t.set('card', 'private', HISTORY_KEY, store).catch(function (retryErr) {
-            console.error('CardHistory.save retry failed', retryErr);
+            dbgError('cardHistory', 'persist.retry', retryErr);
             // Last resort: leave empty in memory so we stop thrashing.
             store = emptyStore();
           });
@@ -1201,12 +1213,14 @@
     function load() {
       if (!t || typeof t.get !== 'function') {
         store = emptyStore();
+        dbgLog('cardHistory', 'load', { entryCount: 0, source: 'no-trello' });
         return Promise.resolve(store);
       }
       return t
         .get('card', 'private', HISTORY_KEY)
         .then(function (raw) {
           store = trimStore(normalizeStore(raw));
+          dbgLog('cardHistory', 'load', { entryCount: store.entries.length });
           notify();
           // Rewrite slimmed history so an oversized legacy blob frees card/private room.
           if (raw != null) {
@@ -1215,7 +1229,7 @@
           return store;
         })
         .catch(function (err) {
-          console.error('CardHistory.load failed', err);
+          dbgError('cardHistory', 'load', err);
           store = emptyStore();
           persist();
           return store;
@@ -1240,6 +1254,10 @@
       store.entries.push(entry);
       store.cursor = store.entries.length;
       store = trimStore(store);
+      dbgLog('cardHistory', 'record', {
+        domainCount: domains.length,
+        domains: domains.slice(),
+      });
       persist();
       notify();
       return entry;
@@ -1305,9 +1323,16 @@
     }
 
     function undo(applySnapshot) {
-      if (!canUndo()) return Promise.resolve(null);
+      if (!canUndo()) {
+        dbgLog('cardHistory', 'undo', { outcome: 'empty' });
+        return Promise.resolve(null);
+      }
       var entry = store.entries[store.cursor - 1];
-      if (!entry) return Promise.resolve(null);
+      if (!entry) {
+        dbgLog('cardHistory', 'undo', { outcome: 'empty' });
+        return Promise.resolve(null);
+      }
+      dbgLog('cardHistory', 'undo', { outcome: 'requested' });
       beginMute();
       var applyFn =
         typeof applySnapshot === 'function' ? applySnapshot : function () {};
@@ -1320,6 +1345,7 @@
           return persist();
         })
         .then(function () {
+          dbgLog('cardHistory', 'undo', { outcome: 'applied' });
           notify();
           return clone(entry.before);
         })
@@ -1329,9 +1355,16 @@
     }
 
     function redo(applySnapshot) {
-      if (!canRedo()) return Promise.resolve(null);
+      if (!canRedo()) {
+        dbgLog('cardHistory', 'redo', { outcome: 'empty' });
+        return Promise.resolve(null);
+      }
       var entry = store.entries[store.cursor];
-      if (!entry) return Promise.resolve(null);
+      if (!entry) {
+        dbgLog('cardHistory', 'redo', { outcome: 'empty' });
+        return Promise.resolve(null);
+      }
+      dbgLog('cardHistory', 'redo', { outcome: 'requested' });
       beginMute();
       var applyFn =
         typeof applySnapshot === 'function' ? applySnapshot : function () {};
@@ -1344,6 +1377,7 @@
           return persist();
         })
         .then(function () {
+          dbgLog('cardHistory', 'redo', { outcome: 'applied' });
           notify();
           return clone(entry.after);
         })

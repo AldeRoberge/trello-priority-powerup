@@ -1923,7 +1923,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   margin: 0;
 }
 
-/* Hero — soft accent wash, no outline (matches heat-panel language) */
+/* Hero — soft accent wash on a slightly darkened pad (lighter than subtasks) */
 .tp-completion-progress-panel {
   --completion-hero-accent: var(--tp-border-strong);
   display: flex;
@@ -1934,16 +1934,16 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   background: color-mix(
     in srgb,
     var(--completion-hero-accent) 12%,
-    var(--tp-surface-subtle)
+    color-mix(in srgb, #000 7%, var(--tp-surface-subtle))
   );
-  transition: background 0.22s ease;
+  transition: background 0.22s ease, padding 0.18s ease, gap 0.18s ease;
 }
 
 .tp-completion-progress-panel.has-progress {
   background: color-mix(
     in srgb,
     var(--completion-hero-accent) 18%,
-    var(--tp-surface)
+    color-mix(in srgb, #000 7%, var(--tp-surface-subtle))
   );
 }
 
@@ -1951,8 +1951,103 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   background: color-mix(
     in srgb,
     var(--completion-hero-accent) 22%,
-    var(--tp-surface)
+    color-mix(in srgb, #000 7%, var(--tp-surface-subtle))
   );
+}
+
+/* Collapsed: keep % + slider (+ Motifs summary when blocked). */
+.tp-completion-progress-panel.is-collapsed {
+  gap: 8px;
+  padding: 12px 14px 10px;
+}
+
+.tp-completion-progress-panel.is-collapsed .tp-completion-master-title,
+.tp-completion-progress-panel.is-collapsed .tp-completion-encouragement,
+.tp-completion-progress-panel.is-collapsed .tp-completion-progress-actions,
+.tp-completion-progress-panel.is-collapsed .tp-completion-master-check-wrap,
+.tp-completion-progress-panel.is-collapsed .tp-completion-master-estimate,
+.tp-completion-progress-panel.is-collapsed .tp-completion-master-motif-host {
+  display: none !important;
+}
+
+.tp-completion-progress-panel.is-collapsed .tp-completion-progress-head {
+  margin: 0;
+}
+
+.tp-completion-progress-panel.is-collapsed .tp-completion-progress-hero {
+  gap: 0;
+}
+
+.tp-completion-progress-panel.is-collapsed .tp-completion-percent {
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+
+.tp-completion-progress-panel.is-collapsed .tp-completion-percent-row {
+  gap: 8px;
+}
+
+.tp-completion-details-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--completion-control-radius, 8px);
+  background: transparent;
+  color: var(--tp-text-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.tp-completion-details-toggle:hover {
+  background: color-mix(in srgb, var(--tp-text) 8%, transparent);
+  color: var(--tp-text);
+}
+
+.tp-completion-details-toggle:focus {
+  outline: none;
+}
+
+.tp-completion-details-toggle:focus-visible {
+  box-shadow: 0 0 0 2px var(--tp-surface), 0 0 0 4px var(--tp-focus, #0c66e4);
+}
+
+.tp-completion-details-chevron {
+  display: block;
+  transition: transform 0.18s ease;
+}
+
+.tp-completion-progress-panel:not(.is-collapsed) .tp-completion-details-chevron {
+  transform: rotate(180deg);
+}
+
+.tp-completion-reasons-summary {
+  margin: 0;
+  padding: 0 2px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: color-mix(in srgb, var(--blocked-accent, #ae2e24) 82%, var(--tp-text));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tp-completion-reasons-summary:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tp-completion-reasons-summary[hidden] {
+  display: none !important;
 }
 
 .tp-completion-progress-head {

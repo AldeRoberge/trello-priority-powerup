@@ -1805,11 +1805,6 @@
       if (!masterDetailsExpanded) setMasterDetailsExpanded(true);
     });
 
-    setMasterDetailsExpanded(masterDetailsExpanded, {
-      persist: false,
-      notifyLayout: false
-    });
-
     progressSection.appendChild(progressPanel);
     containerEl.appendChild(progressSection);
 
@@ -2495,7 +2490,7 @@
       containerEl.classList.toggle('has-blocked', anyBlocked);
       syncBlockedMotifMount(
         masterMotifHost,
-        blocked,
+        blocked && masterDetailsExpanded,
         data.blockedReasons || [],
         function (reasons) {
           data = CT.setMasterBlockedReasons(data, reasons, { origin: 'user' });
@@ -2505,10 +2500,12 @@
           }
           emitChange();
           notifyBlockedChange('master-reason');
+          refreshMasterReasonsSummary();
           onResize();
         },
         'tp-completion-master-motif'
       );
+      refreshMasterReasonsSummary();
     }
 
     function syncMasterCheckButton(progress) {
@@ -2599,6 +2596,10 @@
       // Pause button is always an explicit user action.
       data = CT.setMasterBlocked(data, nextBlocked, { origin: 'user' });
       playCompletionUiSound(nextBlocked ? 'block' : 'unblock');
+      // Expand so Motifs can be edited right after blocking.
+      if (nextBlocked && !masterDetailsExpanded) {
+        setMasterDetailsExpanded(true, { notifyLayout: false });
+      }
       syncMasterBlockedBtn();
       updateProgressUi();
       emitChange();
@@ -4279,6 +4280,10 @@
     });
 
     renderList();
+    setMasterDetailsExpanded(masterDetailsExpanded, {
+      persist: false,
+      notifyLayout: false
+    });
     updateProgressUi();
     refreshLinkedTree({ skipPersist: false });
 
@@ -4337,6 +4342,12 @@
         notifyBlockedChange('api');
         onResize();
         return CT.normalizeCompletionData(data);
+      },
+      setMasterDetailsExpanded: function (expanded) {
+        setMasterDetailsExpanded(!!expanded);
+      },
+      isMasterDetailsExpanded: function () {
+        return !!masterDetailsExpanded;
       },
       isMasterBlockedByUser: function () {
         return CT.isMasterBlockedByUser(data);
@@ -4855,6 +4866,7 @@
     COMPLETION_SCHEME_OPTIONS: COMPLETION_SCHEME_OPTIONS,
     DEFAULT_COMPLETION_SCHEME_KEY: DEFAULT_COMPLETION_SCHEME_KEY,
     CUSTOM_COMPLETION_SCHEME_KEY: CUSTOM_COMPLETION_SCHEME_KEY,
+    MASTER_DETAILS_STORAGE_KEY: MASTER_DETAILS_STORAGE_KEY,
     normalizeCompletionSchemeKey: normalizeCompletionSchemeKey,
     normalizeGradientStops: normalizeGradientStops,
     applyCompletionColorScheme: applyCompletionColorScheme,
@@ -4865,6 +4877,9 @@
     saveStoredCompletionSchemeKey: saveStoredCompletionSchemeKey,
     loadStoredCompletionGradient: loadStoredCompletionGradient,
     saveStoredCompletionGradient: saveStoredCompletionGradient,
+    loadMasterDetailsExpanded: loadMasterDetailsExpanded,
+    saveMasterDetailsExpanded: saveMasterDetailsExpanded,
+    formatMasterReasonsSummary: formatMasterReasonsSummary,
     colorAtProgress: colorAtProgress,
     completionColorForProgress: completionColorForProgress,
     completionColorForEstimate: completionColorForEstimate,

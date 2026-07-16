@@ -98,9 +98,15 @@
 
   <script>
     PriorityTrello.initIframePage(function (t) {
+      if (window.TpDebug && typeof TpDebug.configureFromProfile === 'function') {
+        TpDebug.configureFromProfile(t).then(function (on) {
+          if (on) TpDebug.log('profile', 'page.init');
+        });
+      }
       var Profile = window.UserProfile;
       if (!Profile) {
-        console.error('UserProfile missing');
+        if (window.TpDebug) TpDebug.error('profile', 'missing', new Error('UserProfile missing'));
+        else console.error('UserProfile missing');
         return;
       }
 

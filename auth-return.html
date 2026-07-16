@@ -36,20 +36,26 @@
       try {
         if (token && window.opener && typeof window.opener.authorize === 'function') {
           window.opener.authorize(token);
+          if (window.TpDebug) TpDebug.log('authReturn', 'token.delivered');
           if (msg) msg.textContent = 'Autorisation réussie. Cette fenêtre va se fermer.';
         } else if (denied || !token) {
+          if (window.TpDebug) {
+            TpDebug.log('authReturn', 'token.missing', { denied: !!denied });
+          }
           if (msg) {
             msg.textContent =
               'Autorisation annulée. Vous pouvez fermer cette fenêtre.';
           }
         } else if (msg) {
+          if (window.TpDebug) TpDebug.warn('authReturn', 'opener.missing');
           msg.textContent =
             'Impossible de renvoyer le jeton à ' +
             appName +
             '. Fermez cette fenêtre et réessayez.';
         }
       } catch (err) {
-        console.error('Auth return failed', err);
+        if (window.TpDebug) TpDebug.error('authReturn', 'callback', err);
+        else console.error('Auth return failed', err);
         if (msg) {
           msg.textContent =
             'Erreur lors de l’autorisation. Fermez cette fenêtre et réessayez.';

@@ -29,6 +29,11 @@
   <div id="assistantMount"></div>
   <script>
     PriorityTrello.initIframePage(function (t) {
+      if (window.TpDebug && typeof TpDebug.configureFromProfile === 'function') {
+        TpDebug.configureFromProfile(t).then(function (on) {
+          if (on) TpDebug.log('assistant', 'page.init');
+        });
+      }
       var mount = document.getElementById('assistantMount');
       var cachedMemory = null;
       var cachedProfile = null;
@@ -47,6 +52,9 @@
           if (typeof AgentMemory === 'undefined') return null;
           return AgentMemory.load(t).then(function (memory) {
             cachedMemory = memory;
+            if (window.TpDebug) {
+              TpDebug.log('assistant', 'memory.loaded', { hasMemory: !!memory });
+            }
             return memory;
           });
         })
@@ -78,6 +86,12 @@
                   })
                     .then(function (scan) {
                       cachedDigest = (scan && scan.digest) || '';
+                      if (window.TpDebug) {
+                        TpDebug.log('assistant', 'digest.loaded', {
+                          hasDigest: !!cachedDigest,
+                          cardCount: (scan && scan.cards && scan.cards.length) || 0
+                        });
+                      }
                       return cachedDigest;
                     })
                     .catch(function () {
@@ -99,6 +113,11 @@
               })
                 .then(function (memory) {
                   if (memory) cachedMemory = memory;
+                  if (window.TpDebug) {
+                    TpDebug.log('assistant', 'memory.scan', {
+                      refreshed: !!memory
+                    });
+                  }
                   return memory;
                 })
                 .catch(function () {

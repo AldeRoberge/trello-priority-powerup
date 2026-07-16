@@ -146,4 +146,36 @@ describe('Completion progress', () => {
     assert.equal(atMax[0].done, true);
     assert.equal(!!atMax[0].blocked, false);
   });
+
+  it('formatMasterReasonsSummary compact Motifs line', () => {
+    assert.equal(typeof CUI.formatMasterReasonsSummary, 'function');
+    assert.equal(CUI.formatMasterReasonsSummary([]), 'Bloqué');
+    assert.equal(
+      CUI.formatMasterReasonsSummary(["En attente d'une réponse"]),
+      "En attente d'une réponse"
+    );
+    assert.equal(
+      CUI.formatMasterReasonsSummary(['Court A', 'Court B']),
+      'Court A, Court B'
+    );
+    const long = CUI.formatMasterReasonsSummary([
+      'Une raison assez longue pour dépasser',
+      'Deuxième',
+      'Troisième',
+    ]);
+    assert.match(long, /^Une raison assez longue pour dépasser \+2$/);
+  });
+
+  it('master details expand preference persists', () => {
+    assert.equal(typeof CUI.loadMasterDetailsExpanded, 'function');
+    assert.equal(typeof CUI.saveMasterDetailsExpanded, 'function');
+    const key = CUI.MASTER_DETAILS_STORAGE_KEY;
+    assert.ok(key);
+    localStorage.removeItem(key);
+    assert.equal(CUI.loadMasterDetailsExpanded(), true);
+    CUI.saveMasterDetailsExpanded(false);
+    assert.equal(CUI.loadMasterDetailsExpanded(), false);
+    CUI.saveMasterDetailsExpanded(true);
+    assert.equal(CUI.loadMasterDetailsExpanded(), true);
+  });
 });

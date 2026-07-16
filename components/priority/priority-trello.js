@@ -26,6 +26,21 @@
     return global.PriorityUI || null;
   }
 
+  function dbg() {
+    return global.TpDebug || null;
+  }
+
+  function dbgLog(event, meta) {
+    var d = dbg();
+    if (d && typeof d.log === 'function') d.log('priorityTrello', event, meta);
+  }
+
+  function dbgError(event, err, meta) {
+    var d = dbg();
+    if (d && typeof d.error === 'function') d.error('priorityTrello', event, err, meta);
+    else if (err) console.error('PriorityTrello.' + event, err);
+  }
+
   function defaultColorSchemeKey() {
     var PU = priorityUI();
     return (PU && PU.DEFAULT_COLOR_SCHEME_KEY) || 'blue';
@@ -463,7 +478,7 @@
       var result = calcFn(inputs);
       return PU.resolveDisplay(result, inputs, labelSettings);
     } catch (err) {
-      console.error('PriorityTrello.computeDisplay failed', err);
+      dbgError('computeDisplay', err);
       return null;
     }
   }
@@ -2193,8 +2208,11 @@
 
   // Shared iframe bootstrap: DOM-ready client + post-handshake callback.
   function initIframePage(onReady) {
+    dbgLog('iframe.init.start');
     return createIframeClientDeferred().then(function (t) {
+      dbgLog('iframe.client.ready');
       return runWhenIframeReady(t, function () {
+        dbgLog('iframe.handshake.ready');
         return onReady(t);
       });
     });
@@ -2211,17 +2229,23 @@
     var wasBlocked = !!(previous && previous.enAttente);
     var normalized = normalizeInputs(inputs);
     if (!normalized) return;
+    dbgLog('save.start', {
+      syncDue: options.syncDue !== false,
+      autoSort: options.autoSort !== false,
+      wasBlocked: wasBlocked,
+      nowBlocked: !!normalized.enAttente
+    });
     await t.set('card', 'shared', CARD_PRIORITY_KEY, normalized);
     if (options.syncDue !== false) {
       try {
         await syncCardDueWithTrello(t, { inputs: normalized, prefer: 'powerup' });
       } catch (syncErr) {
-        console.error('Priority due sync (save) failed', syncErr);
+        dbgError('due.sync.save', syncErr);
       }
       try {
         await syncCardStartWithTrello(t, { inputs: normalized, prefer: 'powerup' });
       } catch (startErr) {
-        console.error('Priority start sync (save) failed', startErr);
+        dbgError('start.sync.save', startErr);
       }
     }
     if (options.autoSort !== false) {
@@ -2237,8 +2261,9 @@
     ) {
       try {
         await global.StatutTrello.maybeAutoMoveForBlocked(t);
+        dbgLog('statut.autoMove.blocked');
       } catch (moveErr) {
-        console.error('Statut auto-move (blocked) failed', moveErr);
+        dbgError('statut.autoMove.blocked', moveErr);
       }
     }
     // Unblocked → restore previous Statut list (En cours, etc.) when still on Bloqué.
@@ -2251,10 +2276,12 @@
     ) {
       try {
         await global.StatutTrello.restorePreviousStatutFromUnblocked(t);
+        dbgLog('statut.restore.unblocked');
       } catch (restoreErr) {
-        console.error('Statut restore after unblock failed', restoreErr);
+        dbgError('statut.restore.unblocked', restoreErr);
       }
     }
+    dbgLog('save.end');
   }
 
   async function getCardInputsById(t, cardId) {
@@ -2664,15 +2691,26 @@
 
   async function restPutCard(t, cardId, body) {
     var cfg = restClientOptions();
-    if (!cfg) return { ok: false, reason: 'no-app-key' };
+    if (!cfg) {
+      dbgLog('rest.put.skip', { reason: 'no-app-key' });
+      return { ok: false, reason: 'no-app-key' };
+    }
 
     var api = await t.getRestApi();
     var authorized = await api.isAuthorized();
-    if (!authorized) return { ok: false, reason: 'not-authorized' };
+    if (!authorized) {
+      dbgLog('rest.put.skip', { reason: 'not-authorized' });
+      return { ok: false, reason: 'not-authorized' };
+    }
 
     var token = await api.getToken();
-    if (!token) return { ok: false, reason: 'no-token' };
+    if (!token) {
+      dbgLog('rest.put.skip', { reason: 'no-token' });
+      return { ok: false, reason: 'no-token' };
+    }
 
+    var keys = body && typeof body === 'object' ? Object.keys(body) : [];
+    var t0 = Date.now();
     var url =
       'https://api.trello.com/1/cards/' + encodeURIComponent(cardId) +
       '?key=' + encodeURIComponent(cfg.appKey) +
@@ -2691,8 +2729,17 @@
       } catch (readErr) {
         detail = readErr && readErr.message ? readErr.message : '';
       }
+      dbgError('rest.put', new Error('http_' + response.status), {
+        status: response.status,
+        fields: keys.length,
+        durationMs: Math.max(0, Date.now() - t0)
+      });
       throw new Error('Trello REST PUT /cards/' + cardId + ' failed: ' + response.status + (detail ? ' ' + detail : ''));
     }
+    dbgLog('rest.put.ok', {
+      fields: keys.length,
+      durationMs: Math.max(0, Date.now() - t0)
+    });
     return { ok: true };
   }
 
@@ -2798,19 +2845,32 @@
   }
 
   async function autoSortCardInList(t) {
-    if (!restClientOptions()) return { moved: false, reason: 'no-app-key' };
+    if (!restClientOptions()) {
+      dbgLog('autoSort.skip', { reason: 'no-app-key' });
+      return { moved: false, reason: 'no-app-key' };
+    }
 
     var ids = await readCardIdAndListId(t);
-    if (!ids) return { moved: false, reason: 'no-card-context' };
+    if (!ids) {
+      dbgLog('autoSort.skip', { reason: 'no-card-context' });
+      return { moved: false, reason: 'no-card-context' };
+    }
 
     var settings = await ensureBoardPriorityContext(t);
     var entries = await buildListPriorityEntries(t, ids.listId, settings);
-    if (entries.length < 2) return { moved: false, reason: 'single-card-list' };
+    if (entries.length < 2) {
+      dbgLog('autoSort.skip', { reason: 'single-card-list' });
+      return { moved: false, reason: 'single-card-list' };
+    }
 
     var move = computeCardMovePosition(entries, ids.cardId);
-    if (!move) return { moved: false, reason: 'already-sorted' };
+    if (!move) {
+      dbgLog('autoSort.skip', { reason: 'already-sorted' });
+      return { moved: false, reason: 'already-sorted' };
+    }
 
     await restPutCard(t, ids.cardId, { pos: move.pos });
+    dbgLog('autoSort.moved', { entryCount: entries.length });
     return { moved: true, pos: move.pos };
   }
 
@@ -2819,6 +2879,7 @@
 
     var state = getAutoSortDebounceState(t);
     if (state.timer) clearTimeout(state.timer);
+    dbgLog('autoSort.schedule');
 
     state.chain = state.chain
       .catch(function () { /* keep chain alive after a failed sort */ })
@@ -2832,7 +2893,7 @@
         return autoSortCardInList(t);
       })
       .catch(function (err) {
-        console.error('Priority auto-sort failed', err);
+        dbgError('autoSort', err);
         return { moved: false, reason: 'error' };
       });
 
@@ -2845,7 +2906,7 @@
       var api = await t.getRestApi();
       return api.isAuthorized();
     } catch (err) {
-      console.error('Priority REST auth check failed', err);
+      dbgError('rest.authCheck', err);
       return false;
     }
   }

@@ -82,12 +82,21 @@
     })();
 
     PriorityTrello.initIframePage(function (t) {
-    document.getElementById('startBtn').addEventListener('click', () => t.closeModal());
+    if (window.TpDebug && typeof TpDebug.configureFromProfile === 'function') {
+      TpDebug.configureFromProfile(t).then(function (on) {
+        if (on) TpDebug.log('welcome', 'page.init');
+      });
+    }
+    document.getElementById('startBtn').addEventListener('click', function () {
+      if (window.TpDebug) TpDebug.log('welcome', 'dismiss');
+      t.closeModal();
+    });
     if (typeof t.sizeTo === 'function') {
       return t.sizeTo(document.body);
     }
     }).catch(function (err) {
-      console.error('Priority welcome init failed', err);
+      if (window.TpDebug) TpDebug.error('welcome', 'init', err);
+      else console.error('Priority welcome init failed', err);
     });
   </script>
 </body>
