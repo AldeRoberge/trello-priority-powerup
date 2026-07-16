@@ -1643,7 +1643,38 @@
     function jumpToSection(key) {
       if (!variant) return;
       var target = null;
-      if (key === 'blocked') {
+      if (key === 'progress') {
+        // Overview Progrès / Sous-tâches: toggle the section (open first if collapsed).
+        if (progressCollapse && typeof progressCollapse.setExpanded === 'function') {
+          if (typeof progressCollapse.isExpanded === 'function') {
+            progressCollapse.setExpanded(!progressCollapse.isExpanded());
+          } else {
+            progressCollapse.setExpanded(true);
+          }
+        }
+        target =
+          progressPanel ||
+          (variant.card &&
+            variant.card.querySelector('.variant-progress-section')) ||
+          null;
+      } else if (key === 'statut') {
+        expandProgressSection();
+        if (statutUi && typeof statutUi.setExpanded === 'function') {
+          if (typeof statutUi.isExpanded === 'function') {
+            statutUi.setExpanded(!statutUi.isExpanded());
+          } else {
+            statutUi.setExpanded(true);
+          }
+        }
+        target =
+          statutSection ||
+          (variant.card &&
+            variant.card.querySelector(
+              '.statut-in-progress-mount, .field--statut-embedded'
+            )) ||
+          progressPanel ||
+          null;
+      } else if (key === 'blocked') {
         expandProgressSection();
         if (statutUi && typeof statutUi.syncBlockedPanel === 'function') {
           statutUi.syncBlockedPanel();
@@ -1664,7 +1695,15 @@
             panel &&
             (panel.hidden || !panel.classList.contains('is-statut-blocked'))
           ) {
-            return;
+            // Card is not on Bloqué — land on Statut so Motifs can still be reached.
+            target =
+              statutSection ||
+              (variant.card &&
+                variant.card.querySelector(
+                  '.statut-in-progress-mount, .field--statut-embedded'
+                )) ||
+              progressPanel ||
+              null;
           }
         }
       } else if (typeof variant.openSection === 'function') {

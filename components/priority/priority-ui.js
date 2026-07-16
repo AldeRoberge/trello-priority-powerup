@@ -6907,7 +6907,7 @@
       return { cell: cell, value: valueWrap };
     }
 
-    var statusCell = makeCell('status', 'statut', 'Statut', 'ti-list-check');
+    var statusCell = makeCell('status', 'blocked', 'Statut', 'ti-list-check');
     var progressCell = makeCell('progress', 'progress', 'Progr\u00e8s', 'ti-progress');
     var subtasksCell = makeCell(
       'subtasks',

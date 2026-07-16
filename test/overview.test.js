@@ -293,7 +293,7 @@ describe('PriorityUI createOverviewField', () => {
 
     assert.deepEqual(jumps, [
       'info',
-      'statut',
+      'blocked',
       'progress',
       'progress',
       'due',
