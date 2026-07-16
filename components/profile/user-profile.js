@@ -66,7 +66,7 @@
   ];
 
   var FEATURE_LABELS = {
-    info: 'Information',
+    info: 'Détails',
     statut: 'Statut',
     priority: 'Priorité',
     graph: 'Graphique',

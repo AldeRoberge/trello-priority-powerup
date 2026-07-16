@@ -480,6 +480,97 @@
     );
   }
 
+  /**
+   * Human label for startDate changes in cardPriority.
+   */
+  function describeStartChange(beforeDate, afterDate) {
+    var bDate = beforeDate || '';
+    var aDate = afterDate || '';
+    if (bDate === aDate) return '';
+    if (!bDate && aDate) {
+      return 'D\u00e9but fix\u00e9 au ' + formatHistoryDateFr(aDate);
+    }
+    if (bDate && !aDate) {
+      return 'D\u00e9but retir\u00e9 (\u00e9tait le ' + formatHistoryDateFr(bDate) + ')';
+    }
+    return (
+      'D\u00e9but modifi\u00e9 du ' +
+      formatHistoryDateFr(bDate) +
+      ' au ' +
+      formatHistoryDateFr(aDate)
+    );
+  }
+
+  function recurrenceKey(raw) {
+    if (!raw || typeof raw !== 'object') return '';
+    var frequency =
+      typeof raw.frequency === 'string' ? raw.frequency.trim().toLowerCase() : '';
+    if (!frequency) return '';
+    var interval = Math.round(Number(raw.interval));
+    if (!isFinite(interval) || interval < 1) interval = 1;
+    var key = frequency + ':' + interval;
+    if (frequency === 'weekly' && Array.isArray(raw.weekdays)) {
+      key +=
+        ':' +
+        raw.weekdays
+          .map(function (d) {
+            return Number(d);
+          })
+          .filter(function (d) {
+            return isFinite(d) && d >= 0 && d <= 6;
+          })
+          .sort(function (a, b) {
+            return a - b;
+          })
+          .join(',');
+    }
+    return key;
+  }
+
+  function formatRecurrenceHistoryFr(raw) {
+    if (
+      typeof window !== 'undefined' &&
+      window.PriorityUI &&
+      typeof window.PriorityUI.formatRecurrenceLabelFr === 'function'
+    ) {
+      return window.PriorityUI.formatRecurrenceLabelFr(raw);
+    }
+    if (!raw || typeof raw !== 'object' || !raw.frequency) return 'Ne pas r\u00e9p\u00e9ter';
+    var n = Math.round(Number(raw.interval));
+    if (!isFinite(n) || n < 1) n = 1;
+    if (raw.frequency === 'daily') {
+      return n === 1 ? 'Chaque jour' : 'Tous les ' + n + ' jours';
+    }
+    if (raw.frequency === 'weekly') {
+      return n === 1 ? 'Chaque semaine' : 'Toutes les ' + n + ' semaines';
+    }
+    if (raw.frequency === 'monthly') {
+      return n === 1 ? 'Chaque mois' : 'Tous les ' + n + ' mois';
+    }
+    if (raw.frequency === 'yearly') {
+      return n === 1 ? 'Chaque ann\u00e9e' : 'Tous les ' + n + ' ans';
+    }
+    return 'R\u00e9currente';
+  }
+
+  function describeRecurrenceChange(before, after) {
+    var bKey = recurrenceKey(before);
+    var aKey = recurrenceKey(after);
+    if (bKey === aKey) return '';
+    if (!bKey && aKey) {
+      return 'R\u00e9p\u00e9tition : ' + formatRecurrenceHistoryFr(after).toLowerCase();
+    }
+    if (bKey && !aKey) {
+      return 'R\u00e9p\u00e9tition d\u00e9sactiv\u00e9e';
+    }
+    return (
+      'R\u00e9p\u00e9tition : ' +
+      formatRecurrenceHistoryFr(before).toLowerCase() +
+      ' \u2192 ' +
+      formatRecurrenceHistoryFr(after).toLowerCase()
+    );
+  }
+
   function formatMinutesFr(mins) {
     if (mins == null || mins === '') return 'aucune';
     var n = Number(mins);
@@ -774,6 +865,10 @@
           describeDueChange(bp.dueDate, bp.dueTime, ap.dueDate, ap.dueTime)
         );
       }
+      var startLabel = describeStartChange(bp.startDate, ap.startDate);
+      if (startLabel) parts.push(startLabel);
+      var recurLabel = describeRecurrenceChange(bp.recurrence, ap.recurrence);
+      if (recurLabel) parts.push(recurLabel);
       var blockedLabel = describeBlocked(bp, ap, detail ? 0 : 40);
       if (blockedLabel) parts.push(blockedLabel);
       if (bp.estimatedDurationMinutes !== ap.estimatedDurationMinutes) {
@@ -891,7 +986,7 @@
           parts.push('\u00c9tiquettes modifi\u00e9es');
         }
       }
-      if (!parts.length) parts.push('Information');
+      if (!parts.length) parts.push('Détails');
     }
 
     if (d.indexOf('goals') !== -1) {
@@ -942,7 +1037,7 @@
     priority: 'Priorit\u00e9',
     completion: 'Progr\u00e8s',
     statut: 'Statut',
-    info: 'Information',
+    info: 'Détails',
     goals: 'Objectifs'
   };
 

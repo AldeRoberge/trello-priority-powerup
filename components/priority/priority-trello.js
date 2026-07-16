@@ -10,6 +10,8 @@
   var COLOR_SCHEME_REV_KEY = 'priorityColorSchemeRev';
   // Last agreed Trello `due` ISO ('' = no due). Used for Échéance ↔ Dates conflict detection.
   var CARD_DUE_SYNCED_KEY = 'cardDueSyncedIso';
+  // Last agreed Trello `start` ISO ('' = no start).
+  var CARD_START_SYNCED_KEY = 'cardStartSyncedIso';
   var boardFormulaKey = 'baseline';
   var boardColorSchemeKey = null;
   // Trello minimum for dynamic badge polling (card-badges / card-detail-badges).
@@ -241,6 +243,23 @@
       if (raw.dueEnabled === false) normalized.dueEnabled = false;
     }
 
+    var startDate = '';
+    if (typeof raw.startDate === 'string') {
+      var PUStart = priorityUI();
+      startDate = PUStart && PUStart.normalizeDueDate
+        ? PUStart.normalizeDueDate(raw.startDate)
+        : raw.startDate.trim();
+      if (startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) startDate = '';
+    }
+    if (startDate) normalized.startDate = startDate;
+
+    var PURec = priorityUI();
+    var recurrence =
+      PURec && typeof PURec.normalizeRecurrence === 'function'
+        ? PURec.normalizeRecurrence(raw.recurrence)
+        : null;
+    if (recurrence) normalized.recurrence = recurrence;
+
     // Multi-label task taxonomy (Information + AI); sidecar, not an axis.
     var PUTypes = priorityUI();
     var taskTypes =
@@ -284,6 +303,12 @@
         cleared.dueTime = inputs.dueTime;
       }
       if (inputs.dueEnabled === false) cleared.dueEnabled = false;
+    }
+    if (typeof inputs.startDate === 'string' && inputs.startDate) {
+      cleared.startDate = inputs.startDate;
+    }
+    if (inputs.recurrence && typeof inputs.recurrence === 'object') {
+      cleared.recurrence = inputs.recurrence;
     }
     if (Array.isArray(inputs.taskTypes) && inputs.taskTypes.length) {
       cleared.taskTypes = inputs.taskTypes.slice();
@@ -1716,11 +1741,240 @@
     };
   }
 
+  function parseCardStartValue(value) {
+    if (value == null || value === false) return null;
+    if (typeof value === 'string') {
+      var trimmed = value.trim();
+      return trimmed || null;
+    }
+    if (typeof value === 'object' && !isPowerUpRequestChain(value)) {
+      if (typeof value.start === 'string' && value.start.trim()) {
+        return value.start.trim();
+      }
+      if (
+        value.badges &&
+        typeof value.badges === 'object' &&
+        !isPowerUpRequestChain(value.badges)
+      ) {
+        if (typeof value.badges.start === 'string' && value.badges.start.trim()) {
+          return value.badges.start.trim();
+        }
+      }
+    }
+    return null;
+  }
+
+  async function getCardStart(t) {
+    try {
+      var start = await cardFieldPromise(t, 'start');
+      if (isPowerUpRequestChain(start)) start = null;
+      var parsed = parseCardStartValue(start);
+      if (parsed) return parsed;
+
+      var badges = await cardFieldPromise(t, 'badges');
+      if (isPowerUpRequestChain(badges)) return null;
+      return parseCardStartValue(badges && { badges: badges });
+    } catch (err) {
+      console.error('Priority card start failed', err);
+      return null;
+    }
+  }
+
+  async function getCardStartSyncedIso(t) {
+    try {
+      var stored = await t.get('card', 'shared', CARD_START_SYNCED_KEY);
+      if (stored == null || stored === '') return '';
+      if (typeof stored !== 'string') return '';
+      var PU = priorityUI();
+      if (PU && PU.canonicalizeTrelloDueIso) {
+        return PU.canonicalizeTrelloDueIso(stored);
+      }
+      return stored;
+    } catch (err) {
+      return '';
+    }
+  }
+
+  async function setCardStartSyncedIso(t, iso) {
+    try {
+      await t.set(
+        'card',
+        'shared',
+        CARD_START_SYNCED_KEY,
+        typeof iso === 'string' ? iso : ''
+      );
+    } catch (err) {
+      console.error('Priority start sync marker failed', err);
+    }
+  }
+
+  function applyStartToInputs(inputs, startDate) {
+    var next = inputs
+      ? Object.assign({}, inputs)
+      : Object.assign({}, DEFAULT_INPUTS, { priorityEnabled: false });
+    delete next.startDate;
+    var normalized = '';
+    if (startDate) {
+      var PU = priorityUI();
+      normalized =
+        PU && PU.normalizeDueDate
+          ? PU.normalizeDueDate(startDate)
+          : String(startDate).trim();
+      if (normalized && !/^\d{4}-\d{2}-\d{2}$/.test(normalized)) normalized = '';
+    }
+    if (normalized) next.startDate = normalized;
+    return normalizeInputs(next);
+  }
+
+  function inputsToCanonicalStartIso(inputs) {
+    var PU = priorityUI();
+    if (PU && PU.inputsToTrelloStartIso) return PU.inputsToTrelloStartIso(inputs) || '';
+    return '';
+  }
+
+  async function setCardStart(t, startIso) {
+    var want = startIso ? canonicalizeDueIso(startIso) : '';
+    if (startIso && !want) return { ok: false, reason: 'invalid-start', changed: false };
+    if (!restClientOptions()) return { ok: false, reason: 'no-app-key', changed: false };
+
+    var currentRaw = await getCardStart(t);
+    var currentCanon = canonicalizeDueIso(currentRaw);
+    if (currentCanon === want) {
+      return { ok: true, changed: false, start: want || null };
+    }
+
+    var cardId = await resolveCurrentCardId(t);
+    if (!cardId) return { ok: false, reason: 'no-card-id', changed: false };
+
+    var put = await restPutCard(t, cardId, { start: want || null });
+    if (!put.ok) return Object.assign({ changed: false }, put);
+    return { ok: true, changed: true, start: want || null };
+  }
+
+  /**
+   * Two-way sync: Échéance startDate ↔ Trello Dates `start`.
+   * Same conflict rules as syncCardDueWithTrello.
+   */
+  async function syncCardStartWithTrello(t, options) {
+    options = options || {};
+    var prefer = options.prefer === 'powerup' ? 'powerup' : 'trello';
+    var inputs = options.inputs !== undefined ? options.inputs : await getCardInputs(t);
+    if (inputs) inputs = normalizeInputs(inputs) || inputs;
+
+    var PU = priorityUI();
+    var trelloRaw = await getCardStart(t);
+    var actualCanon = canonicalizeDueIso(trelloRaw);
+    var expectedCanon = inputsToCanonicalStartIso(inputs);
+    var lastSynced = await getCardStartSyncedIso(t);
+
+    if (actualCanon === expectedCanon) {
+      if (lastSynced !== actualCanon) await setCardStartSyncedIso(t, actualCanon);
+      return {
+        ok: true,
+        changed: false,
+        inputs: inputs,
+        start: actualCanon || null,
+      };
+    }
+
+    var trelloChanged = actualCanon !== lastSynced;
+    var powerUpChanged = expectedCanon !== lastSynced;
+    var action = 'pull';
+    if (powerUpChanged && !trelloChanged) action = 'push';
+    else if (trelloChanged && !powerUpChanged) action = 'pull';
+    else if (powerUpChanged && trelloChanged) {
+      action = prefer === 'powerup' ? 'push' : 'pull';
+    } else {
+      action = prefer === 'powerup' ? 'push' : 'pull';
+    }
+
+    if (action === 'pull') {
+      if (!actualCanon) {
+        if (!inputs || !inputs.startDate) {
+          if (lastSynced !== '') await setCardStartSyncedIso(t, '');
+          return {
+            ok: true,
+            changed: false,
+            inputs: inputs,
+            start: null,
+            direction: 'pull',
+          };
+        }
+        var cleared = applyStartToInputs(inputs, null);
+        await t.set('card', 'shared', CARD_PRIORITY_KEY, cleared);
+        await setCardStartSyncedIso(t, '');
+        return {
+          ok: true,
+          changed: true,
+          direction: 'pull',
+          inputs: cleared,
+          start: null,
+        };
+      }
+      var parts =
+        PU && PU.parseTrelloDueToParts
+          ? PU.parseTrelloDueToParts(actualCanon)
+          : null;
+      if (!parts && trelloRaw && PU && PU.parseTrelloDueToParts) {
+        parts = PU.parseTrelloDueToParts(trelloRaw);
+      }
+      if (!parts || !parts.dueDate) {
+        return {
+          ok: false,
+          reason: 'invalid-trello-start',
+          changed: false,
+          inputs: inputs,
+          start: trelloRaw,
+        };
+      }
+      var nextInputs = applyStartToInputs(inputs, parts.dueDate);
+      var nextCanon = inputsToCanonicalStartIso(nextInputs);
+      var inputsChanged =
+        !inputs || (inputs.startDate || '') !== (nextInputs.startDate || '');
+      if (inputsChanged) {
+        await t.set('card', 'shared', CARD_PRIORITY_KEY, nextInputs);
+      }
+      await setCardStartSyncedIso(t, nextCanon);
+      return {
+        ok: true,
+        changed: inputsChanged,
+        direction: 'pull',
+        inputs: nextInputs,
+        start: nextCanon || null,
+      };
+    }
+
+    var put = await setCardStart(t, expectedCanon || null);
+    if (!put.ok) {
+      return {
+        ok: false,
+        reason: put.reason || 'push-failed',
+        changed: false,
+        direction: 'push',
+        inputs: inputs,
+        start: actualCanon || null,
+      };
+    }
+    await setCardStartSyncedIso(t, expectedCanon);
+    return {
+      ok: true,
+      changed: !!put.changed,
+      direction: 'push',
+      inputs: inputs,
+      start: expectedCanon || null,
+    };
+  }
+
   async function getBadgeData(t) {
     try {
       await syncCardDueWithTrello(t, { prefer: 'trello' });
     } catch (syncErr) {
       console.error('Priority due sync (badge) failed', syncErr);
+    }
+    try {
+      await syncCardStartWithTrello(t, { prefer: 'trello' });
+    } catch (startErr) {
+      console.error('Priority start sync (badge) failed', startErr);
     }
     var results = await Promise.all([
       getCardInputs(t),
@@ -1925,6 +2179,11 @@
         await syncCardDueWithTrello(t, { inputs: normalized, prefer: 'powerup' });
       } catch (syncErr) {
         console.error('Priority due sync (save) failed', syncErr);
+      }
+      try {
+        await syncCardStartWithTrello(t, { inputs: normalized, prefer: 'powerup' });
+      } catch (startErr) {
+        console.error('Priority start sync (save) failed', startErr);
       }
     }
     if (options.autoSort !== false) {
@@ -2388,6 +2647,8 @@
   /**
    * Mark (or unmark) the card as Done via REST PUT dueComplete.
    * Requires OAuth (same path as auto-sort). No-ops when already at target.
+   * When recurrence is set and marking complete: advance due/start, persist,
+   * push dates, then leave dueComplete false (Trello-like roll-forward).
    */
   async function setCardDueComplete(t, dueComplete, options) {
     options = options || {};
@@ -2401,6 +2662,68 @@
 
     var cardId = await resolveCurrentCardId(t);
     if (!cardId) return { ok: false, reason: 'no-card-id', changed: false };
+
+    if (want) {
+      var inputs = await getCardInputs(t);
+      var PU = priorityUI();
+      var recurrence =
+        inputs && PU && typeof PU.normalizeRecurrence === 'function'
+          ? PU.normalizeRecurrence(inputs.recurrence)
+          : inputs && inputs.recurrence
+            ? inputs.recurrence
+            : null;
+      if (recurrence && inputs && inputs.dueDate && PU && PU.nextOccurrenceParts) {
+        var nextParts = PU.nextOccurrenceParts(
+          {
+            dueDate: inputs.dueDate,
+            dueTime: inputs.dueTime || '',
+            startDate: inputs.startDate || '',
+          },
+          recurrence
+        );
+        if (nextParts && nextParts.dueDate) {
+          var rolled = Object.assign({}, inputs, {
+            dueDate: nextParts.dueDate,
+            dueTime: nextParts.dueTime || inputs.dueTime || '',
+            dueEnabled: true,
+          });
+          if (nextParts.startDate) rolled.startDate = nextParts.startDate;
+          else delete rolled.startDate;
+          rolled = normalizeInputs(rolled);
+          await t.set('card', 'shared', CARD_PRIORITY_KEY, rolled);
+          try {
+            await syncCardDueWithTrello(t, {
+              inputs: rolled,
+              prefer: 'powerup',
+            });
+          } catch (dueRollErr) {
+            console.error('Priority due roll-forward failed', dueRollErr);
+          }
+          try {
+            await syncCardStartWithTrello(t, {
+              inputs: rolled,
+              prefer: 'powerup',
+            });
+          } catch (startRollErr) {
+            console.error('Priority start roll-forward failed', startRollErr);
+          }
+          // Ensure card is not left complete after rolling the schedule.
+          if (current === true) {
+            var reset = await restPutCard(t, cardId, { dueComplete: false });
+            if (!reset.ok) {
+              return Object.assign({ changed: false, rolled: true }, reset);
+            }
+          }
+          return {
+            ok: true,
+            changed: true,
+            rolled: true,
+            dueComplete: false,
+            inputs: rolled,
+          };
+        }
+      }
+    }
 
     var put = await restPutCard(t, cardId, { dueComplete: want });
     if (!put.ok) return Object.assign({ changed: false }, put);
@@ -2700,6 +3023,10 @@
     setCardDue: setCardDue,
     syncCardDueWithTrello: syncCardDueWithTrello,
     CARD_DUE_SYNCED_KEY: CARD_DUE_SYNCED_KEY,
+    getCardStart: getCardStart,
+    setCardStart: setCardStart,
+    syncCardStartWithTrello: syncCardStartWithTrello,
+    CARD_START_SYNCED_KEY: CARD_START_SYNCED_KEY,
     getBadgeData: getBadgeData,
     formatBadgeText: formatBadgeText,
     formatBlockedBoardBadgeText: formatBlockedBoardBadgeText,

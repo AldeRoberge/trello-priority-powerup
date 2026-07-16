@@ -406,7 +406,7 @@ body {
   opacity: 0.85;
 }
 
-/* ── Information (recap) panel ── */
+/* ── Détails (recap) panel ── */
 .variant-info-section {
   margin-top: 0;
   padding: 0 8px;
@@ -3103,6 +3103,158 @@ body {
   display: flex;
   align-items: stretch;
   gap: 8px;
+}
+
+.due-date-start {
+  margin-top: 8px;
+}
+
+.due-date-picker--start {
+  flex: none;
+  width: 100%;
+}
+
+.due-date-trigger--start {
+  cursor: pointer;
+}
+
+.field--due-date.is-start-open .due-date-trigger--start {
+  box-shadow: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+.due-date-recurring {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  box-shadow: var(--modal-shadow);
+  box-sizing: border-box;
+}
+
+.due-date-recurring-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.due-date-recurring-icon {
+  font-size: 16px;
+  line-height: 1;
+  color: var(--due-accent);
+}
+
+.due-date-recurring-title {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+}
+
+.due-date-recurring-select {
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+  border-radius: 10px;
+  padding: 8px 32px 8px 10px;
+  background:
+    var(--surface-1, var(--surface-2))
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")
+    no-repeat right 10px center;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.due-date-recurring-select:focus-visible {
+  outline: 2px solid var(--due-accent);
+  outline-offset: 1px;
+}
+
+.due-date-recurring-weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.due-date-recurring-weekdays[hidden] {
+  display: none;
+}
+
+.due-date-recurring-weekday {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+  border-radius: 999px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.due-date-recurring-weekday:hover {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--due-accent) 40%, transparent);
+}
+
+.due-date-recurring-weekday.is-selected,
+.due-date-recurring-weekday[aria-pressed='true'] {
+  color: var(--due-accent-text, #fff);
+  background: var(--due-accent);
+  border-color: var(--due-accent);
+}
+
+.due-date-recurring-weekday:focus-visible {
+  outline: 2px solid var(--due-accent);
+  outline-offset: 1px;
+}
+
+.due-date-recurring-interval {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.due-date-recurring-interval[hidden] {
+  display: none;
+}
+
+.due-date-recurring-interval-label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.due-date-recurring-interval-input {
+  width: 3.2em;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: var(--surface-1, var(--surface-2));
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.due-date-recurring-interval-input:focus-visible {
+  outline: 2px solid var(--due-accent);
+  outline-offset: 1px;
 }
 
 .due-date-suggestions {

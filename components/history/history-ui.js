@@ -164,7 +164,7 @@
           if (key === 'priority') return 'Priorité';
           if (key === 'completion') return 'Progrès';
           if (key === 'statut') return 'Statut';
-          if (key === 'info') return 'Information';
+          if (key === 'info') return 'Détails';
           if (key === 'goals') return 'Objectifs';
           return key;
         });

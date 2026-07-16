@@ -2389,6 +2389,15 @@
   var DUE_DATE_CALENDAR_LABEL = 'Calendrier d\'\u00e9ch\u00e9ance';
   var DUE_DATE_BOX_LABEL = 'Date';
   var DUE_DATE_CLEAR_LABEL = 'Effacer la date';
+  var DUE_DATE_START_LABEL = 'D\u00e9but';
+  var DUE_DATE_START_CLEAR_LABEL = 'Effacer la date de d\u00e9but';
+  var DUE_DATE_START_PLACEHOLDER = 'Ajouter une date de d\u00e9but';
+  var DUE_DATE_RECURRING_LABEL = 'R\u00e9currente';
+  var DUE_DATE_RECURRING_NONE = 'Ne pas r\u00e9p\u00e9ter';
+  var DUE_DATE_RECURRING_DAILY = 'Chaque jour';
+  var DUE_DATE_RECURRING_WEEKLY = 'Chaque semaine';
+  var DUE_DATE_RECURRING_MONTHLY = 'Chaque mois';
+  var DUE_DATE_RECURRING_YEARLY = 'Chaque ann\u00e9e';
   var DUE_DATE_TIME_LABEL = 'Heure';
   var DUE_DATE_TIME_PLACEHOLDER = 'Choisir une heure';
   var DUE_DATE_TIME_CLEAR_LABEL = 'Effacer l\'heure';
@@ -2626,6 +2635,140 @@
     var dueDate = normalizeDueDate(inputs.dueDate);
     if (!dueDate) return '';
     return trelloDueIsoFromParts(dueDate, inputs.dueTime) || '';
+  }
+
+  /** Start date → Trello `start` ISO (date-only local midnight). */
+  function inputsToTrelloStartIso(inputs) {
+    if (!inputs) return '';
+    var startDate = normalizeDueDate(inputs.startDate);
+    if (!startDate) return '';
+    return trelloDueIsoFromParts(startDate, null) || '';
+  }
+
+  var RECURRENCE_FREQUENCIES = ['daily', 'weekly', 'monthly', 'yearly'];
+
+  function normalizeRecurrence(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    var frequency =
+      typeof raw.frequency === 'string' ? raw.frequency.trim().toLowerCase() : '';
+    if (RECURRENCE_FREQUENCIES.indexOf(frequency) === -1) return null;
+    var interval = Math.round(Number(raw.interval));
+    if (!isFinite(interval) || interval < 1) interval = 1;
+    if (interval > 99) interval = 99;
+    var out = { frequency: frequency, interval: interval };
+    if (frequency === 'weekly') {
+      var days = [];
+      var seen = Object.create(null);
+      var list = Array.isArray(raw.weekdays) ? raw.weekdays : [];
+      for (var i = 0; i < list.length; i++) {
+        var d = Math.round(Number(list[i]));
+        if (!isFinite(d) || d < 0 || d > 6 || seen[d]) continue;
+        seen[d] = true;
+        days.push(d);
+      }
+      days.sort(function (a, b) {
+        return a - b;
+      });
+      if (!days.length) {
+        var fallback = new Date();
+        days = [fallback.getDay()];
+      }
+      out.weekdays = days;
+    }
+    return out;
+  }
+
+  function addCalendarMonths(date, months) {
+    var d = new Date(date.getTime());
+    var day = d.getDate();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + months);
+    var maxDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    d.setDate(Math.min(day, maxDay));
+    return d;
+  }
+
+  function advanceDateByRecurrence(iso, recurrence) {
+    var date = dueDateToLocalDate(iso);
+    var rule = normalizeRecurrence(recurrence);
+    if (!date || !rule) return iso || '';
+    var interval = rule.interval || 1;
+    var next = new Date(date.getTime());
+
+    if (rule.frequency === 'daily') {
+      next.setDate(next.getDate() + interval);
+      return toIsoDate(next);
+    }
+
+    if (rule.frequency === 'monthly') {
+      return toIsoDate(addCalendarMonths(next, interval));
+    }
+
+    if (rule.frequency === 'yearly') {
+      return toIsoDate(addCalendarMonths(next, interval * 12));
+    }
+
+    // weekly
+    var weekdays = (rule.weekdays || []).slice().sort(function (a, b) {
+      return a - b;
+    });
+    if (!weekdays.length) weekdays = [date.getDay()];
+    var dow = date.getDay();
+    var i;
+    for (i = 0; i < weekdays.length; i++) {
+      if (weekdays[i] > dow) {
+        next.setDate(next.getDate() + (weekdays[i] - dow));
+        return toIsoDate(next);
+      }
+    }
+    var first = weekdays[0];
+    next.setDate(next.getDate() + (7 - dow + first) + (interval - 1) * 7);
+    return toIsoDate(next);
+  }
+
+  /**
+   * Next occurrence parts after completing a recurring card.
+   * Advances due (keeps time) and start by the same calendar-day delta.
+   */
+  function nextOccurrenceParts(parts, recurrence) {
+    var rule = normalizeRecurrence(recurrence);
+    if (!rule || !parts || !parts.dueDate) return null;
+    var nextDue = advanceDateByRecurrence(parts.dueDate, rule);
+    if (!nextDue) return null;
+    var out = {
+      dueDate: nextDue,
+      dueTime: parts.dueTime || '',
+      startDate: ''
+    };
+    if (parts.startDate) {
+      var start = dueDateToLocalDate(parts.startDate);
+      var due = dueDateToLocalDate(parts.dueDate);
+      var nextDueDate = dueDateToLocalDate(nextDue);
+      if (start && due && nextDueDate) {
+        var delta = nextDueDate.getTime() - due.getTime();
+        out.startDate = toIsoDate(new Date(start.getTime() + delta));
+      }
+    }
+    return out;
+  }
+
+  function formatRecurrenceLabelFr(recurrence) {
+    var rule = normalizeRecurrence(recurrence);
+    if (!rule) return 'Ne pas r\u00e9p\u00e9ter';
+    var n = rule.interval || 1;
+    if (rule.frequency === 'daily') {
+      return n === 1 ? 'Chaque jour' : 'Tous les ' + n + ' jours';
+    }
+    if (rule.frequency === 'weekly') {
+      return n === 1 ? 'Chaque semaine' : 'Toutes les ' + n + ' semaines';
+    }
+    if (rule.frequency === 'monthly') {
+      return n === 1 ? 'Chaque mois' : 'Tous les ' + n + ' mois';
+    }
+    if (rule.frequency === 'yearly') {
+      return n === 1 ? 'Chaque ann\u00e9e' : 'Tous les ' + n + ' ans';
+    }
+    return 'R\u00e9currente';
   }
 
   function formatDueDateBoxDisplay(iso) {
@@ -6623,14 +6766,14 @@
     field.className = 'field field--info is-enabled';
 
     var chrome = createCollapsibleEnableChrome({
-      title: 'Information',
+      title: 'Détails',
       bodyId: bodyId,
       hideEnable: true,
       leadingIcon: 'ti-info-circle',
       iconClass: 'info-leading-icon',
       titleClass: 'info-enable-title',
-      collapseLabel: 'Replier Information',
-      expandLabel: 'D\u00e9velopper Information'
+      collapseLabel: 'Replier Détails',
+      expandLabel: 'D\u00e9velopper Détails'
     });
     field.appendChild(chrome.head);
 
@@ -11260,8 +11403,22 @@
       current = '';
       currentTime = '';
     }
+    var currentStart =
+      initialValue && typeof initialValue === 'object'
+        ? normalizeDueDate(initialValue.startDate)
+        : '';
+    var currentRecurrence = normalizeRecurrence(
+      initialValue && typeof initialValue === 'object'
+        ? initialValue.recurrence
+        : null
+    );
     var open = false;
     var timeOpen = false;
+    var startOpen = false;
+    var startViewYear;
+    var startViewMonth;
+    var startFocusIso =
+      currentStart || toIsoDate(startOfLocalDay(new Date()));
     var viewYear;
     var viewMonth;
     var calendarMode = 'day'; /* day | date | month | year */
@@ -11280,7 +11437,15 @@
       focusIso = toIsoDate(date);
     }
 
+    function syncStartViewFromValue(iso) {
+      var date = dueDateToLocalDate(iso) || startOfLocalDay(new Date());
+      startViewYear = date.getFullYear();
+      startViewMonth = date.getMonth();
+      startFocusIso = toIsoDate(date);
+    }
+
     syncViewFromValue(current);
+    syncStartViewFromValue(currentStart);
 
     var field = document.createElement('div');
     field.className = 'field field--due-date';
@@ -11451,6 +11616,183 @@
 
     body.appendChild(countdown);
     body.appendChild(pickers);
+
+    // ── Start date (Début) ─────────────────────────────────────────────
+    var startRow = document.createElement('div');
+    startRow.className = 'due-date-start';
+
+    var startPicker = document.createElement('div');
+    startPicker.className = 'due-date-picker due-date-picker--start';
+
+    var startTrigger = document.createElement('div');
+    startTrigger.className = 'due-date-trigger due-date-trigger--start';
+    startTrigger.setAttribute('role', 'button');
+    startTrigger.setAttribute('tabindex', '0');
+    startTrigger.setAttribute('aria-expanded', 'false');
+    startTrigger.setAttribute('aria-haspopup', 'dialog');
+    startTrigger.setAttribute('aria-label', DUE_DATE_START_LABEL);
+
+    var startTriggerIcon = document.createElement('i');
+    startTriggerIcon.className = 'ti ti-flag due-date-trigger-icon';
+    startTriggerIcon.setAttribute('aria-hidden', 'true');
+
+    var startTriggerText = document.createElement('span');
+    startTriggerText.className = 'due-date-trigger-text';
+    var startTriggerValue = document.createElement('span');
+    startTriggerValue.className = 'due-date-trigger-value is-placeholder';
+    startTriggerValue.textContent = DUE_DATE_START_PLACEHOLDER;
+    var startTriggerTitle = document.createElement('span');
+    startTriggerTitle.className = 'due-date-trigger-title';
+    startTriggerTitle.textContent = DUE_DATE_START_LABEL;
+    startTriggerText.appendChild(startTriggerValue);
+    startTriggerText.appendChild(startTriggerTitle);
+
+    var startTrashBtn = document.createElement('button');
+    startTrashBtn.type = 'button';
+    startTrashBtn.className = 'due-date-trigger-clear';
+    startTrashBtn.setAttribute('aria-label', DUE_DATE_START_CLEAR_LABEL);
+    startTrashBtn.title = DUE_DATE_START_CLEAR_LABEL;
+    startTrashBtn.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
+    startTrashBtn.hidden = !currentStart;
+
+    startTrigger.appendChild(startTriggerIcon);
+    startTrigger.appendChild(startTriggerText);
+    startTrigger.appendChild(startTrashBtn);
+    startPicker.appendChild(startTrigger);
+
+    var startPopover = document.createElement('div');
+    startPopover.className = 'due-date-popover due-date-popover--start';
+    startPopover.hidden = true;
+    startPopover.setAttribute('role', 'dialog');
+    startPopover.setAttribute('aria-label', DUE_DATE_START_LABEL);
+
+    var startNav = document.createElement('div');
+    startNav.className = 'due-date-nav';
+    var startPrevBtn = document.createElement('button');
+    startPrevBtn.type = 'button';
+    startPrevBtn.className = 'due-date-nav-btn';
+    startPrevBtn.setAttribute('aria-label', DUE_DATE_PREV_MONTH);
+    startPrevBtn.innerHTML = '<i class="ti ti-chevron-left" aria-hidden="true"></i>';
+    var startMonthLabel = document.createElement('span');
+    startMonthLabel.className = 'due-date-month-label';
+    var startNextBtn = document.createElement('button');
+    startNextBtn.type = 'button';
+    startNextBtn.className = 'due-date-nav-btn';
+    startNextBtn.setAttribute('aria-label', DUE_DATE_NEXT_MONTH);
+    startNextBtn.innerHTML = '<i class="ti ti-chevron-right" aria-hidden="true"></i>';
+    startNav.appendChild(startPrevBtn);
+    startNav.appendChild(startMonthLabel);
+    startNav.appendChild(startNextBtn);
+    startPopover.appendChild(startNav);
+
+    var startWeekdays = document.createElement('div');
+    startWeekdays.className = 'due-date-weekdays';
+    startWeekdays.setAttribute('aria-hidden', 'true');
+    DUE_DATE_WEEKDAYS.forEach(function (labelText, index) {
+      var cell = document.createElement('span');
+      cell.className = 'due-date-weekday';
+      cell.textContent = labelText;
+      cell.title = DUE_DATE_WEEKDAY_NAMES[index];
+      startWeekdays.appendChild(cell);
+    });
+    startPopover.appendChild(startWeekdays);
+
+    var startGrid = document.createElement('div');
+    startGrid.className = 'due-date-grid';
+    startGrid.setAttribute('role', 'grid');
+    startPopover.appendChild(startGrid);
+
+    var startFooter = document.createElement('div');
+    startFooter.className = 'due-date-footer';
+    var startTodayBtn = document.createElement('button');
+    startTodayBtn.type = 'button';
+    startTodayBtn.className = 'due-date-today';
+    startTodayBtn.textContent = DUE_DATE_TODAY_LABEL;
+    startFooter.appendChild(startTodayBtn);
+    startPopover.appendChild(startFooter);
+    startPicker.appendChild(startPopover);
+    startRow.appendChild(startPicker);
+    body.appendChild(startRow);
+
+    // ── Recurring ──────────────────────────────────────────────────────
+    var recurringRow = document.createElement('div');
+    recurringRow.className = 'due-date-recurring';
+
+    var recurringHead = document.createElement('div');
+    recurringHead.className = 'due-date-recurring-head';
+    var recurringIcon = document.createElement('i');
+    recurringIcon.className = 'ti ti-repeat due-date-recurring-icon';
+    recurringIcon.setAttribute('aria-hidden', 'true');
+    var recurringTitle = document.createElement('span');
+    recurringTitle.className = 'due-date-recurring-title';
+    recurringTitle.textContent = DUE_DATE_RECURRING_LABEL;
+    recurringHead.appendChild(recurringIcon);
+    recurringHead.appendChild(recurringTitle);
+
+    var recurringSelect = document.createElement('select');
+    recurringSelect.className = 'due-date-recurring-select';
+    recurringSelect.setAttribute('aria-label', DUE_DATE_RECURRING_LABEL);
+    [
+      { value: '', label: DUE_DATE_RECURRING_NONE },
+      { value: 'daily', label: DUE_DATE_RECURRING_DAILY },
+      { value: 'weekly', label: DUE_DATE_RECURRING_WEEKLY },
+      { value: 'monthly', label: DUE_DATE_RECURRING_MONTHLY },
+      { value: 'yearly', label: DUE_DATE_RECURRING_YEARLY }
+    ].forEach(function (opt) {
+      var option = document.createElement('option');
+      option.value = opt.value;
+      option.textContent = opt.label;
+      recurringSelect.appendChild(option);
+    });
+    recurringSelect.value = currentRecurrence ? currentRecurrence.frequency : '';
+
+    var recurringWeekdays = document.createElement('div');
+    recurringWeekdays.className = 'due-date-recurring-weekdays';
+    recurringWeekdays.setAttribute('role', 'group');
+    recurringWeekdays.setAttribute('aria-label', 'Jours de la semaine');
+    recurringWeekdays.hidden =
+      !currentRecurrence || currentRecurrence.frequency !== 'weekly';
+
+    var weekdayShort = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+    for (var wd = 0; wd < 7; wd++) {
+      (function (dayIndex) {
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'due-date-recurring-weekday';
+        chip.dataset.day = String(dayIndex);
+        chip.textContent = weekdayShort[dayIndex];
+        chip.title = DUE_DATE_WEEKDAY_NAMES[dayIndex];
+        chip.setAttribute('aria-pressed', 'false');
+        chip.addEventListener('click', function () {
+          toggleRecurrenceWeekday(dayIndex);
+        });
+        recurringWeekdays.appendChild(chip);
+      })(wd);
+    }
+
+    var recurringIntervalWrap = document.createElement('div');
+    recurringIntervalWrap.className = 'due-date-recurring-interval';
+    recurringIntervalWrap.hidden = true;
+    var recurringIntervalLabel = document.createElement('label');
+    recurringIntervalLabel.className = 'due-date-recurring-interval-label';
+    recurringIntervalLabel.textContent = 'Tous les';
+    var recurringIntervalInput = document.createElement('input');
+    recurringIntervalInput.type = 'number';
+    recurringIntervalInput.className = 'due-date-recurring-interval-input';
+    recurringIntervalInput.min = '1';
+    recurringIntervalInput.max = '99';
+    recurringIntervalInput.value = String(
+      (currentRecurrence && currentRecurrence.interval) || 1
+    );
+    recurringIntervalInput.setAttribute('aria-label', 'Intervalle de r\u00e9p\u00e9tition');
+    recurringIntervalWrap.appendChild(recurringIntervalLabel);
+    recurringIntervalWrap.appendChild(recurringIntervalInput);
+
+    recurringRow.appendChild(recurringHead);
+    recurringRow.appendChild(recurringSelect);
+    recurringRow.appendChild(recurringWeekdays);
+    recurringRow.appendChild(recurringIntervalWrap);
+    body.appendChild(recurringRow);
 
     var timePopover = document.createElement('div');
     timePopover.className = 'due-date-time-popover';
@@ -12198,17 +12540,210 @@
       return wrap;
     }
 
+    function refreshStartTrigger() {
+      var display = formatDueDateBoxDisplay(currentStart);
+      if (display) {
+        startTriggerValue.textContent = display;
+        startTriggerValue.classList.remove('is-placeholder');
+        startTrigger.classList.add('has-value');
+        startPicker.classList.add('has-value');
+        startTrashBtn.hidden = false;
+      } else {
+        startTriggerValue.textContent = DUE_DATE_START_PLACEHOLDER;
+        startTriggerValue.classList.add('is-placeholder');
+        startTrigger.classList.remove('has-value');
+        startPicker.classList.remove('has-value');
+        startTrashBtn.hidden = true;
+      }
+      startTrigger.setAttribute('aria-expanded', startOpen ? 'true' : 'false');
+    }
+
+    function refreshRecurrenceUi() {
+      var rule = currentRecurrence;
+      recurringSelect.value = rule ? rule.frequency : '';
+      recurringWeekdays.hidden = !rule || rule.frequency !== 'weekly';
+      var interval = rule && rule.interval ? rule.interval : 1;
+      recurringIntervalInput.value = String(interval);
+      recurringIntervalWrap.hidden = !rule || interval <= 1;
+      var selected = rule && rule.weekdays ? rule.weekdays : [];
+      var chips = recurringWeekdays.querySelectorAll('.due-date-recurring-weekday');
+      for (var i = 0; i < chips.length; i++) {
+        var day = +chips[i].dataset.day;
+        var on = selected.indexOf(day) !== -1;
+        chips[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+        chips[i].classList.toggle('is-selected', on);
+      }
+    }
+
+    function toggleRecurrenceWeekday(dayIndex) {
+      if (!currentRecurrence || currentRecurrence.frequency !== 'weekly') return;
+      var days = (currentRecurrence.weekdays || []).slice();
+      var idx = days.indexOf(dayIndex);
+      if (idx === -1) {
+        days.push(dayIndex);
+      } else if (days.length > 1) {
+        days.splice(idx, 1);
+      } else {
+        return;
+      }
+      currentRecurrence = normalizeRecurrence({
+        frequency: 'weekly',
+        interval: currentRecurrence.interval || 1,
+        weekdays: days
+      });
+      emitChange();
+    }
+
+    function renderStartCalendar() {
+      if (startViewYear == null || startViewMonth == null) {
+        syncStartViewFromValue(currentStart);
+      }
+      var monthName = DUE_DATE_MONTH_NAMES[startViewMonth];
+      var monthCap = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+      startMonthLabel.textContent = monthCap + ' ' + startViewYear;
+
+      startGrid.textContent = '';
+      var first = new Date(startViewYear, startViewMonth, 1);
+      var startOffset = sundayOffset(first);
+      var gridStart = new Date(startViewYear, startViewMonth, 1 - startOffset);
+      var todayIso = toIsoDate(startOfLocalDay(new Date()));
+
+      var row = null;
+      for (var i = 0; i < 42; i++) {
+        if (i % 7 === 0) {
+          row = document.createElement('div');
+          row.className = 'due-date-row';
+          row.setAttribute('role', 'row');
+          startGrid.appendChild(row);
+        }
+        var cellDate = new Date(
+          gridStart.getFullYear(),
+          gridStart.getMonth(),
+          gridStart.getDate() + i
+        );
+        var iso = toIsoDate(cellDate);
+        var inMonth = cellDate.getMonth() === startViewMonth;
+        var isToday = iso === todayIso;
+        var isPast = iso < todayIso;
+        var isSelected = !!currentStart && iso === currentStart;
+        var isFocused = iso === startFocusIso;
+
+        var cell = document.createElement('div');
+        cell.className = 'due-date-cell';
+        cell.setAttribute('role', 'gridcell');
+
+        var dayBtn = document.createElement('button');
+        dayBtn.type = 'button';
+        dayBtn.className = 'due-date-day';
+        dayBtn.dataset.iso = iso;
+        dayBtn.textContent = String(cellDate.getDate());
+        dayBtn.setAttribute(
+          'aria-label',
+          DUE_DATE_WEEKDAY_NAMES[sundayOffset(cellDate)] +
+            ' ' +
+            cellDate.getDate() +
+            ' ' +
+            DUE_DATE_MONTH_NAMES[cellDate.getMonth()] +
+            ' ' +
+            cellDate.getFullYear()
+        );
+        dayBtn.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+        dayBtn.tabIndex = isFocused ? 0 : -1;
+        if (!inMonth) dayBtn.classList.add('is-outside');
+        if (isToday) dayBtn.classList.add('is-today');
+        if (isPast) dayBtn.classList.add('is-past');
+        if (isSelected) dayBtn.classList.add('is-selected');
+        dayBtn.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          selectStartIso(ev.currentTarget.dataset.iso);
+        });
+        cell.appendChild(dayBtn);
+        row.appendChild(cell);
+      }
+
+      var hideToday = !!currentStart && currentStart === todayIso;
+      startTodayBtn.hidden = hideToday;
+      startFooter.hidden = hideToday;
+    }
+
+    function selectStartIso(iso) {
+      var next = normalizeDueDate(iso);
+      if (!next) return;
+      currentStart = next;
+      startFocusIso = next;
+      syncStartViewFromValue(next);
+      emitChange();
+      renderStartCalendar();
+      hideStartPicker();
+    }
+
+    function shiftStartMonth(delta) {
+      startViewMonth += delta;
+      while (startViewMonth < 0) {
+        startViewMonth += 12;
+        startViewYear -= 1;
+      }
+      while (startViewMonth > 11) {
+        startViewMonth -= 12;
+        startViewYear += 1;
+      }
+      var daysInMonth = new Date(startViewYear, startViewMonth + 1, 0).getDate();
+      var focusDay = dueDateToLocalDate(startFocusIso);
+      var day = focusDay ? Math.min(focusDay.getDate(), daysInMonth) : 1;
+      startFocusIso = toIsoDate(new Date(startViewYear, startViewMonth, day));
+      renderStartCalendar();
+    }
+
+    function showStartPicker() {
+      if (startOpen) return;
+      startOpen = true;
+      if (currentStart) syncStartViewFromValue(currentStart);
+      else {
+        syncStartViewFromValue('');
+        startFocusIso = toIsoDate(startOfLocalDay(new Date()));
+      }
+      startPopover.hidden = false;
+      field.classList.add('is-start-open');
+      renderStartCalendar();
+      refreshStartTrigger();
+      bindDocListeners();
+      document.addEventListener('mousedown', onStartDocMouseDown, true);
+      notifyLayout();
+    }
+
+    function hideStartPicker() {
+      if (!startOpen) return;
+      startOpen = false;
+      startPopover.hidden = true;
+      field.classList.remove('is-start-open');
+      document.removeEventListener('mousedown', onStartDocMouseDown, true);
+      refreshStartTrigger();
+      unbindDocListeners();
+      notifyLayout();
+    }
+
+    function onStartDocMouseDown(ev) {
+      if (!startOpen) return;
+      if (startPicker.contains(ev.target)) return;
+      hideStartPicker();
+    }
+
     function emitChange() {
       refreshCountdown();
+      refreshStartTrigger();
+      refreshRecurrenceUi();
       onChange(getValues());
     }
 
     function getValues() {
-      return {
+      var out = {
         dueDate: current || '',
         dueTime: current ? (currentTime || '') : '',
-        dueEnabled: !!current
+        dueEnabled: !!current,
+        startDate: currentStart || '',
+        recurrence: currentRecurrence
       };
+      return out;
     }
 
     function getValue() {
@@ -12226,6 +12761,12 @@
           current = '';
           currentTime = '';
         }
+        if (value.startDate !== undefined) {
+          currentStart = normalizeDueDate(value.startDate);
+        }
+        if (value.recurrence !== undefined) {
+          currentRecurrence = normalizeRecurrence(value.recurrence);
+        }
       } else {
         current = normalizeDueDate(value);
         if (!current) currentTime = '';
@@ -12235,6 +12776,7 @@
       } else {
         syncViewFromValue('');
       }
+      syncStartViewFromValue(currentStart);
       if (collapseApi && options.expand != null) {
         collapseApi.setExpanded(!!options.expand, { notifyLayout: false });
       } else if (collapseApi && current && !options.preserveCollapse) {
@@ -12242,6 +12784,8 @@
       }
       showPickers();
       refreshCountdown();
+      refreshStartTrigger();
+      refreshRecurrenceUi();
     }
 
     function setEnabled(nextEnabled, options) {
@@ -12616,6 +13160,11 @@
     }
 
     function onDocKeyDown(ev) {
+      if (ev.key === 'Escape' && startOpen) {
+        ev.preventDefault();
+        hideStartPicker();
+        return;
+      }
       if (!open || !enabled || calendarMode !== 'day') return;
       if (!grid.contains(document.activeElement) && document.activeElement !== todayBtn) {
         return;
@@ -12666,7 +13215,7 @@
     }
 
     function unbindDocListeners() {
-      if (docListenersBound && !open && !timeOpen) {
+      if (docListenersBound && !open && !timeOpen && !startOpen) {
         document.removeEventListener('keydown', onDocKeyDown, true);
         docListenersBound = false;
       }
@@ -12887,6 +13436,89 @@
       selectIso(toIsoDate(startOfLocalDay(new Date())));
     });
 
+    startTrigger.addEventListener('click', function (event) {
+      if (event.target.closest('.due-date-trigger-clear')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (startOpen) hideStartPicker();
+      else showStartPicker();
+    });
+
+    startTrigger.addEventListener('keydown', function (event) {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      if (event.target.closest('.due-date-trigger-clear')) return;
+      event.preventDefault();
+      if (startOpen) hideStartPicker();
+      else showStartPicker();
+    });
+
+    startTrashBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      currentStart = '';
+      emitChange();
+      if (startOpen) {
+        syncStartViewFromValue('');
+        renderStartCalendar();
+      }
+    });
+
+    startPrevBtn.addEventListener('click', function () {
+      shiftStartMonth(-1);
+    });
+
+    startNextBtn.addEventListener('click', function () {
+      shiftStartMonth(1);
+    });
+
+    startTodayBtn.addEventListener('click', function () {
+      selectStartIso(toIsoDate(startOfLocalDay(new Date())));
+    });
+
+    recurringSelect.addEventListener('change', function () {
+      var freq = recurringSelect.value;
+      if (!freq) {
+        currentRecurrence = null;
+      } else {
+        var weekdays;
+        if (freq === 'weekly') {
+          if (
+            currentRecurrence &&
+            currentRecurrence.frequency === 'weekly' &&
+            currentRecurrence.weekdays &&
+            currentRecurrence.weekdays.length
+          ) {
+            weekdays = currentRecurrence.weekdays.slice();
+          } else {
+            var due = dueDateToLocalDate(current);
+            weekdays = [due ? due.getDay() : new Date().getDay()];
+          }
+        }
+        currentRecurrence = normalizeRecurrence({
+          frequency: freq,
+          interval:
+            currentRecurrence && currentRecurrence.interval
+              ? currentRecurrence.interval
+              : 1,
+          weekdays: weekdays
+        });
+      }
+      emitChange();
+    });
+
+    recurringIntervalInput.addEventListener('change', function () {
+      if (!currentRecurrence) return;
+      var next = Math.round(Number(recurringIntervalInput.value));
+      if (!isFinite(next) || next < 1) next = 1;
+      if (next > 99) next = 99;
+      currentRecurrence = normalizeRecurrence({
+        frequency: currentRecurrence.frequency,
+        interval: next,
+        weekdays: currentRecurrence.weekdays
+      });
+      emitChange();
+    });
+
     collapseApi = bindCollapsibleEnable({
       field: field,
       body: body,
@@ -12904,6 +13536,8 @@
       }
     });
     refreshCountdown();
+    refreshStartTrigger();
+    refreshRecurrenceUi();
     showPickers();
 
     return {
@@ -14203,6 +14837,12 @@
       state.dueEnabled = state.dueDate ? true : (defaults.dueEnabled !== false);
       if (!state.dueDate) state.dueEnabled = false;
     }
+    state.startDate = normalizeDueDate(
+      state.startDate || defaults.startDate || ''
+    );
+    state.recurrence = normalizeRecurrence(
+      state.recurrence != null ? state.recurrence : defaults.recurrence
+    );
     // Priorité is always on (no enable checkbox).
     state.priorityEnabled = true;
     state.estimatedDurationMinutes = clampDurationMinutes(
@@ -14281,6 +14921,8 @@
         state.dueDate = dueValues.dueDate;
         state.dueTime = dueValues.dueTime;
         state.dueEnabled = !!dueValues.dueEnabled;
+        state.startDate = dueValues.startDate || '';
+        state.recurrence = dueValues.recurrence || null;
       }
       if (durationControl) {
         state.estimatedDurationMinutes = durationControl.getMinutes();
@@ -14592,7 +15234,9 @@
       value: {
         dueDate: state.dueDate,
         dueTime: state.dueTime,
-        dueEnabled: dueEnabledInitial
+        dueEnabled: dueEnabledInitial,
+        startDate: state.startDate,
+        recurrence: state.recurrence
       },
       expanded: sectionExpanded('due', dueEnabledInitial),
       onExpandChange: persistSectionExpanded('due'),
@@ -14791,11 +15435,22 @@
               }
             }
           }
-          if ((next.dueDate != null || next.dueTime != null || next.dueEnabled != null) && dueDateField) {
+          if (
+            (next.dueDate != null ||
+              next.dueTime != null ||
+              next.dueEnabled != null ||
+              next.startDate !== undefined ||
+              next.recurrence !== undefined) &&
+            dueDateField
+          ) {
             var duePayload = {
               dueDate: next.dueDate != null ? next.dueDate : state.dueDate,
               dueTime: next.dueTime != null ? next.dueTime : state.dueTime,
-              dueEnabled: next.dueEnabled != null ? next.dueEnabled : state.dueEnabled
+              dueEnabled: next.dueEnabled != null ? next.dueEnabled : state.dueEnabled,
+              startDate:
+                next.startDate !== undefined ? next.startDate : state.startDate,
+              recurrence:
+                next.recurrence !== undefined ? next.recurrence : state.recurrence
             };
             if (preserveCollapse) {
               dueDateField.setValue(duePayload, { preserveCollapse: true });
@@ -15050,6 +15705,12 @@
     parseTrelloDueToParts: parseTrelloDueToParts,
     canonicalizeTrelloDueIso: canonicalizeTrelloDueIso,
     inputsToTrelloDueIso: inputsToTrelloDueIso,
+    inputsToTrelloStartIso: inputsToTrelloStartIso,
+    normalizeRecurrence: normalizeRecurrence,
+    advanceDateByRecurrence: advanceDateByRecurrence,
+    nextOccurrenceParts: nextOccurrenceParts,
+    formatRecurrenceLabelFr: formatRecurrenceLabelFr,
+    RECURRENCE_FREQUENCIES: RECURRENCE_FREQUENCIES,
     isDueDateQuickSuggestionAvailable: isDueDateQuickSuggestionAvailable,
     resolveDueDateQuickSuggestion: resolveDueDateQuickSuggestion,
     daysUntilDue: daysUntilDue,
