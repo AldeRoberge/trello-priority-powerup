@@ -1604,6 +1604,9 @@
       ) {
         var st = variant.getState();
         if (st && !st.enAttente) {
+          console.debug(
+            '[tp-blocked] attachBlockedIntoStatut forcing enAttente (card on Bloqué list)'
+          );
           variant.setState(Object.assign({}, st, { enAttente: true }));
         }
       }
@@ -2810,7 +2813,10 @@
      * Entity Motifs (completion) are the source of truth for blockedReasons.
      */
     function syncPriorityFromProgressBlocked(data) {
-      if (syncingBlockedBridge) return;
+      if (syncingBlockedBridge) {
+        console.debug('[tp-blocked] syncPriorityFromProgressBlocked skipped (bridge busy)');
+        return;
+      }
       if (!variant || typeof variant.setState !== 'function') return;
       if (typeof CompletionTrello === 'undefined' || !CompletionTrello.hasAnyBlocked) {
         return;
@@ -2845,6 +2851,22 @@
       ) {
         return;
       }
+
+      console.debug('[tp-blocked] syncPriorityFromProgressBlocked', {
+        hasBlocked: hasBlocked,
+        curEnAttente: curEnAttente,
+        nextEnAttente: hasBlocked,
+        masterBlocked: !!(data && data.blocked),
+        blockedItemIds: ((data && data.items) || [])
+          .filter(function (it) {
+            return it && it.blocked === true;
+          })
+          .map(function (it) {
+            return it.id;
+          }),
+        linksChanged: nextLinksFp !== curLinksFp,
+        reasonsChanged: nextReasonsFp !== curReasonsFp,
+      });
 
       syncingBlockedBridge = true;
       try {
@@ -2997,7 +3019,10 @@
      * no blockedLinks and nothing is blocked yet.
      */
     function syncProgressFromPriorityBlocked(state) {
-      if (syncingBlockedBridge) return;
+      if (syncingBlockedBridge) {
+        console.debug('[tp-blocked] syncProgressFromPriorityBlocked skipped (bridge busy)');
+        return;
+      }
       if (!completionUi || typeof CompletionTrello === 'undefined') return;
       if (!CompletionTrello.hasAnyBlocked) return;
       var enAttente = !!(state && state.enAttente);
@@ -3012,6 +3037,18 @@
           ? completionUi.getData()
           : latestCompletion || { items: [] };
       var hasBlocked = CompletionTrello.hasAnyBlocked(live);
+
+      console.debug('[tp-blocked] syncProgressFromPriorityBlocked', {
+        enAttente: enAttente,
+        hasBlocked: hasBlocked,
+        linkCount: links.length,
+        masterBlocked: !!(live && live.blocked),
+        masterOrigin:
+          live && CompletionTrello.masterBlockedOrigin
+            ? CompletionTrello.masterBlockedOrigin(live)
+            : null,
+        willSetMasterBlocked: !!(enAttente && !hasBlocked),
+      });
 
       syncingBlockedBridge = true;
       try {
