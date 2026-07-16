@@ -818,13 +818,6 @@ body {
   display: grid;
   grid-template-columns: 132px minmax(0, 1fr);
   gap: 10px 12px;
-  align-items: center;
-}
-
-/* Tall multi-line values: keep labels on the first line, not mid-block. */
-.info-row--title,
-.info-row--desc,
-.info-row--objectif {
   align-items: start;
 }
 
@@ -838,6 +831,8 @@ body {
   align-items: center;
   gap: 6px;
   margin: 0;
+  /* Optical middle vs ~28px chips (true center read high; 2px read low). */
+  padding-top: 5px;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;

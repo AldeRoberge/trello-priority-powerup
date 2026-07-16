@@ -4345,6 +4345,10 @@
 
         sliderWrap.appendChild(itemSlider);
         sliderRow.appendChild(checkWrap);
+        var checklistUi = renderChecklistSection(item);
+        if (checklistUi.addBtn) {
+          sliderRow.appendChild(checklistUi.addBtn);
+        }
         sliderRow.appendChild(sliderWrap);
         sliderRow.appendChild(itemValEl);
         li.appendChild(sliderRow);
@@ -4365,7 +4369,7 @@
           if (motif) li.appendChild(motif.el);
         }
 
-        li.appendChild(renderChecklistSection(item));
+        li.appendChild(checklistUi.section);
       } else {
         var linkMeta = document.createElement('div');
         linkMeta.className = 'tp-completion-link-meta';
@@ -4482,9 +4486,8 @@
       });
 
       addRow.appendChild(addInput);
-      addRow.appendChild(addBtn);
       section.appendChild(addRow);
-      return section;
+      return { section: section, addBtn: addBtn };
     }
 
     function renderChecklistItem(parentItem, nested) {

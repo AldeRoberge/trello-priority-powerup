@@ -2663,6 +2663,10 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble[data-tone='acti
   border-top: 1px solid color-mix(in srgb, var(--tp-border) 70%, transparent);
 }
 
+.tp-completion-checklist:not(:has(.tp-completion-checklist-item)):not(:has(.tp-completion-checklist-add.is-open)) {
+  display: none;
+}
+
 .tp-completion-checklist-list {
   list-style: none;
   display: flex;
@@ -2721,14 +2725,14 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble[data-tone='acti
   gap: 6px;
 }
 
+.tp-completion-checklist-add:not(.is-open) {
+  display: none;
+}
+
 .tp-completion-checklist-add-input {
   flex: 1 1 auto;
   min-width: 0;
   font-size: 12px;
-}
-
-.tp-completion-checklist-add:not(.is-open) .tp-completion-checklist-add-input {
-  display: none;
 }
 
 .tp-completion-checklist-add-btn {
@@ -2746,7 +2750,8 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble[data-tone='acti
   cursor: pointer;
 }
 
-.tp-completion-checklist-add-btn:hover {
+.tp-completion-checklist-add-btn:hover,
+.tp-completion-checklist-add-btn[aria-expanded='true'] {
   color: var(--tp-text);
   background: color-mix(in srgb, #000 8%, transparent);
 }
@@ -3073,10 +3078,10 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
   gap: 8px 10px;
 }
 
-/* check | slider | % */
+/* check | + | slider | % */
 .tp-completion-item-slider-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 2.75rem;
+  grid-template-columns: 28px 28px minmax(0, 1fr) 2.75rem;
   align-items: center;
   gap: 8px 10px;
 }
@@ -4049,7 +4054,7 @@ html[data-color-mode='dark'] .tp-completion-suggestion.is-link:hover {
   }
 
   .tp-completion-item-slider-row {
-    grid-template-columns: 28px minmax(0, 1fr) 2.5rem;
+    grid-template-columns: 28px 28px minmax(0, 1fr) 2.5rem;
     gap: 6px 8px;
   }
 

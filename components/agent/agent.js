@@ -2995,8 +2995,10 @@
       '- Les sous-t\u00e2ches existantes sont dans context.progress.items (id + text). Quand l\'utilisateur cite un libell\u00e9 d\'item (\u00ab\u00a0Valider le devis\u00a0\u00bb, etc.), c\'est une sous-t\u00e2che\u00a0: retrouve-la dans items.',
       '- Pour toute op\u00e9ration sur une sous-t\u00e2che existante\u00a0: passer id OU matchText (libell\u00e9 actuel).',
       '- Ajout\u00a0: sans nom \u2192 demander le nom + OBLIGATOIREMENT \u22652 suggestions de titres concrets tir\u00e9s du titre / description / m\u00e9moire / reste \u00e0 faire (actions=[]). Avec un nom \u2192 add_subtask tout de suite.',
-      '- Titre compos\u00e9 (critique)\u00a0: si le nom d\u00e9crit PLUSIEURS travaux ind\u00e9pendants (slash portrait/landscape, also/aussi, ;, plusieurs phrases)\u00a0: \u00e9mets UN add_subtask par travail, titres polis/corrig\u00e9s. Ne fusionne pas. Ex. \u00ab\u00a0test portrait/landscape OpenGate + exporter la vid\u00e9o + \u00e9valuer top-down shooter\u00a0\u00bb \u2192 4 add_subtask.',
-      '- Une seule action avec qualificatifs (4K, ProRes, outil)\u00a0: UN seul add_subtask.',
+      '- Titre compos\u00e9 (critique)\u00a0: si le nom d\u00e9crit PLUSIEURS travaux ind\u00e9pendants (also/aussi, ;, plusieurs phrases)\u00a0: \u00e9mets UN add_subtask par travail, titres courts et polis. Ne fusionne pas des travaux distincts.',
+      '- Slash portrait/landscape, A/B, etc. dans UNE m\u00eame phrase = UNE seule action (variantes / formats), PAS un add_subtask par variante.',
+      '- Une seule action avec qualificatifs (4K, ProRes, outil, portrait/landscape)\u00a0: UN seul add_subtask.',
+      '- Ex. \u00ab\u00a0test portrait/landscape OpenGate + exporter la vid\u00e9o + \u00e9valuer top-down shooter\u00a0\u00bb \u2192 3 add_subtask (pas 4\u00a0: ne s\u00e9pare pas portrait et landscape).',
       '- INTERDIT de demander le nom d\'une sous-t\u00e2che avec suggestions=[] ou des chips hors sujet (\u00ab\u00a0V\u00e9rifier le stock\u00a0\u00bb sur une carte c\u00e2bles).',
       '- Renommer / changer / supprimer / cocher SANS nom\u00a0:',
       '  \u00b7 Si progress.items est NON VIDE\u00a0: demande laquelle, et mets EXACTEMENT les textes de progress.items dans suggestions (suggestionsMulti:false). Ne propose PAS des titres invent\u00e9s \u00e0 la place des vraies sous-t\u00e2ches.',
@@ -3598,7 +3600,8 @@
 
   /**
    * Ask the model whether a typed title is several independent tasks, and
-   * return polished titles when it should be split (slash alternatives, "also", etc.).
+   * return polished titles when it should be split ("also", clauses, etc.).
+   * Slash variants (portrait/landscape) in one phrase stay a single task.
    * @param {*} provider
    * @param {string} title
    * @param {{ force?: boolean }} [options]
@@ -3619,29 +3622,33 @@
         role: 'system',
         content: [
           'Tu analyses un titre de t\u00e2che / sous-t\u00e2che saisi par l\u2019utilisateur.',
-          'D\u00e9cide s\u2019il d\u00e9crit PLUSIEURS travaux ind\u00e9pendants, puis d\u00e9coupe et reformule chaque titre.',
+          'D\u00e9cide s\u2019il d\u00e9crit PLUSIEURS travaux ind\u00e9pendants, puis d\u00e9coupe en titres courts.',
           'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"shouldSplit":true|false,"tasks":["\u2026","\u2026"]}',
           '',
+          'Principe\u00a0: le MINIMUM de t\u00e2ches. Ne d\u00e9coupe que sur de vrais travaux s\u00e9par\u00e9ment compl\u00e9tables.',
+          '',
           'D\u00e9coupe (shouldSplit=true) quand\u00a0:',
-          '- Alternatives slash (portrait/landscape, A/B) = une t\u00e2che par variante.',
-          '- Plusieurs actions reli\u00e9es par also / aussi / ; / et aussi / puis / en plus.',
-          '- Plusieurs phrases ou clauses = travaux s\u00e9par\u00e9ment compl\u00e9tables.',
+          '- Plusieurs actions reli\u00e9es par also / aussi / ; / et aussi / puis / en plus / as well.',
+          '- Plusieurs phrases ou clauses = travaux distincts (chacun compl\u00e9table seul).',
           '',
           'Ne d\u00e9coupe PAS (shouldSplit=false, tasks=[titre unique poli si besoin]) quand\u00a0:',
-          '- Une seule action avec des qualificatifs (format, r\u00e9solution, outil, lieu).',
+          '- Slash portrait/landscape, A/B, ou/ou\u00a0: variantes ou formats d\u2019UNE m\u00eame action',
+          '  (\u00ab\u00a0test vid\u00e9o portrait/landscape\u00a0\u00bb = UNE t\u00e2che, pas deux).',
+          '- Une seule action avec qualificatifs (format, r\u00e9solution, outil, lieu, mode).',
           '- Une liste d\u2019objets pour LA M\u00caME action (\u00ab\u00a0Acheter lait, pain et beurre\u00a0\u00bb).',
           '- Tu n\u2019es pas s\u00fbr\u00a0: shouldSplit=false.',
           '',
           'Chaque entr\u00e9e de tasks\u00a0:',
           '- Une action concr\u00e8te, courte, autonome (1 ligne).',
-          '- Corrige fautes \u00e9videntes / typos (\u00ab\u00a0Apple Pro Res\u00a0\u00bb \u2192 \u00ab\u00a0Apple ProRes\u00a0\u00bb,',
-          '  \u00ab\u00a0opengate\u00a0\u00bb \u2192 \u00ab\u00a0OpenGate\u00a0\u00bb, sens approximatif si clair).',
+          '- Reste concis\u00a0: corrige typos / noms propres (\u00ab\u00a0opengate\u00a0\u00bb \u2192 \u00ab\u00a0OpenGate\u00a0\u00bb,',
+          '  \u00ab\u00a0Apple Pro Res\u00a0\u00bb \u2192 \u00ab\u00a0Apple ProRes\u00a0\u00bb) sans r\u00e9\u00e9crire ni rallonger.',
           '- Garde la langue du texte d\u2019origine (FR ou EN).',
-          '- INTERDIT\u00a0: inventer du travail absent du texte\u00a0; num\u00e9rotation\u00a0; guillemets superflus.',
+          '- INTERDIT\u00a0: inventer du travail absent du texte\u00a0; dupliquer la m\u00eame action',
+          '  sous plusieurs formulations\u00a0; num\u00e9rotation\u00a0; guillemets superflus.',
           '',
           'Exemple\u00a0:',
           'Entr\u00e9e\u00a0: \u00ab\u00a0Do single portrait/landscape video test with opengate, 4K, Apple Pro Res HQ. Also, we should export the video I\'ve been working on as a test to see the changes; also, we should see what benefits it a pour shooter in portrait mode.\u00a0\u00bb',
-          'Sortie\u00a0: {"shouldSplit":true,"tasks":["Do a single portrait video test with OpenGate, 4K, Apple ProRes HQ.","Do a single landscape video test with OpenGate, 4K, Apple ProRes HQ.","Export the current video as a test to review the changes.","Evaluate the benefits of a top-down shooter in portrait mode."]}'
+          'Sortie\u00a0: {"shouldSplit":true,"tasks":["Do single portrait/landscape video test with OpenGate, 4K, Apple ProRes HQ","Export the video as a test to review the changes","Evaluate portrait-mode benefits for the shooter"]}'
         ].join('\n')
       },
       {

@@ -43,20 +43,19 @@ describe('Task title split', () => {
       {
         shouldSplit: true,
         tasks: [
-          'Do a single portrait video test with OpenGate, 4K, Apple ProRes HQ.',
-          'Do a single landscape video test with OpenGate, 4K, Apple ProRes HQ.',
-          'Export the current video as a test to review the changes.',
-          'Evaluate the benefits of a top-down shooter in portrait mode.',
+          'Do single portrait/landscape video test with OpenGate, 4K, Apple ProRes HQ',
+          'Export the video as a test to review the changes',
+          'Evaluate portrait-mode benefits for the shooter',
         ],
       },
       original
     );
     assert.equal(result.shouldSplit, true);
-    assert.equal(result.tasks.length, 4);
-    assert.match(result.tasks[0], /portrait/i);
-    assert.match(result.tasks[1], /landscape/i);
-    assert.match(result.tasks[2], /export/i);
-    assert.match(result.tasks[3], /shooter/i);
+    assert.equal(result.tasks.length, 3);
+    assert.match(result.tasks[0], /portrait\/landscape/i);
+    assert.doesNotMatch(result.tasks[0], /^Do a single portrait video test/i);
+    assert.match(result.tasks[1], /export/i);
+    assert.match(result.tasks[2], /shooter|portrait/i);
   });
 
   it('normalizeSplitTaskResult rejects single-task and empty payloads', () => {
