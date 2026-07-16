@@ -1020,29 +1020,107 @@
     return { ok: true };
   }
 
+  /**
+   * Master-complete fireworks motifs — 10 short F# major phrases.
+   * Soft sine/triangle, ~0.7–1.1s; picked at random via playMelodySet.
+   */
+  var FIREWORKS_MOTIFS = [
+    // I–III–V–I arpeggio flourish
+    [
+      { freq: FS.Fs4, delay: 0.06, dur: 0.18, peak: 0.032, type: 'triangle' },
+      { freq: FS.As4, delay: 0.2, dur: 0.18, peak: 0.034, type: 'triangle' },
+      { freq: FS.Cs5, delay: 0.34, dur: 0.2, peak: 0.036, type: 'sine' },
+      { freq: FS.Fs5, delay: 0.52, dur: 0.42, peak: 0.03, type: 'sine' },
+      { freq: FS.Cs5, delay: 0.54, dur: 0.38, peak: 0.018, type: 'triangle' }
+    ],
+    // Rising scale with resolving cadence
+    [
+      { freq: FS.Fs4, delay: 0.05, dur: 0.14, peak: 0.03, type: 'triangle' },
+      { freq: FS.Gs4, delay: 0.16, dur: 0.14, peak: 0.032, type: 'triangle' },
+      { freq: FS.As4, delay: 0.28, dur: 0.14, peak: 0.034, type: 'sine' },
+      { freq: FS.Cs5, delay: 0.4, dur: 0.16, peak: 0.036, type: 'sine' },
+      { freq: FS.Ds5, delay: 0.54, dur: 0.16, peak: 0.034, type: 'triangle' },
+      { freq: FS.Fs5, delay: 0.7, dur: 0.38, peak: 0.03, type: 'sine' }
+    ],
+    // I–V–I–III leap then settle
+    [
+      { freq: FS.Fs5, delay: 0.06, dur: 0.2, peak: 0.034, type: 'triangle' },
+      { freq: FS.Cs5, delay: 0.22, dur: 0.18, peak: 0.03, type: 'sine' },
+      { freq: FS.Fs5, delay: 0.38, dur: 0.16, peak: 0.032, type: 'triangle' },
+      { freq: FS.As5, delay: 0.52, dur: 0.2, peak: 0.034, type: 'sine' },
+      { freq: FS.Cs6, delay: 0.72, dur: 0.36, peak: 0.028, type: 'sine' }
+    ],
+    // Call–response: low then bright answer
+    [
+      { freq: FS.Cs4, delay: 0.05, dur: 0.22, peak: 0.032, type: 'triangle' },
+      { freq: FS.Fs4, delay: 0.18, dur: 0.2, peak: 0.03, type: 'sine' },
+      { freq: FS.As5, delay: 0.42, dur: 0.16, peak: 0.034, type: 'triangle' },
+      { freq: FS.Cs6, delay: 0.56, dur: 0.16, peak: 0.032, type: 'sine' },
+      { freq: FS.Fs6, delay: 0.72, dur: 0.34, peak: 0.026, type: 'sine' }
+    ],
+    // Descending cascade into tonic
+    [
+      { freq: FS.Cs6, delay: 0.05, dur: 0.16, peak: 0.034, type: 'triangle' },
+      { freq: FS.As5, delay: 0.18, dur: 0.16, peak: 0.032, type: 'triangle' },
+      { freq: FS.Fs5, delay: 0.32, dur: 0.16, peak: 0.03, type: 'sine' },
+      { freq: FS.Cs5, delay: 0.46, dur: 0.18, peak: 0.03, type: 'sine' },
+      { freq: FS.As4, delay: 0.62, dur: 0.18, peak: 0.028, type: 'triangle' },
+      { freq: FS.Fs4, delay: 0.8, dur: 0.32, peak: 0.03, type: 'sine' }
+    ],
+    // Soft triad stack with melody on top
+    [
+      { freq: FS.Fs4, delay: 0.06, dur: 0.7, peak: 0.02, type: 'sine' },
+      { freq: FS.As4, delay: 0.08, dur: 0.68, peak: 0.018, type: 'sine' },
+      { freq: FS.Cs5, delay: 0.1, dur: 0.66, peak: 0.016, type: 'triangle' },
+      { freq: FS.Fs5, delay: 0.28, dur: 0.18, peak: 0.034, type: 'triangle' },
+      { freq: FS.Gs5, delay: 0.44, dur: 0.16, peak: 0.032, type: 'sine' },
+      { freq: FS.As5, delay: 0.58, dur: 0.36, peak: 0.03, type: 'sine' }
+    ],
+    // Pentatonic skip (I–II–III–V–VI–I)
+    [
+      { freq: FS.Fs4, delay: 0.05, dur: 0.14, peak: 0.03, type: 'triangle' },
+      { freq: FS.Gs4, delay: 0.16, dur: 0.12, peak: 0.032, type: 'triangle' },
+      { freq: FS.As4, delay: 0.26, dur: 0.12, peak: 0.034, type: 'sine' },
+      { freq: FS.Cs5, delay: 0.38, dur: 0.14, peak: 0.036, type: 'sine' },
+      { freq: FS.Ds5, delay: 0.5, dur: 0.14, peak: 0.034, type: 'triangle' },
+      { freq: FS.Fs5, delay: 0.64, dur: 0.4, peak: 0.03, type: 'sine' }
+    ],
+    // Syncopated lift then hold
+    [
+      { freq: FS.As4, delay: 0.05, dur: 0.12, peak: 0.032, type: 'triangle' },
+      { freq: FS.Cs5, delay: 0.14, dur: 0.22, peak: 0.034, type: 'sine' },
+      { freq: FS.Fs5, delay: 0.4, dur: 0.14, peak: 0.036, type: 'triangle' },
+      { freq: FS.As5, delay: 0.52, dur: 0.14, peak: 0.034, type: 'sine' },
+      { freq: FS.Cs6, delay: 0.66, dur: 0.42, peak: 0.028, type: 'sine' },
+      { freq: FS.Fs5, delay: 0.68, dur: 0.38, peak: 0.016, type: 'triangle' }
+    ],
+    // Gentle turnaround (V–VI–V–I)
+    [
+      { freq: FS.Cs5, delay: 0.06, dur: 0.18, peak: 0.032, type: 'triangle' },
+      { freq: FS.Ds5, delay: 0.22, dur: 0.16, peak: 0.034, type: 'sine' },
+      { freq: FS.Cs5, delay: 0.38, dur: 0.16, peak: 0.03, type: 'triangle' },
+      { freq: FS.As4, delay: 0.52, dur: 0.16, peak: 0.03, type: 'sine' },
+      { freq: FS.Fs5, delay: 0.68, dur: 0.4, peak: 0.032, type: 'sine' },
+      { freq: FS.Cs5, delay: 0.7, dur: 0.36, peak: 0.016, type: 'triangle' }
+    ],
+    // Bright close: arpeggio up, octave resolve
+    [
+      { freq: FS.Fs5, delay: 0.05, dur: 0.14, peak: 0.032, type: 'triangle' },
+      { freq: FS.As5, delay: 0.16, dur: 0.14, peak: 0.034, type: 'triangle' },
+      { freq: FS.Cs6, delay: 0.28, dur: 0.16, peak: 0.036, type: 'sine' },
+      { freq: FS.Fs6, delay: 0.44, dur: 0.2, peak: 0.03, type: 'sine' },
+      { freq: FS.Cs6, delay: 0.62, dur: 0.16, peak: 0.028, type: 'triangle' },
+      { freq: FS.Fs5, delay: 0.76, dur: 0.36, peak: 0.03, type: 'sine' }
+    ]
+  ];
+
   function playEffectSound(id) {
     switch (id) {
       case 'fireworks':
         playNoiseBurst({ delay: 0.05, dur: 0.16, freq: 2200, peak: 0.05 });
         playNoiseBurst({ delay: 0.28, dur: 0.2, freq: 1400, peak: 0.045 });
         playNoiseBurst({ delay: 0.55, dur: 0.22, freq: 900, peak: 0.04 });
-        playMelodySet([
-          [
-            { freq: FS.Fs5, delay: 0.08, dur: 0.35, peak: 0.035, type: 'triangle' },
-            { freq: FS.As5, delay: 0.32, dur: 0.4, peak: 0.032, type: 'triangle' },
-            { freq: FS.Cs6, delay: 0.6, dur: 0.45, peak: 0.028, type: 'sine' }
-          ],
-          [
-            { freq: FS.Ds5, delay: 0.05, dur: 0.3, peak: 0.03, type: 'triangle' },
-            { freq: FS.Fs5, delay: 0.25, dur: 0.35, peak: 0.034 },
-            { freq: FS.Cs6, delay: 0.5, dur: 0.4, peak: 0.028, type: 'sine' }
-          ],
-          [
-            { freq: FS.Cs5, delay: 0.1, dur: 0.25, peak: 0.032 },
-            { freq: FS.Fs5, delay: 0.3, dur: 0.3, peak: 0.03, type: 'triangle' },
-            { freq: FS.As5, delay: 0.55, dur: 0.42, peak: 0.03 }
-          ]
-        ]);
+        playMelodySet(FIREWORKS_MOTIFS, { lowpass: 4800 });
         break;
       case 'confetti':
         playMelodySet(
