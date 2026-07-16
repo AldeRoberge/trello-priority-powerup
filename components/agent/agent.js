@@ -831,7 +831,12 @@
       headers['HTTP-Referer'] =
         (typeof location !== 'undefined' && location.origin) ||
         'https://trello.com';
-      headers['X-Title'] = 'Cerveau';
+      headers['X-Title'] =
+        (global.PriorityBrand &&
+          typeof global.PriorityBrand.getAppName === 'function' &&
+          global.PriorityBrand.getAppName()) ||
+        (global.PriorityRestConfig && global.PriorityRestConfig.appName) ||
+        'Cerveau';
     }
     return headers;
   }

@@ -146,10 +146,10 @@
    * gray = idle / backlog · blue = in progress · red = blocked · green = done
    */
   var DEFAULT_STATE_COLORS = {
-    gray: '#626F86',
-    blue: '#0C66E4',
-    red: '#E34935',
-    green: '#22A06B'
+    gray: '#626f86',
+    blue: '#0c66e4',
+    red: '#e34935',
+    green: '#22a06b'
   };
 
   var STATE_COLOR_KEYS = ['gray', 'blue', 'red', 'green'];
@@ -169,7 +169,8 @@
 
   function normalizeHexColor(value, fallback) {
     var raw = typeof value === 'string' ? value.trim() : '';
-    if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw.toUpperCase();
+    // Lowercase: <input type="color"> requires a valid simple color (#rrggbb).
+    if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw.toLowerCase();
     if (/^#[0-9a-fA-F]{3}$/.test(raw)) {
       return (
         '#' +
@@ -179,9 +180,11 @@
         raw.charAt(2) +
         raw.charAt(3) +
         raw.charAt(3)
-      ).toUpperCase();
+      ).toLowerCase();
     }
-    return fallback || '#626F86';
+    var fb = typeof fallback === 'string' ? fallback.trim() : '';
+    if (/^#[0-9a-fA-F]{6}$/.test(fb)) return fb.toLowerCase();
+    return '#626f86';
   }
 
   function normalizeStateColors(raw) {

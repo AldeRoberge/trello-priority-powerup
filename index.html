@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cerveau</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./components/shared/brand.js"></script>
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/version.js"></script>
   <script src="./components/priority/priority-matrix.js"></script>
@@ -25,12 +26,14 @@
   <script src="./components/agent/agent-memory.js"></script>
   <script src="./components/profile/user-profile.js"></script>
   <link rel="stylesheet" href="./components/shared/trello-theme.css" />
+  <link rel="icon" type="image/png" href="./assets/icon.png" />
 </head>
 <body>
   <div id="landing" class="tp-landing" hidden>
     <div class="tp-landing-card">
-      <h1 class="tp-title">Cerveau</h1>
-      <p class="tp-subtitle">Power-Up Trello</p>
+      <img id="brandLogo" class="tp-landing-logo" src="./assets/icon.png" alt="Cerveau" width="72" height="72" />
+      <h1 class="tp-title" id="brandTitle">Cerveau</h1>
+      <p class="tp-subtitle" id="brandTagline">Power-Up Trello</p>
       <p class="tp-version-label">Version déployée</p>
 
       <p class="tp-version-relative" id="versionRelative">Chargement…</p>
@@ -40,6 +43,10 @@
 
 <script>
   const IN_TRELLO = window.self !== window.top;
+
+  if (window.PriorityBrand && typeof PriorityBrand.applyLanding === 'function') {
+    PriorityBrand.applyLanding(document);
+  }
 
   if (IN_TRELLO) {
     initPowerUp();
@@ -125,11 +132,17 @@
       var args = { cardName: cardName, openSection: openSection };
       var focusProgress = openSection === 'progress';
       var focusObjectif = openSection === 'objectif';
+      var appName =
+        (window.PriorityBrand && typeof PriorityBrand.getAppName === 'function'
+          ? PriorityBrand.getAppName()
+          : null) ||
+        (window.PriorityRestConfig && PriorityRestConfig.appName) ||
+        'Cerveau';
       var title = focusProgress
         ? 'Définir le progrès'
         : focusObjectif
           ? 'Objectif'
-          : 'Définir la priorité';
+          : appName;
       return t.modal({
         title: title,
         url: PriorityTrello.pageUrl('./popup.html'),
@@ -241,7 +254,10 @@
           .then(function () {
             return new Promise(function (resolve) {
               t.modal({
-                title: 'Cerveau',
+                title:
+                  (window.PriorityBrand && typeof PriorityBrand.getAppName === 'function'
+                    ? PriorityBrand.getAppName()
+                    : null) || 'Cerveau',
                 url: PriorityTrello.pageUrl('./welcome.html'),
                 height: 520,
                 fullscreen: false,
@@ -269,9 +285,13 @@
 
       // Settings popup loads board context itself — do not gate the menu item on preload.
       'board-buttons': function(t) {
+        var brandIcon =
+          (window.PriorityBrand && PriorityBrand.iconSvg
+            ? PriorityTrello.pageUrl(PriorityBrand.iconSvg)
+            : null) || PriorityTrello.pageUrl('./assets/icon.svg');
         return [
           {
-            icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/settings.svg',
+            icon: brandIcon,
             text: 'Paramètres de priorité',
             callback: function(t) {
               // Popup width is fixed (narrow) by Trello; modal fits statut mapping + color schemes.

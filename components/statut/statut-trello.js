@@ -418,10 +418,10 @@
         : Object.assign(
             {},
             (SM && SM.DEFAULT_STATE_COLORS) || {
-              gray: '#626F86',
-              blue: '#0C66E4',
-              red: '#E34935',
-              green: '#22A06B'
+              gray: '#626f86',
+              blue: '#0c66e4',
+              red: '#e34935',
+              green: '#22a06b'
             }
           );
 
@@ -734,6 +734,9 @@
       if (CT && typeof CT.getCardCompletion === 'function' && typeof CT.markFullyComplete === 'function') {
         try {
           var stored = await CT.getCardCompletion(t);
+          if (typeof CT.capturePreviousCompletionBeforeComplete === 'function') {
+            await CT.capturePreviousCompletionBeforeComplete(t, stored);
+          }
           var completeData = CT.markFullyComplete(stored);
           await CT.saveCardCompletion(t, completeData);
           side.progressComplete = true;
@@ -775,6 +778,29 @@
             current &&
             typeof CTu.isAllSubtasksComplete === 'function' &&
             CTu.isAllSubtasksComplete(current);
+
+          // En cours: pull the slider off 100% (previous Progrès, or 99%).
+          if (
+            stillComplete &&
+            category === 'started' &&
+            typeof CTu.restoreProgressLeavingComplete === 'function' &&
+            typeof CTu.saveCardCompletion === 'function'
+          ) {
+            var previous =
+              typeof CTu.getPreviousCompletionBeforeComplete === 'function'
+                ? await CTu.getPreviousCompletionBeforeComplete(t)
+                : null;
+            var restored = CTu.restoreProgressLeavingComplete(current, previous);
+            await CTu.saveCardCompletion(t, restored);
+            if (typeof CTu.clearPreviousCompletionBeforeComplete === 'function') {
+              await CTu.clearPreviousCompletionBeforeComplete(t);
+            }
+            side.progressIncomplete = true;
+            side.completion = restored;
+            stillComplete = false;
+            current = restored;
+          }
+
           // Keep Done from bouncing back on reopen while progress is still 100%.
           if (typeof CTu.setDueCompleteSuppressed === 'function') {
             await CTu.setDueCompleteSuppressed(t, !!stillComplete);

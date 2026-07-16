@@ -6,6 +6,7 @@
   <title>Paramètres de priorité</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <script src="./components/shared/brand.js"></script>
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/version.js"></script>
   <script src="./components/priority/priority-matrix.js"></script>
@@ -751,7 +752,7 @@
           ? StatutMatch.normalizeStateColors(
               statutState.settings && statutState.settings.stateColors
             )
-          : { gray: '#626F86', blue: '#0C66E4', red: '#E34935', green: '#22A06B' };
+          : { gray: '#626f86', blue: '#0c66e4', red: '#e34935', green: '#22a06b' };
       ['gray', 'blue', 'red', 'green'].forEach(function (key) {
         var input = document.getElementById(
           'statutColor' + key.charAt(0).toUpperCase() + key.slice(1)
@@ -761,7 +762,12 @@
         );
         var hex = colors[key];
         if (input) input.value = hex;
-        if (preview) preview.style.background = hex;
+        if (preview) {
+          preview.style.background = hex;
+          if (preview.parentElement) {
+            preview.parentElement.style.background = hex;
+          }
+        }
       });
     }
 
@@ -868,7 +874,12 @@
             var preview = document.getElementById(
               'statutColorPreview' + key.charAt(0).toUpperCase() + key.slice(1)
             );
-            if (preview) preview.style.background = hex;
+            if (preview) {
+              preview.style.background = hex;
+              if (preview.parentElement) {
+                preview.parentElement.style.background = hex;
+              }
+            }
             persistStatutStateColor(key, hex);
           });
         });
@@ -919,8 +930,12 @@
     });
 
     document.getElementById('showGuide').addEventListener('click', () => {
+      var guideTitle =
+        (window.PriorityBrand && typeof PriorityBrand.getAppName === 'function'
+          ? PriorityBrand.getAppName()
+          : null) || 'Cerveau';
       t.modal({
-        title: 'Cerveau',
+        title: guideTitle,
         url: PriorityTrello.pageUrl('./welcome.html'),
         height: 420,
         fullscreen: false,

@@ -83,4 +83,39 @@ describe('Completion progress', () => {
     CUI.applyCompletionColorScheme('traffic');
     assert.equal(CUI.getActiveCompletionSchemeKey(), 'traffic');
   });
+
+  it('restoreProgressLeavingComplete restores prior incomplete progress', () => {
+    assert.equal(typeof CT.restoreProgressLeavingComplete, 'function');
+    const previous = CT.normalizeCompletionData({
+      items: [
+        { id: 'a', text: 'A', progress: 40 },
+        { id: 'b', text: 'B', progress: 80 },
+      ],
+    });
+    const done = CT.markFullyComplete(previous);
+    const restored = CT.restoreProgressLeavingComplete(done, previous);
+    assert.equal(restored.items[0].progress, 40);
+    assert.equal(restored.items[1].progress, 80);
+    assert.equal(CT.isAllSubtasksComplete(restored), false);
+  });
+
+  it('restoreProgressLeavingComplete falls back to 99% when prior was complete', () => {
+    const done = CT.markFullyComplete({ items: [], progress: 100 });
+    const restored = CT.restoreProgressLeavingComplete(done, done);
+    assert.equal(restored.progress, CT.PROGRESS_NEAR_COMPLETE);
+    assert.equal(CT.isAllSubtasksComplete(restored), false);
+
+    const noPrevious = CT.restoreProgressLeavingComplete(
+      { items: [{ id: 'a', text: 'A', progress: 100 }] },
+      null
+    );
+    assert.equal(noPrevious.items[0].progress, 99);
+    assert.equal(CT.isAllSubtasksComplete(noPrevious), false);
+  });
+
+  it('restoreProgressLeavingComplete is a no-op when already incomplete', () => {
+    const mid = CT.normalizeCompletionData({ items: [], progress: 55 });
+    const out = CT.restoreProgressLeavingComplete(mid, null);
+    assert.equal(out.progress, 55);
+  });
 });

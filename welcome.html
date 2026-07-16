@@ -5,19 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Bienvenue</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./components/shared/brand.js"></script>
   <script src="./components/priority/priority-trello.js"></script>
   <link rel="stylesheet" href="./components/shared/trello-theme.css" />
+  <link rel="icon" type="image/png" href="./assets/icon.png" />
 </head>
 <body class="tp-page tp-page--roomy">
-  <h1 class="tp-title">Cerveau</h1>
-  <p class="tp-subtitle">Évaluez chaque carte selon l'urgence, l'impact et la facilité pour obtenir un score et un libellé de palier.</p>
+  <div class="tp-welcome-brand">
+    <img id="brandLogo" class="tp-welcome-logo" src="./assets/icon.png" alt="" width="48" height="48" />
+    <h1 class="tp-title" id="brandTitle">Cerveau</h1>
+  </div>
+  <p class="tp-subtitle" id="brandSubtitle">Évaluez chaque carte selon l'urgence, l'impact et la facilité pour obtenir un score et un libellé de palier.</p>
 
   <div class="tp-steps">
     <div class="tp-step">
       <div class="tp-step-num">1</div>
       <div class="tp-step-body">
-        <strong>Définir la priorité</strong>
-        <p>Ouvrez une carte et cliquez sur <strong>Définir la priorité</strong>. Ajustez les trois curseurs ou touchez un palier sur la barre de chaleur.</p>
+        <strong id="welcomeStep1Title">Cerveau</strong>
+        <p id="welcomeStep1Body">Ouvrez une carte et cliquez sur <strong>Cerveau</strong>. Ajustez les trois curseurs ou touchez un palier sur la barre de chaleur.</p>
       </div>
     </div>
     <div class="tp-step">
@@ -46,6 +51,35 @@
   <button class="tp-btn tp-btn--primary" type="button" id="startBtn" style="width:100%">Commencer</button>
 
   <script>
+    (function () {
+      var brand = window.PriorityBrand;
+      var name =
+        brand && typeof brand.getAppName === 'function' ? brand.getAppName() : 'Cerveau';
+      if (brand && typeof brand.applyDocumentTitle === 'function') {
+        brand.applyDocumentTitle(document);
+      } else {
+        document.title = name;
+      }
+      var titleEl = document.getElementById('brandTitle');
+      if (titleEl) titleEl.textContent = name;
+      var logoEl = document.getElementById('brandLogo');
+      if (logoEl) {
+        logoEl.alt = name;
+        if (brand && brand.iconPng) logoEl.src = brand.iconPng;
+      }
+      var subtitleEl = document.getElementById('brandSubtitle');
+      if (subtitleEl && brand && brand.subtitle) subtitleEl.textContent = brand.subtitle;
+      var stepTitle = document.getElementById('welcomeStep1Title');
+      if (stepTitle) stepTitle.textContent = name;
+      var stepBody = document.getElementById('welcomeStep1Body');
+      if (stepBody) {
+        stepBody.innerHTML =
+          'Ouvrez une carte et cliquez sur <strong>' +
+          name.replace(/</g, '&lt;') +
+          '</strong>. Ajustez les trois curseurs ou touchez un palier sur la barre de chaleur.';
+      }
+    })();
+
     PriorityTrello.initIframePage(function (t) {
     document.getElementById('startBtn').addEventListener('click', () => t.closeModal());
     if (typeof t.sizeTo === 'function') {

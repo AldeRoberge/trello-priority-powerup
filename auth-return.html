@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Autorisation Cerveau</title>
+  <title>Autorisation</title>
+  <script src="./components/shared/brand.js"></script>
+  <link rel="icon" type="image/png" href="./assets/icon.png" />
   <style>
     body {
       font-family: system-ui, sans-serif;
@@ -16,6 +18,11 @@
   <p id="msg">Autorisation en cours…</p>
   <script>
     (function () {
+      var brand = window.PriorityBrand;
+      var appName =
+        brand && typeof brand.getAppName === 'function' ? brand.getAppName() : 'Cerveau';
+      document.title = 'Autorisation ' + appName;
+
       var msg = document.getElementById('msg');
       var hash = window.location.hash || '';
       var search = window.location.search || '';
@@ -36,7 +43,9 @@
           }
         } else if (msg) {
           msg.textContent =
-            'Impossible de renvoyer le jeton à Priorité. Fermez cette fenêtre et réessayez.';
+            'Impossible de renvoyer le jeton à ' +
+            appName +
+            '. Fermez cette fenêtre et réessayez.';
         }
       } catch (err) {
         console.error('Auth return failed', err);

@@ -201,6 +201,8 @@ html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
 }
 
 .tp-color-swatch {
+  display: block;
+  flex-shrink: 0;
   width: 44px;
   height: 32px;
   border: 2px solid var(--tp-border);
@@ -208,6 +210,7 @@ html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
   cursor: pointer;
   overflow: hidden;
   position: relative;
+  background: var(--tp-surface-subtle, #f1f2f4);
 }
 
 .tp-color-swatch:hover { border-color: var(--tp-border-strong); }
@@ -223,7 +226,9 @@ html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
   opacity: 0;
 }
 
+/* Must be block — inline spans ignore width/height, so swatches looked empty. */
 .tp-color-preview {
+  display: block;
   width: 100%;
   height: 100%;
 }
@@ -1116,6 +1121,32 @@ html[data-color-mode="dark"] .tp-color-scheme-option.is-active {
   padding: 24px;
   text-align: center;
   box-shadow: var(--tp-shadow);
+}
+
+.tp-landing-logo {
+  display: block;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 16px;
+  border-radius: 16px;
+}
+
+.tp-welcome-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.tp-welcome-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.tp-welcome-brand .tp-title {
+  margin-bottom: 0;
 }
 
 .tp-version-label {

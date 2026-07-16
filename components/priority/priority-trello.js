@@ -578,9 +578,22 @@
     };
   }
 
-  function definePriorityLabel() {
+  function brandAppName() {
+    var brand = global.PriorityBrand;
+    if (brand && typeof brand.getAppName === 'function') return brand.getAppName();
+    if (brand && typeof brand.appName === 'string' && brand.appName.trim()) {
+      return brand.appName.trim();
+    }
+    var cfg = global.PriorityRestConfig;
+    if (cfg && typeof cfg.appName === 'string' && cfg.appName.trim()) {
+      return cfg.appName.trim();
+    }
     var PU = priorityUI();
-    return (PU && PU.DEFINE_PRIORITY_LABEL) || 'D\u00e9finir la priorit\u00e9';
+    return (PU && PU.DEFINE_PRIORITY_LABEL) || 'Cerveau';
+  }
+
+  function definePriorityLabel() {
+    return brandAppName();
   }
 
   function parseCardNameValue(value) {
@@ -2114,9 +2127,12 @@
     if (!cfg || !cfg.appKey) return null;
     var opts = {
       appKey: cfg.appKey,
-      appName: cfg.appName || 'Cerveau',
+      appName: brandAppName(),
     };
     if (cfg.appAuthor) opts.appAuthor = cfg.appAuthor;
+    else if (global.PriorityBrand && global.PriorityBrand.appAuthor) {
+      opts.appAuthor = global.PriorityBrand.appAuthor;
+    }
     return opts;
   }
 
@@ -2836,7 +2852,7 @@
     var params = {
       expiration: 'never',
       scope: 'read,write',
-      name: cfg.appName || 'Cerveau',
+      name: brandAppName(),
       key: cfg.appKey,
       // fragment + return_url: popup lands on auth-return.html with #token=…
       callback_method: 'fragment',

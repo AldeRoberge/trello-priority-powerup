@@ -375,6 +375,24 @@ check(
 );
 
 check(
+  'restoreProgressLeavingComplete export',
+  typeof CT.restoreProgressLeavingComplete === 'function'
+);
+var restoredPrior = CT.restoreProgressLeavingComplete(
+  { items: [], progress: 100 },
+  { items: [], progress: 42 }
+);
+check('restoreProgressLeavingComplete prior', restoredPrior.progress === 42);
+var restoredNear = CT.restoreProgressLeavingComplete(
+  { items: [], progress: 100 },
+  null
+);
+check(
+  'restoreProgressLeavingComplete near',
+  restoredNear.progress === CT.PROGRESS_NEAR_COMPLETE
+);
+
+check(
   'face badge hidden at 0%',
   CT.buildCardFaceBadge({ hasItems: true, percent: 0 }) === null
 );

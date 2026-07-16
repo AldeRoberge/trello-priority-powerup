@@ -3352,7 +3352,22 @@
   };
 
   var COMPLETED_BADGE_PREFIX = 'Compl\u00e9t\u00e9';
-  var DEFINE_PRIORITY_LABEL = 'D\u00e9finir la priorit\u00e9';
+
+  function brandAppName() {
+    var brand = global.PriorityBrand;
+    if (brand && typeof brand.getAppName === 'function') return brand.getAppName();
+    if (brand && typeof brand.appName === 'string' && brand.appName.trim()) {
+      return brand.appName.trim();
+    }
+    var cfg = global.PriorityRestConfig;
+    if (cfg && typeof cfg.appName === 'string' && cfg.appName.trim()) {
+      return cfg.appName.trim();
+    }
+    return 'Cerveau';
+  }
+
+  /** Card-back CTA / modal title — product name from PriorityBrand.appName. */
+  var DEFINE_PRIORITY_LABEL = brandAppName();
 
   function taskBadgeLabelForTierKey(tier) {
     if (!tier) return '';

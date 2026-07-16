@@ -104,4 +104,75 @@ describe('StatutMatch / StatutTrello', () => {
     assert.equal(SM.categoryStyle('blocked').icon, 'ban');
     assert.equal(SM.categoryStyle('started').icon, 'play');
   });
+
+  it('normalizeStateColors returns lowercase hex for color inputs', () => {
+    const colors = SM.normalizeStateColors({ blue: '#0C66E4' });
+    assert.equal(colors.blue, '#0c66e4');
+    assert.equal(colors.gray, '#626f86');
+    assert.equal(SM.normalizeHexColor('#ABC', '#000000'), '#aabbcc');
+  });
+
+  it('En cours restores prior progress or 99% from Terminé', async () => {
+    loadComponent('priority/priority-trello.js');
+    loadComponent('completion/completion-trello.js');
+    const CT = global.CompletionTrello;
+    assert.ok(CT);
+
+    const store = Object.create(null);
+    const t = {
+      get(_scope, _visibility, key) {
+        return Promise.resolve(store[key]);
+      },
+      set(_scope, _visibility, key, value) {
+        store[key] = value;
+        return Promise.resolve();
+      },
+    };
+
+    // Stub dueComplete so side effects do not need REST.
+    const PT = global.PriorityTrello;
+    const prevSetDue = PT && PT.setCardDueComplete;
+    const prevClearBlocked = PT && PT.clearBlockedIfComplete;
+    if (PT) {
+      PT.setCardDueComplete = async () => ({ ok: true, synced: false });
+      PT.clearBlockedIfComplete = async () => ({ ok: true, cleared: false });
+    }
+
+    const settings = {
+      listCategories: { done: 'completed', wip: 'started' },
+      roleLists: { completed: 'done' },
+      autoMoveCompleted: false,
+      autoMoveBlocked: false,
+    };
+
+    store[CT.CARD_COMPLETION_KEY] = CT.normalizeCompletionData({
+      items: [],
+      progress: 60,
+    });
+    await ST.applyStatutSideEffects(t, 'done', settings);
+    assert.equal(store[CT.CARD_COMPLETION_KEY].progress, 100);
+    assert.ok(store[CT.COMPLETION_PREVIOUS_BEFORE_COMPLETE_KEY]);
+    assert.equal(store[CT.COMPLETION_PREVIOUS_BEFORE_COMPLETE_KEY].progress, 60);
+
+    const side = await ST.applyStatutSideEffects(t, 'wip', settings);
+    assert.equal(side.category, 'started');
+    assert.equal(side.progressIncomplete, true);
+    assert.equal(store[CT.CARD_COMPLETION_KEY].progress, 60);
+    assert.equal(store[CT.COMPLETION_PREVIOUS_BEFORE_COMPLETE_KEY], null);
+
+    // Already at 100% when entering Terminé → En cours uses 99%.
+    store[CT.CARD_COMPLETION_KEY] = CT.normalizeCompletionData({
+      items: [],
+      progress: 100,
+    });
+    await ST.applyStatutSideEffects(t, 'done', settings);
+    const near = await ST.applyStatutSideEffects(t, 'wip', settings);
+    assert.equal(near.progressIncomplete, true);
+    assert.equal(store[CT.CARD_COMPLETION_KEY].progress, 99);
+
+    if (PT) {
+      if (prevSetDue) PT.setCardDueComplete = prevSetDue;
+      if (prevClearBlocked) PT.clearBlockedIfComplete = prevClearBlocked;
+    }
+  });
 });

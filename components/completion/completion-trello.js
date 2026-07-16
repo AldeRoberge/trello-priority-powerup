@@ -13,6 +13,8 @@
   // When Statut leaves Terminé while progress is still 100%, keep Done off until
   // the user edits progress (or returns to Terminé).
   var COMPLETION_SUPPRESS_DUE_COMPLETE_KEY = 'completionSuppressDueComplete';
+  // Snapshot of Progrès before Statut forced 100% (Terminé) — restored on En cours.
+  var COMPLETION_PREVIOUS_BEFORE_COMPLETE_KEY = 'completionPreviousBeforeComplete';
   var CARD_DETAIL_BADGE_TITLE = 'Progrès';
   var boardCompletionColorSchemeKey = 'traffic';
   var BADGE_REFRESH_SEC =
@@ -23,6 +25,8 @@
   var ITEM_TEXT_MAX = 500;
   var PROGRESS_MIN = 0;
   var PROGRESS_MAX = 100;
+  /** Near-complete fallback when reopening En cours from 100% with no prior snapshot. */
+  var PROGRESS_NEAR_COMPLETE = 99;
   /** Nested linked-card subtasks shown under a master item (master → link → nested). */
   var LINK_NEST_MAX_DEPTH = 2;
   var ESTIMATE_MIN_MINUTES = 1;
@@ -1199,6 +1203,77 @@
     return normalizeCompletionData(next);
   }
 
+  /**
+   * Leave 100% for En cours: restore a prior incomplete snapshot, or drop to
+   * 99% when there was none (already complete before Terminé).
+   * No-op when already incomplete.
+   */
+  function restoreProgressLeavingComplete(data, previous) {
+    var next = normalizeCompletionData(data || { items: [] });
+    if (!isAllSubtasksComplete(next)) return next;
+    var prev = previous ? normalizeCompletionData(previous) : null;
+    if (prev && !isAllSubtasksComplete(prev)) {
+      delete prev.progressEnabled;
+      return normalizeCompletionData(prev);
+    }
+    if (next.items && next.items.length) {
+      next.items = applyMasterProgress(next.items, PROGRESS_NEAR_COMPLETE);
+    } else {
+      next.progress = PROGRESS_NEAR_COMPLETE;
+    }
+    delete next.progressEnabled;
+    return normalizeCompletionData(next);
+  }
+
+  async function getPreviousCompletionBeforeComplete(t) {
+    try {
+      var raw = await t.get('card', 'shared', COMPLETION_PREVIOUS_BEFORE_COMPLETE_KEY);
+      if (!raw || typeof raw !== 'object') return null;
+      var normalized = normalizeCompletionData(raw);
+      if (isAllSubtasksComplete(normalized)) return null;
+      return normalized;
+    } catch (err) {
+      console.error('Completion previous-before-complete get failed', err);
+      return null;
+    }
+  }
+
+  async function setPreviousCompletionBeforeComplete(t, data) {
+    try {
+      if (!data) {
+        await t.set('card', 'shared', COMPLETION_PREVIOUS_BEFORE_COMPLETE_KEY, null);
+        return null;
+      }
+      var normalized = normalizeCompletionData(data);
+      if (isAllSubtasksComplete(normalized)) {
+        await t.set('card', 'shared', COMPLETION_PREVIOUS_BEFORE_COMPLETE_KEY, null);
+        return null;
+      }
+      await t.set('card', 'shared', COMPLETION_PREVIOUS_BEFORE_COMPLETE_KEY, normalized);
+      return normalized;
+    } catch (err) {
+      console.error('Completion previous-before-complete set failed', err);
+      return null;
+    }
+  }
+
+  async function clearPreviousCompletionBeforeComplete(t) {
+    return setPreviousCompletionBeforeComplete(t, null);
+  }
+
+  /**
+   * Remember Progrès before forcing 100% via Terminé. Clears the snapshot when
+   * already complete so En cours falls back to 99%.
+   */
+  async function capturePreviousCompletionBeforeComplete(t, data) {
+    var normalized = normalizeCompletionData(data || { items: [] });
+    if (isAllSubtasksComplete(normalized)) {
+      await clearPreviousCompletionBeforeComplete(t);
+      return null;
+    }
+    return setPreviousCompletionBeforeComplete(t, normalized);
+  }
+
   async function getMarkedDueCompleteFlag(t) {
     try {
       var flagged = await t.get('card', 'shared', COMPLETION_MARKED_DUE_COMPLETE_KEY);
@@ -2222,6 +2297,8 @@
     ESTIMATE_SCALES_SETTINGS_KEY: ESTIMATE_SCALES_SETTINGS_KEY,
     COMPLETION_MARKED_DUE_COMPLETE_KEY: COMPLETION_MARKED_DUE_COMPLETE_KEY,
     COMPLETION_SUPPRESS_DUE_COMPLETE_KEY: COMPLETION_SUPPRESS_DUE_COMPLETE_KEY,
+    COMPLETION_PREVIOUS_BEFORE_COMPLETE_KEY: COMPLETION_PREVIOUS_BEFORE_COMPLETE_KEY,
+    PROGRESS_NEAR_COMPLETE: PROGRESS_NEAR_COMPLETE,
     ITEM_TEXT_MAX: ITEM_TEXT_MAX,
     PROGRESS_MIN: PROGRESS_MIN,
     PROGRESS_MAX: PROGRESS_MAX,
@@ -2286,6 +2363,11 @@
     detectDonePendingMismatch: detectDonePendingMismatch,
     markFullyComplete: markFullyComplete,
     markNotFullyComplete: markNotFullyComplete,
+    restoreProgressLeavingComplete: restoreProgressLeavingComplete,
+    getPreviousCompletionBeforeComplete: getPreviousCompletionBeforeComplete,
+    setPreviousCompletionBeforeComplete: setPreviousCompletionBeforeComplete,
+    clearPreviousCompletionBeforeComplete: clearPreviousCompletionBeforeComplete,
+    capturePreviousCompletionBeforeComplete: capturePreviousCompletionBeforeComplete,
     setDueCompleteSuppressed: setDueCompleteSuppressed,
     getDueCompleteSuppressed: getDueCompleteSuppressed,
     syncCardDueCompleteFromProgress: syncCardDueCompleteFromProgress,
