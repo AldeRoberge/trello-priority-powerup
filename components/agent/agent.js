@@ -11979,6 +11979,7 @@
     rewriteWinkEmoticons: rewriteWinkEmoticons,
     ensureContrastHighlights: ensureContrastHighlights,
     linkSuggestionColorsToHighlights: linkSuggestionColorsToHighlights,
+    normalizeSuggestionEntries: normalizeSuggestionEntries,
     extractHighlightSpans: extractHighlightSpans,
     memoryTurn: memoryTurn,
     cardInterviewTurn: cardInterviewTurn,

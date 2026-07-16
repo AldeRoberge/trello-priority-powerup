@@ -5484,6 +5484,64 @@
       notifyLayout();
     }
 
+    /**
+     * Pull suggestion chips from an assistant history entry (stored list or rawJson).
+     * Used when editing a prior user message so chips from that turn come back.
+     */
+    function suggestionsPayloadFromHistoryEntry(entry) {
+      if (!entry || entry.role !== 'assistant') return null;
+      if (Array.isArray(entry.suggestions) && entry.suggestions.length) {
+        return {
+          suggestions: entry.suggestions,
+          suggestionsMulti: !!entry.suggestionsMulti
+        };
+      }
+      var parsed = entry.rawJson;
+      if (typeof parsed === 'string') {
+        try {
+          parsed = JSON.parse(parsed);
+        } catch (e) {
+          return null;
+        }
+      }
+      if (!parsed || typeof parsed !== 'object') return null;
+      var list = parsed.suggestions;
+      if (!Array.isArray(list) || !list.length) return null;
+      if (typeof Agent.normalizeSuggestionEntries === 'function') {
+        list = Agent.normalizeSuggestionEntries(list, 4, {
+          scale: !!parsed.suggestionScale,
+          message: entry.content || parsed.message || ''
+        });
+      }
+      if (!list.length) return null;
+      return {
+        suggestions: list,
+        suggestionsMulti: !!parsed.suggestionsMulti
+      };
+    }
+
+    function restoreSuggestionsFromHistoryEntry(entry) {
+      var payload = suggestionsPayloadFromHistoryEntry(entry);
+      if (!payload) return false;
+      suggestionsSeq += 1;
+      renderSuggestions(payload.suggestions, {
+        animate: true,
+        multi: payload.suggestionsMulti,
+        answering: true
+      });
+      return true;
+    }
+
+    /** Assistant turn immediately before history index (or last assistant if idx omitted). */
+    function assistantEntryBeforeIndex(idx) {
+      var end =
+        typeof idx === 'number' && idx >= 0 ? idx - 1 : history.length - 1;
+      for (var i = end; i >= 0; i--) {
+        if (history[i] && history[i].role === 'assistant') return history[i];
+      }
+      return null;
+    }
+
     /** Last assistant turn text that looks like a clarifying question. */
     function lastAssistantAsksQuestion() {
       for (var i = history.length - 1; i >= 0; i--) {
@@ -6729,6 +6787,7 @@
         pending = false;
         updateComposerEnabled();
         insertComposerSuggestion(text);
+        restoreSuggestionsFromHistoryEntry(assistantEntryBeforeIndex());
         openAndFocusComposer();
         if (collapse && collapse.refreshSummary) collapse.refreshSummary();
         notifyLayout();
@@ -6736,6 +6795,8 @@
       }
 
       var histIdx = historyIndexForUserRow(row);
+      var prevAssistant =
+        histIdx >= 0 ? assistantEntryBeforeIndex(histIdx) : null;
       messageQueue = [];
       removeMessageRowsFrom(row);
       if (histIdx >= 0) {
@@ -6745,6 +6806,7 @@
       updateComposerEnabled();
       schedulePersistChatHistory();
       insertComposerSuggestion(text);
+      restoreSuggestionsFromHistoryEntry(prevAssistant);
       openAndFocusComposer();
       if (collapse && collapse.refreshSummary) collapse.refreshSummary();
       emptyState.classList.toggle(
@@ -7074,7 +7136,9 @@
         });
         history.push({
           role: 'assistant',
-          content: result.message
+          content: result.message,
+          suggestions: result.suggestions || [],
+          suggestionsMulti: !!result.suggestionsMulti
         });
         schedulePersistChatHistory();
         if (result.suggestions && result.suggestions.length) {
@@ -7261,7 +7325,9 @@
         history.push({
           role: 'assistant',
           content: opening,
-          rawJson: turn.rawJson
+          rawJson: turn.rawJson,
+          suggestions: turn.suggestions || [],
+          suggestionsMulti: !!turn.suggestionsMulti
         });
         schedulePersistChatHistory();
         if (/\?/.test(opening)) {
@@ -7638,7 +7704,9 @@
         history.push({
           role: 'assistant',
           content: turn.message,
-          rawJson: turn.rawJson
+          rawJson: turn.rawJson,
+          suggestions: turn.suggestions || [],
+          suggestionsMulti: !!turn.suggestionsMulti
         });
         schedulePersistChatHistory();
         var identityTools = {

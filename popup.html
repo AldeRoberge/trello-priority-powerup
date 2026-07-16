@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=subtask-pop-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-5" />
-  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=echeance-recurring-1" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=overview-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-scope-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
@@ -23,7 +23,7 @@
   </script>
   <script src="./components/shared/effects.js?v=fx-6"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=echeance-recurring-1"></script>
+  <script src="./components/priority/priority-ui.js?v=overview-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
@@ -90,6 +90,8 @@
     let objectifSection = null;
     let infoUi = null;
     let infoSection = null;
+    let overviewUi = null;
+    let overviewSection = null;
     let cardDesc = '';
     let cardNameCache = '';
     let cardNamePromise = Promise.resolve('');
@@ -377,6 +379,7 @@
         statutUi.syncBlockedPanel();
       }
       attachBlockedIntoStatut();
+      syncOverview();
       resizePopup();
       refreshHistoryBaseline();
     }
@@ -1145,6 +1148,9 @@
       if (completionUi && typeof completionUi.setCardName === 'function') {
         completionUi.setCardName(name || '');
       }
+      if (overviewUi && typeof overviewUi.setData === 'function') {
+        overviewUi.setData({ title: trimmed || name || '' });
+      }
       resizePopup();
     }
 
@@ -1175,8 +1181,138 @@
       });
     }
 
+    function overviewFeatureOn(key) {
+      if (!cachedProfile || !cachedProfile.features) return true;
+      if (
+        window.UserProfile &&
+        typeof UserProfile.isFeatureEnabled === 'function'
+      ) {
+        return UserProfile.isFeatureEnabled(cachedProfile, key);
+      }
+      return cachedProfile.features[key] !== false;
+    }
+
+    function syncOverview(stateOverride) {
+      if (!overviewUi || typeof overviewUi.setData !== 'function') return;
+      var state =
+        stateOverride != null
+          ? stateOverride
+          : latestState != null
+            ? latestState
+            : variant && typeof variant.getState === 'function'
+              ? variant.getState()
+              : {};
+
+      var priorityLabel = '';
+      var priorityColor = '';
+      try {
+        if (
+          window.PriorityUI &&
+          PriorityUI.resolveDisplay &&
+          variant &&
+          state.priorityEnabled !== false
+        ) {
+          var formulaKey =
+            typeof variant.getFormulaKey === 'function'
+              ? variant.getFormulaKey()
+              : 'baseline';
+          var calc =
+            PriorityUI.FORMULAS &&
+            PriorityUI.FORMULAS[formulaKey] &&
+            PriorityUI.FORMULAS[formulaKey].calc
+              ? PriorityUI.FORMULAS[formulaKey].calc
+              : null;
+          if (calc) {
+            var display = PriorityUI.resolveDisplay(calc(state), state);
+            if (display) {
+              priorityLabel = display.label || '';
+              priorityColor = display.seg || display.fill || '';
+            }
+          }
+        }
+      } catch (e) { /* ignore */ }
+
+      var progressPercent = null;
+      var subtasksDone = 0;
+      var subtasksTotal = 0;
+      if (window.CompletionTrello) {
+        var completionSnap =
+          (completionUi && typeof completionUi.getData === 'function'
+            ? completionUi.getData()
+            : null) ||
+          latestCompletion ||
+          { items: [] };
+        var progressMeta = CompletionTrello.computeCardProgress(completionSnap);
+        if (progressMeta) {
+          if (progressMeta.hasItems || progressMeta.percent != null) {
+            progressPercent =
+              progressMeta.percent != null ? progressMeta.percent : 0;
+          }
+          subtasksDone = progressMeta.doneCount || 0;
+          subtasksTotal = progressMeta.totalCount || 0;
+        }
+      }
+
+      var dueCountdown = '';
+      var dueBand = '';
+      var dueOn =
+        window.PriorityUI && typeof PriorityUI.isDueEnabled === 'function'
+          ? PriorityUI.isDueEnabled(state)
+          : state.dueEnabled !== false && !!state.dueDate;
+      if (dueOn && state.dueDate && window.PriorityUI) {
+        if (typeof PriorityUI.formatDueCountdown === 'function') {
+          dueCountdown =
+            PriorityUI.formatDueCountdown(state.dueDate, null, state.dueTime) ||
+            '';
+        }
+        if (typeof PriorityUI.dueProximityBand === 'function') {
+          dueBand =
+            PriorityUI.dueProximityBand(state.dueDate, state.dueTime) || '';
+        }
+      }
+
+      var statusLabel = '';
+      if (latestStatut) {
+        statusLabel = latestStatut.listName || '';
+        if (
+          !statusLabel &&
+          latestStatut.listId &&
+          Array.isArray(latestStatut.lists)
+        ) {
+          for (var li = 0; li < latestStatut.lists.length; li++) {
+            var list = latestStatut.lists[li];
+            if (list && list.id === latestStatut.listId) {
+              statusLabel = list.name || '';
+              break;
+            }
+          }
+        }
+      }
+
+      overviewUi.setData({
+        title: readCardNameLabel() || cardNameCache || '',
+        status: statusLabel,
+        progressPercent: progressPercent,
+        subtasksDone: subtasksDone,
+        subtasksTotal: subtasksTotal,
+        dueCountdown: dueCountdown,
+        dueBand: dueBand,
+        priorityLabel: priorityLabel,
+        priorityColor: priorityColor,
+        features: {
+          statut: overviewFeatureOn('statut'),
+          progress: overviewFeatureOn('progress'),
+          due: overviewFeatureOn('due'),
+          priority: overviewFeatureOn('priority')
+        }
+      });
+    }
+
     function syncInfoRecap(stateOverride) {
-      if (!infoUi || typeof infoUi.setRecap !== 'function') return;
+      if (!infoUi || typeof infoUi.setRecap !== 'function') {
+        syncOverview(stateOverride);
+        return;
+      }
       // Prefer an explicit snapshot from onStateChange. Calling getState() here
       // re-syncs from slider DOM while heat-tier clicks still animate, which
       // leaves Information one update behind.
@@ -1273,6 +1409,7 @@
               : [];
         infoUi.setTaskTypes(nextTypes);
       }
+      syncOverview(state);
     }
 
     var silentEstimateBusy = false;
@@ -1514,6 +1651,31 @@
         } catch (e) { /* ignore */ }
         resizePopup();
       }, 0);
+    }
+
+    function mountOverviewSection(cardEl) {
+      if (!cardEl) return;
+      if (!PriorityUI.createOverviewField) {
+        console.error('Priority popup: createOverviewField unavailable');
+        return;
+      }
+      if (overviewSection && overviewSection.parentNode) {
+        overviewSection.parentNode.removeChild(overviewSection);
+      }
+      overviewUi = PriorityUI.createOverviewField({
+        title: readCardNameLabel() || cardNameCache || '',
+        onJump: jumpToSection,
+        onLayoutChange: resizePopup,
+        features: {
+          statut: overviewFeatureOn('statut'),
+          progress: overviewFeatureOn('progress'),
+          due: overviewFeatureOn('due'),
+          priority: overviewFeatureOn('priority')
+        }
+      });
+      overviewSection = overviewUi.el;
+      cardEl.insertBefore(overviewSection, cardEl.firstChild);
+      syncOverview();
     }
 
     function mountInfoSection(cardEl) {
@@ -4541,6 +4703,7 @@
       });
 
       await mountInfoSection(variant.card);
+      mountOverviewSection(variant.card);
 
       if (argName) setCardNameLabel(argName);
       else if (cardNameCache) setCardNameLabel(cardNameCache);
@@ -4934,6 +5097,7 @@
 
       if (window.UserProfile && typeof UserProfile.applyFeaturesToCard === 'function' && variant && variant.card) {
         UserProfile.applyFeaturesToCard(variant.card, cachedProfile);
+        syncOverview();
       }
 
       await cardNamePromise;

@@ -6665,6 +6665,305 @@
   }
 
   /**
+   * Always-open primary overview at the top of the card popup.
+   * Title + metric cells (status, progress, subtasks, deadline, priority);
+   * each cell jumps to the matching accordion via onJump.
+   */
+  function createOverviewField(config) {
+    config = config || {};
+    var mountEl = config.el;
+    var onJump = typeof config.onJump === 'function' ? config.onJump : null;
+    var onLayoutChange =
+      typeof config.onLayoutChange === 'function' ? config.onLayoutChange : null;
+
+    var titleText = typeof config.title === 'string' ? config.title : '';
+    var statusText = typeof config.status === 'string' ? config.status : '';
+    var progressPercent =
+      config.progressPercent != null && isFinite(+config.progressPercent)
+        ? Math.max(0, Math.min(100, Math.round(+config.progressPercent)))
+        : null;
+    var subtasksDone =
+      config.subtasksDone != null && isFinite(+config.subtasksDone)
+        ? Math.max(0, Math.round(+config.subtasksDone))
+        : 0;
+    var subtasksTotal =
+      config.subtasksTotal != null && isFinite(+config.subtasksTotal)
+        ? Math.max(0, Math.round(+config.subtasksTotal))
+        : 0;
+    var dueCountdown =
+      typeof config.dueCountdown === 'string' ? config.dueCountdown : '';
+    var dueBand = typeof config.dueBand === 'string' ? config.dueBand : '';
+    var priorityLabel =
+      typeof config.priorityLabel === 'string' ? config.priorityLabel : '';
+    var priorityColor =
+      typeof config.priorityColor === 'string' ? config.priorityColor : '';
+    var features =
+      config.features && typeof config.features === 'object'
+        ? Object.assign({}, config.features)
+        : {
+            statut: true,
+            progress: true,
+            due: true,
+            priority: true
+          };
+
+    var section = document.createElement('div');
+    section.className = 'variant-overview-section';
+
+    var field = document.createElement('div');
+    field.className = 'field field--overview is-enabled';
+    section.appendChild(field);
+
+    function makeJumpable(el, jumpKey, label) {
+      el.setAttribute('role', 'button');
+      el.tabIndex = 0;
+      if (label) el.title = 'Aller \u00e0 ' + label;
+      function go() {
+        if (onJump) onJump(jumpKey);
+      }
+      el.addEventListener('click', go);
+      el.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          go();
+        }
+      });
+    }
+
+    // ── Title ──────────────────────────────────────────────────────────
+    var titleBtn = document.createElement('div');
+    titleBtn.className = 'overview-title';
+    makeJumpable(titleBtn, 'info', 'D\u00e9tails');
+
+    var titleIcon = document.createElement('i');
+    titleIcon.className = 'ti ti-heading overview-title-icon';
+    titleIcon.setAttribute('aria-hidden', 'true');
+    titleBtn.appendChild(titleIcon);
+
+    var titleValue = document.createElement('span');
+    titleValue.className = 'overview-title-text';
+    titleBtn.appendChild(titleValue);
+
+    var titleChevron = document.createElement('i');
+    titleChevron.className = 'ti ti-chevron-right overview-title-chevron';
+    titleChevron.setAttribute('aria-hidden', 'true');
+    titleBtn.appendChild(titleChevron);
+
+    field.appendChild(titleBtn);
+
+    // ── Metrics grid ───────────────────────────────────────────────────
+    var metrics = document.createElement('div');
+    metrics.className = 'overview-metrics';
+    field.appendChild(metrics);
+
+    function makeCell(key, jumpKey, label, iconClass) {
+      var cell = document.createElement('div');
+      cell.className = 'overview-cell overview-cell--' + key;
+      cell.dataset.overviewKey = key;
+      makeJumpable(cell, jumpKey, label);
+
+      var head = document.createElement('div');
+      head.className = 'overview-cell-head';
+
+      var icon = document.createElement('i');
+      icon.className = 'ti ' + iconClass + ' overview-cell-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      head.appendChild(icon);
+
+      var lab = document.createElement('span');
+      lab.className = 'overview-cell-label';
+      lab.textContent = label;
+      head.appendChild(lab);
+
+      cell.appendChild(head);
+
+      var valueWrap = document.createElement('div');
+      valueWrap.className = 'overview-cell-value';
+      cell.appendChild(valueWrap);
+
+      metrics.appendChild(cell);
+      return { cell: cell, value: valueWrap };
+    }
+
+    var statusCell = makeCell('status', 'statut', 'Statut', 'ti-list-check');
+    var progressCell = makeCell('progress', 'progress', 'Progr\u00e8s', 'ti-progress');
+    var subtasksCell = makeCell(
+      'subtasks',
+      'progress',
+      'Sous-t\u00e2ches',
+      'ti-checkbox'
+    );
+    var dueCell = makeCell('due', 'due', '\u00c9ch\u00e9ance', 'ti-calendar-event');
+    var priorityCell = makeCell('priority', 'priority', 'Priorit\u00e9', 'ti-flame');
+
+    var progressBarTrack = document.createElement('div');
+    progressBarTrack.className = 'overview-progress-track';
+    var progressBarFill = document.createElement('div');
+    progressBarFill.className = 'overview-progress-fill';
+    progressBarTrack.appendChild(progressBarFill);
+    progressCell.cell.appendChild(progressBarTrack);
+
+    var priorityDot = document.createElement('span');
+    priorityDot.className = 'heat-tier-dot overview-priority-dot';
+    priorityDot.setAttribute('aria-hidden', 'true');
+
+    var priorityText = document.createElement('span');
+    priorityText.className = 'overview-priority-label';
+
+    function setFeatureVisible(cell, on) {
+      if (on) {
+        cell.removeAttribute('hidden');
+      } else {
+        cell.setAttribute('hidden', '');
+      }
+    }
+
+    function paint() {
+      var t = (titleText || '').trim();
+      if (t) {
+        titleValue.textContent = t;
+        titleValue.classList.remove('is-empty');
+        titleBtn.classList.remove('is-empty');
+      } else {
+        titleValue.textContent = 'Sans titre';
+        titleValue.classList.add('is-empty');
+        titleBtn.classList.add('is-empty');
+      }
+
+      setFeatureVisible(statusCell.cell, features.statut !== false);
+      setFeatureVisible(progressCell.cell, features.progress !== false);
+      setFeatureVisible(subtasksCell.cell, features.progress !== false);
+      setFeatureVisible(dueCell.cell, features.due !== false);
+      setFeatureVisible(priorityCell.cell, features.priority !== false);
+
+      var st = (statusText || '').trim();
+      statusCell.value.textContent = st || 'Sans statut';
+      statusCell.value.classList.toggle('is-empty', !st);
+
+      if (progressPercent == null) {
+        progressCell.value.textContent = '\u2014';
+        progressCell.value.classList.add('is-empty');
+        progressBarFill.style.width = '0%';
+        progressBarTrack.classList.add('is-empty');
+      } else {
+        progressCell.value.textContent = progressPercent + '\u00a0%';
+        progressCell.value.classList.remove('is-empty');
+        progressBarFill.style.width = progressPercent + '%';
+        progressBarTrack.classList.remove('is-empty');
+      }
+
+      if (subtasksTotal > 0) {
+        subtasksCell.value.textContent = subtasksDone + '\u00a0/\u00a0' + subtasksTotal;
+        subtasksCell.value.classList.remove('is-empty');
+      } else {
+        subtasksCell.value.textContent = 'Aucune';
+        subtasksCell.value.classList.add('is-empty');
+      }
+
+      var due = (dueCountdown || '').trim();
+      dueCell.value.textContent = due || 'Sans \u00e9ch\u00e9ance';
+      dueCell.value.classList.toggle('is-empty', !due);
+      for (var bi = 0; bi < DUE_PROXIMITY_BANDS.length; bi++) {
+        var bandName = DUE_PROXIMITY_BANDS[bi];
+        dueCell.cell.classList.toggle('is-due-' + bandName, dueBand === bandName);
+      }
+      dueCell.cell.classList.toggle('is-overdue', dueBand === 'overdue');
+      if (dueBand) {
+        dueCell.cell.dataset.dueBand = dueBand;
+        var accent = dueBandAccent(dueBand);
+        if (accent) {
+          dueCell.cell.style.setProperty('--overview-due-accent', accent);
+        } else {
+          dueCell.cell.style.removeProperty('--overview-due-accent');
+        }
+      } else {
+        if (dueCell.cell.dataset) delete dueCell.cell.dataset.dueBand;
+        dueCell.cell.style.removeProperty('--overview-due-accent');
+      }
+
+      var pl = (priorityLabel || '').trim();
+      priorityCell.value.innerHTML = '';
+      if (pl) {
+        if (priorityColor) {
+          priorityDot.style.background = priorityColor;
+          priorityCell.value.appendChild(priorityDot);
+        }
+        priorityText.textContent = pl;
+        priorityCell.value.appendChild(priorityText);
+        priorityCell.value.classList.remove('is-empty');
+      } else {
+        priorityText.textContent = 'Non prioris\u00e9e';
+        priorityCell.value.appendChild(priorityText);
+        priorityCell.value.classList.add('is-empty');
+      }
+
+      if (onLayoutChange) onLayoutChange();
+    }
+
+    paint();
+
+    if (mountEl) {
+      mountEl.appendChild(section);
+    }
+
+    function setData(next) {
+      if (!next || typeof next !== 'object') return;
+      if (next.title != null) titleText = String(next.title || '');
+      if (next.status != null) statusText = String(next.status || '');
+      if (next.progressPercent !== undefined) {
+        if (next.progressPercent == null || next.progressPercent === '') {
+          progressPercent = null;
+        } else if (isFinite(+next.progressPercent)) {
+          progressPercent = Math.max(
+            0,
+            Math.min(100, Math.round(+next.progressPercent))
+          );
+        }
+      }
+      if (next.subtasksDone != null && isFinite(+next.subtasksDone)) {
+        subtasksDone = Math.max(0, Math.round(+next.subtasksDone));
+      }
+      if (next.subtasksTotal != null && isFinite(+next.subtasksTotal)) {
+        subtasksTotal = Math.max(0, Math.round(+next.subtasksTotal));
+      }
+      if (next.dueCountdown != null) {
+        dueCountdown = String(next.dueCountdown || '');
+      }
+      if (next.dueBand != null) dueBand = String(next.dueBand || '');
+      if (next.priorityLabel != null) {
+        priorityLabel = String(next.priorityLabel || '');
+      }
+      if (next.priorityColor != null) {
+        priorityColor = String(next.priorityColor || '');
+      }
+      if (next.features && typeof next.features === 'object') {
+        features = Object.assign({}, features, next.features);
+      }
+      paint();
+    }
+
+    return {
+      el: section,
+      field: field,
+      setData: setData,
+      getData: function () {
+        return {
+          title: titleText,
+          status: statusText,
+          progressPercent: progressPercent,
+          subtasksDone: subtasksDone,
+          subtasksTotal: subtasksTotal,
+          dueCountdown: dueCountdown,
+          dueBand: dueBand,
+          priorityLabel: priorityLabel,
+          priorityColor: priorityColor,
+          features: Object.assign({}, features)
+        };
+      }
+    };
+  }
+
+  /**
    * Top-of-popup recap: title, description (editable), creator, assignees, labels.
    * Progrès mirror (remaining estimate) jumps to Progrès; optional Portée jump to Priorité.
    */
@@ -7229,11 +7528,9 @@
     taskTypesSuggestSection.className = 'info-task-types-suggestions';
     taskTypesSuggestSection.hidden = true;
     taskTypesSuggestSection.innerHTML =
-      '<div class="info-task-types-suggestions-head">' +
+      '<div class="info-task-types-suggestions-list" role="list"></div>' +
       '<button type="button" class="info-task-types-suggestions-refresh" ' +
-      'aria-label="Rafra\u00eechir les suggestions" title="Rafra\u00eechir">\u21bb</button>' +
-      '</div>' +
-      '<div class="info-task-types-suggestions-list" role="list"></div>';
+      'aria-label="Rafra\u00eechir les suggestions" title="Rafra\u00eechir">\u21bb</button>';
     var taskTypesSuggestRefreshBtn = taskTypesSuggestSection.querySelector(
       '.info-task-types-suggestions-refresh'
     );
@@ -7266,10 +7563,11 @@
     var parentPickBtn = document.createElement('button');
     parentPickBtn.type = 'button';
     parentPickBtn.className = 'info-parent-pick-btn';
+    parentPickBtn.setAttribute('aria-label', 'Ajouter une t\u00e2che parente');
+    parentPickBtn.title = 'Ajouter une t\u00e2che parente';
     parentPickBtn.setAttribute('aria-expanded', 'false');
     parentPickBtn.setAttribute('aria-haspopup', 'listbox');
-    parentPickBtn.innerHTML =
-      '<i class="ti ti-plus" aria-hidden="true"></i><span class="info-parent-pick-label">Ajouter</span>';
+    parentPickBtn.innerHTML = '<i class="ti ti-plus" aria-hidden="true"></i>';
 
     var parentPicker = document.createElement('div');
     parentPicker.className = 'info-parent-picker';
@@ -9579,10 +9877,6 @@
       });
       parentPickBtn.hidden = !canPick;
       parentPickBtn.disabled = parentBusy;
-      var pickLabelEl = parentPickBtn.querySelector('.info-parent-pick-label');
-      if (pickLabelEl) {
-        pickLabelEl.textContent = 'Ajouter';
-      }
       if (!canPick && !parentCards.length) {
         setParentStatus('', false);
       }
@@ -15754,6 +16048,7 @@
     dueBadgeSuffix: dueBadgeSuffix,
     isDueEnabled: isDueEnabled,
     withDueDateDisplay: withDueDateDisplay,
+    createOverviewField: createOverviewField,
     createInfoField: createInfoField,
     renderMarkdownToHtml: renderMarkdownToHtml,
     wrapMarkdownInlineSelection: wrapMarkdownInlineSelection,

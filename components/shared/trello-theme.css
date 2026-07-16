@@ -1254,6 +1254,7 @@ body.tp-page--priority {
 
 .tp-page--priority .info-members-add-btn,
 .tp-page--priority .info-labels-add-btn,
+.tp-page--priority .info-task-types-add-btn,
 .tp-page--priority .info-parent-pick-btn {
   border-color: color-mix(in srgb, var(--tp-text, var(--text-primary)) 22%, transparent);
   color: var(--tp-text-subtle, var(--text-secondary));
