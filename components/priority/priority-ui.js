@@ -10902,21 +10902,6 @@
         expandLabel: 'D\u00e9velopper Bloqu\u00e9'
       });
       field.appendChild(chrome.head);
-    } else {
-      var embeddedHead = document.createElement('div');
-      embeddedHead.className = 'blocked-embedded-head';
-      var embeddedIcon = document.createElement('span');
-      embeddedIcon.className = 'section-leading-icon blocked-leading-icon';
-      embeddedIcon.setAttribute('aria-hidden', 'true');
-      var embeddedGlyph = document.createElement('i');
-      embeddedGlyph.className = 'ti ti-barrier-block section-leading-icon-glyph';
-      embeddedIcon.appendChild(embeddedGlyph);
-      var embeddedTitle = document.createElement('span');
-      embeddedTitle.className = 'blocked-embedded-title';
-      embeddedTitle.textContent = 'Cause';
-      embeddedHead.appendChild(embeddedIcon);
-      embeddedHead.appendChild(embeddedTitle);
-      field.appendChild(embeddedHead);
     }
 
     var reasonWrap = document.createElement('div');

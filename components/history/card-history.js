@@ -120,6 +120,29 @@
     return out;
   }
 
+  function slimRecurrence(recurrence) {
+    if (!recurrence || typeof recurrence !== 'object') return null;
+    var frequency =
+      typeof recurrence.frequency === 'string'
+        ? recurrence.frequency.trim().toLowerCase()
+        : '';
+    if (!frequency) return null;
+    var interval = Math.round(Number(recurrence.interval));
+    if (!isFinite(interval) || interval < 1) interval = 1;
+    var out = { frequency: frequency, interval: interval };
+    if (frequency === 'weekly' && Array.isArray(recurrence.weekdays)) {
+      out.weekdays = recurrence.weekdays
+        .map(function (d) {
+          return Number(d);
+        })
+        .filter(function (d) {
+          return isFinite(d) && d >= 0 && d <= 6;
+        })
+        .slice(0, 7);
+    }
+    return out;
+  }
+
   function slimPriority(priority) {
     if (!priority || typeof priority !== 'object') return priority;
     var out = {
@@ -129,6 +152,14 @@
       enAttente: !!priority.enAttente,
       priorityEnabled: priority.priorityEnabled !== false
     };
+    if (priority.dueDate) out.dueDate = String(priority.dueDate).slice(0, 32);
+    if (priority.dueTime) out.dueTime = String(priority.dueTime).slice(0, 8);
+    if (priority.startDate) out.startDate = String(priority.startDate).slice(0, 32);
+    if (priority.estimatedDurationMinutes != null) {
+      out.estimatedDurationMinutes = priority.estimatedDurationMinutes;
+    }
+    var recur = slimRecurrence(priority.recurrence);
+    if (recur) out.recurrence = recur;
     if (Array.isArray(priority.blockedReasons) && priority.blockedReasons.length) {
       out.blockedReasons = priority.blockedReasons.slice(0, 3).map(function (r) {
         if (typeof r === 'string') return r.slice(0, 60);
@@ -138,6 +169,19 @@
           };
         }
         return r;
+      });
+    }
+    if (Array.isArray(priority.blockedLinks) && priority.blockedLinks.length) {
+      out.blockedLinks = priority.blockedLinks.slice(0, 3).map(function (link) {
+        if (typeof link === 'string') return link.slice(0, 80);
+        if (link && typeof link === 'object') {
+          return {
+            id: link.id ? String(link.id).slice(0, 40) : undefined,
+            name: link.name ? String(link.name).slice(0, 60) : undefined,
+            url: link.url ? String(link.url).slice(0, 80) : undefined
+          };
+        }
+        return link;
       });
     }
     return out;
@@ -843,6 +887,11 @@
     if (d.indexOf('priority') !== -1) {
       var bp = (before && before.priority) || {};
       var ap = (after && after.priority) || {};
+      var bEnabled = bp.priorityEnabled !== false;
+      var aEnabled = ap.priorityEnabled !== false;
+      if (bEnabled !== aEnabled) {
+        parts.push(aEnabled ? 'Priorit\u00e9 activ\u00e9e' : 'Priorit\u00e9 d\u00e9sactiv\u00e9e');
+      }
       ['urgency', 'impact', 'ease'].forEach(function (axis) {
         if (bp[axis] !== ap[axis]) {
           var feminine = axis === 'urgency' || axis === 'ease';
@@ -879,7 +928,7 @@
             formatMinutesFr(ap.estimatedDurationMinutes)
         );
       }
-      if (!parts.length) parts.push('Priorit\u00e9');
+      if (!parts.length) parts.push('Priorit\u00e9 modifi\u00e9e');
     }
 
     if (d.indexOf('completion') !== -1) {
@@ -986,7 +1035,7 @@
           parts.push('\u00c9tiquettes modifi\u00e9es');
         }
       }
-      if (!parts.length) parts.push('Détails');
+      if (!parts.length) parts.push('D\u00e9tails modifi\u00e9s');
     }
 
     if (d.indexOf('goals') !== -1) {

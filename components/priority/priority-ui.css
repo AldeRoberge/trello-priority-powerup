@@ -4682,19 +4682,6 @@ html[data-color-mode="dark"] .due-date-time-clock {
   background: transparent !important;
 }
 
-.blocked-embedded-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.blocked-embedded-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--blocked-text, var(--text-primary));
-}
-
 .en-attente-desc {
   font-size: 14px;
   font-weight: 400;

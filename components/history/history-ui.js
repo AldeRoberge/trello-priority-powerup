@@ -158,9 +158,10 @@
         );
       }
 
+      var domains = (details && details.domains) || (entry && entry.domains) || [];
       var domainLabels =
         (details && details.domainLabels) ||
-        ((entry && entry.domains) || []).map(function (key) {
+        domains.map(function (key) {
           if (key === 'priority') return 'Priorité';
           if (key === 'completion') return 'Progrès';
           if (key === 'statut') return 'Statut';
@@ -168,7 +169,11 @@
           if (key === 'goals') return 'Objectifs';
           return key;
         });
-      if (domainLabels && domainLabels.length) {
+
+      // Domain chips only help when several domains changed; a single chip
+      // just repeats the row label / detail lines.
+      var showDomainChips = domainLabels && domainLabels.length > 1;
+      if (showDomainChips) {
         var domainsRow = el('div', 'historique-detail-domains');
         domainLabels.forEach(function (name) {
           domainsRow.appendChild(
@@ -178,14 +183,36 @@
         detail.appendChild(domainsRow);
       }
 
-      var lines =
+      var rawLines =
         (details && details.lines && details.lines.length && details.lines) ||
         (entry && entry.label ? [entry.label] : ['Modification']);
-      var ul = el('ul', 'historique-detail-lines');
-      lines.forEach(function (line) {
-        ul.appendChild(el('li', 'historique-detail-line', { text: line }));
+      var entryLabel = (entry && entry.label) || '';
+      var domainSet = Object.create(null);
+      (domainLabels || []).forEach(function (name) {
+        domainSet[String(name)] = true;
       });
-      detail.appendChild(ul);
+      var lines = rawLines.filter(function (line) {
+        var text = String(line || '');
+        if (!text) return false;
+        // Skip lines that only restate the collapsed row label.
+        if (entryLabel && text === entryLabel) return false;
+        // Skip bare domain names ("Priorité") — chips or the row already say that.
+        if (domainSet[text]) return false;
+        return true;
+      });
+      if (lines.length) {
+        var ul = el('ul', 'historique-detail-lines');
+        lines.forEach(function (line) {
+          ul.appendChild(el('li', 'historique-detail-line', { text: line }));
+        });
+        detail.appendChild(ul);
+      } else if (!absoluteTime) {
+        detail.appendChild(
+          el('p', 'historique-detail-empty', {
+            text: entryLabel || 'Modification'
+          })
+        );
+      }
 
       return detail;
     }

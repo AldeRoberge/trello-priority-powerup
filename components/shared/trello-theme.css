@@ -2767,16 +2767,6 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
   border: 1px solid color-mix(in srgb, var(--blocked-accent, #ae2e24) 18%, transparent);
 }
 
-.tp-completion-item-motif .blocked-embedded-head,
-.tp-completion-master-motif .blocked-embedded-head {
-  margin-bottom: 4px;
-}
-
-.tp-completion-item-motif .blocked-embedded-title,
-.tp-completion-master-motif .blocked-embedded-title {
-  font-size: 12px;
-}
-
 .tp-completion-master-check-wrap {
   flex: none;
   display: inline-flex;

@@ -9,6 +9,7 @@
   <script src="./components/shared/brand.js"></script>
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/version.js"></script>
+  <script src="./components/shared/debug-log.js"></script>
   <script src="./components/priority/priority-matrix.js"></script>
   <script src="./components/priority/priority-ui.js"></script>
   <script src="./components/priority/priority-trello.js"></script>
@@ -170,6 +171,21 @@
           <span>12 heures (2:30 PM)</span>
         </label>
       </div>
+    </div>
+  </details>
+
+  <details class="tp-settings-section" id="debugSettingsSection">
+    <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-bug"></i></span>
+      <span class="tp-settings-summary-title">Débogage</span>
+      <span class="tp-settings-summary-hint">Journaux console (par membre)</span>
+    </summary>
+    <div class="tp-settings-body">
+      <p class="tp-color-scheme-hint">Active les journaux détaillés dans la console du navigateur (DevTools). Préférence personnelle — désactivée par défaut. Aucun contenu de carte, jeton ou message d’assistant n’est journalisé.</p>
+      <label class="tp-statut-toggle">
+        <input type="checkbox" id="debugLoggingToggle" />
+        <span>Activer les journaux de diagnostic</span>
+      </label>
     </div>
   </details>
 
@@ -484,6 +500,68 @@
         resizeSettingsPopup();
       } catch (err) {
         console.error('Display settings init failed', err);
+        section.hidden = true;
+      }
+    }
+
+    async function initDebugSettings() {
+      var section = document.getElementById('debugSettingsSection');
+      var toggle = document.getElementById('debugLoggingToggle');
+      var Profile = window.UserProfile;
+      if (!section || !toggle || !Profile) {
+        if (section) section.hidden = true;
+        return;
+      }
+
+      var profileState = null;
+      var saveTimer = null;
+
+      function applyDebugUi(enabled) {
+        toggle.checked = enabled === true;
+        if (window.TpDebug && typeof TpDebug.configure === 'function') {
+          TpDebug.configure(enabled === true);
+        }
+      }
+
+      function persistDebugLogging() {
+        if (!profileState) return;
+        var nextEnabled = !!toggle.checked;
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(function () {
+          var next = Profile.normalizeProfile(
+            Object.assign({}, profileState, { debugLogging: nextEnabled })
+          );
+          Profile.save(t, next)
+            .then(function (saved) {
+              profileState = saved;
+              applyDebugUi(saved.debugLogging);
+              if (window.TpDebug && typeof TpDebug.log === 'function') {
+                TpDebug.log('settings', 'debugLogging.saved', {
+                  enabled: !!saved.debugLogging
+                });
+              }
+            })
+            .catch(function (err) {
+              if (window.TpDebug && typeof TpDebug.error === 'function') {
+                TpDebug.error('settings', 'debugLogging.save', err);
+              } else {
+                console.error('Debug logging save failed', err);
+              }
+            });
+        }, 180);
+      }
+
+      try {
+        profileState = await Profile.load(t);
+        applyDebugUi(profileState.debugLogging);
+        toggle.addEventListener('change', persistDebugLogging);
+        resizeSettingsPopup();
+      } catch (err) {
+        if (window.TpDebug && typeof TpDebug.error === 'function') {
+          TpDebug.error('settings', 'debugSettings.init', err);
+        } else {
+          console.error('Debug settings init failed', err);
+        }
         section.hidden = true;
       }
     }

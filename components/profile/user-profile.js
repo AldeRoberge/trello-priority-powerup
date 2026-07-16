@@ -185,6 +185,8 @@
       agentPersonality: '',
       agentColor: '',
       agentFace: 'classic',
+      /** Opt-in console diagnostics (member-scoped; not sent to the LLM). */
+      debugLogging: false,
       updatedAt: ''
     };
   }
@@ -316,6 +318,7 @@
       agentPersonality: trimStr(src.agentPersonality, MAX_AGENT_PERSONALITY),
       agentColor: normalizeAgentColor(src.agentColor),
       agentFace: normalizeAgentFace(src.agentFace),
+      debugLogging: src.debugLogging === true,
       updatedAt: typeof src.updatedAt === 'string' ? src.updatedAt : ''
     };
   }
@@ -330,6 +333,10 @@
     var p = normalizeProfile(profile);
     if (EXPERIMENTAL_KEYS.indexOf(key) === -1) return false;
     return p.experimental[key] === true;
+  }
+
+  function isDebugLoggingEnabled(profile) {
+    return normalizeProfile(profile).debugLogging === true;
   }
 
   function featureSelector(key) {
@@ -606,6 +613,7 @@
     ensureAgentIdentity: ensureAgentIdentity,
     isFeatureEnabled: isFeatureEnabled,
     isExperimentalEnabled: isExperimentalEnabled,
+    isDebugLoggingEnabled: isDebugLoggingEnabled,
     applyFeaturesToCard: applyFeaturesToCard,
     toAgentContext: toAgentContext,
     profilePromptLines: profilePromptLines,
