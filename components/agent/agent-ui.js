@@ -5,6 +5,19 @@
 (function (global) {
   'use strict';
 
+  function dbg() {
+    return global.TpDebug || null;
+  }
+  function dbgLog(domain, event, meta) {
+    var d = dbg();
+    if (d && d.log) d.log(domain, event, meta);
+  }
+  function dbgError(domain, event, err, meta) {
+    var d = dbg();
+    if (d && d.error) d.error(domain, event, err, meta);
+    else if (err) console.error(domain + '.' + event, err);
+  }
+
   function el(tag, className, attrs) {
     var node = document.createElement(tag);
     if (className) node.className = className;
@@ -161,6 +174,7 @@
         : 'task';
     var isProjectScope = assistantScope === 'project';
     var standalone = !!options.standalone || isProjectScope;
+    dbgLog('agentUi', 'mount.start', { scope: assistantScope, standalone: standalone });
 
     var bridge = {
       getScope: options.getScope || function () { return assistantScope; },
@@ -1903,6 +1917,7 @@
           isSelfPrompt: !!opts.isSelfPrompt,
           silent: true
         });
+        dbgLog('agentUi', 'queue.queued', { queueLength: messageQueue.length, silent: true });
         return true;
       }
       var row = appendMessage('user', msg, { note: 'En attente' });
@@ -1912,6 +1927,7 @@
         text: msg,
         row: row
       });
+      dbgLog('agentUi', 'queue.queued', { queueLength: messageQueue.length });
       messagesEl.scrollTop = messagesEl.scrollHeight;
       notifyLayout();
       return true;
@@ -1921,6 +1937,7 @@
       if (pending || !messageQueue.length) return;
       var next = messageQueue.shift();
       if (!next || !next.text) return;
+      dbgLog('agentUi', 'queue.processing', { queueLength: messageQueue.length });
       sendUserMessage(next.text, {
         queuedRow: next.row,
         isSelfPrompt: !!next.isSelfPrompt,
@@ -1934,6 +1951,9 @@
       setSuggestionsBusy(false);
       notifyLayout();
       scheduleFaceSleep();
+      if (!messageQueue.length) {
+        dbgLog('agentUi', 'queue.drained', { queueLength: 0 });
+      }
       drainMessageQueue();
       // After the chat settles, Dream consolidates learnings in the background.
       // tryRunCardDream reschedules itself if another turn is still in flight.
@@ -7123,6 +7143,7 @@
       if (sanityBootstrapped || pending || interviewActive) return null;
       if (typeof Agent.cardSanityCheck !== 'function') return null;
       sanityBootstrapped = true;
+      dbgLog('agentUi', 'bootstrap.sanity.start', {});
       try {
         var result = await Agent.cardSanityCheck(provider, bridge, {
           onDebug: function (entry) {
@@ -7172,10 +7193,12 @@
       if (isProjectScope) {
         interviewBootstrapped = true;
         markSettleReady();
+        dbgLog('agentUi', 'bootstrap.interview.skip', { reason: 'project-scope' });
         refreshSuggestions({ animate: true });
         return;
       }
       if (!t || interviewBootstrapped || pending) return;
+      dbgLog('agentUi', 'bootstrap.interview.start', {});
       if (!Agent.isConfigured(provider) || typeof Agent.cardInterviewTurn !== 'function') {
         markSettleReady();
         await runOpenSanityThenSuggestions({
@@ -7367,7 +7390,9 @@
           setAssistantFaceEmotion(thinking, openingEmotion);
         }
         announceAssistantArrival({ emotion: openingEmotion });
+        dbgLog('agentUi', 'bootstrap.interview.end', { ok: true });
       } catch (err) {
+        dbgError('agentUi', 'bootstrap.interview.end', err, { ok: false });
         console.error('AgentUI bootstrapCardInterview failed', err);
         stopThinkingMotions();
         thinking.classList.remove('is-pending', 'is-streaming');
@@ -7387,6 +7412,7 @@
 
     async function ensureProviderLoaded() {
       if (!t) return;
+      dbgLog('agentUi', 'bootstrap.provider.start', {});
       try {
         provider = await Agent.getProvider(t);
         savedProvider = Agent.normalizeProvider(provider);
@@ -7450,7 +7476,12 @@
             mountMemoryUi('onboarding');
           }
         }
+        dbgLog('agentUi', 'bootstrap.provider.end', {
+          configured: Agent.isConfigured(provider),
+          interviewBootstrapped: interviewBootstrapped
+        });
       } catch (err) {
+        dbgError('agentUi', 'bootstrap.provider.end', err, { ok: false });
         console.error('AgentUI load provider failed', err);
       }
     }
@@ -7613,6 +7644,11 @@
       pending = true;
       updateComposerEnabled();
       var myGen = ++chatTurnGen;
+      var turnKind =
+        interviewActive && typeof Agent.cardInterviewTurn === 'function'
+          ? 'cardInterviewTurn'
+          : 'chatTurn';
+      dbgLog('agentUi', 'turn.start', { kind: turnKind });
       var thinking = appendPendingMessage();
       var bubble = thinking.querySelector('.agent-msg-bubble');
       var streamed = false;
@@ -7855,9 +7891,16 @@
         } else if (!interviewActive) {
           refreshSuggestions({ animate: true });
         }
+        dbgLog('agentUi', 'turn.end', {
+          ok: true,
+          kind: turnKind,
+          actionCount: (turn.actions || []).length,
+          droppedCount: (turn.droppedActions || []).length
+        });
       } catch (err) {
         if (err && err.debug) pushDebugEntry(err.debug);
         if (myGen !== chatTurnGen) return;
+        dbgError('agentUi', 'turn.end', err, { ok: false, kind: turnKind });
         stopThinkingMotions();
         thinking.classList.remove('is-pending', 'is-streaming');
         var errText = (err && err.message) || 'Erreur de l\'assistant';
@@ -8041,6 +8084,7 @@
     updateComposerEnabled();
     syncStatusControls();
     notifyLayout();
+    dbgLog('agentUi', 'mount.ready', { scope: assistantScope });
 
     if (initiallyOpen || shouldFocusComposer) {
       openAndFocusComposer();

@@ -2836,8 +2836,9 @@
     ) {
       try {
         await global.StatutTrello.maybeAutoMoveForCompleted(t);
+        dbgLog('statut.autoMove.completed');
       } catch (moveErr) {
-        console.error('Statut auto-move (completed) failed', moveErr);
+        dbgError('statut.autoMove.completed', moveErr);
       }
     }
 

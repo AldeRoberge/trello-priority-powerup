@@ -6,6 +6,19 @@
 (function (global) {
   'use strict';
 
+  function dbg() {
+    return global.TpDebug || null;
+  }
+  function dbgLog(domain, event, meta) {
+    var d = dbg();
+    if (d && d.log) d.log(domain, event, meta);
+  }
+  function dbgError(domain, event, err, meta) {
+    var d = dbg();
+    if (d && d.error) d.error(domain, event, err, meta);
+    else if (err) console.error(domain + '.' + event, err);
+  }
+
   var STORAGE_KEY = 'userProfile';
   var MAX_NAME = 80;
   var MAX_ROLE = 80;
@@ -535,6 +548,7 @@
 
   async function load(t) {
     if (!t || typeof t.get !== 'function') {
+      dbgLog('userProfile', 'load', { ok: false, reason: 'no-client' });
       return ensureAgentIdentity(emptyProfile()).profile;
     }
     try {
@@ -543,14 +557,19 @@
       var ensured = ensureAgentIdentity(profile);
       if (ensured.changed && typeof t.set === 'function') {
         try {
-          return await save(t, ensured.profile);
+          var saved = await save(t, ensured.profile);
+          dbgLog('userProfile', 'load', { ok: true, identityPersisted: true });
+          return saved;
         } catch (persistErr) {
+          dbgError('userProfile', 'load', persistErr);
           console.error('UserProfile identity persist failed', persistErr);
           return ensured.profile;
         }
       }
+      dbgLog('userProfile', 'load', { ok: true });
       return ensured.profile;
     } catch (err) {
+      dbgError('userProfile', 'load', err);
       console.error('UserProfile.load failed', err);
       return ensureAgentIdentity(emptyProfile()).profile;
     }
@@ -558,11 +577,13 @@
 
   async function save(t, profile) {
     if (!t || typeof t.set !== 'function') {
+      dbgLog('userProfile', 'save', { ok: false, reason: 'no-client' });
       throw new Error('UserProfile.save: t.set required');
     }
     var next = normalizeProfile(profile);
     next.updatedAt = new Date().toISOString();
     await t.set('member', 'private', STORAGE_KEY, next);
+    dbgLog('userProfile', 'save', { ok: true });
     return next;
   }
 
@@ -575,6 +596,7 @@
     if (t && typeof t.set === 'function') {
       await t.set('member', 'private', STORAGE_KEY, blank);
     }
+    dbgLog('userProfile', 'reset', { ok: true });
     return blank;
   }
 

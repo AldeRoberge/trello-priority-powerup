@@ -5,6 +5,19 @@
 (function (global) {
   'use strict';
 
+  function dbg() {
+    return global.TpDebug || null;
+  }
+  function dbgLog(domain, event, meta) {
+    var d = dbg();
+    if (d && d.log) d.log(domain, event, meta);
+  }
+  function dbgError(domain, event, err, meta) {
+    var d = dbg();
+    if (d && d.error) d.error(domain, event, err, meta);
+    else if (err) console.error(domain + '.' + event, err);
+  }
+
   var VISIONS_KEY = 'goals.visions';
   var MISSIONS_KEY = 'goals.missions';
   var PROJECTS_KEY = 'goals.projects';
@@ -220,12 +233,14 @@
       return normalizeCollection(raw, normalizeVision);
     });
     boardCache.visions = list;
+    dbgLog('goalsTrello', 'visions.load', { count: list.length });
     return list;
   }
 
   async function saveVisions(t, list) {
     var normalized = normalizeCollection(list, normalizeVision);
     boardCache.visions = normalized;
+    dbgLog('goalsTrello', 'visions.save', { count: normalized.length });
     return writeBoardArray(t, VISIONS_KEY, normalized);
   }
 
@@ -234,12 +249,14 @@
       return normalizeCollection(raw, normalizeMission);
     });
     boardCache.missions = list;
+    dbgLog('goalsTrello', 'missions.load', { count: list.length });
     return list;
   }
 
   async function saveMissions(t, list) {
     var normalized = normalizeCollection(list, normalizeMission);
     boardCache.missions = normalized;
+    dbgLog('goalsTrello', 'missions.save', { count: normalized.length });
     return writeBoardArray(t, MISSIONS_KEY, normalized);
   }
 
@@ -248,24 +265,28 @@
       return normalizeCollection(raw, normalizeProject);
     });
     boardCache.projects = list;
+    dbgLog('goalsTrello', 'projects.load', { count: list.length });
     return list;
   }
 
   async function saveProjects(t, list) {
     var normalized = normalizeCollection(list, normalizeProject);
     boardCache.projects = normalized;
+    dbgLog('goalsTrello', 'projects.save', { count: normalized.length });
     return writeBoardArray(t, PROJECTS_KEY, normalized);
   }
 
   async function getMetrics(t) {
     var list = await readBoardArray(t, METRICS_KEY, normalizeMetricsCollection);
     boardCache.metrics = list;
+    dbgLog('goalsTrello', 'metrics.load', { count: list.length });
     return list;
   }
 
   async function saveMetrics(t, list) {
     var normalized = normalizeMetricsCollection(list);
     boardCache.metrics = normalized;
+    dbgLog('goalsTrello', 'metrics.save', { count: normalized.length });
     return writeBoardArray(t, METRICS_KEY, normalized);
   }
 
@@ -294,6 +315,7 @@
     if (!entity) throw new Error('Nom de vision requis');
     list.push(entity);
     await saveVisions(t, list);
+    dbgLog('goalsTrello', 'vision.create', { ok: true });
     return entity;
   }
 
@@ -314,11 +336,14 @@
     if (!normalized) throw new Error('Vision invalide');
     list[idx] = normalized;
     await saveVisions(t, list);
+    dbgLog('goalsTrello', 'vision.update', { ok: true });
     return normalized;
   }
 
   async function retireVision(t, id) {
-    return updateVision(t, id, { retired: true });
+    var result = await updateVision(t, id, { retired: true });
+    dbgLog('goalsTrello', 'vision.retire', { ok: true });
+    return result;
   }
 
   async function createMission(t, name, visionId) {
@@ -337,6 +362,7 @@
     if (!entity) throw new Error('Mission invalide (nom et visionId requis)');
     list.push(entity);
     await saveMissions(t, list);
+    dbgLog('goalsTrello', 'mission.create', { ok: true });
     return entity;
   }
 
@@ -357,11 +383,14 @@
     if (!normalized) throw new Error('Mission invalide');
     list[idx] = normalized;
     await saveMissions(t, list);
+    dbgLog('goalsTrello', 'mission.update', { ok: true });
     return normalized;
   }
 
   async function retireMission(t, id) {
-    return updateMission(t, id, { retired: true });
+    var result = await updateMission(t, id, { retired: true });
+    dbgLog('goalsTrello', 'mission.retire', { ok: true });
+    return result;
   }
 
   async function createProject(t, name, missionId) {
@@ -380,6 +409,7 @@
     if (!entity) throw new Error('Projet invalide (nom et missionId requis)');
     list.push(entity);
     await saveProjects(t, list);
+    dbgLog('goalsTrello', 'project.create', { ok: true });
     return entity;
   }
 
@@ -398,11 +428,14 @@
     if (!normalized) throw new Error('Projet invalide');
     list[idx] = normalized;
     await saveProjects(t, list);
+    dbgLog('goalsTrello', 'project.update', { ok: true });
     return normalized;
   }
 
   async function retireProject(t, id) {
-    return updateProject(t, id, { retired: true });
+    var result = await updateProject(t, id, { retired: true });
+    dbgLog('goalsTrello', 'project.retire', { ok: true });
+    return result;
   }
 
   async function createMetric(t, raw) {
@@ -426,6 +459,7 @@
       list = enforcePrimaryConstraint(list, metric.linkedGoalId, metric.id);
     }
     await saveMetrics(t, list);
+    dbgLog('goalsTrello', 'metric.create', { ok: true });
     return findById(list, metric.id);
   }
 
@@ -453,6 +487,7 @@
       // leave others as-is
     }
     await saveMetrics(t, list);
+    dbgLog('goalsTrello', 'metric.update', { ok: true });
     return findById(list, metric.id);
   }
 
@@ -473,6 +508,7 @@
       return copy;
     });
     await saveMetrics(t, next);
+    dbgLog('goalsTrello', 'metric.remove', { ok: true });
     return true;
   }
 
@@ -519,6 +555,7 @@
       if (project.retired) throw new Error('Projet retiré');
     }
     await t.set('card', 'shared', CARD_PROJECT_ID_KEY, value);
+    dbgLog('goalsTrello', 'cardProject.link', { action: value ? 'set' : 'clear', ok: true });
     return value;
   }
 

@@ -5835,10 +5835,12 @@
     function recordAttempt(label, metaOrErr) {
       if (metaOrErr && metaOrErr.meta) {
         debug.attempts.push(Object.assign({ label: label }, metaOrErr.meta));
+        dbgLog('agent', 'cardInterviewTurn.fetch', dbgFetchMeta(label, metaOrErr));
         return;
       }
       if (metaOrErr && metaOrErr.debugMeta) {
         debug.attempts.push(Object.assign({ label: label }, metaOrErr.debugMeta));
+        dbgLog('agent', 'cardInterviewTurn.fetch', dbgFetchMeta(label, metaOrErr));
         return;
       }
       debug.attempts.push({
@@ -5846,6 +5848,7 @@
         error: (metaOrErr && metaOrErr.message) || String(metaOrErr || 'error'),
         ok: false
       });
+      dbgLog('agent', 'cardInterviewTurn.fetch', dbgFetchMeta(label, metaOrErr));
     }
 
     function notifyVisible(accumulated) {
@@ -5916,6 +5919,7 @@
       debug.latencyMs = Date.now() - t0;
       debug.ok = false;
       debug.error = (fatal && fatal.message) || String(fatal || 'Erreur');
+      dbgError('agent', 'cardInterviewTurn.end', fatal, { latencyMs: debug.latencyMs, ok: false });
       debug.request = debug.attempts.length
         ? debug.attempts[debug.attempts.length - 1]
         : buildRequestMeta(p, {
@@ -7853,10 +7857,12 @@
     function recordAttempt(label, metaOrErr) {
       if (metaOrErr && metaOrErr.meta) {
         debug.attempts.push(Object.assign({ label: label }, metaOrErr.meta));
+        dbgLog('agent', 'chatTurn.fetch', dbgFetchMeta(label, metaOrErr));
         return;
       }
       if (metaOrErr && metaOrErr.debugMeta) {
         debug.attempts.push(Object.assign({ label: label }, metaOrErr.debugMeta));
+        dbgLog('agent', 'chatTurn.fetch', dbgFetchMeta(label, metaOrErr));
         return;
       }
       debug.attempts.push({
@@ -7864,6 +7870,7 @@
         error: (metaOrErr && metaOrErr.message) || String(metaOrErr || 'error'),
         ok: false
       });
+      dbgLog('agent', 'chatTurn.fetch', dbgFetchMeta(label, metaOrErr));
     }
 
     function notifyVisible(accumulated) {
@@ -7901,6 +7908,11 @@
           });
           recordAttempt('stream (sans json mode)', response);
         } else if (err && /stream/i.test((err && err.message) || '')) {
+          dbgLog('agent', 'chatTurn.fetch', {
+            attempt: 'stream + json',
+            ok: false,
+            fallback: 'stream-rejected'
+          });
           // Provider rejected streaming — fall back to a blocking call.
           try {
             response = await chatCompletions(p, messages, { jsonMode: true, stream: false });
@@ -7924,6 +7936,7 @@
       debug.latencyMs = Date.now() - t0;
       debug.ok = false;
       debug.error = (fatal && fatal.message) || String(fatal || 'Erreur');
+      dbgError('agent', 'chatTurn.end', fatal, { latencyMs: debug.latencyMs, ok: false });
       debug.request = debug.attempts.length
         ? debug.attempts[debug.attempts.length - 1]
         : buildRequestMeta(p, {
@@ -8051,6 +8064,12 @@
       }
     };
     debug.usage = usage;
+    dbgLog('agent', 'chatTurn.end', {
+      ok: true,
+      latencyMs: latencyMs,
+      actionCount: (actions || []).length,
+      droppedCount: (parsed.droppedActions || []).length
+    });
     return {
       message: message,
       emotion: replyEmotion || parsed.emotion || null,
@@ -11707,12 +11726,24 @@
     var results = [];
     var summaries = [];
     var errors = [];
+    var executed = 0;
+    var rejected = 0;
     for (var i = 0; i < list.length; i++) {
       var result = await executeAction(bridge, list[i]);
       results.push(result);
-      if (result.ok && result.summary) summaries.push(result.summary);
-      if (!result.ok && result.error) errors.push(result.error);
+      if (result.ok) {
+        executed += 1;
+        if (result.summary) summaries.push(result.summary);
+      } else {
+        rejected += 1;
+        if (result.error) errors.push(result.error);
+      }
     }
+    dbgLog('agent', 'actions.execute', {
+      total: list.length,
+      executed: executed,
+      rejected: rejected
+    });
     var applied = {
       results: results,
       summary: summaries.filter(Boolean).join(' ') || (errors.length ? '' : 'OK'),

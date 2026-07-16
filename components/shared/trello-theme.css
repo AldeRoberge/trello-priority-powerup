@@ -2579,28 +2579,23 @@ span.tp-estimate-chip {
   white-space: nowrap;
 }
 
-.tp-completion-encouragement[data-tone='idle'],
-.tp-completion-item-progress-lbl[data-tone='idle'] {
+.tp-completion-encouragement[data-tone='idle'] {
   color: color-mix(in srgb, var(--tp-text-muted) 88%, #9aa3af);
 }
 
-.tp-completion-encouragement[data-tone='active'],
-.tp-completion-item-progress-lbl[data-tone='active'] {
+.tp-completion-encouragement[data-tone='active'] {
   color: #b8892d;
 }
 
-html[data-color-mode='dark'] .tp-completion-encouragement[data-tone='active'],
-html[data-color-mode='dark'] .tp-completion-item-progress-lbl[data-tone='active'] {
+html[data-color-mode='dark'] .tp-completion-encouragement[data-tone='active'] {
   color: #d4a94a;
 }
 
-.tp-completion-encouragement[data-tone='near'],
-.tp-completion-item-progress-lbl[data-tone='near'] {
+.tp-completion-encouragement[data-tone='near'] {
   color: color-mix(in srgb, var(--tp-success) 72%, #6f9f3a);
 }
 
-.tp-completion-encouragement[data-tone='done'],
-.tp-completion-item-progress-lbl[data-tone='done'] {
+.tp-completion-encouragement[data-tone='done'] {
   color: var(--tp-success);
 }
 
@@ -2963,10 +2958,10 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
   gap: 8px 10px;
 }
 
-/* label | slider | % | estimate — keep encouragement text in its column */
+/* slider | % | estimate */
 .tp-completion-item-slider-row {
   display: grid;
-  grid-template-columns: minmax(0, 7.25rem) minmax(0, 1fr) 2.75rem auto;
+  grid-template-columns: minmax(0, 1fr) 2.75rem auto;
   align-items: center;
   gap: 8px 10px;
 }
@@ -3097,19 +3092,6 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.tp-completion-item-progress-lbl {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-  transition: color 0.2s ease;
-}
-
-.tp-completion-item-progress-lbl .tp-completion-stage-icon {
-  width: 1.25em;
-  height: 1.25em;
 }
 
 .tp-completion-field-val,
@@ -3857,7 +3839,7 @@ html[data-color-mode='dark'] .tp-completion-suggestion.is-link:hover {
   }
 
   .tp-completion-item-slider-row {
-    grid-template-columns: minmax(0, 6.25rem) minmax(0, 1fr) 2.5rem auto;
+    grid-template-columns: minmax(0, 1fr) 2.5rem auto;
     gap: 6px 8px;
   }
 }

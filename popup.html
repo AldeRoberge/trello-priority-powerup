@@ -1600,6 +1600,13 @@
       if (blockedEl.parentNode !== mount) {
         mount.appendChild(blockedEl);
       }
+      if (
+        typeof statutUi.setBlockedSummary === 'function' &&
+        typeof variant.getState === 'function'
+      ) {
+        var summaryState = variant.getState() || {};
+        statutUi.setBlockedSummary(summaryState.blockedReasons || []);
+      }
       if (typeof statutUi.syncBlockedPanel === 'function') {
         statutUi.syncBlockedPanel();
       }
@@ -1638,6 +1645,9 @@
         expandProgressSection();
         if (statutUi && typeof statutUi.syncBlockedPanel === 'function') {
           statutUi.syncBlockedPanel();
+        }
+        if (statutUi && typeof statutUi.setExpanded === 'function') {
+          statutUi.setExpanded(true);
         }
         target =
           (typeof variant.getBlockedSection === 'function' &&

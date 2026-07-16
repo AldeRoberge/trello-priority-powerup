@@ -2286,11 +2286,6 @@
           : 'Marquer comme termin\u00e9';
     }
 
-    function syncItemProgressLabel(labelEl, percent) {
-      if (!labelEl) return;
-      applyProgressEncouragement(labelEl, CT.clampProgress(percent));
-    }
-
     function syncItemSlidersFromData() {
       data.items.forEach(function (item) {
         var li = findItemRow(item.id);
@@ -2299,7 +2294,6 @@
         var itemBlocked = CT.isItemBlocked(item);
         var slider = li.querySelector('.tp-completion-item-slider');
         var valEl = li.querySelector('.tp-completion-item-val');
-        var labelEl = li.querySelector('.tp-completion-item-progress-lbl');
         var checkBtn = li.querySelector('.tp-completion-check');
         if (slider) {
           slider.value = String(p);
@@ -2309,7 +2303,6 @@
           valEl.textContent = p + '\u00a0%';
           valEl.style.color = itemBlocked ? BLOCKED_ACCENT : '';
         }
-        syncItemProgressLabel(labelEl, p);
         syncCheckButton(checkBtn, item.done, p, { blocked: itemBlocked });
         li.classList.toggle('is-done', item.done);
         li.classList.toggle('is-blocked', itemBlocked);
@@ -3247,7 +3240,6 @@
       var deleteBtn = li.querySelector('.tp-completion-delete');
       var itemSlider = li.querySelector('.tp-completion-item-slider');
       var itemValEl = li.querySelector('.tp-completion-item-val');
-      var itemLabelEl = li.querySelector('.tp-completion-item-progress-lbl');
       var isLinked = CT.isLinkedItem(item);
 
       var blockedBtn = li.querySelector('.tp-completion-blocked-btn');
@@ -3260,7 +3252,6 @@
           itemValEl.textContent = p + '\u00a0%';
           itemValEl.style.color = itemBlocked ? BLOCKED_ACCENT : '';
         }
-        syncItemProgressLabel(itemLabelEl, p);
         syncCheckButton(checkBtn, item.done, p, { blocked: itemBlocked });
         li.classList.toggle('is-done', item.done);
         li.classList.toggle('is-blocked', itemBlocked);
@@ -3663,10 +3654,6 @@
         sliderRow.className = 'tp-completion-item-slider-row';
 
         var itemProgress = CT.itemProgress(item);
-        var sliderLbl = document.createElement('span');
-        sliderLbl.className =
-          'tp-completion-field-lbl tp-completion-item-progress-lbl';
-        syncItemProgressLabel(sliderLbl, itemProgress);
 
         var sliderWrap = document.createElement('div');
         sliderWrap.className = 'field-slider';
@@ -3689,7 +3676,6 @@
         if (itemBlocked) itemValEl.style.color = BLOCKED_ACCENT;
 
         sliderWrap.appendChild(itemSlider);
-        sliderRow.appendChild(sliderLbl);
         sliderRow.appendChild(sliderWrap);
         sliderRow.appendChild(itemValEl);
 

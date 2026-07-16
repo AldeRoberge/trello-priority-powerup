@@ -2960,6 +2960,10 @@ body {
   border-radius: var(--radius);
 }
 
+.field--statut-embedded.is-collapsed.has-section-glow {
+  padding: 4px 10px 8px;
+}
+
 .statut-section-body {
   margin-top: 8px;
 }
@@ -2980,6 +2984,55 @@ body {
   min-height: 0;
 }
 
+.statut-embedded-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.statut-embedded-collapse-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tp-text-muted, var(--text-muted));
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.statut-embedded-collapse-btn:hover {
+  background: color-mix(in srgb, var(--tp-text, var(--text-primary)) 8%, transparent);
+  color: var(--tp-text, var(--text-primary));
+}
+
+.statut-embedded-collapse-btn:focus {
+  outline: none;
+}
+
+.statut-embedded-collapse-btn:focus-visible {
+  box-shadow: 0 0 0 2px var(--tp-surface, var(--surface-1)), 0 0 0 4px var(--tp-focus, #0c66e4);
+}
+
+.statut-embedded-collapse-chevron {
+  display: block;
+  transition: transform 0.18s ease;
+}
+
+.field--statut-embedded:not(.is-collapsed) .statut-embedded-collapse-chevron {
+  transform: rotate(180deg);
+}
+
 .statut-hero {
   display: flex;
   flex-direction: column;
@@ -2989,6 +3042,15 @@ body {
   gap: 8px;
   margin: 0 0 12px;
   color: var(--statut-color, #626f86);
+}
+
+.field--statut-embedded.is-collapsed .statut-hero {
+  flex-direction: row;
+  justify-content: flex-start;
+  flex: 1 1 auto;
+  gap: 8px;
+  margin-bottom: 0;
+  text-align: left;
 }
 
 .statut-hero-icon {
@@ -3003,12 +3065,23 @@ body {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--statut-color, #626f86) 28%, transparent);
 }
 
+.field--statut-embedded.is-collapsed .statut-hero-icon {
+  width: 28px;
+  height: 28px;
+  background: color-mix(in srgb, var(--statut-color, #626f86) 14%, transparent);
+}
+
 /* Beat .field--statut-embedded .statut-list-option-icon (chip size) for the hero. */
 .statut-hero-icon .statut-list-option-icon,
 .field--statut-embedded .statut-hero-icon .statut-list-option-icon {
   width: 28px;
   height: 28px;
   color: inherit;
+}
+
+.field--statut-embedded.is-collapsed .statut-hero-icon .statut-list-option-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .statut-hero-name {
@@ -3020,6 +3093,44 @@ body {
   letter-spacing: -0.02em;
   color: var(--text-primary, var(--tp-text));
   word-break: break-word;
+}
+
+.field--statut-embedded.is-collapsed .statut-hero-name {
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
+}
+
+.statut-embedded-summary {
+  margin: 6px 0 0 36px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: color-mix(in srgb, var(--blocked-accent, #ae2e24) 82%, var(--tp-text, var(--text-primary)));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.statut-embedded-summary:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.statut-embedded-summary[hidden] {
+  display: none !important;
+}
+
+.field--statut-embedded.is-collapsed .statut-groups,
+.field--statut-embedded.is-collapsed .statut-blocked-panel,
+.field--statut-embedded.is-collapsed .statut-auth-box,
+.field--statut-embedded.is-collapsed .statut-empty {
+  display: none !important;
 }
 
 /* Compact status chips under the hero (slightly smaller than standalone). */

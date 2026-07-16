@@ -8,6 +8,19 @@
 (function (global) {
   'use strict';
 
+  function dbg() {
+    return global.TpDebug || null;
+  }
+  function dbgLog(domain, event, meta) {
+    var d = dbg();
+    if (d && d.log) d.log(domain, event, meta);
+  }
+  function dbgError(domain, event, err, meta) {
+    var d = dbg();
+    if (d && d.error) d.error(domain, event, err, meta);
+    else if (err) console.error(domain + '.' + event, err);
+  }
+
   var STORAGE_KEY = 'aiMemory';
   var MAX_LTM_FACTS = 8;
   var MAX_STM_NOTES = 6;
@@ -394,6 +407,16 @@
     }
   }
 
+  function dbgMemoryCounts(memory) {
+    var m = normalizeMemory(memory);
+    return {
+      version: m.version,
+      factCount: m.longTerm.facts.length,
+      noteCount: m.shortTerm.notes.length,
+      bytes: serializedSize(m)
+    };
+  }
+
   function enforceBudget(memory) {
     var next = normalizeMemory(memory);
     while (serializedSize(next) > MAX_SERIALIZED && next.shortTerm.recentCards.length) {
@@ -421,7 +444,10 @@
   }
 
   async function load(t) {
-    if (!t || typeof t.get !== 'function') return emptyMemory();
+    if (!t || typeof t.get !== 'function') {
+      dbgLog('agentMemory', 'load', { ok: false, reason: 'no-client' });
+      return emptyMemory();
+    }
     try {
       var stored = await t.get('board', 'private', STORAGE_KEY);
       var next = enforceBudget(normalizeMemory(stored));
@@ -443,19 +469,26 @@
           console.error('AgentMemory.load purge persist failed', persistErr);
         }
       }
+      dbgLog('agentMemory', 'load', Object.assign({ ok: true }, dbgMemoryCounts(next)));
       return next;
     } catch (err) {
+      dbgError('agentMemory', 'load', err);
       console.error('AgentMemory.load failed', err);
       return emptyMemory();
     }
   }
 
   async function save(t, memory) {
-    if (!t || typeof t.set !== 'function') return normalizeMemory(memory);
+    if (!t || typeof t.set !== 'function') {
+      dbgLog('agentMemory', 'save', { ok: false, reason: 'no-client' });
+      return normalizeMemory(memory);
+    }
     var next = enforceBudget(memory);
     try {
       await t.set('board', 'private', STORAGE_KEY, next);
+      dbgLog('agentMemory', 'save', Object.assign({ ok: true }, dbgMemoryCounts(next)));
     } catch (err) {
+      dbgError('agentMemory', 'save', err);
       console.error('AgentMemory.save failed', err);
     }
     return next;
@@ -629,17 +662,33 @@
   async function scanAndRefresh(t, provider, options) {
     options = options || {};
     var force = !!options.force;
+    var t0 = Date.now();
     var memory = await load(t);
     if (scanIsFresh(memory, force) && !options.forceMergeDigest) {
+      dbgLog('agentMemory', 'scanAndRefresh', {
+        ok: false,
+        reason: 'fresh-cache',
+        durationMs: Date.now() - t0
+      });
       return memory;
     }
 
     var Agent = global.PriorityAgent;
     var PT = global.PriorityTrello;
     if (!Agent || !Agent.isConfigured || !Agent.isConfigured(provider)) {
+      dbgLog('agentMemory', 'scanAndRefresh', {
+        ok: false,
+        reason: 'no-provider',
+        durationMs: Date.now() - t0
+      });
       return memory;
     }
     if (!PT || typeof PT.scanBoardCards !== 'function') {
+      dbgLog('agentMemory', 'scanAndRefresh', {
+        ok: false,
+        reason: 'no-scanner',
+        durationMs: Date.now() - t0
+      });
       return memory;
     }
 
@@ -647,6 +696,7 @@
     try {
       digest = await PT.scanBoardCards(t);
     } catch (err) {
+      dbgError('agentMemory', 'scanAndRefresh', err, { durationMs: Date.now() - t0 });
       console.error('AgentMemory.scanBoardCards failed', err);
       return memory;
     }
@@ -660,6 +710,11 @@
     if (!digestText.trim()) {
       memory = normalizeMemory(memory);
       memory.lastScanAt = new Date().toISOString();
+      dbgLog('agentMemory', 'scanAndRefresh', {
+        ok: true,
+        reason: 'empty-digest',
+        durationMs: Date.now() - t0
+      });
       return save(t, memory);
     }
 
@@ -728,6 +783,7 @@
         }
       }
     } catch (err) {
+      dbgError('agentMemory', 'scanAndRefresh.model', err, { durationMs: Date.now() - t0 });
       console.error('AgentMemory.scanAndRefresh model failed', err);
     }
 
@@ -737,6 +793,11 @@
     delete memory._openingQuestions;
     var saved = await save(t, memory);
     if (opening && opening.length) saved._openingQuestions = opening;
+    dbgLog('agentMemory', 'scanAndRefresh', {
+      ok: true,
+      durationMs: Date.now() - t0,
+      questionCount: opening ? opening.length : 0
+    });
     return saved;
   }
 

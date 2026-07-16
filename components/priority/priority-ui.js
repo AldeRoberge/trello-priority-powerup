@@ -47,6 +47,8 @@
   var FORMULA_STORAGE_KEY = 'trello-priority-powerup/formula';
   var COLOR_SCHEME_STORAGE_KEY = 'trello-priority-powerup/color-scheme';
   var SECTION_COLLAPSE_STORAGE_KEY = 'trello-priority-powerup/section-collapse';
+  var STATUT_EMBEDDED_DETAILS_STORAGE_KEY =
+    'trello-priority-powerup/statut-embedded-details-expanded';
   // 'blocked' / 'statut' kept for legacy prefs; both nest under Progrès (not collapsible).
   var SECTION_COLLAPSE_KEYS = ['info', 'statut', 'objectif', 'priority', 'graph', 'progress', 'due', 'blocked', 'chat', 'historique'];
   var DEFAULT_COLOR_SCHEME_KEY = 'blue';
@@ -1878,6 +1880,28 @@
     var stored = loadSectionCollapseState();
     if (Object.prototype.hasOwnProperty.call(stored, key)) return !!stored[key];
     return !!fallback;
+  }
+
+  function loadStatutEmbeddedDetailsExpanded() {
+    try {
+      if (typeof localStorage === 'undefined') return true;
+      var raw = localStorage.getItem(STATUT_EMBEDDED_DETAILS_STORAGE_KEY);
+      if (raw === '0' || raw === 'false') return false;
+      if (raw === '1' || raw === 'true') return true;
+      return true;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  function saveStatutEmbeddedDetailsExpanded(expanded) {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.setItem(
+        STATUT_EMBEDDED_DETAILS_STORAGE_KEY,
+        expanded ? '1' : '0'
+      );
+    } catch (e) { /* ignore quota / private mode */ }
   }
   var INUTILE_EPS = 0.05;
   var INUTILE_LABEL = 'Inutile';
@@ -6164,6 +6188,10 @@
     var onAuthorize =
       typeof config.onAuthorize === 'function' ? config.onAuthorize : null;
     var authReason = config.authReason || (config.needsAuth ? 'not-authorized' : '');
+    var embeddedDetailsExpanded = embedded
+      ? loadStatutEmbeddedDetailsExpanded()
+      : true;
+    var embeddedBlockedReasons = [];
 
     var field = document.createElement('div');
     field.className = embedded
@@ -6219,6 +6247,9 @@
     body.id = bodyId;
 
     var embeddedBar = null;
+    var embeddedHead = null;
+    var embeddedToggleBtn = null;
+    var embeddedSummaryEl = null;
     var heroEl = null;
     if (embedded) {
       embeddedBar = document.createElement('div');
@@ -6226,10 +6257,27 @@
       embeddedBar.appendChild(settingsBtn);
       body.appendChild(embeddedBar);
 
+      embeddedHead = document.createElement('div');
+      embeddedHead.className = 'statut-embedded-head';
+      body.appendChild(embeddedHead);
+
+      embeddedToggleBtn = document.createElement('button');
+      embeddedToggleBtn.type = 'button';
+      embeddedToggleBtn.className = 'statut-embedded-collapse-btn';
+      embeddedToggleBtn.innerHTML =
+        '<i class="ti ti-chevron-down statut-embedded-collapse-chevron" aria-hidden="true"></i>';
+      embeddedHead.appendChild(embeddedToggleBtn);
+
       heroEl = document.createElement('div');
       heroEl.className = 'statut-hero';
       heroEl.setAttribute('aria-live', 'polite');
-      body.appendChild(heroEl);
+      embeddedHead.appendChild(heroEl);
+
+      embeddedSummaryEl = document.createElement('p');
+      embeddedSummaryEl.className = 'statut-embedded-summary';
+      embeddedSummaryEl.hidden = true;
+      embeddedSummaryEl.setAttribute('aria-live', 'polite');
+      body.appendChild(embeddedSummaryEl);
     }
 
     var authBox = document.createElement('div');
@@ -6349,6 +6397,7 @@
       var wasActive = blockedPanel.classList.contains('is-statut-blocked');
       blockedPanel.classList.toggle('is-statut-blocked', show);
       field.classList.toggle('has-blocked-panel', show);
+      refreshEmbeddedSummary();
       if (wasActive !== show) onLayoutChange();
     }
 
@@ -6375,6 +6424,44 @@
       label.textContent = name;
       wrap.appendChild(label);
       return wrap;
+    }
+
+    function refreshEmbeddedSummary() {
+      if (!embeddedSummaryEl) return;
+      var show = currentCategory() === 'blocked' && !embeddedDetailsExpanded;
+      var text = formatBlockedReasonsSummary(embeddedBlockedReasons, {
+        empty: BLOCKED_LABEL,
+      });
+      embeddedSummaryEl.textContent = text;
+      embeddedSummaryEl.title = text;
+      embeddedSummaryEl.hidden = !show;
+    }
+
+    function setEmbeddedDetailsExpanded(expanded, opts) {
+      if (!embedded) return;
+      opts = opts || {};
+      embeddedDetailsExpanded = !!expanded;
+      field.classList.toggle('is-collapsed', !embeddedDetailsExpanded);
+      if (embeddedToggleBtn) {
+        embeddedToggleBtn.setAttribute(
+          'aria-expanded',
+          embeddedDetailsExpanded ? 'true' : 'false'
+        );
+        embeddedToggleBtn.setAttribute(
+          'aria-label',
+          embeddedDetailsExpanded
+            ? 'Replier les détails du statut'
+            : 'Développer les détails du statut'
+        );
+        embeddedToggleBtn.title = embeddedDetailsExpanded
+          ? 'Replier les détails'
+          : 'Développer les détails';
+      }
+      refreshEmbeddedSummary();
+      if (opts.persist !== false) {
+        saveStatutEmbeddedDetailsExpanded(embeddedDetailsExpanded);
+      }
+      if (opts.notifyLayout !== false) onLayoutChange();
     }
 
     function buildGroups() {
@@ -6517,9 +6604,25 @@
       syncStatutSectionTint();
     }
 
+    if (embeddedToggleBtn) {
+      embeddedToggleBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        setEmbeddedDetailsExpanded(!embeddedDetailsExpanded);
+      });
+    }
+
+    if (embeddedSummaryEl) {
+      embeddedSummaryEl.addEventListener('click', function () {
+        if (!embeddedDetailsExpanded) setEmbeddedDetailsExpanded(true);
+      });
+    }
+
     function selectList(listId) {
       if (!onSelectList) {
         currentListId = String(listId);
+        if (embedded && currentCategory() === 'blocked' && !embeddedDetailsExpanded) {
+          setEmbeddedDetailsExpanded(true, { notifyLayout: false });
+        }
         renderOptions();
         refreshSummary();
         syncStatutSectionTint();
@@ -6537,6 +6640,9 @@
             return;
           }
           currentListId = String(listId);
+          if (embedded && currentCategory() === 'blocked' && !embeddedDetailsExpanded) {
+            setEmbeddedDetailsExpanded(true, { notifyLayout: false });
+          }
           setAuthHint('');
           onChange({ listId: currentListId, result: result });
         })
@@ -6581,6 +6687,12 @@
     }
 
     renderOptions();
+    if (embedded) {
+      setEmbeddedDetailsExpanded(embeddedDetailsExpanded, {
+        persist: false,
+        notifyLayout: false,
+      });
+    }
     refreshSummary();
 
     return {
@@ -6594,11 +6706,17 @@
       },
       syncBlockedPanel: syncStatutSectionTint,
       setExpanded: function (on, opts) {
+        if (!collapse && embedded) return setEmbeddedDetailsExpanded(on, opts);
         if (!collapse) return;
         return collapse.setExpanded(on, opts);
       },
       isExpanded: function () {
-        return collapse ? collapse.isExpanded() : true;
+        if (collapse) return collapse.isExpanded();
+        return embedded ? !!embeddedDetailsExpanded : true;
+      },
+      setBlockedSummary: function (reasons) {
+        embeddedBlockedReasons = normalizeBlockedReasons(reasons);
+        refreshEmbeddedSummary();
       },
       setListId: function (listId) {
         currentListId = listId ? String(listId) : '';

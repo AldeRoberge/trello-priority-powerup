@@ -5,6 +5,19 @@
 (function (global) {
   'use strict';
 
+  function dbg() {
+    return global.TpDebug || null;
+  }
+  function dbgLog(domain, event, meta) {
+    var d = dbg();
+    if (d && d.log) d.log(domain, event, meta);
+  }
+  function dbgError(domain, event, err, meta) {
+    var d = dbg();
+    if (d && d.error) d.error(domain, event, err, meta);
+    else if (err) console.error(domain + '.' + event, err);
+  }
+
   var HOLE_RE = /(\u2026|\.{3,}|\[([^\]]*)\])/g;
 
   function el(tag, className, attrs) {
@@ -108,6 +121,7 @@
     var Agent = global.PriorityAgent;
     var Mem = global.AgentMemory;
     if (!Agent || !Mem) throw new Error('PriorityAgent and AgentMemory required');
+    dbgLog('memoryUi', 'mount.start', { mode: mode, embedded: embedded });
 
     var provider = Agent.normalizeProvider(null);
     var memory = Mem.emptyMemory();
@@ -747,6 +761,9 @@
       focusInput();
       setSuggestions([]);
       var thinking = appendMessage('assistant', '\u2026');
+      var t0 = Date.now();
+      dbgLog('memoryUi', 'send.start', { mode: mode });
+      var patchCount = 0;
       try {
         var turn = await Agent.memoryTurn(provider, history.slice(0, -1), memory, msg, {
           mode: mode,
@@ -756,6 +773,7 @@
           turn.message || 'Okay.';
         history.push({ role: 'assistant', content: turn.message || '' });
         if (turn.patches && turn.patches.length) {
+          patchCount = turn.patches.length;
           memory = await Mem.applyPatches(t, memory, turn.patches);
           renderSummary();
           updateProgress();
@@ -768,7 +786,16 @@
           await Mem.save(t, memory);
         }
         setSuggestions(turn.suggestions);
+        dbgLog('memoryUi', 'send.end', {
+          ok: true,
+          durationMs: Date.now() - t0,
+          patchCount: patchCount
+        });
       } catch (err) {
+        dbgError('memoryUi', 'send.end', err, {
+          ok: false,
+          durationMs: Date.now() - t0
+        });
         console.error('MemoryUI send failed', err);
         thinking.querySelector('.memory-ui-bubble').textContent =
           'Erreur\u00a0: ' + ((err && err.message) || String(err));
@@ -874,6 +901,7 @@
     });
 
     async function bootstrap() {
+      dbgLog('memoryUi', 'bootstrap.start', { mode: mode });
       appendMessage('assistant', 'Chargement du contexte du tableau\u2026');
       try {
         provider = await Agent.getProvider(t);
@@ -890,6 +918,7 @@
         renderSummary();
         updateProgress();
         onLayoutChange();
+        dbgLog('memoryUi', 'bootstrap.end', { ok: false, reason: 'not-configured' });
         return;
       }
       setComposerEnabled(true);
@@ -972,6 +1001,7 @@
       }
       onLayoutChange();
       focusInput();
+      dbgLog('memoryUi', 'bootstrap.end', { ok: true, mode: mode });
     }
 
     bootstrap();
