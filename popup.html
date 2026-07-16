@@ -1282,6 +1282,8 @@
       }
 
       var statusLabel = '';
+      var statusCategory = '';
+      var statusColor = '';
       if (latestStatut) {
         statusLabel = latestStatut.listName || '';
         if (
@@ -1297,12 +1299,88 @@
             }
           }
         }
+        statusCategory = latestStatut.category || '';
+        if (!statusCategory && latestStatut.listId) {
+          var roleLists = latestStatut.roleLists || {};
+          if (
+            roleLists.blocked &&
+            String(roleLists.blocked) === String(latestStatut.listId)
+          ) {
+            statusCategory = 'blocked';
+          } else if (
+            roleLists.completed &&
+            String(roleLists.completed) === String(latestStatut.listId)
+          ) {
+            statusCategory = 'completed';
+          } else if (Array.isArray(latestStatut.lists)) {
+            for (var lc = 0; lc < latestStatut.lists.length; lc++) {
+              var listCat = latestStatut.lists[lc];
+              if (
+                listCat &&
+                String(listCat.id) === String(latestStatut.listId) &&
+                listCat.category
+              ) {
+                statusCategory = listCat.category;
+                break;
+              }
+            }
+          }
+        }
+        if (
+          window.StatutMatch &&
+          typeof StatutMatch.categoryStyle === 'function'
+        ) {
+          var statusStyle = StatutMatch.categoryStyle(
+            statusCategory || '_none'
+          );
+          statusColor = (statusStyle && statusStyle.color) || '';
+        } else if (
+          window.PriorityUI &&
+          typeof PriorityUI.statutCategoryStyle === 'function'
+        ) {
+          var puStyle = PriorityUI.statutCategoryStyle(
+            statusCategory || '_none'
+          );
+          statusColor = (puStyle && puStyle.color) || '';
+        }
+      }
+
+      var progressColor = '';
+      var progressBlocked = false;
+      if (window.CompletionTrello) {
+        var completionForColor =
+          (completionUi && typeof completionUi.getData === 'function'
+            ? completionUi.getData()
+            : null) ||
+          latestCompletion ||
+          { items: [] };
+        if (typeof CompletionTrello.hasAnyBlocked === 'function') {
+          progressBlocked = !!CompletionTrello.hasAnyBlocked(completionForColor);
+        }
+        if (
+          progressBlocked &&
+          window.PriorityUI &&
+          PriorityUI.BLOCKED_STYLES &&
+          PriorityUI.BLOCKED_STYLES.seg
+        ) {
+          progressColor = PriorityUI.BLOCKED_STYLES.seg;
+        } else if (
+          progressPercent != null &&
+          window.CompletionUI &&
+          typeof CompletionUI.completionColorForProgress === 'function'
+        ) {
+          progressColor = CompletionUI.completionColorForProgress(progressPercent);
+        }
       }
 
       overviewUi.setData({
         title: readCardNameLabel() || cardNameCache || '',
         status: statusLabel,
+        statusCategory: statusCategory,
+        statusColor: statusColor,
         progressPercent: progressPercent,
+        progressColor: progressColor,
+        progressBlocked: progressBlocked,
         subtasksDone: subtasksDone,
         subtasksTotal: subtasksTotal,
         dueCountdown: dueCountdown,

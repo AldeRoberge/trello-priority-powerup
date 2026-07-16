@@ -6800,10 +6800,17 @@
 
     var titleText = typeof config.title === 'string' ? config.title : '';
     var statusText = typeof config.status === 'string' ? config.status : '';
+    var statusCategory =
+      typeof config.statusCategory === 'string' ? config.statusCategory : '';
+    var statusColor =
+      typeof config.statusColor === 'string' ? config.statusColor : '';
     var progressPercent =
       config.progressPercent != null && isFinite(+config.progressPercent)
         ? Math.max(0, Math.min(100, Math.round(+config.progressPercent)))
         : null;
+    var progressColor =
+      typeof config.progressColor === 'string' ? config.progressColor : '';
+    var progressBlocked = !!config.progressBlocked;
     var subtasksDone =
       config.subtasksDone != null && isFinite(+config.subtasksDone)
         ? Math.max(0, Math.round(+config.subtasksDone))
@@ -6904,7 +6911,7 @@
       cell.appendChild(valueWrap);
 
       metrics.appendChild(cell);
-      return { cell: cell, value: valueWrap };
+      return { cell: cell, value: valueWrap, head: head, icon: icon };
     }
 
     var statusCell = makeCell('status', 'blocked', 'Statut', 'ti-list-check');
@@ -6917,6 +6924,14 @@
     );
     var dueCell = makeCell('due', 'due', '\u00c9ch\u00e9ance', 'ti-calendar-event');
     var priorityCell = makeCell('priority', 'priority', 'Priorit\u00e9', 'ti-flame');
+
+    var progressRing = document.createElement('span');
+    progressRing.className = 'overview-progress-ring tp-completion-check';
+    progressRing.setAttribute('aria-hidden', 'true');
+    progressRing.innerHTML =
+      '<svg class="tp-completion-check-icon" viewBox="0 0 16 16" width="10" height="10" aria-hidden="true" focusable="false">' +
+      '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3.5 8.2 L6.6 11.2 L12.5 4.8"></path>' +
+      '</svg>';
 
     var progressBarTrack = document.createElement('div');
     progressBarTrack.className = 'overview-progress-track';
@@ -6940,6 +6955,19 @@
       }
     }
 
+    function syncStatusIcon() {
+      var style = statutCategoryStyle(statusCategory || '_none');
+      var iconKey = style.icon || 'dot';
+      var next = createStatutIcon(iconKey, 14);
+      next.classList.add('overview-cell-icon', 'overview-status-icon');
+      if (statusCell.icon && statusCell.icon.parentNode) {
+        statusCell.icon.parentNode.replaceChild(next, statusCell.icon);
+      } else {
+        statusCell.head.insertBefore(next, statusCell.head.children[0] || null);
+      }
+      statusCell.icon = next;
+    }
+
     function paint() {
       var t = (titleText || '').trim();
       if (t) {
@@ -6959,19 +6987,81 @@
       setFeatureVisible(priorityCell.cell, features.priority !== false);
 
       var st = (statusText || '').trim();
+      var statusStyle = statutCategoryStyle(statusCategory || '_none');
+      var statusAccent =
+        statusColor ||
+        statusStyle.color ||
+        '';
+      var statusIsBlocked = statusCategory === 'blocked';
       statusCell.value.textContent = st || 'Sans statut';
       statusCell.value.classList.toggle('is-empty', !st);
+      statusCell.cell.classList.toggle('is-blocked', statusIsBlocked);
+      if (statusCategory) {
+        statusCell.cell.dataset.statusCategory = statusCategory;
+      } else if (statusCell.cell.dataset) {
+        delete statusCell.cell.dataset.statusCategory;
+      }
+      if (statusAccent) {
+        statusCell.cell.style.setProperty('--overview-status-accent', statusAccent);
+      } else {
+        statusCell.cell.style.removeProperty('--overview-status-accent');
+      }
+      syncStatusIcon();
 
+      var progressAccent = progressBlocked
+        ? readCssVar('--blocked-accent', '#ae2e24')
+        : progressColor || '';
+      progressCell.cell.classList.toggle('is-blocked', !!progressBlocked);
+      progressCell.value.innerHTML = '';
       if (progressPercent == null) {
         progressCell.value.textContent = '\u2014';
         progressCell.value.classList.add('is-empty');
         progressBarFill.style.width = '0%';
         progressBarTrack.classList.add('is-empty');
+        progressRing.classList.remove('is-checked', 'has-progress', 'is-blocked');
+        progressRing.style.removeProperty('--completion-progress');
+        progressRing.style.removeProperty('--completion-check-fill');
       } else {
-        progressCell.value.textContent = progressPercent + '\u00a0%';
+        var done = progressPercent >= 100;
+        progressRing.classList.toggle('is-checked', done);
+        progressRing.classList.toggle('has-progress', progressPercent > 0 && !done);
+        progressRing.classList.toggle('is-blocked', !!progressBlocked && !done);
+        progressRing.style.setProperty('--completion-progress', String(progressPercent));
+        if (progressAccent) {
+          progressRing.style.setProperty('--completion-check-fill', progressAccent);
+        } else {
+          progressRing.style.removeProperty('--completion-check-fill');
+        }
+        if (progressBlocked && !done) {
+          progressRing.innerHTML =
+            '<svg class="tp-completion-check-icon tp-completion-pause-icon" viewBox="0 0 16 16" width="10" height="10" aria-hidden="true" focusable="false">' +
+            '<rect x="5" y="4" width="2.2" height="8" rx="0.8" fill="currentColor"></rect>' +
+            '<rect x="8.8" y="4" width="2.2" height="8" rx="0.8" fill="currentColor"></rect>' +
+            '</svg>';
+        } else {
+          progressRing.innerHTML =
+            '<svg class="tp-completion-check-icon" viewBox="0 0 16 16" width="10" height="10" aria-hidden="true" focusable="false">' +
+            '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3.5 8.2 L6.6 11.2 L12.5 4.8"></path>' +
+            '</svg>';
+        }
+        progressCell.value.appendChild(progressRing);
+        var pctText = document.createElement('span');
+        pctText.className = 'overview-progress-pct';
+        pctText.textContent = progressPercent + '\u00a0%';
+        progressCell.value.appendChild(pctText);
         progressCell.value.classList.remove('is-empty');
         progressBarFill.style.width = progressPercent + '%';
         progressBarTrack.classList.remove('is-empty');
+      }
+      if (progressAccent) {
+        progressCell.cell.style.setProperty(
+          '--overview-progress-accent',
+          progressAccent
+        );
+        progressCell.cell.classList.add('has-progress-accent');
+      } else {
+        progressCell.cell.style.removeProperty('--overview-progress-accent');
+        progressCell.cell.classList.remove('has-progress-accent');
       }
 
       if (subtasksTotal > 0) {
@@ -7009,6 +7099,12 @@
         if (priorityColor) {
           priorityDot.style.background = priorityColor;
           priorityCell.value.appendChild(priorityDot);
+          priorityCell.cell.style.setProperty(
+            '--overview-priority-accent',
+            priorityColor
+          );
+        } else {
+          priorityCell.cell.style.removeProperty('--overview-priority-accent');
         }
         priorityText.textContent = pl;
         priorityCell.value.appendChild(priorityText);
@@ -7017,7 +7113,9 @@
         priorityText.textContent = 'Non prioris\u00e9e';
         priorityCell.value.appendChild(priorityText);
         priorityCell.value.classList.add('is-empty');
+        priorityCell.cell.style.removeProperty('--overview-priority-accent');
       }
+      priorityCell.cell.classList.toggle('has-priority-color', !!(pl && priorityColor));
 
       if (onLayoutChange) onLayoutChange();
     }
@@ -7032,6 +7130,12 @@
       if (!next || typeof next !== 'object') return;
       if (next.title != null) titleText = String(next.title || '');
       if (next.status != null) statusText = String(next.status || '');
+      if (next.statusCategory != null) {
+        statusCategory = String(next.statusCategory || '');
+      }
+      if (next.statusColor != null) {
+        statusColor = String(next.statusColor || '');
+      }
       if (next.progressPercent !== undefined) {
         if (next.progressPercent == null || next.progressPercent === '') {
           progressPercent = null;
@@ -7041,6 +7145,12 @@
             Math.min(100, Math.round(+next.progressPercent))
           );
         }
+      }
+      if (next.progressColor != null) {
+        progressColor = String(next.progressColor || '');
+      }
+      if (next.progressBlocked != null) {
+        progressBlocked = !!next.progressBlocked;
       }
       if (next.subtasksDone != null && isFinite(+next.subtasksDone)) {
         subtasksDone = Math.max(0, Math.round(+next.subtasksDone));
@@ -7072,7 +7182,11 @@
         return {
           title: titleText,
           status: statusText,
+          statusCategory: statusCategory,
+          statusColor: statusColor,
           progressPercent: progressPercent,
+          progressColor: progressColor,
+          progressBlocked: progressBlocked,
           subtasksDone: subtasksDone,
           subtasksTotal: subtasksTotal,
           dueCountdown: dueCountdown,

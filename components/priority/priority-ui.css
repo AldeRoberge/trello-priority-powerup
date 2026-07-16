@@ -561,6 +561,42 @@ body {
   color: var(--text-muted);
 }
 
+.overview-cell--status {
+  border-color: color-mix(
+    in srgb,
+    var(--overview-status-accent, var(--border)) 42%,
+    var(--border)
+  );
+  background: color-mix(
+    in srgb,
+    var(--overview-status-accent, transparent) 8%,
+    color-mix(in srgb, var(--surface-2) 78%, transparent)
+  );
+}
+
+.overview-cell--status .overview-cell-icon,
+.overview-cell--status .overview-status-icon {
+  color: var(--overview-status-accent, var(--text-secondary, var(--text-muted)));
+  opacity: 1;
+}
+
+.overview-cell--status .overview-cell-value:not(.is-empty) {
+  color: var(--overview-status-accent, var(--text-primary));
+}
+
+.overview-cell--status.is-blocked {
+  border-color: color-mix(
+    in srgb,
+    var(--overview-status-accent, var(--blocked-accent, #ae2e24)) 55%,
+    var(--border)
+  );
+  background: color-mix(
+    in srgb,
+    var(--overview-status-accent, var(--blocked-accent, #ae2e24)) 12%,
+    color-mix(in srgb, var(--surface-2) 78%, transparent)
+  );
+}
+
 .overview-progress-track {
   height: 4px;
   border-radius: 999px;
@@ -581,7 +617,56 @@ body {
     color-mix(in srgb, var(--tp-primary, #0c66e4) 75%, #61bd4f),
     var(--tp-primary, #0c66e4)
   );
-  transition: width 0.2s ease;
+  transition: width 0.2s ease, background-color 0.2s ease;
+}
+
+.overview-cell--progress.has-progress-accent .overview-progress-fill {
+  background: var(--overview-progress-accent);
+}
+
+.overview-cell--progress {
+  border-color: color-mix(
+    in srgb,
+    var(--overview-progress-accent, var(--border)) 38%,
+    var(--border)
+  );
+}
+
+.overview-cell--progress .overview-cell-value:not(.is-empty) {
+  color: var(--overview-progress-accent, var(--text-primary));
+}
+
+.overview-cell--progress.is-blocked {
+  border-color: color-mix(
+    in srgb,
+    var(--overview-progress-accent, var(--blocked-accent, #ae2e24)) 50%,
+    var(--border)
+  );
+  background: color-mix(
+    in srgb,
+    var(--overview-progress-accent, var(--blocked-accent, #ae2e24)) 10%,
+    color-mix(in srgb, var(--surface-2) 78%, transparent)
+  );
+}
+
+.overview-progress-ring {
+  --completion-check-size: 16px;
+  flex-shrink: 0;
+  pointer-events: none;
+  cursor: default;
+}
+
+.overview-progress-ring:hover,
+.overview-progress-ring:active {
+  transform: none;
+  background: transparent;
+}
+
+.overview-progress-pct {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .overview-priority-dot {
@@ -593,6 +678,14 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.overview-cell--priority.has-priority-color {
+  border-color: color-mix(
+    in srgb,
+    var(--overview-priority-accent, var(--border)) 40%,
+    var(--border)
+  );
 }
 
 .overview-cell--due[data-due-band] {

@@ -126,6 +126,15 @@ function installDom() {
       }
       return child;
     }
+    replaceChild(next, old) {
+      const i = this.children.indexOf(old);
+      if (i === -1) return this.appendChild(next);
+      if (next.parentNode) next.parentNode.removeChild(next);
+      next.parentNode = this;
+      if (old) old.parentNode = null;
+      this.children[i] = next;
+      return old;
+    }
     insertBefore(child, ref) {
       if (!child) return child;
       if (child.parentNode) child.parentNode.removeChild(child);
@@ -205,6 +214,7 @@ function installDom() {
 
   const doc = new Element('document');
   doc.createElement = (tag) => new Element(tag);
+  doc.createElementNS = (_ns, tag) => new Element(tag);
   doc.createTextNode = (t) => {
     const n = new Element('#text');
     n.textContent = t;
@@ -360,5 +370,33 @@ describe('PriorityUI createOverviewField', () => {
     assert.equal(data.progressPercent, 100);
     assert.equal(data.features.progress, false);
     assert.equal(data.features.priority, false);
+  });
+
+  it('applies section colors and progress circle in the summary', () => {
+    const ui = PriorityUI.createOverviewField({
+      title: 'Card',
+      status: 'Bloqué',
+      statusCategory: 'blocked',
+      statusColor: '#e34935',
+      progressPercent: 55,
+      progressColor: '#0c66e4',
+      progressBlocked: true,
+      priorityLabel: 'Critique',
+      priorityColor: '#C9372C',
+    });
+
+    const statusCell = ui.el.querySelector('.overview-cell--status');
+    assert.ok(statusCell.classList.contains('is-blocked'));
+    assert.equal(statusCell.style._props['--overview-status-accent'], '#e34935');
+    assert.ok(statusCell.querySelector('.overview-status-icon'));
+
+    const progressCell = ui.el.querySelector('.overview-cell--progress');
+    assert.ok(progressCell.classList.contains('is-blocked'));
+    assert.ok(progressCell.querySelector('.overview-progress-ring'));
+    assert.ok(progressCell.classList.contains('has-progress-accent'));
+    assert.match(
+      String(progressCell.style._props['--overview-progress-accent'] || ''),
+      /#ae2e24|#e34935|#C9372C/i
+    );
   });
 });
