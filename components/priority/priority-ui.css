@@ -494,7 +494,7 @@ body {
 
 .overview-metrics {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -520,8 +520,8 @@ body {
   border-color: color-mix(in srgb, var(--tp-primary, #0c66e4) 28%, var(--border));
 }
 
-.overview-cell--status.is-blocked:hover,
 .overview-cell--progress.is-blocked:hover,
+.overview-cell--progress.is-done:hover,
 .overview-cell--due[data-due-band]:hover {
   border-color: color-mix(
     in srgb,
@@ -589,8 +589,8 @@ body {
 }
 
 /* Soft top radial glow — same language as Statut blocked / Échéance bands. */
-.overview-cell--status.is-blocked,
 .overview-cell--progress.is-blocked,
+.overview-cell--progress.is-done,
 .overview-cell--due[data-due-band] {
   border-color: color-mix(
     in srgb,
@@ -607,8 +607,8 @@ body {
   background-repeat: no-repeat;
 }
 
-.overview-cell--status .overview-cell-icon,
-.overview-cell--status .overview-status-icon {
+.overview-cell--progress.is-status-mode .overview-cell-icon,
+.overview-cell--progress.is-status-mode .overview-status-icon {
   color: color-mix(
     in srgb,
     var(--overview-status-accent, var(--text-secondary, var(--text-muted))) 80%,
@@ -617,7 +617,7 @@ body {
   opacity: 1;
 }
 
-.overview-cell--status .overview-cell-label {
+.overview-cell--progress.is-status-mode .overview-cell-label {
   color: color-mix(
     in srgb,
     var(--overview-status-accent, var(--text-muted)) 55%,
@@ -625,7 +625,7 @@ body {
   );
 }
 
-.overview-cell--status .overview-cell-value:not(.is-empty) {
+.overview-cell--progress.is-status-mode .overview-cell-value:not(.is-empty) {
   color: color-mix(
     in srgb,
     var(--overview-status-accent, var(--text-primary)) 80%,
@@ -633,10 +633,17 @@ body {
   );
 }
 
-.overview-cell--status.is-blocked {
+.overview-cell--progress.is-blocked {
   --overview-cell-glow: var(
     --overview-status-accent,
-    var(--blocked-accent, #ae2e24)
+    var(--overview-progress-accent, var(--blocked-accent, #ae2e24))
+  );
+}
+
+.overview-cell--progress.is-done {
+  --overview-cell-glow: var(
+    --overview-status-accent,
+    var(--overview-progress-accent, #22a06b)
   );
 }
 
@@ -675,18 +682,11 @@ body {
   );
 }
 
-.overview-cell--progress .overview-cell-value:not(.is-empty) {
+.overview-cell--progress.is-progress-mode .overview-cell-value:not(.is-empty) {
   color: color-mix(
     in srgb,
     var(--overview-progress-accent, var(--text-primary)) 80%,
     var(--text-primary)
-  );
-}
-
-.overview-cell--progress.is-blocked {
-  --overview-cell-glow: var(
-    --overview-progress-accent,
-    var(--blocked-accent, #ae2e24)
   );
 }
 

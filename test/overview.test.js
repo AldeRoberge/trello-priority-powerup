@@ -244,10 +244,11 @@ describe('PriorityUI createOverviewField', () => {
     assert.equal(typeof PriorityUI.createOverviewField, 'function');
   });
 
-  it('mounts title and metric cells', () => {
+  it('mounts title and combined Progrès metric cells', () => {
     const ui = PriorityUI.createOverviewField({
       title: 'Ship overview',
       status: 'En cours',
+      statusCategory: 'started',
       progressPercent: 40,
       subtasksDone: 2,
       subtasksTotal: 5,
@@ -265,19 +266,20 @@ describe('PriorityUI createOverviewField', () => {
     const title = ui.el.querySelector('.overview-title-text');
     assert.equal(title.textContent, 'Ship overview');
 
-    assert.ok(ui.el.querySelector('.overview-cell--status'));
+    assert.equal(ui.el.querySelector('.overview-cell--status'), null);
     assert.ok(ui.el.querySelector('.overview-cell--progress'));
     assert.ok(ui.el.querySelector('.overview-cell--subtasks'));
     assert.ok(ui.el.querySelector('.overview-cell--due'));
     assert.ok(ui.el.querySelector('.overview-cell--priority'));
 
-    assert.match(
-      ui.el.querySelector('.overview-cell--status .overview-cell-value').textContent,
-      /En cours/
-    );
+    // In progress → show % (not the list name).
     assert.match(
       ui.el.querySelector('.overview-cell--progress .overview-cell-value').textContent,
       /40/
+    );
+    assert.doesNotMatch(
+      ui.el.querySelector('.overview-cell--progress .overview-cell-value').textContent,
+      /En cours/
     );
     assert.match(
       ui.el.querySelector('.overview-cell--subtasks .overview-cell-value').textContent,
@@ -289,13 +291,13 @@ describe('PriorityUI createOverviewField', () => {
     const jumps = [];
     const ui = PriorityUI.createOverviewField({
       title: 'Card',
+      progressPercent: 20,
       onJump(key) {
         jumps.push(key);
       },
     });
 
     ui.el.querySelector('.overview-title').click();
-    ui.el.querySelector('.overview-cell--status').click();
     ui.el.querySelector('.overview-cell--progress').click();
     ui.el.querySelector('.overview-cell--subtasks').click();
     ui.el.querySelector('.overview-cell--due').click();
@@ -303,12 +305,25 @@ describe('PriorityUI createOverviewField', () => {
 
     assert.deepEqual(jumps, [
       'info',
-      'blocked',
       'progress',
       'progress',
       'due',
       'priority',
     ]);
+  });
+
+  it('blocked Progrès jumps to blocked section', () => {
+    const jumps = [];
+    const ui = PriorityUI.createOverviewField({
+      status: 'Bloqué',
+      statusCategory: 'blocked',
+      progressPercent: 40,
+      onJump(key) {
+        jumps.push(key);
+      },
+    });
+    ui.el.querySelector('.overview-cell--progress').click();
+    assert.deepEqual(jumps, ['blocked']);
   });
 
   it('setData updates values and hides disabled features', () => {
@@ -325,6 +340,7 @@ describe('PriorityUI createOverviewField', () => {
     ui.setData({
       title: 'Renamed',
       status: 'Done',
+      statusCategory: 'completed',
       progressPercent: 100,
       subtasksDone: 1,
       subtasksTotal: 1,
@@ -341,13 +357,14 @@ describe('PriorityUI createOverviewField', () => {
     });
 
     assert.equal(ui.el.querySelector('.overview-title-text').textContent, 'Renamed');
+    // Done → status label in Progrès (statut feature keeps the cell visible).
     assert.match(
-      ui.el.querySelector('.overview-cell--status .overview-cell-value').textContent,
-      /Done/
+      ui.el.querySelector('.overview-cell--progress .overview-cell-value').textContent,
+      /Done|Termin/
     );
     assert.equal(
       ui.el.querySelector('.overview-cell--progress').getAttribute('hidden'),
-      ''
+      null
     );
     assert.equal(
       ui.el.querySelector('.overview-cell--subtasks').getAttribute('hidden'),
@@ -372,7 +389,7 @@ describe('PriorityUI createOverviewField', () => {
     assert.equal(data.features.priority, false);
   });
 
-  it('applies section colors and progress circle in the summary', () => {
+  it('shows status when blocked, percent otherwise', () => {
     const ui = PriorityUI.createOverviewField({
       title: 'Card',
       status: 'Bloqué',
@@ -385,18 +402,60 @@ describe('PriorityUI createOverviewField', () => {
       priorityColor: '#C9372C',
     });
 
-    const statusCell = ui.el.querySelector('.overview-cell--status');
-    assert.ok(statusCell.classList.contains('is-blocked'));
-    assert.equal(statusCell.style._props['--overview-status-accent'], '#e34935');
-    assert.ok(statusCell.querySelector('.overview-status-icon'));
-
     const progressCell = ui.el.querySelector('.overview-cell--progress');
     assert.ok(progressCell.classList.contains('is-blocked'));
+    assert.ok(progressCell.classList.contains('is-status-mode'));
+    assert.match(
+      progressCell.querySelector('.overview-cell-value').textContent,
+      /Bloqu/
+    );
+    assert.ok(progressCell.querySelector('.overview-status-icon'));
+    assert.equal(
+      progressCell.style._props['--overview-status-accent'],
+      '#e34935'
+    );
+
+    ui.setData({
+      status: 'En cours',
+      statusCategory: 'started',
+      progressBlocked: false,
+      progressPercent: 55,
+      progressColor: '#0c66e4',
+    });
+    assert.ok(progressCell.classList.contains('is-progress-mode'));
+    assert.match(
+      progressCell.querySelector('.overview-cell-value').textContent,
+      /55/
+    );
     assert.ok(progressCell.querySelector('.overview-progress-ring'));
     assert.ok(progressCell.classList.contains('has-progress-accent'));
+  });
+
+  it('shows Terminé status when completed', () => {
+    const ui = PriorityUI.createOverviewField({
+      status: 'Terminé',
+      statusCategory: 'completed',
+      statusColor: '#22a06b',
+      progressPercent: 100,
+    });
+    const progressCell = ui.el.querySelector('.overview-cell--progress');
+    assert.ok(progressCell.classList.contains('is-done'));
+    assert.ok(progressCell.classList.contains('is-status-mode'));
     assert.match(
-      String(progressCell.style._props['--overview-progress-accent'] || ''),
-      /#ae2e24|#e34935|#C9372C/i
+      progressCell.querySelector('.overview-cell-value').textContent,
+      /Termin/
+    );
+  });
+
+  it('falls back to status label when no percent', () => {
+    const ui = PriorityUI.createOverviewField({
+      status: 'À faire',
+      statusCategory: 'unstarted',
+      progressPercent: null,
+    });
+    assert.match(
+      ui.el.querySelector('.overview-cell--progress .overview-cell-value').textContent,
+      /faire|À faire/i
     );
   });
 

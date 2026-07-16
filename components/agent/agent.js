@@ -2528,7 +2528,7 @@
         // Always include items so the agent can match/rename by name even if the
         // section is momentarily off (values are inactive when enabled=false).
         items: (completion.items || []).map(function (item) {
-          return {
+          var mapped = {
             id: item.id,
             text: item.text,
             done: !!item.done,
@@ -2544,6 +2544,29 @@
                 : null,
             estimatedMinutesLocked: item.estimatedMinutesLocked === true
           };
+          if (item.linkedCardId) {
+            mapped.linkedCardId = String(item.linkedCardId);
+          }
+          // Local checklists (sub-sub-tasks) under a subtask.
+          if (Array.isArray(item.items) && item.items.length) {
+            mapped.items = item.items
+              .map(function (child) {
+                if (!child || typeof child !== 'object') return null;
+                return {
+                  id: child.id,
+                  text: child.text,
+                  done: !!child.done,
+                  progress: child.progress,
+                  estimatedMinutes:
+                    child.estimatedMinutes != null &&
+                    isFinite(+child.estimatedMinutes)
+                      ? +child.estimatedMinutes
+                      : null
+                };
+              })
+              .filter(Boolean);
+          }
+          return mapped;
         }),
         blocked: completion.blocked === true,
         blockedOrigin:
@@ -8543,6 +8566,23 @@
     return todayIsoLocal(d);
   }
 
+  /** Whole local calendar days from `fromIso` to `toIso` (YYYY-MM-DD). */
+  function daysBetweenIsoLocal(fromIso, toIso) {
+    if (
+      typeof fromIso !== 'string' ||
+      typeof toIso !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(fromIso) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(toIso)
+    ) {
+      return NaN;
+    }
+    var a = fromIso.split('-');
+    var b = toIso.split('-');
+    var from = new Date(+a[0], +a[1] - 1, +a[2]);
+    var to = new Date(+b[0], +b[1] - 1, +b[2]);
+    return Math.round((to.getTime() - from.getTime()) / 86400000);
+  }
+
   /**
    * Real gaps on the card worth a Coup de pouce / apply suggestion.
    * Ordered by usefulness so the model can prioritize.
@@ -9623,14 +9663,41 @@
         ? progress.estimatedRemainingMinutes
         : null;
 
+    var nextOpenItems = [];
+    if (progress && Array.isArray(progress.items)) {
+      nextOpenItems = progress.items
+        .map(function (it) {
+          if (!it || typeof it !== 'object' || it.done) return null;
+          var text = typeof it.text === 'string' ? it.text.trim() : '';
+          if (!text) return null;
+          return text.length > 60 ? text.slice(0, 57) + '\u2026' : text;
+        })
+        .filter(Boolean)
+        .slice(0, 2);
+    }
+
     var dueEnabled = !(due && due.enabled === false);
     var dueDate = due && due.dueDate ? String(due.dueDate) : '';
+    var dueTime =
+      dueEnabled && due && typeof due.dueTime === 'string' && due.dueTime
+        ? String(due.dueTime).trim()
+        : '';
+    if (dueTime && !/^\d{2}:\d{2}$/.test(dueTime)) dueTime = '';
     var dueMissing = dueEnabled && !dueDate;
     var duePast = !!(display && display.duePast);
     var dueCountdown =
       display && typeof display.dueCountdown === 'string'
         ? display.dueCountdown
         : '';
+    // Match PriorityUI soon band (≤14 days): worth naming timing in the brief.
+    var today = (context && context.today) || todayIsoLocal();
+    var daysUntil = dueDate ? daysBetweenIsoLocal(today, dueDate) : NaN;
+    var dueSoon =
+      !dueMissing &&
+      !duePast &&
+      isFinite(daysUntil) &&
+      daysUntil >= 0 &&
+      daysUntil <= 14;
 
     var ease =
       priority && priority.enabled !== false && priority.ease != null
@@ -9641,19 +9708,20 @@
       (priority && priority.labels && priority.labels.urgency) ||
       '';
 
-    var scale = 'medium';
+    // French-only scale keys (never "quick"/"project" — those leak into LLM copy).
+    var scale = 'moyen';
     if (
       (ease != null && ease >= 4 && totalCount <= 2 && (remainingMinutes == null || remainingMinutes < 60)) ||
       (totalCount <= 1 && (remainingMinutes == null || remainingMinutes < 45) && (ease == null || ease >= 3))
     ) {
-      scale = 'quick';
+      scale = 'petit';
     }
     if (
       totalCount >= 5 ||
       (remainingMinutes != null && remainingMinutes >= 240) ||
       (ease != null && ease <= 2 && totalCount >= 3)
     ) {
-      scale = 'project';
+      scale = 'gros';
     }
 
     var phase = 'idle';
@@ -9704,11 +9772,15 @@
       progressPercent: percent,
       subtasksDone: doneCount,
       subtasksTotal: totalCount,
+      subtasksOpen: Math.max(0, totalCount - doneCount),
+      nextOpenItems: nextOpenItems,
       estimatedRemainingMinutes: remainingMinutes,
       dueMissing: dueMissing,
       duePast: duePast,
+      dueSoon: dueSoon,
       dueCountdown: dueCountdown || null,
       dueDate: dueDate || null,
+      dueTime: dueTime || null,
       priorityTier: typeof tier === 'string' ? tier : '',
       ease: ease,
       scale: scale,
@@ -9723,6 +9795,7 @@
     if (!snapshot || typeof snapshot !== 'object') return '';
     try {
       return JSON.stringify({
+        v: 2,
         phase: snapshot.phase,
         stuck: !!snapshot.stuck,
         statutCategory: snapshot.statutCategory || null,
@@ -9730,10 +9803,15 @@
         progressPercent: snapshot.progressPercent,
         subtasksDone: snapshot.subtasksDone,
         subtasksTotal: snapshot.subtasksTotal,
+        subtasksOpen: snapshot.subtasksOpen,
+        nextOpenItems: snapshot.nextOpenItems || [],
         estimatedRemainingMinutes: snapshot.estimatedRemainingMinutes,
         dueMissing: !!snapshot.dueMissing,
         duePast: !!snapshot.duePast,
+        dueSoon: !!snapshot.dueSoon,
+        dueCountdown: snapshot.dueCountdown || null,
         dueDate: snapshot.dueDate || null,
+        dueTime: snapshot.dueTime || null,
         priorityTier: snapshot.priorityTier || '',
         ease: snapshot.ease,
         scale: snapshot.scale,
@@ -9759,8 +9837,66 @@
     return cut.replace(/[,:;.\-–—\s]+$/, '') + '\u2026';
   }
 
+  function normalizeStatusBriefScale(scale) {
+    var s = String(scale || '').toLowerCase();
+    if (s === 'petit' || s === 'quick') return 'petit';
+    if (s === 'gros' || s === 'project') return 'gros';
+    return 'moyen';
+  }
+
+  /** Compact French clock for status brief (e.g. "14 h", "14 h 30"). */
+  function formatStatusBriefDueTime(time) {
+    if (
+      typeof PriorityUI !== 'undefined' &&
+      typeof PriorityUI.formatDueTimeCompactFr === 'function'
+    ) {
+      return PriorityUI.formatDueTimeCompactFr(time) || '';
+    }
+    var s = String(time || '').trim();
+    if (!/^\d{2}:\d{2}$/.test(s)) return '';
+    var parts = s.split(':');
+    var hours = +parts[0];
+    var minutes = +parts[1];
+    if (!isFinite(hours) || !isFinite(minutes)) return '';
+    if (minutes === 0) return String(hours) + ' h';
+    return (
+      String(hours) +
+      ' h ' +
+      (minutes < 10 ? '0' + minutes : String(minutes))
+    );
+  }
+
+  /**
+   * Due clause for the brief: missing / late / soon timing (+ clock when set).
+   * Far-away dues stay silent so the sentence keeps focusing on work.
+   */
+  function formatStatusBriefDueGap(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') return '';
+    if (snapshot.duePast) return 'en retard';
+    if (snapshot.dueMissing) return 'pas d\'\u00e9ch\u00e9ance';
+    if (!snapshot.dueSoon) return '';
+
+    var when = '';
+    if (typeof snapshot.dueCountdown === 'string' && snapshot.dueCountdown) {
+      when = snapshot.dueCountdown.replace(/\s+/g, ' ').trim();
+      if (when) {
+        when = when.charAt(0).toLocaleLowerCase('fr-FR') + when.slice(1);
+      }
+    }
+    var clock = formatStatusBriefDueTime(snapshot.dueTime);
+    var countdownHasClock = /\b(h|heure|heures|minute|minutes)\b/i.test(when);
+
+    if (when && clock && !countdownHasClock) {
+      return when + ' \u00e0 ' + clock;
+    }
+    if (when) return when;
+    if (clock) return '\u00e0 ' + clock;
+    return '';
+  }
+
   /**
    * Deterministic French boss-style status sentence when AI is unavailable.
+   * Substance first: next work / blocker / owner / due gap. No cheerleading, no %.
    */
   function buildHeuristicStatusBrief(snapshot) {
     if (!snapshot || typeof snapshot !== 'object') return '';
@@ -9775,117 +9911,102 @@
         ? String(snapshot.blockedReasons[0]).trim()
         : '';
     if (reason.length > 48) reason = reason.slice(0, 45) + '\u2026';
-    var scale = snapshot.scale || 'medium';
-    var scaleHint =
-      scale === 'quick'
-        ? 'c\'est un truc rapide'
-        : scale === 'project'
-          ? 'c\'est un gros chantier'
-          : '';
+    var scale = normalizeStatusBriefScale(snapshot.scale);
+    var next =
+      Array.isArray(snapshot.nextOpenItems) && snapshot.nextOpenItems[0]
+        ? String(snapshot.nextOpenItems[0]).trim()
+        : '';
+    if (next.length > 52) next = next.slice(0, 49) + '\u2026';
+    var open =
+      snapshot.subtasksOpen != null && isFinite(+snapshot.subtasksOpen)
+        ? Math.max(0, Math.round(+snapshot.subtasksOpen))
+        : null;
 
-    var ownershipBit = '';
-    if (you) ownershipBit = 'c\'est \u00e0 toi';
-    else if (unassigned) ownershipBit = 'personne n\'est assign\u00e9';
-    else if (other) ownershipBit = 'c\'est chez ' + other;
-    else ownershipBit = 'c\'est pas toi le porteur';
+    var who = you
+      ? '\u00c0 toi'
+      : unassigned
+        ? 'Personne assign\u00e9'
+        : other
+          ? 'Chez ' + other
+          : 'En cours';
+
+    var dueGap = formatStatusBriefDueGap(snapshot);
 
     var sentence = '';
     if (snapshot.phase === 'done') {
       sentence = you
-        ? 'C\'est termin\u00e9 de ton c\u00f4t\u00e9 \u2014 rien d\'urgent \u00e0 remonter.'
-        : 'C\'est marqu\u00e9 termin\u00e9 \u2014 ' + ownershipBit + '.';
+        ? 'Termin\u00e9 de ton c\u00f4t\u00e9.'
+        : 'Marqu\u00e9 termin\u00e9' + (other ? ' (chez ' + other + ')' : '') + '.';
     } else if (snapshot.stuck || snapshot.phase === 'stuck') {
       if (you) {
         sentence = reason
-          ? 'C\'est bloqu\u00e9 de ton c\u00f4t\u00e9 \u2014 ' +
-            reason +
-            ' ; rien n\'avance tant que \u00e7a n\'est pas lev\u00e9.'
-          : 'C\'est bloqu\u00e9 de ton c\u00f4t\u00e9 \u2014 rien n\'avance tant que le blocage n\'est pas lev\u00e9.';
+          ? '\u00c0 toi \u2014 bloqu\u00e9\u00a0: ' + reason + '.'
+          : '\u00c0 toi \u2014 bloqu\u00e9, cause pas claire.';
       } else if (other) {
         sentence = reason
-          ? 'C\'est chez ' + other + ' \u2014 bloqu\u00e9 (' + reason + ').'
-          : 'C\'est chez ' + other + ' \u2014 on ne peut pas avancer tant que c\'est bloqu\u00e9.';
+          ? 'Chez ' + other + ' \u2014 bloqu\u00e9\u00a0: ' + reason + '.'
+          : 'Chez ' + other + ' \u2014 bloqu\u00e9.';
       } else if (unassigned) {
-        sentence =
-          'C\'est bloqu\u00e9 et personne n\'est assign\u00e9 \u2014 \u00e7a va rester plant\u00e9.';
-      } else {
         sentence = reason
-          ? 'C\'est bloqu\u00e9 \u2014 ' + reason + '.'
-          : 'C\'est bloqu\u00e9 \u2014 on ne peut pas avancer.';
+          ? 'Bloqu\u00e9 sans assign\u00e9 \u2014 ' + reason + '.'
+          : 'Bloqu\u00e9 et personne n\'est assign\u00e9.';
+      } else {
+        sentence = reason ? 'Bloqu\u00e9\u00a0: ' + reason + '.' : 'Bloqu\u00e9.';
       }
     } else if (snapshot.phase === 'in_progress') {
-      var pct =
-        snapshot.progressPercent != null ? snapshot.progressPercent + '\u00a0%' : '';
-      if (you) {
-        if (snapshot.dueMissing) {
-          sentence =
-            'Tu es dessus' +
-            (pct ? ' (' + pct + ')' : '') +
-            ', mais sans \u00e9ch\u00e9ance claire.';
-        } else if (snapshot.duePast) {
-          sentence =
-            'Tu es dessus' +
-            (pct ? ' (' + pct + ')' : '') +
-            ', et c\'est en retard.';
-        } else {
-          sentence =
-            'Tu es dessus' +
-            (pct ? ' (' + pct + ')' : '') +
-            (scaleHint ? ' \u2014 ' + scaleHint : '') +
-            '.';
-        }
-      } else if (other) {
-        sentence =
-          'C\'est en cours chez ' +
-          other +
-          (pct ? ' (' + pct + ')' : '') +
-          (snapshot.dueMissing ? ', sans \u00e9ch\u00e9ance' : '') +
-          '.';
-      } else if (unassigned) {
-        sentence =
-          '\u00c7a avance' +
-          (pct ? ' (' + pct + ')' : '') +
-          ', mais personne n\'est assign\u00e9.';
+      var workBit = '';
+      if (next) {
+        workBit = 'prochaine\u00a0: ' + next;
+      } else if (open != null && open > 0) {
+        workBit =
+          open === 1
+            ? '1 sous-t\u00e2che restante'
+            : open + ' sous-t\u00e2ches restantes';
+      } else if (scale === 'gros') {
+        workBit = 'gros chantier encore ouvert';
+      } else if (scale === 'petit') {
+        workBit = 'petit reste \u00e0 finir';
       } else {
-        sentence =
-          'C\'est en cours' +
-          (pct ? ' (' + pct + ')' : '') +
-          (snapshot.dueMissing ? ', sans \u00e9ch\u00e9ance claire' : '') +
-          '.';
+        workBit = 'travail encore ouvert';
       }
+      sentence = who + ' \u2014 ' + workBit;
+      if (dueGap) sentence += ' ; ' + dueGap;
+      sentence += '.';
     } else {
       // not_started / idle
       if (you) {
-        if (snapshot.dueMissing) {
+        if (dueGap === 'pas d\'\u00e9ch\u00e9ance') {
+          sentence = '\u00c0 toi \u2014 pas commenc\u00e9, et pas d\'\u00e9ch\u00e9ance.';
+        } else if (dueGap === 'en retard') {
+          sentence = '\u00c0 toi \u2014 pas commenc\u00e9 et d\u00e9j\u00e0 en retard.';
+        } else if (dueGap) {
+          sentence = '\u00c0 toi \u2014 pas commenc\u00e9 ; ' + dueGap + '.';
+        } else if (scale === 'petit') {
+          sentence = '\u00c0 toi \u2014 petit fix pas encore commenc\u00e9.';
+        } else if (scale === 'gros') {
+          sentence = '\u00c0 toi \u2014 gros chantier pas encore lanc\u00e9.';
+        } else if (next) {
           sentence =
-            'C\'est \u00e0 toi et \u00e7a n\'a pas d\u00e9marr\u00e9 \u2014 il manque surtout une \u00e9ch\u00e9ance.';
-        } else if (scale === 'quick') {
-          sentence = 'C\'est \u00e0 toi \u2014 un petit fix rapide, pas encore commenc\u00e9.';
-        } else if (scale === 'project') {
-          sentence =
-            'C\'est \u00e0 toi \u2014 gros chantier pas encore lanc\u00e9' +
-            (snapshot.duePast ? ', et d\u00e9j\u00e0 en retard' : '') +
+            '\u00c0 toi \u2014 pas commenc\u00e9 ; premi\u00e8re \u00e9tape\u00a0: ' +
+            next +
             '.';
         } else {
-          sentence =
-            'C\'est \u00e0 toi et \u00e7a n\'a pas encore d\u00e9marr\u00e9.';
+          sentence = '\u00c0 toi \u2014 pas encore commenc\u00e9.';
         }
       } else if (other) {
         sentence =
-          'C\'est chez ' +
+          'Chez ' +
           other +
-          ' et \u00e7a n\'a pas encore d\u00e9marr\u00e9' +
-          (snapshot.dueMissing ? ' (pas d\'\u00e9ch\u00e9ance)' : '') +
+          ' \u2014 pas commenc\u00e9' +
+          (dueGap ? ' ; ' + dueGap : '') +
           '.';
       } else if (unassigned) {
-        sentence = snapshot.dueMissing
-          ? 'Personne n\'est assign\u00e9 et il n\'y a pas d\'\u00e9ch\u00e9ance \u2014 \u00e7a risque de dormir.'
-          : 'Personne n\'est assign\u00e9 \u2014 \u00e7a n\'a pas encore d\u00e9marr\u00e9.';
+        sentence = dueGap
+          ? 'Personne assign\u00e9, ' + dueGap + ' \u2014 \u00e7a dort.'
+          : 'Personne assign\u00e9 \u2014 pas commenc\u00e9.';
       } else {
         sentence =
-          'Pas encore commenc\u00e9' +
-          (snapshot.dueMissing ? ', et sans \u00e9ch\u00e9ance' : '') +
-          '.';
+          'Pas commenc\u00e9' + (dueGap ? ' ; ' + dueGap : '') + '.';
       }
     }
 
@@ -9920,17 +10041,22 @@
         role: 'system',
         content: [
           'Tu r\u00e9diges UNE phrase de statut pour le r\u00e9sum\u00e9 d\'une carte Trello (Power-Up Cerveau).',
-          'Imagine que le boss r\u00e9pond \u00e0\u00a0: \u00ab\u00a0Hey, \u00e0 propos de cette t\u00e2che\u2026 qu\'est-ce qui se passe\u00a0?\u00a0\u00bb',
+          'Le boss r\u00e9pond \u00e0\u00a0: \u00ab\u00a0Hey, \u00e0 propos de cette t\u00e2che\u2026 qu\'est-ce qui se passe\u00a0?\u00a0\u00bb',
           'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"sentence":"\u2026"}',
           'R\u00e8gles\u00a0:',
-          '- Une seule phrase, fran\u00e7ais, ton managerial direct (pas de blabla, pas d\'emoji).',
+          '- Une seule phrase, fran\u00e7ais, ton sec et factuel (manager press\u00e9).',
           '- Max ~' + MAX_STATUS_BRIEF_LEN + ' caract\u00e8res.',
-          '- Branche OBLIGATOIREMENT selon snapshot\u00a0: phase (stuck / in_progress / not_started / done), youAssigned vs otherNames / unassigned, dueMissing / duePast, scale (quick vs project).',
-          '- Dis le plus important \u00e0 savoir MAINTENANT (blocage, qui porte, manque d\'\u00e9ch\u00e9ance, taille).',
-          '- N\'invente rien\u00a0: seulement le snapshot. Pas de pr\u00e9noms absents de otherNames.',
-          '- Ne recopie pas b\u00eatement les m\u00e9triques (pas \u00ab\u00a0Statut X, priorit\u00e9 Y\u00a0\u00bb)\u00a0: synth\u00e9tise.',
-          '- Ex. stuck+toi\u00a0: "C\'est bloqu\u00e9 de ton c\u00f4t\u00e9 \u2014 [raison]\u00a0; rien n\'avance tant que \u00e7a n\'est pas lev\u00e9."',
-          '- Ex. en cours+autre+sans due\u00a0: "C\'est en cours chez Sam, mais sans \u00e9ch\u00e9ance claire."',
+          '- SUBSTANCE OBLIGATOIRE\u00a0: qui porte + le fait utile (prochaine sous-t\u00e2che dans nextOpenItems, motif de blocage, \u00e9ch\u00e9ance manquante/retard, taille petit/gros).',
+          '- Si dueSoon=true\u00a0: mentionne le timing (dueCountdown) et l\'heure (dueTime) si elle est d\u00e9finie \u2014 ex. \u00ab\u00a0demain \u00e0 14 h\u00a0\u00bb. Si dueSoon=false et pas dueMissing/duePast\u00a0: ne parle PAS de l\'\u00e9ch\u00e9ance.',
+          '- INTERDIT d\'encourager / flatter / rassurer\u00a0: pas de \u00ab\u00a0\u00e7a devrait aller vite\u00a0\u00bb, \u00ab\u00a0bien avanc\u00e9\u00a0\u00bb, \u00ab\u00a0t\'inqui\u00e8te\u00a0\u00bb, \u00ab\u00a0tu g\u00e8res\u00a0\u00bb.',
+          '- INTERDIT les mots anglais (quick, project, stuck, medium, status\u2026). scale = petit|moyen|gros seulement.',
+          '- INTERDIT de citer le % de progr\u00e8s (d\u00e9j\u00e0 visible dans l\'UI).',
+          '- INTERDIT les phrases vides du type \u00ab\u00a0c\'est en cours de ton c\u00f4t\u00e9\u00a0\u00bb sans dire QUOI reste / QUOI bloque.',
+          '- N\'invente rien\u00a0: seulement le snapshot. Pas de pr\u00e9noms hors otherNames.',
+          '- Ex. BON\u00a0: "\u00c0 toi \u2014 prochaine\u00a0: finaliser le montage ; pas d\'\u00e9ch\u00e9ance."',
+          '- Ex. BON\u00a0: "\u00c0 toi \u2014 prochaine\u00a0: finaliser le montage ; demain \u00e0 14 h."',
+          '- Ex. BON\u00a0: "Chez Sam \u2014 bloqu\u00e9\u00a0: attente API."',
+          '- Ex. MAUVAIS\u00a0: "C\'est en cours de ton c\u00f4t\u00e9, avanc\u00e9 \u00e0 31\u00a0% ; c\'est un quick, donc \u00e7a devrait aller vite."',
           'Snapshot\u00a0:',
           JSON.stringify(snapshot)
         ].join('\n')
@@ -10047,6 +10173,449 @@
     var aiSentence =
       data && typeof data.sentence === 'string'
         ? clampStatusBriefSentence(data.sentence)
+        : '';
+    if (!aiSentence) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: 'empty-sentence',
+        sentence: heuristic,
+        source: 'heuristic',
+        usage: usage,
+        debug: debug
+      };
+    }
+
+    return {
+      ok: true,
+      skipped: false,
+      sentence: aiSentence,
+      source: 'ai',
+      usage: usage,
+      debug: debug
+    };
+  }
+
+  var MAX_PROGRESS_SUMMARY_LEN = 120;
+
+  function truncateProgressLabel(text, maxLen) {
+    var s = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!s) return '';
+    var lim = maxLen || 48;
+    if (s.length <= lim) return s;
+    return s.slice(0, lim - 1).replace(/[,:;\-–—\s]+$/, '') + '\u2026';
+  }
+
+  /**
+   * Map a progress item (local checklist or linked-tree child) into a compact
+   * outline node for the Progrès tab AI summary.
+   */
+  function mapProgressOutlineNode(raw, depth) {
+    if (!raw || typeof raw !== 'object') return null;
+    var text =
+      typeof raw.text === 'string'
+        ? raw.text.trim()
+        : typeof raw.name === 'string'
+          ? raw.name.trim()
+          : '';
+    if (!text) return null;
+    var node = {
+      text: truncateProgressLabel(text, depth > 1 ? 40 : 56),
+      done: !!raw.done
+    };
+    if (raw.linkedCardId || raw.linked) node.linked = true;
+    var kids = [];
+    var sourceKids = Array.isArray(raw.items)
+      ? raw.items
+      : Array.isArray(raw.children)
+        ? raw.children
+        : null;
+    if (sourceKids && sourceKids.length && depth < 3) {
+      for (var i = 0; i < sourceKids.length; i++) {
+        var child = mapProgressOutlineNode(sourceKids[i], depth + 1);
+        if (child) kids.push(child);
+        if (kids.length >= 8) break;
+      }
+    }
+    if (kids.length) node.children = kids;
+    return node;
+  }
+
+  /**
+   * Merge local checklists with resolved linked-card children for one subtask.
+   */
+  function outlineChildrenForItem(item, linkedNode) {
+    var kids = [];
+    var seen = Object.create(null);
+    function pushKid(raw) {
+      var node = mapProgressOutlineNode(raw, 2);
+      if (!node) return;
+      var key = node.text.toLowerCase();
+      if (seen[key]) return;
+      seen[key] = true;
+      kids.push(node);
+    }
+    if (item && Array.isArray(item.items)) {
+      item.items.forEach(pushKid);
+    }
+    if (linkedNode && Array.isArray(linkedNode.children)) {
+      linkedNode.children.forEach(pushKid);
+    }
+    return kids.slice(0, 8);
+  }
+
+  /**
+   * Compact hierarchy for the Progrès collapsed-summary sentence.
+   * options.linkedTreeByItemId: optional map from completion-ui linked resolve.
+   */
+  function buildProgressSummarySnapshot(context, options) {
+    options = options || {};
+    var progress = context && context.progress;
+    var linkedTreeByItemId =
+      options.linkedTreeByItemId && typeof options.linkedTreeByItemId === 'object'
+        ? options.linkedTreeByItemId
+        : null;
+
+    var percent = null;
+    if (progress) {
+      if (typeof progress.percent === 'number' && isFinite(progress.percent)) {
+        percent = Math.max(0, Math.min(100, Math.round(progress.percent)));
+      } else if (
+        typeof progress.cardProgress === 'number' &&
+        isFinite(progress.cardProgress)
+      ) {
+        percent = Math.max(0, Math.min(100, Math.round(progress.cardProgress)));
+      }
+    }
+
+    var items = progress && Array.isArray(progress.items) ? progress.items : [];
+    var outline = [];
+    var openLabels = [];
+    var doneCount = 0;
+    var totalCount = 0;
+
+    function walkCount(node) {
+      if (!node) return;
+      totalCount += 1;
+      if (node.done) doneCount += 1;
+      else if (node.text) openLabels.push(node.text);
+      if (Array.isArray(node.children)) {
+        node.children.forEach(walkCount);
+      }
+    }
+
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      if (!item || typeof item !== 'object') continue;
+      var text = typeof item.text === 'string' ? item.text.trim() : '';
+      if (!text) continue;
+      var linkedNode =
+        linkedTreeByItemId && item.id != null
+          ? linkedTreeByItemId[item.id] || linkedTreeByItemId[String(item.id)]
+          : null;
+      var node = {
+        text: truncateProgressLabel(text, 56),
+        done: !!item.done
+      };
+      if (item.linkedCardId || (linkedNode && linkedNode.linkedCardId)) {
+        node.linked = true;
+      }
+      if (item.blocked) node.blocked = true;
+      var kids = outlineChildrenForItem(item, linkedNode);
+      if (kids.length) node.children = kids;
+      outline.push(node);
+      walkCount(node);
+      if (outline.length >= 12) break;
+    }
+
+    // Prefer hierarchy walk counts; fall back to progress meta when empty.
+    if (!totalCount && progress) {
+      doneCount =
+        typeof progress.doneCount === 'number' ? progress.doneCount : 0;
+      totalCount =
+        typeof progress.totalCount === 'number'
+          ? progress.totalCount
+          : items.length;
+    }
+
+    var openCount = Math.max(0, totalCount - doneCount);
+    var phase = 'idle';
+    if (percent != null && percent >= 100) phase = 'done';
+    else if (totalCount > 0 && openCount <= 0) phase = 'done';
+    else if ((percent != null && percent > 0) || doneCount > 0) {
+      phase = 'in_progress';
+    } else if (totalCount > 0) {
+      phase = 'not_started';
+    }
+
+    return {
+      cardName: context && context.cardName ? String(context.cardName) : '',
+      phase: phase,
+      progressPercent: percent,
+      tasksDone: doneCount,
+      tasksTotal: totalCount,
+      tasksOpen: openCount,
+      openLabels: openLabels.slice(0, 6),
+      outline: outline
+    };
+  }
+
+  function fingerprintProgressSummarySnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') return '';
+    try {
+      return JSON.stringify({
+        v: 1,
+        phase: snapshot.phase,
+        progressPercent: snapshot.progressPercent,
+        tasksDone: snapshot.tasksDone,
+        tasksTotal: snapshot.tasksTotal,
+        tasksOpen: snapshot.tasksOpen,
+        openLabels: snapshot.openLabels || [],
+        outline: snapshot.outline || []
+      });
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function clampProgressSummarySentence(text) {
+    var s = String(text || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!s) return '';
+    if (s.length <= MAX_PROGRESS_SUMMARY_LEN) return s;
+    var cut = s.slice(0, MAX_PROGRESS_SUMMARY_LEN - 1);
+    var lastSpace = cut.lastIndexOf(' ');
+    if (lastSpace > 60) cut = cut.slice(0, lastSpace);
+    return cut.replace(/[,:;.\-–—\s]+$/, '') + '\u2026';
+  }
+
+  /**
+   * Deterministic Progrès summary when AI is unavailable.
+   * Prefer a short synthesis of open task names over bare counts.
+   */
+  function buildHeuristicProgressSummary(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') return '';
+    var open = snapshot.tasksOpen;
+    var total = snapshot.tasksTotal;
+    var labels = Array.isArray(snapshot.openLabels)
+      ? snapshot.openLabels.filter(Boolean)
+      : [];
+
+    if (!total) {
+      if (snapshot.phase === 'done' || snapshot.progressPercent >= 100) {
+        return 'Compl\u00e9t\u00e9';
+      }
+      if (
+        snapshot.progressPercent != null &&
+        snapshot.progressPercent > 0 &&
+        snapshot.progressPercent < 100
+      ) {
+        return snapshot.progressPercent + '\u00a0%';
+      }
+      return 'En attente';
+    }
+
+    if (snapshot.phase === 'done' || open <= 0) return 'Compl\u00e9t\u00e9';
+
+    if (labels.length === 1) {
+      return clampProgressSummarySentence('Reste\u00a0: ' + labels[0] + '.');
+    }
+    if (labels.length === 2) {
+      return clampProgressSummarySentence(
+        'Reste\u00a0: ' + labels[0] + ' et ' + labels[1] + '.'
+      );
+    }
+    if (labels.length >= 3) {
+      return clampProgressSummarySentence(
+        'Reste\u00a0: ' +
+          labels[0] +
+          ', ' +
+          labels[1] +
+          ' et ' +
+          (open - 2) +
+          ' autre' +
+          (open - 2 > 1 ? 's' : '') +
+          '.'
+      );
+    }
+
+    if (open === 1) return 'Une t\u00e2che restante';
+    if (open === 2) return 'Deux t\u00e2ches restantes';
+    return open + ' t\u00e2ches restantes';
+  }
+
+  /**
+   * AI Progrès tab summary: one short sentence combining the task hierarchy.
+   * Returns { ok, skipped?, reason?, sentence?, source, usage?, debug }.
+   */
+  async function cardProgressSummaryTurn(provider, bridge, options) {
+    options = options || {};
+    var onDebug = typeof options.onDebug === 'function' ? options.onDebug : null;
+    var context = options.context || buildContext(bridge);
+    var snapshot =
+      options.snapshot ||
+      buildProgressSummarySnapshot(context, {
+        linkedTreeByItemId: options.linkedTreeByItemId
+      });
+    var heuristic = buildHeuristicProgressSummary(snapshot);
+
+    var p = normalizeProvider(provider);
+    if (!isConfigured(p)) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: 'not-configured',
+        sentence: heuristic,
+        source: 'heuristic'
+      };
+    }
+
+    if (!snapshot.tasksTotal && !(snapshot.outline && snapshot.outline.length)) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: 'no-tasks',
+        sentence: heuristic,
+        source: 'heuristic'
+      };
+    }
+
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu r\u00e9diges UNE phrase courte pour le r\u00e9sum\u00e9 de l\'onglet Progr\u00e8s d\'une carte Trello.',
+          'Objectif\u00a0: synth\u00e9tiser le sens de TOUTES les t\u00e2ches, sous-t\u00e2ches et sous-sous-t\u00e2ches (outline) en une phrase utile.',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"sentence":"\u2026"}',
+          'R\u00e8gles\u00a0:',
+          '- Une seule phrase, fran\u00e7ais, ton clair et factuel.',
+          '- Max ~' + MAX_PROGRESS_SUMMARY_LEN + ' caract\u00e8res.',
+          '- Combine / synth\u00e9tise\u00a0: ne liste pas tout comme un inventaire robotique.',
+          '- Si du travail reste\u00a0: dis ce qui reste \u00e0 faire (th\u00e8me + prochaines \u00e9tapes utiles).',
+          '- Si tout est done\u00a0: dis que c\'est termin\u00e9, en rappelant bri\u00e8vement le sujet.',
+          '- INTERDIT de citer le % de progr\u00e8s.',
+          '- INTERDIT d\'encourager / flatter.',
+          '- N\'invente aucune \u00e9tape absente de outline / openLabels.',
+          '- Ex. BON\u00a0: "Reste la validation client (maquette + feedback) avant publication."',
+          '- Ex. BON\u00a0: "R\u00e9daction du brief termin\u00e9e\u00a0; encha\u00eene sur relecture et envoi."',
+          '- Ex. MAUVAIS\u00a0: "3 t\u00e2ches restantes."',
+          'Snapshot\u00a0:',
+          JSON.stringify(snapshot)
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content:
+          'Donne la phrase de r\u00e9sum\u00e9 Progr\u00e8s (JSON {"sentence":"\u2026"}). Heuristique de secours\u00a0: ' +
+          heuristic
+      }
+    ];
+
+    var debug = {
+      id: 'progress-summary-' + Date.now().toString(36),
+      kind: 'cardProgressSummaryTurn',
+      label: 'R\u00e9sum\u00e9 Progr\u00e8s',
+      startedAt: Date.now(),
+      attempts: []
+    };
+    function emitDebug() {
+      if (!onDebug) return;
+      try {
+        onDebug(debug);
+      } catch (cbErr) {
+        console.error('cardProgressSummaryTurn onDebug failed', cbErr);
+      }
+    }
+
+    var response;
+    var t0 = Date.now();
+    try {
+      try {
+        response = await chatCompletions(p, messages, {
+          jsonMode: true,
+          max_tokens: 120,
+          temperature: 0.35
+        });
+        if (response.meta) {
+          debug.attempts.push(Object.assign({ label: 'json' }, response.meta));
+        }
+      } catch (err) {
+        if (err && err.debugMeta) {
+          debug.attempts.push(Object.assign({ label: 'json' }, err.debugMeta));
+        }
+        if (
+          err &&
+          err.message &&
+          /response_format|json_object|json mode/i.test(err.message)
+        ) {
+          response = await chatCompletions(p, messages, {
+            jsonMode: false,
+            max_tokens: 120,
+            temperature: 0.35
+          });
+          if (response.meta) {
+            debug.attempts.push(
+              Object.assign({ label: 'sans json mode' }, response.meta)
+            );
+          }
+        } else {
+          throw err;
+        }
+      }
+    } catch (fatal) {
+      debug.endedAt = Date.now();
+      debug.latencyMs = Date.now() - t0;
+      debug.ok = false;
+      debug.error = (fatal && fatal.message) || String(fatal || 'Erreur');
+      debug.request = debug.attempts.length
+        ? debug.attempts[debug.attempts.length - 1]
+        : null;
+      emitDebug();
+      return {
+        ok: true,
+        skipped: false,
+        reason: 'llm-error',
+        sentence: heuristic,
+        source: 'heuristic',
+        error: debug.error,
+        debug: debug
+      };
+    }
+
+    var data = null;
+    try {
+      var text = typeof response.content === 'string' ? response.content.trim() : '';
+      var fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+      if (fence) text = fence[1].trim();
+      var start = text.indexOf('{');
+      var end = text.lastIndexOf('}');
+      if (start >= 0 && end > start) text = text.slice(start, end + 1);
+      data = JSON.parse(text);
+    } catch (parseErr) {
+      data = null;
+    }
+
+    var usage = extractUsageFromRaw(response.raw, messages, response.content, p.model);
+    usage.latencyMs = Date.now() - t0;
+    debug.endedAt = Date.now();
+    debug.latencyMs = usage.latencyMs;
+    debug.ok = true;
+    debug.request =
+      response.meta ||
+      (debug.attempts.length ? debug.attempts[debug.attempts.length - 1] : null);
+    debug.response = {
+      status: response.meta && response.meta.status,
+      content: response.content,
+      raw: cloneJsonSafe(response.raw),
+      parsed: data
+    };
+    debug.usage = usage;
+    emitDebug();
+
+    var aiSentence =
+      data && typeof data.sentence === 'string'
+        ? clampProgressSummarySentence(data.sentence)
         : '';
     if (!aiSentence) {
       return {
@@ -13081,6 +13650,10 @@
     fingerprintStatusBriefSnapshot: fingerprintStatusBriefSnapshot,
     buildHeuristicStatusBrief: buildHeuristicStatusBrief,
     cardStatusBriefTurn: cardStatusBriefTurn,
+    buildProgressSummarySnapshot: buildProgressSummarySnapshot,
+    fingerprintProgressSummarySnapshot: fingerprintProgressSummarySnapshot,
+    buildHeuristicProgressSummary: buildHeuristicProgressSummary,
+    cardProgressSummaryTurn: cardProgressSummaryTurn,
     isVerboseStructuredDesc: isVerboseStructuredDesc,
     suggestSubtasks: suggestSubtasks,
     estimateSubtaskDurations: estimateSubtaskDurations,

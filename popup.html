@@ -114,6 +114,11 @@
     var statusBriefFp = '';
     var statusBriefAiCache = { fp: '', sentence: '' };
     var STATUS_BRIEF_DEBOUNCE_MS = 800;
+    var progressSummaryTimer = null;
+    var progressSummaryGen = 0;
+    var progressSummaryFp = '';
+    var progressSummaryAiCache = { fp: '', sentence: '' };
+    var PROGRESS_SUMMARY_DEBOUNCE_MS = 800;
 
     function rememberCardMembers(members) {
       latestCardMembers = Array.isArray(members) ? members.slice() : [];
@@ -276,6 +281,172 @@
           if (gen !== statusBriefGen) return;
           console.error('Overview status brief failed', err);
           paintOverviewStatusBrief(heuristic, false);
+        });
+    }
+
+    function getProgressLinkedTreeByItemId() {
+      if (
+        completionUi &&
+        typeof completionUi.getLinkedTreeByItemId === 'function'
+      ) {
+        try {
+          return completionUi.getLinkedTreeByItemId() || null;
+        } catch (e) {
+          return null;
+        }
+      }
+      return null;
+    }
+
+    function progressSummaryFallbackText() {
+      if (!completionUi || typeof completionUi.getData !== 'function') return '';
+      if (
+        !window.PriorityAgent ||
+        typeof PriorityAgent.buildContext !== 'function' ||
+        typeof PriorityAgent.buildProgressSummarySnapshot !== 'function' ||
+        typeof PriorityAgent.buildHeuristicProgressSummary !== 'function'
+      ) {
+        var progress = CompletionTrello.computeCardProgress(completionUi.getData());
+        if (!progress) return '';
+        if (progress.percent <= 0) return 'En attente';
+        if (progress.hasItems) {
+          var remaining = progress.totalCount - progress.doneCount;
+          if (remaining <= 0) return 'Complété';
+          if (remaining === 1) return 'Une tâche restante';
+          if (remaining === 2) return 'Deux tâches restantes';
+          return remaining + ' tâches restantes';
+        }
+        return progress.percent + '\u00a0%';
+      }
+      var bridge = buildStatusBriefBridge();
+      var context = PriorityAgent.buildContext(bridge);
+      var snapshot = PriorityAgent.buildProgressSummarySnapshot(context, {
+        linkedTreeByItemId: getProgressLinkedTreeByItemId()
+      });
+      return PriorityAgent.buildHeuristicProgressSummary(snapshot) || '';
+    }
+
+    function progressSummaryText() {
+      if (
+        progressSummaryAiCache.fp &&
+        progressSummaryAiCache.fp === progressSummaryFp &&
+        progressSummaryAiCache.sentence
+      ) {
+        return progressSummaryAiCache.sentence;
+      }
+      return progressSummaryFallbackText();
+    }
+
+    function paintProgressSummary() {
+      if (progressCollapse && typeof progressCollapse.refreshSummary === 'function') {
+        progressCollapse.refreshSummary();
+      } else if (progressSummaryEl) {
+        progressSummaryEl.textContent = progressSummaryText();
+      }
+    }
+
+    function scheduleProgressSummary() {
+      if (
+        !window.PriorityAgent ||
+        typeof PriorityAgent.buildContext !== 'function' ||
+        typeof PriorityAgent.buildProgressSummarySnapshot !== 'function' ||
+        typeof PriorityAgent.buildHeuristicProgressSummary !== 'function'
+      ) {
+        if (progressCollapse) progressCollapse.refreshSummary();
+        return;
+      }
+      var bridge = buildStatusBriefBridge();
+      var context = PriorityAgent.buildContext(bridge);
+      var linkedTreeByItemId = getProgressLinkedTreeByItemId();
+      var snapshot = PriorityAgent.buildProgressSummarySnapshot(context, {
+        linkedTreeByItemId: linkedTreeByItemId
+      });
+      var heuristic = PriorityAgent.buildHeuristicProgressSummary(snapshot);
+      var fp =
+        typeof PriorityAgent.fingerprintProgressSummarySnapshot === 'function'
+          ? PriorityAgent.fingerprintProgressSummarySnapshot(snapshot)
+          : '';
+
+      progressSummaryFp = fp;
+
+      if (
+        progressSummaryAiCache.fp &&
+        progressSummaryAiCache.fp === fp &&
+        progressSummaryAiCache.sentence
+      ) {
+        paintProgressSummary();
+        return;
+      }
+
+      // Immediate heuristic while AI runs (cache miss → progressSummaryText uses fallback).
+      paintProgressSummary();
+
+      if (typeof PriorityAgent.cardProgressSummaryTurn !== 'function') return;
+      if (typeof PriorityAgent.getProvider !== 'function') return;
+
+      if (progressSummaryTimer) {
+        clearTimeout(progressSummaryTimer);
+        progressSummaryTimer = null;
+      }
+      progressSummaryTimer = setTimeout(function () {
+        progressSummaryTimer = null;
+        refreshProgressSummaryAi(
+          bridge,
+          snapshot,
+          fp,
+          heuristic,
+          linkedTreeByItemId
+        );
+      }, PROGRESS_SUMMARY_DEBOUNCE_MS);
+    }
+
+    function refreshProgressSummaryAi(
+      bridge,
+      snapshot,
+      fp,
+      heuristic,
+      linkedTreeByItemId
+    ) {
+      var gen = ++progressSummaryGen;
+      if (
+        !window.PriorityAgent ||
+        typeof PriorityAgent.getProvider !== 'function' ||
+        typeof PriorityAgent.cardProgressSummaryTurn !== 'function'
+      ) {
+        return;
+      }
+      PriorityAgent.getProvider(t)
+        .then(function (provider) {
+          if (gen !== progressSummaryGen) return null;
+          if (!PriorityAgent.isConfigured(provider)) {
+            return {
+              ok: true,
+              skipped: true,
+              reason: 'not-configured',
+              sentence: heuristic,
+              source: 'heuristic'
+            };
+          }
+          return PriorityAgent.cardProgressSummaryTurn(provider, bridge, {
+            snapshot: snapshot,
+            linkedTreeByItemId: linkedTreeByItemId
+          });
+        })
+        .then(function (result) {
+          if (gen !== progressSummaryGen) return;
+          if (!result) return;
+          var sentence =
+            (result.sentence && String(result.sentence).trim()) || heuristic;
+          if (result.source === 'ai' && sentence) {
+            progressSummaryAiCache = { fp: fp, sentence: sentence };
+          }
+          progressSummaryFp = fp;
+          paintProgressSummary();
+        })
+        .catch(function (err) {
+          if (gen !== progressSummaryGen) return;
+          console.error('Progrès summary failed', err);
+          paintProgressSummary();
         });
     }
 
@@ -537,7 +708,7 @@
         completionUi.setData(next);
       }
       appliedCompletionFp = fingerprintCompletion(next);
-      if (progressCollapse) progressCollapse.refreshSummary();
+      scheduleProgressSummary();
       syncBlockedSubtasks();
       syncDueBlockedForProgress(next);
       syncDueCompleteFromProgress(next);
@@ -1064,7 +1235,7 @@
           if (completionUi && typeof completionUi.setData === 'function') {
             completionUi.setData(next);
           }
-          if (progressCollapse) progressCollapse.refreshSummary();
+          scheduleProgressSummary();
           syncBlockedSubtasks();
           syncDueBlockedForProgress(next);
           return CompletionTrello.saveCardCompletion(t, next);
@@ -2779,22 +2950,6 @@
       }
     }
 
-    function progressSummaryText() {
-      if (!completionUi || typeof completionUi.getData !== 'function') return '';
-      var progress = CompletionTrello.computeCardProgress(completionUi.getData());
-      if (!progress) return '';
-      if (progress.percent <= 0) return 'En attente';
-      if (progress.hasItems) {
-        var remaining = progress.totalCount - progress.doneCount;
-        if (remaining <= 0) return 'Complété';
-        if (remaining === 1) return 'Une tâche restante';
-        if (remaining === 2) return 'Deux tâches restantes';
-        return remaining + ' tâches restantes';
-      }
-      // Card-level progress only (no subtasks): keep percent.
-      return progress.percent + '\u00a0%';
-    }
-
     function progressIsFullyComplete(data) {
       if (!data || typeof CompletionTrello === 'undefined') return false;
       var progress = CompletionTrello.computeCardProgress(data);
@@ -3570,7 +3725,7 @@
             saveCompletion(latestCompletion);
           }
         }
-        if (progressCollapse) progressCollapse.refreshSummary();
+        scheduleProgressSummary();
         syncBlockedSubtasks();
         syncDueBlockedForProgress(
           (completionUi &&
@@ -3840,7 +3995,7 @@
             syncingBlockedBridge = false;
           }
         }
-        if (progressCollapse) progressCollapse.refreshSummary();
+        scheduleProgressSummary();
         syncBlockedSubtasks();
         resizePopup();
         return { subtaskReason: subtaskReason, cardReason: cardReason };
@@ -4067,7 +4222,7 @@
           saveCompletion(latestCompletion);
           item = latestCompletion.items[latestCompletion.items.length - 1] || null;
         }
-        if (progressCollapse) progressCollapse.refreshSummary();
+        scheduleProgressSummary();
         syncBlockedSubtasks();
         syncPriorityFromProgressBlocked(
           (completionUi &&
@@ -4169,7 +4324,7 @@
           : latestCompletion;
       // Persist again with progressEnabled on (statut side effect may have left it unset).
       saveCompletion(live);
-      if (progressCollapse) progressCollapse.refreshSummary();
+      scheduleProgressSummary();
       syncBlockedSubtasks();
       syncDueBlockedForProgress(live);
       if (progressCollapse && !progressCollapse.isEnabled()) {
@@ -4217,7 +4372,7 @@
                   ? completionUi.getData()
                   : latestCompletion;
               saveCompletion(blockedLive);
-              if (progressCollapse) progressCollapse.refreshSummary();
+              scheduleProgressSummary();
               syncBlockedSubtasks();
               syncDueBlockedForProgress(blockedLive);
               syncDueCompleteFromProgress(blockedLive, { clearSuppress: true });
@@ -4281,7 +4436,7 @@
                   ? completionUi.getData()
                   : latestCompletion;
               saveCompletion(reopenedLive);
-              if (progressCollapse) progressCollapse.refreshSummary();
+              scheduleProgressSummary();
               syncBlockedSubtasks();
               syncDueBlockedForProgress(reopenedLive);
               syncDueCompleteFromProgress(reopenedLive, { clearSuppress: true });
@@ -5210,9 +5365,12 @@
               maybeRefineFromItemMotifs(live);
               syncPriorityFromProgressBlocked(live);
             },
+            onLinkedTreeChange: function () {
+              scheduleProgressSummary();
+            },
             onChange: function (data) {
               saveCompletion(data);
-              if (progressCollapse) progressCollapse.refreshSummary();
+              scheduleProgressSummary();
               syncBlockedSubtasks();
               syncDueBlockedForProgress(data);
               maybeRefineFromItemMotifs(data);
@@ -5298,6 +5456,7 @@
           // Initial paint may already be all-complete — sync Done without fireworks.
           syncDueCompleteFromProgress(latestCompletion);
           maybeSilentEstimateDurations();
+          scheduleProgressSummary();
           // Progrès is always on; only expand follows stored prefs / focus entry.
           var expandFallback = initiallyOpen ? false : true;
           var expandProgress = initiallyOpen
@@ -5706,7 +5865,7 @@
             completionUi.setData(next);
             var live = completionUi.getData();
             saveCompletion(live);
-            if (progressCollapse) progressCollapse.refreshSummary();
+            scheduleProgressSummary();
             syncBlockedSubtasks();
             syncDueBlockedForProgress(live);
             syncPriorityFromProgressBlocked(live);

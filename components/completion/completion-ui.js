@@ -1453,6 +1453,10 @@
       typeof options.onPromoteSubtask === 'function' ? options.onPromoteSubtask : null;
     var onBlockedChange =
       typeof options.onBlockedChange === 'function' ? options.onBlockedChange : null;
+    var onLinkedTreeChange =
+      typeof options.onLinkedTreeChange === 'function'
+        ? options.onLinkedTreeChange
+        : null;
     var getBoardCards =
       typeof options.getBoardCards === 'function' ? options.getBoardCards : null;
     var resolveLinkedTree =
@@ -1571,10 +1575,6 @@
     detailsChevron.setAttribute('aria-hidden', 'true');
     detailsToggleBtn.appendChild(detailsChevron);
 
-    var percentRow = document.createElement('div');
-    percentRow.className = 'tp-completion-percent-row';
-    percentRow.appendChild(masterCheckWrap);
-
     var linkedSnapshots = Object.create(null);
 
     var estimateScales =
@@ -1643,7 +1643,6 @@
     applyProgressEncouragement(encouragementEl, 0);
 
     progressHero.appendChild(masterTitleEl);
-    progressHero.appendChild(percentRow);
     progressHero.appendChild(encouragementEl);
 
     // Full-width header hit target (chevron left), matching section-collapse-btn.
@@ -1734,6 +1733,10 @@
       'completionMasterSlider'
     );
     masterSlider.el.classList.add('tp-completion-master-slider');
+    var masterFieldHead = masterSlider.el.querySelector('.tp-completion-field-head');
+    if (masterFieldHead) {
+      masterFieldHead.insertBefore(masterCheckWrap, masterFieldHead.firstChild);
+    }
     masterSlider.input.addEventListener('change', function () {
       if (data.items.length) {
         renderList();
@@ -1800,9 +1803,6 @@
       setMasterDetailsExpanded(!masterDetailsExpanded);
     });
     // Nested controls must not bubble into the header toggle.
-    masterCheckWrap.addEventListener('click', function (event) {
-      event.stopPropagation();
-    });
     masterEstimateChip.el.addEventListener('click', function (event) {
       event.stopPropagation();
     });
@@ -3253,6 +3253,13 @@
             updateProgressUi();
             onResize();
           }
+          if (onLinkedTreeChange) {
+            try {
+              onLinkedTreeChange(linkedTreeByItemId);
+            } catch (cbErr) {
+              console.error('Completion onLinkedTreeChange failed', cbErr);
+            }
+          }
           return resolved;
         })
         .catch(function (err) {
@@ -3265,7 +3272,7 @@
       opts = opts || {};
       var readOnly = !!opts.readOnly;
       var checkBtn = li.querySelector(
-        ':scope > .tp-completion-item-main .tp-completion-check'
+        ':scope > .tp-completion-item-main .tp-completion-check, :scope > .tp-completion-item-slider-row .tp-completion-check'
       );
       var textInput = li.querySelector(
         ':scope > .tp-completion-item-main .tp-completion-text'
@@ -3752,7 +3759,7 @@
       }
 
       var promoteBtn = null;
-      if (!isLinked) {
+      if (!isLinked && CT.itemHasChecklist(item)) {
         promoteBtn = document.createElement('button');
         promoteBtn.type = 'button';
         promoteBtn.className = 'tp-completion-promote';
@@ -3762,7 +3769,6 @@
         promoteBtn.title = 'Convertir en carte';
       }
 
-      mainRow.appendChild(checkWrap);
       mainRow.appendChild(titleEl);
       if (!isLinked && spellcheckingItemIds[item.id]) {
         var spellSpinner = document.createElement('span');
@@ -3803,6 +3809,11 @@
       if (completeBtn) mainRow.appendChild(completeBtn);
       mainRow.appendChild(deleteBtn);
 
+      // Linked cards have no slider — keep the progress circle on the title row.
+      if (isLinked) {
+        mainRow.insertBefore(checkWrap, mainRow.firstChild);
+      }
+
       li.appendChild(mainRow);
 
       if (!isLinked) {
@@ -3832,6 +3843,7 @@
         if (itemBlocked) itemValEl.style.color = BLOCKED_ACCENT;
 
         sliderWrap.appendChild(itemSlider);
+        sliderRow.appendChild(checkWrap);
         sliderRow.appendChild(sliderWrap);
         sliderRow.appendChild(itemValEl);
         li.appendChild(sliderRow);
@@ -3892,18 +3904,6 @@
       section.dataset.parentId = parentItem.id;
 
       var checklist = Array.isArray(parentItem.items) ? parentItem.items : [];
-      var header = document.createElement('div');
-      header.className = 'tp-completion-checklist-header';
-
-      var headerLabel = document.createElement('span');
-      headerLabel.className = 'tp-completion-checklist-label';
-      headerLabel.textContent =
-        checklist.length > 0
-          ? 'Checklist (' + checklist.length + ')'
-          : 'Checklist';
-
-      header.appendChild(headerLabel);
-      section.appendChild(header);
 
       var list = document.createElement('ul');
       list.className = 'tp-completion-checklist-list';
@@ -3991,8 +3991,8 @@
       detailsBtn.innerHTML =
         '<i class="ti ti-chevron-down" aria-hidden="true"></i>';
       detailsBtn.setAttribute('aria-expanded', 'false');
-      detailsBtn.setAttribute('aria-label', 'Progr\u00e8s et estimation');
-      detailsBtn.title = 'Progr\u00e8s et estimation';
+      detailsBtn.setAttribute('aria-label', 'Progr\u00e8s');
+      detailsBtn.title = 'Progr\u00e8s';
 
       var deleteBtn = document.createElement('button');
       deleteBtn.type = 'button';
@@ -4001,10 +4001,31 @@
       deleteBtn.title = 'Supprimer';
       deleteBtn.innerHTML = TRASH_ICON_SVG;
 
+      var nestedEstimate = createEstimateChip(CT, {
+        t: trelloT,
+        scales: currentEstimateScales(),
+        minutes: CT.clampEstimatedMinutes(nested.estimatedMinutes),
+        compact: true,
+        ariaLabel: 'Estimation de la sous-sous-t\u00e2che',
+        onChange: function (mins) {
+          data = CT.applyChecklistItemEstimate(
+            data,
+            parentItem.id,
+            nested.id,
+            mins,
+            { lock: true }
+          );
+          emitChange();
+          onResize();
+        }
+      });
+      nestedEstimate.el.classList.add('tp-completion-item-estimate');
+
       mainRow.appendChild(checkWrap);
       mainRow.appendChild(titleEl);
       mainRow.appendChild(detailsBtn);
       mainRow.appendChild(deleteBtn);
+      mainRow.appendChild(nestedEstimate.el);
       li.appendChild(mainRow);
 
       var details = document.createElement('div');
@@ -4033,27 +4054,6 @@
       sliderWrap.appendChild(itemSlider);
       sliderRow.appendChild(sliderWrap);
       sliderRow.appendChild(itemValEl);
-
-      var nestedEstimate = createEstimateChip(CT, {
-        t: trelloT,
-        scales: currentEstimateScales(),
-        minutes: CT.clampEstimatedMinutes(nested.estimatedMinutes),
-        compact: true,
-        ariaLabel: 'Estimation de la sous-sous-t\u00e2che',
-        onChange: function (mins) {
-          data = CT.applyChecklistItemEstimate(
-            data,
-            parentItem.id,
-            nested.id,
-            mins,
-            { lock: true }
-          );
-          emitChange();
-          onResize();
-        }
-      });
-      nestedEstimate.el.classList.add('tp-completion-item-estimate');
-      sliderRow.appendChild(nestedEstimate.el);
       details.appendChild(sliderRow);
       li.appendChild(details);
 
@@ -4902,6 +4902,16 @@
       addItem: addItem,
       addLinkedCard: addLinkedCard,
       refreshLinkedTree: refreshLinkedTree,
+      /** Compact linked-tree map for AI Progrès summary (itemId → node). */
+      getLinkedTreeByItemId: function () {
+        var out = Object.create(null);
+        Object.keys(linkedTreeByItemId).forEach(function (id) {
+          var node = linkedTreeByItemId[id];
+          if (!node) return;
+          out[id] = node;
+        });
+        return out;
+      },
       refreshSuggestions: refreshSuggestions,
       focusAddInput: function () {
         addInput.focus();

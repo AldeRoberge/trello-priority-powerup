@@ -6788,7 +6788,7 @@
 
   /**
    * Always-open primary overview at the top of the card popup.
-   * Title + metric cells (status, progress, subtasks, deadline, priority);
+   * Title + metric cells (progress+statut combined, subtasks, deadline, priority);
    * each cell jumps to the matching accordion via onJump.
    */
   function createOverviewField(config) {
@@ -6846,12 +6846,18 @@
     field.className = 'field field--overview is-enabled';
     section.appendChild(field);
 
-    function makeJumpable(el, jumpKey, label) {
+    function makeJumpable(el, jumpKeyOrRef, label) {
       el.setAttribute('role', 'button');
       el.tabIndex = 0;
       if (label) el.title = 'Aller \u00e0 ' + label;
+      function resolveKey() {
+        if (jumpKeyOrRef && typeof jumpKeyOrRef === 'object') {
+          return jumpKeyOrRef.key;
+        }
+        return jumpKeyOrRef;
+      }
       function go() {
-        if (onJump) onJump(jumpKey);
+        if (onJump) onJump(resolveKey());
       }
       el.addEventListener('click', go);
       el.addEventListener('keydown', function (e) {
@@ -6923,8 +6929,13 @@
       return { cell: cell, value: valueWrap, head: head, icon: icon };
     }
 
-    var statusCell = makeCell('status', 'blocked', 'Statut', 'ti-list-check');
-    var progressCell = makeCell('progress', 'progress', 'Progr\u00e8s', 'ti-progress');
+    var progressJump = { key: 'progress' };
+    var progressCell = makeCell(
+      'progress',
+      progressJump,
+      'Progr\u00e8s',
+      'ti-progress'
+    );
     var subtasksCell = makeCell(
       'subtasks',
       'progress',
@@ -6964,17 +6975,43 @@
       }
     }
 
-    function syncStatusIcon() {
-      var style = statutCategoryStyle(statusCategory || '_none');
-      var iconKey = style.icon || 'dot';
-      var next = createStatutIcon(iconKey, 14);
-      next.classList.add('overview-cell-icon', 'overview-status-icon');
-      if (statusCell.icon && statusCell.icon.parentNode) {
-        statusCell.icon.parentNode.replaceChild(next, statusCell.icon);
+    function setProgressHeadIcon(mode, statusStyle) {
+      var next;
+      if (mode === 'status') {
+        next = createStatutIcon((statusStyle && statusStyle.icon) || 'dot', 14);
+        next.classList.add(
+          'overview-cell-icon',
+          'overview-status-icon',
+          'ti'
+        );
       } else {
-        statusCell.head.insertBefore(next, statusCell.head.children[0] || null);
+        next = document.createElement('i');
+        next.className = 'ti ti-progress overview-cell-icon';
+        next.setAttribute('aria-hidden', 'true');
       }
-      statusCell.icon = next;
+      if (progressCell.icon && progressCell.icon.parentNode) {
+        progressCell.icon.parentNode.replaceChild(next, progressCell.icon);
+      } else {
+        progressCell.head.insertBefore(
+          next,
+          progressCell.head.children[0] || null
+        );
+      }
+      progressCell.icon = next;
+    }
+
+    /**
+     * Combined Progrès cell: status wins for blocked/done; otherwise prefer %.
+     */
+    function resolveProgressDisplayMode() {
+      var isBlocked = statusCategory === 'blocked' || !!progressBlocked;
+      var isDone =
+        statusCategory === 'completed' ||
+        (progressPercent != null && progressPercent >= 100);
+      if (isBlocked || isDone) return 'status';
+      if (progressPercent != null) return 'progress';
+      if ((statusText || '').trim()) return 'status';
+      return 'empty';
     }
 
     function paint() {
@@ -7000,59 +7037,92 @@
         statusBriefEl.classList.remove('is-pending');
       }
 
-      setFeatureVisible(statusCell.cell, features.statut !== false);
-      setFeatureVisible(progressCell.cell, features.progress !== false);
+      var progressFeatureOn =
+        features.progress !== false || features.statut !== false;
+      setFeatureVisible(progressCell.cell, progressFeatureOn);
       setFeatureVisible(subtasksCell.cell, features.progress !== false);
       setFeatureVisible(dueCell.cell, features.due !== false);
       setFeatureVisible(priorityCell.cell, features.priority !== false);
 
       var st = (statusText || '').trim();
       var statusStyle = statutCategoryStyle(statusCategory || '_none');
-      var statusAccent =
-        statusColor ||
-        statusStyle.color ||
-        '';
-      var statusIsBlocked = statusCategory === 'blocked';
-      statusCell.value.textContent = st || 'Sans statut';
-      statusCell.value.classList.toggle('is-empty', !st);
-      statusCell.cell.classList.toggle('is-blocked', statusIsBlocked);
-      if (statusCategory) {
-        statusCell.cell.dataset.statusCategory = statusCategory;
-      } else if (statusCell.cell.dataset) {
-        delete statusCell.cell.dataset.statusCategory;
-      }
-      if (statusAccent) {
-        statusCell.cell.style.setProperty('--overview-status-accent', statusAccent);
-      } else {
-        statusCell.cell.style.removeProperty('--overview-status-accent');
-      }
-      syncStatusIcon();
+      var statusAccent = statusColor || statusStyle.color || '';
+      var isBlocked = statusCategory === 'blocked' || !!progressBlocked;
+      var isDone =
+        statusCategory === 'completed' ||
+        (progressPercent != null && progressPercent >= 100);
+      var mode = resolveProgressDisplayMode();
+      progressJump.key = isBlocked ? 'blocked' : 'progress';
 
-      var progressAccent = progressBlocked
-        ? readCssVar('--blocked-accent', '#ae2e24')
-        : progressColor || '';
-      progressCell.cell.classList.toggle('is-blocked', !!progressBlocked);
-      progressCell.value.innerHTML = '';
-      if (progressPercent == null) {
-        progressCell.value.textContent = '\u2014';
-        progressCell.value.classList.add('is-empty');
-        progressBarFill.style.width = '0%';
-        progressBarTrack.classList.add('is-empty');
-        progressRing.classList.remove('is-checked', 'has-progress', 'is-blocked');
-        progressRing.style.removeProperty('--completion-progress');
-        progressRing.style.removeProperty('--completion-check-fill');
-      } else {
-        var done = progressPercent >= 100;
-        progressRing.classList.toggle('is-checked', done);
-        progressRing.classList.toggle('has-progress', progressPercent > 0 && !done);
-        progressRing.classList.toggle('is-blocked', !!progressBlocked && !done);
-        progressRing.style.setProperty('--completion-progress', String(progressPercent));
+      progressCell.cell.classList.toggle('is-blocked', isBlocked);
+      progressCell.cell.classList.toggle('is-done', !!isDone && !isBlocked);
+      progressCell.cell.classList.toggle('is-status-mode', mode === 'status');
+      progressCell.cell.classList.toggle('is-progress-mode', mode === 'progress');
+      if (statusCategory) {
+        progressCell.cell.dataset.statusCategory = statusCategory;
+      } else if (progressCell.cell.dataset) {
+        delete progressCell.cell.dataset.statusCategory;
+      }
+
+      setProgressHeadIcon(mode, statusStyle);
+
+      var progressAccent = '';
+      if (mode === 'status') {
+        progressAccent =
+          isBlocked
+            ? statusAccent || readCssVar('--blocked-accent', '#ae2e24')
+            : statusAccent || progressColor || '';
+        progressCell.value.innerHTML = '';
+        var statusLabel = '';
+        if (isBlocked) {
+          statusLabel =
+            statusCategory === 'blocked' && st ? st : 'Bloqu\u00e9';
+        } else if (isDone) {
+          statusLabel = st || 'Termin\u00e9';
+        } else {
+          statusLabel = st;
+        }
+        progressCell.value.textContent = statusLabel || 'Sans statut';
+        progressCell.value.classList.toggle('is-empty', !statusLabel);
+        progressBarFill.style.width =
+          isDone && !isBlocked
+            ? '100%'
+            : progressPercent != null
+              ? progressPercent + '%'
+              : '0%';
+        progressBarTrack.classList.toggle(
+          'is-empty',
+          !(isDone && !isBlocked) && progressPercent == null
+        );
+        progressBarTrack.hidden = false;
+      } else if (mode === 'progress') {
+        progressAccent = progressBlocked
+          ? readCssVar('--blocked-accent', '#ae2e24')
+          : progressColor || '';
+        progressCell.value.innerHTML = '';
+        var donePct = progressPercent >= 100;
+        progressRing.classList.toggle('is-checked', donePct);
+        progressRing.classList.toggle(
+          'has-progress',
+          progressPercent > 0 && !donePct
+        );
+        progressRing.classList.toggle(
+          'is-blocked',
+          !!progressBlocked && !donePct
+        );
+        progressRing.style.setProperty(
+          '--completion-progress',
+          String(progressPercent)
+        );
         if (progressAccent) {
-          progressRing.style.setProperty('--completion-check-fill', progressAccent);
+          progressRing.style.setProperty(
+            '--completion-check-fill',
+            progressAccent
+          );
         } else {
           progressRing.style.removeProperty('--completion-check-fill');
         }
-        if (progressBlocked && !done) {
+        if (progressBlocked && !donePct) {
           progressRing.innerHTML =
             '<svg class="tp-completion-check-icon tp-completion-pause-icon" viewBox="0 0 16 16" width="10" height="10" aria-hidden="true" focusable="false">' +
             '<rect x="5" y="4" width="2.2" height="8" rx="0.8" fill="currentColor"></rect>' +
@@ -7072,15 +7142,32 @@
         progressCell.value.classList.remove('is-empty');
         progressBarFill.style.width = progressPercent + '%';
         progressBarTrack.classList.remove('is-empty');
+        progressBarTrack.hidden = false;
+      } else {
+        progressCell.value.innerHTML = '';
+        progressCell.value.textContent = '\u2014';
+        progressCell.value.classList.add('is-empty');
+        progressBarFill.style.width = '0%';
+        progressBarTrack.classList.add('is-empty');
+        progressBarTrack.hidden = false;
+        progressRing.classList.remove('is-checked', 'has-progress', 'is-blocked');
+        progressRing.style.removeProperty('--completion-progress');
+        progressRing.style.removeProperty('--completion-check-fill');
       }
+
       if (progressAccent) {
         progressCell.cell.style.setProperty(
           '--overview-progress-accent',
           progressAccent
         );
+        progressCell.cell.style.setProperty(
+          '--overview-status-accent',
+          progressAccent
+        );
         progressCell.cell.classList.add('has-progress-accent');
       } else {
         progressCell.cell.style.removeProperty('--overview-progress-accent');
+        progressCell.cell.style.removeProperty('--overview-status-accent');
         progressCell.cell.classList.remove('has-progress-accent');
       }
 

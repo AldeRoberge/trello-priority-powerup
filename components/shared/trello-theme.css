@@ -1981,10 +1981,6 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   font-size: 14px;
 }
 
-.tp-completion-progress-panel.is-collapsed .tp-completion-percent-row {
-  gap: 8px;
-}
-
 .tp-completion-details-toggle {
   flex: 1 1 auto;
   min-width: 0;
@@ -2731,20 +2727,6 @@ html[data-color-mode='dark'] .tp-completion-encouragement[data-tone='active'] {
   border-top: 1px solid color-mix(in srgb, var(--tp-border) 70%, transparent);
 }
 
-.tp-completion-checklist-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.tp-completion-checklist-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--tp-text-muted);
-}
-
 .tp-completion-checklist-list {
   list-style: none;
   display: flex;
@@ -2920,9 +2902,17 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
 
 .tp-completion-item-main {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto 28px 28px 28px 32px;
+  grid-template-columns: minmax(0, 1fr) auto 28px 28px 32px;
   align-items: center;
   gap: 6px;
+}
+
+.tp-completion-item-main:has(.tp-completion-promote) {
+  grid-template-columns: minmax(0, 1fr) auto 28px 28px 28px 32px;
+}
+
+.tp-completion-checklist-main {
+  grid-template-columns: 28px minmax(0, 1fr) 26px 32px auto;
 }
 
 .tp-completion-item.is-linked .tp-completion-item-main {
@@ -2934,7 +2924,11 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
 }
 
 .tp-completion-item-main:has(.tp-completion-spell-spinner) {
-  grid-template-columns: 28px minmax(0, 1fr) 22px auto 28px 28px 28px 32px;
+  grid-template-columns: minmax(0, 1fr) 22px auto 28px 28px 32px;
+}
+
+.tp-completion-item-main:has(.tp-completion-spell-spinner):has(.tp-completion-promote) {
+  grid-template-columns: minmax(0, 1fr) 22px auto 28px 28px 28px 32px;
 }
 
 .tp-completion-item.is-linked .tp-completion-item-main:has(.tp-completion-spell-spinner) {
@@ -3136,12 +3130,17 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
   gap: 8px 10px;
 }
 
-/* slider | % */
+/* check | slider | % */
 .tp-completion-item-slider-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 2.75rem;
+  grid-template-columns: 28px minmax(0, 1fr) 2.75rem;
   align-items: center;
   gap: 8px 10px;
+}
+
+/* Nested checklist details: slider | % (estimate lives on the title row). */
+.tp-completion-checklist-details .tp-completion-item-slider-row {
+  grid-template-columns: minmax(0, 1fr) 2.75rem;
 }
 
 .tp-completion-item-slider-row .field-slider,
@@ -3257,8 +3256,9 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
   display: none;
 }
 
+/* check | slider | % */
 .tp-completion-master-slider .tp-completion-field-head {
-  grid-template-columns: minmax(0, 1fr) 2.75rem;
+  grid-template-columns: 28px minmax(0, 1fr) 2.75rem;
 }
 
 .tp-completion-field-lbl {
@@ -3285,8 +3285,13 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
   color: var(--tp-text-muted);
 }
 
-/* Completed items are always 100% — hide redundant per-row progress UI. */
+/* Completed items are always 100% — hide redundant slider/%, keep the circle check. */
 .tp-completion-item.is-done .tp-completion-item-slider-row {
+  grid-template-columns: 28px;
+}
+
+.tp-completion-item.is-done .tp-completion-item-slider-row .field-slider,
+.tp-completion-item.is-done .tp-completion-item-slider-row .tp-completion-item-val {
   display: none;
 }
 
@@ -4003,7 +4008,11 @@ html[data-color-mode='dark'] .tp-completion-suggestion.is-link:hover {
   }
 
   .tp-completion-item-main {
-    grid-template-columns: 28px minmax(0, 1fr) auto 28px 28px 28px 32px;
+    grid-template-columns: minmax(0, 1fr) auto 28px 28px 32px;
+  }
+
+  .tp-completion-item-main:has(.tp-completion-promote) {
+    grid-template-columns: minmax(0, 1fr) auto 28px 28px 28px 32px;
   }
 
   .tp-completion-item.is-linked .tp-completion-item-main {
@@ -4011,7 +4020,11 @@ html[data-color-mode='dark'] .tp-completion-suggestion.is-link:hover {
   }
 
   .tp-completion-item-main:has(.tp-completion-spell-spinner) {
-    grid-template-columns: 28px minmax(0, 1fr) 22px auto 28px 28px 28px 32px;
+    grid-template-columns: minmax(0, 1fr) 22px auto 28px 28px 32px;
+  }
+
+  .tp-completion-item-main:has(.tp-completion-spell-spinner):has(.tp-completion-promote) {
+    grid-template-columns: minmax(0, 1fr) 22px auto 28px 28px 28px 32px;
   }
 
   .tp-completion-item.is-linked .tp-completion-item-main:has(.tp-completion-spell-spinner) {
@@ -4024,12 +4037,16 @@ html[data-color-mode='dark'] .tp-completion-suggestion.is-link:hover {
   }
 
   .tp-completion-master-slider .tp-completion-field-head {
-    grid-template-columns: minmax(0, 1fr) 2.5rem;
+    grid-template-columns: 28px minmax(0, 1fr) 2.5rem;
   }
 
   .tp-completion-item-slider-row {
-    grid-template-columns: minmax(0, 1fr) 2.5rem;
+    grid-template-columns: 28px minmax(0, 1fr) 2.5rem;
     gap: 6px 8px;
+  }
+
+  .tp-completion-checklist-details .tp-completion-item-slider-row {
+    grid-template-columns: minmax(0, 1fr) 2.5rem;
   }
 }
 

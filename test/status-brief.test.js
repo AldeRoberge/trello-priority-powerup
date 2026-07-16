@@ -33,8 +33,10 @@ describe('PriorityAgent status brief', () => {
         estimatedRemainingMinutes: null,
         dueMissing: false,
         duePast: false,
+        dueSoon: false,
         dueCountdown: null,
         dueDate: null,
+        dueTime: null,
         priorityTier: '',
         ease: 3,
         scale: 'medium',
@@ -69,7 +71,7 @@ describe('PriorityAgent status brief', () => {
     assert.equal(snapshot.youAssigned, true);
     assert.deepEqual(snapshot.blockedReasons, ['Attente design']);
     assert.equal(snapshot.dueMissing, true);
-    assert.equal(snapshot.scale, 'quick');
+    assert.equal(snapshot.scale, 'petit');
   });
 
   it('buildStatusBriefSnapshot detects project scale', () => {
@@ -79,6 +81,11 @@ describe('PriorityAgent status brief', () => {
         doneCount: 1,
         totalCount: 8,
         estimatedRemainingMinutes: 400,
+        items: [
+          { text: 'Done bit', done: true },
+          { text: 'Rédiger le brief', done: false },
+          { text: 'Valider avec Sam', done: false },
+        ],
       },
       statut: { category: 'started' },
       due: { enabled: true, dueDate: '2026-08-01' },
@@ -93,9 +100,10 @@ describe('PriorityAgent status brief', () => {
       display: { label: 'Critique' },
     });
     assert.equal(snapshot.phase, 'in_progress');
-    assert.equal(snapshot.scale, 'project');
+    assert.equal(snapshot.scale, 'gros');
     assert.equal(snapshot.youAssigned, false);
     assert.deepEqual(snapshot.otherNames, ['Sam']);
+    assert.deepEqual(snapshot.nextOpenItems[0], 'Rédiger le brief');
   });
 
   it('heuristic: stuck + you mentions blocking', () => {
@@ -109,7 +117,7 @@ describe('PriorityAgent status brief', () => {
       })
     );
     assert.match(sentence, /bloqu/i);
-    assert.match(sentence, /ton c|toi/i);
+    assert.match(sentence, /\u00c0 toi|À toi/i);
     assert.match(sentence, /API/i);
   });
 
@@ -128,7 +136,7 @@ describe('PriorityAgent status brief', () => {
     assert.match(sentence, /bloqu/i);
   });
 
-  it('heuristic: in progress + you + missing due', () => {
+  it('heuristic: in progress + you + missing due uses next work, not percent', () => {
     const sentence = Agent.buildHeuristicStatusBrief(
       snap({
         phase: 'in_progress',
@@ -136,11 +144,15 @@ describe('PriorityAgent status brief', () => {
         unassigned: false,
         progressPercent: 40,
         dueMissing: true,
-        scale: 'medium',
+        scale: 'moyen',
+        nextOpenItems: ['Finaliser le montage'],
+        subtasksOpen: 2,
       })
     );
-    assert.match(sentence, /Tu es dessus/i);
+    assert.match(sentence, /\u00c0 toi|À toi/i);
+    assert.match(sentence, /montage/i);
     assert.match(sentence, /\u00e9ch\u00e9ance|échéance/i);
+    assert.doesNotMatch(sentence, /40|%|quick|vite/i);
   });
 
   it('heuristic: not started unassigned missing due', () => {
@@ -152,33 +164,103 @@ describe('PriorityAgent status brief', () => {
       })
     );
     assert.match(sentence, /Personne|assign/i);
-    assert.match(sentence, /\u00e9ch\u00e9ance|échéance|dormir/i);
+    assert.match(sentence, /\u00e9ch\u00e9ance|échéance|dort/i);
   });
 
-  it('heuristic: quick fix not started for you', () => {
+  it('heuristic: petit fix not started for you', () => {
     const sentence = Agent.buildHeuristicStatusBrief(
       snap({
         phase: 'not_started',
         youAssigned: true,
         unassigned: false,
-        scale: 'quick',
+        scale: 'petit',
       })
     );
-    assert.match(sentence, /toi/i);
-    assert.match(sentence, /rapide|fix/i);
+    assert.match(sentence, /\u00c0 toi|À toi/i);
+    assert.match(sentence, /petit|fix/i);
+    assert.doesNotMatch(sentence, /quick/i);
   });
 
-  it('heuristic: project not started for you', () => {
+  it('heuristic: gros chantier not started for you', () => {
     const sentence = Agent.buildHeuristicStatusBrief(
       snap({
         phase: 'not_started',
         youAssigned: true,
         unassigned: false,
-        scale: 'project',
+        scale: 'gros',
       })
     );
-    assert.match(sentence, /toi/i);
+    assert.match(sentence, /\u00c0 toi|À toi/i);
     assert.match(sentence, /chantier|gros/i);
+  });
+
+  it('buildStatusBriefSnapshot marks dueSoon within 14 days', () => {
+    const snapshot = Agent.buildStatusBriefSnapshot({
+      today: '2026-07-16',
+      progress: { percent: 10, doneCount: 0, totalCount: 1 },
+      statut: { category: 'started' },
+      due: { enabled: true, dueDate: '2026-07-18', dueTime: '14:30' },
+      ownership: {
+        members: [{ id: 'me', fullName: 'Alex' }],
+        you: { id: 'me', fullName: 'Alex' },
+        youAssigned: true,
+        unassigned: false,
+        assigneeCount: 1,
+      },
+      display: {
+        label: 'Importante',
+        duePast: false,
+        dueCountdown: 'Dans 2 jours',
+      },
+    });
+    assert.equal(snapshot.dueSoon, true);
+    assert.equal(snapshot.dueTime, '14:30');
+    assert.equal(snapshot.dueMissing, false);
+  });
+
+  it('buildStatusBriefSnapshot does not mark far due as soon', () => {
+    const snapshot = Agent.buildStatusBriefSnapshot({
+      today: '2026-07-16',
+      due: { enabled: true, dueDate: '2026-09-01', dueTime: '09:00' },
+      display: { duePast: false, dueCountdown: 'Dans 47 jours' },
+    });
+    assert.equal(snapshot.dueSoon, false);
+    assert.equal(snapshot.dueTime, '09:00');
+  });
+
+  it('heuristic: soon due includes countdown and clock time', () => {
+    const sentence = Agent.buildHeuristicStatusBrief(
+      snap({
+        phase: 'in_progress',
+        youAssigned: true,
+        unassigned: false,
+        dueSoon: true,
+        dueCountdown: 'Demain',
+        dueTime: '14:30',
+        nextOpenItems: ['Finaliser le montage'],
+        subtasksOpen: 1,
+      })
+    );
+    assert.match(sentence, /montage/i);
+    assert.match(sentence, /demain/i);
+    assert.match(sentence, /14\s*h/i);
+  });
+
+  it('heuristic: far due stays silent about timing', () => {
+    const sentence = Agent.buildHeuristicStatusBrief(
+      snap({
+        phase: 'in_progress',
+        youAssigned: true,
+        unassigned: false,
+        dueSoon: false,
+        dueDate: '2026-09-01',
+        dueCountdown: 'Dans 47 jours',
+        dueTime: '09:00',
+        nextOpenItems: ['Finaliser le montage'],
+      })
+    );
+    assert.match(sentence, /montage/i);
+    assert.doesNotMatch(sentence, /47|09|septembre|échéance/i);
   });
 
   it('fingerprint changes when ownership changes', () => {
