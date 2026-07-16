@@ -370,6 +370,10 @@
     return parts.join(' \u00b7 ');
   }
 
+  function itemHasChecklist(item) {
+    return !!(item && Array.isArray(item.items) && item.items.length);
+  }
+
   function itemEstimatedMinutes(item, snapshotsByCardId) {
     if (!item || typeof item !== 'object') return null;
     var linkedId = itemLinkedCardId(item);
@@ -378,7 +382,22 @@
       var snapTotal = clampEstimatedMinutes(snap.estimatedTotalMinutes);
       if (snapTotal != null) return snapTotal;
     }
-    return clampEstimatedMinutes(item.estimatedMinutes);
+    var explicit = clampEstimatedMinutes(item.estimatedMinutes);
+    // Locked explicit estimate wins over checklist rollup.
+    if (item.estimatedMinutesLocked === true && explicit != null) return explicit;
+    if (itemHasChecklist(item) && !linkedId) {
+      var sum = 0;
+      var hasAny = false;
+      for (var i = 0; i < item.items.length; i++) {
+        var m = clampEstimatedMinutes(item.items[i] && item.items[i].estimatedMinutes);
+        if (m != null) {
+          sum += m;
+          hasAny = true;
+        }
+      }
+      if (hasAny) return sum;
+    }
+    return explicit;
   }
 
   function copyEstimateFields(from, to) {
@@ -950,6 +969,64 @@
     return normalizeCompletionData(next);
   }
 
+  /**
+   * Checklist (sub-sub-task) under a local subtask. No links, blocked, or nesting.
+   */
+  function normalizeChecklistItem(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    var text = typeof raw.text === 'string' ? raw.text.trim() : '';
+    if (text.length > ITEM_TEXT_MAX) text = text.slice(0, ITEM_TEXT_MAX);
+    if (!text) return null;
+
+    var progress = asNumber(raw.progress);
+    if (!isFinite(progress)) {
+      progress = raw.done === true ? PROGRESS_MAX : PROGRESS_MIN;
+    }
+    progress = clampProgress(progress);
+
+    var out = syncDoneFromProgress({
+      id: typeof raw.id === 'string' && raw.id ? raw.id : generateId(),
+      text: text,
+      done: progress >= PROGRESS_MAX,
+      progress: progress,
+    });
+    copyEstimateFields(raw, out);
+    return out;
+  }
+
+  function normalizeChecklistItems(rawItems) {
+    if (!Array.isArray(rawItems) || !rawItems.length) return [];
+    var nested = [];
+    var seenIds = Object.create(null);
+    for (var i = 0; i < rawItems.length; i++) {
+      var child = normalizeChecklistItem(rawItems[i]);
+      if (!child) continue;
+      if (seenIds[child.id]) continue;
+      seenIds[child.id] = true;
+      nested.push(child);
+    }
+    return nested;
+  }
+
+  /**
+   * Scale a local item's checklist toward targetPercent and derive item.progress.
+   * No-op shape when there is no checklist — sets progress directly.
+   */
+  function syncItemChecklistProgress(item, targetPercent) {
+    if (!item || typeof item !== 'object') return item;
+    var target = clampProgress(targetPercent);
+    if (!itemHasChecklist(item)) {
+      item.progress = target;
+      syncDoneFromProgress(item);
+      return item;
+    }
+    item.items = applyMasterProgress(item.items, target);
+    var rolled = computeWeightedProgress(item.items);
+    item.progress = rolled.percent;
+    syncDoneFromProgress(item);
+    return item;
+  }
+
   function normalizeItem(raw) {
     if (!raw || typeof raw !== 'object') return null;
     var linkedCardId = itemLinkedCardId(raw);
@@ -976,6 +1053,18 @@
     });
     if (linkedCardId) out.linkedCardId = linkedCardId;
     copyEstimateFields(raw, out);
+
+    // Local checklist only (never on linked items; no further nesting).
+    if (!linkedCardId) {
+      var nested = normalizeChecklistItems(raw.items);
+      if (nested.length) {
+        out.items = nested;
+        var rolled = computeWeightedProgress(nested);
+        out.progress = rolled.percent;
+        syncDoneFromProgress(out);
+      }
+    }
+
     // Persist blocked only when true; cleared when done/100%.
     if (raw.blocked === true && !out.done) {
       out.blocked = true;
@@ -1440,6 +1529,7 @@
    *
    * Must preserve item.blocked / blockedReasons — dropping them mid-drag lets
    * the Statut bridge re-apply the block onto the master task instead.
+   * Local items with checklists keep nested items and scale them too.
    */
   function applyMasterProgress(items, targetPercent, snapshotsByCardId) {
     if (!items || !items.length) return [];
@@ -1455,6 +1545,19 @@
       if (linkedId) copy.linkedCardId = linkedId;
       copyEstimateFields(item, copy);
       copyBlockedFields(item, copy);
+      if (!linkedId && itemHasChecklist(item)) {
+        copy.items = item.items.map(function (nested) {
+          var n = {
+            id: nested.id,
+            text: nested.text,
+            progress: itemProgress(nested),
+            done: nested.done === true,
+          };
+          copyEstimateFields(nested, n);
+          syncDoneFromProgress(n);
+          return n;
+        });
+      }
       syncDoneFromProgress(copy);
       return copy;
     });
@@ -1488,17 +1591,24 @@
       return working;
     }
 
+    function applyLocalTarget(idx, localTarget) {
+      if (itemHasChecklist(working[idx])) {
+        syncItemChecklistProgress(working[idx], localTarget);
+      } else {
+        working[idx].progress = clampProgress(localTarget);
+        syncDoneFromProgress(working[idx]);
+      }
+    }
+
     if (target === PROGRESS_MAX) {
       localIndexes.forEach(function (idx) {
-        working[idx].progress = PROGRESS_MAX;
-        syncDoneFromProgress(working[idx]);
+        applyLocalTarget(idx, PROGRESS_MAX);
       });
       return working;
     }
     if (target === PROGRESS_MIN) {
       localIndexes.forEach(function (idx) {
-        working[idx].progress = PROGRESS_MIN;
-        syncDoneFromProgress(working[idx]);
+        applyLocalTarget(idx, PROGRESS_MIN);
       });
       return working;
     }
@@ -1537,19 +1647,322 @@
 
     if (localCurrentContrib <= 0) {
       localIndexes.forEach(function (idx) {
-        working[idx].progress = localTarget;
-        syncDoneFromProgress(working[idx]);
+        applyLocalTarget(idx, localTarget);
       });
       return working;
     }
 
     var scale = desiredLocalContrib / localCurrentContrib;
     localIndexes.forEach(function (idx) {
-      working[idx].progress = clampProgress(working[idx].progress * scale);
-      syncDoneFromProgress(working[idx]);
+      applyLocalTarget(idx, working[idx].progress * scale);
     });
 
     return working;
+  }
+
+  /**
+   * Set one local subtask's progress. With a checklist, scales nested items.
+   */
+  function applyItemProgress(data, itemId, progress) {
+    var id = typeof itemId === 'string' ? itemId : '';
+    var normalized = normalizeCompletionData(data);
+    if (!id) return normalized;
+    var target = clampProgress(progress);
+    var found = false;
+    normalized.items = normalized.items.map(function (item) {
+      if (item.id !== id) return item;
+      found = true;
+      if (isLinkedItem(item)) return item;
+      var next = Object.assign({}, item);
+      if (itemHasChecklist(next)) {
+        syncItemChecklistProgress(next, target);
+      } else {
+        next.progress = target;
+        syncDoneFromProgress(next);
+      }
+      return next;
+    });
+    return found ? normalizeCompletionData(normalized) : normalized;
+  }
+
+  function findItemIndex(items, itemId) {
+    for (var i = 0; i < items.length; i++) {
+      if (items[i] && items[i].id === itemId) return i;
+    }
+    return -1;
+  }
+
+  function applyChecklistItemProgress(data, parentId, nestedId, progress) {
+    var pid = typeof parentId === 'string' ? parentId : '';
+    var nid = typeof nestedId === 'string' ? nestedId : '';
+    var normalized = normalizeCompletionData(data);
+    if (!pid || !nid) return normalized;
+    var idx = findItemIndex(normalized.items, pid);
+    if (idx < 0) return normalized;
+    var parent = normalized.items[idx];
+    if (isLinkedItem(parent) || !itemHasChecklist(parent)) return normalized;
+    var target = clampProgress(progress);
+    var nextItems = parent.items.map(function (nested) {
+      if (nested.id !== nid) return nested;
+      var next = Object.assign({}, nested, { progress: target });
+      syncDoneFromProgress(next);
+      return next;
+    });
+    var nextParent = Object.assign({}, parent, { items: nextItems });
+    var rolled = computeWeightedProgress(nextItems);
+    nextParent.progress = rolled.percent;
+    syncDoneFromProgress(nextParent);
+    normalized.items = normalized.items.slice();
+    normalized.items[idx] = nextParent;
+    return normalizeCompletionData(normalized);
+  }
+
+  function applyChecklistItemEstimate(data, parentId, nestedId, minutes, options) {
+    options = options || {};
+    var lock = options.lock !== false;
+    var pid = typeof parentId === 'string' ? parentId : '';
+    var nid = typeof nestedId === 'string' ? nestedId : '';
+    var normalized = normalizeCompletionData(data);
+    if (!pid || !nid) return normalized;
+    var idx = findItemIndex(normalized.items, pid);
+    if (idx < 0) return normalized;
+    var parent = normalized.items[idx];
+    if (isLinkedItem(parent) || !itemHasChecklist(parent)) return normalized;
+    var mins = clampEstimatedMinutes(minutes);
+    var found = false;
+    var nextItems = parent.items.map(function (nested) {
+      if (nested.id !== nid) return nested;
+      found = true;
+      var next = Object.assign({}, nested);
+      if (mins == null) delete next.estimatedMinutes;
+      else next.estimatedMinutes = mins;
+      if (lock) next.estimatedMinutesLocked = true;
+      return next;
+    });
+    if (!found) return normalized;
+    var nextParent = Object.assign({}, parent, { items: nextItems });
+    var rolled = computeWeightedProgress(nextItems);
+    nextParent.progress = rolled.percent;
+    syncDoneFromProgress(nextParent);
+    normalized.items = normalized.items.slice();
+    normalized.items[idx] = nextParent;
+    return normalizeCompletionData(normalized);
+  }
+
+  function applyChecklistItemText(data, parentId, nestedId, text) {
+    var pid = typeof parentId === 'string' ? parentId : '';
+    var nid = typeof nestedId === 'string' ? nestedId : '';
+    var normalized = normalizeCompletionData(data);
+    if (!pid || !nid) return normalized;
+    var idx = findItemIndex(normalized.items, pid);
+    if (idx < 0) return normalized;
+    var parent = normalized.items[idx];
+    if (isLinkedItem(parent) || !itemHasChecklist(parent)) return normalized;
+    var nextText = typeof text === 'string' ? text.trim() : '';
+    if (nextText.length > ITEM_TEXT_MAX) nextText = nextText.slice(0, ITEM_TEXT_MAX);
+    if (!nextText) return normalized;
+    var found = false;
+    var nextItems = parent.items.map(function (nested) {
+      if (nested.id !== nid) return nested;
+      found = true;
+      return Object.assign({}, nested, { text: nextText });
+    });
+    if (!found) return normalized;
+    normalized.items = normalized.items.slice();
+    normalized.items[idx] = Object.assign({}, parent, { items: nextItems });
+    return normalizeCompletionData(normalized);
+  }
+
+  function addChecklistItem(data, parentId, text, opts) {
+    opts = opts || {};
+    var pid = typeof parentId === 'string' ? parentId : '';
+    var normalized = normalizeCompletionData(data);
+    if (!pid) return { data: normalized, item: null };
+    var idx = findItemIndex(normalized.items, pid);
+    if (idx < 0) return { data: normalized, item: null };
+    var parent = normalized.items[idx];
+    if (isLinkedItem(parent)) return { data: normalized, item: null };
+    var child = normalizeChecklistItem({
+      id: generateId(),
+      text: text,
+      progress:
+        opts.done === true || opts.progress === PROGRESS_MAX
+          ? PROGRESS_MAX
+          : typeof opts.progress === 'number'
+            ? opts.progress
+            : PROGRESS_MIN,
+      estimatedMinutes: opts.estimatedMinutes,
+    });
+    if (!child) return { data: normalized, item: null };
+    var nextItems = (parent.items || []).concat([child]);
+    var nextParent = Object.assign({}, parent, { items: nextItems });
+    var rolled = computeWeightedProgress(nextItems);
+    nextParent.progress = rolled.percent;
+    syncDoneFromProgress(nextParent);
+    if (nextParent.done) {
+      delete nextParent.blocked;
+      delete nextParent.blockedReasons;
+    }
+    normalized.items = normalized.items.slice();
+    normalized.items[idx] = nextParent;
+    return {
+      data: normalizeCompletionData(normalized),
+      item: child,
+    };
+  }
+
+  function removeChecklistItem(data, parentId, nestedId) {
+    var pid = typeof parentId === 'string' ? parentId : '';
+    var nid = typeof nestedId === 'string' ? nestedId : '';
+    var normalized = normalizeCompletionData(data);
+    if (!pid || !nid) return normalized;
+    var idx = findItemIndex(normalized.items, pid);
+    if (idx < 0) return normalized;
+    var parent = normalized.items[idx];
+    if (isLinkedItem(parent) || !Array.isArray(parent.items)) return normalized;
+    var nextItems = parent.items.filter(function (nested) {
+      return nested.id !== nid;
+    });
+    if (nextItems.length === parent.items.length) return normalized;
+    var nextParent = Object.assign({}, parent);
+    if (nextItems.length) {
+      nextParent.items = nextItems;
+      var rolled = computeWeightedProgress(nextItems);
+      nextParent.progress = rolled.percent;
+      syncDoneFromProgress(nextParent);
+    } else {
+      delete nextParent.items;
+      // Keep last derived progress as editable leaf progress.
+      syncDoneFromProgress(nextParent);
+    }
+    normalized.items = normalized.items.slice();
+    normalized.items[idx] = nextParent;
+    return normalizeCompletionData(normalized);
+  }
+
+  /**
+   * Child cardCompletion payload when promoting a local subtask to a real card.
+   */
+  function buildChildCompletionFromSubtask(item) {
+    if (!item || typeof item !== 'object') {
+      return normalizeCompletionData({ items: [] });
+    }
+    if (itemHasChecklist(item)) {
+      return normalizeCompletionData({ items: item.items.slice() });
+    }
+    var out = {
+      items: [],
+      progress: itemProgress(item),
+    };
+    copyEstimateFields(item, out);
+    return normalizeCompletionData(out);
+  }
+
+  /**
+   * Replace a local subtask with a linkedCardId item (drops checklist / local progress).
+   */
+  function replaceSubtaskWithLinkedCard(data, itemId, childCardId) {
+    var id = typeof itemId === 'string' ? itemId.trim() : '';
+    var childId = typeof childCardId === 'string' ? childCardId.trim() : '';
+    var normalized = normalizeCompletionData(data);
+    if (!id || !childId) return { data: normalized, ok: false, reason: 'missing-id' };
+    var found = false;
+    var progressCache = 0;
+    normalized.items = normalized.items.map(function (item) {
+      if (item.id !== id) return item;
+      found = true;
+      progressCache = itemProgress(item);
+      var linked = normalizeItem({
+        id: item.id,
+        text: item.text,
+        progress: progressCache,
+        linkedCardId: childId,
+      });
+      return linked || item;
+    });
+    if (!found) return { data: normalized, ok: false, reason: 'no-item' };
+    return {
+      data: normalizeCompletionData(normalized),
+      ok: true,
+      progress: progressCache,
+    };
+  }
+
+  /**
+   * Create a Trello card from a local subtask (same list as parent) and link it.
+   */
+  async function promoteSubtaskToCard(t, itemId, options) {
+    options = options || {};
+    var id = typeof itemId === 'string' ? itemId.trim() : '';
+    if (!id) return { ok: false, reason: 'no-item-id', changed: false };
+
+    var normalized = await getCardCompletion(t);
+    var item = null;
+    for (var i = 0; i < normalized.items.length; i++) {
+      if (normalized.items[i].id === id) {
+        item = normalized.items[i];
+        break;
+      }
+    }
+    if (!item) return { ok: false, reason: 'no-item', changed: false };
+    if (isLinkedItem(item)) return { ok: false, reason: 'already-linked', changed: false };
+
+    var PT = global.PriorityTrello;
+    if (!PT || typeof PT.createCard !== 'function') {
+      return { ok: false, reason: 'no-createCard', changed: false };
+    }
+
+    var createResult = await PT.createCard(t, {
+      name: item.text,
+      idList: options.idList,
+      pos: options.pos || 'bottom',
+    });
+    if (!createResult || !createResult.ok) {
+      return {
+        ok: false,
+        reason: (createResult && createResult.reason) || 'create-failed',
+        changed: false,
+        result: createResult,
+      };
+    }
+
+    var childId =
+      (createResult.cardId && String(createResult.cardId)) ||
+      (createResult.card && createResult.card.id
+        ? String(createResult.card.id)
+        : '');
+    if (!childId) {
+      return { ok: false, reason: 'no-card-id', changed: false, result: createResult };
+    }
+
+    var childCompletion = buildChildCompletionFromSubtask(item);
+    await saveCardCompletionById(t, childId, childCompletion);
+
+    var replaced = replaceSubtaskWithLinkedCard(normalized, id, childId);
+    if (!replaced.ok) {
+      return {
+        ok: false,
+        reason: replaced.reason || 'replace-failed',
+        changed: false,
+        cardId: childId,
+        childCompletion: childCompletion,
+      };
+    }
+
+    var saved = await saveCardCompletion(t, replaced.data);
+    dbgLog('completionTrello', 'promoteSubtaskToCard', {
+      itemId: id,
+      cardId: childId,
+      hadChecklist: itemHasChecklist(item),
+    });
+    return {
+      ok: true,
+      changed: true,
+      cardId: childId,
+      card: createResult.card || null,
+      data: saved,
+      childCompletion: childCompletion,
+    };
   }
 
   async function getCardCompletion(t) {
@@ -2419,7 +2832,9 @@
     itemProgress: itemProgress,
     itemLinkedCardId: itemLinkedCardId,
     isLinkedItem: isLinkedItem,
+    itemHasChecklist: itemHasChecklist,
     syncDoneFromProgress: syncDoneFromProgress,
+    syncItemChecklistProgress: syncItemChecklistProgress,
     generateId: generateId,
     isItemBlocked: isItemBlocked,
     isMasterBlocked: isMasterBlocked,
@@ -2438,6 +2853,8 @@
     blockedLinksFromCompletion: blockedLinksFromCompletion,
     seedBlockedReasonsFromPriority: seedBlockedReasonsFromPriority,
     normalizeItem: normalizeItem,
+    normalizeChecklistItem: normalizeChecklistItem,
+    normalizeChecklistItems: normalizeChecklistItems,
     normalizeCompletionData: normalizeCompletionData,
     ESTIMATE_SCALES: ESTIMATE_SCALES,
     ESTIMATE_SCALE_ORDER: ESTIMATE_SCALE_ORDER,
@@ -2484,6 +2901,15 @@
     getDueCompleteSuppressed: getDueCompleteSuppressed,
     syncCardDueCompleteFromProgress: syncCardDueCompleteFromProgress,
     applyMasterProgress: applyMasterProgress,
+    applyItemProgress: applyItemProgress,
+    applyChecklistItemProgress: applyChecklistItemProgress,
+    applyChecklistItemEstimate: applyChecklistItemEstimate,
+    applyChecklistItemText: applyChecklistItemText,
+    addChecklistItem: addChecklistItem,
+    removeChecklistItem: removeChecklistItem,
+    buildChildCompletionFromSubtask: buildChildCompletionFromSubtask,
+    replaceSubtaskWithLinkedCard: replaceSubtaskWithLinkedCard,
+    promoteSubtaskToCard: promoteSubtaskToCard,
     applyLinkedSnapshots: applyLinkedSnapshots,
     resolveLinkedCompletionTree: resolveLinkedCompletionTree,
     getCardCompletion: getCardCompletion,

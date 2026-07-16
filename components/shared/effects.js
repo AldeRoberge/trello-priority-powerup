@@ -1847,6 +1847,7 @@
   global.CelebrationEffects = {
     EFFECTS: listEffects(),
     META: EFFECT_META,
+    FIREWORKS_MOTIFS: FIREWORKS_MOTIFS,
     list: listEffects,
     normalize: normalizeEffectId,
     label: effectLabel,

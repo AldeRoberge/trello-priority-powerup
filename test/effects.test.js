@@ -85,6 +85,20 @@ describe('CelebrationEffects', () => {
     assert.equal(FX.playUiSound('delete').sound, 'trash');
     assert.equal(FX.playUiSound('nope').ok, false);
   });
+
+  it('fireworks motif bank has 10 F# phrases and playSound runs', () => {
+    assert.ok(Array.isArray(FX.FIREWORKS_MOTIFS));
+    assert.equal(FX.FIREWORKS_MOTIFS.length, 10);
+    for (const motif of FX.FIREWORKS_MOTIFS) {
+      assert.ok(Array.isArray(motif) && motif.length >= 4, 'motif has 4+ notes');
+      for (const tone of motif) {
+        assert.ok(typeof tone.freq === 'number' && tone.freq > 0);
+        assert.ok(typeof tone.delay === 'number');
+        assert.ok(typeof tone.dur === 'number' && tone.dur > 0);
+      }
+    }
+    assert.doesNotThrow(() => FX.playSound('fireworks'));
+  });
 });
 
 describe('PriorityAgent trigger_effect', () => {
