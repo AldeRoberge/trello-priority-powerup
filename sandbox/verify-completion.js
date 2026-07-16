@@ -1206,6 +1206,47 @@ CT.resolveLinkedCompletionTree(fakeT, store['card-a'], {
         setResult.parent.name === 'Autre'
     );
 
+    // Re-link to original parent without replace — both should remain.
+    store['card-parent'] = CT.normalizeCompletionData({ items: [] });
+    return CT.setParentCard(fakeT, 'card-child', 'card-parent', {
+      cards: boardCardsForParent,
+      childName: 'Enfant',
+      childProgress: 30,
+      parentName: 'Parent',
+      parentList: 'Todo',
+    });
+  })
+  .then(function (multiResult) {
+    check('setParentCard add second parent ok', multiResult && multiResult.ok);
+    check(
+      'setParentCard keeps previous parent',
+      CT.completionLinksToCard(store['card-other'], 'card-child')
+    );
+    check(
+      'setParentCard adds second parent',
+      CT.completionLinksToCard(store['card-parent'], 'card-child')
+    );
+    check(
+      'setParentCard returns both parents',
+      Array.isArray(multiResult.parents) && multiResult.parents.length === 2
+    );
+
+    return CT.setParentCard(fakeT, 'card-child', null, {
+      cards: boardCardsForParent,
+      removeParentId: 'card-other',
+    });
+  })
+  .then(function (removeOne) {
+    check('setParentCard remove one ok', removeOne && removeOne.ok);
+    check(
+      'setParentCard remove one drops target',
+      !CT.completionLinksToCard(store['card-other'], 'card-child')
+    );
+    check(
+      'setParentCard remove one keeps other',
+      CT.completionLinksToCard(store['card-parent'], 'card-child')
+    );
+
     return CT.setParentCard(fakeT, 'card-child', 'card-child', {
       cards: boardCardsForParent,
     });

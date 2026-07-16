@@ -191,7 +191,7 @@
       return {
         id: e.id,
         at: e.at,
-        label: String(e.label || '').slice(0, 80),
+        label: String(e.label || '').slice(0, 120),
         domains: Array.isArray(e.domains) ? e.domains.slice(0, 5) : [],
         before: slimPayload(e.before),
         after: slimPayload(e.after)
@@ -333,18 +333,151 @@
     return String(value == null ? '' : value).trim();
   }
 
-  function formatDueFr(date, time) {
-    if (!date) return 'aucune';
-    var m = String(date).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    var out = String(date);
-    if (m) {
-      var monthIdx = Number(m[2]) - 1;
-      var day = Number(m[3]);
-      var month = MONTHS_FR[monthIdx] || m[2];
-      out = day + ' ' + month + ' ' + m[1];
+  /** Compact French clock for history copy (e.g. "14 h", "14 h 30"). */
+  function formatHistoryTimeFr(time) {
+    if (!time) return '';
+    var PU = global.PriorityUI;
+    if (PU && typeof PU.formatDueTimeCompactFr === 'function') {
+      var compact = PU.formatDueTimeCompactFr(time);
+      if (compact) return compact;
     }
-    if (time) out += ' \u00b7 ' + String(time).slice(0, 5);
-    return out;
+    var raw = String(time).slice(0, 5);
+    var parts = raw.match(/^(\d{1,2}):(\d{2})$/);
+    if (!parts) return raw;
+    var hours = Number(parts[1]);
+    var minutes = Number(parts[2]);
+    if (!isFinite(hours) || !isFinite(minutes)) return raw;
+    if (minutes === 0) return String(hours) + ' h';
+    return (
+      String(hours) +
+      ' h ' +
+      (minutes < 10 ? '0' + minutes : String(minutes))
+    );
+  }
+
+  function formatHistoryDateFr(date) {
+    if (!date) return '';
+    var m = String(date).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return String(date);
+    var monthIdx = Number(m[2]) - 1;
+    var day = Number(m[3]);
+    var month = MONTHS_FR[monthIdx] || m[2];
+    return day + ' ' + month + ' ' + m[1];
+  }
+
+  /** Relative day word vs today (lowercase), or '' when not nearby. */
+  function relativeDayWordFr(date, now) {
+    var m = String(date || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return '';
+    var due = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    if (!isFinite(due.getTime())) return '';
+    var at = now || new Date();
+    var today = new Date(at.getFullYear(), at.getMonth(), at.getDate());
+    var days = Math.round((due.getTime() - today.getTime()) / 86400000);
+    if (days === 0) return 'aujourd\'hui';
+    if (days === 1) return 'demain';
+    if (days === -1) return 'hier';
+    if (days === 2) return 'apr\u00e8s-demain';
+    return '';
+  }
+
+  /** Parenthetical day context: "(demain, le 17 juil. 2026)". */
+  function dueDayParenFr(date, now) {
+    var calendar = formatHistoryDateFr(date);
+    if (!calendar) return '';
+    var relative = relativeDayWordFr(date, now);
+    if (relative) return ' (' + relative + ', le ' + calendar + ')';
+    return ' (le ' + calendar + ')';
+  }
+
+  /**
+   * Sentence-style due change for history labels.
+   * Ex.: "Heure de l'échéance modifiée de 14 h à 18 h (demain, le 17 juil. 2026)"
+   */
+  function describeDueChange(beforeDate, beforeTime, afterDate, afterTime, now) {
+    var bDate = beforeDate || '';
+    var aDate = afterDate || '';
+    var bTime = beforeTime ? String(beforeTime).slice(0, 5) : '';
+    var aTime = afterTime ? String(afterTime).slice(0, 5) : '';
+    var at = now || new Date();
+
+    if (!bDate && !aDate) return '';
+
+    if (!bDate && aDate) {
+      var setTime = formatHistoryTimeFr(aTime);
+      if (setTime) {
+        return (
+          '\u00c9ch\u00e9ance fix\u00e9e \u00e0 ' +
+          setTime +
+          dueDayParenFr(aDate, at)
+        );
+      }
+      return '\u00c9ch\u00e9ance fix\u00e9e' + dueDayParenFr(aDate, at);
+    }
+
+    if (bDate && !aDate) {
+      var wasTime = formatHistoryTimeFr(bTime);
+      return (
+        '\u00c9ch\u00e9ance retir\u00e9e (\u00e9tait le ' +
+        formatHistoryDateFr(bDate) +
+        (wasTime ? ' \u00e0 ' + wasTime : '') +
+        ')'
+      );
+    }
+
+    var dateChanged = bDate !== aDate;
+    var timeChanged = bTime !== aTime;
+
+    if (!dateChanged && timeChanged) {
+      var fromTime = formatHistoryTimeFr(bTime);
+      var toTime = formatHistoryTimeFr(aTime);
+      if (!bTime && aTime) {
+        return (
+          'Heure d\'\u00e9ch\u00e9ance ajout\u00e9e : ' +
+          toTime +
+          dueDayParenFr(aDate, at)
+        );
+      }
+      if (bTime && !aTime) {
+        return (
+          'Heure d\'\u00e9ch\u00e9ance retir\u00e9e' + dueDayParenFr(aDate, at)
+        );
+      }
+      return (
+        'Heure de l\'\u00e9ch\u00e9ance modifi\u00e9e de ' +
+        fromTime +
+        ' \u00e0 ' +
+        toTime +
+        dueDayParenFr(aDate, at)
+      );
+    }
+
+    if (dateChanged && !timeChanged) {
+      var keepTime = formatHistoryTimeFr(aTime || bTime);
+      return (
+        'Date d\'\u00e9ch\u00e9ance modifi\u00e9e du ' +
+        formatHistoryDateFr(bDate) +
+        ' au ' +
+        formatHistoryDateFr(aDate) +
+        (keepTime ? ' (toujours \u00e0 ' + keepTime + ')' : '')
+      );
+    }
+
+    // Date + time both changed.
+    var fromFull =
+      formatHistoryDateFr(bDate) +
+      (formatHistoryTimeFr(bTime) ? ' \u00e0 ' + formatHistoryTimeFr(bTime) : '');
+    var toFull =
+      formatHistoryDateFr(aDate) +
+      (formatHistoryTimeFr(aTime) ? ' \u00e0 ' + formatHistoryTimeFr(aTime) : '');
+    var relative = relativeDayWordFr(aDate, at);
+    return (
+      '\u00c9ch\u00e9ance modifi\u00e9e du ' +
+      fromFull +
+      ' au ' +
+      toFull +
+      (relative ? ' (' + relative + ')' : '')
+    );
   }
 
   function formatMinutesFr(mins) {
@@ -621,7 +754,16 @@
       var ap = (after && after.priority) || {};
       ['urgency', 'impact', 'ease'].forEach(function (axis) {
         if (bp[axis] !== ap[axis]) {
-          parts.push(axisLabel(axis) + ' : ' + bp[axis] + ' \u2192 ' + ap[axis]);
+          var feminine = axis === 'urgency' || axis === 'ease';
+          parts.push(
+            axisLabel(axis) +
+              ' pass\u00e9' +
+              (feminine ? 'e' : '') +
+              ' de ' +
+              bp[axis] +
+              ' \u00e0 ' +
+              ap[axis]
+          );
         }
       });
       if (!!bp.enAttente !== !!ap.enAttente) {
@@ -629,10 +771,7 @@
       }
       if (bp.dueDate !== ap.dueDate || bp.dueTime !== ap.dueTime) {
         parts.push(
-          '\u00c9ch\u00e9ance : ' +
-            formatDueFr(bp.dueDate, bp.dueTime) +
-            ' \u2192 ' +
-            formatDueFr(ap.dueDate, ap.dueTime)
+          describeDueChange(bp.dueDate, bp.dueTime, ap.dueDate, ap.dueTime)
         );
       }
       var blockedLabel = describeBlocked(bp, ap, detail ? 0 : 40);
@@ -664,7 +803,7 @@
       if (String(bs.listId || '') !== String(as_.listId || '')) {
         var fromList = bs.listName || 'liste inconnue';
         var toList = as_.listName || 'liste inconnue';
-        parts.push('Liste : ' + fromList + ' \u2192 ' + toList);
+        parts.push('D\u00e9plac\u00e9e de ' + fromList + ' vers ' + toList);
       }
       if (!!bs.dueComplete !== !!as_.dueComplete) {
         parts.push(
@@ -970,11 +1109,16 @@
         .reverse()
         .map(function (e) {
           var details = describeEntry(e);
+          var domains = Array.isArray(e.domains)
+            ? e.domains
+            : changedDomains(e.before, e.after);
+          // Rebuild so relative day words (demain, hier…) stay current.
+          var liveLabel = buildLabel(e.before, e.after, domains, e.label);
           return {
             id: e.id,
             at: e.at,
-            label: e.label,
-            domains: (e.domains || []).slice(),
+            label: liveLabel || e.label,
+            domains: domains.slice(),
             details: details
           };
         });
@@ -1123,6 +1267,7 @@
     buildLabel: buildLabel,
     describeEntry: describeEntry,
     collectChangeParts: collectChangeParts,
+    describeDueChange: describeDueChange,
     deepEqual: deepEqual,
     clone: clone
   };

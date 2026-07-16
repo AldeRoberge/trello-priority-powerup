@@ -6487,6 +6487,25 @@
     };
   }
 
+  function normalizeParentCards(raw) {
+    var list = Array.isArray(raw) ? raw : raw && typeof raw === 'object' ? [raw] : [];
+    var seen = Object.create(null);
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      if (!item || typeof item !== 'object' || !item.id) continue;
+      var id = String(item.id);
+      if (!id || seen[id]) continue;
+      seen[id] = true;
+      out.push({
+        id: id,
+        name: typeof item.name === 'string' ? item.name : '',
+        list: typeof item.list === 'string' ? item.list : '',
+      });
+    }
+    return out;
+  }
+
   /**
    * Top-of-popup recap: title, description (editable), creator, assignees, labels.
    * Progrès mirror (remaining estimate) jumps to Progrès; optional Portée jump to Priorité.
@@ -6518,6 +6537,10 @@
       typeof config.onLabelRename === 'function' ? config.onLabelRename : null;
     var suggestLabelsFn =
       typeof config.suggestLabels === 'function' ? config.suggestLabels : null;
+    var suggestTaskTypesFn =
+      typeof config.suggestTaskTypes === 'function'
+        ? config.suggestTaskTypes
+        : null;
     var onAuthorize =
       typeof config.onAuthorize === 'function' ? config.onAuthorize : null;
     var onJump =
@@ -6576,16 +6599,18 @@
     var labelSuggestionsSeq = 0;
     var labelSuggestionsTimer = null;
     var labelSuggestionsKey = '';
-    var parentCard =
-      config.parent && typeof config.parent === 'object' && config.parent.id
-        ? {
-            id: String(config.parent.id),
-            name:
-              typeof config.parent.name === 'string' ? config.parent.name : '',
-            list:
-              typeof config.parent.list === 'string' ? config.parent.list : '',
-          }
-        : null;
+    var taskTypeSuggestions = [];
+    var taskTypeSuggestionsLoading = false;
+    var taskTypeSuggestionsSeq = 0;
+    var taskTypeSuggestionsTimer = null;
+    var taskTypeSuggestionsKey = '';
+    var parentCards = normalizeParentCards(
+      Array.isArray(config.parents)
+        ? config.parents
+        : config.parent
+          ? [config.parent]
+          : []
+    );
     var parentBusy = false;
     var parentPickerOpen = false;
     var parentBoardCardsCache = null;
@@ -7041,13 +7066,31 @@
     taskTypesInline.className = 'info-task-types-inline';
     taskTypesInline.appendChild(taskTypesEl);
     taskTypesInline.appendChild(taskTypesAddWrap);
+
+    var taskTypesSuggestSection = document.createElement('div');
+    taskTypesSuggestSection.className = 'info-task-types-suggestions';
+    taskTypesSuggestSection.hidden = true;
+    taskTypesSuggestSection.innerHTML =
+      '<div class="info-task-types-suggestions-head">' +
+      '<button type="button" class="info-task-types-suggestions-refresh" ' +
+      'aria-label="Rafra\u00eechir les suggestions" title="Rafra\u00eechir">\u21bb</button>' +
+      '</div>' +
+      '<div class="info-task-types-suggestions-list" role="list"></div>';
+    var taskTypesSuggestRefreshBtn = taskTypesSuggestSection.querySelector(
+      '.info-task-types-suggestions-refresh'
+    );
+    var taskTypesSuggestListEl = taskTypesSuggestSection.querySelector(
+      '.info-task-types-suggestions-list'
+    );
+
     taskTypesWrap.appendChild(taskTypesInline);
     taskTypesWrap.appendChild(taskTypesStatus);
+    taskTypesWrap.appendChild(taskTypesSuggestSection);
     taskTypesRow.value.appendChild(taskTypesWrap);
     body.appendChild(taskTypesRow.row);
 
-    // ── Parent task (via Progrès linkedCardId reverse lookup) ───────────
-    var parentRow = makeRow('parent', 'T\u00e2che parente', {
+    // ── Parent tasks (via Progrès linkedCardId reverse lookup) ──────────
+    var parentRow = makeRow('parent', 'T\u00e2ches parentes', {
       icon: 'ti-hierarchy-3',
     });
     var parentWrap = document.createElement('div');
@@ -7056,33 +7099,8 @@
     var parentInline = document.createElement('div');
     parentInline.className = 'info-parent-inline';
 
-    var parentChip = document.createElement('span');
-    parentChip.className = 'info-parent-chip';
-    parentChip.hidden = true;
-
-    var parentChipOpen = document.createElement('button');
-    parentChipOpen.type = 'button';
-    parentChipOpen.className = 'info-parent-chip-open';
-
-    var parentChipText = document.createElement('span');
-    parentChipText.className = 'info-parent-chip-text';
-    var parentChipName = document.createElement('span');
-    parentChipName.className = 'info-parent-chip-name';
-    var parentChipList = document.createElement('span');
-    parentChipList.className = 'info-parent-chip-list';
-    parentChipText.appendChild(parentChipName);
-    parentChipText.appendChild(parentChipList);
-    parentChipOpen.appendChild(parentChipText);
-
-    var parentClearBtn = document.createElement('button');
-    parentClearBtn.type = 'button';
-    parentClearBtn.className = 'info-parent-clear';
-    parentClearBtn.setAttribute('aria-label', 'Retirer la t\u00e2che parente');
-    parentClearBtn.title = 'Retirer';
-    parentClearBtn.textContent = '\u00d7';
-
-    parentChip.appendChild(parentChipOpen);
-    parentChip.appendChild(parentClearBtn);
+    var parentChipsEl = document.createElement('div');
+    parentChipsEl.className = 'info-parent-chips';
 
     var parentPickWrap = document.createElement('div');
     parentPickWrap.className = 'info-parent-pick-wrap';
@@ -7122,7 +7140,7 @@
     parentPickWrap.appendChild(parentPickBtn);
     parentPickWrap.appendChild(parentPicker);
 
-    parentInline.appendChild(parentChip);
+    parentInline.appendChild(parentChipsEl);
     parentInline.appendChild(parentPickWrap);
     parentWrap.appendChild(parentInline);
     parentRow.value.appendChild(parentWrap);
@@ -8140,8 +8158,24 @@
 
     function pruneLabelSuggestions() {
       var selected = selectedLabelIds();
+      var selectedNames = Object.create(null);
+      labels.forEach(function (label) {
+        var n =
+          label && typeof label.name === 'string'
+            ? label.name.trim().toLocaleLowerCase('fr-FR')
+            : '';
+        if (n) selectedNames[n] = true;
+      });
       labelSuggestions = labelSuggestions.filter(function (label) {
-        return label && label.id && !selected[String(label.id)];
+        if (!label) return false;
+        if (label.isNew) {
+          var name =
+            typeof label.name === 'string'
+              ? label.name.trim().toLocaleLowerCase('fr-FR')
+              : '';
+          return !!name && !selectedNames[name] && !boardHasLabelName(label.name);
+        }
+        return label.id && !selected[String(label.id)];
       });
     }
 
@@ -8149,27 +8183,30 @@
       if (!labelsSuggestListEl || !labelsSuggestSection) return;
       labelsSuggestListEl.replaceChildren();
       pruneLabelSuggestions();
-      if (!suggestLabelsFn || !boardLabels.length || !labelSuggestions.length) {
+      if (!suggestLabelsFn || !labelSuggestions.length) {
         labelsSuggestSection.hidden = true;
         onLayoutChange();
         return;
       }
       labelsSuggestSection.hidden = false;
       labelSuggestions.forEach(function (label) {
-        var name = labelDisplayName(label);
+        var name = labelDisplayName(label) || label.name || 'Suggestion';
         var hex = labelColorHex(label.color);
         var btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'info-labels-suggestion';
+        btn.className =
+          'info-labels-suggestion' + (label.isNew ? ' is-new' : '');
         btn.setAttribute('role', 'listitem');
         btn.style.setProperty('--label-color', hex);
         btn.style.setProperty(
           '--label-fg',
           labelNeedsDarkText(hex) ? '#172b4d' : '#ffffff'
         );
-        btn.title = 'Ajouter\u00a0: ' + name;
+        btn.title = label.isNew
+          ? 'Cr\u00e9er et ajouter\u00a0: ' + name
+          : 'Ajouter\u00a0: ' + name;
         btn.disabled = labelsBusy;
-        btn.dataset.labelId = String(label.id);
+        if (label.id) btn.dataset.labelId = String(label.id);
 
         var swatch = document.createElement('span');
         swatch.className = 'info-label-swatch';
@@ -8177,12 +8214,13 @@
 
         var text = document.createElement('span');
         text.className = 'info-labels-suggestion-text';
-        text.textContent = name;
+        text.textContent = label.isNew ? '+ ' + name : name;
 
         btn.appendChild(swatch);
         btn.appendChild(text);
         btn.addEventListener('click', function () {
-          addLabelFromPicker(label);
+          if (label.isNew) createLabelSuggestion(label);
+          else addLabelFromPicker(label);
         });
         labelsSuggestListEl.appendChild(btn);
       });
@@ -8210,10 +8248,18 @@
     }
 
     function refreshLabelSuggestions(force) {
-      if (!suggestLabelsFn || !boardLabels.length || !availableBoardLabels().length) {
+      if (!suggestLabelsFn) {
         labelSuggestions = [];
         labelSuggestionsLoading = false;
         labelSuggestionsKey = '';
+        renderLabelSuggestions();
+        return Promise.resolve();
+      }
+      var title = (titleInput.value || '').trim() || titleText || '';
+      var desc = (descInput.value || '').trim() || descText || '';
+      if (!title && !desc && !boardLabels.length) {
+        labelSuggestions = [];
+        labelSuggestionsLoading = false;
         renderLabelSuggestions();
         return Promise.resolve();
       }
@@ -8230,8 +8276,8 @@
         .then(function () {
           return suggestLabelsFn({
             force: !!force,
-            cardName: (titleInput.value || '').trim() || titleText || '',
-            cardDesc: (descInput.value || '').trim() || descText || '',
+            cardName: title,
+            cardDesc: desc,
             priorityLabel: priorityLabel || '',
             existingLabels: labels.slice(),
             boardLabels: boardLabels.slice()
@@ -8241,10 +8287,21 @@
           if (seq !== labelSuggestionsSeq) return;
           var selected = selectedLabelIds();
           var seen = Object.create(null);
+          var seenNames = Object.create(null);
           labelSuggestions = Array.isArray(list)
             ? list
                 .filter(function (label) {
-                  if (!label || !label.id) return false;
+                  if (!label) return false;
+                  if (label.isNew) {
+                    var nm =
+                      typeof label.name === 'string' ? label.name.trim() : '';
+                    if (!nm) return false;
+                    var nk = nm.toLocaleLowerCase('fr-FR');
+                    if (seenNames[nk] || boardHasLabelName(nm)) return false;
+                    seenNames[nk] = true;
+                    return true;
+                  }
+                  if (!label.id) return false;
                   var id = String(label.id);
                   if (selected[id] || seen[id]) return false;
                   seen[id] = true;
@@ -8274,6 +8331,86 @@
         labelSuggestionsTimer = null;
         refreshLabelSuggestions(!!force);
       }, force ? 0 : 280);
+    }
+
+    function createLabelSuggestion(suggestion) {
+      if (!onLabelCreate || labelsBusy || !suggestion || !suggestion.name) return;
+      var name = String(suggestion.name || '').trim();
+      if (!name || boardHasLabelName(name)) return;
+      labelsBusy = true;
+      setLabelsStatus('', 'saving');
+      renderLabels();
+      Promise.resolve(
+        onLabelCreate({
+          name: name,
+          color: suggestion.color || undefined,
+          existingLabels: boardLabels.slice()
+        })
+      )
+        .then(function (result) {
+          labelsBusy = false;
+          if (result && result.ok === false) {
+            if (result.reason === 'not-authorized' || result.reason === 'no-app-key') {
+              setAuthHint(result.reason);
+              setLabelsStatus('', 'error');
+            } else {
+              setLabelsStatus('\u00c9chec de la cr\u00e9ation', 'error');
+            }
+            renderLabels();
+            onLayoutChange();
+            return result;
+          }
+          var created =
+            result && result.label && typeof result.label === 'object'
+              ? result.label
+              : null;
+          if (created && created.id) {
+            var createdId = String(created.id);
+            var onBoard = false;
+            for (var i = 0; i < boardLabels.length; i++) {
+              if (boardLabels[i] && String(boardLabels[i].id) === createdId) {
+                onBoard = true;
+                break;
+              }
+            }
+            if (!onBoard) {
+              boardLabels = boardLabels.concat([
+                {
+                  id: created.id,
+                  name: typeof created.name === 'string' ? created.name : name,
+                  color: created.color != null ? created.color : suggestion.color,
+                  idBoard: created.idBoard
+                }
+              ]);
+            }
+            if (!selectedLabelIds()[createdId]) {
+              labels = labels.concat([
+                {
+                  id: created.id,
+                  name: typeof created.name === 'string' ? created.name : name,
+                  color: created.color != null ? created.color : suggestion.color,
+                  idBoard: created.idBoard
+                }
+              ]);
+            }
+          }
+          setAuthHint('');
+          setLabelsStatus('', 'ok');
+          renderLabels();
+          scheduleLabelSuggestions(false);
+          setTimeout(function () {
+            if (labelsStatus.classList.contains('is-ok')) setLabelsStatus('');
+          }, 1400);
+          onLayoutChange();
+          return result;
+        })
+        .catch(function (err) {
+          labelsBusy = false;
+          console.error('Info label suggestion create failed', err);
+          setLabelsStatus('\u00c9chec de la cr\u00e9ation', 'error');
+          renderLabels();
+          onLayoutChange();
+        });
     }
 
     function selectedLabelIds() {
@@ -8622,6 +8759,7 @@
         if (!canAdd) setTaskTypesPickerOpen(false);
         else renderTaskTypesPicker();
       }
+      renderTaskTypeSuggestions();
     }
 
     function persistTaskTypes(nextTypes) {
@@ -8647,6 +8785,7 @@
           }
           setTaskTypesStatus('', '');
           renderTaskTypes();
+          scheduleTaskTypeSuggestions(false);
           onLayoutChange();
         })
         .catch(function (err) {
@@ -8673,6 +8812,131 @@
           return entry !== id;
         })
       );
+    }
+
+    function pruneTaskTypeSuggestions() {
+      var selected = Object.create(null);
+      taskTypes.forEach(function (id) {
+        selected[id] = true;
+      });
+      taskTypeSuggestions = taskTypeSuggestions.filter(function (row) {
+        return row && row.id && isValidTaskTypeId(row.id) && !selected[row.id];
+      });
+    }
+
+    function renderTaskTypeSuggestions() {
+      if (!taskTypesSuggestListEl || !taskTypesSuggestSection) return;
+      taskTypesSuggestListEl.replaceChildren();
+      pruneTaskTypeSuggestions();
+      if (!suggestTaskTypesFn || !taskTypeSuggestions.length) {
+        taskTypesSuggestSection.hidden = true;
+        onLayoutChange();
+        return;
+      }
+      taskTypesSuggestSection.hidden = false;
+      taskTypeSuggestions.forEach(function (row) {
+        var entry = TASK_TYPE_BY_ID[row.id];
+        var label = (entry && entry.label) || row.label || row.id;
+        var hint = (entry && entry.hint) || row.hint || '';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'info-task-types-suggestion';
+        btn.setAttribute('role', 'listitem');
+        btn.title = hint ? 'Ajouter\u00a0: ' + label + ' \u2014 ' + hint : 'Ajouter\u00a0: ' + label;
+        btn.disabled = taskTypesBusy;
+        btn.dataset.taskTypeId = row.id;
+        btn.textContent = label;
+        btn.addEventListener('click', function () {
+          addTaskType(row.id);
+        });
+        taskTypesSuggestListEl.appendChild(btn);
+      });
+      onLayoutChange();
+    }
+
+    function taskTypeSuggestionsContextKey() {
+      var title = (titleInput.value || '').trim() || titleText || '';
+      var desc = (descInput.value || '').trim() || descText || '';
+      var existing = taskTypes.slice().sort().join(',');
+      return title + '\u0001' + desc + '\u0001' + existing;
+    }
+
+    function refreshTaskTypeSuggestions(force) {
+      if (!suggestTaskTypesFn) {
+        taskTypeSuggestions = [];
+        taskTypeSuggestionsLoading = false;
+        taskTypeSuggestionsKey = '';
+        renderTaskTypeSuggestions();
+        return Promise.resolve();
+      }
+      if (taskTypes.length >= TASK_TYPES.length) {
+        taskTypeSuggestions = [];
+        renderTaskTypeSuggestions();
+        return Promise.resolve();
+      }
+      var title = (titleInput.value || '').trim() || titleText || '';
+      var desc = (descInput.value || '').trim() || descText || '';
+      if (!title && !desc) {
+        taskTypeSuggestions = [];
+        renderTaskTypeSuggestions();
+        return Promise.resolve();
+      }
+      var key = taskTypeSuggestionsContextKey();
+      if (!force && key === taskTypeSuggestionsKey) {
+        renderTaskTypeSuggestions();
+        return Promise.resolve();
+      }
+      var seq = ++taskTypeSuggestionsSeq;
+      taskTypeSuggestionsLoading = true;
+      taskTypeSuggestionsKey = key;
+      return Promise.resolve()
+        .then(function () {
+          return suggestTaskTypesFn({
+            force: !!force,
+            cardName: title,
+            cardDesc: desc,
+            existingTypes: taskTypes.slice()
+          });
+        })
+        .then(function (list) {
+          if (seq !== taskTypeSuggestionsSeq) return;
+          var selected = Object.create(null);
+          taskTypes.forEach(function (id) {
+            selected[id] = true;
+          });
+          var seen = Object.create(null);
+          taskTypeSuggestions = Array.isArray(list)
+            ? list
+                .filter(function (row) {
+                  if (!row || !row.id || !isValidTaskTypeId(row.id)) return false;
+                  if (selected[row.id] || seen[row.id]) return false;
+                  seen[row.id] = true;
+                  return true;
+                })
+                .slice(0, 3)
+            : [];
+          taskTypeSuggestionsLoading = false;
+          renderTaskTypeSuggestions();
+        })
+        .catch(function (err) {
+          console.error('Info task type suggestions failed', err);
+          if (seq !== taskTypeSuggestionsSeq) return;
+          taskTypeSuggestionsLoading = false;
+          taskTypeSuggestions = [];
+          renderTaskTypeSuggestions();
+        });
+    }
+
+    function scheduleTaskTypeSuggestions(force) {
+      if (!suggestTaskTypesFn) return;
+      if (taskTypeSuggestionsTimer) {
+        clearTimeout(taskTypeSuggestionsTimer);
+        taskTypeSuggestionsTimer = null;
+      }
+      taskTypeSuggestionsTimer = setTimeout(function () {
+        taskTypeSuggestionsTimer = null;
+        refreshTaskTypeSuggestions(!!force);
+      }, force ? 0 : 280);
     }
 
     function changeLabelColor(label, colorKey) {
@@ -9020,15 +9284,23 @@
         });
     }
 
+    function parentIdSet() {
+      var set = Object.create(null);
+      parentCards.forEach(function (p) {
+        if (p && p.id) set[String(p.id)] = true;
+      });
+      return set;
+    }
+
     function renderParentPickerList(cards, query) {
       parentListEl.replaceChildren();
       var q = String(query || '')
         .trim()
         .toLowerCase();
-      var parentId = parentCard && parentCard.id ? String(parentCard.id) : '';
+      var linked = parentIdSet();
       var filtered = (cards || []).filter(function (card) {
         if (!card || !card.id) return false;
-        if (parentId && String(card.id) === parentId) return false;
+        if (linked[String(card.id)]) return false;
         if (!q) return true;
         var name = String(card.name || '').toLowerCase();
         var list = String(card.list || '').toLowerCase();
@@ -9084,43 +9356,91 @@
       });
     }
 
+    function buildParentChip(parent) {
+      var chip = document.createElement('span');
+      chip.className = 'info-parent-chip';
+      chip.dataset.parentId = parent.id;
+
+      var openBtn = document.createElement('button');
+      openBtn.type = 'button';
+      openBtn.className = 'info-parent-chip-open';
+      openBtn.disabled = parentBusy || !onOpenParent;
+      openBtn.title = onOpenParent
+        ? 'Ouvrir la t\u00e2che parente'
+        : parent.name || '';
+
+      var textEl = document.createElement('span');
+      textEl.className = 'info-parent-chip-text';
+      var nameEl = document.createElement('span');
+      nameEl.className = 'info-parent-chip-name';
+      nameEl.textContent = parent.name || 'Carte sans titre';
+      textEl.appendChild(nameEl);
+      if (parent.list) {
+        var listEl = document.createElement('span');
+        listEl.className = 'info-parent-chip-list';
+        listEl.textContent = parent.list;
+        textEl.appendChild(listEl);
+      }
+      openBtn.appendChild(textEl);
+
+      var clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
+      clearBtn.className = 'info-parent-clear';
+      clearBtn.setAttribute('aria-label', 'Retirer la t\u00e2che parente');
+      clearBtn.title = 'Retirer';
+      clearBtn.textContent = '\u00d7';
+      clearBtn.disabled = parentBusy || !onParentChange;
+      clearBtn.hidden = !onParentChange;
+
+      openBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!onOpenParent || parentBusy || openBtn.disabled) return;
+        Promise.resolve(onOpenParent(parent.id)).catch(function (err) {
+          console.error('Info open parent failed', err);
+        });
+      });
+
+      clearBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (clearBtn.disabled || parentBusy) return;
+        applyParentChange(null, parent.id);
+      });
+
+      chip.appendChild(openBtn);
+      chip.appendChild(clearBtn);
+      return chip;
+    }
+
     function renderParent() {
-      var hasParent = !!(parentCard && parentCard.id);
       var canPick = !!getBoardCards && !!onParentChange;
-      var canClear = hasParent && !!onParentChange;
-      parentChip.hidden = !hasParent;
-      parentClearBtn.hidden = !canClear;
+      parentChipsEl.replaceChildren();
+      parentCards.forEach(function (parent) {
+        parentChipsEl.appendChild(buildParentChip(parent));
+      });
       parentPickBtn.hidden = !canPick;
+      parentPickBtn.disabled = parentBusy;
       var pickLabelEl = parentPickBtn.querySelector('.info-parent-pick-label');
       if (pickLabelEl) {
-        pickLabelEl.textContent = hasParent ? 'Changer\u2026' : 'Ajouter';
+        pickLabelEl.textContent = 'Ajouter';
       }
-      parentPickBtn.disabled = parentBusy;
-      parentClearBtn.disabled = parentBusy;
-      parentChipOpen.disabled = parentBusy || !onOpenParent;
-      if (hasParent) {
-        parentChipName.textContent = parentCard.name || 'Carte sans titre';
-        if (parentCard.list) {
-          parentChipList.hidden = false;
-          parentChipList.textContent = parentCard.list;
-        } else {
-          parentChipList.hidden = true;
-          parentChipList.textContent = '';
-        }
-        parentChipOpen.title = onOpenParent
-          ? 'Ouvrir la t\u00e2che parente'
-          : parentCard.name || '';
-      }
-      if (!canPick && !hasParent) {
+      if (!canPick && !parentCards.length) {
         setParentStatus('', false);
       }
     }
 
-    function applyParentChange(nextParent) {
+    function applyParentChange(nextParent, removeParentId) {
       if (!onParentChange || parentBusy) return;
       parentBusy = true;
       renderParent();
-      Promise.resolve(onParentChange(nextParent || null))
+      var payload =
+        nextParent && nextParent.id
+          ? nextParent
+          : removeParentId
+            ? { removeParentId: String(removeParentId) }
+            : null;
+      Promise.resolve(onParentChange(payload))
         .then(function (result) {
           if (result && result.ok === false) {
             var reason = result.reason || 'error';
@@ -9133,28 +9453,27 @@
             setParentStatus(msg, true);
             return;
           }
-          if (nextParent && nextParent.id) {
-            parentCard = {
-              id: String(nextParent.id),
-              name:
-                typeof nextParent.name === 'string' ? nextParent.name : '',
-              list:
-                typeof nextParent.list === 'string' ? nextParent.list : '',
-            };
-          } else if (result && result.parent && result.parent.id) {
-            parentCard = {
-              id: String(result.parent.id),
-              name:
-                typeof result.parent.name === 'string'
-                  ? result.parent.name
-                  : '',
-              list:
-                typeof result.parent.list === 'string'
-                  ? result.parent.list
-                  : '',
-            };
+          if (result && Array.isArray(result.parents)) {
+            parentCards = normalizeParentCards(result.parents);
+          } else if (nextParent && nextParent.id) {
+            parentCards = normalizeParentCards(
+              parentCards.concat([
+                {
+                  id: String(nextParent.id),
+                  name:
+                    typeof nextParent.name === 'string' ? nextParent.name : '',
+                  list:
+                    typeof nextParent.list === 'string' ? nextParent.list : '',
+                },
+              ])
+            );
+          } else if (removeParentId) {
+            var rid = String(removeParentId);
+            parentCards = parentCards.filter(function (p) {
+              return !(p && String(p.id) === rid);
+            });
           } else {
-            parentCard = null;
+            parentCards = [];
           }
           setParentPickerOpen(false);
           setParentStatus('', false);
@@ -9238,6 +9557,7 @@
           setTitleStatus('', 'ok');
           collapse.refreshSummary();
           scheduleLabelSuggestions(false);
+          scheduleTaskTypeSuggestions(false);
           setTimeout(function () {
             if (titleStatus.classList.contains('is-ok')) setTitleStatus('');
           }, 1400);
@@ -9413,6 +9733,7 @@
           setAuthHint('');
           setDescStatus('', 'ok');
           scheduleLabelSuggestions(false);
+          scheduleTaskTypeSuggestions(false);
           setTimeout(function () {
             if (descStatus.classList.contains('is-ok')) setDescStatus('');
           }, 1400);
@@ -9653,36 +9974,20 @@
       });
     }
 
+    if (taskTypesSuggestRefreshBtn) {
+      taskTypesSuggestRefreshBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        refreshTaskTypeSuggestions(true);
+      });
+    }
+
     parentPickBtn.addEventListener('click', function (event) {
       event.preventDefault();
       event.stopPropagation();
       if (parentPickBtn.disabled || !getBoardCards) return;
       if (parentPickerOpen) setParentPickerOpen(false);
       else openParentPicker();
-    });
-
-    parentClearBtn.addEventListener('click', function (event) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (parentClearBtn.disabled || !parentCard) return;
-      applyParentChange(null);
-    });
-
-    parentChipOpen.addEventListener('click', function (event) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (
-        !parentCard ||
-        !parentCard.id ||
-        !onOpenParent ||
-        parentBusy ||
-        parentChipOpen.disabled
-      ) {
-        return;
-      }
-      Promise.resolve(onOpenParent(parentCard.id)).catch(function (err) {
-        console.error('Info open parent failed', err);
-      });
     });
 
     parentSearchInput.addEventListener('input', function () {
@@ -9739,6 +10044,8 @@
     syncTitleInputSize();
     renderDescPreview();
     collapse.refreshSummary();
+    scheduleLabelSuggestions(false);
+    scheduleTaskTypeSuggestions(false);
 
     return {
       field: field,
@@ -9761,6 +10068,8 @@
         titleDirty = false;
         syncTitleInputSize();
         collapse.refreshSummary();
+        scheduleLabelSuggestions(false);
+        scheduleTaskTypeSuggestions(false);
       },
       getTitle: function () {
         if (titleInput.classList.contains('is-loading')) return titleText || '';
@@ -9783,6 +10092,8 @@
         } else {
           renderDescPreview();
         }
+        scheduleLabelSuggestions(false);
+        scheduleTaskTypeSuggestions(false);
       },
       getDesc: function () {
         return descInput.value;
@@ -9822,6 +10133,7 @@
       setTaskTypes: function (list) {
         taskTypes = normalizeTaskTypes(list);
         renderTaskTypes();
+        scheduleTaskTypeSuggestions(false);
         onLayoutChange();
       },
       getTaskTypes: function () {
@@ -9840,25 +10152,31 @@
         setAuthHint(reason || '');
         onLayoutChange();
       },
-      setParent: function (next) {
-        if (next && typeof next === 'object' && next.id) {
-          parentCard = {
-            id: String(next.id),
-            name: typeof next.name === 'string' ? next.name : '',
-            list: typeof next.list === 'string' ? next.list : '',
-          };
-        } else {
-          parentCard = null;
-        }
+      setParents: function (next) {
+        parentCards = normalizeParentCards(next);
         renderParent();
         onLayoutChange();
       },
+      setParent: function (next) {
+        parentCards = normalizeParentCards(next ? [next] : []);
+        renderParent();
+        onLayoutChange();
+      },
+      getParents: function () {
+        return parentCards.map(function (p) {
+          return {
+            id: p.id,
+            name: p.name || '',
+            list: p.list || '',
+          };
+        });
+      },
       getParent: function () {
-        return parentCard
+        return parentCards.length
           ? {
-              id: parentCard.id,
-              name: parentCard.name || '',
-              list: parentCard.list || '',
+              id: parentCards[0].id,
+              name: parentCards[0].name || '',
+              list: parentCards[0].list || '',
             }
           : null;
       },

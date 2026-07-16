@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=subtask-pop-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-5" />
-  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=due-countdown-bg-2" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=info-suggestions-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-scope-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
@@ -16,7 +16,7 @@
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/effects.js?v=fx-6"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=label-edit-panel-1"></script>
+  <script src="./components/priority/priority-ui.js?v=info-suggestions-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
@@ -31,7 +31,7 @@
     onerror="console.error('Priority popup: failed to load completion-ui.js', this.src)"
   ></script>
   <script
-    src="./components/completion/completion-trello.js?v=estimate-tick-icons-1"
+    src="./components/completion/completion-trello.js?v=multi-parent-1"
     onerror="console.error('Priority popup: failed to load completion-trello.js', this.src)"
   ></script>
   <script>
@@ -44,13 +44,13 @@
   </script>
   <script src="./components/goals/goals-trello.js?v=goals-1"></script>
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
-  <script src="./components/agent/agent.js?v=estimate-time-mois-1"></script>
+  <script src="./components/agent/agent.js?v=info-suggestions-1"></script>
   <script src="./components/agent/agent-memory.js?v=agent-dream-1"></script>
   <script src="./components/agent/memory-ui.js?v=memory-settings-1"></script>
   <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
   <script src="./components/agent/agent-ui.js?v=attente-hourglass-1"></script>
-  <script src="./components/history/card-history.js?v=history-budget-1"></script>
+  <script src="./components/history/card-history.js?v=history-readable-1"></script>
   <script src="./components/history/history-ui.js?v=history-5"></script>
 </head>
 <body class="tp-page tp-page--priority">
@@ -1858,7 +1858,9 @@
           }
           return resolveCardNameForAi().then(function (cardName) {
             return PriorityAgent.getProvider(t).then(function (provider) {
-              if (!PriorityAgent.isConfigured(provider)) return [];
+              if (!PriorityAgent.isConfigured(provider)) {
+                // Still allow heuristic fallbacks inside suggestLabels.
+              }
               var state =
                 variant && typeof variant.getState === 'function' ? variant.getState() : {};
               var priorityLabel = '';
@@ -1895,6 +1897,35 @@
                 priorityLabel: (opts && opts.priorityLabel) || priorityLabel || '',
                 existingLabels: (opts && opts.existingLabels) || [],
                 boardLabels: (opts && opts.boardLabels) || []
+              });
+            });
+          });
+        },
+        suggestTaskTypes: function (opts) {
+          if (
+            !window.PriorityAgent ||
+            typeof PriorityAgent.suggestTaskTypes !== 'function'
+          ) {
+            return Promise.resolve([]);
+          }
+          return resolveCardNameForAi().then(function (cardName) {
+            return PriorityAgent.getProvider(t).then(function (provider) {
+              return PriorityAgent.suggestTaskTypes(provider, {
+                cardName:
+                  (opts && opts.cardName) || cardName || readCardNameLabel() || '',
+                cardDesc:
+                  (opts && opts.cardDesc) ||
+                  (infoUi && typeof infoUi.getDesc === 'function'
+                    ? infoUi.getDesc()
+                    : '') ||
+                  cardDesc ||
+                  '',
+                existingTypes:
+                  (opts && opts.existingTypes) ||
+                  (infoUi && typeof infoUi.getTaskTypes === 'function'
+                    ? infoUi.getTaskTypes()
+                    : []) ||
+                  []
               });
             });
           });
@@ -1962,29 +1993,58 @@
               'Carte li\u00e9e';
             var childProgress = CompletionTrello.computeCardProgress(parts[1] || {})
               .percent;
-            var parentId = nextParent && nextParent.id ? String(nextParent.id) : null;
-            return CompletionTrello.setParentCard(t, childId, parentId, {
+            var removeParentId =
+              nextParent && nextParent.removeParentId
+                ? String(nextParent.removeParentId)
+                : '';
+            var parentId =
+              !removeParentId && nextParent && nextParent.id
+                ? String(nextParent.id)
+                : null;
+            var opts = {
               childName: childName,
               childProgress: childProgress,
               parentName: nextParent && nextParent.name ? nextParent.name : '',
               parentList: nextParent && nextParent.list ? nextParent.list : '',
-            }).then(function (result) {
-              if (result && result.ok === false) return result;
-              if (infoUi && typeof infoUi.setParent === 'function') {
-                infoUi.setParent(
-                  result && result.parent
-                    ? result.parent
-                    : parentId
-                      ? nextParent
-                      : null
-                );
+            };
+            if (removeParentId) {
+              opts.removeParentId = removeParentId;
+            }
+            return CompletionTrello.setParentCard(t, childId, parentId, opts).then(
+              function (result) {
+                if (result && result.ok === false) return result;
+                if (infoUi && typeof infoUi.setParents === 'function') {
+                  infoUi.setParents(
+                    result && Array.isArray(result.parents) ? result.parents : []
+                  );
+                } else if (infoUi && typeof infoUi.setParent === 'function') {
+                  infoUi.setParent(
+                    result && result.parent
+                      ? result.parent
+                      : parentId
+                        ? nextParent
+                        : null
+                  );
+                }
+                var historyLabel = removeParentId
+                  ? 'T\u00e2che parente retir\u00e9e'
+                  : parentId
+                    ? 'T\u00e2che parente ajout\u00e9e'
+                    : 'T\u00e2ches parentes retir\u00e9es';
+                return commitHistoryNow(historyLabel).then(function () {
+                  return (
+                    result || {
+                      ok: true,
+                      parent: parentId ? nextParent : null,
+                      parents:
+                        result && Array.isArray(result.parents)
+                          ? result.parents
+                          : [],
+                    }
+                  );
+                });
               }
-              return commitHistoryNow(
-                parentId ? 'T\u00e2che parente d\u00e9finie' : 'T\u00e2che parente retir\u00e9e'
-              ).then(function () {
-                return result || { ok: true, parent: parentId ? nextParent : null };
-              });
-            });
+            );
           });
         },
         onOpenParent: function (cardId) {
@@ -2146,12 +2206,16 @@
             window.CompletionTrello &&
             typeof CompletionTrello.findParentCards === 'function' &&
             infoUi &&
-            typeof infoUi.setParent === 'function'
+            (typeof infoUi.setParents === 'function' ||
+              typeof infoUi.setParent === 'function')
               ? CompletionTrello.findParentCards(t, childId, { maxCards: 100 }).then(
                   function (parents) {
-                    var first =
-                      Array.isArray(parents) && parents.length ? parents[0] : null;
-                    infoUi.setParent(first);
+                    var list = Array.isArray(parents) ? parents : [];
+                    if (typeof infoUi.setParents === 'function') {
+                      infoUi.setParents(list);
+                    } else {
+                      infoUi.setParent(list.length ? list[0] : null);
+                    }
                     resizePopup();
                   }
                 )

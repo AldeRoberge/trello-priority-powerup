@@ -94,7 +94,7 @@
       id: 't180',
       label: 'Quelques heures',
       minutes: 3 * 60,
-      icon: 'clocks',
+      icon: 'clock-2',
       color: '#B5D033',
     },
     {
@@ -1627,14 +1627,34 @@
   }
 
   /**
-   * Set or clear the parent of childCardId by mutating parents' cardCompletion
-   * linked items. At most one parent is kept after the operation.
+   * Add, remove, or clear parent link(s) for childCardId by mutating parents'
+   * cardCompletion linked items.
+   *
+   * - parentCardId set → add that parent (keeps existing parents unless
+   *   opts.replace is true).
+   * - parentCardId null/'' + opts.removeParentId → remove that one parent.
+   * - parentCardId null/'' without removeParentId → clear all parents.
    *
    * @param {object} t
    * @param {string} childCardId
-   * @param {string|null} parentCardId - null/'' clears all parents
-   * @param {{ childName?: string, childProgress?: number, maxCards?: number }} [opts]
-   * @returns {Promise<{ ok: boolean, reason?: string, parent?: object|null, parentsRemoved?: number }>}
+   * @param {string|null} parentCardId
+   * @param {{
+   *   childName?: string,
+   *   childProgress?: number,
+   *   maxCards?: number,
+   *   replace?: boolean,
+   *   removeParentId?: string,
+   *   parentName?: string,
+   *   parentList?: string,
+   *   cards?: Array
+   * }} [opts]
+   * @returns {Promise<{
+   *   ok: boolean,
+   *   reason?: string,
+   *   parent?: object|null,
+   *   parents?: Array,
+   *   parentsRemoved?: number
+   * }>}
    */
   async function setParentCard(t, childCardId, parentCardId, opts) {
     opts = opts || {};
@@ -1643,6 +1663,11 @@
       parentCardId == null || parentCardId === ''
         ? ''
         : String(parentCardId).trim();
+    var removeOnlyId =
+      typeof opts.removeParentId === 'string' && opts.removeParentId.trim()
+        ? opts.removeParentId.trim()
+        : '';
+    var replaceAll = !!opts.replace;
     if (!childId) return { ok: false, reason: 'no-child' };
     if (nextParentId && nextParentId === childId) {
       return { ok: false, reason: 'self' };
@@ -1664,10 +1689,23 @@
     });
     var parentsRemoved = 0;
     var touchIds = Object.create(null);
-    existingParents.forEach(function (p) {
-      if (p && p.id) touchIds[p.id] = true;
-    });
-    if (nextParentId) touchIds[nextParentId] = true;
+
+    if (nextParentId) {
+      // Add (default) or replace: touch new parent + optionally strip others.
+      touchIds[nextParentId] = true;
+      if (replaceAll) {
+        existingParents.forEach(function (p) {
+          if (p && p.id && p.id !== nextParentId) touchIds[p.id] = true;
+        });
+      }
+    } else if (removeOnlyId) {
+      touchIds[removeOnlyId] = true;
+    } else {
+      // Clear all.
+      existingParents.forEach(function (p) {
+        if (p && p.id) touchIds[p.id] = true;
+      });
+    }
 
     var childName =
       typeof opts.childName === 'string' && opts.childName.trim()
@@ -1690,16 +1728,28 @@
     for (var i = 0; i < idList.length; i++) {
       var pid = idList[i];
       var data = await getCardCompletionById(t, pid);
-      var stripped = removeLinkedChildFromCompletion(data, childId);
-      var nextData = stripped.data;
-      if (stripped.removed) parentsRemoved += stripped.removed;
-      if (pid === nextParentId) {
-        var ensured = ensureLinkedChildInCompletion(nextData, childId, {
-          text: childName,
-          progress: childProgress,
-        });
-        nextData = ensured.data;
+      var nextData = data;
+      var stripped = { removed: 0 };
+
+      if (nextParentId) {
+        if (replaceAll && pid !== nextParentId) {
+          stripped = removeLinkedChildFromCompletion(data, childId);
+          nextData = stripped.data;
+          if (stripped.removed) parentsRemoved += stripped.removed;
+        } else if (pid === nextParentId) {
+          var ensured = ensureLinkedChildInCompletion(nextData, childId, {
+            text: childName,
+            progress: childProgress,
+          });
+          nextData = ensured.data;
+        }
+      } else {
+        // Remove one or clear all — strip this parent.
+        stripped = removeLinkedChildFromCompletion(data, childId);
+        nextData = stripped.data;
+        if (stripped.removed) parentsRemoved += stripped.removed;
       }
+
       if (
         stripped.removed ||
         (pid === nextParentId &&
@@ -1741,9 +1791,15 @@
       };
     }
 
+    var parentsAfter = await findParentCards(t, childId, {
+      maxCards: opts.maxCards,
+      cards: opts.cards,
+    });
+
     return {
       ok: true,
       parent: parentMeta,
+      parents: parentsAfter,
       parentsRemoved: parentsRemoved,
     };
   }

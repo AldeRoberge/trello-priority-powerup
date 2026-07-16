@@ -723,7 +723,7 @@
       {
         label: 'Quelques heures',
         minutes: 3 * 60,
-        icon: 'clocks',
+        icon: 'clock-2',
         color: '#B5D033',
       },
       { label: 'Un jour', minutes: 24 * 60, icon: 'sun', color: '#F2D600' },

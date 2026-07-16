@@ -4040,13 +4040,26 @@
   }
 
   /** Minimum model confidence to surface a label suggestion (0–1). */
-  var LABEL_SUGGEST_MIN_CONFIDENCE = 0.7;
+  var LABEL_SUGGEST_MIN_CONFIDENCE = 0.45;
+  var TASK_TYPE_SUGGEST_MIN_CONFIDENCE = 0.4;
+
+  var TASK_TYPE_CATALOG = [
+    { id: 'action', label: 'Action', hint: 'Action concr\u00e8te unique' },
+    { id: 'project', label: 'Projet', hint: 'Partie d\u2019un effort multi-\u00e9tapes' },
+    { id: 'recurring', label: 'R\u00e9currente', hint: 'T\u00e2che r\u00e9p\u00e9titive / r\u00e9currente' },
+    { id: 'exploratory', label: 'Exploration', hint: 'D\u00e9couverte / recherche' },
+    { id: 'emotional', label: '\u00c9motionnel', hint: '\u00c9motionnel / psychologique' },
+    { id: 'communication', label: 'Communication', hint: 'Communication / relationnel' },
+    { id: 'deliverable', label: 'Livrable', hint: 'Livrable / produit' },
+    { id: 'process', label: 'Processus', hint: 'Processus / maintenance' },
+    { id: 'thinking', label: 'R\u00e9flexion', hint: 'R\u00e9flexion / d\u00e9cisions' }
+  ];
 
   function normalizeBoardLabelRef(raw) {
     if (!raw) return null;
     if (typeof raw === 'string') {
       var asId = raw.trim();
-      return asId ? { id: asId, name: '', confidence: null } : null;
+      return asId ? { id: asId, name: '', color: '', confidence: null, isNew: false } : null;
     }
     if (typeof raw !== 'object') return null;
     var id = raw.id != null ? String(raw.id).trim() : '';
@@ -4066,14 +4079,103 @@
       if (confidence > 1 && confidence <= 100) confidence = confidence / 100;
       confidence = Math.max(0, Math.min(1, confidence));
     }
-    return { id: id, name: name, confidence: confidence };
+    var color =
+      typeof raw.color === 'string' && raw.color.trim() ? raw.color.trim() : '';
+    var isNew = raw.isNew === true || raw.create === true || (!id && !!name);
+    return {
+      id: id,
+      name: name,
+      color: color,
+      confidence: confidence,
+      isNew: isNew
+    };
+  }
+
+  function heuristicLabelSuggestions(context) {
+    var ctx = context && typeof context === 'object' ? context : {};
+    var hay = (
+      String(ctx.cardName || '') +
+      ' ' +
+      String(ctx.cardDesc || '') +
+      ' ' +
+      String(ctx.priorityLabel || '')
+    )
+      .toLocaleLowerCase('fr-FR')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    if (!hay.trim()) return [];
+    var existingIds = Object.create(null);
+    (Array.isArray(ctx.existingLabels) ? ctx.existingLabels : []).forEach(
+      function (label) {
+        if (label && label.id) existingIds[String(label.id)] = true;
+      }
+    );
+    var scored = [];
+    (Array.isArray(ctx.boardLabels) ? ctx.boardLabels : []).forEach(function (label) {
+      if (!label || !label.id || existingIds[String(label.id)]) return;
+      var name = typeof label.name === 'string' ? label.name.trim() : '';
+      if (!name || name.length < 2) return;
+      var needle = name
+        .toLocaleLowerCase('fr-FR')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      if (hay.indexOf(needle) !== -1 || needle.indexOf(hay.trim().slice(0, 24)) !== -1) {
+        scored.push({
+          id: String(label.id),
+          name: name,
+          color: label.color != null ? label.color : null,
+          idBoard: label.idBoard,
+          confidence: 0.7,
+          isNew: false
+        });
+      }
+    });
+    return scored.slice(0, 3);
+  }
+
+  function heuristicTaskTypeSuggestions(context) {
+    var ctx = context && typeof context === 'object' ? context : {};
+    var hay = (
+      String(ctx.cardName || '') +
+      ' ' +
+      String(ctx.cardDesc || '')
+    )
+      .toLocaleLowerCase('fr-FR')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    var existing = Object.create(null);
+    (Array.isArray(ctx.existingTypes) ? ctx.existingTypes : []).forEach(function (id) {
+      if (id) existing[String(id)] = true;
+    });
+    var rules = [
+      { id: 'communication', re: /\b(mail|email|reunion|meeting|appeler|ecrire|message|slack|discuter|parler)\b/ },
+      { id: 'exploratory', re: /\b(recherch|explor|analyser|audit|etude|decouvrir|investig)\b/ },
+      { id: 'recurring', re: /\b(recurrent|chaque|hebdo|quotidien|mensuel|routine|regulier)\b/ },
+      { id: 'project', re: /\b(projet|roadmap|chantier|phase|jalon|milestone)\b/ },
+      { id: 'deliverable', re: /\b(livrable|document|rapport|pdf|diapo|presentation|slides|article)\b/ },
+      { id: 'thinking', re: /\b(reflech|decid|penser|strategie|brainstorm|planifier)\b/ },
+      { id: 'process', re: /\b(process|maintenance|menage|ranger|nettoyer|ops|procedure)\b/ },
+      { id: 'emotional', re: /\b(emotion|stress|anxi|psy|confiance|motivation)\b/ },
+      { id: 'action', re: /\b(faire|acheter|installer|envoyer|fixer|completer|terminer)\b/ }
+    ];
+    var out = [];
+    for (var i = 0; i < rules.length; i++) {
+      if (existing[rules[i].id]) continue;
+      if (rules[i].re.test(hay)) {
+        out.push({ id: rules[i].id, confidence: 0.62 });
+      }
+      if (out.length >= 3) break;
+    }
+    if (!out.length && !existing.action && hay.trim()) {
+      out.push({ id: 'action', confidence: 0.5 });
+    }
+    return out;
   }
 
   /**
-   * Suggest existing board labels for a card (Information → Étiquettes).
-   * Returns only high-confidence matches resolved to board label objects.
+   * Suggest board labels (and optional new names) for Information → Étiquettes.
    * context: { cardName?, cardDesc?, priorityLabel?, existingLabels?, boardLabels? }
-   * @returns {Promise<Array<{id:string,name:string,color?:*,confidence:number}>>}
+   * @returns {Promise<Array<{id?:string,name:string,color?:*,confidence:number,isNew?:boolean}>>}
    */
   async function suggestLabels(provider, context, options) {
     options = options || {};
@@ -4082,15 +4184,14 @@
         ? options.minConfidence
         : LABEL_SUGGEST_MIN_CONFIDENCE;
     var p = normalizeProvider(provider);
-    if (!isConfigured(p)) return [];
     var ctx = context && typeof context === 'object' ? context : {};
+    var fallback = heuristicLabelSuggestions(ctx);
 
     var boardLabels = Array.isArray(ctx.boardLabels)
       ? ctx.boardLabels.filter(function (label) {
           return label && label.id;
         })
       : [];
-    if (!boardLabels.length) return [];
 
     var existingIds = Object.create(null);
     var existingNames = Object.create(null);
@@ -4116,7 +4217,8 @@
           color: label.color != null ? String(label.color) : null
         };
       });
-    if (!available.length) return [];
+
+    if (!isConfigured(p)) return fallback;
 
     var byId = Object.create(null);
     var byName = Object.create(null);
@@ -4144,17 +4246,17 @@
       {
         role: 'system',
         content: [
-          'Tu choisis les \u00e9tiquettes Trello les plus pertinentes pour une carte.',
-          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":[{"id":"\u2026","confidence":0.0}]}',
+          'Tu proposes des \u00e9tiquettes Trello pour une carte, d\u2019apr\u00e8s le titre et la description.',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":[{"id":"\u2026","confidence":0.0},{"name":"Nouveau","color":"blue","confidence":0.0}]}',
           'R\u00e8gles\u00a0:',
-          '- Choisis UNIQUEMENT parmi boardLabels (par id exact). N\u2019invente jamais une \u00e9tiquette.',
-          '- 0 \u00e0 3 suggestions. Pr\u00e9f\u00e8re 0 si le lien avec le titre/description est faible.',
-          '- confidence = probabilit\u00e9 0\u20131 que l\u2019\u00e9tiquette doive \u00eatre sur CETTE carte.',
-          '- N\u2019inclus une suggestion que si confidence \u2265 ' +
+          '- Propose 1 \u00e0 3 suggestions utiles (pas 0 sauf carte totalement vide).',
+          '- Pr\u00e9f\u00e8re d\u2019abord les \u00e9tiquettes existantes de boardLabels (id exact).',
+          '- Si aucune \u00e9tiquette du tableau ne convient, propose un NOUVEAU nom court (name, sans id) + color Trello (green|yellow|orange|red|purple|blue|sky|lime|pink|black).',
+          '- confidence = 0\u20131. Inclus seulement si \u2265 ' +
             String(minConfidence) +
-            '.',
-          '- Si plusieurs couleurs sans nom, ne les propose que si le contexte couleur est \u00e9vident.',
-          '- INTERDIT\u00a0: ids hors liste\u00a0; \u00e9tiquettes d\u00e9j\u00e0 sur la carte\u00a0; suggestions g\u00e9n\u00e9riques sans lien.',
+            ' (ou omets confidence\u00a0: on assumera un bon match).',
+          '- Noms nouveaux\u00a0: 1\u20133 mots max, fran\u00e7ais, concrets (pas \u00ab\u00a0Divers\u00a0\u00bb / \u00ab\u00a0Autre\u00a0\u00bb).',
+          '- INTERDIT\u00a0: ids hors boardLabels\u00a0; \u00e9tiquettes d\u00e9j\u00e0 sur la carte\u00a0; suggestions dans le chat.',
           'Contexte\u00a0:',
           JSON.stringify(payload)
         ].join('\n')
@@ -4162,10 +4264,10 @@
       {
         role: 'user',
         content: title
-          ? 'Quelles \u00e9tiquettes du tableau correspondent clairement \u00e0\u00a0: \u00ab\u00a0' +
+          ? 'Quelles \u00e9tiquettes collent \u00e0\u00a0: \u00ab\u00a0' +
             title.slice(0, 200) +
-            '\u00a0\u00bb\u00a0? Seulement si la confiance est \u00e9lev\u00e9e.'
-          : 'Quelles \u00e9tiquettes du tableau correspondent clairement \u00e0 cette carte\u00a0? Seulement si la confiance est \u00e9lev\u00e9e.'
+            '\u00a0\u00bb\u00a0? Utilise les indices du titre/description.'
+          : 'Propose des \u00e9tiquettes pertinentes pour cette carte (indices du contexte).'
       }
     ];
 
@@ -4173,21 +4275,26 @@
     try {
       response = await chatCompletions(p, messages, {
         jsonMode: true,
-        max_tokens: 220,
-        temperature: 0.25,
+        max_tokens: 280,
+        temperature: 0.35,
         stream: false
       });
     } catch (err) {
       if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
-        response = await chatCompletions(p, messages, {
-          jsonMode: false,
-          max_tokens: 220,
-          temperature: 0.25,
-          stream: false
-        });
+        try {
+          response = await chatCompletions(p, messages, {
+            jsonMode: false,
+            max_tokens: 280,
+            temperature: 0.35,
+            stream: false
+          });
+        } catch (err2) {
+          console.error('PriorityAgent.suggestLabels failed', err2);
+          return fallback;
+        }
       } else {
         console.error('PriorityAgent.suggestLabels failed', err);
-        return [];
+        return fallback;
       }
     }
 
@@ -4207,34 +4314,219 @@
 
     var out = [];
     var seen = Object.create(null);
+    var seenNames = Object.create(null);
     for (var i = 0; i < rawList.length; i++) {
       var ref = normalizeBoardLabelRef(rawList[i]);
       if (!ref) continue;
-      if (ref.confidence == null || ref.confidence < minConfidence) continue;
+      var confidence =
+        ref.confidence == null ? 0.72 : ref.confidence;
+      if (confidence < minConfidence) continue;
+
       var match = null;
       if (ref.id && byId[ref.id]) match = byId[ref.id];
       else if (ref.name) {
         match = byName[ref.name.toLocaleLowerCase('fr-FR')] || null;
       }
-      if (!match || existingIds[match.id] || seen[match.id]) continue;
-      if (match.name && existingNames[match.name.toLocaleLowerCase('fr-FR')]) continue;
-      seen[match.id] = true;
-      var full = null;
-      for (var j = 0; j < boardLabels.length; j++) {
-        if (boardLabels[j] && String(boardLabels[j].id) === match.id) {
-          full = boardLabels[j];
-          break;
+
+      if (match) {
+        if (existingIds[match.id] || seen[match.id]) continue;
+        if (match.name && existingNames[match.name.toLocaleLowerCase('fr-FR')]) {
+          continue;
         }
+        seen[match.id] = true;
+        var full = null;
+        for (var j = 0; j < boardLabels.length; j++) {
+          if (boardLabels[j] && String(boardLabels[j].id) === match.id) {
+            full = boardLabels[j];
+            break;
+          }
+        }
+        out.push({
+          id: match.id,
+          name: full && typeof full.name === 'string' ? full.name : match.name,
+          color: full && full.color != null ? full.color : match.color,
+          idBoard: full && full.idBoard != null ? full.idBoard : undefined,
+          confidence: confidence,
+          isNew: false
+        });
+      } else if (ref.name) {
+        var newName = ref.name.trim().slice(0, 50);
+        var nameKey = newName.toLocaleLowerCase('fr-FR');
+        if (!newName || existingNames[nameKey] || seenNames[nameKey] || byName[nameKey]) {
+          continue;
+        }
+        seenNames[nameKey] = true;
+        out.push({
+          id: '',
+          name: newName,
+          color: ref.color || 'blue',
+          confidence: confidence,
+          isNew: true
+        });
       }
+      if (out.length >= 3) break;
+    }
+
+    if (!out.length && fallback.length) return fallback;
+    return out;
+  }
+
+  /**
+   * Suggest task-type catalog ids for Information → Type de tâche.
+   * context: { cardName?, cardDesc?, existingTypes? }
+   * @returns {Promise<Array<{id:string,label?:string,confidence:number}>>}
+   */
+  async function suggestTaskTypes(provider, context, options) {
+    options = options || {};
+    var minConfidence =
+      typeof options.minConfidence === 'number' && isFinite(options.minConfidence)
+        ? options.minConfidence
+        : TASK_TYPE_SUGGEST_MIN_CONFIDENCE;
+    var p = normalizeProvider(provider);
+    var ctx = context && typeof context === 'object' ? context : {};
+    var existing = Object.create(null);
+    (Array.isArray(ctx.existingTypes) ? ctx.existingTypes : []).forEach(function (id) {
+      if (id) existing[String(id)] = true;
+    });
+    var catalog = TASK_TYPE_CATALOG.filter(function (entry) {
+      return !existing[entry.id];
+    });
+    var fallback = heuristicTaskTypeSuggestions(ctx)
+      .filter(function (row) {
+        return row && row.id && !existing[row.id];
+      })
+      .map(function (row) {
+        var entry = null;
+        for (var i = 0; i < TASK_TYPE_CATALOG.length; i++) {
+          if (TASK_TYPE_CATALOG[i].id === row.id) {
+            entry = TASK_TYPE_CATALOG[i];
+            break;
+          }
+        }
+        return {
+          id: row.id,
+          label: entry ? entry.label : row.id,
+          hint: entry ? entry.hint : '',
+          confidence: row.confidence
+        };
+      });
+
+    if (!catalog.length) return [];
+    if (!isConfigured(p)) return fallback.slice(0, 3);
+
+    var payload = {
+      cardName: typeof ctx.cardName === 'string' ? ctx.cardName.slice(0, 200) : '',
+      cardDesc:
+        typeof ctx.cardDesc === 'string'
+          ? ctx.cardDesc.trim().replace(/\s+/g, ' ').slice(0, 600)
+          : '',
+      catalog: catalog,
+      existingTypes: Object.keys(existing)
+    };
+    var title = String(payload.cardName || '').trim();
+    var messages = [
+      {
+        role: 'system',
+        content: [
+          'Tu classifies une carte Trello dans 1 \u00e0 3 types de t\u00e2che du catalogue.',
+          'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":[{"id":"action","confidence":0.8}]}',
+          'R\u00e8gles\u00a0:',
+          '- Choisis UNIQUEMENT des id du catalog.',
+          '- Propose 1\u20133 types qui collent au titre/description (pas 0 si le titre a du sens).',
+          '- confidence 0\u20131. Inclus seulement si \u2265 ' +
+            String(minConfidence) +
+            ' (ou omets confidence).',
+          '- INTERDIT\u00a0: ids hors catalog\u00a0; types d\u00e9j\u00e0 s\u00e9lectionn\u00e9s\u00a0; suggestions chat.',
+          'Contexte\u00a0:',
+          JSON.stringify(payload)
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content: title
+          ? 'Quels types collent \u00e0\u00a0: \u00ab\u00a0' +
+            title.slice(0, 200) +
+            '\u00a0\u00bb\u00a0?'
+          : 'Propose les types de t\u00e2che les plus pertinents.'
+      }
+    ];
+
+    var response;
+    try {
+      response = await chatCompletions(p, messages, {
+        jsonMode: true,
+        max_tokens: 180,
+        temperature: 0.3,
+        stream: false
+      });
+    } catch (err) {
+      if (err && err.message && /response_format|json_object|json mode/i.test(err.message)) {
+        try {
+          response = await chatCompletions(p, messages, {
+            jsonMode: false,
+            max_tokens: 180,
+            temperature: 0.3,
+            stream: false
+          });
+        } catch (err2) {
+          console.error('PriorityAgent.suggestTaskTypes failed', err2);
+          return fallback.slice(0, 3);
+        }
+      } else {
+        console.error('PriorityAgent.suggestTaskTypes failed', err);
+        return fallback.slice(0, 3);
+      }
+    }
+
+    var rawList = [];
+    try {
+      var parsed = parseAssistantPayload(response.content);
+      rawList = parsed.suggestions || parsed.types || parsed.taskTypes || [];
+    } catch (e) {
+      try {
+        var raw = JSON.parse(response.content);
+        rawList = raw.suggestions || raw.types || raw.taskTypes || [];
+      } catch (e2) {
+        rawList = [];
+      }
+    }
+    if (!Array.isArray(rawList)) rawList = [];
+
+    var byId = Object.create(null);
+    catalog.forEach(function (entry) {
+      byId[entry.id] = entry;
+    });
+
+    var out = [];
+    var seen = Object.create(null);
+    for (var i = 0; i < rawList.length; i++) {
+      var row = rawList[i];
+      var id =
+        typeof row === 'string'
+          ? row.trim()
+          : row && row.id != null
+            ? String(row.id).trim()
+            : '';
+      if (!id || !byId[id] || existing[id] || seen[id]) continue;
+      var confidence = Number(row && row.confidence);
+      if (!isFinite(confidence)) confidence = Number(row && row.score);
+      if (!isFinite(confidence)) confidence = 0.72;
+      else {
+        if (confidence > 1 && confidence <= 100) confidence = confidence / 100;
+        confidence = Math.max(0, Math.min(1, confidence));
+      }
+      if (confidence < minConfidence) continue;
+      seen[id] = true;
       out.push({
-        id: match.id,
-        name: full && typeof full.name === 'string' ? full.name : match.name,
-        color: full && full.color != null ? full.color : match.color,
-        idBoard: full && full.idBoard != null ? full.idBoard : undefined,
-        confidence: ref.confidence
+        id: id,
+        label: byId[id].label,
+        hint: byId[id].hint,
+        confidence: confidence
       });
       if (out.length >= 3) break;
     }
+
+    if (!out.length) return fallback.slice(0, 3);
     return out;
   }
 
@@ -11724,6 +12016,7 @@
     parseDurationMinutes: parseDurationMinutes,
     suggestGoals: suggestGoals,
     suggestLabels: suggestLabels,
+    suggestTaskTypes: suggestTaskTypes,
     suggestMetrics: suggestMetrics,
     parseMetric: parseMetric,
     executeAction: executeAction,
