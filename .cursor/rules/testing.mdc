@@ -1,0 +1,35 @@
+---
+description: How to run the project test suite and coverage; run tests after changing component logic
+alwaysApply: true
+---
+
+# Tests
+
+This Power-Up ships a Node.js test suite (built-in `node:test` runner, no Jest/Vitest).
+
+## Commands
+
+```bash
+npm test              # unit + sandbox verify integration tests
+npm run test:unit     # unit tests only (faster)
+npm run test:coverage # unit tests with V8 coverage for components/
+npm run verify        # legacy sandbox verifies (includes Windows cscript presets)
+```
+
+Requires **Node.js 18+** on `PATH`. Under the hood, `scripts/run-tests.js` invokes `node --test`.
+
+## When to run
+
+After changing logic under `components/` (scoring, matrix, statut, completion, effects, agent, version), run `npm test` (or at least `npm run test:unit`) before considering the task done. If coverage drops on the file you touched, add or extend a test under `test/`.
+
+## Layout
+
+| Path | Role |
+|------|------|
+| `test/*.test.js` | Unit tests — `require()` production IIFEs via `test/helpers/load.js` |
+| `test/sandbox-verifies.test.js` | Spawns existing `sandbox/verify-*.js` scripts |
+| `sandbox/verify-*.js` | Standalone verifies (still runnable directly) |
+
+Do not load production scripts with `vm.runInNewContext` in new unit tests — use `loadComponent()` so coverage instrumentation works.
+
+Three sandbox verifies are currently skipped as known-failing (`verify-completion.js`, `verify-card-dream.js`, `verify-progress-complete.js`). Prefer fixing those scripts or the product code over re-enabling them while red.

@@ -26,6 +26,8 @@ Styles : `../components/priority/priority-ui.css`
 
 ## Scripts de vérification
 
+La suite officielle est dans `test/` (`npm test` / `npm run test:coverage`). Les scripts ci-dessous restent utilisables seuls et sont aussi exécutés via `test/sandbox-verifies.test.js`.
+
 | Script | Runtime | Commande |
 |--------|---------|----------|
 | `verify-presets.js` | Windows `cscript` | `npm run verify:presets` ou `cscript //nologo sandbox\verify-presets.js` |
@@ -33,9 +35,9 @@ Styles : `../components/priority/priority-ui.css`
 | `verify-version.js` | Node.js | `npm run verify:version` |
 | `verify-badges.js` | Node.js | `npm run verify:badges` |
 | `verify-completion.js` | Node.js | `npm run verify:completion` |
-| `verify-statut.js` | Node.js | `node sandbox/verify-statut.js` |
+| `verify-statut.js` | Node.js | `npm run verify:statut` |
 
-- **verify-presets** : formule baseline, paliers (`TIERS`), presets `HEAT_SEGMENTS`. La logique est **dupliquée** volontairement (exécutable sans navigateur ni DOM) — doit rester alignée avec `components/priority/priority-ui.js` (section « Scoring »).
+- **verify-presets** : formule baseline, paliers (`TIERS`), presets `HEAT_SEGMENTS`. La logique est **dupliquée** volontairement (exécutable sans navigateur ni DOM) — doit rester alignée avec `components/priority/priority-ui.js` (section « Scoring »). Préférer `npm run test:unit` (charge le vrai `PriorityUI`) pour la couverture.
 - **verify-version** : formatage et résolution de l'horodatage de build (`components/shared/version.js`, `build-info.json`).
 
 Code de sortie `0` = succès, `1` = échec.

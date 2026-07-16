@@ -34,7 +34,11 @@ check(
 );
 check(
   'levenshtein nearby',
-  SM.levenshtein('bloque', 'blocked') <= 2
+  SM.levenshtein('bloque', 'bloquer') === 1
+);
+check(
+  'levenshtein blocked',
+  SM.levenshtein('bloque', 'blocked') === 3
 );
 
 var todo = SM.matchListToCategory('À faire');

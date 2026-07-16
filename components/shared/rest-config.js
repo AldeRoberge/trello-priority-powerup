@@ -4,7 +4,7 @@
 
   global.PriorityRestConfig = {
     appKey: 'e449f4c01b03a2501072808abe5611ab',
-    appName: 'Priorité',
+    appName: 'Cerveau',
     appAuthor: 'AldeRoberge',
     autoSortDebounceMs: 400,
   };

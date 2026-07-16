@@ -1,15 +1,22 @@
 {
   "name": "trello-priority-powerup",
   "private": true,
-  "description": "Priorité — Power-Up Trello pour scoring urgence/impact/facilité avec badges et libellés de palier",
+  "description": "Cerveau — Power-Up Trello pour scoring urgence/impact/facilité avec badges et libellés de palier",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
+    "test": "node scripts/run-tests.js",
+    "test:unit": "node scripts/run-tests.js --unit",
+    "test:coverage": "node scripts/run-tests.js --coverage",
     "verify:badges": "node sandbox/verify-badges.js",
     "verify:completion": "node sandbox/verify-completion.js",
     "verify:effects": "node sandbox/verify-effects.js",
     "verify:matrix": "node sandbox/verify-matrix.js",
+    "verify:statut": "node sandbox/verify-statut.js",
     "verify:presets": "cscript //nologo sandbox/verify-presets.js",
     "verify:version": "node sandbox/verify-version.js",
-    "verify": "npm run verify:presets && npm run verify:matrix && npm run verify:version && npm run verify:badges && npm run verify:completion && npm run verify:effects",
+    "verify": "npm run verify:presets && npm run verify:matrix && npm run verify:version && npm run verify:badges && npm run verify:completion && npm run verify:effects && npm run verify:statut",
     "stamp:build": "node scripts/stamp-build.js"
   }
 }

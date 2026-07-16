@@ -40,6 +40,18 @@
     sky: 'Ciel'
   };
 
+  /** Permanent face shape / feature set (independent of emotion & color). */
+  var AGENT_FACE_KEYS = ['classic', 'soft', 'bold', 'sly', 'calm', 'spark'];
+
+  var AGENT_FACE_LABELS = {
+    classic: 'Classique',
+    soft: 'Doux',
+    bold: 'Audacieux',
+    sly: 'Malin',
+    calm: 'Calme',
+    spark: 'Vif'
+  };
+
   /** Round / food / nature names that fit each glow color. */
   var AGENT_COLOR_NAMES = {
     orange: ['Orange', 'Mandarin', 'Clementine', 'Tangerine', 'Pumpkin', 'Pizza', 'Soleil'],
@@ -172,6 +184,7 @@
       agentName: '',
       agentPersonality: '',
       agentColor: '',
+      agentFace: 'classic',
       updatedAt: ''
     };
   }
@@ -190,6 +203,18 @@
     if (c === 'turquoise' || c === 'cyan') return 'teal';
     if (c === 'ciel') return 'sky';
     return '';
+  }
+
+  function normalizeAgentFace(raw) {
+    var f = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    if (AGENT_FACE_KEYS.indexOf(f) !== -1) return f;
+    if (f === 'default' || f === 'normal' || f === 'standard') return 'classic';
+    if (f === 'doux' || f === 'round' || f === 'rond') return 'soft';
+    if (f === 'audacieux' || f === 'strong') return 'bold';
+    if (f === 'malin' || f === 'smirk' || f === 'fox') return 'sly';
+    if (f === 'calme' || f === 'zen' || f === 'flat') return 'calm';
+    if (f === 'vif' || f === 'bright' || f === 'sparkle') return 'spark';
+    return 'classic';
   }
 
   function pickRandom(list) {
@@ -290,6 +315,7 @@
       agentName: trimStr(src.agentName, MAX_AGENT_NAME),
       agentPersonality: trimStr(src.agentPersonality, MAX_AGENT_PERSONALITY),
       agentColor: normalizeAgentColor(src.agentColor),
+      agentFace: normalizeAgentFace(src.agentFace),
       updatedAt: typeof src.updatedAt === 'string' ? src.updatedAt : ''
     };
   }
@@ -405,7 +431,8 @@
       experimental: p.experimental,
       agentName: p.agentName || null,
       agentPersonality: p.agentPersonality || null,
-      agentColor: p.agentColor || null
+      agentColor: p.agentColor || null,
+      agentFace: p.agentFace || 'classic'
     };
   }
 
@@ -562,11 +589,14 @@
     AGENT_COLOR_KEYS: AGENT_COLOR_KEYS,
     AGENT_COLOR_LABELS: AGENT_COLOR_LABELS,
     AGENT_COLOR_NAMES: AGENT_COLOR_NAMES,
+    AGENT_FACE_KEYS: AGENT_FACE_KEYS,
+    AGENT_FACE_LABELS: AGENT_FACE_LABELS,
     MAX_AGENT_NAME: MAX_AGENT_NAME,
     MAX_AGENT_PERSONALITY: MAX_AGENT_PERSONALITY,
     emptyProfile: emptyProfile,
     normalizeAgentStatus: normalizeAgentStatus,
     normalizeAgentColor: normalizeAgentColor,
+    normalizeAgentFace: normalizeAgentFace,
     normalizeProfile: normalizeProfile,
     normalizeTimeFormat: normalizeTimeFormat,
     normalizeExperimental: normalizeExperimental,

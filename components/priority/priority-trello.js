@@ -2114,7 +2114,7 @@
     if (!cfg || !cfg.appKey) return null;
     var opts = {
       appKey: cfg.appKey,
-      appName: cfg.appName || 'Priorité',
+      appName: cfg.appName || 'Cerveau',
     };
     if (cfg.appAuthor) opts.appAuthor = cfg.appAuthor;
     return opts;
@@ -2836,7 +2836,7 @@
     var params = {
       expiration: 'never',
       scope: 'read,write',
-      name: cfg.appName || 'Priorité',
+      name: cfg.appName || 'Cerveau',
       key: cfg.appKey,
       // fragment + return_url: popup lands on auth-return.html with #token=…
       callback_method: 'fragment',

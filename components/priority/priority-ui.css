@@ -2485,6 +2485,12 @@ body {
   transition: opacity 0.12s ease, color 0.12s ease;
 }
 
+/* Détails: use remaining header width so more of the card title shows. */
+.field--info .section-toggle-summary {
+  flex: 1 1 auto;
+  max-width: none;
+}
+
 .statut-summary {
   display: inline-flex;
   align-items: center;
@@ -3111,11 +3117,30 @@ body {
 
 .due-date-picker--start {
   flex: none;
-  width: 100%;
+  width: calc((100% - 8px) / 2);
+  max-width: calc((100% - 8px) / 2);
 }
 
 .due-date-trigger--start {
   cursor: pointer;
+}
+
+.due-date-trigger-chevron {
+  flex-shrink: 0;
+  align-self: center;
+  margin-left: auto;
+  font-size: 14px;
+  line-height: 1;
+  color: color-mix(in srgb, var(--text-muted) 62%, transparent);
+  transition: transform 0.18s ease, color 0.12s ease;
+}
+
+.due-date-trigger--start:hover .due-date-trigger-chevron {
+  color: var(--text-muted);
+}
+
+.field--due-date.is-start-open .due-date-trigger-chevron {
+  transform: rotate(180deg);
 }
 
 .field--due-date.is-start-open .due-date-trigger--start {

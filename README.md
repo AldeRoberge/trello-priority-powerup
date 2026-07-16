@@ -1,4 +1,4 @@
-# Priorité — Power-Up Trello
+# Cerveau — Power-Up Trello
 
 Power-Up Trello pour évaluer chaque carte selon **l'urgence**, **l'impact** et **la facilité** : score 0–10, palier (Critique → Optionnel) et badges colorés sur le tableau.
 
@@ -55,10 +55,25 @@ Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques
 ### Prérequis
 
 - Navigateur moderne pour les pages HTML
-- **Node.js** (optionnel) : `verify:version`, `stamp:build`
+- **Node.js 18+** : suite de tests, `verify:*`, `stamp:build`
 - **Windows + `cscript`** : `verify:presets` (formule de score sans dépendre du navigateur)
 
-### Vérifications
+### Tests et couverture
+
+```bash
+# Suite complète (unitaires + scripts sandbox/verify-*.js verts)
+npm test
+
+# Unitaires seulement (plus rapide)
+npm run test:unit
+
+# Unitaires + rapport de couverture V8 sur components/
+npm run test:coverage
+```
+
+Les tests vivent dans `test/` et chargent le JS de production via `require` (voir `test/helpers/load.js`) pour que la couverture instrumente les vrais fichiers. Le lanceur `scripts/run-tests.js` évite les problèmes de glob sous Windows.
+
+### Vérifications (sandbox)
 
 ```bash
 # Formule baseline, paliers et presets HEAT_SEGMENTS (Windows — cscript)
@@ -67,7 +82,7 @@ npm run verify:presets
 # Affichage de version / build-info (Node)
 npm run verify:version
 
-# Les deux
+# Jeu historique de verifies
 npm run verify
 ```
 
@@ -76,6 +91,8 @@ Sous Windows sans npm :
 ```bat
 cscript //nologo sandbox\verify-presets.js
 node sandbox\verify-version.js
+node scripts\run-tests.js
+node scripts\run-tests.js --coverage
 ```
 
 ### Bac à sable UI

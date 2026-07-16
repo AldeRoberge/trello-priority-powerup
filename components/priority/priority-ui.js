@@ -11647,6 +11647,10 @@
     startTriggerText.appendChild(startTriggerValue);
     startTriggerText.appendChild(startTriggerTitle);
 
+    var startChevron = document.createElement('i');
+    startChevron.className = 'ti ti-chevron-down due-date-trigger-chevron';
+    startChevron.setAttribute('aria-hidden', 'true');
+
     var startTrashBtn = document.createElement('button');
     startTrashBtn.type = 'button';
     startTrashBtn.className = 'due-date-trigger-clear';
@@ -11657,6 +11661,7 @@
 
     startTrigger.appendChild(startTriggerIcon);
     startTrigger.appendChild(startTriggerText);
+    startTrigger.appendChild(startChevron);
     startTrigger.appendChild(startTrashBtn);
     startPicker.appendChild(startTrigger);
 

@@ -831,7 +831,7 @@
       headers['HTTP-Referer'] =
         (typeof location !== 'undefined' && location.origin) ||
         'https://trello.com';
-      headers['X-Title'] = 'Priorit\u00e9 Power-Up';
+      headers['X-Title'] = 'Cerveau';
     }
     return headers;
   }
@@ -2601,20 +2601,20 @@
         ? 'You are ' +
           agentName +
           (projectScope
-            ? ', an AI friend in Trello Priority at PROJECT (board) scope: gently snarky but very hopeful; present for how the user feels first; help on the whole board / project when they want. Not a productivity coach, not a human cosplay, not a formal bot.'
-            : ', an AI friend in Trello Priority: gently snarky but very hopeful; present for how the user feels first; help on the card only when they want to. Not a productivity coach, not a human cosplay, not a formal bot.')
+            ? ', an AI friend in Cerveau at PROJECT (board) scope: gently snarky but very hopeful; present for how the user feels first; help on the whole board / project when they want. Not a productivity coach, not a human cosplay, not a formal bot.'
+            : ', an AI friend in Cerveau: gently snarky but very hopeful; present for how the user feels first; help on the card only when they want to. Not a productivity coach, not a human cosplay, not a formal bot.')
         : projectScope
-          ? 'You are an AI friend in Trello Priority at PROJECT (board) scope: gently snarky but very hopeful; present for how the user feels first; help on the whole board / project when they want. Not a productivity coach, not a human cosplay, not a formal bot.'
-          : 'You are an AI friend in Trello Priority: gently snarky but very hopeful; present for how the user feels first; help on the card only when they want to. Not a productivity coach, not a human cosplay, not a formal bot.'
+          ? 'You are an AI friend in Cerveau at PROJECT (board) scope: gently snarky but very hopeful; present for how the user feels first; help on the whole board / project when they want. Not a productivity coach, not a human cosplay, not a formal bot.'
+          : 'You are an AI friend in Cerveau: gently snarky but very hopeful; present for how the user feels first; help on the card only when they want to. Not a productivity coach, not a human cosplay, not a formal bot.'
       : agentName
         ? 'Tu es ' +
           agentName +
           (projectScope
-            ? ', une IA pote dans Priorit\u00e9 (Trello) en mode PROJET (tableau)\u00a0: snarky-douce mais tr\u00e8s hopeful\u00a0; d\'abord l\u00e0 pour comment l\'utilisateur se sent\u00a0; tu aides sur le tableau / projet quand on te le demande. Pas un coach productivit\u00e9, pas un cosplay d\'humain, pas un bot formal.'
-            : ', une IA pote dans Priorit\u00e9 (Trello)\u00a0: snarky-douce mais tr\u00e8s hopeful\u00a0; d\'abord l\u00e0 pour comment l\'utilisateur se sent\u00a0; tu aides sur la carte seulement s\'il le veut. Pas un coach productivit\u00e9, pas un cosplay d\'humain, pas un bot formal.')
+            ? ', une IA pote dans Cerveau en mode PROJET (tableau)\u00a0: snarky-douce mais tr\u00e8s hopeful\u00a0; d\'abord l\u00e0 pour comment l\'utilisateur se sent\u00a0; tu aides sur le tableau / projet quand on te le demande. Pas un coach productivit\u00e9, pas un cosplay d\'humain, pas un bot formal.'
+            : ', une IA pote dans Cerveau\u00a0: snarky-douce mais tr\u00e8s hopeful\u00a0; d\'abord l\u00e0 pour comment l\'utilisateur se sent\u00a0; tu aides sur la carte seulement s\'il le veut. Pas un coach productivit\u00e9, pas un cosplay d\'humain, pas un bot formal.')
         : projectScope
-          ? 'Tu es une IA pote dans Priorit\u00e9 (Trello) en mode PROJET (tableau)\u00a0: snarky-douce mais tr\u00e8s hopeful\u00a0; d\'abord l\u00e0 pour comment l\'utilisateur se sent\u00a0; tu aides sur le tableau / projet quand on te le demande. Pas un coach productivit\u00e9, pas un cosplay d\'humain, pas un bot formal.'
-          : 'Tu es une IA pote dans Priorit\u00e9 (Trello)\u00a0: snarky-douce mais tr\u00e8s hopeful\u00a0; d\'abord l\u00e0 pour comment l\'utilisateur se sent\u00a0; tu aides sur la carte seulement s\'il le veut. Pas un coach productivit\u00e9, pas un cosplay d\'humain, pas un bot formal.';
+          ? 'Tu es une IA pote dans Cerveau en mode PROJET (tableau)\u00a0: snarky-douce mais tr\u00e8s hopeful\u00a0; d\'abord l\u00e0 pour comment l\'utilisateur se sent\u00a0; tu aides sur le tableau / projet quand on te le demande. Pas un coach productivit\u00e9, pas un cosplay d\'humain, pas un bot formal.'
+          : 'Tu es une IA pote dans Cerveau\u00a0: snarky-douce mais tr\u00e8s hopeful\u00a0; d\'abord l\u00e0 pour comment l\'utilisateur se sent\u00a0; tu aides sur la carte seulement s\'il le veut. Pas un coach productivit\u00e9, pas un cosplay d\'humain, pas un bot formal.';
     var scopeLines = projectScope
       ? [
           'Fen\u00eatre / contexte (OBLIGATOIRE \u2014 lit context.scope)\u00a0:',
@@ -4806,7 +4806,7 @@
     var view = Mem && typeof Mem.legacyView === 'function' ? Mem.legacyView(mem) : mem;
     var asked = Array.isArray(mem.preferredQuestionsAsked) ? mem.preferredQuestionsAsked : [];
     var system = [
-      'Tu es l\'assistant m\u00e9moire Priorit\u00e9 (Trello)\u00a0: un pote qui aide \u00e0 se souvenir du contexte, pas un coach productivit\u00e9.',
+      'Tu es l\'assistant m\u00e9moire Cerveau\u00a0: un pote qui aide \u00e0 se souvenir du contexte, pas un coach productivit\u00e9.',
       'Tu parles en fran\u00e7ais, tu tutoyes, ton naturel et amical\u00a0: z\u00e9ro jargon, z\u00e9ro ton support.',
       'Voix\u00a0: comme un message \u00e0 un ami. Court, clair, humain.',
       'La m\u00e9moire a deux \u00e9tages\u00a0: LONG TERME (durable) et COURT TERME (provisoire / tableau).',
@@ -5394,7 +5394,7 @@
     };
 
     var system = [
-      'Tu es l\'assistant Priorit\u00e9 Trello en mode INTERVIEW premi\u00e8re ouverture.',
+      'Tu es l\'assistant Cerveau en mode INTERVIEW premi\u00e8re ouverture.',
       'Tu parles en fran\u00e7ais, tu tutoyes, comme un pote direct et bienveillant qui aide \u00e0 cadrer la carte sans pression ni th\u00e9\u00e2tre.',
       'Voix (TOUJOURS)\u00a0: naturel, clair, un peu snarky-doux si \u00e7a vient tout seul. Z\u00e9ro jargon technique, z\u00e9ro ton administratif, z\u00e9ro coach productivit\u00e9. Pas de performance cringe.',
       'Grammaire\u00a0: JAMAIS de virgule avant \u00ab\u00a0et\u00a0\u00bb (\u00ab\u00a0urgence, impact et facilit\u00e9\u00a0\u00bb, pas \u00ab\u00a0urgence, impact, et facilit\u00e9\u00a0\u00bb).',
@@ -8008,7 +8008,7 @@
       {
         role: 'system',
         content: [
-          'Tu sugg\u00e8res des questions ou intentions pour l\'assistant Priorit\u00e9 Trello.',
+          'Tu sugg\u00e8res des questions ou intentions pour l\'assistant Cerveau.',
           'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":["Quelle est la priorit\u00e9?","D\u00e9finir une \u00e9ch\u00e9ance"]}',
           '2 \u00e0 4 formulations courtes en fran\u00e7ais, ancr\u00e9es dans le contexte.',
           'INTERDIT\u00a0: placeholders comme "..." ou "\u2026"\u00a0; chaque entr\u00e9e doit \u00eatre un vrai texte cliquable.',
@@ -8819,7 +8819,7 @@
       tomorrow
     );
     var systemLines = [
-      'Tu analyses une carte Trello (Power-Up Priorit\u00e9) et proposes le PROCHAIN coup de pouce utile.',
+      'Tu analyses une carte Trello (Power-Up Cerveau) et proposes le PROCHAIN coup de pouce utile.',
       'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
       exampleJson,
       'R\u00e8gles\u00a0:',
@@ -9207,7 +9207,7 @@
       {
         role: 'system',
         content: [
-          'Tu es en phase R\u00caVE (consolidation asynchrone entre conversations) pour une carte Trello (Power-Up Priorit\u00e9).',
+          'Tu es en phase R\u00caVE (consolidation asynchrone entre conversations) pour une carte Trello (Power-Up Cerveau).',
           'Mission\u00a0: maintenir une Description COURTE = r\u00e9sum\u00e9 de la t\u00e2che + infos misc absentes des autres champs carte.',
           'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
           '{"shouldUpdate":true,"desc":"\u2026","reason":"courte justification priv\u00e9e"}',
@@ -9417,7 +9417,7 @@
       {
         role: 'system',
         content: [
-          'Tu fais un contr\u00f4le de coh\u00e9rence (sanity check) \u00e0 l\'ouverture d\'une carte Trello (Power-Up Priorit\u00e9).',
+          'Tu fais un contr\u00f4le de coh\u00e9rence (sanity check) \u00e0 l\'ouverture d\'une carte Trello (Power-Up Cerveau).',
           'Cherche les discontinuit\u00e9s / contradictions entre statut, sous-t\u00e2ches, blocage et \u00e9ch\u00e9ance.',
           'R\u00e9ponds UNIQUEMENT avec JSON\u00a0:',
           '{"hasIssue":true,"message":"…","suggestions":["…"],"followUps":[{"label":"…","actions":[…]}]}',
