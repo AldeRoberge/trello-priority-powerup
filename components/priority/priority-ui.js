@@ -6439,7 +6439,7 @@
 
       var iconWrap = document.createElement('div');
       iconWrap.className = 'statut-hero-icon';
-      iconWrap.appendChild(createStatutIcon(style.icon || 'dot', 56));
+      iconWrap.appendChild(createStatutIcon(style.icon || 'dot', 28));
 
       var nameEl = document.createElement('div');
       nameEl.className = 'statut-hero-name';
@@ -7012,6 +7012,10 @@
       typeof config.onTaskTypesChange === 'function'
         ? config.onTaskTypesChange
         : null;
+    var onDismissedTaskTypeSuggestionsChange =
+      typeof config.onDismissedTaskTypeSuggestionsChange === 'function'
+        ? config.onDismissedTaskTypeSuggestionsChange
+        : null;
     var bodyId = 'info-section-body-' + Math.random().toString(36).slice(2, 9);
     var titleText = typeof config.title === 'string' ? config.title : '';
     var descText = typeof config.desc === 'string' ? config.desc : '';
@@ -7072,6 +7076,9 @@
     var parentPickerOpen = false;
     var parentBoardCardsCache = null;
     var taskTypes = normalizeTaskTypes(config.taskTypes);
+    var dismissedTaskTypeSuggestions = normalizeTaskTypes(
+      config.dismissedTaskTypeSuggestions
+    );
     var taskTypesBusy = false;
     var taskTypesPickerOpen = false;
     var FIELD_SAVE_MS = 450;
@@ -7516,13 +7523,10 @@
     var taskTypesStatus = document.createElement('span');
     taskTypesStatus.className = 'info-desc-status';
     taskTypesStatus.setAttribute('aria-live', 'polite');
+    taskTypesStatus.hidden = true;
 
     taskTypesAddWrap.appendChild(taskTypesAddBtn);
     taskTypesAddWrap.appendChild(taskTypesPicker);
-    var taskTypesInline = document.createElement('div');
-    taskTypesInline.className = 'info-task-types-inline';
-    taskTypesInline.appendChild(taskTypesEl);
-    taskTypesInline.appendChild(taskTypesAddWrap);
 
     var taskTypesSuggestSection = document.createElement('div');
     taskTypesSuggestSection.className = 'info-task-types-suggestions';
@@ -7530,7 +7534,8 @@
     taskTypesSuggestSection.innerHTML =
       '<div class="info-task-types-suggestions-list" role="list"></div>' +
       '<button type="button" class="info-task-types-suggestions-refresh" ' +
-      'aria-label="Rafra\u00eechir les suggestions" title="Rafra\u00eechir">\u21bb</button>';
+      'aria-label="Rafra\u00eechir les suggestions" title="Rafra\u00eechir">' +
+      '<i class="ti ti-refresh" aria-hidden="true"></i></button>';
     var taskTypesSuggestRefreshBtn = taskTypesSuggestSection.querySelector(
       '.info-task-types-suggestions-refresh'
     );
@@ -7538,9 +7543,14 @@
       '.info-task-types-suggestions-list'
     );
 
+    var taskTypesInline = document.createElement('div');
+    taskTypesInline.className = 'info-task-types-inline';
+    taskTypesInline.appendChild(taskTypesEl);
+    taskTypesInline.appendChild(taskTypesSuggestSection);
+    taskTypesInline.appendChild(taskTypesAddWrap);
+
     taskTypesWrap.appendChild(taskTypesInline);
     taskTypesWrap.appendChild(taskTypesStatus);
-    taskTypesWrap.appendChild(taskTypesSuggestSection);
     taskTypesRow.value.appendChild(taskTypesWrap);
     body.appendChild(taskTypesRow.row);
 
@@ -9115,6 +9125,7 @@
 
     function setTaskTypesStatus(text, tone) {
       taskTypesStatus.textContent = text || '';
+      taskTypesStatus.hidden = !text;
       taskTypesStatus.classList.toggle('is-error', tone === 'error');
       taskTypesStatus.classList.toggle('is-saving', tone === 'saving');
     }
@@ -9275,8 +9286,18 @@
       taskTypes.forEach(function (id) {
         selected[id] = true;
       });
+      var dismissed = Object.create(null);
+      dismissedTaskTypeSuggestions.forEach(function (id) {
+        dismissed[id] = true;
+      });
       taskTypeSuggestions = taskTypeSuggestions.filter(function (row) {
-        return row && row.id && isValidTaskTypeId(row.id) && !selected[row.id];
+        return (
+          row &&
+          row.id &&
+          isValidTaskTypeId(row.id) &&
+          !selected[row.id] &&
+          !dismissed[row.id]
+        );
       });
     }
 
@@ -9294,20 +9315,81 @@
         var entry = TASK_TYPE_BY_ID[row.id];
         var label = (entry && entry.label) || row.label || row.id;
         var hint = (entry && entry.hint) || row.hint || '';
+
+        var chip = document.createElement('span');
+        chip.className = 'info-task-types-suggestion-chip';
+        chip.setAttribute('role', 'listitem');
+
         var btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'info-task-types-suggestion';
-        btn.setAttribute('role', 'listitem');
-        btn.title = hint ? 'Ajouter\u00a0: ' + label + ' \u2014 ' + hint : 'Ajouter\u00a0: ' + label;
+        btn.title = hint
+          ? 'Ajouter\u00a0: ' + label + ' \u2014 ' + hint
+          : 'Ajouter\u00a0: ' + label;
         btn.disabled = taskTypesBusy;
         btn.dataset.taskTypeId = row.id;
         btn.textContent = label;
         btn.addEventListener('click', function () {
           addTaskType(row.id);
         });
-        taskTypesSuggestListEl.appendChild(btn);
+
+        var dismissBtn = document.createElement('button');
+        dismissBtn.type = 'button';
+        dismissBtn.className = 'info-task-types-suggestion-dismiss';
+        dismissBtn.setAttribute('aria-label', 'Ignorer la suggestion ' + label);
+        dismissBtn.title = 'Ignorer';
+        dismissBtn.disabled = taskTypesBusy;
+        dismissBtn.innerHTML = '<i class="ti ti-x" aria-hidden="true"></i>';
+        dismissBtn.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          dismissTaskTypeSuggestion(row.id);
+        });
+
+        chip.appendChild(btn);
+        chip.appendChild(dismissBtn);
+        taskTypesSuggestListEl.appendChild(chip);
       });
       onLayoutChange();
+    }
+
+    function persistDismissedTaskTypeSuggestions(nextIds) {
+      var previous = dismissedTaskTypeSuggestions.slice();
+      var normalized = normalizeTaskTypes(nextIds);
+      dismissedTaskTypeSuggestions = normalized;
+      pruneTaskTypeSuggestions();
+      renderTaskTypeSuggestions();
+      if (!onDismissedTaskTypeSuggestionsChange) {
+        return Promise.resolve({ ok: true, changed: false });
+      }
+      return Promise.resolve(
+        onDismissedTaskTypeSuggestionsChange(normalized.slice())
+      )
+        .then(function (result) {
+          if (result && result.ok === false) {
+            dismissedTaskTypeSuggestions = previous;
+            renderTaskTypeSuggestions();
+          }
+          return result || { ok: true, changed: true };
+        })
+        .catch(function (err) {
+          console.error('Dismiss task type suggestion failed', err);
+          dismissedTaskTypeSuggestions = previous;
+          renderTaskTypeSuggestions();
+          throw err;
+        });
+    }
+
+    function dismissTaskTypeSuggestion(id) {
+      if (!isValidTaskTypeId(id)) return;
+      if (dismissedTaskTypeSuggestions.indexOf(id) >= 0) {
+        pruneTaskTypeSuggestions();
+        renderTaskTypeSuggestions();
+        return;
+      }
+      persistDismissedTaskTypeSuggestions(
+        dismissedTaskTypeSuggestions.concat([id])
+      );
     }
 
     function taskTypeSuggestionsContextKey() {
@@ -9360,12 +9442,18 @@
           taskTypes.forEach(function (id) {
             selected[id] = true;
           });
+          var dismissed = Object.create(null);
+          dismissedTaskTypeSuggestions.forEach(function (id) {
+            dismissed[id] = true;
+          });
           var seen = Object.create(null);
           taskTypeSuggestions = Array.isArray(list)
             ? list
                 .filter(function (row) {
                   if (!row || !row.id || !isValidTaskTypeId(row.id)) return false;
-                  if (selected[row.id] || seen[row.id]) return false;
+                  if (selected[row.id] || dismissed[row.id] || seen[row.id]) {
+                    return false;
+                  }
                   seen[row.id] = true;
                   return true;
                 })
@@ -10590,6 +10678,15 @@
       },
       getTaskTypes: function () {
         return taskTypes.slice();
+      },
+      setDismissedTaskTypeSuggestions: function (list) {
+        dismissedTaskTypeSuggestions = normalizeTaskTypes(list);
+        pruneTaskTypeSuggestions();
+        renderTaskTypeSuggestions();
+        onLayoutChange();
+      },
+      getDismissedTaskTypeSuggestions: function () {
+        return dismissedTaskTypeSuggestions.slice();
       },
       setRecap: function (next) {
         if (!next) return;

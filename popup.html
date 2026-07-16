@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=subtask-pop-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-5" />
-  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=overview-1" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=task-types-compact-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-scope-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
@@ -23,13 +23,13 @@
   </script>
   <script src="./components/shared/effects.js?v=fx-6"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=overview-1"></script>
+  <script src="./components/priority/priority-ui.js?v=task-types-compact-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
     }
   </script>
-  <script src="./components/priority/priority-trello.js?v=unblock-restore-1"></script>
+  <script src="./components/priority/priority-trello.js?v=task-types-dismiss-1"></script>
   <script src="./components/statut/statut-match.js?v=attente-hourglass-1"></script>
   <script src="./components/statut/statut-trello.js?v=encours-progress-1"></script>
   <script src="./components/shared/tab-autocomplete.js?v=tab-complete-1"></script>
@@ -1409,6 +1409,15 @@
               : [];
         infoUi.setTaskTypes(nextTypes);
       }
+      if (typeof infoUi.setDismissedTaskTypeSuggestions === 'function') {
+        var nextDismissed =
+          PriorityUI && typeof PriorityUI.normalizeTaskTypes === 'function'
+            ? PriorityUI.normalizeTaskTypes(state.dismissedTaskTypeSuggestions)
+            : Array.isArray(state.dismissedTaskTypeSuggestions)
+              ? state.dismissedTaskTypeSuggestions
+              : [];
+        infoUi.setDismissedTaskTypeSuggestions(nextDismissed);
+      }
       syncOverview(state);
     }
 
@@ -2266,6 +2275,34 @@
             return commitHistoryNow('Type de tâche modifié').then(function () {
               return { ok: true, changed: true, taskTypes: normalized };
             });
+          });
+        },
+        onDismissedTaskTypeSuggestionsChange: function (nextIds) {
+          var normalized =
+            PriorityUI && typeof PriorityUI.normalizeTaskTypes === 'function'
+              ? PriorityUI.normalizeTaskTypes(nextIds)
+              : Array.isArray(nextIds)
+                ? nextIds.slice()
+                : [];
+          var base =
+            (variant && typeof variant.getState === 'function'
+              ? variant.getState()
+              : null) ||
+            latestState ||
+            {};
+          var next = Object.assign({}, base, {
+            dismissedTaskTypeSuggestions: normalized,
+          });
+          if (variant && typeof variant.setState === 'function') {
+            variant.setState(next, { preserveCollapse: true, silent: true });
+          }
+          latestState = Object.assign({}, next);
+          return Promise.resolve(saveState(next)).then(function () {
+            return {
+              ok: true,
+              changed: true,
+              dismissedTaskTypeSuggestions: normalized,
+            };
           });
         },
       });

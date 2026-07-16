@@ -1741,7 +1741,7 @@ body {
 .info-task-types-wrap {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -1749,14 +1749,14 @@ body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
   min-width: 0;
 }
 
 .info-task-types {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   flex: 0 1 auto;
   min-width: 0;
@@ -2289,11 +2289,12 @@ body {
 
 /* ── Task type AI suggestions ── */
 .info-task-types-suggestions {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 6px;
   min-width: 0;
+  flex: 0 1 auto;
 }
 
 .info-task-types-suggestions[hidden] {
@@ -2303,14 +2304,25 @@ body {
 .info-task-types-suggestions-refresh {
   appearance: none;
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
   border: none;
+  border-radius: 6px;
   background: transparent;
   color: var(--text-muted, var(--text-secondary));
   font-size: 14px;
   line-height: 1;
-  padding: 2px 4px;
-  border-radius: 6px;
   cursor: pointer;
+}
+
+.info-task-types-suggestions-refresh .ti {
+  font-size: 14px;
+  line-height: 1;
 }
 
 .info-task-types-suggestions-refresh:hover {
@@ -2319,38 +2331,98 @@ body {
 }
 
 .info-task-types-suggestions-list {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+}
+
+.info-task-types-suggestion-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  max-width: 100%;
+  min-height: 26px;
+  padding: 0 2px 0 0;
+  border-radius: 999px;
+  border: 1px dashed color-mix(in srgb, var(--tp-primary, #0c66e4) 45%, var(--border));
+  background: color-mix(in srgb, var(--tp-primary, #0c66e4) 8%, transparent);
+  box-sizing: border-box;
 }
 
 .info-task-types-suggestion {
   appearance: none;
   display: inline-flex;
   align-items: center;
-  max-width: 100%;
+  max-width: 160px;
   margin: 0;
-  padding: 4px 10px;
-  border: 1px dashed color-mix(in srgb, var(--tp-primary, #0c66e4) 45%, var(--border));
+  padding: 3px 6px 3px 10px;
+  border: none;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--tp-primary, #0c66e4) 8%, transparent);
+  background: transparent;
   color: var(--text-primary);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.2;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .info-task-types-suggestion:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--tp-primary, #0c66e4) 14%, transparent);
+  background: color-mix(in srgb, var(--tp-primary, #0c66e4) 10%, transparent);
 }
 
 .info-task-types-suggestion:disabled {
   opacity: 0.55;
+  cursor: default;
+}
+
+.info-task-types-suggestion-dismiss {
+  appearance: none;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  margin: 0 2px 0 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.85;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.info-task-types-suggestion-dismiss .ti {
+  display: block;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.info-task-types-suggestion-dismiss:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  color: var(--text-primary);
+  opacity: 1;
+}
+
+.info-task-types-suggestion-dismiss:focus-visible {
+  outline: 2px solid var(--tp-primary, #0c66e4);
+  outline-offset: 1px;
+}
+
+.info-task-types-suggestion-dismiss:disabled {
+  opacity: 0.45;
   cursor: default;
 }
 
@@ -2923,17 +2995,19 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 96px;
-  height: 96px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   color: var(--statut-color, #626f86);
   background: color-mix(in srgb, var(--statut-color, #626f86) 16%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--statut-color, #626f86) 28%, transparent);
 }
 
-.statut-hero-icon .statut-list-option-icon {
-  width: 56px;
-  height: 56px;
+/* Beat .field--statut-embedded .statut-list-option-icon (chip size) for the hero. */
+.statut-hero-icon .statut-list-option-icon,
+.field--statut-embedded .statut-hero-icon .statut-list-option-icon {
+  width: 28px;
+  height: 28px;
   color: inherit;
 }
 

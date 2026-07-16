@@ -276,6 +276,21 @@
     if (taskTypes.length) normalized.taskTypes = taskTypes;
     if (raw.taskTypesLocked === true) normalized.taskTypesLocked = true;
 
+    var dismissedTaskTypeSuggestions =
+      PUTypes && typeof PUTypes.normalizeTaskTypes === 'function'
+        ? PUTypes.normalizeTaskTypes(raw.dismissedTaskTypeSuggestions)
+        : (function () {
+            if (!Array.isArray(raw.dismissedTaskTypeSuggestions)) return [];
+            return raw.dismissedTaskTypeSuggestions
+              .map(function (id) {
+                return typeof id === 'string' ? id.trim() : '';
+              })
+              .filter(Boolean);
+          })();
+    if (dismissedTaskTypeSuggestions.length) {
+      normalized.dismissedTaskTypeSuggestions = dismissedTaskTypeSuggestions;
+    }
+
     return normalized;
   }
 
@@ -314,6 +329,13 @@
       cleared.taskTypes = inputs.taskTypes.slice();
     }
     if (inputs.taskTypesLocked === true) cleared.taskTypesLocked = true;
+    if (
+      Array.isArray(inputs.dismissedTaskTypeSuggestions) &&
+      inputs.dismissedTaskTypeSuggestions.length
+    ) {
+      cleared.dismissedTaskTypeSuggestions =
+        inputs.dismissedTaskTypeSuggestions.slice();
+    }
     return cleared;
   }
 
