@@ -1972,10 +1972,6 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   margin: 0;
 }
 
-.tp-completion-progress-panel.is-collapsed .tp-completion-progress-hero {
-  gap: 6px;
-}
-
 .tp-completion-progress-panel.is-collapsed .tp-completion-master-title {
   margin: 0;
   font-size: 14px;
@@ -1985,7 +1981,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   margin: -4px -6px;
   padding: 4px 6px;
@@ -2012,7 +2008,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   outline-offset: 1px;
 }
 
-.tp-completion-details-toggle .tp-completion-progress-hero {
+.tp-completion-details-toggle .tp-completion-master-title {
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -2020,7 +2016,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 .tp-completion-details-chevron {
   flex: 0 0 auto;
   display: block;
-  margin-top: 6px;
+  margin-top: 0;
   font-size: 14px;
   line-height: 1;
   color: color-mix(in srgb, var(--tp-text-muted) 72%, transparent);
@@ -2036,7 +2032,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-completion-progress-panel.is-collapsed .tp-completion-details-chevron {
-  margin-top: 4px;
+  margin-top: 0;
 }
 
 .tp-completion-reasons-summary {
@@ -2138,14 +2134,6 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 .tp-completion-complete-all[hidden],
 .tp-completion-reset-all[hidden] {
   display: none;
-}
-
-.tp-completion-progress-hero {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  flex: 1 1 auto;
 }
 
 .tp-completion-master-title {
@@ -3433,7 +3421,21 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
   opacity: 1;
 }
 
+/* Progress pie uses the same red as the II bars — switch to white so pause pops. */
 .tp-completion-check.is-blocked.has-progress:not(.is-checked) {
+  background: transparent;
+  color: #fff;
+}
+
+.tp-completion-check.is-blocked.has-progress:not(.is-checked) .tp-completion-pause-icon {
+  filter:
+    drop-shadow(0 0 1px color-mix(in srgb, var(--blocked-accent, #ae2e24) 70%, #000))
+    drop-shadow(0 0 0.5px rgba(0, 0, 0, 0.55));
+}
+
+.tp-completion-check-wrap:hover .tp-completion-check.is-blocked.has-progress:not(.is-checked),
+.tp-completion-check.is-blocked.has-progress:not(.is-checked):hover {
+  color: #fff;
   background: transparent;
 }
 
@@ -3530,6 +3532,12 @@ html[data-color-mode="dark"] .tp-completion-check:hover:not(.is-checked) {
   border-color: var(--completion-check-fill);
   background: color-mix(in srgb, var(--completion-check-fill) 12%, transparent);
   color: var(--completion-check-fill);
+}
+
+html[data-color-mode="dark"] .tp-completion-check-wrap:hover .tp-completion-check.is-blocked.has-progress:not(.is-checked),
+html[data-color-mode="dark"] .tp-completion-check.is-blocked.has-progress:not(.is-checked):hover {
+  color: #fff;
+  background: transparent;
 }
 
 html[data-color-mode="dark"] .tp-completion-check.is-checked,

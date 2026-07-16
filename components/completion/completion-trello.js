@@ -1487,6 +1487,44 @@
     if (allComplete && !suppressed) {
       var markResult = await PT.setCardDueComplete(t, true);
       if (markResult && markResult.ok) {
+        if (markResult.rolled) {
+          var reopened = markNotFullyComplete(data);
+          await saveCardCompletion(t, reopened);
+          await setMarkedDueCompleteFlag(t, false);
+          await setDueCompleteSuppressed(t, false);
+          var rolledStatutRestore = null;
+          if (
+            global.StatutTrello &&
+            typeof global.StatutTrello.restorePreviousStatutFromIncomplete === 'function'
+          ) {
+            try {
+              rolledStatutRestore =
+                await global.StatutTrello.restorePreviousStatutFromIncomplete(t);
+            } catch (rolledRestoreErr) {
+              dbgError('completionTrello', 'syncDueComplete.rolledRestoreStatut', rolledRestoreErr);
+              rolledStatutRestore = {
+                ok: false,
+                restored: false,
+                reason: 'restore-threw',
+              };
+            }
+          }
+          dbgLog('completionTrello', 'syncDueComplete', {
+            outcome: 'rolled',
+            allComplete: true,
+            changed: !!markResult.changed,
+          });
+          return {
+            allComplete: false,
+            synced: true,
+            changed: !!markResult.changed,
+            dueComplete: false,
+            rolled: true,
+            inputs: markResult.inputs || null,
+            completion: reopened,
+            statutRestore: rolledStatutRestore,
+          };
+        }
         await setMarkedDueCompleteFlag(t, true);
         dbgLog('completionTrello', 'syncDueComplete', {
           outcome: markResult.changed ? 'marked' : 'no-op',

@@ -119,6 +119,45 @@ describe('Completion progress', () => {
     assert.equal(out.progress, 55);
   });
 
+  it('syncCardDueCompleteFromProgress reopens rolled recurring tasks', async () => {
+    const previousPT = global.PriorityTrello;
+    const previousStatut = global.StatutTrello;
+    const store = new Map();
+    const t = {
+      async get(_scope, _vis, key) {
+        return store.get(key);
+      },
+      async set(_scope, _vis, key, value) {
+        store.set(key, value);
+      },
+    };
+
+    global.PriorityTrello = {
+      setCardDueComplete: async () => ({
+        ok: true,
+        changed: true,
+        rolled: true,
+        dueComplete: false,
+        inputs: { dueDate: '2026-07-17', dueTime: '08:00' },
+      }),
+    };
+    global.StatutTrello = {
+      restorePreviousStatutFromIncomplete: async () => ({ ok: true, restored: true }),
+    };
+
+    try {
+      const result = await CT.syncCardDueCompleteFromProgress(t, { items: [], progress: 100 });
+      assert.equal(result.rolled, true);
+      assert.equal(result.dueComplete, false);
+      assert.equal(result.completion.progress, 0);
+      assert.equal(store.get(CT.CARD_COMPLETION_KEY).progress, 0);
+      assert.equal(store.get(CT.COMPLETION_MARKED_DUE_COMPLETE_KEY), false);
+    } finally {
+      global.PriorityTrello = previousPT;
+      global.StatutTrello = previousStatut;
+    }
+  });
+
   it('applyMasterProgress preserves item blocked flags (not done)', () => {
     const scaled = CT.applyMasterProgress(
       [

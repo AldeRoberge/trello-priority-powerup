@@ -16,12 +16,14 @@ describe('PriorityAgent status brief', () => {
     assert.equal(typeof Agent.buildStatusBriefSnapshot, 'function');
     assert.equal(typeof Agent.buildHeuristicStatusBrief, 'function');
     assert.equal(typeof Agent.fingerprintStatusBriefSnapshot, 'function');
+    assert.equal(typeof Agent.isVacuousStatusBrief, 'function');
   });
 
   function snap(overrides) {
     return Object.assign(
       {
         cardName: 'Task',
+        cardDesc: '',
         phase: 'not_started',
         stuck: false,
         statutCategory: null,
@@ -261,6 +263,76 @@ describe('PriorityAgent status brief', () => {
     );
     assert.match(sentence, /montage/i);
     assert.doesNotMatch(sentence, /47|09|septembre|échéance/i);
+  });
+
+  it('buildStatusBriefSnapshot walks nested open items', () => {
+    const snapshot = Agent.buildStatusBriefSnapshot({
+      cardName: 'Campagne lancement',
+      cardDesc: 'Publier la landing + brief presse.',
+      progress: {
+        percent: 40,
+        doneCount: 1,
+        totalCount: 2,
+        items: [
+          {
+            text: 'Préparer le brief',
+            done: false,
+            items: [
+              { text: 'Collecter inputs', done: true },
+              { text: 'Rédiger draft', done: false },
+            ],
+          },
+        ],
+      },
+      statut: { category: 'started' },
+      due: { enabled: true, dueDate: '2026-07-17' },
+      ownership: {
+        members: [{ id: 'me', fullName: 'Alex' }],
+        you: { id: 'me', fullName: 'Alex' },
+        youAssigned: true,
+        unassigned: false,
+        assigneeCount: 1,
+      },
+      display: { duePast: false, dueCountdown: 'Demain' },
+      today: '2026-07-16',
+    });
+    assert.equal(snapshot.cardName, 'Campagne lancement');
+    assert.match(snapshot.cardDesc, /landing/i);
+    assert.deepEqual(snapshot.nextOpenItems, ['Rédiger draft']);
+  });
+
+  it('heuristic: in progress without next item names the card, not scale fluff', () => {
+    const sentence = Agent.buildHeuristicStatusBrief(
+      snap({
+        cardName: 'Fix login SSO',
+        phase: 'in_progress',
+        youAssigned: true,
+        unassigned: false,
+        scale: 'petit',
+        dueSoon: true,
+        dueCountdown: 'Demain',
+        nextOpenItems: [],
+        subtasksOpen: 0,
+      })
+    );
+    assert.match(sentence, /\u00c0 toi|À toi/i);
+    assert.match(sentence, /Fix login SSO|login/i);
+    assert.match(sentence, /demain/i);
+    assert.doesNotMatch(sentence, /petit reste|travail encore ouvert/i);
+  });
+
+  it('isVacuousStatusBrief rejects empty scale fluff', () => {
+    assert.equal(typeof Agent.isVacuousStatusBrief, 'function');
+    assert.equal(
+      Agent.isVacuousStatusBrief('À toi — petit reste à finir ; demain.'),
+      true
+    );
+    assert.equal(
+      Agent.isVacuousStatusBrief(
+        'À toi — prochaine : finaliser le montage ; demain à 14 h.'
+      ),
+      false
+    );
   });
 
   it('fingerprint changes when ownership changes', () => {

@@ -158,8 +158,23 @@
     'communication',
     'deliverable',
     'process',
-    'thinking'
+    'thinking',
+    'material',
+    'learning',
+    'admin',
+    'creative',
+    'finance'
   ];
+
+  function agentTaskTypeCatalog() {
+    if (
+      typeof PriorityUI !== 'undefined' &&
+      typeof PriorityUI.getTaskTypeCatalog === 'function'
+    ) {
+      return PriorityUI.getTaskTypeCatalog();
+    }
+    return TASK_TYPE_CATALOG;
+  }
 
   function normalizeAgentTaskTypes(raw) {
     if (
@@ -177,7 +192,11 @@
     var seen = Object.create(null);
     for (var i = 0; i < list.length; i++) {
       var id = typeof list[i] === 'string' ? list[i].trim() : '';
-      if (!id || seen[id] || TASK_TYPE_IDS.indexOf(id) < 0) continue;
+      if (!id || seen[id]) continue;
+      var known =
+        TASK_TYPE_IDS.indexOf(id) >= 0 ||
+        /^custom-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id);
+      if (!known) continue;
       seen[id] = true;
       out.push(id);
     }
@@ -3022,7 +3041,7 @@
       '- Ex. projet\u00a0: user \u00ab\u00a0Lie au projet Sport 2026\u00a0\u00bb \u2192 {"message":"Okay, li\u00e9e \u00e0 Sport 2026.","suggestions":["Quelle est la priorit\u00e9?","Ajouter une sous-t\u00e2che"],"followUps":[],"actions":[{"tool":"set_project","args":{"matchText":"Sport 2026"}}]}',
       '- Ex. d\u00e9lier projet\u00a0: user \u00ab\u00a0Enl\u00e8ve le projet\u00a0\u00bb \u2192 {"message":"Okay, projet d\u00e9li\u00e9.","suggestions":["Lier un projet","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_project","args":{"clear":true}}]}',
       'Type de t\u00e2che (context.taskTypes, multi)\u00a0:',
-      '- Ids\u00a0: action|project|recurring|exploratory|emotional|communication|deliverable|process|thinking.',
+      '- Ids\u00a0: action|project|recurring|exploratory|emotional|communication|deliverable|process|thinking|material|learning|admin|creative|finance (+ custom-* du tableau).',
       '- Adapte ton langage\u00a0: ne parle PAS de \u00ab\u00a0livrer\u00a0\u00bb / produit final si deliverable n\'est pas dans context.taskTypes.',
       '- Si types vides et unlocked\u00a0: tu peux classer en silence avec set_task_types. Si taskTypesLocked=true\u00a0: ne change que sur demande explicite (+ force:true).',
       '',
@@ -3092,7 +3111,7 @@
       '- Pour marquer bloqu\u00e9\u00a0: set_blocked avec enAttente:true tout de suite (causes ensuite si fournies). Ne dis jamais que c\'est d\u00e9j\u00e0 bloqu\u00e9 si enabled=false.',
       'Outils disponibles\u00a0:',
       '- set_priority: { urgency?:0-4, impact?:0-4, ease?:1-5, priorityEnabled?:boolean, tier?: string, heatTarget?: number } (tier = Critique|Urgente|Prioritaire|Importante|Flexible|Secondaire|Optionnelle\u00a0; impact 0\u20134 = port\u00e9e Personnel\u2026Global). Legacy estimatedDuration* \u2192 redirig\u00e9 vers set_progress_estimate.',
-      '- set_task_types: { types: string[], force?: boolean } (multi\u00a0; ids\u00a0: action|project|recurring|exploratory|emotional|communication|deliverable|process|thinking). Lit context.taskTypes. Si taskTypesLocked=true, n\'\u00e9crase PAS sauf demande explicite + force:true. Ne suppose PAS qu\'une carte est un livrable\u00a0; adapte ton langage (urgence / cadrage) aux types.',
+      '- set_task_types: { types: string[], force?: boolean } (multi\u00a0; ids\u00a0: action|project|recurring|exploratory|emotional|communication|deliverable|process|thinking|material|learning|admin|creative|finance|custom-*). Lit context.taskTypes. Si taskTypesLocked=true, n\'\u00e9crase PAS sauf demande explicite + force:true. Ne suppose PAS qu\'une carte est un livrable\u00a0; adapte ton langage (urgence / cadrage) aux types.',
       '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean, relativeMinutes?: number, relativeHours?: number } (dueTime OPTIONNEL pour une date\u00a0; d\u00e9lai \u00ab\u00a0dans N min/h\u00a0\u00bb \u2192 relativeMinutes/relativeHours, calcul\u00e9 depuis context.nowTime\u00a0; aujourd\'hui = context.today)',
       '- set_blocked: { enAttente?: boolean, blockedReasons?: string[], blockedLinks?: [{id?:string, matchText?:string, label?:string}] } (enAttente:true seul suffit\u00a0; causes et liens optionnels\u00a0; synchronise Progr\u00e8s blocked\u00a0; si progr\u00e8s \u00e0 100%, le runtime le remet \u00e0 0% \u2014 ajoute aussi set_progress)',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (master sur sous-t\u00e2ches si items\u00a0; sinon progres carte)',
@@ -4434,7 +4453,12 @@
     { id: 'communication', label: 'Communication', hint: 'Communication / relationnel' },
     { id: 'deliverable', label: 'Livrable', hint: 'Livrable / produit' },
     { id: 'process', label: 'Processus', hint: 'Processus / maintenance' },
-    { id: 'thinking', label: 'R\u00e9flexion', hint: 'R\u00e9flexion / d\u00e9cisions' }
+    { id: 'thinking', label: 'R\u00e9flexion', hint: 'R\u00e9flexion / d\u00e9cisions' },
+    { id: 'material', label: 'Mat\u00e9riel', hint: 'Achat / \u00e9quipement / fournitures' },
+    { id: 'learning', label: 'Apprentissage', hint: 'Formation / \u00e9tude / comp\u00e9tences' },
+    { id: 'admin', label: 'Administratif', hint: 'Paperasse / formalit\u00e9s / admin' },
+    { id: 'creative', label: 'Cr\u00e9atif', hint: 'Cr\u00e9ation / design / contenu' },
+    { id: 'finance', label: 'Financier', hint: 'Budget / paiement / argent' }
   ];
 
   function normalizeBoardLabelRef(raw) {
@@ -4538,7 +4562,12 @@
       { id: 'thinking', re: /\b(reflech|decid|penser|strategie|brainstorm|planifier)\b/ },
       { id: 'process', re: /\b(process|maintenance|menage|ranger|nettoyer|ops|procedure)\b/ },
       { id: 'emotional', re: /\b(emotion|stress|anxi|psy|confiance|motivation)\b/ },
-      { id: 'action', re: /\b(faire|acheter|installer|envoyer|fixer|completer|terminer)\b/ }
+      { id: 'material', re: /\b(materiel|fourniture|equipement|outil|stock|commander|achat|acheter)\b/ },
+      { id: 'learning', re: /\b(apprend|formation|cours|etudier|tutoriel|competence|certif)\b/ },
+      { id: 'admin', re: /\b(administratif|paperasse|formulaire|declaration|formalit)\b/ },
+      { id: 'creative', re: /\b(creatif|design|dessin|illustration|montage|maquette|contenu)\b/ },
+      { id: 'finance', re: /\b(budget|payer|paiement|facture|argent|finance|cout|devis)\b/ },
+      { id: 'action', re: /\b(faire|installer|envoyer|fixer|completer|terminer)\b/ }
     ];
     var out = [];
     for (var i = 0; i < rules.length; i++) {
@@ -4770,7 +4799,8 @@
     (Array.isArray(ctx.existingTypes) ? ctx.existingTypes : []).forEach(function (id) {
       if (id) existing[String(id)] = true;
     });
-    var catalog = TASK_TYPE_CATALOG.filter(function (entry) {
+    var fullCatalog = agentTaskTypeCatalog();
+    var catalog = fullCatalog.filter(function (entry) {
       return !existing[entry.id];
     });
     var fallback = heuristicTaskTypeSuggestions(ctx)
@@ -4779,9 +4809,9 @@
       })
       .map(function (row) {
         var entry = null;
-        for (var i = 0; i < TASK_TYPE_CATALOG.length; i++) {
-          if (TASK_TYPE_CATALOG[i].id === row.id) {
-            entry = TASK_TYPE_CATALOG[i];
+        for (var i = 0; i < fullCatalog.length; i++) {
+          if (fullCatalog[i].id === row.id) {
+            entry = fullCatalog[i];
             break;
           }
         }
@@ -6715,7 +6745,7 @@
     }
     if (action.tool === 'set_task_types') {
       return (
-        'set_task_types: types requis (action|project|recurring|exploratory|emotional|communication|deliverable|process|thinking)'
+        'set_task_types: types requis (action|project|recurring|exploratory|emotional|communication|deliverable|process|thinking|material|learning|admin|creative|finance|custom-*)'
       );
     }
     return action.tool + ': args incomplets';
@@ -9584,12 +9614,78 @@
   }
 
   var MAX_STATUS_BRIEF_LEN = 140;
+  var MAX_STATUS_BRIEF_DESC_LEN = 160;
 
   function firstNameFromFullName(fullName) {
     var s = String(fullName || '').trim();
     if (!s) return '';
     var part = s.split(/\s+/)[0] || '';
     return part.length > 24 ? part.slice(0, 24) : part;
+  }
+
+  function truncateStatusBriefLabel(text, maxLen) {
+    var s = String(text || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!s) return '';
+    var lim = maxLen || 60;
+    if (s.length <= lim) return s;
+    return s.slice(0, lim - 1).replace(/[,:;\-–—\s]+$/, '') + '\u2026';
+  }
+
+  /** Short plain excerpt of the card description for the status brief. */
+  function excerptStatusBriefDesc(desc) {
+    var s = String(desc || '')
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/#{1,6}\s+/g, '')
+      .replace(/[*_`>~]+/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return truncateStatusBriefLabel(s, MAX_STATUS_BRIEF_DESC_LEN);
+  }
+
+  /**
+   * Prefer concrete open leaf work; fall back to open parents.
+   * Walks nested checklist items (items/children).
+   */
+  function collectStatusBriefNextOpenItems(items, max) {
+    var out = [];
+    var limit = max || 2;
+    function itemText(it) {
+      if (!it || typeof it !== 'object') return '';
+      if (typeof it.text === 'string') return it.text.trim();
+      if (typeof it.name === 'string') return it.name.trim();
+      return '';
+    }
+    function kidsOf(it) {
+      if (!it || typeof it !== 'object') return null;
+      if (Array.isArray(it.items) && it.items.length) return it.items;
+      if (Array.isArray(it.children) && it.children.length) return it.children;
+      return null;
+    }
+    function hasOpenKid(kids) {
+      if (!kids) return false;
+      for (var i = 0; i < kids.length; i++) {
+        if (kids[i] && !kids[i].done) return true;
+      }
+      return false;
+    }
+    function walk(list) {
+      if (!Array.isArray(list) || out.length >= limit) return;
+      for (var i = 0; i < list.length && out.length < limit; i++) {
+        var it = list[i];
+        if (!it || typeof it !== 'object' || it.done) continue;
+        var kids = kidsOf(it);
+        if (hasOpenKid(kids)) {
+          walk(kids);
+          continue;
+        }
+        var text = truncateStatusBriefLabel(itemText(it), 60);
+        if (text) out.push(text);
+      }
+    }
+    walk(items);
+    return out;
   }
 
   /**
@@ -9663,18 +9759,10 @@
         ? progress.estimatedRemainingMinutes
         : null;
 
-    var nextOpenItems = [];
-    if (progress && Array.isArray(progress.items)) {
-      nextOpenItems = progress.items
-        .map(function (it) {
-          if (!it || typeof it !== 'object' || it.done) return null;
-          var text = typeof it.text === 'string' ? it.text.trim() : '';
-          if (!text) return null;
-          return text.length > 60 ? text.slice(0, 57) + '\u2026' : text;
-        })
-        .filter(Boolean)
-        .slice(0, 2);
-    }
+    var nextOpenItems = collectStatusBriefNextOpenItems(
+      progress && Array.isArray(progress.items) ? progress.items : [],
+      2
+    );
 
     var dueEnabled = !(due && due.enabled === false);
     var dueDate = due && due.dueDate ? String(due.dueDate) : '';
@@ -9762,8 +9850,17 @@
       .filter(Boolean)
       .slice(0, 3);
 
+    var cardName =
+      context && context.cardName
+        ? truncateStatusBriefLabel(String(context.cardName), 72)
+        : '';
+    var cardDesc = excerptStatusBriefDesc(
+      context && context.cardDesc ? context.cardDesc : ''
+    );
+
     return {
-      cardName: context && context.cardName ? String(context.cardName) : '',
+      cardName: cardName,
+      cardDesc: cardDesc,
       phase: phase,
       stuck: stuck,
       statutCategory: category || null,
@@ -9795,7 +9892,9 @@
     if (!snapshot || typeof snapshot !== 'object') return '';
     try {
       return JSON.stringify({
-        v: 2,
+        v: 3,
+        cardName: snapshot.cardName || '',
+        cardDesc: snapshot.cardDesc || '',
         phase: snapshot.phase,
         stuck: !!snapshot.stuck,
         statutCategory: snapshot.statutCategory || null,
@@ -9896,7 +9995,8 @@
 
   /**
    * Deterministic French boss-style status sentence when AI is unavailable.
-   * Substance first: next work / blocker / owner / due gap. No cheerleading, no %.
+   * Substance first: next work / card topic / blocker / owner / due gap.
+   * Never empty scale fluff (« petit reste à finir »).
    */
   function buildHeuristicStatusBrief(snapshot) {
     if (!snapshot || typeof snapshot !== 'object') return '';
@@ -9921,6 +10021,8 @@
       snapshot.subtasksOpen != null && isFinite(+snapshot.subtasksOpen)
         ? Math.max(0, Math.round(+snapshot.subtasksOpen))
         : null;
+    var topic = truncateStatusBriefLabel(snapshot.cardName || '', 42);
+    var descHint = truncateStatusBriefLabel(snapshot.cardDesc || '', 48);
 
     var who = you
       ? '\u00c0 toi'
@@ -9935,7 +10037,9 @@
     var sentence = '';
     if (snapshot.phase === 'done') {
       sentence = you
-        ? 'Termin\u00e9 de ton c\u00f4t\u00e9.'
+        ? 'Termin\u00e9 de ton c\u00f4t\u00e9' +
+          (topic ? ' (\u00ab\u00a0' + topic + '\u00a0\u00bb)' : '') +
+          '.'
         : 'Marqu\u00e9 termin\u00e9' + (other ? ' (chez ' + other + ')' : '') + '.';
     } else if (snapshot.stuck || snapshot.phase === 'stuck') {
       if (you) {
@@ -9957,6 +10061,15 @@
       var workBit = '';
       if (next) {
         workBit = 'prochaine\u00a0: ' + next;
+      } else if (topic) {
+        workBit =
+          scale === 'petit'
+            ? 'petit fix \u00ab\u00a0' + topic + '\u00a0\u00bb encore ouvert'
+            : scale === 'gros'
+              ? 'gros chantier \u00ab\u00a0' + topic + '\u00a0\u00bb encore ouvert'
+              : '\u00ab\u00a0' + topic + '\u00a0\u00bb encore ouvert';
+      } else if (descHint) {
+        workBit = 'encore ouvert\u00a0: ' + descHint;
       } else if (open != null && open > 0) {
         workBit =
           open === 1
@@ -9964,10 +10077,8 @@
             : open + ' sous-t\u00e2ches restantes';
       } else if (scale === 'gros') {
         workBit = 'gros chantier encore ouvert';
-      } else if (scale === 'petit') {
-        workBit = 'petit reste \u00e0 finir';
       } else {
-        workBit = 'travail encore ouvert';
+        workBit = 'encore en cours, d\u00e9tail flou';
       }
       sentence = who + ' \u2014 ' + workBit;
       if (dueGap) sentence += ' ; ' + dueGap;
@@ -9976,20 +10087,46 @@
       // not_started / idle
       if (you) {
         if (dueGap === 'pas d\'\u00e9ch\u00e9ance') {
-          sentence = '\u00c0 toi \u2014 pas commenc\u00e9, et pas d\'\u00e9ch\u00e9ance.';
+          sentence =
+            '\u00c0 toi \u2014 pas commenc\u00e9' +
+            (topic ? ' sur \u00ab\u00a0' + topic + '\u00a0\u00bb' : '') +
+            ', et pas d\'\u00e9ch\u00e9ance.';
         } else if (dueGap === 'en retard') {
-          sentence = '\u00c0 toi \u2014 pas commenc\u00e9 et d\u00e9j\u00e0 en retard.';
+          sentence =
+            '\u00c0 toi \u2014 pas commenc\u00e9' +
+            (topic ? ' sur \u00ab\u00a0' + topic + '\u00a0\u00bb' : '') +
+            ' et d\u00e9j\u00e0 en retard.';
         } else if (dueGap) {
-          sentence = '\u00c0 toi \u2014 pas commenc\u00e9 ; ' + dueGap + '.';
-        } else if (scale === 'petit') {
-          sentence = '\u00c0 toi \u2014 petit fix pas encore commenc\u00e9.';
-        } else if (scale === 'gros') {
-          sentence = '\u00c0 toi \u2014 gros chantier pas encore lanc\u00e9.';
+          sentence =
+            '\u00c0 toi \u2014 pas commenc\u00e9' +
+            (topic ? ' sur \u00ab\u00a0' + topic + '\u00a0\u00bb' : '') +
+            ' ; ' +
+            dueGap +
+            '.';
         } else if (next) {
           sentence =
             '\u00c0 toi \u2014 pas commenc\u00e9 ; premi\u00e8re \u00e9tape\u00a0: ' +
             next +
             '.';
+        } else if (topic && scale === 'petit') {
+          sentence =
+            '\u00c0 toi \u2014 petit fix \u00ab\u00a0' +
+            topic +
+            '\u00a0\u00bb pas encore commenc\u00e9.';
+        } else if (topic && scale === 'gros') {
+          sentence =
+            '\u00c0 toi \u2014 gros chantier \u00ab\u00a0' +
+            topic +
+            '\u00a0\u00bb pas encore lanc\u00e9.';
+        } else if (topic) {
+          sentence =
+            '\u00c0 toi \u2014 \u00ab\u00a0' +
+            topic +
+            '\u00a0\u00bb pas encore commenc\u00e9.';
+        } else if (scale === 'petit') {
+          sentence = '\u00c0 toi \u2014 petit fix pas encore commenc\u00e9.';
+        } else if (scale === 'gros') {
+          sentence = '\u00c0 toi \u2014 gros chantier pas encore lanc\u00e9.';
         } else {
           sentence = '\u00c0 toi \u2014 pas encore commenc\u00e9.';
         }
@@ -9998,6 +10135,7 @@
           'Chez ' +
           other +
           ' \u2014 pas commenc\u00e9' +
+          (topic ? ' sur \u00ab\u00a0' + topic + '\u00a0\u00bb' : '') +
           (dueGap ? ' ; ' + dueGap : '') +
           '.';
       } else if (unassigned) {
@@ -10011,6 +10149,55 @@
     }
 
     return clampStatusBriefSentence(sentence);
+  }
+
+  /** Reject empty / glaze / English-scale AI sentences; fall back to heuristic. */
+  function isVacuousStatusBrief(sentence) {
+    var s = String(sentence || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+    if (!s) return true;
+    if (
+      /petit reste\s*[àa]\s*finir|travail encore ouvert|encore en cours, d[eé]tail flou/.test(
+        s
+      )
+    ) {
+      return true;
+    }
+    if (
+      /\b(quick|project|stuck|medium|status)\b/.test(s) ||
+      /(?:^|[^\wàâäéèêëïîôùûüç])(?:quick|project)\b/.test(s)
+    ) {
+      return true;
+    }
+    if (
+      /devrait aller vite|t['']inqui[eè]te|tu g[eè]res|bien avanc|glaze|bravo/.test(
+        s
+      )
+    ) {
+      return true;
+    }
+    if (
+      /c['']est en cours de ton c[oô]t[eé]|avanc[eé]\s*[àa]\s*\d+\s*%/.test(s)
+    ) {
+      return true;
+    }
+    // Pure owner + due with no work noun: « À toi — demain. »
+    if (/^(?:à toi|chez \w+|personne assign[eé])\s*[—\-–]\s*[^.]{0,28}\.?$/.test(s)) {
+      if (
+        !/prochaine|bloqu|sous-t|fix|chantier|pas commenc|termin|\u00ab/.test(s) &&
+        !/[a-zàâäéèêëïîôùûüç]{4,}/.test(
+          s.replace(
+            /à toi|chez \w+|personne assigné|demain|aujourd.?hui|en retard|pas d.?échéance|à \d+|h\b|\d+/gi,
+            ''
+          )
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -10046,16 +10233,20 @@
           'R\u00e8gles\u00a0:',
           '- Une seule phrase, fran\u00e7ais, ton sec et factuel (manager press\u00e9).',
           '- Max ~' + MAX_STATUS_BRIEF_LEN + ' caract\u00e8res.',
-          '- SUBSTANCE OBLIGATOIRE\u00a0: qui porte + le fait utile (prochaine sous-t\u00e2che dans nextOpenItems, motif de blocage, \u00e9ch\u00e9ance manquante/retard, taille petit/gros).',
+          '- SUBSTANCE OBLIGATOIRE\u00a0: nomme LE TRAVAIL concret (cardName, cardDesc, ou nextOpenItems) + qui porte + le fait utile (prochaine \u00e9tape, motif de blocage, \u00e9ch\u00e9ance manquante/retard).',
+          '- Si nextOpenItems non vide\u00a0: cite la prochaine \u00e9tape. Sinon\u00a0: ancre la phrase sur cardName (et cardDesc si \u00e7a pr\u00e9cise).',
+          '- scale (petit|moyen|gros) = adjectif seulement, JAMAIS le sujet. Interdit de r\u00e9pondre seulement avec la taille.',
           '- Si dueSoon=true\u00a0: mentionne le timing (dueCountdown) et l\'heure (dueTime) si elle est d\u00e9finie \u2014 ex. \u00ab\u00a0demain \u00e0 14 h\u00a0\u00bb. Si dueSoon=false et pas dueMissing/duePast\u00a0: ne parle PAS de l\'\u00e9ch\u00e9ance.',
           '- INTERDIT d\'encourager / flatter / rassurer\u00a0: pas de \u00ab\u00a0\u00e7a devrait aller vite\u00a0\u00bb, \u00ab\u00a0bien avanc\u00e9\u00a0\u00bb, \u00ab\u00a0t\'inqui\u00e8te\u00a0\u00bb, \u00ab\u00a0tu g\u00e8res\u00a0\u00bb.',
-          '- INTERDIT les mots anglais (quick, project, stuck, medium, status\u2026). scale = petit|moyen|gros seulement.',
+          '- INTERDIT les mots anglais (quick, project, stuck, medium, status\u2026).',
           '- INTERDIT de citer le % de progr\u00e8s (d\u00e9j\u00e0 visible dans l\'UI).',
-          '- INTERDIT les phrases vides du type \u00ab\u00a0c\'est en cours de ton c\u00f4t\u00e9\u00a0\u00bb sans dire QUOI reste / QUOI bloque.',
+          '- INTERDIT les phrases vides\u00a0: \u00ab\u00a0petit reste \u00e0 finir\u00a0\u00bb, \u00ab\u00a0travail encore ouvert\u00a0\u00bb, \u00ab\u00a0c\'est en cours de ton c\u00f4t\u00e9\u00a0\u00bb, \u00ab\u00a0\u00c0 toi \u2014 demain\u00a0\u00bb sans dire QUOI.',
           '- N\'invente rien\u00a0: seulement le snapshot. Pas de pr\u00e9noms hors otherNames.',
           '- Ex. BON\u00a0: "\u00c0 toi \u2014 prochaine\u00a0: finaliser le montage ; pas d\'\u00e9ch\u00e9ance."',
           '- Ex. BON\u00a0: "\u00c0 toi \u2014 prochaine\u00a0: finaliser le montage ; demain \u00e0 14 h."',
+          '- Ex. BON\u00a0: "\u00c0 toi \u2014 \u00ab\u00a0Fix login SSO\u00a0\u00bb encore ouvert ; demain."',
           '- Ex. BON\u00a0: "Chez Sam \u2014 bloqu\u00e9\u00a0: attente API."',
+          '- Ex. MAUVAIS\u00a0: "\u00c0 toi \u2014 petit reste \u00e0 finir ; demain."',
           '- Ex. MAUVAIS\u00a0: "C\'est en cours de ton c\u00f4t\u00e9, avanc\u00e9 \u00e0 31\u00a0% ; c\'est un quick, donc \u00e7a devrait aller vite."',
           'Snapshot\u00a0:',
           JSON.stringify(snapshot)
@@ -10064,7 +10255,7 @@
       {
         role: 'user',
         content:
-          'Donne la phrase de statut (JSON {"sentence":"\u2026"}). Heuristique de secours\u00a0: ' +
+          'Donne la phrase de statut (JSON {"sentence":"\u2026"}). Ancre-toi sur le travail r\u00e9el du snapshot (titre / desc / prochaine \u00e9tape). Heuristique de secours\u00a0: ' +
           heuristic
       }
     ];
@@ -10174,11 +10365,11 @@
       data && typeof data.sentence === 'string'
         ? clampStatusBriefSentence(data.sentence)
         : '';
-    if (!aiSentence) {
+    if (!aiSentence || isVacuousStatusBrief(aiSentence)) {
       return {
         ok: true,
         skipped: true,
-        reason: 'empty-sentence',
+        reason: !aiSentence ? 'empty-sentence' : 'vacuous-sentence',
         sentence: heuristic,
         source: 'heuristic',
         usage: usage,
@@ -13649,6 +13840,7 @@
     buildStatusBriefSnapshot: buildStatusBriefSnapshot,
     fingerprintStatusBriefSnapshot: fingerprintStatusBriefSnapshot,
     buildHeuristicStatusBrief: buildHeuristicStatusBrief,
+    isVacuousStatusBrief: isVacuousStatusBrief,
     cardStatusBriefTurn: cardStatusBriefTurn,
     buildProgressSummarySnapshot: buildProgressSummarySnapshot,
     fingerprintProgressSummarySnapshot: fingerprintProgressSummarySnapshot,

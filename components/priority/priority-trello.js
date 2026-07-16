@@ -8,12 +8,14 @@
   var FORMULA_SETTINGS_KEY = 'priorityFormula';
   var COLOR_SCHEME_SETTINGS_KEY = 'priorityColorScheme';
   var COLOR_SCHEME_REV_KEY = 'priorityColorSchemeRev';
+  var CUSTOM_TASK_TYPES_KEY = 'customTaskTypes';
   // Last agreed Trello `due` ISO ('' = no due). Used for Échéance ↔ Dates conflict detection.
   var CARD_DUE_SYNCED_KEY = 'cardDueSyncedIso';
   // Last agreed Trello `start` ISO ('' = no start).
   var CARD_START_SYNCED_KEY = 'cardStartSyncedIso';
   var boardFormulaKey = 'baseline';
   var boardColorSchemeKey = null;
+  var boardCustomTaskTypes = null;
   // Trello minimum for dynamic badge polling (card-badges / card-detail-badges).
   var BADGE_REFRESH_SEC = 10;
   // Label above the card-back badge; without this Trello shows the Power-Up admin name.
@@ -450,6 +452,50 @@
     return key;
   }
 
+  async function getCustomTaskTypes(t) {
+    var PU = priorityUI();
+    try {
+      var stored = await t.get('board', 'shared', CUSTOM_TASK_TYPES_KEY);
+      var list =
+        PU && typeof PU.normalizeCustomTaskTypes === 'function'
+          ? PU.normalizeCustomTaskTypes(stored)
+          : Array.isArray(stored)
+            ? stored
+            : [];
+      boardCustomTaskTypes = list;
+      if (PU && typeof PU.setCustomTaskTypes === 'function') {
+        PU.setCustomTaskTypes(list);
+      }
+      return list.slice();
+    } catch (err) {
+      console.error('Priority custom task types load failed', err);
+      boardCustomTaskTypes = boardCustomTaskTypes || [];
+      return boardCustomTaskTypes.slice();
+    }
+  }
+
+  async function saveCustomTaskTypes(t, raw) {
+    var PU = priorityUI();
+    var list =
+      PU && typeof PU.normalizeCustomTaskTypes === 'function'
+        ? PU.normalizeCustomTaskTypes(raw)
+        : Array.isArray(raw)
+          ? raw
+          : [];
+    boardCustomTaskTypes = list;
+    if (PU && typeof PU.setCustomTaskTypes === 'function') {
+      PU.setCustomTaskTypes(list);
+    }
+    await t.set('board', 'shared', CUSTOM_TASK_TYPES_KEY, list);
+    return list.slice();
+  }
+
+  function getCachedCustomTaskTypes() {
+    return Array.isArray(boardCustomTaskTypes)
+      ? boardCustomTaskTypes.slice()
+      : [];
+  }
+
   async function preloadBoardPriorityContext(t) {
     return ensureBoardPriorityContext(t);
   }
@@ -466,6 +512,7 @@
     }
     await getBoardFormula(t);
     await getBoardColorScheme(t);
+    await getCustomTaskTypes(t);
     return settings;
   }
 
@@ -3207,6 +3254,9 @@
     getBoardColorScheme: getBoardColorScheme,
     getCachedBoardColorSchemeKey: getCachedBoardColorSchemeKey,
     saveBoardColorScheme: saveBoardColorScheme,
+    getCustomTaskTypes: getCustomTaskTypes,
+    getCachedCustomTaskTypes: getCachedCustomTaskTypes,
+    saveCustomTaskTypes: saveCustomTaskTypes,
     preloadBoardPriorityContext: preloadBoardPriorityContext,
     ensureBoardPriorityContext: ensureBoardPriorityContext,
     computeDisplay: computeDisplay,

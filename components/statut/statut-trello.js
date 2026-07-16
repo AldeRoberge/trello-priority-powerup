@@ -808,6 +808,29 @@
       if (PT && typeof PT.setCardDueComplete === 'function') {
         var mark = await PT.setCardDueComplete(t, true, { skipStatutAutoMove: true });
         side.dueComplete = mark;
+        if (
+          mark &&
+          mark.rolled &&
+          CT &&
+          typeof CT.markNotFullyComplete === 'function' &&
+          typeof CT.saveCardCompletion === 'function'
+        ) {
+          try {
+            var reopenedCompletion = CT.markNotFullyComplete(side.completion || completeData);
+            await CT.saveCardCompletion(t, reopenedCompletion);
+            side.progressComplete = false;
+            side.progressIncomplete = true;
+            side.completion = reopenedCompletion;
+            if (typeof CT.setDueCompleteSuppressed === 'function') {
+              await CT.setDueCompleteSuppressed(t, false);
+            }
+            if (typeof restorePreviousStatutFromIncomplete === 'function') {
+              side.statutRestore = await restorePreviousStatutFromIncomplete(t);
+            }
+          } catch (rollProgressErr) {
+            dbgError('statutTrello', 'sideEffects.rollRecurringProgress', rollProgressErr);
+          }
+        }
         if (typeof PT.clearBlockedIfComplete === 'function') {
           await PT.clearBlockedIfComplete(t);
         }

@@ -1538,9 +1538,6 @@
     var progressHead = document.createElement('div');
     progressHead.className = 'tp-completion-progress-head';
 
-    var progressHero = document.createElement('div');
-    progressHero.className = 'tp-completion-progress-hero';
-
     var masterTitleEl = document.createElement(onTitleChange ? 'input' : 'p');
     masterTitleEl.className = 'tp-completion-master-title';
     masterTitleEl.id = 'completionMasterTitle';
@@ -1642,11 +1639,8 @@
     encouragementEl.setAttribute('aria-live', 'polite');
     applyProgressEncouragement(encouragementEl, 0);
 
-    progressHero.appendChild(masterTitleEl);
-    progressHero.appendChild(encouragementEl);
-
-    // Full-width header hit target (chevron left), matching section-collapse-btn.
-    detailsToggleBtn.appendChild(progressHero);
+    // Compact header hit target: chevron + title only (not the whole hero).
+    detailsToggleBtn.appendChild(masterTitleEl);
 
     var completeAllBtn = document.createElement('button');
     completeAllBtn.type = 'button';
@@ -1691,6 +1685,7 @@
     progressHead.appendChild(detailsToggleBtn);
     progressHead.appendChild(progressActions);
     progressPanel.appendChild(progressHead);
+    progressPanel.appendChild(encouragementEl);
 
     var masterSlider = createProgressSlider(
       'Ajuster le progr\u00e8s',
@@ -1895,7 +1890,7 @@
     var filterEmptyEl = containerEl.querySelector('#completionFilterEmpty');
     var showDoneCheckbox = containerEl.querySelector('#completionShowDone');
     var showDoneLabel = containerEl.querySelector('#completionShowDoneLabel');
-    // encouragementEl / masterTitleEl created above in progressHero
+    // encouragementEl / masterTitleEl created above in progress panel
     var addInput = containerEl.querySelector('#completionAddInput');
     var addBtn = containerEl.querySelector('#completionAddBtn');
     var linkBtn = containerEl.querySelector('#completionLinkBtn');

@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=subtask-pop-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-5" />
-  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=time-dial-larger-1" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=recurring-clear-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-scope-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
@@ -24,7 +24,7 @@
   </script>
   <script src="./components/shared/effects.js?v=fx-6"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=time-dial-larger-1"></script>
+  <script src="./components/priority/priority-ui.js?v=recurring-clear-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
@@ -1467,6 +1467,29 @@
         .then(function () {
           return CompletionTrello.syncCardDueCompleteFromProgress(t, data, options);
         })
+        .then(function (result) {
+          if (!result || !result.rolled) return result;
+          if (result.inputs && variant && typeof variant.setState === 'function') {
+            latestState = Object.assign({}, latestState || {}, result.inputs);
+            appliedPriorityFp = fingerprintPriority(latestState);
+            variant.setState(Object.assign({}, latestState), {
+              preserveCollapse: true,
+              silent: true,
+            });
+          }
+          if (result.completion) {
+            latestCompletion = withProgressEnabledFlag(result.completion);
+            appliedCompletionFp = fingerprintCompletion(latestCompletion);
+            if (completionUi && typeof completionUi.setData === 'function') {
+              completionUi.setData(latestCompletion);
+            }
+            scheduleProgressSummary();
+            syncBlockedSubtasks();
+            syncDueBlockedForProgress(latestCompletion);
+            syncInfoRecap();
+          }
+          return result;
+        })
         .catch(function (err) {
           console.error('Completion dueComplete sync failed', err);
         });
@@ -2767,6 +2790,22 @@
             });
           });
         },
+        onCustomTaskTypesChange: function (nextCustoms) {
+          if (
+            !PriorityTrello ||
+            typeof PriorityTrello.saveCustomTaskTypes !== 'function'
+          ) {
+            return Promise.resolve({ ok: false });
+          }
+          return Promise.resolve(
+            PriorityTrello.saveCustomTaskTypes(t, nextCustoms)
+          ).then(function (saved) {
+            if (infoUi && typeof infoUi.setCustomTaskTypes === 'function') {
+              infoUi.setCustomTaskTypes(saved);
+            }
+            return { ok: true, changed: true, customTaskTypes: saved };
+          });
+        },
         onDismissedTaskTypeSuggestionsChange: function (nextIds) {
           var normalized =
             PriorityUI && typeof PriorityUI.normalizeTaskTypes === 'function'
@@ -2819,6 +2858,9 @@
         PriorityTrello.getCurrentMember
           ? PriorityTrello.getCurrentMember(t)
           : Promise.resolve(null),
+        PriorityTrello.getCustomTaskTypes
+          ? PriorityTrello.getCustomTaskTypes(t)
+          : Promise.resolve([]),
       ])
         .then(function (results) {
           var members = results[0] || [];
@@ -2828,9 +2870,18 @@
           var authorized = !!results[4];
           var meCard = results[5];
           currentMemberCache = results[6] || null;
+          var customTaskTypes = results[7] || [];
           var childId = meCard && meCard.id ? String(meCard.id) : '';
           var hasRest =
             PriorityTrello.restClientOptions && !!PriorityTrello.restClientOptions();
+          if (infoUi && typeof infoUi.setCustomTaskTypes === 'function') {
+            infoUi.setCustomTaskTypes(customTaskTypes);
+          } else if (
+            PriorityUI &&
+            typeof PriorityUI.setCustomTaskTypes === 'function'
+          ) {
+            PriorityUI.setCustomTaskTypes(customTaskTypes);
+          }
           if (infoUi && typeof infoUi.setMembers === 'function') {
             infoUi.setMembers(members);
           }
@@ -5391,15 +5442,22 @@
               });
               if (!syncPromise || typeof syncPromise.then !== 'function') return;
               syncPromise
-                .then(function () {
+                .then(function (syncResult) {
+                  if (syncResult && syncResult.rolled) return syncResult;
                   if (
                     allComplete &&
                     typeof PriorityTrello.clearBlockedIfComplete === 'function'
                   ) {
-                    return PriorityTrello.clearBlockedIfComplete(t);
+                    return PriorityTrello.clearBlockedIfComplete(t).then(function () {
+                      return syncResult;
+                    });
                   }
+                  return syncResult;
                 })
-                .then(function () {
+                .then(function (syncResult) {
+                  if (syncResult && syncResult.rolled) {
+                    allComplete = false;
+                  }
                   if (allComplete) {
                     if (
                       completionUi &&

@@ -292,6 +292,9 @@ describe('PriorityUI createOverviewField', () => {
     const ui = PriorityUI.createOverviewField({
       title: 'Card',
       progressPercent: 20,
+      subtasksDone: 0,
+      subtasksTotal: 2,
+      dueCountdown: 'Demain',
       onJump(key) {
         jumps.push(key);
       },
@@ -456,6 +459,60 @@ describe('PriorityUI createOverviewField', () => {
     assert.match(
       ui.el.querySelector('.overview-cell--progress .overview-cell-value').textContent,
       /faire|À faire/i
+    );
+  });
+
+  it('hides Sous-tâches and Échéance when empty', () => {
+    const ui = PriorityUI.createOverviewField({
+      title: 'Card',
+      progressPercent: 10,
+      subtasksDone: 0,
+      subtasksTotal: 0,
+      dueCountdown: '',
+      priorityLabel: 'Flexible',
+    });
+
+    assert.equal(
+      ui.el.querySelector('.overview-cell--subtasks').getAttribute('hidden'),
+      ''
+    );
+    assert.equal(
+      ui.el.querySelector('.overview-cell--due').getAttribute('hidden'),
+      ''
+    );
+
+    ui.setData({
+      subtasksDone: 1,
+      subtasksTotal: 3,
+      dueCountdown: 'Dans 2 jours',
+      dueBand: 'soon',
+    });
+
+    assert.equal(
+      ui.el.querySelector('.overview-cell--subtasks').getAttribute('hidden'),
+      null
+    );
+    assert.equal(
+      ui.el.querySelector('.overview-cell--due').getAttribute('hidden'),
+      null
+    );
+    assert.match(
+      ui.el.querySelector('.overview-cell--subtasks .overview-cell-value').textContent,
+      /1/
+    );
+    assert.match(
+      ui.el.querySelector('.overview-cell--due .overview-cell-value').textContent,
+      /2 jours/
+    );
+
+    ui.setData({ subtasksTotal: 0, dueCountdown: '' });
+    assert.equal(
+      ui.el.querySelector('.overview-cell--subtasks').getAttribute('hidden'),
+      ''
+    );
+    assert.equal(
+      ui.el.querySelector('.overview-cell--due').getAttribute('hidden'),
+      ''
     );
   });
 

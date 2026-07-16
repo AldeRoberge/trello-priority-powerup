@@ -60,40 +60,233 @@
    * Multi-label task taxonomy (Information + AI interview).
    * Order here is picker display order; selection order is preserved on the card.
    */
-  var TASK_TYPES = [
-    { id: 'action', label: 'Action', hint: 'Action concr\u00e8te unique' },
-    { id: 'project', label: 'Projet', hint: 'Partie d\u2019un effort multi-\u00e9tapes' },
-    { id: 'recurring', label: 'R\u00e9currente', hint: 'T\u00e2che r\u00e9p\u00e9titive / r\u00e9currente' },
-    { id: 'exploratory', label: 'Exploration', hint: 'D\u00e9couverte / recherche' },
-    { id: 'emotional', label: '\u00c9motionnel', hint: '\u00c9motionnel / psychologique' },
-    { id: 'communication', label: 'Communication', hint: 'Communication / relationnel' },
-    { id: 'deliverable', label: 'Livrable', hint: 'Livrable / produit' },
-    { id: 'process', label: 'Processus', hint: 'Processus / maintenance' },
-    { id: 'thinking', label: 'R\u00e9flexion', hint: 'R\u00e9flexion / d\u00e9cisions' }
+  /** Built-in task-type catalog (Information → Type de tâche). */
+  var BUILTIN_TASK_TYPES = [
+    { id: 'action', label: 'Action', hint: 'Action concr\u00e8te unique', icon: 'action' },
+    { id: 'project', label: 'Projet', hint: 'Partie d\u2019un effort multi-\u00e9tapes', icon: 'project' },
+    { id: 'recurring', label: 'R\u00e9currente', hint: 'T\u00e2che r\u00e9p\u00e9titive / r\u00e9currente', icon: 'recurring' },
+    { id: 'exploratory', label: 'Exploration', hint: 'D\u00e9couverte / recherche', icon: 'exploratory' },
+    { id: 'emotional', label: '\u00c9motionnel', hint: '\u00c9motionnel / psychologique', icon: 'emotional' },
+    { id: 'communication', label: 'Communication', hint: 'Communication / relationnel', icon: 'communication' },
+    { id: 'deliverable', label: 'Livrable', hint: 'Livrable / produit', icon: 'deliverable' },
+    { id: 'process', label: 'Processus', hint: 'Processus / maintenance', icon: 'process' },
+    { id: 'thinking', label: 'R\u00e9flexion', hint: 'R\u00e9flexion / d\u00e9cisions', icon: 'thinking' },
+    { id: 'material', label: 'Mat\u00e9riel', hint: 'Achat / \u00e9quipement / fournitures', icon: 'material' },
+    { id: 'learning', label: 'Apprentissage', hint: 'Formation / \u00e9tude / comp\u00e9tences', icon: 'learning' },
+    { id: 'admin', label: 'Administratif', hint: 'Paperasse / formalit\u00e9s / admin', icon: 'admin' },
+    { id: 'creative', label: 'Cr\u00e9atif', hint: 'Cr\u00e9ation / design / contenu', icon: 'creative' },
+    { id: 'finance', label: 'Financier', hint: 'Budget / paiement / argent', icon: 'finance' }
   ];
-  var TASK_TYPE_BY_ID = (function () {
+  /** Alias kept for callers that read PriorityUI.TASK_TYPES (built-ins only). */
+  var TASK_TYPES = BUILTIN_TASK_TYPES;
+
+  var CUSTOM_TASK_TYPE_ID_RE = /^custom-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+  var MAX_CUSTOM_TASK_TYPES = 40;
+  var MAX_TASK_TYPE_LABEL_LEN = 40;
+  var MAX_TASK_TYPE_HINT_LEN = 80;
+
+  /** Board-level custom types (mutable; set via setCustomTaskTypes). */
+  var customTaskTypes = [];
+  var TASK_TYPE_BY_ID = Object.create(null);
+
+  function rebuildTaskTypeIndex() {
     var map = Object.create(null);
-    for (var i = 0; i < TASK_TYPES.length; i++) {
-      map[TASK_TYPES[i].id] = TASK_TYPES[i];
+    var i;
+    for (i = 0; i < BUILTIN_TASK_TYPES.length; i++) {
+      map[BUILTIN_TASK_TYPES[i].id] = BUILTIN_TASK_TYPES[i];
     }
-    return map;
-  })();
+    for (i = 0; i < customTaskTypes.length; i++) {
+      map[customTaskTypes[i].id] = customTaskTypes[i];
+    }
+    TASK_TYPE_BY_ID = map;
+  }
+  rebuildTaskTypeIndex();
+
+  function isCustomTaskTypeId(id) {
+    return typeof id === 'string' && CUSTOM_TASK_TYPE_ID_RE.test(id);
+  }
+
+  function isBuiltinTaskTypeId(id) {
+    if (typeof id !== 'string' || !id) return false;
+    for (var i = 0; i < BUILTIN_TASK_TYPES.length; i++) {
+      if (BUILTIN_TASK_TYPES[i].id === id) return true;
+    }
+    return false;
+  }
 
   function isValidTaskTypeId(id) {
-    return typeof id === 'string' && !!TASK_TYPE_BY_ID[id];
+    if (typeof id !== 'string' || !id) return false;
+    if (TASK_TYPE_BY_ID[id]) return true;
+    // Keep orphan custom ids resolvable until the board catalog loads.
+    return isCustomTaskTypeId(id);
+  }
+
+  function getTaskTypeEntry(id) {
+    if (typeof id !== 'string' || !id) return null;
+    if (TASK_TYPE_BY_ID[id]) return TASK_TYPE_BY_ID[id];
+    if (isCustomTaskTypeId(id)) {
+      return { id: id, label: id, hint: '', icon: 'custom', custom: true };
+    }
+    return null;
   }
 
   function taskTypeLabel(id) {
-    var entry = isValidTaskTypeId(id) ? TASK_TYPE_BY_ID[id] : null;
+    var entry = getTaskTypeEntry(id);
     return entry ? entry.label : '';
   }
 
   function taskTypeHint(id) {
-    var entry = isValidTaskTypeId(id) ? TASK_TYPE_BY_ID[id] : null;
-    return entry ? entry.hint : '';
+    var entry = getTaskTypeEntry(id);
+    return entry ? entry.hint || '' : '';
   }
 
-  /** De-dupe + keep catalog-valid ids; preserve first-seen order. */
+  function taskTypeIconKey(id) {
+    var entry = getTaskTypeEntry(id);
+    if (!entry) return 'custom';
+    return entry.icon || entry.id || 'custom';
+  }
+
+  /** Full catalog: built-ins then board customs. */
+  function getTaskTypeCatalog() {
+    return BUILTIN_TASK_TYPES.concat(customTaskTypes);
+  }
+
+  function getCustomTaskTypes() {
+    return customTaskTypes.slice();
+  }
+
+  function slugifyTaskTypeLabel(label) {
+    return String(label || '')
+      .toLocaleLowerCase('fr-FR')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 28) || 'type';
+  }
+
+  function makeCustomTaskTypeId(label) {
+    var slug = slugifyTaskTypeLabel(label);
+    var suffix = Math.random().toString(36).slice(2, 6);
+    return 'custom-' + slug + '-' + suffix;
+  }
+
+  /** Allowed icon keys for custom types (subset of TASK_TYPE_ICON_SVG). */
+  var CUSTOM_TASK_TYPE_ICON_KEYS = [
+    'custom',
+    'action',
+    'project',
+    'material',
+    'learning',
+    'admin',
+    'creative',
+    'finance',
+    'communication',
+    'thinking',
+    'process',
+    'deliverable'
+  ];
+
+  function normalizeTaskTypeIconKey(raw, fallback) {
+    var key = typeof raw === 'string' ? raw.trim() : '';
+    if (key && CUSTOM_TASK_TYPE_ICON_KEYS.indexOf(key) >= 0) return key;
+    if (key && TASK_TYPE_ICON_SVG && TASK_TYPE_ICON_SVG[key]) return key;
+    return fallback || 'custom';
+  }
+
+  function normalizeCustomTaskTypeEntry(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    var label =
+      typeof raw.label === 'string'
+        ? raw.label.trim()
+        : typeof raw.name === 'string'
+          ? raw.name.trim()
+          : '';
+    if (!label) return null;
+    if (label.length > MAX_TASK_TYPE_LABEL_LEN) {
+      label = label.slice(0, MAX_TASK_TYPE_LABEL_LEN);
+    }
+    var id =
+      typeof raw.id === 'string' && isCustomTaskTypeId(raw.id.trim())
+        ? raw.id.trim()
+        : makeCustomTaskTypeId(label);
+    var hint =
+      typeof raw.hint === 'string'
+        ? raw.hint.trim().slice(0, MAX_TASK_TYPE_HINT_LEN)
+        : '';
+    var icon = normalizeTaskTypeIconKey(raw.icon, 'custom');
+    return { id: id, label: label, hint: hint, icon: icon, custom: true };
+  }
+
+  function normalizeCustomTaskTypes(raw) {
+    var list = Array.isArray(raw) ? raw : [];
+    var out = [];
+    var seen = Object.create(null);
+    var seenLabel = Object.create(null);
+    for (var i = 0; i < list.length && out.length < MAX_CUSTOM_TASK_TYPES; i++) {
+      var entry = normalizeCustomTaskTypeEntry(list[i]);
+      if (!entry || seen[entry.id]) continue;
+      var labelKey = entry.label.toLocaleLowerCase('fr-FR');
+      if (seenLabel[labelKey] || isBuiltinTaskTypeId(entry.id)) continue;
+      // Avoid duplicating a built-in label (case-insensitive).
+      var dupBuiltin = false;
+      for (var b = 0; b < BUILTIN_TASK_TYPES.length; b++) {
+        if (
+          BUILTIN_TASK_TYPES[b].label.toLocaleLowerCase('fr-FR') === labelKey
+        ) {
+          dupBuiltin = true;
+          break;
+        }
+      }
+      if (dupBuiltin) continue;
+      seen[entry.id] = true;
+      seenLabel[labelKey] = true;
+      out.push(entry);
+    }
+    return out;
+  }
+
+  function setCustomTaskTypes(raw) {
+    customTaskTypes = normalizeCustomTaskTypes(raw);
+    rebuildTaskTypeIndex();
+    return customTaskTypes.slice();
+  }
+
+  /**
+   * Create a custom type entry (not yet persisted). Returns null if invalid /
+   * duplicate label. Optionally appends to the in-memory catalog.
+   */
+  function createCustomTaskType(input, options) {
+    options = options || {};
+    var label =
+      typeof input === 'string'
+        ? input.trim()
+        : input && typeof input.label === 'string'
+          ? input.label.trim()
+          : '';
+    if (!label) return null;
+    var draft = normalizeCustomTaskTypeEntry({
+      label: label,
+      hint: input && typeof input === 'object' ? input.hint : '',
+      icon: input && typeof input === 'object' ? input.icon : 'custom'
+    });
+    if (!draft) return null;
+    var labelKey = draft.label.toLocaleLowerCase('fr-FR');
+    var catalog = getTaskTypeCatalog();
+    for (var i = 0; i < catalog.length; i++) {
+      if (catalog[i].label.toLocaleLowerCase('fr-FR') === labelKey) {
+        return null;
+      }
+    }
+    if (customTaskTypes.length >= MAX_CUSTOM_TASK_TYPES) return null;
+    if (options.apply !== false) {
+      customTaskTypes = customTaskTypes.concat([draft]);
+      rebuildTaskTypeIndex();
+    }
+    return draft;
+  }
+
+  /** De-dupe + keep catalog-valid (or custom-*) ids; preserve first-seen order. */
   function normalizeTaskTypes(raw) {
     var list = Array.isArray(raw)
       ? raw
@@ -311,6 +504,69 @@
     if (!inner) return '';
     return '<svg class="level-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
       inner + '</svg>';
+  }
+
+  /* Task-type icons (16×16 stroke paths; keys match TASK_TYPES.icon / custom picks). */
+  var TASK_TYPE_ICON_SVG = {
+    action:
+      '<path d="M8.8 2.5L4.2 9h3.1L6.8 13.5 12 6.8H8.7L8.8 2.5z" ' + ICON_S + '/>',
+    project:
+      '<path d="M3 5.2h4.2l1.3 1.3H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6.2a1 1 0 0 1 1-1z" ' + ICON_S + '/>',
+    recurring:
+      '<path d="M4.2 6.2A4.2 4.2 0 0 1 11.5 5M11.8 9.8A4.2 4.2 0 0 1 4.5 11" ' + ICON_S + '/>' +
+      '<path d="M11.5 2.8v2.4H9.1M4.5 13.2v-2.4h2.4" ' + ICON_S + '/>',
+    exploratory:
+      '<circle cx="7" cy="7" r="3.4" ' + ICON_S + '/>' +
+      '<path d="M9.5 9.5L13 13" ' + ICON_S + '/>',
+    emotional:
+      '<path d="M8 13.2S3.2 10 3.2 6.6A2.55 2.55 0 0 1 8 5.2a2.55 2.55 0 0 1 4.8 1.4C12.8 10 8 13.2 8 13.2z" ' + ICON_S + '/>',
+    communication:
+      '<path d="M3.2 4.2h9.6a1 1 0 0 1 1 1v5.2a1 1 0 0 1-1 1H7.2L4 13.2v-1.8H3.2a1 1 0 0 1-1-1V5.2a1 1 0 0 1 1-1z" ' + ICON_S + '/>',
+    deliverable:
+      '<path d="M3.2 5.5L8 3.2l4.8 2.3v5.3L8 13.1l-4.8-2.3V5.5z" ' + ICON_S + '/>' +
+      '<path d="M3.2 5.5L8 7.8l4.8-2.3M8 7.8v5.3" ' + ICON_S + '/>',
+    process:
+      '<circle cx="8" cy="8" r="2.1" ' + ICON_S + '/>' +
+      '<path d="M8 2.8v1.4M8 11.8v1.4M2.8 8h1.4M11.8 8h1.4M4.1 4.1l1 1M10.9 10.9l1 1M4.1 11.9l1-1M10.9 5.1l1-1" ' + ICON_S + ' stroke-width="1"/>',
+    thinking:
+      '<path d="M6.2 11.5h3.6M6.8 13h2.4" ' + ICON_S + '/>' +
+      '<path d="M5.2 10.2a3.6 3.6 0 1 1 5.6 0c-.5.7-1.1 1.2-1.1 2H6.3c0-.8-.6-1.3-1.1-2z" ' + ICON_S + '/>',
+    material:
+      '<rect x="3" y="5.2" width="10" height="7.5" rx="1" ' + ICON_S + '/>' +
+      '<path d="M3 7.4h10M8 5.2V3.8M6.2 3.8h3.6" ' + ICON_S + '/>',
+    learning:
+      '<path d="M8 4.2L3.2 6.2v5.2L8 13.4l4.8-2V6.2L8 4.2z" ' + ICON_S + '/>' +
+      '<path d="M8 4.2v9.2M3.2 6.2L8 8.2l4.8-2" ' + ICON_S + '/>',
+    admin:
+      '<rect x="4" y="2.8" width="8" height="10.4" rx="1" ' + ICON_S + '/>' +
+      '<path d="M6 5.5h4M6 7.8h4M6 10.1h2.5" ' + ICON_S + '/>',
+    creative:
+      '<circle cx="8" cy="8" r="5.2" ' + ICON_S + '/>' +
+      '<circle cx="8" cy="8" r="1.5" ' + ICON_S + '/>' +
+      '<path d="M8 2.8v2.2M8 11v2.2M2.8 8h2.2M11 8h2.2" ' + ICON_S + ' stroke-width="1"/>',
+    finance:
+      '<circle cx="8" cy="8" r="5.2" ' + ICON_S + '/>' +
+      '<path d="M8 5v6M6.2 6.3c.5-.7 1.1-1 1.8-1s1.4.3 1.4 1.1c0 1.5-3.2 1-3.2 2.6 0 .8.7 1.2 1.8 1.2.7 0 1.3-.2 1.8-.7" ' + ICON_S + '/>',
+    custom:
+      '<path d="M3.5 7.2l3.7-3.7a1.2 1.2 0 0 1 1.7 0l3.3 3.3a1.2 1.2 0 0 1 0 1.7L8.5 12.2a1.2 1.2 0 0 1-1.7 0L3.5 8.9a1.2 1.2 0 0 1 0-1.7z" ' + ICON_S + '/>' +
+      '<circle cx="10.2" cy="5.8" r="0.9" ' + ICON_S + '/>'
+  };
+
+  function taskTypeIconSvg(idOrKey, className) {
+    var key = typeof idOrKey === 'string' ? idOrKey : '';
+    if (TASK_TYPE_BY_ID[key] || isCustomTaskTypeId(key)) {
+      key = taskTypeIconKey(key);
+    }
+    var inner = TASK_TYPE_ICON_SVG[key] || TASK_TYPE_ICON_SVG.custom;
+    if (!inner) return '';
+    var cls = className || 'info-task-type-icon';
+    return (
+      '<svg class="' +
+      cls +
+      '" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
+      inner +
+      '</svg>'
+    );
   }
 
   /* Due-time period suggestions — sun / peak / cloud-sun / moon */
@@ -780,6 +1036,10 @@
       slots.push(html);
       return '\u0000MD' + (slots.length - 1) + '\u0000';
     }
+    // Preserve punctuation escaped by the rich editor before applying Markdown rules.
+    s = s.replace(/\\([\\`*_[\]~#>+.!-])/g, function (_, literal) {
+      return stash(literal);
+    });
     s = s.replace(/`([^`\n]+)`/g, function (_, code) {
       return stash('<code class="info-md-code">' + code + '</code>');
     });
@@ -956,6 +1216,172 @@
     }
 
     return out.join('');
+  }
+
+  function escapeRichMarkdownText(value) {
+    return String(value == null ? '' : value).replace(/([\\`*_[\]~])/g, '\\$1');
+  }
+
+  function protectRichParagraphOpenings(value) {
+    return String(value || '')
+      .split('\n')
+      .map(function (line) {
+        if (/^\s*#{1,6}\s/.test(line) || /^\s*>\s?/.test(line)) {
+          return line.replace(/^(\s*)([#>])/, '$1\\$2');
+        }
+        if (/^\s*[-+*]\s/.test(line) || /^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+          return line.replace(/^(\s*)([-+*])/, '$1\\$2');
+        }
+        if (/^\s*\d+\.\s/.test(line)) {
+          return line.replace(/^(\s*\d+)(\.)/, '$1\\$2');
+        }
+        return line;
+      })
+      .join('\n');
+  }
+
+  function richNodeName(node) {
+    return String((node && (node.nodeName || node.tagName)) || '').toUpperCase();
+  }
+
+  function richAttr(node, name) {
+    if (!node || typeof node.getAttribute !== 'function') return '';
+    return String(node.getAttribute(name) || '');
+  }
+
+  function richChildren(node) {
+    if (!node || !node.childNodes) return [];
+    return Array.prototype.slice.call(node.childNodes);
+  }
+
+  function richClassContains(node, name) {
+    if (node && node.classList && typeof node.classList.contains === 'function') {
+      return node.classList.contains(name);
+    }
+    return (' ' + richAttr(node, 'class') + ' ').indexOf(' ' + name + ' ') !== -1;
+  }
+
+  function markdownFromRichInline(node) {
+    if (!node) return '';
+    if (node.nodeType === 3 || richNodeName(node) === '#TEXT') {
+      return escapeRichMarkdownText(node.nodeValue != null ? node.nodeValue : node.textContent);
+    }
+    if (node.nodeType === 8) return '';
+    var tag = richNodeName(node);
+    if (tag === 'BR') return '\n';
+    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'META' || tag === 'IFRAME') return '';
+
+    if (tag === 'IMG') {
+      // Smart-card decoration is not description content.
+      if (
+        richClassContains(node, 'info-md-smartcard-favicon') ||
+        richClassContains(node, 'info-md-smartcard-image')
+      ) {
+        return '';
+      }
+      var src = safeMarkdownHref(richAttr(node, 'src'));
+      if (!src) return '';
+      var alt = richAttr(node, 'alt').replace(/[\[\]]/g, '');
+      return '![' + alt + '](' + src + ')';
+    }
+
+    var inner = richChildren(node).map(markdownFromRichInline).join('');
+    if (tag === 'STRONG' || tag === 'B') return inner ? '**' + inner + '**' : '';
+    if (tag === 'EM' || tag === 'I') return inner ? '*' + inner + '*' : '';
+    if (tag === 'DEL' || tag === 'S' || tag === 'STRIKE') {
+      return inner ? '~~' + inner + '~~' : '';
+    }
+    if (tag === 'CODE' && richNodeName(node.parentNode) !== 'PRE') {
+      return inner ? '`' + inner.replace(/`/g, '\\`') + '`' : '';
+    }
+    if (tag === 'A') {
+      var href = safeMarkdownHref(richAttr(node, 'data-smart-url') || richAttr(node, 'href'));
+      if (!href) return inner;
+      var mode = richAttr(node, 'data-smart-mode');
+      if (mode === 'block' || mode === 'inline') {
+        return '[' + href + '](' + href + ' "smartCard-' + mode + '")';
+      }
+      return '[' + (inner || href) + '](' + href + ')';
+    }
+    return inner;
+  }
+
+  function richListItemMarkdown(node, ordered) {
+    var checked = null;
+    var body = '';
+    richChildren(node).forEach(function (child) {
+      if (richNodeName(child) === 'INPUT' && richAttr(child, 'type').toLowerCase() === 'checkbox') {
+        checked =
+          !!child.checked ||
+          richAttr(child, 'checked') === 'checked' ||
+          richAttr(child, 'checked') === 'true';
+        return;
+      }
+      if (richNodeName(child) === 'UL' || richNodeName(child) === 'OL') return;
+      body += markdownFromRichInline(child);
+    });
+    body = body.replace(/^\s+|\s+$/g, '');
+    var prefix = ordered ? '1. ' : '- ';
+    if (checked !== null) prefix += checked ? '[x] ' : '[ ] ';
+    return prefix + body;
+  }
+
+  function markdownFromRichBlock(node) {
+    if (!node) return '';
+    if (node.nodeType === 3 || richNodeName(node) === '#TEXT') {
+      return escapeRichMarkdownText(node.nodeValue != null ? node.nodeValue : node.textContent);
+    }
+    var tag = richNodeName(node);
+    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'META' || tag === 'IFRAME') return '';
+    if (/^H[1-6]$/.test(tag)) {
+      return Array(Number(tag.charAt(1)) + 1).join('#') + ' ' + markdownFromRichInline(node);
+    }
+    if (tag === 'P' || tag === 'DIV') {
+      return protectRichParagraphOpenings(markdownFromRichInline(node));
+    }
+    if (tag === 'BLOCKQUOTE') {
+      return markdownFromRichInline(node)
+        .split('\n')
+        .map(function (line) {
+          return '> ' + line;
+        })
+        .join('\n');
+    }
+    if (tag === 'PRE') {
+      var code = node.textContent == null ? '' : String(node.textContent);
+      return '```\n' + code.replace(/\n$/, '') + '\n```';
+    }
+    if (tag === 'HR') return '---';
+    if (tag === 'UL' || tag === 'OL') {
+      var ordered = tag === 'OL';
+      return richChildren(node)
+        .filter(function (child) {
+          return richNodeName(child) === 'LI';
+        })
+        .map(function (child) {
+          return richListItemMarkdown(child, ordered);
+        })
+        .join('\n');
+    }
+    return markdownFromRichInline(node);
+  }
+
+  /**
+   * Convert the supported contenteditable DOM back to Trello Markdown.
+   * Unknown wrappers are flattened; unsafe elements and URL schemes are dropped.
+   */
+  function markdownFromRichRoot(root) {
+    if (!root) return '';
+    return richChildren(root)
+      .map(markdownFromRichBlock)
+      .filter(function (part) {
+        return String(part).trim().length > 0;
+      })
+      .join('\n\n')
+      .replace(/\u00a0/g, ' ')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   }
 
   var MD_HEADING_PREFIX_RE = /^(#{1,6})\s+/;
@@ -2417,6 +2843,7 @@
   var DUE_DATE_START_CLEAR_LABEL = 'Effacer la date de d\u00e9but';
   var DUE_DATE_START_PLACEHOLDER = 'Ajouter une date de d\u00e9but';
   var DUE_DATE_RECURRING_LABEL = 'R\u00e9currente';
+  var DUE_DATE_RECURRING_CLEAR_LABEL = 'Effacer la r\u00e9currence';
   var DUE_DATE_RECURRING_NONE = 'Ne pas r\u00e9p\u00e9ter';
   var DUE_DATE_RECURRING_DAILY = 'Chaque jour';
   var DUE_DATE_RECURRING_WEEKLY = 'Chaque semaine';
@@ -2712,6 +3139,10 @@
     return d;
   }
 
+  function occurrenceInstant(iso, time) {
+    return dueInstant(iso, time) || dueDateToLocalDate(iso);
+  }
+
   function advanceDateByRecurrence(iso, recurrence) {
     var date = dueDateToLocalDate(iso);
     var rule = normalizeRecurrence(recurrence);
@@ -2750,14 +3181,36 @@
     return toIsoDate(next);
   }
 
+  function advanceDateByRecurrenceAfter(iso, recurrence, time, now) {
+    var rule = normalizeRecurrence(recurrence);
+    var nextIso = advanceDateByRecurrence(iso, rule);
+    var at = now instanceof Date && !isNaN(now.getTime()) ? now : new Date();
+    var guard = 0;
+    while (nextIso && guard < 500) {
+      var nextInstant = occurrenceInstant(nextIso, time);
+      if (!nextInstant || nextInstant.getTime() > at.getTime()) break;
+      nextIso = advanceDateByRecurrence(nextIso, rule);
+      guard++;
+    }
+    return nextIso || '';
+  }
+
   /**
    * Next occurrence parts after completing a recurring card.
    * Advances due (keeps time) and start by the same calendar-day delta.
+   * When a task is overdue, jumps to the first future occurrence instead of
+   * rolling through stale dates one completion at a time.
    */
-  function nextOccurrenceParts(parts, recurrence) {
+  function nextOccurrenceParts(parts, recurrence, options) {
     var rule = normalizeRecurrence(recurrence);
     if (!rule || !parts || !parts.dueDate) return null;
-    var nextDue = advanceDateByRecurrence(parts.dueDate, rule);
+    options = options || {};
+    var nextDue = advanceDateByRecurrenceAfter(
+      parts.dueDate,
+      rule,
+      parts.dueTime || '',
+      options.now
+    );
     if (!nextDue) return null;
     var out = {
       dueDate: nextDue,
@@ -2776,23 +3229,24 @@
     return out;
   }
 
-  function formatRecurrenceLabelFr(recurrence) {
+  function formatRecurrenceLabelFr(recurrence, time) {
     var rule = normalizeRecurrence(recurrence);
     if (!rule) return 'Ne pas r\u00e9p\u00e9ter';
     var n = rule.interval || 1;
+    var label = '';
     if (rule.frequency === 'daily') {
-      return n === 1 ? 'Chaque jour' : 'Tous les ' + n + ' jours';
+      label = n === 1 ? 'Chaque jour' : 'Tous les ' + n + ' jours';
+    } else if (rule.frequency === 'weekly') {
+      label = n === 1 ? 'Chaque semaine' : 'Toutes les ' + n + ' semaines';
+    } else if (rule.frequency === 'monthly') {
+      label = n === 1 ? 'Chaque mois' : 'Tous les ' + n + ' mois';
+    } else if (rule.frequency === 'yearly') {
+      label = n === 1 ? 'Chaque ann\u00e9e' : 'Tous les ' + n + ' ans';
+    } else {
+      label = 'R\u00e9currente';
     }
-    if (rule.frequency === 'weekly') {
-      return n === 1 ? 'Chaque semaine' : 'Toutes les ' + n + ' semaines';
-    }
-    if (rule.frequency === 'monthly') {
-      return n === 1 ? 'Chaque mois' : 'Tous les ' + n + ' mois';
-    }
-    if (rule.frequency === 'yearly') {
-      return n === 1 ? 'Chaque ann\u00e9e' : 'Tous les ' + n + ' ans';
-    }
-    return 'R\u00e9currente';
+    var timeText = formatDueTimeDisplay(time);
+    return timeText ? label + ' \u00e0 ' + timeText : label;
   }
 
   function formatDueDateBoxDisplay(iso) {
@@ -6249,6 +6703,7 @@
     var embeddedBar = null;
     var embeddedHead = null;
     var embeddedToggleBtn = null;
+    var embeddedHeaderSummary = null;
     var embeddedSummaryEl = null;
     var heroEl = null;
     if (embedded) {
@@ -6257,25 +6712,52 @@
       embeddedBar.appendChild(settingsBtn);
       body.appendChild(embeddedBar);
 
+      // Compact section-style header (chevron + title + collapsed summary).
+      // Hero stays outside the button so hover is not a huge square.
       embeddedHead = document.createElement('div');
-      embeddedHead.className = 'statut-embedded-head';
+      embeddedHead.className = 'statut-embedded-head section-toggle-head';
       body.appendChild(embeddedHead);
 
       embeddedToggleBtn = document.createElement('button');
       embeddedToggleBtn.type = 'button';
-      embeddedToggleBtn.className = 'statut-embedded-collapse-btn';
+      embeddedToggleBtn.className =
+        'statut-embedded-collapse-btn section-collapse-btn';
 
       var embeddedChevron = document.createElement('i');
       embeddedChevron.className =
-        'ti ti-chevron-down statut-embedded-collapse-chevron';
+        'ti ti-chevron-down section-collapse-chevron statut-embedded-collapse-chevron';
       embeddedChevron.setAttribute('aria-hidden', 'true');
       embeddedToggleBtn.appendChild(embeddedChevron);
+
+      var embeddedLeading = document.createElement('span');
+      embeddedLeading.className = 'section-leading-icon statut-leading-icon';
+      embeddedLeading.setAttribute('aria-hidden', 'true');
+      var embeddedLeadingGlyph = document.createElement('i');
+      embeddedLeadingGlyph.className =
+        'ti ti-list section-leading-icon-glyph';
+      embeddedLeading.appendChild(embeddedLeadingGlyph);
+      embeddedToggleBtn.appendChild(embeddedLeading);
+
+      var embeddedTextWrap = document.createElement('span');
+      embeddedTextWrap.className = 'section-enable-text';
+      var embeddedTitle = document.createElement('span');
+      embeddedTitle.className = 'section-enable-title statut-enable-title';
+      embeddedTitle.textContent = 'Statut';
+      embeddedTextWrap.appendChild(embeddedTitle);
+      embeddedToggleBtn.appendChild(embeddedTextWrap);
+
+      embeddedHeaderSummary = document.createElement('span');
+      embeddedHeaderSummary.className = 'section-toggle-summary';
+      embeddedHeaderSummary.hidden = true;
+      embeddedHeaderSummary.setAttribute('aria-hidden', 'true');
+      embeddedToggleBtn.appendChild(embeddedHeaderSummary);
+
+      embeddedHead.appendChild(embeddedToggleBtn);
 
       heroEl = document.createElement('div');
       heroEl.className = 'statut-hero';
       heroEl.setAttribute('aria-live', 'polite');
-      embeddedToggleBtn.appendChild(heroEl);
-      embeddedHead.appendChild(embeddedToggleBtn);
+      body.appendChild(heroEl);
 
       embeddedSummaryEl = document.createElement('p');
       embeddedSummaryEl.className = 'statut-embedded-summary';
@@ -6430,6 +6912,13 @@
       return wrap;
     }
 
+    function refreshEmbeddedHeaderSummary() {
+      if (!embeddedHeaderSummary) return;
+      embeddedHeaderSummary.replaceChildren(summaryContent());
+      embeddedHeaderSummary.hidden = false;
+      embeddedHeaderSummary.setAttribute('aria-hidden', 'false');
+    }
+
     function refreshEmbeddedSummary() {
       if (!embeddedSummaryEl) return;
       var show = currentCategory() === 'blocked' && !embeddedDetailsExpanded;
@@ -6461,6 +6950,7 @@
           ? 'Replier les détails'
           : 'Développer les détails';
       }
+      refreshEmbeddedHeaderSummary();
       refreshEmbeddedSummary();
       if (opts.persist !== false) {
         saveStatutEmbeddedDetailsExpanded(embeddedDetailsExpanded);
@@ -6688,6 +7178,7 @@
 
     function refreshSummary() {
       if (collapse) collapse.refreshSummary();
+      if (embedded) refreshEmbeddedHeaderSummary();
     }
 
     renderOptions();
@@ -7039,9 +7530,13 @@
 
       var progressFeatureOn =
         features.progress !== false || features.statut !== false;
+      var due = (dueCountdown || '').trim();
       setFeatureVisible(progressCell.cell, progressFeatureOn);
-      setFeatureVisible(subtasksCell.cell, features.progress !== false);
-      setFeatureVisible(dueCell.cell, features.due !== false);
+      setFeatureVisible(
+        subtasksCell.cell,
+        features.progress !== false && subtasksTotal > 0
+      );
+      setFeatureVisible(dueCell.cell, features.due !== false && !!due);
       setFeatureVisible(priorityCell.cell, features.priority !== false);
 
       var st = (statusText || '').trim();
@@ -7175,12 +7670,11 @@
         subtasksCell.value.textContent = subtasksDone + '\u00a0/\u00a0' + subtasksTotal;
         subtasksCell.value.classList.remove('is-empty');
       } else {
-        subtasksCell.value.textContent = 'Aucune';
+        subtasksCell.value.textContent = '';
         subtasksCell.value.classList.add('is-empty');
       }
 
-      var due = (dueCountdown || '').trim();
-      dueCell.value.textContent = due || 'Sans \u00e9ch\u00e9ance';
+      dueCell.value.textContent = due;
       dueCell.value.classList.toggle('is-empty', !due);
       for (var bi = 0; bi < DUE_PROXIMITY_BANDS.length; bi++) {
         var bandName = DUE_PROXIMITY_BANDS[bi];
@@ -7363,6 +7857,10 @@
       typeof config.onTaskTypesChange === 'function'
         ? config.onTaskTypesChange
         : null;
+    var onCustomTaskTypesChange =
+      typeof config.onCustomTaskTypesChange === 'function'
+        ? config.onCustomTaskTypesChange
+        : null;
     var onDismissedTaskTypeSuggestionsChange =
       typeof config.onDismissedTaskTypeSuggestionsChange === 'function'
         ? config.onDismissedTaskTypeSuggestionsChange
@@ -7536,6 +8034,7 @@
     var descWrap = document.createElement('div');
     descWrap.className = 'info-desc-wrap';
     var descEditing = false;
+    var descMode = 'rich';
 
     var descPreview = document.createElement('div');
     descPreview.className = 'info-desc-preview';
@@ -7556,7 +8055,18 @@
     descInput.setAttribute('spellcheck', 'false');
     descInput.value = descText;
 
-    // Trello-style markdown toolbar (visible only while editing).
+    var descRich = document.createElement('div');
+    descRich.className = 'info-desc-rich info-desc-preview';
+    descRich.id = 'cardDescRich';
+    descRich.hidden = true;
+    descRich.contentEditable = 'true';
+    descRich.setAttribute('role', 'textbox');
+    descRich.setAttribute('aria-multiline', 'true');
+    descRich.setAttribute('aria-label', 'Description de la carte, texte enrichi');
+    descRich.setAttribute('spellcheck', 'true');
+    descRich.setAttribute('data-placeholder', 'Ajouter une description\u2026');
+
+    // Trello-style formatting toolbar (visible only while editing).
     var descToolbar = document.createElement('div');
     descToolbar.className = 'info-desc-toolbar';
     descToolbar.hidden = true;
@@ -7671,6 +8181,26 @@
     descToolbar.appendChild(descStrikeBtn);
     descToolbar.appendChild(descChecklistBtn);
 
+    var descModeSwitch = document.createElement('div');
+    descModeSwitch.className = 'info-desc-mode-switch';
+    descModeSwitch.setAttribute('role', 'radiogroup');
+    descModeSwitch.setAttribute('aria-label', 'Mode d\u2019\u00e9dition');
+
+    function makeDescModeBtn(mode, label) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'info-desc-mode-btn';
+      btn.setAttribute('role', 'radio');
+      btn.setAttribute('data-desc-mode', mode);
+      btn.textContent = label;
+      descModeSwitch.appendChild(btn);
+      return btn;
+    }
+
+    var descRichModeBtn = makeDescModeBtn('rich', 'Texte enrichi');
+    var descMarkdownModeBtn = makeDescModeBtn('markdown', 'Markdown');
+    descToolbar.appendChild(descModeSwitch);
+
     var descMeta = document.createElement('div');
     descMeta.className = 'info-desc-meta';
     var descSpellSpinner = document.createElement('span');
@@ -7698,6 +8228,7 @@
 
     descWrap.appendChild(descToolbar);
     descWrap.appendChild(descPreview);
+    descWrap.appendChild(descRich);
     descWrap.appendChild(descInput);
     descWrap.appendChild(descMeta);
     descWrap.appendChild(authBox);
@@ -7871,6 +8402,75 @@
     taskTypesPicker.hidden = true;
     taskTypesPicker.setAttribute('role', 'listbox');
     taskTypesPicker.setAttribute('aria-label', 'Types de t\u00e2che disponibles');
+
+    var taskTypesPickerList = document.createElement('div');
+    taskTypesPickerList.className = 'info-task-types-picker-list';
+    taskTypesPickerList.setAttribute('role', 'group');
+    taskTypesPickerList.setAttribute('aria-label', 'Types disponibles');
+
+    var taskTypesCreateWrap = document.createElement('div');
+    taskTypesCreateWrap.className = 'info-task-types-create';
+    taskTypesCreateWrap.hidden = !onCustomTaskTypesChange;
+
+    var taskTypesCreateIcons = document.createElement('div');
+    taskTypesCreateIcons.className = 'info-task-types-create-icons';
+    taskTypesCreateIcons.setAttribute('role', 'group');
+    taskTypesCreateIcons.setAttribute('aria-label', 'Ic\u00f4ne du nouveau type');
+
+    var taskTypesCreateIconKey = 'custom';
+    CUSTOM_TASK_TYPE_ICON_KEYS.forEach(function (iconKey) {
+      var iconBtn = document.createElement('button');
+      iconBtn.type = 'button';
+      iconBtn.className = 'info-task-types-create-icon-btn';
+      iconBtn.dataset.iconKey = iconKey;
+      iconBtn.title = iconKey;
+      iconBtn.setAttribute('aria-label', 'Ic\u00f4ne\u00a0: ' + iconKey);
+      iconBtn.setAttribute('aria-pressed', iconKey === taskTypesCreateIconKey ? 'true' : 'false');
+      if (iconKey === taskTypesCreateIconKey) {
+        iconBtn.classList.add('is-selected');
+      }
+      iconBtn.innerHTML = taskTypeIconSvg(iconKey);
+      iconBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        taskTypesCreateIconKey = iconKey;
+        var buttons = taskTypesCreateIcons.querySelectorAll(
+          '.info-task-types-create-icon-btn'
+        );
+        for (var bi = 0; bi < buttons.length; bi++) {
+          var selected = buttons[bi].dataset.iconKey === taskTypesCreateIconKey;
+          buttons[bi].classList.toggle('is-selected', selected);
+          buttons[bi].setAttribute('aria-pressed', selected ? 'true' : 'false');
+        }
+      });
+      taskTypesCreateIcons.appendChild(iconBtn);
+    });
+
+    var taskTypesCreateRow = document.createElement('div');
+    taskTypesCreateRow.className = 'info-task-types-create-row';
+
+    var taskTypesCreateInput = document.createElement('input');
+    taskTypesCreateInput.type = 'text';
+    taskTypesCreateInput.className = 'tp-input info-task-types-create-input';
+    taskTypesCreateInput.placeholder = 'Nouveau type\u2026';
+    taskTypesCreateInput.setAttribute('aria-label', 'Nom du nouveau type de t\u00e2che');
+    taskTypesCreateInput.setAttribute('autocomplete', 'off');
+    taskTypesCreateInput.maxLength = MAX_TASK_TYPE_LABEL_LEN;
+
+    var taskTypesCreateBtn = document.createElement('button');
+    taskTypesCreateBtn.type = 'button';
+    taskTypesCreateBtn.className = 'info-task-types-create-btn';
+    taskTypesCreateBtn.textContent = 'Cr\u00e9er';
+    taskTypesCreateBtn.title = 'Cr\u00e9er un type de t\u00e2che';
+    taskTypesCreateBtn.disabled = true;
+
+    taskTypesCreateRow.appendChild(taskTypesCreateInput);
+    taskTypesCreateRow.appendChild(taskTypesCreateBtn);
+    taskTypesCreateWrap.appendChild(taskTypesCreateIcons);
+    taskTypesCreateWrap.appendChild(taskTypesCreateRow);
+
+    taskTypesPicker.appendChild(taskTypesPickerList);
+    taskTypesPicker.appendChild(taskTypesCreateWrap);
 
     var taskTypesStatus = document.createElement('span');
     taskTypesStatus.className = 'info-desc-status';
@@ -8068,6 +8668,31 @@
       });
     }
 
+    function syncDescRichSize() {
+      var empty = !markdownFromRichRoot(descRich);
+      descRich.classList.toggle('is-empty', empty);
+      syncExpandableSurfaceHeight(descRich, {
+        maxHeight: INFO_DESC_MAX_HEIGHT_PX,
+        minHeight: empty ? INFO_DESC_EMPTY_MIN_HEIGHT_PX : INFO_DESC_MIN_HEIGHT_PX
+      });
+    }
+
+    function renderDescRich() {
+      descRich.innerHTML = renderMarkdownToHtml(descInput.value);
+      descRich.querySelectorAll('input[type="checkbox"]').forEach(function (checkbox) {
+        checkbox.disabled = false;
+        checkbox.setAttribute('contenteditable', 'false');
+      });
+      syncDescRichSize();
+    }
+
+    function syncDescSourceFromRich() {
+      if (descMode !== 'rich') return descInput.value;
+      var next = markdownFromRichRoot(descRich);
+      if (next !== descInput.value) descInput.value = next;
+      return next;
+    }
+
     function syncDescPreviewSize() {
       var empty = descPreview.classList.contains('is-empty');
       syncExpandableSurfaceHeight(descPreview, {
@@ -8109,11 +8734,23 @@
     }
 
     function syncDescFormatMenuSelection() {
-      var lineStart =
-        descInput.value.lastIndexOf('\n', Math.max(0, descInput.selectionStart) - 1) + 1;
-      var lineEnd = descInput.value.indexOf('\n', descInput.selectionStart);
-      if (lineEnd === -1) lineEnd = descInput.value.length;
-      var kind = detectMarkdownLineFormat(descInput.value.slice(lineStart, lineEnd));
+      var kind = 'normal';
+      if (descMode === 'rich') {
+        try {
+          var block = String(document.queryCommandValue('formatBlock') || '').toLowerCase();
+          if (/^h[1-6]$/.test(block)) kind = block;
+          else if (document.queryCommandState('insertOrderedList')) kind = 'ol';
+          else if (document.queryCommandState('insertUnorderedList')) kind = 'ul';
+        } catch (e) {
+          kind = 'normal';
+        }
+      } else {
+        var lineStart =
+          descInput.value.lastIndexOf('\n', Math.max(0, descInput.selectionStart) - 1) + 1;
+        var lineEnd = descInput.value.indexOf('\n', descInput.selectionStart);
+        if (lineEnd === -1) lineEnd = descInput.value.length;
+        kind = detectMarkdownLineFormat(descInput.value.slice(lineStart, lineEnd));
+      }
       if (!DESC_FORMAT_LABELS[kind]) kind = 'normal';
       descFormatBtnLabel.textContent = DESC_FORMAT_LABELS[kind] || 'Texte normal';
       var options = descFormatMenu.querySelectorAll('[data-md-kind]');
@@ -8159,30 +8796,102 @@
       }
     }
 
+    function execDescRichCommand(command, value) {
+      try {
+        descRich.focus();
+        document.execCommand(command, false, value == null ? null : value);
+      } catch (e) {
+        /* unsupported browser command */
+      }
+      syncDescSourceFromRich();
+      scheduleDescSave();
+      syncDescRichSize();
+      syncDescFormatMenuSelection();
+      onLayoutChange();
+    }
+
+    function applyDescRichBlock(kind) {
+      if (kind === 'ul') {
+        execDescRichCommand('insertUnorderedList');
+        return;
+      }
+      if (kind === 'ol') {
+        execDescRichCommand('insertOrderedList');
+        return;
+      }
+      if (kind === 'checklist') {
+        execDescRichCommand('insertUnorderedList');
+        var selection = global.getSelection && global.getSelection();
+        var node = selection && selection.anchorNode;
+        var li = node && (node.nodeType === 1 ? node : node.parentNode);
+        while (li && li !== descRich && richNodeName(li) !== 'LI') li = li.parentNode;
+        if (li && li !== descRich && !li.querySelector('input[type="checkbox"]')) {
+          var checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.setAttribute('contenteditable', 'false');
+          li.insertBefore(checkbox, li.firstChild);
+          li.insertBefore(document.createTextNode(' '), checkbox.nextSibling);
+          li.classList.add('info-md-li--check');
+        }
+        syncDescSourceFromRich();
+        scheduleDescSave();
+        return;
+      }
+      execDescRichCommand('formatBlock', kind === 'normal' ? 'p' : kind);
+    }
+
+    function focusDescEditor(moveToEnd) {
+      var target = descMode === 'rich' ? descRich : descInput;
+      try {
+        target.focus();
+        if (moveToEnd && descMode === 'markdown') {
+          var len = descInput.value.length;
+          descInput.setSelectionRange(len, len);
+        }
+      } catch (e) {
+        /* ignore */
+      }
+    }
+
+    function setDescMode(mode, options) {
+      options = options || {};
+      var next = mode === 'markdown' ? 'markdown' : 'rich';
+      if (descMode === 'rich' && next === 'markdown') syncDescSourceFromRich();
+      descMode = next;
+      if (descMode === 'rich') renderDescRich();
+      descRich.hidden = !descEditing || descMode !== 'rich';
+      descInput.hidden = !descEditing || descMode !== 'markdown';
+      descRichModeBtn.classList.toggle('is-active', descMode === 'rich');
+      descMarkdownModeBtn.classList.toggle('is-active', descMode === 'markdown');
+      descRichModeBtn.setAttribute('aria-checked', descMode === 'rich' ? 'true' : 'false');
+      descMarkdownModeBtn.setAttribute(
+        'aria-checked',
+        descMode === 'markdown' ? 'true' : 'false'
+      );
+      syncDescFormatMenuSelection();
+      if (descEditing && options.focus !== false) focusDescEditor(false);
+      onLayoutChange();
+    }
+
     function startDescEdit() {
       if (descEditing) return;
       descEditing = true;
       descPreview.hidden = true;
       descToolbar.hidden = false;
-      descInput.hidden = false;
-      syncDescInputSize();
-      try {
-        descInput.focus();
-        var len = descInput.value.length;
-        descInput.setSelectionRange(len, len);
-      } catch (e) {
-        /* ignore */
-      }
-      syncDescFormatMenuSelection();
-      onLayoutChange();
+      setDescMode(descMode, { focus: false });
+      if (descMode === 'markdown') syncDescInputSize();
+      else syncDescRichSize();
+      focusDescEditor(true);
     }
 
     function endDescEdit() {
       if (!descEditing) return;
+      syncDescSourceFromRich();
       descEditing = false;
       closeDescFormatMenu();
       descToolbar.hidden = true;
       descInput.hidden = true;
+      descRich.hidden = true;
       descPreview.hidden = false;
       renderDescPreview();
       onLayoutChange();
@@ -9302,12 +10011,13 @@
       var q = String(query || '').trim();
       labelsCreateBtn.hidden = false;
       if (!q) {
-        labelsCreateBtn.disabled = true;
+        labelsCreateBtn.disabled = !!labelsBusy;
         labelsCreateBtn.innerHTML =
           '<i class="ti ti-plus" aria-hidden="true"></i>' +
           '<span>Cr\u00e9er une nouvelle \u00e9tiquette</span>';
-        labelsCreateBtn.title =
-          'Tapez un nom pour cr\u00e9er une nouvelle \u00e9tiquette';
+        labelsCreateBtn.title = labelsBusy
+          ? 'Cr\u00e9ation en cours\u2026'
+          : 'Cliquez puis tapez un nom pour cr\u00e9er une nouvelle \u00e9tiquette';
         return;
       }
       if (boardHasLabelName(q) || labelsBusy) {
@@ -9497,47 +10207,70 @@
     function availableTaskTypeEntries() {
       var selected = Object.create(null);
       for (var i = 0; i < taskTypes.length; i++) selected[taskTypes[i]] = true;
-      return TASK_TYPES.filter(function (entry) {
+      return getTaskTypeCatalog().filter(function (entry) {
         return !selected[entry.id];
       });
     }
 
+    function canOpenTaskTypesPicker() {
+      if (!onTaskTypesChange) return false;
+      return availableTaskTypeEntries().length > 0 || !!onCustomTaskTypesChange;
+    }
+
+    function syncTaskTypesCreateBtn() {
+      if (!onCustomTaskTypesChange) {
+        taskTypesCreateBtn.disabled = true;
+        return;
+      }
+      var label = (taskTypesCreateInput.value || '').trim();
+      taskTypesCreateBtn.disabled =
+        taskTypesBusy || !label || label.length > MAX_TASK_TYPE_LABEL_LEN;
+    }
+
     function renderTaskTypesPicker() {
-      taskTypesPicker.replaceChildren();
+      taskTypesPickerList.replaceChildren();
+      taskTypesCreateWrap.hidden = !onCustomTaskTypesChange;
       var available = availableTaskTypeEntries();
       if (!available.length) {
         var empty = document.createElement('div');
         empty.className = 'info-task-types-picker-empty';
-        empty.textContent = 'Tous les types sont d\u00e9j\u00e0 s\u00e9lectionn\u00e9s';
-        taskTypesPicker.appendChild(empty);
-        return;
-      }
-      available.forEach(function (entry) {
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'info-task-types-picker-option';
-        btn.setAttribute('role', 'option');
-        btn.disabled = taskTypesBusy;
-        btn.title = entry.hint || entry.label;
-        btn.dataset.taskTypeId = entry.id;
+        empty.textContent = onCustomTaskTypesChange
+          ? 'Tous les types sont s\u00e9lectionn\u00e9s \u2014 cr\u00e9ez-en un nouveau ci-dessous'
+          : 'Tous les types sont d\u00e9j\u00e0 s\u00e9lectionn\u00e9s';
+        taskTypesPickerList.appendChild(empty);
+      } else {
+        available.forEach(function (entry) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'info-task-types-picker-option';
+          btn.setAttribute('role', 'option');
+          btn.disabled = taskTypesBusy;
+          btn.title = entry.hint || entry.label;
+          btn.dataset.taskTypeId = entry.id;
 
-        var text = document.createElement('span');
-        text.className = 'info-task-types-picker-option-text';
-        text.textContent = entry.label;
-        btn.appendChild(text);
+          var head = document.createElement('span');
+          head.className = 'info-task-types-picker-option-head';
+          head.innerHTML = taskTypeIconSvg(entry.id);
+          var text = document.createElement('span');
+          text.className = 'info-task-types-picker-option-text';
+          text.textContent = entry.label;
+          head.appendChild(text);
+          btn.appendChild(head);
 
-        if (entry.hint) {
-          var hint = document.createElement('span');
-          hint.className = 'info-task-types-picker-option-hint';
-          hint.textContent = entry.hint;
-          btn.appendChild(hint);
-        }
+          if (entry.hint) {
+            var hint = document.createElement('span');
+            hint.className = 'info-task-types-picker-option-hint';
+            hint.textContent = entry.hint;
+            btn.appendChild(hint);
+          }
 
-        btn.addEventListener('click', function () {
-          addTaskType(entry.id);
+          btn.addEventListener('click', function () {
+            addTaskType(entry.id);
+          });
+          taskTypesPickerList.appendChild(btn);
         });
-        taskTypesPicker.appendChild(btn);
-      });
+      }
+      syncTaskTypesCreateBtn();
     }
 
     function renderTaskTypes() {
@@ -9549,6 +10282,11 @@
         chip.className = 'info-task-type';
         chip.title = hint || label;
         chip.setAttribute('aria-label', label);
+
+        var iconWrap = document.createElement('span');
+        iconWrap.className = 'info-task-type-icon-wrap';
+        iconWrap.innerHTML = taskTypeIconSvg(id);
+        chip.appendChild(iconWrap);
 
         var text = document.createElement('span');
         text.className = 'info-task-type-name';
@@ -9571,7 +10309,7 @@
         taskTypesEl.appendChild(chip);
       });
 
-      var canAdd = !!onTaskTypesChange && availableTaskTypeEntries().length > 0;
+      var canAdd = canOpenTaskTypesPicker();
       taskTypesAddBtn.hidden = !onTaskTypesChange;
       taskTypesAddBtn.disabled = taskTypesBusy || !canAdd;
       if (taskTypesPickerOpen) {
@@ -9579,6 +10317,62 @@
         else renderTaskTypesPicker();
       }
       renderTaskTypeSuggestions();
+    }
+
+    function persistCustomTaskTypes(nextCustoms, createdEntry) {
+      var previous = getCustomTaskTypes();
+      setCustomTaskTypes(nextCustoms);
+      renderTaskTypes();
+      if (!onCustomTaskTypesChange) {
+        if (createdEntry) addTaskType(createdEntry.id);
+        return Promise.resolve({ ok: true });
+      }
+      taskTypesBusy = true;
+      setTaskTypesStatus('', 'saving');
+      return Promise.resolve(onCustomTaskTypesChange(getCustomTaskTypes()))
+        .then(function (result) {
+          taskTypesBusy = false;
+          if (result && result.ok === false) {
+            setCustomTaskTypes(previous);
+            setTaskTypesStatus('\u00c9chec de l\u2019enregistrement', 'error');
+            renderTaskTypes();
+            onLayoutChange();
+            return result;
+          }
+          setTaskTypesStatus('', '');
+          if (createdEntry) addTaskType(createdEntry.id);
+          else {
+            renderTaskTypes();
+            onLayoutChange();
+          }
+          return result || { ok: true };
+        })
+        .catch(function (err) {
+          console.error('Info custom task types save failed', err);
+          taskTypesBusy = false;
+          setCustomTaskTypes(previous);
+          setTaskTypesStatus('\u00c9chec de l\u2019enregistrement', 'error');
+          renderTaskTypes();
+          onLayoutChange();
+          return { ok: false };
+        });
+    }
+
+    function submitCreateTaskType() {
+      if (taskTypesBusy || !onCustomTaskTypesChange) return;
+      var label = (taskTypesCreateInput.value || '').trim();
+      if (!label) return;
+      var draft = createCustomTaskType(
+        { label: label, icon: taskTypesCreateIconKey },
+        { apply: false }
+      );
+      if (!draft) {
+        setTaskTypesStatus('Ce type existe d\u00e9j\u00e0', 'error');
+        return;
+      }
+      taskTypesCreateInput.value = '';
+      syncTaskTypesCreateBtn();
+      persistCustomTaskTypes(getCustomTaskTypes().concat([draft]), draft);
     }
 
     function persistTaskTypes(nextTypes) {
@@ -9664,7 +10458,7 @@
       }
       taskTypesSuggestSection.hidden = false;
       taskTypeSuggestions.forEach(function (row) {
-        var entry = TASK_TYPE_BY_ID[row.id];
+        var entry = getTaskTypeEntry(row.id);
         var label = (entry && entry.label) || row.label || row.id;
         var hint = (entry && entry.hint) || row.hint || '';
 
@@ -9680,7 +10474,11 @@
           : 'Ajouter\u00a0: ' + label;
         btn.disabled = taskTypesBusy;
         btn.dataset.taskTypeId = row.id;
-        btn.textContent = label;
+        btn.innerHTML =
+          taskTypeIconSvg(row.id, 'info-task-type-icon') +
+          '<span class="info-task-types-suggestion-label">' +
+          escapeHtml(label) +
+          '</span>';
         btn.addEventListener('click', function () {
           addTaskType(row.id);
         });
@@ -9759,7 +10557,7 @@
         renderTaskTypeSuggestions();
         return Promise.resolve();
       }
-      if (taskTypes.length >= TASK_TYPES.length) {
+      if (taskTypes.length >= getTaskTypeCatalog().length) {
         taskTypeSuggestions = [];
         renderTaskTypeSuggestions();
         return Promise.resolve();
@@ -10477,8 +11275,11 @@
     function setDescSpellchecking(on) {
       descSpellSpinner.hidden = !on;
       descInput.classList.toggle('is-spellchecking', !!on);
+      descRich.classList.toggle('is-spellchecking', !!on);
       if (on) descInput.setAttribute('aria-busy', 'true');
       else descInput.removeAttribute('aria-busy');
+      if (on) descRich.setAttribute('aria-busy', 'true');
+      else descRich.removeAttribute('aria-busy');
     }
 
     function clearDescSpellRevert() {
@@ -10508,9 +11309,10 @@
             return;
           }
           descInput.value = original;
+          if (descMode === 'rich') renderDescRich();
           descSpellcheckedText = original.trim() || null;
           descDirty = true;
-          if (descEditing) syncDescInputSize();
+          if (descEditing && descMode === 'markdown') syncDescInputSize();
           else renderDescPreview();
           onLayoutChange();
           flushDescSave();
@@ -10578,6 +11380,7 @@
           return;
         }
         descInput.value = corrected;
+        if (descMode === 'rich') renderDescRich();
         descSpellcheckedText = corrected.trim();
         descDirty = true;
         showDescSpellRevert(snapshot, corrected);
@@ -10593,6 +11396,7 @@
     }
 
     function flushDescSave() {
+      syncDescSourceFromRich();
       if (descSaveTimer) {
         clearTimeout(descSaveTimer);
         descSaveTimer = null;
@@ -10706,6 +11510,63 @@
         endDescEdit();
       }, 0);
     });
+    descRich.addEventListener('input', function () {
+      descSpellcheckGen += 1;
+      setDescSpellchecking(false);
+      clearDescSpellRevert();
+      syncDescSourceFromRich();
+      scheduleDescSave();
+      syncDescRichSize();
+      syncDescFormatMenuSelection();
+      onLayoutChange();
+    });
+    descRich.addEventListener('change', function (e) {
+      if (!e.target || richNodeName(e.target) !== 'INPUT') return;
+      syncDescSourceFromRich();
+      scheduleDescSave();
+    });
+    descRich.addEventListener('keyup', syncDescFormatMenuSelection);
+    descRich.addEventListener('mouseup', syncDescFormatMenuSelection);
+    descRich.addEventListener('keydown', function (e) {
+      var key = e.key;
+      var mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      if (key === 'b' || key === 'B') {
+        e.preventDefault();
+        execDescRichCommand('bold');
+      } else if (key === 'i' || key === 'I') {
+        e.preventDefault();
+        execDescRichCommand('italic');
+      }
+    });
+    descRich.addEventListener('paste', function (e) {
+      if (!e.clipboardData) return;
+      e.preventDefault();
+      var temp = document.createElement('div');
+      var html = e.clipboardData.getData('text/html');
+      if (html) temp.innerHTML = html;
+      else temp.textContent = e.clipboardData.getData('text/plain');
+      var safeMarkdown = markdownFromRichRoot(temp);
+      var safeHtml = renderMarkdownToHtml(safeMarkdown);
+      try {
+        document.execCommand('insertHTML', false, safeHtml);
+      } catch (err) {
+        document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
+      }
+      syncDescSourceFromRich();
+      scheduleDescSave();
+      syncDescRichSize();
+    });
+    descRich.addEventListener('blur', function () {
+      syncDescSourceFromRich();
+      flushDescSave();
+      spellcheckDescAfterCommit();
+      setTimeout(function () {
+        if (!descEditing) return;
+        if (descWrap.contains(document.activeElement)) return;
+        endDescEdit();
+      }, 0);
+    });
     descPreview.addEventListener('click', function (e) {
       if (e.target && e.target.closest && e.target.closest('a, button, input')) return;
       startDescEdit();
@@ -10717,18 +11578,14 @@
       }
     });
 
-    // Keep textarea focus when interacting with the markdown toolbar.
+    // Keep the current editor selection when interacting with the toolbar.
     descToolbar.addEventListener('mousedown', function (e) {
       e.preventDefault();
     });
     descFormatBtn.addEventListener('click', function () {
       if (descFormatMenu.hidden) openDescFormatMenu();
       else closeDescFormatMenu();
-      try {
-        descInput.focus();
-      } catch (err) {
-        /* ignore */
-      }
+      focusDescEditor(false);
     });
     descFormatMenu.addEventListener('click', function (e) {
       var opt =
@@ -10738,19 +11595,31 @@
       if (!opt) return;
       var kind = opt.getAttribute('data-md-kind');
       closeDescFormatMenu();
-      applyDescMarkdownBlock(kind);
+      if (descMode === 'rich') applyDescRichBlock(kind);
+      else applyDescMarkdownBlock(kind);
     });
     descBoldBtn.addEventListener('click', function () {
-      applyDescMarkdownInline('**');
+      if (descMode === 'rich') execDescRichCommand('bold');
+      else applyDescMarkdownInline('**');
     });
     descItalicBtn.addEventListener('click', function () {
-      applyDescMarkdownInline('*');
+      if (descMode === 'rich') execDescRichCommand('italic');
+      else applyDescMarkdownInline('*');
     });
     descStrikeBtn.addEventListener('click', function () {
-      applyDescMarkdownInline('~~');
+      if (descMode === 'rich') execDescRichCommand('strikeThrough');
+      else applyDescMarkdownInline('~~');
     });
     descChecklistBtn.addEventListener('click', function () {
-      applyDescMarkdownBlock('checklist');
+      if (descMode === 'rich') applyDescRichBlock('checklist');
+      else applyDescMarkdownBlock('checklist');
+    });
+    descModeSwitch.addEventListener('click', function (e) {
+      var btn = e.target && e.target.closest
+        ? e.target.closest('[data-desc-mode]')
+        : null;
+      if (!btn) return;
+      setDescMode(btn.getAttribute('data-desc-mode'));
     });
     document.addEventListener('mousedown', function (e) {
       if (!descFormatMenu.hidden && !descFormatWrap.contains(e.target)) {
@@ -10802,6 +11671,22 @@
       setTaskTypesPickerOpen(!taskTypesPickerOpen);
     });
 
+    taskTypesCreateInput.addEventListener('input', function () {
+      syncTaskTypesCreateBtn();
+    });
+    taskTypesCreateInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        event.stopPropagation();
+        submitCreateTaskType();
+      }
+    });
+    taskTypesCreateBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      submitCreateTaskType();
+    });
+
     labelsSearchInput.addEventListener('input', function () {
       if (!labelsPickerOpen) return;
       renderLabelsPicker();
@@ -10848,6 +11733,14 @@
       event.preventDefault();
       event.stopPropagation();
       if (labelsCreateBtn.disabled) {
+        try {
+          labelsSearchInput.focus();
+        } catch (e) {
+          /* ignore */
+        }
+        return;
+      }
+      if (!String(labelsSearchInput.value || '').trim()) {
         try {
           labelsSearchInput.focus();
         } catch (e) {
@@ -10934,6 +11827,7 @@
     renderRecap();
     setAuthHint(authReason);
     syncTitleInputSize();
+    setDescMode('rich', { focus: false });
     renderDescPreview();
     collapse.refreshSummary();
     scheduleLabelSuggestions(false);
@@ -10972,7 +11866,12 @@
         var value = typeof next === 'string' ? next : '';
         if (descDirty && !options.force) return;
         descText = value;
-        if (document.activeElement === descInput && !options.force) return;
+        if (
+          (document.activeElement === descInput || document.activeElement === descRich) &&
+          !options.force
+        ) {
+          return;
+        }
         descSpellcheckGen += 1;
         setDescSpellchecking(false);
         clearDescSpellRevert();
@@ -10980,7 +11879,8 @@
         descDirty = false;
         descSpellcheckedText = value.trim() || null;
         if (descEditing) {
-          syncDescInputSize();
+          if (descMode === 'rich') renderDescRich();
+          else syncDescInputSize();
         } else {
           renderDescPreview();
         }
@@ -10988,6 +11888,7 @@
         scheduleTaskTypeSuggestions(false);
       },
       getDesc: function () {
+        syncDescSourceFromRich();
         return descInput.value;
       },
       setMembers: function (list) {
@@ -11030,6 +11931,15 @@
       },
       getTaskTypes: function () {
         return taskTypes.slice();
+      },
+      setCustomTaskTypes: function (list) {
+        setCustomTaskTypes(list);
+        renderTaskTypes();
+        scheduleTaskTypeSuggestions(false);
+        onLayoutChange();
+      },
+      getCustomTaskTypes: function () {
+        return getCustomTaskTypes();
       },
       setDismissedTaskTypeSuggestions: function (list) {
         dismissedTaskTypeSuggestions = normalizeTaskTypes(list);
@@ -12460,9 +13370,8 @@
     startPopover.appendChild(startFooter);
     startPicker.appendChild(startPopover);
     startRow.appendChild(startPicker);
-    body.appendChild(startRow);
 
-    // ── Recurring ──────────────────────────────────────────────────────
+    // ── Recurring (beside start date) ──────────────────────────────────
     var recurringRow = document.createElement('div');
     recurringRow.className = 'due-date-recurring';
 
@@ -12474,8 +13383,16 @@
     var recurringTitle = document.createElement('span');
     recurringTitle.className = 'due-date-recurring-title';
     recurringTitle.textContent = DUE_DATE_RECURRING_LABEL;
+    var recurringClearBtn = document.createElement('button');
+    recurringClearBtn.type = 'button';
+    recurringClearBtn.className = 'due-date-recurring-clear';
+    recurringClearBtn.setAttribute('aria-label', DUE_DATE_RECURRING_CLEAR_LABEL);
+    recurringClearBtn.title = DUE_DATE_RECURRING_CLEAR_LABEL;
+    recurringClearBtn.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
+    recurringClearBtn.hidden = !currentRecurrence;
     recurringHead.appendChild(recurringIcon);
     recurringHead.appendChild(recurringTitle);
+    recurringHead.appendChild(recurringClearBtn);
 
     var recurringSelect = document.createElement('select');
     recurringSelect.className = 'due-date-recurring-select';
@@ -12536,11 +13453,32 @@
     recurringIntervalWrap.appendChild(recurringIntervalLabel);
     recurringIntervalWrap.appendChild(recurringIntervalInput);
 
+    var recurringTimeWrap = document.createElement('div');
+    recurringTimeWrap.className = 'due-date-recurring-time';
+    recurringTimeWrap.hidden = !currentRecurrence;
+    var recurringTimeLabel = document.createElement('label');
+    recurringTimeLabel.className = 'due-date-recurring-time-label';
+    recurringTimeLabel.textContent = '\u00c0';
+    var recurringTimeInput = document.createElement('input');
+    recurringTimeInput.type = 'time';
+    recurringTimeInput.className = 'due-date-recurring-time-input';
+    recurringTimeInput.step = '300';
+    recurringTimeInput.value = currentTime || rememberedTime || DUE_DATE_TIME_DEFAULT;
+    recurringTimeInput.setAttribute('aria-label', 'Heure de r\u00e9p\u00e9tition');
+    var recurringTimeHint = document.createElement('span');
+    recurringTimeHint.className = 'due-date-recurring-time-hint';
+    recurringTimeHint.textContent = 'Le rappel revient \u00e0 cette heure.';
+    recurringTimeWrap.appendChild(recurringTimeLabel);
+    recurringTimeWrap.appendChild(recurringTimeInput);
+    recurringTimeWrap.appendChild(recurringTimeHint);
+
     recurringRow.appendChild(recurringHead);
     recurringRow.appendChild(recurringSelect);
     recurringRow.appendChild(recurringWeekdays);
     recurringRow.appendChild(recurringIntervalWrap);
-    body.appendChild(recurringRow);
+    recurringRow.appendChild(recurringTimeWrap);
+    startRow.appendChild(recurringRow);
+    body.appendChild(startRow);
 
     var timePopover = document.createElement('div');
     timePopover.className = 'due-date-time-popover';
@@ -13309,10 +14247,13 @@
     function refreshRecurrenceUi() {
       var rule = currentRecurrence;
       recurringSelect.value = rule ? rule.frequency : '';
+      recurringClearBtn.hidden = !rule;
       recurringWeekdays.hidden = !rule || rule.frequency !== 'weekly';
       var interval = rule && rule.interval ? rule.interval : 1;
       recurringIntervalInput.value = String(interval);
-      recurringIntervalWrap.hidden = !rule || interval <= 1;
+      recurringIntervalWrap.hidden = !rule;
+      recurringTimeWrap.hidden = !rule;
+      recurringTimeInput.value = currentTime || rememberedTime || DUE_DATE_TIME_DEFAULT;
       var selected = rule && rule.weekdays ? rule.weekdays : [];
       var chips = recurringWeekdays.querySelectorAll('.due-date-recurring-weekday');
       for (var i = 0; i < chips.length; i++) {
@@ -14228,6 +15169,15 @@
       if (!freq) {
         currentRecurrence = null;
       } else {
+        if (!current) {
+          current = toIsoDate(startOfLocalDay(new Date()));
+          focusIso = current;
+          syncViewFromValue(current);
+        }
+        if (!currentTime) {
+          currentTime = rememberedTime || DUE_DATE_TIME_DEFAULT;
+          rememberedTime = currentTime;
+        }
         var weekdays;
         if (freq === 'weekly') {
           if (
@@ -14254,6 +15204,14 @@
       emitChange();
     });
 
+    recurringClearBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!currentRecurrence) return;
+      currentRecurrence = null;
+      emitChange();
+    });
+
     recurringIntervalInput.addEventListener('change', function () {
       if (!currentRecurrence) return;
       var next = Math.round(Number(recurringIntervalInput.value));
@@ -14265,6 +15223,11 @@
         weekdays: currentRecurrence.weekdays
       });
       emitChange();
+    });
+
+    recurringTimeInput.addEventListener('change', function () {
+      if (!currentRecurrence) return;
+      selectTime(recurringTimeInput.value || DUE_DATE_TIME_DEFAULT);
     });
 
     collapseApi = bindCollapsibleEnable({
@@ -16442,9 +17405,19 @@
     normalizeBlockedLinks: normalizeBlockedLinks,
     formatBlockedBadgeText: formatBlockedBadgeText,
     TASK_TYPES: TASK_TYPES,
+    BUILTIN_TASK_TYPES: BUILTIN_TASK_TYPES,
+    CUSTOM_TASK_TYPE_ICON_KEYS: CUSTOM_TASK_TYPE_ICON_KEYS,
     isValidTaskTypeId: isValidTaskTypeId,
+    isCustomTaskTypeId: isCustomTaskTypeId,
     taskTypeLabel: taskTypeLabel,
     taskTypeHint: taskTypeHint,
+    taskTypeIconKey: taskTypeIconKey,
+    taskTypeIconSvg: taskTypeIconSvg,
+    getTaskTypeCatalog: getTaskTypeCatalog,
+    getCustomTaskTypes: getCustomTaskTypes,
+    setCustomTaskTypes: setCustomTaskTypes,
+    normalizeCustomTaskTypes: normalizeCustomTaskTypes,
+    createCustomTaskType: createCustomTaskType,
     normalizeTaskTypes: normalizeTaskTypes,
     MS_PER_DAY: MS_PER_DAY,
     MS_PER_HOUR: MS_PER_HOUR,
@@ -16494,6 +17467,7 @@
     createOverviewField: createOverviewField,
     createInfoField: createInfoField,
     renderMarkdownToHtml: renderMarkdownToHtml,
+    markdownFromRichRoot: markdownFromRichRoot,
     wrapMarkdownInlineSelection: wrapMarkdownInlineSelection,
     applyMarkdownBlockFormat: applyMarkdownBlockFormat,
     detectMarkdownLineFormat: detectMarkdownLineFormat,

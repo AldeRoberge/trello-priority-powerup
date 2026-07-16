@@ -25,8 +25,10 @@ const UNIT_FILES = [
   'blocked-motifs.test.js',
   'brand.test.js',
   'overview.test.js',
+  'markdown-rich.test.js',
   'status-brief.test.js',
   'progress-summary.test.js',
+  'task-types.test.js',
 ];
 
 function listTests() {
