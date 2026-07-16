@@ -4,10 +4,61 @@
 
   var COMPLETION_SCHEME_STORAGE_KEY = 'trello-priority-powerup/completion-color-scheme';
   var COMPLETION_GRADIENT_STORAGE_KEY = 'trello-priority-powerup/completion-color-gradient';
+  var MASTER_DETAILS_STORAGE_KEY =
+    'trello-priority-powerup/completion-master-details-expanded';
   var DEFAULT_COMPLETION_SCHEME_KEY = 'traffic';
   var CUSTOM_COMPLETION_SCHEME_KEY = 'custom';
   var MIN_GRADIENT_STOPS = 2;
   var MAX_GRADIENT_STOPS = 8;
+
+  /** Default expanded so first-time users see title / Motifs / actions. */
+  function loadMasterDetailsExpanded() {
+    try {
+      if (typeof localStorage === 'undefined') return true;
+      var raw = localStorage.getItem(MASTER_DETAILS_STORAGE_KEY);
+      if (raw === '0' || raw === 'false') return false;
+      if (raw === '1' || raw === 'true') return true;
+      return true;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  function saveMasterDetailsExpanded(expanded) {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.setItem(MASTER_DETAILS_STORAGE_KEY, expanded ? '1' : '0');
+    } catch (e) {
+      /* ignore quota / private mode */
+    }
+  }
+
+  /**
+   * Compact Motifs line for the collapsed master progress panel.
+   * Prefers PriorityUI.formatBlockedReasonsSummary when available.
+   */
+  function formatMasterReasonsSummary(reasons) {
+    var PU = global.PriorityUI;
+    if (PU && typeof PU.formatBlockedReasonsSummary === 'function') {
+      return PU.formatBlockedReasonsSummary(reasons, {
+        empty: PU.BLOCKED_LABEL || 'Bloqu\u00e9'
+      });
+    }
+    var list = [];
+    if (Array.isArray(reasons)) {
+      for (var i = 0; i < reasons.length; i++) {
+        var text = typeof reasons[i] === 'string' ? reasons[i].trim() : '';
+        if (text) list.push(text);
+      }
+    } else if (typeof reasons === 'string' && reasons.trim()) {
+      list.push(reasons.trim());
+    }
+    if (!list.length) return 'Bloqu\u00e9';
+    if (list.length === 1) return list[0];
+    var comma = list.join(', ');
+    if (comma.length <= 42) return comma;
+    return list[0] + ' +' + (list.length - 1);
+  }
 
   // Perceptual color helpers (OKLab / OKLCH) — same approach as priority-ui.js.
   function srgbToLinear(c) {
@@ -1521,8 +1572,18 @@
     masterCheckBtn.id = 'completionMasterCheck';
     masterCheckWrap.appendChild(masterCheckBtn);
 
+    var masterDetailsExpanded = loadMasterDetailsExpanded();
+
+    var detailsToggleBtn = document.createElement('button');
+    detailsToggleBtn.type = 'button';
+    detailsToggleBtn.className = 'tp-completion-details-toggle';
+    detailsToggleBtn.id = 'completionMasterDetailsToggle';
+    detailsToggleBtn.innerHTML =
+      '<i class="ti ti-chevron-down tp-completion-details-chevron" aria-hidden="true"></i>';
+
     var percentRow = document.createElement('div');
     percentRow.className = 'tp-completion-percent-row';
+    percentRow.appendChild(detailsToggleBtn);
     percentRow.appendChild(masterCheckWrap);
     percentRow.appendChild(percentEl);
 
@@ -1690,9 +1751,64 @@
     });
     progressPanel.appendChild(masterSlider.el);
 
+    var reasonsSummaryEl = document.createElement('p');
+    reasonsSummaryEl.className = 'tp-completion-reasons-summary';
+    reasonsSummaryEl.id = 'completionMasterReasonsSummary';
+    reasonsSummaryEl.hidden = true;
+    reasonsSummaryEl.setAttribute('aria-live', 'polite');
+    progressPanel.appendChild(reasonsSummaryEl);
+
     var masterMotifHost = document.createElement('div');
     masterMotifHost.className = 'tp-completion-master-motif-host';
     progressPanel.appendChild(masterMotifHost);
+
+    function refreshMasterReasonsSummary() {
+      var blocked = CT.isMasterBlocked(data);
+      var text = formatMasterReasonsSummary(data.blockedReasons || []);
+      reasonsSummaryEl.textContent = text;
+      reasonsSummaryEl.title = text;
+      // Collapsed + blocked: compact Motifs line; expanded uses the full editor.
+      reasonsSummaryEl.hidden = !blocked || masterDetailsExpanded;
+    }
+
+    function setMasterDetailsExpanded(expanded, opts) {
+      opts = opts || {};
+      masterDetailsExpanded = !!expanded;
+      progressPanel.classList.toggle('is-collapsed', !masterDetailsExpanded);
+      detailsToggleBtn.setAttribute(
+        'aria-expanded',
+        masterDetailsExpanded ? 'true' : 'false'
+      );
+      detailsToggleBtn.setAttribute(
+        'aria-label',
+        masterDetailsExpanded
+          ? 'Replier les d\u00e9tails de la t\u00e2che'
+          : 'D\u00e9velopper les d\u00e9tails de la t\u00e2che'
+      );
+      detailsToggleBtn.title = masterDetailsExpanded
+        ? 'Replier les d\u00e9tails'
+        : 'D\u00e9velopper les d\u00e9tails';
+      refreshMasterReasonsSummary();
+      // Remount Motifs editor when expanding while blocked.
+      if (typeof syncMasterBlockedBtn === 'function') {
+        syncMasterBlockedBtn();
+      }
+      if (opts.persist !== false) saveMasterDetailsExpanded(masterDetailsExpanded);
+      if (opts.notifyLayout !== false) onResize();
+    }
+
+    detailsToggleBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      setMasterDetailsExpanded(!masterDetailsExpanded);
+    });
+    reasonsSummaryEl.addEventListener('click', function () {
+      if (!masterDetailsExpanded) setMasterDetailsExpanded(true);
+    });
+
+    setMasterDetailsExpanded(masterDetailsExpanded, {
+      persist: false,
+      notifyLayout: false
+    });
 
     progressSection.appendChild(progressPanel);
     containerEl.appendChild(progressSection);

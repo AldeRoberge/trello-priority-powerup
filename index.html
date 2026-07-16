@@ -8,6 +8,7 @@
   <script src="./components/shared/brand.js"></script>
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/version.js"></script>
+  <script src="./components/shared/debug-log.js"></script>
   <script src="./components/priority/priority-matrix.js"></script>
   <script src="./components/priority/priority-ui.js"></script>
   <script>
@@ -292,11 +293,11 @@
         return [
           {
             icon: brandIcon,
-            text: 'Paramètres de priorité',
+            text: 'Paramètres du Cerveau',
             callback: function(t) {
               // Popup width is fixed (narrow) by Trello; modal fits statut mapping + color schemes.
               return t.modal({
-                title: 'Paramètres de priorité',
+                title: 'Paramètres du Cerveau',
                 url: PriorityTrello.pageUrl('./settings.html'),
                 height: 720,
                 fullscreen: false,

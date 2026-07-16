@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Paramètres de priorité</title>
+  <title>Paramètres du Cerveau</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <script src="./components/shared/brand.js"></script>
@@ -223,6 +223,12 @@
   <script>
     PriorityTrello.initIframePage(function (t) {
     let buildStampTimer;
+
+    if (window.TpDebug && typeof TpDebug.configureFromProfile === 'function') {
+      TpDebug.configureFromProfile(t).then(function (on) {
+        if (on) TpDebug.log('settings', 'page.init', { debug: true });
+      });
+    }
 
     if (window.Spellcheck && typeof Spellcheck.configure === 'function') {
       Spellcheck.configure({ t: t });
@@ -1033,6 +1039,7 @@
       initCompletionSchemePicker(),
       refreshAutoSortUi(),
       initDisplaySettings(),
+      initDebugSettings(),
       initExperimentalSettings(),
     ]).then(function () {
       resizeSettingsPopup();

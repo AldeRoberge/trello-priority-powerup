@@ -7,6 +7,7 @@
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./components/shared/brand.js"></script>
   <script src="./components/shared/rest-config.js"></script>
+  <script src="./components/shared/debug-log.js"></script>
   <script src="./components/priority/priority-trello.js"></script>
   <script src="./components/agent/agent.js"></script>
   <script src="./components/agent/agent-memory.js"></script>
@@ -20,6 +21,11 @@
   <div id="memoryMount"></div>
   <script>
     PriorityTrello.initIframePage(function (t) {
+      if (window.TpDebug && typeof TpDebug.configureFromProfile === 'function') {
+        TpDebug.configureFromProfile(t).then(function (on) {
+          if (on) TpDebug.log('memoryAlign', 'page.init', { mode: 'onboarding' });
+        });
+      }
       var mount = document.getElementById('memoryMount');
       function resize() {
         if (typeof t.sizeTo === 'function') t.sizeTo(document.body);
@@ -31,15 +37,18 @@
         showSummary: true,
         onLayoutChange: resize,
         onSkip: function () {
+          if (window.TpDebug) TpDebug.log('memoryAlign', 'skip');
           t.closeModal();
         },
         onComplete: function () {
+          if (window.TpDebug) TpDebug.log('memoryAlign', 'complete');
           t.closeModal();
         }
       });
       resize();
     }).catch(function (err) {
-      console.error('memory-align init failed', err);
+      if (window.TpDebug) TpDebug.error('memoryAlign', 'init', err);
+      else console.error('memory-align init failed', err);
     });
   </script>
 </body>

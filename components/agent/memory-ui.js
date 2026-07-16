@@ -734,7 +734,7 @@
       var msg = (text || '').trim();
       if (!msg || pending) return;
       if (!Agent.isConfigured(provider)) {
-        setError('Configurez d\'abord un fournisseur IA (Param\u00e8tres de priorit\u00e9).');
+        setError('Configurez d\'abord un fournisseur IA (Param\u00e8tres du Cerveau).');
         return;
       }
       setError('');
@@ -884,7 +884,7 @@
         messagesEl.replaceChildren();
         appendMessage(
           'assistant',
-          'Pour aligner l\'assistant, configurez d\'abord un fournisseur IA dans \u00ab\u00a0Param\u00e8tres de priorit\u00e9\u00a0\u00bb (menu du tableau).'
+          'Pour aligner l\'assistant, configurez d\'abord un fournisseur IA dans \u00ab\u00a0Param\u00e8tres du Cerveau\u00a0\u00bb (menu du tableau).'
         );
         setComposerEnabled(false);
         renderSummary();

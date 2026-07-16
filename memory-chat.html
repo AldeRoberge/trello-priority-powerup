@@ -7,6 +7,7 @@
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./components/shared/brand.js"></script>
   <script src="./components/shared/rest-config.js"></script>
+  <script src="./components/shared/debug-log.js"></script>
   <script src="./components/priority/priority-trello.js"></script>
   <script src="./components/agent/agent.js"></script>
   <script src="./components/agent/agent-memory.js"></script>
@@ -20,6 +21,11 @@
   <div id="memoryMount"></div>
   <script>
     PriorityTrello.initIframePage(function (t) {
+      if (window.TpDebug && typeof TpDebug.configureFromProfile === 'function') {
+        TpDebug.configureFromProfile(t).then(function (on) {
+          if (on) TpDebug.log('memoryChat', 'page.init', { mode: 'ongoing' });
+        });
+      }
       var mount = document.getElementById('memoryMount');
       function resize() {
         if (typeof t.sizeTo === 'function') t.sizeTo(document.body);
@@ -31,13 +37,15 @@
         showSummary: true,
         onLayoutChange: resize,
         onComplete: function () {
+          if (window.TpDebug) TpDebug.log('memoryChat', 'complete');
           if (typeof t.closeBoardBar === 'function') t.closeBoardBar();
           else if (typeof t.closeModal === 'function') t.closeModal();
         }
       });
       resize();
     }).catch(function (err) {
-      console.error('memory-chat init failed', err);
+      if (window.TpDebug) TpDebug.error('memoryChat', 'init', err);
+      else console.error('memory-chat init failed', err);
     });
   </script>
 </body>

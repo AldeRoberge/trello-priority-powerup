@@ -16,6 +16,7 @@
   <link rel="icon" type="image/png" href="./assets/icon.png" />
   <script src="./components/shared/brand.js"></script>
   <script src="./components/shared/rest-config.js"></script>
+  <script src="./components/shared/debug-log.js"></script>
   <script>
     if (window.PriorityBrand && typeof PriorityBrand.applyDocumentTitle === 'function') {
       PriorityBrand.applyDocumentTitle(document);
@@ -3672,7 +3673,7 @@
               // Popup width is fixed (narrow) by Trello; modal is wide enough for statut mapping.
               return t
                 .modal({
-                  title: 'Paramètres de priorité',
+                  title: 'Paramètres du Cerveau',
                   url: PriorityTrello.pageUrl('./settings.html'),
                   height: 720,
                   fullscreen: false,
@@ -3715,7 +3716,7 @@
       selection = selection || {};
       return t
         .modal({
-          title: 'Paramètres de priorité',
+          title: 'Paramètres du Cerveau',
           url: PriorityTrello.pageUrl('./settings.html'),
           height: 720,
           fullscreen: false,

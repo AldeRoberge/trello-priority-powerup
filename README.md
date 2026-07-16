@@ -17,7 +17,7 @@ Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques
 - **Compatibilité** : les anciennes priorités P1–P5 sont lues pour l'affichage jusqu'à la prochaine sauvegarde
 - **Tri par colonne** : menu `…` d'une liste → **Trier par…** → **Priorité** (Critique en haut, cartes sans priorité en bas)
 - **Tri automatique** (optionnel) : après chaque changement de priorité, la carte se réordonne dans sa liste (nécessite clé API + autorisation OAuth ; voir ci-dessous)
-- **Profil** : préférences personnelles (identité, langue/ton de l’assistant, sections visibles dans l’éditeur), stockées en privé sur le compte Trello — accessibles via **Paramètres de priorité** → **Mon profil**
+- **Profil** : préférences personnelles (identité, langue/ton de l’assistant, sections visibles dans l’éditeur), stockées en privé sur le compte Trello — accessibles via **Paramètres du Cerveau** → **Mon profil**
 
 ---
 
@@ -152,7 +152,7 @@ Le connecteur enregistre les capacités ci-dessous dans `TrelloPowerUp.initializ
 |----------|:-----:|----------------------|-----------|
 | `card-badges` | **Oui** | Badge dynamique sur la **face** de la carte (pastille de palier + libellé, ex. tâche Critique ou complétée) ; rafraîchissement ~10 s | — |
 | `card-detail-badges` | **Oui** | Badge **Priorité** au dos de la carte ; clic ouvre le modal d'édition | `popup.html` (modal « Définir la priorité ») |
-| `board-buttons` | **Oui** | Bouton de tableau **Paramètres de priorité** | `settings.html` (popup) |
+| `board-buttons` | **Oui** | Bouton de tableau **Paramètres du Cerveau** | `settings.html` (popup) |
 | `list-sorters` | **Oui** | Entrée **Priorité** dans le menu `…` d'une liste → **Trier par…** (Critique en haut, sans priorité en bas) | — |
 | `on-enable` | **Oui** | Modal d'accueil à l'**activation** du Power-Up sur un tableau | `welcome.html` |
 | `card-buttons` | **Non** | Stub `[]` — la priorité s'ouvre via `card-detail-badges`, pas un bouton sur la face de carte | — |
@@ -175,7 +175,7 @@ Dépannage tri / capacités : voir [Trier une colonne par priorité](#trier-une-
 
 ### Infos et guide
 
-**Paramètres de priorité** (bouton du tableau) : version déployée, horodatage de build, guide de configuration et **Mon profil**.
+**Paramètres du Cerveau** (bouton du tableau) : version déployée, horodatage de build, guide de configuration et **Mon profil**.
 
 ### Effacer une priorité
 
@@ -223,7 +223,7 @@ Lorsqu'un membre modifie la priorité d'une carte (curseurs, palier, état bloqu
 | `components/shared/rest-config.js` → `appKey` | Oui — clé API de [trello.com/power-ups/admin](https://trello.com/power-ups/admin) |
 | Admin → **Allowed origins** | Oui — origine Pages (ex. `https://VOTRE-UTILISATEUR.github.io`) |
 | `index.html` → `TrelloPowerUp.initialize(…, { appKey, appName })` | Oui (automatique si `appKey` est renseigné) |
-| Autorisation OAuth membre (`read,write`) | Oui — une fois par membre via **Paramètres de priorité** → **Autoriser Trello** (retour OAuth : `auth-return.html`) |
+| Autorisation OAuth membre (`read,write`) | Oui — une fois par membre via **Paramètres du Cerveau** → **Autoriser Trello** (retour OAuth : `auth-return.html`) |
 
 **Limitations**
 
