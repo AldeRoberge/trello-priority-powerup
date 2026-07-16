@@ -2696,26 +2696,28 @@ html[data-color-mode='dark'] .tp-page--priority .agent-hl--a {
   animation: agent-suggestion-in 0.28s ease both;
 }
 
-/* Little chat-bubble tail → composer (solid tip matching chip border color). */
+/* Little chat-bubble tail → composer (triangle tip matching chip border color). */
 .tp-page--priority .agent-suggestion-chip::after {
   content: '';
   position: absolute;
   left: 50%;
-  bottom: -4px;
+  bottom: -5px;
   width: 0;
   height: 0;
   box-sizing: border-box;
-  border: 3.5px solid;
-  border-color: inherit;
-  transform: translateX(-50%) rotate(45deg);
+  border-style: solid;
+  border-width: 5px 4px 0;
+  border-color: var(--tp-border-strong) transparent transparent;
+  transform: translateX(-50%);
   pointer-events: none;
 }
 
 /* Below the input: tip points up toward the text area. */
 .tp-page--priority .agent-suggestions.is-below-composer .agent-suggestion-chip::after {
   bottom: auto;
-  top: -4px;
-  transform: translateX(-50%) rotate(225deg);
+  top: -5px;
+  border-width: 0 4px 5px;
+  border-color: transparent transparent var(--tp-border-strong);
 }
 
 .tp-page--priority .agent-suggestion-chip-icon {

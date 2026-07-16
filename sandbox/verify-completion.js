@@ -934,6 +934,12 @@ check(
     CT.hasAnyBlocked(keepUserMaster) &&
     !CT.hasBlockedSubtasks(keepUserMaster)
 );
+// hasAnyBlocked stays true → enAttente stays true → saveCardInputs does not
+// call restorePreviousStatutFromUnblocked (user-paused master stays on Bloqué).
+check(
+  'user-paused master after last-subtask unblock still blocks statut restore',
+  CT.isMasterBlockedByUser(keepUserMaster) && CT.hasAnyBlocked(keepUserMaster)
+);
 
 var unblockMasterClears = CT.setMasterBlocked(
   {
