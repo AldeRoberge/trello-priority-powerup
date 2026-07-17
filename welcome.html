@@ -11,10 +11,10 @@
   <link rel="stylesheet" href="./components/shared/trello-theme.css" />
   <link rel="icon" type="image/png" href="./assets/icon.png" />
 </head>
-<body class="tp-page tp-page--roomy">
+<body class="tp-page tp-page--roomy tp-page--welcome">
   <div class="tp-welcome-brand">
     <img id="brandLogo" class="tp-welcome-logo" src="./assets/icon.png" alt="" width="48" height="48" />
-    <h1 class="tp-title" id="brandTitle">Cerveau</h1>
+    <h1 class="tp-title" id="brandTitle">Trello Cerveau</h1>
   </div>
   <p class="tp-subtitle" id="brandSubtitle">Évaluez chaque carte selon l'urgence, l'impact et la facilité pour obtenir un score et un libellé de palier.</p>
 
@@ -22,8 +22,8 @@
     <div class="tp-step">
       <div class="tp-step-num">1</div>
       <div class="tp-step-body">
-        <strong id="welcomeStep1Title">Cerveau</strong>
-        <p id="welcomeStep1Body">Ouvrez une carte et cliquez sur <strong>Cerveau</strong>. Ajustez les trois curseurs ou touchez un palier sur la barre de chaleur.</p>
+        <strong id="welcomeStep1Title">Trello Cerveau</strong>
+        <p id="welcomeStep1Body">Ouvrez une carte et cliquez sur <strong>Trello Cerveau</strong>. Ajustez les trois curseurs ou touchez un palier sur la barre de chaleur.</p>
       </div>
     </div>
     <div class="tp-step">
@@ -55,7 +55,7 @@
     (function () {
       var brand = window.PriorityBrand;
       var name =
-        brand && typeof brand.getAppName === 'function' ? brand.getAppName() : 'Cerveau';
+        brand && typeof brand.getAppName === 'function' ? brand.getAppName() : 'Trello Cerveau';
       if (brand && typeof brand.applyDocumentTitle === 'function') {
         brand.applyDocumentTitle(document);
       } else {

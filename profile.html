@@ -45,7 +45,7 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-message-chatbot"></i></span>
       <span class="tp-settings-summary-title">Assistant</span>
-      <span class="tp-settings-summary-hint">Identité, langue et ton</span>
+      <span class="tp-settings-summary-hint">Identité et ton</span>
     </summary>
     <div class="tp-settings-body">
       <label class="tp-profile-field">
@@ -63,10 +63,6 @@
       <div class="tp-profile-actions" style="margin: 0 0 12px; justify-content: flex-start;">
         <button type="button" class="tp-button tp-button--secondary" id="profileAgentReroll">Nouveau nom aléatoire</button>
       </div>
-      <label class="tp-profile-field">
-        <span class="tp-profile-field-label">Langue</span>
-        <select id="profileLanguage" class="tp-select" aria-label="Langue de l’assistant"></select>
-      </label>
       <label class="tp-profile-field">
         <span class="tp-profile-field-label">Ton</span>
         <select id="profileTone" class="tp-select" aria-label="Ton de l’assistant"></select>
@@ -112,6 +108,8 @@
 
       var featureChecks = {};
       var currentExperimental = null;
+      var currentLanguage = 'fr';
+      var currentDialect = 'qc';
       var statusEl = document.getElementById('profileStatus');
       var saveTimer = null;
 
@@ -174,7 +172,8 @@
           displayName: document.getElementById('profileDisplayName').value,
           role: document.getElementById('profileRole').value,
           notes: document.getElementById('profileNotes').value,
-          language: document.getElementById('profileLanguage').value,
+          language: currentLanguage,
+          dialect: currentDialect,
           tone: document.getElementById('profileTone').value,
           agentStatus: document.getElementById('profileAgentStatus').value,
           agentName: document.getElementById('profileAgentName').value,
@@ -189,6 +188,8 @@
       function writeForm(profile) {
         var p = Profile.ensureAgentIdentity(profile).profile;
         currentExperimental = p.experimental;
+        currentLanguage = p.language || 'fr';
+        currentDialect = p.dialect || 'qc';
         document.getElementById('profileDisplayName').value = p.displayName;
         document.getElementById('profileRole').value = p.role;
         document.getElementById('profileNotes').value = p.notes;
@@ -199,12 +200,6 @@
           Profile.AGENT_COLOR_KEYS,
           Profile.AGENT_COLOR_LABELS,
           p.agentColor
-        );
-        fillSelect(
-          document.getElementById('profileLanguage'),
-          Profile.LANGUAGE_KEYS,
-          Profile.LANGUAGE_LABELS,
-          p.language
         );
         fillSelect(
           document.getElementById('profileTone'),
@@ -278,7 +273,6 @@
         'profileNotes',
         'profileAgentName',
         'profileAgentPersonality',
-        'profileLanguage',
         'profileTone',
         'profileAgentStatus'
       ].forEach(function (id) {

@@ -33,6 +33,27 @@
     '  dont tu es certain (certain doit alors \u00eatre true).'
   ].join('\n');
 
+  var QUEBEC_VOCAB_NOTE = [
+    '',
+    'Vocabulaire r\u00e9gional\u00a0:',
+    '- L\'utilisateur peut \u00e9crire en fran\u00e7ais qu\u00e9b\u00e9cois.',
+    '- Ne \u00ab\u00a0corrige\u00a0\u00bb JAMAIS un terme qu\u00e9b\u00e9cois vers un \u00e9quivalent de France',
+    '  (ex. laisse \u00ab\u00a0sabler\u00a0\u00bb, ne le remplace pas par \u00ab\u00a0poncer\u00a0\u00bb;',
+    '  laisse \u00ab\u00a0magasinage\u00a0\u00bb, \u00ab\u00a0fin de semaine\u00a0\u00bb, etc.).',
+    '- Corrige seulement les fautes d\'orthographe \u00e9videntes, pas le choix lexical r\u00e9gional.'
+  ].join('\n');
+
+  function buildSystemPrompt(profile) {
+    var base = SYSTEM_PROMPT;
+    var p = profile && typeof profile === 'object' ? profile : null;
+    var lang = p && typeof p.language === 'string' ? p.language : 'fr';
+    var dialect = p && typeof p.dialect === 'string' ? p.dialect : 'qc';
+    if (lang !== 'en' && dialect === 'qc') {
+      return base + QUEBEC_VOCAB_NOTE;
+    }
+    return base;
+  }
+
   function configure(options) {
     var opts = options && typeof options === 'object' ? options : {};
     if (Object.prototype.hasOwnProperty.call(opts, 't')) {
@@ -129,10 +150,18 @@
     }
 
     try {
+      var profile = null;
+      if (global.UserProfile && typeof global.UserProfile.load === 'function' && context.t) {
+        try {
+          profile = await global.UserProfile.load(context.t);
+        } catch (profileErr) {
+          profile = null;
+        }
+      }
       var response = await Agent.chatCompletions(
         provider,
         [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: buildSystemPrompt(profile) },
           { role: 'user', content: original }
         ],
         {

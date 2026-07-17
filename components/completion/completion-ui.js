@@ -4559,8 +4559,8 @@
       mainRow.appendChild(checkWrap);
       mainRow.appendChild(titleEl);
       mainRow.appendChild(detailsBtn);
-      mainRow.appendChild(deleteBtn);
       mainRow.appendChild(nestedEstimate.el);
+      mainRow.appendChild(deleteBtn);
       li.appendChild(mainRow);
 
       var details = document.createElement('div');

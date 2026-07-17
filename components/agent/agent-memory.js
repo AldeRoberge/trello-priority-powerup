@@ -718,6 +718,19 @@
       return save(t, memory);
     }
 
+    var scanProfile = options.profile || null;
+    if (!scanProfile && global.UserProfile && typeof global.UserProfile.load === 'function') {
+      try {
+        scanProfile = await global.UserProfile.load(t);
+      } catch (profileErr) {
+        scanProfile = { language: 'fr', dialect: 'qc' };
+      }
+    }
+    var langInstr =
+      global.UserProfile && typeof global.UserProfile.languageInstruction === 'function'
+        ? global.UserProfile.languageInstruction(scanProfile || { language: 'fr', dialect: 'qc' })
+        : 'Langue\u00a0: fran\u00e7ais qu\u00e9b\u00e9cois.';
+
     var prompt = [
       'Tu produis UNIQUEMENT du contexte COURT TERME pour un assistant Trello.',
       'R\u00e9ponds UNIQUEMENT en JSON\u00a0:',
@@ -727,7 +740,8 @@
       '- INTERDIT d\'inventer des faits personnels sur l\'utilisateur (nom, \u00e2ge, patron, pr\u00e9f\u00e9rences).',
       '- INTERDIT de remplir une m\u00e9moire long terme depuis le digest.',
       '- suggestedQuestions = 2\u20133 questions pour apprendre des faits durables (nom, r\u00f4le, focus, outils).',
-      '- Fran\u00e7ais. Pas de remplissage.',
+      '- ' + langInstr,
+      '- Pas de remplissage.',
       '',
       'M\u00e9moire long terme actuelle (ne pas r\u00e9p\u00e9ter ici)\u00a0:',
       JSON.stringify({

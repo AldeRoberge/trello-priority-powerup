@@ -7310,20 +7310,16 @@
         var startPrompt = cardTitle
           ? 'Commence l\'interview. Titre de la carte\u00a0: «\u00a0' +
             cardTitle +
-            '\u00a0». Premi\u00e8re r\u00e9ponse = UNE question POURQUOI courte et naturelle, ancr\u00e9e au titre (noyau utile, pas le titre entier recopié). Pas de tease, pas de «\u00a0Ooh\u00a0», pas de «\u00a0je juge pas\u00a0», pas de clin d\'oeil forc\u00e9. Suggestions = meilleures raisons possibles.'
-          : 'Commence l\'interview de cette carte. Premi\u00e8re r\u00e9ponse = UNE question POURQUOI courte et naturelle. Pas de tease ni de th\u00e9\u00e2tre.';
-        var fallbackSubject = cardTitle
-          ? /^(faire|mettre|cr[eé]er|r[eé]diger|pr[eé]parer|lancer|acheter|obtenir|installer)\b/i.test(
-              cardTitle
-            )
-            ? cardTitle.charAt(0).toLocaleLowerCase('fr-FR') + cardTitle.slice(1)
-            : 'faire ' +
-              cardTitle.charAt(0).toLocaleLowerCase('fr-FR') +
-              cardTitle.slice(1)
-          : 'faire cette carte';
-        var fallbackOpening = cardTitle
-          ? 'Pourquoi tu veux ' + fallbackSubject + '?'
-          : 'Pourquoi tu veux faire cette carte?';
+            '\u00a0». Interview MINIMALE\u00a0: PAS de question POURQUOI / motivation. Inf\u00e8re set_task_types + axes \u00e9vidents en silence. Premi\u00e8re r\u00e9ponse = UNE seule question utile pour le scoring (souvent urgence) SI n\u00e9cessaire\u00a0; sinon completeInterview:true apr\u00e8s avoir appliqu\u00e9 ce que tu peux. Court, naturel, ancr\u00e9 au titre.'
+          : 'Commence l\'interview de cette carte. Interview MINIMALE\u00a0: PAS de POURQUOI. Une question utile pour le scoring seulement si n\u00e9cessaire.';
+        var fallbackOpening =
+          Agent.urgencyAskForTaskTypes
+            ? Agent.urgencyAskForTaskTypes([])
+            : 'Si on ne le fait pas, c\'est [[a:grave]]?';
+        // urgencyAskForTaskTypes may return markup without heat chips — keep chips below.
+        if (!fallbackOpening || !/\?/.test(fallbackOpening)) {
+          fallbackOpening = 'Si on ne le fait pas, c\'est [[a:grave]]?';
+        }
 
         var turn = await Agent.cardInterviewTurn(
           provider,
@@ -7346,12 +7342,23 @@
           revealPendingBubble(bubble, turn.message || fallbackOpening);
         }
         var opening = turn.message || fallbackOpening;
+        var openingSuggestions =
+          turn.suggestions && turn.suggestions.length
+            ? turn.suggestions
+            : [
+                { label: 'Pas grand-chose', heat: 0 },
+                { label: 'Un peu embêtant', heat: 2 },
+                { label: 'Oui, c\'est urgent', heat: 4 }
+              ];
+        var openingMulti = turn.suggestions && turn.suggestions.length
+          ? !!turn.suggestionsMulti
+          : false;
         history.push({
           role: 'assistant',
           content: opening,
           rawJson: turn.rawJson,
-          suggestions: turn.suggestions || [],
-          suggestionsMulti: !!turn.suggestionsMulti
+          suggestions: openingSuggestions,
+          suggestionsMulti: openingMulti
         });
         schedulePersistChatHistory();
         if (/\?/.test(opening)) {
@@ -7377,11 +7384,11 @@
         }
         if (turn.usage) updateSessionStats(turn.usage);
         renderPrompts(turn.prompts);
-        if (turn.suggestions && turn.suggestions.length) {
+        if (openingSuggestions.length) {
           suggestionsSeq += 1;
-          renderSuggestions(turn.suggestions, {
+          renderSuggestions(openingSuggestions, {
             animate: true,
-            multi: turn.suggestionsMulti
+            multi: openingMulti
           });
         }
         markSettleReady();

@@ -129,6 +129,26 @@
     en: 'English'
   };
 
+  /** Regional dialect / variety keyed by main language. */
+  var DIALECTS_BY_LANGUAGE = {
+    fr: [
+      { key: 'qc', label: 'Québécois' },
+      { key: 'fr', label: 'France' },
+      { key: 'be', label: 'Belgique' },
+      { key: 'ch', label: 'Suisse' }
+    ],
+    en: [
+      { key: 'us', label: 'US' },
+      { key: 'uk', label: 'UK' },
+      { key: 'ca', label: 'Canada' }
+    ]
+  };
+
+  var DEFAULT_DIALECT_BY_LANGUAGE = {
+    fr: 'qc',
+    en: 'us'
+  };
+
   /** Clock face preference for due times / picker (member-scoped). */
   var TIME_FORMAT_KEYS = ['24', '12'];
   var TIME_FORMAT_LABELS = {
@@ -190,6 +210,7 @@
       notes: '',
       tone: 'concise',
       language: 'fr',
+      dialect: 'qc',
       timeFormat: '24',
       features: defaultFeatures(),
       experimental: defaultExperimental(),
@@ -292,6 +313,125 @@
     return LANGUAGE_KEYS.indexOf(lang) !== -1 ? lang : 'fr';
   }
 
+  function dialectsFor(language) {
+    var lang = normalizeLanguage(language);
+    return DIALECTS_BY_LANGUAGE[lang] || DIALECTS_BY_LANGUAGE.fr;
+  }
+
+  function defaultDialectFor(language) {
+    var lang = normalizeLanguage(language);
+    return DEFAULT_DIALECT_BY_LANGUAGE[lang] || 'qc';
+  }
+
+  function dialectLabelsFor(language) {
+    var list = dialectsFor(language);
+    var out = {};
+    list.forEach(function (d) {
+      out[d.key] = d.label;
+    });
+    return out;
+  }
+
+  function dialectKeysFor(language) {
+    return dialectsFor(language).map(function (d) {
+      return d.key;
+    });
+  }
+
+  function normalizeDialect(language, raw) {
+    var lang = normalizeLanguage(language);
+    var keys = dialectKeysFor(lang);
+    var d = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    // Aliases from older / loose inputs
+    if (lang === 'fr') {
+      if (d === 'quebec' || d === 'québécois' || d === 'quebecois' || d === 'fr-ca' || d === 'fr_ca') {
+        d = 'qc';
+      } else if (d === 'france' || d === 'fr-fr' || d === 'fr_fr' || d === 'metropolitan') {
+        d = 'fr';
+      } else if (d === 'belgium' || d === 'belgique' || d === 'fr-be' || d === 'fr_be') {
+        d = 'be';
+      } else if (d === 'switzerland' || d === 'suisse' || d === 'fr-ch' || d === 'fr_ch') {
+        d = 'ch';
+      }
+    } else if (lang === 'en') {
+      if (d === 'american' || d === 'en-us' || d === 'en_us' || d === 'usa') {
+        d = 'us';
+      } else if (d === 'british' || d === 'en-gb' || d === 'en_gb' || d === 'england') {
+        d = 'uk';
+      } else if (d === 'canadian' || d === 'en-ca' || d === 'en_ca') {
+        d = 'ca';
+      }
+    }
+    if (keys.indexOf(d) !== -1) return d;
+    return defaultDialectFor(lang);
+  }
+
+  function dialectLabel(language, dialect) {
+    var lang = normalizeLanguage(language);
+    var d = normalizeDialect(lang, dialect);
+    var labels = dialectLabelsFor(lang);
+    return labels[d] || d;
+  }
+
+  /**
+   * Short language/dialect instruction for specialist AI prompts
+   * (interview, subtasks, status brief, memory scan, etc.).
+   */
+  function languageInstruction(profile) {
+    var p = normalizeProfile(profile || {});
+    var dialect = p.dialect;
+    var label = dialectLabel(p.language, dialect);
+    if (p.language === 'en') {
+      if (dialect === 'uk') {
+        return (
+          'Language: British English (UK). Prefer UK spelling and wording ' +
+          '(colour, organise, flat, fortnight) over US variants, ' +
+          'unless the user clearly writes in French or another variety.'
+        );
+      }
+      if (dialect === 'ca') {
+        return (
+          'Language: Canadian English. Prefer Canadian spelling and wording ' +
+          '(mix of UK/US norms common in Canada), ' +
+          'unless the user clearly writes in French or another variety.'
+        );
+      }
+      return (
+        'Language: American English (US). Prefer US spelling and wording ' +
+        '(color, organize, apartment), ' +
+        'unless the user clearly writes in French or another variety.'
+      );
+    }
+    if (dialect === 'qc') {
+      return (
+        'Langue\u00a0: français québécois. Utilise le vocabulaire du Québec ' +
+        '(ex. «\u00a0sabler le plâtre\u00a0» et non «\u00a0poncer le plâtre\u00a0»). ' +
+        'Préfère les termes québécois aux équivalents de France quand les deux existent, ' +
+        'sauf si l\'utilisateur écrit clairement en anglais ou dans un autre français.'
+      );
+    }
+    if (dialect === 'be') {
+      return (
+        'Langue\u00a0: français de Belgique (' +
+        label +
+        '). Adapte le vocabulaire belge courant quand pertinent, ' +
+        'sauf si l\'utilisateur écrit clairement en anglais ou autrement.'
+      );
+    }
+    if (dialect === 'ch') {
+      return (
+        'Langue\u00a0: français de Suisse (' +
+        label +
+        '). Adapte le vocabulaire suisse courant quand pertinent, ' +
+        'sauf si l\'utilisateur écrit clairement en anglais ou autrement.'
+      );
+    }
+    return (
+      'Langue\u00a0: français de France. Vocabulaire métropolitain standard, ' +
+      'sauf si l\'utilisateur écrit clairement en anglais ou autrement.'
+    );
+  }
+
   function normalizeFeatures(raw) {
     var src = raw && typeof raw === 'object' ? raw : {};
     var out = defaultFeatures();
@@ -316,13 +456,15 @@
 
   function normalizeProfile(raw) {
     var src = raw && typeof raw === 'object' ? raw : {};
+    var language = normalizeLanguage(src.language);
     return {
       version: 1,
       displayName: trimStr(src.displayName, MAX_NAME),
       role: trimStr(src.role, MAX_ROLE),
       notes: trimStr(src.notes, MAX_NOTES),
       tone: normalizeTone(src.tone),
-      language: normalizeLanguage(src.language),
+      language: language,
+      dialect: normalizeDialect(language, src.dialect),
       timeFormat: normalizeTimeFormat(src.timeFormat),
       features: normalizeFeatures(src.features),
       experimental: normalizeExperimental(src.experimental),
@@ -446,6 +588,7 @@
       notes: p.notes || null,
       tone: p.tone,
       language: p.language,
+      dialect: p.dialect,
       timeFormat: p.timeFormat,
       features: p.features,
       experimental: p.experimental,
@@ -496,10 +639,27 @@
     if (p.notes) {
       lines.push('- Notes / préférences\u00a0: ' + p.notes);
     }
-    if (p.language === 'en') {
-      lines.push('- Langue\u00a0: réponds en anglais (English), sauf si l\'utilisateur écrit clairement en français.');
-    } else {
-      lines.push('- Langue\u00a0: réponds en français.');
+    lines.push('- ' + languageInstruction(p));
+    if (p.language === 'fr' && p.dialect === 'qc') {
+      lines.push(
+        '- Dialecte (critique)\u00a0: français québécois. Vocabulaire régional obligatoire quand un équivalent France existe ' +
+          '(ex. «\u00a0sabler le plâtre\u00a0» pas «\u00a0poncer le plâtre\u00a0»; «\u00a0magasinage\u00a0» plutôt que «\u00a0shopping\u00a0» forcé; ' +
+          '«\u00a0fin de semaine\u00a0» plutôt que «\u00a0week-end\u00a0» si naturel). Ne «\u00a0corrige\u00a0» pas vers le français de France.'
+      );
+    } else if (p.language === 'fr' && p.dialect === 'fr') {
+      lines.push(
+        '- Dialecte\u00a0: français de France (métropolitain). Vocabulaire standard de France.'
+      );
+    } else if (p.language === 'fr' && p.dialect === 'be') {
+      lines.push('- Dialecte\u00a0: français de Belgique. Adapte les tournures belges quand c\'est naturel.');
+    } else if (p.language === 'fr' && p.dialect === 'ch') {
+      lines.push('- Dialecte\u00a0: français de Suisse. Adapte les tournures suisses quand c\'est naturel.');
+    } else if (p.language === 'en' && p.dialect === 'uk') {
+      lines.push('- Dialect: British English (UK spelling and wording).');
+    } else if (p.language === 'en' && p.dialect === 'ca') {
+      lines.push('- Dialect: Canadian English.');
+    } else if (p.language === 'en') {
+      lines.push('- Dialect: American English (US spelling and wording).');
     }
     if (p.language === 'en') {
       lines.push(
@@ -611,6 +771,16 @@
     TONE_LABELS: TONE_LABELS,
     LANGUAGE_KEYS: LANGUAGE_KEYS,
     LANGUAGE_LABELS: LANGUAGE_LABELS,
+    DIALECTS_BY_LANGUAGE: DIALECTS_BY_LANGUAGE,
+    DEFAULT_DIALECT_BY_LANGUAGE: DEFAULT_DIALECT_BY_LANGUAGE,
+    dialectsFor: dialectsFor,
+    dialectKeysFor: dialectKeysFor,
+    dialectLabelsFor: dialectLabelsFor,
+    dialectLabel: dialectLabel,
+    defaultDialectFor: defaultDialectFor,
+    normalizeLanguage: normalizeLanguage,
+    normalizeDialect: normalizeDialect,
+    languageInstruction: languageInstruction,
     TIME_FORMAT_KEYS: TIME_FORMAT_KEYS,
     TIME_FORMAT_LABELS: TIME_FORMAT_LABELS,
     AGENT_STATUS_KEYS: AGENT_STATUS_KEYS,

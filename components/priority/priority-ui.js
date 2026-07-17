@@ -3985,7 +3985,7 @@
     if (cfg && typeof cfg.appName === 'string' && cfg.appName.trim()) {
       return cfg.appName.trim();
     }
-    return 'Cerveau';
+    return 'Trello Cerveau';
   }
 
   /** Card-back CTA / modal title — product name from PriorityBrand.appName. */
@@ -8647,10 +8647,13 @@
     syncTaskTypesCreateIconBtn();
 
     var taskTypesCreateInput = document.createElement('input');
-    taskTypesCreateInput.type = 'text';
+    taskTypesCreateInput.type = 'search';
     taskTypesCreateInput.className = 'tp-input info-task-types-create-input';
-    taskTypesCreateInput.placeholder = 'Nouveau type\u2026';
-    taskTypesCreateInput.setAttribute('aria-label', 'Nom du nouveau type de t\u00e2che');
+    taskTypesCreateInput.placeholder = 'Rechercher ou cr\u00e9er\u2026';
+    taskTypesCreateInput.setAttribute(
+      'aria-label',
+      'Rechercher ou cr\u00e9er un type de t\u00e2che'
+    );
     taskTypesCreateInput.setAttribute('autocomplete', 'off');
     taskTypesCreateInput.maxLength = MAX_TASK_TYPE_LABEL_LEN;
 
@@ -8668,8 +8671,8 @@
     taskTypesCreateWrap.appendChild(taskTypesCreateRow);
     taskTypesCreateWrap.appendChild(taskTypesIconPicker);
 
-    taskTypesPicker.appendChild(taskTypesPickerList);
     taskTypesPicker.appendChild(taskTypesCreateWrap);
+    taskTypesPicker.appendChild(taskTypesPickerList);
 
     var taskTypesStatus = document.createElement('span');
     taskTypesStatus.className = 'info-desc-status';
@@ -10473,7 +10476,14 @@
         renderTaskTypesPicker();
         positionTaskTypesPicker();
         requestAnimationFrame(positionTaskTypesPicker);
+        try {
+          taskTypesCreateInput.focus();
+          taskTypesCreateInput.select();
+        } catch (e) {
+          /* ignore */
+        }
       } else {
+        taskTypesCreateInput.value = '';
         setTaskTypesIconPickerOpen(false);
         clearTaskTypesPickerPosition();
       }
@@ -10488,6 +10498,21 @@
       for (var i = 0; i < taskTypes.length; i++) selected[taskTypes[i]] = true;
       return getTaskTypeCatalog().filter(function (entry) {
         return !selected[entry.id];
+      });
+    }
+
+    function filteredAvailableTaskTypeEntries(query) {
+      var available = availableTaskTypeEntries();
+      var q = String(query || '')
+        .trim()
+        .toLocaleLowerCase('fr-FR');
+      if (!q) return available;
+      return available.filter(function (entry) {
+        var label = String(entry.label || '')
+          .toLocaleLowerCase('fr-FR');
+        var hint = String(entry.hint || '')
+          .toLocaleLowerCase('fr-FR');
+        return label.indexOf(q) !== -1 || hint.indexOf(q) !== -1;
       });
     }
 
@@ -10508,14 +10533,34 @@
 
     function renderTaskTypesPicker() {
       taskTypesPickerList.replaceChildren();
-      taskTypesCreateWrap.hidden = !onCustomTaskTypesChange;
-      var available = availableTaskTypeEntries();
+      // Keep the search field visible whenever the picker can open; only hide
+      // create controls when custom types are unavailable.
+      taskTypesCreateWrap.hidden = false;
+      taskTypesCreateIconWrap.hidden = !onCustomTaskTypesChange;
+      taskTypesCreateBtn.hidden = !onCustomTaskTypesChange;
+      taskTypesCreateInput.placeholder = onCustomTaskTypesChange
+        ? 'Rechercher ou cr\u00e9er\u2026'
+        : 'Rechercher\u2026';
+      taskTypesCreateInput.setAttribute(
+        'aria-label',
+        onCustomTaskTypesChange
+          ? 'Rechercher ou cr\u00e9er un type de t\u00e2che'
+          : 'Rechercher un type de t\u00e2che'
+      );
+      var query = taskTypesCreateInput.value;
+      var available = filteredAvailableTaskTypeEntries(query);
+      var q = String(query || '').trim();
       if (!available.length) {
         var empty = document.createElement('div');
         empty.className = 'info-task-types-picker-empty';
-        empty.textContent = onCustomTaskTypesChange
-          ? 'Tous les types sont s\u00e9lectionn\u00e9s \u2014 cr\u00e9ez-en un nouveau ci-dessous'
-          : 'Tous les types sont d\u00e9j\u00e0 s\u00e9lectionn\u00e9s';
+        if (q) {
+          empty.textContent = 'Aucun type correspondant';
+        } else if (onCustomTaskTypesChange) {
+          empty.textContent =
+            'Tous les types sont s\u00e9lectionn\u00e9s \u2014 cr\u00e9ez-en un nouveau';
+        } else {
+          empty.textContent = 'Tous les types sont d\u00e9j\u00e0 s\u00e9lectionn\u00e9s';
+        }
         taskTypesPickerList.appendChild(empty);
       } else {
         available.forEach(function (entry) {
@@ -11968,14 +12013,51 @@
     });
 
     taskTypesCreateInput.addEventListener('input', function () {
-      syncTaskTypesCreateBtn();
+      if (!taskTypesPickerOpen) {
+        syncTaskTypesCreateBtn();
+        return;
+      }
+      renderTaskTypesPicker();
+      onLayoutChange();
+      requestAnimationFrame(positionTaskTypesPicker);
+    });
+    taskTypesCreateInput.addEventListener('click', function (event) {
+      event.stopPropagation();
     });
     taskTypesCreateInput.addEventListener('keydown', function (event) {
-      if (event.key === 'Enter') {
+      if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
-        submitCreateTaskType();
+        setTaskTypesPickerOpen(false);
+        return;
       }
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      event.stopPropagation();
+      var q = String(taskTypesCreateInput.value || '').trim();
+      var matches = filteredAvailableTaskTypeEntries(q);
+      if (matches.length === 1) {
+        addTaskType(matches[0].id);
+        return;
+      }
+      if (matches.length > 1 && q) {
+        var exact = null;
+        var qKey = q.toLocaleLowerCase('fr-FR');
+        for (var i = 0; i < matches.length; i++) {
+          if (
+            String(matches[i].label || '')
+              .toLocaleLowerCase('fr-FR') === qKey
+          ) {
+            exact = matches[i];
+            break;
+          }
+        }
+        if (exact) {
+          addTaskType(exact.id);
+          return;
+        }
+      }
+      submitCreateTaskType();
     });
     taskTypesCreateBtn.addEventListener('click', function (event) {
       event.preventDefault();

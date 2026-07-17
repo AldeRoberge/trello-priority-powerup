@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cerveau</title>
+  <title>Trello Cerveau</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./components/shared/brand.js"></script>
   <script src="./components/shared/rest-config.js"></script>
@@ -32,8 +32,8 @@
 <body>
   <div id="landing" class="tp-landing" hidden>
     <div class="tp-landing-card">
-      <img id="brandLogo" class="tp-landing-logo" src="./assets/icon.png" alt="Cerveau" width="72" height="72" />
-      <h1 class="tp-title" id="brandTitle">Cerveau</h1>
+      <img id="brandLogo" class="tp-landing-logo" src="./assets/icon.png" alt="Trello Cerveau" width="72" height="72" />
+      <h1 class="tp-title" id="brandTitle">Trello Cerveau</h1>
       <p class="tp-subtitle" id="brandTagline">Power-Up Trello</p>
       <p class="tp-version-label">Version déployée</p>
 
@@ -159,7 +159,7 @@
           ? PriorityBrand.getAppName()
           : null) ||
         (window.PriorityRestConfig && PriorityRestConfig.appName) ||
-        'Cerveau';
+        'Trello Cerveau';
       var title = focusProgress
         ? 'Définir le progrès'
         : focusObjectif
@@ -289,7 +289,7 @@
                 title:
                   (window.PriorityBrand && typeof PriorityBrand.getAppName === 'function'
                     ? PriorityBrand.getAppName()
-                    : null) || 'Cerveau',
+                    : null) || 'Trello Cerveau',
                 url: PriorityTrello.pageUrl('./welcome.html'),
                 height: 520,
                 fullscreen: false,

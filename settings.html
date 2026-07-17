@@ -153,6 +153,25 @@
     </div>
   </details>
 
+  <details class="tp-settings-section" id="languageSettingsSection">
+    <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-language"></i></span>
+      <span class="tp-settings-summary-title">Langue</span>
+      <span class="tp-settings-summary-hint">Langue et dialecte de l’assistant (par membre)</span>
+    </summary>
+    <div class="tp-settings-body">
+      <p class="tp-color-scheme-hint">Choisissez la langue et le dialecte des réponses de l’assistant. Préférence personnelle (membre).</p>
+      <label class="tp-profile-field">
+        <span class="tp-profile-field-label">Langue principale</span>
+        <select id="settingsLanguage" class="tp-select" aria-label="Langue principale de l’assistant"></select>
+      </label>
+      <label class="tp-profile-field">
+        <span class="tp-profile-field-label">Dialecte</span>
+        <select id="settingsDialect" class="tp-select" aria-label="Dialecte de l’assistant"></select>
+      </label>
+    </div>
+  </details>
+
   <details class="tp-settings-section" id="displaySettingsSection">
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-clock"></i></span>
@@ -450,6 +469,106 @@
       });
 
       setActiveColorSchemeUi(activeKey);
+    }
+
+    async function initLanguageSettings() {
+      var section = document.getElementById('languageSettingsSection');
+      var langSelect = document.getElementById('settingsLanguage');
+      var dialectSelect = document.getElementById('settingsDialect');
+      var Profile = window.UserProfile;
+      if (!section || !langSelect || !dialectSelect || !Profile) {
+        if (section) section.hidden = true;
+        return;
+      }
+
+      var profileState = null;
+      var saveTimer = null;
+
+      function fillSelect(selectEl, keys, labels, current) {
+        selectEl.replaceChildren();
+        keys.forEach(function (key) {
+          var opt = document.createElement('option');
+          opt.value = key;
+          opt.textContent = labels[key] || key;
+          if (key === current) opt.selected = true;
+          selectEl.appendChild(opt);
+        });
+      }
+
+      function fillDialectOptions(language, dialect) {
+        var lang = Profile.normalizeLanguage
+          ? Profile.normalizeLanguage(language)
+          : language === 'en'
+            ? 'en'
+            : 'fr';
+        var keys = Profile.dialectKeysFor
+          ? Profile.dialectKeysFor(lang)
+          : lang === 'en'
+            ? ['us', 'uk', 'ca']
+            : ['qc', 'fr', 'be', 'ch'];
+        var labels = Profile.dialectLabelsFor
+          ? Profile.dialectLabelsFor(lang)
+          : {};
+        var nextDialect = Profile.normalizeDialect
+          ? Profile.normalizeDialect(lang, dialect)
+          : dialect;
+        fillSelect(dialectSelect, keys, labels, nextDialect);
+      }
+
+      function applyLanguageUi(profile) {
+        var p = Profile.normalizeProfile(profile);
+        fillSelect(
+          langSelect,
+          Profile.LANGUAGE_KEYS,
+          Profile.LANGUAGE_LABELS,
+          p.language
+        );
+        fillDialectOptions(p.language, p.dialect);
+      }
+
+      function persistLanguageSettings() {
+        if (!profileState) return;
+        var nextLang = langSelect.value || 'fr';
+        var nextDialect = dialectSelect.value;
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(function () {
+          var next = Profile.normalizeProfile(
+            Object.assign({}, profileState, {
+              language: nextLang,
+              dialect: nextDialect
+            })
+          );
+          Profile.save(t, next)
+            .then(function (saved) {
+              profileState = saved;
+              applyLanguageUi(saved);
+            })
+            .catch(function (err) {
+              console.error('Language settings save failed', err);
+            });
+        }, 180);
+      }
+
+      langSelect.addEventListener('change', function () {
+        var lang = langSelect.value || 'fr';
+        var defaultDialect = Profile.defaultDialectFor
+          ? Profile.defaultDialectFor(lang)
+          : lang === 'en'
+            ? 'us'
+            : 'qc';
+        fillDialectOptions(lang, defaultDialect);
+        persistLanguageSettings();
+      });
+      dialectSelect.addEventListener('change', persistLanguageSettings);
+
+      try {
+        profileState = await Profile.load(t);
+        applyLanguageUi(profileState);
+        resizeSettingsPopup();
+      } catch (err) {
+        console.error('Language settings init failed', err);
+        section.hidden = true;
+      }
     }
 
     async function initDisplaySettings() {
@@ -1017,7 +1136,7 @@
       var guideTitle =
         (window.PriorityBrand && typeof PriorityBrand.getAppName === 'function'
           ? PriorityBrand.getAppName()
-          : null) || 'Cerveau';
+          : null) || 'Trello Cerveau';
       t.modal({
         title: guideTitle,
         url: PriorityTrello.pageUrl('./welcome.html'),
@@ -1038,6 +1157,7 @@
       initColorSchemePicker(),
       initCompletionSchemePicker(),
       refreshAutoSortUi(),
+      initLanguageSettings(),
       initDisplaySettings(),
       initDebugSettings(),
       initExperimentalSettings(),

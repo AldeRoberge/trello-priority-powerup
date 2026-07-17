@@ -12,10 +12,10 @@ describe('PriorityBrand', () => {
     delete global.PriorityUI;
   });
 
-  it('exposes customizable appName defaulting to Cerveau', () => {
+  it('exposes customizable appName defaulting to Trello Cerveau', () => {
     const g = loadComponent('shared/brand.js');
-    assert.equal(g.PriorityBrand.appName, 'Cerveau');
-    assert.equal(g.PriorityBrand.getAppName(), 'Cerveau');
+    assert.equal(g.PriorityBrand.appName, 'Trello Cerveau');
+    assert.equal(g.PriorityBrand.getAppName(), 'Trello Cerveau');
   });
 
   it('getAppName trims and falls back when empty', () => {
@@ -23,13 +23,13 @@ describe('PriorityBrand', () => {
     g.PriorityBrand.appName = '  Nova  ';
     assert.equal(g.PriorityBrand.getAppName(), 'Nova');
     g.PriorityBrand.appName = '   ';
-    assert.equal(g.PriorityBrand.getAppName(), 'Cerveau');
+    assert.equal(g.PriorityBrand.getAppName(), 'Trello Cerveau');
   });
 
   it('PriorityUI DEFINE_PRIORITY_LABEL follows brand name', () => {
     loadComponent('shared/brand.js');
     const g = loadComponent('priority/priority-ui.js');
-    assert.equal(g.PriorityUI.DEFINE_PRIORITY_LABEL, 'Cerveau');
+    assert.equal(g.PriorityUI.DEFINE_PRIORITY_LABEL, 'Trello Cerveau');
   });
 
   it('rest-config picks up brand appName', () => {

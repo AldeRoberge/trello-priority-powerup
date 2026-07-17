@@ -2,7 +2,7 @@
 (function (global) {
   'use strict';
 
-  var DEFAULT_APP_NAME = 'Cerveau';
+  var DEFAULT_APP_NAME = 'Trello Cerveau';
 
   var Brand = {
     /** Display name shown in modals, badges, OAuth, and page titles. */

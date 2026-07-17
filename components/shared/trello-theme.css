@@ -96,6 +96,11 @@ html[data-color-mode] .tp-page--roomy:not(.tp-page--priority) {
   padding: 12px 0 16px;
 }
 
+/* Keep the welcome guide comfortably inset inside Trello's modal. */
+html[data-color-mode] .tp-page--welcome {
+  padding: 16px 20px 20px;
+}
+
 .tp-heading {
   font-size: 11px;
   font-weight: 600;
@@ -2858,7 +2863,7 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
 }
 
 .tp-completion-checklist-main {
-  grid-template-columns: 28px minmax(0, 1fr) 26px 32px auto;
+  grid-template-columns: 28px minmax(0, 1fr) 26px auto 32px;
 }
 
 .tp-completion-item.is-linked .tp-completion-item-main {

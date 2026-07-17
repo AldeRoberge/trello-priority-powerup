@@ -1,4 +1,4 @@
-# Cerveau — Power-Up Trello
+# Trello Cerveau — Power-Up Trello
 
 Power-Up Trello pour évaluer chaque carte selon **l'urgence**, **l'impact** et **la facilité** : score 0–10, palier (Critique → Optionnel) et badges colorés sur le tableau.
 

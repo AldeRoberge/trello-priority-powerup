@@ -7,7 +7,7 @@
 
   global.PriorityRestConfig = {
     appKey: 'e449f4c01b03a2501072808abe5611ab',
-    appName: brand.appName || 'Cerveau',
+    appName: brand.appName || 'Trello Cerveau',
     appAuthor: brand.appAuthor || 'AldeRoberge',
     autoSortDebounceMs: 400,
   };

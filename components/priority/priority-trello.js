@@ -673,7 +673,7 @@
       return cfg.appName.trim();
     }
     var PU = priorityUI();
-    return (PU && PU.DEFINE_PRIORITY_LABEL) || 'Cerveau';
+    return (PU && PU.DEFINE_PRIORITY_LABEL) || 'Trello Cerveau';
   }
 
   function definePriorityLabel() {
