@@ -48,12 +48,6 @@
       padding: 6px 12px;
       flex-shrink: 0;
     }
-    .tp-card-open-hint {
-      margin: 0;
-      font-size: 12px;
-      color: var(--ds-text-subtle, #626f86);
-      line-height: 1.35;
-    }
     .tp-card-open-loading {
       margin: 0;
       font-size: 12px;
@@ -68,7 +62,6 @@
     </div>
     <div class="tp-card-open-row">
       <button class="tp-btn tp-btn--primary" type="button" id="openBtn">Ouvrir</button>
-      <p class="tp-card-open-hint" id="hint">S’ouvre automatiquement à l’ouverture de la carte.</p>
     </div>
   </div>
   <script>
@@ -87,7 +80,6 @@
       }
 
       var openBtn = document.getElementById('openBtn');
-      var hintEl = document.getElementById('hint');
       var overviewMount = document.getElementById('overviewMount');
       var overviewLoading = document.getElementById('overviewLoading');
       var overviewUi = null;
@@ -105,13 +97,6 @@
             /* ignore */
           }
         }
-      }
-
-      function setHint(autoEnabled) {
-        if (!hintEl) return;
-        hintEl.textContent = autoEnabled
-          ? 'S’ouvre automatiquement à l’ouverture de la carte.'
-          : 'Ouverture auto désactivée — Paramètres du Cerveau → Affichage.';
       }
 
       function loadAutoOpenPreference(t) {
@@ -254,7 +239,6 @@
         var overviewReady = mountOverview(t);
 
         return loadAutoOpenPreference(t).then(function (autoEnabled) {
-          setHint(autoEnabled);
           resize(t);
           return overviewReady.then(function () {
             if (!autoEnabled) {
