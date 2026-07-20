@@ -7,6 +7,17 @@
   var EDGE_PX = 6;
   var MIN_TIMELINE_W = 640;
 
+  var STATUT_TABLER = {
+    inbox: 'ti-inbox',
+    hourglass: 'ti-hourglass',
+    circle: 'ti-circle',
+    play: 'ti-player-play',
+    ban: 'ti-ban',
+    check: 'ti-check',
+    x: 'ti-x',
+    dot: 'ti-point-filled',
+  };
+
   function GM() {
     return global.GanttModel;
   }
@@ -28,6 +39,18 @@
     return node;
   }
 
+  function iconEl(tiClass, title, extraClass) {
+    var wrap = el(
+      'span',
+      'gantt-detail-icon' + (extraClass ? ' ' + extraClass : '')
+    );
+    if (title) wrap.title = title;
+    var i = el('i', 'ti ' + tiClass);
+    i.setAttribute('aria-hidden', 'true');
+    wrap.appendChild(i);
+    return wrap;
+  }
+
   function mountGantt(mount, t, options) {
     options = options || {};
     var model = GM();
@@ -45,6 +68,7 @@
       expanded: Object.create(null),
       hideCompleted: false,
       hideUndated: false,
+      sortBy: 'date',
       loading: true,
       error: '',
       authHint: '',
@@ -139,6 +163,26 @@
       }
       toolbar.appendChild(title);
 
+      var sortWrap = el('label', 'gantt-sort');
+      sortWrap.appendChild(document.createTextNode('Trier\u00a0: '));
+      var sortSel = el('select', 'gantt-select');
+      [
+        ['date', 'Date'],
+        ['priority', 'Priorit\u00e9'],
+        ['name', 'Nom'],
+      ].forEach(function (opt) {
+        var o = el('option', '', { value: opt[0], text: opt[1] });
+        if (state.sortBy === opt[0]) o.selected = true;
+        sortSel.appendChild(o);
+      });
+      sortSel.addEventListener('change', function () {
+        state.sortBy = sortSel.value || 'date';
+        applySort();
+        renderChart();
+      });
+      sortWrap.appendChild(sortSel);
+      toolbar.appendChild(sortWrap);
+
       var filters = el('div', 'gantt-filters');
       var hideDone = el('label', 'gantt-check');
       var doneCb = el('input', '', { type: 'checkbox' });
@@ -192,6 +236,12 @@
       toolbar.appendChild(filters);
     }
 
+    function applySort() {
+      if (typeof model.sortTreeRoots === 'function') {
+        state.tree = model.sortTreeRoots(state.tree, state.sortBy);
+      }
+    }
+
     function toggleExpand(nodeId) {
       if (state.expanded[nodeId] == null) {
         // Default roots open: first toggle closes
@@ -219,6 +269,90 @@
           /* ignore */
         }
       }
+    }
+
+    function buildDetailIcons(row) {
+      var icons = el('div', 'gantt-detail-icons');
+
+      if (row.kind === 'card') {
+        if (row.blocked) {
+          icons.appendChild(iconEl('ti-ban', 'Bloqu\u00e9', 'is-blocked'));
+        }
+
+        if (row.priorityEnabled !== false && row.priorityLabel) {
+          var pTitle =
+            row.priorityLabel +
+            (row.priorityScore != null
+              ? ' \u00b7 ' + Number(row.priorityScore).toFixed(1)
+              : '');
+          var pIcon = iconEl('ti-flame', pTitle, 'is-priority');
+          if (row.priorityFill) pIcon.style.color = row.priorityFill;
+          icons.appendChild(pIcon);
+        }
+
+        var pct = Math.round(row.progress || 0);
+        var prog = iconEl(
+          row.done || pct >= 100 ? 'ti-circle-check' : 'ti-percentage',
+          'Progr\u00e8s ' + pct + '%',
+          'is-progress'
+        );
+        var progLabel = el('span', 'gantt-icon-label', { text: pct + '%' });
+        prog.appendChild(progLabel);
+        icons.appendChild(prog);
+
+        if (row.categoryIcon || row.category) {
+          var ti =
+            STATUT_TABLER[row.categoryIcon] ||
+            STATUT_TABLER.dot ||
+            'ti-point-filled';
+          var sIcon = iconEl(
+            ti,
+            row.categoryLabel || row.category || 'Statut',
+            'is-statut'
+          );
+          if (row.color) sIcon.style.color = row.color;
+          icons.appendChild(sIcon);
+        }
+
+        if (row.duePast) {
+          icons.appendChild(
+            iconEl(
+              'ti-alert-triangle',
+              row.dueCountdown || '\u00c9ch\u00e9ance d\u00e9pass\u00e9e',
+              'is-overdue'
+            )
+          );
+        } else if (row.dueCountdown) {
+          icons.appendChild(
+            iconEl('ti-calendar-event', row.dueCountdown, 'is-due')
+          );
+        }
+
+        if (row.subtaskCount > 0) {
+          var sub = iconEl(
+            'ti-list-check',
+            row.subtaskCount + ' sous-t\u00e2che(s)',
+            'is-subtasks'
+          );
+          sub.appendChild(
+            el('span', 'gantt-icon-label', { text: String(row.subtaskCount) })
+          );
+          icons.appendChild(sub);
+        }
+      } else {
+        var localPct = Math.round(row.progress || 0);
+        var localProg = iconEl(
+          row.done || localPct >= 100 ? 'ti-circle-check' : 'ti-circle-dashed',
+          'Progr\u00e8s ' + localPct + '%',
+          'is-progress'
+        );
+        localProg.appendChild(
+          el('span', 'gantt-icon-label', { text: localPct + '%' })
+        );
+        icons.appendChild(localProg);
+      }
+
+      return icons.childNodes.length ? icons : null;
     }
 
     function canEditSubtask(row) {
@@ -695,12 +829,8 @@
         }
         labelCell.appendChild(nameBtn);
 
-        if (row.kind !== 'card' || !model.resolveBarInterval(row)) {
-          var chip = el('span', 'gantt-progress-chip', {
-            text: Math.round(row.progress || 0) + '%',
-          });
-          labelCell.appendChild(chip);
-        }
+        var details = buildDetailIcons(row);
+        if (details) labelCell.appendChild(details);
 
         if (canEditSubtask(row)) {
           labelCell.appendChild(buildSubtaskActions(row));
@@ -794,6 +924,7 @@
         .then(function (data) {
           state.loading = false;
           state.tree = (data && data.tree) || [];
+          applySort();
           state.cardsById = Object.create(null);
           var cards = (data && data.cards) || [];
           for (var i = 0; i < cards.length; i++) {

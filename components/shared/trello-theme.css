@@ -1248,8 +1248,19 @@ body.tp-page--priority {
   padding: 0 0 8px;
 }
 
-.tp-page--priority .variant-info-section {
+.tp-page--priority .variant-overview-section {
   margin: 0 0 8px;
+  padding: 0 8px;
+}
+
+.tp-page--priority .field--overview {
+  padding: 10px 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
+}
+
+.tp-page--priority .variant-info-section {
+  margin: 8px 0;
   padding: 0 8px;
 }
 

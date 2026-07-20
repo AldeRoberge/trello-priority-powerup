@@ -108,11 +108,71 @@
 }
 
 .gantt-labels {
-  width: 280px;
+  width: 320px;
   flex-shrink: 0;
   overflow: auto;
   border-right: 1px solid var(--tp-border, #091e4224);
   background: var(--tp-surface, #fff);
+}
+
+.gantt-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--tp-text-subtle, #44546f);
+}
+
+.gantt-select {
+  appearance: auto;
+  border: 1px solid var(--tp-border, #091e4224);
+  background: var(--tp-surface-subtle, #f1f2f4);
+  color: var(--tp-text, #172b4d);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.gantt-detail-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+.gantt-detail-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  color: var(--tp-text-muted, #626f86);
+  font-size: 13px;
+  line-height: 1;
+  max-width: 52px;
+}
+
+.gantt-detail-icon .ti {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.gantt-icon-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: inherit;
+}
+
+.gantt-detail-icon.is-priority {
+  color: var(--tp-primary, #0c66e4);
+}
+
+.gantt-detail-icon.is-blocked,
+.gantt-detail-icon.is-overdue {
+  color: var(--tp-danger-text, #ae2e24);
+}
+
+.gantt-detail-icon.is-progress {
+  color: var(--tp-text-subtle, #44546f);
 }
 
 .gantt-timeline-scroll {
@@ -275,6 +335,7 @@
   background: var(--tp-surface-subtle, #f1f2f4);
   border-radius: 4px;
   padding: 1px 5px;
+  display: none;
 }
 
 .gantt-timeline-header {

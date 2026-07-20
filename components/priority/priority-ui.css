@@ -409,14 +409,14 @@ body {
 
 /* ── Primary overview / résumé (collapsible) ── */
 .variant-overview-section {
-  margin: 0;
-  padding: 0 8px 4px;
+  margin: 0 0 8px;
+  padding: 0 8px;
 }
 
 .field--overview {
   margin-bottom: 0;
   padding: 10px 12px 14px;
-  border-radius: var(--radius);
+  border-radius: 12px;
   border: none;
   background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
 }
@@ -862,14 +862,14 @@ html[data-color-mode='dark'] .overview-action-chip:hover {
 
 /* ── Détails (recap) panel ── */
 .variant-info-section {
-  margin-top: 0;
+  margin: 8px 0;
   padding: 0 8px;
 }
 
 .field--info {
   margin-bottom: 0;
   padding: 10px 12px;
-  border-radius: var(--radius);
+  border-radius: 12px;
   background: transparent;
   border: none;
   transition: background 0.2s ease;

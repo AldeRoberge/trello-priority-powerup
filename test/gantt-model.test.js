@@ -176,4 +176,40 @@ describe('GanttModel', () => {
     assert.equal(flat[0].kind, 'card');
     assert.equal(flat[1].kind, 'local');
   });
+
+  it('sortTreeRoots by priority puts higher priority first', () => {
+    const tree = GanttModel.buildNestTree([
+      {
+        id: 'low',
+        name: 'Low',
+        dueDate: '2026-07-01',
+        priorityRankTier: 5,
+        priorityRankScore: 2,
+      },
+      {
+        id: 'high',
+        name: 'High',
+        dueDate: '2026-07-20',
+        priorityRankTier: 0,
+        priorityRankScore: 9.5,
+      },
+      {
+        id: 'mid',
+        name: 'Mid',
+        dueDate: '2026-07-10',
+        priorityRankTier: 2,
+        priorityRankScore: 6,
+      },
+    ]);
+    const byPriority = GanttModel.sortTreeRoots(tree, 'priority');
+    assert.deepEqual(
+      byPriority.map((n) => n.cardId),
+      ['high', 'mid', 'low']
+    );
+    const byDate = GanttModel.sortTreeRoots(tree, 'date');
+    assert.deepEqual(
+      byDate.map((n) => n.cardId),
+      ['low', 'mid', 'high']
+    );
+  });
 });
