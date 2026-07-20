@@ -630,28 +630,74 @@
     return p;
   }
 
-  /** Higher progress / completedness first; name as tiebreaker. */
+  /** Ascending progress / completedness; name as tiebreaker. */
   function compareRootsByProgress(a, b) {
     var pa = progressValue(a);
     var pb = progressValue(b);
-    if (pa !== pb) return pb - pa;
+    if (pa !== pb) return pa - pb;
     return String((a && a.name) || '').localeCompare(String((b && b.name) || ''), 'fr');
+  }
+
+  function subtaskCountValue(node) {
+    if (node && typeof node.subtaskCount === 'number') return node.subtaskCount;
+    if (node && node.children && node.children.length) return node.children.length;
+    return 0;
+  }
+
+  /** Ascending subtask count; name as tiebreaker. */
+  function compareRootsBySubtasks(a, b) {
+    var ca = subtaskCountValue(a);
+    var cb = subtaskCountValue(b);
+    if (ca !== cb) return ca - cb;
+    return String((a && a.name) || '').localeCompare(String((b && b.name) || ''), 'fr');
+  }
+
+  function normalizeSortBy(sortBy) {
+    if (
+      sortBy === 'priority' ||
+      sortBy === 'name' ||
+      sortBy === 'progress' ||
+      sortBy === 'subtasks'
+    ) {
+      return sortBy;
+    }
+    return 'date';
+  }
+
+  /** Default direction for each column (first click). */
+  function defaultSortDir(sortBy) {
+    var mode = normalizeSortBy(sortBy);
+    if (mode === 'progress' || mode === 'subtasks') return 'desc';
+    return 'asc';
+  }
+
+  function normalizeSortDir(sortBy, sortDir) {
+    if (sortDir === 'asc' || sortDir === 'desc') return sortDir;
+    return defaultSortDir(sortBy);
   }
 
   /**
    * Sort top-level Gantt rows. Nested children keep their relative order.
-   * @param {'date'|'priority'|'name'|'progress'} sortBy
+   * Ascending: date earlier→later, name A→Z, progress 0→100, subtasks few→many,
+   * priority higher→lower importance. Pass sortDir 'desc' to reverse.
+   * @param {'date'|'priority'|'name'|'progress'|'subtasks'} sortBy
+   * @param {'asc'|'desc'} [sortDir]
    */
-  function sortTreeRoots(nodes, sortBy) {
+  function sortTreeRoots(nodes, sortBy, sortDir) {
     var list = (nodes || []).slice();
-    var mode =
-      sortBy === 'priority' || sortBy === 'name' || sortBy === 'progress'
-        ? sortBy
-        : 'date';
-    if (mode === 'priority') list.sort(compareRootsByPriority);
-    else if (mode === 'name') list.sort(compareRootsByName);
-    else if (mode === 'progress') list.sort(compareRootsByProgress);
-    else list.sort(compareRootsByDate);
+    var mode = normalizeSortBy(sortBy);
+    var dir = normalizeSortDir(mode, sortDir);
+    var base;
+    if (mode === 'priority') base = compareRootsByPriority;
+    else if (mode === 'name') base = compareRootsByName;
+    else if (mode === 'progress') base = compareRootsByProgress;
+    else if (mode === 'subtasks') base = compareRootsBySubtasks;
+    else base = compareRootsByDate;
+    var mult = dir === 'desc' ? -1 : 1;
+    list.sort(function (a, b) {
+      var r = base(a, b);
+      return r === 0 ? 0 : r * mult;
+    });
     return list;
   }
 
@@ -824,6 +870,10 @@
     rowSelectionState: rowSelectionState,
     compareRootsByPriority: compareRootsByPriority,
     compareRootsByProgress: compareRootsByProgress,
+    compareRootsBySubtasks: compareRootsBySubtasks,
+    normalizeSortBy: normalizeSortBy,
+    defaultSortDir: defaultSortDir,
+    normalizeSortDir: normalizeSortDir,
     sortTreeRoots: sortTreeRoots,
   };
 })(typeof window !== 'undefined' ? window : this);

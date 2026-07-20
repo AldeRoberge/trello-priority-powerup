@@ -108,6 +108,57 @@ describe('GanttTrello subtask mutations', () => {
     assert.equal(store.parent.cardCompletion.items[0].id, 'loc');
   });
 
+  it('deleteSubtask archives a top-level board card via REST', async () => {
+    const previousPT = global.PriorityTrello;
+    const puts = [];
+    global.PriorityTrello = {
+      isRestAuthorized: async () => true,
+      restPutCard: async (_t, cardId, body) => {
+        puts.push({ cardId, body });
+        return { ok: true };
+      },
+    };
+    try {
+      const res = await GanttTrello.deleteSubtask(fakeT({}), {
+        kind: 'card',
+        cardId: 'root-card',
+      });
+      assert.equal(res.ok, true);
+      assert.equal(res.archived, true);
+      assert.equal(puts.length, 1);
+      assert.equal(puts[0].cardId, 'root-card');
+      assert.deepEqual(puts[0].body, { closed: true });
+    } finally {
+      global.PriorityTrello = previousPT;
+    }
+  });
+
+  it('renameSubtask renames a top-level board card via REST', async () => {
+    const previousPT = global.PriorityTrello;
+    const puts = [];
+    global.PriorityTrello = {
+      isRestAuthorized: async () => true,
+      restPutCard: async (_t, cardId, body) => {
+        puts.push({ cardId, body });
+        return { ok: true };
+      },
+    };
+    try {
+      const res = await GanttTrello.renameSubtask(
+        fakeT({}),
+        { kind: 'card', cardId: 'root-card' },
+        'Renamed root'
+      );
+      assert.equal(res.ok, true);
+      assert.equal(res.name, 'Renamed root');
+      assert.equal(res.cardNameUpdated, true);
+      assert.equal(puts.length, 1);
+      assert.deepEqual(puts[0].body, { name: 'Renamed root' });
+    } finally {
+      global.PriorityTrello = previousPT;
+    }
+  });
+
   it('setSubtaskDone toggles checklist item progress', async () => {
     const store = {
       parent: {

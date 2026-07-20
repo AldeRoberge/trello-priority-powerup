@@ -8,7 +8,8 @@
   var CUSTOM_COMPLETION_SCHEME_KEY = 'custom';
   var MIN_GRADIENT_STOPS = 2;
   var MAX_GRADIENT_STOPS = 8;
-  var ENCOURAGEMENT_BUBBLE_OFFSET_X = 14;
+  // CSS ::after caret is at left:14px, 10px wide → tip center ≈ 19px from bubble left.
+  var ENCOURAGEMENT_BUBBLE_CARET_X = 19;
   var ENCOURAGEMENT_BUBBLE_OFFSET_Y = 12;
 
   // Perceptual color helpers (OKLab / OKLCH) — same approach as priority-ui.js.
@@ -455,7 +456,7 @@
 
   // Stage icons sit in a circle. Color follows the progress scheme (same as %).
   var COMPLETION_ENCOURAGEMENT_TIERS = [
-    { max: 0, text: 'En attente', icon: 'ti-player-pause', tone: 'idle' },
+    { max: 0, text: 'Pas commenc\u00e9', icon: 'ti-player-pause', tone: 'idle' },
     { max: 10, text: 'Amorc\u00e9e', icon: 'ti-player-play', tone: 'active' },
     { max: 25, text: 'D\u00e9but\u00e9', icon: 'ti-player-play', tone: 'active' },
     { max: 50, text: 'En cours', icon: 'ti-player-play', tone: 'active' },
@@ -503,8 +504,8 @@
     var x = Number(clientX);
     var y = Number(clientY);
     if (!isFinite(x) || !isFinite(y)) return;
-    // Anchor near the cursor; CSS translateY(-100%) keeps the bubble above it.
-    el.style.left = Math.round(x + ENCOURAGEMENT_BUBBLE_OFFSET_X) + 'px';
+    // Place caret tip under the cursor; CSS translateY(-100%) keeps the bubble above it.
+    el.style.left = Math.round(x - ENCOURAGEMENT_BUBBLE_CARET_X) + 'px';
     el.style.top = Math.round(y - ENCOURAGEMENT_BUBBLE_OFFSET_Y) + 'px';
   }
 

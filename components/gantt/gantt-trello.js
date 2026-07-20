@@ -550,12 +550,48 @@
   }
 
   /**
-   * Delete a local/checklist subtask, or unlink a nested linked card.
+   * Delete a local/checklist subtask, unlink a nested linked card,
+   * or archive a top-level board card (closed: true).
    */
   async function deleteSubtask(t, rowMeta) {
+    rowMeta = rowMeta || {};
+
+    if (rowMeta.kind === 'card' && rowMeta.cardId && !rowMeta.linkParentCardId) {
+      var archiveId = String(rowMeta.cardId);
+      var ptArchive = PT();
+      if (!ptArchive || typeof ptArchive.restPutCard !== 'function') {
+        return { ok: false, reason: 'no-restPutCard' };
+      }
+      var authArchive = await ensureRestAuthorized(t);
+      if (!authArchive.ok) {
+        return {
+          ok: false,
+          reason: authArchive.reason || 'auth-failed',
+        };
+      }
+      try {
+        var putArchive = await ptArchive.restPutCard(t, archiveId, {
+          closed: true,
+        });
+        if (!putArchive || !putArchive.ok) {
+          return { ok: false, reason: 'archive-failed', cardId: archiveId };
+        }
+        return { ok: true, archived: true, cardId: archiveId };
+      } catch (archiveErr) {
+        console.error('GanttTrello.deleteSubtask archive failed', archiveErr);
+        return {
+          ok: false,
+          reason: 'archive-failed',
+          error:
+            archiveErr && archiveErr.message
+              ? archiveErr.message
+              : String(archiveErr),
+        };
+      }
+    }
+
     var ct = CT();
     if (!ct) return { ok: false, reason: 'no-completion' };
-    rowMeta = rowMeta || {};
 
     if (rowMeta.kind === 'local') {
       var parentId = rowMeta.parentCardId;

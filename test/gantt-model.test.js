@@ -296,6 +296,101 @@ describe('GanttModel', () => {
       byProgress.map((n) => n.cardId),
       ['done', 'high', 'mid', 'low']
     );
+    const byProgressAsc = GanttModel.sortTreeRoots(tree, 'progress', 'asc');
+    assert.deepEqual(
+      byProgressAsc.map((n) => n.cardId),
+      ['low', 'mid', 'high', 'done']
+    );
+  });
+
+  it('sortTreeRoots by name supports descending', () => {
+    const tree = GanttModel.buildNestTree([
+      { id: 'b', name: 'Bravo', dueDate: '2026-07-01' },
+      { id: 'a', name: 'Alpha', dueDate: '2026-07-20' },
+      { id: 'c', name: 'Charlie', dueDate: '2026-07-10' },
+    ]);
+    const desc = GanttModel.sortTreeRoots(tree, 'name', 'desc');
+    assert.deepEqual(
+      desc.map((n) => n.cardId),
+      ['c', 'b', 'a']
+    );
+  });
+
+  it('sortTreeRoots by subtasks orders by count', () => {
+    const tree = GanttModel.buildNestTree([
+      {
+        id: 'few',
+        name: 'Few',
+        dueDate: '2026-07-01',
+        subtaskCount: 1,
+        items: [{ id: 'a', text: 'A', progress: 0 }],
+      },
+      {
+        id: 'many',
+        name: 'Many',
+        dueDate: '2026-07-20',
+        subtaskCount: 3,
+        items: [
+          { id: 'a', text: 'A', progress: 0 },
+          { id: 'b', text: 'B', progress: 0 },
+          { id: 'c', text: 'C', progress: 0 },
+        ],
+      },
+      {
+        id: 'none',
+        name: 'None',
+        dueDate: '2026-07-10',
+        subtaskCount: 0,
+      },
+    ]);
+    const desc = GanttModel.sortTreeRoots(tree, 'subtasks');
+    assert.deepEqual(
+      desc.map((n) => n.cardId),
+      ['many', 'few', 'none']
+    );
+    const asc = GanttModel.sortTreeRoots(tree, 'subtasks', 'asc');
+    assert.deepEqual(
+      asc.map((n) => n.cardId),
+      ['none', 'few', 'many']
+    );
+  });
+
+  it('sortTreeRoots by priority supports descending', () => {
+    const tree = GanttModel.buildNestTree([
+      {
+        id: 'low',
+        name: 'Low',
+        dueDate: '2026-07-01',
+        priorityRankTier: 5,
+        priorityRankScore: 2,
+      },
+      {
+        id: 'high',
+        name: 'High',
+        dueDate: '2026-07-20',
+        priorityRankTier: 0,
+        priorityRankScore: 9.5,
+      },
+      {
+        id: 'mid',
+        name: 'Mid',
+        dueDate: '2026-07-10',
+        priorityRankTier: 2,
+        priorityRankScore: 6,
+      },
+    ]);
+    const desc = GanttModel.sortTreeRoots(tree, 'priority', 'desc');
+    assert.deepEqual(
+      desc.map((n) => n.cardId),
+      ['low', 'mid', 'high']
+    );
+  });
+
+  it('defaultSortDir prefers desc for progress and subtasks', () => {
+    assert.equal(GanttModel.defaultSortDir('progress'), 'desc');
+    assert.equal(GanttModel.defaultSortDir('subtasks'), 'desc');
+    assert.equal(GanttModel.defaultSortDir('name'), 'asc');
+    assert.equal(GanttModel.defaultSortDir('priority'), 'asc');
   });
 
   it('shiftAnchor moves week/month/year windows', () => {

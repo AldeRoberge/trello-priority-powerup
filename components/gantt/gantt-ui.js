@@ -1159,8 +1159,17 @@
       ) {
         return true;
       }
-      if (row.kind === 'card' && row.linkParentCardId && row.cardId) return true;
+      // Board cards (roots and linked children) — blocked or not.
+      if (row.kind === 'card' && row.cardId) return true;
       return false;
+    }
+
+    function isLinkedCardRow(row) {
+      return !!(row && row.kind === 'card' && row.linkParentCardId && row.cardId);
+    }
+
+    function isBoardRootCard(row) {
+      return !!(row && row.kind === 'card' && row.cardId && !row.linkParentCardId);
     }
 
     function subtaskMeta(row) {
@@ -1207,27 +1216,36 @@
 
     function deleteSubtaskRow(row, mouseEvent) {
       if (state.saving || !canEditSubtask(row)) return;
-      var label = row.name || 'cette sous-t\u00e2che';
-      confirmDelete(
-        'Supprimer \u00ab\u00a0' + label + '\u00a0\u00bb\u00a0?',
-        mouseEvent
-      ).then(function (ok) {
+      var label = row.name || 'cette t\u00e2che';
+      var prompt = isBoardRootCard(row)
+        ? 'Archiver \u00ab\u00a0' + label + '\u00a0\u00bb\u00a0?'
+        : isLinkedCardRow(row)
+          ? 'Retirer le lien vers \u00ab\u00a0' + label + '\u00a0\u00bb\u00a0?'
+          : 'Supprimer \u00ab\u00a0' + label + '\u00a0\u00bb\u00a0?';
+      confirmDelete(prompt, mouseEvent).then(function (ok) {
         if (!ok) return;
         state.saving = true;
-        setStatus('Suppression\u2026');
+        setStatus(isBoardRootCard(row) ? 'Archivage\u2026' : 'Suppression\u2026');
         ganttTrello
           .deleteSubtask(t, subtaskMeta(row))
           .then(function (res) {
             state.saving = false;
             if (!res || !res.ok) {
               setStatus(
-                '\u00c9chec suppression' +
+                '\u00c9chec' +
                   (res && res.reason ? ' (' + res.reason + ')' : ''),
                 true
               );
               return reload();
             }
-            setStatus('Sous-t\u00e2che supprim\u00e9e');
+            if (state.selected[row.id]) delete state.selected[row.id];
+            setStatus(
+              res.archived
+                ? 'Carte archiv\u00e9e'
+                : res.unlinked
+                  ? 'Lien retir\u00e9'
+                  : 'Sous-t\u00e2che supprim\u00e9e'
+            );
             return reload();
           })
           .catch(function (err) {
@@ -1364,8 +1382,9 @@
 
       var delBtn = el('button', 'gantt-action-btn gantt-action-btn--delete', {
         type: 'button',
-        title:
-          row.kind === 'card'
+        title: isBoardRootCard(row)
+          ? 'Archiver la carte'
+          : isLinkedCardRow(row)
             ? 'Retirer le lien'
             : 'Supprimer la sous-t\u00e2che',
       });
@@ -1710,39 +1729,56 @@
       });
       headerCell.appendChild(selectAll);
       headerCell.appendChild(el('span', 'gantt-twist-spacer'));
-      headerCell.appendChild(el('span', 'gantt-header-title', { text: 'T\u00e2ches' }));
+
+      var titleWrap = el('div', 'gantt-header-title-wrap');
+      var titleSort = el('span', 'gantt-header-title');
+      titleSort.appendChild(document.createTextNode('T\u00e2ches'));
+      var nameInd = sortIndicator(state.sortBy === 'name');
+      if (nameInd) titleSort.appendChild(nameInd);
+      bindSortableHeader(titleSort, 'name', 'nom');
+      titleWrap.appendChild(titleSort);
+
+      var subSort = el('span', 'gantt-header-subtasks-sort');
+      subSort.appendChild(iconEl('ti-list-check', '', 'is-subtasks'));
+      var subInd = sortIndicator(state.sortBy === 'subtasks');
+      if (subInd) subSort.appendChild(subInd);
+      bindSortableHeader(subSort, 'subtasks', 'sous-t\u00e2ches');
+      titleWrap.appendChild(subSort);
+      headerCell.appendChild(titleWrap);
 
       var headerIcons = el('div', 'gantt-detail-icons gantt-detail-icons--header');
       [
-        'is-blocked',
-        'is-priority',
-        'is-progress',
-        'is-due',
-      ].forEach(function (slotClass) {
-        var slot = el('span', 'gantt-detail-slot ' + slotClass);
-        if (slotClass === 'is-progress') {
-          slot.classList.add('is-sortable');
-          if (state.sortBy === 'progress') slot.classList.add('is-active');
-          slot.title = 'Trier par progr\u00e8s';
-          slot.setAttribute('role', 'button');
-          slot.setAttribute('tabindex', '0');
-          slot.appendChild(
-            el('span', 'gantt-progress-text', { text: '%' })
-          );
-          function sortByProgress() {
-            setSortBy('progress');
-          }
-          slot.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            sortByProgress();
-          });
-          slot.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              sortByProgress();
-            }
-          });
+        { cls: 'is-blocked', sortable: false },
+        {
+          cls: 'is-priority',
+          sortable: true,
+          mode: 'priority',
+          label: 'priorit\u00e9',
+          content: function (slot) {
+            slot.appendChild(iconEl('ti-flame', '', 'is-priority'));
+            var ind = sortIndicator(state.sortBy === 'priority');
+            if (ind) slot.appendChild(ind);
+          },
+        },
+        {
+          cls: 'is-progress',
+          sortable: true,
+          mode: 'progress',
+          label: 'progr\u00e8s',
+          content: function (slot) {
+            slot.appendChild(
+              el('span', 'gantt-progress-text', { text: '%' })
+            );
+            var ind = sortIndicator(state.sortBy === 'progress');
+            if (ind) slot.appendChild(ind);
+          },
+        },
+        { cls: 'is-due', sortable: false },
+      ].forEach(function (spec) {
+        var slot = el('span', 'gantt-detail-slot ' + spec.cls);
+        if (spec.sortable) {
+          if (typeof spec.content === 'function') spec.content(slot);
+          bindSortableHeader(slot, spec.mode, spec.label);
         }
         headerIcons.appendChild(slot);
       });

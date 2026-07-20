@@ -431,7 +431,7 @@ check(
     CT.normalizeItem({ id: 'y', text: 'ok', progress: 100, difficulty: 1 }).done === true
 );
 
-check('encouragement at 0', CUI.progressEncouragementText(0) === 'En attente');
+check('encouragement at 0', CUI.progressEncouragementText(0) === 'Pas commenc\u00e9');
 check('encouragement amorcee', CUI.progressEncouragementText(8) === 'Amorc\u00e9e');
 check('encouragement debut', CUI.progressEncouragementText(20) === 'D\u00e9but\u00e9');
 check('encouragement en cours', CUI.progressEncouragementText(40) === 'En cours');
