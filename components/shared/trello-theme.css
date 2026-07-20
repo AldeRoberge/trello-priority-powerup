@@ -2829,7 +2829,7 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble[data-tone='acti
 }
 
 .tp-completion-bulk {
-  display: none;
+  display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
@@ -2837,15 +2837,21 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble[data-tone='acti
   border-radius: var(--completion-radius, 10px);
   background: var(--tp-surface-subtle, #f1f2f4);
   border: 1px solid var(--tp-border, #091e4224);
-}
-
-.tp-completion-bulk.is-visible,
-.tp-completion-bulk:not([hidden]) {
-  display: flex;
+  min-height: 40px;
+  box-sizing: border-box;
 }
 
 .tp-completion-bulk[hidden] {
   display: none !important;
+}
+
+.tp-completion-bulk.is-idle {
+  opacity: 0.55;
+}
+
+.tp-completion-bulk.is-idle .tp-completion-bulk-count {
+  color: var(--tp-text-muted, #626f86);
+  font-weight: 500;
 }
 
 .tp-completion-bulk-count {
@@ -2864,6 +2870,11 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble[data-tone='acti
   font-size: 12px;
 }
 
+.tp-completion-bulk-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .tp-completion-bulk-btn .ti {
   font-size: 14px;
 }
@@ -2871,6 +2882,11 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble[data-tone='acti
 .tp-completion-bulk-btn--danger {
   color: var(--tp-danger-text, #ae2e24);
   border-color: color-mix(in srgb, var(--tp-danger-text, #ae2e24) 45%, transparent);
+}
+
+.tp-completion-bulk-btn--danger:disabled {
+  color: var(--tp-text-muted, #626f86);
+  border-color: var(--tp-border, #091e4224);
 }
 
 .tp-completion-item.is-selected {

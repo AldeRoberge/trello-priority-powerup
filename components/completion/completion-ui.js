@@ -3037,11 +3037,12 @@
       renderList();
     }
 
-    function makeBulkBtn(className, iconClass, label, onClick) {
+    function makeBulkBtn(className, iconClass, label, onClick, disabled) {
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = className;
       btn.title = label;
+      btn.disabled = !!disabled;
       btn.innerHTML =
         '<i class="ti ' +
         iconClass +
@@ -3049,34 +3050,51 @@
         '<span>' +
         label +
         '</span>';
-      btn.addEventListener('click', onClick);
+      if (!disabled) btn.addEventListener('click', onClick);
       return btn;
     }
 
     function renderBulkBar() {
       if (!bulkBarEl) return;
       bulkBarEl.innerHTML = '';
-      var n = selectedCount();
-      if (!n) {
-        bulkBarEl.hidden = true;
-        bulkBarEl.classList.remove('is-visible');
+      var hasItems = data.items.length > 0;
+      bulkBarEl.hidden = !hasItems;
+      if (!hasItems) {
+        bulkBarEl.classList.remove('is-idle');
         return;
       }
-      bulkBarEl.hidden = false;
-      bulkBarEl.classList.add('is-visible');
+
+      var n = selectedCount();
+      var idle = n === 0;
+      bulkBarEl.classList.toggle('is-idle', idle);
+
       var count = document.createElement('span');
       count.className = 'tp-completion-bulk-count';
-      count.textContent = n + ' s\u00e9lectionn\u00e9e(s)';
+      count.textContent = idle
+        ? 'Aucune s\u00e9lection'
+        : n + ' s\u00e9lectionn\u00e9e(s)';
       bulkBarEl.appendChild(count);
       bulkBarEl.appendChild(
-        makeBulkBtn('tp-btn tp-btn--secondary tp-completion-bulk-btn', 'ti-circle-check', 'Terminer', function () {
-          runBulk('done');
-        })
+        makeBulkBtn(
+          'tp-btn tp-btn--secondary tp-completion-bulk-btn',
+          'ti-circle-check',
+          'Terminer',
+          function () {
+            runBulk('done');
+          },
+          idle
+        )
       );
       bulkBarEl.appendChild(
-        makeBulkBtn('tp-btn tp-btn--secondary tp-completion-bulk-btn', 'ti-reload', 'Rouvrir', function () {
-          runBulk('reopen');
-        })
+        makeBulkBtn(
+          'tp-btn tp-btn--secondary tp-completion-bulk-btn',
+          'ti-reload',
+          'Rouvrir',
+          function () {
+            runBulk('reopen');
+          },
+          idle
+        )
       );
       bulkBarEl.appendChild(
         makeBulkBtn(
@@ -3085,7 +3103,8 @@
           'Supprimer',
           function () {
             runBulk('delete');
-          }
+          },
+          idle
         )
       );
       bulkBarEl.appendChild(
@@ -3095,7 +3114,8 @@
           'Tout d\u00e9s\u00e9lectionner',
           function () {
             clearSelection();
-          }
+          },
+          idle
         )
       );
     }
