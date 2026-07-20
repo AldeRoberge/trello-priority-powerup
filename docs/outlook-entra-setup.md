@@ -130,7 +130,10 @@ Do **not** paste the `ADIbizaUX` client ID into `outlook-config.js`. Use only th
 
 Your work/school tenant does not know the app registration (registered elsewhere, or single-tenant). Without a tenant admin, Graph login will keep failing.
 
-**Use ICS instead (no admin):** see [outlook-ics-export.md](outlook-ics-export.md) — Gantt button **Exporter .ics**.
+**Use ICS or Power Automate instead (no admin):**
+
+- [outlook-ics-export.md](outlook-ics-export.md) — manual `.ics` export  
+- [outlook-power-automate.md](outlook-power-automate.md) — automatic Trello → Outlook in Microsoft’s cloud
 
 ## Related files
 

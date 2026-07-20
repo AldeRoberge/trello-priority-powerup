@@ -660,12 +660,48 @@
       });
       filters.appendChild(icsBtn);
 
+      var paBtn = el('button', 'gantt-btn', {
+        type: 'button',
+        text: 'Power Automate',
+      });
+      paBtn.title =
+        'Guide : synchroniser Trello \u2192 Outlook automatiquement (cloud Microsoft, sans h\u00e9bergement)';
+      paBtn.addEventListener('click', function () {
+        openPowerAutomateGuide();
+      });
+      filters.appendChild(paBtn);
+
       var refresh = el('button', 'gantt-btn', { type: 'button', text: 'Actualiser' });
       refresh.addEventListener('click', function () {
         reload();
       });
       filters.appendChild(refresh);
       toolbar.appendChild(filters);
+    }
+
+    function openPowerAutomateGuide() {
+      var url =
+        global.PriorityTrello && typeof PriorityTrello.pageUrl === 'function'
+          ? PriorityTrello.pageUrl('./outlook-power-automate.html')
+          : './outlook-power-automate.html';
+      if (t && typeof t.modal === 'function') {
+        try {
+          t.modal({
+            url: url,
+            title: 'Power Automate \u2192 Outlook',
+            fullscreen: false,
+            height: 640,
+          });
+          return;
+        } catch (err) {
+          console.warn('GanttUI Power Automate modal failed', err);
+        }
+      }
+      try {
+        global.open(url, '_blank', 'noopener');
+      } catch (e2) {
+        setStatus('Impossible d\u2019ouvrir le guide Power Automate', true);
+      }
     }
 
     function exportIcsCalendar() {

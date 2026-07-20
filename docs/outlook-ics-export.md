@@ -4,13 +4,15 @@ Use this when Microsoft Graph / Entra app registration is blocked (e.g. `AADSTS7
 
 ## What you get
 
-| | Graph sync (Connecter Outlook) | **Exporter .ics** |
-|--|--|--|
-| Admin / Entra app | Required | **Not required** |
-| Direction | Two-way (when it works) | **One-way:** Trello → Outlook |
-| Title + description | Yes | Yes |
-| Dates | Yes | Yes |
-| Live updates | While Gantt is open | Re-export / re-import when dates change |
+| | Graph sync (Connecter Outlook) | **Exporter .ics** | **Power Automate** |
+|--|--|--|--|
+| Admin / Entra app | Required | **Not required** | **Not required** |
+| Direction | Two-way (when it works) | **One-way:** Trello → Outlook | **One-way:** Trello → Outlook |
+| Title + description | Yes | Yes | Yes |
+| Dates | Yes | Yes | Yes |
+| Live updates | While Gantt is open | Re-export / re-import when dates change | **Yes** (cloud flow) |
+
+For automatic updates without hosting, see [outlook-power-automate.md](outlook-power-automate.md) (Gantt button **Power Automate**).
 
 ## In the Gantt
 

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Power Automate → Outlook</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <link rel="stylesheet" href="./components/shared/trello-theme.css" />
+  <script src="./components/shared/brand.js"></script>
+  <script src="./components/priority/priority-trello.js"></script>
+  <style>
+    .pa-guide {
+      max-width: 40rem;
+      margin: 0 auto;
+      padding: 1rem 1.25rem 2rem;
+      line-height: 1.45;
+    }
+    .pa-guide h1 {
+      font-size: 1.35rem;
+      margin: 0 0 0.5rem;
+    }
+    .pa-guide h2 {
+      font-size: 1.05rem;
+      margin: 1.4rem 0 0.5rem;
+    }
+    .pa-guide ol,
+    .pa-guide ul {
+      padding-left: 1.25rem;
+      margin: 0.4rem 0 0.8rem;
+    }
+    .pa-guide li {
+      margin: 0.35rem 0;
+    }
+    .pa-guide .tp-muted {
+      color: var(--ds-text-subtle, #626f86);
+      font-size: 0.92rem;
+    }
+    .pa-guide code {
+      font-size: 0.88em;
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      background: var(--ds-background-neutral, #091e420f);
+    }
+    .pa-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 1rem 0 1.25rem;
+    }
+    .pa-actions a,
+    .pa-actions button {
+      display: inline-block;
+      padding: 0.45rem 0.75rem;
+      border-radius: 3px;
+      border: none;
+      background: var(--ds-background-brand-bold, #0c66e4);
+      color: #fff;
+      font: inherit;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .pa-actions a.secondary,
+    .pa-actions button.secondary {
+      background: var(--ds-background-neutral, #091e420f);
+      color: var(--ds-text, #172b4d);
+    }
+    .pa-callout {
+      border-left: 3px solid var(--ds-border-brand, #0c66e4);
+      padding: 0.55rem 0.75rem;
+      margin: 0.75rem 0;
+      background: var(--ds-background-neutral, #091e420f);
+      border-radius: 0 3px 3px 0;
+    }
+  </style>
+</head>
+<body class="tp-page">
+  <div class="pa-guide" id="guide">
+    <h1>Automatiser Outlook (Power Automate)</h1>
+    <p class="tp-muted">
+      Sync <strong>Trello → calendrier Outlook</strong> dans le cloud Microsoft.
+      Aucun serveur à héberger, pas d’app Entra SPA.
+    </p>
+
+    <div class="pa-actions">
+      <a
+        id="openAutomate"
+        href="https://make.powerautomate.com/"
+        target="_blank"
+        rel="noopener"
+        >Ouvrir Power Automate</a
+      >
+      <a
+        id="openDocs"
+        class="secondary"
+        href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/outlook-power-automate.md"
+        target="_blank"
+        rel="noopener"
+        >Guide détaillé (GitHub)</a
+      >
+      <button type="button" class="secondary" id="closeBtn">Fermer</button>
+    </div>
+
+    <div class="pa-callout">
+      Sens unique : les changements Outlook ne mettent pas à jour Trello.
+      Pour un import ponctuel sans Automate, utilisez <strong>Exporter .ics</strong> dans le Gantt.
+    </div>
+
+    <h2>1. Champ Trello</h2>
+    <ol>
+      <li>Sur le tableau → <strong>Champs personnalisés</strong> → champ texte.</li>
+      <li>Nom exact : <code>Outlook Event ID</code> (évite les doublons).</li>
+    </ol>
+
+    <h2>2. Flux automatisé</h2>
+    <ol>
+      <li>Power Automate → <strong>Créer</strong> → <strong>Flux de cloud automatisé</strong>.</li>
+      <li>Déclencheur <strong>Trello</strong> : <em>When a card is updated</em> → choisir le tableau.</li>
+      <li>Condition : <em>Due date</em> n’est pas vide.</li>
+      <li>
+        Si <code>Outlook Event ID</code> est vide →
+        <strong>Outlook / Outlook.com – Create event</strong>
+        (sujet = nom, corps = description, horaire = échéance),
+        puis écrire l’<em>Id</em> de l’événement dans <code>Outlook Event ID</code>.
+      </li>
+      <li>
+        Sinon → <strong>Update event</strong> avec cet Id
+        (même mappings titre / dates / description).
+      </li>
+    </ol>
+
+    <h2>3. Tester</h2>
+    <ol>
+      <li>Enregistrer et activer le flux.</li>
+      <li>Mettre une échéance sur une carte test.</li>
+      <li>Vérifier l’événement dans Outlook, puis renommer la carte (même événement, pas de doublon).</li>
+    </ol>
+
+    <p class="tp-muted">
+      Connecteur bloqué par l’entreprise&nbsp;? Réessayez avec un compte Microsoft
+      personnel, ou demandez l’autorisation des connecteurs Trello + Outlook
+      (toujours sans inscription d’app Entra).
+    </p>
+  </div>
+  <script>
+    PriorityTrello.initIframePage(function (t) {
+      var closeBtn = document.getElementById('closeBtn');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', function () {
+          if (t && typeof t.closeModal === 'function') t.closeModal();
+          else if (t && typeof t.closePopup === 'function') t.closePopup();
+        });
+      }
+      if (typeof t.sizeTo === 'function') {
+        try {
+          t.sizeTo(document.body);
+        } catch (e) {
+          /* ignore */
+        }
+      }
+    });
+  </script>
+</body>
+</html>

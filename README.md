@@ -39,6 +39,7 @@ By getting a system that works for you, you’ll spend less time making lists an
 | `settings.html` | Paramètres du tableau (statut, infos, build, guide) |
 | `profile.html` | Profil membre (préférences, fonctionnalités, assistant) |
 | `welcome.html` | Modal d'accueil à l'activation du Power-Up |
+| `outlook-power-automate.html` | Guide in-app : sync Trello → Outlook via Power Automate |
 | `gantt.html` | Vue Gantt plein écran (bouton tableau) |
 | `outlook-auth.html` | Retour popup MSAL (autorisation Outlook) |
 | `components/` | Modules par domaine (JS + CSS colocated) |
@@ -279,7 +280,9 @@ Voir le guide détaillé : [docs/outlook-entra-setup.md](docs/outlook-entra-setu
 - Pas de webhooks : rien ne sync tant que le Gantt n’est pas ouvert (ou Sync manuel).
 - Calendrier par défaut (`primary`) uniquement en v1.
 - `clientId` public (SPA) — normal ; pas de secret client dans le dépôt.
-- Si Entra / Graph est bloqué (`AADSTS700016`, pas d’admin) : utilisez **Exporter .ics** dans le Gantt — guide [docs/outlook-ics-export.md](docs/outlook-ics-export.md) (sens unique Trello → Outlook, sans permission admin).
+- Si Entra / Graph est bloqué (`AADSTS700016`, pas d’admin) :
+  - **Power Automate** (auto, cloud Microsoft, sans hébergement) — [docs/outlook-power-automate.md](docs/outlook-power-automate.md) / bouton Gantt **Power Automate**
+  - **Exporter .ics** (manuel) — [docs/outlook-ics-export.md](docs/outlook-ics-export.md)
 
 ### Messages console sur Trello.com
 
