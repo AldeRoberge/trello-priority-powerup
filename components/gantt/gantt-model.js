@@ -683,6 +683,64 @@
     return out;
   }
 
+  /**
+   * Ids of nodes in the subtree that have children (need expanding to show cascade).
+   * @returns {string[]}
+   */
+  function collectExpandableSubtreeIds(node) {
+    var out = [];
+    function walk(n) {
+      if (!n || n.id == null || n.id === '') return;
+      var kids = n.children || [];
+      if (kids.length) {
+        out.push(String(n.id));
+        for (var i = 0; i < kids.length; i++) walk(kids[i]);
+      }
+    }
+    walk(node);
+    return out;
+  }
+
+  /**
+   * Depth-first list of every node in the nest tree (ignores expand/collapse).
+   */
+  function flattenAll(nodes) {
+    var out = [];
+    function walk(list) {
+      for (var i = 0; i < (list || []).length; i++) {
+        var n = list[i];
+        if (!n) continue;
+        out.push(n);
+        if (n.children && n.children.length) walk(n.children);
+      }
+    }
+    walk(nodes);
+    return out;
+  }
+
+  /**
+   * Checkbox state for a row given a selected-id map (cascade-aware).
+   * @returns {{ checked: boolean, indeterminate: boolean }}
+   */
+  function rowSelectionState(node, selectedMap) {
+    selectedMap = selectedMap || {};
+    if (!node || node.id == null || node.id === '') {
+      return { checked: false, indeterminate: false };
+    }
+    var ids = collectSubtreeIds(node);
+    if (ids.length <= 1) {
+      var alone = !!selectedMap[String(node.id)];
+      return { checked: alone, indeterminate: false };
+    }
+    var selected = 0;
+    for (var i = 0; i < ids.length; i++) {
+      if (selectedMap[ids[i]]) selected += 1;
+    }
+    if (!selected) return { checked: false, indeterminate: false };
+    if (selected >= ids.length) return { checked: true, indeterminate: false };
+    return { checked: false, indeterminate: true };
+  }
+
   global.GanttModel = {
     VIEW_MODES: VIEW_MODES,
     MS_DAY: MS_DAY,
@@ -716,6 +774,9 @@
     filterRows: filterRows,
     findNodeById: findNodeById,
     collectSubtreeIds: collectSubtreeIds,
+    collectExpandableSubtreeIds: collectExpandableSubtreeIds,
+    flattenAll: flattenAll,
+    rowSelectionState: rowSelectionState,
     compareRootsByPriority: compareRootsByPriority,
     compareRootsByProgress: compareRootsByProgress,
     sortTreeRoots: sortTreeRoots,

@@ -733,7 +733,11 @@
     }
 
     function selectedRows() {
-      var rows = visibleRows();
+      // Walk the full nest tree so cascade-selected children count even if collapsed.
+      var rows =
+        typeof model.flattenAll === 'function'
+          ? model.flattenAll(state.tree)
+          : visibleRows();
       var out = [];
       for (var i = 0; i < rows.length; i++) {
         if (rows[i] && state.selected[rows[i].id]) out.push(rows[i]);
@@ -751,6 +755,16 @@
       renderChart();
     }
 
+    function expandSubtreeForSelect(node) {
+      if (!node || typeof model.collectExpandableSubtreeIds !== 'function') {
+        return;
+      }
+      var ids = model.collectExpandableSubtreeIds(node);
+      for (var i = 0; i < ids.length; i++) {
+        state.expanded[ids[i]] = true;
+      }
+    }
+
     function toggleSelected(rowId, on) {
       var node =
         typeof model.findNodeById === 'function'
@@ -766,6 +780,8 @@
         if (on) state.selected[ids[i]] = true;
         else delete state.selected[ids[i]];
       }
+      // Reveal nested children so cascade selection is visible.
+      if (on && node) expandSubtreeForSelect(node);
       renderBulkBar();
       renderChart();
     }
@@ -1551,13 +1567,30 @@
         labelCell.style.setProperty('--gantt-depth', String(row.depth || 0));
 
         var sel = el('input', 'gantt-select-box', { type: 'checkbox' });
-        sel.checked = !!state.selected[row.id];
-        sel.title = 'S\u00e9lectionner';
+        var selState =
+          typeof model.rowSelectionState === 'function'
+            ? model.rowSelectionState(row, state.selected)
+            : {
+                checked: !!state.selected[row.id],
+                indeterminate: false,
+              };
+        sel.checked = !!selState.checked;
+        sel.indeterminate = !!selState.indeterminate;
+        sel.title = row.expandable
+          ? 'S\u00e9lectionner (avec sous-t\u00e2ches)'
+          : 'S\u00e9lectionner';
         sel.addEventListener('click', function (e) {
           e.stopPropagation();
         });
         sel.addEventListener('change', function () {
-          toggleSelected(row.id, !!sel.checked);
+          // Indeterminate is cleared by the browser before `change`; read prior
+          // cascade state so a partial parent click selects the whole subtree.
+          var prior =
+            typeof model.rowSelectionState === 'function'
+              ? model.rowSelectionState(row, state.selected)
+              : null;
+          var wantOn = prior && prior.indeterminate ? true : !!sel.checked;
+          toggleSelected(row.id, wantOn);
         });
         labelCell.appendChild(sel);
 

@@ -386,7 +386,29 @@ describe('GanttModel', () => {
       'check:c1',
       'local:sub',
     ]);
+    assert.deepEqual(GanttModel.collectExpandableSubtreeIds(parent).sort(), [
+      'card:p',
+      'local:sub',
+    ]);
+    assert.deepEqual(
+      GanttModel.flattenAll(tree).map((n) => n.id).sort(),
+      ['card:child', 'card:p', 'check:c1', 'local:sub']
+    );
     assert.equal(GanttModel.findNodeById(tree, 'missing'), null);
+
+    const selected = Object.create(null);
+    selected['card:p'] = true;
+    selected['local:sub'] = true;
+    assert.deepEqual(GanttModel.rowSelectionState(parent, selected), {
+      checked: false,
+      indeterminate: true,
+    });
+    selected['check:c1'] = true;
+    selected['card:child'] = true;
+    assert.deepEqual(GanttModel.rowSelectionState(parent, selected), {
+      checked: true,
+      indeterminate: false,
+    });
   });
 
   it('snapDate week keeps day; xToDate clamps to range', () => {
