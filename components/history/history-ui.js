@@ -57,6 +57,7 @@
    * @param {function(): Array} options.getEntries
    * @param {function(string): object|null} [options.getEntryDetails]
    * @param {function(string): Promise} options.onRevert
+   * @param {function(string): Promise} [options.onRestore]
    * @param {function()} [options.onLayoutChange]
    * @param {boolean} [options.initiallyOpen]
    */
@@ -75,6 +76,8 @@
         : function () { return null; };
     var onRevert =
       typeof options.onRevert === 'function' ? options.onRevert : function () { return Promise.resolve(); };
+    var onRestore =
+      typeof options.onRestore === 'function' ? options.onRestore : function () { return Promise.resolve(); };
     var onLayoutChange =
       typeof options.onLayoutChange === 'function' ? options.onLayoutChange : function () {};
     var applying = false;
@@ -233,12 +236,16 @@
         emptyEl.hidden = true;
         listEl.hidden = false;
         entries.forEach(function (entry) {
+          var isUndone = !!(entry && entry.undone);
           var isOpen = expandedId && entry.id === expandedId;
           var item = el(
             'li',
-            'historique-item' + (isOpen ? ' is-expanded' : '')
+            'historique-item' +
+              (isOpen ? ' is-expanded' : '') +
+              (isUndone ? ' is-undone' : '')
           );
           item.setAttribute('data-history-id', entry.id || '');
+          if (isUndone) item.setAttribute('data-undone', 'true');
 
           var row = el('div', 'historique-item-row');
 
@@ -254,7 +261,9 @@
           );
           mainText.appendChild(
             el('p', 'historique-item-time', {
-              text: formatRelativeTime(entry.at)
+              text: isUndone
+                ? 'Annulée · ' + formatRelativeTime(entry.at)
+                : formatRelativeTime(entry.at)
             })
           );
           var chevron = el(
@@ -270,24 +279,38 @@
             render();
           });
 
-          var btn = el('button', 'historique-revert-btn', {
-            type: 'button',
-            title: 'Revenir',
-            'aria-label': 'Revenir'
-          });
-          var btnIcon = el('i', 'ti ti-circle-arrow-left');
+          var actionLabel = isUndone ? 'Rétablir' : 'Revenir';
+          var btn = el(
+            'button',
+            'historique-revert-btn' + (isUndone ? ' historique-restore-btn' : ''),
+            {
+              type: 'button',
+              title: actionLabel,
+              'aria-label': actionLabel
+            }
+          );
+          var btnIcon = el(
+            'i',
+            isUndone ? 'ti ti-circle-arrow-right' : 'ti ti-circle-arrow-left'
+          );
           btnIcon.setAttribute('aria-hidden', 'true');
           btn.appendChild(btnIcon);
-          btn.appendChild(document.createTextNode('Revenir'));
+          btn.appendChild(document.createTextNode(actionLabel));
           btn.disabled = applying;
           btn.addEventListener('click', function (ev) {
             ev.stopPropagation();
             if (applying || !entry.id) return;
             applying = true;
             btn.disabled = true;
-            Promise.resolve(onRevert(entry.id))
+            var action = isUndone ? onRestore(entry.id) : onRevert(entry.id);
+            Promise.resolve(action)
               .catch(function (err) {
-                console.error('HistoryUI revert failed', err);
+                console.error(
+                  isUndone
+                    ? 'HistoryUI restore failed'
+                    : 'HistoryUI revert failed',
+                  err
+                );
               })
               .then(function () {
                 applying = false;

@@ -63,6 +63,21 @@
   );
 }
 
+.tp-page--priority .historique-item.is-undone {
+  opacity: 0.72;
+  background: color-mix(
+    in srgb,
+    var(--tp-elev-2, var(--tp-surface-subtle)) 55%,
+    transparent
+  );
+}
+
+.tp-page--priority .historique-item.is-undone .historique-item-label {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  color: var(--text-muted, var(--tp-text-muted));
+}
+
 .tp-page--priority .historique-item-row {
   display: flex;
   align-items: center;
@@ -155,6 +170,14 @@
 .tp-page--priority .historique-revert-btn:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+.tp-page--priority .historique-restore-btn:hover:not(:disabled) {
+  background: color-mix(
+    in srgb,
+    var(--surface-hover, var(--tp-surface-hover)) 80%,
+    var(--tp-elev-2, var(--tp-surface-subtle))
+  );
 }
 
 .tp-page--priority .historique-item-detail {
