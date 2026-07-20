@@ -21,6 +21,7 @@ const UNIT_FILES = [
   'priority-scoring.test.js',
   'priority-score-breakdown.test.js',
   'recurrence.test.js',
+  'due-vague.test.js',
   'statut.test.js',
   'effects.test.js',
   'completion.test.js',

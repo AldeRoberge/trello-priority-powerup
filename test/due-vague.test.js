@@ -43,7 +43,8 @@ describe('Échéance vague mode', () => {
     const eventually = PU.resolveDueVagueToDate('eventuellement', now);
     assert.equal(proche, '2026-08-19');
     assert.equal(lointain, '2027-07-20');
-    assert.equal(eventually, '2029-07-20');
+    // 1095 days crosses leap day 2028-02-29 → 2029-07-19
+    assert.equal(eventually, '2029-07-19');
     assert.equal(PU.resolveDueVagueToDate('bogus', now), '');
   });
 
