@@ -9151,6 +9151,15 @@
           icon: 'ti-check',
           variant: 'primary'
         });
+      }
+      // Keep add-subtask immediately right of the primary status chip (✓ / play).
+      chips.push({
+        id: 'add-subtask',
+        label: 'Sous-t\u00e2che',
+        icon: 'ti-plus',
+        variant: 'neutral'
+      });
+      if (!state.isBlocked) {
         chips.push({
           id: 'block',
           label: 'En attente\u2026',
@@ -9158,12 +9167,6 @@
           variant: 'warn'
         });
       }
-      chips.push({
-        id: 'add-subtask',
-        label: 'Sous-t\u00e2che',
-        icon: 'ti-plus',
-        variant: 'neutral'
-      });
       if (dueDays != null && isFinite(dueDays) && dueDays <= 0) {
         chips.push({
           id: 'postpone-tomorrow',

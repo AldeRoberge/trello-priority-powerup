@@ -665,14 +665,18 @@ describe('PriorityUI createOverviewField', () => {
 
     const chips = ui.el.querySelectorAll('.overview-action-chip');
     const ids = Array.from(chips).map((c) => c.dataset.overviewAction);
-    assert.deepEqual(ids, ['complete', 'block', 'add-subtask']);
+    assert.deepEqual(ids, ['complete', 'add-subtask', 'block']);
     assert.equal(ui.el.querySelector('.overview-actions').hidden, false);
 
     chips[0].click();
     assert.equal(actions[0].id, 'complete');
 
     // En attente opens composer; picking a suggestion emits block.
-    chips[1].click();
+    const blockChip = Array.from(chips).find(
+      (c) => c.dataset.overviewAction === 'block'
+    );
+    assert.ok(blockChip);
+    blockChip.click();
     const suggestion = ui.el.querySelector('.overview-composer-chip');
     assert.ok(suggestion);
     suggestion.click();
