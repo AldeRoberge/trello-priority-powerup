@@ -2227,21 +2227,9 @@
     progressPanel.appendChild(masterMotifHost);
 
     progressSection.appendChild(progressPanel);
-    containerEl.appendChild(progressSection);
 
-    var listSection = document.createElement('section');
-    listSection.className = 'tp-completion-list-section';
-    listSection.innerHTML =
-      '<div class="tp-completion-tools" id="completionTools" hidden>' +
-      '<input type="search" class="tp-input tp-completion-search" id="completionSearch" ' +
-      'placeholder="Rechercher une sous-t\u00e2che\u2026" maxlength="200" autocomplete="off" ' +
-      'aria-label="Rechercher une sous-t\u00e2che" />' +
-      '<select class="tp-input tp-completion-filter" id="completionFilter" aria-label="Filtrer les sous-t\u00e2ches">' +
-      '<option value="all">Toutes</option>' +
-      '<option value="active">En cours</option>' +
-      '<option value="done">Termin\u00e9es</option>' +
-      '</select>' +
-      '</div>' +
+    var bulkBarMount = document.createElement('div');
+    bulkBarMount.innerHTML =
       '<div class="tp-completion-bulk is-idle" id="completionBulkBar" role="toolbar" ' +
       'aria-label="Actions de s\u00e9lection">' +
       '<label class="tp-completion-select-all-label" title="Tout s\u00e9lectionner">' +
@@ -2261,6 +2249,22 @@
       '<button type="button" class="tp-btn tp-btn--secondary tp-completion-bulk-btn" id="completionBulkClear" ' +
       'disabled title="Tout d\u00e9s\u00e9lectionner" aria-label="Tout d\u00e9s\u00e9lectionner">' +
       '<i class="ti ti-deselect" aria-hidden="true"></i></button>' +
+      '</div>';
+    containerEl.appendChild(bulkBarMount.firstChild);
+    containerEl.appendChild(progressSection);
+
+    var listSection = document.createElement('section');
+    listSection.className = 'tp-completion-list-section';
+    listSection.innerHTML =
+      '<div class="tp-completion-tools" id="completionTools" hidden>' +
+      '<input type="search" class="tp-input tp-completion-search" id="completionSearch" ' +
+      'placeholder="Rechercher une sous-t\u00e2che\u2026" maxlength="200" autocomplete="off" ' +
+      'aria-label="Rechercher une sous-t\u00e2che" />' +
+      '<select class="tp-input tp-completion-filter" id="completionFilter" aria-label="Filtrer les sous-t\u00e2ches">' +
+      '<option value="all">Toutes</option>' +
+      '<option value="active">En cours</option>' +
+      '<option value="done">Termin\u00e9es</option>' +
+      '</select>' +
       '</div>' +
       '<ul class="tp-completion-list" id="completionList" aria-label="Sous-t\u00e2ches"></ul>' +
       '<p class="tp-completion-filter-empty" id="completionFilterEmpty" hidden>' +
