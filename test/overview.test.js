@@ -651,7 +651,7 @@ describe('PriorityUI createOverviewField', () => {
     assert.equal(actions[1], 'postpone-tomorrow');
   });
 
-  it('shows Terminer / En attente / Sous-tâche when in progress', () => {
+  it('shows Terminer / Ajouter une sous-tâche / Mettre en attente when in progress', () => {
     const actions = [];
     const ui = PriorityUI.createOverviewField({
       progressPercent: 40,
@@ -666,12 +666,20 @@ describe('PriorityUI createOverviewField', () => {
     const chips = ui.el.querySelectorAll('.overview-action-chip');
     const ids = Array.from(chips).map((c) => c.dataset.overviewAction);
     assert.deepEqual(ids, ['complete', 'add-subtask', 'block']);
+    assert.match(
+      chips.find((c) => c.dataset.overviewAction === 'add-subtask').textContent,
+      /^Ajouter/
+    );
+    assert.match(
+      chips.find((c) => c.dataset.overviewAction === 'block').textContent,
+      /^Mettre/
+    );
     assert.equal(ui.el.querySelector('.overview-actions').hidden, false);
 
     chips[0].click();
     assert.equal(actions[0].id, 'complete');
 
-    // En attente opens composer; picking a suggestion emits block.
+    // Mettre en attente opens composer; picking a suggestion emits block.
     const blockChip = Array.from(chips).find(
       (c) => c.dataset.overviewAction === 'block'
     );

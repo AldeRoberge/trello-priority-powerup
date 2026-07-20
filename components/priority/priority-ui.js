@@ -63,6 +63,8 @@
   var SECTION_COLLAPSE_STORAGE_KEY = 'trello-priority-powerup/section-collapse';
   var STATUT_EMBEDDED_DETAILS_STORAGE_KEY =
     'trello-priority-powerup/statut-embedded-details-expanded';
+  var INFO_ROW_COLLAPSE_STORAGE_KEY =
+    'trello-priority-powerup/info-row-collapse';
   // 'blocked' / 'statut' kept for legacy prefs; both nest under Progrès (not collapsible).
   var SECTION_COLLAPSE_KEYS = [
     'overview',
@@ -76,6 +78,16 @@
     'blocked',
     'chat',
     'historique'
+  ];
+  /** Info (Détails) property rows that can collapse to a one-line summary. */
+  var INFO_ROW_COLLAPSE_KEYS = [
+    'desc',
+    'creator',
+    'members',
+    'labels',
+    'task-types',
+    'parent',
+    'objectif'
   ];
   var DEFAULT_COLOR_SCHEME_KEY = 'blue';
   /** Member clock preference: '24' (default) or '12'. Canonical storage stays HH:MM. */
@@ -3123,6 +3135,68 @@
       );
     } catch (e) { /* ignore quota / private mode */ }
   }
+
+  /**
+   * @returns {{ [key: string]: boolean }}
+   *  Values are expanded (true) vs collapsed (false). Missing keys → collapsed.
+   */
+  function loadInfoRowCollapseState() {
+    try {
+      if (typeof localStorage === 'undefined') return {};
+      var raw = localStorage.getItem(INFO_ROW_COLLAPSE_STORAGE_KEY);
+      if (!raw) return {};
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return {};
+      var out = {};
+      INFO_ROW_COLLAPSE_KEYS.forEach(function (key) {
+        if (typeof parsed[key] === 'boolean') out[key] = parsed[key];
+      });
+      return out;
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveInfoRowCollapseState(patch) {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      if (!patch || typeof patch !== 'object') return;
+      var next = Object.assign({}, loadInfoRowCollapseState());
+      INFO_ROW_COLLAPSE_KEYS.forEach(function (key) {
+        if (typeof patch[key] === 'boolean') next[key] = patch[key];
+      });
+      localStorage.setItem(INFO_ROW_COLLAPSE_STORAGE_KEY, JSON.stringify(next));
+    } catch (e) { /* ignore quota / private mode */ }
+  }
+
+  /** Missing key → collapsed (false). */
+  function resolveInfoRowExpanded(key, fallback) {
+    var stored = loadInfoRowCollapseState();
+    if (Object.prototype.hasOwnProperty.call(stored, key)) return !!stored[key];
+    return fallback != null ? !!fallback : false;
+  }
+
+  /** Plain one-line preview for collapsed Description. */
+  function infoDescPlainSummary(text, maxLen) {
+    var limit = maxLen != null ? maxLen : 120;
+    var s = String(text == null ? '' : text);
+    s = s.replace(/<[^>]*>/g, ' ');
+    s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ');
+    s = s.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+    s = s
+      .split(/\r?\n/)
+      .map(function (line) {
+        return stripMarkdownLinePrefix(line);
+      })
+      .join(' ');
+    s = s.replace(/[*_`~>]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!s) return '';
+    if (s.length <= limit) return s;
+    var cut = s.slice(0, limit - 1);
+    var softer = cut.replace(/\s+\S*$/, '');
+    return (softer.length >= Math.floor(limit * 0.5) ? softer : cut) + '\u2026';
+  }
+
   var INUTILE_EPS = 0.05;
   var INUTILE_LABEL = 'Inutile';
   var INUTILE_STYLES = {
@@ -9155,14 +9229,14 @@
       // Keep add-subtask immediately right of the primary status chip (✓ / play).
       chips.push({
         id: 'add-subtask',
-        label: 'Sous-t\u00e2che',
+        label: 'Ajouter une sous-t\u00e2che',
         icon: 'ti-plus',
         variant: 'neutral'
       });
       if (!state.isBlocked) {
         chips.push({
           id: 'block',
-          label: 'En attente\u2026',
+          label: 'Mettre en attente\u2026',
           icon: 'ti-player-pause',
           variant: 'warn'
         });
@@ -9850,23 +9924,127 @@
       var row = document.createElement('div');
       row.className = 'info-row info-row--' + key;
       if (options.interactive) row.classList.add('is-interactive');
+      if (options.collapsible) row.classList.add('info-row--collapsible');
+
+      var value = document.createElement('div');
+      value.className = 'info-row-value';
+
+      function appendLabelIcon(parent) {
+        if (!options.icon) return;
+        var labelIcon = document.createElement('i');
+        labelIcon.className = 'ti ' + options.icon + ' info-row-icon';
+        labelIcon.setAttribute('aria-hidden', 'true');
+        parent.appendChild(labelIcon);
+      }
+
+      function appendLabelText(parent) {
+        var labelTextEl = document.createElement('span');
+        labelTextEl.className = 'info-row-label-text';
+        labelTextEl.textContent = labelText;
+        parent.appendChild(labelTextEl);
+      }
+
+      if (options.collapsible) {
+        var rowExpanded = resolveInfoRowExpanded(key, false);
+        row.classList.toggle('is-collapsed', !rowExpanded);
+
+        var toggleBtn = document.createElement('button');
+        toggleBtn.type = 'button';
+        toggleBtn.className = 'info-row-toggle';
+        toggleBtn.title = labelText;
+        toggleBtn.setAttribute(
+          'aria-label',
+          rowExpanded
+            ? 'Replier ' + labelText
+            : 'D\u00e9velopper ' + labelText
+        );
+        toggleBtn.setAttribute('aria-expanded', rowExpanded ? 'true' : 'false');
+
+        var chevron = document.createElement('i');
+        chevron.className =
+          'ti ti-chevron-down section-collapse-chevron info-row-chevron';
+        chevron.setAttribute('aria-hidden', 'true');
+        toggleBtn.appendChild(chevron);
+        appendLabelIcon(toggleBtn);
+        appendLabelText(toggleBtn);
+
+        var summaryEl = document.createElement('span');
+        summaryEl.className = 'info-row-summary';
+        summaryEl.hidden = rowExpanded;
+        summaryEl.setAttribute('aria-hidden', rowExpanded ? 'true' : 'false');
+
+        var detailEl = document.createElement('div');
+        detailEl.className = 'info-row-detail';
+        detailEl.hidden = !rowExpanded;
+
+        value.appendChild(summaryEl);
+        value.appendChild(detailEl);
+        row.appendChild(toggleBtn);
+        row.appendChild(value);
+
+        function applyRowExpanded(next, opts) {
+          opts = opts || {};
+          var was = rowExpanded;
+          rowExpanded = !!next;
+          row.classList.toggle('is-collapsed', !rowExpanded);
+          summaryEl.hidden = rowExpanded;
+          summaryEl.setAttribute(
+            'aria-hidden',
+            rowExpanded ? 'true' : 'false'
+          );
+          detailEl.hidden = !rowExpanded;
+          toggleBtn.setAttribute(
+            'aria-expanded',
+            rowExpanded ? 'true' : 'false'
+          );
+          toggleBtn.setAttribute(
+            'aria-label',
+            rowExpanded
+              ? 'Replier ' + labelText
+              : 'D\u00e9velopper ' + labelText
+          );
+          if (!opts.skipPersist) {
+            var patch = {};
+            patch[key] = rowExpanded;
+            saveInfoRowCollapseState(patch);
+          }
+          if (was !== rowExpanded && typeof options.onExpandChange === 'function') {
+            options.onExpandChange(rowExpanded);
+          }
+          onLayoutChange();
+        }
+
+        toggleBtn.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          applyRowExpanded(!rowExpanded);
+        });
+
+        function setSummary(text, emptyLabel) {
+          var raw = typeof text === 'string' ? text.trim() : '';
+          summaryEl.textContent = raw || emptyLabel || '';
+          summaryEl.classList.toggle('is-empty', !raw);
+        }
+
+        return {
+          row: row,
+          value: detailEl,
+          summaryEl: summaryEl,
+          toggleBtn: toggleBtn,
+          setSummary: setSummary,
+          setExpanded: applyRowExpanded,
+          isExpanded: function () {
+            return rowExpanded;
+          },
+          key: key
+        };
+      }
 
       var label = document.createElement('div');
       label.className = 'info-row-label';
       label.title = labelText;
-      if (options.icon) {
-        var labelIcon = document.createElement('i');
-        labelIcon.className = 'ti ' + options.icon + ' info-row-icon';
-        labelIcon.setAttribute('aria-hidden', 'true');
-        label.appendChild(labelIcon);
-      }
-      var labelTextEl = document.createElement('span');
-      labelTextEl.className = 'info-row-label-text';
-      labelTextEl.textContent = labelText;
-      label.appendChild(labelTextEl);
-
-      var value = document.createElement('div');
-      value.className = 'info-row-value';
+      appendLabelIcon(label);
+      appendLabelText(label);
 
       row.appendChild(label);
       row.appendChild(value);
