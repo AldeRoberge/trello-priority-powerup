@@ -391,9 +391,8 @@
       maxlength: '40',
       placeholder: 'ex. Clementine'
     });
-    var agentColorSelect = el('select', 'agent-input agent-color-select', {
-      'aria-label': 'Couleur de l\'assistant'
-    });
+    var agentColorPickerHost = el('div', 'agent-color-picker');
+    var agentColorPicker = null;
     var agentFacePicker = el('div', 'agent-face-picker', {
       role: 'radiogroup',
       'aria-label': 'Visage de l\'assistant'
@@ -408,7 +407,10 @@
     faceField.appendChild(el('span', 'agent-field-label', { text: 'Visage' }));
     faceField.appendChild(agentFacePicker);
     settingsPanel.appendChild(faceField);
-    settingsPanel.appendChild(labeledInput('Couleur', agentColorSelect));
+    var colorField = el('div', 'agent-field');
+    colorField.appendChild(el('span', 'agent-field-label', { text: 'Couleur' }));
+    colorField.appendChild(agentColorPickerHost);
+    settingsPanel.appendChild(colorField);
     settingsPanel.appendChild(labeledInput('Personnalit\u00e9', agentPersonalityInput));
 
     var charActions = el('div', 'agent-settings-actions agent-char-actions');
@@ -1523,31 +1525,78 @@
       }
     }
 
-    function fillAgentColorSelect(selected) {
-      var keys =
-        (global.UserProfile && global.UserProfile.AGENT_COLOR_KEYS) || [
-          'orange',
-          'yellow',
-          'green',
-          'purple',
-          'blue',
-          'pink',
-          'red',
-          'teal',
-          'coral',
-          'sky'
-        ];
-      var labels =
-        (global.UserProfile && global.UserProfile.AGENT_COLOR_LABELS) || {};
-      var current = selected || agentIdentity.agentColor || 'orange';
-      agentColorSelect.replaceChildren();
-      keys.forEach(function (key) {
-        agentColorSelect.appendChild(
-          el('option', null, { value: key, text: labels[key] || key })
-        );
+    function getAgentColorValue() {
+      if (agentColorPicker && typeof agentColorPicker.getValue === 'function') {
+        return agentColorPicker.getValue() || agentIdentity.agentColor || 'orange';
+      }
+      return agentIdentity.agentColor || 'orange';
+    }
+
+    function setAgentColorValue(color) {
+      if (agentColorPicker && typeof agentColorPicker.setValue === 'function') {
+        agentColorPicker.setValue(color);
+      }
+    }
+
+    function onAgentColorPicked(nextColor) {
+      var curName = (agentNameInput.value || '').trim();
+      var isStock =
+        !curName ||
+        (global.UserProfile &&
+          global.UserProfile.isStockAgentName &&
+          global.UserProfile.isStockAgentName(curName));
+      if (isStock && global.UserProfile && global.UserProfile.pickAgentNameForColor) {
+        agentNameInput.value = global.UserProfile.pickAgentNameForColor(nextColor);
+      }
+      persistAgentIdentity({
+        agentName: (agentNameInput.value || '').trim() || agentIdentity.agentName,
+        agentPersonality:
+          (agentPersonalityInput.value || '').trim() ||
+          agentIdentity.agentPersonality,
+        agentColor: nextColor,
+        agentFace: agentIdentity.agentFace
+      }).catch(function (err) {
+        console.error('AgentUI color pick failed', err);
       });
-      if (keys.indexOf(current) === -1) current = keys[0] || 'orange';
-      agentColorSelect.value = current;
+    }
+
+    function ensureAgentColorPicker(selected) {
+      var initial = selected || agentIdentity.agentColor || 'orange';
+      if (
+        agentColorPicker &&
+        typeof agentColorPicker.setValue === 'function'
+      ) {
+        agentColorPicker.setValue(initial);
+        return agentColorPicker;
+      }
+      if (
+        global.UserProfile &&
+        typeof global.UserProfile.mountAgentColorPicker === 'function'
+      ) {
+        agentColorPicker = global.UserProfile.mountAgentColorPicker(
+          agentColorPickerHost,
+          {
+            value: initial,
+            onChange: onAgentColorPicked
+          }
+        );
+        return agentColorPicker;
+      }
+      // Fallback if UserProfile is unavailable: plain text readout.
+      agentColorPickerHost.textContent = initial;
+      agentColorPicker = {
+        getValue: function () {
+          return agentIdentity.agentColor || 'orange';
+        },
+        setValue: function (color) {
+          agentColorPickerHost.textContent = color || 'orange';
+        }
+      };
+      return agentColorPicker;
+    }
+
+    function fillAgentColorSelect(selected) {
+      ensureAgentColorPicker(selected);
     }
 
     function fillAgentFacePicker(selected) {
@@ -1563,10 +1612,7 @@
       var labels =
         (global.UserProfile && global.UserProfile.AGENT_FACE_LABELS) || {};
       var current = normalizeAgentFace(selected || agentIdentity.agentFace);
-      var color =
-        (agentColorSelect && agentColorSelect.value) ||
-        agentIdentity.agentColor ||
-        'orange';
+      var color = getAgentColorValue();
       var aura = normalizeFaceAura(color) || 'orange';
       agentFacePicker.replaceChildren();
       keys.forEach(function (key) {
@@ -1596,9 +1642,7 @@
             agentPersonality:
               (agentPersonalityInput.value || '').trim() ||
               agentIdentity.agentPersonality,
-            agentColor:
-              (agentColorSelect && agentColorSelect.value) ||
-              agentIdentity.agentColor,
+            agentColor: getAgentColorValue(),
             agentFace: key
           }).catch(function (err) {
             console.error('AgentUI face pick failed', err);
@@ -1610,10 +1654,7 @@
 
     function syncAgentAvatarPreview() {
       if (!agentAvatarPreviewFaceHost) return;
-      var color =
-        (agentColorSelect && agentColorSelect.value) ||
-        agentIdentity.agentColor ||
-        'orange';
+      var color = getAgentColorValue();
       var aura = normalizeFaceAura(color) || 'orange';
       var style = normalizeAgentFace(agentIdentity.agentFace);
       var name =
@@ -1624,7 +1665,7 @@
       var needNew =
         !face ||
         face.getAttribute('data-face') !== style ||
-        face.getAttribute('data-aura') !== aura;
+        face.getAttribute('data-aura') !== auraToken(aura);
       if (needNew) {
         face = createAssistantFace('happy', aura, style);
         face.classList.add('agent-face--preview');
@@ -1688,7 +1729,7 @@
     }
 
     function readAgentIdentityForm() {
-      var color = agentColorSelect.value || agentIdentity.agentColor || 'orange';
+      var color = getAgentColorValue();
       if (global.UserProfile && typeof global.UserProfile.normalizeAgentColor === 'function') {
         color = global.UserProfile.normalizeAgentColor(color) || color;
       }
@@ -2637,17 +2678,52 @@
     };
 
     var FACE_AURAS = {
-      orange: { hi: '#ffe0c2', mid: '#f5b58a', lo: '#e8956a' },
-      yellow: { hi: '#fff6c8', mid: '#f5d76e', lo: '#e0b83a' },
-      green: { hi: '#d8f5c8', mid: '#8fd86a', lo: '#5aa843' },
-      purple: { hi: '#e8d4ff', mid: '#b48ae0', lo: '#8a5cbf' },
-      blue: { hi: '#cfe4ff', mid: '#7eb2f0', lo: '#4a86d4' },
-      pink: { hi: '#ffd6e8', mid: '#f095b8', lo: '#d96a94' },
-      red: { hi: '#ffd0c8', mid: '#f08070', lo: '#d14a3a' },
-      teal: { hi: '#c8f5ee', mid: '#5ecfb8', lo: '#2fa892' },
-      coral: { hi: '#ffd8c8', mid: '#f0a078', lo: '#e07850' },
-      sky: { hi: '#dff4ff', mid: '#8ec8e8', lo: '#5aa8d0' }
+      orange: { hi: '#ffe0c2', mid: '#f5b58a', lo: '#e8956a', glow: '#c4794a' },
+      yellow: { hi: '#fff6c8', mid: '#f5d76e', lo: '#e0b83a', glow: '#d4a017' },
+      green: { hi: '#d8f5c8', mid: '#8fd86a', lo: '#5aa843', glow: '#4a8f38' },
+      purple: { hi: '#e8d4ff', mid: '#b48ae0', lo: '#8a5cbf', glow: '#6f3fa8' },
+      blue: { hi: '#cfe4ff', mid: '#7eb2f0', lo: '#4a86d4', glow: '#3a6fb3' },
+      pink: { hi: '#ffd6e8', mid: '#f095b8', lo: '#d96a94', glow: '#c24f7c' },
+      red: { hi: '#ffd0c8', mid: '#f08070', lo: '#d14a3a', glow: '#b9382a' },
+      teal: { hi: '#c8f5ee', mid: '#5ecfb8', lo: '#2fa892', glow: '#1f8a78' },
+      coral: { hi: '#ffd8c8', mid: '#f0a078', lo: '#e07850', glow: '#c45f38' },
+      sky: { hi: '#dff4ff', mid: '#8ec8e8', lo: '#5aa8d0', glow: '#3f8ab3' }
     };
+
+    function paletteForAura(aura) {
+      if (global.UserProfile && typeof global.UserProfile.agentColorPalette === 'function') {
+        return global.UserProfile.agentColorPalette(aura);
+      }
+      var tone = normalizeFaceAura(aura) || 'orange';
+      if (tone.charAt(0) === '#') {
+        return FACE_AURAS.orange;
+      }
+      return FACE_AURAS[tone] || FACE_AURAS.orange;
+    }
+
+    function auraToken(tone) {
+      var t = String(tone || '');
+      return t.charAt(0) === '#' ? 'custom' : t || 'orange';
+    }
+
+    function applyAuraCssVars(el, tone, palette) {
+      if (!el) return;
+      var token = auraToken(tone);
+      el.setAttribute('data-aura', token);
+      if (token === 'custom' && palette) {
+        el.style.setProperty('--agent-face-hi', palette.hi);
+        el.style.setProperty('--agent-face-mid', palette.mid);
+        el.style.setProperty('--agent-face-lo', palette.lo);
+        el.style.setProperty('--agent-face-glow', palette.glow || palette.lo);
+        el.style.setProperty('--agent-hl-accent', palette.mid);
+      } else {
+        el.style.removeProperty('--agent-face-hi');
+        el.style.removeProperty('--agent-face-mid');
+        el.style.removeProperty('--agent-face-lo');
+        el.style.removeProperty('--agent-face-glow');
+        el.style.removeProperty('--agent-hl-accent');
+      }
+    }
 
     function normalizeFaceAura(value) {
       var raw = String(value || '')
@@ -2655,7 +2731,7 @@
         .toLowerCase();
       if (global.UserProfile && typeof global.UserProfile.normalizeAgentColor === 'function') {
         var fromProfile = global.UserProfile.normalizeAgentColor(raw);
-        if (fromProfile && FACE_AURAS[fromProfile]) return fromProfile;
+        if (fromProfile) return fromProfile;
       }
       if (FACE_AURAS[raw]) return raw;
       if (raw === 'jaune' || raw === 'gold' || raw === 'amber' || raw === 'dore') return 'yellow';
@@ -2667,6 +2743,7 @@
       if (raw === 'rouge') return 'red';
       if (raw === 'turquoise' || raw === 'cyan' || raw === 'mint') return 'teal';
       if (raw === 'ciel') return 'sky';
+      if (/^#[0-9a-f]{3}([0-9a-f]{3})?$/.test(raw)) return raw;
       return null;
     }
 
@@ -3005,7 +3082,7 @@
 
     function applyFacePalette(face, tone, palette) {
       if (!face || !palette) return;
-      face.setAttribute('data-aura', tone || 'orange');
+      applyAuraCssVars(face, tone, palette);
       var stops = face.querySelectorAll('.agent-face-skin-stop');
       if (stops.length < 3) {
         stops = face.querySelectorAll('radialGradient stop');
@@ -3025,7 +3102,7 @@
     function applyFaceAura(face, aura) {
       if (!face) return;
       var tone = normalizeFaceAura(aura) || identityAura();
-      applyFacePalette(face, tone, FACE_AURAS[tone] || FACE_AURAS.orange);
+      applyFacePalette(face, tone, paletteForAura(tone));
     }
 
     function refreshAssistantFacesAura() {
@@ -3037,7 +3114,7 @@
         var mood = face.getAttribute('data-emotion') || 'neutral';
         var aura = auraForEmotion(mood);
         applyFaceAura(face, aura);
-        row.setAttribute('data-aura', aura);
+        applyAuraCssVars(row, aura, paletteForAura(aura));
       }
     }
 
@@ -3163,15 +3240,15 @@
       var mood = emotion || 'neutral';
       if (FACE_EMOTIONS.indexOf(mood) === -1) mood = 'neutral';
       var aura = auraForEmotion(mood, color);
-      var palette = FACE_AURAS[aura] || FACE_AURAS.orange;
+      var palette = paletteForAura(aura);
       var style = normalizeAgentFace(
         faceStyle != null ? faceStyle : identityFace()
       );
       var face = el('span', 'agent-face agent-face--' + mood);
       face.setAttribute('aria-hidden', 'true');
       face.setAttribute('data-emotion', mood);
-      face.setAttribute('data-aura', aura);
       face.setAttribute('data-face', style);
+      applyAuraCssVars(face, aura, palette);
       var gradId = 'agentFaceSkin' + ++faceGradientSeq;
       face.innerHTML =
         '<svg class="agent-face-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40" focusable="false">' +
@@ -3374,7 +3451,7 @@
       var row = face.closest('.agent-msg--assistant');
       if (row) {
         row.setAttribute('data-emotion', 'surprised');
-        row.setAttribute('data-aura', 'yellow');
+        applyAuraCssVars(row, 'yellow', paletteForAura('yellow'));
       }
       playBarfSound();
       pukeAllOverScreen(face);
@@ -4241,7 +4318,7 @@
         face.classList.remove('is-sick');
         clearFaceAsleepVisual(face);
         row.setAttribute('data-emotion', mood);
-        row.setAttribute('data-aura', aura);
+        applyAuraCssVars(row, aura, paletteForAura(aura));
         if (mood !== 'thinking') {
           face.removeAttribute('data-think');
         }
@@ -5216,13 +5293,11 @@
       );
       if (role === 'assistant' && !(meta && meta.error)) {
         // Seed aura before highlights so [[a:]] uses identity / turn color on first paint.
-        row.setAttribute(
-          'data-aura',
-          auraForEmotion(
-            (meta && meta.emotion) || 'neutral',
-            meta && (meta.color != null ? meta.color : meta.aura)
-          )
+        var seedAura = auraForEmotion(
+          (meta && meta.emotion) || 'neutral',
+          meta && (meta.color != null ? meta.color : meta.aura)
         );
+        applyAuraCssVars(row, seedAura, paletteForAura(seedAura));
         fillHighlightedBubble(bubble, text);
       } else {
         bubble.textContent = text;
@@ -5275,7 +5350,7 @@
       row.setAttribute('aria-busy', 'true');
       row.setAttribute('aria-label', 'R\u00e9ponse en cours');
       // Seed identity aura so [[a:…]] accents paint correctly during stream.
-      row.setAttribute('data-aura', identityAura());
+      applyAuraCssVars(row, identityAura(), paletteForAura(identityAura()));
       // Face + thinking clouds while waiting; bubble swaps to text when streaming starts.
       var bubble = el('div', 'agent-msg-bubble agent-msg-bubble--pending');
       var clouds = el('div', 'agent-think-clouds');
@@ -8197,26 +8272,11 @@
     doneBtn.addEventListener('click', function () {
       setSettingsOpen(false);
     });
-    agentColorSelect.addEventListener('change', function () {
-      var nextColor = agentColorSelect.value;
-      var curName = (agentNameInput.value || '').trim();
-      var isStock =
-        !curName ||
-        (global.UserProfile &&
-          global.UserProfile.isStockAgentName &&
-          global.UserProfile.isStockAgentName(curName));
-      if (isStock && global.UserProfile && global.UserProfile.pickAgentNameForColor) {
-        agentNameInput.value = global.UserProfile.pickAgentNameForColor(nextColor);
-      }
-      // Rebuild picker thumbs so each face style previews the new color.
-      fillAgentFacePicker(agentIdentity.agentFace);
-      syncAgentAvatarPreview();
-    });
     agentNameInput.addEventListener('input', function () {
       syncAgentAvatarPreview();
     });
     rerollNameBtn.addEventListener('click', function () {
-      var color = agentColorSelect.value || agentIdentity.agentColor;
+      var color = getAgentColorValue();
       if (global.UserProfile && global.UserProfile.pickAgentNameForColor) {
         agentNameInput.value = global.UserProfile.pickAgentNameForColor(color);
       }
@@ -8230,10 +8290,11 @@
         global.UserProfile && global.UserProfile.pickRandomAgentColor
           ? global.UserProfile.pickRandomAgentColor()
           : 'orange';
-      agentColorSelect.value = nextColor;
+      setAgentColorValue(nextColor);
       if (global.UserProfile && global.UserProfile.pickAgentNameForColor) {
         agentNameInput.value = global.UserProfile.pickAgentNameForColor(nextColor);
       }
+      fillAgentFacePicker(agentIdentity.agentFace);
       syncAgentAvatarPreview();
       persistAgentIdentity(readAgentIdentityForm()).catch(function (err) {
         console.error('AgentUI reroll color failed', err);

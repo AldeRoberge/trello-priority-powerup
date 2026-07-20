@@ -53,6 +53,33 @@
     sky: 'Ciel'
   };
 
+  /** Mid swatch hex for each named aura (matches the face gradient mid stop). */
+  var AGENT_COLOR_HEX = {
+    orange: '#f5b58a',
+    yellow: '#f5d76e',
+    green: '#8fd86a',
+    purple: '#b48ae0',
+    blue: '#7eb2f0',
+    pink: '#f095b8',
+    red: '#f08070',
+    teal: '#5ecfb8',
+    coral: '#f0a078',
+    sky: '#8ec8e8'
+  };
+
+  var AGENT_COLOR_PALETTES = {
+    orange: { hi: '#ffe0c2', mid: '#f5b58a', lo: '#e8956a', glow: '#c4794a' },
+    yellow: { hi: '#fff6c8', mid: '#f5d76e', lo: '#e0b83a', glow: '#d4a017' },
+    green: { hi: '#d8f5c8', mid: '#8fd86a', lo: '#5aa843', glow: '#4a8f38' },
+    purple: { hi: '#e8d4ff', mid: '#b48ae0', lo: '#8a5cbf', glow: '#6f3fa8' },
+    blue: { hi: '#cfe4ff', mid: '#7eb2f0', lo: '#4a86d4', glow: '#3a6fb3' },
+    pink: { hi: '#ffd6e8', mid: '#f095b8', lo: '#d96a94', glow: '#c24f7c' },
+    red: { hi: '#ffd0c8', mid: '#f08070', lo: '#d14a3a', glow: '#b9382a' },
+    teal: { hi: '#c8f5ee', mid: '#5ecfb8', lo: '#2fa892', glow: '#1f8a78' },
+    coral: { hi: '#ffd8c8', mid: '#f0a078', lo: '#e07850', glow: '#c45f38' },
+    sky: { hi: '#dff4ff', mid: '#8ec8e8', lo: '#5aa8d0', glow: '#3f8ab3' }
+  };
+
   /** Permanent face shape / feature set (independent of emotion & color). */
   var AGENT_FACE_KEYS = ['classic', 'soft', 'bold', 'sly', 'calm', 'spark'];
 
@@ -227,20 +254,137 @@
     };
   }
 
+  function parseAgentHex(raw) {
+    var s = String(raw == null ? '' : raw)
+      .trim()
+      .toLowerCase();
+    if (!s) return '';
+    if (s.charAt(0) !== '#') s = '#' + s;
+    if (/^#[0-9a-f]{6}$/.test(s)) return s;
+    if (/^#[0-9a-f]{3}$/.test(s)) {
+      return (
+        '#' +
+        s.charAt(1) +
+        s.charAt(1) +
+        s.charAt(2) +
+        s.charAt(2) +
+        s.charAt(3) +
+        s.charAt(3)
+      );
+    }
+    return '';
+  }
+
   function normalizeAgentColor(raw) {
     var c = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
     if (AGENT_COLOR_KEYS.indexOf(c) !== -1) return c;
     // Common aliases from older face auras / FR labels.
-    if (c === 'jaune' || c === 'gold' || c === 'amber') return 'yellow';
+    if (c === 'jaune' || c === 'gold' || c === 'amber' || c === 'dore' || c === 'doré') {
+      return 'yellow';
+    }
     if (c === 'peach' || c === 'warm') return 'orange';
-    if (c === 'vert' || c === 'lime' || c === 'mint') return c === 'mint' ? 'teal' : 'green';
+    if (c === 'vert' || c === 'lime') return 'green';
+    if (c === 'mint') return 'teal';
     if (c === 'violet' || c === 'lavender') return 'purple';
     if (c === 'bleu') return 'blue';
     if (c === 'rose') return 'pink';
     if (c === 'rouge') return 'red';
     if (c === 'turquoise' || c === 'cyan') return 'teal';
+    if (c === 'corail') return 'coral';
     if (c === 'ciel') return 'sky';
-    return '';
+    var hex = parseAgentHex(raw);
+    if (!hex) return '';
+    // Snap exact preset mid tones back to named keys.
+    for (var i = 0; i < AGENT_COLOR_KEYS.length; i++) {
+      var key = AGENT_COLOR_KEYS[i];
+      if (AGENT_COLOR_HEX[key] === hex) return key;
+    }
+    return hex;
+  }
+
+  function isCustomAgentColor(color) {
+    var n = normalizeAgentColor(color);
+    return !!(n && n.charAt(0) === '#');
+  }
+
+  function hexToRgb(hex) {
+    var h = parseAgentHex(hex);
+    if (!h) return null;
+    return {
+      r: parseInt(h.slice(1, 3), 16),
+      g: parseInt(h.slice(3, 5), 16),
+      b: parseInt(h.slice(5, 7), 16)
+    };
+  }
+
+  function rgbToHex(r, g, b) {
+    function byte(n) {
+      var v = Math.max(0, Math.min(255, Math.round(n)));
+      var s = v.toString(16);
+      return s.length === 1 ? '0' + s : s;
+    }
+    return '#' + byte(r) + byte(g) + byte(b);
+  }
+
+  function mixRgb(a, b, t) {
+    return {
+      r: a.r + (b.r - a.r) * t,
+      g: a.g + (b.g - a.g) * t,
+      b: a.b + (b.b - a.b) * t
+    };
+  }
+
+  function agentColorHex(color) {
+    var n = normalizeAgentColor(color) || 'orange';
+    if (n.charAt(0) === '#') return n;
+    return AGENT_COLOR_HEX[n] || AGENT_COLOR_HEX.orange;
+  }
+
+  function agentColorPalette(color) {
+    var n = normalizeAgentColor(color) || 'orange';
+    if (n.charAt(0) !== '#') {
+      var preset = AGENT_COLOR_PALETTES[n] || AGENT_COLOR_PALETTES.orange;
+      return {
+        hi: preset.hi,
+        mid: preset.mid,
+        lo: preset.lo,
+        glow: preset.glow
+      };
+    }
+    var midRgb = hexToRgb(n);
+    if (!midRgb) return agentColorPalette('orange');
+    var hi = mixRgb(midRgb, { r: 255, g: 255, b: 255 }, 0.48);
+    var lo = mixRgb(midRgb, { r: 48, g: 32, b: 24 }, 0.34);
+    var glow = mixRgb(midRgb, { r: 36, g: 24, b: 18 }, 0.42);
+    return {
+      hi: rgbToHex(hi.r, hi.g, hi.b),
+      mid: n,
+      lo: rgbToHex(lo.r, lo.g, lo.b),
+      glow: rgbToHex(glow.r, glow.g, glow.b)
+    };
+  }
+
+  function nearestAgentColorKey(color) {
+    var n = normalizeAgentColor(color);
+    if (n && n.charAt(0) !== '#') return n;
+    var rgb = hexToRgb(agentColorHex(color));
+    if (!rgb) return 'orange';
+    var best = 'orange';
+    var bestDist = Infinity;
+    for (var i = 0; i < AGENT_COLOR_KEYS.length; i++) {
+      var key = AGENT_COLOR_KEYS[i];
+      var p = hexToRgb(AGENT_COLOR_HEX[key]);
+      if (!p) continue;
+      var dist =
+        (p.r - rgb.r) * (p.r - rgb.r) +
+        (p.g - rgb.g) * (p.g - rgb.g) +
+        (p.b - rgb.b) * (p.b - rgb.b);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = key;
+      }
+    }
+    return best;
   }
 
   function normalizeAgentFace(raw) {
@@ -265,7 +409,7 @@
   }
 
   function pickAgentNameForColor(color) {
-    var key = normalizeAgentColor(color) || 'orange';
+    var key = nearestAgentColorKey(color);
     return pickRandom(AGENT_COLOR_NAMES[key] || AGENT_COLOR_NAMES.orange) || 'Orange';
   }
 
@@ -280,6 +424,111 @@
       }
     }
     return false;
+  }
+
+  /**
+   * Visual color picker: preset swatches + native custom color input.
+   * Returns { getValue, setValue }.
+   */
+  function mountAgentColorPicker(host, options) {
+    options = options || {};
+    if (!host) {
+      return {
+        getValue: function () {
+          return 'orange';
+        },
+        setValue: function () {}
+      };
+    }
+    var onChange = typeof options.onChange === 'function' ? options.onChange : null;
+    var current = normalizeAgentColor(options.value) || 'orange';
+
+    host.classList.add('tp-agent-color-picker');
+    host.setAttribute('role', 'radiogroup');
+    host.setAttribute('aria-label', options.ariaLabel || 'Couleur de l\'assistant');
+    host.replaceChildren();
+
+    var swatches = [];
+    AGENT_COLOR_KEYS.forEach(function (key) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tp-agent-color-swatch';
+      btn.setAttribute('data-color', key);
+      btn.setAttribute('role', 'radio');
+      btn.setAttribute('aria-label', AGENT_COLOR_LABELS[key] || key);
+      btn.title = AGENT_COLOR_LABELS[key] || key;
+      btn.style.background = AGENT_COLOR_HEX[key];
+      btn.addEventListener('click', function () {
+        applyValue(key, true);
+      });
+      host.appendChild(btn);
+      swatches.push(btn);
+    });
+
+    var customWrap = document.createElement('label');
+    customWrap.className = 'tp-agent-color-custom';
+    customWrap.title = 'Couleur personnalisée';
+    customWrap.setAttribute('aria-label', 'Couleur personnalisée');
+
+    var customSwatch = document.createElement('span');
+    customSwatch.className = 'tp-agent-color-custom-face';
+    customSwatch.setAttribute('aria-hidden', 'true');
+
+    var customInput = document.createElement('input');
+    customInput.type = 'color';
+    customInput.className = 'tp-agent-color-custom-input';
+    customInput.setAttribute('aria-label', 'Choisir une couleur personnalisée');
+
+    var customLabel = document.createElement('span');
+    customLabel.className = 'tp-agent-color-custom-label';
+    customLabel.textContent = 'Perso';
+
+    customWrap.appendChild(customSwatch);
+    customWrap.appendChild(customInput);
+    customWrap.appendChild(customLabel);
+    host.appendChild(customWrap);
+
+    function syncUi() {
+      var named = current && current.charAt(0) !== '#';
+      var hex = agentColorHex(current);
+      for (var i = 0; i < swatches.length; i++) {
+        var key = swatches[i].getAttribute('data-color');
+        var selected = named && key === current;
+        swatches[i].classList.toggle('is-selected', selected);
+        swatches[i].setAttribute('aria-checked', selected ? 'true' : 'false');
+      }
+      var customSelected = !named;
+      customWrap.classList.toggle('is-selected', customSelected);
+      customWrap.setAttribute('aria-checked', customSelected ? 'true' : 'false');
+      customInput.value = hex;
+      customSwatch.style.background = hex;
+    }
+
+    function applyValue(next, emit) {
+      var normalized = normalizeAgentColor(next) || 'orange';
+      var changed = normalized !== current;
+      current = normalized;
+      syncUi();
+      if (emit && changed && onChange) onChange(current);
+    }
+
+    customInput.addEventListener('input', function () {
+      applyValue(customInput.value, true);
+    });
+    customInput.addEventListener('change', function () {
+      applyValue(customInput.value, true);
+    });
+
+    syncUi();
+
+    return {
+      getValue: function () {
+        return current;
+      },
+      setValue: function (value) {
+        applyValue(value, false);
+      }
+    };
   }
 
   /**
@@ -791,6 +1040,8 @@
     AGENT_STATUS_LABELS: AGENT_STATUS_LABELS,
     AGENT_COLOR_KEYS: AGENT_COLOR_KEYS,
     AGENT_COLOR_LABELS: AGENT_COLOR_LABELS,
+    AGENT_COLOR_HEX: AGENT_COLOR_HEX,
+    AGENT_COLOR_PALETTES: AGENT_COLOR_PALETTES,
     AGENT_COLOR_NAMES: AGENT_COLOR_NAMES,
     AGENT_FACE_KEYS: AGENT_FACE_KEYS,
     AGENT_FACE_LABELS: AGENT_FACE_LABELS,
@@ -799,6 +1050,12 @@
     emptyProfile: emptyProfile,
     normalizeAgentStatus: normalizeAgentStatus,
     normalizeAgentColor: normalizeAgentColor,
+    parseAgentHex: parseAgentHex,
+    isCustomAgentColor: isCustomAgentColor,
+    agentColorHex: agentColorHex,
+    agentColorPalette: agentColorPalette,
+    nearestAgentColorKey: nearestAgentColorKey,
+    mountAgentColorPicker: mountAgentColorPicker,
     normalizeAgentFace: normalizeAgentFace,
     normalizeProfile: normalizeProfile,
     normalizeTimeFormat: normalizeTimeFormat,

@@ -299,6 +299,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .tp-page--priority .variant-chat-section--standalone .agent-chat-panel {
@@ -306,12 +307,20 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .tp-page--priority .variant-chat-section--standalone .agent-messages {
-  flex: 1 1 auto;
-  min-height: 140px;
+  /* flex-basis 0 + min-height 0: scroll inside the rail instead of growing forever */
+  flex: 1 1 0;
+  min-height: 0;
   max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.tp-page--priority .variant-chat-section--standalone .agent-chat-panel > :not(.agent-messages) {
+  flex-shrink: 0;
 }
 
 /* Fullscreen right rail — same fill behavior as standalone assistant */
@@ -340,6 +349,7 @@
   flex-direction: column;
   min-height: 0;
   margin-top: 8px;
+  overflow: hidden;
 }
 
 .tp-page--priority.is-split-assistant .cerveau-assistant .agent-chat-panel {
@@ -347,12 +357,19 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .tp-page--priority.is-split-assistant .cerveau-assistant .agent-messages {
-  flex: 1 1 auto;
-  min-height: 120px;
+  flex: 1 1 0;
+  min-height: 0;
   max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-chat-panel > :not(.agent-messages) {
+  flex-shrink: 0;
 }
 
 .tp-page--assistant {
@@ -605,9 +622,10 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 320px;
+  max-height: min(320px, 45vh);
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
   /* Fit glow-pulse peak (blur 16px + spread 5px) plus face scale/rotate. */
   padding: 20px 10px 20px 20px;
 }
@@ -832,6 +850,32 @@
   --agent-face-mid: #8ec8e8;
   --agent-face-lo: #5aa8d0;
   --agent-face-glow: #3f8ab3;
+}
+
+/* Custom hex identity — CSS vars are set inline by applyAuraCssVars. */
+.tp-page--priority .agent-face[data-aura='custom'] {
+  background: var(--agent-face-mid);
+}
+
+.tp-page--priority .agent-color-picker.tp-agent-color-picker {
+  margin-top: 2px;
+}
+
+/* Face-style silhouettes: keep glow host close to the SVG head shape. */
+.tp-page--priority .agent-face[data-face='soft'] {
+  border-radius: 48% / 44%;
+}
+.tp-page--priority .agent-face[data-face='bold'] {
+  border-radius: 44% / 50%;
+}
+.tp-page--priority .agent-face[data-face='sly'] {
+  border-radius: 48% / 46%;
+}
+.tp-page--priority .agent-face[data-face='calm'] {
+  border-radius: 42% / 50%;
+}
+.tp-page--priority .agent-face[data-face='spark'] {
+  border-radius: 50% / 45%;
 }
 
 .tp-page--priority .agent-personality-input {

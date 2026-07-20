@@ -4254,13 +4254,11 @@
       var deleteBtn = li.querySelector(
         ':scope > .tp-completion-item-main .tp-completion-delete'
       );
-      var directSliderRow = null;
-      for (var ci = 0; ci < li.children.length; ci++) {
-        if (li.children[ci].classList.contains('tp-completion-item-slider-row')) {
-          directSliderRow = li.children[ci];
-          break;
-        }
-      }
+      var directSliderRow =
+        li.querySelector(':scope > .tp-completion-item-slider-row') ||
+        li.querySelector(
+          ':scope > .tp-completion-checklist-details .tp-completion-item-slider-row'
+        );
       var itemSlider = directSliderRow
         ? directSliderRow.querySelector('.tp-completion-item-slider')
         : null;
@@ -4794,7 +4792,18 @@
         mainRow.appendChild(spellSpinner);
       }
 
+      var detailsBtn = null;
       if (!isLinked) {
+        detailsBtn = document.createElement('button');
+        detailsBtn.type = 'button';
+        detailsBtn.className = 'tp-completion-checklist-details-btn';
+        detailsBtn.innerHTML =
+          '<i class="ti ti-chevron-down" aria-hidden="true"></i>';
+        detailsBtn.setAttribute('aria-expanded', 'false');
+        detailsBtn.setAttribute('aria-label', 'Progr\u00e8s');
+        detailsBtn.title = 'Progr\u00e8s';
+        mainRow.appendChild(detailsBtn);
+
         var itemEstimate = createEstimateChip(CT, {
           t: trelloT,
           scales: currentEstimateScales(),
@@ -4842,6 +4851,10 @@
           }
         }
 
+        var details = document.createElement('div');
+        details.className = 'tp-completion-checklist-details';
+        details.hidden = true;
+
         var sliderRow = document.createElement('div');
         sliderRow.className = 'tp-completion-item-slider-row';
 
@@ -4870,7 +4883,19 @@
         sliderWrap.appendChild(itemSlider);
         sliderRow.appendChild(sliderWrap);
         sliderRow.appendChild(itemValEl);
-        li.appendChild(sliderRow);
+        details.appendChild(sliderRow);
+        li.appendChild(details);
+
+        if (detailsBtn) {
+          detailsBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            var open = details.hidden;
+            details.hidden = !open;
+            detailsBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            detailsBtn.classList.toggle('is-open', open);
+            onResize();
+          });
+        }
 
         if (itemBlocked) {
           var motif = createBlockedMotifField({
