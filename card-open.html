@@ -83,7 +83,20 @@
       var overviewMount = document.getElementById('overviewMount');
       var overviewLoading = document.getElementById('overviewLoading');
       var overviewUi = null;
+      var overviewRefreshChain = Promise.resolve();
+      var overviewLiveSyncStarted = false;
+      var overviewLiveSyncTimer = null;
+      var appliedOverviewFp = '';
+      var LIVE_SYNC_POLL_MS = 3000;
       if (openBtn) openBtn.textContent = 'Ouvrir ' + appName;
+
+      function stableFp(value) {
+        try {
+          return JSON.stringify(value == null ? null : value);
+        } catch (e) {
+          return '';
+        }
+      }
 
       function storageKey(cardId) {
         return STORAGE_PREFIX + String(cardId || '');
@@ -155,7 +168,7 @@
                 openSection: options.openSection || 'overview'
               },
               height: 1100,
-              fullscreen: false,
+              fullscreen: true,
               accentColor: '#22272B',
               callback: function () {
                 try {
