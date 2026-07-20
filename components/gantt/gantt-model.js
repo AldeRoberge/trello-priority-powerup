@@ -647,6 +647,22 @@
   }
 
   /**
+   * Work-day fraction of a 24h day (0–1) for CSS off-hours overlays.
+   * @returns {{ start: number, end: number }|null}
+   */
+  function workDayFractions(dayStart, dayEnd) {
+    var startTime = normalizeWorkTime(dayStart, DEFAULT_DAY_START);
+    var endTime = normalizeWorkTime(dayEnd, DEFAULT_DAY_END);
+    var s = parseTime(startTime);
+    var e = parseTime(endTime);
+    if (!s || !e) return null;
+    var start = (s.hours * 60 + s.minutes) / (24 * 60);
+    var end = (e.hours * 60 + e.minutes) / (24 * 60);
+    if (!(end > start)) return null;
+    return { start: start, end: end };
+  }
+
+  /**
    * Agenda work-hours overlay band within a day range.
    * @returns {{ left: number, width: number }|null}
    */
@@ -1358,6 +1374,7 @@
     intervalToParts: intervalToParts,
     barGeometry: barGeometry,
     workHoursBand: workHoursBand,
+    workDayFractions: workDayFractions,
     offHoursBands: offHoursBands,
     buildNestTree: buildNestTree,
     flattenVisible: flattenVisible,

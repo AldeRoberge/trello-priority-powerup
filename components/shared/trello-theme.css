@@ -1542,10 +1542,11 @@ body.tp-page--priority.is-split-assistant {
   }
 
   .tp-page--priority.is-split-assistant .cerveau-assistant {
-    flex: 0 0 auto !important;
+    flex: 1 1 auto !important;
     width: 100% !important;
     max-width: none !important;
-    max-height: min(42vh, 420px);
+    min-height: min(48vh, 360px);
+    max-height: min(55vh, 520px);
   }
 }
 

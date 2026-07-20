@@ -2881,6 +2881,38 @@
       var colW = state.timelineWidth / colCount;
       timelineCol.style.setProperty('--gantt-day-w', colW + 'px');
       timelineCol.style.width = state.timelineWidth + 'px';
+      timelineCol.classList.add('gantt-timeline--' + state.viewMode);
+
+      // Paint morning / night on timed views via CSS (row backgrounds are opaque,
+      // so absolute overlays behind them are invisible).
+      if (usesTimedTimeline() && typeof model.workDayFractions === 'function') {
+        var frac = model.workDayFractions(
+          state.ganttSettings.dayStart,
+          state.ganttSettings.dayEnd
+        );
+        if (frac) {
+          var offUnit =
+            state.viewMode === 'day' ? state.timelineWidth : colW;
+          timelineCol.classList.add('gantt-timeline--timed');
+          timelineCol.style.setProperty(
+            '--gantt-off-unit-w',
+            offUnit + 'px'
+          );
+          timelineCol.style.setProperty(
+            '--gantt-off-am-w',
+            frac.start * offUnit + 'px'
+          );
+          timelineCol.style.setProperty(
+            '--gantt-off-pm-w',
+            frac.end * offUnit + 'px'
+          );
+          timelineCol.title =
+            'Hors heures de travail \u00b7 avant ' +
+            state.ganttSettings.dayStart +
+            ' / apr\u00e8s ' +
+            state.ganttSettings.dayEnd;
+        }
+      }
 
       var headerLabels = el('div', 'gantt-row gantt-row--header');
       var headerCell = el('div', 'gantt-label-cell gantt-label-cell--header');

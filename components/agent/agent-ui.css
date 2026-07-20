@@ -392,12 +392,29 @@
   order: 1;
 }
 
-/* Top spacer absorbs free height so short threads sit above the composer (ChatGPT-style) */
+/* Top spacer absorbs free height so short threads sit above the composer (ChatGPT-style).
+   Disabled when the rail is stacked under the form (short bottom panel). */
 .tp-page--priority.is-split-assistant .cerveau-assistant .agent-messages::before {
   content: '';
   flex: 1 1 auto;
   min-height: 0;
   pointer-events: none;
+}
+
+@media (max-width: 860px) {
+  .tp-page--priority.is-split-assistant .cerveau-assistant .agent-messages::before {
+    content: none;
+    display: none;
+    flex: 0 0 0;
+  }
+
+  .tp-page--priority.is-split-assistant .cerveau-assistant .agent-messages {
+    justify-content: flex-start;
+  }
+
+  .tp-page--priority.is-split-assistant .cerveau-assistant .agent-msg--assistant .agent-msg-bubble {
+    flex: 1 1 auto;
+  }
 }
 
 .tp-page--priority.is-split-assistant .cerveau-assistant .agent-empty {
@@ -434,7 +451,16 @@
   flex-shrink: 0;
 }
 
-.tp-page--assistant {
+/* Board-bar Assistant (bottom of Trello): use the full bar width, not the
+   card-popup 880px column from .tp-page--priority. */
+html:has(body.tp-page--assistant) {
+  height: 100%;
+}
+
+.tp-page--priority.tp-page--assistant,
+body.tp-page--priority.tp-page--assistant {
+  max-width: none;
+  width: 100%;
   margin: 0;
   padding: 0;
   height: 100%;
@@ -446,6 +472,31 @@
 .tp-page--assistant #assistantMount {
   height: 100%;
   min-height: inherit;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+/* Short board-bar: don't push messages into a thin strip above the composer. */
+.tp-page--assistant .variant-chat-section--standalone .agent-messages::before {
+  content: none;
+  display: none;
+  flex: 0 0 0;
+}
+
+.tp-page--assistant .variant-chat-section--standalone .agent-messages {
+  justify-content: flex-start;
+  padding: 12px 14px 12px 16px;
+}
+
+.tp-page--assistant .agent-msg,
+.tp-page--assistant .agent-msg--assistant {
+  max-width: 100%;
+}
+
+.tp-page--assistant .agent-msg--assistant .agent-msg-bubble {
+  flex: 1 1 auto;
+  max-width: calc(100% - 40px);
 }
 
 .tp-page--priority .agent-preset-row {
