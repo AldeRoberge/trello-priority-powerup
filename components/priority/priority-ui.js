@@ -3884,6 +3884,21 @@
     return label ? '~ ' + label : '';
   }
 
+  /**
+   * Due face text from stored inputs — Vague horizon label or precise countdown.
+   * Used by board badges, overview / task summary, and display helpers.
+   */
+  function formatDueCountdownFromInputs(inputs, now) {
+    if (!isDueEnabled(inputs)) return '';
+    if (isDueVagueMode(inputs)) {
+      var vagueId = normalizeDueVague(inputs.dueVague);
+      return vagueId ? formatDueVagueCountdown(vagueId) : '';
+    }
+    var dueDate = normalizeDueDate(inputs && inputs.dueDate);
+    if (!dueDate) return '';
+    return formatDueCountdown(dueDate, now, inputs && inputs.dueTime) || '';
+  }
+
   function isDueVagueMode(inputs) {
     if (!inputs) return false;
     if (normalizeDueMode(inputs.dueMode) === DUE_DATE_MODE_VAGUE) return true;
@@ -4661,9 +4676,7 @@
     var dueTime = vagueMode ? '' : normalizeDueTime(inputs && inputs.dueTime);
     var next = {
       dueDate: dueDate,
-      dueCountdown: vagueMode
-        ? formatDueVagueCountdown(dueVagueId)
-        : formatDueCountdown(dueDate, null, dueTime),
+      dueCountdown: formatDueCountdownFromInputs(inputs),
       duePast: vagueMode ? false : isDuePast(dueDate, dueTime)
     };
     if (dueTime) next.dueTime = dueTime;
@@ -20487,6 +20500,7 @@
     getTimeFormat: getTimeFormat,
     isHour12: isHour12,
     formatDueCountdown: formatDueCountdown,
+    formatDueCountdownFromInputs: formatDueCountdownFromInputs,
     formatDueTimeDisplay: formatDueTimeDisplay,
     formatDueTimeCompactFr: formatDueTimeCompactFr,
     formatDueDateDisplay: formatDueDateDisplay,

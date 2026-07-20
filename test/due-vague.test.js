@@ -129,13 +129,38 @@ describe('Échéance vague mode', () => {
     assert.equal(PU.isDueVagueEligible('', now), false);
   });
 
-  it('vague options are all beyond one week', () => {
-    for (const opt of PU.DUE_DATE_VAGUE_OPTIONS) {
-      assert.ok(opt.days > 7, opt.id + ' should be > 7 days');
-    }
+  it('formatDueCountdownFromInputs prefers Vague horizon labels', () => {
     assert.equal(
-      PU.DUE_DATE_VAGUE_OPTIONS.some((o) => o.id === 'bientot'),
-      false
+      PU.formatDueCountdownFromInputs({
+        dueMode: 'vague',
+        dueVague: 'eventuellement',
+        dueDate: '2029-07-19',
+        dueEnabled: true
+      }),
+      '~ Éventuellement'
     );
+    assert.doesNotMatch(
+      PU.formatDueCountdownFromInputs({
+        dueMode: 'vague',
+        dueVague: 'eventuellement',
+        dueDate: '2029-07-19',
+        dueEnabled: true
+      }),
+      /ans restants/
+    );
+  });
+
+  it('withDueDateDisplay keeps Éventuellement on the card face text', () => {
+    const display = PU.withDueDateDisplay(
+      { label: 'Importante', tierI: 3 },
+      {
+        dueDate: '2029-07-19',
+        dueMode: 'vague',
+        dueVague: 'eventuellement',
+        dueEnabled: true
+      }
+    );
+    assert.equal(display.dueCountdown, '~ Éventuellement');
+    assert.equal(PU.formatDueBadgeText(display), 'Tâche importante (~ Éventuellement)');
   });
 });

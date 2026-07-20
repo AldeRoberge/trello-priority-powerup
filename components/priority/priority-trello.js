@@ -1946,6 +1946,11 @@
     var next = inputs
       ? Object.assign({}, inputs)
       : Object.assign({}, DEFAULT_INPUTS, { priorityEnabled: false });
+    var prevVague =
+      inputs && typeof inputs.dueVague === 'string' ? inputs.dueVague : '';
+    var prevMode = inputs && inputs.dueMode === 'vague' ? 'vague' : '';
+    var prevDueDate =
+      inputs && typeof inputs.dueDate === 'string' ? inputs.dueDate : '';
     delete next.dueDate;
     delete next.dueTime;
     delete next.dueEnabled;
@@ -1954,6 +1959,18 @@
     if (parts && parts.dueDate) {
       next.dueDate = parts.dueDate;
       if (parts.dueTime) next.dueTime = parts.dueTime;
+      // Keep Vague horizon when Trello still has the same calendar proxy day.
+      // Otherwise badge sync (prefer:trello) would flatten Vague → "3 ans restants".
+      if (
+        (prevMode === 'vague' || prevVague) &&
+        prevVague &&
+        prevDueDate &&
+        parts.dueDate === prevDueDate
+      ) {
+        next.dueMode = 'vague';
+        next.dueVague = prevVague;
+        delete next.dueTime;
+      }
     }
     return normalizeInputs(next);
   }
@@ -2331,8 +2348,24 @@
   }
 
   async function getBadgeData(t) {
+    var inputsBefore = null;
     try {
-      await syncCardDueWithTrello(t, { prefer: 'trello' });
+      inputsBefore = await getCardInputs(t);
+    } catch (preErr) {
+      console.error('Priority badge inputs preload failed', preErr);
+    }
+    // Vague dues use a proxy Trello date — prefer Power-Up so badge sync
+    // does not flatten the horizon label back to "N ans restants".
+    var duePrefer =
+      inputsBefore &&
+      (inputsBefore.dueMode === 'vague' || inputsBefore.dueVague)
+        ? 'powerup'
+        : 'trello';
+    try {
+      await syncCardDueWithTrello(t, {
+        prefer: duePrefer,
+        inputs: inputsBefore || undefined
+      });
     } catch (syncErr) {
       console.error('Priority due sync (badge) failed', syncErr);
     }

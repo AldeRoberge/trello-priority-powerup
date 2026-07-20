@@ -1710,19 +1710,33 @@
         window.PriorityUI && typeof PriorityUI.isDueEnabled === 'function'
           ? PriorityUI.isDueEnabled(state)
           : state.dueEnabled !== false && !!state.dueDate;
-      if (dueOn && state.dueDate && window.PriorityUI) {
-        if (typeof PriorityUI.formatDueCountdown === 'function') {
+      if (dueOn && window.PriorityUI) {
+        if (typeof PriorityUI.formatDueCountdownFromInputs === 'function') {
+          dueCountdown = PriorityUI.formatDueCountdownFromInputs(state) || '';
+        } else if (
+          state.dueDate &&
+          typeof PriorityUI.formatDueCountdown === 'function'
+        ) {
           dueCountdown =
             PriorityUI.formatDueCountdown(state.dueDate, null, state.dueTime) ||
             '';
         }
-        if (typeof PriorityUI.dueProximityBand === 'function') {
-          dueBand =
-            PriorityUI.dueProximityBand(state.dueDate, state.dueTime) || '';
-        }
-        if (typeof PriorityUI.daysUntilDue === 'function') {
-          var days = PriorityUI.daysUntilDue(state.dueDate);
-          if (isFinite(days)) dueDays = days;
+        if (
+          state.dueMode === 'vague' ||
+          (typeof PriorityUI.isDueVagueMode === 'function' &&
+            PriorityUI.isDueVagueMode(state))
+        ) {
+          dueBand = 'far';
+          dueDays = null;
+        } else if (state.dueDate) {
+          if (typeof PriorityUI.dueProximityBand === 'function') {
+            dueBand =
+              PriorityUI.dueProximityBand(state.dueDate, state.dueTime) || '';
+          }
+          if (typeof PriorityUI.daysUntilDue === 'function') {
+            var days = PriorityUI.daysUntilDue(state.dueDate);
+            if (isFinite(days)) dueDays = days;
+          }
         }
       }
 
