@@ -393,6 +393,107 @@ describe('GanttModel', () => {
     assert.equal(GanttModel.defaultSortDir('priority'), 'asc');
   });
 
+  it('stateSectionKey maps started / pending / blocked', () => {
+    assert.equal(
+      GanttModel.stateSectionKey({ category: 'started' }),
+      'started'
+    );
+    assert.equal(
+      GanttModel.stateSectionKey({ category: 'unstarted' }),
+      'pending'
+    );
+    assert.equal(
+      GanttModel.stateSectionKey({ category: 'backlog' }),
+      'pending'
+    );
+    assert.equal(
+      GanttModel.stateSectionKey({ category: 'blocked' }),
+      'blocked'
+    );
+    assert.equal(
+      GanttModel.stateSectionKey({ category: 'started', blocked: true }),
+      'blocked'
+    );
+    assert.equal(GanttModel.stateSectionKey({}), 'pending');
+  });
+
+  it('sortTreeRootsGroupedByState orders En cours → En attente → Bloqué', () => {
+    const tree = GanttModel.buildNestTree([
+      {
+        id: 'wait',
+        name: 'Zulu wait',
+        dueDate: '2026-07-01',
+        category: 'unstarted',
+      },
+      {
+        id: 'go',
+        name: 'Alpha go',
+        dueDate: '2026-07-20',
+        category: 'started',
+      },
+      {
+        id: 'stuck',
+        name: 'Mid stuck',
+        dueDate: '2026-07-10',
+        category: 'started',
+        blocked: true,
+      },
+      {
+        id: 'back',
+        name: 'Bravo back',
+        dueDate: '2026-07-05',
+        category: 'backlog',
+      },
+    ]);
+    const grouped = GanttModel.sortTreeRootsGroupedByState(tree, 'name', 'asc');
+    assert.deepEqual(
+      grouped.map((n) => (n.kind === 'section' ? n.sectionKey : n.cardId)),
+      ['started', 'go', 'pending', 'back', 'wait', 'blocked', 'stuck']
+    );
+    assert.equal(grouped[0].name, 'En cours');
+    assert.equal(grouped[2].name, 'En attente');
+    assert.equal(grouped[5].name, 'Bloqué');
+  });
+
+  it('pruneEmptyStateSections drops headers with no tasks', () => {
+    const rows = [
+      GanttModel.makeStateSectionHeader('started'),
+      GanttModel.makeStateSectionHeader('pending'),
+      { id: 'card:a', kind: 'card', cardId: 'a', name: 'A', depth: 0 },
+      GanttModel.makeStateSectionHeader('blocked'),
+    ];
+    const pruned = GanttModel.pruneEmptyStateSections(rows);
+    assert.deepEqual(
+      pruned.map((n) => (n.kind === 'section' ? n.sectionKey : n.cardId)),
+      ['pending', 'a']
+    );
+  });
+
+  it('filterRows keeps section headers', () => {
+    const rows = [
+      GanttModel.makeStateSectionHeader('started'),
+      {
+        id: 'card:done',
+        kind: 'card',
+        cardId: 'done',
+        done: true,
+        category: 'completed',
+      },
+      {
+        id: 'card:open',
+        kind: 'card',
+        cardId: 'open',
+        category: 'started',
+        startDate: '2026-07-01',
+        dueDate: '2026-07-02',
+      },
+    ];
+    const filtered = GanttModel.filterRows(rows, { hideCompleted: true });
+    assert.equal(filtered[0].kind, 'section');
+    assert.equal(filtered.some((r) => r.cardId === 'done'), false);
+    assert.equal(filtered.some((r) => r.cardId === 'open'), true);
+  });
+
   it('shiftAnchor moves week/month/year windows', () => {
     assert.equal(
       GanttModel.toIsoDate(GanttModel.shiftAnchor('week', '2026-07-22', 1)),

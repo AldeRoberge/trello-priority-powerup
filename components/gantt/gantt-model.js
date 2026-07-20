@@ -29,6 +29,14 @@
     'd\u00e9c.',
   ];
 
+  /** Gantt state sections (Statut): En cours → En attente → Bloqué. */
+  var STATE_SECTION_ORDER = ['started', 'pending', 'blocked'];
+  var STATE_SECTION_LABELS = {
+    started: 'En cours',
+    pending: 'En attente',
+    blocked: 'Bloqu\u00e9',
+  };
+
   function pad2(n) {
     return n < 10 ? '0' + n : String(n);
   }
@@ -684,7 +692,9 @@
    * @param {'asc'|'desc'} [sortDir]
    */
   function sortTreeRoots(nodes, sortBy, sortDir) {
-    var list = (nodes || []).slice();
+    var list = (nodes || []).slice().filter(function (n) {
+      return n && n.kind !== 'section';
+    });
     var mode = normalizeSortBy(sortBy);
     var dir = normalizeSortDir(mode, sortDir);
     var base;
@@ -699,6 +709,103 @@
       return r === 0 ? 0 : r * mult;
     });
     return list;
+  }
+
+  /**
+   * State section for a root card: En cours → En attente → Bloqué.
+   * Blocked wins over list category when enAttente is set.
+   * @returns {'started'|'pending'|'blocked'}
+   */
+  function stateSectionKey(node) {
+    if (!node) return 'pending';
+    if (node.kind === 'section' && node.sectionKey) {
+      return node.sectionKey === 'started' || node.sectionKey === 'blocked'
+        ? node.sectionKey
+        : 'pending';
+    }
+    if (node.blocked || node.category === 'blocked') return 'blocked';
+    if (node.category === 'started') return 'started';
+    return 'pending';
+  }
+
+  function stateSectionLabel(sectionKey) {
+    var key = sectionKey === 'started' || sectionKey === 'blocked' ? sectionKey : 'pending';
+    return STATE_SECTION_LABELS[key];
+  }
+
+  function makeStateSectionHeader(sectionKey) {
+    var key =
+      sectionKey === 'started' || sectionKey === 'blocked' ? sectionKey : 'pending';
+    return {
+      id: 'section:' + key,
+      kind: 'section',
+      sectionKey: key,
+      name: STATE_SECTION_LABELS[key],
+      category: key === 'pending' ? 'unstarted' : key,
+      categoryLabel: STATE_SECTION_LABELS[key],
+      depth: 0,
+      expandable: false,
+      children: [],
+      progress: 0,
+      done: false,
+      startDate: '',
+      dueDate: '',
+      cardId: null,
+      parentCardId: null,
+      itemId: null,
+      blocked: key === 'blocked',
+      subtaskCount: 0,
+    };
+  }
+
+  /**
+   * Group roots into En cours → En attente → Bloqué sections (headers as siblings),
+   * sorting within each section with the usual sortTreeRoots rules.
+   * Empty sections are omitted.
+   */
+  function sortTreeRootsGroupedByState(nodes, sortBy, sortDir) {
+    var buckets = {
+      started: [],
+      pending: [],
+      blocked: [],
+    };
+    (nodes || []).forEach(function (n) {
+      if (!n || n.kind === 'section') return;
+      buckets[stateSectionKey(n)].push(n);
+    });
+    var out = [];
+    for (var i = 0; i < STATE_SECTION_ORDER.length; i++) {
+      var key = STATE_SECTION_ORDER[i];
+      var sorted = sortTreeRoots(buckets[key], sortBy, sortDir);
+      if (!sorted.length) continue;
+      out.push(makeStateSectionHeader(key));
+      for (var j = 0; j < sorted.length; j++) out.push(sorted[j]);
+    }
+    return out;
+  }
+
+  /**
+   * Drop section headers that have no following task rows before the next section.
+   */
+  function pruneEmptyStateSections(rows) {
+    var list = rows || [];
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var row = list[i];
+      if (!row) continue;
+      if (row.kind === 'section') {
+        var hasTask = false;
+        for (var j = i + 1; j < list.length; j++) {
+          if (!list[j]) continue;
+          if (list[j].kind === 'section') break;
+          hasTask = true;
+          break;
+        }
+        if (!hasTask) continue;
+      }
+      out.push(row);
+    }
+    return out;
   }
 
   /**
@@ -731,6 +838,8 @@
     options = options || {};
     return (rows || []).filter(function (row) {
       if (!row) return false;
+      // Section headers stay until pruneEmptyStateSections runs.
+      if (row.kind === 'section') return true;
       if (options.hideCompleted && (row.done || row.category === 'completed')) {
         return false;
       }
@@ -878,5 +987,12 @@
     defaultSortDir: defaultSortDir,
     normalizeSortDir: normalizeSortDir,
     sortTreeRoots: sortTreeRoots,
+    STATE_SECTION_ORDER: STATE_SECTION_ORDER,
+    STATE_SECTION_LABELS: STATE_SECTION_LABELS,
+    stateSectionKey: stateSectionKey,
+    stateSectionLabel: stateSectionLabel,
+    makeStateSectionHeader: makeStateSectionHeader,
+    sortTreeRootsGroupedByState: sortTreeRootsGroupedByState,
+    pruneEmptyStateSections: pruneEmptyStateSections,
   };
 })(typeof window !== 'undefined' ? window : this);
