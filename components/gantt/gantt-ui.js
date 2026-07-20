@@ -1410,21 +1410,70 @@
       renderChart();
     }
 
-    function confirmDelete(message, mouseEvent) {
+    function confirmTrash(message, mouseEvent) {
       var confirmApi = TC();
-      if (confirmApi && typeof confirmApi.ask === 'function') {
-        return confirmApi.ask(t, {
-          title: 'Supprimer',
-          message: message,
-          confirmText: 'Supprimer',
-          cancelText: 'Annuler',
-          confirmStyle: 'danger',
+      if (confirmApi && typeof confirmApi.askActions === 'function') {
+        return confirmApi.askActions(t, {
+          title: message,
           mouseEvent: mouseEvent || null,
+          actions: [
+            { id: 'done', text: 'Marquer comme termin\u00e9' },
+            { id: 'delete', text: 'Supprimer' },
+            { id: 'cancel', text: 'Annuler' },
+          ],
         });
       }
+      if (confirmApi && typeof confirmApi.ask === 'function') {
+        return confirmApi
+          .ask(t, {
+            title: 'Supprimer',
+            message: message,
+            confirmText: 'Supprimer',
+            cancelText: 'Annuler',
+            confirmStyle: 'danger',
+            mouseEvent: mouseEvent || null,
+          })
+          .then(function (ok) {
+            return ok ? 'delete' : 'cancel';
+          });
+      }
       return Promise.resolve(
-        global.confirm ? !!global.confirm(message) : true
+        global.confirm && global.confirm(message) ? 'delete' : 'cancel'
       );
+    }
+
+    function markSubtaskDone(row) {
+      if (state.saving || !canEditSubtask(row)) return Promise.resolve();
+      if (row.done) {
+        setStatus('D\u00e9j\u00e0 termin\u00e9e');
+        return Promise.resolve();
+      }
+      state.saving = true;
+      setStatus('Marquage termin\u00e9\u2026');
+      return ganttTrello
+        .setSubtaskDone(t, subtaskMeta(row), true)
+        .then(function (res) {
+          state.saving = false;
+          if (!res || !res.ok) {
+            setStatus(
+              '\u00c9chec' +
+                (res && res.reason ? ' (' + res.reason + ')' : ''),
+              true
+            );
+            return reload();
+          }
+          playGanttUiSound('complete_all');
+          setStatus('Sous-t\u00e2che termin\u00e9e');
+          return reload();
+        })
+        .catch(function (err) {
+          state.saving = false;
+          setStatus(
+            'Erreur\u00a0: ' + (err && err.message ? err.message : String(err)),
+            true
+          );
+          return reload();
+        });
     }
 
     function runBulk(op, mouseEvent) {
@@ -1493,11 +1542,15 @@
       };
 
       if (op === 'delete') {
-        confirmDelete(
+        confirmTrash(
           'Supprimer ' + rows.length + ' sous-t\u00e2che(s)\u00a0?',
           mouseEvent
-        ).then(function (ok) {
-          if (ok) start();
+        ).then(function (choice) {
+          if (choice === 'done') {
+            runBulk('done', mouseEvent);
+            return;
+          }
+          if (choice === 'delete') start();
         });
         return;
       }
@@ -1634,8 +1687,12 @@
         : isLinkedCardRow(row)
           ? 'Retirer le lien vers \u00ab\u00a0' + label + '\u00a0\u00bb\u00a0?'
           : 'Supprimer \u00ab\u00a0' + label + '\u00a0\u00bb\u00a0?';
-      confirmDelete(prompt, mouseEvent).then(function (ok) {
-        if (!ok) return;
+      confirmTrash(prompt, mouseEvent).then(function (choice) {
+        if (!choice || choice === 'cancel') return;
+        if (choice === 'done') {
+          markSubtaskDone(row);
+          return;
+        }
         state.saving = true;
         setStatus(isBoardRootCard(row) ? 'Archivage\u2026' : 'Suppression\u2026');
         ganttTrello

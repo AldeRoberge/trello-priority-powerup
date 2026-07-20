@@ -21,17 +21,17 @@ describe('TpConfirm', () => {
     };
     const ok = await TpConfirm.ask(null, { message: 'Supprimer ?' });
     assert.equal(ok, false);
-    assert.equal(seen, 'Supprimer ?');
+    assert.match(seen, /Supprimer \?/);
   });
 
-  it('opens a native confirm popup when t.popup exists', async () => {
+  it('opens a list popup so Annuler can close reliably', async () => {
     let popupOpts = null;
     const t = {
       popup(opts) {
         popupOpts = opts;
-        // Simulate user confirming.
+        // Simulate user confirming via the first list item.
         setTimeout(function () {
-          opts.onConfirm({
+          opts.items[0].callback({
             closePopup() {
               return Promise.resolve();
             },
@@ -47,17 +47,18 @@ describe('TpConfirm', () => {
       confirmStyle: 'danger',
     });
     assert.equal(ok, true);
-    assert.equal(popupOpts.type, 'confirm');
-    assert.equal(popupOpts.title, 'Supprimer');
-    assert.equal(popupOpts.message, 'Supprimer 2 tâches ?');
-    assert.equal(popupOpts.confirmStyle, 'danger');
+    assert.ok(Array.isArray(popupOpts.items));
+    assert.equal(popupOpts.items.length, 2);
+    assert.equal(popupOpts.items[0].text, 'Supprimer');
+    assert.equal(popupOpts.items[1].text, 'Annuler');
+    assert.equal(popupOpts.title, 'Supprimer 2 tâches ?');
   });
 
-  it('resolves false when the user cancels the native popup', async () => {
+  it('resolves false when the user picks Annuler', async () => {
     const t = {
       popup(opts) {
         setTimeout(function () {
-          opts.onCancel({
+          opts.items[1].callback({
             closePopup() {
               return Promise.resolve();
             },
@@ -68,5 +69,59 @@ describe('TpConfirm', () => {
     };
     const ok = await TpConfirm.ask(t, { message: 'Supprimer ?' });
     assert.equal(ok, false);
+  });
+
+  it('askActions returns the chosen action id and closes', async () => {
+    let closed = false;
+    const t = {
+      popup(opts) {
+        setTimeout(function () {
+          opts.items[0].callback({
+            closePopup() {
+              closed = true;
+              return Promise.resolve();
+            },
+          });
+        }, 0);
+        return Promise.resolve();
+      },
+    };
+    const choice = await TpConfirm.askActions(t, {
+      title: 'Supprimer « Test » ?',
+      actions: [
+        { id: 'done', text: 'Marquer comme terminé' },
+        { id: 'delete', text: 'Supprimer' },
+        { id: 'cancel', text: 'Annuler' },
+      ],
+    });
+    assert.equal(choice, 'done');
+    assert.equal(closed, true);
+  });
+
+  it('askActions Annuler returns cancel and closes', async () => {
+    let closed = false;
+    const t = {
+      popup(opts) {
+        setTimeout(function () {
+          opts.items[2].callback({
+            closePopup() {
+              closed = true;
+              return Promise.resolve();
+            },
+          });
+        }, 0);
+        return Promise.resolve();
+      },
+    };
+    const choice = await TpConfirm.askActions(t, {
+      title: 'Supprimer ?',
+      actions: [
+        { id: 'done', text: 'Marquer comme terminé' },
+        { id: 'delete', text: 'Supprimer' },
+        { id: 'cancel', text: 'Annuler' },
+      ],
+    });
+    assert.equal(choice, 'cancel');
+    assert.equal(closed, true);
   });
 });
