@@ -12,6 +12,14 @@
   // Card shared: listId before the card entered Bloqué (for restore when last subtask unblocks).
   var STATUT_PREVIOUS_BLOCKED_LIST_KEY = 'statutPreviousListBeforeBlocked';
   var FALLBACK_RESTORE_CATEGORIES = ['started', 'unstarted', 'backlog'];
+  var ENSURE_TTL_MS = 15000;
+  var ensureCache = { result: null, at: 0, inflight: null };
+
+  function invalidateEnsureCache() {
+    ensureCache.result = null;
+    ensureCache.at = 0;
+    ensureCache.inflight = null;
+  }
 
   function matchApi() {
     return global.StatutMatch || null;
