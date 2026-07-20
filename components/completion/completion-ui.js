@@ -1143,10 +1143,11 @@
   /**
    * Compact estimate chip + popover (ticks + optional freeform).
    * config: {
-   *   minutes, scales|scale, readOnly, adjusted, compact, ariaLabel,
+   *   minutes, scales|scale, readOnly, adjusted, compact, clearable, ariaLabel,
    *   onChange(minutes|null), t
    * }
    * Scales stay in minutes; Progrès / subtasks use Temps.
+   * Empty state: grayed clock only (estimate optional). Set state: label + × to clear.
    */
   function createEstimateChip(CT, config) {
     config = config || {};
@@ -1165,6 +1166,7 @@
           ? config.scales.slice()
           : [config.scale || 'time'];
     var readOnly = !!config.readOnly;
+    var clearable = config.clearable !== false;
     var onChange = typeof config.onChange === 'function' ? config.onChange : null;
     var trelloT = config.t || null;
 
@@ -1185,6 +1187,24 @@
     chip.appendChild(iconEl);
     chip.appendChild(label);
     wrap.appendChild(chip);
+
+    var clearBtn = null;
+    if (!readOnly) {
+      clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
+      clearBtn.className = 'tp-estimate-chip-clear';
+      clearBtn.setAttribute('aria-label', 'Retirer l\u2019estimation');
+      clearBtn.title = 'Retirer l\u2019estimation';
+      clearBtn.innerHTML = '<i class="ti ti-x" aria-hidden="true"></i>';
+      clearBtn.hidden = true;
+      clearBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        closePopover();
+        setMinutes(null, true);
+      });
+      wrap.appendChild(clearBtn);
+    }
 
     var popover = null;
     var ticksRoot = null;
@@ -1207,7 +1227,7 @@
       return {
         id: id,
         emptyLabel: 'Estimer',
-        emptyTitle: 'D\u00e9finir une estim\u00e9e',
+        emptyTitle: 'Ajouter une dur\u00e9e estim\u00e9e (optionnel)',
         popoverLabel: 'Choisir une estim\u00e9e',
         freeform: id === 'time',
       };
@@ -1217,14 +1237,15 @@
       if (scaleIds.length > 1) {
         return {
           emptyLabel: 'Estimer',
-          emptyTitle: 'D\u00e9finir une dur\u00e9e estim\u00e9e',
+          emptyTitle: 'Ajouter une dur\u00e9e estim\u00e9e (optionnel)',
           popoverLabel: 'Choisir une estim\u00e9e',
         };
       }
       var meta = primaryMeta();
       return {
         emptyLabel: meta.emptyLabel || 'Estimer',
-        emptyTitle: meta.emptyTitle || 'D\u00e9finir une estim\u00e9e',
+        emptyTitle:
+          meta.emptyTitle || 'Ajouter une dur\u00e9e estim\u00e9e (optionnel)',
         popoverLabel: meta.popoverLabel || 'Choisir une estim\u00e9e',
       };
     }
@@ -1277,13 +1298,16 @@
     function paint() {
       var labels = emptyLabels();
       var estimating = !!config.estimating && minutes == null;
+      var isEmpty = minutes == null && !estimating;
       var text = estimating
         ? 'Estimation'
         : minutes == null
-          ? labels.emptyLabel
+          ? ''
           : formatCurrent();
       label.textContent = text;
+      label.hidden = isEmpty;
       chip.classList.toggle('is-empty', minutes == null);
+      chip.classList.toggle('is-icon-only', isEmpty);
       chip.classList.toggle('is-set', minutes != null);
       chip.classList.toggle('is-estimating', estimating);
       chip.classList.toggle('is-adjusted', !!config.adjusted && minutes != null);
@@ -1293,7 +1317,10 @@
       chip.setAttribute('aria-busy', estimating ? 'true' : 'false');
       chip.setAttribute(
         'aria-label',
-        config.ariaLabel || labels.emptyTitle || 'Estimation'
+        config.ariaLabel ||
+          (minutes != null
+            ? 'Estimation\u00a0: ' + text + '. Modifier'
+            : labels.emptyTitle || 'Ajouter une dur\u00e9e estim\u00e9e')
       );
       chip.title = estimating
         ? 'Estimation en cours\u00a0\u2014 vous pouvez encore la modifier'
@@ -1302,6 +1329,12 @@
           : config.adjusted
             ? 'Total ajust\u00e9\u00a0: ' + text
             : text;
+
+      if (clearBtn) {
+        var showClear = clearable && minutes != null;
+        clearBtn.hidden = !showClear;
+        wrap.classList.toggle('has-clear', showClear);
+      }
 
       var tick = resolveChipTick();
       var iconName =
@@ -1329,6 +1362,11 @@
 
     function setEstimating(on) {
       config.estimating = !!on && minutes == null;
+      paint();
+    }
+
+    function setClearable(next) {
+      clearable = next !== false;
       paint();
     }
 
@@ -1658,6 +1696,7 @@
       setScale: setScale,
       setScales: setScales,
       setEstimating: setEstimating,
+      setClearable: setClearable,
       setAdjusted: function (adjusted) {
         config.adjusted = !!adjusted;
         paint();
@@ -1841,6 +1880,7 @@
       t: trelloT,
       scales: currentEstimateScales(),
       minutes: CT.computeEstimatedTotal(data),
+      clearable: !data.items.length,
       adjusted:
         data.items.length &&
         typeof data.estimatedMinutesOffset === 'number' &&
@@ -1851,6 +1891,7 @@
           lock: true,
           snapshotsByCardId: linkedSnapshots
         });
+        updateProgressUi();
         emitChange();
         onResize();
       }
@@ -3253,6 +3294,20 @@
 
     function syncMasterEstimateChip() {
       var scales = currentEstimateScales();
+      var progress = CT.computeCardProgress(data, linkedSnapshots);
+      var fullyComplete =
+        progress &&
+        (progress.percent >= 100 || isAllCompleteProgress(progress));
+      // Hide Estimer once the task is done — no remaining effort to size.
+      masterEstimateChip.el.hidden = !!fullyComplete;
+      if (fullyComplete) {
+        if (typeof masterEstimateChip.el._tpCloseEstimate === 'function') {
+          masterEstimateChip.el._tpCloseEstimate();
+        } else {
+          closeOpenEstimatePopovers();
+        }
+        return;
+      }
       var total = CT.computeEstimatedTotal(data, linkedSnapshots);
       var remaining = CT.computeEstimatedRemaining(data, linkedSnapshots);
       var chipScales =
@@ -3273,6 +3328,10 @@
         }
       }
       masterEstimateChip.setMinutes(total);
+      if (typeof masterEstimateChip.setClearable === 'function') {
+        // With subtasks the total is a rollup — clear each row instead.
+        masterEstimateChip.setClearable(!data.items.length);
+      }
       masterEstimateChip.setAdjusted(
         !!(
           data.items.length &&
@@ -3320,7 +3379,7 @@
           ? accent
           : 'var(--tp-border-strong)'
       );
-      progressPanel.classList.toggle('is-complete', progress.percent === 100);
+      progressPanel.classList.toggle('is-complete', progress.percent >= 100);
       progressPanel.classList.toggle('has-progress', progress.percent > 0);
       applyProgressSectionTint(
         progressShellEl,
@@ -5469,6 +5528,9 @@
           out[id] = node;
         });
         return out;
+      },
+      getLinkedSnapshots: function () {
+        return linkedSnapshots || Object.create(null);
       },
       refreshSuggestions: refreshSuggestions,
       focusAddInput: function () {

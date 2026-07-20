@@ -7894,11 +7894,18 @@
       opts.progressPercent != null && isFinite(+opts.progressPercent)
         ? Math.max(0, Math.min(100, Math.round(+opts.progressPercent)))
         : null;
+    // Statut Terminé / explicit complete → treat as 100% even if percent lags at 0.
+    if (
+      opts.statusCategory === 'completed' ||
+      opts.forceComplete === true
+    ) {
+      percent = 100;
+    }
     if (percent == null) return '';
 
     var color =
       typeof opts.progressColor === 'string' ? opts.progressColor : '';
-    var blocked = !!opts.progressBlocked;
+    var blocked = !!opts.progressBlocked && percent < 100;
     var title = typeof opts.title === 'string' ? opts.title.trim() : '';
     var donePct = percent >= 100;
     var showReason = blocked && !donePct;

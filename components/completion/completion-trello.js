@@ -76,7 +76,7 @@
       label: 'Temps',
       shortLabel: 'temps',
       emptyLabel: 'Estimer',
-      emptyTitle: 'D\u00e9finir une dur\u00e9e estim\u00e9e',
+      emptyTitle: 'Ajouter une dur\u00e9e estim\u00e9e (optionnel)',
       popoverLabel: 'Choisir une dur\u00e9e',
       freeform: true,
       freeformPlaceholder: 'ex. 2 h',
@@ -408,8 +408,8 @@
       if (snapTotal != null) return snapTotal;
     }
     var explicit = clampEstimatedMinutes(item.estimatedMinutes);
-    // Locked explicit estimate wins over checklist rollup.
-    if (item.estimatedMinutesLocked === true && explicit != null) return explicit;
+    // Locked: honor the user's value, including an intentional clear (null).
+    if (item.estimatedMinutesLocked === true) return explicit;
     if (itemHasChecklist(item) && !linkedId) {
       var sum = 0;
       var hasAny = false;
@@ -423,6 +423,30 @@
       if (hasAny) return sum;
     }
     return explicit;
+  }
+
+  /** Minutes that should still count in totals/weights (even if display was cleared). */
+  function itemAggregateEstimateMinutes(item, snapshotsByCardId) {
+    var display = itemEstimatedMinutes(item, snapshotsByCardId);
+    if (display != null) return display;
+    if (
+      !item ||
+      item.estimatedMinutesLocked !== true ||
+      !itemHasChecklist(item) ||
+      itemLinkedCardId(item)
+    ) {
+      return null;
+    }
+    var sum = 0;
+    var hasAny = false;
+    for (var i = 0; i < item.items.length; i++) {
+      var m = clampEstimatedMinutes(item.items[i] && item.items[i].estimatedMinutes);
+      if (m != null) {
+        sum += m;
+        hasAny = true;
+      }
+    }
+    return hasAny ? sum : null;
   }
 
   function copyEstimateFields(from, to) {
@@ -447,7 +471,7 @@
     if (!items || !items.length) return 0;
     var sum = 0;
     for (var i = 0; i < items.length; i++) {
-      var m = itemEstimatedMinutes(items[i], snapshotsByCardId);
+      var m = itemAggregateEstimateMinutes(items[i], snapshotsByCardId);
       if (m != null) sum += m;
     }
     return sum;
@@ -1213,7 +1237,7 @@
     var sum = 0;
     var count = 0;
     for (var i = 0; i < items.length; i++) {
-      var mins = itemEstimatedMinutes(items[i], snapshotsByCardId);
+      var mins = itemAggregateEstimateMinutes(items[i], snapshotsByCardId);
       if (mins != null) {
         sum += mins;
         count++;
@@ -1225,7 +1249,7 @@
 
   /** Effort weight for Progrès: estimated minutes, else average/equal fallback. */
   function itemProgressWeight(item, snapshotsByCardId, fallbackWeight) {
-    var mins = itemEstimatedMinutes(item, snapshotsByCardId);
+    var mins = itemAggregateEstimateMinutes(item, snapshotsByCardId);
     if (mins != null) return mins;
     var fb = asNumber(fallbackWeight);
     return isFinite(fb) && fb > 0 ? fb : 1;
@@ -3010,6 +3034,7 @@
     getCachedBoardEstimateScales: getCachedBoardEstimateScales,
     setCachedBoardEstimateScales: setCachedBoardEstimateScales,
     itemEstimatedMinutes: itemEstimatedMinutes,
+    itemAggregateEstimateMinutes: itemAggregateEstimateMinutes,
     computeItemsEstimateBase: computeItemsEstimateBase,
     computeEstimatedTotal: computeEstimatedTotal,
     computeEstimatedRemaining: computeEstimatedRemaining,

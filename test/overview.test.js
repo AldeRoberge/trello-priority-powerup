@@ -715,5 +715,25 @@ describe('PriorityUI createOverviewField', () => {
       done.querySelector('.overview-progress-fill').style.width,
       '100%'
     );
+
+    // Terminé with lagged/zero progress still shows 100% (not 0%).
+    const fromStatut = PriorityUI.buildProgressSummaryNode({
+      progressPercent: 0,
+      statusCategory: 'completed',
+      progressColor: '#22a06b',
+    });
+    assert.match(
+      fromStatut.querySelector('.overview-progress-pct').textContent,
+      /100/
+    );
+    assert.equal(
+      fromStatut.querySelector('.overview-progress-fill').style.width,
+      '100%'
+    );
+    assert.ok(
+      fromStatut.querySelector('.overview-progress-ring').classList.contains(
+        'is-checked'
+      )
+    );
   });
 });

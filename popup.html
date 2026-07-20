@@ -285,14 +285,33 @@
           : null) ||
         latestCompletion ||
         { items: [] };
+      var linkedSnapshots =
+        completionUi && typeof completionUi.getLinkedSnapshots === 'function'
+          ? completionUi.getLinkedSnapshots()
+          : null;
       if (typeof CompletionTrello.computeCardProgress === 'function') {
-        var progressMeta = CompletionTrello.computeCardProgress(completionSnap);
+        var progressMeta = CompletionTrello.computeCardProgress(
+          completionSnap,
+          linkedSnapshots
+        );
         if (progressMeta && (progressMeta.hasItems || progressMeta.percent != null)) {
           progressPercent =
             progressMeta.percent != null ? progressMeta.percent : 0;
         }
       }
-      if (typeof CompletionTrello.hasAnyBlocked === 'function') {
+      // Statut Terminé / fully complete → always show 100% in the section summary
+      // (matches Overview isDone), even if completion data briefly lags.
+      var statusCompleted =
+        latestStatut && latestStatut.category === 'completed';
+      var fullyComplete =
+        statusCompleted ||
+        (typeof CompletionTrello.isAllSubtasksComplete === 'function' &&
+          CompletionTrello.isAllSubtasksComplete(completionSnap)) ||
+        (progressPercent != null && progressPercent >= 100);
+      if (fullyComplete) {
+        progressPercent = 100;
+        progressBlocked = false;
+      } else if (typeof CompletionTrello.hasAnyBlocked === 'function') {
         progressBlocked = !!CompletionTrello.hasAnyBlocked(completionSnap);
       }
       if (
@@ -326,6 +345,10 @@
           progressPercent: metrics.progressPercent,
           progressColor: metrics.progressColor,
           progressBlocked: metrics.progressBlocked,
+          statusCategory:
+            latestStatut && latestStatut.category
+              ? latestStatut.category
+              : '',
           title: progressSummaryText()
         });
         if (node) return node;

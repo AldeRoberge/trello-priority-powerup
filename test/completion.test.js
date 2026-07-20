@@ -327,6 +327,42 @@ describe('Completion progress', () => {
     assert.equal(CT.itemEstimatedMinutes(locked), 999);
   });
 
+  it('cleared locked estimate stays empty but nested still count in totals', () => {
+    const cleared = CT.normalizeItem({
+      id: 's1',
+      text: 'Sub',
+      estimatedMinutesLocked: true,
+      items: [
+        { id: 'a', text: 'A', progress: 0, estimatedMinutes: 30 },
+        { id: 'b', text: 'B', progress: 0, estimatedMinutes: 45 },
+      ],
+    });
+    assert.equal(CT.itemEstimatedMinutes(cleared), null);
+    assert.equal(CT.itemAggregateEstimateMinutes(cleared), 75);
+
+    const data = CT.normalizeCompletionData({ items: [cleared] });
+    assert.equal(CT.computeEstimatedTotal(data), 75);
+
+    const afterClear = CT.applyItemEstimate(
+      {
+        items: [
+          {
+            id: 'leaf',
+            text: 'Leaf',
+            estimatedMinutes: 20,
+          },
+        ],
+      },
+      'leaf',
+      null,
+      { lock: true }
+    );
+    assert.equal(afterClear.items[0].estimatedMinutes, undefined);
+    assert.equal(afterClear.items[0].estimatedMinutesLocked, true);
+    assert.equal(CT.itemEstimatedMinutes(afterClear.items[0]), null);
+    assert.equal(CT.computeEstimatedTotal(afterClear), null);
+  });
+
   it('progressFromFaderDelta maps vertical drag like an Ableton fader', () => {
     assert.equal(typeof CUI.progressFromFaderDelta, 'function');
     assert.equal(typeof CUI.bindProgressFader, 'function');
