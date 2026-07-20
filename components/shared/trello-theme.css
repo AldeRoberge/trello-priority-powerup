@@ -1544,8 +1544,8 @@ body.tp-page--priority {
   display: none;
   align-items: center;
   justify-content: center;
-  min-height: 160px;
-  padding: 28px 20px;
+  min-height: 280px;
+  padding: 24px 20px 28px;
   text-align: center;
 }
 
@@ -1642,8 +1642,9 @@ body.tp-page--priority {
   min-width: 0;
   font-size: 11px;
   line-height: 1.25;
-  color: var(--tp-text-disabled, #8993a4);
+  color: var(--tp-text-subtle, #8993a4);
   transition: color 0.15s ease;
+  opacity: 0.72;
 }
 
 .tp-popup-boot-step-icon {
@@ -1664,6 +1665,7 @@ body.tp-page--priority {
 .tp-popup-boot-step.is-active {
   color: var(--tp-text, #172b4d);
   font-weight: 600;
+  opacity: 1;
 }
 
 .tp-popup-boot-step.is-active .tp-popup-boot-step-icon {
@@ -1676,15 +1678,15 @@ body.tp-page--priority {
 
 .tp-popup-boot-step.is-done {
   color: var(--tp-text-subtle, #626f86);
+  opacity: 1;
 }
 
 .tp-popup-boot-step.is-done .tp-popup-boot-step-icon {
-  color: var(--tp-success-text, #216e4e);
+  color: var(--tp-success, #216e4e);
 }
 
 .tp-popup-boot-step.is-skipped {
-  color: var(--tp-text-disabled, #8993a4);
-  opacity: 0.72;
+  opacity: 0.45;
 }
 
 .tp-popup-boot-step-label {

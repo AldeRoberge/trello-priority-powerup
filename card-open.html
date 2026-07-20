@@ -184,6 +184,11 @@
           return Promise.resolve();
         }
 
+        if (overviewLoading) {
+          overviewLoading.textContent = 'Chargement de l\u2019aper\u00e7u\u2026';
+          overviewLoading.hidden = false;
+        }
+
         overviewUi = PriorityUI.createOverviewField({
           el: overviewMount,
           compact: true,
@@ -200,18 +205,24 @@
             resize(t);
           }
         });
-        if (overviewLoading && overviewLoading.parentNode) {
-          overviewLoading.parentNode.removeChild(overviewLoading);
+        if (overviewLoading) {
+          overviewLoading.textContent = 'R\u00e9cup\u00e9ration priorit\u00e9, progr\u00e8s et statut\u2026';
         }
 
         return PriorityTrello.getCardOverviewSnapshot(t)
           .then(function (snap) {
+            if (overviewLoading && overviewLoading.parentNode) {
+              overviewLoading.parentNode.removeChild(overviewLoading);
+            }
             if (overviewUi && typeof overviewUi.setData === 'function') {
               overviewUi.setData(snap || {});
             }
             resize(t);
           })
           .catch(function (err) {
+            if (overviewLoading) {
+              overviewLoading.textContent = 'Aper\u00e7u indisponible';
+            }
             if (window.TpDebug) TpDebug.error('cardOpen', 'overview.load', err);
             else console.error('Card-back overview load failed', err);
             resize(t);
