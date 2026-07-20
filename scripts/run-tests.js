@@ -22,6 +22,7 @@ const UNIT_FILES = [
   'priority-score-breakdown.test.js',
   'recurrence.test.js',
   'due-vague.test.js',
+  'iframe-client.test.js',
   'statut.test.js',
   'effects.test.js',
   'completion.test.js',

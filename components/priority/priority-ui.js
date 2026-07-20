@@ -770,12 +770,16 @@
   }
 
   /**
-   * Card-local assignees who are not (necessarily) Trello members.
-   * Stored on cardPriority.customAssignees; optional trelloMemberId link for avatar.
+   * Assignees who are not (necessarily) Trello members.
+   * Board catalog: customAssigneeCatalog (reusable across cards).
+   * Card membership: cardPriority.customAssignees (who is on this card).
+   * Optional trelloMemberId links an avatar from a board Trello member.
    */
   var CUSTOM_ASSIGNEE_ID_RE = /^person-[a-z0-9]+(?:-[a-z0-9]+)*$/;
   var MAX_CUSTOM_ASSIGNEES = 40;
   var MAX_CUSTOM_ASSIGNEE_NAME_LEN = 60;
+  /** Board-level Hors Trello people (mutable; set via setCustomAssigneeCatalog). */
+  var customAssigneeCatalog = [];
 
   function isCustomAssigneeId(id) {
     return typeof id === 'string' && CUSTOM_ASSIGNEE_ID_RE.test(id);
@@ -879,6 +883,106 @@
           : ''
     });
     return draft;
+  }
+
+  function getCustomAssigneeCatalog() {
+    return customAssigneeCatalog.slice();
+  }
+
+  function setCustomAssigneeCatalog(raw) {
+    customAssigneeCatalog = normalizeCustomAssignees(raw);
+    return customAssigneeCatalog.slice();
+  }
+
+  function findCustomAssigneeCatalogById(id) {
+    var key = id != null ? String(id) : '';
+    if (!key) return null;
+    for (var i = 0; i < customAssigneeCatalog.length; i++) {
+      if (String(customAssigneeCatalog[i].id) === key) {
+        return customAssigneeCatalog[i];
+      }
+    }
+    return null;
+  }
+
+  function findCustomAssigneeCatalogByName(name) {
+    var nameKey = String(name || '')
+      .trim()
+      .toLocaleLowerCase('fr-FR');
+    if (!nameKey) return null;
+    for (var i = 0; i < customAssigneeCatalog.length; i++) {
+      if (customAssigneeCatalog[i].name.toLocaleLowerCase('fr-FR') === nameKey) {
+        return customAssigneeCatalog[i];
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Upsert a Hors Trello person into the board catalog.
+   * Reuses an existing entry when id or name already matches (stable ids across cards).
+   */
+  function upsertCustomAssigneeCatalog(input) {
+    var draft =
+      input && typeof input === 'object' && isCustomAssigneeId(input.id)
+        ? normalizeCustomAssigneeEntry(input)
+        : createCustomAssignee(input);
+    if (!draft) return null;
+
+    var byId = findCustomAssigneeCatalogById(draft.id);
+    var byName = findCustomAssigneeCatalogByName(draft.name);
+    var existing = byId || byName;
+    if (existing) {
+      var next = {
+        id: existing.id,
+        name: draft.name || existing.name
+      };
+      var link =
+        draft.trelloMemberId || existing.trelloMemberId || undefined;
+      if (link) next.trelloMemberId = link;
+      var nextList = customAssigneeCatalog.map(function (item) {
+        return String(item.id) === String(existing.id) ? next : item;
+      });
+      customAssigneeCatalog = normalizeCustomAssignees(nextList);
+      return findCustomAssigneeCatalogById(existing.id) || next;
+    }
+
+    if (customAssigneeCatalog.length >= MAX_CUSTOM_ASSIGNEES) return null;
+    customAssigneeCatalog = normalizeCustomAssignees(
+      customAssigneeCatalog.concat([draft])
+    );
+    return findCustomAssigneeCatalogById(draft.id) || draft;
+  }
+
+  /**
+   * Merge card (or other) people into the board catalog without remapping ids.
+   * Returns { changed, catalog }.
+   */
+  function mergeIntoCustomAssigneeCatalog(entries) {
+    var before = JSON.stringify(customAssigneeCatalog);
+    var list = Array.isArray(entries) ? entries : [];
+    for (var i = 0; i < list.length; i++) {
+      var entry = normalizeCustomAssigneeEntry(list[i]);
+      if (!entry) continue;
+      if (findCustomAssigneeCatalogById(entry.id)) {
+        upsertCustomAssigneeCatalog(entry);
+        continue;
+      }
+      if (findCustomAssigneeCatalogByName(entry.name)) {
+        // Name already catalogued under another id — keep both catalogs
+        // distinct only by skipping so picker shows the first stable id.
+        continue;
+      }
+      if (customAssigneeCatalog.length >= MAX_CUSTOM_ASSIGNEES) break;
+      customAssigneeCatalog = normalizeCustomAssignees(
+        customAssigneeCatalog.concat([entry])
+      );
+    }
+    var catalog = getCustomAssigneeCatalog();
+    return {
+      changed: JSON.stringify(catalog) !== before,
+      catalog: catalog
+    };
   }
 
   /**
@@ -8877,6 +8981,13 @@
       typeof config.onCustomAssigneesChange === 'function'
         ? config.onCustomAssigneesChange
         : null;
+    var onCustomAssigneeCatalogChange =
+      typeof config.onCustomAssigneeCatalogChange === 'function'
+        ? config.onCustomAssigneeCatalogChange
+        : null;
+    if (Array.isArray(config.customAssigneeCatalog)) {
+      setCustomAssigneeCatalog(config.customAssigneeCatalog);
+    }
     var onLabelAdd =
       typeof config.onLabelAdd === 'function' ? config.onLabelAdd : null;
     var onLabelRemove =
@@ -10260,6 +10371,54 @@
         out.push(member);
       }
       return out;
+    }
+
+    function availableCatalogAssignees() {
+      var selected = selectedMemberIds();
+      var out = [];
+      var catalog = getCustomAssigneeCatalog();
+      for (var i = 0; i < catalog.length; i++) {
+        var entry = catalog[i];
+        if (!entry || !entry.id) continue;
+        if (selected[String(entry.id)]) continue;
+        out.push(entry);
+      }
+      return out;
+    }
+
+    function persistCustomAssigneeCatalog(nextList) {
+      var previous = getCustomAssigneeCatalog();
+      var list = normalizeCustomAssignees(nextList);
+      setCustomAssigneeCatalog(list);
+      if (!onCustomAssigneeCatalogChange) {
+        return Promise.resolve({
+          ok: true,
+          changed: false,
+          customAssigneeCatalog: list
+        });
+      }
+      return Promise.resolve(onCustomAssigneeCatalogChange(list))
+        .then(function (result) {
+          if (result && result.ok === false) {
+            setCustomAssigneeCatalog(previous);
+            return result;
+          }
+          if (result && Array.isArray(result.customAssigneeCatalog)) {
+            setCustomAssigneeCatalog(result.customAssigneeCatalog);
+          }
+          return (
+            result || {
+              ok: true,
+              changed: true,
+              customAssigneeCatalog: getCustomAssigneeCatalog()
+            }
+          );
+        })
+        .catch(function (err) {
+          console.error('Info custom assignee catalog save failed', err);
+          setCustomAssigneeCatalog(previous);
+          return { ok: false };
+        });
     }
 
     function setMembersPickerOpen(open) {
