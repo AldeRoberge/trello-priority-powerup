@@ -802,6 +802,23 @@
     return '';
   }
 
+  /**
+   * True when clipboard/plain text is a single pasteable URL (not a paragraph).
+   * Accepts http(s)/mailto, optional <angle> wrappers, and www.* (→ https).
+   */
+  function normalizePasteableMarkdownUrl(text) {
+    var u = String(text == null ? '' : text).trim();
+    if (!u || /\s/.test(u)) return '';
+    if (u.charAt(0) === '<' && u.charAt(u.length - 1) === '>') {
+      u = u.slice(1, -1).trim();
+      if (!u || /\s/.test(u)) return '';
+    }
+    var safe = safeMarkdownHref(u);
+    if (safe) return safe;
+    if (/^www\./i.test(u)) return safeMarkdownHref('https://' + u);
+    return '';
+  }
+
   /** Reverse of escapeHtml for values extracted from already-escaped markdown. */
   function unescapeHtml(s) {
     return String(s || '')
@@ -1626,6 +1643,28 @@
       value: value.slice(0, start) + open + selected + close + value.slice(end),
       start: start + openLen,
       end: start + openLen + selected.length
+    };
+  }
+
+  /**
+   * Turn a non-empty markdown selection into [label](url).
+   * @returns {{ value: string, start: number, end: number } | null}
+   */
+  function linkMarkdownSelection(state, url) {
+    var href = normalizePasteableMarkdownUrl(url) || safeMarkdownHref(url);
+    if (!href) return null;
+    var value = String(state && state.value != null ? state.value : '');
+    var start = Math.max(0, Number(state && state.start) || 0);
+    var end = Math.max(start, Number(state && state.end) || 0);
+    if (end > value.length) end = value.length;
+    if (start > value.length) start = value.length;
+    if (start === end) return null;
+    var label = value.slice(start, end).replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+    var insertion = '[' + label + '](' + href + ')';
+    return {
+      value: value.slice(0, start) + insertion + value.slice(end),
+      start: start + 1,
+      end: start + 1 + label.length
     };
   }
 
@@ -10304,18 +10343,34 @@
       labelsCreateBtn.title = 'Cr\u00e9er l\u2019\u00e9tiquette\u00a0: ' + q;
     }
 
+    function filteredBoardLabels(query) {
+      var q = String(query || '')
+        .trim()
+        .toLowerCase();
+      return boardLabels.filter(function (label) {
+        if (!label || !label.id) return false;
+        if (!q) return true;
+        return labelDisplayName(label).toLowerCase().indexOf(q) !== -1;
+      });
+    }
+
     function renderLabelsPicker() {
       labelsPickerList.replaceChildren();
       var query = labelsSearchInput.value;
-      var available = filteredAvailableBoardLabels(query);
       var q = String(query || '').trim();
+      // With delete enabled, list every board label so unused and applied
+      // ones can be permanently removed from Trello via the row ×.
+      var listed = onLabelDelete
+        ? filteredBoardLabels(query)
+        : filteredAvailableBoardLabels(query);
+      var selected = selectedLabelIds();
 
-      if (!available.length) {
+      if (!listed.length) {
         var empty = document.createElement('div');
         empty.className = 'info-labels-picker-empty';
         if (q) {
           empty.textContent = 'Aucune \u00e9tiquette correspondante';
-        } else if (boardLabels.length) {
+        } else if (boardLabels.length && !onLabelDelete) {
           empty.textContent =
             'Toutes les \u00e9tiquettes sont d\u00e9j\u00e0 sur la carte';
         } else {
@@ -10323,21 +10378,27 @@
         }
         labelsPickerList.appendChild(empty);
       } else {
-        available.forEach(function (label) {
+        listed.forEach(function (label) {
           var name = labelDisplayName(label);
           var hex = labelColorHex(label.color);
+          var onCard = !!selected[String(label.id)];
+          var row = document.createElement('div');
+          row.className = 'info-labels-picker-row';
+          if (onCard) row.classList.add('is-on-card');
+          row.setAttribute('role', 'option');
+          row.setAttribute('aria-selected', onCard ? 'true' : 'false');
+          row.dataset.labelId = String(label.id);
+
           var btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'info-labels-picker-option';
-          btn.setAttribute('role', 'option');
           btn.style.setProperty('--label-color', hex);
           btn.style.setProperty(
             '--label-fg',
             labelNeedsDarkText(hex) ? '#172b4d' : '#ffffff'
           );
-          btn.title = name;
-          btn.disabled = labelsBusy;
-          btn.dataset.labelId = String(label.id);
+          btn.title = onCard ? name + ' (sur cette carte)' : name;
+          btn.disabled = labelsBusy || onCard;
 
           var swatch = document.createElement('span');
           swatch.className = 'info-label-swatch';
@@ -10349,10 +10410,34 @@
 
           btn.appendChild(swatch);
           btn.appendChild(text);
-          btn.addEventListener('click', function () {
-            addLabelFromPicker(label);
-          });
-          labelsPickerList.appendChild(btn);
+          if (!onCard) {
+            btn.addEventListener('click', function () {
+              addLabelFromPicker(label);
+            });
+          }
+          row.appendChild(btn);
+
+          if (onLabelDelete) {
+            var deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'info-labels-picker-delete';
+            deleteBtn.setAttribute(
+              'aria-label',
+              'Supprimer l\u2019\u00e9tiquette du tableau\u00a0: ' + name
+            );
+            deleteBtn.title = 'Supprimer du tableau';
+            deleteBtn.disabled = labelsBusy;
+            deleteBtn.innerHTML =
+              '<i class="ti ti-x" aria-hidden="true"></i>';
+            deleteBtn.addEventListener('click', function (event) {
+              event.preventDefault();
+              event.stopPropagation();
+              deleteLabelFromBoard(label);
+            });
+            row.appendChild(deleteBtn);
+          }
+
+          labelsPickerList.appendChild(row);
         });
       }
 
@@ -18196,6 +18281,8 @@
     renderMarkdownToHtml: renderMarkdownToHtml,
     markdownFromRichRoot: markdownFromRichRoot,
     wrapMarkdownInlineSelection: wrapMarkdownInlineSelection,
+    linkMarkdownSelection: linkMarkdownSelection,
+    normalizePasteableMarkdownUrl: normalizePasteableMarkdownUrl,
     applyMarkdownBlockFormat: applyMarkdownBlockFormat,
     detectMarkdownLineFormat: detectMarkdownLineFormat,
     stripMarkdownLinePrefix: stripMarkdownLinePrefix,

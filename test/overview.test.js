@@ -144,6 +144,23 @@ function installDom() {
       else this.children.splice(i, 0, child);
       return child;
     }
+    replaceChildren(...nodes) {
+      while (this.children.length) {
+        const c = this.children.pop();
+        if (c) c.parentNode = null;
+      }
+      this._text = '';
+      this._html = '';
+      for (const node of nodes) {
+        if (node == null) continue;
+        if (typeof node === 'string') {
+          this._text += node;
+          this._html += node;
+        } else {
+          this.appendChild(node);
+        }
+      }
+    }
     querySelector(sel) {
       return this.querySelectorAll(sel)[0] || null;
     }
@@ -539,5 +556,92 @@ describe('PriorityUI createOverviewField', () => {
     assert.equal(brief.hidden, false);
     assert.ok(brief.classList.contains('is-pending'));
     assert.match(brief.textContent, /bloqu/i);
+  });
+
+  it('collapses and expands with summary showing the title', () => {
+    const ui = PriorityUI.createOverviewField({
+      title: 'Campagne lancement',
+      progressPercent: 40,
+      expanded: true,
+    });
+
+    assert.ok(ui.field.classList.contains('field--overview'));
+    assert.equal(ui.isExpanded(), true);
+    assert.ok(!ui.field.classList.contains('is-collapsed'));
+
+    const body = ui.el.querySelector('.overview-section-body');
+    assert.ok(body);
+    assert.equal(body.hidden, false);
+
+    ui.setExpanded(false);
+    assert.equal(ui.isExpanded(), false);
+    assert.ok(ui.field.classList.contains('is-collapsed'));
+    assert.equal(body.hidden, true);
+
+    const summary = ui.el.querySelector('.section-toggle-summary');
+    assert.ok(summary);
+    assert.equal(summary.hidden, false);
+    assert.match(summary.textContent, /Campagne lancement/);
+
+    ui.setExpanded(true);
+    assert.equal(ui.isExpanded(), true);
+    assert.equal(body.hidden, false);
+  });
+
+  it('buildProgressSummaryNode paints ring, percent, bar, and color', () => {
+    assert.equal(typeof PriorityUI.buildProgressSummaryNode, 'function');
+    assert.equal(PriorityUI.buildProgressSummaryNode({}), '');
+    assert.equal(
+      PriorityUI.buildProgressSummaryNode({ progressPercent: null }),
+      ''
+    );
+
+    const node = PriorityUI.buildProgressSummaryNode({
+      progressPercent: 40,
+      progressColor: '#0c66e4',
+      title: '2 tâches restantes',
+    });
+    assert.ok(node);
+    assert.ok(node.classList.contains('progress-summary'));
+    assert.ok(node.classList.contains('has-progress-accent'));
+    assert.equal(node.title, '2 tâches restantes');
+    assert.equal(
+      node.style._props['--overview-progress-accent'],
+      '#0c66e4'
+    );
+
+    const ring = node.querySelector('.overview-progress-ring');
+    assert.ok(ring);
+    assert.ok(ring.classList.contains('has-progress'));
+    assert.equal(ring.style._props['--completion-progress'], '40');
+    assert.equal(ring.style._props['--completion-check-fill'], '#0c66e4');
+
+    assert.match(node.querySelector('.overview-progress-pct').textContent, /40/);
+    assert.equal(
+      node.querySelector('.overview-progress-fill').style.width,
+      '40%'
+    );
+  });
+
+  it('buildProgressSummaryNode marks blocked and complete states', () => {
+    const blocked = PriorityUI.buildProgressSummaryNode({
+      progressPercent: 55,
+      progressBlocked: true,
+    });
+    assert.ok(blocked.classList.contains('is-blocked'));
+    const blockedRing = blocked.querySelector('.overview-progress-ring');
+    assert.ok(blockedRing.classList.contains('is-blocked'));
+    assert.match(blockedRing.innerHTML, /pause/i);
+
+    const done = PriorityUI.buildProgressSummaryNode({
+      progressPercent: 100,
+      progressColor: '#22a06b',
+    });
+    const doneRing = done.querySelector('.overview-progress-ring');
+    assert.ok(doneRing.classList.contains('is-checked'));
+    assert.equal(
+      done.querySelector('.overview-progress-fill').style.width,
+      '100%'
+    );
   });
 });

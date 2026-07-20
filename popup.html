@@ -1721,7 +1721,10 @@
         }
       } catch (e) { /* ignore */ }
 
-      var progressPercent = null;
+      var progressMetrics = readProgressSummaryMetrics();
+      var progressPercent = progressMetrics.progressPercent;
+      var progressColor = progressMetrics.progressColor;
+      var progressBlocked = progressMetrics.progressBlocked;
       var subtasksDone = 0;
       var subtasksTotal = 0;
       if (window.CompletionTrello) {
@@ -1733,10 +1736,6 @@
           { items: [] };
         var progressMeta = CompletionTrello.computeCardProgress(completionSnap);
         if (progressMeta) {
-          if (progressMeta.hasItems || progressMeta.percent != null) {
-            progressPercent =
-              progressMeta.percent != null ? progressMeta.percent : 0;
-          }
           subtasksDone = progressMeta.doneCount || 0;
           subtasksTotal = progressMeta.totalCount || 0;
         }
@@ -1824,34 +1823,6 @@
         }
       }
 
-      var progressColor = '';
-      var progressBlocked = false;
-      if (window.CompletionTrello) {
-        var completionForColor =
-          (completionUi && typeof completionUi.getData === 'function'
-            ? completionUi.getData()
-            : null) ||
-          latestCompletion ||
-          { items: [] };
-        if (typeof CompletionTrello.hasAnyBlocked === 'function') {
-          progressBlocked = !!CompletionTrello.hasAnyBlocked(completionForColor);
-        }
-        if (
-          progressBlocked &&
-          window.PriorityUI &&
-          PriorityUI.BLOCKED_STYLES &&
-          PriorityUI.BLOCKED_STYLES.seg
-        ) {
-          progressColor = PriorityUI.BLOCKED_STYLES.seg;
-        } else if (
-          progressPercent != null &&
-          window.CompletionUI &&
-          typeof CompletionUI.completionColorForProgress === 'function'
-        ) {
-          progressColor = CompletionUI.completionColorForProgress(progressPercent);
-        }
-      }
-
       overviewUi.setData({
         title: readCardNameLabel() || cardNameCache || '',
         status: statusLabel,
@@ -1873,6 +1844,7 @@
           priority: overviewFeatureOn('priority')
         }
       });
+      paintProgressSummary();
       scheduleOverviewStatusBrief();
     }
 
@@ -5223,7 +5195,7 @@
         alwaysEnabled: true,
         enabled: true,
         expanded: false,
-        getSummary: progressSummaryText,
+        getSummary: buildProgressHeaderSummary,
         onLayoutChange: resizePopup,
         onExpandChange: function (isExpanded) {
           progressExpanded = !!isExpanded;

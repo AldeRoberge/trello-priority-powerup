@@ -2614,11 +2614,29 @@ body {
   color: var(--text-secondary);
 }
 
+.info-labels-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  border-radius: 6px;
+}
+
+.info-labels-picker-row:hover {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+
+.info-labels-picker-row.is-on-card .info-labels-picker-option {
+  opacity: 0.72;
+}
+
 .info-labels-picker-option {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
   margin: 0;
   padding: 6px 8px;
   border: none;
@@ -2632,7 +2650,7 @@ body {
 }
 
 .info-labels-picker-option:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: transparent;
 }
 
 .info-labels-picker-option:focus-visible {
@@ -2642,6 +2660,47 @@ body {
 
 .info-labels-picker-option:disabled {
   opacity: 0.5;
+  cursor: default;
+}
+
+.info-labels-picker-delete {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 26px;
+  height: 26px;
+  margin: 0 2px 0 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.75;
+}
+
+.info-labels-picker-delete .ti {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.info-labels-picker-delete:hover:not(:disabled) {
+  background: color-mix(in srgb, #c9372c 14%, transparent);
+  color: #c9372c;
+  opacity: 1;
+}
+
+.info-labels-picker-delete:focus-visible {
+  outline: 2px solid var(--tp-primary, #0c66e4);
+  outline-offset: 0;
+}
+
+.info-labels-picker-delete:disabled {
+  opacity: 0.4;
   cursor: default;
 }
 
