@@ -789,6 +789,8 @@
   font-size: 12px;
   padding: 6px 0;
   letter-spacing: -0.02em;
+  border-right: 1px solid var(--gantt-grid-line);
+  box-sizing: border-box;
 }
 
 .gantt-col-head.is-today {
@@ -842,6 +844,7 @@
 
 .gantt-timeline--timed.gantt-timeline--day .gantt-timeline-header,
 .gantt-timeline--timed.gantt-timeline--day .gantt-timeline-row {
+  /* Hour columns are unequal under time-warp — skip the equal repeating grid. */
   background-image:
     linear-gradient(
       to right,
@@ -851,15 +854,8 @@
       transparent var(--gantt-off-pm-w),
       var(--gantt-off-hours-fill) var(--gantt-off-pm-w),
       var(--gantt-off-hours-fill) 100%
-    ),
-    repeating-linear-gradient(
-      to right,
-      transparent 0,
-      transparent calc(var(--gantt-day-w) - 1px),
-      var(--gantt-grid-line) calc(var(--gantt-day-w) - 1px),
-      var(--gantt-grid-line) var(--gantt-day-w)
     );
-  background-size: 100% 100%, var(--gantt-day-w) 100%;
+  background-size: 100% 100%;
 }
 
 .gantt-timeline-row {

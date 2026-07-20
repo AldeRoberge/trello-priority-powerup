@@ -115,11 +115,9 @@
    * [[g:/r:/y:]] = semantic priority colors; [[a:]] = agent identity accent.
    * Safe: every phrase is textContent; no HTML from the model.
    */
-  function fillHighlightedBubble(bubble, text) {
-    if (!bubble) return;
-    bubble.replaceChildren();
-    var raw = typeof text === 'string' ? text : '';
-    var display = hideIncompleteHighlightMarker(normalizeHighlightMarkup(raw));
+  function appendHighlightedFragment(parent, text) {
+    if (!parent || text == null || text === '') return;
+    var display = typeof text === 'string' ? text : '';
     if (!display) return;
     var re = /\[\[([grya]):([^\]]{1,120})\]\]/gi;
     var last = 0;
@@ -128,7 +126,7 @@
     while ((m = re.exec(display)) !== null) {
       hasHighlight = true;
       if (m.index > last) {
-        bubble.appendChild(
+        parent.appendChild(
           document.createTextNode(
             stripLeftoverHighlightMarkup(display.slice(last, m.index))
           )
@@ -137,18 +135,52 @@
       var span = document.createElement('span');
       span.className = 'agent-hl agent-hl--' + String(m[1]).toLowerCase();
       span.textContent = m[2];
-      bubble.appendChild(span);
+      parent.appendChild(span);
       last = m.index + m[0].length;
     }
     if (!hasHighlight) {
-      bubble.textContent = stripLeftoverHighlightMarkup(display);
+      parent.appendChild(
+        document.createTextNode(stripLeftoverHighlightMarkup(display))
+      );
       return;
     }
     if (last < display.length) {
-      bubble.appendChild(
-        document.createTextNode(stripLeftoverHighlightMarkup(display.slice(last)))
+      parent.appendChild(
+        document.createTextNode(
+          stripLeftoverHighlightMarkup(display.slice(last))
+        )
       );
     }
+  }
+
+  function fillHighlightedBubble(bubble, text) {
+    if (!bubble) return;
+    bubble.replaceChildren();
+    var raw = typeof text === 'string' ? text : '';
+    var display = hideIncompleteHighlightMarker(normalizeHighlightMarkup(raw));
+    if (!display) return;
+    appendHighlightedFragment(bubble, display);
+  }
+
+  /** Highlights + optional {{n}} visual blocks (AgentBlocks). */
+  function fillMessageContent(bubble, text, blocks, options) {
+    options = options || {};
+    if (
+      typeof AgentBlocks !== 'undefined' &&
+      typeof AgentBlocks.fillMessageContent === 'function'
+    ) {
+      AgentBlocks.fillMessageContent(bubble, text, blocks || [], {
+        streaming: !!options.streaming,
+        highlight: {
+          normalize: normalizeHighlightMarkup,
+          hideIncomplete: hideIncompleteHighlightMarker,
+          stripLeftover: stripLeftoverHighlightMarkup,
+          appendHighlighted: appendHighlightedFragment
+        }
+      });
+      return;
+    }
+    fillHighlightedBubble(bubble, text);
   }
 
     function statusIcon(status) {
@@ -2237,6 +2269,7 @@
           appendChangeRecap(result.applied, {
             ok: true
           });
+          appendActionResultBlocks(result.applied);
           notifyLayout();
         }
       } catch (err) {
@@ -5171,6 +5204,7 @@
         note: item.label
       });
       appendChangeRecap(result, { ok: result.ok });
+      appendActionResultBlocks(result);
       history.push({
         role: 'assistant',
         content: result.summary || result.recap || 'Okay, c\'est fait.'
@@ -5402,7 +5436,9 @@
           meta && (meta.color != null ? meta.color : meta.aura)
         );
         applyAuraCssVars(row, seedAura, paletteForAura(seedAura));
-        fillHighlightedBubble(bubble, text);
+        fillMessageContent(bubble, text, (meta && meta.blocks) || [], {
+          streaming: !!(meta && meta.streaming)
+        });
       } else {
         bubble.textContent = text;
       }
@@ -5515,10 +5551,35 @@
       return emotion;
     }
 
-    function revealPendingBubble(bubble, text) {
+    function revealPendingBubble(bubble, text, blocks) {
       if (!bubble) return;
       bubble.classList.remove('agent-msg-bubble--pending');
-      fillHighlightedBubble(bubble, text || '');
+      fillMessageContent(bubble, text || '', blocks || [], { streaming: false });
+    }
+
+    function appendActionResultBlocks(applied, context) {
+      if (
+        typeof AgentBlocks === 'undefined' ||
+        typeof AgentBlocks.synthesizeBlocksFromResults !== 'function' ||
+        typeof AgentBlocks.appendResultBlocks !== 'function'
+      ) {
+        return null;
+      }
+      var blocks = AgentBlocks.synthesizeBlocksFromResults(applied, context);
+      if (!blocks.length) return null;
+      var host = null;
+      var kids = messagesEl.children;
+      for (var i = kids.length - 1; i >= 0; i--) {
+        if (
+          kids[i].classList &&
+          kids[i].classList.contains('agent-msg--assistant')
+        ) {
+          host = kids[i];
+          break;
+        }
+      }
+      if (!host) return null;
+      return AgentBlocks.appendResultBlocks(host, blocks);
     }
 
     function appendChatError(text) {
@@ -5797,6 +5858,7 @@
           note: 'Affinage priorit\u00e9'
         });
         appendChangeRecap(result, { ok: result.ok });
+        appendActionResultBlocks(result);
         history.push({
           role: 'assistant',
           content: 'Okay, c\'est mis \u00e0 jour.'
@@ -6087,6 +6149,7 @@
         note: item.label
       });
       appendChangeRecap(result, { ok: result.ok });
+      appendActionResultBlocks(result);
       history.push({
         role: 'assistant',
         content: result.summary || result.recap || 'Okay, c\'est appliqu\u00e9.'
@@ -7696,7 +7759,11 @@
         thinking.removeAttribute('aria-busy');
         thinking.removeAttribute('aria-label');
         if (bubble) {
-          revealPendingBubble(bubble, turn.message || fallbackOpening);
+          revealPendingBubble(
+            bubble,
+            turn.message || fallbackOpening,
+            turn.blocks || []
+          );
         }
         var opening = turn.message || fallbackOpening;
         var openingSuggestions =
@@ -7730,6 +7797,7 @@
             droppedActions: turn.droppedActions,
             ok: applied.ok
           });
+          appendActionResultBlocks(applied, turn.context);
           interviewPriorityTrusted = true;
           muteListening();
         }
@@ -8042,9 +8110,9 @@
                   thinking.classList.remove('is-pending');
                   thinking.removeAttribute('aria-busy');
                   thinking.removeAttribute('aria-label');
-                  revealPendingBubble(bubble, visible);
+                  revealPendingBubble(bubble, visible, []);
                 } else {
-                  fillHighlightedBubble(bubble, visible);
+                  fillMessageContent(bubble, visible, [], { streaming: true });
                 }
                 messagesEl.scrollTop = messagesEl.scrollHeight;
                 notifyLayout();
@@ -8082,9 +8150,9 @@
                   thinking.classList.remove('is-pending');
                   thinking.removeAttribute('aria-busy');
                   thinking.removeAttribute('aria-label');
-                  revealPendingBubble(bubble, visible);
+                  revealPendingBubble(bubble, visible, []);
                 } else {
-                  fillHighlightedBubble(bubble, visible);
+                  fillMessageContent(bubble, visible, [], { streaming: true });
                 }
                 messagesEl.scrollTop = messagesEl.scrollHeight;
                 notifyLayout();
@@ -8096,8 +8164,13 @@
         if (turn && turn.debug) pushDebugEntry(turn.debug);
         if (myGen !== chatTurnGen) return;
         if (bubble) {
-          if (!streamed) revealPendingBubble(bubble, turn.message);
-          else fillHighlightedBubble(bubble, turn.message);
+          if (!streamed) {
+            revealPendingBubble(bubble, turn.message, turn.blocks || []);
+          } else {
+            fillMessageContent(bubble, turn.message, turn.blocks || [], {
+              streaming: false
+            });
+          }
         }
         thinking.classList.remove('is-pending', 'is-streaming');
         thinking.removeAttribute('aria-busy');
@@ -8167,6 +8240,7 @@
             droppedActions: turn.droppedActions,
             ok: applied ? applied.ok : false
           });
+          appendActionResultBlocks(applied || { results: [] }, turn.context);
           setAssistantFaceEmotion(thinking, applied && applied.ok ? 'happy' : 'sad', {
             color: turn.color || (applied && applied.ok ? 'yellow' : 'orange')
           });
@@ -8295,6 +8369,7 @@
           note: fu.label
         });
         appendChangeRecap(result, { ok: result.ok });
+        appendActionResultBlocks(result);
         history.push({
           role: 'assistant',
           content: result.summary || result.recap || 'Okay, c\'est fait.'

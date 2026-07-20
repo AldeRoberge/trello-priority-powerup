@@ -488,6 +488,17 @@
       return state.viewMode === 'day' || state.viewMode === 'week';
     }
 
+    function timelineMapOptions() {
+      if (!usesTimedTimeline()) return null;
+      if (typeof model.buildTimeWarp !== 'function') return null;
+      var warp = model.buildTimeWarp(
+        state.ganttSettings.dayStart,
+        state.ganttSettings.dayEnd
+      );
+      if (!warp) return null;
+      return { timeWarp: warp };
+    }
+
     function formatIntervalTitle(interval) {
       if (!interval) return '';
       var start = model.toIsoDate(interval.start);
@@ -2573,7 +2584,7 @@
       var x = clientX - rect.left;
       var r = range();
       if (usesTimedTimeline() && typeof model.xToDateTime === 'function') {
-        var dt = model.xToDateTime(x, r, width);
+        var dt = model.xToDateTime(x, r, width, timelineMapOptions());
         return model.snapDateTime
           ? model.snapDateTime(
               dt,
@@ -2590,7 +2601,8 @@
       var geo = model.barGeometry(
         interval,
         range(),
-        state.timelineWidth
+        state.timelineWidth,
+        timelineMapOptions()
       );
       if (!geo || !geo.visible) {
         ghostEl.hidden = true;
@@ -2713,6 +2725,7 @@
         }
 
         var r = range();
+        var mapOpts = timelineMapOptions();
         var startX = ev.clientX;
         var origin = {
           start: interval.start,
@@ -2728,6 +2741,23 @@
           width: state.timelineWidth,
           pointerId: ev.pointerId,
           agenda: usesTimedTimeline(),
+          mapOpts: mapOpts,
+          originLeft: usesTimedTimeline()
+            ? model.dateTimeToX(
+                interval.start,
+                r,
+                state.timelineWidth,
+                mapOpts
+              )
+            : 0,
+          originRight: usesTimedTimeline()
+            ? model.dateTimeToX(
+                interval.end,
+                r,
+                state.timelineWidth,
+                mapOpts
+              )
+            : 0,
         };
         barEl.classList.add('is-dragging');
         barEl.setPointerCapture(ev.pointerId);
@@ -2737,23 +2767,32 @@
           var dx = e.clientX - state.drag.startX;
           var next;
           if (state.drag.agenda) {
-            var msDelta =
-              (dx / state.drag.width) *
-              model.rangeDayCount(state.drag.range) *
-              model.MS_DAY;
-            if (state.drag.mode === 'move') {
-              next = model.shiftIntervalMs(state.drag.origin, msDelta);
-            } else {
-              next = model.resizeIntervalMs(
-                state.drag.origin,
-                state.drag.mode === 'start' ? 'start' : 'end',
-                msDelta
-              );
+            // Map through warped X space so dx in morning ≠ dx in work hours.
+            var leftX = state.drag.originLeft + dx;
+            var rightX = state.drag.originRight + dx;
+            if (state.drag.mode === 'start') {
+              leftX = state.drag.originLeft + dx;
+              rightX = state.drag.originRight;
+            } else if (state.drag.mode === 'end') {
+              leftX = state.drag.originLeft;
+              rightX = state.drag.originRight + dx;
             }
-            if (!next) return;
+            var nextStart = model.xToDateTime(
+              leftX,
+              state.drag.range,
+              state.drag.width,
+              state.drag.mapOpts
+            );
+            var nextEnd = model.xToDateTime(
+              rightX,
+              state.drag.range,
+              state.drag.width,
+              state.drag.mapOpts
+            );
+            if (!nextStart || !nextEnd) return;
             next = {
-              start: model.snapDateTime(next.start, state.viewMode),
-              end: model.snapDateTime(next.end, state.viewMode),
+              start: model.snapDateTime(nextStart, state.viewMode),
+              end: model.snapDateTime(nextEnd, state.viewMode),
               hasTime: true,
             };
           } else {
@@ -2818,7 +2857,12 @@
 
     function updateBarEl(barEl, row, interval, dragMode) {
       var r = range();
-      var geo = model.barGeometry(interval, r, state.timelineWidth);
+      var geo = model.barGeometry(
+        interval,
+        r,
+        state.timelineWidth,
+        timelineMapOptions()
+      );
       if (!geo || !geo.visible) {
         barEl.style.display = 'none';
         return;
@@ -2884,34 +2928,28 @@
       timelineCol.classList.add('gantt-timeline--' + state.viewMode);
 
       // Paint morning / night on timed views via CSS (row backgrounds are opaque,
-      // so absolute overlays behind them are invisible).
-      if (usesTimedTimeline() && typeof model.workDayFractions === 'function') {
-        var frac = model.workDayFractions(
-          state.ganttSettings.dayStart,
-          state.ganttSettings.dayEnd
+      // so absolute overlays behind them are invisible). Off-hours are time-warped
+      // so they only take ~20% of each day column.
+      var mapOpts = timelineMapOptions();
+      var timeWarp = mapOpts && mapOpts.timeWarp;
+      if (usesTimedTimeline() && timeWarp) {
+        var offUnit =
+          state.viewMode === 'day' ? state.timelineWidth : colW;
+        timelineCol.classList.add('gantt-timeline--timed');
+        timelineCol.style.setProperty('--gantt-off-unit-w', offUnit + 'px');
+        timelineCol.style.setProperty(
+          '--gantt-off-am-w',
+          timeWarp.visualMorningEnd * offUnit + 'px'
         );
-        if (frac) {
-          var offUnit =
-            state.viewMode === 'day' ? state.timelineWidth : colW;
-          timelineCol.classList.add('gantt-timeline--timed');
-          timelineCol.style.setProperty(
-            '--gantt-off-unit-w',
-            offUnit + 'px'
-          );
-          timelineCol.style.setProperty(
-            '--gantt-off-am-w',
-            frac.start * offUnit + 'px'
-          );
-          timelineCol.style.setProperty(
-            '--gantt-off-pm-w',
-            frac.end * offUnit + 'px'
-          );
-          timelineCol.title =
-            'Hors heures de travail \u00b7 avant ' +
-            state.ganttSettings.dayStart +
-            ' / apr\u00e8s ' +
-            state.ganttSettings.dayEnd;
-        }
+        timelineCol.style.setProperty(
+          '--gantt-off-pm-w',
+          timeWarp.visualNightStart * offUnit + 'px'
+        );
+        timelineCol.title =
+          'Hors heures de travail \u00b7 avant ' +
+          state.ganttSettings.dayStart +
+          ' / apr\u00e8s ' +
+          state.ganttSettings.dayEnd;
       }
 
       var headerLabels = el('div', 'gantt-row gantt-row--header');
@@ -3026,7 +3064,19 @@
         else if (col.relative === 'tomorrow') headClass += ' is-tomorrow';
         else if (col.relative === 'yesterday') headClass += ' is-yesterday';
         var cell = el('div', headClass, { text: col.label });
-        cell.style.width = 100 / r.columns.length + '%';
+        if (
+          state.viewMode === 'day' &&
+          timeWarp &&
+          typeof col.hour === 'number' &&
+          typeof model.realFracToVisual === 'function'
+        ) {
+          var v0 = model.realFracToVisual(col.hour / 24, timeWarp);
+          var v1 = model.realFracToVisual((col.hour + 1) / 24, timeWarp);
+          cell.style.width = Math.max(0, (v1 - v0) * 100) + '%';
+          cell.style.flex = '0 0 auto';
+        } else {
+          cell.style.width = 100 / r.columns.length + '%';
+        }
         if (typeof col.hour === 'number') {
           cell.title = col.hour + ' h';
         } else if (col.relative === 'today') {
@@ -3051,7 +3101,7 @@
       ) {
         var todayX =
           typeof model.dateTimeToX === 'function'
-            ? model.dateTimeToX(now, r, state.timelineWidth)
+            ? model.dateTimeToX(now, r, state.timelineWidth, mapOpts)
             : model.dateToX(todayDate, r, state.timelineWidth);
         var marker = el('div', 'gantt-today-line');
         marker.style.left = todayX + 'px';
@@ -3275,7 +3325,12 @@
         var interval = model.resolveBarInterval(row, intervalOptions());
         var hasVisibleBar = false;
         if (interval) {
-          var geo = model.barGeometry(interval, r, state.timelineWidth);
+          var geo = model.barGeometry(
+            interval,
+            r,
+            state.timelineWidth,
+            mapOpts
+          );
           if (geo && geo.visible) {
             hasVisibleBar = true;
             var bar = el('div', 'gantt-bar');

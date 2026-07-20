@@ -279,17 +279,21 @@ describe('GanttModel', () => {
   it('workHoursBand covers 08:15–16:45 in day view', () => {
     const range = GanttModel.viewRange('day', '2026-07-22');
     const width = 240;
-    const band = GanttModel.workHoursBand('08:15', '16:45', range, width);
+    const warp = GanttModel.buildTimeWarp('08:15', '16:45');
+    const opts = { timeWarp: warp };
+    const band = GanttModel.workHoursBand('08:15', '16:45', range, width, opts);
     assert.ok(band);
     const startX = GanttModel.dateTimeToX(
       GanttModel.combineDateTime('2026-07-22', '08:15'),
       range,
-      width
+      width,
+      opts
     );
     const endX = GanttModel.dateTimeToX(
       GanttModel.combineDateTime('2026-07-22', '16:45'),
       range,
-      width
+      width,
+      opts
     );
     assert.ok(Math.abs(band.left - startX) < 0.01);
     assert.ok(Math.abs(band.width - (endX - startX)) < 0.01);
@@ -297,7 +301,15 @@ describe('GanttModel', () => {
 
   it('offHoursBands grays morning and night in day and week views', () => {
     const dayRange = GanttModel.viewRange('day', '2026-07-22');
-    const dayBands = GanttModel.offHoursBands('08:15', '16:45', dayRange, 240);
+    const warp = GanttModel.buildTimeWarp('08:15', '16:45');
+    const opts = { timeWarp: warp };
+    const dayBands = GanttModel.offHoursBands(
+      '08:15',
+      '16:45',
+      dayRange,
+      240,
+      opts
+    );
     assert.equal(dayBands.length, 2);
     assert.equal(dayBands[0].kind, 'morning');
     assert.equal(dayBands[1].kind, 'night');
@@ -308,7 +320,8 @@ describe('GanttModel', () => {
           GanttModel.dateTimeToX(
             GanttModel.combineDateTime('2026-07-22', '08:15'),
             dayRange,
-            240
+            240,
+            opts
           )
       ) < 0.01
     );
@@ -318,7 +331,8 @@ describe('GanttModel', () => {
           GanttModel.dateTimeToX(
             GanttModel.combineDateTime('2026-07-22', '16:45'),
             dayRange,
-            240
+            240,
+            opts
           )
       ) < 0.01
     );
@@ -328,12 +342,17 @@ describe('GanttModel', () => {
       '08:15',
       '16:45',
       weekRange,
-      700
+      700,
+      opts
     );
     assert.equal(weekBands.length, 14); // 7 mornings + 7 nights
     assert.equal(
-      GanttModel.offHoursBands('08:15', '16:45', GanttModel.viewRange('month', '2026-07-22'), 900)
-        .length,
+      GanttModel.offHoursBands(
+        '08:15',
+        '16:45',
+        GanttModel.viewRange('month', '2026-07-22'),
+        900
+      ).length,
       0
     );
 
@@ -341,6 +360,51 @@ describe('GanttModel', () => {
     assert.ok(frac);
     assert.ok(Math.abs(frac.start - (8 * 60 + 15) / (24 * 60)) < 1e-9);
     assert.ok(Math.abs(frac.end - (16 * 60 + 45) / (24 * 60)) < 1e-9);
+  });
+
+  it('time warp compresses off-hours and round-trips', () => {
+    const warp = GanttModel.buildTimeWarp('08:15', '16:45');
+    assert.ok(warp);
+    assert.ok(
+      Math.abs(
+        warp.visualMorningShare +
+          warp.visualNightShare -
+          GanttModel.OFF_HOURS_VISUAL_SHARE
+      ) < 1e-9
+    );
+    assert.ok(warp.visualWorkShare > 0.7);
+
+    // Work start/end land on visual breakpoints.
+    assert.ok(
+      Math.abs(
+        GanttModel.realFracToVisual(warp.morningEnd, warp) -
+          warp.visualMorningEnd
+      ) < 1e-9
+    );
+    assert.ok(
+      Math.abs(
+        GanttModel.realFracToVisual(warp.nightStart, warp) -
+          warp.visualNightStart
+      ) < 1e-9
+    );
+
+    const range = GanttModel.viewRange('day', '2026-07-22');
+    const width = 1000;
+    const opts = { timeWarp: warp };
+    const morningEnd = GanttModel.combineDateTime('2026-07-22', '08:15');
+    const nightStart = GanttModel.combineDateTime('2026-07-22', '16:45');
+    const xAm = GanttModel.dateTimeToX(morningEnd, range, width, opts);
+    const xPm = GanttModel.dateTimeToX(nightStart, range, width, opts);
+    // Off-hours are compressed: morning band < linear share of the day.
+    const linearAm = ((8 * 60 + 15) / (24 * 60)) * width;
+    assert.ok(xAm < linearAm * 0.5);
+    assert.ok(xPm - xAm > width * 0.7);
+
+    // Round-trip a mid-work time.
+    const ten = GanttModel.combineDateTime('2026-07-22', '10:00');
+    const x = GanttModel.dateTimeToX(ten, range, width, opts);
+    const back = GanttModel.xToDateTime(x, range, width, opts);
+    assert.equal(GanttModel.toIsoTime(back), '10:00');
   });
 
   it('intervalToParts emits times when hasTime', () => {

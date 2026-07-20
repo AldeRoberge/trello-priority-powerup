@@ -13474,7 +13474,14 @@
             projectId: projectId,
             projectName: projectName,
             cleared: clearProject
-          })
+          }),
+          visual: clearProject
+            ? { type: 'project', cleared: true }
+            : {
+                type: 'project',
+                projectId: projectId,
+                name: projectName
+              }
         };
       }
       if (tool === 'set_due') {
@@ -14225,7 +14232,15 @@
           id: id,
           detail: detailForTool(tool, null, null, beforeAdd, afterAdd, args, {
             id: id
-          })
+          }),
+          visual: {
+            type: 'subtask',
+            id: id,
+            text: text,
+            done: addDone,
+            blocked: addBlocked,
+            estimatedMinutes: addEst != null ? addEst : undefined
+          }
         };
       }
       if (tool === 'set_subtask_blocked') {
@@ -15814,21 +15829,14 @@
         return result;
       }
       if (tool === 'set_statut') {
-        var extra =
-          result.detail && typeof result.detail === 'string' ? {} : {};
         result.visual = {
           type: 'statut',
           listName:
             (args && (args.listName || args.matchList)) ||
-            (result.detail &&
-            /list\s*\u2192\s*([^;]+)/i.test(String(result.detail))
-              ? RegExp.$1.trim()
-              : '') ||
             '',
           listId: args.listId || undefined,
           category: args.category || undefined
         };
-        // Prefer names captured at execute time via detail parsing
         if (result.detail && typeof result.detail === 'string') {
           var listMatch = result.detail.match(/list\s*[:=→>]\s*([^;]+)/i);
           if (listMatch) result.visual.listName = listMatch[1].trim();
