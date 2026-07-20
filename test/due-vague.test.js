@@ -48,10 +48,14 @@ describe('Échéance vague mode', () => {
     assert.equal(PU.resolveDueVagueToDate('bogus', now), '');
   });
 
-  it('formatDueVagueCountdown prefixes with a tilde', () => {
+  it('formatDueVagueCountdown uses À faire phrasing (no day count)', () => {
     assert.equal(
       PU.formatDueVagueCountdown('proche'),
-      '~ Dans un futur proche'
+      'À faire dans un futur proche'
+    );
+    assert.equal(
+      PU.formatDueVagueCountdown('eventuellement'),
+      'À faire éventuellement'
     );
     assert.equal(PU.formatDueVagueLabel('eventuellement'), 'Éventuellement');
     assert.equal(PU.formatDueVagueCountdown(''), '');
@@ -67,7 +71,7 @@ describe('Échéance vague mode', () => {
         dueEnabled: true
       }
     );
-    assert.equal(display.dueCountdown, '~ Dans un futur proche');
+    assert.equal(display.dueCountdown, 'À faire dans un futur proche');
     assert.equal(display.duePast, false);
     assert.equal(display.dueMode, 'vague');
     assert.equal(display.dueVague, 'proche');
@@ -137,7 +141,7 @@ describe('Échéance vague mode', () => {
         dueDate: '2029-07-19',
         dueEnabled: true
       }),
-      '~ Éventuellement'
+      'À faire éventuellement'
     );
     assert.doesNotMatch(
       PU.formatDueCountdownFromInputs({
@@ -150,9 +154,9 @@ describe('Échéance vague mode', () => {
     );
   });
 
-  it('withDueDateDisplay keeps Éventuellement on the card face text', () => {
+  it('withDueDateDisplay keeps À faire éventuellement on the card face text', () => {
     const display = PU.withDueDateDisplay(
-      { label: 'Importante', tierI: 3 },
+      { label: 'Secondaire', tierI: 5 },
       {
         dueDate: '2029-07-19',
         dueMode: 'vague',
@@ -160,7 +164,10 @@ describe('Échéance vague mode', () => {
         dueEnabled: true
       }
     );
-    assert.equal(display.dueCountdown, '~ Éventuellement');
-    assert.equal(PU.formatDueBadgeText(display), 'Tâche importante (~ Éventuellement)');
+    assert.equal(display.dueCountdown, 'À faire éventuellement');
+    assert.equal(
+      PU.formatDueBadgeText(display),
+      'Tâche secondaire (À faire éventuellement)'
+    );
   });
 });

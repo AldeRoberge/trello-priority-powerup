@@ -3878,10 +3878,20 @@
     return opt.label;
   }
 
-  /** Badge / countdown text for vague mode (tilde prefix). */
+  /**
+   * Badge / countdown text for vague mode — action phrasing, no day count.
+   * Ex. "À faire éventuellement" (not "3 ans restants" / "~ Éventuellement").
+   */
   function formatDueVagueCountdown(id) {
+    var opt = dueVagueOption(id);
+    if (!opt) return '';
+    if (opt.id === 'bientot') return '\u00c0 faire bient\u00f4t';
+    if (opt.id === 'proche') return '\u00c0 faire dans un futur proche';
+    if (opt.id === 'lointain') return '\u00c0 faire dans un futur lointain';
+    if (opt.id === 'eventuellement') return '\u00c0 faire \u00e9ventuellement';
     var label = formatDueVagueLabel(id);
-    return label ? '~ ' + label : '';
+    if (!label) return '';
+    return '\u00c0 faire ' + label.charAt(0).toLowerCase() + label.slice(1);
   }
 
   /**
