@@ -16,7 +16,7 @@
     sortBy: 'date',
     sortDir: 'asc',
   };
-  // Fire icon for priorities strictly above Importante (Critique / Urgente / Prioritaire).
+  // Priority dot for tiers strictly above Importante (Critique / Urgente / Prioritaire).
   var PRIORITY_FIRE_TIER_MAX = 2;
 
   function GM() {
@@ -200,6 +200,16 @@
     var i = el('i', 'ti ' + tiClass);
     i.setAttribute('aria-hidden', 'true');
     wrap.appendChild(i);
+    return wrap;
+  }
+
+  function priorityDotEl(title, fill) {
+    var wrap = el('span', 'gantt-detail-icon is-priority');
+    if (title) wrap.title = title;
+    var dot = el('span', 'gantt-priority-dot');
+    dot.setAttribute('aria-hidden', 'true');
+    if (fill) dot.style.backgroundColor = fill;
+    wrap.appendChild(dot);
     return wrap;
   }
 
@@ -869,9 +879,7 @@
             (row.priorityScore != null
               ? ' \u00b7 ' + Number(row.priorityScore).toFixed(1)
               : '');
-          var pIcon = iconEl('ti-flame', pTitle, 'is-priority');
-          if (row.priorityFill) pIcon.style.color = row.priorityFill;
-          slot('is-priority', pIcon);
+          slot('is-priority', priorityDotEl(pTitle, row.priorityFill || null));
         } else {
           slot('is-priority', null);
         }
@@ -1778,7 +1786,7 @@
           mode: 'priority',
           label: 'priorit\u00e9',
           content: function (slot) {
-            slot.appendChild(iconEl('ti-flame', '', 'is-priority'));
+            slot.appendChild(priorityDotEl('', null));
             var ind = sortIndicator(state.sortBy === 'priority');
             if (ind) slot.appendChild(ind);
           },

@@ -363,6 +363,14 @@
   color: var(--tp-primary, #0c66e4);
 }
 
+.gantt-priority-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
 .gantt-detail-icon.is-blocked {
   color: var(--tp-danger-text, #ae2e24);
 }
