@@ -187,3 +187,90 @@ describe('Card history labels', () => {
     assert.equal(entry.after.priority.recurrence.interval, 2);
   });
 });
+
+describe('Card history undo/redo', () => {
+  let CH;
+
+  before(() => {
+    clearComponentCache();
+    loadComponent('history/card-history.js');
+    CH = global.CardHistory;
+    assert.ok(CH);
+  });
+
+  function prioritySnap(urgency) {
+    return {
+      priority: { urgency: urgency, impact: 2, ease: 2 }
+    };
+  }
+
+  it('undo keeps the entry for redo and list marks it undone', async () => {
+    const history = CH.create({});
+    const applied = [];
+    const recordApply = (snap) => {
+      applied.push(snap);
+    };
+
+    const entry = history.record(prioritySnap(1), prioritySnap(5));
+    assert.ok(entry);
+    assert.equal(history.canUndo(), true);
+    assert.equal(history.canRedo(), false);
+
+    await history.undo(recordApply);
+    assert.equal(history.canUndo(), false);
+    assert.equal(history.canRedo(), true);
+    assert.deepEqual(applied[0].priority.urgency, 1);
+
+    const listed = history.list();
+    assert.equal(listed.length, 1);
+    assert.equal(listed[0].undone, true);
+    assert.equal(listed[0].id, entry.id);
+
+    await history.redo(recordApply);
+    assert.equal(history.canRedo(), false);
+    assert.equal(history.canUndo(), true);
+    assert.deepEqual(applied[1].priority.urgency, 5);
+    assert.equal(history.list()[0].undone, false);
+  });
+
+  it('revertTo preserves later entries so redoTo can restore them', async () => {
+    const history = CH.create({});
+    const applied = [];
+    const recordApply = (snap) => {
+      applied.push(snap && snap.priority ? snap.priority.urgency : null);
+    };
+
+    const first = history.record(prioritySnap(1), prioritySnap(2));
+    const second = history.record(prioritySnap(2), prioritySnap(3));
+    assert.ok(first && second);
+
+    await history.revertTo(first.id, recordApply);
+    assert.equal(history.canUndo(), false);
+    assert.equal(history.canRedo(), true);
+
+    const listed = history.list();
+    assert.equal(listed.length, 2);
+    assert.equal(listed[0].id, second.id);
+    assert.equal(listed[0].undone, true);
+    assert.equal(listed[1].id, first.id);
+    assert.equal(listed[1].undone, true);
+
+    await history.redoTo(second.id, recordApply);
+    assert.equal(history.canUndo(), true);
+    assert.equal(history.canRedo(), false);
+    assert.equal(history.list().every((e) => !e.undone), true);
+    // revertTo applies befores newest→oldest; redoTo applies afters oldest→newest.
+    assert.deepEqual(applied, [2, 1, 2, 3]);
+  });
+
+  it('recording after undo drops the redo stack', async () => {
+    const history = CH.create({});
+    history.record(prioritySnap(1), prioritySnap(2));
+    await history.undo(function () {});
+    assert.equal(history.canRedo(), true);
+    history.record(prioritySnap(1), prioritySnap(9));
+    assert.equal(history.canRedo(), false);
+    assert.equal(history.list().length, 1);
+    assert.equal(history.list()[0].undone, false);
+  });
+});
