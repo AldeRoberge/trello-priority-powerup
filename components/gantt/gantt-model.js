@@ -5,6 +5,15 @@
   var VIEW_MODES = ['week', 'month', 'year'];
   var MS_DAY = 24 * 60 * 60 * 1000;
   var WEEKDAY_SHORT = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
+  var WEEKDAY_LONG = [
+    'Dimanche',
+    'Lundi',
+    'Mardi',
+    'Mercredi',
+    'Jeudi',
+    'Vendredi',
+    'Samedi',
+  ];
   var MONTH_SHORT = [
     'janv.',
     'f\u00e9vr.',
@@ -119,7 +128,8 @@
     if (mode === 'month') {
       return String(date.getDate());
     }
-    return WEEKDAY_SHORT[date.getDay()] + ' ' + date.getDate();
+    // Week view: full weekday names (Lundi, Mardi, Mercredi, …).
+    return WEEKDAY_LONG[date.getDay()] || WEEKDAY_SHORT[date.getDay()];
   }
 
   /**

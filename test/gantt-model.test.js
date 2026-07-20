@@ -31,7 +31,19 @@ describe('GanttModel', () => {
     assert.equal(byKey['2026-07-23'].label, 'Demain');
     assert.equal(byKey['2026-07-23'].relative, 'tomorrow');
     assert.equal(byKey['2026-07-24'].relative, null);
-    assert.match(byKey['2026-07-24'].label, /ven\.|24/);
+    assert.equal(byKey['2026-07-24'].label, 'Vendredi');
+    assert.equal(byKey['2026-07-20'].label, 'Lundi');
+    assert.equal(byKey['2026-07-22'].label, "Aujourd'hui");
+    // Other days in the week keep full weekday names (not "mer. 22").
+    const weekOther = GanttModel.viewRange(
+      'week',
+      '2026-07-22',
+      GanttModel.parseIsoDate('2026-08-01')
+    );
+    assert.equal(
+      weekOther.columns.find((c) => c.key === '2026-07-22').label,
+      'Mercredi'
+    );
 
     const month = GanttModel.viewRange('month', '2026-07-15', now);
     const todayCol = month.columns.find((c) => c.key === '2026-07-22');
