@@ -348,14 +348,22 @@
       toolbar.innerHTML = '';
 
       var zoom = el('div', 'gantt-zoom');
-      ['week', 'month', 'year'].forEach(function (mode) {
-        var labels = { week: 'Semaine', month: 'Mois', year: 'Ann\u00e9e' };
-        var btn = el('button', 'gantt-btn' + (state.viewMode === mode ? ' is-active' : ''), {
-          type: 'button',
-          text: labels[mode],
-        });
+      [
+        { mode: 'week', label: 'Semaine', icon: 'ti-calendar-week' },
+        { mode: 'month', label: 'Mois', icon: 'ti-calendar-month' },
+        { mode: 'year', label: 'Ann\u00e9e', icon: 'ti-calendar-stats' },
+      ].forEach(function (spec) {
+        var btn = el(
+          'button',
+          'gantt-btn' + (state.viewMode === spec.mode ? ' is-active' : ''),
+          { type: 'button', title: spec.label }
+        );
+        var icon = el('i', 'ti ' + spec.icon);
+        icon.setAttribute('aria-hidden', 'true');
+        btn.appendChild(icon);
+        btn.appendChild(document.createTextNode(spec.label));
         btn.addEventListener('click', function () {
-          state.viewMode = mode;
+          state.viewMode = spec.mode;
           render();
         });
         zoom.appendChild(btn);
