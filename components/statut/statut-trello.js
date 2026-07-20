@@ -18,7 +18,7 @@
   function invalidateEnsureCache() {
     ensureCache.result = null;
     ensureCache.at = 0;
-    ensureCache.inflight = null;
+    // Keep inflight so concurrent callers still coalesce on the active ensure.
   }
 
   function matchApi() {
@@ -543,6 +543,7 @@
     var normalized = normalizeSettings(settings);
     applySettingsColors(normalized);
     await t.set('board', 'shared', STATUT_SETTINGS_KEY, normalized);
+    invalidateEnsureCache();
     return normalized;
   }
 
@@ -573,40 +574,64 @@
    */
   async function ensureStatutSettings(t, options) {
     options = options || {};
-    var current = await readStatutSettings(t);
-    var lists = await getBoardLists(t);
-
-    if (current.initialized && !options.forceRedetect) {
-      // Merge newly appeared lists as uncategorized so settings UI can show them.
-      var changed = false;
-      var newListCount = 0;
-      lists.forEach(function (list) {
-        if (!(list.id in current.listCategories)) {
-          current.listCategories[list.id] = null;
-          changed = true;
-          newListCount += 1;
-        }
-      });
-      if (changed) {
-        current = await saveStatutSettings(t, current);
-      }
-      dbgLog('statutTrello', 'ensureSettings.loaded', {
-        listCount: lists.length,
-        newListCount: newListCount,
-      });
-      return { settings: current, lists: lists, detected: false };
+    if (options.forceRedetect) {
+      invalidateEnsureCache();
+    } else if (
+      ensureCache.result &&
+      Date.now() - ensureCache.at < ENSURE_TTL_MS
+    ) {
+      return ensureCache.result;
+    } else if (ensureCache.inflight) {
+      return ensureCache.inflight;
     }
 
-    var next = applyDetection(lists, current);
-    next = await saveStatutSettings(t, next);
-    dbgLog('statutTrello', 'ensureSettings.defaulted', { listCount: lists.length });
-    return { settings: next, lists: lists, detected: true };
+    ensureCache.inflight = (async function () {
+      var current = await readStatutSettings(t);
+      var lists = await getBoardLists(t);
+      var result;
+
+      if (current.initialized && !options.forceRedetect) {
+        // Merge newly appeared lists as uncategorized so settings UI can show them.
+        var changed = false;
+        var newListCount = 0;
+        lists.forEach(function (list) {
+          if (!(list.id in current.listCategories)) {
+            current.listCategories[list.id] = null;
+            changed = true;
+            newListCount += 1;
+          }
+        });
+        if (changed) {
+          current = await saveStatutSettings(t, current);
+        }
+        dbgLog('statutTrello', 'ensureSettings.loaded', {
+          listCount: lists.length,
+          newListCount: newListCount,
+        });
+        result = { settings: current, lists: lists, detected: false };
+      } else {
+        var next = applyDetection(lists, current);
+        next = await saveStatutSettings(t, next);
+        dbgLog('statutTrello', 'ensureSettings.defaulted', {
+          listCount: lists.length,
+        });
+        result = { settings: next, lists: lists, detected: true };
+      }
+
+      ensureCache.result = result;
+      ensureCache.at = Date.now();
+      return result;
+    })().finally(function () {
+      ensureCache.inflight = null;
+    });
+
+    return ensureCache.inflight;
   }
 
   async function getCardStatut(t) {
     var PT = priorityTrello();
-    var lists = await getBoardLists(t);
     var ensured = await ensureStatutSettings(t);
+    var lists = ensured.lists || [];
     var settings = ensured.settings;
 
     var listId = null;

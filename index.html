@@ -100,8 +100,22 @@
           window.TpDebug && TpDebug.isEnabled()
             ? TpDebug.start('index', 'capability.' + (capabilityName || 'unknown'))
             : null;
-        if (window.TpDebug && typeof TpDebug.configureFromProfile === 'function') {
-          TpDebug.configureFromProfile(t).catch(function () {});
+        var profilePromise =
+          typeof UserProfile !== 'undefined' && typeof UserProfile.load === 'function'
+            ? UserProfile.load(t).catch(function () {
+                return null;
+              })
+            : Promise.resolve(null);
+        if (window.TpDebug && typeof TpDebug.configure === 'function') {
+          profilePromise.then(function (profile) {
+            var on =
+              profile &&
+              typeof UserProfile !== 'undefined' &&
+              typeof UserProfile.isDebugLoggingEnabled === 'function'
+                ? UserProfile.isDebugLoggingEnabled(profile)
+                : !!(profile && profile.debugLogging);
+            TpDebug.configure(!!on);
+          });
         }
         var preloads = [
           PriorityTrello.preloadBoardPriorityContext(t).catch(function (err) {
@@ -119,13 +133,7 @@
         }
         if (typeof GoalsTrello !== 'undefined' && GoalsTrello.preloadBoardGoalsContext) {
           preloads.push(
-            Promise.resolve()
-              .then(function () {
-                if (typeof UserProfile === 'undefined' || typeof UserProfile.load !== 'function') {
-                  return null;
-                }
-                return UserProfile.load(t);
-              })
+            profilePromise
               .then(function (profile) {
                 var on =
                   typeof UserProfile !== 'undefined' &&
@@ -142,7 +150,7 @@
           );
         }
         return Promise.all(preloads).then(function () {
-          return capabilityFn(t, opts);
+          return capabilityFn(t, opts, profilePromise);
         }).then(
           function (result) {
             if (timer) timer.end({ ok: true });
@@ -224,18 +232,12 @@
         // No board cleanup required; shared plugin data is left intact for re-enable.
       }),
 
-      'card-detail-badges': withBoardContext(function (t) {
+      'card-detail-badges': withBoardContext(function (t, _opts, profilePromise) {
         var jobs = [
           PriorityTrello.cardDetailBadges(t, openPriorityPopup),
           CompletionTrello.cardDetailBadges(t, openCompletionPopup),
         ];
-        return Promise.resolve()
-          .then(function () {
-            if (typeof UserProfile === 'undefined' || typeof UserProfile.load !== 'function') {
-              return null;
-            }
-            return UserProfile.load(t);
-          })
+        return Promise.resolve(profilePromise || null)
           .then(function (profile) {
             var objectifOn =
               typeof UserProfile !== 'undefined' &&

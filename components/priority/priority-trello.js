@@ -20,6 +20,10 @@
   var boardCustomTaskTypes = null;
   var boardMemberRoleCatalog = null;
   var boardCustomAssigneeCatalog = null;
+  var boardMatrixSettings = null;
+  var boardContextAt = 0;
+  var boardContextInflight = null;
+  var BOARD_CONTEXT_TTL_MS = 10000;
   // Trello minimum for dynamic badge polling (card-badges / card-detail-badges).
   var BADGE_REFRESH_SEC = 10;
   // Label above the card-back badge; without this Trello shows the Power-Up admin name.
@@ -482,12 +486,18 @@
   }
 
   async function getMatrixSettings(t) {
+    if (boardMatrixSettings && Date.now() - boardContextAt < BOARD_CONTEXT_TTL_MS) {
+      return boardMatrixSettings;
+    }
     var stored = await t.get('board', 'shared', MATRIX_SETTINGS_KEY);
     if (typeof PriorityMatrix !== 'undefined' && PriorityMatrix.normalizeSettings) {
-      return PriorityMatrix.normalizeSettings(stored);
+      boardMatrixSettings = PriorityMatrix.normalizeSettings(stored);
+    } else if (stored && typeof stored === 'object') {
+      boardMatrixSettings = stored;
+    } else {
+      boardMatrixSettings = { enabled: true, overrides: {} };
     }
-    if (stored && typeof stored === 'object') return stored;
-    return { enabled: true, overrides: {} };
+    return boardMatrixSettings;
   }
 
   async function getBoardFormula(t) {
@@ -548,6 +558,9 @@
 
   async function getCustomTaskTypes(t) {
     var PU = priorityUI();
+    if (Array.isArray(boardCustomTaskTypes)) {
+      return boardCustomTaskTypes.slice();
+    }
     try {
       var stored = await t.get('board', 'shared', CUSTOM_TASK_TYPES_KEY);
       var list =
@@ -592,6 +605,9 @@
 
   async function getMemberRoleCatalog(t) {
     var PU = priorityUI();
+    if (Array.isArray(boardMemberRoleCatalog)) {
+      return boardMemberRoleCatalog.slice();
+    }
     try {
       var stored = await t.get('board', 'shared', MEMBER_ROLE_CATALOG_KEY);
       var list =
@@ -606,7 +622,7 @@
       if (PU && typeof PU.setMemberRoleCatalog === 'function') {
         PU.setMemberRoleCatalog(list);
       }
-      // Seed board on first empty load so Settings sees the defaults.
+      // Seed board once on first empty load so Settings sees the defaults.
       if (!Array.isArray(stored) || !stored.length) {
         await t.set('board', 'shared', MEMBER_ROLE_CATALOG_KEY, list);
       }
