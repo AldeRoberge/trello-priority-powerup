@@ -530,7 +530,7 @@
 }
 
 .gantt-task-name.is-renamable {
-  cursor: text;
+  cursor: pointer;
 }
 
 .gantt-rename-input {
