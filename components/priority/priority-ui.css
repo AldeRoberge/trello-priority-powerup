@@ -2307,6 +2307,7 @@ html[data-color-mode='dark'] .overview-action-chip:hover {
 }
 
 .info-members-picker-option-text {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

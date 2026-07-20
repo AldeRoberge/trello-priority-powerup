@@ -78,4 +78,42 @@ describe('custom assignees', () => {
     assert.equal(normalized.customAssignees[0].name, 'Jane');
     assert.equal(normalized.customAssignees[0].trelloMemberId, 'x');
   });
+
+  it('board catalog upserts by name with stable id', () => {
+    PriorityUI.setCustomAssigneeCatalog([]);
+    const first = PriorityUI.upsertCustomAssigneeCatalog({
+      name: 'Alex Freelance',
+      trelloMemberId: 't1',
+    });
+    assert.ok(first);
+    assert.ok(PriorityUI.isCustomAssigneeId(first.id));
+    const again = PriorityUI.upsertCustomAssigneeCatalog({
+      name: 'alex freelance',
+    });
+    assert.equal(again.id, first.id);
+    assert.equal(again.trelloMemberId, 't1');
+    assert.equal(PriorityUI.getCustomAssigneeCatalog().length, 1);
+  });
+
+  it('mergeIntoCustomAssigneeCatalog seeds from card people', () => {
+    PriorityUI.setCustomAssigneeCatalog([]);
+    const merged = PriorityUI.mergeIntoCustomAssigneeCatalog([
+      { id: 'person-client-ab12', name: 'Client X' },
+      { id: 'person-client-cd34', name: 'client x' },
+      { id: 'person-sam-ef56', name: 'Sam' },
+    ]);
+    assert.equal(merged.changed, true);
+    assert.equal(merged.catalog.length, 2);
+    assert.equal(merged.catalog[0].id, 'person-client-ab12');
+    assert.equal(merged.catalog[1].name, 'Sam');
+  });
+
+  it('exposes custom assignee catalog storage key and APIs', () => {
+    assert.equal(
+      PriorityTrello.CUSTOM_ASSIGNEE_CATALOG_KEY,
+      'customAssigneeCatalog'
+    );
+    assert.equal(typeof PriorityTrello.getCustomAssigneeCatalog, 'function');
+    assert.equal(typeof PriorityTrello.saveCustomAssigneeCatalog, 'function');
+  });
 });

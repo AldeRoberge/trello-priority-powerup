@@ -10,6 +10,7 @@
   var COLOR_SCHEME_REV_KEY = 'priorityColorSchemeRev';
   var CUSTOM_TASK_TYPES_KEY = 'customTaskTypes';
   var MEMBER_ROLE_CATALOG_KEY = 'memberRoleCatalog';
+  var CUSTOM_ASSIGNEE_CATALOG_KEY = 'customAssigneeCatalog';
   // Last agreed Trello `due` ISO ('' = no due). Used for Échéance ↔ Dates conflict detection.
   var CARD_DUE_SYNCED_KEY = 'cardDueSyncedIso';
   // Last agreed Trello `start` ISO ('' = no start).
@@ -18,6 +19,7 @@
   var boardColorSchemeKey = null;
   var boardCustomTaskTypes = null;
   var boardMemberRoleCatalog = null;
+  var boardCustomAssigneeCatalog = null;
   // Trello minimum for dynamic badge polling (card-badges / card-detail-badges).
   var BADGE_REFRESH_SEC = 10;
   // Label above the card-back badge; without this Trello shows the Power-Up admin name.
@@ -632,6 +634,50 @@
       : [];
   }
 
+  async function getCustomAssigneeCatalog(t) {
+    var PU = priorityUI();
+    try {
+      var stored = await t.get('board', 'shared', CUSTOM_ASSIGNEE_CATALOG_KEY);
+      var list =
+        PU && typeof PU.normalizeCustomAssignees === 'function'
+          ? PU.normalizeCustomAssignees(stored)
+          : Array.isArray(stored)
+            ? stored
+            : [];
+      boardCustomAssigneeCatalog = list;
+      if (PU && typeof PU.setCustomAssigneeCatalog === 'function') {
+        PU.setCustomAssigneeCatalog(list);
+      }
+      return list.slice();
+    } catch (err) {
+      console.error('Priority custom assignee catalog load failed', err);
+      boardCustomAssigneeCatalog = boardCustomAssigneeCatalog || [];
+      return boardCustomAssigneeCatalog.slice();
+    }
+  }
+
+  async function saveCustomAssigneeCatalog(t, raw) {
+    var PU = priorityUI();
+    var list =
+      PU && typeof PU.normalizeCustomAssignees === 'function'
+        ? PU.normalizeCustomAssignees(raw)
+        : Array.isArray(raw)
+          ? raw
+          : [];
+    boardCustomAssigneeCatalog = list;
+    if (PU && typeof PU.setCustomAssigneeCatalog === 'function') {
+      PU.setCustomAssigneeCatalog(list);
+    }
+    await t.set('board', 'shared', CUSTOM_ASSIGNEE_CATALOG_KEY, list);
+    return list.slice();
+  }
+
+  function getCachedCustomAssigneeCatalog() {
+    return Array.isArray(boardCustomAssigneeCatalog)
+      ? boardCustomAssigneeCatalog.slice()
+      : [];
+  }
+
   async function preloadBoardPriorityContext(t) {
     return ensureBoardPriorityContext(t);
   }
@@ -650,6 +696,7 @@
     await getBoardColorScheme(t);
     await getCustomTaskTypes(t);
     await getMemberRoleCatalog(t);
+    await getCustomAssigneeCatalog(t);
     return settings;
   }
 
@@ -3528,6 +3575,10 @@
     getCachedMemberRoleCatalog: getCachedMemberRoleCatalog,
     saveMemberRoleCatalog: saveMemberRoleCatalog,
     MEMBER_ROLE_CATALOG_KEY: MEMBER_ROLE_CATALOG_KEY,
+    getCustomAssigneeCatalog: getCustomAssigneeCatalog,
+    getCachedCustomAssigneeCatalog: getCachedCustomAssigneeCatalog,
+    saveCustomAssigneeCatalog: saveCustomAssigneeCatalog,
+    CUSTOM_ASSIGNEE_CATALOG_KEY: CUSTOM_ASSIGNEE_CATALOG_KEY,
     preloadBoardPriorityContext: preloadBoardPriorityContext,
     ensureBoardPriorityContext: ensureBoardPriorityContext,
     computeDisplay: computeDisplay,

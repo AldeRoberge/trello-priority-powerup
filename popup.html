@@ -2532,14 +2532,59 @@
             variant.setState(next, { preserveCollapse: true });
           }
           latestState = Object.assign({}, next);
-          return Promise.resolve(saveState(next)).then(function () {
-            return commitHistoryNow('Personnes assignées modifiées').then(function () {
-              return {
-                ok: true,
-                changed: true,
-                customAssignees: list,
-              };
+
+          var catalogPromise = Promise.resolve(null);
+          if (
+            list.length &&
+            PriorityUI &&
+            typeof PriorityUI.mergeIntoCustomAssigneeCatalog === 'function' &&
+            PriorityTrello &&
+            typeof PriorityTrello.saveCustomAssigneeCatalog === 'function'
+          ) {
+            var merged = PriorityUI.mergeIntoCustomAssigneeCatalog(list);
+            if (merged && merged.changed) {
+              catalogPromise = Promise.resolve(
+                PriorityTrello.saveCustomAssigneeCatalog(t, merged.catalog)
+              ).then(function (saved) {
+                if (infoUi && typeof infoUi.setCustomAssigneeCatalog === 'function') {
+                  infoUi.setCustomAssigneeCatalog(saved);
+                }
+                return saved;
+              });
+            }
+          }
+
+          return catalogPromise.then(function () {
+            return Promise.resolve(saveState(next)).then(function () {
+              return commitHistoryNow('Personnes assignées modifiées').then(function () {
+                return {
+                  ok: true,
+                  changed: true,
+                  customAssignees: list,
+                };
+              });
             });
+          });
+        },
+        onCustomAssigneeCatalogChange: function (nextCatalog) {
+          if (
+            !PriorityTrello ||
+            typeof PriorityTrello.saveCustomAssigneeCatalog !== 'function'
+          ) {
+            return Promise.resolve({ ok: false });
+          }
+          return Promise.resolve(
+            PriorityTrello.saveCustomAssigneeCatalog(t, nextCatalog)
+          ).then(function (saved) {
+            if (infoUi && typeof infoUi.setCustomAssigneeCatalog === 'function') {
+              infoUi.setCustomAssigneeCatalog(saved);
+            } else if (
+              PriorityUI &&
+              typeof PriorityUI.setCustomAssigneeCatalog === 'function'
+            ) {
+              PriorityUI.setCustomAssigneeCatalog(saved);
+            }
+            return { ok: true, changed: true, customAssigneeCatalog: saved };
           });
         },
         onLabelAdd: function (label) {
@@ -3074,6 +3119,9 @@
         PriorityTrello.getMemberRoleCatalog
           ? PriorityTrello.getMemberRoleCatalog(t)
           : Promise.resolve([]),
+        PriorityTrello.getCustomAssigneeCatalog
+          ? PriorityTrello.getCustomAssigneeCatalog(t)
+          : Promise.resolve([]),
       ])
         .then(function (results) {
           var members = results[0] || [];
@@ -3085,6 +3133,7 @@
           currentMemberCache = results[6] || null;
           var customTaskTypes = results[7] || [];
           var memberRoleCatalog = results[8] || [];
+          var customAssigneeCatalog = results[9] || [];
           var childId = meCard && meCard.id ? String(meCard.id) : '';
           var hasRest =
             PriorityTrello.restClientOptions && !!PriorityTrello.restClientOptions();
@@ -3103,6 +3152,40 @@
             typeof PriorityUI.setMemberRoleCatalog === 'function'
           ) {
             PriorityUI.setMemberRoleCatalog(memberRoleCatalog);
+          }
+          if (infoUi && typeof infoUi.setCustomAssigneeCatalog === 'function') {
+            infoUi.setCustomAssigneeCatalog(customAssigneeCatalog);
+          } else if (
+            PriorityUI &&
+            typeof PriorityUI.setCustomAssigneeCatalog === 'function'
+          ) {
+            PriorityUI.setCustomAssigneeCatalog(customAssigneeCatalog);
+          }
+          // Seed board catalog from people already on this card (migration).
+          if (
+            PriorityUI &&
+            typeof PriorityUI.mergeIntoCustomAssigneeCatalog === 'function' &&
+            PriorityTrello &&
+            typeof PriorityTrello.saveCustomAssigneeCatalog === 'function'
+          ) {
+            var cardPeople =
+              latestState && Array.isArray(latestState.customAssignees)
+                ? latestState.customAssignees
+                : [];
+            var mergedPeople = PriorityUI.mergeIntoCustomAssigneeCatalog(cardPeople);
+            if (mergedPeople && mergedPeople.changed) {
+              Promise.resolve(
+                PriorityTrello.saveCustomAssigneeCatalog(t, mergedPeople.catalog)
+              )
+                .then(function (saved) {
+                  if (infoUi && typeof infoUi.setCustomAssigneeCatalog === 'function') {
+                    infoUi.setCustomAssigneeCatalog(saved);
+                  }
+                })
+                .catch(function (err) {
+                  console.error('Custom assignee catalog migration failed', err);
+                });
+            }
           }
           if (infoUi && typeof infoUi.setMembers === 'function') {
             infoUi.setMembers(members);
