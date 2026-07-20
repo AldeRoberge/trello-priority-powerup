@@ -596,6 +596,158 @@
     );
   }
 
+  /**
+   * Clearer chime when a Progrès encouragement stage changes (e.g. En cours →
+   * Bon progrès). Distinct from the fine scrub tick so milestones read clearly.
+   *
+   * opts.direction: 'up' | 'down' (default 'up')
+   * opts.tier: 0–n stage index (optional; derived from percent when omitted)
+   */
+  function playProgressMilestone(percent, opts) {
+    opts = opts || {};
+    percent = Math.max(0, Math.min(100, Number(percent) || 0));
+    var ascending = opts.direction !== 'down';
+    var roots = [
+      FS.Fs4,
+      FS.Gs4,
+      FS.As4,
+      FS.B4,
+      FS.Cs5,
+      FS.Ds5,
+      FS.F5,
+      FS.Fs5,
+    ];
+    var tier =
+      typeof opts.tier === 'number' && isFinite(opts.tier)
+        ? Math.max(0, Math.min(roots.length - 1, Math.round(opts.tier)))
+        : Math.max(
+            0,
+            Math.min(
+              roots.length - 1,
+              Math.round((percent / 100) * (roots.length - 1))
+            )
+          );
+    var root = roots[tier];
+    var third = root * (FS.As4 / FS.Fs4); // major 3rd in F# colour
+    var fifth = root * (FS.Cs5 / FS.Fs4);
+    var peak = 0.04 + (tier / (roots.length - 1)) * 0.028;
+
+    if (percent >= 100) {
+      playTones(
+        [
+          {
+            freq: FS.Fs5,
+            delay: 0,
+            dur: 0.07,
+            peak: 0.05,
+            type: 'triangle',
+            attack: 0.002,
+          },
+          {
+            freq: FS.As5,
+            delay: 0.04,
+            dur: 0.09,
+            peak: 0.045,
+            type: 'triangle',
+            attack: 0.003,
+          },
+          {
+            freq: FS.Cs6,
+            delay: 0.085,
+            dur: 0.16,
+            peak: 0.042,
+            type: 'sine',
+            attack: 0.004,
+          },
+          {
+            freq: FS.Fs6,
+            delay: 0.12,
+            dur: 0.22,
+            peak: 0.038,
+            type: 'sine',
+            attack: 0.005,
+          },
+        ],
+        { lowpass: 5600 }
+      );
+      lastProgressTickAt =
+        typeof performance !== 'undefined' && performance.now
+          ? performance.now()
+          : Date.now();
+      lastProgressTickPct = percent;
+      return { ok: true, sound: 'progress_milestone', tier: tier };
+    }
+
+    if (ascending) {
+      playTones(
+        [
+          {
+            freq: root,
+            delay: 0,
+            dur: 0.07,
+            peak: peak,
+            type: 'triangle',
+            attack: 0.002,
+          },
+          {
+            freq: third,
+            delay: 0.045,
+            dur: 0.09,
+            peak: peak * 0.85,
+            type: 'triangle',
+            attack: 0.003,
+          },
+          {
+            freq: fifth,
+            delay: 0.09,
+            dur: 0.14,
+            peak: peak * 0.7,
+            type: 'sine',
+            attack: 0.004,
+          },
+        ],
+        { lowpass: 5000 + tier * 80 }
+      );
+    } else {
+      playTones(
+        [
+          {
+            freq: fifth,
+            delay: 0,
+            dur: 0.06,
+            peak: peak * 0.75,
+            type: 'triangle',
+            attack: 0.002,
+          },
+          {
+            freq: third,
+            delay: 0.04,
+            dur: 0.08,
+            peak: peak * 0.7,
+            type: 'triangle',
+            attack: 0.003,
+          },
+          {
+            freq: root,
+            delay: 0.08,
+            dur: 0.12,
+            peak: peak * 0.65,
+            type: 'sine',
+            attack: 0.004,
+          },
+        ],
+        { lowpass: 4200 }
+      );
+    }
+
+    lastProgressTickAt =
+      typeof performance !== 'undefined' && performance.now
+        ? performance.now()
+        : Date.now();
+    lastProgressTickPct = percent;
+    return { ok: true, sound: 'progress_milestone', tier: tier };
+  }
+
   /** Soft F# tick used when a single subtask is checked (smaller than full fireworks). */
   function playSubtaskPopSound() {
     playUiSound('done');
@@ -1855,6 +2007,7 @@
     clear: clearEffects,
     playSound: playEffectSound,
     playProgressTick: playProgressTick,
+    playProgressMilestone: playProgressMilestone,
     playSubtaskPop: playSubtaskPop,
     playUiSound: playUiSound,
   };

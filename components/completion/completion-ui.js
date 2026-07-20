@@ -476,6 +476,14 @@
     return COMPLETION_ENCOURAGEMENT_TIERS[COMPLETION_ENCOURAGEMENT_TIERS.length - 1];
   }
 
+  function progressEncouragementTierIndex(percent) {
+    var p = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+    for (var i = 0; i < COMPLETION_ENCOURAGEMENT_TIERS.length; i++) {
+      if (p <= COMPLETION_ENCOURAGEMENT_TIERS[i].max) return i;
+    }
+    return COMPLETION_ENCOURAGEMENT_TIERS.length - 1;
+  }
+
   function progressEncouragementText(percent) {
     return progressEncouragementMeta(percent).text;
   }
@@ -538,17 +546,40 @@
     input.classList.toggle('is-blocked', blocked);
   }
 
+  var lastProgressEncouragementTier = null;
+
   function playSliderProgressTick(percent) {
+    var p = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+    var tier = progressEncouragementTierIndex(p);
+    var prev = lastProgressEncouragementTier;
+    var milestone = prev != null && tier !== prev;
+    lastProgressEncouragementTier = tier;
     try {
+      if (
+        milestone &&
+        global.CelebrationEffects &&
+        typeof global.CelebrationEffects.playProgressMilestone === 'function'
+      ) {
+        global.CelebrationEffects.playProgressMilestone(p, {
+          tier: tier,
+          direction: tier < prev ? 'down' : 'up',
+        });
+        return;
+      }
       if (
         global.CelebrationEffects &&
         typeof global.CelebrationEffects.playProgressTick === 'function'
       ) {
-        global.CelebrationEffects.playProgressTick(percent);
+        global.CelebrationEffects.playProgressTick(p);
       }
     } catch (e) {
       /* ignore audio failures */
     }
+  }
+
+  function resetSliderProgressSoundTier(percent) {
+    lastProgressEncouragementTier =
+      percent == null ? null : progressEncouragementTierIndex(percent);
   }
 
   function playCompletionUiSound(name) {
@@ -2071,6 +2102,7 @@
       window.removeEventListener('pointercancel', onEncouragementPointerEnd, true);
       encouragementPointerId =
         event && event.pointerId != null ? event.pointerId : null;
+      resetSliderProgressSoundTier(percent);
       showEncouragementBubble(
         event ? event.clientX : null,
         event ? event.clientY : null,
@@ -6388,6 +6420,7 @@
     progressBadgePreviewSamples: progressBadgePreviewSamples,
     progressEncouragementText: progressEncouragementText,
     progressEncouragementMeta: progressEncouragementMeta,
+    progressEncouragementTierIndex: progressEncouragementTierIndex,
     applyProgressEncouragement: applyProgressEncouragement,
     playAllCompleteCelebration: playAllCompleteCelebration,
     clearAllCompleteCelebration: clearAllCompleteCelebration,

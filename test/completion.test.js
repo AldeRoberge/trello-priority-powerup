@@ -39,6 +39,15 @@ describe('Completion progress', () => {
     assert.equal(CUI.progressEncouragementMeta(0).tone, 'idle');
   });
 
+  it('progress encouragement tier index steps at label boundaries', () => {
+    assert.equal(CUI.progressEncouragementTierIndex(0), 0);
+    assert.equal(CUI.progressEncouragementTierIndex(10), 1);
+    assert.equal(CUI.progressEncouragementTierIndex(11), 2);
+    assert.equal(CUI.progressEncouragementTierIndex(50), 3);
+    assert.equal(CUI.progressEncouragementTierIndex(51), 4);
+    assert.equal(CUI.progressEncouragementTierIndex(100), 7);
+  });
+
   it('progress encouragement bubble paints live percent with stage', () => {
     const el = {
       dataset: {},

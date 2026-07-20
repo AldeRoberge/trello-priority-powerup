@@ -62,8 +62,21 @@ describe('CelebrationEffects', () => {
     assert.equal(typeof FX.clear, 'function');
     assert.equal(typeof FX.playSubtaskPop, 'function');
     assert.equal(typeof FX.playUiSound, 'function');
+    assert.equal(typeof FX.playProgressTick, 'function');
+    assert.equal(typeof FX.playProgressMilestone, 'function');
     assert.equal(FX.playSubtaskPop(null, { sound: false }).ok, false);
     assert.equal(FX.play('banner', { sound: false }).ok, false);
+  });
+
+  it('playProgressMilestone returns a staged chime result', () => {
+    const up = FX.playProgressMilestone(50, { tier: 3, direction: 'up' });
+    assert.equal(up.ok, true);
+    assert.equal(up.sound, 'progress_milestone');
+    assert.equal(up.tier, 3);
+    const down = FX.playProgressMilestone(10, { tier: 1, direction: 'down' });
+    assert.equal(down.ok, true);
+    assert.equal(down.sound, 'progress_milestone');
+    assert.equal(FX.playProgressMilestone(100).ok, true);
   });
 
   it('playUiSound accepts known ids and aliases', () => {
