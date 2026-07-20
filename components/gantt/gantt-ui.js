@@ -2,7 +2,7 @@
 (function (global) {
   'use strict';
 
-  var ROW_H = 36;
+  var ROW_H = 40;
   var LABEL_W = 240;
   var EDGE_PX = 6;
   var MIN_TIMELINE_W = 640;
