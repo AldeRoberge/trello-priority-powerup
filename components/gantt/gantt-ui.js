@@ -788,7 +788,7 @@
       renderChart();
     }
 
-    function openCard(cardId, cardName) {
+    function openCard(cardId, cardName, mouseEvent) {
       if (!cardId || !t) return;
       var appName =
         (global.PriorityBrand &&
@@ -801,27 +801,36 @@
         global.PriorityTrello && typeof PriorityTrello.pageUrl === 'function'
           ? PriorityTrello.pageUrl('./popup.html')
           : './popup.html';
+      var args = {
+        cardId: String(cardId),
+        cardName: cardName || '',
+        openSection: 'priority',
+      };
+      // Prefer popup so the fullscreen Gantt modal is not replaced.
+      if (typeof t.popup === 'function') {
+        try {
+          var popupOpts = {
+            title: appName,
+            url: pageUrl,
+            args: args,
+            height: 600,
+          };
+          if (mouseEvent) popupOpts.mouseEvent = mouseEvent;
+          return t.popup(popupOpts);
+        } catch (e) {
+          /* fall through */
+        }
+      }
       if (typeof t.modal === 'function') {
         try {
           return t.modal({
             title: appName,
             url: pageUrl,
-            args: {
-              cardId: String(cardId),
-              cardName: cardName || '',
-              openSection: 'priority',
-            },
+            args: args,
             height: 1100,
             fullscreen: false,
             accentColor: '#22272B',
           });
-        } catch (e) {
-          /* fall through */
-        }
-      }
-      if (typeof t.showCard === 'function') {
-        try {
-          t.showCard(cardId);
         } catch (e2) {
           /* ignore */
         }
@@ -1895,11 +1904,12 @@
         }
         var openClickTimer = null;
         if (row.kind === 'card' && row.cardId) {
-          nameBtn.addEventListener('click', function () {
+          nameBtn.addEventListener('click', function (e) {
             if (openClickTimer) clearTimeout(openClickTimer);
+            var mouseEvent = e;
             openClickTimer = setTimeout(function () {
               openClickTimer = null;
-              openCard(row.cardId, row.name);
+              openCard(row.cardId, row.name, mouseEvent);
             }, 280);
           });
         }
