@@ -17,6 +17,7 @@ describe('GanttUI helpers', () => {
   beforeEach(() => {
     try {
       global.localStorage.removeItem(GanttUI.LABELS_W_STORAGE_KEY);
+      global.localStorage.removeItem(GanttUI.FILTERS_STORAGE_KEY);
     } catch (e) {
       /* ignore */
     }
@@ -51,6 +52,30 @@ describe('GanttUI helpers', () => {
     assert.equal(GanttUI.readStoredLabelsWidth(), GanttUI.LABELS_W_DEFAULT);
     global.localStorage.setItem(GanttUI.LABELS_W_STORAGE_KEY, '9999');
     assert.equal(GanttUI.readStoredLabelsWidth(), GanttUI.LABELS_W_DEFAULT);
+  });
+
+  it('defaults hideCompleted on and persists filter preferences', () => {
+    const defaults = GanttUI.readStoredFilters();
+    assert.equal(defaults.hideCompleted, true);
+    assert.equal(defaults.hideUndated, false);
+    assert.equal(defaults.sortBy, 'date');
+
+    GanttUI.storeFilters({
+      hideCompleted: false,
+      hideUndated: true,
+      sortBy: 'progress',
+      sortDir: 'asc',
+    });
+    const stored = GanttUI.readStoredFilters();
+    assert.deepEqual(stored, {
+      hideCompleted: false,
+      hideUndated: true,
+      sortBy: 'progress',
+      sortDir: 'asc',
+    });
+
+    global.localStorage.setItem(GanttUI.FILTERS_STORAGE_KEY, '{bad');
+    assert.deepEqual(GanttUI.readStoredFilters(), GanttUI.DEFAULT_FILTERS);
   });
 
   it('shouldShowPriorityFire only above Importante', () => {
