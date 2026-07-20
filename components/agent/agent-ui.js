@@ -926,6 +926,9 @@
         if (!standalone && typeof PriorityUI.saveSectionCollapseState === 'function') {
           PriorityUI.saveSectionCollapseState({ chat: !!isExpanded });
         }
+        if (typeof options.onExpandChange === 'function') {
+          options.onExpandChange(!!isExpanded);
+        }
       }
     });
 
@@ -2694,9 +2697,20 @@
       return normalizeAgentFace(agentIdentity.agentFace);
     }
 
-    /** Geometry overrides per face style (applied on top of the shared SVG). */
+    /**
+     * Geometry overrides per face style (applied on top of the shared SVG).
+     * Styles are intentionally exaggerated so each reads as a different character
+     * at the small chat / picker sizes (~32–64px).
+     */
     var FACE_STYLE_FEATURES = {
       classic: {
+        head: { rx: 19.2, ry: 19.2 },
+        featuresTransform: '',
+        eyeFill: '#2a211c',
+        browStroke: '#6b3f2a',
+        cheekFill: '#f07a7a',
+        mouthStroke: '#6b3f2a',
+        mouthWidth: '1.5',
         eyeL: { cx: 14.2, cy: 17.6, rx: 2.35, ry: 2.7 },
         eyeR: { cx: 25.8, cy: 17.6, rx: 2.35, ry: 2.7 },
         shineL: { cx: 15, cy: 16.7, r: 0.7 },
@@ -2705,62 +2719,169 @@
         browR: 'M23.9 14.2c1.4-.9 3.2-.9 4.6 0',
         browWidth: '1.35',
         cheekL: { cx: 11.2, cy: 22.4, rx: 2.4, ry: 1.4, opacity: '0.35' },
-        cheekR: { cx: 28.8, cy: 22.4, rx: 2.4, ry: 1.4, opacity: '0.35' }
+        cheekR: { cx: 28.8, cy: 22.4, rx: 2.4, ry: 1.4, opacity: '0.35' },
+        mouths: {
+          neutral: 'M15.6 25.2c1.4.9 3.2 1.3 4.4 1.3s3-.4 4.4-1.3',
+          happy: 'M14.4 24.4c1.8 2.4 4.2 3.5 5.6 3.5s3.8-1.1 5.6-3.5',
+          sad: 'M15.4 26.8c1.5-1.2 3.3-1.7 4.6-1.7s3.1.5 4.6 1.7',
+          curious: 'M16.2 25c1.2 1.35 2.8 2 3.8 2s2.6-.65 3.8-2',
+          thinking: 'M17.5 25.4c1.1.35 2.4.5 3.4.35',
+          tongue: 'M14.6 24.6c1.7 2.2 3.9 3.2 5.4 3.2s3.7-1 5.4-3.2',
+          wink: 'M15.8 25.2c1.2 1.1 2.8 1.6 4.2 1.5 1.2-.1 2.4-.5 3.4-1.2',
+          excited: 'M14 24.2c2 2.8 4.4 4 6 4s4-1.2 6-4'
+        },
+        surprised: { cx: 20, cy: 25.6, rx: 2.1, ry: 2.5 }
       },
+      /* Big round eyes, high soft brows, heavy blush — babyish / gentle. */
       soft: {
-        eyeL: { cx: 14.2, cy: 17.8, rx: 2.7, ry: 3.0 },
-        eyeR: { cx: 25.8, cy: 17.8, rx: 2.7, ry: 3.0 },
-        shineL: { cx: 15.1, cy: 16.8, r: 0.85 },
-        shineR: { cx: 26.7, cy: 16.8, r: 0.85 },
-        browL: 'M11.2 14.6c1.5-.55 3.4-.55 4.9 0',
-        browR: 'M23.9 14.6c1.5-.55 3.4-.55 4.9 0',
-        browWidth: '1.2',
-        cheekL: { cx: 11.0, cy: 22.6, rx: 2.9, ry: 1.7, opacity: '0.48' },
-        cheekR: { cx: 29.0, cy: 22.6, rx: 2.9, ry: 1.7, opacity: '0.48' }
+        head: { rx: 19.5, ry: 18.4 },
+        featuresTransform: 'translate(0 -0.4)',
+        eyeFill: '#3a2a24',
+        browStroke: '#a07058',
+        cheekFill: '#ff8aa0',
+        mouthStroke: '#8a5540',
+        mouthWidth: '1.35',
+        eyeL: { cx: 13.6, cy: 17.2, rx: 3.35, ry: 3.55 },
+        eyeR: { cx: 26.4, cy: 17.2, rx: 3.35, ry: 3.55 },
+        shineL: { cx: 14.7, cy: 16.1, r: 1.15 },
+        shineR: { cx: 27.5, cy: 16.1, r: 1.15 },
+        browL: 'M10.2 13.2c1.8-.35 4.2-.35 6.2 0',
+        browR: 'M23.6 13.2c1.8-.35 4.2-.35 6.2 0',
+        browWidth: '1.05',
+        cheekL: { cx: 10.2, cy: 23.2, rx: 3.6, ry: 2.2, opacity: '0.62' },
+        cheekR: { cx: 29.8, cy: 23.2, rx: 3.6, ry: 2.2, opacity: '0.62' },
+        mouths: {
+          neutral: 'M15.2 25.6c1.6.7 3.4 1 4.8 1s3.2-.3 4.8-1',
+          happy: 'M13.6 24.8c2.2 2.8 4.8 4.2 6.4 4.2s4.2-1.4 6.4-4.2',
+          sad: 'M15.2 27.2c1.6-1 3.4-1.4 4.8-1.4s3.2.4 4.8 1.4',
+          curious: 'M15.8 25.4c1.4 1.5 3.1 2.2 4.2 2.2s2.8-.7 4.2-2.2',
+          thinking: 'M17.2 25.8c1.2.3 2.6.4 3.6.25',
+          tongue: 'M13.8 25c2 2.6 4.4 3.8 6.2 3.8s4.2-1.2 6.2-3.8',
+          wink: 'M15.2 25.6c1.4 1.2 3.1 1.7 4.6 1.6 1.3-.1 2.6-.55 3.8-1.3',
+          excited: 'M13.2 24.6c2.4 3.2 5 4.6 6.8 4.6s4.4-1.4 6.8-4.6'
+        },
+        surprised: { cx: 20, cy: 26.0, rx: 2.5, ry: 2.9 }
       },
+      /* Close-set intense eyes, heavy low brows, almost no blush — stern. */
       bold: {
-        eyeL: { cx: 14.0, cy: 17.5, rx: 2.55, ry: 2.85 },
-        eyeR: { cx: 26.0, cy: 17.5, rx: 2.55, ry: 2.85 },
-        shineL: { cx: 14.85, cy: 16.55, r: 0.65 },
-        shineR: { cx: 26.85, cy: 16.55, r: 0.65 },
-        browL: 'M10.8 13.6c1.6-1.15 3.6-1.15 5.2 0',
-        browR: 'M24.0 13.6c1.6-1.15 3.6-1.15 5.2 0',
-        browWidth: '1.85',
-        cheekL: { cx: 11.0, cy: 22.3, rx: 2.2, ry: 1.3, opacity: '0.28' },
-        cheekR: { cx: 29.0, cy: 22.3, rx: 2.2, ry: 1.3, opacity: '0.28' }
+        head: { rx: 18.6, ry: 19.6 },
+        featuresTransform: 'translate(0 0.6)',
+        eyeFill: '#1a120e',
+        browStroke: '#2a1810',
+        cheekFill: '#d06050',
+        mouthStroke: '#3a2218',
+        mouthWidth: '1.85',
+        eyeL: { cx: 15.6, cy: 18.2, rx: 1.85, ry: 2.55 },
+        eyeR: { cx: 24.4, cy: 18.2, rx: 1.85, ry: 2.55 },
+        shineL: { cx: 16.15, cy: 17.35, r: 0.4 },
+        shineR: { cx: 24.95, cy: 17.35, r: 0.4 },
+        browL: 'M11.4 13.0c1.8-1.55 4.2-1.55 6.0 0.15',
+        browR: 'M22.6 13.15c1.8-1.55 4.2-1.55 6.0 0.15',
+        browWidth: '2.35',
+        cheekL: { cx: 11.4, cy: 22.8, rx: 1.6, ry: 1.0, opacity: '0.12' },
+        cheekR: { cx: 28.6, cy: 22.8, rx: 1.6, ry: 1.0, opacity: '0.12' },
+        mouths: {
+          neutral: 'M16.4 25.6c1.1.45 2.4.65 3.6.65s2.5-.2 3.6-.65',
+          happy: 'M15.2 24.8c1.4 1.6 3.2 2.3 4.8 2.3s3.4-.7 4.8-2.3',
+          sad: 'M15.8 26.4c1.3-.9 2.9-1.25 4.2-1.25s2.9.35 4.2 1.25',
+          curious: 'M16.6 25.2c1.0 1.0 2.3 1.5 3.4 1.5s2.4-.5 3.4-1.5',
+          thinking: 'M17.8 25.6c0.9.2 2.0.3 2.8.15',
+          tongue: 'M15.4 24.8c1.4 1.6 3.1 2.4 4.6 2.4s3.2-.8 4.6-2.4',
+          wink: 'M16.2 25.4c1.0.85 2.3 1.2 3.6 1.15 1.1-.05 2.1-.4 3.0-.95',
+          excited: 'M14.8 24.4c1.8 2.2 3.8 3.1 5.2 3.1s3.4-.9 5.2-3.1'
+        },
+        surprised: { cx: 20, cy: 25.8, rx: 1.7, ry: 2.1 }
       },
+      /* Asymmetric almond eyes, angled brows, crooked smirk — mischievous. */
       sly: {
-        eyeL: { cx: 14.4, cy: 17.9, rx: 2.5, ry: 2.15 },
-        eyeR: { cx: 25.6, cy: 17.5, rx: 2.5, ry: 2.15 },
-        shineL: { cx: 15.2, cy: 17.1, r: 0.55 },
-        shineR: { cx: 26.3, cy: 16.7, r: 0.55 },
-        browL: 'M11.2 15.0c1.5-.35 3.3-.85 4.8-1.15',
-        browR: 'M24.0 13.4c1.5.2 3.2.55 4.6 1.15',
-        browWidth: '1.45',
-        cheekL: { cx: 11.4, cy: 22.5, rx: 2.1, ry: 1.2, opacity: '0.22' },
-        cheekR: { cx: 28.6, cy: 22.2, rx: 2.5, ry: 1.45, opacity: '0.4' }
+        head: { rx: 19.0, ry: 18.8 },
+        featuresTransform: 'rotate(-3 20 20)',
+        eyeFill: '#241810',
+        browStroke: '#4a2e1c',
+        cheekFill: '#e87868',
+        mouthStroke: '#5a3824',
+        mouthWidth: '1.55',
+        eyeL: { cx: 13.8, cy: 18.4, rx: 3.1, ry: 1.55 },
+        eyeR: { cx: 26.2, cy: 16.9, rx: 2.7, ry: 2.05 },
+        shineL: { cx: 14.9, cy: 17.9, r: 0.45 },
+        shineR: { cx: 27.0, cy: 16.2, r: 0.65 },
+        browL: 'M10.4 16.2c1.6-.15 3.6-.95 5.4-1.7',
+        browR: 'M23.2 12.6c1.7.55 3.6 1.35 5.2 2.35',
+        browWidth: '1.65',
+        cheekL: { cx: 10.8, cy: 23.0, rx: 1.8, ry: 1.1, opacity: '0.15' },
+        cheekR: { cx: 29.4, cy: 21.8, rx: 3.2, ry: 1.8, opacity: '0.5' },
+        mouths: {
+          neutral: 'M15.0 25.4c1.6.4 3.4.55 5.0.2 1.4-.3 2.8-.95 4.0-1.7',
+          happy: 'M14.2 24.6c1.6 1.4 3.6 2.0 5.4 1.7 1.6-.25 3.2-1.1 4.6-2.2',
+          sad: 'M15.2 26.6c1.4-.7 3.0-1.0 4.6-.7 1.4.25 2.8.9 4.0 1.7',
+          curious: 'M15.6 24.8c1.3.9 2.9 1.3 4.2 1.1 1.2-.15 2.4-.7 3.6-1.5',
+          thinking: 'M18.2 25.2c1.0.15 2.2.05 3.2-.35',
+          tongue: 'M14.4 24.6c1.6 1.6 3.6 2.3 5.4 2.0 1.6-.25 3.2-1.1 4.6-2.2',
+          wink: 'M15.0 25.2c1.3.7 2.9.95 4.4.7 1.3-.2 2.6-.75 3.8-1.5',
+          excited: 'M13.8 24.2c1.8 2.0 4.0 2.8 6.0 2.4 1.8-.35 3.6-1.4 5.2-2.8'
+        },
+        surprised: { cx: 21.2, cy: 25.4, rx: 2.0, ry: 2.3 }
       },
+      /* Wide-set tiny sleepy eyes, flat high brows, no blush — serene. */
       calm: {
-        eyeL: { cx: 14.3, cy: 18.0, rx: 2.1, ry: 2.25 },
-        eyeR: { cx: 25.7, cy: 18.0, rx: 2.1, ry: 2.25 },
-        shineL: { cx: 15.0, cy: 17.2, r: 0.5 },
-        shineR: { cx: 26.4, cy: 17.2, r: 0.5 },
-        browL: 'M11.6 14.8c1.4-.25 3.1-.25 4.5 0',
-        browR: 'M23.9 14.8c1.4-.25 3.1-.25 4.5 0',
-        browWidth: '1.15',
-        cheekL: { cx: 11.4, cy: 22.5, rx: 2.0, ry: 1.15, opacity: '0.18' },
-        cheekR: { cx: 28.6, cy: 22.5, rx: 2.0, ry: 1.15, opacity: '0.18' }
+        head: { rx: 18.2, ry: 19.8 },
+        featuresTransform:
+          'translate(20 20) scale(0.94) translate(-20 -20) translate(0 0.4)',
+        eyeFill: '#3a342e',
+        browStroke: '#8a7a6a',
+        cheekFill: '#d0a090',
+        mouthStroke: '#7a6a5a',
+        mouthWidth: '1.15',
+        eyeL: { cx: 12.4, cy: 18.6, rx: 1.55, ry: 1.35 },
+        eyeR: { cx: 27.6, cy: 18.6, rx: 1.55, ry: 1.35 },
+        shineL: { cx: 12.9, cy: 18.15, r: 0.35 },
+        shineR: { cx: 28.1, cy: 18.15, r: 0.35 },
+        browL: 'M10.0 14.6c1.5-.05 3.4-.05 4.9 0',
+        browR: 'M25.1 14.6c1.5-.05 3.4-.05 4.9 0',
+        browWidth: '0.95',
+        cheekL: { cx: 11.0, cy: 22.8, rx: 1.4, ry: 0.8, opacity: '0.06' },
+        cheekR: { cx: 29.0, cy: 22.8, rx: 1.4, ry: 0.8, opacity: '0.06' },
+        mouths: {
+          neutral: 'M16.8 25.6c1.0.35 2.2.5 3.2.5s2.2-.15 3.2-.5',
+          happy: 'M15.8 25.0c1.3 1.2 2.9 1.7 4.2 1.7s2.9-.5 4.2-1.7',
+          sad: 'M16.4 26.4c1.1-.7 2.4-.95 3.6-.95s2.5.25 3.6.95',
+          curious: 'M16.6 25.2c1.0.85 2.2 1.2 3.4 1.2s2.4-.35 3.4-1.2',
+          thinking: 'M18.0 25.4c0.8.15 1.8.2 2.6.1',
+          tongue: 'M15.8 25.0c1.3 1.2 2.9 1.7 4.2 1.7s2.9-.5 4.2-1.7',
+          wink: 'M16.4 25.4c1.0.7 2.2 1.0 3.4.95 1.0-.05 2.0-.35 2.9-.85',
+          excited: 'M15.4 24.8c1.5 1.6 3.2 2.2 4.6 2.2s3.1-.6 4.6-2.2'
+        },
+        surprised: { cx: 20, cy: 25.8, rx: 1.5, ry: 1.8 }
       },
+      /* Huge sparkly eyes, high arched brows, big smile — energetic. */
       spark: {
-        eyeL: { cx: 14.1, cy: 17.3, rx: 2.75, ry: 3.05 },
-        eyeR: { cx: 25.9, cy: 17.3, rx: 2.75, ry: 3.05 },
-        shineL: { cx: 15.15, cy: 16.35, r: 1.05 },
-        shineR: { cx: 26.95, cy: 16.35, r: 1.05 },
-        browL: 'M11.0 13.8c1.55-1.05 3.5-1.05 5.1 0',
-        browR: 'M23.9 13.8c1.55-1.05 3.5-1.05 5.1 0',
-        browWidth: '1.4',
-        cheekL: { cx: 11.1, cy: 22.3, rx: 2.55, ry: 1.5, opacity: '0.42' },
-        cheekR: { cx: 28.9, cy: 22.3, rx: 2.55, ry: 1.5, opacity: '0.42' }
+        head: { rx: 19.6, ry: 18.6 },
+        featuresTransform: 'translate(0 -0.8)',
+        eyeFill: '#1e1410',
+        browStroke: '#5a3018',
+        cheekFill: '#ff6a88',
+        mouthStroke: '#5a3018',
+        mouthWidth: '1.7',
+        eyeL: { cx: 13.4, cy: 16.4, rx: 3.6, ry: 3.9 },
+        eyeR: { cx: 26.6, cy: 16.4, rx: 3.6, ry: 3.9 },
+        shineL: { cx: 14.7, cy: 15.0, r: 1.45 },
+        shineR: { cx: 27.9, cy: 15.0, r: 1.45 },
+        browL: 'M9.8 12.0c2.0-1.55 4.8-1.7 7.0-.15',
+        browR: 'M23.2 11.85c2.0-1.55 4.8-1.7 7.0-.15',
+        browWidth: '1.55',
+        cheekL: { cx: 10.0, cy: 22.0, rx: 3.0, ry: 1.7, opacity: '0.55' },
+        cheekR: { cx: 30.0, cy: 22.0, rx: 3.0, ry: 1.7, opacity: '0.55' },
+        mouths: {
+          neutral: 'M14.8 24.8c1.6 1.2 3.6 1.7 5.2 1.7s3.6-.5 5.2-1.7',
+          happy: 'M13.0 23.6c2.4 3.4 5.2 5.0 7.0 5.0s4.6-1.6 7.0-5.0',
+          sad: 'M14.8 27.0c1.7-1.4 3.7-2.0 5.2-2.0s3.5.6 5.2 2.0',
+          curious: 'M15.2 24.6c1.5 1.7 3.4 2.5 4.8 2.5s3.3-.8 4.8-2.5',
+          thinking: 'M16.8 25.0c1.3.45 2.8.6 4.0.4',
+          tongue: 'M13.4 23.8c2.2 3.0 5.0 4.4 6.6 4.4s4.4-1.4 6.6-4.4',
+          wink: 'M14.6 24.6c1.6 1.5 3.6 2.1 5.2 2.0 1.5-.1 3.0-.7 4.4-1.6',
+          excited: 'M12.6 23.2c2.6 3.8 5.6 5.4 7.4 5.4s4.8-1.6 7.4-5.4'
+        },
+        surprised: { cx: 20, cy: 25.2, rx: 2.8, ry: 3.2 }
       }
     };
 
@@ -2776,21 +2897,78 @@
       var style = normalizeAgentFace(styleKey);
       var feats = FACE_STYLE_FEATURES[style] || FACE_STYLE_FEATURES.classic;
       face.setAttribute('data-face', style);
+
+      var head = feats.head || { rx: 19.2, ry: 19.2 };
+      setEllipseAttrs(face.querySelector('.agent-face-bg'), head);
+      setEllipseAttrs(face.querySelector('.agent-face-ring'), head);
+
+      var features = face.querySelector('.agent-face-features');
+      if (features) {
+        if (feats.featuresTransform) {
+          features.setAttribute('transform', feats.featuresTransform);
+        } else {
+          features.removeAttribute('transform');
+        }
+      }
+
       setEllipseAttrs(face.querySelector('.agent-face-eye--l'), feats.eyeL);
       setEllipseAttrs(face.querySelector('.agent-face-eye--r'), feats.eyeR);
       setEllipseAttrs(face.querySelector('.agent-face-shine--l'), feats.shineL);
       setEllipseAttrs(face.querySelector('.agent-face-shine--r'), feats.shineR);
       setEllipseAttrs(face.querySelector('.agent-face-cheek--l'), feats.cheekL);
       setEllipseAttrs(face.querySelector('.agent-face-cheek--r'), feats.cheekR);
+
+      var eyeFill = feats.eyeFill || '#2a211c';
+      var eyeL = face.querySelector('.agent-face-eye--l');
+      var eyeR = face.querySelector('.agent-face-eye--r');
+      if (eyeL) eyeL.setAttribute('fill', eyeFill);
+      if (eyeR) eyeR.setAttribute('fill', eyeFill);
+
+      var cheekFill = feats.cheekFill || '#f07a7a';
+      var cheekL = face.querySelector('.agent-face-cheek--l');
+      var cheekR = face.querySelector('.agent-face-cheek--r');
+      if (cheekL) cheekL.setAttribute('fill', cheekFill);
+      if (cheekR) cheekR.setAttribute('fill', cheekFill);
+
+      var browStroke = feats.browStroke || '#6b3f2a';
       var browL = face.querySelector('.agent-face-brow--l');
       var browR = face.querySelector('.agent-face-brow--r');
       if (browL) {
         browL.setAttribute('d', feats.browL);
         browL.setAttribute('stroke-width', feats.browWidth);
+        browL.setAttribute('stroke', browStroke);
       }
       if (browR) {
         browR.setAttribute('d', feats.browR);
         browR.setAttribute('stroke-width', feats.browWidth);
+        browR.setAttribute('stroke', browStroke);
+      }
+
+      var mouthStroke = feats.mouthStroke || browStroke;
+      var mouthWidth = feats.mouthWidth || '1.5';
+      var mouths = feats.mouths || {};
+      var mouthKeys = [
+        'neutral',
+        'happy',
+        'sad',
+        'curious',
+        'thinking',
+        'tongue',
+        'wink',
+        'excited'
+      ];
+      for (var mi = 0; mi < mouthKeys.length; mi++) {
+        var mKey = mouthKeys[mi];
+        var mouthNode = face.querySelector('.agent-face-mouth--' + mKey);
+        if (!mouthNode) continue;
+        if (mouths[mKey]) mouthNode.setAttribute('d', mouths[mKey]);
+        mouthNode.setAttribute('stroke', mouthStroke);
+        mouthNode.setAttribute('stroke-width', mouthWidth);
+      }
+      var surprised = face.querySelector('.agent-face-mouth--surprised');
+      if (surprised) {
+        setEllipseAttrs(surprised, feats.surprised || { cx: 20, cy: 25.6, rx: 2.1, ry: 2.5 });
+        surprised.setAttribute('fill', mouthStroke);
       }
     }
 
@@ -3012,10 +3190,10 @@
         '"/>' +
         '</radialGradient>' +
         '</defs>' +
-        '<circle class="agent-face-bg" cx="20" cy="20" r="19.2" fill="url(#' +
+        '<ellipse class="agent-face-bg" cx="20" cy="20" rx="19.2" ry="19.2" fill="url(#' +
         gradId +
         ')"/>' +
-        '<circle class="agent-face-ring" cx="20" cy="20" r="19.2" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="1.4"/>' +
+        '<ellipse class="agent-face-ring" cx="20" cy="20" rx="19.2" ry="19.2" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="1.4"/>' +
         '<g class="agent-face-features">' +
         '<g class="agent-face-brows">' +
         '<path class="agent-face-brow agent-face-brow--l" d="M11.5 14.2c1.4-.9 3.2-.9 4.6 0" fill="none" stroke="#6b3f2a" stroke-width="1.35" stroke-linecap="round"/>' +

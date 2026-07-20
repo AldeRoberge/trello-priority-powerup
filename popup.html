@@ -59,7 +59,7 @@
   <script src="./components/agent/memory-ui.js?v=memory-settings-1"></script>
   <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
-  <script src="./components/agent/agent-ui.js?v=attente-hourglass-1"></script>
+  <script src="./components/agent/agent-ui.js?v=assistant-dock-1"></script>
   <script src="./components/history/card-history.js?v=echeance-recurring-1"></script>
   <script src="./components/history/history-ui.js?v=history-5"></script>
 </head>
@@ -1930,19 +1930,13 @@
 
     /** Move Assistant into the right rail for the fullscreen split layout. */
     function placeAssistantInRail(agentUi) {
-      var rail = document.getElementById('assistantRail');
-      var splitter = document.getElementById('cerveauSplitter');
-      var shell = document.getElementById('cerveauShell');
       var chatSection =
         (agentUi && agentUi.el) ||
         (variant &&
           variant.card &&
           variant.card.querySelector('.variant-chat-section'));
-      if (!rail || !chatSection) return;
-      rail.appendChild(chatSection);
-      rail.hidden = false;
-      if (splitter) splitter.hidden = false;
-      document.body.classList.add('is-split-assistant');
+      if (!chatSection) return;
+      syncAssistantSplitDock(chatSection, true);
       if (
         agentUi &&
         agentUi.collapse &&
@@ -1950,7 +1944,38 @@
       ) {
         agentUi.collapse.setExpanded(true);
       }
-      bindAssistantSplit(shell, rail, splitter);
+    }
+
+    /** Expanded → right rail; collapsed → back with other section summaries. */
+    function syncAssistantSplitDock(chatSection, expanded) {
+      var rail = document.getElementById('assistantRail');
+      var splitter = document.getElementById('cerveauSplitter');
+      var shell = document.getElementById('cerveauShell');
+      var card = variant && variant.card;
+      if (!chatSection) return;
+
+      if (expanded) {
+        if (!rail) return;
+        rail.appendChild(chatSection);
+        rail.hidden = false;
+        if (splitter) splitter.hidden = false;
+        document.body.classList.add('is-split-assistant');
+        bindAssistantSplit(shell, rail, splitter);
+        return;
+      }
+
+      if (card) {
+        var hist = card.querySelector('.variant-historique-section');
+        if (hist) {
+          if (hist.nextSibling) card.insertBefore(chatSection, hist.nextSibling);
+          else card.appendChild(chatSection);
+        } else {
+          card.appendChild(chatSection);
+        }
+      }
+      if (rail) rail.hidden = true;
+      if (splitter) splitter.hidden = true;
+      document.body.classList.remove('is-split-assistant');
     }
 
     var ASSISTANT_RAIL_W_KEY = 'cerveau-assistant-rail-width';
@@ -7363,7 +7388,17 @@
                 };
               });
           },
-          onLayoutChange: resizePopup
+          onLayoutChange: resizePopup,
+          onExpandChange: function (isExpanded) {
+            var chatSection =
+              (agentUi && agentUi.el) ||
+              (variant &&
+                variant.card &&
+                variant.card.querySelector('.variant-chat-section')) ||
+              document.querySelector('.variant-chat-section');
+            syncAssistantSplitDock(chatSection, !!isExpanded);
+            resizePopup();
+          }
         });
         completeBootStep('assistant');
       } else if (featureOn('assistant')) {
