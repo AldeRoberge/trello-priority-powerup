@@ -457,7 +457,7 @@ describe('GanttModel', () => {
     assert.equal(GanttModel.stateSectionKey({}), 'pending');
   });
 
-  it('sortTreeRootsGroupedByState orders En cours → En attente → Bloqué', () => {
+  it('sortTreeRootsGroupedByState orders En cours → À faire → Bloqué', () => {
     const tree = GanttModel.buildNestTree([
       {
         id: 'wait',
@@ -504,8 +504,22 @@ describe('GanttModel', () => {
       grouped[2].children.map((n) => n.cardId),
       ['stuck']
     );
-    assert.equal(grouped[1].name, 'En attente');
-    assert.equal(grouped[2].name, 'Bloqué');
+    assert.equal(grouped[1].name, '\u00c0 faire');
+    assert.equal(grouped[2].name, 'Bloqu\u00e9');
+  });
+
+  it('sortTreeRootsGroupedByState always keeps empty À faire section', () => {
+    const tree = GanttModel.buildNestTree([
+      { id: 'go', name: 'Go', dueDate: '2026-07-20', category: 'started' },
+    ]);
+    const grouped = GanttModel.sortTreeRootsGroupedByState(tree, 'name', 'asc');
+    assert.deepEqual(
+      grouped.map((n) => n.sectionKey),
+      ['started', 'pending']
+    );
+    assert.equal(grouped[1].name, '\u00c0 faire');
+    assert.equal(grouped[1].children.length, 0);
+    assert.equal(grouped[1].expandable, false);
   });
 
   it('flattenVisible can collapse state sections', () => {
@@ -546,7 +560,7 @@ describe('GanttModel', () => {
     assert.equal(pruned[0].sectionKey, 'started');
   });
 
-  it('pruneEmptyStateSections drops headers with no tasks', () => {
+  it('pruneEmptyStateSections drops empty started/blocked but keeps À faire', () => {
     const rows = [
       GanttModel.makeStateSectionHeader('started'),
       GanttModel.makeStateSectionHeader('pending'),
@@ -557,6 +571,16 @@ describe('GanttModel', () => {
     assert.deepEqual(
       pruned.map((n) => (n.kind === 'section' ? n.sectionKey : n.cardId)),
       ['pending', 'a']
+    );
+
+    const onlyEmptyPending = GanttModel.pruneEmptyStateSections([
+      GanttModel.makeStateSectionHeader('started'),
+      GanttModel.makeStateSectionHeader('pending'),
+      GanttModel.makeStateSectionHeader('blocked'),
+    ]);
+    assert.deepEqual(
+      onlyEmptyPending.map((n) => n.sectionKey),
+      ['pending']
     );
   });
 

@@ -4,6 +4,10 @@
 
   var VIEW_MODES = ['day', 'week', 'month', 'year'];
   var MS_DAY = 24 * 60 * 60 * 1000;
+  var MS_MINUTE = 60 * 1000;
+  var DEFAULT_DAY_START = '08:15';
+  var DEFAULT_DAY_END = '16:45';
+  var AGENDA_SNAP_MINUTES = 15;
   var WEEKDAY_SHORT = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
   var WEEKDAY_LONG = [
     'Dimanche',
@@ -29,11 +33,11 @@
     'd\u00e9c.',
   ];
 
-  /** Gantt state sections (Statut): En cours → En attente → Bloqué. */
+  /** Gantt state sections (Statut): En cours → À faire → Bloqué. */
   var STATE_SECTION_ORDER = ['started', 'pending', 'blocked'];
   var STATE_SECTION_LABELS = {
     started: 'En cours',
-    pending: 'En attente',
+    pending: '\u00c0 faire',
     blocked: 'Bloqu\u00e9',
   };
 
@@ -78,6 +82,45 @@
 
   function startOfDay(date) {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
+
+  /** Parse `HH:MM` → `{ hours, minutes }` or null. */
+  function parseTime(value) {
+    if (value == null || value === '') return null;
+    if (typeof value !== 'string') return null;
+    var trimmed = value.trim();
+    var m = /^(\d{1,2}):(\d{2})$/.exec(trimmed);
+    if (!m) return null;
+    var hours = Number(m[1]);
+    var minutes = Number(m[2]);
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+    return { hours: hours, minutes: minutes };
+  }
+
+  function toIsoTime(date) {
+    if (!(date instanceof Date) || isNaN(date.getTime())) return '';
+    return pad2(date.getHours()) + ':' + pad2(date.getMinutes());
+  }
+
+  /** Combine a calendar date with optional `HH:MM` (midnight when time omitted). */
+  function combineDateTime(dateOrIso, timeStr) {
+    var d =
+      dateOrIso instanceof Date
+        ? startOfDay(dateOrIso)
+        : parseIsoDate(dateOrIso);
+    if (!d) return null;
+    var out = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    var t = parseTime(timeStr);
+    if (t) out.setHours(t.hours, t.minutes, 0, 0);
+    return out;
+  }
+
+  function normalizeWorkTime(value, fallback) {
+    var t = parseTime(value);
+    if (t) return pad2(t.hours) + ':' + pad2(t.minutes);
+    var fb = parseTime(fallback);
+    if (fb) return pad2(fb.hours) + ':' + pad2(fb.minutes);
+    return fallback || '';
   }
 
   function addDays(date, days) {
@@ -752,7 +795,7 @@
   }
 
   /**
-   * State section for a root card: En cours → En attente → Bloqué.
+   * State section for a root card: En cours → À faire → Bloqué.
    * Blocked wins over list category when enAttente is set.
    * @returns {'started'|'pending'|'blocked'}
    */
@@ -808,9 +851,9 @@
   }
 
   /**
-   * Group roots into En cours → En attente → Bloqué sections (tasks as children),
+   * Group roots into En cours → À faire → Bloqué sections (tasks as children),
    * sorting within each section with the usual sortTreeRoots rules.
-   * Empty sections are omitted.
+   * Empty started/blocked sections are omitted; À faire is always shown.
    */
   function sortTreeRootsGroupedByState(nodes, sortBy, sortDir) {
     var buckets = {
@@ -834,10 +877,11 @@
     for (var i = 0; i < STATE_SECTION_ORDER.length; i++) {
       var key = STATE_SECTION_ORDER[i];
       var sorted = sortTreeRoots(buckets[key], sortBy, sortDir);
-      if (!sorted.length) continue;
+      // Always keep À faire visible, even with no tasks.
+      if (!sorted.length && key !== 'pending') continue;
       var header = makeStateSectionHeader(key);
       header.children = sorted;
-      header.expandable = true;
+      header.expandable = sorted.length > 0;
       header.subtaskCount = sorted.length;
       out.push(header);
     }
@@ -847,6 +891,7 @@
   /**
    * Drop section headers that have no visible task rows after them.
    * Collapsed sections with children are kept so the header stays clickable.
+   * À faire is always kept, even when empty.
    */
   function pruneEmptyStateSections(rows, expandedSet) {
     var list = rows || [];
@@ -855,6 +900,10 @@
       var row = list[i];
       if (!row) continue;
       if (row.kind === 'section') {
+        if (row.sectionKey === 'pending') {
+          out.push(row);
+          continue;
+        }
         var hasTask = false;
         for (var j = i + 1; j < list.length; j++) {
           if (!list[j]) continue;
