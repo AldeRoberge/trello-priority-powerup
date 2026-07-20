@@ -54,6 +54,7 @@ const UNIT_FILES = [
   'gantt-mini-editors.test.js',
   'outlook-sync.test.js',
   'outlook-ics.test.js',
+  'desc-meta.test.js',
 ];
 
 function listTests() {

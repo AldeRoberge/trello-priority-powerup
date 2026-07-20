@@ -802,13 +802,18 @@
   color: var(--tp-text, #172b4d);
 }
 
-.gantt-work-hours {
+.gantt-work-hours,
+.gantt-off-hours {
   position: absolute;
   top: 0;
   bottom: 0;
   z-index: 0;
   pointer-events: none;
   background: rgba(9, 30, 66, 0.07);
+}
+
+.gantt-off-hours {
+  background: rgba(9, 30, 66, 0.09);
 }
 
 .gantt-timeline-row {

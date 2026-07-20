@@ -3011,25 +3011,36 @@
       timelineCol.appendChild(headerTimeline);
 
       if (
-        state.viewMode === 'day' &&
-        typeof model.workHoursBand === 'function'
+        usesTimedTimeline() &&
+        typeof model.offHoursBands === 'function'
       ) {
-        var band = model.workHoursBand(
+        var offBands = model.offHoursBands(
           state.ganttSettings.dayStart,
           state.ganttSettings.dayEnd,
           r,
           state.timelineWidth
         );
-        if (band && band.width > 0) {
-          var workEl = el('div', 'gantt-work-hours');
-          workEl.style.left = band.left + 'px';
-          workEl.style.width = band.width + 'px';
-          workEl.title =
-            'Heures de travail \u00b7 ' +
-            state.ganttSettings.dayStart +
-            ' \u2013 ' +
-            state.ganttSettings.dayEnd;
-          timelineCol.appendChild(workEl);
+        var offTitle =
+          'Hors heures de travail \u00b7 avant ' +
+          state.ganttSettings.dayStart +
+          ' / apr\u00e8s ' +
+          state.ganttSettings.dayEnd;
+        for (var ob = 0; ob < offBands.length; ob++) {
+          var band = offBands[ob];
+          if (!band || !(band.width > 0)) continue;
+          var offEl = el(
+            'div',
+            'gantt-off-hours' +
+              (band.kind === 'morning'
+                ? ' gantt-off-hours--morning'
+                : band.kind === 'night'
+                  ? ' gantt-off-hours--night'
+                  : '')
+          );
+          offEl.style.left = band.left + 'px';
+          offEl.style.width = band.width + 'px';
+          offEl.title = offTitle;
+          timelineCol.appendChild(offEl);
         }
       }
 

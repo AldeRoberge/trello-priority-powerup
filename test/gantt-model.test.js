@@ -295,6 +295,49 @@ describe('GanttModel', () => {
     assert.ok(Math.abs(band.width - (endX - startX)) < 0.01);
   });
 
+  it('offHoursBands grays morning and night in day and week views', () => {
+    const dayRange = GanttModel.viewRange('day', '2026-07-22');
+    const dayBands = GanttModel.offHoursBands('08:15', '16:45', dayRange, 240);
+    assert.equal(dayBands.length, 2);
+    assert.equal(dayBands[0].kind, 'morning');
+    assert.equal(dayBands[1].kind, 'night');
+    assert.ok(Math.abs(dayBands[0].left) < 0.01);
+    assert.ok(
+      Math.abs(
+        dayBands[0].width -
+          GanttModel.dateTimeToX(
+            GanttModel.combineDateTime('2026-07-22', '08:15'),
+            dayRange,
+            240
+          )
+      ) < 0.01
+    );
+    assert.ok(
+      Math.abs(
+        dayBands[1].left -
+          GanttModel.dateTimeToX(
+            GanttModel.combineDateTime('2026-07-22', '16:45'),
+            dayRange,
+            240
+          )
+      ) < 0.01
+    );
+
+    const weekRange = GanttModel.viewRange('week', '2026-07-22');
+    const weekBands = GanttModel.offHoursBands(
+      '08:15',
+      '16:45',
+      weekRange,
+      700
+    );
+    assert.equal(weekBands.length, 14); // 7 mornings + 7 nights
+    assert.equal(
+      GanttModel.offHoursBands('08:15', '16:45', GanttModel.viewRange('month', '2026-07-22'), 900)
+        .length,
+      0
+    );
+  });
+
   it('intervalToParts emits times when hasTime', () => {
     const iv = GanttModel.resolveBarInterval({
       startDate: '2026-07-22',

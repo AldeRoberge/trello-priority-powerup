@@ -2078,6 +2078,27 @@ html[data-color-mode='dark'] .overview-composer-input {
   min-height: 1.1em;
 }
 
+.info-desc-meta-toggle {
+  display: inline-block;
+  margin: 4px 0 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ds-text-subtle, #626f86);
+  font: inherit;
+  font-size: 0.8rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.info-desc-meta-toggle:hover {
+  color: var(--ds-text, #172b4d);
+}
+
+.info-desc-meta-toggle[hidden] {
+  display: none;
+}
+
 .info-desc-spinner {
   flex: 0 0 auto;
   display: inline-flex;

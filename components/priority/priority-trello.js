@@ -2497,39 +2497,18 @@
   }
 
   async function getBadgeData(t) {
-    var inputsBefore = null;
-    try {
-      inputsBefore = await getCardInputs(t);
-    } catch (preErr) {
-      console.error('Priority badge inputs preload failed', preErr);
-    }
-    // Vague dues use a proxy Trello date — prefer Power-Up so badge sync
-    // does not flatten the horizon label back to "N ans restants".
-    var duePrefer =
-      inputsBefore &&
-      (inputsBefore.dueMode === 'vague' || inputsBefore.dueVague)
-        ? 'powerup'
-        : 'trello';
-    try {
-      await syncCardDueWithTrello(t, {
-        prefer: duePrefer,
-        inputs: inputsBefore || undefined
-      });
-    } catch (syncErr) {
-      console.error('Priority due sync (badge) failed', syncErr);
-    }
-    try {
-      await syncCardStartWithTrello(t, { prefer: 'trello' });
-    } catch (startErr) {
-      console.error('Priority start sync (badge) failed', startErr);
-    }
+    // Read-only: never sync due/start or mutate plugin data here.
+    // Badge polls run often; writes re-trigger capabilities and cause REST thrash.
     var results = await Promise.all([
       getCardInputs(t),
       getCardDueComplete(t),
       t.get('board', 'shared', COLOR_SCHEME_REV_KEY).catch(function () { return null; }),
     ]);
     var completed = results[1] === true;
-    var inputs = await clearBlockedIfComplete(t, results[0], completed);
+    var inputs = results[0];
+    if (completed && inputs && inputs.enAttente) {
+      inputs = clearBlockedFromInputs(inputs);
+    }
     var display = null;
     if (inputs) {
       var settings = await ensureBoardPriorityContext(t);

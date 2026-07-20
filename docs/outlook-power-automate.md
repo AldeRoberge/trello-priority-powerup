@@ -95,9 +95,17 @@ If **Get a row** fails when the card is new, use this pattern instead:
 
 ## Alternative (Free Trello) — marker in the description
 
-If you prefer not to use Excel, store the event id in the card **description** (available on Free).
+Cerveau hides this automatically in the popup (see **Afficher les métadonnées masquées**).
 
-Marker line (keep exactly this prefix):
+Preferred marker (HTML comment — invisible in Trello’s own markdown view):
+
+```text
+<!--cerveau-meta
+outlook-event-id: PASTE_EVENT_ID_HERE
+-->
+```
+
+Also accepted (visible in native Trello until Cerveau rewrites it):
 
 ```text
 [outlook-event-id]: PASTE_EVENT_ID_HERE
@@ -106,13 +114,28 @@ Marker line (keep exactly this prefix):
 Flow idea:
 
 1. Trigger: **When a card is updated**, due date not empty.
-2. Condition: **Description** contains `[outlook-event-id]:`.
-3. **If no** → Create event → **Update a card** description =  
-   `concat(triggerBody()?['desc'], '\n\n[outlook-event-id]: ', outputs('Create_event')?['body/id'])`  
-   (adjust action names to match your flow).
-4. **If yes** → Parse id with an expression, e.g. after the marker, then **Update event**.
+2. Condition: description contains `outlook-event-id` **or** Excel row exists (prefer Excel if you use both).
+3. **If no id** → Create event → **Update a card** description = visible text + comment block with the new event id.  
+   Expression sketch (adjust action names):
 
-**Downsides:** the marker is visible in the description; careless edits can break the id. Prefer **Excel mapping** when possible.
+```text
+concat(
+  trim(replace(replace(triggerBody()?['desc'], '<!--cerveau-meta', ''), '[outlook-event-id]:', '')),
+  '
+
+<!--cerveau-meta
+outlook-event-id: ',
+  outputs('Create_event')?['body/id'],
+  '
+-->'
+)
+```
+
+(Simpler: append `\n\n[outlook-event-id]: @{outputs('Create_event')?['body/id']}` — Cerveau will hide it in the popup.)
+
+4. **If yes** → Parse id, then **Update event**.
+
+**Note:** Prefer **Excel mapping** if you edit descriptions often in Power Automate; the comment block is best when Cerveau Graph sync (or a careful flow) maintains it.
 
 ---
 

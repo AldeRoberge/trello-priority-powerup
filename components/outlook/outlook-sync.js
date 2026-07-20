@@ -27,6 +27,10 @@
     return global.PriorityTrello || null;
   }
 
+  function descMeta() {
+    return global.DescMeta || null;
+  }
+
   function pad2(n) {
     return n < 10 ? '0' + n : String(n);
   }
@@ -164,7 +168,12 @@
     var s = emptySnapshot();
     if (!card) return s;
     s.name = typeof card.name === 'string' ? card.name : '';
-    s.desc = typeof card.desc === 'string' ? card.desc : '';
+    var rawDesc = typeof card.desc === 'string' ? card.desc : '';
+    var dm = descMeta();
+    s.desc =
+      dm && typeof dm.stripVisibleOnly === 'function'
+        ? dm.stripVisibleOnly(rawDesc)
+        : rawDesc;
     var interval = resolveCardInterval(card);
     if (interval) {
       s.startDate = interval.startDate;
@@ -353,6 +362,26 @@
     return store[boardId];
   }
 
+  async function writeOutlookEventIdToDesc(t, cardId, eventId, currentDesc) {
+    var dm = descMeta();
+    var pt = priorityTrello();
+    if (!dm || typeof dm.setMeta !== 'function') {
+      return { ok: false, reason: 'no-desc-meta' };
+    }
+    if (!pt || typeof pt.restPutCard !== 'function') {
+      return { ok: false, reason: 'no-rest' };
+    }
+    var next = dm.setMeta(currentDesc || '', 'outlook-event-id', eventId);
+    if (next === (currentDesc || '')) {
+      return { ok: true, changed: false, desc: next };
+    }
+    var put = await pt.restPutCard(t, cardId, { desc: next });
+    if (!put || !put.ok) {
+      return Object.assign({ ok: false, reason: 'rest-desc-meta' }, put || {});
+    }
+    return { ok: true, changed: true, desc: next };
+  }
+
   async function applyToTrello(t, cardId, snapshot) {
     var s = normalizeSnapshot(snapshot);
     var pt = priorityTrello();
@@ -369,7 +398,21 @@
 
     var body = {};
     if (s.name) body.name = s.name;
-    if (typeof s.desc === 'string') body.desc = s.desc;
+    if (typeof s.desc === 'string') {
+      var dm = descMeta();
+      if (
+        dm &&
+        typeof dm.joinDesc === 'function' &&
+        typeof dm.splitDesc === 'function' &&
+        snapshot &&
+        snapshot._fullDesc != null
+      ) {
+        var split = dm.splitDesc(String(snapshot._fullDesc));
+        body.desc = dm.joinDesc(s.desc, split.meta);
+      } else {
+        body.desc = s.desc;
+      }
+    }
 
     if (Object.keys(body).length) {
       var put = await pt.restPutCard(t, cardId, body);
@@ -428,6 +471,11 @@
       } catch (extErr) {
         console.warn('OutlookSync extension failed', extErr);
       }
+      try {
+        await writeOutlookEventIdToDesc(t, cardId, eventId, card.desc || '');
+      } catch (descErr) {
+        console.warn('OutlookSync desc meta failed', descErr);
+      }
       return {
         ok: true,
         action: 'created',
@@ -447,6 +495,11 @@
       } catch (e2) {
         /* ignore */
       }
+      try {
+        await writeOutlookEventIdToDesc(t, cardId, newId, card.desc || '');
+      } catch (descErr2) {
+        console.warn('OutlookSync desc meta failed', descErr2);
+      }
       return {
         ok: true,
         action: 'recreated',
@@ -463,7 +516,10 @@
     );
 
     if (merged.toTrello) {
-      var tRes = await applyToTrello(t, cardId, merged.toTrello);
+      var pull = Object.assign({}, merged.toTrello, {
+        _fullDesc: card.desc || '',
+      });
+      var tRes = await applyToTrello(t, cardId, pull);
       if (!tRes.ok) return Object.assign({ action: 'merge' }, tRes);
     }
     if (merged.toOutlook) {
@@ -471,6 +527,18 @@
       if (patch) {
         await g.updateEvent(accessToken, mapEntry.eventId, patch);
       }
+    }
+
+    // Keep description meta in sync with mapped event id (Power Automate / Free Trello).
+    try {
+      await writeOutlookEventIdToDesc(
+        t,
+        cardId,
+        mapEntry.eventId,
+        card.desc || ''
+      );
+    } catch (descErr3) {
+      /* ignore */
     }
 
     return {

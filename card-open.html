@@ -87,7 +87,9 @@
       var overviewLiveSyncStarted = false;
       var overviewLiveSyncTimer = null;
       var appliedOverviewFp = '';
-      var LIVE_SYNC_POLL_MS = 3000;
+      // Safety-net only — t.render + visibilitychange already refresh on card changes.
+      // A short interval re-ran getBadgeData/statut often and amplified API load.
+      var LIVE_SYNC_POLL_MS = 30000;
       if (openBtn) openBtn.textContent = 'Ouvrir ' + appName;
 
       function stableFp(value) {

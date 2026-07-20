@@ -398,8 +398,10 @@
       'aria-label': 'Visage de l\'assistant'
     });
     var agentPersonalityInput = el('textarea', 'agent-input agent-personality-input', {
-      rows: '3',
-      maxlength: '400',
+      rows: '4',
+      maxlength: String(
+        (global.UserProfile && global.UserProfile.MAX_AGENT_PERSONALITY) || 900
+      ),
       placeholder: 'ex. Pote attentionn\u00e9, peu fan de productivit\u00e9\u2026'
     });
     settingsPanel.appendChild(labeledInput('Nom', agentNameInput));
@@ -1895,7 +1897,7 @@
       var trimmed = String(personality || '').trim();
       if (!trimmed) return { ok: false, reason: 'empty-personality' };
       var maxLen =
-        (global.UserProfile && global.UserProfile.MAX_AGENT_PERSONALITY) || 400;
+        (global.UserProfile && global.UserProfile.MAX_AGENT_PERSONALITY) || 900;
       if (trimmed.length > maxLen) trimmed = trimmed.slice(0, maxLen);
       await persistAgentIdentity({
         agentName: agentIdentity.agentName,

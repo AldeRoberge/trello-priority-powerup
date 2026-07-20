@@ -14937,7 +14937,6 @@
         options = options || {};
         var value = typeof next === 'string' ? next : '';
         if (descDirty && !options.force) return;
-        descText = value;
         if (
           (document.activeElement === descInput || document.activeElement === descRich) &&
           !options.force
@@ -14947,17 +14946,40 @@
         descSpellcheckGen += 1;
         setDescSpellchecking(false);
         clearDescSpellRevert();
-        descInput.value = value;
+        applyFullDescToEditor(value);
         descDirty = false;
-        descSpellcheckedText = value.trim() || null;
-        if (descMode === 'rich') renderDescRich();
-        else syncDescInputSize();
+        descSpellcheckedText = splitFullDesc(value).visible.trim() || null;
         scheduleLabelSuggestions(false);
         scheduleTaskTypeSuggestions(false);
       },
       getDesc: function () {
+        return fullDescFromEditor();
+      },
+      getDescVisible: function () {
         syncDescSourceFromRich();
-        return descInput.value;
+        return visibleFromEditorValue(descInput.value);
+      },
+      getDescMeta: function () {
+        fullDescFromEditor();
+        return cloneMetaMap(descMetaMap);
+      },
+      setShowDescMeta: function (on) {
+        var want = !!on;
+        if (want === showDescMeta) return;
+        syncDescSourceFromRich();
+        if (showDescMeta) {
+          var split = splitFullDesc(descInput.value);
+          descMetaMap = cloneMetaMap(split.meta);
+          showDescMeta = false;
+          descInput.value = split.visible;
+        } else {
+          showDescMeta = true;
+          descInput.value = joinFullDesc(descInput.value, descMetaMap);
+        }
+        if (descMode === 'rich') renderDescRich();
+        else syncDescInputSize();
+        syncDescMetaToggle();
+        onLayoutChange();
       },
       setMembers: function (list) {
         members = Array.isArray(list) ? list.slice() : [];

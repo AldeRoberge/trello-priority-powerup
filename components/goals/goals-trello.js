@@ -42,6 +42,14 @@
   };
   var migratePromise = null;
 
+  function boardGoalsCacheWarm() {
+    return (
+      Array.isArray(boardCache.objectifs) &&
+      Array.isArray(boardCache.projects) &&
+      Array.isArray(boardCache.metrics)
+    );
+  }
+
   function generateId() {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
       return crypto.randomUUID();
@@ -336,6 +344,9 @@
 
   async function getObjectifs(t) {
     await ensureMigrated(t);
+    if (Array.isArray(boardCache.objectifs)) {
+      return boardCache.objectifs;
+    }
     var list = await readBoardArray(t, OBJECTIFS_KEY, function (raw) {
       return normalizeCollection(raw, normalizeObjectif);
     });
@@ -353,6 +364,9 @@
 
   async function getProjects(t) {
     await ensureMigrated(t);
+    if (Array.isArray(boardCache.projects)) {
+      return boardCache.projects;
+    }
     var list = await readBoardArray(t, PROJECTS_KEY, function (raw) {
       return normalizeCollection(raw, normalizeProject);
     });

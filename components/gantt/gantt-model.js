@@ -662,6 +662,58 @@
     return { left: left, width: Math.max(0, right - left) };
   }
 
+  /**
+   * Morning / night overlays for timed views (Agenda + week).
+   * Each day contributes [midnight → dayStart] and [dayEnd → next midnight].
+   * @returns {Array<{ left: number, width: number, kind: 'morning'|'night' }>}
+   */
+  function offHoursBands(dayStart, dayEnd, range, widthPx) {
+    if (!range || !range.start) return [];
+    if (range.mode !== 'day' && range.mode !== 'week') return [];
+    var startTime = normalizeWorkTime(dayStart, DEFAULT_DAY_START);
+    var endTime = normalizeWorkTime(dayEnd, DEFAULT_DAY_END);
+    var workStart0 = combineDateTime(range.start, startTime);
+    var workEnd0 = combineDateTime(range.start, endTime);
+    if (!workStart0 || !workEnd0) return [];
+    if (workEnd0.getTime() <= workStart0.getTime()) return [];
+
+    var bands = [];
+    var total = rangeDayCount(range);
+    var di;
+    for (di = 0; di < total; di++) {
+      var day = addDays(range.start, di);
+      var midnight = startOfDay(day);
+      var workStart = combineDateTime(day, startTime);
+      var workEnd = combineDateTime(day, endTime);
+      var nextMidnight = addDays(day, 1);
+      if (!workStart || !workEnd) continue;
+
+      if (workStart.getTime() > midnight.getTime()) {
+        var mLeft = dateTimeToX(midnight, range, widthPx);
+        var mRight = dateTimeToX(workStart, range, widthPx);
+        if (mRight > mLeft) {
+          bands.push({
+            left: mLeft,
+            width: mRight - mLeft,
+            kind: 'morning',
+          });
+        }
+      }
+      if (nextMidnight.getTime() > workEnd.getTime()) {
+        var nLeft = dateTimeToX(workEnd, range, widthPx);
+        var nRight = dateTimeToX(nextMidnight, range, widthPx);
+        if (nRight > nLeft) {
+          bands.push({
+            left: nLeft,
+            width: nRight - nLeft,
+            kind: 'night',
+          });
+        }
+      }
+    }
+    return bands;
+  }
+
 /**
    * Build nest tree from enriched board cards.
    * cardRecords: [{ id, name, progress, category, startDate, dueDate, estimatedMinutes,
@@ -1306,6 +1358,7 @@
     intervalToParts: intervalToParts,
     barGeometry: barGeometry,
     workHoursBand: workHoursBand,
+    offHoursBands: offHoursBands,
     buildNestTree: buildNestTree,
     flattenVisible: flattenVisible,
     filterRows: filterRows,

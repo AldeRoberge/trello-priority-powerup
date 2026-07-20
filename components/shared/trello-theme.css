@@ -4968,75 +4968,83 @@ html[data-color-mode='dark'] .tp-completion-suggestion.is-link:hover {
 
 /* Agent identity color picker (presets + custom) */
 .tp-agent-color-picker {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 6px;
-  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  width: auto;
+  max-width: 100%;
 }
 
 .tp-agent-color-swatch {
   appearance: none;
   position: relative;
-  width: 100%;
-  aspect-ratio: 1;
-  min-height: 28px;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  min-height: 0;
   margin: 0;
   padding: 0;
-  border: 2px solid transparent;
+  border: 1.5px solid transparent;
   border-radius: 999px;
   box-shadow:
     inset 0 0 0 1px rgba(9, 30, 66, 0.14),
-    0 1px 2px rgba(9, 30, 66, 0.08);
+    0 1px 1px rgba(9, 30, 66, 0.06);
   cursor: pointer;
   transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
 }
 
 .tp-agent-color-swatch:hover {
-  transform: translateY(-1px) scale(1.04);
+  transform: scale(1.12);
   box-shadow:
     inset 0 0 0 1px rgba(9, 30, 66, 0.18),
-    0 2px 6px rgba(9, 30, 66, 0.14);
+    0 1px 3px rgba(9, 30, 66, 0.12);
 }
 
 .tp-agent-color-swatch.is-selected {
   border-color: var(--tp-primary, #0c66e4);
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--tp-primary, #0c66e4) 35%, transparent),
+    0 0 0 1.5px color-mix(in srgb, var(--tp-primary, #0c66e4) 40%, transparent),
     inset 0 0 0 1px rgba(255, 255, 255, 0.45);
 }
 
 .tp-agent-color-swatch:focus-visible {
   outline: 2px solid var(--tp-primary, #0c66e4);
-  outline-offset: 2px;
+  outline-offset: 1px;
 }
 
 .tp-agent-color-custom {
   position: relative;
-  display: flex;
-  flex-direction: column;
+  flex: 0 0 auto;
+  display: inline-flex;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 3px;
+  width: auto;
+  height: 18px;
   margin: 0;
-  padding: 2px;
-  border: 2px solid transparent;
-  border-radius: 10px;
+  padding: 0 4px 0 1px;
+  border: 1.5px solid transparent;
+  border-radius: 999px;
   cursor: pointer;
-  min-height: 28px;
+  min-height: 0;
   transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
 }
 
 .tp-agent-color-custom.is-selected {
   border-color: var(--tp-primary, #0c66e4);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tp-primary, #0c66e4) 35%, transparent);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--tp-primary, #0c66e4) 40%, transparent);
   background: color-mix(in srgb, var(--tp-primary, #0c66e4) 8%, transparent);
 }
 
 .tp-agent-color-custom-face {
   display: block;
-  width: 100%;
-  aspect-ratio: 1;
-  min-height: 22px;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  min-height: 0;
+  aspect-ratio: auto;
   border-radius: 999px;
   background:
     conic-gradient(
