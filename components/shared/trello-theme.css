@@ -2340,11 +2340,13 @@ input.tp-completion-master-title.is-empty:not(:focus) {
     box-shadow 0.18s ease;
 }
 
+.tp-estimate-chip[role='button']:hover,
 button.tp-estimate-chip:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px color-mix(in srgb, var(--estimate-accent, var(--tp-text)) 16%, transparent);
 }
 
+.tp-estimate-chip[role='button']:focus-visible,
 button.tp-estimate-chip:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--tp-focus-ring, rgba(12, 102, 228, 0.28));

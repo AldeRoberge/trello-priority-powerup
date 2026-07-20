@@ -1174,9 +1174,12 @@
     wrap.className =
       'tp-estimate-chip-wrap' + (config.compact ? ' is-compact' : '');
 
-    var chip = document.createElement(readOnly ? 'span' : 'button');
-    if (!readOnly) chip.type = 'button';
+    var chip = document.createElement(readOnly ? 'span' : 'div');
     chip.className = 'tp-estimate-chip';
+    if (!readOnly) {
+      chip.setAttribute('role', 'button');
+      chip.setAttribute('tabindex', '0');
+    }
 
     // Same Tabler icons as the Temps dropdown ticks (bolt / clock / sun / …).
     var iconEl = document.createElement('i');
@@ -1190,27 +1193,18 @@
 
     var clearBtn = null;
     if (!readOnly) {
-      clearBtn = document.createElement('span');
+      clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
       clearBtn.className = 'tp-estimate-chip-clear';
-      clearBtn.setAttribute('role', 'button');
-      clearBtn.setAttribute('tabindex', '0');
       clearBtn.setAttribute('aria-label', 'Retirer l\u2019estimation');
       clearBtn.title = 'Retirer l\u2019estimation';
       clearBtn.innerHTML = '<i class="ti ti-x" aria-hidden="true"></i>';
       clearBtn.hidden = true;
-      function clearEstimate(e) {
-        if (e) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
+      clearBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
         closePopover();
         setMinutes(null, true);
-      }
-      clearBtn.addEventListener('click', clearEstimate);
-      clearBtn.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-          clearEstimate(e);
-        }
       });
       chip.appendChild(clearBtn);
     }
@@ -1678,6 +1672,19 @@
       rebuildPopoverBody();
       wrap.appendChild(popover);
       chip.addEventListener('click', function (e) {
+        if (e.target && e.target.closest && e.target.closest('.tp-estimate-chip-clear')) {
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        if (popover.classList.contains('is-open')) closePopover();
+        else openPopover();
+      });
+      chip.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        if (e.target && e.target.closest && e.target.closest('.tp-estimate-chip-clear')) {
+          return;
+        }
         e.preventDefault();
         e.stopPropagation();
         if (popover.classList.contains('is-open')) closePopover();
