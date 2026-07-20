@@ -334,6 +334,10 @@
   min-width: 22px;
 }
 
+.gantt-detail-icon.is-subtasks {
+  color: var(--tp-text, #172b4d);
+}
+
 .gantt-detail-icon {
   display: inline-flex;
   align-items: center;
@@ -652,7 +656,7 @@
 
 .gantt-task-title-wrap .gantt-detail-icon.is-subtasks {
   flex: 0 0 auto;
-  color: var(--tp-text-subtle, #44546f);
+  color: var(--tp-text, #172b4d);
 }
 
 .gantt-task-name {
@@ -670,6 +674,11 @@
   min-width: 0;
 }
 
+.gantt-task-name.is-subtask {
+  color: var(--tp-text, #091e42);
+  font-weight: 500;
+}
+
 .gantt-task-name.is-card {
   cursor: pointer;
 }
@@ -681,6 +690,10 @@
 .gantt-task-name.is-done {
   text-decoration: line-through;
   color: var(--tp-text-muted, #626f86);
+}
+
+.gantt-task-name.is-subtask.is-done {
+  color: var(--tp-text-subtle, #44546f);
 }
 
 .gantt-task-name.is-renamable {

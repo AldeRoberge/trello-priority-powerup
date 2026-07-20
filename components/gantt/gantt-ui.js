@@ -1167,8 +1167,6 @@
         cardId: String(cardId),
         cardName: cardName || '',
         openSection: 'priority',
-        // Nested overlay inside fullscreen Gantt — popup must not call t.sizeTo.
-        embed: 'overlay',
       };
 
       // Wide in-Gantt overlay: Trello t.popup width is fixed/narrow, and t.modal
@@ -2491,6 +2489,9 @@
           'button',
           'gantt-task-name' +
             (row.kind === 'card' ? ' is-card' : '') +
+            (row.depth > 0 || row.kind === 'local' || row.kind === 'checklist'
+              ? ' is-subtask'
+              : '') +
             (canEditSubtask(row) ? ' is-renamable' : '') +
             (row.done ? ' is-done' : ''),
           { type: 'button', text: row.name }
