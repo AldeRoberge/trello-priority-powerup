@@ -306,14 +306,24 @@
     return new Date(a.getFullYear() + dir, a.getMonth(), 1);
   }
 
+  
   /**
-   * Resolve [start, end] inclusive day range for a bar.
+   * Resolve [start, end] bar interval.
    * Prefer startDate + dueDate; due-only uses estimate or 1 day; start-only = 1 day.
+   * Optional times (startTime / dueTime) produce real datetimes (hasTime: true).
+   * In Agenda (options.mode === 'day'), date-only cards span work hours.
    */
-  function resolveBarInterval(parts) {
+  function resolveBarInterval(parts, options) {
     parts = parts || {};
+    options = options || {};
+    var mode = options.mode ? normalizeViewMode(options.mode) : null;
+    var dayStart = normalizeWorkTime(options.dayStart, DEFAULT_DAY_START);
+    var dayEnd = normalizeWorkTime(options.dayEnd, DEFAULT_DAY_END);
     var start = parseIsoDate(parts.startDate);
     var due = parseIsoDate(parts.dueDate);
+    var hasStartTime = !!parseTime(parts.startTime);
+    var hasDueTime = !!parseTime(parts.dueTime);
+    var hasAnyTime = hasStartTime || hasDueTime;
     var est =
       typeof parts.estimatedMinutes === 'number' && isFinite(parts.estimatedMinutes)
         ? Math.max(0, Math.round(parts.estimatedMinutes))
@@ -321,21 +331,69 @@
 
     if (start && due) {
       if (due.getTime() < start.getTime()) {
-        return { start: due, end: start };
+        var swapped = start;
+        start = due;
+        due = swapped;
+        var swapStartTime = parts.startTime;
+        parts = Object.assign({}, parts, {
+          startTime: parts.dueTime,
+          dueTime: swapStartTime,
+        });
+        hasStartTime = !!parseTime(parts.startTime);
+        hasDueTime = !!parseTime(parts.dueTime);
+        hasAnyTime = hasStartTime || hasDueTime;
       }
-      return { start: start, end: due };
-    }
-    if (due && !start) {
+    } else if (due && !start) {
       if (est != null && est > 0) {
+        if (hasDueTime && est < 24 * 60) {
+          var dueInstant = combineDateTime(due, parts.dueTime);
+          var startFromEst = new Date(dueInstant.getTime() - est * MS_MINUTE);
+          return {
+            start: startFromEst,
+            end: dueInstant,
+            hasTime: true,
+          };
+        }
         var days = Math.max(1, Math.ceil(est / (60 * 24)));
-        return { start: addDays(due, -(days - 1)), end: due };
+        start = addDays(due, -(days - 1));
+      } else {
+        start = due;
       }
-      return { start: due, end: due };
+    } else if (start && !due) {
+      due = start;
+    } else {
+      return null;
     }
-    if (start && !due) {
-      return { start: start, end: start };
+
+    var startDt;
+    var endDt;
+    var hasTime = false;
+
+    if (hasAnyTime) {
+      startDt = combineDateTime(
+        start,
+        hasStartTime ? parts.startTime : mode === 'day' ? dayStart : null
+      );
+      endDt = combineDateTime(
+        due,
+        hasDueTime ? parts.dueTime : mode === 'day' ? dayEnd : null
+      );
+      hasTime = true;
+    } else if (mode === 'day') {
+      startDt = combineDateTime(start, dayStart);
+      endDt = combineDateTime(due, dayEnd);
+      hasTime = true;
+    } else {
+      startDt = start;
+      endDt = due;
+      hasTime = false;
     }
-    return null;
+
+    if (!startDt || !endDt) return null;
+    if (endDt.getTime() < startDt.getTime()) {
+      return { start: endDt, end: startDt, hasTime: hasTime };
+    }
+    return { start: startDt, end: endDt, hasTime: hasTime };
   }
 
   function rangeDayCount(range) {
@@ -375,11 +433,23 @@
     var w = typeof widthPx === 'number' && widthPx > 0 ? widthPx : 1;
     var total = rangeDayCount(range);
     var dayW = w / total;
-    // Floor so each day column [i*dayW, (i+1)*dayW) maps to day i (matches barGeometry / CSS grid).
     var offset = Math.floor(Number(x) / dayW);
     if (!isFinite(offset) || offset < 0) offset = 0;
     if (offset >= total) offset = total - 1;
     return addDays(range.start, offset);
+  }
+
+  /** Inverse of dateTimeToX — continuous time along the timeline. */
+  function xToDateTime(x, range, widthPx) {
+    if (!range || !range.start) return null;
+    var w = typeof widthPx === 'number' && widthPx > 0 ? widthPx : 1;
+    var total = rangeDayCount(range);
+    var ratio = Number(x) / w;
+    if (!isFinite(ratio)) ratio = 0;
+    if (ratio < 0) ratio = 0;
+    if (ratio > 1) ratio = 1;
+    var startMs = startOfDay(range.start).getTime();
+    return new Date(startMs + ratio * total * MS_DAY);
   }
 
   function snapDate(date, mode) {
@@ -392,12 +462,53 @@
     return startOfDay(d);
   }
 
+  function snapDateTime(date, mode, stepMinutes) {
+    var d;
+    if (date instanceof Date && !isNaN(date.getTime())) {
+      d = new Date(date.getTime());
+    } else {
+      d = parseIsoDate(date);
+    }
+    if (!d) return null;
+    var m = normalizeViewMode(mode);
+    if (m !== 'day') return snapDate(d, m);
+    var step =
+      typeof stepMinutes === 'number' && stepMinutes > 0
+        ? Math.round(stepMinutes)
+        : AGENDA_SNAP_MINUTES;
+    var mins = d.getHours() * 60 + d.getMinutes() + (d.getSeconds() >= 30 ? 1 : 0);
+    var snapped = Math.round(mins / step) * step;
+    var base = startOfDay(d);
+    if (snapped >= 24 * 60) {
+      base = addDays(base, 1);
+      base.setHours(0, 0, 0, 0);
+      return base;
+    }
+    if (snapped < 0) {
+      base.setHours(0, 0, 0, 0);
+      return base;
+    }
+    base.setHours(Math.floor(snapped / 60), snapped % 60, 0, 0);
+    return base;
+  }
+
   function shiftInterval(interval, dayDelta) {
     if (!interval || !interval.start || !interval.end) return null;
     var delta = Number(dayDelta) || 0;
     return {
       start: addDays(interval.start, delta),
       end: addDays(interval.end, delta),
+      hasTime: !!interval.hasTime,
+    };
+  }
+
+  function shiftIntervalMs(interval, msDelta) {
+    if (!interval || !interval.start || !interval.end) return null;
+    var delta = Number(msDelta) || 0;
+    return {
+      start: new Date(interval.start.getTime() + delta),
+      end: new Date(interval.end.getTime() + delta),
+      hasTime: interval.hasTime !== false,
     };
   }
 
@@ -413,16 +524,44 @@
       end = addDays(end, delta);
       if (end.getTime() < start.getTime()) end = start;
     }
-    return { start: start, end: end };
+    return { start: start, end: end, hasTime: !!interval.hasTime };
   }
 
-  /** Order two dates into an inclusive [start, end] interval (paint / click-drag). */
-  function orderedInterval(a, b) {
-    var start = a instanceof Date ? startOfDay(a) : parseIsoDate(a);
-    var end = b instanceof Date ? startOfDay(b) : parseIsoDate(b);
+  function resizeIntervalMs(interval, edge, msDelta) {
+    if (!interval || !interval.start || !interval.end) return null;
+    var delta = Number(msDelta) || 0;
+    var start = new Date(interval.start.getTime());
+    var end = new Date(interval.end.getTime());
+    if (edge === 'start') {
+      start = new Date(start.getTime() + delta);
+      if (start.getTime() > end.getTime()) start = new Date(end.getTime());
+    } else {
+      end = new Date(end.getTime() + delta);
+      if (end.getTime() < start.getTime()) end = new Date(start.getTime());
+    }
+    return { start: start, end: end, hasTime: true };
+  }
+
+  function orderedInterval(a, b, options) {
+    options = options || {};
+    var keepTime = !!options.keepTime;
+    var start;
+    var end;
+    if (a instanceof Date && !isNaN(a.getTime())) {
+      start = keepTime ? new Date(a.getTime()) : startOfDay(a);
+    } else {
+      start = parseIsoDate(a);
+    }
+    if (b instanceof Date && !isNaN(b.getTime())) {
+      end = keepTime ? new Date(b.getTime()) : startOfDay(b);
+    } else {
+      end = parseIsoDate(b);
+    }
     if (!start || !end) return null;
-    if (start.getTime() <= end.getTime()) return { start: start, end: end };
-    return { start: end, end: start };
+    if (start.getTime() <= end.getTime()) {
+      return { start: start, end: end, hasTime: keepTime };
+    }
+    return { start: end, end: start, hasTime: keepTime };
   }
 
   /**
@@ -439,27 +578,53 @@
     };
   }
 
-  function intervalToParts(interval) {
+  function intervalToParts(interval, options) {
     if (!interval) return { startDate: '', dueDate: '' };
-    return {
+    options = options || {};
+    var out = {
       startDate: toIsoDate(interval.start),
       dueDate: toIsoDate(interval.end),
     };
+    var includeTime =
+      options.includeTime === true ||
+      (options.includeTime !== false && interval.hasTime === true);
+    if (includeTime && interval.start && interval.end) {
+      out.startTime = toIsoTime(interval.start);
+      out.dueTime = toIsoTime(interval.end);
+    }
+    return out;
   }
 
   function barGeometry(interval, range, widthPx) {
     if (!interval || !range) return null;
-    var total = rangeDayCount(range);
     var w = typeof widthPx === 'number' && widthPx > 0 ? widthPx : 1;
+    var useTime = range.mode === 'day' || interval.hasTime === true;
+    if (useTime) {
+      var left = dateTimeToX(interval.start, range, widthPx);
+      var right = dateTimeToX(interval.end, range, widthPx);
+      if (right < left) {
+        var swap = left;
+        left = right;
+        right = swap;
+      }
+      var timedWidth = Math.max(Math.min(8, w * 0.02), right - left);
+      return {
+        left: left,
+        width: timedWidth,
+        visible: right > 0 && left < w && timedWidth > 0,
+        clippedLeft: left <= 0 && right > 0,
+        clippedRight: right >= w && left < w,
+      };
+    }
+    var total = rangeDayCount(range);
     var dayW = w / total;
     var startOffset = dayDiff(interval.start, range.start);
     var endOffset = dayDiff(interval.end, range.start);
-    var left = startOffset * dayW;
+    var leftDay = startOffset * dayW;
     var width = (endOffset - startOffset + 1) * dayW;
-    var visible =
-      endOffset >= 0 && startOffset < total && width > 0;
+    var visible = endOffset >= 0 && startOffset < total && width > 0;
     return {
-      left: left,
+      left: leftDay,
       width: Math.max(dayW * 0.35, width),
       visible: visible,
       clippedLeft: startOffset < 0,
@@ -468,6 +633,22 @@
   }
 
   /**
+   * Agenda work-hours overlay band within a day range.
+   * @returns {{ left: number, width: number }|null}
+   */
+  function workHoursBand(dayStart, dayEnd, range, widthPx) {
+    if (!range || !range.start) return null;
+    if (range.mode !== 'day') return null;
+    var start = combineDateTime(range.start, normalizeWorkTime(dayStart, DEFAULT_DAY_START));
+    var end = combineDateTime(range.start, normalizeWorkTime(dayEnd, DEFAULT_DAY_END));
+    if (!start || !end) return null;
+    if (end.getTime() <= start.getTime()) return null;
+    var left = dateTimeToX(start, range, widthPx);
+    var right = dateTimeToX(end, range, widthPx);
+    return { left: left, width: Math.max(0, right - left) };
+  }
+
+/**
    * Build nest tree from enriched board cards.
    * cardRecords: [{ id, name, progress, category, startDate, dueDate, estimatedMinutes,
    *   items: completion items, dueComplete, listId, listName, color }]
@@ -567,6 +748,8 @@
         children: [],
         startDate: rec.startDate || '',
         dueDate: rec.dueDate || '',
+        startTime: rec.startTime || '',
+        dueTime: rec.dueTime || '',
         estimatedMinutes: rec.estimatedMinutes || null,
         category: rec.category || null,
         categoryIcon: rec.categoryIcon || null,
@@ -1064,8 +1247,16 @@
   global.GanttModel = {
     VIEW_MODES: VIEW_MODES,
     MS_DAY: MS_DAY,
+    MS_MINUTE: MS_MINUTE,
+    DEFAULT_DAY_START: DEFAULT_DAY_START,
+    DEFAULT_DAY_END: DEFAULT_DAY_END,
+    AGENDA_SNAP_MINUTES: AGENDA_SNAP_MINUTES,
     toIsoDate: toIsoDate,
+    toIsoTime: toIsoTime,
     parseIsoDate: parseIsoDate,
+    parseTime: parseTime,
+    combineDateTime: combineDateTime,
+    normalizeWorkTime: normalizeWorkTime,
     startOfDay: startOfDay,
     addDays: addDays,
     dayDiff: dayDiff,
@@ -1085,13 +1276,18 @@
     dateToX: dateToX,
     dateTimeToX: dateTimeToX,
     xToDate: xToDate,
+    xToDateTime: xToDateTime,
     snapDate: snapDate,
+    snapDateTime: snapDateTime,
     shiftInterval: shiftInterval,
+    shiftIntervalMs: shiftIntervalMs,
     resizeInterval: resizeInterval,
+    resizeIntervalMs: resizeIntervalMs,
     orderedInterval: orderedInterval,
     selectAllCheckboxState: selectAllCheckboxState,
     intervalToParts: intervalToParts,
     barGeometry: barGeometry,
+    workHoursBand: workHoursBand,
     buildNestTree: buildNestTree,
     flattenVisible: flattenVisible,
     filterRows: filterRows,

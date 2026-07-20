@@ -787,6 +787,15 @@
   color: var(--tp-text, #172b4d);
 }
 
+.gantt-work-hours {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: rgba(9, 30, 66, 0.07);
+}
+
 .gantt-timeline-row {
   position: relative;
   background-image: repeating-linear-gradient(

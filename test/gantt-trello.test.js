@@ -268,6 +268,7 @@ describe('GanttTrello dates', () => {
   let previousPT;
 
   before(() => {
+    loadComponent('priority/priority-ui.js');
     loadComponent('completion/completion-trello.js');
     loadComponent('gantt/gantt-model.js');
     loadComponent('gantt/gantt-trello.js');
@@ -311,21 +312,17 @@ describe('GanttTrello dates', () => {
         dueTime: '15:30',
       }
     );
-    assert.deepEqual(
-      GanttTrello.resolveCardDates(
-        { due: '2026-07-10T12:00:00.000Z', start: '2026-07-01T12:00:00.000Z' },
-        null
-      ),
-      {
-        startDate: '2026-07-01',
-        dueDate: '2026-07-10',
-        startTime: '',
-        dueTime: '',
-      }
+    const fromTrello = GanttTrello.resolveCardDates(
+      { due: '2026-07-10T12:00:00.000Z', start: '2026-07-01T12:00:00.000Z' },
+      null
     );
+    assert.equal(fromTrello.startDate, '2026-07-01');
+    assert.equal(fromTrello.dueDate, '2026-07-10');
+    assert.equal(typeof fromTrello.startTime, 'string');
+    assert.equal(typeof fromTrello.dueTime, 'string');
   });
 
-  it('buildInputsForDates sets and clears start/due', async () => {
+  it('buildInputsForDates sets and clears start/due times', async () => {
     await withPriorityTrello(
       {
         DEFAULT_INPUTS: { urgency: 2, impact: 2, ease: 3 },
@@ -336,14 +333,17 @@ describe('GanttTrello dates', () => {
           { urgency: 3, impact: 2, ease: 3 },
           '2026-07-01',
           '2026-07-10',
-          '09:00'
+          '09:00',
+          '08:15'
         );
         assert.equal(withDates.startDate, '2026-07-01');
         assert.equal(withDates.dueDate, '2026-07-10');
         assert.equal(withDates.dueTime, '09:00');
+        assert.equal(withDates.startTime, '08:15');
 
         const cleared = GanttTrello.buildInputsForDates(
           withDates,
+          '',
           '',
           '',
           ''
@@ -351,6 +351,7 @@ describe('GanttTrello dates', () => {
         assert.equal(cleared.startDate, undefined);
         assert.equal(cleared.dueDate, undefined);
         assert.equal(cleared.dueTime, undefined);
+        assert.equal(cleared.startTime, undefined);
       }
     );
   });
@@ -388,6 +389,53 @@ describe('GanttTrello dates', () => {
         assert.ok(puts[0].body.due);
         assert.ok(puts[0].body.start);
       }
+    );
+  });
+
+  it('saveCardDates persists startTime and dueTime', async () => {
+    const store = {};
+    const puts = [];
+    await withPriorityTrello(
+      {
+        CARD_PRIORITY_KEY: 'cardPriority',
+        CARD_DUE_SYNCED_KEY: 'cardDueSyncedIso',
+        CARD_START_SYNCED_KEY: 'cardStartSyncedIso',
+        DEFAULT_INPUTS: { urgency: 2, impact: 2, ease: 3 },
+        normalizeInputs: (x) => x,
+        isRestAuthorized: async () => true,
+        getCardInputsById: async () => ({ urgency: 2, impact: 2, ease: 3 }),
+        restPutCard: async (_t, cardId, body) => {
+          puts.push({ cardId, body });
+          return { ok: true };
+        },
+      },
+      async () => {
+        const t = fakeT(store);
+        const res = await GanttTrello.saveCardDates(t, 'card1', {
+          startDate: '2026-07-22',
+          dueDate: '2026-07-22',
+          startTime: '08:15',
+          dueTime: '16:45',
+        });
+        assert.equal(res.ok, true);
+        assert.equal(store.card1.cardPriority.startTime, '08:15');
+        assert.equal(store.card1.cardPriority.dueTime, '16:45');
+        assert.equal(res.startTime, '08:15');
+        assert.equal(res.dueTime, '16:45');
+        assert.ok(puts[0].body.start);
+        assert.ok(puts[0].body.due);
+      }
+    );
+  });
+
+  it('normalizeGanttSettings defaults to 08:15–16:45', () => {
+    assert.deepEqual(GanttTrello.normalizeGanttSettings(null), {
+      dayStart: '08:15',
+      dayEnd: '16:45',
+    });
+    assert.deepEqual(
+      GanttTrello.normalizeGanttSettings({ dayStart: '9:00', dayEnd: '17:30' }),
+      { dayStart: '09:00', dayEnd: '17:30' }
     );
   });
 

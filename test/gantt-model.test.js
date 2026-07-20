@@ -188,6 +188,88 @@ describe('GanttModel', () => {
     assert.equal(GanttModel.toIsoDate(resized.end), '2026-07-08');
   });
 
+  it('resolveBarInterval applies start/due times', () => {
+    const iv = GanttModel.resolveBarInterval({
+      startDate: '2026-07-22',
+      dueDate: '2026-07-22',
+      startTime: '09:00',
+      dueTime: '11:30',
+    });
+    assert.equal(iv.hasTime, true);
+    assert.equal(GanttModel.toIsoTime(iv.start), '09:00');
+    assert.equal(GanttModel.toIsoTime(iv.end), '11:30');
+  });
+
+  it('resolveBarInterval date-only in day mode uses work hours', () => {
+    const iv = GanttModel.resolveBarInterval(
+      { startDate: '2026-07-22', dueDate: '2026-07-22' },
+      { mode: 'day', dayStart: '08:15', dayEnd: '16:45' }
+    );
+    assert.equal(iv.hasTime, true);
+    assert.equal(GanttModel.toIsoTime(iv.start), '08:15');
+    assert.equal(GanttModel.toIsoTime(iv.end), '16:45');
+  });
+
+  it('xToDateTime and snapDateTime round in Agenda', () => {
+    const range = GanttModel.viewRange('day', '2026-07-22');
+    const width = 240;
+    // Noon → mid timeline
+    const noon = GanttModel.xToDateTime(width / 2, range, width);
+    assert.equal(noon.getHours(), 12);
+    assert.equal(noon.getMinutes(), 0);
+
+    const snapped = GanttModel.snapDateTime(
+      new Date(2026, 6, 22, 8, 22, 0),
+      'day',
+      15
+    );
+    assert.equal(GanttModel.toIsoTime(snapped), '08:15');
+  });
+
+  it('shiftIntervalMs moves by minutes', () => {
+    const iv = GanttModel.resolveBarInterval({
+      startDate: '2026-07-22',
+      dueDate: '2026-07-22',
+      startTime: '10:00',
+      dueTime: '11:00',
+    });
+    const shifted = GanttModel.shiftIntervalMs(iv, 30 * GanttModel.MS_MINUTE);
+    assert.equal(GanttModel.toIsoTime(shifted.start), '10:30');
+    assert.equal(GanttModel.toIsoTime(shifted.end), '11:30');
+  });
+
+  it('workHoursBand covers 08:15–16:45 in day view', () => {
+    const range = GanttModel.viewRange('day', '2026-07-22');
+    const width = 240;
+    const band = GanttModel.workHoursBand('08:15', '16:45', range, width);
+    assert.ok(band);
+    const startX = GanttModel.dateTimeToX(
+      GanttModel.combineDateTime('2026-07-22', '08:15'),
+      range,
+      width
+    );
+    const endX = GanttModel.dateTimeToX(
+      GanttModel.combineDateTime('2026-07-22', '16:45'),
+      range,
+      width
+    );
+    assert.ok(Math.abs(band.left - startX) < 0.01);
+    assert.ok(Math.abs(band.width - (endX - startX)) < 0.01);
+  });
+
+  it('intervalToParts emits times when hasTime', () => {
+    const iv = GanttModel.resolveBarInterval({
+      startDate: '2026-07-22',
+      dueDate: '2026-07-22',
+      startTime: '08:15',
+      dueTime: '16:45',
+    });
+    const parts = GanttModel.intervalToParts(iv);
+    assert.equal(parts.startDate, '2026-07-22');
+    assert.equal(parts.startTime, '08:15');
+    assert.equal(parts.dueTime, '16:45');
+  });
+
   it('buildNestTree nests linked cards and local items; dedupes linked from roots', () => {
     const tree = GanttModel.buildNestTree([
       {

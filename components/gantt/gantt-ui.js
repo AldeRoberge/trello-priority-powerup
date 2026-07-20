@@ -276,6 +276,10 @@
       cardOverlayKeyHandler: null,
       sectionDrag: null,
       suppressCardOpen: false,
+      ganttSettings: {
+        dayStart: model.DEFAULT_DAY_START || '08:15',
+        dayEnd: model.DEFAULT_DAY_END || '16:45',
+      },
     };
 
     function persistFilters() {
@@ -361,6 +365,25 @@
       return model.viewRange(state.viewMode, state.anchor);
     }
 
+    function intervalOptions() {
+      return {
+        mode: state.viewMode,
+        dayStart: state.ganttSettings.dayStart,
+        dayEnd: state.ganttSettings.dayEnd,
+      };
+    }
+
+    function formatIntervalTitle(interval) {
+      if (!interval) return '';
+      var start = model.toIsoDate(interval.start);
+      var end = model.toIsoDate(interval.end);
+      if (interval.hasTime && typeof model.toIsoTime === 'function') {
+        start += ' ' + model.toIsoTime(interval.start);
+        end += ' ' + model.toIsoTime(interval.end);
+      }
+      return start === end ? start : start + ' \u2192 ' + end;
+    }
+
     function visibleRows() {
       var flat = model.flattenVisible(state.tree, state.expanded);
       var filtered = model.filterRows(flat, {
@@ -379,7 +402,7 @@
 
       var zoom = el('div', 'gantt-zoom');
       [
-        { mode: 'day', label: 'Journ\u00e9e', icon: 'ti-calendar' },
+        { mode: 'day', label: 'Agenda', icon: 'ti-calendar' },
         { mode: 'week', label: 'Semaine', icon: 'ti-calendar-week' },
         { mode: 'month', label: 'Mois', icon: 'ti-calendar-month' },
         { mode: 'year', label: 'Ann\u00e9e', icon: 'ti-calendar-stats' },
@@ -1757,12 +1780,18 @@
     }
 
     function applyIntervalToRow(row, interval) {
-      var parts = model.intervalToParts(interval);
+      var parts = model.intervalToParts(interval, {
+        includeTime: state.viewMode === 'day' || !!interval.hasTime,
+      });
       row.startDate = parts.startDate;
       row.dueDate = parts.dueDate;
+      row.startTime = parts.startTime || '';
+      row.dueTime = parts.dueTime || '';
       if (row.cardId && state.cardsById[row.cardId]) {
         state.cardsById[row.cardId].startDate = parts.startDate;
         state.cardsById[row.cardId].dueDate = parts.dueDate;
+        state.cardsById[row.cardId].startTime = parts.startTime || '';
+        state.cardsById[row.cardId].dueTime = parts.dueTime || '';
       }
     }
 
@@ -1775,9 +1804,16 @@
         .saveCardDates(t, row.cardId, {
           startDate: row.startDate || '',
           dueDate: row.dueDate || '',
+          startTime: clearing
+            ? ''
+            : row.startTime ||
+              (state.cardsById[row.cardId] &&
+                state.cardsById[row.cardId].startTime) ||
+              '',
           dueTime: clearing
             ? ''
-            : (state.cardsById[row.cardId] &&
+            : row.dueTime ||
+              (state.cardsById[row.cardId] &&
                 state.cardsById[row.cardId].dueTime) ||
               '',
         })
@@ -1826,9 +1862,12 @@
       if (state.saving || !row || row.kind !== 'card' || !row.cardId) return;
       row.startDate = '';
       row.dueDate = '';
+      row.startTime = '';
+      row.dueTime = '';
       if (state.cardsById[row.cardId]) {
         state.cardsById[row.cardId].startDate = '';
         state.cardsById[row.cardId].dueDate = '';
+        state.cardsById[row.cardId].startTime = '';
         state.cardsById[row.cardId].dueTime = '';
       }
       persistRow(row);
@@ -1841,7 +1880,14 @@
       var width =
         rect.width > 0 ? rect.width : state.timelineWidth || MIN_TIMELINE_W;
       var x = clientX - rect.left;
-      var d = model.xToDate(x, range(), width);
+      var r = range();
+      if (state.viewMode === 'day' && typeof model.xToDateTime === 'function') {
+        var dt = model.xToDateTime(x, r, width);
+        return model.snapDateTime
+          ? model.snapDateTime(dt, 'day', model.AGENDA_SNAP_MINUTES || 15)
+          : dt;
+      }
+      var d = model.xToDate(x, r, width);
       return model.snapDate(d, state.viewMode);
     }
 
@@ -1876,7 +1922,11 @@
           ghost.hidden = true;
           return;
         }
-        placeGhost(ghost, { start: d, end: d });
+        placeGhost(ghost, {
+          start: d,
+          end: d,
+          hasTime: state.viewMode === 'day',
+        });
       });
 
       timeRow.addEventListener('pointerleave', function () {
@@ -1902,7 +1952,11 @@
           pointerId: ev.pointerId,
         };
         timeRow.classList.add('is-painting');
-        placeGhost(ghost, { start: origin, end: origin });
+        placeGhost(ghost, {
+          start: origin,
+          end: origin,
+          hasTime: state.viewMode === 'day',
+        });
         timeRow.setPointerCapture(ev.pointerId);
 
         function onMove(e) {
@@ -1910,7 +1964,9 @@
           var cur = dateAtTimelineX(timeRow, e.clientX);
           if (!cur) return;
           state.paint.current = cur;
-          var iv = model.orderedInterval(state.paint.origin, cur);
+          var iv = model.orderedInterval(state.paint.origin, cur, {
+            keepTime: state.viewMode === 'day',
+          });
           if (iv) placeGhost(ghost, iv);
         }
 
@@ -1924,7 +1980,9 @@
           state.paint = null;
           ghost.hidden = true;
           if (!paint) return;
-          var iv = model.orderedInterval(paint.origin, paint.current);
+          var iv = model.orderedInterval(paint.origin, paint.current, {
+            keepTime: state.viewMode === 'day',
+          });
           if (!iv) return;
           applyIntervalToRow(row, iv);
           applySort();
@@ -1964,6 +2022,7 @@
         var origin = {
           start: interval.start,
           end: interval.end,
+          hasTime: !!interval.hasTime,
         };
         state.drag = {
           row: row,
@@ -1973,6 +2032,7 @@
           range: r,
           width: state.timelineWidth,
           pointerId: ev.pointerId,
+          agenda: state.viewMode === 'day',
         };
         barEl.classList.add('is-dragging');
         barEl.setPointerCapture(ev.pointerId);
@@ -1980,24 +2040,47 @@
         function onMove(e) {
           if (!state.drag) return;
           var dx = e.clientX - state.drag.startX;
-          var dayDelta = Math.round(
-            (dx / state.drag.width) * model.rangeDayCount(state.drag.range)
-          );
           var next;
-          if (state.drag.mode === 'move') {
-            next = model.shiftInterval(state.drag.origin, dayDelta);
+          if (state.drag.agenda) {
+            var msDelta =
+              (dx / state.drag.width) *
+              model.rangeDayCount(state.drag.range) *
+              model.MS_DAY;
+            if (state.drag.mode === 'move') {
+              next = model.shiftIntervalMs(state.drag.origin, msDelta);
+            } else {
+              next = model.resizeIntervalMs(
+                state.drag.origin,
+                state.drag.mode === 'start' ? 'start' : 'end',
+                msDelta
+              );
+            }
+            if (!next) return;
+            next = {
+              start: model.snapDateTime(next.start, 'day'),
+              end: model.snapDateTime(next.end, 'day'),
+              hasTime: true,
+            };
           } else {
-            next = model.resizeInterval(
-              state.drag.origin,
-              state.drag.mode === 'start' ? 'start' : 'end',
-              dayDelta
+            var dayDelta = Math.round(
+              (dx / state.drag.width) * model.rangeDayCount(state.drag.range)
             );
+            if (state.drag.mode === 'move') {
+              next = model.shiftInterval(state.drag.origin, dayDelta);
+            } else {
+              next = model.resizeInterval(
+                state.drag.origin,
+                state.drag.mode === 'start' ? 'start' : 'end',
+                dayDelta
+              );
+            }
+            if (!next) return;
+            next = {
+              start: model.snapDate(next.start, state.viewMode),
+              end: model.snapDate(next.end, state.viewMode),
+              hasTime: !!state.drag.origin.hasTime,
+            };
           }
-          if (!next) return;
-          next = {
-            start: model.snapDate(next.start, state.viewMode),
-            end: model.snapDate(next.end, state.viewMode),
-          };
           if (next.end.getTime() < next.start.getTime()) {
             if (state.drag.mode === 'start') next.start = next.end;
             else next.end = next.start;
@@ -2015,13 +2098,11 @@
           var drag = state.drag;
           state.drag = null;
           if (!drag) return;
-          var finalInterval = model.resolveBarInterval(row);
+          var finalInterval = model.resolveBarInterval(row, intervalOptions());
           if (
             finalInterval &&
-            (model.toIsoDate(finalInterval.start) !==
-              model.toIsoDate(drag.origin.start) ||
-              model.toIsoDate(finalInterval.end) !==
-                model.toIsoDate(drag.origin.end))
+            (finalInterval.start.getTime() !== drag.origin.start.getTime() ||
+              finalInterval.end.getTime() !== drag.origin.end.getTime())
           ) {
             persistRow(row);
           }
@@ -2199,6 +2280,29 @@
         headerTimeline.appendChild(cell);
       });
       timelineCol.appendChild(headerTimeline);
+
+      if (
+        state.viewMode === 'day' &&
+        typeof model.workHoursBand === 'function'
+      ) {
+        var band = model.workHoursBand(
+          state.ganttSettings.dayStart,
+          state.ganttSettings.dayEnd,
+          r,
+          state.timelineWidth
+        );
+        if (band && band.width > 0) {
+          var workEl = el('div', 'gantt-work-hours');
+          workEl.style.left = band.left + 'px';
+          workEl.style.width = band.width + 'px';
+          workEl.title =
+            'Heures de travail \u00b7 ' +
+            state.ganttSettings.dayStart +
+            ' \u2013 ' +
+            state.ganttSettings.dayEnd;
+          timelineCol.appendChild(workEl);
+        }
+      }
 
       // Today marker — placed at the current time within today's column.
       var now = new Date();
@@ -2427,7 +2531,7 @@
         timeRow.style.height = ROW_H + 'px';
         timeRow.style.width = state.timelineWidth + 'px';
 
-        var interval = model.resolveBarInterval(row);
+        var interval = model.resolveBarInterval(row, intervalOptions());
         var hasVisibleBar = false;
         if (interval) {
           var geo = model.barGeometry(interval, r, state.timelineWidth);
@@ -2440,11 +2544,7 @@
             bar.style.backgroundColor = row.color || 'var(--tp-primary, #0c66e4)';
             if (row.category) bar.setAttribute('data-category', row.category);
             bar.title =
-              (row.name || '') +
-              ' \u00b7 ' +
-              model.toIsoDate(interval.start) +
-              ' \u2192 ' +
-              model.toIsoDate(interval.end);
+              (row.name || '') + ' \u00b7 ' + formatIntervalTitle(interval);
 
             var fill = el('div', 'gantt-bar-fill');
             fill.style.width = Math.max(0, Math.min(100, row.progress || 0)) + '%';
@@ -2555,6 +2655,9 @@
         .then(function (data) {
           state.loading = false;
           state.tree = (data && data.tree) || [];
+          if (data && data.ganttSettings) {
+            state.ganttSettings = data.ganttSettings;
+          }
           applySort();
           state.cardsById = Object.create(null);
           var cards = (data && data.cards) || [];

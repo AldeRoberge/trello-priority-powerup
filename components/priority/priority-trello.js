@@ -302,7 +302,17 @@
         : raw.startDate.trim();
       if (startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) startDate = '';
     }
-    if (startDate) normalized.startDate = startDate;
+    if (startDate) {
+      normalized.startDate = startDate;
+      if (typeof raw.startTime === 'string') {
+        var PUStartTime = priorityUI();
+        var startTime = PUStartTime && PUStartTime.normalizeDueTime
+          ? PUStartTime.normalizeDueTime(raw.startTime)
+          : raw.startTime.trim();
+        if (startTime && !/^\d{2}:\d{2}$/.test(startTime)) startTime = '';
+        if (startTime) normalized.startTime = startTime;
+      }
+    }
 
     var PURec = priorityUI();
     var recurrence =
@@ -2211,11 +2221,12 @@
     }
   }
 
-  function applyStartToInputs(inputs, startDate) {
+  function applyStartToInputs(inputs, startDate, startTime) {
     var next = inputs
       ? Object.assign({}, inputs)
       : Object.assign({}, DEFAULT_INPUTS, { priorityEnabled: false });
     delete next.startDate;
+    delete next.startTime;
     var normalized = '';
     if (startDate) {
       var PU = priorityUI();
@@ -2225,7 +2236,17 @@
           : String(startDate).trim();
       if (normalized && !/^\d{4}-\d{2}-\d{2}$/.test(normalized)) normalized = '';
     }
-    if (normalized) next.startDate = normalized;
+    if (normalized) {
+      next.startDate = normalized;
+      var PUTime = priorityUI();
+      var nt =
+        startTime && PUTime && PUTime.normalizeDueTime
+          ? PUTime.normalizeDueTime(startTime)
+          : startTime
+            ? String(startTime).trim()
+            : '';
+      if (nt && /^\d{2}:\d{2}$/.test(nt)) next.startTime = nt;
+    }
     return normalizeInputs(next);
   }
 
@@ -2330,10 +2351,16 @@
           start: trelloRaw,
         };
       }
-      var nextInputs = applyStartToInputs(inputs, parts.dueDate);
+      var nextInputs = applyStartToInputs(
+        inputs,
+        parts.dueDate,
+        parts.dueTime || ''
+      );
       var nextCanon = inputsToCanonicalStartIso(nextInputs);
       var inputsChanged =
-        !inputs || (inputs.startDate || '') !== (nextInputs.startDate || '');
+        !inputs ||
+        (inputs.startDate || '') !== (nextInputs.startDate || '') ||
+        (inputs.startTime || '') !== (nextInputs.startTime || '');
       if (inputsChanged) {
         await t.set(await cardPluginScope(t), 'shared', CARD_PRIORITY_KEY, nextInputs);
       }

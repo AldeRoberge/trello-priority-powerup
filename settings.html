@@ -16,6 +16,8 @@
   <script src="./components/priority/priority-trello.js"></script>
   <script src="./components/statut/statut-match.js"></script>
   <script src="./components/statut/statut-trello.js"></script>
+  <script src="./components/gantt/gantt-model.js"></script>
+  <script src="./components/gantt/gantt-trello.js"></script>
   <script src="./components/shared/tab-autocomplete.js"></script>
   <script src="./components/completion/completion-ui.js"></script>
   <script src="./components/completion/completion-trello.js"></script>
@@ -194,6 +196,28 @@
         <span class="tp-profile-field-label">Dialecte</span>
         <select id="settingsDialect" class="tp-select" aria-label="Dialecte de l’assistant"></select>
       </label>
+    </div>
+  </details>
+
+  <details class="tp-settings-section" id="ganttSettingsSection">
+    <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-calendar-time"></i></span>
+      <span class="tp-settings-summary-title">Gantt</span>
+      <span class="tp-settings-summary-hint">Heures de travail (Agenda)</span>
+    </summary>
+    <div class="tp-settings-body">
+      <p class="tp-color-scheme-hint">Plage horaire mise en avant dans la vue Agenda du Gantt. Partagée sur le tableau.</p>
+      <div class="tp-statut-roles">
+        <label class="tp-statut-role">
+          <span class="tp-statut-role-label">Début de journée</span>
+          <input type="time" id="ganttDayStart" class="tp-input" value="08:15" aria-label="Début de journée" />
+        </label>
+        <label class="tp-statut-role">
+          <span class="tp-statut-role-label">Fin de journée</span>
+          <input type="time" id="ganttDayEnd" class="tp-input" value="16:45" aria-label="Fin de journée" />
+        </label>
+      </div>
+      <p class="tp-member-roles-status" id="ganttSettingsStatus" aria-live="polite"></p>
     </div>
   </details>
 
@@ -611,6 +635,66 @@
         resizeSettingsPopup();
       } catch (err) {
         console.error('Language settings init failed', err);
+        section.hidden = true;
+      }
+    }
+
+    async function initGanttSettings() {
+      var section = document.getElementById('ganttSettingsSection');
+      var startEl = document.getElementById('ganttDayStart');
+      var endEl = document.getElementById('ganttDayEnd');
+      var statusEl = document.getElementById('ganttSettingsStatus');
+      var GT = window.GanttTrello;
+      if (!section || !startEl || !endEl || !GT) {
+        if (section) section.hidden = true;
+        return;
+      }
+
+      var saveTimer = null;
+
+      function setStatus(msg) {
+        if (statusEl) statusEl.textContent = msg || '';
+      }
+
+      function applyUi(settings) {
+        var s = GT.normalizeGanttSettings
+          ? GT.normalizeGanttSettings(settings)
+          : settings || { dayStart: '08:15', dayEnd: '16:45' };
+        startEl.value = s.dayStart || '08:15';
+        endEl.value = s.dayEnd || '16:45';
+      }
+
+      function persist() {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(function () {
+          var next = {
+            dayStart: startEl.value || '08:15',
+            dayEnd: endEl.value || '16:45',
+          };
+          GT.saveGanttSettings(t, next)
+            .then(function (saved) {
+              applyUi(saved);
+              setStatus('Enregistré');
+              setTimeout(function () {
+                setStatus('');
+              }, 1500);
+            })
+            .catch(function (err) {
+              console.error('Gantt settings save failed', err);
+              setStatus('Échec enregistrement');
+            });
+        }, 300);
+      }
+
+      startEl.addEventListener('change', persist);
+      endEl.addEventListener('change', persist);
+
+      try {
+        var settings = await GT.getGanttSettings(t);
+        applyUi(settings);
+        resizeSettingsPopup();
+      } catch (err) {
+        console.error('Gantt settings init failed', err);
         section.hidden = true;
       }
     }
@@ -1563,6 +1647,7 @@
       initCompletionSchemePicker(),
       refreshAutoSortUi(),
       initLanguageSettings(),
+      initGanttSettings(),
       initDisplaySettings(),
       initDebugSettings(),
       initExperimentalSettings(),
