@@ -192,10 +192,6 @@
   justify-self: center;
 }
 
-.gantt-row.is-selected {
-  background: var(--tp-surface-hover, #091e420f);
-}
-
 .gantt-detail-icons {
   display: grid;
   grid-template-columns: repeat(6, 22px);
@@ -296,6 +292,9 @@
 .gantt-timeline {
   position: relative;
   min-width: 100%;
+  --gantt-day-w: 24px;
+  --gantt-grid-line: rgba(9, 30, 66, 0.14);
+  --gantt-row-odd: rgba(9, 30, 66, 0.04);
 }
 
 .gantt-row {
@@ -304,6 +303,15 @@
   box-sizing: border-box;
   border-bottom: 1px solid var(--tp-border, #091e4224);
   position: relative;
+  background: var(--tp-surface, #fff);
+}
+
+.gantt-row.is-odd {
+  background: var(--gantt-row-odd, #f4f5f7);
+}
+
+.gantt-row.is-selected {
+  background: var(--tp-surface-hover, #091e420f);
 }
 
 .gantt-row--header {
@@ -434,32 +442,52 @@
 
 .gantt-timeline-header {
   display: flex;
+  background-color: var(--tp-surface, #fff);
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(var(--gantt-day-w) - 1px),
+    var(--gantt-grid-line) calc(var(--gantt-day-w) - 1px),
+    var(--gantt-grid-line) var(--gantt-day-w)
+  );
+  background-size: var(--gantt-day-w) 100%;
 }
 
 .gantt-col-head {
   box-sizing: border-box;
   text-align: center;
   padding: 6px 2px;
-  border-right: 1px solid var(--tp-border, #091e4224);
+  border-right: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  position: relative;
+  z-index: 1;
 }
 
 .gantt-timeline-row {
   position: relative;
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(var(--gantt-day-w) - 1px),
+    var(--gantt-grid-line) calc(var(--gantt-day-w) - 1px),
+    var(--gantt-grid-line) var(--gantt-day-w)
+  );
+  background-size: var(--gantt-day-w) 100%;
 }
 
 .gantt-timeline-row.is-paintable {
   cursor: crosshair;
 }
 
-.gantt-timeline-row.is-paintable:hover {
-  background: var(--tp-surface-hover, #091e420a);
+.gantt-timeline-row.is-paintable:hover,
+.gantt-row.is-paintable:hover {
+  filter: brightness(0.985);
 }
 
 .gantt-timeline-row.is-painting {
-  background: var(--tp-surface-hover, #091e420f);
+  background-color: var(--tp-surface-hover, #091e420f);
 }
 
 .gantt-paint-ghost {

@@ -287,17 +287,8 @@
       };
     }
 
-    if (cardId) {
-      payload.extensions = [
-        {
-          '@odata.type': 'microsoft.graph.openTypeExtension',
-          extensionName:
-            (global.OutlookConfig && global.OutlookConfig.extensionName) ||
-            'Com.TrelloCerveau.CardLink',
-          trelloCardId: String(cardId),
-        },
-      ];
-    }
+    // cardId is applied after create via setCardLinkExtension (Graph open extension).
+    void cardId;
 
     return payload;
   }

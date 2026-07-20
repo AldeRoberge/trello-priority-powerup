@@ -456,7 +456,7 @@
    * Card-local one-offs live in cardPriority.memberRoleCustoms (custom-* ids).
    */
   var BUILTIN_MEMBER_ROLES = [
-    { id: 'subtitles', label: 'Sous-titres', icon: 'subtitles' },
+    { id: 'subtitles', label: 'Sous-titres', icon: 'captions' },
     { id: 'coloring', label: '\u00c9talonnage', icon: 'palette' },
     { id: 'editing', label: 'Montage', icon: 'scissors' },
     { id: 'music', label: 'Musique et effets sonores', icon: 'music' }
@@ -5198,21 +5198,26 @@
       impactCore = impactCore * hardFactor;
     }
 
-    var core = pressure + impactCore;
+    var urgencyShare = pressure;
+    var impactShare = impactCore;
     var easeMul = 1;
     if (dampen < EASE_MUL_DAMPEN_THRESHOLD) {
       easeMul = lerp(EASE_MUL_LO, EASE_MUL_HI, (F - 1) / 4);
       var impactOnlyBlend = urgencyBoostRamp(U);
-      var wholeCore = (pressure + impactCore) * easeMul;
-      var impactOnlyCore = pressure + impactCore * easeMul;
-      core = lerp(wholeCore, impactOnlyCore, impactOnlyBlend);
+      // At low U both shares get easeMul; at high U only impact does.
+      urgencyShare = pressure * lerp(easeMul, 1, impactOnlyBlend);
+      impactShare = impactCore * easeMul;
     }
-
-    var rawScore = core + easeTerm + urgencyBoost(U, I, dampen);
+    var core = urgencyShare + impactShare;
+    var boost = urgencyBoost(U, I, dampen);
+    var rawScore = core + easeTerm + boost;
     return {
       pressure: pressure,
       impactCore: impactCore,
+      urgencyShare: urgencyShare,
+      impactShare: impactShare,
       easeTerm: easeTerm,
+      urgencyBoost: boost,
       dampen: dampen,
       effectiveF: effectiveF,
       easeBoost: easeBoost,
@@ -5234,7 +5239,10 @@
     return {
       pressure: terms.pressure * s,
       impactCore: terms.impactCore * s,
+      urgencyShare: terms.urgencyShare * s,
+      impactShare: terms.impactShare * s,
       easeTerm: terms.easeTerm * s,
+      urgencyBoost: terms.urgencyBoost * s,
       dampen: terms.dampen,
       effectiveF: terms.effectiveF,
       easeBoost: terms.easeBoost,
@@ -5282,7 +5290,10 @@
       terms: {
         pressure: t.pressure,
         impactCore: t.impactCore,
+        urgencyShare: t.urgencyShare,
+        impactShare: t.impactShare,
         easeTerm: t.easeTerm,
+        urgencyBoost: t.urgencyBoost,
         dampen: t.dampen,
         effectiveF: t.effectiveF,
         easeMul: t.easeMul,

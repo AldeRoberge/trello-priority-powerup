@@ -32,6 +32,7 @@ const UNIT_FILES = [
   'status-brief.test.js',
   'progress-summary.test.js',
   'task-types.test.js',
+  'member-roles.test.js',
   'task-split.test.js',
   'history.test.js',
   'debug-log.test.js',

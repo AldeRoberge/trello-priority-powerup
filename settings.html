@@ -1302,6 +1302,13 @@
             if (busy) return;
             var label = inputEl.value.trim();
             if (!label) return;
+            var labelKey = label.toLocaleLowerCase('fr-FR');
+            for (var i = 0; i < catalog.length; i++) {
+              if (catalog[i].label.toLocaleLowerCase('fr-FR') === labelKey) {
+                setStatus('Ce rôle existe déjà');
+                return;
+              }
+            }
             var draft =
               PriorityUI && typeof PriorityUI.createCustomMemberRole === 'function'
                 ? PriorityUI.createCustomMemberRole(
@@ -1310,23 +1317,8 @@
                   )
                 : null;
             if (!draft) {
-              // Allow adding with a board catalog entry shape even if create failed
-              // due to in-memory customs; build a custom id manually via normalize.
-              draft = {
-                id: 'custom-' + label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 20) + '-' + Math.random().toString(36).slice(2, 6),
-                label: label,
-                icon: PriorityUI && PriorityUI.randomTaskTypeIconKey
-                  ? PriorityUI.randomTaskTypeIconKey()
-                  : 'tag',
-                custom: true,
-              };
-            }
-            var labelKey = draft.label.toLocaleLowerCase('fr-FR');
-            for (var i = 0; i < catalog.length; i++) {
-              if (catalog[i].label.toLocaleLowerCase('fr-FR') === labelKey) {
-                setStatus('Ce rôle existe déjà');
-                return;
-              }
+              setStatus('Rôle invalide');
+              return;
             }
             inputEl.value = '';
             persistCatalog(catalog.concat([draft]));

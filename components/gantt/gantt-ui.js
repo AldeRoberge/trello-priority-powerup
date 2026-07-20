@@ -1234,6 +1234,10 @@
       var chart = el('div', 'gantt-chart');
       var labelsCol = el('div', 'gantt-labels');
       var timelineCol = el('div', 'gantt-timeline');
+      var dayCount = model.rangeDayCount(r);
+      var dayW = state.timelineWidth / Math.max(1, dayCount);
+      timelineCol.style.setProperty('--gantt-day-w', dayW + 'px');
+      timelineCol.style.width = state.timelineWidth + 'px';
 
       var headerLabels = el('div', 'gantt-row gantt-row--header');
       var headerCell = el('div', 'gantt-label-cell gantt-label-cell--header');
@@ -1288,10 +1292,13 @@
         return;
       }
 
-      rows.forEach(function (row) {
+      rows.forEach(function (row, rowIndex) {
+        var oddClass = rowIndex % 2 === 1 ? ' is-odd' : '';
         var labelRow = el(
           'div',
-          'gantt-row' + (state.selected[row.id] ? ' is-selected' : '')
+          'gantt-row' +
+            oddClass +
+            (state.selected[row.id] ? ' is-selected' : '')
         );
         labelRow.style.height = ROW_H + 'px';
         var labelCell = el('div', 'gantt-label-cell');
@@ -1356,7 +1363,10 @@
         labelRow.appendChild(labelCell);
         labelsCol.appendChild(labelRow);
 
-        var timeRow = el('div', 'gantt-row gantt-timeline-row');
+        var timeRow = el(
+          'div',
+          'gantt-row gantt-timeline-row' + oddClass
+        );
         timeRow.style.height = ROW_H + 'px';
         timeRow.style.width = state.timelineWidth + 'px';
 
