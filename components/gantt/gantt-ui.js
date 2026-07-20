@@ -226,9 +226,14 @@
     return wrap;
   }
 
-  function priorityDotEl(title, fill) {
-    var wrap = el('span', 'gantt-detail-icon is-priority');
-    if (title) wrap.title = title;
+  function priorityDotEl(title, fill, muted) {
+    var wrap = el(
+      'button',
+      'gantt-detail-icon gantt-detail-icon--btn is-priority' +
+        (muted ? ' is-priority-muted' : ''),
+      { type: 'button', title: title || 'Priorit\u00e9' }
+    );
+    wrap.setAttribute('aria-label', title || 'Priorit\u00e9');
     var dot = el('span', 'gantt-priority-dot');
     dot.setAttribute('aria-hidden', 'true');
     if (fill) dot.style.backgroundColor = fill;
@@ -288,6 +293,9 @@
       outlookSyncing: false,
       cardOverlay: null,
       cardOverlayKeyHandler: null,
+      miniPopover: null,
+      miniPopoverKeyHandler: null,
+      miniPopoverOutsideHandler: null,
       sectionDrag: null,
       suppressCardOpen: false,
       ganttSettings: {
@@ -936,33 +944,6 @@
       }
     }
 
-    function popupUrlWithArgs(pageUrl, args) {
-      var base = pageUrl || './popup.html';
-      var parts = [];
-      Object.keys(args || {}).forEach(function (key) {
-        var val = args[key];
-        if (val == null || val === '') return;
-        parts.push(
-          encodeURIComponent(key) + '=' + encodeURIComponent(String(val))
-        );
-      });
-      if (!parts.length) return base;
-      return base + (base.indexOf('?') >= 0 ? '&' : '?') + parts.join('&');
-    }
-
-    /** Signed iframe URL for nested popup — required so TrelloPowerUp.iframe() gets a secret. */
-    function signedPopupUrl(pageUrl, args) {
-      if (t && typeof t.signUrl === 'function') {
-        try {
-          // Prefer relative path: signUrl assumes no existing hash (pageUrl is absolute).
-          return t.signUrl('./popup.html', args || {});
-        } catch (signErr) {
-          console.error('Gantt signUrl(popup) failed', signErr);
-        }
-      }
-      return popupUrlWithArgs(pageUrl, args);
-    }
-
     function cardIdsForSectionDrag(originRow) {
       var selected = selectedRows().filter(function (r) {
         return r && r.kind === 'card' && r.cardId;
@@ -1186,8 +1167,13 @@
       });
     }
 
-    function openCard(cardId, cardName) {
+    function openCard(cardId, cardName, options) {
       if (!cardId || !t) return;
+      options = options || {};
+      var openSection =
+        typeof options.openSection === 'string' && options.openSection
+          ? options.openSection
+          : 'priority';
       var appName =
         (global.PriorityBrand &&
         typeof PriorityBrand.getAppName === 'function'
@@ -1199,32 +1185,121 @@
         global.PriorityTrello && typeof PriorityTrello.pageUrl === 'function'
           ? PriorityTrello.pageUrl('./popup.html')
           : './popup.html';
+      var ganttUrl =
+        global.PriorityTrello && typeof PriorityTrello.pageUrl === 'function'
+          ? PriorityTrello.pageUrl('./gantt.html')
+          : './gantt.html';
       var args = {
         cardId: String(cardId),
         cardName: cardName || '',
-        openSection: 'priority',
+        openSection: openSection,
       };
 
-      // Wide in-Gantt overlay: Trello t.popup width is fixed/narrow, and t.modal
-      // would replace the fullscreen Gantt.
+      closeMiniPopover();
       closeCardOverlay({ reload: false });
 
-      var overlay = el('div', 'gantt-card-overlay');
-      overlay.setAttribute('role', 'dialog');
-      overlay.setAttribute('aria-modal', 'true');
-      overlay.setAttribute('aria-label', appName);
-
-      var backdrop = el('div', 'gantt-card-overlay-backdrop');
-      backdrop.addEventListener('click', function () {
-        closeCardOverlay();
+      // Do not nest popup.html inside this fullscreen Gantt iframe: the Power-Up
+      // client talks to window.parent, so a nested iframe never receives `render`
+      // from Trello and stays on "Ouverture de Cerveau…". Open a real modal, then
+      // restore Gantt when the task editor closes.
+      if (typeof t.modal !== 'function') {
+        console.error('Gantt openCard: t.modal unavailable');
+        return;
+      }
+      return t.modal({
+        title: cardName || appName,
+        url: pageUrl,
+        args: args,
+        fullscreen: true,
+        accentColor: '#22272B',
+        callback: function () {
+          if (typeof t.modal !== 'function') return;
+          t.modal({
+            title: 'Gantt',
+            url: ganttUrl,
+            fullscreen: true,
+            accentColor: '#22272B',
+          });
+        },
       });
+    }
 
-      var panel = el('div', 'gantt-card-overlay-panel');
-      var header = el('div', 'gantt-card-overlay-header');
-      var title = el('div', 'gantt-card-overlay-title', {
-        text: cardName || appName,
-      });
-      var closeBtn = el('button', 'gantt-card-overlay-close', {
+    function closeMiniPopover(opts) {
+      opts = opts || {};
+      if (state.miniPopoverKeyHandler) {
+        document.removeEventListener('keydown', state.miniPopoverKeyHandler, true);
+        state.miniPopoverKeyHandler = null;
+      }
+      if (state.miniPopoverOutsideHandler) {
+        document.removeEventListener(
+          'pointerdown',
+          state.miniPopoverOutsideHandler,
+          true
+        );
+        state.miniPopoverOutsideHandler = null;
+      }
+      if (state.miniPopover) {
+        if (
+          state.miniPopover.mountApi &&
+          typeof state.miniPopover.mountApi.destroy === 'function'
+        ) {
+          try {
+            state.miniPopover.mountApi.destroy();
+          } catch (e) {
+            /* ignore */
+          }
+        }
+        if (state.miniPopover.el && state.miniPopover.el.parentNode) {
+          state.miniPopover.el.parentNode.removeChild(state.miniPopover.el);
+        }
+      }
+      state.miniPopover = null;
+      if (opts.reload) reload();
+    }
+
+    function positionMiniPopover(popoverEl, anchorEl) {
+      if (!popoverEl || !anchorEl) return;
+      var margin = 8;
+      var rect = anchorEl.getBoundingClientRect();
+      var rootRect = root.getBoundingClientRect();
+      popoverEl.style.visibility = 'hidden';
+      popoverEl.style.left = '0px';
+      popoverEl.style.top = '0px';
+      var pw = popoverEl.offsetWidth || 320;
+      var ph = popoverEl.offsetHeight || 200;
+      var left = rect.left - rootRect.left;
+      var top = rect.bottom - rootRect.top + 6;
+      if (left + pw > rootRect.width - margin) {
+        left = Math.max(margin, rootRect.width - pw - margin);
+      }
+      if (left < margin) left = margin;
+      if (top + ph > rootRect.height - margin) {
+        top = rect.top - rootRect.top - ph - 6;
+      }
+      if (top < margin) top = margin;
+      popoverEl.style.left = Math.round(left) + 'px';
+      popoverEl.style.top = Math.round(top) + 'px';
+      popoverEl.style.visibility = '';
+    }
+
+    /**
+     * Shared anchored mini editor popover.
+     * opts: { anchor, title, sectionKey, cardId, cardName, mount(bodyEl) → api }
+     */
+    function openMiniEditor(opts) {
+      opts = opts || {};
+      if (!opts.anchor || typeof opts.mount !== 'function') return;
+      closeMiniPopover();
+
+      var popover = el('div', 'gantt-mini-popover');
+      popover.setAttribute('role', 'dialog');
+      popover.setAttribute('aria-label', opts.title || 'Modifier');
+
+      var head = el('div', 'gantt-mini-popover-head');
+      head.appendChild(
+        el('div', 'gantt-mini-popover-title', { text: opts.title || '' })
+      );
+      var closeBtn = el('button', 'gantt-mini-popover-close', {
         type: 'button',
         title: 'Fermer',
         text: '\u00d7',
@@ -1233,33 +1308,367 @@
       closeBtn.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        closeCardOverlay();
+        closeMiniPopover({ reload: true });
       });
-      header.appendChild(title);
-      header.appendChild(closeBtn);
+      head.appendChild(closeBtn);
 
-      var frame = document.createElement('iframe');
-      frame.className = 'gantt-card-overlay-frame';
-      frame.title = appName;
-      // Must sign: custom iframes are not auto-signed like t.modal / t.popup.
-      frame.src = signedPopupUrl(pageUrl, args);
+      var bodyEl = el('div', 'gantt-mini-popover-body');
+      var foot = el('div', 'gantt-mini-popover-foot');
+      var openFullBtn = el('button', 'gantt-mini-popover-full', {
+        type: 'button',
+        text: 'Ouvrir la section',
+      });
+      openFullBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var sectionKey = opts.sectionKey || 'priority';
+        var cardId = opts.cardId;
+        var cardName = opts.cardName || '';
+        closeMiniPopover({ reload: false });
+        openCard(cardId, cardName, { openSection: sectionKey });
+      });
+      foot.appendChild(openFullBtn);
 
-      panel.appendChild(header);
-      panel.appendChild(frame);
-      overlay.appendChild(backdrop);
-      overlay.appendChild(panel);
-      root.appendChild(overlay);
-      state.cardOverlay = overlay;
+      popover.appendChild(head);
+      popover.appendChild(bodyEl);
+      popover.appendChild(foot);
+      root.appendChild(popover);
 
-      state.cardOverlayKeyHandler = function (e) {
+      var mountApi = null;
+      try {
+        mountApi = opts.mount(bodyEl) || null;
+      } catch (mountErr) {
+        console.error('Gantt mini editor mount failed', mountErr);
+        bodyEl.textContent = 'Impossible d\u2019ouvrir l\u2019\u00e9diteur.';
+      }
+
+      state.miniPopover = {
+        el: popover,
+        mountApi: mountApi,
+        cardId: opts.cardId,
+        sectionKey: opts.sectionKey,
+      };
+
+      positionMiniPopover(popover, opts.anchor);
+
+      state.miniPopoverKeyHandler = function (e) {
         if (e.key === 'Escape') {
           e.preventDefault();
           e.stopPropagation();
-          closeCardOverlay();
+          closeMiniPopover({ reload: true });
         }
       };
-      document.addEventListener('keydown', state.cardOverlayKeyHandler, true);
+      document.addEventListener('keydown', state.miniPopoverKeyHandler, true);
+
+      state.miniPopoverOutsideHandler = function (e) {
+        if (!state.miniPopover || !state.miniPopover.el) return;
+        var target = e.target;
+        if (state.miniPopover.el.contains(target)) return;
+        if (opts.anchor && opts.anchor.contains && opts.anchor.contains(target)) {
+          return;
+        }
+        closeMiniPopover({ reload: true });
+      };
+      // Defer so the opening click does not immediately close.
+      setTimeout(function () {
+        if (!state.miniPopover) return;
+        document.addEventListener(
+          'pointerdown',
+          state.miniPopoverOutsideHandler,
+          true
+        );
+      }, 0);
+
       closeBtn.focus();
+    }
+
+    function openMiniPriority(row, anchor) {
+      if (!row || !row.cardId || !anchor) return;
+      var PT = global.PriorityTrello;
+      var ui = PU();
+      if (!PT || !ui || typeof ui.mountMiniPriority !== 'function') {
+        setStatus('\u00c9diteur de priorit\u00e9 indisponible', true);
+        return;
+      }
+      openMiniEditor({
+        anchor: anchor,
+        title: 'Priorit\u00e9',
+        sectionKey: 'priority',
+        cardId: row.cardId,
+        cardName: row.name,
+        mount: function (bodyEl) {
+          var loading = el('div', 'gantt-mini-popover-loading', {
+            text: 'Chargement\u2026',
+          });
+          bodyEl.appendChild(loading);
+          var apiHolder = { destroy: function () {} };
+
+          Promise.all([
+            PT.getCardInputsById(t, row.cardId),
+            typeof PT.getBoardFormula === 'function'
+              ? PT.getBoardFormula(t)
+              : Promise.resolve('baseline'),
+          ])
+            .then(function (pair) {
+              if (!state.miniPopover || state.miniPopover.cardId !== row.cardId) {
+                return;
+              }
+              bodyEl.removeChild(loading);
+              var inputs = pair[0] || {};
+              var formula = pair[1] || 'baseline';
+              var mounted = ui.mountMiniPriority(bodyEl, {
+                id: 'gantt-' + row.cardId,
+                formula: formula,
+                defaults: inputs,
+                dimensions: PT.PRIORITY_DIMENSIONS,
+                onStateChange: function (next) {
+                  PT.saveCardInputsById(t, row.cardId, {
+                    urgency: next.urgency,
+                    impact: next.impact,
+                    ease: next.ease,
+                  })
+                    .then(function () {
+                      setStatus('Priorit\u00e9 enregistr\u00e9e');
+                    })
+                    .catch(function (err) {
+                      setStatus(
+                        'Erreur priorit\u00e9\u00a0: ' +
+                          (err && err.message ? err.message : String(err)),
+                        true
+                      );
+                    });
+                },
+              });
+              apiHolder.destroy = function () {
+                if (mounted && mounted.destroy) mounted.destroy();
+              };
+              if (state.miniPopover) state.miniPopover.mountApi = apiHolder;
+              positionMiniPopover(state.miniPopover.el, anchor);
+            })
+            .catch(function (err) {
+              loading.textContent =
+                'Erreur\u00a0: ' +
+                (err && err.message ? err.message : String(err));
+            });
+
+          return apiHolder;
+        },
+      });
+    }
+
+    function openMiniDue(row, anchor) {
+      if (!row || !row.cardId || !anchor) return;
+      var PT = global.PriorityTrello;
+      var ui = PU();
+      if (!PT || !ui || typeof ui.mountMiniDue !== 'function') {
+        setStatus('\u00c9diteur d\u2019\u00e9ch\u00e9ance indisponible', true);
+        return;
+      }
+      openMiniEditor({
+        anchor: anchor,
+        title: '\u00c9ch\u00e9ance',
+        sectionKey: 'due',
+        cardId: row.cardId,
+        cardName: row.name,
+        mount: function (bodyEl) {
+          var loading = el('div', 'gantt-mini-popover-loading', {
+            text: 'Chargement\u2026',
+          });
+          bodyEl.appendChild(loading);
+          var apiHolder = { destroy: function () {} };
+
+          PT.getCardInputsById(t, row.cardId)
+            .then(function (inputs) {
+              if (!state.miniPopover || state.miniPopover.cardId !== row.cardId) {
+                return;
+              }
+              bodyEl.removeChild(loading);
+              var mounted = ui.mountMiniDue(bodyEl, {
+                value: inputs || {},
+                onChange: function (values) {
+                  var patch = {
+                    dueDate: values.dueDate || '',
+                    dueTime: values.dueTime || '',
+                    dueEnabled: !!values.dueEnabled,
+                    dueMode: values.dueMode,
+                    dueVague: values.dueVague || '',
+                    startDate: values.startDate || '',
+                    recurrence: values.recurrence || null,
+                  };
+                  var chain = PT.saveCardInputsById(t, row.cardId, patch);
+                  if (typeof ganttTrello.saveCardDates === 'function') {
+                    chain = chain.then(function () {
+                      return ganttTrello.saveCardDates(t, row.cardId, {
+                        startDate: values.startDate || '',
+                        dueDate: values.dueDate || '',
+                        dueTime: values.dueTime || '',
+                      });
+                    });
+                  }
+                  chain
+                    .then(function () {
+                      setStatus('\u00c9ch\u00e9ance enregistr\u00e9e');
+                    })
+                    .catch(function (err) {
+                      setStatus(
+                        'Erreur \u00e9ch\u00e9ance\u00a0: ' +
+                          (err && err.message ? err.message : String(err)),
+                        true
+                      );
+                    });
+                },
+              });
+              apiHolder.destroy = function () {
+                if (mounted && mounted.destroy) mounted.destroy();
+              };
+              if (state.miniPopover) state.miniPopover.mountApi = apiHolder;
+              positionMiniPopover(state.miniPopover.el, anchor);
+            })
+            .catch(function (err) {
+              loading.textContent =
+                'Erreur\u00a0: ' +
+                (err && err.message ? err.message : String(err));
+            });
+
+          return apiHolder;
+        },
+      });
+    }
+
+    function openMiniBlocked(row, anchor) {
+      if (!row || !row.cardId || !anchor) return;
+      var PT = global.PriorityTrello;
+      var ui = PU();
+      if (!PT || !ui || typeof ui.mountMiniBlocked !== 'function') {
+        setStatus('\u00c9diteur Bloqu\u00e9 indisponible', true);
+        return;
+      }
+      openMiniEditor({
+        anchor: anchor,
+        title: 'Bloqu\u00e9',
+        sectionKey: 'blocked',
+        cardId: row.cardId,
+        cardName: row.name,
+        mount: function (bodyEl) {
+          var loading = el('div', 'gantt-mini-popover-loading', {
+            text: 'Chargement\u2026',
+          });
+          bodyEl.appendChild(loading);
+          var apiHolder = { destroy: function () {} };
+
+          PT.getCardInputsById(t, row.cardId)
+            .then(function (inputs) {
+              if (!state.miniPopover || state.miniPopover.cardId !== row.cardId) {
+                return;
+              }
+              bodyEl.removeChild(loading);
+              var mounted = ui.mountMiniBlocked(bodyEl, {
+                value: !!(inputs && inputs.enAttente),
+                blockedReasons: (inputs && inputs.blockedReasons) || [],
+                blockedLinks: (inputs && inputs.blockedLinks) || [],
+                hideSubtaskPicker: true,
+                onChange: function (next) {
+                  PT.saveCardInputsById(t, row.cardId, {
+                    enAttente: !!next.enAttente,
+                    blockedReasons: next.blockedReasons || [],
+                    blockedLinks: next.blockedLinks || [],
+                  })
+                    .then(function () {
+                      setStatus(
+                        next.enAttente
+                          ? 'Carte bloqu\u00e9e'
+                          : 'Carte d\u00e9bloqu\u00e9e'
+                      );
+                    })
+                    .catch(function (err) {
+                      setStatus(
+                        'Erreur blocage\u00a0: ' +
+                          (err && err.message ? err.message : String(err)),
+                        true
+                      );
+                    });
+                },
+              });
+              apiHolder.destroy = function () {
+                if (mounted && mounted.destroy) mounted.destroy();
+              };
+              if (state.miniPopover) state.miniPopover.mountApi = apiHolder;
+              positionMiniPopover(state.miniPopover.el, anchor);
+            })
+            .catch(function (err) {
+              loading.textContent =
+                'Erreur\u00a0: ' +
+                (err && err.message ? err.message : String(err));
+            });
+
+          return apiHolder;
+        },
+      });
+    }
+
+    function openMiniProgress(row, anchor) {
+      if (!row || !row.cardId || !anchor) return;
+      var CT = global.CompletionTrello;
+      var CU = global.CompletionUI;
+      if (
+        !CT ||
+        !CU ||
+        typeof CU.mountMiniProgress !== 'function' ||
+        typeof CT.getCardCompletionById !== 'function'
+      ) {
+        setStatus('\u00c9diteur de progr\u00e8s indisponible', true);
+        return;
+      }
+      openMiniEditor({
+        anchor: anchor,
+        title: 'Progr\u00e8s',
+        sectionKey: 'progress',
+        cardId: row.cardId,
+        cardName: row.name,
+        mount: function (bodyEl) {
+          var loading = el('div', 'gantt-mini-popover-loading', {
+            text: 'Chargement\u2026',
+          });
+          bodyEl.appendChild(loading);
+          var apiHolder = { destroy: function () {} };
+
+          CT.getCardCompletionById(t, row.cardId)
+            .then(function (data) {
+              if (!state.miniPopover || state.miniPopover.cardId !== row.cardId) {
+                return;
+              }
+              bodyEl.removeChild(loading);
+              var mounted = CU.mountMiniProgress(bodyEl, {
+                data: data || { items: [] },
+                onChange: function (nextData) {
+                  CT.saveCardCompletionById(t, row.cardId, nextData)
+                    .then(function () {
+                      setStatus('Progr\u00e8s enregistr\u00e9');
+                    })
+                    .catch(function (err) {
+                      setStatus(
+                        'Erreur progr\u00e8s\u00a0: ' +
+                          (err && err.message ? err.message : String(err)),
+                        true
+                      );
+                    });
+                },
+              });
+              apiHolder.destroy = function () {
+                if (mounted && mounted.destroy) mounted.destroy();
+              };
+              if (state.miniPopover) state.miniPopover.mountApi = apiHolder;
+              positionMiniPopover(state.miniPopover.el, anchor);
+            })
+            .catch(function (err) {
+              loading.textContent =
+                'Erreur\u00a0: ' +
+                (err && err.message ? err.message : String(err));
+            });
+
+          return apiHolder;
+        },
+      });
     }
 
     function buildDetailIcons(row) {
@@ -1275,51 +1684,71 @@
         var isBlocked = !!row.blocked;
         var blockedBtn = iconButton(
           'ti-player-pause',
-          isBlocked ? 'D\u00e9bloquer' : 'Bloquer',
+          isBlocked ? 'Bloqu\u00e9 \u2014 modifier' : 'Bloquer',
           isBlocked ? 'is-blocked' : 'is-blocked-ghost'
         );
         blockedBtn.addEventListener('click', function (e) {
           e.preventDefault();
           e.stopPropagation();
-          toggleCardBlocked(row);
+          openMiniBlocked(row, blockedBtn);
         });
         slot('is-blocked', blockedBtn);
 
-        if (shouldShowPriorityFire(row)) {
-          var pTitle =
-            (row.priorityLabel || 'Priorit\u00e9') +
-            (row.priorityScore != null
-              ? ' \u00b7 ' + Number(row.priorityScore).toFixed(1)
-              : '');
-          slot('is-priority', priorityDotEl(pTitle, row.priorityFill || null));
-        } else {
-          slot('is-priority', null);
-        }
+        var pTitle =
+          (row.priorityLabel || 'Priorit\u00e9') +
+          (row.priorityScore != null
+            ? ' \u00b7 ' + Number(row.priorityScore).toFixed(1)
+            : '');
+        var showFire = shouldShowPriorityFire(row);
+        var priorityBtn = priorityDotEl(
+          pTitle,
+          showFire ? row.priorityFill || null : null,
+          !showFire
+        );
+        priorityBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          openMiniPriority(row, priorityBtn);
+        });
+        slot('is-priority', priorityBtn);
 
         var pct = Math.round(row.progress || 0);
-        var progText = el('span', 'gantt-progress-text', {
+        var progBtn = el('button', 'gantt-progress-text gantt-progress-text--btn', {
+          type: 'button',
           text: pct + '%',
           title: 'Progr\u00e8s ' + pct + '%',
         });
-        slot('is-progress', progText);
+        progBtn.setAttribute('aria-label', 'Progr\u00e8s ' + pct + '%');
+        progBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          openMiniProgress(row, progBtn);
+        });
+        slot('is-progress', progBtn);
 
+        var dueTitle =
+          row.dueCountdown ||
+          (row.dueDate
+            ? '\u00c9ch\u00e9ance ' + row.dueDate
+            : 'D\u00e9finir l\u2019\u00e9ch\u00e9ance');
+        var dueBtn;
         if (row.duePast) {
-          slot(
-            'is-overdue',
-            iconEl(
-              'ti-clock',
-              row.dueCountdown || 'En retard',
-              'is-overdue'
-            )
-          );
-        } else if (row.dueCountdown) {
-          slot(
-            'is-due',
-            iconEl('ti-calendar-event', row.dueCountdown, 'is-due')
-          );
+          dueBtn = iconButton('ti-clock', dueTitle, 'is-overdue');
+        } else if (row.dueCountdown || row.dueDate) {
+          dueBtn = iconButton('ti-calendar-event', dueTitle, 'is-due');
         } else {
-          slot('is-due', null);
+          dueBtn = iconButton(
+            'ti-calendar-event',
+            'D\u00e9finir l\u2019\u00e9ch\u00e9ance',
+            'is-due-muted'
+          );
         }
+        dueBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          openMiniDue(row, dueBtn);
+        });
+        slot(row.duePast ? 'is-overdue' : 'is-due', dueBtn);
       } else {
         slot('is-blocked', null);
         slot('is-priority', null);
@@ -2828,6 +3257,7 @@
 
     return {
       destroy: function () {
+        closeMiniPopover({ reload: false });
         closeCardOverlay({ reload: false });
         mount.innerHTML = '';
       },
