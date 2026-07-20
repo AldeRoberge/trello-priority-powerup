@@ -39,6 +39,7 @@ const UNIT_FILES = [
   'interview-why-guards.test.js',
   'add-subtask-dedupe.test.js',
   'gantt-model.test.js',
+  'gantt-trello.test.js',
 ];
 
 function listTests() {

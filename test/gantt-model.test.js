@@ -131,9 +131,36 @@ describe('GanttModel', () => {
     assert.equal(parent.children.length, 2);
     assert.equal(parent.children[0].kind, 'local');
     assert.equal(parent.children[0].name, 'Local A');
+    assert.equal(parent.children[0].parentCardId, 'parent');
+    assert.equal(parent.children[0].itemId, 'l1');
     assert.equal(parent.children[1].kind, 'card');
     assert.equal(parent.children[1].cardId, 'child');
     assert.equal(parent.children[1].name, 'Child card');
+    assert.equal(parent.children[1].linkParentCardId, 'parent');
+    assert.equal(parent.children[1].linkItemId, 'lk');
+  });
+
+  it('buildNestTree attaches checklist parentItemId', () => {
+    const tree = GanttModel.buildNestTree([
+      {
+        id: 'p',
+        name: 'P',
+        items: [
+          {
+            id: 'sub',
+            text: 'Sub',
+            progress: 50,
+            items: [{ id: 'c1', text: 'Check', progress: 0 }],
+          },
+        ],
+      },
+    ]);
+    const local = tree[0].children[0];
+    assert.equal(local.kind, 'local');
+    assert.equal(local.children[0].kind, 'checklist');
+    assert.equal(local.children[0].parentCardId, 'p');
+    assert.equal(local.children[0].parentItemId, 'sub');
+    assert.equal(local.children[0].itemId, 'c1');
   });
 
   it('flattenVisible expands root children by default', () => {

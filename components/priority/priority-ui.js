@@ -7555,13 +7555,15 @@
 
   /**
    * Primary overview / résumé at the top of the card popup (collapsible).
-   * Title + metric cells (progress+statut combined, subtasks, deadline, priority);
-   * each cell jumps to the matching accordion via onJump.
+   * Title + metric cells (progress+statut combined, deadline, priority);
+   * contextual action chips; each cell jumps to the matching accordion via onJump.
    */
   function createOverviewField(config) {
     config = config || {};
     var mountEl = config.el;
     var onJump = typeof config.onJump === 'function' ? config.onJump : null;
+    var onAction =
+      typeof config.onAction === 'function' ? config.onAction : null;
     var onLayoutChange =
       typeof config.onLayoutChange === 'function' ? config.onLayoutChange : null;
     var onExpandChange =
@@ -7580,24 +7582,17 @@
     var progressColor =
       typeof config.progressColor === 'string' ? config.progressColor : '';
     var progressBlocked = !!config.progressBlocked;
-    var subtasksDone =
-      config.subtasksDone != null && isFinite(+config.subtasksDone)
-        ? Math.max(0, Math.round(+config.subtasksDone))
-        : 0;
-    var subtasksTotal =
-      config.subtasksTotal != null && isFinite(+config.subtasksTotal)
-        ? Math.max(0, Math.round(+config.subtasksTotal))
-        : 0;
     var dueCountdown =
       typeof config.dueCountdown === 'string' ? config.dueCountdown : '';
     var dueBand = typeof config.dueBand === 'string' ? config.dueBand : '';
+    var dueDays =
+      config.dueDays != null && isFinite(+config.dueDays)
+        ? Math.round(+config.dueDays)
+        : null;
     var priorityLabel =
       typeof config.priorityLabel === 'string' ? config.priorityLabel : '';
     var priorityColor =
       typeof config.priorityColor === 'string' ? config.priorityColor : '';
-    var statusBrief =
-      typeof config.statusBrief === 'string' ? config.statusBrief : '';
-    var statusBriefPending = !!config.statusBriefPending;
     var features =
       config.features && typeof config.features === 'object'
         ? Object.assign({}, config.features)
@@ -7676,18 +7671,19 @@
 
     body.appendChild(titleBtn);
 
-    // ── Status brief (boss-style one-liner) ─────────────────────────────
-    var statusBriefEl = document.createElement('p');
-    statusBriefEl.className = 'overview-status-brief';
-    statusBriefEl.hidden = true;
-    body.appendChild(statusBriefEl);
-
     // ── Metrics grid ───────────────────────────────────────────────────
     var metrics = document.createElement('div');
     metrics.className = 'overview-metrics';
     body.appendChild(metrics);
 
-    function makeCell(key, jumpKey, label, iconClass) {
+    // ── Contextual actions ─────────────────────────────────────────────
+    var actionsEl = document.createElement('div');
+    actionsEl.className = 'overview-actions';
+    actionsEl.hidden = true;
+    body.appendChild(actionsEl);
+
+    function makeCell(key, jumpKey, label, iconClass, options) {
+      options = options || {};
       var cell = document.createElement('div');
       cell.className = 'overview-cell overview-cell--' + key;
       cell.dataset.overviewKey = key;
@@ -7701,10 +7697,14 @@
       icon.setAttribute('aria-hidden', 'true');
       head.appendChild(icon);
 
-      var lab = document.createElement('span');
-      lab.className = 'overview-cell-label';
-      lab.textContent = label;
-      head.appendChild(lab);
+      if (!options.hideLabel) {
+        var lab = document.createElement('span');
+        lab.className = 'overview-cell-label';
+        lab.textContent = label;
+        head.appendChild(lab);
+      } else {
+        cell.classList.add('overview-cell--nolabel');
+      }
 
       cell.appendChild(head);
 
@@ -7723,13 +7723,9 @@
       'Progr\u00e8s',
       'ti-progress'
     );
-    var subtasksCell = makeCell(
-      'subtasks',
-      'progress',
-      'Sous-t\u00e2ches',
-      'ti-checkbox'
-    );
-    var dueCell = makeCell('due', 'due', '\u00c9ch\u00e9ance', 'ti-calendar-event');
+    var dueCell = makeCell('due', 'due', '\u00c9ch\u00e9ance', 'ti-calendar-event', {
+      hideLabel: true
+    });
     var priorityCell = makeCell('priority', 'priority', 'Priorit\u00e9', 'ti-flame');
 
     var progressRing = document.createElement('span');
@@ -7801,6 +7797,44 @@
       return 'empty';
     }
 
+    function paintActions() {
+      actionsEl.replaceChildren();
+      var chips = [];
+      var isBlocked = statusCategory === 'blocked' || !!progressBlocked;
+      if (isBlocked) {
+        chips.push({
+          id: 'unblock',
+          label: 'Marquer d\u00e9bloqu\u00e9'
+        });
+      }
+      if (dueDays != null && isFinite(dueDays) && dueDays <= 0) {
+        chips.push({
+          id: 'postpone-tomorrow',
+          label: 'Reporter \u00e0 demain'
+        });
+      }
+      if (!chips.length) {
+        actionsEl.hidden = true;
+        return;
+      }
+      actionsEl.hidden = false;
+      for (var i = 0; i < chips.length; i++) {
+        (function (chip) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'overview-action-chip';
+          btn.textContent = chip.label;
+          btn.dataset.overviewAction = chip.id;
+          btn.addEventListener('click', function (e) {
+            if (e && typeof e.preventDefault === 'function') e.preventDefault();
+            if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+            if (onAction) onAction(chip.id);
+          });
+          actionsEl.appendChild(btn);
+        })(chips[i]);
+      }
+    }
+
     function paint() {
       var t = (titleText || '').trim();
       if (t) {
@@ -7813,25 +7847,10 @@
         titleBtn.classList.add('is-empty');
       }
 
-      var brief = (statusBrief || '').trim();
-      if (brief) {
-        statusBriefEl.textContent = brief;
-        statusBriefEl.hidden = false;
-        statusBriefEl.classList.toggle('is-pending', !!statusBriefPending);
-      } else {
-        statusBriefEl.textContent = '';
-        statusBriefEl.hidden = true;
-        statusBriefEl.classList.remove('is-pending');
-      }
-
       var progressFeatureOn =
         features.progress !== false || features.statut !== false;
       var due = (dueCountdown || '').trim();
       setFeatureVisible(progressCell.cell, progressFeatureOn);
-      setFeatureVisible(
-        subtasksCell.cell,
-        features.progress !== false && subtasksTotal > 0
-      );
       setFeatureVisible(dueCell.cell, features.due !== false && !!due);
       setFeatureVisible(priorityCell.cell, features.priority !== false);
 
@@ -7972,14 +7991,6 @@
         progressCell.cell.classList.remove('has-progress-accent');
       }
 
-      if (subtasksTotal > 0) {
-        subtasksCell.value.textContent = subtasksDone + '\u00a0/\u00a0' + subtasksTotal;
-        subtasksCell.value.classList.remove('is-empty');
-      } else {
-        subtasksCell.value.textContent = '';
-        subtasksCell.value.classList.add('is-empty');
-      }
-
       dueCell.value.textContent = due;
       dueCell.value.classList.toggle('is-empty', !due);
       for (var bi = 0; bi < DUE_PROXIMITY_BANDS.length; bi++) {
@@ -8023,6 +8034,8 @@
         priorityCell.cell.style.removeProperty('--overview-priority-accent');
       }
       priorityCell.cell.classList.toggle('has-priority-color', !!(pl && priorityColor));
+
+      paintActions();
 
       if (onLayoutChange) onLayoutChange();
     }
@@ -8079,27 +8092,22 @@
       if (next.progressBlocked != null) {
         progressBlocked = !!next.progressBlocked;
       }
-      if (next.subtasksDone != null && isFinite(+next.subtasksDone)) {
-        subtasksDone = Math.max(0, Math.round(+next.subtasksDone));
-      }
-      if (next.subtasksTotal != null && isFinite(+next.subtasksTotal)) {
-        subtasksTotal = Math.max(0, Math.round(+next.subtasksTotal));
-      }
       if (next.dueCountdown != null) {
         dueCountdown = String(next.dueCountdown || '');
       }
       if (next.dueBand != null) dueBand = String(next.dueBand || '');
+      if (next.dueDays !== undefined) {
+        if (next.dueDays == null || next.dueDays === '') {
+          dueDays = null;
+        } else if (isFinite(+next.dueDays)) {
+          dueDays = Math.round(+next.dueDays);
+        }
+      }
       if (next.priorityLabel != null) {
         priorityLabel = String(next.priorityLabel || '');
       }
       if (next.priorityColor != null) {
         priorityColor = String(next.priorityColor || '');
-      }
-      if (next.statusBrief != null) {
-        statusBrief = String(next.statusBrief || '');
-      }
-      if (next.statusBriefPending != null) {
-        statusBriefPending = !!next.statusBriefPending;
       }
       if (next.features && typeof next.features === 'object') {
         features = Object.assign({}, features, next.features);
@@ -8131,14 +8139,11 @@
           progressPercent: progressPercent,
           progressColor: progressColor,
           progressBlocked: progressBlocked,
-          subtasksDone: subtasksDone,
-          subtasksTotal: subtasksTotal,
           dueCountdown: dueCountdown,
           dueBand: dueBand,
+          dueDays: dueDays,
           priorityLabel: priorityLabel,
           priorityColor: priorityColor,
-          statusBrief: statusBrief,
-          statusBriefPending: statusBriefPending,
           features: Object.assign({}, features)
         };
       }

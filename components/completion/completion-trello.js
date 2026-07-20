@@ -1846,6 +1846,25 @@
     return normalizeCompletionData(normalized);
   }
 
+  /**
+   * Rename a top-level completion item (local or linked label).
+   */
+  function applyItemText(data, itemId, text) {
+    var id = typeof itemId === 'string' ? itemId : '';
+    var normalized = normalizeCompletionData(data);
+    if (!id) return normalized;
+    var nextText = typeof text === 'string' ? text.trim() : '';
+    if (nextText.length > ITEM_TEXT_MAX) nextText = nextText.slice(0, ITEM_TEXT_MAX);
+    if (!nextText) return normalized;
+    var found = false;
+    normalized.items = normalized.items.map(function (item) {
+      if (!item || item.id !== id) return item;
+      found = true;
+      return Object.assign({}, item, { text: nextText });
+    });
+    return found ? normalizeCompletionData(normalized) : normalized;
+  }
+
   function addChecklistItem(data, parentId, text, opts) {
     opts = opts || {};
     var pid = typeof parentId === 'string' ? parentId : '';
@@ -2978,6 +2997,7 @@
     applyChecklistItemProgress: applyChecklistItemProgress,
     applyChecklistItemEstimate: applyChecklistItemEstimate,
     applyChecklistItemText: applyChecklistItemText,
+    applyItemText: applyItemText,
     addChecklistItem: addChecklistItem,
     removeChecklistItem: removeChecklistItem,
     buildChildCompletionFromSubtask: buildChildCompletionFromSubtask,

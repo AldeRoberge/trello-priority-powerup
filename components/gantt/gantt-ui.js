@@ -172,7 +172,7 @@
         ganttTrello.ensureRestAuthorized(t).then(function (res) {
           if (res && res.ok) {
             state.authHint = '';
-            setStatus('Autorisation OK \u2014 vous pouvez glisser les barres');
+            setStatus('');
           } else {
             setStatus(
               'Autorisation refus\u00e9e' +
@@ -219,6 +219,226 @@
           /* ignore */
         }
       }
+    }
+
+    function canEditSubtask(row) {
+      if (!row) return false;
+      if (row.kind === 'local' && row.parentCardId && row.itemId) return true;
+      if (
+        row.kind === 'checklist' &&
+        row.parentCardId &&
+        row.parentItemId &&
+        row.itemId
+      ) {
+        return true;
+      }
+      if (row.kind === 'card' && row.linkParentCardId && row.cardId) return true;
+      return false;
+    }
+
+    function subtaskMeta(row) {
+      return {
+        kind: row.kind,
+        parentCardId: row.parentCardId || null,
+        itemId: row.itemId || null,
+        parentItemId: row.parentItemId || null,
+        cardId: row.cardId || null,
+        linkParentCardId: row.linkParentCardId || null,
+        linkItemId: row.linkItemId || null,
+      };
+    }
+
+    function toggleSubtaskDone(row) {
+      if (state.saving || !canEditSubtask(row)) return;
+      state.saving = true;
+      var nextDone = !row.done;
+      setStatus(nextDone ? 'Marquage termin\u00e9\u2026' : 'R\u00e9ouverture\u2026');
+      ganttTrello
+        .setSubtaskDone(t, subtaskMeta(row), nextDone)
+        .then(function (res) {
+          state.saving = false;
+          if (!res || !res.ok) {
+            setStatus(
+              '\u00c9chec' +
+                (res && res.reason ? ' (' + res.reason + ')' : ''),
+              true
+            );
+            return reload();
+          }
+          setStatus(nextDone ? 'Sous-t\u00e2che termin\u00e9e' : 'Sous-t\u00e2che rouverte');
+          return reload();
+        })
+        .catch(function (err) {
+          state.saving = false;
+          setStatus(
+            'Erreur\u00a0: ' + (err && err.message ? err.message : String(err)),
+            true
+          );
+          return reload();
+        });
+    }
+
+    function deleteSubtaskRow(row) {
+      if (state.saving || !canEditSubtask(row)) return;
+      var label = row.name || 'cette sous-t\u00e2che';
+      var ok = true;
+      try {
+        ok = global.confirm
+          ? global.confirm('Supprimer \u00ab\u00a0' + label + '\u00a0\u00bb\u00a0?')
+          : true;
+      } catch (e) {
+        ok = true;
+      }
+      if (!ok) return;
+      state.saving = true;
+      setStatus('Suppression\u2026');
+      ganttTrello
+        .deleteSubtask(t, subtaskMeta(row))
+        .then(function (res) {
+          state.saving = false;
+          if (!res || !res.ok) {
+            setStatus(
+              '\u00c9chec suppression' +
+                (res && res.reason ? ' (' + res.reason + ')' : ''),
+              true
+            );
+            return reload();
+          }
+          setStatus('Sous-t\u00e2che supprim\u00e9e');
+          return reload();
+        })
+        .catch(function (err) {
+          state.saving = false;
+          setStatus(
+            'Erreur\u00a0: ' + (err && err.message ? err.message : String(err)),
+            true
+          );
+          return reload();
+        });
+    }
+
+    function commitRename(row, nextName) {
+      var trimmed = typeof nextName === 'string' ? nextName.trim() : '';
+      if (!trimmed || trimmed === row.name) {
+        renderChart();
+        return;
+      }
+      if (state.saving || !canEditSubtask(row)) return;
+      state.saving = true;
+      setStatus('Renommage\u2026');
+      ganttTrello
+        .renameSubtask(t, subtaskMeta(row), trimmed)
+        .then(function (res) {
+          state.saving = false;
+          if (!res || !res.ok) {
+            setStatus(
+              '\u00c9chec renommage' +
+                (res && res.reason ? ' (' + res.reason + ')' : ''),
+              true
+            );
+            return reload();
+          }
+          row.name = res.name || trimmed;
+          setStatus('Sous-t\u00e2che renomm\u00e9e');
+          return reload();
+        })
+        .catch(function (err) {
+          state.saving = false;
+          setStatus(
+            'Erreur\u00a0: ' + (err && err.message ? err.message : String(err)),
+            true
+          );
+          return reload();
+        });
+    }
+
+    function startInlineRename(row, nameEl) {
+      if (state.saving || !canEditSubtask(row) || !nameEl || !nameEl.parentNode) {
+        return;
+      }
+      var input = el('input', 'gantt-rename-input', {
+        type: 'text',
+        maxlength: '500',
+      });
+      input.value = row.name || '';
+      input.setAttribute('aria-label', 'Renommer la sous-t\u00e2che');
+      var finished = false;
+
+      function finish(save) {
+        if (finished) return;
+        finished = true;
+        var value = input.value;
+        if (save) commitRename(row, value);
+        else renderChart();
+      }
+
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finish(true);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          finish(false);
+        }
+      });
+      input.addEventListener('blur', function () {
+        finish(true);
+      });
+
+      nameEl.parentNode.replaceChild(input, nameEl);
+      input.focus();
+      input.select();
+    }
+
+    function buildSubtaskActions(row) {
+      var actions = el('div', 'gantt-row-actions');
+
+      var doneBtn = el(
+        'button',
+        'gantt-action-btn gantt-action-btn--done' + (row.done ? ' is-on' : ''),
+        {
+          type: 'button',
+          title: row.done
+            ? 'Marquer non termin\u00e9'
+            : 'Marquer termin\u00e9',
+          text: row.done ? '\u2611' : '\u2610',
+        }
+      );
+      doneBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        toggleSubtaskDone(row);
+      });
+      actions.appendChild(doneBtn);
+
+      var renameBtn = el('button', 'gantt-action-btn gantt-action-btn--rename', {
+        type: 'button',
+        title: 'Renommer',
+        text: '\u270e',
+      });
+      renameBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var nameEl = renameBtn
+          .closest('.gantt-label-cell')
+          .querySelector('.gantt-task-name');
+        startInlineRename(row, nameEl);
+      });
+      actions.appendChild(renameBtn);
+
+      var delBtn = el('button', 'gantt-action-btn gantt-action-btn--delete', {
+        type: 'button',
+        title:
+          row.kind === 'card'
+            ? 'Retirer le lien'
+            : 'Supprimer la sous-t\u00e2che',
+        text: '\u00d7',
+      });
+      delBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        deleteSubtaskRow(row);
+      });
+      actions.appendChild(delBtn);
+
+      return actions;
     }
 
     function applyIntervalToRow(row, interval) {
@@ -454,12 +674,25 @@
 
         var nameBtn = el(
           'button',
-          'gantt-task-name' + (row.kind === 'card' ? ' is-card' : ''),
+          'gantt-task-name' +
+            (row.kind === 'card' ? ' is-card' : '') +
+            (canEditSubtask(row) ? ' is-renamable' : '') +
+            (row.done ? ' is-done' : ''),
           { type: 'button', text: row.name }
         );
         if (row.kind === 'card' && row.cardId) {
           nameBtn.addEventListener('click', function () {
             openCard(row.cardId);
+          });
+        }
+        if (canEditSubtask(row)) {
+          nameBtn.title =
+            (nameBtn.title ? nameBtn.title + ' \u00b7 ' : '') +
+            'Double-clic pour renommer';
+          nameBtn.addEventListener('dblclick', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            startInlineRename(row, nameBtn);
           });
         }
         labelCell.appendChild(nameBtn);
@@ -469,6 +702,10 @@
             text: Math.round(row.progress || 0) + '%',
           });
           labelCell.appendChild(chip);
+        }
+
+        if (canEditSubtask(row)) {
+          labelCell.appendChild(buildSubtaskActions(row));
         }
 
         labelRow.appendChild(labelCell);
@@ -585,7 +822,7 @@
       ganttTrello.ensureRestAuthorized(t).then(function (res) {
         if (res && res.ok) {
           state.authHint = '';
-          setStatus('Autorisation OK');
+          setStatus('');
         }
       });
     });

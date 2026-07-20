@@ -342,9 +342,10 @@
       }
     }
 
-    function localNode(item, depth) {
+    function localNode(item, depth, parentCardId) {
+      var itemId = item && item.id != null ? String(item.id) : '';
       var node = {
-        id: 'local:' + (item.id || Math.random()),
+        id: 'local:' + (itemId || Math.random()),
         kind: 'local',
         name: item.text || 'Sous-t\u00e2che',
         progress:
@@ -359,13 +360,17 @@
         category: null,
         color: null,
         cardId: null,
+        parentCardId: parentCardId || null,
+        itemId: itemId || null,
+        parentItemId: null,
       };
       var checklist = Array.isArray(item.items) ? item.items : [];
       for (var c = 0; c < checklist.length; c++) {
         var ch = checklist[c];
         if (!ch) continue;
+        var nestedId = ch.id != null ? String(ch.id) : '';
         node.children.push({
-          id: 'check:' + (ch.id || c),
+          id: 'check:' + (nestedId || c),
           kind: 'checklist',
           name: ch.text || 'Item',
           progress:
@@ -380,13 +385,16 @@
           category: null,
           color: null,
           cardId: null,
+          parentCardId: parentCardId || null,
+          itemId: nestedId || null,
+          parentItemId: itemId || null,
         });
       }
       if (node.children.length) node.expandable = true;
       return node;
     }
 
-    function cardNode(rec, depth) {
+    function cardNode(rec, depth, linkMeta) {
       var id = String(rec.id);
       var node = {
         id: 'card:' + id,
@@ -406,7 +414,16 @@
         listId: rec.listId || null,
         listName: rec.listName || '',
         dueComplete: !!rec.dueComplete,
+        parentCardId: null,
+        itemId: null,
+        parentItemId: null,
+        linkParentCardId: null,
+        linkItemId: null,
       };
+      if (linkMeta) {
+        node.linkParentCardId = linkMeta.parentCardId || null;
+        node.linkItemId = linkMeta.itemId || null;
+      }
       var rawItems = Array.isArray(rec.items) ? rec.items : [];
       for (var k = 0; k < rawItems.length; k++) {
         var it = rawItems[k];
@@ -415,8 +432,12 @@
           it.linkedCardId != null ? String(it.linkedCardId).trim() : '';
         if (linked) {
           var childRec = byId[linked];
+          var linkInfo = {
+            parentCardId: id,
+            itemId: it.id != null ? String(it.id) : null,
+          };
           if (childRec) {
-            node.children.push(cardNode(childRec, depth + 1));
+            node.children.push(cardNode(childRec, depth + 1, linkInfo));
           } else {
             node.children.push({
               id: 'card:' + linked,
@@ -442,10 +463,15 @@
               listName: '',
               dueComplete: false,
               missing: true,
+              parentCardId: null,
+              itemId: null,
+              parentItemId: null,
+              linkParentCardId: linkInfo.parentCardId,
+              linkItemId: linkInfo.itemId,
             });
           }
         } else {
-          node.children.push(localNode(it, depth + 1));
+          node.children.push(localNode(it, depth + 1, id));
         }
       }
       if (node.children.length) node.expandable = true;

@@ -422,11 +422,221 @@
     };
   }
 
+  function removeTopLevelItem(data, itemId) {
+    var ct = CT();
+    if (!ct || typeof ct.normalizeCompletionData !== 'function') {
+      return data || { items: [] };
+    }
+    var normalized = ct.normalizeCompletionData(data || { items: [] });
+    var id = itemId != null ? String(itemId) : '';
+    if (!id) return normalized;
+    var nextItems = (normalized.items || []).filter(function (item) {
+      return !item || item.id !== id;
+    });
+    if (nextItems.length === (normalized.items || []).length) return normalized;
+    return ct.normalizeCompletionData(
+      Object.assign({}, normalized, { items: nextItems })
+    );
+  }
+
+  /**
+   * Toggle or set a local / checklist / linked subtask done, then persist.
+   * rowMeta: { kind, parentCardId, itemId, parentItemId, cardId, linkParentCardId }
+   */
+  async function setSubtaskDone(t, rowMeta, done) {
+    var ct = CT();
+    if (!ct) return { ok: false, reason: 'no-completion' };
+    rowMeta = rowMeta || {};
+    var wantDone = !!done;
+    var progress = wantDone
+      ? ct.PROGRESS_MAX != null
+        ? ct.PROGRESS_MAX
+        : 100
+      : ct.PROGRESS_MIN != null
+        ? ct.PROGRESS_MIN
+        : 0;
+
+    if (rowMeta.kind === 'local') {
+      var parentId = rowMeta.parentCardId;
+      var itemId = rowMeta.itemId;
+      if (!parentId || !itemId) return { ok: false, reason: 'missing-ids' };
+      var data = await ct.getCardCompletionById(t, parentId);
+      var next = ct.applyItemProgress(data, itemId, progress);
+      await ct.saveCardCompletionById(t, parentId, next);
+      return { ok: true, parentCardId: parentId, data: next };
+    }
+
+    if (rowMeta.kind === 'checklist') {
+      var pCard = rowMeta.parentCardId;
+      var pItem = rowMeta.parentItemId;
+      var nestedId = rowMeta.itemId;
+      if (!pCard || !pItem || !nestedId) {
+        return { ok: false, reason: 'missing-ids' };
+      }
+      var checkData = await ct.getCardCompletionById(t, pCard);
+      var checkNext = ct.applyChecklistItemProgress(
+        checkData,
+        pItem,
+        nestedId,
+        progress
+      );
+      await ct.saveCardCompletionById(t, pCard, checkNext);
+      return { ok: true, parentCardId: pCard, data: checkNext };
+    }
+
+    if (rowMeta.kind === 'card' && rowMeta.cardId) {
+      var childId = String(rowMeta.cardId);
+      var childData = await ct.getCardCompletionById(t, childId);
+      var childNext = wantDone
+        ? ct.markFullyComplete(childData)
+        : ct.markNotFullyComplete(childData);
+      await ct.saveCardCompletionById(t, childId, childNext);
+      return { ok: true, cardId: childId, data: childNext };
+    }
+
+    return { ok: false, reason: 'unsupported-kind' };
+  }
+
+  /**
+   * Delete a local/checklist subtask, or unlink a nested linked card.
+   */
+  async function deleteSubtask(t, rowMeta) {
+    var ct = CT();
+    if (!ct) return { ok: false, reason: 'no-completion' };
+    rowMeta = rowMeta || {};
+
+    if (rowMeta.kind === 'local') {
+      var parentId = rowMeta.parentCardId;
+      var itemId = rowMeta.itemId;
+      if (!parentId || !itemId) return { ok: false, reason: 'missing-ids' };
+      var data = await ct.getCardCompletionById(t, parentId);
+      var next = removeTopLevelItem(data, itemId);
+      await ct.saveCardCompletionById(t, parentId, next);
+      return { ok: true, parentCardId: parentId, data: next };
+    }
+
+    if (rowMeta.kind === 'checklist') {
+      var pCard = rowMeta.parentCardId;
+      var pItem = rowMeta.parentItemId;
+      var nestedId = rowMeta.itemId;
+      if (!pCard || !pItem || !nestedId) {
+        return { ok: false, reason: 'missing-ids' };
+      }
+      var checkData = await ct.getCardCompletionById(t, pCard);
+      var checkNext = ct.removeChecklistItem(checkData, pItem, nestedId);
+      await ct.saveCardCompletionById(t, pCard, checkNext);
+      return { ok: true, parentCardId: pCard, data: checkNext };
+    }
+
+    if (rowMeta.kind === 'card' && rowMeta.linkParentCardId && rowMeta.cardId) {
+      var linkParent = String(rowMeta.linkParentCardId);
+      var linkedId = String(rowMeta.cardId);
+      var parentData = await ct.getCardCompletionById(t, linkParent);
+      var removed = ct.removeLinkedChildFromCompletion(parentData, linkedId);
+      await ct.saveCardCompletionById(t, linkParent, removed.data);
+      return {
+        ok: true,
+        parentCardId: linkParent,
+        data: removed.data,
+        unlinked: removed.removed,
+      };
+    }
+
+    return { ok: false, reason: 'unsupported-kind' };
+  }
+
+  /**
+   * Rename a local / checklist / linked subtask and persist.
+   */
+  async function renameSubtask(t, rowMeta, text) {
+    var ct = CT();
+    if (!ct) return { ok: false, reason: 'no-completion' };
+    rowMeta = rowMeta || {};
+    var nextText = typeof text === 'string' ? text.trim() : '';
+    var max =
+      ct.ITEM_TEXT_MAX != null && isFinite(ct.ITEM_TEXT_MAX)
+        ? ct.ITEM_TEXT_MAX
+        : 500;
+    if (nextText.length > max) nextText = nextText.slice(0, max);
+    if (!nextText) return { ok: false, reason: 'empty' };
+
+    if (rowMeta.kind === 'local') {
+      var parentId = rowMeta.parentCardId;
+      var itemId = rowMeta.itemId;
+      if (!parentId || !itemId) return { ok: false, reason: 'missing-ids' };
+      var data = await ct.getCardCompletionById(t, parentId);
+      var next = ct.applyItemText(data, itemId, nextText);
+      await ct.saveCardCompletionById(t, parentId, next);
+      return { ok: true, parentCardId: parentId, data: next, name: nextText };
+    }
+
+    if (rowMeta.kind === 'checklist') {
+      var pCard = rowMeta.parentCardId;
+      var pItem = rowMeta.parentItemId;
+      var nestedId = rowMeta.itemId;
+      if (!pCard || !pItem || !nestedId) {
+        return { ok: false, reason: 'missing-ids' };
+      }
+      var checkData = await ct.getCardCompletionById(t, pCard);
+      var checkNext = ct.applyChecklistItemText(
+        checkData,
+        pItem,
+        nestedId,
+        nextText
+      );
+      await ct.saveCardCompletionById(t, pCard, checkNext);
+      return { ok: true, parentCardId: pCard, data: checkNext, name: nextText };
+    }
+
+    if (rowMeta.kind === 'card' && rowMeta.cardId) {
+      var childId = String(rowMeta.cardId);
+      var linkParent =
+        rowMeta.linkParentCardId != null
+          ? String(rowMeta.linkParentCardId)
+          : '';
+      var linkItemId =
+        rowMeta.linkItemId != null ? String(rowMeta.linkItemId) : '';
+
+      if (linkParent && linkItemId && typeof ct.applyItemText === 'function') {
+        var parentData = await ct.getCardCompletionById(t, linkParent);
+        var parentNext = ct.applyItemText(parentData, linkItemId, nextText);
+        await ct.saveCardCompletionById(t, linkParent, parentNext);
+      }
+
+      var pt = PT();
+      var nameOk = false;
+      if (pt && typeof pt.restPutCard === 'function') {
+        var auth = await ensureRestAuthorized(t);
+        if (auth.ok) {
+          try {
+            var put = await pt.restPutCard(t, childId, { name: nextText });
+            nameOk = !!(put && put.ok);
+          } catch (restErr) {
+            console.error('GanttTrello.renameSubtask REST failed', restErr);
+          }
+        }
+      }
+
+      return {
+        ok: true,
+        cardId: childId,
+        name: nextText,
+        cardNameUpdated: nameOk,
+      };
+    }
+
+    return { ok: false, reason: 'unsupported-kind' };
+  }
+
   global.GanttTrello = {
     loadBoard: loadBoard,
     ensureRestAuthorized: ensureRestAuthorized,
     saveCardDates: saveCardDates,
     resolveCardDates: resolveCardDates,
     buildInputsForDates: buildInputsForDates,
+    setSubtaskDone: setSubtaskDone,
+    deleteSubtask: deleteSubtask,
+    renameSubtask: renameSubtask,
+    removeTopLevelItem: removeTopLevelItem,
   };
 })(typeof window !== 'undefined' ? window : this);

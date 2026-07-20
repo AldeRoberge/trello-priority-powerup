@@ -267,8 +267,6 @@ describe('PriorityUI createOverviewField', () => {
       status: 'En cours',
       statusCategory: 'started',
       progressPercent: 40,
-      subtasksDone: 2,
-      subtasksTotal: 5,
       dueCountdown: 'Dans 3 jours',
       dueBand: 'soon',
       priorityLabel: 'Importante',
@@ -285,9 +283,10 @@ describe('PriorityUI createOverviewField', () => {
 
     assert.equal(ui.el.querySelector('.overview-cell--status'), null);
     assert.ok(ui.el.querySelector('.overview-cell--progress'));
-    assert.ok(ui.el.querySelector('.overview-cell--subtasks'));
+    assert.equal(ui.el.querySelector('.overview-cell--subtasks'), null);
     assert.ok(ui.el.querySelector('.overview-cell--due'));
     assert.ok(ui.el.querySelector('.overview-cell--priority'));
+    assert.equal(ui.el.querySelector('.overview-status-brief'), null);
 
     // In progress → show % (not the list name).
     assert.match(
@@ -299,8 +298,12 @@ describe('PriorityUI createOverviewField', () => {
       /En cours/
     );
     assert.match(
-      ui.el.querySelector('.overview-cell--subtasks .overview-cell-value').textContent,
-      /2/
+      ui.el.querySelector('.overview-cell--due .overview-cell-value').textContent,
+      /3 jours/
+    );
+    assert.equal(
+      ui.el.querySelector('.overview-cell--due .overview-cell-label'),
+      null
     );
   });
 
@@ -309,8 +312,6 @@ describe('PriorityUI createOverviewField', () => {
     const ui = PriorityUI.createOverviewField({
       title: 'Card',
       progressPercent: 20,
-      subtasksDone: 0,
-      subtasksTotal: 2,
       dueCountdown: 'Demain',
       onJump(key) {
         jumps.push(key);
@@ -319,13 +320,11 @@ describe('PriorityUI createOverviewField', () => {
 
     ui.el.querySelector('.overview-title').click();
     ui.el.querySelector('.overview-cell--progress').click();
-    ui.el.querySelector('.overview-cell--subtasks').click();
     ui.el.querySelector('.overview-cell--due').click();
     ui.el.querySelector('.overview-cell--priority').click();
 
     assert.deepEqual(jumps, [
       'info',
-      'progress',
       'progress',
       'due',
       'priority',
@@ -351,8 +350,6 @@ describe('PriorityUI createOverviewField', () => {
       title: 'A',
       status: 'Todo',
       progressPercent: 10,
-      subtasksDone: 0,
-      subtasksTotal: 1,
       dueCountdown: 'Demain',
       priorityLabel: 'Flexible',
     });
@@ -362,8 +359,6 @@ describe('PriorityUI createOverviewField', () => {
       status: 'Done',
       statusCategory: 'completed',
       progressPercent: 100,
-      subtasksDone: 1,
-      subtasksTotal: 1,
       dueCountdown: 'En retard',
       dueBand: 'overdue',
       priorityLabel: 'Critique',
@@ -385,10 +380,6 @@ describe('PriorityUI createOverviewField', () => {
     assert.equal(
       ui.el.querySelector('.overview-cell--progress').getAttribute('hidden'),
       null
-    );
-    assert.equal(
-      ui.el.querySelector('.overview-cell--subtasks').getAttribute('hidden'),
-      ''
     );
     assert.equal(
       ui.el.querySelector('.overview-cell--priority').getAttribute('hidden'),
@@ -507,83 +498,87 @@ describe('PriorityUI createOverviewField', () => {
     );
   });
 
-  it('hides Sous-tâches and Échéance when empty', () => {
+  it('hides Échéance when empty', () => {
     const ui = PriorityUI.createOverviewField({
       title: 'Card',
       progressPercent: 10,
-      subtasksDone: 0,
-      subtasksTotal: 0,
       dueCountdown: '',
       priorityLabel: 'Flexible',
     });
 
-    assert.equal(
-      ui.el.querySelector('.overview-cell--subtasks').getAttribute('hidden'),
-      ''
-    );
+    assert.equal(ui.el.querySelector('.overview-cell--subtasks'), null);
     assert.equal(
       ui.el.querySelector('.overview-cell--due').getAttribute('hidden'),
       ''
     );
 
     ui.setData({
-      subtasksDone: 1,
-      subtasksTotal: 3,
       dueCountdown: 'Dans 2 jours',
       dueBand: 'soon',
     });
 
     assert.equal(
-      ui.el.querySelector('.overview-cell--subtasks').getAttribute('hidden'),
-      null
-    );
-    assert.equal(
       ui.el.querySelector('.overview-cell--due').getAttribute('hidden'),
       null
-    );
-    assert.match(
-      ui.el.querySelector('.overview-cell--subtasks .overview-cell-value').textContent,
-      /1/
     );
     assert.match(
       ui.el.querySelector('.overview-cell--due .overview-cell-value').textContent,
       /2 jours/
     );
 
-    ui.setData({ subtasksTotal: 0, dueCountdown: '' });
-    assert.equal(
-      ui.el.querySelector('.overview-cell--subtasks').getAttribute('hidden'),
-      ''
-    );
+    ui.setData({ dueCountdown: '' });
     assert.equal(
       ui.el.querySelector('.overview-cell--due').getAttribute('hidden'),
       ''
     );
   });
 
-  it('setData renders statusBrief and hides when empty', () => {
+  it('shows action chips for blocked and due today, and fires onAction', () => {
+    const actions = [];
     const ui = PriorityUI.createOverviewField({
       title: 'Card',
-      statusBrief: 'Tu es dessus, mais sans échéance claire.',
+      statusCategory: 'blocked',
+      progressBlocked: true,
+      dueCountdown: "Aujourd'hui",
+      dueDays: 0,
+      onAction(id) {
+        actions.push(id);
+      },
     });
 
-    const brief = ui.el.querySelector('.overview-status-brief');
-    assert.ok(brief);
-    assert.equal(brief.hidden, false);
-    assert.match(brief.textContent, /Tu es dessus/);
-    assert.equal(ui.getData().statusBrief, 'Tu es dessus, mais sans échéance claire.');
+    const row = ui.el.querySelector('.overview-actions');
+    assert.ok(row);
+    assert.equal(row.hidden, false);
+    const chips = ui.el.querySelectorAll('.overview-action-chip');
+    assert.equal(chips.length, 2);
+    assert.match(chips[0].textContent, /d[eé]bloqu/i);
+    assert.match(chips[1].textContent, /Reporter/i);
+    assert.equal(chips[0].dataset.overviewAction, 'unblock');
+    assert.equal(chips[1].dataset.overviewAction, 'postpone-tomorrow');
 
-    ui.setData({ statusBrief: '', statusBriefPending: false });
-    assert.equal(brief.hidden, true);
-    assert.equal(brief.textContent, '');
+    chips[0].click();
+    chips[1].click();
+    assert.deepEqual(actions, ['unblock', 'postpone-tomorrow']);
 
     ui.setData({
-      statusBrief: 'C’est bloqué de ton côté.',
-      statusBriefPending: true,
+      statusCategory: 'started',
+      progressBlocked: false,
+      dueDays: 3,
+      dueCountdown: 'Dans 3 jours',
     });
-    assert.equal(brief.hidden, false);
-    assert.ok(brief.classList.contains('is-pending'));
-    assert.match(brief.textContent, /bloqu/i);
+    assert.equal(ui.el.querySelector('.overview-actions').hidden, true);
+    assert.equal(ui.el.querySelectorAll('.overview-action-chip').length, 0);
+  });
+
+  it('shows Reporter chip when overdue', () => {
+    const ui = PriorityUI.createOverviewField({
+      dueCountdown: 'En retard de 1 jour',
+      dueDays: -1,
+      dueBand: 'overdue',
+    });
+    const chips = ui.el.querySelectorAll('.overview-action-chip');
+    assert.equal(chips.length, 1);
+    assert.equal(chips[0].dataset.overviewAction, 'postpone-tomorrow');
   });
 
   it('collapses and expands with summary showing the title', () => {

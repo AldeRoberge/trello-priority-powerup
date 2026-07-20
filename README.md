@@ -4,6 +4,14 @@ Power-Up Trello pour évaluer chaque carte selon **l'urgence**, **l'impact** et 
 
 Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques servis depuis la racine du dépôt (ex. GitHub Pages).
 
+You always have so many big things to do, yet so little time?
+
+Have sometimes trouble sticking to the plan?
+
+You’re not alone!
+
+By getting a system that works for you, you’ll spend less time making lists and more time enjoying your life.
+
 ---
 
 ## Fonctionnalités

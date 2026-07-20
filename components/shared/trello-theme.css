@@ -2255,7 +2255,7 @@ button.tp-estimate-chip:focus-visible {
 }
 
 .tp-estimate-chip.is-set {
-  color: var(--tp-text-muted);
+  color: var(--estimate-accent, var(--tp-text-muted));
 }
 
 .tp-estimate-chip.is-adjusted {
@@ -2267,14 +2267,17 @@ button.tp-estimate-chip:focus-visible {
   flex: 0 0 auto;
   font-size: 15px;
   line-height: 1;
-  color: var(--estimate-accent, var(--tp-text-muted));
-  opacity: 0.9;
+  color: inherit;
+  opacity: 0.95;
   transition: color 0.18s ease, opacity 0.18s ease;
 }
 
 .tp-estimate-chip.is-empty .tp-estimate-chip-icon {
   opacity: 0.45;
-  color: var(--tp-text-muted);
+}
+
+.tp-estimate-chip.is-set .tp-estimate-chip-icon {
+  opacity: 1;
 }
 
 .tp-estimate-chip.is-estimating {
@@ -2297,6 +2300,7 @@ button.tp-estimate-chip:focus-visible {
 
 .tp-estimate-chip-label {
   white-space: nowrap;
+  color: inherit;
 }
 
 .tp-estimate-chip-wrap.is-compact .tp-estimate-chip {

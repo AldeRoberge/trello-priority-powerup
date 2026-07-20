@@ -145,11 +145,6 @@
     let latestLabelsFp = '';
     let latestCardMembers = [];
     let currentMemberCache = null;
-    var statusBriefTimer = null;
-    var statusBriefGen = 0;
-    var statusBriefFp = '';
-    var statusBriefAiCache = { fp: '', sentence: '' };
-    var STATUS_BRIEF_DEBOUNCE_MS = 800;
     var progressSummaryTimer = null;
     var progressSummaryGen = 0;
     var progressSummaryFp = '';
@@ -176,148 +171,6 @@
         assigneeCount: members.length,
         unassigned: members.length === 0
       };
-    }
-
-    function buildStatusBriefBridge() {
-      return {
-        getScope: function () {
-          return 'task';
-        },
-        getCardName: function () {
-          return readCardNameLabel() || cardNameCache || '';
-        },
-        getCardDesc: function () {
-          if (infoUi && typeof infoUi.getDesc === 'function') {
-            return infoUi.getDesc() || '';
-          }
-          return cardDesc || '';
-        },
-        getFormulaKey: function () {
-          if (variant && typeof variant.getFormulaKey === 'function') {
-            return variant.getFormulaKey();
-          }
-          return boardFormula || 'baseline';
-        },
-        getPriorityState: function () {
-          return variant && typeof variant.getState === 'function'
-            ? variant.getState()
-            : latestState || {};
-        },
-        getCompletion: function () {
-          if (completionUi && typeof completionUi.getData === 'function') {
-            return completionUi.getData();
-          }
-          return latestCompletion || { items: [] };
-        },
-        getStatut: function () {
-          return latestStatut;
-        },
-        getOwnership: getOwnershipSnapshot,
-        getProfile: function () {
-          return cachedProfile;
-        },
-        getMemory: function () {
-          return cachedMemory;
-        },
-        getCardMemory: function () {
-          return cachedCardMemory;
-        }
-      };
-    }
-
-    function paintOverviewStatusBrief(sentence, pending) {
-      if (!overviewUi || typeof overviewUi.setData !== 'function') return;
-      overviewUi.setData({
-        statusBrief: sentence || '',
-        statusBriefPending: !!pending
-      });
-    }
-
-    function scheduleOverviewStatusBrief() {
-      if (
-        !window.PriorityAgent ||
-        typeof PriorityAgent.buildContext !== 'function' ||
-        typeof PriorityAgent.buildStatusBriefSnapshot !== 'function' ||
-        typeof PriorityAgent.buildHeuristicStatusBrief !== 'function'
-      ) {
-        return;
-      }
-      var bridge = buildStatusBriefBridge();
-      var context = PriorityAgent.buildContext(bridge);
-      var snapshot = PriorityAgent.buildStatusBriefSnapshot(context);
-      var heuristic = PriorityAgent.buildHeuristicStatusBrief(snapshot);
-      var fp =
-        typeof PriorityAgent.fingerprintStatusBriefSnapshot === 'function'
-          ? PriorityAgent.fingerprintStatusBriefSnapshot(snapshot)
-          : '';
-
-      if (statusBriefAiCache.fp && statusBriefAiCache.fp === fp && statusBriefAiCache.sentence) {
-        paintOverviewStatusBrief(statusBriefAiCache.sentence, false);
-        statusBriefFp = fp;
-        return;
-      }
-
-      paintOverviewStatusBrief(heuristic, false);
-      statusBriefFp = fp;
-
-      if (typeof PriorityAgent.cardStatusBriefTurn !== 'function') return;
-      if (typeof PriorityAgent.getProvider !== 'function') return;
-
-      if (statusBriefTimer) {
-        clearTimeout(statusBriefTimer);
-        statusBriefTimer = null;
-      }
-      statusBriefTimer = setTimeout(function () {
-        statusBriefTimer = null;
-        refreshOverviewStatusBriefAi(bridge, snapshot, fp, heuristic);
-      }, STATUS_BRIEF_DEBOUNCE_MS);
-    }
-
-    function refreshOverviewStatusBriefAi(bridge, snapshot, fp, heuristic) {
-      var gen = ++statusBriefGen;
-      if (
-        !window.PriorityAgent ||
-        typeof PriorityAgent.getProvider !== 'function' ||
-        typeof PriorityAgent.cardStatusBriefTurn !== 'function'
-      ) {
-        return;
-      }
-      paintOverviewStatusBrief(
-        (statusBriefAiCache.fp === fp && statusBriefAiCache.sentence) ||
-          heuristic,
-        true
-      );
-      PriorityAgent.getProvider(t)
-        .then(function (provider) {
-          if (gen !== statusBriefGen) return null;
-          if (!PriorityAgent.isConfigured(provider)) {
-            return {
-              ok: true,
-              skipped: true,
-              reason: 'not-configured',
-              sentence: heuristic,
-              source: 'heuristic'
-            };
-          }
-          return PriorityAgent.cardStatusBriefTurn(provider, bridge, {
-            snapshot: snapshot
-          });
-        })
-        .then(function (result) {
-          if (gen !== statusBriefGen) return;
-          if (!result) return;
-          var sentence =
-            (result.sentence && String(result.sentence).trim()) || heuristic;
-          if (result.source === 'ai' && sentence) {
-            statusBriefAiCache = { fp: fp, sentence: sentence };
-          }
-          paintOverviewStatusBrief(sentence, false);
-        })
-        .catch(function (err) {
-          if (gen !== statusBriefGen) return;
-          console.error('Overview status brief failed', err);
-          paintOverviewStatusBrief(heuristic, false);
-        });
     }
 
     function getProgressLinkedTreeByItemId() {
@@ -797,7 +650,6 @@
       if (infoUi && typeof infoUi.setMembers === 'function') {
         infoUi.setMembers(list);
       }
-      scheduleOverviewStatusBrief();
       resizePopup();
       refreshHistoryBaseline();
     }
@@ -1773,24 +1625,10 @@
       var progressPercent = progressMetrics.progressPercent;
       var progressColor = progressMetrics.progressColor;
       var progressBlocked = progressMetrics.progressBlocked;
-      var subtasksDone = 0;
-      var subtasksTotal = 0;
-      if (window.CompletionTrello) {
-        var completionSnap =
-          (completionUi && typeof completionUi.getData === 'function'
-            ? completionUi.getData()
-            : null) ||
-          latestCompletion ||
-          { items: [] };
-        var progressMeta = CompletionTrello.computeCardProgress(completionSnap);
-        if (progressMeta) {
-          subtasksDone = progressMeta.doneCount || 0;
-          subtasksTotal = progressMeta.totalCount || 0;
-        }
-      }
 
       var dueCountdown = '';
       var dueBand = '';
+      var dueDays = null;
       var dueOn =
         window.PriorityUI && typeof PriorityUI.isDueEnabled === 'function'
           ? PriorityUI.isDueEnabled(state)
@@ -1804,6 +1642,10 @@
         if (typeof PriorityUI.dueProximityBand === 'function') {
           dueBand =
             PriorityUI.dueProximityBand(state.dueDate, state.dueTime) || '';
+        }
+        if (typeof PriorityUI.daysUntilDue === 'function') {
+          var days = PriorityUI.daysUntilDue(state.dueDate);
+          if (isFinite(days)) dueDays = days;
         }
       }
 
@@ -1879,10 +1721,9 @@
         progressPercent: progressPercent,
         progressColor: progressColor,
         progressBlocked: progressBlocked,
-        subtasksDone: subtasksDone,
-        subtasksTotal: subtasksTotal,
         dueCountdown: dueCountdown,
         dueBand: dueBand,
+        dueDays: dueDays,
         priorityLabel: priorityLabel,
         priorityColor: priorityColor,
         features: {
@@ -1893,7 +1734,6 @@
         }
       });
       paintProgressSummary();
-      scheduleOverviewStatusBrief();
     }
 
     function syncInfoRecap(stateOverride) {
@@ -2259,6 +2099,111 @@
       }, 0);
     }
 
+    function overviewUnblockCard() {
+      if (variant && typeof variant.setState === 'function') {
+        variant.setState(
+          Object.assign({}, variant.getState(), {
+            enAttente: false,
+            blockedReasons: [],
+            blockedLinks: []
+          })
+        );
+      }
+      syncProgressFromPriorityBlocked({ enAttente: false });
+
+      var onBlockedList =
+        latestStatut &&
+        (latestStatut.category === 'blocked' ||
+          (typeof statutUi !== 'undefined' &&
+            statutUi &&
+            typeof statutUi.getCategory === 'function' &&
+            statutUi.getCategory() === 'blocked'));
+      if (onBlockedList && typeof applyStatutListSelection === 'function') {
+        var lists = (latestStatut && latestStatut.lists) || [];
+        var targetId = null;
+        var i;
+        for (i = 0; i < lists.length; i++) {
+          if (lists[i] && lists[i].category === 'started' && lists[i].id) {
+            targetId = lists[i].id;
+            break;
+          }
+        }
+        if (!targetId) {
+          for (i = 0; i < lists.length; i++) {
+            if (lists[i] && lists[i].category === 'unstarted' && lists[i].id) {
+              targetId = lists[i].id;
+              break;
+            }
+          }
+        }
+        if (!targetId) {
+          for (i = 0; i < lists.length; i++) {
+            var cat = lists[i] && lists[i].category;
+            if (
+              lists[i] &&
+              lists[i].id &&
+              cat !== 'blocked' &&
+              cat !== 'completed'
+            ) {
+              targetId = lists[i].id;
+              break;
+            }
+          }
+        }
+        if (targetId) {
+          applyStatutListSelection(targetId);
+        }
+      }
+      syncOverview();
+      resizePopup();
+    }
+
+    function overviewPostponeDueTomorrow() {
+      if (!variant || typeof variant.setState !== 'function') return;
+      var state = variant.getState() || {};
+      var tomorrowIso = '';
+      if (
+        window.PriorityUI &&
+        typeof PriorityUI.resolveDueDateQuickSuggestion === 'function'
+      ) {
+        var resolved = PriorityUI.resolveDueDateQuickSuggestion('demain-matin');
+        if (resolved && resolved.iso) tomorrowIso = resolved.iso;
+      }
+      if (!tomorrowIso) {
+        var now = new Date();
+        var d = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() + 1
+        );
+        tomorrowIso =
+          d.getFullYear() +
+          '-' +
+          String(d.getMonth() + 1).padStart(2, '0') +
+          '-' +
+          String(d.getDate()).padStart(2, '0');
+      }
+      variant.setState(
+        Object.assign({}, state, {
+          dueDate: tomorrowIso,
+          dueEnabled: true,
+          dueTime: state.dueTime || ''
+        })
+      );
+      syncOverview();
+      resizePopup();
+    }
+
+    function handleOverviewAction(actionId) {
+      if (actionId === 'unblock') {
+        overviewUnblockCard();
+        return;
+      }
+      if (actionId === 'postpone-tomorrow') {
+        overviewPostponeDueTomorrow();
+      }
+    }
+
     function mountOverviewSection(cardEl) {
       if (!cardEl) return;
       if (!PriorityUI.createOverviewField) {
@@ -2271,6 +2216,7 @@
       overviewUi = PriorityUI.createOverviewField({
         title: readCardNameLabel() || cardNameCache || '',
         onJump: jumpToSection,
+        onAction: handleOverviewAction,
         onLayoutChange: resizePopup,
         expanded: PriorityUI.resolveSectionExpanded('overview', true),
         onExpandChange: function (isExpanded) {
@@ -2391,7 +2337,6 @@
                 if (infoUi && typeof infoUi.setMembers === 'function') {
                   infoUi.setMembers(members || []);
                 }
-                scheduleOverviewStatusBrief();
               })
               .then(function () {
                 return commitHistoryNow('Membre ajouté').then(function () {
@@ -2415,7 +2360,6 @@
                 if (infoUi && typeof infoUi.setMembers === 'function') {
                   infoUi.setMembers(members || []);
                 }
-                scheduleOverviewStatusBrief();
               })
               .then(function () {
                 return commitHistoryNow('Membre retiré').then(function () {

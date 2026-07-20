@@ -108,7 +108,7 @@
 }
 
 .gantt-labels {
-  width: 240px;
+  width: 280px;
   flex-shrink: 0;
   overflow: auto;
   border-right: 1px solid var(--tp-border, #091e4224);
@@ -197,6 +197,55 @@
 
 .gantt-task-name.is-card:hover {
   text-decoration: underline;
+}
+
+.gantt-task-name.is-done {
+  text-decoration: line-through;
+  color: var(--tp-text-muted, #626f86);
+}
+
+.gantt-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: 2px;
+  opacity: 0.55;
+}
+
+.gantt-row:hover .gantt-row-actions,
+.gantt-row-actions:focus-within {
+  opacity: 1;
+}
+
+.gantt-action-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--tp-text-muted, #626f86);
+  cursor: pointer;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gantt-action-btn:hover {
+  background: var(--tp-surface-hover, #091e420f);
+  color: var(--tp-text, #172b4d);
+}
+
+.gantt-action-btn--done.is-on {
+  color: var(--tp-success, #216e4e);
+}
+
+.gantt-action-btn--delete:hover {
+  color: var(--tp-danger-text, #ae2e24);
 }
 
 .gantt-progress-chip {
