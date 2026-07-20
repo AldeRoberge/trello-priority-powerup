@@ -51,6 +51,7 @@ const UNIT_FILES = [
   'gantt-model.test.js',
   'gantt-trello.test.js',
   'gantt-ui.test.js',
+  'gantt-mini-editors.test.js',
   'outlook-sync.test.js',
   'outlook-ics.test.js',
 ];

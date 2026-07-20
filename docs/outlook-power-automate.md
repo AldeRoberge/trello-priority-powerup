@@ -2,137 +2,163 @@
 
 Automate **Trello → Outlook Calendar** using Microsoft Power Automate. Runs in Microsoft’s cloud — you do **not** host a server.
 
+**No Trello Pro required.** Custom Fields are Pro-only; this guide uses a free **Excel** mapping table (or an optional line in the card description).
+
 | | Graph (Connecter Outlook) | ICS export | **Power Automate** |
 |--|--|--|--|
 | Your hosting | No | No | **No** |
 | Entra SPA app | Yes | No | **No** |
+| Trello Pro | No | No | **No** |
 | Auto updates | While Gantt open | Manual | **Yes** (cloud triggers) |
 | Direction | Two-way | One-way | **One-way** (Trello → Outlook) |
 
 ## Prerequisites
 
 1. A Microsoft account that can open [Power Automate](https://make.powerautomate.com) (Microsoft 365 / free Microsoft account often works; some orgs disable connectors).
-2. Access to the Trello board.
+2. Access to the Trello board (**Free / Standard is fine** — no Custom Fields).
 3. Outlook calendar on the same Microsoft account you connect in the flow.
+4. OneDrive or Excel Online (comes with the same Microsoft account).
 
-If your **work** tenant blocks the Trello or Outlook connector, try the same flows with a **personal** Microsoft account (outlook.com) and that calendar — or ask IT to allow those connectors (no custom Entra app required).
+If your **work** tenant blocks the Trello or Outlook connector, try a **personal** Microsoft account (outlook.com), or ask IT to allow those connectors (no custom Entra app required).
 
-## Recommended setup (create + update, fewer duplicates)
+---
 
-### 1. Custom field on the Trello board
+## Recommended setup (Free Trello) — Excel mapping
 
-1. Board → **…** → **Custom Fields** → add a **Text** field.
-2. Name it exactly: `Outlook Event ID`  
-   (used to remember the Outlook event so updates don’t create duplicates).
+Store `CardId → EventId` in a small Excel file so updates don’t create duplicate Outlook events.
+
+### 1. Create the Excel workbook
+
+1. Open [https://excel.office.com](https://excel.office.com) (or OneDrive → New → Excel).
+2. Name the file e.g. `Trello-Outlook-Map`.
+3. On **Sheet1**, put headers in row 1:
+
+| A | B | C |
+|---|---|---|
+| CardId | EventId | CardName |
+
+4. Save it in OneDrive.
 
 ### 2. Create the flow
 
-1. Open [https://make.powerautomate.com](https://make.powerautomate.com) → **Create** → **Automated cloud flow**.
+1. [https://make.powerautomate.com](https://make.powerautomate.com) → **Create** → **Automated cloud flow**.
 2. Name: `Trello → Outlook (Cerveau)`.
-3. Trigger: search **Trello** → **When a card is updated**.
-4. Sign in to Trello; pick your **Board**.
-5. Click **New step**.
+3. Trigger: **Trello** → **When a card is updated** → pick your **Board**.
+4. **New step** → **Condition**: **Due date** is not equal to *(empty)* / `null`.  
+   Continue only in **If yes**.
 
-### 3. Condition — only dated cards
+### 3. Look up the card in Excel
 
-1. Add **Condition**.
-2. Left: **Due date** (from the Trello trigger).
-3. Operator: **is not equal to**.
-4. Right: leave empty (or use expression `null`).
+Still in **If yes**:
 
-Stay on the **If yes** branch for the next steps.
+1. **Excel Online (Business)** or **Excel Online (OneDrive)** → **Get a row**  
+   (or **List rows present in a table** — see tip below).
+2. Point at your workbook / table.
+3. Key column: `CardId` = Trello trigger **Card ID** (or `id`).
 
-### 4. Branch — create vs update
+**Tip:** Format the header row as an Excel **Table** (select headers → Insert → Table). Many Excel actions require a named table (e.g. `Table1`).
 
-Add another **Condition** in **If yes**:
+### 4. Create or update Outlook
 
-| | Field |
-|--|--|
-| Left | Custom field **Outlook Event ID** (or “Get custom field options / Get card” if needed — see note below) |
-| Operator | **is equal to** |
-| Right | *(empty)* |
+Add a **Condition**: Excel **EventId** is equal to *(empty)*.
 
-**If yes** (no event yet) — **Create event**:
+**If yes — create**
 
-1. Action: **Office 365 Outlook** or **Outlook.com** → **Create event (V4)**  
-   (use **Outlook.com** for personal MSA; **Office 365 Outlook** for work mailbox).
-2. Calendar: your calendar (e.g. Calendar).
-3. Subject: **Name** (Trello card).
-4. Start time: **Due date** (or Start date if you use both — map as you prefer).
-5. End time: same as start + 1 hour, or use an expression (example below).
-6. Body: **Description** (Trello).
-7. Next action: **Trello – Update a card** (or **Update custom field**) → set **Outlook Event ID** to the **Id** from the Create event output.
+1. **Outlook.com** or **Office 365 Outlook** → **Create event (V4)**  
+   - Subject ← Trello **Name**  
+   - Body ← Trello **Description**  
+   - Start ← **Due date**  
+   - End ← expression `addHours(triggerOutputs()?['body/due'], 1)` (or `addDays(..., 1)` for all-day style)
+2. **Excel – Update a row** (or **Add a row** if Get a row failed / no match):  
+   - `CardId` ← Trello card id  
+   - `EventId` ← **Id** from Create event  
+   - `CardName` ← card name  
 
-**If no** (event id already set) — **Update event**:
+If **Get a row** fails when the card is new, use this pattern instead:
 
-1. Action: **Update event (V4)**.
-2. Event id: the **Outlook Event ID** custom field value.
-3. Subject / times / body: same mappings as create.
+1. **List rows** filtered by `CardId eq '...'` (or get all and **Filter array**).
+2. Condition: length of results = 0 → **Add a row** after create; else **Update event** + **Update a row**.
 
-#### End time expression (optional)
+**If no — update**
 
-If the connector wants a separate end:
+1. **Update event (V4)** with Excel **EventId**.
+2. Same subject / body / times as create.
+3. Optionally **Update a row** with the latest `CardName`.
+
+### 5. Save and test
+
+1. **Save** → turn the flow **On**.
+2. Set a due date on a test card → wait ~1 minute → check Outlook.
+3. Rename the card → same event should update; Excel should still have one row for that `CardId`.
+
+---
+
+## Alternative (Free Trello) — marker in the description
+
+If you prefer not to use Excel, store the event id in the card **description** (available on Free).
+
+Marker line (keep exactly this prefix):
 
 ```text
-addHours(triggerOutputs()?['body/due'], 1)
+[outlook-event-id]: PASTE_EVENT_ID_HERE
 ```
 
-Or for all-day style end next day:
+Flow idea:
 
-```text
-addDays(triggerOutputs()?['body/due'], 1)
-```
+1. Trigger: **When a card is updated**, due date not empty.
+2. Condition: **Description** contains `[outlook-event-id]:`.
+3. **If no** → Create event → **Update a card** description =  
+   `concat(triggerBody()?['desc'], '\n\n[outlook-event-id]: ', outputs('Create_event')?['body/id'])`  
+   (adjust action names to match your flow).
+4. **If yes** → Parse id with an expression, e.g. after the marker, then **Update event**.
 
-### 5. Trello custom field note
+**Downsides:** the marker is visible in the description; careless edits can break the id. Prefer **Excel mapping** when possible.
 
-Depending on the Trello connector version:
+---
 
-- Prefer actions like **Get a card** / **Get custom fields** after the trigger if **Outlook Event ID** is not on the trigger payload.
-- Or use **Update custom fields** after create.
+## Optional: Trello Pro custom field
 
-Exact action names vary slightly between Power Automate UI locales.
+If you later get **Trello Pro / Premium**, you can use a text custom field `Outlook Event ID` instead of Excel — same create/update logic, field on the card. Not required for this guide.
 
-### 6. Save and test
+---
 
-1. **Save** the flow → turn it **On**.
-2. In Trello, set a due date on a test card (and a title/description).
-3. Wait ~1 minute → check Outlook calendar.
-4. Change the card title → confirm the **same** event updates (not a second event).
+## Simpler starter (create only — expects duplicates)
 
-## Simpler starter flow (create only)
+1. Trigger: **When a card is created** or **When a due date is set** (if listed).
+2. Action: **Create event** only.
 
-If custom fields are awkward:
+Editing cards will spawn **extra** events. Use Excel mapping for real use.
 
-1. Trigger: **Trello – When a card is created** or **When a due date is set** (if available in your connector).
-2. Action: **Create event** with Subject = name, Body = desc, time = due.
-
-**Downside:** editing the card often creates **duplicate** events. Prefer the custom-field flow above for day-to-day use.
+---
 
 ## Optional: scheduled catch-up
 
-Add a second flow:
-
-1. Trigger: **Recurrence** (e.g. every day at 7:00).
-2. Action: **Trello – Get cards** on the board (filter open cards).
-3. **Apply to each** card with a due date and empty **Outlook Event ID** → Create event → write Event ID.
+1. Trigger: **Recurrence** (e.g. daily 7:00).
+2. **Trello – Get cards** (open cards on the board).
+3. **Apply to each**: due date set **and** no Excel row for that `CardId` → Create event → Add Excel row.
 
 Useful for cards that already had dates before the flow existed.
+
+---
 
 ## Gantt in this Power-Up
 
 - **Exporter .ics** — one-shot import (no Automate).
-- **Power Automate** — open the in-app guide from the Gantt toolbar (**Power Automate**) or read this file.
-- **Connecter Outlook** — Graph sync; needs Entra SPA; often blocked without admin.
+- **Power Automate** — this guide (toolbar button).
+- **Connecter Outlook** — Graph; needs Entra; often blocked without admin.
+
+---
 
 ## Troubleshooting
 
 | Issue | What to try |
 |-------|-------------|
 | Can’t find Trello connector | Org policy; try personal account at make.powerautomate.com |
-| Flow runs but no event | Check Outlook connector account = the mailbox you open in Outlook |
-| Duplicates | Implement **Outlook Event ID** custom field + update branch |
-| Work mailbox blocked | Use Outlook.com calendar, or ask IT to allow Outlook + Trello connectors (still no custom Entra app) |
-| Due date timezone wrong | In Create event, set time zone explicitly; or convert with `convertTimeZone(...)` |
+| Excel “table not found” | Select header row → Insert → **Table**; use that table name in the action |
+| Flow runs but no event | Outlook connector account = mailbox you open in Outlook |
+| Duplicates | Excel `CardId` / `EventId` mapping (or description marker) + update branch |
+| Work mailbox blocked | Outlook.com calendar, or ask IT for Outlook + Trello connectors |
+| Due date timezone wrong | Set time zone on Create event; or `convertTimeZone(...)` |
 
 ## Related
 

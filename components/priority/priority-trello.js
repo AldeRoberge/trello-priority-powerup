@@ -3177,6 +3177,93 @@
   }
 
   /**
+   * Merge + persist cardPriority for an arbitrary board card (Gantt / board context).
+   * Preserves sidecars not present in `inputs` by loading existing first.
+   * Explicit empty due / unblock clearing is applied when those keys are provided.
+   */
+  async function saveCardInputsById(t, cardId, inputs, options) {
+    options = options || {};
+    var id = cardId != null ? String(cardId).trim() : '';
+    if (!id) {
+      throw new Error('saveCardInputsById requires cardId');
+    }
+    var existing = null;
+    try {
+      existing = await getCardInputsById(t, id);
+    } catch (readErr) {
+      existing = null;
+    }
+    var base = existing
+      ? Object.assign({}, existing)
+      : Object.assign({}, DEFAULT_INPUTS, { priorityEnabled: true });
+    var patch = inputs && typeof inputs === 'object' ? inputs : {};
+
+    if (patch.urgency != null) base.urgency = patch.urgency;
+    if (patch.impact != null) base.impact = patch.impact;
+    if (patch.ease != null) base.ease = patch.ease;
+    if (patch.priorityEnabled != null) base.priorityEnabled = patch.priorityEnabled;
+    if (patch.estimatedDurationMinutes != null) {
+      base.estimatedDurationMinutes = patch.estimatedDurationMinutes;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(patch, 'enAttente')) {
+      if (patch.enAttente) {
+        base.enAttente = true;
+        if (patch.blockedReasons != null) base.blockedReasons = patch.blockedReasons;
+        if (patch.blockedLinks != null) base.blockedLinks = patch.blockedLinks;
+      } else {
+        base = clearBlockedFromInputs(base);
+        base.enAttente = false;
+        if (patch.blockedReasons != null) base.blockedReasons = patch.blockedReasons;
+        if (patch.blockedLinks != null) base.blockedLinks = patch.blockedLinks;
+      }
+    } else {
+      if (patch.blockedReasons != null) base.blockedReasons = patch.blockedReasons;
+      if (patch.blockedLinks != null) base.blockedLinks = patch.blockedLinks;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(patch, 'dueDate')) {
+      if (patch.dueDate) {
+        base.dueDate = patch.dueDate;
+        if (patch.dueTime != null) base.dueTime = patch.dueTime;
+        if (patch.dueEnabled != null) base.dueEnabled = patch.dueEnabled;
+      } else {
+        delete base.dueDate;
+        delete base.dueTime;
+        delete base.dueEnabled;
+      }
+    } else if (patch.dueTime != null) {
+      base.dueTime = patch.dueTime;
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'dueMode')) {
+      base.dueMode = patch.dueMode;
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'dueVague')) {
+      if (patch.dueVague) base.dueVague = patch.dueVague;
+      else delete base.dueVague;
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'startDate')) {
+      if (patch.startDate) {
+        base.startDate = patch.startDate;
+      } else {
+        delete base.startDate;
+        delete base.startTime;
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'recurrence')) {
+      if (patch.recurrence) base.recurrence = patch.recurrence;
+      else delete base.recurrence;
+    }
+
+    var normalized = normalizeInputs(base);
+    if (!normalized) {
+      throw new Error('saveCardInputsById: invalid inputs');
+    }
+    await t.set(id, 'shared', CARD_PRIORITY_KEY, normalized);
+    return normalized;
+  }
+
+  /**
    * Compact board digest for AI memory / suggestions.
    * Caps cards and truncates descriptions to stay prompt-friendly.
    * @returns {Promise<{ digest: string, cards: Array, lists: Array }>}
@@ -4132,6 +4219,7 @@
     cardDetailBadges: cardDetailBadges,
     saveCardInputs: saveCardInputs,
     getCardInputsById: getCardInputsById,
+    saveCardInputsById: saveCardInputsById,
     scanBoardCards: scanBoardCards,
     getCardNeighborhood: getCardNeighborhood,
     prioritySortRank: prioritySortRank,

@@ -1052,3 +1052,166 @@ html:has(body.tp-page--gantt) body {
   border: 0;
   background: var(--tp-surface, #fff);
 }
+
+/* ── Mini editors (priority / progress / due / blocked) ───────────────── */
+
+.gantt-detail-icon.is-priority-muted {
+  color: var(--tp-text-subtle, #8c9bab);
+  opacity: 0.55;
+}
+
+.gantt-detail-icon.is-due-muted {
+  color: var(--tp-text-subtle, #8c9bab);
+  opacity: 0.45;
+}
+
+.gantt-progress-text--btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 2px 4px;
+  margin: 0;
+  cursor: pointer;
+  border-radius: 4px;
+  font: inherit;
+}
+
+.gantt-progress-text--btn:hover,
+.gantt-progress-text--btn:focus-visible {
+  background: var(--tp-surface-hover, #091e420f);
+  outline: none;
+}
+
+.gantt-mini-popover {
+  position: absolute;
+  z-index: 40;
+  width: min(360px, calc(100% - 16px));
+  max-height: min(70vh, 520px);
+  display: flex;
+  flex-direction: column;
+  background: var(--tp-surface, #fff);
+  color: var(--tp-text, #172b4d);
+  border: 1px solid var(--tp-border, #091e4224);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(9, 30, 66, 0.18);
+  overflow: hidden;
+}
+
+.gantt-mini-popover-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--tp-border, #091e4224);
+  flex-shrink: 0;
+}
+
+.gantt-mini-popover-title {
+  flex: 1 1 auto;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.gantt-mini-popover-close {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--tp-text-subtle, #44546f);
+}
+
+.gantt-mini-popover-close:hover,
+.gantt-mini-popover-close:focus-visible {
+  background: var(--tp-surface-hover, #091e420f);
+  color: var(--tp-text, #172b4d);
+  outline: none;
+}
+
+.gantt-mini-popover-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 10px 12px;
+  min-height: 0;
+}
+
+.gantt-mini-popover-loading {
+  font-size: 13px;
+  color: var(--tp-text-subtle, #44546f);
+  padding: 8px 0;
+}
+
+.gantt-mini-popover-foot {
+  flex-shrink: 0;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--tp-border, #091e4224);
+}
+
+.gantt-mini-popover-full {
+  appearance: none;
+  width: 100%;
+  border: 1px solid var(--tp-border, #091e4224);
+  background: var(--tp-surface, #fff);
+  color: var(--tp-primary, #0c66e4);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gantt-mini-popover-full:hover,
+.gantt-mini-popover-full:focus-visible {
+  background: var(--tp-surface-hover, #091e420f);
+  outline: none;
+}
+
+.tp-mini-priority .variant-fields {
+  margin-top: 8px;
+}
+
+.tp-mini-due .field--due-date .section-toggle-head {
+  display: none;
+}
+
+.tp-mini-due .field--due-date {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.tp-mini-blocked .field--en-attente-embedded {
+  margin: 0;
+}
+
+.tp-mini-progress-summary {
+  font-size: 12px;
+  color: var(--tp-text-subtle, #44546f);
+  margin-bottom: 8px;
+}
+
+.tp-mini-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tp-mini-progress-pct {
+  flex: 0 0 auto;
+  min-width: 3.2em;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.tp-mini-progress-range {
+  flex: 1 1 auto;
+  width: 100%;
+  accent-color: var(--tp-primary, #0c66e4);
+}

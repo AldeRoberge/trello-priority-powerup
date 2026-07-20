@@ -41,6 +41,18 @@
       border-radius: 3px;
       background: var(--ds-background-neutral, #091e420f);
     }
+    .pa-guide table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 0.9rem;
+      margin: 0.5rem 0 0.75rem;
+    }
+    .pa-guide th,
+    .pa-guide td {
+      border: 1px solid var(--ds-border, #091e4224);
+      padding: 0.35rem 0.5rem;
+      text-align: left;
+    }
     .pa-actions {
       display: flex;
       flex-wrap: wrap;
@@ -79,7 +91,8 @@
     <h1>Automatiser Outlook (Power Automate)</h1>
     <p class="tp-muted">
       Sync <strong>Trello → calendrier Outlook</strong> dans le cloud Microsoft.
-      Aucun serveur à héberger, pas d’app Entra SPA.
+      Aucun serveur, pas d’app Entra, <strong>pas besoin de Trello Pro</strong>
+      (les champs personnalisés ne sont pas utilisés).
     </p>
 
     <div class="pa-actions">
@@ -102,44 +115,65 @@
     </div>
 
     <div class="pa-callout">
-      Sens unique : les changements Outlook ne mettent pas à jour Trello.
-      Pour un import ponctuel sans Automate, utilisez <strong>Exporter .ics</strong> dans le Gantt.
+      Sens unique : Outlook ne met pas à jour Trello.
+      Mapping des IDs dans <strong>Excel / OneDrive</strong> (gratuit) pour éviter les doublons.
     </div>
 
-    <h2>1. Champ Trello</h2>
+    <h2>1. Fichier Excel (mapping)</h2>
     <ol>
-      <li>Sur le tableau → <strong>Champs personnalisés</strong> → champ texte.</li>
-      <li>Nom exact : <code>Outlook Event ID</code> (évite les doublons).</li>
+      <li>Créez un classeur OneDrive / Excel Online, ex. <code>Trello-Outlook-Map</code>.</li>
+      <li>Ligne d’en-têtes (formatez en <strong>Tableau</strong>)&nbsp;:</li>
     </ol>
+    <table>
+      <thead>
+        <tr>
+          <th>CardId</th>
+          <th>EventId</th>
+          <th>CardName</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td colspan="3" class="tp-muted">(lignes ajoutées par le flux)</td>
+        </tr>
+      </tbody>
+    </table>
 
     <h2>2. Flux automatisé</h2>
     <ol>
       <li>Power Automate → <strong>Créer</strong> → <strong>Flux de cloud automatisé</strong>.</li>
-      <li>Déclencheur <strong>Trello</strong> : <em>When a card is updated</em> → choisir le tableau.</li>
+      <li>Déclencheur Trello : <em>When a card is updated</em> → votre tableau.</li>
       <li>Condition : <em>Due date</em> n’est pas vide.</li>
       <li>
-        Si <code>Outlook Event ID</code> est vide →
-        <strong>Outlook / Outlook.com – Create event</strong>
-        (sujet = nom, corps = description, horaire = échéance),
-        puis écrire l’<em>Id</em> de l’événement dans <code>Outlook Event ID</code>.
+        Excel : chercher une ligne dont <code>CardId</code> = id de la carte.
       </li>
       <li>
-        Sinon → <strong>Update event</strong> avec cet Id
-        (même mappings titre / dates / description).
+        Si pas de <code>EventId</code> →
+        <strong>Create event</strong> (sujet, description, échéance),
+        puis <strong>Add/Update row</strong> Excel avec l’id d’événement.
+      </li>
+      <li>
+        Sinon → <strong>Update event</strong> avec cet <code>EventId</code>.
       </li>
     </ol>
 
-    <h2>3. Tester</h2>
+    <h2>3. Variante sans Excel</h2>
+    <p>
+      Ajoutez en bas de la description de carte une ligne
+      <code>[outlook-event-id]: …</code> après la création, et parsez-la pour les mises à jour.
+      Moins propre que Excel, mais compatible Trello Free.
+    </p>
+
+    <h2>4. Tester</h2>
     <ol>
       <li>Enregistrer et activer le flux.</li>
       <li>Mettre une échéance sur une carte test.</li>
-      <li>Vérifier l’événement dans Outlook, puis renommer la carte (même événement, pas de doublon).</li>
+      <li>Vérifier Outlook, puis renommer la carte (un seul événement).</li>
     </ol>
 
     <p class="tp-muted">
-      Connecteur bloqué par l’entreprise&nbsp;? Réessayez avec un compte Microsoft
-      personnel, ou demandez l’autorisation des connecteurs Trello + Outlook
-      (toujours sans inscription d’app Entra).
+      Connecteur bloqué au travail&nbsp;? Compte Microsoft personnel, ou demandez
+      Trello + Outlook dans Power Automate (toujours sans app Entra).
     </p>
   </div>
   <script>

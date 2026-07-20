@@ -9945,8 +9945,10 @@
       }
 
       if (options.collapsible) {
+        var compactDetail = !!options.compactDetail;
         var rowExpanded = resolveInfoRowExpanded(key, false);
         row.classList.toggle('is-collapsed', !rowExpanded);
+        if (compactDetail) row.classList.add('info-row--compact-detail');
 
         var toggleBtn = document.createElement('button');
         toggleBtn.type = 'button';
@@ -9970,12 +9972,17 @@
 
         var summaryEl = document.createElement('span');
         summaryEl.className = 'info-row-summary';
-        summaryEl.hidden = rowExpanded;
-        summaryEl.setAttribute('aria-hidden', rowExpanded ? 'true' : 'false');
+        // Compact rows show live chips/+ in detail; text summary is for Description.
+        var showSummary = !compactDetail && !rowExpanded;
+        summaryEl.hidden = !showSummary;
+        summaryEl.setAttribute(
+          'aria-hidden',
+          showSummary ? 'false' : 'true'
+        );
 
         var detailEl = document.createElement('div');
         detailEl.className = 'info-row-detail';
-        detailEl.hidden = !rowExpanded;
+        detailEl.hidden = compactDetail ? false : !rowExpanded;
 
         value.appendChild(summaryEl);
         value.appendChild(detailEl);
@@ -9987,12 +9994,13 @@
           var was = rowExpanded;
           rowExpanded = !!next;
           row.classList.toggle('is-collapsed', !rowExpanded);
-          summaryEl.hidden = rowExpanded;
+          var nextShowSummary = !compactDetail && !rowExpanded;
+          summaryEl.hidden = !nextShowSummary;
           summaryEl.setAttribute(
             'aria-hidden',
-            rowExpanded ? 'true' : 'false'
+            nextShowSummary ? 'false' : 'true'
           );
-          detailEl.hidden = !rowExpanded;
+          detailEl.hidden = compactDetail ? false : !rowExpanded;
           toggleBtn.setAttribute(
             'aria-expanded',
             rowExpanded ? 'true' : 'false'
@@ -10020,6 +10028,23 @@
           applyRowExpanded(!rowExpanded);
         });
 
+        // Click collapsed content (summary or chip area) to expand, except
+        // interactive quick-access controls (+, parent open, etc.).
+        value.addEventListener('click', function (event) {
+          if (rowExpanded) return;
+          if (
+            event.target.closest(
+              'button, a, input, select, textarea, label, ' +
+                '[role="button"], [role="listbox"], [role="option"], ' +
+                '[role="combobox"], .info-parent-chip-open'
+            )
+          ) {
+            return;
+          }
+          event.preventDefault();
+          applyRowExpanded(true);
+        });
+
         function setSummary(text, emptyLabel) {
           var raw = typeof text === 'string' ? text.trim() : '';
           summaryEl.textContent = raw || emptyLabel || '';
@@ -10031,6 +10056,7 @@
           value: detailEl,
           summaryEl: summaryEl,
           toggleBtn: toggleBtn,
+          compactDetail: compactDetail,
           setSummary: setSummary,
           setExpanded: applyRowExpanded,
           isExpanded: function () {
@@ -10318,7 +10344,8 @@
     // ── Creator (visible when ≠ sole assignee) ─────────────────────────
     var creatorRow = makeRow('creator', 'Cr\u00e9ateur', {
       icon: 'ti-user',
-      collapsible: true
+      collapsible: true,
+      compactDetail: true
     });
     var creatorEl = document.createElement('div');
     creatorEl.className = 'info-members info-creator';
@@ -10331,6 +10358,7 @@
     var membersRow = makeRow('members', 'Assign\u00e9s', {
       icon: 'ti-users',
       collapsible: true,
+      compactDetail: true,
       onExpandChange: function (isExpanded) {
         if (!isExpanded) {
           setMembersPickerOpen(false);
@@ -10393,6 +10421,7 @@
     var labelsRow = makeRow('labels', '\u00c9tiquettes', {
       icon: 'ti-tag',
       collapsible: true,
+      compactDetail: true,
       onExpandChange: function (isExpanded) {
         if (!isExpanded) {
           setLabelsPickerOpen(false);
@@ -10490,6 +10519,7 @@
     var taskTypesRow = makeRow('task-types', 'Type de t\u00e2che', {
       icon: 'ti-category',
       collapsible: true,
+      compactDetail: true,
       onExpandChange: function (isExpanded) {
         if (!isExpanded) {
           setTaskTypesPickerOpen(false);
@@ -10687,6 +10717,7 @@
     var parentRow = makeRow('parent', 'T\u00e2ches parentes', {
       icon: 'ti-hierarchy-3',
       collapsible: true,
+      compactDetail: true,
       onExpandChange: function (isExpanded) {
         if (!isExpanded) setParentPickerOpen(false);
       }
@@ -10748,7 +10779,8 @@
     // ── Objectif (project link) ───────────────────────────────
     var objectifRow = makeRow('objectif', 'Objectif', {
       icon: 'ti-hierarchy-2',
-      collapsible: true
+      collapsible: true,
+      compactDetail: true
     });
     var objectifMount = document.createElement('div');
     objectifMount.className = 'info-objectif-mount objectif-section-body';
@@ -11935,6 +11967,13 @@
               if (event.target.closest('.info-member-clear')) return;
               event.preventDefault();
               event.stopPropagation();
+              if (
+                membersRow.isExpanded &&
+                !membersRow.isExpanded()
+              ) {
+                membersRow.setExpanded(true);
+                return;
+              }
               toggleMemberRolesPicker(mid);
             });
             main.addEventListener('keydown', function (event) {
@@ -11942,6 +11981,13 @@
                 if (event.target.closest('.info-member-clear')) return;
                 event.preventDefault();
                 event.stopPropagation();
+                if (
+                  membersRow.isExpanded &&
+                  !membersRow.isExpanded()
+                ) {
+                  membersRow.setExpanded(true);
+                  return;
+                }
                 toggleMemberRolesPicker(mid);
               }
             });
@@ -14853,10 +14899,24 @@
         });
     });
 
+    function ensureInfoRowExpanded(rowApi) {
+      if (
+        rowApi &&
+        typeof rowApi.isExpanded === 'function' &&
+        typeof rowApi.setExpanded === 'function' &&
+        !rowApi.isExpanded()
+      ) {
+        rowApi.setExpanded(true);
+        return true;
+      }
+      return false;
+    }
+
     membersAddBtn.addEventListener('click', function (event) {
       event.preventDefault();
       event.stopPropagation();
       if (membersAddBtn.disabled) return;
+      ensureInfoRowExpanded(membersRow);
       setMembersPickerOpen(!membersPickerOpen);
     });
 
@@ -14864,6 +14924,7 @@
       event.preventDefault();
       event.stopPropagation();
       if (labelsAddBtn.disabled) return;
+      ensureInfoRowExpanded(labelsRow);
       setLabelsPickerOpen(!labelsPickerOpen);
     });
 
@@ -14871,6 +14932,7 @@
       event.preventDefault();
       event.stopPropagation();
       if (taskTypesAddBtn.disabled) return;
+      ensureInfoRowExpanded(taskTypesRow);
       setTaskTypesPickerOpen(!taskTypesPickerOpen);
     });
 
@@ -15029,6 +15091,7 @@
       event.preventDefault();
       event.stopPropagation();
       if (parentPickBtn.disabled || !getBoardCards) return;
+      ensureInfoRowExpanded(parentRow);
       if (parentPickerOpen) setParentPickerOpen(false);
       else openParentPicker();
     });
@@ -21353,6 +21416,322 @@
     }
   }
 
+  // ── 10b. Mini editors (Gantt popovers) ──────────────────────────────────
+
+  var DEFAULT_MINI_DIMENSIONS = [
+    {
+      key: 'urgency',
+      label: 'Urgence',
+      icon: 'ti-flame',
+      wordsKey: 'urgency',
+      min: 0,
+      max: 4,
+      value: 2
+    },
+    {
+      key: 'impact',
+      label: 'Impact',
+      icon: 'ti-target-arrow',
+      wordsKey: 'impact',
+      min: 0,
+      max: 4,
+      value: 2
+    },
+    {
+      key: 'ease',
+      label: 'Facilit\u00e9',
+      icon: 'ti-gauge',
+      wordsKey: 'ease',
+      min: 1,
+      max: 5,
+      value: 3
+    }
+  ];
+
+  /**
+   * Compact Priorité editor: heat panel + Urgence / Impact / Facilité sliders.
+   * Reuses createHeatPanel + createField (same as mountVariant Priorité body).
+   */
+  function mountMiniPriority(containerEl, config) {
+    if (!containerEl) throw new Error('mountMiniPriority: container required');
+    config = config || {};
+    var onStateChange =
+      typeof config.onStateChange === 'function' ? config.onStateChange : function () {};
+    var dimensions =
+      Array.isArray(config.dimensions) && config.dimensions.length
+        ? config.dimensions
+        : DEFAULT_MINI_DIMENSIONS;
+    var formulaKey = normalizeFormulaKey(config.formula || 'baseline');
+    var formula = FORMULAS[formulaKey] || FORMULAS.baseline;
+    var calcFn = formula.calc;
+    var overrideFn = formula.override;
+    var defaults = config.defaults && typeof config.defaults === 'object' ? config.defaults : {};
+    var idPrefix = config.id || 'mini';
+
+    var state = {};
+    dimensions.forEach(function (dim) {
+      var v = defaults[dim.key];
+      if (typeof v !== 'number' || !isFinite(v)) v = dim.value;
+      state[dim.key] = clamp(v, dim.min, dim.max);
+    });
+    state.priorityEnabled = true;
+
+    var root = document.createElement('div');
+    root.className = 'tp-mini-priority';
+    containerEl.appendChild(root);
+
+    var heat = null;
+    var fields = {};
+    var sliderAnimFrame = null;
+
+    function syncStateFromFields() {
+      Object.keys(fields).forEach(function (key) {
+        state[key] = fields[key].getValue();
+      });
+    }
+
+    function emitChange() {
+      syncStateFromFields();
+      onStateChange(Object.assign({}, state));
+    }
+
+    function cancelSliderAnim() {
+      if (sliderAnimFrame != null) {
+        cancelAnimationFrame(sliderAnimFrame);
+        sliderAnimFrame = null;
+      }
+    }
+
+    function animateFieldsTo(targets) {
+      cancelSliderAnim();
+      var from = {};
+      var keys = Object.keys(targets);
+      keys.forEach(function (key) {
+        from[key] = fields[key]
+          ? fields[key].getValue()
+          : state[key] != null
+            ? state[key]
+            : targets[key];
+      });
+      var allSame = keys.every(function (key) {
+        return Math.abs(from[key] - targets[key]) < 1e-9;
+      });
+      if (allSame) {
+        keys.forEach(function (key) {
+          state[key] = targets[key];
+          if (fields[key]) fields[key].setValue(targets[key]);
+        });
+        repaint();
+        emitChange();
+        return;
+      }
+      keys.forEach(function (key) {
+        state[key] = targets[key];
+      });
+      emitChange();
+      var startTime = null;
+      function step(ts) {
+        if (startTime == null) startTime = ts;
+        var t = Math.min(1, (ts - startTime) / SLIDER_ANIM_MS);
+        var eased = easeOutCubic(t);
+        keys.forEach(function (key) {
+          if (fields[key]) {
+            fields[key].updateDisplay(lerp(from[key], targets[key], eased));
+          }
+        });
+        repaint();
+        if (t < 1) {
+          sliderAnimFrame = requestAnimationFrame(step);
+        } else {
+          sliderAnimFrame = null;
+          keys.forEach(function (key) {
+            if (fields[key]) fields[key].setValue(targets[key]);
+          });
+          repaint();
+        }
+      }
+      sliderAnimFrame = requestAnimationFrame(step);
+    }
+
+    function repaint() {
+      syncStateFromFields();
+      var result = calcFn(state);
+      var display = resolveDisplay(result, state);
+      if (heat) heat.paint(result, display);
+      return display;
+    }
+
+    heat = createHeatPanel({
+      el: root,
+      formulaKey: formulaKey,
+      hideSegments: formulaKey === 'eisenhower',
+      onSegmentClick: function (targetP) {
+        syncStateFromFields();
+        var clickedSeg = heatSegmentForTarget(targetP);
+        var display = resolveDisplay(calcFn(state), state);
+        if (
+          clickedSeg &&
+          !display.inutile &&
+          display.tierI != null &&
+          display.tierI === clickedSeg.i
+        ) {
+          return;
+        }
+        var next = clickedSeg && clickedSeg.preset
+          ? Object.assign({}, state, clickedSeg.preset)
+          : overrideFn(targetP, state);
+        var delta = pickOverrideDelta(state, next);
+        if (!Object.keys(delta).length) return;
+        animateFieldsTo(delta);
+      }
+    });
+
+    var fieldsWrap = document.createElement('div');
+    fieldsWrap.className = 'variant-fields tp-mini-priority-fields';
+    root.appendChild(fieldsWrap);
+
+    dimensions.forEach(function (dim) {
+      fields[dim.key] = createField({
+        el: fieldsWrap,
+        id: idPrefix + '-' + dim.key,
+        label: dim.label,
+        icon: dim.icon,
+        wordsKey: dim.wordsKey || dim.key,
+        min: dim.min,
+        max: dim.max,
+        value: state[dim.key],
+        onChange: function () {
+          cancelSliderAnim();
+          repaint();
+          emitChange();
+        }
+      });
+    });
+
+    repaint();
+
+    return {
+      el: root,
+      getState: function () {
+        syncStateFromFields();
+        return Object.assign({}, state);
+      },
+      setState: function (next) {
+        if (!next || typeof next !== 'object') return;
+        dimensions.forEach(function (dim) {
+          if (typeof next[dim.key] === 'number' && isFinite(next[dim.key])) {
+            state[dim.key] = clamp(next[dim.key], dim.min, dim.max);
+            if (fields[dim.key]) fields[dim.key].setValue(state[dim.key]);
+          }
+        });
+        repaint();
+      },
+      destroy: function () {
+        cancelSliderAnim();
+        if (root.parentNode) root.parentNode.removeChild(root);
+      }
+    };
+  }
+
+  /**
+   * Compact Échéance editor wrapping createDueDateField.
+   */
+  function mountMiniDue(containerEl, config) {
+    if (!containerEl) throw new Error('mountMiniDue: container required');
+    config = config || {};
+    var onChange =
+      typeof config.onChange === 'function' ? config.onChange : function () {};
+    var root = document.createElement('div');
+    root.className = 'tp-mini-due';
+    containerEl.appendChild(root);
+
+    var dueField = createDueDateField({
+      el: root,
+      value: config.value || {},
+      expanded: true,
+      onChange: function () {
+        onChange(dueField.getValues());
+      },
+      onExpandChange: function () {},
+      onLayoutChange: function () {}
+    });
+    if (dueField && dueField.setExpanded) {
+      dueField.setExpanded(true, { persist: false });
+    }
+
+    return {
+      el: root,
+      getValues: function () {
+        return dueField.getValues();
+      },
+      setValue: function (v, opts) {
+        dueField.setValue(v, opts);
+      },
+      destroy: function () {
+        if (root.parentNode) root.parentNode.removeChild(root);
+      }
+    };
+  }
+
+  /**
+   * Compact Bloqué editor wrapping createEnAttenteField (embedded).
+   */
+  function mountMiniBlocked(containerEl, config) {
+    if (!containerEl) throw new Error('mountMiniBlocked: container required');
+    config = config || {};
+    var onChange =
+      typeof config.onChange === 'function' ? config.onChange : function () {};
+    var root = document.createElement('div');
+    root.className = 'tp-mini-blocked';
+    containerEl.appendChild(root);
+
+    var field = createEnAttenteField({
+      el: root,
+      value: !!config.value,
+      blockedReasons: config.blockedReasons,
+      blockedLinks: config.blockedLinks,
+      embedded: true,
+      hideSubtaskPicker: config.hideSubtaskPicker !== false,
+      getSubtasks: config.getSubtasks || null,
+      onChange: function () {
+        onChange({
+          enAttente: field.getValue(),
+          blockedReasons: field.getBlockedReasons
+            ? field.getBlockedReasons()
+            : [],
+          blockedLinks: field.getBlockedLinks ? field.getBlockedLinks() : []
+        });
+      },
+      onLayoutChange: function () {}
+    });
+
+    return {
+      el: root,
+      getValue: function () {
+        return {
+          enAttente: field.getValue(),
+          blockedReasons: field.getBlockedReasons
+            ? field.getBlockedReasons()
+            : [],
+          blockedLinks: field.getBlockedLinks ? field.getBlockedLinks() : []
+        };
+      },
+      setValue: function (next) {
+        if (!next || typeof next !== 'object') return;
+        if (next.enAttente != null) field.setValue(!!next.enAttente);
+        if (next.blockedReasons != null && field.setBlockedReasons) {
+          field.setBlockedReasons(next.blockedReasons);
+        }
+        if (next.blockedLinks != null && field.setBlockedLinks) {
+          field.setBlockedLinks(next.blockedLinks);
+        }
+      },
+      destroy: function () {
+        if (root.parentNode) root.parentNode.removeChild(root);
+      }
+    };
+  }
+
   // ── 11. PriorityUI public API ───────────────────────────────────────────
 
   var PriorityUI = {
@@ -21455,6 +21834,9 @@
     createCalcGraphPanel: createCalcGraphPanel,
     createFormulaSwitcher: createFormulaSwitcher,
     mountVariant: mountVariant,
+    mountMiniPriority: mountMiniPriority,
+    mountMiniDue: mountMiniDue,
+    mountMiniBlocked: mountMiniBlocked,
     tierFor: tierFor,
     isInutile: isInutile,
     isEnAttente: isEnAttente,
