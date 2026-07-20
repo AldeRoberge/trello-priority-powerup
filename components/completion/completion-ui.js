@@ -4825,7 +4825,7 @@
       if (completeBtn) mainRow.appendChild(completeBtn);
       mainRow.appendChild(deleteBtn);
 
-      // Progress check + add-nested sit on the title row: [✓] [+] title…
+      // Progress circle stays on the title row (after the selection checkbox).
       mainRow.insertBefore(checkWrap, selectBox.nextSibling);
 
       li.appendChild(mainRow);
@@ -4833,8 +4833,13 @@
       var checklistUi = null;
       if (!isLinked) {
         checklistUi = renderChecklistSection(item);
+        // Nested-add sits immediately right of the checkmark (Terminer) control.
         if (checklistUi.addBtn) {
-          mainRow.insertBefore(checklistUi.addBtn, checkWrap.nextSibling);
+          if (completeBtn) {
+            mainRow.insertBefore(checklistUi.addBtn, completeBtn.nextSibling);
+          } else {
+            mainRow.insertBefore(checklistUi.addBtn, deleteBtn);
+          }
         }
 
         var sliderRow = document.createElement('div');

@@ -3526,14 +3526,14 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
 
 .tp-completion-item-main {
   display: grid;
-  /* select | check | + | title | estimate | blocked | complete | delete */
-  grid-template-columns: 18px 28px 28px minmax(0, 1fr) auto 28px 28px 28px;
+  /* select | check | title | estimate | blocked | complete | + | delete */
+  grid-template-columns: 18px 28px minmax(0, 1fr) auto 28px 28px 28px 28px;
   align-items: center;
   gap: 6px;
 }
 
 .tp-completion-item-main:has(.tp-completion-promote) {
-  grid-template-columns: 18px 28px 28px minmax(0, 1fr) auto 28px 28px 28px 28px;
+  grid-template-columns: 18px 28px minmax(0, 1fr) auto 28px 28px 28px 28px 28px;
 }
 
 .tp-completion-checklist-main {
@@ -3549,11 +3549,11 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
 }
 
 .tp-completion-item-main:has(.tp-completion-spell-spinner) {
-  grid-template-columns: 18px 28px 28px minmax(0, 1fr) 22px auto 28px 28px 28px;
+  grid-template-columns: 18px 28px minmax(0, 1fr) 22px auto 28px 28px 28px 28px;
 }
 
 .tp-completion-item-main:has(.tp-completion-spell-spinner):has(.tp-completion-promote) {
-  grid-template-columns: 18px 28px 28px minmax(0, 1fr) 22px auto 28px 28px 28px 28px;
+  grid-template-columns: 18px 28px minmax(0, 1fr) 22px auto 28px 28px 28px 28px 28px;
 }
 
 .tp-completion-item.is-linked .tp-completion-item-main:has(.tp-completion-spell-spinner) {
@@ -3757,7 +3757,7 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
   gap: 8px 10px;
 }
 
-/* slider | % (check + add live on the title row) */
+/* slider | % (check on title row; + sits right of Terminer checkmark) */
 .tp-completion-item-slider-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 2.75rem;
@@ -4698,11 +4698,11 @@ html[data-color-mode='dark'] .tp-completion-suggestion.is-link:hover {
   }
 
   .tp-completion-item-main {
-    grid-template-columns: 18px 28px 28px minmax(0, 1fr) auto 28px 28px 28px;
+    grid-template-columns: 18px 28px minmax(0, 1fr) auto 28px 28px 28px 28px;
   }
 
   .tp-completion-item-main:has(.tp-completion-promote) {
-    grid-template-columns: 18px 28px 28px minmax(0, 1fr) auto 28px 28px 28px 28px;
+    grid-template-columns: 18px 28px minmax(0, 1fr) auto 28px 28px 28px 28px 28px;
   }
 
   .tp-completion-item.is-linked .tp-completion-item-main {
@@ -4710,11 +4710,11 @@ html[data-color-mode='dark'] .tp-completion-suggestion.is-link:hover {
   }
 
   .tp-completion-item-main:has(.tp-completion-spell-spinner) {
-    grid-template-columns: 18px 28px 28px minmax(0, 1fr) 22px auto 28px 28px 28px;
+    grid-template-columns: 18px 28px minmax(0, 1fr) 22px auto 28px 28px 28px 28px;
   }
 
   .tp-completion-item-main:has(.tp-completion-spell-spinner):has(.tp-completion-promote) {
-    grid-template-columns: 18px 28px 28px minmax(0, 1fr) 22px auto 28px 28px 28px 28px;
+    grid-template-columns: 18px 28px minmax(0, 1fr) 22px auto 28px 28px 28px 28px 28px;
   }
 
   .tp-completion-item.is-linked .tp-completion-item-main:has(.tp-completion-spell-spinner) {
