@@ -1880,16 +1880,8 @@
   }
 
   async function resolveCurrentCardId(t) {
-    try {
-      if (t && typeof t.arg === 'function') {
-        var fromArg = t.arg('cardId');
-        if (fromArg != null && String(fromArg).trim()) {
-          return String(fromArg).trim();
-        }
-      }
-    } catch (argErr) {
-      /* ignore */
-    }
+    var fromArg = readPowerUpArg(t, 'cardId');
+    if (fromArg) return fromArg;
     var ids = await readCardIdAndListId(t);
     var cardId = ids && ids.cardId;
     if (cardId) return cardId;
@@ -1899,6 +1891,35 @@
       if (typeof rawId === 'object' && rawId) rawId = rawId.id;
       if (rawId) return String(rawId);
     } catch (err) {
+      /* ignore */
+    }
+    return null;
+  }
+
+  /**
+   * Read a Power-Up iframe arg from t.arg(), then URL ?query (Gantt overlay).
+   */
+  function readPowerUpArg(t, key) {
+    if (!key) return null;
+    try {
+      if (t && typeof t.arg === 'function') {
+        var fromArg = t.arg(key);
+        if (fromArg != null && String(fromArg).trim()) {
+          return String(fromArg).trim();
+        }
+      }
+    } catch (argErr) {
+      /* ignore */
+    }
+    try {
+      if (typeof URLSearchParams !== 'undefined' && global.location) {
+        var sp = new URLSearchParams(global.location.search || '');
+        var fromUrl = sp.get(key);
+        if (fromUrl != null && String(fromUrl).trim()) {
+          return String(fromUrl).trim();
+        }
+      }
+    } catch (urlErr) {
       /* ignore */
     }
     return null;
@@ -3674,6 +3695,7 @@
     restPutCard: restPutCard,
     readCardIdAndListId: readCardIdAndListId,
     resolveCurrentCardId: resolveCurrentCardId,
+    readPowerUpArg: readPowerUpArg,
     pageUrl: pageUrl,
     createIframeClient: createIframeClient,
     createIframeClientDeferred: createIframeClientDeferred,

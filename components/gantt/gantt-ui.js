@@ -272,6 +272,8 @@
       saving: false,
       outlookConnected: false,
       outlookSyncing: false,
+      cardOverlay: null,
+      cardOverlayKeyHandler: null,
     };
 
     function persistFilters() {
@@ -836,7 +838,36 @@
       renderChart();
     }
 
-    function openCard(cardId, cardName, mouseEvent) {
+    function closeCardOverlay(opts) {
+      opts = opts || {};
+      if (state.cardOverlayKeyHandler) {
+        document.removeEventListener('keydown', state.cardOverlayKeyHandler, true);
+        state.cardOverlayKeyHandler = null;
+      }
+      if (state.cardOverlay && state.cardOverlay.parentNode) {
+        state.cardOverlay.parentNode.removeChild(state.cardOverlay);
+      }
+      state.cardOverlay = null;
+      if (opts.reload !== false) {
+        reload();
+      }
+    }
+
+    function popupUrlWithArgs(pageUrl, args) {
+      var base = pageUrl || './popup.html';
+      var parts = [];
+      Object.keys(args || {}).forEach(function (key) {
+        var val = args[key];
+        if (val == null || val === '') return;
+        parts.push(
+          encodeURIComponent(key) + '=' + encodeURIComponent(String(val))
+        );
+      });
+      if (!parts.length) return base;
+      return base + (base.indexOf('?') >= 0 ? '&' : '?') + parts.join('&');
+    }
+
+    function openCard(cardId, cardName) {
       if (!cardId || !t) return;
       var appName =
         (global.PriorityBrand &&
@@ -854,35 +885,61 @@
         cardName: cardName || '',
         openSection: 'priority',
       };
-      // Prefer popup so the fullscreen Gantt modal is not replaced.
-      if (typeof t.popup === 'function') {
-        try {
-          var popupOpts = {
-            title: appName,
-            url: pageUrl,
-            args: args,
-            height: 600,
-          };
-          if (mouseEvent) popupOpts.mouseEvent = mouseEvent;
-          return t.popup(popupOpts);
-        } catch (e) {
-          /* fall through */
+
+      // Wide in-Gantt overlay: Trello t.popup width is fixed/narrow, and t.modal
+      // would replace the fullscreen Gantt.
+      closeCardOverlay({ reload: false });
+
+      var overlay = el('div', 'gantt-card-overlay');
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+      overlay.setAttribute('aria-label', appName);
+
+      var backdrop = el('div', 'gantt-card-overlay-backdrop');
+      backdrop.addEventListener('click', function () {
+        closeCardOverlay();
+      });
+
+      var panel = el('div', 'gantt-card-overlay-panel');
+      var header = el('div', 'gantt-card-overlay-header');
+      var title = el('div', 'gantt-card-overlay-title', {
+        text: cardName || appName,
+      });
+      var closeBtn = el('button', 'gantt-card-overlay-close', {
+        type: 'button',
+        title: 'Fermer',
+        text: '\u00d7',
+      });
+      closeBtn.setAttribute('aria-label', 'Fermer');
+      closeBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeCardOverlay();
+      });
+      header.appendChild(title);
+      header.appendChild(closeBtn);
+
+      var frame = document.createElement('iframe');
+      frame.className = 'gantt-card-overlay-frame';
+      frame.title = appName;
+      frame.src = popupUrlWithArgs(pageUrl, args);
+
+      panel.appendChild(header);
+      panel.appendChild(frame);
+      overlay.appendChild(backdrop);
+      overlay.appendChild(panel);
+      root.appendChild(overlay);
+      state.cardOverlay = overlay;
+
+      state.cardOverlayKeyHandler = function (e) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          closeCardOverlay();
         }
-      }
-      if (typeof t.modal === 'function') {
-        try {
-          return t.modal({
-            title: appName,
-            url: pageUrl,
-            args: args,
-            height: 1100,
-            fullscreen: false,
-            accentColor: '#22272B',
-          });
-        } catch (e2) {
-          /* ignore */
-        }
-      }
+      };
+      document.addEventListener('keydown', state.cardOverlayKeyHandler, true);
+      closeBtn.focus();
     }
 
     function buildDetailIcons(row) {
@@ -1886,15 +1943,25 @@
       });
       timelineCol.appendChild(headerTimeline);
 
-      // Today marker
-      var todayDate = model.startOfDay(new Date());
+      // Today marker — placed at the current time within today's column.
+      var now = new Date();
+      var todayDate = model.startOfDay(now);
       if (
         todayDate.getTime() >= r.start.getTime() &&
         todayDate.getTime() <= r.end.getTime()
       ) {
-        var todayX = model.dateToX(todayDate, r, state.timelineWidth);
+        var todayX =
+          typeof model.dateTimeToX === 'function'
+            ? model.dateTimeToX(now, r, state.timelineWidth)
+            : model.dateToX(todayDate, r, state.timelineWidth);
         var marker = el('div', 'gantt-today-line');
         marker.style.left = todayX + 'px';
+        marker.title =
+          "Maintenant \u00b7 " +
+          now.toLocaleTimeString('fr-FR', {
+            hour: '2-digit',
+            minute: '2-digit',
+          });
         timelineCol.appendChild(marker);
       }
 
@@ -2017,12 +2084,11 @@
         }
         var openClickTimer = null;
         if (row.kind === 'card' && row.cardId) {
-          nameBtn.addEventListener('click', function (e) {
+          nameBtn.addEventListener('click', function () {
             if (openClickTimer) clearTimeout(openClickTimer);
-            var mouseEvent = e;
             openClickTimer = setTimeout(function () {
               openClickTimer = null;
-              openCard(row.cardId, row.name, mouseEvent);
+              openCard(row.cardId, row.name);
             }, 280);
           });
         }
@@ -2235,6 +2301,7 @@
 
     return {
       destroy: function () {
+        closeCardOverlay({ reload: false });
         mount.innerHTML = '';
       },
       reload: reload,
