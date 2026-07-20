@@ -1172,7 +1172,7 @@
       if (!debugLog.length) {
         debugPanel.appendChild(
           el('p', 'agent-debug-empty', {
-            text: 'Aucun \u00e9change r\u00e9seau pour l\u2019instant. Envoyez un message ou rechargez les suggestions.'
+            text: 'Rien pour l\u2019instant. Envoyez un message ou rechargez les suggestions.'
           })
         );
         return;
