@@ -484,10 +484,19 @@
     if (!el) return;
     var meta = progressEncouragementMeta(percent);
     var p = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
-    el.dataset.tone = meta.tone;
-    el.classList.toggle('is-complete', meta.tone === 'done');
+    if (el.dataset) {
+      el.dataset.tone = meta.tone;
+      el.dataset.percent = String(p);
+    }
+    if (el.classList && typeof el.classList.toggle === 'function') {
+      el.classList.toggle('is-complete', meta.tone === 'done');
+    }
     // Match % / bar accent from the active completion color scheme.
-    el.style.color = p > 0 ? completionColorForProgress(p) : '';
+    if (el.style) {
+      el.style.color = p > 0 ? completionColorForProgress(p) : '';
+    }
+    // Live % first so the bubble visibly updates on every scrub tick (stage
+    // labels only change at coarse thresholds like 26–50 → « En cours »).
     el.innerHTML =
       '<span class="tp-completion-stage-icon" aria-hidden="true">' +
       '<i class="ti ' +
@@ -495,7 +504,12 @@
       '"></i>' +
       '</span>' +
       '<span class="tp-completion-stage-text">' +
+      '<span class="tp-completion-stage-pct">' +
+      p +
+      '\u00a0%</span>' +
+      '<span class="tp-completion-stage-label">' +
       meta.text +
+      '</span>' +
       '</span>';
   }
 
@@ -2009,8 +2023,9 @@
       }
     }
 
-    function moveEncouragementBubble(clientX, clientY) {
+    function moveEncouragementBubble(clientX, clientY, percent) {
       if (!encouragementBubbleVisible) return;
+      if (percent != null) applyProgressEncouragement(encouragementEl, percent);
       positionEncouragementBubble(encouragementEl, clientX, clientY);
     }
 
@@ -2028,7 +2043,13 @@
       ) {
         return;
       }
-      moveEncouragementBubble(event.clientX, event.clientY);
+      // Prefer the live range value so the label tracks the handle even when
+      // weighted progress lags behind the pointer during scrubbing.
+      var livePct =
+        masterSlider && masterSlider.input
+          ? Number(masterSlider.input.value)
+          : null;
+      moveEncouragementBubble(event.clientX, event.clientY, livePct);
     }
 
     function onEncouragementPointerEnd(event) {
@@ -2142,7 +2163,11 @@
         if (encouragementBubbleVisible) {
           applyProgressEncouragement(encouragementEl, v);
         }
-        updateProgressUi({ skipMasterSync: true, deferDoneListReveal: true });
+        updateProgressUi({
+          skipMasterSync: true,
+          scrubPercent: v,
+          deferDoneListReveal: true,
+        });
         onChange(CT.normalizeCompletionData(data));
       },
       'completionMasterSlider'
@@ -3647,7 +3672,11 @@
         if (encouragementBubbleVisible) {
           applyProgressEncouragement(encouragementEl, p);
         }
-        updateProgressUi({ skipMasterSync: true, deferDoneListReveal: true });
+        updateProgressUi({
+          skipMasterSync: true,
+          scrubPercent: p,
+          deferDoneListReveal: true,
+        });
         onChange(CT.normalizeCompletionData(data));
         if (meta.commit) {
           masterDragging = false;
@@ -3744,8 +3773,15 @@
         masterSlider.valEl.style.color =
           anyBlocked || progress.percent > 0 ? accent : '';
       }
+      var scrubbing = !!(opts.skipMasterSync || masterDragging);
+      var encouragementPct =
+        opts.scrubPercent != null && isFinite(Number(opts.scrubPercent))
+          ? Number(opts.scrubPercent)
+          : scrubbing
+            ? Number(masterSlider.input.value)
+            : progress.percent;
       if (encouragementBubbleVisible) {
-        applyProgressEncouragement(encouragementEl, progress.percent);
+        applyProgressEncouragement(encouragementEl, encouragementPct);
       }
       progressPanel.style.setProperty(
         '--completion-hero-accent',
@@ -3764,7 +3800,7 @@
       syncMasterCheckButton(progress);
       syncCompleteAllButton(progress);
       syncResetAllButton(progress);
-      if (!opts.skipMasterSync && !masterDragging) {
+      if (!scrubbing) {
         masterSlider.setValue(progress.percent);
       } else {
         // Keep fill locked to the handle while dragging. Weighted average after
@@ -3782,7 +3818,11 @@
         'is-complete',
         Number(masterSlider.input.value) >= 100
       );
-      masterDragging = false;
+      // Only clear the drag flag when this refresh is not part of a scrub —
+      // otherwise async onChange refreshes can fight the live handle value.
+      if (!scrubbing) {
+        masterDragging = false;
+      }
       syncAllCompleteSideEffects(progress, opts);
     }
 
@@ -6348,6 +6388,7 @@
     progressBadgePreviewSamples: progressBadgePreviewSamples,
     progressEncouragementText: progressEncouragementText,
     progressEncouragementMeta: progressEncouragementMeta,
+    applyProgressEncouragement: applyProgressEncouragement,
     playAllCompleteCelebration: playAllCompleteCelebration,
     clearAllCompleteCelebration: clearAllCompleteCelebration,
     mountCompletionUI: mountCompletionUI,

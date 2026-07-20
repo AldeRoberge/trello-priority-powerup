@@ -39,6 +39,23 @@ describe('Completion progress', () => {
     assert.equal(CUI.progressEncouragementMeta(0).tone, 'idle');
   });
 
+  it('progress encouragement bubble paints live percent with stage', () => {
+    const el = {
+      dataset: {},
+      style: {},
+      classList: { toggle() {} },
+      innerHTML: '',
+    };
+    CUI.applyProgressEncouragement(el, 42);
+    assert.equal(el.dataset.percent, '42');
+    assert.match(el.innerHTML, /42/);
+    assert.match(el.innerHTML, /En cours/);
+    CUI.applyProgressEncouragement(el, 7);
+    assert.equal(el.dataset.percent, '7');
+    assert.match(el.innerHTML, /7/);
+    assert.match(el.innerHTML, /Amorc/);
+  });
+
   it('clampProgress bounds to 0–100', () => {
     assert.equal(CT.clampProgress(-10), 0);
     assert.equal(CT.clampProgress(150), 100);

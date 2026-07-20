@@ -2875,6 +2875,20 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35em;
+}
+
+.tp-completion-stage-pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.tp-completion-stage-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tp-completion-encouragement-bubble[data-tone='idle'] {
