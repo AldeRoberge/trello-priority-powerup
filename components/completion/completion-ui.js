@@ -3030,7 +3030,6 @@
     function clearSelection() {
       selected = Object.create(null);
       renderBulkBar();
-      syncSelectAllUi();
       renderList();
     }
 
@@ -3046,7 +3045,6 @@
         else delete selected[ids[i]];
       }
       renderBulkBar();
-      syncSelectAllUi();
       renderList();
     }
 
@@ -3057,8 +3055,6 @@
 
     function renderBulkBar() {
       if (!bulkBarEl) return;
-      // Always keep the toolbar mounted so selecting never shifts layout.
-      bulkBarEl.hidden = false;
       var n = selectedCount();
       var idle = n === 0;
       bulkBarEl.classList.toggle('is-idle', idle);

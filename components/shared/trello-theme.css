@@ -2967,10 +2967,6 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble[data-tone='acti
   box-sizing: border-box;
 }
 
-.tp-completion-bulk[hidden] {
-  display: flex !important;
-}
-
 .tp-completion-bulk.is-idle {
   opacity: 0.55;
 }
