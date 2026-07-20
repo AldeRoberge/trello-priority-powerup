@@ -160,7 +160,7 @@ Après le déploiement GitHub Pages, enregistrez ou mettez à jour le Power-Up s
 5. Enregistrer, attendre la fin du déploiement GitHub Pages si l'URL du connecteur vient de changer.
 6. Sur chaque tableau : **retirer et réajouter** le Power-Up (Trello ne recharge pas toujours les capacités sur un tableau déjà ouvert).
 
-Le connecteur enregistre les capacités ci-dessous dans `TrelloPowerUp.initialize()`. Six sont **utilisées** ; les autres sont des **stubs** (`[]` / no-op) pour éviter l'erreur console si elles restent cochées dans l'admin :
+Le connecteur enregistre les capacités ci-dessous dans `TrelloPowerUp.initialize()`. La liste canonique vit dans `components/shared/capabilities.js` et est affichée sous **Paramètres du Cerveau → Débogage** (observation runtime + rappel admin). Six sont **utilisées** ; les autres sont des **stubs** (`[]` / no-op) pour éviter l'erreur console si elles restent cochées dans l'admin :
 
 | Capacité | Admin | Rôle dans ce Power-Up | Page / UI |
 |----------|:-----:|----------------------|-----------|
@@ -176,6 +176,8 @@ Le connecteur enregistre les capacités ci-dessous dans `TrelloPowerUp.initializ
 
 **À activer (6)** : `card-badges`, `card-detail-badges`, `card-back-section`, `board-buttons`, `list-sorters`, `on-enable`.  
 **À ne pas activer** : `card-buttons`, `list-actions`, `on-disable` (stubs présents si cochées par erreur).
+
+Vérification développeur : **Paramètres du Cerveau → Débogage** liste chaque capacité (Activer / Ne pas activer), indique si le connecteur l’a **observée** (handler appelé), et propose un lien vers [l’admin Power-Up](https://trello.com/power-ups/admin) plus la copie des IDs à cocher. Après un changement de capacités, retirer et réajouter le Power-Up sur le tableau.
 
 Dépannage tri / capacités : voir [Trier une colonne par priorité](#trier-une-colonne-par-priorité) et [« Priorité » n'apparaît pas dans *Trier par…*](#priorité-napparaît-pas-dans-trier-par).
 

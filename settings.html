@@ -10,6 +10,7 @@
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/version.js"></script>
   <script src="./components/shared/debug-log.js"></script>
+  <script src="./components/shared/capabilities.js"></script>
   <script src="./components/priority/priority-matrix.js"></script>
   <script src="./components/priority/priority-ui.js"></script>
   <script src="./components/priority/priority-trello.js"></script>
@@ -221,7 +222,7 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-bug"></i></span>
       <span class="tp-settings-summary-title">Débogage</span>
-      <span class="tp-settings-summary-hint">Journaux console (par membre)</span>
+      <span class="tp-settings-summary-hint">Journaux et capacités admin</span>
     </summary>
     <div class="tp-settings-body">
       <p class="tp-color-scheme-hint">Active les journaux détaillés dans la console du navigateur (DevTools). Préférence personnelle — désactivée par défaut. Aucun contenu de carte, jeton ou message d’assistant n’est journalisé.</p>
@@ -229,6 +230,23 @@
         <input type="checkbox" id="debugLoggingToggle" />
         <span>Activer les journaux de diagnostic</span>
       </label>
+
+      <div class="tp-capabilities" id="capabilitiesChecklist">
+        <p class="tp-color-scheme-hint">Capacités Power-Up (admin Trello)</p>
+        <p class="tp-capabilities-summary" id="capabilitiesSummary">Chargement…</p>
+        <p class="tp-capabilities-note">
+          Trello n’expose pas l’état des interrupteurs admin. Cochez exactement la liste
+          <strong>À activer</strong> sur
+          <a class="tp-link" id="capabilitiesAdminLink" href="https://trello.com/power-ups/admin" target="_blank" rel="noopener noreferrer">trello.com/power-ups/admin</a>
+          → Capabilities, puis retirez et réajoutez le Power-Up sur le tableau. L’observation ci-dessous se met à jour quand le connecteur est réellement appelé.
+        </p>
+        <ul class="tp-capabilities-list" id="capabilitiesList" aria-label="Liste des capacités"></ul>
+        <div class="tp-capabilities-actions">
+          <button type="button" class="tp-button tp-button--secondary" id="capabilitiesRefresh">Actualiser l’observation</button>
+          <button type="button" class="tp-button tp-button--secondary" id="capabilitiesCopy">Copier les IDs à activer</button>
+        </div>
+        <p class="tp-capabilities-copy-status" id="capabilitiesCopyStatus" hidden></p>
+      </div>
     </div>
   </details>
 
@@ -695,10 +713,122 @@
         }, 180);
       }
 
+      function renderCapabilitiesChecklist(probe) {
+        var Caps = window.PowerUpCapabilities;
+        var listEl = document.getElementById('capabilitiesList');
+        var summaryEl = document.getElementById('capabilitiesSummary');
+        var wrap = document.getElementById('capabilitiesChecklist');
+        if (!Caps || !listEl || !summaryEl || !wrap) return;
+
+        var rows = Caps.evaluateAll(probe || {});
+        var summary = Caps.summarize(rows);
+        summaryEl.textContent = summary.label;
+        summaryEl.dataset.tone = summary.ok ? 'ok' : 'warn';
+
+        listEl.replaceChildren();
+        rows.forEach(function (row) {
+          if (!row) return;
+          var li = document.createElement('li');
+          li.className = 'tp-capabilities-item tp-capabilities-item--' + row.tone;
+          li.dataset.capability = row.id;
+          li.dataset.status = row.status;
+
+          var head = document.createElement('div');
+          head.className = 'tp-capabilities-item-head';
+
+          var badge = document.createElement('span');
+          badge.className =
+            'tp-capabilities-badge ' +
+            (row.expectedOn
+              ? 'tp-capabilities-badge--on'
+              : 'tp-capabilities-badge--off');
+          badge.textContent = row.expectedOn ? 'Activer' : 'Ne pas activer';
+          head.appendChild(badge);
+
+          var title = document.createElement('code');
+          title.className = 'tp-capabilities-id';
+          title.textContent = row.id;
+          head.appendChild(title);
+
+          var status = document.createElement('span');
+          status.className = 'tp-capabilities-status';
+          status.textContent = row.statusLabel;
+          head.appendChild(status);
+
+          li.appendChild(head);
+
+          var meta = document.createElement('p');
+          meta.className = 'tp-capabilities-meta';
+          meta.textContent = row.label + ' — ' + row.how;
+          li.appendChild(meta);
+
+          listEl.appendChild(li);
+        });
+      }
+
+      async function refreshCapabilitiesChecklist() {
+        var Caps = window.PowerUpCapabilities;
+        if (!Caps) return;
+        // Opening settings proves board-buttons is live for this session.
+        try {
+          await Caps.markSeen(t, 'board-buttons');
+        } catch (e) {
+          /* ignore */
+        }
+        var probe = await Caps.loadProbe(t);
+        renderCapabilitiesChecklist(probe);
+        resizeSettingsPopup();
+      }
+
+      function copyRequiredCapabilityIds() {
+        var Caps = window.PowerUpCapabilities;
+        var statusEl = document.getElementById('capabilitiesCopyStatus');
+        if (!Caps) return;
+        var text = Caps.requiredIds().join('\n');
+        var done = function (ok) {
+          if (!statusEl) return;
+          statusEl.hidden = false;
+          statusEl.textContent = ok
+            ? 'IDs à activer copiés dans le presse-papiers.'
+            : 'Copie impossible — sélectionnez la liste manuellement.';
+          resizeSettingsPopup();
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(
+            function () {
+              done(true);
+            },
+            function () {
+              done(false);
+            }
+          );
+        } else {
+          done(false);
+        }
+      }
+
       try {
         profileState = await Profile.load(t);
         applyDebugUi(profileState.debugLogging);
         toggle.addEventListener('change', persistDebugLogging);
+
+        var adminLink = document.getElementById('capabilitiesAdminLink');
+        if (adminLink && window.PowerUpCapabilities) {
+          adminLink.href = PowerUpCapabilities.ADMIN_URL;
+        }
+        var refreshBtn = document.getElementById('capabilitiesRefresh');
+        if (refreshBtn) {
+          refreshBtn.addEventListener('click', function () {
+            refreshCapabilitiesChecklist().catch(function (err) {
+              console.error('Capabilities refresh failed', err);
+            });
+          });
+        }
+        var copyBtn = document.getElementById('capabilitiesCopy');
+        if (copyBtn) {
+          copyBtn.addEventListener('click', copyRequiredCapabilityIds);
+        }
+        await refreshCapabilitiesChecklist();
         resizeSettingsPopup();
       } catch (err) {
         if (window.TpDebug && typeof TpDebug.error === 'function') {

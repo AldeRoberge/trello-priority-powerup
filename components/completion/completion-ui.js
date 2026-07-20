@@ -2184,13 +2184,22 @@
       '<option value="done">Termin\u00e9es</option>' +
       '</select>' +
       '</div>' +
-      '<div class="tp-completion-select-bar" id="completionSelectBar" hidden>' +
+      '<div class="tp-completion-bulk is-idle" id="completionBulkBar" role="toolbar" ' +
+      'aria-label="Actions de s\u00e9lection">' +
       '<label class="tp-completion-select-all-label">' +
       '<input type="checkbox" class="tp-completion-select-box" id="completionSelectAll" />' +
       '<span>Tout s\u00e9lectionner</span>' +
       '</label>' +
+      '<span class="tp-completion-bulk-count" id="completionBulkCount">Aucune s\u00e9lection</span>' +
+      '<button type="button" class="tp-btn tp-btn--secondary tp-completion-bulk-btn" id="completionBulkDone" disabled title="Terminer">' +
+      '<i class="ti ti-circle-check" aria-hidden="true"></i><span>Terminer</span></button>' +
+      '<button type="button" class="tp-btn tp-btn--secondary tp-completion-bulk-btn" id="completionBulkReopen" disabled title="Rouvrir">' +
+      '<i class="ti ti-reload" aria-hidden="true"></i><span>Rouvrir</span></button>' +
+      '<button type="button" class="tp-btn tp-btn--secondary tp-completion-bulk-btn tp-completion-bulk-btn--danger" id="completionBulkDelete" disabled title="Supprimer">' +
+      '<i class="ti ti-trash" aria-hidden="true"></i><span>Supprimer</span></button>' +
+      '<button type="button" class="tp-btn tp-btn--secondary tp-completion-bulk-btn" id="completionBulkClear" disabled title="Tout d\u00e9s\u00e9lectionner">' +
+      '<i class="ti ti-deselect" aria-hidden="true"></i><span>Tout d\u00e9s\u00e9lectionner</span></button>' +
       '</div>' +
-      '<div class="tp-completion-bulk" id="completionBulkBar" hidden></div>' +
       '<ul class="tp-completion-list" id="completionList" aria-label="Sous-t\u00e2ches"></ul>' +
       '<p class="tp-completion-filter-empty" id="completionFilterEmpty" hidden>' +
       'Aucune sous-t\u00e2che ne correspond.</p>';
@@ -2247,9 +2256,13 @@
     var listEl = containerEl.querySelector('#completionList');
     var doneListEl = containerEl.querySelector('#completionDoneList');
     var toolsEl = containerEl.querySelector('#completionTools');
-    var selectBarEl = containerEl.querySelector('#completionSelectBar');
     var selectAllCheckbox = containerEl.querySelector('#completionSelectAll');
     var bulkBarEl = containerEl.querySelector('#completionBulkBar');
+    var bulkCountEl = containerEl.querySelector('#completionBulkCount');
+    var bulkDoneBtn = containerEl.querySelector('#completionBulkDone');
+    var bulkReopenBtn = containerEl.querySelector('#completionBulkReopen');
+    var bulkDeleteBtn = containerEl.querySelector('#completionBulkDelete');
+    var bulkClearBtn = containerEl.querySelector('#completionBulkClear');
     var searchInput = containerEl.querySelector('#completionSearch');
     var filterSelect = containerEl.querySelector('#completionFilter');
     var filterEmptyEl = containerEl.querySelector('#completionFilterEmpty');
@@ -3037,93 +3050,35 @@
       renderList();
     }
 
-    function makeBulkBtn(className, iconClass, label, onClick, disabled) {
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = className;
-      btn.title = label;
-      btn.disabled = !!disabled;
-      btn.innerHTML =
-        '<i class="ti ' +
-        iconClass +
-        '" aria-hidden="true"></i>' +
-        '<span>' +
-        label +
-        '</span>';
-      if (!disabled) btn.addEventListener('click', onClick);
-      return btn;
+    function setBulkBtnEnabled(btn, enabled) {
+      if (!btn) return;
+      btn.disabled = !enabled;
     }
 
     function renderBulkBar() {
       if (!bulkBarEl) return;
-      bulkBarEl.innerHTML = '';
-      var hasItems = data.items.length > 0;
-      bulkBarEl.hidden = !hasItems;
-      if (!hasItems) {
-        bulkBarEl.classList.remove('is-idle');
-        return;
-      }
-
+      // Always keep the toolbar mounted so selecting never shifts layout.
+      bulkBarEl.hidden = false;
       var n = selectedCount();
       var idle = n === 0;
       bulkBarEl.classList.toggle('is-idle', idle);
-
-      var count = document.createElement('span');
-      count.className = 'tp-completion-bulk-count';
-      count.textContent = idle
-        ? 'Aucune s\u00e9lection'
-        : n + ' s\u00e9lectionn\u00e9e(s)';
-      bulkBarEl.appendChild(count);
-      bulkBarEl.appendChild(
-        makeBulkBtn(
-          'tp-btn tp-btn--secondary tp-completion-bulk-btn',
-          'ti-circle-check',
-          'Terminer',
-          function () {
-            runBulk('done');
-          },
-          idle
-        )
-      );
-      bulkBarEl.appendChild(
-        makeBulkBtn(
-          'tp-btn tp-btn--secondary tp-completion-bulk-btn',
-          'ti-reload',
-          'Rouvrir',
-          function () {
-            runBulk('reopen');
-          },
-          idle
-        )
-      );
-      bulkBarEl.appendChild(
-        makeBulkBtn(
-          'tp-btn tp-btn--secondary tp-completion-bulk-btn tp-completion-bulk-btn--danger',
-          'ti-trash',
-          'Supprimer',
-          function () {
-            runBulk('delete');
-          },
-          idle
-        )
-      );
-      bulkBarEl.appendChild(
-        makeBulkBtn(
-          'tp-btn tp-btn--secondary tp-completion-bulk-btn',
-          'ti-deselect',
-          'Tout d\u00e9s\u00e9lectionner',
-          function () {
-            clearSelection();
-          },
-          idle
-        )
-      );
+      if (bulkCountEl) {
+        bulkCountEl.textContent = idle
+          ? 'Aucune s\u00e9lection'
+          : n + ' s\u00e9lectionn\u00e9e(s)';
+      }
+      setBulkBtnEnabled(bulkDoneBtn, !idle);
+      setBulkBtnEnabled(bulkReopenBtn, !idle);
+      setBulkBtnEnabled(bulkDeleteBtn, !idle);
+      setBulkBtnEnabled(bulkClearBtn, !idle);
+      syncSelectAllUi();
     }
 
     function syncSelectAllUi() {
-      if (!selectBarEl || !selectAllCheckbox) return;
+      if (!selectAllCheckbox) return;
       var visible = visibleSelectionEntries();
-      selectBarEl.hidden = !data.items.length;
+      var hasVisible = visible.length > 0;
+      selectAllCheckbox.disabled = !hasVisible;
       var selectedVisible = 0;
       for (var i = 0; i < visible.length; i++) {
         if (selected[visible[i].key]) selectedVisible += 1;
@@ -3241,8 +3196,27 @@
           }
         }
         renderBulkBar();
-        syncSelectAllUi();
         renderList();
+      });
+    }
+    if (bulkDoneBtn) {
+      bulkDoneBtn.addEventListener('click', function () {
+        runBulk('done');
+      });
+    }
+    if (bulkReopenBtn) {
+      bulkReopenBtn.addEventListener('click', function () {
+        runBulk('reopen');
+      });
+    }
+    if (bulkDeleteBtn) {
+      bulkDeleteBtn.addEventListener('click', function () {
+        runBulk('delete');
+      });
+    }
+    if (bulkClearBtn) {
+      bulkClearBtn.addEventListener('click', function () {
+        clearSelection();
       });
     }
 

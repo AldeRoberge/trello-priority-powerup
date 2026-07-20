@@ -9,6 +9,7 @@
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/version.js"></script>
   <script src="./components/shared/debug-log.js"></script>
+  <script src="./components/shared/capabilities.js"></script>
   <script src="./components/priority/priority-matrix.js"></script>
   <script src="./components/priority/priority-ui.js"></script>
   <script>
@@ -80,8 +81,21 @@
   function initPowerUp() {
     if (window.TpDebug) TpDebug.log('index', 'powerUp.init');
 
-    function withBoardContext(capabilityFn, capabilityName) {
+    function trackCapability(capabilityName, capabilityFn) {
       return function (t, opts) {
+        if (
+          window.PowerUpCapabilities &&
+          typeof PowerUpCapabilities.markSeen === 'function' &&
+          capabilityName
+        ) {
+          PowerUpCapabilities.markSeen(t, capabilityName).catch(function () {});
+        }
+        return capabilityFn(t, opts);
+      };
+    }
+
+    function withBoardContext(capabilityFn, capabilityName) {
+      return trackCapability(capabilityName, function (t, opts) {
         var timer =
           window.TpDebug && TpDebug.isEnabled()
             ? TpDebug.start('index', 'capability.' + (capabilityName || 'unknown'))
@@ -139,7 +153,7 @@
             throw err;
           }
         );
-      };
+      });
     }
 
     async function openPriorityPopup(t, options) {
@@ -200,15 +214,15 @@
 
       // card-buttons is not used (priority is opened via card-detail-badges).
       // list-actions / on-disable: stubs if enabled in admin (avoids IFrameIO "not implemented").
-      'card-buttons': function () {
+      'card-buttons': trackCapability('card-buttons', function () {
         return [];
-      },
-      'list-actions': function () {
+      }),
+      'list-actions': trackCapability('list-actions', function () {
         return [];
-      },
-      'on-disable': function () {
+      }),
+      'on-disable': trackCapability('on-disable', function () {
         // No board cleanup required; shared plugin data is left intact for re-enable.
-      },
+      }),
 
       'card-detail-badges': withBoardContext(function (t) {
         var jobs = [
@@ -247,7 +261,7 @@
       // Opens Cerveau when the card back is shown (iframe loads → modal).
       // Enable `card-back-section` in Power-Up admin. Guard in card-open.html
       // avoids reopen loops when pluginData refreshes the section while the modal is open.
-      'card-back-section': function (t) {
+      'card-back-section': trackCapability('card-back-section', function (t) {
         var appName =
           (window.PriorityBrand && typeof PriorityBrand.getAppName === 'function'
             ? PriorityBrand.getAppName()
@@ -271,9 +285,9 @@
             callback: openPriorityPopup,
           },
         };
-      },
+      }),
 
-      'on-enable': function(t) {
+      'on-enable': trackCapability('on-enable', function(t) {
         if (window.TpDebug) {
           TpDebug.configureFromProfile(t).catch(function () {});
           TpDebug.log('index', 'on-enable');
@@ -315,10 +329,10 @@
               });
             });
           });
-      },
+      }),
 
       // Settings popup loads board context itself — do not gate the menu item on preload.
-      'board-buttons': function(t) {
+      'board-buttons': trackCapability('board-buttons', function(t) {
         return [
           {
             // Monochrome SVG — Trello recolors board-button icons; multi-color brand art
@@ -362,7 +376,7 @@
             },
           },
         ];
-      },
+      }),
 
       'list-sorters': withBoardContext(function (t) {
         return PriorityTrello.listPrioritySorters(t);
