@@ -11876,10 +11876,10 @@
       onLayoutChange();
     });
     descInput.addEventListener('keyup', function () {
-      if (descEditing) syncDescFormatMenuSelection();
+      syncDescFormatMenuSelection();
     });
     descInput.addEventListener('click', function () {
-      if (descEditing) syncDescFormatMenuSelection();
+      syncDescFormatMenuSelection();
     });
     descInput.addEventListener('keydown', function (e) {
       var key = e.key;
@@ -11900,12 +11900,6 @@
       // Persist immediately; spellcheck runs async with a small spinner.
       flushDescSave();
       spellcheckDescAfterCommit();
-      // Defer exit so toolbar clicks (mousedown preventDefault) keep edit mode.
-      setTimeout(function () {
-        if (!descEditing) return;
-        if (descWrap.contains(document.activeElement)) return;
-        endDescEdit();
-      }, 0);
     });
     descRich.addEventListener('input', function () {
       descSpellcheckGen += 1;
@@ -11958,21 +11952,6 @@
       syncDescSourceFromRich();
       flushDescSave();
       spellcheckDescAfterCommit();
-      setTimeout(function () {
-        if (!descEditing) return;
-        if (descWrap.contains(document.activeElement)) return;
-        endDescEdit();
-      }, 0);
-    });
-    descPreview.addEventListener('click', function (e) {
-      if (e.target && e.target.closest && e.target.closest('a, button, input')) return;
-      startDescEdit();
-    });
-    descPreview.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        startDescEdit();
-      }
     });
 
     // Keep the current editor selection when interacting with the toolbar.
@@ -12285,7 +12264,6 @@
     setAuthHint(authReason);
     syncTitleInputSize();
     setDescMode('rich', { focus: false });
-    renderDescPreview();
     collapse.refreshSummary();
     scheduleLabelSuggestions(false);
     scheduleTaskTypeSuggestions(false);
@@ -12335,12 +12313,8 @@
         descInput.value = value;
         descDirty = false;
         descSpellcheckedText = value.trim() || null;
-        if (descEditing) {
-          if (descMode === 'rich') renderDescRich();
-          else syncDescInputSize();
-        } else {
-          renderDescPreview();
-        }
+        if (descMode === 'rich') renderDescRich();
+        else syncDescInputSize();
         scheduleLabelSuggestions(false);
         scheduleTaskTypeSuggestions(false);
       },
