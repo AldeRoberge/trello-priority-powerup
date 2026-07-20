@@ -254,8 +254,13 @@
             text: 'Outlook (config)',
           });
           outlookHint.title =
-            'D\u00e9finissez OutlookConfig.clientId (Entra SPA) pour activer la sync';
-          outlookHint.disabled = true;
+            'D\u00e9ployez OutlookConfig.clientId (Entra SPA) pour activer la sync';
+          outlookHint.addEventListener('click', function () {
+            setStatus(
+              'Outlook non configur\u00e9\u00a0: d\u00e9ployez clientId dans outlook-config.js (Pages), puis rechargez le Gantt.',
+              true
+            );
+          });
           filters.appendChild(outlookHint);
         } else {
           var outlookConnect = el('button', 'gantt-btn', {
