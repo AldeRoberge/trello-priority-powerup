@@ -60,6 +60,7 @@
   <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
   <script src="./components/shared/desc-meta.js?v=desc-meta-1"></script>
+  <script src="./components/outlook/outlook-sync.js?v=desc-meta-1"></script>
   <script src="./components/agent/agent-ui.js?v=queue-combine-1"></script>
   <script src="./components/history/card-history.js?v=echeance-recurring-1"></script>
   <script src="./components/history/history-ui.js?v=history-5"></script>
@@ -6520,6 +6521,28 @@
         if (typeof PriorityTrello.getCardDesc === 'function') {
           var resolvedDesc = await PriorityTrello.getCardDesc(t);
           if (typeof resolvedDesc === 'string') cardDesc = resolvedDesc;
+        }
+        // Backfill hidden outlook-event-id from prior Graph sync mapping (no Entra call).
+        if (
+          window.OutlookSync &&
+          typeof OutlookSync.ensureDescMetaFromStore === 'function' &&
+          typeof PriorityTrello.resolveCurrentCardId === 'function'
+        ) {
+          try {
+            var metaCardId = await PriorityTrello.resolveCurrentCardId(t);
+            if (metaCardId) {
+              var metaRes = await OutlookSync.ensureDescMetaFromStore(
+                t,
+                metaCardId,
+                cardDesc || ''
+              );
+              if (metaRes && typeof metaRes.desc === 'string' && metaRes.desc) {
+                cardDesc = metaRes.desc;
+              }
+            }
+          } catch (metaErr) {
+            console.warn('Outlook desc meta backfill skipped', metaErr);
+          }
         }
         if (cardNameCache) {
           beginBootStep(

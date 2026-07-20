@@ -382,6 +382,44 @@
     return { ok: true, changed: true, desc: next };
   }
 
+  /**
+   * If member-private outlookSync already has an eventId for this card,
+   * ensure it is also stored in the card description (hidden meta block).
+   * No Graph call — safe after a past successful sync.
+   */
+  async function ensureDescMetaFromStore(t, cardId, currentDesc) {
+    var id = cardId != null ? String(cardId).trim() : '';
+    if (!id) return { ok: false, reason: 'no-card-id', desc: currentDesc || '' };
+
+    var dm = descMeta();
+    if (dm && typeof dm.getMeta === 'function') {
+      var existing = dm.getMeta(currentDesc || '', 'outlook-event-id');
+      if (existing) {
+        return {
+          ok: true,
+          changed: false,
+          already: true,
+          desc: currentDesc || '',
+          eventId: existing,
+        };
+      }
+    }
+
+    var boardId = await resolveBoardId(t);
+    if (!boardId) {
+      return { ok: false, reason: 'no-board-id', desc: currentDesc || '' };
+    }
+    var store = await loadStore(t);
+    var entry = boardEntry(store, boardId);
+    var mapped = entry.events && entry.events[id];
+    var eventId = mapped && mapped.eventId ? String(mapped.eventId) : '';
+    if (!eventId) {
+      return { ok: true, changed: false, missing: true, desc: currentDesc || '' };
+    }
+
+    return writeOutlookEventIdToDesc(t, id, eventId, currentDesc || '');
+  }
+
   async function applyToTrello(t, cardId, snapshot) {
     var s = normalizeSnapshot(snapshot);
     var pt = priorityTrello();
@@ -781,6 +819,8 @@
     syncBoard: syncBoard,
     syncCard: syncCard,
     scheduleSyncCard: scheduleSyncCard,
+    writeOutlookEventIdToDesc: writeOutlookEventIdToDesc,
+    ensureDescMetaFromStore: ensureDescMetaFromStore,
     loadStore: loadStore,
     saveStore: saveStore,
   };
