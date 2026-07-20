@@ -139,4 +139,75 @@ describe('GanttTrello subtask mutations', () => {
     assert.equal(nested.progress, 100);
     assert.equal(nested.done, true);
   });
+
+  it('renameSubtask updates local item text', async () => {
+    const store = {
+      parent: {
+        cardCompletion: {
+          items: [{ id: 's1', text: 'Old', progress: 0 }],
+        },
+      },
+    };
+    const t = fakeT(store);
+    const res = await GanttTrello.renameSubtask(
+      t,
+      { kind: 'local', parentCardId: 'parent', itemId: 's1' },
+      '  New title  '
+    );
+    assert.equal(res.ok, true);
+    assert.equal(res.name, 'New title');
+    assert.equal(store.parent.cardCompletion.items[0].text, 'New title');
+  });
+
+  it('renameSubtask updates checklist item text', async () => {
+    const store = {
+      parent: {
+        cardCompletion: {
+          items: [
+            {
+              id: 'sub',
+              text: 'Sub',
+              progress: 0,
+              items: [{ id: 'c1', text: 'Old check', progress: 0 }],
+            },
+          ],
+        },
+      },
+    };
+    const t = fakeT(store);
+    const res = await GanttTrello.renameSubtask(
+      t,
+      {
+        kind: 'checklist',
+        parentCardId: 'parent',
+        parentItemId: 'sub',
+        itemId: 'c1',
+      },
+      'Renamed check'
+    );
+    assert.equal(res.ok, true);
+    assert.equal(
+      store.parent.cardCompletion.items[0].items[0].text,
+      'Renamed check'
+    );
+  });
+
+  it('renameSubtask rejects empty names', async () => {
+    const store = {
+      parent: {
+        cardCompletion: {
+          items: [{ id: 's1', text: 'Keep', progress: 0 }],
+        },
+      },
+    };
+    const t = fakeT(store);
+    const res = await GanttTrello.renameSubtask(
+      t,
+      { kind: 'local', parentCardId: 'parent', itemId: 's1' },
+      '   '
+    );
+    assert.equal(res.ok, false);
+    assert.equal(res.reason, 'empty');
+    assert.equal(store.parent.cardCompletion.items[0].text, 'Keep');
+  });
 });

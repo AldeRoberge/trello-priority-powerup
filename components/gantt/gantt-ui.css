@@ -204,6 +204,26 @@
   color: var(--tp-text-muted, #626f86);
 }
 
+.gantt-task-name.is-renamable {
+  cursor: text;
+}
+
+.gantt-rename-input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 24px;
+  margin: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--tp-primary, #0c66e4);
+  border-radius: 4px;
+  background: var(--tp-input-bg, #fff);
+  color: var(--tp-text, #172b4d);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+}
+
 .gantt-row-actions {
   display: inline-flex;
   align-items: center;

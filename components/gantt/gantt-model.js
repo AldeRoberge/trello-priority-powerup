@@ -410,10 +410,30 @@
         dueDate: rec.dueDate || '',
         estimatedMinutes: rec.estimatedMinutes || null,
         category: rec.category || null,
+        categoryIcon: rec.categoryIcon || null,
+        categoryLabel: rec.categoryLabel || '',
         color: rec.color || null,
         listId: rec.listId || null,
         listName: rec.listName || '',
         dueComplete: !!rec.dueComplete,
+        subtaskCount:
+          typeof rec.subtaskCount === 'number'
+            ? rec.subtaskCount
+            : Array.isArray(rec.items)
+              ? rec.items.length
+              : 0,
+        priorityScore: rec.priorityScore != null ? rec.priorityScore : null,
+        priorityTierI: rec.priorityTierI != null ? rec.priorityTierI : null,
+        priorityLabel: rec.priorityLabel || '',
+        priorityFill: rec.priorityFill || null,
+        priorityEnabled: rec.priorityEnabled !== false,
+        blocked: !!rec.blocked,
+        duePast: !!rec.duePast,
+        dueCountdown: rec.dueCountdown || '',
+        priorityRankTier:
+          rec.priorityRankTier != null ? rec.priorityRankTier : 100,
+        priorityRankScore:
+          rec.priorityRankScore != null ? rec.priorityRankScore : -1,
         parentCardId: null,
         itemId: null,
         parentItemId: null,
@@ -498,6 +518,42 @@
     return roots;
   }
 
+  function compareRootsByPriority(a, b) {
+    var ta = a && a.priorityRankTier != null ? a.priorityRankTier : 100;
+    var tb = b && b.priorityRankTier != null ? b.priorityRankTier : 100;
+    if (ta !== tb) return ta - tb;
+    var sa = a && a.priorityRankScore != null ? a.priorityRankScore : -1;
+    var sb = b && b.priorityRankScore != null ? b.priorityRankScore : -1;
+    if (sa !== sb) return sb - sa;
+    return String((a && a.name) || '').localeCompare(String((b && b.name) || ''), 'fr');
+  }
+
+  function compareRootsByDate(a, b) {
+    var da = (a && (a.dueDate || a.startDate)) || '';
+    var db = (b && (b.dueDate || b.startDate)) || '';
+    if (da && db && da !== db) return da < db ? -1 : 1;
+    if (da && !db) return -1;
+    if (!da && db) return 1;
+    return String((a && a.name) || '').localeCompare(String((b && b.name) || ''), 'fr');
+  }
+
+  function compareRootsByName(a, b) {
+    return String((a && a.name) || '').localeCompare(String((b && b.name) || ''), 'fr');
+  }
+
+  /**
+   * Sort top-level Gantt rows. Nested children keep their relative order.
+   * @param {'date'|'priority'|'name'} sortBy
+   */
+  function sortTreeRoots(nodes, sortBy) {
+    var list = (nodes || []).slice();
+    var mode = sortBy === 'priority' || sortBy === 'name' ? sortBy : 'date';
+    if (mode === 'priority') list.sort(compareRootsByPriority);
+    else if (mode === 'name') list.sort(compareRootsByName);
+    else list.sort(compareRootsByDate);
+    return list;
+  }
+
   /**
    * Flatten tree for rendering; expandedSet maps node.id → true.
    * Roots are expanded by default when not listed.
@@ -568,5 +624,7 @@
     buildNestTree: buildNestTree,
     flattenVisible: flattenVisible,
     filterRows: filterRows,
+    compareRootsByPriority: compareRootsByPriority,
+    sortTreeRoots: sortTreeRoots,
   };
 })(typeof window !== 'undefined' ? window : this);

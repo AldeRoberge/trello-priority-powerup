@@ -157,6 +157,14 @@
     var pt = PT();
     var ct = CT();
     var records = [];
+    var prioritySettings = null;
+    if (pt && typeof pt.ensureBoardPriorityContext === 'function') {
+      try {
+        prioritySettings = await pt.ensureBoardPriorityContext(t);
+      } catch (e) {
+        prioritySettings = null;
+      }
+    }
 
     for (var ci = 0; ci < cards.length; ci++) {
       var card = cards[ci];
@@ -191,6 +199,27 @@
 
       var listId = card.idList != null ? String(card.idList) : null;
       var category = categoryForList(settings, listId);
+      var match = SM();
+      var catStyle =
+        match && typeof match.categoryStyle === 'function'
+          ? match.categoryStyle(category || '_none')
+          : null;
+
+      var display = null;
+      if (inputs && pt && typeof pt.computeDisplay === 'function') {
+        try {
+          display = pt.computeDisplay(inputs, prioritySettings);
+        } catch (e) {
+          display = null;
+        }
+      }
+
+      var rank =
+        pt && typeof pt.prioritySortRank === 'function'
+          ? pt.prioritySortRank(display)
+          : { tier: 100, score: -1 };
+
+      var items = Array.isArray(completion.items) ? completion.items : [];
 
       records.push({
         id: cardId,
@@ -206,10 +235,31 @@
         dueTime: dates.dueTime,
         progress: progress,
         estimatedMinutes: estimatedMinutesFromCompletion(completion),
-        items: Array.isArray(completion.items) ? completion.items : [],
+        items: items,
+        subtaskCount: items.length,
         category: category,
+        categoryIcon: catStyle && catStyle.icon ? catStyle.icon : null,
+        categoryLabel:
+          match && typeof match.categoryLabel === 'function' && category
+            ? match.categoryLabel(category)
+            : category || '',
         color: colorForCategory(category, settings),
         inputs: inputs,
+        display: display,
+        priorityScore:
+          display && typeof display.score === 'number' ? display.score : null,
+        priorityTierI:
+          display && display.tierI != null ? display.tierI : null,
+        priorityLabel:
+          (display && (display.matrixLabel || display.tierLabel || display.label)) ||
+          '',
+        priorityFill: (display && display.fill) || null,
+        priorityEnabled: !(display && display.priorityEnabled === false),
+        blocked: !!(display && display.blocked),
+        duePast: !!(display && display.duePast),
+        dueCountdown: (display && display.dueCountdown) || '',
+        priorityRankTier: rank.tier,
+        priorityRankScore: rank.score,
       });
     }
 

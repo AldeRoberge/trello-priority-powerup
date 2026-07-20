@@ -685,10 +685,8 @@
             openCard(row.cardId);
           });
         }
-        if (canEditSubtask(row)) {
-          nameBtn.title =
-            (nameBtn.title ? nameBtn.title + ' \u00b7 ' : '') +
-            'Double-clic pour renommer';
+        if (canEditSubtask(row) && row.kind !== 'card') {
+          nameBtn.title = 'Double-clic pour renommer';
           nameBtn.addEventListener('dblclick', function (e) {
             e.preventDefault();
             e.stopPropagation();
