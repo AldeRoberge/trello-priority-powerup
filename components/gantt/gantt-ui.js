@@ -1167,6 +1167,8 @@
         cardId: String(cardId),
         cardName: cardName || '',
         openSection: 'priority',
+        // Nested overlay inside fullscreen Gantt — popup must not call t.sizeTo.
+        embed: 'overlay',
       };
 
       // Wide in-Gantt overlay: Trello t.popup width is fixed/narrow, and t.modal
@@ -2656,10 +2658,7 @@
     function render() {
       renderToolbar();
       renderChart();
-      // Fullscreen board modal: t.sizeTo warns and is a no-op.
-      if (global.PriorityTrello && typeof global.PriorityTrello.sizeToContent === 'function') {
-        global.PriorityTrello.sizeToContent(t);
-      }
+      // Gantt is always opened as a fullscreen board modal — never call t.sizeTo.
     }
 
     function reload(options) {

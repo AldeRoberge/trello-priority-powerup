@@ -2844,12 +2844,38 @@
   }
 
   /**
+   * True when this page is a nested Power-Up iframe (e.g. Task overlay inside
+   * fullscreen Gantt). getContext() often omits fullscreen there, but t.sizeTo
+   * still hits the parent modal and Trello warns.
+   */
+  function isNestedPowerUpIframe() {
+    try {
+      if (typeof global === 'undefined' || !global.parent || !global.top) {
+        return false;
+      }
+      return global.parent !== global.top;
+    } catch (err) {
+      return true;
+    }
+  }
+
+  /** Skip sizeTo for fullscreen hosts, Gantt overlays, and nested iframes. */
+  function shouldSkipSizeTo(t) {
+    if (isFullscreenModal(t)) return true;
+    if (isNestedPowerUpIframe()) return true;
+    var embed = readPowerUpArg(t, 'embed');
+    if (embed === 'overlay' || embed === 'gantt') return true;
+    return false;
+  }
+
+  /**
    * Resize the host popup/modal to content. Skips fullscreen modals (e.g. Gantt)
-   * where Trello warns: "Fullscreen modals cannot be resized with t.sizeTo".
+   * and nested overlays where Trello warns:
+   * "Fullscreen modals cannot be resized with t.sizeTo".
    */
   function sizeToContent(t, el) {
     if (!t || typeof t.sizeTo !== 'function') return;
-    if (isFullscreenModal(t)) return;
+    if (shouldSkipSizeTo(t)) return;
     try {
       var target =
         el ||
@@ -3973,6 +3999,8 @@
     readPowerUpArg: readPowerUpArg,
     pageUrl: pageUrl,
     isFullscreenModal: isFullscreenModal,
+    isNestedPowerUpIframe: isNestedPowerUpIframe,
+    shouldSkipSizeTo: shouldSkipSizeTo,
     sizeToContent: sizeToContent,
     createIframeClient: createIframeClient,
     createIframeClientDeferred: createIframeClientDeferred,

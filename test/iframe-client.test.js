@@ -93,4 +93,46 @@ describe('iframe client options', () => {
     assert.equal(PT.isFullscreenModal(tFs), true);
     assert.equal(PT.isFullscreenModal(tNormal), false);
   });
+
+  it('sizeToContent skips Gantt overlay embed and nested iframes', () => {
+    let sizeCalls = 0;
+    const tOverlay = {
+      getContext() {
+        return { fullscreen: false };
+      },
+      arg(key) {
+        return key === 'embed' ? 'overlay' : null;
+      },
+      sizeTo() {
+        sizeCalls += 1;
+      },
+    };
+    PT.sizeToContent(tOverlay);
+    assert.equal(sizeCalls, 0);
+    assert.equal(PT.shouldSkipSizeTo(tOverlay), true);
+
+    const prevParent = global.parent;
+    const prevTop = global.top;
+    try {
+      global.top = {};
+      global.parent = { other: true };
+      const tNested = {
+        getContext() {
+          return { fullscreen: false };
+        },
+        arg() {
+          return null;
+        },
+        sizeTo() {
+          sizeCalls += 1;
+        },
+      };
+      assert.equal(PT.isNestedPowerUpIframe(), true);
+      PT.sizeToContent(tNested);
+      assert.equal(sizeCalls, 0);
+    } finally {
+      global.parent = prevParent;
+      global.top = prevTop;
+    }
+  });
 });
