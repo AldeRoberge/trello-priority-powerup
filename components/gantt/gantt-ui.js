@@ -1807,7 +1807,9 @@
         renderChart();
       });
       headerCell.appendChild(selectAll);
-      headerCell.appendChild(el('span', 'gantt-twist-spacer'));
+
+      var headerNest = el('div', 'gantt-nest');
+      headerNest.appendChild(el('span', 'gantt-twist-spacer'));
 
       var titleWrap = el('div', 'gantt-header-title-wrap');
       var titleSort = el('span', 'gantt-header-title');
@@ -1823,7 +1825,8 @@
       if (subInd) subSort.appendChild(subInd);
       bindSortableHeader(subSort, 'subtasks', 'sous-t\u00e2ches');
       titleWrap.appendChild(subSort);
-      headerCell.appendChild(titleWrap);
+      headerNest.appendChild(titleWrap);
+      headerCell.appendChild(headerNest);
 
       var headerIcons = el('div', 'gantt-detail-icons gantt-detail-icons--header');
       [
@@ -1971,6 +1974,7 @@
         });
         labelCell.appendChild(sel);
 
+        var nest = el('div', 'gantt-nest');
         if (row.expandable) {
           var isOpen =
             state.expanded[row.id] === true ||
@@ -1983,9 +1987,9 @@
             e.stopPropagation();
             toggleExpand(row.id);
           });
-          labelCell.appendChild(twist);
+          nest.appendChild(twist);
         } else {
-          labelCell.appendChild(el('span', 'gantt-twist-spacer'));
+          nest.appendChild(el('span', 'gantt-twist-spacer'));
         }
 
         var nameWrap = el('div', 'gantt-task-title-wrap');
@@ -2025,7 +2029,8 @@
         nameWrap.appendChild(nameBtn);
         var subBadge = buildSubtaskTitleBadge(row);
         if (subBadge) nameWrap.appendChild(subBadge);
-        labelCell.appendChild(nameWrap);
+        nest.appendChild(nameWrap);
+        labelCell.appendChild(nest);
 
         labelCell.appendChild(buildDetailIcons(row));
         labelCell.appendChild(buildSubtaskActions(row));
