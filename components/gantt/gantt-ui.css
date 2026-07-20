@@ -206,7 +206,7 @@
   grid-template-columns: 22px 28px minmax(80px, 1fr) 104px 72px;
   align-items: center;
   column-gap: 6px;
-  padding: 0 8px 0 calc(8px + var(--gantt-depth, 0) * 14px);
+  padding: 0 8px;
   width: 100%;
   box-sizing: border-box;
   overflow: hidden;
@@ -487,6 +487,8 @@
   gap: 6px;
   min-width: 0;
   overflow: hidden;
+  /* Nesting indent — keep checkboxes / twist in a fixed column. */
+  padding-left: calc(var(--gantt-depth, 0) * 14px);
 }
 
 .gantt-task-title-wrap .gantt-task-name {
