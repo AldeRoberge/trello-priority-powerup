@@ -40,6 +40,7 @@ const UNIT_FILES = [
   'task-split.test.js',
   'history.test.js',
   'debug-log.test.js',
+  'capabilities.test.js',
   'agent-claims.test.js',
   'interview-why-guards.test.js',
   'add-subtask-dedupe.test.js',
