@@ -2244,19 +2244,23 @@
       '</div>' +
       '<div class="tp-completion-bulk is-idle" id="completionBulkBar" role="toolbar" ' +
       'aria-label="Actions de s\u00e9lection">' +
-      '<label class="tp-completion-select-all-label">' +
-      '<input type="checkbox" class="tp-completion-select-box" id="completionSelectAll" />' +
-      '<span>Tout s\u00e9lectionner</span>' +
+      '<label class="tp-completion-select-all-label" title="Tout s\u00e9lectionner">' +
+      '<input type="checkbox" class="tp-completion-select-box" id="completionSelectAll" ' +
+      'aria-label="Tout s\u00e9lectionner" />' +
       '</label>' +
-      '<span class="tp-completion-bulk-count" id="completionBulkCount">Aucune s\u00e9lection</span>' +
-      '<button type="button" class="tp-btn tp-btn--secondary tp-completion-bulk-btn" id="completionBulkDone" disabled title="Terminer">' +
-      '<i class="ti ti-circle-check" aria-hidden="true"></i><span>Terminer</span></button>' +
-      '<button type="button" class="tp-btn tp-btn--secondary tp-completion-bulk-btn" id="completionBulkReopen" disabled title="Rouvrir">' +
-      '<i class="ti ti-reload" aria-hidden="true"></i><span>Rouvrir</span></button>' +
-      '<button type="button" class="tp-btn tp-btn--secondary tp-completion-bulk-btn tp-completion-bulk-btn--danger" id="completionBulkDelete" disabled title="Supprimer">' +
-      '<i class="ti ti-trash" aria-hidden="true"></i><span>Supprimer</span></button>' +
-      '<button type="button" class="tp-btn tp-btn--secondary tp-completion-bulk-btn" id="completionBulkClear" disabled title="Tout d\u00e9s\u00e9lectionner">' +
-      '<i class="ti ti-deselect" aria-hidden="true"></i><span>Tout d\u00e9s\u00e9lectionner</span></button>' +
+      '<span class="tp-completion-bulk-count" id="completionBulkCount" aria-live="polite">0</span>' +
+      '<button type="button" class="tp-btn tp-btn--secondary tp-completion-bulk-btn" id="completionBulkDone" ' +
+      'disabled title="Terminer" aria-label="Terminer">' +
+      '<i class="ti ti-circle-check" aria-hidden="true"></i></button>' +
+      '<button type="button" class="tp-btn tp-btn--secondary tp-completion-bulk-btn" id="completionBulkReopen" ' +
+      'disabled title="Rouvrir" aria-label="Rouvrir">' +
+      '<i class="ti ti-reload" aria-hidden="true"></i></button>' +
+      '<button type="button" class="tp-btn tp-btn--secondary tp-completion-bulk-btn tp-completion-bulk-btn--danger" ' +
+      'id="completionBulkDelete" disabled title="Supprimer" aria-label="Supprimer">' +
+      '<i class="ti ti-trash" aria-hidden="true"></i></button>' +
+      '<button type="button" class="tp-btn tp-btn--secondary tp-completion-bulk-btn" id="completionBulkClear" ' +
+      'disabled title="Tout d\u00e9s\u00e9lectionner" aria-label="Tout d\u00e9s\u00e9lectionner">' +
+      '<i class="ti ti-deselect" aria-hidden="true"></i></button>' +
       '</div>' +
       '<ul class="tp-completion-list" id="completionList" aria-label="Sous-t\u00e2ches"></ul>' +
       '<p class="tp-completion-filter-empty" id="completionFilterEmpty" hidden>' +
@@ -3118,7 +3122,8 @@
       var idle = n === 0;
       bulkBarEl.classList.toggle('is-idle', idle);
       if (bulkCountEl) {
-        bulkCountEl.textContent = idle
+        bulkCountEl.textContent = String(n);
+        bulkCountEl.title = idle
           ? 'Aucune s\u00e9lection'
           : n + ' s\u00e9lectionn\u00e9e(s)';
       }

@@ -3117,12 +3117,13 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble[data-tone='acti
 .tp-completion-select-all-label {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--tp-text-subtle, #44546f);
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0;
   cursor: pointer;
   user-select: none;
+  flex: 0 0 auto;
 }
 
 .tp-completion-select-all-label:has(input:disabled) {
@@ -3143,22 +3144,18 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble[data-tone='acti
 .tp-completion-bulk {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 6px 8px;
+  flex-wrap: nowrap;
+  gap: 4px;
+  padding: 4px 6px;
   border-radius: var(--completion-radius, 10px);
   background: var(--tp-surface-subtle, #f1f2f4);
   border: 1px solid var(--tp-border, #091e4224);
-  min-height: 40px;
+  min-height: 36px;
   box-sizing: border-box;
 }
 
 .tp-completion-bulk.is-idle {
   opacity: 0.55;
-}
-
-.tp-completion-bulk .tp-completion-select-all-label {
-  margin-right: 4px;
 }
 
 .tp-completion-bulk.is-idle .tp-completion-bulk-count {
@@ -3167,20 +3164,27 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble[data-tone='acti
 }
 
 .tp-completion-bulk-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 28px;
+  padding: 0 4px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   color: var(--tp-text, #172b4d);
   margin-right: 2px;
-  min-width: 7.5rem;
 }
 
 .tp-completion-bulk-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  width: 28px;
   height: 28px;
-  padding: 0 10px;
-  font-size: 12px;
+  padding: 0;
+  flex: 0 0 auto;
 }
 
 .tp-completion-bulk-btn:disabled {
@@ -3189,7 +3193,8 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble[data-tone='acti
 }
 
 .tp-completion-bulk-btn .ti {
-  font-size: 14px;
+  font-size: 16px;
+  line-height: 1;
 }
 
 .tp-completion-bulk-btn--danger {
