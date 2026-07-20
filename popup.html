@@ -6,7 +6,7 @@
   <title>Trello Cerveau</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=plus-after-check-1" />
+  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=split-ratio-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-5" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css?v=facilite-slider-2" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
@@ -95,6 +95,15 @@
       <div class="cerveau-main">
         <div class="compare-grid" id="priorityMount"></div>
       </div>
+      <div
+        class="cerveau-splitter"
+        id="cerveauSplitter"
+        hidden
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Redimensionner l\u2019assistant"
+        title="Glisser pour redimensionner"
+      ></div>
       <aside class="cerveau-assistant" id="assistantRail" hidden></aside>
     </div>
   </div>
@@ -1922,6 +1931,8 @@
     /** Move Assistant into the right rail for the fullscreen split layout. */
     function placeAssistantInRail(agentUi) {
       var rail = document.getElementById('assistantRail');
+      var splitter = document.getElementById('cerveauSplitter');
+      var shell = document.getElementById('cerveauShell');
       var chatSection =
         (agentUi && agentUi.el) ||
         (variant &&
@@ -1930,6 +1941,7 @@
       if (!rail || !chatSection) return;
       rail.appendChild(chatSection);
       rail.hidden = false;
+      if (splitter) splitter.hidden = false;
       document.body.classList.add('is-split-assistant');
       if (
         agentUi &&
@@ -1938,6 +1950,113 @@
       ) {
         agentUi.collapse.setExpanded(true);
       }
+      bindAssistantSplit(shell, rail, splitter);
+    }
+
+    var ASSISTANT_RAIL_W_KEY = 'cerveau-assistant-rail-width';
+    var ASSISTANT_RAIL_W_MIN = 280;
+    var ASSISTANT_RAIL_W_DEFAULT = 380;
+    var assistantSplitBound = false;
+
+    function readAssistantRailWidth() {
+      try {
+        var raw =
+          window.localStorage &&
+          window.localStorage.getItem(ASSISTANT_RAIL_W_KEY);
+        var n = raw != null ? parseInt(raw, 10) : NaN;
+        if (isFinite(n) && n >= ASSISTANT_RAIL_W_MIN && n <= 1200) return n;
+      } catch (e) {
+        /* ignore */
+      }
+      return ASSISTANT_RAIL_W_DEFAULT;
+    }
+
+    function storeAssistantRailWidth(w) {
+      try {
+        if (window.localStorage) {
+          window.localStorage.setItem(ASSISTANT_RAIL_W_KEY, String(Math.round(w)));
+        }
+      } catch (e) {
+        /* ignore */
+      }
+    }
+
+    function clampAssistantRailWidth(width, shellEl) {
+      var shellW =
+        (shellEl && shellEl.clientWidth) ||
+        (document.documentElement && document.documentElement.clientWidth) ||
+        1000;
+      // Leave room for the form column + splitter.
+      var max = Math.max(ASSISTANT_RAIL_W_MIN, shellW - 360);
+      var w = Math.round(Number(width) || ASSISTANT_RAIL_W_DEFAULT);
+      return Math.max(ASSISTANT_RAIL_W_MIN, Math.min(max, w));
+    }
+
+    function applyAssistantRailWidth(rail, shellEl, width) {
+      if (!rail) return ASSISTANT_RAIL_W_DEFAULT;
+      var w = clampAssistantRailWidth(width, shellEl);
+      rail.style.flex = '0 0 ' + w + 'px';
+      rail.style.width = w + 'px';
+      rail.style.maxWidth = w + 'px';
+      return w;
+    }
+
+    function bindAssistantSplit(shell, rail, splitter) {
+      if (!shell || !rail || !splitter || assistantSplitBound) {
+        applyAssistantRailWidth(rail, shell, readAssistantRailWidth());
+        return;
+      }
+      assistantSplitBound = true;
+      var width = applyAssistantRailWidth(rail, shell, readAssistantRailWidth());
+
+      splitter.addEventListener('pointerdown', function (ev) {
+        if (ev.button != null && ev.button !== 0) return;
+        // Stacked (narrow) layout — ignore drag.
+        if (window.matchMedia && window.matchMedia('(max-width: 860px)').matches) {
+          return;
+        }
+        ev.preventDefault();
+        var startX = ev.clientX;
+        var startW =
+          rail.getBoundingClientRect().width || width || ASSISTANT_RAIL_W_DEFAULT;
+        splitter.classList.add('is-dragging');
+        shell.classList.add('is-resizing');
+        try {
+          splitter.setPointerCapture(ev.pointerId);
+        } catch (e) {
+          /* ignore */
+        }
+
+        function onMove(moveEv) {
+          // Dragging left grows the assistant (right column).
+          var delta = startX - moveEv.clientX;
+          width = applyAssistantRailWidth(rail, shell, startW + delta);
+        }
+
+        function onUp(upEv) {
+          try {
+            splitter.releasePointerCapture(upEv.pointerId);
+          } catch (e) {
+            /* ignore */
+          }
+          splitter.removeEventListener('pointermove', onMove);
+          splitter.removeEventListener('pointerup', onUp);
+          splitter.removeEventListener('pointercancel', onUp);
+          splitter.classList.remove('is-dragging');
+          shell.classList.remove('is-resizing');
+          width = applyAssistantRailWidth(rail, shell, width);
+          storeAssistantRailWidth(width);
+        }
+
+        splitter.addEventListener('pointermove', onMove);
+        splitter.addEventListener('pointerup', onUp);
+        splitter.addEventListener('pointercancel', onUp);
+      });
+
+      window.addEventListener('resize', function () {
+        if (!document.body.classList.contains('is-split-assistant')) return;
+        width = applyAssistantRailWidth(rail, shell, width || readAssistantRailWidth());
+      });
     }
 
     function resizePopup() {
