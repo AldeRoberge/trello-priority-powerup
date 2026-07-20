@@ -8246,16 +8246,16 @@ html[data-color-mode="dark"] .heat-score-tooltip {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  width: 280px;
-  max-width: 280px;
+  width: 296px;
+  max-width: 296px;
   margin: 0 auto;
 }
 
 .calc-rsm-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 34px;
+  grid-template-columns: minmax(0, 1fr) 48px;
   align-items: stretch;
-  gap: 4px;
+  gap: 6px;
   width: 100%;
 }
 
@@ -8270,13 +8270,15 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 }
 
 .calc-rsm-ease-col {
+  position: relative;
+  z-index: 3;
   display: flex;
   flex-direction: row;
   align-items: stretch;
   justify-content: center;
   min-height: 0;
   height: 100%;
-  gap: 2px;
+  gap: 3px;
   box-sizing: border-box;
 }
 
@@ -8290,7 +8292,7 @@ html[data-color-mode="dark"] .heat-score-tooltip {
   color: var(--text-muted);
   user-select: none;
   pointer-events: none;
-  flex-shrink: 0;
+  flex: 0 0 auto;
   align-self: center;
 }
 
@@ -8300,7 +8302,7 @@ html[data-color-mode="dark"] .heat-score-tooltip {
   align-items: center;
   justify-content: stretch;
   flex: 1 1 auto;
-  min-width: 0;
+  min-width: 14px;
   min-height: 0;
   height: 100%;
   gap: 2px;
@@ -8312,6 +8314,7 @@ html[data-color-mode="dark"] .heat-score-tooltip {
   line-height: 1;
   color: var(--text-muted);
   user-select: none;
+  pointer-events: none;
   flex-shrink: 0;
 }
 
@@ -8325,14 +8328,18 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 
 .calc-rsm-ease-range {
   flex: 1 1 auto;
-  width: 14px;
-  min-height: 0;
+  align-self: center;
+  width: 18px;
+  height: 100%;
+  min-height: 48px;
   margin: 0;
   padding: 0;
   writing-mode: vertical-lr;
   direction: rtl;
   touch-action: none;
   cursor: pointer;
+  position: relative;
+  z-index: 1;
 }
 
 .calc-rsm-ease-range::-webkit-slider-runnable-track {
