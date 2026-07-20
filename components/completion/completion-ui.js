@@ -4825,15 +4825,18 @@
       if (completeBtn) mainRow.appendChild(completeBtn);
       mainRow.appendChild(deleteBtn);
 
-      // Linked cards have no slider — keep the progress circle on the title row
-      // (after the selection checkbox).
-      if (isLinked) {
-        mainRow.insertBefore(checkWrap, selectBox.nextSibling);
-      }
+      // Progress check + add-nested sit on the title row: [✓] [+] title…
+      mainRow.insertBefore(checkWrap, selectBox.nextSibling);
 
       li.appendChild(mainRow);
 
+      var checklistUi = null;
       if (!isLinked) {
+        checklistUi = renderChecklistSection(item);
+        if (checklistUi.addBtn) {
+          mainRow.insertBefore(checklistUi.addBtn, checkWrap.nextSibling);
+        }
+
         var sliderRow = document.createElement('div');
         sliderRow.className = 'tp-completion-item-slider-row';
 
@@ -4860,11 +4863,6 @@
         if (itemBlocked) itemValEl.style.color = BLOCKED_ACCENT;
 
         sliderWrap.appendChild(itemSlider);
-        sliderRow.appendChild(checkWrap);
-        var checklistUi = renderChecklistSection(item);
-        if (checklistUi.addBtn) {
-          sliderRow.appendChild(checklistUi.addBtn);
-        }
         sliderRow.appendChild(sliderWrap);
         sliderRow.appendChild(itemValEl);
         li.appendChild(sliderRow);
@@ -6439,6 +6437,116 @@
     };
   }
 
+  /**
+   * Compact overall progress editor for Gantt: % slider + optional item summary.
+   * Uses applyMasterProgress when checklist items exist; otherwise card-level progress.
+   */
+  function mountMiniProgress(containerEl, config) {
+    if (!containerEl) throw new Error('mountMiniProgress: container required');
+    var CT = getCompletionTrello();
+    if (!CT || typeof CT.normalizeCompletionData !== 'function') {
+      throw new Error('CompletionTrello must be loaded before mountMiniProgress');
+    }
+    config = config || {};
+    var onChange =
+      typeof config.onChange === 'function' ? config.onChange : function () {};
+    var data = CT.normalizeCompletionData(config.data || { items: [] });
+    var progressMeta = CT.computeCardProgress(data);
+    var current = CT.clampProgress(
+      progressMeta && progressMeta.percent != null ? progressMeta.percent : 0
+    );
+
+    var root = document.createElement('div');
+    root.className = 'tp-mini-progress';
+    containerEl.appendChild(root);
+
+    var summary = document.createElement('div');
+    summary.className = 'tp-mini-progress-summary';
+    root.appendChild(summary);
+
+    var row = document.createElement('div');
+    row.className = 'tp-mini-progress-row';
+    root.appendChild(row);
+
+    var pctLabel = document.createElement('span');
+    pctLabel.className = 'tp-mini-progress-pct';
+    row.appendChild(pctLabel);
+
+    var range = document.createElement('input');
+    range.type = 'range';
+    range.className = 'tp-mini-progress-range';
+    range.min = '0';
+    range.max = '100';
+    range.step = '1';
+    range.value = String(current);
+    range.setAttribute('aria-label', 'Progr\u00e8s');
+    row.appendChild(range);
+
+    function refreshSummary() {
+      progressMeta = CT.computeCardProgress(data);
+      current = CT.clampProgress(
+        progressMeta && progressMeta.percent != null ? progressMeta.percent : 0
+      );
+      pctLabel.textContent = Math.round(current) + '\u00a0%';
+      pctLabel.style.color = completionColorForProgress(current);
+      range.value = String(Math.round(current));
+      if (progressMeta && progressMeta.hasItems) {
+        summary.textContent =
+          (progressMeta.doneCount || 0) +
+          ' / ' +
+          (progressMeta.totalCount || 0) +
+          ' sous-t\u00e2ches';
+        summary.hidden = false;
+      } else {
+        summary.textContent = '';
+        summary.hidden = true;
+      }
+    }
+
+    function applyPercent(nextPct, commit) {
+      var target = CT.clampProgress(nextPct);
+      if (data.items && data.items.length) {
+        data = CT.normalizeCompletionData(
+          Object.assign({}, data, {
+            items: CT.applyMasterProgress(data.items, target),
+          })
+        );
+      } else {
+        data = CT.normalizeCompletionData(
+          Object.assign({}, data, { progress: target })
+        );
+      }
+      refreshSummary();
+      if (commit) onChange(Object.assign({}, data));
+    }
+
+    range.addEventListener('input', function () {
+      applyPercent(+range.value, false);
+    });
+    range.addEventListener('change', function () {
+      applyPercent(+range.value, true);
+    });
+
+    refreshSummary();
+
+    return {
+      el: root,
+      getData: function () {
+        return Object.assign({}, data);
+      },
+      getProgress: function () {
+        return current;
+      },
+      setData: function (next) {
+        data = CT.normalizeCompletionData(next || { items: [] });
+        refreshSummary();
+      },
+      destroy: function () {
+        if (root.parentNode) root.parentNode.removeChild(root);
+      },
+    };
+  }
+
   global.CompletionUI = {
     PROGRESS_OKLCH: PROGRESS_OKLCH,
     COMPLETION_COLOR_SCHEMES: COMPLETION_COLOR_SCHEMES,
@@ -6469,6 +6577,7 @@
     playAllCompleteCelebration: playAllCompleteCelebration,
     clearAllCompleteCelebration: clearAllCompleteCelebration,
     mountCompletionUI: mountCompletionUI,
+    mountMiniProgress: mountMiniProgress,
     mountProgressGradientEditor: mountProgressGradientEditor,
     progressFromFaderDelta: progressFromFaderDelta,
     bindProgressFader: bindProgressFader,
