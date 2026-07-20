@@ -1,0 +1,15 @@
+---
+description: Always commit and push after meaningful work
+alwaysApply: true
+---
+
+# Git: always commit and push
+
+After finishing meaningful work:
+
+1. Commit local changes (status → diff → log → stage → commit).
+2. Push the current branch to `origin`.
+
+Do this by default without waiting for a separate ask.
+
+Never force-push main/master unless explicitly requested. Never skip hooks or update git config. Never commit secrets.

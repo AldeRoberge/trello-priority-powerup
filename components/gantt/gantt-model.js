@@ -280,6 +280,29 @@
     return { start: start, end: end };
   }
 
+  /** Order two dates into an inclusive [start, end] interval (paint / click-drag). */
+  function orderedInterval(a, b) {
+    var start = a instanceof Date ? startOfDay(a) : parseIsoDate(a);
+    var end = b instanceof Date ? startOfDay(b) : parseIsoDate(b);
+    if (!start || !end) return null;
+    if (start.getTime() <= end.getTime()) return { start: start, end: end };
+    return { start: end, end: start };
+  }
+
+  /**
+   * Header “select all” checkbox derived state.
+   * @returns {{ checked: boolean, indeterminate: boolean }}
+   */
+  function selectAllCheckboxState(selectedCount, visibleCount) {
+    var vis = Math.max(0, Math.round(Number(visibleCount) || 0));
+    var sel = Math.max(0, Math.round(Number(selectedCount) || 0));
+    if (sel > vis) sel = vis;
+    return {
+      checked: vis > 0 && sel === vis,
+      indeterminate: sel > 0 && sel < vis,
+    };
+  }
+
   function intervalToParts(interval) {
     if (!interval) return { startDate: '', dueDate: '' };
     return {
@@ -632,6 +655,8 @@
     snapDate: snapDate,
     shiftInterval: shiftInterval,
     resizeInterval: resizeInterval,
+    orderedInterval: orderedInterval,
+    selectAllCheckboxState: selectAllCheckboxState,
     intervalToParts: intervalToParts,
     barGeometry: barGeometry,
     buildNestTree: buildNestTree,

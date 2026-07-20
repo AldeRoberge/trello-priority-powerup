@@ -10594,14 +10594,17 @@
 
     function renderMembers() {
       membersEl.replaceChildren();
+      var display = displayAssignees();
 
-      if (members.length) {
-        members.forEach(function (member) {
+      if (display.length) {
+        display.forEach(function (member) {
           var name = memberDisplayName(member) || 'Membre';
           var mid = member && member.id != null ? String(member.id) : '';
+          var isCustom = !!(member && member.custom) || isCustomAssigneeId(mid);
           var chip = document.createElement('div');
           chip.className =
             'info-member' +
+            (isCustom ? ' is-custom' : '') +
             (memberRolesPickerMemberId === mid ? ' is-roles-open' : '');
           chip.title = onMemberRolesChange
             ? name + ' \u2014 d\u00e9finir les r\u00f4les'
@@ -10647,7 +10650,20 @@
           nameEl.textContent = name;
           main.appendChild(nameEl);
 
-          if (onMemberRemove) {
+          if (isCustom) {
+            var badge = document.createElement('span');
+            badge.className = 'info-member-custom-badge';
+            badge.textContent = 'hors Trello';
+            badge.title = member.trelloMemberId
+              ? 'Personne hors Trello (li\u00e9e \u00e0 un membre)'
+              : 'Personne hors Trello';
+            main.appendChild(badge);
+          }
+
+          var canRemove =
+            (isCustom && !!onCustomAssigneesChange) ||
+            (!isCustom && !!onMemberRemove);
+          if (canRemove) {
             var clearBtn = document.createElement('button');
             clearBtn.type = 'button';
             clearBtn.className = 'info-member-clear';
@@ -10732,8 +10748,8 @@
         });
       }
 
-      var canAdd = !!onMemberAdd;
-      membersAddBtn.hidden = !onMemberAdd;
+      var canAdd = !!onMemberAdd || !!onCustomAssigneesChange;
+      membersAddBtn.hidden = !canAdd;
       membersAddBtn.disabled = membersBusy || !canAdd || memberRolesBusy;
       if (membersPickerOpen) renderMembersPicker();
       if (memberRolesPickerMemberId) {
@@ -10807,9 +10823,40 @@
         });
     }
 
+    function clearRolesForMemberId(id) {
+      if (!memberRoles[id]) return;
+      var nextMap = removeMemberFromRoles(memberRoles, id);
+      memberRoles = nextMap;
+      if (onMemberRolesChange) {
+        var customs = pruneMemberRoleCustoms(getMemberRoleCustoms(), nextMap);
+        setMemberRoleCustoms(customs);
+        Promise.resolve(onMemberRolesChange(nextMap, customs)).catch(
+          function (err) {
+            console.error('Info member roles cleanup failed', err);
+          }
+        );
+      }
+    }
+
     function removeMemberFromCard(member) {
-      if (!onMemberRemove || membersBusy || !member || !member.id) return;
+      if (membersBusy || !member || !member.id) return;
       var id = String(member.id);
+      var isCustom = !!(member.custom) || isCustomAssigneeId(id);
+
+      if (isCustom) {
+        if (!onCustomAssigneesChange) return;
+        var nextCustoms = customAssignees.filter(function (item) {
+          return !(item && String(item.id) === id);
+        });
+        clearRolesForMemberId(id);
+        if (memberRolesPickerMemberId === id) {
+          setMemberRolesPickerOpen('');
+        }
+        persistCustomAssignees(nextCustoms);
+        return;
+      }
+
+      if (!onMemberRemove) return;
       membersBusy = true;
       setMembersStatus('', 'saving');
       renderMembers();
@@ -10830,22 +10877,7 @@
           members = members.filter(function (item) {
             return !(item && String(item.id) === id);
           });
-          if (memberRoles[id]) {
-            var nextMap = removeMemberFromRoles(memberRoles, id);
-            memberRoles = nextMap;
-            if (onMemberRolesChange) {
-              var customs = pruneMemberRoleCustoms(
-                getMemberRoleCustoms(),
-                nextMap
-              );
-              setMemberRoleCustoms(customs);
-              Promise.resolve(onMemberRolesChange(nextMap, customs)).catch(
-                function (err) {
-                  console.error('Info member roles cleanup failed', err);
-                }
-              );
-            }
-          }
+          clearRolesForMemberId(id);
           if (memberRolesPickerMemberId === id) {
             setMemberRolesPickerOpen('');
           }
@@ -13740,6 +13772,14 @@
         members = Array.isArray(list) ? list.slice() : [];
         renderMembers();
         onLayoutChange();
+      },
+      setCustomAssignees: function (list) {
+        customAssignees = normalizeCustomAssignees(list);
+        renderMembers();
+        onLayoutChange();
+      },
+      getCustomAssignees: function () {
+        return normalizeCustomAssignees(customAssignees);
       },
       setMemberRoles: function (map) {
         memberRoles = normalizeMemberRoles(map);

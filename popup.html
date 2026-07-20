@@ -1835,6 +1835,15 @@
               : [];
         infoUi.setMemberRoleCustoms(nextRoleCustoms);
       }
+      if (typeof infoUi.setCustomAssignees === 'function') {
+        var nextCustomAssignees =
+          PriorityUI && typeof PriorityUI.normalizeCustomAssignees === 'function'
+            ? PriorityUI.normalizeCustomAssignees(state.customAssignees)
+            : Array.isArray(state.customAssignees)
+              ? state.customAssignees
+              : [];
+        infoUi.setCustomAssignees(nextCustomAssignees);
+      }
       if (typeof infoUi.setDismissedTaskTypeSuggestions === 'function') {
         var nextDismissed =
           PriorityUI && typeof PriorityUI.normalizeTaskTypes === 'function'
@@ -2445,6 +2454,37 @@
                 changed: true,
                 memberRoles: map,
                 memberRoleCustoms: customs,
+              };
+            });
+          });
+        },
+        onCustomAssigneesChange: function (nextList) {
+          var list =
+            PriorityUI && typeof PriorityUI.normalizeCustomAssignees === 'function'
+              ? PriorityUI.normalizeCustomAssignees(nextList)
+              : Array.isArray(nextList)
+                ? nextList
+                : [];
+          var base =
+            (variant && typeof variant.getState === 'function'
+              ? variant.getState()
+              : null) ||
+            latestState ||
+            {};
+          var next = Object.assign({}, base, {
+            customAssignees: list,
+          });
+          if (!list.length) delete next.customAssignees;
+          if (variant && typeof variant.setState === 'function') {
+            variant.setState(next, { preserveCollapse: true });
+          }
+          latestState = Object.assign({}, next);
+          return Promise.resolve(saveState(next)).then(function () {
+            return commitHistoryNow('Personnes assignées modifiées').then(function () {
+              return {
+                ok: true,
+                changed: true,
+                customAssignees: list,
               };
             });
           });
