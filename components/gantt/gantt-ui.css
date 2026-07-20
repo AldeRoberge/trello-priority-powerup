@@ -518,7 +518,6 @@
 
 .gantt-task-name.is-card {
   cursor: pointer;
-  color: var(--tp-link, #0c66e4);
 }
 
 .gantt-task-name.is-card:hover {
