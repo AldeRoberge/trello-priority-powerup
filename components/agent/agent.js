@@ -2544,6 +2544,36 @@
         // dueDate/dueTime are inactive when enabled=false.
         dueDate: dueEnabled ? state.dueDate || null : null,
         dueTime: dueEnabled ? state.dueTime || null : null,
+        dueMode:
+          dueEnabled &&
+          (state.dueMode === 'vague' ||
+            (typeof PriorityUI !== 'undefined' &&
+              PriorityUI.normalizeDueVague &&
+              PriorityUI.normalizeDueVague(state.dueVague)))
+            ? 'vague'
+            : dueEnabled
+              ? 'precise'
+              : null,
+        dueVague: (function () {
+          if (!dueEnabled) return null;
+          if (
+            typeof PriorityUI !== 'undefined' &&
+            typeof PriorityUI.normalizeDueVague === 'function'
+          ) {
+            return PriorityUI.normalizeDueVague(state.dueVague) || null;
+          }
+          return state.dueVague || null;
+        })(),
+        dueLabel: (function () {
+          if (!dueEnabled) return null;
+          if (
+            typeof PriorityUI !== 'undefined' &&
+            typeof PriorityUI.formatDueCountdownFromInputs === 'function'
+          ) {
+            return PriorityUI.formatDueCountdownFromInputs(state) || null;
+          }
+          return null;
+        })(),
         savedDueDate: !dueEnabled && state.dueDate ? state.dueDate : undefined,
         savedDueTime: !dueEnabled && state.dueTime ? state.dueTime : undefined
       };
@@ -3078,7 +3108,7 @@
       '- Ne bloque JAMAIS une action pour un param\u00e8tre optionnel. Applique le minimum viable, puis adapte.',
       '- Ne pose une question AVANT d\'appeler un outil QUE si un param\u00e8tre OBLIGATOIRE manque et qu\'aucune action partielle n\'est possible.',
       '- Param\u00e8tres optionnels (ne jamais exiger avant d\'agir)\u00a0: dueTime, blockedReasons, axes priorit\u00e9 non fournis, progress pr\u00e9cis si on active seulement la section.',
-      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_blocked / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_subtask_estimate\u00a0: id OU matchText + estimatedMinutes\u00a0; set_progress_estimate.estimatedMinutes\u00a0; set_due.dueDate OU relativeMinutes/relativeHours si aucune date/heure relative/absolue n\'est donn\u00e9e\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_project\u00a0: projectId OU matchText/name OU clear:true\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget ou priorityEnabled\u00a0; set_task_types.types (tableau d\'ids connus)\u00a0; trigger_effect.effect\u00a0; point_at.section OU field\u00a0; set_agent_name.name\u00a0; set_agent_color.color\u00a0; set_agent_personality.personality.',
+      '- Param\u00e8tres obligatoires (sans eux, impossible d\'agir)\u00a0: add_subtask.text\u00a0; rename_card.name\u00a0; set_description.desc (string, peut \u00eatre vide pour effacer)\u00a0; rename_subtask.text + (id OU matchText)\u00a0; remove_subtask / toggle_subtask / set_subtask_blocked / set_subtask_progress\u00a0: id OU matchText\u00a0; set_subtask_progress.progress\u00a0; set_subtask_estimate\u00a0: id OU matchText + estimatedMinutes\u00a0; set_progress_estimate.estimatedMinutes\u00a0; set_due.dueDate OU relativeMinutes/relativeHours OU dueVague si aucune date/heure/horizon n\'est donn\u00e9\u00a0; set_formula.formula\u00a0; set_statut\u00a0: listId OU matchList OU category\u00a0; set_project\u00a0: projectId OU matchText/name OU clear:true\u00a0; set_priority\u00a0: au moins un axe, tier, heatTarget ou priorityEnabled\u00a0; set_task_types.types (tableau d\'ids connus)\u00a0; trigger_effect.effect\u00a0; point_at.section OU field\u00a0; set_agent_name.name\u00a0; set_agent_color.color\u00a0; set_agent_personality.personality.',
       '- Dates relatives (jours)\u00a0: r\u00e9sous avec context.today (aujourd\'hui / today \u2192 context.today\u00a0; demain \u2192 +1 jour). N\'invente pas d\'autre date.',
       '- Heures relatives (tr\u00e8s important)\u00a0: \u00ab\u00a0dans 15 minutes\u00a0\u00bb / \u00ab\u00a0in 15 minutes\u00a0\u00bb / \u00ab\u00a0dans 2 heures\u00a0\u00bb = D\u00c9LAI depuis maintenant, PAS une heure fixe du matin.',
       '- Pour un d\u00e9lai\u00a0: utilise set_due avec relativeMinutes (ou relativeHours). Le runtime calcule dueDate/dueTime \u00e0 partir de context.nowTime (' +
@@ -3089,6 +3119,10 @@
       '\u00c9ch\u00e9ance (dueTime optionnel sauf d\u00e9lai relatif)\u00a0:',
       '- Si une date est connue (ex. \u00ab\u00a0aujourd\'hui\u00a0\u00bb, \u00ab\u00a0demain\u00a0\u00bb, \u00ab\u00a02026-07-14\u00a0\u00bb)\u00a0: APPLIQUE set_due avec dueDate (+ dueEnabled:true) TOUT DE SUITE, m\u00eame sans heure.',
       '- dueTime est OPTIONNEL pour une date seule. Ne demande JAMAIS l\'heure avant d\'avoir pos\u00e9 la date.',
+      '- Horizon VAGUE (pas de jour calendrier)\u00a0: si l\'utilisateur dit \u00ab\u00a0\u00e9ventuellement\u00a0\u00bb / \u00ab\u00a0todo eventually\u00a0\u00bb / \u00ab\u00a0\u00e0 faire \u00e9ventuellement\u00a0\u00bb / \u00ab\u00a0futur proche\u00a0\u00bb / \u00ab\u00a0futur lointain\u00a0\u00bb / \u00ab\u00a0someday\u00a0\u00bb\u00a0: APPLIQUE set_due avec dueVague (+ dueEnabled:true) TOUT DE SUITE. INTERDIT de demander une date YYYY-MM-DD \u00e0 la place.',
+      '- dueVague ids\u00a0: "proche" (futur proche), "lointain" (futur lointain), "eventuellement" (\u00e9ventuellement / someday). Le runtime pose une date proxy\u00a0; le libell\u00e9 face = \u00ab\u00a0\u00c0 faire \u00e9ventuellement\u00a0\u00bb etc.',
+      '- Ex. vague\u00a0: user \u00ab\u00a0mark as todo eventually\u00a0\u00bb / \u00ab\u00a0\u00e0 faire \u00e9ventuellement\u00a0\u00bb \u2192 {"message":"Okay, \u00e0 faire \u00e9ventuellement.","suggestions":["Quelle est la priorit\u00e9?","Marquer bloqu\u00e9"],"followUps":[],"actions":[{"tool":"set_due","args":{"dueVague":"eventuellement","dueEnabled":true}}]}',
+      '- Ex. futur proche\u00a0: user \u00ab\u00a0dans un futur proche\u00a0\u00bb \u2192 {"message":"Okay, dans un futur proche.","suggestions":["Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_due","args":{"dueVague":"proche","dueEnabled":true}}]}',
       '- Si l\'utilisateur donne un d\u00e9lai (\u00ab\u00a0dans N minutes/heures\u00a0\u00bb)\u00a0: APPLIQUE set_due avec relativeMinutes/relativeHours (+ dueEnabled:true) TOUT DE SUITE. Ne redemande pas date ni heure.',
       '- Ex. d\u00e9lai\u00a0: user \u00ab\u00a0dans 15 minutes\u00a0\u00bb \u2192 {"message":"Okay, dans 15 minutes.","suggestions":["Marquer bloqu\u00e9","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_due","args":{"relativeMinutes":15,"dueEnabled":true}}]}',
       '- Ex. d\u00e9lai heures\u00a0: user \u00ab\u00a0dans 2 heures\u00a0\u00bb \u2192 {"message":"Okay, dans 2 heures.","suggestions":["Marquer bloqu\u00e9","Ajouter une sous-t\u00e2che"],"followUps":[],"actions":[{"tool":"set_due","args":{"relativeHours":2,"dueEnabled":true}}]}',
@@ -3097,8 +3131,8 @@
         '","dueEnabled":true}}]}',
       '- Ex. tour 2 heure\u00a0: user \u00ab\u00a014:00\u00a0\u00bb \u2192 {"message":"Okay, 14:00.","suggestions":["Marquer bloqu\u00e9","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_due","args":{"dueTime":"14:00","dueEnabled":true}}]}',
       '- Ex. refus heure\u00a0: user \u00ab\u00a0pas d\'heure\u00a0\u00bb \u2192 {"message":"Okay.","suggestions":["Marquer bloqu\u00e9","Ajouter une sous-t\u00e2che"],"followUps":[],"actions":[]}',
-      '- Si \u00ab\u00a0d\u00e9finir une \u00e9ch\u00e9ance\u00a0\u00bb SANS aucune date\u00a0: alors seulement demander la date (obligatoire). actions=[].',
-      '- Ex. sans date\u00a0: user \u00ab\u00a0D\u00e9finir une \u00e9ch\u00e9ance\u00a0\u00bb \u2192 {"message":"Pour quelle date?","suggestions":["Aujourd\'hui","Demain","Vendredi"],"followUps":[],"actions":[]}',
+      '- Si \u00ab\u00a0d\u00e9finir une \u00e9ch\u00e9ance\u00a0\u00bb SANS aucune date NI horizon vague\u00a0: alors seulement demander la date (ou proposer Aujourd\'hui / Demain / \u00c9ventuellement). actions=[].',
+      '- Ex. sans date\u00a0: user \u00ab\u00a0D\u00e9finir une \u00e9ch\u00e9ance\u00a0\u00bb \u2192 {"message":"Pour quelle date?","suggestions":["Aujourd\'hui","Demain","\u00c9ventuellement"],"followUps":[{"label":"\u00c9ventuellement","actions":[{"tool":"set_due","args":{"dueVague":"eventuellement","dueEnabled":true}}]}],"actions":[]}',
       'Bloquer une carte (agir d\'abord, cause ensuite)\u00a0:',
       '- Si l\'utilisateur demande de marquer bloqu\u00e9 / en attente SANS donner de cause\u00a0: APPLIQUE TOUT DE SUITE set_blocked avec enAttente:true (sans blockedReasons), puis confirme et demande la cause en option.',
       '- Ex. tour 1\u00a0: user \u00ab\u00a0Marquer la t\u00e2che comme bloqu\u00e9e\u00a0\u00bb \u2192 {"message":"Okay, bloqu\u00e9. Quelle est la cause?","suggestions":["En attente d\'une approbation","En attente d\'une r\u00e9ponse","Bloqu\u00e9 \u00e0 cause du mat\u00e9riel"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}',
@@ -3235,7 +3269,7 @@
       'Sections activables (tr\u00e8s important)\u00a0:',
       '- Chaque bloc a un champ enabled. Si enabled=false, la section est d\u00e9sactiv\u00e9e\u00a0: les valeurs saved* / latentes NE comptent PAS.',
       '- Priorit\u00e9 active seulement si priority.enabled=true.',
-      '- \u00c9ch\u00e9ance active seulement si due.enabled=true (sinon dueDate/dueTime actifs sont null).',
+      '- \u00c9ch\u00e9ance active seulement si due.enabled=true (sinon dueDate/dueTime actifs sont null). due.dueMode="vague" + due.dueVague + due.dueLabel d\u00e9crivent un horizon flou (\u00ab\u00a0\u00c0 faire \u00e9ventuellement\u00a0\u00bb)\u00a0; ne redemande pas une date pr\u00e9cise.',
       '- Bloqu\u00e9 / en attente actif SEULEMENT si blocked.enabled=true (identique \u00e0 enAttente\u00a0; la cause s\u2019\u00e9dite sous Statut quand la carte est en Bloqu\u00e9).',
       '- Si blocked.enabled=false, la carte N\'EST PAS bloqu\u00e9e, m\u00eame si savedReasons contient d\'anciennes causes.',
       '- Progr\u00e8s actif seulement si progress.enabled=true.',
@@ -3244,7 +3278,7 @@
       'Outils disponibles\u00a0:',
       '- set_priority: { urgency?:0-4, impact?:0-4, ease?:1-5, priorityEnabled?:boolean, tier?: string, heatTarget?: number } (tier = Critique|Urgente|Prioritaire|Importante|Flexible|Secondaire|Optionnelle\u00a0; impact 0\u20134 = port\u00e9e Personnel\u2026Global). Legacy estimatedDuration* \u2192 redirig\u00e9 vers set_progress_estimate.',
       '- set_task_types: { types: string[], force?: boolean } (multi\u00a0; ids\u00a0: action|project|recurring|exploratory|emotional|communication|deliverable|process|thinking|material|learning|admin|creative|finance|custom-*). Lit context.taskTypes. Si taskTypesLocked=true, n\'\u00e9crase PAS sauf demande explicite + force:true. Ne suppose PAS qu\'une carte est un livrable\u00a0; adapte ton langage (urgence / cadrage) aux types.',
-      '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean, relativeMinutes?: number, relativeHours?: number } (dueTime OPTIONNEL pour une date\u00a0; d\u00e9lai \u00ab\u00a0dans N min/h\u00a0\u00bb \u2192 relativeMinutes/relativeHours, calcul\u00e9 depuis context.nowTime\u00a0; aujourd\'hui = context.today)',
+      '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean, relativeMinutes?: number, relativeHours?: number, dueVague?: "proche"|"lointain"|"eventuellement", dueMode?: "precise"|"vague" } (dueTime OPTIONNEL pour une date\u00a0; d\u00e9lai \u00ab\u00a0dans N min/h\u00a0\u00bb \u2192 relativeMinutes/relativeHours\u00a0; horizon flou \u2192 dueVague, sans date calendrier\u00a0; aujourd\'hui = context.today)',
       '- set_blocked: { enAttente?: boolean, blockedReasons?: string[], blockedLinks?: [{id?:string, matchText?:string, label?:string}] } (enAttente:true seul suffit\u00a0; causes et liens optionnels\u00a0; synchronise Progr\u00e8s blocked\u00a0; si progr\u00e8s \u00e0 100%, le runtime le remet \u00e0 0% \u2014 ajoute aussi set_progress)',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (master sur sous-t\u00e2ches si items\u00a0; sinon progres carte)',
       '- set_subtask_estimate: { id?: string, matchText?: string, estimatedMinutes: number|null, estimatedDuration?: string }',
@@ -6689,7 +6723,7 @@
       'Outils autoris\u00e9s dans actions\u00a0:',
       '- set_priority: { urgency?, impact?, ease?, tier?, priorityEnabled? }',
       '- set_task_types: { types: string[], force?: boolean } (multi\u00a0; ids catalog\u00a0; silencieux\u00a0; respect taskTypesLocked)',
-      '- set_due: { dueDate?: YYYY-MM-DD, dueTime?: HH:MM, relativeHours?, relativeMinutes?, clear? }',
+      '- set_due: { dueDate?: YYYY-MM-DD, dueTime?: HH:MM, relativeHours?, relativeMinutes?, dueVague?: proche|lointain|eventuellement, clear? }',
       '- set_blocked: { enAttente?: boolean, blockedReasons?: string[] } (si l\'utilisateur attend quelque chose de concret\u00a0: enAttente:true + cause \u00ab\u00a0En attente de\u2026\u00a0\u00bb)',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (active le bloc Progr\u00e8s + % carte\u00a0; OBLIGATOIRE d\u00e8s qu\'on parle d\'avancement)',
       '- set_project: { projectId?, matchText?, name?, clear? }',
@@ -9465,11 +9499,29 @@
   }
 
   /**
-   * Resolve proposed dueDate/dueTime from set_due args (absolute or relative).
-   * @returns {{dueDate:?string, dueTime:?string, hasDate:boolean, hasTime:boolean}|null}
+   * Resolve proposed dueDate/dueTime from set_due args (absolute, relative, or vague).
+   * @returns {{dueDate:?string, dueTime:?string, dueVague:?string, dueMode:?string, hasDate:boolean, hasTime:boolean, hasVague:boolean}|null}
    */
   function resolveImprovementDueArgs(args, context) {
     if (!args || typeof args !== 'object') return null;
+    if (
+      Object.prototype.hasOwnProperty.call(args, 'dueVague') ||
+      args.dueMode === 'vague'
+    ) {
+      var vagueId = resolveDueVagueArg(args.dueVague);
+      if (!vagueId) return null;
+      var vagueDate = resolveDueVagueToDateSafe(vagueId);
+      if (!vagueDate) return null;
+      return {
+        dueDate: vagueDate,
+        dueTime: null,
+        dueVague: vagueId,
+        dueMode: 'vague',
+        hasDate: true,
+        hasTime: false,
+        hasVague: true
+      };
+    }
     var hasRelative =
       args.relativeMinutes != null || args.relativeHours != null;
     if (hasRelative) {
@@ -9507,11 +9559,22 @@
       return {
         dueDate: resolved.dueDate,
         dueTime: resolved.dueTime,
+        dueVague: null,
+        dueMode: 'precise',
         hasDate: true,
-        hasTime: true
+        hasTime: true,
+        hasVague: false
       };
     }
-    var out = { dueDate: null, dueTime: null, hasDate: false, hasTime: false };
+    var out = {
+      dueDate: null,
+      dueTime: null,
+      dueVague: null,
+      dueMode: 'precise',
+      hasDate: false,
+      hasTime: false,
+      hasVague: false
+    };
     if (Object.prototype.hasOwnProperty.call(args, 'dueDate')) {
       var dueDate = validateDueDate(args.dueDate);
       if (dueDate === undefined) return null;
@@ -9551,11 +9614,20 @@
       var wantEnabled =
         args.dueEnabled != null
           ? !!args.dueEnabled
-          : proposed.hasDate || proposed.hasTime
+          : proposed.hasDate || proposed.hasTime || proposed.hasVague
             ? true
             : !!due.enabled;
       if (wantEnabled !== !!due.enabled) return false;
       if (!wantEnabled) return true;
+      var curVague =
+        due.dueMode === 'vague' && due.dueVague ? String(due.dueVague) : '';
+      if (proposed.hasVague) {
+        return curVague === String(proposed.dueVague || '');
+      }
+      if (curVague) {
+        // Switching from vague → precise is a real change.
+        if (proposed.hasDate || proposed.hasTime) return false;
+      }
       var nextDate = proposed.hasDate ? proposed.dueDate : due.dueDate || null;
       var nextTime = proposed.hasTime ? proposed.dueTime : due.dueTime || null;
       var curDate = due.dueDate || null;
@@ -9567,7 +9639,8 @@
         nextDate &&
         curDate &&
         nextDate === curDate &&
-        wantEnabled
+        wantEnabled &&
+        !curVague
       ) {
         return true;
       }
@@ -11965,6 +12038,74 @@
     return trimmed;
   }
 
+  /**
+   * Resolve a Vague échéance id from set_due args (catalog id or natural phrase).
+   * Ids: proche | lointain | eventuellement (+ legacy bientot).
+   */
+  function resolveDueVagueArg(raw) {
+    if (raw == null || raw === '') return '';
+    var asString = typeof raw === 'string' ? raw : String(raw);
+    if (
+      typeof PriorityUI !== 'undefined' &&
+      typeof PriorityUI.normalizeDueVague === 'function'
+    ) {
+      var catalogId = PriorityUI.normalizeDueVague(asString);
+      if (catalogId) return catalogId;
+    }
+    var t = asString
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[''`]/g, ' ')
+      .replace(/[^a-z0-9\s-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!t) return '';
+    if (
+      t === 'eventuellement' ||
+      t === 'eventually' ||
+      t === 'someday' ||
+      t === 'some day' ||
+      t === 'todo eventually' ||
+      t === 'a faire eventuellement' ||
+      t === 'faire eventuellement' ||
+      t.indexOf('eventuel') >= 0
+    ) {
+      return 'eventuellement';
+    }
+    if (
+      t === 'proche' ||
+      t === 'near future' ||
+      t === 'soonish' ||
+      t.indexOf('futur proche') >= 0 ||
+      t.indexOf('near term') >= 0
+    ) {
+      return 'proche';
+    }
+    if (
+      t === 'lointain' ||
+      t === 'far future' ||
+      t === 'long term' ||
+      t === 'long-term' ||
+      t.indexOf('futur lointain') >= 0
+    ) {
+      return 'lointain';
+    }
+    if (t === 'bientot' || t === 'soon') return 'bientot';
+    return '';
+  }
+
+  function resolveDueVagueToDateSafe(id) {
+    if (
+      typeof PriorityUI !== 'undefined' &&
+      typeof PriorityUI.resolveDueVagueToDate === 'function'
+    ) {
+      return PriorityUI.resolveDueVagueToDate(id) || '';
+    }
+    return '';
+  }
+
   function snapshotPriority(bridge) {
     var s =
       typeof bridge.getPriorityState === 'function' ? bridge.getPriorityState() || {} : {};
@@ -11985,6 +12126,17 @@
           })
           .filter(Boolean)
       : [];
+    var dueVague =
+      typeof PriorityUI !== 'undefined' &&
+      typeof PriorityUI.normalizeDueVague === 'function'
+        ? PriorityUI.normalizeDueVague(s.dueVague)
+        : typeof s.dueVague === 'string'
+          ? s.dueVague.trim()
+          : '';
+    var dueMode =
+      dueVague || s.dueMode === 'vague'
+        ? 'vague'
+        : 'precise';
     return {
       urgency: s.urgency,
       impact: s.impact,
@@ -11997,6 +12149,8 @@
       dueDate: s.dueDate || '',
       dueTime: s.dueTime || '',
       dueEnabled: !!s.dueEnabled,
+      dueMode: dueMode,
+      dueVague: dueVague,
       enAttente: !!s.enAttente,
       blockedReasons: Array.isArray(s.blockedReasons)
         ? s.blockedReasons.slice()
@@ -12332,6 +12486,8 @@
       pushChange(parts, 'dueEnabled', beforeP.dueEnabled, afterP.dueEnabled);
       pushChange(parts, 'dueDate', beforeP.dueDate, afterP.dueDate);
       pushChange(parts, 'dueTime', beforeP.dueTime, afterP.dueTime);
+      pushChange(parts, 'dueMode', beforeP.dueMode, afterP.dueMode);
+      pushChange(parts, 'dueVague', beforeP.dueVague, afterP.dueVague);
     } else if (tool === 'set_blocked') {
       pushChange(parts, 'enAttente', beforeP.enAttente, afterP.enAttente);
       pushChange(
@@ -12843,9 +12999,46 @@
         }
         var beforeDue = snapshotPriority(bridge);
         var duePartial = {};
+        var vagueId = '';
+        if (Object.prototype.hasOwnProperty.call(args, 'dueVague')) {
+          vagueId = resolveDueVagueArg(args.dueVague);
+          if (args.dueVague != null && args.dueVague !== '' && !vagueId) {
+            return {
+              ok: false,
+              tool: tool,
+              error:
+                'dueVague invalide (proche|lointain|eventuellement)'
+            };
+          }
+        } else if (
+          args.dueMode === 'vague' &&
+          Object.prototype.hasOwnProperty.call(args, 'dueDate') === false &&
+          args.relativeMinutes == null &&
+          args.relativeHours == null
+        ) {
+          // dueMode:vague without id — not enough to act
+          return {
+            ok: false,
+            tool: tool,
+            error: 'dueVague requis en mode vague'
+          };
+        }
         var hasRelative =
           args.relativeMinutes != null || args.relativeHours != null;
-        if (hasRelative) {
+        if (vagueId) {
+          var vagueDate = resolveDueVagueToDateSafe(vagueId);
+          if (!vagueDate) {
+            return {
+              ok: false,
+              tool: tool,
+              error: 'Impossible de r\u00e9soudre l\'horizon vague'
+            };
+          }
+          duePartial.dueVague = vagueId;
+          duePartial.dueMode = 'vague';
+          duePartial.dueDate = vagueDate;
+          duePartial.dueTime = '';
+        } else if (hasRelative) {
           var offsetMins = 0;
           if (args.relativeHours != null) {
             var hours = Number(args.relativeHours);
@@ -12901,7 +13094,8 @@
           duePartial.dueEnabled = !!args.dueEnabled;
         } else if (
           (Object.prototype.hasOwnProperty.call(duePartial, 'dueDate') ||
-            Object.prototype.hasOwnProperty.call(duePartial, 'dueTime')) &&
+            Object.prototype.hasOwnProperty.call(duePartial, 'dueTime') ||
+            Object.prototype.hasOwnProperty.call(duePartial, 'dueVague')) &&
           !beforeDue.dueEnabled
         ) {
           duePartial.dueEnabled = true;
@@ -14552,6 +14746,7 @@
     dueFromOffsetMinutes: dueFromOffsetMinutes,
     nowTimeLocal: nowTimeLocal,
     parseRelativeDueOffset: parseRelativeDueOffset,
+    resolveDueVagueArg: resolveDueVagueArg,
     rewriteActionsForRelativeDue: rewriteActionsForRelativeDue,
     detectPriorityTierInText: detectPriorityTierInText,
     rewriteActionsForPriorityTier: rewriteActionsForPriorityTier,

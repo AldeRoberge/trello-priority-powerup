@@ -43,6 +43,7 @@ const UNIT_FILES = [
   'trello-confirm.test.js',
   'capabilities.test.js',
   'agent-claims.test.js',
+  'agent-due-vague.test.js',
   'interview-why-guards.test.js',
   'add-subtask-dedupe.test.js',
   'gantt-model.test.js',
