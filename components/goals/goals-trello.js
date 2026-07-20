@@ -383,6 +383,9 @@
   }
 
   async function getMetrics(t) {
+    if (Array.isArray(boardCache.metrics)) {
+      return boardCache.metrics;
+    }
     var list = await readBoardArray(t, METRICS_KEY, normalizeMetricsCollection);
     boardCache.metrics = list;
     dbgLog('goalsTrello', 'metrics.load', { count: list.length });
@@ -397,6 +400,7 @@
   }
 
   async function preloadBoardGoalsContext(t) {
+    if (boardGoalsCacheWarm()) return boardCache;
     await Promise.all([getObjectifs(t), getProjects(t), getMetrics(t)]);
     return boardCache;
   }
