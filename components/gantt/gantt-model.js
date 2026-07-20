@@ -372,14 +372,24 @@
     if (hasAnyTime) {
       startDt = combineDateTime(
         start,
-        hasStartTime ? parts.startTime : mode === 'day' ? dayStart : null
+        hasStartTime
+          ? parts.startTime
+          : mode === 'day' || mode === 'week'
+            ? dayStart
+            : null
       );
       endDt = combineDateTime(
         due,
-        hasDueTime ? parts.dueTime : mode === 'day' ? dayEnd : null
+        hasDueTime
+          ? parts.dueTime
+          : mode === 'day' || mode === 'week'
+            ? dayEnd
+            : null
       );
       hasTime = true;
-    } else if (mode === 'day') {
+    } else if (mode === 'day' || mode === 'week') {
+      // Week drag/paint uses continuous time like Agenda — date-only cards
+      // open as work-hours spans so edges can be resized to real times.
       startDt = combineDateTime(start, dayStart);
       endDt = combineDateTime(due, dayEnd);
       hasTime = true;
@@ -471,7 +481,8 @@
     }
     if (!d) return null;
     var m = normalizeViewMode(mode);
-    if (m !== 'day') return snapDate(d, m);
+    // Day (Agenda) and Week support continuous time drag with minute snapping.
+    if (m !== 'day' && m !== 'week') return snapDate(d, m);
     var step =
       typeof stepMinutes === 'number' && stepMinutes > 0
         ? Math.round(stepMinutes)
@@ -598,7 +609,10 @@
   function barGeometry(interval, range, widthPx) {
     if (!interval || !range) return null;
     var w = typeof widthPx === 'number' && widthPx > 0 ? widthPx : 1;
-    var useTime = range.mode === 'day' || interval.hasTime === true;
+    var useTime =
+      range.mode === 'day' ||
+      range.mode === 'week' ||
+      interval.hasTime === true;
     if (useTime) {
       var left = dateTimeToX(interval.start, range, widthPx);
       var right = dateTimeToX(interval.end, range, widthPx);

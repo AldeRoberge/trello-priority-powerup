@@ -395,6 +395,11 @@
       };
     }
 
+    /** Day (Agenda) and Week timelines support begin/end times, not just dates. */
+    function usesTimedTimeline() {
+      return state.viewMode === 'day' || state.viewMode === 'week';
+    }
+
     function formatIntervalTitle(interval) {
       if (!interval) return '';
       var start = model.toIsoDate(interval.start);
@@ -2331,7 +2336,7 @@
 
     function applyIntervalToRow(row, interval) {
       var parts = model.intervalToParts(interval, {
-        includeTime: state.viewMode === 'day' || !!interval.hasTime,
+        includeTime: usesTimedTimeline() || !!interval.hasTime,
       });
       row.startDate = parts.startDate;
       row.dueDate = parts.dueDate;
@@ -2431,10 +2436,14 @@
         rect.width > 0 ? rect.width : state.timelineWidth || MIN_TIMELINE_W;
       var x = clientX - rect.left;
       var r = range();
-      if (state.viewMode === 'day' && typeof model.xToDateTime === 'function') {
+      if (usesTimedTimeline() && typeof model.xToDateTime === 'function') {
         var dt = model.xToDateTime(x, r, width);
         return model.snapDateTime
-          ? model.snapDateTime(dt, 'day', model.AGENDA_SNAP_MINUTES || 15)
+          ? model.snapDateTime(
+              dt,
+              state.viewMode,
+              model.AGENDA_SNAP_MINUTES || 15
+            )
           : dt;
       }
       var d = model.xToDate(x, r, width);
@@ -2475,7 +2484,7 @@
         placeGhost(ghost, {
           start: d,
           end: d,
-          hasTime: state.viewMode === 'day',
+          hasTime: usesTimedTimeline(),
         });
       });
 
@@ -2505,7 +2514,7 @@
         placeGhost(ghost, {
           start: origin,
           end: origin,
-          hasTime: state.viewMode === 'day',
+          hasTime: usesTimedTimeline(),
         });
         timeRow.setPointerCapture(ev.pointerId);
 
@@ -2515,7 +2524,7 @@
           if (!cur) return;
           state.paint.current = cur;
           var iv = model.orderedInterval(state.paint.origin, cur, {
-            keepTime: state.viewMode === 'day',
+            keepTime: usesTimedTimeline(),
           });
           if (iv) placeGhost(ghost, iv);
         }
@@ -2531,7 +2540,7 @@
           ghost.hidden = true;
           if (!paint) return;
           var iv = model.orderedInterval(paint.origin, paint.current, {
-            keepTime: state.viewMode === 'day',
+            keepTime: usesTimedTimeline(),
           });
           if (!iv) return;
           applyIntervalToRow(row, iv);
@@ -2582,7 +2591,7 @@
           range: r,
           width: state.timelineWidth,
           pointerId: ev.pointerId,
-          agenda: state.viewMode === 'day',
+          agenda: usesTimedTimeline(),
         };
         barEl.classList.add('is-dragging');
         barEl.setPointerCapture(ev.pointerId);
@@ -2607,8 +2616,8 @@
             }
             if (!next) return;
             next = {
-              start: model.snapDateTime(next.start, 'day'),
-              end: model.snapDateTime(next.end, 'day'),
+              start: model.snapDateTime(next.start, state.viewMode),
+              end: model.snapDateTime(next.end, state.viewMode),
               hasTime: true,
             };
           } else {

@@ -210,6 +210,44 @@ describe('GanttModel', () => {
     assert.equal(GanttModel.toIsoTime(iv.end), '16:45');
   });
 
+  it('resolveBarInterval date-only in week mode uses work hours', () => {
+    const iv = GanttModel.resolveBarInterval(
+      { startDate: '2026-07-20', dueDate: '2026-07-22' },
+      { mode: 'week', dayStart: '08:15', dayEnd: '16:45' }
+    );
+    assert.equal(iv.hasTime, true);
+    assert.equal(GanttModel.toIsoTime(iv.start), '08:15');
+    assert.equal(GanttModel.toIsoTime(iv.end), '16:45');
+    assert.equal(GanttModel.toIsoDate(iv.start), '2026-07-20');
+    assert.equal(GanttModel.toIsoDate(iv.end), '2026-07-22');
+  });
+
+  it('snapDateTime rounds in Week view like Agenda', () => {
+    const snapped = GanttModel.snapDateTime(
+      new Date(2026, 6, 22, 8, 22, 0),
+      'week',
+      15
+    );
+    assert.equal(GanttModel.toIsoTime(snapped), '08:15');
+  });
+
+  it('week barGeometry uses continuous time when hasTime', () => {
+    const range = GanttModel.viewRange('week', '2026-07-22');
+    const width = 700;
+    const iv = {
+      start: GanttModel.combineDateTime('2026-07-22', '09:00'),
+      end: GanttModel.combineDateTime('2026-07-22', '12:00'),
+      hasTime: true,
+    };
+    const geo = GanttModel.barGeometry(iv, range, width);
+    assert.ok(geo && geo.visible);
+    const left = GanttModel.dateTimeToX(iv.start, range, width);
+    const right = GanttModel.dateTimeToX(iv.end, range, width);
+    assert.ok(Math.abs(geo.left - left) < 1);
+    assert.ok(geo.width > 0);
+    assert.ok(geo.width <= right - left + 1);
+  });
+
   it('xToDateTime and snapDateTime round in Agenda', () => {
     const range = GanttModel.viewRange('day', '2026-07-22');
     const width = 240;
