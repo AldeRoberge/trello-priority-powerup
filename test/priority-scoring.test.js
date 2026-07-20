@@ -84,40 +84,4 @@ describe('PriorityUI scoring (baseline)', () => {
     PriorityUI.saveStatutEmbeddedDetailsExpanded(true);
     assert.equal(PriorityUI.loadStatutEmbeddedDetailsExpanded(), true);
   });
-
-  it('persists Détails info-row collapse preference (default collapsed)', () => {
-    assert.equal(typeof PriorityUI.loadInfoRowCollapseState, 'function');
-    assert.equal(typeof PriorityUI.saveInfoRowCollapseState, 'function');
-    assert.equal(typeof PriorityUI.resolveInfoRowExpanded, 'function');
-    const key = PriorityUI.INFO_ROW_COLLAPSE_STORAGE_KEY;
-    assert.ok(key);
-    assert.ok(Array.isArray(PriorityUI.INFO_ROW_COLLAPSE_KEYS));
-    assert.ok(PriorityUI.INFO_ROW_COLLAPSE_KEYS.includes('desc'));
-    localStorage.removeItem(key);
-    assert.deepEqual(PriorityUI.loadInfoRowCollapseState(), {});
-    assert.equal(PriorityUI.resolveInfoRowExpanded('desc'), false);
-    assert.equal(PriorityUI.resolveInfoRowExpanded('members', true), true);
-    PriorityUI.saveInfoRowCollapseState({ desc: true, members: false });
-    assert.equal(PriorityUI.resolveInfoRowExpanded('desc'), true);
-    assert.equal(PriorityUI.resolveInfoRowExpanded('members'), false);
-    assert.equal(PriorityUI.resolveInfoRowExpanded('labels'), false);
-    PriorityUI.saveInfoRowCollapseState({ labels: true });
-    const stored = PriorityUI.loadInfoRowCollapseState();
-    assert.equal(stored.desc, true);
-    assert.equal(stored.members, false);
-    assert.equal(stored.labels, true);
-  });
-
-  it('builds a plain Description summary for collapsed info rows', () => {
-    assert.equal(typeof PriorityUI.infoDescPlainSummary, 'function');
-    assert.equal(PriorityUI.infoDescPlainSummary(''), '');
-    assert.equal(
-      PriorityUI.infoDescPlainSummary('## Hello **world**\n\nNext'),
-      'Hello world Next'
-    );
-    const long = 'word '.repeat(40).trim();
-    const summary = PriorityUI.infoDescPlainSummary(long, 40);
-    assert.ok(summary.length <= 40);
-    assert.ok(summary.endsWith('\u2026'));
-  });
 });

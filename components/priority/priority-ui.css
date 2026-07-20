@@ -1413,12 +1413,7 @@ html[data-color-mode='dark'] .overview-composer-input {
   display: none;
 }
 
-.info-row.is-collapsed {
-  align-items: center;
-}
-
-.info-row-label,
-.info-row-toggle {
+.info-row-label {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1432,52 +1427,10 @@ html[data-color-mode='dark'] .overview-composer-input {
   line-height: 1.35;
 }
 
-.info-row-toggle {
-  appearance: none;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 4px 4px 4px 2px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  color: inherit;
-}
-
-.info-row-toggle:hover {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-  color: var(--text-secondary, var(--text-muted));
-}
-
-.info-row-toggle:focus-visible {
-  outline: 2px solid var(--accent, #0c66e4);
-  outline-offset: 1px;
-}
-
-.info-row-chevron {
-  flex-shrink: 0;
-  font-size: 14px;
-  line-height: 1;
-  opacity: 0.75;
-  transition: transform 0.18s ease;
-}
-
-.info-row.is-collapsed .info-row-chevron {
-  transform: rotate(-90deg);
-}
-
 .info-row--title .info-row-label,
 .info-row--desc .info-row-label,
-.info-row--desc .info-row-toggle,
-.info-row--objectif .info-row-label,
-.info-row--objectif .info-row-toggle {
+.info-row--objectif .info-row-label {
   padding-top: 6px;
-}
-
-.info-row.is-collapsed .info-row-toggle {
-  padding-top: 4px;
 }
 
 .info-row-icon {
@@ -1494,122 +1447,6 @@ html[data-color-mode='dark'] .overview-composer-input {
 
 .info-row-value {
   min-width: 0;
-}
-
-.info-row-summary {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  line-height: 1.35;
-  color: var(--text-primary);
-  cursor: pointer;
-}
-
-.info-row-summary.is-empty {
-  color: var(--text-muted);
-  font-style: italic;
-  font-weight: 500;
-}
-
-.info-row-detail {
-  min-width: 0;
-}
-
-.info-row.is-collapsed:not(.info-row--compact-detail) .info-row-detail,
-.info-row:not(.is-collapsed) .info-row-summary,
-.info-row--compact-detail:not(.is-collapsed) .info-row-summary,
-.info-row--compact-detail.is-collapsed .info-row-summary:not(.is-empty) {
-  display: none;
-}
-
-.info-row.is-collapsed .info-row-value {
-  cursor: pointer;
-}
-
-.info-row.is-collapsed.info-row--compact-detail .info-row-value {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.info-row.is-collapsed.info-row--compact-detail .info-row-summary.is-empty {
-  display: block;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.info-row.is-collapsed.info-row--compact-detail .info-row-detail {
-  display: block;
-  flex: 0 1 auto;
-  min-width: 0;
-}
-
-/* Compact collapsed: one-line chips + quick-add (+), no remove/edit chrome. */
-.info-row.is-collapsed.info-row--compact-detail .info-members-inline,
-.info-row.is-collapsed.info-row--compact-detail .info-labels-inline,
-.info-row.is-collapsed.info-row--compact-detail .info-task-types-inline,
-.info-row.is-collapsed.info-row--compact-detail .info-parent-inline,
-.info-row.is-collapsed.info-row--compact-detail .info-members,
-.info-row.is-collapsed.info-row--compact-detail .info-labels,
-.info-row.is-collapsed.info-row--compact-detail .info-task-types,
-.info-row.is-collapsed.info-row--compact-detail .info-parent-chips,
-.info-row.is-collapsed.info-row--compact-detail .info-creator {
-  flex-wrap: nowrap;
-  overflow: hidden;
-  max-width: 100%;
-}
-
-.info-row.is-collapsed.info-row--compact-detail .info-members-wrap,
-.info-row.is-collapsed.info-row--compact-detail .info-labels-wrap,
-.info-row.is-collapsed.info-row--compact-detail .info-task-types-wrap,
-.info-row.is-collapsed.info-row--compact-detail .info-parent-wrap,
-.info-row.is-collapsed.info-row--compact-detail .info-objectif-mount {
-  max-width: 100%;
-  overflow: hidden;
-}
-
-.info-row.is-collapsed.info-row--compact-detail .objectif-breadcrumb {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
-
-.info-row.is-collapsed .info-member-clear,
-.info-row.is-collapsed .info-label-clear,
-.info-row.is-collapsed .info-label-edit,
-.info-row.is-collapsed .info-label-actions,
-.info-row.is-collapsed .info-task-type-clear,
-.info-row.is-collapsed .info-parent-clear,
-.info-row.is-collapsed .info-member-role-clear,
-.info-row.is-collapsed .info-member-role-add,
-.info-row.is-collapsed .info-member-roles,
-.info-row.is-collapsed .info-labels-suggestions,
-.info-row.is-collapsed .info-task-types-suggestions,
-.info-row.is-collapsed .info-members-picker,
-.info-row.is-collapsed .info-labels-picker,
-.info-row.is-collapsed .info-task-types-picker,
-.info-row.is-collapsed .info-parent-picker,
-.info-row.is-collapsed .info-labels-color-picker,
-.info-row.is-collapsed .info-member-roles-picker-host,
-.info-row.is-collapsed .info-desc-meta,
-.info-row.is-collapsed .info-desc-toolbar,
-.info-row.is-collapsed .info-desc-status,
-.info-row.is-collapsed .objectif-picker-row,
-.info-row.is-collapsed .objectif-add-mission,
-.info-row.is-collapsed .objectif-create-row {
-  display: none !important;
-}
-
-/* Quick-add (+) stays available while collapsed. */
-.info-row.is-collapsed .info-members-add-btn,
-.info-row.is-collapsed .info-labels-add-btn,
-.info-row.is-collapsed .info-task-types-add-btn,
-.info-row.is-collapsed .info-parent-pick-btn {
-  cursor: pointer;
 }
 
 /* Cellphone-narrow popup: icon-only labels free space for values. */

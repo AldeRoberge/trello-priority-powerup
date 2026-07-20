@@ -130,4 +130,19 @@ describe('GanttUI helpers', () => {
       false
     );
   });
+
+  it('computeTimelineWidth fills the viewport but keeps readable columns', () => {
+    assert.equal(GanttUI.minColumnWidth('week'), 88);
+    assert.equal(GanttUI.minColumnWidth('day'), 32);
+    assert.equal(GanttUI.minColumnWidth('month'), 30);
+    assert.equal(GanttUI.minColumnWidth('year'), 72);
+
+    // Wide scrollport: stretch to fill.
+    assert.equal(GanttUI.computeTimelineWidth(1000, 'week', 7), 1000);
+    // Narrow scrollport: expand past viewport so week labels stay readable.
+    assert.equal(GanttUI.computeTimelineWidth(400, 'week', 7), 7 * 88);
+    assert.equal(GanttUI.computeTimelineWidth(500, 'day', 24), 24 * 32);
+    assert.equal(GanttUI.computeTimelineWidth(600, 'month', 31), 31 * 30);
+    assert.equal(GanttUI.computeTimelineWidth(800, 'year', 12), 12 * 72);
+  });
 });

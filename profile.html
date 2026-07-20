@@ -56,10 +56,21 @@
         <span class="tp-profile-field-label">Couleur</span>
         <div id="profileAgentColor" class="tp-agent-color-picker" aria-label="Couleur de l’assistant"></div>
       </div>
-      <label class="tp-profile-field">
-        <span class="tp-profile-field-label">Personnalité</span>
+      <div class="tp-profile-field">
+        <div class="tp-profile-field-label-row">
+          <span class="tp-profile-field-label">Personnalité</span>
+          <button
+            type="button"
+            class="tp-profile-field-dice"
+            id="profileAgentPersonalityReroll"
+            aria-label="Personnalité aléatoire"
+            title="Personnalité aléatoire"
+          >
+            <i class="ti ti-dice" aria-hidden="true"></i>
+          </button>
+        </div>
         <textarea class="tp-input tp-textarea" id="profileAgentPersonality" maxlength="400" rows="3" placeholder="ex. Pote attentionné, peu fan de productivité, préfère parler du ressenti…"></textarea>
-      </label>
+      </div>
       <div class="tp-profile-actions" style="margin: 0 0 12px; justify-content: flex-start;">
         <button type="button" class="tp-button tp-button--secondary" id="profileAgentReroll">Nouveau nom aléatoire</button>
       </div>
@@ -317,6 +328,14 @@
           Profile.pickAgentNameForColor(color);
         scheduleSave();
       });
+
+      document
+        .getElementById('profileAgentPersonalityReroll')
+        .addEventListener('click', function () {
+          var el = document.getElementById('profileAgentPersonality');
+          el.value = Profile.pickRandomAgentPersonality(el.value);
+          scheduleSave();
+        });
 
       document.getElementById('profileFeatures').addEventListener('change', scheduleSave);
 

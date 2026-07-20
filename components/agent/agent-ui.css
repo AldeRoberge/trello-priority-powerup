@@ -198,7 +198,7 @@
   color: var(--tp-text);
 }
 
-.tp-page--priority .agent-settings-memory {
+.tp-page--priority .agent-settings-fold {
   margin: 12px 0 4px;
   padding: 0;
   border: 1px solid var(--tp-border);
@@ -206,7 +206,7 @@
   background: var(--tp-surface, var(--tp-bg));
 }
 
-.tp-page--priority .agent-settings-memory > summary {
+.tp-page--priority .agent-settings-fold > summary {
   list-style: none;
   cursor: pointer;
   display: flex;
@@ -219,11 +219,11 @@
   user-select: none;
 }
 
-.tp-page--priority .agent-settings-memory > summary::-webkit-details-marker {
+.tp-page--priority .agent-settings-fold > summary::-webkit-details-marker {
   display: none;
 }
 
-.tp-page--priority .agent-settings-memory > summary::before {
+.tp-page--priority .agent-settings-fold > summary::before {
   content: '';
   width: 0;
   height: 0;
@@ -233,15 +233,15 @@
   transition: transform 0.15s ease;
 }
 
-.tp-page--priority .agent-settings-memory[open] > summary::before {
+.tp-page--priority .agent-settings-fold[open] > summary::before {
   transform: rotate(90deg);
 }
 
-.tp-page--priority .agent-settings-memory-title {
+.tp-page--priority .agent-settings-fold-title {
   flex: 1 1 auto;
 }
 
-.tp-page--priority .agent-settings-memory-badge {
+.tp-page--priority .agent-settings-fold-badge {
   flex: 0 0 auto;
   font-size: 11px;
   font-weight: 650;
@@ -251,12 +251,8 @@
   color: var(--tp-text);
 }
 
-.tp-page--priority .agent-settings-memory-body {
+.tp-page--priority .agent-settings-fold-body {
   padding: 0 10px 10px;
-}
-
-.tp-page--priority .agent-memory-actions {
-  margin-bottom: 8px;
 }
 
 .tp-page--priority .agent-settings-memory-mount {
@@ -265,6 +261,10 @@
   overflow: auto;
   border-top: 1px solid var(--tp-border);
   padding-top: 8px;
+}
+
+.tp-page--priority .agent-memory-actions {
+  margin-bottom: 8px;
 }
 
 .tp-page--priority .agent-settings-memory-mount .memory-ui {
@@ -473,6 +473,56 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--tp-text-subtle);
+}
+
+.tp-page--priority .agent-field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tp-page--priority .agent-field-label-row .agent-field-label {
+  margin: 0;
+}
+
+.tp-page--priority .agent-field-dice {
+  appearance: none;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--tp-border);
+  border-radius: 6px;
+  background: var(--tp-surface, var(--tp-bg));
+  color: var(--tp-text-muted, #626f86);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease,
+    transform 0.12s ease;
+}
+
+.tp-page--priority .agent-field-dice:hover {
+  border-color: color-mix(in srgb, var(--tp-primary, #0c66e4) 45%, var(--tp-border));
+  background: color-mix(in srgb, var(--tp-primary, #0c66e4) 8%, var(--tp-surface, var(--tp-bg)));
+  color: var(--tp-primary, #0c66e4);
+}
+
+.tp-page--priority .agent-field-dice:active {
+  transform: rotate(-12deg) scale(1.06);
+}
+
+.tp-page--priority .agent-field-dice:focus-visible {
+  outline: 2px solid var(--tp-primary, #0c66e4);
+  outline-offset: 1px;
+}
+
+.tp-page--priority .agent-field-dice .ti {
+  font-size: 15px;
+  line-height: 1;
 }
 
 .tp-page--priority .agent-input {

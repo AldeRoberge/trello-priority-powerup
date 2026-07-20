@@ -5768,22 +5768,6 @@
           },
         });
         body.appendChild(crumb);
-        if (infoUi && typeof infoUi.setObjectifSummary === 'function') {
-          var oName =
-            hierarchy.objectif && hierarchy.objectif.name
-              ? String(hierarchy.objectif.name).trim()
-              : '';
-          var pName =
-            hierarchy.project && hierarchy.project.name
-              ? String(hierarchy.project.name).trim()
-              : '';
-          var summaryBits = [];
-          if (oName) summaryBits.push(oName);
-          if (pName) summaryBits.push(pName);
-          infoUi.setObjectifSummary(summaryBits.join(' \u203a '));
-        }
-      } else if (infoUi && typeof infoUi.setObjectifSummary === 'function') {
-        infoUi.setObjectifSummary('');
       }
 
       if (activeProjects.length || (hierarchy.project && hierarchy.project.retired)) {
@@ -5990,12 +5974,6 @@
       return refreshObjectifData().then(function () {
         if (initiallyOpen && typeof infoUi.setExpanded === 'function') {
           infoUi.setExpanded(true);
-        }
-        if (
-          initiallyOpen &&
-          typeof infoUi.setInfoRowExpanded === 'function'
-        ) {
-          infoUi.setInfoRowExpanded('objectif', true);
         }
         renderObjectifBody();
         resizePopup();
@@ -7010,13 +6988,6 @@
             } else if (key === 'objectif' || key === 'info') {
               if (infoUi && typeof infoUi.setExpanded === 'function') {
                 infoUi.setExpanded(true);
-              }
-              if (
-                key === 'objectif' &&
-                infoUi &&
-                typeof infoUi.setInfoRowExpanded === 'function'
-              ) {
-                infoUi.setInfoRowExpanded('objectif', true);
               }
               if (key === 'objectif') {
                 target =

@@ -411,7 +411,24 @@
     colorField.appendChild(el('span', 'agent-field-label', { text: 'Couleur' }));
     colorField.appendChild(agentColorPickerHost);
     settingsPanel.appendChild(colorField);
-    settingsPanel.appendChild(labeledInput('Personnalit\u00e9', agentPersonalityInput));
+
+    var personalityField = el('div', 'agent-field');
+    var personalityLabelRow = el('div', 'agent-field-label-row');
+    personalityLabelRow.appendChild(
+      el('span', 'agent-field-label', { text: 'Personnalit\u00e9' })
+    );
+    var rerollPersonalityBtn = el('button', 'agent-field-dice', {
+      type: 'button',
+      'aria-label': 'Personnalit\u00e9 al\u00e9atoire',
+      title: 'Personnalit\u00e9 al\u00e9atoire'
+    });
+    var rerollPersonalityIcon = el('i', 'ti ti-dice');
+    rerollPersonalityIcon.setAttribute('aria-hidden', 'true');
+    rerollPersonalityBtn.appendChild(rerollPersonalityIcon);
+    personalityLabelRow.appendChild(rerollPersonalityBtn);
+    personalityField.appendChild(personalityLabelRow);
+    personalityField.appendChild(agentPersonalityInput);
+    settingsPanel.appendChild(personalityField);
 
     var charActions = el('div', 'agent-settings-actions agent-char-actions');
     var rerollNameBtn = el('button', 'tp-button agent-btn agent-btn--secondary', {
@@ -426,14 +443,23 @@
     charActions.appendChild(rerollColorBtn);
     settingsPanel.appendChild(charActions);
 
-    var settingsTitle = el('h4', 'agent-settings-title', { text: 'Fournisseur IA' });
-    settingsPanel.appendChild(settingsTitle);
+    var providerDetails = el('details', 'agent-settings-fold agent-settings-provider');
+    var providerSummary = el('summary', 'agent-settings-fold-summary');
+    providerSummary.appendChild(
+      el('span', 'agent-settings-fold-title', { text: 'Fournisseur IA' })
+    );
+    var providerBadge = el('span', 'agent-settings-fold-badge');
+    providerBadge.hidden = true;
+    providerSummary.appendChild(providerBadge);
+    providerDetails.appendChild(providerSummary);
 
-    var settingsHint = el('p', 'agent-settings-hint', {
-      text:
-        'Cl\u00e9 OpenAI ou endpoint compatible (OpenRouter, proxy CORS\u2026). Stock\u00e9e en priv\u00e9 sur votre compte Trello.'
-    });
-    settingsPanel.appendChild(settingsHint);
+    var providerBody = el('div', 'agent-settings-fold-body');
+    providerBody.appendChild(
+      el('p', 'agent-settings-hint', {
+        text:
+          'Cl\u00e9 OpenAI ou endpoint compatible (OpenRouter, proxy CORS\u2026). Stock\u00e9e en priv\u00e9 sur votre compte Trello.'
+      })
+    );
 
     var presetRow = el('div', 'agent-preset-row', { role: 'group', 'aria-label': 'Pr\u00e9r\u00e9glages' });
     var presetButtons = {};
@@ -447,7 +473,7 @@
       presetButtons[id] = btn;
       presetRow.appendChild(btn);
     });
-    settingsPanel.appendChild(presetRow);
+    providerBody.appendChild(presetRow);
 
     var apiKeyInput = el('input', 'agent-input', {
       type: 'password',
@@ -478,10 +504,10 @@
     var modelSelectField = labeledInput('Mod\u00e8le', modelSelect);
     var modelInputField = labeledInput('Mod\u00e8le', modelInput);
 
-    settingsPanel.appendChild(labeledInput('Cl\u00e9 API', apiKeyInput));
-    settingsPanel.appendChild(labeledInput('URL de base', baseUrlInput));
-    settingsPanel.appendChild(modelSelectField);
-    settingsPanel.appendChild(modelInputField);
+    providerBody.appendChild(labeledInput('Cl\u00e9 API', apiKeyInput));
+    providerBody.appendChild(labeledInput('URL de base', baseUrlInput));
+    providerBody.appendChild(modelSelectField);
+    providerBody.appendChild(modelInputField);
 
     var STATUS_PREF_STORAGE_KEY = 'trello-priority-powerup/agent-status';
     var LEGACY_DEBUG_PREF_STORAGE_KEY = 'trello-priority-powerup/agent-debug-enabled';
@@ -548,18 +574,61 @@
       );
     });
     statusSelect.value = statusLevel;
-    settingsPanel.appendChild(labeledInput('Afficher le statut', statusSelect));
+    providerBody.appendChild(labeledInput('Afficher le statut', statusSelect));
+
+    var settingsActions = el('div', 'agent-settings-actions');
+    var saveBtn = el('button', 'tp-button agent-btn', { type: 'button', text: 'Enregistrer' });
+    var testBtn = el('button', 'tp-button agent-btn agent-btn--secondary', {
+      type: 'button',
+      text: 'Tester le fournisseur'
+    });
+    settingsActions.appendChild(saveBtn);
+    settingsActions.appendChild(testBtn);
+    providerBody.appendChild(settingsActions);
+
+    var settingsStatus = el('p', 'agent-settings-status');
+    settingsStatus.hidden = true;
+    providerBody.appendChild(settingsStatus);
+
+    var testResultsEl = el('ul', 'agent-test-results');
+    testResultsEl.hidden = true;
+    providerBody.appendChild(testResultsEl);
+
+    providerDetails.appendChild(providerBody);
+    settingsPanel.appendChild(providerDetails);
+
+    function syncProviderFold() {
+      var configured = Agent.isConfigured(provider);
+      if (configured) {
+        providerBadge.hidden = true;
+        providerBadge.textContent = '';
+      } else {
+        providerBadge.hidden = false;
+        providerBadge.textContent = 'Non configur\u00e9';
+      }
+    }
+
+    function openProviderFold() {
+      providerDetails.open = true;
+      syncProviderFold();
+      notifyLayout();
+    }
+
+    providerDetails.addEventListener('toggle', function () {
+      syncProviderFold();
+      notifyLayout();
+    });
 
     // ── Mémoire (settings submenu) ───────────────────────────────────────
-    var memoryDetails = el('details', 'agent-settings-memory');
-    var memorySummary = el('summary', 'agent-settings-memory-summary');
-    memorySummary.appendChild(el('span', 'agent-settings-memory-title', { text: 'M\u00e9moire' }));
-    var memoryBadge = el('span', 'agent-settings-memory-badge');
+    var memoryDetails = el('details', 'agent-settings-fold agent-settings-memory');
+    var memorySummary = el('summary', 'agent-settings-fold-summary');
+    memorySummary.appendChild(el('span', 'agent-settings-fold-title', { text: 'M\u00e9moire' }));
+    var memoryBadge = el('span', 'agent-settings-fold-badge');
     memoryBadge.hidden = true;
     memorySummary.appendChild(memoryBadge);
     memoryDetails.appendChild(memorySummary);
 
-    var memoryBody = el('div', 'agent-settings-memory-body');
+    var memoryBody = el('div', 'agent-settings-fold-body');
     memoryBody.appendChild(
       el('p', 'agent-settings-hint', {
         text:
@@ -683,24 +752,7 @@
       notifyLayout();
     });
     syncMemoryBadge();
-
-    var settingsActions = el('div', 'agent-settings-actions');
-    var saveBtn = el('button', 'tp-button agent-btn', { type: 'button', text: 'Enregistrer' });
-    var testBtn = el('button', 'tp-button agent-btn agent-btn--secondary', {
-      type: 'button',
-      text: 'Tester le fournisseur'
-    });
-    settingsActions.appendChild(saveBtn);
-    settingsActions.appendChild(testBtn);
-    settingsPanel.appendChild(settingsActions);
-
-    var settingsStatus = el('p', 'agent-settings-status');
-    settingsStatus.hidden = true;
-    settingsPanel.appendChild(settingsStatus);
-
-    var testResultsEl = el('ul', 'agent-test-results');
-    testResultsEl.hidden = true;
-    settingsPanel.appendChild(testResultsEl);
+    syncProviderFold();
 
     var doneWrap = el('div', 'agent-settings-done');
     var doneBtn = el('button', 'tp-button agent-btn', {
@@ -1877,6 +1929,8 @@
         'aria-label',
         configured ? 'Param\u00e8tres de l\'assistant' : 'Configurer l\'assistant'
       );
+      syncProviderFold();
+      if (!configured) providerDetails.open = true;
     }
 
     function readSettingsForm() {
@@ -8262,6 +8316,7 @@
         collapse.setExpanded(true);
       }
       setSettingsOpen(true);
+      openProviderFold();
     });
     saveBtn.addEventListener('click', function () {
       saveSettings();
@@ -8283,6 +8338,17 @@
       syncAgentAvatarPreview();
       persistAgentIdentity(readAgentIdentityForm()).catch(function (err) {
         console.error('AgentUI reroll name failed', err);
+      });
+    });
+    rerollPersonalityBtn.addEventListener('click', function () {
+      var next =
+        global.UserProfile && global.UserProfile.pickRandomAgentPersonality
+          ? global.UserProfile.pickRandomAgentPersonality(agentPersonalityInput.value)
+          : '';
+      if (!next) return;
+      agentPersonalityInput.value = next;
+      persistAgentIdentity(readAgentIdentityForm()).catch(function (err) {
+        console.error('AgentUI reroll personality failed', err);
       });
     });
     rerollColorBtn.addEventListener('click', function () {

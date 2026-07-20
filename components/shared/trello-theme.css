@@ -4932,6 +4932,40 @@ html[data-color-mode='dark'] .tp-completion-suggestion.is-link:hover {
   color: var(--tp-text-subtle, #44546f);
 }
 
+.tp-profile-field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tp-profile-field-dice {
+  appearance: none;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--tp-border, #091e4224);
+  border-radius: 6px;
+  background: var(--tp-surface, #fff);
+  color: var(--tp-text-muted, #626f86);
+  cursor: pointer;
+}
+
+.tp-profile-field-dice:hover {
+  border-color: color-mix(in srgb, var(--tp-primary, #0c66e4) 45%, var(--tp-border, #091e4224));
+  color: var(--tp-primary, #0c66e4);
+}
+
+.tp-profile-field-dice .ti {
+  font-size: 15px;
+  line-height: 1;
+}
+
 /* Agent identity color picker (presets + custom) */
 .tp-agent-color-picker {
   display: grid;

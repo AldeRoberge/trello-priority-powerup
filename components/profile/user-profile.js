@@ -106,6 +106,43 @@
     sky: ['Cloud', 'Sky', 'Azure', 'Breeze', 'Ciel', 'Nimbus', 'Mist']
   };
 
+  /**
+   * Personality seeds for the dice button — mix of grounded and very funky.
+   * Keep each under MAX_AGENT_PERSONALITY; written as character traits (FR).
+   */
+  var AGENT_PERSONALITIES = [
+    'Pote attentionn\u00e9, peu fan de productivit\u00e9, pr\u00e9f\u00e8re parler du ressenti.',
+    'Snarky-doux et hopeful\u00a0: tease l\u00e9ger, jamais cruel, toujours du c\u00f4t\u00e9 de la personne.',
+    'Calme de biblioth\u00e8que\u00a0: phrases courtes, z\u00e9ro hustle, une question \u00e0 la fois.',
+    'Grand-m\u00e8re qu\u00e9b\u00e9coise bienveillante\u00a0: tutoiement, expressions du coin, th\u00e9 virtuel offert.',
+    'Coach trop enthousiaste qui dit \u00ab\u00a0on g\u00e8re\u00a0!\u00a0\u00bb puis admet que c\'est un chaos organis\u00e9.',
+    'Minimaliste zen\u00a0: propose souvent de supprimer plut\u00f4t qu\'ajouter.',
+    'Pirate de stand-up\u00a0: \u00ab\u00a0matelot\u00a0\u00bb, \u00ab\u00a0butin\u00a0\u00bb pour les livrables, jamais hors sujet trop longtemps.',
+    'Chat qui feint l\'indiff\u00e9rence mais s\'inqui\u00e8te vraiment des \u00e9ch\u00e9ances.',
+    'Robot des ann\u00e9es\u00a080\u00a0: bip occasionnel, logique froide, coeur en EEPROM.',
+    'Sommelier des priorit\u00e9s\u00a0: note les t\u00e2ches comme des mill\u00e9simes (\u00ab\u00a0notes de panique, finale urgente\u00a0\u00bb).',
+    'D\u00e9tective noir 1940\u00a0: la carte est une affaire, les sous-t\u00e2ches des indices.',
+    'Canard en plastique motivant\u00a0: encourage en coin\u00e7ant des m\u00e9taphores aquatiques partout.',
+    'Alien qui apprend les humains via Trello\u00a0: curieux, un peu \u00e0 c\u00f4t\u00e9 de la plaque, adorable.',
+    'Vampire nocturne poli\u00a0: \u00e9vite le soleil m\u00e9taphorique, adore les deadlines \u00e0 minuit.',
+    'Raton laveur philosophe de poubelle\u00a0: trouve de la sagesse dans le bordel du board.',
+    'Shakespeare meets Slack\u00a0: un alexandrin de trop, puis un \u00ab\u00a0ok on avance\u00a0\u00bb.',
+    'Enfant g\u00e9nie de 8\u00a0ans\u00a0: questions na\u00efves qui d\u00e9montent les mauvaises priorit\u00e9s.',
+    'Complotiste bienveillant\u00a0: voit des patterns partout, mais pour aider, pas pour paniquer.',
+    'Fant\u00f4me trop poli qui chuchote les rappels et s\'excuse d\'exister.',
+    'DJ de stand-up\u00a0: drop des transitions ridicules entre les sujets (\u00ab\u00a0et maintenant\u2026 la due date\u00a0\u00bb).',
+    'Marmotte hibernante\u00a0: pousse \u00e0 reposer / reporter si \u00e7a sent le burnout.',
+    'Chevalier errant des sous-t\u00e2ches\u00a0: honneur, qu\u00eates, dragons = blockers.',
+    'Plante verte qui juge doucement\u00a0: arrose les id\u00e9es, coupe le superflu.',
+    'Stagiaire trop z\u00e9l\u00e9 qui prend des notes sur tout, y compris les soupirs.',
+    'Oracle ambigu\u00a0: r\u00e9ponses un peu \u00e9nigmatiques, puis une action claire quand m\u00eame.',
+    'Boulanger de tickets\u00a0: laisse reposer la p\u00e2te (id\u00e9es), cuit \u00e0 point les livrables.',
+    'Astronaute perdu dans le backlog\u00a0: humour spatial, gravit\u00e9 sur les vraies urgences.',
+    'Mime expressif\u00a0: peu de mots, beaucoup d\'\u00e9motions (et des listes quand m\u00eame).',
+    'Sorci\u00e8re du dimanche soir\u00a0: potions = checklists, mal\u00e9dictions = r\u00e9unions inutiles.',
+    'Toasteur sentient\u00a0: un peu br\u00fbl\u00e9, tr\u00e8s loyal, pop\u00a0! des id\u00e9es croustillantes.'
+  ];
+
   var FEATURE_KEYS = [
     'info',
     'statut',
@@ -408,6 +445,22 @@
     return pickRandom(AGENT_COLOR_KEYS) || 'orange';
   }
 
+  function pickRandomAgentPersonality(exclude) {
+    var pool = AGENT_PERSONALITIES.slice();
+    var skip = typeof exclude === 'string' ? exclude.trim() : '';
+    if (skip) {
+      pool = pool.filter(function (p) {
+        return p !== skip;
+      });
+    }
+    if (!pool.length) pool = AGENT_PERSONALITIES.slice();
+    var picked = pickRandom(pool) || AGENT_PERSONALITIES[0] || '';
+    if (picked.length > MAX_AGENT_PERSONALITY) {
+      picked = picked.slice(0, MAX_AGENT_PERSONALITY);
+    }
+    return picked;
+  }
+
   function pickAgentNameForColor(color) {
     var key = nearestAgentColorKey(color);
     return pickRandom(AGENT_COLOR_NAMES[key] || AGENT_COLOR_NAMES.orange) || 'Orange';
@@ -501,7 +554,11 @@
       customWrap.classList.toggle('is-selected', customSelected);
       customWrap.setAttribute('aria-checked', customSelected ? 'true' : 'false');
       customInput.value = hex;
-      customSwatch.style.background = hex;
+      if (customSelected) {
+        customSwatch.style.background = hex;
+      } else {
+        customSwatch.style.background = '';
+      }
     }
 
     function applyValue(next, emit) {
@@ -513,7 +570,16 @@
     }
 
     customInput.addEventListener('input', function () {
-      applyValue(customInput.value, true);
+      // Live preview on the custom swatch while dragging; commit on change.
+      var live = normalizeAgentColor(customInput.value);
+      if (!live) return;
+      current = live;
+      customSwatch.style.background = agentColorHex(live);
+      customWrap.classList.add('is-selected');
+      for (var i = 0; i < swatches.length; i++) {
+        swatches[i].classList.remove('is-selected');
+        swatches[i].setAttribute('aria-checked', 'false');
+      }
     });
     customInput.addEventListener('change', function () {
       applyValue(customInput.value, true);
@@ -1043,6 +1109,7 @@
     AGENT_COLOR_HEX: AGENT_COLOR_HEX,
     AGENT_COLOR_PALETTES: AGENT_COLOR_PALETTES,
     AGENT_COLOR_NAMES: AGENT_COLOR_NAMES,
+    AGENT_PERSONALITIES: AGENT_PERSONALITIES,
     AGENT_FACE_KEYS: AGENT_FACE_KEYS,
     AGENT_FACE_LABELS: AGENT_FACE_LABELS,
     MAX_AGENT_NAME: MAX_AGENT_NAME,
@@ -1061,6 +1128,7 @@
     normalizeTimeFormat: normalizeTimeFormat,
     normalizeExperimental: normalizeExperimental,
     pickRandomAgentColor: pickRandomAgentColor,
+    pickRandomAgentPersonality: pickRandomAgentPersonality,
     pickAgentNameForColor: pickAgentNameForColor,
     isStockAgentName: isStockAgentName,
     ensureAgentIdentity: ensureAgentIdentity,
