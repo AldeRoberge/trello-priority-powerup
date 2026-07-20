@@ -4517,6 +4517,7 @@
   function isDueEnabled(inputs) {
     if (!inputs) return false;
     if (inputs.dueEnabled === false) return false;
+    if (isDueVagueMode(inputs) && normalizeDueVague(inputs.dueVague)) return true;
     return !!normalizeDueDate(inputs.dueDate);
   }
 
@@ -16706,7 +16707,8 @@
     }
 
     function refreshCountdown() {
-      if (!current) {
+      var hasVague = currentMode === DUE_DATE_MODE_VAGUE && !!currentVague;
+      if (!current && !hasVague) {
         countdownPrimary.textContent = '';
         countdownSecondary.textContent = '';
         countdownSecondary.hidden = true;
@@ -16718,6 +16720,7 @@
         refreshTimeRow();
         refreshTrigger();
         refreshSuggestions();
+        refreshVagueChips();
         refreshTodayBtn();
         if (collapseApi) collapseApi.refreshSummary();
         return;
@@ -16725,6 +16728,7 @@
       refreshTrigger();
       refreshTimeRow();
       refreshSuggestions();
+      refreshVagueChips();
       refreshTodayBtn();
       if (!enabled) {
         countdownPrimary.textContent = '';
@@ -16735,6 +16739,24 @@
         field.classList.remove('has-due-date');
         paintCountdownDot('');
         clearDueProximityBand(field);
+        if (collapseApi) collapseApi.refreshSummary();
+        return;
+      }
+      if (hasVague) {
+        countdownPrimary.textContent = formatDueVagueCountdown(currentVague);
+        countdownSecondary.textContent = '';
+        countdownSecondary.hidden = true;
+        countdown.hidden = !countdownPrimary.textContent;
+        countdown.classList.remove('is-past');
+        field.classList.add('has-due-date');
+        if (current) {
+          var vagueBand = dueProximityBand(current, '');
+          applyDueProximityBand(field, vagueBand);
+          paintCountdownDot(vagueBand);
+        } else {
+          paintCountdownDot('');
+          clearDueProximityBand(field);
+        }
         if (collapseApi) collapseApi.refreshSummary();
         return;
       }
@@ -16753,6 +16775,21 @@
     }
 
     function buildDueSummary() {
+      if (currentMode === DUE_DATE_MODE_VAGUE && currentVague) {
+        var vagueLabel = formatDueVagueCountdown(currentVague);
+        if (!vagueLabel) return '';
+        var wrapVague = document.createElement('span');
+        wrapVague.className = 'due-summary due-summary--vague';
+        var icon = document.createElement('i');
+        icon.className = 'ti ti-tilde due-summary-vague-icon';
+        icon.setAttribute('aria-hidden', 'true');
+        var textVague = document.createElement('span');
+        textVague.className = 'due-summary-label';
+        textVague.textContent = formatDueVagueLabel(currentVague);
+        wrapVague.appendChild(icon);
+        wrapVague.appendChild(textVague);
+        return wrapVague;
+      }
       if (!current) return formatDueDateCompactSummary(current, currentTime);
       var label = formatDueDateCompactSummary(current, currentTime);
       if (!label) return '';
@@ -16981,12 +17018,17 @@
     }
 
     function getValues() {
+      var vagueActive = currentMode === DUE_DATE_MODE_VAGUE && !!currentVague;
       var out = {
         dueDate: current || '',
-        dueTime: current ? (currentTime || '') : '',
-        dueEnabled: !!current,
-        startDate: currentStart || '',
-        recurrence: currentRecurrence
+        dueTime: current && currentMode === DUE_DATE_MODE_PRECISE ? (currentTime || '') : '',
+        dueEnabled: !!(current || vagueActive),
+        dueMode: currentMode,
+        dueVague: vagueActive ? currentVague : '',
+        startDate:
+          currentMode === DUE_DATE_MODE_PRECISE ? currentStart || '' : '',
+        recurrence:
+          currentMode === DUE_DATE_MODE_PRECISE ? currentRecurrence : null
       };
       return out;
     }
@@ -17005,16 +17047,37 @@
         if (value.dueEnabled === false) {
           current = '';
           currentTime = '';
+          currentVague = '';
         }
-        if (value.startDate !== undefined) {
+        if (value.dueVague !== undefined) {
+          currentVague = normalizeDueVague(value.dueVague);
+        }
+        if (value.dueMode !== undefined) {
+          currentMode = normalizeDueMode(value.dueMode);
+        } else if (currentVague) {
+          currentMode = DUE_DATE_MODE_VAGUE;
+        }
+        if (currentMode === DUE_DATE_MODE_VAGUE && currentVague && !current) {
+          current = resolveDueVagueToDate(currentVague);
+        }
+        if (currentMode === DUE_DATE_MODE_VAGUE) {
+          currentTime = '';
+          currentStart = '';
+          currentRecurrence = null;
+        } else {
+          currentVague = '';
+        }
+        if (value.startDate !== undefined && currentMode === DUE_DATE_MODE_PRECISE) {
           currentStart = normalizeDueDate(value.startDate);
         }
-        if (value.recurrence !== undefined) {
+        if (value.recurrence !== undefined && currentMode === DUE_DATE_MODE_PRECISE) {
           currentRecurrence = normalizeRecurrence(value.recurrence);
         }
       } else {
         current = normalizeDueDate(value);
         if (!current) currentTime = '';
+        currentVague = '';
+        currentMode = DUE_DATE_MODE_PRECISE;
       }
       if (current) {
         syncViewFromValue(current);
@@ -17027,7 +17090,7 @@
       } else if (collapseApi && current && !options.preserveCollapse) {
         // Keep current expand state; do not force-open on every setValue.
       }
-      showPickers();
+      refreshModeUi();
       refreshCountdown();
       refreshStartTrigger();
       refreshRecurrenceUi();
@@ -17165,6 +17228,11 @@
       if (!enabled) return;
       var next = normalizeDueDate(iso);
       if (!next) return;
+      if (currentMode !== DUE_DATE_MODE_PRECISE) {
+        currentMode = DUE_DATE_MODE_PRECISE;
+        currentVague = '';
+        refreshModeUi();
+      }
       if (!currentTime) {
         currentTime = rememberedTime || DUE_DATE_TIME_DEFAULT;
       }
@@ -17506,8 +17574,16 @@
       if (currentTime) rememberedTime = currentTime;
       current = '';
       currentTime = '';
+      currentVague = '';
       emitChange();
       if (open) renderCalendar();
+    });
+
+    preciseModeBtn.addEventListener('click', function () {
+      setDueMode(DUE_DATE_MODE_PRECISE);
+    });
+    vagueModeBtn.addEventListener('click', function () {
+      setDueMode(DUE_DATE_MODE_VAGUE);
     });
 
     timeTrashBtn.addEventListener('click', function (event) {
@@ -17805,7 +17881,7 @@
     refreshCountdown();
     refreshStartTrigger();
     refreshRecurrenceUi();
-    showPickers();
+    refreshModeUi();
 
     return {
       el: field,
@@ -17820,7 +17896,7 @@
       isEnableAllowed: collapseApi.isEnableAllowed,
       setExpanded: collapseApi.setExpanded,
       isEnabled: function () {
-        return !!current;
+        return !!(current || (currentMode === DUE_DATE_MODE_VAGUE && currentVague));
       },
       isExpanded: collapseApi.isExpanded
     };
@@ -19098,11 +19174,28 @@
     state.dueTime = state.dueDate
       ? normalizeDueTime(state.dueTime || defaults.dueTime || '')
       : '';
+    state.dueVague = normalizeDueVague(state.dueVague || defaults.dueVague || '');
+    state.dueMode = normalizeDueMode(
+      state.dueMode ||
+        (state.dueVague ? DUE_DATE_MODE_VAGUE : defaults.dueMode) ||
+        DUE_DATE_MODE_PRECISE
+    );
+    if (state.dueVague) state.dueMode = DUE_DATE_MODE_VAGUE;
+    if (state.dueMode === DUE_DATE_MODE_VAGUE && state.dueVague && !state.dueDate) {
+      state.dueDate = resolveDueVagueToDate(state.dueVague);
+    }
+    if (state.dueMode === DUE_DATE_MODE_VAGUE) {
+      state.dueTime = '';
+    } else {
+      state.dueVague = '';
+    }
     if (defaults.dueEnabled === false || state.dueEnabled === false) {
       state.dueEnabled = false;
     } else {
-      state.dueEnabled = state.dueDate ? true : (defaults.dueEnabled !== false);
-      if (!state.dueDate) state.dueEnabled = false;
+      state.dueEnabled = state.dueDate || state.dueVague
+        ? true
+        : defaults.dueEnabled !== false;
+      if (!state.dueDate && !state.dueVague) state.dueEnabled = false;
     }
     state.startDate = normalizeDueDate(
       state.startDate || defaults.startDate || ''
@@ -19188,6 +19281,8 @@
         state.dueDate = dueValues.dueDate;
         state.dueTime = dueValues.dueTime;
         state.dueEnabled = !!dueValues.dueEnabled;
+        state.dueMode = dueValues.dueMode || DUE_DATE_MODE_PRECISE;
+        state.dueVague = dueValues.dueVague || '';
         state.startDate = dueValues.startDate || '';
         state.recurrence = dueValues.recurrence || null;
       }
@@ -19495,13 +19590,17 @@
     dueSection.className = 'variant-due-section';
     card.appendChild(dueSection);
 
-    var dueEnabledInitial = state.dueEnabled !== false && !!state.dueDate;
+    var dueEnabledInitial =
+      state.dueEnabled !== false &&
+      (!!state.dueDate || !!normalizeDueVague(state.dueVague));
     dueDateField = createDueDateField({
       el: dueSection,
       value: {
         dueDate: state.dueDate,
         dueTime: state.dueTime,
         dueEnabled: dueEnabledInitial,
+        dueMode: state.dueMode || DUE_DATE_MODE_PRECISE,
+        dueVague: state.dueVague || '',
         startDate: state.startDate,
         recurrence: state.recurrence
       },
@@ -19712,6 +19811,8 @@
             (next.dueDate != null ||
               next.dueTime != null ||
               next.dueEnabled != null ||
+              next.dueMode != null ||
+              next.dueVague != null ||
               next.startDate !== undefined ||
               next.recurrence !== undefined) &&
             dueDateField
@@ -19720,6 +19821,8 @@
               dueDate: next.dueDate != null ? next.dueDate : state.dueDate,
               dueTime: next.dueTime != null ? next.dueTime : state.dueTime,
               dueEnabled: next.dueEnabled != null ? next.dueEnabled : state.dueEnabled,
+              dueMode: next.dueMode != null ? next.dueMode : state.dueMode,
+              dueVague: next.dueVague != null ? next.dueVague : state.dueVague,
               startDate:
                 next.startDate !== undefined ? next.startDate : state.startDate,
               recurrence:
@@ -20026,6 +20129,15 @@
     RECURRENCE_FREQUENCIES: RECURRENCE_FREQUENCIES,
     isDueDateQuickSuggestionAvailable: isDueDateQuickSuggestionAvailable,
     resolveDueDateQuickSuggestion: resolveDueDateQuickSuggestion,
+    DUE_DATE_MODE_PRECISE: DUE_DATE_MODE_PRECISE,
+    DUE_DATE_MODE_VAGUE: DUE_DATE_MODE_VAGUE,
+    DUE_DATE_VAGUE_OPTIONS: DUE_DATE_VAGUE_OPTIONS,
+    normalizeDueMode: normalizeDueMode,
+    normalizeDueVague: normalizeDueVague,
+    resolveDueVagueToDate: resolveDueVagueToDate,
+    formatDueVagueLabel: formatDueVagueLabel,
+    formatDueVagueCountdown: formatDueVagueCountdown,
+    isDueVagueMode: isDueVagueMode,
     daysUntilDue: daysUntilDue,
     msUntilDue: msUntilDue,
     isDuePast: isDuePast,

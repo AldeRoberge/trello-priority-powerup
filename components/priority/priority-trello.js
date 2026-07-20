@@ -262,6 +262,36 @@
       if (raw.dueEnabled === false) normalized.dueEnabled = false;
     }
 
+    var PUVague = priorityUI();
+    var dueVague =
+      PUVague && typeof PUVague.normalizeDueVague === 'function'
+        ? PUVague.normalizeDueVague(raw.dueVague)
+        : typeof raw.dueVague === 'string'
+          ? raw.dueVague.trim()
+          : '';
+    var dueMode =
+      PUVague && typeof PUVague.normalizeDueMode === 'function'
+        ? PUVague.normalizeDueMode(raw.dueMode)
+        : raw.dueMode === 'vague'
+          ? 'vague'
+          : 'precise';
+    if (dueVague) dueMode = 'vague';
+    if (dueMode === 'vague' && dueVague) {
+      normalized.dueMode = 'vague';
+      normalized.dueVague = dueVague;
+      if (!dueDate && PUVague && PUVague.resolveDueVagueToDate) {
+        dueDate = PUVague.resolveDueVagueToDate(dueVague) || '';
+        if (dueDate) normalized.dueDate = dueDate;
+      }
+      delete normalized.dueTime;
+      if (raw.dueEnabled === false) normalized.dueEnabled = false;
+      else if (normalized.dueDate) {
+        /* keep enabled when vague horizon is set */
+      }
+    } else if (dueDate) {
+      /* precise: omit dueMode/dueVague for compact storage */
+    }
+
     var startDate = '';
     if (typeof raw.startDate === 'string') {
       var PUStart = priorityUI();
@@ -369,6 +399,12 @@
         cleared.dueTime = inputs.dueTime;
       }
       if (inputs.dueEnabled === false) cleared.dueEnabled = false;
+    }
+    if (inputs.dueMode === 'vague' || inputs.dueVague) {
+      cleared.dueMode = 'vague';
+      if (typeof inputs.dueVague === 'string' && inputs.dueVague) {
+        cleared.dueVague = inputs.dueVague;
+      }
     }
     if (typeof inputs.startDate === 'string' && inputs.startDate) {
       cleared.startDate = inputs.startDate;
@@ -1866,6 +1902,8 @@
     delete next.dueDate;
     delete next.dueTime;
     delete next.dueEnabled;
+    delete next.dueMode;
+    delete next.dueVague;
     if (parts && parts.dueDate) {
       next.dueDate = parts.dueDate;
       if (parts.dueTime) next.dueTime = parts.dueTime;

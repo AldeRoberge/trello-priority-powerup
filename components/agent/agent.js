@@ -12875,6 +12875,8 @@
           }
           duePartial.dueDate = resolvedRelative.dueDate;
           duePartial.dueTime = resolvedRelative.dueTime;
+          duePartial.dueMode = 'precise';
+          duePartial.dueVague = '';
         } else {
           if (Object.prototype.hasOwnProperty.call(args, 'dueDate')) {
             var dueDate = validateDueDate(args.dueDate);
@@ -12882,6 +12884,8 @@
               return { ok: false, tool: tool, error: 'dueDate invalide (YYYY-MM-DD)' };
             }
             duePartial.dueDate = dueDate || '';
+            duePartial.dueMode = 'precise';
+            duePartial.dueVague = '';
           }
           if (Object.prototype.hasOwnProperty.call(args, 'dueTime')) {
             var dueTime = validateDueTime(args.dueTime);
@@ -12889,6 +12893,8 @@
               return { ok: false, tool: tool, error: 'dueTime invalide (HH:MM)' };
             }
             duePartial.dueTime = dueTime || '';
+            duePartial.dueMode = 'precise';
+            duePartial.dueVague = '';
           }
         }
         if (args.dueEnabled != null) {

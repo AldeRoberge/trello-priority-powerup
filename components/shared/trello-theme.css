@@ -1607,6 +1607,14 @@ body.tp-page--priority {
   font-weight: 600;
 }
 
+.tp-page--priority .due-date-mode-btn {
+  font-size: 11px;
+}
+
+.tp-page--priority .due-date-vague-chip {
+  font-size: 13px;
+}
+
 .tp-page--priority .due-date-desc {
   font-size: 14px;
   font-weight: 400;

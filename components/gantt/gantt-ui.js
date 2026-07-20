@@ -278,10 +278,12 @@
       var sortWrap = el('label', 'gantt-sort');
       sortWrap.appendChild(document.createTextNode('Trier\u00a0: '));
       var sortSel = el('select', 'gantt-select');
+      sortSel.setAttribute('data-gantt-sort', '1');
       [
         ['date', 'Date'],
         ['priority', 'Priorit\u00e9'],
         ['name', 'Nom'],
+        ['progress', 'Progr\u00e8s'],
       ].forEach(function (opt) {
         var o = el('option', '', { value: opt[0], text: opt[1] });
         if (state.sortBy === opt[0]) o.selected = true;
@@ -568,6 +570,14 @@
       if (typeof model.sortTreeRoots === 'function') {
         state.tree = model.sortTreeRoots(state.tree, state.sortBy);
       }
+    }
+
+    function setSortBy(mode) {
+      state.sortBy = mode || 'date';
+      var sel = root.querySelector('select[data-gantt-sort]');
+      if (sel) sel.value = state.sortBy;
+      applySort();
+      renderChart();
     }
 
     function toggleExpand(nodeId) {
@@ -1457,7 +1467,44 @@
       headerCell.appendChild(selectAll);
       headerCell.appendChild(el('span', 'gantt-twist-spacer'));
       headerCell.appendChild(el('span', 'gantt-header-title', { text: 'T\u00e2ches' }));
-      headerCell.appendChild(el('span', 'gantt-detail-icons gantt-detail-icons--header'));
+
+      var headerIcons = el('div', 'gantt-detail-icons gantt-detail-icons--header');
+      [
+        'is-blocked',
+        'is-priority',
+        'is-progress',
+        'is-statut',
+        'is-due',
+        'is-subtasks',
+      ].forEach(function (slotClass) {
+        var slot = el('span', 'gantt-detail-slot ' + slotClass);
+        if (slotClass === 'is-progress') {
+          slot.classList.add('is-sortable');
+          if (state.sortBy === 'progress') slot.classList.add('is-active');
+          slot.title = 'Trier par progr\u00e8s';
+          slot.setAttribute('role', 'button');
+          slot.setAttribute('tabindex', '0');
+          slot.appendChild(
+            el('span', 'gantt-progress-text', { text: '%' })
+          );
+          function sortByProgress() {
+            setSortBy('progress');
+          }
+          slot.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            sortByProgress();
+          });
+          slot.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              sortByProgress();
+            }
+          });
+        }
+        headerIcons.appendChild(slot);
+      });
+      headerCell.appendChild(headerIcons);
       headerCell.appendChild(el('span', 'gantt-row-actions gantt-row-actions--header'));
       headerLabels.appendChild(headerCell);
       labelsCol.appendChild(headerLabels);

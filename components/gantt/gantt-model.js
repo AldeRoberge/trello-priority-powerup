@@ -579,15 +579,35 @@
     return String((a && a.name) || '').localeCompare(String((b && b.name) || ''), 'fr');
   }
 
+  function progressValue(node) {
+    var p = node && typeof node.progress === 'number' ? node.progress : 0;
+    if (node && (node.done || node.category === 'completed')) {
+      return Math.max(p, 100);
+    }
+    return p;
+  }
+
+  /** Higher progress / completedness first; name as tiebreaker. */
+  function compareRootsByProgress(a, b) {
+    var pa = progressValue(a);
+    var pb = progressValue(b);
+    if (pa !== pb) return pb - pa;
+    return String((a && a.name) || '').localeCompare(String((b && b.name) || ''), 'fr');
+  }
+
   /**
    * Sort top-level Gantt rows. Nested children keep their relative order.
-   * @param {'date'|'priority'|'name'} sortBy
+   * @param {'date'|'priority'|'name'|'progress'} sortBy
    */
   function sortTreeRoots(nodes, sortBy) {
     var list = (nodes || []).slice();
-    var mode = sortBy === 'priority' || sortBy === 'name' ? sortBy : 'date';
+    var mode =
+      sortBy === 'priority' || sortBy === 'name' || sortBy === 'progress'
+        ? sortBy
+        : 'date';
     if (mode === 'priority') list.sort(compareRootsByPriority);
     else if (mode === 'name') list.sort(compareRootsByName);
+    else if (mode === 'progress') list.sort(compareRootsByProgress);
     else list.sort(compareRootsByDate);
     return list;
   }
@@ -697,6 +717,7 @@
     findNodeById: findNodeById,
     collectSubtreeIds: collectSubtreeIds,
     compareRootsByPriority: compareRootsByPriority,
+    compareRootsByProgress: compareRootsByProgress,
     sortTreeRoots: sortTreeRoots,
   };
 })(typeof window !== 'undefined' ? window : this);
