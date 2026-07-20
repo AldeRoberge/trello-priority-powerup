@@ -734,6 +734,9 @@
       if (options.hideCompleted && (row.done || row.category === 'completed')) {
         return false;
       }
+      if (options.hideBlocked && (row.blocked || row.category === 'blocked')) {
+        return false;
+      }
       if (options.hideUndated) {
         var interval = resolveBarInterval(row);
         if (!interval) return false;

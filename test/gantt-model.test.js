@@ -479,6 +479,19 @@ describe('GanttModel', () => {
     );
   });
 
+  it('filterRows hides blocked when asked', () => {
+    const rows = [
+      { id: '1', blocked: true, dueDate: '2026-07-01' },
+      { id: '2', blocked: false, dueDate: '2026-07-02' },
+      { id: '3', category: 'blocked', dueDate: '2026-07-03' },
+      { id: '4', done: false, dueDate: '2026-07-04' },
+    ];
+    assert.deepEqual(
+      GanttModel.filterRows(rows, { hideBlocked: true }).map((r) => r.id),
+      ['2', '4']
+    );
+  });
+
   it('flattenVisible respects collapsed expandable roots', () => {
     const tree = GanttModel.buildNestTree([
       {
