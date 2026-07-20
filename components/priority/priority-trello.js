@@ -662,6 +662,9 @@
 
   async function getCustomAssigneeCatalog(t) {
     var PU = priorityUI();
+    if (Array.isArray(boardCustomAssigneeCatalog)) {
+      return boardCustomAssigneeCatalog.slice();
+    }
     try {
       var stored = await t.get('board', 'shared', CUSTOM_ASSIGNEE_CATALOG_KEY);
       var list =
@@ -713,17 +716,32 @@
   }
 
   async function ensureBoardPriorityContext(t) {
-    var settings = await getMatrixSettings(t);
-    var PU = priorityUI();
-    if (PU && PU.setMatrixSettings) {
-      PU.setMatrixSettings(settings);
+    if (
+      boardMatrixSettings &&
+      Date.now() - boardContextAt < BOARD_CONTEXT_TTL_MS
+    ) {
+      return boardMatrixSettings;
     }
-    await getBoardFormula(t);
-    await getBoardColorScheme(t);
-    await getCustomTaskTypes(t);
-    await getMemberRoleCatalog(t);
-    await getCustomAssigneeCatalog(t);
-    return settings;
+    if (boardContextInflight) return boardContextInflight;
+
+    boardContextInflight = (async function () {
+      var settings = await getMatrixSettings(t);
+      var PU = priorityUI();
+      if (PU && PU.setMatrixSettings) {
+        PU.setMatrixSettings(settings);
+      }
+      await getBoardFormula(t);
+      await getBoardColorScheme(t);
+      await getCustomTaskTypes(t);
+      await getMemberRoleCatalog(t);
+      await getCustomAssigneeCatalog(t);
+      boardContextAt = Date.now();
+      return settings;
+    })().finally(function () {
+      boardContextInflight = null;
+    });
+
+    return boardContextInflight;
   }
 
   function computeDisplay(inputs, labelSettings, formulaKey) {

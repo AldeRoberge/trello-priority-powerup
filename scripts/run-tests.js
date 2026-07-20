@@ -40,6 +40,7 @@ const UNIT_FILES = [
   'task-split.test.js',
   'history.test.js',
   'debug-log.test.js',
+  'user-profile-cache.test.js',
   'trello-confirm.test.js',
   'capabilities.test.js',
   'agent-claims.test.js',

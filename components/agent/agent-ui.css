@@ -319,6 +319,13 @@
   overflow-y: auto;
 }
 
+.tp-page--priority .variant-chat-section--standalone .agent-messages::before {
+  content: '';
+  flex: 1 1 auto;
+  min-height: 0;
+  pointer-events: none;
+}
+
 .tp-page--priority .variant-chat-section--standalone .agent-chat-panel > :not(.agent-messages) {
   flex-shrink: 0;
 }
@@ -383,6 +390,14 @@
   overflow-x: hidden;
   overflow-y: auto;
   order: 1;
+}
+
+/* Top spacer absorbs free height so short threads sit above the composer (ChatGPT-style) */
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-messages::before {
+  content: '';
+  flex: 1 1 auto;
+  min-height: 0;
+  pointer-events: none;
 }
 
 .tp-page--priority.is-split-assistant .cerveau-assistant .agent-empty {
