@@ -9,6 +9,12 @@
   var LABELS_W_MIN = 280;
   var LABELS_W_DEFAULT = 560;
   var LABELS_W_STORAGE_KEY = 'tp-gantt-labels-width';
+  var FILTERS_STORAGE_KEY = 'tp-gantt-filters';
+  var DEFAULT_FILTERS = {
+    hideCompleted: true,
+    hideUndated: false,
+    sortBy: 'date',
+  };
   // Fire icon for priorities strictly above Importante (Critique / Urgente / Prioritaire).
   var PRIORITY_FIRE_TIER_MAX = 2;
 
@@ -60,6 +66,62 @@
     } catch (e) {
       /* ignore */
     }
+  }
+
+  function normalizeSortBy(value) {
+    return value === 'priority' || value === 'name' || value === 'progress'
+      ? value
+      : 'date';
+  }
+
+  function readStoredFilters() {
+    var out = {
+      hideCompleted: DEFAULT_FILTERS.hideCompleted,
+      hideUndated: DEFAULT_FILTERS.hideUndated,
+      sortBy: DEFAULT_FILTERS.sortBy,
+    };
+    try {
+      var raw =
+        global.localStorage && global.localStorage.getItem(FILTERS_STORAGE_KEY);
+      if (!raw) return out;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return out;
+      if (typeof parsed.hideCompleted === 'boolean') {
+        out.hideCompleted = parsed.hideCompleted;
+      }
+      if (typeof parsed.hideUndated === 'boolean') {
+        out.hideUndated = parsed.hideUndated;
+      }
+      if (typeof parsed.sortBy === 'string') {
+        out.sortBy = normalizeSortBy(parsed.sortBy);
+      }
+    } catch (e) {
+      /* ignore */
+    }
+    return out;
+  }
+
+  function storeFilters(filters) {
+    filters = filters || {};
+    var payload = {
+      hideCompleted:
+        typeof filters.hideCompleted === 'boolean'
+          ? filters.hideCompleted
+          : DEFAULT_FILTERS.hideCompleted,
+      hideUndated:
+        typeof filters.hideUndated === 'boolean'
+          ? filters.hideUndated
+          : DEFAULT_FILTERS.hideUndated,
+      sortBy: normalizeSortBy(filters.sortBy),
+    };
+    try {
+      if (global.localStorage) {
+        global.localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(payload));
+      }
+    } catch (e) {
+      /* ignore */
+    }
+    return payload;
   }
 
   /**
@@ -151,6 +213,7 @@
       hideCompleted: false,
       hideUndated: false,
       sortBy: 'date',
+      sortDir: 'asc',
       loading: true,
       error: '',
       authHint: '',
@@ -313,15 +376,14 @@
         ['priority', 'Priorit\u00e9'],
         ['name', 'Nom'],
         ['progress', 'Progr\u00e8s'],
+        ['subtasks', 'Sous-t\u00e2ches'],
       ].forEach(function (opt) {
         var o = el('option', '', { value: opt[0], text: opt[1] });
         if (state.sortBy === opt[0]) o.selected = true;
         sortSel.appendChild(o);
       });
       sortSel.addEventListener('change', function () {
-        state.sortBy = sortSel.value || 'date';
-        applySort();
-        renderChart();
+        setSortBy(sortSel.value || 'date', { resetDir: true });
       });
       sortWrap.appendChild(sortSel);
       toolbar.appendChild(sortWrap);
@@ -597,16 +659,77 @@
 
     function applySort() {
       if (typeof model.sortTreeRoots === 'function') {
-        state.tree = model.sortTreeRoots(state.tree, state.sortBy);
+        state.tree = model.sortTreeRoots(state.tree, state.sortBy, state.sortDir);
       }
     }
 
-    function setSortBy(mode) {
-      state.sortBy = mode || 'date';
+    function defaultSortDir(mode) {
+      if (typeof model.defaultSortDir === 'function') {
+        return model.defaultSortDir(mode);
+      }
+      if (mode === 'progress' || mode === 'subtasks') return 'desc';
+      return 'asc';
+    }
+
+    /**
+     * @param {string} mode
+     * @param {{ resetDir?: boolean, dir?: 'asc'|'desc' }} [opts]
+     * Clicking the same column toggles asc/desc; a new column uses its default dir.
+     */
+    function setSortBy(mode, opts) {
+      opts = opts || {};
+      var next = mode || 'date';
+      if (opts.dir === 'asc' || opts.dir === 'desc') {
+        state.sortBy = next;
+        state.sortDir = opts.dir;
+      } else if (opts.resetDir || state.sortBy !== next) {
+        state.sortBy = next;
+        state.sortDir = defaultSortDir(next);
+      } else {
+        state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+      }
       var sel = root.querySelector('select[data-gantt-sort]');
       if (sel) sel.value = state.sortBy;
       applySort();
       renderChart();
+    }
+
+    function sortIndicator(active) {
+      if (!active) return null;
+      return el('span', 'gantt-sort-indicator', {
+        text: state.sortDir === 'asc' ? '\u25B2' : '\u25BC',
+        'aria-hidden': 'true',
+      });
+    }
+
+    function bindSortableHeader(slot, mode, label) {
+      slot.classList.add('is-sortable');
+      var active = state.sortBy === mode;
+      if (active) slot.classList.add('is-active');
+      var dirHint =
+        active
+          ? state.sortDir === 'asc'
+            ? ' croissant'
+            : ' d\u00e9croissant'
+          : '';
+      slot.title = 'Trier par ' + label + dirHint;
+      slot.setAttribute('role', 'button');
+      slot.setAttribute('tabindex', '0');
+      slot.setAttribute('aria-pressed', active ? 'true' : 'false');
+      function onSort() {
+        setSortBy(mode);
+      }
+      slot.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        onSort();
+      });
+      slot.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSort();
+        }
+      });
     }
 
     function toggleExpand(nodeId) {
@@ -722,20 +845,6 @@
         } else {
           slot('is-due', null);
         }
-
-        if (row.subtaskCount > 0) {
-          var sub = iconEl(
-            'ti-list-check',
-            row.subtaskCount + ' sous-t\u00e2che(s)',
-            'is-subtasks'
-          );
-          sub.appendChild(
-            el('span', 'gantt-icon-label', { text: String(row.subtaskCount) })
-          );
-          slot('is-subtasks', sub);
-        } else {
-          slot('is-subtasks', null);
-        }
       } else {
         slot('is-blocked', null);
         slot('is-priority', null);
@@ -748,10 +857,22 @@
           })
         );
         slot('is-due', null);
-        slot('is-subtasks', null);
       }
 
       return icons;
+    }
+
+    function buildSubtaskTitleBadge(row) {
+      if (!row || !(row.subtaskCount > 0)) return null;
+      var sub = iconEl(
+        'ti-list-check',
+        row.subtaskCount + ' sous-t\u00e2che(s)',
+        'is-subtasks'
+      );
+      sub.appendChild(
+        el('span', 'gantt-icon-label', { text: String(row.subtaskCount) })
+      );
+      return sub;
     }
 
     function unblockCard(row) {
@@ -1559,7 +1680,6 @@
         'is-priority',
         'is-progress',
         'is-due',
-        'is-subtasks',
       ].forEach(function (slotClass) {
         var slot = el('span', 'gantt-detail-slot ' + slotClass);
         if (slotClass === 'is-progress') {
@@ -1687,6 +1807,7 @@
           labelCell.appendChild(el('span', 'gantt-twist-spacer'));
         }
 
+        var nameWrap = el('div', 'gantt-task-title-wrap');
         var nameBtn = el(
           'button',
           'gantt-task-name' +
@@ -1710,7 +1831,10 @@
             startInlineRename(row, nameBtn);
           });
         }
-        labelCell.appendChild(nameBtn);
+        nameWrap.appendChild(nameBtn);
+        var subBadge = buildSubtaskTitleBadge(row);
+        if (subBadge) nameWrap.appendChild(subBadge);
+        labelCell.appendChild(nameWrap);
 
         labelCell.appendChild(buildDetailIcons(row));
         labelCell.appendChild(buildSubtaskActions(row));

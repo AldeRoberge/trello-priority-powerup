@@ -203,7 +203,7 @@
 
 .gantt-label-cell {
   display: grid;
-  grid-template-columns: 22px 28px minmax(80px, 1fr) 126px 72px;
+  grid-template-columns: 22px 28px minmax(80px, 1fr) 104px 72px;
   align-items: center;
   column-gap: 6px;
   padding: 0 8px 0 calc(8px + var(--gantt-depth, 0) * 14px);
@@ -235,12 +235,12 @@
 
 .gantt-detail-icons {
   display: grid;
-  grid-template-columns: repeat(5, 22px);
+  grid-template-columns: repeat(4, 22px);
   align-items: center;
   justify-items: center;
   column-gap: 2px;
   flex-shrink: 0;
-  width: 126px;
+  width: 104px;
 }
 
 .gantt-detail-icons--header .gantt-detail-slot:not(.is-sortable),
@@ -425,6 +425,24 @@
 .gantt-twist:hover {
   background: var(--tp-surface-hover, #091e420f);
   color: var(--tp-text, #172b4d);
+}
+
+.gantt-task-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.gantt-task-title-wrap .gantt-task-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.gantt-task-title-wrap .gantt-detail-icon.is-subtasks {
+  flex: 0 0 auto;
+  color: var(--tp-text-subtle, #44546f);
 }
 
 .gantt-task-name {
