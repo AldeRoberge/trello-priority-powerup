@@ -287,6 +287,24 @@
     return (offset / total) * w;
   }
 
+  /**
+   * Map a DateTime onto the timeline, preserving time-of-day within the day
+   * (noon → middle of today's column). Clamped to [0, width].
+   */
+  function dateTimeToX(date, range, widthPx) {
+    if (!(date instanceof Date) || isNaN(date.getTime()) || !range || !range.start) {
+      return 0;
+    }
+    var w = typeof widthPx === 'number' && widthPx > 0 ? widthPx : 1;
+    var total = rangeDayCount(range);
+    var startMs = startOfDay(range.start).getTime();
+    var offsetMs = date.getTime() - startMs;
+    var x = (offsetMs / (total * MS_DAY)) * w;
+    if (!isFinite(x) || x < 0) return 0;
+    if (x > w) return w;
+    return x;
+  }
+
   function xToDate(x, range, widthPx) {
     if (!range) return null;
     var w = typeof widthPx === 'number' && widthPx > 0 ? widthPx : 1;
@@ -964,6 +982,7 @@
     resolveBarInterval: resolveBarInterval,
     rangeDayCount: rangeDayCount,
     dateToX: dateToX,
+    dateTimeToX: dateTimeToX,
     xToDate: xToDate,
     snapDate: snapDate,
     shiftInterval: shiftInterval,

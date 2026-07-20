@@ -118,6 +118,19 @@ describe('GanttModel', () => {
     assert.equal(GanttModel.toIsoDate(back), '2026-07-23');
   });
 
+  it('dateTimeToX places noon in the middle of the day column', () => {
+    const range = GanttModel.viewRange('week', '2026-07-22');
+    const width = 700;
+    const dayW = width / 7;
+    // Thursday 2026-07-23 is column index 3 (Mon=20 … Thu=23).
+    const noon = new Date(2026, 6, 23, 12, 0, 0);
+    const midnight = new Date(2026, 6, 23, 0, 0, 0);
+    const xNoon = GanttModel.dateTimeToX(noon, range, width);
+    const xMidnight = GanttModel.dateTimeToX(midnight, range, width);
+    assert.equal(xMidnight, 3 * dayW);
+    assert.ok(Math.abs(xNoon - (3 * dayW + dayW / 2)) < 0.01);
+  });
+
   it('xToDate maps each day column without half-day hover offset', () => {
     const range = GanttModel.viewRange('week', '2026-07-22');
     const width = 700;
