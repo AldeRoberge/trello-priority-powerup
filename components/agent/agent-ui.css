@@ -291,7 +291,18 @@
   flex-direction: column;
   min-height: 0;
   margin: 0;
-  padding: 10px 12px 12px;
+  /* Tight bottom — empty space below the composer used to look like padding */
+  padding: 8px 10px 4px;
+  gap: 6px;
+}
+
+/* Shell must fill under the header so the enabled background isn't empty chrome */
+.tp-page--priority .variant-chat-section--standalone .field--chat > .section-toggle-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .tp-page--priority .variant-chat-section--standalone .agent-chat-body {
@@ -299,6 +310,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  margin-top: 0;
   overflow: hidden;
 }
 
@@ -347,7 +359,8 @@
   min-height: 0;
   height: 100%;
   margin: 0;
-  padding: 10px 12px 12px;
+  padding: 8px 10px 4px;
+  gap: 6px;
 }
 
 /* Collapsible shell wraps the body — must fill remaining height under the header */
@@ -364,7 +377,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  margin-top: 8px;
+  margin-top: 0;
   overflow: hidden;
 }
 
@@ -486,7 +499,11 @@ body.tp-page--priority.tp-page--assistant {
 
 .tp-page--assistant .variant-chat-section--standalone .agent-messages {
   justify-content: flex-start;
-  padding: 12px 14px 12px 16px;
+  padding: 10px 12px 6px 14px;
+}
+
+.tp-page--assistant .variant-chat-section--standalone .agent-chat-panel {
+  gap: 6px;
 }
 
 .tp-page--assistant .agent-msg,
