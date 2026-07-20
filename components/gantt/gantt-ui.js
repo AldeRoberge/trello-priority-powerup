@@ -1414,15 +1414,17 @@
     function persistRow(row) {
       if (!row || row.kind !== 'card' || !row.cardId) return Promise.resolve();
       state.saving = true;
-      setStatus('Enregistrement\u2026');
+      var clearing = !row.startDate && !row.dueDate;
+      setStatus(clearing ? 'Effacement des dates\u2026' : 'Enregistrement\u2026');
       return ganttTrello
         .saveCardDates(t, row.cardId, {
-          startDate: row.startDate,
-          dueDate: row.dueDate,
-          dueTime:
-            (state.cardsById[row.cardId] &&
-              state.cardsById[row.cardId].dueTime) ||
-            '',
+          startDate: row.startDate || '',
+          dueDate: row.dueDate || '',
+          dueTime: clearing
+            ? ''
+            : (state.cardsById[row.cardId] &&
+                state.cardsById[row.cardId].dueTime) ||
+              '',
         })
         .then(function (res) {
           state.saving = false;
@@ -1437,7 +1439,7 @@
             }
             return reload();
           }
-          setStatus('Dates enregistr\u00e9es');
+          setStatus(clearing ? 'Dates effac\u00e9es' : 'Dates enregistr\u00e9es');
           var outlookSync = OS();
           if (
             state.outlookConnected &&
@@ -1446,9 +1448,13 @@
           ) {
             outlookSync.scheduleSyncCard(t, row.cardId);
           }
-          setTimeout(function () {
-            if (!state.saving) setStatus('');
-          }, 1500);
+          if (clearing) {
+            renderChart();
+          } else {
+            setTimeout(function () {
+              if (!state.saving) setStatus('');
+            }, 1500);
+          }
           return res;
         })
         .catch(function (err) {
@@ -1459,6 +1465,18 @@
           );
           return reload();
         });
+    }
+
+    function clearRowDates(row) {
+      if (state.saving || !row || row.kind !== 'card' || !row.cardId) return;
+      row.startDate = '';
+      row.dueDate = '';
+      if (state.cardsById[row.cardId]) {
+        state.cardsById[row.cardId].startDate = '';
+        state.cardsById[row.cardId].dueDate = '';
+        state.cardsById[row.cardId].dueTime = '';
+      }
+      persistRow(row);
     }
 
     function dateAtTimelineX(timeRow, clientX) {
@@ -1570,6 +1588,13 @@
 
       function onPointerDown(ev) {
         if (ev.button != null && ev.button !== 0) return;
+        if (
+          ev.target &&
+          ev.target.closest &&
+          ev.target.closest('.gantt-bar-clear')
+        ) {
+          return;
+        }
         ev.preventDefault();
         ev.stopPropagation();
 
@@ -1962,6 +1987,22 @@
             if (row.kind === 'card') {
               bar.appendChild(el('span', 'gantt-bar-edge gantt-bar-edge--start'));
               bar.appendChild(el('span', 'gantt-bar-edge gantt-bar-edge--end'));
+              var clearBtn = el('button', 'gantt-bar-clear', {
+                type: 'button',
+                title: 'Effacer les dates',
+                text: '\u00d7',
+              });
+              clearBtn.setAttribute('aria-label', 'Effacer d\u00e9but et \u00e9ch\u00e9ance');
+              clearBtn.addEventListener('pointerdown', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+              });
+              clearBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                clearRowDates(row);
+              });
+              bar.appendChild(clearBtn);
               bindBarDrag(bar, row, interval);
             }
 

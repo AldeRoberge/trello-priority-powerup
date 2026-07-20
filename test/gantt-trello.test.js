@@ -389,6 +389,55 @@ describe('GanttTrello dates', () => {
     );
   });
 
+  it('saveCardDates clears start and due via REST nulls', async () => {
+    const store = {
+      card1: {
+        cardPriority: {
+          urgency: 2,
+          impact: 2,
+          ease: 3,
+          startDate: '2026-07-01',
+          dueDate: '2026-07-05',
+          dueTime: '09:00',
+        },
+        cardDueSyncedIso: '2026-07-05T13:00:00.000Z',
+        cardStartSyncedIso: '2026-07-01T12:00:00.000Z',
+      },
+    };
+    const puts = [];
+    await withPriorityTrello(
+      {
+        CARD_PRIORITY_KEY: 'cardPriority',
+        CARD_DUE_SYNCED_KEY: 'cardDueSyncedIso',
+        CARD_START_SYNCED_KEY: 'cardStartSyncedIso',
+        DEFAULT_INPUTS: { urgency: 2, impact: 2, ease: 3 },
+        normalizeInputs: (x) => x,
+        isRestAuthorized: async () => true,
+        getCardInputsById: async () => store.card1.cardPriority,
+        restPutCard: async (_t, cardId, body) => {
+          puts.push({ cardId, body });
+          return { ok: true };
+        },
+      },
+      async () => {
+        const t = fakeT(store);
+        const res = await GanttTrello.saveCardDates(t, 'card1', {
+          startDate: '',
+          dueDate: '',
+          dueTime: '',
+        });
+        assert.equal(res.ok, true);
+        assert.equal(store.card1.cardPriority.startDate, undefined);
+        assert.equal(store.card1.cardPriority.dueDate, undefined);
+        assert.equal(store.card1.cardPriority.dueTime, undefined);
+        assert.equal(store.card1.cardDueSyncedIso, '');
+        assert.equal(store.card1.cardStartSyncedIso, '');
+        assert.equal(puts.length, 1);
+        assert.deepEqual(puts[0].body, { due: null, start: null });
+      }
+    );
+  });
+
   it('saveCardDates rejects missing card id', async () => {
     const res = await GanttTrello.saveCardDates(fakeT({}), '', {
       startDate: '2026-07-01',
