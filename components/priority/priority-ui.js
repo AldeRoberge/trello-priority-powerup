@@ -2549,6 +2549,7 @@
   var BLOCKED_LABEL = 'Bloqu\u00e9';
   var BLOCKED_DISPLAY = BLOCKED_SYMBOL + ' ' + BLOCKED_LABEL;
   var BLOCKED_REASON_PLACEHOLDER = 'Pr\u00e9ciser la raison du blocage\u2026';
+  var BLOCKED_REASON_ADD_LABEL = 'Ajouter une cause de blocage';
   var BLOCKED_REASON_SUGGESTIONS_LABEL = 'Suggestions';
   var BLOCKED_REASON_CLEAR_LABEL = 'Effacer la cause';
   var BLOCKED_REASON_EDIT_LABEL = 'Modifier la cause';
@@ -3807,7 +3808,7 @@
   /**
    * Human-readable due headline + remaining line for the Échéance body.
    * Ex. primary "6 jours restants", secondary "Lundi prochain à midi".
-   * Past dues use relative phrasing ("Il y a une heure") instead of
+   * Past dues use countdown phrasing ("En retard de 5 jours") instead of
    * calendar lines like "Aujourd'hui à 8 h".
    */
   function formatDueDateHumanReadable(iso, time, now) {
@@ -3817,13 +3818,12 @@
     var dueTime = normalizeDueTime(time);
     var at = now || new Date();
 
-    // Overdue: never show "Aujourd'hui à 8 h" — use "Il y a…" + (En retard).
+    // Overdue: never show "Aujourd'hui à 8 h" — use "En retard de…".
     if (isDuePast(normalized, dueTime, at)) {
-      var pastPrimary = dueTime
-        ? formatDueTimeTriggerTitle(normalized, dueTime, at)
-        : formatDueDateTriggerTitle(normalized, at);
-      if (pastPrimary) pastPrimary += ' (En retard)';
-      return { primary: pastPrimary, secondary: '' };
+      return {
+        primary: formatDueCountdown(normalized, at, time),
+        secondary: ''
+      };
     }
 
     var dayPhrase = formatDueDateRelativeDay(normalized, at);
@@ -7785,14 +7785,17 @@
     }
 
     /**
-     * Combined Progrès cell: status wins for blocked/done; otherwise prefer %.
+     * Combined Progrès cell: completed → status; blocked → progress ring (II pause)
+     * when a % exists so the pause icon stays visible; otherwise status / %.
      */
     function resolveProgressDisplayMode() {
       var isBlocked = statusCategory === 'blocked' || !!progressBlocked;
       var isDone =
         statusCategory === 'completed' ||
         (progressPercent != null && progressPercent >= 100);
-      if (isBlocked || isDone) return 'status';
+      // Prefer the ring when blocked so the II pause icon is shown (not status text alone).
+      if (isBlocked && !isDone && progressPercent != null) return 'progress';
+      if (isDone || isBlocked) return 'status';
       if (progressPercent != null) return 'progress';
       if ((statusText || '').trim()) return 'status';
       return 'empty';
@@ -7870,8 +7873,30 @@
         } else {
           statusLabel = st;
         }
-        progressCell.value.textContent = statusLabel || 'Sans statut';
-        progressCell.value.classList.toggle('is-empty', !statusLabel);
+        // Blocked without a %: still show the II pause ring beside the label.
+        if (isBlocked) {
+          progressRing.classList.remove('is-checked', 'has-progress');
+          progressRing.classList.add('is-blocked');
+          progressRing.style.setProperty('--completion-progress', '0');
+          if (progressAccent) {
+            progressRing.style.setProperty(
+              '--completion-check-fill',
+              progressAccent
+            );
+          } else {
+            progressRing.style.removeProperty('--completion-check-fill');
+          }
+          progressRing.innerHTML = PROGRESS_PAUSE_SVG;
+          progressCell.value.appendChild(progressRing);
+          var blockedLabel = document.createElement('span');
+          blockedLabel.className = 'overview-progress-pct';
+          blockedLabel.textContent = statusLabel || 'Bloqu\u00e9';
+          progressCell.value.appendChild(blockedLabel);
+          progressCell.value.classList.toggle('is-empty', !statusLabel);
+        } else {
+          progressCell.value.textContent = statusLabel || 'Sans statut';
+          progressCell.value.classList.toggle('is-empty', !statusLabel);
+        }
         progressBarFill.style.width =
           isDone && !isBlocked
             ? '100%'
@@ -7884,8 +7909,10 @@
         );
         progressBarTrack.hidden = false;
       } else if (mode === 'progress') {
-        progressAccent = progressBlocked
-          ? readCssVar('--blocked-accent', '#ae2e24')
+        var showPause = isBlocked && !(progressPercent >= 100);
+        progressAccent = showPause
+          ? statusAccent ||
+            readCssVar('--blocked-accent', '#ae2e24')
           : progressColor || '';
         progressCell.value.innerHTML = '';
         var donePct = progressPercent >= 100;
@@ -7894,10 +7921,7 @@
           'has-progress',
           progressPercent > 0 && !donePct
         );
-        progressRing.classList.toggle(
-          'is-blocked',
-          !!progressBlocked && !donePct
-        );
+        progressRing.classList.toggle('is-blocked', showPause);
         progressRing.style.setProperty(
           '--completion-progress',
           String(progressPercent)
@@ -7910,8 +7934,7 @@
         } else {
           progressRing.style.removeProperty('--completion-check-fill');
         }
-        progressRing.innerHTML =
-          progressBlocked && !donePct ? PROGRESS_PAUSE_SVG : PROGRESS_CHECK_SVG;
+        progressRing.innerHTML = showPause ? PROGRESS_PAUSE_SVG : PROGRESS_CHECK_SVG;
         progressCell.value.appendChild(progressRing);
         var pctText = document.createElement('span');
         pctText.className = 'overview-progress-pct';
@@ -13079,6 +13102,16 @@
     reasonInput.setAttribute('autocomplete', 'off');
     reasonInput.setAttribute('spellcheck', 'false');
 
+    // Compact "+" once at least one cause exists; expands the full input to add another.
+    var reasonComposerOpen = false;
+    var reasonAddBtn = document.createElement('button');
+    reasonAddBtn.type = 'button';
+    reasonAddBtn.className = 'blocked-reason-add-btn';
+    reasonAddBtn.setAttribute('aria-label', BLOCKED_REASON_ADD_LABEL);
+    reasonAddBtn.title = BLOCKED_REASON_ADD_LABEL;
+    reasonAddBtn.innerHTML = '<i class="ti ti-plus" aria-hidden="true"></i>';
+    reasonAddBtn.hidden = !(currentReasons.length || currentLinks.length);
+
     // Build suggestions DOM before TabAutocomplete.bind — bind() calls
     // onProposal synchronously during init, so suggestionsList must exist.
     var suggestions = document.createElement('div');
@@ -13111,7 +13144,7 @@
           return reasonTabCandidates.slice();
         },
         isEnabled: function () {
-          return !reasonInput.disabled;
+          return !reasonInput.disabled && !reasonInputMount.hidden;
         },
         onProposal: function (proposal) {
           var target =
@@ -13164,6 +13197,45 @@
         if (reasonKey(currentReasons[i]) === key) return true;
       }
       return false;
+    }
+
+    function hasProvidedReasons() {
+      return currentReasons.length > 0 || currentLinks.length > 0;
+    }
+
+    function syncReasonComposer() {
+      var has = hasProvidedReasons();
+      if (!has) reasonComposerOpen = false;
+      var showInput = !has || reasonComposerOpen;
+      var wasHidden = !!reasonInputMount.hidden;
+      reasonInputMount.hidden = !showInput;
+      reasonAddBtn.hidden = !has || reasonComposerOpen;
+      reasonWrap.classList.toggle('has-blocked-reasons', has);
+      reasonWrap.classList.toggle('is-composing-reason', showInput && has);
+      if (!showInput) {
+        suggestions.hidden = true;
+        if (reasonTabComplete) reasonTabComplete.refresh();
+      }
+      if (wasHidden !== !!reasonInputMount.hidden) onLayoutChange();
+    }
+
+    function openReasonComposer() {
+      reasonComposerOpen = true;
+      syncReasonComposer();
+      try {
+        reasonInput.focus();
+      } catch (err) {
+        /* ignore */
+      }
+    }
+
+    function closeReasonComposer() {
+      reasonComposerOpen = false;
+      if ((reasonInput.value || '').trim()) {
+        reasonInput.value = '';
+        refreshSuggestions();
+      }
+      syncReasonComposer();
     }
 
     function hasLinkId(id) {
@@ -13523,7 +13595,13 @@
           clearBtn.addEventListener('click', function () {
             if (typeof finishReasonEdit === 'function') finishReasonEdit(false);
             removeReason(reason);
-            reasonInput.focus();
+            if (!hasProvidedReasons()) {
+              try {
+                reasonInput.focus();
+              } catch (err) {
+                /* ignore */
+              }
+            }
           });
 
           chip.appendChild(text);
@@ -13681,7 +13759,13 @@
           clearBtn.textContent = '\u00d7';
           clearBtn.addEventListener('click', function () {
             removeLink(link.id);
-            reasonInput.focus();
+            if (!hasProvidedReasons()) {
+              try {
+                reasonInput.focus();
+              } catch (err) {
+                /* ignore */
+              }
+            }
           });
 
           chip.appendChild(text);
@@ -13691,8 +13775,10 @@
       }
 
       selectedWrap.hidden = !hasAny;
+      if (hasAny) selectedWrap.appendChild(reasonAddBtn);
       field.classList.toggle('has-blocked-reason', hasAny);
       field.classList.toggle('has-blocked-subtask-link', currentLinks.length > 0);
+      syncReasonComposer();
     }
 
     function refreshSuggestions() {
@@ -13717,11 +13803,15 @@
           btn.setAttribute('role', 'listitem');
           btn.textContent = optionLabel;
           btn.dataset.reason = optionLabel;
+          btn.addEventListener('mousedown', function (event) {
+            // Keep focus long enough for click to commit before blur closes the composer.
+            event.preventDefault();
+          });
           btn.addEventListener('click', function () {
             addReason(optionLabel);
             reasonInput.value = '';
             refreshSuggestions();
-            reasonInput.focus();
+            closeReasonComposer();
           });
           suggestionsList.appendChild(btn);
         })(ranked[i]);
@@ -13908,11 +13998,22 @@
       if (collapse) collapse.refreshSummary();
     }
 
+    reasonAddBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      openReasonComposer();
+    });
+
     reasonInput.addEventListener('input', function () {
       refreshSuggestions();
     });
 
     reasonInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && hasProvidedReasons()) {
+        event.preventDefault();
+        closeReasonComposer();
+        return;
+      }
       if (event.key !== 'Enter') return;
       event.preventDefault();
       var typed = normalizeBlockedReason(reasonInput.value);
@@ -13925,7 +14026,17 @@
         addReason(typed, { skipTaskCreate: deferTask });
         refineReasonAfterCommit(typed, { deferredTaskCreate: deferTask });
       }
-      reasonInput.focus();
+      closeReasonComposer();
+    });
+
+    reasonInput.addEventListener('blur', function () {
+      setTimeout(function () {
+        if (document.activeElement === reasonInput) return;
+        if (suggestions.contains(document.activeElement)) return;
+        if (!(reasonInput.value || '').trim() && hasProvidedReasons()) {
+          closeReasonComposer();
+        }
+      }, 0);
     });
 
     setBlockedReasons(

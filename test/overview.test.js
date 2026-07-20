@@ -409,7 +409,7 @@ describe('PriorityUI createOverviewField', () => {
     assert.equal(data.features.priority, false);
   });
 
-  it('shows status when blocked, percent otherwise', () => {
+  it('shows pause ring when blocked, percent otherwise', () => {
     const ui = PriorityUI.createOverviewField({
       title: 'Card',
       status: 'Bloqué',
@@ -424,14 +424,17 @@ describe('PriorityUI createOverviewField', () => {
 
     const progressCell = ui.el.querySelector('.overview-cell--progress');
     assert.ok(progressCell.classList.contains('is-blocked'));
-    assert.ok(progressCell.classList.contains('is-status-mode'));
+    assert.ok(progressCell.classList.contains('is-progress-mode'));
+    const ring = progressCell.querySelector('.overview-progress-ring');
+    assert.ok(ring);
+    assert.ok(ring.classList.contains('is-blocked'));
+    assert.match(ring.innerHTML, /pause/i);
     assert.match(
       progressCell.querySelector('.overview-cell-value').textContent,
-      /Bloqu/
+      /55/
     );
-    assert.ok(progressCell.querySelector('.overview-status-icon'));
     assert.equal(
-      progressCell.style._props['--overview-status-accent'],
+      progressCell.style._props['--overview-progress-accent'],
       '#e34935'
     );
 
@@ -449,6 +452,31 @@ describe('PriorityUI createOverviewField', () => {
     );
     assert.ok(progressCell.querySelector('.overview-progress-ring'));
     assert.ok(progressCell.classList.contains('has-progress-accent'));
+    assert.doesNotMatch(
+      progressCell.querySelector('.overview-progress-ring').innerHTML,
+      /pause/i
+    );
+  });
+
+  it('shows pause ring beside Bloqué when blocked with no percent', () => {
+    const ui = PriorityUI.createOverviewField({
+      status: 'Bloqué',
+      statusCategory: 'blocked',
+      statusColor: '#e34935',
+      progressPercent: null,
+      progressBlocked: true,
+    });
+    const progressCell = ui.el.querySelector('.overview-cell--progress');
+    assert.ok(progressCell.classList.contains('is-blocked'));
+    assert.ok(progressCell.classList.contains('is-status-mode'));
+    const ring = progressCell.querySelector('.overview-progress-ring');
+    assert.ok(ring);
+    assert.ok(ring.classList.contains('is-blocked'));
+    assert.match(ring.innerHTML, /pause/i);
+    assert.match(
+      progressCell.querySelector('.overview-cell-value').textContent,
+      /Bloqu/
+    );
   });
 
   it('shows Terminé status when completed', () => {

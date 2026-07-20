@@ -657,25 +657,36 @@ check(
   })()
 );
 check(
-  'human readable past today uses Il y a not Aujourd\'hui',
+  'human readable past today uses En retard de not Aujourd\'hui',
   (function () {
     var human = PU.formatDueDateHumanReadable('2026-07-13', '13:00', nowAfternoon);
     return (
-      human.primary === 'Il y a une heure (En retard)' &&
+      human.primary === 'En retard de 1 h' &&
       !human.secondary &&
       human.primary.indexOf('Aujourd') === -1
     );
   })()
 );
 check(
-  'human readable past date-only uses relative day',
+  'human readable past date-only uses En retard de',
   (function () {
     var human = PU.formatDueDateHumanReadable(
       addDaysIso('2026-07-13', -1),
       '',
       nowAfternoon
     );
-    return human.primary === 'Hier (En retard)' && !human.secondary;
+    return human.primary === 'En retard de 1 jour' && !human.secondary;
+  })()
+);
+check(
+  'human readable past multi-day uses En retard de N jours',
+  (function () {
+    var human = PU.formatDueDateHumanReadable(
+      addDaysIso('2026-07-13', -5),
+      '',
+      nowAfternoon
+    );
+    return human.primary === 'En retard de 5 jours' && !human.secondary;
   })()
 );
 check(

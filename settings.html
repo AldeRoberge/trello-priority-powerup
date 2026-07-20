@@ -804,25 +804,68 @@
     }
 
     var statutState = { lists: [], settings: null };
+    var STATUT_OPTION_DOT = '\u25CF '; // ●
 
-    function categoryOptionsHtml(selected) {
+    function ensureStatutColorsApplied() {
+      if (typeof StatutMatch !== 'undefined' && StatutMatch.applyStateColors) {
+        StatutMatch.applyStateColors(
+          statutState.settings && statutState.settings.stateColors
+        );
+      }
+    }
+
+    function statutColorForCategory(key) {
+      if (typeof StatutMatch !== 'undefined' && StatutMatch.stateColorForCategory) {
+        return StatutMatch.stateColorForCategory(key || '_none');
+      }
+      return '#626f86';
+    }
+
+    function listCategoryKey(listId) {
+      var cats = statutState.settings && statutState.settings.listCategories;
+      return (cats && cats[listId]) || null;
+    }
+
+    function applySelectAccent(selectEl, color) {
+      if (!selectEl) return;
+      if (color) {
+        selectEl.style.setProperty('--statut-select-color', color);
+        selectEl.classList.add('tp-select--statut-colored');
+      } else {
+        selectEl.style.removeProperty('--statut-select-color');
+        selectEl.classList.remove('tp-select--statut-colored');
+      }
+    }
+
+    function paintOption(opt, color, label) {
+      opt.textContent = STATUT_OPTION_DOT + label;
+      if (color) opt.style.color = color;
+    }
+
+    function fillCategoryOptions(selectEl, selected) {
+      if (!selectEl) return;
+      selectEl.replaceChildren();
+      var none = document.createElement('option');
+      none.value = '';
+      paintOption(none, statutColorForCategory('_none'), 'Non assigné');
+      if (!selected) none.selected = true;
+      selectEl.appendChild(none);
+
       var cats =
         typeof StatutMatch !== 'undefined' && StatutMatch.CATEGORIES
           ? StatutMatch.CATEGORIES
           : [];
-      var html = '<option value="">Non assigné</option>';
       cats.forEach(function (cat) {
-        var sel = selected === cat.key ? ' selected' : '';
-        html +=
-          '<option value="' +
-          cat.key +
-          '"' +
-          sel +
-          '>' +
-          cat.label +
-          '</option>';
+        var opt = document.createElement('option');
+        opt.value = cat.key;
+        paintOption(opt, statutColorForCategory(cat.key), cat.label);
+        if (selected === cat.key) opt.selected = true;
+        selectEl.appendChild(opt);
       });
-      return html;
+      applySelectAccent(
+        selectEl,
+        selected ? statutColorForCategory(selected) : null
+      );
     }
 
     function fillRoleSelect(selectEl, lists, selectedId, preferredCategory) {
@@ -848,7 +891,12 @@
       function addOpt(list, suffix) {
         var opt = document.createElement('option');
         opt.value = list.id;
-        opt.textContent = list.name + (suffix || '');
+        var cat = listCategoryKey(list.id);
+        paintOption(
+          opt,
+          statutColorForCategory(cat || '_none'),
+          list.name + (suffix || '')
+        );
         if (selectedId && String(selectedId) === String(list.id)) {
           opt.selected = true;
         }
@@ -861,6 +909,12 @@
       others.forEach(function (list) {
         addOpt(list, '');
       });
+
+      var selectedCat = selectedId ? listCategoryKey(selectedId) : null;
+      applySelectAccent(
+        selectEl,
+        selectedCat ? statutColorForCategory(selectedCat) : null
+      );
     }
 
     function renderStatutMap() {
@@ -880,6 +934,14 @@
       statutState.lists.forEach(function (list) {
         var row = document.createElement('div');
         row.className = 'tp-statut-map-row';
+        var catKey = cats[list.id] || null;
+        var catColor = statutColorForCategory(catKey || '_none');
+
+        var swatch = document.createElement('span');
+        swatch.className = 'tp-statut-map-swatch';
+        swatch.style.background = catColor;
+        swatch.setAttribute('aria-hidden', 'true');
+        if (!catKey) swatch.classList.add('tp-statut-map-swatch--empty');
 
         var name = document.createElement('span');
         name.className = 'tp-statut-map-name';
@@ -890,7 +952,7 @@
         select.className = 'tp-select tp-statut-map-select';
         select.dataset.listId = list.id;
         select.setAttribute('aria-label', 'Catégorie pour ' + list.name);
-        select.innerHTML = categoryOptionsHtml(cats[list.id] || '');
+        fillCategoryOptions(select, catKey || '');
         select.addEventListener('change', function () {
           var next = Object.assign({}, statutState.settings);
           next.listCategories = Object.assign({}, next.listCategories);
@@ -915,6 +977,7 @@
             });
         });
 
+        row.appendChild(swatch);
         row.appendChild(name);
         row.appendChild(select);
         listEl.appendChild(row);
@@ -924,6 +987,7 @@
     function syncStatutControlsFromState() {
       var settings = statutState.settings;
       if (!settings) return;
+      ensureStatutColorsApplied();
       var blockedSel = document.getElementById('statutBlockedList');
       var completedSel = document.getElementById('statutCompletedList');
       var showUnassigned = document.getElementById('statutShowUnassigned');
@@ -982,6 +1046,25 @@
           ? StatutMatch.normalizeStateColors(statutState.settings.stateColors)
           : Object.assign({}, statutState.settings.stateColors || {});
       colors[key] = value;
+      statutState.settings = Object.assign({}, statutState.settings, {
+        stateColors: colors,
+      });
+      ensureStatutColorsApplied();
+      // Live-refresh dropdown accents while dragging the color picker (save is debounced).
+      var settings = statutState.settings;
+      fillRoleSelect(
+        document.getElementById('statutBlockedList'),
+        statutState.lists,
+        settings.roleLists && settings.roleLists.blocked,
+        'blocked'
+      );
+      fillRoleSelect(
+        document.getElementById('statutCompletedList'),
+        statutState.lists,
+        settings.roleLists && settings.roleLists.completed,
+        'completed'
+      );
+      renderStatutMap();
       if (statutColorSaveTimer) clearTimeout(statutColorSaveTimer);
       statutColorSaveTimer = setTimeout(function () {
         persistStatutPatch({ stateColors: colors }).catch(function (err) {
