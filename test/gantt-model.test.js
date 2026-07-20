@@ -336,6 +336,11 @@ describe('GanttModel', () => {
         .length,
       0
     );
+
+    const frac = GanttModel.workDayFractions('08:15', '16:45');
+    assert.ok(frac);
+    assert.ok(Math.abs(frac.start - (8 * 60 + 15) / (24 * 60)) < 1e-9);
+    assert.ok(Math.abs(frac.end - (16 * 60 + 45) / (24 * 60)) < 1e-9);
   });
 
   it('intervalToParts emits times when hasTime', () => {

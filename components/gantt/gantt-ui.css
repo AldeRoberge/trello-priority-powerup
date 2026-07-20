@@ -812,8 +812,54 @@
   background: rgba(9, 30, 66, 0.07);
 }
 
-.gantt-off-hours {
-  background: rgba(9, 30, 66, 0.09);
+/* Off-hours (morning / night) painted into row backgrounds so opaque fills
+   cannot hide them. --gantt-off-* come from work day start/end. */
+.gantt-timeline--timed {
+  --gantt-off-hours-fill: rgba(9, 30, 66, 0.14);
+}
+
+.gantt-timeline--timed.gantt-timeline--week .gantt-timeline-header,
+.gantt-timeline--timed.gantt-timeline--week .gantt-timeline-row {
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      var(--gantt-off-hours-fill) 0,
+      var(--gantt-off-hours-fill) var(--gantt-off-am-w),
+      transparent var(--gantt-off-am-w),
+      transparent var(--gantt-off-pm-w),
+      var(--gantt-off-hours-fill) var(--gantt-off-pm-w),
+      var(--gantt-off-hours-fill) var(--gantt-off-unit-w)
+    ),
+    repeating-linear-gradient(
+      to right,
+      transparent 0,
+      transparent calc(var(--gantt-day-w) - 1px),
+      var(--gantt-grid-line) calc(var(--gantt-day-w) - 1px),
+      var(--gantt-grid-line) var(--gantt-day-w)
+    );
+  background-size: var(--gantt-off-unit-w) 100%, var(--gantt-day-w) 100%;
+}
+
+.gantt-timeline--timed.gantt-timeline--day .gantt-timeline-header,
+.gantt-timeline--timed.gantt-timeline--day .gantt-timeline-row {
+  background-image:
+    linear-gradient(
+      to right,
+      var(--gantt-off-hours-fill) 0,
+      var(--gantt-off-hours-fill) var(--gantt-off-am-w),
+      transparent var(--gantt-off-am-w),
+      transparent var(--gantt-off-pm-w),
+      var(--gantt-off-hours-fill) var(--gantt-off-pm-w),
+      var(--gantt-off-hours-fill) 100%
+    ),
+    repeating-linear-gradient(
+      to right,
+      transparent 0,
+      transparent calc(var(--gantt-day-w) - 1px),
+      var(--gantt-grid-line) calc(var(--gantt-day-w) - 1px),
+      var(--gantt-grid-line) var(--gantt-day-w)
+    );
+  background-size: 100% 100%, var(--gantt-day-w) 100%;
 }
 
 .gantt-timeline-row {

@@ -3042,40 +3042,6 @@
       });
       timelineCol.appendChild(headerTimeline);
 
-      if (
-        usesTimedTimeline() &&
-        typeof model.offHoursBands === 'function'
-      ) {
-        var offBands = model.offHoursBands(
-          state.ganttSettings.dayStart,
-          state.ganttSettings.dayEnd,
-          r,
-          state.timelineWidth
-        );
-        var offTitle =
-          'Hors heures de travail \u00b7 avant ' +
-          state.ganttSettings.dayStart +
-          ' / apr\u00e8s ' +
-          state.ganttSettings.dayEnd;
-        for (var ob = 0; ob < offBands.length; ob++) {
-          var band = offBands[ob];
-          if (!band || !(band.width > 0)) continue;
-          var offEl = el(
-            'div',
-            'gantt-off-hours' +
-              (band.kind === 'morning'
-                ? ' gantt-off-hours--morning'
-                : band.kind === 'night'
-                  ? ' gantt-off-hours--night'
-                  : '')
-          );
-          offEl.style.left = band.left + 'px';
-          offEl.style.width = band.width + 'px';
-          offEl.title = offTitle;
-          timelineCol.appendChild(offEl);
-        }
-      }
-
       // Today marker — placed at the current time within today's column.
       var now = new Date();
       var todayDate = model.startOfDay(now);

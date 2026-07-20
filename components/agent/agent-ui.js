@@ -2004,6 +2004,22 @@
       if (note && note.parentNode) note.parentNode.removeChild(note);
     }
 
+    function setQueuedRowText(row, text) {
+      if (!row) return;
+      var bubble = row.querySelector('.agent-msg-bubble');
+      if (bubble) bubble.textContent = text;
+    }
+
+    function findLastVisibleQueuedEntry() {
+      for (var i = messageQueue.length - 1; i >= 0; i--) {
+        var entry = messageQueue[i];
+        if (entry && entry.row && !entry.silent && !entry.isSelfPrompt) {
+          return entry;
+        }
+      }
+      return null;
+    }
+
     function enqueueUserMessage(text, options) {
       var opts = options || {};
       var msg = (text || '').trim();
@@ -2019,6 +2035,18 @@
           silent: true
         });
         dbgLog('agentUi', 'queue.queued', { queueLength: messageQueue.length, silent: true });
+        return true;
+      }
+      // While a turn is in flight, fold extra sends into one pending bubble / request.
+      var lastVisible = findLastVisibleQueuedEntry();
+      if (lastVisible) {
+        lastVisible.text = String(lastVisible.text || '').trim()
+          ? String(lastVisible.text).replace(/\s+$/, '') + '\n\n' + msg
+          : msg;
+        setQueuedRowText(lastVisible.row, lastVisible.text);
+        dbgLog('agentUi', 'queue.combined', { queueLength: messageQueue.length });
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        notifyLayout();
         return true;
       }
       var row = appendMessage('user', msg, { note: 'En attente' });
@@ -2038,6 +2066,26 @@
       if (pending || !messageQueue.length) return;
       var next = messageQueue.shift();
       if (!next || !next.text) return;
+      // Coalesce any leftover visible user entries into one turn (safety net).
+      if (next.row && !next.silent && !next.isSelfPrompt) {
+        while (
+          messageQueue.length &&
+          messageQueue[0] &&
+          messageQueue[0].row &&
+          !messageQueue[0].silent &&
+          !messageQueue[0].isSelfPrompt
+        ) {
+          var extra = messageQueue.shift();
+          next.text =
+            String(next.text || '').replace(/\s+$/, '') +
+            '\n\n' +
+            String(extra.text || '').trim();
+          if (extra.row && extra.row.parentNode) {
+            extra.row.parentNode.removeChild(extra.row);
+          }
+        }
+        setQueuedRowText(next.row, next.text);
+      }
       dbgLog('agentUi', 'queue.processing', { queueLength: messageQueue.length });
       sendUserMessage(next.text, {
         queuedRow: next.row,
