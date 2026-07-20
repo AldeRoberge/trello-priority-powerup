@@ -4,7 +4,8 @@
 
   var ROW_H = 40;
   var LABEL_W = 240;
-  var EDGE_PX = 6;
+  var EDGE_HANDLE_CLASS_START = 'gantt-bar-edge--start';
+  var EDGE_HANDLE_CLASS_END = 'gantt-bar-edge--end';
   var MIN_TIMELINE_W = 640;
   var LABELS_W_MIN = 280;
   var LABELS_W_DEFAULT = 560;
@@ -2585,11 +2586,11 @@
         ev.preventDefault();
         ev.stopPropagation();
 
-        var rect = barEl.getBoundingClientRect();
-        var localX = ev.clientX - rect.left;
         var mode = 'move';
-        if (localX <= EDGE_PX) mode = 'start';
-        else if (localX >= rect.width - EDGE_PX) mode = 'end';
+        if (ev.target && ev.target.closest) {
+          if (ev.target.closest('.' + EDGE_HANDLE_CLASS_START)) mode = 'start';
+          else if (ev.target.closest('.' + EDGE_HANDLE_CLASS_END)) mode = 'end';
+        }
 
         var r = range();
         var startX = ev.clientX;

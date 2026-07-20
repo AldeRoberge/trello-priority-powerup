@@ -876,6 +876,8 @@
 
 .gantt-bar.is-editable {
   cursor: grab;
+  /* Exterior resize handles sit outside the bar body. */
+  overflow: visible;
 }
 
 .gantt-bar.is-dragging {
@@ -891,6 +893,8 @@
   bottom: 0;
   background: rgba(255, 255, 255, 0.28);
   pointer-events: none;
+  border-radius: inherit;
+  overflow: hidden;
 }
 
 .gantt-bar-label {
@@ -939,20 +943,35 @@
 
 .gantt-bar-edge {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 6px;
-  z-index: 2;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 18px;
+  z-index: 5;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.gantt-bar:hover .gantt-bar-edge,
+.gantt-bar.is-dragging .gantt-bar-edge,
+.gantt-bar-edge:focus-visible {
+  opacity: 1;
 }
 
 .gantt-bar-edge--start {
-  left: 0;
-  cursor: ew-resize;
+  left: auto;
+  right: 100%;
+  margin-right: 3px;
 }
 
 .gantt-bar-edge--end {
-  right: 0;
-  cursor: ew-resize;
+  right: auto;
+  left: 100%;
+  margin-left: 3px;
 }
 
 body.tp-page--gantt {
