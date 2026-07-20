@@ -28,6 +28,7 @@ const UNIT_FILES = [
   'brand.test.js',
   'overview.test.js',
   'markdown-rich.test.js',
+  'markdown-link.test.js',
   'status-brief.test.js',
   'progress-summary.test.js',
   'task-types.test.js',

@@ -154,6 +154,86 @@ describe('PriorityAgent progress summary', () => {
     assert.match(two, /Valider avec client/);
   });
 
+  it('buildProgressSummarySnapshot marks blocked and collects Motifs', () => {
+    const snapshot = Agent.buildProgressSummarySnapshot({
+      cardName: 'Campagne',
+      blocked: {
+        enabled: true,
+        blockedReasons: ["En attente d'une approbation"],
+      },
+      progress: {
+        percent: 40,
+        items: [
+          {
+            id: 'a',
+            text: 'Préparer le brief',
+            done: true,
+          },
+          {
+            id: 'b',
+            text: 'Valider avec client',
+            done: false,
+            blocked: true,
+            blockedReasons: ["En attente d'une approbation"],
+          },
+        ],
+      },
+    });
+    assert.equal(snapshot.phase, 'blocked');
+    assert.equal(snapshot.stuck, true);
+    assert.deepEqual(snapshot.blockedReasons, ["En attente d'une approbation"]);
+    assert.ok(snapshot.openLabels.includes('Valider avec client'));
+  });
+
+  it('buildHeuristicProgressSummary prefers block reason over open tasks', () => {
+    const blocked = Agent.buildHeuristicProgressSummary({
+      phase: 'blocked',
+      stuck: true,
+      tasksTotal: 2,
+      tasksOpen: 1,
+      openLabels: ['Valider avec client'],
+      blockedReasons: ["En attente d'une approbation"],
+    });
+    assert.match(blocked, /approbation/i);
+    assert.doesNotMatch(blocked, /Valider|Reste/i);
+
+    const noReason = Agent.buildHeuristicProgressSummary({
+      phase: 'blocked',
+      stuck: true,
+      tasksTotal: 1,
+      tasksOpen: 1,
+      openLabels: ['Faire la chose'],
+      blockedReasons: [],
+    });
+    assert.equal(noReason, 'Bloqué');
+    assert.doesNotMatch(noReason, /Faire la chose|Reste/i);
+  });
+
+  it('cardProgressSummaryTurn skips AI when blocked', async () => {
+    const result = await Agent.cardProgressSummaryTurn(
+      { apiKey: 'sk-test', baseUrl: 'https://example.test', model: 'x' },
+      {
+        getCardName: () => 'Test',
+        getCompletion: () => ({
+          blocked: true,
+          blockedReasons: ["En attente d'un câble"],
+          items: [
+            { id: '1', text: 'Écrire le pitch', done: false, progress: 0 },
+          ],
+        }),
+        getPriorityState: () => ({
+          enAttente: true,
+          blockedReasons: ["En attente d'un câble"],
+        }),
+      }
+    );
+    assert.equal(result.source, 'heuristic');
+    assert.equal(result.skipped, true);
+    assert.equal(result.reason, 'blocked');
+    assert.match(result.sentence, /c[aâ]ble/i);
+    assert.doesNotMatch(result.sentence, /pitch|Reste/i);
+  });
+
   it('fingerprintProgressSummarySnapshot changes when outline changes', () => {
     const a = Agent.buildProgressSummarySnapshot({
       progress: {

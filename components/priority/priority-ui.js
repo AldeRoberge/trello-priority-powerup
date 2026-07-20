@@ -7484,6 +7484,7 @@
 
   /**
    * Compact Progrès header summary: same ring + % + bar + color as the Overview cell.
+   * When blocked, the label shows the Motif (block reason) instead of remaining tasks / %.
    * Returns a DOM node, or '' when there is nothing to show.
    */
   function buildProgressSummaryNode(opts) {
@@ -7497,8 +7498,9 @@
     var color =
       typeof opts.progressColor === 'string' ? opts.progressColor : '';
     var blocked = !!opts.progressBlocked;
-    var title = typeof opts.title === 'string' ? opts.title : '';
+    var title = typeof opts.title === 'string' ? opts.title.trim() : '';
     var donePct = percent >= 100;
+    var showReason = blocked && !donePct;
     var accent = blocked
       ? readCssVar('--blocked-accent', '#ae2e24')
       : color || '';
@@ -7506,7 +7508,7 @@
     var wrap = document.createElement('span');
     wrap.className = 'progress-summary';
     if (title) wrap.title = title;
-    wrap.classList.toggle('is-blocked', blocked && !donePct);
+    wrap.classList.toggle('is-blocked', showReason);
     if (accent) {
       wrap.style.setProperty('--overview-progress-accent', accent);
       wrap.classList.add('has-progress-accent');
@@ -7520,17 +7522,21 @@
     ring.setAttribute('aria-hidden', 'true');
     ring.classList.toggle('is-checked', donePct);
     ring.classList.toggle('has-progress', percent > 0 && !donePct);
-    ring.classList.toggle('is-blocked', blocked && !donePct);
+    ring.classList.toggle('is-blocked', showReason);
     ring.style.setProperty('--completion-progress', String(percent));
     if (accent) {
       ring.style.setProperty('--completion-check-fill', accent);
     }
-    ring.innerHTML =
-      blocked && !donePct ? PROGRESS_PAUSE_SVG : PROGRESS_CHECK_SVG;
+    ring.innerHTML = showReason ? PROGRESS_PAUSE_SVG : PROGRESS_CHECK_SVG;
 
     var pctText = document.createElement('span');
     pctText.className = 'overview-progress-pct';
-    pctText.textContent = percent + '\u00a0%';
+    if (showReason) {
+      pctText.classList.add('progress-summary-reason');
+      pctText.textContent = title || 'Bloqu\u00e9';
+    } else {
+      pctText.textContent = percent + '\u00a0%';
+    }
 
     valueRow.appendChild(ring);
     valueRow.appendChild(pctText);
@@ -8463,6 +8469,12 @@
       icon: 'ti-strikethrough',
       mod: 'is-emphasis'
     });
+    var descLinkBtn = makeDescToolbarBtn({
+      action: 'link',
+      title: 'Lien (Ctrl+K)',
+      label: 'Lien',
+      icon: 'ti-link'
+    });
     var descChecklistBtn = makeDescToolbarBtn({
       action: 'checklist',
       title: 'Liste de t\u00e2ches',
@@ -8475,6 +8487,7 @@
     descToolbar.appendChild(descBoldBtn);
     descToolbar.appendChild(descItalicBtn);
     descToolbar.appendChild(descStrikeBtn);
+    descToolbar.appendChild(descLinkBtn);
     descToolbar.appendChild(descChecklistBtn);
 
     var descModeSwitch = document.createElement('div');
@@ -9134,6 +9147,123 @@
       syncDescRichSize();
       syncDescFormatMenuSelection();
       onLayoutChange();
+    }
+
+    function getDescRichSelection() {
+      try {
+        var sel = window.getSelection && window.getSelection();
+        if (!sel || sel.rangeCount === 0) return null;
+        var anchor = sel.anchorNode;
+        if (!anchor || !descRich.contains(anchor)) return null;
+        return sel;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function decorateDescRichLink(anchor, url) {
+      if (!anchor) return;
+      try {
+        anchor.setAttribute('href', url);
+        anchor.className = 'info-md-link';
+        if (/^mailto:/i.test(url)) {
+          anchor.removeAttribute('target');
+          anchor.removeAttribute('rel');
+        } else {
+          anchor.setAttribute('target', '_blank');
+          anchor.setAttribute('rel', 'noopener noreferrer');
+        }
+      } catch (e) {
+        /* ignore */
+      }
+    }
+
+    function findDescRichLinkFromSelection(sel) {
+      if (!sel || !sel.anchorNode) return null;
+      var node = sel.anchorNode;
+      if (node.nodeType === 3) node = node.parentNode;
+      while (node && node !== descRich) {
+        if (richNodeName(node) === 'A') return node;
+        node = node.parentNode;
+      }
+      return null;
+    }
+
+    /** Apply url to the current rich selection, or insert a linked URL if collapsed. */
+    function applyDescRichLink(url) {
+      var href = normalizePasteableMarkdownUrl(url) || safeMarkdownHref(url);
+      if (!href) return false;
+      try {
+        descRich.focus();
+      } catch (e) {
+        /* ignore */
+      }
+      var sel = getDescRichSelection();
+      if (sel && !sel.isCollapsed) {
+        try {
+          document.execCommand('createLink', false, href);
+        } catch (err) {
+          return false;
+        }
+        decorateDescRichLink(findDescRichLinkFromSelection(getDescRichSelection()), href);
+      } else {
+        var html = renderMarkdownLinkHtml(escapeHtml(href), href);
+        if (!html) return false;
+        try {
+          document.execCommand('insertHTML', false, html);
+        } catch (err2) {
+          try {
+            document.execCommand('insertText', false, href);
+          } catch (err3) {
+            return false;
+          }
+        }
+      }
+      syncDescSourceFromRich();
+      scheduleDescSave();
+      syncDescRichSize();
+      syncDescFormatMenuSelection();
+      onLayoutChange();
+      return true;
+    }
+
+    function applyDescMarkdownLink(url) {
+      var href = normalizePasteableMarkdownUrl(url) || safeMarkdownHref(url);
+      if (!href) return false;
+      var state = getDescEditState();
+      var linked = linkMarkdownSelection(state, href);
+      if (linked) {
+        applyMarkdownEditToTextarea(descInput, linked);
+      } else {
+        var insertion = '[' + href + '](' + href + ')';
+        applyMarkdownEditToTextarea(descInput, {
+          value: state.value.slice(0, state.start) + insertion + state.value.slice(state.end),
+          start: state.start + 1,
+          end: state.start + 1 + href.length
+        });
+      }
+      syncDescFormatMenuSelection();
+      try {
+        descInput.focus();
+      } catch (e) {
+        /* ignore */
+      }
+      return true;
+    }
+
+    function promptDescLinkUrl() {
+      var existing = '';
+      if (descMode === 'rich') {
+        var sel = getDescRichSelection();
+        var anchor = findDescRichLinkFromSelection(sel);
+        if (anchor) existing = richAttr(anchor, 'href') || '';
+      }
+      var next = window.prompt('URL du lien', existing || 'https://');
+      if (next == null) return;
+      var href = normalizePasteableMarkdownUrl(next) || safeMarkdownHref(String(next).trim());
+      if (!href) return;
+      if (descMode === 'rich') applyDescRichLink(href);
+      else applyDescMarkdownLink(href);
     }
 
     function applyDescRichBlock(kind) {
@@ -11980,6 +12110,20 @@
         applyDescMarkdownInline('*');
         return;
       }
+      if (key === 'k' || key === 'K') {
+        e.preventDefault();
+        promptDescLinkUrl();
+        return;
+      }
+    });
+    descInput.addEventListener('paste', function (e) {
+      if (!e.clipboardData) return;
+      var state = getDescEditState();
+      if (state.start === state.end) return;
+      var url = normalizePasteableMarkdownUrl(e.clipboardData.getData('text/plain'));
+      if (!url) return;
+      e.preventDefault();
+      applyDescMarkdownLink(url);
     });
     descInput.addEventListener('blur', function () {
       // Persist immediately; spellcheck runs async with a small spinner.
@@ -12013,21 +12157,32 @@
       } else if (key === 'i' || key === 'I') {
         e.preventDefault();
         execDescRichCommand('italic');
+      } else if (key === 'k' || key === 'K') {
+        e.preventDefault();
+        promptDescLinkUrl();
       }
     });
     descRich.addEventListener('paste', function (e) {
       if (!e.clipboardData) return;
+      var plain = e.clipboardData.getData('text/plain');
+      var pasteUrl = normalizePasteableMarkdownUrl(plain);
+      var sel = getDescRichSelection();
+      if (pasteUrl && sel && !sel.isCollapsed) {
+        e.preventDefault();
+        applyDescRichLink(pasteUrl);
+        return;
+      }
       e.preventDefault();
       var temp = document.createElement('div');
       var html = e.clipboardData.getData('text/html');
       if (html) temp.innerHTML = html;
-      else temp.textContent = e.clipboardData.getData('text/plain');
+      else temp.textContent = plain;
       var safeMarkdown = markdownFromRichRoot(temp);
       var safeHtml = renderMarkdownToHtml(safeMarkdown);
       try {
         document.execCommand('insertHTML', false, safeHtml);
       } catch (err) {
-        document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
+        document.execCommand('insertText', false, plain);
       }
       syncDescSourceFromRich();
       scheduleDescSave();
@@ -12070,6 +12225,9 @@
     descStrikeBtn.addEventListener('click', function () {
       if (descMode === 'rich') execDescRichCommand('strikeThrough');
       else applyDescMarkdownInline('~~');
+    });
+    descLinkBtn.addEventListener('click', function () {
+      promptDescLinkUrl();
     });
     descChecklistBtn.addEventListener('click', function () {
       if (descMode === 'rich') applyDescRichBlock('checklist');

@@ -433,7 +433,6 @@ body {
 
 .field--overview .section-toggle-summary {
   flex: 1 1 auto;
-  max-width: none;
 }
 
 .overview-section-body {
@@ -3278,7 +3277,7 @@ body {
   display: inline-flex;
   align-items: center;
   min-width: 0;
-  max-width: 46%;
+  max-width: none;
   margin-top: 2px;
   padding-left: 0;
   font-size: 13px;
@@ -3287,15 +3286,28 @@ body {
   line-height: 1.35;
   text-align: left;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  /* Soften overflow toward the header’s right edge (no hard ellipsis). */
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    #000 calc(100% - 2.75rem),
+    rgba(0, 0, 0, 0.55) calc(100% - 1.1rem),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    #000 calc(100% - 2.75rem),
+    rgba(0, 0, 0, 0.55) calc(100% - 1.1rem),
+    transparent 100%
+  );
   transition: opacity 0.12s ease, color 0.12s ease;
 }
 
-/* Détails: use remaining header width so more of the card title shows. */
+/* Détails: prefer growing with the title column when space is tight. */
 .field--info .section-toggle-summary {
   flex: 1 1 auto;
-  max-width: none;
 }
 
 .statut-summary {
@@ -3315,7 +3327,7 @@ body {
 
 .statut-summary-label {
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
   min-width: 0;
   font-weight: 600;
@@ -3324,7 +3336,6 @@ body {
 
 /* Progrès collapsed header: same ring + bar + color as Overview */
 .field--progress .section-toggle-summary {
-  max-width: 54%;
   white-space: normal;
 }
 
@@ -3332,6 +3343,8 @@ body {
   display: inline-flex;
   flex-direction: column;
   gap: 4px;
+  flex: 1 1 auto;
+  width: 100%;
   min-width: 88px;
   max-width: 100%;
   vertical-align: middle;
@@ -3342,6 +3355,7 @@ body {
   align-items: center;
   gap: 6px;
   min-width: 0;
+  width: 100%;
   font-size: 13px;
   font-weight: 650;
   line-height: 1.25;
@@ -3369,6 +3383,13 @@ body {
   );
 }
 
+.progress-summary-reason {
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  min-width: 0;
+}
+
 .priority-summary {
   display: inline-flex;
   align-items: center;
@@ -3383,7 +3404,7 @@ body {
 
 .priority-summary-label {
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
   min-width: 0;
   font-weight: 600;
@@ -3412,7 +3433,7 @@ body {
 
 .due-summary-label {
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
   min-width: 0;
   font-weight: 600;

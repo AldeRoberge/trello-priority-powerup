@@ -336,13 +336,55 @@
 
     function progressSummaryFallbackText() {
       if (!completionUi || typeof completionUi.getData !== 'function') return '';
+      var completionSnap = completionUi.getData();
+      if (
+        window.CompletionTrello &&
+        typeof CompletionTrello.hasAnyBlocked === 'function' &&
+        CompletionTrello.hasAnyBlocked(completionSnap)
+      ) {
+        var blockedReasons =
+          typeof CompletionTrello.aggregateBlockedReasons === 'function'
+            ? CompletionTrello.aggregateBlockedReasons(completionSnap)
+            : [];
+        if (
+          (!blockedReasons || !blockedReasons.length) &&
+          variant &&
+          typeof variant.getState === 'function'
+        ) {
+          var blockedState = variant.getState() || {};
+          if (
+            blockedState.enAttente &&
+            Array.isArray(blockedState.blockedReasons)
+          ) {
+            blockedReasons = blockedState.blockedReasons;
+          }
+        }
+        if (
+          window.PriorityUI &&
+          typeof PriorityUI.formatBlockedReasonsSummary === 'function'
+        ) {
+          return PriorityUI.formatBlockedReasonsSummary(blockedReasons, {
+            empty: 'Bloqué',
+            links:
+              variant && typeof variant.getState === 'function'
+                ? (variant.getState() || {}).blockedLinks
+                : null,
+            items:
+              completionSnap && Array.isArray(completionSnap.items)
+                ? completionSnap.items
+                : []
+          });
+        }
+        if (blockedReasons && blockedReasons.length) return blockedReasons[0];
+        return 'Bloqué';
+      }
       if (
         !window.PriorityAgent ||
         typeof PriorityAgent.buildContext !== 'function' ||
         typeof PriorityAgent.buildProgressSummarySnapshot !== 'function' ||
         typeof PriorityAgent.buildHeuristicProgressSummary !== 'function'
       ) {
-        var progress = CompletionTrello.computeCardProgress(completionUi.getData());
+        var progress = CompletionTrello.computeCardProgress(completionSnap);
         if (!progress) return '';
         if (progress.percent <= 0) return 'En attente';
         if (progress.hasItems) {
@@ -491,6 +533,12 @@
 
       // Immediate heuristic while AI runs (cache miss → progressSummaryText uses fallback).
       paintProgressSummary();
+
+      // Motifs are authoritative when blocked — no AI paraphrase of open tasks.
+      if (snapshot.stuck || snapshot.phase === 'blocked') {
+        progressSummaryAiCache = { fp: '', sentence: '' };
+        return;
+      }
 
       if (typeof PriorityAgent.cardProgressSummaryTurn !== 'function') return;
       if (typeof PriorityAgent.getProvider !== 'function') return;

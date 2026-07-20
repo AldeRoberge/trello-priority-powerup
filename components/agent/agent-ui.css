@@ -3290,6 +3290,9 @@ html[data-color-mode='dark']
   font-weight: 600;
   line-height: 1.4;
   white-space: nowrap;
+  /* Keep pill edges crisp — section summary fade is for plain text overflow. */
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 
 .tp-page--priority .field--chat.has-ai-suggestions.is-ai-suggestions-loading .section-toggle-summary {
@@ -3317,6 +3320,8 @@ html[data-color-mode='dark']
   line-height: 1.4;
   white-space: nowrap;
   animation: agent-new-message-glow 1.6s ease-in-out infinite;
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 
 .tp-page--priority .field--chat.has-new-message:not(.is-collapsed) .section-toggle-summary {

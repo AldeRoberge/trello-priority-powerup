@@ -627,11 +627,19 @@ describe('PriorityUI createOverviewField', () => {
     const blocked = PriorityUI.buildProgressSummaryNode({
       progressPercent: 55,
       progressBlocked: true,
+      title: "En attente d'une approbation",
     });
     assert.ok(blocked.classList.contains('is-blocked'));
     const blockedRing = blocked.querySelector('.overview-progress-ring');
     assert.ok(blockedRing.classList.contains('is-blocked'));
     assert.match(blockedRing.innerHTML, /pause/i);
+    const reason = blocked.querySelector('.progress-summary-reason');
+    assert.ok(reason);
+    assert.match(reason.textContent, /approbation/i);
+    assert.doesNotMatch(
+      blocked.querySelector('.overview-progress-pct').textContent,
+      /55/
+    );
 
     const done = PriorityUI.buildProgressSummaryNode({
       progressPercent: 100,

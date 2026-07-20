@@ -10952,6 +10952,46 @@
   }
 
   /**
+   * Unique Motifs for the Progrès summary when the card / a task is blocked.
+   * Prefer card-level causes, then master progress, then item Motifs.
+   */
+  function collectProgressSummaryBlockedReasons(context, progress, items) {
+    var reasons = [];
+    var seen = Object.create(null);
+    function pushAll(list) {
+      if (!Array.isArray(list)) return;
+      for (var i = 0; i < list.length; i++) {
+        var reason = typeof list[i] === 'string' ? list[i].trim() : '';
+        if (!reason) continue;
+        var key = reason.toLowerCase();
+        if (seen[key]) continue;
+        seen[key] = true;
+        reasons.push(reason);
+      }
+    }
+    var blocked = context && context.blocked;
+    if (blocked && blocked.enabled) pushAll(blocked.blockedReasons);
+    if (progress && progress.blocked) pushAll(progress.blockedReasons);
+    for (var j = 0; j < items.length; j++) {
+      var item = items[j];
+      if (!item || item.done || !item.blocked) continue;
+      pushAll(item.blockedReasons);
+    }
+    return reasons.slice(0, 4);
+  }
+
+  function isProgressSummaryStuck(context, progress, items) {
+    var blocked = context && context.blocked;
+    if (blocked && blocked.enabled) return true;
+    if (progress && progress.blocked) return true;
+    if (progress && progress.hasBlockedSubtasks) return true;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i] && items[i].blocked && !items[i].done) return true;
+    }
+    return false;
+  }
+
+  /**
    * Compact hierarchy for the Progrès collapsed-summary sentence.
    * options.linkedTreeByItemId: optional map from completion-ui linked resolve.
    */
@@ -11026,9 +11066,14 @@
     }
 
     var openCount = Math.max(0, totalCount - doneCount);
+    var stuck = isProgressSummaryStuck(context, progress, items);
+    var blockedReasons = stuck
+      ? collectProgressSummaryBlockedReasons(context, progress, items)
+      : [];
     var phase = 'idle';
     if (percent != null && percent >= 100) phase = 'done';
     else if (totalCount > 0 && openCount <= 0) phase = 'done';
+    else if (stuck) phase = 'blocked';
     else if ((percent != null && percent > 0) || doneCount > 0) {
       phase = 'in_progress';
     } else if (totalCount > 0) {
@@ -11038,6 +11083,8 @@
     return {
       cardName: context && context.cardName ? String(context.cardName) : '',
       phase: phase,
+      stuck: stuck,
+      blockedReasons: blockedReasons,
       progressPercent: percent,
       tasksDone: doneCount,
       tasksTotal: totalCount,
@@ -11051,8 +11098,10 @@
     if (!snapshot || typeof snapshot !== 'object') return '';
     try {
       return JSON.stringify({
-        v: 1,
+        v: 2,
         phase: snapshot.phase,
+        stuck: !!snapshot.stuck,
+        blockedReasons: snapshot.blockedReasons || [],
         progressPercent: snapshot.progressPercent,
         tasksDone: snapshot.tasksDone,
         tasksTotal: snapshot.tasksTotal,
@@ -11080,6 +11129,7 @@
   /**
    * Deterministic Progrès summary when AI is unavailable.
    * Prefer a short synthesis of open task names over bare counts.
+   * When blocked: show Motifs (block reasons), never the remaining task list.
    */
   function buildHeuristicProgressSummary(snapshot) {
     if (!snapshot || typeof snapshot !== 'object') return '';
@@ -11088,6 +11138,21 @@
     var labels = Array.isArray(snapshot.openLabels)
       ? snapshot.openLabels.filter(Boolean)
       : [];
+
+    if (snapshot.stuck || snapshot.phase === 'blocked') {
+      var reasons = Array.isArray(snapshot.blockedReasons)
+        ? snapshot.blockedReasons.filter(Boolean)
+        : [];
+      if (!reasons.length) return 'Bloqu\u00e9';
+      if (reasons.length === 1) {
+        return clampProgressSummarySentence(reasons[0]);
+      }
+      var joined = reasons.join(', ');
+      if (joined.length <= 42) return clampProgressSummarySentence(joined);
+      return clampProgressSummarySentence(
+        reasons[0] + ' +' + (reasons.length - 1)
+      );
+    }
 
     if (!total) {
       if (snapshot.phase === 'done' || snapshot.progressPercent >= 100) {
@@ -11147,6 +11212,17 @@
       });
     var heuristic = buildHeuristicProgressSummary(snapshot);
 
+    // Blocked: Motifs are structured — skip AI so the reason replaces open tasks.
+    if (snapshot.stuck || snapshot.phase === 'blocked') {
+      return {
+        ok: true,
+        skipped: true,
+        reason: 'blocked',
+        sentence: heuristic,
+        source: 'heuristic'
+      };
+    }
+
     var p = normalizeProvider(provider);
     if (!isConfigured(p)) {
       return {
@@ -11179,14 +11255,17 @@
           '- Une seule phrase, fran\u00e7ais, ton clair et factuel.',
           '- Max ~' + MAX_PROGRESS_SUMMARY_LEN + ' caract\u00e8res.',
           '- Combine / synth\u00e9tise\u00a0: ne liste pas tout comme un inventaire robotique.',
-          '- Si du travail reste\u00a0: dis ce qui reste \u00e0 faire (th\u00e8me + prochaines \u00e9tapes utiles).',
+          '- Si stuck/phase=blocked\u00a0: r\u00e9sume UNIQUEMENT les causes (blockedReasons), pas les t\u00e2ches ouvertes.',
+          '- Si du travail reste (non bloqu\u00e9)\u00a0: dis ce qui reste \u00e0 faire (th\u00e8me + prochaines \u00e9tapes utiles).',
           '- Si tout est done\u00a0: dis que c\'est termin\u00e9, en rappelant bri\u00e8vement le sujet.',
           '- INTERDIT de citer le % de progr\u00e8s.',
           '- INTERDIT d\'encourager / flatter.',
-          '- N\'invente aucune \u00e9tape absente de outline / openLabels.',
+          '- N\'invente aucune \u00e9tape absente de outline / openLabels / blockedReasons.',
           '- Ex. BON\u00a0: "Reste la validation client (maquette + feedback) avant publication."',
           '- Ex. BON\u00a0: "R\u00e9daction du brief termin\u00e9e\u00a0; encha\u00eene sur relecture et envoi."',
+          '- Ex. BON (bloqu\u00e9)\u00a0: "En attente d\'une approbation."',
           '- Ex. MAUVAIS\u00a0: "3 t\u00e2ches restantes."',
+          '- Ex. MAUVAIS (bloqu\u00e9)\u00a0: citer une t\u00e2che ouverte au lieu de blockedReasons.',
           'Snapshot\u00a0:',
           JSON.stringify(snapshot)
         ].join('\n')
