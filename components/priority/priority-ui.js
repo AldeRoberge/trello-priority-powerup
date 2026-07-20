@@ -63,8 +63,6 @@
   var SECTION_COLLAPSE_STORAGE_KEY = 'trello-priority-powerup/section-collapse';
   var STATUT_EMBEDDED_DETAILS_STORAGE_KEY =
     'trello-priority-powerup/statut-embedded-details-expanded';
-  var INFO_ROW_COLLAPSE_STORAGE_KEY =
-    'trello-priority-powerup/info-row-collapse';
   // 'blocked' / 'statut' kept for legacy prefs; both nest under Progrès (not collapsible).
   var SECTION_COLLAPSE_KEYS = [
     'overview',
@@ -78,16 +76,6 @@
     'blocked',
     'chat',
     'historique'
-  ];
-  /** Info (Détails) property rows that can collapse to a one-line summary. */
-  var INFO_ROW_COLLAPSE_KEYS = [
-    'desc',
-    'creator',
-    'members',
-    'labels',
-    'task-types',
-    'parent',
-    'objectif'
   ];
   var DEFAULT_COLOR_SCHEME_KEY = 'blue';
   /** Member clock preference: '24' (default) or '12'. Canonical storage stays HH:MM. */
@@ -3134,67 +3122,6 @@
         expanded ? '1' : '0'
       );
     } catch (e) { /* ignore quota / private mode */ }
-  }
-
-  /**
-   * @returns {{ [key: string]: boolean }}
-   *  Values are expanded (true) vs collapsed (false). Missing keys → collapsed.
-   */
-  function loadInfoRowCollapseState() {
-    try {
-      if (typeof localStorage === 'undefined') return {};
-      var raw = localStorage.getItem(INFO_ROW_COLLAPSE_STORAGE_KEY);
-      if (!raw) return {};
-      var parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object') return {};
-      var out = {};
-      INFO_ROW_COLLAPSE_KEYS.forEach(function (key) {
-        if (typeof parsed[key] === 'boolean') out[key] = parsed[key];
-      });
-      return out;
-    } catch (e) {
-      return {};
-    }
-  }
-
-  function saveInfoRowCollapseState(patch) {
-    try {
-      if (typeof localStorage === 'undefined') return;
-      if (!patch || typeof patch !== 'object') return;
-      var next = Object.assign({}, loadInfoRowCollapseState());
-      INFO_ROW_COLLAPSE_KEYS.forEach(function (key) {
-        if (typeof patch[key] === 'boolean') next[key] = patch[key];
-      });
-      localStorage.setItem(INFO_ROW_COLLAPSE_STORAGE_KEY, JSON.stringify(next));
-    } catch (e) { /* ignore quota / private mode */ }
-  }
-
-  /** Missing key → collapsed (false). */
-  function resolveInfoRowExpanded(key, fallback) {
-    var stored = loadInfoRowCollapseState();
-    if (Object.prototype.hasOwnProperty.call(stored, key)) return !!stored[key];
-    return fallback != null ? !!fallback : false;
-  }
-
-  /** Plain one-line preview for collapsed Description. */
-  function infoDescPlainSummary(text, maxLen) {
-    var limit = maxLen != null ? maxLen : 120;
-    var s = String(text == null ? '' : text);
-    s = s.replace(/<[^>]*>/g, ' ');
-    s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ');
-    s = s.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
-    s = s
-      .split(/\r?\n/)
-      .map(function (line) {
-        return stripMarkdownLinePrefix(line);
-      })
-      .join(' ');
-    s = s.replace(/[*_`~>]+/g, ' ').replace(/\s+/g, ' ').trim();
-    if (!s) return '';
-    if (s.length <= limit) return s;
-    var cut = s.slice(0, limit - 1);
-    var softer = cut.replace(/\s+\S*$/, '');
-    return (softer.length >= Math.floor(limit * 0.5) ? softer : cut) + '\u2026';
   }
 
   var INUTILE_EPS = 0.05;
@@ -9924,158 +9851,23 @@
       var row = document.createElement('div');
       row.className = 'info-row info-row--' + key;
       if (options.interactive) row.classList.add('is-interactive');
-      if (options.collapsible) row.classList.add('info-row--collapsible');
-
-      var value = document.createElement('div');
-      value.className = 'info-row-value';
-
-      function appendLabelIcon(parent) {
-        if (!options.icon) return;
-        var labelIcon = document.createElement('i');
-        labelIcon.className = 'ti ' + options.icon + ' info-row-icon';
-        labelIcon.setAttribute('aria-hidden', 'true');
-        parent.appendChild(labelIcon);
-      }
-
-      function appendLabelText(parent) {
-        var labelTextEl = document.createElement('span');
-        labelTextEl.className = 'info-row-label-text';
-        labelTextEl.textContent = labelText;
-        parent.appendChild(labelTextEl);
-      }
-
-      if (options.collapsible) {
-        var compactDetail = !!options.compactDetail;
-        var rowExpanded = resolveInfoRowExpanded(key, false);
-        row.classList.toggle('is-collapsed', !rowExpanded);
-        if (compactDetail) row.classList.add('info-row--compact-detail');
-
-        var toggleBtn = document.createElement('button');
-        toggleBtn.type = 'button';
-        toggleBtn.className = 'info-row-toggle';
-        toggleBtn.title = labelText;
-        toggleBtn.setAttribute(
-          'aria-label',
-          rowExpanded
-            ? 'Replier ' + labelText
-            : 'D\u00e9velopper ' + labelText
-        );
-        toggleBtn.setAttribute('aria-expanded', rowExpanded ? 'true' : 'false');
-
-        var chevron = document.createElement('i');
-        chevron.className =
-          'ti ti-chevron-down section-collapse-chevron info-row-chevron';
-        chevron.setAttribute('aria-hidden', 'true');
-        toggleBtn.appendChild(chevron);
-        appendLabelIcon(toggleBtn);
-        appendLabelText(toggleBtn);
-
-        var summaryEl = document.createElement('span');
-        summaryEl.className = 'info-row-summary is-empty';
-        // Compact rows show live chips/+ in detail; text summary is for
-        // Description, or an empty hint when a compact row has no chips yet.
-        summaryEl.textContent = '';
-
-        var detailEl = document.createElement('div');
-        detailEl.className = 'info-row-detail';
-
-        value.appendChild(summaryEl);
-        value.appendChild(detailEl);
-        row.appendChild(toggleBtn);
-        row.appendChild(value);
-
-        function syncSummaryVisibility() {
-          var empty = summaryEl.classList.contains('is-empty');
-          var showSummary = compactDetail
-            ? !rowExpanded && empty
-            : !rowExpanded;
-          summaryEl.hidden = !showSummary;
-          summaryEl.setAttribute(
-            'aria-hidden',
-            showSummary ? 'false' : 'true'
-          );
-          detailEl.hidden = compactDetail ? false : !rowExpanded;
-        }
-
-        syncSummaryVisibility();
-
-        function applyRowExpanded(next, opts) {
-          opts = opts || {};
-          var was = rowExpanded;
-          rowExpanded = !!next;
-          row.classList.toggle('is-collapsed', !rowExpanded);
-          syncSummaryVisibility();
-          toggleBtn.setAttribute(
-            'aria-expanded',
-            rowExpanded ? 'true' : 'false'
-          );
-          toggleBtn.setAttribute(
-            'aria-label',
-            rowExpanded
-              ? 'Replier ' + labelText
-              : 'D\u00e9velopper ' + labelText
-          );
-          if (!opts.skipPersist) {
-            var patch = {};
-            patch[key] = rowExpanded;
-            saveInfoRowCollapseState(patch);
-          }
-          if (was !== rowExpanded && typeof options.onExpandChange === 'function') {
-            options.onExpandChange(rowExpanded);
-          }
-          onLayoutChange();
-        }
-
-        toggleBtn.addEventListener('click', function (event) {
-          event.preventDefault();
-          event.stopPropagation();
-          applyRowExpanded(!rowExpanded);
-        });
-
-        // Click collapsed content (summary or chip area) to expand, except
-        // interactive quick-access controls (+, parent open, etc.).
-        value.addEventListener('click', function (event) {
-          if (rowExpanded) return;
-          if (
-            event.target.closest(
-              'button, a, input, select, textarea, label, ' +
-                '[role="button"], [role="listbox"], [role="option"], ' +
-                '[role="combobox"], .info-parent-chip-open'
-            )
-          ) {
-            return;
-          }
-          event.preventDefault();
-          applyRowExpanded(true);
-        });
-
-        function setSummary(text, emptyLabel) {
-          var raw = typeof text === 'string' ? text.trim() : '';
-          summaryEl.textContent = raw || emptyLabel || '';
-          summaryEl.classList.toggle('is-empty', !raw);
-          syncSummaryVisibility();
-        }
-
-        return {
-          row: row,
-          value: detailEl,
-          summaryEl: summaryEl,
-          toggleBtn: toggleBtn,
-          compactDetail: compactDetail,
-          setSummary: setSummary,
-          setExpanded: applyRowExpanded,
-          isExpanded: function () {
-            return rowExpanded;
-          },
-          key: key
-        };
-      }
 
       var label = document.createElement('div');
       label.className = 'info-row-label';
       label.title = labelText;
-      appendLabelIcon(label);
-      appendLabelText(label);
+      if (options.icon) {
+        var labelIcon = document.createElement('i');
+        labelIcon.className = 'ti ' + options.icon + ' info-row-icon';
+        labelIcon.setAttribute('aria-hidden', 'true');
+        label.appendChild(labelIcon);
+      }
+      var labelTextEl = document.createElement('span');
+      labelTextEl.className = 'info-row-label-text';
+      labelTextEl.textContent = labelText;
+      label.appendChild(labelTextEl);
+
+      var value = document.createElement('div');
+      value.className = 'info-row-value';
 
       row.appendChild(label);
       row.appendChild(value);
@@ -10133,21 +9925,7 @@
     body.appendChild(titleRow.row);
 
     // ── Description (always-visible markdown / rich editor) ─────────────
-    var descRow = makeRow('desc', 'Description', {
-      icon: 'ti-notes',
-      collapsible: true,
-      onExpandChange: function (isExpanded) {
-        if (!isExpanded) {
-          refreshDescSummary();
-          return;
-        }
-        requestAnimationFrame(function () {
-          if (descMode === 'rich') syncDescRichSize();
-          else syncDescInputSize();
-          onLayoutChange();
-        });
-      }
-    });
+    var descRow = makeRow('desc', 'Description', { icon: 'ti-notes' });
     var descWrap = document.createElement('div');
     descWrap.className = 'info-desc-wrap';
     var descMode = 'rich';
@@ -10347,11 +10125,7 @@
     body.appendChild(descRow.row);
 
     // ── Creator (visible when ≠ sole assignee) ─────────────────────────
-    var creatorRow = makeRow('creator', 'Cr\u00e9ateur', {
-      icon: 'ti-user',
-      collapsible: true,
-      compactDetail: true
-    });
+    var creatorRow = makeRow('creator', 'Cr\u00e9ateur', { icon: 'ti-user' });
     var creatorEl = document.createElement('div');
     creatorEl.className = 'info-members info-creator';
     creatorEl.setAttribute('aria-label', 'Cr\u00e9ateur de la carte');
@@ -10360,17 +10134,7 @@
     body.appendChild(creatorRow.row);
 
     // ── Assignees ──────────────────────────────────────────────────────
-    var membersRow = makeRow('members', 'Assign\u00e9s', {
-      icon: 'ti-users',
-      collapsible: true,
-      compactDetail: true,
-      onExpandChange: function (isExpanded) {
-        if (!isExpanded) {
-          setMembersPickerOpen(false);
-          setMemberRolesPickerOpen('');
-        }
-      }
-    });
+    var membersRow = makeRow('members', 'Assign\u00e9s', { icon: 'ti-users' });
     var membersWrap = document.createElement('div');
     membersWrap.className = 'info-members-wrap';
 
@@ -10423,17 +10187,7 @@
     body.appendChild(membersRow.row);
 
     // ── Labels (Trello étiquettes) ─────────────────────────────────────
-    var labelsRow = makeRow('labels', '\u00c9tiquettes', {
-      icon: 'ti-tag',
-      collapsible: true,
-      compactDetail: true,
-      onExpandChange: function (isExpanded) {
-        if (!isExpanded) {
-          setLabelsPickerOpen(false);
-          setLabelsColorPickerOpen('');
-        }
-      }
-    });
+    var labelsRow = makeRow('labels', '\u00c9tiquettes', { icon: 'ti-tag' });
     var labelsWrap = document.createElement('div');
     labelsWrap.className = 'info-labels-wrap';
 
@@ -10523,14 +10277,6 @@
     // ── Type de tâche (multi-label catalog) ─────────────────────────────
     var taskTypesRow = makeRow('task-types', 'Type de t\u00e2che', {
       icon: 'ti-category',
-      collapsible: true,
-      compactDetail: true,
-      onExpandChange: function (isExpanded) {
-        if (!isExpanded) {
-          setTaskTypesPickerOpen(false);
-          setTaskTypesIconPickerOpen(false);
-        }
-      }
     });
     var taskTypesWrap = document.createElement('div');
     taskTypesWrap.className = 'info-task-types-wrap';
@@ -10721,11 +10467,6 @@
     // ── Parent tasks (via Progrès linkedCardId reverse lookup) ──────────
     var parentRow = makeRow('parent', 'T\u00e2ches parentes', {
       icon: 'ti-hierarchy-3',
-      collapsible: true,
-      compactDetail: true,
-      onExpandChange: function (isExpanded) {
-        if (!isExpanded) setParentPickerOpen(false);
-      }
     });
     var parentWrap = document.createElement('div');
     parentWrap.className = 'info-parent-wrap';
@@ -10782,11 +10523,7 @@
     body.appendChild(parentRow.row);
 
     // ── Objectif (project link) ───────────────────────────────
-    var objectifRow = makeRow('objectif', 'Objectif', {
-      icon: 'ti-hierarchy-2',
-      collapsible: true,
-      compactDetail: true
-    });
+    var objectifRow = makeRow('objectif', 'Objectif', { icon: 'ti-hierarchy-2' });
     var objectifMount = document.createElement('div');
     objectifMount.className = 'info-objectif-mount objectif-section-body';
     objectifMount.id = 'info-objectif-mount';
@@ -11310,10 +11047,7 @@
       creatorEl.replaceChildren();
       var show = creatorDiffersFromAssignees();
       creatorRow.row.hidden = !show;
-      if (!show) {
-        refreshCreatorSummary();
-        return;
-      }
+      if (!show) return;
 
       var name = memberDisplayName(creatorMember) || 'Membre';
       var chip = document.createElement('span');
@@ -11326,7 +11060,6 @@
       nameEl.textContent = name;
       chip.appendChild(nameEl);
       creatorEl.appendChild(chip);
-      refreshCreatorSummary();
     }
 
     function setMembersStatus(text, kind) {
@@ -11972,13 +11705,6 @@
               if (event.target.closest('.info-member-clear')) return;
               event.preventDefault();
               event.stopPropagation();
-              if (
-                membersRow.isExpanded &&
-                !membersRow.isExpanded()
-              ) {
-                membersRow.setExpanded(true);
-                return;
-              }
               toggleMemberRolesPicker(mid);
             });
             main.addEventListener('keydown', function (event) {
@@ -11986,13 +11712,6 @@
                 if (event.target.closest('.info-member-clear')) return;
                 event.preventDefault();
                 event.stopPropagation();
-                if (
-                  membersRow.isExpanded &&
-                  !membersRow.isExpanded()
-                ) {
-                  membersRow.setExpanded(true);
-                  return;
-                }
                 toggleMemberRolesPicker(mid);
               }
             });
@@ -12115,7 +11834,6 @@
         }
       }
       renderCreator();
-      refreshMembersSummary();
     }
 
     function addMemberFromPicker(member) {
@@ -13218,7 +12936,6 @@
         labelsColorPicker.replaceChildren();
       }
       renderLabelSuggestions();
-      refreshLabelsSummary();
     }
 
     function setTaskTypesStatus(text, tone) {
@@ -13478,7 +13195,6 @@
         }
       }
       renderTaskTypeSuggestions();
-      refreshTaskTypesSummary();
     }
 
     function persistCustomTaskTypes(nextCustoms, createdEntry) {
@@ -14287,7 +14003,6 @@
       if (!canPick && !parentCards.length) {
         setParentStatus('', false);
       }
-      refreshParentSummary();
     }
 
     function applyParentChange(nextParent, removeParentId) {
@@ -14359,84 +14074,6 @@
     function renderRecap() {
       setRecapText(porteValueEl, impactReachLabel, 'Non d\u00e9finie');
       setRecapText(dureeValueEl, durationLabel, 'Non d\u00e9finie');
-    }
-
-    function refreshDescSummary() {
-      if (!descRow.setSummary) return;
-      var source =
-        typeof descInput !== 'undefined' && descInput
-          ? descInput.value
-          : descText;
-      descRow.setSummary(infoDescPlainSummary(source), 'Aucune');
-    }
-
-    function refreshCreatorSummary() {
-      if (!creatorRow.setSummary) return;
-      creatorRow.setSummary(
-        memberDisplayName(creatorMember) || '',
-        'Aucun'
-      );
-    }
-
-    function refreshMembersSummary() {
-      if (!membersRow.setSummary) return;
-      var names = displayAssignees()
-        .map(function (m) {
-          return memberDisplayName(m);
-        })
-        .filter(Boolean);
-      membersRow.setSummary(names.join(' \u00b7 '), 'Aucun');
-    }
-
-    function refreshLabelsSummary() {
-      if (!labelsRow.setSummary) return;
-      var names = labels
-        .map(function (label) {
-          return labelDisplayName(label);
-        })
-        .filter(Boolean);
-      labelsRow.setSummary(names.join(' \u00b7 '), 'Aucune');
-    }
-
-    function refreshTaskTypesSummary() {
-      if (!taskTypesRow.setSummary) return;
-      var names = taskTypes
-        .map(function (id) {
-          return taskTypeLabel(id) || id;
-        })
-        .filter(Boolean);
-      taskTypesRow.setSummary(names.join(' \u00b7 '), 'Aucun');
-    }
-
-    function refreshParentSummary() {
-      if (!parentRow.setSummary) return;
-      var names = parentCards
-        .map(function (p) {
-          return p && p.name ? String(p.name).trim() : '';
-        })
-        .filter(Boolean);
-      parentRow.setSummary(names.join(' \u00b7 '), 'Aucune');
-    }
-
-    function refreshObjectifSummary(text) {
-      if (!objectifRow.setSummary) return;
-      if (arguments.length) {
-        objectifRow.setSummary(
-          typeof text === 'string' ? text.trim() : '',
-          'Aucun'
-        );
-        return;
-      }
-      // Keep existing summary text when no override is provided.
-    }
-
-    function refreshAllInfoRowSummaries() {
-      refreshDescSummary();
-      refreshCreatorSummary();
-      refreshMembersSummary();
-      refreshLabelsSummary();
-      refreshTaskTypesSummary();
-      refreshParentSummary();
     }
 
     function summaryText() {
@@ -14674,7 +14311,6 @@
           descText = next;
           setAuthHint('');
           setDescStatus('', 'ok');
-          refreshDescSummary();
           scheduleLabelSuggestions(false);
           scheduleTaskTypeSuggestions(false);
           setTimeout(function () {
@@ -14904,41 +14540,25 @@
         });
     });
 
-    function ensureInfoRowExpanded(rowApi) {
-      if (
-        rowApi &&
-        typeof rowApi.isExpanded === 'function' &&
-        typeof rowApi.setExpanded === 'function' &&
-        !rowApi.isExpanded()
-      ) {
-        rowApi.setExpanded(true);
-        return true;
-      }
-      return false;
-    }
-
     membersAddBtn.addEventListener('click', function (event) {
       event.preventDefault();
       event.stopPropagation();
       if (membersAddBtn.disabled) return;
-      if (ensureInfoRowExpanded(membersRow)) setMembersPickerOpen(true);
-      else setMembersPickerOpen(!membersPickerOpen);
+      setMembersPickerOpen(!membersPickerOpen);
     });
 
     labelsAddBtn.addEventListener('click', function (event) {
       event.preventDefault();
       event.stopPropagation();
       if (labelsAddBtn.disabled) return;
-      if (ensureInfoRowExpanded(labelsRow)) setLabelsPickerOpen(true);
-      else setLabelsPickerOpen(!labelsPickerOpen);
+      setLabelsPickerOpen(!labelsPickerOpen);
     });
 
     taskTypesAddBtn.addEventListener('click', function (event) {
       event.preventDefault();
       event.stopPropagation();
       if (taskTypesAddBtn.disabled) return;
-      if (ensureInfoRowExpanded(taskTypesRow)) setTaskTypesPickerOpen(true);
-      else setTaskTypesPickerOpen(!taskTypesPickerOpen);
+      setTaskTypesPickerOpen(!taskTypesPickerOpen);
     });
 
     taskTypesCreateIconBtn.addEventListener('click', function (event) {
@@ -15096,10 +14716,6 @@
       event.preventDefault();
       event.stopPropagation();
       if (parentPickBtn.disabled || !getBoardCards) return;
-      if (ensureInfoRowExpanded(parentRow)) {
-        openParentPicker();
-        return;
-      }
       if (parentPickerOpen) setParentPickerOpen(false);
       else openParentPicker();
     });
@@ -15168,8 +14784,6 @@
     setAuthHint(authReason);
     syncTitleInputSize();
     setDescMode('rich', { focus: false });
-    refreshAllInfoRowSummaries();
-    if (objectifRow.setSummary) objectifRow.setSummary('', 'Aucun');
     collapse.refreshSummary();
     scheduleLabelSuggestions(false);
     scheduleTaskTypeSuggestions(false);
@@ -15221,7 +14835,6 @@
         descSpellcheckedText = value.trim() || null;
         if (descMode === 'rich') renderDescRich();
         else syncDescInputSize();
-        refreshDescSummary();
         scheduleLabelSuggestions(false);
         scheduleTaskTypeSuggestions(false);
       },
@@ -15375,29 +14988,10 @@
         objectifRow.row.hidden = !visible;
         onLayoutChange();
       },
-      setObjectifSummary: function (text) {
-        refreshObjectifSummary(text);
-      },
-      setInfoRowExpanded: function (key, on, opts) {
-        var rows = {
-          desc: descRow,
-          creator: creatorRow,
-          members: membersRow,
-          labels: labelsRow,
-          'task-types': taskTypesRow,
-          parent: parentRow,
-          objectif: objectifRow
-        };
-        var target = rows[key];
-        if (target && typeof target.setExpanded === 'function') {
-          target.setExpanded(!!on, opts || {});
-        }
-      },
       flushTitle: flushTitleSave,
       flushDesc: flushDescSave,
       refreshSummary: function () {
         collapse.refreshSummary();
-        refreshAllInfoRowSummaries();
       },
       setExpanded: function (on, opts) {
         return collapse.setExpanded(on, opts);

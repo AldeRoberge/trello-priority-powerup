@@ -343,6 +343,15 @@
   padding: 10px 12px 12px;
 }
 
+/* Collapsible shell wraps the body — must fill remaining height under the header */
+.tp-page--priority.is-split-assistant .cerveau-assistant .field--chat > .section-toggle-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .tp-page--priority.is-split-assistant .cerveau-assistant .agent-chat-body {
   flex: 1 1 auto;
   display: flex;
@@ -350,6 +359,13 @@
   min-height: 0;
   margin-top: 8px;
   overflow: hidden;
+}
+
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-settings {
+  flex: 0 1 auto;
+  max-height: 42%;
+  overflow: auto;
+  min-height: 0;
 }
 
 .tp-page--priority.is-split-assistant .cerveau-assistant .agent-chat-panel {
@@ -366,6 +382,37 @@
   max-height: none;
   overflow-x: hidden;
   overflow-y: auto;
+  order: 1;
+}
+
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-empty {
+  order: 0;
+  flex-shrink: 0;
+}
+
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-followups,
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-prompts,
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-apply-suggestions,
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-chat-info,
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-error {
+  order: 2;
+  flex-shrink: 0;
+}
+
+/* Composer + suggestions stay under the scrollable transcript */
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-suggestions {
+  order: 90;
+  flex-shrink: 0;
+}
+
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-composer {
+  order: 91;
+  flex-shrink: 0;
+}
+
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-interview-bar {
+  order: 92;
+  flex-shrink: 0;
 }
 
 .tp-page--priority.is-split-assistant .cerveau-assistant .agent-chat-panel > :not(.agent-messages) {

@@ -52,10 +52,10 @@
         <span class="tp-profile-field-label">Nom</span>
         <input type="text" class="tp-input" id="profileAgentName" maxlength="40" placeholder="ex. Clementine" autocomplete="off" />
       </label>
-      <label class="tp-profile-field">
+      <div class="tp-profile-field">
         <span class="tp-profile-field-label">Couleur</span>
-        <select id="profileAgentColor" class="tp-select" aria-label="Couleur de l’assistant"></select>
-      </label>
+        <div id="profileAgentColor" class="tp-agent-color-picker" aria-label="Couleur de l’assistant"></div>
+      </div>
       <label class="tp-profile-field">
         <span class="tp-profile-field-label">Personnalité</span>
         <textarea class="tp-input tp-textarea" id="profileAgentPersonality" maxlength="400" rows="3" placeholder="ex. Pote attentionné, peu fan de productivité, préfère parler du ressenti…"></textarea>
@@ -112,11 +112,43 @@
       var currentDialect = 'qc';
       var statusEl = document.getElementById('profileStatus');
       var saveTimer = null;
+      var agentColorPicker = null;
 
       function resize() {
         if (typeof t.sizeTo === 'function') {
           t.sizeTo(document.body);
         }
+      }
+
+      function getAgentColorValue() {
+        if (agentColorPicker && typeof agentColorPicker.getValue === 'function') {
+          return agentColorPicker.getValue();
+        }
+        return 'orange';
+      }
+
+      function onAgentColorPicked(nextColor) {
+        var nameEl = document.getElementById('profileAgentName');
+        if (
+          !nameEl.value.trim() ||
+          (Profile.isStockAgentName && Profile.isStockAgentName(nameEl.value))
+        ) {
+          nameEl.value = Profile.pickAgentNameForColor(nextColor);
+        }
+        scheduleSave();
+      }
+
+      function ensureAgentColorPicker(selected) {
+        var host = document.getElementById('profileAgentColor');
+        if (!host) return;
+        if (agentColorPicker && typeof agentColorPicker.setValue === 'function') {
+          agentColorPicker.setValue(selected || 'orange');
+          return;
+        }
+        agentColorPicker = Profile.mountAgentColorPicker(host, {
+          value: selected || 'orange',
+          onChange: onAgentColorPicked
+        });
       }
 
       function setStatus(text, isError) {
@@ -178,7 +210,7 @@
           agentStatus: document.getElementById('profileAgentStatus').value,
           agentName: document.getElementById('profileAgentName').value,
           agentPersonality: document.getElementById('profileAgentPersonality').value,
-          agentColor: document.getElementById('profileAgentColor').value,
+          agentColor: getAgentColorValue(),
           features: features,
           // Experimental toggles live in Settings; keep last known values here.
           experimental: currentExperimental
@@ -195,12 +227,7 @@
         document.getElementById('profileNotes').value = p.notes;
         document.getElementById('profileAgentName').value = p.agentName;
         document.getElementById('profileAgentPersonality').value = p.agentPersonality;
-        fillSelect(
-          document.getElementById('profileAgentColor'),
-          Profile.AGENT_COLOR_KEYS,
-          Profile.AGENT_COLOR_LABELS,
-          p.agentColor
-        );
+        ensureAgentColorPicker(p.agentColor);
         fillSelect(
           document.getElementById('profileTone'),
           Profile.TONE_KEYS,
@@ -284,20 +311,8 @@
         }
       });
 
-      document.getElementById('profileAgentColor').addEventListener('change', function () {
-        var nameEl = document.getElementById('profileAgentName');
-        var nextColor = document.getElementById('profileAgentColor').value;
-        if (
-          !nameEl.value.trim() ||
-          (Profile.isStockAgentName && Profile.isStockAgentName(nameEl.value))
-        ) {
-          nameEl.value = Profile.pickAgentNameForColor(nextColor);
-        }
-        scheduleSave();
-      });
-
       document.getElementById('profileAgentReroll').addEventListener('click', function () {
-        var color = document.getElementById('profileAgentColor').value;
+        var color = getAgentColorValue();
         document.getElementById('profileAgentName').value =
           Profile.pickAgentNameForColor(color);
         scheduleSave();

@@ -5019,10 +5019,6 @@ html[data-color-mode='dark'] .tp-completion-suggestion.is-link:hover {
   pointer-events: none;
 }
 
-.tp-agent-color-custom.is-selected .tp-agent-color-custom-face {
-  /* Selected custom uses the actual picked color (set inline). */
-}
-
 .tp-agent-color-custom-input {
   position: absolute;
   inset: 0;

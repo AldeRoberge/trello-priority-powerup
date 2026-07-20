@@ -300,6 +300,24 @@
     if (c === 'turquoise' || c === 'cyan') return 'teal';
     if (c === 'corail') return 'coral';
     if (c === 'ciel') return 'sky';
+    var hex = String(raw || '')
+      .trim()
+      .toLowerCase();
+    if (hex.charAt(0) !== '#' && /^[0-9a-f]{3}([0-9a-f]{3})?$/.test(hex)) {
+      hex = '#' + hex;
+    }
+    if (/^#[0-9a-f]{6}$/.test(hex)) return hex;
+    if (/^#[0-9a-f]{3}$/.test(hex)) {
+      return (
+        '#' +
+        hex.charAt(1) +
+        hex.charAt(1) +
+        hex.charAt(2) +
+        hex.charAt(2) +
+        hex.charAt(3) +
+        hex.charAt(3)
+      );
+    }
     return '';
   }
 
@@ -3460,7 +3478,7 @@
         '", text?: string, sound?: effectId } (effet visuel + son\u00a0; text = texte PLEIN \u00c9CRAN optionnel\u00a0; sound = stinger alternatif\u00a0; n\'alt\u00e8re pas la carte)',
       '- point_at: { section?: "priority"|"due"|"blocked"|"progress"|"statut"|"objectif"|"info", field?: "urgency"|"impact"|"ease", level?: 0-4|string } (ouvre la section, scrolle, tourne le corps vers la cible, gant blanc qui pointe, clignote\u00a0; n\'alt\u00e8re pas la carte\u00a0; section OU field requis)',
       '- set_agent_name: { name: string } (nouveau nom de l\'assistant\u00a0; name obligatoire, non vide, max ~40 car.\u00a0; persiste pour le membre)',
-      '- set_agent_color: { color: string } (couleur d\'identit\u00e9\u00a0: orange|yellow|green|purple|blue|pink|red|teal|coral|sky ou alias FR\u00a0; persiste pour le membre)',
+      '- set_agent_color: { color: string } (couleur d\'identit\u00e9\u00a0: orange|yellow|green|purple|blue|pink|red|teal|coral|sky, alias FR, ou hex #RRGGBB\u00a0; persiste pour le membre)',
       '- set_agent_personality: { personality: string } (trait de personnalit\u00e9 / character\u00a0; obligatoire, non vide, max ~400 car.\u00a0; persiste pour le membre)',
       'Identit\u00e9 de l\'assistant (nom / couleur / personnalit\u00e9)\u00a0:',
       '- Tu PEUX changer ton nom, ta couleur d\'identit\u00e9 et ta personnalit\u00e9. INTERDIT de dire que tu ne peux pas / que tu gardes ton ancienne identit\u00e9.',
@@ -6895,7 +6913,7 @@
       '- set_subtask_progress: { id?|matchText?, progress: 0-100 }',
       '- set_subtask_estimate / set_progress_estimate: dur\u00e9es Progr\u00e8s',
       '- trigger_effect: { effect } (confetti / flowers quand progress=100 \u2014 f\u00e9licitations)',
-      '- set_agent_color: { color } (apart\u00e9 couleur\u00a0: orange|yellow|green|purple|blue|pink|red|teal|coral|sky\u00a0; dor\u00e9/gold \u2192 yellow)',
+      '- set_agent_color: { color } (apart\u00e9 couleur\u00a0: orange|yellow|green|purple|blue|pink|red|teal|coral|sky ou #RRGGBB\u00a0; dor\u00e9/gold \u2192 yellow)',
       '- set_agent_name: { name } (apart\u00e9 nom)',
       '- set_agent_personality: { personality } (apart\u00e9 perso)',
       '- prompts optionnels: [{ "type":"priority_axes", "urgency":n, "impact":n, "ease":n }] (apr\u00e8s inf\u00e9rence)',
@@ -7527,7 +7545,7 @@
       return 'set_agent_name: name requis';
     }
     if (action.tool === 'set_agent_color') {
-      return 'set_agent_color: color requis (orange|yellow|green|purple|blue|pink|red|teal|coral|sky)';
+      return 'set_agent_color: color requis (orange|yellow|…|sky ou #RRGGBB)';
     }
     if (action.tool === 'set_agent_personality') {
       return 'set_agent_personality: personality requis';
@@ -8527,6 +8545,21 @@
     if (raw === 'rouge') return 'red';
     if (raw === 'turquoise' || raw === 'cyan' || raw === 'mint') return 'teal';
     if (raw === 'ciel') return 'sky';
+    if (raw.charAt(0) !== '#' && /^[0-9a-f]{3}([0-9a-f]{3})?$/.test(raw)) {
+      raw = '#' + raw;
+    }
+    if (/^#[0-9a-f]{6}$/.test(raw)) return raw;
+    if (/^#[0-9a-f]{3}$/.test(raw)) {
+      return (
+        '#' +
+        raw.charAt(1) +
+        raw.charAt(1) +
+        raw.charAt(2) +
+        raw.charAt(2) +
+        raw.charAt(3) +
+        raw.charAt(3)
+      );
+    }
     return null;
   }
 
@@ -14749,7 +14782,7 @@
             ok: false,
             tool: tool,
             error:
-              'Couleur invalide (orange|yellow|green|purple|blue|pink|red|teal|coral|sky)'
+              'Couleur invalide (orange|yellow|\u2026|sky ou #RRGGBB)'
           };
         }
         var beforeAgentColor = '';
@@ -14770,7 +14803,7 @@
             'Changement de couleur \u00e9chou\u00e9';
           if (recolorReason === 'empty-color' || recolorReason === 'invalid-color') {
             recolorReason =
-              'Couleur invalide (orange|yellow|green|purple|blue|pink|red|teal|coral|sky)';
+              'Couleur invalide (orange|yellow|\u2026|sky ou #RRGGBB)';
           }
           return { ok: false, tool: tool, error: recolorReason };
         }
