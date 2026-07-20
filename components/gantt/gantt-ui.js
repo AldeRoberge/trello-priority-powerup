@@ -875,6 +875,19 @@
       return base + (base.indexOf('?') >= 0 ? '&' : '?') + parts.join('&');
     }
 
+    /** Signed iframe URL for nested popup — required so TrelloPowerUp.iframe() gets a secret. */
+    function signedPopupUrl(pageUrl, args) {
+      if (t && typeof t.signUrl === 'function') {
+        try {
+          // Prefer relative path: signUrl assumes no existing hash (pageUrl is absolute).
+          return t.signUrl('./popup.html', args || {});
+        } catch (signErr) {
+          console.error('Gantt signUrl(popup) failed', signErr);
+        }
+      }
+      return popupUrlWithArgs(pageUrl, args);
+    }
+
     function openCard(cardId, cardName) {
       if (!cardId || !t) return;
       var appName =
@@ -930,7 +943,8 @@
       var frame = document.createElement('iframe');
       frame.className = 'gantt-card-overlay-frame';
       frame.title = appName;
-      frame.src = popupUrlWithArgs(pageUrl, args);
+      // Must sign: custom iframes are not auto-signed like t.modal / t.popup.
+      frame.src = signedPopupUrl(pageUrl, args);
 
       panel.appendChild(header);
       panel.appendChild(frame);
