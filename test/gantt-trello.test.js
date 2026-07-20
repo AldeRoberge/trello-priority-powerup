@@ -318,6 +318,7 @@ describe('GanttTrello dates', () => {
       {
         startDate: '2026-07-01',
         dueDate: '2026-07-10',
+        startTime: '',
         dueTime: '',
       }
     );

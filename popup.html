@@ -32,7 +32,7 @@
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
     }
   </script>
-  <script src="./components/priority/priority-trello.js?v=gantt-card-overlay-1"></script>
+  <script src="./components/priority/priority-trello.js?v=gantt-sizeTo-1"></script>
   <script src="./components/statut/statut-match.js?v=attente-hourglass-1"></script>
   <script src="./components/statut/statut-trello.js?v=encours-progress-1"></script>
   <script src="./components/shared/tab-autocomplete.js?v=tab-complete-1"></script>
@@ -1585,8 +1585,21 @@
     }
 
     function resizePopup() {
+      if (
+        window.PriorityTrello &&
+        typeof PriorityTrello.sizeToContent === 'function'
+      ) {
+        PriorityTrello.sizeToContent(t);
+        return;
+      }
       if (typeof t.sizeTo === 'function') {
-        t.sizeTo(document.body);
+        try {
+          var ctx = typeof t.getContext === 'function' ? t.getContext() : null;
+          if (ctx && ctx.fullscreen) return;
+          t.sizeTo(document.body);
+        } catch (e) {
+          /* ignore */
+        }
       }
     }
 

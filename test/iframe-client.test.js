@@ -65,4 +65,32 @@ describe('iframe client options', () => {
     assert.equal(attrs['data-color-mode'], 'light');
     assert.equal(t.getContext().theme, 'dark');
   });
+
+  it('sizeToContent skips fullscreen modals', () => {
+    let sizeCalls = 0;
+    const tFs = {
+      getContext() {
+        return { fullscreen: true };
+      },
+      sizeTo() {
+        sizeCalls += 1;
+      },
+    };
+    PT.sizeToContent(tFs);
+    assert.equal(sizeCalls, 0);
+
+    const tNormal = {
+      getContext() {
+        return { fullscreen: false };
+      },
+      sizeTo() {
+        sizeCalls += 1;
+        return Promise.resolve();
+      },
+    };
+    PT.sizeToContent(tNormal);
+    assert.equal(sizeCalls, 1);
+    assert.equal(PT.isFullscreenModal(tFs), true);
+    assert.equal(PT.isFullscreenModal(tNormal), false);
+  });
 });

@@ -2292,12 +2292,9 @@
     function render() {
       renderToolbar();
       renderChart();
-      if (typeof t.sizeTo === 'function') {
-        try {
-          t.sizeTo(document.body);
-        } catch (e) {
-          /* ignore */
-        }
+      // Fullscreen board modal: t.sizeTo warns and is a no-op.
+      if (global.PriorityTrello && typeof global.PriorityTrello.sizeToContent === 'function') {
+        global.PriorityTrello.sizeToContent(t);
       }
     }
 

@@ -2592,6 +2592,43 @@
     }
   }
 
+  /** True when this iframe is hosted in a Trello fullscreen modal (sizeTo is a no-op / warns). */
+  function isFullscreenModal(t) {
+    if (!t || typeof t.getContext !== 'function') return false;
+    try {
+      var ctx = t.getContext();
+      if (!ctx) return false;
+      if (ctx.fullscreen === true) return true;
+      if (ctx.modal && ctx.modal.fullscreen === true) return true;
+    } catch (err) {
+      /* context optional during early init */
+    }
+    return false;
+  }
+
+  /**
+   * Resize the host popup/modal to content. Skips fullscreen modals (e.g. Gantt)
+   * where Trello warns: "Fullscreen modals cannot be resized with t.sizeTo".
+   */
+  function sizeToContent(t, el) {
+    if (!t || typeof t.sizeTo !== 'function') return;
+    if (isFullscreenModal(t)) return;
+    try {
+      var target =
+        el ||
+        (typeof document !== 'undefined' ? document.body : null);
+      if (!target) return;
+      var result = t.sizeTo(target);
+      if (result && typeof result.then === 'function') {
+        result.then(null, function () {
+          /* ignore rejected sizeTo (unsupported host) */
+        });
+      }
+    } catch (err) {
+      /* ignore */
+    }
+  }
+
   function syncIframeTheme(t) {
     if (!t) return t;
     try {
@@ -3697,6 +3734,8 @@
     resolveCurrentCardId: resolveCurrentCardId,
     readPowerUpArg: readPowerUpArg,
     pageUrl: pageUrl,
+    isFullscreenModal: isFullscreenModal,
+    sizeToContent: sizeToContent,
     createIframeClient: createIframeClient,
     createIframeClientDeferred: createIframeClientDeferred,
     initIframePage: initIframePage,
