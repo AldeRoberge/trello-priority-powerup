@@ -9,167 +9,90 @@
   <script src="./components/shared/brand.js"></script>
   <script src="./components/priority/priority-trello.js"></script>
   <style>
-    .pa-guide {
-      max-width: 40rem;
-      margin: 0 auto;
-      padding: 1rem 1.25rem 2rem;
-      line-height: 1.45;
-    }
-    .pa-guide h1 {
-      font-size: 1.35rem;
-      margin: 0 0 0.5rem;
-    }
-    .pa-guide h2 {
-      font-size: 1.05rem;
-      margin: 1.4rem 0 0.5rem;
-    }
-    .pa-guide ol {
-      padding-left: 1.25rem;
-      margin: 0.4rem 0 0.8rem;
-    }
-    .pa-guide li {
-      margin: 0.4rem 0;
-    }
-    .pa-guide .tp-muted {
-      color: var(--ds-text-subtle, #626f86);
-      font-size: 0.92rem;
-    }
-    .pa-guide code {
-      font-size: 0.88em;
-      padding: 0.1em 0.35em;
+    .pa-guide { max-width: 40rem; margin: 0 auto; padding: 1rem 1.25rem 2rem; line-height: 1.45; }
+    .pa-guide h1 { font-size: 1.35rem; margin: 0 0 0.5rem; }
+    .pa-guide h2 { font-size: 1.05rem; margin: 1.35rem 0 0.45rem; }
+    .pa-guide ol { padding-left: 1.25rem; }
+    .pa-guide li { margin: 0.35rem 0; }
+    .pa-guide .tp-muted { color: var(--ds-text-subtle, #626f86); font-size: 0.92rem; }
+    .pa-guide code, .pa-guide pre {
+      font-size: 0.8rem; background: var(--ds-background-neutral, #091e420f);
       border-radius: 3px;
-      background: var(--ds-background-neutral, #091e420f);
-      word-break: break-word;
     }
-    .pa-guide pre {
-      font-size: 0.8rem;
-      padding: 0.65rem 0.75rem;
-      overflow-x: auto;
-      border-radius: 3px;
-      background: var(--ds-background-neutral, #091e420f);
-      white-space: pre-wrap;
+    .pa-guide code { padding: 0.1em 0.35em; }
+    .pa-guide pre { padding: 0.65rem 0.75rem; overflow-x: auto; white-space: pre-wrap; }
+    .pa-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
+    .pa-actions a, .pa-actions button {
+      display: inline-block; padding: 0.45rem 0.75rem; border-radius: 3px; border: none;
+      background: var(--ds-background-brand-bold, #0c66e4); color: #fff; font: inherit; font-weight: 600;
+      text-decoration: none; cursor: pointer;
     }
-    .pa-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin: 1rem 0 1.25rem;
-    }
-    .pa-actions a,
-    .pa-actions button {
-      display: inline-block;
-      padding: 0.45rem 0.75rem;
-      border-radius: 3px;
-      border: none;
-      background: var(--ds-background-brand-bold, #0c66e4);
-      color: #fff;
-      font: inherit;
-      font-weight: 600;
-      text-decoration: none;
-      cursor: pointer;
-    }
-    .pa-actions a.secondary,
-    .pa-actions button.secondary {
-      background: var(--ds-background-neutral, #091e420f);
-      color: var(--ds-text, #172b4d);
+    .pa-actions a.secondary, .pa-actions button.secondary {
+      background: var(--ds-background-neutral, #091e420f); color: var(--ds-text, #172b4d);
     }
     .pa-callout {
       border-left: 3px solid var(--ds-border-brand, #0c66e4);
-      padding: 0.55rem 0.75rem;
-      margin: 0.75rem 0;
-      background: var(--ds-background-neutral, #091e420f);
-      border-radius: 0 3px 3px 0;
-    }
-    .pa-callout strong {
-      display: block;
-      margin-bottom: 0.25rem;
+      padding: 0.55rem 0.75rem; margin: 0.75rem 0;
+      background: var(--ds-background-neutral, #091e420f); border-radius: 0 3px 3px 0;
     }
   </style>
 </head>
 <body class="tp-page">
-  <div class="pa-guide" id="guide">
+  <div class="pa-guide">
     <h1>Power Automate → Outlook</h1>
-    <p class="tp-muted">
-      Sans Entra, sans Trello Pro, sans serveur.
-    </p>
+    <p class="tp-muted">Guide aligné sur l’UI française. Pas de déclencheur « carte mise à jour ».</p>
 
     <div class="pa-callout">
-      <strong>Qui fait quoi</strong>
-      <strong>Power Automate</strong> crée l’événement Outlook et
-      <strong>écrit</strong> <code>[outlook-event-id]: …</code> dans la description Trello.<br />
-      <strong>Cerveau</strong> ne fait que <strong>masquer</strong> cette ligne dans le popup
-      (bouton <em>Afficher les métadonnées masquées</em>).
-      Sans étape « Update a card » dans le flux, vous ne verrez jamais de métadonnées.
+      Déclencheur Trello dispo :
+      <strong>Lorsqu'une nouvelle carte est ajoutée à un tableau</strong>.
+      Pour les edits plus tard → 2ᵉ flux <strong>planifié</strong>.
     </div>
 
     <div class="pa-actions">
-      <a
-        href="https://make.powerautomate.com/"
-        target="_blank"
-        rel="noopener"
-        >Ouvrir Power Automate</a
-      >
-      <a
-        class="secondary"
-        href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/outlook-power-automate.md"
-        target="_blank"
-        rel="noopener"
-        >Guide GitHub</a
-      >
+      <a href="https://make.powerautomate.com/" target="_blank" rel="noopener">Ouvrir Power Automate</a>
+      <a class="secondary" href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/outlook-power-automate.md" target="_blank" rel="noopener">Guide complet</a>
       <button type="button" class="secondary" id="closeBtn">Fermer</button>
     </div>
 
-    <h2>Flux (résumé)</h2>
+    <h2>Flux A — nouvelle carte</h2>
     <ol>
-      <li>
-        Déclencheur Trello : <em>When a card is updated</em> → échéance non vide.
-      </li>
-      <li>
-        Si la description <strong>ne contient pas</strong>
-        <code>outlook-event-id</code> →
-        <strong>Create event</strong>, puis
-        <strong>Update a card</strong> (description) en ajoutant&nbsp;:
-      </li>
+      <li>Déclencheur : <em>Lorsqu'une nouvelle carte est ajoutée à un tableau</em>.</li>
+      <li>Condition : échéance non vide.</li>
+      <li><strong>Créer un événement (V4)</strong> — calendrier choisi ; début/fin en <code>yyyy-MM-dd</code> :</li>
+    </ol>
+    <pre>formatDateTime(triggerOutputs()?['body/due'], 'yyyy-MM-dd')
+formatDateTime(addDays(triggerOutputs()?['body/due'], 1), 'yyyy-MM-dd')</pre>
+    <ol start="4">
+      <li>Variable <code>EventId</code> = Id (contenu dynamique) de Créer un événement.</li>
+      <li><strong>Mettre à jour une carte</strong> — description :</li>
     </ol>
     <pre>concat(
-  triggerBody()?['desc'],
+  coalesce(triggerOutputs()?['body/desc'], ''),
   '
 
 [outlook-event-id]: ',
-  body('Create_event')?['id']
+  variables('EventId')
 )</pre>
-    <ol start="3">
-      <li>
-        Sinon → lire l’id dans la description →
-        <strong>Update event</strong>.
-      </li>
-      <li>
-        Activer le flux → tester une carte avec échéance → rouvrir Cerveau →
-        <em>Afficher les métadonnées masquées</em>.
-      </li>
-    </ol>
+
+    <h2>Flux B — récurrence</h2>
+    <p class="tp-muted">
+      Toutes les heures : lister les cartes, créer si pas d’id, sinon mettre à jour l’événement.
+      Nécessaire car Trello n’envoie pas « carte modifiée » à Automate.
+    </p>
 
     <p class="tp-muted">
-      « Exporter .ics » et « Connecter Outlook » (Graph) sont d’autres chemins.
-      Pour Automate, seule l’écriture dans la description par le flux compte.
+      Cerveau ne crée pas l’événement : il masque seulement
+      <code>[outlook-event-id]</code> dans le popup.
     </p>
   </div>
   <script>
     PriorityTrello.initIframePage(function (t) {
-      var closeBtn = document.getElementById('closeBtn');
-      if (closeBtn) {
-        closeBtn.addEventListener('click', function () {
-          if (t && typeof t.closeModal === 'function') t.closeModal();
-          else if (t && typeof t.closePopup === 'function') t.closePopup();
-        });
-      }
-      if (typeof t.sizeTo === 'function') {
-        try {
-          t.sizeTo(document.body);
-        } catch (e) {
-          /* ignore */
-        }
-      }
+      var b = document.getElementById('closeBtn');
+      if (b) b.addEventListener('click', function () {
+        if (t && t.closeModal) t.closeModal();
+        else if (t && t.closePopup) t.closePopup();
+      });
+      if (t && t.sizeTo) try { t.sizeTo(document.body); } catch (e) {}
     });
   </script>
 </body>
