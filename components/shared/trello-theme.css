@@ -1413,7 +1413,7 @@ body.tp-page--priority {
 .tp-page--priority {
   box-sizing: border-box;
   width: 100%;
-  max-width: 1170px; /* ~1/3 wider than prior 880px */
+  max-width: 880px;
   min-height: auto;
   margin: 0 auto;
   padding: 0;

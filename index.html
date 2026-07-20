@@ -157,8 +157,7 @@
     }
 
     async function openPriorityPopup(t, options) {
-      // Popup width is fixed (narrow) by Trello; fullscreen modal + content max-width
-      // (~1170px) gives a panel about 1/3 wider than the card-sized shell.
+      // Popup width is fixed (narrow) by Trello; modal gives a comfortable editor width.
       // Use pageUrl (absolute, unsigned) — t.modal signs once; t.signUrl() double-signs.
       // Pass card name via args so the iframe can show it immediately (reliable card context).
       // openSection expands that section inside popup.html (priority / progress / objectif).
@@ -191,7 +190,7 @@
         url: PriorityTrello.pageUrl('./popup.html'),
         args: args,
         height: 1100,
-        fullscreen: true,
+        fullscreen: false,
         accentColor: '#22272B',
       });
     }

@@ -979,7 +979,7 @@ html:has(body.tp-page--gantt) body {
   z-index: 1;
   display: flex;
   flex-direction: column;
-  width: min(1170px, 100%);
+  width: min(960px, 100%);
   max-width: 100%;
   height: 100%;
   background: var(--tp-surface, #fff);
