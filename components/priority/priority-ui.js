@@ -14138,6 +14138,14 @@
       getCustomAssignees: function () {
         return normalizeCustomAssignees(customAssignees);
       },
+      setCustomAssigneeCatalog: function (list) {
+        setCustomAssigneeCatalog(list);
+        if (membersPickerOpen) renderMembersPicker();
+        onLayoutChange();
+      },
+      getCustomAssigneeCatalog: function () {
+        return getCustomAssigneeCatalog();
+      },
       setMemberRoles: function (map) {
         memberRoles = normalizeMemberRoles(map);
         renderMembers();
@@ -15703,6 +15711,8 @@
       currentMode === DUE_DATE_MODE_VAGUE && hasDueDateInitially
         ? initialVague
         : '';
+    // Keep last Vague chip across Précis ↔ Vague toggles (like rememberedTime).
+    var rememberedVague = currentVague || initialVague || '';
     var currentStart =
       initialValue && typeof initialValue === 'object'
         ? normalizeDueDate(initialValue.startDate)
@@ -16872,12 +16882,17 @@
         currentTime = '';
         currentStart = '';
         currentRecurrence = null;
-        if (!currentVague) {
-          current = '';
-        } else if (!current) {
+        if (!currentVague && rememberedVague) {
+          currentVague = rememberedVague;
+        }
+        if (currentVague) {
           current = resolveDueVagueToDate(currentVague);
+          if (current) syncViewFromValue(current);
+        } else {
+          current = '';
         }
       } else {
+        if (currentVague) rememberedVague = currentVague;
         currentVague = '';
       }
       refreshModeUi();
@@ -16895,10 +16910,12 @@
       if (!nextId) return;
       if (currentVague === nextId) {
         currentVague = '';
+        rememberedVague = '';
         current = '';
         currentTime = '';
       } else {
         currentVague = nextId;
+        rememberedVague = nextId;
         current = resolveDueVagueToDate(nextId);
         currentTime = '';
         currentStart = '';
@@ -16917,6 +16934,7 @@
       var next = normalizeDueDate(resolved.iso);
       if (!next) return;
       current = next;
+      if (currentVague) rememberedVague = currentVague;
       currentVague = '';
       currentTime = normalizeDueTime(resolved.time) || '';
       if (currentTime) rememberedTime = currentTime;
@@ -17305,23 +17323,33 @@
           current = '';
           currentTime = '';
           currentVague = '';
+          rememberedVague = '';
         }
         if (value.dueVague !== undefined) {
-          currentVague = normalizeDueVague(value.dueVague);
+          var nextVague = normalizeDueVague(value.dueVague);
+          if (nextVague) {
+            currentVague = nextVague;
+            rememberedVague = nextVague;
+          } else {
+            // Empty dueVague while precise must not wipe session memory.
+            currentVague = '';
+          }
         }
         if (value.dueMode !== undefined) {
           currentMode = normalizeDueMode(value.dueMode);
         } else if (currentVague) {
           currentMode = DUE_DATE_MODE_VAGUE;
         }
-        if (currentMode === DUE_DATE_MODE_VAGUE && currentVague && !current) {
-          current = resolveDueVagueToDate(currentVague);
-        }
         if (currentMode === DUE_DATE_MODE_VAGUE) {
+          if (!currentVague && rememberedVague) currentVague = rememberedVague;
+          if (currentVague && !current) {
+            current = resolveDueVagueToDate(currentVague);
+          }
           currentTime = '';
           currentStart = '';
           currentRecurrence = null;
         } else {
+          if (currentVague) rememberedVague = currentVague;
           currentVague = '';
         }
         if (value.startDate !== undefined && currentMode === DUE_DATE_MODE_PRECISE) {
@@ -17333,6 +17361,7 @@
       } else {
         current = normalizeDueDate(value);
         if (!current) currentTime = '';
+        if (currentVague) rememberedVague = currentVague;
         currentVague = '';
         currentMode = DUE_DATE_MODE_PRECISE;
       }
@@ -17487,6 +17516,7 @@
       if (!next) return;
       if (currentMode !== DUE_DATE_MODE_PRECISE) {
         currentMode = DUE_DATE_MODE_PRECISE;
+        if (currentVague) rememberedVague = currentVague;
         currentVague = '';
         refreshModeUi();
       }
@@ -17832,6 +17862,7 @@
       current = '';
       currentTime = '';
       currentVague = '';
+      rememberedVague = '';
       emitChange();
       if (open) renderCalendar();
     });
