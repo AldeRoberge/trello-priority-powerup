@@ -5311,7 +5311,6 @@
         listEl.replaceChildren();
         doneListEl.replaceChildren();
         listSection.classList.toggle('is-empty', !data.items.length);
-        listSection.classList.toggle('has-tree', data.items.length > 0);
         updateToolsUi();
         syncSelectAllUi();
         renderBulkBar();

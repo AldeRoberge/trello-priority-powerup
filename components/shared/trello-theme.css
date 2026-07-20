@@ -3097,12 +3097,6 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble[data-tone='acti
   gap: 6px;
 }
 
-.tp-completion-list-section.has-tree .tp-completion-list,
-.tp-completion-list-section.has-tree .tp-completion-done-list {
-  --completion-tree-gutter: 14px;
-  --completion-tree-line: color-mix(in srgb, var(--tp-border-strong) 70%, var(--tp-text-muted));
-}
-
 .tp-completion-list-head {
   display: flex;
   align-items: baseline;
@@ -3272,10 +3266,6 @@ html[data-color-mode="dark"] .tp-completion-item.is-selected {
   position: relative;
 }
 
-.tp-completion-item--depth1 {
-  margin-left: var(--completion-tree-gutter, 14px);
-}
-
 .tp-completion-promote {
   flex: 0 0 auto;
   display: inline-flex;
@@ -3403,57 +3393,10 @@ html[data-color-mode="dark"] .tp-completion-item.is-selected {
   background: color-mix(in srgb, #000 8%, transparent);
 }
 
-.tp-completion-item--depth1::before {
-  content: '';
-  position: absolute;
-  left: calc(var(--completion-tree-gutter, 14px) * -1 + 5px);
-  top: -6px;
-  bottom: 50%;
-  width: 0;
-  border-left: 1.5px solid var(--completion-tree-line, var(--tp-border-strong));
-  pointer-events: none;
-}
-
-.tp-completion-item--depth1::after {
-  content: '';
-  position: absolute;
-  left: calc(var(--completion-tree-gutter, 14px) * -1 + 5px);
-  top: 50%;
-  width: calc(var(--completion-tree-gutter, 14px) - 7px);
-  border-top: 1.5px solid var(--completion-tree-line, var(--tp-border-strong));
-  pointer-events: none;
-}
-
-.tp-completion-list > .tp-completion-item--depth1:first-child::before,
-.tp-completion-done-list > .tp-completion-item--depth1:first-child::before {
-  top: 50%;
-}
-
 .tp-completion-item--nested {
-  margin-left: calc(var(--completion-tree-gutter, 14px) * 2 + 6px);
+  margin-left: 14px;
   padding: 8px 10px;
   background: color-mix(in srgb, #000 8%, var(--tp-surface-subtle));
-}
-
-.tp-completion-item--nested::before {
-  content: '';
-  position: absolute;
-  left: calc(var(--completion-tree-gutter, 14px) * -1 + 5px);
-  top: -6px;
-  bottom: 50%;
-  width: 0;
-  border-left: 1.5px solid var(--completion-tree-line, var(--tp-border-strong));
-  pointer-events: none;
-}
-
-.tp-completion-item--nested::after {
-  content: '';
-  position: absolute;
-  left: calc(var(--completion-tree-gutter, 14px) * -1 + 5px);
-  top: 50%;
-  width: calc(var(--completion-tree-gutter, 14px) - 7px);
-  border-top: 1.5px solid var(--completion-tree-line, var(--tp-border-strong));
-  pointer-events: none;
 }
 
 .tp-completion-item.is-linked {
