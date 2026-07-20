@@ -173,6 +173,59 @@
       };
     }
 
+    /** Read-only agent bridge for status / progress summary (no mutators). */
+    function buildStatusBriefBridge() {
+      return {
+        getScope: function () {
+          return 'task';
+        },
+        getCardName: function () {
+          return readCardNameLabel() || cardNameCache || '';
+        },
+        getCardDesc: function () {
+          if (infoUi && typeof infoUi.getDesc === 'function') {
+            return infoUi.getDesc() || '';
+          }
+          return cardDesc || '';
+        },
+        getFormulaKey: function () {
+          if (variant && typeof variant.getFormulaKey === 'function') {
+            return variant.getFormulaKey();
+          }
+          return (
+            (PriorityTrello &&
+              typeof PriorityTrello.getCachedBoardFormulaKey === 'function' &&
+              PriorityTrello.getCachedBoardFormulaKey()) ||
+            'baseline'
+          );
+        },
+        getPriorityState: function () {
+          return variant && typeof variant.getState === 'function'
+            ? variant.getState()
+            : latestState || {};
+        },
+        getCompletion: function () {
+          if (completionUi && typeof completionUi.getData === 'function') {
+            return completionUi.getData();
+          }
+          return latestCompletion || { items: [] };
+        },
+        getStatut: function () {
+          return latestStatut;
+        },
+        getOwnership: getOwnershipSnapshot,
+        getProfile: function () {
+          return cachedProfile;
+        },
+        getMemory: function () {
+          return cachedMemory;
+        },
+        getCardMemory: function () {
+          return cachedCardMemory;
+        }
+      };
+    }
+
     function getProgressLinkedTreeByItemId() {
       if (
         completionUi &&

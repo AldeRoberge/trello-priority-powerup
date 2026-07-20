@@ -240,8 +240,10 @@
     if (!range) return null;
     var w = typeof widthPx === 'number' && widthPx > 0 ? widthPx : 1;
     var total = rangeDayCount(range);
-    var ratio = Math.max(0, Math.min(1, x / w));
-    var offset = Math.round(ratio * total);
+    var dayW = w / total;
+    // Floor so each day column [i*dayW, (i+1)*dayW) maps to day i (matches barGeometry / CSS grid).
+    var offset = Math.floor(Number(x) / dayW);
+    if (!isFinite(offset) || offset < 0) offset = 0;
     if (offset >= total) offset = total - 1;
     return addDays(range.start, offset);
   }
@@ -631,6 +633,36 @@
     });
   }
 
+  /** Depth-first search for a node id in a nest tree. */
+  function findNodeById(nodes, id) {
+    if (id == null || id === '') return null;
+    var want = String(id);
+    for (var i = 0; i < (nodes || []).length; i++) {
+      var n = nodes[i];
+      if (!n) continue;
+      if (String(n.id) === want) return n;
+      var found = findNodeById(n.children, want);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  /**
+   * Collect ids for a node and all nested descendants (for cascade select).
+   * @returns {string[]}
+   */
+  function collectSubtreeIds(node) {
+    var out = [];
+    function walk(n) {
+      if (!n || n.id == null || n.id === '') return;
+      out.push(String(n.id));
+      var kids = n.children || [];
+      for (var i = 0; i < kids.length; i++) walk(kids[i]);
+    }
+    walk(node);
+    return out;
+  }
+
   global.GanttModel = {
     VIEW_MODES: VIEW_MODES,
     MS_DAY: MS_DAY,
@@ -662,6 +694,8 @@
     buildNestTree: buildNestTree,
     flattenVisible: flattenVisible,
     filterRows: filterRows,
+    findNodeById: findNodeById,
+    collectSubtreeIds: collectSubtreeIds,
     compareRootsByPriority: compareRootsByPriority,
     sortTreeRoots: sortTreeRoots,
   };

@@ -261,17 +261,29 @@ check(
 check(
   'blocked incomplete badge',
   PT.formatBadgeText(blockedDisplay, false) ===
-    '\u2298 T\u00e2che urgente (En attente d\'une approbation)'
+    '\u2298 En attente d\'une approbation (T\u00e2che urgente)'
 );
 check(
   'critique blocked incomplete badge',
   PT.formatBadgeText(critiqueBlockedDisplay, false) ===
-    '\u2298 T\u00e2che critique (En attente d\'une r\u00e9ponse)'
+    '\u2298 En attente d\'une r\u00e9ponse (T\u00e2che critique)'
 );
 check(
   'blocked incomplete badge without reason',
   PT.formatBadgeText({ blocked: true, tierI: 1, tierLabel: 'Urgente' }, false) ===
-    '\u2298 T\u00e2che urgente (Bloqu\u00e9)'
+    '\u2298 T\u00e2che urgente'
+);
+check(
+  'blocked badge strips Bloqué à cause de prefix',
+  PT.formatBadgeText(
+    {
+      blocked: true,
+      tierI: 0,
+      tierLabel: 'Critique',
+      blockedReasons: ['Bloqu\u00e9 \u00e0 cause de unreproduced'],
+    },
+    false
+  ) === '\u2298 unreproduced (T\u00e2che critique)'
 );
 check(
   'blocked board badge has no icon',

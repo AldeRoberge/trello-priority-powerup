@@ -722,8 +722,8 @@
         : typeof d.blockedReason === 'string'
           ? d.blockedReason.trim()
           : '';
-    var suffix = trimmed || ((PU && PU.BLOCKED_LABEL) || 'Bloqu\u00e9');
-    return label + ' (' + suffix + ')';
+    if (!trimmed || trimmed === 'Bloqu\u00e9') return label;
+    return trimmed + ' (' + label + ')';
   }
 
   function formatProgressFaceSuffix(progress) {

@@ -742,9 +742,22 @@
     }
 
     function toggleSelected(rowId, on) {
-      if (on) state.selected[rowId] = true;
-      else delete state.selected[rowId];
+      var node =
+        typeof model.findNodeById === 'function'
+          ? model.findNodeById(state.tree, rowId)
+          : null;
+      var ids =
+        node && typeof model.collectSubtreeIds === 'function'
+          ? model.collectSubtreeIds(node)
+          : rowId
+            ? [String(rowId)]
+            : [];
+      for (var i = 0; i < ids.length; i++) {
+        if (on) state.selected[ids[i]] = true;
+        else delete state.selected[ids[i]];
+      }
       renderBulkBar();
+      renderChart();
     }
 
     function runBulk(op) {
@@ -1179,13 +1192,21 @@
 
     function dateAtTimelineX(timeRow, clientX) {
       var rect = timeRow.getBoundingClientRect();
+      // Use the laid-out row width when it differs slightly from state.timelineWidth
+      // (subpixel / scrollbars), so hover lines up with the day grid.
+      var width =
+        rect.width > 0 ? rect.width : state.timelineWidth || MIN_TIMELINE_W;
       var x = clientX - rect.left;
-      var d = model.xToDate(x, range(), state.timelineWidth);
+      var d = model.xToDate(x, range(), width);
       return model.snapDate(d, state.viewMode);
     }
 
     function placeGhost(ghostEl, interval) {
-      var geo = model.barGeometry(interval, range(), state.timelineWidth);
+      var geo = model.barGeometry(
+        interval,
+        range(),
+        state.timelineWidth
+      );
       if (!geo || !geo.visible) {
         ghostEl.hidden = true;
         return;
@@ -1490,8 +1511,6 @@
         });
         sel.addEventListener('change', function () {
           toggleSelected(row.id, !!sel.checked);
-          labelRow.classList.toggle('is-selected', !!sel.checked);
-          renderBulkBar();
         });
         labelCell.appendChild(sel);
 
@@ -1612,6 +1631,21 @@
       labelsCol.style.width = clampLabelsWidth(state.labelsWidth, chart) + 'px';
       state.labelsWidth = clampLabelsWidth(state.labelsWidth, chart);
       bindLabelsSplitter(splitter, labelsCol, chart, scroll);
+
+      // Keep task list and calendar rows aligned while scrolling.
+      var syncingScroll = false;
+      function syncScroll(from, to) {
+        if (syncingScroll) return;
+        syncingScroll = true;
+        to.scrollTop = from.scrollTop;
+        syncingScroll = false;
+      }
+      labelsCol.addEventListener('scroll', function () {
+        syncScroll(labelsCol, scroll);
+      });
+      scroll.addEventListener('scroll', function () {
+        syncScroll(scroll, labelsCol);
+      });
 
       // Measure available width once (or when viewport changed a lot).
       requestAnimationFrame(function () {

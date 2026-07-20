@@ -78,6 +78,17 @@ describe('GanttModel', () => {
     assert.equal(GanttModel.toIsoDate(back), '2026-07-23');
   });
 
+  it('xToDate maps each day column without half-day hover offset', () => {
+    const range = GanttModel.viewRange('week', '2026-07-22');
+    const width = 700;
+    const dayW = width / 7;
+    // Late in Thursday's column must stay Thursday (not round into Friday).
+    const lateThu = GanttModel.xToDate(3 * dayW + dayW * 0.85, range, width);
+    assert.equal(GanttModel.toIsoDate(lateThu), '2026-07-23');
+    const earlyFri = GanttModel.xToDate(4 * dayW + 1, range, width);
+    assert.equal(GanttModel.toIsoDate(earlyFri), '2026-07-24');
+  });
+
   it('snapDate year snaps to month start', () => {
     const snapped = GanttModel.snapDate('2026-07-18', 'year');
     assert.equal(GanttModel.toIsoDate(snapped), '2026-07-01');
@@ -323,6 +334,38 @@ describe('GanttModel', () => {
     const collapsed = GanttModel.flattenVisible(tree, { [tree[0].id]: false });
     assert.equal(collapsed.length, 1);
     assert.equal(collapsed[0].kind, 'card');
+  });
+
+  it('collectSubtreeIds includes master and nested subtasks', () => {
+    const tree = GanttModel.buildNestTree([
+      {
+        id: 'p',
+        name: 'Parent',
+        items: [
+          {
+            id: 'sub',
+            text: 'Sub',
+            progress: 0,
+            items: [{ id: 'c1', text: 'Check', progress: 0 }],
+          },
+          { id: 'lk', text: 'Child', linkedCardId: 'child', progress: 0 },
+        ],
+      },
+      {
+        id: 'child',
+        name: 'Child card',
+        items: [],
+      },
+    ]);
+    const parent = GanttModel.findNodeById(tree, 'card:p');
+    assert.ok(parent);
+    assert.deepEqual(GanttModel.collectSubtreeIds(parent).sort(), [
+      'card:child',
+      'card:p',
+      'check:c1',
+      'local:sub',
+    ]);
+    assert.equal(GanttModel.findNodeById(tree, 'missing'), null);
   });
 
   it('snapDate week keeps day; xToDate clamps to range', () => {

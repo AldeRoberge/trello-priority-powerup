@@ -3555,6 +3555,19 @@
     { id: 'dans-une-semaine', label: 'Dans une semaine', hint: '+7 j' },
     { id: 'dans-deux-semaines', label: 'Dans deux semaines', hint: '+14 j' }
   ];
+  /** Precise calendar day vs vague horizon (proxy dueDate still stored). */
+  var DUE_DATE_MODE_PRECISE = 'precise';
+  var DUE_DATE_MODE_VAGUE = 'vague';
+  var DUE_DATE_MODE_PRECISE_LABEL = 'Pr\u00e9cis';
+  var DUE_DATE_MODE_VAGUE_LABEL = 'Vague';
+  var DUE_DATE_VAGUE_OPTIONS_LABEL = 'Horizon approximatif';
+  /** Vague horizon chips — each maps to an approximate future calendar day. */
+  var DUE_DATE_VAGUE_OPTIONS = [
+    { id: 'bientot', label: 'Bient\u00f4t', days: 7 },
+    { id: 'proche', label: 'Dans un futur proche', days: 30 },
+    { id: 'lointain', label: 'Dans un futur lointain', days: 365 },
+    { id: 'eventuellement', label: '\u00c9ventuellement', days: 1095 }
+  ];
   /** Shared workplace times for quick-date presets (match period chips). */
   var DUE_DATE_QUICK_MORNING_TIME = '09:00';
   var DUE_DATE_QUICK_AFTERNOON_TIME = '14:00';
@@ -3698,6 +3711,64 @@
       return null;
     }
     return { iso: toIsoDate(date), time: time };
+  }
+
+  function normalizeDueMode(value) {
+    return value === DUE_DATE_MODE_VAGUE
+      ? DUE_DATE_MODE_VAGUE
+      : DUE_DATE_MODE_PRECISE;
+  }
+
+  function normalizeDueVague(value) {
+    if (typeof value !== 'string') return '';
+    var id = value.trim();
+    if (!id) return '';
+    for (var i = 0; i < DUE_DATE_VAGUE_OPTIONS.length; i++) {
+      if (DUE_DATE_VAGUE_OPTIONS[i].id === id) return id;
+    }
+    return '';
+  }
+
+  function dueVagueOption(id) {
+    var normalized = normalizeDueVague(id);
+    if (!normalized) return null;
+    for (var i = 0; i < DUE_DATE_VAGUE_OPTIONS.length; i++) {
+      if (DUE_DATE_VAGUE_OPTIONS[i].id === normalized) {
+        return DUE_DATE_VAGUE_OPTIONS[i];
+      }
+    }
+    return null;
+  }
+
+  /** Approximate YYYY-MM-DD for a vague horizon chip (local calendar). */
+  function resolveDueVagueToDate(id, now) {
+    var opt = dueVagueOption(id);
+    if (!opt) return '';
+    var at = now || new Date();
+    var today = startOfLocalDay(at);
+    var date = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate() + opt.days
+    );
+    return toIsoDate(date) || '';
+  }
+
+  function formatDueVagueLabel(id) {
+    var opt = dueVagueOption(id);
+    return opt ? opt.label : '';
+  }
+
+  /** Badge / countdown text for vague mode (tilde prefix). */
+  function formatDueVagueCountdown(id) {
+    var label = formatDueVagueLabel(id);
+    return label ? '~ ' + label : '';
+  }
+
+  function isDueVagueMode(inputs) {
+    if (!inputs) return false;
+    if (normalizeDueMode(inputs.dueMode) === DUE_DATE_MODE_VAGUE) return true;
+    return !!normalizeDueVague(inputs.dueVague);
   }
 
   function startOfLocalDay(date) {
@@ -4453,15 +4524,27 @@
     if (!display) return display;
     // Disabled checkbox keeps dueDate stored but skips badge/overdue effects.
     if (inputs && inputs.dueEnabled === false) return display;
+    var dueVagueId = normalizeDueVague(inputs && inputs.dueVague);
+    var vagueMode = isDueVagueMode(inputs) && !!dueVagueId;
     var dueDate = normalizeDueDate(inputs && inputs.dueDate);
+    if (!dueDate && !vagueMode) return display;
+    if (vagueMode && !dueDate) {
+      dueDate = resolveDueVagueToDate(dueVagueId);
+    }
     if (!dueDate) return display;
-    var dueTime = normalizeDueTime(inputs && inputs.dueTime);
+    var dueTime = vagueMode ? '' : normalizeDueTime(inputs && inputs.dueTime);
     var next = {
       dueDate: dueDate,
-      dueCountdown: formatDueCountdown(dueDate, null, dueTime),
-      duePast: isDuePast(dueDate, dueTime)
+      dueCountdown: vagueMode
+        ? formatDueVagueCountdown(dueVagueId)
+        : formatDueCountdown(dueDate, null, dueTime),
+      duePast: vagueMode ? false : isDuePast(dueDate, dueTime)
     };
     if (dueTime) next.dueTime = dueTime;
+    if (vagueMode) {
+      next.dueMode = DUE_DATE_MODE_VAGUE;
+      next.dueVague = dueVagueId;
+    }
     return Object.assign({}, display, next);
   }
   var BLOCKED_STYLES = {
@@ -4657,6 +4740,19 @@
     return TASK_BADGE_LABELS[BLOCKED_LABEL];
   }
 
+  /**
+   * Face-badge reason: drop "Bloqué à cause de …" — the ⊘ already marks blocked.
+   */
+  function compactBlockedReasonForBadge(reason) {
+    var text = typeof reason === 'string' ? reason.trim() : '';
+    if (!text) return '';
+    var stripped = text.replace(
+      /^bloqu\u00e9\s+\u00e0\s+cause\s+(de\s+|d\')/i,
+      ''
+    );
+    return (stripped || text).trim();
+  }
+
   function taskBadgeLabel(display) {
     if (!display) return '';
     if (display.blocked) return blockedTaskBadgeLabel(display);
@@ -4668,28 +4764,31 @@
 
   function formatBlockedBadgeText(display, reason) {
     var label = blockedTaskBadgeLabel(display);
-    var suffix;
+    var reasonText;
     if (reason != null && reason !== '') {
-      suffix = typeof reason === 'string'
+      reasonText = typeof reason === 'string'
         ? reason
         : formatBlockedReasonsSummary(reason, {
-            empty: BLOCKED_LABEL,
+            empty: '',
             links: display && display.blockedLinks
           });
     } else if (display && (display.blockedReasons || display.blockedLinks)) {
-      suffix = formatBlockedReasonsSummary(
+      reasonText = formatBlockedReasonsSummary(
         display.blockedReasons != null ? display.blockedReasons : display.blockedReason,
         {
-          empty: BLOCKED_LABEL,
+          empty: '',
           links: display.blockedLinks
         }
       );
     } else if (display && display.blockedReason) {
-      suffix = display.blockedReason;
+      reasonText = display.blockedReason;
     } else {
-      suffix = BLOCKED_LABEL;
+      reasonText = '';
     }
-    return label + ' (' + suffix + ')';
+    reasonText = compactBlockedReasonForBadge(reasonText);
+    // ⊘ already means blocked — skip a bare "Bloqué" reason.
+    if (!reasonText || reasonText === BLOCKED_LABEL) return label;
+    return reasonText + ' (' + label + ')';
   }
 
   function isDarkTheme() {
@@ -15318,17 +15417,34 @@
     // Section is always on (no enable checkbox). dueEnabled tracks whether a
     // date is set — empty stays optional / visually quiet (no has-due-date).
     var enabled = true;
-    var hasDueDateInitially = !!current && (
-      initialValue && typeof initialValue === 'object' && initialValue.dueEnabled != null
+    var initialVague =
+      initialValue && typeof initialValue === 'object'
+        ? normalizeDueVague(initialValue.dueVague)
+        : '';
+    var currentMode = normalizeDueMode(
+      initialValue && typeof initialValue === 'object'
+        ? initialValue.dueMode
+        : null
+    );
+    if (initialVague) currentMode = DUE_DATE_MODE_VAGUE;
+    var hasDueDateInitially =
+      (!!current || !!initialVague) &&
+      (initialValue && typeof initialValue === 'object' && initialValue.dueEnabled != null
         ? !!initialValue.dueEnabled
         : config.enabled != null
           ? !!config.enabled
-          : true
-    );
+          : true);
     if (!hasDueDateInitially) {
       current = '';
       currentTime = '';
+      initialVague = '';
+    } else if (currentMode === DUE_DATE_MODE_VAGUE && initialVague && !current) {
+      current = resolveDueVagueToDate(initialVague);
     }
+    var currentVague =
+      currentMode === DUE_DATE_MODE_VAGUE && hasDueDateInitially
+        ? initialVague
+        : '';
     var currentStart =
       initialValue && typeof initialValue === 'object'
         ? normalizeDueDate(initialValue.startDate)
@@ -15338,6 +15454,11 @@
         ? initialValue.recurrence
         : null
     );
+    if (currentMode === DUE_DATE_MODE_VAGUE) {
+      currentTime = '';
+      currentStart = '';
+      currentRecurrence = null;
+    }
     var open = false;
     var timeOpen = false;
     var startOpen = false;
@@ -15388,6 +15509,42 @@
     });
     chrome.title.id = uid + '-label';
     field.appendChild(chrome.head);
+
+    var modeSwitch = document.createElement('div');
+    modeSwitch.className = 'due-date-mode-switch';
+    modeSwitch.setAttribute('role', 'radiogroup');
+    modeSwitch.setAttribute('aria-label', 'Mode d\'\u00e9ch\u00e9ance');
+
+    function makeDueModeBtn(mode, label, icon) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'due-date-mode-btn';
+      btn.setAttribute('role', 'radio');
+      btn.dataset.dueMode = mode;
+      btn.setAttribute('aria-label', label);
+      btn.title = label;
+      btn.innerHTML =
+        '<i class="ti ' +
+        icon +
+        '" aria-hidden="true"></i>' +
+        '<span class="due-date-mode-btn-label">' +
+        label +
+        '</span>';
+      modeSwitch.appendChild(btn);
+      return btn;
+    }
+
+    var preciseModeBtn = makeDueModeBtn(
+      DUE_DATE_MODE_PRECISE,
+      DUE_DATE_MODE_PRECISE_LABEL,
+      'ti-target-arrow'
+    );
+    var vagueModeBtn = makeDueModeBtn(
+      DUE_DATE_MODE_VAGUE,
+      DUE_DATE_MODE_VAGUE_LABEL,
+      'ti-tilde'
+    );
+    chrome.head.appendChild(modeSwitch);
 
     var body = document.createElement('div');
     body.className = 'due-date-body section-toggle-body';
@@ -15550,6 +15707,34 @@
 
     body.appendChild(countdown);
     body.appendChild(pickers);
+
+    var vaguePanel = document.createElement('div');
+    vaguePanel.className = 'due-date-vague';
+    vaguePanel.setAttribute('role', 'group');
+    vaguePanel.setAttribute('aria-label', DUE_DATE_VAGUE_OPTIONS_LABEL);
+    vaguePanel.hidden = currentMode !== DUE_DATE_MODE_VAGUE;
+
+    DUE_DATE_VAGUE_OPTIONS.forEach(function (item) {
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'due-date-vague-chip';
+      chip.dataset.vague = item.id;
+      chip.setAttribute('aria-pressed', 'false');
+      chip.setAttribute('aria-label', item.label);
+      var chipIcon = document.createElement('i');
+      chipIcon.className = 'ti ti-tilde due-date-vague-chip-icon';
+      chipIcon.setAttribute('aria-hidden', 'true');
+      var chipLabel = document.createElement('span');
+      chipLabel.className = 'due-date-vague-chip-label';
+      chipLabel.textContent = item.label;
+      chip.appendChild(chipIcon);
+      chip.appendChild(chipLabel);
+      chip.addEventListener('click', function () {
+        applyVagueOption(item.id);
+      });
+      vaguePanel.appendChild(chip);
+    });
+    body.appendChild(vaguePanel);
 
     // ── Start date (Début) ─────────────────────────────────────────────
     var startRow = document.createElement('div');
@@ -16373,7 +16558,11 @@
 
     function refreshSuggestions() {
       var expanded = !collapseApi || collapseApi.isExpanded();
-      var show = enabled && expanded && !current;
+      var show =
+        enabled &&
+        expanded &&
+        !current &&
+        currentMode === DUE_DATE_MODE_PRECISE;
       var chips = suggestions.querySelectorAll('[data-suggestion]');
       var anyAvailable = false;
       for (var i = 0; i < chips.length; i++) {
@@ -16386,13 +16575,92 @@
       if (wasHidden !== suggestions.hidden) notifyLayout();
     }
 
+    function refreshVagueChips() {
+      var chips = vaguePanel.querySelectorAll('[data-vague]');
+      for (var i = 0; i < chips.length; i++) {
+        var selected = chips[i].dataset.vague === currentVague;
+        chips[i].classList.toggle('is-selected', selected);
+        chips[i].setAttribute('aria-pressed', selected ? 'true' : 'false');
+      }
+    }
+
+    function refreshModeUi() {
+      var isVague = currentMode === DUE_DATE_MODE_VAGUE;
+      field.classList.toggle('is-vague-mode', isVague);
+      field.dataset.dueMode = currentMode;
+      preciseModeBtn.classList.toggle('is-active', !isVague);
+      vagueModeBtn.classList.toggle('is-active', isVague);
+      preciseModeBtn.setAttribute('aria-checked', isVague ? 'false' : 'true');
+      vagueModeBtn.setAttribute('aria-checked', isVague ? 'true' : 'false');
+      vaguePanel.hidden = !isVague;
+      pickers.hidden = isVague;
+      startRow.hidden = isVague;
+      if (isVague) {
+        hidePickers();
+        hideStartPicker();
+      } else {
+        showPickers();
+      }
+      refreshVagueChips();
+      refreshSuggestions();
+      notifyLayout();
+    }
+
+    function setDueMode(nextMode, options) {
+      options = options || {};
+      var mode = normalizeDueMode(nextMode);
+      if (mode === currentMode && !options.force) return;
+      currentMode = mode;
+      if (mode === DUE_DATE_MODE_VAGUE) {
+        currentTime = '';
+        currentStart = '';
+        currentRecurrence = null;
+        if (!currentVague) {
+          current = '';
+        } else if (!current) {
+          current = resolveDueVagueToDate(currentVague);
+        }
+      } else {
+        currentVague = '';
+      }
+      refreshModeUi();
+      if (!options.silent) emitChange();
+      else {
+        refreshCountdown();
+        refreshStartTrigger();
+        refreshRecurrenceUi();
+      }
+    }
+
+    function applyVagueOption(id) {
+      if (!enabled || currentMode !== DUE_DATE_MODE_VAGUE) return;
+      var nextId = normalizeDueVague(id);
+      if (!nextId) return;
+      if (currentVague === nextId) {
+        currentVague = '';
+        current = '';
+        currentTime = '';
+      } else {
+        currentVague = nextId;
+        current = resolveDueVagueToDate(nextId);
+        currentTime = '';
+        currentStart = '';
+        currentRecurrence = null;
+        if (current) syncViewFromValue(current);
+      }
+      refreshVagueChips();
+      emitChange();
+    }
+
     function applyQuickSuggestion(id) {
       if (!enabled) return;
+      if (currentMode !== DUE_DATE_MODE_PRECISE) setDueMode(DUE_DATE_MODE_PRECISE, { silent: true });
       var resolved = resolveDueDateQuickSuggestion(id);
       if (!resolved || !resolved.iso) return;
       var next = normalizeDueDate(resolved.iso);
       if (!next) return;
       current = next;
+      currentVague = '';
       currentTime = normalizeDueTime(resolved.time) || '';
       if (currentTime) rememberedTime = currentTime;
       focusIso = next;
