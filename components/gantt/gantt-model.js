@@ -411,6 +411,105 @@
     return Math.max(1, dayDiff(range.end, range.start) + 1);
   }
 
+  /**
+   * Work-day fraction of a 24h day (0–1) for CSS off-hours overlays.
+   * @returns {{ start: number, end: number }|null}
+   */
+  function workDayFractions(dayStart, dayEnd) {
+    var startTime = normalizeWorkTime(dayStart, DEFAULT_DAY_START);
+    var endTime = normalizeWorkTime(dayEnd, DEFAULT_DAY_END);
+    var s = parseTime(startTime);
+    var e = parseTime(endTime);
+    if (!s || !e) return null;
+    var start = (s.hours * 60 + s.minutes) / (24 * 60);
+    var end = (e.hours * 60 + e.minutes) / (24 * 60);
+    if (!(end > start)) return null;
+    return { start: start, end: end };
+  }
+
+  /**
+   * Compress morning/night so work hours dominate each day column.
+   * Off-hours together get ~OFF_HOURS_VISUAL_SHARE of the column (split by duration).
+   * @returns {object|null} warp with real/visual breakpoints in [0,1]
+   */
+  var OFF_HOURS_VISUAL_SHARE = 0.2;
+
+  function buildTimeWarp(dayStart, dayEnd, options) {
+    var frac = workDayFractions(dayStart, dayEnd);
+    if (!frac) return null;
+    var morningR = frac.start;
+    var nightR = 1 - frac.end;
+    var offR = morningR + nightR;
+    if (!(offR > 0) || !(frac.end > frac.start)) return null;
+    var offShare =
+      options && typeof options.offVisualShare === 'number'
+        ? options.offVisualShare
+        : OFF_HOURS_VISUAL_SHARE;
+    if (!(offShare > 0)) offShare = OFF_HOURS_VISUAL_SHARE;
+    if (offShare > 0.45) offShare = 0.45;
+    var morningV = offShare * (morningR / offR);
+    var nightV = offShare * (nightR / offR);
+    var workV = 1 - morningV - nightV;
+    return {
+      morningEnd: morningR,
+      nightStart: frac.end,
+      visualMorningEnd: morningV,
+      visualNightStart: morningV + workV,
+      visualMorningShare: morningV,
+      visualWorkShare: workV,
+      visualNightShare: nightV,
+    };
+  }
+
+  function realFracToVisual(realFrac, warp) {
+    var r = Number(realFrac);
+    if (!warp || !isFinite(r)) return r;
+    if (r <= 0) return 0;
+    if (r >= 1) return 1;
+    if (r <= warp.morningEnd) {
+      if (!(warp.morningEnd > 0)) return warp.visualMorningEnd;
+      return (r / warp.morningEnd) * warp.visualMorningEnd;
+    }
+    if (r <= warp.nightStart) {
+      var workR = warp.nightStart - warp.morningEnd;
+      if (!(workR > 0)) return warp.visualNightStart;
+      var t = (r - warp.morningEnd) / workR;
+      return (
+        warp.visualMorningEnd +
+        t * (warp.visualNightStart - warp.visualMorningEnd)
+      );
+    }
+    var nightR = 1 - warp.nightStart;
+    if (!(nightR > 0)) return 1;
+    var t2 = (r - warp.nightStart) / nightR;
+    return warp.visualNightStart + t2 * (1 - warp.visualNightStart);
+  }
+
+  function visualFracToReal(visualFrac, warp) {
+    var v = Number(visualFrac);
+    if (!warp || !isFinite(v)) return v;
+    if (v <= 0) return 0;
+    if (v >= 1) return 1;
+    if (v <= warp.visualMorningEnd) {
+      if (!(warp.visualMorningEnd > 0)) return warp.morningEnd;
+      return (v / warp.visualMorningEnd) * warp.morningEnd;
+    }
+    if (v <= warp.visualNightStart) {
+      var workV = warp.visualNightStart - warp.visualMorningEnd;
+      if (!(workV > 0)) return warp.nightStart;
+      var t = (v - warp.visualMorningEnd) / workV;
+      return warp.morningEnd + t * (warp.nightStart - warp.morningEnd);
+    }
+    var nightV = 1 - warp.visualNightStart;
+    if (!(nightV > 0)) return 1;
+    var t2 = (v - warp.visualNightStart) / nightV;
+    return warp.nightStart + t2 * (1 - warp.nightStart);
+  }
+
+  function mapOptions(options) {
+    return options && typeof options === 'object' ? options : null;
+  }
+
   function dateToX(date, range, widthPx) {
     var d = parseIsoDate(date);
     if (!d || !range) return 0;
@@ -422,9 +521,10 @@
 
   /**
    * Map a DateTime onto the timeline, preserving time-of-day within the day
-   * (noon → middle of today's column). Clamped to [0, width].
+   * (noon → middle of today's column when linear). Optional options.timeWarp
+   * compresses morning/night in day/week views.
    */
-  function dateTimeToX(date, range, widthPx) {
+  function dateTimeToX(date, range, widthPx, options) {
     if (!(date instanceof Date) || isNaN(date.getTime()) || !range || !range.start) {
       return 0;
     }
@@ -432,7 +532,15 @@
     var total = rangeDayCount(range);
     var startMs = startOfDay(range.start).getTime();
     var offsetMs = date.getTime() - startMs;
-    var x = (offsetMs / (total * MS_DAY)) * w;
+    var dayFloat = offsetMs / MS_DAY;
+    var opts = mapOptions(options);
+    var warp = opts && opts.timeWarp;
+    if (warp && (range.mode === 'day' || range.mode === 'week') && dayFloat >= 0) {
+      var dayIndex = Math.floor(dayFloat);
+      var realFrac = dayFloat - dayIndex;
+      dayFloat = dayIndex + realFracToVisual(realFrac, warp);
+    }
+    var x = (dayFloat / total) * w;
     if (!isFinite(x) || x < 0) return 0;
     if (x > w) return w;
     return x;
@@ -450,7 +558,7 @@
   }
 
   /** Inverse of dateTimeToX — continuous time along the timeline. */
-  function xToDateTime(x, range, widthPx) {
+  function xToDateTime(x, range, widthPx, options) {
     if (!range || !range.start) return null;
     var w = typeof widthPx === 'number' && widthPx > 0 ? widthPx : 1;
     var total = rangeDayCount(range);
@@ -458,8 +566,23 @@
     if (!isFinite(ratio)) ratio = 0;
     if (ratio < 0) ratio = 0;
     if (ratio > 1) ratio = 1;
+    var dayFloat = ratio * total;
+    var opts = mapOptions(options);
+    var warp = opts && opts.timeWarp;
+    if (warp && (range.mode === 'day' || range.mode === 'week')) {
+      var dayIndex = Math.floor(dayFloat);
+      if (dayIndex >= total) dayIndex = total - 1;
+      if (dayIndex < 0) dayIndex = 0;
+      var visualFrac = dayFloat - Math.floor(dayFloat);
+      // At exact end of timeline, dayFloat === total → treat as end of last day.
+      if (ratio >= 1) {
+        dayFloat = total;
+      } else {
+        dayFloat = dayIndex + visualFracToReal(visualFrac, warp);
+      }
+    }
     var startMs = startOfDay(range.start).getTime();
-    return new Date(startMs + ratio * total * MS_DAY);
+    return new Date(startMs + dayFloat * MS_DAY);
   }
 
   function snapDate(date, mode) {
@@ -606,7 +729,7 @@
     return out;
   }
 
-  function barGeometry(interval, range, widthPx) {
+  function barGeometry(interval, range, widthPx, options) {
     if (!interval || !range) return null;
     var w = typeof widthPx === 'number' && widthPx > 0 ? widthPx : 1;
     var useTime =
@@ -614,8 +737,8 @@
       range.mode === 'week' ||
       interval.hasTime === true;
     if (useTime) {
-      var left = dateTimeToX(interval.start, range, widthPx);
-      var right = dateTimeToX(interval.end, range, widthPx);
+      var left = dateTimeToX(interval.start, range, widthPx, options);
+      var right = dateTimeToX(interval.end, range, widthPx, options);
       if (right < left) {
         var swap = left;
         left = right;
@@ -647,34 +770,24 @@
   }
 
   /**
-   * Work-day fraction of a 24h day (0–1) for CSS off-hours overlays.
-   * @returns {{ start: number, end: number }|null}
-   */
-  function workDayFractions(dayStart, dayEnd) {
-    var startTime = normalizeWorkTime(dayStart, DEFAULT_DAY_START);
-    var endTime = normalizeWorkTime(dayEnd, DEFAULT_DAY_END);
-    var s = parseTime(startTime);
-    var e = parseTime(endTime);
-    if (!s || !e) return null;
-    var start = (s.hours * 60 + s.minutes) / (24 * 60);
-    var end = (e.hours * 60 + e.minutes) / (24 * 60);
-    if (!(end > start)) return null;
-    return { start: start, end: end };
-  }
-
-  /**
    * Agenda work-hours overlay band within a day range.
    * @returns {{ left: number, width: number }|null}
    */
-  function workHoursBand(dayStart, dayEnd, range, widthPx) {
+  function workHoursBand(dayStart, dayEnd, range, widthPx, options) {
     if (!range || !range.start) return null;
     if (range.mode !== 'day') return null;
     var start = combineDateTime(range.start, normalizeWorkTime(dayStart, DEFAULT_DAY_START));
     var end = combineDateTime(range.start, normalizeWorkTime(dayEnd, DEFAULT_DAY_END));
     if (!start || !end) return null;
     if (end.getTime() <= start.getTime()) return null;
-    var left = dateTimeToX(start, range, widthPx);
-    var right = dateTimeToX(end, range, widthPx);
+    var mapOpts = mapOptions(options) || {};
+    if (!mapOpts.timeWarp) {
+      mapOpts = {
+        timeWarp: buildTimeWarp(dayStart, dayEnd),
+      };
+    }
+    var left = dateTimeToX(start, range, widthPx, mapOpts);
+    var right = dateTimeToX(end, range, widthPx, mapOpts);
     return { left: left, width: Math.max(0, right - left) };
   }
 
@@ -683,7 +796,7 @@
    * Each day contributes [midnight → dayStart] and [dayEnd → next midnight].
    * @returns {Array<{ left: number, width: number, kind: 'morning'|'night' }>}
    */
-  function offHoursBands(dayStart, dayEnd, range, widthPx) {
+  function offHoursBands(dayStart, dayEnd, range, widthPx, options) {
     if (!range || !range.start) return [];
     if (range.mode !== 'day' && range.mode !== 'week') return [];
     var startTime = normalizeWorkTime(dayStart, DEFAULT_DAY_START);
@@ -692,6 +805,11 @@
     var workEnd0 = combineDateTime(range.start, endTime);
     if (!workStart0 || !workEnd0) return [];
     if (workEnd0.getTime() <= workStart0.getTime()) return [];
+
+    var mapOpts = mapOptions(options) || {};
+    if (!mapOpts.timeWarp) {
+      mapOpts = { timeWarp: buildTimeWarp(dayStart, dayEnd) };
+    }
 
     var bands = [];
     var total = rangeDayCount(range);
@@ -705,8 +823,8 @@
       if (!workStart || !workEnd) continue;
 
       if (workStart.getTime() > midnight.getTime()) {
-        var mLeft = dateTimeToX(midnight, range, widthPx);
-        var mRight = dateTimeToX(workStart, range, widthPx);
+        var mLeft = dateTimeToX(midnight, range, widthPx, mapOpts);
+        var mRight = dateTimeToX(workStart, range, widthPx, mapOpts);
         if (mRight > mLeft) {
           bands.push({
             left: mLeft,
@@ -716,8 +834,8 @@
         }
       }
       if (nextMidnight.getTime() > workEnd.getTime()) {
-        var nLeft = dateTimeToX(workEnd, range, widthPx);
-        var nRight = dateTimeToX(nextMidnight, range, widthPx);
+        var nLeft = dateTimeToX(workEnd, range, widthPx, mapOpts);
+        var nRight = dateTimeToX(nextMidnight, range, widthPx, mapOpts);
         if (nRight > nLeft) {
           bands.push({
             left: nLeft,

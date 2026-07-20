@@ -1298,6 +1298,17 @@
     return out.slice(0, 2);
   }
 
+  /** Normalize model `blocks` via AgentBlocks when available. */
+  function normalizeBlocks(raw, context) {
+    if (
+      typeof AgentBlocks !== 'undefined' &&
+      typeof AgentBlocks.normalizeBlocks === 'function'
+    ) {
+      return AgentBlocks.normalizeBlocks(raw, context);
+    }
+    return [];
+  }
+
   /**
    * After applying a tier (without explicit axes), offer slider refine UI.
    */
@@ -3218,8 +3229,19 @@
       '- Ex. Urgente, impact faible\u00a0: \u00ab\u00a0Cette t\u00e2che est [[r:urgente]], m\u00eame si l\'impact reste assez limit\u00e9, donc on la traite en [[r:Urgente]].\u00a0\u00bb',
       '- Ex. Importante, facile\u00a0: \u00ab\u00a0Cette t\u00e2che est utile pour l\'interne et [[g:assez facile]], donc on la classe [[y:Importante]].\u00a0\u00bb',
       '- Si priority.enabled=false\u00a0: dis qu\'aucune priorit\u00e9 n\'est d\u00e9finie (ne sors pas d\'anciennes valeurs).',
+      'Blocs visuels (blocks \u2014 tr\u00e8s important, ne sois jamais ennuyeux)\u00a0:',
+      '- En plus du texte, tu peux \u00e9mettre blocks: [{type, ...}] (0\u20136). Ce sont des cartes visuelles dans le chat.',
+      '- Types\u00a0: priority | subtask | card_ref | due | statut | project | progress | diff | members | labels.',
+      '- Place-les dans le message avec {{0}}, {{1}}, \u2026 (index dans blocks). Sans placeholder, ils s\'affichent sous le texte.',
+      '- Pr\u00e9f\u00e8re un bloc plut\u00f4t que de lister les m\u00eames faits en prose. Texte court + visuel riche.',
+      '- Apr\u00e8s une action (priorit\u00e9, sous-t\u00e2che, \u00e9ch\u00e9ance\u2026)\u00a0: confirme bri\u00e8vement\u00a0; le runtime affiche aussi des cartes auto. Tu peux quand m\u00eame \u00e9mettre blocks pour r\u00e9f\u00e9rences / Q&R.',
+      '- Quand tu cites une autre carte du tableau\u00a0: blocks avec type card_ref + cardIndex (index boardCards).',
+      '- Ex. priorit\u00e9\u00a0: {"message":"Voil\u00e0 la priorit\u00e9 actuelle\u00a0:\\n{{0}}","blocks":[{"type":"priority","tier":"Critique","urgency":4,"impact":3,"ease":2}]}',
+      '- Ex. autre carte\u00a0: {"message":"Sur cette carte\u00a0:\\n{{0}}","blocks":[{"type":"card_ref","cardIndex":2,"fields":["name","list","due","priority"]}]}',
+      '- Ex. sous-t\u00e2che\u00a0: {"message":"Ajout\u00e9e\u00a0:\\n{{0}}","blocks":[{"type":"subtask","text":"R\u00e9diger le brief","estimatedMinutes":30}]}',
+      '- INTERDIT le HTML/Markdown\u00a0; uniquement [[g/r/y/a:]] et {{n}} + blocks structur\u00e9s.',
       'R\u00e9ponds UNIQUEMENT avec un objet JSON valide de la forme\u00a0:',
-      '{"thinking":"notes priv\u00e9es","message":"texte visible","emotion":"happy","color":"yellow","suggestions":["Question utile","Autre intention"],"suggestionsMulti":false,"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}],"cardPatches":[{"op":"remember","text":"fait local \u00e0 la carte"}],"patches":[{"op":"remember","text":"fait projet / tableau"}],"selfPrompt":false,"selfPromptFocus":""}',
+      '{"thinking":"notes priv\u00e9es","message":"texte visible avec {{0}} optionnel","emotion":"happy","color":"yellow","suggestions":["Question utile","Autre intention"],"suggestionsMulti":false,"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"blocks":[{"type":"priority","tier":"Flexible","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}],"cardPatches":[{"op":"remember","text":"fait local \u00e0 la carte"}],"patches":[{"op":"remember","text":"fait projet / tableau"}],"selfPrompt":false,"selfPromptFocus":""}',
       'Auto-revue apr\u00e8s un cycle de travail (selfPrompt)\u00a0:',
       '- Apr\u00e8s un VRAI cycle de travail (plusieurs actions / maj substantielle de la carte\u00a0: sous-t\u00e2ches, progr\u00e8s, axes, \u00e9ch\u00e9ance, description\u2026), mets selfPrompt:true pour te relancer TOI-M\u00caME juste apr\u00e8s.',
       '- But de l\'auto-revue\u00a0: (1) v\u00e9rifier vite ce que tu viens de faire\u00a0; (2) surtout chercher UNE nouvelle opportunit\u00e9 concr\u00e8te d\'aider (prochaine \u00e9tape, oubli, coh\u00e9rence, offrande utile).',
@@ -7159,6 +7181,7 @@
       actions,
       context
     );
+    var blocks = normalizeBlocks(parsed.blocks, context);
 
     var suggestionScale = wantsSuggestionScale(data) || wantsSuggestionScale(parsed);
     var scoutGuard = applyInterviewProgressScoutGuards(
@@ -7335,6 +7358,7 @@
         message: message,
         suggestions: suggestionEntries,
         prompts: prompts,
+        blocks: blocks,
         actions: actions,
         completeInterview: completeInterview,
         droppedActions: parsed.droppedActions || []
@@ -7360,6 +7384,7 @@
         : wantsSuggestionsMulti(data) || wantsSuggestionsMulti(parsed),
       actions: actions,
       prompts: prompts,
+      blocks: blocks,
       followUps: parsed.followUps || [],
       cardPatches: cardPatches,
       patches: patches,
@@ -8574,6 +8599,7 @@
         suggestions: [],
         suggestionsMulti: false,
         prompts: [],
+        blocks: [],
         actions: [],
         droppedActions: [],
         cardPatches: [],
@@ -8665,6 +8691,7 @@
         suggestions: suggestions,
         suggestionsMulti: wantsSuggestionsMulti(parsed),
         prompts: Array.isArray(parsed.prompts) ? parsed.prompts : [],
+        blocks: Array.isArray(parsed.blocks) ? parsed.blocks : [],
         actions: normalized.actions,
         droppedActions: normalized.dropped,
         cardPatches: normalizeCardPatches(parsed.cardPatches),
@@ -8684,6 +8711,7 @@
         suggestions: [],
         suggestionsMulti: false,
         prompts: [],
+        blocks: [],
         actions: [],
         droppedActions: [],
         cardPatches: [],
@@ -9221,6 +9249,7 @@
           actions,
           context
         );
+    var blocks = normalizeBlocks(parsed.blocks, context);
     if (onDelta && message) {
       try {
         onDelta(message, response.content);
@@ -9244,6 +9273,7 @@
         followUps: parsed.followUps,
         suggestions: parsed.suggestions,
         prompts: prompts,
+        blocks: blocks,
         actions: actions,
         droppedActions: parsed.droppedActions || [],
         tierInjected: !!tierRewrite.injected,
@@ -9266,6 +9296,7 @@
       suggestions: parsed.suggestions,
       suggestionsMulti: !!parsed.suggestionsMulti,
       prompts: prompts,
+      blocks: blocks,
       actions: actions,
       droppedActions: parsed.droppedActions || [],
       cardPatches: projectScope ? [] : parsed.cardPatches || [],
@@ -13379,7 +13410,13 @@
           detail: detailForTool(tool, null, null, null, null, args, {
             listId: targetListId,
             listName: listName
-          })
+          }),
+          visual: {
+            type: 'statut',
+            listId: targetListId,
+            listName: listName,
+            category: args.category || undefined
+          }
         };
       }
       if (tool === 'set_project') {
@@ -15656,6 +15693,243 @@
     }
   }
 
+  /**
+   * Attach a structured `visual` payload for chat result cards when missing.
+   * Uses post-action bridge snapshots so the synthesizer stays dumb.
+   */
+  function enrichResultVisual(bridge, result) {
+    if (!result || !result.ok || result.visual) return result;
+    var tool = result.tool;
+    var args = result.args || {};
+    try {
+      if (tool === 'set_priority') {
+        var pri = snapshotPriority(bridge);
+        var tierLabel = '';
+        if (
+          typeof PriorityUI !== 'undefined' &&
+          typeof PriorityUI.baselineScore === 'function' &&
+          typeof PriorityUI.tierFor === 'function' &&
+          pri.priorityEnabled !== false
+        ) {
+          var score = PriorityUI.baselineScore(pri.urgency, pri.impact, pri.ease);
+          var tier = PriorityUI.tierFor(score);
+          if (tier && tier.label) tierLabel = tier.label;
+        }
+        if (!tierLabel && args.tier) tierLabel = String(args.tier);
+        var visual = {
+          type: 'priority',
+          tier: tierLabel || 'Priorit\u00e9',
+          urgency: pri.urgency,
+          impact: pri.impact,
+          ease: pri.ease,
+          priorityEnabled: pri.priorityEnabled !== false
+        };
+        var diffRows = [];
+        if (result.detail && typeof result.detail === 'string') {
+          // Optional axis diff from before→after words if PriorityUI available
+        }
+        result.visual = visual;
+        return result;
+      }
+      if (
+        tool === 'add_subtask' ||
+        tool === 'rename_subtask' ||
+        tool === 'toggle_subtask' ||
+        tool === 'set_subtask_blocked' ||
+        tool === 'set_subtask_progress' ||
+        tool === 'set_subtask_estimate' ||
+        tool === 'remove_subtask'
+      ) {
+        var comp = snapshotCompletion(bridge);
+        var item = null;
+        var id = result.id || args.id;
+        if (id && comp.items) {
+          for (var i = 0; i < comp.items.length; i++) {
+            if (String(comp.items[i].id) === String(id)) {
+              item = comp.items[i];
+              break;
+            }
+          }
+        }
+        if (!item && args.matchText && comp.items) {
+          var needle = normalizeSubtaskTitleKey(args.matchText);
+          for (var j = 0; j < comp.items.length; j++) {
+            if (normalizeSubtaskTitleKey(comp.items[j].text) === needle) {
+              item = comp.items[j];
+              break;
+            }
+          }
+        }
+        if (tool === 'remove_subtask') {
+          result.visual = {
+            type: 'subtask',
+            text:
+              (item && item.text) ||
+              (typeof args.matchText === 'string' ? args.matchText : '') ||
+              'Sous-t\u00e2che',
+            removed: true,
+            id: id != null ? String(id) : undefined
+          };
+          return result;
+        }
+        var text =
+          (item && item.text) ||
+          (typeof args.text === 'string' ? args.text.trim() : '') ||
+          (typeof args.matchText === 'string' ? args.matchText.trim() : '') ||
+          'Sous-t\u00e2che';
+        result.visual = {
+          type: 'subtask',
+          text: text,
+          id: (item && item.id) || (id != null ? String(id) : undefined),
+          done: item ? !!item.done : !!args.done,
+          blocked: item ? !!item.blocked : !!args.blocked,
+          progress: item && item.progress != null ? item.progress : undefined,
+          estimatedMinutes:
+            item && item.estimatedMinutes != null
+              ? item.estimatedMinutes
+              : resolveEstimateMinutesArg(args)
+        };
+        return result;
+      }
+      if (tool === 'set_due') {
+        var dueSnap = snapshotPriority(bridge);
+        if (!dueSnap.dueEnabled && !dueSnap.dueVague) {
+          result.visual = { type: 'due', cleared: true };
+        } else if (dueSnap.dueVague) {
+          result.visual = {
+            type: 'due',
+            dueVague: dueSnap.dueVague,
+            dueMode: 'vague'
+          };
+        } else {
+          result.visual = {
+            type: 'due',
+            dueDate: dueSnap.dueDate || '',
+            dueTime: dueSnap.dueTime || '',
+            dueMode: 'precise',
+            recurrence: dueSnap.recurrence || undefined,
+            startDate: dueSnap.startDate || undefined
+          };
+        }
+        return result;
+      }
+      if (tool === 'set_statut') {
+        var extra =
+          result.detail && typeof result.detail === 'string' ? {} : {};
+        result.visual = {
+          type: 'statut',
+          listName:
+            (args && (args.listName || args.matchList)) ||
+            (result.detail &&
+            /list\s*\u2192\s*([^;]+)/i.test(String(result.detail))
+              ? RegExp.$1.trim()
+              : '') ||
+            '',
+          listId: args.listId || undefined,
+          category: args.category || undefined
+        };
+        // Prefer names captured at execute time via detail parsing
+        if (result.detail && typeof result.detail === 'string') {
+          var listMatch = result.detail.match(/list\s*[:=→>]\s*([^;]+)/i);
+          if (listMatch) result.visual.listName = listMatch[1].trim();
+          var idMatch = result.detail.match(/\bid\s*[:=]\s*([^;]+)/i);
+          if (idMatch) result.visual.listId = idMatch[1].trim();
+        }
+        if (!result.visual.listName && args.matchList) {
+          result.visual.listName = String(args.matchList);
+        }
+        return result;
+      }
+      if (tool === 'set_project') {
+        if (args.clear === true) {
+          result.visual = { type: 'project', cleared: true };
+        } else {
+          result.visual = {
+            type: 'project',
+            name: args.name || args.matchText || '',
+            projectId: args.projectId || undefined
+          };
+          if (result.detail && typeof result.detail === 'string') {
+            var pn = result.detail.match(/projet\s*[:=→>]\s*([^;]+)/i);
+            if (pn) result.visual.name = pn[1].trim();
+          }
+        }
+        return result;
+      }
+      if (
+        tool === 'set_progress' ||
+        tool === 'set_progress_estimate' ||
+        tool === 'complete_all_subtasks' ||
+        tool === 'reset_progress'
+      ) {
+        var prog = snapshotCompletion(bridge);
+        var doneCount = 0;
+        (prog.items || []).forEach(function (it) {
+          if (it.done) doneCount += 1;
+        });
+        result.visual = {
+          type: 'progress',
+          progress: prog.progress,
+          progressEnabled: prog.progressEnabled !== false,
+          estimatedMinutes: prog.estimatedMinutes,
+          doneCount: doneCount,
+          totalCount: (prog.items || []).length
+        };
+        return result;
+      }
+      if (tool === 'set_members' || tool === 'set_custom_assignees') {
+        var people = [];
+        if (result.detail && typeof result.detail === 'string') {
+          result.detail.split(/[;,]/).forEach(function (part) {
+            var t = part.trim();
+            if (!t) return;
+            if (t.charAt(0) === '+' || t.charAt(0) === '−' || t.charAt(0) === '-') {
+              people.push({
+                name: t.slice(1).trim(),
+                op: t.charAt(0) === '+' ? 'add' : 'remove'
+              });
+            }
+          });
+        }
+        if (!people.length && Array.isArray(args.add)) {
+          args.add.forEach(function (a) {
+            var n =
+              typeof a === 'string'
+                ? a
+                : a && (a.fullName || a.name || a.username);
+            if (n) people.push({ name: String(n), op: 'add' });
+          });
+        }
+        if (people.length) {
+          result.visual = { type: 'members', people: people };
+        }
+        return result;
+      }
+      if (tool === 'set_labels') {
+        var labels = [];
+        if (result.detail && typeof result.detail === 'string') {
+          result.detail.split(/[;,]/).forEach(function (part) {
+            var t = part.trim();
+            if (!t) return;
+            if (t.charAt(0) === '+' || t.charAt(0) === '−' || t.charAt(0) === '-') {
+              labels.push({
+                name: t.slice(1).trim(),
+                op: t.charAt(0) === '+' ? 'add' : 'remove'
+              });
+            }
+          });
+        }
+        if (labels.length) {
+          result.visual = { type: 'labels', labels: labels };
+        }
+        return result;
+      }
+    } catch (err) {
+      console.error('enrichResultVisual failed', err);
+    }
+    return result;
+  }
+
   async function executeActions(bridge, actions) {
     var list = Array.isArray(actions) ? actions : [];
     var results = [];
@@ -15665,6 +15939,7 @@
     var rejected = 0;
     for (var i = 0; i < list.length; i++) {
       var result = await executeAction(bridge, list[i]);
+      result = enrichResultVisual(bridge, result);
       results.push(result);
       if (result.ok) {
         executed += 1;
@@ -16016,6 +16291,8 @@
     looksLikeAgentColorChangeClaim: looksLikeAgentColorChangeClaim,
     rewriteActionsForAgentColor: rewriteActionsForAgentColor,
     normalizePrompts: normalizePrompts,
+    normalizeBlocks: normalizeBlocks,
+    enrichResultVisual: enrichResultVisual,
     normalizeCardPatches: normalizeCardPatches,
     chatTurn: chatTurn,
     looksLikeSubtaskPickQuestion: looksLikeSubtaskPickQuestion,

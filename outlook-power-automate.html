@@ -23,13 +23,12 @@
       font-size: 1.05rem;
       margin: 1.4rem 0 0.5rem;
     }
-    .pa-guide ol,
-    .pa-guide ul {
+    .pa-guide ol {
       padding-left: 1.25rem;
       margin: 0.4rem 0 0.8rem;
     }
     .pa-guide li {
-      margin: 0.35rem 0;
+      margin: 0.4rem 0;
     }
     .pa-guide .tp-muted {
       color: var(--ds-text-subtle, #626f86);
@@ -40,18 +39,15 @@
       padding: 0.1em 0.35em;
       border-radius: 3px;
       background: var(--ds-background-neutral, #091e420f);
+      word-break: break-word;
     }
-    .pa-guide table {
-      border-collapse: collapse;
-      width: 100%;
-      font-size: 0.9rem;
-      margin: 0.5rem 0 0.75rem;
-    }
-    .pa-guide th,
-    .pa-guide td {
-      border: 1px solid var(--ds-border, #091e4224);
-      padding: 0.35rem 0.5rem;
-      text-align: left;
+    .pa-guide pre {
+      font-size: 0.8rem;
+      padding: 0.65rem 0.75rem;
+      overflow-x: auto;
+      border-radius: 3px;
+      background: var(--ds-background-neutral, #091e420f);
+      white-space: pre-wrap;
     }
     .pa-actions {
       display: flex;
@@ -84,100 +80,78 @@
       background: var(--ds-background-neutral, #091e420f);
       border-radius: 0 3px 3px 0;
     }
+    .pa-callout strong {
+      display: block;
+      margin-bottom: 0.25rem;
+    }
   </style>
 </head>
 <body class="tp-page">
   <div class="pa-guide" id="guide">
-    <h1>Automatiser Outlook (Power Automate)</h1>
+    <h1>Power Automate → Outlook</h1>
     <p class="tp-muted">
-      Sync <strong>Trello → calendrier Outlook</strong> dans le cloud Microsoft.
-      Aucun serveur, pas d’app Entra, <strong>pas besoin de Trello Pro</strong>
-      (les champs personnalisés ne sont pas utilisés).
+      Sans Entra, sans Trello Pro, sans serveur.
     </p>
+
+    <div class="pa-callout">
+      <strong>Qui fait quoi</strong>
+      <strong>Power Automate</strong> crée l’événement Outlook et
+      <strong>écrit</strong> <code>[outlook-event-id]: …</code> dans la description Trello.<br />
+      <strong>Cerveau</strong> ne fait que <strong>masquer</strong> cette ligne dans le popup
+      (bouton <em>Afficher les métadonnées masquées</em>).
+      Sans étape « Update a card » dans le flux, vous ne verrez jamais de métadonnées.
+    </div>
 
     <div class="pa-actions">
       <a
-        id="openAutomate"
         href="https://make.powerautomate.com/"
         target="_blank"
         rel="noopener"
         >Ouvrir Power Automate</a
       >
       <a
-        id="openDocs"
         class="secondary"
         href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/outlook-power-automate.md"
         target="_blank"
         rel="noopener"
-        >Guide détaillé (GitHub)</a
+        >Guide GitHub</a
       >
       <button type="button" class="secondary" id="closeBtn">Fermer</button>
     </div>
 
-    <div class="pa-callout">
-      Sens unique : Outlook ne met pas à jour Trello.
-      Mapping des IDs dans <strong>Excel / OneDrive</strong> (gratuit) pour éviter les doublons.
-    </div>
-
-    <h2>1. Fichier Excel (mapping)</h2>
+    <h2>Flux (résumé)</h2>
     <ol>
-      <li>Créez un classeur OneDrive / Excel Online, ex. <code>Trello-Outlook-Map</code>.</li>
-      <li>Ligne d’en-têtes (formatez en <strong>Tableau</strong>)&nbsp;:</li>
-    </ol>
-    <table>
-      <thead>
-        <tr>
-          <th>CardId</th>
-          <th>EventId</th>
-          <th>CardName</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td colspan="3" class="tp-muted">(lignes ajoutées par le flux)</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <h2>2. Flux automatisé</h2>
-    <ol>
-      <li>Power Automate → <strong>Créer</strong> → <strong>Flux de cloud automatisé</strong>.</li>
-      <li>Déclencheur Trello : <em>When a card is updated</em> → votre tableau.</li>
-      <li>Condition : <em>Due date</em> n’est pas vide.</li>
       <li>
-        Excel : chercher une ligne dont <code>CardId</code> = id de la carte.
+        Déclencheur Trello : <em>When a card is updated</em> → échéance non vide.
       </li>
       <li>
-        Si pas de <code>EventId</code> →
-        <strong>Create event</strong> (sujet, description, échéance),
-        puis <strong>Add/Update row</strong> Excel avec l’id d’événement.
-      </li>
-      <li>
-        Sinon → <strong>Update event</strong> avec cet <code>EventId</code>.
+        Si la description <strong>ne contient pas</strong>
+        <code>outlook-event-id</code> →
+        <strong>Create event</strong>, puis
+        <strong>Update a card</strong> (description) en ajoutant&nbsp;:
       </li>
     </ol>
+    <pre>concat(
+  triggerBody()?['desc'],
+  '
 
-    <h2>3. Variante sans Excel — métadonnées dans la description</h2>
-    <p>
-      Après création de l’événement, écrivez en bas de la description&nbsp;:
-    </p>
-    <p><code>[outlook-event-id]: …</code></p>
-    <p class="tp-muted">
-      Ou le bloc commentaire <code>&lt;!--cerveau-meta … --&gt;</code>.
-      Dans le popup Cerveau, ce texte est <strong>masqué</strong> par défaut
-      (bouton <em>Afficher les métadonnées masquées</em>).
-    </p>
-
-    <h2>4. Tester</h2>
-    <ol>
-      <li>Enregistrer et activer le flux.</li>
-      <li>Mettre une échéance sur une carte test.</li>
-      <li>Vérifier Outlook, puis renommer la carte (un seul événement).</li>
+[outlook-event-id]: ',
+  body('Create_event')?['id']
+)</pre>
+    <ol start="3">
+      <li>
+        Sinon → lire l’id dans la description →
+        <strong>Update event</strong>.
+      </li>
+      <li>
+        Activer le flux → tester une carte avec échéance → rouvrir Cerveau →
+        <em>Afficher les métadonnées masquées</em>.
+      </li>
     </ol>
 
     <p class="tp-muted">
-      Connecteur bloqué au travail&nbsp;? Compte Microsoft personnel, ou demandez
-      Trello + Outlook dans Power Automate (toujours sans app Entra).
+      « Exporter .ics » et « Connecter Outlook » (Graph) sont d’autres chemins.
+      Pour Automate, seule l’écriture dans la description par le flux compte.
     </p>
   </div>
   <script>

@@ -1,189 +1,119 @@
-# Outlook auto-sync with Power Automate (no hosting)
+# Outlook auto-sync with Power Automate (no hosting, no Trello Pro)
 
-Automate **Trello → Outlook Calendar** using Microsoft Power Automate. Runs in Microsoft’s cloud — you do **not** host a server.
+**Cerveau does not create Outlook events.** Power Automate does.  
+**Cerveau only hides** the `outlook-event-id` line/block in the card popup once the flow has written it.
 
-**No Trello Pro required.** Custom Fields are Pro-only; this guide uses a free **Excel** mapping table (or an optional line in the card description).
+| Who | Role |
+|-----|------|
+| **Power Automate** | Create/update Outlook events; **write** `outlook-event-id` into the Trello description |
+| **Cerveau popup** | **Hide** that metadata by default; show it under **Afficher les métadonnées masquées** |
 
-| | Graph (Connecter Outlook) | ICS export | **Power Automate** |
-|--|--|--|--|
-| Your hosting | No | No | **No** |
-| Entra SPA app | Yes | No | **No** |
-| Trello Pro | No | No | **No** |
-| Auto updates | While Gantt open | Manual | **Yes** (cloud triggers) |
-| Direction | Two-way | One-way | **One-way** (Trello → Outlook) |
+No Entra SPA app. No Trello Pro custom fields. No server to host.
+
+---
 
 ## Prerequisites
 
-1. A Microsoft account that can open [Power Automate](https://make.powerautomate.com) (Microsoft 365 / free Microsoft account often works; some orgs disable connectors).
-2. Access to the Trello board (**Free / Standard is fine** — no Custom Fields).
-3. Outlook calendar on the same Microsoft account you connect in the flow.
-4. OneDrive or Excel Online (comes with the same Microsoft account).
-
-If your **work** tenant blocks the Trello or Outlook connector, try a **personal** Microsoft account (outlook.com), or ask IT to allow those connectors (no custom Entra app required).
+1. [Power Automate](https://make.powerautomate.com) (personal Microsoft account is fine if work blocks connectors).
+2. Trello board access (Free is fine).
+3. Outlook / Outlook.com calendar on the **same** Microsoft account as the flow.
 
 ---
 
-## Recommended setup (Free Trello) — Excel mapping
+## Recommended flow (description marker, no Excel)
 
-Store `CardId → EventId` in a small Excel file so updates don’t create duplicate Outlook events.
+### 1. Create the flow
 
-### 1. Create the Excel workbook
-
-1. Open [https://excel.office.com](https://excel.office.com) (or OneDrive → New → Excel).
-2. Name the file e.g. `Trello-Outlook-Map`.
-3. On **Sheet1**, put headers in row 1:
-
-| A | B | C |
-|---|---|---|
-| CardId | EventId | CardName |
-
-4. Save it in OneDrive.
-
-### 2. Create the flow
-
-1. [https://make.powerautomate.com](https://make.powerautomate.com) → **Create** → **Automated cloud flow**.
+1. **Create** → **Automated cloud flow**.
 2. Name: `Trello → Outlook (Cerveau)`.
-3. Trigger: **Trello** → **When a card is updated** → pick your **Board**.
-4. **New step** → **Condition**: **Due date** is not equal to *(empty)* / `null`.  
-   Continue only in **If yes**.
+3. Trigger: **Trello – When a card is updated** → select your board.
+4. **Condition**: **Due date** is not empty. Work only in **If yes**.
 
-### 3. Look up the card in Excel
+### 2. Detect whether an event already exists
 
-Still in **If yes**:
+**Condition**: **Description** contains `outlook-event-id`
 
-1. **Excel Online (Business)** or **Excel Online (OneDrive)** → **Get a row**  
-   (or **List rows present in a table** — see tip below).
-2. Point at your workbook / table.
-3. Key column: `CardId` = Trello trigger **Card ID** (or `id`).
+- **If no** → create path (step 3)  
+- **If yes** → update path (step 4)
 
-**Tip:** Format the header row as an Excel **Table** (select headers → Insert → Table). Many Excel actions require a named table (e.g. `Table1`).
-
-### 4. Create or update Outlook
-
-Add a **Condition**: Excel **EventId** is equal to *(empty)*.
-
-**If yes — create**
+### 3. Create path (first time)
 
 1. **Outlook.com** or **Office 365 Outlook** → **Create event (V4)**  
-   - Subject ← Trello **Name**  
-   - Body ← Trello **Description**  
+   - Subject ← card **Name**  
+   - Body ← card **Description** (optional; may include old noise — fine)  
    - Start ← **Due date**  
-   - End ← expression `addHours(triggerOutputs()?['body/due'], 1)` (or `addDays(..., 1)` for all-day style)
-2. **Excel – Update a row** (or **Add a row** if Get a row failed / no match):  
-   - `CardId` ← Trello card id  
-   - `EventId` ← **Id** from Create event  
-   - `CardName` ← card name  
+   - End ← `addHours(triggerOutputs()?['body/due'], 1)`
+2. **Trello – Update a card** (description) — **this is the automatic metadata write**:
 
-If **Get a row** fails when the card is new, use this pattern instead:
-
-1. **List rows** filtered by `CardId eq '...'` (or get all and **Filter array**).
-2. Condition: length of results = 0 → **Add a row** after create; else **Update event** + **Update a row**.
-
-**If no — update**
-
-1. **Update event (V4)** with Excel **EventId**.
-2. Same subject / body / times as create.
-3. Optionally **Update a row** with the latest `CardName`.
-
-### 5. Save and test
-
-1. **Save** → turn the flow **On**.
-2. Set a due date on a test card → wait ~1 minute → check Outlook.
-3. Rename the card → same event should update; Excel should still have one row for that `CardId`.
-
----
-
-## Alternative (Free Trello) — marker in the description
-
-Cerveau hides this automatically in the popup (see **Afficher les métadonnées masquées**).
-
-Preferred marker (HTML comment — invisible in Trello’s own markdown view):
-
-```text
-<!--cerveau-meta
-outlook-event-id: PASTE_EVENT_ID_HERE
--->
-```
-
-Also accepted (visible in native Trello until Cerveau rewrites it):
-
-```text
-[outlook-event-id]: PASTE_EVENT_ID_HERE
-```
-
-Flow idea:
-
-1. Trigger: **When a card is updated**, due date not empty.
-2. Condition: description contains `outlook-event-id` **or** Excel row exists (prefer Excel if you use both).
-3. **If no id** → Create event → **Update a card** description = visible text + comment block with the new event id.  
-   Expression sketch (adjust action names):
+Append the event id. Simplest expression:
 
 ```text
 concat(
-  trim(replace(replace(triggerBody()?['desc'], '<!--cerveau-meta', ''), '[outlook-event-id]:', '')),
+  triggerBody()?['desc'],
   '
 
-<!--cerveau-meta
-outlook-event-id: ',
-  outputs('Create_event')?['body/id'],
-  '
--->'
+[outlook-event-id]: ',
+  body('Create_event')?['id']
 )
 ```
 
-(Simpler: append `\n\n[outlook-event-id]: @{outputs('Create_event')?['body/id']}` — Cerveau will hide it in the popup.)
+(Adjust `Create_event` to your action’s exact name in the dynamic content picker.)
 
-4. **If yes** → Parse id, then **Update event**.
+Cerveau will **hide** that line in the popup. In native Trello it may still show until you open Cerveau (which keeps the hidden `<!--cerveau-meta-->` form on later saves).
 
-**Note:** Prefer **Excel mapping** if you edit descriptions often in Power Automate; the comment block is best when Cerveau Graph sync (or a careful flow) maintains it.
+### 4. Update path (later edits)
 
----
+1. Parse the id from the description (Compose + expression), e.g. take the text after `[outlook-event-id]:`.
+2. **Update event (V4)** with that id; map subject / times / body like create.
 
-## Optional: Trello Pro custom field
+### 5. Save, turn **On**, test
 
-If you later get **Trello Pro / Premium**, you can use a text custom field `Outlook Event ID` instead of Excel — same create/update logic, field on the card. Not required for this guide.
-
----
-
-## Simpler starter (create only — expects duplicates)
-
-1. Trigger: **When a card is created** or **When a due date is set** (if listed).
-2. Action: **Create event** only.
-
-Editing cards will spawn **extra** events. Use Excel mapping for real use.
+1. Set a due date on a test card.  
+2. Wait ~1 minute → event appears in Outlook.  
+3. Reopen the card in **Cerveau** → description looks normal; click **Afficher les métadonnées masquées** to see the id.  
+4. Rename the card → same Outlook event updates (not a duplicate).
 
 ---
 
-## Optional: scheduled catch-up
+## Marker formats Cerveau understands
 
-1. Trigger: **Recurrence** (e.g. daily 7:00).
-2. **Trello – Get cards** (open cards on the board).
-3. **Apply to each**: due date set **and** no Excel row for that `CardId` → Create event → Add Excel row.
+Either works:
 
-Useful for cards that already had dates before the flow existed.
+```text
+[outlook-event-id]: THE_OUTLOOK_EVENT_ID
+```
+
+```text
+<!--cerveau-meta
+outlook-event-id: THE_OUTLOOK_EVENT_ID
+-->
+```
+
+**Power Automate must write one of these.** Cerveau will not invent an Outlook event id by itself.
 
 ---
 
-## Gantt in this Power-Up
+## Optional: Excel mapping instead
 
-- **Exporter .ics** — one-shot import (no Automate).
-- **Power Automate** — this guide (toolbar button).
-- **Connecter Outlook** — Graph; needs Entra; often blocked without admin.
+If you prefer not to touch the description, use a OneDrive Excel table `CardId | EventId | CardName` — see older notes in git history / ask. Description marker is the path that matches “metadata in the description.”
+
+---
+
+## Gantt buttons
+
+| Button | What it does |
+|--------|----------------|
+| **Power Automate** | Opens this guide in-app |
+| **Exporter .ics** | Manual calendar file — **does not** write `outlook-event-id` |
+| **Connecter Outlook** | Graph sync (Entra) — separate path; not required for Automate |
 
 ---
 
 ## Troubleshooting
 
-| Issue | What to try |
-|-------|-------------|
-| Can’t find Trello connector | Org policy; try personal account at make.powerautomate.com |
-| Excel “table not found” | Select header row → Insert → **Table**; use that table name in the action |
-| Flow runs but no event | Outlook connector account = mailbox you open in Outlook |
-| Duplicates | Excel `CardId` / `EventId` mapping (or description marker) + update branch |
-| Work mailbox blocked | Outlook.com calendar, or ask IT for Outlook + Trello connectors |
-| Due date timezone wrong | Set time zone on Create event; or `convertTimeZone(...)` |
-
-## Related
-
-- [outlook-ics-export.md](outlook-ics-export.md) — manual `.ics` export
-- [outlook-entra-setup.md](outlook-entra-setup.md) — Graph SPA (admin-heavy)
+| Issue | Cause |
+|-------|--------|
+| No metadata in Cerveau | Flow never ran step 3 (Update card description), or due-date condition failed |
+| No reveal link in popup | No marker in description yet — run the create path once |
+| Duplicate Outlook events | Update path not parsing id / always taking create branch |
+| Connector missing | Org policy — try personal account at make.powerautomate.com |
