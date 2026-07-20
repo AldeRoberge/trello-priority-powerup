@@ -73,6 +73,21 @@ check(
   Agent.fallbackBlockedReasonText("En attente d'une r\u00e9ponse") ===
     "En attente d'une r\u00e9ponse"
 );
+check(
+  'fallbackBlockedReasonText pas d\'internet → avoir',
+  Agent.fallbackBlockedReasonText("Pas d'internet") ===
+    "En attente d'avoir internet"
+);
+check(
+  'fallbackBlockedReasonText heals En attente de pas d\'',
+  Agent.fallbackBlockedReasonText("En attente de pas d'internet") ===
+    "En attente d'avoir internet"
+);
+check(
+  'fallbackBlockedReasonText pas d\'… pour goal',
+  Agent.fallbackBlockedReasonText("pas d'internet pour publier") ===
+    "En attente d'avoir internet pour publier"
+);
 
 var priority = { enAttente: false, blockedReasons: [] };
 var completion = { items: [], progress: 100 };

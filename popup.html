@@ -4441,7 +4441,13 @@
           typeof PriorityAgent.suggestBlockedReasonText === 'function'
             ? PriorityAgent.getProvider(t)
                 .then(function (provider) {
-                  return PriorityAgent.suggestBlockedReasonText(provider, text);
+                  return PriorityAgent.suggestBlockedReasonText(provider, text, {
+                    cardTitle:
+                      (typeof readCardNameLabel === 'function' &&
+                        readCardNameLabel()) ||
+                      cardNameCache ||
+                      '',
+                  });
                 })
                 .catch(function () {
                   return null;
@@ -4769,8 +4775,7 @@
           fullscreen: false,
           accentColor: '#22272B',
           args: {
-            selectedVisionId: selection.visionId || null,
-            selectedMissionId: selection.missionId || null,
+            selectedObjectifId: selection.objectifId || null,
             selectedProjectId: selection.projectId || null,
           },
         })
@@ -4863,36 +4868,21 @@
       var hierarchy = (latestGoals && latestGoals.hierarchy) || {};
       var projectId = (latestGoals && latestGoals.projectId) || null;
       var projects = (latestGoals && latestGoals.projects) || [];
-      var missions = (latestGoals && latestGoals.missions) || [];
-      var visions = (latestGoals && latestGoals.visions) || [];
+      var objectifs = (latestGoals && latestGoals.objectifs) || [];
       var activeProjects = GT.activeOnly(projects);
-      var activeMissions = GT.activeOnly(missions);
-      var activeVisions = GT.activeOnly(visions);
+      var activeObjectifs = GT.activeOnly(objectifs);
 
       if (projectId && hierarchy.project) {
         var crumb = document.createElement('div');
         crumb.className = 'objectif-breadcrumb';
-        var visionId = hierarchy.vision && hierarchy.vision.id;
-        var missionId = hierarchy.mission && hierarchy.mission.id;
+        var objectifId = hierarchy.objectif && hierarchy.objectif.id;
         var linkedProjectId = hierarchy.project && hierarchy.project.id;
-        appendObjectifCrumb(crumb, hierarchy.vision && hierarchy.vision.name, {
-          asButton: !!visionId,
-          retired: hierarchy.vision && hierarchy.vision.retired,
-          title: 'Modifier la vision',
+        appendObjectifCrumb(crumb, hierarchy.objectif && hierarchy.objectif.name, {
+          asButton: !!objectifId,
+          retired: hierarchy.objectif && hierarchy.objectif.retired,
+          title: 'Modifier l\u2019objectif',
           onClick: function () {
-            openGoalsSettings({ visionId: visionId });
-          },
-        });
-        appendObjectifSep(crumb);
-        appendObjectifCrumb(crumb, hierarchy.mission && hierarchy.mission.name, {
-          asButton: !!missionId,
-          retired: hierarchy.mission && hierarchy.mission.retired,
-          title: 'Modifier la mission',
-          onClick: function () {
-            openGoalsSettings({
-              visionId: visionId,
-              missionId: missionId,
-            });
+            openGoalsSettings({ objectifId: objectifId });
           },
         });
         appendObjectifSep(crumb);
@@ -4902,8 +4892,7 @@
           title: 'Modifier le projet',
           onClick: function () {
             openGoalsSettings({
-              visionId: visionId,
-              missionId: missionId,
+              objectifId: objectifId,
               projectId: linkedProjectId,
             });
           },
@@ -4937,8 +4926,8 @@
         activeProjects.forEach(function (p) {
           var o = document.createElement('option');
           o.value = p.id;
-          var mission = GT.findById(missions, p.missionId);
-          o.textContent = mission ? p.name + ' · ' + mission.name : p.name;
+          var objectif = GT.findById(objectifs, p.objectifId);
+          o.textContent = objectif ? p.name + ' · ' + objectif.name : p.name;
           if (projectId === p.id) o.selected = true;
           select.appendChild(o);
         });
@@ -4946,7 +4935,6 @@
         select.addEventListener('change', function () {
           var nextId = select.value || null;
           if (!nextId) {
-            // Keep card unlinked and focus create form.
             GT.setCardProjectId(t, null)
               .then(function () {
                 return refreshObjectifData();
@@ -4985,59 +4973,25 @@
       var createRow = document.createElement('div');
       createRow.className = 'objectif-create-row';
 
-      if (!activeMissions.length) {
-        if (!activeVisions.length) {
-          var visionHint = document.createElement('p');
-          visionHint.className = 'objectif-create-hint';
-          visionHint.textContent = 'Créer une vision, puis une mission et un projet :';
-          createRow.appendChild(visionHint);
-          var visionInput = document.createElement('input');
-          visionInput.type = 'text';
-          visionInput.className = 'tp-goals-input';
-          visionInput.placeholder = 'Nom de la vision';
-          visionInput.maxLength = 120;
-          var visionBtn = document.createElement('button');
-          visionBtn.type = 'button';
-          visionBtn.className = 'tp-button tp-button--secondary';
-          visionBtn.textContent = 'Créer la vision';
-          bindCreateAction(visionBtn, visionInput, function (name) {
-            return GT.createVision(t, name);
-          });
-          createRow.appendChild(visionInput);
-          createRow.appendChild(visionBtn);
-        } else {
-          var missionHint = document.createElement('p');
-          missionHint.className = 'objectif-create-hint';
-          missionHint.textContent = 'Créer une mission :';
-          createRow.appendChild(missionHint);
-          var visionSelect = document.createElement('select');
-          visionSelect.className = 'tp-select';
-          visionSelect.setAttribute('aria-label', 'Vision parente');
-          activeVisions.forEach(function (v) {
-            var o = document.createElement('option');
-            o.value = v.id;
-            o.textContent = v.name;
-            if (hierarchy.vision && hierarchy.vision.id === v.id) o.selected = true;
-            visionSelect.appendChild(o);
-          });
-          var missionInput = document.createElement('input');
-          missionInput.type = 'text';
-          missionInput.className = 'tp-goals-input';
-          missionInput.placeholder = 'Nom de la mission';
-          missionInput.maxLength = 120;
-          var missionBtn = document.createElement('button');
-          missionBtn.type = 'button';
-          missionBtn.className = 'tp-button tp-button--secondary';
-          missionBtn.textContent = 'Créer la mission';
-          bindCreateAction(missionBtn, missionInput, function (name) {
-            var visionId = visionSelect.value;
-            if (!visionId) return Promise.reject(new Error('Vision requise'));
-            return GT.createMission(t, name, visionId);
-          });
-          createRow.appendChild(visionSelect);
-          createRow.appendChild(missionInput);
-          createRow.appendChild(missionBtn);
-        }
+      if (!activeObjectifs.length) {
+        var objectifHint = document.createElement('p');
+        objectifHint.className = 'objectif-create-hint';
+        objectifHint.textContent = 'Créer un objectif, puis un projet :';
+        createRow.appendChild(objectifHint);
+        var objectifInput = document.createElement('input');
+        objectifInput.type = 'text';
+        objectifInput.className = 'tp-goals-input';
+        objectifInput.placeholder = 'Ex. Produire des vidéos de qualité';
+        objectifInput.maxLength = 120;
+        var objectifBtn = document.createElement('button');
+        objectifBtn.type = 'button';
+        objectifBtn.className = 'tp-button tp-button--secondary';
+        objectifBtn.textContent = 'Créer l\u2019objectif';
+        bindCreateAction(objectifBtn, objectifInput, function (name) {
+          return GT.createObjectif(t, name);
+        });
+        createRow.appendChild(objectifInput);
+        createRow.appendChild(objectifBtn);
       } else {
         var projectHint = document.createElement('p');
         projectHint.className = 'objectif-create-hint';
@@ -5045,30 +4999,29 @@
           ? 'Ou créer un projet et le lier :'
           : 'Créer un projet et le lier à cette carte :';
         createRow.appendChild(projectHint);
-        var missionSelect = document.createElement('select');
-        missionSelect.className = 'tp-select';
-        missionSelect.setAttribute('aria-label', 'Mission parente');
-        activeMissions.forEach(function (m) {
-          var o = document.createElement('option');
-          o.value = m.id;
-          var vision = GT.findById(visions, m.visionId);
-          o.textContent = vision ? m.name + ' · ' + vision.name : m.name;
-          if (hierarchy.mission && hierarchy.mission.id === m.id) o.selected = true;
-          missionSelect.appendChild(o);
+        var objectifSelect = document.createElement('select');
+        objectifSelect.className = 'tp-select';
+        objectifSelect.setAttribute('aria-label', 'Objectif parent');
+        activeObjectifs.forEach(function (o) {
+          var opt = document.createElement('option');
+          opt.value = o.id;
+          opt.textContent = o.name;
+          if (hierarchy.objectif && hierarchy.objectif.id === o.id) opt.selected = true;
+          objectifSelect.appendChild(opt);
         });
         var nameInput = document.createElement('input');
         nameInput.type = 'text';
         nameInput.className = 'tp-goals-input';
-        nameInput.placeholder = 'Nom du projet';
+        nameInput.placeholder = 'Ex. Production Vidéo';
         nameInput.maxLength = 120;
         var createBtn = document.createElement('button');
         createBtn.type = 'button';
         createBtn.className = 'tp-button tp-button--secondary';
         createBtn.textContent = 'Créer et lier';
         bindCreateAction(createBtn, nameInput, function (name) {
-          var missionId = missionSelect.value;
-          if (!missionId) return Promise.reject(new Error('Mission requise'));
-          return GT.createProject(t, name, missionId).then(function (project) {
+          var parentId = objectifSelect.value;
+          if (!parentId) return Promise.reject(new Error('Objectif requis'));
+          return GT.createProject(t, name, parentId).then(function (project) {
             return GT.setCardProjectId(t, project.id).then(function (id) {
               return commitHistoryNow('Projet lié').then(function () {
                 return id;
@@ -5076,60 +5029,30 @@
             });
           });
         });
-        createRow.appendChild(missionSelect);
+        createRow.appendChild(objectifSelect);
         createRow.appendChild(nameInput);
         createRow.appendChild(createBtn);
 
-        // Allow adding another mission from this window as well.
-        var addMissionDetails = document.createElement('details');
-        addMissionDetails.className = 'objectif-add-mission';
-        var addMissionSummary = document.createElement('summary');
-        addMissionSummary.textContent = 'Configurer une mission';
-        addMissionDetails.appendChild(addMissionSummary);
-        if (activeVisions.length) {
-          var addVisionSelect = document.createElement('select');
-          addVisionSelect.className = 'tp-select';
-          addVisionSelect.setAttribute('aria-label', 'Vision parente');
-          activeVisions.forEach(function (v) {
-            var o = document.createElement('option');
-            o.value = v.id;
-            o.textContent = v.name;
-            addVisionSelect.appendChild(o);
-          });
-          var addMissionInput = document.createElement('input');
-          addMissionInput.type = 'text';
-          addMissionInput.className = 'tp-goals-input';
-          addMissionInput.placeholder = 'Nom de la mission';
-          addMissionInput.maxLength = 120;
-          var addMissionBtn = document.createElement('button');
-          addMissionBtn.type = 'button';
-          addMissionBtn.className = 'tp-button tp-button--secondary';
-          addMissionBtn.textContent = 'Ajouter la mission';
-          bindCreateAction(addMissionBtn, addMissionInput, function (name) {
-            var visionId = addVisionSelect.value;
-            if (!visionId) return Promise.reject(new Error('Vision requise'));
-            return GT.createMission(t, name, visionId);
-          });
-          addMissionDetails.appendChild(addVisionSelect);
-          addMissionDetails.appendChild(addMissionInput);
-          addMissionDetails.appendChild(addMissionBtn);
-        } else {
-          var addVisionInput = document.createElement('input');
-          addVisionInput.type = 'text';
-          addVisionInput.className = 'tp-goals-input';
-          addVisionInput.placeholder = 'Nom de la vision';
-          addVisionInput.maxLength = 120;
-          var addVisionBtn = document.createElement('button');
-          addVisionBtn.type = 'button';
-          addVisionBtn.className = 'tp-button tp-button--secondary';
-          addVisionBtn.textContent = 'Créer la vision';
-          bindCreateAction(addVisionBtn, addVisionInput, function (name) {
-            return GT.createVision(t, name);
-          });
-          addMissionDetails.appendChild(addVisionInput);
-          addMissionDetails.appendChild(addVisionBtn);
-        }
-        createRow.appendChild(addMissionDetails);
+        var addObjectifDetails = document.createElement('details');
+        addObjectifDetails.className = 'objectif-add-mission';
+        var addObjectifSummary = document.createElement('summary');
+        addObjectifSummary.textContent = 'Ajouter un objectif';
+        addObjectifDetails.appendChild(addObjectifSummary);
+        var addObjectifInput = document.createElement('input');
+        addObjectifInput.type = 'text';
+        addObjectifInput.className = 'tp-goals-input';
+        addObjectifInput.placeholder = 'Nom de l\u2019objectif';
+        addObjectifInput.maxLength = 120;
+        var addObjectifBtn = document.createElement('button');
+        addObjectifBtn.type = 'button';
+        addObjectifBtn.className = 'tp-button tp-button--secondary';
+        addObjectifBtn.textContent = 'Créer l\u2019objectif';
+        bindCreateAction(addObjectifBtn, addObjectifInput, function (name) {
+          return GT.createObjectif(t, name);
+        });
+        addObjectifDetails.appendChild(addObjectifInput);
+        addObjectifDetails.appendChild(addObjectifBtn);
+        createRow.appendChild(addObjectifDetails);
       }
       body.appendChild(createRow);
     }
@@ -5145,14 +5068,12 @@
         var cache = GT.getCachedBoardGoals();
         var hierarchy = projectId
           ? GT.resolveHierarchyFromCache(cache, projectId)
-          : { vision: null, mission: null, project: null };
+          : { objectif: null, project: null };
         latestGoals = {
           projectId: projectId,
           hierarchy: hierarchy,
-          visions: cache.visions,
-          missions: cache.missions,
+          objectifs: cache.objectifs,
           projects: cache.projects,
-          metrics: cache.metrics,
         };
         appliedGoalsProjectId = projectId || null;
         renderObjectifBody();

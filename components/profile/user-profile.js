@@ -105,13 +105,13 @@
   var EXPERIMENTAL_KEYS = ['objectif', 'impactGlobe', 'easeHourglass'];
 
   var EXPERIMENTAL_LABELS = {
-    objectif: 'Objectifs (vision, mission, projet)',
+    objectif: 'Objectifs (objectifs et projets)',
     impactGlobe: 'Globe d’impact (portée)',
     easeHourglass: 'Sablier de durée (Facilité)'
   };
 
   var EXPERIMENTAL_HINTS = {
-    objectif: 'Section Objectif sur les cartes, badges et paramètres Vision → Mission → Projet',
+    objectif: 'Section Objectif sur les cartes, badges et paramètres Objectifs → Projets',
     impactGlobe: 'Anneau de portée autour du globe sur le champ Impact',
     easeHourglass: 'Contrôle de durée estimée avec sablier sous Facilité'
   };

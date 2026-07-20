@@ -64,6 +64,37 @@ describe('Dual blocked Motifs', () => {
     );
   });
 
+  it('fallbackBlockedReasonText rewrites lack / negation naturally', () => {
+    assert.equal(
+      Agent.fallbackBlockedReasonText("Pas d'internet"),
+      "En attente d'avoir internet"
+    );
+    assert.equal(
+      Agent.fallbackBlockedReasonText('Sans wifi'),
+      "En attente d'avoir wifi"
+    );
+    assert.equal(
+      Agent.fallbackBlockedReasonText("En attente de pas d'internet"),
+      "En attente d'avoir internet"
+    );
+    assert.equal(
+      Agent.fallbackBlockedReasonText("pas d'internet pour publier"),
+      "En attente d'avoir internet pour publier"
+    );
+  });
+
+  it('fallbackBlockedReasonPair weaves lack WHY with subtask goal', () => {
+    const pair = Agent.fallbackBlockedReasonPair({
+      subtaskTitle: 'Publier',
+      why: "Pas d'internet",
+    });
+    assert.equal(pair.subtaskReason, "En attente d'avoir internet");
+    assert.equal(
+      pair.cardReason,
+      "En attente d'avoir internet pour publier"
+    );
+  });
+
   it('fallbackBlockedReasonPair with no WHY keeps card provisional only', () => {
     const pair = Agent.fallbackBlockedReasonPair({
       subtaskTitle: 'Tester en mode portrait',

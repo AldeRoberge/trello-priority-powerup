@@ -2457,26 +2457,21 @@
           });
           ctx.goals = {
             projectId: goalsRaw.projectId || null,
-            vision: h.vision
-              ? { id: h.vision.id, name: h.vision.name, retired: !!h.vision.retired }
-              : null,
-            mission: h.mission
-              ? { id: h.mission.id, name: h.mission.name, retired: !!h.mission.retired }
+            objectif: h.objectif
+              ? { id: h.objectif.id, name: h.objectif.name, retired: !!h.objectif.retired }
               : null,
             project: h.project
               ? { id: h.project.id, name: h.project.name, retired: !!h.project.retired }
               : null,
             projects: activeProjects
               .map(function (p) {
-                return { id: p.id, name: p.name, missionId: p.missionId };
+                return { id: p.id, name: p.name, objectifId: p.objectifId };
               })
               .slice(0, 40),
             metrics: Array.isArray(goalsRaw.metrics)
               ? goalsRaw.metrics
                   .filter(function (m) {
-                    return (
-                      h.mission && m.linkedGoalId === h.mission.id
-                    );
+                    return h.objectif && m.linkedGoalId === h.objectif.id;
                   })
                   .map(function (m) {
                     return {
@@ -3232,7 +3227,8 @@
       '- Si actions est [] , le label est renvoy\u00e9 comme message utilisateur (pr\u00e9f\u00e8re suggestions pour \u00e7a).',
       'Causes de blocage (blockedReasons) \u2014 tr\u00e8s important\u00a0:',
       '- Une cause d\u00e9crit POURQUOI la carte est bloqu\u00e9e (\u00e9tat / raison), pas une t\u00e2che \u00e0 faire.',
-      '- Formule pr\u00e9f\u00e9r\u00e9e\u00a0: "Bloqu\u00e9 \u00e0 cause de \u2026" ou "En attente de \u2026".',
+      '- Formule pr\u00e9f\u00e9r\u00e9e\u00a0: "Bloqu\u00e9 \u00e0 cause de \u2026", "En attente de \u2026" ou "En attente d\'avoir \u2026".',
+      '- N\u00e9gations (pas d\'internet, sans wifi)\u00a0: reformule \u00ab\u00a0En attente d\'avoir internet\u00a0\u00bb \u2014 jamais \u00ab\u00a0En attente de pas d\'internet\u00a0\u00bb.',
       '- INTERDIT\u00a0: infinitifs d\'action comme "V\u00e9rifier le mat\u00e9riel", "Contacter le client", "Commander du stock".',
       '- Exemple mat\u00e9riel\u00a0: label d\'action "Marquer bloqu\u00e9 (mat\u00e9riel)" + cause "Bloqu\u00e9 \u00e0 cause de la disponibilit\u00e9 du mat\u00e9riel" (PAS "V\u00e9rifier le mat\u00e9riel" comme cause).',
       '- La cause est optionnelle\u00a0: on peut bloquer sans blockedReasons. Ne jamais exiger une cause ni boucler dessus.',
@@ -3923,8 +3919,9 @@
           '- Tu n\u2019es pas s\u00fbr\u00a0: shouldSplit=false.',
           '',
           'Chaque entr\u00e9e de reasons\u00a0:',
-          '- UNE cause courte, autonome (1 ligne), pr\u00e9f\u00e9rer \u00ab\u00a0En attente de \u2026\u00a0\u00bb / \u00ab\u00a0En attente d\'\u2026\u00a0\u00bb',
+          '- UNE cause courte, autonome (1 ligne), pr\u00e9f\u00e9rer \u00ab\u00a0En attente de \u2026\u00a0\u00bb / \u00ab\u00a0En attente d\'\u2026\u00a0\u00bb / \u00ab\u00a0En attente d\'avoir \u2026\u00a0\u00bb',
           '  ou \u00ab\u00a0Bloqu\u00e9 \u00e0 cause de \u2026\u00a0\u00bb pour un obstacle mat\u00e9riel / permission.',
+          '- N\u00e9gations (pas de/d\', sans)\u00a0: \u00ab\u00a0En attente d\'avoir \u2026\u00a0\u00bb \u2014 INTERDIT \u00ab\u00a0En attente de pas d\'\u2026\u00a0\u00bb.',
           '- Corrige fautes \u00e9videntes / typos.',
           '- Garde la langue du texte d\u2019origine (FR ou EN).',
           '- INTERDIT\u00a0: inventer des causes absentes\u00a0; num\u00e9rotation\u00a0; guillemets superflus\u00a0; actions \u00e0 faire (\u00ab\u00a0Obtenir\u2026\u00a0\u00bb).',
@@ -4146,23 +4143,90 @@
     return out;
   }
 
+  function lowerFrFirst(text) {
+    var s = String(text || '');
+    if (!s) return '';
+    return s.charAt(0).toLocaleLowerCase('fr-FR') + s.slice(1);
+  }
+
+  /**
+   * Rewrite lack / negation fragments into natural "En attente d'avoir …" causes.
+   * "pas d'internet" → "En attente d'avoir internet"
+   * "pas d'internet pour publier" → "En attente d'avoir internet pour publier"
+   * Returns null when the fragment is not a lack pattern.
+   */
+  function rewriteLackAsWaitingCause(fragment) {
+    var body = String(fragment || '')
+      .trim()
+      .replace(/\.+$/, '');
+    if (!body) return null;
+
+    var pourMatch = body.match(/^(.*?)(\s+pour\s+.+)$/i);
+    var core = pourMatch ? String(pourMatch[1] || '').trim() : body;
+    var pourSuffix = pourMatch ? String(pourMatch[2] || '') : '';
+    if (!core) return null;
+
+    var thing = '';
+    var m;
+    if (
+      (m = core.match(/^pas\s+d['\u2019]\s*(.+)$/i)) ||
+      (m = core.match(/^pas\s+de\s+(.+)$/i)) ||
+      (m = core.match(/^sans\s+(.+)$/i)) ||
+      (m = core.match(/^manque\s+d['\u2019]\s*(.+)$/i)) ||
+      (m = core.match(
+        /^il\s+n['\u2019]y\s+a\s+pas\s+(?:de\s+|d['\u2019]\s*)(.+)$/i
+      ))
+    ) {
+      thing = String(m[1] || '').trim();
+      if (!thing) return null;
+      return ('En attente d\'avoir ' + lowerFrFirst(thing) + pourSuffix).slice(
+        0,
+        500
+      );
+    }
+    if ((m = core.match(/^manque\s+de\s+(.+)$/i))) {
+      thing = String(m[1] || '').trim();
+      if (!thing) return null;
+      return ('En attente de ' + lowerFrFirst(thing) + pourSuffix).slice(0, 500);
+    }
+    return null;
+  }
+
   /**
    * Deterministic fallback: turn a free-typed motif / action into a cause phrase.
    * "Manger un hot-dog" → "En attente de manger un hot-dog"
+   * "Pas d'internet" → "En attente d'avoir internet"
    */
   function fallbackBlockedReasonText(reason) {
     var trimmed = typeof reason === 'string' ? reason.trim() : '';
     if (!trimmed) return '';
+
+    // Heal awkward "En attente de pas d'/de …" / "En attente de sans …".
+    if (
+      /^en\s+attente\s+de\s+pas\s+/i.test(trimmed) ||
+      /^en\s+attente\s+de\s+sans\s+/i.test(trimmed) ||
+      /^en\s+attente\s+de\s+manque\s+/i.test(trimmed)
+    ) {
+      var healed = rewriteLackAsWaitingCause(
+        trimmed.replace(/^en\s+attente\s+de\s+/i, '')
+      );
+      if (healed) return healed;
+    }
+
     if (/^en\s+attente\s+(de|d\')/i.test(trimmed)) return trimmed;
-    if (/^bloqu\u00e9\s+\u00e0\s+cause\s+de\s+/i.test(trimmed)) return trimmed;
+    if (/^bloqu\u00e9\b/i.test(trimmed)) return trimmed;
+
     var known = normalizeAgentBlockedReason(trimmed);
     if (known && known !== trimmed && /^en\s+attente|^bloqu\u00e9/i.test(known)) {
       return known;
     }
+
+    var lack = rewriteLackAsWaitingCause(trimmed);
+    if (lack) return lack;
+
     var body = trimmed.replace(/\.+$/, '');
     // Prefer lowercase after "de" for infinitives / mid-sentence phrasing.
-    var lower =
-      body.charAt(0).toLocaleLowerCase('fr-FR') + body.slice(1);
+    var lower = lowerFrFirst(body);
     if (/^(une?|des)\s+/i.test(lower)) {
       return ('En attente d\'' + lower).slice(0, 500);
     }
@@ -4173,13 +4237,22 @@
   }
 
   /**
-   * AI-assisted polish for a typed block motif → single "En attente de …" cause.
+   * AI-assisted polish for a typed block motif → single natural cause.
+   * @param {*} provider
+   * @param {string} reason
+   * @param {{ cardTitle?: string }} [opts]
    */
-  async function suggestBlockedReasonText(provider, reason) {
+  async function suggestBlockedReasonText(provider, reason, opts) {
+    opts = opts && typeof opts === 'object' ? opts : {};
     var trimmed = typeof reason === 'string' ? reason.trim() : '';
     if (!trimmed) return '';
+    var cardTitle = String(opts.cardTitle || opts.cardName || '').trim();
     var fallback = fallbackBlockedReasonText(trimmed);
-    if (/^en\s+attente\s+(de|d\')/i.test(trimmed) || /^bloqu\u00e9\s+\u00e0\s+cause\s+de\s+/i.test(trimmed)) {
+    // Already polished (and not the awkward "En attente de pas …" form).
+    if (
+      (/^en\s+attente\s+(de|d\')/i.test(trimmed) || /^bloqu\u00e9\b/i.test(trimmed)) &&
+      !/^en\s+attente\s+de\s+(pas|sans|manque)\s+/i.test(trimmed)
+    ) {
       return trimmed;
     }
     var p = normalizeProvider(provider);
@@ -4192,13 +4265,20 @@
           'Tu transformes une cause de blocage Trello en une seule cause en fran\u00e7ais.',
           'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"text":"\u2026"}',
           'R\u00e8gles\u00a0:',
-          '- text = UNE cause, pas une action \u00e0 faire (sauf si d\u00e9j\u00e0 une cause).',
-          '- Pr\u00e9f\u00e8re \u00ab\u00a0En attente de \u2026\u00a0\u00bb (ou \u00ab\u00a0En attente d\'\u2026\u00a0\u00bb) pour une attente / action pas encore faite.',
-          '- Utilise \u00ab\u00a0Bloqu\u00e9 \u00e0 cause de \u2026\u00a0\u00bb seulement pour un obstacle physique / permission / mat\u00e9riel.',
+          '- text = UNE cause naturelle, pas une action \u00e0 faire (sauf si d\u00e9j\u00e0 une cause).',
+          '- Pr\u00e9f\u00e8re \u00ab\u00a0En attente de/d\'\u2026\u00a0\u00bb ou \u00ab\u00a0En attente d\'avoir \u2026\u00a0\u00bb.',
+          '- Utilise \u00ab\u00a0Bloqu\u00e9 \u00e0 cause de \u2026\u00a0\u00bb seulement pour un obstacle physique / permission / mat\u00e9riel clairement nomm\u00e9.',
+          '- N\u00e9gations / manques (pas de, pas d\', sans, manque de, il n\'y a pas)\u00a0:',
+          '  reformule en \u00ab\u00a0En attente d\'avoir \u2026\u00a0\u00bb (jamais calquer la n\u00e9gation).',
+          '- INTERDIT\u00a0: \u00ab\u00a0En attente de pas d\'internet\u00a0\u00bb, \u00ab\u00a0En attente de pas de \u2026\u00a0\u00bb, \u00ab\u00a0En attente de sans \u2026\u00a0\u00bb.',
+          '- Si le titre de carte / but est fourni, tu PEUX ajouter \u00ab\u00a0pour [but]\u00a0\u00bb quand \u00e7a clarifie (ex. publier, tester).',
           '- Si l\'entr\u00e9e est un infinitif (ex. Manger un hot-dog / Essayer le connecteur)\u00a0: \u00ab\u00a0En attente de manger\u2026\u00a0\u00bb / \u00ab\u00a0En attente d\'essayer\u2026\u00a0\u00bb (minuscule apr\u00e8s de/d\', \u00e9lision devant voyelle).',
           '- PAS de parenth\u00e8ses autour du titre, PAS de num\u00e9rotation, PAS de seconde cause.',
           '- INTERDIT\u00a0: \u00ab\u00a0En attente de (Essayer\u2026)\u00a0\u00bb \u2014 int\u00e8gre le verbe naturellement.',
           '- Max ~100 caract\u00e8res.',
+          'Ex.\u00a0: \u00ab\u00a0Pas d\'internet\u00a0\u00bb (carte \u00ab\u00a0Publier l\'article\u00a0\u00bb) \u2192 {"text":"En attente d\'avoir internet pour publier"}',
+          'Ex.\u00a0: \u00ab\u00a0Pas de wifi\u00a0\u00bb \u2192 {"text":"En attente d\'avoir le wifi"}',
+          'Ex.\u00a0: \u00ab\u00a0Sans acc\u00e8s VPN\u00a0\u00bb \u2192 {"text":"En attente d\'avoir l\'acc\u00e8s VPN"}',
           'Ex.\u00a0: \u00ab\u00a0Manger un hot-dog\u00a0\u00bb \u2192 {"text":"En attente de manger un hot-dog"}',
           'Ex.\u00a0: \u00ab\u00a0Essayer le connecteur Antidote\u00a0\u00bb \u2192 {"text":"En attente d\'essayer le connecteur Antidote"}',
           'Ex.\u00a0: \u00ab\u00a0r\u00e9ponse du client\u00a0\u00bb \u2192 {"text":"En attente d\'une r\u00e9ponse du client"}',
@@ -4207,7 +4287,12 @@
       },
       {
         role: 'user',
-        content: 'Cause saisie\u00a0: «' + trimmed.slice(0, 200) + '»'
+        content: [
+          cardTitle ? 'Carte\u00a0: \u00ab' + cardTitle.slice(0, 120) + '\u00bb' : '',
+          'Cause saisie\u00a0: \u00ab' + trimmed.slice(0, 200) + '\u00bb'
+        ]
+          .filter(Boolean)
+          .join('\n')
       }
     ];
 
@@ -4257,6 +4342,7 @@
       .replace(/^["«]\s*|\s*["»]$/g, '')
       .slice(0, 500);
     if (!text) return fallback;
+    // Finalize via fallback so awkward "En attente de pas …" still gets healed.
     return fallbackBlockedReasonText(text) || text;
   }
 
@@ -4351,7 +4437,11 @@
     if (taskLower && whyCore) {
       var coreLower =
         whyCore.charAt(0).toLocaleLowerCase('fr-FR') + whyCore.slice(1);
-      if (/^la\s+/i.test(coreLower)) {
+      // Lack / negation → "En attente d'avoir X pour [task]" (never "de pas d'X").
+      var lackWoven = rewriteLackAsWaitingCause(coreLower + ' pour ' + taskLower);
+      if (lackWoven) {
+        cardReason = lackWoven;
+      } else if (/^la\s+/i.test(coreLower)) {
         cardReason =
           'En attente de la ' +
           coreLower.replace(/^la\s+/i, '') +
@@ -4416,10 +4506,13 @@
           '- subtaskReason = pourquoi CETTE sous-t\u00e2che ne peut pas avancer (cause directe\u00a0: mat\u00e9riel, permission, r\u00e9ponse\u2026).',
           '- cardReason = pourquoi la t\u00e2che parente / carte attend\u00a0: relie la cause au but de la sous-t\u00e2che.',
           '- INTERDIT sur subtaskReason\u00a0: \u00ab\u00a0En attente de [titre exact de la sous-t\u00e2che]\u00a0\u00bb (auto-r\u00e9f\u00e9rence).',
-          '- Pr\u00e9f\u00e8re \u00ab\u00a0En attente de/d\'\u2026\u00a0\u00bb\u00a0; \u00ab\u00a0Bloqu\u00e9 \u00e0 cause de\u00a0\u00bb seulement pour un obstacle mat\u00e9riel / permission.',
+          '- Pr\u00e9f\u00e8re \u00ab\u00a0En attente de/d\'\u2026\u00a0\u00bb ou \u00ab\u00a0En attente d\'avoir \u2026\u00a0\u00bb\u00a0; \u00ab\u00a0Bloqu\u00e9 \u00e0 cause de\u00a0\u00bb seulement pour un obstacle mat\u00e9riel / permission.',
+          '- N\u00e9gations (pas de/d\', sans, manque)\u00a0: reformule en \u00ab\u00a0En attente d\'avoir \u2026\u00a0\u00bb \u2014 INTERDIT \u00ab\u00a0En attente de pas d\'\u2026\u00a0\u00bb.',
           '- Minuscule apr\u00e8s de/d\'\u00a0; max ~100 caract\u00e8res par champ\u00a0; PAS de parenth\u00e8ses ni num\u00e9rotation.',
           'Ex.\u00a0: sous-t\u00e2che \u00ab\u00a0Tester en mode portrait\u00a0\u00bb, cause \u00ab\u00a0Il faut le tr\u00e9pied\u00a0\u00bb',
           '  \u2192 {"subtaskReason":"En attente d\'avoir le tr\u00e9pied requis","cardReason":"En attente du tr\u00e9pied pour tester en mode portrait"}',
+          'Ex.\u00a0: sous-t\u00e2che \u00ab\u00a0Publier\u00a0\u00bb, cause \u00ab\u00a0Pas d\'internet\u00a0\u00bb',
+          '  \u2192 {"subtaskReason":"En attente d\'avoir internet","cardReason":"En attente d\'avoir internet pour publier"}',
           'Ex.\u00a0: sous-t\u00e2che \u00ab\u00a0Valider le devis\u00a0\u00bb, cause \u00ab\u00a0r\u00e9ponse du client\u00a0\u00bb',
           '  \u2192 {"subtaskReason":"En attente d\'une r\u00e9ponse du client","cardReason":"En attente de la r\u00e9ponse du client pour valider le devis"}'
         ].join('\n')
@@ -4793,15 +4886,15 @@
   }
 
   /**
-   * Suggest Vision / Mission / Projet names for board Objectifs settings.
-   * context: { kind, boardName?, existingNames?, parentVision?, parentMission?, hierarchy? }
+   * Suggest Objectif / Projet names for board Objectifs settings.
+   * context: { kind, boardName?, existingNames?, parentObjectif?, hierarchy? }
    */
   async function suggestGoals(provider, context, options) {
     options = options || {};
     var p = normalizeProvider(provider);
     if (!isConfigured(p)) return [];
     var ctx = context && typeof context === 'object' ? context : {};
-    var kind = ctx.kind === 'mission' || ctx.kind === 'project' ? ctx.kind : 'vision';
+    var kind = ctx.kind === 'project' ? 'project' : 'objectif';
     var existing = Array.isArray(ctx.existingNames)
       ? ctx.existingNames
           .map(function (s) {
@@ -4810,41 +4903,37 @@
           .filter(Boolean)
       : [];
 
-    var kindLabel =
-      kind === 'mission' ? 'missions' : kind === 'project' ? 'projets' : 'visions';
-    var kindOne =
-      kind === 'mission' ? 'mission' : kind === 'project' ? 'projet' : 'vision';
+    var kindLabel = kind === 'project' ? 'projets' : 'objectifs';
+    var kindOne = kind === 'project' ? 'projet' : 'objectif';
 
     var payload = {
       kind: kind,
       boardName: typeof ctx.boardName === 'string' ? ctx.boardName.slice(0, 200) : '',
-      parentVision: typeof ctx.parentVision === 'string' ? ctx.parentVision.slice(0, 200) : '',
-      parentMission: typeof ctx.parentMission === 'string' ? ctx.parentMission.slice(0, 200) : '',
+      parentObjectif:
+        typeof ctx.parentObjectif === 'string' ? ctx.parentObjectif.slice(0, 200) : '',
       existingNames: existing.slice(0, 40),
       hierarchy: ctx.hierarchy && typeof ctx.hierarchy === 'object' ? ctx.hierarchy : null
     };
 
     var roleHints = {
-      vision:
-        'Une vision = ambition strat\u00e9gique durable (ex. \u00ab\u00a0Devenir la r\u00e9f\u00e9rence locale en formation\u00a0\u00bb).',
-      mission:
-        'Une mission = axe concret sous la vision, souvent mesurable (ex. \u00ab\u00a0Doubler les inscriptions Q4\u00a0\u00bb).',
+      objectif:
+        'Un objectif = r\u00e9sultat durable \u00e0 viser (ex. \u00ab\u00a0Produire des vid\u00e9os de qualit\u00e9\u00a0\u00bb).',
       project:
-        'Un projet = chantier op\u00e9rationnel sous la mission (ex. \u00ab\u00a0Campagne rentr\u00e9e 2026\u00a0\u00bb).'
+        'Un projet = chantier concret sous l\u2019objectif (ex. \u00ab\u00a0Production Vid\u00e9o\u00a0\u00bb).'
     };
 
     var messages = [
       {
         role: 'system',
         content: [
-          'Tu proposes des noms d\'objectifs pour un Power-Up Trello (hi\u00e9rarchie Vision \u2192 Mission \u2192 Projet).',
+          'Tu proposes des noms pour un Power-Up Trello (hi\u00e9rarchie Objectifs \u2192 Projets).',
           'R\u00e9ponds UNIQUEMENT avec JSON\u00a0: {"suggestions":["\u2026","\u2026","\u2026"]}',
           'Exactement 3 suggestions si possible (2 minimum si le contexte est pauvre).',
           'Chaque suggestion = un nom court en fran\u00e7ais (pas une question, pas de num\u00e9rotation).',
           roleHints[kind],
-          'Inspire-toi du tableau, des parents et de la hi\u00e9rarchie existante.',
+          'Inspire-toi du tableau, de l\u2019objectif parent et de la hi\u00e9rarchie existante.',
           'INTERDIT\u00a0: dupliquer un nom existant (m\u00eame sens).',
-          'INTERDIT\u00a0: placeholders, guillemets superflus, formulations trop g\u00e9n\u00e9riques (\u00ab\u00a0Nouvelle vision\u00a0\u00bb).',
+          'INTERDIT\u00a0: placeholders, guillemets superflus, formulations trop g\u00e9n\u00e9riques (\u00ab\u00a0Nouvel objectif\u00a0\u00bb).',
           'Contexte\u00a0:',
           JSON.stringify(payload)
         ].join('\n')

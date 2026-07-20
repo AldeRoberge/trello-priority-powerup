@@ -482,7 +482,7 @@ check(
 );
 check(
   'countdown overdue 1 day',
-  PU.formatDueCountdown(addDaysIso('2026-07-13', -1), nowFixed) === 'En retard de 1 jour'
+  PU.formatDueCountdown(addDaysIso('2026-07-13', -1), nowFixed) === 'En retard d\'une journ\u00e9e'
 );
 check(
   'countdown overdue 2 weeks',
@@ -529,7 +529,7 @@ check(
 check(
   'countdown overdue hides hours when 10+ late',
   PU.formatDueCountdown('2026-07-13', nowAfternoon, '00:00') ===
-    'En retard de 1 jour'
+    'En retard d\'une journ\u00e9e'
 );
 check(
   'countdown with time overdue weeks scales',
@@ -675,7 +675,7 @@ check(
       '',
       nowAfternoon
     );
-    return human.primary === 'En retard de 1 jour' && !human.secondary;
+    return human.primary === 'En retard d\'une journ\u00e9e' && !human.secondary;
   })()
 );
 check(

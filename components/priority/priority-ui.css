@@ -681,6 +681,8 @@ body {
 }
 
 .overview-progress-fill {
+  /* Block so width:% works when the fill is a <span> (header summary). */
+  display: block;
   height: 100%;
   width: 0%;
   border-radius: inherit;
@@ -3340,6 +3342,13 @@ body {
 }
 
 /* Progrès collapsed header: same ring + % + bar + color as Overview */
+.field--progress .section-toggle-summary {
+  white-space: normal;
+  /* Keep the bar fill crisp — fade is for plain text overflow. */
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
 .progress-summary {
   display: inline-flex;
   flex-direction: row;

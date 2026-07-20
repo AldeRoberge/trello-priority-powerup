@@ -3869,7 +3869,7 @@
     if (!isFinite(days)) return '';
     if (days < 0) {
       var late = -days;
-      if (late === 1) return 'en retard de 1 jour';
+      if (late === 1) return 'en retard d\'une journ\u00e9e';
       if (late < COUNTDOWN_DAYS_PER_WEEK) return 'en retard de ' + late + ' jours';
       if (late < COUNTDOWN_WEEK_THRESHOLD_DAYS) {
         var lateWeeks = Math.max(1, Math.round(late / COUNTDOWN_DAYS_PER_WEEK));
@@ -8953,7 +8953,7 @@
     parentRow.value.appendChild(parentWrap);
     body.appendChild(parentRow.row);
 
-    // ── Objectif (project / mission link) ───────────────────────────────
+    // ── Objectif (project link) ───────────────────────────────
     var objectifRow = makeRow('objectif', 'Objectif', { icon: 'ti-hierarchy-2' });
     var objectifMount = document.createElement('div');
     objectifMount.className = 'info-objectif-mount objectif-section-body';
@@ -10581,7 +10581,7 @@
             deleteBtn.title = 'Supprimer du tableau';
             deleteBtn.disabled = labelsBusy;
             deleteBtn.innerHTML =
-              '<i class="ti ti-x" aria-hidden="true"></i>';
+              '<i class="ti ti-trash" aria-hidden="true"></i>';
             deleteBtn.addEventListener('click', function (event) {
               event.preventDefault();
               event.stopPropagation();

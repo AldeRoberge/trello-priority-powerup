@@ -30,7 +30,7 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-hierarchy-2"></i></span>
       <span class="tp-settings-summary-title">Objectifs</span>
-      <span class="tp-settings-summary-hint">Vision, mission, projet et métriques (expérimental)</span>
+      <span class="tp-settings-summary-hint">Objectifs et projets (expérimental)</span>
     </summary>
     <div class="tp-settings-body">
       <div id="goalsSettingsMount"></div>
@@ -348,15 +348,10 @@
       }
 
       var initialSelection = {
-        visionId: t.arg('selectedVisionId') || null,
-        missionId: t.arg('selectedMissionId') || null,
+        objectifId: t.arg('selectedObjectifId') || null,
         projectId: t.arg('selectedProjectId') || null,
       };
-      var hasSelection = !!(
-        initialSelection.visionId ||
-        initialSelection.missionId ||
-        initialSelection.projectId
-      );
+      var hasSelection = !!(initialSelection.objectifId || initialSelection.projectId);
       if (section && hasSelection) {
         section.open = true;
       }

@@ -1,5 +1,6 @@
-/* Trello Power-Up bridge — Vision / Mission / Project / Metric storage and badges.
+/* Trello Power-Up bridge — Objectif / Project storage and badges.
  * Board collections: board/shared. Card link: card/shared goals.projectId.
+ * One-shot migrate from legacy Vision / Mission keys when needed.
  * Does not touch priority scoring. Exposes window.GoalsTrello (no bundler).
  */
 (function (global) {
@@ -18,8 +19,9 @@
     else if (err) console.error(domain + '.' + event, err);
   }
 
-  var VISIONS_KEY = 'goals.visions';
-  var MISSIONS_KEY = 'goals.missions';
+  var OBJECTIFS_KEY = 'goals.objectifs';
+  var LEGACY_VISIONS_KEY = 'goals.visions';
+  var LEGACY_MISSIONS_KEY = 'goals.missions';
   var PROJECTS_KEY = 'goals.projects';
   var METRICS_KEY = 'goals.metrics';
   var CARD_PROJECT_ID_KEY = 'goals.projectId';
@@ -34,11 +36,11 @@
   var METRIC_MEASUREMENTS = { direct: true, manual: true };
 
   var boardCache = {
-    visions: null,
-    missions: null,
+    objectifs: null,
     projects: null,
     metrics: null,
   };
+  var migratePromise = null;
 
   function generateId() {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -86,16 +88,24 @@
     return entity;
   }
 
-  function normalizeVision(raw) {
+  function normalizeObjectif(raw) {
     return normalizeGoalEntity(raw, null);
   }
 
-  function normalizeMission(raw) {
-    return normalizeGoalEntity(raw, 'visionId');
-  }
-
   function normalizeProject(raw) {
-    return normalizeGoalEntity(raw, 'missionId');
+    if (!raw || typeof raw !== 'object') return null;
+    // Accept legacy missionId during migration / read of old boards.
+    var patched = raw;
+    if (
+      !(typeof raw.objectifId === 'string' && raw.objectifId) &&
+      typeof raw.missionId === 'string' &&
+      raw.missionId
+    ) {
+      patched = Object.assign({}, raw, { objectifId: raw.missionId });
+    }
+    var entity = normalizeGoalEntity(patched, 'objectifId');
+    if (!entity) return null;
+    return entity;
   }
 
   function normalizeMetric(raw, existingMetricIds) {
@@ -175,16 +185,16 @@
     }
     var out = [];
     var seen = Object.create(null);
-    var primaryByMission = Object.create(null);
+    var primaryByGoal = Object.create(null);
     for (var j = 0; j < list.length; j++) {
       var metric = normalizeMetric(list[j], idPass);
       if (!metric || seen[metric.id]) continue;
       seen[metric.id] = true;
       if (metric.isPrimary) {
-        if (primaryByMission[metric.linkedGoalId]) {
+        if (primaryByGoal[metric.linkedGoalId]) {
           metric.isPrimary = false;
         } else {
-          primaryByMission[metric.linkedGoalId] = metric.id;
+          primaryByGoal[metric.linkedGoalId] = metric.id;
         }
       }
       out.push(metric);
@@ -192,11 +202,11 @@
     return out;
   }
 
-  /** Enforce at most one primary metric per Mission; returns new array. */
-  function enforcePrimaryConstraint(metrics, missionId, primaryMetricId) {
+  /** Enforce at most one primary metric per linked goal; returns new array. */
+  function enforcePrimaryConstraint(metrics, linkedGoalId, primaryMetricId) {
     var list = Array.isArray(metrics) ? metrics.slice() : [];
     for (var i = 0; i < list.length; i++) {
-      if (list[i].linkedGoalId !== missionId) continue;
+      if (list[i].linkedGoalId !== linkedGoalId) continue;
       list[i] = Object.assign({}, list[i], {
         isPrimary: primaryMetricId != null && list[i].id === primaryMetricId,
       });
@@ -228,39 +238,121 @@
     return list;
   }
 
-  async function getVisions(t) {
-    var list = await readBoardArray(t, VISIONS_KEY, function (raw) {
-      return normalizeCollection(raw, normalizeVision);
+  /**
+   * Pure migrate helper: missions → objectifs; projects missionId → objectifId.
+   * Exported for sandbox verifies.
+   */
+  function migrateLegacyGoals(legacyVisions, legacyMissions, legacyProjects) {
+    var missions = Array.isArray(legacyMissions) ? legacyMissions : [];
+    var projects = Array.isArray(legacyProjects) ? legacyProjects : [];
+    var objectifs = [];
+    var seen = Object.create(null);
+
+    for (var i = 0; i < missions.length; i++) {
+      var mission = missions[i];
+      if (!mission || typeof mission !== 'object') continue;
+      var objectif = normalizeObjectif({
+        id: typeof mission.id === 'string' && mission.id ? mission.id : generateId(),
+        name: mission.name,
+        retired: mission.retired === true,
+        createdAt: mission.createdAt,
+      });
+      if (!objectif || seen[objectif.id]) continue;
+      seen[objectif.id] = true;
+      objectifs.push(objectif);
+    }
+
+    // If only visions exist (no missions), promote visions so data is not lost.
+    if (!objectifs.length && Array.isArray(legacyVisions)) {
+      for (var v = 0; v < legacyVisions.length; v++) {
+        var vision = legacyVisions[v];
+        if (!vision || typeof vision !== 'object') continue;
+        var fromVision = normalizeObjectif({
+          id: typeof vision.id === 'string' && vision.id ? vision.id : generateId(),
+          name: vision.name,
+          retired: vision.retired === true,
+          createdAt: vision.createdAt,
+        });
+        if (!fromVision || seen[fromVision.id]) continue;
+        seen[fromVision.id] = true;
+        objectifs.push(fromVision);
+      }
+    }
+
+    var nextProjects = [];
+    for (var p = 0; p < projects.length; p++) {
+      var proj = projects[p];
+      if (!proj || typeof proj !== 'object') continue;
+      var objectifId =
+        typeof proj.objectifId === 'string' && proj.objectifId
+          ? proj.objectifId
+          : typeof proj.missionId === 'string'
+            ? proj.missionId
+            : '';
+      var normalized = normalizeProject(
+        Object.assign({}, proj, objectifId ? { objectifId: objectifId } : {})
+      );
+      if (normalized) nextProjects.push(normalized);
+    }
+
+    return { objectifs: objectifs, projects: nextProjects };
+  }
+
+  async function ensureMigrated(t) {
+    if (migratePromise) return migratePromise;
+    migratePromise = (async function () {
+      var storedObjectifs = await t.get('board', 'shared', OBJECTIFS_KEY);
+      var hasObjectifs = Array.isArray(storedObjectifs) && storedObjectifs.length > 0;
+      if (hasObjectifs) return;
+
+      var legacyVisions = await t.get('board', 'shared', LEGACY_VISIONS_KEY);
+      var legacyMissions = await t.get('board', 'shared', LEGACY_MISSIONS_KEY);
+      var legacyProjects = await t.get('board', 'shared', PROJECTS_KEY);
+      var hasLegacy =
+        (Array.isArray(legacyVisions) && legacyVisions.length > 0) ||
+        (Array.isArray(legacyMissions) && legacyMissions.length > 0) ||
+        (Array.isArray(legacyProjects) &&
+          legacyProjects.some(function (p) {
+            return p && typeof p.missionId === 'string' && p.missionId && !p.objectifId;
+          }));
+      if (!hasLegacy) return;
+
+      var migrated = migrateLegacyGoals(legacyVisions, legacyMissions, legacyProjects);
+      await writeBoardArray(t, OBJECTIFS_KEY, migrated.objectifs);
+      await writeBoardArray(t, PROJECTS_KEY, migrated.projects);
+      boardCache.objectifs = migrated.objectifs;
+      boardCache.projects = migrated.projects;
+      dbgLog('goalsTrello', 'migrate.legacy', {
+        objectifs: migrated.objectifs.length,
+        projects: migrated.projects.length,
+      });
+    })().catch(function (err) {
+      migratePromise = null;
+      dbgError('goalsTrello', 'migrate.legacy', err);
+      throw err;
     });
-    boardCache.visions = list;
-    dbgLog('goalsTrello', 'visions.load', { count: list.length });
+    return migratePromise;
+  }
+
+  async function getObjectifs(t) {
+    await ensureMigrated(t);
+    var list = await readBoardArray(t, OBJECTIFS_KEY, function (raw) {
+      return normalizeCollection(raw, normalizeObjectif);
+    });
+    boardCache.objectifs = list;
+    dbgLog('goalsTrello', 'objectifs.load', { count: list.length });
     return list;
   }
 
-  async function saveVisions(t, list) {
-    var normalized = normalizeCollection(list, normalizeVision);
-    boardCache.visions = normalized;
-    dbgLog('goalsTrello', 'visions.save', { count: normalized.length });
-    return writeBoardArray(t, VISIONS_KEY, normalized);
-  }
-
-  async function getMissions(t) {
-    var list = await readBoardArray(t, MISSIONS_KEY, function (raw) {
-      return normalizeCollection(raw, normalizeMission);
-    });
-    boardCache.missions = list;
-    dbgLog('goalsTrello', 'missions.load', { count: list.length });
-    return list;
-  }
-
-  async function saveMissions(t, list) {
-    var normalized = normalizeCollection(list, normalizeMission);
-    boardCache.missions = normalized;
-    dbgLog('goalsTrello', 'missions.save', { count: normalized.length });
-    return writeBoardArray(t, MISSIONS_KEY, normalized);
+  async function saveObjectifs(t, list) {
+    var normalized = normalizeCollection(list, normalizeObjectif);
+    boardCache.objectifs = normalized;
+    dbgLog('goalsTrello', 'objectifs.save', { count: normalized.length });
+    return writeBoardArray(t, OBJECTIFS_KEY, normalized);
   }
 
   async function getProjects(t) {
+    await ensureMigrated(t);
     var list = await readBoardArray(t, PROJECTS_KEY, function (raw) {
       return normalizeCollection(raw, normalizeProject);
     });
@@ -291,36 +383,35 @@
   }
 
   async function preloadBoardGoalsContext(t) {
-    await Promise.all([getVisions(t), getMissions(t), getProjects(t), getMetrics(t)]);
+    await Promise.all([getObjectifs(t), getProjects(t), getMetrics(t)]);
     return boardCache;
   }
 
   function getCachedBoardGoals() {
     return {
-      visions: boardCache.visions || [],
-      missions: boardCache.missions || [],
+      objectifs: boardCache.objectifs || [],
       projects: boardCache.projects || [],
       metrics: boardCache.metrics || [],
     };
   }
 
-  async function createVision(t, name) {
-    var list = await getVisions(t);
-    var entity = normalizeVision({
+  async function createObjectif(t, name) {
+    var list = await getObjectifs(t);
+    var entity = normalizeObjectif({
       id: generateId(),
       name: name,
       retired: false,
       createdAt: nowIso(),
     });
-    if (!entity) throw new Error('Nom de vision requis');
+    if (!entity) throw new Error('Nom d\u2019objectif requis');
     list.push(entity);
-    await saveVisions(t, list);
-    dbgLog('goalsTrello', 'vision.create', { ok: true });
+    await saveObjectifs(t, list);
+    dbgLog('goalsTrello', 'objectif.create', { ok: true });
     return entity;
   }
 
-  async function updateVision(t, id, patch) {
-    var list = await getVisions(t);
+  async function updateObjectif(t, id, patch) {
+    var list = await getObjectifs(t);
     var idx = -1;
     for (var i = 0; i < list.length; i++) {
       if (list[i].id === id) {
@@ -328,85 +419,38 @@
         break;
       }
     }
-    if (idx < 0) throw new Error('Vision introuvable');
+    if (idx < 0) throw new Error('Objectif introuvable');
     var next = Object.assign({}, list[idx], patch || {}, { id: list[idx].id });
     delete next.completed;
     delete next.complete;
-    var normalized = normalizeVision(next);
-    if (!normalized) throw new Error('Vision invalide');
+    var normalized = normalizeObjectif(next);
+    if (!normalized) throw new Error('Objectif invalide');
     list[idx] = normalized;
-    await saveVisions(t, list);
-    dbgLog('goalsTrello', 'vision.update', { ok: true });
+    await saveObjectifs(t, list);
+    dbgLog('goalsTrello', 'objectif.update', { ok: true });
     return normalized;
   }
 
-  async function retireVision(t, id) {
-    var result = await updateVision(t, id, { retired: true });
-    dbgLog('goalsTrello', 'vision.retire', { ok: true });
+  async function retireObjectif(t, id) {
+    var result = await updateObjectif(t, id, { retired: true });
+    dbgLog('goalsTrello', 'objectif.retire', { ok: true });
     return result;
   }
 
-  async function createMission(t, name, visionId) {
-    var visions = await getVisions(t);
-    var vision = findById(visions, visionId);
-    if (!vision) throw new Error('Vision introuvable');
-    if (vision.retired) throw new Error('Vision retirée');
-    var list = await getMissions(t);
-    var entity = normalizeMission({
-      id: generateId(),
-      name: name,
-      visionId: visionId,
-      retired: false,
-      createdAt: nowIso(),
-    });
-    if (!entity) throw new Error('Mission invalide (nom et visionId requis)');
-    list.push(entity);
-    await saveMissions(t, list);
-    dbgLog('goalsTrello', 'mission.create', { ok: true });
-    return entity;
-  }
-
-  async function updateMission(t, id, patch) {
-    var list = await getMissions(t);
-    var idx = -1;
-    for (var i = 0; i < list.length; i++) {
-      if (list[i].id === id) {
-        idx = i;
-        break;
-      }
-    }
-    if (idx < 0) throw new Error('Mission introuvable');
-    var next = Object.assign({}, list[idx], patch || {}, { id: list[idx].id });
-    delete next.completed;
-    delete next.complete;
-    var normalized = normalizeMission(next);
-    if (!normalized) throw new Error('Mission invalide');
-    list[idx] = normalized;
-    await saveMissions(t, list);
-    dbgLog('goalsTrello', 'mission.update', { ok: true });
-    return normalized;
-  }
-
-  async function retireMission(t, id) {
-    var result = await updateMission(t, id, { retired: true });
-    dbgLog('goalsTrello', 'mission.retire', { ok: true });
-    return result;
-  }
-
-  async function createProject(t, name, missionId) {
-    var missions = await getMissions(t);
-    var mission = findById(missions, missionId);
-    if (!mission) throw new Error('Mission introuvable');
-    if (mission.retired) throw new Error('Mission retirée');
+  async function createProject(t, name, objectifId) {
+    var objectifs = await getObjectifs(t);
+    var objectif = findById(objectifs, objectifId);
+    if (!objectif) throw new Error('Objectif introuvable');
+    if (objectif.retired) throw new Error('Objectif retir\u00e9');
     var list = await getProjects(t);
     var entity = normalizeProject({
       id: generateId(),
       name: name,
-      missionId: missionId,
+      objectifId: objectifId,
       retired: false,
       createdAt: nowIso(),
     });
-    if (!entity) throw new Error('Projet invalide (nom et missionId requis)');
+    if (!entity) throw new Error('Projet invalide (nom et objectifId requis)');
     list.push(entity);
     await saveProjects(t, list);
     dbgLog('goalsTrello', 'project.create', { ok: true });
@@ -439,11 +483,11 @@
   }
 
   async function createMetric(t, raw) {
-    var missions = await getMissions(t);
+    var objectifs = await getObjectifs(t);
     var linkedGoalId = raw && raw.linkedGoalId;
-    var mission = findById(missions, linkedGoalId);
-    if (!mission) throw new Error('Mission introuvable');
-    if (mission.retired) throw new Error('Mission retirée');
+    var objectif = findById(objectifs, linkedGoalId);
+    if (!objectif) throw new Error('Objectif introuvable');
+    if (objectif.retired) throw new Error('Objectif retir\u00e9');
     var list = await getMetrics(t);
     var ids = Object.create(null);
     list.forEach(function (m) {
@@ -453,7 +497,7 @@
       Object.assign({}, raw, { id: raw && raw.id ? raw.id : generateId() }),
       ids
     );
-    if (!metric) throw new Error('Métrique invalide');
+    if (!metric) throw new Error('M\u00e9trique invalide');
     list.push(metric);
     if (metric.isPrimary) {
       list = enforcePrimaryConstraint(list, metric.linkedGoalId, metric.id);
@@ -472,19 +516,17 @@
         break;
       }
     }
-    if (idx < 0) throw new Error('Métrique introuvable');
+    if (idx < 0) throw new Error('M\u00e9trique introuvable');
     var ids = Object.create(null);
     list.forEach(function (m) {
       ids[m.id] = true;
     });
     var next = Object.assign({}, list[idx], patch || {}, { id: list[idx].id });
     var metric = normalizeMetric(next, ids);
-    if (!metric) throw new Error('Métrique invalide');
+    if (!metric) throw new Error('M\u00e9trique invalide');
     list[idx] = metric;
     if (metric.isPrimary) {
       list = enforcePrimaryConstraint(list, metric.linkedGoalId, metric.id);
-    } else if (patch && patch.isPrimary === false) {
-      // leave others as-is
     }
     await saveMetrics(t, list);
     dbgLog('goalsTrello', 'metric.update', { ok: true });
@@ -496,7 +538,6 @@
     var next = list.filter(function (m) {
       return m.id !== id;
     });
-    // Drop dependsOn references to removed metric
     next = next.map(function (m) {
       if (!m.dependsOn || !m.dependsOn.length) return m;
       var deps = m.dependsOn.filter(function (dep) {
@@ -512,28 +553,28 @@
     return true;
   }
 
-  async function setPrimaryMetric(t, missionId, metricId) {
+  async function setPrimaryMetric(t, linkedGoalId, metricId) {
     var list = await getMetrics(t);
     if (metricId) {
       var found = findById(list, metricId);
-      if (!found || found.linkedGoalId !== missionId) {
-        throw new Error('Métrique introuvable pour cette mission');
+      if (!found || found.linkedGoalId !== linkedGoalId) {
+        throw new Error('M\u00e9trique introuvable pour cet objectif');
       }
     }
-    list = enforcePrimaryConstraint(list, missionId, metricId || null);
+    list = enforcePrimaryConstraint(list, linkedGoalId, metricId || null);
     await saveMetrics(t, list);
-    return getMetricsForMissionFromList(list, missionId);
+    return getMetricsForObjectifFromList(list, linkedGoalId);
   }
 
-  function getMetricsForMissionFromList(list, missionId) {
+  function getMetricsForObjectifFromList(list, linkedGoalId) {
     return (list || []).filter(function (m) {
-      return m.linkedGoalId === missionId;
+      return m.linkedGoalId === linkedGoalId;
     });
   }
 
-  async function getMetricsForMission(t, missionId) {
+  async function getMetricsForObjectif(t, linkedGoalId) {
     var list = await getMetrics(t);
-    return getMetricsForMissionFromList(list, missionId);
+    return getMetricsForObjectifFromList(list, linkedGoalId);
   }
 
   async function getCardProjectId(t) {
@@ -552,7 +593,7 @@
       var projects = await getProjects(t);
       var project = findById(projects, value);
       if (!project) throw new Error('Projet introuvable');
-      if (project.retired) throw new Error('Projet retiré');
+      if (project.retired) throw new Error('Projet retir\u00e9');
     }
     await t.set('card', 'shared', CARD_PROJECT_ID_KEY, value);
     dbgLog('goalsTrello', 'cardProject.link', { action: value ? 'set' : 'clear', ok: true });
@@ -560,24 +601,22 @@
   }
 
   /**
-   * Resolve Vision → Mission → Project for a projectId (includes retired).
+   * Resolve Objectif → Project for a projectId (includes retired).
    */
   function resolveHierarchyFromCache(cache, projectId) {
     var projects = cache.projects || [];
-    var missions = cache.missions || [];
-    var visions = cache.visions || [];
+    var objectifs = cache.objectifs || [];
     var project = findById(projects, projectId);
     if (!project) {
-      return { vision: null, mission: null, project: null };
+      return { objectif: null, project: null };
     }
-    var mission = findById(missions, project.missionId);
-    var vision = mission ? findById(visions, mission.visionId) : null;
-    return { vision: vision, mission: mission, project: project };
+    var objectif = findById(objectifs, project.objectifId);
+    return { objectif: objectif, project: project };
   }
 
   async function resolveHierarchy(t, projectId) {
     if (!projectId) {
-      return { vision: null, mission: null, project: null };
+      return { objectif: null, project: null };
     }
     await preloadBoardGoalsContext(t);
     return resolveHierarchyFromCache(getCachedBoardGoals(), projectId);
@@ -658,9 +697,9 @@
                   callback: openCallback,
                 });
               }
-              var missionName = hierarchy.mission ? hierarchy.mission.name : '—';
+              var objectifName = hierarchy.objectif ? hierarchy.objectif.name : 'Objectif';
               return withBadgeRefresh({
-                title: missionName,
+                title: objectifName,
                 text: hierarchy.project.name,
                 color: hierarchy.project.retired ? 'light-gray' : 'purple',
                 callback: openCallback,
@@ -705,39 +744,33 @@
   }
 
   global.GoalsTrello = {
-    VISIONS_KEY: VISIONS_KEY,
-    MISSIONS_KEY: MISSIONS_KEY,
+    OBJECTIFS_KEY: OBJECTIFS_KEY,
     PROJECTS_KEY: PROJECTS_KEY,
     METRICS_KEY: METRICS_KEY,
     CARD_PROJECT_ID_KEY: CARD_PROJECT_ID_KEY,
     BADGE_REFRESH_SEC: BADGE_REFRESH_SEC,
     generateId: generateId,
-    normalizeVision: normalizeVision,
-    normalizeMission: normalizeMission,
+    normalizeObjectif: normalizeObjectif,
     normalizeProject: normalizeProject,
     normalizeMetric: normalizeMetric,
     normalizeMetricsCollection: normalizeMetricsCollection,
     enforcePrimaryConstraint: enforcePrimaryConstraint,
+    migrateLegacyGoals: migrateLegacyGoals,
     activeOnly: activeOnly,
     findById: findById,
     directionArrow: directionArrow,
     formatMetricValue: formatMetricValue,
-    getVisions: getVisions,
-    saveVisions: saveVisions,
-    getMissions: getMissions,
-    saveMissions: saveMissions,
+    getObjectifs: getObjectifs,
+    saveObjectifs: saveObjectifs,
     getProjects: getProjects,
     saveProjects: saveProjects,
     getMetrics: getMetrics,
     saveMetrics: saveMetrics,
     preloadBoardGoalsContext: preloadBoardGoalsContext,
     getCachedBoardGoals: getCachedBoardGoals,
-    createVision: createVision,
-    updateVision: updateVision,
-    retireVision: retireVision,
-    createMission: createMission,
-    updateMission: updateMission,
-    retireMission: retireMission,
+    createObjectif: createObjectif,
+    updateObjectif: updateObjectif,
+    retireObjectif: retireObjectif,
     createProject: createProject,
     updateProject: updateProject,
     retireProject: retireProject,
@@ -745,7 +778,7 @@
     updateMetric: updateMetric,
     removeMetric: removeMetric,
     setPrimaryMetric: setPrimaryMetric,
-    getMetricsForMission: getMetricsForMission,
+    getMetricsForObjectif: getMetricsForObjectif,
     getCardProjectId: getCardProjectId,
     setCardProjectId: setCardProjectId,
     resolveHierarchy: resolveHierarchy,
