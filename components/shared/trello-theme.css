@@ -1544,13 +1544,20 @@ body.tp-page--priority {
   display: none;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   min-height: 280px;
   padding: 24px 20px 28px;
   text-align: center;
 }
 
+.tp-page--priority.is-booting {
+  overflow: hidden;
+}
+
 .tp-page--priority.is-booting .tp-popup-boot {
   display: flex;
+  min-height: 100%;
+  height: 100%;
 }
 
 .tp-page--priority.is-booting #popupMain,
