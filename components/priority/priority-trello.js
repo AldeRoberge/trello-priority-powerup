@@ -2471,13 +2471,51 @@
     return opts;
   }
 
+  // Options for TrelloPowerUp.iframe(). Opt out of ADS tokens: the SDK's
+  // theme path checks platform-dst-motion-theme-default before FeatureGates
+  // is ready and logs a console error. We apply data-color-mode ourselves.
+  function iframeClientOptions() {
+    var opts = { useADSTokens: false };
+    var restOpts = restClientOptions();
+    if (!restOpts) return opts;
+    opts.appKey = restOpts.appKey;
+    opts.appName = restOpts.appName;
+    if (restOpts.appAuthor) opts.appAuthor = restOpts.appAuthor;
+    return opts;
+  }
+
+  function applyColorMode(theme) {
+    if (typeof document === 'undefined' || !document.documentElement) return;
+    if (theme === 'light' || theme === 'dark') {
+      document.documentElement.setAttribute('data-color-mode', theme);
+    }
+  }
+
+  function syncIframeTheme(t) {
+    if (!t) return t;
+    try {
+      var ctx = typeof t.getContext === 'function' ? t.getContext() : null;
+      applyColorMode((ctx && (ctx.theme || ctx.initialTheme)) || null);
+    } catch (err) {
+      /* theme optional during early init */
+    }
+    if (typeof t.subscribeToThemeChanges === 'function') {
+      try {
+        t.subscribeToThemeChanges(function (theme) {
+          applyColorMode(theme);
+        });
+      } catch (subErr) {
+        /* ignore — older SDK stubs */
+      }
+    }
+    return t;
+  }
+
   function createIframeClient() {
     if (typeof global.TrelloPowerUp === 'undefined') {
       throw new Error('TrelloPowerUp is not loaded');
     }
-    var restOpts = restClientOptions();
-    if (restOpts) return global.TrelloPowerUp.iframe(restOpts);
-    return global.TrelloPowerUp.iframe();
+    return syncIframeTheme(global.TrelloPowerUp.iframe(iframeClientOptions()));
   }
 
   // Call after DOM is ready so TrelloPowerUp.iframe() theme init finds document.body.
@@ -2488,7 +2526,6 @@
   }
 
   // Defer t.get/set until Trello finishes the iframe handshake.
-  // Residual feature-gate noise in power-up.min.js is Trello-internal (see README).
   function runWhenIframeReady(t, fn) {
     var started = false;
     return new Promise(function (resolve, reject) {
@@ -3549,6 +3586,7 @@
     isRestAuthorized: isRestAuthorized,
     authorizeRestForAutoSort: authorizeRestForAutoSort,
     restClientOptions: restClientOptions,
+    iframeClientOptions: iframeClientOptions,
     restPutCard: restPutCard,
     readCardIdAndListId: readCardIdAndListId,
     resolveCurrentCardId: resolveCurrentCardId,
@@ -3557,6 +3595,7 @@
     createIframeClientDeferred: createIframeClientDeferred,
     initIframePage: initIframePage,
     runWhenIframeReady: runWhenIframeReady,
+    syncIframeTheme: syncIframeTheme,
     BADGE_REFRESH_SEC: BADGE_REFRESH_SEC,
   };
 })(typeof window !== 'undefined' ? window : this);

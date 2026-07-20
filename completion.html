@@ -21,12 +21,14 @@
     // Primary entry is index.html → openPriorityPopup({ openSection: 'progress' }).
     try {
       if (window.TpDebug) TpDebug.log('completion', 'legacy.init');
-      if (window.TrelloPowerUp && typeof TrelloPowerUp.iframe === 'function') {
-        var t = TrelloPowerUp.iframe(
-          (window.PriorityTrello && PriorityTrello.restClientOptions && PriorityTrello.restClientOptions()) || {}
-        );
+      if (window.PriorityTrello && typeof PriorityTrello.createIframeClient === 'function') {
+        var t = PriorityTrello.createIframeClient();
         if (t && typeof t.render === 'function') t.render(function () {});
         if (t && typeof t.sizeTo === 'function') t.sizeTo(document.body);
+      } else if (window.TrelloPowerUp && typeof TrelloPowerUp.iframe === 'function') {
+        var tLegacy = TrelloPowerUp.iframe({ useADSTokens: false });
+        if (tLegacy && typeof tLegacy.render === 'function') tLegacy.render(function () {});
+        if (tLegacy && typeof tLegacy.sizeTo === 'function') tLegacy.sizeTo(document.body);
       }
     } catch (err) {
       if (window.TpDebug) TpDebug.error('completion', 'legacy.init', err);
