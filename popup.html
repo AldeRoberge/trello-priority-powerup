@@ -6,7 +6,7 @@
   <title>Trello Cerveau</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=progress-bulk-1" />
+  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=popup-boot-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-5" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css?v=recurring-hint-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
@@ -63,11 +63,25 @@
   <script src="./components/history/card-history.js?v=echeance-recurring-1"></script>
   <script src="./components/history/history-ui.js?v=history-5"></script>
 </head>
-<body class="tp-page tp-page--priority">
-  <div class="compare-page">
+<body class="tp-page tp-page--priority is-booting">
+  <div
+    id="popupBoot"
+    class="tp-popup-boot"
+    role="status"
+    aria-live="polite"
+    aria-busy="true"
+  >
+    <div class="tp-popup-boot-inner">
+      <span class="tp-popup-boot-spinner" aria-hidden="true">
+        <i class="ti ti-loader-2"></i>
+      </span>
+      <p class="tp-popup-boot-msg" id="popupBootMsg">Chargement…</p>
+    </div>
+  </div>
+  <div class="compare-page" id="popupMain">
     <div class="compare-grid" id="priorityMount"></div>
   </div>
-  <div class="tp-build-info tp-popup-build-info" id="buildInfo">Build : chargement…</div>
+  <div class="tp-build-info tp-popup-build-info" id="buildInfo" hidden></div>
 
   <script>
     PriorityTrello.initIframePage(function (t) {
@@ -77,10 +91,73 @@
       });
     }
 
+    var POPUP_BOOT_TIMEOUT_MS = 3000;
+    var bootTimer = null;
+    var bootSettled = false;
+
+    function setBootMessage(text, isError) {
+      var boot = document.getElementById('popupBoot');
+      var msg = document.getElementById('popupBootMsg');
+      var icon = boot && boot.querySelector('.tp-popup-boot-spinner .ti');
+      if (msg) msg.textContent = text || 'Chargement…';
+      if (boot) {
+        boot.classList.toggle('is-error', !!isError);
+        boot.setAttribute('aria-busy', isError ? 'false' : 'true');
+      }
+      if (icon) {
+        icon.className = isError ? 'ti ti-alert-circle' : 'ti ti-loader-2';
+      }
+    }
+
+    function clearBootTimer() {
+      if (bootTimer) {
+        clearTimeout(bootTimer);
+        bootTimer = null;
+      }
+    }
+
+    function finishBoot(options) {
+      options = options || {};
+      if (bootSettled && !options.forceError) return;
+      clearBootTimer();
+      if (options.error) {
+        bootSettled = true;
+        document.body.classList.add('is-booting');
+        document.body.classList.add('is-boot-error');
+        setBootMessage(options.error, true);
+        resizePopup();
+        return;
+      }
+      bootSettled = true;
+      document.body.classList.remove('is-booting');
+      document.body.classList.remove('is-boot-error');
+      var boot = document.getElementById('popupBoot');
+      if (boot) {
+        boot.hidden = true;
+        boot.setAttribute('aria-busy', 'false');
+      }
+      resizePopup();
+    }
+
+    function startBootWatch() {
+      clearBootTimer();
+      bootTimer = setTimeout(function () {
+        bootTimer = null;
+        if (bootSettled) return;
+        setBootMessage(
+          'Le chargement prend trop de temps. Fermez cette fenêtre et rouvrez la carte.',
+          true
+        );
+        document.body.classList.add('is-boot-error');
+        resizePopup();
+      }, POPUP_BOOT_TIMEOUT_MS);
+    }
+
     var buildStampTimer = null;
     function renderBuildInfo(builtAt) {
       var el = document.getElementById('buildInfo');
       if (!el || !window.BuildVersion) return;
+      el.hidden = false;
       el.textContent =
         BuildVersion.updatedLabel(builtAt) +
         ' · ' +
@@ -89,7 +166,10 @@
     function loadBuildInfo() {
       var el = document.getElementById('buildInfo');
       if (!el || !window.BuildVersion || typeof BuildVersion.fetchBuiltAt !== 'function') {
-        if (el) el.textContent = 'Build : indisponible';
+        if (el) {
+          el.hidden = false;
+          el.textContent = 'Build : indisponible';
+        }
         return;
       }
       BuildVersion.fetchBuiltAt(
@@ -105,11 +185,13 @@
           resizePopup();
         })
         .catch(function () {
+          el.hidden = false;
           el.textContent = 'Build : indisponible';
         });
     }
-    loadBuildInfo();
 
+    startBootWatch();
+    // Build stamp loads after the UI is ready — do not use it as a boot placeholder.
     const mountEl = document.getElementById('priorityMount');
     let variant = null;
     let completionUi = null;
@@ -6405,10 +6487,13 @@
       resizePopup();
       startLiveSync();
       if (window.TpDebug) TpDebug.log('popup', 'init.ready');
+      finishBoot();
+      loadBuildInfo();
     }
 
     window.addEventListener('pagehide', function () {
       if (window.TpDebug) TpDebug.log('popup', 'pagehide');
+      clearBootTimer();
       if (buildStampTimer) {
         clearInterval(buildStampTimer);
         buildStampTimer = null;
@@ -6433,10 +6518,32 @@
       }
     });
 
-    return init();
+    return init().catch(function (err) {
+      finishBoot({
+        error:
+          'Impossible de charger la carte. Fermez cette fenêtre et réessayez.',
+      });
+      throw err;
+    });
     }).catch(function (err) {
       if (window.TpDebug) TpDebug.error('popup', 'init', err);
       else console.error('Priority popup init failed', err);
+      // Fallback if boot helpers never ran (iframe client failed before callback body).
+      if (!document.body.classList.contains('is-boot-error')) {
+        document.body.classList.add('is-booting');
+        document.body.classList.add('is-boot-error');
+        var boot = document.getElementById('popupBoot');
+        var msg = document.getElementById('popupBootMsg');
+        if (boot) {
+          boot.hidden = false;
+          boot.classList.add('is-error');
+          boot.setAttribute('aria-busy', 'false');
+        }
+        if (msg) {
+          msg.textContent =
+            'Impossible de charger la carte. Fermez cette fenêtre et réessayez.';
+        }
+      }
     });
   </script>
 </body>

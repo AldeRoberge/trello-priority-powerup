@@ -1535,6 +1535,81 @@ body.tp-page--priority {
   text-align: center;
 }
 
+.tp-page--priority .tp-popup-build-info[hidden] {
+  display: none;
+}
+
+/* Boot overlay — replaces empty mount + “Build : chargement…” placeholder */
+.tp-popup-boot {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  padding: 28px 20px;
+  text-align: center;
+}
+
+.tp-page--priority.is-booting .tp-popup-boot {
+  display: flex;
+}
+
+.tp-page--priority.is-booting #popupMain,
+.tp-page--priority.is-booting .tp-popup-build-info {
+  display: none;
+}
+
+.tp-popup-boot-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 280px;
+}
+
+.tp-popup-boot-spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  color: var(--tp-primary);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.tp-popup-boot-spinner .ti {
+  display: block;
+  animation: tp-popup-boot-spin 0.8s linear infinite;
+}
+
+.tp-popup-boot.is-error .tp-popup-boot-spinner,
+.tp-page--priority.is-boot-error .tp-popup-boot-spinner {
+  color: var(--tp-danger-text);
+}
+
+.tp-popup-boot.is-error .tp-popup-boot-spinner .ti,
+.tp-page--priority.is-boot-error .tp-popup-boot-spinner .ti {
+  animation: none;
+}
+
+.tp-popup-boot-msg {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--tp-text-subtle);
+}
+
+.tp-popup-boot.is-error .tp-popup-boot-msg,
+.tp-page--priority.is-boot-error .tp-popup-boot-msg {
+  color: var(--tp-danger-text);
+}
+
+@keyframes tp-popup-boot-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .tp-page--priority .compare-grid {
   display: block;
   width: 100%;
