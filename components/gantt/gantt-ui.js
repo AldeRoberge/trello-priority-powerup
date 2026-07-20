@@ -14,6 +14,7 @@
     hideCompleted: true,
     hideUndated: false,
     sortBy: 'date',
+    sortDir: 'asc',
   };
   // Fire icon for priorities strictly above Importante (Critique / Urgente / Prioritaire).
   var PRIORITY_FIRE_TIER_MAX = 2;
@@ -69,9 +70,25 @@
   }
 
   function normalizeSortBy(value) {
-    return value === 'priority' || value === 'name' || value === 'progress'
+    var model = GM();
+    if (model && typeof model.normalizeSortBy === 'function') {
+      return model.normalizeSortBy(value);
+    }
+    return value === 'priority' ||
+      value === 'name' ||
+      value === 'progress' ||
+      value === 'subtasks'
       ? value
       : 'date';
+  }
+
+  function normalizeSortDir(value, sortBy) {
+    if (value === 'asc' || value === 'desc') return value;
+    var model = GM();
+    if (model && typeof model.defaultSortDir === 'function') {
+      return model.defaultSortDir(sortBy);
+    }
+    return sortBy === 'progress' || sortBy === 'subtasks' ? 'desc' : 'asc';
   }
 
   function readStoredFilters() {
@@ -79,6 +96,7 @@
       hideCompleted: DEFAULT_FILTERS.hideCompleted,
       hideUndated: DEFAULT_FILTERS.hideUndated,
       sortBy: DEFAULT_FILTERS.sortBy,
+      sortDir: DEFAULT_FILTERS.sortDir,
     };
     try {
       var raw =
@@ -95,6 +113,11 @@
       if (typeof parsed.sortBy === 'string') {
         out.sortBy = normalizeSortBy(parsed.sortBy);
       }
+      if (typeof parsed.sortDir === 'string') {
+        out.sortDir = normalizeSortDir(parsed.sortDir, out.sortBy);
+      } else {
+        out.sortDir = normalizeSortDir(null, out.sortBy);
+      }
     } catch (e) {
       /* ignore */
     }
@@ -103,6 +126,7 @@
 
   function storeFilters(filters) {
     filters = filters || {};
+    var sortBy = normalizeSortBy(filters.sortBy);
     var payload = {
       hideCompleted:
         typeof filters.hideCompleted === 'boolean'
@@ -112,7 +136,8 @@
         typeof filters.hideUndated === 'boolean'
           ? filters.hideUndated
           : DEFAULT_FILTERS.hideUndated,
-      sortBy: normalizeSortBy(filters.sortBy),
+      sortBy: sortBy,
+      sortDir: normalizeSortDir(filters.sortDir, sortBy),
     };
     try {
       if (global.localStorage) {
@@ -203,6 +228,7 @@
       return { destroy: function () {} };
     }
 
+    var storedFilters = readStoredFilters();
     var state = {
       viewMode: 'week',
       anchor: model.toIsoDate(new Date()),
@@ -210,10 +236,10 @@
       cardsById: Object.create(null),
       expanded: Object.create(null),
       selected: Object.create(null),
-      hideCompleted: false,
-      hideUndated: false,
-      sortBy: 'date',
-      sortDir: 'asc',
+      hideCompleted: storedFilters.hideCompleted,
+      hideUndated: storedFilters.hideUndated,
+      sortBy: storedFilters.sortBy,
+      sortDir: storedFilters.sortDir,
       loading: true,
       error: '',
       authHint: '',
@@ -227,6 +253,15 @@
       outlookConnected: false,
       outlookSyncing: false,
     };
+
+    function persistFilters() {
+      storeFilters({
+        hideCompleted: state.hideCompleted,
+        hideUndated: state.hideUndated,
+        sortBy: state.sortBy,
+        sortDir: state.sortDir,
+      });
+    }
 
     var root = el('div', 'gantt-root');
     var toolbar = el('div', 'gantt-toolbar');
@@ -394,6 +429,7 @@
       doneCb.checked = state.hideCompleted;
       doneCb.addEventListener('change', function () {
         state.hideCompleted = !!doneCb.checked;
+        persistFilters();
         renderChart();
       });
       hideDone.appendChild(doneCb);
@@ -405,6 +441,7 @@
       undatedCb.checked = state.hideUndated;
       undatedCb.addEventListener('change', function () {
         state.hideUndated = !!undatedCb.checked;
+        persistFilters();
         renderChart();
       });
       hideUndated.appendChild(undatedCb);
@@ -678,7 +715,7 @@
      */
     function setSortBy(mode, opts) {
       opts = opts || {};
-      var next = mode || 'date';
+      var next = normalizeSortBy(mode);
       if (opts.dir === 'asc' || opts.dir === 'desc') {
         state.sortBy = next;
         state.sortDir = opts.dir;
@@ -690,6 +727,7 @@
       }
       var sel = root.querySelector('select[data-gantt-sort]');
       if (sel) sel.value = state.sortBy;
+      persistFilters();
       applySort();
       renderChart();
     }
@@ -832,7 +870,7 @@
           slot(
             'is-overdue',
             iconEl(
-              'ti-box',
+              'ti-clock',
               row.dueCountdown || 'En retard',
               'is-overdue'
             )
@@ -2037,9 +2075,13 @@
     clampLabelsWidth: clampLabelsWidth,
     readStoredLabelsWidth: readStoredLabelsWidth,
     storeLabelsWidth: storeLabelsWidth,
+    readStoredFilters: readStoredFilters,
+    storeFilters: storeFilters,
     shouldShowPriorityFire: shouldShowPriorityFire,
     LABELS_W_MIN: LABELS_W_MIN,
     LABELS_W_DEFAULT: LABELS_W_DEFAULT,
     LABELS_W_STORAGE_KEY: LABELS_W_STORAGE_KEY,
+    FILTERS_STORAGE_KEY: FILTERS_STORAGE_KEY,
+    DEFAULT_FILTERS: DEFAULT_FILTERS,
   };
 })(typeof window !== 'undefined' ? window : this);
