@@ -19,6 +19,20 @@
 (function (global) {
   'use strict';
 
+  function playPriorityUiSound(name, opts) {
+    try {
+      if (
+        global.CelebrationEffects &&
+        typeof global.CelebrationEffects.playUiSound === 'function'
+      ) {
+        return global.CelebrationEffects.playUiSound(name, opts || {});
+      }
+    } catch (e) {
+      /* ignore audio failures */
+    }
+    return { ok: false };
+  }
+
   // ── 1. Formula weights & constants ─────────────────────────────────────
 
   var WT = 1.2;
@@ -8374,9 +8388,13 @@
    * Primary overview / résumé at the top of the card popup (collapsible).
    * Title + metric cells (progress+statut combined, deadline, priority);
    * contextual action chips; each cell jumps to the matching accordion via onJump.
+   *
+   * config.compact — card-back / embedded strip: no accordion chrome, no action
+   * chips, tighter layout (used by the Trello Cerveau card-back section).
    */
   function createOverviewField(config) {
     config = config || {};
+    var compact = !!config.compact;
     var mountEl = config.el;
     var onJump = typeof config.onJump === 'function' ? config.onJump : null;
     var onAction =
@@ -8423,32 +8441,42 @@
     var bodyId = 'overview-section-body-' + Math.random().toString(36).slice(2, 9);
 
     var section = document.createElement('div');
-    section.className = 'variant-overview-section';
+    section.className =
+      'variant-overview-section' + (compact ? ' variant-overview-section--compact' : '');
 
     var field = document.createElement('div');
-    field.className = 'field field--overview is-enabled';
+    field.className =
+      'field field--overview is-enabled' +
+      (compact ? ' field--overview-compact' : '');
     section.appendChild(field);
 
-    var chrome = createCollapsibleEnableChrome({
-      title: 'R\u00e9sum\u00e9',
-      bodyId: bodyId,
-      hideEnable: true,
-      leadingIcon: 'ti-layout-dashboard',
-      iconClass: 'overview-leading-icon',
-      titleClass: 'overview-enable-title',
-      collapseLabel: 'Replier R\u00e9sum\u00e9',
-      expandLabel: 'D\u00e9velopper R\u00e9sum\u00e9'
-    });
-    field.appendChild(chrome.head);
+    var chrome = null;
+    if (!compact) {
+      chrome = createCollapsibleEnableChrome({
+        title: 'R\u00e9sum\u00e9',
+        bodyId: bodyId,
+        hideEnable: true,
+        leadingIcon: 'ti-layout-dashboard',
+        iconClass: 'overview-leading-icon',
+        titleClass: 'overview-enable-title',
+        collapseLabel: 'Replier R\u00e9sum\u00e9',
+        expandLabel: 'D\u00e9velopper R\u00e9sum\u00e9'
+      });
+      field.appendChild(chrome.head);
+    }
 
     var body = document.createElement('div');
-    body.className = 'overview-section-body section-toggle-body';
+    body.className =
+      'overview-section-body' +
+      (compact ? '' : ' section-toggle-body');
     body.id = bodyId;
 
     function makeJumpable(el, jumpKeyOrRef, label) {
       el.setAttribute('role', 'button');
       el.tabIndex = 0;
-      if (label) el.title = 'Aller \u00e0 ' + label;
+      if (label) {
+        el.title = compact ? 'Ouvrir ' + brandAppName() : 'Aller \u00e0 ' + label;
+      }
       function resolveKey() {
         if (jumpKeyOrRef && typeof jumpKeyOrRef === 'object') {
           return jumpKeyOrRef.key;
@@ -8481,10 +8509,12 @@
     titleValue.className = 'overview-title-text';
     titleBtn.appendChild(titleValue);
 
-    var titleChevron = document.createElement('i');
-    titleChevron.className = 'ti ti-chevron-right overview-title-chevron';
-    titleChevron.setAttribute('aria-hidden', 'true');
-    titleBtn.appendChild(titleChevron);
+    if (!compact) {
+      var titleChevron = document.createElement('i');
+      titleChevron.className = 'ti ti-chevron-right overview-title-chevron';
+      titleChevron.setAttribute('aria-hidden', 'true');
+      titleBtn.appendChild(titleChevron);
+    }
 
     body.appendChild(titleBtn);
 
@@ -8497,7 +8527,7 @@
     var actionsEl = document.createElement('div');
     actionsEl.className = 'overview-actions';
     actionsEl.hidden = true;
-    body.appendChild(actionsEl);
+    if (!compact) body.appendChild(actionsEl);
 
     function makeCell(key, jumpKey, label, iconClass, options) {
       options = options || {};
@@ -8615,6 +8645,10 @@
     }
 
     function paintActions() {
+      if (compact || !actionsEl.parentNode) {
+        actionsEl.hidden = true;
+        return;
+      }
       actionsEl.replaceChildren();
       var chips = [];
       var isBlocked = statusCategory === 'blocked' || !!progressBlocked;
@@ -8899,20 +8933,23 @@
 
     field.appendChild(body);
 
-    var collapse = bindCollapsibleEnable({
-      field: field,
-      body: body,
-      chrome: chrome,
-      alwaysEnabled: true,
-      enabled: true,
-      expanded: config.expanded != null ? !!config.expanded : true,
-      getSummary: summaryText,
-      onLayoutChange: onLayoutChange,
-      onExpandChange: onExpandChange || function () {}
-    });
+    var collapse = null;
+    if (!compact && chrome) {
+      collapse = bindCollapsibleEnable({
+        field: field,
+        body: body,
+        chrome: chrome,
+        alwaysEnabled: true,
+        enabled: true,
+        expanded: config.expanded != null ? !!config.expanded : true,
+        getSummary: summaryText,
+        onLayoutChange: onLayoutChange,
+        onExpandChange: onExpandChange || function () {}
+      });
+    }
 
     paint();
-    collapse.refreshSummary();
+    if (collapse && collapse.refreshSummary) collapse.refreshSummary();
 
     if (mountEl) {
       mountEl.appendChild(section);
@@ -8965,12 +9002,13 @@
         features = Object.assign({}, features, next.features);
       }
       paint();
-      collapse.refreshSummary();
+      if (collapse && collapse.refreshSummary) collapse.refreshSummary();
     }
 
     return {
       el: section,
       field: field,
+      compact: compact,
       setData: setData,
       setExpanded: function (on) {
         if (collapse && typeof collapse.setExpanded === 'function') {
@@ -8978,6 +9016,7 @@
         }
       },
       isExpanded: function () {
+        if (compact) return true;
         return collapse && typeof collapse.isExpanded === 'function'
           ? collapse.isExpanded()
           : true;
@@ -19566,7 +19605,33 @@
 
     var priorityCollapse = null;
     var lastPriorityDisplay = null;
+    var lastPrioritySoundTierI = null;
     var durationControl = null;
+
+    function seedPrioritySoundTier(display) {
+      if (!display || display.inutile || display.tierI == null) {
+        lastPrioritySoundTierI = null;
+        return;
+      }
+      lastPrioritySoundTierI = display.tierI;
+    }
+
+    function maybePlayPriorityTierSound(display) {
+      if (!display || display.inutile || display.tierI == null) return;
+      var tierI = display.tierI;
+      if (lastPrioritySoundTierI == null) {
+        lastPrioritySoundTierI = tierI;
+        return;
+      }
+      if (tierI === lastPrioritySoundTierI) return;
+      var prev = lastPrioritySoundTierI;
+      lastPrioritySoundTierI = tierI;
+      // Lower tierI = higher priority (Critique=0).
+      playPriorityUiSound('priority', {
+        tierI: tierI,
+        direction: tierI < prev ? 'up' : 'down',
+      });
+    }
 
     function buildPrioritySummary() {
       var d = lastPriorityDisplay;
@@ -19810,6 +19875,8 @@
           : overrideFn(targetP, state);
         var delta = pickOverrideDelta(state, next);
         if (!Object.keys(delta).length) return;
+        var preview = resolveDisplay(calcFn(Object.assign({}, state, delta)), state);
+        maybePlayPriorityTierSound(preview);
         animateFieldsTo(delta);
       }
     });
@@ -19862,6 +19929,7 @@
         state[key] = level;
         cancelSliderAnim();
         repaint();
+        maybePlayPriorityTierSound(lastPriorityDisplay);
         persistSliderState();
       }
     };
@@ -19888,6 +19956,7 @@
         onChange: function () {
           cancelSliderAnim();
           repaint();
+          maybePlayPriorityTierSound(lastPriorityDisplay);
           persistSliderState();
         },
         wizard: {
@@ -20198,8 +20267,10 @@
           repaint();
           if (silent) {
             syncStateFromFields();
+            seedPrioritySoundTier(lastPriorityDisplay);
           } else {
             persistSliderState();
+            maybePlayPriorityTierSound(lastPriorityDisplay);
           }
         } finally {
           if (silent) suppressPersist = false;

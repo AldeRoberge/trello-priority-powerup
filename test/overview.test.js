@@ -736,4 +736,40 @@ describe('PriorityUI createOverviewField', () => {
       )
     );
   });
+
+  it('createOverviewField compact mode skips accordion chrome and actions', () => {
+    const jumps = [];
+    const ui = PriorityUI.createOverviewField({
+      title: 'Card back',
+      compact: true,
+      progressPercent: 40,
+      dueCountdown: 'Dans 2 jours',
+      dueBand: 'soon',
+      priorityLabel: 'Importante',
+      priorityColor: '#0c66e4',
+      onJump(key) {
+        jumps.push(key);
+      },
+    });
+
+    assert.equal(ui.compact, true);
+    assert.ok(ui.el.classList.contains('variant-overview-section--compact'));
+    assert.ok(ui.field.classList.contains('field--overview-compact'));
+    assert.equal(ui.el.querySelector('.section-toggle-head'), null);
+    assert.equal(ui.el.querySelector('.overview-actions'), null);
+    assert.equal(ui.el.querySelector('.overview-title-chevron'), null);
+    assert.equal(ui.el.querySelector('.overview-title-text').textContent, 'Card back');
+    assert.match(
+      ui.el.querySelector('.overview-cell--progress .overview-cell-value').textContent,
+      /40/
+    );
+    assert.equal(
+      ui.el.querySelector('.overview-cell--due .overview-cell-value').textContent,
+      'Dans 2 jours'
+    );
+
+    ui.el.querySelector('.overview-title').click();
+    assert.deepEqual(jumps, ['info']);
+    assert.equal(ui.isExpanded(), true);
+  });
 });

@@ -2458,6 +2458,216 @@
     }
   }
 
+  /**
+   * Snapshot for Résumé / card-back compact overview (title, progress, due, priority).
+   */
+  async function getCardOverviewSnapshot(t) {
+    var empty = {
+      title: '',
+      status: '',
+      statusCategory: '',
+      statusColor: '',
+      progressPercent: null,
+      progressColor: '',
+      progressBlocked: false,
+      dueCountdown: '',
+      dueBand: '',
+      dueDays: null,
+      priorityLabel: '',
+      priorityColor: '',
+      features: {
+        statut: true,
+        progress: true,
+        due: true,
+        priority: true
+      }
+    };
+    if (!t) return empty;
+
+    var badgePromise = getBadgeData(t).catch(function () {
+      return { display: null, completed: false };
+    });
+    var namePromise =
+      typeof getCardName === 'function'
+        ? getCardName(t).catch(function () {
+            return '';
+          })
+        : Promise.resolve('');
+    var completionPromise = (function () {
+      var CT = global.CompletionTrello;
+      if (!CT || typeof CT.getCardCompletion !== 'function') {
+        return Promise.resolve(null);
+      }
+      return CT.getCardCompletion(t).catch(function () {
+        return null;
+      });
+    })();
+    var statutPromise = (function () {
+      var ST = global.StatutTrello;
+      if (!ST || typeof ST.getCardStatut !== 'function') {
+        return Promise.resolve(null);
+      }
+      return ST.getCardStatut(t).catch(function () {
+        return null;
+      });
+    })();
+    var profilePromise = (function () {
+      var UP = global.UserProfile;
+      if (!UP || typeof UP.load !== 'function') return Promise.resolve(null);
+      return UP.load(t).catch(function () {
+        return null;
+      });
+    })();
+
+    var results = await Promise.all([
+      badgePromise,
+      namePromise,
+      completionPromise,
+      statutPromise,
+      profilePromise
+    ]);
+    var badge = results[0] || {};
+    var title = typeof results[1] === 'string' ? results[1] : '';
+    var completion = results[2];
+    var statut = results[3];
+    var profile = results[4];
+    var display = badge.display || null;
+    var completed = !!badge.completed;
+
+    var features = {
+      statut: true,
+      progress: true,
+      due: true,
+      priority: true
+    };
+    var UP = global.UserProfile;
+    if (profile && UP && typeof UP.isFeatureEnabled === 'function') {
+      features.statut = UP.isFeatureEnabled(profile, 'statut') !== false;
+      features.progress = UP.isFeatureEnabled(profile, 'progress') !== false;
+      features.due = UP.isFeatureEnabled(profile, 'due') !== false;
+      features.priority = UP.isFeatureEnabled(profile, 'priority') !== false;
+    }
+
+    var progressPercent = null;
+    var progressColor = '';
+    var progressBlocked = false;
+    var CT = global.CompletionTrello;
+    if (completion && CT && typeof CT.computeCardProgress === 'function') {
+      if (completion.progressEnabled !== false) {
+        var progressMeta = CT.computeCardProgress(completion);
+        if (progressMeta && (progressMeta.hasItems || progressMeta.percent != null)) {
+          progressPercent =
+            progressMeta.percent != null ? progressMeta.percent : 0;
+        }
+      }
+    }
+    var statusCategory =
+      statut && typeof statut.category === 'string' ? statut.category : '';
+    var statusLabel =
+      statut && typeof statut.listName === 'string' ? statut.listName : '';
+    var statusColor = '';
+    if (
+      global.StatutMatch &&
+      typeof global.StatutMatch.categoryStyle === 'function'
+    ) {
+      var stStyle = global.StatutMatch.categoryStyle(statusCategory || '_none');
+      statusColor = (stStyle && stStyle.color) || '';
+    } else {
+      var PU = priorityUI();
+      if (PU && typeof PU.statutCategoryStyle === 'function') {
+        var puStyle = PU.statutCategoryStyle(statusCategory || '_none');
+        statusColor = (puStyle && puStyle.color) || '';
+      }
+    }
+
+    var fullyComplete =
+      completed ||
+      statusCategory === 'completed' ||
+      (CT &&
+        typeof CT.isAllSubtasksComplete === 'function' &&
+        completion &&
+        CT.isAllSubtasksComplete(completion)) ||
+      (progressPercent != null && progressPercent >= 100);
+    if (fullyComplete) {
+      progressPercent = 100;
+      progressBlocked = false;
+      if (!statusCategory) statusCategory = 'completed';
+    } else if (
+      CT &&
+      typeof CT.hasAnyBlocked === 'function' &&
+      completion
+    ) {
+      progressBlocked = !!CT.hasAnyBlocked(completion);
+    }
+    if (display && display.blocked) progressBlocked = true;
+
+    var PU2 = priorityUI();
+    if (progressBlocked && PU2 && PU2.BLOCKED_STYLES && PU2.BLOCKED_STYLES.seg) {
+      progressColor = PU2.BLOCKED_STYLES.seg;
+    } else if (
+      progressPercent != null &&
+      global.CompletionUI &&
+      typeof global.CompletionUI.completionColorForProgress === 'function'
+    ) {
+      progressColor = global.CompletionUI.completionColorForProgress(
+        progressPercent
+      );
+    } else if (progressPercent != null) {
+      if (progressPercent >= 100) progressColor = '#22a06b';
+      else if (progressPercent >= 50) progressColor = '#0c66e4';
+      else progressColor = '#579dff';
+    }
+
+    var priorityLabel = '';
+    var priorityColor = '';
+    if (display && display.priorityEnabled !== false) {
+      priorityLabel = display.label || '';
+      priorityColor = display.seg || display.fill || '';
+    }
+
+    var dueCountdown = '';
+    var dueBand = '';
+    var dueDays = null;
+    if (display && display.dueCountdown) {
+      dueCountdown = display.dueCountdown;
+    }
+    if (PU2 && display) {
+      var dueVague =
+        display.dueMode === 'vague' ||
+        (typeof PU2.isDueVagueMode === 'function' &&
+          PU2.isDueVagueMode(display));
+      if (dueVague) {
+        dueBand = 'far';
+        dueDays = null;
+      } else if (display.dueDate) {
+        if (typeof PU2.dueProximityBand === 'function') {
+          dueBand =
+            PU2.dueProximityBand(display.dueDate, display.dueTime) || '';
+        }
+        if (typeof PU2.daysUntilDue === 'function') {
+          var days = PU2.daysUntilDue(display.dueDate);
+          if (isFinite(days)) dueDays = days;
+        }
+      }
+    }
+
+    return {
+      title: title || '',
+      status: statusLabel,
+      statusCategory: statusCategory,
+      statusColor: statusColor,
+      progressPercent: progressPercent,
+      progressColor: progressColor,
+      progressBlocked: progressBlocked,
+      dueCountdown: dueCountdown,
+      dueBand: dueBand,
+      dueDays: dueDays,
+      priorityLabel: priorityLabel,
+      priorityColor: priorityColor,
+      features: features
+    };
+  }
+
   function hasPriorityFaceContent(display) {
     if (!display) return false;
     if (display.priorityEnabled === false && !display.blocked && !display.dueCountdown) {
@@ -3731,6 +3941,7 @@
     syncCardStartWithTrello: syncCardStartWithTrello,
     CARD_START_SYNCED_KEY: CARD_START_SYNCED_KEY,
     getBadgeData: getBadgeData,
+    getCardOverviewSnapshot: getCardOverviewSnapshot,
     formatBadgeText: formatBadgeText,
     formatBlockedBoardBadgeText: formatBlockedBoardBadgeText,
     incompleteBadgeLabel: incompleteBadgeLabel,

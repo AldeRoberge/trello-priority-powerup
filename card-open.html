@@ -5,16 +5,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cerveau</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css"
+  />
+  <link rel="stylesheet" href="./components/shared/trello-theme.css" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css" />
   <script src="./components/shared/brand.js"></script>
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/debug-log.js"></script>
+  <script src="./components/priority/priority-matrix.js"></script>
+  <script src="./components/priority/priority-ui.js"></script>
   <script src="./components/priority/priority-trello.js"></script>
+  <script src="./components/statut/statut-match.js"></script>
+  <script src="./components/statut/statut-trello.js"></script>
+  <script src="./components/completion/completion-trello.js"></script>
   <script src="./components/profile/user-profile.js"></script>
-  <link rel="stylesheet" href="./components/shared/trello-theme.css" />
   <style>
     body.tp-card-open {
       margin: 0;
-      padding: 4px 0;
+      padding: 4px 0 2px;
+    }
+    .tp-card-open-shell {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .tp-card-open-overview {
+      min-width: 0;
+    }
+    .tp-card-open-overview .variant-overview-section--compact {
+      width: 100%;
     }
     .tp-card-open-row {
       display: flex;
@@ -25,8 +46,15 @@
       width: auto;
       min-height: 32px;
       padding: 6px 12px;
+      flex-shrink: 0;
     }
     .tp-card-open-hint {
+      margin: 0;
+      font-size: 12px;
+      color: var(--ds-text-subtle, #626f86);
+      line-height: 1.35;
+    }
+    .tp-card-open-loading {
       margin: 0;
       font-size: 12px;
       color: var(--ds-text-subtle, #626f86);
@@ -34,9 +62,14 @@
   </style>
 </head>
 <body class="tp-page tp-card-open">
-  <div class="tp-card-open-row">
-    <button class="tp-btn tp-btn--primary" type="button" id="openBtn">Ouvrir</button>
-    <p class="tp-card-open-hint" id="hint">S’ouvre automatiquement à l’ouverture de la carte.</p>
+  <div class="tp-card-open-shell">
+    <div class="tp-card-open-overview" id="overviewMount">
+      <p class="tp-card-open-loading" id="overviewLoading">Chargement…</p>
+    </div>
+    <div class="tp-card-open-row">
+      <button class="tp-btn tp-btn--primary" type="button" id="openBtn">Ouvrir</button>
+      <p class="tp-card-open-hint" id="hint">S’ouvre automatiquement à l’ouverture de la carte.</p>
+    </div>
   </div>
   <script>
     (function () {
@@ -55,6 +88,9 @@
 
       var openBtn = document.getElementById('openBtn');
       var hintEl = document.getElementById('hint');
+      var overviewMount = document.getElementById('overviewMount');
+      var overviewLoading = document.getElementById('overviewLoading');
+      var overviewUi = null;
       if (openBtn) openBtn.textContent = 'Ouvrir ' + appName;
 
       function storageKey(cardId) {
@@ -129,7 +165,10 @@
             return t.modal({
               title: appName,
               url: PriorityTrello.pageUrl('./popup.html'),
-              args: { cardName: cardName, openSection: 'priority' },
+              args: {
+                cardName: cardName,
+                openSection: options.openSection || 'overview'
+              },
               height: 1100,
               fullscreen: false,
               accentColor: '#22272B',
@@ -142,6 +181,55 @@
                 if (window.TpDebug) TpDebug.log('cardOpen', 'modal.closed');
               },
             });
+          });
+      }
+
+      function mountOverview(t) {
+        if (
+          !overviewMount ||
+          !window.PriorityUI ||
+          typeof PriorityUI.createOverviewField !== 'function' ||
+          !window.PriorityTrello ||
+          typeof PriorityTrello.getCardOverviewSnapshot !== 'function'
+        ) {
+          if (overviewLoading) {
+            overviewLoading.textContent = '';
+            overviewLoading.hidden = true;
+          }
+          return Promise.resolve();
+        }
+
+        overviewUi = PriorityUI.createOverviewField({
+          el: overviewMount,
+          compact: true,
+          onJump: function (section) {
+            openCerveauModal(t, {
+              force: true,
+              openSection: section || 'overview'
+            }).catch(function (err) {
+              if (window.TpDebug) TpDebug.error('cardOpen', 'modal.jump', err);
+              else console.error('Cerveau modal open failed', err);
+            });
+          },
+          onLayoutChange: function () {
+            resize(t);
+          }
+        });
+        if (overviewLoading && overviewLoading.parentNode) {
+          overviewLoading.parentNode.removeChild(overviewLoading);
+        }
+
+        return PriorityTrello.getCardOverviewSnapshot(t)
+          .then(function (snap) {
+            if (overviewUi && typeof overviewUi.setData === 'function') {
+              overviewUi.setData(snap || {});
+            }
+            resize(t);
+          })
+          .catch(function (err) {
+            if (window.TpDebug) TpDebug.error('cardOpen', 'overview.load', err);
+            else console.error('Card-back overview load failed', err);
+            resize(t);
           });
       }
 
@@ -163,25 +251,29 @@
 
         resize(t);
 
+        var overviewReady = mountOverview(t);
+
         return loadAutoOpenPreference(t).then(function (autoEnabled) {
           setHint(autoEnabled);
           resize(t);
-          if (!autoEnabled) {
-            if (window.TpDebug) {
-              TpDebug.log('cardOpen', 'modal.skip', { reason: 'pref-disabled' });
+          return overviewReady.then(function () {
+            if (!autoEnabled) {
+              if (window.TpDebug) {
+                TpDebug.log('cardOpen', 'modal.skip', { reason: 'pref-disabled' });
+              }
+              return null;
             }
-            return null;
-          }
-          return openCerveauModal(t).then(
-            function () {
-              resize(t);
-            },
-            function (err) {
-              if (window.TpDebug) TpDebug.error('cardOpen', 'modal.auto', err);
-              else console.error('Cerveau auto-open failed', err);
-              resize(t);
-            }
-          );
+            return openCerveauModal(t).then(
+              function () {
+                resize(t);
+              },
+              function (err) {
+                if (window.TpDebug) TpDebug.error('cardOpen', 'modal.auto', err);
+                else console.error('Cerveau auto-open failed', err);
+                resize(t);
+              }
+            );
+          });
         });
       });
     })();

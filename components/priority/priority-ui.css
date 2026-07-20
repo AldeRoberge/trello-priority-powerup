@@ -413,12 +413,23 @@ body {
   padding: 0 8px;
 }
 
+.variant-overview-section--compact {
+  margin: 0;
+  padding: 0;
+}
+
 .field--overview {
   margin-bottom: 0;
   padding: 10px 12px;
   border-radius: var(--radius);
   border: none;
   background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
+}
+
+.field--overview-compact {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
 }
 
 .field--overview .section-collapse-btn {
@@ -495,6 +506,41 @@ body {
 .overview-title.is-empty .overview-title-text {
   font-weight: 500;
   color: var(--text-muted);
+}
+
+.field--overview-compact .overview-title {
+  margin: 0 0 6px;
+  padding: 2px 0;
+}
+
+.field--overview-compact .overview-title:hover {
+  background: transparent;
+}
+
+.field--overview-compact .overview-title-text {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.field--overview-compact .overview-title-icon {
+  font-size: 15px;
+}
+
+.field--overview-compact .overview-metrics {
+  gap: 6px;
+}
+
+.field--overview-compact .overview-cell {
+  padding: 6px 8px;
+  gap: 4px;
+}
+
+.field--overview-compact .overview-cell-label {
+  font-size: 10px;
+}
+
+.field--overview-compact .overview-cell-value {
+  font-size: 12px;
 }
 
 .overview-metrics {
