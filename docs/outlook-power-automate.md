@@ -52,19 +52,21 @@ formatDateTime(addDays(triggerOutputs()?['body/due'], 1), 'yyyy-MM-dd')
 
 Ne pas coller `due` brut (erreur `date-time` vs `date-no-tz`).
 
-### 4. Sauver l’Id dans une variable
+### 4. Variable EventId (hors condition)
 
-Après **Créer un événement** :
+**Important :** **Initialiser une variable** doit être **à la racine** du flux (juste après le déclencheur), **pas** dans la Condition.
 
-1. **Variables** → **Initialiser une variable**
-2. Nom : `EventId`
-3. Type : **Chaîne**
-4. Valeur : **Contenu dynamique** → sous Créer un événement → **Id**  
-   (ne tapez pas le nom de l’action à la main)
+1. Après le déclencheur, **avant** la Condition : **Variables** → **Initialiser une variable**
+   - Nom : `EventId`
+   - Type : Chaîne
+   - Valeur : *(vide)*
+2. **Dans** Si oui, **après** Créer un événement : **Variables** → **Définir une variable**
+   - Nom : `EventId`
+   - Valeur : **Contenu dynamique** → Id de Créer un événement
 
 ### 5. Écrire l’id dans la description Trello
 
-**Trello** → **Mettre à jour une carte**
+**Trello** → **Mettre à jour une carte** (toujours dans Si oui, après Définir la variable)
 
 - Carte : id de la carte du déclencheur  
 - Description (expression) :
@@ -85,19 +87,109 @@ Cerveau masquera cette ligne dans le popup (**Afficher les métadonnées masqué
 
 ---
 
-## Flux B — Récurrence (mises à jour)
+## Flux B — Mise à jour continue (dates / titre)
 
-Sans déclencheur « carte modifiée », utilisez la planification.
+Trello n’envoie pas « carte modifiée » à Automate. Ce flux **regarde le tableau régulièrement** et pousse les changements vers Outlook.
 
-1. **Créer** → **Flux de cloud planifié**
-2. Récurrence : toutes les **1 heure** (ou 15 min)
-3. Trello → action du type **Obtenir les cartes** / lister les cartes du tableau
-4. **Appliquer à chaque** carte :
-   - Si pas d’échéance → ignorer  
-   - Si description **ne contient pas** `outlook-event-id` → créer événement + variable + update description (comme Flux A)  
-   - Sinon → **Mettre à jour un événement** avec l’id extrait de la description  
+### 1. Créer le flux planifié
 
-(Extraction d’id : Compose / expression sur le texte après `[outlook-event-id]:`.)
+1. **Créer** → **Flux de cloud planifié** (Scheduled cloud flow)
+2. Nom : `Trello → Outlook (sync horaire)`
+3. Récurrence : toutes les **15 minutes** ou **1 heure** (plus fréquent = plus de runs)
+
+### 2. Variables à la racine
+
+Toujours **avant** toute Condition / Appliquer à chaque :
+
+1. **Initialiser une variable** `EventId` (Chaîne, vide)
+2. Optionnel : **Initialiser** `CardDesc` (Chaîne, vide) si utile
+
+### 3. Lister les cartes
+
+**Trello** → chercher une action du genre :
+
+- **Obtenir les cartes** / **List cards** / **Get cards** sur le **tableau**
+
+(Le libellé exact varie ; choisissez celle qui renvoie la liste des cartes du board.)
+
+### 4. Appliquer à chaque carte
+
+**Contrôle** → **Appliquer à chaque** → sélectionnez le tableau de cartes de l’étape précédente.
+
+**Dans** la boucle :
+
+#### 4a. Condition : a une échéance ?
+
+- `items('Appliquer_à_chaque')?['due']` **n’est pas vide**  
+  (ou le champ Date d’échéance du contenu dynamique de la carte courante)
+
+**Si non** → ne rien faire.
+
+**Si oui** → suite.
+
+#### 4b. Condition : a déjà un outlook-event-id ?
+
+- Description de la carte **contient** `outlook-event-id`
+
+---
+
+**Branche Si non** (pas encore d’événement) — comme Flux A :
+
+1. **Créer un événement (V4)**  
+   - Début : `formatDateTime(items('Appliquer_à_chaque')?['due'], 'yyyy-MM-dd')`  
+   - Fin : `formatDateTime(addDays(items('Appliquer_à_chaque')?['due'], 1), 'yyyy-MM-dd')`  
+   - Objet : nom de la carte courante  
+2. **Définir la variable** `EventId` = Id (contenu dynamique)  
+3. **Mettre à jour une carte** — description :
+
+```text
+concat(
+  coalesce(items('Appliquer_à_chaque')?['desc'], ''),
+  '
+
+[outlook-event-id]: ',
+  variables('EventId')
+)
+```
+
+(Adaptez `Appliquer_à_chaque` au nom exact de votre boucle — visible dans le code peek / contenu dynamique.)
+
+---
+
+**Branche Si oui** (événement déjà lié) — **mettre à jour Outlook** :
+
+1. **Composer** (Compose) nommé `ParsedEventId` — expression pour extraire l’id :
+
+```text
+trim(
+  first(
+    split(
+      last(split(coalesce(items('Appliquer_à_chaque')?['desc'], ''), '[outlook-event-id]:')),
+      decodeUriComponent('%0A')
+    )
+  )
+)
+```
+
+Plus simple si une seule ligne d’id en bas de description :
+
+```text
+trim(last(split(coalesce(items('Appliquer_à_chaque')?['desc'], ''), '[outlook-event-id]:')))
+```
+
+2. **Outlook** → **Mettre à jour un événement (V4)**  
+   - Id de l’événement : sortie du Compose `ParsedEventId`  
+   - Objet : nom actuel de la carte  
+   - Début / Fin : mêmes `formatDateTime` / `addDays` que ci‑dessus sur `due` de la carte courante  
+
+Ainsi, quand vous changez l’échéance (ou le titre) dans Trello, le prochain passage du flux met Outlook à jour.
+
+### 5. Activer
+
+Laissez Flux A + Flux B **activés**.  
+Test : changez l’échéance d’une carte déjà liée → attendez le prochain run (15 min / 1 h) → vérifiez Outlook.
+
+**Astuce :** pour tester sans attendre, ouvrez Flux B → **Exécuter** (Run) manuellement.
 
 ---
 
