@@ -13,6 +13,7 @@
   var DEFAULT_FILTERS = {
     hideCompleted: true,
     hideUndated: false,
+    hideBlocked: false,
     sortBy: 'date',
     sortDir: 'asc',
   };
@@ -95,6 +96,7 @@
     var out = {
       hideCompleted: DEFAULT_FILTERS.hideCompleted,
       hideUndated: DEFAULT_FILTERS.hideUndated,
+      hideBlocked: DEFAULT_FILTERS.hideBlocked,
       sortBy: DEFAULT_FILTERS.sortBy,
       sortDir: DEFAULT_FILTERS.sortDir,
     };
@@ -109,6 +111,9 @@
       }
       if (typeof parsed.hideUndated === 'boolean') {
         out.hideUndated = parsed.hideUndated;
+      }
+      if (typeof parsed.hideBlocked === 'boolean') {
+        out.hideBlocked = parsed.hideBlocked;
       }
       if (typeof parsed.sortBy === 'string') {
         out.sortBy = normalizeSortBy(parsed.sortBy);
@@ -136,6 +141,10 @@
         typeof filters.hideUndated === 'boolean'
           ? filters.hideUndated
           : DEFAULT_FILTERS.hideUndated,
+      hideBlocked:
+        typeof filters.hideBlocked === 'boolean'
+          ? filters.hideBlocked
+          : DEFAULT_FILTERS.hideBlocked,
       sortBy: sortBy,
       sortDir: normalizeSortDir(filters.sortDir, sortBy),
     };
@@ -248,6 +257,7 @@
       selected: Object.create(null),
       hideCompleted: storedFilters.hideCompleted,
       hideUndated: storedFilters.hideUndated,
+      hideBlocked: storedFilters.hideBlocked,
       sortBy: storedFilters.sortBy,
       sortDir: storedFilters.sortDir,
       loading: true,
@@ -268,6 +278,7 @@
       storeFilters({
         hideCompleted: state.hideCompleted,
         hideUndated: state.hideUndated,
+        hideBlocked: state.hideBlocked,
         sortBy: state.sortBy,
         sortDir: state.sortDir,
       });
@@ -351,6 +362,7 @@
       var filtered = model.filterRows(flat, {
         hideCompleted: state.hideCompleted,
         hideUndated: state.hideUndated,
+        hideBlocked: state.hideBlocked,
       });
       if (typeof model.pruneEmptyStateSections === 'function') {
         return model.pruneEmptyStateSections(filtered);
@@ -457,6 +469,18 @@
       hideDone.appendChild(doneCb);
       hideDone.appendChild(document.createTextNode(' Masquer termin\u00e9s'));
       filters.appendChild(hideDone);
+
+      var hideBlocked = el('label', 'gantt-check');
+      var blockedCb = el('input', '', { type: 'checkbox' });
+      blockedCb.checked = state.hideBlocked;
+      blockedCb.addEventListener('change', function () {
+        state.hideBlocked = !!blockedCb.checked;
+        persistFilters();
+        renderChart();
+      });
+      hideBlocked.appendChild(blockedCb);
+      hideBlocked.appendChild(document.createTextNode(' Masquer bloqu\u00e9es'));
+      filters.appendChild(hideBlocked);
 
       var hideUndated = el('label', 'gantt-check');
       var undatedCb = el('input', '', { type: 'checkbox' });

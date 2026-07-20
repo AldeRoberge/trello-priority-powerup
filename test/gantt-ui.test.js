@@ -58,12 +58,14 @@ describe('GanttUI helpers', () => {
     const defaults = GanttUI.readStoredFilters();
     assert.equal(defaults.hideCompleted, true);
     assert.equal(defaults.hideUndated, false);
+    assert.equal(defaults.hideBlocked, false);
     assert.equal(defaults.sortBy, 'date');
     assert.equal(defaults.sortDir, 'asc');
 
     GanttUI.storeFilters({
       hideCompleted: false,
       hideUndated: true,
+      hideBlocked: true,
       sortBy: 'progress',
       sortDir: 'asc',
     });
@@ -71,6 +73,7 @@ describe('GanttUI helpers', () => {
     assert.deepEqual(stored, {
       hideCompleted: false,
       hideUndated: true,
+      hideBlocked: true,
       sortBy: 'progress',
       sortDir: 'asc',
     });
@@ -78,6 +81,7 @@ describe('GanttUI helpers', () => {
     GanttUI.storeFilters({ sortBy: 'subtasks' });
     assert.equal(GanttUI.readStoredFilters().sortBy, 'subtasks');
     assert.equal(GanttUI.readStoredFilters().sortDir, 'desc');
+    assert.equal(GanttUI.readStoredFilters().hideBlocked, false);
 
     global.localStorage.setItem(GanttUI.FILTERS_STORAGE_KEY, '{bad');
     assert.deepEqual(GanttUI.readStoredFilters(), GanttUI.DEFAULT_FILTERS);
