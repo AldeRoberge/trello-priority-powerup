@@ -19,6 +19,7 @@ const UNIT_FILES = [
   'version.test.js',
   'priority-matrix.test.js',
   'priority-scoring.test.js',
+  'priority-score-breakdown.test.js',
   'recurrence.test.js',
   'statut.test.js',
   'effects.test.js',

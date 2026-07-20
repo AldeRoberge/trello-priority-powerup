@@ -389,8 +389,16 @@ describe('PriorityUI createOverviewField', () => {
       ui.el.querySelector('.overview-cell--due').getAttribute('hidden'),
       null
     );
+    // Completed overrides overdue → Complété (not overdue band).
     assert.ok(
-      ui.el.querySelector('.overview-cell--due').classList.contains('is-due-overdue')
+      ui.el.querySelector('.overview-cell--due').classList.contains('is-done')
+    );
+    assert.ok(
+      !ui.el.querySelector('.overview-cell--due').classList.contains('is-due-overdue')
+    );
+    assert.match(
+      ui.el.querySelector('.overview-cell--due .overview-cell-value').textContent,
+      /Compl/
     );
 
     const data = ui.getData();
@@ -484,6 +492,39 @@ describe('PriorityUI createOverviewField', () => {
       progressCell.querySelector('.overview-cell-value').textContent,
       /Termin/
     );
+  });
+
+  it('completed overdue shows Complété, grayed priority, and no action chips', () => {
+    const ui = PriorityUI.createOverviewField({
+      status: 'Terminé',
+      statusCategory: 'completed',
+      statusColor: '#22a06b',
+      progressPercent: 100,
+      dueCountdown: 'En retard de 2 jours',
+      dueBand: 'overdue',
+      dueDays: -2,
+      priorityLabel: 'Critique',
+      priorityColor: '#C9372C',
+    });
+
+    const dueCell = ui.el.querySelector('.overview-cell--due');
+    assert.ok(dueCell.classList.contains('is-done'));
+    assert.ok(!dueCell.classList.contains('is-overdue'));
+    assert.ok(!dueCell.classList.contains('is-due-overdue'));
+    assert.equal(dueCell.dataset.dueBand, undefined);
+    assert.match(dueCell.querySelector('.overview-cell-value').textContent, /Compl/);
+
+    const priorityCell = ui.el.querySelector('.overview-cell--priority');
+    assert.ok(priorityCell.classList.contains('is-complete'));
+    assert.ok(!priorityCell.classList.contains('has-priority-color'));
+    assert.match(
+      priorityCell.querySelector('.overview-cell-value').textContent,
+      /Critique/
+    );
+    assert.equal(priorityCell.getAttribute('hidden'), null);
+
+    assert.equal(ui.el.querySelector('.overview-actions').hidden, true);
+    assert.equal(ui.el.querySelectorAll('.overview-action-chip').length, 0);
   });
 
   it('falls back to status label when no percent', () => {

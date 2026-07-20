@@ -318,13 +318,11 @@
 
       // Settings popup loads board context itself — do not gate the menu item on preload.
       'board-buttons': function(t) {
-        var brandIcon =
-          (window.PriorityBrand && PriorityBrand.iconSvg
-            ? PriorityTrello.pageUrl(PriorityBrand.iconSvg)
-            : null) || PriorityTrello.pageUrl('./assets/icon.svg');
         return [
           {
-            icon: brandIcon,
+            // Monochrome SVG — Trello recolors board-button icons; multi-color brand art
+            // becomes an opaque white square.
+            icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/settings.svg',
             text: 'Paramètres du Cerveau',
             callback: function(t) {
               // Popup width is fixed (narrow) by Trello; modal fits statut mapping + color schemes.

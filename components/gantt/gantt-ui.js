@@ -663,6 +663,16 @@
         });
     }
 
+    function makeIconBtn(className, iconClass, label, onClick) {
+      var btn = el('button', className, { type: 'button', title: label });
+      var icon = el('i', 'ti ' + iconClass);
+      icon.setAttribute('aria-hidden', 'true');
+      btn.appendChild(icon);
+      btn.appendChild(document.createTextNode(label));
+      btn.addEventListener('click', onClick);
+      return btn;
+    }
+
     function renderBulkBar() {
       bulkBar.innerHTML = '';
       var n = selectedCount();
@@ -677,41 +687,36 @@
         })
       );
 
-      var doneBtn = el('button', 'gantt-btn', {
-        type: 'button',
-        text: 'Terminer',
-      });
-      doneBtn.addEventListener('click', function () {
-        runBulk('done');
-      });
-      bulkBar.appendChild(doneBtn);
-
-      var reopenBtn = el('button', 'gantt-btn', {
-        type: 'button',
-        text: 'Rouvrir',
-      });
-      reopenBtn.addEventListener('click', function () {
-        runBulk('reopen');
-      });
-      bulkBar.appendChild(reopenBtn);
-
-      var delBtn = el('button', 'gantt-btn gantt-btn--danger', {
-        type: 'button',
-        text: 'Supprimer',
-      });
-      delBtn.addEventListener('click', function () {
-        runBulk('delete');
-      });
-      bulkBar.appendChild(delBtn);
-
-      var clearBtn = el('button', 'gantt-btn', {
-        type: 'button',
-        text: 'Tout d\u00e9s\u00e9lectionner',
-      });
-      clearBtn.addEventListener('click', function () {
-        clearSelection();
-      });
-      bulkBar.appendChild(clearBtn);
+      bulkBar.appendChild(
+        makeIconBtn('gantt-btn', 'ti-circle-check', 'Terminer', function () {
+          runBulk('done');
+        })
+      );
+      bulkBar.appendChild(
+        makeIconBtn('gantt-btn', 'ti-reload', 'Rouvrir', function () {
+          runBulk('reopen');
+        })
+      );
+      bulkBar.appendChild(
+        makeIconBtn(
+          'gantt-btn gantt-btn--danger',
+          'ti-trash',
+          'Supprimer',
+          function () {
+            runBulk('delete');
+          }
+        )
+      );
+      bulkBar.appendChild(
+        makeIconBtn(
+          'gantt-btn',
+          'ti-deselect',
+          'Tout d\u00e9s\u00e9lectionner',
+          function () {
+            clearSelection();
+          }
+        )
+      );
     }
 
     function canEditSubtask(row) {
@@ -1243,6 +1248,22 @@
       var headerCell = el('div', 'gantt-label-cell gantt-label-cell--header');
       var selectAll = el('input', 'gantt-select-box', { type: 'checkbox' });
       selectAll.title = 'Tout s\u00e9lectionner / d\u00e9s\u00e9lectionner';
+      var visibleForSelect = rows;
+      var selectedVisible = 0;
+      for (var vi = 0; vi < visibleForSelect.length; vi++) {
+        if (
+          visibleForSelect[vi] &&
+          visibleForSelect[vi].id &&
+          state.selected[visibleForSelect[vi].id]
+        ) {
+          selectedVisible++;
+        }
+      }
+      selectAll.checked =
+        visibleForSelect.length > 0 &&
+        selectedVisible === visibleForSelect.length;
+      selectAll.indeterminate =
+        selectedVisible > 0 && selectedVisible < visibleForSelect.length;
       selectAll.addEventListener('change', function () {
         var on = !!selectAll.checked;
         var list = visibleRows();

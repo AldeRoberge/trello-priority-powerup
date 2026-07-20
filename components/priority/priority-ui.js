@@ -5167,16 +5167,16 @@
   }
 
   // Baseline score (0–10):
-  //   core         = lerp((pressure+impactCore)×easeMul, pressure+impactCore×easeMul, ramp(U)), ramp smooth U=3→4
-  //   pressure     = urgencyLevelToPressure(U)           — fused time+blocking (0–6)
-  //   impactCore   = WI × curveImpact(I) × hardFactor  — hardFactor attenuated when U≥3
-  //   urgencyBoost = URGENCY_BOOST_MAX×(U/4)²×(1−dampen)×max(0,1−I/4)×ramp(U), ramp smooth U=3→4
+  //   urgencyShare = pressure × lerp(easeMul, 1, ramp(U))   — easeMul only at low/mid U
+  //   impactShare  = impactCore × easeMul                   — when easeMul active
+  //   impactCore   = WI × curveImpact(I) × hardFactor       — hardFactor attenuated when U≥3
+  //   urgencyBoost = URGENCY_BOOST_MAX×(U/4)²×(1−dampen)×max(0,1−I/4)×ramp(U)
   //   easeTerm     = easeWeight × (I/4 + EASE_BASE) × (F/5)^γ × EASE_SCALE
-  //   easeWeight   = WI_EASE × (1 − dampen × 0.85)      — full ease weight when not urgent
-  //   easeMul      = lerp(0.75, 1.25, (F−1)/4)         — boosts easy tasks at moderate U+I
+  //   easeWeight   = WI_EASE × (1 − dampen × 0.85)
+  //   easeMul      = lerp(0.75, 1.25, (F−1)/4) when dampen low
   //   dampen       = ((U/4)×(I/4))^DAMPEN_POWER × DAMPEN_MAX
   //   effectiveF   = max(F, EASE_FLOOR) when U≥3 and I≥3
-  //   rawScore     = core + easeTerm + urgencyBoost
+  //   rawScore     = urgencyShare + impactShare + easeTerm + urgencyBoost
   //   score        = clamp(rawScore × (10 / rawMax), 0, 10)
   //   rawMax       = rawScore at U=4, I=4, F=5 (all max → exactly 10.0)
   function calcBaselineTermsRaw(U, I, F) {
@@ -5378,17 +5378,15 @@
   }
 
   function formatBaseline(terms, score) {
-    var dampPct = (terms.dampen * 100).toFixed(0);
-    var easeMulNote = terms.easeMul != null && terms.easeMul !== 1
-      ? ', ×' + terms.easeMul.toFixed(2) + ' noyau'
-      : '';
-    return (
-      'Pression d\'urgence → ' + terms.pressure.toFixed(1) +
-      '   ·   Impact → ' + terms.impactCore.toFixed(1) +
-      '   ·   Facilité → ' + terms.easeTerm.toFixed(1) +
-      ' (attén. ' + dampPct + ' %, F eff. ' + terms.effectiveF.toFixed(1) + easeMulNote + ')' +
-      '   =   ' + formatScore(score)
-    );
+    var parts = [
+      'Urgence ' + (terms.urgencyShare != null ? terms.urgencyShare : terms.pressure).toFixed(1),
+      'Impact ' + (terms.impactShare != null ? terms.impactShare : terms.impactCore).toFixed(1),
+      'Facilit\u00e9 ' + terms.easeTerm.toFixed(1)
+    ];
+    if (terms.urgencyBoost != null && terms.urgencyBoost > 0.05) {
+      parts.push('Bonus urgence ' + terms.urgencyBoost.toFixed(1));
+    }
+    return parts.join(' + ') + '   =   ' + formatScore(score);
   }
 
   function formatEisenhower(terms, score) {
@@ -5422,6 +5420,22 @@
     return Math.abs(n - Math.round(n)) < 0.01 ? String(Math.round(n)) : n.toFixed(1);
   }
 
+  function formatSignedPoints(value) {
+    var n = Number(value);
+    var abs = Math.abs(n).toFixed(1);
+    if (n > 0.0005) return '+' + abs;
+    if (n < -0.0005) return '\u2212' + abs;
+    return '0.0';
+  }
+
+  function breakdownRowTitle(text) {
+    return { kind: 'title', text: text };
+  }
+
+  function breakdownRowFormula(text) {
+    return { kind: 'formula', text: text };
+  }
+
   function breakdownRowTerm(label, level, value, detail, textValue) {
     return {
       kind: 'term',
@@ -5446,15 +5460,18 @@
   }
 
   function breakdownRowToLine(row) {
+    if (row.kind === 'title') return row.text;
+    if (row.kind === 'formula') return row.text;
     if (row.kind === 'term') {
-      var line = row.label + ' (' + row.level + ')';
+      var line = row.label;
+      if (row.level != null && row.level !== '') line += ' (niveau ' + row.level + ')';
       if (row.detail) line += ' \u2192 ' + row.detail + ' ' + row.value;
       else line += ' \u2192 ' + row.value;
       return line;
     }
     if (row.kind === 'sub') return row.text;
     if (row.kind === 'info') return row.label + ' : ' + row.value;
-    if (row.kind === 'total') return '= ' + row.value + ' / 10';
+    if (row.kind === 'total') return 'Score = ' + row.value + ' / 10';
     return '';
   }
 
@@ -5474,6 +5491,22 @@
     wrap.className = 'heat-score-tooltip-rows';
 
     breakdown.rows.forEach(function (row) {
+      if (row.kind === 'title') {
+        var title = document.createElement('div');
+        title.className = 'heat-score-tooltip-title';
+        title.textContent = row.text;
+        wrap.appendChild(title);
+        return;
+      }
+
+      if (row.kind === 'formula') {
+        var formula = document.createElement('div');
+        formula.className = 'heat-score-tooltip-formula';
+        formula.textContent = row.text;
+        wrap.appendChild(formula);
+        return;
+      }
+
       if (row.kind === 'term') {
         var term = document.createElement('div');
         term.className = 'heat-score-tooltip-term';
@@ -5483,11 +5516,13 @@
         var label = document.createElement('span');
         label.className = 'heat-score-tooltip-label';
         label.textContent = row.label;
-        var level = document.createElement('span');
-        level.className = 'heat-score-tooltip-level';
-        level.textContent = row.level;
         main.appendChild(label);
-        main.appendChild(level);
+        if (row.level != null && row.level !== '') {
+          var level = document.createElement('span');
+          level.className = 'heat-score-tooltip-level';
+          level.textContent = row.level;
+          main.appendChild(level);
+        }
 
         var contrib = document.createElement('div');
         contrib.className = 'heat-score-tooltip-term-contrib';
@@ -5536,12 +5571,16 @@
       if (row.kind === 'total') {
         var total = document.createElement('div');
         total.className = 'heat-score-tooltip-total';
+        var totalLabel = document.createElement('span');
+        totalLabel.className = 'heat-score-tooltip-total-label';
+        totalLabel.textContent = 'Score';
         var totalValue = document.createElement('span');
         totalValue.className = 'heat-score-tooltip-total-value';
         totalValue.textContent = row.value;
         var totalMax = document.createElement('span');
         totalMax.className = 'heat-score-tooltip-total-max';
         totalMax.textContent = '/ 10';
+        total.appendChild(totalLabel);
         total.appendChild(totalValue);
         total.appendChild(totalMax);
         wrap.appendChild(total);
@@ -5553,19 +5592,44 @@
 
   function formatBaselineBreakdown(result) {
     var t = result.terms;
+    var urgPts = t.urgencyShare != null ? t.urgencyShare : t.pressure;
+    var impPts = t.impactShare != null ? t.impactShare : t.impactCore;
+    var easePts = t.easeTerm;
+    var boostPts = t.urgencyBoost != null ? t.urgencyBoost : 0;
+    var hasBoost = boostPts > 0.05;
+
     var rows = [
-      breakdownRowTerm('Urgence', formatSliderLevel(t.U), t.pressure.toFixed(1), 'Pression'),
-      breakdownRowTerm('Impact', formatSliderLevel(t.I), t.impactCore.toFixed(1))
+      breakdownRowTitle('Comment ce score est calcul\u00e9'),
+      breakdownRowFormula(
+        hasBoost
+          ? 'Urgence + Impact + Facilit\u00e9 + bonus'
+          : 'Urgence + Impact + Facilit\u00e9'
+      ),
+      breakdownRowTerm('Urgence', formatSliderLevel(t.U), formatSignedPoints(urgPts)),
+      breakdownRowTerm('Impact', formatSliderLevel(t.I), formatSignedPoints(impPts))
     ];
-    if (t.hardFactor != null && t.hardFactor < 0.999) {
-      rows.push(breakdownRowSub('P\u00e9nalit\u00e9 effort \u00d7' + t.hardFactor.toFixed(2)));
+    if (t.hardFactor != null && t.hardFactor < 0.999 && t.I > 0) {
+      rows.push(breakdownRowSub('Un peu r\u00e9duit\u00a0: t\u00e2che difficile \u00e0 r\u00e9aliser'));
     }
-    rows.push(breakdownRowTerm('Facilit\u00e9', formatSliderLevel(t.F), t.easeTerm.toFixed(1)));
-    if (t.dampen > 0.01) {
-      rows.push(breakdownRowSub('Att\u00e9nuation ' + (t.dampen * 100).toFixed(0) + ' %'));
+    rows.push(breakdownRowTerm('Facilit\u00e9', formatSliderLevel(t.F), formatSignedPoints(easePts)));
+    if (t.dampen > 0.12) {
+      rows.push(
+        breakdownRowSub(
+          'Compte moins ici\u00a0: urgence et impact sont d\u00e9j\u00e0 \u00e9lev\u00e9s'
+        )
+      );
     }
-    if (t.easeMul != null && Math.abs(t.easeMul - 1) > 0.01) {
-      rows.push(breakdownRowSub('Multiplicateur noyau \u00d7' + t.easeMul.toFixed(2)));
+    if (hasBoost) {
+      rows.push(
+        breakdownRowTerm(
+          'Bonus urgence',
+          '',
+          formatSignedPoints(boostPts)
+        )
+      );
+      rows.push(
+        breakdownRowSub('Urgence maximale avec peu d\u2019impact\u00a0: coup de pouce')
+      );
     }
     rows.push(breakdownRowTotal(result.score));
     return breakdownFromRows(rows, 'Comment ce score est calcul\u00e9');
@@ -5575,6 +5639,8 @@
     var t = result.terms;
     var quadrant = result.eisenhower || eisenhowerQuadrantById(t.quadrantId);
     return breakdownFromRows([
+      breakdownRowTitle('Comment ce score est calcul\u00e9'),
+      breakdownRowFormula('Urgence \u00d7 Impact \u2192 un quadrant (score fixe)'),
       breakdownRowTerm(
         'Urgence',
         formatSliderLevel(t.U),
@@ -5582,7 +5648,7 @@
         null,
         true
       ),
-      breakdownRowSub('Seuil urgent \u2265 ' + EISENHOWER_URGENCY_THRESHOLD),
+      breakdownRowSub('Urgent si le niveau est \u2265 ' + EISENHOWER_URGENCY_THRESHOLD),
       breakdownRowTerm(
         'Impact',
         formatSliderLevel(t.I),
@@ -5590,15 +5656,17 @@
         null,
         true
       ),
-      breakdownRowSub('Seuil important \u2265 ' + EISENHOWER_IMPACT_THRESHOLD),
+      breakdownRowSub('Important si le niveau est \u2265 ' + EISENHOWER_IMPACT_THRESHOLD),
       breakdownRowInfo('Quadrant', quadrant ? quadrant.label : ''),
       breakdownRowTotal(result.score)
-    ], 'Matrice Eisenhower');
+    ], 'Comment ce score est calcul\u00e9');
   }
 
   function formatWSJFBreakdown(result) {
     var t = result.terms;
     return breakdownFromRows([
+      breakdownRowTitle('Comment ce score est calcul\u00e9'),
+      breakdownRowFormula('Pression \u00f7 taille de la t\u00e2che'),
       breakdownRowTerm('Urgence', formatSliderLevel(t.U), t.pressure.toFixed(1), 'Pression'),
       breakdownRowTerm('Facilit\u00e9', formatSliderLevel(t.F), t.jobSize.toFixed(0), 'Taille'),
       breakdownRowInfo(
@@ -5606,12 +5674,14 @@
         t.pressure.toFixed(1) + ' \u00f7 ' + t.jobSize.toFixed(0) + ' \u00d7 ' + WSJF_SCALE.toFixed(2)
       ),
       breakdownRowTotal(result.score)
-    ]);
+    ], 'Comment ce score est calcul\u00e9');
   }
 
   function formatValueEffortBreakdown(result) {
     var t = result.terms;
     return breakdownFromRows([
+      breakdownRowTitle('Comment ce score est calcul\u00e9'),
+      breakdownRowFormula('(Impact \u00d7 Urgence) \u00f7 taille'),
       breakdownRowInfo('Impact', formatSliderLevel(t.I)),
       breakdownRowInfo('Urgence', formatSliderLevel(t.U)),
       breakdownRowTerm('Facilit\u00e9', formatSliderLevel(t.F), t.jobSize.toFixed(0), 'Taille'),
@@ -5621,7 +5691,7 @@
           ' \u00d7 ' + VALUE_EFFORT_SCALE
       ),
       breakdownRowTotal(result.score)
-    ]);
+    ], 'Comment ce score est calcul\u00e9');
   }
 
   var SCORE_BREAKDOWNS = {
@@ -8132,6 +8202,14 @@
       actionsEl.replaceChildren();
       var chips = [];
       var isBlocked = statusCategory === 'blocked' || !!progressBlocked;
+      var isDone =
+        statusCategory === 'completed' ||
+        (progressPercent != null && progressPercent >= 100);
+      // Completed cards need no unblock / postpone suggestions.
+      if (isDone) {
+        actionsEl.hidden = true;
+        return;
+      }
       if (isBlocked) {
         chips.push({
           id: 'unblock',
@@ -8322,16 +8400,24 @@
         progressCell.cell.classList.remove('has-progress-accent');
       }
 
-      dueCell.value.textContent = due;
-      dueCell.value.classList.toggle('is-empty', !due);
+      // Completed: show Complété instead of overdue/countdown banding.
+      var dueDone = !!isDone && !isBlocked && !!due;
+      var dueText = dueDone ? COMPLETED_BADGE_PREFIX : due;
+      var dueBandActive = dueDone ? '' : dueBand;
+      dueCell.value.textContent = dueText;
+      dueCell.value.classList.toggle('is-empty', !dueText);
+      dueCell.cell.classList.toggle('is-done', dueDone);
       for (var bi = 0; bi < DUE_PROXIMITY_BANDS.length; bi++) {
         var bandName = DUE_PROXIMITY_BANDS[bi];
-        dueCell.cell.classList.toggle('is-due-' + bandName, dueBand === bandName);
+        dueCell.cell.classList.toggle(
+          'is-due-' + bandName,
+          dueBandActive === bandName
+        );
       }
-      dueCell.cell.classList.toggle('is-overdue', dueBand === 'overdue');
-      if (dueBand) {
-        dueCell.cell.dataset.dueBand = dueBand;
-        var accent = dueBandAccent(dueBand);
+      dueCell.cell.classList.toggle('is-overdue', dueBandActive === 'overdue');
+      if (dueBandActive) {
+        dueCell.cell.dataset.dueBand = dueBandActive;
+        var accent = dueBandAccent(dueBandActive);
         if (accent) {
           dueCell.cell.style.setProperty('--overview-due-accent', accent);
         } else {
@@ -8339,19 +8425,35 @@
         }
       } else {
         if (dueCell.cell.dataset) delete dueCell.cell.dataset.dueBand;
-        dueCell.cell.style.removeProperty('--overview-due-accent');
+        if (dueDone) {
+          dueCell.cell.style.setProperty(
+            '--overview-due-accent',
+            statusAccent || progressColor || '#22a06b'
+          );
+        } else {
+          dueCell.cell.style.removeProperty('--overview-due-accent');
+        }
       }
 
       var pl = (priorityLabel || '').trim();
+      var priorityDone = !!isDone && !isBlocked;
       priorityCell.value.innerHTML = '';
+      priorityCell.cell.classList.toggle('is-complete', priorityDone);
       if (pl) {
         if (priorityColor) {
-          priorityDot.style.background = priorityColor;
+          // Keep the tier visible when done, but mute the accent.
+          priorityDot.style.background = priorityDone
+            ? 'var(--text-muted, #626f86)'
+            : priorityColor;
           priorityCell.value.appendChild(priorityDot);
-          priorityCell.cell.style.setProperty(
-            '--overview-priority-accent',
-            priorityColor
-          );
+          if (priorityDone) {
+            priorityCell.cell.style.removeProperty('--overview-priority-accent');
+          } else {
+            priorityCell.cell.style.setProperty(
+              '--overview-priority-accent',
+              priorityColor
+            );
+          }
         } else {
           priorityCell.cell.style.removeProperty('--overview-priority-accent');
         }
@@ -8364,7 +8466,10 @@
         priorityCell.value.classList.add('is-empty');
         priorityCell.cell.style.removeProperty('--overview-priority-accent');
       }
-      priorityCell.cell.classList.toggle('has-priority-color', !!(pl && priorityColor));
+      priorityCell.cell.classList.toggle(
+        'has-priority-color',
+        !!(pl && priorityColor && !priorityDone)
+      );
 
       paintActions();
 
@@ -9964,7 +10069,7 @@
             setMemberRoleCustoms(result.memberRoleCustoms);
           }
           setMembersStatus('', 'ok');
-          setMemberRolesPickerOpen('');
+          // Keep the picker open so the user can toggle several roles.
           renderMembers();
           setTimeout(function () {
             if (membersStatus.classList.contains('is-ok')) {
@@ -9991,53 +10096,85 @@
       onLayoutChange();
     }
 
-    function availableRolesForMember(memberId) {
-      var assigned = Object.create(null);
-      var current = rolesForMember(memberId);
-      for (var i = 0; i < current.length; i++) assigned[current[i]] = true;
-      var catalog = getMemberRoleCatalog().concat(getMemberRoleCustoms());
-      var out = [];
-      var seen = Object.create(null);
-      for (var c = 0; c < catalog.length; c++) {
-        var entry = catalog[c];
-        if (!entry || !entry.id || assigned[entry.id] || seen[entry.id]) continue;
-        seen[entry.id] = true;
-        out.push(entry);
-      }
-      return out;
-    }
-
     function renderMemberRolesPicker(memberId) {
       memberRolesPicker.replaceChildren();
-      var available = availableRolesForMember(memberId);
+      var assigned = Object.create(null);
+      var current = rolesForMember(memberId);
+      for (var a = 0; a < current.length; a++) assigned[current[a]] = true;
+
+      var heading = document.createElement('div');
+      heading.className = 'info-member-roles-picker-heading';
+      var member = null;
+      for (var mi = 0; mi < members.length; mi++) {
+        if (members[mi] && String(members[mi].id) === String(memberId)) {
+          member = members[mi];
+          break;
+        }
+      }
+      var memberName = memberDisplayName(member) || 'Membre';
+      heading.textContent = 'R\u00f4les\u00a0: ' + memberName;
+      memberRolesPicker.appendChild(heading);
 
       var list = document.createElement('div');
       list.className = 'info-member-roles-picker-list';
       list.setAttribute('role', 'group');
-      list.setAttribute('aria-label', 'R\u00f4les du catalogue');
+      list.setAttribute('aria-label', 'R\u00f4les de ' + memberName);
 
-      if (!available.length) {
+      var catalog = getMemberRoleCatalog().concat(getMemberRoleCustoms());
+      var seen = Object.create(null);
+      var entries = [];
+      for (var c = 0; c < catalog.length; c++) {
+        var entry = catalog[c];
+        if (!entry || !entry.id || seen[entry.id]) continue;
+        seen[entry.id] = true;
+        entries.push(entry);
+      }
+      // Keep assigned orphans visible even if dropped from catalog.
+      for (var r = 0; r < current.length; r++) {
+        if (seen[current[r]]) continue;
+        var orphan = getMemberRoleEntry(current[r]);
+        if (orphan) {
+          seen[orphan.id] = true;
+          entries.push(orphan);
+        }
+      }
+
+      if (!entries.length) {
         var empty = document.createElement('div');
         empty.className = 'info-member-roles-picker-empty';
-        empty.textContent = 'Tous les r\u00f4les sont d\u00e9j\u00e0 assign\u00e9s';
+        empty.textContent = 'Aucun r\u00f4le dans le catalogue';
         list.appendChild(empty);
       } else {
-        available.forEach(function (entry) {
+        entries.forEach(function (entry) {
+          var isOn = !!assigned[entry.id];
           var btn = document.createElement('button');
           btn.type = 'button';
-          btn.className = 'info-member-roles-picker-option';
+          btn.className =
+            'info-member-roles-picker-option' + (isOn ? ' is-selected' : '');
           btn.setAttribute('role', 'option');
-          btn.title = entry.label;
+          btn.setAttribute('aria-selected', isOn ? 'true' : 'false');
+          btn.title = isOn
+            ? 'Retirer\u00a0: ' + entry.label
+            : 'Ajouter\u00a0: ' + entry.label;
           btn.disabled = memberRolesBusy;
+          var check = document.createElement('i');
+          check.className =
+            'ti ' + (isOn ? 'ti-square-check-filled' : 'ti-square') +
+            ' info-member-roles-picker-check';
+          check.setAttribute('aria-hidden', 'true');
           var icon = document.createElement('i');
           icon.className = 'ti ti-' + (entry.icon || 'tag');
           icon.setAttribute('aria-hidden', 'true');
           var text = document.createElement('span');
           text.textContent = entry.label;
+          btn.appendChild(check);
           btn.appendChild(icon);
           btn.appendChild(text);
-          btn.addEventListener('click', function () {
-            addRoleToMember(memberId, entry.id);
+          btn.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (isOn) removeRoleFromMember(memberId, entry.id);
+            else addRoleToMember(memberId, entry.id);
           });
           list.appendChild(btn);
         });
@@ -10099,6 +10236,16 @@
       }
     }
 
+    function toggleMemberRolesPicker(memberId) {
+      var mid = memberId != null ? String(memberId).trim() : '';
+      if (!mid || !onMemberRolesChange || memberRolesBusy) return;
+      if (memberRolesPickerMemberId === mid) {
+        setMemberRolesPickerOpen('');
+      } else {
+        setMemberRolesPickerOpen(mid);
+      }
+    }
+
     function addRoleToMember(memberId, roleId) {
       if (!roleId || memberRolesBusy) return;
       var map = cloneMemberRolesMap();
@@ -10129,12 +10276,45 @@
           var name = memberDisplayName(member) || 'Membre';
           var mid = member && member.id != null ? String(member.id) : '';
           var chip = document.createElement('div');
-          chip.className = 'info-member';
-          chip.title = name;
-          chip.setAttribute('aria-label', name);
+          chip.className =
+            'info-member' +
+            (memberRolesPickerMemberId === mid ? ' is-roles-open' : '');
+          chip.title = onMemberRolesChange
+            ? name + ' \u2014 d\u00e9finir les r\u00f4les'
+            : name;
+          chip.setAttribute(
+            'aria-label',
+            onMemberRolesChange
+              ? name + ', d\u00e9finir les r\u00f4les'
+              : name
+          );
 
           var main = document.createElement('div');
           main.className = 'info-member-main';
+          if (onMemberRolesChange && mid) {
+            main.classList.add('is-clickable');
+            main.setAttribute('role', 'button');
+            main.tabIndex = 0;
+            main.setAttribute(
+              'aria-expanded',
+              memberRolesPickerMemberId === mid ? 'true' : 'false'
+            );
+            main.setAttribute('aria-haspopup', 'listbox');
+            main.addEventListener('click', function (event) {
+              if (event.target.closest('.info-member-clear')) return;
+              event.preventDefault();
+              event.stopPropagation();
+              toggleMemberRolesPicker(mid);
+            });
+            main.addEventListener('keydown', function (event) {
+              if (event.key === 'Enter' || event.key === ' ') {
+                if (event.target.closest('.info-member-clear')) return;
+                event.preventDefault();
+                event.stopPropagation();
+                toggleMemberRolesPicker(mid);
+              }
+            });
+          }
 
           appendMemberAvatar(main, member);
 
@@ -10204,8 +10384,8 @@
             var addRoleBtn = document.createElement('button');
             addRoleBtn.type = 'button';
             addRoleBtn.className = 'info-member-role-add';
-            addRoleBtn.setAttribute('aria-label', 'Ajouter un r\u00f4le \u00e0 ' + name);
-            addRoleBtn.title = 'Ajouter un r\u00f4le';
+            addRoleBtn.setAttribute('aria-label', 'D\u00e9finir les r\u00f4les de ' + name);
+            addRoleBtn.title = 'D\u00e9finir les r\u00f4les';
             addRoleBtn.setAttribute(
               'aria-expanded',
               memberRolesPickerMemberId === mid ? 'true' : 'false'
@@ -10215,11 +10395,7 @@
             addRoleBtn.addEventListener('click', function (event) {
               event.preventDefault();
               event.stopPropagation();
-              if (memberRolesPickerMemberId === mid) {
-                setMemberRolesPickerOpen('');
-              } else {
-                setMemberRolesPickerOpen(mid);
-              }
+              toggleMemberRolesPicker(mid);
             });
             rolesRow.appendChild(addRoleBtn);
           }
