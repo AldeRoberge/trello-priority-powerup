@@ -52,4 +52,48 @@ describe('GanttUI helpers', () => {
     global.localStorage.setItem(GanttUI.LABELS_W_STORAGE_KEY, '9999');
     assert.equal(GanttUI.readStoredLabelsWidth(), GanttUI.LABELS_W_DEFAULT);
   });
+
+  it('shouldShowPriorityFire only above Importante', () => {
+    assert.equal(typeof GanttUI.shouldShowPriorityFire, 'function');
+    assert.equal(
+      GanttUI.shouldShowPriorityFire({
+        priorityEnabled: true,
+        priorityTierI: 0,
+        priorityLabel: 'Critique',
+      }),
+      true
+    );
+    assert.equal(
+      GanttUI.shouldShowPriorityFire({
+        priorityEnabled: true,
+        priorityTierI: 2,
+        priorityLabel: 'Prioritaire',
+      }),
+      true
+    );
+    assert.equal(
+      GanttUI.shouldShowPriorityFire({
+        priorityEnabled: true,
+        priorityTierI: 3,
+        priorityLabel: 'Importante',
+      }),
+      false
+    );
+    assert.equal(
+      GanttUI.shouldShowPriorityFire({
+        priorityEnabled: true,
+        priorityTierI: 4,
+        priorityLabel: 'Flexible',
+      }),
+      false
+    );
+    assert.equal(
+      GanttUI.shouldShowPriorityFire({
+        priorityEnabled: false,
+        priorityTierI: 0,
+        priorityLabel: 'Critique',
+      }),
+      false
+    );
+  });
 });

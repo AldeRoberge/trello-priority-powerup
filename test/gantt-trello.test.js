@@ -347,6 +347,36 @@ describe('GanttTrello dates', () => {
     assert.equal(res.reason, 'no-card-id');
   });
 
+  it('clearCardBlocked clears enAttente and persists', async () => {
+    assert.equal(typeof GanttTrello.clearCardBlocked, 'function');
+    const store = {};
+    await withPriorityTrello(
+      {
+        CARD_PRIORITY_KEY: 'cardPriority',
+        getCardInputsById: async () => ({
+          urgency: 2,
+          impact: 2,
+          ease: 3,
+          enAttente: true,
+          blockedReasons: ['Attente'],
+        }),
+        clearBlockedFromInputs: (inputs) => ({
+          urgency: inputs.urgency,
+          impact: inputs.impact,
+          ease: inputs.ease,
+        }),
+        normalizeInputs: (inputs) => inputs,
+      },
+      async () => {
+        const res = await GanttTrello.clearCardBlocked(fakeT(store), 'card1');
+        assert.equal(res.ok, true);
+        assert.equal(res.cardId, 'card1');
+        assert.equal(store.card1.cardPriority.enAttente, undefined);
+        assert.equal(store.card1.cardPriority.urgency, 2);
+      }
+    );
+  });
+
   it('loadBoard builds nest tree from board cards', async () => {
     await withPriorityTrello(
       {

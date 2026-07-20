@@ -203,7 +203,7 @@
 
 .gantt-label-cell {
   display: grid;
-  grid-template-columns: 22px 28px minmax(80px, 1fr) 148px 72px;
+  grid-template-columns: 22px 28px minmax(80px, 1fr) 126px 72px;
   align-items: center;
   column-gap: 6px;
   padding: 0 8px 0 calc(8px + var(--gantt-depth, 0) * 14px);
@@ -235,12 +235,12 @@
 
 .gantt-detail-icons {
   display: grid;
-  grid-template-columns: repeat(6, 22px);
+  grid-template-columns: repeat(5, 22px);
   align-items: center;
   justify-items: center;
   column-gap: 2px;
   flex-shrink: 0;
-  width: 148px;
+  width: 126px;
 }
 
 .gantt-detail-icons--header .gantt-detail-slot:not(.is-sortable),
@@ -311,6 +311,22 @@
 
 .gantt-detail-icon.is-blocked {
   color: var(--tp-danger-text, #ae2e24);
+}
+
+.gantt-detail-icon--btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.gantt-detail-icon--btn:hover,
+.gantt-detail-icon--btn:focus-visible {
+  background: color-mix(in srgb, var(--tp-danger-text, #ae2e24) 14%, transparent);
+  outline: none;
 }
 
 .gantt-detail-icon.is-overdue {

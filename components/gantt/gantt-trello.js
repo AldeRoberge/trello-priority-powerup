@@ -680,12 +680,57 @@
     return { ok: false, reason: 'unsupported-kind' };
   }
 
+  /**
+   * Clear Bloqué (enAttente) on an arbitrary board card and persist plugin data.
+   */
+  async function clearCardBlocked(t, cardId) {
+    var pt = PT();
+    if (!pt) return { ok: false, reason: 'no-priority-trello' };
+    var id = cardId != null ? String(cardId).trim() : '';
+    if (!id) return { ok: false, reason: 'no-card-id' };
+    if (typeof pt.clearBlockedFromInputs !== 'function') {
+      return { ok: false, reason: 'no-clear-blocked' };
+    }
+
+    var existing = null;
+    if (typeof pt.getCardInputsById === 'function') {
+      try {
+        existing = await pt.getCardInputsById(t, id);
+      } catch (e) {
+        existing = null;
+      }
+    }
+    if (!existing) {
+      return { ok: false, reason: 'no-inputs' };
+    }
+    if (!existing.enAttente) {
+      return { ok: true, already: true, cardId: id, inputs: existing };
+    }
+
+    var cleared = pt.clearBlockedFromInputs(existing);
+    if (typeof pt.normalizeInputs === 'function') {
+      cleared = pt.normalizeInputs(cleared) || cleared;
+    }
+    try {
+      await t.set(id, 'shared', pt.CARD_PRIORITY_KEY || 'cardPriority', cleared);
+    } catch (storeErr) {
+      console.error('GanttTrello.clearCardBlocked store failed', storeErr);
+      return {
+        ok: false,
+        reason: 'store-failed',
+        error: storeErr && storeErr.message ? storeErr.message : String(storeErr),
+      };
+    }
+    return { ok: true, cardId: id, inputs: cleared };
+  }
+
   global.GanttTrello = {
     loadBoard: loadBoard,
     ensureRestAuthorized: ensureRestAuthorized,
     saveCardDates: saveCardDates,
     resolveCardDates: resolveCardDates,
     buildInputsForDates: buildInputsForDates,
+    clearCardBlocked: clearCardBlocked,
     setSubtaskDone: setSubtaskDone,
     deleteSubtask: deleteSubtask,
     renameSubtask: renameSubtask,
