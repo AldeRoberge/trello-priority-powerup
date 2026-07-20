@@ -477,6 +477,51 @@ describe('GanttTrello dates', () => {
     );
   });
 
+  it('setCardBlocked enables enAttente without Motifs', async () => {
+    assert.equal(typeof GanttTrello.setCardBlocked, 'function');
+    const store = {};
+    await withPriorityTrello(
+      {
+        CARD_PRIORITY_KEY: 'cardPriority',
+        getCardInputsById: async () => ({
+          urgency: 2,
+          impact: 2,
+          ease: 3,
+        }),
+        normalizeInputs: (inputs) => inputs,
+      },
+      async () => {
+        const res = await GanttTrello.setCardBlocked(fakeT(store), 'card1', true);
+        assert.equal(res.ok, true);
+        assert.equal(res.blocked, true);
+        assert.equal(store.card1.cardPriority.enAttente, true);
+        assert.equal(store.card1.cardPriority.urgency, 2);
+      }
+    );
+  });
+
+  it('setCardBlocked is a no-op when already in the requested state', async () => {
+    const store = {};
+    await withPriorityTrello(
+      {
+        CARD_PRIORITY_KEY: 'cardPriority',
+        getCardInputsById: async () => ({
+          urgency: 1,
+          impact: 1,
+          ease: 1,
+          enAttente: true,
+        }),
+        normalizeInputs: (inputs) => inputs,
+      },
+      async () => {
+        const res = await GanttTrello.setCardBlocked(fakeT(store), 'card1', true);
+        assert.equal(res.ok, true);
+        assert.equal(res.already, true);
+        assert.equal(store.card1, undefined);
+      }
+    );
+  });
+
   it('loadBoard builds nest tree from board cards', async () => {
     await withPriorityTrello(
       {

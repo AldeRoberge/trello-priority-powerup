@@ -348,10 +348,14 @@
 
     function visibleRows() {
       var flat = model.flattenVisible(state.tree, state.expanded);
-      return model.filterRows(flat, {
+      var filtered = model.filterRows(flat, {
         hideCompleted: state.hideCompleted,
         hideUndated: state.hideUndated,
       });
+      if (typeof model.pruneEmptyStateSections === 'function') {
+        return model.pruneEmptyStateSections(filtered);
+      }
+      return filtered;
     }
 
     function renderToolbar() {
@@ -713,9 +717,19 @@
     }
 
     function applySort() {
-      if (typeof model.sortTreeRoots === 'function') {
+      if (typeof model.sortTreeRootsGroupedByState === 'function') {
+        state.tree = model.sortTreeRootsGroupedByState(
+          state.tree,
+          state.sortBy,
+          state.sortDir
+        );
+      } else if (typeof model.sortTreeRoots === 'function') {
         state.tree = model.sortTreeRoots(state.tree, state.sortBy, state.sortDir);
       }
+    }
+
+    function isSelectableGanttRow(row) {
+      return !!(row && row.kind !== 'section' && row.id);
     }
 
     function defaultSortDir(mode) {
@@ -857,21 +871,18 @@
       }
 
       if (row.kind === 'card') {
-        if (row.blocked) {
-          var blockedBtn = iconButton(
-            'ti-player-pause',
-            'D\u00e9bloquer',
-            'is-blocked'
-          );
-          blockedBtn.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            unblockCard(row);
-          });
-          slot('is-blocked', blockedBtn);
-        } else {
-          slot('is-blocked', null);
-        }
+        var isBlocked = !!row.blocked;
+        var blockedBtn = iconButton(
+          'ti-player-pause',
+          isBlocked ? 'D\u00e9bloquer' : 'Bloquer',
+          isBlocked ? 'is-blocked' : 'is-blocked-ghost'
+        );
+        blockedBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleCardBlocked(row);
+        });
+        slot('is-blocked', blockedBtn);
 
         if (shouldShowPriorityFire(row)) {
           var pTitle =
@@ -938,28 +949,30 @@
       return sub;
     }
 
-    function unblockCard(row) {
+    function toggleCardBlocked(row) {
       if (!row || row.kind !== 'card' || !row.cardId || state.saving) return;
-      if (!row.blocked) return;
-      if (typeof ganttTrello.clearCardBlocked !== 'function') {
-        setStatus('D\u00e9blocage indisponible', true);
+      if (typeof ganttTrello.setCardBlocked !== 'function') {
+        setStatus('Blocage indisponible', true);
         return;
       }
+      var nextBlocked = !row.blocked;
       state.saving = true;
-      setStatus('D\u00e9blocage\u2026');
+      setStatus(nextBlocked ? 'Blocage\u2026' : 'D\u00e9blocage\u2026');
       ganttTrello
-        .clearCardBlocked(t, row.cardId)
+        .setCardBlocked(t, row.cardId, nextBlocked)
         .then(function (res) {
           state.saving = false;
           if (!res || !res.ok) {
             setStatus(
-              '\u00c9chec du d\u00e9blocage' +
+              (nextBlocked
+                ? '\u00c9chec du blocage'
+                : '\u00c9chec du d\u00e9blocage') +
                 (res && res.reason ? ' (' + res.reason + ')' : ''),
               true
             );
             return reload();
           }
-          setStatus('Carte d\u00e9bloqu\u00e9e');
+          setStatus(nextBlocked ? 'Carte bloqu\u00e9e' : 'Carte d\u00e9bloqu\u00e9e');
           return reload();
         })
         .catch(function (err) {
@@ -980,7 +993,13 @@
           : visibleRows();
       var out = [];
       for (var i = 0; i < rows.length; i++) {
-        if (rows[i] && state.selected[rows[i].id]) out.push(rows[i]);
+        if (
+          rows[i] &&
+          isSelectableGanttRow(rows[i]) &&
+          state.selected[rows[i].id]
+        ) {
+          out.push(rows[i]);
+        }
       }
       return out;
     }
@@ -1729,7 +1748,10 @@
       var headerCell = el('div', 'gantt-label-cell gantt-label-cell--header');
       var selectAll = el('input', 'gantt-select-box', { type: 'checkbox' });
       selectAll.title = 'Tout s\u00e9lectionner / d\u00e9s\u00e9lectionner';
-      var visibleForSelect = rows;
+      var visibleForSelect = [];
+      for (var vs = 0; vs < rows.length; vs++) {
+        if (isSelectableGanttRow(rows[vs])) visibleForSelect.push(rows[vs]);
+      }
       var selectedVisible = 0;
       for (var vi = 0; vi < visibleForSelect.length; vi++) {
         if (
@@ -1752,7 +1774,9 @@
         state.selected = Object.create(null);
         if (on) {
           for (var si = 0; si < list.length; si++) {
-            if (list[si] && list[si].id) state.selected[list[si].id] = true;
+            if (isSelectableGanttRow(list[si])) {
+              state.selected[list[si].id] = true;
+            }
           }
         }
         renderBulkBar();
@@ -1857,6 +1881,34 @@
 
       rows.forEach(function (row, rowIndex) {
         var oddClass = rowIndex % 2 === 1 ? ' is-odd' : '';
+
+        if (row.kind === 'section') {
+          var sectionLabelRow = el(
+            'div',
+            'gantt-row gantt-row--section' +
+              (row.sectionKey ? ' is-' + row.sectionKey : '')
+          );
+          sectionLabelRow.style.height = ROW_H + 'px';
+          var sectionCell = el('div', 'gantt-label-cell gantt-label-cell--section');
+          var sectionTitle = el('div', 'gantt-section-title', {
+            text: row.name || '',
+          });
+          sectionTitle.title = row.name || '';
+          sectionCell.appendChild(sectionTitle);
+          sectionLabelRow.appendChild(sectionCell);
+          labelsCol.appendChild(sectionLabelRow);
+
+          var sectionTimeRow = el(
+            'div',
+            'gantt-row gantt-row--section gantt-timeline-row' +
+              (row.sectionKey ? ' is-' + row.sectionKey : '')
+          );
+          sectionTimeRow.style.height = ROW_H + 'px';
+          sectionTimeRow.style.width = state.timelineWidth + 'px';
+          timelineCol.appendChild(sectionTimeRow);
+          return;
+        }
+
         var labelRow = el(
           'div',
           'gantt-row' +
