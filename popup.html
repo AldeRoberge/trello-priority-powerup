@@ -1611,6 +1611,28 @@
         });
     }
 
+    function runHistoryRestore(entryId) {
+      if (!cardHistory) return Promise.resolve(null);
+      var restore =
+        typeof cardHistory.redoTo === 'function'
+          ? cardHistory.redoTo(entryId, applyHistorySnapshot)
+          : cardHistory.redo(applyHistorySnapshot);
+      return restore.then(function (result) {
+        if (result) {
+          try {
+            if (
+              window.CelebrationEffects &&
+              typeof CelebrationEffects.playUiSound === 'function'
+            ) {
+              CelebrationEffects.playUiSound('redo');
+            }
+          } catch (e) { /* ignore */ }
+        }
+        if (historyUi) historyUi.refresh();
+        return result;
+      });
+    }
+
     function isEditableHistoryTarget(target) {
       if (!target || target === document.body) return false;
       var tag = (target.tagName || '').toLowerCase();
@@ -1656,6 +1678,9 @@
         },
         onRevert: function (entryId) {
           return runHistoryRevert(entryId);
+        },
+        onRestore: function (entryId) {
+          return runHistoryRestore(entryId);
         },
         onLayoutChange: resizePopup
       });
