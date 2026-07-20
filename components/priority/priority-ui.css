@@ -4525,19 +4525,24 @@ html[data-color-mode='dark'] .overview-action-chip:hover {
 }
 
 .due-date-vague-chip:hover {
-  border-color: color-mix(in srgb, var(--due-accent, var(--tp-primary, #0c66e4)) 35%, transparent);
-  background: color-mix(in srgb, var(--due-accent, var(--tp-primary, #0c66e4)) 8%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--due-accent) 40%, transparent);
+  background: color-mix(in srgb, var(--due-accent) 8%, var(--surface-2));
 }
 
 .due-date-vague-chip.is-selected {
-  border-color: color-mix(in srgb, var(--due-accent, var(--tp-primary, #0c66e4)) 55%, transparent);
-  background: color-mix(in srgb, var(--due-accent, var(--tp-primary, #0c66e4)) 14%, var(--surface-2));
-  color: var(--text-primary);
+  border-color: var(--due-accent);
+  background: var(--due-accent);
+  color: var(--due-accent-text);
   font-weight: 600;
 }
 
+.due-date-vague-chip.is-selected:hover {
+  background: color-mix(in srgb, var(--due-accent) 88%, #000);
+  border-color: color-mix(in srgb, var(--due-accent) 88%, #000);
+}
+
 .due-date-vague-chip:focus-visible {
-  outline: 2px solid var(--tp-primary, #0c66e4);
+  outline: 2px solid var(--due-accent);
   outline-offset: 1px;
 }
 
@@ -4545,11 +4550,12 @@ html[data-color-mode='dark'] .overview-action-chip:hover {
   flex-shrink: 0;
   font-size: 16px;
   line-height: 1;
-  color: var(--due-accent, var(--tp-primary, #0c66e4));
+  color: var(--due-accent);
   opacity: 0.85;
 }
 
 .due-date-vague-chip.is-selected .due-date-vague-chip-icon {
+  color: var(--due-accent-text);
   opacity: 1;
 }
 
