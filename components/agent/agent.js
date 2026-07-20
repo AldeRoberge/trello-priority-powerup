@@ -130,6 +130,8 @@
     set_formula: 'Formule mise \u00e0 jour.',
     set_statut: 'Statut mis \u00e0 jour.',
     set_project: 'Projet li\u00e9.',
+    set_members: 'Assign\u00e9s mis \u00e0 jour.',
+    set_labels: '\u00c9tiquettes mises \u00e0 jour.',
     rename_card: 'Carte renomm\u00e9e.',
     set_description: 'Description mise \u00e0 jour.',
     add_subtask: 'Sous-t\u00e2che ajout\u00e9e.',
@@ -2446,6 +2448,66 @@
         }
       } catch (eOwn) { /* ignore */ }
     }
+    if (typeof bridge.getCardLabels === 'function') {
+      try {
+        var labelsRaw = bridge.getCardLabels();
+        if (Array.isArray(labelsRaw)) {
+          ctx.labels = labelsRaw
+            .map(function (l) {
+              if (!l || l.id == null) return null;
+              return {
+                id: String(l.id),
+                name: typeof l.name === 'string' ? l.name : '',
+                color: typeof l.color === 'string' ? l.color : ''
+              };
+            })
+            .filter(Boolean)
+            .slice(0, 30);
+        }
+      } catch (eLab) { /* ignore */ }
+    }
+    if (typeof bridge.getBoardMembers === 'function') {
+      try {
+        var boardMemRaw = bridge.getBoardMembers();
+        // Sync cache only — async Promises are resolved at tool time.
+        if (Array.isArray(boardMemRaw)) {
+          ctx.boardMembers = boardMemRaw
+            .map(function (m) {
+              if (!m || m.id == null) return null;
+              return {
+                id: String(m.id),
+                fullName:
+                  typeof m.fullName === 'string' && m.fullName.trim()
+                    ? m.fullName.trim()
+                    : typeof m.username === 'string'
+                      ? m.username.trim()
+                      : '',
+                username: typeof m.username === 'string' ? m.username : ''
+              };
+            })
+            .filter(Boolean)
+            .slice(0, 40);
+        }
+      } catch (eBm) { /* ignore */ }
+    }
+    if (typeof bridge.getBoardLabels === 'function') {
+      try {
+        var boardLabRaw = bridge.getBoardLabels();
+        if (Array.isArray(boardLabRaw)) {
+          ctx.boardLabels = boardLabRaw
+            .map(function (l) {
+              if (!l || l.id == null) return null;
+              return {
+                id: String(l.id),
+                name: typeof l.name === 'string' ? l.name : '',
+                color: typeof l.color === 'string' ? l.color : ''
+              };
+            })
+            .filter(Boolean)
+            .slice(0, 60);
+        }
+      } catch (eBl) { /* ignore */ }
+    }
     if (typeof bridge.getGoals === 'function') {
       try {
         var goalsRaw = bridge.getGoals();
@@ -2573,6 +2635,20 @@
             return PriorityUI.formatDueCountdownFromInputs(state) || null;
           }
           return null;
+        })(),
+        startDate: dueEnabled ? state.startDate || null : null,
+        startTime: dueEnabled ? state.startTime || null : null,
+        recurrence: (function () {
+          if (!dueEnabled) return null;
+          if (
+            typeof PriorityUI !== 'undefined' &&
+            typeof PriorityUI.normalizeRecurrence === 'function'
+          ) {
+            return PriorityUI.normalizeRecurrence(state.recurrence);
+          }
+          return state.recurrence && typeof state.recurrence === 'object'
+            ? state.recurrence
+            : null;
         })(),
         savedDueDate: !dueEnabled && state.dueDate ? state.dueDate : undefined,
         savedDueTime: !dueEnabled && state.dueTime ? state.dueTime : undefined
@@ -3123,6 +3199,13 @@
       '- dueVague ids\u00a0: "proche" (futur proche), "lointain" (futur lointain), "eventuellement" (\u00e9ventuellement / someday). Le runtime pose une date proxy\u00a0; le libell\u00e9 face = \u00ab\u00a0\u00c0 faire \u00e9ventuellement\u00a0\u00bb etc.',
       '- Ex. vague\u00a0: user \u00ab\u00a0mark as todo eventually\u00a0\u00bb / \u00ab\u00a0\u00e0 faire \u00e9ventuellement\u00a0\u00bb \u2192 {"message":"Okay, \u00e0 faire \u00e9ventuellement.","suggestions":["Quelle est la priorit\u00e9?","Marquer bloqu\u00e9"],"followUps":[],"actions":[{"tool":"set_due","args":{"dueVague":"eventuellement","dueEnabled":true}}]}',
       '- Ex. futur proche\u00a0: user \u00ab\u00a0dans un futur proche\u00a0\u00bb \u2192 {"message":"Okay, dans un futur proche.","suggestions":["Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_due","args":{"dueVague":"proche","dueEnabled":true}}]}',
+      '- D\u00e9but (startDate)\u00a0: si l\'utilisateur donne une date de d\u00e9but / \u00ab\u00a0commence le\u00a0\u00bb\u00a0: set_due avec startDate (+ startTime optionnel). Mode Vague n\'a pas de d\u00e9but.',
+      '- R\u00e9currence\u00a0: \u00ab\u00a0chaque semaine\u00a0\u00bb / \u00ab\u00a0tous les jours\u00a0\u00bb / \u00ab\u00a0mensuel\u00a0\u00bb \u2192 set_due avec recurrence {frequency, interval?, weekdays?} (weekdays 0=dim\u20266=sam). clearRecurrence:true ou recurrence:null pour enlever. Pr\u00e9cis seulement (pas Vague).',
+      '- Ex. r\u00e9currence\u00a0: user \u00ab\u00a0r\u00e9p\u00e8te chaque lundi\u00a0\u00bb \u2192 {"message":"Okay, chaque lundi.","suggestions":[],"followUps":[],"actions":[{"tool":"set_due","args":{"recurrence":{"frequency":"weekly","interval":1,"weekdays":[1]},"dueEnabled":true}}]}',
+      '- Effacer l\'\u00e9ch\u00e9ance\u00a0: set_due {clear:true} (ou dueEnabled:false + dueDate:null).',
+      '- Assign\u00e9s\u00a0: \u00ab\u00a0assigne-moi\u00a0\u00bb / \u00ab\u00a0ajoute Alice\u00a0\u00bb \u2192 set_members {add:[...]}. \u00ab\u00a0retire Bob\u00a0\u00bb \u2192 remove. Utilise context.boardMembers / ownership.',
+      '- Ex. assign\u00e9\u00a0: user \u00ab\u00a0assigne-moi\u00a0\u00bb \u2192 {"message":"Okay, tu es assign\u00e9.","suggestions":[],"followUps":[],"actions":[{"tool":"set_members","args":{"add":[{"id":"(context.ownership.you.id)"}]}}]} \u2014 remplace id par context.ownership.you.id r\u00e9el.',
+      '- \u00c9tiquettes\u00a0: set_labels {add/remove/create}. create:{name,color?} si le label n\'existe pas encore sur le board.',
       '- Si l\'utilisateur donne un d\u00e9lai (\u00ab\u00a0dans N minutes/heures\u00a0\u00bb)\u00a0: APPLIQUE set_due avec relativeMinutes/relativeHours (+ dueEnabled:true) TOUT DE SUITE. Ne redemande pas date ni heure.',
       '- Ex. d\u00e9lai\u00a0: user \u00ab\u00a0dans 15 minutes\u00a0\u00bb \u2192 {"message":"Okay, dans 15 minutes.","suggestions":["Marquer bloqu\u00e9","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_due","args":{"relativeMinutes":15,"dueEnabled":true}}]}',
       '- Ex. d\u00e9lai heures\u00a0: user \u00ab\u00a0dans 2 heures\u00a0\u00bb \u2192 {"message":"Okay, dans 2 heures.","suggestions":["Marquer bloqu\u00e9","Ajouter une sous-t\u00e2che"],"followUps":[],"actions":[{"tool":"set_due","args":{"relativeHours":2,"dueEnabled":true}}]}',
@@ -3269,7 +3352,8 @@
       'Sections activables (tr\u00e8s important)\u00a0:',
       '- Chaque bloc a un champ enabled. Si enabled=false, la section est d\u00e9sactiv\u00e9e\u00a0: les valeurs saved* / latentes NE comptent PAS.',
       '- Priorit\u00e9 active seulement si priority.enabled=true.',
-      '- \u00c9ch\u00e9ance active seulement si due.enabled=true (sinon dueDate/dueTime actifs sont null). due.dueMode="vague" + due.dueVague + due.dueLabel d\u00e9crivent un horizon flou (\u00ab\u00a0\u00c0 faire \u00e9ventuellement\u00a0\u00bb)\u00a0; ne redemande pas une date pr\u00e9cise.',
+      '- \u00c9ch\u00e9ance active seulement si due.enabled=true (sinon dueDate/dueTime actifs sont null). due.dueMode="vague" + due.dueVague + due.dueLabel d\u00e9crivent un horizon flou (\u00ab\u00a0\u00c0 faire \u00e9ventuellement\u00a0\u00bb)\u00a0; ne redemande pas une date pr\u00e9cise. due.startDate / due.recurrence d\u00e9crivent d\u00e9but et r\u00e9p\u00e9tition.',
+      '- Assign\u00e9s\u00a0: context.ownership.members (carte) + context.boardMembers (tableau). \u00c9tiquettes\u00a0: context.labels (carte) + context.boardLabels (tableau).',
       '- Bloqu\u00e9 / en attente actif SEULEMENT si blocked.enabled=true (identique \u00e0 enAttente\u00a0; la cause s\u2019\u00e9dite sous Statut quand la carte est en Bloqu\u00e9).',
       '- Si blocked.enabled=false, la carte N\'EST PAS bloqu\u00e9e, m\u00eame si savedReasons contient d\'anciennes causes.',
       '- Progr\u00e8s actif seulement si progress.enabled=true.',
@@ -3278,8 +3362,10 @@
       'Outils disponibles\u00a0:',
       '- set_priority: { urgency?:0-4, impact?:0-4, ease?:1-5, priorityEnabled?:boolean, tier?: string, heatTarget?: number } (tier = Critique|Urgente|Prioritaire|Importante|Flexible|Secondaire|Optionnelle\u00a0; impact 0\u20134 = port\u00e9e Personnel\u2026Global). Legacy estimatedDuration* \u2192 redirig\u00e9 vers set_progress_estimate.',
       '- set_task_types: { types: string[], force?: boolean } (multi\u00a0; ids\u00a0: action|project|recurring|exploratory|emotional|communication|deliverable|process|thinking|material|learning|admin|creative|finance|custom-*). Lit context.taskTypes. Si taskTypesLocked=true, n\'\u00e9crase PAS sauf demande explicite + force:true. Ne suppose PAS qu\'une carte est un livrable\u00a0; adapte ton langage (urgence / cadrage) aux types.',
-      '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean, relativeMinutes?: number, relativeHours?: number, dueVague?: "proche"|"lointain"|"eventuellement", dueMode?: "precise"|"vague" } (dueTime OPTIONNEL pour une date\u00a0; d\u00e9lai \u00ab\u00a0dans N min/h\u00a0\u00bb \u2192 relativeMinutes/relativeHours\u00a0; horizon flou \u2192 dueVague, sans date calendrier\u00a0; aujourd\'hui = context.today)',
+      '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean, relativeMinutes?: number, relativeHours?: number, dueVague?: "proche"|"lointain"|"eventuellement", dueMode?: "precise"|"vague", startDate?: "YYYY-MM-DD"|null, startTime?: "HH:MM"|null, clearStart?: boolean, recurrence?: { frequency: "daily"|"weekly"|"monthly"|"yearly", interval?: number, weekdays?: number[] }|null, clearRecurrence?: boolean, clear?: boolean } (dueTime OPTIONNEL\u00a0; d\u00e9lai relatif \u2192 relativeMinutes/Hours\u00a0; horizon flou \u2192 dueVague\u00a0; d\u00e9but \u2192 startDate\u00a0; r\u00e9currence \u2192 recurrence\u00a0; clear:true efface l\'\u00e9ch\u00e9ance\u00a0; aujourd\'hui = context.today)',
       '- set_blocked: { enAttente?: boolean, blockedReasons?: string[], blockedLinks?: [{id?:string, matchText?:string, label?:string}] } (enAttente:true seul suffit\u00a0; causes et liens optionnels\u00a0; synchronise Progr\u00e8s blocked\u00a0; si progr\u00e8s \u00e0 100%, le runtime le remet \u00e0 0% \u2014 ajoute aussi set_progress)',
+      '- set_members: { add?: (string|{id?,matchText?,name?})[], remove?: (string|{id?,matchText?})[], clear?: boolean } (assigne / retire des membres du tableau\u00a0; match via context.boardMembers / ownership.members)',
+      '- set_labels: { add?: (string|{id?,matchText?,name?,color?})[], remove?: (string|{id?,matchText?})[], create?: {name:string, color?:string}, clear?: boolean } (\u00e9tiquettes Trello\u00a0; match via context.boardLabels / labels)',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (master sur sous-t\u00e2ches si items\u00a0; sinon progres carte)',
       '- set_subtask_estimate: { id?: string, matchText?: string, estimatedMinutes: number|null, estimatedDuration?: string }',
       '- set_progress_estimate: { estimatedMinutes: number|null, estimatedDuration?: string } (total master)',
@@ -6723,8 +6809,10 @@
       'Outils autoris\u00e9s dans actions\u00a0:',
       '- set_priority: { urgency?, impact?, ease?, tier?, priorityEnabled? }',
       '- set_task_types: { types: string[], force?: boolean } (multi\u00a0; ids catalog\u00a0; silencieux\u00a0; respect taskTypesLocked)',
-      '- set_due: { dueDate?: YYYY-MM-DD, dueTime?: HH:MM, relativeHours?, relativeMinutes?, dueVague?: proche|lointain|eventuellement, clear? }',
+      '- set_due: { dueDate?: YYYY-MM-DD, dueTime?: HH:MM, relativeHours?, relativeMinutes?, dueVague?: proche|lointain|eventuellement, startDate?, recurrence?, clear? }',
       '- set_blocked: { enAttente?: boolean, blockedReasons?: string[] } (si l\'utilisateur attend quelque chose de concret\u00a0: enAttente:true + cause \u00ab\u00a0En attente de\u2026\u00a0\u00bb)',
+      '- set_members: { add?, remove? }',
+      '- set_labels: { add?, remove?, create? }',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (active le bloc Progr\u00e8s + % carte\u00a0; OBLIGATOIRE d\u00e8s qu\'on parle d\'avancement)',
       '- set_project: { projectId?, matchText?, name?, clear? }',
       '- rename_card: { name } (titre plus clair / plus court si la r\u00e9ponse le justifie)',
@@ -6923,6 +7011,8 @@
       set_task_types: true,
       set_due: true,
       set_blocked: true,
+      set_members: true,
+      set_labels: true,
       set_progress: true,
       set_project: true,
       add_subtask: true,
@@ -12106,6 +12196,121 @@
     return '';
   }
 
+  function normalizeMatchKey(value) {
+    return String(value || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ');
+  }
+
+  /**
+   * Match a board member by id, fullName, or username.
+   * Spec can be a string, or { id?, matchText?, name?, username? }.
+   */
+  function matchBoardMember(members, spec) {
+    var list = Array.isArray(members) ? members : [];
+    if (!list.length || spec == null || spec === '') return null;
+    var idWant = '';
+    var textWant = '';
+    if (typeof spec === 'string' || typeof spec === 'number') {
+      textWant = String(spec).trim();
+      idWant = textWant;
+    } else if (typeof spec === 'object') {
+      idWant =
+        spec.id != null
+          ? String(spec.id).trim()
+          : spec.memberId != null
+            ? String(spec.memberId).trim()
+            : '';
+      textWant =
+        (typeof spec.matchText === 'string' && spec.matchText) ||
+        (typeof spec.name === 'string' && spec.name) ||
+        (typeof spec.fullName === 'string' && spec.fullName) ||
+        (typeof spec.username === 'string' && spec.username) ||
+        '';
+      textWant = String(textWant).trim();
+    }
+    if (idWant) {
+      for (var i = 0; i < list.length; i++) {
+        if (list[i] && String(list[i].id) === idWant) return list[i];
+      }
+    }
+    var key = normalizeMatchKey(textWant);
+    if (!key) return null;
+    var exact = null;
+    var partial = null;
+    for (var j = 0; j < list.length; j++) {
+      var m = list[j];
+      if (!m) continue;
+      var full = normalizeMatchKey(m.fullName || '');
+      var user = normalizeMatchKey(m.username || '');
+      if (full === key || user === key) {
+        exact = m;
+        break;
+      }
+      if (
+        !partial &&
+        ((full && full.indexOf(key) >= 0) || (user && user.indexOf(key) >= 0))
+      ) {
+        partial = m;
+      }
+    }
+    return exact || partial;
+  }
+
+  /**
+   * Match a board/card label by id or name (optional color).
+   */
+  function matchBoardLabel(labels, spec) {
+    var list = Array.isArray(labels) ? labels : [];
+    if (!list.length || spec == null || spec === '') return null;
+    var idWant = '';
+    var textWant = '';
+    var colorWant = '';
+    if (typeof spec === 'string' || typeof spec === 'number') {
+      textWant = String(spec).trim();
+      idWant = textWant;
+    } else if (typeof spec === 'object') {
+      idWant =
+        spec.id != null
+          ? String(spec.id).trim()
+          : spec.labelId != null
+            ? String(spec.labelId).trim()
+            : '';
+      textWant =
+        (typeof spec.matchText === 'string' && spec.matchText) ||
+        (typeof spec.name === 'string' && spec.name) ||
+        '';
+      textWant = String(textWant).trim();
+      colorWant = typeof spec.color === 'string' ? spec.color.trim().toLowerCase() : '';
+    }
+    if (idWant) {
+      for (var i = 0; i < list.length; i++) {
+        if (list[i] && String(list[i].id) === idWant) return list[i];
+      }
+    }
+    var key = normalizeMatchKey(textWant);
+    if (!key && !colorWant) return null;
+    var exact = null;
+    var partial = null;
+    for (var j = 0; j < list.length; j++) {
+      var l = list[j];
+      if (!l) continue;
+      var name = normalizeMatchKey(l.name || '');
+      var color = typeof l.color === 'string' ? l.color.toLowerCase() : '';
+      if (colorWant && color !== colorWant) continue;
+      if (key && name === key) {
+        exact = l;
+        break;
+      }
+      if (key && !partial && name && name.indexOf(key) >= 0) partial = l;
+      if (!key && colorWant && color === colorWant && !partial) partial = l;
+    }
+    return exact || partial;
+  }
+
   function snapshotPriority(bridge) {
     var s =
       typeof bridge.getPriorityState === 'function' ? bridge.getPriorityState() || {} : {};
@@ -12151,6 +12356,17 @@
       dueEnabled: !!s.dueEnabled,
       dueMode: dueMode,
       dueVague: dueVague,
+      startDate: s.startDate || '',
+      startTime: s.startTime || '',
+      recurrence: (function () {
+        if (
+          typeof PriorityUI !== 'undefined' &&
+          typeof PriorityUI.normalizeRecurrence === 'function'
+        ) {
+          return PriorityUI.normalizeRecurrence(s.recurrence);
+        }
+        return s.recurrence && typeof s.recurrence === 'object' ? s.recurrence : null;
+      })(),
       enAttente: !!s.enAttente,
       blockedReasons: Array.isArray(s.blockedReasons)
         ? s.blockedReasons.slice()
@@ -12488,6 +12704,16 @@
       pushChange(parts, 'dueTime', beforeP.dueTime, afterP.dueTime);
       pushChange(parts, 'dueMode', beforeP.dueMode, afterP.dueMode);
       pushChange(parts, 'dueVague', beforeP.dueVague, afterP.dueVague);
+      pushChange(parts, 'startDate', beforeP.startDate, afterP.startDate);
+      pushChange(parts, 'startTime', beforeP.startTime, afterP.startTime);
+      pushChange(
+        parts,
+        'recurrence',
+        beforeP.recurrence
+          ? JSON.stringify(beforeP.recurrence)
+          : '',
+        afterP.recurrence ? JSON.stringify(afterP.recurrence) : ''
+      );
     } else if (tool === 'set_blocked') {
       pushChange(parts, 'enAttente', beforeP.enAttente, afterP.enAttente);
       pushChange(
@@ -13000,106 +13226,191 @@
         var beforeDue = snapshotPriority(bridge);
         var duePartial = {};
         var vagueId = '';
-        if (Object.prototype.hasOwnProperty.call(args, 'dueVague')) {
-          vagueId = resolveDueVagueArg(args.dueVague);
-          if (args.dueVague != null && args.dueVague !== '' && !vagueId) {
+        var clearDue =
+          args.clear === true ||
+          args.clearDue === true ||
+          (args.dueDate === null &&
+            args.dueEnabled === false &&
+            !Object.prototype.hasOwnProperty.call(args, 'dueVague') &&
+            args.relativeMinutes == null &&
+            args.relativeHours == null);
+
+        if (clearDue) {
+          duePartial.dueEnabled = false;
+          duePartial.dueDate = '';
+          duePartial.dueTime = '';
+          duePartial.dueVague = '';
+          duePartial.dueMode = 'precise';
+        } else {
+          if (Object.prototype.hasOwnProperty.call(args, 'dueVague')) {
+            vagueId = resolveDueVagueArg(args.dueVague);
+            if (args.dueVague != null && args.dueVague !== '' && !vagueId) {
+              return {
+                ok: false,
+                tool: tool,
+                error:
+                  'dueVague invalide (proche|lointain|eventuellement)'
+              };
+            }
+          } else if (
+            args.dueMode === 'vague' &&
+            Object.prototype.hasOwnProperty.call(args, 'dueDate') === false &&
+            args.relativeMinutes == null &&
+            args.relativeHours == null
+          ) {
+            return {
+              ok: false,
+              tool: tool,
+              error: 'dueVague requis en mode vague'
+            };
+          }
+          var hasRelative =
+            args.relativeMinutes != null || args.relativeHours != null;
+          if (vagueId) {
+            var vagueDate = resolveDueVagueToDateSafe(vagueId);
+            if (!vagueDate) {
+              return {
+                ok: false,
+                tool: tool,
+                error: 'Impossible de r\u00e9soudre l\'horizon vague'
+              };
+            }
+            duePartial.dueVague = vagueId;
+            duePartial.dueMode = 'vague';
+            duePartial.dueDate = vagueDate;
+            duePartial.dueTime = '';
+            // Vague UI clears start + recurrence.
+            duePartial.startDate = '';
+            duePartial.startTime = '';
+            duePartial.recurrence = null;
+          } else if (hasRelative) {
+            var offsetMins = 0;
+            if (args.relativeHours != null) {
+              var hours = Number(args.relativeHours);
+              if (!isFinite(hours)) {
+                return { ok: false, tool: tool, error: 'relativeHours invalide' };
+              }
+              offsetMins += hours * 60;
+            }
+            if (args.relativeMinutes != null) {
+              var minutes = Number(args.relativeMinutes);
+              if (!isFinite(minutes)) {
+                return { ok: false, tool: tool, error: 'relativeMinutes invalide' };
+              }
+              offsetMins += minutes;
+            }
+            offsetMins = Math.round(offsetMins);
+            if (offsetMins < 0) {
+              return {
+                ok: false,
+                tool: tool,
+                error: 'd\u00e9lai relatif doit \u00eatre \u2265 0'
+              };
+            }
+            var resolvedRelative = dueFromOffsetMinutes(offsetMins);
+            if (!resolvedRelative) {
+              return { ok: false, tool: tool, error: 'd\u00e9lai relatif invalide' };
+            }
+            duePartial.dueDate = resolvedRelative.dueDate;
+            duePartial.dueTime = resolvedRelative.dueTime;
+            duePartial.dueMode = 'precise';
+            duePartial.dueVague = '';
+          } else {
+            if (Object.prototype.hasOwnProperty.call(args, 'dueDate')) {
+              var dueDate = validateDueDate(args.dueDate);
+              if (dueDate === undefined) {
+                return { ok: false, tool: tool, error: 'dueDate invalide (YYYY-MM-DD)' };
+              }
+              duePartial.dueDate = dueDate || '';
+              duePartial.dueMode = 'precise';
+              duePartial.dueVague = '';
+            }
+            if (Object.prototype.hasOwnProperty.call(args, 'dueTime')) {
+              var dueTime = validateDueTime(args.dueTime);
+              if (dueTime === undefined) {
+                return { ok: false, tool: tool, error: 'dueTime invalide (HH:MM)' };
+              }
+              duePartial.dueTime = dueTime || '';
+              duePartial.dueMode = 'precise';
+              duePartial.dueVague = '';
+            }
+          }
+          if (args.dueEnabled != null) {
+            duePartial.dueEnabled = !!args.dueEnabled;
+          } else if (
+            (Object.prototype.hasOwnProperty.call(duePartial, 'dueDate') ||
+              Object.prototype.hasOwnProperty.call(duePartial, 'dueTime') ||
+              Object.prototype.hasOwnProperty.call(duePartial, 'dueVague')) &&
+            !beforeDue.dueEnabled
+          ) {
+            duePartial.dueEnabled = true;
+          }
+        }
+
+        // Start date / time (precise mode only — ignored when going vague).
+        if (args.clearStart === true) {
+          duePartial.startDate = '';
+          duePartial.startTime = '';
+        } else if (!vagueId) {
+          if (Object.prototype.hasOwnProperty.call(args, 'startDate')) {
+            var startDate = validateDueDate(args.startDate);
+            if (startDate === undefined) {
+              return {
+                ok: false,
+                tool: tool,
+                error: 'startDate invalide (YYYY-MM-DD)'
+              };
+            }
+            duePartial.startDate = startDate || '';
+            if (!startDate) duePartial.startTime = '';
+          }
+          if (Object.prototype.hasOwnProperty.call(args, 'startTime')) {
+            var startTime = validateDueTime(args.startTime);
+            if (startTime === undefined) {
+              return {
+                ok: false,
+                tool: tool,
+                error: 'startTime invalide (HH:MM)'
+              };
+            }
+            duePartial.startTime = startTime || '';
+          }
+        }
+
+        // Recurrence (precise mode only; null / clearRecurrence clears).
+        if (vagueId) {
+          /* already cleared above */
+        } else if (
+          args.clearRecurrence === true ||
+          args.recurrence === null ||
+          args.recurrence === ''
+        ) {
+          duePartial.recurrence = null;
+        } else if (
+          Object.prototype.hasOwnProperty.call(args, 'recurrence') &&
+          args.recurrence &&
+          typeof args.recurrence === 'object'
+        ) {
+          var rule = null;
+          if (
+            typeof PriorityUI !== 'undefined' &&
+            typeof PriorityUI.normalizeRecurrence === 'function'
+          ) {
+            rule = PriorityUI.normalizeRecurrence(args.recurrence);
+          }
+          if (!rule) {
             return {
               ok: false,
               tool: tool,
               error:
-                'dueVague invalide (proche|lointain|eventuellement)'
+                'recurrence invalide (frequency: daily|weekly|monthly|yearly)'
             };
           }
-        } else if (
-          args.dueMode === 'vague' &&
-          Object.prototype.hasOwnProperty.call(args, 'dueDate') === false &&
-          args.relativeMinutes == null &&
-          args.relativeHours == null
-        ) {
-          // dueMode:vague without id — not enough to act
-          return {
-            ok: false,
-            tool: tool,
-            error: 'dueVague requis en mode vague'
-          };
-        }
-        var hasRelative =
-          args.relativeMinutes != null || args.relativeHours != null;
-        if (vagueId) {
-          var vagueDate = resolveDueVagueToDateSafe(vagueId);
-          if (!vagueDate) {
-            return {
-              ok: false,
-              tool: tool,
-              error: 'Impossible de r\u00e9soudre l\'horizon vague'
-            };
-          }
-          duePartial.dueVague = vagueId;
-          duePartial.dueMode = 'vague';
-          duePartial.dueDate = vagueDate;
-          duePartial.dueTime = '';
-        } else if (hasRelative) {
-          var offsetMins = 0;
-          if (args.relativeHours != null) {
-            var hours = Number(args.relativeHours);
-            if (!isFinite(hours)) {
-              return { ok: false, tool: tool, error: 'relativeHours invalide' };
-            }
-            offsetMins += hours * 60;
-          }
-          if (args.relativeMinutes != null) {
-            var minutes = Number(args.relativeMinutes);
-            if (!isFinite(minutes)) {
-              return { ok: false, tool: tool, error: 'relativeMinutes invalide' };
-            }
-            offsetMins += minutes;
-          }
-          offsetMins = Math.round(offsetMins);
-          if (offsetMins < 0) {
-            return {
-              ok: false,
-              tool: tool,
-              error: 'd\u00e9lai relatif doit \u00eatre \u2265 0'
-            };
-          }
-          var resolvedRelative = dueFromOffsetMinutes(offsetMins);
-          if (!resolvedRelative) {
-            return { ok: false, tool: tool, error: 'd\u00e9lai relatif invalide' };
-          }
-          duePartial.dueDate = resolvedRelative.dueDate;
-          duePartial.dueTime = resolvedRelative.dueTime;
+          duePartial.recurrence = rule;
           duePartial.dueMode = 'precise';
           duePartial.dueVague = '';
-        } else {
-          if (Object.prototype.hasOwnProperty.call(args, 'dueDate')) {
-            var dueDate = validateDueDate(args.dueDate);
-            if (dueDate === undefined) {
-              return { ok: false, tool: tool, error: 'dueDate invalide (YYYY-MM-DD)' };
-            }
-            duePartial.dueDate = dueDate || '';
-            duePartial.dueMode = 'precise';
-            duePartial.dueVague = '';
-          }
-          if (Object.prototype.hasOwnProperty.call(args, 'dueTime')) {
-            var dueTime = validateDueTime(args.dueTime);
-            if (dueTime === undefined) {
-              return { ok: false, tool: tool, error: 'dueTime invalide (HH:MM)' };
-            }
-            duePartial.dueTime = dueTime || '';
-            duePartial.dueMode = 'precise';
-            duePartial.dueVague = '';
-          }
         }
-        if (args.dueEnabled != null) {
-          duePartial.dueEnabled = !!args.dueEnabled;
-        } else if (
-          (Object.prototype.hasOwnProperty.call(duePartial, 'dueDate') ||
-            Object.prototype.hasOwnProperty.call(duePartial, 'dueTime') ||
-            Object.prototype.hasOwnProperty.call(duePartial, 'dueVague')) &&
-          !beforeDue.dueEnabled
-        ) {
-          duePartial.dueEnabled = true;
-        }
+
         if (!Object.keys(duePartial).length) {
           return {
             ok: false,
@@ -14389,6 +14700,260 @@
           })
         };
       }
+      if (tool === 'set_members') {
+        if (
+          typeof bridge.addMember !== 'function' &&
+          typeof bridge.removeMember !== 'function'
+        ) {
+          return { ok: false, tool: tool, error: 'Assign\u00e9s indisponibles' };
+        }
+        var boardMembers = [];
+        if (typeof bridge.loadBoardMembers === 'function') {
+          boardMembers = await Promise.resolve(bridge.loadBoardMembers());
+        } else if (typeof bridge.getBoardMembers === 'function') {
+          boardMembers = await Promise.resolve(bridge.getBoardMembers());
+        }
+        if (!Array.isArray(boardMembers)) boardMembers = [];
+        var addSpecs = [];
+        if (Array.isArray(args.add)) addSpecs = args.add.slice();
+        else if (args.add != null) addSpecs = [args.add];
+        else if (args.memberId != null || args.matchText || args.name) {
+          addSpecs = [args];
+        }
+        var removeSpecs = [];
+        if (Array.isArray(args.remove)) removeSpecs = args.remove.slice();
+        else if (args.remove != null) removeSpecs = [args.remove];
+        if (args.clear === true && typeof bridge.getOwnership === 'function') {
+          var own = bridge.getOwnership() || {};
+          var cur = Array.isArray(own.members) ? own.members : [];
+          removeSpecs = removeSpecs.concat(cur);
+        }
+        if (!addSpecs.length && !removeSpecs.length) {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Aucun membre \u00e0 ajouter ou retirer'
+          };
+        }
+        var memberOps = [];
+        var mi;
+        for (mi = 0; mi < removeSpecs.length; mi++) {
+          var rm = matchBoardMember(boardMembers, removeSpecs[mi]);
+          if (!rm && removeSpecs[mi] && removeSpecs[mi].id != null) {
+            rm = { id: String(removeSpecs[mi].id) };
+          }
+          if (!rm || !rm.id) {
+            return {
+              ok: false,
+              tool: tool,
+              error: 'Membre \u00e0 retirer introuvable'
+            };
+          }
+          if (typeof bridge.removeMember !== 'function') {
+            return { ok: false, tool: tool, error: 'Retrait membre indisponible' };
+          }
+          var rmRes = await Promise.resolve(bridge.removeMember(rm.id));
+          if (!rmRes || rmRes.ok === false) {
+            return {
+              ok: false,
+              tool: tool,
+              error:
+                (rmRes && (rmRes.reason || rmRes.error)) ||
+                'Retrait membre \u00e9chou\u00e9'
+            };
+          }
+          memberOps.push('−' + (rm.fullName || rm.username || rm.id));
+        }
+        for (mi = 0; mi < addSpecs.length; mi++) {
+          var am = matchBoardMember(boardMembers, addSpecs[mi]);
+          if (!am || !am.id) {
+            return {
+              ok: false,
+              tool: tool,
+              error: 'Membre \u00e0 assigner introuvable'
+            };
+          }
+          if (typeof bridge.addMember !== 'function') {
+            return { ok: false, tool: tool, error: 'Ajout membre indisponible' };
+          }
+          var amRes = await Promise.resolve(bridge.addMember(am.id));
+          if (!amRes || amRes.ok === false) {
+            return {
+              ok: false,
+              tool: tool,
+              error:
+                (amRes && (amRes.reason || amRes.error)) ||
+                'Ajout membre \u00e9chou\u00e9'
+            };
+          }
+          memberOps.push('+' + (am.fullName || am.username || am.id));
+        }
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.set_members,
+          detail: detailForTool(tool, null, null, null, null, args, {
+            ops: memberOps
+          })
+        };
+      }
+      if (tool === 'set_labels') {
+        if (
+          typeof bridge.addLabel !== 'function' &&
+          typeof bridge.removeLabel !== 'function' &&
+          typeof bridge.createLabel !== 'function'
+        ) {
+          return { ok: false, tool: tool, error: '\u00c9tiquettes indisponibles' };
+        }
+        var boardLabels = [];
+        if (typeof bridge.loadBoardLabels === 'function') {
+          boardLabels = await Promise.resolve(bridge.loadBoardLabels());
+        } else if (typeof bridge.getBoardLabels === 'function') {
+          boardLabels = await Promise.resolve(bridge.getBoardLabels());
+        }
+        if (!Array.isArray(boardLabels)) boardLabels = [];
+        var cardLabels = [];
+        if (typeof bridge.loadCardLabels === 'function') {
+          cardLabels = await Promise.resolve(bridge.loadCardLabels());
+        } else if (typeof bridge.getCardLabels === 'function') {
+          cardLabels = await Promise.resolve(bridge.getCardLabels());
+        }
+        if (!Array.isArray(cardLabels)) cardLabels = [];
+        var labelPool = boardLabels.length ? boardLabels : cardLabels;
+        var addLabelSpecs = [];
+        if (Array.isArray(args.add)) addLabelSpecs = args.add.slice();
+        else if (args.add != null) addLabelSpecs = [args.add];
+        var removeLabelSpecs = [];
+        if (Array.isArray(args.remove)) removeLabelSpecs = args.remove.slice();
+        else if (args.remove != null) removeLabelSpecs = [args.remove];
+        if (args.clear === true) {
+          removeLabelSpecs = removeLabelSpecs.concat(cardLabels);
+        }
+        var createSpec =
+          args.create && typeof args.create === 'object' ? args.create : null;
+        if (
+          !addLabelSpecs.length &&
+          !removeLabelSpecs.length &&
+          !createSpec
+        ) {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Aucune \u00e9tiquette \u00e0 modifier'
+          };
+        }
+        var labelOps = [];
+        var li;
+        for (li = 0; li < removeLabelSpecs.length; li++) {
+          var rl =
+            matchBoardLabel(cardLabels, removeLabelSpecs[li]) ||
+            matchBoardLabel(labelPool, removeLabelSpecs[li]);
+          if (!rl || !rl.id) {
+            return {
+              ok: false,
+              tool: tool,
+              error: '\u00c9tiquette \u00e0 retirer introuvable'
+            };
+          }
+          if (typeof bridge.removeLabel !== 'function') {
+            return {
+              ok: false,
+              tool: tool,
+              error: 'Retrait \u00e9tiquette indisponible'
+            };
+          }
+          var rlRes = await Promise.resolve(bridge.removeLabel(rl.id));
+          if (!rlRes || rlRes.ok === false) {
+            return {
+              ok: false,
+              tool: tool,
+              error:
+                (rlRes && (rlRes.reason || rlRes.error)) ||
+                'Retrait \u00e9tiquette \u00e9chou\u00e9'
+            };
+          }
+          labelOps.push('−' + (rl.name || rl.id));
+        }
+        for (li = 0; li < addLabelSpecs.length; li++) {
+          var al = matchBoardLabel(labelPool, addLabelSpecs[li]);
+          if (!al || !al.id) {
+            return {
+              ok: false,
+              tool: tool,
+              error: '\u00c9tiquette \u00e0 ajouter introuvable'
+            };
+          }
+          if (typeof bridge.addLabel !== 'function') {
+            return {
+              ok: false,
+              tool: tool,
+              error: 'Ajout \u00e9tiquette indisponible'
+            };
+          }
+          var alRes = await Promise.resolve(bridge.addLabel(al.id));
+          if (!alRes || alRes.ok === false) {
+            return {
+              ok: false,
+              tool: tool,
+              error:
+                (alRes && (alRes.reason || alRes.error)) ||
+                'Ajout \u00e9tiquette \u00e9chou\u00e9'
+            };
+          }
+          labelOps.push('+' + (al.name || al.id));
+        }
+        if (createSpec) {
+          var createName =
+            typeof createSpec.name === 'string'
+              ? createSpec.name.trim()
+              : typeof createSpec.matchText === 'string'
+                ? createSpec.matchText.trim()
+                : '';
+          if (!createName) {
+            return {
+              ok: false,
+              tool: tool,
+              error: 'create.name requis'
+            };
+          }
+          if (typeof bridge.createLabel !== 'function') {
+            return {
+              ok: false,
+              tool: tool,
+              error: 'Cr\u00e9ation \u00e9tiquette indisponible'
+            };
+          }
+          var crRes = await Promise.resolve(
+            bridge.createLabel({
+              name: createName,
+              color: createSpec.color
+            })
+          );
+          if (!crRes || crRes.ok === false) {
+            return {
+              ok: false,
+              tool: tool,
+              error:
+                (crRes && (crRes.reason || crRes.error)) ||
+                'Cr\u00e9ation \u00e9tiquette \u00e9chou\u00e9e'
+            };
+          }
+          labelOps.push(
+            '+new:' +
+              ((crRes.label && crRes.label.name) || createName)
+          );
+        }
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.set_labels,
+          detail: detailForTool(tool, null, null, null, null, args, {
+            ops: labelOps
+          })
+        };
+      }
       return { ok: false, tool: tool, error: 'Outil inconnu\u00a0: ' + tool };
     } catch (err) {
       return {
@@ -14747,6 +15312,8 @@
     nowTimeLocal: nowTimeLocal,
     parseRelativeDueOffset: parseRelativeDueOffset,
     resolveDueVagueArg: resolveDueVagueArg,
+    matchBoardMember: matchBoardMember,
+    matchBoardLabel: matchBoardLabel,
     rewriteActionsForRelativeDue: rewriteActionsForRelativeDue,
     detectPriorityTierInText: detectPriorityTierInText,
     rewriteActionsForPriorityTier: rewriteActionsForPriorityTier,

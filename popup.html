@@ -54,7 +54,7 @@
   </script>
   <script src="./components/goals/goals-trello.js?v=goals-1"></script>
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
-  <script src="./components/agent/agent.js?v=due-vague-1"></script>
+  <script src="./components/agent/agent.js?v=agent-parity-1"></script>
   <script src="./components/agent/agent-memory.js?v=agent-dream-1"></script>
   <script src="./components/agent/memory-ui.js?v=memory-settings-1"></script>
   <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
@@ -364,6 +364,9 @@
     let latestMembersFp = '';
     let latestLabelsFp = '';
     let latestCardMembers = [];
+    let latestBoardMembers = [];
+    let latestCardLabels = [];
+    let latestBoardLabels = [];
     let currentMemberCache = null;
     var progressSummaryTimer = null;
     var progressSummaryGen = 0;
@@ -373,6 +376,18 @@
 
     function rememberCardMembers(members) {
       latestCardMembers = Array.isArray(members) ? members.slice() : [];
+    }
+
+    function rememberBoardMembers(members) {
+      latestBoardMembers = Array.isArray(members) ? members.slice() : [];
+    }
+
+    function rememberCardLabels(labels) {
+      latestCardLabels = Array.isArray(labels) ? labels.slice() : [];
+    }
+
+    function rememberBoardLabels(labels) {
+      latestBoardLabels = Array.isArray(labels) ? labels.slice() : [];
     }
 
     function getOwnershipSnapshot() {
@@ -952,6 +967,7 @@
 
     function applyRemoteLabels(labels) {
       var list = Array.isArray(labels) ? labels : [];
+      rememberCardLabels(list);
       appliedLabelsFp = fingerprintIds(list);
       latestLabelsFp = appliedLabelsFp;
       if (infoUi && typeof infoUi.setLabels === 'function') {
@@ -3498,14 +3514,17 @@
           if (infoUi && typeof infoUi.setBoardMembers === 'function') {
             infoUi.setBoardMembers(boardMembers);
           }
+          rememberBoardMembers(boardMembers);
           if (infoUi && typeof infoUi.setLabels === 'function') {
             infoUi.setLabels(cardLabels);
           }
+          rememberCardLabels(cardLabels);
           latestLabelsFp = fingerprintIds(cardLabels);
           appliedLabelsFp = latestLabelsFp;
           if (infoUi && typeof infoUi.setBoardLabels === 'function') {
             infoUi.setBoardLabels(boardLabels);
           }
+          rememberBoardLabels(boardLabels);
           if (infoUi && typeof infoUi.setDesc === 'function') {
             infoUi.setDesc(cardDesc || '', { force: true });
           }
@@ -6645,6 +6664,192 @@
             return latestStatut;
           },
           getOwnership: getOwnershipSnapshot,
+          getCardLabels: function () {
+            return latestCardLabels.slice();
+          },
+          getBoardMembers: function () {
+            return latestBoardMembers.slice();
+          },
+          getBoardLabels: function () {
+            return latestBoardLabels.slice();
+          },
+          loadBoardMembers: function () {
+            if (latestBoardMembers.length) {
+              return Promise.resolve(latestBoardMembers.slice());
+            }
+            if (typeof PriorityTrello.getBoardMembers !== 'function') {
+              return Promise.resolve([]);
+            }
+            return PriorityTrello.getBoardMembers(t).then(function (list) {
+              rememberBoardMembers(list);
+              return latestBoardMembers.slice();
+            });
+          },
+          loadBoardLabels: function () {
+            if (latestBoardLabels.length) {
+              return Promise.resolve(latestBoardLabels.slice());
+            }
+            if (typeof PriorityTrello.getBoardLabels !== 'function') {
+              return Promise.resolve([]);
+            }
+            return PriorityTrello.getBoardLabels(t).then(function (list) {
+              rememberBoardLabels(list);
+              return latestBoardLabels.slice();
+            });
+          },
+          loadCardLabels: function () {
+            if (latestCardLabels.length) {
+              return Promise.resolve(latestCardLabels.slice());
+            }
+            if (typeof PriorityTrello.getCardLabels !== 'function') {
+              return Promise.resolve([]);
+            }
+            return PriorityTrello.getCardLabels(t).then(function (list) {
+              rememberCardLabels(list);
+              return latestCardLabels.slice();
+            });
+          },
+          addMember: function (memberId) {
+            if (!memberId || typeof PriorityTrello.addCardMember !== 'function') {
+              return Promise.resolve({ ok: false, reason: 'unavailable' });
+            }
+            markMembersDirty();
+            return PriorityTrello.addCardMember(t, memberId).then(function (result) {
+              if (result && result.ok === false) return result;
+              return PriorityTrello.getCardMembers(t).then(function (members) {
+                rememberCardMembers(members);
+                latestMembersFp = fingerprintIds(members);
+                appliedMembersFp = latestMembersFp;
+                if (infoUi && typeof infoUi.setMembers === 'function') {
+                  infoUi.setMembers(members || []);
+                }
+                return commitHistoryNow('Membre ajouté (assistant)').then(function () {
+                  return {
+                    ok: true,
+                    memberId: memberId,
+                    changed: !!(result && result.changed)
+                  };
+                });
+              });
+            });
+          },
+          removeMember: function (memberId) {
+            if (!memberId || typeof PriorityTrello.removeCardMember !== 'function') {
+              return Promise.resolve({ ok: false, reason: 'unavailable' });
+            }
+            markMembersDirty();
+            return PriorityTrello.removeCardMember(t, memberId).then(function (result) {
+              if (result && result.ok === false) return result;
+              return PriorityTrello.getCardMembers(t).then(function (members) {
+                rememberCardMembers(members);
+                latestMembersFp = fingerprintIds(members);
+                appliedMembersFp = latestMembersFp;
+                if (infoUi && typeof infoUi.setMembers === 'function') {
+                  infoUi.setMembers(members || []);
+                }
+                return commitHistoryNow('Membre retiré (assistant)').then(function () {
+                  return {
+                    ok: true,
+                    memberId: memberId,
+                    changed: !!(result && result.changed)
+                  };
+                });
+              });
+            });
+          },
+          addLabel: function (labelId) {
+            if (!labelId || typeof PriorityTrello.addCardLabel !== 'function') {
+              return Promise.resolve({ ok: false, reason: 'unavailable' });
+            }
+            markLabelsDirty();
+            return PriorityTrello.addCardLabel(t, labelId).then(function (result) {
+              if (result && result.ok === false) return result;
+              return PriorityTrello.getCardLabels(t).then(function (labels) {
+                rememberCardLabels(labels);
+                latestLabelsFp = fingerprintIds(labels);
+                appliedLabelsFp = latestLabelsFp;
+                if (infoUi && typeof infoUi.setLabels === 'function') {
+                  infoUi.setLabels(labels || []);
+                }
+                return commitHistoryNow('Étiquette ajoutée (assistant)').then(function () {
+                  return {
+                    ok: true,
+                    labelId: labelId,
+                    changed: !!(result && result.changed)
+                  };
+                });
+              });
+            });
+          },
+          removeLabel: function (labelId) {
+            if (!labelId || typeof PriorityTrello.removeCardLabel !== 'function') {
+              return Promise.resolve({ ok: false, reason: 'unavailable' });
+            }
+            markLabelsDirty();
+            return PriorityTrello.removeCardLabel(t, labelId).then(function (result) {
+              if (result && result.ok === false) return result;
+              return PriorityTrello.getCardLabels(t).then(function (labels) {
+                rememberCardLabels(labels);
+                latestLabelsFp = fingerprintIds(labels);
+                appliedLabelsFp = latestLabelsFp;
+                if (infoUi && typeof infoUi.setLabels === 'function') {
+                  infoUi.setLabels(labels || []);
+                }
+                return commitHistoryNow('Étiquette retirée (assistant)').then(function () {
+                  return {
+                    ok: true,
+                    labelId: labelId,
+                    changed: !!(result && result.changed)
+                  };
+                });
+              });
+            });
+          },
+          createLabel: function (payload) {
+            if (typeof PriorityTrello.createBoardLabel !== 'function') {
+              return Promise.resolve({ ok: false, reason: 'unavailable' });
+            }
+            var name =
+              payload && typeof payload.name === 'string' ? payload.name.trim() : '';
+            if (!name) {
+              return Promise.resolve({ ok: false, reason: 'empty-name' });
+            }
+            markLabelsDirty();
+            return PriorityTrello.createBoardLabel(t, {
+              name: name,
+              color: payload && payload.color,
+              addToCard: true
+            }).then(function (result) {
+              if (result && result.ok === false) return result;
+              return Promise.all([
+                PriorityTrello.getCardLabels(t),
+                PriorityTrello.getBoardLabels
+                  ? PriorityTrello.getBoardLabels(t)
+                  : Promise.resolve([])
+              ]).then(function (parts) {
+                var labels = parts[0] || [];
+                var boardLabels = parts[1] || [];
+                rememberCardLabels(labels);
+                rememberBoardLabels(boardLabels);
+                latestLabelsFp = fingerprintIds(labels);
+                appliedLabelsFp = latestLabelsFp;
+                if (infoUi && typeof infoUi.setLabels === 'function') {
+                  infoUi.setLabels(labels);
+                }
+                if (infoUi && typeof infoUi.setBoardLabels === 'function') {
+                  infoUi.setBoardLabels(boardLabels);
+                }
+                return commitHistoryNow('Étiquette créée (assistant)').then(function () {
+                  return {
+                    ok: true,
+                    changed: true,
+                    label: (result && result.label) || null,
+                    labelId: result && result.labelId
+                  };
+                });
+              });
+            });
+          },
           selectStatut: function (listId) {
             return applyStatutListSelection(listId);
           },
