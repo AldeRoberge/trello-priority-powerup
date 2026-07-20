@@ -1558,6 +1558,16 @@
     function runHistoryUndo() {
       if (!cardHistory || !cardHistory.canUndo()) return Promise.resolve(null);
       return cardHistory.undo(applyHistorySnapshot).then(function (result) {
+        if (result) {
+          try {
+            if (
+              window.CelebrationEffects &&
+              typeof CelebrationEffects.playUiSound === 'function'
+            ) {
+              CelebrationEffects.playUiSound('undo');
+            }
+          } catch (e) { /* ignore */ }
+        }
         if (historyUi) historyUi.refresh();
         return result;
       });
@@ -1566,6 +1576,16 @@
     function runHistoryRedo() {
       if (!cardHistory || !cardHistory.canRedo()) return Promise.resolve(null);
       return cardHistory.redo(applyHistorySnapshot).then(function (result) {
+        if (result) {
+          try {
+            if (
+              window.CelebrationEffects &&
+              typeof CelebrationEffects.playUiSound === 'function'
+            ) {
+              CelebrationEffects.playUiSound('redo');
+            }
+          } catch (e) { /* ignore */ }
+        }
         if (historyUi) historyUi.refresh();
         return result;
       });
@@ -1576,6 +1596,16 @@
       return cardHistory
         .revertTo(entryId, applyHistorySnapshot)
         .then(function (result) {
+          if (result) {
+            try {
+              if (
+                window.CelebrationEffects &&
+                typeof CelebrationEffects.playUiSound === 'function'
+              ) {
+                CelebrationEffects.playUiSound('undo');
+              }
+            } catch (e) { /* ignore */ }
+          }
           if (historyUi) historyUi.refresh();
           return result;
         });

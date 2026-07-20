@@ -28,6 +28,20 @@
     return global.GanttTrello;
   }
 
+  function playGanttUiSound(name, opts) {
+    try {
+      if (
+        global.CelebrationEffects &&
+        typeof global.CelebrationEffects.playUiSound === 'function'
+      ) {
+        return global.CelebrationEffects.playUiSound(name, opts || {});
+      }
+    } catch (e) {
+      /* ignore */
+    }
+    return { ok: false };
+  }
+
   function PU() {
     return global.PriorityUI;
   }
@@ -1455,6 +1469,9 @@
             if (failed) {
               setStatus(failed + ' \u00e9chec(s)', true);
             } else {
+              if (op === 'delete') playGanttUiSound('trash');
+              else if (op === 'done') playGanttUiSound('complete_all');
+              else playGanttUiSound('uncomplete');
               setStatus(
                 op === 'delete'
                   ? 'Sous-t\u00e2ches supprim\u00e9es'
@@ -1634,6 +1651,7 @@
               return reload();
             }
             if (state.selected[row.id]) delete state.selected[row.id];
+            playGanttUiSound('trash');
             setStatus(
               res.archived
                 ? 'Carte archiv\u00e9e'

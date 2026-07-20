@@ -1280,12 +1280,9 @@
     }
 
     function listEntries() {
-      // Newest first for UI; only applied entries up to cursor.
-      var applied = store.entries.slice(0, store.cursor);
-      return applied
-        .slice()
-        .reverse()
-        .map(function (e) {
+      // Newest first for UI. Entries at/after cursor are undone (redo stack).
+      return store.entries
+        .map(function (e, index) {
           var details = describeEntry(e);
           var domains = Array.isArray(e.domains)
             ? e.domains
@@ -1297,14 +1294,16 @@
             at: e.at,
             label: liveLabel || e.label,
             domains: domains.slice(),
-            details: details
+            details: details,
+            undone: index >= store.cursor
           };
-        });
+        })
+        .reverse();
     }
 
     function getEntry(entryId) {
       if (!entryId) return null;
-      for (var i = 0; i < store.cursor; i++) {
+      for (var i = 0; i < store.entries.length; i++) {
         var e = store.entries[i];
         if (e && e.id === entryId) {
           var copied = clone(e);
@@ -1412,21 +1411,62 @@
       }
       if (idx < 0) return Promise.resolve(null);
       var entry = store.entries[idx];
-      beginMute();
       var applyFn =
         typeof applySnapshot === 'function' ? applySnapshot : function () {};
-      return Promise.resolve()
+      beginMute();
+      // Walk newest→target so each domain slice is restored correctly, and
+      // keep later entries so the user can Rétablir (redo) afterward.
+      var chain = Promise.resolve();
+      for (var j = store.cursor - 1; j >= idx; j--) {
+        (function (stepEntry) {
+          chain = chain.then(function () {
+            return applyFn(clone(stepEntry.before));
+          });
+        })(store.entries[j]);
+      }
+      return chain
         .then(function () {
-          return applyFn(clone(entry.before));
-        })
-        .then(function () {
-          store.entries = store.entries.slice(0, idx);
           store.cursor = idx;
           return persist();
         })
         .then(function () {
           notify();
           return clone(entry.before);
+        })
+        .finally(function () {
+          endMute();
+        });
+    }
+
+    function redoTo(entryId, applySnapshot) {
+      var idx = -1;
+      for (var i = store.cursor; i < store.entries.length; i++) {
+        if (store.entries[i] && store.entries[i].id === entryId) {
+          idx = i;
+          break;
+        }
+      }
+      if (idx < 0) return Promise.resolve(null);
+      var entry = store.entries[idx];
+      var applyFn =
+        typeof applySnapshot === 'function' ? applySnapshot : function () {};
+      beginMute();
+      var chain = Promise.resolve();
+      for (var j = store.cursor; j <= idx; j++) {
+        (function (stepEntry) {
+          chain = chain.then(function () {
+            return applyFn(clone(stepEntry.after));
+          });
+        })(store.entries[j]);
+      }
+      return chain
+        .then(function () {
+          store.cursor = idx + 1;
+          return persist();
+        })
+        .then(function () {
+          notify();
+          return clone(entry.after);
         })
         .finally(function () {
           endMute();
@@ -1440,6 +1480,7 @@
       undo: undo,
       redo: redo,
       revertTo: revertTo,
+      redoTo: redoTo,
       list: listEntries,
       getEntry: getEntry,
       getEntryDetails: getEntryDetails,

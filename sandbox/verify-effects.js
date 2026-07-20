@@ -85,12 +85,20 @@ check('playUiSound export', typeof FX.playUiSound === 'function');
   'reset_all',
   'uncomplete',
   'add',
-  'done'
+  'done',
+  'priority',
+  'undo',
+  'redo'
 ].forEach(function (id) {
   var once = FX.playUiSound(id);
   check('playUiSound ' + id, !!(once && once.ok && once.sound === id));
 });
 check('playUiSound alias delete→trash', FX.playUiSound('delete').sound === 'trash');
+check('playUiSound alias revert→undo', FX.playUiSound('revert').sound === 'undo');
+check(
+  'playUiSound priority opts',
+  FX.playUiSound('priority', { tierI: 0, direction: 'up' }).tierI === 0
+);
 check('playUiSound unknown fails', FX.playUiSound('nope').ok === false);
 check('banner without text fails', FX.play('banner', { sound: false }).ok === false);
 check(

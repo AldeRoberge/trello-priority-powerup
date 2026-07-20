@@ -91,12 +91,26 @@ describe('CelebrationEffects', () => {
       'uncomplete',
       'add',
       'done',
+      'priority',
+      'undo',
+      'redo',
     ]) {
       const once = FX.playUiSound(id);
       assert.ok(once && once.ok && once.sound === id, id);
     }
     assert.equal(FX.playUiSound('delete').sound, 'trash');
+    assert.equal(FX.playUiSound('revert').sound, 'undo');
+    assert.equal(FX.playUiSound('priority_up').sound, 'priority');
     assert.equal(FX.playUiSound('nope').ok, false);
+  });
+
+  it('playUiSound priority scales with tier intensity', () => {
+    const critique = FX.playUiSound('priority', { tierI: 0, direction: 'up' });
+    assert.equal(critique.ok, true);
+    assert.equal(critique.tierI, 0);
+    const soft = FX.playUiSound('priority', { tierI: 6, direction: 'down' });
+    assert.equal(soft.ok, true);
+    assert.equal(soft.tierI, 6);
   });
 
   it('fireworks motif bank has 10 F# phrases and playSound runs', () => {

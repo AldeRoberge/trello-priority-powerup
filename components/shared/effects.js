@@ -758,13 +758,16 @@
    * Kept in F# major so they sit well beside progress ticks / fireworks.
    *
    * @param {string} name
-   * @returns {{ ok: boolean, sound?: string, error?: string }}
+   * @param {{ tierI?: number, tier?: number, direction?: 'up'|'down' }} [opts]
+   * @returns {{ ok: boolean, sound?: string, error?: string, tierI?: number }}
    */
-  function playUiSound(name) {
-    var id = String(name || '')
+  function playUiSound(name, opts) {
+    opts = opts || {};
+    var raw = String(name || '')
       .trim()
       .toLowerCase()
       .replace(/[\s-]+/g, '_');
+    var id = raw;
     var aliases = {
       delete: 'trash',
       remove: 'trash',
@@ -790,10 +793,24 @@
       new_item: 'add',
       draft: 'add',
       subtask_done: 'done',
-      check: 'done'
+      check: 'done',
+      priority_up: 'priority',
+      priority_down: 'priority',
+      tier: 'priority',
+      heat: 'priority',
+      revert: 'undo',
+      undelete: 'undo',
+      untrash: 'undo',
+      restore: 'undo',
+      paper: 'undo',
+      reapply: 'redo'
     };
     if (aliases[id]) id = aliases[id];
-
+    if (raw === 'priority_down') {
+      opts = Object.assign({}, opts, { direction: 'down' });
+    } else if (raw === 'priority_up') {
+      opts = Object.assign({}, opts, { direction: 'up' });
+    }
     switch (id) {
       case 'done':
         playTones(
@@ -1070,6 +1087,242 @@
               peak: 0.026,
               type: 'sine',
               attack: 0.002
+            }
+          ],
+          { lowpass: 4000 }
+        );
+        return { ok: true, sound: id };
+
+      case 'priority': {
+        // Growing harmonic horns + drums. Intensity follows priority heat
+        // (Critique loudest). opts.tierI: 0=Critique … 6=Optionnelle.
+        // opts.direction: 'up' (more urgent) | 'down'.
+        var tierMax = 6;
+        var tierI =
+          typeof opts.tierI === 'number' && isFinite(opts.tierI)
+            ? Math.max(0, Math.min(tierMax, Math.round(opts.tierI)))
+            : typeof opts.tier === 'number' && isFinite(opts.tier)
+              ? Math.max(0, Math.min(tierMax, Math.round(opts.tier)))
+              : 3;
+        var heat = (tierMax - tierI) / tierMax; // 0 = Optionnelle, 1 = Critique
+        var ascending = opts.direction !== 'down';
+        var roots = [
+          FS.Fs3,
+          FS.Gs3,
+          FS.As3,
+          FS.B3,
+          FS.Cs4,
+          FS.Ds4,
+          FS.Fs4,
+        ];
+        // More urgent → higher brass register.
+        var root = roots[Math.round(heat * (roots.length - 1))];
+        var third = root * (FS.As4 / FS.Fs4);
+        var fifth = root * (FS.Cs5 / FS.Fs4);
+        var octave = root * 2;
+        var hornPeak = 0.032 + heat * 0.045;
+        var drumPeak = 0.028 + heat * 0.04;
+        var hits = 2 + Math.round(heat * 4);
+
+        // Timpani / epic drums under the brass.
+        for (var d = 0; d < hits; d++) {
+          var dDelay = ascending ? d * (0.055 - heat * 0.008) : d * 0.05;
+          playNoiseBurst({
+            delay: dDelay,
+            dur: 0.06 + heat * 0.04,
+            freq: 140 + d * 18 + heat * 40,
+            freqEnd: 70,
+            peak: drumPeak * (0.7 + d * 0.08),
+            filterType: 'bandpass',
+            q: 1.6,
+            power: 0.75,
+            attack: 0.003
+          });
+          playTones(
+            [
+              {
+                freq: FS.Fs2 * (1 + heat * 0.35),
+                delay: dDelay,
+                dur: 0.1 + heat * 0.06,
+                peak: drumPeak * 0.55,
+                type: 'sine',
+                attack: 0.004,
+                freqEnd: FS.Fs2 * 0.7
+              }
+            ],
+            { lowpass: 420 }
+          );
+        }
+
+        if (ascending) {
+          playTones(
+            [
+              {
+                freq: root,
+                delay: 0.02,
+                dur: 0.14 + heat * 0.08,
+                peak: hornPeak,
+                type: 'sawtooth',
+                attack: 0.01
+              },
+              {
+                freq: third,
+                delay: 0.08,
+                dur: 0.16 + heat * 0.08,
+                peak: hornPeak * 0.9,
+                type: 'triangle',
+                attack: 0.012
+              },
+              {
+                freq: fifth,
+                delay: 0.16,
+                dur: 0.2 + heat * 0.1,
+                peak: hornPeak * 0.85,
+                type: 'sawtooth',
+                attack: 0.014
+              },
+              {
+                freq: octave,
+                delay: 0.26,
+                dur: 0.28 + heat * 0.14,
+                peak: hornPeak * 0.75,
+                type: 'triangle',
+                attack: 0.016
+              }
+            ],
+            { lowpass: 2800 + heat * 1600 }
+          );
+        } else {
+          playTones(
+            [
+              {
+                freq: octave,
+                delay: 0.02,
+                dur: 0.12 + heat * 0.06,
+                peak: hornPeak * 0.8,
+                type: 'sawtooth',
+                attack: 0.01
+              },
+              {
+                freq: fifth,
+                delay: 0.1,
+                dur: 0.14 + heat * 0.06,
+                peak: hornPeak * 0.75,
+                type: 'triangle',
+                attack: 0.012
+              },
+              {
+                freq: third,
+                delay: 0.18,
+                dur: 0.16 + heat * 0.08,
+                peak: hornPeak * 0.7,
+                type: 'sawtooth',
+                attack: 0.014
+              },
+              {
+                freq: root,
+                delay: 0.28,
+                dur: 0.22 + heat * 0.1,
+                peak: hornPeak * 0.65,
+                type: 'triangle',
+                attack: 0.016,
+                freqEnd: root * 0.85
+              }
+            ],
+            { lowpass: 2400 + heat * 1000 }
+          );
+        }
+        return { ok: true, sound: id, tierI: tierI };
+      }
+
+      case 'undo': {
+        // Paper sliding back out of a trash can — dry rustle + soft lift.
+        playNoiseBurst({
+          delay: 0,
+          dur: 0.07,
+          freq: 2200,
+          freqEnd: 900,
+          peak: 0.03,
+          filterType: 'bandpass',
+          q: 1.8,
+          power: 0.55,
+          attack: 0.002
+        });
+        playNoiseBurst({
+          delay: 0.04,
+          dur: 0.11,
+          freq: 1600,
+          freqEnd: 420,
+          peak: 0.028,
+          filterType: 'bandpass',
+          q: 1.2,
+          power: 0.7,
+          attack: 0.003
+        });
+        playNoiseBurst({
+          delay: 0.09,
+          dur: 0.14,
+          freq: 900,
+          freqEnd: 180,
+          peak: 0.022,
+          filterType: 'highpass',
+          q: 0.7,
+          power: 0.85
+        });
+        playTones(
+          [
+            {
+              freq: FS.As4,
+              delay: 0.05,
+              dur: 0.1,
+              peak: 0.022,
+              type: 'triangle',
+              attack: 0.004,
+              freqEnd: FS.Cs5
+            },
+            {
+              freq: FS.Fs5,
+              delay: 0.12,
+              dur: 0.16,
+              peak: 0.026,
+              type: 'sine',
+              attack: 0.005
+            }
+          ],
+          { lowpass: 3600 }
+        );
+        return { ok: true, sound: id };
+      }
+
+      case 'redo':
+        playNoiseBurst({
+          delay: 0,
+          dur: 0.05,
+          freq: 1400,
+          freqEnd: 700,
+          peak: 0.02,
+          filterType: 'bandpass',
+          q: 1.4,
+          power: 0.65,
+          attack: 0.002
+        });
+        playTones(
+          [
+            {
+              freq: FS.Cs5,
+              delay: 0.02,
+              dur: 0.07,
+              peak: 0.026,
+              type: 'triangle',
+              attack: 0.003
+            },
+            {
+              freq: FS.Fs5,
+              delay: 0.07,
+              dur: 0.12,
+              peak: 0.028,
+              type: 'sine',
+              attack: 0.004
             }
           ],
           { lowpass: 4000 }

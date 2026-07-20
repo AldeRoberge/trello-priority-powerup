@@ -2806,6 +2806,7 @@
             data.items.splice(insertAt, 0, restored);
           }
           delete itemSplitReverts[anchorItemId];
+          playCompletionUiSound('undo');
           emitChange();
           onResize();
         },
@@ -5778,6 +5779,7 @@
           textInput.value = originalText;
           current.text = originalText;
           delete itemSpellReverts[itemId];
+          playCompletionUiSound('undo');
           var persisted = applyNormalizedKeepingDrafts(data);
           updateProgressUi();
           onChange(persisted);

@@ -15021,6 +15021,7 @@
       if (!isBlockedWaitingOtherTask(currentReasons)) {
         currentLinks = [];
       }
+      playPriorityUiSound('trash');
       refreshSelected();
       refreshSuggestions();
       refreshSubtaskUi();
@@ -15365,6 +15366,7 @@
                 event.preventDefault();
                 event.stopPropagation();
                 clearReasonSpellRevert(reason);
+                playPriorityUiSound('undo');
                 if (hasReason(reason)) {
                   renameReason(reason, previousText);
                 } else {
@@ -17967,6 +17969,7 @@
       currentTime = '';
       currentVague = '';
       rememberedVague = '';
+      playPriorityUiSound('trash');
       emitChange();
       if (open) renderCalendar();
     });
@@ -17984,6 +17987,7 @@
       if (!enabled) return;
       currentTime = '';
       rememberedTime = '';
+      playPriorityUiSound('trash');
       emitChange();
       if (timeOpen) syncTimePickerSelection();
     });
@@ -18169,6 +18173,7 @@
       event.preventDefault();
       event.stopPropagation();
       currentStart = '';
+      playPriorityUiSound('trash');
       emitChange();
       if (startOpen) {
         syncStartViewFromValue('');
@@ -18233,6 +18238,7 @@
       event.stopPropagation();
       if (!currentRecurrence) return;
       currentRecurrence = null;
+      playPriorityUiSound('trash');
       emitChange();
     });
 
@@ -19996,6 +20002,7 @@
         onChange: function () {
           cancelSliderAnim();
           repaint();
+          maybePlayPriorityTierSound(lastPriorityDisplay);
           persistSliderState();
         },
         onToggle: function () {
@@ -20092,6 +20099,7 @@
 
     applyFormulaMode(formulaKey);
     repaint();
+    seedPrioritySoundTier(lastPriorityDisplay);
 
     var progressCompleteLock = false;
     var savedDueEnabledBeforeLock = null;
