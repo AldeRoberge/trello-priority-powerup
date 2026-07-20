@@ -2750,7 +2750,8 @@ button.tp-estimate-chip:focus-visible {
   margin: 0;
   padding: 0 8px 0 2px;
   border: 0;
-  border-radius: 0;
+  /* Match the wrap’s right capsule edge so hover fill stays round. */
+  border-radius: 0 999px 999px 0;
   background: transparent;
   color: inherit;
   font: inherit;
