@@ -9,17 +9,8 @@
   var LABELS_W_MIN = 280;
   var LABELS_W_DEFAULT = 560;
   var LABELS_W_STORAGE_KEY = 'tp-gantt-labels-width';
-
-  var STATUT_TABLER = {
-    inbox: 'ti-inbox',
-    hourglass: 'ti-hourglass',
-    circle: 'ti-circle',
-    play: 'ti-player-play',
-    ban: 'ti-ban',
-    check: 'ti-check',
-    x: 'ti-x',
-    dot: 'ti-point-filled',
-  };
+  // Fire icon for priorities strictly above Importante (Critique / Urgente / Prioritaire).
+  var PRIORITY_FIRE_TIER_MAX = 2;
 
   function GM() {
     return global.GanttModel;
@@ -27,6 +18,14 @@
 
   function GT() {
     return global.GanttTrello;
+  }
+
+  function PU() {
+    return global.PriorityUI;
+  }
+
+  function TC() {
+    return global.TpConfirm || null;
   }
 
   function OA() {
@@ -101,6 +100,36 @@
     i.setAttribute('aria-hidden', 'true');
     wrap.appendChild(i);
     return wrap;
+  }
+
+  function iconButton(tiClass, title, extraClass) {
+    var wrap = el(
+      'button',
+      'gantt-detail-icon gantt-detail-icon--btn' +
+        (extraClass ? ' ' + extraClass : ''),
+      { type: 'button', title: title || '' }
+    );
+    if (title) wrap.setAttribute('aria-label', title);
+    var i = el('i', 'ti ' + tiClass);
+    i.setAttribute('aria-hidden', 'true');
+    wrap.appendChild(i);
+    return wrap;
+  }
+
+  function priorityFireTierMax() {
+    var ui = PU();
+    if (ui && ui.TIER_I && typeof ui.TIER_I.IMPORTANTE === 'number') {
+      return ui.TIER_I.IMPORTANTE - 1;
+    }
+    return PRIORITY_FIRE_TIER_MAX;
+  }
+
+  function shouldShowPriorityFire(row) {
+    if (!row || row.priorityEnabled === false) return false;
+    if (row.priorityTierI == null || !isFinite(Number(row.priorityTierI))) {
+      return false;
+    }
+    return Number(row.priorityTierI) <= priorityFireTierMax();
   }
 
   function mountGantt(mount, t, options) {
@@ -641,14 +670,24 @@
 
       if (row.kind === 'card') {
         if (row.blocked) {
-          slot('is-blocked', iconEl('ti-player-pause', 'Bloqu\u00e9', 'is-blocked'));
+          var blockedBtn = iconButton(
+            'ti-player-pause',
+            'D\u00e9bloquer',
+            'is-blocked'
+          );
+          blockedBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            unblockCard(row);
+          });
+          slot('is-blocked', blockedBtn);
         } else {
           slot('is-blocked', null);
         }
 
-        if (row.priorityEnabled !== false && row.priorityLabel) {
+        if (shouldShowPriorityFire(row)) {
           var pTitle =
-            row.priorityLabel +
+            (row.priorityLabel || 'Priorit\u00e9') +
             (row.priorityScore != null
               ? ' \u00b7 ' + Number(row.priorityScore).toFixed(1)
               : '');
@@ -665,22 +704,6 @@
           title: 'Progr\u00e8s ' + pct + '%',
         });
         slot('is-progress', progText);
-
-        if (row.categoryIcon || row.category) {
-          var ti =
-            STATUT_TABLER[row.categoryIcon] ||
-            STATUT_TABLER.dot ||
-            'ti-point-filled';
-          var sIcon = iconEl(
-            ti,
-            row.categoryLabel || row.category || 'Statut',
-            'is-statut'
-          );
-          if (row.color) sIcon.style.color = row.color;
-          slot('is-statut', sIcon);
-        } else {
-          slot('is-statut', null);
-        }
 
         if (row.duePast) {
           slot(
@@ -724,12 +747,45 @@
             title: 'Progr\u00e8s ' + localPct + '%',
           })
         );
-        slot('is-statut', null);
         slot('is-due', null);
         slot('is-subtasks', null);
       }
 
       return icons;
+    }
+
+    function unblockCard(row) {
+      if (!row || row.kind !== 'card' || !row.cardId || state.saving) return;
+      if (!row.blocked) return;
+      if (typeof ganttTrello.clearCardBlocked !== 'function') {
+        setStatus('D\u00e9blocage indisponible', true);
+        return;
+      }
+      state.saving = true;
+      setStatus('D\u00e9blocage\u2026');
+      ganttTrello
+        .clearCardBlocked(t, row.cardId)
+        .then(function (res) {
+          state.saving = false;
+          if (!res || !res.ok) {
+            setStatus(
+              '\u00c9chec du d\u00e9blocage' +
+                (res && res.reason ? ' (' + res.reason + ')' : ''),
+              true
+            );
+            return reload();
+          }
+          setStatus('Carte d\u00e9bloqu\u00e9e');
+          return reload();
+        })
+        .catch(function (err) {
+          state.saving = false;
+          setStatus(
+            'Erreur\u00a0: ' + (err && err.message ? err.message : String(err)),
+            true
+          );
+          return reload();
+        });
     }
 
     function selectedRows() {
@@ -786,7 +842,24 @@
       renderChart();
     }
 
-    function runBulk(op) {
+    function confirmDelete(message, mouseEvent) {
+      var confirmApi = TC();
+      if (confirmApi && typeof confirmApi.ask === 'function') {
+        return confirmApi.ask(t, {
+          title: 'Supprimer',
+          message: message,
+          confirmText: 'Supprimer',
+          cancelText: 'Annuler',
+          confirmStyle: 'danger',
+          mouseEvent: mouseEvent || null,
+        });
+      }
+      return Promise.resolve(
+        global.confirm ? !!global.confirm(message) : true
+      );
+    }
+
+    function runBulk(op, mouseEvent) {
       var rows = selectedRows().filter(canEditSubtask);
       if (!rows.length) {
         setStatus('Aucune sous-t\u00e2che s\u00e9lectionn\u00e9e pour cette action', true);
@@ -794,71 +867,70 @@
       }
       if (state.saving) return;
 
-      if (op === 'delete') {
-        var ok = true;
-        try {
-          ok = global.confirm
-            ? global.confirm(
-                'Supprimer ' + rows.length + ' sous-t\u00e2che(s)\u00a0?'
-              )
-            : true;
-        } catch (e) {
-          ok = true;
-        }
-        if (!ok) return;
-      }
+      var start = function () {
+        state.saving = true;
+        setStatus(
+          op === 'delete'
+            ? 'Suppression\u2026'
+            : op === 'done'
+              ? 'Marquage termin\u00e9\u2026'
+              : 'R\u00e9ouverture\u2026'
+        );
 
-      state.saving = true;
-      setStatus(
-        op === 'delete'
-          ? 'Suppression\u2026'
-          : op === 'done'
-            ? 'Marquage termin\u00e9\u2026'
-            : 'R\u00e9ouverture\u2026'
-      );
-
-      var chain = Promise.resolve();
-      var failed = 0;
-      rows.forEach(function (row) {
-        chain = chain.then(function () {
-          if (op === 'delete') {
-            return ganttTrello.deleteSubtask(t, subtaskMeta(row)).then(function (res) {
-              if (!res || !res.ok) failed += 1;
-            });
-          }
-          return ganttTrello
-            .setSubtaskDone(t, subtaskMeta(row), op === 'done')
-            .then(function (res) {
-              if (!res || !res.ok) failed += 1;
-            });
+        var chain = Promise.resolve();
+        var failed = 0;
+        rows.forEach(function (row) {
+          chain = chain.then(function () {
+            if (op === 'delete') {
+              return ganttTrello.deleteSubtask(t, subtaskMeta(row)).then(function (res) {
+                if (!res || !res.ok) failed += 1;
+              });
+            }
+            return ganttTrello
+              .setSubtaskDone(t, subtaskMeta(row), op === 'done')
+              .then(function (res) {
+                if (!res || !res.ok) failed += 1;
+              });
+          });
         });
-      });
 
-      chain
-        .then(function () {
-          state.saving = false;
-          state.selected = Object.create(null);
-          if (failed) {
-            setStatus(failed + ' \u00e9chec(s)', true);
-          } else {
+        chain
+          .then(function () {
+            state.saving = false;
+            state.selected = Object.create(null);
+            if (failed) {
+              setStatus(failed + ' \u00e9chec(s)', true);
+            } else {
+              setStatus(
+                op === 'delete'
+                  ? 'Sous-t\u00e2ches supprim\u00e9es'
+                  : op === 'done'
+                    ? 'Sous-t\u00e2ches termin\u00e9es'
+                    : 'Sous-t\u00e2ches rouvertes'
+              );
+            }
+            return reload();
+          })
+          .catch(function (err) {
+            state.saving = false;
             setStatus(
-              op === 'delete'
-                ? 'Sous-t\u00e2ches supprim\u00e9es'
-                : op === 'done'
-                  ? 'Sous-t\u00e2ches termin\u00e9es'
-                  : 'Sous-t\u00e2ches rouvertes'
+              'Erreur\u00a0: ' + (err && err.message ? err.message : String(err)),
+              true
             );
-          }
-          return reload();
-        })
-        .catch(function (err) {
-          state.saving = false;
-          setStatus(
-            'Erreur\u00a0: ' + (err && err.message ? err.message : String(err)),
-            true
-          );
-          return reload();
+            return reload();
+          });
+      };
+
+      if (op === 'delete') {
+        confirmDelete(
+          'Supprimer ' + rows.length + ' sous-t\u00e2che(s)\u00a0?',
+          mouseEvent
+        ).then(function (ok) {
+          if (ok) start();
         });
+        return;
+      }
+      start();
     }
 
     function makeIconBtn(className, iconClass, label, onClick) {
@@ -900,8 +972,8 @@
           'gantt-btn gantt-btn--danger',
           'ti-trash',
           'Supprimer',
-          function () {
-            runBulk('delete');
+          function (e) {
+            runBulk('delete', e);
           }
         )
       );
@@ -974,43 +1046,40 @@
         });
     }
 
-    function deleteSubtaskRow(row) {
+    function deleteSubtaskRow(row, mouseEvent) {
       if (state.saving || !canEditSubtask(row)) return;
       var label = row.name || 'cette sous-t\u00e2che';
-      var ok = true;
-      try {
-        ok = global.confirm
-          ? global.confirm('Supprimer \u00ab\u00a0' + label + '\u00a0\u00bb\u00a0?')
-          : true;
-      } catch (e) {
-        ok = true;
-      }
-      if (!ok) return;
-      state.saving = true;
-      setStatus('Suppression\u2026');
-      ganttTrello
-        .deleteSubtask(t, subtaskMeta(row))
-        .then(function (res) {
-          state.saving = false;
-          if (!res || !res.ok) {
+      confirmDelete(
+        'Supprimer \u00ab\u00a0' + label + '\u00a0\u00bb\u00a0?',
+        mouseEvent
+      ).then(function (ok) {
+        if (!ok) return;
+        state.saving = true;
+        setStatus('Suppression\u2026');
+        ganttTrello
+          .deleteSubtask(t, subtaskMeta(row))
+          .then(function (res) {
+            state.saving = false;
+            if (!res || !res.ok) {
+              setStatus(
+                '\u00c9chec suppression' +
+                  (res && res.reason ? ' (' + res.reason + ')' : ''),
+                true
+              );
+              return reload();
+            }
+            setStatus('Sous-t\u00e2che supprim\u00e9e');
+            return reload();
+          })
+          .catch(function (err) {
+            state.saving = false;
             setStatus(
-              '\u00c9chec suppression' +
-                (res && res.reason ? ' (' + res.reason + ')' : ''),
+              'Erreur\u00a0: ' + (err && err.message ? err.message : String(err)),
               true
             );
             return reload();
-          }
-          setStatus('Sous-t\u00e2che supprim\u00e9e');
-          return reload();
-        })
-        .catch(function (err) {
-          state.saving = false;
-          setStatus(
-            'Erreur\u00a0: ' + (err && err.message ? err.message : String(err)),
-            true
-          );
-          return reload();
-        });
+          });
+      });
     }
 
     function commitRename(row, nextName) {
@@ -1148,7 +1217,7 @@
       } else {
         delBtn.addEventListener('click', function (e) {
           e.stopPropagation();
-          deleteSubtaskRow(row);
+          deleteSubtaskRow(row, e);
         });
       }
       actions.appendChild(delBtn);
@@ -1489,7 +1558,6 @@
         'is-blocked',
         'is-priority',
         'is-progress',
-        'is-statut',
         'is-due',
         'is-subtasks',
       ].forEach(function (slotClass) {
@@ -1845,6 +1913,7 @@
     clampLabelsWidth: clampLabelsWidth,
     readStoredLabelsWidth: readStoredLabelsWidth,
     storeLabelsWidth: storeLabelsWidth,
+    shouldShowPriorityFire: shouldShowPriorityFire,
     LABELS_W_MIN: LABELS_W_MIN,
     LABELS_W_DEFAULT: LABELS_W_DEFAULT,
     LABELS_W_STORAGE_KEY: LABELS_W_STORAGE_KEY,

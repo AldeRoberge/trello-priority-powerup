@@ -3111,7 +3111,7 @@
       return !!(entry && (entry.kind === 'item' || entry.kind === 'check'));
     }
 
-    function runBulk(op) {
+    function runBulk(op, mouseEvent) {
       if (bulkBusy) return;
       var entries = selectedEntries();
       if (op === 'delete') {
@@ -3121,64 +3121,79 @@
       }
       if (!entries.length) return;
 
-      if (op === 'delete') {
-        var ok = true;
-        try {
-          ok = global.confirm
-            ? global.confirm('Supprimer ' + entries.length + ' t\u00e2che(s)\u00a0?')
-            : true;
-        } catch (e) {
-          ok = true;
+      var applyBulk = function () {
+        bulkBusy = true;
+        var targetProgress = op === 'done' ? 100 : 0;
+        for (var i = 0; i < entries.length; i++) {
+          var entry = entries[i];
+          if (op === 'delete') {
+            if (entry.kind === 'item') {
+              delete itemSpellReverts[entry.itemId];
+              delete spellcheckingItemIds[entry.itemId];
+              delete itemSpellTokens[entry.itemId];
+              delete estimatingItemIds[entry.itemId];
+              clearSplitRevertTracking([entry.itemId]);
+              data.items = data.items.filter(function (item) {
+                return item.id !== entry.itemId;
+              });
+              delete linkedTreeByItemId[entry.itemId];
+            } else if (entry.kind === 'check') {
+              data = CT.removeChecklistItem(data, entry.parentId, entry.nestedId);
+            }
+          } else if (entry.kind === 'item') {
+            data = CT.applyItemProgress(data, entry.itemId, targetProgress);
+          } else if (entry.kind === 'check') {
+            data = CT.applyChecklistItemProgress(
+              data,
+              entry.parentId,
+              entry.nestedId,
+              targetProgress
+            );
+          }
         }
-        if (!ok) return;
+        if (op === 'delete' && !data.items.length) {
+          data.progress = CT.computeCardProgress(data, linkedSnapshots).percent;
+        }
+        if (op === 'delete') {
+          playCompletionUiSound('trash');
+        } else if (op === 'reopen') {
+          playCompletionUiSound('uncomplete');
+        } else if (entries.length > 1) {
+          playCompletionUiSound('complete_all');
+        }
+        selected = Object.create(null);
+        bulkBusy = false;
+        emitChange();
+        if (op === 'delete') {
+          refreshLinkedTree({ skipPersist: true });
+        }
+        onResize();
+      };
+
+      if (op === 'delete') {
+        var confirmApi = global.TpConfirm;
+        var message =
+          'Supprimer ' + entries.length + ' t\u00e2che(s)\u00a0?';
+        var ask =
+          confirmApi && typeof confirmApi.ask === 'function'
+            ? confirmApi.ask(trelloT, {
+                title: 'Supprimer',
+                message: message,
+                confirmText: 'Supprimer',
+                cancelText: 'Annuler',
+                confirmStyle: 'danger',
+                mouseEvent: mouseEvent || null,
+              })
+            : Promise.resolve(
+                global.confirm ? !!global.confirm(message) : true
+              );
+        ask.then(function (ok) {
+          if (ok) applyBulk();
+        });
+        return;
       }
 
-      bulkBusy = true;
-      var targetProgress = op === 'done' ? 100 : 0;
-      for (var i = 0; i < entries.length; i++) {
-        var entry = entries[i];
-        if (op === 'delete') {
-          if (entry.kind === 'item') {
-            delete itemSpellReverts[entry.itemId];
-            delete spellcheckingItemIds[entry.itemId];
-            delete itemSpellTokens[entry.itemId];
-            delete estimatingItemIds[entry.itemId];
-            clearSplitRevertTracking([entry.itemId]);
-            data.items = data.items.filter(function (item) {
-              return item.id !== entry.itemId;
-            });
-            delete linkedTreeByItemId[entry.itemId];
-          } else if (entry.kind === 'check') {
-            data = CT.removeChecklistItem(data, entry.parentId, entry.nestedId);
-          }
-        } else if (entry.kind === 'item') {
-          data = CT.applyItemProgress(data, entry.itemId, targetProgress);
-        } else if (entry.kind === 'check') {
-          data = CT.applyChecklistItemProgress(
-            data,
-            entry.parentId,
-            entry.nestedId,
-            targetProgress
-          );
-        }
-      }
-      if (op === 'delete' && !data.items.length) {
-        data.progress = CT.computeCardProgress(data, linkedSnapshots).percent;
-      }
-      if (op === 'delete') {
-        playCompletionUiSound('trash');
-      } else if (op === 'reopen') {
-        playCompletionUiSound('uncomplete');
-      } else if (entries.length > 1) {
-        playCompletionUiSound('complete_all');
-      }
-      selected = Object.create(null);
-      bulkBusy = false;
-      emitChange();
-      if (op === 'delete') {
-        refreshLinkedTree({ skipPersist: true });
-      }
-      onResize();
+      applyBulk();
     }
 
     if (selectAllCheckbox) {
@@ -3206,8 +3221,8 @@
       });
     }
     if (bulkDeleteBtn) {
-      bulkDeleteBtn.addEventListener('click', function () {
-        runBulk('delete');
+      bulkDeleteBtn.addEventListener('click', function (e) {
+        runBulk('delete', e);
       });
     }
     if (bulkClearBtn) {
