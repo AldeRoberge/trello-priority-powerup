@@ -2289,17 +2289,20 @@ input.tp-completion-master-title.is-empty:not(:focus) {
 .tp-estimate-chip-wrap {
   position: relative;
   display: inline-flex;
-  align-items: center;
-  gap: 2px;
+  align-items: stretch;
+  gap: 0;
   flex: 0 0 auto;
 }
 
 .tp-estimate-chip-wrap.has-clear .tp-estimate-chip {
-  padding-right: 6px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right-color: transparent;
+  padding-right: 4px;
 }
 
 .tp-estimate-chip-wrap.is-compact.has-clear .tp-estimate-chip {
-  padding-right: 4px;
+  padding-right: 2px;
 }
 
 .tp-completion-progress-actions .tp-completion-master-estimate {
@@ -2340,13 +2343,11 @@ input.tp-completion-master-title.is-empty:not(:focus) {
     box-shadow 0.18s ease;
 }
 
-.tp-estimate-chip[role='button']:hover,
 button.tp-estimate-chip:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px color-mix(in srgb, var(--estimate-accent, var(--tp-text)) 16%, transparent);
 }
 
-.tp-estimate-chip[role='button']:focus-visible,
 button.tp-estimate-chip:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--tp-focus-ring, rgba(12, 102, 228, 0.28));
@@ -2422,18 +2423,24 @@ button.tp-estimate-chip:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
-  margin: 0 0 0 1px;
-  padding: 0;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  color: inherit;
+  align-self: stretch;
+  width: 18px;
+  min-height: 0;
+  margin: 0 0 0 -1px;
+  padding: 0 5px 0 2px;
+  border: 1px solid color-mix(in srgb, var(--estimate-accent, var(--tp-border-strong)) 45%, var(--tp-border));
+  border-left: 0;
+  border-radius: 0 999px 999px 0;
+  background: color-mix(
+    in srgb,
+    var(--estimate-accent, var(--tp-text-muted)) 10%,
+    var(--tp-surface-2, var(--surface-2, transparent))
+  );
+  color: var(--tp-text-muted);
   font: inherit;
   line-height: 1;
   cursor: pointer;
-  opacity: 0.45;
+  opacity: 0.55;
   transition:
     opacity 0.12s ease,
     background-color 0.12s ease,
@@ -2447,9 +2454,9 @@ button.tp-estimate-chip:focus-visible {
 
 .tp-estimate-chip-clear:hover,
 .tp-estimate-chip-clear:focus-visible {
-  opacity: 0.9;
+  opacity: 0.95;
   color: var(--tp-text);
-  background: color-mix(in srgb, currentColor 12%, transparent);
+  background: color-mix(in srgb, currentColor 10%, transparent);
   outline: none;
 }
 
@@ -2473,9 +2480,8 @@ button.tp-estimate-chip:focus-visible {
 }
 
 .tp-estimate-chip-wrap.is-compact .tp-estimate-chip-clear {
-  width: 12px;
-  height: 12px;
-  margin-left: 0;
+  width: 16px;
+  padding: 0 4px 0 1px;
 }
 
 .tp-estimate-chip-wrap.is-compact .tp-estimate-chip-clear .ti {

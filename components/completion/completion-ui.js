@@ -1174,12 +1174,9 @@
     wrap.className =
       'tp-estimate-chip-wrap' + (config.compact ? ' is-compact' : '');
 
-    var chip = document.createElement(readOnly ? 'span' : 'div');
+    var chip = document.createElement(readOnly ? 'span' : 'button');
+    if (!readOnly) chip.type = 'button';
     chip.className = 'tp-estimate-chip';
-    if (!readOnly) {
-      chip.setAttribute('role', 'button');
-      chip.setAttribute('tabindex', '0');
-    }
 
     // Same Tabler icons as the Temps dropdown ticks (bolt / clock / sun / …).
     var iconEl = document.createElement('i');
@@ -1206,7 +1203,7 @@
         closePopover();
         setMinutes(null, true);
       });
-      chip.appendChild(clearBtn);
+      wrap.appendChild(clearBtn);
     }
 
     var popover = null;
@@ -1672,19 +1669,6 @@
       rebuildPopoverBody();
       wrap.appendChild(popover);
       chip.addEventListener('click', function (e) {
-        if (e.target && e.target.closest && e.target.closest('.tp-estimate-chip-clear')) {
-          return;
-        }
-        e.preventDefault();
-        e.stopPropagation();
-        if (popover.classList.contains('is-open')) closePopover();
-        else openPopover();
-      });
-      chip.addEventListener('keydown', function (e) {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
-        if (e.target && e.target.closest && e.target.closest('.tp-estimate-chip-clear')) {
-          return;
-        }
         e.preventDefault();
         e.stopPropagation();
         if (popover.classList.contains('is-open')) closePopover();
