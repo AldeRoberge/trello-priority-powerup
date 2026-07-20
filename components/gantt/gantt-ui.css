@@ -492,7 +492,8 @@
 .gantt-label-cell--section {
   display: flex;
   align-items: center;
-  padding-left: 12px;
+  gap: 6px;
+  padding-left: 8px;
   font-weight: 700;
   font-size: 13px;
   letter-spacing: 0.04em;
@@ -500,10 +501,50 @@
   color: var(--tp-text-subtle, #44546f);
 }
 
+.gantt-section-twist {
+  flex: 0 0 auto;
+}
+
 .gantt-section-title {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gantt-section-title:hover,
+.gantt-section-title:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
+.gantt-section-count {
+  flex: 0 0 auto;
+  margin-left: 2px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(9, 30, 66, 0.08);
+  color: var(--tp-text-subtle, #44546f);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.gantt-row--section.is-collapsed {
+  opacity: 0.92;
 }
 
 .gantt-row--section.is-started .gantt-section-title {

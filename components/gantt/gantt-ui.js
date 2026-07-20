@@ -367,7 +367,7 @@
         hideBlocked: state.hideBlocked,
       });
       if (typeof model.pruneEmptyStateSections === 'function') {
-        return model.pruneEmptyStateSections(filtered);
+        return model.pruneEmptyStateSections(filtered, state.expanded);
       }
       return filtered;
     }
@@ -1995,25 +1995,63 @@
         var oddClass = rowIndex % 2 === 1 ? ' is-odd' : '';
 
         if (row.kind === 'section') {
+          var sectionOpen =
+            typeof model.isNodeExpanded === 'function'
+              ? model.isNodeExpanded(row, state.expanded)
+              : state.expanded[row.id] !== false;
           var sectionLabelRow = el(
             'div',
             'gantt-row gantt-row--section' +
-              (row.sectionKey ? ' is-' + row.sectionKey : '')
+              (row.sectionKey ? ' is-' + row.sectionKey : '') +
+              (sectionOpen ? '' : ' is-collapsed')
           );
           sectionLabelRow.style.height = ROW_H + 'px';
           var sectionCell = el('div', 'gantt-label-cell gantt-label-cell--section');
-          var sectionTitle = el('div', 'gantt-section-title', {
+          var sectionTwist = el('button', 'gantt-twist gantt-section-twist', {
+            type: 'button',
+            text: sectionOpen ? '\u25be' : '\u25b8',
+            title: sectionOpen
+              ? 'Replier la section'
+              : 'D\u00e9plier la section',
+          });
+          sectionTwist.setAttribute(
+            'aria-expanded',
+            sectionOpen ? 'true' : 'false'
+          );
+          sectionTwist.setAttribute('aria-label', row.name || 'Section');
+          function toggleSection(e) {
+            if (e) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+            toggleExpand(row.id);
+          }
+          sectionTwist.addEventListener('click', toggleSection);
+          var sectionTitle = el('button', 'gantt-section-title', {
+            type: 'button',
             text: row.name || '',
           });
-          sectionTitle.title = row.name || '';
+          sectionTitle.title =
+            (row.name || '') +
+            (sectionOpen ? ' \u2014 Replier' : ' \u2014 D\u00e9plier');
+          sectionTitle.addEventListener('click', toggleSection);
+          sectionCell.appendChild(sectionTwist);
           sectionCell.appendChild(sectionTitle);
+          if (row.children && row.children.length) {
+            sectionCell.appendChild(
+              el('span', 'gantt-section-count', {
+                text: String(row.children.length),
+              })
+            );
+          }
           sectionLabelRow.appendChild(sectionCell);
           labelsCol.appendChild(sectionLabelRow);
 
           var sectionTimeRow = el(
             'div',
             'gantt-row gantt-row--section gantt-timeline-row' +
-              (row.sectionKey ? ' is-' + row.sectionKey : '')
+              (row.sectionKey ? ' is-' + row.sectionKey : '') +
+              (sectionOpen ? '' : ' is-collapsed')
           );
           sectionTimeRow.style.height = ROW_H + 'px';
           sectionTimeRow.style.width = state.timelineWidth + 'px';

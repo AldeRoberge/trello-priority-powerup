@@ -487,12 +487,63 @@ describe('GanttModel', () => {
     ]);
     const grouped = GanttModel.sortTreeRootsGroupedByState(tree, 'name', 'asc');
     assert.deepEqual(
-      grouped.map((n) => (n.kind === 'section' ? n.sectionKey : n.cardId)),
-      ['started', 'go', 'pending', 'back', 'wait', 'blocked', 'stuck']
+      grouped.map((n) => n.sectionKey),
+      ['started', 'pending', 'blocked']
     );
     assert.equal(grouped[0].name, 'En cours');
-    assert.equal(grouped[2].name, 'En attente');
-    assert.equal(grouped[5].name, 'Bloqué');
+    assert.equal(grouped[0].expandable, true);
+    assert.deepEqual(
+      grouped[0].children.map((n) => n.cardId),
+      ['go']
+    );
+    assert.deepEqual(
+      grouped[1].children.map((n) => n.cardId),
+      ['back', 'wait']
+    );
+    assert.deepEqual(
+      grouped[2].children.map((n) => n.cardId),
+      ['stuck']
+    );
+    assert.equal(grouped[1].name, 'En attente');
+    assert.equal(grouped[2].name, 'Bloqué');
+  });
+
+  it('flattenVisible can collapse state sections', () => {
+    const tree = GanttModel.buildNestTree([
+      { id: 'go', name: 'Go', dueDate: '2026-07-20', category: 'started' },
+      {
+        id: 'wait',
+        name: 'Wait',
+        dueDate: '2026-07-01',
+        category: 'unstarted',
+      },
+    ]);
+    const grouped = GanttModel.sortTreeRootsGroupedByState(tree, 'name', 'asc');
+    const open = GanttModel.flattenVisible(grouped, {});
+    assert.deepEqual(
+      open.map((n) => (n.kind === 'section' ? n.sectionKey : n.cardId)),
+      ['started', 'go', 'pending', 'wait']
+    );
+    const collapsed = GanttModel.flattenVisible(grouped, {
+      'section:started': false,
+    });
+    assert.deepEqual(
+      collapsed.map((n) => (n.kind === 'section' ? n.sectionKey : n.cardId)),
+      ['started', 'pending', 'wait']
+    );
+  });
+
+  it('pruneEmptyStateSections keeps collapsed headers with children', () => {
+    const header = GanttModel.makeStateSectionHeader('started');
+    header.children = [
+      { id: 'card:a', kind: 'card', cardId: 'a', name: 'A', depth: 0 },
+    ];
+    const pruned = GanttModel.pruneEmptyStateSections(
+      [header],
+      { 'section:started': false }
+    );
+    assert.equal(pruned.length, 1);
+    assert.equal(pruned[0].sectionKey, 'started');
   });
 
   it('pruneEmptyStateSections drops headers with no tasks', () => {

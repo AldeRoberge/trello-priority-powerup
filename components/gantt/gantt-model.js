@@ -784,7 +784,7 @@
       category: key === 'pending' ? 'unstarted' : key,
       categoryLabel: STATE_SECTION_LABELS[key],
       depth: 0,
-      expandable: false,
+      expandable: true,
       children: [],
       progress: 0,
       done: false,
@@ -798,8 +798,17 @@
     };
   }
 
+  function isNodeExpanded(node, expandedSet) {
+    if (!node) return false;
+    expandedSet = expandedSet || {};
+    if (expandedSet[node.id] === true) return true;
+    if (expandedSet[node.id] === false) return false;
+    // Depth-0 expandable nodes (task roots and state sections) start open.
+    return !!(node.depth === 0 && node.expandable);
+  }
+
   /**
-   * Group roots into En cours → En attente → Bloqué sections (headers as siblings),
+   * Group roots into En cours → En attente → Bloqué sections (tasks as children),
    * sorting within each section with the usual sortTreeRoots rules.
    * Empty sections are omitted.
    */
@@ -809,25 +818,37 @@
       pending: [],
       blocked: [],
     };
-    (nodes || []).forEach(function (n) {
+    function bucketNode(n) {
       if (!n || n.kind === 'section') return;
       buckets[stateSectionKey(n)].push(n);
+    }
+    (nodes || []).forEach(function (n) {
+      if (!n) return;
+      if (n.kind === 'section') {
+        (n.children || []).forEach(bucketNode);
+        return;
+      }
+      bucketNode(n);
     });
     var out = [];
     for (var i = 0; i < STATE_SECTION_ORDER.length; i++) {
       var key = STATE_SECTION_ORDER[i];
       var sorted = sortTreeRoots(buckets[key], sortBy, sortDir);
       if (!sorted.length) continue;
-      out.push(makeStateSectionHeader(key));
-      for (var j = 0; j < sorted.length; j++) out.push(sorted[j]);
+      var header = makeStateSectionHeader(key);
+      header.children = sorted;
+      header.expandable = true;
+      header.subtaskCount = sorted.length;
+      out.push(header);
     }
     return out;
   }
 
   /**
-   * Drop section headers that have no following task rows before the next section.
+   * Drop section headers that have no visible task rows after them.
+   * Collapsed sections with children are kept so the header stays clickable.
    */
-  function pruneEmptyStateSections(rows) {
+  function pruneEmptyStateSections(rows, expandedSet) {
     var list = rows || [];
     var out = [];
     for (var i = 0; i < list.length; i++) {
@@ -841,7 +862,18 @@
           hasTask = true;
           break;
         }
-        if (!hasTask) continue;
+        if (hasTask) {
+          out.push(row);
+          continue;
+        }
+        if (
+          !isNodeExpanded(row, expandedSet) &&
+          row.children &&
+          row.children.length
+        ) {
+          out.push(row);
+        }
+        continue;
       }
       out.push(row);
     }
@@ -861,9 +893,7 @@
         var n = list[i];
         if (!n) continue;
         out.push(n);
-        var open =
-          expandedSet[n.id] === true ||
-          (expandedSet[n.id] == null && n.depth === 0 && n.expandable);
+        var open = isNodeExpanded(n, expandedSet);
         if (open && n.children && n.children.length) {
           walk(n.children);
         }
@@ -1033,6 +1063,7 @@
     stateSectionKey: stateSectionKey,
     stateSectionLabel: stateSectionLabel,
     makeStateSectionHeader: makeStateSectionHeader,
+    isNodeExpanded: isNodeExpanded,
     sortTreeRootsGroupedByState: sortTreeRootsGroupedByState,
     pruneEmptyStateSections: pruneEmptyStateSections,
   };
