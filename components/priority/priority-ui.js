@@ -18656,7 +18656,7 @@
     var onToggle = config.onToggle || function () {};
     var SVG_W = 260;
     var SVG_H = 208;
-    var MARGIN = { top: 8, right: 6, bottom: 22, left: 24 };
+    var MARGIN = { top: 8, right: 6, bottom: 26, left: 28 };
     var PLOT_W = SVG_W - MARGIN.left - MARGIN.right;
     var PLOT_H = SVG_H - MARGIN.top - MARGIN.bottom;
     var CONTOUR_RES = 40;
@@ -18900,7 +18900,7 @@
     labelU.setAttribute('title', KEYWORDS.urgency);
 
     var labelIY = MARGIN.top + PLOT_H * 0.5;
-    var labelIX = plotX(0) - 16;
+    var labelIX = plotX(0) - 18;
     var labelI = svgEl('text', { class: 'calc-rsm-axis-label calc-rsm-axis-label-y' });
     labelI.setAttribute('transform', 'rotate(-90 ' + labelIX + ' ' + labelIY + ')');
     labelI.setAttribute('x', String(labelIX));
@@ -18941,6 +18941,14 @@
     easeLabelTop.className = 'calc-rsm-ease-label calc-rsm-ease-label-top';
     easeLabelTop.textContent = '5';
 
+    var easeMid = document.createElement('div');
+    easeMid.className = 'calc-rsm-ease-mid';
+
+    var easeTitle = document.createElement('span');
+    easeTitle.className = 'calc-rsm-ease-title';
+    easeTitle.textContent = 'Facilit\u00e9';
+    easeTitle.setAttribute('aria-hidden', 'true');
+
     var easeSlider = document.createElement('input');
     easeSlider.type = 'range';
     easeSlider.className = 'calc-rsm-ease-range';
@@ -18948,15 +18956,17 @@
     easeSlider.max = '5';
     easeSlider.step = String(SLIDER_STEP);
     easeSlider.value = '3';
-    easeSlider.setAttribute('aria-label', 'Facilité');
+    easeSlider.setAttribute('aria-label', 'Facilit\u00e9');
     easeSlider.title = KEYWORDS.ease;
 
     var easeLabelBottom = document.createElement('span');
     easeLabelBottom.className = 'calc-rsm-ease-label calc-rsm-ease-label-bottom';
     easeLabelBottom.textContent = '1';
 
+    easeMid.appendChild(easeTitle);
+    easeMid.appendChild(easeSlider);
     easeCol.appendChild(easeLabelTop);
-    easeCol.appendChild(easeSlider);
+    easeCol.appendChild(easeMid);
     easeCol.appendChild(easeLabelBottom);
 
     chart.appendChild(surfaceCanvas);

@@ -7777,14 +7777,14 @@ html[data-color-mode="dark"] .heat-score-tooltip {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  width: 260px;
-  max-width: 260px;
+  width: 280px;
+  max-width: 280px;
   margin: 0 auto;
 }
 
 .calc-rsm-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 18px;
+  grid-template-columns: minmax(0, 1fr) 34px;
   align-items: stretch;
   gap: 4px;
   width: 100%;
@@ -7809,6 +7809,30 @@ html[data-color-mode="dark"] .heat-score-tooltip {
   height: 100%;
   gap: 2px;
   box-sizing: border-box;
+}
+
+.calc-rsm-ease-mid {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  gap: 2px;
+}
+
+.calc-rsm-ease-title {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  user-select: none;
+  flex-shrink: 0;
+  align-self: center;
 }
 
 .calc-rsm-ease-label {
@@ -7923,7 +7947,7 @@ html[data-color-mode="dark"] .heat-score-tooltip {
 }
 
 .calc-rsm-axis-label {
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 500;
   font-family: inherit;
   fill: var(--text-muted);
