@@ -274,6 +274,8 @@
       outlookSyncing: false,
       cardOverlay: null,
       cardOverlayKeyHandler: null,
+      sectionDrag: null,
+      suppressCardOpen: false,
     };
 
     function persistFilters() {
@@ -886,6 +888,229 @@
         }
       }
       return popupUrlWithArgs(pageUrl, args);
+    }
+
+    function cardIdsForSectionDrag(originRow) {
+      var selected = selectedRows().filter(function (r) {
+        return r && r.kind === 'card' && r.cardId;
+      });
+      var originSelected = !!(originRow && state.selected[originRow.id]);
+      var seen = Object.create(null);
+      var ids = [];
+      function pushId(cid) {
+        var id = cid != null ? String(cid) : '';
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        ids.push(id);
+      }
+      if (originSelected && selected.length) {
+        for (var i = 0; i < selected.length; i++) {
+          pushId(selected[i].cardId);
+        }
+      }
+      if (originRow && originRow.kind === 'card' && originRow.cardId) {
+        pushId(originRow.cardId);
+      }
+      return ids;
+    }
+
+    function applySectionDrop(cardIds, sectionKey) {
+      if (
+        !cardIds ||
+        !cardIds.length ||
+        !sectionKey ||
+        typeof ganttTrello.moveCardToStateSection !== 'function'
+      ) {
+        return;
+      }
+      if (state.saving) return;
+      state.saving = true;
+      var label =
+        sectionKey === 'started'
+          ? 'En cours'
+          : sectionKey === 'blocked'
+            ? 'Bloqu\u00e9'
+            : 'En attente';
+      setStatus(
+        'D\u00e9placement vers ' +
+          label +
+          (cardIds.length > 1 ? ' (' + cardIds.length + ')' : '') +
+          '\u2026'
+      );
+
+      var chain = Promise.resolve({ ok: true, results: [] });
+      cardIds
+        .reduce(function (p, cid) {
+          return p.then(function (acc) {
+            return ganttTrello
+              .moveCardToStateSection(t, cid, sectionKey)
+              .then(function (res) {
+                acc.results.push(res);
+                if (!res || !res.ok) acc.ok = false;
+                return acc;
+              });
+          });
+        }, chain)
+        .then(function (acc) {
+          state.saving = false;
+          state.suppressCardOpen = false;
+          if (!acc.ok) {
+            setStatus(
+              '\u00c9chec du d\u00e9placement de statut',
+              true
+            );
+          } else {
+            state.selected = Object.create(null);
+            setStatus(
+              cardIds.length === 1
+                ? 'Statut mis \u00e0 jour'
+                : cardIds.length + ' cartes mises \u00e0 jour'
+            );
+          }
+          return reload();
+        })
+        .catch(function (err) {
+          state.saving = false;
+          state.suppressCardOpen = false;
+          setStatus(
+            'Erreur\u00a0: ' + (err && err.message ? err.message : String(err)),
+            true
+          );
+          return reload();
+        });
+    }
+
+    function bindLabelSectionDrag(labelRow, row) {
+      if (!row || row.kind !== 'card' || !row.cardId) return;
+      if (typeof ganttTrello.moveCardToStateSection !== 'function') return;
+
+      labelRow.classList.add('is-section-draggable');
+      labelRow.title = labelRow.title || 'Glisser vers une section pour changer le statut';
+
+      labelRow.addEventListener('pointerdown', function (ev) {
+        if (ev.button != null && ev.button !== 0) return;
+        if (state.saving || state.sectionDrag) return;
+        var tgt = ev.target;
+        if (tgt && tgt.closest) {
+          if (tgt.closest('.gantt-select-box')) return;
+          if (tgt.closest('.gantt-twist')) return;
+          if (tgt.closest('.gantt-row-actions')) return;
+          if (tgt.closest('.gantt-detail-icons')) return;
+          if (tgt.closest('.gantt-rename-input')) return;
+          if (tgt.closest('.gantt-action-btn')) return;
+        }
+
+        var cardIds = cardIdsForSectionDrag(row);
+        if (!cardIds.length) return;
+
+        var drag = {
+          pointerId: ev.pointerId,
+          startX: ev.clientX,
+          startY: ev.clientY,
+          cardIds: cardIds,
+          originRowId: row.id,
+          active: false,
+          ghost: null,
+          dropKey: null,
+        };
+        state.sectionDrag = drag;
+
+        function clearDropHighlight() {
+          var nodes = root.querySelectorAll(
+            '.gantt-row--section.is-drop-target'
+          );
+          for (var i = 0; i < nodes.length; i++) {
+            nodes[i].classList.remove('is-drop-target');
+          }
+        }
+
+        function highlightSectionAt(clientX, clientY) {
+          clearDropHighlight();
+          drag.dropKey = null;
+          var under = document.elementFromPoint(clientX, clientY);
+          var section =
+            under && under.closest
+              ? under.closest('.gantt-row--section[data-section-key]')
+              : null;
+          if (!section) return;
+          section.classList.add('is-drop-target');
+          drag.dropKey = section.getAttribute('data-section-key');
+        }
+
+        function onMove(e) {
+          if (!state.sectionDrag || state.sectionDrag !== drag) return;
+          var dx = e.clientX - drag.startX;
+          var dy = e.clientY - drag.startY;
+          if (!drag.active) {
+            if (dx * dx + dy * dy < 36) return;
+            drag.active = true;
+            state.suppressCardOpen = true;
+            try {
+              labelRow.setPointerCapture(ev.pointerId);
+            } catch (capErr) {
+              /* ignore */
+            }
+            var ghost = el('div', 'gantt-section-drag-ghost', {
+              text:
+                cardIds.length > 1
+                  ? cardIds.length + ' cartes'
+                  : row.name || 'Carte',
+            });
+            document.body.appendChild(ghost);
+            drag.ghost = ghost;
+            labelRow.classList.add('is-dragging-section');
+            root.classList.add('is-section-dragging');
+          }
+          if (drag.ghost) {
+            drag.ghost.style.left = e.clientX + 12 + 'px';
+            drag.ghost.style.top = e.clientY + 12 + 'px';
+          }
+          highlightSectionAt(e.clientX, e.clientY);
+        }
+
+        function cleanup() {
+          clearDropHighlight();
+          if (drag.ghost && drag.ghost.parentNode) {
+            drag.ghost.parentNode.removeChild(drag.ghost);
+          }
+          labelRow.classList.remove('is-dragging-section');
+          root.classList.remove('is-section-dragging');
+          try {
+            labelRow.releasePointerCapture(ev.pointerId);
+          } catch (relErr) {
+            /* ignore */
+          }
+          document.removeEventListener('pointermove', onMove, true);
+          document.removeEventListener('pointerup', onUp, true);
+          document.removeEventListener('pointercancel', onUp, true);
+          if (state.sectionDrag === drag) state.sectionDrag = null;
+        }
+
+        function onUp(e) {
+          if (!state.sectionDrag || state.sectionDrag !== drag) {
+            cleanup();
+            return;
+          }
+          var wasActive = drag.active;
+          var dropKey = drag.dropKey;
+          var ids = drag.cardIds.slice();
+          cleanup();
+          if (!wasActive) return;
+          if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          if (!dropKey || state.saving) {
+            state.suppressCardOpen = false;
+            return;
+          }
+          applySectionDrop(ids, dropKey);
+        }
+
+        document.addEventListener('pointermove', onMove, true);
+        document.addEventListener('pointerup', onUp, true);
+        document.addEventListener('pointercancel', onUp, true);
+      });
     }
 
     function openCard(cardId, cardName) {
@@ -2020,6 +2245,10 @@
               (sectionOpen ? '' : ' is-collapsed')
           );
           sectionLabelRow.style.height = ROW_H + 'px';
+          sectionLabelRow.setAttribute(
+            'data-section-key',
+            row.sectionKey || 'pending'
+          );
           var sectionCell = el('div', 'gantt-label-cell gantt-label-cell--section');
           var sectionTwist = el('button', 'gantt-twist gantt-section-twist', {
             type: 'button',
@@ -2069,6 +2298,10 @@
           );
           sectionTimeRow.style.height = ROW_H + 'px';
           sectionTimeRow.style.width = state.timelineWidth + 'px';
+          sectionTimeRow.setAttribute(
+            'data-section-key',
+            row.sectionKey || 'pending'
+          );
           timelineCol.appendChild(sectionTimeRow);
           return;
         }
@@ -2155,9 +2388,21 @@
         var openClickTimer = null;
         if (row.kind === 'card' && row.cardId) {
           nameBtn.addEventListener('click', function () {
+            if (state.suppressCardOpen) {
+              state.suppressCardOpen = false;
+              if (openClickTimer) {
+                clearTimeout(openClickTimer);
+                openClickTimer = null;
+              }
+              return;
+            }
             if (openClickTimer) clearTimeout(openClickTimer);
             openClickTimer = setTimeout(function () {
               openClickTimer = null;
+              if (state.suppressCardOpen) {
+                state.suppressCardOpen = false;
+                return;
+              }
               openCard(row.cardId, row.name);
             }, 280);
           });
@@ -2172,6 +2417,7 @@
         labelCell.appendChild(buildSubtaskActions(row));
 
         labelRow.appendChild(labelCell);
+        bindLabelSectionDrag(labelRow, row);
         labelsCol.appendChild(labelRow);
 
         var timeRow = el(

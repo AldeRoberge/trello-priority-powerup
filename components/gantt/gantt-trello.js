@@ -2,6 +2,12 @@
 (function (global) {
   'use strict';
 
+  var GANTT_SETTINGS_KEY = 'ganttSettings';
+  var DEFAULT_GANTT_SETTINGS = {
+    dayStart: '08:15',
+    dayEnd: '16:45',
+  };
+
   function GM() {
     return global.GanttModel || null;
   }
@@ -26,6 +32,56 @@
     return global.PriorityUI || null;
   }
 
+
+  function normalizeGanttSettings(raw) {
+    var model = GM();
+    var dayStart =
+      model && typeof model.normalizeWorkTime === 'function'
+        ? model.normalizeWorkTime(
+            raw && raw.dayStart,
+            DEFAULT_GANTT_SETTINGS.dayStart
+          )
+        : DEFAULT_GANTT_SETTINGS.dayStart;
+    var dayEnd =
+      model && typeof model.normalizeWorkTime === 'function'
+        ? model.normalizeWorkTime(
+            raw && raw.dayEnd,
+            DEFAULT_GANTT_SETTINGS.dayEnd
+          )
+        : DEFAULT_GANTT_SETTINGS.dayEnd;
+    var parse =
+      model && typeof model.parseTime === 'function' ? model.parseTime : null;
+    var startParts = parse ? parse(dayStart) : null;
+    var endParts = parse ? parse(dayEnd) : null;
+    if (
+      startParts &&
+      endParts &&
+      startParts.hours * 60 + startParts.minutes >=
+        endParts.hours * 60 + endParts.minutes
+    ) {
+      dayStart = DEFAULT_GANTT_SETTINGS.dayStart;
+      dayEnd = DEFAULT_GANTT_SETTINGS.dayEnd;
+    }
+    return { dayStart: dayStart, dayEnd: dayEnd };
+  }
+
+  async function getGanttSettings(t) {
+    try {
+      var raw = await t.get('board', 'shared', GANTT_SETTINGS_KEY);
+      return normalizeGanttSettings(raw);
+    } catch (err) {
+      console.error('GanttTrello.getGanttSettings failed', err);
+      return normalizeGanttSettings(null);
+    }
+  }
+
+  async function saveGanttSettings(t, settings) {
+    var normalized = normalizeGanttSettings(settings);
+    await t.set('board', 'shared', GANTT_SETTINGS_KEY, normalized);
+    return normalized;
+  }
+
+
   function isoDateFromTrello(value) {
     var ui = PU();
     if (!value) return '';
@@ -41,9 +97,20 @@
     return '';
   }
 
+  function isoTimeFromTrello(value) {
+    var ui = PU();
+    if (!value) return '';
+    if (ui && typeof ui.parseTrelloDueToParts === 'function') {
+      var parts = ui.parseTrelloDueToParts(value);
+      return parts && parts.dueTime ? parts.dueTime : '';
+    }
+    return '';
+  }
+
   function resolveCardDates(card, inputs) {
     var startDate = '';
     var dueDate = '';
+    var startTime = '';
     var dueTime = '';
 
     if (inputs) {
@@ -53,6 +120,9 @@
       if (typeof inputs.dueDate === 'string' && inputs.dueDate) {
         dueDate = inputs.dueDate;
       }
+      if (typeof inputs.startTime === 'string' && inputs.startTime) {
+        startTime = inputs.startTime;
+      }
       if (typeof inputs.dueTime === 'string' && inputs.dueTime) {
         dueTime = inputs.dueTime;
       }
@@ -60,12 +130,19 @@
 
     if (!dueDate && card && card.due) {
       dueDate = isoDateFromTrello(card.due);
+      if (!dueTime) dueTime = isoTimeFromTrello(card.due);
     }
     if (!startDate && card && card.start) {
       startDate = isoDateFromTrello(card.start);
+      if (!startTime) startTime = isoTimeFromTrello(card.start);
     }
 
-    return { startDate: startDate, dueDate: dueDate, dueTime: dueTime };
+    return {
+      startDate: startDate,
+      dueDate: dueDate,
+      startTime: startTime,
+      dueTime: dueTime,
+    };
   }
 
   function categoryForList(settings, listId) {
@@ -234,6 +311,7 @@
         dueComplete: !!card.dueComplete,
         startDate: dates.startDate,
         dueDate: dates.dueDate,
+        startTime: dates.startTime,
         dueTime: dates.dueTime,
         progress: progress,
         estimatedMinutes: estimatedMinutesFromCompletion(completion),
@@ -280,6 +358,7 @@
       cards: records,
       tree: tree,
       settings: settings,
+      ganttSettings: await getGanttSettings(t),
     };
   }
 
@@ -309,7 +388,8 @@
     }
   }
 
-  function buildInputsForDates(existingInputs, startDate, dueDate, dueTime) {
+
+  function buildInputsForDates(existingInputs, startDate, dueDate, dueTime, startTime) {
     var pt = PT();
     var base = existingInputs
       ? Object.assign({}, existingInputs)
@@ -330,13 +410,31 @@
         : dueDate
           ? String(dueDate).trim()
           : '';
+    var nextStartTime =
+      startTime && ui && ui.normalizeDueTime
+        ? ui.normalizeDueTime(startTime)
+        : startTime
+          ? String(startTime).trim()
+          : '';
+    var nextDueTime =
+      dueTime && ui && ui.normalizeDueTime
+        ? ui.normalizeDueTime(dueTime)
+        : dueTime
+          ? String(dueTime).trim()
+          : '';
 
-    if (nextStart) base.startDate = nextStart;
-    else delete base.startDate;
+    if (nextStart) {
+      base.startDate = nextStart;
+      if (nextStartTime) base.startTime = nextStartTime;
+      else delete base.startTime;
+    } else {
+      delete base.startDate;
+      delete base.startTime;
+    }
 
     if (nextDue) {
       base.dueDate = nextDue;
-      if (dueTime) base.dueTime = dueTime;
+      if (nextDueTime) base.dueTime = nextDueTime;
       else delete base.dueTime;
       delete base.dueEnabled;
     } else {
@@ -364,13 +462,18 @@
     return dueDate + 'T12:00:00.000Z';
   }
 
-  function toStartIso(startDate) {
+  function toStartIso(startDate, startTime) {
     var ui = PU();
     if (!startDate) return '';
     if (ui && typeof ui.inputsToTrelloStartIso === 'function') {
-      return ui.inputsToTrelloStartIso({ startDate: startDate }) || '';
+      return (
+        ui.inputsToTrelloStartIso({
+          startDate: startDate,
+          startTime: startTime || '',
+        }) || ''
+      );
     }
-    return toDueIso(startDate, null);
+    return toDueIso(startDate, startTime || null);
   }
 
   /**
@@ -402,18 +505,32 @@
 
     var startDate = parts && parts.startDate ? parts.startDate : '';
     var dueDate = parts && parts.dueDate ? parts.dueDate : '';
-    var dueTime =
-      parts && parts.dueTime
-        ? parts.dueTime
+    var clearing = !startDate && !dueDate;
+    var dueTime = clearing
+      ? ''
+      : parts && Object.prototype.hasOwnProperty.call(parts, 'dueTime')
+        ? parts.dueTime || ''
         : existing && existing.dueTime
           ? existing.dueTime
           : '';
+    var startTime = clearing
+      ? ''
+      : parts && Object.prototype.hasOwnProperty.call(parts, 'startTime')
+        ? parts.startTime || ''
+        : existing && existing.startTime
+          ? existing.startTime
+          : '';
 
-    // Single-day bars: if start === due keep both; clear start when only due intended is ok.
-    var nextInputs = buildInputsForDates(existing, startDate, dueDate, dueTime);
+    var nextInputs = buildInputsForDates(
+      existing,
+      startDate,
+      dueDate,
+      dueTime,
+      startTime
+    );
 
     var dueIso = toDueIso(dueDate, dueTime);
-    var startIso = toStartIso(startDate);
+    var startIso = toStartIso(startDate, startTime);
 
     var ui = PU();
     if (ui && typeof ui.canonicalizeTrelloDueIso === 'function') {
@@ -468,6 +585,8 @@
       cardId: id,
       startDate: startDate,
       dueDate: dueDate,
+      startTime: startTime,
+      dueTime: dueTime,
       dueIso: dueIso || null,
       startIso: startIso || null,
       inputs: nextInputs,
@@ -716,9 +835,55 @@
     return { ok: false, reason: 'unsupported-kind' };
   }
 
+  /** Prefer these list categories when dropping into En attente. */
+  var PENDING_LIST_CATEGORIES = ['unstarted', 'backlog', 'triage'];
+  var STARTED_LIST_CATEGORIES = ['started'];
+
+  /**
+   * First board list (in board order) mapped to any of the given categories.
+   */
+  function firstListIdForCategories(lists, settings, categories) {
+    var cats = (settings && settings.listCategories) || {};
+    var wants = categories || [];
+    for (var c = 0; c < wants.length; c++) {
+      var want = wants[c];
+      for (var j = 0; j < (lists || []).length; j++) {
+        var lid = lists[j] && lists[j].id != null ? String(lists[j].id) : null;
+        if (lid && cats[lid] === want) return lid;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Resolve the Trello list id for a Gantt state section drop.
+   * @param {'started'|'pending'|'blocked'} sectionKey
+   */
+  function resolveStateSectionListId(lists, settings, sectionKey) {
+    var key =
+      sectionKey === 'started' || sectionKey === 'blocked' ? sectionKey : 'pending';
+    if (key === 'started') {
+      return firstListIdForCategories(lists, settings, STARTED_LIST_CATEGORIES);
+    }
+    if (key === 'blocked') {
+      var role =
+        settings && settings.roleLists && settings.roleLists.blocked
+          ? String(settings.roleLists.blocked)
+          : null;
+      if (role) {
+        for (var i = 0; i < (lists || []).length; i++) {
+          if (lists[i] && String(lists[i].id) === role) return role;
+        }
+      }
+      return firstListIdForCategories(lists, settings, ['blocked']);
+    }
+    return firstListIdForCategories(lists, settings, PENDING_LIST_CATEGORIES);
+  }
+
   /**
    * Set or clear Bloqué (enAttente) on an arbitrary board card and persist plugin data.
    * Enabling blocks without requiring Motifs; clearing uses clearBlockedFromInputs.
+   * When enabling and the card has no inputs yet, seeds DEFAULT_INPUTS.
    */
   async function setCardBlocked(t, cardId, blocked) {
     var pt = PT();
@@ -736,7 +901,14 @@
       }
     }
     if (!existing) {
-      return { ok: false, reason: 'no-inputs' };
+      if (!wantBlocked) {
+        return { ok: false, reason: 'no-inputs' };
+      }
+      existing = Object.assign(
+        {},
+        pt.DEFAULT_INPUTS || { urgency: 2, impact: 2, ease: 3 },
+        { priorityEnabled: false }
+      );
     }
 
     var already = !!existing.enAttente;
@@ -774,12 +946,130 @@
     return setCardBlocked(t, cardId, false);
   }
 
+  /**
+   * Move a board card into a Gantt state section: list move + set/clear enAttente.
+   * Bloqué: set blocked (+ move to blocked list when mapped).
+   * En cours / En attente: clear blocked first, then move to started or
+   * unstarted/backlog/triage.
+   */
+  async function moveCardToStateSection(t, cardId, sectionKey) {
+    var pt = PT();
+    var st = ST();
+    var id = cardId != null ? String(cardId).trim() : '';
+    if (!id) return { ok: false, reason: 'no-card-id' };
+    var key =
+      sectionKey === 'started' || sectionKey === 'blocked' ? sectionKey : 'pending';
+
+    var settings = null;
+    var lists = [];
+    if (st && typeof st.ensureStatutSettings === 'function') {
+      try {
+        var ensured = await st.ensureStatutSettings(t);
+        settings = ensured && ensured.settings ? ensured.settings : null;
+      } catch (ensureErr) {
+        settings = null;
+      }
+    }
+    if (!settings && st && typeof st.readStatutSettings === 'function') {
+      try {
+        settings = await st.readStatutSettings(t);
+      } catch (readErr) {
+        settings = null;
+      }
+    }
+    if (st && typeof st.getBoardLists === 'function') {
+      try {
+        lists = (await st.getBoardLists(t)) || [];
+      } catch (listsErr) {
+        lists = [];
+      }
+    } else if (t && typeof t.lists === 'function') {
+      try {
+        lists = (await t.lists('id', 'name')) || [];
+      } catch (tListsErr) {
+        lists = [];
+      }
+    }
+
+    var listId = resolveStateSectionListId(lists, settings, key);
+
+    var blockedRes;
+    if (key === 'blocked') {
+      blockedRes = await setCardBlocked(t, id, true);
+    } else {
+      blockedRes = await setCardBlocked(t, id, false);
+      if (blockedRes && !blockedRes.ok && blockedRes.reason === 'no-inputs') {
+        blockedRes = { ok: true, skipped: true, reason: 'no-inputs' };
+      }
+    }
+    if (!blockedRes || !blockedRes.ok) {
+      return Object.assign(
+        { ok: false, sectionKey: key, listId: listId || null },
+        blockedRes || { reason: 'blocked-failed' }
+      );
+    }
+
+    if (!listId) {
+      return {
+        ok: true,
+        cardId: id,
+        sectionKey: key,
+        listId: null,
+        moved: false,
+        noListMapped: true,
+        blocked: blockedRes,
+      };
+    }
+
+    if (!pt || typeof pt.restPutCard !== 'function') {
+      return {
+        ok: false,
+        reason: 'no-restPutCard',
+        sectionKey: key,
+        listId: listId,
+        blocked: blockedRes,
+      };
+    }
+
+    var put = await pt.restPutCard(t, id, {
+      idList: String(listId),
+      pos: 'bottom',
+    });
+    if (!put || !put.ok) {
+      return {
+        ok: false,
+        reason: (put && put.reason) || 'move-failed',
+        sectionKey: key,
+        listId: listId,
+        blocked: blockedRes,
+        put: put || null,
+      };
+    }
+
+    return {
+      ok: true,
+      cardId: id,
+      sectionKey: key,
+      listId: listId,
+      moved: true,
+      blocked: blockedRes,
+    };
+  }
+
   global.GanttTrello = {
+    GANTT_SETTINGS_KEY: GANTT_SETTINGS_KEY,
+    DEFAULT_GANTT_SETTINGS: DEFAULT_GANTT_SETTINGS,
+    normalizeGanttSettings: normalizeGanttSettings,
+    getGanttSettings: getGanttSettings,
+    saveGanttSettings: saveGanttSettings,
     loadBoard: loadBoard,
     ensureRestAuthorized: ensureRestAuthorized,
     saveCardDates: saveCardDates,
     resolveCardDates: resolveCardDates,
     buildInputsForDates: buildInputsForDates,
+    firstListIdForCategories: firstListIdForCategories,
+    resolveStateSectionListId: resolveStateSectionListId,
+    moveCardToStateSection: moveCardToStateSection,
     setCardBlocked: setCardBlocked,
     clearCardBlocked: clearCardBlocked,
     setSubtaskDone: setSubtaskDone,

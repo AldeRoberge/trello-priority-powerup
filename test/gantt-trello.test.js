@@ -307,6 +307,7 @@ describe('GanttTrello dates', () => {
       {
         startDate: '2026-07-02',
         dueDate: '2026-07-09',
+        startTime: '',
         dueTime: '15:30',
       }
     );
@@ -521,6 +522,164 @@ describe('GanttTrello dates', () => {
         assert.equal(store.card1, undefined);
       }
     );
+  });
+
+  it('setCardBlocked seeds DEFAULT_INPUTS when enabling with no stored inputs', async () => {
+    const store = {};
+    await withPriorityTrello(
+      {
+        CARD_PRIORITY_KEY: 'cardPriority',
+        DEFAULT_INPUTS: { urgency: 2, impact: 2, ease: 3 },
+        getCardInputsById: async () => null,
+        normalizeInputs: (inputs) => inputs,
+      },
+      async () => {
+        const res = await GanttTrello.setCardBlocked(fakeT(store), 'card1', true);
+        assert.equal(res.ok, true);
+        assert.equal(store.card1.cardPriority.enAttente, true);
+        assert.equal(store.card1.cardPriority.urgency, 2);
+        assert.equal(store.card1.cardPriority.priorityEnabled, false);
+      }
+    );
+  });
+
+  it('resolveStateSectionListId picks started, pending, and blocked lists', () => {
+    const lists = [
+      { id: 'l-triage', name: 'Inbox' },
+      { id: 'l-start', name: 'Doing' },
+      { id: 'l-wait', name: 'Todo' },
+      { id: 'l-block', name: 'Blocked' },
+    ];
+    const settings = {
+      listCategories: {
+        'l-triage': 'triage',
+        'l-start': 'started',
+        'l-wait': 'unstarted',
+        'l-block': 'blocked',
+      },
+      roleLists: { blocked: 'l-block' },
+    };
+    assert.equal(
+      GanttTrello.resolveStateSectionListId(lists, settings, 'started'),
+      'l-start'
+    );
+    assert.equal(
+      GanttTrello.resolveStateSectionListId(lists, settings, 'pending'),
+      'l-wait'
+    );
+    assert.equal(
+      GanttTrello.resolveStateSectionListId(lists, settings, 'blocked'),
+      'l-block'
+    );
+    assert.equal(
+      GanttTrello.firstListIdForCategories(lists, settings, ['backlog', 'triage']),
+      'l-triage'
+    );
+  });
+
+  it('moveCardToStateSection clears blocked and moves to started list', async () => {
+    const store = {};
+    const puts = [];
+    const previousST = global.StatutTrello;
+    global.StatutTrello = {
+      ensureStatutSettings: async () => ({
+        settings: {
+          listCategories: { 'list-started': 'started', 'list-todo': 'unstarted' },
+          roleLists: { blocked: null },
+        },
+      }),
+      getBoardLists: async () => [
+        { id: 'list-started', name: 'Doing' },
+        { id: 'list-todo', name: 'Todo' },
+      ],
+    };
+    try {
+      await withPriorityTrello(
+        {
+          CARD_PRIORITY_KEY: 'cardPriority',
+          getCardInputsById: async () => ({
+            urgency: 2,
+            impact: 2,
+            ease: 3,
+            enAttente: true,
+          }),
+          clearBlockedFromInputs: (inputs) => ({
+            urgency: inputs.urgency,
+            impact: inputs.impact,
+            ease: inputs.ease,
+          }),
+          normalizeInputs: (inputs) => inputs,
+          restPutCard: async (_t, cardId, body) => {
+            puts.push({ cardId, body });
+            return { ok: true };
+          },
+        },
+        async () => {
+          const res = await GanttTrello.moveCardToStateSection(
+            fakeT(store),
+            'card1',
+            'started'
+          );
+          assert.equal(res.ok, true);
+          assert.equal(res.sectionKey, 'started');
+          assert.equal(res.listId, 'list-started');
+          assert.equal(res.moved, true);
+          assert.equal(store.card1.cardPriority.enAttente, undefined);
+          assert.equal(puts.length, 1);
+          assert.equal(puts[0].cardId, 'card1');
+          assert.equal(puts[0].body.idList, 'list-started');
+        }
+      );
+    } finally {
+      global.StatutTrello = previousST;
+    }
+  });
+
+  it('moveCardToStateSection sets blocked and moves to blocked list', async () => {
+    const store = {};
+    const puts = [];
+    const previousST = global.StatutTrello;
+    global.StatutTrello = {
+      ensureStatutSettings: async () => ({
+        settings: {
+          listCategories: { 'list-block': 'blocked' },
+          roleLists: { blocked: 'list-block' },
+        },
+      }),
+      getBoardLists: async () => [{ id: 'list-block', name: 'Blocked' }],
+    };
+    try {
+      await withPriorityTrello(
+        {
+          CARD_PRIORITY_KEY: 'cardPriority',
+          DEFAULT_INPUTS: { urgency: 2, impact: 2, ease: 3 },
+          getCardInputsById: async () => ({
+            urgency: 1,
+            impact: 1,
+            ease: 2,
+          }),
+          normalizeInputs: (inputs) => inputs,
+          restPutCard: async (_t, cardId, body) => {
+            puts.push({ cardId, body });
+            return { ok: true };
+          },
+        },
+        async () => {
+          const res = await GanttTrello.moveCardToStateSection(
+            fakeT(store),
+            'card9',
+            'blocked'
+          );
+          assert.equal(res.ok, true);
+          assert.equal(res.sectionKey, 'blocked');
+          assert.equal(res.listId, 'list-block');
+          assert.equal(store.card9.cardPriority.enAttente, true);
+          assert.equal(puts[0].body.idList, 'list-block');
+        }
+      );
+    } finally {
+      global.StatutTrello = previousST;
+    }
   });
 
   it('loadBoard builds nest tree from board cards', async () => {

@@ -477,6 +477,40 @@
   border-bottom-color: var(--tp-border, #091e4224);
 }
 
+.gantt-row--section.is-drop-target {
+  background: var(--tp-selected, #deebff);
+  outline: 2px solid var(--tp-primary, #0c66e4);
+  outline-offset: -2px;
+}
+
+.gantt-row.is-section-draggable {
+  cursor: grab;
+}
+
+.gantt-row.is-dragging-section {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+
+.gantt-root.is-section-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.gantt-section-drag-ghost {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: var(--tp-primary, #0c66e4);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(9, 30, 66, 0.25);
+  white-space: nowrap;
+}
+
 .gantt-row--section.is-started {
   box-shadow: inset 3px 0 0 var(--tp-primary, #0c66e4);
 }
