@@ -6,7 +6,7 @@
   <title>Trello Cerveau</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=panel-width-1" />
+  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=popup-boot-2" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-5" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css?v=recurring-hint-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
@@ -2107,33 +2107,6 @@
         }
       }
 
-      var completionSnap =
-        (completionUi && typeof completionUi.getData === 'function'
-          ? completionUi.getData()
-          : null) ||
-        latestCompletion ||
-        { items: [] };
-      var enrichment = {
-        summaryText: '',
-        blockedReasons: [],
-        tasks: [],
-        tasksDone: 0,
-        tasksTotal: 0
-      };
-      if (
-        window.PriorityUI &&
-        typeof PriorityUI.buildOverviewEnrichment === 'function'
-      ) {
-        enrichment = PriorityUI.buildOverviewEnrichment(completionSnap, {
-          progressPercent: progressPercent,
-          progressBlocked: progressBlocked,
-          statusCategory: statusCategory,
-          blockedReasons: state.blockedReasons || state.blockedReason,
-          links: state.blockedLinks || state.blockedLink,
-          items: completionSnap.items || []
-        });
-      }
-
       overviewUi.setData({
         title: readCardNameLabel() || cardNameCache || '',
         status: statusLabel,
@@ -2147,11 +2120,6 @@
         dueDays: dueDays,
         priorityLabel: priorityLabel,
         priorityColor: priorityColor,
-        summaryText: enrichment.summaryText || '',
-        blockedReasons: enrichment.blockedReasons || [],
-        tasks: enrichment.tasks || [],
-        tasksDone: enrichment.tasksDone != null ? enrichment.tasksDone : 0,
-        tasksTotal: enrichment.tasksTotal != null ? enrichment.tasksTotal : 0,
         features: {
           statut: overviewFeatureOn('statut'),
           progress: overviewFeatureOn('progress'),
@@ -2647,152 +2615,13 @@
       resizePopup();
     }
 
-    function overviewCompleteCard() {
-      if (completionUi && typeof completionUi.toggleMasterComplete === 'function') {
-        completionUi.toggleMasterComplete();
-      } else if (
-        window.CompletionTrello &&
-        typeof CompletionTrello.markFullyComplete === 'function'
-      ) {
-        var live =
-          (completionUi && typeof completionUi.getData === 'function'
-            ? completionUi.getData()
-            : null) ||
-          latestCompletion ||
-          { items: [] };
-        var next = withProgressEnabledFlag(
-          CompletionTrello.markFullyComplete(live)
-        );
-        latestCompletion = next;
-        if (completionUi && typeof completionUi.setData === 'function') {
-          completionUi.setData(next);
-        }
-        saveCompletion(next);
-      }
-      syncOverview();
-      resizePopup();
-    }
-
-    function overviewBlockWithReasons(reasons) {
-      var list =
-        window.PriorityUI && typeof PriorityUI.normalizeBlockedReasons === 'function'
-          ? PriorityUI.normalizeBlockedReasons(reasons)
-          : Array.isArray(reasons)
-            ? reasons.filter(Boolean)
-            : [];
-      if (!list.length) return;
-
-      if (completionUi && typeof completionUi.setMasterBlockedReasons === 'function') {
-        latestCompletion = withProgressEnabledFlag(
-          completionUi.setMasterBlockedReasons(list, { origin: 'user' })
-        );
-      } else if (window.CompletionTrello) {
-        var liveBlock =
-          (completionUi && typeof completionUi.getData === 'function'
-            ? completionUi.getData()
-            : null) ||
-          latestCompletion ||
-          { items: [] };
-        var nextBlock = withProgressEnabledFlag(
-          CompletionTrello.setMasterBlockedReasons(liveBlock, list, {
-            origin: 'user'
-          })
-        );
-        latestCompletion = nextBlock;
-        if (completionUi && typeof completionUi.setData === 'function') {
-          completionUi.setData(nextBlock);
-        }
-        saveCompletion(nextBlock);
-      }
-
-      if (variant && typeof variant.setState === 'function') {
-        variant.setState(
-          Object.assign({}, variant.getState(), {
-            enAttente: true,
-            blockedReasons: list
-          })
-        );
-      }
-      syncProgressFromPriorityBlocked({ enAttente: true });
-
-      var alreadyBlocked =
-        latestStatut &&
-        (latestStatut.category === 'blocked' ||
-          (statutUi &&
-            typeof statutUi.getCategory === 'function' &&
-            statutUi.getCategory() === 'blocked'));
-      if (!alreadyBlocked && typeof applyStatutListSelection === 'function') {
-        var lists = (latestStatut && latestStatut.lists) || [];
-        var blockedId = null;
-        for (var bi = 0; bi < lists.length; bi++) {
-          if (lists[bi] && lists[bi].category === 'blocked' && lists[bi].id) {
-            blockedId = lists[bi].id;
-            break;
-          }
-        }
-        if (
-          !blockedId &&
-          latestStatut &&
-          latestStatut.roleLists &&
-          latestStatut.roleLists.blocked
-        ) {
-          blockedId = latestStatut.roleLists.blocked;
-        }
-        if (blockedId) applyStatutListSelection(blockedId);
-      }
-      if (
-        statutUi &&
-        typeof statutUi.syncBlockedPanel === 'function'
-      ) {
-        statutUi.syncBlockedPanel();
-      }
-      syncOverview();
-      resizePopup();
-    }
-
-    function overviewAddSubtask(text) {
-      var label = typeof text === 'string' ? text.trim() : '';
-      if (!label) return;
-      if (completionUi && typeof completionUi.addItem === 'function') {
-        completionUi.addItem(label);
-      }
-      syncOverview();
-      resizePopup();
-    }
-
-    function overviewToggleTask(itemId) {
-      var id = itemId != null ? String(itemId) : '';
-      if (!id) return;
-      if (completionUi && typeof completionUi.toggleItemDoneById === 'function') {
-        completionUi.toggleItemDoneById(id);
-      }
-      syncOverview();
-      resizePopup();
-    }
-
-    function handleOverviewAction(actionId, payload) {
+    function handleOverviewAction(actionId) {
       if (actionId === 'unblock') {
         overviewUnblockCard();
         return;
       }
       if (actionId === 'postpone-tomorrow') {
         overviewPostponeDueTomorrow();
-        return;
-      }
-      if (actionId === 'complete') {
-        overviewCompleteCard();
-        return;
-      }
-      if (actionId === 'block') {
-        overviewBlockWithReasons(payload && payload.reasons);
-        return;
-      }
-      if (actionId === 'add-subtask') {
-        overviewAddSubtask(payload && payload.text);
-        return;
-      }
-      if (actionId === 'toggle-task') {
-        overviewToggleTask(payload && payload.id);
       }
     }
 
