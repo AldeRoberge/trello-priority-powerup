@@ -4448,7 +4448,6 @@ html[data-color-mode='dark'] .overview-action-chip:hover {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  align-self: center;
   margin-left: auto;
   padding: 2px;
   border-radius: 7px;
@@ -5900,11 +5899,23 @@ html[data-color-mode="dark"] .due-date-time-clock {
 }
 
 .due-date-countdown-primary {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 22px;
   font-weight: 650;
   letter-spacing: -0.02em;
   color: var(--text-primary);
   line-height: 1.25;
+}
+
+.due-date-countdown.is-empty {
+  margin-bottom: 8px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.due-date-countdown.is-empty .due-date-countdown-primary:empty {
+  flex: 1 1 auto;
 }
 
 .due-date-countdown-secondary {
@@ -5930,6 +5941,10 @@ html[data-color-mode="dark"] .due-date-time-clock {
 
 .due-date-countdown[hidden] {
   display: none;
+}
+
+.due-date-countdown .due-date-mode-switch {
+  align-self: center;
 }
 
 /* ── Compact field ── */

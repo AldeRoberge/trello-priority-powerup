@@ -15511,6 +15511,26 @@
     chrome.title.id = uid + '-label';
     field.appendChild(chrome.head);
 
+    var body = document.createElement('div');
+    body.className = 'due-date-body section-toggle-body';
+    body.id = bodyId;
+
+    var countdown = document.createElement('div');
+    countdown.className = 'due-date-countdown';
+    countdown.id = uid + '-desc';
+    countdown.setAttribute('aria-live', 'polite');
+
+    var countdownPrimaryRow = document.createElement('div');
+    countdownPrimaryRow.className = 'due-date-countdown-primary-row';
+    var countdownDot = document.createElement('span');
+    countdownDot.className = 'heat-tier-dot due-date-countdown-dot';
+    countdownDot.setAttribute('aria-hidden', 'true');
+    countdownDot.hidden = true;
+    var countdownPrimary = document.createElement('div');
+    countdownPrimary.className = 'due-date-countdown-primary';
+    countdownPrimaryRow.appendChild(countdownDot);
+    countdownPrimaryRow.appendChild(countdownPrimary);
+
     var modeSwitch = document.createElement('div');
     modeSwitch.className = 'due-date-mode-switch';
     modeSwitch.setAttribute('role', 'radiogroup');
@@ -15545,28 +15565,7 @@
       DUE_DATE_MODE_VAGUE_LABEL,
       'ti-tilde'
     );
-    chrome.head.appendChild(modeSwitch);
-
-    var body = document.createElement('div');
-    body.className = 'due-date-body section-toggle-body';
-    body.id = bodyId;
-
-    var countdown = document.createElement('div');
-    countdown.className = 'due-date-countdown';
-    countdown.id = uid + '-desc';
-    countdown.setAttribute('aria-live', 'polite');
-    countdown.hidden = true;
-
-    var countdownPrimaryRow = document.createElement('div');
-    countdownPrimaryRow.className = 'due-date-countdown-primary-row';
-    var countdownDot = document.createElement('span');
-    countdownDot.className = 'heat-tier-dot due-date-countdown-dot';
-    countdownDot.setAttribute('aria-hidden', 'true');
-    countdownDot.hidden = true;
-    var countdownPrimary = document.createElement('div');
-    countdownPrimary.className = 'due-date-countdown-primary';
-    countdownPrimaryRow.appendChild(countdownDot);
-    countdownPrimaryRow.appendChild(countdownPrimary);
+    countdownPrimaryRow.appendChild(modeSwitch);
 
     var countdownSecondary = document.createElement('div');
     countdownSecondary.className = 'due-date-countdown-secondary';
@@ -16708,12 +16707,14 @@
 
     function refreshCountdown() {
       var hasVague = currentMode === DUE_DATE_MODE_VAGUE && !!currentVague;
+      // Mode switch lives on the countdown row — keep the shell visible.
+      countdown.hidden = false;
       if (!current && !hasVague) {
         countdownPrimary.textContent = '';
         countdownSecondary.textContent = '';
         countdownSecondary.hidden = true;
-        countdown.hidden = true;
         countdown.classList.remove('is-past');
+        countdown.classList.add('is-empty');
         field.classList.remove('has-due-date');
         paintCountdownDot('');
         clearDueProximityBand(field);
@@ -16734,19 +16735,19 @@
         countdownPrimary.textContent = '';
         countdownSecondary.textContent = '';
         countdownSecondary.hidden = true;
-        countdown.hidden = true;
         countdown.classList.remove('is-past');
+        countdown.classList.add('is-empty');
         field.classList.remove('has-due-date');
         paintCountdownDot('');
         clearDueProximityBand(field);
         if (collapseApi) collapseApi.refreshSummary();
         return;
       }
+      countdown.classList.remove('is-empty');
       if (hasVague) {
         countdownPrimary.textContent = formatDueVagueCountdown(currentVague);
         countdownSecondary.textContent = '';
         countdownSecondary.hidden = true;
-        countdown.hidden = !countdownPrimary.textContent;
         countdown.classList.remove('is-past');
         field.classList.add('has-due-date');
         if (current) {
@@ -16766,7 +16767,6 @@
       countdownPrimary.textContent = human.primary || '';
       countdownSecondary.textContent = human.secondary || '';
       countdownSecondary.hidden = !human.secondary;
-      countdown.hidden = !human.primary;
       countdown.classList.toggle('is-past', past);
       field.classList.add('has-due-date');
       applyDueProximityBand(field, band);
