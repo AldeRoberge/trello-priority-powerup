@@ -1422,13 +1422,21 @@ body.tp-page--priority {
 /* Fullscreen (even without Assistant): use the full modal width */
 .tp-page--priority.is-cerveau-fullscreen {
   max-width: none;
-  height: 100%;
   margin: 0;
+}
+
+/* Without the Assistant split, let the document scroll normally in the modal. */
+body.tp-page--priority.is-cerveau-fullscreen:not(.is-split-assistant) {
+  height: auto;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 /* Fullscreen split: card form left, Assistant rail right */
 body.tp-page--priority.is-split-assistant {
   overflow: hidden;
+  height: 100%;
 }
 
 .tp-page--priority.is-split-assistant {
@@ -1445,6 +1453,7 @@ body.tp-page--priority.is-split-assistant {
 .tp-page--priority.is-split-assistant .compare-page {
   height: 100%;
   max-height: 100%;
+  min-height: 0;
   padding: 8px 12px 12px;
   box-sizing: border-box;
   overflow: hidden;
@@ -1462,8 +1471,10 @@ body.tp-page--priority.is-split-assistant {
 .tp-page--priority.is-split-assistant .cerveau-main {
   flex: 1 1 auto;
   min-width: 0;
+  min-height: 0; /* required so overflow-y can scroll inside the flex row */
   overflow-x: hidden;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .tp-page--priority.is-split-assistant .cerveau-assistant {
