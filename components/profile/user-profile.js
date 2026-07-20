@@ -221,6 +221,8 @@
       agentFace: 'classic',
       /** Opt-in console diagnostics (member-scoped; not sent to the LLM). */
       debugLogging: false,
+      /** Open the Cerveau editor modal automatically when a card is opened. */
+      autoOpenCerveau: true,
       updatedAt: ''
     };
   }
@@ -474,6 +476,8 @@
       agentColor: normalizeAgentColor(src.agentColor),
       agentFace: normalizeAgentFace(src.agentFace),
       debugLogging: src.debugLogging === true,
+      // Default ON — only an explicit false disables auto-open.
+      autoOpenCerveau: src.autoOpenCerveau !== false,
       updatedAt: typeof src.updatedAt === 'string' ? src.updatedAt : ''
     };
   }
@@ -492,6 +496,10 @@
 
   function isDebugLoggingEnabled(profile) {
     return normalizeProfile(profile).debugLogging === true;
+  }
+
+  function isAutoOpenCerveauEnabled(profile) {
+    return normalizeProfile(profile).autoOpenCerveau !== false;
   }
 
   function featureSelector(key) {
@@ -802,6 +810,7 @@
     isFeatureEnabled: isFeatureEnabled,
     isExperimentalEnabled: isExperimentalEnabled,
     isDebugLoggingEnabled: isDebugLoggingEnabled,
+    isAutoOpenCerveauEnabled: isAutoOpenCerveauEnabled,
     applyFeaturesToCard: applyFeaturesToCard,
     toAgentContext: toAgentContext,
     profilePromptLines: profilePromptLines,

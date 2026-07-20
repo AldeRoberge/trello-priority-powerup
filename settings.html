@@ -199,9 +199,9 @@
 
   <details class="tp-settings-section" id="displaySettingsSection">
     <summary class="tp-settings-summary">
-      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-clock"></i></span>
+      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-layout"></i></span>
       <span class="tp-settings-summary-title">Affichage</span>
-      <span class="tp-settings-summary-hint">Format d’heure (par membre)</span>
+      <span class="tp-settings-summary-hint">Heure et ouverture de carte (par membre)</span>
     </summary>
     <div class="tp-settings-body">
       <p class="tp-color-scheme-hint">Choisissez comment les heures s’affichent dans l’échéance et le sélecteur. Préférence personnelle (membre).</p>
@@ -215,6 +215,13 @@
           <span>12 heures (2:30 PM)</span>
         </label>
       </div>
+
+      <p class="tp-color-scheme-hint" style="margin-top:14px">À l’ouverture d’une carte Trello</p>
+      <label class="tp-statut-toggle">
+        <input type="checkbox" id="autoOpenCerveauToggle" />
+        <span>Ouvrir automatiquement l’éditeur Cerveau</span>
+      </label>
+      <p class="tp-color-scheme-hint">Si désactivé, utilisez le badge Priorité, le bouton de la section, ou « Ouvrir » sur le dos de la carte. Préférence personnelle (membre).</p>
     </div>
   </details>
 
@@ -611,6 +618,7 @@
     async function initDisplaySettings() {
       var section = document.getElementById('displaySettingsSection');
       var wrap = document.getElementById('timeFormatOptions');
+      var autoOpenToggle = document.getElementById('autoOpenCerveauToggle');
       var Profile = window.UserProfile;
       if (!section || !wrap || !Profile) {
         if (section) section.hidden = true;
@@ -635,22 +643,39 @@
         }
       }
 
-      function persistTimeFormat() {
+      function applyAutoOpenUi(enabled) {
+        if (autoOpenToggle) {
+          autoOpenToggle.checked = enabled !== false;
+        }
+      }
+
+      function persistDisplaySettings() {
         if (!profileState) return;
         var selected = wrap.querySelector('input[name="timeFormat"]:checked');
         var nextFormat = selected ? selected.value : '24';
+        var nextAutoOpen = autoOpenToggle ? !!autoOpenToggle.checked : true;
         clearTimeout(saveTimer);
         saveTimer = setTimeout(function () {
           var next = Profile.normalizeProfile(
-            Object.assign({}, profileState, { timeFormat: nextFormat })
+            Object.assign({}, profileState, {
+              timeFormat: nextFormat,
+              autoOpenCerveau: nextAutoOpen,
+            })
           );
           Profile.save(t, next)
             .then(function (saved) {
               profileState = saved;
               applyTimeFormatUi(saved.timeFormat);
+              applyAutoOpenUi(saved.autoOpenCerveau);
+              if (window.TpDebug && typeof TpDebug.log === 'function') {
+                TpDebug.log('settings', 'display.saved', {
+                  timeFormat: saved.timeFormat,
+                  autoOpenCerveau: saved.autoOpenCerveau !== false,
+                });
+              }
             })
             .catch(function (err) {
-              console.error('Time format save failed', err);
+              console.error('Display settings save failed', err);
             });
         }, 180);
       }
@@ -658,7 +683,11 @@
       try {
         profileState = await Profile.load(t);
         applyTimeFormatUi(profileState.timeFormat);
-        wrap.addEventListener('change', persistTimeFormat);
+        applyAutoOpenUi(profileState.autoOpenCerveau);
+        wrap.addEventListener('change', persistDisplaySettings);
+        if (autoOpenToggle) {
+          autoOpenToggle.addEventListener('change', persistDisplaySettings);
+        }
         resizeSettingsPopup();
       } catch (err) {
         console.error('Display settings init failed', err);

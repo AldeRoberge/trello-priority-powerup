@@ -165,3 +165,36 @@ describe('UserProfile.debugLogging', () => {
     g.TpDebug.configure(false);
   });
 });
+
+describe('UserProfile.autoOpenCerveau', () => {
+  beforeEach(() => {
+    clearComponentCache();
+    delete global.UserProfile;
+  });
+
+  it('defaults autoOpenCerveau to true', () => {
+    const g = loadComponent('profile/user-profile.js');
+    const empty = g.UserProfile.emptyProfile();
+    assert.equal(empty.autoOpenCerveau, true);
+    assert.equal(g.UserProfile.isAutoOpenCerveauEnabled(empty), true);
+    assert.equal(g.UserProfile.isAutoOpenCerveauEnabled({}), true);
+  });
+
+  it('only an explicit false disables auto-open', () => {
+    const g = loadComponent('profile/user-profile.js');
+    assert.equal(g.UserProfile.normalizeProfile({ autoOpenCerveau: false }).autoOpenCerveau, false);
+    assert.equal(g.UserProfile.normalizeProfile({ autoOpenCerveau: true }).autoOpenCerveau, true);
+    assert.equal(g.UserProfile.normalizeProfile({}).autoOpenCerveau, true);
+    assert.equal(g.UserProfile.isAutoOpenCerveauEnabled({ autoOpenCerveau: false }), false);
+  });
+
+  it('excludes autoOpenCerveau from agent context', () => {
+    const g = loadComponent('profile/user-profile.js');
+    const ctx = g.UserProfile.toAgentContext({
+      autoOpenCerveau: false,
+      displayName: 'Alex',
+    });
+    assert.equal('autoOpenCerveau' in ctx, false);
+    assert.equal(ctx.displayName, 'Alex');
+  });
+});

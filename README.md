@@ -187,7 +187,7 @@ Dépannage tri / capacités : voir [Trier une colonne par priorité](#trier-une-
 
 ### Définir une priorité
 
-1. Ouvrir une carte — le modal **Cerveau** s’ouvre automatiquement (sinon badge **Priorité** ou bouton de la section)
+1. Ouvrir une carte — le modal **Cerveau** s’ouvre automatiquement si l’option est activée (**Paramètres du Cerveau → Affichage** ; sinon badge **Priorité** ou bouton de la section)
 2. Ajuster les curseurs ou toucher un palier sur la barre de chaleur — le badge apparaît sur la carte
 
 ### Infos et guide

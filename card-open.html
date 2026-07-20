@@ -9,6 +9,7 @@
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/debug-log.js"></script>
   <script src="./components/priority/priority-trello.js"></script>
+  <script src="./components/profile/user-profile.js"></script>
   <link rel="stylesheet" href="./components/shared/trello-theme.css" />
   <style>
     body.tp-card-open {
@@ -53,6 +54,7 @@
       }
 
       var openBtn = document.getElementById('openBtn');
+      var hintEl = document.getElementById('hint');
       if (openBtn) openBtn.textContent = 'Ouvrir ' + appName;
 
       function storageKey(cardId) {
@@ -67,6 +69,29 @@
             /* ignore */
           }
         }
+      }
+
+      function setHint(autoEnabled) {
+        if (!hintEl) return;
+        hintEl.textContent = autoEnabled
+          ? 'S’ouvre automatiquement à l’ouverture de la carte.'
+          : 'Ouverture auto désactivée — Paramètres du Cerveau → Affichage.';
+      }
+
+      function loadAutoOpenPreference(t) {
+        if (typeof UserProfile === 'undefined' || typeof UserProfile.load !== 'function') {
+          return Promise.resolve(true);
+        }
+        return UserProfile.load(t)
+          .then(function (profile) {
+            if (typeof UserProfile.isAutoOpenCerveauEnabled === 'function') {
+              return UserProfile.isAutoOpenCerveauEnabled(profile);
+            }
+            return !profile || profile.autoOpenCerveau !== false;
+          })
+          .catch(function () {
+            return true;
+          });
       }
 
       function openCerveauModal(t, options) {
@@ -138,16 +163,26 @@
 
         resize(t);
 
-        return openCerveauModal(t).then(
-          function () {
-            resize(t);
-          },
-          function (err) {
-            if (window.TpDebug) TpDebug.error('cardOpen', 'modal.auto', err);
-            else console.error('Cerveau auto-open failed', err);
-            resize(t);
+        return loadAutoOpenPreference(t).then(function (autoEnabled) {
+          setHint(autoEnabled);
+          resize(t);
+          if (!autoEnabled) {
+            if (window.TpDebug) {
+              TpDebug.log('cardOpen', 'modal.skip', { reason: 'pref-disabled' });
+            }
+            return null;
           }
-        );
+          return openCerveauModal(t).then(
+            function () {
+              resize(t);
+            },
+            function (err) {
+              if (window.TpDebug) TpDebug.error('cardOpen', 'modal.auto', err);
+              else console.error('Cerveau auto-open failed', err);
+              resize(t);
+            }
+          );
+        });
       });
     })();
   </script>
