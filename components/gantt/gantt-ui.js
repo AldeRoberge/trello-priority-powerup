@@ -18,6 +18,14 @@
     sortBy: 'date',
     sortDir: 'asc',
   };
+  // Minimum header-column width per zoom mode. When the viewport is narrower,
+  // the timeline grows past the scrollport so columns stay readable.
+  var MIN_COL_W = {
+    day: 32,
+    week: 88,
+    month: 30,
+    year: 72,
+  };
   // Priority dot for tiers strictly above Importante (Critique / Urgente / Prioritaire).
   var PRIORITY_FIRE_TIER_MAX = 2;
 
@@ -188,6 +196,25 @@
     return Math.max(LABELS_W_MIN, Math.min(max, w));
   }
 
+  function minColumnWidth(mode) {
+    var m =
+      GM() && typeof GM().normalizeViewMode === 'function'
+        ? GM().normalizeViewMode(mode)
+        : mode;
+    return MIN_COL_W[m] || MIN_COL_W.week;
+  }
+
+  /**
+   * Timeline pixel width for the current zoom: fill the scrollport when possible,
+   * otherwise expand so each header column keeps a readable minimum width.
+   */
+  function computeTimelineWidth(availPx, mode, columnCount) {
+    var avail = Math.max(0, Math.round(Number(availPx) || 0));
+    var cols = Math.max(1, Math.round(Number(columnCount) || 1));
+    var minContent = cols * minColumnWidth(mode);
+    return Math.max(avail, minContent, 1);
+  }
+
   function el(tag, className, attrs) {
     var node = document.createElement(tag);
     if (className) node.className = className;
@@ -286,6 +313,7 @@
       timelineWidth: MIN_TIMELINE_W,
       labelsWidth: readStoredLabelsWidth(),
       widthMeasured: false,
+      pendingScrollLeft: null,
       drag: null,
       paint: null,
       splitDrag: null,
@@ -327,6 +355,71 @@
     mount.innerHTML = '';
     mount.appendChild(root);
 
+    var measureRaf = 0;
+    var resizeObserver = null;
+
+    function availableTimelineWidth(scrollEl) {
+      var chartEl = body.querySelector('.gantt-chart');
+      if (chartEl && chartEl.clientWidth > 0) {
+        // Measure from the chart shell so a horizontal scrollbar inside the
+        // scrollport cannot shrink avail and fight the content width.
+        return Math.max(0, chartEl.clientWidth - state.labelsWidth - 5);
+      }
+      return (scrollEl && scrollEl.clientWidth) || 0;
+    }
+
+    function applyTimelineWidth(nextW, scrollLeft) {
+      var w = Math.round(Number(nextW) || 0);
+      if (w < 1) return false;
+      if (Math.abs(w - state.timelineWidth) <= 2 && state.widthMeasured) {
+        return false;
+      }
+      if (typeof scrollLeft === 'number' && isFinite(scrollLeft)) {
+        state.pendingScrollLeft = scrollLeft;
+      }
+      state.timelineWidth = w;
+      state.widthMeasured = true;
+      return true;
+    }
+
+    function remeasureTimeline(force) {
+      if (state.splitDrag || state.drag || state.paint) return;
+      var scroll = body.querySelector('.gantt-timeline-scroll');
+      if (!scroll) return;
+      var avail = availableTimelineWidth(scroll);
+      if (avail < 1) return;
+      var r = range();
+      var nextW = computeTimelineWidth(
+        avail,
+        state.viewMode,
+        r.columns && r.columns.length
+      );
+      if (!force && Math.abs(nextW - state.timelineWidth) <= 2) {
+        state.widthMeasured = true;
+        return;
+      }
+      if (applyTimelineWidth(nextW, scroll.scrollLeft)) {
+        renderChart();
+      }
+    }
+
+    function scheduleRemeasure() {
+      if (measureRaf) return;
+      measureRaf = requestAnimationFrame(function () {
+        measureRaf = 0;
+        remeasureTimeline(false);
+      });
+    }
+
+    if (typeof global.ResizeObserver === 'function') {
+      resizeObserver = new global.ResizeObserver(function () {
+        scheduleRemeasure();
+      });
+      resizeObserver.observe(root);
+    } else if (typeof global.addEventListener === 'function') {
+      global.addEventListener('resize', scheduleRemeasure);
+    }
+
     function bindLabelsSplitter(splitter, labelsCol, chartEl, scrollEl) {
       splitter.addEventListener('pointerdown', function (ev) {
         if (ev.button != null && ev.button !== 0) return;
@@ -363,14 +456,8 @@
           state.labelsWidth = clampLabelsWidth(state.labelsWidth, chartEl);
           storeLabelsWidth(state.labelsWidth);
           labelsCol.style.width = state.labelsWidth + 'px';
-          // Remeasure timeline so day grid matches the new calendar width.
-          var avail = (scrollEl && scrollEl.clientWidth) || MIN_TIMELINE_W;
-          var nextW = Math.max(MIN_TIMELINE_W, avail);
-          if (Math.abs(nextW - state.timelineWidth) > 4) {
-            state.timelineWidth = nextW;
-            state.widthMeasured = true;
-            renderChart();
-          }
+          // Remeasure timeline so the day grid matches the new calendar width.
+          remeasureTimeline(true);
         }
 
         splitter.addEventListener('pointermove', onMove);
@@ -412,19 +499,52 @@
       return start === end ? start : start + ' \u2192 ' + end;
     }
 
+    /** Compact duration for the bar center, e.g. "45 min", "2h 30", "1j 3h". */
+    function formatDurationSummary(interval) {
+      if (!interval || !interval.start || !interval.end) return '';
+      var ms = interval.end.getTime() - interval.start.getTime();
+      if (!isFinite(ms) || ms < 0) ms = 0;
+      var mins = Math.round(ms / (model.MS_MINUTE || 60000));
+      if (mins < 60) return mins + ' min';
+      var days = Math.floor(mins / (24 * 60));
+      var rem = mins - days * 24 * 60;
+      var hours = Math.floor(rem / 60);
+      var m = rem % 60;
+      var parts = [];
+      if (days > 0) parts.push(days + 'j');
+      if (hours > 0) parts.push(hours + 'h');
+      if (m > 0 && days === 0) parts.push(String(m));
+      if (!parts.length) return '0 min';
+      if (days === 0 && hours > 0 && m > 0) return hours + 'h ' + m;
+      return parts.join(' ');
+    }
+
     function formatBarLabel(row, interval) {
       var pct = Math.round((row && row.progress) || 0) + '%';
+      if (interval && interval.hasTime && usesTimedTimeline()) {
+        var dur = formatDurationSummary(interval);
+        if (dur) return dur + ' \u00b7 ' + pct;
+      }
+      return pct;
+    }
+
+    function makeBarEdge(side, interval) {
+      var edge = el(
+        'span',
+        'gantt-bar-edge gantt-bar-edge--' + side
+      );
+      var timeEl = el('span', 'gantt-bar-edge-time');
       if (
         interval &&
         interval.hasTime &&
-        usesTimedTimeline() &&
         typeof model.toIsoTime === 'function'
       ) {
-        var a = model.toIsoTime(interval.start);
-        var b = model.toIsoTime(interval.end);
-        if (a && b) return a + '\u2013' + b + ' \u00b7 ' + pct;
+        timeEl.textContent = model.toIsoTime(
+          side === 'start' ? interval.start : interval.end
+        );
       }
-      return pct;
+      edge.appendChild(timeEl);
+      return edge;
     }
 
     function visibleRows() {
@@ -2661,7 +2781,7 @@
             else next.end = next.start;
           }
           applyIntervalToRow(row, next);
-          updateBarEl(barEl, row, next);
+          updateBarEl(barEl, row, next, state.drag.mode);
         }
 
         function onUp() {
@@ -2670,10 +2790,15 @@
           barEl.removeEventListener('pointerup', onUp);
           barEl.removeEventListener('pointercancel', onUp);
           barEl.classList.remove('is-dragging');
+          var startEdge = barEl.querySelector('.gantt-bar-edge--start');
+          var endEdge = barEl.querySelector('.gantt-bar-edge--end');
+          if (startEdge) startEdge.classList.remove('is-active');
+          if (endEdge) endEdge.classList.remove('is-active');
           var drag = state.drag;
           state.drag = null;
           if (!drag) return;
           var finalInterval = model.resolveBarInterval(row, intervalOptions());
+          if (finalInterval) updateBarEl(barEl, row, finalInterval, null);
           if (
             finalInterval &&
             (finalInterval.start.getTime() !== drag.origin.start.getTime() ||
@@ -2691,7 +2816,7 @@
       barEl.addEventListener('pointerdown', onPointerDown);
     }
 
-    function updateBarEl(barEl, row, interval) {
+    function updateBarEl(barEl, row, interval, dragMode) {
       var r = range();
       var geo = model.barGeometry(interval, r, state.timelineWidth);
       if (!geo || !geo.visible) {
@@ -2711,9 +2836,30 @@
       if (labelEl) {
         labelEl.textContent = formatBarLabel(row, interval);
       }
+      var startEdge = barEl.querySelector('.gantt-bar-edge--start');
+      var endEdge = barEl.querySelector('.gantt-bar-edge--end');
+      var startTimeEl = startEdge && startEdge.querySelector('.gantt-bar-edge-time');
+      var endTimeEl = endEdge && endEdge.querySelector('.gantt-bar-edge-time');
+      if (interval && interval.hasTime && typeof model.toIsoTime === 'function') {
+        if (startTimeEl) startTimeEl.textContent = model.toIsoTime(interval.start);
+        if (endTimeEl) endTimeEl.textContent = model.toIsoTime(interval.end);
+      }
+      if (startEdge) {
+        startEdge.classList.toggle('is-active', dragMode === 'start');
+      }
+      if (endEdge) {
+        endEdge.classList.toggle('is-active', dragMode === 'end');
+      }
     }
 
     function renderChart() {
+      var restoreLeft = state.pendingScrollLeft;
+      state.pendingScrollLeft = null;
+      if (restoreLeft == null) {
+        var prevScroll = body.querySelector('.gantt-timeline-scroll');
+        if (prevScroll) restoreLeft = prevScroll.scrollLeft;
+      }
+
       body.innerHTML = '';
       if (state.loading) {
         body.appendChild(el('div', 'gantt-empty', { text: 'Chargement\u2026' }));
@@ -2729,9 +2875,11 @@
       var chart = el('div', 'gantt-chart');
       var labelsCol = el('div', 'gantt-labels');
       var timelineCol = el('div', 'gantt-timeline');
-      var dayCount = model.rangeDayCount(r);
-      var dayW = state.timelineWidth / Math.max(1, dayCount);
-      timelineCol.style.setProperty('--gantt-day-w', dayW + 'px');
+      // Grid lines follow header columns (hours / days / months), not raw day count —
+      // year view would otherwise paint hundreds of hairlines.
+      var colCount = Math.max(1, (r.columns && r.columns.length) || 1);
+      var colW = state.timelineWidth / colCount;
+      timelineCol.style.setProperty('--gantt-day-w', colW + 'px');
       timelineCol.style.width = state.timelineWidth + 'px';
 
       var headerLabels = el('div', 'gantt-row gantt-row--header');
@@ -3140,8 +3288,8 @@
             bar.appendChild(label);
 
             if (row.kind === 'card') {
-              bar.appendChild(el('span', 'gantt-bar-edge gantt-bar-edge--start'));
-              bar.appendChild(el('span', 'gantt-bar-edge gantt-bar-edge--end'));
+              bar.appendChild(makeBarEdge('start', interval));
+              bar.appendChild(makeBarEdge('end', interval));
               var clearBtn = el('button', 'gantt-bar-clear', {
                 type: 'button',
                 title: 'Effacer les dates',
@@ -3205,14 +3353,14 @@
         syncScroll(scroll, labelsCol);
       });
 
-      // Measure available width once (or when viewport changed a lot).
       requestAnimationFrame(function () {
-        var avail = scroll.clientWidth || MIN_TIMELINE_W;
-        var nextW = Math.max(MIN_TIMELINE_W, avail);
-        if (!state.widthMeasured || Math.abs(nextW - state.timelineWidth) > 48) {
-          state.widthMeasured = true;
-          if (Math.abs(nextW - state.timelineWidth) > 8) {
-            state.timelineWidth = nextW;
+        if (restoreLeft != null && isFinite(restoreLeft)) {
+          scroll.scrollLeft = restoreLeft;
+        }
+        var avail = availableTimelineWidth(scroll);
+        var nextW = computeTimelineWidth(avail, state.viewMode, colCount);
+        if (!state.widthMeasured || Math.abs(nextW - state.timelineWidth) > 2) {
+          if (applyTimelineWidth(nextW, scroll.scrollLeft)) {
             renderChart();
           }
         }
@@ -3304,6 +3452,16 @@
 
     return {
       destroy: function () {
+        if (measureRaf) {
+          cancelAnimationFrame(measureRaf);
+          measureRaf = 0;
+        }
+        if (resizeObserver) {
+          resizeObserver.disconnect();
+          resizeObserver = null;
+        } else if (typeof global.removeEventListener === 'function') {
+          global.removeEventListener('resize', scheduleRemeasure);
+        }
         closeMiniPopover({ reload: false });
         closeCardOverlay({ reload: false });
         mount.innerHTML = '';
@@ -3318,6 +3476,8 @@
   global.GanttUI = {
     mountGantt: mountGantt,
     clampLabelsWidth: clampLabelsWidth,
+    minColumnWidth: minColumnWidth,
+    computeTimelineWidth: computeTimelineWidth,
     readStoredLabelsWidth: readStoredLabelsWidth,
     storeLabelsWidth: storeLabelsWidth,
     readStoredFilters: readStoredFilters,
@@ -3328,5 +3488,6 @@
     LABELS_W_STORAGE_KEY: LABELS_W_STORAGE_KEY,
     FILTERS_STORAGE_KEY: FILTERS_STORAGE_KEY,
     DEFAULT_FILTERS: DEFAULT_FILTERS,
+    MIN_COL_W: MIN_COL_W,
   };
 })(typeof window !== 'undefined' ? window : this);
