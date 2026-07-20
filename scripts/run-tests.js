@@ -45,6 +45,7 @@ const UNIT_FILES = [
   'agent-claims.test.js',
   'agent-due-vague.test.js',
   'agent-parity.test.js',
+  'agent-parity-more.test.js',
   'interview-why-guards.test.js',
   'add-subtask-dedupe.test.js',
   'gantt-model.test.js',

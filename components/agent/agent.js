@@ -132,6 +132,15 @@
     set_project: 'Projet li\u00e9.',
     set_members: 'Assign\u00e9s mis \u00e0 jour.',
     set_labels: '\u00c9tiquettes mises \u00e0 jour.',
+    set_custom_assignees: 'Personnes assign\u00e9es mises \u00e0 jour.',
+    set_member_roles: 'R\u00f4les des assign\u00e9s mis \u00e0 jour.',
+    add_checklist_item: 'Sous-sous-t\u00e2che ajout\u00e9e.',
+    remove_checklist_item: 'Sous-sous-t\u00e2che supprim\u00e9e.',
+    rename_checklist_item: 'Sous-sous-t\u00e2che renomm\u00e9e.',
+    set_checklist_progress: 'Progr\u00e8s de sous-sous-t\u00e2che mis \u00e0 jour.',
+    history_undo: 'Modification annul\u00e9e.',
+    history_redo: 'Modification r\u00e9tablie.',
+    history_revert: 'Historique restaur\u00e9.',
     rename_card: 'Carte renomm\u00e9e.',
     set_description: 'Description mise \u00e0 jour.',
     add_subtask: 'Sous-t\u00e2che ajout\u00e9e.',
@@ -2508,6 +2517,62 @@
         }
       } catch (eBl) { /* ignore */ }
     }
+    if (typeof bridge.getPriorityState === 'function') {
+      try {
+        var priForPeople = bridge.getPriorityState() || {};
+        if (Array.isArray(priForPeople.customAssignees)) {
+          ctx.customAssignees = priForPeople.customAssignees
+            .map(function (p) {
+              if (!p || p.id == null) return null;
+              return {
+                id: String(p.id),
+                name: typeof p.name === 'string' ? p.name : ''
+              };
+            })
+            .filter(Boolean)
+            .slice(0, 20);
+        }
+        if (priForPeople.memberRoles && typeof priForPeople.memberRoles === 'object') {
+          ctx.memberRoles = priForPeople.memberRoles;
+        }
+      } catch (ePe) { /* ignore */ }
+    }
+    if (
+      typeof PriorityUI !== 'undefined' &&
+      typeof PriorityUI.getMemberRoleCatalog === 'function'
+    ) {
+      try {
+        ctx.memberRoleCatalog = (PriorityUI.getMemberRoleCatalog() || [])
+          .map(function (r) {
+            return r && r.id
+              ? { id: r.id, label: r.label || r.id }
+              : null;
+          })
+          .filter(Boolean)
+          .slice(0, 40);
+      } catch (eRc) { /* ignore */ }
+    }
+    if (typeof bridge.getHistory === 'function') {
+      try {
+        var histRaw = bridge.getHistory();
+        if (histRaw && typeof histRaw === 'object') {
+          ctx.history = {
+            canUndo: !!histRaw.canUndo,
+            canRedo: !!histRaw.canRedo,
+            entries: Array.isArray(histRaw.entries)
+              ? histRaw.entries.slice(0, 12).map(function (e) {
+                  return {
+                    id: e.id,
+                    label: e.label || '',
+                    undone: !!e.undone,
+                    at: e.at || null
+                  };
+                })
+              : []
+          };
+        }
+      } catch (eHi) { /* ignore */ }
+    }
     if (typeof bridge.getGoals === 'function') {
       try {
         var goalsRaw = bridge.getGoals();
@@ -3206,6 +3271,9 @@
       '- Assign\u00e9s\u00a0: \u00ab\u00a0assigne-moi\u00a0\u00bb / \u00ab\u00a0ajoute Alice\u00a0\u00bb \u2192 set_members {add:[...]}. \u00ab\u00a0retire Bob\u00a0\u00bb \u2192 remove. Utilise context.boardMembers / ownership.',
       '- Ex. assign\u00e9\u00a0: user \u00ab\u00a0assigne-moi\u00a0\u00bb \u2192 {"message":"Okay, tu es assign\u00e9.","suggestions":[],"followUps":[],"actions":[{"tool":"set_members","args":{"add":[{"id":"(context.ownership.you.id)"}]}}]} \u2014 remplace id par context.ownership.you.id r\u00e9el.',
       '- \u00c9tiquettes\u00a0: set_labels {add/remove/create}. create:{name,color?} si le label n\'existe pas encore sur le board.',
+      '- Personnes hors Trello\u00a0: set_custom_assignees {add:["Sam"]}. R\u00f4les\u00a0: set_member_roles {matchText:"Alice", roles:["Montage","Sous-titres"]}.',
+      '- Checklist (sous-sous-t\u00e2ches)\u00a0: add_checklist_item sous une sous-t\u00e2che locale (pas une carte li\u00e9e). Ex. {"tool":"add_checklist_item","args":{"parentMatchText":"Valider le devis","text":"Relire les chiffres"}}.',
+      '- Historique\u00a0: history_undo / history_redo, ou history_revert {matchLabel:"Priorit\u00e9"} / {steps:1}.',
       '- Si l\'utilisateur donne un d\u00e9lai (\u00ab\u00a0dans N minutes/heures\u00a0\u00bb)\u00a0: APPLIQUE set_due avec relativeMinutes/relativeHours (+ dueEnabled:true) TOUT DE SUITE. Ne redemande pas date ni heure.',
       '- Ex. d\u00e9lai\u00a0: user \u00ab\u00a0dans 15 minutes\u00a0\u00bb \u2192 {"message":"Okay, dans 15 minutes.","suggestions":["Marquer bloqu\u00e9","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_due","args":{"relativeMinutes":15,"dueEnabled":true}}]}',
       '- Ex. d\u00e9lai heures\u00a0: user \u00ab\u00a0dans 2 heures\u00a0\u00bb \u2192 {"message":"Okay, dans 2 heures.","suggestions":["Marquer bloqu\u00e9","Ajouter une sous-t\u00e2che"],"followUps":[],"actions":[{"tool":"set_due","args":{"relativeHours":2,"dueEnabled":true}}]}',
@@ -3353,7 +3421,7 @@
       '- Chaque bloc a un champ enabled. Si enabled=false, la section est d\u00e9sactiv\u00e9e\u00a0: les valeurs saved* / latentes NE comptent PAS.',
       '- Priorit\u00e9 active seulement si priority.enabled=true.',
       '- \u00c9ch\u00e9ance active seulement si due.enabled=true (sinon dueDate/dueTime actifs sont null). due.dueMode="vague" + due.dueVague + due.dueLabel d\u00e9crivent un horizon flou (\u00ab\u00a0\u00c0 faire \u00e9ventuellement\u00a0\u00bb)\u00a0; ne redemande pas une date pr\u00e9cise. due.startDate / due.recurrence d\u00e9crivent d\u00e9but et r\u00e9p\u00e9tition.',
-      '- Assign\u00e9s\u00a0: context.ownership.members (carte) + context.boardMembers (tableau). \u00c9tiquettes\u00a0: context.labels (carte) + context.boardLabels (tableau).',
+      '- Assign\u00e9s\u00a0: context.ownership.members (carte) + context.boardMembers (tableau). \u00c9tiquettes\u00a0: context.labels (carte) + context.boardLabels (tableau). Personnes custom\u00a0: context.customAssignees. R\u00f4les\u00a0: context.memberRoles + context.memberRoleCatalog. Historique\u00a0: context.history.',
       '- Bloqu\u00e9 / en attente actif SEULEMENT si blocked.enabled=true (identique \u00e0 enAttente\u00a0; la cause s\u2019\u00e9dite sous Statut quand la carte est en Bloqu\u00e9).',
       '- Si blocked.enabled=false, la carte N\'EST PAS bloqu\u00e9e, m\u00eame si savedReasons contient d\'anciennes causes.',
       '- Progr\u00e8s actif seulement si progress.enabled=true.',
@@ -3366,6 +3434,11 @@
       '- set_blocked: { enAttente?: boolean, blockedReasons?: string[], blockedLinks?: [{id?:string, matchText?:string, label?:string}] } (enAttente:true seul suffit\u00a0; causes et liens optionnels\u00a0; synchronise Progr\u00e8s blocked\u00a0; si progr\u00e8s \u00e0 100%, le runtime le remet \u00e0 0% \u2014 ajoute aussi set_progress)',
       '- set_members: { add?: (string|{id?,matchText?,name?})[], remove?: (string|{id?,matchText?})[], clear?: boolean } (assigne / retire des membres du tableau\u00a0; match via context.boardMembers / ownership.members)',
       '- set_labels: { add?: (string|{id?,matchText?,name?,color?})[], remove?: (string|{id?,matchText?})[], create?: {name:string, color?:string}, clear?: boolean } (\u00e9tiquettes Trello\u00a0; match via context.boardLabels / labels)',
+      '- set_custom_assignees: { add?: (string|{name})[], remove?: (string|{id?,matchText?})[], clear?: boolean } (personnes hors Trello sur la carte\u00a0; context.customAssignees)',
+      '- set_member_roles: { matchText|memberId|name, roles: string[], clear?: boolean } (r\u00f4les\u00a0: subtitles|coloring|editing|music ou libell\u00e9s FR\u00a0; context.memberRoleCatalog)',
+      '- add_checklist_item: { parentMatchText|parentId, text, done?, progress? } (sous-sous-t\u00e2che sous une sous-t\u00e2che locale)',
+      '- remove_checklist_item / rename_checklist_item / set_checklist_progress: { parentMatchText|parentId, matchText|id, text?, progress? }',
+      '- history_undo / history_redo: {} \u2014 history_revert: { entryId?|matchLabel?|steps? } (context.history)',
       '- set_progress: { progress?:0-100, progressEnabled?: boolean } (master sur sous-t\u00e2ches si items\u00a0; sinon progres carte)',
       '- set_subtask_estimate: { id?: string, matchText?: string, estimatedMinutes: number|null, estimatedDuration?: string }',
       '- set_progress_estimate: { estimatedMinutes: number|null, estimatedDuration?: string } (total master)',
@@ -7013,6 +7086,15 @@
       set_blocked: true,
       set_members: true,
       set_labels: true,
+      set_custom_assignees: true,
+      set_member_roles: true,
+      add_checklist_item: true,
+      remove_checklist_item: true,
+      rename_checklist_item: true,
+      set_checklist_progress: true,
+      history_undo: true,
+      history_redo: true,
+      history_revert: true,
       set_progress: true,
       set_project: true,
       add_subtask: true,
@@ -12311,6 +12393,112 @@
     return exact || partial;
   }
 
+  /** Resolve a member role id from catalog id or French label. */
+  function resolveMemberRoleId(raw) {
+    if (raw == null || raw === '') return '';
+    var asString = String(raw).trim();
+    if (!asString) return '';
+    if (
+      typeof PriorityUI !== 'undefined' &&
+      typeof PriorityUI.isValidMemberRoleId === 'function' &&
+      PriorityUI.isValidMemberRoleId(asString)
+    ) {
+      return asString;
+    }
+    var key = normalizeMatchKey(asString);
+    var catalog = [];
+    if (
+      typeof PriorityUI !== 'undefined' &&
+      typeof PriorityUI.getMemberRoleCatalog === 'function'
+    ) {
+      catalog = PriorityUI.getMemberRoleCatalog() || [];
+    } else if (
+      typeof PriorityUI !== 'undefined' &&
+      Array.isArray(PriorityUI.BUILTIN_MEMBER_ROLES)
+    ) {
+      catalog = PriorityUI.BUILTIN_MEMBER_ROLES;
+    }
+    for (var i = 0; i < catalog.length; i++) {
+      var entry = catalog[i];
+      if (!entry) continue;
+      if (String(entry.id) === asString) return entry.id;
+      if (normalizeMatchKey(entry.label || '') === key) return entry.id;
+    }
+    // Common aliases
+    if (key === 'sous-titres' || key === 'sous titres' || key === 'captions') {
+      return 'subtitles';
+    }
+    if (key === 'etalonnage' || key === 'color' || key === 'color grading') {
+      return 'coloring';
+    }
+    if (key === 'montage' || key === 'editing' || key === 'edit') {
+      return 'editing';
+    }
+    if (key.indexOf('musique') >= 0 || key === 'music' || key === 'sfx') {
+      return 'music';
+    }
+    return '';
+  }
+
+  function matchCustomAssignee(list, spec) {
+    var people = Array.isArray(list) ? list : [];
+    if (!people.length || spec == null || spec === '') return null;
+    var idWant = '';
+    var textWant = '';
+    if (typeof spec === 'string' || typeof spec === 'number') {
+      textWant = String(spec).trim();
+      idWant = textWant;
+    } else if (typeof spec === 'object') {
+      idWant = spec.id != null ? String(spec.id).trim() : '';
+      textWant =
+        (typeof spec.matchText === 'string' && spec.matchText) ||
+        (typeof spec.name === 'string' && spec.name) ||
+        (typeof spec.fullName === 'string' && spec.fullName) ||
+        '';
+      textWant = String(textWant).trim();
+    }
+    if (idWant) {
+      for (var i = 0; i < people.length; i++) {
+        if (people[i] && String(people[i].id) === idWant) return people[i];
+      }
+    }
+    var key = normalizeMatchKey(textWant);
+    if (!key) return null;
+    for (var j = 0; j < people.length; j++) {
+      if (normalizeMatchKey((people[j] && people[j].name) || '') === key) {
+        return people[j];
+      }
+    }
+    for (var k = 0; k < people.length; k++) {
+      var name = normalizeMatchKey((people[k] && people[k].name) || '');
+      if (name && name.indexOf(key) >= 0) return people[k];
+    }
+    return null;
+  }
+
+  function resolveChecklistParent(items, args) {
+    var parentArgs = {
+      id:
+        args && typeof args.parentId === 'string'
+          ? args.parentId
+          : args && typeof args.parent === 'string'
+            ? args.parent
+            : '',
+      matchText:
+        args && typeof args.parentMatchText === 'string'
+          ? args.parentMatchText
+          : args && typeof args.parentText === 'string'
+            ? args.parentText
+            : ''
+    };
+    return resolveSubtaskItem(items, parentArgs);
+  }
+
+  function resolveChecklistChild(parent, args) {
+    if (!parent || !Array.isArray(parent.items)) return null;
+    return resolveSubtaskItem(parent.items, args);
+  }
+
   function snapshotPriority(bridge) {
     var s =
       typeof bridge.getPriorityState === 'function' ? bridge.getPriorityState() || {} : {};
@@ -14954,6 +15142,477 @@
           })
         };
       }
+      if (tool === 'set_custom_assignees') {
+        if (typeof bridge.applyPriority !== 'function') {
+          return { ok: false, tool: tool, error: 'Bridge priorit\u00e9 indisponible' };
+        }
+        var beforePri = snapshotPriority(bridge);
+        var stateForPeople =
+          typeof bridge.getPriorityState === 'function'
+            ? bridge.getPriorityState() || {}
+            : {};
+        var people = Array.isArray(stateForPeople.customAssignees)
+          ? stateForPeople.customAssignees.slice()
+          : [];
+        if (
+          typeof PriorityUI !== 'undefined' &&
+          typeof PriorityUI.normalizeCustomAssignees === 'function'
+        ) {
+          people = PriorityUI.normalizeCustomAssignees(people);
+        }
+        if (args.clear === true) {
+          people = [];
+        }
+        var removePeople = [];
+        if (Array.isArray(args.remove)) removePeople = args.remove;
+        else if (args.remove != null) removePeople = [args.remove];
+        for (var rpi = 0; rpi < removePeople.length; rpi++) {
+          var hit = matchCustomAssignee(people, removePeople[rpi]);
+          if (!hit) {
+            return {
+              ok: false,
+              tool: tool,
+              error: 'Personne \u00e0 retirer introuvable'
+            };
+          }
+          people = people.filter(function (p) {
+            return !p || String(p.id) !== String(hit.id);
+          });
+        }
+        var addPeople = [];
+        if (Array.isArray(args.add)) addPeople = args.add;
+        else if (args.add != null) addPeople = [args.add];
+        for (var api = 0; api < addPeople.length; api++) {
+          var spec = addPeople[api];
+          var existing = matchCustomAssignee(people, spec);
+          if (existing) continue;
+          var created = null;
+          if (
+            typeof PriorityUI !== 'undefined' &&
+            typeof PriorityUI.createCustomAssignee === 'function'
+          ) {
+            created = PriorityUI.createCustomAssignee(spec);
+          }
+          if (!created || !created.name) {
+            return {
+              ok: false,
+              tool: tool,
+              error: 'Nom de personne requis'
+            };
+          }
+          people.push(created);
+        }
+        if (
+          typeof PriorityUI !== 'undefined' &&
+          typeof PriorityUI.normalizeCustomAssignees === 'function'
+        ) {
+          people = PriorityUI.normalizeCustomAssignees(people);
+        }
+        if (typeof bridge.setCustomAssignees === 'function') {
+          var peopleRes = await Promise.resolve(bridge.setCustomAssignees(people));
+          if (peopleRes && peopleRes.ok === false) {
+            return {
+              ok: false,
+              tool: tool,
+              error:
+                (peopleRes.reason || peopleRes.error) ||
+                'Personnes assign\u00e9es \u00e9chou\u00e9es'
+            };
+          }
+        } else {
+          bridge.applyPriority({ customAssignees: people });
+        }
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.set_custom_assignees,
+          detail: detailForTool(
+            tool,
+            beforePri,
+            snapshotPriority(bridge),
+            null,
+            null,
+            args,
+            { count: people.length }
+          )
+        };
+      }
+      if (tool === 'set_member_roles') {
+        if (typeof bridge.applyPriority !== 'function') {
+          return { ok: false, tool: tool, error: 'Bridge priorit\u00e9 indisponible' };
+        }
+        var stateRoles =
+          typeof bridge.getPriorityState === 'function'
+            ? bridge.getPriorityState() || {}
+            : {};
+        var rolesMap =
+          typeof PriorityUI !== 'undefined' &&
+          typeof PriorityUI.normalizeMemberRoles === 'function'
+            ? PriorityUI.normalizeMemberRoles(stateRoles.memberRoles)
+            : stateRoles.memberRoles && typeof stateRoles.memberRoles === 'object'
+              ? Object.assign({}, stateRoles.memberRoles)
+              : {};
+        var boardMembersForRoles = [];
+        if (typeof bridge.loadBoardMembers === 'function') {
+          boardMembersForRoles = await Promise.resolve(bridge.loadBoardMembers());
+        } else if (typeof bridge.getBoardMembers === 'function') {
+          boardMembersForRoles = bridge.getBoardMembers() || [];
+        }
+        var ownershipForRoles =
+          typeof bridge.getOwnership === 'function'
+            ? bridge.getOwnership() || {}
+            : {};
+        var poolMembers = (boardMembersForRoles || []).concat(
+          ownershipForRoles.members || []
+        );
+        var customsForRoles = Array.isArray(stateRoles.customAssignees)
+          ? stateRoles.customAssignees
+          : [];
+        var targetMember =
+          matchBoardMember(poolMembers, args) ||
+          matchCustomAssignee(customsForRoles, args);
+        if ((!targetMember || !targetMember.id) && args.memberId) {
+          targetMember = { id: String(args.memberId) };
+        }
+        if (!targetMember || !targetMember.id) {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Assign\u00e9 introuvable pour les r\u00f4les'
+          };
+        }
+        var mid = String(targetMember.id);
+        if (args.clear === true) {
+          delete rolesMap[mid];
+        } else {
+          var roleSpecs = Array.isArray(args.roles)
+            ? args.roles
+            : args.role != null
+              ? [args.role]
+              : [];
+          if (!roleSpecs.length) {
+            return {
+              ok: false,
+              tool: tool,
+              error: 'roles requis (ex. subtitles|Montage)'
+            };
+          }
+          var nextRoles = [];
+          for (var ri = 0; ri < roleSpecs.length; ri++) {
+            var rid = resolveMemberRoleId(roleSpecs[ri]);
+            if (!rid) {
+              return {
+                ok: false,
+                tool: tool,
+                error: 'R\u00f4le inconnu\u00a0: ' + String(roleSpecs[ri])
+              };
+            }
+            if (nextRoles.indexOf(rid) === -1) nextRoles.push(rid);
+          }
+          rolesMap[mid] = nextRoles;
+        }
+        if (
+          typeof PriorityUI !== 'undefined' &&
+          typeof PriorityUI.normalizeMemberRoles === 'function'
+        ) {
+          rolesMap = PriorityUI.normalizeMemberRoles(rolesMap);
+        }
+        if (typeof bridge.setMemberRoles === 'function') {
+          var rolesRes = await Promise.resolve(bridge.setMemberRoles(rolesMap));
+          if (rolesRes && rolesRes.ok === false) {
+            return {
+              ok: false,
+              tool: tool,
+              error:
+                (rolesRes.reason || rolesRes.error) ||
+                'R\u00f4les \u00e9chou\u00e9s'
+            };
+          }
+        } else {
+          bridge.applyPriority({ memberRoles: rolesMap });
+        }
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.set_member_roles,
+          detail: detailForTool(tool, null, null, null, null, args, {
+            memberId: mid,
+            roles: rolesMap[mid] || []
+          })
+        };
+      }
+      if (tool === 'add_checklist_item') {
+        if (
+          typeof bridge.applyCompletion !== 'function' ||
+          typeof CompletionTrello === 'undefined' ||
+          typeof CompletionTrello.addChecklistItem !== 'function'
+        ) {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Checklist indisponible'
+          };
+        }
+        var completionCl =
+          typeof bridge.getCompletion === 'function'
+            ? bridge.getCompletion()
+            : { items: [] };
+        var parentCl = resolveChecklistParent(
+          (completionCl && completionCl.items) || [],
+          args
+        );
+        if (!parentCl || !parentCl.id) {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Sous-t\u00e2che parente introuvable'
+          };
+        }
+        var childText =
+          typeof args.text === 'string'
+            ? args.text.trim()
+            : typeof args.name === 'string'
+              ? args.name.trim()
+              : '';
+        if (!childText) {
+          return { ok: false, tool: tool, error: 'text requis' };
+        }
+        var beforeCl = snapshotCompletion(bridge);
+        var addedCl = CompletionTrello.addChecklistItem(
+          completionCl,
+          parentCl.id,
+          childText,
+          {
+            done: args.done === true,
+            progress: args.progress,
+            estimatedMinutes: args.estimatedMinutes
+          }
+        );
+        if (!addedCl || !addedCl.item) {
+          return {
+            ok: false,
+            tool: tool,
+            error:
+              'Impossible d\'ajouter (parente li\u00e9e ou texte invalide)'
+          };
+        }
+        bridge.applyCompletion(addedCl.data);
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.add_checklist_item,
+          detail: detailForTool(
+            tool,
+            null,
+            null,
+            beforeCl,
+            snapshotCompletion(bridge),
+            args,
+            { parentId: parentCl.id, id: addedCl.item.id }
+          )
+        };
+      }
+      if (
+        tool === 'remove_checklist_item' ||
+        tool === 'rename_checklist_item' ||
+        tool === 'set_checklist_progress'
+      ) {
+        if (
+          typeof bridge.applyCompletion !== 'function' ||
+          typeof CompletionTrello === 'undefined'
+        ) {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Checklist indisponible'
+          };
+        }
+        var completionNest =
+          typeof bridge.getCompletion === 'function'
+            ? bridge.getCompletion()
+            : { items: [] };
+        var parentNest = resolveChecklistParent(
+          (completionNest && completionNest.items) || [],
+          args
+        );
+        if (!parentNest || !parentNest.id) {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Sous-t\u00e2che parente introuvable'
+          };
+        }
+        var childNest = resolveChecklistChild(parentNest, args);
+        if (!childNest || !childNest.id) {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Sous-sous-t\u00e2che introuvable'
+          };
+        }
+        var beforeNest = snapshotCompletion(bridge);
+        var nextNest = completionNest;
+        if (tool === 'remove_checklist_item') {
+          nextNest = CompletionTrello.removeChecklistItem(
+            completionNest,
+            parentNest.id,
+            childNest.id
+          );
+        } else if (tool === 'rename_checklist_item') {
+          var newNestText =
+            typeof args.text === 'string'
+              ? args.text.trim()
+              : typeof args.name === 'string'
+                ? args.name.trim()
+                : '';
+          if (!newNestText) {
+            return { ok: false, tool: tool, error: 'Nouveau text requis' };
+          }
+          nextNest = CompletionTrello.applyChecklistItemText(
+            completionNest,
+            parentNest.id,
+            childNest.id,
+            newNestText
+          );
+        } else {
+          var nestProgress = Number(args.progress);
+          if (!isFinite(nestProgress)) {
+            if (args.done === true) nestProgress = 100;
+            else if (args.done === false) nestProgress = 0;
+            else {
+              return {
+                ok: false,
+                tool: tool,
+                error: 'progress 0-100 requis'
+              };
+            }
+          }
+          nextNest = CompletionTrello.applyChecklistItemProgress(
+            completionNest,
+            parentNest.id,
+            childNest.id,
+            nestProgress
+          );
+        }
+        bridge.applyCompletion(nextNest);
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS[tool],
+          detail: detailForTool(
+            tool,
+            null,
+            null,
+            beforeNest,
+            snapshotCompletion(bridge),
+            args,
+            { parentId: parentNest.id, id: childNest.id }
+          )
+        };
+      }
+      if (
+        tool === 'history_undo' ||
+        tool === 'history_redo' ||
+        tool === 'history_revert'
+      ) {
+        if (tool === 'history_undo') {
+          if (typeof bridge.historyUndo !== 'function') {
+            return { ok: false, tool: tool, error: 'Historique indisponible' };
+          }
+          var undoRes = await Promise.resolve(bridge.historyUndo());
+          if (!undoRes) {
+            return { ok: false, tool: tool, error: 'Rien \u00e0 annuler' };
+          }
+          return {
+            ok: true,
+            tool: tool,
+            args: args,
+            summary: TOOL_LABELS.history_undo
+          };
+        }
+        if (tool === 'history_redo') {
+          if (typeof bridge.historyRedo !== 'function') {
+            return { ok: false, tool: tool, error: 'Historique indisponible' };
+          }
+          var redoRes = await Promise.resolve(bridge.historyRedo());
+          if (!redoRes) {
+            return { ok: false, tool: tool, error: 'Rien \u00e0 r\u00e9tablir' };
+          }
+          return {
+            ok: true,
+            tool: tool,
+            args: args,
+            summary: TOOL_LABELS.history_redo
+          };
+        }
+        if (typeof bridge.historyRevert !== 'function') {
+          return { ok: false, tool: tool, error: 'Historique indisponible' };
+        }
+        var entryId =
+          typeof args.entryId === 'string'
+            ? args.entryId.trim()
+            : typeof args.id === 'string'
+              ? args.id.trim()
+              : '';
+        if (!entryId && typeof bridge.getHistory === 'function') {
+          var hist = bridge.getHistory() || {};
+          var entries = Array.isArray(hist.entries) ? hist.entries : [];
+          var matchLabel =
+            typeof args.matchLabel === 'string'
+              ? args.matchLabel.trim()
+              : typeof args.label === 'string'
+                ? args.label.trim()
+                : '';
+          if (matchLabel) {
+            var needle = normalizeMatchKey(matchLabel);
+            for (var hi = 0; hi < entries.length; hi++) {
+              if (
+                entries[hi] &&
+                !entries[hi].undone &&
+                normalizeMatchKey(entries[hi].label || '').indexOf(needle) >= 0
+              ) {
+                entryId = entries[hi].id;
+                break;
+              }
+            }
+          } else if (args.steps != null) {
+            var steps = Math.max(1, Math.round(Number(args.steps)) || 1);
+            var active = entries.filter(function (e) {
+              return e && !e.undone;
+            });
+            var target = active[Math.min(steps, active.length) - 1];
+            if (target) entryId = target.id;
+          }
+        }
+        if (!entryId) {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'entryId ou matchLabel requis'
+          };
+        }
+        var revertRes = await Promise.resolve(bridge.historyRevert(entryId));
+        if (!revertRes) {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Entr\u00e9e d\'historique introuvable'
+          };
+        }
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.history_revert,
+          detail: detailForTool(tool, null, null, null, null, args, {
+            entryId: entryId
+          })
+        };
+      }
       return { ok: false, tool: tool, error: 'Outil inconnu\u00a0: ' + tool };
     } catch (err) {
       return {
@@ -15314,6 +15973,8 @@
     resolveDueVagueArg: resolveDueVagueArg,
     matchBoardMember: matchBoardMember,
     matchBoardLabel: matchBoardLabel,
+    matchCustomAssignee: matchCustomAssignee,
+    resolveMemberRoleId: resolveMemberRoleId,
     rewriteActionsForRelativeDue: rewriteActionsForRelativeDue,
     detectPriorityTierInText: detectPriorityTierInText,
     rewriteActionsForPriorityTier: rewriteActionsForPriorityTier,

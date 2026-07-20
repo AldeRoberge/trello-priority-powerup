@@ -7130,7 +7130,7 @@
             }
             latestState = Object.assign({}, next);
             if (infoUi && typeof infoUi.setMemberRoles === 'function') {
-              infoUi.setMemberRoles(map, customs);
+              infoUi.setMemberRoles(map);
             }
             return Promise.resolve(saveState(next)).then(function () {
               return commitHistoryNow('Rôles des assignés (assistant)').then(
