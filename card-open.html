@@ -83,7 +83,20 @@
       var overviewMount = document.getElementById('overviewMount');
       var overviewLoading = document.getElementById('overviewLoading');
       var overviewUi = null;
+      var overviewRefreshChain = Promise.resolve();
+      var overviewLiveSyncStarted = false;
+      var overviewLiveSyncTimer = null;
+      var appliedOverviewFp = '';
+      var LIVE_SYNC_POLL_MS = 3000;
       if (openBtn) openBtn.textContent = 'Ouvrir ' + appName;
+
+      function stableFp(value) {
+        try {
+          return JSON.stringify(value == null ? null : value);
+        } catch (e) {
+          return '';
+        }
+      }
 
       function storageKey(cardId) {
         return STORAGE_PREFIX + String(cardId || '');
@@ -113,6 +126,67 @@
           .catch(function () {
             return true;
           });
+      }
+
+      function applyOverviewSnap(snap, options) {
+        options = options || {};
+        var next = snap || {};
+        var fp = stableFp(next);
+        if (!options.force && fp && fp === appliedOverviewFp) {
+          resize(options.t);
+          return false;
+        }
+        appliedOverviewFp = fp;
+        if (overviewUi && typeof overviewUi.setData === 'function') {
+          overviewUi.setData(next);
+        }
+        resize(options.t);
+        return true;
+      }
+
+      function refreshOverview(t, options) {
+        options = options || {};
+        if (
+          !overviewUi ||
+          !window.PriorityTrello ||
+          typeof PriorityTrello.getCardOverviewSnapshot !== 'function'
+        ) {
+          return Promise.resolve(false);
+        }
+        overviewRefreshChain = overviewRefreshChain
+          .then(function () {
+            return PriorityTrello.getCardOverviewSnapshot(t);
+          })
+          .then(function (snap) {
+            return applyOverviewSnap(snap, { t: t, force: !!options.force });
+          })
+          .catch(function (err) {
+            if (window.TpDebug) TpDebug.error('cardOpen', 'overview.refresh', err);
+            else console.error('Card-back overview refresh failed', err);
+            return false;
+          });
+        return overviewRefreshChain;
+      }
+
+      function startOverviewLiveSync(t) {
+        if (overviewLiveSyncStarted) return;
+        overviewLiveSyncStarted = true;
+        if (window.TpDebug) TpDebug.log('cardOpen', 'overview.liveSync.start');
+        if (overviewLiveSyncTimer) clearInterval(overviewLiveSyncTimer);
+        overviewLiveSyncTimer = setInterval(function () {
+          if (document.visibilityState === 'hidden') return;
+          refreshOverview(t);
+        }, LIVE_SYNC_POLL_MS);
+        if (typeof t.render === 'function') {
+          t.render(function () {
+            refreshOverview(t);
+          });
+        }
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible') {
+            refreshOverview(t);
+          }
+        });
       }
 
       function openCerveauModal(t, options) {
@@ -164,6 +238,9 @@
                   /* ignore */
                 }
                 if (window.TpDebug) TpDebug.log('cardOpen', 'modal.closed');
+                // Modal edits land in shared plugin data; refresh the strip
+                // immediately so users do not need to close/reopen the card.
+                refreshOverview(t, { force: true });
               },
             });
           });
@@ -214,10 +291,8 @@
             if (overviewLoading && overviewLoading.parentNode) {
               overviewLoading.parentNode.removeChild(overviewLoading);
             }
-            if (overviewUi && typeof overviewUi.setData === 'function') {
-              overviewUi.setData(snap || {});
-            }
-            resize(t);
+            applyOverviewSnap(snap, { t: t, force: true });
+            startOverviewLiveSync(t);
           })
           .catch(function (err) {
             if (overviewLoading) {
@@ -226,6 +301,8 @@
             if (window.TpDebug) TpDebug.error('cardOpen', 'overview.load', err);
             else console.error('Card-back overview load failed', err);
             resize(t);
+            // Still listen so a later successful fetch can paint the strip.
+            startOverviewLiveSync(t);
           });
       }
 

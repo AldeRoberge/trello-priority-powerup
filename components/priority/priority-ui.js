@@ -3634,6 +3634,7 @@
   var DUE_DATE_CALENDAR_LABEL = 'Calendrier d\'\u00e9ch\u00e9ance';
   var DUE_DATE_BOX_LABEL = 'Date';
   var DUE_DATE_CLEAR_LABEL = 'Effacer la date';
+  var DUE_DATE_MASTER_CLEAR_LABEL = 'Effacer la date et l\'heure';
   var DUE_DATE_START_LABEL = 'D\u00e9but';
   var DUE_DATE_START_CLEAR_LABEL = 'Effacer la date de d\u00e9but';
   var DUE_DATE_START_PLACEHOLDER = 'Ajouter une date de d\u00e9but';
@@ -15856,6 +15857,15 @@
       expandLabel: 'D\u00e9velopper \u00c9ch\u00e9ance'
     });
     chrome.title.id = uid + '-label';
+
+    var masterClearBtn = document.createElement('button');
+    masterClearBtn.type = 'button';
+    masterClearBtn.className = 'due-date-master-clear';
+    masterClearBtn.setAttribute('aria-label', DUE_DATE_MASTER_CLEAR_LABEL);
+    masterClearBtn.title = DUE_DATE_MASTER_CLEAR_LABEL;
+    masterClearBtn.hidden = true;
+    masterClearBtn.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
+    chrome.head.appendChild(masterClearBtn);
     field.appendChild(chrome.head);
 
     var body = document.createElement('div');
@@ -17084,6 +17094,22 @@
       return vagueEligible;
     }
 
+    function syncMasterClearBtn(hasDue) {
+      masterClearBtn.hidden = !hasDue;
+    }
+
+    function clearDueDateAndTime() {
+      if (currentTime) rememberedTime = currentTime;
+      current = '';
+      currentTime = '';
+      currentVague = '';
+      rememberedVague = '';
+      playPriorityUiSound('trash');
+      emitChange();
+      if (open) renderCalendar();
+      if (timeOpen) syncTimePickerSelection();
+    }
+
     function refreshCountdown() {
       var hasVague = currentMode === DUE_DATE_MODE_VAGUE && !!currentVague;
       var vagueEligible = refreshVagueToggle();
@@ -17095,6 +17121,7 @@
         countdown.classList.add('is-empty');
         countdown.hidden = !vagueEligible;
         field.classList.remove('has-due-date');
+        syncMasterClearBtn(false);
         paintCountdownDot('');
         clearDueProximityBand(field);
         refreshTimeRow();
@@ -17119,12 +17146,14 @@
         countdown.classList.add('is-empty');
         countdown.hidden = !vagueEligible;
         field.classList.remove('has-due-date');
+        syncMasterClearBtn(false);
         paintCountdownDot('');
         clearDueProximityBand(field);
         if (collapseApi) collapseApi.refreshSummary();
         return;
       }
       countdown.classList.remove('is-empty');
+      syncMasterClearBtn(true);
       if (hasVague) {
         countdownPrimary.textContent = formatDueVagueCountdown(currentVague);
         countdownSecondary.textContent = '';
@@ -17960,18 +17989,18 @@
       notifyLayout();
     }
 
+    masterClearBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!enabled) return;
+      clearDueDateAndTime();
+    });
+
     dateTrashBtn.addEventListener('click', function (event) {
       event.preventDefault();
       event.stopPropagation();
       if (!enabled) return;
-      if (currentTime) rememberedTime = currentTime;
-      current = '';
-      currentTime = '';
-      currentVague = '';
-      rememberedVague = '';
-      playPriorityUiSound('trash');
-      emitChange();
-      if (open) renderCalendar();
+      clearDueDateAndTime();
     });
 
     preciseModeBtn.addEventListener('click', function () {

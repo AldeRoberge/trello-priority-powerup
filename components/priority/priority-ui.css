@@ -3893,6 +3893,40 @@ html[data-color-mode='dark'] .overview-action-chip:hover {
   color: var(--text-primary);
 }
 
+.due-date-master-clear {
+  flex-shrink: 0;
+  align-self: center;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.due-date-master-clear:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.due-date-master-clear:focus-visible {
+  outline: 2px solid var(--due-accent, var(--focus-ring-strong, #0c66e4));
+  outline-offset: 1px;
+}
+
+.due-date-master-clear[hidden] {
+  display: none;
+}
+
 /* Expanded: body content replaces the header summary */
 .field:not(.is-collapsed) > .section-toggle-head .section-toggle-summary {
   display: none;
