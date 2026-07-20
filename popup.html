@@ -6,11 +6,11 @@
   <title>Trello Cerveau</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=subtask-plus-title-1" />
+  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=split-assistant-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-5" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css?v=facilite-slider-2" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
-  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=agent-scope-1" />
+  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=split-assistant-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
   <link rel="stylesheet" href="./components/history/history-ui.css?v=history-6" />
   <link rel="icon" type="image/png" href="./assets/icon.png" />
@@ -91,17 +91,46 @@
     </div>
   </div>
   <div class="compare-page" id="popupMain">
-    <div class="compare-grid" id="priorityMount"></div>
+    <div class="cerveau-shell" id="cerveauShell">
+      <div class="cerveau-main">
+        <div class="compare-grid" id="priorityMount"></div>
+      </div>
+      <aside class="cerveau-assistant" id="assistantRail" hidden></aside>
+    </div>
   </div>
   <div class="tp-build-info tp-popup-build-info" id="buildInfo" hidden></div>
 
   <script>
+    // Visible before the Power-Up handshake so nested/broken hosts are not a blank spin.
+    (function earlyBootWatch() {
+      var el = document.getElementById('popupBootMsg');
+      if (!el) return;
+      setTimeout(function () {
+        if (!document.body || !document.body.classList.contains('is-booting')) return;
+        if (el.getAttribute('data-boot-alive') === '1') return;
+        el.textContent = 'Connexion \u00e0 Trello\u2026';
+      }, 2500);
+      setTimeout(function () {
+        if (!document.body || !document.body.classList.contains('is-booting')) return;
+        if (el.getAttribute('data-boot-alive') === '1') return;
+        el.textContent =
+          'Toujours en attente de Trello. Fermez et rouvrez la carte depuis le Gantt.';
+        document.body.classList.add('is-boot-error');
+        var boot = document.getElementById('popupBoot');
+        if (boot) boot.classList.add('is-error');
+      }, 12000);
+    })();
+
     PriorityTrello.initIframePage(function (t) {
+    var bootMsg = document.getElementById('popupBootMsg');
+    if (bootMsg) bootMsg.setAttribute('data-boot-alive', '1');
     if (window.TpDebug && typeof TpDebug.configureFromProfile === 'function') {
       TpDebug.configureFromProfile(t).then(function (on) {
         if (on) TpDebug.log('popup', 'page.init');
       });
     }
+    // popup.html is opened as a fullscreen Trello modal (form + Assistant rail).
+    document.body.classList.add('is-cerveau-fullscreen');
 
     var POPUP_BOOT_TIMEOUT_MS = 12000;
     var bootTimer = null;
@@ -1888,6 +1917,27 @@
           console.error('Completion dueComplete sync failed', err);
         });
       return dueCompleteSyncChain;
+    }
+
+    /** Move Assistant into the right rail for the fullscreen split layout. */
+    function placeAssistantInRail(agentUi) {
+      var rail = document.getElementById('assistantRail');
+      var chatSection =
+        (agentUi && agentUi.el) ||
+        (variant &&
+          variant.card &&
+          variant.card.querySelector('.variant-chat-section'));
+      if (!rail || !chatSection) return;
+      rail.appendChild(chatSection);
+      rail.hidden = false;
+      document.body.classList.add('is-split-assistant');
+      if (
+        agentUi &&
+        agentUi.collapse &&
+        typeof agentUi.collapse.setExpanded === 'function'
+      ) {
+        agentUi.collapse.setExpanded(true);
+      }
     }
 
     function resizePopup() {
@@ -6448,12 +6498,14 @@
       var focusProgress = openSection === 'progress';
       var focusPriority = openSection === 'priority';
       var focusObjectif = openSection === 'objectif';
+      var focusDue = openSection === 'due';
+      var focusBlocked = openSection === 'blocked';
       var focusSection = focusProgress
         ? 'progress'
         : focusPriority
           ? 'priority'
-          : focusObjectif
-            ? null
+          : focusDue
+            ? 'due'
             : null;
 
       const hasSavedPriority = !!inputs;
@@ -6613,7 +6665,7 @@
         agentUi = AgentUI.mount(variant.card, {
           t: t,
           scope: 'task',
-          initiallyOpen: focusProgress,
+          initiallyOpen: true,
           focusComposer: focusProgress,
           getScope: function () {
             return 'task';
@@ -7234,6 +7286,8 @@
         skipBootStep('history');
       }
 
+      placeAssistantInRail(agentUi);
+
       beginBootStep('ready');
       if (window.UserProfile && typeof UserProfile.applyFeaturesToCard === 'function' && variant && variant.card) {
         UserProfile.applyFeaturesToCard(variant.card, cachedProfile);
@@ -7243,6 +7297,10 @@
       await cardNamePromise;
       if (focusProgress && agentUi && typeof agentUi.focusComposer === 'function') {
         agentUi.focusComposer();
+      } else if (focusBlocked && typeof jumpToSection === 'function') {
+        jumpToSection('blocked');
+      } else if (focusDue && typeof jumpToSection === 'function') {
+        jumpToSection('due');
       } else if (focusObjectif && objectifSection) {
         if (infoUi && typeof infoUi.setExpanded === 'function') {
           infoUi.setExpanded(true);

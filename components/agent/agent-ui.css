@@ -314,6 +314,47 @@
   max-height: none;
 }
 
+/* Fullscreen right rail — same fill behavior as standalone assistant */
+.tp-page--priority.is-split-assistant .cerveau-assistant .variant-chat-section {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tp-page--priority.is-split-assistant .cerveau-assistant .field--chat {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  margin: 0;
+  padding: 10px 12px 12px;
+}
+
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-chat-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-top: 8px;
+}
+
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-chat-panel {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-messages {
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: none;
+}
+
 .tp-page--assistant {
   margin: 0;
   padding: 0;

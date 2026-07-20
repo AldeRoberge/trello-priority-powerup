@@ -157,7 +157,7 @@
     }
 
     async function openPriorityPopup(t, options) {
-      // Popup width is fixed (narrow) by Trello; modal gives a comfortable editor width.
+      // Fullscreen so the form + assistant can sit side-by-side.
       // Use pageUrl (absolute, unsigned) — t.modal signs once; t.signUrl() double-signs.
       // Pass card name via args so the iframe can show it immediately (reliable card context).
       // openSection expands that section inside popup.html (priority / progress / objectif).
@@ -190,7 +190,7 @@
         url: PriorityTrello.pageUrl('./popup.html'),
         args: args,
         height: 1100,
-        fullscreen: false,
+        fullscreen: true,
         accentColor: '#22272B',
       });
     }
