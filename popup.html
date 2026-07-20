@@ -32,7 +32,7 @@
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
     }
   </script>
-  <script src="./components/priority/priority-trello.js?v=gantt-sizeTo-2"></script>
+  <script src="./components/priority/priority-trello.js?v=gantt-overlay-boot-1"></script>
   <script src="./components/statut/statut-match.js?v=attente-hourglass-1"></script>
   <script src="./components/statut/statut-trello.js?v=encours-progress-1"></script>
   <script src="./components/shared/tab-autocomplete.js?v=tab-complete-1"></script>
@@ -893,20 +893,36 @@
 
     /** Live Trello card fields — bypass getCardName (prefers stale popup arg). */
     function fetchLiveCardInfo() {
-      var basicsPromise = t
-        .card('name', 'desc')
-        .then(function (card) {
-          return {
-            name:
-              card && typeof card.name === 'string' ? card.name : '',
-            desc:
-              card && typeof card.desc === 'string' ? card.desc : '',
-          };
-        })
-        .catch(function (err) {
-          console.error('Live sync card basics failed', err);
-          return { name: null, desc: null };
-        });
+      var basicsPromise;
+      if (
+        window.PriorityTrello &&
+        typeof PriorityTrello.cardDataPromise === 'function'
+      ) {
+        basicsPromise = PriorityTrello.cardDataPromise(t, 'name', 'desc')
+          .then(function (card) {
+            return {
+              name: card && typeof card.name === 'string' ? card.name : '',
+              desc: card && typeof card.desc === 'string' ? card.desc : '',
+            };
+          })
+          .catch(function (err) {
+            console.error('Live sync card basics failed', err);
+            return { name: null, desc: null };
+          });
+      } else {
+        basicsPromise = t
+          .card('name', 'desc')
+          .then(function (card) {
+            return {
+              name: card && typeof card.name === 'string' ? card.name : '',
+              desc: card && typeof card.desc === 'string' ? card.desc : '',
+            };
+          })
+          .catch(function (err) {
+            console.error('Live sync card basics failed', err);
+            return { name: null, desc: null };
+          });
+      }
 
       return Promise.all([
         basicsPromise,
@@ -6290,12 +6306,15 @@
 
       beginBootStep('card');
       try {
-        var cardBasics = await t.card('name', 'desc');
-        if (cardBasics && typeof cardBasics.desc === 'string') {
-          cardDesc = cardBasics.desc;
+        // Prefer helpers: Gantt overlay passes cardId/cardName args (no t.card context).
+        // Bare await t.card() can hang forever in that host.
+        if (typeof PriorityTrello.getCardName === 'function') {
+          var resolvedName = await PriorityTrello.getCardName(t);
+          if (resolvedName) cardNameCache = resolvedName;
         }
-        if (cardBasics && typeof cardBasics.name === 'string' && cardBasics.name.trim()) {
-          cardNameCache = cardBasics.name.trim();
+        if (typeof PriorityTrello.getCardDesc === 'function') {
+          var resolvedDesc = await PriorityTrello.getCardDesc(t);
+          if (typeof resolvedDesc === 'string') cardDesc = resolvedDesc;
         }
         if (cardNameCache) {
           beginBootStep(

@@ -94,23 +94,8 @@ describe('iframe client options', () => {
     assert.equal(PT.isFullscreenModal(tNormal), false);
   });
 
-  it('sizeToContent skips Gantt overlay embed and nested iframes', () => {
+  it('sizeToContent skips nested iframes', () => {
     let sizeCalls = 0;
-    const tOverlay = {
-      getContext() {
-        return { fullscreen: false };
-      },
-      arg(key) {
-        return key === 'embed' ? 'overlay' : null;
-      },
-      sizeTo() {
-        sizeCalls += 1;
-      },
-    };
-    PT.sizeToContent(tOverlay);
-    assert.equal(sizeCalls, 0);
-    assert.equal(PT.shouldSkipSizeTo(tOverlay), true);
-
     const prevParent = global.parent;
     const prevTop = global.top;
     try {
@@ -128,11 +113,50 @@ describe('iframe client options', () => {
         },
       };
       assert.equal(PT.isNestedPowerUpIframe(), true);
+      assert.equal(PT.shouldSkipSizeTo(tNested), true);
       PT.sizeToContent(tNested);
       assert.equal(sizeCalls, 0);
     } finally {
       global.parent = prevParent;
       global.top = prevTop;
     }
+  });
+
+  it('cardDataPromise uses REST when cardId arg is set', async () => {
+    const urls = [];
+    global.fetch = async (url) => {
+      urls.push(String(url));
+      return {
+        ok: true,
+        async json() {
+          return { id: 'card123', name: 'From REST', desc: 'Body' };
+        },
+      };
+    };
+    const t = {
+      arg(key) {
+        return key === 'cardId' ? 'card123' : null;
+      },
+      async getRestApi() {
+        return {
+          async isAuthorized() {
+            return true;
+          },
+          async getToken() {
+            return 'tok';
+          },
+        };
+      },
+      card() {
+        throw new Error('t.card should not be used for overlay cardId');
+      },
+    };
+    global.PriorityRestConfig = { appKey: 'key', appAuthor: 'Test' };
+    const card = await PT.cardDataPromise(t, 'name', 'desc');
+    assert.equal(card.name, 'From REST');
+    assert.equal(card.desc, 'Body');
+    assert.equal(urls.length, 1);
+    assert.match(urls[0], /\/cards\/card123\?/);
+    assert.match(urls[0], /fields=name%2Cdesc|fields=name,desc/);
   });
 });

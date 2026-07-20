@@ -775,10 +775,103 @@
     return false;
   }
 
-  function cardFieldPromise(t, field) {
+  var CARD_FIELD_TIMEOUT_MS = 6000;
+
+  function withTimeout(promise, ms, label) {
     return new Promise(function (resolve, reject) {
-      t.card(field).get(field).then(resolve, reject);
+      var settled = false;
+      var timer = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        reject(new Error(label || 'timeout'));
+      }, ms || CARD_FIELD_TIMEOUT_MS);
+      Promise.resolve(promise).then(
+        function (value) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(value);
+        },
+        function (err) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          reject(err);
+        }
+      );
     });
+  }
+
+  /** Build GET /cards/{id} query for Power-Up field names (Gantt overlay REST path). */
+  function buildRestCardQuery(fields) {
+    var fieldList = [];
+    var wantMembers = false;
+    (fields || []).forEach(function (f) {
+      if (f === 'members') wantMembers = true;
+      else if (f) fieldList.push(String(f));
+    });
+    if (!fieldList.length) fieldList.push('id');
+    var parts = ['fields=' + fieldList.map(encodeURIComponent).join(',')];
+    if (wantMembers) {
+      parts.push('members=true');
+      parts.push(
+        'member_fields=' +
+          encodeURIComponent('id,fullName,username,initials,avatarHash,avatarUrl')
+      );
+    }
+    return parts.join('&');
+  }
+
+  async function restGetCardJson(t, cardId, queryExtra) {
+    if (!cardId || !restClientOptions()) return null;
+    try {
+      var api = await t.getRestApi();
+      var authorized = await api.isAuthorized();
+      if (!authorized) return null;
+      var token = await api.getToken();
+      if (!token) return null;
+      var cfg = restClientOptions();
+      var url =
+        'https://api.trello.com/1/cards/' +
+        encodeURIComponent(cardId) +
+        '?key=' +
+        encodeURIComponent(cfg.appKey) +
+        '&token=' +
+        encodeURIComponent(token) +
+        (queryExtra ? '&' + queryExtra : '');
+      var response = await fetch(url, { method: 'GET' });
+      if (!response.ok) return null;
+      return await response.json();
+    } catch (err) {
+      console.error('Priority REST GET card failed', err);
+      return null;
+    }
+  }
+
+  /**
+   * Read a card field. When opened from Gantt (cardId arg, board context),
+   * t.card() has no card localization and can hang — use REST instead.
+   */
+  function cardFieldPromise(t, field) {
+    var argId = readPowerUpArg(t, 'cardId');
+    if (argId) {
+      return restGetCardJson(t, argId, buildRestCardQuery([field])).then(
+        function (card) {
+          if (!card) return null;
+          if (field === 'members') return card.members || null;
+          return Object.prototype.hasOwnProperty.call(card, field)
+            ? card[field]
+            : null;
+        }
+      );
+    }
+    return withTimeout(
+      new Promise(function (resolve, reject) {
+        t.card(field).get(field).then(resolve, reject);
+      }),
+      CARD_FIELD_TIMEOUT_MS,
+      't.card timeout: ' + field
+    );
   }
 
   function formatCompletedBadgeLabel(taskLabel) {
@@ -928,9 +1021,17 @@
 
   function cardDataPromise(t) {
     var fields = Array.prototype.slice.call(arguments, 1);
-    return new Promise(function (resolve, reject) {
-      t.card.apply(t, fields).then(resolve, reject);
-    });
+    var argId = readPowerUpArg(t, 'cardId');
+    if (argId) {
+      return restGetCardJson(t, argId, buildRestCardQuery(fields));
+    }
+    return withTimeout(
+      new Promise(function (resolve, reject) {
+        t.card.apply(t, fields).then(resolve, reject);
+      }),
+      CARD_FIELD_TIMEOUT_MS,
+      't.card timeout'
+    );
   }
 
   async function getCardName(t) {
@@ -2905,12 +3006,10 @@
     }
   }
 
-  /** Skip sizeTo for fullscreen hosts, Gantt overlays, and nested iframes. */
+  /** Skip sizeTo for fullscreen hosts and nested iframes (Gantt Task overlay). */
   function shouldSkipSizeTo(t) {
     if (isFullscreenModal(t)) return true;
     if (isNestedPowerUpIframe()) return true;
-    var embed = readPowerUpArg(t, 'embed');
-    if (embed === 'overlay' || embed === 'gantt') return true;
     return false;
   }
 
@@ -2975,14 +3074,21 @@
   // Defer t.get/set until Trello finishes the iframe handshake.
   function runWhenIframeReady(t, fn) {
     var started = false;
+    var HANDSHAKE_TIMEOUT_MS = 10000;
     return new Promise(function (resolve, reject) {
       if (!t || typeof t.render !== 'function') {
         Promise.resolve().then(fn).then(resolve, reject);
         return;
       }
+      var timer = setTimeout(function () {
+        if (started) return;
+        started = true;
+        reject(new Error('Trello iframe handshake timed out'));
+      }, HANDSHAKE_TIMEOUT_MS);
       t.render(function () {
         if (started) return;
         started = true;
+        clearTimeout(timer);
         Promise.resolve().then(fn).then(resolve, reject);
       });
     });
@@ -3985,6 +4091,7 @@
     getCardDisplay: getCardDisplay,
     getCardName: getCardName,
     getCardDesc: getCardDesc,
+    cardDataPromise: cardDataPromise,
     getCardMembers: getCardMembers,
     getCurrentMember: getCurrentMember,
     getBoardMembers: getBoardMembers,
