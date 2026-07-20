@@ -9777,6 +9777,80 @@
     var descDirty = false;
     var descSaveTimer = null;
     var descBusy = false;
+    var descMetaMap = Object.create(null);
+    var showDescMeta = false;
+
+    function DM() {
+      return global.DescMeta || null;
+    }
+
+    function splitFullDesc(full) {
+      var dm = DM();
+      if (dm && typeof dm.splitDesc === 'function') {
+        return dm.splitDesc(full);
+      }
+      return {
+        visible: typeof full === 'string' ? full : '',
+        meta: {},
+        hasMeta: false,
+      };
+    }
+
+    function joinFullDesc(visible, meta) {
+      var dm = DM();
+      if (dm && typeof dm.joinDesc === 'function') {
+        return dm.joinDesc(visible, meta);
+      }
+      return typeof visible === 'string' ? visible : '';
+    }
+
+    function cloneMetaMap(meta) {
+      var out = Object.create(null);
+      if (!meta || typeof meta !== 'object') return out;
+      Object.keys(meta).forEach(function (k) {
+        if (meta[k] != null && String(meta[k]).trim() !== '') {
+          out[k] = String(meta[k]).trim();
+        }
+      });
+      return out;
+    }
+
+    function editorShowsFullDesc() {
+      return !!showDescMeta;
+    }
+
+    function visibleFromEditorValue(value) {
+      if (editorShowsFullDesc()) {
+        return splitFullDesc(value).visible;
+      }
+      return typeof value === 'string' ? value : '';
+    }
+
+    function fullDescFromEditor() {
+      syncDescSourceFromRich();
+      var raw = descInput.value;
+      if (editorShowsFullDesc()) {
+        var split = splitFullDesc(raw);
+        descMetaMap = cloneMetaMap(split.meta);
+        return joinFullDesc(split.visible, descMetaMap);
+      }
+      return joinFullDesc(raw, descMetaMap);
+    }
+
+    function applyFullDescToEditor(full, options) {
+      options = options || {};
+      var split = splitFullDesc(full);
+      descMetaMap = cloneMetaMap(split.meta);
+      var shown = editorShowsFullDesc()
+        ? joinFullDesc(split.visible, descMetaMap)
+        : split.visible;
+      descText = full;
+      descInput.value = shown;
+      syncDescMetaToggle();
+      if (options.skipRender) return;
+      if (descMode === 'rich') renderDescRich();
+      else syncDescInputSize();
+    }
     var descSpellcheckGen = 0;
     var descSpellcheckedText = descText.trim() || null;
     var descSpellRevert = null;
@@ -9938,7 +10012,11 @@
     descInput.placeholder = 'Ajouter une description\u2026';
     descInput.setAttribute('aria-label', 'Description de la carte');
     descInput.setAttribute('spellcheck', 'false');
-    descInput.value = descText;
+    (function initDescEditorValue() {
+      var split = splitFullDesc(descText);
+      descMetaMap = cloneMetaMap(split.meta);
+      descInput.value = split.visible;
+    })();
 
     var descRich = document.createElement('div');
     descRich.className = 'info-desc-rich info-desc-preview';
@@ -10104,6 +10182,41 @@
     descMeta.appendChild(descSpellSpinner);
     descMeta.appendChild(descStatus);
 
+    var descMetaToggle = document.createElement('button');
+    descMetaToggle.type = 'button';
+    descMetaToggle.className = 'info-desc-meta-toggle';
+    descMetaToggle.hidden = true;
+    descMetaToggle.setAttribute('aria-pressed', 'false');
+    descMetaToggle.textContent = 'Afficher les m\u00e9tadonn\u00e9es masqu\u00e9es';
+
+    function syncDescMetaToggle() {
+      var has =
+        Object.keys(descMetaMap).length > 0 ||
+        (editorShowsFullDesc() && splitFullDesc(descInput.value).hasMeta);
+      descMetaToggle.hidden = !has && !showDescMeta;
+      descMetaToggle.setAttribute('aria-pressed', showDescMeta ? 'true' : 'false');
+      descMetaToggle.textContent = showDescMeta
+        ? 'Masquer les m\u00e9tadonn\u00e9es'
+        : 'Afficher les m\u00e9tadonn\u00e9es masqu\u00e9es';
+    }
+
+    descMetaToggle.addEventListener('click', function () {
+      syncDescSourceFromRich();
+      if (showDescMeta) {
+        var split = splitFullDesc(descInput.value);
+        descMetaMap = cloneMetaMap(split.meta);
+        showDescMeta = false;
+        descInput.value = split.visible;
+      } else {
+        showDescMeta = true;
+        descInput.value = joinFullDesc(descInput.value, descMetaMap);
+      }
+      if (descMode === 'rich') renderDescRich();
+      else syncDescInputSize();
+      syncDescMetaToggle();
+      onLayoutChange();
+    });
+
     var authBox = document.createElement('div');
     authBox.className = 'info-auth-box';
     authBox.hidden = true;
@@ -10120,9 +10233,11 @@
     descWrap.appendChild(descRich);
     descWrap.appendChild(descInput);
     descWrap.appendChild(descMeta);
+    descWrap.appendChild(descMetaToggle);
     descWrap.appendChild(authBox);
     descRow.value.appendChild(descWrap);
     body.appendChild(descRow.row);
+    syncDescMetaToggle();
 
     // ── Creator (visible when ≠ sole assignee) ─────────────────────────
     var creatorRow = makeRow('creator', 'Cr\u00e9ateur', { icon: 'ti-user' });
@@ -14285,7 +14400,7 @@
         descSaveTimer = null;
       }
       if (!onDescChange || !descDirty || descBusy) return Promise.resolve();
-      var next = descInput.value;
+      var next = fullDescFromEditor();
       descBusy = true;
       setDescStatus('', 'saving');
       return Promise.resolve(onDescChange(next))
@@ -14301,7 +14416,8 @@
             return result;
           }
           // Spellcheck (or typing) may have changed the field while this save ran.
-          if (descInput.value !== next) {
+          var currentFull = fullDescFromEditor();
+          if (currentFull !== next) {
             descText = next;
             descDirty = true;
             scheduleDescSave();
@@ -14309,6 +14425,7 @@
           }
           descDirty = false;
           descText = next;
+          syncDescMetaToggle();
           setAuthHint('');
           setDescStatus('', 'ok');
           scheduleLabelSuggestions(false);
