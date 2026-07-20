@@ -2,7 +2,7 @@
 (function (global) {
   'use strict';
 
-  var VIEW_MODES = ['week', 'month', 'year'];
+  var VIEW_MODES = ['day', 'week', 'month', 'year'];
   var MS_DAY = 24 * 60 * 60 * 1000;
   var WEEKDAY_SHORT = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
   var WEEKDAY_LONG = [
@@ -131,8 +131,13 @@
     if (mode === 'year') {
       return MONTH_SHORT[date.getMonth()] || String(date.getMonth() + 1);
     }
-    var relative = relativeDayLabel(date, now);
-    if (relative) return relative;
+    if (mode === 'day') {
+      var relative = relativeDayLabel(date, now);
+      if (relative) return relative;
+      return WEEKDAY_LONG[date.getDay()] || WEEKDAY_SHORT[date.getDay()];
+    }
+    var relativeDay = relativeDayLabel(date, now);
+    if (relativeDay) return relativeDay;
     if (mode === 'month') {
       return String(date.getDate());
     }
@@ -180,8 +185,24 @@
     var columns = [];
     var cursor;
     var colEnd;
+    var h;
+    var isTodayDay;
 
-    if (m === 'week') {
+    if (m === 'day') {
+      start = startOfDay(a);
+      end = start;
+      isTodayDay = dayDiff(start, startOfDay(ref)) === 0;
+      for (h = 0; h < 24; h++) {
+        columns.push({
+          key: toIsoDate(start) + 'T' + pad2(h),
+          label: String(h) + 'h',
+          relative: isTodayDay && ref.getHours() === h ? 'today' : null,
+          start: start,
+          end: end,
+          hour: h,
+        });
+      }
+    } else if (m === 'week') {
       start = startOfWeek(a);
       end = endOfWeek(a);
       cursor = start;
@@ -234,6 +255,7 @@
     var m = normalizeViewMode(mode);
     var a = parseIsoDate(anchor) || startOfDay(new Date());
     var dir = direction < 0 ? -1 : 1;
+    if (m === 'day') return addDays(a, dir);
     if (m === 'week') return addDays(a, dir * 7);
     if (m === 'month') {
       return new Date(a.getFullYear(), a.getMonth() + dir, 1);

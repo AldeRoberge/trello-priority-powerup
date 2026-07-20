@@ -695,6 +695,12 @@
   color: var(--tp-text-subtle, #44546f);
 }
 
+.gantt-timeline-header--day .gantt-col-head {
+  font-size: 10px;
+  padding: 6px 0;
+  letter-spacing: -0.02em;
+}
+
 .gantt-col-head.is-today {
   color: var(--tp-primary, #0c66e4);
   font-weight: 700;

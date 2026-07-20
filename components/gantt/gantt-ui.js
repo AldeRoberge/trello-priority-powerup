@@ -377,6 +377,7 @@
 
       var zoom = el('div', 'gantt-zoom');
       [
+        { mode: 'day', label: 'Journ\u00e9e', icon: 'ti-calendar' },
         { mode: 'week', label: 'Semaine', icon: 'ti-calendar-week' },
         { mode: 'month', label: 'Mois', icon: 'ti-calendar-month' },
         { mode: 'year', label: 'Ann\u00e9e', icon: 'ti-calendar-stats' },
@@ -432,6 +433,13 @@
       } else if (state.viewMode === 'month') {
         title.textContent =
           r.start.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+      } else if (state.viewMode === 'day') {
+        title.textContent = r.start.toLocaleDateString('fr-FR', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        });
       } else {
         title.textContent =
           model.toIsoDate(r.start) + ' \u2192 ' + model.toIsoDate(r.end);
@@ -1927,6 +1935,9 @@
       labelsCol.appendChild(headerLabels);
 
       var headerTimeline = el('div', 'gantt-row gantt-row--header gantt-timeline-header');
+      if (state.viewMode === 'day') {
+        headerTimeline.classList.add('gantt-timeline-header--day');
+      }
       headerTimeline.style.width = state.timelineWidth + 'px';
       r.columns.forEach(function (col) {
         var headClass = 'gantt-col-head';
@@ -1935,10 +1946,17 @@
         else if (col.relative === 'yesterday') headClass += ' is-yesterday';
         var cell = el('div', headClass, { text: col.label });
         cell.style.width = 100 / r.columns.length + '%';
-        if (col.relative === 'today') cell.title = "Aujourd'hui";
-        else if (col.relative === 'tomorrow') cell.title = 'Demain';
-        else if (col.relative === 'yesterday') cell.title = 'Hier';
-        else if (col.key) cell.title = col.key;
+        if (typeof col.hour === 'number') {
+          cell.title = col.hour + ' h';
+        } else if (col.relative === 'today') {
+          cell.title = "Aujourd'hui";
+        } else if (col.relative === 'tomorrow') {
+          cell.title = 'Demain';
+        } else if (col.relative === 'yesterday') {
+          cell.title = 'Hier';
+        } else if (col.key) {
+          cell.title = col.key;
+        }
         headerTimeline.appendChild(cell);
       });
       timelineCol.appendChild(headerTimeline);

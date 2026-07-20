@@ -20,6 +20,33 @@ describe('GanttModel', () => {
     assert.equal(range.columns.length, 7);
   });
 
+  it('viewRange day covers a single day with 24 hour columns', () => {
+    const now = new Date(2026, 6, 22, 14, 30, 0);
+    const range = GanttModel.viewRange('day', '2026-07-22', now);
+    assert.equal(range.mode, 'day');
+    assert.equal(GanttModel.toIsoDate(range.start), '2026-07-22');
+    assert.equal(GanttModel.toIsoDate(range.end), '2026-07-22');
+    assert.equal(range.columns.length, 24);
+    assert.equal(range.columns[0].label, '0h');
+    assert.equal(range.columns[14].label, '14h');
+    assert.equal(range.columns[14].relative, 'today');
+    assert.equal(range.columns[13].relative, null);
+
+    const other = GanttModel.viewRange(
+      'day',
+      '2026-07-21',
+      GanttModel.parseIsoDate('2026-07-22')
+    );
+    assert.ok(other.columns.every((c) => c.relative == null));
+  });
+
+  it('dateTimeToX in day view maps noon to mid timeline', () => {
+    const range = GanttModel.viewRange('day', '2026-07-22');
+    const width = 480;
+    const noon = new Date(2026, 6, 22, 12, 0, 0);
+    assert.ok(Math.abs(GanttModel.dateTimeToX(noon, range, width) - width / 2) < 0.01);
+  });
+
   it('viewRange week/month labels use Aujourd\'hui Demain Hier', () => {
     const now = GanttModel.parseIsoDate('2026-07-22');
     const week = GanttModel.viewRange('week', '2026-07-22', now);
@@ -519,6 +546,14 @@ describe('GanttModel', () => {
     assert.equal(
       GanttModel.toIsoDate(GanttModel.shiftAnchor('year', '2026-07-15', 1)),
       '2027-07-01'
+    );
+    assert.equal(
+      GanttModel.toIsoDate(GanttModel.shiftAnchor('day', '2026-07-22', -1)),
+      '2026-07-21'
+    );
+    assert.equal(
+      GanttModel.toIsoDate(GanttModel.shiftAnchor('day', '2026-07-22', 1)),
+      '2026-07-23'
     );
   });
 
