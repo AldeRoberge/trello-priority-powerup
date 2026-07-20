@@ -2130,9 +2130,25 @@
 }
 
 .tp-page--priority .agent-msg--user .agent-msg-bubble {
-  background: var(--tp-primary);
-  color: var(--tp-primary-text);
+  /* Soft tint instead of solid primary — less glare in the Assistant rail */
+  background: color-mix(
+    in srgb,
+    var(--tp-primary) 18%,
+    var(--tp-elev-2, var(--tp-surface, var(--tp-bg)))
+  );
+  color: var(--tp-text);
+  border: 1px solid
+    color-mix(in srgb, var(--tp-primary) 28%, var(--tp-border));
   border-bottom-right-radius: 2px;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-msg--user .agent-msg-bubble {
+  background: color-mix(
+    in srgb,
+    var(--tp-primary) 16%,
+    var(--tp-elev-3, var(--tp-surface-subtle, #22272b))
+  );
+  border-color: color-mix(in srgb, var(--tp-primary) 24%, var(--tp-border));
 }
 
 .tp-page--priority .agent-msg--user.is-queued {
