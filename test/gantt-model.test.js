@@ -20,6 +20,34 @@ describe('GanttModel', () => {
     assert.equal(range.columns.length, 7);
   });
 
+  it('viewRange week/month labels use Aujourd\'hui Demain Hier', () => {
+    const now = GanttModel.parseIsoDate('2026-07-22');
+    const week = GanttModel.viewRange('week', '2026-07-22', now);
+    const byKey = Object.fromEntries(week.columns.map((c) => [c.key, c]));
+    assert.equal(byKey['2026-07-21'].label, 'Hier');
+    assert.equal(byKey['2026-07-21'].relative, 'yesterday');
+    assert.equal(byKey['2026-07-22'].label, "Aujourd'hui");
+    assert.equal(byKey['2026-07-22'].relative, 'today');
+    assert.equal(byKey['2026-07-23'].label, 'Demain');
+    assert.equal(byKey['2026-07-23'].relative, 'tomorrow');
+    assert.equal(byKey['2026-07-24'].relative, null);
+    assert.match(byKey['2026-07-24'].label, /ven\.|24/);
+
+    const month = GanttModel.viewRange('month', '2026-07-15', now);
+    const todayCol = month.columns.find((c) => c.key === '2026-07-22');
+    assert.ok(todayCol);
+    assert.equal(todayCol.label, "Aujourd'hui");
+    assert.equal(GanttModel.relativeDayLabel(now, now), "Aujourd'hui");
+    assert.equal(
+      GanttModel.relativeDayLabel(GanttModel.addDays(now, 1), now),
+      'Demain'
+    );
+    assert.equal(
+      GanttModel.relativeDayLabel(GanttModel.addDays(now, -1), now),
+      'Hier'
+    );
+  });
+
   it('viewRange month covers full calendar month', () => {
     const range = GanttModel.viewRange('month', '2026-07-15');
     assert.equal(GanttModel.toIsoDate(range.start), '2026-07-01');

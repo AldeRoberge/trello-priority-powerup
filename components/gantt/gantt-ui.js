@@ -1528,8 +1528,16 @@
       var headerTimeline = el('div', 'gantt-row gantt-row--header gantt-timeline-header');
       headerTimeline.style.width = state.timelineWidth + 'px';
       r.columns.forEach(function (col) {
-        var cell = el('div', 'gantt-col-head', { text: col.label });
+        var headClass = 'gantt-col-head';
+        if (col.relative === 'today') headClass += ' is-today';
+        else if (col.relative === 'tomorrow') headClass += ' is-tomorrow';
+        else if (col.relative === 'yesterday') headClass += ' is-yesterday';
+        var cell = el('div', headClass, { text: col.label });
         cell.style.width = 100 / r.columns.length + '%';
+        if (col.relative === 'today') cell.title = "Aujourd'hui";
+        else if (col.relative === 'tomorrow') cell.title = 'Demain';
+        else if (col.relative === 'yesterday') cell.title = 'Hier';
+        else if (col.key) cell.title = col.key;
         headerTimeline.appendChild(cell);
       });
       timelineCol.appendChild(headerTimeline);

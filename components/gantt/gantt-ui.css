@@ -523,6 +523,19 @@
   white-space: nowrap;
   position: relative;
   z-index: 1;
+  font-size: 11px;
+  color: var(--tp-text-subtle, #44546f);
+}
+
+.gantt-col-head.is-today {
+  color: var(--tp-primary, #0c66e4);
+  font-weight: 700;
+}
+
+.gantt-col-head.is-tomorrow,
+.gantt-col-head.is-yesterday {
+  font-weight: 600;
+  color: var(--tp-text, #172b4d);
 }
 
 .gantt-timeline-row {

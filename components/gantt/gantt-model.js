@@ -110,10 +110,12 @@
     return isViewMode(mode) ? mode : 'week';
   }
 
-  function columnLabel(date, mode) {
+  function columnLabel(date, mode, now) {
     if (mode === 'year') {
       return MONTH_SHORT[date.getMonth()] || String(date.getMonth() + 1);
     }
+    var relative = relativeDayLabel(date, now);
+    if (relative) return relative;
     if (mode === 'month') {
       return String(date.getDate());
     }
@@ -121,12 +123,40 @@
   }
 
   /**
+   * French relative day label vs `now` (defaults to today).
+   * @returns {''|'Aujourd\'hui'|'Demain'|'Hier'}
+   */
+  function relativeDayLabel(date, now) {
+    var key = relativeDayKey(date, now);
+    if (key === 'today') return "Aujourd'hui";
+    if (key === 'tomorrow') return 'Demain';
+    if (key === 'yesterday') return 'Hier';
+    return '';
+  }
+
+  /**
+   * @returns {null|'today'|'tomorrow'|'yesterday'}
+   */
+  function relativeDayKey(date, now) {
+    if (!(date instanceof Date) || isNaN(date.getTime())) return null;
+    var d = startOfDay(date);
+    var n = startOfDay(now instanceof Date && !isNaN(now.getTime()) ? now : new Date());
+    var diff = dayDiff(d, n);
+    if (diff === 0) return 'today';
+    if (diff === 1) return 'tomorrow';
+    if (diff === -1) return 'yesterday';
+    return null;
+  }
+
+  /**
    * Visible window + header columns for a zoom mode, anchored on `anchor`.
+   * @param {Date} [now] — reference day for Aujourd'hui / Demain / Hier labels
    * @returns {{ mode, start: Date, end: Date, columns: Array }}
    */
-  function viewRange(mode, anchor) {
+  function viewRange(mode, anchor, now) {
     var m = normalizeViewMode(mode);
     var a = parseIsoDate(anchor) || startOfDay(new Date());
+    var ref = now instanceof Date && !isNaN(now.getTime()) ? now : new Date();
     var start;
     var end;
     var columns = [];
@@ -141,7 +171,8 @@
         colEnd = cursor;
         columns.push({
           key: toIsoDate(cursor),
-          label: columnLabel(cursor, m),
+          label: columnLabel(cursor, m, ref),
+          relative: relativeDayKey(cursor, ref),
           start: cursor,
           end: colEnd,
         });
@@ -155,7 +186,8 @@
         colEnd = cursor;
         columns.push({
           key: toIsoDate(cursor),
-          label: columnLabel(cursor, m),
+          label: columnLabel(cursor, m, ref),
+          relative: relativeDayKey(cursor, ref),
           start: cursor,
           end: colEnd,
         });
@@ -169,7 +201,8 @@
         colEnd = endOfMonth(cursor);
         columns.push({
           key: cursor.getFullYear() + '-' + pad2(mi + 1),
-          label: columnLabel(cursor, m),
+          label: columnLabel(cursor, m, ref),
+          relative: null,
           start: cursor,
           end: colEnd,
         });
@@ -749,6 +782,8 @@
     startOfDay: startOfDay,
     addDays: addDays,
     dayDiff: dayDiff,
+    relativeDayLabel: relativeDayLabel,
+    relativeDayKey: relativeDayKey,
     startOfWeek: startOfWeek,
     endOfWeek: endOfWeek,
     startOfMonth: startOfMonth,
