@@ -38,6 +38,7 @@ const UNIT_FILES = [
   'agent-claims.test.js',
   'interview-why-guards.test.js',
   'add-subtask-dedupe.test.js',
+  'gantt-model.test.js',
 ];
 
 function listTests() {

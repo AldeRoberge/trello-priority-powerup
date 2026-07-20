@@ -1120,8 +1120,6 @@
       });
   }
 
-  var ESTIMATE_LOG_MAX = Math.round(2 * 365.25 * 24 * 60);
-
   function closeOpenEstimatePopovers(except) {
     var open = document.querySelectorAll('.tp-estimate-popover.is-open');
     for (var i = 0; i < open.length; i++) {
@@ -1178,12 +1176,13 @@
     if (!readOnly) chip.type = 'button';
     chip.className = 'tp-estimate-chip';
 
-    var sand = document.createElement('span');
-    sand.className = 'tp-estimate-chip-sand';
-    sand.setAttribute('aria-hidden', 'true');
+    // Same Tabler icons as the Temps dropdown ticks (bolt / clock / sun / …).
+    var iconEl = document.createElement('i');
+    iconEl.className = 'ti ti-clock tp-estimate-chip-icon';
+    iconEl.setAttribute('aria-hidden', 'true');
     var label = document.createElement('span');
     label.className = 'tp-estimate-chip-label';
-    chip.appendChild(sand);
+    chip.appendChild(iconEl);
     chip.appendChild(label);
     wrap.appendChild(chip);
 
@@ -1251,36 +1250,28 @@
       return String(minutes) + ' min';
     }
 
-    function sandFillRatio() {
-      if (minutes == null) return 0;
-      if (hasScale('time') || scaleIds.length !== 1) {
-        return Math.min(
-          1,
-          Math.log(Math.max(minutes, 5)) / Math.log(ESTIMATE_LOG_MAX)
-        );
+    /** Nearest tick for the chip icon + accent (prefer Temps when multi-scale). */
+    function resolveChipTick() {
+      if (minutes == null) return null;
+      var scaleId = hasScale('time') ? 'time' : scaleIds[0] || 'time';
+      if (typeof CT.nearestEstimateTick === 'function') {
+        return CT.nearestEstimateTick(minutes, scaleId);
       }
-      var scaleId = scaleIds[0];
       var ticks = ticksForScale(scaleId);
-      if (ticks.length > 1) {
-        var nearest =
-          typeof CT.nearestEstimateTick === 'function'
-            ? CT.nearestEstimateTick(minutes, scaleId)
-            : null;
-        var idx = 0;
-        if (nearest) {
-          for (var i = 0; i < ticks.length; i++) {
-            if (ticks[i].id === nearest.id || ticks[i].minutes === nearest.minutes) {
-              idx = i;
-              break;
-            }
-          }
+      if (!ticks.length) return null;
+      var best = ticks[0];
+      var bestDist = Infinity;
+      var logM = Math.log(Math.max(minutes, 1));
+      for (var i = 0; i < ticks.length; i++) {
+        var tm = ticks[i].minutes;
+        if (tm == null || !isFinite(+tm)) continue;
+        var dist = Math.abs(logM - Math.log(Math.max(+tm, 1)));
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = ticks[i];
         }
-        return idx / (ticks.length - 1);
       }
-      return Math.min(
-        1,
-        Math.log(Math.max(minutes, 5)) / Math.log(ESTIMATE_LOG_MAX)
-      );
+      return best;
     }
 
     function paint() {
@@ -1311,11 +1302,16 @@
           : config.adjusted
             ? 'Total ajust\u00e9\u00a0: ' + text
             : text;
-      var fill = sandFillRatio();
-      sand.style.transform = estimating
-        ? ''
-        : 'scaleY(' + (0.12 + fill * 0.88).toFixed(3) + ')';
-      wrap.style.removeProperty('--estimate-accent');
+
+      var tick = resolveChipTick();
+      var iconName =
+        (tick && tick.icon) || (estimating ? 'loader-2' : 'clock');
+      iconEl.className = 'ti ti-' + iconName + ' tp-estimate-chip-icon';
+      if (tick && tick.color) {
+        wrap.style.setProperty('--estimate-accent', tick.color);
+      } else {
+        wrap.style.removeProperty('--estimate-accent');
+      }
       syncTickSelection();
     }
 

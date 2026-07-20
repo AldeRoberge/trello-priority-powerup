@@ -350,6 +350,18 @@
               });
             },
           },
+          {
+            icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/gantt-chart.svg',
+            text: 'Gantt',
+            callback: function(t) {
+              return t.modal({
+                title: 'Gantt',
+                url: PriorityTrello.pageUrl('./gantt.html'),
+                fullscreen: true,
+                accentColor: '#22272B',
+              });
+            },
+          },
         ];
       },
 

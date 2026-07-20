@@ -2263,41 +2263,35 @@ button.tp-estimate-chip:focus-visible {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--estimate-accent, var(--tp-primary, #0c66e4)) 28%, transparent);
 }
 
-.tp-estimate-chip-sand {
-  display: block;
-  width: 8px;
-  height: 14px;
-  border-radius: 2px 2px 3px 3px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--estimate-accent, var(--tp-text-muted)) 35%, transparent) 0%,
-    var(--estimate-accent, var(--tp-text-muted)) 100%
-  );
-  transform-origin: bottom center;
-  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease;
+.tp-estimate-chip-icon {
+  flex: 0 0 auto;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--estimate-accent, var(--tp-text-muted));
   opacity: 0.9;
+  transition: color 0.18s ease, opacity 0.18s ease;
 }
 
-.tp-estimate-chip.is-empty .tp-estimate-chip-sand {
-  opacity: 0.35;
+.tp-estimate-chip.is-empty .tp-estimate-chip-icon {
+  opacity: 0.45;
+  color: var(--tp-text-muted);
 }
 
 .tp-estimate-chip.is-estimating {
   color: color-mix(in srgb, var(--estimate-accent, var(--tp-text-muted)) 70%, var(--tp-text));
 }
 
-.tp-estimate-chip.is-estimating .tp-estimate-chip-sand {
+.tp-estimate-chip.is-estimating .tp-estimate-chip-icon {
   opacity: 0.9;
-  animation: tp-estimate-sand-spin 0.85s linear infinite;
-  transform-origin: 50% 50%;
+  animation: tp-estimate-icon-spin 0.85s linear infinite;
 }
 
-@keyframes tp-estimate-sand-spin {
+@keyframes tp-estimate-icon-spin {
   from {
-    transform: rotate(0deg) scaleY(0.55);
+    transform: rotate(0deg);
   }
   to {
-    transform: rotate(360deg) scaleY(0.55);
+    transform: rotate(360deg);
   }
 }
 
@@ -2311,9 +2305,8 @@ button.tp-estimate-chip:focus-visible {
   gap: 5px;
 }
 
-.tp-estimate-chip-wrap.is-compact .tp-estimate-chip-sand {
-  width: 6px;
-  height: 11px;
+.tp-estimate-chip-wrap.is-compact .tp-estimate-chip-icon {
+  font-size: 13px;
 }
 
 span.tp-estimate-chip {
