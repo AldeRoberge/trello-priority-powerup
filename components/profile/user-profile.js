@@ -573,10 +573,6 @@
     for (var d = 0; d < dureeNodes.length; d++) {
       dureeNodes[d].hidden = true;
     }
-    var progresNodes = cardEl.querySelectorAll('.info-row--progress');
-    for (var pr = 0; pr < progresNodes.length; pr++) {
-      progresNodes[pr].hidden = p.features.progress === false;
-    }
   }
 
   /** Compact object for LLM context (no storage metadata). */

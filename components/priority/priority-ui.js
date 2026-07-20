@@ -8147,7 +8147,7 @@
 
   /**
    * Top-of-popup recap: title, description (editable), creator, assignees, labels.
-   * Progrès mirror (remaining estimate) jumps to Progrès; optional Portée jump to Priorité.
+   * Optional Portée jump to Priorité when experimental.impactGlobe is on.
    */
   function createInfoField(config) {
     var el = config.el;
@@ -8221,8 +8221,6 @@
     var priorityLabel = typeof config.priorityLabel === 'string' ? config.priorityLabel : '';
     var impactReachLabel = typeof config.impactReach === 'string' ? config.impactReach : '';
     var durationLabel = typeof config.durationLabel === 'string' ? config.durationLabel : '';
-    var progressLabel =
-      typeof config.progressLabel === 'string' ? config.progressLabel : '';
     var titleDirty = false;
     var titleSaveTimer = null;
     var titleBusy = false;
@@ -8319,7 +8317,7 @@
         row.tabIndex = 0;
         row.title = 'Aller \u00e0 ' + labelText;
         function jump() {
-          // Portée lives in Priorité; Progrès has its own section.
+          // Portée lives in Priorité.
           onJump(key === 'porte' ? 'priority' : key);
         }
         row.addEventListener('click', jump);
@@ -8985,15 +8983,6 @@
     dureeRow.row.hidden = true;
     dureeRow.value.appendChild(dureeValueEl);
     body.appendChild(dureeRow.row);
-
-    var progresRow = makeRow('progress', 'Progr\u00e8s', {
-      interactive: true,
-      icon: 'ti-percentage'
-    });
-    var progresValueEl = document.createElement('span');
-    progresValueEl.className = 'info-recap-text';
-    progresRow.value.appendChild(progresValueEl);
-    body.appendChild(progresRow.row);
 
     field.appendChild(body);
     el.appendChild(field);
@@ -11824,7 +11813,6 @@
     function renderRecap() {
       setRecapText(porteValueEl, impactReachLabel, 'Non d\u00e9finie');
       setRecapText(dureeValueEl, durationLabel, 'Non d\u00e9finie');
-      setRecapText(progresValueEl, progressLabel, 'Non estim\u00e9');
     }
 
     function summaryText() {
@@ -11832,7 +11820,6 @@
         return titleText;
       }
       var bits = [];
-      if (progressLabel) bits.push(progressLabel);
       if (impactReachLabel) bits.push(impactReachLabel);
       return bits.join(' \u00b7 ');
     }
@@ -12652,7 +12639,6 @@
         if (next.priorityLabel != null) priorityLabel = String(next.priorityLabel || '');
         if (next.impactReach != null) impactReachLabel = String(next.impactReach || '');
         if (next.durationLabel != null) durationLabel = String(next.durationLabel || '');
-        if (next.progressLabel != null) progressLabel = String(next.progressLabel || '');
         renderRecap();
         collapse.refreshSummary();
       },

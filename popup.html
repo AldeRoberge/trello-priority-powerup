@@ -1940,53 +1940,10 @@
         }
       }
 
-      var progressLabel = '';
-      if (window.CompletionTrello) {
-        var completionSnap =
-          (completionUi && typeof completionUi.getData === 'function'
-            ? completionUi.getData()
-            : null) ||
-          latestCompletion ||
-          { items: [] };
-        var progressMeta = CompletionTrello.computeCardProgress(completionSnap);
-        if (progressMeta && progressMeta.percent === 100) {
-          progressLabel = 'Termin\u00e9';
-        } else {
-          var remainingMins =
-            typeof CompletionTrello.computeEstimatedRemaining === 'function'
-              ? CompletionTrello.computeEstimatedRemaining(completionSnap)
-              : null;
-          var totalMins =
-            typeof CompletionTrello.computeEstimatedTotal === 'function'
-              ? CompletionTrello.computeEstimatedTotal(completionSnap)
-              : null;
-          var pctBit =
-            progressMeta && progressMeta.percent != null
-              ? progressMeta.percent + '\u00a0%'
-              : '';
-          var remainBit = '';
-          if (
-            remainingMins != null &&
-            remainingMins > 0 &&
-            typeof CompletionTrello.formatEstimatedRemainingLabel === 'function'
-          ) {
-            remainBit = CompletionTrello.formatEstimatedRemainingLabel(remainingMins);
-          } else if (
-            totalMins != null &&
-            typeof CompletionTrello.formatEstimatedMinutesCompact === 'function'
-          ) {
-            remainBit = CompletionTrello.formatEstimatedMinutesCompact(totalMins);
-          }
-          if (pctBit && remainBit) progressLabel = pctBit + ' \u00b7 ' + remainBit;
-          else progressLabel = remainBit || pctBit || '';
-        }
-      }
-
       infoUi.setRecap({
         priorityLabel: priorityLabel,
         impactReach: impactReach,
-        durationLabel: '',
-        progressLabel: progressLabel
+        durationLabel: ''
       });
       if (typeof infoUi.setTaskTypes === 'function') {
         var nextTypes =
