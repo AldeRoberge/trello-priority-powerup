@@ -793,4 +793,67 @@ describe('GanttTrello dates', () => {
       }
     );
   });
+
+  it('loadBoard unwraps ensureStatutSettings and maps En cours lists', async () => {
+    const previousST = global.StatutTrello;
+    global.StatutTrello = {
+      ensureStatutSettings: async () => ({
+        settings: {
+          listCategories: { 'list-doing': 'started', 'list-todo': 'unstarted' },
+          roleLists: { blocked: null },
+        },
+        lists: [
+          { id: 'list-doing', name: 'Doing' },
+          { id: 'list-todo', name: 'Todo' },
+        ],
+        detected: false,
+      }),
+    };
+    try {
+      await withPriorityTrello(
+        {
+          getCardInputsById: async () => ({ urgency: 2, impact: 2, ease: 3 }),
+          ensureBoardPriorityContext: async () => ({}),
+          computeDisplay: () => null,
+          prioritySortRank: () => ({ tier: 100, score: -1 }),
+        },
+        async () => {
+          const t = {
+            lists: async () => [
+              { id: 'list-doing', name: 'Doing' },
+              { id: 'list-todo', name: 'Todo' },
+            ],
+            cards: async () => [
+              {
+                id: 'c-go',
+                name: 'In progress card',
+                idList: 'list-doing',
+                pos: 1,
+              },
+              {
+                id: 'c-wait',
+                name: 'Todo card',
+                idList: 'list-todo',
+                pos: 2,
+              },
+            ],
+            get() {
+              return Promise.resolve(undefined);
+            },
+            set() {
+              return Promise.resolve();
+            },
+          };
+          const data = await GanttTrello.loadBoard(t);
+          const byId = Object.fromEntries(
+            data.cards.map((c) => [c.id, c])
+          );
+          assert.equal(byId['c-go'].category, 'started');
+          assert.equal(byId['c-wait'].category, 'unstarted');
+        }
+      );
+    } finally {
+      global.StatutTrello = previousST;
+    }
+  });
 });

@@ -220,7 +220,10 @@
     var statut = ST();
     if (statut && typeof statut.ensureStatutSettings === 'function') {
       try {
-        settings = await statut.ensureStatutSettings(t);
+        var ensured = await statut.ensureStatutSettings(t);
+        // ensureStatutSettings returns { settings, lists, detected }.
+        settings =
+          ensured && ensured.settings ? ensured.settings : ensured || null;
       } catch (e) {
         settings = null;
       }

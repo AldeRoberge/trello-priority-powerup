@@ -1036,7 +1036,8 @@
   /**
    * Group roots into En cours → À faire → Bloqué sections (tasks as children),
    * sorting within each section with the usual sortTreeRoots rules.
-   * Empty started/blocked sections are omitted; À faire is always shown.
+   * All three section headers are always shown (even when empty) so status
+   * is visible and section drag-drop always has a target.
    */
   function sortTreeRootsGroupedByState(nodes, sortBy, sortDir) {
     var buckets = {
@@ -1060,8 +1061,6 @@
     for (var i = 0; i < STATE_SECTION_ORDER.length; i++) {
       var key = STATE_SECTION_ORDER[i];
       var sorted = sortTreeRoots(buckets[key], sortBy, sortDir);
-      // Always keep À faire visible, even with no tasks.
-      if (!sorted.length && key !== 'pending') continue;
       var header = makeStateSectionHeader(key);
       header.children = sorted;
       header.expandable = sorted.length > 0;
@@ -1074,7 +1073,7 @@
   /**
    * Drop section headers that have no visible task rows after them.
    * Collapsed sections with children are kept so the header stays clickable.
-   * À faire is always kept, even when empty.
+   * En cours / À faire / Bloqué headers are always kept, even when empty.
    */
   function pruneEmptyStateSections(rows, expandedSet) {
     var list = rows || [];
@@ -1083,7 +1082,12 @@
       var row = list[i];
       if (!row) continue;
       if (row.kind === 'section') {
-        if (row.sectionKey === 'pending') {
+        var sectionKey = row.sectionKey;
+        if (
+          sectionKey === 'started' ||
+          sectionKey === 'pending' ||
+          sectionKey === 'blocked'
+        ) {
           out.push(row);
           continue;
         }

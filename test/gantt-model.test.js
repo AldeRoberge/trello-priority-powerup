@@ -590,18 +590,28 @@ describe('GanttModel', () => {
     assert.equal(grouped[2].name, 'Bloqu\u00e9');
   });
 
-  it('sortTreeRootsGroupedByState always keeps empty À faire section', () => {
+  it('sortTreeRootsGroupedByState always keeps empty En cours / À faire / Bloqué', () => {
     const tree = GanttModel.buildNestTree([
       { id: 'go', name: 'Go', dueDate: '2026-07-20', category: 'started' },
     ]);
     const grouped = GanttModel.sortTreeRootsGroupedByState(tree, 'name', 'asc');
     assert.deepEqual(
       grouped.map((n) => n.sectionKey),
-      ['started', 'pending']
+      ['started', 'pending', 'blocked']
     );
+    assert.equal(grouped[0].children.length, 1);
     assert.equal(grouped[1].name, '\u00c0 faire');
     assert.equal(grouped[1].children.length, 0);
     assert.equal(grouped[1].expandable, false);
+    assert.equal(grouped[2].name, 'Bloqu\u00e9');
+    assert.equal(grouped[2].children.length, 0);
+    assert.equal(grouped[2].expandable, false);
+
+    const emptyBoard = GanttModel.sortTreeRootsGroupedByState([], 'name', 'asc');
+    assert.deepEqual(
+      emptyBoard.map((n) => n.sectionKey),
+      ['started', 'pending', 'blocked']
+    );
   });
 
   it('flattenVisible can collapse state sections', () => {
@@ -618,14 +628,14 @@ describe('GanttModel', () => {
     const open = GanttModel.flattenVisible(grouped, {});
     assert.deepEqual(
       open.map((n) => (n.kind === 'section' ? n.sectionKey : n.cardId)),
-      ['started', 'go', 'pending', 'wait']
+      ['started', 'go', 'pending', 'wait', 'blocked']
     );
     const collapsed = GanttModel.flattenVisible(grouped, {
       'section:started': false,
     });
     assert.deepEqual(
       collapsed.map((n) => (n.kind === 'section' ? n.sectionKey : n.cardId)),
-      ['started', 'pending', 'wait']
+      ['started', 'pending', 'wait', 'blocked']
     );
   });
 
@@ -642,7 +652,7 @@ describe('GanttModel', () => {
     assert.equal(pruned[0].sectionKey, 'started');
   });
 
-  it('pruneEmptyStateSections drops empty started/blocked but keeps À faire', () => {
+  it('pruneEmptyStateSections keeps empty En cours / À faire / Bloqué', () => {
     const rows = [
       GanttModel.makeStateSectionHeader('started'),
       GanttModel.makeStateSectionHeader('pending'),
@@ -652,17 +662,17 @@ describe('GanttModel', () => {
     const pruned = GanttModel.pruneEmptyStateSections(rows);
     assert.deepEqual(
       pruned.map((n) => (n.kind === 'section' ? n.sectionKey : n.cardId)),
-      ['pending', 'a']
+      ['started', 'pending', 'a', 'blocked']
     );
 
-    const onlyEmptyPending = GanttModel.pruneEmptyStateSections([
+    const onlyEmpty = GanttModel.pruneEmptyStateSections([
       GanttModel.makeStateSectionHeader('started'),
       GanttModel.makeStateSectionHeader('pending'),
       GanttModel.makeStateSectionHeader('blocked'),
     ]);
     assert.deepEqual(
-      onlyEmptyPending.map((n) => n.sectionKey),
-      ['pending']
+      onlyEmpty.map((n) => n.sectionKey),
+      ['started', 'pending', 'blocked']
     );
   });
 
