@@ -900,9 +900,12 @@
           title: row.done
             ? 'Marquer non termin\u00e9'
             : 'Marquer termin\u00e9',
-          text: row.done ? '\u2611' : '\u2610',
         }
       );
+      doneBtn.innerHTML =
+        '<i class="ti ' +
+        (row.done ? 'ti-circle-check' : 'ti-check') +
+        '" aria-hidden="true"></i>';
       if (!editable) {
         doneBtn.disabled = true;
         doneBtn.classList.add('is-disabled');
