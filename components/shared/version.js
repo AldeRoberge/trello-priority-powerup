@@ -67,7 +67,8 @@
 
   function updatedLabel(iso) {
     const ago = relativeAgo(iso);
-    return ago === 'à l\'instant' ? 'Mis à jour à l\'instant' : `Mis à jour ${ago}`;
+    const prefix = 'Binaires de l\'application Cerveau mis à jour';
+    return ago === 'à l\'instant' ? `${prefix} à l\'instant` : `${prefix} ${ago}`;
   }
 
   function parseTimestampMs(value) {

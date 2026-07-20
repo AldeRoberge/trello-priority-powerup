@@ -373,11 +373,86 @@
       return progressSummaryFallbackText();
     }
 
+    function readProgressSummaryMetrics() {
+      var progressPercent = null;
+      var progressColor = '';
+      var progressBlocked = false;
+      if (!window.CompletionTrello) {
+        return {
+          progressPercent: progressPercent,
+          progressColor: progressColor,
+          progressBlocked: progressBlocked
+        };
+      }
+      var completionSnap =
+        (completionUi && typeof completionUi.getData === 'function'
+          ? completionUi.getData()
+          : null) ||
+        latestCompletion ||
+        { items: [] };
+      if (typeof CompletionTrello.computeCardProgress === 'function') {
+        var progressMeta = CompletionTrello.computeCardProgress(completionSnap);
+        if (progressMeta && (progressMeta.hasItems || progressMeta.percent != null)) {
+          progressPercent =
+            progressMeta.percent != null ? progressMeta.percent : 0;
+        }
+      }
+      if (typeof CompletionTrello.hasAnyBlocked === 'function') {
+        progressBlocked = !!CompletionTrello.hasAnyBlocked(completionSnap);
+      }
+      if (
+        progressBlocked &&
+        window.PriorityUI &&
+        PriorityUI.BLOCKED_STYLES &&
+        PriorityUI.BLOCKED_STYLES.seg
+      ) {
+        progressColor = PriorityUI.BLOCKED_STYLES.seg;
+      } else if (
+        progressPercent != null &&
+        window.CompletionUI &&
+        typeof CompletionUI.completionColorForProgress === 'function'
+      ) {
+        progressColor = CompletionUI.completionColorForProgress(progressPercent);
+      }
+      return {
+        progressPercent: progressPercent,
+        progressColor: progressColor,
+        progressBlocked: progressBlocked
+      };
+    }
+
+    function buildProgressHeaderSummary() {
+      var metrics = readProgressSummaryMetrics();
+      if (
+        window.PriorityUI &&
+        typeof PriorityUI.buildProgressSummaryNode === 'function'
+      ) {
+        var node = PriorityUI.buildProgressSummaryNode({
+          progressPercent: metrics.progressPercent,
+          progressColor: metrics.progressColor,
+          progressBlocked: metrics.progressBlocked,
+          title: progressSummaryText()
+        });
+        if (node) return node;
+      }
+      return progressSummaryText();
+    }
+
     function paintProgressSummary() {
       if (progressCollapse && typeof progressCollapse.refreshSummary === 'function') {
         progressCollapse.refreshSummary();
       } else if (progressSummaryEl) {
-        progressSummaryEl.textContent = progressSummaryText();
+        var content = buildProgressHeaderSummary();
+        if (content == null || content === '') {
+          progressSummaryEl.replaceChildren();
+          progressSummaryEl.hidden = true;
+        } else if (typeof content === 'string') {
+          progressSummaryEl.textContent = content;
+          progressSummaryEl.hidden = false;
+        } else if (content.nodeType) {
+          progressSummaryEl.replaceChildren(content);
+          progressSummaryEl.hidden = false;
+        }
       }
     }
 
@@ -2220,6 +2295,10 @@
         title: readCardNameLabel() || cardNameCache || '',
         onJump: jumpToSection,
         onLayoutChange: resizePopup,
+        expanded: PriorityUI.resolveSectionExpanded('overview', true),
+        onExpandChange: function (isExpanded) {
+          PriorityUI.saveSectionCollapseState({ overview: !!isExpanded });
+        },
         features: {
           statut: overviewFeatureOn('statut'),
           progress: overviewFeatureOn('progress'),

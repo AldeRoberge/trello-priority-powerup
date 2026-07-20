@@ -398,6 +398,7 @@ body {
 .field--historique .section-leading-icon,
 .field--statut .section-leading-icon,
 .field--info .section-leading-icon,
+.field--overview .section-leading-icon,
 .field--priority .section-leading-icon,
 .field--progress .section-leading-icon,
 .field--due-date .section-leading-icon,
@@ -406,7 +407,7 @@ body {
   opacity: 0.85;
 }
 
-/* ── Primary overview (always open) ── */
+/* ── Primary overview / résumé (collapsible) ── */
 .variant-overview-section {
   margin: 0;
   padding: 0 8px 4px;
@@ -414,10 +415,32 @@ body {
 
 .field--overview {
   margin-bottom: 0;
-  padding: 12px 14px 14px;
+  padding: 10px 12px 14px;
   border-radius: var(--radius);
   border: none;
   background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
+}
+
+.field--overview .section-collapse-btn {
+  align-items: center;
+  margin-right: 0;
+}
+
+.field--overview .section-collapse-chevron,
+.field--overview .section-leading-icon {
+  margin-top: 0;
+}
+
+.field--overview .section-toggle-summary {
+  flex: 1 1 auto;
+  max-width: none;
+}
+
+.overview-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 2px 0 0;
 }
 
 .overview-title {
@@ -3238,6 +3261,53 @@ body {
   min-width: 0;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+/* Progrès collapsed header: same ring + bar + color as Overview */
+.field--progress .section-toggle-summary {
+  max-width: 54%;
+  white-space: normal;
+}
+
+.progress-summary {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 88px;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.progress-summary-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.25;
+  color: color-mix(
+    in srgb,
+    var(--overview-progress-accent, var(--text-primary)) 80%,
+    var(--text-primary)
+  );
+}
+
+.progress-summary .overview-progress-track {
+  width: 100%;
+  min-width: 72px;
+}
+
+.progress-summary.has-progress-accent .overview-progress-fill {
+  background: var(--overview-progress-accent);
+}
+
+.progress-summary.is-blocked .progress-summary-value {
+  color: color-mix(
+    in srgb,
+    var(--overview-progress-accent, var(--blocked-accent, #ae2e24)) 80%,
+    var(--text-primary)
+  );
 }
 
 .priority-summary {

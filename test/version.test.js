@@ -53,9 +53,12 @@ describe('BuildVersion', () => {
   it('updatedLabel formats instant and past builds', () => {
     assert.equal(
       BuildVersion.updatedLabel(new Date().toISOString()),
-      "Mis à jour à l'instant"
+      "Binaires de l'application Cerveau mis à jour à l'instant"
     );
     const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    assert.match(BuildVersion.updatedLabel(hourAgo), /^Mis à jour /);
+    assert.match(
+      BuildVersion.updatedLabel(hourAgo),
+      /^Binaires de l'application Cerveau mis à jour /
+    );
   });
 });

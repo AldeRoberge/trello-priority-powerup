@@ -50,7 +50,19 @@
   var STATUT_EMBEDDED_DETAILS_STORAGE_KEY =
     'trello-priority-powerup/statut-embedded-details-expanded';
   // 'blocked' / 'statut' kept for legacy prefs; both nest under Progrès (not collapsible).
-  var SECTION_COLLAPSE_KEYS = ['info', 'statut', 'objectif', 'priority', 'graph', 'progress', 'due', 'blocked', 'chat', 'historique'];
+  var SECTION_COLLAPSE_KEYS = [
+    'overview',
+    'info',
+    'statut',
+    'objectif',
+    'priority',
+    'graph',
+    'progress',
+    'due',
+    'blocked',
+    'chat',
+    'historique'
+  ];
   var DEFAULT_COLOR_SCHEME_KEY = 'blue';
   /** Member clock preference: '24' (default) or '12'. Canonical storage stays HH:MM. */
   var preferredTimeFormat = '24';
@@ -7421,8 +7433,83 @@
     return out;
   }
 
+  var PROGRESS_CHECK_SVG =
+    '<svg class="tp-completion-check-icon" viewBox="0 0 16 16" width="10" height="10" aria-hidden="true" focusable="false">' +
+    '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3.5 8.2 L6.6 11.2 L12.5 4.8"></path>' +
+    '</svg>';
+  var PROGRESS_PAUSE_SVG =
+    '<svg class="tp-completion-check-icon tp-completion-pause-icon" viewBox="0 0 16 16" width="10" height="10" aria-hidden="true" focusable="false">' +
+    '<rect x="5" y="4" width="2.2" height="8" rx="0.8" fill="currentColor"></rect>' +
+    '<rect x="8.8" y="4" width="2.2" height="8" rx="0.8" fill="currentColor"></rect>' +
+    '</svg>';
+
   /**
-   * Always-open primary overview at the top of the card popup.
+   * Compact Progrès header summary: same ring + % + bar + color as the Overview cell.
+   * Returns a DOM node, or '' when there is nothing to show.
+   */
+  function buildProgressSummaryNode(opts) {
+    opts = opts || {};
+    var percent =
+      opts.progressPercent != null && isFinite(+opts.progressPercent)
+        ? Math.max(0, Math.min(100, Math.round(+opts.progressPercent)))
+        : null;
+    if (percent == null) return '';
+
+    var color =
+      typeof opts.progressColor === 'string' ? opts.progressColor : '';
+    var blocked = !!opts.progressBlocked;
+    var title = typeof opts.title === 'string' ? opts.title : '';
+    var donePct = percent >= 100;
+    var accent = blocked
+      ? readCssVar('--blocked-accent', '#ae2e24')
+      : color || '';
+
+    var wrap = document.createElement('span');
+    wrap.className = 'progress-summary';
+    if (title) wrap.title = title;
+    wrap.classList.toggle('is-blocked', blocked && !donePct);
+    if (accent) {
+      wrap.style.setProperty('--overview-progress-accent', accent);
+      wrap.classList.add('has-progress-accent');
+    }
+
+    var valueRow = document.createElement('span');
+    valueRow.className = 'progress-summary-value';
+
+    var ring = document.createElement('span');
+    ring.className = 'overview-progress-ring tp-completion-check';
+    ring.setAttribute('aria-hidden', 'true');
+    ring.classList.toggle('is-checked', donePct);
+    ring.classList.toggle('has-progress', percent > 0 && !donePct);
+    ring.classList.toggle('is-blocked', blocked && !donePct);
+    ring.style.setProperty('--completion-progress', String(percent));
+    if (accent) {
+      ring.style.setProperty('--completion-check-fill', accent);
+    }
+    ring.innerHTML =
+      blocked && !donePct ? PROGRESS_PAUSE_SVG : PROGRESS_CHECK_SVG;
+
+    var pctText = document.createElement('span');
+    pctText.className = 'overview-progress-pct';
+    pctText.textContent = percent + '\u00a0%';
+
+    valueRow.appendChild(ring);
+    valueRow.appendChild(pctText);
+
+    var track = document.createElement('span');
+    track.className = 'overview-progress-track';
+    var fill = document.createElement('span');
+    fill.className = 'overview-progress-fill';
+    fill.style.width = percent + '%';
+    track.appendChild(fill);
+
+    wrap.appendChild(valueRow);
+    wrap.appendChild(track);
+    return wrap;
+  }
+
+  /**
+   * Primary overview / résumé at the top of the card popup (collapsible).
    * Title + metric cells (progress+statut combined, subtasks, deadline, priority);
    * each cell jumps to the matching accordion via onJump.
    */
@@ -7432,6 +7519,8 @@
     var onJump = typeof config.onJump === 'function' ? config.onJump : null;
     var onLayoutChange =
       typeof config.onLayoutChange === 'function' ? config.onLayoutChange : null;
+    var onExpandChange =
+      typeof config.onExpandChange === 'function' ? config.onExpandChange : null;
 
     var titleText = typeof config.title === 'string' ? config.title : '';
     var statusText = typeof config.status === 'string' ? config.status : '';
@@ -7474,12 +7563,30 @@
             priority: true
           };
 
+    var bodyId = 'overview-section-body-' + Math.random().toString(36).slice(2, 9);
+
     var section = document.createElement('div');
     section.className = 'variant-overview-section';
 
     var field = document.createElement('div');
     field.className = 'field field--overview is-enabled';
     section.appendChild(field);
+
+    var chrome = createCollapsibleEnableChrome({
+      title: 'R\u00e9sum\u00e9',
+      bodyId: bodyId,
+      hideEnable: true,
+      leadingIcon: 'ti-layout-dashboard',
+      iconClass: 'overview-leading-icon',
+      titleClass: 'overview-enable-title',
+      collapseLabel: 'Replier R\u00e9sum\u00e9',
+      expandLabel: 'D\u00e9velopper R\u00e9sum\u00e9'
+    });
+    field.appendChild(chrome.head);
+
+    var body = document.createElement('div');
+    body.className = 'overview-section-body section-toggle-body';
+    body.id = bodyId;
 
     function makeJumpable(el, jumpKeyOrRef, label) {
       el.setAttribute('role', 'button');
@@ -7522,18 +7629,18 @@
     titleChevron.setAttribute('aria-hidden', 'true');
     titleBtn.appendChild(titleChevron);
 
-    field.appendChild(titleBtn);
+    body.appendChild(titleBtn);
 
     // ── Status brief (boss-style one-liner) ─────────────────────────────
     var statusBriefEl = document.createElement('p');
     statusBriefEl.className = 'overview-status-brief';
     statusBriefEl.hidden = true;
-    field.appendChild(statusBriefEl);
+    body.appendChild(statusBriefEl);
 
     // ── Metrics grid ───────────────────────────────────────────────────
     var metrics = document.createElement('div');
     metrics.className = 'overview-metrics';
-    field.appendChild(metrics);
+    body.appendChild(metrics);
 
     function makeCell(key, jumpKey, label, iconClass) {
       var cell = document.createElement('div');
@@ -7583,10 +7690,7 @@
     var progressRing = document.createElement('span');
     progressRing.className = 'overview-progress-ring tp-completion-check';
     progressRing.setAttribute('aria-hidden', 'true');
-    progressRing.innerHTML =
-      '<svg class="tp-completion-check-icon" viewBox="0 0 16 16" width="10" height="10" aria-hidden="true" focusable="false">' +
-      '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3.5 8.2 L6.6 11.2 L12.5 4.8"></path>' +
-      '</svg>';
+    progressRing.innerHTML = PROGRESS_CHECK_SVG;
 
     var progressBarTrack = document.createElement('div');
     progressBarTrack.className = 'overview-progress-track';
@@ -7761,18 +7865,8 @@
         } else {
           progressRing.style.removeProperty('--completion-check-fill');
         }
-        if (progressBlocked && !donePct) {
-          progressRing.innerHTML =
-            '<svg class="tp-completion-check-icon tp-completion-pause-icon" viewBox="0 0 16 16" width="10" height="10" aria-hidden="true" focusable="false">' +
-            '<rect x="5" y="4" width="2.2" height="8" rx="0.8" fill="currentColor"></rect>' +
-            '<rect x="8.8" y="4" width="2.2" height="8" rx="0.8" fill="currentColor"></rect>' +
-            '</svg>';
-        } else {
-          progressRing.innerHTML =
-            '<svg class="tp-completion-check-icon" viewBox="0 0 16 16" width="10" height="10" aria-hidden="true" focusable="false">' +
-            '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3.5 8.2 L6.6 11.2 L12.5 4.8"></path>' +
-            '</svg>';
-        }
+        progressRing.innerHTML =
+          progressBlocked && !donePct ? PROGRESS_PAUSE_SVG : PROGRESS_CHECK_SVG;
         progressCell.value.appendChild(progressRing);
         var pctText = document.createElement('span');
         pctText.className = 'overview-progress-pct';
@@ -7865,7 +7959,27 @@
       if (onLayoutChange) onLayoutChange();
     }
 
+    function summaryText() {
+      var t = (titleText || '').trim();
+      return t || 'Sans titre';
+    }
+
+    field.appendChild(body);
+
+    var collapse = bindCollapsibleEnable({
+      field: field,
+      body: body,
+      chrome: chrome,
+      alwaysEnabled: true,
+      enabled: true,
+      expanded: config.expanded != null ? !!config.expanded : true,
+      getSummary: summaryText,
+      onLayoutChange: onLayoutChange,
+      onExpandChange: onExpandChange || function () {}
+    });
+
     paint();
+    collapse.refreshSummary();
 
     if (mountEl) {
       mountEl.appendChild(section);
@@ -7923,12 +8037,23 @@
         features = Object.assign({}, features, next.features);
       }
       paint();
+      collapse.refreshSummary();
     }
 
     return {
       el: section,
       field: field,
       setData: setData,
+      setExpanded: function (on) {
+        if (collapse && typeof collapse.setExpanded === 'function') {
+          collapse.setExpanded(!!on);
+        }
+      },
+      isExpanded: function () {
+        return collapse && typeof collapse.isExpanded === 'function'
+          ? collapse.isExpanded()
+          : true;
+      },
       getData: function () {
         return {
           title: titleText,
@@ -8173,21 +8298,11 @@
     titleRow.value.appendChild(titleWrap);
     body.appendChild(titleRow.row);
 
-    // ── Description (Markdown preview + expandable editor) ─────────────
+    // ── Description (always-visible markdown / rich editor) ─────────────
     var descRow = makeRow('desc', 'Description', { icon: 'ti-notes' });
     var descWrap = document.createElement('div');
     descWrap.className = 'info-desc-wrap';
-    var descEditing = false;
     var descMode = 'rich';
-
-    var descPreview = document.createElement('div');
-    descPreview.className = 'info-desc-preview';
-    descPreview.tabIndex = 0;
-    descPreview.setAttribute('role', 'button');
-    descPreview.setAttribute(
-      'aria-label',
-      'Description de la carte. Activer pour modifier.'
-    );
 
     var descInput = document.createElement('textarea');
     descInput.className = 'info-desc-input';
@@ -8202,7 +8317,6 @@
     var descRich = document.createElement('div');
     descRich.className = 'info-desc-rich info-desc-preview';
     descRich.id = 'cardDescRich';
-    descRich.hidden = true;
     descRich.contentEditable = 'true';
     descRich.setAttribute('role', 'textbox');
     descRich.setAttribute('aria-multiline', 'true');
@@ -8210,10 +8324,9 @@
     descRich.setAttribute('spellcheck', 'true');
     descRich.setAttribute('data-placeholder', 'Ajouter une description\u2026');
 
-    // Trello-style formatting toolbar (visible only while editing).
+    // Trello-style formatting toolbar (always visible with the editor).
     var descToolbar = document.createElement('div');
     descToolbar.className = 'info-desc-toolbar';
-    descToolbar.hidden = true;
     descToolbar.setAttribute('role', 'toolbar');
     descToolbar.setAttribute('aria-label', 'Mise en forme de la description');
 
@@ -8371,7 +8484,6 @@
     authBox.appendChild(authBtn);
 
     descWrap.appendChild(descToolbar);
-    descWrap.appendChild(descPreview);
     descWrap.appendChild(descRich);
     descWrap.appendChild(descInput);
     descWrap.appendChild(descMeta);
@@ -8895,33 +9007,6 @@
       return next;
     }
 
-    function syncDescPreviewSize() {
-      var empty = descPreview.classList.contains('is-empty');
-      syncExpandableSurfaceHeight(descPreview, {
-        maxHeight: INFO_DESC_MAX_HEIGHT_PX,
-        minHeight: empty ? INFO_DESC_EMPTY_MIN_HEIGHT_PX : INFO_DESC_MIN_HEIGHT_PX
-      });
-    }
-
-    function renderDescPreview() {
-      var value = descInput.value;
-      var trimmed = value.trim();
-      descPreview.classList.toggle('is-empty', !trimmed);
-      if (!trimmed) {
-        descPreview.innerHTML =
-          '<span class="info-desc-placeholder">Ajouter une description\u2026</span>';
-      } else {
-        descPreview.innerHTML = renderMarkdownToHtml(value);
-        hydrateSmartLinkPreviews(descPreview, {
-          onDone: function () {
-            if (!descEditing) syncDescPreviewSize();
-            onLayoutChange();
-          }
-        });
-      }
-      if (!descEditing) syncDescPreviewSize();
-    }
-
     function closeDescFormatMenu() {
       descFormatMenu.hidden = true;
       descFormatWrap.classList.remove('is-open');
@@ -9061,8 +9146,8 @@
       if (descMode === 'rich' && next === 'markdown') syncDescSourceFromRich();
       descMode = next;
       if (descMode === 'rich') renderDescRich();
-      descRich.hidden = !descEditing || descMode !== 'rich';
-      descInput.hidden = !descEditing || descMode !== 'markdown';
+      descRich.hidden = descMode !== 'rich';
+      descInput.hidden = descMode !== 'markdown';
       descRichModeBtn.classList.toggle('is-active', descMode === 'rich');
       descMarkdownModeBtn.classList.toggle('is-active', descMode === 'markdown');
       descRichModeBtn.setAttribute('aria-checked', descMode === 'rich' ? 'true' : 'false');
@@ -9071,31 +9156,9 @@
         descMode === 'markdown' ? 'true' : 'false'
       );
       syncDescFormatMenuSelection();
-      if (descEditing && options.focus !== false) focusDescEditor(false);
-      onLayoutChange();
-    }
-
-    function startDescEdit() {
-      if (descEditing) return;
-      descEditing = true;
-      descPreview.hidden = true;
-      descToolbar.hidden = false;
-      setDescMode(descMode, { focus: false });
       if (descMode === 'markdown') syncDescInputSize();
       else syncDescRichSize();
-      focusDescEditor(true);
-    }
-
-    function endDescEdit() {
-      if (!descEditing) return;
-      syncDescSourceFromRich();
-      descEditing = false;
-      closeDescFormatMenu();
-      descToolbar.hidden = true;
-      descInput.hidden = true;
-      descRich.hidden = true;
-      descPreview.hidden = false;
-      renderDescPreview();
+      if (options.focus !== false) focusDescEditor(false);
       onLayoutChange();
     }
 
@@ -11646,8 +11709,8 @@
           if (descMode === 'rich') renderDescRich();
           descSpellcheckedText = original.trim() || null;
           descDirty = true;
-          if (descEditing && descMode === 'markdown') syncDescInputSize();
-          else renderDescPreview();
+          if (descMode === 'markdown') syncDescInputSize();
+          else syncDescRichSize();
           onLayoutChange();
           flushDescSave();
         },
@@ -11718,8 +11781,8 @@
         descSpellcheckedText = corrected.trim();
         descDirty = true;
         showDescSpellRevert(snapshot, corrected);
-        if (descEditing) syncDescInputSize();
-        else renderDescPreview();
+        if (descMode === 'markdown') syncDescInputSize();
+        else syncDescRichSize();
         onLayoutChange();
         flushDescSave();
       }).catch(function () {
@@ -18153,6 +18216,7 @@
     dueBadgeSuffix: dueBadgeSuffix,
     isDueEnabled: isDueEnabled,
     withDueDateDisplay: withDueDateDisplay,
+    buildProgressSummaryNode: buildProgressSummaryNode,
     createOverviewField: createOverviewField,
     createInfoField: createInfoField,
     renderMarkdownToHtml: renderMarkdownToHtml,
