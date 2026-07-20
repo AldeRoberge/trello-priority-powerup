@@ -97,6 +97,26 @@ check(
   PT.formatBadgeText(urgentDisplay, false) === '\u2B24 T\u00e2che urgente'
 );
 check(
+  'priority face badge combines progress percent',
+  PT.formatBadgeText(urgentDisplay, false, { percent: 45 }) ===
+    '\u2B24 T\u00e2che urgente \u00b7 45\u00a0%'
+);
+check(
+  'priority face badge progress-only when no display',
+  PT.formatBadgeText(null, false, { percent: 45 }) === '45\u00a0%'
+);
+check(
+  'priority face badge complete with progress',
+  PT.formatBadgeText(urgentDisplay, true, { percent: 100 }) ===
+    '\u2713 Compl\u00e9t\u00e9 (T\u00e2che urgente) \u00b7 \u2713 100\u00a0%'
+);
+check(
+  'buildCardFaceBadge with progress keeps priority color',
+  PT.buildCardFaceBadge(urgentDisplay, false, { percent: 45 }).text ===
+    '\u2B24 T\u00e2che urgente \u00b7 45\u00a0%' &&
+    isTrelloBadgeColor(PT.buildCardFaceBadge(urgentDisplay, false, { percent: 45 }).color)
+);
+check(
   'complete urgent badge',
   PT.formatBadgeText(urgentDisplay, true) === '\u2713 Compl\u00e9t\u00e9 (T\u00e2che urgente)'
 );

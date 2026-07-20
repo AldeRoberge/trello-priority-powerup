@@ -192,38 +192,10 @@
 
     TrelloPowerUp.initialize({
 
+      // Face: single Priority badge (priority label + progress % when set).
+      // Project / separate progress badges are omitted on the board card face.
       'card-badges': withBoardContext(function (t) {
-        var jobs = [
-          PriorityTrello.cardFaceBadges(t),
-          CompletionTrello.cardFaceBadges(t),
-        ];
-        return Promise.resolve()
-          .then(function () {
-            if (typeof UserProfile === 'undefined' || typeof UserProfile.load !== 'function') {
-              return null;
-            }
-            return UserProfile.load(t);
-          })
-          .then(function (profile) {
-            var objectifOn =
-              typeof UserProfile !== 'undefined' &&
-              typeof UserProfile.isExperimentalEnabled === 'function'
-                ? UserProfile.isExperimentalEnabled(profile, 'objectif')
-                : false;
-            if (
-              objectifOn &&
-              typeof GoalsTrello !== 'undefined' &&
-              GoalsTrello.cardFaceBadges
-            ) {
-              jobs.push(GoalsTrello.cardFaceBadges(t));
-            }
-            return Promise.all(jobs);
-          })
-          .then(function (results) {
-            return results.reduce(function (acc, list) {
-              return acc.concat(list || []);
-            }, []);
-          });
+        return PriorityTrello.cardFaceBadges(t);
       }, 'card-badges'),
 
       // card-buttons is not used (priority is opened via card-detail-badges).

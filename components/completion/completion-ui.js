@@ -1190,20 +1190,29 @@
 
     var clearBtn = null;
     if (!readOnly) {
-      clearBtn = document.createElement('button');
-      clearBtn.type = 'button';
+      clearBtn = document.createElement('span');
       clearBtn.className = 'tp-estimate-chip-clear';
+      clearBtn.setAttribute('role', 'button');
+      clearBtn.setAttribute('tabindex', '0');
       clearBtn.setAttribute('aria-label', 'Retirer l\u2019estimation');
       clearBtn.title = 'Retirer l\u2019estimation';
       clearBtn.innerHTML = '<i class="ti ti-x" aria-hidden="true"></i>';
       clearBtn.hidden = true;
-      clearBtn.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
+      function clearEstimate(e) {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
         closePopover();
         setMinutes(null, true);
+      }
+      clearBtn.addEventListener('click', clearEstimate);
+      clearBtn.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          clearEstimate(e);
+        }
       });
-      wrap.appendChild(clearBtn);
+      chip.appendChild(clearBtn);
     }
 
     var popover = null;

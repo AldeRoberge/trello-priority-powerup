@@ -211,3 +211,203 @@ describe('GanttTrello subtask mutations', () => {
     assert.equal(store.parent.cardCompletion.items[0].text, 'Keep');
   });
 });
+
+describe('GanttTrello dates', () => {
+  let GanttTrello;
+  let previousPT;
+
+  before(() => {
+    loadComponent('completion/completion-trello.js');
+    loadComponent('gantt/gantt-model.js');
+    loadComponent('gantt/gantt-trello.js');
+    GanttTrello = global.GanttTrello;
+    previousPT = global.PriorityTrello;
+  });
+
+  function withPriorityTrello(mock, fn) {
+    global.PriorityTrello = mock;
+    return Promise.resolve()
+      .then(fn)
+      .finally(() => {
+        global.PriorityTrello = previousPT;
+      });
+  }
+
+  function fakeT(store) {
+    return {
+      get(scope, visibility, key) {
+        const bucket = store[scope] || {};
+        return Promise.resolve(bucket[key]);
+      },
+      set(scope, visibility, key, value) {
+        if (!store[scope]) store[scope] = {};
+        store[scope][key] = value;
+        return Promise.resolve();
+      },
+    };
+  }
+
+  it('resolveCardDates prefers plugin inputs then Trello fields', () => {
+    assert.deepEqual(
+      GanttTrello.resolveCardDates(
+        { due: '2026-07-10T12:00:00.000Z', start: '2026-07-01T12:00:00.000Z' },
+        { startDate: '2026-07-02', dueDate: '2026-07-09', dueTime: '15:30' }
+      ),
+      {
+        startDate: '2026-07-02',
+        dueDate: '2026-07-09',
+        dueTime: '15:30',
+      }
+    );
+    assert.deepEqual(
+      GanttTrello.resolveCardDates(
+        { due: '2026-07-10T12:00:00.000Z', start: '2026-07-01T12:00:00.000Z' },
+        null
+      ),
+      {
+        startDate: '2026-07-01',
+        dueDate: '2026-07-10',
+        dueTime: '',
+      }
+    );
+  });
+
+  it('buildInputsForDates sets and clears start/due', async () => {
+    await withPriorityTrello(
+      {
+        DEFAULT_INPUTS: { urgency: 2, impact: 2, ease: 3 },
+        normalizeInputs: (x) => x,
+      },
+      () => {
+        const withDates = GanttTrello.buildInputsForDates(
+          { urgency: 3, impact: 2, ease: 3 },
+          '2026-07-01',
+          '2026-07-10',
+          '09:00'
+        );
+        assert.equal(withDates.startDate, '2026-07-01');
+        assert.equal(withDates.dueDate, '2026-07-10');
+        assert.equal(withDates.dueTime, '09:00');
+
+        const cleared = GanttTrello.buildInputsForDates(
+          withDates,
+          '',
+          '',
+          ''
+        );
+        assert.equal(cleared.startDate, undefined);
+        assert.equal(cleared.dueDate, undefined);
+        assert.equal(cleared.dueTime, undefined);
+      }
+    );
+  });
+
+  it('saveCardDates writes plugin keys and REST due/start', async () => {
+    const store = {};
+    const puts = [];
+    await withPriorityTrello(
+      {
+        CARD_PRIORITY_KEY: 'cardPriority',
+        CARD_DUE_SYNCED_KEY: 'cardDueSyncedIso',
+        CARD_START_SYNCED_KEY: 'cardStartSyncedIso',
+        DEFAULT_INPUTS: { urgency: 2, impact: 2, ease: 3 },
+        normalizeInputs: (x) => x,
+        isRestAuthorized: async () => true,
+        getCardInputsById: async () => ({ urgency: 2, impact: 2, ease: 3 }),
+        restPutCard: async (_t, cardId, body) => {
+          puts.push({ cardId, body });
+          return { ok: true };
+        },
+      },
+      async () => {
+        const t = fakeT(store);
+        const res = await GanttTrello.saveCardDates(t, 'card1', {
+          startDate: '2026-07-01',
+          dueDate: '2026-07-05',
+        });
+        assert.equal(res.ok, true);
+        assert.equal(store.card1.cardPriority.startDate, '2026-07-01');
+        assert.equal(store.card1.cardPriority.dueDate, '2026-07-05');
+        assert.ok(store.card1.cardDueSyncedIso);
+        assert.ok(store.card1.cardStartSyncedIso);
+        assert.equal(puts.length, 1);
+        assert.equal(puts[0].cardId, 'card1');
+        assert.ok(puts[0].body.due);
+        assert.ok(puts[0].body.start);
+      }
+    );
+  });
+
+  it('saveCardDates rejects missing card id', async () => {
+    const res = await GanttTrello.saveCardDates(fakeT({}), '', {
+      startDate: '2026-07-01',
+      dueDate: '2026-07-01',
+    });
+    assert.equal(res.ok, false);
+    assert.equal(res.reason, 'no-card-id');
+  });
+
+  it('loadBoard builds nest tree from board cards', async () => {
+    await withPriorityTrello(
+      {
+        getCardInputsById: async (_t, id) =>
+          id === 'parent'
+            ? { dueDate: '2026-07-20' }
+            : { startDate: '2026-07-18', dueDate: '2026-07-19' },
+        ensureBoardPriorityContext: async () => ({}),
+        computeDisplay: () => ({ score: 5, tierI: 2, label: 'Normal' }),
+        prioritySortRank: () => ({ tier: 2, score: 5 }),
+      },
+      async () => {
+        const t = {
+          lists: async () => [{ id: 'L1', name: 'Doing' }],
+          cards: async () => [
+            {
+              id: 'parent',
+              name: 'Parent',
+              idList: 'L1',
+              due: '2026-07-20T12:00:00.000Z',
+              pos: 1,
+            },
+            {
+              id: 'child',
+              name: 'Child',
+              idList: 'L1',
+              start: '2026-07-18T12:00:00.000Z',
+              due: '2026-07-19T12:00:00.000Z',
+              pos: 2,
+            },
+          ],
+          get(scope, _v, key) {
+            if (key === 'cardCompletion' && scope === 'parent') {
+              return Promise.resolve({
+                items: [
+                  {
+                    id: 'lk',
+                    text: 'Child link',
+                    linkedCardId: 'child',
+                    progress: 0,
+                  },
+                ],
+              });
+            }
+            if (key === 'cardCompletion') {
+              return Promise.resolve({ items: [] });
+            }
+            return Promise.resolve(undefined);
+          },
+          set() {
+            return Promise.resolve();
+          },
+        };
+
+        const data = await GanttTrello.loadBoard(t);
+        assert.equal(data.cards.length, 2);
+        assert.equal(data.tree.length, 1);
+        assert.equal(data.tree[0].cardId, 'parent');
+        assert.equal(data.tree[0].children.length, 1);
+        assert.equal(data.tree[0].children[0].cardId, 'child');
+      }
+    );
+  });
+});

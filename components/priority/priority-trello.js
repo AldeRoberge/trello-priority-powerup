@@ -726,25 +726,40 @@
     return label + ' (' + suffix + ')';
   }
 
-  function formatBadgeText(display, completed) {
-    if (!display) return '';
-    if (completed) {
-      return tierBadgeDot(display, true) + ' ' + formatCompletedBadgeLabel(incompleteBadgeLabel(display));
+  function formatProgressFaceSuffix(progress) {
+    var CT = global.CompletionTrello;
+    if (!progress || !(progress.percent > 0)) return '';
+    if (CT && typeof CT.formatFaceBadgeText === 'function') {
+      return CT.formatFaceBadgeText(progress) || '';
     }
-    if (display.blocked) {
-      return tierBadgeDot(display, false) + ' ' + formatBlockedBoardBadgeText(display);
-    }
-    var PU = priorityUI();
-    if (display.priorityEnabled === false) {
-      if (PU && display.dueCountdown) {
-        return tierBadgeDot(display, false) + ' ' + display.dueCountdown;
+    if (progress.percent === 100) return '\u2713 ' + progress.percent + '\u00a0%';
+    return progress.percent + '\u00a0%';
+  }
+
+  function formatBadgeText(display, completed, progress) {
+    var priorityText = '';
+    if (display) {
+      if (completed) {
+        priorityText =
+          tierBadgeDot(display, true) + ' ' + formatCompletedBadgeLabel(incompleteBadgeLabel(display));
+      } else if (display.blocked) {
+        priorityText = tierBadgeDot(display, false) + ' ' + formatBlockedBoardBadgeText(display);
+      } else {
+        var PU = priorityUI();
+        if (display.priorityEnabled === false) {
+          if (PU && display.dueCountdown) {
+            priorityText = tierBadgeDot(display, false) + ' ' + display.dueCountdown;
+          }
+        } else if (PU && PU.formatDueBadgeText && display.dueCountdown) {
+          priorityText = tierBadgeDot(display, false) + ' ' + PU.formatDueBadgeText(display);
+        } else if (display.priorityEnabled !== false) {
+          priorityText = tierBadgeDot(display, false) + ' ' + incompleteBadgeLabel(display);
+        }
       }
-      return '';
     }
-    if (PU && PU.formatDueBadgeText && display.dueCountdown) {
-      return tierBadgeDot(display, false) + ' ' + PU.formatDueBadgeText(display);
-    }
-    return tierBadgeDot(display, false) + ' ' + incompleteBadgeLabel(display);
+    var progressText = formatProgressFaceSuffix(progress);
+    if (priorityText && progressText) return priorityText + ' \u00b7 ' + progressText;
+    return priorityText || progressText || '';
   }
 
   function tierDetailBadgeColor(display) {
@@ -755,12 +770,34 @@
     return trelloBadgeMuted();
   }
 
-  function buildCardFaceBadge(display, completed) {
-    if (!display) return null;
-    return {
-      text: formatBadgeText(display, completed),
-      color: completed ? trelloBadgeComplete() : tierDetailBadgeColor(display),
-    };
+  function progressFaceBadgeColor(progress) {
+    if (
+      typeof global.CompletionUI !== 'undefined' &&
+      global.CompletionUI.completionTrelloBadgeColor
+    ) {
+      return global.CompletionUI.completionTrelloBadgeColor(progress.percent);
+    }
+    if (progress && progress.percent === 100) return 'green';
+    if (progress && progress.percent >= 50) return 'blue';
+    return 'sky';
+  }
+
+  function buildCardFaceBadge(display, completed, progress) {
+    var text = formatBadgeText(display, completed, progress);
+    if (!text) return null;
+    if (display) {
+      return {
+        text: text,
+        color: completed ? trelloBadgeComplete() : tierDetailBadgeColor(display),
+      };
+    }
+    if (progress && progress.percent > 0) {
+      return {
+        text: text,
+        color: progressFaceBadgeColor(progress),
+      };
+    }
+    return null;
   }
 
   function brandAppName() {
@@ -2239,12 +2276,45 @@
     return Object.assign({ refresh: BADGE_REFRESH_SEC }, badge);
   }
 
+  async function getFaceProgress(t) {
+    var CT = global.CompletionTrello;
+    if (!CT || typeof CT.getCardCompletion !== 'function') return null;
+    try {
+      var data = await CT.getCardCompletion(t);
+      if (data && data.progressEnabled === false) return null;
+      var progress =
+        typeof CT.computeCardProgress === 'function' ? CT.computeCardProgress(data) : null;
+      if (!progress || !(progress.percent > 0)) return null;
+      return progress;
+    } catch (err) {
+      console.error('Priority face progress load failed', err);
+      return null;
+    }
+  }
+
+  function hasPriorityFaceContent(display) {
+    if (!display) return false;
+    if (display.priorityEnabled === false && !display.blocked && !display.dueCountdown) {
+      return false;
+    }
+    if (
+      display.priorityEnabled === false &&
+      !display.blocked &&
+      !formatBadgeText(display, false)
+    ) {
+      return false;
+    }
+    return !!formatBadgeText(display, false);
+  }
+
   function dynamicCardFaceBadge(t) {
     return {
       dynamic: function () {
-        return getBadgeData(t).then(function (data) {
-          if (!data.display) return { refresh: BADGE_REFRESH_SEC };
-          var badge = buildCardFaceBadge(data.display, data.completed);
+        return Promise.all([getBadgeData(t), getFaceProgress(t)]).then(function (pair) {
+          var data = pair[0];
+          var progress = pair[1];
+          if (!data.display && !progress) return { refresh: BADGE_REFRESH_SEC };
+          var badge = buildCardFaceBadge(data.display, data.completed, progress);
           if (!badge || !badge.text) return { refresh: BADGE_REFRESH_SEC };
           return withBadgeRefresh(badge);
         });
@@ -2253,19 +2323,16 @@
   }
 
   function cardFaceBadges(t) {
-    return getCardDisplay(t)
-      .then(function (display) {
-        if (!display) return [];
-        if (
-          display.priorityEnabled === false &&
-          !display.blocked &&
-          !display.dueCountdown
-        ) {
-          return [];
-        }
-        if (display.priorityEnabled === false && !display.blocked && !formatBadgeText(display, false)) {
-          return [];
-        }
+    return Promise.all([
+      getCardDisplay(t).catch(function () {
+        return null;
+      }),
+      getFaceProgress(t),
+    ])
+      .then(function (pair) {
+        var display = pair[0];
+        var progress = pair[1];
+        if (!hasPriorityFaceContent(display) && !progress) return [];
         return [dynamicCardFaceBadge(t)];
       })
       .catch(function (err) {

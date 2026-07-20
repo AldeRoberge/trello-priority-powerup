@@ -37,6 +37,10 @@
     return global.OutlookSync || null;
   }
 
+  function OI() {
+    return global.OutlookIcs || null;
+  }
+
   function readStoredLabelsWidth() {
     try {
       var raw =
@@ -57,6 +61,21 @@
     } catch (e) {
       /* ignore */
     }
+  }
+
+  /**
+   * Clamp labels column width. `chartWidthOrEl` may be a pixel number or an element with clientWidth.
+   */
+  function clampLabelsWidth(width, chartWidthOrEl) {
+    var chartW = 1000;
+    if (typeof chartWidthOrEl === 'number' && chartWidthOrEl > 0) {
+      chartW = chartWidthOrEl;
+    } else if (chartWidthOrEl && chartWidthOrEl.clientWidth) {
+      chartW = chartWidthOrEl.clientWidth;
+    }
+    var max = Math.max(LABELS_W_MIN, chartW - 220);
+    var w = Math.round(Number(width) || LABELS_W_DEFAULT);
+    return Math.max(LABELS_W_MIN, Math.min(max, w));
   }
 
   function el(tag, className, attrs) {
@@ -128,16 +147,6 @@
     root.appendChild(body);
     mount.innerHTML = '';
     mount.appendChild(root);
-
-    function clampLabelsWidth(width, chartEl) {
-      var chartW =
-        chartEl && chartEl.clientWidth
-          ? chartEl.clientWidth
-          : body.clientWidth || 1000;
-      var max = Math.max(LABELS_W_MIN, chartW - 220);
-      var w = Math.round(Number(width) || LABELS_W_DEFAULT);
-      return Math.max(LABELS_W_MIN, Math.min(max, w));
-    }
 
     function bindLabelsSplitter(splitter, labelsCol, chartEl, scrollEl) {
       splitter.addEventListener('pointerdown', function (ev) {
@@ -415,12 +424,68 @@
         }
       }
 
+      var icsBtn = el('button', 'gantt-btn', {
+        type: 'button',
+        text: 'Exporter .ics',
+      });
+      icsBtn.title =
+        'T\u00e9l\u00e9charger un calendrier (.ics) pour Outlook — sans compte Entra';
+      icsBtn.addEventListener('click', function () {
+        exportIcsCalendar();
+      });
+      filters.appendChild(icsBtn);
+
       var refresh = el('button', 'gantt-btn', { type: 'button', text: 'Actualiser' });
       refresh.addEventListener('click', function () {
         reload();
       });
       filters.appendChild(refresh);
       toolbar.appendChild(filters);
+    }
+
+    function exportIcsCalendar() {
+      var ics = OI();
+      if (!ics || typeof ics.exportBoard !== 'function') {
+        setStatus('Module ICS manquant', true);
+        return;
+      }
+      setStatus('Export .ics\u2026');
+      var cards = [];
+      var ids = Object.keys(state.cardsById || {});
+      for (var i = 0; i < ids.length; i++) {
+        cards.push(state.cardsById[ids[i]]);
+      }
+      Promise.resolve(
+        cards.length
+          ? ics.exportBoard(t, { cards: cards })
+          : ics.exportBoard(t)
+      )
+        .then(function (res) {
+          if (!res || !res.ok) {
+            if (res && res.reason === 'no-dated-cards') {
+              setStatus('Aucune carte dat\u00e9e \u00e0 exporter', true);
+            } else {
+              setStatus(
+                'Export .ics \u00e9chou\u00e9' +
+                  (res && res.reason ? ' (' + res.reason + ')' : ''),
+                true
+              );
+            }
+            return;
+          }
+          setStatus(
+            'Fichier .ics t\u00e9l\u00e9charg\u00e9 (' +
+              res.eventCount +
+              ' \u00e9v\u00e9nement(s)) — importez-le dans Outlook'
+          );
+        })
+        .catch(function (err) {
+          setStatus(
+            'Export .ics\u00a0: ' +
+              (err && err.message ? err.message : String(err)),
+            true
+          );
+        });
     }
 
     function formatOutlookSummary(summary) {
@@ -1119,12 +1184,6 @@
       return model.snapDate(d, state.viewMode);
     }
 
-    function orderedInterval(a, b) {
-      if (!a || !b) return null;
-      if (a.getTime() <= b.getTime()) return { start: a, end: b };
-      return { start: b, end: a };
-    }
-
     function placeGhost(ghostEl, interval) {
       var geo = model.barGeometry(interval, range(), state.timelineWidth);
       if (!geo || !geo.visible) {
@@ -1186,7 +1245,7 @@
           var cur = dateAtTimelineX(timeRow, e.clientX);
           if (!cur) return;
           state.paint.current = cur;
-          var iv = orderedInterval(state.paint.origin, cur);
+          var iv = model.orderedInterval(state.paint.origin, cur);
           if (iv) placeGhost(ghost, iv);
         }
 
@@ -1200,7 +1259,7 @@
           state.paint = null;
           ghost.hidden = true;
           if (!paint) return;
-          var iv = orderedInterval(paint.origin, paint.current);
+          var iv = model.orderedInterval(paint.origin, paint.current);
           if (!iv) return;
           applyIntervalToRow(row, iv);
           applySort();
@@ -1356,11 +1415,12 @@
           selectedVisible++;
         }
       }
-      selectAll.checked =
-        visibleForSelect.length > 0 &&
-        selectedVisible === visibleForSelect.length;
-      selectAll.indeterminate =
-        selectedVisible > 0 && selectedVisible < visibleForSelect.length;
+      var selectState = model.selectAllCheckboxState(
+        selectedVisible,
+        visibleForSelect.length
+      );
+      selectAll.checked = selectState.checked;
+      selectAll.indeterminate = selectState.indeterminate;
       selectAll.addEventListener('change', function () {
         var on = !!selectAll.checked;
         var list = visibleRows();
@@ -1660,5 +1720,11 @@
 
   global.GanttUI = {
     mountGantt: mountGantt,
+    clampLabelsWidth: clampLabelsWidth,
+    readStoredLabelsWidth: readStoredLabelsWidth,
+    storeLabelsWidth: storeLabelsWidth,
+    LABELS_W_MIN: LABELS_W_MIN,
+    LABELS_W_DEFAULT: LABELS_W_DEFAULT,
+    LABELS_W_STORAGE_KEY: LABELS_W_STORAGE_KEY,
   };
 })(typeof window !== 'undefined' ? window : this);

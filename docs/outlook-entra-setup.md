@@ -6,12 +6,14 @@ Guide to register the Microsoft identity app used by the Gantt ↔ Outlook calen
 
 Create a **Single-page application (SPA)** under **Microsoft Entra ID → App registrations**.
 
-| Choice | Use this? | Why |
-|--------|-----------|-----|
-| **Single-page application (SPA)** | **Yes** | The Power-Up runs in the browser (GitHub Pages). Auth uses MSAL + PKCE popup. |
-| Web / confidential client | No | Would need a client secret and a backend. This Power-Up has neither. |
-| Mobile / desktop (public client) | No | Wrong redirect / platform for an iframe Power-Up. |
-| Daemon / service principal | No | No user sign-in; cannot access a member’s Outlook calendar. |
+
+| Choice                            | Use this? | Why                                                                           |
+| --------------------------------- | --------- | ----------------------------------------------------------------------------- |
+| **Single-page application (SPA)** | **Yes**   | The Power-Up runs in the browser (GitHub Pages). Auth uses MSAL + PKCE popup. |
+| Web / confidential client         | No        | Would need a client secret and a backend. This Power-Up has neither.          |
+| Mobile / desktop (public client)  | No        | Wrong redirect / platform for an iframe Power-Up.                             |
+| Daemon / service principal        | No        | No user sign-in; cannot access a member’s Outlook calendar.                   |
+
 
 Also:
 
@@ -23,7 +25,7 @@ Also:
 
 - Access to [Azure Portal](https://portal.azure.com) or [Microsoft Entra admin center](https://entra.microsoft.com)
 - Your Power-Up base URL on GitHub Pages, for example:  
-  `https://AldeRoberge.github.io/trello-priority-powerup`
+`https://AldeRoberge.github.io/trello-priority-powerup`
 
 ## Step-by-step
 
@@ -31,17 +33,12 @@ Also:
 
 1. Open **Microsoft Entra ID** → **App registrations** → **New registration**.
 2. **Name:** e.g. `Trello Cerveau Outlook`.
-3. **Supported account types:**  
-   **Accounts in any organizational directory and personal Microsoft accounts**  
+3. **Supported account types:**
+  **Accounts in any organizational directory and personal Microsoft accounts**  
    (matches `authority: https://login.microsoftonline.com/common` in the Power-Up).
 4. **Redirect URI:**
-   - Platform: **Single-page application (SPA)**
-   - URI (exact match required):
-
-   ```text
-   https://AldeRoberge.github.io/trello-priority-powerup/outlook-auth.html
-   ```
-
+  - Platform: **Single-page application (SPA)**
+  - URI (exact match required):
    Replace the host/path if your Pages URL is different. No trailing slash.
 5. Click **Register**.
 
@@ -49,7 +46,7 @@ Also:
 
 On the app **Overview** page, copy **Application (client) ID**.
 
-Paste it into [`components/outlook/outlook-config.js`](../components/outlook/outlook-config.js):
+Paste it into `[components/outlook/outlook-config.js](../components/outlook/outlook-config.js)`:
 
 ```js
 clientId: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
@@ -61,9 +58,11 @@ Commit and deploy so GitHub Pages serves the updated file.
 
 1. **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated permissions**.
 2. Add:
-   - `User.Read` (often present by default)
-   - `Calendars.ReadWrite`
-3. **Add permissions**.
+
+1. 
+  - `User.Read` (often present by default)
+  - `Calendars.ReadWrite`
+2. **Add permissions**.
 
 Do **not** add application permissions such as `Calendars.ReadWrite` (Application). Those need admin consent and a daemon app.
 
@@ -95,13 +94,15 @@ Under **Authentication**:
 
 ## Troubleshooting
 
-| Symptom | Likely cause |
-|---------|----------------|
-| Popup closes with an error after login | Redirect URI mismatch (wrong path, `http` vs `https`, trailing slash) |
-| Toolbar shows **Outlook (config)** disabled | Empty `clientId` in `outlook-config.js`, or Pages not redeployed |
-| Calendar consent denied | Missing `Calendars.ReadWrite`, or tenant blocks the permission |
-| Titles/dates don’t update in Trello | Outlook connected but Trello OAuth not authorized |
-| Portal error `AADSTS16000` / app `ADIbizaUX` / tenant **Microsoft Services** | Azure Portal sign-in stuck on the wrong tenant — see below |
+
+| Symptom                                                                      | Likely cause                                                          |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Popup closes with an error after login                                       | Redirect URI mismatch (wrong path, `http` vs `https`, trailing slash) |
+| Toolbar shows **Outlook (config)** disabled                                  | Empty `clientId` in `outlook-config.js`, or Pages not redeployed      |
+| Calendar consent denied                                                      | Missing `Calendars.ReadWrite`, or tenant blocks the permission        |
+| Titles/dates don’t update in Trello                                          | Outlook connected but Trello OAuth not authorized                     |
+| Portal error `AADSTS16000` / app `ADIbizaUX` / tenant **Microsoft Services** | Azure Portal sign-in stuck on the wrong tenant — see below            |
+
 
 ### AADSTS16000 with `ADIbizaUX` (Azure Portal, not the Power-Up)
 
@@ -125,11 +126,20 @@ Alternative if you already have a tenant: ask that tenant’s admin to invite yo
 
 Do **not** paste the `ADIbizaUX` client ID into `outlook-config.js`. Use only the **Application (client) ID** from *your* App registration Overview page.
 
+### AADSTS700016 — app not found in this directory
+
+Your work/school tenant does not know the app registration (registered elsewhere, or single-tenant). Without a tenant admin, Graph login will keep failing.
+
+**Use ICS instead (no admin):** see [outlook-ics-export.md](outlook-ics-export.md) — Gantt button **Exporter .ics**.
+
 ## Related files
 
-| File | Role |
-|------|------|
-| [`components/outlook/outlook-config.js`](../components/outlook/outlook-config.js) | `clientId`, scopes, authority |
-| [`outlook-auth.html`](../outlook-auth.html) | MSAL popup redirect page |
-| [`components/outlook/outlook-auth.js`](../components/outlook/outlook-auth.js) | MSAL login / token |
-| [`README.md`](../README.md) | Product overview (Sync Outlook section) |
+
+| File                                                                              | Role                                    |
+| --------------------------------------------------------------------------------- | --------------------------------------- |
+| `[components/outlook/outlook-config.js](../components/outlook/outlook-config.js)` | `clientId`, scopes, authority           |
+| `[outlook-auth.html](../outlook-auth.html)`                                       | MSAL popup redirect page                |
+| `[components/outlook/outlook-auth.js](../components/outlook/outlook-auth.js)`     | MSAL login / token                      |
+| `[README.md](../README.md)`                                                       | Product overview (Sync Outlook section) |
+
+

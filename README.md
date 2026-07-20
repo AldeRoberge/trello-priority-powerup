@@ -276,6 +276,7 @@ Voir le guide détaillé : [docs/outlook-entra-setup.md](docs/outlook-entra-setu
 - Pas de webhooks : rien ne sync tant que le Gantt n’est pas ouvert (ou Sync manuel).
 - Calendrier par défaut (`primary`) uniquement en v1.
 - `clientId` public (SPA) — normal ; pas de secret client dans le dépôt.
+- Si Entra / Graph est bloqué (`AADSTS700016`, pas d’admin) : utilisez **Exporter .ics** dans le Gantt — guide [docs/outlook-ics-export.md](docs/outlook-ics-export.md) (sens unique Trello → Outlook, sans permission admin).
 
 ### Messages console sur Trello.com
 

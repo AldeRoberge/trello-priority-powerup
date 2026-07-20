@@ -671,16 +671,9 @@
     };
   }
 
-  function cardFaceBadges(t) {
-    return getCardProjectId(t)
-      .then(function (projectId) {
-        if (!projectId) return [];
-        return [dynamicCardFaceBadge(t)];
-      })
-      .catch(function (err) {
-        console.error('Goals card-badges failed', err);
-        return [];
-      });
+  function cardFaceBadges(_t) {
+    // Project name is not shown on the board card face (detail badge only).
+    return Promise.resolve([]);
   }
 
   function cardDetailBadges(t, openCallback) {

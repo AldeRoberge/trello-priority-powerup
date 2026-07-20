@@ -2887,18 +2887,9 @@
     };
   }
 
-  function cardFaceBadges(t) {
-    return getCardCompletion(t)
-      .then(function (data) {
-        if (data && data.progressEnabled === false) return [];
-        var progress = computeCardProgress(data);
-        if (progress.percent <= 0) return [];
-        return [dynamicCardFaceBadge(t)];
-      })
-      .catch(function (err) {
-        console.error('Completion card-badges failed', err);
-        return [];
-      });
+  function cardFaceBadges(_t) {
+    // Progress is shown on the Priority face badge (combined). No separate face badge.
+    return Promise.resolve([]);
   }
 
   function cardDetailBadges(t, openCallback) {

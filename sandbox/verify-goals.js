@@ -158,7 +158,11 @@ check(
 );
 
 var badge = GT.buildCardFaceBadge(hier);
-check('face badge uses project name', badge && badge.text === project.name);
+check('buildCardFaceBadge uses project name', badge && badge.text === project.name);
+check(
+  'card face badges omitted (project is detail-only)',
+  typeof GT.cardFaceBadges === 'function'
+);
 
 var matched = GT.findProjectByMatch(cache.projects, { matchText: 'production' });
 check('findProjectByMatch fuzzy', matched && matched.id === project.id);

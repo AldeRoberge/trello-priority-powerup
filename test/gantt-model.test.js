@@ -212,4 +212,128 @@ describe('GanttModel', () => {
       ['low', 'mid', 'high']
     );
   });
+
+  it('sortTreeRoots by name is alphabetical', () => {
+    const tree = GanttModel.buildNestTree([
+      { id: 'b', name: 'Bravo', dueDate: '2026-07-01' },
+      { id: 'a', name: 'Alpha', dueDate: '2026-07-20' },
+      { id: 'c', name: 'Charlie', dueDate: '2026-07-10' },
+    ]);
+    const byName = GanttModel.sortTreeRoots(tree, 'name');
+    assert.deepEqual(
+      byName.map((n) => n.cardId),
+      ['a', 'b', 'c']
+    );
+  });
+
+  it('shiftAnchor moves week/month/year windows', () => {
+    assert.equal(
+      GanttModel.toIsoDate(GanttModel.shiftAnchor('week', '2026-07-22', 1)),
+      '2026-07-29'
+    );
+    assert.equal(
+      GanttModel.toIsoDate(GanttModel.shiftAnchor('month', '2026-07-15', -1)),
+      '2026-06-01'
+    );
+    assert.equal(
+      GanttModel.toIsoDate(GanttModel.shiftAnchor('year', '2026-07-15', 1)),
+      '2027-07-01'
+    );
+  });
+
+  it('intervalToParts and barGeometry cover visible range', () => {
+    const iv = GanttModel.resolveBarInterval({
+      startDate: '2026-07-22',
+      dueDate: '2026-07-24',
+    });
+    assert.deepEqual(GanttModel.intervalToParts(iv), {
+      startDate: '2026-07-22',
+      dueDate: '2026-07-24',
+    });
+    const range = GanttModel.viewRange('week', '2026-07-22');
+    const geo = GanttModel.barGeometry(iv, range, 700);
+    assert.ok(geo.visible);
+    assert.ok(geo.width > 0);
+    assert.equal(GanttModel.rangeDayCount(range), 7);
+  });
+
+  it('resolveBarInterval swaps inverted start/due', () => {
+    const iv = GanttModel.resolveBarInterval({
+      startDate: '2026-07-10',
+      dueDate: '2026-07-01',
+    });
+    assert.equal(GanttModel.toIsoDate(iv.start), '2026-07-01');
+    assert.equal(GanttModel.toIsoDate(iv.end), '2026-07-10');
+  });
+
+  it('orderedInterval orders paint drag endpoints either way', () => {
+    const forward = GanttModel.orderedInterval('2026-07-20', '2026-07-23');
+    assert.equal(GanttModel.toIsoDate(forward.start), '2026-07-20');
+    assert.equal(GanttModel.toIsoDate(forward.end), '2026-07-23');
+    const backward = GanttModel.orderedInterval('2026-07-23', '2026-07-20');
+    assert.equal(GanttModel.toIsoDate(backward.start), '2026-07-20');
+    assert.equal(GanttModel.toIsoDate(backward.end), '2026-07-23');
+    assert.equal(GanttModel.orderedInterval(null, '2026-07-20'), null);
+  });
+
+  it('selectAllCheckboxState covers empty / partial / all', () => {
+    assert.deepEqual(GanttModel.selectAllCheckboxState(0, 0), {
+      checked: false,
+      indeterminate: false,
+    });
+    assert.deepEqual(GanttModel.selectAllCheckboxState(0, 5), {
+      checked: false,
+      indeterminate: false,
+    });
+    assert.deepEqual(GanttModel.selectAllCheckboxState(2, 5), {
+      checked: false,
+      indeterminate: true,
+    });
+    assert.deepEqual(GanttModel.selectAllCheckboxState(5, 5), {
+      checked: true,
+      indeterminate: false,
+    });
+  });
+
+  it('filterRows hides completed and undated when asked', () => {
+    const rows = [
+      { id: '1', done: true, dueDate: '2026-07-01' },
+      { id: '2', done: false, dueDate: '2026-07-02' },
+      { id: '3', done: false },
+      { id: '4', category: 'completed', dueDate: '2026-07-03' },
+    ];
+    assert.deepEqual(
+      GanttModel.filterRows(rows, { hideCompleted: true }).map((r) => r.id),
+      ['2', '3']
+    );
+    assert.deepEqual(
+      GanttModel.filterRows(rows, { hideUndated: true }).map((r) => r.id),
+      ['1', '2', '4']
+    );
+  });
+
+  it('flattenVisible respects collapsed expandable roots', () => {
+    const tree = GanttModel.buildNestTree([
+      {
+        id: 'p',
+        name: 'P',
+        items: [{ id: 'a', text: 'Sub', progress: 0 }],
+      },
+    ]);
+    const collapsed = GanttModel.flattenVisible(tree, { [tree[0].id]: false });
+    assert.equal(collapsed.length, 1);
+    assert.equal(collapsed[0].kind, 'card');
+  });
+
+  it('snapDate week keeps day; xToDate clamps to range', () => {
+    assert.equal(
+      GanttModel.toIsoDate(GanttModel.snapDate('2026-07-18', 'week')),
+      '2026-07-18'
+    );
+    const range = GanttModel.viewRange('week', '2026-07-22');
+    const last = GanttModel.xToDate(9999, range, 700);
+    assert.equal(GanttModel.toIsoDate(last), '2026-07-26');
+    const first = GanttModel.xToDate(-10, range, 700);
+    assert.equal(GanttModel.toIsoDate(first), '2026-07-20');
+  });
 });
