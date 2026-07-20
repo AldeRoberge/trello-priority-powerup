@@ -54,7 +54,7 @@
   </script>
   <script src="./components/goals/goals-trello.js?v=goals-1"></script>
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
-  <script src="./components/agent/agent.js?v=agent-parity-1"></script>
+  <script src="./components/agent/agent.js?v=agent-parity-2"></script>
   <script src="./components/agent/agent-memory.js?v=agent-dream-1"></script>
   <script src="./components/agent/memory-ui.js?v=memory-settings-1"></script>
   <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
@@ -5574,6 +5574,22 @@
           },
         });
         body.appendChild(crumb);
+        if (infoUi && typeof infoUi.setObjectifSummary === 'function') {
+          var oName =
+            hierarchy.objectif && hierarchy.objectif.name
+              ? String(hierarchy.objectif.name).trim()
+              : '';
+          var pName =
+            hierarchy.project && hierarchy.project.name
+              ? String(hierarchy.project.name).trim()
+              : '';
+          var summaryBits = [];
+          if (oName) summaryBits.push(oName);
+          if (pName) summaryBits.push(pName);
+          infoUi.setObjectifSummary(summaryBits.join(' \u203a '));
+        }
+      } else if (infoUi && typeof infoUi.setObjectifSummary === 'function') {
+        infoUi.setObjectifSummary('');
       }
 
       if (activeProjects.length || (hierarchy.project && hierarchy.project.retired)) {
@@ -5780,6 +5796,12 @@
       return refreshObjectifData().then(function () {
         if (initiallyOpen && typeof infoUi.setExpanded === 'function') {
           infoUi.setExpanded(true);
+        }
+        if (
+          initiallyOpen &&
+          typeof infoUi.setInfoRowExpanded === 'function'
+        ) {
+          infoUi.setInfoRowExpanded('objectif', true);
         }
         renderObjectifBody();
         resizePopup();
@@ -6793,6 +6815,13 @@
               if (infoUi && typeof infoUi.setExpanded === 'function') {
                 infoUi.setExpanded(true);
               }
+              if (
+                key === 'objectif' &&
+                infoUi &&
+                typeof infoUi.setInfoRowExpanded === 'function'
+              ) {
+                infoUi.setInfoRowExpanded('objectif', true);
+              }
               if (key === 'objectif') {
                 target =
                   (variant &&
@@ -7037,6 +7066,106 @@
                 });
               });
             });
+          },
+          setCustomAssignees: function (list) {
+            var people =
+              PriorityUI && typeof PriorityUI.normalizeCustomAssignees === 'function'
+                ? PriorityUI.normalizeCustomAssignees(list)
+                : Array.isArray(list)
+                  ? list
+                  : [];
+            var base =
+              (variant && typeof variant.getState === 'function'
+                ? variant.getState()
+                : null) ||
+              latestState ||
+              {};
+            var next = Object.assign({}, base, { customAssignees: people });
+            if (!people.length) delete next.customAssignees;
+            if (variant && typeof variant.setState === 'function') {
+              variant.setState(next, { preserveCollapse: true });
+            }
+            latestState = Object.assign({}, next);
+            if (infoUi && typeof infoUi.setCustomAssignees === 'function') {
+              infoUi.setCustomAssignees(people);
+            }
+            return Promise.resolve(saveState(next)).then(function () {
+              return commitHistoryNow('Personnes assignées (assistant)').then(
+                function () {
+                  return { ok: true, changed: true, customAssignees: people };
+                }
+              );
+            });
+          },
+          setMemberRoles: function (rolesMap) {
+            var map =
+              PriorityUI && typeof PriorityUI.normalizeMemberRoles === 'function'
+                ? PriorityUI.normalizeMemberRoles(rolesMap)
+                : rolesMap && typeof rolesMap === 'object'
+                  ? rolesMap
+                  : {};
+            var base =
+              (variant && typeof variant.getState === 'function'
+                ? variant.getState()
+                : null) ||
+              latestState ||
+              {};
+            var customs =
+              PriorityUI && typeof PriorityUI.pruneMemberRoleCustoms === 'function'
+                ? PriorityUI.pruneMemberRoleCustoms(
+                    base.memberRoleCustoms,
+                    map
+                  )
+                : Array.isArray(base.memberRoleCustoms)
+                  ? base.memberRoleCustoms
+                  : [];
+            var next = Object.assign({}, base, {
+              memberRoles: map,
+              memberRoleCustoms: customs,
+            });
+            if (!Object.keys(map).length) delete next.memberRoles;
+            if (!customs.length) delete next.memberRoleCustoms;
+            if (variant && typeof variant.setState === 'function') {
+              variant.setState(next, { preserveCollapse: true });
+            }
+            latestState = Object.assign({}, next);
+            if (infoUi && typeof infoUi.setMemberRoles === 'function') {
+              infoUi.setMemberRoles(map, customs);
+            }
+            return Promise.resolve(saveState(next)).then(function () {
+              return commitHistoryNow('Rôles des assignés (assistant)').then(
+                function () {
+                  return { ok: true, changed: true, memberRoles: map };
+                }
+              );
+            });
+          },
+          getHistory: function () {
+            if (!cardHistory) {
+              return { canUndo: false, canRedo: false, entries: [] };
+            }
+            var entries =
+              typeof cardHistory.list === 'function' ? cardHistory.list() : [];
+            return {
+              canUndo:
+                typeof cardHistory.canUndo === 'function'
+                  ? !!cardHistory.canUndo()
+                  : false,
+              canRedo:
+                typeof cardHistory.canRedo === 'function'
+                  ? !!cardHistory.canRedo()
+                  : false,
+              entries: Array.isArray(entries) ? entries : [],
+            };
+          },
+          historyUndo: function () {
+            return runHistoryUndo();
+          },
+          historyRedo: function () {
+            return runHistoryRedo();
+          },
+          historyRevert: function (entryId) {
+            return runHistoryRevert(entryId);
           },
           selectStatut: function (listId) {
             return applyStatutListSelection(listId);

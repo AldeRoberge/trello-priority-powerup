@@ -10102,7 +10102,21 @@
     body.appendChild(titleRow.row);
 
     // ── Description (always-visible markdown / rich editor) ─────────────
-    var descRow = makeRow('desc', 'Description', { icon: 'ti-notes' });
+    var descRow = makeRow('desc', 'Description', {
+      icon: 'ti-notes',
+      collapsible: true,
+      onExpandChange: function (isExpanded) {
+        if (!isExpanded) {
+          refreshDescSummary();
+          return;
+        }
+        requestAnimationFrame(function () {
+          if (descMode === 'rich') syncDescRichSize();
+          else syncDescInputSize();
+          onLayoutChange();
+        });
+      }
+    });
     var descWrap = document.createElement('div');
     descWrap.className = 'info-desc-wrap';
     var descMode = 'rich';
@@ -10302,7 +10316,10 @@
     body.appendChild(descRow.row);
 
     // ── Creator (visible when ≠ sole assignee) ─────────────────────────
-    var creatorRow = makeRow('creator', 'Cr\u00e9ateur', { icon: 'ti-user' });
+    var creatorRow = makeRow('creator', 'Cr\u00e9ateur', {
+      icon: 'ti-user',
+      collapsible: true
+    });
     var creatorEl = document.createElement('div');
     creatorEl.className = 'info-members info-creator';
     creatorEl.setAttribute('aria-label', 'Cr\u00e9ateur de la carte');
@@ -10311,7 +10328,16 @@
     body.appendChild(creatorRow.row);
 
     // ── Assignees ──────────────────────────────────────────────────────
-    var membersRow = makeRow('members', 'Assign\u00e9s', { icon: 'ti-users' });
+    var membersRow = makeRow('members', 'Assign\u00e9s', {
+      icon: 'ti-users',
+      collapsible: true,
+      onExpandChange: function (isExpanded) {
+        if (!isExpanded) {
+          setMembersPickerOpen(false);
+          setMemberRolesPickerOpen('');
+        }
+      }
+    });
     var membersWrap = document.createElement('div');
     membersWrap.className = 'info-members-wrap';
 
@@ -10364,7 +10390,16 @@
     body.appendChild(membersRow.row);
 
     // ── Labels (Trello étiquettes) ─────────────────────────────────────
-    var labelsRow = makeRow('labels', '\u00c9tiquettes', { icon: 'ti-tag' });
+    var labelsRow = makeRow('labels', '\u00c9tiquettes', {
+      icon: 'ti-tag',
+      collapsible: true,
+      onExpandChange: function (isExpanded) {
+        if (!isExpanded) {
+          setLabelsPickerOpen(false);
+          setLabelsColorPickerOpen('');
+        }
+      }
+    });
     var labelsWrap = document.createElement('div');
     labelsWrap.className = 'info-labels-wrap';
 
@@ -10454,6 +10489,13 @@
     // ── Type de tâche (multi-label catalog) ─────────────────────────────
     var taskTypesRow = makeRow('task-types', 'Type de t\u00e2che', {
       icon: 'ti-category',
+      collapsible: true,
+      onExpandChange: function (isExpanded) {
+        if (!isExpanded) {
+          setTaskTypesPickerOpen(false);
+          setTaskTypesIconPickerOpen(false);
+        }
+      }
     });
     var taskTypesWrap = document.createElement('div');
     taskTypesWrap.className = 'info-task-types-wrap';
@@ -10644,6 +10686,10 @@
     // ── Parent tasks (via Progrès linkedCardId reverse lookup) ──────────
     var parentRow = makeRow('parent', 'T\u00e2ches parentes', {
       icon: 'ti-hierarchy-3',
+      collapsible: true,
+      onExpandChange: function (isExpanded) {
+        if (!isExpanded) setParentPickerOpen(false);
+      }
     });
     var parentWrap = document.createElement('div');
     parentWrap.className = 'info-parent-wrap';
@@ -10700,7 +10746,10 @@
     body.appendChild(parentRow.row);
 
     // ── Objectif (project link) ───────────────────────────────
-    var objectifRow = makeRow('objectif', 'Objectif', { icon: 'ti-hierarchy-2' });
+    var objectifRow = makeRow('objectif', 'Objectif', {
+      icon: 'ti-hierarchy-2',
+      collapsible: true
+    });
     var objectifMount = document.createElement('div');
     objectifMount.className = 'info-objectif-mount objectif-section-body';
     objectifMount.id = 'info-objectif-mount';
@@ -11224,7 +11273,10 @@
       creatorEl.replaceChildren();
       var show = creatorDiffersFromAssignees();
       creatorRow.row.hidden = !show;
-      if (!show) return;
+      if (!show) {
+        refreshCreatorSummary();
+        return;
+      }
 
       var name = memberDisplayName(creatorMember) || 'Membre';
       var chip = document.createElement('span');
@@ -11237,6 +11289,7 @@
       nameEl.textContent = name;
       chip.appendChild(nameEl);
       creatorEl.appendChild(chip);
+      refreshCreatorSummary();
     }
 
     function setMembersStatus(text, kind) {
@@ -12011,6 +12064,7 @@
         }
       }
       renderCreator();
+      refreshMembersSummary();
     }
 
     function addMemberFromPicker(member) {
@@ -13113,6 +13167,7 @@
         labelsColorPicker.replaceChildren();
       }
       renderLabelSuggestions();
+      refreshLabelsSummary();
     }
 
     function setTaskTypesStatus(text, tone) {
@@ -13372,6 +13427,7 @@
         }
       }
       renderTaskTypeSuggestions();
+      refreshTaskTypesSummary();
     }
 
     function persistCustomTaskTypes(nextCustoms, createdEntry) {
@@ -14180,6 +14236,7 @@
       if (!canPick && !parentCards.length) {
         setParentStatus('', false);
       }
+      refreshParentSummary();
     }
 
     function applyParentChange(nextParent, removeParentId) {
@@ -14251,6 +14308,84 @@
     function renderRecap() {
       setRecapText(porteValueEl, impactReachLabel, 'Non d\u00e9finie');
       setRecapText(dureeValueEl, durationLabel, 'Non d\u00e9finie');
+    }
+
+    function refreshDescSummary() {
+      if (!descRow.setSummary) return;
+      var source =
+        typeof descInput !== 'undefined' && descInput
+          ? descInput.value
+          : descText;
+      descRow.setSummary(infoDescPlainSummary(source), 'Aucune');
+    }
+
+    function refreshCreatorSummary() {
+      if (!creatorRow.setSummary) return;
+      creatorRow.setSummary(
+        memberDisplayName(creatorMember) || '',
+        'Aucun'
+      );
+    }
+
+    function refreshMembersSummary() {
+      if (!membersRow.setSummary) return;
+      var names = displayAssignees()
+        .map(function (m) {
+          return memberDisplayName(m);
+        })
+        .filter(Boolean);
+      membersRow.setSummary(names.join(' \u00b7 '), 'Aucun');
+    }
+
+    function refreshLabelsSummary() {
+      if (!labelsRow.setSummary) return;
+      var names = labels
+        .map(function (label) {
+          return labelDisplayName(label);
+        })
+        .filter(Boolean);
+      labelsRow.setSummary(names.join(' \u00b7 '), 'Aucune');
+    }
+
+    function refreshTaskTypesSummary() {
+      if (!taskTypesRow.setSummary) return;
+      var names = taskTypes
+        .map(function (id) {
+          return taskTypeLabel(id) || id;
+        })
+        .filter(Boolean);
+      taskTypesRow.setSummary(names.join(' \u00b7 '), 'Aucun');
+    }
+
+    function refreshParentSummary() {
+      if (!parentRow.setSummary) return;
+      var names = parentCards
+        .map(function (p) {
+          return p && p.name ? String(p.name).trim() : '';
+        })
+        .filter(Boolean);
+      parentRow.setSummary(names.join(' \u00b7 '), 'Aucune');
+    }
+
+    function refreshObjectifSummary(text) {
+      if (!objectifRow.setSummary) return;
+      if (arguments.length) {
+        objectifRow.setSummary(
+          typeof text === 'string' ? text.trim() : '',
+          'Aucun'
+        );
+        return;
+      }
+      // Keep existing summary text when no override is provided.
+    }
+
+    function refreshAllInfoRowSummaries() {
+      refreshDescSummary();
+      refreshCreatorSummary();
+      refreshMembersSummary();
+      refreshLabelsSummary();
+      refreshTaskTypesSummary();
+      refreshParentSummary();
     }
 
     function summaryText() {
@@ -14488,6 +14623,7 @@
           descText = next;
           setAuthHint('');
           setDescStatus('', 'ok');
+          refreshDescSummary();
           scheduleLabelSuggestions(false);
           scheduleTaskTypeSuggestions(false);
           setTimeout(function () {
@@ -14961,6 +15097,8 @@
     setAuthHint(authReason);
     syncTitleInputSize();
     setDescMode('rich', { focus: false });
+    refreshAllInfoRowSummaries();
+    if (objectifRow.setSummary) objectifRow.setSummary('', 'Aucun');
     collapse.refreshSummary();
     scheduleLabelSuggestions(false);
     scheduleTaskTypeSuggestions(false);
@@ -15012,6 +15150,7 @@
         descSpellcheckedText = value.trim() || null;
         if (descMode === 'rich') renderDescRich();
         else syncDescInputSize();
+        refreshDescSummary();
         scheduleLabelSuggestions(false);
         scheduleTaskTypeSuggestions(false);
       },
@@ -15165,10 +15304,29 @@
         objectifRow.row.hidden = !visible;
         onLayoutChange();
       },
+      setObjectifSummary: function (text) {
+        refreshObjectifSummary(text);
+      },
+      setInfoRowExpanded: function (key, on, opts) {
+        var rows = {
+          desc: descRow,
+          creator: creatorRow,
+          members: membersRow,
+          labels: labelsRow,
+          'task-types': taskTypesRow,
+          parent: parentRow,
+          objectif: objectifRow
+        };
+        var target = rows[key];
+        if (target && typeof target.setExpanded === 'function') {
+          target.setExpanded(!!on, opts || {});
+        }
+      },
       flushTitle: flushTitleSave,
       flushDesc: flushDescSave,
       refreshSummary: function () {
         collapse.refreshSummary();
+        refreshAllInfoRowSummaries();
       },
       setExpanded: function (on, opts) {
         return collapse.setExpanded(on, opts);
@@ -21243,6 +21401,12 @@
     STATUT_EMBEDDED_DETAILS_STORAGE_KEY: STATUT_EMBEDDED_DETAILS_STORAGE_KEY,
     loadStatutEmbeddedDetailsExpanded: loadStatutEmbeddedDetailsExpanded,
     saveStatutEmbeddedDetailsExpanded: saveStatutEmbeddedDetailsExpanded,
+    INFO_ROW_COLLAPSE_STORAGE_KEY: INFO_ROW_COLLAPSE_STORAGE_KEY,
+    INFO_ROW_COLLAPSE_KEYS: INFO_ROW_COLLAPSE_KEYS,
+    loadInfoRowCollapseState: loadInfoRowCollapseState,
+    saveInfoRowCollapseState: saveInfoRowCollapseState,
+    resolveInfoRowExpanded: resolveInfoRowExpanded,
+    infoDescPlainSummary: infoDescPlainSummary,
     eisenhowerQuadrantFor: eisenhowerQuadrantFor,
     isEisenhowerUrgent: isEisenhowerUrgent,
     isEisenhowerImportant: isEisenhowerImportant,
