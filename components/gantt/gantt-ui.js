@@ -6,6 +6,9 @@
   var LABEL_W = 240;
   var EDGE_PX = 6;
   var MIN_TIMELINE_W = 640;
+  var LABELS_W_MIN = 280;
+  var LABELS_W_DEFAULT = 560;
+  var LABELS_W_STORAGE_KEY = 'tp-gantt-labels-width';
 
   var STATUT_TABLER = {
     inbox: 'ti-inbox',
@@ -32,6 +35,28 @@
 
   function OS() {
     return global.OutlookSync || null;
+  }
+
+  function readStoredLabelsWidth() {
+    try {
+      var raw =
+        global.localStorage && global.localStorage.getItem(LABELS_W_STORAGE_KEY);
+      var n = raw != null ? parseInt(raw, 10) : NaN;
+      if (isFinite(n) && n >= LABELS_W_MIN && n <= 1200) return n;
+    } catch (e) {
+      /* ignore */
+    }
+    return LABELS_W_DEFAULT;
+  }
+
+  function storeLabelsWidth(w) {
+    try {
+      if (global.localStorage) {
+        global.localStorage.setItem(LABELS_W_STORAGE_KEY, String(w));
+      }
+    } catch (e) {
+      /* ignore */
+    }
   }
 
   function el(tag, className, attrs) {
@@ -82,9 +107,11 @@
       error: '',
       authHint: '',
       timelineWidth: MIN_TIMELINE_W,
+      labelsWidth: readStoredLabelsWidth(),
       widthMeasured: false,
       drag: null,
       paint: null,
+      splitDrag: null,
       saving: false,
       outlookConnected: false,
       outlookSyncing: false,
@@ -101,6 +128,68 @@
     root.appendChild(body);
     mount.innerHTML = '';
     mount.appendChild(root);
+
+    function clampLabelsWidth(width, chartEl) {
+      var chartW =
+        chartEl && chartEl.clientWidth
+          ? chartEl.clientWidth
+          : body.clientWidth || 1000;
+      var max = Math.max(LABELS_W_MIN, chartW - 220);
+      var w = Math.round(Number(width) || LABELS_W_DEFAULT);
+      return Math.max(LABELS_W_MIN, Math.min(max, w));
+    }
+
+    function bindLabelsSplitter(splitter, labelsCol, chartEl, scrollEl) {
+      splitter.addEventListener('pointerdown', function (ev) {
+        if (ev.button != null && ev.button !== 0) return;
+        if (state.splitDrag || state.drag || state.paint) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        state.splitDrag = {
+          startX: ev.clientX,
+          startW: labelsCol.getBoundingClientRect().width || state.labelsWidth,
+          pointerId: ev.pointerId,
+        };
+        splitter.classList.add('is-dragging');
+        root.classList.add('is-resizing');
+        splitter.setPointerCapture(ev.pointerId);
+
+        function onMove(e) {
+          if (!state.splitDrag) return;
+          var next = clampLabelsWidth(
+            state.splitDrag.startW + (e.clientX - state.splitDrag.startX),
+            chartEl
+          );
+          state.labelsWidth = next;
+          labelsCol.style.width = next + 'px';
+        }
+
+        function onUp() {
+          splitter.releasePointerCapture(ev.pointerId);
+          splitter.removeEventListener('pointermove', onMove);
+          splitter.removeEventListener('pointerup', onUp);
+          splitter.removeEventListener('pointercancel', onUp);
+          splitter.classList.remove('is-dragging');
+          root.classList.remove('is-resizing');
+          state.splitDrag = null;
+          state.labelsWidth = clampLabelsWidth(state.labelsWidth, chartEl);
+          storeLabelsWidth(state.labelsWidth);
+          labelsCol.style.width = state.labelsWidth + 'px';
+          // Remeasure timeline so day grid matches the new calendar width.
+          var avail = (scrollEl && scrollEl.clientWidth) || MIN_TIMELINE_W;
+          var nextW = Math.max(MIN_TIMELINE_W, avail);
+          if (Math.abs(nextW - state.timelineWidth) > 4) {
+            state.timelineWidth = nextW;
+            state.widthMeasured = true;
+            renderChart();
+          }
+        }
+
+        splitter.addEventListener('pointermove', onMove);
+        splitter.addEventListener('pointerup', onUp);
+        splitter.addEventListener('pointercancel', onUp);
+      });
+    }
 
     function setStatus(msg, isError) {
       statusBar.textContent = msg || '';
@@ -1447,10 +1536,22 @@
       });
 
       chart.appendChild(labelsCol);
+
+      var splitter = el('div', 'gantt-splitter');
+      splitter.title = 'Glisser pour redimensionner';
+      splitter.setAttribute('role', 'separator');
+      splitter.setAttribute('aria-orientation', 'vertical');
+      splitter.setAttribute('aria-label', 'Redimensionner les colonnes');
+      chart.appendChild(splitter);
+
       var scroll = el('div', 'gantt-timeline-scroll');
       scroll.appendChild(timelineCol);
       chart.appendChild(scroll);
       body.appendChild(chart);
+
+      labelsCol.style.width = clampLabelsWidth(state.labelsWidth, chart) + 'px';
+      state.labelsWidth = clampLabelsWidth(state.labelsWidth, chart);
+      bindLabelsSplitter(splitter, labelsCol, chart, scroll);
 
       // Measure available width once (or when viewport changed a lot).
       requestAnimationFrame(function () {

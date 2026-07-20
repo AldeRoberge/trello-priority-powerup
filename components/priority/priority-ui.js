@@ -8854,6 +8854,7 @@
     var memberRoles = normalizeMemberRoles(config.memberRoles);
     var memberRolesBusy = false;
     var memberRolesPickerMemberId = '';
+    var customAssignees = normalizeCustomAssignees(config.customAssignees);
     if (Array.isArray(config.memberRoleCustoms)) {
       setMemberRoleCustoms(config.memberRoleCustoms);
     }
@@ -10132,19 +10133,28 @@
       applyInfoSaveStatus(membersStatus, text, kind);
     }
 
+    function displayAssignees() {
+      return mergeAssigneesForDisplay(members, customAssignees, boardMembers);
+    }
+
     function selectedMemberIds() {
       var ids = Object.create(null);
-      for (var i = 0; i < members.length; i++) {
-        if (members[i] && members[i].id) ids[String(members[i].id)] = true;
+      var all = displayAssignees();
+      for (var i = 0; i < all.length; i++) {
+        if (all[i] && all[i].id) ids[String(all[i].id)] = true;
       }
       return ids;
     }
 
     function availableBoardMembers() {
       var selected = selectedMemberIds();
+      // Also hide board members already represented only as a Trello assignee id.
+      for (var i = 0; i < members.length; i++) {
+        if (members[i] && members[i].id) selected[String(members[i].id)] = true;
+      }
       var out = [];
-      for (var i = 0; i < boardMembers.length; i++) {
-        var member = boardMembers[i];
+      for (var b = 0; b < boardMembers.length; b++) {
+        var member = boardMembers[b];
         if (!member || !member.id) continue;
         if (selected[String(member.id)]) continue;
         out.push(member);
@@ -10164,40 +10174,182 @@
       onLayoutChange();
     }
 
+    function persistCustomAssignees(nextList) {
+      var list = normalizeCustomAssignees(nextList);
+      customAssignees = list;
+      if (!onCustomAssigneesChange) {
+        renderMembers();
+        onLayoutChange();
+        return Promise.resolve({ ok: true, changed: false, customAssignees: list });
+      }
+      membersBusy = true;
+      setMembersStatus('', 'saving');
+      renderMembers();
+      return Promise.resolve(onCustomAssigneesChange(list))
+        .then(function (result) {
+          membersBusy = false;
+          if (result && result.ok === false) {
+            setMembersStatus('\u00c9chec de l\u2019enregistrement', 'error');
+            renderMembers();
+            onLayoutChange();
+            return result;
+          }
+          if (result && Array.isArray(result.customAssignees)) {
+            customAssignees = normalizeCustomAssignees(result.customAssignees);
+          }
+          setMembersStatus('', 'ok');
+          setMembersPickerOpen(false);
+          renderMembers();
+          setTimeout(function () {
+            if (membersStatus.classList.contains('is-ok')) {
+              setMembersStatus('');
+            }
+          }, 1400);
+          onLayoutChange();
+          return result || { ok: true, changed: true, customAssignees: list };
+        })
+        .catch(function (err) {
+          membersBusy = false;
+          console.error('Info custom assignee save failed', err);
+          setMembersStatus('\u00c9chec de l\u2019enregistrement', 'error');
+          renderMembers();
+          onLayoutChange();
+        });
+    }
+
+    function addCustomAssigneeFromPicker() {
+      if (membersBusy || !onCustomAssigneesChange) return;
+      var nameInput = membersPicker.querySelector('.info-members-create-input');
+      var linkSelect = membersPicker.querySelector('.info-members-create-link');
+      var name = nameInput && typeof nameInput.value === 'string'
+        ? nameInput.value.trim()
+        : '';
+      var linkId =
+        linkSelect && typeof linkSelect.value === 'string'
+          ? linkSelect.value.trim()
+          : '';
+      var draft = createCustomAssignee({
+        name: name,
+        trelloMemberId: linkId || ''
+      });
+      if (!draft) {
+        setMembersStatus('Nom invalide', 'error');
+        return;
+      }
+      var nameKey = draft.name.toLocaleLowerCase('fr-FR');
+      for (var i = 0; i < customAssignees.length; i++) {
+        if (customAssignees[i].name.toLocaleLowerCase('fr-FR') === nameKey) {
+          setMembersStatus('Cette personne existe d\u00e9j\u00e0', 'error');
+          return;
+        }
+      }
+      persistCustomAssignees(customAssignees.concat([draft]));
+    }
+
     function renderMembersPicker() {
       membersPicker.replaceChildren();
       var available = availableBoardMembers();
+
+      var list = document.createElement('div');
+      list.className = 'info-members-picker-list';
+      list.setAttribute('role', 'group');
+      list.setAttribute('aria-label', 'Membres du tableau');
+
       if (!available.length) {
         var empty = document.createElement('div');
         empty.className = 'info-members-picker-empty';
         empty.textContent = boardMembers.length
-          ? 'Tous les membres sont d\u00e9j\u00e0 assign\u00e9s'
-          : 'Aucun membre sur ce tableau';
-        membersPicker.appendChild(empty);
-        return;
-      }
-      available.forEach(function (member) {
-        var name = memberDisplayName(member) || 'Membre';
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'info-members-picker-option';
-        btn.setAttribute('role', 'option');
-        btn.title = name;
-        btn.disabled = membersBusy;
-        btn.dataset.memberId = String(member.id);
+          ? 'Tous les membres Trello sont d\u00e9j\u00e0 assign\u00e9s'
+          : 'Aucun membre Trello sur ce tableau';
+        list.appendChild(empty);
+      } else {
+        available.forEach(function (member) {
+          var name = memberDisplayName(member) || 'Membre';
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'info-members-picker-option';
+          btn.setAttribute('role', 'option');
+          btn.title = name;
+          btn.disabled = membersBusy;
+          btn.dataset.memberId = String(member.id);
 
-        appendMemberAvatar(btn, member);
+          appendMemberAvatar(btn, member);
 
-        var text = document.createElement('span');
-        text.className = 'info-members-picker-option-text';
-        text.textContent = name;
+          var text = document.createElement('span');
+          text.className = 'info-members-picker-option-text';
+          text.textContent = name;
 
-        btn.appendChild(text);
-        btn.addEventListener('click', function () {
-          addMemberFromPicker(member);
+          btn.appendChild(text);
+          btn.addEventListener('click', function () {
+            addMemberFromPicker(member);
+          });
+          list.appendChild(btn);
         });
-        membersPicker.appendChild(btn);
-      });
+      }
+      membersPicker.appendChild(list);
+
+      if (onCustomAssigneesChange) {
+        var createWrap = document.createElement('div');
+        createWrap.className = 'info-members-create';
+        var createTitle = document.createElement('div');
+        createTitle.className = 'info-members-create-title';
+        createTitle.textContent = 'Personne hors Trello';
+        createWrap.appendChild(createTitle);
+
+        var nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'info-members-create-input';
+        nameInput.placeholder = 'Nom (ex. freelances, client\u2026)';
+        nameInput.maxLength = MAX_CUSTOM_ASSIGNEE_NAME_LEN;
+        nameInput.setAttribute('aria-label', 'Nom de la personne');
+        nameInput.addEventListener('click', function (event) {
+          event.stopPropagation();
+        });
+        nameInput.addEventListener('keydown', function (event) {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            addCustomAssigneeFromPicker();
+          }
+        });
+
+        var linkSelect = document.createElement('select');
+        linkSelect.className = 'info-members-create-link';
+        linkSelect.setAttribute(
+          'aria-label',
+          'Lier \u00e0 un membre Trello (optionnel)'
+        );
+        linkSelect.addEventListener('click', function (event) {
+          event.stopPropagation();
+        });
+        var optNone = document.createElement('option');
+        optNone.value = '';
+        optNone.textContent = 'Sans lien Trello';
+        linkSelect.appendChild(optNone);
+        boardMembers.forEach(function (member) {
+          if (!member || !member.id) return;
+          var opt = document.createElement('option');
+          opt.value = String(member.id);
+          opt.textContent =
+            'Lier\u00a0: ' + (memberDisplayName(member) || member.id);
+          linkSelect.appendChild(opt);
+        });
+
+        var createBtn = document.createElement('button');
+        createBtn.type = 'button';
+        createBtn.className = 'info-members-create-btn';
+        createBtn.textContent = 'Cr\u00e9er';
+        createBtn.disabled = membersBusy;
+        createBtn.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          addCustomAssigneeFromPicker();
+        });
+
+        createWrap.appendChild(nameInput);
+        createWrap.appendChild(linkSelect);
+        createWrap.appendChild(createBtn);
+        membersPicker.appendChild(createWrap);
+      }
     }
 
     function rolesForMember(memberId) {

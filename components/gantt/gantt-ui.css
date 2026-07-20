@@ -118,12 +118,42 @@
 }
 
 .gantt-labels {
-  width: min(46vw, 720px);
-  min-width: 560px;
+  width: 560px;
+  min-width: 0;
   flex-shrink: 0;
   overflow: auto;
-  border-right: 1px solid var(--tp-border, #091e4224);
   background: var(--tp-surface, #fff);
+}
+
+.gantt-splitter {
+  width: 5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  touch-action: none;
+  position: relative;
+  z-index: 4;
+  background: var(--tp-border, #091e4224);
+  transition: background 0.12s ease;
+}
+
+.gantt-splitter::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  right: -3px;
+}
+
+.gantt-splitter:hover,
+.gantt-splitter.is-dragging {
+  background: var(--tp-primary, #0c66e4);
+}
+
+.gantt-root.is-resizing,
+.gantt-root.is-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .gantt-bulk {
@@ -173,7 +203,7 @@
 
 .gantt-label-cell {
   display: grid;
-  grid-template-columns: 22px 28px minmax(200px, 1fr) 148px 72px;
+  grid-template-columns: 22px 28px minmax(80px, 1fr) 148px 72px;
   align-items: center;
   column-gap: 6px;
   padding: 0 8px 0 calc(8px + var(--gantt-depth, 0) * 14px);
