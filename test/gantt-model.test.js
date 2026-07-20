@@ -237,6 +237,27 @@ describe('GanttModel', () => {
     );
   });
 
+  it('sortTreeRoots by progress puts higher completedness first', () => {
+    const tree = GanttModel.buildNestTree([
+      { id: 'low', name: 'Low', progress: 10, dueDate: '2026-07-01' },
+      { id: 'high', name: 'High', progress: 90, dueDate: '2026-07-20' },
+      { id: 'mid', name: 'Mid', progress: 50, dueDate: '2026-07-10' },
+      {
+        id: 'done',
+        name: 'Done',
+        progress: 0,
+        dueComplete: true,
+        category: 'completed',
+        dueDate: '2026-07-05',
+      },
+    ]);
+    const byProgress = GanttModel.sortTreeRoots(tree, 'progress');
+    assert.deepEqual(
+      byProgress.map((n) => n.cardId),
+      ['done', 'high', 'mid', 'low']
+    );
+  });
+
   it('shiftAnchor moves week/month/year windows', () => {
     assert.equal(
       GanttModel.toIsoDate(GanttModel.shiftAnchor('week', '2026-07-22', 1)),
