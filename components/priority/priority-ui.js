@@ -8386,9 +8386,240 @@
   }
 
   /**
+   * Build open/blocked task rows + counts from completion data for the Résumé.
+   */
+  function buildOverviewTasksFromCompletion(completion, options) {
+    options = options || {};
+    var cap =
+      options.cap != null && isFinite(+options.cap)
+        ? Math.max(0, Math.round(+options.cap))
+        : 5;
+    var items =
+      completion && Array.isArray(completion.items) ? completion.items : [];
+    var CT = global.CompletionTrello;
+    var tasks = [];
+    var doneCount = 0;
+    var totalCount = 0;
+    var openLabels = [];
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (!it || typeof it !== 'object') continue;
+      var text = typeof it.text === 'string' ? it.text.trim() : '';
+      if (!text) continue;
+      totalCount += 1;
+      var blocked =
+        CT && typeof CT.isItemBlocked === 'function'
+          ? !!CT.isItemBlocked(it)
+          : it.blocked === true;
+      var done =
+        !blocked &&
+        (!!it.done ||
+          (it.progress != null && isFinite(+it.progress) && +it.progress >= 100));
+      if (done) {
+        doneCount += 1;
+        continue;
+      }
+      openLabels.push(text);
+      if (tasks.length < cap) {
+        tasks.push({
+          id: it.id != null ? String(it.id) : '',
+          text: text,
+          done: false,
+          blocked: blocked
+        });
+      }
+    }
+    return {
+      tasks: tasks,
+      tasksDone: doneCount,
+      tasksTotal: totalCount,
+      tasksOpen: Math.max(0, totalCount - doneCount),
+      openLabels: openLabels
+    };
+  }
+
+  /**
+   * Deterministic one-line situation for the Résumé (no AI).
+   * Prefers Motifs when blocked; otherwise open task names.
+   */
+  function buildOverviewSummaryText(opts) {
+    opts = opts || {};
+    var Agent = global.PriorityAgent;
+    if (Agent && typeof Agent.buildHeuristicProgressSummary === 'function') {
+      var snap = {
+        phase: opts.phase || 'idle',
+        stuck: !!opts.stuck,
+        blockedReasons: Array.isArray(opts.blockedReasons)
+          ? opts.blockedReasons
+          : [],
+        progressPercent:
+          opts.progressPercent != null && isFinite(+opts.progressPercent)
+            ? Math.round(+opts.progressPercent)
+            : null,
+        tasksDone: opts.tasksDone != null ? opts.tasksDone : 0,
+        tasksTotal: opts.tasksTotal != null ? opts.tasksTotal : 0,
+        tasksOpen: opts.tasksOpen != null ? opts.tasksOpen : 0,
+        openLabels: Array.isArray(opts.openLabels) ? opts.openLabels : []
+      };
+      var fromAgent = Agent.buildHeuristicProgressSummary(snap);
+      if (fromAgent) return fromAgent;
+    }
+
+    var blocked = !!opts.stuck || opts.phase === 'blocked';
+    var reasons = Array.isArray(opts.blockedReasons)
+      ? opts.blockedReasons.filter(Boolean)
+      : [];
+    if (blocked) {
+      if (!reasons.length) return 'Bloqu\u00e9';
+      if (reasons.length === 1) return String(reasons[0]);
+      var joined = reasons.join(', ');
+      if (joined.length <= 42) return joined;
+      return reasons[0] + ' +' + (reasons.length - 1);
+    }
+    var total = opts.tasksTotal != null ? +opts.tasksTotal : 0;
+    var open = opts.tasksOpen != null ? +opts.tasksOpen : 0;
+    var labels = Array.isArray(opts.openLabels)
+      ? opts.openLabels.filter(Boolean)
+      : [];
+    var pct =
+      opts.progressPercent != null && isFinite(+opts.progressPercent)
+        ? Math.round(+opts.progressPercent)
+        : null;
+    if (!total) {
+      if (opts.phase === 'done' || (pct != null && pct >= 100)) {
+        return 'Compl\u00e9t\u00e9';
+      }
+      if (pct != null && pct > 0 && pct < 100) return pct + '\u00a0%';
+      return 'En attente';
+    }
+    if (opts.phase === 'done' || open <= 0) return 'Compl\u00e9t\u00e9';
+    if (labels.length === 1) return 'Reste\u00a0: ' + labels[0] + '.';
+    if (labels.length === 2) {
+      return 'Reste\u00a0: ' + labels[0] + ' et ' + labels[1] + '.';
+    }
+    if (labels.length > 2) {
+      return (
+        'Reste\u00a0: ' +
+        labels[0] +
+        ', ' +
+        labels[1] +
+        ' +' +
+        (labels.length - 2) +
+        '.'
+      );
+    }
+    return open + ' t\u00e2che' + (open > 1 ? 's' : '') + ' restante' + (open > 1 ? 's' : '');
+  }
+
+  /**
+   * Enrichment payload from completion + priority Motifs for Résumé / snapshot.
+   */
+  function buildOverviewEnrichment(completion, options) {
+    options = options || {};
+    var taskMeta = buildOverviewTasksFromCompletion(completion, {
+      cap: options.taskCap != null ? options.taskCap : 5
+    });
+    var CT = global.CompletionTrello;
+    var fromCompletion =
+      CT && typeof CT.aggregateBlockedReasons === 'function'
+        ? CT.aggregateBlockedReasons(completion || { items: [] })
+        : [];
+    if (!fromCompletion.length && completion && Array.isArray(completion.items)) {
+      var seenReasons = Object.create(null);
+      var fallback = [];
+      function pushReason(reason) {
+        var n = normalizeBlockedReason(reason);
+        if (!n || seenReasons[n]) return;
+        seenReasons[n] = true;
+        fallback.push(n);
+      }
+      if (completion.blocked === true && Array.isArray(completion.blockedReasons)) {
+        for (var mr = 0; mr < completion.blockedReasons.length; mr++) {
+          pushReason(completion.blockedReasons[mr]);
+        }
+      }
+      for (var ii = 0; ii < completion.items.length; ii++) {
+        var bit = completion.items[ii];
+        if (!bit || bit.blocked !== true) continue;
+        if (!Array.isArray(bit.blockedReasons)) continue;
+        for (var br = 0; br < bit.blockedReasons.length; br++) {
+          pushReason(bit.blockedReasons[br]);
+        }
+      }
+      fromCompletion = fallback;
+    }
+    var fromPriority = normalizeBlockedReasons(
+      options.blockedReasons != null
+        ? options.blockedReasons
+        : options.priorityReasons
+    );
+    var blockedReasons = fromCompletion.length ? fromCompletion : fromPriority;
+    if (
+      options.links != null ||
+      (options.items != null && options.items.length)
+    ) {
+      blockedReasons = expandBlockedReasonsForDisplay(
+        blockedReasons,
+        options.links,
+        options.items || (completion && completion.items) || []
+      );
+    }
+    var progressBlocked = !!options.progressBlocked;
+    if (
+      !progressBlocked &&
+      CT &&
+      typeof CT.hasAnyBlocked === 'function' &&
+      completion
+    ) {
+      progressBlocked = !!CT.hasAnyBlocked(completion);
+    }
+    var statusCategory =
+      typeof options.statusCategory === 'string' ? options.statusCategory : '';
+    var progressPercent =
+      options.progressPercent != null && isFinite(+options.progressPercent)
+        ? Math.max(0, Math.min(100, Math.round(+options.progressPercent)))
+        : null;
+    var isDone =
+      statusCategory === 'completed' ||
+      (progressPercent != null && progressPercent >= 100);
+    var isBlocked =
+      !isDone && (statusCategory === 'blocked' || progressBlocked);
+    var phase = isDone
+      ? 'done'
+      : isBlocked
+        ? 'blocked'
+        : taskMeta.tasksTotal > 0 && taskMeta.tasksDone > 0
+          ? 'in_progress'
+          : progressPercent != null && progressPercent > 0
+            ? 'in_progress'
+            : 'not_started';
+    var summaryText =
+      typeof options.summaryText === 'string' && options.summaryText.trim()
+        ? options.summaryText.trim()
+        : buildOverviewSummaryText({
+            phase: phase,
+            stuck: isBlocked,
+            blockedReasons: blockedReasons,
+            progressPercent: progressPercent,
+            tasksDone: taskMeta.tasksDone,
+            tasksTotal: taskMeta.tasksTotal,
+            tasksOpen: taskMeta.tasksOpen,
+            openLabels: taskMeta.openLabels
+          });
+    return {
+      summaryText: summaryText,
+      blockedReasons: blockedReasons,
+      tasks: taskMeta.tasks,
+      tasksDone: taskMeta.tasksDone,
+      tasksTotal: taskMeta.tasksTotal,
+      tasksOpen: taskMeta.tasksOpen,
+      phase: phase
+    };
+  }
+
+  /**
    * Primary overview / résumé at the top of the card popup (collapsible).
-   * Title + metric cells (progress+statut combined, deadline, priority);
-   * contextual action chips; each cell jumps to the matching accordion via onJump.
+   * Status-first hero + Motifs + open tasks + contextual actions.
    *
    * config.compact — card-back / embedded strip: no accordion chrome, no action
    * chips, tighter layout (used by the Trello Cerveau card-back section).
@@ -8429,6 +8660,18 @@
       typeof config.priorityLabel === 'string' ? config.priorityLabel : '';
     var priorityColor =
       typeof config.priorityColor === 'string' ? config.priorityColor : '';
+    var summaryTextValue =
+      typeof config.summaryText === 'string' ? config.summaryText : '';
+    var blockedReasonsList = normalizeBlockedReasons(config.blockedReasons);
+    var overviewTasks = Array.isArray(config.tasks) ? config.tasks.slice() : [];
+    var tasksDone =
+      config.tasksDone != null && isFinite(+config.tasksDone)
+        ? Math.max(0, Math.round(+config.tasksDone))
+        : 0;
+    var tasksTotal =
+      config.tasksTotal != null && isFinite(+config.tasksTotal)
+        ? Math.max(0, Math.round(+config.tasksTotal))
+        : 0;
     var features =
       config.features && typeof config.features === 'object'
         ? Object.assign({}, config.features)
@@ -8440,10 +8683,12 @@
           };
 
     var bodyId = 'overview-section-body-' + Math.random().toString(36).slice(2, 9);
+    var composerMode = ''; // '' | 'block' | 'add-subtask'
 
     var section = document.createElement('div');
     section.className =
-      'variant-overview-section' + (compact ? ' variant-overview-section--compact' : '');
+      'variant-overview-section' +
+      (compact ? ' variant-overview-section--compact' : '');
 
     var field = document.createElement('div');
     field.className =
@@ -8468,8 +8713,7 @@
 
     var body = document.createElement('div');
     body.className =
-      'overview-section-body' +
-      (compact ? '' : ' section-toggle-body');
+      'overview-section-body' + (compact ? '' : ' section-toggle-body');
     body.id = bodyId;
 
     function makeJumpable(el, jumpKeyOrRef, label) {
@@ -8496,6 +8740,12 @@
       });
     }
 
+    function emitAction(id, payload) {
+      if (!onAction) return;
+      if (payload !== undefined) onAction(id, payload);
+      else onAction(id);
+    }
+
     // ── Title ──────────────────────────────────────────────────────────
     var titleBtn = document.createElement('div');
     titleBtn.className = 'overview-title';
@@ -8519,16 +8769,63 @@
 
     body.appendChild(titleBtn);
 
-    // ── Metrics grid ───────────────────────────────────────────────────
-    var metrics = document.createElement('div');
-    metrics.className = 'overview-metrics';
-    body.appendChild(metrics);
+    // ── Status hero ────────────────────────────────────────────────────
+    var hero = document.createElement('div');
+    hero.className = 'overview-hero';
+    var progressJump = { key: 'progress' };
+    makeJumpable(hero, progressJump, 'Progr\u00e8s');
 
-    // ── Contextual actions ─────────────────────────────────────────────
-    var actionsEl = document.createElement('div');
-    actionsEl.className = 'overview-actions';
-    actionsEl.hidden = true;
-    if (!compact) body.appendChild(actionsEl);
+    var heroRing = document.createElement('span');
+    heroRing.className = 'overview-progress-ring tp-completion-check overview-hero-ring';
+    heroRing.setAttribute('aria-hidden', 'true');
+    heroRing.innerHTML = PROGRESS_CHECK_SVG;
+
+    var heroMain = document.createElement('div');
+    heroMain.className = 'overview-hero-main';
+
+    var heroTop = document.createElement('div');
+    heroTop.className = 'overview-hero-top';
+
+    var heroPhase = document.createElement('span');
+    heroPhase.className = 'overview-hero-phase';
+    heroTop.appendChild(heroPhase);
+
+    var heroCount = document.createElement('span');
+    heroCount.className = 'overview-hero-count';
+    heroTop.appendChild(heroCount);
+
+    var heroPct = document.createElement('span');
+    heroPct.className = 'overview-hero-pct';
+    heroTop.appendChild(heroPct);
+
+    var heroSentence = document.createElement('p');
+    heroSentence.className = 'overview-hero-sentence';
+
+    var heroTrack = document.createElement('div');
+    heroTrack.className = 'overview-progress-track overview-hero-track';
+    var heroFill = document.createElement('div');
+    heroFill.className = 'overview-progress-fill';
+    heroTrack.appendChild(heroFill);
+
+    heroMain.appendChild(heroTop);
+    heroMain.appendChild(heroSentence);
+    heroMain.appendChild(heroTrack);
+
+    hero.appendChild(heroRing);
+    hero.appendChild(heroMain);
+    body.appendChild(hero);
+
+    // ── Motifs band ────────────────────────────────────────────────────
+    var motifsEl = document.createElement('div');
+    motifsEl.className = 'overview-motifs';
+    motifsEl.hidden = true;
+    makeJumpable(motifsEl, { key: 'blocked' }, 'Motifs');
+    body.appendChild(motifsEl);
+
+    // ── Meta row (due + priority) ──────────────────────────────────────
+    var metrics = document.createElement('div');
+    metrics.className = 'overview-metrics overview-metrics--meta';
+    body.appendChild(metrics);
 
     function makeCell(key, jumpKey, label, iconClass, options) {
       options = options || {};
@@ -8564,29 +8861,20 @@
       return { cell: cell, value: valueWrap, head: head, icon: icon };
     }
 
-    var progressJump = { key: 'progress' };
+    // Keep a progress cell for tests / jump compatibility (visually in hero).
     var progressCell = makeCell(
       'progress',
       progressJump,
       'Progr\u00e8s',
       'ti-progress'
     );
+    progressCell.cell.classList.add('overview-cell--progress-mirror');
+    progressCell.cell.setAttribute('hidden', '');
+
     var dueCell = makeCell('due', 'due', '\u00c9ch\u00e9ance', 'ti-calendar-event', {
       hideLabel: true
     });
     var priorityCell = makeCell('priority', 'priority', 'Priorit\u00e9', 'ti-flame');
-
-    var progressRing = document.createElement('span');
-    progressRing.className = 'overview-progress-ring tp-completion-check';
-    progressRing.setAttribute('aria-hidden', 'true');
-    progressRing.innerHTML = PROGRESS_CHECK_SVG;
-
-    var progressBarTrack = document.createElement('div');
-    progressBarTrack.className = 'overview-progress-track';
-    var progressBarFill = document.createElement('div');
-    progressBarFill.className = 'overview-progress-fill';
-    progressBarTrack.appendChild(progressBarFill);
-    progressCell.cell.appendChild(progressBarTrack);
 
     var priorityDot = document.createElement('span');
     priorityDot.className = 'heat-tier-dot overview-priority-dot';
@@ -8594,6 +8882,32 @@
 
     var priorityText = document.createElement('span');
     priorityText.className = 'overview-priority-label';
+
+    // ── Task strip ─────────────────────────────────────────────────────
+    var tasksWrap = document.createElement('div');
+    tasksWrap.className = 'overview-tasks';
+    tasksWrap.hidden = true;
+    body.appendChild(tasksWrap);
+
+    var tasksList = document.createElement('div');
+    tasksList.className = 'overview-tasks-list';
+    tasksWrap.appendChild(tasksList);
+
+    var tasksDoneHint = document.createElement('div');
+    tasksDoneHint.className = 'overview-tasks-done-hint';
+    tasksDoneHint.hidden = true;
+    tasksWrap.appendChild(tasksDoneHint);
+
+    // ── Actions + composers ────────────────────────────────────────────
+    var actionsEl = document.createElement('div');
+    actionsEl.className = 'overview-actions';
+    actionsEl.hidden = true;
+    if (!compact) body.appendChild(actionsEl);
+
+    var composerEl = document.createElement('div');
+    composerEl.className = 'overview-composer';
+    composerEl.hidden = true;
+    if (!compact) body.appendChild(composerEl);
 
     function setFeatureVisible(cell, on) {
       if (on) {
@@ -8603,95 +8917,422 @@
       }
     }
 
-    function setProgressHeadIcon(mode, statusStyle) {
-      var next;
-      if (mode === 'status') {
-        next = createStatutIcon((statusStyle && statusStyle.icon) || 'dot', 14);
-        next.classList.add(
-          'overview-cell-icon',
-          'overview-status-icon',
-          'ti'
-        );
-      } else {
-        next = document.createElement('i');
-        next.className = 'ti ti-progress overview-cell-icon';
-        next.setAttribute('aria-hidden', 'true');
-      }
-      if (progressCell.icon && progressCell.icon.parentNode) {
-        progressCell.icon.parentNode.replaceChild(next, progressCell.icon);
-      } else {
-        progressCell.head.insertBefore(
-          next,
-          progressCell.head.children[0] || null
-        );
-      }
-      progressCell.icon = next;
-    }
-
-    /**
-     * Combined Progrès cell: completed → status; blocked → progress ring (II pause)
-     * when a % exists so the pause icon stays visible; otherwise status / %.
-     */
-    function resolveProgressDisplayMode() {
+    function resolveDoneBlocked() {
       var isBlocked = statusCategory === 'blocked' || !!progressBlocked;
       var isDone =
         statusCategory === 'completed' ||
         (progressPercent != null && progressPercent >= 100);
-      // Prefer the ring when blocked so the II pause icon is shown (not status text alone).
-      if (isBlocked && !isDone && progressPercent != null) return 'progress';
-      if (isDone || isBlocked) return 'status';
-      if (progressPercent != null) return 'progress';
-      if ((statusText || '').trim()) return 'status';
-      return 'empty';
+      return { isBlocked: isBlocked && !isDone, isDone: isDone };
+    }
+
+    function phaseLabel(isBlocked, isDone) {
+      if (isDone) {
+        return (statusText || '').trim() || 'Termin\u00e9';
+      }
+      if (isBlocked) {
+        return statusCategory === 'blocked' && (statusText || '').trim()
+          ? (statusText || '').trim()
+          : 'Bloqu\u00e9';
+      }
+      if (
+        (progressPercent != null && progressPercent > 0) ||
+        (tasksTotal > 0 && tasksDone > 0) ||
+        statusCategory === 'started'
+      ) {
+        return 'En cours';
+      }
+      if ((statusText || '').trim()) return (statusText || '').trim();
+      return '\u00c0 faire';
+    }
+
+    function closeComposer() {
+      composerMode = '';
+      composerEl.hidden = true;
+      composerEl.replaceChildren();
+      if (onLayoutChange) onLayoutChange();
+    }
+
+    function openBlockComposer() {
+      composerMode = 'block';
+      composerEl.hidden = false;
+      composerEl.replaceChildren();
+
+      var head = document.createElement('div');
+      head.className = 'overview-composer-head';
+      head.textContent = 'Pourquoi en attente\u00a0?';
+      composerEl.appendChild(head);
+
+      var suggestions = document.createElement('div');
+      suggestions.className = 'overview-composer-suggestions';
+      var ranked = rankBlockedReasonSuggestions({
+        query: '',
+        selected: [],
+        cap: 6
+      });
+      for (var i = 0; i < ranked.length; i++) {
+        (function (reason) {
+          var chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'overview-composer-chip';
+          chip.textContent = reason;
+          chip.addEventListener('click', function (e) {
+            if (e && e.preventDefault) e.preventDefault();
+            if (e && e.stopPropagation) e.stopPropagation();
+            bumpBlockedReasonFreq(reason);
+            emitAction('block', { reasons: [reason] });
+            closeComposer();
+          });
+          suggestions.appendChild(chip);
+        })(ranked[i]);
+      }
+      composerEl.appendChild(suggestions);
+
+      var row = document.createElement('div');
+      row.className = 'overview-composer-row';
+
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'overview-composer-input';
+      input.placeholder = BLOCKED_REASON_PLACEHOLDER;
+      input.setAttribute('aria-label', 'Cause du blocage');
+
+      var submit = document.createElement('button');
+      submit.type = 'button';
+      submit.className = 'overview-action-chip overview-action-chip--primary';
+      submit.textContent = 'Bloquer';
+
+      function commitCustom() {
+        var reason = normalizeBlockedReason(input.value);
+        if (!reason) {
+          input.focus();
+          return;
+        }
+        bumpBlockedReasonFreq(reason);
+        emitAction('block', { reasons: [reason] });
+        closeComposer();
+      }
+
+      submit.addEventListener('click', function (e) {
+        if (e && e.preventDefault) e.preventDefault();
+        if (e && e.stopPropagation) e.stopPropagation();
+        commitCustom();
+      });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commitCustom();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          closeComposer();
+        }
+      });
+
+      var cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'overview-action-chip overview-action-chip--ghost';
+      cancel.textContent = 'Annuler';
+      cancel.addEventListener('click', function (e) {
+        if (e && e.preventDefault) e.preventDefault();
+        if (e && e.stopPropagation) e.stopPropagation();
+        closeComposer();
+      });
+
+      row.appendChild(input);
+      row.appendChild(submit);
+      row.appendChild(cancel);
+      composerEl.appendChild(row);
+
+      if (onLayoutChange) onLayoutChange();
+      setTimeout(function () {
+        try {
+          input.focus();
+        } catch (err) { /* ignore */ }
+      }, 0);
+    }
+
+    function openAddSubtaskComposer() {
+      composerMode = 'add-subtask';
+      composerEl.hidden = false;
+      composerEl.replaceChildren();
+
+      var head = document.createElement('div');
+      head.className = 'overview-composer-head';
+      head.textContent = 'Nouvelle sous-t\u00e2che';
+      composerEl.appendChild(head);
+
+      var row = document.createElement('div');
+      row.className = 'overview-composer-row';
+
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'overview-composer-input';
+      input.placeholder = 'D\u00e9crire la sous-t\u00e2che\u2026';
+      input.setAttribute('aria-label', 'Nouvelle sous-t\u00e2che');
+
+      var submit = document.createElement('button');
+      submit.type = 'button';
+      submit.className = 'overview-action-chip overview-action-chip--primary';
+      submit.textContent = 'Ajouter';
+
+      function commit() {
+        var text = String(input.value || '').trim();
+        if (!text) {
+          input.focus();
+          return;
+        }
+        emitAction('add-subtask', { text: text });
+        closeComposer();
+      }
+
+      submit.addEventListener('click', function (e) {
+        if (e && e.preventDefault) e.preventDefault();
+        if (e && e.stopPropagation) e.stopPropagation();
+        commit();
+      });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commit();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          closeComposer();
+        }
+      });
+
+      var cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'overview-action-chip overview-action-chip--ghost';
+      cancel.textContent = 'Annuler';
+      cancel.addEventListener('click', function (e) {
+        if (e && e.preventDefault) e.preventDefault();
+        if (e && e.stopPropagation) e.stopPropagation();
+        closeComposer();
+      });
+
+      row.appendChild(input);
+      row.appendChild(submit);
+      row.appendChild(cancel);
+      composerEl.appendChild(row);
+
+      if (onLayoutChange) onLayoutChange();
+      setTimeout(function () {
+        try {
+          input.focus();
+        } catch (err) { /* ignore */ }
+      }, 0);
     }
 
     function paintActions() {
       if (compact || !actionsEl.parentNode) {
         actionsEl.hidden = true;
+        closeComposer();
         return;
       }
       actionsEl.replaceChildren();
-      var chips = [];
-      var isBlocked = statusCategory === 'blocked' || !!progressBlocked;
-      var isDone =
-        statusCategory === 'completed' ||
-        (progressPercent != null && progressPercent >= 100);
-      // Completed cards need no unblock / postpone suggestions.
-      if (isDone) {
+      var state = resolveDoneBlocked();
+      if (state.isDone) {
         actionsEl.hidden = true;
+        closeComposer();
         return;
       }
-      if (isBlocked) {
+
+      var chips = [];
+      if (state.isBlocked) {
         chips.push({
           id: 'unblock',
-          label: 'Marquer d\u00e9bloqu\u00e9'
+          label: 'Marquer d\u00e9bloqu\u00e9',
+          icon: 'ti-player-play',
+          variant: 'primary'
+        });
+      } else {
+        chips.push({
+          id: 'complete',
+          label: 'Terminer',
+          icon: 'ti-check',
+          variant: 'primary'
+        });
+        chips.push({
+          id: 'block',
+          label: 'En attente\u2026',
+          icon: 'ti-player-pause',
+          variant: 'warn'
         });
       }
+      chips.push({
+        id: 'add-subtask',
+        label: 'Sous-t\u00e2che',
+        icon: 'ti-plus',
+        variant: 'neutral'
+      });
       if (dueDays != null && isFinite(dueDays) && dueDays <= 0) {
         chips.push({
           id: 'postpone-tomorrow',
-          label: 'Reporter \u00e0 demain'
+          label: 'Reporter \u00e0 demain',
+          icon: 'ti-calendar-plus',
+          variant: 'neutral'
         });
       }
-      if (!chips.length) {
-        actionsEl.hidden = true;
-        return;
-      }
+
       actionsEl.hidden = false;
       for (var i = 0; i < chips.length; i++) {
         (function (chip) {
           var btn = document.createElement('button');
           btn.type = 'button';
-          btn.className = 'overview-action-chip';
-          btn.textContent = chip.label;
+          btn.className =
+            'overview-action-chip' +
+            (chip.variant === 'primary'
+              ? ' overview-action-chip--primary'
+              : chip.variant === 'warn'
+                ? ' overview-action-chip--warn'
+                : '');
           btn.dataset.overviewAction = chip.id;
+          if (chip.icon) {
+            var ic = document.createElement('i');
+            ic.className = 'ti ' + chip.icon;
+            ic.setAttribute('aria-hidden', 'true');
+            btn.appendChild(ic);
+          }
+          var lab = document.createElement('span');
+          lab.textContent = chip.label;
+          btn.appendChild(lab);
           btn.addEventListener('click', function (e) {
             if (e && typeof e.preventDefault === 'function') e.preventDefault();
             if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
-            if (onAction) onAction(chip.id);
+            if (chip.id === 'block') {
+              if (composerMode === 'block') closeComposer();
+              else openBlockComposer();
+              return;
+            }
+            if (chip.id === 'add-subtask') {
+              if (composerMode === 'add-subtask') closeComposer();
+              else openAddSubtaskComposer();
+              return;
+            }
+            emitAction(chip.id);
           });
           actionsEl.appendChild(btn);
         })(chips[i]);
+      }
+    }
+
+    function paintMotifs(isBlocked) {
+      motifsEl.replaceChildren();
+      if (!isBlocked || !blockedReasonsList.length) {
+        motifsEl.hidden = true;
+        return;
+      }
+      motifsEl.hidden = false;
+      var label = document.createElement('span');
+      label.className = 'overview-motifs-label';
+      label.textContent = 'Motifs';
+      motifsEl.appendChild(label);
+      for (var i = 0; i < blockedReasonsList.length; i++) {
+        var chip = document.createElement('span');
+        chip.className = 'overview-motif-chip';
+        chip.textContent = blockedReasonsList[i];
+        motifsEl.appendChild(chip);
+      }
+    }
+
+    function paintTasks(isBlocked) {
+      tasksList.replaceChildren();
+      var showTasks = overviewTasks.length > 0 || tasksDone > 0;
+      if (!showTasks) {
+        tasksWrap.hidden = true;
+        return;
+      }
+      tasksWrap.hidden = false;
+
+      if (!overviewTasks.length) {
+        tasksList.hidden = true;
+      } else {
+        tasksList.hidden = false;
+        for (var i = 0; i < overviewTasks.length; i++) {
+          (function (task) {
+            var row = document.createElement('div');
+            row.className =
+              'overview-task-row' +
+              (task.blocked ? ' is-blocked' : '') +
+              (task.done ? ' is-done' : '');
+            row.dataset.taskId = task.id || '';
+
+            var check = document.createElement('button');
+            check.type = 'button';
+            check.className =
+              'overview-progress-ring tp-completion-check overview-task-check';
+            check.setAttribute(
+              'aria-label',
+              task.blocked
+                ? 'D\u00e9bloquer'
+                : task.done
+                  ? 'Marquer non fait'
+                  : 'Marquer termin\u00e9'
+            );
+            check.classList.toggle('is-checked', !!task.done && !task.blocked);
+            check.classList.toggle('is-blocked', !!task.blocked);
+            check.innerHTML = task.blocked
+              ? PROGRESS_PAUSE_SVG
+              : PROGRESS_CHECK_SVG;
+            if (compact) {
+              check.disabled = true;
+              check.tabIndex = -1;
+            } else {
+              check.addEventListener('click', function (e) {
+                if (e && e.preventDefault) e.preventDefault();
+                if (e && e.stopPropagation) e.stopPropagation();
+                if (!task.id) return;
+                emitAction('toggle-task', { id: task.id });
+              });
+            }
+
+            var text = document.createElement('span');
+            text.className = 'overview-task-text';
+            text.textContent = task.text || '';
+            if (!compact) {
+              text.setAttribute('role', 'button');
+              text.tabIndex = 0;
+              text.title = 'Aller \u00e0 Progr\u00e8s';
+              function jumpProgress(e) {
+                if (e && e.preventDefault) e.preventDefault();
+                if (e && e.stopPropagation) e.stopPropagation();
+                if (onJump) onJump(isBlocked ? 'blocked' : 'progress');
+              }
+              text.addEventListener('click', jumpProgress);
+              text.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  jumpProgress(e);
+                }
+              });
+            }
+
+            row.appendChild(check);
+            row.appendChild(text);
+            tasksList.appendChild(row);
+          })(overviewTasks[i]);
+        }
+      }
+
+      if (tasksDone > 0) {
+        tasksDoneHint.hidden = false;
+        tasksDoneHint.textContent =
+          '+' +
+          tasksDone +
+          ' termin\u00e9e' +
+          (tasksDone > 1 ? 's' : '');
+        if (!compact) {
+          tasksDoneHint.setAttribute('role', 'button');
+          tasksDoneHint.tabIndex = 0;
+          tasksDoneHint.title = 'Aller \u00e0 Progr\u00e8s';
+          tasksDoneHint.onclick = function (e) {
+            if (e && e.preventDefault) e.preventDefault();
+            if (onJump) onJump('progress');
+          };
+        }
+      } else {
+        tasksDoneHint.hidden = true;
+        tasksDoneHint.textContent = '';
+        tasksDoneHint.onclick = null;
       }
     }
 
@@ -8710,148 +9351,114 @@
       var progressFeatureOn =
         features.progress !== false || features.statut !== false;
       var due = (dueCountdown || '').trim();
-      setFeatureVisible(progressCell.cell, progressFeatureOn);
+      // Mirror cell stays hidden; hero carries progress UX.
+      setFeatureVisible(progressCell.cell, false);
       setFeatureVisible(dueCell.cell, features.due !== false && !!due);
       setFeatureVisible(priorityCell.cell, features.priority !== false);
+      metrics.hidden =
+        (dueCell.cell.getAttribute('hidden') != null ||
+          features.due === false ||
+          !due) &&
+        (priorityCell.cell.getAttribute('hidden') != null ||
+          features.priority === false);
 
-      var st = (statusText || '').trim();
-      var statusStyle = statutCategoryStyle(statusCategory || '_none');
-      var statusAccent = statusColor || statusStyle.color || '';
-      var isBlocked = statusCategory === 'blocked' || !!progressBlocked;
-      var isDone =
-        statusCategory === 'completed' ||
-        (progressPercent != null && progressPercent >= 100);
-      var mode = resolveProgressDisplayMode();
+      var state = resolveDoneBlocked();
+      var isBlocked = state.isBlocked;
+      var isDone = state.isDone;
       progressJump.key = isBlocked ? 'blocked' : 'progress';
 
+      var statusStyle = statutCategoryStyle(statusCategory || '_none');
+      var statusAccent = statusColor || statusStyle.color || '';
+      var accent = isBlocked
+        ? statusAccent || readCssVar('--blocked-accent', '#ae2e24')
+        : isDone
+          ? statusAccent || progressColor || '#22a06b'
+          : progressColor || statusAccent || '';
+
+      hero.classList.toggle('is-blocked', isBlocked);
+      hero.classList.toggle('is-done', isDone);
+      hero.classList.toggle('has-progress-accent', !!accent);
+      if (accent) {
+        hero.style.setProperty('--overview-progress-accent', accent);
+        hero.style.setProperty('--overview-status-accent', accent);
+        heroRing.style.setProperty('--completion-check-fill', accent);
+      } else {
+        hero.style.removeProperty('--overview-progress-accent');
+        hero.style.removeProperty('--overview-status-accent');
+        heroRing.style.removeProperty('--completion-check-fill');
+      }
+
+      var showPct =
+        progressPercent != null && progressFeatureOn
+          ? progressPercent
+          : isDone
+            ? 100
+            : null;
+      var ringPct = showPct != null ? showPct : 0;
+      heroRing.classList.toggle('is-checked', !!isDone);
+      heroRing.classList.toggle(
+        'has-progress',
+        !isDone && !isBlocked && ringPct > 0
+      );
+      heroRing.classList.toggle('is-blocked', isBlocked);
+      heroRing.style.setProperty('--completion-progress', String(ringPct));
+      heroRing.innerHTML = isBlocked ? PROGRESS_PAUSE_SVG : PROGRESS_CHECK_SVG;
+
+      heroPhase.textContent = phaseLabel(isBlocked, isDone);
+      if (tasksTotal > 0) {
+        heroCount.hidden = false;
+        heroCount.textContent = tasksDone + '/' + tasksTotal;
+      } else {
+        heroCount.hidden = true;
+        heroCount.textContent = '';
+      }
+      if (showPct != null && !isBlocked) {
+        heroPct.hidden = false;
+        heroPct.textContent = showPct + '\u00a0%';
+      } else {
+        heroPct.hidden = true;
+        heroPct.textContent = '';
+      }
+
+      var sentence =
+        (summaryTextValue || '').trim() ||
+        buildOverviewSummaryText({
+          phase: isDone ? 'done' : isBlocked ? 'blocked' : 'in_progress',
+          stuck: isBlocked,
+          blockedReasons: blockedReasonsList,
+          progressPercent: progressPercent,
+          tasksDone: tasksDone,
+          tasksTotal: tasksTotal,
+          tasksOpen: Math.max(0, tasksTotal - tasksDone),
+          openLabels: overviewTasks.map(function (task) {
+            return task.text;
+          })
+        });
+      heroSentence.textContent = sentence;
+      heroSentence.hidden = !sentence;
+      heroTrack.hidden = showPct == null && !isDone;
+      heroFill.style.width =
+        showPct != null ? showPct + '%' : isDone ? '100%' : '0%';
+
+      // Mirror values into hidden progress cell for getData / legacy tests.
+      progressCell.value.textContent = isBlocked
+        ? phaseLabel(true, false)
+        : isDone
+          ? phaseLabel(false, true)
+          : showPct != null
+            ? showPct + '\u00a0%'
+            : phaseLabel(false, false);
       progressCell.cell.classList.toggle('is-blocked', isBlocked);
       progressCell.cell.classList.toggle('is-done', !!isDone && !isBlocked);
-      progressCell.cell.classList.toggle('is-status-mode', mode === 'status');
-      progressCell.cell.classList.toggle('is-progress-mode', mode === 'progress');
-      if (statusCategory) {
-        progressCell.cell.dataset.statusCategory = statusCategory;
-      } else if (progressCell.cell.dataset) {
-        delete progressCell.cell.dataset.statusCategory;
-      }
+      progressCell.cell.classList.toggle(
+        'is-status-mode',
+        isDone || (isBlocked && progressPercent == null)
+      );
+      progressCell.cell.classList.toggle(
+        'is-progress-mode',
+        !isDone && progressPercent != null
+      );
 
-      setProgressHeadIcon(mode, statusStyle);
-
-      var progressAccent = '';
-      if (mode === 'status') {
-        progressAccent =
-          isBlocked
-            ? statusAccent || readCssVar('--blocked-accent', '#ae2e24')
-            : statusAccent || progressColor || '';
-        progressCell.value.innerHTML = '';
-        var statusLabel = '';
-        if (isBlocked) {
-          statusLabel =
-            statusCategory === 'blocked' && st ? st : 'Bloqu\u00e9';
-        } else if (isDone) {
-          statusLabel = st || 'Termin\u00e9';
-        } else {
-          statusLabel = st;
-        }
-        // Blocked without a %: still show the II pause ring beside the label.
-        if (isBlocked) {
-          progressRing.classList.remove('is-checked', 'has-progress');
-          progressRing.classList.add('is-blocked');
-          progressRing.style.setProperty('--completion-progress', '0');
-          if (progressAccent) {
-            progressRing.style.setProperty(
-              '--completion-check-fill',
-              progressAccent
-            );
-          } else {
-            progressRing.style.removeProperty('--completion-check-fill');
-          }
-          progressRing.innerHTML = PROGRESS_PAUSE_SVG;
-          progressCell.value.appendChild(progressRing);
-          var blockedLabel = document.createElement('span');
-          blockedLabel.className = 'overview-progress-pct';
-          blockedLabel.textContent = statusLabel || 'Bloqu\u00e9';
-          progressCell.value.appendChild(blockedLabel);
-          progressCell.value.classList.toggle('is-empty', !statusLabel);
-        } else {
-          progressCell.value.textContent = statusLabel || 'Sans statut';
-          progressCell.value.classList.toggle('is-empty', !statusLabel);
-        }
-        progressBarFill.style.width =
-          isDone && !isBlocked
-            ? '100%'
-            : progressPercent != null
-              ? progressPercent + '%'
-              : '0%';
-        progressBarTrack.classList.toggle(
-          'is-empty',
-          !(isDone && !isBlocked) && progressPercent == null
-        );
-        progressBarTrack.hidden = false;
-      } else if (mode === 'progress') {
-        var showPause = isBlocked && !(progressPercent >= 100);
-        progressAccent = showPause
-          ? statusAccent ||
-            readCssVar('--blocked-accent', '#ae2e24')
-          : progressColor || '';
-        progressCell.value.innerHTML = '';
-        var donePct = progressPercent >= 100;
-        progressRing.classList.toggle('is-checked', donePct);
-        progressRing.classList.toggle(
-          'has-progress',
-          progressPercent > 0 && !donePct
-        );
-        progressRing.classList.toggle('is-blocked', showPause);
-        progressRing.style.setProperty(
-          '--completion-progress',
-          String(progressPercent)
-        );
-        if (progressAccent) {
-          progressRing.style.setProperty(
-            '--completion-check-fill',
-            progressAccent
-          );
-        } else {
-          progressRing.style.removeProperty('--completion-check-fill');
-        }
-        progressRing.innerHTML = showPause ? PROGRESS_PAUSE_SVG : PROGRESS_CHECK_SVG;
-        progressCell.value.appendChild(progressRing);
-        var pctText = document.createElement('span');
-        pctText.className = 'overview-progress-pct';
-        pctText.textContent = progressPercent + '\u00a0%';
-        progressCell.value.appendChild(pctText);
-        progressCell.value.classList.remove('is-empty');
-        progressBarFill.style.width = progressPercent + '%';
-        progressBarTrack.classList.remove('is-empty');
-        progressBarTrack.hidden = false;
-      } else {
-        progressCell.value.innerHTML = '';
-        progressCell.value.textContent = '\u2014';
-        progressCell.value.classList.add('is-empty');
-        progressBarFill.style.width = '0%';
-        progressBarTrack.classList.add('is-empty');
-        progressBarTrack.hidden = false;
-        progressRing.classList.remove('is-checked', 'has-progress', 'is-blocked');
-        progressRing.style.removeProperty('--completion-progress');
-        progressRing.style.removeProperty('--completion-check-fill');
-      }
-
-      if (progressAccent) {
-        progressCell.cell.style.setProperty(
-          '--overview-progress-accent',
-          progressAccent
-        );
-        progressCell.cell.style.setProperty(
-          '--overview-status-accent',
-          progressAccent
-        );
-        progressCell.cell.classList.add('has-progress-accent');
-      } else {
-        progressCell.cell.style.removeProperty('--overview-progress-accent');
-        progressCell.cell.style.removeProperty('--overview-status-accent');
-        progressCell.cell.classList.remove('has-progress-accent');
-      }
-
-      // Completed: show Complété instead of overdue/countdown banding.
       var dueDone = !!isDone && !isBlocked && !!due;
       var dueText = dueDone ? COMPLETED_BADGE_PREFIX : due;
       var dueBandActive = dueDone ? '' : dueBand;
@@ -8868,9 +9475,9 @@
       dueCell.cell.classList.toggle('is-overdue', dueBandActive === 'overdue');
       if (dueBandActive) {
         dueCell.cell.dataset.dueBand = dueBandActive;
-        var accent = dueBandAccent(dueBandActive);
-        if (accent) {
-          dueCell.cell.style.setProperty('--overview-due-accent', accent);
+        var dueAccent = dueBandAccent(dueBandActive);
+        if (dueAccent) {
+          dueCell.cell.style.setProperty('--overview-due-accent', dueAccent);
         } else {
           dueCell.cell.style.removeProperty('--overview-due-accent');
         }
@@ -8892,7 +9499,6 @@
       priorityCell.cell.classList.toggle('is-complete', priorityDone);
       if (pl) {
         if (priorityColor) {
-          // Keep the tier visible when done, but mute the accent.
           priorityDot.style.background = priorityDone
             ? 'var(--text-muted, #626f86)'
             : priorityColor;
@@ -8922,6 +9528,8 @@
         !!(pl && priorityColor && !priorityDone)
       );
 
+      paintMotifs(isBlocked);
+      paintTasks(isBlocked);
       paintActions();
 
       if (onLayoutChange) onLayoutChange();
@@ -8999,6 +9607,27 @@
       if (next.priorityColor != null) {
         priorityColor = String(next.priorityColor || '');
       }
+      if (next.summaryText != null) {
+        summaryTextValue = String(next.summaryText || '');
+      }
+      if (next.blockedReasons !== undefined) {
+        blockedReasonsList = normalizeBlockedReasons(next.blockedReasons);
+      }
+      if (next.tasks !== undefined) {
+        overviewTasks = Array.isArray(next.tasks) ? next.tasks.slice() : [];
+      }
+      if (next.tasksDone !== undefined) {
+        tasksDone =
+          next.tasksDone != null && isFinite(+next.tasksDone)
+            ? Math.max(0, Math.round(+next.tasksDone))
+            : 0;
+      }
+      if (next.tasksTotal !== undefined) {
+        tasksTotal =
+          next.tasksTotal != null && isFinite(+next.tasksTotal)
+            ? Math.max(0, Math.round(+next.tasksTotal))
+            : 0;
+      }
       if (next.features && typeof next.features === 'object') {
         features = Object.assign({}, features, next.features);
       }
@@ -9036,6 +9665,11 @@
           dueDays: dueDays,
           priorityLabel: priorityLabel,
           priorityColor: priorityColor,
+          summaryText: summaryTextValue,
+          blockedReasons: blockedReasonsList.slice(),
+          tasks: overviewTasks.slice(),
+          tasksDone: tasksDone,
+          tasksTotal: tasksTotal,
           features: Object.assign({}, features)
         };
       }
@@ -18966,17 +19600,17 @@
     easeCol.className = 'calc-rsm-ease-col';
     easeCol.title = KEYWORDS.ease;
 
-    var easeLabelTop = document.createElement('span');
-    easeLabelTop.className = 'calc-rsm-ease-label calc-rsm-ease-label-top';
-    easeLabelTop.textContent = '5';
-
-    var easeMid = document.createElement('div');
-    easeMid.className = 'calc-rsm-ease-mid';
-
     var easeTitle = document.createElement('span');
     easeTitle.className = 'calc-rsm-ease-title';
     easeTitle.textContent = 'Facilit\u00e9';
     easeTitle.setAttribute('aria-hidden', 'true');
+
+    var easeTrack = document.createElement('div');
+    easeTrack.className = 'calc-rsm-ease-track';
+
+    var easeLabelTop = document.createElement('span');
+    easeLabelTop.className = 'calc-rsm-ease-label calc-rsm-ease-label-top';
+    easeLabelTop.textContent = '5';
 
     var easeSlider = document.createElement('input');
     easeSlider.type = 'range';
@@ -18992,11 +19626,11 @@
     easeLabelBottom.className = 'calc-rsm-ease-label calc-rsm-ease-label-bottom';
     easeLabelBottom.textContent = '1';
 
-    easeMid.appendChild(easeTitle);
-    easeMid.appendChild(easeSlider);
-    easeCol.appendChild(easeLabelTop);
-    easeCol.appendChild(easeMid);
-    easeCol.appendChild(easeLabelBottom);
+    easeTrack.appendChild(easeLabelTop);
+    easeTrack.appendChild(easeSlider);
+    easeTrack.appendChild(easeLabelBottom);
+    easeCol.appendChild(easeTitle);
+    easeCol.appendChild(easeTrack);
 
     chart.appendChild(surfaceCanvas);
     chart.appendChild(svg);
@@ -20639,6 +21273,9 @@
     isDueEnabled: isDueEnabled,
     withDueDateDisplay: withDueDateDisplay,
     buildProgressSummaryNode: buildProgressSummaryNode,
+    buildOverviewTasksFromCompletion: buildOverviewTasksFromCompletion,
+    buildOverviewSummaryText: buildOverviewSummaryText,
+    buildOverviewEnrichment: buildOverviewEnrichment,
     createOverviewField: createOverviewField,
     createInfoField: createInfoField,
     renderMarkdownToHtml: renderMarkdownToHtml,

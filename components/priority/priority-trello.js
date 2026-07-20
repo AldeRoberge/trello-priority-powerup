@@ -2475,6 +2475,11 @@
       dueDays: null,
       priorityLabel: '',
       priorityColor: '',
+      summaryText: '',
+      blockedReasons: [],
+      tasks: [],
+      tasksDone: 0,
+      tasksTotal: 0,
       features: {
         statut: true,
         progress: true,
@@ -2651,6 +2656,42 @@
       }
     }
 
+    var priorityReasons = [];
+    var priorityLinks = [];
+    if (display) {
+      if (Array.isArray(display.blockedReasons)) {
+        priorityReasons = display.blockedReasons.slice();
+      } else if (
+        typeof display.blockedReason === 'string' &&
+        display.blockedReason.trim()
+      ) {
+        priorityReasons = [display.blockedReason.trim()];
+      }
+      if (Array.isArray(display.blockedLinks)) {
+        priorityLinks = display.blockedLinks.slice();
+      } else if (display.blockedLink) {
+        priorityLinks = [display.blockedLink];
+      }
+    }
+
+    var enrichment = {
+      summaryText: '',
+      blockedReasons: [],
+      tasks: [],
+      tasksDone: 0,
+      tasksTotal: 0
+    };
+    if (PU2 && typeof PU2.buildOverviewEnrichment === 'function') {
+      enrichment = PU2.buildOverviewEnrichment(completion || { items: [] }, {
+        progressPercent: progressPercent,
+        progressBlocked: progressBlocked,
+        statusCategory: statusCategory,
+        blockedReasons: priorityReasons,
+        links: priorityLinks,
+        items: completion && completion.items ? completion.items : []
+      });
+    }
+
     return {
       title: title || '',
       status: statusLabel,
@@ -2664,6 +2705,11 @@
       dueDays: dueDays,
       priorityLabel: priorityLabel,
       priorityColor: priorityColor,
+      summaryText: enrichment.summaryText || '',
+      blockedReasons: enrichment.blockedReasons || [],
+      tasks: enrichment.tasks || [],
+      tasksDone: enrichment.tasksDone != null ? enrichment.tasksDone : 0,
+      tasksTotal: enrichment.tasksTotal != null ? enrichment.tasksTotal : 0,
       features: features
     };
   }

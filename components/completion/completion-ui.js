@@ -5991,6 +5991,40 @@
         applyEstimateScales(nextScales, { rerender: true });
       },
       addItem: addItem,
+      toggleMasterComplete: toggleMasterComplete,
+      toggleItemDoneById: function (itemId) {
+        var id = itemId != null ? String(itemId) : '';
+        if (!id) return;
+        var live = null;
+        for (var ti = 0; ti < data.items.length; ti++) {
+          if (data.items[ti] && String(data.items[ti].id) === id) {
+            live = data.items[ti];
+            break;
+          }
+        }
+        if (!live) return;
+        if (CT.isItemBlocked(live)) {
+          data = CT.setItemBlocked(data, live.id, false);
+          playCompletionUiSound('unblock');
+          emitChange();
+          notifyBlockedChange('overview-check');
+          onResize();
+          return;
+        }
+        var wasDone = !!live.done;
+        setItemProgress(live, live.done ? 0 : 100);
+        emitChange({
+          animateItemId: live.id,
+          flipWasDone: wasDone,
+          focusTextItemId: live.id
+        });
+        if (!wasDone && live.done) {
+          playSubtaskCompletePop(null, { sound: true });
+        } else if (wasDone && !live.done) {
+          playCompletionUiSound('uncomplete');
+        }
+        onResize();
+      },
       addLinkedCard: addLinkedCard,
       refreshLinkedTree: refreshLinkedTree,
       /** Compact linked-tree map for AI Progrès summary (itemId → node). */

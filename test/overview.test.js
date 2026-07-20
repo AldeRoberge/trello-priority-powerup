@@ -68,7 +68,10 @@ function installDom() {
       this._html = '';
       this.parentNode = null;
       this.hidden = false;
+      this.disabled = false;
       this.tabIndex = -1;
+      this.value = '';
+      this.type = '';
       this._listeners = Object.create(null);
     }
     get textContent() {
@@ -100,6 +103,15 @@ function installDom() {
             .split(/\s+/)
             .filter(Boolean)
         );
+      }
+      if (name === 'data-overview-action') {
+        this.dataset.overviewAction = String(value);
+      }
+      if (name === 'data-task-id') {
+        this.dataset.taskId = String(value);
+      }
+      if (name === 'data-overview-key') {
+        this.dataset.overviewKey = String(value);
       }
     }
     getAttribute(name) {
@@ -202,8 +214,13 @@ function installDom() {
       return true;
     }
     click() {
-      this.dispatchEvent({ type: 'click', preventDefault() {} });
+      this.dispatchEvent({
+        type: 'click',
+        preventDefault() {},
+        stopPropagation() {},
+      });
     }
+    focus() {}
   }
 
   function matches(el, sel) {
@@ -246,6 +263,20 @@ function installDom() {
   global.document = doc;
   global.window = global;
   global.HTMLElement = Element;
+  global.localStorage = {
+    _data: Object.create(null),
+    getItem(k) {
+      return Object.prototype.hasOwnProperty.call(this._data, k)
+        ? this._data[k]
+        : null;
+    },
+    setItem(k, v) {
+      this._data[k] = String(v);
+    },
+    removeItem(k) {
+      delete this._data[k];
+    },
+  };
 }
 
 describe('PriorityUI createOverviewField', () => {
@@ -261,7 +292,7 @@ describe('PriorityUI createOverviewField', () => {
     assert.equal(typeof PriorityUI.createOverviewField, 'function');
   });
 
-  it('mounts title and combined Progrès metric cells', () => {
+  it('mounts title, status hero, and meta cells', () => {
     const ui = PriorityUI.createOverviewField({
       title: 'Ship overview',
       status: 'En cours',
@@ -271,6 +302,10 @@ describe('PriorityUI createOverviewField', () => {
       dueBand: 'soon',
       priorityLabel: 'Importante',
       priorityColor: '#0079BF',
+      summaryText: 'Reste : Rédiger le brief.',
+      tasksDone: 1,
+      tasksTotal: 3,
+      tasks: [{ id: 'a', text: 'Rédiger le brief', done: false, blocked: false }],
     });
 
     assert.ok(ui.el);
@@ -281,22 +316,18 @@ describe('PriorityUI createOverviewField', () => {
     const title = ui.el.querySelector('.overview-title-text');
     assert.equal(title.textContent, 'Ship overview');
 
-    assert.equal(ui.el.querySelector('.overview-cell--status'), null);
-    assert.ok(ui.el.querySelector('.overview-cell--progress'));
-    assert.equal(ui.el.querySelector('.overview-cell--subtasks'), null);
+    const hero = ui.el.querySelector('.overview-hero');
+    assert.ok(hero);
+    assert.match(hero.querySelector('.overview-hero-phase').textContent, /cours/i);
+    assert.match(hero.querySelector('.overview-hero-pct').textContent, /40/);
+    assert.match(hero.querySelector('.overview-hero-count').textContent, /1\/3/);
+    assert.match(
+      hero.querySelector('.overview-hero-sentence').textContent,
+      /brief/i
+    );
+
     assert.ok(ui.el.querySelector('.overview-cell--due'));
     assert.ok(ui.el.querySelector('.overview-cell--priority'));
-    assert.equal(ui.el.querySelector('.overview-status-brief'), null);
-
-    // In progress → show % (not the list name).
-    assert.match(
-      ui.el.querySelector('.overview-cell--progress .overview-cell-value').textContent,
-      /40/
-    );
-    assert.doesNotMatch(
-      ui.el.querySelector('.overview-cell--progress .overview-cell-value').textContent,
-      /En cours/
-    );
     assert.match(
       ui.el.querySelector('.overview-cell--due .overview-cell-value').textContent,
       /3 jours/
@@ -304,6 +335,44 @@ describe('PriorityUI createOverviewField', () => {
     assert.equal(
       ui.el.querySelector('.overview-cell--due .overview-cell-label'),
       null
+    );
+    assert.match(
+      ui.el.querySelector('.overview-task-text').textContent,
+      /brief/i
+    );
+  });
+
+  it('renders Motifs and open tasks from setData', () => {
+    const ui = PriorityUI.createOverviewField({
+      title: 'Card',
+      progressPercent: 20,
+    });
+    ui.setData({
+      statusCategory: 'blocked',
+      progressBlocked: true,
+      blockedReasons: ["En attente d'une approbation", 'Budget insuffisant'],
+      summaryText: "En attente d'une approbation",
+      tasksDone: 1,
+      tasksTotal: 3,
+      tasks: [
+        { id: 't1', text: 'Relire la maquette', done: false, blocked: true },
+        { id: 't2', text: 'Envoyer au client', done: false, blocked: false },
+      ],
+    });
+
+    const motifs = ui.el.querySelector('.overview-motifs');
+    assert.ok(motifs);
+    assert.equal(motifs.hidden, false);
+    const chips = ui.el.querySelectorAll('.overview-motif-chip');
+    assert.equal(chips.length, 2);
+    assert.match(chips[0].textContent, /approbation/i);
+
+    const rows = ui.el.querySelectorAll('.overview-task-row');
+    assert.equal(rows.length, 2);
+    assert.ok(rows[0].classList.contains('is-blocked'));
+    assert.match(
+      ui.el.querySelector('.overview-tasks-done-hint').textContent,
+      /1 termin/
     );
   });
 
@@ -319,19 +388,14 @@ describe('PriorityUI createOverviewField', () => {
     });
 
     ui.el.querySelector('.overview-title').click();
-    ui.el.querySelector('.overview-cell--progress').click();
+    ui.el.querySelector('.overview-hero').click();
     ui.el.querySelector('.overview-cell--due').click();
     ui.el.querySelector('.overview-cell--priority').click();
 
-    assert.deepEqual(jumps, [
-      'info',
-      'progress',
-      'due',
-      'priority',
-    ]);
+    assert.deepEqual(jumps, ['info', 'progress', 'due', 'priority']);
   });
 
-  it('blocked Progrès jumps to blocked section', () => {
+  it('blocked hero jumps to blocked section', () => {
     const jumps = [];
     const ui = PriorityUI.createOverviewField({
       status: 'Bloqué',
@@ -341,7 +405,7 @@ describe('PriorityUI createOverviewField', () => {
         jumps.push(key);
       },
     });
-    ui.el.querySelector('.overview-cell--progress').click();
+    ui.el.querySelector('.overview-hero').click();
     assert.deepEqual(jumps, ['blocked']);
   });
 
@@ -372,14 +436,9 @@ describe('PriorityUI createOverviewField', () => {
     });
 
     assert.equal(ui.el.querySelector('.overview-title-text').textContent, 'Renamed');
-    // Done → status label in Progrès (statut feature keeps the cell visible).
     assert.match(
-      ui.el.querySelector('.overview-cell--progress .overview-cell-value').textContent,
+      ui.el.querySelector('.overview-hero-phase').textContent,
       /Done|Termin/
-    );
-    assert.equal(
-      ui.el.querySelector('.overview-cell--progress').getAttribute('hidden'),
-      null
     );
     assert.equal(
       ui.el.querySelector('.overview-cell--priority').getAttribute('hidden'),
@@ -389,7 +448,6 @@ describe('PriorityUI createOverviewField', () => {
       ui.el.querySelector('.overview-cell--due').getAttribute('hidden'),
       null
     );
-    // Completed overrides overdue → Complété (not overdue band).
     assert.ok(
       ui.el.querySelector('.overview-cell--due').classList.contains('is-done')
     );
@@ -421,19 +479,14 @@ describe('PriorityUI createOverviewField', () => {
       priorityColor: '#C9372C',
     });
 
-    const progressCell = ui.el.querySelector('.overview-cell--progress');
-    assert.ok(progressCell.classList.contains('is-blocked'));
-    assert.ok(progressCell.classList.contains('is-progress-mode'));
-    const ring = progressCell.querySelector('.overview-progress-ring');
+    const hero = ui.el.querySelector('.overview-hero');
+    assert.ok(hero.classList.contains('is-blocked'));
+    const ring = hero.querySelector('.overview-progress-ring');
     assert.ok(ring);
     assert.ok(ring.classList.contains('is-blocked'));
     assert.match(ring.innerHTML, /pause/i);
-    assert.match(
-      progressCell.querySelector('.overview-cell-value').textContent,
-      /55/
-    );
     assert.equal(
-      progressCell.style._props['--overview-progress-accent'],
+      hero.style._props['--overview-progress-accent'],
       '#e34935'
     );
 
@@ -444,15 +497,11 @@ describe('PriorityUI createOverviewField', () => {
       progressPercent: 55,
       progressColor: '#0c66e4',
     });
-    assert.ok(progressCell.classList.contains('is-progress-mode'));
-    assert.match(
-      progressCell.querySelector('.overview-cell-value').textContent,
-      /55/
-    );
-    assert.ok(progressCell.querySelector('.overview-progress-ring'));
-    assert.ok(progressCell.classList.contains('has-progress-accent'));
+    assert.ok(!hero.classList.contains('is-blocked'));
+    assert.match(hero.querySelector('.overview-hero-pct').textContent, /55/);
+    assert.ok(hero.classList.contains('has-progress-accent'));
     assert.doesNotMatch(
-      progressCell.querySelector('.overview-progress-ring').innerHTML,
+      hero.querySelector('.overview-progress-ring').innerHTML,
       /pause/i
     );
   });
@@ -465,17 +514,13 @@ describe('PriorityUI createOverviewField', () => {
       progressPercent: null,
       progressBlocked: true,
     });
-    const progressCell = ui.el.querySelector('.overview-cell--progress');
-    assert.ok(progressCell.classList.contains('is-blocked'));
-    assert.ok(progressCell.classList.contains('is-status-mode'));
-    const ring = progressCell.querySelector('.overview-progress-ring');
+    const hero = ui.el.querySelector('.overview-hero');
+    assert.ok(hero.classList.contains('is-blocked'));
+    const ring = hero.querySelector('.overview-progress-ring');
     assert.ok(ring);
     assert.ok(ring.classList.contains('is-blocked'));
     assert.match(ring.innerHTML, /pause/i);
-    assert.match(
-      progressCell.querySelector('.overview-cell-value').textContent,
-      /Bloqu/
-    );
+    assert.match(hero.querySelector('.overview-hero-phase').textContent, /Bloqu/);
   });
 
   it('shows Terminé status when completed', () => {
@@ -485,13 +530,9 @@ describe('PriorityUI createOverviewField', () => {
       statusColor: '#22a06b',
       progressPercent: 100,
     });
-    const progressCell = ui.el.querySelector('.overview-cell--progress');
-    assert.ok(progressCell.classList.contains('is-done'));
-    assert.ok(progressCell.classList.contains('is-status-mode'));
-    assert.match(
-      progressCell.querySelector('.overview-cell-value').textContent,
-      /Termin/
-    );
+    const hero = ui.el.querySelector('.overview-hero');
+    assert.ok(hero.classList.contains('is-done'));
+    assert.match(hero.querySelector('.overview-hero-phase').textContent, /Termin/);
   });
 
   it('completed overdue shows Complété, grayed priority, and no action chips', () => {
@@ -534,7 +575,7 @@ describe('PriorityUI createOverviewField', () => {
       progressPercent: null,
     });
     assert.match(
-      ui.el.querySelector('.overview-cell--progress .overview-cell-value').textContent,
+      ui.el.querySelector('.overview-hero-phase').textContent,
       /faire|À faire/i
     );
   });
@@ -547,7 +588,6 @@ describe('PriorityUI createOverviewField', () => {
       priorityLabel: 'Flexible',
     });
 
-    assert.equal(ui.el.querySelector('.overview-cell--subtasks'), null);
     assert.equal(
       ui.el.querySelector('.overview-cell--due').getAttribute('hidden'),
       ''
@@ -582,8 +622,8 @@ describe('PriorityUI createOverviewField', () => {
       progressBlocked: true,
       dueCountdown: "Aujourd'hui",
       dueDays: 0,
-      onAction(id) {
-        actions.push(id);
+      onAction(id, payload) {
+        actions.push(payload !== undefined ? { id, payload } : id);
       },
     });
 
@@ -591,24 +631,97 @@ describe('PriorityUI createOverviewField', () => {
     assert.ok(row);
     assert.equal(row.hidden, false);
     const chips = ui.el.querySelectorAll('.overview-action-chip');
-    assert.equal(chips.length, 2);
-    assert.match(chips[0].textContent, /d[eé]bloqu/i);
-    assert.match(chips[1].textContent, /Reporter/i);
-    assert.equal(chips[0].dataset.overviewAction, 'unblock');
-    assert.equal(chips[1].dataset.overviewAction, 'postpone-tomorrow');
+    const ids = Array.from(chips).map((c) => c.dataset.overviewAction);
+    assert.ok(ids.includes('unblock'));
+    assert.ok(ids.includes('add-subtask'));
+    assert.ok(ids.includes('postpone-tomorrow'));
+    assert.ok(!ids.includes('complete'));
+    assert.ok(!ids.includes('block'));
 
-    chips[0].click();
-    chips[1].click();
-    assert.deepEqual(actions, ['unblock', 'postpone-tomorrow']);
+    const unblock = Array.from(chips).find(
+      (c) => c.dataset.overviewAction === 'unblock'
+    );
+    unblock.click();
+    assert.equal(actions[0], 'unblock');
 
-    ui.setData({
+    const postpone = Array.from(chips).find(
+      (c) => c.dataset.overviewAction === 'postpone-tomorrow'
+    );
+    postpone.click();
+    assert.equal(actions[1], 'postpone-tomorrow');
+  });
+
+  it('shows Terminer / En attente / Sous-tâche when in progress', () => {
+    const actions = [];
+    const ui = PriorityUI.createOverviewField({
+      progressPercent: 40,
       statusCategory: 'started',
-      progressBlocked: false,
       dueDays: 3,
       dueCountdown: 'Dans 3 jours',
+      onAction(id, payload) {
+        actions.push({ id, payload });
+      },
     });
-    assert.equal(ui.el.querySelector('.overview-actions').hidden, true);
-    assert.equal(ui.el.querySelectorAll('.overview-action-chip').length, 0);
+
+    const chips = ui.el.querySelectorAll('.overview-action-chip');
+    const ids = Array.from(chips).map((c) => c.dataset.overviewAction);
+    assert.deepEqual(ids, ['complete', 'block', 'add-subtask']);
+    assert.equal(ui.el.querySelector('.overview-actions').hidden, false);
+
+    chips[0].click();
+    assert.equal(actions[0].id, 'complete');
+
+    // En attente opens composer; picking a suggestion emits block.
+    chips[1].click();
+    const suggestion = ui.el.querySelector('.overview-composer-chip');
+    assert.ok(suggestion);
+    suggestion.click();
+    assert.equal(actions[1].id, 'block');
+    assert.ok(Array.isArray(actions[1].payload.reasons));
+    assert.ok(actions[1].payload.reasons.length >= 1);
+  });
+
+  it('add-subtask composer emits onAction with text', () => {
+    const actions = [];
+    const ui = PriorityUI.createOverviewField({
+      progressPercent: 10,
+      onAction(id, payload) {
+        actions.push({ id, payload });
+      },
+    });
+    const addBtn = Array.from(
+      ui.el.querySelectorAll('.overview-action-chip')
+    ).find((c) => c.dataset.overviewAction === 'add-subtask');
+    assert.ok(addBtn);
+    addBtn.click();
+    const input = ui.el.querySelector('.overview-composer-input');
+    assert.ok(input);
+    input.value = 'Nouvelle étape';
+    const submit = Array.from(
+      ui.el.querySelectorAll('.overview-composer .overview-action-chip')
+    ).find((c) => /Ajouter/i.test(c.textContent));
+    assert.ok(submit);
+    submit.click();
+    assert.equal(actions[0].id, 'add-subtask');
+    assert.equal(actions[0].payload.text, 'Nouvelle étape');
+  });
+
+  it('toggle-task checkbox emits onAction', () => {
+    const actions = [];
+    const ui = PriorityUI.createOverviewField({
+      progressPercent: 20,
+      tasks: [{ id: 'task-1', text: 'Faire X', done: false, blocked: false }],
+      tasksDone: 0,
+      tasksTotal: 1,
+      onAction(id, payload) {
+        actions.push({ id, payload });
+      },
+    });
+    const check = ui.el.querySelector('.overview-task-check');
+    assert.ok(check);
+    check.click();
+    assert.equal(actions[0].id, 'toggle-task');
+    assert.equal(actions[0].payload.id, 'task-1');
   });
 
   it('shows Reporter chip when overdue', () => {
@@ -618,8 +731,8 @@ describe('PriorityUI createOverviewField', () => {
       dueBand: 'overdue',
     });
     const chips = ui.el.querySelectorAll('.overview-action-chip');
-    assert.equal(chips.length, 1);
-    assert.equal(chips[0].dataset.overviewAction, 'postpone-tomorrow');
+    const ids = Array.from(chips).map((c) => c.dataset.overviewAction);
+    assert.ok(ids.includes('postpone-tomorrow'));
   });
 
   it('collapses and expands with summary showing the title', () => {
@@ -716,7 +829,6 @@ describe('PriorityUI createOverviewField', () => {
       '100%'
     );
 
-    // Terminé with lagged/zero progress still shows 100% (not 0%).
     const fromStatut = PriorityUI.buildProgressSummaryNode({
       progressPercent: 0,
       statusCategory: 'completed',
@@ -747,6 +859,12 @@ describe('PriorityUI createOverviewField', () => {
       dueBand: 'soon',
       priorityLabel: 'Importante',
       priorityColor: '#0c66e4',
+      blockedReasons: ["En attente d'une réponse"],
+      statusCategory: 'blocked',
+      progressBlocked: true,
+      tasks: [{ id: 'x', text: 'Attendre le retour', done: false, blocked: true }],
+      tasksDone: 0,
+      tasksTotal: 1,
       onJump(key) {
         jumps.push(key);
       },
@@ -759,17 +877,52 @@ describe('PriorityUI createOverviewField', () => {
     assert.equal(ui.el.querySelector('.overview-actions'), null);
     assert.equal(ui.el.querySelector('.overview-title-chevron'), null);
     assert.equal(ui.el.querySelector('.overview-title-text').textContent, 'Card back');
+    assert.ok(ui.el.querySelector('.overview-hero'));
+    assert.ok(ui.el.querySelector('.overview-motifs'));
     assert.match(
-      ui.el.querySelector('.overview-cell--progress .overview-cell-value').textContent,
-      /40/
+      ui.el.querySelector('.overview-task-text').textContent,
+      /Attendre/
     );
     assert.equal(
       ui.el.querySelector('.overview-cell--due .overview-cell-value').textContent,
       'Dans 2 jours'
     );
+    const check = ui.el.querySelector('.overview-task-check');
+    assert.ok(check);
+    assert.equal(check.disabled, true);
 
     ui.el.querySelector('.overview-title').click();
     assert.deepEqual(jumps, ['info']);
     assert.equal(ui.isExpanded(), true);
+  });
+
+  it('buildOverviewEnrichment derives tasks, motifs, and summary', () => {
+    assert.equal(typeof PriorityUI.buildOverviewEnrichment, 'function');
+    const enrichment = PriorityUI.buildOverviewEnrichment(
+      {
+        items: [
+          { id: '1', text: 'Done task', done: true, progress: 100 },
+          { id: '2', text: 'Open task', done: false, progress: 0 },
+          {
+            id: '3',
+            text: 'Blocked task',
+            done: false,
+            progress: 0,
+            blocked: true,
+            blockedReasons: ['En attente client'],
+          },
+        ],
+      },
+      {
+        progressPercent: 33,
+        progressBlocked: true,
+        statusCategory: 'blocked',
+      }
+    );
+    assert.equal(enrichment.tasksDone, 1);
+    assert.equal(enrichment.tasksTotal, 3);
+    assert.equal(enrichment.tasks.length, 2);
+    assert.ok(enrichment.blockedReasons.some((r) => /client/i.test(r)));
+    assert.ok(enrichment.summaryText);
   });
 });
