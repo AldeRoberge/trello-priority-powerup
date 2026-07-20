@@ -244,6 +244,35 @@
           });
       }, 'card-detail-badges'),
 
+      // Opens Cerveau when the card back is shown (iframe loads → modal).
+      // Enable `card-back-section` in Power-Up admin. Guard in card-open.html
+      // avoids reopen loops when pluginData refreshes the section while the modal is open.
+      'card-back-section': function (t) {
+        var appName =
+          (window.PriorityBrand && typeof PriorityBrand.getAppName === 'function'
+            ? PriorityBrand.getAppName()
+            : null) ||
+          (window.PriorityRestConfig && PriorityRestConfig.appName) ||
+          'Trello Cerveau';
+        var sectionUrl =
+          typeof t.signUrl === 'function'
+            ? t.signUrl('./card-open.html')
+            : PriorityTrello.pageUrl('./card-open.html');
+        return {
+          title: appName,
+          icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/brain.svg',
+          content: {
+            type: 'iframe',
+            url: sectionUrl,
+            height: 48,
+          },
+          action: {
+            text: 'Ouvrir',
+            callback: openPriorityPopup,
+          },
+        };
+      },
+
       'on-enable': function(t) {
         if (window.TpDebug) {
           TpDebug.configureFromProfile(t).catch(function () {});

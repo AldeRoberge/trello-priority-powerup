@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cerveau</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./components/shared/brand.js"></script>
+  <script src="./components/shared/rest-config.js"></script>
+  <script src="./components/shared/debug-log.js"></script>
+  <script src="./components/priority/priority-trello.js"></script>
+  <link rel="stylesheet" href="./components/shared/trello-theme.css" />
+  <style>
+    body.tp-card-open {
+      margin: 0;
+      padding: 4px 0;
+    }
+    .tp-card-open-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tp-card-open-row .tp-btn {
+      width: auto;
+      min-height: 32px;
+      padding: 6px 12px;
+    }
+    .tp-card-open-hint {
+      margin: 0;
+      font-size: 12px;
+      color: var(--ds-text-subtle, #626f86);
+    }
+  </style>
+</head>
+<body class="tp-page tp-card-open">
+  <div class="tp-card-open-row">
+    <button class="tp-btn tp-btn--primary" type="button" id="openBtn">Ouvrir</button>
+    <p class="tp-card-open-hint" id="hint">S’ouvre automatiquement à l’ouverture de la carte.</p>
+  </div>
+  <script>
+    (function () {
+      var STORAGE_PREFIX = 'cerveau.autoModal.';
+      var brand = window.PriorityBrand;
+      var appName =
+        brand && typeof brand.getAppName === 'function'
+          ? brand.getAppName()
+          : 'Trello Cerveau';
+
+      if (brand && typeof brand.applyDocumentTitle === 'function') {
+        brand.applyDocumentTitle(document);
+      } else {
+        document.title = appName;
+      }
+
+      var openBtn = document.getElementById('openBtn');
+      if (openBtn) openBtn.textContent = 'Ouvrir ' + appName;
+
+      function storageKey(cardId) {
+        return STORAGE_PREFIX + String(cardId || '');
+      }
+
+      function resize(t) {
+        if (typeof t.sizeTo === 'function') {
+          try {
+            t.sizeTo(document.body);
+          } catch (e) {
+            /* ignore */
+          }
+        }
+      }
+
+      function openCerveauModal(t, options) {
+        options = options || {};
+        return Promise.resolve()
+          .then(function () {
+            return t.card('id', 'name');
+          })
+          .then(function (card) {
+            var cardId = card && card.id ? card.id : '';
+            var cardName = card && typeof card.name === 'string' ? card.name : '';
+            var key = storageKey(cardId);
+            if (!options.force && cardId) {
+              try {
+                if (sessionStorage.getItem(key) === '1') {
+                  if (window.TpDebug) {
+                    TpDebug.log('cardOpen', 'modal.skip', { reason: 'already-open' });
+                  }
+                  return null;
+                }
+                sessionStorage.setItem(key, '1');
+              } catch (e) {
+                /* private mode / blocked storage — still open */
+              }
+            } else if (options.force && cardId) {
+              try {
+                sessionStorage.setItem(key, '1');
+              } catch (e) {
+                /* ignore */
+              }
+            }
+            if (window.TpDebug) {
+              TpDebug.log('cardOpen', 'modal.open', { force: !!options.force });
+            }
+            return t.modal({
+              title: appName,
+              url: PriorityTrello.pageUrl('./popup.html'),
+              args: { cardName: cardName, openSection: 'priority' },
+              height: 1100,
+              fullscreen: false,
+              accentColor: '#22272B',
+              callback: function () {
+                try {
+                  if (cardId) sessionStorage.removeItem(key);
+                } catch (e) {
+                  /* ignore */
+                }
+                if (window.TpDebug) TpDebug.log('cardOpen', 'modal.closed');
+              },
+            });
+          });
+      }
+
+      PriorityTrello.initIframePage(function (t) {
+        if (window.TpDebug && typeof TpDebug.configureFromProfile === 'function') {
+          TpDebug.configureFromProfile(t).then(function (on) {
+            if (on) TpDebug.log('cardOpen', 'page.init');
+          });
+        }
+
+        if (openBtn) {
+          openBtn.addEventListener('click', function () {
+            openCerveauModal(t, { force: true }).catch(function (err) {
+              if (window.TpDebug) TpDebug.error('cardOpen', 'modal.force', err);
+              else console.error('Cerveau modal open failed', err);
+            });
+          });
+        }
+
+        resize(t);
+
+        return openCerveauModal(t).then(
+          function () {
+            resize(t);
+          },
+          function (err) {
+            if (window.TpDebug) TpDebug.error('cardOpen', 'modal.auto', err);
+            else console.error('Cerveau auto-open failed', err);
+            resize(t);
+          }
+        );
+      });
+    })();
+  </script>
+</body>
+</html>
