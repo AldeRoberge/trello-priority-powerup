@@ -1710,6 +1710,81 @@
     return api;
   }
 
+  /** Selection key for a top-level Progrès subtask (master). */
+  function selectionKeyForItem(itemId) {
+    return 'item:' + String(itemId || '');
+  }
+
+  /** Selection key for a nested checklist sub-sous-tâche. */
+  function selectionKeyForChecklist(parentId, nestedId) {
+    return 'check:' + String(parentId || '') + ':' + String(nestedId || '');
+  }
+
+  function parseSelectionKey(key) {
+    var raw = typeof key === 'string' ? key : '';
+    if (raw.indexOf('item:') === 0) {
+      var itemId = raw.slice(5);
+      return itemId ? { kind: 'item', itemId: itemId } : null;
+    }
+    if (raw.indexOf('check:') === 0) {
+      var rest = raw.slice(6);
+      var colon = rest.indexOf(':');
+      if (colon <= 0) return null;
+      var parentId = rest.slice(0, colon);
+      var nestedId = rest.slice(colon + 1);
+      if (!parentId || !nestedId) return null;
+      return { kind: 'check', parentId: parentId, nestedId: nestedId };
+    }
+    return null;
+  }
+
+  /** Master item key + all checklist children (cascade, like Gantt). */
+  function collectItemSelectionIds(item) {
+    if (!item || !item.id) return [];
+    var ids = [selectionKeyForItem(item.id)];
+    var nested = Array.isArray(item.items) ? item.items : [];
+    for (var i = 0; i < nested.length; i++) {
+      if (nested[i] && nested[i].id) {
+        ids.push(selectionKeyForChecklist(item.id, nested[i].id));
+      }
+    }
+    return ids;
+  }
+
+  /**
+   * When a master is selected with its checklist children, bulk ops on the
+   * master already cover the children — drop redundant check entries.
+   */
+  function dedupeBulkEntries(entries) {
+    var list = Array.isArray(entries) ? entries : [];
+    var parentIds = Object.create(null);
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].kind === 'item' && list[i].itemId) {
+        parentIds[list[i].itemId] = true;
+      }
+    }
+    var out = [];
+    for (var j = 0; j < list.length; j++) {
+      var e = list[j];
+      if (!e) continue;
+      if (e.kind === 'check' && e.parentId && parentIds[e.parentId]) continue;
+      out.push(e);
+    }
+    return out;
+  }
+
+  function selectAllCheckboxState(selectedCount, visibleCount) {
+    var selected = Math.max(0, Number(selectedCount) || 0);
+    var visible = Math.max(0, Number(visibleCount) || 0);
+    if (!visible || !selected) {
+      return { checked: false, indeterminate: false };
+    }
+    if (selected >= visible) {
+      return { checked: true, indeterminate: false };
+    }
+    return { checked: false, indeterminate: true };
+  }
+
   function mountCompletionUI(containerEl, options) {
     if (!containerEl) throw new Error('mountCompletionUI: container required');
     var CT = getCompletionTrello();
@@ -1770,6 +1845,9 @@
     var linkedResolveSeq = 0;
     var boardCardsCache = null;
     var linkPickerOpen = false;
+    // Multi-select map (Gantt-style): selectionKey → true
+    var selected = Object.create(null);
+    var bulkBusy = false;
 
     function spellcheckText(text) {
       var trimmed = (text || '').trim();
@@ -2106,6 +2184,13 @@
       '<option value="done">Termin\u00e9es</option>' +
       '</select>' +
       '</div>' +
+      '<div class="tp-completion-select-bar" id="completionSelectBar" hidden>' +
+      '<label class="tp-completion-select-all-label">' +
+      '<input type="checkbox" class="tp-completion-select-box" id="completionSelectAll" />' +
+      '<span>Tout s\u00e9lectionner</span>' +
+      '</label>' +
+      '</div>' +
+      '<div class="tp-completion-bulk" id="completionBulkBar" hidden></div>' +
       '<ul class="tp-completion-list" id="completionList" aria-label="Sous-t\u00e2ches"></ul>' +
       '<p class="tp-completion-filter-empty" id="completionFilterEmpty" hidden>' +
       'Aucune sous-t\u00e2che ne correspond.</p>';
@@ -2162,6 +2247,9 @@
     var listEl = containerEl.querySelector('#completionList');
     var doneListEl = containerEl.querySelector('#completionDoneList');
     var toolsEl = containerEl.querySelector('#completionTools');
+    var selectBarEl = containerEl.querySelector('#completionSelectBar');
+    var selectAllCheckbox = containerEl.querySelector('#completionSelectAll');
+    var bulkBarEl = containerEl.querySelector('#completionBulkBar');
     var searchInput = containerEl.querySelector('#completionSearch');
     var filterSelect = containerEl.querySelector('#completionFilter');
     var filterEmptyEl = containerEl.querySelector('#completionFilterEmpty');
@@ -2856,6 +2944,286 @@
           filterSelect.value = 'all';
         }
       }
+    }
+
+    function visibleSelectionEntries() {
+      var out = [];
+      var showActive = shouldShowActiveList();
+      var showDone = shouldShowDoneList(
+        data.items.filter(function (item) {
+          return item.done;
+        }).length
+      );
+      data.items.forEach(function (item) {
+        if (!itemMatchesQuery(item)) return;
+        if (item.done) {
+          if (!showDone) return;
+        } else if (!showActive) {
+          return;
+        }
+        out.push({
+          key: selectionKeyForItem(item.id),
+          kind: 'item',
+          itemId: item.id,
+          linked: CT.isLinkedItem(item),
+          done: !!item.done,
+        });
+        var nested = Array.isArray(item.items) ? item.items : [];
+        for (var n = 0; n < nested.length; n++) {
+          if (!nested[n] || !nested[n].id) continue;
+          out.push({
+            key: selectionKeyForChecklist(item.id, nested[n].id),
+            kind: 'check',
+            parentId: item.id,
+            nestedId: nested[n].id,
+            linked: false,
+            done: !!nested[n].done,
+          });
+        }
+      });
+      return out;
+    }
+
+    function pruneSelection() {
+      var valid = Object.create(null);
+      data.items.forEach(function (item) {
+        if (!item || !item.id) return;
+        valid[selectionKeyForItem(item.id)] = true;
+        var nested = Array.isArray(item.items) ? item.items : [];
+        for (var i = 0; i < nested.length; i++) {
+          if (nested[i] && nested[i].id) {
+            valid[selectionKeyForChecklist(item.id, nested[i].id)] = true;
+          }
+        }
+      });
+      Object.keys(selected).forEach(function (key) {
+        if (!valid[key]) delete selected[key];
+      });
+    }
+
+    function selectedEntries() {
+      var visible = visibleSelectionEntries();
+      var out = [];
+      for (var i = 0; i < visible.length; i++) {
+        if (selected[visible[i].key]) out.push(visible[i]);
+      }
+      return out;
+    }
+
+    function selectedCount() {
+      return selectedEntries().length;
+    }
+
+    function clearSelection() {
+      selected = Object.create(null);
+      renderBulkBar();
+      syncSelectAllUi();
+      renderList();
+    }
+
+    function toggleSelected(key, on, cascadeItem) {
+      var parsed = parseSelectionKey(key);
+      var ids = [key];
+      if (cascadeItem && parsed && parsed.kind === 'item') {
+        var item = findLiveItem(parsed.itemId);
+        if (item) ids = collectItemSelectionIds(item);
+      }
+      for (var i = 0; i < ids.length; i++) {
+        if (on) selected[ids[i]] = true;
+        else delete selected[ids[i]];
+      }
+      renderBulkBar();
+      syncSelectAllUi();
+      renderList();
+    }
+
+    function makeBulkBtn(className, iconClass, label, onClick) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = className;
+      btn.title = label;
+      btn.innerHTML =
+        '<i class="ti ' +
+        iconClass +
+        '" aria-hidden="true"></i>' +
+        '<span>' +
+        label +
+        '</span>';
+      btn.addEventListener('click', onClick);
+      return btn;
+    }
+
+    function renderBulkBar() {
+      if (!bulkBarEl) return;
+      bulkBarEl.innerHTML = '';
+      var n = selectedCount();
+      if (!n) {
+        bulkBarEl.hidden = true;
+        bulkBarEl.classList.remove('is-visible');
+        return;
+      }
+      bulkBarEl.hidden = false;
+      bulkBarEl.classList.add('is-visible');
+      var count = document.createElement('span');
+      count.className = 'tp-completion-bulk-count';
+      count.textContent = n + ' s\u00e9lectionn\u00e9e(s)';
+      bulkBarEl.appendChild(count);
+      bulkBarEl.appendChild(
+        makeBulkBtn('tp-btn tp-btn--secondary tp-completion-bulk-btn', 'ti-circle-check', 'Terminer', function () {
+          runBulk('done');
+        })
+      );
+      bulkBarEl.appendChild(
+        makeBulkBtn('tp-btn tp-btn--secondary tp-completion-bulk-btn', 'ti-reload', 'Rouvrir', function () {
+          runBulk('reopen');
+        })
+      );
+      bulkBarEl.appendChild(
+        makeBulkBtn(
+          'tp-btn tp-btn--secondary tp-completion-bulk-btn tp-completion-bulk-btn--danger',
+          'ti-trash',
+          'Supprimer',
+          function () {
+            runBulk('delete');
+          }
+        )
+      );
+      bulkBarEl.appendChild(
+        makeBulkBtn(
+          'tp-btn tp-btn--secondary tp-completion-bulk-btn',
+          'ti-deselect',
+          'Tout d\u00e9s\u00e9lectionner',
+          function () {
+            clearSelection();
+          }
+        )
+      );
+    }
+
+    function syncSelectAllUi() {
+      if (!selectBarEl || !selectAllCheckbox) return;
+      var visible = visibleSelectionEntries();
+      selectBarEl.hidden = !data.items.length;
+      var selectedVisible = 0;
+      for (var i = 0; i < visible.length; i++) {
+        if (selected[visible[i].key]) selectedVisible += 1;
+      }
+      var state = selectAllCheckboxState(selectedVisible, visible.length);
+      selectAllCheckbox.checked = state.checked;
+      selectAllCheckbox.indeterminate = state.indeterminate;
+    }
+
+    function createSelectCheckbox(key, cascadeItem) {
+      var box = document.createElement('input');
+      box.type = 'checkbox';
+      box.className = 'tp-completion-select-box';
+      box.title = 'S\u00e9lectionner';
+      box.setAttribute('aria-label', 'S\u00e9lectionner');
+      box.checked = !!selected[key];
+      box.addEventListener('click', function (e) {
+        e.stopPropagation();
+      });
+      box.addEventListener('change', function () {
+        toggleSelected(key, !!box.checked, cascadeItem !== false);
+      });
+      return box;
+    }
+
+    function canBulkComplete(entry) {
+      if (!entry) return false;
+      if (entry.kind === 'check') return true;
+      if (entry.kind === 'item' && !entry.linked) return true;
+      return false;
+    }
+
+    function canBulkDelete(entry) {
+      return !!(entry && (entry.kind === 'item' || entry.kind === 'check'));
+    }
+
+    function runBulk(op) {
+      if (bulkBusy) return;
+      var entries = selectedEntries();
+      if (op === 'delete') {
+        entries = dedupeBulkEntries(entries).filter(canBulkDelete);
+      } else {
+        entries = dedupeBulkEntries(entries).filter(canBulkComplete);
+      }
+      if (!entries.length) return;
+
+      if (op === 'delete') {
+        var ok = true;
+        try {
+          ok = global.confirm
+            ? global.confirm('Supprimer ' + entries.length + ' t\u00e2che(s)\u00a0?')
+            : true;
+        } catch (e) {
+          ok = true;
+        }
+        if (!ok) return;
+      }
+
+      bulkBusy = true;
+      var targetProgress = op === 'done' ? 100 : 0;
+      for (var i = 0; i < entries.length; i++) {
+        var entry = entries[i];
+        if (op === 'delete') {
+          if (entry.kind === 'item') {
+            delete itemSpellReverts[entry.itemId];
+            delete spellcheckingItemIds[entry.itemId];
+            delete itemSpellTokens[entry.itemId];
+            delete estimatingItemIds[entry.itemId];
+            clearSplitRevertTracking([entry.itemId]);
+            data.items = data.items.filter(function (item) {
+              return item.id !== entry.itemId;
+            });
+            delete linkedTreeByItemId[entry.itemId];
+          } else if (entry.kind === 'check') {
+            data = CT.removeChecklistItem(data, entry.parentId, entry.nestedId);
+          }
+        } else if (entry.kind === 'item') {
+          data = CT.applyItemProgress(data, entry.itemId, targetProgress);
+        } else if (entry.kind === 'check') {
+          data = CT.applyChecklistItemProgress(
+            data,
+            entry.parentId,
+            entry.nestedId,
+            targetProgress
+          );
+        }
+      }
+      if (op === 'delete' && !data.items.length) {
+        data.progress = CT.computeCardProgress(data, linkedSnapshots).percent;
+      }
+      if (op === 'delete') {
+        playCompletionUiSound('trash');
+      } else if (op === 'reopen') {
+        playCompletionUiSound('uncomplete');
+      } else if (entries.length > 1) {
+        playCompletionUiSound('complete_all');
+      }
+      selected = Object.create(null);
+      bulkBusy = false;
+      emitChange();
+      if (op === 'delete') {
+        refreshLinkedTree({ skipPersist: true });
+      }
+      onResize();
+    }
+
+    if (selectAllCheckbox) {
+      selectAllCheckbox.addEventListener('change', function () {
+        var on = !!selectAllCheckbox.checked;
+        var visible = visibleSelectionEntries();
+        selected = Object.create(null);
+        if (on) {
+          for (var i = 0; i < visible.length; i++) {
+            selected[visible[i].key] = true;
+          }
+        }
+        renderBulkBar();
+        syncSelectAllUi();
+        renderList();
+      });
     }
 
     function isEmptyDraftItem(item) {
@@ -4232,13 +4600,17 @@
         'tp-completion-item tp-completion-item--depth1' +
         (item.done ? ' is-done' : '') +
         (itemBlocked ? ' is-blocked' : '') +
-        (isLinked ? ' is-linked' : '');
+        (isLinked ? ' is-linked' : '') +
+        (selected[selectionKeyForItem(item.id)] ? ' is-selected' : '');
       li.dataset.id = item.id;
       li.dataset.depth = '1';
       if (isLinked) li.dataset.linkedCardId = CT.itemLinkedCardId(item);
 
       var mainRow = document.createElement('div');
       mainRow.className = 'tp-completion-item-main';
+
+      var selectBox = createSelectCheckbox(selectionKeyForItem(item.id), true);
+      mainRow.appendChild(selectBox);
 
       var checkWrap = document.createElement('div');
       checkWrap.className = 'tp-completion-check-wrap';
@@ -4365,9 +4737,10 @@
       if (completeBtn) mainRow.appendChild(completeBtn);
       mainRow.appendChild(deleteBtn);
 
-      // Linked cards have no slider — keep the progress circle on the title row.
+      // Linked cards have no slider — keep the progress circle on the title row
+      // (after the selection checkbox).
       if (isLinked) {
-        mainRow.insertBefore(checkWrap, mainRow.firstChild);
+        mainRow.insertBefore(checkWrap, selectBox.nextSibling);
       }
 
       li.appendChild(mainRow);
@@ -4550,13 +4923,22 @@
       var nestedProgress = CT.itemProgress(nested);
       li.className =
         'tp-completion-checklist-item tp-completion-item--depth2' +
-        (nested.done ? ' is-done' : '');
+        (nested.done ? ' is-done' : '') +
+        (selected[selectionKeyForChecklist(parentItem.id, nested.id)]
+          ? ' is-selected'
+          : '');
       li.dataset.id = nested.id;
       li.dataset.parentId = parentItem.id;
       li.dataset.depth = '2';
 
       var mainRow = document.createElement('div');
       mainRow.className = 'tp-completion-item-main tp-completion-checklist-main';
+
+      var selectBox = createSelectCheckbox(
+        selectionKeyForChecklist(parentItem.id, nested.id),
+        false
+      );
+      mainRow.appendChild(selectBox);
 
       var checkWrap = document.createElement('div');
       checkWrap.className = 'tp-completion-check-wrap';
@@ -4837,11 +5219,14 @@
     function renderList() {
       beginSuppressEmptyDraftDiscard();
       try {
+        pruneSelection();
         listEl.replaceChildren();
         doneListEl.replaceChildren();
         listSection.classList.toggle('is-empty', !data.items.length);
         listSection.classList.toggle('has-tree', data.items.length > 0);
         updateToolsUi();
+        syncSelectAllUi();
+        renderBulkBar();
 
         if (!data.items.length) {
           filterEmptyEl.hidden = true;
@@ -5963,6 +6348,12 @@
     mountProgressGradientEditor: mountProgressGradientEditor,
     progressFromFaderDelta: progressFromFaderDelta,
     bindProgressFader: bindProgressFader,
+    selectionKeyForItem: selectionKeyForItem,
+    selectionKeyForChecklist: selectionKeyForChecklist,
+    parseSelectionKey: parseSelectionKey,
+    collectItemSelectionIds: collectItemSelectionIds,
+    dedupeBulkEntries: dedupeBulkEntries,
+    selectAllCheckboxState: selectAllCheckboxState,
     FADER_LONG_PRESS_MS: FADER_LONG_PRESS_MS,
     FADER_PIXELS_PER_PERCENT: FADER_PIXELS_PER_PERCENT,
   };

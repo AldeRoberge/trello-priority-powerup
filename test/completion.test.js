@@ -381,4 +381,48 @@ describe('Completion progress', () => {
       55
     );
   });
+
+  it('Progrès selection keys cascade and dedupe like Gantt', () => {
+    assert.equal(CUI.selectionKeyForItem('a'), 'item:a');
+    assert.equal(CUI.selectionKeyForChecklist('a', 'b'), 'check:a:b');
+    assert.deepEqual(CUI.parseSelectionKey('item:a'), {
+      kind: 'item',
+      itemId: 'a',
+    });
+    assert.deepEqual(CUI.parseSelectionKey('check:a:b'), {
+      kind: 'check',
+      parentId: 'a',
+      nestedId: 'b',
+    });
+    assert.deepEqual(
+      CUI.collectItemSelectionIds({
+        id: 'master',
+        items: [{ id: 'c1' }, { id: 'c2' }],
+      }),
+      ['item:master', 'check:master:c1', 'check:master:c2']
+    );
+    assert.deepEqual(
+      CUI.dedupeBulkEntries([
+        { kind: 'item', itemId: 'master' },
+        { kind: 'check', parentId: 'master', nestedId: 'c1' },
+        { kind: 'check', parentId: 'other', nestedId: 'x' },
+      ]),
+      [
+        { kind: 'item', itemId: 'master' },
+        { kind: 'check', parentId: 'other', nestedId: 'x' },
+      ]
+    );
+    assert.deepEqual(CUI.selectAllCheckboxState(0, 3), {
+      checked: false,
+      indeterminate: false,
+    });
+    assert.deepEqual(CUI.selectAllCheckboxState(3, 3), {
+      checked: true,
+      indeterminate: false,
+    });
+    assert.deepEqual(CUI.selectAllCheckboxState(1, 3), {
+      checked: false,
+      indeterminate: true,
+    });
+  });
 });
