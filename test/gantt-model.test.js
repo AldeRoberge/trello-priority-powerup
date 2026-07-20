@@ -226,9 +226,9 @@ describe('GanttModel', () => {
     const snapped = GanttModel.snapDateTime(
       new Date(2026, 6, 22, 8, 22, 0),
       'week',
-      15
+      30
     );
-    assert.equal(GanttModel.toIsoTime(snapped), '08:15');
+    assert.equal(GanttModel.toIsoTime(snapped), '08:30');
   });
 
   it('week barGeometry uses continuous time when hasTime', () => {
@@ -259,9 +259,9 @@ describe('GanttModel', () => {
     const snapped = GanttModel.snapDateTime(
       new Date(2026, 6, 22, 8, 22, 0),
       'day',
-      15
+      30
     );
-    assert.equal(GanttModel.toIsoTime(snapped), '08:15');
+    assert.equal(GanttModel.toIsoTime(snapped), '08:30');
   });
 
   it('shiftIntervalMs moves by minutes', () => {

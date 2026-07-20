@@ -7,7 +7,7 @@
   var MS_MINUTE = 60 * 1000;
   var DEFAULT_DAY_START = '08:15';
   var DEFAULT_DAY_END = '16:45';
-  var AGENDA_SNAP_MINUTES = 15;
+  var AGENDA_SNAP_MINUTES = 30;
   var WEEKDAY_SHORT = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
   var WEEKDAY_LONG = [
     'Dimanche',

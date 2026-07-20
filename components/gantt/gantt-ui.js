@@ -411,6 +411,21 @@
       return start === end ? start : start + ' \u2192 ' + end;
     }
 
+    function formatBarLabel(row, interval) {
+      var pct = Math.round((row && row.progress) || 0) + '%';
+      if (
+        interval &&
+        interval.hasTime &&
+        usesTimedTimeline() &&
+        typeof model.toIsoTime === 'function'
+      ) {
+        var a = model.toIsoTime(interval.start);
+        var b = model.toIsoTime(interval.end);
+        if (a && b) return a + '\u2013' + b + ' \u00b7 ' + pct;
+      }
+      return pct;
+    }
+
     function visibleRows() {
       var flat = model.flattenVisible(state.tree, state.expanded);
       var filtered = model.filterRows(flat, {
@@ -2442,7 +2457,7 @@
           ? model.snapDateTime(
               dt,
               state.viewMode,
-              model.AGENDA_SNAP_MINUTES || 15
+              model.AGENDA_SNAP_MINUTES || 30
             )
           : dt;
       }
@@ -2685,9 +2700,15 @@
       barEl.style.display = '';
       barEl.style.left = geo.left + 'px';
       barEl.style.width = geo.width + 'px';
+      barEl.title =
+        (row.name || '') + ' \u00b7 ' + formatIntervalTitle(interval);
       var fill = barEl.querySelector('.gantt-bar-fill');
       if (fill) {
         fill.style.width = Math.max(0, Math.min(100, row.progress || 0)) + '%';
+      }
+      var labelEl = barEl.querySelector('.gantt-bar-label');
+      if (labelEl) {
+        labelEl.textContent = formatBarLabel(row, interval);
       }
     }
 
@@ -3113,7 +3134,7 @@
             bar.appendChild(fill);
 
             var label = el('span', 'gantt-bar-label', {
-              text: Math.round(row.progress || 0) + '%',
+              text: formatBarLabel(row, interval),
             });
             bar.appendChild(label);
 
