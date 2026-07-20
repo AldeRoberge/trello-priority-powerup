@@ -114,10 +114,28 @@ describe('Échéance vague mode', () => {
       urgency: 0.5,
       impact: 0.5,
       ease: 0.5,
-      dueVague: 'bientot'
+      dueVague: 'proche'
     });
     assert.equal(normalized.dueMode, 'vague');
-    assert.equal(normalized.dueVague, 'bientot');
+    assert.equal(normalized.dueVague, 'proche');
     assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(normalized.dueDate));
+  });
+
+  it('isDueVagueEligible requires more than one week', () => {
+    const now = new Date(2026, 6, 20);
+    assert.equal(PU.isDueVagueEligible('2026-07-27', now), false); // +7
+    assert.equal(PU.isDueVagueEligible('2026-07-28', now), true); // +8
+    assert.equal(PU.isDueVagueEligible('2026-08-19', now), true);
+    assert.equal(PU.isDueVagueEligible('', now), false);
+  });
+
+  it('vague options are all beyond one week', () => {
+    for (const opt of PU.DUE_DATE_VAGUE_OPTIONS) {
+      assert.ok(opt.days > 7, opt.id + ' should be > 7 days');
+    }
+    assert.equal(
+      PU.DUE_DATE_VAGUE_OPTIONS.some((o) => o.id === 'bientot'),
+      false
+    );
   });
 });

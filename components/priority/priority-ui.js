@@ -3665,13 +3665,16 @@
   var DUE_DATE_MODE_PRECISE_LABEL = 'Pr\u00e9cis';
   var DUE_DATE_MODE_VAGUE_LABEL = 'Vague';
   var DUE_DATE_VAGUE_OPTIONS_LABEL = 'Horizon approximatif';
-  /** Vague horizon chips — each maps to an approximate future calendar day. */
+  /** Vague horizon chips — only horizons strictly beyond one week. */
   var DUE_DATE_VAGUE_OPTIONS = [
-    { id: 'bientot', label: 'Bient\u00f4t', days: 7 },
     { id: 'proche', label: 'Dans un futur proche', days: 30 },
     { id: 'lointain', label: 'Dans un futur lointain', days: 365 },
     { id: 'eventuellement', label: '\u00c9ventuellement', days: 1095 }
   ];
+  /** Legacy Vague ids still accepted when loading stored card data. */
+  var DUE_DATE_VAGUE_LEGACY_DAYS = {
+    bientot: 7
+  };
   /** Shared workplace times for quick-date presets (match period chips). */
   var DUE_DATE_QUICK_MORNING_TIME = '09:00';
   var DUE_DATE_QUICK_AFTERNOON_TIME = '14:00';
@@ -3830,6 +3833,9 @@
     for (var i = 0; i < DUE_DATE_VAGUE_OPTIONS.length; i++) {
       if (DUE_DATE_VAGUE_OPTIONS[i].id === id) return id;
     }
+    if (Object.prototype.hasOwnProperty.call(DUE_DATE_VAGUE_LEGACY_DAYS, id)) {
+      return id;
+    }
     return '';
   }
 
@@ -3840,6 +3846,13 @@
       if (DUE_DATE_VAGUE_OPTIONS[i].id === normalized) {
         return DUE_DATE_VAGUE_OPTIONS[i];
       }
+    }
+    if (Object.prototype.hasOwnProperty.call(DUE_DATE_VAGUE_LEGACY_DAYS, normalized)) {
+      return {
+        id: normalized,
+        label: normalized,
+        days: DUE_DATE_VAGUE_LEGACY_DAYS[normalized]
+      };
     }
     return null;
   }
@@ -3860,7 +3873,9 @@
 
   function formatDueVagueLabel(id) {
     var opt = dueVagueOption(id);
-    return opt ? opt.label : '';
+    if (!opt) return '';
+    if (opt.id === 'bientot') return 'Bient\u00f4t';
+    return opt.label;
   }
 
   /** Badge / countdown text for vague mode (tilde prefix). */
@@ -3873,6 +3888,12 @@
     if (!inputs) return false;
     if (normalizeDueMode(inputs.dueMode) === DUE_DATE_MODE_VAGUE) return true;
     return !!normalizeDueVague(inputs.dueVague);
+  }
+
+  /** Vague mode is for horizons strictly beyond one week. */
+  function isDueVagueEligible(iso, now) {
+    var days = daysUntilDue(iso, now);
+    return isFinite(days) && days > COUNTDOWN_DAYS_PER_WEEK;
   }
 
   function startOfLocalDay(date) {
@@ -15787,6 +15808,9 @@
     countdown.id = uid + '-desc';
     countdown.setAttribute('aria-live', 'polite');
 
+    var countdownMain = document.createElement('div');
+    countdownMain.className = 'due-date-countdown-main';
+
     var countdownPrimaryRow = document.createElement('div');
     countdownPrimaryRow.className = 'due-date-countdown-primary-row';
     var countdownDot = document.createElement('span');
@@ -15797,6 +15821,12 @@
     countdownPrimary.className = 'due-date-countdown-primary';
     countdownPrimaryRow.appendChild(countdownDot);
     countdownPrimaryRow.appendChild(countdownPrimary);
+
+    var countdownSecondary = document.createElement('div');
+    countdownSecondary.className = 'due-date-countdown-secondary';
+
+    countdownMain.appendChild(countdownPrimaryRow);
+    countdownMain.appendChild(countdownSecondary);
 
     var modeSwitch = document.createElement('div');
     modeSwitch.className = 'due-date-mode-switch';
@@ -15832,13 +15862,9 @@
       DUE_DATE_MODE_VAGUE_LABEL,
       'ti-tilde'
     );
-    countdownPrimaryRow.appendChild(modeSwitch);
 
-    var countdownSecondary = document.createElement('div');
-    countdownSecondary.className = 'due-date-countdown-secondary';
-
-    countdown.appendChild(countdownPrimaryRow);
-    countdown.appendChild(countdownSecondary);
+    countdown.appendChild(countdownMain);
+    countdown.appendChild(modeSwitch);
 
     var pickers = document.createElement('div');
     pickers.className = 'due-date-pickers';
@@ -16853,8 +16879,12 @@
 
     function refreshModeUi() {
       var isVague = currentMode === DUE_DATE_MODE_VAGUE;
+      var vagueEligible =
+        isVague || (!!current && isDueVagueEligible(current));
       field.classList.toggle('is-vague-mode', isVague);
       field.dataset.dueMode = currentMode;
+      modeSwitch.hidden = !vagueEligible;
+      vagueModeBtn.hidden = !vagueEligible;
       preciseModeBtn.classList.toggle('is-active', !isVague);
       vagueModeBtn.classList.toggle('is-active', isVague);
       preciseModeBtn.setAttribute('aria-checked', isVague ? 'false' : 'true');
@@ -16876,6 +16906,10 @@
     function setDueMode(nextMode, options) {
       options = options || {};
       var mode = normalizeDueMode(nextMode);
+      if (mode === DUE_DATE_MODE_VAGUE && current && !isDueVagueEligible(current)) {
+        // Near-term dues stay Precise — Vague is only for > 1 week.
+        if (!currentVague && !rememberedVague) return;
+      }
       if (mode === currentMode && !options.force) return;
       currentMode = mode;
       if (mode === DUE_DATE_MODE_VAGUE) {
@@ -16888,6 +16922,8 @@
         if (currentVague) {
           current = resolveDueVagueToDate(currentVague);
           if (current) syncViewFromValue(current);
+        } else if (current && isDueVagueEligible(current)) {
+          /* Keep far precise date until a Vague chip is picked. */
         } else {
           current = '';
         }
@@ -16980,16 +17016,25 @@
       countdownDot.style.background = accent;
     }
 
+    function refreshVagueToggle() {
+      var vagueEligible =
+        currentMode === DUE_DATE_MODE_VAGUE ||
+        (!!current && isDueVagueEligible(current));
+      modeSwitch.hidden = !vagueEligible;
+      vagueModeBtn.hidden = !vagueEligible;
+      return vagueEligible;
+    }
+
     function refreshCountdown() {
       var hasVague = currentMode === DUE_DATE_MODE_VAGUE && !!currentVague;
-      // Mode switch lives on the countdown row — keep the shell visible.
-      countdown.hidden = false;
+      var vagueEligible = refreshVagueToggle();
       if (!current && !hasVague) {
         countdownPrimary.textContent = '';
         countdownSecondary.textContent = '';
         countdownSecondary.hidden = true;
         countdown.classList.remove('is-past');
         countdown.classList.add('is-empty');
+        countdown.hidden = !vagueEligible;
         field.classList.remove('has-due-date');
         paintCountdownDot('');
         clearDueProximityBand(field);
@@ -17001,6 +17046,7 @@
         if (collapseApi) collapseApi.refreshSummary();
         return;
       }
+      countdown.hidden = false;
       refreshTrigger();
       refreshTimeRow();
       refreshSuggestions();
@@ -17012,6 +17058,7 @@
         countdownSecondary.hidden = true;
         countdown.classList.remove('is-past');
         countdown.classList.add('is-empty');
+        countdown.hidden = !vagueEligible;
         field.classList.remove('has-due-date');
         paintCountdownDot('');
         clearDueProximityBand(field);
@@ -20432,6 +20479,7 @@
     formatDueVagueLabel: formatDueVagueLabel,
     formatDueVagueCountdown: formatDueVagueCountdown,
     isDueVagueMode: isDueVagueMode,
+    isDueVagueEligible: isDueVagueEligible,
     daysUntilDue: daysUntilDue,
     msUntilDue: msUntilDue,
     isDuePast: isDuePast,
