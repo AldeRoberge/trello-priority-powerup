@@ -1419,10 +1419,10 @@ body.tp-page--priority {
   padding: 0;
 }
 
-/* Fullscreen (even without Assistant): use the full modal width */
-.tp-page--priority.is-cerveau-fullscreen {
-  max-width: none;
-  margin: 0;
+/* Fullscreen without Assistant rail: keep a readable centered column */
+.tp-page--priority.is-cerveau-fullscreen:not(.is-split-assistant) {
+  max-width: 880px;
+  margin: 0 auto;
 }
 
 /* Without the Assistant split, let the document scroll normally in the modal. */
@@ -1441,6 +1441,7 @@ body.tp-page--priority.is-split-assistant {
 
 .tp-page--priority.is-split-assistant {
   max-width: none;
+  width: 100%;
   height: 100%;
   margin: 0;
 }
@@ -3567,14 +3568,14 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
 
 .tp-completion-item-main {
   display: grid;
-  /* select | check | title | estimate | blocked | complete | + | delete */
-  grid-template-columns: 18px 28px minmax(0, 1fr) auto 28px 28px 28px 28px;
+  /* select | check | title | details | estimate | blocked | complete | + | delete */
+  grid-template-columns: 18px 28px minmax(0, 1fr) 26px auto 28px 28px 28px 28px;
   align-items: center;
   gap: 6px;
 }
 
 .tp-completion-item-main:has(.tp-completion-promote) {
-  grid-template-columns: 18px 28px minmax(0, 1fr) auto 28px 28px 28px 28px 28px;
+  grid-template-columns: 18px 28px minmax(0, 1fr) 26px auto 28px 28px 28px 28px 28px;
 }
 
 .tp-completion-checklist-main {
@@ -3590,11 +3591,11 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
 }
 
 .tp-completion-item-main:has(.tp-completion-spell-spinner) {
-  grid-template-columns: 18px 28px minmax(0, 1fr) 22px auto 28px 28px 28px 28px;
+  grid-template-columns: 18px 28px minmax(0, 1fr) 22px 26px auto 28px 28px 28px 28px;
 }
 
 .tp-completion-item-main:has(.tp-completion-spell-spinner):has(.tp-completion-promote) {
-  grid-template-columns: 18px 28px minmax(0, 1fr) 22px auto 28px 28px 28px 28px 28px;
+  grid-template-columns: 18px 28px minmax(0, 1fr) 22px 26px auto 28px 28px 28px 28px 28px;
 }
 
 .tp-completion-item.is-linked .tp-completion-item-main:has(.tp-completion-spell-spinner) {
@@ -4739,11 +4740,11 @@ html[data-color-mode='dark'] .tp-completion-suggestion.is-link:hover {
   }
 
   .tp-completion-item-main {
-    grid-template-columns: 18px 28px minmax(0, 1fr) auto 28px 28px 28px 28px;
+    grid-template-columns: 18px 28px minmax(0, 1fr) 26px auto 28px 28px 28px 28px;
   }
 
   .tp-completion-item-main:has(.tp-completion-promote) {
-    grid-template-columns: 18px 28px minmax(0, 1fr) auto 28px 28px 28px 28px 28px;
+    grid-template-columns: 18px 28px minmax(0, 1fr) 26px auto 28px 28px 28px 28px 28px;
   }
 
   .tp-completion-item.is-linked .tp-completion-item-main {
@@ -4751,11 +4752,11 @@ html[data-color-mode='dark'] .tp-completion-suggestion.is-link:hover {
   }
 
   .tp-completion-item-main:has(.tp-completion-spell-spinner) {
-    grid-template-columns: 18px 28px minmax(0, 1fr) 22px auto 28px 28px 28px 28px;
+    grid-template-columns: 18px 28px minmax(0, 1fr) 22px 26px auto 28px 28px 28px 28px;
   }
 
   .tp-completion-item-main:has(.tp-completion-spell-spinner):has(.tp-completion-promote) {
-    grid-template-columns: 18px 28px minmax(0, 1fr) 22px auto 28px 28px 28px 28px 28px;
+    grid-template-columns: 18px 28px minmax(0, 1fr) 22px 26px auto 28px 28px 28px 28px 28px;
   }
 
   .tp-completion-item.is-linked .tp-completion-item-main:has(.tp-completion-spell-spinner) {
@@ -4929,6 +4930,121 @@ html[data-color-mode='dark'] .tp-completion-suggestion.is-link:hover {
   font-size: 12.5px;
   font-weight: 600;
   color: var(--tp-text-subtle, #44546f);
+}
+
+/* Agent identity color picker (presets + custom) */
+.tp-agent-color-picker {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+
+.tp-agent-color-swatch {
+  appearance: none;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  min-height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  box-shadow:
+    inset 0 0 0 1px rgba(9, 30, 66, 0.14),
+    0 1px 2px rgba(9, 30, 66, 0.08);
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.tp-agent-color-swatch:hover {
+  transform: translateY(-1px) scale(1.04);
+  box-shadow:
+    inset 0 0 0 1px rgba(9, 30, 66, 0.18),
+    0 2px 6px rgba(9, 30, 66, 0.14);
+}
+
+.tp-agent-color-swatch.is-selected {
+  border-color: var(--tp-primary, #0c66e4);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--tp-primary, #0c66e4) 35%, transparent),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
+.tp-agent-color-swatch:focus-visible {
+  outline: 2px solid var(--tp-primary, #0c66e4);
+  outline-offset: 2px;
+}
+
+.tp-agent-color-custom {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  margin: 0;
+  padding: 2px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  min-height: 28px;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+.tp-agent-color-custom.is-selected {
+  border-color: var(--tp-primary, #0c66e4);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tp-primary, #0c66e4) 35%, transparent);
+  background: color-mix(in srgb, var(--tp-primary, #0c66e4) 8%, transparent);
+}
+
+.tp-agent-color-custom-face {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  min-height: 22px;
+  border-radius: 999px;
+  background:
+    conic-gradient(
+      from 210deg,
+      #ff6b6b,
+      #f5d76e,
+      #8fd86a,
+      #7eb2f0,
+      #b48ae0,
+      #f095b8,
+      #ff6b6b
+    );
+  box-shadow: inset 0 0 0 1px rgba(9, 30, 66, 0.14);
+  pointer-events: none;
+}
+
+.tp-agent-color-custom.is-selected .tp-agent-color-custom-face {
+  /* Selected custom uses the actual picked color (set inline). */
+}
+
+.tp-agent-color-custom-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  border: 0;
+  padding: 0;
+}
+
+.tp-agent-color-custom-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: var(--tp-text-muted, #626f86);
+  pointer-events: none;
+}
+
+.tp-agent-color-custom.is-selected .tp-agent-color-custom-label {
+  color: var(--tp-text, #172b4d);
 }
 
 .tp-textarea {
