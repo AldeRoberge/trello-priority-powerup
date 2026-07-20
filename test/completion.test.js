@@ -32,6 +32,13 @@ describe('Completion progress', () => {
     assert.equal(CT.CARD_COMPLETION_KEY, 'cardCompletion');
   });
 
+  it('progress encouragement labels idle as not started', () => {
+    assert.equal(CUI.progressEncouragementText(0), 'Pas commencé');
+    assert.equal(CUI.progressEncouragementText(8), 'Amorcée');
+    assert.equal(CUI.progressEncouragementText(100), 'Terminé');
+    assert.equal(CUI.progressEncouragementMeta(0).tone, 'idle');
+  });
+
   it('clampProgress bounds to 0–100', () => {
     assert.equal(CT.clampProgress(-10), 0);
     assert.equal(CT.clampProgress(150), 100);
