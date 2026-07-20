@@ -40,6 +40,7 @@ const UNIT_FILES = [
   'add-subtask-dedupe.test.js',
   'gantt-model.test.js',
   'gantt-trello.test.js',
+  'outlook-sync.test.js',
 ];
 
 function listTests() {

@@ -568,6 +568,54 @@ html[data-color-mode] .tp-page--settings {
   white-space: nowrap;
 }
 
+.tp-member-roles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.tp-member-roles-row {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.tp-member-roles-icon {
+  font-size: 16px;
+  color: var(--tp-text-subtle, #626f86);
+}
+
+.tp-member-roles-label {
+  width: 100%;
+  min-width: 0;
+}
+
+.tp-member-roles-remove {
+  white-space: nowrap;
+}
+
+.tp-member-roles-create {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.tp-member-roles-create .tp-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tp-member-roles-status {
+  margin: 0;
+  min-height: 1.2em;
+  font-size: 12px;
+  color: var(--tp-text-subtle, #626f86);
+}
+
 .tp-statut-map-select,
 .tp-statut-roles .tp-select {
   background: var(--tp-surface-subtle, #f1f2f4);
@@ -1227,6 +1275,7 @@ body.tp-page--priority {
   font-weight: 400;
   line-height: 1.45;
   letter-spacing: -0.01em;
+  --radius: 12px;
 }
 
 .tp-page--priority {
@@ -1254,8 +1303,8 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .field--overview {
-  padding: 10px 12px 14px;
-  border-radius: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius, 12px);
   background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
 }
 
@@ -1266,7 +1315,7 @@ body.tp-page--priority {
 
 .tp-page--priority .field--info {
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: var(--radius, 12px);
   background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
 }
 
@@ -1277,7 +1326,7 @@ body.tp-page--priority {
 
 .tp-page--priority .field--statut {
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: var(--radius, 12px);
 }
 
 .tp-page--priority .field--statut-embedded {
@@ -1374,8 +1423,8 @@ body.tp-page--priority {
 
 /* Soft surface language — heat, fields, blocked, due, graph share tint shells */
 .tp-page--priority .heat-panel {
-  padding: 16px;
-  border-radius: 12px;
+  padding: 12px;
+  border-radius: var(--radius, 12px);
 }
 
 .tp-page--priority .heat-head {
@@ -1386,7 +1435,7 @@ body.tp-page--priority {
 .tp-page--priority .heat-badge {
   margin: 0;
   padding: 12px 16px;
-  border-radius: 12px;
+  border-radius: var(--radius, 12px);
   grid-template-columns: auto minmax(min-content, 1fr);
   box-shadow: none;
 }
@@ -1488,14 +1537,15 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .variant-due-section {
-  margin-top: 12px;
-  padding: 0 8px 4px;
+  margin-top: 8px;
+  padding: 0 8px 8px;
 }
 
 .tp-page--priority .field--due-date {
   margin-bottom: 0;
-  padding: 12px;
+  padding: 10px 12px;
   border: none;
+  border-radius: var(--radius, 12px);
 }
 
 .tp-page--priority .field--due-date.is-enabled,
@@ -1733,7 +1783,7 @@ body.tp-page--priority {
 }
 
 .tp-page--priority .calc-graph-panel.is-enabled {
-  padding: 12px;
+  padding: 10px 12px;
   border: none;
   background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
 }
@@ -1745,7 +1795,8 @@ body.tp-page--priority {
 
 .tp-page--priority .field--priority {
   border: none;
-  padding: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius, 12px);
 }
 
 .tp-page--priority .field--priority.is-enabled {
@@ -1842,7 +1893,7 @@ body.tp-page--completion {
   max-width: 520px;
   margin: 0 auto;
   padding: 4px 12px 14px;
-  --completion-radius: 10px;
+  --completion-radius: 12px;
   --completion-track-master: 8px;
   --completion-track-item: 4px;
   --completion-thumb-master: 18px;
@@ -1867,7 +1918,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   --slider-thumb-border: var(--tp-border-strong);
   --slider-thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
   --slider-focus-ring: 0 0 0 3px rgba(12, 102, 228, 0.28);
-  --completion-radius: 10px;
+  --completion-radius: 12px;
   --completion-control-radius: 8px;
   --completion-track-master: 8px;
   --completion-track-item: 4px;
@@ -1904,16 +1955,16 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 }
 
 .tp-page--priority .variant-progress-section {
-  margin-top: 12px;
+  margin-top: 8px;
   padding: 0 8px 8px;
 }
 
 /* Soft enable shell — tint only, stable box (heat-panel vibe) */
 .tp-page--priority .field--progress {
   margin-bottom: 0;
-  padding: 12px;
+  padding: 10px 12px;
   border: none;
-  border-radius: var(--radius, 8px);
+  border-radius: var(--radius, 12px);
   background: transparent;
   transition: background 0.2s ease;
 }
@@ -1986,7 +2037,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   flex-direction: column;
   gap: 8px;
   padding: 14px 16px 12px;
-  border-radius: var(--completion-radius, 10px);
+  border-radius: var(--completion-radius, 12px);
   background: color-mix(
     in srgb,
     var(--completion-hero-accent) 12%,
@@ -2666,7 +2717,7 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble[data-tone='acti
   flex-direction: column;
   gap: 8px;
   padding: 10px 10px;
-  border-radius: var(--completion-radius, 10px);
+  border-radius: var(--completion-radius, 12px);
   background: color-mix(in srgb, #000 12%, var(--tp-surface-subtle));
   transition: background 0.15s ease;
   position: relative;
@@ -3771,7 +3822,7 @@ html[data-color-mode="dark"] .tp-completion-check.is-checked:hover {
   gap: 8px;
   margin-top: 8px;
   padding: 10px;
-  border-radius: var(--completion-radius, 10px);
+  border-radius: var(--completion-radius, 12px);
   background: color-mix(in srgb, #000 10%, var(--tp-surface-subtle));
 }
 

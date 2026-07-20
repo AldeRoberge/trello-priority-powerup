@@ -21,6 +21,29 @@
     return global.PriorityTrello || null;
   }
 
+  async function cardPluginScope(t) {
+    var pt = priorityTrello();
+    if (pt && typeof pt.resolveCurrentCardId === 'function') {
+      try {
+        var id = await pt.resolveCurrentCardId(t);
+        if (id) return id;
+      } catch (e) {
+        /* fall through */
+      }
+    }
+    try {
+      if (t && typeof t.arg === 'function') {
+        var fromArg = t.arg('cardId');
+        if (fromArg != null && String(fromArg).trim()) {
+          return String(fromArg).trim();
+        }
+      }
+    } catch (e2) {
+      /* ignore */
+    }
+    return 'card';
+  }
+
   function isCompletedListId(listId, settings) {
     if (!listId || !settings) return false;
     var id = String(listId);
@@ -134,7 +157,7 @@
 
   async function getPreviousListId(t) {
     try {
-      var raw = await t.get('card', 'shared', STATUT_PREVIOUS_LIST_KEY);
+      var raw = await t.get(await cardPluginScope(t), 'shared', STATUT_PREVIOUS_LIST_KEY);
       if (raw == null || raw === '') return null;
       return String(raw);
     } catch (err) {
@@ -145,11 +168,12 @@
 
   async function setPreviousListId(t, listId) {
     try {
+      var scope = await cardPluginScope(t);
       if (!listId) {
-        await t.set('card', 'shared', STATUT_PREVIOUS_LIST_KEY, null);
+        await t.set(scope, 'shared', STATUT_PREVIOUS_LIST_KEY, null);
         return null;
       }
-      await t.set('card', 'shared', STATUT_PREVIOUS_LIST_KEY, String(listId));
+      await t.set(scope, 'shared', STATUT_PREVIOUS_LIST_KEY, String(listId));
       return String(listId);
     } catch (err) {
       dbgError('statutTrello', 'setPreviousListId', err);
@@ -163,7 +187,11 @@
 
   async function getPreviousBlockedListId(t) {
     try {
-      var raw = await t.get('card', 'shared', STATUT_PREVIOUS_BLOCKED_LIST_KEY);
+      var raw = await t.get(
+        await cardPluginScope(t),
+        'shared',
+        STATUT_PREVIOUS_BLOCKED_LIST_KEY
+      );
       if (raw == null || raw === '') return null;
       return String(raw);
     } catch (err) {
@@ -174,11 +202,12 @@
 
   async function setPreviousBlockedListId(t, listId) {
     try {
+      var scope = await cardPluginScope(t);
       if (!listId) {
-        await t.set('card', 'shared', STATUT_PREVIOUS_BLOCKED_LIST_KEY, null);
+        await t.set(scope, 'shared', STATUT_PREVIOUS_BLOCKED_LIST_KEY, null);
         return null;
       }
-      await t.set('card', 'shared', STATUT_PREVIOUS_BLOCKED_LIST_KEY, String(listId));
+      await t.set(scope, 'shared', STATUT_PREVIOUS_BLOCKED_LIST_KEY, String(listId));
       return String(listId);
     } catch (err) {
       dbgError('statutTrello', 'setPreviousBlockedListId', err);

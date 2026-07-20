@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Autorisation Outlook</title>
+  <script src="./components/shared/brand.js"></script>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 2rem;
+      color: #172b4d;
+    }
+  </style>
+</head>
+<body>
+  <p id="msg">Autorisation Outlook en cours…</p>
+  <script>
+    (function () {
+      var brand = window.PriorityBrand;
+      var appName =
+        brand && typeof brand.getAppName === 'function'
+          ? brand.getAppName()
+          : 'Trello Cerveau';
+      document.title = 'Autorisation Outlook — ' + appName;
+      var msg = document.getElementById('msg');
+      if (msg) {
+        msg.textContent =
+          'Autorisation Outlook terminée. Cette fenêtre peut se fermer.';
+      }
+      setTimeout(function () {
+        try {
+          window.close();
+        } catch (e) {
+          /* ignore */
+        }
+      }, 600);
+    })();
+  </script>
+</body>
+</html>

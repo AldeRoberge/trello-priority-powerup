@@ -120,6 +120,7 @@
         (await t.cards(
           'id',
           'name',
+          'desc',
           'idList',
           'due',
           'start',
@@ -224,6 +225,7 @@
       records.push({
         id: cardId,
         name: card.name || '',
+        desc: typeof card.desc === 'string' ? card.desc : '',
         listId: listId,
         listName: listId ? listNameById[listId] || '' : '',
         pos: typeof card.pos === 'number' ? card.pos : Number(card.pos) || 0,

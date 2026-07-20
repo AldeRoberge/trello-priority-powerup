@@ -28,6 +28,31 @@
 
   var ITEM_TEXT_MAX = 500;
   var PROGRESS_MIN = 0;
+
+  async function cardPluginScope(t) {
+    try {
+      if (
+        global.PriorityTrello &&
+        typeof global.PriorityTrello.resolveCurrentCardId === 'function'
+      ) {
+        var id = await global.PriorityTrello.resolveCurrentCardId(t);
+        if (id) return id;
+      }
+    } catch (e) {
+      /* fall through */
+    }
+    try {
+      if (t && typeof t.arg === 'function') {
+        var fromArg = t.arg('cardId');
+        if (fromArg != null && String(fromArg).trim()) {
+          return String(fromArg).trim();
+        }
+      }
+    } catch (e2) {
+      /* ignore */
+    }
+    return 'card';
+  }
   var PROGRESS_MAX = 100;
   /** Near-complete fallback when reopening En cours from 100% with no prior snapshot. */
   var PROGRESS_NEAR_COMPLETE = 99;
@@ -1365,7 +1390,11 @@
 
   async function getPreviousCompletionBeforeComplete(t) {
     try {
-      var raw = await t.get('card', 'shared', COMPLETION_PREVIOUS_BEFORE_COMPLETE_KEY);
+      var raw = await t.get(
+        await cardPluginScope(t),
+        'shared',
+        COMPLETION_PREVIOUS_BEFORE_COMPLETE_KEY
+      );
       if (!raw || typeof raw !== 'object') return null;
       var normalized = normalizeCompletionData(raw);
       if (isAllSubtasksComplete(normalized)) return null;
@@ -1378,16 +1407,17 @@
 
   async function setPreviousCompletionBeforeComplete(t, data) {
     try {
+      var scope = await cardPluginScope(t);
       if (!data) {
-        await t.set('card', 'shared', COMPLETION_PREVIOUS_BEFORE_COMPLETE_KEY, null);
+        await t.set(scope, 'shared', COMPLETION_PREVIOUS_BEFORE_COMPLETE_KEY, null);
         return null;
       }
       var normalized = normalizeCompletionData(data);
       if (isAllSubtasksComplete(normalized)) {
-        await t.set('card', 'shared', COMPLETION_PREVIOUS_BEFORE_COMPLETE_KEY, null);
+        await t.set(scope, 'shared', COMPLETION_PREVIOUS_BEFORE_COMPLETE_KEY, null);
         return null;
       }
-      await t.set('card', 'shared', COMPLETION_PREVIOUS_BEFORE_COMPLETE_KEY, normalized);
+      await t.set(scope, 'shared', COMPLETION_PREVIOUS_BEFORE_COMPLETE_KEY, normalized);
       return normalized;
     } catch (err) {
       console.error('Completion previous-before-complete set failed', err);
@@ -1414,7 +1444,11 @@
 
   async function getMarkedDueCompleteFlag(t) {
     try {
-      var flagged = await t.get('card', 'shared', COMPLETION_MARKED_DUE_COMPLETE_KEY);
+      var flagged = await t.get(
+        await cardPluginScope(t),
+        'shared',
+        COMPLETION_MARKED_DUE_COMPLETE_KEY
+      );
       return flagged === true;
     } catch (err) {
       return false;
@@ -1423,10 +1457,11 @@
 
   async function setMarkedDueCompleteFlag(t, value) {
     try {
+      var scope = await cardPluginScope(t);
       if (value) {
-        await t.set('card', 'shared', COMPLETION_MARKED_DUE_COMPLETE_KEY, true);
+        await t.set(scope, 'shared', COMPLETION_MARKED_DUE_COMPLETE_KEY, true);
       } else {
-        await t.set('card', 'shared', COMPLETION_MARKED_DUE_COMPLETE_KEY, false);
+        await t.set(scope, 'shared', COMPLETION_MARKED_DUE_COMPLETE_KEY, false);
       }
     } catch (err) {
       console.error('Completion marked-due-complete flag failed', err);
@@ -1435,7 +1470,13 @@
 
   async function getDueCompleteSuppressed(t) {
     try {
-      return (await t.get('card', 'shared', COMPLETION_SUPPRESS_DUE_COMPLETE_KEY)) === true;
+      return (
+        (await t.get(
+          await cardPluginScope(t),
+          'shared',
+          COMPLETION_SUPPRESS_DUE_COMPLETE_KEY
+        )) === true
+      );
     } catch (err) {
       return false;
     }
@@ -1443,10 +1484,11 @@
 
   async function setDueCompleteSuppressed(t, value) {
     try {
+      var scope = await cardPluginScope(t);
       if (value) {
-        await t.set('card', 'shared', COMPLETION_SUPPRESS_DUE_COMPLETE_KEY, true);
+        await t.set(scope, 'shared', COMPLETION_SUPPRESS_DUE_COMPLETE_KEY, true);
       } else {
-        await t.set('card', 'shared', COMPLETION_SUPPRESS_DUE_COMPLETE_KEY, false);
+        await t.set(scope, 'shared', COMPLETION_SUPPRESS_DUE_COMPLETE_KEY, false);
       }
     } catch (err) {
       console.error('Completion suppress-due-complete flag failed', err);
@@ -2058,7 +2100,7 @@
   }
 
   async function getCardCompletion(t) {
-    var stored = await t.get('card', 'shared', CARD_COMPLETION_KEY);
+    var stored = await t.get(await cardPluginScope(t), 'shared', CARD_COMPLETION_KEY);
     return normalizeCompletionData(stored);
   }
 
@@ -2081,7 +2123,7 @@
       itemCount: normalized.items.length,
       progress: progress.percent,
     });
-    await t.set('card', 'shared', CARD_COMPLETION_KEY, normalized);
+    await t.set(await cardPluginScope(t), 'shared', CARD_COMPLETION_KEY, normalized);
     return normalized;
   }
 

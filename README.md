@@ -25,6 +25,7 @@ By getting a system that works for you, you’ll spend less time making lists an
 - **Compatibilité** : les anciennes priorités P1–P5 sont lues pour l'affichage jusqu'à la prochaine sauvegarde
 - **Tri par colonne** : menu `…` d'une liste → **Trier par…** → **Priorité** (Critique en haut, cartes sans priorité en bas)
 - **Tri automatique** (optionnel) : après chaque changement de priorité, la carte se réordonne dans sa liste (nécessite clé API + autorisation OAuth ; voir ci-dessous)
+- **Gantt** : vue chronologique du tableau (dates start/due), avec sync Outlook optionnelle (titre, description, dates)
 - **Profil** : préférences personnelles (identité, langue/ton de l’assistant, sections visibles dans l’éditeur), stockées en privé sur le compte Trello — accessibles via **Paramètres du Cerveau** → **Mon profil**
 
 ---
@@ -38,15 +39,20 @@ By getting a system that works for you, you’ll spend less time making lists an
 | `settings.html` | Paramètres du tableau (statut, infos, build, guide) |
 | `profile.html` | Profil membre (préférences, fonctionnalités, assistant) |
 | `welcome.html` | Modal d'accueil à l'activation du Power-Up |
+| `gantt.html` | Vue Gantt plein écran (bouton tableau) |
+| `outlook-auth.html` | Retour popup MSAL (autorisation Outlook) |
 | `components/` | Modules par domaine (JS + CSS colocated) |
 | `components/shared/` | Thème Trello, version, REST config, utilitaires |
 | `components/priority/` | Score, UI et connecteur Trello priorité |
 | `components/completion/` | Progrès / sous-tâches |
 | `components/statut/` | Mapping listes → catégories |
+| `components/gantt/` | Modèle, UI et connecteur Gantt |
+| `components/outlook/` | Auth MSAL, Graph Calendar, sync bidirectionnelle |
 | `components/agent/` | Assistant, mémoire, UI chat |
 | `components/profile/` | Profil membre |
 | `assets/` | Icônes Power-Up et badges SVG |
 | `components/shared/rest-config.js` | Clé API Power-Up pour le tri automatique (REST) |
+| `components/outlook/outlook-config.js` | Client ID Entra (SPA) pour Outlook |
 | `build-info.json` | Horodatage du dernier déploiement |
 | `scripts/` | Utilitaires Node (`stamp-build.js`, `render-icon.js`) |
 | `sandbox/` | Prototypes UI et scripts de vérification — **non déployés** (voir `sandbox/README.md`) |
@@ -241,6 +247,32 @@ Lorsqu'un membre modifie la priorité d'une carte (curseurs, palier, état bloqu
 - Les curseurs déclenchent une sauvegarde immédiate ; le déplacement est **débouncé** (400 ms par défaut, `autoSortDebounceMs` dans `components/shared/rest-config.js`).
 - Nécessite la portée REST **écriture** (`write`) pour modifier la position des cartes.
 
+### Sync Outlook (Gantt)
+
+Depuis la vue **Gantt**, les cartes datées peuvent être synchronisées avec le calendrier Outlook du membre (titre ↔ sujet, description ↔ corps, start/due ↔ plage d’événement). Sync **bidirectionnelle** pour les paires carte↔événement déjà liées ; les nouveaux événements Outlook non liés ne créent pas de cartes Trello.
+
+**Fonctionnement (client-only)**
+
+- Auth Microsoft via MSAL (popup) + Microsoft Graph dans le navigateur — **pas de backend**.
+- Sync au chargement du Gantt (si déjà connecté), via **Sync Outlook**, et après enregistrement de dates (débounced).
+- En cas de conflit sur un champ modifié des deux côtés : **Trello gagne**.
+- Mapping stocké en privé membre (`outlookSync`), par tableau.
+
+**Configuration Entra (une fois)**
+
+1. Portail Azure → **App registrations** → New registration (comptes personnels + organisationnels si besoin).
+2. Platform **Single-page application (SPA)** — redirect URI exacte du Power-Up, ex.  
+   `https://VOTRE-UTILISATEUR.github.io/trello-priority-powerup/outlook-auth.html`
+3. API permissions (delegated) : `User.Read`, `Calendars.ReadWrite`.
+4. Copier l’**Application (client) ID** dans [`components/outlook/outlook-config.js`](components/outlook/outlook-config.js) → `clientId`.
+5. Dans le Gantt : **Connecter Outlook**, puis **Sync Outlook**. Autoriser aussi Trello (REST) pour les écritures de titre/description/dates.
+
+**Limitations**
+
+- Pas de webhooks : rien ne sync tant que le Gantt n’est pas ouvert (ou Sync manuel).
+- Calendrier par défaut (`primary`) uniquement en v1.
+- `clientId` public (SPA) — normal ; pas de secret client dans le dépôt.
+
 ### Messages console sur Trello.com
 
 Certaines erreurs affichées dans la console du navigateur proviennent de **Trello** (application principale ou SDK `power-up.min.js`), pas de ce Power-Up :
@@ -259,6 +291,7 @@ Les pages iframe reportent les appels API via `t.render()` (`runWhenIframeReady`
 | Portée | Clé | Contenu |
 |--------|-----|---------|
 | Carte (`shared`) | `cardPriority` | `{ urgency, impact, ease }` |
+| Membre (`private`) | `outlookSync` | Mapping carte ↔ événement Outlook par tableau |
 
 ---
 

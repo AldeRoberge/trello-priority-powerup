@@ -9,6 +9,7 @@
   var COLOR_SCHEME_SETTINGS_KEY = 'priorityColorScheme';
   var COLOR_SCHEME_REV_KEY = 'priorityColorSchemeRev';
   var CUSTOM_TASK_TYPES_KEY = 'customTaskTypes';
+  var MEMBER_ROLE_CATALOG_KEY = 'memberRoleCatalog';
   // Last agreed Trello `due` ISO ('' = no due). Used for Échéance ↔ Dates conflict detection.
   var CARD_DUE_SYNCED_KEY = 'cardDueSyncedIso';
   // Last agreed Trello `start` ISO ('' = no start).
@@ -16,6 +17,7 @@
   var boardFormulaKey = 'baseline';
   var boardColorSchemeKey = null;
   var boardCustomTaskTypes = null;
+  var boardMemberRoleCatalog = null;
   // Trello minimum for dynamic badge polling (card-badges / card-detail-badges).
   var BADGE_REFRESH_SEC = 10;
   // Label above the card-back badge; without this Trello shows the Power-Up admin name.
@@ -308,6 +310,30 @@
       normalized.dismissedTaskTypeSuggestions = dismissedTaskTypeSuggestions;
     }
 
+    var memberRoles =
+      PUTypes && typeof PUTypes.normalizeMemberRoles === 'function'
+        ? PUTypes.normalizeMemberRoles(raw.memberRoles)
+        : {};
+    if (Object.keys(memberRoles).length) normalized.memberRoles = memberRoles;
+
+    var memberRoleCustoms =
+      PUTypes && typeof PUTypes.normalizeMemberRoleCustoms === 'function'
+        ? PUTypes.normalizeMemberRoleCustoms(raw.memberRoleCustoms)
+        : [];
+    if (
+      PUTypes &&
+      typeof PUTypes.pruneMemberRoleCustoms === 'function' &&
+      memberRoleCustoms.length
+    ) {
+      memberRoleCustoms = PUTypes.pruneMemberRoleCustoms(
+        memberRoleCustoms,
+        memberRoles
+      );
+    }
+    if (memberRoleCustoms.length) {
+      normalized.memberRoleCustoms = memberRoleCustoms;
+    }
+
     return normalized;
   }
 
@@ -353,6 +379,15 @@
       cleared.dismissedTaskTypeSuggestions =
         inputs.dismissedTaskTypeSuggestions.slice();
     }
+    if (inputs.memberRoles && typeof inputs.memberRoles === 'object') {
+      cleared.memberRoles = inputs.memberRoles;
+    }
+    if (
+      Array.isArray(inputs.memberRoleCustoms) &&
+      inputs.memberRoleCustoms.length
+    ) {
+      cleared.memberRoleCustoms = inputs.memberRoleCustoms.slice();
+    }
     return cleared;
   }
 
@@ -366,7 +401,7 @@
     }
     if (!completed || !inputs || !inputs.enAttente) return inputs;
     var cleared = clearBlockedFromInputs(inputs);
-    await t.set('card', 'shared', CARD_PRIORITY_KEY, cleared);
+    await t.set(await cardPluginScope(t), 'shared', CARD_PRIORITY_KEY, cleared);
     return cleared;
   }
 
@@ -384,7 +419,7 @@
   }
 
   async function getCardInputs(t) {
-    return readStoredCardInputs(t, 'card');
+    return readStoredCardInputs(t, await cardPluginScope(t));
   }
 
   async function getMatrixSettings(t) {
@@ -496,6 +531,60 @@
       : [];
   }
 
+  async function getMemberRoleCatalog(t) {
+    var PU = priorityUI();
+    try {
+      var stored = await t.get('board', 'shared', MEMBER_ROLE_CATALOG_KEY);
+      var list =
+        PU && typeof PU.normalizeMemberRoleCatalog === 'function'
+          ? PU.normalizeMemberRoleCatalog(stored)
+          : Array.isArray(stored) && stored.length
+            ? stored
+            : PU && typeof PU.defaultMemberRoleCatalog === 'function'
+              ? PU.defaultMemberRoleCatalog()
+              : [];
+      boardMemberRoleCatalog = list;
+      if (PU && typeof PU.setMemberRoleCatalog === 'function') {
+        PU.setMemberRoleCatalog(list);
+      }
+      // Seed board on first empty load so Settings sees the defaults.
+      if (!Array.isArray(stored) || !stored.length) {
+        await t.set('board', 'shared', MEMBER_ROLE_CATALOG_KEY, list);
+      }
+      return list.slice();
+    } catch (err) {
+      console.error('Priority member role catalog load failed', err);
+      boardMemberRoleCatalog =
+        boardMemberRoleCatalog ||
+        (PU && typeof PU.defaultMemberRoleCatalog === 'function'
+          ? PU.defaultMemberRoleCatalog()
+          : []);
+      return boardMemberRoleCatalog.slice();
+    }
+  }
+
+  async function saveMemberRoleCatalog(t, raw) {
+    var PU = priorityUI();
+    var list =
+      PU && typeof PU.normalizeMemberRoleCatalog === 'function'
+        ? PU.normalizeMemberRoleCatalog(raw)
+        : Array.isArray(raw)
+          ? raw
+          : [];
+    boardMemberRoleCatalog = list;
+    if (PU && typeof PU.setMemberRoleCatalog === 'function') {
+      PU.setMemberRoleCatalog(list);
+    }
+    await t.set('board', 'shared', MEMBER_ROLE_CATALOG_KEY, list);
+    return list.slice();
+  }
+
+  function getCachedMemberRoleCatalog() {
+    return Array.isArray(boardMemberRoleCatalog)
+      ? boardMemberRoleCatalog.slice()
+      : [];
+  }
+
   async function preloadBoardPriorityContext(t) {
     return ensureBoardPriorityContext(t);
   }
@@ -513,6 +602,7 @@
     await getBoardFormula(t);
     await getBoardColorScheme(t);
     await getCustomTaskTypes(t);
+    await getMemberRoleCatalog(t);
     return settings;
   }
 
@@ -1659,6 +1749,16 @@
   }
 
   async function resolveCurrentCardId(t) {
+    try {
+      if (t && typeof t.arg === 'function') {
+        var fromArg = t.arg('cardId');
+        if (fromArg != null && String(fromArg).trim()) {
+          return String(fromArg).trim();
+        }
+      }
+    } catch (argErr) {
+      /* ignore */
+    }
     var ids = await readCardIdAndListId(t);
     var cardId = ids && ids.cardId;
     if (cardId) return cardId;
@@ -1673,9 +1773,18 @@
     return null;
   }
 
+  /**
+   * Plugin-data scope for the active card: explicit cardId arg (board → Cerveau
+   * modal) or the literal 'card' when the iframe already has card context.
+   */
+  async function cardPluginScope(t) {
+    var id = await resolveCurrentCardId(t);
+    return id || 'card';
+  }
+
   async function getCardDueSyncedIso(t) {
     try {
-      var stored = await t.get('card', 'shared', CARD_DUE_SYNCED_KEY);
+      var stored = await t.get(await cardPluginScope(t), 'shared', CARD_DUE_SYNCED_KEY);
       if (stored == null) return '';
       if (stored === '') return '';
       if (typeof stored !== 'string') return '';
@@ -1691,7 +1800,12 @@
 
   async function setCardDueSyncedIso(t, iso) {
     try {
-      await t.set('card', 'shared', CARD_DUE_SYNCED_KEY, typeof iso === 'string' ? iso : '');
+      await t.set(
+        await cardPluginScope(t),
+        'shared',
+        CARD_DUE_SYNCED_KEY,
+        typeof iso === 'string' ? iso : ''
+      );
     } catch (err) {
       console.error('Priority due sync marker failed', err);
     }
@@ -1792,7 +1906,7 @@
           return { ok: true, changed: false, inputs: inputs, due: null, direction: 'pull' };
         }
         var cleared = applyDuePartsToInputs(inputs, null);
-        await t.set('card', 'shared', CARD_PRIORITY_KEY, cleared);
+        await t.set(await cardPluginScope(t), 'shared', CARD_PRIORITY_KEY, cleared);
         await setCardDueSyncedIso(t, '');
         return {
           ok: true,
@@ -1826,7 +1940,7 @@
         (inputs.dueTime || '') !== (nextInputs.dueTime || '') ||
         (inputs.dueEnabled === false) !== (nextInputs.dueEnabled === false);
       if (inputsChanged) {
-        await t.set('card', 'shared', CARD_PRIORITY_KEY, nextInputs);
+        await t.set(await cardPluginScope(t), 'shared', CARD_PRIORITY_KEY, nextInputs);
       }
       await setCardDueSyncedIso(t, nextCanon);
       return {
@@ -1900,7 +2014,7 @@
 
   async function getCardStartSyncedIso(t) {
     try {
-      var stored = await t.get('card', 'shared', CARD_START_SYNCED_KEY);
+      var stored = await t.get(await cardPluginScope(t), 'shared', CARD_START_SYNCED_KEY);
       if (stored == null || stored === '') return '';
       if (typeof stored !== 'string') return '';
       var PU = priorityUI();
@@ -1916,7 +2030,7 @@
   async function setCardStartSyncedIso(t, iso) {
     try {
       await t.set(
-        'card',
+        await cardPluginScope(t),
         'shared',
         CARD_START_SYNCED_KEY,
         typeof iso === 'string' ? iso : ''
@@ -2019,7 +2133,7 @@
           };
         }
         var cleared = applyStartToInputs(inputs, null);
-        await t.set('card', 'shared', CARD_PRIORITY_KEY, cleared);
+        await t.set(await cardPluginScope(t), 'shared', CARD_PRIORITY_KEY, cleared);
         await setCardStartSyncedIso(t, '');
         return {
           ok: true,
@@ -2050,7 +2164,7 @@
       var inputsChanged =
         !inputs || (inputs.startDate || '') !== (nextInputs.startDate || '');
       if (inputsChanged) {
-        await t.set('card', 'shared', CARD_PRIORITY_KEY, nextInputs);
+        await t.set(await cardPluginScope(t), 'shared', CARD_PRIORITY_KEY, nextInputs);
       }
       await setCardStartSyncedIso(t, nextCanon);
       return {
@@ -2303,7 +2417,7 @@
       wasBlocked: wasBlocked,
       nowBlocked: !!normalized.enAttente
     });
-    await t.set('card', 'shared', CARD_PRIORITY_KEY, normalized);
+    await t.set(await cardPluginScope(t), 'shared', CARD_PRIORITY_KEY, normalized);
     if (options.syncDue !== false) {
       try {
         await syncCardDueWithTrello(t, { inputs: normalized, prefer: 'powerup' });
@@ -2933,7 +3047,7 @@
           if (nextParts.startDate) rolled.startDate = nextParts.startDate;
           else delete rolled.startDate;
           rolled = normalizeInputs(rolled);
-          await t.set('card', 'shared', CARD_PRIORITY_KEY, rolled);
+          await t.set(await cardPluginScope(t), 'shared', CARD_PRIORITY_KEY, rolled);
           try {
             await syncCardDueWithTrello(t, {
               inputs: rolled,
@@ -3257,6 +3371,10 @@
     getCustomTaskTypes: getCustomTaskTypes,
     getCachedCustomTaskTypes: getCachedCustomTaskTypes,
     saveCustomTaskTypes: saveCustomTaskTypes,
+    getMemberRoleCatalog: getMemberRoleCatalog,
+    getCachedMemberRoleCatalog: getCachedMemberRoleCatalog,
+    saveMemberRoleCatalog: saveMemberRoleCatalog,
+    MEMBER_ROLE_CATALOG_KEY: MEMBER_ROLE_CATALOG_KEY,
     preloadBoardPriorityContext: preloadBoardPriorityContext,
     ensureBoardPriorityContext: ensureBoardPriorityContext,
     computeDisplay: computeDisplay,

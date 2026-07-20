@@ -1794,6 +1794,24 @@
               : [];
         infoUi.setTaskTypes(nextTypes);
       }
+      if (typeof infoUi.setMemberRoles === 'function') {
+        var nextMemberRoles =
+          PriorityUI && typeof PriorityUI.normalizeMemberRoles === 'function'
+            ? PriorityUI.normalizeMemberRoles(state.memberRoles)
+            : state.memberRoles && typeof state.memberRoles === 'object'
+              ? state.memberRoles
+              : {};
+        infoUi.setMemberRoles(nextMemberRoles);
+      }
+      if (typeof infoUi.setMemberRoleCustoms === 'function') {
+        var nextRoleCustoms =
+          PriorityUI && typeof PriorityUI.normalizeMemberRoleCustoms === 'function'
+            ? PriorityUI.normalizeMemberRoleCustoms(state.memberRoleCustoms)
+            : Array.isArray(state.memberRoleCustoms)
+              ? state.memberRoleCustoms
+              : [];
+        infoUi.setMemberRoleCustoms(nextRoleCustoms);
+      }
       if (typeof infoUi.setDismissedTaskTypeSuggestions === 'function') {
         var nextDismissed =
           PriorityUI && typeof PriorityUI.normalizeTaskTypes === 'function'
@@ -2368,6 +2386,46 @@
               });
           });
         },
+        onMemberRolesChange: function (nextMap, nextCustoms) {
+          var map =
+            PriorityUI && typeof PriorityUI.normalizeMemberRoles === 'function'
+              ? PriorityUI.normalizeMemberRoles(nextMap)
+              : nextMap && typeof nextMap === 'object'
+                ? nextMap
+                : {};
+          var customs =
+            PriorityUI && typeof PriorityUI.pruneMemberRoleCustoms === 'function'
+              ? PriorityUI.pruneMemberRoleCustoms(nextCustoms, map)
+              : Array.isArray(nextCustoms)
+                ? nextCustoms
+                : [];
+          var base =
+            (variant && typeof variant.getState === 'function'
+              ? variant.getState()
+              : null) ||
+            latestState ||
+            {};
+          var next = Object.assign({}, base, {
+            memberRoles: map,
+            memberRoleCustoms: customs,
+          });
+          if (!Object.keys(map).length) delete next.memberRoles;
+          if (!customs.length) delete next.memberRoleCustoms;
+          if (variant && typeof variant.setState === 'function') {
+            variant.setState(next, { preserveCollapse: true });
+          }
+          latestState = Object.assign({}, next);
+          return Promise.resolve(saveState(next)).then(function () {
+            return commitHistoryNow('Rôles des assignés modifiés').then(function () {
+              return {
+                ok: true,
+                changed: true,
+                memberRoles: map,
+                memberRoleCustoms: customs,
+              };
+            });
+          });
+        },
         onLabelAdd: function (label) {
           if (!label || !label.id || !PriorityTrello.addCardLabel) {
             return Promise.resolve({ ok: false, reason: 'unavailable', changed: false });
@@ -2897,6 +2955,9 @@
         PriorityTrello.getCustomTaskTypes
           ? PriorityTrello.getCustomTaskTypes(t)
           : Promise.resolve([]),
+        PriorityTrello.getMemberRoleCatalog
+          ? PriorityTrello.getMemberRoleCatalog(t)
+          : Promise.resolve([]),
       ])
         .then(function (results) {
           var members = results[0] || [];
@@ -2907,6 +2968,7 @@
           var meCard = results[5];
           currentMemberCache = results[6] || null;
           var customTaskTypes = results[7] || [];
+          var memberRoleCatalog = results[8] || [];
           var childId = meCard && meCard.id ? String(meCard.id) : '';
           var hasRest =
             PriorityTrello.restClientOptions && !!PriorityTrello.restClientOptions();
@@ -2917,6 +2979,14 @@
             typeof PriorityUI.setCustomTaskTypes === 'function'
           ) {
             PriorityUI.setCustomTaskTypes(customTaskTypes);
+          }
+          if (infoUi && typeof infoUi.setMemberRoleCatalog === 'function') {
+            infoUi.setMemberRoleCatalog(memberRoleCatalog);
+          } else if (
+            PriorityUI &&
+            typeof PriorityUI.setMemberRoleCatalog === 'function'
+          ) {
+            PriorityUI.setMemberRoleCatalog(memberRoleCatalog);
           }
           if (infoUi && typeof infoUi.setMembers === 'function') {
             infoUi.setMembers(members);

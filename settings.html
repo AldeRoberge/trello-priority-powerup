@@ -112,6 +112,30 @@
     </div>
   </details>
 
+  <details class="tp-settings-section" id="memberRolesSettingsSection">
+    <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-user-star"></i></span>
+      <span class="tp-settings-summary-title">Rôles des assignés</span>
+      <span class="tp-settings-summary-hint">Catalogue partagé (montage, sous-titres…)</span>
+    </summary>
+    <div class="tp-settings-body">
+      <p class="tp-color-scheme-hint">Rôles proposés sur chaque carte lors de l’assignation. Les rôles ponctuels créés sur une carte restent locaux à cette carte.</p>
+      <div class="tp-member-roles-list" id="memberRolesCatalogList" aria-label="Catalogue des rôles"></div>
+      <div class="tp-member-roles-create">
+        <input
+          type="text"
+          id="memberRoleCreateInput"
+          class="tp-input"
+          maxlength="40"
+          placeholder="Nouveau rôle du tableau"
+          aria-label="Nouveau rôle du tableau"
+        />
+        <button type="button" class="tp-button tp-button--secondary" id="memberRoleCreateBtn">Ajouter</button>
+      </div>
+      <p class="tp-member-roles-status" id="memberRolesStatus" aria-live="polite"></p>
+    </div>
+  </details>
+
   <details class="tp-settings-section" id="colorSchemeSection">
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-palette"></i></span>
@@ -1170,6 +1194,157 @@
       }
     }
 
+    async function initMemberRolesSettings() {
+      var section = document.getElementById('memberRolesSettingsSection');
+      var listEl = document.getElementById('memberRolesCatalogList');
+      var inputEl = document.getElementById('memberRoleCreateInput');
+      var addBtn = document.getElementById('memberRoleCreateBtn');
+      var statusEl = document.getElementById('memberRolesStatus');
+      if (!section || !listEl || !PriorityTrello.getMemberRoleCatalog) {
+        if (section) section.hidden = true;
+        return;
+      }
+
+      var catalog = [];
+      var busy = false;
+
+      function setStatus(text) {
+        if (statusEl) statusEl.textContent = text || '';
+      }
+
+      function renderCatalog() {
+        listEl.replaceChildren();
+        if (!catalog.length) {
+          var empty = document.createElement('p');
+          empty.className = 'tp-color-scheme-hint';
+          empty.textContent = 'Aucun rôle dans le catalogue.';
+          listEl.appendChild(empty);
+          return;
+        }
+        catalog.forEach(function (entry, index) {
+          var row = document.createElement('div');
+          row.className = 'tp-member-roles-row';
+
+          var icon = document.createElement('i');
+          icon.className = 'ti ti-' + (entry.icon || 'tag') + ' tp-member-roles-icon';
+          icon.setAttribute('aria-hidden', 'true');
+
+          var labelInput = document.createElement('input');
+          labelInput.type = 'text';
+          labelInput.className = 'tp-input tp-member-roles-label';
+          labelInput.value = entry.label || '';
+          labelInput.maxLength = 40;
+          labelInput.setAttribute('aria-label', 'Nom du rôle');
+          labelInput.disabled = busy;
+
+          var removeBtn = document.createElement('button');
+          removeBtn.type = 'button';
+          removeBtn.className = 'tp-button tp-button--secondary tp-member-roles-remove';
+          removeBtn.textContent = 'Retirer';
+          removeBtn.disabled = busy;
+          removeBtn.addEventListener('click', function () {
+            if (busy) return;
+            var next = catalog.slice();
+            next.splice(index, 1);
+            persistCatalog(next);
+          });
+
+          labelInput.addEventListener('change', function () {
+            if (busy) return;
+            var nextLabel = labelInput.value.trim();
+            if (!nextLabel) {
+              labelInput.value = entry.label || '';
+              return;
+            }
+            var next = catalog.map(function (item, i) {
+              if (i !== index) return item;
+              return Object.assign({}, item, { label: nextLabel });
+            });
+            persistCatalog(next);
+          });
+
+          row.appendChild(icon);
+          row.appendChild(labelInput);
+          row.appendChild(removeBtn);
+          listEl.appendChild(row);
+        });
+        resizeSettingsPopup();
+      }
+
+      function persistCatalog(next) {
+        busy = true;
+        setStatus('Enregistrement…');
+        renderCatalog();
+        return PriorityTrello.saveMemberRoleCatalog(t, next)
+          .then(function (saved) {
+            catalog = saved || [];
+            busy = false;
+            setStatus('Enregistré');
+            renderCatalog();
+            setTimeout(function () {
+              if (statusEl && statusEl.textContent === 'Enregistré') setStatus('');
+            }, 1400);
+          })
+          .catch(function (err) {
+            busy = false;
+            console.error('Member role catalog save failed', err);
+            setStatus('Échec de l’enregistrement');
+            renderCatalog();
+          });
+      }
+
+      try {
+        catalog = await PriorityTrello.getMemberRoleCatalog(t);
+        renderCatalog();
+
+        if (addBtn && inputEl) {
+          function addRole() {
+            if (busy) return;
+            var label = inputEl.value.trim();
+            if (!label) return;
+            var draft =
+              PriorityUI && typeof PriorityUI.createCustomMemberRole === 'function'
+                ? PriorityUI.createCustomMemberRole(
+                    { label: label },
+                    { apply: false }
+                  )
+                : null;
+            if (!draft) {
+              // Allow adding with a board catalog entry shape even if create failed
+              // due to in-memory customs; build a custom id manually via normalize.
+              draft = {
+                id: 'custom-' + label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 20) + '-' + Math.random().toString(36).slice(2, 6),
+                label: label,
+                icon: PriorityUI && PriorityUI.randomTaskTypeIconKey
+                  ? PriorityUI.randomTaskTypeIconKey()
+                  : 'tag',
+                custom: true,
+              };
+            }
+            var labelKey = draft.label.toLocaleLowerCase('fr-FR');
+            for (var i = 0; i < catalog.length; i++) {
+              if (catalog[i].label.toLocaleLowerCase('fr-FR') === labelKey) {
+                setStatus('Ce rôle existe déjà');
+                return;
+              }
+            }
+            inputEl.value = '';
+            persistCatalog(catalog.concat([draft]));
+          }
+          addBtn.addEventListener('click', addRole);
+          inputEl.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              addRole();
+            }
+          });
+        }
+      } catch (err) {
+        console.error('Member roles settings init failed', err);
+        section.hidden = true;
+      }
+    }
+
     document.getElementById('authorizeAutoSort').addEventListener('click', function () {
       var statusEl = document.getElementById('autoSortStatus');
       var authBtn = document.getElementById('authorizeAutoSort');
@@ -1232,6 +1407,7 @@
       loadBuildInfo(),
       initGoalsSettings(),
       initStatutSettings(),
+      initMemberRolesSettings(),
       initColorSchemePicker(),
       initCompletionSchemePicker(),
       refreshAutoSortUi(),

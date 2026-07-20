@@ -449,6 +449,326 @@
     }
     return out;
   }
+
+  /**
+   * Board-level assignee role catalog (Information → Assignés).
+   * Full list is stored on the board (seeded with builtins on first load).
+   * Card-local one-offs live in cardPriority.memberRoleCustoms (custom-* ids).
+   */
+  var BUILTIN_MEMBER_ROLES = [
+    { id: 'subtitles', label: 'Sous-titres', icon: 'subtitles' },
+    { id: 'coloring', label: '\u00c9talonnage', icon: 'palette' },
+    { id: 'editing', label: 'Montage', icon: 'scissors' },
+    { id: 'music', label: 'Musique et effets sonores', icon: 'music' }
+  ];
+  var CUSTOM_MEMBER_ROLE_ID_RE = /^custom-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+  var MAX_MEMBER_ROLE_CATALOG = 40;
+  var MAX_MEMBER_ROLE_LABEL_LEN = 40;
+  var MAX_MEMBER_ROLES_PER_MEMBER = 12;
+
+  /** Board catalog (mutable; set via setMemberRoleCatalog). */
+  var memberRoleCatalog = BUILTIN_MEMBER_ROLES.map(function (e) {
+    return { id: e.id, label: e.label, icon: e.icon };
+  });
+  /** Card-local one-off role labels (not on the board catalog). */
+  var memberRoleCustoms = [];
+  var MEMBER_ROLE_BY_ID = Object.create(null);
+
+  function rebuildMemberRoleIndex() {
+    var map = Object.create(null);
+    var i;
+    for (i = 0; i < memberRoleCatalog.length; i++) {
+      map[memberRoleCatalog[i].id] = memberRoleCatalog[i];
+    }
+    for (i = 0; i < memberRoleCustoms.length; i++) {
+      if (!map[memberRoleCustoms[i].id]) {
+        map[memberRoleCustoms[i].id] = memberRoleCustoms[i];
+      }
+    }
+    MEMBER_ROLE_BY_ID = map;
+  }
+  rebuildMemberRoleIndex();
+
+  function isCustomMemberRoleId(id) {
+    return typeof id === 'string' && CUSTOM_MEMBER_ROLE_ID_RE.test(id);
+  }
+
+  function isBuiltinMemberRoleId(id) {
+    if (typeof id !== 'string' || !id) return false;
+    for (var i = 0; i < BUILTIN_MEMBER_ROLES.length; i++) {
+      if (BUILTIN_MEMBER_ROLES[i].id === id) return true;
+    }
+    return false;
+  }
+
+  function defaultMemberRoleCatalog() {
+    return BUILTIN_MEMBER_ROLES.map(function (e) {
+      return { id: e.id, label: e.label, icon: e.icon };
+    });
+  }
+
+  function slugifyMemberRoleLabel(label) {
+    return String(label || '')
+      .toLocaleLowerCase('fr-FR')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 28) || 'role';
+  }
+
+  function makeCustomMemberRoleId(label) {
+    var slug = slugifyMemberRoleLabel(label);
+    var suffix = Math.random().toString(36).slice(2, 6);
+    return 'custom-' + slug + '-' + suffix;
+  }
+
+  function normalizeMemberRoleIconKey(raw, fallback) {
+    return normalizeTaskTypeIconKey(raw, fallback || 'tag');
+  }
+
+  function normalizeMemberRoleEntry(raw, options) {
+    options = options || {};
+    if (!raw || typeof raw !== 'object') return null;
+    var label =
+      typeof raw.label === 'string'
+        ? raw.label.trim()
+        : typeof raw.name === 'string'
+          ? raw.name.trim()
+          : '';
+    if (!label) return null;
+    if (label.length > MAX_MEMBER_ROLE_LABEL_LEN) {
+      label = label.slice(0, MAX_MEMBER_ROLE_LABEL_LEN);
+    }
+    var rawId = typeof raw.id === 'string' ? raw.id.trim() : '';
+    var id = '';
+    if (rawId && isBuiltinMemberRoleId(rawId)) {
+      id = rawId;
+    } else if (rawId && isCustomMemberRoleId(rawId)) {
+      id = rawId;
+    } else if (options.allowAnyId && rawId && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(rawId)) {
+      id = rawId;
+    } else {
+      id = makeCustomMemberRoleId(label);
+    }
+    var icon = normalizeMemberRoleIconKey(raw.icon, 'tag');
+    var entry = { id: id, label: label, icon: icon };
+    if (isCustomMemberRoleId(id)) entry.custom = true;
+    return entry;
+  }
+
+  function normalizeMemberRoleCatalog(raw) {
+    var list = Array.isArray(raw) ? raw : [];
+    if (!list.length) return defaultMemberRoleCatalog();
+    var out = [];
+    var seen = Object.create(null);
+    var seenLabel = Object.create(null);
+    for (var i = 0; i < list.length && out.length < MAX_MEMBER_ROLE_CATALOG; i++) {
+      var entry = normalizeMemberRoleEntry(list[i], { allowAnyId: true });
+      if (!entry || seen[entry.id]) continue;
+      var labelKey = entry.label.toLocaleLowerCase('fr-FR');
+      if (seenLabel[labelKey]) continue;
+      seen[entry.id] = true;
+      seenLabel[labelKey] = true;
+      out.push({
+        id: entry.id,
+        label: entry.label,
+        icon: entry.icon,
+        custom: isCustomMemberRoleId(entry.id) || undefined
+      });
+      if (!out[out.length - 1].custom) delete out[out.length - 1].custom;
+    }
+    return out.length ? out : defaultMemberRoleCatalog();
+  }
+
+  function normalizeMemberRoleCustoms(raw) {
+    var list = Array.isArray(raw) ? raw : [];
+    var out = [];
+    var seen = Object.create(null);
+    var seenLabel = Object.create(null);
+    var boardIds = Object.create(null);
+    var boardLabels = Object.create(null);
+    for (var b = 0; b < memberRoleCatalog.length; b++) {
+      boardIds[memberRoleCatalog[b].id] = true;
+      boardLabels[memberRoleCatalog[b].label.toLocaleLowerCase('fr-FR')] = true;
+    }
+    for (var i = 0; i < list.length && out.length < MAX_MEMBER_ROLE_CATALOG; i++) {
+      var entry = normalizeMemberRoleEntry(list[i]);
+      if (!entry || !isCustomMemberRoleId(entry.id) || seen[entry.id]) continue;
+      if (boardIds[entry.id]) continue;
+      var labelKey = entry.label.toLocaleLowerCase('fr-FR');
+      if (seenLabel[labelKey] || boardLabels[labelKey]) continue;
+      seen[entry.id] = true;
+      seenLabel[labelKey] = true;
+      out.push({
+        id: entry.id,
+        label: entry.label,
+        icon: entry.icon,
+        custom: true
+      });
+    }
+    return out;
+  }
+
+  function setMemberRoleCatalog(raw) {
+    memberRoleCatalog = normalizeMemberRoleCatalog(raw);
+    rebuildMemberRoleIndex();
+    return memberRoleCatalog.slice();
+  }
+
+  function getMemberRoleCatalog() {
+    return memberRoleCatalog.slice();
+  }
+
+  function setMemberRoleCustoms(raw) {
+    memberRoleCustoms = normalizeMemberRoleCustoms(raw);
+    rebuildMemberRoleIndex();
+    return memberRoleCustoms.slice();
+  }
+
+  function getMemberRoleCustoms() {
+    return memberRoleCustoms.slice();
+  }
+
+  function isValidMemberRoleId(id) {
+    if (typeof id !== 'string' || !id) return false;
+    if (MEMBER_ROLE_BY_ID[id]) return true;
+    // Keep orphan custom ids until customs/catalog load.
+    return isCustomMemberRoleId(id) || isBuiltinMemberRoleId(id);
+  }
+
+  function getMemberRoleEntry(id) {
+    if (typeof id !== 'string' || !id) return null;
+    if (MEMBER_ROLE_BY_ID[id]) return MEMBER_ROLE_BY_ID[id];
+    if (isCustomMemberRoleId(id) || isBuiltinMemberRoleId(id)) {
+      var builtin = null;
+      for (var i = 0; i < BUILTIN_MEMBER_ROLES.length; i++) {
+        if (BUILTIN_MEMBER_ROLES[i].id === id) {
+          builtin = BUILTIN_MEMBER_ROLES[i];
+          break;
+        }
+      }
+      if (builtin) return { id: builtin.id, label: builtin.label, icon: builtin.icon };
+      return { id: id, label: id, icon: 'tag', custom: true };
+    }
+    return null;
+  }
+
+  function memberRoleLabel(id) {
+    var entry = getMemberRoleEntry(id);
+    return entry ? entry.label : '';
+  }
+
+  function memberRoleIconKey(id) {
+    var entry = getMemberRoleEntry(id);
+    return entry ? entry.icon || 'tag' : 'tag';
+  }
+
+  function normalizeMemberRoleIds(raw) {
+    var list = Array.isArray(raw)
+      ? raw
+      : typeof raw === 'string' && raw.trim()
+        ? [raw]
+        : [];
+    var out = [];
+    var seen = Object.create(null);
+    for (var i = 0; i < list.length && out.length < MAX_MEMBER_ROLES_PER_MEMBER; i++) {
+      var id = typeof list[i] === 'string' ? list[i].trim() : '';
+      if (!id || !isValidMemberRoleId(id) || seen[id]) continue;
+      seen[id] = true;
+      out.push(id);
+    }
+    return out;
+  }
+
+  /**
+   * Normalize cardPriority.memberRoles map: { memberId: roleId[] }.
+   */
+  function normalizeMemberRoles(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return {};
+    }
+    var out = Object.create(null);
+    var keys = Object.keys(raw);
+    for (var i = 0; i < keys.length; i++) {
+      var memberId = String(keys[i] || '').trim();
+      if (!memberId) continue;
+      var roles = normalizeMemberRoleIds(raw[keys[i]]);
+      if (roles.length) out[memberId] = roles;
+    }
+    return out;
+  }
+
+  function pruneMemberRoleCustoms(customs, rolesMap) {
+    var used = Object.create(null);
+    var map = normalizeMemberRoles(rolesMap);
+    var memberIds = Object.keys(map);
+    for (var i = 0; i < memberIds.length; i++) {
+      var roles = map[memberIds[i]];
+      for (var r = 0; r < roles.length; r++) used[roles[r]] = true;
+    }
+    var list = normalizeMemberRoleCustoms(customs);
+    return list.filter(function (entry) {
+      return used[entry.id];
+    });
+  }
+
+  function removeMemberFromRoles(rolesMap, memberId) {
+    var map = normalizeMemberRoles(rolesMap);
+    var id = memberId != null ? String(memberId).trim() : '';
+    if (!id || !map[id]) return map;
+    delete map[id];
+    return map;
+  }
+
+  /**
+   * Create a card-local one-off role (custom-*). Does not touch the board catalog.
+   * Optionally appends to in-memory memberRoleCustoms when options.apply !== false.
+   */
+  function createCustomMemberRole(input, options) {
+    options = options || {};
+    var label =
+      typeof input === 'string'
+        ? input.trim()
+        : input && typeof input.label === 'string'
+          ? input.label.trim()
+          : '';
+    if (!label) return null;
+    var draft = normalizeMemberRoleEntry({
+      label: label,
+      icon:
+        input && typeof input === 'object' && input.icon
+          ? input.icon
+          : randomTaskTypeIconKey()
+    });
+    if (!draft || !isCustomMemberRoleId(draft.id)) return null;
+    var labelKey = draft.label.toLocaleLowerCase('fr-FR');
+    var catalog = getMemberRoleCatalog().concat(getMemberRoleCustoms());
+    for (var i = 0; i < catalog.length; i++) {
+      if (catalog[i].label.toLocaleLowerCase('fr-FR') === labelKey) {
+        return null;
+      }
+    }
+    if (memberRoleCustoms.length >= MAX_MEMBER_ROLE_CATALOG) return null;
+    if (options.apply !== false) {
+      memberRoleCustoms = memberRoleCustoms.concat([
+        {
+          id: draft.id,
+          label: draft.label,
+          icon: draft.icon,
+          custom: true
+        }
+      ]);
+      rebuildMemberRoleIndex();
+    }
+    return {
+      id: draft.id,
+      label: draft.label,
+      icon: draft.icon,
+      custom: true
+    };
+  }
+
   // Urgency / impact axis max (ease uses 1..5).
   var AXIS_UI_MAX = 4;
   // Tier indices — keep in sync with TIER_DEFS order (Critique → Optionnelle).
@@ -8165,6 +8485,10 @@
       typeof config.onMemberAdd === 'function' ? config.onMemberAdd : null;
     var onMemberRemove =
       typeof config.onMemberRemove === 'function' ? config.onMemberRemove : null;
+    var onMemberRolesChange =
+      typeof config.onMemberRolesChange === 'function'
+        ? config.onMemberRolesChange
+        : null;
     var onLabelAdd =
       typeof config.onLabelAdd === 'function' ? config.onLabelAdd : null;
     var onLabelRemove =
@@ -8239,6 +8563,15 @@
     var authReason = config.authReason || '';
     var membersBusy = false;
     var membersPickerOpen = false;
+    var memberRoles = normalizeMemberRoles(config.memberRoles);
+    var memberRolesBusy = false;
+    var memberRolesPickerMemberId = '';
+    if (Array.isArray(config.memberRoleCustoms)) {
+      setMemberRoleCustoms(config.memberRoleCustoms);
+    }
+    if (Array.isArray(config.memberRoleCatalog)) {
+      setMemberRoleCatalog(config.memberRoleCatalog);
+    }
     var labelsBusy = false;
     var labelsPickerOpen = false;
     var labelsColorEditId = '';
@@ -8617,6 +8950,17 @@
     membersInline.appendChild(membersAddWrap);
     membersWrap.appendChild(membersInline);
     membersWrap.appendChild(membersStatus);
+
+    var memberRolesPickerHost = document.createElement('div');
+    memberRolesPickerHost.className = 'info-member-roles-picker-host';
+    memberRolesPickerHost.hidden = true;
+    var memberRolesPicker = document.createElement('div');
+    memberRolesPicker.className = 'info-member-roles-picker';
+    memberRolesPicker.setAttribute('role', 'listbox');
+    memberRolesPicker.setAttribute('aria-label', 'R\u00f4les disponibles');
+    memberRolesPickerHost.appendChild(memberRolesPicker);
+    membersWrap.appendChild(memberRolesPickerHost);
+
     membersRow.value.appendChild(membersWrap);
     body.appendChild(membersRow.row);
 
@@ -9568,23 +9912,225 @@
       });
     }
 
+    function rolesForMember(memberId) {
+      var id = memberId != null ? String(memberId) : '';
+      return id && memberRoles[id] ? memberRoles[id].slice() : [];
+    }
+
+    function cloneMemberRolesMap() {
+      return normalizeMemberRoles(memberRoles);
+    }
+
+    function persistMemberRoles(nextMap, nextCustoms) {
+      var map = normalizeMemberRoles(nextMap);
+      var customs = pruneMemberRoleCustoms(
+        nextCustoms != null ? nextCustoms : getMemberRoleCustoms(),
+        map
+      );
+      setMemberRoleCustoms(customs);
+      memberRoles = map;
+      if (!onMemberRolesChange) {
+        renderMembers();
+        onLayoutChange();
+        return Promise.resolve({ ok: true, changed: false });
+      }
+      memberRolesBusy = true;
+      setMembersStatus('', 'saving');
+      renderMembers();
+      return Promise.resolve(onMemberRolesChange(map, customs))
+        .then(function (result) {
+          memberRolesBusy = false;
+          if (result && result.ok === false) {
+            setMembersStatus('\u00c9chec des r\u00f4les', 'error');
+            renderMembers();
+            onLayoutChange();
+            return result;
+          }
+          if (result && result.memberRoles) {
+            memberRoles = normalizeMemberRoles(result.memberRoles);
+          }
+          if (result && result.memberRoleCustoms) {
+            setMemberRoleCustoms(result.memberRoleCustoms);
+          }
+          setMembersStatus('', 'ok');
+          setMemberRolesPickerOpen('');
+          renderMembers();
+          setTimeout(function () {
+            if (membersStatus.classList.contains('is-ok')) {
+              setMembersStatus('');
+            }
+          }, 1400);
+          onLayoutChange();
+          return result || { ok: true, changed: true };
+        })
+        .catch(function (err) {
+          memberRolesBusy = false;
+          console.error('Info member roles save failed', err);
+          setMembersStatus('\u00c9chec des r\u00f4les', 'error');
+          renderMembers();
+          onLayoutChange();
+        });
+    }
+
+    function setMemberRolesPickerOpen(memberId) {
+      var id = memberId != null ? String(memberId).trim() : '';
+      memberRolesPickerMemberId = id;
+      memberRolesPickerHost.hidden = !id;
+      if (id) renderMemberRolesPicker(id);
+      onLayoutChange();
+    }
+
+    function availableRolesForMember(memberId) {
+      var assigned = Object.create(null);
+      var current = rolesForMember(memberId);
+      for (var i = 0; i < current.length; i++) assigned[current[i]] = true;
+      var catalog = getMemberRoleCatalog().concat(getMemberRoleCustoms());
+      var out = [];
+      var seen = Object.create(null);
+      for (var c = 0; c < catalog.length; c++) {
+        var entry = catalog[c];
+        if (!entry || !entry.id || assigned[entry.id] || seen[entry.id]) continue;
+        seen[entry.id] = true;
+        out.push(entry);
+      }
+      return out;
+    }
+
+    function renderMemberRolesPicker(memberId) {
+      memberRolesPicker.replaceChildren();
+      var available = availableRolesForMember(memberId);
+
+      var list = document.createElement('div');
+      list.className = 'info-member-roles-picker-list';
+      list.setAttribute('role', 'group');
+      list.setAttribute('aria-label', 'R\u00f4les du catalogue');
+
+      if (!available.length) {
+        var empty = document.createElement('div');
+        empty.className = 'info-member-roles-picker-empty';
+        empty.textContent = 'Tous les r\u00f4les sont d\u00e9j\u00e0 assign\u00e9s';
+        list.appendChild(empty);
+      } else {
+        available.forEach(function (entry) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'info-member-roles-picker-option';
+          btn.setAttribute('role', 'option');
+          btn.title = entry.label;
+          btn.disabled = memberRolesBusy;
+          var icon = document.createElement('i');
+          icon.className = 'ti ti-' + (entry.icon || 'tag');
+          icon.setAttribute('aria-hidden', 'true');
+          var text = document.createElement('span');
+          text.textContent = entry.label;
+          btn.appendChild(icon);
+          btn.appendChild(text);
+          btn.addEventListener('click', function () {
+            addRoleToMember(memberId, entry.id);
+          });
+          list.appendChild(btn);
+        });
+      }
+      memberRolesPicker.appendChild(list);
+
+      if (onMemberRolesChange) {
+        var createWrap = document.createElement('div');
+        createWrap.className = 'info-member-roles-create';
+        var createRow = document.createElement('div');
+        createRow.className = 'info-member-roles-create-row';
+        var createInput = document.createElement('input');
+        createInput.type = 'text';
+        createInput.className = 'info-member-roles-create-input';
+        createInput.placeholder = 'Nouveau r\u00f4le (cette carte)';
+        createInput.maxLength = MAX_MEMBER_ROLE_LABEL_LEN;
+        createInput.setAttribute('aria-label', 'Cr\u00e9er un r\u00f4le pour cette carte');
+        var createBtn = document.createElement('button');
+        createBtn.type = 'button';
+        createBtn.className = 'info-member-roles-create-btn';
+        createBtn.textContent = 'Ajouter';
+        createBtn.disabled = memberRolesBusy;
+
+        function submitCreate() {
+          if (memberRolesBusy) return;
+          var draft = createCustomMemberRole(
+            { label: createInput.value },
+            { apply: true }
+          );
+          if (!draft) {
+            setMembersStatus('R\u00f4le invalide ou doublon', 'error');
+            return;
+          }
+          var map = cloneMemberRolesMap();
+          var mid = String(memberId);
+          var roles = normalizeMemberRoleIds((map[mid] || []).concat([draft.id]));
+          if (roles.length) map[mid] = roles;
+          persistMemberRoles(map, getMemberRoleCustoms());
+        }
+
+        createBtn.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          submitCreate();
+        });
+        createInput.addEventListener('keydown', function (event) {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            submitCreate();
+          }
+        });
+        createInput.addEventListener('click', function (event) {
+          event.stopPropagation();
+        });
+        createRow.appendChild(createInput);
+        createRow.appendChild(createBtn);
+        createWrap.appendChild(createRow);
+        memberRolesPicker.appendChild(createWrap);
+      }
+    }
+
+    function addRoleToMember(memberId, roleId) {
+      if (!roleId || memberRolesBusy) return;
+      var map = cloneMemberRolesMap();
+      var mid = String(memberId);
+      var roles = normalizeMemberRoleIds((map[mid] || []).concat([roleId]));
+      if (roles.length) map[mid] = roles;
+      else delete map[mid];
+      persistMemberRoles(map);
+    }
+
+    function removeRoleFromMember(memberId, roleId) {
+      if (!roleId || memberRolesBusy) return;
+      var map = cloneMemberRolesMap();
+      var mid = String(memberId);
+      var roles = (map[mid] || []).filter(function (id) {
+        return id !== roleId;
+      });
+      if (roles.length) map[mid] = roles;
+      else delete map[mid];
+      persistMemberRoles(map);
+    }
+
     function renderMembers() {
       membersEl.replaceChildren();
 
       if (members.length) {
         members.forEach(function (member) {
           var name = memberDisplayName(member) || 'Membre';
-          var chip = document.createElement('span');
+          var mid = member && member.id != null ? String(member.id) : '';
+          var chip = document.createElement('div');
           chip.className = 'info-member';
           chip.title = name;
           chip.setAttribute('aria-label', name);
 
-          appendMemberAvatar(chip, member);
+          var main = document.createElement('div');
+          main.className = 'info-member-main';
+
+          appendMemberAvatar(main, member);
 
           var nameEl = document.createElement('span');
           nameEl.className = 'info-member-name';
           nameEl.textContent = name;
-          chip.appendChild(nameEl);
+          main.appendChild(nameEl);
 
           if (onMemberRemove) {
             var clearBtn = document.createElement('button');
@@ -9595,13 +10141,80 @@
               'Retirer\u00a0: ' + name
             );
             clearBtn.textContent = '\u00d7';
-            clearBtn.disabled = membersBusy;
+            clearBtn.disabled = membersBusy || memberRolesBusy;
             clearBtn.addEventListener('click', function (event) {
               event.preventDefault();
               event.stopPropagation();
               removeMemberFromCard(member);
             });
-            chip.appendChild(clearBtn);
+            main.appendChild(clearBtn);
+          }
+
+          chip.appendChild(main);
+
+          var rolesRow = document.createElement('div');
+          rolesRow.className = 'info-member-roles';
+          rolesRow.setAttribute('aria-label', 'R\u00f4les de ' + name);
+
+          var roleIds = rolesForMember(mid);
+          roleIds.forEach(function (roleId) {
+            var entry = getMemberRoleEntry(roleId);
+            var label = (entry && entry.label) || roleId;
+            var roleChip = document.createElement('span');
+            roleChip.className = 'info-member-role';
+            roleChip.title = label;
+            var roleIcon = document.createElement('i');
+            roleIcon.className =
+              'ti ti-' + ((entry && entry.icon) || 'tag');
+            roleIcon.setAttribute('aria-hidden', 'true');
+            var roleLabel = document.createElement('span');
+            roleLabel.className = 'info-member-role-label';
+            roleLabel.textContent = label;
+            roleChip.appendChild(roleIcon);
+            roleChip.appendChild(roleLabel);
+            if (onMemberRolesChange) {
+              var roleClear = document.createElement('button');
+              roleClear.type = 'button';
+              roleClear.className = 'info-member-role-clear';
+              roleClear.setAttribute('aria-label', 'Retirer le r\u00f4le ' + label);
+              roleClear.textContent = '\u00d7';
+              roleClear.disabled = memberRolesBusy;
+              roleClear.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                removeRoleFromMember(mid, roleId);
+              });
+              roleChip.appendChild(roleClear);
+            }
+            rolesRow.appendChild(roleChip);
+          });
+
+          if (onMemberRolesChange && mid) {
+            var addRoleBtn = document.createElement('button');
+            addRoleBtn.type = 'button';
+            addRoleBtn.className = 'info-member-role-add';
+            addRoleBtn.setAttribute('aria-label', 'Ajouter un r\u00f4le \u00e0 ' + name);
+            addRoleBtn.title = 'Ajouter un r\u00f4le';
+            addRoleBtn.setAttribute(
+              'aria-expanded',
+              memberRolesPickerMemberId === mid ? 'true' : 'false'
+            );
+            addRoleBtn.innerHTML = '<i class="ti ti-plus" aria-hidden="true"></i>';
+            addRoleBtn.disabled = memberRolesBusy;
+            addRoleBtn.addEventListener('click', function (event) {
+              event.preventDefault();
+              event.stopPropagation();
+              if (memberRolesPickerMemberId === mid) {
+                setMemberRolesPickerOpen('');
+              } else {
+                setMemberRolesPickerOpen(mid);
+              }
+            });
+            rolesRow.appendChild(addRoleBtn);
+          }
+
+          if (rolesRow.childNodes.length) {
+            chip.appendChild(rolesRow);
           }
 
           membersEl.appendChild(chip);
@@ -9610,8 +10223,15 @@
 
       var canAdd = !!onMemberAdd;
       membersAddBtn.hidden = !onMemberAdd;
-      membersAddBtn.disabled = membersBusy || !canAdd;
+      membersAddBtn.disabled = membersBusy || !canAdd || memberRolesBusy;
       if (membersPickerOpen) renderMembersPicker();
+      if (memberRolesPickerMemberId) {
+        if (!selectedMemberIds()[memberRolesPickerMemberId]) {
+          setMemberRolesPickerOpen('');
+        } else {
+          renderMemberRolesPicker(memberRolesPickerMemberId);
+        }
+      }
       renderCreator();
     }
 
@@ -9699,6 +10319,25 @@
           members = members.filter(function (item) {
             return !(item && String(item.id) === id);
           });
+          if (memberRoles[id]) {
+            var nextMap = removeMemberFromRoles(memberRoles, id);
+            memberRoles = nextMap;
+            if (onMemberRolesChange) {
+              var customs = pruneMemberRoleCustoms(
+                getMemberRoleCustoms(),
+                nextMap
+              );
+              setMemberRoleCustoms(customs);
+              Promise.resolve(onMemberRolesChange(nextMap, customs)).catch(
+                function (err) {
+                  console.error('Info member roles cleanup failed', err);
+                }
+              );
+            }
+          }
+          if (memberRolesPickerMemberId === id) {
+            setMemberRolesPickerOpen('');
+          }
           setAuthHint('');
           setMembersStatus('', 'ok');
           renderMembers();
@@ -12480,6 +13119,12 @@
       if (membersPickerOpen && !membersAddWrap.contains(event.target)) {
         setMembersPickerOpen(false);
       }
+      if (
+        memberRolesPickerMemberId &&
+        !membersWrap.contains(event.target)
+      ) {
+        setMemberRolesPickerOpen('');
+      }
       if (labelsPickerOpen && !labelsAddWrap.contains(event.target)) {
         setLabelsPickerOpen(false);
       }
@@ -12583,6 +13228,30 @@
       setMembers: function (list) {
         members = Array.isArray(list) ? list.slice() : [];
         renderMembers();
+        onLayoutChange();
+      },
+      setMemberRoles: function (map) {
+        memberRoles = normalizeMemberRoles(map);
+        renderMembers();
+        onLayoutChange();
+      },
+      getMemberRoles: function () {
+        return normalizeMemberRoles(memberRoles);
+      },
+      setMemberRoleCustoms: function (list) {
+        setMemberRoleCustoms(list);
+        renderMembers();
+        onLayoutChange();
+      },
+      getMemberRoleCustoms: function () {
+        return getMemberRoleCustoms();
+      },
+      setMemberRoleCatalog: function (list) {
+        setMemberRoleCatalog(list);
+        renderMembers();
+        if (memberRolesPickerMemberId) {
+          renderMemberRolesPicker(memberRolesPickerMemberId);
+        }
         onLayoutChange();
       },
       setCreator: function (member) {
@@ -18490,6 +19159,25 @@
     normalizeCustomTaskTypes: normalizeCustomTaskTypes,
     createCustomTaskType: createCustomTaskType,
     normalizeTaskTypes: normalizeTaskTypes,
+    BUILTIN_MEMBER_ROLES: BUILTIN_MEMBER_ROLES,
+    isCustomMemberRoleId: isCustomMemberRoleId,
+    isBuiltinMemberRoleId: isBuiltinMemberRoleId,
+    isValidMemberRoleId: isValidMemberRoleId,
+    defaultMemberRoleCatalog: defaultMemberRoleCatalog,
+    getMemberRoleCatalog: getMemberRoleCatalog,
+    setMemberRoleCatalog: setMemberRoleCatalog,
+    normalizeMemberRoleCatalog: normalizeMemberRoleCatalog,
+    getMemberRoleCustoms: getMemberRoleCustoms,
+    setMemberRoleCustoms: setMemberRoleCustoms,
+    normalizeMemberRoleCustoms: normalizeMemberRoleCustoms,
+    createCustomMemberRole: createCustomMemberRole,
+    memberRoleLabel: memberRoleLabel,
+    memberRoleIconKey: memberRoleIconKey,
+    getMemberRoleEntry: getMemberRoleEntry,
+    normalizeMemberRoleIds: normalizeMemberRoleIds,
+    normalizeMemberRoles: normalizeMemberRoles,
+    pruneMemberRoleCustoms: pruneMemberRoleCustoms,
+    removeMemberFromRoles: removeMemberFromRoles,
     MS_PER_DAY: MS_PER_DAY,
     MS_PER_HOUR: MS_PER_HOUR,
     MS_PER_MINUTE: MS_PER_MINUTE,

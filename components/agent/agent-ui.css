@@ -1,16 +1,16 @@
 /* Assistant chat section — priority popup */
 
 .tp-page--priority .variant-chat-section {
-  margin-top: 12px;
+  margin-top: 8px;
   padding: 0 8px 8px;
 }
 
 /* Soft enable shell — match Priorité / Progrès */
 .tp-page--priority .field--chat {
   margin-bottom: 0;
-  padding: 12px;
+  padding: 10px 12px;
   border: none;
-  border-radius: var(--radius, 8px);
+  border-radius: var(--radius, 12px);
   background: transparent;
   transition: background 0.2s ease;
 }

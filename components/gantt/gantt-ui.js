@@ -26,6 +26,14 @@
     return global.GanttTrello;
   }
 
+  function OA() {
+    return global.OutlookAuth || null;
+  }
+
+  function OS() {
+    return global.OutlookSync || null;
+  }
+
   function el(tag, className, attrs) {
     var node = document.createElement(tag);
     if (className) node.className = className;
@@ -66,6 +74,7 @@
       tree: [],
       cardsById: Object.create(null),
       expanded: Object.create(null),
+      selected: Object.create(null),
       hideCompleted: false,
       hideUndated: false,
       sortBy: 'date',
@@ -75,14 +84,19 @@
       timelineWidth: MIN_TIMELINE_W,
       widthMeasured: false,
       drag: null,
+      paint: null,
       saving: false,
+      outlookConnected: false,
+      outlookSyncing: false,
     };
 
     var root = el('div', 'gantt-root');
     var toolbar = el('div', 'gantt-toolbar');
+    var bulkBar = el('div', 'gantt-bulk');
     var body = el('div', 'gantt-body');
     var statusBar = el('div', 'gantt-status');
     root.appendChild(toolbar);
+    root.appendChild(bulkBar);
     root.appendChild(statusBar);
     root.appendChild(body);
     mount.innerHTML = '';
@@ -228,12 +242,167 @@
       });
       filters.appendChild(authBtn);
 
+      var outlookAuth = OA();
+      var outlookSync = OS();
+      if (outlookAuth && outlookSync) {
+        if (
+          typeof outlookAuth.isConfigured === 'function' &&
+          !outlookAuth.isConfigured()
+        ) {
+          var outlookHint = el('button', 'gantt-btn', {
+            type: 'button',
+            text: 'Outlook (config)',
+          });
+          outlookHint.title =
+            'D\u00e9finissez OutlookConfig.clientId (Entra SPA) pour activer la sync';
+          outlookHint.disabled = true;
+          filters.appendChild(outlookHint);
+        } else {
+          var outlookConnect = el('button', 'gantt-btn', {
+            type: 'button',
+            text: state.outlookConnected
+              ? 'D\u00e9connecter Outlook'
+              : 'Connecter Outlook',
+          });
+          outlookConnect.title = state.outlookConnected
+            ? 'D\u00e9connecter le compte Microsoft'
+            : 'Autoriser Outlook Calendar (Microsoft Graph)';
+          outlookConnect.addEventListener('click', function () {
+            if (state.outlookConnected) {
+              setStatus('D\u00e9connexion Outlook\u2026');
+              outlookAuth.disconnect().then(function (res) {
+                state.outlookConnected = false;
+                if (res && res.ok) {
+                  setStatus('Outlook d\u00e9connect\u00e9');
+                } else {
+                  setStatus(
+                    'D\u00e9connexion Outlook \u00e9chou\u00e9e' +
+                      (res && res.reason ? ' (' + res.reason + ')' : ''),
+                    true
+                  );
+                }
+                renderToolbar();
+              });
+              return;
+            }
+            setStatus('Connexion Outlook\u2026');
+            outlookAuth.connect().then(function (res) {
+              if (res && res.ok) {
+                state.outlookConnected = true;
+                setStatus('Outlook connect\u00e9');
+                renderToolbar();
+                runOutlookSync();
+              } else {
+                state.outlookConnected = false;
+                setStatus(
+                  'Connexion Outlook refus\u00e9e' +
+                    (res && res.reason ? ' (' + res.reason + ')' : ''),
+                  true
+                );
+                renderToolbar();
+              }
+            });
+          });
+          filters.appendChild(outlookConnect);
+
+          if (state.outlookConnected) {
+            var outlookSyncBtn = el('button', 'gantt-btn', {
+              type: 'button',
+              text: state.outlookSyncing ? 'Sync\u2026' : 'Sync Outlook',
+            });
+            outlookSyncBtn.disabled = !!state.outlookSyncing;
+            outlookSyncBtn.title =
+              'Synchroniser titres, descriptions et dates avec Outlook';
+            outlookSyncBtn.addEventListener('click', function () {
+              runOutlookSync();
+            });
+            filters.appendChild(outlookSyncBtn);
+          }
+        }
+      }
+
       var refresh = el('button', 'gantt-btn', { type: 'button', text: 'Actualiser' });
       refresh.addEventListener('click', function () {
         reload();
       });
       filters.appendChild(refresh);
       toolbar.appendChild(filters);
+    }
+
+    function formatOutlookSummary(summary) {
+      if (!summary) return 'Sync Outlook termin\u00e9e';
+      var parts = [];
+      if (summary.created) parts.push(summary.created + ' cr\u00e9\u00e9(s)');
+      if (summary.updated) parts.push(summary.updated + ' maj');
+      if (summary.deleted) parts.push(summary.deleted + ' supprim\u00e9(s)');
+      if (summary.merged && !summary.updated) {
+        parts.push(summary.merged + ' \u00e0 jour');
+      }
+      if (summary.errors) parts.push(summary.errors + ' erreur(s)');
+      if (!parts.length) return 'Outlook : rien \u00e0 synchroniser';
+      return 'Outlook : ' + parts.join(', ');
+    }
+
+    function runOutlookSync() {
+      var outlookSync = OS();
+      var outlookAuth = OA();
+      if (!outlookSync || typeof outlookSync.syncBoard !== 'function') {
+        setStatus('Module Outlook sync manquant', true);
+        return Promise.resolve();
+      }
+      if (
+        outlookAuth &&
+        typeof outlookAuth.isConfigured === 'function' &&
+        !outlookAuth.isConfigured()
+      ) {
+        setStatus('OutlookConfig.clientId manquant', true);
+        return Promise.resolve();
+      }
+      state.outlookSyncing = true;
+      setStatus('Sync Outlook\u2026');
+      renderToolbar();
+      return outlookSync
+        .syncBoard(t)
+        .then(function (summary) {
+          state.outlookSyncing = false;
+          if (!summary || !summary.ok) {
+            setStatus(
+              'Sync Outlook \u00e9chou\u00e9e' +
+                (summary && summary.reason ? ' (' + summary.reason + ')' : ''),
+              true
+            );
+          } else {
+            setStatus(formatOutlookSummary(summary));
+            if (summary.updated) {
+              return reload({ syncOutlook: false }).then(function () {
+                setStatus(formatOutlookSummary(summary));
+              });
+            }
+          }
+          renderToolbar();
+          return summary;
+        })
+        .catch(function (err) {
+          state.outlookSyncing = false;
+          setStatus(
+            'Sync Outlook\u00a0: ' +
+              (err && err.message ? err.message : String(err)),
+            true
+          );
+          renderToolbar();
+        });
+    }
+
+    function refreshOutlookConnected() {
+      var outlookAuth = OA();
+      if (!outlookAuth || typeof outlookAuth.isConnected !== 'function') {
+        state.outlookConnected = false;
+        return Promise.resolve(false);
+      }
+      return outlookAuth.isConnected().then(function (connected) {
+        state.outlookConnected = !!connected;
+        return state.outlookConnected;
+      });
     }
 
     function applySort() {
@@ -252,19 +421,40 @@
       renderChart();
     }
 
-    function openCard(cardId) {
+    function openCard(cardId, cardName) {
       if (!cardId || !t) return;
-      if (typeof t.showCard === 'function') {
+      var appName =
+        (global.PriorityBrand &&
+        typeof PriorityBrand.getAppName === 'function'
+          ? PriorityBrand.getAppName()
+          : null) ||
+        (global.PriorityRestConfig && PriorityRestConfig.appName) ||
+        'Trello Cerveau';
+      var pageUrl =
+        global.PriorityTrello && typeof PriorityTrello.pageUrl === 'function'
+          ? PriorityTrello.pageUrl('./popup.html')
+          : './popup.html';
+      if (typeof t.modal === 'function') {
         try {
-          t.showCard(cardId);
-          return;
+          return t.modal({
+            title: appName,
+            url: pageUrl,
+            args: {
+              cardId: String(cardId),
+              cardName: cardName || '',
+              openSection: 'priority',
+            },
+            height: 1100,
+            fullscreen: false,
+            accentColor: '#22272B',
+          });
         } catch (e) {
           /* fall through */
         }
       }
-      if (typeof t.navigate === 'function') {
+      if (typeof t.showCard === 'function') {
         try {
-          t.navigate({ card: cardId });
+          t.showCard(cardId);
         } catch (e2) {
           /* ignore */
         }
@@ -274,9 +464,17 @@
     function buildDetailIcons(row) {
       var icons = el('div', 'gantt-detail-icons');
 
+      function slot(className, node) {
+        var cell = el('span', 'gantt-detail-slot' + (className ? ' ' + className : ''));
+        if (node) cell.appendChild(node);
+        icons.appendChild(cell);
+      }
+
       if (row.kind === 'card') {
         if (row.blocked) {
-          icons.appendChild(iconEl('ti-ban', 'Bloqu\u00e9', 'is-blocked'));
+          slot('is-blocked', iconEl('ti-player-pause', 'Bloqu\u00e9', 'is-blocked'));
+        } else {
+          slot('is-blocked', null);
         }
 
         if (row.priorityEnabled !== false && row.priorityLabel) {
@@ -287,18 +485,17 @@
               : '');
           var pIcon = iconEl('ti-flame', pTitle, 'is-priority');
           if (row.priorityFill) pIcon.style.color = row.priorityFill;
-          icons.appendChild(pIcon);
+          slot('is-priority', pIcon);
+        } else {
+          slot('is-priority', null);
         }
 
         var pct = Math.round(row.progress || 0);
-        var prog = iconEl(
-          row.done || pct >= 100 ? 'ti-circle-check' : 'ti-percentage',
-          'Progr\u00e8s ' + pct + '%',
-          'is-progress'
-        );
-        var progLabel = el('span', 'gantt-icon-label', { text: pct + '%' });
-        prog.appendChild(progLabel);
-        icons.appendChild(prog);
+        var progText = el('span', 'gantt-progress-text', {
+          text: pct + '%',
+          title: 'Progr\u00e8s ' + pct + '%',
+        });
+        slot('is-progress', progText);
 
         if (row.categoryIcon || row.category) {
           var ti =
@@ -311,21 +508,27 @@
             'is-statut'
           );
           if (row.color) sIcon.style.color = row.color;
-          icons.appendChild(sIcon);
+          slot('is-statut', sIcon);
+        } else {
+          slot('is-statut', null);
         }
 
         if (row.duePast) {
-          icons.appendChild(
+          slot(
+            'is-overdue',
             iconEl(
-              'ti-alert-triangle',
-              row.dueCountdown || '\u00c9ch\u00e9ance d\u00e9pass\u00e9e',
+              'ti-box',
+              row.dueCountdown || 'En retard',
               'is-overdue'
             )
           );
         } else if (row.dueCountdown) {
-          icons.appendChild(
+          slot(
+            'is-due',
             iconEl('ti-calendar-event', row.dueCountdown, 'is-due')
           );
+        } else {
+          slot('is-due', null);
         }
 
         if (row.subtaskCount > 0) {
@@ -337,22 +540,178 @@
           sub.appendChild(
             el('span', 'gantt-icon-label', { text: String(row.subtaskCount) })
           );
-          icons.appendChild(sub);
+          slot('is-subtasks', sub);
+        } else {
+          slot('is-subtasks', null);
         }
       } else {
+        slot('is-blocked', null);
+        slot('is-priority', null);
         var localPct = Math.round(row.progress || 0);
-        var localProg = iconEl(
-          row.done || localPct >= 100 ? 'ti-circle-check' : 'ti-circle-dashed',
-          'Progr\u00e8s ' + localPct + '%',
-          'is-progress'
+        slot(
+          'is-progress',
+          el('span', 'gantt-progress-text', {
+            text: localPct + '%',
+            title: 'Progr\u00e8s ' + localPct + '%',
+          })
         );
-        localProg.appendChild(
-          el('span', 'gantt-icon-label', { text: localPct + '%' })
-        );
-        icons.appendChild(localProg);
+        slot('is-statut', null);
+        slot('is-due', null);
+        slot('is-subtasks', null);
       }
 
-      return icons.childNodes.length ? icons : null;
+      return icons;
+    }
+
+    function selectedRows() {
+      var rows = visibleRows();
+      var out = [];
+      for (var i = 0; i < rows.length; i++) {
+        if (rows[i] && state.selected[rows[i].id]) out.push(rows[i]);
+      }
+      return out;
+    }
+
+    function selectedCount() {
+      return selectedRows().length;
+    }
+
+    function clearSelection() {
+      state.selected = Object.create(null);
+      renderBulkBar();
+      renderChart();
+    }
+
+    function toggleSelected(rowId, on) {
+      if (on) state.selected[rowId] = true;
+      else delete state.selected[rowId];
+      renderBulkBar();
+    }
+
+    function runBulk(op) {
+      var rows = selectedRows().filter(canEditSubtask);
+      if (!rows.length) {
+        setStatus('Aucune sous-t\u00e2che s\u00e9lectionn\u00e9e pour cette action', true);
+        return;
+      }
+      if (state.saving) return;
+
+      if (op === 'delete') {
+        var ok = true;
+        try {
+          ok = global.confirm
+            ? global.confirm(
+                'Supprimer ' + rows.length + ' sous-t\u00e2che(s)\u00a0?'
+              )
+            : true;
+        } catch (e) {
+          ok = true;
+        }
+        if (!ok) return;
+      }
+
+      state.saving = true;
+      setStatus(
+        op === 'delete'
+          ? 'Suppression\u2026'
+          : op === 'done'
+            ? 'Marquage termin\u00e9\u2026'
+            : 'R\u00e9ouverture\u2026'
+      );
+
+      var chain = Promise.resolve();
+      var failed = 0;
+      rows.forEach(function (row) {
+        chain = chain.then(function () {
+          if (op === 'delete') {
+            return ganttTrello.deleteSubtask(t, subtaskMeta(row)).then(function (res) {
+              if (!res || !res.ok) failed += 1;
+            });
+          }
+          return ganttTrello
+            .setSubtaskDone(t, subtaskMeta(row), op === 'done')
+            .then(function (res) {
+              if (!res || !res.ok) failed += 1;
+            });
+        });
+      });
+
+      chain
+        .then(function () {
+          state.saving = false;
+          state.selected = Object.create(null);
+          if (failed) {
+            setStatus(failed + ' \u00e9chec(s)', true);
+          } else {
+            setStatus(
+              op === 'delete'
+                ? 'Sous-t\u00e2ches supprim\u00e9es'
+                : op === 'done'
+                  ? 'Sous-t\u00e2ches termin\u00e9es'
+                  : 'Sous-t\u00e2ches rouvertes'
+            );
+          }
+          return reload();
+        })
+        .catch(function (err) {
+          state.saving = false;
+          setStatus(
+            'Erreur\u00a0: ' + (err && err.message ? err.message : String(err)),
+            true
+          );
+          return reload();
+        });
+    }
+
+    function renderBulkBar() {
+      bulkBar.innerHTML = '';
+      var n = selectedCount();
+      if (!n) {
+        bulkBar.classList.remove('is-visible');
+        return;
+      }
+      bulkBar.classList.add('is-visible');
+      bulkBar.appendChild(
+        el('span', 'gantt-bulk-count', {
+          text: n + ' s\u00e9lectionn\u00e9e(s)',
+        })
+      );
+
+      var doneBtn = el('button', 'gantt-btn', {
+        type: 'button',
+        text: 'Terminer',
+      });
+      doneBtn.addEventListener('click', function () {
+        runBulk('done');
+      });
+      bulkBar.appendChild(doneBtn);
+
+      var reopenBtn = el('button', 'gantt-btn', {
+        type: 'button',
+        text: 'Rouvrir',
+      });
+      reopenBtn.addEventListener('click', function () {
+        runBulk('reopen');
+      });
+      bulkBar.appendChild(reopenBtn);
+
+      var delBtn = el('button', 'gantt-btn gantt-btn--danger', {
+        type: 'button',
+        text: 'Supprimer',
+      });
+      delBtn.addEventListener('click', function () {
+        runBulk('delete');
+      });
+      bulkBar.appendChild(delBtn);
+
+      var clearBtn = el('button', 'gantt-btn', {
+        type: 'button',
+        text: 'Tout d\u00e9s\u00e9lectionner',
+      });
+      clearBtn.addEventListener('click', function () {
+        clearSelection();
+      });
+      bulkBar.appendChild(clearBtn);
     }
 
     function canEditSubtask(row) {
@@ -526,6 +885,7 @@
 
     function buildSubtaskActions(row) {
       var actions = el('div', 'gantt-row-actions');
+      var editable = canEditSubtask(row);
 
       var doneBtn = el(
         'button',
@@ -538,10 +898,15 @@
           text: row.done ? '\u2611' : '\u2610',
         }
       );
-      doneBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        toggleSubtaskDone(row);
-      });
+      if (!editable) {
+        doneBtn.disabled = true;
+        doneBtn.classList.add('is-disabled');
+      } else {
+        doneBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          toggleSubtaskDone(row);
+        });
+      }
       actions.appendChild(doneBtn);
 
       var renameBtn = el('button', 'gantt-action-btn gantt-action-btn--rename', {
@@ -549,13 +914,18 @@
         title: 'Renommer',
         text: '\u270e',
       });
-      renameBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        var nameEl = renameBtn
-          .closest('.gantt-label-cell')
-          .querySelector('.gantt-task-name');
-        startInlineRename(row, nameEl);
-      });
+      if (!editable) {
+        renameBtn.disabled = true;
+        renameBtn.classList.add('is-disabled');
+      } else {
+        renameBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var nameEl = renameBtn
+            .closest('.gantt-label-cell')
+            .querySelector('.gantt-task-name');
+          startInlineRename(row, nameEl);
+        });
+      }
       actions.appendChild(renameBtn);
 
       var delBtn = el('button', 'gantt-action-btn gantt-action-btn--delete', {
@@ -564,12 +934,17 @@
           row.kind === 'card'
             ? 'Retirer le lien'
             : 'Supprimer la sous-t\u00e2che',
-        text: '\u00d7',
       });
-      delBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        deleteSubtaskRow(row);
-      });
+      delBtn.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
+      if (!editable) {
+        delBtn.disabled = true;
+        delBtn.classList.add('is-disabled');
+      } else {
+        delBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          deleteSubtaskRow(row);
+        });
+      }
       actions.appendChild(delBtn);
 
       return actions;
@@ -612,6 +987,14 @@
             return reload();
           }
           setStatus('Dates enregistr\u00e9es');
+          var outlookSync = OS();
+          if (
+            state.outlookConnected &&
+            outlookSync &&
+            typeof outlookSync.scheduleSyncCard === 'function'
+          ) {
+            outlookSync.scheduleSyncCard(t, row.cardId);
+          }
           setTimeout(function () {
             if (!state.saving) setStatus('');
           }, 1500);
@@ -625,6 +1008,108 @@
           );
           return reload();
         });
+    }
+
+    function dateAtTimelineX(timeRow, clientX) {
+      var rect = timeRow.getBoundingClientRect();
+      var x = clientX - rect.left;
+      var d = model.xToDate(x, range(), state.timelineWidth);
+      return model.snapDate(d, state.viewMode);
+    }
+
+    function orderedInterval(a, b) {
+      if (!a || !b) return null;
+      if (a.getTime() <= b.getTime()) return { start: a, end: b };
+      return { start: b, end: a };
+    }
+
+    function placeGhost(ghostEl, interval) {
+      var geo = model.barGeometry(interval, range(), state.timelineWidth);
+      if (!geo || !geo.visible) {
+        ghostEl.hidden = true;
+        return;
+      }
+      ghostEl.hidden = false;
+      ghostEl.style.left = geo.left + 'px';
+      ghostEl.style.width = geo.width + 'px';
+    }
+
+    function bindTimelinePaint(timeRow, row) {
+      if (row.kind !== 'card' || !row.cardId) return;
+      timeRow.classList.add('is-paintable');
+      timeRow.title = 'Cliquer ou glisser pour d\u00e9finir une dur\u00e9e';
+
+      var ghost = el('div', 'gantt-paint-ghost');
+      ghost.hidden = true;
+      timeRow.appendChild(ghost);
+
+      timeRow.addEventListener('pointermove', function (ev) {
+        if (state.paint || state.drag || state.saving) return;
+        var d = dateAtTimelineX(timeRow, ev.clientX);
+        if (!d) {
+          ghost.hidden = true;
+          return;
+        }
+        placeGhost(ghost, { start: d, end: d });
+      });
+
+      timeRow.addEventListener('pointerleave', function () {
+        if (state.paint) return;
+        ghost.hidden = true;
+      });
+
+      timeRow.addEventListener('pointerdown', function (ev) {
+        if (ev.button != null && ev.button !== 0) return;
+        if (state.saving || state.drag || state.paint) return;
+        if (ev.target && ev.target.closest && ev.target.closest('.gantt-bar')) {
+          return;
+        }
+        var origin = dateAtTimelineX(timeRow, ev.clientX);
+        if (!origin) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        state.paint = {
+          row: row,
+          origin: origin,
+          current: origin,
+          pointerId: ev.pointerId,
+        };
+        timeRow.classList.add('is-painting');
+        placeGhost(ghost, { start: origin, end: origin });
+        timeRow.setPointerCapture(ev.pointerId);
+
+        function onMove(e) {
+          if (!state.paint) return;
+          var cur = dateAtTimelineX(timeRow, e.clientX);
+          if (!cur) return;
+          state.paint.current = cur;
+          var iv = orderedInterval(state.paint.origin, cur);
+          if (iv) placeGhost(ghost, iv);
+        }
+
+        function onUp() {
+          timeRow.releasePointerCapture(ev.pointerId);
+          timeRow.removeEventListener('pointermove', onMove);
+          timeRow.removeEventListener('pointerup', onUp);
+          timeRow.removeEventListener('pointercancel', onUp);
+          timeRow.classList.remove('is-painting');
+          var paint = state.paint;
+          state.paint = null;
+          ghost.hidden = true;
+          if (!paint) return;
+          var iv = orderedInterval(paint.origin, paint.current);
+          if (!iv) return;
+          applyIntervalToRow(row, iv);
+          applySort();
+          renderChart();
+          persistRow(row);
+        }
+
+        timeRow.addEventListener('pointermove', onMove);
+        timeRow.addEventListener('pointerup', onUp);
+        timeRow.addEventListener('pointercancel', onUp);
+      });
     }
 
     function bindBarDrag(barEl, row, interval) {
@@ -751,7 +1236,27 @@
       var timelineCol = el('div', 'gantt-timeline');
 
       var headerLabels = el('div', 'gantt-row gantt-row--header');
-      headerLabels.appendChild(el('div', 'gantt-label-cell', { text: 'T\u00e2ches' }));
+      var headerCell = el('div', 'gantt-label-cell gantt-label-cell--header');
+      var selectAll = el('input', 'gantt-select-box', { type: 'checkbox' });
+      selectAll.title = 'Tout s\u00e9lectionner / d\u00e9s\u00e9lectionner';
+      selectAll.addEventListener('change', function () {
+        var on = !!selectAll.checked;
+        var list = visibleRows();
+        state.selected = Object.create(null);
+        if (on) {
+          for (var si = 0; si < list.length; si++) {
+            if (list[si] && list[si].id) state.selected[list[si].id] = true;
+          }
+        }
+        renderBulkBar();
+        renderChart();
+      });
+      headerCell.appendChild(selectAll);
+      headerCell.appendChild(el('span', 'gantt-twist-spacer'));
+      headerCell.appendChild(el('span', 'gantt-header-title', { text: 'T\u00e2ches' }));
+      headerCell.appendChild(el('span', 'gantt-detail-icons gantt-detail-icons--header'));
+      headerCell.appendChild(el('span', 'gantt-row-actions gantt-row-actions--header'));
+      headerLabels.appendChild(headerCell);
       labelsCol.appendChild(headerLabels);
 
       var headerTimeline = el('div', 'gantt-row gantt-row--header gantt-timeline-header');
@@ -784,10 +1289,26 @@
       }
 
       rows.forEach(function (row) {
-        var labelRow = el('div', 'gantt-row');
+        var labelRow = el(
+          'div',
+          'gantt-row' + (state.selected[row.id] ? ' is-selected' : '')
+        );
         labelRow.style.height = ROW_H + 'px';
         var labelCell = el('div', 'gantt-label-cell');
-        labelCell.style.paddingLeft = 8 + row.depth * 14 + 'px';
+        labelCell.style.setProperty('--gantt-depth', String(row.depth || 0));
+
+        var sel = el('input', 'gantt-select-box', { type: 'checkbox' });
+        sel.checked = !!state.selected[row.id];
+        sel.title = 'S\u00e9lectionner';
+        sel.addEventListener('click', function (e) {
+          e.stopPropagation();
+        });
+        sel.addEventListener('change', function () {
+          toggleSelected(row.id, !!sel.checked);
+          labelRow.classList.toggle('is-selected', !!sel.checked);
+          renderBulkBar();
+        });
+        labelCell.appendChild(sel);
 
         if (row.expandable) {
           var isOpen =
@@ -816,7 +1337,7 @@
         );
         if (row.kind === 'card' && row.cardId) {
           nameBtn.addEventListener('click', function () {
-            openCard(row.cardId);
+            openCard(row.cardId, row.name);
           });
         }
         if (canEditSubtask(row) && row.kind !== 'card') {
@@ -829,12 +1350,8 @@
         }
         labelCell.appendChild(nameBtn);
 
-        var details = buildDetailIcons(row);
-        if (details) labelCell.appendChild(details);
-
-        if (canEditSubtask(row)) {
-          labelCell.appendChild(buildSubtaskActions(row));
-        }
+        labelCell.appendChild(buildDetailIcons(row));
+        labelCell.appendChild(buildSubtaskActions(row));
 
         labelRow.appendChild(labelCell);
         labelsCol.appendChild(labelRow);
@@ -844,9 +1361,11 @@
         timeRow.style.width = state.timelineWidth + 'px';
 
         var interval = model.resolveBarInterval(row);
+        var hasVisibleBar = false;
         if (interval) {
           var geo = model.barGeometry(interval, r, state.timelineWidth);
           if (geo && geo.visible) {
+            hasVisibleBar = true;
             var bar = el('div', 'gantt-bar');
             if (row.kind === 'card') bar.classList.add('is-editable');
             bar.style.left = geo.left + 'px';
@@ -877,6 +1396,10 @@
 
             timeRow.appendChild(bar);
           }
+        }
+
+        if (row.kind === 'card' && row.cardId && !hasVisibleBar) {
+          bindTimelinePaint(timeRow, row);
         }
 
         timelineCol.appendChild(timeRow);
@@ -914,7 +1437,8 @@
       }
     }
 
-    function reload() {
+    function reload(options) {
+      options = options || {};
       state.loading = true;
       state.error = '';
       setStatus('Chargement du tableau\u2026');
@@ -932,8 +1456,28 @@
               state.cardsById[cards[i].id] = cards[i];
             }
           }
+          // Drop selections for rows that no longer exist.
+          var still = Object.create(null);
+          var flat = model.flattenVisible(state.tree, state.expanded);
+          for (var fi = 0; fi < flat.length; fi++) {
+            if (flat[fi] && state.selected[flat[fi].id]) {
+              still[flat[fi].id] = true;
+            }
+          }
+          state.selected = still;
           setStatus(cards.length + ' carte(s)');
+          renderBulkBar();
           render();
+          return refreshOutlookConnected().then(function (connected) {
+            renderToolbar();
+            if (
+              options.syncOutlook &&
+              connected &&
+              !state.outlookSyncing
+            ) {
+              return runOutlookSync();
+            }
+          });
         })
         .catch(function (err) {
           state.loading = false;
@@ -956,7 +1500,10 @@
       });
     });
 
-    reload();
+    refreshOutlookConnected().then(function () {
+      renderToolbar();
+      reload({ syncOutlook: true });
+    });
 
     return {
       destroy: function () {
