@@ -243,9 +243,30 @@
   width: 148px;
 }
 
-.gantt-detail-icons--header,
+.gantt-detail-icons--header .gantt-detail-slot:not(.is-sortable),
 .gantt-row-actions--header {
   visibility: hidden;
+}
+
+.gantt-detail-icons--header .gantt-detail-slot.is-sortable {
+  visibility: visible;
+  cursor: pointer;
+  border-radius: 4px;
+  color: var(--tp-text-subtle, #44546f);
+}
+
+.gantt-detail-icons--header .gantt-detail-slot.is-sortable:hover,
+.gantt-detail-icons--header .gantt-detail-slot.is-sortable:focus-visible {
+  background: var(--tp-surface-hovered, #091e420f);
+  outline: none;
+}
+
+.gantt-detail-icons--header .gantt-detail-slot.is-sortable.is-active {
+  color: var(--tp-primary, #0c66e4);
+}
+
+.gantt-detail-icons--header .gantt-detail-slot.is-sortable.is-active .gantt-progress-text {
+  color: inherit;
 }
 
 .gantt-detail-slot {
