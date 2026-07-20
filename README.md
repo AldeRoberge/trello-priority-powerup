@@ -260,6 +260,10 @@ Depuis la vue **Gantt**, les cartes datées peuvent être synchronisées avec le
 
 **Configuration Entra (une fois)**
 
+Voir le guide détaillé : [docs/outlook-entra-setup.md](docs/outlook-entra-setup.md).
+
+**Type d’app :** **Single-page application (SPA)** (pas Web, pas secret client).
+
 1. Portail Azure → **App registrations** → New registration (comptes personnels + organisationnels si besoin).
 2. Platform **Single-page application (SPA)** — redirect URI exacte du Power-Up, ex.  
    `https://VOTRE-UTILISATEUR.github.io/trello-priority-powerup/outlook-auth.html`

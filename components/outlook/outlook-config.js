@@ -17,7 +17,7 @@
 
   global.OutlookConfig = {
     /** Entra application (client) ID — paste from Azure portal SPA registration. */
-    clientId: '',
+    clientId: '63646e5d-10ae-406e-9b37-c6cca8609082',
     /**
      * Authority: "common" allows work + personal Microsoft accounts.
      * Use "organizations" for work-only, or a tenant GUID.
