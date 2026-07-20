@@ -1369,25 +1369,6 @@
       }
       actions.appendChild(doneBtn);
 
-      var renameBtn = el('button', 'gantt-action-btn gantt-action-btn--rename', {
-        type: 'button',
-        title: 'Renommer',
-        text: '\u270e',
-      });
-      if (!editable) {
-        renameBtn.disabled = true;
-        renameBtn.classList.add('is-disabled');
-      } else {
-        renameBtn.addEventListener('click', function (e) {
-          e.stopPropagation();
-          var nameEl = renameBtn
-            .closest('.gantt-label-cell')
-            .querySelector('.gantt-task-name');
-          startInlineRename(row, nameEl);
-        });
-      }
-      actions.appendChild(renameBtn);
-
       var delBtn = el('button', 'gantt-action-btn gantt-action-btn--delete', {
         type: 'button',
         title: isBoardRootCard(row)
@@ -1899,18 +1880,27 @@
           { type: 'button', text: row.name }
         );
         nameBtn.title = row.name || '';
-        if (row.kind === 'card' && row.cardId) {
-          nameBtn.addEventListener('click', function () {
-            openCard(row.cardId, row.name);
-          });
-        }
-        if (canEditSubtask(row) && row.kind !== 'card') {
+        if (canEditSubtask(row)) {
           nameBtn.title =
             (row.name || '') + ' \u2014 Double-clic pour renommer';
           nameBtn.addEventListener('dblclick', function (e) {
             e.preventDefault();
             e.stopPropagation();
+            if (openClickTimer) {
+              clearTimeout(openClickTimer);
+              openClickTimer = null;
+            }
             startInlineRename(row, nameBtn);
+          });
+        }
+        var openClickTimer = null;
+        if (row.kind === 'card' && row.cardId) {
+          nameBtn.addEventListener('click', function () {
+            if (openClickTimer) clearTimeout(openClickTimer);
+            openClickTimer = setTimeout(function () {
+              openClickTimer = null;
+              openCard(row.cardId, row.name);
+            }, 280);
           });
         }
         nameWrap.appendChild(nameBtn);
