@@ -940,7 +940,7 @@
       }
       state.cardOverlay = null;
       if (opts.reload !== false) {
-        reload();
+        reload({ quiet: true });
       }
     }
 
@@ -1224,8 +1224,17 @@
       });
     }
 
+    /**
+     * Re-fetch board data and re-render without the loading flash
+     * (no "Chargement…" empty state). Used after mini-editor closes.
+     */
+    function refreshBoardQuiet() {
+      return reload({ quiet: true });
+    }
+
     function closeMiniPopover(opts) {
       opts = opts || {};
+      var shouldRefresh = !!opts.reload;
       if (state.miniPopoverKeyHandler) {
         document.removeEventListener('keydown', state.miniPopoverKeyHandler, true);
         state.miniPopoverKeyHandler = null;
@@ -1254,7 +1263,8 @@
         }
       }
       state.miniPopover = null;
-      if (opts.reload) reload();
+      // Quiet refresh: update icons/bars without the full-page "Chargement…" blink.
+      if (shouldRefresh) refreshBoardQuiet();
     }
 
     function positionMiniPopover(popoverEl, anchorEl) {
@@ -3186,14 +3196,19 @@
 
     function reload(options) {
       options = options || {};
-      state.loading = true;
-      state.error = '';
-      setStatus('Chargement du tableau\u2026');
-      render();
+      // Soft reloads (e.g. after mini editors) skip the empty "Chargement…" flash.
+      var quiet = options.quiet === true;
+      if (!quiet) {
+        state.loading = true;
+        state.error = '';
+        setStatus('Chargement du tableau\u2026');
+        render();
+      }
       return ganttTrello
         .loadBoard(t)
         .then(function (data) {
           state.loading = false;
+          state.error = '';
           state.tree = (data && data.tree) || [];
           if (data && data.ganttSettings) {
             state.ganttSettings = data.ganttSettings;
@@ -3215,9 +3230,10 @@
             }
           }
           state.selected = still;
-          setStatus(cards.length + ' carte(s)');
+          if (!quiet) setStatus(cards.length + ' carte(s)');
           renderBulkBar();
-          render();
+          if (quiet) renderChart();
+          else render();
           return refreshOutlookConnected().then(function (connected) {
             renderToolbar();
             if (
