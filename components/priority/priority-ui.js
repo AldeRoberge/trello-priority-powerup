@@ -10487,21 +10487,73 @@
         linkSelect && typeof linkSelect.value === 'string'
           ? linkSelect.value.trim()
           : '';
-      var draft = createCustomAssignee({
-        name: name,
-        trelloMemberId: linkId || ''
-      });
-      if (!draft) {
+      if (!name) {
         setMembersStatus('Nom invalide', 'error');
         return;
       }
-      var nameKey = draft.name.toLocaleLowerCase('fr-FR');
+      var nameKey = name.toLocaleLowerCase('fr-FR');
       for (var i = 0; i < customAssignees.length; i++) {
         if (customAssignees[i].name.toLocaleLowerCase('fr-FR') === nameKey) {
           setMembersStatus('Cette personne existe d\u00e9j\u00e0', 'error');
           return;
         }
       }
+
+      var catalogHit = findCustomAssigneeCatalogByName(name);
+      var draft = catalogHit
+        ? normalizeCustomAssigneeEntry({
+            id: catalogHit.id,
+            name: catalogHit.name,
+            trelloMemberId: linkId || catalogHit.trelloMemberId || ''
+          })
+        : createCustomAssignee({
+            name: name,
+            trelloMemberId: linkId || ''
+          });
+      if (!draft) {
+        setMembersStatus('Nom invalide', 'error');
+        return;
+      }
+
+      var ensureCatalog = function () {
+        var before = getCustomAssigneeCatalog();
+        var upserted = upsertCustomAssigneeCatalog(draft);
+        if (!upserted) {
+          setMembersStatus('Catalogue plein', 'error');
+          return Promise.resolve({ ok: false });
+        }
+        draft = upserted;
+        var after = getCustomAssigneeCatalog();
+        var changed =
+          JSON.stringify(before) !== JSON.stringify(after);
+        if (!changed) {
+          return Promise.resolve({ ok: true, changed: false });
+        }
+        return persistCustomAssigneeCatalog(after);
+      };
+
+      ensureCatalog().then(function (result) {
+        if (result && result.ok === false) {
+          if (!membersStatus.textContent) {
+            setMembersStatus('\u00c9chec de l\u2019enregistrement', 'error');
+          }
+          return;
+        }
+        persistCustomAssignees(customAssignees.concat([draft]));
+      });
+    }
+
+    function addCatalogAssigneeFromPicker(entry) {
+      if (membersBusy || !onCustomAssigneesChange || !entry || !entry.id) return;
+      var id = String(entry.id);
+      for (var i = 0; i < customAssignees.length; i++) {
+        if (customAssignees[i] && String(customAssignees[i].id) === id) {
+          setMembersStatus('Cette personne existe d\u00e9j\u00e0', 'error');
+          return;
+        }
+      }
+      var draft = normalizeCustomAssigneeEntry(entry);
+      if (!draft) return;
       persistCustomAssignees(customAssignees.concat([draft]));
     }
 
@@ -10548,12 +10600,58 @@
       membersPicker.appendChild(list);
 
       if (onCustomAssigneesChange) {
-        var createWrap = document.createElement('div');
-        createWrap.className = 'info-members-create';
+        var catalogAvailable = availableCatalogAssignees();
+        var horsWrap = document.createElement('div');
+        horsWrap.className = 'info-members-create';
+
+        var horsTitle = document.createElement('div');
+        horsTitle.className = 'info-members-create-title';
+        horsTitle.textContent = 'Personnes hors Trello';
+        horsWrap.appendChild(horsTitle);
+
+        if (catalogAvailable.length) {
+          var horsList = document.createElement('div');
+          horsList.className = 'info-members-picker-list';
+          horsList.setAttribute('role', 'group');
+          horsList.setAttribute('aria-label', 'Personnes hors Trello');
+          catalogAvailable.forEach(function (entry) {
+            var display = customAssigneeToMember(entry, boardMembers);
+            var name =
+              (display && memberDisplayName(display)) || entry.name || 'Personne';
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'info-members-picker-option';
+            btn.setAttribute('role', 'option');
+            btn.title = name;
+            btn.disabled = membersBusy;
+            btn.dataset.personId = String(entry.id);
+            if (display) appendMemberAvatar(btn, display);
+            var text = document.createElement('span');
+            text.className = 'info-members-picker-option-text';
+            text.textContent = name;
+            var badge = document.createElement('span');
+            badge.className = 'info-member-custom-badge';
+            badge.textContent = 'hors Trello';
+            btn.appendChild(text);
+            btn.appendChild(badge);
+            btn.addEventListener('click', function () {
+              addCatalogAssigneeFromPicker(entry);
+            });
+            horsList.appendChild(btn);
+          });
+          horsWrap.appendChild(horsList);
+        } else if (getCustomAssigneeCatalog().length) {
+          var horsEmpty = document.createElement('div');
+          horsEmpty.className = 'info-members-picker-empty';
+          horsEmpty.textContent =
+            'Toutes les personnes hors Trello sont d\u00e9j\u00e0 assign\u00e9es';
+          horsWrap.appendChild(horsEmpty);
+        }
+
         var createTitle = document.createElement('div');
         createTitle.className = 'info-members-create-title';
-        createTitle.textContent = 'Personne hors Trello';
-        createWrap.appendChild(createTitle);
+        createTitle.textContent = 'Nouvelle personne';
+        horsWrap.appendChild(createTitle);
 
         var nameInput = document.createElement('input');
         nameInput.type = 'text';
@@ -10604,10 +10702,10 @@
           addCustomAssigneeFromPicker();
         });
 
-        createWrap.appendChild(nameInput);
-        createWrap.appendChild(linkSelect);
-        createWrap.appendChild(createBtn);
-        membersPicker.appendChild(createWrap);
+        horsWrap.appendChild(nameInput);
+        horsWrap.appendChild(linkSelect);
+        horsWrap.appendChild(createBtn);
+        membersPicker.appendChild(horsWrap);
       }
     }
 
