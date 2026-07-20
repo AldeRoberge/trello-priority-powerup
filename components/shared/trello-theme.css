@@ -1485,7 +1485,7 @@ body.tp-page--priority.is-split-assistant {
   touch-action: none;
   position: relative;
   z-index: 4;
-  background: var(--tp-border, #091e4224);
+  background: transparent;
   transition: background 0.12s ease;
 }
 
