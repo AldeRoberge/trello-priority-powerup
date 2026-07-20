@@ -1505,6 +1505,7 @@ html[data-color-mode='dark'] .overview-composer-input {
   font-size: 13px;
   line-height: 1.35;
   color: var(--text-primary);
+  cursor: pointer;
 }
 
 .info-row-summary.is-empty {
@@ -1517,23 +1518,75 @@ html[data-color-mode='dark'] .overview-composer-input {
   min-width: 0;
 }
 
-.info-row.is-collapsed .info-row-detail,
-.info-row:not(.is-collapsed) .info-row-summary {
+.info-row.is-collapsed:not(.info-row--compact-detail) .info-row-detail,
+.info-row:not(.is-collapsed) .info-row-summary,
+.info-row--compact-detail:not(.is-collapsed) .info-row-summary,
+.info-row--compact-detail.is-collapsed .info-row-summary:not(.is-empty) {
   display: none;
 }
 
-/* Defense in depth: never show edit chrome while collapsed. */
-.info-row.is-collapsed .info-members-add-btn,
-.info-row.is-collapsed .info-labels-add-btn,
-.info-row.is-collapsed .info-task-types-add-btn,
-.info-row.is-collapsed .info-parent-pick-btn,
+.info-row.is-collapsed .info-row-value {
+  cursor: pointer;
+}
+
+.info-row.is-collapsed.info-row--compact-detail .info-row-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-row.is-collapsed.info-row--compact-detail .info-row-summary.is-empty {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.info-row.is-collapsed.info-row--compact-detail .info-row-detail {
+  display: block;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* Compact collapsed: one-line chips + quick-add (+), no remove/edit chrome. */
+.info-row.is-collapsed.info-row--compact-detail .info-members-inline,
+.info-row.is-collapsed.info-row--compact-detail .info-labels-inline,
+.info-row.is-collapsed.info-row--compact-detail .info-task-types-inline,
+.info-row.is-collapsed.info-row--compact-detail .info-parent-inline,
+.info-row.is-collapsed.info-row--compact-detail .info-members,
+.info-row.is-collapsed.info-row--compact-detail .info-labels,
+.info-row.is-collapsed.info-row--compact-detail .info-task-types,
+.info-row.is-collapsed.info-row--compact-detail .info-parent-chips,
+.info-row.is-collapsed.info-row--compact-detail .info-creator {
+  flex-wrap: nowrap;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.info-row.is-collapsed.info-row--compact-detail .info-members-wrap,
+.info-row.is-collapsed.info-row--compact-detail .info-labels-wrap,
+.info-row.is-collapsed.info-row--compact-detail .info-task-types-wrap,
+.info-row.is-collapsed.info-row--compact-detail .info-parent-wrap,
+.info-row.is-collapsed.info-row--compact-detail .info-objectif-mount {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.info-row.is-collapsed.info-row--compact-detail .objectif-breadcrumb {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
 .info-row.is-collapsed .info-member-clear,
 .info-row.is-collapsed .info-label-clear,
 .info-row.is-collapsed .info-label-edit,
+.info-row.is-collapsed .info-label-actions,
 .info-row.is-collapsed .info-task-type-clear,
 .info-row.is-collapsed .info-parent-clear,
 .info-row.is-collapsed .info-member-role-clear,
 .info-row.is-collapsed .info-member-role-add,
+.info-row.is-collapsed .info-member-roles,
 .info-row.is-collapsed .info-labels-suggestions,
 .info-row.is-collapsed .info-task-types-suggestions,
 .info-row.is-collapsed .info-members-picker,
@@ -1544,10 +1597,19 @@ html[data-color-mode='dark'] .overview-composer-input {
 .info-row.is-collapsed .info-member-roles-picker-host,
 .info-row.is-collapsed .info-desc-meta,
 .info-row.is-collapsed .info-desc-toolbar,
+.info-row.is-collapsed .info-desc-status,
 .info-row.is-collapsed .objectif-picker-row,
 .info-row.is-collapsed .objectif-add-mission,
 .info-row.is-collapsed .objectif-create-row {
   display: none !important;
+}
+
+/* Quick-add (+) stays available while collapsed. */
+.info-row.is-collapsed .info-members-add-btn,
+.info-row.is-collapsed .info-labels-add-btn,
+.info-row.is-collapsed .info-task-types-add-btn,
+.info-row.is-collapsed .info-parent-pick-btn {
+  cursor: pointer;
 }
 
 /* Cellphone-narrow popup: icon-only labels free space for values. */

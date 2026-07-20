@@ -9971,36 +9971,40 @@
         appendLabelText(toggleBtn);
 
         var summaryEl = document.createElement('span');
-        summaryEl.className = 'info-row-summary';
-        // Compact rows show live chips/+ in detail; text summary is for Description.
-        var showSummary = !compactDetail && !rowExpanded;
-        summaryEl.hidden = !showSummary;
-        summaryEl.setAttribute(
-          'aria-hidden',
-          showSummary ? 'false' : 'true'
-        );
+        summaryEl.className = 'info-row-summary is-empty';
+        // Compact rows show live chips/+ in detail; text summary is for
+        // Description, or an empty hint when a compact row has no chips yet.
+        summaryEl.textContent = '';
 
         var detailEl = document.createElement('div');
         detailEl.className = 'info-row-detail';
-        detailEl.hidden = compactDetail ? false : !rowExpanded;
 
         value.appendChild(summaryEl);
         value.appendChild(detailEl);
         row.appendChild(toggleBtn);
         row.appendChild(value);
 
+        function syncSummaryVisibility() {
+          var empty = summaryEl.classList.contains('is-empty');
+          var showSummary = compactDetail
+            ? !rowExpanded && empty
+            : !rowExpanded;
+          summaryEl.hidden = !showSummary;
+          summaryEl.setAttribute(
+            'aria-hidden',
+            showSummary ? 'false' : 'true'
+          );
+          detailEl.hidden = compactDetail ? false : !rowExpanded;
+        }
+
+        syncSummaryVisibility();
+
         function applyRowExpanded(next, opts) {
           opts = opts || {};
           var was = rowExpanded;
           rowExpanded = !!next;
           row.classList.toggle('is-collapsed', !rowExpanded);
-          var nextShowSummary = !compactDetail && !rowExpanded;
-          summaryEl.hidden = !nextShowSummary;
-          summaryEl.setAttribute(
-            'aria-hidden',
-            nextShowSummary ? 'false' : 'true'
-          );
-          detailEl.hidden = compactDetail ? false : !rowExpanded;
+          syncSummaryVisibility();
           toggleBtn.setAttribute(
             'aria-expanded',
             rowExpanded ? 'true' : 'false'
@@ -10049,6 +10053,7 @@
           var raw = typeof text === 'string' ? text.trim() : '';
           summaryEl.textContent = raw || emptyLabel || '';
           summaryEl.classList.toggle('is-empty', !raw);
+          syncSummaryVisibility();
         }
 
         return {
@@ -14916,24 +14921,24 @@
       event.preventDefault();
       event.stopPropagation();
       if (membersAddBtn.disabled) return;
-      ensureInfoRowExpanded(membersRow);
-      setMembersPickerOpen(!membersPickerOpen);
+      if (ensureInfoRowExpanded(membersRow)) setMembersPickerOpen(true);
+      else setMembersPickerOpen(!membersPickerOpen);
     });
 
     labelsAddBtn.addEventListener('click', function (event) {
       event.preventDefault();
       event.stopPropagation();
       if (labelsAddBtn.disabled) return;
-      ensureInfoRowExpanded(labelsRow);
-      setLabelsPickerOpen(!labelsPickerOpen);
+      if (ensureInfoRowExpanded(labelsRow)) setLabelsPickerOpen(true);
+      else setLabelsPickerOpen(!labelsPickerOpen);
     });
 
     taskTypesAddBtn.addEventListener('click', function (event) {
       event.preventDefault();
       event.stopPropagation();
       if (taskTypesAddBtn.disabled) return;
-      ensureInfoRowExpanded(taskTypesRow);
-      setTaskTypesPickerOpen(!taskTypesPickerOpen);
+      if (ensureInfoRowExpanded(taskTypesRow)) setTaskTypesPickerOpen(true);
+      else setTaskTypesPickerOpen(!taskTypesPickerOpen);
     });
 
     taskTypesCreateIconBtn.addEventListener('click', function (event) {
@@ -15091,7 +15096,10 @@
       event.preventDefault();
       event.stopPropagation();
       if (parentPickBtn.disabled || !getBoardCards) return;
-      ensureInfoRowExpanded(parentRow);
+      if (ensureInfoRowExpanded(parentRow)) {
+        openParentPicker();
+        return;
+      }
       if (parentPickerOpen) setParentPickerOpen(false);
       else openParentPicker();
     });
