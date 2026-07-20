@@ -334,6 +334,14 @@
       normalized.memberRoleCustoms = memberRoleCustoms;
     }
 
+    var customAssignees =
+      PUTypes && typeof PUTypes.normalizeCustomAssignees === 'function'
+        ? PUTypes.normalizeCustomAssignees(raw.customAssignees)
+        : [];
+    if (customAssignees.length) {
+      normalized.customAssignees = customAssignees;
+    }
+
     return normalized;
   }
 
@@ -387,6 +395,9 @@
       inputs.memberRoleCustoms.length
     ) {
       cleared.memberRoleCustoms = inputs.memberRoleCustoms.slice();
+    }
+    if (Array.isArray(inputs.customAssignees) && inputs.customAssignees.length) {
+      cleared.customAssignees = inputs.customAssignees.slice();
     }
     return cleared;
   }

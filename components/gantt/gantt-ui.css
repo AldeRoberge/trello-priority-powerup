@@ -118,7 +118,8 @@
 }
 
 .gantt-labels {
-  width: 420px;
+  width: min(46vw, 720px);
+  min-width: 560px;
   flex-shrink: 0;
   overflow: auto;
   border-right: 1px solid var(--tp-border, #091e4224);
@@ -172,7 +173,7 @@
 
 .gantt-label-cell {
   display: grid;
-  grid-template-columns: 22px 28px minmax(0, 1fr) 148px 72px;
+  grid-template-columns: 22px 28px minmax(200px, 1fr) 148px 72px;
   align-items: center;
   column-gap: 6px;
   padding: 0 8px 0 calc(8px + var(--gantt-depth, 0) * 14px);

@@ -769,6 +769,167 @@
     };
   }
 
+  /**
+   * Card-local assignees who are not (necessarily) Trello members.
+   * Stored on cardPriority.customAssignees; optional trelloMemberId link for avatar.
+   */
+  var CUSTOM_ASSIGNEE_ID_RE = /^person-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+  var MAX_CUSTOM_ASSIGNEES = 40;
+  var MAX_CUSTOM_ASSIGNEE_NAME_LEN = 60;
+
+  function isCustomAssigneeId(id) {
+    return typeof id === 'string' && CUSTOM_ASSIGNEE_ID_RE.test(id);
+  }
+
+  function slugifyPersonName(name) {
+    return String(name || '')
+      .toLocaleLowerCase('fr-FR')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 28) || 'personne';
+  }
+
+  function makeCustomAssigneeId(name) {
+    return 'person-' + slugifyPersonName(name) + '-' + Math.random().toString(36).slice(2, 6);
+  }
+
+  function initialsFromName(name) {
+    var parts = String(name || '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!parts.length) return '?';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  }
+
+  function normalizeCustomAssigneeEntry(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    var name =
+      typeof raw.name === 'string'
+        ? raw.name.trim()
+        : typeof raw.fullName === 'string'
+          ? raw.fullName.trim()
+          : typeof raw.label === 'string'
+            ? raw.label.trim()
+            : '';
+    if (!name) return null;
+    if (name.length > MAX_CUSTOM_ASSIGNEE_NAME_LEN) {
+      name = name.slice(0, MAX_CUSTOM_ASSIGNEE_NAME_LEN);
+    }
+    var id =
+      typeof raw.id === 'string' && isCustomAssigneeId(raw.id.trim())
+        ? raw.id.trim()
+        : makeCustomAssigneeId(name);
+    var trelloMemberId = '';
+    if (typeof raw.trelloMemberId === 'string' && raw.trelloMemberId.trim()) {
+      trelloMemberId = raw.trelloMemberId.trim();
+    } else if (
+      typeof raw.linkedMemberId === 'string' &&
+      raw.linkedMemberId.trim()
+    ) {
+      trelloMemberId = raw.linkedMemberId.trim();
+    }
+    // Never treat a custom person id as a Trello link.
+    if (isCustomAssigneeId(trelloMemberId)) trelloMemberId = '';
+    return {
+      id: id,
+      name: name,
+      trelloMemberId: trelloMemberId || undefined
+    };
+  }
+
+  function normalizeCustomAssignees(raw) {
+    var list = Array.isArray(raw) ? raw : [];
+    var out = [];
+    var seen = Object.create(null);
+    var seenName = Object.create(null);
+    for (var i = 0; i < list.length && out.length < MAX_CUSTOM_ASSIGNEES; i++) {
+      var entry = normalizeCustomAssigneeEntry(list[i]);
+      if (!entry || seen[entry.id]) continue;
+      var nameKey = entry.name.toLocaleLowerCase('fr-FR');
+      if (seenName[nameKey]) continue;
+      seen[entry.id] = true;
+      seenName[nameKey] = true;
+      var row = { id: entry.id, name: entry.name };
+      if (entry.trelloMemberId) row.trelloMemberId = entry.trelloMemberId;
+      out.push(row);
+    }
+    return out;
+  }
+
+  function createCustomAssignee(input, options) {
+    options = options || {};
+    var name =
+      typeof input === 'string'
+        ? input.trim()
+        : input && typeof input.name === 'string'
+          ? input.name.trim()
+          : input && typeof input.fullName === 'string'
+            ? input.fullName.trim()
+            : '';
+    if (!name) return null;
+    var draft = normalizeCustomAssigneeEntry({
+      name: name,
+      trelloMemberId:
+        input && typeof input === 'object'
+          ? input.trelloMemberId || input.linkedMemberId || ''
+          : ''
+    });
+    return draft;
+  }
+
+  /**
+   * Display shape compatible with assignee chips (avatar / name / roles).
+   */
+  function customAssigneeToMember(entry, boardMembersList) {
+    if (!entry || !entry.id) return null;
+    var name = entry.name || 'Personne';
+    var member = {
+      id: entry.id,
+      fullName: name,
+      username: '',
+      initials: initialsFromName(name),
+      custom: true,
+      trelloMemberId: entry.trelloMemberId || ''
+    };
+    if (entry.trelloMemberId && Array.isArray(boardMembersList)) {
+      for (var i = 0; i < boardMembersList.length; i++) {
+        var bm = boardMembersList[i];
+        if (bm && String(bm.id) === String(entry.trelloMemberId)) {
+          if (bm.avatar) member.avatar = bm.avatar;
+          if (bm.avatarUrl) member.avatarUrl = bm.avatarUrl;
+          if (bm.avatarHash) member.avatarHash = bm.avatarHash;
+          if (bm.initials && !member.avatar && !member.avatarUrl && !member.avatarHash) {
+            member.initials = bm.initials;
+          }
+          break;
+        }
+      }
+    }
+    return member;
+  }
+
+  function mergeAssigneesForDisplay(trelloMembers, customList, boardMembersList) {
+    var out = [];
+    var seen = Object.create(null);
+    var trello = Array.isArray(trelloMembers) ? trelloMembers : [];
+    for (var i = 0; i < trello.length; i++) {
+      if (!trello[i] || !trello[i].id) continue;
+      seen[String(trello[i].id)] = true;
+      out.push(trello[i]);
+    }
+    var customs = normalizeCustomAssignees(customList);
+    for (var c = 0; c < customs.length; c++) {
+      if (seen[customs[c].id]) continue;
+      var display = customAssigneeToMember(customs[c], boardMembersList);
+      if (display) out.push(display);
+    }
+    return out;
+  }
+
   // Urgency / impact axis max (ease uses 1..5).
   var AXIS_UI_MAX = 4;
   // Tier indices — keep in sync with TIER_DEFS order (Critique → Optionnelle).
@@ -8611,6 +8772,10 @@
     var onMemberRolesChange =
       typeof config.onMemberRolesChange === 'function'
         ? config.onMemberRolesChange
+        : null;
+    var onCustomAssigneesChange =
+      typeof config.onCustomAssigneesChange === 'function'
+        ? config.onCustomAssigneesChange
         : null;
     var onLabelAdd =
       typeof config.onLabelAdd === 'function' ? config.onLabelAdd : null;
@@ -19372,6 +19537,11 @@
     normalizeMemberRoles: normalizeMemberRoles,
     pruneMemberRoleCustoms: pruneMemberRoleCustoms,
     removeMemberFromRoles: removeMemberFromRoles,
+    isCustomAssigneeId: isCustomAssigneeId,
+    normalizeCustomAssignees: normalizeCustomAssignees,
+    createCustomAssignee: createCustomAssignee,
+    customAssigneeToMember: customAssigneeToMember,
+    mergeAssigneesForDisplay: mergeAssigneesForDisplay,
     MS_PER_DAY: MS_PER_DAY,
     MS_PER_HOUR: MS_PER_HOUR,
     MS_PER_MINUTE: MS_PER_MINUTE,

@@ -1371,13 +1371,15 @@
             (row.done ? ' is-done' : ''),
           { type: 'button', text: row.name }
         );
+        nameBtn.title = row.name || '';
         if (row.kind === 'card' && row.cardId) {
           nameBtn.addEventListener('click', function () {
             openCard(row.cardId, row.name);
           });
         }
         if (canEditSubtask(row) && row.kind !== 'card') {
-          nameBtn.title = 'Double-clic pour renommer';
+          nameBtn.title =
+            (row.name || '') + ' \u2014 Double-clic pour renommer';
           nameBtn.addEventListener('dblclick', function (e) {
             e.preventDefault();
             e.stopPropagation();
