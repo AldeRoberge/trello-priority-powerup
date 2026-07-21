@@ -2123,7 +2123,7 @@
       'Tout compl\u00e9ter \u2014 mettre le progr\u00e8s \u00e0 100\u00a0%'
     );
     completeAllBtn.title = 'Tout compl\u00e9ter';
-    completeAllBtn.hidden = true;
+    completeAllBtn.hidden = false;
 
     var resetAllBtn = document.createElement('button');
     resetAllBtn.type = 'button';
@@ -3588,8 +3588,8 @@
     function syncCompleteAllButton(progress) {
       var fullyComplete =
         progress.percent >= 100 || isAllCompleteProgress(progress);
-      // Always offer complete-all until everything is at 100% (including 0%).
-      completeAllBtn.hidden = fullyComplete;
+      // Always visible on the Progrès header; only disabled at 100%.
+      completeAllBtn.hidden = false;
       completeAllBtn.disabled = fullyComplete;
     }
 
