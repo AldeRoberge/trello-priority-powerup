@@ -6925,6 +6925,10 @@
     var getSummary = config.getSummary || function () { return ''; };
     var onBeforeDisable = config.onBeforeDisable || null;
     var onAfterEnable = config.onAfterEnable || null;
+    var getContextMenuItems =
+      typeof config.getContextMenuItems === 'function'
+        ? config.getContextMenuItems
+        : null;
     var activateHint = 'Activer pour modifier';
     var lockedHint = 'Indisponible tant que le progr\u00e8s est \u00e0 100\u00a0%';
 
@@ -7139,9 +7143,7 @@
       });
     }
 
-    syncUi(false);
-
-    return {
+    var api = {
       setEnabled: setEnabled,
       setExpanded: setExpanded,
       setEnableAllowed: setEnableAllowed,
@@ -7151,6 +7153,21 @@
       refreshSummary: refreshSummary,
       syncUi: syncUi
     };
+
+    if (
+      getContextMenuItems &&
+      chrome.head &&
+      global.ContextMenu &&
+      typeof global.ContextMenu.bind === 'function'
+    ) {
+      ContextMenu.bind(chrome.head, function (e) {
+        return getContextMenuItems(api, e) || [];
+      });
+    }
+
+    syncUi(false);
+
+    return api;
   }
 
   function statutCategoryStyle(key) {
@@ -9182,7 +9199,40 @@
         expanded: config.expanded != null ? !!config.expanded : true,
         getSummary: summaryText,
         onLayoutChange: onLayoutChange,
-        onExpandChange: onExpandChange || function () {}
+        onExpandChange: onExpandChange || function () {},
+        getContextMenuItems: function (api) {
+          if (
+            !global.ContextMenu ||
+            typeof global.ContextMenu.buildOverviewItems !== 'function'
+          ) {
+            return [];
+          }
+          return ContextMenu.buildOverviewItems({
+            isExpanded: api.isExpanded,
+            setExpanded: api.setExpanded,
+            getData: function () {
+              return {
+                title: titleText,
+                status: statusText,
+                statusCategory: statusCategory,
+                progressPercent: progressPercent,
+                progressBlocked: progressBlocked,
+                dueDays: dueDays,
+              };
+            },
+            onAction: function (id) {
+              if (id === 'block') {
+                openBlockComposer();
+                return;
+              }
+              if (id === 'add-subtask') {
+                openAddSubtaskComposer();
+                return;
+              }
+              emitAction(id);
+            },
+          });
+        },
       });
     }
 

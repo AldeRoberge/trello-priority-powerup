@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=section-shell-dark-1" />
   <link rel="stylesheet" href="./components/shared/effects.css" />
+  <link rel="stylesheet" href="./components/shared/context-menu.css?v=ctx-menu-1" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css?v=section-shell-dark-1" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=debug-below-1" />
   <link rel="stylesheet" href="./components/agent/agent-blocks.css?v=blocks-flush-1" />
@@ -15,6 +16,7 @@
   <script src="./components/shared/brand.js"></script>
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/debug-log.js"></script>
+  <script src="./components/shared/context-menu.js?v=ctx-menu-1"></script>
   <script src="./components/shared/effects.js"></script>
   <script src="./components/priority/priority-matrix.js"></script>
   <script src="./components/priority/priority-ui.js"></script>
@@ -197,7 +199,9 @@
                 return cachedPeople;
               }
               try {
-                cachedPeople = await People.load(t, { force: true });
+                cachedPeople = await People.load(t, {
+                  maxAgeMs: People.AGENT_REFRESH_MAX_AGE_MS || 5000
+                });
               } catch (e) {
                 console.error('People.refresh failed', e);
               }

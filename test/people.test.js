@@ -218,8 +218,12 @@ describe('People directory', () => {
     const p = dir.people[0];
     assert.equal(p.relation, 'my boss');
     assert.equal(p.phone, '819-824-9613 poste: 2252');
+    // Compact seeds only — not the whole synonym group.
+    assert.ok(p.aliases.includes('boss') || p.aliases.includes('my boss'));
+    assert.ok(!p.aliases.some((a) => /^ceo$/i.test(a)));
     assert.ok(People.findByAliasOrName(dir, 'ma boss'));
     assert.ok(People.findByAliasOrName(dir, 'director'));
+    assert.ok(People.findByAliasOrName(dir, 'du patron'));
     const ctx = People.toAgentContext(dir);
     assert.equal(ctx[0].phone, '819-824-9613 poste: 2252');
     assert.equal(ctx[0].relation, 'my boss');
@@ -235,6 +239,28 @@ describe('People directory', () => {
       phone: '819-555-0000',
     });
     assert.equal(People.findByAliasOrName(dir, 'ma boss').name, 'Sylviane Mailhot');
+  });
+
+  it('longest synonym wins: chef de projet is not boss', () => {
+    const pm = People.upsert(People.emptyDirectory(), {
+      name: 'Alex PM',
+      relation: 'chef de projet',
+    });
+    assert.equal(People.findByAliasOrName(pm, 'product owner').name, 'Alex PM');
+    assert.equal(People.findByAliasOrName(pm, 'project manager').name, 'Alex PM');
+    // Must not fall into the manager/boss group via bare "chef".
+    assert.equal(People.findByAliasOrName(pm, 'ma boss'), null);
+    assert.ok(
+      !pm.people[0].aliases.some((a) => /^boss$/i.test(a)),
+      'should not seed boss from chef de projet'
+    );
+  });
+
+  it('aliasesFromRelation stays compact', () => {
+    const seeds = People.aliasesFromRelation('ma boss');
+    assert.ok(seeds.some((a) => /boss/i.test(a)));
+    assert.ok(seeds.length <= 4);
+    assert.ok(!seeds.some((a) => /ceo|pdg|vice.?pr/i.test(a)));
   });
 });
 

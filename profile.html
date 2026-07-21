@@ -547,7 +547,20 @@
           maxlength: 120
         });
         var aliasesInput = field('Alias (optionnel)', 'peopleEditAliases', {
-          value: person && person.aliases ? person.aliases.join(', ') : '',
+          value: (function () {
+            if (!person || !person.aliases || !person.aliases.length) return '';
+            var seeded = {};
+            if (PeopleApi.aliasesFromRelation && person.relation) {
+              PeopleApi.aliasesFromRelation(person.relation).forEach(function (s) {
+                seeded[String(s).toLowerCase()] = true;
+              });
+            }
+            return person.aliases
+              .filter(function (a) {
+                return !seeded[String(a).toLowerCase()];
+              })
+              .join(', ');
+          })(),
           placeholder: 'ex. SM, Sylviane',
           hint: 'Surnoms en plus de la relation. La relation remplit déjà boss / patron…',
           maxlength: 200

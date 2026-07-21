@@ -2097,7 +2097,10 @@
         return;
       }
       try {
-        var dir = await global.People.load(t, { force: true });
+        var dir = await global.People.load(t, {
+          maxAgeMs:
+            (global.People && global.People.AGENT_REFRESH_MAX_AGE_MS) || 5000
+        });
         if (typeof options.onPeopleLoaded === 'function') {
           options.onPeopleLoaded(dir);
         }

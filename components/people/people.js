@@ -1,10 +1,11 @@
 /**
- * Member People directory — contacts with aliases, roles, email, phone.
+ * Member People directory — contacts with relation, aliases, roles, email, phone.
  * Stored at member/private (same privacy lane as userProfile).
  * Exposes window.People (no bundler).
  *
- * resolvePeopleInText() expands role aliases (“ma boss” → Jane) for agent
- * blocked-reason polishing. Synonym groups expand when any member is present.
+ * Relation ("ma boss") seeds compact aliases; synonym groups expand at match
+ * time (boss ↔ patron ↔ manager ↔ N+1…). resolveInText() rewrites role phrases
+ * in blocked reasons to the canonical name.
  */
 (function (global) {
   'use strict';
@@ -646,10 +647,6 @@
     return phrases;
   }
 
-  function escapeRegExp(s) {
-    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
   /**
    * Find a person by name, alias, role, or synonym (e.g. "ma boss", "patron").
    */
@@ -909,21 +906,31 @@
     var list = toAgentContext(directoryOrPeople);
     if (!list.length) {
       return [
-        'Personnes / coll\u00e8gues (annuaire)\u00a0: vide. Si l\'utilisateur parle de \u00ab\u00a0ma boss\u00a0\u00bb / un coll\u00e8gue sans nom connu\u00a0: DEMANDE qui c\'est, puis upsert_person. N\'invente JAMAIS un nom.'
+        'Personnes / coll\u00e8gues (annuaire)\u00a0: vide. Si l\'utilisateur parle de \u00ab\u00a0ma boss\u00a0\u00bb / un coll\u00e8gue sans nom connu\u00a0: DEMANDE qui c\'est, puis upsert_person {name, relation}. N\'invente JAMAIS un nom.'
       ];
     }
     var lines = [
       'Personnes / coll\u00e8gues (annuaire membre \u2014 TU CONNAIS CES GENS)\u00a0:',
-      '- Tu as leurs coordonn\u00e9es (t\u00e9l\u00e9phone, courriel, r\u00f4le, relation). Si on te demande le num\u00e9ro / courriel / qui est ta boss\u00a0: R\u00c9PONDS avec ces faits. INTERDIT de dire que tu ne sais pas quand la fiche est ci-dessous.'
+      '- Coordonn\u00e9es ci-dessous = source de v\u00e9rit\u00e9. T\u00e9l\u00e9phone / courriel / \u00ab\u00a0qui est ma boss?\u00a0\u00bb\u00a0: R\u00c9PONDS avec ces faits. INTERDIT de dire que tu ne sais pas quand la fiche est l\u00e0.',
+      '- Synonymes de relation (boss\u2194patron\u2194manager\u2194N+1, coll\u00e8gue\u2194coworker, client\u2194customer\u2026)\u00a0: r\u00e9sous vers le NOM propre.'
     ];
     list.forEach(function (p) {
       var bits = [p.name];
       if (p.relation) bits.push('relation\u00a0: ' + p.relation);
-      if (p.aliases && p.aliases.length) {
-        bits.push('alias\u00a0: ' + p.aliases.join(', '));
-      }
       if (p.roles && p.roles.length) {
         bits.push('r\u00f4les\u00a0: ' + p.roles.join(', '));
+      }
+      if (p.aliases && p.aliases.length) {
+        // Keep prompt compact: skip aliases that merely echo relation.
+        var relKey = p.relation ? normKey(p.relation) : '';
+        var relBare = relKey ? stripLeadingDet(relKey) : '';
+        var aliasShow = p.aliases.filter(function (a) {
+          var k = normKey(a);
+          return k && k !== relKey && k !== relBare;
+        });
+        if (aliasShow.length) {
+          bits.push('alias\u00a0: ' + aliasShow.slice(0, 6).join(', '));
+        }
       }
       if (p.email) bits.push('email\u00a0: ' + p.email);
       if (p.phone) bits.push('t\u00e9l\u00e9phone\u00a0: ' + p.phone);
@@ -931,7 +938,7 @@
       lines.push('- ' + bits.join(' \u00b7 '));
     });
     lines.push(
-      '- Ex. user \u00ab\u00a0c\'est quoi le t\u00e9l\u00e9phone de ma boss?\u00a0\u00bb + fiche Sylviane (relation boss, t\u00e9l\u00a0: 819-\u2026) \u2192 r\u00e9ponds le num\u00e9ro de Sylviane Mailhot tout de suite.'
+      '- Ex. user \u00ab\u00a0c\'est quoi le t\u00e9l\u00e9phone de ma boss?\u00a0\u00bb + fiche avec relation boss + t\u00e9l\u00a0: r\u00e9ponds le num\u00e9ro + le nom tout de suite.'
     );
     lines.push(
       '- Quand l\'utilisateur dit un alias / relation (ex. \u00ab\u00a0ma boss\u00a0\u00bb)\u00a0: utilise le NOM propre partout (messages, blockedReasons, set_custom_assignees).'
@@ -940,7 +947,7 @@
       '- Hors Trello\u00a0: m\u00eame id person-* via set_custom_assignees. upsert_person synchronise le catalogue.'
     );
     lines.push(
-      '- Personne inconnue\u00a0: UNE question (\u00ab\u00a0C\'est qui, ta boss?\u00a0\u00bb), puis upsert_person {name, relation:"ma boss", aliases, phone?}.'
+      '- Personne inconnue\u00a0: UNE question (\u00ab\u00a0C\'est qui, ta boss?\u00a0\u00bb), puis upsert_person {name, relation:"ma boss", phone?, email?}.'
     );
     return lines;
   }
@@ -1045,12 +1052,16 @@
   async function load(t, options) {
     options = options || {};
     var force = !!options.force;
+    var maxAgeMs =
+      typeof options.maxAgeMs === 'number' && options.maxAgeMs >= 0
+        ? options.maxAgeMs
+        : LOAD_TTL_MS;
     if (!t || typeof t.get !== 'function') {
       dbgLog('people', 'load', { ok: false, reason: 'no-client' });
       return emptyDirectory();
     }
     if (!force) {
-      var hit = cachedDirectory();
+      var hit = cachedDirectory(maxAgeMs);
       if (hit) return hit;
       if (loadCache.inflight) return loadCache.inflight;
     } else {
@@ -1064,7 +1075,8 @@
         dbgLog('people', 'load', {
           ok: true,
           count: directory.people.length,
-          force: force
+          force: force,
+          maxAgeMs: maxAgeMs
         });
         return rememberDirectory(directory);
       } catch (err) {
@@ -1112,6 +1124,8 @@
     MAX_NAME: MAX_NAME,
     MAX_NOTES: MAX_NOTES,
     MAX_RELATION: MAX_RELATION,
+    MAX_ALIASES: MAX_ALIASES,
+    AGENT_REFRESH_MAX_AGE_MS: AGENT_REFRESH_MAX_AGE_MS,
     emptyDirectory: emptyDirectory,
     normalizeDirectory: normalizeDirectory,
     normalizePerson: normalizePerson,
