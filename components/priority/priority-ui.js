@@ -8875,9 +8875,7 @@
     progressCell.cell.classList.add('overview-cell--progress-mirror');
     progressCell.cell.setAttribute('hidden', '');
 
-    var dueCell = makeCell('due', 'due', '\u00c9ch\u00e9ance', 'ti-calendar-event', {
-      hideLabel: true
-    });
+    var dueCell = makeCell('due', 'due', '\u00c9ch\u00e9ance', 'ti-calendar-event');
     var priorityCell = makeCell('priority', 'priority', 'Priorit\u00e9', 'ti-flame');
 
     var priorityDot = document.createElement('span');
@@ -9469,6 +9467,7 @@
       var dueDone = !!isDone && !isBlocked && !!due;
       var dueText = dueDone ? COMPLETED_BADGE_PREFIX : due;
       var dueBandActive = dueDone ? '' : dueBand;
+      var dueAccentColor = '';
       dueCell.value.textContent = dueText;
       dueCell.value.classList.toggle('is-empty', !dueText);
       dueCell.cell.classList.toggle('is-done', dueDone);
@@ -9482,23 +9481,17 @@
       dueCell.cell.classList.toggle('is-overdue', dueBandActive === 'overdue');
       if (dueBandActive) {
         dueCell.cell.dataset.dueBand = dueBandActive;
-        var dueAccent = dueBandAccent(dueBandActive);
-        if (dueAccent) {
-          dueCell.cell.style.setProperty('--overview-due-accent', dueAccent);
+        dueAccentColor = dueBandAccent(dueBandActive) || '';
+        if (dueAccentColor) {
+          dueCell.cell.style.setProperty('--overview-due-accent', dueAccentColor);
         } else {
           dueCell.cell.style.removeProperty('--overview-due-accent');
         }
       } else {
         if (dueCell.cell.dataset) delete dueCell.cell.dataset.dueBand;
-        if (dueDone) {
-          dueCell.cell.style.setProperty(
-            '--overview-due-accent',
-            statusAccent || progressColor || '#22a06b'
-          );
-        } else {
-          dueCell.cell.style.removeProperty('--overview-due-accent');
-        }
+        dueCell.cell.style.removeProperty('--overview-due-accent');
       }
+      dueCell.cell.classList.toggle('has-due-accent', !!dueAccentColor);
 
       var pl = (priorityLabel || '').trim();
       var priorityDone = !!isDone && !isBlocked;

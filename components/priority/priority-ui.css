@@ -1066,9 +1066,7 @@ html[data-color-mode='dark'] .overview-composer-input {
 }
 
 .overview-cell--progress.is-blocked:hover,
-.overview-cell--progress.is-done:hover,
-.overview-cell--due.is-done:hover,
-.overview-cell--due[data-due-band]:hover {
+.overview-cell--progress.is-done:hover {
   border-color: color-mix(
     in srgb,
     var(--overview-cell-glow, var(--tp-primary, #0c66e4)) 48%,
@@ -1138,19 +1136,9 @@ html[data-color-mode='dark'] .overview-composer-input {
   margin-bottom: -2px;
 }
 
-.overview-cell--due .overview-cell-value {
-  font-size: 20px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  white-space: normal;
-}
-
-/* Soft top radial glow — same language as Statut blocked / Échéance bands. */
+/* Soft top radial glow — same language as Statut blocked. */
 .overview-cell--progress.is-blocked,
-.overview-cell--progress.is-done,
-.overview-cell--due.is-done,
-.overview-cell--due[data-due-band] {
+.overview-cell--progress.is-done {
   border-color: color-mix(
     in srgb,
     var(--overview-cell-glow, var(--border)) 42%,
@@ -1207,24 +1195,15 @@ html[data-color-mode='dark'] .overview-composer-input {
 }
 
 .overview-cell--due.is-done {
-  --overview-cell-glow: var(--overview-due-accent, #22a06b);
+  opacity: 0.72;
+  filter: grayscale(1);
 }
 
-.overview-cell--due.is-done .overview-cell-icon {
-  color: color-mix(
-    in srgb,
-    var(--overview-due-accent, #22a06b) 80%,
-    var(--text-primary)
-  );
-  opacity: 1;
-}
-
+.overview-cell--due.is-done .overview-cell-icon,
+.overview-cell--due.is-done .overview-cell-label,
 .overview-cell--due.is-done .overview-cell-value:not(.is-empty) {
-  color: color-mix(
-    in srgb,
-    var(--overview-due-accent, #22a06b) 80%,
-    var(--text-primary)
-  );
+  color: var(--text-muted, #626f86);
+  opacity: 1;
 }
 
 .overview-progress-track {
@@ -1333,6 +1312,14 @@ html[data-color-mode='dark'] .overview-composer-input {
   );
 }
 
+.overview-cell--due.has-due-accent {
+  border-color: color-mix(
+    in srgb,
+    var(--overview-due-accent, var(--border)) 40%,
+    var(--border)
+  );
+}
+
 /* Completed: keep priority label visible but muted. */
 .overview-cell--priority.is-complete {
   opacity: 0.72;
@@ -1344,11 +1331,7 @@ html[data-color-mode='dark'] .overview-composer-input {
   color: var(--text-muted, #626f86);
 }
 
-.overview-cell--due[data-due-band] {
-  --overview-cell-glow: var(--overview-due-accent, transparent);
-}
-
-.overview-cell--due[data-due-band] .overview-cell-icon {
+.overview-cell--due.has-due-accent .overview-cell-icon {
   color: color-mix(
     in srgb,
     var(--overview-due-accent, var(--text-secondary, var(--text-muted))) 80%,
@@ -1357,7 +1340,7 @@ html[data-color-mode='dark'] .overview-composer-input {
   opacity: 1;
 }
 
-.overview-cell--due[data-due-band] .overview-cell-label {
+.overview-cell--due.has-due-accent .overview-cell-label {
   color: color-mix(
     in srgb,
     var(--overview-due-accent, var(--text-muted)) 55%,
@@ -1365,7 +1348,7 @@ html[data-color-mode='dark'] .overview-composer-input {
   );
 }
 
-.overview-cell--due[data-due-band] .overview-cell-value:not(.is-empty) {
+.overview-cell--due.has-due-accent .overview-cell-value:not(.is-empty) {
   color: color-mix(
     in srgb,
     var(--overview-due-accent, var(--text-primary)) 80%,

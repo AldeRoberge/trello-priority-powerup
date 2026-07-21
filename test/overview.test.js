@@ -332,9 +332,9 @@ describe('PriorityUI createOverviewField', () => {
       ui.el.querySelector('.overview-cell--due .overview-cell-value').textContent,
       /3 jours/
     );
-    assert.equal(
-      ui.el.querySelector('.overview-cell--due .overview-cell-label'),
-      null
+    assert.match(
+      ui.el.querySelector('.overview-cell--due .overview-cell-label').textContent,
+      /\u00c9ch\u00e9ance/i
     );
     assert.match(
       ui.el.querySelector('.overview-task-text').textContent,
