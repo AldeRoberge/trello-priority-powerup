@@ -32,6 +32,7 @@
   var MAX_EMAIL = 120;
   var MAX_PHONE = 40;
   var MAX_NOTES = 400;
+  var MAX_RELATION = 80;
   var LOAD_TTL_MS = 30000;
   var loadCache = { directory: null, at: 0, inflight: null };
 
@@ -54,7 +55,9 @@
     'votre',
     'vos',
     'leur',
-    'leurs'
+    'leurs',
+    'my',
+    'our'
   ];
 
   /**
@@ -62,8 +65,89 @@
    * Keys are normalized (accent-folded lowercase).
    */
   var ALIAS_SYNONYM_GROUPS = [
-    ['boss', 'patron', 'patronne', 'manager', 'n+1', 'n plus 1', 'superieur', 'superieure', 'responsable']
+    [
+      'boss',
+      'patron',
+      'patronne',
+      'manager',
+      'n+1',
+      'n plus 1',
+      'superieur',
+      'superieure',
+      'responsable',
+      'directeur',
+      'directrice',
+      'director',
+      'dirigeant',
+      'dirigeante'
+    ],
+    ['collegue', 'coworker', 'co-worker', 'equipier', 'equipiere', 'pair'],
+    ['client', 'cliente', 'customer'],
+    ['conjoint', 'conjointe', 'partenaire', 'spouse', 'mari', 'femme']
   ];
+
+  /**
+   * From a free-text relation ("my boss", "ma boss", "directeur") produce
+   * canonical aliases the matcher / agent can use.
+   */
+  function aliasesFromRelation(relation) {
+    var raw = clampStr(relation, MAX_RELATION);
+    if (!raw) return [];
+    var t = normKey(raw);
+    var out = [raw];
+    function push(s) {
+      if (s && out.indexOf(s) === -1) out.push(s);
+    }
+    // Strip "my/ma/mon…" to get the role noun when present.
+    var bare = t;
+    for (var d = 0; d < FR_DET.length; d++) {
+      var pref = FR_DET[d] + ' ';
+      if (bare.indexOf(pref) === 0) {
+        bare = bare.slice(pref.length);
+        break;
+      }
+    }
+    if (bare && bare !== t) push(bare);
+
+    for (var g = 0; g < ALIAS_SYNONYM_GROUPS.length; g++) {
+      var group = ALIAS_SYNONYM_GROUPS[g];
+      var hit = false;
+      for (var i = 0; i < group.length; i++) {
+        if (t === group[i] || bare === group[i] || t.indexOf(group[i]) !== -1) {
+          hit = true;
+          break;
+        }
+      }
+      if (hit) {
+        for (var j = 0; j < group.length; j++) push(group[j]);
+        // Common FR possessives for the primary noun.
+        push('ma ' + group[0]);
+        push('mon ' + group[0]);
+        push('my ' + group[0]);
+      }
+    }
+    return normalizeStringList(out, MAX_ALIAS, MAX_ALIASES);
+  }
+
+  /**
+   * Harvest boss/colleague-style aliases from roles + notes when relation empty.
+   */
+  function inferAliasesFromRolesAndNotes(roles, notes) {
+    var blob = normKey((roles || []).join(' ') + ' ' + (notes || ''));
+    if (!blob) return [];
+    var out = [];
+    for (var g = 0; g < ALIAS_SYNONYM_GROUPS.length; g++) {
+      var group = ALIAS_SYNONYM_GROUPS[g];
+      for (var i = 0; i < group.length; i++) {
+        if (blob.indexOf(group[i]) !== -1) {
+          out = out.concat(group);
+          out.push('ma ' + group[0], 'mon ' + group[0], 'my ' + group[0]);
+          break;
+        }
+      }
+    }
+    return normalizeStringList(out, MAX_ALIAS, MAX_ALIASES);
+  }
 
   function rememberDirectory(directory) {
     loadCache.directory = directory;
