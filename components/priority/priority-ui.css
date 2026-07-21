@@ -5029,6 +5029,15 @@ html[data-color-mode='dark'] .overview-composer-input {
   white-space: nowrap;
 }
 
+.due-date-mode-switch.is-icons-only .due-date-mode-btn {
+  gap: 0;
+  padding: 0 6px;
+}
+
+.due-date-mode-switch.is-icons-only .due-date-mode-btn-label {
+  display: none;
+}
+
 .due-date-vague {
   display: flex;
   flex-direction: column;

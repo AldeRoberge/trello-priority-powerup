@@ -3931,7 +3931,10 @@
     return !!normalizeDueVague(inputs.dueVague);
   }
 
-  /** Vague mode is for horizons strictly beyond one week. */
+  /**
+   * Far-horizon due dates (> 1 week) get the labeled Précis/Vague toggle;
+   * nearer dates still offer Vague, but icon-only.
+   */
   function isDueVagueEligible(iso, now) {
     var days = daysUntilDue(iso, now);
     return isFinite(days) && days > COUNTDOWN_DAYS_PER_WEEK;
@@ -16675,7 +16678,7 @@
     countdownMain.appendChild(countdownSecondary);
 
     var modeSwitch = document.createElement('div');
-    modeSwitch.className = 'due-date-mode-switch';
+    modeSwitch.className = 'due-date-mode-switch is-icons-only';
     modeSwitch.setAttribute('role', 'radiogroup');
     modeSwitch.setAttribute('aria-label', 'Mode d\'\u00e9ch\u00e9ance');
 
@@ -17725,12 +17728,12 @@
 
     function refreshModeUi() {
       var isVague = currentMode === DUE_DATE_MODE_VAGUE;
-      var vagueEligible =
-        isVague || (!!current && isDueVagueEligible(current));
+      var showLabels = !!current && isDueVagueEligible(current);
       field.classList.toggle('is-vague-mode', isVague);
       field.dataset.dueMode = currentMode;
-      modeSwitch.hidden = !vagueEligible;
-      vagueModeBtn.hidden = !vagueEligible;
+      modeSwitch.hidden = false;
+      vagueModeBtn.hidden = false;
+      modeSwitch.classList.toggle('is-icons-only', !showLabels);
       preciseModeBtn.classList.toggle('is-active', !isVague);
       vagueModeBtn.classList.toggle('is-active', isVague);
       preciseModeBtn.setAttribute('aria-checked', isVague ? 'false' : 'true');
@@ -17752,10 +17755,6 @@
     function setDueMode(nextMode, options) {
       options = options || {};
       var mode = normalizeDueMode(nextMode);
-      if (mode === DUE_DATE_MODE_VAGUE && current && !isDueVagueEligible(current)) {
-        // Near-term dues stay Precise — Vague is only for > 1 week.
-        if (!currentVague && !rememberedVague) return;
-      }
       if (mode === currentMode && !options.force) return;
       currentMode = mode;
       if (mode === DUE_DATE_MODE_VAGUE) {
@@ -17863,12 +17862,11 @@
     }
 
     function refreshVagueToggle() {
-      var vagueEligible =
-        currentMode === DUE_DATE_MODE_VAGUE ||
-        (!!current && isDueVagueEligible(current));
-      modeSwitch.hidden = !vagueEligible;
-      vagueModeBtn.hidden = !vagueEligible;
-      return vagueEligible;
+      var showLabels = !!current && isDueVagueEligible(current);
+      modeSwitch.hidden = false;
+      vagueModeBtn.hidden = false;
+      modeSwitch.classList.toggle('is-icons-only', !showLabels);
+      return true;
     }
 
     function syncMasterClearBtn(hasDue) {
@@ -17889,14 +17887,14 @@
 
     function refreshCountdown() {
       var hasVague = currentMode === DUE_DATE_MODE_VAGUE && !!currentVague;
-      var vagueEligible = refreshVagueToggle();
+      refreshVagueToggle();
       if (!current && !hasVague) {
         countdownPrimary.textContent = '';
         countdownSecondary.textContent = '';
         countdownSecondary.hidden = true;
         countdown.classList.remove('is-past');
         countdown.classList.add('is-empty');
-        countdown.hidden = !vagueEligible;
+        countdown.hidden = !enabled;
         field.classList.remove('has-due-date');
         syncMasterClearBtn(false);
         paintCountdownDot('');
@@ -17921,7 +17919,7 @@
         countdownSecondary.hidden = true;
         countdown.classList.remove('is-past');
         countdown.classList.add('is-empty');
-        countdown.hidden = !vagueEligible;
+        countdown.hidden = true;
         field.classList.remove('has-due-date');
         syncMasterClearBtn(false);
         paintCountdownDot('');

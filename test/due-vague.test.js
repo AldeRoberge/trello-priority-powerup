@@ -125,13 +125,14 @@ describe('Échéance vague mode', () => {
     assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(normalized.dueDate));
   });
 
-  it('isDueVagueEligible requires more than one week', () => {
+  it('isDueVagueEligible is true only beyond one week (labeled toggle)', () => {
     const now = new Date(2026, 6, 20);
-    assert.equal(PU.isDueVagueEligible('2026-07-27', now), false); // +7
-    assert.equal(PU.isDueVagueEligible('2026-07-28', now), true); // +8
+    assert.equal(PU.isDueVagueEligible('2026-07-27', now), false); // +7 → icons-only
+    assert.equal(PU.isDueVagueEligible('2026-07-28', now), true); // +8 → labels
     assert.equal(PU.isDueVagueEligible('2026-08-19', now), true);
     assert.equal(PU.isDueVagueEligible('', now), false);
   });
+
 
   it('formatDueCountdownFromInputs prefers Vague horizon labels', () => {
     assert.equal(
