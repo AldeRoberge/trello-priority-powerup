@@ -541,10 +541,47 @@
     var modelSelectField = labeledInput('Mod\u00e8le', modelSelect);
     var modelInputField = labeledInput('Mod\u00e8le', modelInput);
 
+    var MODEL_MODE_OPTIONS = [
+      { id: 'auto', label: 'Automatique (l\'assistant choisit)' },
+      { id: 'efficient', label: '\u00c9conome' },
+      { id: 'balanced', label: '\u00c9quilibr\u00e9' },
+      { id: 'capable', label: 'Puissant' }
+    ];
+    var modelModeSelect = el('select', 'agent-input agent-model-mode-select', {
+      'aria-label': 'Mode co\u00fbt / finesse'
+    });
+    MODEL_MODE_OPTIONS.forEach(function (m) {
+      modelModeSelect.appendChild(
+        el('option', null, { value: m.id, text: m.label })
+      );
+    });
+    var modelModeField = labeledInput('Mode', modelModeSelect);
+
     providerBody.appendChild(labeledInput('Cl\u00e9 API', apiKeyInput));
     providerBody.appendChild(labeledInput('URL de base', baseUrlInput));
     providerBody.appendChild(modelSelectField);
     providerBody.appendChild(modelInputField);
+    providerBody.appendChild(modelModeField);
+
+    modelModeSelect.addEventListener('change', function () {
+      var nextMode =
+        typeof Agent.normalizeModelMode === 'function'
+          ? Agent.normalizeModelMode(modelModeSelect.value)
+          : modelModeSelect.value || 'auto';
+      provider = Agent.normalizeProvider(
+        Object.assign({}, provider, { modelMode: nextMode })
+      );
+      modelModeSelect.value = provider.modelMode || 'auto';
+      if (!t) return;
+      Agent.saveProvider(t, provider)
+        .then(function (saved) {
+          provider = Agent.normalizeProvider(saved);
+          savedProvider = Agent.normalizeProvider(saved);
+        })
+        .catch(function (err) {
+          console.error('AgentUI: modelMode save failed', err);
+        });
+    });
 
     var STATUS_PREF_STORAGE_KEY = 'trello-priority-powerup/agent-status';
     var LEGACY_DEBUG_PREF_STORAGE_KEY = 'trello-priority-powerup/agent-debug-enabled';
@@ -2018,6 +2055,11 @@
         baseUrlInput.readOnly = false;
       }
       syncModelControls();
+      var mode =
+        typeof Agent.normalizeModelMode === 'function'
+          ? Agent.normalizeModelMode(provider.modelMode)
+          : provider.modelMode || 'auto';
+      modelModeSelect.value = mode;
       syncPresetButtons();
       if (collapse && collapse.refreshSummary) collapse.refreshSummary();
       updateComposerEnabled();
@@ -2042,6 +2084,7 @@
         apiKey: apiKeyInput.value,
         baseUrl: baseUrlInput.value,
         model: isOpenAI ? modelSelect.value : modelInput.value,
+        modelMode: modelModeSelect.value,
         verifiedFingerprint: provider.verifiedFingerprint || ''
       });
       // Config changed vs last verified fingerprint → not verified anymore.
@@ -2061,7 +2104,8 @@
         preset: preset.id,
         apiKey: apiKeyInput.value,
         baseUrl: preset.baseUrl || baseUrlInput.value,
-        model: provider.preset === preset.id ? currentModel : preset.model || currentModel
+        model: provider.preset === preset.id ? currentModel : preset.model || currentModel,
+        modelMode: modelModeSelect.value || provider.modelMode || 'auto'
       };
       if (preset.id === 'custom') {
         next.baseUrl = baseUrlInput.value || provider.baseUrl || '';
@@ -8241,7 +8285,13 @@
           suggestions: turn.suggestions || [],
           suggestionsMulti: !!turn.suggestionsMulti
         });
-        if (turn.modelTier) {
+        if (
+          turn.modelTier &&
+          (!provider.modelMode ||
+            provider.modelMode === 'auto' ||
+            (typeof Agent.normalizeModelMode === 'function' &&
+              Agent.normalizeModelMode(provider.modelMode) === 'auto'))
+        ) {
           sessionModelTier = turn.modelTier;
         }
         schedulePersistChatHistory();

@@ -644,6 +644,11 @@
     var badge = el('div', 'agent-block-priority-badge agent-block-priority-badge--heat-' + heat);
     badge.textContent = enabled ? tier : 'Priorité désactivée';
     card.appendChild(badge);
+    if (enabled && block.matrixLabel) {
+      card.appendChild(
+        el('div', 'agent-block-matrix-label', { text: block.matrixLabel })
+      );
+    }
     if (enabled) {
       var strip = el('div', 'agent-block-heat-strip');
       for (var h = 0; h <= 4; h++) {
@@ -755,6 +760,20 @@
 
   function renderDueBlock(block) {
     var card = el('div', 'agent-block agent-block--due');
+    if (block.dueBand && DUE_BANDS[block.dueBand]) {
+      card.setAttribute('data-due-band', block.dueBand);
+      card.classList.add('is-due-' + block.dueBand);
+      if (block.dueBand === 'overdue') card.classList.add('is-overdue');
+      var PriorityUI = global.PriorityUI;
+      if (PriorityUI && typeof PriorityUI.dueBandAccent === 'function') {
+        try {
+          var accent = PriorityUI.dueBandAccent(block.dueBand);
+          if (accent) card.style.setProperty('--agent-due-band-accent', accent);
+        } catch (e) {
+          /* ignore */
+        }
+      }
+    }
     var label = el('div', 'agent-block-label', { text: 'Échéance' });
     card.appendChild(label);
     var value = el('div', 'agent-block-due-value');
@@ -772,13 +791,73 @@
       value.textContent = parts.join(' · ') || '—';
     }
     card.appendChild(value);
+    var meta = el('div', 'agent-block-meta');
+    if (block.dueBand && DUE_BAND_LABELS[block.dueBand] && !block.cleared) {
+      meta.appendChild(
+        el('span', 'agent-block-pill agent-block-pill--due-band', {
+          text: DUE_BAND_LABELS[block.dueBand]
+        })
+      );
+    }
     if (block.recurrence && block.recurrence.frequency) {
-      card.appendChild(
-        el('div', 'agent-block-meta', {
+      meta.appendChild(
+        el('span', 'agent-block-pill', {
           text: 'Récurrence · ' + block.recurrence.frequency
         })
       );
     }
+    if (meta.childNodes.length) card.appendChild(meta);
+    return card;
+  }
+
+  function renderBlockedBlock(block) {
+    var card = el(
+      'div',
+      'agent-block agent-block--blocked' +
+        (block.cleared || block.enabled === false ? ' is-cleared' : ' is-active')
+    );
+    card.appendChild(el('div', 'agent-block-label', { text: 'Blocage' }));
+    var status = el('div', 'agent-block-blocked-status');
+    if (block.cleared || block.enabled === false) {
+      status.textContent = 'Pas bloqué';
+    } else {
+      status.textContent = 'En attente';
+      status.classList.add('is-warn');
+    }
+    card.appendChild(status);
+    var reasons = Array.isArray(block.reasons) ? block.reasons : [];
+    var links = Array.isArray(block.links) ? block.links : [];
+    if (reasons.length || links.length) {
+      var chips = el('div', 'agent-block-chip-row');
+      reasons.forEach(function (r) {
+        chips.appendChild(
+          el('span', 'agent-block-pill agent-block-pill--warn', { text: r })
+        );
+      });
+      links.forEach(function (link) {
+        var text = (link && (link.label || link.id)) || '';
+        if (!text) return;
+        chips.appendChild(
+          el('span', 'agent-block-pill agent-block-pill--accent', {
+            text: '↳ ' + text
+          })
+        );
+      });
+      if (chips.childNodes.length) card.appendChild(chips);
+    }
+    return card;
+  }
+
+  function renderTaskTypesBlock(block) {
+    var card = el('div', 'agent-block agent-block--task-types');
+    card.appendChild(el('div', 'agent-block-label', { text: 'Types' }));
+    var row = el('div', 'agent-block-chip-row');
+    (block.types || []).forEach(function (t) {
+      var label = (t && (t.label || t.id)) || '';
+      if (!label) return;
+      row.appendChild(el('span', 'agent-block-person-chip', { text: label }));
+    });
+    card.appendChild(row);
     return card;
   }
 
@@ -920,6 +999,8 @@
       if (block.type === 'subtask') return renderSubtaskBlock(block);
       if (block.type === 'card_ref') return renderCardRefBlock(block);
       if (block.type === 'due') return renderDueBlock(block);
+      if (block.type === 'blocked') return renderBlockedBlock(block);
+      if (block.type === 'task_types') return renderTaskTypesBlock(block);
       if (block.type === 'statut') return renderStatutBlock(block);
       if (block.type === 'project') return renderProjectBlock(block);
       if (block.type === 'progress') return renderProgressBlock(block);

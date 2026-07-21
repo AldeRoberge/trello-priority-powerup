@@ -190,5 +190,71 @@ describe('PriorityAgent dynamic model tiers', () => {
       balanced: 'balanced',
       capable: 'capable'
     });
+    assert.deepEqual(Agent.MODEL_MODES, {
+      auto: 'auto',
+      efficient: 'efficient',
+      balanced: 'balanced',
+      capable: 'capable'
+    });
+  });
+
+  it('normalizes modelMode and defaults to auto', () => {
+    assert.equal(Agent.normalizeModelMode('auto'), 'auto');
+    assert.equal(Agent.normalizeModelMode('automatique'), 'auto');
+    assert.equal(Agent.normalizeModelMode('capable'), 'capable');
+    assert.equal(Agent.normalizeModelMode('Économe'), 'auto');
+    assert.equal(Agent.normalizeModelMode('efficient'), 'efficient');
+    assert.equal(Agent.normalizeModelMode(''), 'auto');
+    assert.equal(Agent.normalizeModelMode('nope'), 'auto');
+    assert.equal(Agent.normalizeProvider(null).modelMode, 'auto');
+    assert.equal(
+      Agent.normalizeProvider({ model: 'gpt-5.4', modelMode: 'capable' }).modelMode,
+      'capable'
+    );
+  });
+
+  it('locked modelMode ignores warm-up and sticky session tier', () => {
+    const p = Agent.normalizeProvider({
+      preset: 'openai',
+      model: 'gpt-5.4-nano',
+      modelMode: 'capable',
+      apiKey: 'sk-test'
+    });
+    assert.equal(Agent.resolveChatModel(p, [], null), 'gpt-5.4');
+    assert.equal(Agent.resolveChatModel(p, [], 'efficient'), 'gpt-5.4');
+
+    const econ = Agent.normalizeProvider({
+      preset: 'openai',
+      model: 'gpt-5.4',
+      modelMode: 'efficient',
+      apiKey: 'sk-test'
+    });
+    assert.equal(Agent.resolveChatModel(econ, [], null), 'gpt-5.4-nano');
+    assert.equal(Agent.resolveChatModel(econ, [], 'capable'), 'gpt-5.4-nano');
+
+    const bal = Agent.normalizeProvider({
+      preset: 'openai',
+      model: 'gpt-5.4-nano',
+      modelMode: 'balanced',
+      apiKey: 'sk-test'
+    });
+    assert.equal(Agent.resolveChatModel(bal, [], null), 'gpt-5.4-mini');
+  });
+
+  it('auto modelMode keeps warm-up and sticky behavior', () => {
+    const p = Agent.normalizeProvider({
+      preset: 'openai',
+      model: 'gpt-5.4-nano',
+      modelMode: 'auto',
+      apiKey: 'sk-test'
+    });
+    assert.equal(Agent.resolveChatModel(p, [], null), 'gpt-5.4-mini');
+    const afterWarmup = [
+      { role: 'user', content: '1' },
+      { role: 'user', content: '2' },
+      { role: 'user', content: '3' },
+      { role: 'user', content: '4' }
+    ];
+    assert.equal(Agent.resolveChatModel(p, afterWarmup, 'capable'), 'gpt-5.4');
   });
 });

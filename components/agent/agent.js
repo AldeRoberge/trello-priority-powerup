@@ -132,6 +132,13 @@
     balanced: 'balanced',
     capable: 'capable'
   };
+  /** User-facing chat mode: auto (AI + warm-up) or a locked tier. */
+  var MODEL_MODES = {
+    auto: 'auto',
+    efficient: 'efficient',
+    balanced: 'balanced',
+    capable: 'capable'
+  };
   var CHAT_WARMUP_USER_TURNS = 4;
   var FAMILY_TIER_MODELS = {
     'gpt-5.4': {
@@ -213,6 +220,18 @@
     return null;
   }
 
+  function normalizeModelMode(raw) {
+    var t = String(raw || '')
+      .trim()
+      .toLowerCase();
+    if (!t || t === 'auto' || t === 'automatic' || t === 'automatique') {
+      return MODEL_MODES.auto;
+    }
+    var tier = normalizeModelTier(t);
+    if (tier) return tier;
+    return MODEL_MODES.auto;
+  }
+
   function detectModelFamily(modelId) {
     var id = stripModelPrefix(modelId).toLowerCase();
     if (!id) return null;
@@ -274,8 +293,9 @@
 
   /**
    * Resolve the API model for a chat turn.
-   * Warm-up: first CHAT_WARMUP_USER_TURNS user messages floor at balanced (never nano).
-   * After warm-up: sticky session tier if set, else the saved provider model.
+   * Locked modelMode (efficient|balanced|capable): always that tier (ignores sticky / warm-up).
+   * Auto mode: warm-up floors nano→balanced for the first CHAT_WARMUP_USER_TURNS user messages;
+   * after warm-up, sticky session tier if set, else the saved provider model.
    * Never downgrades a saved capable/balanced model during warm-up.
    *
    * @param {object} provider
@@ -285,6 +305,10 @@
   function resolveChatModel(provider, history, sessionTier) {
     var p = normalizeProvider(provider);
     var saved = p.model;
+    var mode = normalizeModelMode(p.modelMode);
+    if (mode !== MODEL_MODES.auto) {
+      return modelForTier(p, mode);
+    }
     var priorUserTurns = countUserTurns(history);
     var userTurnNumber = priorUserTurns + 1;
     if (userTurnNumber <= CHAT_WARMUP_USER_TURNS) {
@@ -1063,6 +1087,7 @@
       preset: presetId,
       baseUrl: baseUrl,
       model: model,
+      modelMode: normalizeModelMode(src.modelMode),
       apiKey: apiKey,
       verifiedFingerprint: verifiedFingerprint
     };
@@ -3509,22 +3534,28 @@
       '- INTERDIT\u00a0: \u00ab\u00a0Ce palier X est attribu\u00e9 car\u2026\u00a0\u00bb, \u00ab\u00a0jug\u00e9e avoir\u2026\u00a0\u00bb, jargon (\u00ab\u00a0axes\u00a0\u00bb, \u00ab\u00a0urgence \u00e9lev\u00e9e\u00a0\u00bb, \u00ab\u00a0attention imm\u00e9diate\u00a0\u00bb).',
       '- INTERDIT de r\u00e9citer Urgence/Impact/Facilit\u00e9 avec des chiffres, INTERDIT de mentionner le score num\u00e9rique sauf si on le demande explicitement.',
       '- Les axes vont de 0\u20134 (urgence, impact) et 1\u20135 (facilit\u00e9)\u00a0: ne jamais inventer d\'\u00e9chelles 0\u201310.',
-      '- M\u00eame logique Q&R pour progr\u00e8s / \u00e9ch\u00e9ance / statut\u00a0: caption + block progress | due | statut (valeurs context), pas une liste prose.',
+      '- M\u00eame logique Q&R pour progr\u00e8s / \u00e9ch\u00e9ance / statut / blocage / types\u00a0: caption + block progress | due | statut | blocked | task_types (valeurs context), pas une liste prose.',
       '- Ex. progr\u00e8s\u00a0: {"message":"On est l\u00e0\u00a0:\\n{{0}}","blocks":[{"type":"progress","progress":40,"doneCount":1,"totalCount":3}]}',
-      '- Ex. \u00e9ch\u00e9ance\u00a0: {"message":"\u00c9ch\u00e9ance\u00a0:\\n{{0}}","blocks":[{"type":"due","dueDate":"2026-07-21","dueTime":"14:00"}]}',
+      '- Ex. \u00e9ch\u00e9ance\u00a0: {"message":"\u00c9ch\u00e9ance\u00a0:\\n{{0}}","blocks":[{"type":"due","dueDate":"2026-07-21","dueTime":"14:00","dueBand":"soon"}]}',
+      '- Ex. bloqu\u00e9\u00a0: {"message":"Oui, c\'est bloqu\u00e9\u00a0:\\n{{0}}","blocks":[{"type":"blocked","enabled":true,"reasons":["En attente d\'une approbation"]}]}',
       '- Si priority.enabled=false\u00a0: dis qu\'aucune priorit\u00e9 n\'est d\u00e9finie (ne sors pas d\'anciennes valeurs, pas de bloc invent\u00e9).',
       'Show, don\'t tell + blocs visuels (blocks \u2014 tr\u00e8s important, ne sois jamais ennuyeux)\u00a0:',
       '- Principe\u00a0: montre plut\u00f4t que de raconter. Si un fait carte a un type de bloc, \u00e9mets le bloc\u00a0; le message reste une caption courte (pote), pas un dump.',
       '- En plus du texte, \u00e9mets blocks: [{type, ...}] (0\u20136). Ce sont des cartes visuelles dans le chat (m\u00eame langage heat / chips que l\'app).',
-      '- Types\u00a0: priority | subtask | card_ref | due | statut | project | progress | diff | members | labels.',
+      '- Types\u00a0: priority | subtask | card_ref | due | statut | project | progress | diff | members | labels | blocked | task_types.',
       '- Place-les dans le message avec {{0}}, {{1}}, \u2026 (index dans blocks). Sans placeholder, ils s\'affichent sous le texte.',
       '- Pr\u00e9f\u00e8re un bloc + [[g/r/y/a:]] plut\u00f4t que de lister les m\u00eames faits en prose. Texte court + visuel riche.',
-      '- Q&R \u00ab\u00a0quelle priorit\u00e9 / \u00e9ch\u00e9ance / progr\u00e8s / statut?\u00a0\u00bb\u00a0: TOUJOURS le bloc correspondant depuis context (voir section Expliquer la priorit\u00e9).',
-      '- Apr\u00e8s une action (priorit\u00e9, sous-t\u00e2che, \u00e9ch\u00e9ance\u2026)\u00a0: UNE courte confirmation (\u00ab\u00a0Okay, c\'est fait.\u00a0\u00bb). Le runtime affiche d\u00e9j\u00e0 des cartes auto\u00a0: INTERDIT de re-d\u00e9crire en prose ce que ces cartes montrent. Tu peux \u00e9mettre blocks pour Q&R / r\u00e9f\u00e9rences, pas pour doubler le r\u00e9cap.',
+      '- Q&R \u00ab\u00a0quelle priorit\u00e9 / \u00e9ch\u00e9ance / progr\u00e8s / statut / est-ce bloqu\u00e9?\u00a0\u00bb\u00a0: TOUJOURS le bloc correspondant depuis context (voir section Expliquer la priorit\u00e9).',
+      '- Apr\u00e8s une action (priorit\u00e9, sous-t\u00e2che, \u00e9ch\u00e9ance, blocage\u2026)\u00a0: UNE courte confirmation (\u00ab\u00a0Okay, c\'est fait.\u00a0\u00bb). Le runtime affiche d\u00e9j\u00e0 des cartes auto\u00a0: INTERDIT de re-d\u00e9crire en prose ce que ces cartes montrent. Tu peux \u00e9mettre blocks pour Q&R / r\u00e9f\u00e9rences, pas pour doubler le r\u00e9cap.',
       '- Quand tu cites une autre carte du tableau\u00a0: blocks avec type card_ref + cardIndex (index boardCards).',
-      '- Ex. priorit\u00e9\u00a0: {"message":"Voil\u00e0 la priorit\u00e9 actuelle\u00a0:\\n{{0}}","blocks":[{"type":"priority","tier":"Critique","urgency":4,"impact":3,"ease":2}]}',
+      '- priority\u00a0: tu peux ajouter matrixLabel (libell\u00e9 matrice, ex. Victoire rapide) s\'il est dans context / display \u2014 ne l\'invente pas.',
+      '- due\u00a0: dueBand optionnel (overdue|imminent|soon|weeks|month|far) seulement si tu le connais depuis le contexte / runtime.',
+      '- blocked\u00a0: {enabled, reasons?, links?} depuis context.blocked (motifs + liens sous-t\u00e2ches). cleared/enabled:false si d\u00e9bloqu\u00e9.',
+      '- task_types\u00a0: {types:[ids]} depuis context.taskTypes (labels r\u00e9solus par le runtime).',
+      '- Ex. priorit\u00e9\u00a0: {"message":"Voil\u00e0 la priorit\u00e9 actuelle\u00a0:\\n{{0}}","blocks":[{"type":"priority","tier":"Critique","urgency":4,"impact":3,"ease":2,"matrixLabel":"Pari strat\u00e9gique"}]}',
       '- Ex. autre carte\u00a0: {"message":"Sur cette carte\u00a0:\\n{{0}}","blocks":[{"type":"card_ref","cardIndex":2,"fields":["name","list","due","priority"]}]}',
       '- Ex. sous-t\u00e2che\u00a0: {"message":"Ajout\u00e9e\u00a0:\\n{{0}}","blocks":[{"type":"subtask","text":"R\u00e9diger le brief","estimatedMinutes":30}]}',
+      '- Ex. types\u00a0: {"message":"Class\u00e9e comme\u00a0:\\n{{0}}","blocks":[{"type":"task_types","types":["action","process"]}]}',
       '- Ne force PAS de blocs sur small talk, identit\u00e9 IA, hors-sujet, ou un simple ACK. Cap 6. Pas de spam sur chaque confirmation.',
       '- INTERDIT le HTML/Markdown\u00a0; uniquement [[g/r/y/a:]] et {{n}} + blocks structur\u00e9s.',
       'R\u00e9ponds UNIQUEMENT avec un objet JSON valide de la forme\u00a0:',
@@ -16178,6 +16209,7 @@
       if (tool === 'set_priority') {
         var pri = snapshotPriority(bridge);
         var tierLabel = '';
+        var matrixLabel = '';
         if (
           typeof PriorityUI !== 'undefined' &&
           typeof PriorityUI.baselineScore === 'function' &&
@@ -16187,6 +16219,36 @@
           var score = PriorityUI.baselineScore(pri.urgency, pri.impact, pri.ease);
           var tier = PriorityUI.tierFor(score);
           if (tier && tier.label) tierLabel = tier.label;
+          if (typeof PriorityUI.resolveDisplay === 'function') {
+            try {
+              var display = PriorityUI.resolveDisplay(
+                {
+                  score: score,
+                  urgency: pri.urgency,
+                  impact: pri.impact,
+                  ease: pri.ease
+                },
+                {
+                  urgency: pri.urgency,
+                  impact: pri.impact,
+                  ease: pri.ease,
+                  priorityEnabled: pri.priorityEnabled !== false
+                }
+              );
+              if (display && display.matrixLabel) {
+                matrixLabel = String(display.matrixLabel);
+              }
+              if (
+                (!tierLabel || tierLabel === 'Priorit\u00e9') &&
+                display &&
+                display.label
+              ) {
+                tierLabel = String(display.label);
+              }
+            } catch (eDisplay) {
+              /* ignore */
+            }
+          }
         }
         if (!tierLabel && args.tier) tierLabel = String(args.tier);
         var visual = {
@@ -16197,10 +16259,7 @@
           ease: pri.ease,
           priorityEnabled: pri.priorityEnabled !== false
         };
-        var diffRows = [];
-        if (result.detail && typeof result.detail === 'string') {
-          // Optional axis diff from before→after words if PriorityUI available
-        }
+        if (matrixLabel) visual.matrixLabel = matrixLabel;
         result.visual = visual;
         return result;
       }
@@ -16272,9 +16331,24 @@
           result.visual = {
             type: 'due',
             dueVague: dueSnap.dueVague,
-            dueMode: 'vague'
+            dueMode: 'vague',
+            dueBand: 'far'
           };
         } else {
+          var dueBand = '';
+          if (
+            typeof PriorityUI !== 'undefined' &&
+            typeof PriorityUI.dueProximityBand === 'function' &&
+            dueSnap.dueDate
+          ) {
+            try {
+              dueBand =
+                PriorityUI.dueProximityBand(dueSnap.dueDate, dueSnap.dueTime) ||
+                '';
+            } catch (eBand) {
+              dueBand = '';
+            }
+          }
           result.visual = {
             type: 'due',
             dueDate: dueSnap.dueDate || '',
@@ -16282,6 +16356,71 @@
             dueMode: 'precise',
             recurrence: dueSnap.recurrence || undefined,
             startDate: dueSnap.startDate || undefined
+          };
+          if (dueBand) result.visual.dueBand = dueBand;
+        }
+        return result;
+      }
+      if (tool === 'set_blocked') {
+        var blockedSnap = snapshotPriority(bridge);
+        if (!blockedSnap.enAttente) {
+          result.visual = { type: 'blocked', enabled: false, cleared: true };
+        } else {
+          var blockedVisual = { type: 'blocked', enabled: true };
+          if (
+            Array.isArray(blockedSnap.blockedReasons) &&
+            blockedSnap.blockedReasons.length
+          ) {
+            blockedVisual.reasons = blockedSnap.blockedReasons.slice();
+          } else if (Array.isArray(args.blockedReasons) && args.blockedReasons.length) {
+            blockedVisual.reasons = args.blockedReasons
+              .map(function (r) {
+                return typeof r === 'string' ? r.trim() : '';
+              })
+              .filter(Boolean);
+          }
+          var linkSrc =
+            Array.isArray(blockedSnap.blockedLinks) && blockedSnap.blockedLinks.length
+              ? blockedSnap.blockedLinks
+              : Array.isArray(args.blockedLinks)
+                ? args.blockedLinks
+                : [];
+          if (linkSrc.length) {
+            blockedVisual.links = linkSrc
+              .map(function (link) {
+                if (!link) return null;
+                if (typeof link === 'string') return { label: link };
+                var label =
+                  (typeof link.label === 'string' && link.label.trim()) ||
+                  (typeof link.matchText === 'string' && link.matchText.trim()) ||
+                  '';
+                var id = link.id != null ? String(link.id) : '';
+                if (!label && !id) return null;
+                var entry = {};
+                if (label) entry.label = label;
+                if (id) entry.id = id;
+                return entry;
+              })
+              .filter(Boolean);
+          }
+          result.visual = blockedVisual;
+        }
+        return result;
+      }
+      if (tool === 'set_task_types') {
+        var typeSnap = snapshotPriority(bridge);
+        var typeIds =
+          Array.isArray(typeSnap.taskTypes) && typeSnap.taskTypes.length
+            ? typeSnap.taskTypes
+            : Array.isArray(args.types)
+              ? args.types
+              : [];
+        if (typeIds.length) {
+          result.visual = {
+            type: 'task_types',
+            types: typeIds.map(function (id) {
+              return typeof id === 'string' ? id : id && id.id;
+            }).filter(Boolean)
           };
         }
         return result;
@@ -16730,9 +16869,11 @@
     PRESETS: PRESETS,
     OPENAI_MODELS: OPENAI_MODELS,
     MODEL_TIERS: MODEL_TIERS,
+    MODEL_MODES: MODEL_MODES,
     CHAT_WARMUP_USER_TURNS: CHAT_WARMUP_USER_TURNS,
     normalizeProvider: normalizeProvider,
     normalizeModelTier: normalizeModelTier,
+    normalizeModelMode: normalizeModelMode,
     classifyModelClass: classifyModelClass,
     modelForTier: modelForTier,
     resolveChatModel: resolveChatModel,

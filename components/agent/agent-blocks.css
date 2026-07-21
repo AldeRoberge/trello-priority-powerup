@@ -354,6 +354,80 @@
   opacity: 0.85;
 }
 
+/* Matrix subtitle under priority badge */
+.tp-page--priority .agent-block-matrix-label {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tp-text-subtle, #626f86);
+  line-height: 1.3;
+}
+
+/* Due proximity bands */
+.tp-page--priority .agent-block--due[data-due-band] {
+  border-color: color-mix(
+    in srgb,
+    var(--agent-due-band-accent, var(--tp-border, #dfe1e6)) 55%,
+    var(--tp-border, #dfe1e6)
+  );
+  background: color-mix(
+    in srgb,
+    var(--agent-due-band-accent, transparent) 10%,
+    var(--tp-surface, #fff)
+  );
+}
+
+.tp-page--priority .agent-block-pill--due-band {
+  border-color: color-mix(
+    in srgb,
+    var(--agent-due-band-accent, #626f86) 45%,
+    transparent
+  );
+  background: color-mix(
+    in srgb,
+    var(--agent-due-band-accent, #626f86) 14%,
+    transparent
+  );
+}
+
+.tp-page--priority .agent-block--due.is-overdue .agent-block-due-value,
+.tp-page--priority .agent-block--due.is-due-overdue .agent-block-due-value {
+  color: #ae2e24;
+  font-weight: 700;
+}
+
+/* Blocked / en attente */
+.tp-page--priority .agent-block--blocked.is-active {
+  border-color: color-mix(in srgb, #e34935 45%, var(--tp-border, #dfe1e6));
+  background: color-mix(in srgb, #e34935 8%, var(--tp-surface, #fff));
+}
+
+.tp-page--priority .agent-block-blocked-status {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tp-text, #172b4d);
+  line-height: 1.3;
+}
+
+.tp-page--priority .agent-block-blocked-status.is-warn {
+  color: #ae2e24;
+}
+
+.tp-page--priority .agent-block--blocked.is-cleared .agent-block-blocked-status {
+  font-weight: 500;
+  color: var(--tp-text-subtle, #626f86);
+}
+
+.tp-page--priority .agent-block--blocked .agent-block-chip-row {
+  margin-top: 6px;
+}
+
+/* Task types */
+.tp-page--priority .agent-block--task-types .agent-block-person-chip {
+  border-color: color-mix(in srgb, var(--agent-accent, #0c66e4) 35%, transparent);
+  background: color-mix(in srgb, var(--agent-accent, #0c66e4) 10%, transparent);
+}
+
 html[data-color-mode='dark'] .tp-page--priority .agent-msg-bubble .agent-block,
 html[data-color-mode='dark'] .tp-page--priority .agent-result-blocks .agent-block {
   background: color-mix(

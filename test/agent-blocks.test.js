@@ -100,6 +100,75 @@ describe('AgentBlocks', () => {
     assert.equal(blocks[4].type, 'labels');
   });
 
+  it('normalizes blocked, task_types, priority matrixLabel, dueBand', () => {
+    const blocks = AgentBlocks.normalizeBlocks(
+      [
+        {
+          type: 'blocked',
+          enabled: true,
+          reasons: ["En attente d'une approbation"],
+          links: [{ id: 'st1', label: 'Valider le devis' }]
+        },
+        { type: 'blocked', cleared: true },
+        { type: 'task_types', types: ['action', 'process'] },
+        {
+          type: 'priority',
+          tier: 'Importante',
+          urgency: 2,
+          impact: 2,
+          ease: 4,
+          matrixLabel: 'Victoire rapide'
+        },
+        {
+          type: 'due',
+          dueDate: '2026-07-22',
+          dueBand: 'soon'
+        },
+        { type: 'due', dueDate: '2026-07-22', dueBand: 'nope' }
+      ],
+      {}
+    );
+    assert.equal(blocks.length, 6);
+    assert.equal(blocks[0].type, 'blocked');
+    assert.equal(blocks[0].enabled, true);
+    assert.equal(blocks[0].reasons.length, 1);
+    assert.equal(blocks[0].links[0].label, 'Valider le devis');
+    assert.equal(blocks[1].type, 'blocked');
+    assert.equal(blocks[1].cleared, true);
+    assert.equal(blocks[2].type, 'task_types');
+    assert.equal(blocks[2].types.length, 2);
+    assert.equal(blocks[2].types[0].id, 'action');
+    assert.ok(blocks[2].types[0].label);
+    assert.equal(blocks[3].matrixLabel, 'Victoire rapide');
+    assert.equal(blocks[4].dueBand, 'soon');
+    assert.equal(blocks[5].dueBand, undefined);
+  });
+
+  it('synthesizes blocked and task_types from tool visuals', () => {
+    const blocks = AgentBlocks.synthesizeBlocksFromResults({
+      results: [
+        {
+          ok: true,
+          tool: 'set_blocked',
+          visual: {
+            type: 'blocked',
+            enabled: true,
+            reasons: ["En attente d'un cable"]
+          }
+        },
+        {
+          ok: true,
+          tool: 'set_task_types',
+          visual: { type: 'task_types', types: ['material', 'action'] }
+        }
+      ]
+    });
+    assert.equal(blocks.length, 2);
+    assert.equal(blocks[0].type, 'blocked');
+    assert.equal(blocks[1].type, 'task_types');
+    assert.equal(blocks[1].types[0].id, 'material');
+  });
+
   it('caps blocks at MAX_BLOCKS', () => {
     const raw = [];
     for (let i = 0; i < 10; i++) {
