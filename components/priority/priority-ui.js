@@ -16947,6 +16947,23 @@
         selectTime(period.time);
         setDialMode('hour');
       });
+      if (
+        global.ContextMenu &&
+        typeof global.ContextMenu.bind === 'function'
+      ) {
+        ContextMenu.bind(chip, function () {
+          return [
+            {
+              id: 'time-period:' + period.id,
+              label: period.label,
+              action: function () {
+                selectTime(period.time);
+                setDialMode('hour');
+              },
+            },
+          ];
+        });
+      }
       timePeriods.appendChild(chip);
     });
 

@@ -511,4 +511,87 @@ describe('ContextMenu', () => {
     });
     assert.ok(hist.some((i) => i.id === 'restore'));
   });
+
+  it('buildBulkActionItems and completion master items', () => {
+    const calls = [];
+    const bulk = ContextMenu.buildBulkActionItems({
+      count: 2,
+      onDone() {
+        calls.push('done');
+      },
+      onReopen() {
+        calls.push('reopen');
+      },
+      onDelete() {
+        calls.push('del');
+      },
+      onClear() {
+        calls.push('clear');
+      },
+      onSelectAll() {
+        calls.push('all');
+      },
+    });
+    assert.ok(bulk.some((i) => i.id === 'bulk-done'));
+    bulk.find((i) => i.id === 'bulk-clear').action();
+    assert.deepEqual(calls, ['clear']);
+
+    const master = ContextMenu.buildCompletionMasterItems({
+      done: false,
+      blocked: true,
+      onToggleComplete() {},
+      onToggleBlocked() {},
+      onCompleteAll() {
+        calls.push('all-done');
+      },
+      onResetAll() {},
+    });
+    assert.ok(master.some((i) => i.id === 'complete-all'));
+    master.find((i) => i.id === 'complete-all').action();
+    assert.ok(calls.includes('all-done'));
+  });
+
+  it('buildGanttToolbarItems and agent composer items', () => {
+    let mode = null;
+    const toolbar = ContextMenu.buildGanttToolbarItems({
+      viewMode: 'week',
+      hideCompleted: true,
+      hideBlocked: false,
+      hideUndated: false,
+      onViewMode(m) {
+        mode = m;
+      },
+      onPrev() {},
+      onToday() {},
+      onNext() {},
+      onToggleHideCompleted() {},
+      onToggleHideBlocked() {},
+      onToggleHideUndated() {},
+    });
+    assert.ok(toolbar.some((i) => i.id === 'zoom-month'));
+    toolbar.find((i) => i.id === 'zoom-month').action();
+    assert.equal(mode, 'month');
+    assert.equal(
+      toolbar.find((i) => i.id === 'filter-completed').label,
+      'Afficher les termin\u00e9s'
+    );
+
+    let sent = false;
+    const composer = ContextMenu.buildAgentComposerItems({
+      sendDisabled: false,
+      currentMode: 'auto',
+      modes: [
+        { id: 'auto', label: 'Auto' },
+        { id: 'capable', label: 'Puissant' },
+      ],
+      onSend() {
+        sent = true;
+      },
+      onSetMode() {},
+    });
+    assert.ok(composer.some((i) => i.id === 'send'));
+    assert.ok(composer.some((i) => i.id === 'mode:capable'));
+    composer.find((i) => i.id === 'send').action();
+    assert.equal(sent, true);
+  });
 });

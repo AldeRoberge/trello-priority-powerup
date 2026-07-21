@@ -1156,6 +1156,41 @@
     }
     composer.appendChild(modelModeSelect);
     composer.appendChild(sendBtn);
+    if (
+      global.ContextMenu &&
+      typeof global.ContextMenu.bind === 'function' &&
+      typeof global.ContextMenu.buildAgentComposerItems === 'function'
+    ) {
+      ContextMenu.bind(composer, function () {
+        return ContextMenu.buildAgentComposerItems({
+          sendDisabled: !!sendBtn.disabled,
+          currentMode: modelModeSelect.value || 'auto',
+          modes: MODEL_MODE_OPTIONS,
+          onSend: function () {
+            if (typeof onSend === 'function') onSend();
+          },
+          onSetMode: function (modeId) {
+            var nextMode =
+              typeof Agent.normalizeModelMode === 'function'
+                ? Agent.normalizeModelMode(modeId)
+                : modeId || 'auto';
+            provider = Agent.normalizeProvider(
+              Object.assign({}, provider, { modelMode: nextMode })
+            );
+            modelModeSelect.value = provider.modelMode || 'auto';
+            if (!t) return;
+            Agent.saveProvider(t, provider)
+              .then(function (saved) {
+                provider = Agent.normalizeProvider(saved);
+                savedProvider = Agent.normalizeProvider(saved);
+              })
+              .catch(function (err) {
+                console.error('AgentUI: modelMode save failed', err);
+              });
+          },
+        });
+      });
+    }
     chatPanel.appendChild(suggestionsEl);
     chatPanel.appendChild(composer);
 
@@ -6353,6 +6388,22 @@
         chip.addEventListener('click', function () {
           onFollowUp(fu);
         });
+        if (
+          global.ContextMenu &&
+          typeof global.ContextMenu.bind === 'function'
+        ) {
+          ContextMenu.bind(chip, function () {
+            return [
+              {
+                id: 'followup',
+                label: fu.label || 'Appliquer',
+                action: function () {
+                  onFollowUp(fu);
+                },
+              },
+            ];
+          });
+        }
         followUpsEl.appendChild(chip);
       });
       notifyLayout();

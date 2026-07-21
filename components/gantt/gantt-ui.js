@@ -362,6 +362,74 @@
     mount.innerHTML = '';
     mount.appendChild(root);
 
+    if (
+      global.ContextMenu &&
+      typeof global.ContextMenu.bind === 'function'
+    ) {
+      if (typeof global.ContextMenu.buildGanttToolbarItems === 'function') {
+        ContextMenu.bind(toolbar, function () {
+          return ContextMenu.buildGanttToolbarItems({
+            viewMode: state.viewMode,
+            hideCompleted: !!state.hideCompleted,
+            hideBlocked: !!state.hideBlocked,
+            hideUndated: !!state.hideUndated,
+            onViewMode: function (mode) {
+              state.viewMode = mode;
+              render();
+            },
+            onPrev: function () {
+              state.anchor = model.toIsoDate(
+                model.shiftAnchor(state.viewMode, state.anchor, -1)
+              );
+              render();
+            },
+            onToday: function () {
+              state.anchor = model.toIsoDate(new Date());
+              render();
+            },
+            onNext: function () {
+              state.anchor = model.toIsoDate(
+                model.shiftAnchor(state.viewMode, state.anchor, 1)
+              );
+              render();
+            },
+            onToggleHideCompleted: function (nextVal) {
+              state.hideCompleted = !!nextVal;
+              persistFilters();
+              renderChart();
+            },
+            onToggleHideBlocked: function (nextVal) {
+              state.hideBlocked = !!nextVal;
+              persistFilters();
+              renderChart();
+            },
+            onToggleHideUndated: function (nextVal) {
+              state.hideUndated = !!nextVal;
+              persistFilters();
+              renderChart();
+            },
+          });
+        });
+      }
+      if (typeof global.ContextMenu.buildBulkActionItems === 'function') {
+        ContextMenu.bind(bulkBar, function () {
+          return ContextMenu.buildBulkActionItems({
+            count: selectedCount(),
+            onDone: function () {
+              runBulk('done');
+            },
+            onReopen: function () {
+              runBulk('reopen');
+            },
+            onDelete: function (e) {
+              runBulk('delete', e);
+            },
+            onClear: clearSelection,
+          });
+        });
+      }
+    }
+
     var measureRaf = 0;
     var resizeObserver = null;
 

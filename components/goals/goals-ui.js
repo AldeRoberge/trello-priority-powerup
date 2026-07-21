@@ -312,6 +312,42 @@
           onSelect();
         }
       });
+      if (
+        global.ContextMenu &&
+        typeof global.ContextMenu.bind === 'function'
+      ) {
+        ContextMenu.bind(row, function () {
+          var items = [
+            {
+              id: 'select',
+              label: 'S\u00e9lectionner',
+              disabled: item.id === selectedId,
+              action: function () {
+                onSelect();
+              },
+            },
+            {
+              id: 'rename',
+              label: 'Modifier\u2026',
+              action: function () {
+                editBtn.click();
+              },
+            },
+          ];
+          if (!item.retired) {
+            items.push({
+              id: 'retire',
+              label: 'Retirer',
+              danger: true,
+              action: function () {
+                var retire = actions.querySelector('[aria-label="Retirer"]');
+                if (retire) retire.click();
+              },
+            });
+          }
+          return items;
+        });
+      }
       return row;
     }
 
