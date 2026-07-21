@@ -2120,7 +2120,7 @@
     completeAllBtn.innerHTML = '<i class="ti ti-checks" aria-hidden="true"></i>';
     completeAllBtn.setAttribute(
       'aria-label',
-      'Marquer toutes les sous-t\u00e2ches comme termin\u00e9es'
+      'Tout compl\u00e9ter \u2014 mettre le progr\u00e8s \u00e0 100\u00a0%'
     );
     completeAllBtn.title = 'Tout compl\u00e9ter';
     completeAllBtn.hidden = true;
@@ -3586,11 +3586,10 @@
     }
 
     function syncCompleteAllButton(progress) {
-      var hasProgress = progress.percent > 0;
       var fullyComplete =
         progress.percent >= 100 || isAllCompleteProgress(progress);
-      // Match `.has-progress`; hide once everything is already complete.
-      completeAllBtn.hidden = !hasProgress || fullyComplete;
+      // Always offer complete-all until everything is at 100% (including 0%).
+      completeAllBtn.hidden = fullyComplete;
       completeAllBtn.disabled = fullyComplete;
     }
 
@@ -3622,12 +3621,15 @@
 
     function completeAllTasks() {
       var progress = CT.computeCardProgress(data, linkedSnapshots);
-      if (progress.percent <= 0 || progress.percent >= 100 || isAllCompleteProgress(progress)) {
+      if (progress.percent >= 100 || isAllCompleteProgress(progress)) {
         return;
       }
       resetAllClearsCompleted = false;
-      if (data.items.length) {
+      if (typeof CT.markFullyComplete === 'function') {
+        data = CT.markFullyComplete(data);
+      } else if (data.items.length) {
         data.items = CT.applyMasterProgress(data.items, 100, linkedSnapshots);
+        data.progress = 100;
       } else {
         data.progress = 100;
       }
