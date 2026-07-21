@@ -13,8 +13,8 @@ describe('CelebrationEffects', () => {
     assert.ok(FX);
   });
 
-  it('lists 22 effects', () => {
-    assert.equal(FX.list().length, 22);
+  it('lists 23 effects', () => {
+    assert.equal(FX.list().length, 23);
   });
 
   it('normalizes known ids and aliases', () => {
@@ -41,6 +41,7 @@ describe('CelebrationEffects', () => {
       'coin',
       'drumroll',
       'banner',
+      'fleur_de_lys',
     ];
     for (const id of expected) {
       assert.ok(FX.list().includes(id), `missing ${id}`);
@@ -53,6 +54,9 @@ describe('CelebrationEffects', () => {
     assert.equal(FX.normalize('fullscreen_text'), 'banner');
     assert.equal(FX.normalize('fleurs'), 'flowers');
     assert.equal(FX.normalize('bouquet'), 'flowers');
+    assert.equal(FX.normalize('quebec'), 'fleur_de_lys');
+    assert.equal(FX.normalize('vive_le_quebec_libre'), 'fleur_de_lys');
+    assert.equal(FX.normalize('gens_du_pays'), 'fleur_de_lys');
     assert.equal(FX.normalize('lava'), null);
   });
 
@@ -189,8 +193,37 @@ describe('PriorityAgent trigger_effect', () => {
 
     res = await Agent.executeAction(bridge, {
       tool: 'trigger_effect',
+      args: { effect: 'fleur_de_lys', text: 'VIVE LE QUÉBEC' },
+    });
+    assert.ok(res && res.ok);
+    const quebec = played[played.length - 1];
+    assert.equal(quebec.name, 'fleur_de_lys');
+    assert.equal(quebec.opts.text, 'VIVE LE QUÉBEC');
+
+    res = await Agent.executeAction(bridge, {
+      tool: 'trigger_effect',
       args: { effect: 'banner' },
     });
     assert.ok(res && !res.ok);
+  });
+
+  it('injects fleur_de_lys when user says Vive le Québec Libre', () => {
+    assert.equal(Agent.looksLikeQuebecLibrePhrase('Vive le Québec Libre'), true);
+    assert.equal(Agent.looksLikeQuebecLibrePhrase('vive le quebec'), true);
+    assert.equal(Agent.looksLikeQuebecLibrePhrase('Gens du pays!'), true);
+    assert.equal(Agent.looksLikeQuebecLibrePhrase('bonjour'), false);
+
+    const injected = Agent.ensureQuebecLibreEffect([], 'Vive le Québec Libre');
+    assert.equal(injected.length, 1);
+    assert.equal(injected[0].tool, 'trigger_effect');
+    assert.equal(injected[0].args.effect, 'fleur_de_lys');
+    assert.equal(injected[0].args.text, 'VIVE LE QUÉBEC');
+
+    const replaced = Agent.ensureQuebecLibreEffect(
+      [{ tool: 'trigger_effect', args: { effect: 'confetti' } }],
+      'Québec libre'
+    );
+    assert.equal(replaced.length, 1);
+    assert.equal(replaced[0].args.effect, 'fleur_de_lys');
   });
 });

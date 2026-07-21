@@ -49,10 +49,11 @@ var expected = [
   'laser',
   'coin',
   'drumroll',
-  'banner'
+  'banner',
+  'fleur_de_lys'
 ];
 
-check('list has 22 effects', FX.list().length === 22);
+check('list has 23 effects', FX.list().length === 23);
 expected.forEach(function (id) {
   check('has ' + id, FX.list().indexOf(id) !== -1);
   check('normalize ' + id, FX.normalize(id) === id);
@@ -65,6 +66,8 @@ check('alias tonnerre → thunder', FX.normalize('tonnerre') === 'thunder');
 check('alias fullscreen_text → banner', FX.normalize('fullscreen_text') === 'banner');
 check('alias fleurs → flowers', FX.normalize('fleurs') === 'flowers');
 check('alias bouquet → flowers', FX.normalize('bouquet') === 'flowers');
+check('alias quebec → fleur_de_lys', FX.normalize('quebec') === 'fleur_de_lys');
+check('alias gens_du_pays → fleur_de_lys', FX.normalize('gens_du_pays') === 'fleur_de_lys');
 check('unknown effect', FX.normalize('lava') == null);
 check('label fireworks', typeof FX.label('fireworks') === 'string' && FX.label('fireworks').length > 0);
 check('play export', typeof FX.play === 'function');

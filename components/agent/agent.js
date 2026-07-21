@@ -462,7 +462,8 @@
           'laser',
           'coin',
           'drumroll',
-          'banner'
+          'banner',
+          'fleur_de_lys'
         ];
 
   function normalizeEffectId(raw) {
@@ -1687,6 +1688,44 @@
     if (!hasEffect) {
       list.push({ tool: 'trigger_effect', args: { effect: 'confetti' } });
     }
+    return list;
+  }
+
+  function looksLikeQuebecLibrePhrase(text) {
+    var raw = String(text || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!raw) return false;
+    return (
+      /\bvive\s+le\s+quebec(\s+libre)?\b/.test(raw) ||
+      /\bquebec\s+libre\b/.test(raw) ||
+      /\bgens\s+du\s+pays\b/.test(raw)
+    );
+  }
+
+  function ensureQuebecLibreEffect(actions, userText) {
+    if (!looksLikeQuebecLibrePhrase(userText)) return actions || [];
+    var list = Array.isArray(actions) ? actions.slice() : [];
+    var quebecAction = {
+      tool: 'trigger_effect',
+      args: {
+        effect: 'fleur_de_lys',
+        text: 'VIVE LE QU\u00c9BEC'
+      }
+    };
+    var replaced = false;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].tool === 'trigger_effect') {
+        list[i] = quebecAction;
+        replaced = true;
+        break;
+      }
+    }
+    if (!replaced) list.push(quebecAction);
     return list;
   }
 
@@ -3516,7 +3555,7 @@
       '- Ex. couleur\u00a0: user \u00ab\u00a0change ta couleur pour rouge\u00a0\u00bb \u2192 {"message":"Okay, je passe au rouge\u00a0!","emotion":"happy","color":"red","suggestions":[],"followUps":[],"actions":[{"tool":"set_agent_color","args":{"color":"red"}}]}',
       '- Ex. personnalit\u00e9\u00a0: user \u00ab\u00a0sois un peu taquin\u00a0\u00bb \u2192 {"message":"Deal. Mode taquin activ\u00e9.","suggestions":[],"followUps":[],"actions":[{"tool":"set_agent_personality","args":{"personality":"Un peu taquin, volontiers espi\u00e8gle, reste utile."}}]}',
       'Effets fun dynamiques (trigger_effect)\u00a0:',
-      '- Palette visuelle\u00a0: fireworks, confetti, hearts, sparkles, shooting_stars, bubbles, aurora, balloons, petals, flowers, rainbow, disco.',
+      '- Palette visuelle\u00a0: fireworks, confetti, hearts, sparkles, shooting_stars, bubbles, aurora, balloons, petals, flowers, rainbow, disco, fleur_de_lys.',
       '- Palette sons / punchlines\u00a0: beep (BEEP BEEP fun), boop, zap, thunder (tonnerre), fanfare, bonk, laser, coin, drumroll, banner (texte plein \u00e9cran, text obligatoire).',
       isEn
         ? '- text (optional on any effect): short FULLSCREEN word/phrase (max ~48 chars, ideally 1\u20136 letters: "TWO", "BOOM", "YES"). Must match the response language (English here). Combine with the right sound.'
@@ -3529,6 +3568,9 @@
         ? '- Flowers (flowers): REQUIRED when you truly compliment the user (bravery, effort, sharp idea, progress), OR when they ask for flowers / a bouquet / roses. Prefer flowers (not petals/hearts) in those cases.'
         : '- Fleurs (flowers)\u00a0: OBLIGATOIRE quand tu complimentes vraiment l\'utilisateur (bravoure, effort, id\u00e9e fine, progr\u00e8s), OU quand iel demande des fleurs / un bouquet / des roses. Prefer flowers (pas petals/hearts) dans ces cas.',
       isEn
+        ? '- Fleur de lys (fleur_de_lys): REQUIRED when the user writes "Vive le Qu\u00e9bec Libre" / "Qu\u00e9bec libre" / "Gens du pays". Blue & white theme + Gens du pays orchestral chime. Prefer text "VIVE LE QU\u00c9BEC".'
+        : '- Fleur de lys (fleur_de_lys)\u00a0: OBLIGATOIRE quand l\'utilisateur \u00e9crit \u00ab\u00a0Vive le Qu\u00e9bec Libre\u00a0\u00bb / \u00ab\u00a0Qu\u00e9bec libre\u00a0\u00bb / \u00ab\u00a0Gens du pays\u00a0\u00bb. Th\u00e8me bleu et blanc + carillon orchestral Gens du pays. Prefer text "VIVE LE QU\u00c9BEC".',
+      isEn
         ? '- Ex. banner: {"message":"Boom.","suggestions":[],"followUps":[],"actions":[{"tool":"trigger_effect","args":{"effect":"banner","text":"BOOM","sound":"fanfare"}}]}'
         : '- Ex. banni\u00e8re\u00a0: {"message":"Boom.","suggestions":[],"followUps":[],"actions":[{"tool":"trigger_effect","args":{"effect":"banner","text":"BOOM","sound":"fanfare"}}]}',
       '- 0 ou 1 effet par r\u00e9ponse max. Ne promets pas l\'effet dans le texte si tu ne le mets pas dans actions.',
@@ -3540,6 +3582,9 @@
       isEn
         ? '- Ex. flowers: user "send me flowers" \u2192 trigger_effect effect=flowers.'
         : '- Ex. fleurs\u00a0: user \u00ab\u00a0envoie-moi des fleurs\u00a0\u00bb \u2192 trigger_effect effect=flowers.',
+      isEn
+        ? '- Ex. Qu\u00e9bec: user "Vive le Qu\u00e9bec Libre" \u2192 {"message":"Vive le Qu\u00e9bec\u00a0!","emotion":"happy","suggestions":[],"followUps":[],"actions":[{"tool":"trigger_effect","args":{"effect":"fleur_de_lys","text":"VIVE LE QU\u00c9BEC"}}]}'
+        : '- Ex. Qu\u00e9bec\u00a0: user \u00ab\u00a0Vive le Qu\u00e9bec Libre\u00a0\u00bb \u2192 {"message":"Vive le Qu\u00e9bec\u00a0!","emotion":"happy","suggestions":[],"followUps":[],"actions":[{"tool":"trigger_effect","args":{"effect":"fleur_de_lys","text":"VIVE LE QU\u00c9BEC"}}]}',
       'Montrer / pointer sur la page (point_at) \u2014 tr\u00e8s important\u00a0:',
       '- Quand l\'utilisateur demande o\u00f9 c\'est \u00e9crit, o\u00f9 voir X, \u00ab\u00a0montre-moi\u00a0\u00bb, \u00ab\u00a0where does it say\u00a0\u00bb, \u00ab\u00a0point to\u00a0\u00bb\u00a0: R\u00c9PONDS bri\u00e8vement ET appelle point_at (ne te contente pas de paraphraser le contexte).',
       '- section\u00a0: priority (Priorit\u00e9 / heat) | due (\u00c9ch\u00e9ance) | blocked (Blocage) | progress (Progr\u00e8s / sous-t\u00e2ches) | statut | objectif | info.',
@@ -7174,7 +7219,11 @@
     );
     message = progressGuard.message;
     actions = progressGuard.actions;
+    actions = ensureQuebecLibreEffect(actions, userText);
     var emotion = progressGuard.emotion;
+    if (looksLikeQuebecLibrePhrase(userText) && !emotion) {
+      emotion = 'happy';
+    }
     var replyColor = colorRewrite.color || parsed.color || null;
     var prompts = ensurePriorityAxesPrompt(
       normalizePrompts(parsed.prompts, context),
@@ -9217,6 +9266,7 @@
     );
     message = progressGuard.message;
     actions = progressGuard.actions;
+    actions = ensureQuebecLibreEffect(actions, userText);
     var projectScope = isProjectScope(context && context.scope);
     if (projectScope) {
       var droppedForScope = [];
@@ -9240,6 +9290,9 @@
       context && context.userName
     );
     var replyEmotion = progressGuard.emotion;
+    if (looksLikeQuebecLibrePhrase(userText) && !replyEmotion) {
+      replyEmotion = 'happy';
+    }
     var replyColor =
       colorRewrite.color || parsed.color || null;
     var prompts = projectScope
@@ -16320,6 +16373,8 @@
     applyInterviewWhyGuards: applyInterviewWhyGuards,
     polishMessageAfterProgressComplete: polishMessageAfterProgressComplete,
     ensureProgressCelebration: ensureProgressCelebration,
+    looksLikeQuebecLibrePhrase: looksLikeQuebecLibrePhrase,
+    ensureQuebecLibreEffect: ensureQuebecLibreEffect,
     applyProgressCompleteGuards: applyProgressCompleteGuards,
     rewriteWinkEmoticons: rewriteWinkEmoticons,
     ensureContrastHighlights: ensureContrastHighlights,

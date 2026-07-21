@@ -70,7 +70,8 @@
     laser: { label: 'Laser', ms: 1100 },
     coin: { label: 'Pi\u00e8ce', ms: 1000 },
     drumroll: { label: 'Roulement', ms: 1800 },
-    banner: { label: 'Banni\u00e8re', ms: 2400 }
+    banner: { label: 'Banni\u00e8re', ms: 2400 },
+    fleur_de_lys: { label: 'Fleur de lys', ms: 4500 }
   };
 
   var EFFECT_ALIASES = {
@@ -132,7 +133,17 @@
     fullscreen: 'banner',
     stinger: 'banner',
     flash_text: 'banner',
-    title_card: 'banner'
+    title_card: 'banner',
+    fleur_de_lis: 'fleur_de_lys',
+    fleurdely: 'fleur_de_lys',
+    fleurdelys: 'fleur_de_lys',
+    quebec: 'fleur_de_lys',
+    quebec_libre: 'fleur_de_lys',
+    vive_quebec: 'fleur_de_lys',
+    vive_le_quebec: 'fleur_de_lys',
+    vive_le_quebec_libre: 'fleur_de_lys',
+    gens_du_pays: 'fleur_de_lys',
+    drapeau_quebec: 'fleur_de_lys'
   };
 
   var COLORS = {
@@ -141,7 +152,8 @@
     flowers: ['#ff8f73', '#ff5c8a', '#f5cd47', '#9f8fef', '#579dff', '#fda4af', '#fbcfe8'],
     cool: ['#579dff', '#4bce97', '#9f8fef', '#6ee7b7', '#93c5fd'],
     warm: ['#f5cd47', '#ff8f73', '#fb923c', '#fbbf24', '#fff'],
-    neon: ['#39ff14', '#00f0ff', '#ff2bd6', '#ffe600', '#ffffff']
+    neon: ['#39ff14', '#00f0ff', '#ff2bd6', '#ffe600', '#ffffff'],
+    quebec: ['#003399', '#ffffff', '#1a4db3', '#e8f0ff', '#002266', '#f5f8ff']
   };
 
   var BANNER_THEMES = {
@@ -156,6 +168,7 @@
     fireworks: { className: 'is-party', flash: true },
     confetti: { className: 'is-party', flash: false },
     disco: { className: 'is-party', flash: true },
+    fleur_de_lys: { className: 'is-quebec', flash: false },
     banner: { className: 'is-banner', flash: false }
   };
 
@@ -454,6 +467,57 @@
         { freq: FS.Cs6, delay: 0.55, dur: 0.4, peak: 0.03 }
       ]
     ]);
+  }
+
+  /**
+   * Orchestral chime approximating "Gens du pays" (opening motif),
+   * transposed into the Power-Up's F# major colour.
+   */
+  function soundGensDuPays() {
+    // Soft string-like pad under the melody
+    playTones(
+      [
+        { freq: FS.Fs3, delay: 0, dur: 3.8, peak: 0.018, type: 'sine', attack: 0.18 },
+        { freq: FS.Cs4, delay: 0.04, dur: 3.75, peak: 0.014, type: 'sine', attack: 0.22 },
+        { freq: FS.As3, delay: 0.08, dur: 3.7, peak: 0.012, type: 'triangle', attack: 0.25 },
+        { freq: FS.Fs4, delay: 0.12, dur: 3.6, peak: 0.01, type: 'sine', attack: 0.3 }
+      ],
+      { lowpass: 1800, q: 0.4, timeJitter: 0.01 }
+    );
+    // Melody + octave doubling (bell / winds colour)
+    playTones(
+      [
+        // Gens du pays
+        { freq: FS.As4, delay: 0.15, dur: 0.32, peak: 0.042, type: 'triangle', attack: 0.03 },
+        { freq: FS.Gs4, delay: 0.42, dur: 0.28, peak: 0.04, type: 'triangle', attack: 0.025 },
+        { freq: FS.Fs4, delay: 0.68, dur: 0.28, peak: 0.038, type: 'sine', attack: 0.025 },
+        { freq: FS.As4, delay: 0.94, dur: 0.36, peak: 0.044, type: 'triangle', attack: 0.03 },
+        // c'est votre tour
+        { freq: FS.Cs5, delay: 1.3, dur: 0.32, peak: 0.042, type: 'triangle', attack: 0.03 },
+        { freq: FS.B4, delay: 1.58, dur: 0.28, peak: 0.04, type: 'sine', attack: 0.025 },
+        { freq: FS.As4, delay: 1.84, dur: 0.28, peak: 0.038, type: 'triangle', attack: 0.025 },
+        { freq: FS.Gs4, delay: 2.1, dur: 0.4, peak: 0.04, type: 'sine', attack: 0.03 },
+        // de vous laisser parler d'amour (resolve)
+        { freq: FS.Fs4, delay: 2.55, dur: 0.28, peak: 0.038, type: 'triangle', attack: 0.03 },
+        { freq: FS.Fs4, delay: 2.8, dur: 0.26, peak: 0.036, type: 'sine', attack: 0.025 },
+        { freq: FS.Gs4, delay: 3.04, dur: 0.26, peak: 0.038, type: 'triangle', attack: 0.025 },
+        { freq: FS.As4, delay: 3.28, dur: 0.32, peak: 0.042, type: 'triangle', attack: 0.03 },
+        { freq: FS.As4, delay: 3.58, dur: 0.28, peak: 0.04, type: 'sine', attack: 0.03 },
+        { freq: FS.Gs4, delay: 3.84, dur: 0.55, peak: 0.036, type: 'triangle', attack: 0.04 }
+      ],
+      { lowpass: 3200, q: 0.55, timeJitter: 0.012 }
+    );
+    // Soft high harmonics / chime sparkle
+    playTones(
+      [
+        { freq: FS.As5, delay: 0.2, dur: 0.55, peak: 0.016, type: 'sine', attack: 0.05 },
+        { freq: FS.Cs6, delay: 1.35, dur: 0.6, peak: 0.015, type: 'sine', attack: 0.06 },
+        { freq: FS.Fs5, delay: 2.6, dur: 0.7, peak: 0.014, type: 'sine', attack: 0.08 },
+        { freq: FS.Cs6, delay: 3.6, dur: 0.85, peak: 0.018, type: 'sine', attack: 0.1 },
+        { freq: FS.Fs6, delay: 3.75, dur: 0.9, peak: 0.012, type: 'triangle', attack: 0.12 }
+      ],
+      { lowpass: 4800, q: 0.35, timeJitter: 0.01 }
+    );
   }
 
   function soundBonk() {
@@ -1750,6 +1814,9 @@
       case 'fanfare':
         soundFanfare();
         break;
+      case 'fleur_de_lys':
+        soundGensDuPays();
+        break;
       case 'bonk':
         soundBonk();
         break;
@@ -2090,6 +2157,42 @@
     }
   }
 
+  function buildFleurDeLys(overlay) {
+    var wash = document.createElement('div');
+    wash.className = 'tp-fx-quebec-wash';
+    overlay.appendChild(wash);
+
+    var cross = document.createElement('div');
+    cross.className = 'tp-fx-quebec-cross';
+    overlay.appendChild(cross);
+
+    var colors = COLORS.quebec;
+    for (var i = 0; i < 24; i++) {
+      var el = document.createElement('span');
+      el.className = 'tp-fx-fleur';
+      el.textContent = '\u269C';
+      el.style.setProperty('--x', rand(4, 96) + '%');
+      el.style.setProperty('--size', rand(22, 48) + 'px');
+      el.style.setProperty('--c', pick(colors, i));
+      el.style.setProperty('--delay', rand(0, 1.1) + 's');
+      el.style.setProperty('--dur', rand(3.2, 4.4) + 's');
+      el.style.setProperty('--drift', rand(-70, 70) + 'px');
+      el.style.setProperty('--spin', rand(-50, 50) + 'deg');
+      overlay.appendChild(el);
+    }
+    for (var j = 0; j < 14; j++) {
+      var spark = document.createElement('span');
+      spark.className = 'tp-fx-sparkle';
+      spark.style.setProperty('--x', rand(8, 92) + '%');
+      spark.style.setProperty('--y', rand(10, 78) + '%');
+      spark.style.setProperty('--size', rand(6, 14) + 'px');
+      spark.style.setProperty('--c', j % 2 === 0 ? '#ffffff' : '#003399');
+      spark.style.setProperty('--delay', rand(0.2, 1.6) + 's');
+      spark.style.setProperty('--dur', rand(1.1, 1.8) + 's');
+      overlay.appendChild(spark);
+    }
+  }
+
   function buildRainbow(overlay) {
     var el = document.createElement('div');
     el.className = 'tp-fx-rainbow';
@@ -2137,6 +2240,7 @@
     balloons: buildBalloons,
     petals: buildPetals,
     flowers: buildFlowers,
+    fleur_de_lys: buildFleurDeLys,
     rainbow: buildRainbow,
     disco: buildDisco,
     beep: buildBeep,

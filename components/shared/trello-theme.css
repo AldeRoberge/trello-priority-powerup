@@ -1440,10 +1440,11 @@ body.tp-page--priority.is-split-assistant {
 }
 
 .tp-page--priority.is-split-assistant {
-  max-width: none;
+  /* Same readable column as collapsed (880) + splitter + default rail (380) */
+  max-width: 1265px;
   width: 100%;
   height: 100%;
-  margin: 0;
+  margin: 0 auto;
 }
 
 .tp-page--priority .cerveau-shell {
