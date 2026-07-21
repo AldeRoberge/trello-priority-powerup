@@ -467,6 +467,27 @@
     return text;
   }
 
+  /**
+   * Drop leading indent before {{n}} markers so pre-wrap bubbles do not
+   * push block cards inward when the model indents placeholders.
+   */
+  function normalizeBlockPlaceholderIndent(text) {
+    if (typeof text !== 'string' || !text) return text || '';
+    return text.replace(/^[ \t]+(\{\{\d+\}\})/gm, '$1');
+  }
+
+  /** Trailing spaces/tabs before a block (keep newlines). */
+  function trimTrailingIndent(chunk) {
+    if (typeof chunk !== 'string' || !chunk) return chunk || '';
+    return chunk.replace(/[ \t]+$/g, '');
+  }
+
+  /** Leading spaces/tabs after a block (keep newlines). */
+  function trimLeadingIndent(chunk) {
+    if (typeof chunk !== 'string' || !chunk) return chunk || '';
+    return chunk.replace(/^[ \t]+/g, '');
+  }
+
   function formatMinutes(mins) {
     if (mins == null || !isFinite(+mins) || +mins <= 0) return '';
     var m = Math.round(+mins);
@@ -812,6 +833,7 @@
       }
       display = hideIncompleteBlockMarker(display);
     }
+    display = normalizeBlockPlaceholderIndent(display);
 
     if (!display && !list.length) return;
 
@@ -821,8 +843,14 @@
     var last = 0;
     var m;
     var hasPlaceholder = false;
+    var pendingAfterBlock = false;
 
     function appendTextChunk(chunk) {
+      if (!chunk) return;
+      if (pendingAfterBlock) {
+        chunk = trimLeadingIndent(chunk);
+        pendingAfterBlock = false;
+      }
       if (!chunk) return;
       if (typeof highlight.appendHighlighted === 'function') {
         highlight.appendHighlighted(bubble, chunk);
@@ -834,7 +862,7 @@
     while ((m = re.exec(display)) !== null) {
       hasPlaceholder = true;
       if (m.index > last) {
-        appendTextChunk(display.slice(last, m.index));
+        appendTextChunk(trimTrailingIndent(display.slice(last, m.index)));
       }
       var idx = parseInt(m[1], 10);
       if (
@@ -848,6 +876,7 @@
         if (node) {
           bubble.appendChild(node);
           used[idx] = true;
+          pendingAfterBlock = true;
         } else {
           appendTextChunk(m[0]);
         }
@@ -909,6 +938,7 @@
     normalizeBlocks: normalizeBlocks,
     synthesizeBlocksFromResults: synthesizeBlocksFromResults,
     hideIncompleteBlockMarker: hideIncompleteBlockMarker,
+    normalizeBlockPlaceholderIndent: normalizeBlockPlaceholderIndent,
     fillMessageContent: fillMessageContent,
     renderBlock: renderBlock,
     appendResultBlocks: appendResultBlocks,
