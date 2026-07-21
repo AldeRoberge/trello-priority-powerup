@@ -76,6 +76,8 @@
     set_agent_name: true,
     set_agent_color: true,
     set_agent_personality: true,
+    upsert_person: true,
+    remove_person: true,
     trigger_effect: true
   };
   var DEFAULT_OPENAI_BASE = 'https://api.openai.com/v1';
@@ -121,6 +123,181 @@
     { id: 'o3-mini', label: 'o3-mini' }
   ];
 
+  /**
+   * Chat model tiers the assistant may request via JSON `modelTier`.
+   * Warm-up (first CHAT_WARMUP_USER_TURNS user messages) floors at balanced.
+   */
+  var MODEL_TIERS = {
+    efficient: 'efficient',
+    balanced: 'balanced',
+    capable: 'capable'
+  };
+  var CHAT_WARMUP_USER_TURNS = 4;
+  var FAMILY_TIER_MODELS = {
+    'gpt-5.4': {
+      efficient: 'gpt-5.4-nano',
+      balanced: 'gpt-5.4-mini',
+      capable: 'gpt-5.4'
+    },
+    'gpt-5.2': {
+      efficient: 'gpt-5-nano',
+      balanced: 'gpt-5-mini',
+      capable: 'gpt-5.2'
+    },
+    'gpt-5.1': {
+      efficient: 'gpt-5-nano',
+      balanced: 'gpt-5-mini',
+      capable: 'gpt-5.1'
+    },
+    'gpt-5': {
+      efficient: 'gpt-5-nano',
+      balanced: 'gpt-5-mini',
+      capable: 'gpt-5'
+    },
+    'gpt-4.1': {
+      efficient: 'gpt-4.1-nano',
+      balanced: 'gpt-4.1-mini',
+      capable: 'gpt-4.1'
+    },
+    'gpt-4o': {
+      efficient: 'gpt-4o-mini',
+      balanced: 'gpt-4o-mini',
+      capable: 'gpt-4o'
+    },
+    o4: {
+      efficient: 'o4-mini',
+      balanced: 'o4-mini',
+      capable: 'o4-mini'
+    },
+    o3: {
+      efficient: 'o3-mini',
+      balanced: 'o3-mini',
+      capable: 'o3-mini'
+    }
+  };
+  var DEFAULT_TIER_MODELS = {
+    efficient: 'gpt-5.4-nano',
+    balanced: 'gpt-5.4-mini',
+    capable: 'gpt-5.4'
+  };
+
+  function stripModelPrefix(modelId) {
+    var id = String(modelId || '').trim();
+    var slash = id.lastIndexOf('/');
+    if (slash >= 0) return id.slice(slash + 1);
+    return id;
+  }
+
+  function withModelPrefix(bareId, likeModel) {
+    var like = String(likeModel || '').trim();
+    var slash = like.lastIndexOf('/');
+    if (slash >= 0) return like.slice(0, slash + 1) + bareId;
+    return bareId;
+  }
+
+  function normalizeModelTier(raw) {
+    var t = String(raw || '')
+      .trim()
+      .toLowerCase();
+    if (!t) return null;
+    if (t === MODEL_TIERS.efficient || t === MODEL_TIERS.balanced || t === MODEL_TIERS.capable) {
+      return t;
+    }
+    if (t === 'cheap' || t === 'nano' || t === 'fast' || t === 'low') return MODEL_TIERS.efficient;
+    if (t === 'standard' || t === 'mini' || t === 'default' || t === 'ok') {
+      return MODEL_TIERS.balanced;
+    }
+    if (t === 'smart' || t === 'full' || t === 'strong' || t === 'high') {
+      return MODEL_TIERS.capable;
+    }
+    return null;
+  }
+
+  function detectModelFamily(modelId) {
+    var id = stripModelPrefix(modelId).toLowerCase();
+    if (!id) return null;
+    if (/^gpt-5\.4/.test(id)) return 'gpt-5.4';
+    if (/^gpt-5\.2/.test(id)) return 'gpt-5.2';
+    if (/^gpt-5\.1/.test(id)) return 'gpt-5.1';
+    if (/^gpt-5/.test(id)) return 'gpt-5';
+    if (/^gpt-4\.1/.test(id)) return 'gpt-4.1';
+    if (/^gpt-4o/.test(id)) return 'gpt-4o';
+    if (/^o4/.test(id)) return 'o4';
+    if (/^o3/.test(id)) return 'o3';
+    return null;
+  }
+
+  /**
+   * @returns {'efficient'|'balanced'|'capable'|'unknown'}
+   */
+  function classifyModelClass(modelId) {
+    var id = stripModelPrefix(modelId).toLowerCase();
+    if (!id) return 'unknown';
+    if (id.indexOf('nano') >= 0) return MODEL_TIERS.efficient;
+    if (id.indexOf('mini') >= 0 || /^o[0-9]/.test(id)) return MODEL_TIERS.balanced;
+    if (/^gpt-5/.test(id) || /^gpt-4/.test(id)) return MODEL_TIERS.capable;
+    return 'unknown';
+  }
+
+  function isKnownOpenAiStyleModel(modelId) {
+    var id = stripModelPrefix(modelId).toLowerCase();
+    if (!id) return false;
+    if (detectModelFamily(id)) return true;
+    for (var i = 0; i < OPENAI_MODELS.length; i++) {
+      if (String(OPENAI_MODELS[i].id).toLowerCase() === id) return true;
+    }
+    return /^gpt-/.test(id) || /^o[0-9]/.test(id);
+  }
+
+  function modelForTier(provider, tier) {
+    var p = normalizeProvider(provider);
+    var t = normalizeModelTier(tier);
+    if (!t) return p.model;
+    if (!isKnownOpenAiStyleModel(p.model) && classifyModelClass(p.model) === 'unknown') {
+      return p.model;
+    }
+    var family = detectModelFamily(p.model);
+    var bare =
+      (family && FAMILY_TIER_MODELS[family] && FAMILY_TIER_MODELS[family][t]) ||
+      DEFAULT_TIER_MODELS[t] ||
+      p.model;
+    return withModelPrefix(bare, p.model);
+  }
+
+  function countUserTurns(history) {
+    var n = 0;
+    (history || []).forEach(function (entry) {
+      if (entry && entry.role === 'user') n += 1;
+    });
+    return n;
+  }
+
+  /**
+   * Resolve the API model for a chat turn.
+   * Warm-up: first CHAT_WARMUP_USER_TURNS user messages floor at balanced (never nano).
+   * After warm-up: sticky session tier if set, else the saved provider model.
+   * Never downgrades a saved capable/balanced model during warm-up.
+   *
+   * @param {object} provider
+   * @param {Array} history prior turns (current user message not yet included)
+   * @param {string|null} [sessionTier] sticky tier from a previous assistant reply
+   */
+  function resolveChatModel(provider, history, sessionTier) {
+    var p = normalizeProvider(provider);
+    var saved = p.model;
+    var priorUserTurns = countUserTurns(history);
+    var userTurnNumber = priorUserTurns + 1;
+    if (userTurnNumber <= CHAT_WARMUP_USER_TURNS) {
+      if (classifyModelClass(saved) === MODEL_TIERS.efficient) {
+        return modelForTier(p, MODEL_TIERS.balanced);
+      }
+      return saved;
+    }
+    var tier = normalizeModelTier(sessionTier);
+    if (tier) return modelForTier(p, tier);
+    return saved;
+  }
+
   var TOOL_LABELS = {
     set_priority: 'Priorit\u00e9 mise \u00e0 jour.',
     set_due: '\u00c9ch\u00e9ance mise \u00e0 jour.',
@@ -157,7 +334,9 @@
     point_at: 'Section montr\u00e9e.',
     set_agent_name: 'Nom de l\'assistant mis \u00e0 jour.',
     set_agent_color: 'Couleur de l\'assistant mise \u00e0 jour.',
-    set_agent_personality: 'Personnalit\u00e9 de l\'assistant mise \u00e0 jour.'
+    set_agent_personality: 'Personnalit\u00e9 de l\'assistant mise \u00e0 jour.',
+    upsert_person: 'Personne mise \u00e0 jour.',
+    remove_person: 'Personne retir\u00e9e.'
   };
 
   var TASK_TYPE_IDS = [
@@ -604,6 +783,38 @@
       return 'Bloqu\u00e9 \u00e0 cause de ' + rest;
     }
     return trimmed;
+  }
+
+  /** Resolve role aliases (ma boss → Jane Doe) using the People directory. */
+  function resolvePeopleInReason(reason, people) {
+    var normalized = normalizeAgentBlockedReason(reason);
+    if (!normalized) return '';
+    if (
+      global.People &&
+      typeof global.People.resolveInText === 'function' &&
+      people &&
+      (Array.isArray(people) ? people.length : people.people && people.people.length)
+    ) {
+      try {
+        return global.People.resolveInText(normalized, people) || normalized;
+      } catch (e) {
+        return normalized;
+      }
+    }
+    return normalized;
+  }
+
+  function getPeopleFromBridge(bridge) {
+    if (!bridge || typeof bridge.getPeople !== 'function') return [];
+    try {
+      var raw = bridge.getPeople();
+      if (global.People && typeof global.People.normalizeDirectory === 'function') {
+        return global.People.normalizeDirectory(raw).people;
+      }
+      if (Array.isArray(raw)) return raw;
+      if (raw && Array.isArray(raw.people)) return raw.people;
+    } catch (e) { /* ignore */ }
+    return [];
   }
 
   function ensureFollowUpActionVerb(label, actions) {
@@ -2362,6 +2573,22 @@
         }
       } catch (e) { /* ignore */ }
     }
+    if (typeof bridge.getPeople === 'function') {
+      try {
+        var peopleRaw = bridge.getPeople();
+        if (global.People && typeof global.People.toAgentContext === 'function') {
+          ctx.people = global.People.toAgentContext(peopleRaw);
+        } else if (Array.isArray(peopleRaw)) {
+          ctx.people = peopleRaw;
+        } else if (peopleRaw && Array.isArray(peopleRaw.people)) {
+          ctx.people = peopleRaw.people;
+        } else {
+          ctx.people = [];
+        }
+      } catch (e) {
+        ctx.people = [];
+      }
+    }
     if (typeof bridge.getMemory === 'function') {
       try {
         var mem = bridge.getMemory();
@@ -3052,6 +3279,16 @@
         'Profil utilisateur\u00a0: r\u00e9ponds en anglais (English) sauf si l\'utilisateur \u00e9crit clairement en fran\u00e7ais.'
       ];
     }
+    var peopleLines = [];
+    if (global.People && typeof global.People.peoplePromptLines === 'function') {
+      try {
+        peopleLines = global.People.peoplePromptLines(
+          (context && context.people) || []
+        ) || [];
+      } catch (e) {
+        peopleLines = [];
+      }
+    }
     var isEn = !!(context && context.profile && context.profile.language === 'en');
     var agentName =
       context && context.profile && typeof context.profile.agentName === 'string'
@@ -3078,6 +3315,8 @@
           '- Say things simply: priority, due date, subtask, blocked, etc. Only when the topic is actually the card.',
           '- No corporate support tone: "Please provide…", "How may I assist?", "Don\'t hesitate…", stiff formality.',
           '- Confirm like chat: "Okay, got it." / "Done. Set it to Flexible."',
+          '- Show, don\'t tell (card facts): when answering about priority / due / progress / statut / subtasks, prefer a short caption + visual blocks ({{n}}) and [[g/r/y/a:]] highlights over a prose dump of the same facts.',
+          '- Never invent card state: block fields, tiers, %, dates, people, and labels must come from context / tool results. If a section is off or missing, say so. Do not guess.',
           '- Punctuation: NEVER use em dashes (—). Prefer a period, comma, or a new sentence.',
           '- BAD: "Okay, Flexible. Refine the axes if needed."',
           '- GOOD: "Okay, Flexible. You can still tweak urgency / impact / ease if you want."'
@@ -3137,7 +3376,7 @@
           '- INTERDIT de r\u00e9pondre \u00ab\u00a0rien dans le contexte\u00a0\u00bb si boardDigest liste d\u00e9j\u00e0 des cartes pertinentes.',
           '- INTERDIT cardPatches (pas de m\u00e9moire locale de carte). Utilise seulement patches (m\u00e9moire tableau / projet).',
           '- INTERDIT les outils carte\u00a0: set_priority, set_due, set_blocked, set_progress, set_task_types, add_subtask, rename_subtask, remove_subtask, toggle_subtask, set_subtask_progress, complete_all_subtasks, reset_progress, rename_card, set_description, set_statut, set_formula, set_project, point_at.',
-          '- Outils autoris\u00e9s\u00a0: set_agent_name, set_agent_color, set_agent_personality, trigger_effect (+ patches m\u00e9moire).',
+          '- Outils autoris\u00e9s\u00a0: set_agent_name, set_agent_color, set_agent_personality, upsert_person, remove_person, trigger_effect (+ patches m\u00e9moire).',
           '- Aide sur\u00a0: vue d\'ensemble du tableau, m\u00e9moire projet, qui fait quoi, normes d\'\u00e9quipe, prochaines priorit\u00e9s transversales, discussions hors d\'une carte pr\u00e9cise.',
           '- Si l\'utilisateur parle d\'une carte pr\u00e9cise\u00a0: conseille d\'ouvrir cette carte pour l\'\u00e9diter\u00a0; tu peux quand m\u00eame discuter / m\u00e9moriser des faits projet.',
           'Alignement souple\u00a0: tu es un ami avant d\'\u00eatre un outil. Tu aides sur le projet / tableau quand on te le demande, mais tu n\'es PAS limit\u00e9 \u00e0 Trello et tu ne pousses PAS le travail.'
@@ -3152,6 +3391,7 @@
     return [identityLine, langLine]
       .concat(voiceLines)
       .concat(profileLines)
+      .concat(peopleLines)
       .concat(scopeLines)
       .concat([
       'Honn\u00eatet\u00e9 IA (non n\u00e9gociable)\u00a0:',
@@ -3192,7 +3432,10 @@
       '- Inf\u00e8re au maximum\u00a0: intention (renommer, ajouter, bloquer\u2026), cible mentionn\u00e9e (nom de sous-t\u00e2che, date\u2026), et applique toute partie faisable avec les outils.',
       '- Cherche d\'abord dans le contexte (boardDigest en mode projet\u00a0; progress.items, due, blocked, priority, m\u00e9moire, historique en mode carte) avant de conclure que tu ne peux pas agir.',
       '- NE PAS inventer de faits absents. NE PAS renvoyer la question \u00e0 l\'utilisateur sous forme miroir.',
-      '- Personnes / pr\u00e9noms (critique)\u00a0: n\'utilise JAMAIS un pr\u00e9nom ou un nom propre qui n\'appara\u00eet pas d\u00e9j\u00e0 dans le message utilisateur, l\'historique, cardMemory, memory, boardDigest ou progress.items. Les exemples du prompt ne sont PAS des gens r\u00e9els de la carte.',
+      '- Visuels / blocks (critique)\u00a0: tier, urgence, impact, facilit\u00e9, %, dates, listes, membres, labels dans blocks OU dans message DOIVENT venir de context.* / r\u00e9sultats d\'outils / boardDigest. INTERDIT de fabriquer un bloc avec des valeurs invent\u00e9es ou obsol\u00e8tes.',
+      '- Si priority.enabled=false (ou section absente)\u00a0: dis qu\'aucune priorit\u00e9 n\'est d\u00e9finie\u00a0; INTERDIT d\'\u00e9mettre un bloc priority fictif. M\u00eame logique pour progr\u00e8s / \u00e9ch\u00e9ance / statut / items vides.',
+      '- Dans thinking, avant d\'afficher un fait visuel\u00a0: note bri\u00e8vement d\'o\u00f9 il vient dans le contexte.',
+      '- Personnes / pr\u00e9noms (critique)\u00a0: n\'utilise JAMAIS un pr\u00e9nom ou un nom propre qui n\'appara\u00eet pas d\u00e9j\u00e0 dans le message utilisateur, l\'historique, cardMemory, memory, context.people, boardDigest ou progress.items. Les exemples du prompt ne sont PAS des gens r\u00e9els de la carte. Si context.people a un alias (ex. boss \u2192 Jane Doe), utilise ce nom.',
       '- INTERDIT\u00a0: \u00ab\u00a0Pourriez-vous pr\u00e9ciser\u2026?\u00a0\u00bb, \u00ab\u00a0Quels sont les\u2026?\u00a0\u00bb (miroir), ou toute reformulation de la question de l\'utilisateur.',
       '- Ex.\u00a0: user \u00ab\u00a0Quels liens 404 doivent \u00eatre corrig\u00e9s?\u00a0\u00bb (rien dans le contexte) \u2192 {"thinking":"progress.items, due, blocked, cardDesc, m\u00e9moire\u00a0: aucun inventaire de liens 404.","message":"Hmm je sais pas\u00a0: y a rien sur les liens 404 sur cette carte.","suggestions":["Quelle est la priorit\u00e9?","Marquer bloqu\u00e9"],"followUps":[],"actions":[]}',
       'R\u00e9ponds \u00e0 la question (critique \u2014 cut the chase)\u00a0:',
@@ -3257,30 +3500,35 @@
       '- Ex. port\u00e9e\u00a0: user \u00ab\u00a0qui est impact\u00e9?\u00a0\u00bb, impactReach=\u00c9quipe \u2192 message du type \u00ab\u00a0La port\u00e9e est \u00c9quipe\u00a0: effet sur l\'\u00e9quipe imm\u00e9diate.\u00a0\u00bb',
       '- Ex. dur\u00e9e\u00a0: user \u00ab\u00a0combien de temps?\u00a0\u00bb \u2192 cite le total / restant Progr\u00e8s.',
       '- Si priority.enabled=false\u00a0: dis qu\'aucune Facilit\u00e9 / priorit\u00e9 n\'est d\u00e9finie (ne sors pas d\'anciennes valeurs).',
-      'Expliquer la priorit\u00e9 actuelle (tr\u00e8s important)\u00a0:',
-      '- Quand l\'utilisateur demande la priorit\u00e9 (\u00ab\u00a0Quelle est la priorit\u00e9?\u00a0\u00bb, \u00ab\u00a0pourquoi ce palier?\u00a0\u00bb, etc.)\u00a0: une phrase simple, style pote.',
-      '- Structure\u00a0: \u00ab\u00a0Cette t\u00e2che est [urgence/impact en mots], donc [cons\u00e9quence priorit\u00e9].\u00a0\u00bb',
-      '- Pr\u00e9f\u00e8re context.priority.explanation s\'il est pr\u00e9sent (souvent d\u00e9j\u00e0 dans ce style)\u00a0; sinon reformule comme \u00e7a \u00e0 partir de display.label + labels.',
+      'Expliquer la priorit\u00e9 actuelle (tr\u00e8s important \u2014 show, don\'t tell)\u00a0:',
+      '- Quand l\'utilisateur demande la priorit\u00e9 (\u00ab\u00a0Quelle est la priorit\u00e9?\u00a0\u00bb, \u00ab\u00a0c\'est quoi la prio?\u00a0\u00bb)\u00a0: caption courte + bloc priority depuis context.priority (tier / urgency / impact / ease). PAS un paragraphe qui r\u00e9cite les axes.',
+      '- Ex. Q&R priorit\u00e9\u00a0: {"thinking":"priority.enabled + display Critique depuis context.","message":"Voil\u00e0 o\u00f9 on en est\u00a0:\\n{{0}}","blocks":[{"type":"priority","tier":"Critique","urgency":4,"impact":3,"ease":2}],"suggestions":["Pourquoi ce niveau?","Augmenter l\'impact","D\u00e9finir une \u00e9ch\u00e9ance"],"followUps":[],"actions":[]}',
+      '- Si iel demande POURQUOI (\u00ab\u00a0pourquoi ce palier?\u00a0\u00bb)\u00a0: 1 phrase pote + le m\u00eame bloc. Pr\u00e9f\u00e8re context.priority.explanation\u00a0; sinon reformule display.label + labels. Surlignage [[g/r/y:]] sur 1\u20132 mots-cl\u00e9s seulement.',
+      '- Structure why\u00a0: \u00ab\u00a0Cette t\u00e2che est [urgence/impact en mots], donc [cons\u00e9quence].\\n{{0}}\u00a0\u00bb + blocks priority.',
+      '- Ex. why Critique\u00a0: {"thinking":"priority.explanation / Critique.","message":"Cette t\u00e2che est [[r:urgente]] et importante pour l\'\u00e9quipe, donc priorit\u00e9 [[r:maximale]].\\n{{0}}","blocks":[{"type":"priority","tier":"Critique","urgency":4,"impact":3,"ease":2}],"suggestions":["Augmenter l\'impact","D\u00e9finir une \u00e9ch\u00e9ance"],"followUps":[],"actions":[]}',
       '- INTERDIT\u00a0: \u00ab\u00a0Ce palier X est attribu\u00e9 car\u2026\u00a0\u00bb, \u00ab\u00a0jug\u00e9e avoir\u2026\u00a0\u00bb, jargon (\u00ab\u00a0axes\u00a0\u00bb, \u00ab\u00a0urgence \u00e9lev\u00e9e\u00a0\u00bb, \u00ab\u00a0attention imm\u00e9diate\u00a0\u00bb).',
       '- INTERDIT de r\u00e9citer Urgence/Impact/Facilit\u00e9 avec des chiffres, INTERDIT de mentionner le score num\u00e9rique sauf si on le demande explicitement.',
       '- Les axes vont de 0\u20134 (urgence, impact) et 1\u20135 (facilit\u00e9)\u00a0: ne jamais inventer d\'\u00e9chelles 0\u201310.',
-      '- Ex. Critique, urgence haute + impact \u00c9quipe\u00a0: {"thinking":"priority.explanation / Critique.","message":"Cette t\u00e2che est [[r:urgente]] et importante pour l\'\u00e9quipe, donc on lui donne la priorit\u00e9 [[r:maximale]].","suggestions":["Augmenter l\'impact","D\u00e9finir une \u00e9ch\u00e9ance"],"followUps":[],"actions":[]}',
-      '- Ex. Urgente, impact faible\u00a0: \u00ab\u00a0Cette t\u00e2che est [[r:urgente]], m\u00eame si l\'impact reste assez limit\u00e9, donc on la traite en [[r:Urgente]].\u00a0\u00bb',
-      '- Ex. Importante, facile\u00a0: \u00ab\u00a0Cette t\u00e2che est utile pour l\'interne et [[g:assez facile]], donc on la classe [[y:Importante]].\u00a0\u00bb',
-      '- Si priority.enabled=false\u00a0: dis qu\'aucune priorit\u00e9 n\'est d\u00e9finie (ne sors pas d\'anciennes valeurs).',
-      'Blocs visuels (blocks \u2014 tr\u00e8s important, ne sois jamais ennuyeux)\u00a0:',
-      '- En plus du texte, tu peux \u00e9mettre blocks: [{type, ...}] (0\u20136). Ce sont des cartes visuelles dans le chat.',
+      '- M\u00eame logique Q&R pour progr\u00e8s / \u00e9ch\u00e9ance / statut\u00a0: caption + block progress | due | statut (valeurs context), pas une liste prose.',
+      '- Ex. progr\u00e8s\u00a0: {"message":"On est l\u00e0\u00a0:\\n{{0}}","blocks":[{"type":"progress","progress":40,"doneCount":1,"totalCount":3}]}',
+      '- Ex. \u00e9ch\u00e9ance\u00a0: {"message":"\u00c9ch\u00e9ance\u00a0:\\n{{0}}","blocks":[{"type":"due","dueDate":"2026-07-21","dueTime":"14:00"}]}',
+      '- Si priority.enabled=false\u00a0: dis qu\'aucune priorit\u00e9 n\'est d\u00e9finie (ne sors pas d\'anciennes valeurs, pas de bloc invent\u00e9).',
+      'Show, don\'t tell + blocs visuels (blocks \u2014 tr\u00e8s important, ne sois jamais ennuyeux)\u00a0:',
+      '- Principe\u00a0: montre plut\u00f4t que de raconter. Si un fait carte a un type de bloc, \u00e9mets le bloc\u00a0; le message reste une caption courte (pote), pas un dump.',
+      '- En plus du texte, \u00e9mets blocks: [{type, ...}] (0\u20136). Ce sont des cartes visuelles dans le chat (m\u00eame langage heat / chips que l\'app).',
       '- Types\u00a0: priority | subtask | card_ref | due | statut | project | progress | diff | members | labels.',
       '- Place-les dans le message avec {{0}}, {{1}}, \u2026 (index dans blocks). Sans placeholder, ils s\'affichent sous le texte.',
-      '- Pr\u00e9f\u00e8re un bloc plut\u00f4t que de lister les m\u00eames faits en prose. Texte court + visuel riche.',
-      '- Apr\u00e8s une action (priorit\u00e9, sous-t\u00e2che, \u00e9ch\u00e9ance\u2026)\u00a0: confirme bri\u00e8vement\u00a0; le runtime affiche aussi des cartes auto. Tu peux quand m\u00eame \u00e9mettre blocks pour r\u00e9f\u00e9rences / Q&R.',
+      '- Pr\u00e9f\u00e8re un bloc + [[g/r/y/a:]] plut\u00f4t que de lister les m\u00eames faits en prose. Texte court + visuel riche.',
+      '- Q&R \u00ab\u00a0quelle priorit\u00e9 / \u00e9ch\u00e9ance / progr\u00e8s / statut?\u00a0\u00bb\u00a0: TOUJOURS le bloc correspondant depuis context (voir section Expliquer la priorit\u00e9).',
+      '- Apr\u00e8s une action (priorit\u00e9, sous-t\u00e2che, \u00e9ch\u00e9ance\u2026)\u00a0: UNE courte confirmation (\u00ab\u00a0Okay, c\'est fait.\u00a0\u00bb). Le runtime affiche d\u00e9j\u00e0 des cartes auto\u00a0: INTERDIT de re-d\u00e9crire en prose ce que ces cartes montrent. Tu peux \u00e9mettre blocks pour Q&R / r\u00e9f\u00e9rences, pas pour doubler le r\u00e9cap.',
       '- Quand tu cites une autre carte du tableau\u00a0: blocks avec type card_ref + cardIndex (index boardCards).',
       '- Ex. priorit\u00e9\u00a0: {"message":"Voil\u00e0 la priorit\u00e9 actuelle\u00a0:\\n{{0}}","blocks":[{"type":"priority","tier":"Critique","urgency":4,"impact":3,"ease":2}]}',
       '- Ex. autre carte\u00a0: {"message":"Sur cette carte\u00a0:\\n{{0}}","blocks":[{"type":"card_ref","cardIndex":2,"fields":["name","list","due","priority"]}]}',
       '- Ex. sous-t\u00e2che\u00a0: {"message":"Ajout\u00e9e\u00a0:\\n{{0}}","blocks":[{"type":"subtask","text":"R\u00e9diger le brief","estimatedMinutes":30}]}',
+      '- Ne force PAS de blocs sur small talk, identit\u00e9 IA, hors-sujet, ou un simple ACK. Cap 6. Pas de spam sur chaque confirmation.',
       '- INTERDIT le HTML/Markdown\u00a0; uniquement [[g/r/y/a:]] et {{n}} + blocks structur\u00e9s.',
       'R\u00e9ponds UNIQUEMENT avec un objet JSON valide de la forme\u00a0:',
-      '{"thinking":"notes priv\u00e9es","message":"texte visible avec {{0}} optionnel","emotion":"happy","color":"yellow","suggestions":["Question utile","Autre intention"],"suggestionsMulti":false,"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"blocks":[{"type":"priority","tier":"Flexible","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}],"cardPatches":[{"op":"remember","text":"fait local \u00e0 la carte"}],"patches":[{"op":"remember","text":"fait projet / tableau"}],"selfPrompt":false,"selfPromptFocus":""}',
+      '{"thinking":"notes priv\u00e9es","message":"texte visible avec {{0}} optionnel","emotion":"happy","color":"yellow","modelTier":"balanced","suggestions":["Question utile","Autre intention"],"suggestionsMulti":false,"followUps":[{"label":"Marquer bloqu\u00e9","actions":[{"tool":"set_blocked","args":{"enAttente":true}}]}],"prompts":[{"type":"priority_axes","urgency":1,"impact":2,"ease":3}],"blocks":[{"type":"priority","tier":"Flexible","urgency":1,"impact":2,"ease":3}],"actions":[{"tool":"set_priority","args":{"tier":"Flexible"}}],"cardPatches":[{"op":"remember","text":"fait local \u00e0 la carte"}],"patches":[{"op":"remember","text":"fait projet / tableau"}],"selfPrompt":false,"selfPromptFocus":""}',
       'Auto-revue apr\u00e8s un cycle de travail (selfPrompt)\u00a0:',
       '- Apr\u00e8s un VRAI cycle de travail (plusieurs actions / maj substantielle de la carte\u00a0: sous-t\u00e2ches, progr\u00e8s, axes, \u00e9ch\u00e9ance, description\u2026), mets selfPrompt:true pour te relancer TOI-M\u00caME juste apr\u00e8s.',
       '- But de l\'auto-revue\u00a0: (1) v\u00e9rifier vite ce que tu viens de faire\u00a0; (2) surtout chercher UNE nouvelle opportunit\u00e9 concr\u00e8te d\'aider (prochaine \u00e9tape, oubli, coh\u00e9rence, offrande utile).',
@@ -3305,6 +3553,17 @@
       '- Ex. concentr\u00e9\u00a0: {"emotion":"thinking","color":"' +
         (agentColor || 'orange') +
         '","message":"Hmm laisse-moi v\u00e9rifier.","suggestions":["Quelle est la priorit\u00e9?"],"followUps":[],"actions":[]}',
+      'Mod\u00e8le (co\u00fbt / finesse \u2014 champ modelTier)\u00a0:',
+      '- Tu peux \u00e9mettre "modelTier" pour le PROCHAIN tour\u00a0: efficient | balanced | capable.',
+      '- efficient\u00a0: r\u00e9ponses simples, salutations, confirmations, chips, petits ajustements (moins cher).',
+      '- balanced\u00a0: d\u00e9faut raisonnable (entretien, priorit\u00e9, \u00e9ch\u00e9ance, sous-t\u00e2ches courantes).',
+      '- capable\u00a0: raisonnement plus dur (ambigu\u00eft\u00e9, multi-\u00e9tapes, correction d\'erreur, analyse riche).',
+      '- Les ' +
+        CHAT_WARMUP_USER_TURNS +
+        ' premiers messages utilisateur sont forc\u00e9s en balanced minimum par le runtime (ne compte pas dessus pour economiser).',
+      '- INTERDIT de parler de modelTier, de co\u00fbt API ou de noms de mod\u00e8les dans "message".',
+      '- Ex. apr\u00e8s un salut simple\u00a0: {"modelTier":"efficient","message":"Allo!","suggestions":["\u00c7a va"],"followUps":[],"actions":[]}',
+      '- Ex. avant une analyse costaude\u00a0: {"modelTier":"capable","message":"Okay, je regarde \u00e7a de pr\u00e8s.","emotion":"thinking","suggestions":[],"followUps":[],"actions":[]}',
       'M\u00e9moire \u2014 deux niveaux (important)\u00a0:',
       '- cardPatches (CETTE t\u00e2che)\u00a0: faits locaux (pourquoi, livrable, avancement, reste \u00e0 faire, contraintes de la carte).',
       '  Ex. {"op":"remember","text":"D\u00e9j\u00e0 fait\u00a0: \u2026"} / {"op":"remember","text":"Reste\u00a0: \u2026"}. 1\u20132 max par tour.',
@@ -3493,6 +3752,8 @@
       '- Une cause d\u00e9crit POURQUOI la carte est bloqu\u00e9e (\u00e9tat / raison), pas une t\u00e2che \u00e0 faire.',
       '- Formule pr\u00e9f\u00e9r\u00e9e\u00a0: "Bloqu\u00e9 \u00e0 cause de \u2026", "En attente de \u2026" ou "En attente d\'avoir \u2026".',
       '- N\u00e9gations (pas d\'internet, sans wifi)\u00a0: reformule \u00ab\u00a0En attente d\'avoir internet\u00a0\u00bb \u2014 jamais \u00ab\u00a0En attente de pas d\'internet\u00a0\u00bb.',
+      '- Personnes (critique)\u00a0: si context.people r\u00e9sout un alias (\u00ab\u00a0ma boss\u00a0\u00bb \u2192 Jane Doe), \u00c9CRIS le nom propre dans blockedReasons et dans le message. INTERDIT \u00ab\u00a0En attente de la r\u00e9ponse de la boss\u00a0\u00bb quand Jane Doe est connue \u2192 \u00ab\u00a0En attente de la r\u00e9ponse de Jane Doe\u00a0\u00bb.',
+      '- Ex. (boss connue)\u00a0: user \u00ab\u00a0j\'ai envoy\u00e9 \u00e0 ma boss, pas urgent, bloqu\u00e9\u00a0\u00bb + people Jane Doe (alias boss) \u2192 set_blocked {enAttente:true, blockedReasons:["En attente de la r\u00e9ponse de Jane Doe"]} + message qui cite Jane Doe.',
       '- INTERDIT\u00a0: infinitifs d\'action comme "V\u00e9rifier le mat\u00e9riel", "Contacter le client", "Commander du stock".',
       '- Exemple mat\u00e9riel\u00a0: label d\'action "Marquer bloqu\u00e9 (mat\u00e9riel)" + cause "Bloqu\u00e9 \u00e0 cause de la disponibilit\u00e9 du mat\u00e9riel" (PAS "V\u00e9rifier le mat\u00e9riel" comme cause).',
       '- La cause est optionnelle\u00a0: on peut bloquer sans blockedReasons. Ne jamais exiger une cause ni boucler dessus.',
@@ -3541,6 +3802,8 @@
       '- set_agent_name: { name: string } (nouveau nom de l\'assistant\u00a0; name obligatoire, non vide, max ~40 car.\u00a0; persiste pour le membre)',
       '- set_agent_color: { color: string } (couleur d\'identit\u00e9\u00a0: orange|yellow|green|purple|blue|pink|red|teal|coral|sky, alias FR, ou hex #RRGGBB\u00a0; persiste pour le membre)',
       '- set_agent_personality: { personality: string } (trait de personnalit\u00e9 / character\u00a0; obligatoire, non vide, max ~400 car.\u00a0; persiste pour le membre)',
+      '- upsert_person: { name: string, aliases?: string[], roles?: string[], email?: string, phone?: string, notes?: string, matchText?: string, addAlias?: string, addRole?: string } (annuaire Personnes membre\u00a0; context.people\u00a0; cr\u00e9e ou met \u00e0 jour)',
+      '- remove_person: { matchText|name|id: string } (retire une personne de l\'annuaire)',
       'Identit\u00e9 de l\'assistant (nom / couleur / personnalit\u00e9)\u00a0:',
       '- Tu PEUX changer ton nom, ta couleur d\'identit\u00e9 et ta personnalit\u00e9. INTERDIT de dire que tu ne peux pas / que tu gardes ton ancienne identit\u00e9.',
       '- Nom (set_agent_name)\u00a0: quand l\'utilisateur le demande (ou te laisse choisir), utilise set_agent_name.',
@@ -7193,7 +7456,9 @@
       trigger_effect: true,
       set_agent_name: true,
       set_agent_color: true,
-      set_agent_personality: true
+      set_agent_personality: true,
+      upsert_person: true,
+      remove_person: true
     };
     actions = actions.filter(function (a) {
       return a && allowedTools[a.tool];
@@ -7560,6 +7825,21 @@
         (typeof args.value === 'string' && !!args.value.trim())
       );
     }
+    if (action.tool === 'upsert_person') {
+      return (
+        (typeof args.name === 'string' && !!args.name.trim()) ||
+        (typeof args.matchText === 'string' && !!args.matchText.trim()) ||
+        (typeof args.id === 'string' && !!args.id.trim())
+      );
+    }
+    if (action.tool === 'remove_person') {
+      return (
+        (typeof args.matchText === 'string' && !!args.matchText.trim()) ||
+        (typeof args.name === 'string' && !!args.name.trim()) ||
+        (typeof args.id === 'string' && !!args.id.trim()) ||
+        (typeof args.text === 'string' && !!args.text.trim())
+      );
+    }
     if (action.tool === 'set_task_types') {
       var typeArgs =
         args.types != null
@@ -7623,6 +7903,12 @@
     }
     if (action.tool === 'set_agent_personality') {
       return 'set_agent_personality: personality requis';
+    }
+    if (action.tool === 'upsert_person') {
+      return 'upsert_person: name ou matchText requis';
+    }
+    if (action.tool === 'remove_person') {
+      return 'remove_person: matchText, name ou id requis';
     }
     if (action.tool === 'set_task_types') {
       return (
@@ -8644,6 +8930,7 @@
         message: 'R\u00e9ponse vide du fournisseur.',
         emotion: null,
         color: null,
+        modelTier: null,
         followUps: [],
         suggestions: [],
         suggestionsMulti: false,
@@ -8736,6 +9023,9 @@
         color: normalizeAssistantColor(
           parsed.color || parsed.aura || parsed.glow
         ),
+        modelTier: normalizeModelTier(
+          parsed.modelTier || parsed.model_tier
+        ),
         followUps: followUps,
         suggestions: suggestions,
         suggestionsMulti: wantsSuggestionsMulti(parsed),
@@ -8756,6 +9046,7 @@
         message: text,
         emotion: null,
         color: null,
+        modelTier: null,
         followUps: [],
         suggestions: [],
         suggestionsMulti: false,
@@ -9092,6 +9383,10 @@
     dbgLog('agent', 'chatTurn.start', {});
     var onDelta = typeof options.onDelta === 'function' ? options.onDelta : null;
     var p = normalizeProvider(provider);
+    var resolvedModel = resolveChatModel(p, history, options.modelTier);
+    if (resolvedModel && resolvedModel !== p.model) {
+      p = normalizeProvider(Object.assign({}, p, { model: resolvedModel }));
+    }
     var context = buildContext(bridge);
     var messages = [
       { role: 'system', content: systemPrompt(context) }
@@ -9329,6 +9624,7 @@
         blocks: blocks,
         actions: actions,
         droppedActions: parsed.droppedActions || [],
+        modelTier: parsed.modelTier || null,
         tierInjected: !!tierRewrite.injected,
         colorInjected: !!colorRewrite.injected,
         scope: (context && context.scope) || ASSISTANT_SCOPES.TASK
@@ -9345,6 +9641,7 @@
       message: message,
       emotion: replyEmotion || parsed.emotion || null,
       color: replyColor,
+      modelTier: parsed.modelTier || null,
       followUps: parsed.followUps,
       suggestions: parsed.suggestions,
       suggestionsMulti: !!parsed.suggestionsMulti,
@@ -13757,12 +14054,13 @@
             : { items: [] };
         var blockedPartial = {};
         if (Array.isArray(args.blockedReasons)) {
+          var peopleForReasons = getPeopleFromBridge(bridge);
           blockedPartial.blockedReasons = args.blockedReasons
             .filter(function (r) {
               return typeof r === 'string' && r.trim();
             })
             .map(function (r) {
-              return normalizeAgentBlockedReason(r);
+              return resolvePeopleInReason(r, peopleForReasons);
             })
             .filter(Boolean);
         }
@@ -14158,6 +14456,16 @@
         if (!text) {
           return { ok: false, tool: tool, error: 'Texte de sous-t\u00e2che requis' };
         }
+        var peopleForSubtask = getPeopleFromBridge(bridge);
+        if (
+          peopleForSubtask.length &&
+          global.People &&
+          typeof global.People.resolveInText === 'function'
+        ) {
+          try {
+            text = global.People.resolveInText(text, peopleForSubtask) || text;
+          } catch (eResolveSub) { /* keep text */ }
+        }
         var beforeAdd = snapshotCompletion(bridge);
         var data =
           typeof bridge.getCompletion === 'function'
@@ -14321,12 +14629,13 @@
           Array.isArray(args.blockedReasons) &&
           typeof CompletionTrello.setItemBlockedReasons === 'function'
         ) {
+          var peopleForItemReasons = getPeopleFromBridge(bridge);
           var whyArg = args.blockedReasons
             .filter(function (r) {
               return typeof r === 'string' && r.trim();
             })
             .map(function (r) {
-              return normalizeAgentBlockedReason(r) || String(r).trim();
+              return resolvePeopleInReason(r, peopleForItemReasons) || String(r).trim();
             })
             .filter(Boolean);
           var itemHadMotifs =
@@ -14970,6 +15279,102 @@
           summary: TOOL_LABELS.set_agent_personality,
           detail: detailForTool(tool, null, null, null, null, args, {
             after: afterPersonality
+          })
+        };
+      }
+      if (tool === 'upsert_person') {
+        if (typeof bridge.upsertPerson !== 'function') {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Annuaire Personnes indisponible'
+          };
+        }
+        var personPatch = {
+          name: typeof args.name === 'string' ? args.name.trim() : '',
+          matchText:
+            typeof args.matchText === 'string'
+              ? args.matchText.trim()
+              : typeof args.id === 'string'
+                ? args.id.trim()
+                : '',
+          aliases: args.aliases,
+          roles: args.roles,
+          email: args.email,
+          phone: args.phone,
+          notes: args.notes,
+          addAlias: args.addAlias,
+          addRole: args.addRole,
+          trelloMemberId: args.trelloMemberId
+        };
+        if (typeof args.id === 'string' && args.id.trim()) {
+          personPatch.id = args.id.trim();
+        }
+        if (!personPatch.name && !personPatch.matchText && !personPatch.id) {
+          return { ok: false, tool: tool, error: 'Nom ou matchText requis' };
+        }
+        var upsertResult = await Promise.resolve(
+          bridge.upsertPerson(personPatch)
+        );
+        if (!upsertResult || !upsertResult.ok) {
+          return {
+            ok: false,
+            tool: tool,
+            error:
+              (upsertResult && (upsertResult.reason || upsertResult.error)) ||
+              'Mise \u00e0 jour personne \u00e9chou\u00e9e'
+          };
+        }
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.upsert_person,
+          detail: detailForTool(tool, null, null, null, null, args, {
+            name: (upsertResult.person && upsertResult.person.name) || personPatch.name
+          })
+        };
+      }
+      if (tool === 'remove_person') {
+        if (typeof bridge.removePerson !== 'function') {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Annuaire Personnes indisponible'
+          };
+        }
+        var removeMatch =
+          (typeof args.id === 'string' && args.id.trim()) ||
+          (typeof args.matchText === 'string' && args.matchText.trim()) ||
+          (typeof args.name === 'string' && args.name.trim()) ||
+          (typeof args.text === 'string' && args.text.trim()) ||
+          '';
+        if (!removeMatch) {
+          return { ok: false, tool: tool, error: 'matchText / name / id requis' };
+        }
+        var removeResult = await Promise.resolve(
+          bridge.removePerson({
+            id: typeof args.id === 'string' ? args.id.trim() : '',
+            matchText: removeMatch,
+            name: typeof args.name === 'string' ? args.name.trim() : ''
+          })
+        );
+        if (!removeResult || !removeResult.ok) {
+          return {
+            ok: false,
+            tool: tool,
+            error:
+              (removeResult && (removeResult.reason || removeResult.error)) ||
+              'Suppression personne \u00e9chou\u00e9e'
+          };
+        }
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.remove_person,
+          detail: detailForTool(tool, null, null, null, null, args, {
+            match: removeMatch
           })
         };
       }
@@ -16324,7 +16729,15 @@
     CARD_INTERVIEW_KEY: CARD_INTERVIEW_KEY,
     PRESETS: PRESETS,
     OPENAI_MODELS: OPENAI_MODELS,
+    MODEL_TIERS: MODEL_TIERS,
+    CHAT_WARMUP_USER_TURNS: CHAT_WARMUP_USER_TURNS,
     normalizeProvider: normalizeProvider,
+    normalizeModelTier: normalizeModelTier,
+    classifyModelClass: classifyModelClass,
+    modelForTier: modelForTier,
+    resolveChatModel: resolveChatModel,
+    countUserTurns: countUserTurns,
+    parseAssistantPayload: parseAssistantPayload,
     providerFingerprint: providerFingerprint,
     providersEqual: providersEqual,
     isConfigured: isConfigured,
@@ -16444,6 +16857,7 @@
     parseMetric: parseMetric,
     executeAction: executeAction,
     executeActions: executeActions,
+    resolvePeopleInReason: resolvePeopleInReason,
     normalizeSubtaskTitleKey: normalizeSubtaskTitleKey,
     findExistingSubtaskByText: findExistingSubtaskByText,
     formatChangeRecap: formatChangeRecap,

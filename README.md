@@ -7,14 +7,14 @@ As-tu parfois de la difficulté à t'en tenir au plan?
 En mettant en place un système, tu passeras moins de temps à faire des listes et plus de temps à profiter de la vie.
 
 
-### Synchronisation bi-directionnelle avec Trello
+### Synchronisation bidirectionnelle avec Trello
 <img width="686" height="487" alt="image" src="https://github.com/user-attachments/assets/718f6379-bae3-4b1c-8282-5993f5dff3cd" />
 <img width="292" height="192" alt="image" src="https://github.com/user-attachments/assets/9aefc770-22c9-4651-9cbb-4398e7e38c2a" />
 
 ### Chat AI (Supporte ChatGPT et OpenRouter)
 <img width="623" height="587" alt="image" src="https://github.com/user-attachments/assets/bd495c10-8962-4560-a511-5d24d15c460e" />
 
-### Système de priorité paramètrable
+### Système de priorité paramétrable
 <img width="683" height="624" alt="image" src="https://github.com/user-attachments/assets/0da7cae6-93db-4483-8617-33133fa6750a" />
 
 ### Tableau Gantt (Beta)
@@ -23,13 +23,13 @@ En mettant en place un système, tu passeras moins de temps à faire des listes 
 ### Sous-tâches
 <img width="655" height="262" alt="image" src="https://github.com/user-attachments/assets/896ce1d3-6e74-4ad0-81e0-b03866aa6907" />
 
-### Échéance précises
+### Échéances précises
 <img width="667" height="720" alt="image" src="https://github.com/user-attachments/assets/f2105fed-a5e0-4ff8-add5-bd9e6ed4a740" />
 
 ### Historique
 <img width="698" height="199" alt="image" src="https://github.com/user-attachments/assets/f5ca34f2-8c9a-4c88-9d82-6195fc7d97ce" />
 
-### Écran de chargement détaillée
+### Écran de chargement détaillé
 <img width="401" height="304" alt="image" src="https://github.com/user-attachments/assets/53e8bc64-4c4a-493e-b218-fe84a117cefe" />
 
 
@@ -37,7 +37,7 @@ Aucune étape de build pour le déploiement : des fichiers HTML/JS/CSS statiques
 
 You always have so many big things to do, yet so little time?
 
-Have sometimes trouble sticking to the plan?
+Do you sometimes have trouble sticking to the plan?
 
 You’re not alone!
 
@@ -289,7 +289,7 @@ Depuis la vue **Gantt**, les cartes datées peuvent être synchronisées avec le
 **Fonctionnement (client-only)**
 
 - Auth Microsoft via MSAL (popup) + Microsoft Graph dans le navigateur — **pas de backend**.
-- Sync au chargement du Gantt (si déjà connecté), via **Sync Outlook**, et après enregistrement de dates (débounced).
+- Sync au chargement du Gantt (si déjà connecté), via **Sync Outlook**, et après enregistrement de dates (debounced).
 - En cas de conflit sur un champ modifié des deux côtés : **Trello gagne**.
 - Mapping stocké en privé membre (`outlookSync`), par tableau.
 

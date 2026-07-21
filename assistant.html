@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=section-shell-dark-1" />
   <link rel="stylesheet" href="./components/shared/effects.css" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css?v=section-shell-dark-1" />
-  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=section-shell-dark-1" />
+  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=debug-below-1" />
   <link rel="stylesheet" href="./components/agent/agent-blocks.css?v=blocks-flush-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css" />
   <script src="./components/shared/brand.js"></script>
@@ -24,6 +24,7 @@
   <script src="./components/agent/agent-blocks.js?v=blocks-flush-1"></script>
   <script src="./components/agent/agent-memory.js"></script>
   <script src="./components/profile/user-profile.js"></script>
+  <script src="./components/people/people.js"></script>
   <script src="./components/agent/memory-ui.js"></script>
   <script src="./components/agent/agent-ui.js"></script>
 </head>
@@ -39,6 +40,7 @@
       var mount = document.getElementById('assistantMount');
       var cachedMemory = null;
       var cachedProfile = null;
+      var cachedPeople = null;
       var cachedDigest = '';
 
       function resize() {
@@ -65,6 +67,13 @@
           return UserProfile.load(t).then(function (profile) {
             cachedProfile = profile;
             return profile;
+          });
+        })
+        .then(function () {
+          if (typeof People === 'undefined' || !People.load) return null;
+          return People.load(t).then(function (directory) {
+            cachedPeople = directory;
+            return directory;
           });
         })
         .then(function () {
@@ -173,6 +182,27 @@
             },
             getProfile: function () {
               return cachedProfile;
+            },
+            getPeople: function () {
+              return (
+                cachedPeople || {
+                  version: 1,
+                  people: [],
+                  updatedAt: ''
+                }
+              );
+            },
+            applyPeople: async function (next) {
+              if (!next || typeof next !== 'object') return cachedPeople;
+              cachedPeople = next;
+              if (typeof People !== 'undefined' && typeof People.save === 'function') {
+                try {
+                  cachedPeople = await People.save(t, next);
+                } catch (e) {
+                  console.error('People.save failed', e);
+                }
+              }
+              return cachedPeople;
             },
             getBoardDigest: function () {
               return cachedDigest || '';

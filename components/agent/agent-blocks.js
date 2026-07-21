@@ -15,11 +15,29 @@
     progress: true,
     diff: true,
     members: true,
-    labels: true
+    labels: true,
+    blocked: true,
+    task_types: true
   };
 
   var MAX_BLOCKS = 6;
   var PLACEHOLDER_RE = /\{\{(\d+)\}\}/g;
+  var DUE_BANDS = {
+    overdue: true,
+    imminent: true,
+    soon: true,
+    weeks: true,
+    month: true,
+    far: true
+  };
+  var DUE_BAND_LABELS = {
+    overdue: 'En retard',
+    imminent: 'Imminent',
+    soon: 'Bientôt',
+    weeks: 'Dans les semaines',
+    month: 'Dans le mois',
+    far: 'Plus loin'
+  };
 
   function clampInt(v, min, max, fallback) {
     var n = Number(v);
@@ -92,11 +110,13 @@
     var impact = clampInt(raw.impact, 0, 4, null);
     var ease = clampInt(raw.ease, 1, 5, null);
     var tier = trimStr(raw.tier, 40);
+    var matrixLabel = trimStr(raw.matrixLabel || raw.matrix, 60);
     var out = { type: 'priority' };
     if (tier) out.tier = tier;
     if (urgency != null) out.urgency = urgency;
     if (impact != null) out.impact = impact;
     if (ease != null) out.ease = ease;
+    if (matrixLabel) out.matrixLabel = matrixLabel;
     if (raw.priorityEnabled === false) out.priorityEnabled = false;
     else if (raw.priorityEnabled === true) out.priorityEnabled = true;
     if (!out.tier && urgency == null && impact == null && ease == null) {
@@ -205,7 +225,107 @@
       if (freq) out.recurrence = { frequency: freq };
     }
     if (raw.startDate) out.startDate = trimStr(raw.startDate, 32);
+    var dueBand = trimStr(raw.dueBand || raw.band, 16).toLowerCase();
+    if (dueBand && DUE_BANDS[dueBand]) out.dueBand = dueBand;
     return out;
+  }
+
+  function normalizeBlockedBlock(raw) {
+    var cleared =
+      raw.cleared === true ||
+      raw.clear === true ||
+      raw.enabled === false ||
+      raw.enAttente === false;
+    var enabled =
+      raw.enabled === true ||
+      raw.enAttente === true ||
+      (!cleared &&
+        (Array.isArray(raw.reasons) ||
+          Array.isArray(raw.blockedReasons) ||
+          Array.isArray(raw.links) ||
+          Array.isArray(raw.blockedLinks)));
+    if (cleared && !enabled) {
+      return { type: 'blocked', enabled: false, cleared: true };
+    }
+    if (!enabled && !cleared) return null;
+    var out = { type: 'blocked', enabled: true };
+    var reasons = [];
+    var reasonSrc = Array.isArray(raw.reasons)
+      ? raw.reasons
+      : Array.isArray(raw.blockedReasons)
+        ? raw.blockedReasons
+        : [];
+    reasonSrc.forEach(function (r) {
+      var s = trimStr(typeof r === 'string' ? r : r && (r.text || r.reason), 120);
+      if (s) reasons.push(s);
+    });
+    if (reasons.length) out.reasons = reasons.slice(0, 8);
+    var links = [];
+    var linkSrc = Array.isArray(raw.links)
+      ? raw.links
+      : Array.isArray(raw.blockedLinks)
+        ? raw.blockedLinks
+        : [];
+    linkSrc.forEach(function (link) {
+      if (typeof link === 'string') {
+        var ls = trimStr(link, 80);
+        if (ls) links.push({ label: ls });
+        return;
+      }
+      if (!link || typeof link !== 'object') return;
+      var label = trimStr(link.label || link.text || link.matchText || link.name, 80);
+      var id = link.id != null ? String(link.id).trim() : '';
+      if (!label && !id) return;
+      var entry = {};
+      if (label) entry.label = label;
+      if (id) entry.id = id;
+      links.push(entry);
+    });
+    if (links.length) out.links = links.slice(0, 8);
+    return out;
+  }
+
+  function resolveTaskTypeLabel(id, rawLabel) {
+    var fromRaw = trimStr(rawLabel, 40);
+    if (fromRaw) return fromRaw;
+    var PriorityUI = global.PriorityUI;
+    if (PriorityUI && typeof PriorityUI.taskTypeLabel === 'function') {
+      try {
+        var lab = PriorityUI.taskTypeLabel(id);
+        if (lab) return trimStr(lab, 40);
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    return trimStr(id, 40);
+  }
+
+  function normalizeTaskTypesBlock(raw) {
+    var types = [];
+    var src = Array.isArray(raw.types)
+      ? raw.types
+      : Array.isArray(raw.taskTypes)
+        ? raw.taskTypes
+        : Array.isArray(raw.items)
+          ? raw.items
+          : [];
+    src.forEach(function (t) {
+      if (typeof t === 'string') {
+        var id = trimStr(t, 40);
+        if (!id) return;
+        types.push({ id: id, label: resolveTaskTypeLabel(id) });
+        return;
+      }
+      if (!t || typeof t !== 'object') return;
+      var tid = trimStr(t.id || t.type || t.name, 40);
+      if (!tid) return;
+      types.push({
+        id: tid,
+        label: resolveTaskTypeLabel(tid, t.label || t.name)
+      });
+    });
+    if (!types.length) return null;
+    return { type: 'task_types', types: types.slice(0, 8) };
   }
 
   function normalizeStatutBlock(raw) {
@@ -376,6 +496,8 @@
     if (type === 'subtask') return normalizeSubtaskBlock(raw);
     if (type === 'card_ref') return normalizeCardRefBlock(raw, context);
     if (type === 'due') return normalizeDueBlock(raw);
+    if (type === 'blocked') return normalizeBlockedBlock(raw);
+    if (type === 'task_types') return normalizeTaskTypesBlock(raw);
     if (type === 'statut') return normalizeStatutBlock(raw);
     if (type === 'project') return normalizeProjectBlock(raw);
     if (type === 'progress') return normalizeProgressBlock(raw);
@@ -403,6 +525,8 @@
     if (!block || !block.type) return '';
     if (block.type === 'priority') return 'priority';
     if (block.type === 'due') return 'due';
+    if (block.type === 'blocked') return 'blocked';
+    if (block.type === 'task_types') return 'task_types';
     if (block.type === 'statut') return 'statut:' + (block.listId || block.listName || '');
     if (block.type === 'project') return 'project:' + (block.projectId || block.name || 'x');
     if (block.type === 'progress') return 'progress';

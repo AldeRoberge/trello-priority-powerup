@@ -2172,7 +2172,7 @@
       el.className = 'tp-fx-fleur';
       el.textContent = '\u269C';
       el.style.setProperty('--x', rand(4, 96) + '%');
-      el.style.setProperty('--size', rand(22, 48) + 'px');
+      el.style.setProperty('--size', rand(44, 88) + 'px');
       el.style.setProperty('--c', pick(colors, i));
       el.style.setProperty('--delay', rand(0, 1.1) + 's');
       el.style.setProperty('--dur', rand(3.2, 4.4) + 's');

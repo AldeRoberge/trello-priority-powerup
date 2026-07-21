@@ -11,6 +11,7 @@
   <script src="./components/shared/debug-log.js"></script>
   <script src="./components/priority/priority-trello.js"></script>
   <script src="./components/profile/user-profile.js"></script>
+  <script src="./components/people/people.js"></script>
   <link rel="stylesheet" href="./components/shared/trello-theme.css" />
 </head>
 <body class="tp-page tp-page--settings tp-page--profile">
@@ -85,6 +86,21 @@
     </div>
   </details>
 
+  <details class="tp-settings-section" id="peopleSection" open>
+    <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-users"></i></span>
+      <span class="tp-settings-summary-title">Personnes</span>
+      <span class="tp-settings-summary-hint">Boss, collègues, contacts — pour l’assistant</span>
+    </summary>
+    <div class="tp-settings-body">
+      <div class="tp-people-toolbar">
+        <p class="tp-people-hint">L’assistant résout «&nbsp;ma boss&nbsp;» vers le vrai nom dans les causes de blocage.</p>
+        <button type="button" class="tp-button tp-button--secondary" id="peopleAddBtn">Ajouter</button>
+      </div>
+      <div class="tp-people-list" id="peopleList" role="list" aria-label="Annuaire de personnes"></div>
+    </div>
+  </details>
+
   <details class="tp-settings-section" id="featuresSection" open>
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-layout-navbar"></i></span>
@@ -111,6 +127,7 @@
         });
       }
       var Profile = window.UserProfile;
+      var PeopleApi = window.People;
       if (!Profile) {
         if (window.TpDebug) TpDebug.error('profile', 'missing', new Error('UserProfile missing'));
         else console.error('UserProfile missing');
@@ -124,6 +141,11 @@
       var statusEl = document.getElementById('profileStatus');
       var saveTimer = null;
       var agentColorPicker = null;
+      var peopleDirectory = PeopleApi
+        ? PeopleApi.emptyDirectory()
+        : { version: 1, people: [], updatedAt: '' };
+      var peopleEditingId = null;
+      var peopleSaveTimer = null;
 
       function resize() {
         if (typeof t.sizeTo === 'function') {
@@ -284,6 +306,289 @@
         }, 450);
       }
 
+      /* —— People directory UI —— */
+      function schedulePeopleSave() {
+        if (!PeopleApi) return;
+        clearTimeout(peopleSaveTimer);
+        peopleSaveTimer = setTimeout(function () {
+          persistPeople(true).catch(function () {});
+        }, 450);
+      }
+
+      async function persistPeople(showOk) {
+        if (!PeopleApi) return peopleDirectory;
+        try {
+          peopleDirectory = await PeopleApi.save(t, peopleDirectory);
+          renderPeopleList();
+          if (showOk) setStatus('Personnes enregistrées.');
+          return peopleDirectory;
+        } catch (err) {
+          console.error('People.save failed', err);
+          setStatus('Enregistrement des personnes impossible.', true);
+          throw err;
+        }
+      }
+
+      function splitChipField(value) {
+        return String(value || '')
+          .split(/[,;|/]/)
+          .map(function (s) {
+            return s.trim();
+          })
+          .filter(Boolean);
+      }
+
+      function metaLine(person) {
+        var bits = [];
+        if (person.email) bits.push(person.email);
+        if (person.phone) bits.push(person.phone);
+        return bits.join(' · ');
+      }
+
+      function renderPeopleList() {
+        var list = document.getElementById('peopleList');
+        if (!list || !PeopleApi) return;
+        list.replaceChildren();
+        var people = (peopleDirectory && peopleDirectory.people) || [];
+
+        if (peopleEditingId === '__new__') {
+          list.appendChild(buildPeopleEditor(null));
+        }
+
+        if (!people.length && peopleEditingId !== '__new__') {
+          var empty = document.createElement('p');
+          empty.className = 'tp-people-empty';
+          empty.textContent =
+            'Personne pour l’instant. Ajoute ta boss, un client… ou laisse l’assistant te demander quand tu en parles.';
+          list.appendChild(empty);
+          resize();
+          return;
+        }
+
+        people.forEach(function (person) {
+          if (peopleEditingId === person.id) {
+            list.appendChild(buildPeopleEditor(person));
+          } else {
+            list.appendChild(buildPeopleCard(person));
+          }
+        });
+        resize();
+      }
+
+      function buildPeopleCard(person) {
+        var card = document.createElement('div');
+        card.className = 'tp-people-card';
+        card.setAttribute('role', 'listitem');
+
+        var avatar = document.createElement('span');
+        avatar.className = 'tp-people-avatar';
+        avatar.setAttribute('aria-hidden', 'true');
+        avatar.textContent = PeopleApi.initialsFromName(person.name);
+        card.appendChild(avatar);
+
+        var body = document.createElement('div');
+        body.className = 'tp-people-body';
+
+        var nameRow = document.createElement('div');
+        nameRow.className = 'tp-people-name-row';
+        var nameEl = document.createElement('span');
+        nameEl.className = 'tp-people-name';
+        nameEl.textContent = person.name;
+        nameRow.appendChild(nameEl);
+        if (person.roles && person.roles[0]) {
+          var roleChip = document.createElement('span');
+          roleChip.className = 'tp-people-role-chip';
+          roleChip.textContent = person.roles[0];
+          nameRow.appendChild(roleChip);
+        }
+        body.appendChild(nameRow);
+
+        var meta = metaLine(person);
+        if (meta) {
+          var metaEl = document.createElement('div');
+          metaEl.className = 'tp-people-meta';
+          metaEl.textContent = meta;
+          body.appendChild(metaEl);
+        }
+
+        if (person.aliases && person.aliases.length) {
+          var aliases = document.createElement('div');
+          aliases.className = 'tp-people-aliases';
+          person.aliases.forEach(function (a) {
+            var chip = document.createElement('span');
+            chip.className = 'tp-people-alias-chip';
+            chip.textContent = a;
+            aliases.appendChild(chip);
+          });
+          body.appendChild(aliases);
+        }
+
+        card.appendChild(body);
+
+        var actions = document.createElement('div');
+        actions.className = 'tp-people-actions';
+        var editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'tp-people-icon-btn';
+        editBtn.title = 'Modifier';
+        editBtn.setAttribute('aria-label', 'Modifier ' + person.name);
+        editBtn.innerHTML = '<i class="ti ti-pencil" aria-hidden="true"></i>';
+        editBtn.addEventListener('click', function () {
+          peopleEditingId = person.id;
+          renderPeopleList();
+        });
+        actions.appendChild(editBtn);
+
+        var delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'tp-people-icon-btn is-danger';
+        delBtn.title = 'Supprimer';
+        delBtn.setAttribute('aria-label', 'Supprimer ' + person.name);
+        delBtn.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
+        delBtn.addEventListener('click', function () {
+          peopleDirectory = PeopleApi.remove(peopleDirectory, { id: person.id });
+          if (peopleEditingId === person.id) peopleEditingId = null;
+          renderPeopleList();
+          schedulePeopleSave();
+        });
+        actions.appendChild(delBtn);
+        card.appendChild(actions);
+        return card;
+      }
+
+      function buildPeopleEditor(person) {
+        var card = document.createElement('div');
+        card.className = 'tp-people-card is-editing';
+        card.setAttribute('role', 'listitem');
+
+        var editor = document.createElement('div');
+        editor.className = 'tp-people-editor';
+
+        function field(labelText, id, opts) {
+          opts = opts || {};
+          var label = document.createElement('label');
+          label.className = 'tp-profile-field';
+          var span = document.createElement('span');
+          span.className = 'tp-profile-field-label';
+          span.textContent = labelText;
+          label.appendChild(span);
+          var input = document.createElement(opts.textarea ? 'textarea' : 'input');
+          input.className = opts.textarea ? 'tp-input tp-textarea' : 'tp-input';
+          input.id = id;
+          if (!opts.textarea) {
+            input.type = opts.type || 'text';
+            input.autocomplete = opts.autocomplete || 'off';
+          } else {
+            input.rows = opts.rows || 2;
+          }
+          if (opts.maxlength) input.maxLength = opts.maxlength;
+          if (opts.placeholder) input.placeholder = opts.placeholder;
+          if (opts.value) input.value = opts.value;
+          label.appendChild(input);
+          if (opts.hint) {
+            var hint = document.createElement('p');
+            hint.className = 'tp-people-chip-input-hint';
+            hint.textContent = opts.hint;
+            label.appendChild(hint);
+          }
+          editor.appendChild(label);
+          return input;
+        }
+
+        var nameInput = field('Nom', 'peopleEditName', {
+          value: (person && person.name) || '',
+          placeholder: 'ex. Jane Doe',
+          maxlength: PeopleApi.MAX_NAME,
+          autocomplete: 'name'
+        });
+        var aliasesInput = field('Alias', 'peopleEditAliases', {
+          value: person && person.aliases ? person.aliases.join(', ') : '',
+          placeholder: 'ex. boss, ma boss, patron',
+          hint: 'Séparés par des virgules — l’assistant les reconnaît dans le chat.',
+          maxlength: 200
+        });
+        var rolesInput = field('Rôles', 'peopleEditRoles', {
+          value: person && person.roles ? person.roles.join(', ') : '',
+          placeholder: 'ex. Boss, N+1',
+          maxlength: 120
+        });
+        var emailInput = field('Courriel', 'peopleEditEmail', {
+          type: 'email',
+          value: (person && person.email) || '',
+          placeholder: 'ex. jane@exemple.com',
+          maxlength: 120,
+          autocomplete: 'email'
+        });
+        var phoneInput = field('Téléphone', 'peopleEditPhone', {
+          type: 'tel',
+          value: (person && person.phone) || '',
+          placeholder: 'ex. 514-555-0100',
+          maxlength: 40,
+          autocomplete: 'tel'
+        });
+        var notesInput = field('Notes', 'peopleEditNotes', {
+          textarea: true,
+          value: (person && person.notes) || '',
+          placeholder: 'ex. Préfère Teams, dispo le mardi…',
+          maxlength: PeopleApi.MAX_NOTES
+        });
+
+        var actions = document.createElement('div');
+        actions.className = 'tp-people-editor-actions';
+        var saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.className = 'tp-button';
+        saveBtn.textContent = 'Enregistrer';
+        saveBtn.addEventListener('click', function () {
+          var name = nameInput.value.trim();
+          if (!name) {
+            setStatus('Le nom est obligatoire.', true);
+            nameInput.focus();
+            return;
+          }
+          var patch = {
+            name: name,
+            aliases: splitChipField(aliasesInput.value),
+            roles: splitChipField(rolesInput.value),
+            email: emailInput.value.trim(),
+            phone: phoneInput.value.trim(),
+            notes: notesInput.value.trim()
+          };
+          if (person && person.id) patch.id = person.id;
+          peopleDirectory = PeopleApi.upsert(peopleDirectory, patch);
+          peopleEditingId = null;
+          renderPeopleList();
+          schedulePeopleSave();
+        });
+        actions.appendChild(saveBtn);
+
+        var cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'tp-button tp-button--secondary';
+        cancelBtn.textContent = 'Annuler';
+        cancelBtn.addEventListener('click', function () {
+          peopleEditingId = null;
+          renderPeopleList();
+        });
+        actions.appendChild(cancelBtn);
+        editor.appendChild(actions);
+
+        card.appendChild(editor);
+        setTimeout(function () {
+          nameInput.focus();
+          resize();
+        }, 0);
+        return card;
+      }
+
+      var peopleAddBtn = document.getElementById('peopleAddBtn');
+      if (peopleAddBtn) {
+        peopleAddBtn.addEventListener('click', function () {
+          peopleEditingId = '__new__';
+          renderPeopleList();
+        });
+      }
+
       document.getElementById('profileSave').addEventListener('click', function () {
         persist(true).catch(function () {});
       });
@@ -346,6 +651,25 @@
           writeForm(Profile.emptyProfile());
           setStatus('Chargement du profil impossible — valeurs par défaut.', true);
         });
+
+      if (PeopleApi) {
+        PeopleApi.load(t)
+          .then(function (dir) {
+            peopleDirectory = dir;
+            renderPeopleList();
+          })
+          .catch(function (err) {
+            console.error('People.load failed', err);
+            peopleDirectory = PeopleApi.emptyDirectory();
+            renderPeopleList();
+          });
+      } else {
+        var peopleList = document.getElementById('peopleList');
+        if (peopleList) {
+          peopleList.innerHTML =
+            '<p class="tp-people-empty">Module Personnes indisponible.</p>';
+        }
+      }
     }).catch(function (err) {
       console.error('Priority profile init failed', err);
     });

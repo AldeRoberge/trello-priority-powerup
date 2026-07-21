@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-7" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css?v=section-shell-dark-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=elev-dark-1" />
-  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=section-shell-dark-1" />
+  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=debug-below-1" />
   <link rel="stylesheet" href="./components/agent/agent-blocks.css?v=blocks-flush-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
   <link rel="stylesheet" href="./components/history/history-ui.css?v=history-7" />
@@ -60,10 +60,11 @@
   <script src="./components/agent/agent-memory.js?v=agent-dream-1"></script>
   <script src="./components/agent/memory-ui.js?v=memory-settings-1"></script>
   <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
+  <script src="./components/people/people.js?v=people-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
   <script src="./components/shared/desc-meta.js?v=desc-meta-1"></script>
   <script src="./components/outlook/outlook-sync.js?v=desc-meta-1"></script>
-  <script src="./components/agent/agent-ui.js?v=queue-combine-1"></script>
+  <script src="./components/agent/agent-ui.js?v=debug-below-1"></script>
   <script src="./components/history/card-history.js?v=echeance-recurring-1"></script>
   <script src="./components/history/history-ui.js?v=history-5"></script>
 </head>
@@ -220,6 +221,7 @@
       { id: 'card', label: 'Carte', detail: 'Lecture de la carte\u2026' },
       { id: 'memory', label: 'M\u00e9moire', detail: 'Chargement de la m\u00e9moire\u2026' },
       { id: 'profile', label: 'Profil', detail: 'Chargement du profil\u2026' },
+      { id: 'people', label: 'Personnes', detail: 'Chargement des personnes\u2026' },
       { id: 'sync', label: '\u00c9ch\u00e9ances', detail: 'Synchronisation des \u00e9ch\u00e9ances\u2026' },
       { id: 'priority', label: 'Priorit\u00e9', detail: 'Chargement de la priorit\u00e9\u2026' },
       { id: 'info', label: 'Informations', detail: 'Chargement des informations\u2026' },
@@ -498,6 +500,7 @@
     let cachedMemory = null;
     let cachedCardMemory = null;
     let cachedProfile = null;
+    let cachedPeople = null;
     let boardDigestCache = '';
     let latestMembersFp = '';
     let latestLabelsFp = '';
@@ -589,6 +592,9 @@
         getOwnership: getOwnershipSnapshot,
         getProfile: function () {
           return cachedProfile;
+        },
+        getPeople: function () {
+          return cachedPeople;
         },
         getMemory: function () {
           return cachedMemory;
@@ -6723,6 +6729,22 @@
         skipBootStep('profile');
       }
 
+      beginBootStep('people');
+      if (window.People) {
+        try {
+          cachedPeople = await People.load(t);
+        } catch (peopleErr) {
+          console.error('People.load failed', peopleErr);
+          cachedPeople =
+            window.People && People.emptyDirectory
+              ? People.emptyDirectory()
+              : { version: 1, people: [], updatedAt: '' };
+        }
+        completeBootStep('people');
+      } else {
+        skipBootStep('people');
+      }
+
       if (
         window.PriorityUI &&
         typeof PriorityUI.setTimeFormat === 'function' &&
@@ -7025,6 +7047,27 @@
           },
           getProfile: function () {
             return cachedProfile;
+          },
+          getPeople: function () {
+            return (
+              cachedPeople || {
+                version: 1,
+                people: [],
+                updatedAt: ''
+              }
+            );
+          },
+          applyPeople: async function (next) {
+            if (!next || typeof next !== 'object') return cachedPeople;
+            cachedPeople = next;
+            if (window.People && typeof People.save === 'function') {
+              try {
+                cachedPeople = await People.save(t, next);
+              } catch (savePeopleErr) {
+                console.error('People.save failed', savePeopleErr);
+              }
+            }
+            return cachedPeople;
           },
           getBoardDigest: function () {
             return boardDigestCache || '';

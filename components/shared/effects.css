@@ -497,11 +497,11 @@
   position: absolute;
   left: var(--x, 50%);
   bottom: -12%;
-  width: var(--size, 32px);
-  height: var(--size, 32px);
-  margin-left: calc(var(--size, 32px) * -0.5);
+  width: var(--size, 64px);
+  height: var(--size, 64px);
+  margin-left: calc(var(--size, 64px) * -0.5);
   color: var(--c, #003399);
-  font-size: var(--size, 32px);
+  font-size: var(--size, 64px);
   line-height: 1;
   text-align: center;
   opacity: 0;

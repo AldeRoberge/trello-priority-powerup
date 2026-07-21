@@ -37,6 +37,7 @@ const UNIT_FILES = [
   'task-types.test.js',
   'member-roles.test.js',
   'custom-assignees.test.js',
+  'people.test.js',
   'task-split.test.js',
   'history.test.js',
   'debug-log.test.js',

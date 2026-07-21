@@ -218,6 +218,7 @@
       getMemory: options.getMemory || function () { return null; },
       getCardMemory: options.getCardMemory || function () { return null; },
       getProfile: options.getProfile || function () { return null; },
+      getPeople: options.getPeople || function () { return null; },
       getBoardDigest: options.getBoardDigest || function () { return ''; },
       refreshBoardDigest:
         typeof options.refreshBoardDigest === 'function'
@@ -270,6 +271,8 @@
     var provider = Agent.normalizeProvider(null);
     var savedProvider = Agent.normalizeProvider(null);
     var history = [];
+    /** Sticky modelTier from the last assistant reply (session-only; not persisted). */
+    var sessionModelTier = null;
     var chatRestored = false;
     var chatPersistTimer = null;
     var pending = false;
@@ -939,18 +942,19 @@
     infoHead.appendChild(debugBtn);
     infoEl.appendChild(infoHead);
 
-    var debugPanel = el('div', 'agent-debug-panel', {
-      role: 'region',
-      'aria-label': 'Panneau de d\u00e9bogage'
-    });
-    debugPanel.hidden = true;
-    infoEl.appendChild(debugPanel);
-
     chatPanel.appendChild(infoEl);
 
     var errorEl = el('p', 'agent-error');
     errorEl.hidden = true;
     chatPanel.appendChild(errorEl);
+
+    // Below composer / stats / errors so open debug never sits above chat chrome.
+    var debugPanel = el('div', 'agent-debug-panel', {
+      role: 'region',
+      'aria-label': 'Panneau de d\u00e9bogage'
+    });
+    debugPanel.hidden = true;
+    chatPanel.appendChild(debugPanel);
 
     body.appendChild(chatPanel);
     field.appendChild(body);
@@ -1950,6 +1954,58 @@
         agentFace: agentIdentity.agentFace
       });
       return { ok: true, personality: agentIdentity.agentPersonality };
+    };
+
+    bridge.upsertPerson = async function (patch) {
+      if (!global.People || typeof global.People.upsert !== 'function') {
+        return { ok: false, reason: 'people-unavailable' };
+      }
+      var current =
+        typeof bridge.getPeople === 'function' ? bridge.getPeople() : null;
+      var next = global.People.upsert(current, patch || {});
+      if (typeof options.applyPeople === 'function') {
+        await Promise.resolve(options.applyPeople(next));
+      } else if (t && typeof global.People.save === 'function') {
+        next = await global.People.save(t, next);
+      }
+      if (typeof bridge.getPeople === 'function') {
+        // Prefer live cache update via applyPeople; getPeople should reflect next.
+      }
+      var found = null;
+      if (patch && patch.name) {
+        found = global.People.findByAliasOrName(next, patch.name);
+      } else if (patch && (patch.matchText || patch.id)) {
+        found = global.People.findByAliasOrName(
+          next,
+          patch.matchText || patch.id
+        );
+      }
+      if (!found && next.people && next.people.length) {
+        found = next.people[next.people.length - 1];
+      }
+      return { ok: true, person: found, directory: next };
+    };
+
+    bridge.removePerson = async function (match) {
+      if (!global.People || typeof global.People.remove !== 'function') {
+        return { ok: false, reason: 'people-unavailable' };
+      }
+      var current =
+        typeof bridge.getPeople === 'function' ? bridge.getPeople() : null;
+      var beforeCount =
+        current && Array.isArray(current.people) ? current.people.length : 0;
+      var next = global.People.remove(current, match || {});
+      var afterCount =
+        next && Array.isArray(next.people) ? next.people.length : 0;
+      if (afterCount === beforeCount) {
+        return { ok: false, reason: 'not-found' };
+      }
+      if (typeof options.applyPeople === 'function') {
+        await Promise.resolve(options.applyPeople(next));
+      } else if (t && typeof global.People.save === 'function') {
+        next = await global.People.save(t, next);
+      }
+      return { ok: true, directory: next };
     };
 
     function fillSettingsForm() {
@@ -6973,6 +7029,7 @@
         var msgs = (stored && stored.messages) || [];
         if (!msgs.length) return false;
         history.length = 0;
+        sessionModelTier = null;
         for (var i = 0; i < msgs.length; i++) {
           var entry = msgs[i];
           if (!entry || !entry.role || !entry.content) continue;
@@ -7243,6 +7300,7 @@
       if (histIdx >= 0) {
         history.splice(histIdx);
       }
+      if (!history.length) sessionModelTier = null;
       pending = false;
       updateComposerEnabled();
       schedulePersistChatHistory();
@@ -8141,6 +8199,7 @@
             bridge,
             apiMsg,
             {
+              modelTier: sessionModelTier,
               onDelta: function (visible) {
                 if (myGen !== chatTurnGen) return;
                 if (!bubble || !visible) return;
@@ -8182,6 +8241,9 @@
           suggestions: turn.suggestions || [],
           suggestionsMulti: !!turn.suggestionsMulti
         });
+        if (turn.modelTier) {
+          sessionModelTier = turn.modelTier;
+        }
         schedulePersistChatHistory();
         var identityTools = {
           set_agent_color: true,

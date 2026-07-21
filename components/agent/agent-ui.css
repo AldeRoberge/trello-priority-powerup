@@ -28,7 +28,10 @@ html[data-color-mode='dark'] .tp-page--priority.is-split-assistant .cerveau-assi
   background: var(--tp-elev-1, #161b22);
 }
 
-html[data-color-mode='dark'] .tp-page--priority .agent-msg--assistant .agent-msg-bubble {
+html[data-color-mode='dark']
+  .tp-page--priority
+  .agent-msg--assistant
+  .agent-msg-bubble:not(.agent-msg-bubble--pending) {
   background: var(--tp-elev-3, #2d333b);
 }
 
@@ -497,6 +500,13 @@ html[data-color-mode='dark'] .tp-page--priority .agent-msg--user .agent-msg-bubb
 .tp-page--priority.is-split-assistant .cerveau-assistant .agent-interview-bar {
   order: 92;
   flex-shrink: 0;
+}
+
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-debug-panel {
+  order: 100;
+  flex-shrink: 0;
+  min-height: 0;
+  max-height: min(40%, 320px);
 }
 
 .tp-page--priority.is-split-assistant .cerveau-assistant .agent-chat-panel > :not(.agent-messages) {
@@ -2422,7 +2432,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-msg--user .agent-msg-bubb
   filter: saturate(0.85);
 }
 
-.tp-page--priority .agent-msg--assistant .agent-msg-bubble {
+.tp-page--priority .agent-msg--assistant .agent-msg-bubble:not(.agent-msg-bubble--pending) {
   /* Shrink beside the face instead of wrapping the whole bubble underneath. */
   flex: 0 1 auto;
   min-width: 0;
@@ -2703,7 +2713,8 @@ html[data-color-mode='dark'] .tp-page--priority .agent-hl--a {
 }
 
 /* Pending: thought-cloud trail to the right of the avatar (no speech chrome). */
-.tp-page--priority .agent-msg--assistant .agent-msg-bubble--pending {
+.tp-page--priority .agent-msg--assistant .agent-msg-bubble--pending,
+html[data-color-mode='dark'] .tp-page--priority .agent-msg--assistant .agent-msg-bubble--pending {
   display: inline-flex;
   align-items: flex-end;
   flex: 0 0 auto;
@@ -2714,6 +2725,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-hl--a {
   background: transparent;
   border: none;
   border-radius: 0;
+  color: inherit;
 }
 
 .tp-page--priority .agent-msg-bubble--pending:empty {
@@ -4118,8 +4130,11 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-top: 4px;
-  border-top: 1px solid var(--tp-border);
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--tp-border);
+  border-radius: 3px;
+  background: var(--tp-surface-subtle);
   max-height: 320px;
   overflow: auto;
   color: color-mix(in srgb, var(--tp-text) 78%, var(--tp-text-muted));
