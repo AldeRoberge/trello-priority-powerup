@@ -115,6 +115,9 @@
             <div class="tp-popup-boot-skel-line is-label"></div>
             <div class="tp-popup-boot-skel-line is-mid"></div>
           </div>
+          <div class="tp-popup-boot-skel-card is-compact tp-popup-boot-skel-chat">
+            <div class="tp-popup-boot-skel-line is-label"></div>
+          </div>
         </div>
         <aside class="tp-popup-boot-skel-rail">
           <div class="tp-popup-boot-skel-line is-label"></div>
@@ -164,6 +167,21 @@
   <div class="tp-build-info tp-popup-build-info" id="buildInfo" hidden></div>
 
   <script>
+    // Match boot skeleton to remembered Assistant collapse before paint.
+    (function earlyAssistantSkelPref() {
+      try {
+        if (typeof localStorage === 'undefined') return;
+        var raw = localStorage.getItem('trello-priority-powerup/section-collapse');
+        if (!raw) return;
+        var parsed = JSON.parse(raw);
+        if (parsed && parsed.chat === false && document.body) {
+          document.body.classList.add('is-boot-assistant-collapsed');
+        }
+      } catch (e) {
+        /* ignore */
+      }
+    })();
+
     // Visible before the Power-Up handshake so nested/broken hosts are not a blank spin.
     (function earlyBootWatch() {
       var el = document.getElementById('popupBootMsg');
@@ -2010,7 +2028,7 @@
       return dueCompleteSyncChain;
     }
 
-    /** Move Assistant into the right rail for the fullscreen split layout. */
+    /** Dock Assistant into the rail when expanded; leave collapsed with other sections. */
     function placeAssistantInRail(agentUi) {
       var chatSection =
         (agentUi && agentUi.el) ||
@@ -2018,16 +2036,26 @@
           variant.card &&
           variant.card.querySelector('.variant-chat-section'));
       if (!chatSection) return;
-      syncAssistantSplitDock(chatSection, true);
+      var expanded = true;
       if (
         agentUi &&
         agentUi.collapse &&
-        typeof agentUi.collapse.setExpanded === 'function'
+        typeof agentUi.collapse.isExpanded === 'function'
       ) {
-        agentUi.collapse.setExpanded(true);
+        expanded = !!agentUi.collapse.isExpanded();
+      } else if (
+        PriorityUI &&
+        typeof PriorityUI.resolveSectionExpanded === 'function'
+      ) {
+        expanded = PriorityUI.resolveSectionExpanded('chat', true);
       }
+      syncAssistantSplitDock(chatSection, expanded);
       // Reparenting into the rail resets .agent-messages scroll — pin to latest.
-      if (agentUi && typeof agentUi.scrollMessagesToBottom === 'function') {
+      if (
+        expanded &&
+        agentUi &&
+        typeof agentUi.scrollMessagesToBottom === 'function'
+      ) {
         agentUi.scrollMessagesToBottom();
       }
     }
@@ -6910,7 +6938,7 @@
         agentUi = AgentUI.mount(variant.card, {
           t: t,
           scope: 'task',
-          initiallyOpen: true,
+          // Collapse preference restored inside AgentUI; deep-link focus expands.
           focusComposer: focusProgress,
           getScope: function () {
             return 'task';

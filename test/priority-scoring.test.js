@@ -84,4 +84,17 @@ describe('PriorityUI scoring (baseline)', () => {
     PriorityUI.saveStatutEmbeddedDetailsExpanded(true);
     assert.equal(PriorityUI.loadStatutEmbeddedDetailsExpanded(), true);
   });
+
+  it('persists Assistant (chat) section collapse preference', () => {
+    assert.equal(typeof PriorityUI.resolveSectionExpanded, 'function');
+    assert.equal(typeof PriorityUI.saveSectionCollapseState, 'function');
+    const key = PriorityUI.SECTION_COLLAPSE_STORAGE_KEY;
+    assert.ok(key);
+    localStorage.removeItem(key);
+    assert.equal(PriorityUI.resolveSectionExpanded('chat', true), true);
+    PriorityUI.saveSectionCollapseState({ chat: false });
+    assert.equal(PriorityUI.resolveSectionExpanded('chat', true), false);
+    PriorityUI.saveSectionCollapseState({ chat: true });
+    assert.equal(PriorityUI.resolveSectionExpanded('chat', true), true);
+  });
 });

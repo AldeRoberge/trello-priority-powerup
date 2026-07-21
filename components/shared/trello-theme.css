@@ -1742,6 +1742,28 @@ html[data-color-mode='dark'] .tp-page--priority .heat-score-tooltip {
   width: 100%;
 }
 
+/* Collapsed Assistant: skeleton matches single-column form (no rail) */
+.tp-page--priority.is-booting.is-boot-assistant-collapsed,
+.tp-page--priority.is-boot-leaving.is-boot-assistant-collapsed {
+  max-width: 880px;
+}
+
+.tp-popup-boot-skel-chat {
+  display: none;
+}
+
+.tp-page--priority.is-boot-assistant-collapsed .tp-popup-boot-skel-rail {
+  display: none;
+}
+
+.tp-page--priority.is-boot-assistant-collapsed .tp-popup-boot-skel-main {
+  padding-right: 0;
+}
+
+.tp-page--priority.is-boot-assistant-collapsed .tp-popup-boot-skel-chat {
+  display: flex;
+}
+
 .tp-page--priority.is-booting .tp-popup-boot,
 .tp-page--priority.is-boot-leaving .tp-popup-boot {
   display: grid;

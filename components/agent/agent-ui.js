@@ -961,8 +961,11 @@
     var debugLog = [];
     var selectedDebugId = null;
 
-    var expandFallback = false;
-    var expandChat = initiallyOpen
+    // Prefer saved collapse; default expanded. initiallyOpen only matters as
+    // fallback when nothing is stored (and standalone always stays open).
+    var expandFallback =
+      options.initiallyOpen != null ? !!options.initiallyOpen : true;
+    var expandChat = standalone
       ? true
       : typeof PriorityUI.resolveSectionExpanded === 'function'
         ? PriorityUI.resolveSectionExpanded('chat', expandFallback)
@@ -8537,7 +8540,7 @@
     notifyLayout();
     dbgLog('agentUi', 'mount.ready', { scope: assistantScope });
 
-    if (initiallyOpen || shouldFocusComposer) {
+    if (shouldFocusComposer) {
       openAndFocusComposer();
     }
 
