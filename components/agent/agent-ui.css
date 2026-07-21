@@ -23,6 +23,27 @@
   );
 }
 
+html[data-color-mode='dark'] .tp-page--priority .field--chat.is-enabled {
+  background: var(--tp-elev-3, #2d333b);
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-messages,
+html[data-color-mode='dark'] .tp-page--priority.is-split-assistant .cerveau-assistant .agent-messages {
+  background: var(--tp-elev-1, #161b22);
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-msg--assistant .agent-msg-bubble {
+  background: var(--tp-elev-3, #2d333b);
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-msg--user .agent-msg-bubble {
+  background: color-mix(
+    in srgb,
+    var(--tp-primary) 16%,
+    var(--tp-elev-3, #2d333b)
+  );
+}
+
 .tp-page--priority .agent-settings-btn {
   flex: 0 0 auto;
   align-self: center;
@@ -2370,7 +2391,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-msg--user .agent-msg-bubb
   background: color-mix(
     in srgb,
     var(--tp-primary) 16%,
-    var(--tp-elev-3, var(--tp-surface-subtle, #22272b))
+    var(--tp-elev-3, #2d333b)
   );
   border-color: color-mix(in srgb, var(--tp-primary) 24%, var(--tp-border));
 }

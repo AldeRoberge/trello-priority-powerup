@@ -355,6 +355,6 @@ html[data-color-mode='dark'] .tp-page--priority .agent-result-blocks .agent-bloc
   background: color-mix(
     in srgb,
     var(--agent-accent, var(--tp-primary, #579dff)) 10%,
-    var(--tp-surface, #22272b)
+    var(--tp-elev-3, #2d333b)
   );
 }

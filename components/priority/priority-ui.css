@@ -106,16 +106,16 @@ html[data-color-mode="light"] {
 }
 
 html[data-color-mode="dark"] {
-  /* Match trello-theme elevation: 0 dark → 2 lighter */
-  --surface-0: #1d2125;
-  --surface-1: #282e33;
-  --surface-2: #333c43;
+  /* Match trello-theme elevation: 0 dark canvas → 2 card → 3+ raised */
+  --surface-0: var(--tp-elev-0, #0d1117);
+  --surface-1: var(--tp-elev-1, #161b22);
+  --surface-2: var(--tp-elev-2, #21262d);
   --border: #a6c5e75c;
   --text-primary: #f7f8f9;
   --text-secondary: #b6c2cf;
   --text-muted: #8c9bab;
   --due-accent: #579dff;
-  --due-accent-text: #1d2125;
+  --due-accent-text: var(--tp-elev-0, #0d1117);
   --focus-ring: rgba(166, 197, 231, 0.4);
   --focus-ring-strong: rgba(166, 197, 231, 0.5);
   --modal-backdrop: rgba(0, 0, 0, 0.55);
@@ -455,7 +455,7 @@ body {
 
 .overview-title {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   width: 100%;
   margin: 0 0 10px;
@@ -479,7 +479,8 @@ body {
 .overview-title-chevron {
   flex-shrink: 0;
   font-size: 18px;
-  line-height: 1;
+  line-height: 1.25;
+  margin-top: 0.15em;
   color: var(--text-secondary, var(--text-muted));
   opacity: 0.9;
 }
@@ -497,9 +498,8 @@ body {
   font-weight: 650;
   line-height: 1.25;
   letter-spacing: -0.02em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .overview-title-text.is-empty,
@@ -1365,13 +1365,6 @@ html[data-color-mode='dark'] .overview-composer-input {
 @media (max-width: 560px) {
   .overview-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .overview-title-text {
-    white-space: normal;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
   }
 }
 

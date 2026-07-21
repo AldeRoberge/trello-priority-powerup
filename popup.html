@@ -6,7 +6,7 @@
   <title>Trello Cerveau</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=assistant-maxwidth-1" />
+  <link rel="stylesheet" href="./components/shared/trello-theme.css?v=boot-skeleton-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-7" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css?v=facilite-slider-2" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=goals-2" />
@@ -75,6 +75,56 @@
     aria-live="polite"
     aria-busy="true"
   >
+    <div class="tp-popup-boot-skeleton" aria-hidden="true">
+      <div class="tp-popup-boot-skel-shell">
+        <div class="tp-popup-boot-skel-main">
+          <div class="tp-popup-boot-skel-title"></div>
+          <div class="tp-popup-boot-skel-card">
+            <div class="tp-popup-boot-skel-line is-short"></div>
+            <div class="tp-popup-boot-skel-line"></div>
+            <div class="tp-popup-boot-skel-line is-mid"></div>
+          </div>
+          <div class="tp-popup-boot-skel-card">
+            <div class="tp-popup-boot-skel-line is-label"></div>
+            <div class="tp-popup-boot-skel-row">
+              <div class="tp-popup-boot-skel-chip"></div>
+              <div class="tp-popup-boot-skel-track"></div>
+            </div>
+            <div class="tp-popup-boot-skel-row">
+              <div class="tp-popup-boot-skel-chip"></div>
+              <div class="tp-popup-boot-skel-track"></div>
+            </div>
+            <div class="tp-popup-boot-skel-row">
+              <div class="tp-popup-boot-skel-chip"></div>
+              <div class="tp-popup-boot-skel-track"></div>
+            </div>
+          </div>
+          <div class="tp-popup-boot-skel-card">
+            <div class="tp-popup-boot-skel-line is-label"></div>
+            <div class="tp-popup-boot-skel-line"></div>
+            <div class="tp-popup-boot-skel-line is-mid"></div>
+            <div class="tp-popup-boot-skel-pills">
+              <span></span><span></span><span></span>
+            </div>
+          </div>
+          <div class="tp-popup-boot-skel-card is-compact">
+            <div class="tp-popup-boot-skel-line is-label"></div>
+            <div class="tp-popup-boot-skel-line is-short"></div>
+          </div>
+          <div class="tp-popup-boot-skel-card is-compact">
+            <div class="tp-popup-boot-skel-line is-label"></div>
+            <div class="tp-popup-boot-skel-line is-mid"></div>
+          </div>
+        </div>
+        <aside class="tp-popup-boot-skel-rail">
+          <div class="tp-popup-boot-skel-line is-label"></div>
+          <div class="tp-popup-boot-skel-bubble"></div>
+          <div class="tp-popup-boot-skel-bubble is-short"></div>
+          <div class="tp-popup-boot-skel-bubble"></div>
+          <div class="tp-popup-boot-skel-compose"></div>
+        </aside>
+      </div>
+    </div>
     <div class="tp-popup-boot-inner">
       <span class="tp-popup-boot-spinner" aria-hidden="true">
         <i class="ti ti-loader-2"></i>
@@ -288,8 +338,14 @@
       clearBootTimer();
       if (options.error) {
         bootSettled = true;
+        document.body.classList.remove('is-boot-leaving');
         document.body.classList.add('is-booting');
         document.body.classList.add('is-boot-error');
+        var errBoot = document.getElementById('popupBoot');
+        if (errBoot) {
+          errBoot.hidden = false;
+          errBoot.classList.remove('is-leaving');
+        }
         setBootMessage(options.error, true);
         resizePopup();
         return;
@@ -303,14 +359,36 @@
       setBootMessage('Cerveau est pr\u00eat', false);
       renderBootSteps();
       bootSettled = true;
-      document.body.classList.remove('is-booting');
       document.body.classList.remove('is-boot-error');
       var boot = document.getElementById('popupBoot');
-      if (boot) {
-        boot.hidden = true;
-        boot.setAttribute('aria-busy', 'false');
+      if (!boot) {
+        document.body.classList.remove('is-booting');
+        resizePopup();
+        return;
       }
+      boot.setAttribute('aria-busy', 'false');
+      // Reveal real UI under the skeleton, then fade the overlay out.
+      document.body.classList.add('is-boot-leaving');
+      document.body.classList.remove('is-booting');
       resizePopup();
+      var settled = false;
+      function settleLeave() {
+        if (settled) return;
+        settled = true;
+        document.body.classList.remove('is-boot-leaving');
+        boot.hidden = true;
+        boot.classList.remove('is-leaving');
+        resizePopup();
+      }
+      requestAnimationFrame(function () {
+        boot.classList.add('is-leaving');
+      });
+      boot.addEventListener('transitionend', function onLeave(ev) {
+        if (ev.target !== boot) return;
+        boot.removeEventListener('transitionend', onLeave);
+        settleLeave();
+      });
+      setTimeout(settleLeave, 420);
     }
 
     function startBootWatch() {
@@ -7522,12 +7600,14 @@
       else console.error('Priority popup init failed', err);
       // Fallback if boot helpers never ran (iframe client failed before callback body).
       if (!document.body.classList.contains('is-boot-error')) {
+        document.body.classList.remove('is-boot-leaving');
         document.body.classList.add('is-booting');
         document.body.classList.add('is-boot-error');
         var boot = document.getElementById('popupBoot');
         var msg = document.getElementById('popupBootMsg');
         if (boot) {
           boot.hidden = false;
+          boot.classList.remove('is-leaving');
           boot.classList.add('is-error');
           boot.setAttribute('aria-busy', 'false');
         }

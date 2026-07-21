@@ -245,7 +245,7 @@
 }
 
 html[data-color-mode='dark'] .goals-metrics-panel {
-  background: var(--tp-elev-2, var(--tp-surface, #333c43));
+  background: var(--tp-elev-3, #2d333b);
   box-shadow: -8px 0 24px rgba(0, 0, 0, 0.45);
 }
 
