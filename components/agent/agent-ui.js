@@ -4678,12 +4678,7 @@
       var root = cardEl || document;
       var target = null;
 
-      if (field === 'impact' && level != null) {
-        target = root.querySelector(
-          '.impact-reach-chip[data-level="' + level + '"]'
-        );
-      }
-      if (!target && field) {
+      if (field) {
         target =
           root.querySelector('[data-field-id$="-' + field + '"]') ||
           root.querySelector('[data-field-id="' + field + '"]');
@@ -4691,17 +4686,6 @@
       if (!target && section) {
         var sel = sectionSelector(section);
         if (sel) target = root.querySelector(sel);
-      }
-      if (
-        target &&
-        field === 'impact' &&
-        level == null &&
-        target.querySelector
-      ) {
-        var activeChip = target.querySelector(
-          '.impact-reach-chip.is-active, .impact-reach-chip[aria-pressed="true"]'
-        );
-        if (activeChip) target = activeChip;
       }
       return {
         ok: !!target,

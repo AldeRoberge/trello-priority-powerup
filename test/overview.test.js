@@ -489,6 +489,9 @@ describe('PriorityUI createOverviewField', () => {
       hero.style._props['--overview-progress-accent'],
       '#e34935'
     );
+    const blockedTrack = hero.querySelector('.overview-hero-track');
+    assert.ok(blockedTrack);
+    assert.equal(blockedTrack.hidden, true);
 
     ui.setData({
       status: 'En cours',
@@ -504,6 +507,7 @@ describe('PriorityUI createOverviewField', () => {
       hero.querySelector('.overview-progress-ring').innerHTML,
       /pause/i
     );
+    assert.equal(hero.querySelector('.overview-hero-track').hidden, false);
   });
 
   it('shows pause ring beside Bloqué when blocked with no percent', () => {
@@ -829,6 +833,7 @@ describe('PriorityUI createOverviewField', () => {
       blocked.querySelector('.overview-progress-pct').textContent,
       /55/
     );
+    assert.equal(blocked.querySelector('.overview-progress-track'), null);
 
     const done = PriorityUI.buildProgressSummaryNode({
       progressPercent: 100,

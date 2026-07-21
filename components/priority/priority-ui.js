@@ -6529,31 +6529,9 @@
 
   // ── 9. Form controls (field, heat panel, calc graph) ────────────────────
 
-  // Impact reach (Personnel → Global) — orange quake ring wrapping the globe.
-  // Radii grow from a small epicenter disc to the full sphere outline (3D wrap).
-  var IMPACT_GLOBE = { cx: 60, cy: 44, rx: 32, ry: 30 };
-  var IMPACT_REACH_COLORS = ['#e8a838', '#e8922e', '#e07028', '#d45520', '#c43c18'];
-  // [rx, ry] — ry opens toward sphere aspect so the ring reads as wrapping the globe.
-  var IMPACT_REACH_ELLIPSES = [
-    [7, 3.5],
-    [14, 8],
-    [21, 15],
-    [27, 23],
-    [IMPACT_GLOBE.rx, IMPACT_GLOBE.ry]
-  ];
-
-  // Facilité estimated duration: log-spaced presets ~minutes → years.
+  // Estimated duration helpers (shared with Progrès / agent).
   var DURATION_MIN_MINUTES = 5;
   var DURATION_MAX_MINUTES = Math.round(2 * 365.25 * 24 * 60);
-  var DURATION_CRACK_MINUTES = Math.round(365.25 * 24 * 60);
-  var DURATION_TICKS = [
-    { label: 'Quelques minutes', minutes: 15 },
-    { label: 'Quelques heures', minutes: 3 * 60 },
-    { label: 'Quelques jours', minutes: 3 * 24 * 60 },
-    { label: 'Quelques semaines', minutes: 3 * 7 * 24 * 60 },
-    { label: 'Quelques mois', minutes: 3 * 30 * 24 * 60 },
-    { label: 'Quelques ann\u00e9es', minutes: DURATION_MAX_MINUTES }
-  ];
   var DURATION_UNITS = [
     { id: 'min', label: 'min', minutes: 1 },
     { id: 'h', label: 'h', minutes: 60 },
@@ -6664,392 +6642,6 @@
     else if (/^(ans?|ann[eé]es?|years?|y)$/.test(u)) factor = 365.25 * 24 * 60;
     else return null;
     return clampDurationMinutes(n * factor);
-  }
-
-  function svgNS() {
-    return 'http://www.w3.org/2000/svg';
-  }
-
-  function svgEl(tag, attrs) {
-    var node = document.createElementNS(svgNS(), tag);
-    if (attrs) {
-      Object.keys(attrs).forEach(function (k) {
-        node.setAttribute(k, attrs[k]);
-      });
-    }
-    return node;
-  }
-
-  /**
-   * Earthquake-globe visualization bound to an impact field (0–4).
-   * Orange ring grows from a small surface disc until it wraps the whole 3D globe.
-   */
-  function attachImpactReachVisual(fieldApi) {
-    if (!fieldApi || !fieldApi.el) return null;
-    var cx = IMPACT_GLOBE.cx;
-    var cy = IMPACT_GLOBE.cy;
-    var gRx = IMPACT_GLOBE.rx;
-    var gRy = IMPACT_GLOBE.ry;
-
-    var wrap = document.createElement('div');
-    wrap.className = 'impact-reach';
-    wrap.setAttribute('aria-hidden', 'true');
-
-    var stage = document.createElement('div');
-    stage.className = 'impact-reach-stage';
-
-    var svg = svgEl('svg', {
-      class: 'impact-reach-svg',
-      viewBox: '0 0 120 88',
-      width: '120',
-      height: '88'
-    });
-
-    // Soft 3D pedestal ellipse (shadow / horizon).
-    svg.appendChild(
-      svgEl('ellipse', {
-        class: 'impact-reach-pedestal',
-        cx: String(cx),
-        cy: '76',
-        rx: String(gRx + 6),
-        ry: '5.5'
-      })
-    );
-
-    var globeG = svgEl('g', { class: 'impact-reach-globe' });
-    globeG.appendChild(
-      svgEl('ellipse', {
-        class: 'impact-reach-sphere',
-        cx: String(cx),
-        cy: String(cy),
-        rx: String(gRx),
-        ry: String(gRy)
-      })
-    );
-    globeG.appendChild(
-      svgEl('ellipse', {
-        class: 'impact-reach-meridian',
-        cx: String(cx),
-        cy: String(cy),
-        rx: '14',
-        ry: String(gRy),
-        fill: 'none'
-      })
-    );
-    globeG.appendChild(
-      svgEl('ellipse', {
-        class: 'impact-reach-parallel',
-        cx: String(cx),
-        cy: String(cy),
-        rx: String(gRx),
-        ry: '10',
-        fill: 'none'
-      })
-    );
-    globeG.appendChild(
-      svgEl('ellipse', {
-        class: 'impact-reach-parallel',
-        cx: String(cx),
-        cy: String(cy - 10),
-        rx: '28',
-        ry: '7',
-        fill: 'none'
-      })
-    );
-    globeG.appendChild(
-      svgEl('path', {
-        class: 'impact-reach-land',
-        d: 'M42 38c4-6 10-8 16-6 5 2 8 7 7 12-1 4-5 7-10 8-6 1-11-2-13-7zM70 50c3-2 7-2 10 1 2 3 1 7-2 9-4 2-8 1-10-2-2-3-1-6 2-8z'
-      })
-    );
-    globeG.appendChild(
-      svgEl('ellipse', {
-        class: 'impact-reach-shine',
-        cx: String(cx - 12),
-        cy: String(cy - 12),
-        rx: '8',
-        ry: '5'
-      })
-    );
-    svg.appendChild(globeG);
-
-    // Quake rings sit in the same 3D plane as the globe (shared center).
-    var quakeG = svgEl('g', { class: 'impact-reach-quake' });
-    // Back half (dashed) suggests the ring wrapping behind the sphere.
-    var ringBack = svgEl('ellipse', {
-      class: 'impact-reach-ring impact-reach-ring--back',
-      cx: String(cx),
-      cy: String(cy),
-      rx: '7',
-      ry: '3.5',
-      fill: 'none'
-    });
-    var ring = svgEl('ellipse', {
-      class: 'impact-reach-ring',
-      cx: String(cx),
-      cy: String(cy),
-      rx: '7',
-      ry: '3.5',
-      fill: 'none'
-    });
-    var ringEcho = svgEl('ellipse', {
-      class: 'impact-reach-ring impact-reach-ring--echo',
-      cx: String(cx),
-      cy: String(cy),
-      rx: '7',
-      ry: '3.5',
-      fill: 'none'
-    });
-    var epicenter = svgEl('circle', {
-      class: 'impact-reach-epicenter',
-      cx: String(cx),
-      cy: String(cy),
-      r: '2.4'
-    });
-    quakeG.appendChild(ringBack);
-    quakeG.appendChild(ringEcho);
-    quakeG.appendChild(ring);
-    quakeG.appendChild(epicenter);
-    svg.appendChild(quakeG);
-
-    stage.appendChild(svg);
-    wrap.appendChild(stage);
-
-    var legend = document.createElement('div');
-    legend.className = 'impact-reach-legend';
-    var shorts = (LABELS.impact && LABELS.impact.short) || [];
-    shorts.forEach(function (name, i) {
-      var chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'impact-reach-chip';
-      chip.dataset.level = String(i);
-      chip.textContent = name;
-      chip.setAttribute('aria-label', 'Port\u00e9e\u00a0: ' + name);
-      chip.addEventListener('click', function () {
-        if (typeof fieldApi.setValue === 'function') fieldApi.setValue(i);
-        if (typeof fieldApi.onChange === 'function') fieldApi.onChange(i);
-      });
-      legend.appendChild(chip);
-    });
-    wrap.appendChild(legend);
-
-    fieldApi.el.classList.add('field--impact-reach');
-    fieldApi.el.appendChild(wrap);
-
-    var lastLevel = -1;
-    function paint(level) {
-      var L = clamp(Math.round(level), 0, 4);
-      var color = IMPACT_REACH_COLORS[L];
-      var ell = IMPACT_REACH_ELLIPSES[L];
-      var rx = ell[0];
-      var ry = ell[1];
-      wrap.style.setProperty('--reach-color', color);
-      wrap.dataset.level = String(L);
-      // At Global, ring coincides with the sphere silhouette (full wrap).
-      ring.setAttribute('rx', String(rx));
-      ring.setAttribute('ry', String(ry));
-      ringBack.setAttribute('rx', String(rx));
-      ringBack.setAttribute('ry', String(ry));
-      // Echo sits slightly outside the primary ring for ripple depth.
-      var echoScale = L >= 4 ? 1.06 : 1.12;
-      ringEcho.setAttribute('rx', String(rx * echoScale));
-      ringEcho.setAttribute('ry', String(ry * echoScale));
-      epicenter.setAttribute('fill', color);
-      ring.setAttribute('stroke', color);
-      ringBack.setAttribute('stroke', color);
-      ringEcho.setAttribute('stroke', color);
-      epicenter.setAttribute('r', L >= 4 ? '0' : String(2.2 + L * 0.15));
-      var chips = legend.querySelectorAll('.impact-reach-chip');
-      for (var i = 0; i < chips.length; i++) {
-        var active = i === L;
-        chips[i].classList.toggle('is-active', active);
-        chips[i].setAttribute('aria-pressed', active ? 'true' : 'false');
-      }
-      if (L !== lastLevel) {
-        wrap.classList.remove('is-shaking');
-        void wrap.offsetWidth;
-        wrap.classList.add('is-shaking');
-        lastLevel = L;
-      }
-    }
-
-    var origUpdate = fieldApi.updateDisplay;
-    fieldApi.updateDisplay = function (v) {
-      origUpdate(v);
-      paint(snappedLevel(v, 0, 4));
-    };
-    paint(snappedLevel(fieldApi.getValue(), 0, 4));
-
-    return {
-      el: wrap,
-      paint: paint
-    };
-  }
-
-  /**
-   * Estimated-duration block under Facilité: simple log-spaced grid + hourglass.
-   */
-  function createEstimatedDurationControl(config) {
-    config = config || {};
-    var host = config.el;
-    var onChange = config.onChange || function () {};
-    var minutes = clampDurationMinutes(config.value);
-
-    var block = document.createElement('div');
-    block.className = 'ease-duration';
-
-    var head = document.createElement('div');
-    head.className = 'ease-duration-head';
-    var title = document.createElement('span');
-    title.className = 'ease-duration-title';
-    title.textContent = 'Dur\u00e9e estim\u00e9e';
-    var summary = document.createElement('span');
-    summary.className = 'ease-duration-summary';
-    head.appendChild(title);
-    head.appendChild(summary);
-    block.appendChild(head);
-
-    var body = document.createElement('div');
-    body.className = 'ease-duration-body';
-
-    // Hourglass visual — chambers: top y=8→34, waist≈36, bottom y=38→64
-    var glassWrap = document.createElement('div');
-    glassWrap.className = 'hourglass-wrap';
-    var hgSvg = svgEl('svg', {
-      class: 'hourglass-svg',
-      viewBox: '0 0 48 72',
-      width: '36',
-      height: '54'
-    });
-    hgSvg.appendChild(
-      svgEl('path', {
-        class: 'hourglass-frame',
-        d: 'M10 6h28v6c0 8-8 14-14 18 6 4 14 10 14 18v6H10v-6c0-8 8-14 14-18C18 26 10 20 10 12V6z',
-        fill: 'none'
-      })
-    );
-    var sandTop = svgEl('path', {
-      class: 'hourglass-sand hourglass-sand--top',
-      d: 'M14 10h20v2c0 6-6 11-10 14-4-3-10-8-10-14v-2z'
-    });
-    var sandBot = svgEl('path', {
-      class: 'hourglass-sand hourglass-sand--bot',
-      d: 'M24 38c4 3 10 8 10 14v6H14v-6c0-6 6-11 10-14z'
-    });
-    var crackL = svgEl('path', {
-      class: 'hourglass-crack',
-      d: 'M18 22l4 6-3 5 5 7',
-      fill: 'none'
-    });
-    var crackR = svgEl('path', {
-      class: 'hourglass-crack',
-      d: 'M30 24l-3 5 4 6-2 5',
-      fill: 'none'
-    });
-    hgSvg.appendChild(sandBot);
-    hgSvg.appendChild(sandTop);
-    hgSvg.appendChild(crackL);
-    hgSvg.appendChild(crackR);
-    glassWrap.appendChild(hgSvg);
-    body.appendChild(glassWrap);
-
-    var controls = document.createElement('div');
-    controls.className = 'ease-duration-controls';
-
-    var grid = document.createElement('div');
-    grid.className = 'ease-duration-grid';
-    grid.setAttribute('role', 'listbox');
-    grid.setAttribute('aria-label', 'Dur\u00e9e estim\u00e9e');
-
-    var cellButtons = [];
-    DURATION_TICKS.forEach(function (tick, idx) {
-      var cell = document.createElement('button');
-      cell.type = 'button';
-      cell.className = 'ease-duration-cell';
-      cell.setAttribute('role', 'option');
-      cell.dataset.minutes = String(tick.minutes);
-      cell.dataset.index = String(idx);
-      // Shorter label for grid density; full phrase stays as title.
-      cell.textContent = tick.label.replace(/^Quelques\s+/i, '');
-      cell.title = tick.label;
-      cell.addEventListener('click', function () {
-        applyMinutes(tick.minutes, true);
-      });
-      grid.appendChild(cell);
-      cellButtons.push(cell);
-    });
-    controls.appendChild(grid);
-    body.appendChild(controls);
-    block.appendChild(body);
-
-    if (host) host.appendChild(block);
-
-    function nearestTickIndex(m) {
-      if (m == null) return -1;
-      var best = 0;
-      var bestDist = Infinity;
-      for (var i = 0; i < DURATION_TICKS.length; i++) {
-        var d = Math.abs(
-          Math.log(DURATION_TICKS[i].minutes) - Math.log(m)
-        );
-        if (d < bestDist) {
-          bestDist = d;
-          best = i;
-        }
-      }
-      return best;
-    }
-
-    function paintHourglass(m) {
-      var fill = m == null ? 0 : durationToSlider(m) / 100;
-      // Top chamber empties (scale from top lip), bottom fills (scale from floor).
-      var topScale = Math.max(0.08, 1 - fill);
-      var botScale = Math.max(0.08, fill);
-      sandTop.setAttribute(
-        'transform',
-        'translate(24 10) scale(1 ' + topScale.toFixed(3) + ') translate(-24 -10)'
-      );
-      sandBot.setAttribute(
-        'transform',
-        'translate(24 58) scale(1 ' + botScale.toFixed(3) + ') translate(-24 -58)'
-      );
-      sandTop.style.opacity = String(0.35 + topScale * 0.65);
-      sandBot.style.opacity = String(0.35 + botScale * 0.65);
-      var cracked = m != null && m >= DURATION_CRACK_MINUTES;
-      block.classList.toggle('hourglass--cracked', cracked);
-      if (cracked) {
-        block.classList.remove('hourglass--smash');
-        void block.offsetWidth;
-        block.classList.add('hourglass--smash');
-      }
-    }
-
-    function applyMinutes(next, notify) {
-      minutes = clampDurationMinutes(next);
-      summary.textContent =
-        minutes == null ? 'Non d\u00e9finie' : formatDurationFr(minutes);
-      summary.classList.toggle('is-empty', minutes == null);
-      var activeIdx = nearestTickIndex(minutes);
-      for (var i = 0; i < cellButtons.length; i++) {
-        var on = i === activeIdx && minutes != null;
-        cellButtons[i].classList.toggle('is-active', on);
-        cellButtons[i].setAttribute('aria-selected', on ? 'true' : 'false');
-      }
-      paintHourglass(minutes);
-      if (notify) onChange(minutes);
-    }
-
-    applyMinutes(minutes, false);
-
-    return {
-      el: block,
-      getMinutes: function () {
-        return minutes;
-      },
-      setMinutes: function (next) {
-        applyMinutes(next, false);
-      }
-    };
   }
 
   function createField(config) {
@@ -7183,12 +6775,6 @@
     inputEl.addEventListener('input', handleRangeInput);
     inputEl.addEventListener('change', handleRangeInput);
 
-    if (
-      config.showImpactGlobe &&
-      (wordsKey === 'impact' || id === 'impact')
-    ) {
-      attachImpactReachVisual(api);
-    }
     api.updateDisplay(value);
     return api;
   }
@@ -8313,7 +7899,7 @@
 
   /**
    * Compact Progrès header summary: same ring + % + bar + color as the Overview cell.
-   * When blocked, the label shows the Motif (block reason) instead of remaining tasks / %.
+   * When blocked, shows Motif (block reason) only — no progress bar.
    * Returns a DOM node, or '' when there is nothing to show.
    */
   function buildProgressSummaryNode(opts) {
@@ -8377,15 +7963,17 @@
     valueRow.appendChild(ring);
     valueRow.appendChild(pctText);
 
-    var track = document.createElement('span');
-    track.className = 'overview-progress-track';
-    var fill = document.createElement('span');
-    fill.className = 'overview-progress-fill';
-    fill.style.width = percent + '%';
-    track.appendChild(fill);
-
     wrap.appendChild(valueRow);
-    wrap.appendChild(track);
+    // Blocked summary shows Motif only — no progress bar.
+    if (!showReason) {
+      var track = document.createElement('span');
+      track.className = 'overview-progress-track';
+      var fill = document.createElement('span');
+      fill.className = 'overview-progress-fill';
+      fill.style.width = percent + '%';
+      track.appendChild(fill);
+      wrap.appendChild(track);
+    }
     return wrap;
   }
 
@@ -9441,7 +9029,8 @@
         });
       heroSentence.textContent = sentence;
       heroSentence.hidden = !sentence;
-      heroTrack.hidden = showPct == null && !isDone;
+      // Hide the bar when blocked — Motifs / phase carry the status.
+      heroTrack.hidden = isBlocked || (showPct == null && !isDone);
       heroFill.style.width =
         showPct != null ? showPct + '%' : isDone ? '100%' : '0%';
 
@@ -9678,7 +9267,6 @@
 
   /**
    * Top-of-popup recap: title, description (editable), creator, assignees, labels.
-   * Optional Portée jump to Priorité when experimental.impactGlobe is on.
    */
   function createInfoField(config) {
     var el = config.el;
@@ -9766,7 +9354,6 @@
     // Kept for label suggestions / collapsed summary — not shown as an Information row.
     var priorityLabel = typeof config.priorityLabel === 'string' ? config.priorityLabel : '';
     var impactReachLabel = typeof config.impactReach === 'string' ? config.impactReach : '';
-    var durationLabel = typeof config.durationLabel === 'string' ? config.durationLabel : '';
     var titleDirty = false;
     var titleSaveTimer = null;
     var titleBusy = false;
@@ -9947,8 +9534,7 @@
         row.tabIndex = 0;
         row.title = 'Aller \u00e0 ' + labelText;
         function jump() {
-          // Portée lives in Priorité.
-          onJump(key === 'porte' ? 'priority' : key);
+          onJump(key);
         }
         row.addEventListener('click', jump);
         row.addEventListener('keydown', function (e) {
@@ -10642,29 +10228,6 @@
     objectifRow.row.hidden = true;
     objectifRow.value.appendChild(objectifMount);
     body.appendChild(objectifRow.row);
-
-    // ── Portée / Durée (experimental mirrors of Priorité) ─────────────
-    var porteRow = makeRow('porte', 'Port\u00e9e', {
-      interactive: true,
-      icon: 'ti-world'
-    });
-    var porteValueEl = document.createElement('span');
-    porteValueEl.className = 'info-recap-text';
-    // Shown only when experimental.impactGlobe is enabled (applyFeaturesToCard).
-    porteRow.row.hidden = true;
-    porteRow.value.appendChild(porteValueEl);
-    body.appendChild(porteRow.row);
-
-    // Legacy Durée (Facilité) — permanently hidden; estimates live in Progrès.
-    var dureeRow = makeRow('duree', 'Dur\u00e9e', {
-      interactive: true,
-      icon: 'ti-hourglass'
-    });
-    var dureeValueEl = document.createElement('span');
-    dureeValueEl.className = 'info-recap-text';
-    dureeRow.row.hidden = true;
-    dureeRow.value.appendChild(dureeValueEl);
-    body.appendChild(dureeRow.row);
 
     field.appendChild(body);
     el.appendChild(field);
@@ -14176,17 +13739,6 @@
         });
     }
 
-    function setRecapText(node, text, emptyLabel) {
-      var value = (text || '').trim();
-      node.textContent = value || emptyLabel;
-      node.classList.toggle('is-empty', !value);
-    }
-
-    function renderRecap() {
-      setRecapText(porteValueEl, impactReachLabel, 'Non d\u00e9finie');
-      setRecapText(dureeValueEl, durationLabel, 'Non d\u00e9finie');
-    }
-
     function summaryText() {
       if (titleText && !titleInput.classList.contains('is-loading')) {
         return titleText;
@@ -14893,7 +14445,6 @@
     renderLabels();
     renderTaskTypes();
     renderParent();
-    renderRecap();
     setAuthHint(authReason);
     syncTitleInputSize();
     setDescMode('rich', { focus: false });
@@ -15080,8 +14631,6 @@
         if (!next) return;
         if (next.priorityLabel != null) priorityLabel = String(next.priorityLabel || '');
         if (next.impactReach != null) impactReachLabel = String(next.impactReach || '');
-        if (next.durationLabel != null) durationLabel = String(next.durationLabel || '');
-        renderRecap();
         collapse.refreshSummary();
       },
       setAuthReason: function (reason) {
@@ -20419,7 +19968,6 @@
     var priorityCollapse = null;
     var lastPriorityDisplay = null;
     var lastPrioritySoundTierI = null;
-    var durationControl = null;
 
     function seedPrioritySoundTier(display) {
       if (!display || display.inutile || display.tierI == null) {
@@ -20516,9 +20064,6 @@
         state.dueVague = dueValues.dueVague || '';
         state.startDate = dueValues.startDate || '';
         state.recurrence = dueValues.recurrence || null;
-      }
-      if (durationControl) {
-        state.estimatedDurationMinutes = durationControl.getMinutes();
       }
     }
 
@@ -20747,14 +20292,6 @@
       }
     };
 
-    var experimental =
-      variantConfig.experimental && typeof variantConfig.experimental === 'object'
-        ? variantConfig.experimental
-        : {};
-    var showImpactGlobe = experimental.impactGlobe === true;
-    // Facilité hourglass deprecated — estimates live in Progrès.
-    var showEaseHourglass = false;
-
     variantConfig.dimensions.forEach(function (dim, dimIndex) {
       fields[dim.key] = createField({
         el: fieldsWrap,
@@ -20765,7 +20302,6 @@
         min: dim.min,
         max: dim.max,
         value: state[dim.key],
-        showImpactGlobe: showImpactGlobe,
         onChange: function () {
           cancelSliderAnim();
           repaint();
@@ -20779,25 +20315,6 @@
           setValue: wizardHooks.setValue
         }
       });
-      if (
-        showEaseHourglass &&
-        dim.key === 'ease' &&
-        fields[dim.key] &&
-        fields[dim.key].el
-      ) {
-        durationControl = createEstimatedDurationControl({
-          el: fields[dim.key].el,
-          value: state.estimatedDurationMinutes,
-          onChange: function (minutes) {
-            state.estimatedDurationMinutes = minutes;
-            persistSliderState(true);
-            if (typeof variantConfig.onLayoutChange === 'function') {
-              variantConfig.onLayoutChange();
-            }
-          }
-        });
-        fields[dim.key].el.classList.add('field--ease-duration');
-      }
     });
 
     try {
@@ -21075,9 +20592,6 @@
             state.estimatedDurationMinutes = clampDurationMinutes(
               next.estimatedDurationMinutes
             );
-            if (durationControl) {
-              durationControl.setMinutes(state.estimatedDurationMinutes);
-            }
           }
           repaint();
           if (silent) {
@@ -21756,9 +21270,7 @@
     sliderToDuration: sliderToDuration,
     clampDurationMinutes: clampDurationMinutes,
     DURATION_MIN_MINUTES: DURATION_MIN_MINUTES,
-    DURATION_MAX_MINUTES: DURATION_MAX_MINUTES,
-    DURATION_CRACK_MINUTES: DURATION_CRACK_MINUTES,
-    DURATION_TICKS: DURATION_TICKS
+    DURATION_MAX_MINUTES: DURATION_MAX_MINUTES
   };
 
   global.PriorityUI = PriorityUI;

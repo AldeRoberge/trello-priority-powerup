@@ -23,10 +23,6 @@
   );
 }
 
-html[data-color-mode='dark'] .tp-page--priority .field--chat.is-enabled {
-  background: var(--tp-elev-3, #2d333b);
-}
-
 html[data-color-mode='dark'] .tp-page--priority .agent-messages,
 html[data-color-mode='dark'] .tp-page--priority.is-split-assistant .cerveau-assistant .agent-messages {
   background: var(--tp-elev-1, #161b22);
@@ -4461,10 +4457,6 @@ html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-value.is-bad {
     0 0 0 2px rgba(255, 255, 255, 0.95),
     0 0 0 5px rgba(38, 132, 255, 0.55),
     0 0 18px rgba(38, 132, 255, 0.35);
-}
-
-.impact-reach-chip.is-agent-point-target {
-  border-radius: 999px;
 }
 
 @keyframes agent-point-blink {

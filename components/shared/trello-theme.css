@@ -1597,22 +1597,8 @@ html[data-color-mode='dark'] .tp-page--priority .variant-card {
   );
 }
 
-html[data-color-mode='dark'] .tp-page--priority .field--overview,
-html[data-color-mode='dark'] .tp-page--priority .field--info,
-html[data-color-mode='dark'] .tp-page--priority .field--priority.is-enabled,
-html[data-color-mode='dark'] .tp-page--priority .field--progress.is-enabled,
-html[data-color-mode='dark'] .tp-page--priority .field--due-date.is-enabled,
-html[data-color-mode='dark'] .tp-page--priority .field--due-date.has-due-date,
-html[data-color-mode='dark'] .tp-page--priority .field--due-date.is-open,
-html[data-color-mode='dark'] .tp-page--priority .field--chat.is-enabled,
-html[data-color-mode='dark'] .tp-page--priority .field--statut {
-  background: var(--tp-elev-3, #2d333b);
-}
-
-html[data-color-mode='dark'] .tp-page--priority .field.has-section-glow,
-html[data-color-mode='dark'] .tp-page--priority .field--progress.has-section-glow.is-enabled {
-  background-color: var(--tp-elev-3, #2d333b);
-}
+/* Collapsible section shells stay on Historique’s darker mix
+   (surface-1 72% / surface-2) — do not lift them to elev-3. */
 
 html[data-color-mode='dark'] .tp-page--priority.is-split-assistant .cerveau-assistant {
   background: var(--tp-elev-1, #161b22);

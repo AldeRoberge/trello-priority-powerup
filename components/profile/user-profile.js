@@ -211,18 +211,14 @@
   };
 
   /** Opt-in beta features (default off). */
-  var EXPERIMENTAL_KEYS = ['objectif', 'impactGlobe', 'easeHourglass'];
+  var EXPERIMENTAL_KEYS = ['objectif'];
 
   var EXPERIMENTAL_LABELS = {
-    objectif: 'Objectifs (objectifs et projets)',
-    impactGlobe: 'Globe d’impact (portée)',
-    easeHourglass: 'Sablier de durée (Facilité)'
+    objectif: 'Objectifs (objectifs et projets)'
   };
 
   var EXPERIMENTAL_HINTS = {
-    objectif: 'Section Objectif sur les cartes, badges et paramètres Objectifs → Projets',
-    impactGlobe: 'Anneau de portée autour du globe sur le champ Impact',
-    easeHourglass: 'Contrôle de durée estimée avec sablier sous Facilité'
+    objectif: 'Section Objectif sur les cartes, badges et paramètres Objectifs → Projets'
   };
 
   var TONE_KEYS = ['concise', 'detailed', 'friendly'];
@@ -930,16 +926,6 @@
       for (var j = 0; j < objectifNodes.length; j++) {
         objectifNodes[j].hidden = !objectifOn;
       }
-    }
-    var porteOn = p.experimental.impactGlobe === true;
-    var porteNodes = cardEl.querySelectorAll('.info-row--porte');
-    for (var pIdx = 0; pIdx < porteNodes.length; pIdx++) {
-      porteNodes[pIdx].hidden = !porteOn;
-    }
-    // Durée (Facilité) retired — estimates live under Progrès.
-    var dureeNodes = cardEl.querySelectorAll('.info-row--duree');
-    for (var d = 0; d < dureeNodes.length; d++) {
-      dureeNodes[d].hidden = true;
     }
   }
 
