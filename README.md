@@ -4,7 +4,7 @@ Tu as toujours plein de grandes choses à faire, mais si peu de temps?
 
 As-tu parfois de la difficulté à t'en tenir au plan?
 
-Tu n'es pas seul. En mettant en place un système, tu passeras moins de temps à faire des listes et plus de temps à profiter de la vie.
+En mettant en place un système, tu passeras moins de temps à faire des listes et plus de temps à profiter de la vie.
 
 
 ### Synchronisation bi-directionnelle avec Trello
