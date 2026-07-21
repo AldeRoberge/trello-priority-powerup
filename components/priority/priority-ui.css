@@ -7226,7 +7226,7 @@ input.field-range:active::-webkit-slider-thumb {
 }
 
 html[data-color-mode="dark"] .field--ease-duration .ease-duration {
-  background: color-mix(in srgb, var(--tp-surface-subtle, #282e33) 70%, #1a1f24);
+  background: color-mix(in srgb, var(--tp-surface-subtle, #161b22) 70%, #0d1117);
   border-color: var(--tp-border, #a6c5e75c);
 }
 
@@ -7354,12 +7354,12 @@ html[data-color-mode="dark"] .hourglass-frame {
 }
 
 html[data-color-mode="dark"] .ease-duration-cell {
-  background: var(--tp-surface, #22272b);
+  background: var(--tp-surface, #21262d);
   color: var(--tp-text, #fff);
 }
 
 html[data-color-mode="dark"] .ease-duration-cell.is-active {
-  background: color-mix(in srgb, var(--tp-primary, #579dff) 22%, var(--tp-surface, #22272b));
+  background: color-mix(in srgb, var(--tp-primary, #579dff) 22%, var(--tp-surface, #21262d));
 }
 
 @media (max-width: 360px) {
@@ -8088,7 +8088,7 @@ body.help-modal-open {
 }
 
 html[data-color-mode="dark"] .heat-score-tooltip {
-  background: var(--surface-2, #22272b);
+  background: var(--surface-2, #21262d);
   box-shadow: var(--modal-shadow);
 }
 

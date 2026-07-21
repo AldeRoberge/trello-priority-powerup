@@ -3394,7 +3394,7 @@ span.tp-estimate-chip {
 }
 
 html[data-color-mode='dark'] .tp-completion-encouragement-bubble {
-  background: var(--tp-surface, #22272b);
+  background: var(--tp-surface, #21262d);
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.25),
     0 10px 24px rgba(0, 0, 0, 0.35);
@@ -3617,7 +3617,7 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble[data-tone='acti
 }
 
 html[data-color-mode="dark"] .tp-completion-item.is-selected {
-  background: color-mix(in srgb, var(--tp-primary, #579dff) 14%, var(--tp-elev-0, #1d2125));
+  background: color-mix(in srgb, var(--tp-primary, #579dff) 14%, var(--tp-elev-0, #0d1117));
 }
 
 .tp-completion-search {
@@ -3818,19 +3818,19 @@ html[data-color-mode="dark"] .tp-completion-item.is-selected {
 }
 
 html[data-color-mode="dark"] .tp-completion-item {
-  background: color-mix(in srgb, var(--tp-elev-0, #1d2125) 55%, var(--tp-surface-subtle));
+  background: color-mix(in srgb, var(--tp-elev-0, #0d1117) 55%, var(--tp-surface-subtle));
 }
 
 html[data-color-mode="dark"] .tp-completion-item:hover {
-  background: color-mix(in srgb, var(--tp-elev-0, #1d2125) 35%, var(--tp-surface-subtle));
+  background: color-mix(in srgb, var(--tp-elev-0, #0d1117) 35%, var(--tp-surface-subtle));
 }
 
 html[data-color-mode="dark"] .tp-completion-item.is-linked {
-  background: color-mix(in srgb, var(--tp-focus, #579dff) 14%, var(--tp-elev-0, #1d2125));
+  background: color-mix(in srgb, var(--tp-focus, #579dff) 14%, var(--tp-elev-0, #0d1117));
 }
 
 html[data-color-mode="dark"] .tp-completion-item--nested {
-  background: color-mix(in srgb, var(--tp-elev-0, #1d2125) 70%, var(--tp-surface-subtle));
+  background: color-mix(in srgb, var(--tp-elev-0, #0d1117) 70%, var(--tp-surface-subtle));
 }
 
 .tp-completion-item.is-flipping {
@@ -4987,7 +4987,7 @@ html[data-color-mode='dark'] .tp-completion-suggestion.is-link {
 }
 
 html[data-color-mode='dark'] .tp-completion-suggestion.is-link:hover {
-  background: color-mix(in srgb, var(--tp-focus, #579dff) 22%, var(--tp-elev-0, #1d2125));
+  background: color-mix(in srgb, var(--tp-focus, #579dff) 22%, var(--tp-elev-0, #0d1117));
 }
 
 .tp-completion-suggestion:focus-visible {
