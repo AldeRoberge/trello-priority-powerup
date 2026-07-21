@@ -2006,6 +2006,7 @@
     function setSettingsOpen(open) {
       settingsOpen = !!open;
       settingsPanel.hidden = !settingsOpen;
+      body.classList.toggle('is-settings-open', settingsOpen);
       settingsBtn.classList.toggle('is-active', settingsOpen);
       settingsBtn.setAttribute('aria-expanded', settingsOpen ? 'true' : 'false');
       notifyLayout();

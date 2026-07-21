@@ -1590,7 +1590,11 @@ html[data-color-mode='dark'] body.tp-page--priority {
 }
 
 html[data-color-mode='dark'] .tp-page--priority .variant-card {
-  background: var(--tp-elev-2, #21262d);
+  background: color-mix(
+    in srgb,
+    var(--card-tier-tint, transparent) var(--card-tier-tint-mix, 6%),
+    var(--tp-elev-2, #21262d)
+  );
 }
 
 html[data-color-mode='dark'] .tp-page--priority .field--overview,

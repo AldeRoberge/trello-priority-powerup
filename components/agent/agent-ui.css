@@ -335,6 +335,20 @@ html[data-color-mode='dark'] .tp-page--priority .agent-msg--user .agent-msg-bubb
   overflow: hidden;
 }
 
+/* Settings fills the rail and scrolls; chat hides while open */
+.tp-page--priority .variant-chat-section--standalone .agent-chat-body.is-settings-open .agent-settings {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.tp-page--priority .variant-chat-section--standalone .agent-chat-body.is-settings-open .agent-chat-panel {
+  display: none;
+}
+
 .tp-page--priority .variant-chat-section--standalone .agent-chat-panel {
   flex: 1 1 auto;
   display: flex;
@@ -402,11 +416,19 @@ html[data-color-mode='dark'] .tp-page--priority .agent-msg--user .agent-msg-bubb
   overflow: hidden;
 }
 
-.tp-page--priority.is-split-assistant .cerveau-assistant .agent-settings {
-  flex: 0 1 auto;
-  max-height: 42%;
-  overflow: auto;
+/* Settings fills the rail and scrolls; chat hides while open */
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-chat-body.is-settings-open .agent-settings {
+  flex: 1 1 0;
   min-height: 0;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-chat-body.is-settings-open .agent-chat-panel {
+  display: none;
 }
 
 .tp-page--priority.is-split-assistant .cerveau-assistant .agent-chat-panel {
@@ -3875,7 +3897,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-list-item.is-active
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
-  background: var(--tp-elev-0, #1d2125);
+  background: var(--tp-elev-0, #0d1117);
   color: color-mix(in srgb, #9fadbc 82%, #738496);
 }
 
