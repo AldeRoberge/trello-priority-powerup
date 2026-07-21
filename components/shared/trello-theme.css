@@ -1574,7 +1574,7 @@ body.tp-page--priority.is-split-assistant {
 }
 
 .tp-page--priority .variant-info-section {
-  margin: 8px 0;
+  margin: 8px 0 0;
   padding: 0 8px;
 }
 
@@ -2264,7 +2264,7 @@ html[data-color-mode='dark'] .tp-page--priority .heat-score-tooltip {
 
 .tp-page--priority .variant-due-section {
   margin-top: 8px;
-  padding: 0 8px 8px;
+  padding: 0 8px;
 }
 
 .tp-page--priority .field--due-date {
@@ -2690,7 +2690,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 
 .tp-page--priority .variant-progress-section {
   margin-top: 8px;
-  padding: 0 8px 8px;
+  padding: 0 8px;
 }
 
 /* Soft enable shell — tint only, stable box (heat-panel vibe) */

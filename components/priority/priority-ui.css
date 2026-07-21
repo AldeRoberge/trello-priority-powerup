@@ -335,7 +335,9 @@ body {
    the gear uses align-self: center on its own. */
 .field--statut .section-collapse-btn,
 .field--chat .section-collapse-btn,
-.field--info .section-collapse-btn {
+.field--info .section-collapse-btn,
+.field--historique .section-collapse-btn,
+.field--due-date .section-collapse-btn {
   align-items: center;
   /* Keep hit-area padding, but don't overlap the trailing enable/settings controls */
   margin-right: 0;
@@ -345,11 +347,14 @@ body {
 .field--chat .section-collapse-chevron,
 .field--historique .section-collapse-chevron,
 .field--info .section-collapse-chevron,
+.field--due-date .section-collapse-chevron,
 .field--statut .section-leading-icon,
 .field--chat .section-leading-icon,
 .field--historique .section-leading-icon,
-.field--info .section-leading-icon {
+.field--info .section-leading-icon,
+.field--due-date .section-leading-icon {
   margin-top: 0;
+  align-self: center;
 }
 
 .section-enable-label {
@@ -440,6 +445,12 @@ body {
 .field--overview .section-collapse-chevron,
 .field--overview .section-leading-icon {
   margin-top: 0;
+}
+
+.field--historique .section-toggle-summary,
+.field--due-date .section-toggle-summary {
+  margin-top: 0;
+  align-self: center;
 }
 
 .field--overview .section-toggle-summary {
@@ -1370,7 +1381,7 @@ html[data-color-mode='dark'] .overview-composer-input {
 
 /* ── Détails (recap) panel ── */
 .variant-info-section {
-  margin: 8px 0;
+  margin: 8px 0 0;
   padding: 0 8px;
 }
 
@@ -4902,7 +4913,7 @@ html[data-color-mode='dark'] .overview-composer-input {
 /* ── Due date section ── */
 .variant-due-section {
   margin-top: 8px;
-  padding: 0 8px 8px;
+  padding: 0 8px;
 }
 
 .field--due-date {
