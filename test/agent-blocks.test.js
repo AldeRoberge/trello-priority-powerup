@@ -236,7 +236,7 @@ describe('AgentBlocks', () => {
     try {
       AgentBlocks.fillMessageContent(
         bubble,
-        'Priorité :\n{{0}}\nEt voici une autre carte.',
+        'Priorité :\n  {{0}}\n  Et voici une autre carte.',
         [
           { type: 'priority', tier: 'Critique', urgency: 4, impact: 3, ease: 2 },
           { type: 'subtask', text: 'Orphan subtask' }
@@ -249,6 +249,14 @@ describe('AgentBlocks', () => {
         .map((n) => n.className);
       assert.ok(types.some((c) => c.indexOf('priority') >= 0));
       assert.ok(types.some((c) => c.indexOf('subtask') >= 0));
+      const texts = bubble.children
+        .filter((n) => n.nodeType === 3)
+        .map((n) => n.textContent);
+      assert.ok(
+        texts.every((t) => !/^[ \t]/.test(t) && !/[ \t]$/.test(t.replace(/\n$/, ''))),
+        'text chunks around blocks should not keep leading/trailing indent: ' +
+          JSON.stringify(texts)
+      );
     } finally {
       global.document.createElement = realCreate;
     }
