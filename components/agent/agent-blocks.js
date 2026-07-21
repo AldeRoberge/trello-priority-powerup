@@ -485,7 +485,7 @@
   /** Leading spaces/tabs after a block (keep newlines). */
   function trimLeadingIndent(chunk) {
     if (typeof chunk !== 'string' || !chunk) return chunk || '';
-    return chunk.replace(/^[ \t]+/g, '');
+    return chunk.replace(/^[ \t]+/, '').replace(/^(\n+)[ \t]+/, '$1');
   }
 
   function formatMinutes(mins) {
