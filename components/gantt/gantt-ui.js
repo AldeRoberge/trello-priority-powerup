@@ -3395,6 +3395,66 @@
 
         labelRow.appendChild(labelCell);
         bindLabelSectionDrag(labelRow, row);
+        if (
+          global.ContextMenu &&
+          typeof global.ContextMenu.bind === 'function' &&
+          typeof global.ContextMenu.buildGanttCardItems === 'function'
+        ) {
+          ContextMenu.bind(labelRow, function () {
+            var isOpen =
+              state.expanded[row.id] === true ||
+              (state.expanded[row.id] == null && row.depth === 0);
+            var deleteLabel = isBoardRootCard(row)
+              ? 'Archiver la carte'
+              : isLinkedCardRow(row)
+                ? 'Retirer le lien'
+                : 'Supprimer';
+            var detailRoot = labelCell.querySelector('.gantt-detail-icons');
+            function clickDetail(sel) {
+              var btn = detailRoot && detailRoot.querySelector(sel);
+              if (btn) btn.click();
+            }
+            return ContextMenu.buildGanttCardItems({
+              kind: row.kind,
+              cardId: row.cardId,
+              selected: !!state.selected[row.id],
+              expandable: !!row.expandable,
+              expanded: isOpen,
+              editable: canEditSubtask(row),
+              done: !!row.done,
+              deleteLabel: deleteLabel,
+              onOpen: function () {
+                if (row.cardId) openCard(row.cardId, row.name);
+              },
+              onToggleSelect: function () {
+                toggleSelected(row.id, !state.selected[row.id]);
+              },
+              onToggleExpand: function () {
+                toggleExpand(row.id);
+              },
+              onMiniBlocked: function () {
+                clickDetail('.gantt-detail-slot.is-blocked button');
+              },
+              onMiniPriority: function () {
+                clickDetail('.gantt-detail-slot.is-priority button');
+              },
+              onMiniProgress: function () {
+                clickDetail('.gantt-detail-slot.is-progress button');
+              },
+              onMiniDue: function () {
+                clickDetail(
+                  '.gantt-detail-slot.is-due button, .gantt-detail-slot.is-overdue button'
+                );
+              },
+              onToggleDone: function () {
+                toggleSubtaskDone(row);
+              },
+              onDelete: function () {
+                deleteSubtaskRow(row);
+              },
+            });
+          });
+        }
         labelsCol.appendChild(labelRow);
 
         var timeRow = el(
@@ -3453,6 +3513,25 @@
               });
               bar.appendChild(clearBtn);
               bindBarDrag(bar, row, interval);
+              if (
+                global.ContextMenu &&
+                typeof global.ContextMenu.bind === 'function' &&
+                typeof global.ContextMenu.buildGanttBarItems === 'function'
+              ) {
+                ContextMenu.bind(bar, function () {
+                  return ContextMenu.buildGanttBarItems({
+                    kind: row.kind,
+                    cardId: row.cardId,
+                    clearDisabled: !row.startDate && !row.dueDate,
+                    onOpen: function () {
+                      if (row.cardId) openCard(row.cardId, row.name);
+                    },
+                    onClearDates: function () {
+                      clearRowDates(row);
+                    },
+                  });
+                });
+              }
             }
 
             timeRow.appendChild(bar);

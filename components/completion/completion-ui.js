@@ -3318,6 +3318,39 @@
         clearSelection();
       });
     }
+    var bulkBarEl = containerEl.querySelector('#completionBulkBar');
+    if (
+      bulkBarEl &&
+      global.ContextMenu &&
+      typeof global.ContextMenu.bind === 'function' &&
+      typeof global.ContextMenu.buildBulkActionItems === 'function'
+    ) {
+      ContextMenu.bind(bulkBarEl, function () {
+        var n = Object.keys(selected).length;
+        return ContextMenu.buildBulkActionItems({
+          count: n,
+          onDone: function () {
+            runBulk('done');
+          },
+          onReopen: function () {
+            runBulk('reopen');
+          },
+          onDelete: function () {
+            runBulk('delete');
+          },
+          onClear: clearSelection,
+          onSelectAll: function () {
+            var visible = visibleSelectionEntries();
+            selected = Object.create(null);
+            for (var i = 0; i < visible.length; i++) {
+              selected[visible[i].key] = true;
+            }
+            renderBulkBar();
+            renderList();
+          },
+        });
+      });
+    }
 
     function isEmptyDraftItem(item) {
       return (
@@ -3720,6 +3753,37 @@
     resetAllBtn.addEventListener('click', resetAllTasks);
     masterBlockedBtn.addEventListener('click', toggleMasterBlocked);
     masterCheckBtn.addEventListener('click', toggleMasterComplete);
+    if (
+      global.ContextMenu &&
+      typeof global.ContextMenu.bind === 'function' &&
+      typeof global.ContextMenu.buildCompletionMasterItems === 'function'
+    ) {
+      ContextMenu.bind(progressPanel, function (e) {
+        // Only chrome / head — not individual task rows (they have their own menus).
+        var t = e && e.target;
+        if (
+          t &&
+          typeof t.closest === 'function' &&
+          t.closest('.tp-completion-item, .tp-completion-checklist-item')
+        ) {
+          return [];
+        }
+        var snap = CT.computeCardProgress(data, linkedSnapshots);
+        return ContextMenu.buildCompletionMasterItems({
+          done: !!(snap && snap.percent >= 100),
+          blocked: CT.hasAnyBlocked(data) || !!data.blocked,
+          onToggleComplete: toggleMasterComplete,
+          onToggleBlocked: toggleMasterBlocked,
+          onCompleteAll: completeAllTasks,
+          onResetAll: resetAllTasks,
+          onFocusAdd: function () {
+            try {
+              addInput.focus();
+            } catch (err) { /* ignore */ }
+          },
+        });
+      });
+    }
     bindProgressFader(masterCheckBtn, {
       getProgress: function () {
         return CT.computeCardProgress(data, linkedSnapshots).percent;
@@ -4623,6 +4687,49 @@
       if (!isLinked && itemSplitReverts[item.id]) {
         showItemSplitRevert(item.id);
       }
+
+      if (
+        !readOnly &&
+        global.ContextMenu &&
+        typeof global.ContextMenu.bind === 'function' &&
+        typeof global.ContextMenu.buildCompletionItemItems === 'function'
+      ) {
+        ContextMenu.bind(li, function () {
+          var detailsBtn = li.querySelector('.tp-completion-checklist-details-btn');
+          var checklistAddBtn = li.querySelector(
+            '.tp-completion-checklist-add-btn'
+          );
+          return ContextMenu.buildCompletionItemItems({
+            done: !!item.done,
+            blocked: CT.isItemBlocked(item),
+            linked: isLinked,
+            canPromote: !!(promoteBtn && !promoteBtn.disabled),
+            toggleDisabled: false,
+            onToggleDone: function () {
+              toggleItemDone(checkBtn);
+            },
+            onToggleBlocked: function () {
+              if (item.done) return;
+              toggleItemBlocked(item.id);
+            },
+            onShowProgress: function () {
+              if (detailsBtn) detailsBtn.click();
+            },
+            onAddChecklist: function () {
+              if (checklistAddBtn) checklistAddBtn.click();
+            },
+            onPromote: function () {
+              if (promoteBtn) promoteBtn.click();
+            },
+            onOpenLinked: function () {
+              openLinkedCard(CT.itemLinkedCardId(item));
+            },
+            onDelete: function () {
+              removeItem(item.id);
+            },
+          });
+        });
+      }
     }
 
     function renderNestedNode(node, depth) {
@@ -5308,6 +5415,30 @@
         emitChange();
         onResize();
       });
+
+      if (
+        global.ContextMenu &&
+        typeof global.ContextMenu.bind === 'function' &&
+        typeof global.ContextMenu.buildChecklistItemItems === 'function'
+      ) {
+        ContextMenu.bind(li, function () {
+          return ContextMenu.buildChecklistItemItems({
+            done: !!nested.done,
+            onToggleDone: function () {
+              checkBtn.click();
+            },
+            onShowProgress: function () {
+              detailsBtn.click();
+            },
+            onDelete: function () {
+              data = CT.removeChecklistItem(data, parentItem.id, nested.id);
+              playCompletionUiSound('trash');
+              emitChange();
+              onResize();
+            },
+          });
+        });
+      }
 
       return li;
     }

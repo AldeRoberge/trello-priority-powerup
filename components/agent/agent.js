@@ -32,6 +32,7 @@
  * 14.  chatTurn — main conversational loop
  * 15.  Status brief / progress summary / cardDreamTurn (post-chat consolidate)
  * 16.  executeAction / executeActions — apply model tools to the board
+ *      (+ rich actionFailure / formatActionErrors for user-facing errors)
  * 17.  PriorityAgent public API
  */
 (function (global) {
@@ -2572,6 +2573,30 @@
 
   // ── 7. buildContext — card/board snapshot fed to systemPrompt ────────────
   // Bridge is a thin facade from AgentUI / popup over Trello Power-Up APIs.
+
+  // Getters buildContext reads from the page bridge. AgentUI must forward these
+  // from mount options or the model sees empty card state (labels, members, …).
+  var BUILD_CONTEXT_GETTERS = [
+    'getScope',
+    'getCardName',
+    'getCardDesc',
+    'getFormulaKey',
+    'getProfile',
+    'getPeople',
+    'getCustomAssigneeCatalog',
+    'getMemory',
+    'getCardMemory',
+    'getBoardDigest',
+    'getStatut',
+    'getOwnership',
+    'getCardLabels',
+    'getBoardMembers',
+    'getBoardLabels',
+    'getPriorityState',
+    'getHistory',
+    'getGoals',
+    'getCompletion'
+  ];
 
   function buildContext(bridge) {
     var ctx = {
@@ -13675,8 +13700,282 @@
         afterPersonality = afterPersonality.slice(0, 47) + '\u2026';
       }
       parts.push('personality \u2192 "' + afterPersonality + '"');
+    } else if (tool === 'upsert_person') {
+      var personAfter =
+        (extra && extra.person && typeof extra.person === 'object'
+          ? extra.person
+          : null) || null;
+      var personBefore =
+        (extra && extra.before && typeof extra.before === 'object'
+          ? extra.before
+          : null) || null;
+      var personName =
+        (personAfter && personAfter.name) ||
+        (typeof extra.name === 'string' && extra.name.trim()) ||
+        (typeof args.name === 'string' && args.name.trim()) ||
+        (typeof args.matchText === 'string' && args.matchText.trim()) ||
+        '?';
+      if (extra && extra.created) {
+        parts.push('"' + personName + '" cr\u00e9\u00e9e');
+        if (personAfter) {
+          if (personAfter.relation) {
+            parts.push('relation: ' + personAfter.relation);
+          }
+          if (personAfter.aliases && personAfter.aliases.length) {
+            parts.push('aliases: ' + personAfter.aliases.join(', '));
+          }
+          if (personAfter.roles && personAfter.roles.length) {
+            parts.push('roles: ' + personAfter.roles.join(', '));
+          }
+          if (personAfter.email) parts.push('email: ' + personAfter.email);
+          if (personAfter.phone) parts.push('phone: ' + personAfter.phone);
+        } else {
+          if (typeof args.relation === 'string' && args.relation.trim()) {
+            parts.push('relation: ' + args.relation.trim());
+          }
+          if (typeof args.addAlias === 'string' && args.addAlias.trim()) {
+            parts.push('+alias: ' + args.addAlias.trim());
+          }
+        }
+      } else if (personBefore && personAfter) {
+        var personChanges = [];
+        pushChange(personChanges, 'name', personBefore.name, personAfter.name);
+        pushChange(
+          personChanges,
+          'relation',
+          personBefore.relation || '',
+          personAfter.relation || ''
+        );
+        pushChange(
+          personChanges,
+          'aliases',
+          personBefore.aliases || [],
+          personAfter.aliases || []
+        );
+        pushChange(
+          personChanges,
+          'roles',
+          personBefore.roles || [],
+          personAfter.roles || []
+        );
+        pushChange(
+          personChanges,
+          'email',
+          personBefore.email || '',
+          personAfter.email || ''
+        );
+        pushChange(
+          personChanges,
+          'phone',
+          personBefore.phone || '',
+          personAfter.phone || ''
+        );
+        pushChange(
+          personChanges,
+          'notes',
+          personBefore.notes || '',
+          personAfter.notes || ''
+        );
+        if (personChanges.length) {
+          parts.push('"' + personName + '" mise \u00e0 jour');
+          Array.prototype.push.apply(parts, personChanges);
+        } else {
+          parts.push('"' + personName + '" d\u00e9j\u00e0 \u00e0 jour');
+        }
+      } else {
+        parts.push('"' + personName + '" mise \u00e0 jour');
+        if (typeof args.relation === 'string' && args.relation.trim()) {
+          parts.push('relation: ' + args.relation.trim());
+        }
+        if (typeof args.addAlias === 'string' && args.addAlias.trim()) {
+          parts.push('+alias: ' + args.addAlias.trim());
+        }
+        if (typeof args.addRole === 'string' && args.addRole.trim()) {
+          parts.push('+role: ' + args.addRole.trim());
+        }
+        if (typeof args.email === 'string' && args.email.trim()) {
+          parts.push('email: ' + args.email.trim());
+        }
+        if (typeof args.phone === 'string' && args.phone.trim()) {
+          parts.push('phone: ' + args.phone.trim());
+        }
+      }
+    } else if (tool === 'remove_person') {
+      var removeLabel =
+        (extra && typeof extra.name === 'string' && extra.name.trim()) ||
+        (extra && typeof extra.match === 'string' && extra.match.trim()) ||
+        (typeof args.name === 'string' && args.name.trim()) ||
+        (typeof args.matchText === 'string' && args.matchText.trim()) ||
+        (typeof args.id === 'string' && args.id.trim()) ||
+        '?';
+      parts.push('- "' + removeLabel + '"');
+    } else if (tool === 'set_members' || tool === 'set_labels') {
+      var memberOps = (extra && Array.isArray(extra.ops) && extra.ops) || [];
+      if (memberOps.length) {
+        parts.push(memberOps.join(', '));
+      } else {
+        parts.push(tool === 'set_labels' ? 'aucune \u00e9tiquette' : 'aucun membre');
+      }
+    } else if (tool === 'set_custom_assignees') {
+      if (extra && extra.count != null) {
+        parts.push('personnes: ' + extra.count);
+      }
+      if (Array.isArray(args.add) && args.add.length) {
+        parts.push(
+          '+ ' +
+            args.add
+              .map(function (s) {
+                return typeof s === 'string'
+                  ? s
+                  : (s && (s.name || s.matchText || s.id)) || '?';
+              })
+              .join(', ')
+        );
+      }
+      if (Array.isArray(args.remove) && args.remove.length) {
+        parts.push(
+          '- ' +
+            args.remove
+              .map(function (s) {
+                return typeof s === 'string'
+                  ? s
+                  : (s && (s.name || s.matchText || s.id)) || '?';
+              })
+              .join(', ')
+        );
+      }
+      if (args.clear === true) parts.push('clear');
+    } else if (tool === 'set_member_roles') {
+      var roleMember =
+        (extra && extra.memberId) ||
+        args.memberId ||
+        args.matchText ||
+        args.name ||
+        '?';
+      var roleList =
+        (extra && Array.isArray(extra.roles) && extra.roles) ||
+        (Array.isArray(args.roles) && args.roles) ||
+        [];
+      parts.push('member: ' + roleMember);
+      if (args.clear === true) {
+        parts.push('roles \u2192 (vid\u00e9)');
+      } else {
+        parts.push(
+          'roles \u2192 ' + (roleList.length ? roleList.join(', ') : '(aucun)')
+        );
+      }
+    } else if (tool === 'set_project') {
+      if (extra && extra.cleared) {
+        parts.push('projet \u2192 (aucun)');
+      } else {
+        parts.push(
+          'projet \u2192 "' +
+            ((extra && extra.projectName) ||
+              args.name ||
+              args.matchText ||
+              (extra && extra.projectId) ||
+              args.projectId ||
+              '?') +
+            '"'
+        );
+      }
+    } else if (tool === 'set_subtask_estimate') {
+      var estId = (extra && extra.id) || args.id;
+      var beforeEstItem = findItem(beforeC && beforeC.items, estId);
+      var afterEstItem = findItem(afterC && afterC.items, estId);
+      if (beforeEstItem || afterEstItem) {
+        parts.push('id: ' + (estId || '?'));
+        var estLabel =
+          (afterEstItem && afterEstItem.text) ||
+          (beforeEstItem && beforeEstItem.text) ||
+          '';
+        if (estLabel) parts.push('"' + estLabel + '"');
+        pushChange(
+          parts,
+          'estimatedMinutes',
+          beforeEstItem && beforeEstItem.estimatedMinutes,
+          afterEstItem && afterEstItem.estimatedMinutes
+        );
+      } else {
+        parts.push('id: ' + (estId || '?'));
+      }
+    } else if (tool === 'set_progress_estimate') {
+      pushChange(
+        parts,
+        'estimatedMinutes',
+        beforeC && beforeC.estimatedMinutes,
+        afterC && afterC.estimatedMinutes
+      );
+    } else if (
+      tool === 'add_checklist_item' ||
+      tool === 'remove_checklist_item' ||
+      tool === 'rename_checklist_item' ||
+      tool === 'set_checklist_progress'
+    ) {
+      if (extra && extra.parentId) parts.push('parent: ' + extra.parentId);
+      if (extra && extra.id) parts.push('id: ' + extra.id);
+      if (typeof args.text === 'string' && args.text.trim()) {
+        parts.push('"' + args.text.trim() + '"');
+      }
+      if (args.progress != null) parts.push('progress \u2192 ' + args.progress);
+    } else if (
+      tool === 'history_undo' ||
+      tool === 'history_redo' ||
+      tool === 'history_revert'
+    ) {
+      if (extra && extra.label) parts.push(String(extra.label));
+      else if (args && args.matchLabel) parts.push(String(args.matchLabel));
+      else if (args && args.entryId) parts.push('entry: ' + args.entryId);
+      else if (args && args.steps != null) parts.push('steps: ' + args.steps);
+      else parts.push(tool === 'history_undo' ? 'annuler' : tool === 'history_redo' ? 'r\u00e9tablir' : 'restaurer');
     }
-    return parts.length ? parts.join('; ') : 'aucun diff d\u00e9tect\u00e9';
+    if (parts.length) return parts.join('; ');
+    return fallbackDetailFromArgs(tool, args, extra);
+  }
+
+  /**
+   * Last-resort recap when a tool has no field-level diff: surface useful args
+   * instead of the opaque "aucun diff détecté".
+   */
+  function fallbackDetailFromArgs(tool, args, extra) {
+    args = args || {};
+    extra = extra || {};
+    var bits = [];
+    function pushStr(label, value) {
+      if (value == null) return;
+      var s = String(value).trim();
+      if (!s) return;
+      if (s.length > 60) s = s.slice(0, 59) + '\u2026';
+      bits.push(label ? label + ': ' + s : s);
+    }
+    if (typeof extra.name === 'string') pushStr(null, '"' + extra.name.trim() + '"');
+    if (typeof extra.match === 'string') pushStr(null, '"' + extra.match.trim() + '"');
+    if (Array.isArray(extra.ops) && extra.ops.length) {
+      bits.push(extra.ops.join(', '));
+    }
+    if (extra.count != null) pushStr('count', extra.count);
+    if (extra.memberId) pushStr('member', extra.memberId);
+    if (extra.projectName) pushStr('projet', '"' + extra.projectName + '"');
+    if (extra.cleared) bits.push('cleared');
+    if (extra.listName) pushStr('list', extra.listName);
+    if (extra.effect) pushStr('effect', extra.effect);
+    [
+      'name',
+      'text',
+      'matchText',
+      'relation',
+      'category',
+      'effect',
+      'formula',
+      'personality'
+    ].forEach(function (key) {
+      if (typeof args[key] === 'string' && args[key].trim()) {
+        pushStr(key, args[key].trim());
+      }
+    });
+    if (args.clear === true) bits.push('clear');
+    if (bits.length) return bits.join('; ');
+    return 'OK';
   }
 
   /**
@@ -13691,7 +13990,144 @@
   }
 
   /**
+   * Map bridge / REST reason codes to short French labels.
+   */
+  var BRIDGE_REASON_LABELS = {
+    unavailable: 'Fonction Trello indisponible (REST ou OAuth).',
+    'no-app-key': 'Cl\u00e9 d\'application Trello manquante.',
+    'not-authorized': 'Autorisation Trello (OAuth) requise.',
+    'no-token': 'Jeton Trello manquant.',
+    'no-card-id': 'Identifiant de carte introuvable.',
+    'no-member-id': 'Identifiant de membre manquant.',
+    'people-unavailable': 'Annuaire People indisponible.',
+    'no-setProject': 'setProject non branch\u00e9 sur ce pont.',
+    'no-setCardName': 'setCardName non branch\u00e9 sur ce pont.',
+    'no-setCardDesc': 'setCardDesc non branch\u00e9 sur ce pont.',
+    'no-selectStatut': 'selectStatut non branch\u00e9 sur ce pont.',
+    'empty-name': 'Nom vide.',
+    'invalid-color': 'Couleur invalide.',
+    'empty-personality': 'Personnalit\u00e9 vide.',
+    'not-found': 'Introuvable.'
+  };
+
+  function translateBridgeReason(reason) {
+    if (reason == null || reason === '') return '';
+    var key = String(reason).trim();
+    if (BRIDGE_REASON_LABELS[key]) return BRIDGE_REASON_LABELS[key];
+    return key;
+  }
+
+  function summarizeMemberSpec(spec) {
+    if (spec == null) return '(vide)';
+    if (typeof spec === 'string') return JSON.stringify(spec);
+    if (typeof spec !== 'object') return String(spec);
+    var bits = [];
+    if (spec.id != null) bits.push('id=' + spec.id);
+    if (spec.matchText) bits.push('matchText=' + spec.matchText);
+    if (spec.name) bits.push('name=' + spec.name);
+    if (spec.username) bits.push('username=' + spec.username);
+    if (spec.fullName) bits.push('fullName=' + spec.fullName);
+    return bits.length ? bits.join(', ') : JSON.stringify(spec).slice(0, 120);
+  }
+
+  /**
+   * Structured action failure for recap + user-facing error bubbles.
+   * extras: { code?, hint?, cause?, args?, detail?, reason? }
+   */
+  function actionFailure(tool, error, extras) {
+    extras = extras || {};
+    var out = {
+      ok: false,
+      tool: tool,
+      error: error || '\u00c9chec'
+    };
+    if (extras.code) out.code = String(extras.code);
+    if (extras.hint) out.hint = String(extras.hint);
+    if (extras.cause) out.cause = String(extras.cause);
+    if (extras.detail) out.detail = extras.detail;
+    if (extras.args) out.args = extras.args;
+    if (extras.reason) out.reason = String(extras.reason);
+    return out;
+  }
+
+  function bridgeMissingFailure(tool, error, methods) {
+    var list = (Array.isArray(methods) ? methods : [methods]).filter(Boolean);
+    return actionFailure(tool, error, {
+      code: 'bridge-missing',
+      cause: 'missing: ' + list.map(function (m) {
+        return 'bridge.' + m;
+      }).join(' / '),
+      hint:
+        'Ce pont agent n\'expose pas ' +
+        list.join('/') +
+        '. Ouvre la carte via le popup Power-Up (pas seulement l\'assistant projet).'
+    });
+  }
+
+  function bridgeOpFailure(tool, fallbackError, res) {
+    var reason =
+      (res && (res.reason || res.error || res.message)) || '';
+    var translated = translateBridgeReason(reason);
+    var hint = '';
+    if (
+      reason === 'not-authorized' ||
+      reason === 'no-token' ||
+      reason === 'no-app-key'
+    ) {
+      hint = 'Autorise le Power-Up \u00e0 \u00e9crire sur Trello (OAuth).';
+    } else if (reason === 'unavailable') {
+      hint =
+        'La m\u00e9thode Trello n\'est pas disponible dans ce contexte.';
+    }
+    return actionFailure(tool, translated || fallbackError, {
+      code: reason || 'bridge-op-failed',
+      reason: reason || undefined,
+      cause: reason ? 'reason: ' + reason : undefined,
+      hint: hint || undefined
+    });
+  }
+
+  /**
+   * Fill hint/code on plain `{ ok:false, error }` results when missing.
+   */
+  function enrichActionError(result) {
+    if (!result || result.ok || result.skipped) return result;
+    var err = result.error != null ? String(result.error) : '';
+    if (BRIDGE_REASON_LABELS[err] && !result.hint) {
+      result.cause = result.cause || err;
+      result.code = result.code || err;
+      result.error = BRIDGE_REASON_LABELS[err];
+      result.hint =
+        'V\u00e9rifie l\'autorisation Trello et la configuration du Power-Up.';
+      return result;
+    }
+    if (/indisponible/i.test(err) && !result.hint) {
+      result.code = result.code || 'unavailable';
+      result.hint =
+        'La capacit\u00e9 n\'est pas branch\u00e9e sur ce pont agent, ou une d\u00e9pendance Trello manque.';
+    }
+    if (/introuvable/i.test(err) && !result.hint) {
+      result.code = result.code || 'not-found';
+      result.hint =
+        'Aucun \u00e9l\u00e9ment du contexte ne correspond aux args fournis.';
+    }
+    return result;
+  }
+
+  function formatFailureLines(tool, error, extras) {
+    extras = extras || {};
+    var lines = [];
+    var head = '\u2717 ' + (tool || '?') + ': ' + (error || '\u00e9chec');
+    if (extras.code) head += ' [' + extras.code + ']';
+    lines.push(head);
+    if (extras.cause) lines.push('  cause: ' + extras.cause);
+    if (extras.hint) lines.push('  \u2192 ' + extras.hint);
+    return lines;
+  }
+
+  /**
    * Technical recap from executeActions results (executor is source of truth).
+   * Failures include code / cause / hint when present (rich errors).
    */
   function formatChangeRecap(applied, options) {
     options = options || {};
@@ -13703,12 +14139,18 @@
       if (r.ok) {
         lines.push('\u2713 ' + tool + (r.detail ? ': ' + r.detail : ''));
       } else {
-        lines.push('\u2717 ' + tool + ': ' + (r.error || '\u00e9chec'));
+        Array.prototype.push.apply(
+          lines,
+          formatFailureLines(tool, r.error, r)
+        );
       }
     });
     (options.droppedActions || []).forEach(function (d) {
       if (!d) return;
-      lines.push('\u2717 ' + (d.tool || '?') + ': ' + (d.error || 'args incomplets'));
+      Array.prototype.push.apply(
+        lines,
+        formatFailureLines(d.tool, d.error || 'args incomplets', d)
+      );
     });
     if (!lines.length) {
       if (options.emptyClaim) {
@@ -13719,12 +14161,45 @@
     return lines.join('\n');
   }
 
+  /**
+   * User-facing summary of failed / dropped actions (visible chat error).
+   */
+  function formatActionErrors(applied, options) {
+    options = options || {};
+    var parts = [];
+    var results = (applied && applied.results) || [];
+    results.forEach(function (r) {
+      if (!r || r.ok || r.skipped) return;
+      var tool = r.tool || '?';
+      var block = tool + '\u00a0: ' + (r.error || '\u00e9chec');
+      if (r.hint) block += '\n' + r.hint;
+      else if (r.cause) block += '\n(' + r.cause + ')';
+      parts.push(block);
+    });
+    (options.droppedActions || []).forEach(function (d) {
+      if (!d) return;
+      var block =
+        (d.tool || '?') + '\u00a0: ' + (d.error || 'args incomplets');
+      if (d.hint) block += '\n' + d.hint;
+      parts.push(block);
+    });
+    if (!parts.length) return '';
+    var header =
+      parts.length === 1
+        ? 'Une action a \u00e9chou\u00e9\u00a0:'
+        : parts.length + ' actions ont \u00e9chou\u00e9\u00a0:';
+    return header + '\n\n' + parts.join('\n\n');
+  }
+
   // ── 16. executeAction(s) — apply one tool call to Trello via bridge ──────
   // Keep side-effects here (not in the UI). Unknown types → soft error.
 
   async function executeAction(bridge, action) {
     if (!bridge || !action || !action.tool) {
-      return { ok: false, tool: action && action.tool, error: 'Action invalide' };
+      return actionFailure(action && action.tool, 'Action invalide', {
+        code: 'invalid-action',
+        hint: 'Action sans outil ou pont manquant.'
+      });
     }
     var tool = action.tool;
     var args = action.args && typeof action.args === 'object' ? action.args : {};
@@ -13885,7 +14360,9 @@
       }
       if (tool === 'set_statut') {
         if (typeof bridge.selectStatut !== 'function') {
-          return { ok: false, tool: tool, error: 'Statut indisponible' };
+          return bridgeMissingFailure(tool, 'Statut indisponible', [
+            'selectStatut'
+          ]);
         }
         var statutCtx =
           typeof bridge.getStatut === 'function' ? bridge.getStatut() : null;
@@ -13938,7 +14415,9 @@
       }
       if (tool === 'set_project') {
         if (typeof bridge.setProject !== 'function') {
-          return { ok: false, tool: tool, error: 'Objectifs indisponibles' };
+          return bridgeMissingFailure(tool, 'Objectifs indisponibles', [
+            'setProject'
+          ]);
         }
         var clearProject = args.clear === true;
         var projectId = null;
@@ -14486,7 +14965,9 @@
       }
       if (tool === 'rename_card') {
         if (typeof bridge.setCardName !== 'function') {
-          return { ok: false, tool: tool, error: 'Renommage carte indisponible' };
+          return bridgeMissingFailure(tool, 'Renommage carte indisponible', [
+            'setCardName'
+          ]);
         }
         var newCardName =
           typeof args.name === 'string' && args.name.trim()
@@ -15203,7 +15684,9 @@
           soundOverride = normalizeEffectId(args.sfx);
         }
         if (typeof bridge.playEffect !== 'function') {
-          return { ok: false, tool: tool, error: 'Effets indisponibles' };
+          return bridgeMissingFailure(tool, 'Effets indisponibles', [
+            'playEffect'
+          ]);
         }
         var playOpts = { sound: soundOverride || true };
         if (effectText) playOpts.text = effectText;
@@ -15481,6 +15964,33 @@
         if (!personPatch.name && !personPatch.matchText && !personPatch.id) {
           return { ok: false, tool: tool, error: 'Nom ou matchText requis' };
         }
+        var peopleBeforeUpsert = getPeopleFromBridge(bridge);
+        var personBeforeUpsert = null;
+        if (
+          global.People &&
+          typeof global.People.findByAliasOrName === 'function'
+        ) {
+          if (personPatch.id) {
+            for (var pbi = 0; pbi < peopleBeforeUpsert.length; pbi++) {
+              if (peopleBeforeUpsert[pbi].id === personPatch.id) {
+                personBeforeUpsert = peopleBeforeUpsert[pbi];
+                break;
+              }
+            }
+          }
+          if (!personBeforeUpsert && personPatch.matchText) {
+            personBeforeUpsert = global.People.findByAliasOrName(
+              peopleBeforeUpsert,
+              personPatch.matchText
+            );
+          }
+          if (!personBeforeUpsert && personPatch.name) {
+            personBeforeUpsert = global.People.findByAliasOrName(
+              peopleBeforeUpsert,
+              personPatch.name
+            );
+          }
+        }
         var upsertResult = await Promise.resolve(
           bridge.upsertPerson(personPatch)
         );
@@ -15515,13 +16025,22 @@
             }
           } catch (eSyncHors) { /* non-fatal */ }
         }
+        var personAfterUpsert = upsertResult.person || null;
+        var personCreated = !personBeforeUpsert;
         return {
           ok: true,
           tool: tool,
           args: args,
-          summary: TOOL_LABELS.upsert_person,
+          summary: personCreated
+            ? 'Personne ajout\u00e9e.'
+            : TOOL_LABELS.upsert_person,
           detail: detailForTool(tool, null, null, null, null, args, {
-            name: (upsertResult.person && upsertResult.person.name) || personPatch.name
+            name:
+              (personAfterUpsert && personAfterUpsert.name) ||
+              personPatch.name,
+            person: personAfterUpsert,
+            before: personBeforeUpsert,
+            created: personCreated
           })
         };
       }
@@ -15541,6 +16060,27 @@
           '';
         if (!removeMatch) {
           return { ok: false, tool: tool, error: 'matchText / name / id requis' };
+        }
+        var peopleBeforeRemove = getPeopleFromBridge(bridge);
+        var personBeforeRemove = null;
+        if (
+          global.People &&
+          typeof global.People.findByAliasOrName === 'function'
+        ) {
+          if (typeof args.id === 'string' && args.id.trim()) {
+            for (var pri = 0; pri < peopleBeforeRemove.length; pri++) {
+              if (peopleBeforeRemove[pri].id === args.id.trim()) {
+                personBeforeRemove = peopleBeforeRemove[pri];
+                break;
+              }
+            }
+          }
+          if (!personBeforeRemove) {
+            personBeforeRemove = global.People.findByAliasOrName(
+              peopleBeforeRemove,
+              removeMatch
+            );
+          }
         }
         var removeResult = await Promise.resolve(
           bridge.removePerson({
@@ -15564,7 +16104,9 @@
           args: args,
           summary: TOOL_LABELS.remove_person,
           detail: detailForTool(tool, null, null, null, null, args, {
-            match: removeMatch
+            match: removeMatch,
+            name:
+              (personBeforeRemove && personBeforeRemove.name) || removeMatch
           })
         };
       }
@@ -15626,7 +16168,11 @@
           typeof bridge.addMember !== 'function' &&
           typeof bridge.removeMember !== 'function'
         ) {
-          return { ok: false, tool: tool, error: 'Assign\u00e9s indisponibles' };
+          return bridgeMissingFailure(
+            tool,
+            'Assign\u00e9s indisponibles',
+            ['addMember', 'removeMember']
+          );
         }
         var boardMembers = [];
         if (typeof bridge.loadBoardMembers === 'function') {
@@ -15650,11 +16196,11 @@
           removeSpecs = removeSpecs.concat(cur);
         }
         if (!addSpecs.length && !removeSpecs.length) {
-          return {
-            ok: false,
-            tool: tool,
-            error: 'Aucun membre \u00e0 ajouter ou retirer'
-          };
+          return actionFailure(tool, 'Aucun membre \u00e0 ajouter ou retirer', {
+            code: 'empty-ops',
+            hint: 'Passe add[], remove[], ou clear:true.',
+            args: args
+          });
         }
         var memberOps = [];
         var mi;
@@ -15664,48 +16210,48 @@
             rm = { id: String(removeSpecs[mi].id) };
           }
           if (!rm || !rm.id) {
-            return {
-              ok: false,
-              tool: tool,
-              error: 'Membre \u00e0 retirer introuvable'
-            };
+            return actionFailure(tool, 'Membre \u00e0 retirer introuvable', {
+              code: 'member-not-found',
+              cause: 'spec: ' + summarizeMemberSpec(removeSpecs[mi]),
+              hint:
+                'Aucun membre du tableau ne correspond. Utilise context.boardMembers / ownership.',
+              args: args
+            });
           }
           if (typeof bridge.removeMember !== 'function') {
-            return { ok: false, tool: tool, error: 'Retrait membre indisponible' };
+            return bridgeMissingFailure(
+              tool,
+              'Retrait membre indisponible',
+              ['removeMember']
+            );
           }
           var rmRes = await Promise.resolve(bridge.removeMember(rm.id));
           if (!rmRes || rmRes.ok === false) {
-            return {
-              ok: false,
-              tool: tool,
-              error:
-                (rmRes && (rmRes.reason || rmRes.error)) ||
-                'Retrait membre \u00e9chou\u00e9'
-            };
+            return bridgeOpFailure(tool, 'Retrait membre \u00e9chou\u00e9', rmRes);
           }
           memberOps.push('−' + (rm.fullName || rm.username || rm.id));
         }
         for (mi = 0; mi < addSpecs.length; mi++) {
           var am = matchBoardMember(boardMembers, addSpecs[mi]);
           if (!am || !am.id) {
-            return {
-              ok: false,
-              tool: tool,
-              error: 'Membre \u00e0 assigner introuvable'
-            };
+            return actionFailure(tool, 'Membre \u00e0 assigner introuvable', {
+              code: 'member-not-found',
+              cause: 'spec: ' + summarizeMemberSpec(addSpecs[mi]),
+              hint:
+                'Aucun membre du tableau ne correspond. Utilise context.boardMembers / ownership.',
+              args: args
+            });
           }
           if (typeof bridge.addMember !== 'function') {
-            return { ok: false, tool: tool, error: 'Ajout membre indisponible' };
+            return bridgeMissingFailure(
+              tool,
+              'Ajout membre indisponible',
+              ['addMember']
+            );
           }
           var amRes = await Promise.resolve(bridge.addMember(am.id));
           if (!amRes || amRes.ok === false) {
-            return {
-              ok: false,
-              tool: tool,
-              error:
-                (amRes && (amRes.reason || amRes.error)) ||
-                'Ajout membre \u00e9chou\u00e9'
-            };
+            return bridgeOpFailure(tool, 'Ajout membre \u00e9chou\u00e9', amRes);
           }
           memberOps.push('+' + (am.fullName || am.username || am.id));
         }
@@ -15725,7 +16271,11 @@
           typeof bridge.removeLabel !== 'function' &&
           typeof bridge.createLabel !== 'function'
         ) {
-          return { ok: false, tool: tool, error: '\u00c9tiquettes indisponibles' };
+          return bridgeMissingFailure(
+            tool,
+            '\u00c9tiquettes indisponibles',
+            ['addLabel', 'removeLabel', 'createLabel']
+          );
         }
         var boardLabels = [];
         if (typeof bridge.loadBoardLabels === 'function') {
@@ -16370,11 +16920,19 @@
       }
       return { ok: false, tool: tool, error: 'Outil inconnu\u00a0: ' + tool };
     } catch (err) {
-      return {
-        ok: false,
-        tool: tool,
-        error: (err && err.message) || '\u00c9chec d\'ex\u00e9cution'
-      };
+      var msg = (err && err.message) || '\u00c9chec d\'ex\u00e9cution';
+      var causeLine = '';
+      if (err && err.stack) {
+        causeLine = String(err.stack).split('\n')[0];
+      } else if (err != null) {
+        causeLine = String(err);
+      }
+      dbgError('agent', 'actions.executeOne', err, { tool: tool });
+      return actionFailure(tool, msg, {
+        code: 'exception',
+        cause: causeLine || undefined,
+        hint: 'Exception pendant l\'ex\u00e9cution de l\'outil.'
+      });
     }
   }
 
@@ -16725,6 +17283,7 @@
     var rejected = 0;
     for (var i = 0; i < list.length; i++) {
       var result = await executeAction(bridge, list[i]);
+      result = enrichActionError(result);
       result = enrichResultVisual(bridge, result);
       results.push(result);
       if (result.ok) {
@@ -16733,6 +17292,13 @@
       } else {
         rejected += 1;
         if (result.error) errors.push(result.error);
+        dbgLog('agent', 'actions.reject', {
+          tool: result.tool,
+          error: result.error,
+          code: result.code || null,
+          cause: result.cause || null,
+          hint: result.hint || null
+        });
       }
     }
     dbgLog('agent', 'actions.execute', {
@@ -16747,6 +17313,7 @@
       ok: errors.length === 0 && results.length > 0
     };
     applied.recap = formatChangeRecap(applied);
+    applied.errorSummary = formatActionErrors(applied);
     return applied;
   }
 
@@ -17069,6 +17636,7 @@
     getProvider: getProvider,
     saveProvider: saveProvider,
     buildContext: buildContext,
+    BUILD_CONTEXT_GETTERS: BUILD_CONTEXT_GETTERS,
     buildPriorityExplanation: buildPriorityExplanation,
     buildEaseExplanation: buildEaseExplanation,
     dueFromOffsetMinutes: dueFromOffsetMinutes,
@@ -17184,6 +17752,8 @@
     normalizeSubtaskTitleKey: normalizeSubtaskTitleKey,
     findExistingSubtaskByText: findExistingSubtaskByText,
     formatChangeRecap: formatChangeRecap,
+    formatActionErrors: formatActionErrors,
+    actionFailure: actionFailure,
     looksLikeAppliedClaim: looksLikeAppliedClaim,
     normalizePointSection: normalizePointSection,
     normalizePointField: normalizePointField,

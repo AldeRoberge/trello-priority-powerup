@@ -355,6 +355,51 @@
             item.appendChild(buildDetailPanel(entry));
           }
 
+          if (
+            global.ContextMenu &&
+            typeof global.ContextMenu.bind === 'function' &&
+            typeof global.ContextMenu.buildHistoryEntryItems === 'function'
+          ) {
+            ContextMenu.bind(item, function () {
+              return ContextMenu.buildHistoryEntryItems({
+                undone: isUndone,
+                open: isOpen,
+                busy: applying,
+                onToggleDetails: function () {
+                  if (!entry.id) return;
+                  expandedId = expandedId === entry.id ? null : entry.id;
+                  render();
+                },
+                onRevert: function () {
+                  if (applying || !entry.id) return;
+                  applying = true;
+                  Promise.resolve(onRevert(entry.id))
+                    .catch(function (err) {
+                      console.error('HistoryUI revert failed', err);
+                    })
+                    .then(function () {
+                      applying = false;
+                      expandedId = null;
+                      render();
+                    });
+                },
+                onRestore: function () {
+                  if (applying || !entry.id) return;
+                  applying = true;
+                  Promise.resolve(onRestore(entry.id))
+                    .catch(function (err) {
+                      console.error('HistoryUI restore failed', err);
+                    })
+                    .then(function () {
+                      applying = false;
+                      expandedId = null;
+                      render();
+                    });
+                },
+              });
+            });
+          }
+
           listEl.appendChild(item);
         });
       }

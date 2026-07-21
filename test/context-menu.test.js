@@ -378,4 +378,137 @@ describe('ContextMenu', () => {
     assert.equal(move.disabled, true);
     assert.ok(items.some((i) => i.id === 'toggle-hide-blocked'));
   });
+
+  it('skips native menu on editable targets', () => {
+    const el = global.document.createElement('div');
+    const input = global.document.createElement('input');
+    input.tagName = 'INPUT';
+    el.appendChild(input);
+    global.document.body.appendChild(el);
+    let opened = false;
+    ContextMenu.bind(el, () => {
+      opened = true;
+      return [{ id: 'x', label: 'X', action() {} }];
+    });
+    el.dispatchEvent({
+      type: 'contextmenu',
+      target: input,
+      clientX: 10,
+      clientY: 12,
+      preventDefault() {},
+      stopPropagation() {},
+    });
+    assert.equal(opened, false);
+    assert.equal(ContextMenu.isNativeEditableTarget(input), true);
+  });
+
+  it('buildCompletionItemItems and checklist items', () => {
+    const calls = [];
+    const master = ContextMenu.buildCompletionItemItems({
+      done: false,
+      blocked: false,
+      linked: false,
+      canPromote: true,
+      onToggleDone() {
+        calls.push('done');
+      },
+      onToggleBlocked() {
+        calls.push('block');
+      },
+      onShowProgress() {
+        calls.push('prog');
+      },
+      onAddChecklist() {
+        calls.push('add');
+      },
+      onPromote() {
+        calls.push('promote');
+      },
+      onDelete() {
+        calls.push('del');
+      },
+    });
+    const ids = master.filter((i) => !i.sep).map((i) => i.id);
+    assert.deepEqual(ids, [
+      'toggle-done',
+      'toggle-blocked',
+      'show-progress',
+      'add-checklist',
+      'promote',
+      'delete',
+    ]);
+    master.find((i) => i.id === 'promote').action();
+    assert.deepEqual(calls, ['promote']);
+
+    const nested = ContextMenu.buildChecklistItemItems({
+      done: true,
+      onToggleDone() {
+        calls.push('nested');
+      },
+      onShowProgress() {},
+      onDelete() {},
+    });
+    assert.equal(nested[0].label, 'Marquer non termin\u00e9');
+  });
+
+  it('buildGanttCardItems and agent message items', () => {
+    const gantt = ContextMenu.buildGanttCardItems({
+      kind: 'card',
+      cardId: 'c1',
+      selected: false,
+      expandable: true,
+      expanded: false,
+      editable: true,
+      done: false,
+      deleteLabel: 'Archiver la carte',
+      onOpen() {},
+      onToggleSelect() {},
+      onToggleExpand() {},
+      onMiniBlocked() {},
+      onMiniPriority() {},
+      onMiniProgress() {},
+      onMiniDue() {},
+      onToggleDone() {},
+      onDelete() {},
+    });
+    const gids = gantt.filter((i) => !i.sep).map((i) => i.id);
+    assert.ok(gids.includes('open-card'));
+    assert.ok(gids.includes('mini-priority'));
+    assert.ok(gids.includes('delete'));
+
+    const msg = ContextMenu.buildAgentMessageItems({
+      role: 'assistant',
+      canCopy: true,
+      canFeedback: true,
+      onCopy() {},
+      onFeedbackUp() {},
+      onFeedbackDown() {},
+    });
+    assert.ok(msg.some((i) => i.id === 'feedback-up'));
+    assert.ok(msg.some((i) => i.id === 'copy'));
+  });
+
+  it('buildOverviewTaskItems and history entry items', () => {
+    let jumped = false;
+    const tasks = ContextMenu.buildOverviewTaskItems({
+      done: false,
+      blocked: true,
+      onToggle() {},
+      onJumpProgress() {
+        jumped = true;
+      },
+    });
+    assert.equal(tasks[0].label, 'D\u00e9bloquer');
+    tasks[1].action();
+    assert.equal(jumped, true);
+
+    const hist = ContextMenu.buildHistoryEntryItems({
+      undone: true,
+      open: false,
+      onToggleDetails() {},
+      onRestore() {},
+      onRevert() {},
+    });
+    assert.ok(hist.some((i) => i.id === 'restore'));
+  });
 });

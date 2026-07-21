@@ -1,0 +1,261 @@
+/* AI usage statistics panel (AgentStats) */
+
+.tp-page--priority .agent-settings-stats-mount {
+  margin-top: 4px;
+}
+
+.tp-page--priority .agent-stats-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tp-page--priority .agent-stats-empty {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--tp-text-muted);
+}
+
+.tp-page--priority .agent-stats-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tp-page--priority .agent-stats-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--tp-surface-subtle, var(--tp-bg)) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tp-border) 80%, transparent);
+}
+
+.tp-page--priority .agent-stats-kpi-label {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--tp-text-muted);
+}
+
+.tp-page--priority .agent-stats-kpi-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--tp-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.tp-page--priority .agent-stats-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tp-page--priority .agent-stats-chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tp-page--priority .agent-stats-chart-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--tp-text);
+}
+
+.tp-page--priority .agent-stats-chart-body {
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--tp-surface) 92%, var(--tp-bg));
+  border: 1px solid color-mix(in srgb, var(--tp-border) 70%, transparent);
+  padding: 4px 2px 2px;
+  overflow: hidden;
+}
+
+.tp-page--priority .agent-stats-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 10px;
+  color: var(--tp-text-muted);
+}
+
+.tp-page--priority .agent-stats-legend--col {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.tp-page--priority .agent-stats-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.tp-page--priority .agent-stats-swatch--in,
+.tp-page--priority .agent-stats-bar--in {
+  fill: color-mix(in srgb, var(--tp-accent, #0c66e4) 78%, #1a3a5c);
+  background: color-mix(in srgb, var(--tp-accent, #0c66e4) 78%, #1a3a5c);
+}
+
+.tp-page--priority .agent-stats-swatch--out,
+.tp-page--priority .agent-stats-bar--out {
+  fill: color-mix(in srgb, var(--tp-success, #22a06b) 75%, #1b4332);
+  background: color-mix(in srgb, var(--tp-success, #22a06b) 75%, #1b4332);
+}
+
+.tp-page--priority .agent-stats-swatch--sent,
+.tp-page--priority .agent-stats-bar--sent {
+  fill: color-mix(in srgb, var(--tp-accent, #0c66e4) 70%, #334);
+  background: color-mix(in srgb, var(--tp-accent, #0c66e4) 70%, #334);
+}
+
+.tp-page--priority .agent-stats-swatch--recv,
+.tp-page--priority .agent-stats-bar--recv {
+  fill: color-mix(in srgb, #e56910 80%, #5c3a1a);
+  background: color-mix(in srgb, #e56910 80%, #5c3a1a);
+}
+
+.tp-page--priority .agent-stats-svg {
+  display: block;
+  max-width: 100%;
+}
+
+.tp-page--priority .agent-stats-grid {
+  stroke: color-mix(in srgb, var(--tp-border) 55%, transparent);
+  stroke-width: 1;
+}
+
+.tp-page--priority .agent-stats-area {
+  fill: color-mix(in srgb, var(--tp-accent, #0c66e4) 18%, transparent);
+}
+
+.tp-page--priority .agent-stats-line {
+  stroke: color-mix(in srgb, var(--tp-accent, #0c66e4) 88%, #0a2540);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.tp-page--priority .agent-stats-dot {
+  fill: color-mix(in srgb, var(--tp-accent, #0c66e4) 90%, #0a2540);
+}
+
+.tp-page--priority .agent-stats-axis {
+  fill: var(--tp-text-muted);
+  font-size: 9px;
+}
+
+.tp-page--priority .agent-stats-donut-track {
+  stroke: color-mix(in srgb, var(--tp-border) 70%, transparent);
+}
+
+.tp-page--priority .agent-stats-donut-in {
+  stroke: color-mix(in srgb, var(--tp-accent, #0c66e4) 78%, #1a3a5c);
+}
+
+.tp-page--priority .agent-stats-donut-out {
+  stroke: color-mix(in srgb, var(--tp-success, #22a06b) 75%, #1b4332);
+}
+
+.tp-page--priority .agent-stats-donut-center {
+  fill: var(--tp-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tp-page--priority .agent-stats-split {
+  display: grid;
+  grid-template-columns: minmax(0, 120px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.tp-page--priority .agent-stats-donut-wrap,
+.tp-page--priority .agent-stats-models {
+  min-width: 0;
+}
+
+.tp-page--priority .agent-stats-model-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tp-page--priority .agent-stats-model-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.tp-page--priority .agent-stats-model-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tp-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-page--priority .agent-stats-model-meta {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--tp-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tp-page--priority .agent-stats-model-track {
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--tp-border) 60%, transparent);
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.tp-page--priority .agent-stats-model-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--tp-accent, #0c66e4) 70%, #334);
+}
+
+.tp-page--priority .agent-stats-disclaimer {
+  margin: 0;
+}
+
+.tp-page--priority .agent-stats-actions {
+  margin-top: 0;
+}
+
+@media (max-width: 360px) {
+  .tp-page--priority .agent-stats-split {
+    grid-template-columns: 1fr;
+  }
+
+  .tp-page--priority .agent-stats-kpis {
+    grid-template-columns: 1fr;
+  }
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-stats-area {
+  fill: color-mix(in srgb, var(--tp-accent, #579dff) 22%, transparent);
+}
+
+html[data-color-mode='dark'] .tp-page--priority .agent-stats-line,
+html[data-color-mode='dark'] .tp-page--priority .agent-stats-dot {
+  stroke: color-mix(in srgb, var(--tp-accent, #579dff) 90%, #fff);
+  fill: color-mix(in srgb, var(--tp-accent, #579dff) 90%, #fff);
+}

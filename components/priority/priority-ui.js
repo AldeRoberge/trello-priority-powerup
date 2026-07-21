@@ -6743,6 +6743,18 @@
     }
 
     lblBtn.addEventListener('click', openFieldHelp);
+    if (
+      global.ContextMenu &&
+      typeof global.ContextMenu.bind === 'function' &&
+      typeof global.ContextMenu.buildPriorityFieldItems === 'function'
+    ) {
+      ContextMenu.bind(lblBtn, function () {
+        return ContextMenu.buildPriorityFieldItems({
+          label: label,
+          onOpenHelp: openFieldHelp,
+        });
+      });
+    }
 
     lblBtn.appendChild(lblIcon);
     lblBtn.appendChild(lblText);
@@ -7757,6 +7769,30 @@
             if (busy || String(list.id) === String(currentListId)) return;
             selectList(list.id);
           });
+          if (
+            global.ContextMenu &&
+            typeof global.ContextMenu.bind === 'function' &&
+            typeof global.ContextMenu.buildStatutChipItems === 'function'
+          ) {
+            ContextMenu.bind(btn, function () {
+              return ContextMenu.buildStatutChipItems({
+                listName: list.name,
+                selected: String(list.id) === String(currentListId),
+                busy: busy,
+                onSelect: function () {
+                  if (busy || String(list.id) === String(currentListId)) return;
+                  selectList(list.id);
+                },
+                onOpenSettings: onOpenSettings
+                  ? function () {
+                      Promise.resolve(onOpenSettings()).catch(function (err) {
+                        console.error('Statut open settings failed', err);
+                      });
+                    }
+                  : null,
+              });
+            });
+          }
           chipRow.appendChild(btn);
         });
       });
@@ -8860,6 +8896,22 @@
             }
             emitAction(chip.id);
           });
+          if (
+            global.ContextMenu &&
+            typeof global.ContextMenu.bind === 'function'
+          ) {
+            ContextMenu.bind(btn, function () {
+              return [
+                {
+                  id: chip.id,
+                  label: chip.label,
+                  action: function () {
+                    btn.click();
+                  },
+                },
+              ];
+            });
+          }
           actionsEl.appendChild(btn);
         })(chips[i]);
       }
@@ -8958,6 +9010,26 @@
 
             row.appendChild(check);
             row.appendChild(text);
+            if (
+              !compact &&
+              global.ContextMenu &&
+              typeof global.ContextMenu.bind === 'function' &&
+              typeof global.ContextMenu.buildOverviewTaskItems === 'function'
+            ) {
+              ContextMenu.bind(row, function () {
+                return ContextMenu.buildOverviewTaskItems({
+                  done: !!task.done,
+                  blocked: !!task.blocked,
+                  onToggle: function () {
+                    if (!task.id) return;
+                    emitAction('toggle-task', { id: task.id });
+                  },
+                  onJumpProgress: function () {
+                    if (onJump) onJump(isBlocked ? 'blocked' : 'progress');
+                  },
+                });
+              });
+            }
             tasksList.appendChild(row);
           })(overviewTasks[i]);
         }
@@ -11585,6 +11657,29 @@
             chip.appendChild(rolesRow);
           }
 
+          if (
+            global.ContextMenu &&
+            typeof global.ContextMenu.bind === 'function' &&
+            typeof global.ContextMenu.buildInfoChipItems === 'function'
+          ) {
+            ContextMenu.bind(chip, function () {
+              return ContextMenu.buildInfoChipItems({
+                kind: 'member',
+                onEditRoles:
+                  onMemberRolesChange && mid
+                    ? function () {
+                        toggleMemberRolesPicker(mid);
+                      }
+                    : null,
+                onRemove: canRemove
+                  ? function () {
+                      removeMemberFromCard(member);
+                    }
+                  : null,
+              });
+            });
+          }
+
           membersEl.appendChild(chip);
         });
       }
@@ -12689,6 +12784,28 @@
           }
 
           if (actions.childNodes.length) chip.appendChild(actions);
+          if (
+            global.ContextMenu &&
+            typeof global.ContextMenu.bind === 'function' &&
+            typeof global.ContextMenu.buildInfoChipItems === 'function'
+          ) {
+            ContextMenu.bind(chip, function () {
+              return ContextMenu.buildInfoChipItems({
+                kind: 'label',
+                onEdit: canEditLabel
+                  ? function () {
+                      setLabelsColorPickerOpen(label.id);
+                    }
+                  : null,
+                onRemove: onLabelRemove
+                  ? function () {
+                      if (labelsColorEditId) setLabelsColorPickerOpen('');
+                      removeLabelFromCard(label);
+                    }
+                  : null,
+              });
+            });
+          }
           labelsEl.appendChild(chip);
         });
       }
@@ -12948,6 +13065,20 @@
           removeTaskType(id);
         });
         chip.appendChild(clearBtn);
+        if (
+          global.ContextMenu &&
+          typeof global.ContextMenu.bind === 'function' &&
+          typeof global.ContextMenu.buildInfoChipItems === 'function'
+        ) {
+          ContextMenu.bind(chip, function () {
+            return ContextMenu.buildInfoChipItems({
+              kind: 'task-type',
+              onRemove: function () {
+                removeTaskType(id);
+              },
+            });
+          });
+        }
         taskTypesEl.appendChild(chip);
       });
 
@@ -14542,22 +14673,6 @@
         return ContextMenu.buildInfoItems({
           isExpanded: api.isExpanded,
           setExpanded: api.setExpanded,
-          focusTitle: function () {
-            api.setExpanded(true);
-            try {
-              titleInput.focus();
-            } catch (e) { /* ignore */ }
-          },
-          focusDesc: function () {
-            api.setExpanded(true);
-            if (typeof focusDescEditor === 'function') {
-              focusDescEditor(false);
-            } else {
-              try {
-                descInput.focus();
-              } catch (e2) { /* ignore */ }
-            }
-          },
           openGoals:
             typeof config.onOpenGoals === 'function'
               ? function () {
@@ -16518,6 +16633,22 @@
       chip.addEventListener('click', function () {
         applyQuickSuggestion(item.id);
       });
+      if (
+        global.ContextMenu &&
+        typeof global.ContextMenu.bind === 'function'
+      ) {
+        ContextMenu.bind(chip, function () {
+          return [
+            {
+              id: 'due-quick:' + item.id,
+              label: item.label,
+              action: function () {
+                applyQuickSuggestion(item.id);
+              },
+            },
+          ];
+        });
+      }
       suggestions.appendChild(chip);
     });
 
@@ -16548,6 +16679,22 @@
       chip.addEventListener('click', function () {
         applyVagueOption(item.id);
       });
+      if (
+        global.ContextMenu &&
+        typeof global.ContextMenu.bind === 'function'
+      ) {
+        ContextMenu.bind(chip, function () {
+          return [
+            {
+              id: 'due-vague:' + item.id,
+              label: item.label,
+              action: function () {
+                applyVagueOption(item.id);
+              },
+            },
+          ];
+        });
+      }
       vaguePanel.appendChild(chip);
     });
     body.appendChild(vaguePanel);
@@ -18991,6 +19138,25 @@
     if (hideSegments) {
       segsWrap.hidden = true;
       segLabels.hidden = true;
+    }
+
+    if (
+      !hideSegments &&
+      global.ContextMenu &&
+      typeof global.ContextMenu.bind === 'function' &&
+      typeof global.ContextMenu.buildHeatSegmentItems === 'function'
+    ) {
+      ContextMenu.bind(panel, function () {
+        return ContextMenu.buildHeatSegmentItems({
+          segments: HEAT_SEGMENTS,
+          onPick: function (seg) {
+            if (seg && seg.target != null) onSegmentClick(seg.target);
+          },
+          onExplain: function () {
+            openScoreTooltip();
+          },
+        });
+      });
     }
 
     var currentBadgeTierLabel = 'Optionnelle';

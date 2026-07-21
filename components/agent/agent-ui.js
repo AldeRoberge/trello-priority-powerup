@@ -41,12 +41,27 @@
    * Page bridges (popup.html) pass Trello helpers as mount options. The mount
    * facade must forward them or buildContext / executeActions never see them
    * (e.g. getCardLabels → context.labels stays empty → AI invents "no labels").
+   *
+   * Strategy: copy every function option onto the bridge except UI-only
+   * callbacks. A denylist beats a whitelist so new page helpers cannot be
+   * forgotten again.
    */
+  var BRIDGE_UI_ONLY_OPTIONS = {
+    onLayoutChange: true,
+    onExpandChange: true,
+    onMemoryUpdate: true,
+    onCardMemoryUpdate: true,
+    /** Used via options.applyPeople inside upsertPerson / removePerson. */
+    applyPeople: true
+  };
+
+  /** Documented page helpers (kept for tests / grepping; forwarding is denylist). */
   var OPTIONAL_BRIDGE_FNS = [
     'getCardLabels',
     'getBoardLabels',
     'loadCardLabels',
     'loadBoardLabels',
+    'loadCardMembers',
     'addLabel',
     'removeLabel',
     'createLabel',
@@ -59,17 +74,49 @@
     'getHistory',
     'historyUndo',
     'historyRedo',
-    'historyRevert'
+    'historyRevert',
+    'getOwnership',
+    'getGoals',
+    'setProject',
+    'selectStatut',
+    'getCustomAssigneeCatalog',
+    'upsertCustomAssigneeCatalog',
+    'pointAt',
+    'resolvePointTarget',
+    'refreshBoardDigest',
+    'refreshPeople'
   ];
 
   function attachOptionalBridgeFns(bridge, options) {
     if (!bridge || !options) return bridge;
-    OPTIONAL_BRIDGE_FNS.forEach(function (name) {
-      if (typeof options[name] === 'function') {
-        bridge[name] = options[name];
-      }
+    Object.keys(options).forEach(function (name) {
+      if (BRIDGE_UI_ONLY_OPTIONS[name]) return;
+      if (typeof options[name] !== 'function') return;
+      bridge[name] = options[name];
     });
     return bridge;
+  }
+
+  /**
+   * Refresh Trello caches the page keeps for buildContext (labels, members).
+   * Safe no-op when loaders are absent (project assistant).
+   */
+  function hydrateBridgeCaches(bridge) {
+    if (!bridge) return Promise.resolve();
+    var jobs = [];
+    function pushLoad(name) {
+      if (typeof bridge[name] !== 'function') return;
+      jobs.push(
+        Promise.resolve(bridge[name]({ force: true })).catch(function () {
+          /* keep prior cache */
+        })
+      );
+    }
+    pushLoad('loadCardLabels');
+    pushLoad('loadBoardLabels');
+    pushLoad('loadCardMembers');
+    pushLoad('loadBoardMembers');
+    return jobs.length ? Promise.all(jobs) : Promise.resolve();
   }
 
   function el(tag, className, attrs) {
@@ -330,8 +377,8 @@
         return Promise.resolve({ ok: false, reason: 'no-selectStatut' });
       }
     };
-    // Page-provided Trello helpers (popup.html). Without these, buildContext
-    // never sees étiquettes / board members / history, and set_labels fails.
+    // Page-provided Trello helpers (popup.html / assistant.html). Without these,
+    // buildContext never sees étiquettes / members / history / goals.
     attachOptionalBridgeFns(bridge, options);
     var onMemoryUpdate =
       typeof options.onMemoryUpdate === 'function' ? options.onMemoryUpdate : null;
@@ -445,9 +492,9 @@
       );
     }
 
-    function syncStatsBadge() {
-      /* defined after stats fold DOM exists; no-op until then */
-    }
+    var syncStatsBadge = function () {
+      /* replaced after stats fold DOM exists */
+    };
 
     if (Stats && typeof Stats.load === 'function' && t) {
       Stats.load(t)
@@ -2301,6 +2348,20 @@
       } catch (err) {
         console.error('AgentUI refreshPeople failed', err);
       }
+    }
+
+    /** Labels / members / board catalogs for buildContext — refresh before each turn. */
+    async function hydrateCardContextCaches() {
+      try {
+        await hydrateBridgeCaches(bridge);
+      } catch (e) { /* keep prior caches */ }
+    }
+
+    async function prepareTurnContext() {
+      await Promise.all([
+        refreshPeopleDirectory().catch(function () {}),
+        hydrateCardContextCaches()
+      ]);
     }
 
     function fillSettingsForm() {
@@ -5828,6 +5889,43 @@
       }
       messagesEl.appendChild(row);
       messagesEl.scrollTop = messagesEl.scrollHeight;
+      if (
+        global.ContextMenu &&
+        typeof global.ContextMenu.bind === 'function' &&
+        typeof global.ContextMenu.buildAgentMessageItems === 'function' &&
+        !(meta && meta.offer)
+      ) {
+        ContextMenu.bind(row, function () {
+          var canFeedback =
+            role === 'assistant' &&
+            !(meta && (meta.error || meta.recap || meta.noFeedback || meta.offer)) &&
+            !!row.querySelector('.agent-msg-feedback');
+          return ContextMenu.buildAgentMessageItems({
+            role: role,
+            canCopy: !!messageBubblePlainText(row),
+            canFeedback: canFeedback,
+            onEditResume: function () {
+              resumeFromUserMessage(row);
+            },
+            onCopy: function () {
+              var text = messageBubblePlainText(row);
+              if (!text) return;
+              var copyBtn = row.querySelector('.agent-msg-copy');
+              copyTextToClipboard(text).then(function (ok) {
+                if (ok && copyBtn) flashCopyButton(copyBtn);
+              });
+            },
+            onFeedbackUp: function () {
+              var up = row.querySelector('.agent-msg-feedback-btn--up');
+              if (up) up.click();
+            },
+            onFeedbackDown: function () {
+              var down = row.querySelector('.agent-msg-feedback-btn--down');
+              if (down) down.click();
+            },
+          });
+        });
+      }
       if (role === 'assistant' && !(meta && meta.silent)) {
         announceAssistantArrival({
           sound: !(meta && meta.noSound),
@@ -6073,6 +6171,13 @@
       }
       messagesEl.scrollTop = messagesEl.scrollHeight;
       notifyLayout();
+      if (hasFailures) {
+        var errText = Agent.formatActionErrors
+          ? Agent.formatActionErrors(applied || { results: [] }, options)
+          : '';
+        if (!errText && recap) errText = recap;
+        if (errText) appendChatError(errText);
+      }
       return wrap;
     }
 
@@ -6430,6 +6535,23 @@
         chip.addEventListener('click', function () {
           onApplySuggestion(item, index);
         });
+        if (
+          global.ContextMenu &&
+          typeof global.ContextMenu.bind === 'function'
+        ) {
+          ContextMenu.bind(chip, function () {
+            return [
+              {
+                id: 'apply-suggestion',
+                label: 'Appliquer',
+                disabled: !!pending,
+                action: function () {
+                  onApplySuggestion(item, index);
+                },
+              },
+            ];
+          });
+        }
         applyListEl.appendChild(chip);
       });
       syncApplySummary();
@@ -7169,6 +7291,22 @@
         chip.addEventListener('click', function () {
           onSuggestionChip(text, chip);
         });
+        if (
+          global.ContextMenu &&
+          typeof global.ContextMenu.bind === 'function'
+        ) {
+          ContextMenu.bind(chip, function () {
+            return [
+              {
+                id: 'use-suggestion',
+                label: 'Utiliser cette suggestion',
+                action: function () {
+                  onSuggestionChip(text, chip);
+                },
+              },
+            ];
+          });
+        }
         suggestionsEl.appendChild(chip);
       });
       if (suggestionsMultiSelect) {
@@ -8459,8 +8597,8 @@
         var turn;
         if (interviewActive && typeof Agent.cardInterviewTurn === 'function') {
           try {
-            await refreshPeopleDirectory();
-          } catch (peopleRefreshErr) { /* keep cached people */ }
+            await prepareTurnContext();
+          } catch (prepErr) { /* keep cached context */ }
           if (myGen !== chatTurnGen) return;
           turn = await Agent.cardInterviewTurn(
             provider,
@@ -8503,8 +8641,8 @@
             if (myGen !== chatTurnGen) return;
           }
           try {
-            await refreshPeopleDirectory();
-          } catch (peopleRefreshErr) { /* keep cached people */ }
+            await prepareTurnContext();
+          } catch (prepErr) { /* keep cached context */ }
           if (myGen !== chatTurnGen) return;
           turn = await Agent.chatTurn(
             provider,
@@ -8933,6 +9071,8 @@
     mount: mount,
     /** @internal exposed for unit tests */
     attachOptionalBridgeFns: attachOptionalBridgeFns,
-    OPTIONAL_BRIDGE_FNS: OPTIONAL_BRIDGE_FNS
+    hydrateBridgeCaches: hydrateBridgeCaches,
+    OPTIONAL_BRIDGE_FNS: OPTIONAL_BRIDGE_FNS,
+    BRIDGE_UI_ONLY_OPTIONS: BRIDGE_UI_ONLY_OPTIONS
   };
 })(typeof window !== 'undefined' ? window : this);

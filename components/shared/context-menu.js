@@ -193,6 +193,19 @@
     return menu;
   }
 
+  function isNativeEditableTarget(target) {
+    if (!target) return false;
+    var tag = String(target.tagName || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    if (target.isContentEditable) return true;
+    if (typeof target.closest === 'function') {
+      return !!target.closest(
+        'input, textarea, select, [contenteditable=""], [contenteditable="true"]'
+      );
+    }
+    return false;
+  }
+
   /**
    * @param {Element} el
    * @param {function(Event): Array} getItems
@@ -207,6 +220,7 @@
     }
 
     function onContextMenu(e) {
+      if (isNativeEditableTarget(e && e.target)) return;
       var items = getItems(e);
       items = normalizeItems(items);
       if (!items.length) return;
@@ -270,6 +284,16 @@
         }
       },
     });
+    if (typeof opts.focusComposer === 'function') {
+      items.push({
+        id: 'focus-composer',
+        label: 'Focus composer',
+        action: function () {
+          if (typeof opts.setExpanded === 'function') opts.setExpanded(true);
+          opts.focusComposer();
+        },
+      });
+    }
     return items;
   }
 
@@ -574,10 +598,686 @@
     return items;
   }
 
+  /** Overview task row. */
+  function buildOverviewTaskItems(opts) {
+    opts = opts || {};
+    var done = !!opts.done;
+    var blocked = !!opts.blocked;
+    var items = [];
+    if (blocked) {
+      items.push({
+        id: 'toggle-task',
+        label: 'D\u00e9bloquer',
+        action: function () {
+          if (typeof opts.onToggle === 'function') opts.onToggle();
+        },
+      });
+    } else {
+      items.push({
+        id: 'toggle-task',
+        label: done ? 'Marquer non fait' : 'Marquer termin\u00e9',
+        action: function () {
+          if (typeof opts.onToggle === 'function') opts.onToggle();
+        },
+      });
+    }
+    items.push({
+      id: 'jump-progress',
+      label: 'Aller \u00e0 Progr\u00e8s',
+      action: function () {
+        if (typeof opts.onJumpProgress === 'function') opts.onJumpProgress();
+      },
+    });
+    return items;
+  }
+
+  /** Completion master / linked subtask row. */
+  function buildCompletionItemItems(opts) {
+    opts = opts || {};
+    var done = !!opts.done;
+    var blocked = !!opts.blocked;
+    var linked = !!opts.linked;
+    var items = [];
+    items.push({
+      id: 'toggle-done',
+      label: done ? 'Marquer non termin\u00e9' : 'Marquer termin\u00e9',
+      disabled: !!opts.toggleDisabled,
+      action: function () {
+        if (typeof opts.onToggleDone === 'function') opts.onToggleDone();
+      },
+    });
+    if (!linked) {
+      items.push({
+        id: 'toggle-blocked',
+        label: blocked ? 'D\u00e9bloquer' : 'Bloquer',
+        disabled: !!done,
+        action: function () {
+          if (typeof opts.onToggleBlocked === 'function') opts.onToggleBlocked();
+        },
+      });
+      items.push({
+        id: 'show-progress',
+        label: 'Afficher le progr\u00e8s',
+        action: function () {
+          if (typeof opts.onShowProgress === 'function') opts.onShowProgress();
+        },
+      });
+      items.push({
+        id: 'add-checklist',
+        label: 'Ajouter une sous-sous-t\u00e2che',
+        action: function () {
+          if (typeof opts.onAddChecklist === 'function') opts.onAddChecklist();
+        },
+      });
+      if (opts.canPromote) {
+        items.push({
+          id: 'promote',
+          label: 'Convertir en carte',
+          action: function () {
+            if (typeof opts.onPromote === 'function') opts.onPromote();
+          },
+        });
+      }
+    } else {
+      items.push({
+        id: 'open-linked',
+        label: 'Ouvrir la carte li\u00e9e',
+        action: function () {
+          if (typeof opts.onOpenLinked === 'function') opts.onOpenLinked();
+        },
+      });
+    }
+    items.push({ sep: true });
+    items.push({
+      id: 'delete',
+      label: linked ? 'Retirer le lien' : 'Supprimer',
+      danger: true,
+      action: function () {
+        if (typeof opts.onDelete === 'function') opts.onDelete();
+      },
+    });
+    return items;
+  }
+
+  /** Nested checklist item. */
+  function buildChecklistItemItems(opts) {
+    opts = opts || {};
+    var done = !!opts.done;
+    return [
+      {
+        id: 'toggle-done',
+        label: done ? 'Marquer non termin\u00e9' : 'Marquer termin\u00e9',
+        action: function () {
+          if (typeof opts.onToggleDone === 'function') opts.onToggleDone();
+        },
+      },
+      {
+        id: 'show-progress',
+        label: 'Afficher le progr\u00e8s',
+        action: function () {
+          if (typeof opts.onShowProgress === 'function') opts.onShowProgress();
+        },
+      },
+      { sep: true },
+      {
+        id: 'delete',
+        label: 'Supprimer',
+        danger: true,
+        action: function () {
+          if (typeof opts.onDelete === 'function') opts.onDelete();
+        },
+      },
+    ];
+  }
+
+  /** Statut list chip. */
+  function buildStatutChipItems(opts) {
+    opts = opts || {};
+    var name = opts.listName || 'cette liste';
+    var items = [
+      {
+        id: 'select-list',
+        label: 'S\u00e9lectionner \u00ab\u00a0' + name + '\u00a0\u00bb',
+        disabled: !!opts.selected || !!opts.busy,
+        action: function () {
+          if (typeof opts.onSelect === 'function') opts.onSelect();
+        },
+      },
+    ];
+    if (typeof opts.onOpenSettings === 'function') {
+      items.push({
+        id: 'open-settings',
+        label: 'Personnaliser les statuts\u2026',
+        action: function () {
+          opts.onOpenSettings();
+        },
+      });
+    }
+    return items;
+  }
+
+  /** Heat / priority tier segment. */
+  function buildHeatSegmentItems(opts) {
+    opts = opts || {};
+    var segments = Array.isArray(opts.segments) ? opts.segments : [];
+    var items = [];
+    for (var i = 0; i < segments.length; i++) {
+      (function (seg) {
+        items.push({
+          id: 'heat:' + (seg.i != null ? seg.i : seg.label),
+          label: seg.label || String(seg.target),
+          action: function () {
+            if (typeof opts.onPick === 'function') opts.onPick(seg);
+          },
+        });
+      })(segments[i]);
+    }
+    if (typeof opts.onExplain === 'function') {
+      if (items.length) items.push({ sep: true });
+      items.push({
+        id: 'explain-score',
+        label: 'Comment ce score est calcul\u00e9',
+        action: function () {
+          opts.onExplain();
+        },
+      });
+    }
+    return items;
+  }
+
+  /** Agent message bubble. */
+  function buildAgentMessageItems(opts) {
+    opts = opts || {};
+    var role = opts.role || 'assistant';
+    var items = [];
+    if (role === 'user') {
+      items.push({
+        id: 'edit-resume',
+        label: 'Modifier et reprendre',
+        action: function () {
+          if (typeof opts.onEditResume === 'function') opts.onEditResume();
+        },
+      });
+    }
+    items.push({
+      id: 'copy',
+      label: 'Copier',
+      disabled: !opts.canCopy,
+      action: function () {
+        if (typeof opts.onCopy === 'function') opts.onCopy();
+      },
+    });
+    if (role === 'assistant' && opts.canFeedback) {
+      items.push({ sep: true });
+      items.push({
+        id: 'feedback-up',
+        label: 'Bonne r\u00e9ponse',
+        action: function () {
+          if (typeof opts.onFeedbackUp === 'function') opts.onFeedbackUp();
+        },
+      });
+      items.push({
+        id: 'feedback-down',
+        label: 'Mauvaise r\u00e9ponse',
+        action: function () {
+          if (typeof opts.onFeedbackDown === 'function') opts.onFeedbackDown();
+        },
+      });
+    }
+    return items;
+  }
+
+  /** Gantt card / subtask label row. */
+  function buildGanttCardItems(opts) {
+    opts = opts || {};
+    var selected = !!opts.selected;
+    var items = [];
+    if (opts.kind === 'card' && opts.cardId) {
+      items.push({
+        id: 'open-card',
+        label: 'Ouvrir la carte',
+        action: function () {
+          if (typeof opts.onOpen === 'function') opts.onOpen();
+        },
+      });
+    }
+    items.push({
+      id: 'toggle-select',
+      label: selected ? 'D\u00e9s\u00e9lectionner' : 'S\u00e9lectionner',
+      action: function () {
+        if (typeof opts.onToggleSelect === 'function') opts.onToggleSelect();
+      },
+    });
+    if (opts.expandable) {
+      items.push({
+        id: 'toggle-expand',
+        label: opts.expanded ? 'Replier' : 'D\u00e9velopper',
+        action: function () {
+          if (typeof opts.onToggleExpand === 'function') opts.onToggleExpand();
+        },
+      });
+    }
+    if (opts.kind === 'card') {
+      items.push({ sep: true });
+      items.push({
+        id: 'mini-blocked',
+        label: 'Bloquer\u2026',
+        action: function () {
+          if (typeof opts.onMiniBlocked === 'function') opts.onMiniBlocked();
+        },
+      });
+      items.push({
+        id: 'mini-priority',
+        label: 'Priorit\u00e9\u2026',
+        action: function () {
+          if (typeof opts.onMiniPriority === 'function') opts.onMiniPriority();
+        },
+      });
+      items.push({
+        id: 'mini-progress',
+        label: 'Progr\u00e8s\u2026',
+        action: function () {
+          if (typeof opts.onMiniProgress === 'function') opts.onMiniProgress();
+        },
+      });
+      items.push({
+        id: 'mini-due',
+        label: '\u00c9ch\u00e9ance\u2026',
+        action: function () {
+          if (typeof opts.onMiniDue === 'function') opts.onMiniDue();
+        },
+      });
+    }
+    if (opts.editable) {
+      items.push({ sep: true });
+      items.push({
+        id: 'toggle-done',
+        label: opts.done ? 'Marquer non termin\u00e9' : 'Marquer termin\u00e9',
+        action: function () {
+          if (typeof opts.onToggleDone === 'function') opts.onToggleDone();
+        },
+      });
+      items.push({
+        id: 'delete',
+        label: opts.deleteLabel || 'Supprimer',
+        danger: true,
+        action: function () {
+          if (typeof opts.onDelete === 'function') opts.onDelete();
+        },
+      });
+    }
+    return items;
+  }
+
+  /** Gantt timeline bar. */
+  function buildGanttBarItems(opts) {
+    opts = opts || {};
+    var items = [];
+    if (opts.kind === 'card' && opts.cardId) {
+      items.push({
+        id: 'open-card',
+        label: 'Ouvrir la carte',
+        action: function () {
+          if (typeof opts.onOpen === 'function') opts.onOpen();
+        },
+      });
+    }
+    items.push({
+      id: 'clear-dates',
+      label: 'Effacer les dates',
+      danger: true,
+      disabled: !!opts.clearDisabled,
+      action: function () {
+        if (typeof opts.onClearDates === 'function') opts.onClearDates();
+      },
+    });
+    return items;
+  }
+
+  /** History entry row. */
+  function buildHistoryEntryItems(opts) {
+    opts = opts || {};
+    var undone = !!opts.undone;
+    var open = !!opts.open;
+    return [
+      {
+        id: 'toggle-details',
+        label: open ? 'Masquer les d\u00e9tails' : 'Afficher les d\u00e9tails',
+        action: function () {
+          if (typeof opts.onToggleDetails === 'function') opts.onToggleDetails();
+        },
+      },
+      {
+        id: undone ? 'restore' : 'revert',
+        label: undone ? 'R\u00e9tablir' : 'Revenir \u00e0 cet \u00e9tat',
+        disabled: !!opts.busy,
+        action: function () {
+          if (undone) {
+            if (typeof opts.onRestore === 'function') opts.onRestore();
+          } else if (typeof opts.onRevert === 'function') {
+            opts.onRevert();
+          }
+        },
+      },
+    ];
+  }
+
+  /** Info member / label / task-type chip. */
+  function buildInfoChipItems(opts) {
+    opts = opts || {};
+    var kind = opts.kind || 'label';
+    var items = [];
+    if (kind === 'member') {
+      if (typeof opts.onEditRoles === 'function') {
+        items.push({
+          id: 'edit-roles',
+          label: 'D\u00e9finir les r\u00f4les\u2026',
+          action: function () {
+            opts.onEditRoles();
+          },
+        });
+      }
+      if (typeof opts.onRemove === 'function') {
+        items.push({
+          id: 'remove',
+          label: 'Retirer',
+          danger: true,
+          action: function () {
+            opts.onRemove();
+          },
+        });
+      }
+    } else if (kind === 'label') {
+      if (typeof opts.onEdit === 'function') {
+        items.push({
+          id: 'edit',
+          label: 'Modifier l\u2019\u00e9tiquette\u2026',
+          action: function () {
+            opts.onEdit();
+          },
+        });
+      }
+      if (typeof opts.onRemove === 'function') {
+        items.push({
+          id: 'remove',
+          label: 'Retirer de cette carte',
+          danger: true,
+          action: function () {
+            opts.onRemove();
+          },
+        });
+      }
+    } else if (kind === 'task-type') {
+      if (typeof opts.onRemove === 'function') {
+        items.push({
+          id: 'remove',
+          label: 'Retirer',
+          danger: true,
+          action: function () {
+            opts.onRemove();
+          },
+        });
+      }
+    }
+    return items;
+  }
+
+  /** Shared bulk-selection toolbar (completion or gantt). */
+  function buildBulkActionItems(opts) {
+    opts = opts || {};
+    var count = opts.count > 0 ? opts.count : 0;
+    var items = [];
+    if (count > 0) {
+      items.push({
+        id: 'bulk-count',
+        label: count + ' s\u00e9lectionn\u00e9e(s)',
+        disabled: true,
+        action: function () {},
+      });
+      items.push({ sep: true });
+    }
+    items.push({
+      id: 'bulk-done',
+      label: 'Terminer',
+      disabled: count < 1,
+      action: function () {
+        if (typeof opts.onDone === 'function') opts.onDone();
+      },
+    });
+    items.push({
+      id: 'bulk-reopen',
+      label: 'Rouvrir',
+      disabled: count < 1,
+      action: function () {
+        if (typeof opts.onReopen === 'function') opts.onReopen();
+      },
+    });
+    items.push({
+      id: 'bulk-delete',
+      label: 'Supprimer',
+      danger: true,
+      disabled: count < 1,
+      action: function () {
+        if (typeof opts.onDelete === 'function') opts.onDelete();
+      },
+    });
+    items.push({
+      id: 'bulk-clear',
+      label: 'Tout d\u00e9s\u00e9lectionner',
+      disabled: count < 1,
+      action: function () {
+        if (typeof opts.onClear === 'function') opts.onClear();
+      },
+    });
+    if (typeof opts.onSelectAll === 'function') {
+      items.push({
+        id: 'bulk-select-all',
+        label: 'Tout s\u00e9lectionner',
+        action: function () {
+          opts.onSelectAll();
+        },
+      });
+    }
+    return items;
+  }
+
+  /** Completion master chrome (check / block / complete-all / reset). */
+  function buildCompletionMasterItems(opts) {
+    opts = opts || {};
+    var done = !!opts.done;
+    var blocked = !!opts.blocked;
+    var items = [
+      {
+        id: 'toggle-master',
+        label: done ? 'Marquer non termin\u00e9' : 'Marquer termin\u00e9',
+        action: function () {
+          if (typeof opts.onToggleComplete === 'function') opts.onToggleComplete();
+        },
+      },
+      {
+        id: 'toggle-blocked',
+        label: blocked ? 'D\u00e9bloquer' : 'Mettre en attente',
+        action: function () {
+          if (typeof opts.onToggleBlocked === 'function') opts.onToggleBlocked();
+        },
+      },
+      { sep: true },
+      {
+        id: 'complete-all',
+        label: 'Tout terminer',
+        action: function () {
+          if (typeof opts.onCompleteAll === 'function') opts.onCompleteAll();
+        },
+      },
+      {
+        id: 'reset-all',
+        label: 'Tout invalider',
+        action: function () {
+          if (typeof opts.onResetAll === 'function') opts.onResetAll();
+        },
+      },
+    ];
+    if (typeof opts.onFocusAdd === 'function') {
+      items.push({
+        id: 'focus-add',
+        label: 'Ajouter une sous-t\u00e2che',
+        action: function () {
+          opts.onFocusAdd();
+        },
+      });
+    }
+    return items;
+  }
+
+  /** Gantt toolbar zoom / nav / filters. */
+  function buildGanttToolbarItems(opts) {
+    opts = opts || {};
+    var viewMode = opts.viewMode || 'week';
+    var items = [
+      {
+        id: 'zoom-day',
+        label: 'Agenda',
+        disabled: viewMode === 'day',
+        action: function () {
+          if (typeof opts.onViewMode === 'function') opts.onViewMode('day');
+        },
+      },
+      {
+        id: 'zoom-week',
+        label: 'Semaine',
+        disabled: viewMode === 'week',
+        action: function () {
+          if (typeof opts.onViewMode === 'function') opts.onViewMode('week');
+        },
+      },
+      {
+        id: 'zoom-month',
+        label: 'Mois',
+        disabled: viewMode === 'month',
+        action: function () {
+          if (typeof opts.onViewMode === 'function') opts.onViewMode('month');
+        },
+      },
+      {
+        id: 'zoom-year',
+        label: 'Ann\u00e9e',
+        disabled: viewMode === 'year',
+        action: function () {
+          if (typeof opts.onViewMode === 'function') opts.onViewMode('year');
+        },
+      },
+      { sep: true },
+      {
+        id: 'nav-prev',
+        label: 'Pr\u00e9c\u00e9dent',
+        action: function () {
+          if (typeof opts.onPrev === 'function') opts.onPrev();
+        },
+      },
+      {
+        id: 'nav-today',
+        label: "Aujourd'hui",
+        action: function () {
+          if (typeof opts.onToday === 'function') opts.onToday();
+        },
+      },
+      {
+        id: 'nav-next',
+        label: 'Suivant',
+        action: function () {
+          if (typeof opts.onNext === 'function') opts.onNext();
+        },
+      },
+      { sep: true },
+      {
+        id: 'filter-completed',
+        label: opts.hideCompleted
+          ? 'Afficher les termin\u00e9s'
+          : 'Masquer les termin\u00e9s',
+        action: function () {
+          if (typeof opts.onToggleHideCompleted === 'function') {
+            opts.onToggleHideCompleted(!opts.hideCompleted);
+          }
+        },
+      },
+      {
+        id: 'filter-blocked',
+        label: opts.hideBlocked
+          ? 'Afficher les bloqu\u00e9es'
+          : 'Masquer les bloqu\u00e9es',
+        action: function () {
+          if (typeof opts.onToggleHideBlocked === 'function') {
+            opts.onToggleHideBlocked(!opts.hideBlocked);
+          }
+        },
+      },
+      {
+        id: 'filter-undated',
+        label: opts.hideUndated
+          ? 'Afficher sans date'
+          : 'Masquer sans date',
+        action: function () {
+          if (typeof opts.onToggleHideUndated === 'function') {
+            opts.onToggleHideUndated(!opts.hideUndated);
+          }
+        },
+      },
+    ];
+    return items;
+  }
+
+  /** Agent composer chrome (send + model tiers). */
+  function buildAgentComposerItems(opts) {
+    opts = opts || {};
+    var items = [
+      {
+        id: 'send',
+        label: 'Envoyer',
+        disabled: !!opts.sendDisabled,
+        action: function () {
+          if (typeof opts.onSend === 'function') opts.onSend();
+        },
+      },
+    ];
+    var modes = Array.isArray(opts.modes) ? opts.modes : [];
+    if (modes.length) {
+      items.push({ sep: true });
+      for (var i = 0; i < modes.length; i++) {
+        (function (mode) {
+          items.push({
+            id: 'mode:' + mode.id,
+            label: mode.label || mode.id,
+            disabled: mode.id === opts.currentMode,
+            action: function () {
+              if (typeof opts.onSetMode === 'function') opts.onSetMode(mode.id);
+            },
+          });
+        })(modes[i]);
+      }
+    }
+    return items;
+  }
+
+  /** Priority axis field label help. */
+  function buildPriorityFieldItems(opts) {
+    opts = opts || {};
+    var label = opts.label || 'ce champ';
+    return [
+      {
+        id: 'open-help',
+        label: 'Choisir le niveau de ' + label + '\u2026',
+        action: function () {
+          if (typeof opts.onOpenHelp === 'function') opts.onOpenHelp();
+        },
+      },
+    ];
+  }
+
   global.ContextMenu = {
     show: show,
     hide: hide,
     bind: bind,
+    isNativeEditableTarget: isNativeEditableTarget,
     normalizeItems: normalizeItems,
     buildExpandToggleItem: buildExpandToggleItem,
     buildAgentItems: buildAgentItems,
@@ -588,5 +1288,20 @@
     buildHistoryItems: buildHistoryItems,
     buildPriorityItems: buildPriorityItems,
     buildGanttSectionItems: buildGanttSectionItems,
+    buildOverviewTaskItems: buildOverviewTaskItems,
+    buildCompletionItemItems: buildCompletionItemItems,
+    buildChecklistItemItems: buildChecklistItemItems,
+    buildStatutChipItems: buildStatutChipItems,
+    buildHeatSegmentItems: buildHeatSegmentItems,
+    buildAgentMessageItems: buildAgentMessageItems,
+    buildGanttCardItems: buildGanttCardItems,
+    buildGanttBarItems: buildGanttBarItems,
+    buildHistoryEntryItems: buildHistoryEntryItems,
+    buildInfoChipItems: buildInfoChipItems,
+    buildBulkActionItems: buildBulkActionItems,
+    buildCompletionMasterItems: buildCompletionMasterItems,
+    buildGanttToolbarItems: buildGanttToolbarItems,
+    buildAgentComposerItems: buildAgentComposerItems,
+    buildPriorityFieldItems: buildPriorityFieldItems,
   };
 })(typeof window !== 'undefined' ? window : this);

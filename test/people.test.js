@@ -448,5 +448,9 @@ describe('People ↔ Hors Trello assignees', () => {
     assert.equal(directory.people.length, 1);
     assert.ok(catalog.some((p) => p.name === 'Jane Doe'));
     assert.equal(catalog[0].id, directory.people[0].id);
+    assert.match(result.results[0].detail, /Jane Doe/);
+    assert.match(result.results[0].detail, /cr[eé]ée/i);
+    assert.doesNotMatch(result.results[0].detail, /aucun diff/i);
+    assert.match(result.recap, /Jane Doe/);
   });
 });

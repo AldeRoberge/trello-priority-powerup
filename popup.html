@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=debug-below-1" />
   <link rel="stylesheet" href="./components/agent/agent-blocks.css?v=blocks-flush-1" />
   <link rel="stylesheet" href="./components/agent/memory-ui.css?v=memory-settings-1" />
+  <link rel="stylesheet" href="./components/agent/agent-stats.css?v=stats-1" />
   <link rel="stylesheet" href="./components/history/history-ui.css?v=history-7" />
   <link rel="icon" type="image/png" href="./assets/icon.png" />
   <script src="./components/shared/brand.js"></script>
@@ -61,6 +62,7 @@
   <script src="./components/agent/agent-blocks.js?v=blocks-flush-1"></script>
   <script src="./components/agent/agent-memory.js?v=agent-dream-1"></script>
   <script src="./components/agent/memory-ui.js?v=memory-settings-1"></script>
+  <script src="./components/agent/agent-stats.js?v=stats-1"></script>
   <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
   <script src="./components/people/people.js?v=people-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
@@ -7328,8 +7330,8 @@
           getBoardLabels: function () {
             return latestBoardLabels.slice();
           },
-          loadBoardMembers: function () {
-            if (latestBoardMembers.length) {
+          loadBoardMembers: function (opts) {
+            if (!(opts && opts.force) && latestBoardMembers.length) {
               return Promise.resolve(latestBoardMembers.slice());
             }
             if (typeof PriorityTrello.getBoardMembers !== 'function') {
@@ -7340,8 +7342,8 @@
               return latestBoardMembers.slice();
             });
           },
-          loadBoardLabels: function () {
-            if (latestBoardLabels.length) {
+          loadBoardLabels: function (opts) {
+            if (!(opts && opts.force) && latestBoardLabels.length) {
               return Promise.resolve(latestBoardLabels.slice());
             }
             if (typeof PriorityTrello.getBoardLabels !== 'function') {
@@ -7352,8 +7354,8 @@
               return latestBoardLabels.slice();
             });
           },
-          loadCardLabels: function () {
-            if (latestCardLabels.length) {
+          loadCardLabels: function (opts) {
+            if (!(opts && opts.force) && latestCardLabels.length) {
               return Promise.resolve(latestCardLabels.slice());
             }
             if (typeof PriorityTrello.getCardLabels !== 'function') {
@@ -7361,7 +7363,21 @@
             }
             return PriorityTrello.getCardLabels(t).then(function (list) {
               rememberCardLabels(list);
+              latestLabelsFp = fingerprintIds(list);
               return latestCardLabels.slice();
+            });
+          },
+          loadCardMembers: function (opts) {
+            if (!(opts && opts.force) && latestCardMembers.length) {
+              return Promise.resolve(latestCardMembers.slice());
+            }
+            if (typeof PriorityTrello.getCardMembers !== 'function') {
+              return Promise.resolve([]);
+            }
+            return PriorityTrello.getCardMembers(t).then(function (list) {
+              rememberCardMembers(list);
+              latestMembersFp = fingerprintIds(list);
+              return latestCardMembers.slice();
             });
           },
           addMember: function (memberId) {
