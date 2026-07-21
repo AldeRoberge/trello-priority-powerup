@@ -180,6 +180,21 @@ describe('AgentBlocks', () => {
     );
   });
 
+  it('strips indent before block placeholders', () => {
+    assert.equal(
+      AgentBlocks.normalizeBlockPlaceholderIndent('Priorité :\n  {{0}}\nSuite'),
+      'Priorité :\n{{0}}\nSuite'
+    );
+    assert.equal(
+      AgentBlocks.normalizeBlockPlaceholderIndent('\t{{1}} ok'),
+      '{{1}} ok'
+    );
+    assert.equal(
+      AgentBlocks.normalizeBlockPlaceholderIndent('inline {{0}} keep'),
+      'inline {{0}} keep'
+    );
+  });
+
   it('fills message content with placeholders and orphan blocks', () => {
     const bubble = {
       children: [],

@@ -3,7 +3,11 @@
 .tp-page--priority .agent-msg-bubble .agent-block,
 .tp-page--priority .agent-result-blocks .agent-block {
   display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   margin: 8px 0 0;
+  margin-inline: 0;
   padding: 8px 10px;
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--agent-accent, var(--tp-primary, #0c66e4)) 28%, var(--tp-border, #dfe1e6));
