@@ -1,5 +1,11 @@
 # Trello Cerveau — Power-Up Trello
-Supercharge ton cerveau avec Trello
+
+Tu as toujours plein de grandes choses à faire, mais si peu de temps?
+
+As-tu parfois de la difficulté à t'en tenir au plan?
+
+Tu n'es pas seul. En mettant en place un système, tu passeras moins de temps à faire des listes et plus de temps à profiter de la vie.
+
 
 ### Synchronisation bi-directionnelle avec Trello
 <img width="686" height="487" alt="image" src="https://github.com/user-attachments/assets/718f6379-bae3-4b1c-8282-5993f5dff3cd" />
