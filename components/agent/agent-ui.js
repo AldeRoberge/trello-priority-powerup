@@ -11,8 +11,9 @@
  * Table of contents (inside mount closure)
  * ────────────────────────────────────────
  *  1.  DOM helpers, FR count words, highlight / block renderers
+ *      (+ attachOptionalBridgeFns for page Trello helpers)
  *  2.  Session state (modelTier, messageQueue, listen-scan, dream)
- *  3.  Settings panel (provider presets, verify, memory submenu)
+ *  3.  Settings panel (provider presets, verify, memory, statistiques)
  *  4.  Chat panel chrome (composer, TabAutocomplete, collapse, debug)
  *  5.  Face / aura / emotion (UserProfile) + point-at glove overlays
  *  6.  Message list render + streaming finalize
@@ -421,6 +422,46 @@
       estimated: false,
       lastUsage: null
     };
+
+    var Stats = global.AgentStats;
+    var usageStore =
+      Stats && typeof Stats.emptyStore === 'function' ? Stats.emptyStore() : null;
+    var usageSaver = null;
+    var statsPanelCtl = null;
+
+    if (Stats && typeof Stats.createDebouncedSaver === 'function') {
+      usageSaver = Stats.createDebouncedSaver(
+        t,
+        function () {
+          return usageStore;
+        },
+        function (next) {
+          usageStore = next;
+          if (statsPanelCtl && typeof statsPanelCtl.refresh === 'function') {
+            statsPanelCtl.refresh(usageStore);
+          }
+          syncStatsBadge();
+        }
+      );
+    }
+
+    function syncStatsBadge() {
+      /* defined after stats fold DOM exists; no-op until then */
+    }
+
+    if (Stats && typeof Stats.load === 'function' && t) {
+      Stats.load(t)
+        .then(function (stored) {
+          usageStore = stored;
+          if (statsPanelCtl && typeof statsPanelCtl.refresh === 'function') {
+            statsPanelCtl.refresh(usageStore);
+          }
+          syncStatsBadge();
+        })
+        .catch(function (err) {
+          console.error('AgentUI: AgentStats.load failed', err);
+        });
+    }
 
     var section = el('div', 'variant-chat-section' + (standalone ? ' variant-chat-section--standalone' : ''));
     var field = el('div', 'field field--chat');
@@ -868,6 +909,85 @@
     syncMemoryBadge();
     syncProviderFold();
 
+    // ── Statistiques (usage ledger) ──────────────────────────────────────
+    var statsDetails = el('details', 'agent-settings-fold agent-settings-stats');
+    var statsSummary = el('summary', 'agent-settings-fold-summary');
+    statsSummary.appendChild(
+      el('span', 'agent-settings-fold-title', { text: 'Statistiques' })
+    );
+    var statsBadge = el('span', 'agent-settings-fold-badge');
+    statsBadge.hidden = true;
+    statsSummary.appendChild(statsBadge);
+    statsDetails.appendChild(statsSummary);
+
+    var statsBody = el('div', 'agent-settings-fold-body');
+    statsBody.appendChild(
+      el('p', 'agent-settings-hint', {
+        text:
+          'Historique d\u2019usage de l\u2019IA sur votre compte\u00a0: co\u00fbts estim\u00e9s, tokens et messages.'
+      })
+    );
+    var statsMountEl = el('div', 'agent-settings-stats-mount');
+    statsBody.appendChild(statsMountEl);
+    statsDetails.appendChild(statsBody);
+    settingsPanel.appendChild(statsDetails);
+
+    syncStatsBadge = function () {
+      if (!usageStore || !Stats || typeof Stats.formatCostUsd !== 'function') {
+        statsBadge.hidden = true;
+        statsBadge.textContent = '';
+        return;
+      }
+      var life = usageStore.life || {};
+      if (!life.turns) {
+        statsBadge.hidden = true;
+        statsBadge.textContent = '';
+        return;
+      }
+      statsBadge.hidden = false;
+      statsBadge.textContent = '\u2248' + Stats.formatCostUsd(life.cost || 0);
+    };
+
+    function mountStatsPanel() {
+      if (!Stats || typeof Stats.mountPanel !== 'function') {
+        statsMountEl.replaceChildren();
+        statsMountEl.appendChild(
+          el('p', 'agent-settings-hint', {
+            text: 'Module statistiques indisponible sur cette page.'
+          })
+        );
+        return;
+      }
+      if (statsPanelCtl && typeof statsPanelCtl.destroy === 'function') {
+        statsPanelCtl.destroy();
+        statsPanelCtl = null;
+      }
+      statsMountEl.replaceChildren();
+      statsPanelCtl = Stats.mountPanel(statsMountEl, {
+        store: usageStore,
+        onLayoutChange: notifyLayout,
+        onReset: function () {
+          if (!Stats || typeof Stats.reset !== 'function') {
+            usageStore = Stats.emptyStore();
+            return Promise.resolve(usageStore);
+          }
+          return Stats.reset(t).then(function (blank) {
+            usageStore = blank;
+            syncStatsBadge();
+            return blank;
+          });
+        }
+      });
+      syncStatsBadge();
+    }
+
+    statsDetails.addEventListener('toggle', function () {
+      if (statsDetails.open) mountStatsPanel();
+      syncStatsBadge();
+      notifyLayout();
+    });
+    syncStatsBadge();
+
     var doneWrap = el('div', 'agent-settings-done');
     var doneBtn = el('button', 'tp-button agent-btn', {
       type: 'button',
@@ -1282,6 +1402,15 @@
       if (usage.estimated) sessionStats.estimated = true;
       sessionStats.lastUsage = usage;
       renderChatStats();
+
+      if (Stats && typeof Stats.recordTurn === 'function' && usageStore) {
+        usageStore = Stats.recordTurn(usageStore, usage, { sent: 1, recv: 1 });
+        if (statsPanelCtl && typeof statsPanelCtl.refresh === 'function') {
+          statsPanelCtl.refresh(usageStore);
+        }
+        syncStatsBadge();
+        if (usageSaver) usageSaver.schedule();
+      }
     }
 
     function syncStatusControls() {

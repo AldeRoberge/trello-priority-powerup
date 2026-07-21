@@ -9221,6 +9221,9 @@
               };
             },
             onAction: function (id) {
+              if (api && typeof api.setExpanded === 'function') {
+                api.setExpanded(true);
+              }
               if (id === 'block') {
                 openBlockComposer();
                 return;

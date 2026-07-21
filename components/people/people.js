@@ -74,10 +74,9 @@
 
   /**
    * Built-in synonym groups: storing any one expands matching to the group.
-   * Keys are normalized (accent-folded lowercase).
+   * Keep lean — match-time only; prefer common FR/EN workplace phrases.
    */
   var ALIAS_SYNONYM_GROUPS = [
-    // Manager / boss / N+1
     [
       'boss',
       'patron',
@@ -86,96 +85,52 @@
       'manageuse',
       'n+1',
       'n plus 1',
-      'n+ 1',
-      'hierarchie',
       'superieur',
       'superieure',
-      'superieur hierarchique',
-      'superieure hierarchique',
       'responsable',
       'chef',
       'cheffe',
-      'chef de service',
-      'cheffe de service',
-      'chef d equipe',
-      'cheffe d equipe',
       'team lead',
       'teamlead',
       'team leader',
-      'leader',
       'directeur',
       'directrice',
       'director',
-      'dirigeant',
-      'dirigeante',
-      'pdg',
-      'ceo',
-      'vp',
-      'vice-president',
-      'vice-presidente',
-      'vice president',
       'superviseur',
       'superviseure',
-      'supervisor',
-      'superior'
+      'supervisor'
     ],
-    // Skip-level / N+2
     [
       'n+2',
       'n plus 2',
-      'n+ 2',
       'grand patron',
       'grande patronne',
       'skip level',
-      'skip-level',
-      'skiplevel',
-      'boss du boss',
-      'patron du patron'
+      'skip-level'
     ],
-    // Colleague / teammate
     [
       'collegue',
-      'collegues',
       'coworker',
       'co-worker',
       'co worker',
-      'coworkers',
       'equipier',
       'equipiere',
-      'equipiers',
       'coequipier',
       'coequipiere',
       'teammate',
-      'team mate',
-      'team-mate',
-      'pair',
-      'pairs',
-      'peer',
-      'peers',
-      'compagnon de travail',
-      'compagne de travail'
+      'peer'
     ],
-    // Client / customer
     [
       'client',
       'cliente',
-      'clients',
-      'clientele',
       'customer',
-      'customers',
-      'acheteur',
-      'acheteuse',
-      'donneur d ordre',
-      'donneuse d ordre',
       'commanditaire',
       'sponsor',
       'stakeholder',
       'partie prenante'
     ],
-    // Vendor / supplier / partner org
     [
       'fournisseur',
-      'fournisseuse',
       'vendor',
       'supplier',
       'prestataire',
@@ -183,84 +138,31 @@
       'sous traitant',
       'contractor',
       'consultant',
-      'consultante',
-      'partenaire externe',
-      'agence'
+      'consultante'
     ],
-    // Spouse / partner (personal)
     [
       'conjoint',
       'conjointe',
       'partenaire',
-      'conjoint.e',
       'spouse',
       'mari',
       'femme',
-      'epoux',
-      'epouse',
-      'copain',
-      'copine',
       'chum',
       'blonde',
       'boyfriend',
-      'girlfriend',
-      'fiance',
-      'fiancee',
-      'compagnon',
-      'compagne'
+      'girlfriend'
     ],
-    // Assistant / admin
     [
       'adjoint',
       'adjointe',
       'assistant',
       'assistante',
-      'executive assistant',
       'secretaire',
-      'adjointe administrative',
-      'adjoint administratif',
-      'personal assistant',
-      'assistante de direction',
-      'assistant de direction'
+      'executive assistant'
     ],
-    // Intern / junior
-    [
-      'stagiaire',
-      'intern',
-      'interne',
-      'junior',
-      'apprenti',
-      'apprentie',
-      'trainee',
-      'etudiant',
-      'etudiante',
-      'co-op',
-      'coop'
-    ],
-    // Mentor / coach
-    [
-      'mentor',
-      'mentore',
-      'mentorat',
-      'coach',
-      'coaching',
-      'sponsor interne',
-      'parrain',
-      'marraine'
-    ],
-    // HR / RH
-    [
-      'rh',
-      'hr',
-      'ressources humaines',
-      'human resources',
-      'people ops',
-      'people operations',
-      'recruteur',
-      'recruteuse',
-      'recruiter'
-    ],
-    // IT / tech support (avoid bare "it" — too common in EN)
+    ['stagiaire', 'intern', 'junior', 'apprenti', 'apprentie', 'trainee'],
+    ['mentor', 'coach', 'parrain', 'marraine'],
+    ['rh', 'hr', 'ressources humaines', 'human resources', 'recruteur', 'recruiter'],
     [
       'ti',
       'informatique',
@@ -268,37 +170,10 @@
       'support it',
       'helpdesk',
       'help desk',
-      'service desk',
-      'sysadmin',
-      'admin systeme',
-      'tech support',
-      'soutien technique'
+      'tech support'
     ],
-    // Finance / accounting
-    [
-      'finance',
-      'finances',
-      'comptable',
-      'comptabilite',
-      'accounting',
-      'controller',
-      'controleur',
-      'controleuse',
-      'payroll',
-      'paie'
-    ],
-    // Legal / compliance
-    [
-      'juridique',
-      'legal',
-      'avocat',
-      'avocate',
-      'counsel',
-      'compliance',
-      'conformite',
-      'notaire'
-    ],
-    // Family (common blockers / context)
+    ['finance', 'comptable', 'comptabilite', 'accounting', 'paie', 'payroll'],
+    ['juridique', 'legal', 'avocat', 'avocate', 'compliance', 'conformite'],
     [
       'mere',
       'maman',
@@ -311,41 +186,19 @@
       'frere',
       'soeur',
       'brother',
-      'sister',
-      'beau-pere',
-      'belle-mere',
-      'beau pere',
-      'belle mere',
-      'beau-frere',
-      'belle-soeur'
+      'sister'
     ],
-    // Doctor / health
-    [
-      'medecin',
-      'docteur',
-      'docteure',
-      'doctor',
-      'therapeute',
-      'psy',
-      'psychologue',
-      'physiotherapeute',
-      'physio'
-    ],
-    // Contact / point person / PM
+    ['medecin', 'docteur', 'doctor', 'psy', 'psychologue', 'physio'],
     [
       'contact',
-      'point de contact',
-      'point person',
       'interlocuteur',
       'interlocutrice',
       'referent',
       'referente',
-      'responsable dossier',
       'product owner',
       'project manager',
       'chef de projet',
-      'cheffe de projet',
-      'gestionnaire de projet'
+      'cheffe de projet'
     ]
   ];
 
@@ -906,48 +759,33 @@
     var list = toAgentContext(directoryOrPeople);
     if (!list.length) {
       return [
-        'Personnes / coll\u00e8gues (annuaire)\u00a0: vide. Si l\'utilisateur parle de \u00ab\u00a0ma boss\u00a0\u00bb / un coll\u00e8gue sans nom connu\u00a0: DEMANDE qui c\'est, puis upsert_person {name, relation}. N\'invente JAMAIS un nom.'
+        'Personnes (annuaire)\u00a0: vide. Alias inconnu (\u00ab\u00a0ma boss\u00a0\u00bb)\u00a0: DEMANDE qui c\'est, puis upsert_person {name, relation}. N\'invente JAMAIS un nom.'
       ];
     }
     var lines = [
-      'Personnes / coll\u00e8gues (annuaire membre \u2014 TU CONNAIS CES GENS)\u00a0:',
-      '- Coordonn\u00e9es ci-dessous = source de v\u00e9rit\u00e9. T\u00e9l\u00e9phone / courriel / \u00ab\u00a0qui est ma boss?\u00a0\u00bb\u00a0: R\u00c9PONDS avec ces faits. INTERDIT de dire que tu ne sais pas quand la fiche est l\u00e0.',
-      '- Synonymes de relation (boss\u2194patron\u2194manager\u2194N+1, coll\u00e8gue\u2194coworker, client\u2194customer\u2026)\u00a0: r\u00e9sous vers le NOM propre.'
+      'Personnes (annuaire \u2014 source de v\u00e9rit\u00e9)\u00a0:',
+      '- T\u00e9l / courriel / \u00ab\u00a0qui est ma boss?\u00a0\u00bb\u00a0: r\u00e9ponds avec ces fiches. INTERDIT de dire que tu ne sais pas.'
     ];
     list.forEach(function (p) {
       var bits = [p.name];
       if (p.relation) bits.push('relation\u00a0: ' + p.relation);
-      if (p.roles && p.roles.length) {
-        bits.push('r\u00f4les\u00a0: ' + p.roles.join(', '));
-      }
+      if (p.roles && p.roles.length) bits.push('r\u00f4les\u00a0: ' + p.roles.join(', '));
       if (p.aliases && p.aliases.length) {
-        // Keep prompt compact: skip aliases that merely echo relation.
         var relKey = p.relation ? normKey(p.relation) : '';
         var relBare = relKey ? stripLeadingDet(relKey) : '';
         var aliasShow = p.aliases.filter(function (a) {
           var k = normKey(a);
           return k && k !== relKey && k !== relBare;
         });
-        if (aliasShow.length) {
-          bits.push('alias\u00a0: ' + aliasShow.slice(0, 6).join(', '));
-        }
+        if (aliasShow.length) bits.push('alias\u00a0: ' + aliasShow.slice(0, 4).join(', '));
       }
       if (p.email) bits.push('email\u00a0: ' + p.email);
-      if (p.phone) bits.push('t\u00e9l\u00e9phone\u00a0: ' + p.phone);
+      if (p.phone) bits.push('t\u00e9l\u00a0: ' + p.phone);
       if (p.notes) bits.push('notes\u00a0: ' + p.notes);
       lines.push('- ' + bits.join(' \u00b7 '));
     });
     lines.push(
-      '- Ex. user \u00ab\u00a0c\'est quoi le t\u00e9l\u00e9phone de ma boss?\u00a0\u00bb + fiche avec relation boss + t\u00e9l\u00a0: r\u00e9ponds le num\u00e9ro + le nom tout de suite.'
-    );
-    lines.push(
-      '- Quand l\'utilisateur dit un alias / relation (ex. \u00ab\u00a0ma boss\u00a0\u00bb)\u00a0: utilise le NOM propre partout (messages, blockedReasons, set_custom_assignees).'
-    );
-    lines.push(
-      '- Hors Trello\u00a0: m\u00eame id person-* via set_custom_assignees. upsert_person synchronise le catalogue.'
-    );
-    lines.push(
-      '- Personne inconnue\u00a0: UNE question (\u00ab\u00a0C\'est qui, ta boss?\u00a0\u00bb), puis upsert_person {name, relation:"ma boss", phone?, email?}.'
+      '- Alias / relation (\u00ab\u00a0ma boss\u00a0\u00bb)\u00a0: NOM propre partout. Inconnu\u00a0: UNE question, puis upsert_person.'
     );
     return lines;
   }

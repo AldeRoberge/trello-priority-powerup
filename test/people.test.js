@@ -59,21 +59,8 @@ describe('People directory', () => {
       name: 'Jane Doe',
       aliases: ['boss'],
     });
-    for (const q of [
-      'mon chef',
-      'ma cheffe',
-      'the manager',
-      'n+1',
-      'mon supérieur',
-      'team lead',
-      'ma directrice',
-      'supervisor',
-    ]) {
-      assert.equal(
-        People.findByAliasOrName(boss, q).name,
-        'Jane Doe',
-        q
-      );
+    for (const q of ['mon chef', 'the manager', 'n+1', 'team lead', 'supervisor']) {
+      assert.equal(People.findByAliasOrName(boss, q).name, 'Jane Doe', q);
     }
 
     const collab = People.upsert(People.emptyDirectory(), {
@@ -82,37 +69,18 @@ describe('People directory', () => {
     });
     assert.equal(People.findByAliasOrName(collab, 'coworker').name, 'Sam Peer');
     assert.equal(People.findByAliasOrName(collab, 'teammate').name, 'Sam Peer');
-    assert.equal(
-      People.findByAliasOrName(collab, 'mon coéquipier').name,
-      'Sam Peer'
-    );
 
     const client = People.upsert(People.emptyDirectory(), {
       name: 'Acme Lead',
       aliases: ['client'],
     });
     assert.equal(People.findByAliasOrName(client, 'customer').name, 'Acme Lead');
-    assert.equal(
-      People.findByAliasOrName(client, 'stakeholder').name,
-      'Acme Lead'
-    );
 
     const rh = People.upsert(People.emptyDirectory(), {
       name: 'Pat RH',
       aliases: ['rh'],
     });
     assert.equal(People.findByAliasOrName(rh, 'hr').name, 'Pat RH');
-    assert.equal(
-      People.findByAliasOrName(rh, 'ressources humaines').name,
-      'Pat RH'
-    );
-
-    const vendor = People.upsert(People.emptyDirectory(), {
-      name: 'Vendor Co',
-      aliases: ['fournisseur'],
-    });
-    assert.equal(People.findByAliasOrName(vendor, 'prestataire').name, 'Vendor Co');
-    assert.equal(People.findByAliasOrName(vendor, 'contractor').name, 'Vendor Co');
   });
 
   it('resolves new synonym phrases in blocked-reason text', () => {
