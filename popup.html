@@ -1997,6 +1997,18 @@
         onRestore: function (entryId) {
           return runHistoryRestore(entryId);
         },
+        canUndo: function () {
+          return !!(cardHistory && typeof cardHistory.canUndo === 'function' && cardHistory.canUndo());
+        },
+        canRedo: function () {
+          return !!(cardHistory && typeof cardHistory.canRedo === 'function' && cardHistory.canRedo());
+        },
+        onUndo: function () {
+          return runHistoryUndo();
+        },
+        onRedo: function () {
+          return runHistoryRedo();
+        },
         onLayoutChange: resizePopup
       });
     }
@@ -3211,6 +3223,9 @@
         },
         onLayoutChange: resizePopup,
         onJump: jumpToSection,
+        onOpenGoals: function () {
+          return openGoalsSettings();
+        },
         onAuthorize: function () {
           return PriorityTrello.authorizeRestForAutoSort(t);
         },
@@ -6189,7 +6204,57 @@
               try { completionUi.focusAddInput(); } catch (e) { /* ignore */ }
             }, 0);
           }
-        }
+        },
+        getContextMenuItems: function (api) {
+          if (
+            !window.ContextMenu ||
+            typeof ContextMenu.buildProgressItems !== 'function'
+          ) {
+            return [];
+          }
+          var data = completionUi && typeof completionUi.getData === 'function'
+            ? completionUi.getData()
+            : latestCompletion;
+          var blocked = !!(data && data.masterBlocked);
+          return ContextMenu.buildProgressItems({
+            isExpanded: api.isExpanded,
+            setExpanded: api.setExpanded,
+            isBlocked: blocked,
+            completeAll: function () {
+              api.setExpanded(true);
+              if (completionUi && typeof completionUi.completeAllTasks === 'function') {
+                completionUi.completeAllTasks();
+              }
+            },
+            resetAll: function () {
+              api.setExpanded(true);
+              if (completionUi && typeof completionUi.resetAllTasks === 'function') {
+                completionUi.resetAllTasks();
+              }
+            },
+            focusAdd: function () {
+              api.setExpanded(true);
+              if (completionUi && typeof completionUi.focusAddInput === 'function') {
+                setTimeout(function () {
+                  try { completionUi.focusAddInput(); } catch (e) { /* ignore */ }
+                }, 0);
+              }
+            },
+            setBlocked: function (on) {
+              api.setExpanded(true);
+              if (!completionUi) return;
+              if (on && typeof completionUi.setMasterBlocked === 'function') {
+                completionUi.setMasterBlocked(true);
+              } else if (!on) {
+                if (typeof completionUi.clearAllBlocked === 'function') {
+                  completionUi.clearAllBlocked();
+                } else if (typeof completionUi.setMasterBlocked === 'function') {
+                  completionUi.setMasterBlocked(false);
+                }
+              }
+            },
+          });
+        },
       });
 
       return Promise.all([

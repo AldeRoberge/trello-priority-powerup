@@ -6093,6 +6093,8 @@
       focusAddInput: function () {
         addInput.focus();
       },
+      completeAllTasks: completeAllTasks,
+      resetAllTasks: resetAllTasks,
       el: containerEl,
     };
   }

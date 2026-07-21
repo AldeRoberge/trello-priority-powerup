@@ -3187,6 +3187,81 @@
             );
           }
           sectionLabelRow.appendChild(sectionCell);
+          if (
+            global.ContextMenu &&
+            typeof global.ContextMenu.bind === 'function' &&
+            typeof global.ContextMenu.buildGanttSectionItems === 'function'
+          ) {
+            ContextMenu.bind(sectionLabelRow, function () {
+              var selectedCardIds = selectedRows()
+                .filter(function (r) {
+                  return r && r.kind === 'card' && r.cardId;
+                })
+                .map(function (r) {
+                  return r.cardId;
+                });
+              return ContextMenu.buildGanttSectionItems({
+                sectionKey: row.sectionKey || 'pending',
+                expanded: sectionOpen,
+                selectedCount: selectedCardIds.length,
+                hideBlocked: !!state.hideBlocked,
+                onToggleExpand: function () {
+                  toggleExpand(row.id);
+                },
+                onCollapseAll: function () {
+                  var order =
+                    model.STATE_SECTION_ORDER ||
+                    ['started', 'pending', 'blocked'];
+                  for (var si = 0; si < order.length; si++) {
+                    state.expanded['section:' + order[si]] = false;
+                  }
+                  renderChart();
+                },
+                onExpandAll: function () {
+                  var order2 =
+                    model.STATE_SECTION_ORDER ||
+                    ['started', 'pending', 'blocked'];
+                  for (var sj = 0; sj < order2.length; sj++) {
+                    state.expanded['section:' + order2[sj]] = true;
+                  }
+                  renderChart();
+                },
+                onMoveSelection: function () {
+                  applySectionDrop(selectedCardIds, row.sectionKey);
+                },
+                onSelectCards: function () {
+                  var kids = row.children || [];
+                  state.selected = Object.create(null);
+                  for (var ki = 0; ki < kids.length; ki++) {
+                    if (kids[ki] && kids[ki].id) {
+                      state.selected[kids[ki].id] = true;
+                      if (typeof expandSubtreeForSelect === 'function') {
+                        expandSubtreeForSelect(kids[ki]);
+                      }
+                    }
+                  }
+                  renderBulkBar();
+                  renderChart();
+                },
+                onToggleHideBlocked: function (next) {
+                  state.hideBlocked = !!next;
+                  persistFilters();
+                  var checks = root.querySelectorAll('.gantt-check');
+                  for (var ci = 0; ci < checks.length; ci++) {
+                    if (
+                      checks[ci].textContent &&
+                      /bloqu/i.test(checks[ci].textContent)
+                    ) {
+                      var inp = checks[ci].querySelector('input');
+                      if (inp) inp.checked = !!next;
+                      break;
+                    }
+                  }
+                  renderChart();
+                },
+              });
+            });
+          }
           labelsCol.appendChild(sectionLabelRow);
 
           var sectionTimeRow = el(

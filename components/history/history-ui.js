@@ -141,7 +141,35 @@
         if (typeof PriorityUI.saveSectionCollapseState === 'function') {
           PriorityUI.saveSectionCollapseState({ historique: !!isExpanded });
         }
-      }
+      },
+      getContextMenuItems: function (api) {
+        if (
+          !global.ContextMenu ||
+          typeof global.ContextMenu.buildHistoryItems !== 'function'
+        ) {
+          return [];
+        }
+        var canUndo =
+          typeof options.canUndo === 'function'
+            ? !!options.canUndo()
+            : !!options.canUndo;
+        var canRedo =
+          typeof options.canRedo === 'function'
+            ? !!options.canRedo()
+            : !!options.canRedo;
+        return ContextMenu.buildHistoryItems({
+          isExpanded: api.isExpanded,
+          setExpanded: api.setExpanded,
+          canUndo: canUndo,
+          canRedo: canRedo,
+          undo: function () {
+            if (typeof options.onUndo === 'function') options.onUndo();
+          },
+          redo: function () {
+            if (typeof options.onRedo === 'function') options.onRedo();
+          },
+        });
+      },
     });
 
     function buildDetailPanel(entry) {

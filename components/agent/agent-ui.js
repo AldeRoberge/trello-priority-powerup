@@ -36,6 +36,41 @@
     else if (err) console.error(domain + '.' + event, err);
   }
 
+  /**
+   * Page bridges (popup.html) pass Trello helpers as mount options. The mount
+   * facade must forward them or buildContext / executeActions never see them
+   * (e.g. getCardLabels → context.labels stays empty → AI invents "no labels").
+   */
+  var OPTIONAL_BRIDGE_FNS = [
+    'getCardLabels',
+    'getBoardLabels',
+    'loadCardLabels',
+    'loadBoardLabels',
+    'addLabel',
+    'removeLabel',
+    'createLabel',
+    'getBoardMembers',
+    'loadBoardMembers',
+    'addMember',
+    'removeMember',
+    'setCustomAssignees',
+    'setMemberRoles',
+    'getHistory',
+    'historyUndo',
+    'historyRedo',
+    'historyRevert'
+  ];
+
+  function attachOptionalBridgeFns(bridge, options) {
+    if (!bridge || !options) return bridge;
+    OPTIONAL_BRIDGE_FNS.forEach(function (name) {
+      if (typeof options[name] === 'function') {
+        bridge[name] = options[name];
+      }
+    });
+    return bridge;
+  }
+
   function el(tag, className, attrs) {
     var node = document.createElement(tag);
     if (className) node.className = className;
@@ -294,6 +329,9 @@
         return Promise.resolve({ ok: false, reason: 'no-selectStatut' });
       }
     };
+    // Page-provided Trello helpers (popup.html). Without these, buildContext
+    // never sees étiquettes / board members / history, and set_labels fails.
+    attachOptionalBridgeFns(bridge, options);
     var onMemoryUpdate =
       typeof options.onMemoryUpdate === 'function' ? options.onMemoryUpdate : null;
     var onCardMemoryUpdate =
@@ -1094,7 +1132,34 @@
           options.onExpandChange(!!isExpanded);
         }
         if (isExpanded) scrollMessagesToBottom();
-      }
+      },
+      getContextMenuItems: function (api) {
+        if (
+          !global.ContextMenu ||
+          typeof global.ContextMenu.buildAgentItems !== 'function'
+        ) {
+          return [];
+        }
+        return ContextMenu.buildAgentItems({
+          isExpanded: api.isExpanded,
+          setExpanded: api.setExpanded,
+          collapseLabel: 'Replier Assistant',
+          expandLabel: 'D\u00e9velopper Assistant',
+          openSettings: function (opts) {
+            setSettingsOpen(true);
+            if (opts && opts.memory) {
+              memoryDetails.open = true;
+              if (typeof syncMemoryBadge === 'function') syncMemoryBadge();
+              if (opts.mountMemory && typeof mountMemoryUi === 'function') {
+                mountMemoryUi(
+                  opts.mountMemory === 'onboarding' ? 'onboarding' : 'ongoing'
+                );
+              }
+            }
+          },
+          focusComposer: openAndFocusComposer,
+        });
+      },
     });
 
     /** Pin chat to latest message; re-run after layout (dock / unhide / fonts). */
@@ -8736,6 +8801,9 @@
   }
 
   global.AgentUI = {
-    mount: mount
+    mount: mount,
+    /** @internal exposed for unit tests */
+    attachOptionalBridgeFns: attachOptionalBridgeFns,
+    OPTIONAL_BRIDGE_FNS: OPTIONAL_BRIDGE_FNS
   };
 })(typeof window !== 'undefined' ? window : this);

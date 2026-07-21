@@ -14528,7 +14528,41 @@
       expanded: config.expanded != null ? !!config.expanded : true,
       getSummary: summaryText,
       onLayoutChange: onLayoutChange,
-      onExpandChange: config.onExpandChange || function () {}
+      onExpandChange: config.onExpandChange || function () {},
+      getContextMenuItems: function (api) {
+        if (
+          !global.ContextMenu ||
+          typeof global.ContextMenu.buildInfoItems !== 'function'
+        ) {
+          return [];
+        }
+        return ContextMenu.buildInfoItems({
+          isExpanded: api.isExpanded,
+          setExpanded: api.setExpanded,
+          focusTitle: function () {
+            api.setExpanded(true);
+            try {
+              titleInput.focus();
+            } catch (e) { /* ignore */ }
+          },
+          focusDesc: function () {
+            api.setExpanded(true);
+            if (typeof focusDescEditor === 'function') {
+              focusDescEditor(false);
+            } else {
+              try {
+                descInput.focus();
+              } catch (e2) { /* ignore */ }
+            }
+          },
+          openGoals:
+            typeof config.onOpenGoals === 'function'
+              ? function () {
+                  config.onOpenGoals();
+                }
+              : null,
+        });
+      },
     });
 
     renderMembers();
@@ -18715,7 +18749,32 @@
         if (typeof config.onExpandChange === 'function') {
           config.onExpandChange(expanded, options);
         }
-      }
+      },
+      getContextMenuItems: function (api) {
+        if (
+          !global.ContextMenu ||
+          typeof global.ContextMenu.buildDueItems !== 'function'
+        ) {
+          return [];
+        }
+        var hasDue = !!(
+          current ||
+          (currentMode === DUE_DATE_MODE_VAGUE && currentVague)
+        );
+        return ContextMenu.buildDueItems({
+          isExpanded: api.isExpanded,
+          setExpanded: api.setExpanded,
+          suggestions: DUE_DATE_QUICK_SUGGESTIONS,
+          applyQuick: function (id) {
+            api.setExpanded(true);
+            applyQuickSuggestion(id);
+          },
+          clearDue: function () {
+            clearDueDateAndTime();
+          },
+          clearDisabled: !hasDue,
+        });
+      },
     });
     refreshCountdown();
     refreshStartTrigger();
@@ -18728,6 +18787,8 @@
       getValues: getValues,
       setValue: setValue,
       setEnabled: setEnabled,
+      applyQuickSuggestion: applyQuickSuggestion,
+      clearDueDateAndTime: clearDueDateAndTime,
       refreshTimeFormat: function () {
         refreshCountdown();
       },
@@ -19825,7 +19886,23 @@
       onExpandChange: config.onExpandChange || null,
       onLayoutChange: function () {
         syncGraphVisibility();
-      }
+      },
+      getContextMenuItems: function (api) {
+        if (
+          !global.ContextMenu ||
+          typeof global.ContextMenu.buildExpandToggleItem !== 'function'
+        ) {
+          return [];
+        }
+        return [
+          ContextMenu.buildExpandToggleItem({
+            isExpanded: api.isExpanded,
+            setExpanded: api.setExpanded,
+            collapseLabel: 'Replier Calcul',
+            expandLabel: 'D\u00e9velopper Calcul',
+          }),
+        ];
+      },
     });
     graphCollapsed = !graphCollapse.isExpanded();
 
@@ -20370,7 +20447,25 @@
         if (typeof variantConfig.onLayoutChange === 'function') {
           variantConfig.onLayoutChange();
         }
-      }
+      },
+      getContextMenuItems: function (api) {
+        if (
+          !global.ContextMenu ||
+          typeof global.ContextMenu.buildPriorityItems !== 'function'
+        ) {
+          return [];
+        }
+        return ContextMenu.buildPriorityItems({
+          isExpanded: api.isExpanded,
+          setExpanded: api.setExpanded,
+          graphExpanded: !!(calcGraph && calcGraph.isExpanded && calcGraph.isExpanded()),
+          toggleGraph: function (wantOpen) {
+            if (calcGraph && typeof calcGraph.setCollapsed === 'function') {
+              calcGraph.setCollapsed(!wantOpen);
+            }
+          },
+        });
+      },
     });
 
     var wizardHooks = {
