@@ -7057,6 +7057,17 @@
               }
             );
           },
+          refreshPeople: async function () {
+            if (!window.People || typeof People.load !== 'function') {
+              return cachedPeople;
+            }
+            try {
+              cachedPeople = await People.load(t, { force: true });
+            } catch (e) {
+              console.error('People.refresh failed', e);
+            }
+            return cachedPeople;
+          },
           applyPeople: async function (next) {
             if (!next || typeof next !== 'object') return cachedPeople;
             cachedPeople = next;

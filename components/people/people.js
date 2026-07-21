@@ -34,9 +34,11 @@
   var MAX_NOTES = 400;
   var MAX_RELATION = 80;
   var LOAD_TTL_MS = 30000;
+  /** Soft refresh window for agent turns (cross-window profile edits). */
+  var AGENT_REFRESH_MAX_AGE_MS = 5000;
   var loadCache = { directory: null, at: 0, inflight: null };
 
-  /** Possessive / article prefixes commonly used with role aliases in FR. */
+  /** Possessive / article prefixes commonly used with role aliases in FR/EN. */
   var FR_DET = [
     'ma',
     'mon',
@@ -50,6 +52,10 @@
     'la',
     'le',
     'les',
+    'du',
+    'au',
+    'aux',
+    'des',
     'notre',
     'nos',
     'votre',
@@ -57,7 +63,12 @@
     'leur',
     'leurs',
     'my',
-    'our'
+    'our',
+    'your',
+    'his',
+    'her',
+    'their',
+    'the'
   ];
 
   /**
@@ -65,106 +76,280 @@
    * Keys are normalized (accent-folded lowercase).
    */
   var ALIAS_SYNONYM_GROUPS = [
+    // Manager / boss / N+1
     [
       'boss',
       'patron',
       'patronne',
       'manager',
+      'manageuse',
       'n+1',
       'n plus 1',
+      'n+ 1',
+      'hierarchie',
       'superieur',
       'superieure',
+      'superieur hierarchique',
+      'superieure hierarchique',
       'responsable',
+      'chef',
+      'cheffe',
+      'chef de service',
+      'cheffe de service',
+      'chef d equipe',
+      'cheffe d equipe',
+      'team lead',
+      'teamlead',
+      'team leader',
+      'leader',
       'directeur',
       'directrice',
       'director',
       'dirigeant',
-      'dirigeante'
+      'dirigeante',
+      'pdg',
+      'ceo',
+      'vp',
+      'vice-president',
+      'vice-presidente',
+      'vice president',
+      'superviseur',
+      'superviseure',
+      'supervisor',
+      'superior'
     ],
-    ['collegue', 'coworker', 'co-worker', 'equipier', 'equipiere', 'pair'],
-    ['client', 'cliente', 'customer'],
-    ['conjoint', 'conjointe', 'partenaire', 'spouse', 'mari', 'femme']
+    // Skip-level / N+2
+    [
+      'n+2',
+      'n plus 2',
+      'n+ 2',
+      'grand patron',
+      'grande patronne',
+      'skip level',
+      'skip-level',
+      'skiplevel',
+      'boss du boss',
+      'patron du patron'
+    ],
+    // Colleague / teammate
+    [
+      'collegue',
+      'collegues',
+      'coworker',
+      'co-worker',
+      'co worker',
+      'coworkers',
+      'equipier',
+      'equipiere',
+      'equipiers',
+      'coequipier',
+      'coequipiere',
+      'teammate',
+      'team mate',
+      'team-mate',
+      'pair',
+      'pairs',
+      'peer',
+      'peers',
+      'compagnon de travail',
+      'compagne de travail'
+    ],
+    // Client / customer
+    [
+      'client',
+      'cliente',
+      'clients',
+      'clientele',
+      'customer',
+      'customers',
+      'acheteur',
+      'acheteuse',
+      'donneur d ordre',
+      'donneuse d ordre',
+      'commanditaire',
+      'sponsor',
+      'stakeholder',
+      'partie prenante'
+    ],
+    // Vendor / supplier / partner org
+    [
+      'fournisseur',
+      'fournisseuse',
+      'vendor',
+      'supplier',
+      'prestataire',
+      'sous-traitant',
+      'sous traitant',
+      'contractor',
+      'consultant',
+      'consultante',
+      'partenaire externe',
+      'agence'
+    ],
+    // Spouse / partner (personal)
+    [
+      'conjoint',
+      'conjointe',
+      'partenaire',
+      'conjoint.e',
+      'spouse',
+      'mari',
+      'femme',
+      'epoux',
+      'epouse',
+      'copain',
+      'copine',
+      'chum',
+      'blonde',
+      'boyfriend',
+      'girlfriend',
+      'fiance',
+      'fiancee',
+      'compagnon',
+      'compagne'
+    ],
+    // Assistant / admin
+    [
+      'adjoint',
+      'adjointe',
+      'assistant',
+      'assistante',
+      'executive assistant',
+      'secretaire',
+      'adjointe administrative',
+      'adjoint administratif',
+      'personal assistant',
+      'assistante de direction',
+      'assistant de direction'
+    ],
+    // Intern / junior
+    [
+      'stagiaire',
+      'intern',
+      'interne',
+      'junior',
+      'apprenti',
+      'apprentie',
+      'trainee',
+      'etudiant',
+      'etudiante',
+      'co-op',
+      'coop'
+    ],
+    // Mentor / coach
+    [
+      'mentor',
+      'mentore',
+      'mentorat',
+      'coach',
+      'coaching',
+      'sponsor interne',
+      'parrain',
+      'marraine'
+    ],
+    // HR / RH
+    [
+      'rh',
+      'hr',
+      'ressources humaines',
+      'human resources',
+      'people ops',
+      'people operations',
+      'recruteur',
+      'recruteuse',
+      'recruiter'
+    ],
+    // IT / tech support (avoid bare "it" — too common in EN)
+    [
+      'ti',
+      'informatique',
+      'support ti',
+      'support it',
+      'helpdesk',
+      'help desk',
+      'service desk',
+      'sysadmin',
+      'admin systeme',
+      'tech support',
+      'soutien technique'
+    ],
+    // Finance / accounting
+    [
+      'finance',
+      'finances',
+      'comptable',
+      'comptabilite',
+      'accounting',
+      'controller',
+      'controleur',
+      'controleuse',
+      'payroll',
+      'paie'
+    ],
+    // Legal / compliance
+    [
+      'juridique',
+      'legal',
+      'avocat',
+      'avocate',
+      'counsel',
+      'compliance',
+      'conformite',
+      'notaire'
+    ],
+    // Family (common blockers / context)
+    [
+      'mere',
+      'maman',
+      'mom',
+      'mother',
+      'pere',
+      'papa',
+      'dad',
+      'father',
+      'frere',
+      'soeur',
+      'brother',
+      'sister',
+      'beau-pere',
+      'belle-mere',
+      'beau pere',
+      'belle mere',
+      'beau-frere',
+      'belle-soeur'
+    ],
+    // Doctor / health
+    [
+      'medecin',
+      'docteur',
+      'docteure',
+      'doctor',
+      'therapeute',
+      'psy',
+      'psychologue',
+      'physiotherapeute',
+      'physio'
+    ],
+    // Contact / point person / PM
+    [
+      'contact',
+      'point de contact',
+      'point person',
+      'interlocuteur',
+      'interlocutrice',
+      'referent',
+      'referente',
+      'responsable dossier',
+      'product owner',
+      'project manager',
+      'chef de projet',
+      'cheffe de projet',
+      'gestionnaire de projet'
+    ]
   ];
 
-  /**
-   * From a free-text relation ("my boss", "ma boss", "directeur") produce
-   * canonical aliases the matcher / agent can use.
-   */
-  function aliasesFromRelation(relation) {
-    var raw = clampStr(relation, MAX_RELATION);
-    if (!raw) return [];
-    var t = normKey(raw);
-    var out = [raw];
-    function push(s) {
-      if (s && out.indexOf(s) === -1) out.push(s);
-    }
-    // Strip "my/ma/mon…" to get the role noun when present.
-    var bare = t;
-    for (var d = 0; d < FR_DET.length; d++) {
-      var pref = FR_DET[d] + ' ';
-      if (bare.indexOf(pref) === 0) {
-        bare = bare.slice(pref.length);
-        break;
-      }
-    }
-    if (bare && bare !== t) push(bare);
-
-    for (var g = 0; g < ALIAS_SYNONYM_GROUPS.length; g++) {
-      var group = ALIAS_SYNONYM_GROUPS[g];
-      var hit = false;
-      for (var i = 0; i < group.length; i++) {
-        if (t === group[i] || bare === group[i] || t.indexOf(group[i]) !== -1) {
-          hit = true;
-          break;
-        }
-      }
-      if (hit) {
-        for (var j = 0; j < group.length; j++) push(group[j]);
-        // Common FR possessives for the primary noun.
-        push('ma ' + group[0]);
-        push('mon ' + group[0]);
-        push('my ' + group[0]);
-      }
-    }
-    return normalizeStringList(out, MAX_ALIAS, MAX_ALIASES);
-  }
-
-  /**
-   * Harvest boss/colleague-style aliases from roles + notes when relation empty.
-   */
-  function inferAliasesFromRolesAndNotes(roles, notes) {
-    var blob = normKey((roles || []).join(' ') + ' ' + (notes || ''));
-    if (!blob) return [];
-    var out = [];
-    for (var g = 0; g < ALIAS_SYNONYM_GROUPS.length; g++) {
-      var group = ALIAS_SYNONYM_GROUPS[g];
-      for (var i = 0; i < group.length; i++) {
-        if (blob.indexOf(group[i]) !== -1) {
-          out = out.concat(group);
-          out.push('ma ' + group[0], 'mon ' + group[0], 'my ' + group[0]);
-          break;
-        }
-      }
-    }
-    return normalizeStringList(out, MAX_ALIAS, MAX_ALIASES);
-  }
-
-  function rememberDirectory(directory) {
-    loadCache.directory = directory;
-    loadCache.at = Date.now();
-    return directory;
-  }
-
-  function cachedDirectory() {
-    if (!loadCache.directory) return null;
-    if (Date.now() - loadCache.at > LOAD_TTL_MS) return null;
-    return loadCache.directory;
-  }
-
-  function clearLoadCache() {
-    loadCache.directory = null;
-    loadCache.at = 0;
-    loadCache.inflight = null;
+  function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   function foldAccents(s) {
@@ -179,6 +364,104 @@
       .replace(/['’]/g, "'")
       .replace(/\s+/g, ' ')
       .trim();
+  }
+
+  /** Strip a single leading FR/EN determinant ("ma boss" → "boss"). */
+  function stripLeadingDet(folded) {
+    var bare = String(folded || '');
+    for (var d = 0; d < FR_DET.length; d++) {
+      var pref = FR_DET[d] + ' ';
+      if (bare.indexOf(pref) === 0) {
+        return bare.slice(pref.length).trim();
+      }
+    }
+    return bare;
+  }
+
+  /**
+   * True when needle appears in haystack as a whole phrase (not mid-word).
+   * "chef" matches "mon chef" / "chef de service"; not "parchemin".
+   */
+  function phraseContains(haystack, needle) {
+    if (!haystack || !needle) return false;
+    if (haystack === needle) return true;
+    var re = new RegExp(
+      '(?:^|\\s)' + escapeRegExp(needle) + '(?=\\s|$)'
+    );
+    return re.test(haystack);
+  }
+
+  /**
+   * Longest synonym-group member that matches text (exact or whole-phrase).
+   * Preferring length avoids "chef" beating "chef de projet".
+   */
+  function findSynonymGroupForText(text) {
+    var t = normKey(text);
+    if (!t) return null;
+    var bare = stripLeadingDet(t);
+    var bestGroup = null;
+    var bestLen = -1;
+    for (var g = 0; g < ALIAS_SYNONYM_GROUPS.length; g++) {
+      var group = ALIAS_SYNONYM_GROUPS[g];
+      for (var i = 0; i < group.length; i++) {
+        var member = group[i];
+        if (
+          t === member ||
+          bare === member ||
+          phraseContains(t, member) ||
+          phraseContains(bare, member)
+        ) {
+          if (member.length > bestLen) {
+            bestLen = member.length;
+            bestGroup = group;
+          }
+        }
+      }
+    }
+    return bestGroup;
+  }
+
+  /**
+   * From a free-text relation ("my boss", "ma boss", "directeur") produce
+   * compact seed aliases. Full synonym expansion happens at match time.
+   */
+  function aliasesFromRelation(relation) {
+    var raw = clampStr(relation, MAX_RELATION);
+    if (!raw) return [];
+    var t = normKey(raw);
+    var out = [raw];
+    function push(s) {
+      if (s && out.indexOf(s) === -1) out.push(s);
+    }
+    var bare = stripLeadingDet(t);
+    if (bare && bare !== t) push(bare);
+
+    var group = findSynonymGroupForText(t);
+    if (group && group[0]) {
+      // Primary group key so expandedAliasKeys can expand the whole set.
+      push(group[0]);
+    }
+    return normalizeStringList(out, MAX_ALIAS, MAX_ALIASES);
+  }
+
+  function rememberDirectory(directory) {
+    loadCache.directory = directory;
+    loadCache.at = Date.now();
+    return directory;
+  }
+
+  function cachedDirectory(maxAgeMs) {
+    if (!loadCache.directory) return null;
+    var ttl =
+      typeof maxAgeMs === 'number' && maxAgeMs >= 0 ? maxAgeMs : LOAD_TTL_MS;
+    if (Date.now() - loadCache.at > ttl) return null;
+    return loadCache.directory;
+  }
+
+  function clearLoadCache() {
+    loadCache.directory = null;
+    loadCache.at = 0;
+    loadCache.inflight = null;
   }
 
   function personId() {
@@ -241,20 +524,28 @@
       typeof raw.id === 'string' && /^person-[a-z0-9-]+$/i.test(raw.id.trim())
         ? raw.id.trim()
         : personId();
+    var relation = clampStr(raw.relation, MAX_RELATION);
+    var roles = normalizeStringList(raw.roles, MAX_ROLE, MAX_ROLES);
+    var notes = clampStr(raw.notes, MAX_NOTES);
     var aliases = normalizeStringList(raw.aliases, MAX_ALIAS, MAX_ALIASES);
-    // Drop aliases that equal the canonical name.
+    // Relation → compact aliases (my boss → boss). Synonyms expand at match time.
+    aliases = normalizeStringList(
+      aliases.concat(aliasesFromRelation(relation)),
+      MAX_ALIAS,
+      MAX_ALIASES
+    );
     aliases = aliases.filter(function (a) {
       return normKey(a) !== normKey(name);
     });
-    var roles = normalizeStringList(raw.roles, MAX_ROLE, MAX_ROLES);
     return {
       id: id,
       name: name,
+      relation: relation,
       aliases: aliases,
       roles: roles,
       email: clampStr(raw.email, MAX_EMAIL),
       phone: clampStr(raw.phone, MAX_PHONE),
-      notes: clampStr(raw.notes, MAX_NOTES),
+      notes: notes,
       trelloMemberId:
         typeof raw.trelloMemberId === 'string' && raw.trelloMemberId.trim()
           ? raw.trelloMemberId.trim().slice(0, 64)
@@ -301,6 +592,12 @@
     }
     (person.aliases || []).forEach(add);
     (person.roles || []).forEach(add);
+    // Relation is a first-class match source (even before aliases are seeded).
+    if (person.relation) {
+      add(person.relation);
+      var relBare = stripLeadingDet(normKey(person.relation));
+      if (relBare) add(relBare);
+    }
     // Expand synonym groups when any member is present.
     var allKeys = Object.keys(keys);
     for (var g = 0; g < ALIAS_SYNONYM_GROUPS.length; g++) {
@@ -360,14 +657,7 @@
     var q = normKey(query);
     if (!q) return null;
     // Strip leading determinant for secondary match.
-    var qBare = q;
-    for (var d = 0; d < FR_DET.length; d++) {
-      var pref = FR_DET[d] + ' ';
-      if (qBare.indexOf(pref) === 0) {
-        qBare = qBare.slice(pref.length);
-        break;
-      }
-    }
+    var qBare = stripLeadingDet(q);
 
     var people = Array.isArray(directoryOrPeople)
       ? directoryOrPeople
@@ -503,6 +793,7 @@
       : {
           id: personId(),
           name: '',
+          relation: '',
           aliases: [],
           roles: [],
           email: '',
@@ -516,6 +807,10 @@
       base.name = clampStr(patch.name, MAX_NAME);
     }
     if (!base.name) return dir;
+
+    if (Object.prototype.hasOwnProperty.call(patch, 'relation')) {
+      base.relation = clampStr(patch.relation, MAX_RELATION);
+    }
 
     if (Array.isArray(patch.aliases) || typeof patch.aliases === 'string') {
       base.aliases = normalizeStringList(patch.aliases, MAX_ALIAS, MAX_ALIASES);
@@ -600,6 +895,7 @@
       return {
         id: p.id,
         name: p.name,
+        relation: p.relation || null,
         aliases: (p.aliases || []).slice(),
         roles: (p.roles || []).slice(),
         email: p.email || null,
@@ -613,14 +909,16 @@
     var list = toAgentContext(directoryOrPeople);
     if (!list.length) {
       return [
-        'Personnes (annuaire)\u00a0: vide. Si l\'utilisateur parle de \u00ab\u00a0ma boss\u00a0\u00bb / \u00ab\u00a0mon patron\u00a0\u00bb / un r\u00f4le sans nom connu\u00a0: DEMANDE qui c\'est, puis upsert_person. N\'invente JAMAIS un nom.'
+        'Personnes / coll\u00e8gues (annuaire)\u00a0: vide. Si l\'utilisateur parle de \u00ab\u00a0ma boss\u00a0\u00bb / un coll\u00e8gue sans nom connu\u00a0: DEMANDE qui c\'est, puis upsert_person. N\'invente JAMAIS un nom.'
       ];
     }
     var lines = [
-      'Personnes (annuaire membre \u2014 source de v\u00e9rit\u00e9 pour alias / r\u00f4les)\u00a0:'
+      'Personnes / coll\u00e8gues (annuaire membre \u2014 TU CONNAIS CES GENS)\u00a0:',
+      '- Tu as leurs coordonn\u00e9es (t\u00e9l\u00e9phone, courriel, r\u00f4le, relation). Si on te demande le num\u00e9ro / courriel / qui est ta boss\u00a0: R\u00c9PONDS avec ces faits. INTERDIT de dire que tu ne sais pas quand la fiche est ci-dessous.'
     ];
     list.forEach(function (p) {
       var bits = [p.name];
+      if (p.relation) bits.push('relation\u00a0: ' + p.relation);
       if (p.aliases && p.aliases.length) {
         bits.push('alias\u00a0: ' + p.aliases.join(', '));
       }
@@ -628,18 +926,21 @@
         bits.push('r\u00f4les\u00a0: ' + p.roles.join(', '));
       }
       if (p.email) bits.push('email\u00a0: ' + p.email);
-      if (p.phone) bits.push('t\u00e9l\u00a0: ' + p.phone);
+      if (p.phone) bits.push('t\u00e9l\u00e9phone\u00a0: ' + p.phone);
       if (p.notes) bits.push('notes\u00a0: ' + p.notes);
       lines.push('- ' + bits.join(' \u00b7 '));
     });
     lines.push(
-      '- Quand l\'utilisateur dit un alias / r\u00f4le (ex. \u00ab\u00a0ma boss\u00a0\u00bb)\u00a0: utilise le NOM propre dans messages, blockedReasons, sous-t\u00e2ches et set_custom_assignees (ex. \u00ab\u00a0En attente de la r\u00e9ponse de Jane Doe\u00a0\u00bb / add:["Jane Doe"]), jamais le seul r\u00f4le.'
+      '- Ex. user \u00ab\u00a0c\'est quoi le t\u00e9l\u00e9phone de ma boss?\u00a0\u00bb + fiche Sylviane (relation boss, t\u00e9l\u00a0: 819-\u2026) \u2192 r\u00e9ponds le num\u00e9ro de Sylviane Mailhot tout de suite.'
     );
     lines.push(
-      '- Hors Trello\u00a0: chaque personne de cet annuaire est aussi assignable via set_custom_assignees (m\u00eame id person-*). upsert_person synchronise le catalogue Hors Trello du tableau.'
+      '- Quand l\'utilisateur dit un alias / relation (ex. \u00ab\u00a0ma boss\u00a0\u00bb)\u00a0: utilise le NOM propre partout (messages, blockedReasons, set_custom_assignees).'
     );
     lines.push(
-      '- Personne inconnue\u00a0: pose UNE question (\u00ab\u00a0C\'est qui, ta boss?\u00a0\u00bb), puis upsert_person {name, aliases:[\'boss\']} \u00e0 la r\u00e9ponse. Ne stocke pas seulement un fait m\u00e9moire libre.'
+      '- Hors Trello\u00a0: m\u00eame id person-* via set_custom_assignees. upsert_person synchronise le catalogue.'
+    );
+    lines.push(
+      '- Personne inconnue\u00a0: UNE question (\u00ab\u00a0C\'est qui, ta boss?\u00a0\u00bb), puis upsert_person {name, relation:"ma boss", aliases, phone?}.'
     );
     return lines;
   }
@@ -741,31 +1042,44 @@
     };
   }
 
-  async function load(t) {
+  async function load(t, options) {
+    options = options || {};
+    var force = !!options.force;
     if (!t || typeof t.get !== 'function') {
       dbgLog('people', 'load', { ok: false, reason: 'no-client' });
       return emptyDirectory();
     }
-    var hit = cachedDirectory();
-    if (hit) return hit;
-    if (loadCache.inflight) return loadCache.inflight;
+    if (!force) {
+      var hit = cachedDirectory();
+      if (hit) return hit;
+      if (loadCache.inflight) return loadCache.inflight;
+    } else {
+      clearLoadCache();
+    }
 
-    loadCache.inflight = (async function () {
+    var fetchPromise = (async function () {
       try {
         var stored = await t.get('member', 'private', STORAGE_KEY);
         var directory = normalizeDirectory(stored);
-        dbgLog('people', 'load', { ok: true, count: directory.people.length });
+        dbgLog('people', 'load', {
+          ok: true,
+          count: directory.people.length,
+          force: force
+        });
         return rememberDirectory(directory);
       } catch (err) {
         dbgError('people', 'load', err);
         console.error('People.load failed', err);
         return rememberDirectory(emptyDirectory());
       } finally {
-        loadCache.inflight = null;
+        if (loadCache.inflight === fetchPromise) {
+          loadCache.inflight = null;
+        }
       }
     })();
 
-    return loadCache.inflight;
+    if (!force) loadCache.inflight = fetchPromise;
+    return fetchPromise;
   }
 
   async function save(t, directory) {
@@ -797,10 +1111,12 @@
     MAX_PEOPLE: MAX_PEOPLE,
     MAX_NAME: MAX_NAME,
     MAX_NOTES: MAX_NOTES,
+    MAX_RELATION: MAX_RELATION,
     emptyDirectory: emptyDirectory,
     normalizeDirectory: normalizeDirectory,
     normalizePerson: normalizePerson,
     initialsFromName: initialsFromName,
+    aliasesFromRelation: aliasesFromRelation,
     findByAliasOrName: findByAliasOrName,
     resolveInText: resolveInText,
     toCustomAssignee: toCustomAssignee,

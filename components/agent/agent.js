@@ -3892,7 +3892,7 @@
       '- set_agent_name: { name: string } (nouveau nom de l\'assistant\u00a0; name obligatoire, non vide, max ~40 car.\u00a0; persiste pour le membre)',
       '- set_agent_color: { color: string } (couleur d\'identit\u00e9\u00a0: orange|yellow|green|purple|blue|pink|red|teal|coral|sky, alias FR, ou hex #RRGGBB\u00a0; persiste pour le membre)',
       '- set_agent_personality: { personality: string } (trait de personnalit\u00e9 / character\u00a0; obligatoire, non vide, max ~400 car.\u00a0; persiste pour le membre)',
-      '- upsert_person: { name: string, aliases?: string[], roles?: string[], email?: string, phone?: string, notes?: string, matchText?: string, addAlias?: string, addRole?: string } (annuaire Personnes membre\u00a0; context.people\u00a0; cr\u00e9e ou met \u00e0 jour)',
+      '- upsert_person: { name: string, relation?: string, aliases?: string[], roles?: string[], email?: string, phone?: string, notes?: string, matchText?: string, addAlias?: string, addRole?: string } (annuaire Personnes membre\u00a0; context.people\u00a0; relation ex. \u00ab\u00a0ma boss\u00a0\u00bb\u00a0; cr\u00e9e ou met \u00e0 jour)',
       '- remove_person: { matchText|name|id: string } (retire une personne de l\'annuaire)',
       'Identit\u00e9 de l\'assistant (nom / couleur / personnalit\u00e9)\u00a0:',
       '- Tu PEUX changer ton nom, ta couleur d\'identit\u00e9 et ta personnalit\u00e9. INTERDIT de dire que tu ne peux pas / que tu gardes ton ancienne identit\u00e9.',
@@ -15465,6 +15465,7 @@
               : typeof args.id === 'string'
                 ? args.id.trim()
                 : '',
+          relation: args.relation,
           aliases: args.aliases,
           roles: args.roles,
           email: args.email,

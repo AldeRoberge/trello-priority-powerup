@@ -239,6 +239,10 @@
       getCardMemory: options.getCardMemory || function () { return null; },
       getProfile: options.getProfile || function () { return null; },
       getPeople: options.getPeople || function () { return null; },
+      refreshPeople:
+        typeof options.refreshPeople === 'function'
+          ? options.refreshPeople
+          : null,
       getCustomAssigneeCatalog:
         typeof options.getCustomAssigneeCatalog === 'function'
           ? options.getCustomAssigneeCatalog
@@ -577,48 +581,10 @@
     var modelSelectField = labeledInput('Mod\u00e8le', modelSelect);
     var modelInputField = labeledInput('Mod\u00e8le', modelInput);
 
-    var MODEL_MODE_OPTIONS = [
-      { id: 'auto', label: 'Automatique (l\'assistant choisit)' },
-      { id: 'efficient', label: '\u00c9conome' },
-      { id: 'balanced', label: '\u00c9quilibr\u00e9' },
-      { id: 'capable', label: 'Puissant' }
-    ];
-    var modelModeSelect = el('select', 'agent-input agent-model-mode-select', {
-      'aria-label': 'Mode co\u00fbt / finesse'
-    });
-    MODEL_MODE_OPTIONS.forEach(function (m) {
-      modelModeSelect.appendChild(
-        el('option', null, { value: m.id, text: m.label })
-      );
-    });
-    var modelModeField = labeledInput('Mode', modelModeSelect);
-
     providerBody.appendChild(labeledInput('Cl\u00e9 API', apiKeyInput));
     providerBody.appendChild(labeledInput('URL de base', baseUrlInput));
     providerBody.appendChild(modelSelectField);
     providerBody.appendChild(modelInputField);
-    providerBody.appendChild(modelModeField);
-
-    modelModeSelect.addEventListener('change', function () {
-      var nextMode =
-        typeof Agent.normalizeModelMode === 'function'
-          ? Agent.normalizeModelMode(modelModeSelect.value)
-          : modelModeSelect.value || 'auto';
-      provider = Agent.normalizeProvider(
-        Object.assign({}, provider, { modelMode: nextMode })
-      );
-      modelModeSelect.value = provider.modelMode || 'auto';
-      if (!t) return;
-      Agent.saveProvider(t, provider)
-        .then(function (saved) {
-          provider = Agent.normalizeProvider(saved);
-          savedProvider = Agent.normalizeProvider(saved);
-        })
-        .catch(function (err) {
-          console.error('AgentUI: modelMode save failed', err);
-        });
-    });
-
     var STATUS_PREF_STORAGE_KEY = 'trello-priority-powerup/agent-status';
     var LEGACY_DEBUG_PREF_STORAGE_KEY = 'trello-priority-powerup/agent-debug-enabled';
     var STATUS_LEVELS = ['none', 'standard', 'full'];
@@ -915,6 +881,40 @@
       placeholder: 'Demandez ce que vous voulez',
       'aria-label': 'Message \u00e0 l\'assistant'
     });
+    var MODEL_MODE_OPTIONS = [
+      { id: 'auto', label: 'Auto' },
+      { id: 'efficient', label: '\u00c9conome' },
+      { id: 'balanced', label: '\u00c9quilibr\u00e9' },
+      { id: 'capable', label: 'Puissant' }
+    ];
+    var modelModeSelect = el('select', 'agent-model-mode-select', {
+      'aria-label': 'Mode co\u00fbt / finesse',
+      title: 'Mode co\u00fbt / finesse'
+    });
+    MODEL_MODE_OPTIONS.forEach(function (m) {
+      modelModeSelect.appendChild(
+        el('option', null, { value: m.id, text: m.label })
+      );
+    });
+    modelModeSelect.addEventListener('change', function () {
+      var nextMode =
+        typeof Agent.normalizeModelMode === 'function'
+          ? Agent.normalizeModelMode(modelModeSelect.value)
+          : modelModeSelect.value || 'auto';
+      provider = Agent.normalizeProvider(
+        Object.assign({}, provider, { modelMode: nextMode })
+      );
+      modelModeSelect.value = provider.modelMode || 'auto';
+      if (!t) return;
+      Agent.saveProvider(t, provider)
+        .then(function (saved) {
+          provider = Agent.normalizeProvider(saved);
+          savedProvider = Agent.normalizeProvider(saved);
+        })
+        .catch(function (err) {
+          console.error('AgentUI: modelMode save failed', err);
+        });
+    });
     var sendBtn = el('button', 'tp-button agent-send-btn', {
       type: 'button',
       'aria-label': 'Envoyer'
@@ -949,6 +949,7 @@
     } else {
       composer.appendChild(input);
     }
+    composer.appendChild(modelModeSelect);
     composer.appendChild(sendBtn);
     chatPanel.appendChild(suggestionsEl);
     chatPanel.appendChild(composer);
@@ -2081,6 +2082,30 @@
       return { ok: true, directory: next };
     };
 
+    /**
+     * Re-read member People from Trello so coworker phone/email/relation
+     * edited in another window (profile) are visible on the next turn.
+     */
+    async function refreshPeopleDirectory() {
+      if (typeof bridge.refreshPeople === 'function') {
+        try {
+          await bridge.refreshPeople();
+          return;
+        } catch (e) { /* fall through */ }
+      }
+      if (!t || !global.People || typeof global.People.load !== 'function') {
+        return;
+      }
+      try {
+        var dir = await global.People.load(t, { force: true });
+        if (typeof options.onPeopleLoaded === 'function') {
+          options.onPeopleLoaded(dir);
+        }
+      } catch (err) {
+        console.error('AgentUI refreshPeople failed', err);
+      }
+    }
+
     function fillSettingsForm() {
       apiKeyInput.value = provider.apiKey || '';
       baseUrlInput.value = provider.baseUrl || '';
@@ -2165,6 +2190,7 @@
       // Keep composer typable during in-flight turns; extra sends go to messageQueue.
       composer.hidden = !configured;
       sendBtn.disabled = !configured;
+      modelModeSelect.disabled = !configured;
       input.disabled = !configured;
       if (!configured) {
         clearSuggestions();
@@ -8235,6 +8261,10 @@
         }
         var turn;
         if (interviewActive && typeof Agent.cardInterviewTurn === 'function') {
+          try {
+            await refreshPeopleDirectory();
+          } catch (peopleRefreshErr) { /* keep cached people */ }
+          if (myGen !== chatTurnGen) return;
           turn = await Agent.cardInterviewTurn(
             provider,
             history.slice(0, -1),
@@ -8275,6 +8305,10 @@
             }
             if (myGen !== chatTurnGen) return;
           }
+          try {
+            await refreshPeopleDirectory();
+          } catch (peopleRefreshErr) { /* keep cached people */ }
+          if (myGen !== chatTurnGen) return;
           turn = await Agent.chatTurn(
             provider,
             history.slice(0, -1),

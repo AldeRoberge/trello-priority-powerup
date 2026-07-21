@@ -32,7 +32,10 @@ describe('People directory', () => {
     assert.equal(dir.people.length, 1);
     assert.equal(dir.people[0].name, 'Jane Doe');
     assert.ok(dir.people[0].id.startsWith('person-'));
-    assert.deepEqual(dir.people[0].aliases, ['boss', 'ma boss']);
+    assert.ok(dir.people[0].aliases.includes('boss'));
+    assert.ok(dir.people[0].aliases.includes('ma boss'));
+    // Synonym expansion (patron / manager / …) happens at match time, not in storage.
+    assert.equal(People.findByAliasOrName(dir, 'patron').name, 'Jane Doe');
     assert.deepEqual(dir.people[0].roles, ['Boss', 'N+1']);
     assert.equal(dir.people[0].email, 'jane@example.com');
     assert.equal(dir.people[0].phone, '514-555-0100');
@@ -49,6 +52,82 @@ describe('People directory', () => {
     assert.equal(People.findByAliasOrName(dir, 'patron').name, 'Jane Doe');
     assert.equal(People.findByAliasOrName(dir, 'Jane Doe').name, 'Jane Doe');
     assert.equal(People.findByAliasOrName(dir, 'inconnu'), null);
+  });
+
+  it('expands rich synonym groups across FR/EN workplace roles', () => {
+    const boss = People.upsert(People.emptyDirectory(), {
+      name: 'Jane Doe',
+      aliases: ['boss'],
+    });
+    for (const q of [
+      'mon chef',
+      'ma cheffe',
+      'the manager',
+      'n+1',
+      'mon supérieur',
+      'team lead',
+      'ma directrice',
+      'supervisor',
+    ]) {
+      assert.equal(
+        People.findByAliasOrName(boss, q).name,
+        'Jane Doe',
+        q
+      );
+    }
+
+    const collab = People.upsert(People.emptyDirectory(), {
+      name: 'Sam Peer',
+      aliases: ['collègue'],
+    });
+    assert.equal(People.findByAliasOrName(collab, 'coworker').name, 'Sam Peer');
+    assert.equal(People.findByAliasOrName(collab, 'teammate').name, 'Sam Peer');
+    assert.equal(
+      People.findByAliasOrName(collab, 'mon coéquipier').name,
+      'Sam Peer'
+    );
+
+    const client = People.upsert(People.emptyDirectory(), {
+      name: 'Acme Lead',
+      aliases: ['client'],
+    });
+    assert.equal(People.findByAliasOrName(client, 'customer').name, 'Acme Lead');
+    assert.equal(
+      People.findByAliasOrName(client, 'stakeholder').name,
+      'Acme Lead'
+    );
+
+    const rh = People.upsert(People.emptyDirectory(), {
+      name: 'Pat RH',
+      aliases: ['rh'],
+    });
+    assert.equal(People.findByAliasOrName(rh, 'hr').name, 'Pat RH');
+    assert.equal(
+      People.findByAliasOrName(rh, 'ressources humaines').name,
+      'Pat RH'
+    );
+
+    const vendor = People.upsert(People.emptyDirectory(), {
+      name: 'Vendor Co',
+      aliases: ['fournisseur'],
+    });
+    assert.equal(People.findByAliasOrName(vendor, 'prestataire').name, 'Vendor Co');
+    assert.equal(People.findByAliasOrName(vendor, 'contractor').name, 'Vendor Co');
+  });
+
+  it('resolves new synonym phrases in blocked-reason text', () => {
+    const dir = People.upsert(People.emptyDirectory(), {
+      name: 'Jane Doe',
+      aliases: ['chef'],
+    });
+    assert.equal(
+      People.resolveInText('Bloqué chez mon N+1', dir),
+      'Bloqué chez Jane Doe'
+    );
+    assert.match(
+      People.resolveInText('En attente du team lead', dir),
+      /Jane Doe/
+    );
   });
 
   it('resolves "la boss" to Jane Doe in blocked reason text', () => {
@@ -112,7 +191,7 @@ describe('People directory', () => {
     const ctx = People.toAgentContext(dir);
     assert.equal(ctx.length, 1);
     assert.equal(ctx[0].name, 'Jane Doe');
-    assert.deepEqual(ctx[0].aliases, ['boss']);
+    assert.ok(ctx[0].aliases.includes('boss'));
     assert.equal(ctx[0].email, 'j@x.com');
   });
 
@@ -126,7 +205,36 @@ describe('People directory', () => {
       })
     );
     assert.ok(filled.some((l) => /Jane Doe/.test(l)));
-    assert.ok(filled.some((l) => /NOM propre|alias/i.test(l)));
+    assert.ok(filled.some((l) => /CONNAIS|t[eé]l/i.test(l)));
+  });
+
+  it('relation "my boss" expands aliases and keeps phone for the agent', () => {
+    const dir = People.upsert(People.emptyDirectory(), {
+      name: 'Sylviane Mailhot',
+      relation: 'my boss',
+      roles: ['director'],
+      phone: '819-824-9613 poste: 2252',
+    });
+    const p = dir.people[0];
+    assert.equal(p.relation, 'my boss');
+    assert.equal(p.phone, '819-824-9613 poste: 2252');
+    assert.ok(People.findByAliasOrName(dir, 'ma boss'));
+    assert.ok(People.findByAliasOrName(dir, 'director'));
+    const ctx = People.toAgentContext(dir);
+    assert.equal(ctx[0].phone, '819-824-9613 poste: 2252');
+    assert.equal(ctx[0].relation, 'my boss');
+    const lines = People.peoplePromptLines(dir);
+    assert.ok(lines.some((l) => /819-824-9613/.test(l)));
+    assert.ok(lines.some((l) => /Sylviane Mailhot/.test(l)));
+  });
+
+  it('role director alone is enough to resolve ma boss', () => {
+    const dir = People.upsert(People.emptyDirectory(), {
+      name: 'Sylviane Mailhot',
+      roles: ['director'],
+      phone: '819-555-0000',
+    });
+    assert.equal(People.findByAliasOrName(dir, 'ma boss').name, 'Sylviane Mailhot');
   });
 });
 

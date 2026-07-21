@@ -3926,6 +3926,32 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
   align-items: flex-end;
 }
 
+.tp-page--priority .agent-model-mode-select {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  max-width: 7.5rem;
+  min-width: 5.5rem;
+  height: 32px;
+  padding: 0 6px;
+  border: 1px solid var(--tp-border-strong, rgba(9, 30, 66, 0.14));
+  border-radius: 3px;
+  background: var(--tp-elev-3, var(--tp-input-bg, #fff));
+  color: var(--tp-text, #172b4d);
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.tp-page--priority .agent-model-mode-select:focus {
+  outline: 2px solid var(--tp-primary, #0c66e4);
+  outline-offset: 1px;
+}
+
+.tp-page--priority .agent-model-mode-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .tp-page--priority .agent-interview-bar {
   display: flex;
   flex-wrap: wrap;

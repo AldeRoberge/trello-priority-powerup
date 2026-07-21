@@ -420,6 +420,11 @@
           roleChip.className = 'tp-people-role-chip';
           roleChip.textContent = person.roles[0];
           nameRow.appendChild(roleChip);
+        } else if (person.relation) {
+          var relChip = document.createElement('span');
+          relChip.className = 'tp-people-role-chip';
+          relChip.textContent = person.relation;
+          nameRow.appendChild(relChip);
         }
         body.appendChild(nameRow);
 
@@ -431,10 +436,19 @@
           body.appendChild(metaEl);
         }
 
+        var chips = [];
+        if (person.relation) chips.push(person.relation);
         if (person.aliases && person.aliases.length) {
+          person.aliases.forEach(function (a) {
+            if (!person.relation || a.toLowerCase() !== person.relation.toLowerCase()) {
+              chips.push(a);
+            }
+          });
+        }
+        if (chips.length) {
           var aliases = document.createElement('div');
           aliases.className = 'tp-people-aliases';
-          person.aliases.forEach(function (a) {
+          chips.slice(0, 8).forEach(function (a) {
             var chip = document.createElement('span');
             chip.className = 'tp-people-alias-chip';
             chip.textContent = a;
@@ -517,20 +531,26 @@
 
         var nameInput = field('Nom', 'peopleEditName', {
           value: (person && person.name) || '',
-          placeholder: 'ex. Jane Doe',
+          placeholder: 'ex. Sylviane Mailhot',
           maxlength: PeopleApi.MAX_NAME,
           autocomplete: 'name'
         });
-        var aliasesInput = field('Alias', 'peopleEditAliases', {
-          value: person && person.aliases ? person.aliases.join(', ') : '',
-          placeholder: 'ex. boss, ma boss, patron',
-          hint: 'Séparés par des virgules — l’assistant les reconnaît dans le chat.',
-          maxlength: 200
+        var relationInput = field('Relation avec toi', 'peopleEditRelation', {
+          value: (person && person.relation) || '',
+          placeholder: 'ex. ma boss, mon collègue, client',
+          hint: 'L’assistant s’en sert pour « ma boss » → ce contact.',
+          maxlength: PeopleApi.MAX_RELATION || 80
         });
         var rolesInput = field('Rôles', 'peopleEditRoles', {
           value: person && person.roles ? person.roles.join(', ') : '',
-          placeholder: 'ex. Boss, N+1',
+          placeholder: 'ex. Directrice, N+1',
           maxlength: 120
+        });
+        var aliasesInput = field('Alias (optionnel)', 'peopleEditAliases', {
+          value: person && person.aliases ? person.aliases.join(', ') : '',
+          placeholder: 'ex. SM, Sylviane',
+          hint: 'Surnoms en plus de la relation. La relation remplit déjà boss / patron…',
+          maxlength: 200
         });
         var emailInput = field('Courriel', 'peopleEditEmail', {
           type: 'email',
@@ -542,7 +562,7 @@
         var phoneInput = field('Téléphone', 'peopleEditPhone', {
           type: 'tel',
           value: (person && person.phone) || '',
-          placeholder: 'ex. 514-555-0100',
+          placeholder: 'ex. 819-824-9613 poste 2252',
           maxlength: 40,
           autocomplete: 'tel'
         });
@@ -568,6 +588,7 @@
           }
           var patch = {
             name: name,
+            relation: relationInput.value.trim(),
             aliases: splitChipField(aliasesInput.value),
             roles: splitChipField(rolesInput.value),
             email: emailInput.value.trim(),
