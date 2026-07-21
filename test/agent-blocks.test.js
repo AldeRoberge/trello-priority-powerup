@@ -262,6 +262,10 @@ describe('AgentBlocks', () => {
       AgentBlocks.normalizeBlockPlaceholderIndent('inline {{0}} keep'),
       'inline {{0}} keep'
     );
+    assert.equal(
+      AgentBlocks.normalizeBlockPlaceholderIndent('Priorité\n\u00a0\u00a0{{0}}'),
+      'Priorité\n{{0}}'
+    );
   });
 
   it('fills message content with placeholders and orphan blocks', () => {

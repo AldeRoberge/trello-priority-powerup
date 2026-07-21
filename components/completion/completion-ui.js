@@ -1,4 +1,21 @@
-/* Completion popup UI — subtask list and progress sliders. */
+/**
+ * Completion popup UI — subtask list, progress sliders, estimate chrome.
+ * Exposes window.CompletionUI (mountCompletionUI + color helpers).
+ *
+ * Role: DOM for the Progrès section. Persistence / aggregation live in
+ * CompletionTrello. Colors mirror PriorityUI’s OKLab approach (traffic /
+ * custom gradients). Celebrations go through CelebrationEffects.
+ *
+ * Table of contents
+ * ─────────────────
+ *  1. OKLab / completion color schemes + localStorage persistence
+ *  2. Encouragement bubble, fader HUD, slider track painting
+ *  3. Celebration hooks (all-complete, subtask pop)
+ *  4. mountCompletionUI — list, master slider, suggestions, estimates
+ *  5. Item progress / blocked / linked-card interactions
+ *  6. AI suggestion chips (suggestSubtasks bridge)
+ *  7. CompletionUI public API
+ */
 (function (global) {
   'use strict';
 
@@ -12,7 +29,8 @@
   var ENCOURAGEMENT_BUBBLE_CARET_X = 19;
   var ENCOURAGEMENT_BUBBLE_OFFSET_Y = 12;
 
-  // Perceptual color helpers (OKLab / OKLCH) — same approach as priority-ui.js.
+  // ── 1. OKLab / completion color schemes ─────────────────────────────────
+
   function srgbToLinear(c) {
     c /= 255;
     return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
@@ -1830,6 +1848,8 @@
     }
     return { checked: false, indeterminate: true };
   }
+
+  // ── mountCompletionUI — main Progrès editor ─────────────────────────────
 
   function mountCompletionUI(containerEl, options) {
     if (!containerEl) throw new Error('mountCompletionUI: container required');

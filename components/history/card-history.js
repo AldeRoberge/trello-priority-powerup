@@ -1,6 +1,11 @@
 /**
  * Persisted card edit history (undo / redo / revert).
  * Stored in card/private so it does not compete with shared plugin data.
+ * Exposes window.CardHistory.
+ *
+ * Hard limit: card/private is ONE 4096 budget shared with cardAgentChat —
+ * MAX_ENTRIES=8, MAX_SERIALIZED≈1000. Entries are slim diffs, not full snaps.
+ * UI (history-ui) calls record / undo / redo / revertTo.
  */
 (function (global) {
   'use strict';

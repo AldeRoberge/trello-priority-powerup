@@ -1,20 +1,33 @@
 /**
- * Priority UI + scoring for the Priorité Power-Up.
+ * Priority UI + scoring for the Cerveau / Priorité Power-Up.
  * Loaded via <script> — exposes window.PriorityUI (no module bundler).
  *
- * Table of contents
- * ─────────────────
- *  1. Formula weights & constants
- *  2. Labels, keywords, tiers & heat presets
- *  3. Icon registry (property level SVG)
- *  4. Matrix label bridge (PriorityMatrix)
- *  5. Math helpers & tier styling
- *  6. Scoring formulas (baseline, Eisenhower, WSJF, value/effort)
- *  7. Formatters & heat-preset override solvers
- *  8. Help modal
- *  9. Form controls (field, heat panel, calc graph / RSM)
- * 10. Variant mount & slider persistence
- * 11. PriorityUI public API
+ * Role: pure UI + math for the card popup editor (popup.html). Does NOT talk
+ * to Trello — that is PriorityTrello. Agent / completion / gantt call into
+ * this module for scoring, labels, markdown, due pickers, and section fields.
+ *
+ * Table of contents (approximate line ranges)
+ * ───────────────────────────────────────────
+ *  1.   Formula weights & constants; section-collapse keys
+ *  1b.  Task-type catalog (built-in + board custom)
+ *  1c.  Member-role catalog (built-in + board custom + card-local)
+ *  1d.  Custom assignees (“Hors Trello” people directory)
+ *  2.   Labels, keywords, tiers & heat presets
+ *  3.   Icon registry (axis levels, task types, due chrome)
+ *  3b.  Markdown / smart-card / link-unfurl rendering
+ *  3c.  Color schemes (OKLab ramps → Classique / Feu badges)
+ *  3d.  Due-date helpers (ISO, vague phrases, countdown copy)
+ *  4.   Matrix label bridge (PriorityMatrix)
+ *  5.   Math helpers & tier styling
+ *  6.   Scoring formulas (baseline, Eisenhower, WSJF, value/effort)
+ *  7.   Formatters & heat-preset override solvers
+ *  8.   Help modal + criteria wizard
+ *  9.   Form controls:
+ *         createField (urgency/impact/ease), statut, overview, info,
+ *         en-attente / blocked motifs, due date, heat panel, calc graph
+ * 10.   Variant mount & slider persistence (sandbox + popup shells)
+ * 10b.  Mini editors (Gantt popovers: priority / due / blocked)
+ * 11.   PriorityUI public API (exported on global)
  */
 (function (global) {
   'use strict';
@@ -82,10 +95,10 @@
   var preferredTimeFormat = '24';
   var SCORE_MAX = 10;
 
-  /**
-   * Multi-label task taxonomy (Information + AI interview).
-   * Order here is picker display order; selection order is preserved on the card.
-   */
+  // ── 1b. Task-type catalog (built-in + board custom) ─────────────────────
+  // Multi-label taxonomy for Information + AI interview. Picker order = array
+  // order; card selection order is preserved separately on save.
+
   /** Built-in task-type catalog (Information → Type de tâche). */
   var BUILTIN_TASK_TYPES = [
     { id: 'action', label: 'Action', hint: 'Action concr\u00e8te unique', icon: 'action' },
@@ -488,6 +501,10 @@
   var memberRoleCustoms = [];
   var MEMBER_ROLE_BY_ID = Object.create(null);
 
+  // ── 1c. Member-role catalog (built-in + board + card-local) ─────────────
+  // Roles tag board members / custom people (e.g. boss, peer). Board catalog
+  // is shared; card-local customs cover one-off labels until promoted.
+
   function rebuildMemberRoleIndex() {
     var map = Object.create(null);
     var i;
@@ -795,6 +812,10 @@
   /** Board-level Hors Trello people (mutable; set via setCustomAssigneeCatalog). */
   var customAssigneeCatalog = [];
 
+  // ── 1d. Custom assignees (“Hors Trello”) ────────────────────────────────
+  // People not on the Trello board; stored board-wide, merged into assignee
+  // pickers alongside real members (ids look like custom-person-*).
+
   function isCustomAssigneeId(id) {
     return typeof id === 'string' && CUSTOM_ASSIGNEE_ID_RE.test(id);
   }
@@ -891,6 +912,10 @@
     if (!name) return null;
     var draft = normalizeCustomAssigneeEntry({
       name: name,
+      id:
+        input && typeof input === 'object' && typeof input.id === 'string'
+          ? input.id
+          : undefined,
       trelloMemberId:
         input && typeof input === 'object'
           ? input.trelloMemberId || input.linkedMemberId || ''
@@ -1379,6 +1404,10 @@
     return '<svg class="due-date-suggestion-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">' +
       inner + '</svg>';
   }
+
+  // ── 3b. Markdown / smart-card / link helpers ────────────────────────────
+  // Description rich text: escape → markdown → optional unfurl / smart cards.
+  // Never trust model HTML; all user content goes through escapeHtml first.
 
   function escapeHtml(s) {
     return String(s)
@@ -2385,7 +2414,9 @@
     urgency: 'ti-flame'
   };
 
-  // Perceptual color helpers (OKLab / OKLCH) for scheme ramps and badge matching.
+  // ── 3c. Color schemes (OKLab / OKLCH ramps) ─────────────────────────────
+  // Perceptual helpers for Classique / Feu badge colors and heat matching.
+
   function srgbToLinear(c) {
     c /= 255;
     return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
@@ -3619,6 +3650,9 @@
     }
     return null;
   }
+
+  // ── 3d. Due-date helpers (labels, ISO, vague phrases, countdown) ────────
+  // Canonical storage is ISO + HH:MM; UI can show FR vague copy (“demain”).
 
   var DUE_DATE_LABEL = '\u00c9ch\u00e9ance';
   var DUE_DATE_PLACEHOLDER = 'Choisir une date';
@@ -6527,7 +6561,10 @@
     showWizardStep(initialStep);
   }
 
-  // ── 9. Form controls (field, heat panel, calc graph) ────────────────────
+  // ── 9. Form controls (popup sections) ───────────────────────────────────
+  // Factory functions return { root, setValue, … } controllers mounted into
+  // popup.html sections. Layout changes bubble via onLayoutChange → Trello
+  // iframe resize. Prefer these over ad-hoc DOM in other components.
 
   // Estimated duration helpers (shared with Progrès / agent).
   var DURATION_MIN_MINUTES = 5;
@@ -7222,6 +7259,9 @@
     }
     return svg;
   }
+
+  // Statut section: list-category picker (À faire / En cours / Bloqué / …)
+  // wired to StatutTrello settings. Embedded mode = card-back strip.
 
   function createStatutField(config) {
     var el = config.el;
@@ -14686,6 +14726,8 @@
     };
   }
 
+  // En attente / Bloqué: toggle + motif composer (reasons, waiting-on links).
+
   function createEnAttenteField(config) {
     var el = config.el;
     var checked = !!config.value;
@@ -16066,6 +16108,9 @@
           }
     };
   }
+
+  // Échéance section: start + due calendars, time, recurrence, vague phrases.
+  // Syncs with Trello card due/start via PriorityTrello (cardDueSyncedIso).
 
   function createDueDateField(config) {
     var el = config.el;

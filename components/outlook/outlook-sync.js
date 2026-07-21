@@ -1,4 +1,11 @@
-/* Outlook ↔ Trello card sync — mapping, merge, syncBoard/syncCard. */
+/**
+ * Outlook ↔ Trello card sync — mapping, merge, syncBoard / syncCard.
+ * Exposes window.OutlookSync. Depends on OutlookAuth, OutlookGraph, Gantt*.
+ *
+ * Bidirectional field set: name, desc, startDate, dueDate, dueTime.
+ * Graph all-day end is exclusive; cardId stored via Graph open extension.
+ * Orphan mappings (card gone) delete the Outlook event.
+ */
 (function (global) {
   'use strict';
 

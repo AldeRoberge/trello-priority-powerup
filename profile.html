@@ -319,6 +319,26 @@
         if (!PeopleApi) return peopleDirectory;
         try {
           peopleDirectory = await PeopleApi.save(t, peopleDirectory);
+          // Keep board Hors Trello catalog in sync (shared person-* ids).
+          if (
+            window.PriorityTrello &&
+            typeof PriorityTrello.getCustomAssigneeCatalog === 'function' &&
+            typeof PriorityTrello.saveCustomAssigneeCatalog === 'function' &&
+            typeof PeopleApi.mergeIntoAssigneeCatalog === 'function'
+          ) {
+            try {
+              var catalog = await PriorityTrello.getCustomAssigneeCatalog(t);
+              var merged = PeopleApi.mergeIntoAssigneeCatalog(
+                catalog,
+                peopleDirectory
+              );
+              if (merged && merged.changed) {
+                await PriorityTrello.saveCustomAssigneeCatalog(t, merged.catalog);
+              }
+            } catch (syncErr) {
+              console.error('People → Hors Trello sync failed', syncErr);
+            }
+          }
           renderPeopleList();
           if (showOk) setStatus('Personnes enregistrées.');
           return peopleDirectory;

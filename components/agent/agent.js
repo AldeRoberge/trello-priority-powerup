@@ -2,6 +2,37 @@
  * Priority Power-Up AI agent — OpenAI-compatible client, member-private
  * provider settings, JSON chat protocol with actionable follow-ups.
  * Exposes window.PriorityAgent (no bundler).
+ *
+ * Role: LLM I/O + action protocol. AgentUI mounts the chat chrome; this
+ * module builds context, calls the model, parses JSON turns, and executes
+ * actions against Trello bridges (PriorityTrello, CompletionTrello, …).
+ *
+ * Hard constraints
+ * ────────────────
+ * - Trello pluginData ≤ 4096 chars per scope/visibility (ALL keys combined).
+ *   card/private is shared with cardEditHistory — keep chat/interview slim.
+ * - Assistant replies are JSON (message + actions + suggestions + blocks).
+ * - Never trust model HTML; UI renders via AgentUI / AgentBlocks safely.
+ *
+ * Table of contents
+ * ─────────────────
+ *  1.  Debug helpers, storage keys, assistant scopes (task vs project)
+ *  2.  Model tiers / modes / OpenAI–OpenRouter presets
+ *  3.  Task-type / color / point-at / effect normalizers
+ *  4.  Blocked-reason + People alias resolution; priority explanations
+ *  5.  Provider CRUD (member-private), apiFetch, relative-due rewrites
+ *  6.  Turn guards (due / why / progress-complete / Québec libre / highlights)
+ *  7.  buildContext(bridge) — card snapshot for the system prompt
+ *  8.  Heuristic + LLM suggest* helpers (subtasks, labels, goals, metrics…)
+ *  9.  memoryTurn — board long-term / short-term memory chat
+ * 10.  Card first-open interview (Akinator / Q20) + cardInterviewTurn
+ * 11.  Per-card / board chat history (budget-capped pluginData)
+ * 12.  Suggestions enrichment (heat, icons, impact-reach, subtask pick)
+ * 13.  parseAssistantPayload + chatCompletions (streaming-capable)
+ * 14.  chatTurn — main conversational loop
+ * 15.  Status brief / progress summary / cardDreamTurn (post-chat consolidate)
+ * 16.  executeAction / executeActions — apply model tools to the board
+ * 17.  PriorityAgent public API
  */
 (function (global) {
   'use strict';
@@ -187,6 +218,8 @@
     balanced: 'gpt-5.4-mini',
     capable: 'gpt-5.4'
   };
+
+  // ── 2. Model tiers / modes / curated OpenAI list ─────────────────────────
 
   function stripModelPrefix(modelId) {
     var id = String(modelId || '').trim();
@@ -1064,6 +1097,9 @@
       'Cette t\u00e2che est ' + parts[0] + ' et ' + parts[1] + ', donc ' + conclusion + '.'
     );
   }
+
+  // ── 5. Provider settings + HTTP ──────────────────────────────────────────
+  // Stored member/private (agentProvider). Fingerprint gates “verified”.
 
   function normalizeBaseUrl(url) {
     if (typeof url !== 'string') return '';
@@ -2534,6 +2570,9 @@
     return out.slice(0, 4);
   }
 
+  // ── 7. buildContext — card/board snapshot fed to systemPrompt ────────────
+  // Bridge is a thin facade from AgentUI / popup over Trello Power-Up APIs.
+
   function buildContext(bridge) {
     var ctx = {
       today: todayIsoLocal(),
@@ -2613,6 +2652,26 @@
       } catch (e) {
         ctx.people = [];
       }
+    }
+    if (typeof bridge.getCustomAssigneeCatalog === 'function') {
+      try {
+        var horsCatalog = bridge.getCustomAssigneeCatalog();
+        if (Array.isArray(horsCatalog) && horsCatalog.length) {
+          ctx.customAssigneeCatalog = horsCatalog
+            .map(function (p) {
+              if (!p || typeof p !== 'object') return null;
+              return {
+                id: p.id || '',
+                name: p.name || '',
+                trelloMemberId: p.trelloMemberId || undefined
+              };
+            })
+            .filter(function (p) {
+              return p && p.name;
+            })
+            .slice(0, 40);
+        }
+      } catch (eCatCtx) { /* ignore */ }
     }
     if (typeof bridge.getMemory === 'function') {
       try {
@@ -3640,7 +3699,7 @@
       '- Assign\u00e9s\u00a0: \u00ab\u00a0assigne-moi\u00a0\u00bb / \u00ab\u00a0ajoute Alice\u00a0\u00bb \u2192 set_members {add:[...]}. \u00ab\u00a0retire Bob\u00a0\u00bb \u2192 remove. Utilise context.boardMembers / ownership.',
       '- Ex. assign\u00e9\u00a0: user \u00ab\u00a0assigne-moi\u00a0\u00bb \u2192 {"message":"Okay, tu es assign\u00e9.","suggestions":[],"followUps":[],"actions":[{"tool":"set_members","args":{"add":[{"id":"(context.ownership.you.id)"}]}}]} \u2014 remplace id par context.ownership.you.id r\u00e9el.',
       '- \u00c9tiquettes\u00a0: set_labels {add/remove/create}. create:{name,color?} si le label n\'existe pas encore sur le board.',
-      '- Personnes hors Trello\u00a0: set_custom_assignees {add:["Sam"]}. R\u00f4les\u00a0: set_member_roles {matchText:"Alice", roles:["Montage","Sous-titres"]}.',
+      '- Personnes hors Trello\u00a0: set_custom_assignees {add:["Sam"]}. Alias de context.people OK (ex. add:["ma boss"] \u2192 Jane Doe). R\u00f4les\u00a0: set_member_roles {matchText:"Alice", roles:["Montage","Sous-titres"]}.',
       '- Checklist (sous-sous-t\u00e2ches)\u00a0: add_checklist_item sous une sous-t\u00e2che locale (pas une carte li\u00e9e). Ex. {"tool":"add_checklist_item","args":{"parentMatchText":"Valider le devis","text":"Relire les chiffres"}}.',
       '- Historique\u00a0: history_undo / history_redo, ou history_revert {matchLabel:"Priorit\u00e9"} / {steps:1}.',
       '- Si l\'utilisateur donne un d\u00e9lai (\u00ab\u00a0dans N minutes/heures\u00a0\u00bb)\u00a0: APPLIQUE set_due avec relativeMinutes/relativeHours (+ dueEnabled:true) TOUT DE SUITE. Ne redemande pas date ni heure.',
@@ -3792,7 +3851,7 @@
       '- Chaque bloc a un champ enabled. Si enabled=false, la section est d\u00e9sactiv\u00e9e\u00a0: les valeurs saved* / latentes NE comptent PAS.',
       '- Priorit\u00e9 active seulement si priority.enabled=true.',
       '- \u00c9ch\u00e9ance active seulement si due.enabled=true (sinon dueDate/dueTime actifs sont null). due.dueMode="vague" + due.dueVague + due.dueLabel d\u00e9crivent un horizon flou (\u00ab\u00a0\u00c0 faire \u00e9ventuellement\u00a0\u00bb)\u00a0; ne redemande pas une date pr\u00e9cise. due.startDate / due.recurrence d\u00e9crivent d\u00e9but et r\u00e9p\u00e9tition.',
-      '- Assign\u00e9s\u00a0: context.ownership.members (carte) + context.boardMembers (tableau). \u00c9tiquettes\u00a0: context.labels (carte) + context.boardLabels (tableau). Personnes custom\u00a0: context.customAssignees. R\u00f4les\u00a0: context.memberRoles + context.memberRoleCatalog. Historique\u00a0: context.history.',
+      '- Assign\u00e9s\u00a0: context.ownership.members (carte) + context.boardMembers (tableau). \u00c9tiquettes\u00a0: context.labels (carte) + context.boardLabels (tableau). Personnes custom\u00a0: context.customAssignees (carte) + context.customAssigneeCatalog (tableau Hors Trello) + context.people (annuaire / alias). R\u00f4les\u00a0: context.memberRoles + context.memberRoleCatalog. Historique\u00a0: context.history.',
       '- Bloqu\u00e9 / en attente actif SEULEMENT si blocked.enabled=true (identique \u00e0 enAttente\u00a0; la cause s\u2019\u00e9dite sous Statut quand la carte est en Bloqu\u00e9).',
       '- Si blocked.enabled=false, la carte N\'EST PAS bloqu\u00e9e, m\u00eame si savedReasons contient d\'anciennes causes.',
       '- Progr\u00e8s actif seulement si progress.enabled=true.',
@@ -3805,7 +3864,7 @@
       '- set_blocked: { enAttente?: boolean, blockedReasons?: string[], blockedLinks?: [{id?:string, matchText?:string, label?:string}] } (enAttente:true seul suffit\u00a0; causes et liens optionnels\u00a0; synchronise Progr\u00e8s blocked\u00a0; si progr\u00e8s \u00e0 100%, le runtime le remet \u00e0 0% \u2014 ajoute aussi set_progress)',
       '- set_members: { add?: (string|{id?,matchText?,name?})[], remove?: (string|{id?,matchText?})[], clear?: boolean } (assigne / retire des membres du tableau\u00a0; match via context.boardMembers / ownership.members)',
       '- set_labels: { add?: (string|{id?,matchText?,name?,color?})[], remove?: (string|{id?,matchText?})[], create?: {name:string, color?:string}, clear?: boolean } (\u00e9tiquettes Trello\u00a0; match via context.boardLabels / labels)',
-      '- set_custom_assignees: { add?: (string|{name})[], remove?: (string|{id?,matchText?})[], clear?: boolean } (personnes hors Trello sur la carte\u00a0; context.customAssignees)',
+      '- set_custom_assignees: { add?: (string|{name})[], remove?: (string|{id?,matchText?})[], clear?: boolean } (personnes hors Trello sur la carte\u00a0; context.customAssignees + context.customAssigneeCatalog\u00a0; r\u00e9sout aussi context.people aliases)',
       '- set_member_roles: { matchText|memberId|name, roles: string[], clear?: boolean } (r\u00f4les\u00a0: subtitles|coloring|editing|music ou libell\u00e9s FR\u00a0; context.memberRoleCatalog)',
       '- add_checklist_item: { parentMatchText|parentId, text, done?, progress? } (sous-sous-t\u00e2che sous une sous-t\u00e2che locale)',
       '- remove_checklist_item / rename_checklist_item / set_checklist_progress: { parentMatchText|parentId, matchText|id, text?, progress? }',
@@ -3908,6 +3967,9 @@
    * Accepts legacy string arrays or mixed objects from the model.
    * @returns {Array<{type:'text'|'link', text:string, cardId?:string, list?:string}>}
    */
+  // ── 8. Suggest / split / estimate helpers (LLM + heuristics) ─────────────
+  // Used by Progrès UI and agent tools; prefer heuristics when API is down.
+
   function normalizeProgressSuggestions(raw, boardCards, options) {
     options = options || {};
     var max =
@@ -7743,6 +7805,9 @@
   }
 
   /** Drop tool calls that are missing required args (e.g. empty add_subtask). */
+  // ── 12. Action + suggestion normalizers (post-model) ─────────────────────
+  // Models emit loose JSON; these coerce to executable action shapes.
+
   function hasSubtaskRef(args) {
     return (
       (typeof args.id === 'string' && !!args.id.trim()) ||
@@ -8954,6 +9019,8 @@
     return null;
   }
 
+  // ── 13. Parse model JSON + chatCompletions HTTP ──────────────────────────
+
   function parseAssistantPayload(content) {
     var text = typeof content === 'string' ? content.trim() : '';
     if (!text) {
@@ -9409,6 +9476,9 @@
    * @param {(visibleMessage: string, accumulatedRaw: string) => void} [options.onDelta]
    *   Called as tokens arrive with the best-effort visible assistant message.
    */
+  // ── 14. chatTurn — primary conversational entry (task or project scope) ──
+  // Builds messages, calls model, runs guards, returns { message, actions… }.
+
   async function chatTurn(provider, history, bridge, userText, options) {
     options = options || {};
     dbgLog('agent', 'chatTurn.start', {});
@@ -12243,6 +12313,9 @@
    *
    * Returns { ok, skipped?, reason?, updated?, desc?, applied?, usage?, debug }.
    */
+  // ── 15. Card dream — background consolidate after chat settles ───────────
+  // Writes card memory / status brief / progress summary; must stay cheap.
+
   async function cardDreamTurn(provider, bridge, options) {
     options = options || {};
     var onDebug = typeof options.onDebug === 'function' ? options.onDebug : null;
@@ -12885,9 +12958,24 @@
     return '';
   }
 
-  function matchCustomAssignee(list, spec) {
+  function matchCustomAssignee(list, spec, peopleDirectory) {
     var people = Array.isArray(list) ? list : [];
-    if (!people.length || spec == null || spec === '') return null;
+    if (spec == null || spec === '') return null;
+
+    // Resolve aliases via People directory first (ma boss → Jane Doe).
+    var resolved = null;
+    if (
+      global.People &&
+      typeof global.People.resolveAssigneeSpec === 'function' &&
+      peopleDirectory
+    ) {
+      try {
+        resolved = global.People.resolveAssigneeSpec(peopleDirectory, spec);
+      } catch (e) {
+        resolved = null;
+      }
+    }
+
     var idWant = '';
     var textWant = '';
     if (typeof spec === 'string' || typeof spec === 'number') {
@@ -12902,6 +12990,13 @@
         '';
       textWant = String(textWant).trim();
     }
+    if (resolved) {
+      if (resolved.id) idWant = resolved.id;
+      if (resolved.name) textWant = resolved.name;
+    }
+
+    if (!people.length) return null;
+
     if (idWant) {
       for (var i = 0; i < people.length; i++) {
         if (people[i] && String(people[i].id) === idWant) return people[i];
@@ -12917,6 +13012,44 @@
     for (var k = 0; k < people.length; k++) {
       var name = normalizeMatchKey((people[k] && people[k].name) || '');
       if (name && name.indexOf(key) >= 0) return people[k];
+    }
+    return null;
+  }
+
+  /**
+   * Build a Hors Trello draft from an add-spec, preferring People directory
+   * (shared person-* id + canonical name).
+   */
+  function draftCustomAssigneeFromSpec(spec, peopleDirectory) {
+    if (
+      global.People &&
+      typeof global.People.resolveAssigneeSpec === 'function' &&
+      peopleDirectory
+    ) {
+      try {
+        var fromPeople = global.People.resolveAssigneeSpec(peopleDirectory, spec);
+        if (fromPeople && fromPeople.name) {
+          if (
+            typeof PriorityUI !== 'undefined' &&
+            typeof PriorityUI.createCustomAssignee === 'function'
+          ) {
+            return PriorityUI.createCustomAssignee(fromPeople);
+          }
+          return fromPeople;
+        }
+      } catch (e) { /* fall through */ }
+    }
+    if (
+      typeof PriorityUI !== 'undefined' &&
+      typeof PriorityUI.createCustomAssignee === 'function'
+    ) {
+      return PriorityUI.createCustomAssignee(spec);
+    }
+    if (typeof spec === 'string' && spec.trim()) {
+      return { name: spec.trim() };
+    }
+    if (spec && typeof spec === 'object' && typeof spec.name === 'string') {
+      return { name: spec.name.trim(), id: spec.id, trelloMemberId: spec.trelloMemberId };
     }
     return null;
   }
@@ -13585,6 +13718,9 @@
     }
     return lines.join('\n');
   }
+
+  // ── 16. executeAction(s) — apply one tool call to Trello via bridge ──────
+  // Keep side-effects here (not in the UI). Unknown types → soft error.
 
   async function executeAction(bridge, action) {
     if (!bridge || !action || !action.tool) {
@@ -15356,6 +15492,28 @@
               'Mise \u00e0 jour personne \u00e9chou\u00e9e'
           };
         }
+        // Sync into board Hors Trello catalog (same person-* id) so the
+        // assignee picker and set_custom_assignees share the contact.
+        if (
+          upsertResult.person &&
+          typeof bridge.upsertCustomAssigneeCatalog === 'function'
+        ) {
+          try {
+            var horsDraft =
+              global.People && typeof global.People.toCustomAssignee === 'function'
+                ? global.People.toCustomAssignee(upsertResult.person)
+                : {
+                    id: upsertResult.person.id,
+                    name: upsertResult.person.name,
+                    trelloMemberId: upsertResult.person.trelloMemberId
+                  };
+            if (horsDraft && horsDraft.name) {
+              await Promise.resolve(
+                bridge.upsertCustomAssigneeCatalog(horsDraft)
+              );
+            }
+          } catch (eSyncHors) { /* non-fatal */ }
+        }
         return {
           ok: true,
           tool: tool,
@@ -15734,6 +15892,7 @@
         ) {
           people = PriorityUI.normalizeCustomAssignees(people);
         }
+        var peopleDirForAssign = getPeopleFromBridge(bridge);
         if (args.clear === true) {
           people = [];
         }
@@ -15741,7 +15900,11 @@
         if (Array.isArray(args.remove)) removePeople = args.remove;
         else if (args.remove != null) removePeople = [args.remove];
         for (var rpi = 0; rpi < removePeople.length; rpi++) {
-          var hit = matchCustomAssignee(people, removePeople[rpi]);
+          var hit = matchCustomAssignee(
+            people,
+            removePeople[rpi],
+            peopleDirForAssign
+          );
           if (!hit) {
             return {
               ok: false,
@@ -15758,15 +15921,31 @@
         else if (args.add != null) addPeople = [args.add];
         for (var api = 0; api < addPeople.length; api++) {
           var spec = addPeople[api];
-          var existing = matchCustomAssignee(people, spec);
+          var existing = matchCustomAssignee(
+            people,
+            spec,
+            peopleDirForAssign
+          );
           if (existing) continue;
-          var created = null;
+          // Also try board Hors Trello catalog before creating a new entry.
           if (
-            typeof PriorityUI !== 'undefined' &&
-            typeof PriorityUI.createCustomAssignee === 'function'
+            typeof bridge.getCustomAssigneeCatalog === 'function' &&
+            typeof PriorityUI !== 'undefined'
           ) {
-            created = PriorityUI.createCustomAssignee(spec);
+            try {
+              var catalog = bridge.getCustomAssigneeCatalog() || [];
+              var catalogHit = matchCustomAssignee(
+                catalog,
+                spec,
+                peopleDirForAssign
+              );
+              if (catalogHit) {
+                people.push(catalogHit);
+                continue;
+              }
+            } catch (eCat) { /* ignore */ }
           }
+          var created = draftCustomAssigneeFromSpec(spec, peopleDirForAssign);
           if (!created || !created.name) {
             return {
               ok: false,
@@ -15843,9 +16022,10 @@
         var customsForRoles = Array.isArray(stateRoles.customAssignees)
           ? stateRoles.customAssignees
           : [];
+        var peopleDirForRoles = getPeopleFromBridge(bridge);
         var targetMember =
           matchBoardMember(poolMembers, args) ||
-          matchCustomAssignee(customsForRoles, args);
+          matchCustomAssignee(customsForRoles, args, peopleDirForRoles);
         if ((!targetMember || !targetMember.id) && args.memberId) {
           targetMember = { id: String(args.memberId) };
         }
@@ -16897,6 +17077,7 @@
     matchBoardMember: matchBoardMember,
     matchBoardLabel: matchBoardLabel,
     matchCustomAssignee: matchCustomAssignee,
+    draftCustomAssigneeFromSpec: draftCustomAssigneeFromSpec,
     resolveMemberRoleId: resolveMemberRoleId,
     rewriteActionsForRelativeDue: rewriteActionsForRelativeDue,
     detectPriorityTierInText: detectPriorityTierInText,

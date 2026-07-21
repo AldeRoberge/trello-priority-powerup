@@ -1,6 +1,10 @@
 /**
- * Structured visual blocks for assistant chat turns.
- * Safe: all user/model strings go through textContent; no HTML from the model.
+ * Structured visual blocks for assistant chat turns ({{0}} placeholders).
+ * Exposes window.AgentBlocks. Safe: strings via textContent; no model HTML.
+ *
+ * Types: priority, subtask, card_ref, due, statut, project, progress, diff,
+ * members, labels, blocked, task_types. normalize() coerces model JSON;
+ * render() builds DOM; strip/hide helpers support streaming.
  */
 (function (global) {
   'use strict';
@@ -591,25 +595,26 @@
     return text;
   }
 
-  /**
-   * Drop leading indent before {{n}} markers so pre-wrap bubbles do not
-   * push block cards inward when the model indents placeholders.
-   */
+  /** Drop leading indent before {{n}} markers so pre-wrap bubbles do not
+   * push block cards inward when the model indents placeholders
+   * (spaces, tabs, and French nbsp / narrow-nbsp). */
   function normalizeBlockPlaceholderIndent(text) {
     if (typeof text !== 'string' || !text) return text || '';
-    return text.replace(/^[ \t]+(\{\{\d+\}\})/gm, '$1');
+    return text.replace(/^[\t \u00a0\u202f]+(\{\{\d+\}\})/gm, '$1');
   }
 
-  /** Trailing spaces/tabs before a block (keep newlines). */
+  /** Trailing spaces/tabs/nbsp before a block (keep newlines). */
   function trimTrailingIndent(chunk) {
     if (typeof chunk !== 'string' || !chunk) return chunk || '';
-    return chunk.replace(/[ \t]+$/g, '');
+    return chunk.replace(/[\t \u00a0\u202f]+$/g, '');
   }
 
-  /** Leading spaces/tabs after a block (keep newlines). */
+  /** Leading spaces/tabs/nbsp after a block (keep newlines). */
   function trimLeadingIndent(chunk) {
     if (typeof chunk !== 'string' || !chunk) return chunk || '';
-    return chunk.replace(/^[ \t]+/, '').replace(/^(\n+)[ \t]+/, '$1');
+    return chunk
+      .replace(/^[\t \u00a0\u202f]+/, '')
+      .replace(/^(\n+)[\t \u00a0\u202f]+/, '$1');
   }
 
   function formatMinutes(mins) {
@@ -1110,6 +1115,9 @@
 
   /**
    * Append auto-synthesized result cards after the bubble (same assistant row).
+   * Always append at the end of the row so face + bubble + feedback stay on the
+   * first flex line; CSS gives .agent-result-blocks flex-basis 100% so cards
+   * wrap underneath (aligned with the bubble) instead of floating to the right.
    */
   function appendResultBlocks(hostRow, blocks, options) {
     options = options || {};
@@ -1125,12 +1133,9 @@
       }
     });
     if (!wrap.childNodes.length) return null;
-    var bubble = hostRow.querySelector('.agent-msg-bubble');
-    var verify = hostRow.querySelector('.agent-tool-verify');
-    if (verify && verify.parentNode === hostRow) {
-      hostRow.insertBefore(wrap, verify);
-    } else if (bubble && bubble.nextSibling) {
-      hostRow.insertBefore(wrap, bubble.nextSibling);
+    var note = hostRow.querySelector('.agent-msg-note');
+    if (note && note.parentNode === hostRow) {
+      hostRow.insertBefore(wrap, note);
     } else {
       hostRow.appendChild(wrap);
     }

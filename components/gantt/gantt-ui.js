@@ -1,4 +1,11 @@
-/* Gantt chart UI — toolbar, rows, bars, drag/resize. */
+/**
+ * Gantt chart UI — toolbar, rows, bars, drag/resize (gantt.html).
+ * Exposes window.GanttUI.mountGantt(mount, t, options).
+ *
+ * Role: DOM + pointer interactions. Layout math → GanttModel; load/save dates
+ * → GanttTrello; optional Outlook sync via OutlookSync. Mini editors reuse
+ * PriorityUI.mountMiniPriority / mountMiniDue / mountMiniBlocked.
+ */
 (function (global) {
   'use strict';
 

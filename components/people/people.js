@@ -2,6 +2,9 @@
  * Member People directory — contacts with aliases, roles, email, phone.
  * Stored at member/private (same privacy lane as userProfile).
  * Exposes window.People (no bundler).
+ *
+ * resolvePeopleInText() expands role aliases (“ma boss” → Jane) for agent
+ * blocked-reason polishing. Synonym groups expand when any member is present.
  */
 (function (global) {
   'use strict';
@@ -546,12 +549,112 @@
       lines.push('- ' + bits.join(' \u00b7 '));
     });
     lines.push(
-      '- Quand l\'utilisateur dit un alias / r\u00f4le (ex. \u00ab\u00a0ma boss\u00a0\u00bb)\u00a0: utilise le NOM propre dans messages, blockedReasons et sous-t\u00e2ches (ex. \u00ab\u00a0En attente de la r\u00e9ponse de Jane Doe\u00a0\u00bb), jamais le seul r\u00f4le.'
+      '- Quand l\'utilisateur dit un alias / r\u00f4le (ex. \u00ab\u00a0ma boss\u00a0\u00bb)\u00a0: utilise le NOM propre dans messages, blockedReasons, sous-t\u00e2ches et set_custom_assignees (ex. \u00ab\u00a0En attente de la r\u00e9ponse de Jane Doe\u00a0\u00bb / add:["Jane Doe"]), jamais le seul r\u00f4le.'
+    );
+    lines.push(
+      '- Hors Trello\u00a0: chaque personne de cet annuaire est aussi assignable via set_custom_assignees (m\u00eame id person-*). upsert_person synchronise le catalogue Hors Trello du tableau.'
     );
     lines.push(
       '- Personne inconnue\u00a0: pose UNE question (\u00ab\u00a0C\'est qui, ta boss?\u00a0\u00bb), puis upsert_person {name, aliases:[\'boss\']} \u00e0 la r\u00e9ponse. Ne stocke pas seulement un fait m\u00e9moire libre.'
     );
     return lines;
+  }
+
+  /**
+   * Shape compatible with PriorityUI Hors Trello assignees (shared person-* id).
+   */
+  function toCustomAssignee(person) {
+    var p = normalizePerson(person);
+    if (!p) return null;
+    var row = { id: p.id, name: p.name };
+    if (p.trelloMemberId) row.trelloMemberId = p.trelloMemberId;
+    return row;
+  }
+
+  /**
+   * Resolve an assignee spec (string / {name,matchText,id}) via People aliases
+   * into a Hors Trello–ready { id, name, trelloMemberId? } draft.
+   */
+  function resolveAssigneeSpec(directoryOrPeople, spec) {
+    var query = '';
+    var idWant = '';
+    if (typeof spec === 'string' || typeof spec === 'number') {
+      query = String(spec).trim();
+      idWant = query;
+    } else if (spec && typeof spec === 'object') {
+      idWant = spec.id != null ? String(spec.id).trim() : '';
+      query =
+        (typeof spec.matchText === 'string' && spec.matchText.trim()) ||
+        (typeof spec.name === 'string' && spec.name.trim()) ||
+        (typeof spec.fullName === 'string' && spec.fullName.trim()) ||
+        idWant;
+    }
+    if (!query && !idWant) return null;
+
+    var people = Array.isArray(directoryOrPeople)
+      ? directoryOrPeople
+      : directoryOrPeople && Array.isArray(directoryOrPeople.people)
+        ? directoryOrPeople.people
+        : [];
+
+    if (idWant) {
+      for (var i = 0; i < people.length; i++) {
+        if (people[i] && people[i].id === idWant) {
+          return toCustomAssignee(people[i]);
+        }
+      }
+    }
+    var found = findByAliasOrName(directoryOrPeople, query);
+    return found ? toCustomAssignee(found) : null;
+  }
+
+  /**
+   * Merge People directory entries into a Hors Trello catalog array
+   * (shared person-* ids). Returns { changed, catalog }.
+   */
+  function mergeIntoAssigneeCatalog(catalog, directoryOrPeople) {
+    var list = Array.isArray(catalog) ? catalog.slice() : [];
+    var people = Array.isArray(directoryOrPeople)
+      ? directoryOrPeople
+      : directoryOrPeople && Array.isArray(directoryOrPeople.people)
+        ? directoryOrPeople.people
+        : [];
+    var before = JSON.stringify(list);
+    var byId = {};
+    var byName = {};
+    for (var i = 0; i < list.length; i++) {
+      if (!list[i] || !list[i].id) continue;
+      byId[list[i].id] = i;
+      byName[normKey(list[i].name)] = i;
+    }
+    for (var p = 0; p < people.length; p++) {
+      var draft = toCustomAssignee(people[p]);
+      if (!draft) continue;
+      var nameKey = normKey(draft.name);
+      if (byId[draft.id] != null) {
+        var idx = byId[draft.id];
+        list[idx] = {
+          id: draft.id,
+          name: draft.name,
+          trelloMemberId:
+            draft.trelloMemberId || list[idx].trelloMemberId || undefined
+        };
+        if (!list[idx].trelloMemberId) delete list[idx].trelloMemberId;
+        continue;
+      }
+      if (byName[nameKey] != null) {
+        // Keep existing catalog id when name already present under another id.
+        continue;
+      }
+      if (list.length >= MAX_PEOPLE) break;
+      list.push(draft);
+      byId[draft.id] = list.length - 1;
+      byName[nameKey] = list.length - 1;
+    }
+    return {
+      changed: JSON.stringify(list) !== before,
+      catalog: list
+    };
   }
 
   async function load(t) {
@@ -616,6 +719,9 @@
     initialsFromName: initialsFromName,
     findByAliasOrName: findByAliasOrName,
     resolveInText: resolveInText,
+    toCustomAssignee: toCustomAssignee,
+    resolveAssigneeSpec: resolveAssigneeSpec,
+    mergeIntoAssigneeCatalog: mergeIntoAssigneeCatalog,
     upsert: upsert,
     remove: remove,
     toAgentContext: toAgentContext,

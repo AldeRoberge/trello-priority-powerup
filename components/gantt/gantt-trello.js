@@ -1,4 +1,11 @@
-/* Gantt chart — board load + by-cardId date persistence. */
+/**
+ * Gantt chart — board load + by-cardId date persistence.
+ * Exposes window.GanttTrello.
+ *
+ * Role: fetch cards/lists, merge Priority/Completion/Statut snapshots into
+ * Gantt rows, save start/due via PriorityTrello, ganttSettings (dayStart/End).
+ * Clear-blocked helpers used when dragging cards out of En attente.
+ */
 (function (global) {
   'use strict';
 

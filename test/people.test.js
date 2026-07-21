@@ -205,3 +205,146 @@ describe('People + agent blocked reasons', () => {
     assert.equal(ctx.people[0].email, 'j@x.com');
   });
 });
+
+describe('People ↔ Hors Trello assignees', () => {
+  let People;
+  let PriorityUI;
+  let PriorityAgent;
+
+  before(() => {
+    clearComponentCache();
+    loadComponent('people/people.js');
+    loadComponent('priority/priority-ui.js');
+    loadComponent('agent/agent.js');
+    People = global.People;
+    PriorityUI = global.PriorityUI;
+    PriorityAgent = global.PriorityAgent;
+    assert.ok(People);
+    assert.ok(PriorityUI);
+    assert.ok(PriorityAgent);
+  });
+
+  it('toCustomAssignee shares person-* id for Hors Trello', () => {
+    const dir = People.upsert(People.emptyDirectory(), {
+      name: 'Jane Doe',
+      aliases: ['boss'],
+    });
+    const draft = People.toCustomAssignee(dir.people[0]);
+    assert.ok(draft);
+    assert.equal(draft.name, 'Jane Doe');
+    assert.ok(PriorityUI.isCustomAssigneeId(draft.id));
+    assert.equal(draft.id, dir.people[0].id);
+  });
+
+  it('resolveAssigneeSpec maps ma boss → Jane Doe draft', () => {
+    const dir = People.upsert(People.emptyDirectory(), {
+      name: 'Jane Doe',
+      aliases: ['boss'],
+    });
+    const draft = People.resolveAssigneeSpec(dir, 'ma boss');
+    assert.ok(draft);
+    assert.equal(draft.name, 'Jane Doe');
+    assert.equal(draft.id, dir.people[0].id);
+  });
+
+  it('createCustomAssignee reuses People id', () => {
+    const dir = People.upsert(People.emptyDirectory(), {
+      name: 'Jane Doe',
+      aliases: ['boss'],
+    });
+    const created = PriorityUI.createCustomAssignee(
+      People.toCustomAssignee(dir.people[0])
+    );
+    assert.equal(created.id, dir.people[0].id);
+    assert.equal(created.name, 'Jane Doe');
+  });
+
+  it('mergeIntoAssigneeCatalog upserts People into Hors Trello catalog', () => {
+    const dir = People.upsert(People.emptyDirectory(), {
+      name: 'Jane Doe',
+      aliases: ['boss'],
+    });
+    const merged = People.mergeIntoAssigneeCatalog([], dir);
+    assert.equal(merged.changed, true);
+    assert.equal(merged.catalog.length, 1);
+    assert.equal(merged.catalog[0].id, dir.people[0].id);
+    assert.equal(merged.catalog[0].name, 'Jane Doe');
+  });
+
+  it('matchCustomAssignee resolves aliases via People directory', () => {
+    const dir = People.upsert(People.emptyDirectory(), {
+      name: 'Jane Doe',
+      aliases: ['boss'],
+    });
+    const onCard = [
+      PriorityUI.createCustomAssignee(People.toCustomAssignee(dir.people[0])),
+    ];
+    const hit = PriorityAgent.matchCustomAssignee(onCard, 'ma boss', dir);
+    assert.ok(hit);
+    assert.equal(hit.name, 'Jane Doe');
+    assert.equal(hit.id, dir.people[0].id);
+  });
+
+  it('set_custom_assignees add:["ma boss"] assigns Jane Doe', async () => {
+    const dir = People.upsert(People.emptyDirectory(), {
+      name: 'Jane Doe',
+      aliases: ['boss'],
+    });
+    let state = { customAssignees: [] };
+    const catalog = [];
+    const bridge = {
+      getPeople: () => dir,
+      getPriorityState: () => state,
+      applyPriority: (partial) => {
+        state = Object.assign({}, state, partial);
+      },
+      setCustomAssignees: (list) => {
+        state.customAssignees = list;
+        return { ok: true, customAssignees: list };
+      },
+      getCustomAssigneeCatalog: () => catalog,
+      getCompletion: () => ({ items: [] }),
+    };
+    const result = await PriorityAgent.executeActions(bridge, [
+      { tool: 'set_custom_assignees', args: { add: ['ma boss'] } },
+    ]);
+    assert.equal(result.results[0].ok, true);
+    assert.equal(state.customAssignees.length, 1);
+    assert.equal(state.customAssignees[0].name, 'Jane Doe');
+    assert.equal(state.customAssignees[0].id, dir.people[0].id);
+  });
+
+  it('upsert_person syncs into Hors Trello catalog via bridge', async () => {
+    let directory = People.emptyDirectory();
+    let catalog = [];
+    const bridge = {
+      getPeople: () => directory,
+      upsertPerson: async (patch) => {
+        directory = People.upsert(directory, patch);
+        return {
+          ok: true,
+          person: directory.people[directory.people.length - 1],
+          directory,
+        };
+      },
+      upsertCustomAssigneeCatalog: async (entry) => {
+        const upserted = PriorityUI.upsertCustomAssigneeCatalog(entry);
+        catalog = PriorityUI.getCustomAssigneeCatalog();
+        return { ok: true, entry: upserted, customAssigneeCatalog: catalog };
+      },
+      getPriorityState: () => ({}),
+      getCompletion: () => ({ items: [] }),
+    };
+    PriorityUI.setCustomAssigneeCatalog([]);
+    const result = await PriorityAgent.executeActions(bridge, [
+      {
+        tool: 'upsert_person',
+        args: { name: 'Jane Doe', aliases: ['boss'] },
+      },
+    ]);
+    assert.equal(result.results[0].ok, true);
+    assert.equal(directory.people.length, 1);
+    assert.ok(catalog.some((p) => p.name === 'Jane Doe'));
+    assert.equal(catalog[0].id, directory.people[0].id);
+  });
+});

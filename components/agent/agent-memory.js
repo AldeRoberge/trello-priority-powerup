@@ -4,6 +4,8 @@
  *
  * Long-term is curated and high-bar: identity, role, boss, tools, durable prefs.
  * Short-term holds board context and provisional notes that must not pollute LTM.
+ * Per-card memory (card/shared) is separate — local facts about THIS card only
+ * (see section “Per-card memory” near the bottom of this file).
  */
 (function (global) {
   'use strict';

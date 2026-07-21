@@ -1,4 +1,14 @@
-/* Trello Power-Up bridge — card completion / subtask storage and badges. */
+/**
+ * Completion / Progrès Trello bridge — subtask storage, estimates, badges.
+ * Exposes window.CompletionTrello (no bundler).
+ *
+ * Role: persist cardCompletion pluginData, aggregate progress/blocked/estimates,
+ * sync Trello dueComplete when all subtasks done (with suppress/restore keys
+ * so Statut ↔ Progrès do not fight). UI is CompletionUI.
+ *
+ * Notable keys: cardCompletion, estimateScales, completionMarkedDueComplete,
+ * completionSuppressDueComplete, completionPreviousBeforeComplete.
+ */
 (function (global) {
   'use strict';
 

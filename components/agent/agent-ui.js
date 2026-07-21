@@ -1,6 +1,24 @@
 /**
- * Chat UI for the Priority Power-Up assistant.
+ * Chat UI for the Cerveau assistant (card popup + project window).
  * Exposes window.AgentUI.mount(cardEl, options).
+ *
+ * Role: DOM only. All LLM / Trello work goes through PriorityAgent + bridges
+ * passed in options. Safe rendering: textContent + AgentBlocks; highlight
+ * markup is [[g:…]] / [[a:…]] etc., never raw HTML from the model.
+ *
+ * mount(cardEl, options) returns a controller { destroy, … }.
+ *
+ * Table of contents (inside mount closure)
+ * ────────────────────────────────────────
+ *  1.  DOM helpers, FR count words, highlight / block renderers
+ *  2.  Session state (modelTier, messageQueue, listen-scan, dream)
+ *  3.  Settings panel (provider presets, verify, memory submenu)
+ *  4.  Chat panel chrome (composer, TabAutocomplete, collapse, debug)
+ *  5.  Face / aura / emotion (UserProfile) + point-at glove overlays
+ *  6.  Message list render + streaming finalize
+ *  7.  sendUserMessage / turn pipeline / action confirmations
+ *  8.  Coup de pouce listen-scan + suggestion chips
+ *  9.  Public controller API returned from mount
  */
 (function (global) {
   'use strict';
@@ -191,6 +209,8 @@
       return '\u2013';
     }
 
+  // ── mount() — builds settings + chat panels into cardEl ──────────────────
+
   function mount(cardEl, options) {
     if (!cardEl) throw new Error('AgentUI.mount: cardEl required');
     options = options || {};
@@ -219,6 +239,22 @@
       getCardMemory: options.getCardMemory || function () { return null; },
       getProfile: options.getProfile || function () { return null; },
       getPeople: options.getPeople || function () { return null; },
+      getCustomAssigneeCatalog:
+        typeof options.getCustomAssigneeCatalog === 'function'
+          ? options.getCustomAssigneeCatalog
+          : function () {
+              if (
+                global.PriorityUI &&
+                typeof global.PriorityUI.getCustomAssigneeCatalog === 'function'
+              ) {
+                return global.PriorityUI.getCustomAssigneeCatalog();
+              }
+              return [];
+            },
+      upsertCustomAssigneeCatalog:
+        typeof options.upsertCustomAssigneeCatalog === 'function'
+          ? options.upsertCustomAssigneeCatalog
+          : null,
       getBoardDigest: options.getBoardDigest || function () { return ''; },
       refreshBoardDigest:
         typeof options.refreshBoardDigest === 'function'
@@ -8132,6 +8168,8 @@
         notifyLayout();
       }
     }
+
+    // ── sendUserMessage — enqueue or start a chatTurn, then executeActions ───
 
     async function sendUserMessage(text, options) {
       var opts = options || {};

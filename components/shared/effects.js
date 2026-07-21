@@ -2,6 +2,17 @@
  * CelebrationEffects — brief visual overlays + Web Audio stingers.
  * Used by completion UI (fireworks) and the agent (trigger_effect).
  * Supports optional fullscreen text via play(name, { text: 'DEUX' }).
+ * Exposes window.CelebrationEffects.
+ *
+ * Table of contents
+ * ─────────────────
+ *  1. Audio context + F# major tone helpers
+ *  2. Named UI sounds (progress tick/milestone, subtask pop, …)
+ *  3. playUiSound router
+ *  4. DOM overlay builders (beep, zap, fanfare, fireworks, …)
+ *  5. play(effectId) / clearEffects public API
+ *
+ * Respects prefers-reduced-motion (visuals skipped; sounds may still play).
  */
 (function (global) {
   'use strict';
@@ -594,6 +605,8 @@
    * Short UI tick for progress scrubbing. Pitch rises with percent (0–100).
    * Throttled so fast drags stay crisp instead of muddy.
    */
+  // ── 2. Named UI sounds (progress, subtask, chrome clicks) ───────────────
+
   function playProgressTick(percent) {
     percent = Math.max(0, Math.min(100, Number(percent) || 0));
     var now =
@@ -1915,6 +1928,8 @@
       overlay.appendChild(el);
     }
   }
+
+  // ── 4. DOM overlay builders (one build* per effect id) ──────────────────
 
   function buildBeep(overlay) {
     appendFlash(overlay);

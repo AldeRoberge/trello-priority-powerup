@@ -1,4 +1,10 @@
-/* Gantt chart — pure layout / date math (no DOM, no Trello). */
+/**
+ * Gantt chart — pure layout / date math (no DOM, no Trello).
+ * Exposes window.GanttModel.
+ *
+ * Role: view modes (day/week/month/year), column headers, row geometry,
+ * bar hit-testing, agenda snap, filter/sort of card rows. Consumed by GanttUI.
+ */
 (function (global) {
   'use strict';
 

@@ -1,5 +1,7 @@
 /**
  * Matrix-based priority labels from urgency, impact, and ease.
+ * Exposes window.PriorityMatrix. Used by PriorityUI for optional matrix tiers
+ * alongside formula scores (board setting matrixLabelSettings).
  *
  * Extensibility:
  * - Override DIMENSIONS (ranges, level bands) via createConfig()

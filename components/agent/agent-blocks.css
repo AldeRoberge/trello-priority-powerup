@@ -16,6 +16,14 @@
     var(--agent-accent, var(--tp-primary, #0c66e4)) 6%,
     var(--tp-surface, #fff)
   );
+  /* Bubble uses white-space:pre-wrap — reset so blocks never inherit
+     trailing spaces as a left indent / mid-line float. */
+  white-space: normal;
+  float: none;
+  clear: both;
+  position: relative;
+  left: 0;
+  right: auto;
   animation: agent-block-in 0.22s ease-out;
 }
 
@@ -23,16 +31,29 @@
   margin-top: 0;
 }
 
+/*
+ * Tool result cards are siblings of the face + bubble in a wrapping flex row.
+ * Force a full-width next line under the bubble (same alignment as .agent-msg-note)
+ * so short captions cannot leave cards floating to the right of the bubble.
+ */
 .tp-page--priority .agent-result-blocks {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex: 1 0 100%;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   margin: 6px 0 0;
-  max-width: min(100%, 320px);
+  /* face 32px + gap 8px */
+  padding-left: 40px;
+  float: none;
+  clear: both;
 }
 
 .tp-page--priority .agent-block--result {
   margin: 0;
+  max-width: min(100%, 320px);
 }
 
 @keyframes agent-block-in {
@@ -232,6 +253,9 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .tp-page--priority .agent-block-statut-swatch {

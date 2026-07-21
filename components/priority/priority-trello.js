@@ -1,4 +1,25 @@
-/* Trello Power-Up bridge — card priority storage and badges. */
+/**
+ * Trello Power-Up bridge — card priority storage, badges, board settings.
+ * Exposes window.PriorityTrello (no bundler).
+ *
+ * Role: all Trello I/O for priority (pluginData + REST). Pure scoring/UI is
+ * PriorityUI. index.html capabilities (card-badges, list-sorters, …) call here.
+ *
+ * Key pluginData
+ * ──────────────
+ * cardPriority (card/shared)     — axes + blocked + due meta
+ * priorityFormula / colorScheme  — board/shared settings
+ * customTaskTypes, memberRoleCatalog, customAssigneeCatalog — board catalogs
+ * cardDueSyncedIso / cardStartSyncedIso — conflict detection vs Trello dates
+ *
+ * Table of contents
+ * ─────────────────
+ *  1. Normalize / read / write card inputs + board context cache
+ *  2. Badge builders (face + detail) and list sort by tier
+ *  3. Card name/desc/members/labels REST helpers
+ *  4. Due/start sync + auto-sort after priority change
+ *  5. Power-Up capability handlers + PriorityTrello public API
+ */
 (function (global) {
   'use strict';
 

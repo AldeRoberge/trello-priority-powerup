@@ -1,4 +1,12 @@
-/* Statut Trello bridge — board mapping, list moves, auto-move roles. */
+/**
+ * Statut Trello bridge — board list→category mapping, auto-moves, restore.
+ * Exposes window.StatutTrello. Matching heuristics live in StatutMatch.
+ *
+ * Categories: backlog / unstarted / started / enAttente (Bloqué) / done.
+ * Remembers previous list ids when entering Terminé or Bloqué so leaving
+ * those states can restore the card. Coordinates with CompletionTrello on
+ * dueComplete when progress hits/leaves 100%.
+ */
 (function (global) {
   'use strict';
 

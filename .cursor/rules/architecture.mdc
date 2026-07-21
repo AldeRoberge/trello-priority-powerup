@@ -1,0 +1,63 @@
+---
+description: Map of major modules, globals, and boundaries for the Cerveau Trello Power-Up
+alwaysApply: true
+---
+
+# Architecture map (Trello Cerveau)
+
+Static HTML/JS/CSS Power-Up — **no bundler**. Scripts load via `<script>` and attach to `window.*`. Prefer reading the file header TOC before diving into a mega-file.
+
+## Entry pages
+
+| Page | Purpose |
+|------|---------|
+| `index.html` | Power-Up connector + capability registration |
+| `popup.html` | Card editor (priority / progrès / agent / info) |
+| `settings.html` | Board settings (statut, formula, goals, …) |
+| `profile.html` | Member preferences (`UserProfile`) |
+| `gantt.html` | Full-screen Gantt |
+| `assistant.html` | Project-scope assistant window |
+| `memory-*.html` | Memory alignment surfaces |
+
+## Layering (keep boundaries)
+
+```
+UI (*-ui.js)  →  pure helpers (PriorityUI, GanttModel, AgentBlocks)
+              →  Trello bridges (*-trello.js)  →  pluginData / REST
+AgentUI       →  PriorityAgent (LLM)          →  executeActions(bridge)
+```
+
+- **UI modules** must not call Trello REST directly; take a bridge/`t` from the page.
+- **`PriorityUI` / `GanttModel` / `AgentBlocks`** are pure (or DOM-only) — no pluginData.
+- **`*-trello.js`** own persistence keys and badge/capability handlers.
+- **`PriorityAgent`** owns prompts, chat protocol, and action execution; **`AgentUI`** is chrome only.
+
+## Largest modules (start here)
+
+| File (~lines) | Global | One-line role |
+|---------------|--------|---------------|
+| `components/priority/priority-ui.js` (~21k) | `PriorityUI` | Scoring, markdown, due/statut/overview field factories, color schemes |
+| `components/agent/agent.js` (~17k) | `PriorityAgent` | LLM client, `chatTurn` / interview / dream, `executeActions` |
+| `components/agent/agent-ui.js` (~8k) | `AgentUI` | Chat/settings DOM; `mount(cardEl, options)` |
+| `components/completion/completion-ui.js` (~6k) | `CompletionUI` | Progrès list + sliders |
+| `components/priority/priority-trello.js` (~4k) | `PriorityTrello` | `cardPriority`, badges, board catalogs |
+| `components/gantt/gantt-ui.js` (~3.5k) | `GanttUI` | Timeline DOM + drag |
+| `components/completion/completion-trello.js` (~3k) | `CompletionTrello` | `cardCompletion`, estimates, dueComplete sync |
+| `components/shared/effects.js` (~2.3k) | `CelebrationEffects` | SFX + overlays |
+
+Other important globals: `StatutTrello`, `GanttModel`, `GanttTrello`, `AgentMemory`, `MemoryUI`, `AgentBlocks`, `CardHistory`, `UserProfile`, `People`, `PriorityMatrix`, `GoalsTrello` / `GoalsUI`, `OutlookSync` / `OutlookAuth` / `OutlookGraph`.
+
+## PluginData budget
+
+Trello allows **4096 chars per scope/visibility (all keys combined)**.
+
+- `card/private` is shared by `cardAgentChat`, `cardEditHistory`, etc. — keep chat/history slim.
+- Prefer board/shared for catalogs; member/private for provider + profile + people.
+
+## Conventions when editing
+
+1. Match existing IIFE + `'use strict'` + `global.Foo = …` style.
+2. Update the file’s header TOC when adding a major section.
+3. After logic changes under `components/`, run `npm run test:unit` (or `npm test`).
+4. Do not introduce a bundler, TypeScript, or new framework without an explicit request.
+5. Agent-visible copy: no em dashes; FR punctuation rules live in `PriorityAgent` polish helpers.

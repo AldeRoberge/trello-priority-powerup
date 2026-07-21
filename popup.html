@@ -7447,12 +7447,91 @@
             if (infoUi && typeof infoUi.setCustomAssignees === 'function') {
               infoUi.setCustomAssignees(people);
             }
-            return Promise.resolve(saveState(next)).then(function () {
-              return commitHistoryNow('Personnes assignées (assistant)').then(
-                function () {
-                  return { ok: true, changed: true, customAssignees: people };
-                }
-              );
+            var catalogPromise = Promise.resolve(null);
+            if (
+              people.length &&
+              PriorityUI &&
+              typeof PriorityUI.mergeIntoCustomAssigneeCatalog === 'function' &&
+              PriorityTrello &&
+              typeof PriorityTrello.saveCustomAssigneeCatalog === 'function'
+            ) {
+              var mergedAgent = PriorityUI.mergeIntoCustomAssigneeCatalog(people);
+              if (mergedAgent && mergedAgent.changed) {
+                catalogPromise = Promise.resolve(
+                  PriorityTrello.saveCustomAssigneeCatalog(t, mergedAgent.catalog)
+                ).then(function (saved) {
+                  if (infoUi && typeof infoUi.setCustomAssigneeCatalog === 'function') {
+                    infoUi.setCustomAssigneeCatalog(saved);
+                  } else if (
+                    PriorityUI &&
+                    typeof PriorityUI.setCustomAssigneeCatalog === 'function'
+                  ) {
+                    PriorityUI.setCustomAssigneeCatalog(saved);
+                  }
+                  return saved;
+                });
+              }
+            }
+            return catalogPromise.then(function () {
+              return Promise.resolve(saveState(next)).then(function () {
+                return commitHistoryNow('Personnes assignées (assistant)').then(
+                  function () {
+                    return { ok: true, changed: true, customAssignees: people };
+                  }
+                );
+              });
+            });
+          },
+          getCustomAssigneeCatalog: function () {
+            if (
+              PriorityUI &&
+              typeof PriorityUI.getCustomAssigneeCatalog === 'function'
+            ) {
+              return PriorityUI.getCustomAssigneeCatalog();
+            }
+            return [];
+          },
+          upsertCustomAssigneeCatalog: function (entry) {
+            if (
+              !PriorityUI ||
+              typeof PriorityUI.upsertCustomAssigneeCatalog !== 'function'
+            ) {
+              return Promise.resolve({ ok: false, reason: 'unavailable' });
+            }
+            var upserted = PriorityUI.upsertCustomAssigneeCatalog(entry);
+            if (!upserted) {
+              return Promise.resolve({ ok: false, reason: 'rejected' });
+            }
+            if (
+              !PriorityTrello ||
+              typeof PriorityTrello.saveCustomAssigneeCatalog !== 'function'
+            ) {
+              return Promise.resolve({
+                ok: true,
+                changed: true,
+                entry: upserted,
+                persisted: false
+              });
+            }
+            return Promise.resolve(
+              PriorityTrello.saveCustomAssigneeCatalog(
+                t,
+                PriorityUI.getCustomAssigneeCatalog()
+              )
+            ).then(function (saved) {
+              if (infoUi && typeof infoUi.setCustomAssigneeCatalog === 'function') {
+                infoUi.setCustomAssigneeCatalog(saved);
+              } else if (
+                typeof PriorityUI.setCustomAssigneeCatalog === 'function'
+              ) {
+                PriorityUI.setCustomAssigneeCatalog(saved);
+              }
+              return {
+                ok: true,
+                changed: true,
+                entry: upserted,
+                customAssigneeCatalog: saved
+              };
             });
           },
           setMemberRoles: function (rolesMap) {

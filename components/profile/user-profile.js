@@ -1,7 +1,11 @@
 /**
- * Member profile — personal preferences & feature flags for a custom Priorité experience.
- * Stored at member/private (same privacy lane as agentProvider).
+ * Member profile — personal preferences & feature flags for a custom Cerveau
+ * experience. Stored at member/private (same privacy lane as agentProvider).
  * Exposes window.UserProfile (no bundler).
+ *
+ * Includes: identity, face aura/shape, language/dialect/tone, clock 12/24,
+ * section visibility in the card editor, beta flags, debug level, auto-open.
+ * toLlmContext() is the slim object injected into agent system prompts.
  */
 (function (global) {
   'use strict';

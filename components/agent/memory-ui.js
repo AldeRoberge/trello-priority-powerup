@@ -1,6 +1,9 @@
 /**
  * Compact conversational UI for AI memory alignment (modal + board bar).
  * Exposes window.MemoryUI.mount(container, options).
+ *
+ * Hole-filling prompts (… / [placeholder]) + TabAutocomplete. Talks to
+ * AgentMemory via PriorityAgent.memoryTurn — not a general chat surface.
  */
 (function (global) {
   'use strict';
