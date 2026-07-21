@@ -2026,6 +2026,10 @@
       ) {
         agentUi.collapse.setExpanded(true);
       }
+      // Reparenting into the rail resets .agent-messages scroll — pin to latest.
+      if (agentUi && typeof agentUi.scrollMessagesToBottom === 'function') {
+        agentUi.scrollMessagesToBottom();
+      }
     }
 
     /** Expanded → right rail; collapsed → back with other section summaries. */

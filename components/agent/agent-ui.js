@@ -1005,20 +1005,29 @@
           unreadAssistant = 0;
           syncApplySummary();
         }
-        if (isExpanded && messagesEl) {
-          // Body was just unhidden — wait a frame so scrollHeight is correct.
-          requestAnimationFrame(function () {
-            messagesEl.scrollTop = messagesEl.scrollHeight;
-          });
-        }
         if (!standalone && typeof PriorityUI.saveSectionCollapseState === 'function') {
           PriorityUI.saveSectionCollapseState({ chat: !!isExpanded });
         }
+        // Dock/reparent first (options.onExpandChange) — that resets scrollTop.
         if (typeof options.onExpandChange === 'function') {
           options.onExpandChange(!!isExpanded);
         }
+        if (isExpanded) scrollMessagesToBottom();
       }
     });
+
+    /** Pin chat to latest message; re-run after layout (dock / unhide / fonts). */
+    function scrollMessagesToBottom() {
+      if (!messagesEl) return;
+      function pin() {
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+      pin();
+      requestAnimationFrame(function () {
+        pin();
+        requestAnimationFrame(pin);
+      });
+    }
 
     function syncApplySummary() {
       field.classList.toggle(
@@ -6215,12 +6224,14 @@
           collapse.setExpanded(true);
         }
       }
+      scrollMessagesToBottom();
       setTimeout(function () {
         try {
           section.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         } catch (e) {
           /* ignore */
         }
+        scrollMessagesToBottom();
         focusComposerInput();
         notifyLayout();
       }, 0);
@@ -6996,6 +7007,7 @@
         chatRestored = true;
         if (collapse && collapse.refreshSummary) collapse.refreshSummary();
         notifyLayout();
+        scrollMessagesToBottom();
         return true;
       } catch (err) {
         console.error('AgentUI loadChat failed', err);
@@ -8535,6 +8547,7 @@
       refreshProvider: ensureProviderLoaded,
       collapse: collapse,
       focusComposer: openAndFocusComposer,
+      scrollMessagesToBottom: scrollMessagesToBottom,
       openSettings: function (opts) {
         setSettingsOpen(true);
         if (opts && opts.memory) {

@@ -26,6 +26,10 @@
       margin: 0;
       padding: 4px 0 2px;
     }
+    /* Match Trello card chrome — theme --tp-bg (#0d1117) is too black */
+    html[data-color-mode="dark"] body.tp-card-open {
+      background: #172b4d;
+    }
     .tp-card-open-shell {
       display: flex;
       flex-direction: column;
