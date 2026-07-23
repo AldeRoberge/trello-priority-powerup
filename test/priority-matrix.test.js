@@ -14,18 +14,19 @@ describe('PriorityMatrix', () => {
     assert.ok(PriorityMatrix);
   });
 
+  // Impact / Facilité are on the 0–10 scale post-adaptation; Urgence stays 0–4.
   it('resolves well-known matrix labels', () => {
     const cases = [
-      [{ ease: 5, impact: 4, urgency: 4 }, 'Opportunité massive'],
+      [{ ease: 9, impact: 9, urgency: 4 }, 'Opportunité massive'],
       [{ ease: 1, impact: 0, urgency: 4 }, 'Corvée express'],
-      [{ ease: 5, impact: 3, urgency: 1 }, 'Victoire rapide'],
-      [{ ease: 1, impact: 4, urgency: 4 }, 'Chemin critique'],
-      [{ ease: 3, impact: 4, urgency: 4 }, 'Accélérateur'],
-      [{ ease: 5, impact: 2, urgency: 4 }, 'Coup de pouce'],
-      [{ ease: 3, impact: 2, urgency: 2 }, 'À arbitrer'],
-      [{ ease: 3, impact: 2, urgency: 1 }, 'Piste exploratoire'],
-      [{ ease: 3, impact: 2, urgency: 4 }, 'Pression modérée'],
-      [{ ease: 2, impact: 2, urgency: 4 }, 'Échéance serrée'],
+      [{ ease: 9, impact: 7, urgency: 1 }, 'Victoire rapide'],
+      [{ ease: 1, impact: 9, urgency: 4 }, 'Chemin critique'],
+      [{ ease: 5, impact: 9, urgency: 4 }, 'Accélérateur'],
+      [{ ease: 9, impact: 5, urgency: 4 }, 'Coup de pouce'],
+      [{ ease: 5, impact: 5, urgency: 2 }, 'À arbitrer'],
+      [{ ease: 5, impact: 5, urgency: 1 }, 'Piste exploratoire'],
+      [{ ease: 5, impact: 5, urgency: 4 }, 'Pression modérée'],
+      [{ ease: 3, impact: 5, urgency: 4 }, 'Échéance serrée'],
     ];
     for (const [inputs, expected] of cases) {
       const r = PriorityMatrix.resolveLabel(inputs, { tier });
@@ -39,7 +40,7 @@ describe('PriorityMatrix', () => {
       rules: PriorityMatrix.RULES.filter((r) => r.id === 'backlog-filler'),
     };
     const fallback = PriorityMatrix.resolveLabel(
-      { ease: 3, impact: 2, urgency: 2 },
+      { ease: 5, impact: 5, urgency: 2 },
       sparseCtx
     );
     assert.equal(fallback.fromMatrix, false);
@@ -49,7 +50,7 @@ describe('PriorityMatrix', () => {
   it('honors disabled matrix (tier labels only)', () => {
     const disabledCtx = PriorityMatrix.buildResolveContext({ enabled: false }, tier);
     const result = PriorityMatrix.resolveLabel(
-      { ease: 5, impact: 4, urgency: 4 },
+      { ease: 9, impact: 9, urgency: 4 },
       disabledCtx
     );
     assert.equal(result.matrixDisabled, true);
@@ -61,7 +62,7 @@ describe('PriorityMatrix', () => {
       overrides: { 'massive-opportunity': { label: 'Jackpot' } },
     });
     const customResult = PriorityMatrix.resolveLabel(
-      { ease: 5, impact: 4, urgency: 4 },
+      { ease: 9, impact: 9, urgency: 4 },
       customCtx
     );
     assert.equal(customResult.label, 'Jackpot');

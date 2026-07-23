@@ -4887,6 +4887,156 @@ html[data-color-mode='dark'] .overview-composer-input {
   padding-right: 0;
 }
 
+/* ── Impact factors / Facilité costs (expandable checklists) ── */
+.axis-factors {
+  margin: -4px 0 8px;
+  padding: 0 2px;
+}
+
+.axis-factors-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.axis-factors-toggle:hover,
+.axis-factors-toggle:focus-visible {
+  color: var(--text-primary);
+}
+
+.axis-factors-chevron {
+  font-size: 14px;
+  transition: transform 0.15s ease;
+}
+
+.axis-factors.is-expanded .axis-factors-chevron {
+  transform: rotate(180deg);
+}
+
+.axis-factors-toggle-label {
+  flex: 1 1 auto;
+}
+
+.axis-factors-mode-tag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.axis-factors-mode-tag.is-calculated {
+  background: color-mix(in srgb, var(--tp-primary, #0c66e4) 18%, transparent);
+  color: var(--tp-primary, #0c66e4);
+}
+
+.axis-factors-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+}
+
+.axis-factors-body[hidden] {
+  display: none;
+}
+
+.axis-factor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.axis-factor-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.axis-factor-checkbox {
+  margin: 0;
+}
+
+.axis-factor-select {
+  flex: 0 0 auto;
+  max-width: 150px;
+  font-size: 11px;
+}
+
+.axis-factor-select:disabled,
+.axis-factor-range:disabled {
+  opacity: 0.45;
+}
+
+.axis-factor-range {
+  flex: 0 0 auto;
+  width: 90px;
+}
+
+/* ── Urgence → Empressement migration nudge ── */
+.urgency-review-nudge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, #ff8b00 40%, transparent);
+  background: color-mix(in srgb, #ff8b00 12%, transparent);
+}
+
+.urgency-review-nudge[hidden] {
+  display: none;
+}
+
+.urgency-review-nudge-text {
+  flex: 1 1 auto;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.urgency-review-nudge-dismiss {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.urgency-review-nudge-dismiss:hover,
+.urgency-review-nudge-dismiss:focus-visible {
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  color: var(--text-primary);
+}
+
 /* ── Blocked reasons (nested under Progrès → Statut) ── */
 .variant-blocked-section {
   margin-top: 0;
@@ -5030,6 +5180,76 @@ html[data-color-mode='dark'] .overview-composer-input {
 
 .due-date-mode-switch.is-icons-only .due-date-mode-btn-label {
   display: none;
+}
+
+.due-limit-state-switch {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.due-limit-state-btn {
+  flex: 1 1 auto;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color, rgba(9, 30, 66, 0.13));
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  text-align: center;
+}
+
+.due-limit-state-btn.is-active {
+  border-color: var(--due-accent, var(--tp-primary, #0c66e4));
+  background: color-mix(in srgb, var(--due-accent, var(--tp-primary, #0c66e4)) 12%, transparent);
+  color: var(--text-primary);
+}
+
+.due-limit-state-btn:focus-visible {
+  outline: 2px solid var(--due-accent, var(--tp-primary, #0c66e4));
+  outline-offset: 1px;
+}
+
+.due-date-body.is-due-limit-none > *:not(.due-limit-state-switch):not(.due-date-fixe-row) {
+  display: none !important;
+}
+
+.due-date-fixe-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+}
+
+.due-date-fixe-row[hidden] {
+  display: none;
+}
+
+.due-date-fixe-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.due-date-fixe-checkbox {
+  margin: 0;
+}
+
+.due-date-fixe-copy {
+  margin-left: 24px;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .due-date-vague {

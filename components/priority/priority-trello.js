@@ -104,47 +104,49 @@
         }
       }
     }
-    return { urgency: 2, impact: 2, ease: 3 };
+    return { impact: 5, ease: 5, empressement: 'aucun' };
   }
 
   var IMPORTANT_INPUTS = importantInputs();
-  var DEFAULT_INPUTS = IMPORTANT_INPUTS;
+  // axesScaledTo10 marks fresh cards as already on the new 0–10 Impact/Facilité
+  // scale, so normalizeInputs never mistakes them for pre-adaptation values.
+  var DEFAULT_INPUTS = Object.assign({ axesScaledTo10: true }, IMPORTANT_INPUTS);
 
   var LEGACY_ID_TO_INPUTS = {
-    1: { urgency: 4, impact: 4, ease: 5 },
-    2: { urgency: 3, impact: 3, ease: 2 },
-    3: { urgency: 2, impact: 2, ease: 3 },
-    4: { urgency: 1, impact: 1, ease: 2 },
-    5: { urgency: 0, impact: 0, ease: 2 },
+    1: { impact: 10, ease: 10, empressement: 'vite', axesScaledTo10: true },
+    2: { impact: 7.5, ease: 2.5, empressement: 'assez-vite', axesScaledTo10: true },
+    3: { impact: 5, ease: 5, empressement: 'bientot', axesScaledTo10: true },
+    4: { impact: 2.5, ease: 2.5, empressement: 'aucun', axesScaledTo10: true },
+    5: { impact: 0, ease: 2.5, empressement: 'aucun', axesScaledTo10: true },
   };
 
   var PRIORITY_DIMENSIONS = [
-    {
-      key: 'urgency',
-      label: 'Urgence',
-      icon: 'ti-flame',
-      wordsKey: 'urgency',
-      min: 0,
-      max: 4,
-      value: 2,
-    },
     {
       key: 'impact',
       label: 'Impact',
       icon: 'ti-target-arrow',
       wordsKey: 'impact',
       min: 0,
-      max: 4,
-      value: 2,
+      max: 10,
+      value: 5,
     },
     {
       key: 'ease',
       label: 'Facilité',
       icon: 'ti-gauge',
       wordsKey: 'ease',
-      min: 1,
-      max: 5,
-      value: 3,
+      min: 0,
+      max: 10,
+      value: 5,
+    },
+    {
+      key: 'empressement',
+      label: 'Empressement',
+      icon: 'ti-flame',
+      wordsKey: 'empressement',
+      min: 0,
+      max: 4,
+      value: 0,
     },
   ];
 
@@ -157,17 +159,100 @@
     return NaN;
   }
 
+  /** Sanitizes the impactFactors / easeCosts checkbox maps against known defs. */
+  function normalizeFactorEntries(raw, defs) {
+    if (!raw || typeof raw !== 'object') return null;
+    if (!Array.isArray(defs) || !defs.length) {
+      // PriorityUI not loaded yet: keep the raw shape rather than dropping data.
+      return Object.keys(raw).length ? raw : null;
+    }
+    var out = {};
+    defs.forEach(function (def) {
+      var entry = raw[def.id];
+      if (!entry || typeof entry !== 'object') return;
+      var clean = { checked: !!entry.checked };
+      if (def.kind === 'named') {
+        var stepId = typeof entry.stepId === 'string' ? entry.stepId : '';
+        var validStep =
+          Array.isArray(def.steps) &&
+          def.steps.some(function (step) {
+            return step.id === stepId;
+          });
+        clean.stepId = validStep ? stepId : def.defaultStepId;
+      } else {
+        var intensity = asNumber(entry.intensity);
+        clean.intensity = isFinite(intensity)
+          ? Math.max(1, Math.min(10, Math.round(intensity)))
+          : def.defaultIntensity || 5;
+      }
+      out[def.id] = clean;
+    });
+    return Object.keys(out).length ? out : null;
+  }
+
   function normalizeInputs(raw) {
     if (!raw || typeof raw !== 'object') return null;
-    var urgency = asNumber(raw.urgency);
     var impact = asNumber(raw.impact);
     var ease = asNumber(raw.ease);
-    if (!isFinite(urgency) || !isFinite(impact) || !isFinite(ease)) return null;
+    if (!isFinite(impact) || !isFinite(ease)) return null;
     var normalized = {
-      urgency: Math.max(0, Math.min(4, urgency)),
-      impact: Math.max(0, Math.min(4, impact)),
-      ease: Math.max(1, Math.min(5, ease)),
+      impact: Math.max(0, Math.min(10, impact)),
+      ease: Math.max(0, Math.min(10, ease)),
     };
+
+    var PU = priorityUI();
+
+    // Empressement (id or 0–4 index); defaults to "Aucun" when absent.
+    if (raw.empressement != null) {
+      normalized.empressement =
+        PU && typeof PU.normalizeEmpressementId === 'function'
+          ? PU.normalizeEmpressementId(raw.empressement)
+          : typeof raw.empressement === 'string'
+            ? raw.empressement
+            : 'aucun';
+    }
+
+    if (raw.dateFixe === true) normalized.dateFixe = true;
+    if (raw.dueLimitState === 'has' || raw.dueLimitState === 'none') {
+      normalized.dueLimitState = raw.dueLimitState;
+    }
+
+    var impactFactors = normalizeFactorEntries(
+      raw.impactFactors,
+      PU && PU.IMPACT_FACTOR_DEFS
+    );
+    if (impactFactors) normalized.impactFactors = impactFactors;
+    var easeCosts = normalizeFactorEntries(raw.easeCosts, PU && PU.EASE_COST_DEFS);
+    if (easeCosts) normalized.easeCosts = easeCosts;
+
+    // Legacy Urgence axis: kept as a sidecar (back-compat) while migration
+    // helpers derive Empressement + a one-time Impact/Facilité rescale.
+    if (raw.urgency != null) normalized.urgency = asNumber(raw.urgency);
+    if (raw.axesScaledTo10 === true) normalized.axesScaledTo10 = true;
+    if (raw.legacyUrgency != null) normalized.legacyUrgency = asNumber(raw.legacyUrgency);
+    if (raw.urgencyMigrated === true) normalized.urgencyMigrated = true;
+    if (raw.urgencyReviewNeeded === true) normalized.urgencyReviewNeeded = true;
+
+    if (PU) {
+      var scalePatch =
+        typeof PU.migrateLegacyAxisScales === 'function'
+          ? PU.migrateLegacyAxisScales(raw)
+          : null;
+      if (scalePatch) {
+        normalized.impact = scalePatch.impact;
+        normalized.ease = scalePatch.ease;
+        normalized.axesScaledTo10 = true;
+      }
+      var urgencyPatch =
+        typeof PU.migrateLegacyUrgency === 'function' ? PU.migrateLegacyUrgency(raw) : null;
+      if (urgencyPatch) {
+        normalized.legacyUrgency = urgencyPatch.legacyUrgency;
+        normalized.urgencyMigrated = true;
+        normalized.empressement = urgencyPatch.empressement;
+        if (urgencyPatch.urgencyReviewNeeded) normalized.urgencyReviewNeeded = true;
+      }
+    }
+
     // Sidecar: estimated work duration in minutes (Facilité UI); does not alter ease score.
     var durationMin = asNumber(raw.estimatedDurationMinutes);
     if (isFinite(durationMin) && durationMin > 0) {
@@ -181,7 +266,6 @@
     }
 
     // Keep blockedReasons even when off so re-enable restores the draft.
-    var PU = priorityUI();
     var reasons =
       PU && PU.normalizeBlockedReasons
         ? PU.normalizeBlockedReasons(raw)
@@ -425,10 +509,19 @@
       return inputs;
     }
     var cleared = {
-      urgency: inputs.urgency,
       impact: inputs.impact,
       ease: inputs.ease,
     };
+    if (inputs.urgency != null) cleared.urgency = inputs.urgency;
+    if (inputs.empressement != null) cleared.empressement = inputs.empressement;
+    if (inputs.dateFixe != null) cleared.dateFixe = inputs.dateFixe;
+    if (inputs.dueLimitState != null) cleared.dueLimitState = inputs.dueLimitState;
+    if (inputs.impactFactors != null) cleared.impactFactors = inputs.impactFactors;
+    if (inputs.easeCosts != null) cleared.easeCosts = inputs.easeCosts;
+    if (inputs.legacyUrgency != null) cleared.legacyUrgency = inputs.legacyUrgency;
+    if (inputs.urgencyMigrated != null) cleared.urgencyMigrated = inputs.urgencyMigrated;
+    if (inputs.urgencyReviewNeeded != null) cleared.urgencyReviewNeeded = inputs.urgencyReviewNeeded;
+    if (inputs.axesScaledTo10 != null) cleared.axesScaledTo10 = inputs.axesScaledTo10;
     if (inputs.priorityEnabled === false) cleared.priorityEnabled = false;
     if (typeof inputs.dueDate === 'string' && inputs.dueDate) {
       cleared.dueDate = inputs.dueDate;
@@ -3235,6 +3328,15 @@
     if (patch.urgency != null) base.urgency = patch.urgency;
     if (patch.impact != null) base.impact = patch.impact;
     if (patch.ease != null) base.ease = patch.ease;
+    if (patch.empressement != null) base.empressement = patch.empressement;
+    if (patch.dateFixe != null) base.dateFixe = patch.dateFixe;
+    if (patch.dueLimitState != null) base.dueLimitState = patch.dueLimitState;
+    if (patch.impactFactors != null) base.impactFactors = patch.impactFactors;
+    if (patch.easeCosts != null) base.easeCosts = patch.easeCosts;
+    if (patch.legacyUrgency != null) base.legacyUrgency = patch.legacyUrgency;
+    if (patch.urgencyMigrated != null) base.urgencyMigrated = patch.urgencyMigrated;
+    if (patch.urgencyReviewNeeded != null) base.urgencyReviewNeeded = patch.urgencyReviewNeeded;
+    if (patch.axesScaledTo10 != null) base.axesScaledTo10 = patch.axesScaledTo10;
     if (patch.priorityEnabled != null) base.priorityEnabled = patch.priorityEnabled;
     if (patch.estimatedDurationMinutes != null) {
       base.estimatedDurationMinutes = patch.estimatedDurationMinutes;

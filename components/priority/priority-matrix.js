@@ -26,28 +26,30 @@
         { id: 'veryHigh', min: 3.5, max: 4 }
       ]
     },
+    // Impact / Facilité live on the 0–10 scale after the priority adaptation.
+    // Urgence stays 0–4 (now derived from Empressement + Échéance, not a user input).
     impact: {
       key: 'impact',
       min: 0,
-      max: 4,
+      max: 10,
       levels: [
-        { id: 'veryLow', min: 0, max: 0.99 },
-        { id: 'low', min: 1, max: 1.99 },
-        { id: 'mid', min: 2, max: 2.99 },
-        { id: 'high', min: 3, max: 3.49 },
-        { id: 'veryHigh', min: 3.5, max: 4 }
+        { id: 'veryLow', min: 0, max: 1.99 },
+        { id: 'low', min: 2, max: 3.99 },
+        { id: 'mid', min: 4, max: 5.99 },
+        { id: 'high', min: 6, max: 7.99 },
+        { id: 'veryHigh', min: 8, max: 10 }
       ]
     },
     ease: {
       key: 'ease',
-      min: 1,
-      max: 5,
+      min: 0,
+      max: 10,
       levels: [
-        { id: 'veryLow', min: 1, max: 1.49 },
-        { id: 'low', min: 1.5, max: 2.49 },
-        { id: 'mid', min: 2.5, max: 3.49 },
-        { id: 'high', min: 3.5, max: 4.49 },
-        { id: 'veryHigh', min: 4.5, max: 5 }
+        { id: 'veryLow', min: 0, max: 1.99 },
+        { id: 'low', min: 2, max: 3.99 },
+        { id: 'mid', min: 4, max: 5.99 },
+        { id: 'high', min: 6, max: 7.99 },
+        { id: 'veryHigh', min: 8, max: 10 }
       ]
     }
   };

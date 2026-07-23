@@ -48,6 +48,7 @@
 
   // ── 1. Formula weights & constants ─────────────────────────────────────
 
+  // Legacy Eisenhower / WSJF helpers (still used by alternate formulas).
   var WT = 1.2;
   var WB = 0.8;
   var WI = 0.95;
@@ -70,7 +71,7 @@
   var WSJF_SCALE = 10 / 6;
   var VALUE_EFFORT_SCALE = 2.5;
   var EISENHOWER_URGENCY_THRESHOLD = 2;
-  var EISENHOWER_IMPACT_THRESHOLD = 2;
+  var EISENHOWER_IMPACT_THRESHOLD = 5; // Impact axis is 0–10 after adaptation
   var FORMULA_STORAGE_KEY = 'trello-priority-powerup/formula';
   var COLOR_SCHEME_STORAGE_KEY = 'trello-priority-powerup/color-scheme';
   var SECTION_COLLAPSE_STORAGE_KEY = 'trello-priority-powerup/section-collapse';
@@ -94,6 +95,90 @@
   /** Member clock preference: '24' (default) or '12'. Canonical storage stays HH:MM. */
   var preferredTimeFormat = '24';
   var SCORE_MAX = 10;
+
+  // ── 1a. Priority adaptation (Impact + Facilité + Échéance + Empressement) ─
+  // score = clamp(base + datePull + empressePull, 0, 10)
+  // base  = Impact*BASE_IMPACT_WEIGHT + Facilité*BASE_EASE_WEIGHT  (each 0–10)
+
+  var AXIS_SCORE_MAX = 10;
+  var BASE_IMPACT_WEIGHT = 0.6;
+  var BASE_EASE_WEIGHT = 0.4;
+  /** true = easier tasks score higher (quick wins float). Flip to surface hard work. */
+  var EASE_QUICK_WINS = true;
+  var DATE_PROXIMITY_TAU_DAYS = 5;
+  var DATE_GAIN_MOVABLE = 1.2;
+  var DATE_GAIN_FIXED = 3.5;
+  var EMPRESSEMENT_PULL_MAX = 3.0;
+  var IMPACT_SYNERGY_PER_EXTRA = 0.12;
+  /**
+   * Migration mode for old Urgence → Empressement:
+   * 'part_b' = auto-map all tasks (compress downward) + review nudge when ≥8
+   * 'part_a_only' = start at Aucun for all; nudge every migrated task once
+   */
+  var URGENCY_MIGRATION_MODE = 'part_b';
+  var URGENCY_REVIEW_THRESHOLD_10 = 8;
+
+  var EMPRESSEMENT_OPTIONS = [
+    { id: 'aucun', label: 'Aucun', index: 0 },
+    { id: 'bientot', label: 'Bient\u00f4t', index: 1 },
+    { id: 'assez-vite', label: 'Assez vite', index: 2 },
+    { id: 'vite', label: 'Vite', index: 3 },
+    { id: 'au-plus-vite', label: 'Au plus vite', index: 4 }
+  ];
+  var EMPRESSEMENT_DEFAULT_ID = 'aucun';
+
+  /** Impact sub-factors ("Nous permet de…"). Weights are org knobs. */
+  var IMPACT_FACTOR_DEFS = [
+    { id: 'vitesse', label: 'Gagner en vitesse', weight: 1.0 },
+    { id: 'probleme', label: 'R\u00e9soudre un probl\u00e8me', weight: 1.3 },
+    { id: 'qualite', label: 'Am\u00e9liorer la qualit\u00e9 future', weight: 1.0 },
+    { id: 'reach', label: 'Toucher beaucoup de gens', weight: 1.15 },
+    { id: 'contenu', label: 'Produire du contenu', weight: 1.0 }
+  ];
+
+  /** Facilité cost factors ("Ce que ça coûte…"). Named scales map to ease contrib 0–10. */
+  var EASE_COST_TIME_STEPS = [
+    { id: 'une-heure', label: 'Une heure', ease: 10 },
+    { id: 'plusieurs-heures', label: 'Plusieurs heures', ease: 8.5 },
+    { id: 'une-journee', label: 'Une journ\u00e9e', ease: 7 },
+    { id: 'plusieurs-jours', label: 'Plusieurs jours', ease: 5.5 },
+    { id: 'une-semaine', label: 'Une semaine', ease: 4 },
+    { id: 'plusieurs-semaines', label: 'Plusieurs semaines', ease: 2.5 },
+    { id: 'un-mois', label: 'Un mois', ease: 1.5 },
+    { id: 'plusieurs-mois', label: 'Plusieurs mois', ease: 0 }
+  ];
+  var EASE_COST_PEOPLE_STEPS = [
+    { id: 'juste-moi', label: 'Juste moi', ease: 10 },
+    { id: 'moi-et-une', label: 'Moi et une autre personne', ease: 7.5 },
+    { id: 'plusieurs', label: 'Plusieurs personnes', ease: 5 },
+    { id: 'equipe', label: 'Toute l\'\u00e9quipe', ease: 2.5 },
+    { id: 'organisation', label: 'Toute l\'organisation', ease: 0 }
+  ];
+  var EASE_COST_DEFS = [
+    {
+      id: 'temps',
+      label: 'Prend beaucoup de temps',
+      kind: 'named',
+      steps: EASE_COST_TIME_STEPS,
+      defaultStepId: 'plusieurs-jours'
+    },
+    {
+      id: 'gens',
+      label: 'Demande beaucoup de gens',
+      kind: 'named',
+      steps: EASE_COST_PEOPLE_STEPS,
+      defaultStepId: 'moi-et-une'
+    },
+    { id: 'argent', label: 'Co\u00fbte beaucoup d\'argent', kind: 'intensity', defaultIntensity: 5 },
+    { id: 'mental', label: 'Grande charge mentale', kind: 'intensity', defaultIntensity: 5 }
+  ];
+
+  var DUE_LIMIT_STATE_NONE = 'none';
+  var DUE_LIMIT_STATE_HAS = 'has';
+  var DUE_DATE_FIXE_COPY =
+    'Impos\u00e9e de l\'ext\u00e9rieur, ne bouge pas.';
+  var URGENCY_REVIEW_PROMPT =
+    'Cette t\u00e2che \u00e9tait marqu\u00e9e tr\u00e8s urgente \u2014 confirmer son Empressement et son \u00c9ch\u00e9ance\u00a0?';
 
   // ── 1b. Task-type catalog (built-in + board custom) ─────────────────────
   // Multi-label taxonomy for Information + AI interview. Picker order = array
@@ -1074,7 +1159,11 @@
   }
 
   // Urgency / impact axis max (ease uses 1..5).
+  /** Derived legacy urgency axis (0–4) for matrix / Eisenhower / calc graph. */
   var AXIS_UI_MAX = 4;
+  var IMPACT_UI_MAX = AXIS_SCORE_MAX;
+  var EASE_UI_MAX = AXIS_SCORE_MAX;
+  var EMPRESSEMENT_UI_MAX = 4;
   // Tier indices — keep in sync with TIER_DEFS order (Critique → Optionnelle).
   var TIER_I = {
     CRITIQUE: 0,
@@ -1126,53 +1215,111 @@
       }
     },
     impact: {
-      icon: ['impact-0', 'impact-1', 'impact-2', 'impact-3', 'impact-4'],
-      short: ['Personnel', '\u00c9quipe', 'Interne', 'Population', 'Global'],
+      icon: [
+        'impact-0', 'impact-0', 'impact-1', 'impact-1', 'impact-2',
+        'impact-2', 'impact-3', 'impact-3', 'impact-4', 'impact-4', 'impact-4'
+      ],
+      short: [
+        'Nul', 'Minimal', 'Faible', 'L\u00e9ger', 'Mod\u00e9r\u00e9',
+        'Notable', '\u00c9lev\u00e9', 'Fort', 'Tr\u00e8s fort', 'Majeur', 'Critique'
+      ],
       detail: [
-        'Port\u00e9e individuelle. L\'action touche surtout vous ou une seule personne.',
-        'Port\u00e9e \u00e9quipe. Effet sur le groupe de travail imm\u00e9diat ou le squad.',
-        'Port\u00e9e interne. Impact \u00e0 l\'\u00e9chelle de l\'organisation (plusieurs \u00e9quipes / d\u00e9partements).',
-        'Port\u00e9e population. Effet notable sur clients, usagers ou une communaut\u00e9 large.',
-        'Port\u00e9e mondiale. Rayonnement global : march\u00e9, soci\u00e9t\u00e9 ou plan\u00e8te.'
+        'Aucun enjeu perceptible.',
+        'Enjeu minime, effet tr\u00e8s local.',
+        'Faible valeur relative.',
+        'L\u00e9ger gain ou am\u00e9lioration.',
+        'Enjeu mod\u00e9r\u00e9 pour l\'\u00e9quipe ou le projet.',
+        'Valeur claire, m\u00e9rite une place dans le backlog.',
+        'Enjeu \u00e9lev\u00e9 : effet notable sur les objectifs.',
+        'Fort levier de valeur.',
+        'Tr\u00e8s fort impact sur le r\u00e9sultat attendu.',
+        'Enjeu majeur pour l\'organisation.',
+        'Impact critique : cons\u00e9quences majeures si ignor\u00e9.'
       ],
       popup: {
-        subtitle: 'Quelle est la port\u00e9e de cette action?',
-        intro: 'L\'impact mesure la port\u00e9e de l\'action\u00a0: qui est touch\u00e9, de l\'individu jusqu\'au global. Plus le cercle est grand, plus la secousse (valeur et audience) est large.',
-        guidance: 'Choisissez le plus petit cercle qui contient vraiment les personnes ou syst\u00e8mes affect\u00e9s.'
+        subtitle: 'Combien cette t\u00e2che compte-t-elle\u00a0?',
+        intro: 'L\'impact mesure \u00e0 quel point la t\u00e2che compte\u00a0: valeur, port\u00e9e et levier. Vous pouvez le r\u00e9gler directement ou le d\u00e9duire des facteurs \u00ab\u00a0Nous permet de\u2026\u00a0\u00bb.',
+        guidance: 'Pensez \u00e0 la valeur livr\u00e9e, pas seulement \u00e0 qui est touch\u00e9.'
       },
       affirmations: [
-        'Personnel. Touche surtout une personne.',
-        '\u00c9quipe. Effet sur l\'\u00e9quipe imm\u00e9diate.',
-        'Interne. Port\u00e9e organisationnelle.',
-        'Population. Clients, usagers ou communaut\u00e9 large.',
-        'Global. Rayonnement mondial.'
+        'Nul. Aucun enjeu perceptible.',
+        'Minimal. Effet tr\u00e8s local.',
+        'Faible. Peu de valeur relative.',
+        'L\u00e9ger. Petit gain.',
+        'Mod\u00e9r\u00e9. Enjeu moyen.',
+        'Notable. Valeur claire.',
+        '\u00c9lev\u00e9. Effet notable sur les objectifs.',
+        'Fort. Fort levier de valeur.',
+        'Tr\u00e8s fort. Gros effet sur le r\u00e9sultat.',
+        'Majeur. Enjeu organisationnel.',
+        'Critique. Cons\u00e9quences majeures si ignor\u00e9.'
       ]
     },
     ease: {
-      icon: ['', 'ease-1', 'ease-2', 'ease-3', 'ease-4', 'ease-5'],
-      short: ['', 'Très difficile', 'Difficile', 'Moyen', 'Facile', 'Super facile'],
+      icon: [
+        'ease-1', 'ease-1', 'ease-2', 'ease-2', 'ease-3',
+        'ease-3', 'ease-4', 'ease-4', 'ease-5', 'ease-5', 'ease-5'
+      ],
+      short: [
+        'Tr\u00e8s difficile', 'Tr\u00e8s difficile', 'Difficile', 'Difficile', 'Assez difficile',
+        'Moyen', 'Assez facile', 'Facile', 'Facile', 'Tr\u00e8s facile', 'Super facile'
+      ],
       detail: [
-        '',
-        'Projet lourd avec complexité élevée. Coordonner demande beaucoup de ressources ; faible confiance, faible réversibilité.',
-        'Effort conséquent avec plusieurs dépendances. Coût et difficulté notables, risque modéré à l\'exécution.',
-        'Complexité maîtrisée, exécution standard. Ressources raisonnables, difficulté absorbable par l\'équipe.',
-        'Peu de friction, rapide à réaliser. Faible coût, bonne confiance dans l\'exécution, facilement réversible.',
-        'Quasi sans friction. Très peu de ressources, complexité minimale, risque faible et annulation aisée.'
+        'Projet lourd, coordination intense, risque \u00e9lev\u00e9.',
+        'Tr\u00e8s exigeant en ressources et attention.',
+        'Effort cons\u00e9quent, plusieurs d\u00e9pendances.',
+        'Difficile, co\u00fbt et friction notables.',
+        'Assez difficile, demande de la rigueur.',
+        'Complexit\u00e9 ma\u00eetris\u00e9e, ex\u00e9cution standard.',
+        'Assez facile, friction limit\u00e9e.',
+        'Facile, rapide \u00e0 r\u00e9aliser.',
+        'Peu de friction, bonne confiance.',
+        'Tr\u00e8s facile, quasi sans obstacle.',
+        'Super facile. Quasi sans effort.'
       ],
       popup: {
-        subtitle: 'À quel point est-il facile de faire cette tâche?',
-        intro: 'La facilité d\'exécution reflète la complexité, le coût, l\'incertitude et le niveau de confiance dont vous disposez. Une tâche simple demande peu de ressources et reste facilement réversible ; une tâche difficile exige plus de coordination, multiplie les risques et coûte cher à corriger.',
-        guidance: 'Estimez la difficulté technique, les ressources mobilisées et la facilité à revenir en arrière si besoin.'
+        subtitle: '\u00c0 quel point est-il facile de faire cette t\u00e2che\u00a0?',
+        intro: 'La facilit\u00e9 refl\u00e8te le co\u00fbt d\'ex\u00e9cution (temps, gens, argent, charge mentale). R\u00e9glez le curseur ou d\u00e9duisez-le via \u00ab\u00a0Ce que \u00e7a co\u00fbte\u2026\u00a0\u00bb.',
+        guidance: 'Estimez le co\u00fbt global\u00a0: plus c\'est co\u00fbteux, plus la facilit\u00e9 est basse.'
       },
       affirmations: [
-        '',
-        'Très difficile. Projet lourd, coordination intense, risque important.',
-        'Difficile. Travail conséquent, dépendances multiples.',
-        'Moyen. Complexité maîtrisée, exécution standard.',
-        'Facile. Rapide à faire, peu de friction.',
-        'Super facile. Très peu d\'effort, faible risque, facile à annuler.'
+        'Tr\u00e8s difficile. Projet lourd, risque important.',
+        'Tr\u00e8s difficile. Ressources et attention maximales.',
+        'Difficile. Effort cons\u00e9quent.',
+        'Difficile. Friction et co\u00fbt notables.',
+        'Assez difficile. Demande de la rigueur.',
+        'Moyen. Complexit\u00e9 ma\u00eetris\u00e9e.',
+        'Assez facile. Friction limit\u00e9e.',
+        'Facile. Rapide \u00e0 faire.',
+        'Facile. Peu de friction.',
+        'Tr\u00e8s facile. Quasi sans obstacle.',
+        'Super facile. Tr\u00e8s peu d\'effort.'
       ]
     },
+    empressement: {
+      icon: ['urgency-0', 'urgency-1', 'urgency-2', 'urgency-3', 'urgency-4'],
+      short: ['Aucun', 'Bient\u00f4t', 'Assez vite', 'Vite', 'Au plus vite'],
+      detail: [
+        'Aucun empressement particulier. La t\u00e2che peut attendre sans frustration.',
+        'On aimerait s\'en d\u00e9barrasser bient\u00f4t, sans date impos\u00e9e.',
+        'Envie claire de avancer assez vite.',
+        'Forte volont\u00e9 de cl\u00f4turer rapidement.',
+        'Priorit\u00e9 personnelle maximale\u00a0: au plus vite.'
+      ],
+      popup: {
+        subtitle: 'Quelle est votre envie de terminer cette t\u00e2che\u00a0?',
+        intro: 'L\'empressement est l\'\u00e9lan \u00e0 terminer, ind\u00e9pendant de toute date. C\'est le r\u00e9sidu honn\u00eate de l\'ancienne Urgence apr\u00e8s s\u00e9paration de l\'Impact et de l\'\u00c9ch\u00e9ance.',
+        guidance: 'Ignorez la date limite\u00a0: parlez seulement de votre envie de voir la t\u00e2che disparaitre.'
+      },
+      affirmations: [
+        'Aucun. Pas d\'\u00e9lan particulier.',
+        'Bient\u00f4t. On aimerait s\'en d\u00e9barrasser.',
+        'Assez vite. Envie claire d\'avancer.',
+        'Vite. Forte volont\u00e9 de cl\u00f4turer.',
+        'Au plus vite. \u00c9lan maximal, d\u00e9lib\u00e9r\u00e9.'
+      ]
+    },
+    // Legacy labels kept for help/history readers; Urgence is no longer an input.
     urgency: {
       icon: ['urgency-0', 'urgency-1', 'urgency-2', 'urgency-3', 'urgency-4'],
       short: ['Aucune', 'Faible', 'Modérée', 'Élevée', 'Critique'],
@@ -1185,8 +1332,8 @@
       ],
       popup: {
         subtitle: 'À quel point est-ce urgent de faire cette tâche?',
-        intro: 'L\'urgence capture la pression et les conséquences d\'un report : blocages provoqués et dépendances qui s\'accumulent si la tâche est repoussée.',
-        guidance: 'Regardez ce qui bloque si vous reportez et les conséquences concrètes d\'un changement de priorité.'
+        intro: 'L\'urgence n\'est plus un curseur d\'entr\u00e9e\u00a0: elle \u00e9merge de l\'Impact, de l\'\u00c9ch\u00e9ance et de l\'Empressement.',
+        guidance: 'Utilisez Empressement et \u00c9ch\u00e9ance \u00e0 la place.'
       },
       affirmations: [
         'Aucune pression. Rien ne bloque, aucune dépendance critique.',
@@ -2387,16 +2534,18 @@
   var KEYWORDS = {
     time: 'Pression relative : blocages, dépendances et risque si repoussée.',
     blocking: 'Effet sur l\'équipe : blocages, dépendances et ralentissement du travail.',
-    impact: 'Port\u00e9e de l\'action : Personnel \u2192 \u00c9quipe \u2192 Interne \u2192 Population \u2192 Global.',
-    ease: 'Coût d\'exécution : complexité, ressources, difficulté, confiance et réversibilité.',
-    urgency: 'Niveau d\'urgence : blocages, dépendances et risque si repoussée.'
+    impact: 'Combien la t\u00e2che compte : valeur, port\u00e9e et levier (0\u201310).',
+    ease: 'Co\u00fbt d\'ex\u00e9cution : temps, gens, argent, charge mentale (0\u201310, plus facile = plus haut).',
+    empressement: 'Envie de terminer, ind\u00e9pendante de toute date.',
+    urgency: 'Niveau d\'urgence d\u00e9riv\u00e9 (sortie) : Impact + \u00c9ch\u00e9ance + Empressement.'
   };
 
   var QUESTIONS = {
     time: 'Quelle pression pèse sur cette tâche?',
     blocking: 'Est-ce que quelque chose cesse de fonctionner si ce n\'est pas fait?',
-    impact: 'Quelle est la port\u00e9e de cette action?',
-    ease: 'À quel point est-il facile de faire cette tâche?',
+    impact: 'Combien cette t\u00e2che compte-t-elle\u00a0?',
+    ease: '\u00c0 quel point est-il facile de faire cette t\u00e2che\u00a0?',
+    empressement: 'Quelle est votre envie de terminer cette t\u00e2che\u00a0?',
     urgency: 'À quel point est-ce urgent de faire cette tâche?'
   };
 
@@ -2411,6 +2560,7 @@
     blocking: 'ti-barrier-block',
     impact: 'ti-target-arrow',
     ease: 'ti-gauge',
+    empressement: 'ti-rocket',
     urgency: 'ti-flame'
   };
 
@@ -2814,13 +2964,14 @@
   }
 
   var HEAT_SEGMENT_DEFS = [
-    { i: TIER_I.OPTIONNELLE, target: 0.7, preset: { urgency: 0, impact: 0, ease: 2 } },
-    { i: TIER_I.SECONDAIRE, target: 2.1, preset: { urgency: 1, impact: 1, ease: 2 } },
-    { i: TIER_I.FLEXIBLE, target: 3.6, preset: { urgency: 1, impact: 2, ease: 3 } },
-    { i: TIER_I.IMPORTANTE, target: 5.0, preset: { urgency: 2, impact: 2, ease: 3 } },
-    { i: TIER_I.PRIORITAIRE, target: 6.5, preset: { urgency: 2, impact: 3, ease: 3 } },
-    { i: TIER_I.URGENTE, target: 7.9, preset: { urgency: 3, impact: 3, ease: 2 } },
-    { i: TIER_I.CRITIQUE, target: 9.3, preset: { urgency: 4, impact: 4, ease: 5 } }
+    // Presets use Impact / Facilité (0–10) + Empressement (0–4). No Urgence input.
+    { i: TIER_I.OPTIONNELLE, target: 0.7, preset: { impact: 0, ease: 2, empressement: 0 } },
+    { i: TIER_I.SECONDAIRE, target: 2.1, preset: { impact: 2, ease: 3, empressement: 0 } },
+    { i: TIER_I.FLEXIBLE, target: 3.6, preset: { impact: 4, ease: 5, empressement: 0 } },
+    { i: TIER_I.IMPORTANTE, target: 5.0, preset: { impact: 5, ease: 5, empressement: 1 } },
+    { i: TIER_I.PRIORITAIRE, target: 6.5, preset: { impact: 7, ease: 5, empressement: 2 } },
+    { i: TIER_I.URGENTE, target: 7.9, preset: { impact: 7, ease: 4, empressement: 3 } },
+    { i: TIER_I.CRITIQUE, target: 9.3, preset: { impact: 10, ease: 8, empressement: 3 } }
   ];
 
   var HEAT_SEGMENTS = [];
@@ -5065,10 +5216,10 @@
   // ── 4. Matrix label bridge (PriorityMatrix) ─────────────────────────────
 
   function isInutile(inputs) {
-    var U = inputs.urgency != null ? inputs.urgency : 0;
     var I = inputs.impact != null ? inputs.impact : 0;
-    var F = inputs.ease != null ? inputs.ease : 5;
-    return U < INUTILE_EPS && I < INUTILE_EPS && F <= 1 + INUTILE_EPS;
+    var F = inputs.ease != null ? inputs.ease : AXIS_SCORE_MAX;
+    var E = empressementIndex(inputs);
+    return I < INUTILE_EPS && F <= INUTILE_EPS && E <= 0;
   }
 
   var matrixSettings = null;
@@ -5086,7 +5237,13 @@
     if (!Matrix) return null;
     var settings = labelSettings != null ? labelSettings : matrixSettings;
     var ctx = Matrix.buildResolveContext(settings, tier, score);
-    return Matrix.resolveLabel(inputs, ctx);
+    // The matrix's Urgence axis (0–4) has no direct UI input anymore; derive it
+    // from Empressement + Échéance so quadrant rules keep matching sensibly.
+    var matrixInputs =
+      inputs && inputs.urgency == null
+        ? Object.assign({}, inputs, { urgency: deriveLegacyUrgency(inputs) })
+        : inputs;
+    return Matrix.resolveLabel(matrixInputs, ctx);
   }
 
   function isEnAttente(inputs) {
@@ -5341,12 +5498,12 @@
     {
       key: 'baseline',
       label: 'Score composite',
-      description: 'Urgence, impact et facilité fusionnés en un score 0–10 et un palier.'
+      description: 'Impact et facilit\u00e9, plus pression d\'\u00e9ch\u00e9ance et empressement, en un score 0\u201310.'
     },
     {
       key: 'eisenhower',
       label: 'Matrice Eisenhower',
-      description: 'Urgence × importance — quatre quadrants : Faire, Planifier, Déléguer, Éliminer.'
+      description: 'Pression (empressement / \u00e9ch\u00e9ance) \u00d7 importance — quatre quadrants.'
     }
   ];
 
@@ -5359,7 +5516,7 @@
         score: 9.0,
         urgent: true,
         important: true,
-        preset: { urgency: 3, impact: 3 }
+        preset: { urgency: 3, impact: 7.5 }
       },
       {
         id: 'schedule',
@@ -5368,7 +5525,7 @@
         score: 6.5,
         urgent: false,
         important: true,
-        preset: { urgency: 1, impact: 3 }
+        preset: { urgency: 1, impact: 7.5 }
       },
       {
         id: 'delegate',
@@ -5377,7 +5534,7 @@
         score: 4.0,
         urgent: true,
         important: false,
-        preset: { urgency: 3, impact: 1 }
+        preset: { urgency: 3, impact: 2.5 }
       },
       {
         id: 'delete',
@@ -5386,7 +5543,7 @@
         score: 1.5,
         urgent: false,
         important: false,
-        preset: { urgency: 1, impact: 1 }
+        preset: { urgency: 1, impact: 2.5 }
       }
     ];
     return defs.map(function (def) {
@@ -5625,25 +5782,23 @@
   }
 
   function impactTerm(I, F) {
-    return WI * I * F / 5;
+    return WI * (I / AXIS_SCORE_MAX) * 4 * (F / AXIS_SCORE_MAX) * 5 / 5;
   }
 
   function curveImpact(I) {
-    return Math.pow(I / 4, IMPACT_EXP) * 4;
+    return Math.pow(I / AXIS_SCORE_MAX, IMPACT_EXP) * 4;
   }
 
-  // Effort dampening: rises with U×I; capped below 1 so ease still contributes at max U+I.
   function dampenCurve(U, I) {
-    var ui = (U / 4) * (I / 4);
+    var ui = (U / 4) * (I / AXIS_SCORE_MAX);
     return Math.pow(ui, DAMPEN_POWER) * DAMPEN_MAX;
   }
 
   function effectiveEaseF(U, I, F) {
-    if (U >= 3 && I >= 3) return Math.max(F, EASE_FLOOR);
+    if (U >= 3 && I >= 7.5) return Math.max(F, EASE_FLOOR * 2);
     return F;
   }
 
-  // Smooth ramp U=3→4 so boost has no step at max urgency (graph + score).
   function urgencyBoostRamp(U) {
     if (U <= URGENCY_BOOST_MIN_U - 1) return 0;
     if (U >= URGENCY_BOOST_MIN_U) return 1;
@@ -5651,104 +5806,333 @@
     return t * t * (3 - 2 * t);
   }
 
-  // Low-impact urgency floor: max U with little I still reaches Urgente tier.
   function urgencyBoost(U, I, dampen) {
     var ramp = urgencyBoostRamp(U);
     if (ramp <= 0) return 0;
-    var impactFactor = Math.max(0, 1 - I / 4);
+    var impactFactor = Math.max(0, 1 - I / AXIS_SCORE_MAX);
     if (impactFactor <= 0) return 0;
     return URGENCY_BOOST_MAX * Math.pow(U / 4, 2) * (1 - dampen) * impactFactor * ramp;
   }
 
-  // Baseline score (0–10):
-  //   urgencyShare = pressure × lerp(easeMul, 1, ramp(U))   — easeMul only at low/mid U
-  //   impactShare  = impactCore × easeMul                   — when easeMul active
-  //   impactCore   = WI × curveImpact(I) × hardFactor       — hardFactor attenuated when U≥3
-  //   urgencyBoost = URGENCY_BOOST_MAX×(U/4)²×(1−dampen)×max(0,1−I/4)×ramp(U)
-  //   easeTerm     = easeWeight × (I/4 + EASE_BASE) × (F/5)^γ × EASE_SCALE
-  //   easeWeight   = WI_EASE × (1 − dampen × 0.85)
-  //   easeMul      = lerp(0.75, 1.25, (F−1)/4) when dampen low
-  //   dampen       = ((U/4)×(I/4))^DAMPEN_POWER × DAMPEN_MAX
-  //   effectiveF   = max(F, EASE_FLOOR) when U≥3 and I≥3
-  //   rawScore     = urgencyShare + impactShare + easeTerm + urgencyBoost
-  //   score        = clamp(rawScore × (10 / rawMax), 0, 10)
-  //   rawMax       = rawScore at U=4, I=4, F=5 (all max → exactly 10.0)
-  function calcBaselineTermsRaw(U, I, F) {
-    var pressure = urgencyLevelToPressure(U);
-    var impactCore = WI * curveImpact(I);
-    var effectiveF = effectiveEaseF(U, I, F);
-    var dampen = dampenCurve(U, I);
-    var easeBoost = Math.pow(effectiveF / 5, GAMMA_EASE);
-    var easeWeight = WI_EASE * (1 - dampen * DAMPEN_EASE_ATTENUATION);
-    var easeTerm = easeWeight * (I / 4 + EASE_BASE) * easeBoost * EASE_SCALE;
+  // ── New composite score (Impact + Facilité + datePull + empressePull) ──
 
-    var hardFactor = 1;
-    if (F <= 2 && dampen < EASE_MUL_DAMPEN_THRESHOLD) {
-      hardFactor = lerp(HARD_PENALTY_FLOOR, 1, (F - 1));
-      if (U >= 3) {
-        var urgShield = 1 - Math.pow(U / 4, 2) * (1 - dampen);
-        hardFactor = lerp(hardFactor, 1, urgShield);
+  function empressementOptionById(id) {
+    for (var i = 0; i < EMPRESSEMENT_OPTIONS.length; i++) {
+      if (EMPRESSEMENT_OPTIONS[i].id === id) return EMPRESSEMENT_OPTIONS[i];
+    }
+    return EMPRESSEMENT_OPTIONS[0];
+  }
+
+  function empressementOptionByIndex(index) {
+    var idx = clamp(Math.round(Number(index) || 0), 0, EMPRESSEMENT_UI_MAX);
+    for (var i = 0; i < EMPRESSEMENT_OPTIONS.length; i++) {
+      if (EMPRESSEMENT_OPTIONS[i].index === idx) return EMPRESSEMENT_OPTIONS[i];
+    }
+    return EMPRESSEMENT_OPTIONS[0];
+  }
+
+  function normalizeEmpressementId(raw) {
+    if (typeof raw === 'number' && isFinite(raw)) {
+      return empressementOptionByIndex(raw).id;
+    }
+    if (typeof raw === 'string' && raw.trim()) {
+      var found = empressementOptionById(raw.trim());
+      if (found) return found.id;
+    }
+    return EMPRESSEMENT_DEFAULT_ID;
+  }
+
+  function empressementIndex(inputs) {
+    if (!inputs) return 0;
+    if (inputs.empressement != null) {
+      if (typeof inputs.empressement === 'number') {
+        return clamp(Math.round(inputs.empressement), 0, EMPRESSEMENT_UI_MAX);
       }
-      impactCore = impactCore * hardFactor;
+      return empressementOptionById(normalizeEmpressementId(inputs.empressement)).index;
     }
+    return 0;
+  }
 
-    var urgencyShare = pressure;
-    var impactShare = impactCore;
-    var easeMul = 1;
-    if (dampen < EASE_MUL_DAMPEN_THRESHOLD) {
-      easeMul = lerp(EASE_MUL_LO, EASE_MUL_HI, (F - 1) / 4);
-      var impactOnlyBlend = urgencyBoostRamp(U);
-      // At low U both shares get easeMul; at high U only impact does.
-      urgencyShare = pressure * lerp(easeMul, 1, impactOnlyBlend);
-      impactShare = impactCore * easeMul;
+  function impactFactorDefById(id) {
+    for (var i = 0; i < IMPACT_FACTOR_DEFS.length; i++) {
+      if (IMPACT_FACTOR_DEFS[i].id === id) return IMPACT_FACTOR_DEFS[i];
     }
-    var core = urgencyShare + impactShare;
-    var boost = urgencyBoost(U, I, dampen);
-    var rawScore = core + easeTerm + boost;
+    return null;
+  }
+
+  function easeCostDefById(id) {
+    for (var i = 0; i < EASE_COST_DEFS.length; i++) {
+      if (EASE_COST_DEFS[i].id === id) return EASE_COST_DEFS[i];
+    }
+    return null;
+  }
+
+  function namedStepEase(steps, stepId) {
+    if (!Array.isArray(steps) || !steps.length) return AXIS_SCORE_MAX / 2;
+    for (var i = 0; i < steps.length; i++) {
+      if (steps[i].id === stepId) return steps[i].ease;
+    }
+    return steps[0].ease;
+  }
+
+  /**
+   * Weighted average of checked Impact sub-factors (intensities 1–10),
+   * with synergy multiplier 1 + 0.12*(n-1), capped at 10.
+   */
+  function computeImpactFromFactors(factors) {
+    if (!factors || typeof factors !== 'object') return null;
+    var sumW = 0;
+    var sum = 0;
+    var checkedCount = 0;
+    for (var i = 0; i < IMPACT_FACTOR_DEFS.length; i++) {
+      var def = IMPACT_FACTOR_DEFS[i];
+      var entry = factors[def.id];
+      if (!entry || !entry.checked) continue;
+      var intensity = clamp(Number(entry.intensity) || 5, 1, 10);
+      sumW += def.weight;
+      sum += intensity * def.weight;
+      checkedCount += 1;
+    }
+    if (checkedCount === 0 || sumW <= 0) return null;
+    var avg = sum / sumW;
+    var synergy = 1 + IMPACT_SYNERGY_PER_EXTRA * (checkedCount - 1);
+    return clamp(avg * synergy, 0, AXIS_SCORE_MAX);
+  }
+
+  /**
+   * Facilité from cost checkboxes. Each cost lowers ease.
+   * Named scales contribute their ease value; intensity costs map 1–10 → ease 10–0.
+   * Average of checked cost ease contributions; null if none checked.
+   */
+  function computeEaseFromCosts(costs) {
+    if (!costs || typeof costs !== 'object') return null;
+    var sum = 0;
+    var checkedCount = 0;
+    for (var i = 0; i < EASE_COST_DEFS.length; i++) {
+      var def = EASE_COST_DEFS[i];
+      var entry = costs[def.id];
+      if (!entry || !entry.checked) continue;
+      var easeContrib;
+      if (def.kind === 'named') {
+        easeContrib = namedStepEase(def.steps, entry.stepId || def.defaultStepId);
+      } else {
+        var intensity = clamp(Number(entry.intensity) || def.defaultIntensity || 5, 1, 10);
+        easeContrib = AXIS_SCORE_MAX - intensity;
+      }
+      sum += easeContrib;
+      checkedCount += 1;
+    }
+    if (checkedCount === 0) return null;
+    return clamp(sum / checkedCount, 0, AXIS_SCORE_MAX);
+  }
+
+  function effectiveImpact(inputs) {
+    var fromFactors = computeImpactFromFactors(inputs && inputs.impactFactors);
+    if (fromFactors != null) return fromFactors;
+    var I = inputs && inputs.impact != null ? Number(inputs.impact) : 5;
+    return clamp(isFinite(I) ? I : 5, 0, AXIS_SCORE_MAX);
+  }
+
+  function effectiveEase(inputs) {
+    var fromCosts = computeEaseFromCosts(inputs && inputs.easeCosts);
+    if (fromCosts != null) return fromCosts;
+    var F = inputs && inputs.ease != null ? Number(inputs.ease) : 5;
+    return clamp(isFinite(F) ? F : 5, 0, AXIS_SCORE_MAX);
+  }
+
+  function easeForScore(easeValue) {
+    var F = clamp(easeValue, 0, AXIS_SCORE_MAX);
+    return EASE_QUICK_WINS ? F : AXIS_SCORE_MAX - F;
+  }
+
+  function cardHasDueDate(inputs) {
+    if (!inputs) return false;
+    if (inputs.dueEnabled === false) return false;
+    if (inputs.dueLimitState === DUE_LIMIT_STATE_NONE) return false;
+    if (inputs.dueDate) return true;
+    if (inputs.dueVague) return true;
+    return false;
+  }
+
+  function computeDatePull(inputs, now) {
+    if (!cardHasDueDate(inputs)) return 0;
+    var iso = inputs.dueDate;
+    if (!iso && inputs.dueVague && typeof resolveDueVagueToDate === 'function') {
+      iso = resolveDueVagueToDate(inputs.dueVague);
+    }
+    if (!iso) return 0;
+    var days = daysUntilDue(iso, now);
+    if (!isFinite(days)) return 0;
+    var proximity = days < 0 ? 1 : Math.exp(-days / DATE_PROXIMITY_TAU_DAYS);
+    var dateGain = inputs.dateFixe === true ? DATE_GAIN_FIXED : DATE_GAIN_MOVABLE;
+    return proximity * dateGain;
+  }
+
+  function computeEmpressePull(inputs) {
+    return (empressementIndex(inputs) / EMPRESSEMENT_UI_MAX) * EMPRESSEMENT_PULL_MAX;
+  }
+
+  function computeBaseScore(impact, ease) {
+    return effectiveImpact({ impact: impact }) * BASE_IMPACT_WEIGHT +
+      easeForScore(effectiveEase({ ease: ease })) * BASE_EASE_WEIGHT;
+  }
+
+  /**
+   * Derive a legacy 0–4 urgency for matrix / Eisenhower / calc-graph compat.
+   * Not a user input — pressure from Empressement + deadline pull.
+   */
+  function deriveLegacyUrgency(inputs, now) {
+    var emp = empressementIndex(inputs);
+    var datePull = computeDatePull(inputs, now);
+    var pressure01 = clamp(emp / EMPRESSEMENT_UI_MAX * 0.55 + datePull / DATE_GAIN_FIXED * 0.45, 0, 1);
+    return clamp(pressure01 * AXIS_UI_MAX, 0, AXIS_UI_MAX);
+  }
+
+  /**
+   * Map old Urgence (any 0–4 or 0–10 scale) onto a 0–10 scale for migration.
+   */
+  function legacyUrgencyTo10(rawUrgency) {
+    var u = Number(rawUrgency);
+    if (!isFinite(u)) return 0;
+    if (u <= 4) return clamp(u * 2.5, 0, 10);
+    return clamp(u, 0, 10);
+  }
+
+  /** Part B table: compress downward; never auto-assign Au plus vite. */
+  function empressementIdFromLegacyUrgency10(u10) {
+    if (u10 <= 3) return 'aucun';
+    if (u10 <= 6) return 'bientot';
+    if (u10 <= 8) return 'assez-vite';
+    return 'vite';
+  }
+
+  /**
+   * One-shot migration of old Urgence → Empressement (+ review flag).
+   * Mutates/returns a shallow patch; does not copy Urgence into Empressement verbatim.
+   */
+  function migrateLegacyUrgency(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    if (raw.legacyUrgency != null || raw.urgencyMigrated === true) {
+      return null; // already migrated
+    }
+    if (raw.urgency == null && raw.empressement != null) return null;
+    if (raw.urgency == null) return null;
+    var u10 = legacyUrgencyTo10(raw.urgency);
+    var patch = {
+      legacyUrgency: Number(raw.urgency),
+      urgencyMigrated: true
+    };
+    if (URGENCY_MIGRATION_MODE === 'part_a_only') {
+      patch.empressement = EMPRESSEMENT_DEFAULT_ID;
+      patch.urgencyReviewNeeded = true;
+    } else {
+      patch.empressement = empressementIdFromLegacyUrgency10(u10);
+      if (u10 >= URGENCY_REVIEW_THRESHOLD_10) {
+        patch.urgencyReviewNeeded = true;
+      }
+    }
+    return patch;
+  }
+
+  /**
+   * Scale legacy Impact 0–4 / Ease 1–5 into 0–10 when axes look pre-adaptation.
+   */
+  function migrateLegacyAxisScales(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    if (raw.axesScaledTo10 === true) return null;
+    var impact = Number(raw.impact);
+    var ease = Number(raw.ease);
+    if (!isFinite(impact) || !isFinite(ease)) return null;
+    // Heuristic: old ease was 1–5 (never 0); old impact max 4.
+    var looksLegacy =
+      (ease >= 1 && ease <= 5 && impact >= 0 && impact <= 4 &&
+        (raw.empressement == null || raw.urgency != null)) ||
+      raw.urgency != null;
+    if (!looksLegacy && impact <= 4 && ease <= 5 && ease >= 1 && raw.axesScaledTo10 == null) {
+      // Soft: if both within old ranges and no new fields, scale once.
+      if (raw.impactFactors || raw.easeCosts || raw.dateFixe != null) return null;
+      looksLegacy = true;
+    }
+    if (!looksLegacy) return null;
     return {
-      pressure: pressure,
-      impactCore: impactCore,
-      urgencyShare: urgencyShare,
-      impactShare: impactShare,
-      easeTerm: easeTerm,
-      urgencyBoost: boost,
-      dampen: dampen,
-      effectiveF: effectiveF,
-      easeBoost: easeBoost,
-      easeWeight: easeWeight,
-      easeMul: easeMul,
-      hardFactor: hardFactor,
-      rawScore: rawScore,
-      U: U,
-      I: I,
-      F: F
+      impact: clamp(impact * 2.5, 0, AXIS_SCORE_MAX),
+      ease: clamp(((ease - 1) / 4) * AXIS_SCORE_MAX, 0, AXIS_SCORE_MAX),
+      axesScaledTo10: true
     };
   }
 
-  var BASELINE_RAW_MAX = calcBaselineTermsRaw(4, 4, 5).rawScore;
-  var BASELINE_SCORE_SCALE = 10 / BASELINE_RAW_MAX;
-
-  function scaleBaselineTerms(terms) {
-    var s = BASELINE_SCORE_SCALE;
+  // New baseline:
+  //   base          = Impact*0.6 + Facilité*0.4   (each 0–10; Facilité direction via EASE_QUICK_WINS)
+  //   datePull      = proximity * dateGain         (0 if no date; dateGain 1.2 or 3.5)
+  //   proximity     = days<0 ? 1 : exp(-days/5)
+  //   empressePull  = empressementIndex/4 * 3.0
+  //   score         = clamp(base + datePull + empressePull, 0, 10)
+  function calcBaselineTermsFromInputs(inputs, now) {
+    var I = effectiveImpact(inputs);
+    var Fraw = effectiveEase(inputs);
+    var F = easeForScore(Fraw);
+    var base = I * BASE_IMPACT_WEIGHT + F * BASE_EASE_WEIGHT;
+    var datePull = computeDatePull(inputs, now);
+    var empressePull = computeEmpressePull(inputs);
+    var score = clamp(base + datePull + empressePull, 0, SCORE_MAX);
+    var U = deriveLegacyUrgency(inputs, now);
     return {
-      pressure: terms.pressure * s,
-      impactCore: terms.impactCore * s,
-      urgencyShare: terms.urgencyShare * s,
-      impactShare: terms.impactShare * s,
-      easeTerm: terms.easeTerm * s,
-      urgencyBoost: terms.urgencyBoost * s,
-      dampen: terms.dampen,
-      effectiveF: terms.effectiveF,
-      easeBoost: terms.easeBoost,
-      easeWeight: terms.easeWeight,
-      easeMul: terms.easeMul,
-      hardFactor: terms.hardFactor,
-      rawScore: terms.rawScore,
-      score: clamp(terms.rawScore * s, 0, 10),
-      U: terms.U,
+      base: base,
+      impactShare: I * BASE_IMPACT_WEIGHT,
+      easeTerm: F * BASE_EASE_WEIGHT,
+      datePull: datePull,
+      empressePull: empressePull,
+      score: score,
+      U: U,
+      I: I,
+      F: Fraw,
+      Fscore: F,
+      E: empressementIndex(inputs),
+      dateFixe: !!(inputs && inputs.dateFixe),
+      hasDate: cardHasDueDate(inputs)
+    };
+  }
+
+  /** Legacy signature kept for heat graph / tests that pass U,I,F only. */
+  function calcBaselineTermsRaw(U, I, F) {
+    var inputs = {
+      urgency: U,
+      impact: I != null ? I : 5,
+      ease: F != null ? F : 5,
+      empressement: 0
+    };
+    // If I/F look like old 0–4 / 1–5, treat as already on new scale when >4 or ease can be 0.
+    var terms = calcBaselineTermsFromInputs(inputs);
+    return {
+      pressure: urgencyLevelToPressure(U),
+      impactCore: terms.impactShare,
+      urgencyShare: 0,
+      impactShare: terms.impactShare,
+      easeTerm: terms.easeTerm,
+      urgencyBoost: 0,
+      dampen: 0,
+      effectiveF: terms.F,
+      easeBoost: 1,
+      easeWeight: BASE_EASE_WEIGHT,
+      easeMul: 1,
+      hardFactor: 1,
+      rawScore: terms.score,
+      datePull: terms.datePull,
+      empressePull: terms.empressePull,
+      base: terms.base,
+      U: U,
       I: terms.I,
       F: terms.F
     };
+  }
+
+  var BASELINE_RAW_MAX = 10;
+  var BASELINE_SCORE_SCALE = 1;
+
+  function scaleBaselineTerms(terms) {
+    return Object.assign({}, terms, {
+      score: clamp(terms.rawScore != null ? terms.rawScore : terms.score, 0, 10)
+    });
   }
 
   function calcBaselineTerms(U, I, F) {
@@ -5756,45 +6140,58 @@
   }
 
   function jobSize(F) {
-    return Math.max(6 - F, 1);
+    // Facilité 0–10 → job size 1..6 for WSJF compat
+    var f = clamp(F, 0, AXIS_SCORE_MAX);
+    return Math.max(6 - f / 2, 1);
   }
 
   function readInputs(inputs) {
-    var U = inputs.urgency;
-    var I = inputs.impact;
-    var F = inputs.ease;
+    var terms = calcBaselineTermsFromInputs(inputs || {});
+    var U = terms.U;
+    var I = terms.I;
+    var F = terms.F;
     var pressure = urgencyLevelToPressure(U);
     var imp = impactTerm(I, F);
-    var importance = 0.5 + I / 4;
+    var importance = 0.5 + I / AXIS_SCORE_MAX;
     var urgencyNorm = pressure / PRESSURE_MAX;
     var js = jobSize(F);
-    return { U: U, I: I, F: F, pressure: pressure, imp: imp, importance: importance, urgencyNorm: urgencyNorm, jobSize: js };
+    return {
+      U: U,
+      I: I,
+      F: F,
+      E: terms.E,
+      pressure: pressure,
+      imp: imp,
+      importance: importance,
+      urgencyNorm: urgencyNorm,
+      jobSize: js,
+      base: terms.base,
+      datePull: terms.datePull,
+      empressePull: terms.empressePull
+    };
   }
 
   function calcBaseline(inputs) {
-    var d = readInputs(inputs);
-    var t = calcBaselineTerms(d.U, d.I, d.F);
+    var t = calcBaselineTermsFromInputs(inputs || {});
     return {
       score: t.score,
-      pressure: t.pressure,
-      impactCore: t.impactCore,
+      pressure: urgencyLevelToPressure(t.U),
+      impactCore: t.impactShare,
       easeTerm: t.easeTerm,
-      dampen: t.dampen,
-      effectiveF: t.effectiveF,
+      dampen: 0,
+      effectiveF: t.F,
       terms: {
-        pressure: t.pressure,
-        impactCore: t.impactCore,
-        urgencyShare: t.urgencyShare,
+        base: t.base,
         impactShare: t.impactShare,
         easeTerm: t.easeTerm,
-        urgencyBoost: t.urgencyBoost,
-        dampen: t.dampen,
-        effectiveF: t.effectiveF,
-        easeMul: t.easeMul,
-        hardFactor: t.hardFactor,
-        U: d.U,
-        I: d.I,
-        F: d.F
+        datePull: t.datePull,
+        empressePull: t.empressePull,
+        U: t.U,
+        I: t.I,
+        F: t.F,
+        E: t.E,
+        dateFixe: t.dateFixe,
+        hasDate: t.hasDate
       },
       tier: tierFor(t.score)
     };
@@ -5873,12 +6270,14 @@
 
   function formatBaseline(terms, score) {
     var parts = [
-      'Urgence ' + (terms.urgencyShare != null ? terms.urgencyShare : terms.pressure).toFixed(1),
-      'Impact ' + (terms.impactShare != null ? terms.impactShare : terms.impactCore).toFixed(1),
-      'Facilit\u00e9 ' + terms.easeTerm.toFixed(1)
+      'Impact ' + (terms.impactShare != null ? terms.impactShare : 0).toFixed(1),
+      'Facilit\u00e9 ' + (terms.easeTerm != null ? terms.easeTerm : 0).toFixed(1)
     ];
-    if (terms.urgencyBoost != null && terms.urgencyBoost > 0.05) {
-      parts.push('Bonus urgence ' + terms.urgencyBoost.toFixed(1));
+    if (terms.datePull != null && terms.datePull > 0.05) {
+      parts.push('\u00c9ch\u00e9ance ' + terms.datePull.toFixed(1));
+    }
+    if (terms.empressePull != null && terms.empressePull > 0.05) {
+      parts.push('Empressement ' + terms.empressePull.toFixed(1));
     }
     return parts.join(' + ') + '   =   ' + formatScore(score);
   }
@@ -6086,43 +6485,36 @@
 
   function formatBaselineBreakdown(result) {
     var t = result.terms;
-    var urgPts = t.urgencyShare != null ? t.urgencyShare : t.pressure;
-    var impPts = t.impactShare != null ? t.impactShare : t.impactCore;
-    var easePts = t.easeTerm;
-    var boostPts = t.urgencyBoost != null ? t.urgencyBoost : 0;
-    var hasBoost = boostPts > 0.05;
+    var impPts = t.impactShare != null ? t.impactShare : 0;
+    var easePts = t.easeTerm != null ? t.easeTerm : 0;
+    var datePts = t.datePull != null ? t.datePull : 0;
+    var empPts = t.empressePull != null ? t.empressePull : 0;
+    var hasDatePts = datePts > 0.05;
+    var hasEmpPts = empPts > 0.05;
+
+    var formulaParts = ['Impact + Facilit\u00e9'];
+    if (hasDatePts) formulaParts.push('\u00c9ch\u00e9ance');
+    if (hasEmpPts) formulaParts.push('Empressement');
 
     var rows = [
       breakdownRowTitle('Comment ce score est calcul\u00e9'),
-      breakdownRowFormula(
-        hasBoost
-          ? 'Urgence + Impact + Facilit\u00e9 + bonus'
-          : 'Urgence + Impact + Facilit\u00e9'
-      ),
-      breakdownRowTerm('Urgence', formatSliderLevel(t.U), formatSignedPoints(urgPts)),
-      breakdownRowTerm('Impact', formatSliderLevel(t.I), formatSignedPoints(impPts))
+      breakdownRowFormula(formulaParts.join(' + ')),
+      breakdownRowTerm('Impact', formatSliderLevel(t.I), formatSignedPoints(impPts)),
+      breakdownRowTerm('Facilit\u00e9', formatSliderLevel(t.F), formatSignedPoints(easePts))
     ];
-    if (t.hardFactor != null && t.hardFactor < 0.999 && t.I > 0) {
-      rows.push(breakdownRowSub('Un peu r\u00e9duit\u00a0: t\u00e2che difficile \u00e0 r\u00e9aliser'));
-    }
-    rows.push(breakdownRowTerm('Facilit\u00e9', formatSliderLevel(t.F), formatSignedPoints(easePts)));
-    if (t.dampen > 0.12) {
-      rows.push(
-        breakdownRowSub(
-          'Compte moins ici\u00a0: urgence et impact sont d\u00e9j\u00e0 \u00e9lev\u00e9s'
-        )
-      );
-    }
-    if (hasBoost) {
+    if (hasDatePts) {
       rows.push(
         breakdownRowTerm(
-          'Bonus urgence',
-          '',
-          formatSignedPoints(boostPts)
+          '\u00c9ch\u00e9ance',
+          null,
+          formatSignedPoints(datePts),
+          t.dateFixe ? 'date fixe' : null
         )
       );
+    }
+    if (hasEmpPts) {
       rows.push(
-        breakdownRowSub('Urgence maximale avec peu d\u2019impact\u00a0: coup de pouce')
+        breakdownRowTerm('Empressement', formatSliderLevel(t.E), formatSignedPoints(empPts))
       );
     }
     rows.push(breakdownRowTotal(result.score));
@@ -6201,11 +6593,16 @@
     return fn(result);
   }
 
-  function baselineScore(U, I, F) {
-    return calcBaselineTerms(U, I, F).score;
+  /** New signature: impact/ease (0–10) + empressement (0–4). No urgency input. */
+  function baselineScore(impact, ease, empressement, extra) {
+    var inputs = Object.assign(
+      { impact: impact, ease: ease, empressement: empressement },
+      extra || {}
+    );
+    return calcBaselineTermsFromInputs(inputs).score;
   }
 
-  function betterBaselineOverride(score, u, i, f, best, targetP, curU, curI, curF) {
+  function betterBaselineOverride(score, imp, eas, emp, best, targetP, curImpact, curEase, curEmp) {
     if (!best) return true;
     var dist = Math.abs(score - targetP);
     var bestDist = Math.abs(best.score - targetP);
@@ -6214,8 +6611,11 @@
     var candUnder = score < targetP - 1e-9;
     var bestUnder = best.score < targetP - 1e-9;
     if (candUnder !== bestUnder) return bestUnder;
-    var move = Math.abs(u - curU) + Math.abs(i - curI) + Math.abs(f - curF);
-    var bestMove = Math.abs(best.urgency - curU) + Math.abs(best.impact - curI) + Math.abs(best.ease - curF);
+    var move = Math.abs(imp - curImpact) + Math.abs(eas - curEase) + Math.abs(emp - curEmp);
+    var bestMove =
+      Math.abs(best.impact - curImpact) +
+      Math.abs(best.ease - curEase) +
+      Math.abs(best.empressement - curEmp);
     if (move !== bestMove) return move < bestMove;
     return score > best.score;
   }
@@ -6237,7 +6637,7 @@
 
   function pickOverrideDelta(current, next) {
     var delta = {};
-    ['urgency', 'impact', 'ease'].forEach(function (key) {
+    ['impact', 'ease', 'empressement', 'urgency'].forEach(function (key) {
       var cur = current[key] != null ? current[key] : 0;
       var nxt = next[key] != null ? next[key] : cur;
       if (Math.abs(cur - nxt) >= 1e-9) delta[key] = nxt;
@@ -6245,31 +6645,40 @@
     return delta;
   }
 
+  /** Searches Impact/Facilité/Empressement (échéance stays as-is) for a target score. */
   function overrideBaseline(targetP, inputs) {
-    var curU = inputs.urgency != null ? inputs.urgency : 0;
-    var curI = inputs.impact != null ? inputs.impact : 0;
-    var curF = inputs.ease != null ? inputs.ease : 5;
-    var curScore = baselineScore(curU, curI, curF);
+    inputs = inputs || {};
+    var curImpact = effectiveImpact(inputs);
+    var curEase = inputs.ease != null ? inputs.ease : 5;
+    var curEmp = empressementIndex(inputs);
+    var curScore = calcBaselineTermsFromInputs(inputs).score;
     var targetSeg = heatSegmentForTarget(targetP);
     var sameTier = targetSeg && tierFor(curScore).i === targetSeg.i;
 
     if (sameTier) {
-      return { urgency: curU, impact: curI, ease: curF };
+      return { impact: curImpact, ease: curEase, empressement: curEmp };
     }
 
-    var fMin = sameTier ? curF : 1;
-    var fMax = sameTier ? curF : 5;
     var best = null;
-    for (var u = 0; u <= AXIS_UI_MAX; u++) {
-      for (var i = 0; i <= AXIS_UI_MAX; i++) {
-        for (var f = fMin; f <= fMax; f++) {
-          var score = baselineScore(u, i, f);
-          if (!betterBaselineOverride(score, u, i, f, best, targetP, curU, curI, curF)) continue;
-          best = { score: score, urgency: u, impact: i, ease: f };
+    for (var imp = 0; imp <= AXIS_SCORE_MAX; imp++) {
+      for (var eas = 0; eas <= AXIS_SCORE_MAX; eas++) {
+        for (var emp = 0; emp <= EMPRESSEMENT_UI_MAX; emp++) {
+          var candidate = Object.assign({}, inputs, {
+            impact: imp,
+            ease: eas,
+            empressement: emp,
+            impactFactors: null,
+            easeCosts: null
+          });
+          var score = calcBaselineTermsFromInputs(candidate).score;
+          if (!betterBaselineOverride(score, imp, eas, emp, best, targetP, curImpact, curEase, curEmp)) {
+            continue;
+          }
+          best = { score: score, impact: imp, ease: eas, empressement: emp };
         }
       }
     }
-    return { urgency: best.urgency, impact: best.impact, ease: best.ease };
+    return { impact: best.impact, ease: best.ease, empressement: best.empressement };
   }
 
   function overrideEisenhower(targetP, inputs) {
@@ -6463,7 +6872,7 @@
     quoteEl.hidden = !quote;
 
     list.innerHTML = '';
-    var start = wordsKey === 'ease' ? 1 : 0;
+    var start = 0;
     var end = entry.short.length - 1;
     var selectable = typeof modalContext.onSelect === 'function';
     for (var i = start; i <= end; i++) {
@@ -6858,6 +7267,182 @@
 
     api.updateDisplay(value);
     return api;
+  }
+
+  /**
+   * Expandable checklist under Impact ("Nous permet de…") or Facilité
+   * ("Ce que ça coûte…"). Checking any box switches the master slider to a
+   * calculated average (see computeImpactFromFactors / computeEaseFromCosts);
+   * unchecking all boxes returns control to the manual slider.
+   */
+  function createAxisFactorsWidget(config) {
+    var defs = config.defs || [];
+    var title = config.title || '';
+    var getInitial = config.getInitial || function () { return null; };
+    var onChange = config.onChange || function () {};
+
+    var values = {};
+    function seedValues() {
+      var initial = getInitial() || {};
+      defs.forEach(function (def) {
+        var entry = initial[def.id];
+        values[def.id] = {
+          checked: !!(entry && entry.checked),
+          intensity: entry && entry.intensity != null
+            ? clamp(Number(entry.intensity) || 5, 1, 10)
+            : (def.defaultIntensity || 5),
+          stepId: (entry && entry.stepId) || def.defaultStepId
+        };
+      });
+    }
+    seedValues();
+
+    var wrap = document.createElement('div');
+    wrap.className = 'axis-factors';
+
+    var toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'axis-factors-toggle';
+    var chevron = document.createElement('i');
+    chevron.className = 'ti ti-chevron-down axis-factors-chevron';
+    chevron.setAttribute('aria-hidden', 'true');
+    var toggleLabel = document.createElement('span');
+    toggleLabel.className = 'axis-factors-toggle-label';
+    toggleLabel.textContent = title;
+    var modeTag = document.createElement('span');
+    modeTag.className = 'axis-factors-mode-tag';
+    toggleBtn.appendChild(chevron);
+    toggleBtn.appendChild(toggleLabel);
+    toggleBtn.appendChild(modeTag);
+    wrap.appendChild(toggleBtn);
+
+    var body = document.createElement('div');
+    body.className = 'axis-factors-body';
+    wrap.appendChild(body);
+
+    var expanded = false;
+    function setExpanded(next) {
+      expanded = !!next;
+      body.hidden = !expanded;
+      wrap.classList.toggle('is-expanded', expanded);
+      toggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    }
+    setExpanded(false);
+    toggleBtn.addEventListener('click', function () {
+      setExpanded(!expanded);
+    });
+
+    var rows = {};
+
+    function anyChecked() {
+      return defs.some(function (def) { return values[def.id].checked; });
+    }
+
+    function updateModeTag() {
+      var calculated = anyChecked();
+      modeTag.textContent = calculated ? 'calcul\u00e9' : 'manuel';
+      modeTag.classList.toggle('is-calculated', calculated);
+    }
+
+    function emit() {
+      updateModeTag();
+      onChange(getValues());
+    }
+
+    defs.forEach(function (def) {
+      var row = document.createElement('div');
+      row.className = 'axis-factor-row';
+
+      var lbl = document.createElement('label');
+      lbl.className = 'axis-factor-checkbox-label';
+      var checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'axis-factor-checkbox';
+      checkbox.checked = values[def.id].checked;
+      var textSpan = document.createElement('span');
+      textSpan.textContent = def.label;
+      lbl.appendChild(checkbox);
+      lbl.appendChild(textSpan);
+      row.appendChild(lbl);
+
+      var control = null;
+      if (def.kind === 'named') {
+        control = document.createElement('select');
+        control.className = 'axis-factor-select';
+        (def.steps || []).forEach(function (step) {
+          var opt = document.createElement('option');
+          opt.value = step.id;
+          opt.textContent = step.label;
+          control.appendChild(opt);
+        });
+        control.value = values[def.id].stepId || def.defaultStepId;
+        control.disabled = !values[def.id].checked;
+        control.addEventListener('change', function () {
+          values[def.id].stepId = control.value;
+          emit();
+        });
+      } else {
+        control = document.createElement('input');
+        control.type = 'range';
+        control.className = 'axis-factor-range field-range';
+        control.min = '1';
+        control.max = '10';
+        control.step = '1';
+        control.value = String(values[def.id].intensity);
+        control.disabled = !values[def.id].checked;
+        control.addEventListener('input', function () {
+          values[def.id].intensity = clamp(+control.value, 1, 10);
+          emit();
+        });
+      }
+      row.appendChild(control);
+
+      checkbox.addEventListener('change', function () {
+        values[def.id].checked = checkbox.checked;
+        control.disabled = !checkbox.checked;
+        emit();
+      });
+
+      rows[def.id] = { checkbox: checkbox, control: control };
+      body.appendChild(row);
+    });
+
+    function getValues() {
+      var out = {};
+      defs.forEach(function (def) {
+        var v = values[def.id];
+        out[def.id] = def.kind === 'named'
+          ? { checked: !!v.checked, stepId: v.stepId || def.defaultStepId }
+          : { checked: !!v.checked, intensity: v.intensity };
+      });
+      return out;
+    }
+
+    function setValues(next) {
+      var prev = getInitial;
+      getInitial = function () { return next || {}; };
+      seedValues();
+      getInitial = prev;
+      defs.forEach(function (def) {
+        var r = rows[def.id];
+        if (!r) return;
+        r.checkbox.checked = values[def.id].checked;
+        r.control.disabled = !values[def.id].checked;
+        if (def.kind === 'named') r.control.value = values[def.id].stepId;
+        else r.control.value = String(values[def.id].intensity);
+      });
+      updateModeTag();
+    }
+
+    updateModeTag();
+
+    return {
+      el: wrap,
+      getValues: getValues,
+      setValues: setValues,
+      isCalculated: anyChecked,
+      setExpanded: setExpanded
+    };
   }
 
   function createCollapsibleEnableChrome(config) {
@@ -16389,6 +16974,22 @@
     } else if (currentMode === DUE_DATE_MODE_VAGUE && initialVague && !current) {
       current = resolveDueVagueToDate(initialVague);
     }
+    // "N'a pas de date limite" (default) hides the picker; scoring ignores the
+    // date entirely while in that state, even if a date is still remembered underneath.
+    var currentDueLimitState =
+      initialValue &&
+      typeof initialValue === 'object' &&
+      (initialValue.dueLimitState === DUE_LIMIT_STATE_HAS ||
+        initialValue.dueLimitState === DUE_LIMIT_STATE_NONE)
+        ? initialValue.dueLimitState
+        : hasDueDateInitially
+          ? DUE_LIMIT_STATE_HAS
+          : DUE_LIMIT_STATE_NONE;
+    var currentDateFixe = !!(
+      initialValue &&
+      typeof initialValue === 'object' &&
+      initialValue.dateFixe
+    );
     var currentVague =
       currentMode === DUE_DATE_MODE_VAGUE && hasDueDateInitially
         ? initialVague
@@ -16472,6 +17073,77 @@
     var body = document.createElement('div');
     body.className = 'due-date-body section-toggle-body';
     body.id = bodyId;
+
+    var dueLimitSwitch = document.createElement('div');
+    dueLimitSwitch.className = 'due-limit-state-switch';
+    dueLimitSwitch.setAttribute('role', 'radiogroup');
+    dueLimitSwitch.setAttribute('aria-label', 'Limite de temps');
+
+    function makeDueLimitBtn(limitState, label) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'due-limit-state-btn';
+      btn.setAttribute('role', 'radio');
+      btn.dataset.dueLimitState = limitState;
+      btn.textContent = label;
+      dueLimitSwitch.appendChild(btn);
+      return btn;
+    }
+    var dueLimitNoneBtn = makeDueLimitBtn(DUE_LIMIT_STATE_NONE, 'N\u2019a pas de date limite');
+    var dueLimitHasBtn = makeDueLimitBtn(DUE_LIMIT_STATE_HAS, 'A une date limite');
+    body.appendChild(dueLimitSwitch);
+
+    var dateFixeRow = document.createElement('div');
+    dateFixeRow.className = 'due-date-fixe-row';
+    var dateFixeLabel = document.createElement('label');
+    dateFixeLabel.className = 'due-date-fixe-label';
+    var dateFixeCheckbox = document.createElement('input');
+    dateFixeCheckbox.type = 'checkbox';
+    dateFixeCheckbox.className = 'due-date-fixe-checkbox';
+    dateFixeCheckbox.checked = currentDateFixe;
+    var dateFixeText = document.createElement('span');
+    dateFixeText.className = 'due-date-fixe-text';
+    dateFixeText.textContent = 'Date fixe';
+    dateFixeLabel.appendChild(dateFixeCheckbox);
+    dateFixeLabel.appendChild(dateFixeText);
+    var dateFixeCopy = document.createElement('span');
+    dateFixeCopy.className = 'due-date-fixe-copy';
+    dateFixeCopy.textContent = DUE_DATE_FIXE_COPY;
+    dateFixeRow.appendChild(dateFixeLabel);
+    dateFixeRow.appendChild(dateFixeCopy);
+    body.appendChild(dateFixeRow);
+
+    function paintDueLimitSwitch() {
+      var isNone = currentDueLimitState === DUE_LIMIT_STATE_NONE;
+      dueLimitNoneBtn.classList.toggle('is-active', isNone);
+      dueLimitNoneBtn.setAttribute('aria-checked', isNone ? 'true' : 'false');
+      dueLimitHasBtn.classList.toggle('is-active', !isNone);
+      dueLimitHasBtn.setAttribute('aria-checked', !isNone ? 'true' : 'false');
+      body.classList.toggle('is-due-limit-none', isNone);
+      dateFixeRow.hidden = isNone;
+      dateFixeCheckbox.checked = currentDateFixe;
+    }
+
+    function setDueLimitState(nextState) {
+      var normalized = nextState === DUE_LIMIT_STATE_HAS ? DUE_LIMIT_STATE_HAS : DUE_LIMIT_STATE_NONE;
+      if (normalized === currentDueLimitState) return;
+      currentDueLimitState = normalized;
+      paintDueLimitSwitch();
+      emitChange();
+      notifyLayout();
+    }
+
+    dueLimitNoneBtn.addEventListener('click', function () {
+      setDueLimitState(DUE_LIMIT_STATE_NONE);
+    });
+    dueLimitHasBtn.addEventListener('click', function () {
+      setDueLimitState(DUE_LIMIT_STATE_HAS);
+    });
+    dateFixeCheckbox.addEventListener('change', function () {
+      currentDateFixe = !!dateFixeCheckbox.checked;
+      emitChange();
+    });
+    paintDueLimitSwitch();
 
     var countdown = document.createElement('div');
     countdown.className = 'due-date-countdown';
@@ -18101,7 +18773,9 @@
         startDate:
           currentMode === DUE_DATE_MODE_PRECISE ? currentStart || '' : '',
         recurrence:
-          currentMode === DUE_DATE_MODE_PRECISE ? currentRecurrence : null
+          currentMode === DUE_DATE_MODE_PRECISE ? currentRecurrence : null,
+        dueLimitState: currentDueLimitState,
+        dateFixe: currentDateFixe
       };
       return out;
     }
@@ -18156,6 +18830,15 @@
         if (value.recurrence !== undefined && currentMode === DUE_DATE_MODE_PRECISE) {
           currentRecurrence = normalizeRecurrence(value.recurrence);
         }
+        if (value.dueLimitState !== undefined) {
+          currentDueLimitState =
+            value.dueLimitState === DUE_LIMIT_STATE_HAS
+              ? DUE_LIMIT_STATE_HAS
+              : DUE_LIMIT_STATE_NONE;
+        }
+        if (value.dateFixe !== undefined) {
+          currentDateFixe = !!value.dateFixe;
+        }
       } else {
         current = normalizeDueDate(value);
         if (!current) currentTime = '';
@@ -18178,6 +18861,7 @@
       refreshCountdown();
       refreshStartTrigger();
       refreshRecurrenceUi();
+      paintDueLimitSwitch();
     }
 
     function setEnabled(nextEnabled, options) {
@@ -20372,6 +21056,33 @@
         ? state.estimatedDurationMinutes
         : defaults.estimatedDurationMinutes
     );
+    // Impact/Facilité are always on the 0–10 scale once saved through this editor.
+    state.axesScaledTo10 = true;
+    state.dueLimitState =
+      state.dueLimitState || defaults.dueLimitState ||
+      (state.dueDate || state.dueVague ? DUE_LIMIT_STATE_HAS : DUE_LIMIT_STATE_NONE);
+    state.dateFixe = !!(state.dateFixe != null ? state.dateFixe : defaults.dateFixe);
+    state.impactFactors =
+      state.impactFactors && typeof state.impactFactors === 'object'
+        ? state.impactFactors
+        : defaults.impactFactors && typeof defaults.impactFactors === 'object'
+          ? defaults.impactFactors
+          : {};
+    state.easeCosts =
+      state.easeCosts && typeof state.easeCosts === 'object'
+        ? state.easeCosts
+        : defaults.easeCosts && typeof defaults.easeCosts === 'object'
+          ? defaults.easeCosts
+          : {};
+    if (state.legacyUrgency == null && defaults.legacyUrgency != null) {
+      state.legacyUrgency = defaults.legacyUrgency;
+    }
+    if (state.urgencyMigrated == null && defaults.urgencyMigrated != null) {
+      state.urgencyMigrated = defaults.urgencyMigrated;
+    }
+    state.urgencyReviewNeeded = !!(
+      state.urgencyReviewNeeded != null ? state.urgencyReviewNeeded : defaults.urgencyReviewNeeded
+    );
 
     var priorityCollapse = null;
     var lastPriorityDisplay = null;
@@ -20472,7 +21183,11 @@
         state.dueVague = dueValues.dueVague || '';
         state.startDate = dueValues.startDate || '';
         state.recurrence = dueValues.recurrence || null;
+        state.dueLimitState = dueValues.dueLimitState || DUE_LIMIT_STATE_NONE;
+        state.dateFixe = !!dueValues.dateFixe;
       }
+      if (impactFactorsWidget) state.impactFactors = impactFactorsWidget.getValues();
+      if (easeCostsWidget) state.easeCosts = easeCostsWidget.getValues();
     }
 
     function cancelSliderAnim() {
@@ -20743,6 +21458,74 @@
       });
     });
 
+    var impactFactorsWidget = null;
+    if (fields.impact && fields.impact.el && fields.impact.el.parentNode) {
+      impactFactorsWidget = createAxisFactorsWidget({
+        title: 'Nous permet de\u2026',
+        defs: IMPACT_FACTOR_DEFS,
+        getInitial: function () { return state.impactFactors; },
+        onChange: function (values) {
+          state.impactFactors = values;
+          var computed = computeImpactFromFactors(values);
+          if (computed != null) fields.impact.setValue(computed);
+          cancelSliderAnim();
+          repaint();
+          maybePlayPriorityTierSound(lastPriorityDisplay);
+          persistSliderState();
+        }
+      });
+      fields.impact.el.parentNode.insertBefore(
+        impactFactorsWidget.el,
+        fields.impact.el.nextSibling
+      );
+    }
+
+    var easeCostsWidget = null;
+    if (fields.ease && fields.ease.el && fields.ease.el.parentNode) {
+      easeCostsWidget = createAxisFactorsWidget({
+        title: 'Ce que \u00e7a co\u00fbte\u2026',
+        defs: EASE_COST_DEFS,
+        getInitial: function () { return state.easeCosts; },
+        onChange: function (values) {
+          state.easeCosts = values;
+          var computed = computeEaseFromCosts(values);
+          if (computed != null) fields.ease.setValue(computed);
+          cancelSliderAnim();
+          repaint();
+          maybePlayPriorityTierSound(lastPriorityDisplay);
+          persistSliderState();
+        }
+      });
+      fields.ease.el.parentNode.insertBefore(
+        easeCostsWidget.el,
+        fields.ease.el.nextSibling
+      );
+    }
+
+    var urgencyNudge = document.createElement('div');
+    urgencyNudge.className = 'urgency-review-nudge';
+    var urgencyNudgeText = document.createElement('span');
+    urgencyNudgeText.className = 'urgency-review-nudge-text';
+    urgencyNudgeText.textContent = URGENCY_REVIEW_PROMPT;
+    var urgencyNudgeDismiss = document.createElement('button');
+    urgencyNudgeDismiss.type = 'button';
+    urgencyNudgeDismiss.className = 'urgency-review-nudge-dismiss';
+    urgencyNudgeDismiss.setAttribute('aria-label', 'Masquer ce rappel');
+    urgencyNudgeDismiss.innerHTML = '<i class="ti ti-x" aria-hidden="true"></i>';
+    urgencyNudge.appendChild(urgencyNudgeText);
+    urgencyNudge.appendChild(urgencyNudgeDismiss);
+    fieldsWrap.insertBefore(urgencyNudge, fieldsWrap.firstChild);
+
+    function paintUrgencyNudge() {
+      urgencyNudge.hidden = !state.urgencyReviewNeeded;
+    }
+    urgencyNudgeDismiss.addEventListener('click', function () {
+      state.urgencyReviewNeeded = false;
+      paintUrgencyNudge();
+      persistSliderState();
+    });
+    paintUrgencyNudge();
+
     try {
       calcGraph = createCalcGraphPanel({
         el: fieldsSection,
@@ -20994,7 +21777,9 @@
               next.dueMode != null ||
               next.dueVague != null ||
               next.startDate !== undefined ||
-              next.recurrence !== undefined) &&
+              next.recurrence !== undefined ||
+              next.dueLimitState != null ||
+              next.dateFixe != null) &&
             dueDateField
           ) {
             var duePayload = {
@@ -21006,13 +21791,25 @@
               startDate:
                 next.startDate !== undefined ? next.startDate : state.startDate,
               recurrence:
-                next.recurrence !== undefined ? next.recurrence : state.recurrence
+                next.recurrence !== undefined ? next.recurrence : state.recurrence,
+              dueLimitState:
+                next.dueLimitState != null ? next.dueLimitState : state.dueLimitState,
+              dateFixe: next.dateFixe != null ? next.dateFixe : state.dateFixe
             };
             if (preserveCollapse) {
               dueDateField.setValue(duePayload, { preserveCollapse: true });
             } else {
               dueDateField.setValue(duePayload);
             }
+          }
+          if (next.impactFactors !== undefined && impactFactorsWidget) {
+            impactFactorsWidget.setValues(next.impactFactors);
+          }
+          if (next.easeCosts !== undefined && easeCostsWidget) {
+            easeCostsWidget.setValues(next.easeCosts);
+          }
+          if (next.urgencyReviewNeeded != null) {
+            paintUrgencyNudge();
           }
           if (next.estimatedDurationMinutes !== undefined) {
             state.estimatedDurationMinutes = clampDurationMinutes(
@@ -21092,31 +21889,31 @@
 
   var DEFAULT_MINI_DIMENSIONS = [
     {
-      key: 'urgency',
-      label: 'Urgence',
-      icon: 'ti-flame',
-      wordsKey: 'urgency',
-      min: 0,
-      max: 4,
-      value: 2
-    },
-    {
       key: 'impact',
       label: 'Impact',
       icon: 'ti-target-arrow',
       wordsKey: 'impact',
       min: 0,
-      max: 4,
-      value: 2
+      max: AXIS_SCORE_MAX,
+      value: 5
     },
     {
       key: 'ease',
       label: 'Facilit\u00e9',
       icon: 'ti-gauge',
       wordsKey: 'ease',
-      min: 1,
-      max: 5,
-      value: 3
+      min: 0,
+      max: AXIS_SCORE_MAX,
+      value: 5
+    },
+    {
+      key: 'empressement',
+      label: 'Empressement',
+      icon: 'ti-flame',
+      wordsKey: 'empressement',
+      min: 0,
+      max: EMPRESSEMENT_UI_MAX,
+      value: 0
     }
   ];
 
@@ -21411,6 +22208,49 @@
     PRESSURE_MAX: PRESSURE_MAX,
     SCORE_MAX: SCORE_MAX,
     AXIS_UI_MAX: AXIS_UI_MAX,
+    AXIS_SCORE_MAX: AXIS_SCORE_MAX,
+    IMPACT_UI_MAX: IMPACT_UI_MAX,
+    EASE_UI_MAX: EASE_UI_MAX,
+    EMPRESSEMENT_UI_MAX: EMPRESSEMENT_UI_MAX,
+    // ── Priority adaptation (Impact + Facilité + Échéance + Empressement) ──
+    BASE_IMPACT_WEIGHT: BASE_IMPACT_WEIGHT,
+    BASE_EASE_WEIGHT: BASE_EASE_WEIGHT,
+    EASE_QUICK_WINS: EASE_QUICK_WINS,
+    DATE_PROXIMITY_TAU_DAYS: DATE_PROXIMITY_TAU_DAYS,
+    DATE_GAIN_MOVABLE: DATE_GAIN_MOVABLE,
+    DATE_GAIN_FIXED: DATE_GAIN_FIXED,
+    EMPRESSEMENT_PULL_MAX: EMPRESSEMENT_PULL_MAX,
+    IMPACT_SYNERGY_PER_EXTRA: IMPACT_SYNERGY_PER_EXTRA,
+    URGENCY_MIGRATION_MODE: URGENCY_MIGRATION_MODE,
+    URGENCY_REVIEW_THRESHOLD_10: URGENCY_REVIEW_THRESHOLD_10,
+    EMPRESSEMENT_OPTIONS: EMPRESSEMENT_OPTIONS,
+    EMPRESSEMENT_DEFAULT_ID: EMPRESSEMENT_DEFAULT_ID,
+    IMPACT_FACTOR_DEFS: IMPACT_FACTOR_DEFS,
+    EASE_COST_DEFS: EASE_COST_DEFS,
+    DUE_LIMIT_STATE_NONE: DUE_LIMIT_STATE_NONE,
+    DUE_LIMIT_STATE_HAS: DUE_LIMIT_STATE_HAS,
+    DUE_DATE_FIXE_COPY: DUE_DATE_FIXE_COPY,
+    URGENCY_REVIEW_PROMPT: URGENCY_REVIEW_PROMPT,
+    empressementOptionById: empressementOptionById,
+    empressementOptionByIndex: empressementOptionByIndex,
+    normalizeEmpressementId: normalizeEmpressementId,
+    empressementIndex: empressementIndex,
+    impactFactorDefById: impactFactorDefById,
+    easeCostDefById: easeCostDefById,
+    computeImpactFromFactors: computeImpactFromFactors,
+    computeEaseFromCosts: computeEaseFromCosts,
+    effectiveImpact: effectiveImpact,
+    effectiveEase: effectiveEase,
+    easeForScore: easeForScore,
+    cardHasDueDate: cardHasDueDate,
+    computeDatePull: computeDatePull,
+    computeEmpressePull: computeEmpressePull,
+    computeBaseScore: computeBaseScore,
+    deriveLegacyUrgency: deriveLegacyUrgency,
+    migrateLegacyUrgency: migrateLegacyUrgency,
+    migrateLegacyAxisScales: migrateLegacyAxisScales,
+    calcBaselineTermsFromInputs: calcBaselineTermsFromInputs,
+    createAxisFactorsWidget: createAxisFactorsWidget,
     TIER_I: TIER_I,
     TIER_I_MAX: TIER_I_MAX,
     TIER_I_SCHEME_MAPPED_MAX: TIER_I_SCHEME_MAPPED_MAX,

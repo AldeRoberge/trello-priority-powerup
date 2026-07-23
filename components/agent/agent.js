@@ -497,7 +497,7 @@
     'info'
   ];
 
-  var POINT_FIELDS = ['urgency', 'impact', 'ease'];
+  var POINT_FIELDS = ['empressement', 'impact', 'ease'];
 
   var AGENT_COLOR_KEYS = [
     'orange',
@@ -641,6 +641,14 @@
     }
     if (s === 'urgency' || s === 'urgence' || s === 'urgent') {
       return 'urgency';
+    }
+    if (
+      s === 'empressement' ||
+      s === 'promptitude' ||
+      s === 'hurry' ||
+      s === 'promptness'
+    ) {
+      return 'empressement';
     }
     if (
       s === 'ease' ||
@@ -4069,7 +4077,7 @@
       '- Pour activer/d\u00e9sactiver\u00a0: priorityEnabled, dueEnabled, enAttente (Bloqu\u00e9), progressEnabled.',
       '- Pour marquer bloqu\u00e9\u00a0: set_blocked avec enAttente:true tout de suite (causes ensuite si fournies). Ne dis jamais que c\'est d\u00e9j\u00e0 bloqu\u00e9 si enabled=false.',
       'Outils disponibles\u00a0:',
-      '- set_priority: { urgency?:0-4, impact?:0-4, ease?:1-5, priorityEnabled?:boolean, tier?: string, heatTarget?: number } (tier = Critique|Urgente|Prioritaire|Importante|Flexible|Secondaire|Optionnelle\u00a0; impact 0\u20134 = port\u00e9e Personnel\u2026Global). Legacy estimatedDuration* \u2192 redirig\u00e9 vers set_progress_estimate.',
+      '- set_priority: { impact?:0-10, ease?:0-10, empressement?: aucun|bientot|assez-vite|vite|au-plus-vite, priorityEnabled?:boolean, tier?: string, heatTarget?: number } (tier = Critique|Urgente|Prioritaire|Importante|Flexible|Secondaire|Optionnelle). Legacy estimatedDuration* \u2192 redirig\u00e9 vers set_progress_estimate.',
       '- set_task_types: { types: string[], force?: boolean } (multi\u00a0; ids\u00a0: action|project|recurring|exploratory|emotional|communication|deliverable|process|thinking|material|learning|admin|creative|finance|custom-*). Lit context.taskTypes. Si taskTypesLocked=true, n\'\u00e9crase PAS sauf demande explicite + force:true. Ne suppose PAS qu\'une carte est un livrable\u00a0; adapte ton langage (urgence / cadrage) aux types.',
       '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean, relativeMinutes?: number, relativeHours?: number, dueVague?: "bientot"|"proche"|"lointain"|"eventuellement"|"tres-lointain"|string, dueMode?: "precise"|"vague", startDate?: "YYYY-MM-DD"|null, startTime?: "HH:MM"|null, clearStart?: boolean, recurrence?: { frequency: "daily"|"weekly"|"monthly"|"yearly", interval?: number, weekdays?: number[] }|null, clearRecurrence?: boolean, clear?: boolean } (dueTime OPTIONNEL\u00a0; d\u00e9lai relatif \u2192 relativeMinutes/Hours\u00a0; horizon flou \u2192 dueVague\u00a0; d\u00e9but \u2192 startDate\u00a0; r\u00e9currence \u2192 recurrence\u00a0; clear:true efface l\'\u00e9ch\u00e9ance\u00a0; aujourd\'hui = context.today)',
       '- set_blocked: { enAttente?: boolean, blockedReasons?: string[], blockedLinks?: [{id?:string, matchText?:string, label?:string}] } (enAttente:true seul suffit\u00a0; causes et liens optionnels\u00a0; synchronise Progr\u00e8s blocked\u00a0; si progr\u00e8s \u00e0 100%, le runtime le remet \u00e0 0% \u2014 ajoute aussi set_progress)',
@@ -10658,6 +10666,7 @@
           : args.urgency != null ||
               args.impact != null ||
               args.ease != null ||
+              args.empressement != null ||
               args.tier != null ||
               args.heatTarget != null ||
               args.estimatedDurationMinutes !== undefined ||
@@ -10674,6 +10683,12 @@
         return false;
       }
       if (args.ease != null && +args.ease !== +priority.ease) return false;
+      if (
+        args.empressement != null &&
+        String(args.empressement) !== String(priority.empressement)
+      ) {
+        return false;
+      }
       if (args.estimatedDurationMinutes !== undefined) {
         var nextDur =
           args.estimatedDurationMinutes === null ||
@@ -13383,6 +13398,7 @@
       urgency: s.urgency,
       impact: s.impact,
       ease: s.ease,
+      empressement: s.empressement,
       estimatedDurationMinutes:
         s.estimatedDurationMinutes != null && isFinite(+s.estimatedDurationMinutes)
           ? +s.estimatedDurationMinutes
@@ -13719,7 +13735,7 @@
     extra = extra || {};
     if (tool === 'set_priority') {
       pushChange(parts, 'priorityEnabled', beforeP.priorityEnabled, afterP.priorityEnabled);
-      pushChange(parts, 'urgency', beforeP.urgency, afterP.urgency);
+      pushChange(parts, 'empressement', beforeP.empressement, afterP.empressement);
       pushChange(parts, 'impact', beforeP.impact, afterP.impact);
       pushChange(parts, 'ease', beforeP.ease, afterP.ease);
       pushChange(
@@ -14475,23 +14491,33 @@
               ? PriorityUI.FORMULAS[formulaKey]
               : null;
           if (heatSeg.preset && (!formulaDef || formulaKey === 'baseline')) {
-            if (heatSeg.preset.urgency != null) partial.urgency = heatSeg.preset.urgency;
+            if (heatSeg.preset.empressement != null) partial.empressement = heatSeg.preset.empressement;
             if (heatSeg.preset.impact != null) partial.impact = heatSeg.preset.impact;
             if (heatSeg.preset.ease != null) partial.ease = heatSeg.preset.ease;
           } else if (formulaDef && typeof formulaDef.override === 'function') {
             var overridden = formulaDef.override(heatSeg.target, stateNow) || {};
-            if (overridden.urgency != null) partial.urgency = overridden.urgency;
+            // Baseline returns empressement; the legacy formulas (Eisenhower/WSJF/
+            // Valeur-Effort) still return urgency (kept as a back-compat sidecar).
+            if (overridden.empressement != null) partial.empressement = overridden.empressement;
+            else if (overridden.urgency != null) partial.urgency = overridden.urgency;
             if (overridden.impact != null) partial.impact = overridden.impact;
             if (overridden.ease != null) partial.ease = overridden.ease;
           } else if (heatSeg.preset) {
-            if (heatSeg.preset.urgency != null) partial.urgency = heatSeg.preset.urgency;
+            if (heatSeg.preset.empressement != null) partial.empressement = heatSeg.preset.empressement;
             if (heatSeg.preset.impact != null) partial.impact = heatSeg.preset.impact;
             if (heatSeg.preset.ease != null) partial.ease = heatSeg.preset.ease;
           }
         }
         if (args.urgency != null) partial.urgency = clampInt(args.urgency, 0, 4, 0);
-        if (args.impact != null) partial.impact = clampInt(args.impact, 0, 4, 0);
-        if (args.ease != null) partial.ease = clampInt(args.ease, 1, 5, 3);
+        if (args.impact != null) partial.impact = clampInt(args.impact, 0, 10, 5);
+        if (args.ease != null) partial.ease = clampInt(args.ease, 0, 10, 5);
+        if (args.empressement != null) {
+          partial.empressement =
+            typeof PriorityUI !== 'undefined' &&
+            typeof PriorityUI.normalizeEmpressementId === 'function'
+              ? PriorityUI.normalizeEmpressementId(args.empressement)
+              : args.empressement;
+        }
         // Duration now lives in Progrès — redirect legacy Facilité duration args.
         var redirectedEstimate = resolveEstimateMinutesArg({
           estimatedMinutes:
@@ -14512,7 +14538,8 @@
         } else if (
           (partial.urgency != null ||
             partial.impact != null ||
-            partial.ease != null) &&
+            partial.ease != null ||
+            partial.empressement != null) &&
           !beforeP.priorityEnabled
         ) {
           // Writing axis values must activate Priorité or the UI stays off.
