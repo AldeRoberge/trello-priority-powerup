@@ -3715,16 +3715,28 @@
   var DUE_DATE_MODE_PRECISE_LABEL = 'Pr\u00e9cis';
   var DUE_DATE_MODE_VAGUE_LABEL = 'Vague';
   var DUE_DATE_VAGUE_OPTIONS_LABEL = 'Horizon approximatif';
-  /** Vague horizon chips — only horizons strictly beyond one week. */
+  /**
+   * Vague horizon continuum (slider steps) — near → far.
+   * Keep proche / lointain / eventuellement ids for agent + stored cards.
+   */
   var DUE_DATE_VAGUE_OPTIONS = [
+    { id: 'bientot', label: 'Bient\u00f4t', days: 7 },
+    { id: 'sous-peu', label: 'Sous peu', days: 14 },
+    { id: 'quelques-semaines', label: 'Dans quelques semaines', days: 21 },
     { id: 'proche', label: 'Dans un futur proche', days: 30 },
+    { id: 'prochain-mois', label: 'Dans le mois qui vient', days: 45 },
+    { id: 'quelques-mois', label: 'Dans quelques mois', days: 90 },
+    { id: 'semestre', label: 'Dans un semestre', days: 180 },
     { id: 'lointain', label: 'Dans un futur lointain', days: 365 },
-    { id: 'eventuellement', label: '\u00c9ventuellement', days: 1095 }
+    { id: 'an-ou-deux', label: 'Dans un an ou deux', days: 548 },
+    { id: 'eventuellement', label: '\u00c9ventuellement', days: 1095 },
+    { id: 'assez-lointain', label: 'Dans un futur assez lointain', days: 1460 },
+    { id: 'tres-lointain', label: 'Dans un futur tr\u00e8s lointain', days: 1825 }
   ];
+  /** Default Vague slider step when entering Vague with no prior horizon. */
+  var DUE_DATE_VAGUE_DEFAULT_ID = 'proche';
   /** Legacy Vague ids still accepted when loading stored card data. */
-  var DUE_DATE_VAGUE_LEGACY_DAYS = {
-    bientot: 7
-  };
+  var DUE_DATE_VAGUE_LEGACY_DAYS = {};
   /** Shared workplace times for quick-date presets (match period chips). */
   var DUE_DATE_QUICK_MORNING_TIME = '09:00';
   var DUE_DATE_QUICK_AFTERNOON_TIME = '14:00';
@@ -3907,6 +3919,23 @@
     return null;
   }
 
+  function dueVagueIndex(id) {
+    var normalized = normalizeDueVague(id);
+    if (!normalized) return -1;
+    for (var i = 0; i < DUE_DATE_VAGUE_OPTIONS.length; i++) {
+      if (DUE_DATE_VAGUE_OPTIONS[i].id === normalized) return i;
+    }
+    return -1;
+  }
+
+  function dueVagueIdAtIndex(index) {
+    var i = Math.round(Number(index));
+    if (!isFinite(i) || !DUE_DATE_VAGUE_OPTIONS.length) return '';
+    if (i < 0) i = 0;
+    if (i >= DUE_DATE_VAGUE_OPTIONS.length) i = DUE_DATE_VAGUE_OPTIONS.length - 1;
+    return DUE_DATE_VAGUE_OPTIONS[i].id;
+  }
+
   /** Approximate YYYY-MM-DD for a vague horizon chip (local calendar). */
   function resolveDueVagueToDate(id, now) {
     var opt = dueVagueOption(id);
@@ -3924,8 +3953,7 @@
   function formatDueVagueLabel(id) {
     var opt = dueVagueOption(id);
     if (!opt) return '';
-    if (opt.id === 'bientot') return 'Bient\u00f4t';
-    return opt.label;
+    return opt.label || '';
   }
 
   /**
@@ -3936,9 +3964,13 @@
     var opt = dueVagueOption(id);
     if (!opt) return '';
     if (opt.id === 'bientot') return '\u00c0 faire bient\u00f4t';
+    if (opt.id === 'sous-peu') return '\u00c0 faire sous peu';
     if (opt.id === 'proche') return '\u00c0 faire dans un futur proche';
     if (opt.id === 'lointain') return '\u00c0 faire dans un futur lointain';
     if (opt.id === 'eventuellement') return '\u00c0 faire \u00e9ventuellement';
+    if (opt.id === 'tres-lointain') {
+      return '\u00c0 faire dans un futur tr\u00e8s lointain';
+    }
     var label = formatDueVagueLabel(id);
     if (!label) return '';
     return '\u00c0 faire ' + label.charAt(0).toLowerCase() + label.slice(1);
@@ -16661,42 +16693,50 @@
     vaguePanel.setAttribute('aria-label', DUE_DATE_VAGUE_OPTIONS_LABEL);
     vaguePanel.hidden = currentMode !== DUE_DATE_MODE_VAGUE;
 
-    DUE_DATE_VAGUE_OPTIONS.forEach(function (item) {
-      var chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'due-date-vague-chip';
-      chip.dataset.vague = item.id;
-      chip.setAttribute('aria-pressed', 'false');
-      chip.setAttribute('aria-label', item.label);
-      var chipIcon = document.createElement('i');
-      chipIcon.className = 'ti ti-tilde due-date-vague-chip-icon';
-      chipIcon.setAttribute('aria-hidden', 'true');
-      var chipLabel = document.createElement('span');
-      chipLabel.className = 'due-date-vague-chip-label';
-      chipLabel.textContent = item.label;
-      chip.appendChild(chipIcon);
-      chip.appendChild(chipLabel);
-      chip.addEventListener('click', function () {
-        applyVagueOption(item.id);
-      });
-      if (
-        global.ContextMenu &&
-        typeof global.ContextMenu.bind === 'function'
-      ) {
-        ContextMenu.bind(chip, function () {
-          return [
-            {
-              id: 'due-vague:' + item.id,
-              label: item.label,
-              action: function () {
-                applyVagueOption(item.id);
-              },
-            },
-          ];
-        });
-      }
-      vaguePanel.appendChild(chip);
-    });
+    var vagueValueEl = document.createElement('div');
+    vagueValueEl.className = 'due-date-vague-value';
+    vagueValueEl.setAttribute('aria-live', 'polite');
+
+    var vagueSlider = document.createElement('input');
+    vagueSlider.type = 'range';
+    vagueSlider.className = 'due-date-vague-slider field-range';
+    vagueSlider.min = '0';
+    vagueSlider.max = String(Math.max(0, DUE_DATE_VAGUE_OPTIONS.length - 1));
+    vagueSlider.step = '1';
+    vagueSlider.setAttribute('aria-label', DUE_DATE_VAGUE_OPTIONS_LABEL);
+    var initialVagueIdx = dueVagueIndex(currentVague);
+    vagueSlider.value = String(
+      initialVagueIdx >= 0
+        ? initialVagueIdx
+        : Math.max(0, dueVagueIndex(DUE_DATE_VAGUE_DEFAULT_ID))
+    );
+
+    var vagueEnds = document.createElement('div');
+    vagueEnds.className = 'due-date-vague-ends';
+    var vagueEndNear = document.createElement('span');
+    vagueEndNear.className = 'due-date-vague-end due-date-vague-end--near';
+    vagueEndNear.textContent =
+      (DUE_DATE_VAGUE_OPTIONS[0] && DUE_DATE_VAGUE_OPTIONS[0].label) ||
+      'Bient\u00f4t';
+    var vagueEndFar = document.createElement('span');
+    vagueEndFar.className = 'due-date-vague-end due-date-vague-end--far';
+    vagueEndFar.textContent =
+      (DUE_DATE_VAGUE_OPTIONS[DUE_DATE_VAGUE_OPTIONS.length - 1] &&
+        DUE_DATE_VAGUE_OPTIONS[DUE_DATE_VAGUE_OPTIONS.length - 1].label) ||
+      'Dans un futur tr\u00e8s lointain';
+    vagueEnds.appendChild(vagueEndNear);
+    vagueEnds.appendChild(vagueEndFar);
+
+    vaguePanel.appendChild(vagueValueEl);
+    vaguePanel.appendChild(vagueSlider);
+    vaguePanel.appendChild(vagueEnds);
+
+    function onVagueSliderInput() {
+      applyVagueOption(dueVagueIdAtIndex(vagueSlider.value), { fromSlider: true });
+    }
+    vagueSlider.addEventListener('input', onVagueSliderInput);
+    vagueSlider.addEventListener('change', onVagueSliderInput);
+
     body.appendChild(vaguePanel);
 
     // ── Start date (Début) ─────────────────────────────────────────────
@@ -17555,13 +17595,21 @@
       if (wasHidden !== suggestions.hidden) notifyLayout();
     }
 
-    function refreshVagueChips() {
-      var chips = vaguePanel.querySelectorAll('[data-vague]');
-      for (var i = 0; i < chips.length; i++) {
-        var selected = chips[i].dataset.vague === currentVague;
-        chips[i].classList.toggle('is-selected', selected);
-        chips[i].setAttribute('aria-pressed', selected ? 'true' : 'false');
+    function refreshVagueSlider() {
+      var idx = dueVagueIndex(currentVague);
+      if (idx < 0) idx = Math.max(0, dueVagueIndex(DUE_DATE_VAGUE_DEFAULT_ID));
+      if (String(vagueSlider.value) !== String(idx)) {
+        vagueSlider.value = String(idx);
       }
+      var label = formatDueVagueLabel(
+        currentVague || dueVagueIdAtIndex(idx)
+      );
+      vagueValueEl.textContent = label || DUE_DATE_VAGUE_OPTIONS_LABEL;
+      vagueSlider.setAttribute(
+        'aria-valuetext',
+        label || DUE_DATE_VAGUE_OPTIONS_LABEL
+      );
+      vagueSlider.disabled = !enabled;
     }
 
     function refreshModeUi() {
@@ -17585,7 +17633,7 @@
       } else {
         showPickers();
       }
-      refreshVagueChips();
+      refreshVagueSlider();
       refreshSuggestions();
       notifyLayout();
     }
@@ -17602,11 +17650,13 @@
         if (!currentVague && rememberedVague) {
           currentVague = rememberedVague;
         }
+        if (!currentVague) {
+          currentVague = DUE_DATE_VAGUE_DEFAULT_ID;
+          rememberedVague = currentVague;
+        }
         if (currentVague) {
           current = resolveDueVagueToDate(currentVague);
           if (current) syncViewFromValue(current);
-        } else if (current && isDueVagueEligible(current)) {
-          /* Keep far precise date until a Vague chip is picked. */
         } else {
           current = '';
         }
@@ -17623,25 +17673,25 @@
       }
     }
 
-    function applyVagueOption(id) {
+    function applyVagueOption(id, opts) {
+      opts = opts || {};
       if (!enabled || currentMode !== DUE_DATE_MODE_VAGUE) return;
       var nextId = normalizeDueVague(id);
       if (!nextId) return;
+      // Slider always keeps a horizon selected (no toggle-off).
       if (currentVague === nextId) {
-        currentVague = '';
-        rememberedVague = '';
-        current = '';
-        currentTime = '';
-      } else {
-        currentVague = nextId;
-        rememberedVague = nextId;
-        current = resolveDueVagueToDate(nextId);
-        currentTime = '';
-        currentStart = '';
-        currentRecurrence = null;
-        if (current) syncViewFromValue(current);
+        refreshVagueSlider();
+        if (!opts.fromSlider) emitChange();
+        return;
       }
-      refreshVagueChips();
+      currentVague = nextId;
+      rememberedVague = nextId;
+      current = resolveDueVagueToDate(nextId);
+      currentTime = '';
+      currentStart = '';
+      currentRecurrence = null;
+      if (current) syncViewFromValue(current);
+      refreshVagueSlider();
       emitChange();
     }
 
@@ -17740,7 +17790,7 @@
         refreshTimeRow();
         refreshTrigger();
         refreshSuggestions();
-        refreshVagueChips();
+        refreshVagueSlider();
         refreshTodayBtn();
         if (collapseApi) collapseApi.refreshSummary();
         return;
@@ -17749,7 +17799,7 @@
       refreshTrigger();
       refreshTimeRow();
       refreshSuggestions();
-      refreshVagueChips();
+      refreshVagueSlider();
       refreshTodayBtn();
       if (!enabled) {
         countdownPrimary.textContent = '';
@@ -21586,8 +21636,11 @@
     DUE_DATE_MODE_PRECISE: DUE_DATE_MODE_PRECISE,
     DUE_DATE_MODE_VAGUE: DUE_DATE_MODE_VAGUE,
     DUE_DATE_VAGUE_OPTIONS: DUE_DATE_VAGUE_OPTIONS,
+    DUE_DATE_VAGUE_DEFAULT_ID: DUE_DATE_VAGUE_DEFAULT_ID,
     normalizeDueMode: normalizeDueMode,
     normalizeDueVague: normalizeDueVague,
+    dueVagueIndex: dueVagueIndex,
+    dueVagueIdAtIndex: dueVagueIdAtIndex,
     resolveDueVagueToDate: resolveDueVagueToDate,
     formatDueVagueLabel: formatDueVagueLabel,
     formatDueVagueCountdown: formatDueVagueCountdown,

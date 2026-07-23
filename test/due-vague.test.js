@@ -15,11 +15,27 @@ describe('Échéance vague mode', () => {
     assert.equal(PU.DUE_DATE_MODE_PRECISE, 'precise');
     assert.equal(PU.DUE_DATE_MODE_VAGUE, 'vague');
     assert.ok(Array.isArray(PU.DUE_DATE_VAGUE_OPTIONS));
-    assert.ok(PU.DUE_DATE_VAGUE_OPTIONS.length >= 3);
+    assert.ok(PU.DUE_DATE_VAGUE_OPTIONS.length >= 8);
     const ids = PU.DUE_DATE_VAGUE_OPTIONS.map((o) => o.id);
+    assert.equal(ids[0], 'bientot');
+    assert.equal(ids[ids.length - 1], 'tres-lointain');
     assert.ok(ids.includes('proche'));
     assert.ok(ids.includes('lointain'));
     assert.ok(ids.includes('eventuellement'));
+    assert.equal(PU.DUE_DATE_VAGUE_DEFAULT_ID, 'proche');
+  });
+
+  it('maps continuum endpoints on the vague slider helpers', () => {
+    assert.equal(PU.dueVagueIndex('bientot'), 0);
+    assert.equal(
+      PU.dueVagueIdAtIndex(PU.DUE_DATE_VAGUE_OPTIONS.length - 1),
+      'tres-lointain'
+    );
+    assert.equal(PU.formatDueVagueLabel('bientot'), 'Bientôt');
+    assert.equal(
+      PU.formatDueVagueCountdown('tres-lointain'),
+      'À faire dans un futur très lointain'
+    );
   });
 
   it('normalizeDueVague accepts known ids only', () => {

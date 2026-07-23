@@ -1921,6 +1921,192 @@
     });
   }
 
+  var ECHO_CONFIRM_STOPWORDS = {
+    pour: true,
+    surtout: true,
+    cest: true,
+    ca: true,
+    une: true,
+    des: true,
+    les: true,
+    le: true,
+    la: true,
+    un: true,
+    et: true,
+    ou: true,
+    de: true,
+    du: true,
+    au: true,
+    aux: true,
+    en: true,
+    que: true,
+    qui: true,
+    sur: true,
+    dans: true,
+    avec: true,
+    pas: true,
+    plus: true,
+    bien: true,
+    tout: true,
+    tous: true,
+    cette: true,
+    cet: true,
+    ces: true,
+    son: true,
+    sa: true,
+    ses: true,
+    mon: true,
+    ma: true,
+    mes: true,
+    ton: true,
+    ta: true,
+    tes: true,
+    notre: true,
+    nos: true,
+    votre: true,
+    vos: true,
+    est: true,
+    sont: true,
+    etre: true,
+    fait: true,
+    faire: true,
+    veux: true,
+    veut: true,
+    sert: true,
+    but: true,
+    goal: true,
+    the: true,
+    and: true,
+    for: true,
+    to: true,
+    of: true,
+    a: true,
+    an: true,
+    is: true,
+    it: true,
+    this: true,
+    that: true
+  };
+
+  function foldEchoToken(word) {
+    return String(word || '')
+      .toLocaleLowerCase('fr-FR')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '');
+  }
+
+  function tokenizeForEchoOverlap(text) {
+    var raw = stripInterviewMarkup(text)
+      .toLocaleLowerCase('fr-FR')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\w\s]/g, ' ');
+    var parts = raw.split(/\s+/);
+    var out = [];
+    var seen = Object.create(null);
+    for (var i = 0; i < parts.length; i++) {
+      var w = foldEchoToken(parts[i]);
+      if (!w || w.length < 3 || ECHO_CONFIRM_STOPWORDS[w] || seen[w]) continue;
+      seen[w] = true;
+      out.push(w);
+    }
+    return out;
+  }
+
+  function titleTokenOverlapRatio(message, cardName) {
+    var msgToks = tokenizeForEchoOverlap(message);
+    var titleToks = tokenizeForEchoOverlap(cardName);
+    if (!titleToks.length || !msgToks.length) return 0;
+    var titleSet = Object.create(null);
+    for (var i = 0; i < titleToks.length; i++) titleSet[titleToks[i]] = true;
+    var hits = 0;
+    for (var j = 0; j < msgToks.length; j++) {
+      if (titleSet[msgToks[j]]) hits += 1;
+    }
+    return hits / titleToks.length;
+  }
+
+  /**
+   * Stupid interview questions that only restate the card title as a yes/no
+   * confirmation ("C'est surtout pour faciliter l'accès…, c'est ça?").
+   */
+  function looksLikeTitleEchoConfirmAsk(message, cardName) {
+    var raw = stripInterviewMarkup(message);
+    if (!raw || raw.indexOf('?') < 0) return false;
+    var title = String(cardName || '').trim();
+    if (!title) return false;
+    var t = raw.toLocaleLowerCase('fr-FR');
+    // Impact / ownership confirms are useful — not title echoes.
+    if (
+      /\bc['']est\s+toi\b/.test(t) ||
+      /\bc['']est\s+\[\[a:toi\]\]/i.test(message) ||
+      /\btu\s+t['']en\s+occupes\b/.test(t) ||
+      /\bc['']est\s+toi\s+qui\b/.test(t)
+    ) {
+      return false;
+    }
+    var looksConfirm =
+      /c['']est\s+[cç]a\s*\?/.test(t) ||
+      /c['']est\s+bien\s+[cç]a\s*\?/.test(t) ||
+      /\bright\s*\?/.test(t) ||
+      /\bcorrect\s*\?/.test(t) ||
+      /c['']est\s+surtout\s+pour\b/.test(t) ||
+      /[cç]a\s+sert\s+[àa]\s+/.test(t) ||
+      /le\s+but\s+(?:c['']est|est)\b/.test(t) ||
+      /c['']est\s+pour\b/.test(t);
+    if (!looksConfirm) return false;
+    return titleTokenOverlapRatio(raw, title) >= 0.5;
+  }
+
+  /**
+   * Replace title-echo confirmations with the next useful interview pivot.
+   * Avoid bouncing back to another urgency ask if one was already posed.
+   */
+  function applyInterviewEchoGuards(turn, context, history) {
+    turn = turn && typeof turn === 'object' ? turn : {};
+    var message = typeof turn.message === 'string' ? turn.message : '';
+    var cardName = (context && context.cardName) || '';
+    if (!looksLikeTitleEchoConfirmAsk(message, cardName)) return turn;
+
+    var urgencyAlready = false;
+    function noteUrgency(text) {
+      var t = stripInterviewMarkup(text).toLocaleLowerCase('fr-FR');
+      if (/c['']est\s+grave/.test(t) || /[cç]a\s+presse/.test(t)) {
+        urgencyAlready = true;
+      }
+    }
+    var asked =
+      context && context.interview && Array.isArray(context.interview.asked)
+        ? context.interview.asked
+        : [];
+    for (var i = 0; i < asked.length; i++) noteUrgency(asked[i]);
+    (history || []).forEach(function (entry) {
+      if (entry && entry.role === 'assistant') noteUrgency(entry.content);
+    });
+
+    var pivotContext = context;
+    if (
+      urgencyAlready &&
+      !(context && context.interview && context.interview.priorityAxesTrusted)
+    ) {
+      pivotContext = Object.assign({}, context || {}, {
+        interview: Object.assign({}, (context && context.interview) || {}, {
+          priorityAxesTrusted: true
+        })
+      });
+    }
+
+    var next = buildInterviewNextPivot(pivotContext);
+    return Object.assign({}, turn, {
+      message: next.message,
+      suggestions: next.suggestions,
+      suggestionsMulti: next.suggestionsMulti,
+      suggestionScale: next.suggestionScale,
+      completeInterview: !!next.completeInterview
+    });
+  }
+
   function looksLikeCongratulation(message) {
     if (typeof message !== 'string' || !message) return false;
     return /\b(bravo|f[eé]licitations|chapeau|pli[eé]|bien jou[eé]|nice\b|woo+hoo|yay|congrats?|well\s+done)\b/i.test(
@@ -3714,7 +3900,7 @@
       '- Si une date est connue (ex. \u00ab\u00a0aujourd\'hui\u00a0\u00bb, \u00ab\u00a0demain\u00a0\u00bb, \u00ab\u00a02026-07-14\u00a0\u00bb)\u00a0: APPLIQUE set_due avec dueDate (+ dueEnabled:true) TOUT DE SUITE, m\u00eame sans heure.',
       '- dueTime est OPTIONNEL pour une date seule. Ne demande JAMAIS l\'heure avant d\'avoir pos\u00e9 la date.',
       '- Horizon VAGUE (pas de jour calendrier)\u00a0: si l\'utilisateur dit \u00ab\u00a0\u00e9ventuellement\u00a0\u00bb / \u00ab\u00a0todo eventually\u00a0\u00bb / \u00ab\u00a0\u00e0 faire \u00e9ventuellement\u00a0\u00bb / \u00ab\u00a0futur proche\u00a0\u00bb / \u00ab\u00a0futur lointain\u00a0\u00bb / \u00ab\u00a0someday\u00a0\u00bb\u00a0: APPLIQUE set_due avec dueVague (+ dueEnabled:true) TOUT DE SUITE. INTERDIT de demander une date YYYY-MM-DD \u00e0 la place.',
-      '- dueVague ids\u00a0: "proche" (futur proche), "lointain" (futur lointain), "eventuellement" (\u00e9ventuellement / someday). Le runtime pose une date proxy\u00a0; le libell\u00e9 face = \u00ab\u00a0\u00c0 faire \u00e9ventuellement\u00a0\u00bb etc.',
+      '- dueVague ids (continuum)\u00a0: "bientot", "proche", "lointain", "eventuellement", "tres-lointain", \u2026 Le runtime pose une date proxy\u00a0; le libell\u00e9 face = \u00ab\u00a0\u00c0 faire \u00e9ventuellement\u00a0\u00bb etc.',
       '- Ex. vague\u00a0: user \u00ab\u00a0mark as todo eventually\u00a0\u00bb / \u00ab\u00a0\u00e0 faire \u00e9ventuellement\u00a0\u00bb \u2192 {"message":"Okay, \u00e0 faire \u00e9ventuellement.","suggestions":["Quelle est la priorit\u00e9?","Marquer bloqu\u00e9"],"followUps":[],"actions":[{"tool":"set_due","args":{"dueVague":"eventuellement","dueEnabled":true}}]}',
       '- Ex. futur proche\u00a0: user \u00ab\u00a0dans un futur proche\u00a0\u00bb \u2192 {"message":"Okay, dans un futur proche.","suggestions":["Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_due","args":{"dueVague":"proche","dueEnabled":true}}]}',
       '- D\u00e9but (startDate)\u00a0: si l\'utilisateur donne une date de d\u00e9but / \u00ab\u00a0commence le\u00a0\u00bb\u00a0: set_due avec startDate (+ startTime optionnel). Mode Vague n\'a pas de d\u00e9but.',
@@ -3885,7 +4071,7 @@
       'Outils disponibles\u00a0:',
       '- set_priority: { urgency?:0-4, impact?:0-4, ease?:1-5, priorityEnabled?:boolean, tier?: string, heatTarget?: number } (tier = Critique|Urgente|Prioritaire|Importante|Flexible|Secondaire|Optionnelle\u00a0; impact 0\u20134 = port\u00e9e Personnel\u2026Global). Legacy estimatedDuration* \u2192 redirig\u00e9 vers set_progress_estimate.',
       '- set_task_types: { types: string[], force?: boolean } (multi\u00a0; ids\u00a0: action|project|recurring|exploratory|emotional|communication|deliverable|process|thinking|material|learning|admin|creative|finance|custom-*). Lit context.taskTypes. Si taskTypesLocked=true, n\'\u00e9crase PAS sauf demande explicite + force:true. Ne suppose PAS qu\'une carte est un livrable\u00a0; adapte ton langage (urgence / cadrage) aux types.',
-      '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean, relativeMinutes?: number, relativeHours?: number, dueVague?: "proche"|"lointain"|"eventuellement", dueMode?: "precise"|"vague", startDate?: "YYYY-MM-DD"|null, startTime?: "HH:MM"|null, clearStart?: boolean, recurrence?: { frequency: "daily"|"weekly"|"monthly"|"yearly", interval?: number, weekdays?: number[] }|null, clearRecurrence?: boolean, clear?: boolean } (dueTime OPTIONNEL\u00a0; d\u00e9lai relatif \u2192 relativeMinutes/Hours\u00a0; horizon flou \u2192 dueVague\u00a0; d\u00e9but \u2192 startDate\u00a0; r\u00e9currence \u2192 recurrence\u00a0; clear:true efface l\'\u00e9ch\u00e9ance\u00a0; aujourd\'hui = context.today)',
+      '- set_due: { dueDate?: "YYYY-MM-DD"|null, dueTime?: "HH:MM"|null, dueEnabled?: boolean, relativeMinutes?: number, relativeHours?: number, dueVague?: "bientot"|"proche"|"lointain"|"eventuellement"|"tres-lointain"|string, dueMode?: "precise"|"vague", startDate?: "YYYY-MM-DD"|null, startTime?: "HH:MM"|null, clearStart?: boolean, recurrence?: { frequency: "daily"|"weekly"|"monthly"|"yearly", interval?: number, weekdays?: number[] }|null, clearRecurrence?: boolean, clear?: boolean } (dueTime OPTIONNEL\u00a0; d\u00e9lai relatif \u2192 relativeMinutes/Hours\u00a0; horizon flou \u2192 dueVague\u00a0; d\u00e9but \u2192 startDate\u00a0; r\u00e9currence \u2192 recurrence\u00a0; clear:true efface l\'\u00e9ch\u00e9ance\u00a0; aujourd\'hui = context.today)',
       '- set_blocked: { enAttente?: boolean, blockedReasons?: string[], blockedLinks?: [{id?:string, matchText?:string, label?:string}] } (enAttente:true seul suffit\u00a0; causes et liens optionnels\u00a0; synchronise Progr\u00e8s blocked\u00a0; si progr\u00e8s \u00e0 100%, le runtime le remet \u00e0 0% \u2014 ajoute aussi set_progress)',
       '- set_members: { add?: (string|{id?,matchText?,name?})[], remove?: (string|{id?,matchText?})[], clear?: boolean } (assigne / retire des membres du tableau\u00a0; match via context.boardMembers / ownership.members)',
       '- set_labels: { add?: (string|{id?,matchText?,name?,color?})[], remove?: (string|{id?,matchText?})[], create?: {name:string, color?:string}, clear?: boolean } (\u00e9tiquettes Trello\u00a0; match via context.boardLabels / labels)',
@@ -7084,7 +7270,9 @@
       '- Challenge vague (1 tour max, avec?)\u00a0: \u00ab\u00a0[Sujet], \u00e7a sonne un peu technique et sans vouloir t\'offenser, un peu vague?\u00a0\u00bb',
       '- Format livrable (suggestionsMulti:true) SEULEMENT si deliverable est parmi context.taskTypes (ou signal livrable \u00e9vident)\u00a0: \u00ab\u00a0Le produit final, c\'est un document texte? Un diaporama?\u00a0\u00bb (+ PDF, atelier, checklist\u2026).',
       '- SINON (action / process / emotional / communication / exploratory / thinking / recurring sans deliverable)\u00a0: clarifie le r\u00e9sultat dans le langage du type (\u00ab\u00a0Au fond, tu veux que quoi soit vrai / fait / clarifi\u00e9?\u00a0\u00bb) \u2014 JAMAIS \u00ab\u00a0produit final / diaporama\u00a0\u00bb. JAMAIS \u00ab\u00a0Pourquoi tu veux\u2026?\u00a0\u00bb.',
-      '- Hypoth\u00e8se de but (oui/non, suggestionsMulti:false) si utile\u00a0: avance ton best guess. Ex. strat\u00e9gie com\u00a0: \u00ab\u00a0\u00c7a sert \u00e0 guider le service des communications pour offrir un meilleur service, c\'est \u00e7a?\u00a0\u00bb',
+      '- Hypoth\u00e8se de but (oui/non, suggestionsMulti:false) SEULEMENT si tu ajoutes une info NOUVELLE (acteur externe, livrable format, permission\u2026) ABSENTE du titre. INTERDIT de reformuler le titre en \u00ab\u00a0C\'est pour [titre], c\'est \u00e7a?\u00a0\u00bb.',
+      '- Ex. FAUX (titre d\u00e9j\u00e0 clair)\u00a0: titre \u00ab\u00a0Faciliter l\'acc\u00e8s \u00e0 la biblioth\u00e8que de m\u00e9dia\u00a0\u00bb \u2192 \u00ab\u00a0C\'est surtout pour faciliter l\'acc\u00e8s \u00e0 la biblioth\u00e8que, c\'est \u00e7a?\u00a0\u00bb',
+      '- Ex. VRAI (nouvelle info)\u00a0: strat\u00e9gie com floue \u2192 \u00ab\u00a0\u00c7a sert \u00e0 guider le service des communications pour offrir un meilleur service, c\'est \u00e7a?\u00a0\u00bb',
       '- Sur r\u00e9ponse\u00a0: remember \u00ab\u00a0Livrable\u00a0: \u2026\u00a0\u00bb seulement si deliverable\u00a0; sinon \u00ab\u00a0But\u00a0: \u2026\u00a0\u00bb / \u00ab\u00a0R\u00e9sultat\u00a0: \u2026\u00a0\u00bb (+ rename_card si utile\u00a0; set_description court, sans dump).',
       '- Une id\u00e9e par tour\u00a0: types silencieux, puis clarification SEULEMENT si flou, puis axes. Skip tout ce qui est \u00e9vident.',
       '',
@@ -7159,12 +7347,15 @@
       '- Valide avant de pivoter\u00a0: apr\u00e8s un refus / drop / incertitude (\u00ab\u00a0laisse faire\u00a0\u00bb, \u00ab\u00a0pas maintenant\u00a0\u00bb, \u00ab\u00a0Je ne sais pas\u00a0\u00bb), commence par un ACK court (\u00ab\u00a0Compris.\u00a0\u00bb / \u00ab\u00a0Okay.\u00a0\u00bb) PUIS la question suivante. Ex. FAUX\u00a0: \u00ab\u00a0De quoi veux-tu parler maintenant?\u00a0\u00bb \u2014 Ex. VRAI\u00a0: \u00ab\u00a0Compris. De quoi veux-tu parler maintenant?\u00a0\u00bb',
       '- Pose UNE question COURTE (naturelle, pote). Vise ~6\u201316 mots. JAMAIS de chiffres ni d\'\u00e9chelles \u00ab\u00a00 \u00e0 4\u00a0\u00bb / \u00ab\u00a01 \u00e0 5\u00a0\u00bb.',
       '- Assumer + confirmer (critique, mode dynamique)\u00a0: si tu as un best guess PLAUSIBLE mais PAS \u00e9vident \u00e0 100%\u00a0: avance l\'hypoth\u00e8se et demande confirmation. suggestions = ["Oui","Non"] + suggestionsMulti:false. Si l\'hypoth\u00e8se est DIFFICILE \u00e0 juger pour l\'utilisateur (org / budget / permission / impact large)\u00a0: ["Oui","Non","Je ne sais pas"].',
-      '- Si c\'est \u00e9vident (effort trivial, achat = quelques minutes, corv\u00e9e perso = impact personnel)\u00a0: N\'ASK PAS \u2014 m\u00eame pas Oui/Non. set_priority / remember en silence, pose autre chose.',
+      '- L\'hypoth\u00e8se DOIT apporter une info NOUVELLE (qui, format, permission, co\u00fbt, port\u00e9e\u2026). INTERDIT de paraphraser le titre / le sujet d\u00e9j\u00e0 pos\u00e9 dans la question d\'urgence.',
+      '- INTERDIT les questions stupides \u00ab\u00a0C\'est surtout pour [reprise du titre], c\'est \u00e7a?\u00a0\u00bb / \u00ab\u00a0\u00c7a sert \u00e0 [titre]?\u00a0\u00bb / \u00ab\u00a0Le but c\'est [titre]?\u00a0\u00bb. Le titre EST le but jusqu\'\u00e0 preuve du contraire.',
+      '- Ex. FAUX (echo titre)\u00a0: titre \u00ab\u00a0Faciliter l\'acc\u00e8s \u00e0 la biblioth\u00e8que de m\u00e9dia\u00a0\u00bb \u2192 \u00ab\u00a0C\'est surtout pour faciliter l\'acc\u00e8s \u00e0 la biblioth\u00e8que, c\'est \u00e7a?\u00a0\u00bb',
+      '- Si c\'est \u00e9vident (effort trivial, achat = quelques minutes, corv\u00e9e perso = impact personnel, but = titre)\u00a0: N\'ASK PAS \u2014 m\u00eame pas Oui/Non. set_priority / remember en silence, pose autre chose.',
       '- INTERDIT les questions ouvertes (qui / quoi / laquelle / quelles cons\u00e9quences) quand une hypoth\u00e8se courte tiendrait en oui/non. Transforme-les en confirmation.',
       '- Ex. FAUX (ouvert)\u00a0: \u00ab\u00a0Qui est le plus touch\u00e9 si on ne fait pas installer les dipl\u00f4mes sur le mur?\u00a0\u00bb',
       '- Ex. VRAI (assumer)\u00a0: \u00ab\u00a0Le plus impact\u00e9 si on ne les installe pas, c\'est [[a:toi]]?\u00a0\u00bb + suggestions ["Oui","Non"], suggestionsMulti:false.',
       '- Ex. FAUX (ouvert)\u00a0: \u00ab\u00a0\u00c7a sert \u00e0 quoi exactement?\u00a0\u00bb / \u00ab\u00a0Qui s\'en occupe?\u00a0\u00bb quand tu peux d\u00e9j\u00e0 deviner.',
-      '- Ex. VRAI\u00a0: \u00ab\u00a0C\'est surtout pour [[a:impressionner les clients]] qui passent, c\'est \u00e7a?\u00a0\u00bb / \u00ab\u00a0C\'est [[a:toi]] qui t\'en occupes?\u00a0\u00bb + Oui/Non.',
+      '- Ex. VRAI (nouvelle info)\u00a0: \u00ab\u00a0C\'est [[a:toi]] qui t\'en occupes?\u00a0\u00bb + Oui/Non \u2014 PAS \u00ab\u00a0C\'est pour [titre], c\'est \u00e7a?\u00a0\u00bb.',
       '- Ex. VRAI (difficile)\u00a0: \u00ab\u00a0Faut la permission de quelqu\'un pour avancer?\u00a0\u00bb + ["Oui","Non","Je ne sais pas"].',
       '- Si Non\u00a0: encha\u00eene avec une autre hypoth\u00e8se OU (seulement alors) une \u00e9chelle / liste courte d\'options. Ne repars pas sur une question trop ouverte.',
       '- Si \u00ab\u00a0Je ne sais pas\u00a0\u00bb\u00a0: ne force pas\u00a0; passe \u00e0 une question plus accessible ou inf\u00e8re prudent.',
@@ -7657,6 +7848,32 @@
       suggestionScale = !!whyGuard.suggestionScale || suggestionScale;
       scoutRedirected = true;
       scoutGuard = whyGuard;
+    }
+
+    var echoGuard = applyInterviewEchoGuards(
+      {
+        message: message,
+        suggestions: scoutRedirected
+          ? scoutGuard.suggestions
+          : (data && data.suggestions) || parsed.suggestions,
+        suggestionsMulti: scoutRedirected
+          ? scoutGuard.suggestionsMulti
+          : wantsSuggestionsMulti(data) || wantsSuggestionsMulti(parsed),
+        suggestionScale: suggestionScale,
+        completeInterview: !!(
+          (data && data.completeInterview) ||
+          scoutGuard.completeInterview
+        )
+      },
+      context,
+      history
+    );
+    var echoRedirected = echoGuard.message !== message;
+    message = echoGuard.message;
+    if (echoRedirected) {
+      suggestionScale = !!echoGuard.suggestionScale || suggestionScale;
+      scoutRedirected = true;
+      scoutGuard = echoGuard;
     }
 
     var dueGuard = applyKnownDueGuards(
@@ -12755,7 +12972,7 @@
 
   /**
    * Resolve a Vague échéance id from set_due args (catalog id or natural phrase).
-   * Ids: proche | lointain | eventuellement (+ legacy bientot).
+   * Continuum includes bientot → tres-lointain (proche / lointain / eventuellement kept).
    */
   function resolveDueVagueArg(raw) {
     if (raw == null || raw === '') return '';
@@ -12790,13 +13007,17 @@
       return 'eventuellement';
     }
     if (
-      t === 'proche' ||
-      t === 'near future' ||
-      t === 'soonish' ||
-      t.indexOf('futur proche') >= 0 ||
-      t.indexOf('near term') >= 0
+      t.indexOf('tres lointain') >= 0 ||
+      t.indexOf('very far') >= 0 ||
+      t === 'tres-lointain'
     ) {
-      return 'proche';
+      return 'tres-lointain';
+    }
+    if (
+      t.indexOf('assez lointain') >= 0 ||
+      t === 'assez-lointain'
+    ) {
+      return 'assez-lointain';
     }
     if (
       t === 'lointain' ||
@@ -12807,7 +13028,32 @@
     ) {
       return 'lointain';
     }
-    if (t === 'bientot' || t === 'soon') return 'bientot';
+    if (
+      t === 'proche' ||
+      t === 'near future' ||
+      t === 'soonish' ||
+      t.indexOf('futur proche') >= 0 ||
+      t.indexOf('near term') >= 0
+    ) {
+      return 'proche';
+    }
+    if (
+      t === 'bientot' ||
+      t === 'soon' ||
+      t.indexOf('bientot') >= 0
+    ) {
+      return 'bientot';
+    }
+    if (t.indexOf('sous peu') >= 0) return 'sous-peu';
+    if (t.indexOf('quelques semaines') >= 0) return 'quelques-semaines';
+    if (t.indexOf('quelques mois') >= 0) return 'quelques-mois';
+    if (t.indexOf('semestre') >= 0) return 'semestre';
+    if (t.indexOf('an ou deux') >= 0 || t.indexOf('un an ou deux') >= 0) {
+      return 'an-ou-deux';
+    }
+    if (t.indexOf('mois qui vient') >= 0 || t === 'prochain-mois') {
+      return 'prochain-mois';
+    }
     return '';
   }
 
@@ -17675,6 +17921,8 @@
     isUniversalMotiveText: isUniversalMotiveText,
     interviewMotivationWhyAlreadyAsked: interviewMotivationWhyAlreadyAsked,
     applyInterviewWhyGuards: applyInterviewWhyGuards,
+    looksLikeTitleEchoConfirmAsk: looksLikeTitleEchoConfirmAsk,
+    applyInterviewEchoGuards: applyInterviewEchoGuards,
     polishMessageAfterProgressComplete: polishMessageAfterProgressComplete,
     ensureProgressCelebration: ensureProgressCelebration,
     looksLikeQuebecLibrePhrase: looksLikeQuebecLibrePhrase,
