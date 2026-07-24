@@ -2965,11 +2965,13 @@
 
   var HEAT_SEGMENT_DEFS = [
     // Presets use Impact / Facilité (0–10) + Empressement (0–4). No Urgence input.
+    // Each preset's baseline score (impact*0.6 + ease*0.4 + empressement*0.75) is
+    // chosen to land solidly inside its tier band, not just near the target.
     { i: TIER_I.OPTIONNELLE, target: 0.7, preset: { impact: 0, ease: 2, empressement: 0 } },
     { i: TIER_I.SECONDAIRE, target: 2.1, preset: { impact: 2, ease: 3, empressement: 0 } },
-    { i: TIER_I.FLEXIBLE, target: 3.6, preset: { impact: 4, ease: 5, empressement: 0 } },
-    { i: TIER_I.IMPORTANTE, target: 5.0, preset: { impact: 5, ease: 5, empressement: 1 } },
-    { i: TIER_I.PRIORITAIRE, target: 6.5, preset: { impact: 7, ease: 5, empressement: 2 } },
+    { i: TIER_I.FLEXIBLE, target: 3.6, preset: { impact: 4, ease: 3, empressement: 0 } },
+    { i: TIER_I.IMPORTANTE, target: 5.0, preset: { impact: 5, ease: 5, empressement: 0 } },
+    { i: TIER_I.PRIORITAIRE, target: 6.5, preset: { impact: 7, ease: 4, empressement: 1 } },
     { i: TIER_I.URGENTE, target: 7.9, preset: { impact: 7, ease: 4, empressement: 3 } },
     { i: TIER_I.CRITIQUE, target: 9.3, preset: { impact: 10, ease: 8, empressement: 3 } }
   ];

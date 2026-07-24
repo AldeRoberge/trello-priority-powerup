@@ -21,48 +21,62 @@ describe('PriorityUI score breakdown (?)', () => {
 
   it('baseline parts sum to the displayed score', () => {
     const samples = [
-      [0, 0, 1],
+      [0, 0, 0],
       [2, 2, 3],
-      [3, 1, 5],
+      [3, 1, 4],
       [4, 0, 1],
-      [4, 4, 5],
+      [8, 8, 2],
       [1, 3, 1],
       [3, 3, 2],
     ];
-    for (const [u, i, f] of samples) {
-      const result = calcBaseline({ urgency: u, impact: i, ease: f });
+    for (const [impact, ease, empressement] of samples) {
+      const result = calcBaseline({ impact, ease, empressement });
       const t = result.terms;
-      const sum =
-        t.urgencyShare + t.impactShare + t.easeTerm + (t.urgencyBoost || 0);
+      const sum = t.impactShare + t.easeTerm + t.datePull + t.empressePull;
       assert.ok(
         Math.abs(sum - result.score) < 1e-9,
-        `U=${u} I=${i} F=${f}: sum ${sum} != score ${result.score}`
+        `I=${impact} F=${ease} E=${empressement}: sum ${sum} != score ${result.score}`
       );
     }
   });
 
-  it('baseline tooltip uses a plain formula and signed contributions', () => {
-    const result = calcBaseline({ urgency: 2, impact: 2, ease: 3 });
+  it('baseline tooltip uses a plain formula and signed contributions (no Échéance/Empressement)', () => {
+    const result = calcBaseline({ impact: 2, ease: 3, empressement: 0 });
     const breakdown = scoreBreakdown('baseline', result);
     assert.equal(breakdown.short, 'Comment ce score est calculé');
     assert.ok(breakdown.lines[0].includes('Comment ce score est calculé'));
-    assert.equal(breakdown.lines[1], 'Urgence + Impact + Facilité');
-    assert.match(breakdown.text, /Urgence \(niveau 2\) → \+/);
+    assert.equal(breakdown.lines[1], 'Impact + Facilité');
     assert.match(breakdown.text, /Impact \(niveau 2\) → \+/);
     assert.match(breakdown.text, /Facilité \(niveau 3\) → \+/);
     assert.match(breakdown.text, /Score = \d+\.\d \/ 10/);
+    assert.equal(breakdown.text.includes('Urgence'), false);
     assert.equal(breakdown.text.includes('Pression'), false);
     assert.equal(breakdown.text.includes('Multiplicateur'), false);
     assert.equal(breakdown.text.includes('Atténuation'), false);
     assert.equal(breakdown.text.includes('Pénalité'), false);
   });
 
-  it('shows urgency bonus in plain language when it applies', () => {
-    const result = calcBaseline({ urgency: 4, impact: 0, ease: 1 });
+  it('shows Empressement in plain language when it applies', () => {
+    const result = calcBaseline({ impact: 0, ease: 1, empressement: 4 });
     const breakdown = scoreBreakdown('baseline', result);
-    assert.ok(breakdown.lines[1].includes('bonus'));
-    assert.match(breakdown.text, /Bonus urgence → \+/);
-    assert.ok(breakdown.text.includes('coup de pouce'));
+    assert.equal(breakdown.lines[1], 'Impact + Facilité + Empressement');
+    assert.match(breakdown.text, /Empressement \(niveau 4\) → \+/);
+  });
+
+  it('shows Échéance (with a date fixe detail) in plain language when a due date is close', () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const iso = tomorrow.toISOString().slice(0, 10);
+    const result = calcBaseline({
+      impact: 2,
+      ease: 2,
+      empressement: 0,
+      dueDate: iso,
+      dateFixe: true,
+    });
+    const breakdown = scoreBreakdown('baseline', result);
+    assert.equal(breakdown.lines[1], 'Impact + Facilité + Échéance');
+    assert.match(breakdown.text, /Échéance → date fixe \+/);
   });
 
   it('eisenhower tooltip explains thresholds in plain French', () => {

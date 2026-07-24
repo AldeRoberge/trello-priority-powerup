@@ -19,49 +19,54 @@ describe('PriorityUI scoring (baseline)', () => {
     assert.equal(typeof calcBaseline, 'function');
   });
 
-  it('max inputs score 10 Critique', () => {
-    const result = calcBaseline({ urgency: 4, impact: 4, ease: 5 });
+  // Baseline score = Impact*0.6 + Facilité*0.4 (+ Échéance pull + Empressement pull).
+  // No date, no Empressement here: score is purely Impact + Facilité.
+  it('max Impact + Facilité + Empressement score 10 Critique', () => {
+    const result = calcBaseline({ impact: 10, ease: 10, empressement: 4 });
     assert.ok(Math.abs(result.score - 10) < 0.01);
     assert.equal(result.tier.label, 'Critique');
   });
 
-  it('keeps max urgency + low impact + hard as Urgente+', () => {
-    const urgentLow = baselineScore(4, 0, 1);
-    assert.ok(urgentLow >= 7.2, `expected >= 7.2, got ${urgentLow}`);
+  it('baselineScore(impact, ease, empressement) matches Impact*0.6 + Facilité*0.4 + Empressement pull', () => {
+    const s = baselineScore(5, 5, 0);
+    assert.ok(Math.abs(s - 5) < 0.01, `expected ~5, got ${s}`);
   });
 
-  it('easy beats hard at similar urgency/impact', () => {
-    const hard = baselineScore(2, 2.5, 1);
-    const easy = baselineScore(2, 2.8, 5);
+  it('max Empressement alone cannot reach Urgente (additive, capped pull)', () => {
+    const s = baselineScore(0, 0, 4);
+    assert.ok(s < 4.3, `expected < 4.3 (below Importante), got ${s}`);
+  });
+
+  it('easy beats hard at the same Impact/Empressement', () => {
+    const hard = baselineScore(4, 1, 0);
+    const easy = baselineScore(4, 8, 0);
     assert.ok(easy > hard, `easy ${easy} should beat hard ${hard}`);
   });
 
-  it('critique hard stays Critique', () => {
-    const critHard = baselineScore(4, 4, 1);
+  it('critique-level Impact + Facilité stays Critique even with no Empressement', () => {
+    const critHard = baselineScore(10, 8, 0);
     assert.ok(critHard >= 8.6, `expected >= 8.6, got ${critHard}`);
   });
 
   it('all-min stays low (below Secondaire)', () => {
-    const allMin = baselineScore(0, 0, 1);
+    const allMin = baselineScore(0, 0, 0);
     assert.ok(allMin < 1.4, `expected < 1.4, got ${allMin}`);
   });
 
+  it('raising Empressement raises the score', () => {
+    const base = baselineScore(5, 5, 0);
+    const withEmpressement = baselineScore(5, 5, 4);
+    assert.ok(withEmpressement > base, `${withEmpressement} should be > ${base}`);
+  });
+
   it('HEAT_SEGMENTS presets land in expected tiers', () => {
-    const presets = [
-      ['Optionnelle', 0, 0, 2],
-      ['Secondaire', 1, 1, 2],
-      ['Flexible', 1, 2, 3],
-      ['Importante', 2, 2, 3],
-      ['Prioritaire', 2, 3, 3],
-      ['Urgente', 3, 3, 2],
-      ['Critique', 4, 4, 5],
-    ];
-    for (const [label, u, i, f] of presets) {
-      const result = calcBaseline({ urgency: u, impact: i, ease: f });
+    for (const seg of PriorityUI.HEAT_SEGMENTS) {
+      const preset = seg.preset;
+      const result = calcBaseline(preset);
       assert.equal(
-        result.tier.label,
-        label,
-        `${label} U=${u} I=${i} F=${f} -> ${result.tier.label} (${result.score.toFixed(2)})`
+        result.tier.i,
+        seg.i,
+        `${seg.label} preset ${JSON.stringify(preset)} -> ${result.tier.label} (${result.score.toFixed(2)})`
       );
     }
   });
