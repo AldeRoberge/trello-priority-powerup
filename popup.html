@@ -2138,9 +2138,8 @@
           '.variant-overview-section--actions'
         );
         var moreDetails = card.querySelector('.variant-more-details-section');
-        var hist = card.querySelector(
-          ':scope > .variant-historique-section'
-        );
+        var hist = card.querySelector('.variant-historique-section');
+        if (hist && hist.parentNode !== card) hist = null;
         var anchor = actionsFooter || moreDetails || hist;
         if (anchor) {
           if (anchor.nextSibling) {
