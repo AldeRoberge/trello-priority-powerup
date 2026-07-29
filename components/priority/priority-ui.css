@@ -403,6 +403,7 @@ body {
 .field--historique .section-leading-icon,
 .field--statut .section-leading-icon,
 .field--info .section-leading-icon,
+.field--more-details .section-leading-icon,
 .field--overview .section-leading-icon,
 .field--priority .section-leading-icon,
 .field--progress .section-leading-icon,
@@ -1362,7 +1363,7 @@ html[data-color-mode='dark'] .overview-composer-input {
   }
 }
 
-/* ── Détails (recap) panel ── */
+/* ── Détails (unified top) + Plus de détails ── */
 .variant-info-section {
   margin: 8px 0 0;
   padding: 0 8px;
@@ -1379,6 +1380,76 @@ html[data-color-mode='dark'] .overview-composer-input {
 
 .field--info.is-enabled {
   background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
+}
+
+.field--info.is-unified {
+  padding-top: 12px;
+}
+
+.field--info.is-unified .info-section-body {
+  padding-top: 0;
+}
+
+.variant-more-details-section {
+  margin: 8px 0 0;
+  padding: 0 8px;
+}
+
+.field--more-details {
+  margin-bottom: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: transparent;
+  border: none;
+}
+
+.field--more-details.is-enabled {
+  background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
+}
+
+.more-details-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 0 0;
+}
+
+.info-historique-mount {
+  margin-top: 4px;
+}
+
+.info-historique-mount .variant-historique-section {
+  margin: 0;
+  padding: 0;
+}
+
+.info-historique-mount .field--historique {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.variant-overview-section--actions {
+  margin: 10px 0 4px;
+  padding: 0 8px;
+}
+
+.field--overview-actions {
+  margin-bottom: 0;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.field--overview-actions .overview-section-body {
+  padding: 0;
+}
+
+.overview-actions--footer {
+  margin-top: 0;
+  padding: 0;
 }
 
 .info-section-body {
@@ -5262,14 +5333,6 @@ html[data-color-mode='dark'] .overview-composer-input {
 
 .due-date-vague[hidden] {
   display: none;
-}
-
-.due-date-vague-value {
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.3;
-  color: var(--text-primary);
-  text-align: center;
 }
 
 .due-date-vague-slider {

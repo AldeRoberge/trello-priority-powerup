@@ -171,6 +171,28 @@ describe('Échéance vague mode', () => {
     );
   });
 
+  it('dateFixe is ignored for score pull and breakdown while Vague', () => {
+    const now = new Date(2026, 6, 20);
+    const base = {
+      impact: 5,
+      ease: 5,
+      dueDate: '2026-07-21',
+      dueMode: 'vague',
+      dueVague: 'proche',
+      dateFixe: true
+    };
+    const vagueFixed = PU.calcBaselineTermsFromInputs(base, now);
+    const vagueMovable = PU.calcBaselineTermsFromInputs(
+      Object.assign({}, base, { dateFixe: false }),
+      now
+    );
+    assert.equal(vagueFixed.dateFixe, false);
+    assert.equal(vagueFixed.datePull, vagueMovable.datePull);
+    const result = PU.calc.baseline(base, now);
+    const breakdown = PU.format.scoreBreakdown('baseline', result);
+    assert.doesNotMatch(breakdown.text, /date fixe/i);
+  });
+
   it('withDueDateDisplay keeps À faire éventuellement on the card face text', () => {
     const display = PU.withDueDateDisplay(
       { label: 'Secondaire', tierI: 5 },

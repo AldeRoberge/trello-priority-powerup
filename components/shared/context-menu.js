@@ -465,8 +465,8 @@
       buildExpandToggleItem({
         isExpanded: opts.isExpanded,
         setExpanded: opts.setExpanded,
-        collapseLabel: 'Replier Information',
-        expandLabel: 'D\u00e9velopper Information',
+        collapseLabel: 'Replier Plus de d\u00e9tails',
+        expandLabel: 'D\u00e9velopper Plus de d\u00e9tails',
       }),
     ];
     if (typeof opts.openGoals === 'function') {

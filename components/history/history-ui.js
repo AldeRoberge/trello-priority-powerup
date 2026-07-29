@@ -60,6 +60,7 @@
    * @param {function(string): Promise} [options.onRestore]
    * @param {function()} [options.onLayoutChange]
    * @param {boolean} [options.initiallyOpen]
+   * @param {HTMLElement} [options.mountEl] parent node (e.g. Plus de détails)
    */
   function mount(cardEl, options) {
     options = options || {};
@@ -113,12 +114,20 @@
     field.appendChild(body);
     section.appendChild(field);
 
-    // Insert just above Assistant when present.
-    var chatSection = cardEl.querySelector('.variant-chat-section');
-    if (chatSection) {
-      cardEl.insertBefore(section, chatSection);
+    var mountParent =
+      options.mountEl && options.mountEl.nodeType === 1
+        ? options.mountEl
+        : cardEl;
+    if (mountParent === cardEl) {
+      // Insert just above Assistant when present.
+      var chatSection = cardEl.querySelector('.variant-chat-section');
+      if (chatSection) {
+        cardEl.insertBefore(section, chatSection);
+      } else {
+        cardEl.appendChild(section);
+      }
     } else {
-      cardEl.appendChild(section);
+      mountParent.appendChild(section);
     }
 
     var expandHistorique = PriorityUI.resolveSectionExpanded

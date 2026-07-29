@@ -81,6 +81,7 @@
   var SECTION_COLLAPSE_KEYS = [
     'overview',
     'info',
+    'moreDetails',
     'statut',
     'objectif',
     'priority',
@@ -5966,7 +5967,10 @@
     var days = daysUntilDue(iso, now);
     if (!isFinite(days)) return 0;
     var proximity = days < 0 ? 1 : Math.exp(-days / DATE_PROXIMITY_TAU_DAYS);
-    var dateGain = inputs.dateFixe === true ? DATE_GAIN_FIXED : DATE_GAIN_MOVABLE;
+    var dateGain =
+      inputs.dateFixe === true && !isDueVagueMode(inputs)
+        ? DATE_GAIN_FIXED
+        : DATE_GAIN_MOVABLE;
     return proximity * dateGain;
   }
 
@@ -6090,7 +6094,7 @@
       F: Fraw,
       Fscore: F,
       E: empressementIndex(inputs),
-      dateFixe: !!(inputs && inputs.dateFixe),
+      dateFixe: !!(inputs && inputs.dateFixe) && !isDueVagueMode(inputs),
       hasDate: cardHasDueDate(inputs)
     };
   }
@@ -8922,15 +8926,17 @@
   }
 
   /**
-   * Primary overview / résumé at the top of the card popup (collapsible).
+   * Overview / résumé strip (collapsible) or footer actions box.
    * Status-first hero + Motifs + open tasks + contextual actions.
    *
    * config.compact — card-back / embedded strip: no accordion chrome, no action
    * chips, tighter layout (used by the Trello Cerveau card-back section).
+   * config.actionsOnly — popup footer: actions + composers only (no Résumé chrome).
    */
   function createOverviewField(config) {
     config = config || {};
     var compact = !!config.compact;
+    var actionsOnly = !!config.actionsOnly && !compact;
     var mountEl = config.el;
     var onJump = typeof config.onJump === 'function' ? config.onJump : null;
     var onAction =
@@ -8992,16 +8998,18 @@
     var section = document.createElement('div');
     section.className =
       'variant-overview-section' +
-      (compact ? ' variant-overview-section--compact' : '');
+      (compact ? ' variant-overview-section--compact' : '') +
+      (actionsOnly ? ' variant-overview-section--actions' : '');
 
     var field = document.createElement('div');
     field.className =
       'field field--overview is-enabled' +
-      (compact ? ' field--overview-compact' : '');
+      (compact ? ' field--overview-compact' : '') +
+      (actionsOnly ? ' field--overview-actions' : '');
     section.appendChild(field);
 
     var chrome = null;
-    if (!compact) {
+    if (!compact && !actionsOnly) {
       chrome = createCollapsibleEnableChrome({
         title: 'R\u00e9sum\u00e9',
         bodyId: bodyId,
@@ -9017,7 +9025,8 @@
 
     var body = document.createElement('div');
     body.className =
-      'overview-section-body' + (compact ? '' : ' section-toggle-body');
+      'overview-section-body' +
+      (compact || actionsOnly ? '' : ' section-toggle-body');
     body.id = bodyId;
 
     function makeJumpable(el, jumpKeyOrRef, label) {
@@ -9064,14 +9073,14 @@
     titleValue.className = 'overview-title-text';
     titleBtn.appendChild(titleValue);
 
-    if (!compact) {
+    if (!compact && !actionsOnly) {
       var titleChevron = document.createElement('i');
       titleChevron.className = 'ti ti-chevron-right overview-title-chevron';
       titleChevron.setAttribute('aria-hidden', 'true');
       titleBtn.appendChild(titleChevron);
     }
 
-    body.appendChild(titleBtn);
+    if (!actionsOnly) body.appendChild(titleBtn);
 
     // ── Status hero ────────────────────────────────────────────────────
     var hero = document.createElement('div');
@@ -9117,19 +9126,19 @@
 
     hero.appendChild(heroRing);
     hero.appendChild(heroMain);
-    body.appendChild(hero);
+    if (!actionsOnly) body.appendChild(hero);
 
     // ── Motifs band ────────────────────────────────────────────────────
     var motifsEl = document.createElement('div');
     motifsEl.className = 'overview-motifs';
     motifsEl.hidden = true;
     makeJumpable(motifsEl, { key: 'blocked' }, 'Motifs');
-    body.appendChild(motifsEl);
+    if (!actionsOnly) body.appendChild(motifsEl);
 
     // ── Meta row (due + priority) ──────────────────────────────────────
     var metrics = document.createElement('div');
     metrics.className = 'overview-metrics overview-metrics--meta';
-    body.appendChild(metrics);
+    if (!actionsOnly) body.appendChild(metrics);
 
     function makeCell(key, jumpKey, label, iconClass, options) {
       options = options || {};
@@ -9189,7 +9198,7 @@
     var tasksWrap = document.createElement('div');
     tasksWrap.className = 'overview-tasks';
     tasksWrap.hidden = true;
-    body.appendChild(tasksWrap);
+    if (!actionsOnly) body.appendChild(tasksWrap);
 
     var tasksList = document.createElement('div');
     tasksList.className = 'overview-tasks-list';
@@ -9202,7 +9211,8 @@
 
     // ── Actions + composers ────────────────────────────────────────────
     var actionsEl = document.createElement('div');
-    actionsEl.className = 'overview-actions';
+    actionsEl.className =
+      'overview-actions' + (actionsOnly ? ' overview-actions--footer' : '');
     actionsEl.hidden = true;
     if (!compact) body.appendChild(actionsEl);
 
@@ -9251,11 +9261,15 @@
       composerMode = '';
       composerEl.hidden = true;
       composerEl.replaceChildren();
+      if (actionsOnly) {
+        section.hidden = !!actionsEl.hidden;
+      }
       if (onLayoutChange) onLayoutChange();
     }
 
     function openBlockComposer() {
       composerMode = 'block';
+      if (actionsOnly) section.hidden = false;
       composerEl.hidden = false;
       composerEl.replaceChildren();
 
@@ -9354,6 +9368,7 @@
 
     function openAddSubtaskComposer() {
       composerMode = 'add-subtask';
+      if (actionsOnly) section.hidden = false;
       composerEl.hidden = false;
       composerEl.replaceChildren();
 
@@ -9869,6 +9884,10 @@
       paintTasks(isBlocked);
       paintActions();
 
+      if (actionsOnly) {
+        section.hidden = !!actionsEl.hidden && !!composerEl.hidden;
+      }
+
       if (onLayoutChange) onLayoutChange();
     }
 
@@ -10012,6 +10031,7 @@
       el: section,
       field: field,
       compact: compact,
+      actionsOnly: actionsOnly,
       setData: setData,
       setExpanded: function (on) {
         if (collapse && typeof collapse.setExpanded === 'function') {
@@ -10019,7 +10039,7 @@
         }
       },
       isExpanded: function () {
-        if (compact) return true;
+        if (compact || actionsOnly) return true;
         return collapse && typeof collapse.isExpanded === 'function'
           ? collapse.isExpanded()
           : true;
@@ -10050,7 +10070,9 @@
   }
 
   /**
-   * Top-of-popup recap: title, description (editable), creator, assignees, labels.
+   * Unified card header: title, description, creator, assignees.
+   * Secondary props live in a separate « Plus de détails » section (returned as
+   * moreDetailsEl for the popup to place after Priorité / Progrès / Échéance).
    */
   function createInfoField(config) {
     var el = config.el;
@@ -10269,23 +10291,36 @@
     var FIELD_SAVE_MS = 450;
 
     var field = document.createElement('div');
-    field.className = 'field field--info is-enabled';
-
-    var chrome = createCollapsibleEnableChrome({
-      title: 'Détails',
-      bodyId: bodyId,
-      hideEnable: true,
-      leadingIcon: 'ti-info-circle',
-      iconClass: 'info-leading-icon',
-      titleClass: 'info-enable-title',
-      collapseLabel: 'Replier Détails',
-      expandLabel: 'D\u00e9velopper Détails'
-    });
-    field.appendChild(chrome.head);
+    field.className = 'field field--info is-enabled is-unified';
 
     var body = document.createElement('div');
-    body.className = 'info-section-body section-toggle-body';
+    body.className = 'info-section-body';
     body.id = bodyId;
+
+    // Secondary properties — placed by the popup after Priorité / Progrès / Échéance.
+    var moreSection = document.createElement('div');
+    moreSection.className = 'variant-more-details-section';
+    var moreField = document.createElement('div');
+    moreField.className = 'field field--more-details is-enabled';
+    var moreBodyId =
+      'more-details-body-' + Math.random().toString(36).slice(2, 9);
+    var moreChrome = createCollapsibleEnableChrome({
+      title: 'Plus de d\u00e9tails',
+      bodyId: moreBodyId,
+      hideEnable: true,
+      leadingIcon: 'ti-list-details',
+      iconClass: 'more-details-leading-icon',
+      titleClass: 'more-details-enable-title',
+      collapseLabel: 'Replier Plus de d\u00e9tails',
+      expandLabel: 'D\u00e9velopper Plus de d\u00e9tails'
+    });
+    moreField.appendChild(moreChrome.head);
+    var moreBody = document.createElement('div');
+    moreBody.className =
+      'more-details-section-body section-toggle-body info-section-body';
+    moreBody.id = moreBodyId;
+    var historiqueMount = document.createElement('div');
+    historiqueMount.className = 'info-historique-mount';
 
     function makeRow(key, labelText, options) {
       options = options || {};
@@ -10753,7 +10788,7 @@
     labelsWrap.appendChild(labelsStatus);
     labelsWrap.appendChild(labelsSuggestSection);
     labelsRow.value.appendChild(labelsWrap);
-    body.appendChild(labelsRow.row);
+    // Appended into Plus de détails below.
 
     // ── Type de tâche (multi-label catalog) ─────────────────────────────
     var taskTypesRow = makeRow('task-types', 'Type de t\u00e2che', {
@@ -10943,7 +10978,7 @@
     taskTypesWrap.appendChild(taskTypesInline);
     taskTypesWrap.appendChild(taskTypesStatus);
     taskTypesRow.value.appendChild(taskTypesWrap);
-    body.appendChild(taskTypesRow.row);
+    // Appended into Plus de détails below (after Objectif / parents).
 
     // ── Parent tasks (via Progrès linkedCardId reverse lookup) ──────────
     var parentRow = makeRow('parent', 'T\u00e2ches parentes', {
@@ -11001,7 +11036,6 @@
     parentInline.appendChild(parentPickWrap);
     parentWrap.appendChild(parentInline);
     parentRow.value.appendChild(parentWrap);
-    body.appendChild(parentRow.row);
 
     // ── Objectif (project link) ───────────────────────────────
     var objectifRow = makeRow('objectif', 'Objectif', { icon: 'ti-hierarchy-2' });
@@ -11011,7 +11045,15 @@
     objectifRow.row.classList.add('variant-objectif-section');
     objectifRow.row.hidden = true;
     objectifRow.value.appendChild(objectifMount);
-    body.appendChild(objectifRow.row);
+
+    // Plus de détails order: Objectif → parents → type → étiquettes → historique.
+    moreBody.appendChild(objectifRow.row);
+    moreBody.appendChild(parentRow.row);
+    moreBody.appendChild(taskTypesRow.row);
+    moreBody.appendChild(labelsRow.row);
+    moreBody.appendChild(historiqueMount);
+    moreField.appendChild(moreBody);
+    moreSection.appendChild(moreField);
 
     field.appendChild(body);
     el.appendChild(field);
@@ -15272,16 +15314,43 @@
       }
     });
 
-    var collapse = bindCollapsibleEnable({
-      field: field,
-      body: body,
-      chrome: chrome,
+    var moreCollapse = bindCollapsibleEnable({
+      field: moreField,
+      body: moreBody,
+      chrome: moreChrome,
       alwaysEnabled: true,
       enabled: true,
-      expanded: config.expanded != null ? !!config.expanded : true,
-      getSummary: summaryText,
+      expanded:
+        config.moreDetailsExpanded != null
+          ? !!config.moreDetailsExpanded
+          : false,
+      getSummary: function () {
+        var bits = [];
+        if (taskTypes && taskTypes.length) {
+          bits.push(
+            taskTypes.length === 1
+              ? '1 type'
+              : taskTypes.length + ' types'
+          );
+        }
+        if (labels && labels.length) {
+          bits.push(
+            labels.length === 1
+              ? '1 \u00e9tiquette'
+              : labels.length + ' \u00e9tiquettes'
+          );
+        }
+        if (parentCards && parentCards.length) {
+          bits.push(
+            parentCards.length === 1
+              ? '1 parent'
+              : parentCards.length + ' parents'
+          );
+        }
+        return bits.join(' \u00b7 ');
+      },
       onLayoutChange: onLayoutChange,
-      onExpandChange: config.onExpandChange || function () {},
+      onExpandChange: config.onMoreDetailsExpandChange || function () {},
       getContextMenuItems: function (api) {
         if (
           !global.ContextMenu ||
@@ -15302,6 +15371,21 @@
       },
     });
 
+    // Primary Détails is always open (no accordion); keep a stub for callers.
+    var collapse = {
+      refreshSummary: function () {
+        if (moreCollapse && typeof moreCollapse.refreshSummary === 'function') {
+          moreCollapse.refreshSummary();
+        }
+      },
+      setExpanded: function () {
+        return true;
+      },
+      isExpanded: function () {
+        return true;
+      },
+    };
+
     renderMembers();
     renderLabels();
     renderTaskTypes();
@@ -15315,6 +15399,19 @@
 
     return {
       field: field,
+      moreDetailsEl: moreSection,
+      getMoreDetailsEl: function () {
+        return moreSection;
+      },
+      getHistoriqueMount: function () {
+        return historiqueMount;
+      },
+      setMoreDetailsExpanded: function (on, opts) {
+        return moreCollapse.setExpanded(on, opts);
+      },
+      isMoreDetailsExpanded: function () {
+        return moreCollapse.isExpanded();
+      },
       setTitle: function (name, options) {
         options = options || {};
         var value = typeof name === 'string' ? name : '';
@@ -15531,6 +15628,9 @@
       },
       setObjectifVisible: function (visible) {
         objectifRow.row.hidden = !visible;
+        if (moreCollapse && typeof moreCollapse.refreshSummary === 'function') {
+          moreCollapse.refreshSummary();
+        }
         onLayoutChange();
       },
       flushTitle: flushTitleSave,
@@ -15538,11 +15638,11 @@
       refreshSummary: function () {
         collapse.refreshSummary();
       },
-      setExpanded: function (on, opts) {
-        return collapse.setExpanded(on, opts);
+      setExpanded: function () {
+        return true;
       },
       isExpanded: function () {
-        return collapse.isExpanded();
+        return true;
       }
     };
   }
@@ -17115,6 +17215,13 @@
     dateFixeRow.appendChild(dateFixeCopy);
     body.appendChild(dateFixeRow);
 
+    function syncDateFixeRow() {
+      var isNone = currentDueLimitState === DUE_LIMIT_STATE_NONE;
+      var isVague = currentMode === DUE_DATE_MODE_VAGUE;
+      dateFixeRow.hidden = isNone || isVague;
+      dateFixeCheckbox.checked = currentDateFixe;
+    }
+
     function paintDueLimitSwitch() {
       var isNone = currentDueLimitState === DUE_LIMIT_STATE_NONE;
       dueLimitNoneBtn.classList.toggle('is-active', isNone);
@@ -17122,8 +17229,7 @@
       dueLimitHasBtn.classList.toggle('is-active', !isNone);
       dueLimitHasBtn.setAttribute('aria-checked', !isNone ? 'true' : 'false');
       body.classList.toggle('is-due-limit-none', isNone);
-      dateFixeRow.hidden = isNone;
-      dateFixeCheckbox.checked = currentDateFixe;
+      syncDateFixeRow();
     }
 
     function setDueLimitState(nextState) {
@@ -17367,10 +17473,6 @@
     vaguePanel.setAttribute('aria-label', DUE_DATE_VAGUE_OPTIONS_LABEL);
     vaguePanel.hidden = currentMode !== DUE_DATE_MODE_VAGUE;
 
-    var vagueValueEl = document.createElement('div');
-    vagueValueEl.className = 'due-date-vague-value';
-    vagueValueEl.setAttribute('aria-live', 'polite');
-
     var vagueSlider = document.createElement('input');
     vagueSlider.type = 'range';
     vagueSlider.className = 'due-date-vague-slider field-range';
@@ -17401,7 +17503,6 @@
     vagueEnds.appendChild(vagueEndNear);
     vagueEnds.appendChild(vagueEndFar);
 
-    vaguePanel.appendChild(vagueValueEl);
     vaguePanel.appendChild(vagueSlider);
     vaguePanel.appendChild(vagueEnds);
 
@@ -18278,7 +18379,6 @@
       var label = formatDueVagueLabel(
         currentVague || dueVagueIdAtIndex(idx)
       );
-      vagueValueEl.textContent = label || DUE_DATE_VAGUE_OPTIONS_LABEL;
       vagueSlider.setAttribute(
         'aria-valuetext',
         label || DUE_DATE_VAGUE_OPTIONS_LABEL
@@ -18301,6 +18401,7 @@
       vaguePanel.hidden = !isVague;
       pickers.hidden = isVague;
       startRow.hidden = isVague;
+      syncDateFixeRow();
       if (isVague) {
         hidePickers();
         hideStartPicker();
@@ -18777,7 +18878,7 @@
         recurrence:
           currentMode === DUE_DATE_MODE_PRECISE ? currentRecurrence : null,
         dueLimitState: currentDueLimitState,
-        dateFixe: currentDateFixe
+        dateFixe: currentMode === DUE_DATE_MODE_VAGUE ? false : currentDateFixe
       };
       return out;
     }

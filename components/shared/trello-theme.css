@@ -2345,10 +2345,6 @@ html[data-color-mode='dark'] .tp-page--priority .heat-score-tooltip {
   font-size: 11px;
 }
 
-.tp-page--priority .due-date-vague-value {
-  font-size: 13px;
-}
-
 .tp-page--priority .due-date-desc {
   font-size: 14px;
   font-weight: 400;

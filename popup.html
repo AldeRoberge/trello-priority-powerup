@@ -1984,7 +1984,12 @@
 
     function mountHistoriqueSection(cardEl) {
       if (!window.HistoryUI || !window.CardHistory || !cardEl) return null;
+      var histMount =
+        infoUi && typeof infoUi.getHistoriqueMount === 'function'
+          ? infoUi.getHistoriqueMount()
+          : null;
       return HistoryUI.mount(cardEl, {
+        mountEl: histMount || undefined,
         getEntries: function () {
           return cardHistory ? cardHistory.list() : [];
         },
@@ -2013,6 +2018,34 @@
         },
         onLayoutChange: resizePopup
       });
+    }
+
+    function placeMoreDetailsSection(cardEl) {
+      if (!cardEl || !infoUi) return;
+      var moreEl =
+        (typeof infoUi.getMoreDetailsEl === 'function' && infoUi.getMoreDetailsEl()) ||
+        infoUi.moreDetailsEl ||
+        null;
+      if (!moreEl) return;
+      var actions = cardEl.querySelector('.variant-overview-section--actions');
+      var chat = cardEl.querySelector('.variant-chat-section');
+      if (actions && actions.parentNode === cardEl) {
+        cardEl.insertBefore(moreEl, actions);
+      } else if (chat && chat.parentNode === cardEl) {
+        cardEl.insertBefore(moreEl, chat);
+      } else {
+        cardEl.appendChild(moreEl);
+      }
+    }
+
+    function placeOverviewActionsSection(cardEl, sectionEl) {
+      if (!cardEl || !sectionEl) return;
+      var chat = cardEl.querySelector('.variant-chat-section');
+      if (chat && chat.parentNode === cardEl) {
+        cardEl.insertBefore(sectionEl, chat);
+      } else {
+        cardEl.appendChild(sectionEl);
+      }
     }
 
     function syncDueCompleteFromProgress(data, options) {
@@ -2101,10 +2134,20 @@
       }
 
       if (card) {
-        var hist = card.querySelector('.variant-historique-section');
-        if (hist) {
-          if (hist.nextSibling) card.insertBefore(chatSection, hist.nextSibling);
-          else card.appendChild(chatSection);
+        var actionsFooter = card.querySelector(
+          '.variant-overview-section--actions'
+        );
+        var moreDetails = card.querySelector('.variant-more-details-section');
+        var hist = card.querySelector(
+          ':scope > .variant-historique-section'
+        );
+        var anchor = actionsFooter || moreDetails || hist;
+        if (anchor) {
+          if (anchor.nextSibling) {
+            card.insertBefore(chatSection, anchor.nextSibling);
+          } else {
+            card.appendChild(chatSection);
+          }
         } else {
           card.appendChild(chatSection);
         }
@@ -3165,13 +3208,10 @@
       }
       overviewUi = PriorityUI.createOverviewField({
         title: readCardNameLabel() || cardNameCache || '',
+        actionsOnly: true,
         onJump: jumpToSection,
         onAction: handleOverviewAction,
         onLayoutChange: resizePopup,
-        expanded: PriorityUI.resolveSectionExpanded('overview', true),
-        onExpandChange: function (isExpanded) {
-          PriorityUI.saveSectionCollapseState({ overview: !!isExpanded });
-        },
         features: {
           statut: overviewFeatureOn('statut'),
           progress: overviewFeatureOn('progress'),
@@ -3180,7 +3220,7 @@
         }
       });
       overviewSection = overviewUi.el;
-      cardEl.insertBefore(overviewSection, cardEl.firstChild);
+      placeOverviewActionsSection(cardEl, overviewSection);
       syncOverview();
     }
 
@@ -3210,8 +3250,6 @@
       infoSection.className = 'variant-info-section';
       cardEl.insertBefore(infoSection, cardEl.firstChild);
 
-      var expandInfo = PriorityUI.resolveSectionExpanded('info', true);
-
       infoUi = PriorityUI.createInfoField({
         el: infoSection,
         title: '',
@@ -3219,9 +3257,9 @@
         members: [],
         labels: [],
         boardLabels: [],
-        expanded: expandInfo,
-        onExpandChange: function (isExpanded) {
-          PriorityUI.saveSectionCollapseState({ info: !!isExpanded });
+        moreDetailsExpanded: PriorityUI.resolveSectionExpanded('moreDetails', false),
+        onMoreDetailsExpandChange: function (isExpanded) {
+          PriorityUI.saveSectionCollapseState({ moreDetails: !!isExpanded });
         },
         onLayoutChange: resizePopup,
         onJump: jumpToSection,
@@ -6939,7 +6977,6 @@
 
       beginBootStep('info', 'Chargement des membres, \u00e9tiquettes et infos\u2026');
       await mountInfoSection(variant.card);
-      mountOverviewSection(variant.card);
       completeBootStep('info');
 
       if (argName) setCardNameLabel(argName);
@@ -7019,6 +7056,12 @@
       }
       syncBlockedSubtasks();
       syncInfoRecap();
+
+      placeMoreDetailsSection(variant.card);
+      mountOverviewSection(variant.card);
+      if (focusObjectif && infoUi && typeof infoUi.setMoreDetailsExpanded === 'function') {
+        infoUi.setMoreDetailsExpanded(true);
+      }
 
       var agentUi = null;
       if (featureOn('assistant') && window.AgentUI && window.PriorityAgent) {
@@ -7259,8 +7302,8 @@
                   variant.card.querySelector('.variant-progress-section')) ||
                 null;
             } else if (key === 'objectif' || key === 'info') {
-              if (infoUi && typeof infoUi.setExpanded === 'function') {
-                infoUi.setExpanded(true);
+              if (key === 'objectif' && infoUi && typeof infoUi.setMoreDetailsExpanded === 'function') {
+                infoUi.setMoreDetailsExpanded(true);
               }
               if (key === 'objectif') {
                 target =

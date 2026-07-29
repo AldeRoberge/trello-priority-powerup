@@ -913,6 +913,32 @@ describe('PriorityUI createOverviewField', () => {
     assert.equal(ui.isExpanded(), true);
   });
 
+  it('createOverviewField actionsOnly keeps footer chips without Résumé chrome', () => {
+    const actions = [];
+    const host = document.createElement('div');
+    const ui = PriorityUI.createOverviewField({
+      el: host,
+      actionsOnly: true,
+      progressPercent: 20,
+      onAction(id) {
+        actions.push(id);
+      },
+    });
+
+    assert.equal(ui.actionsOnly, true);
+    assert.ok(ui.el.classList.contains('variant-overview-section--actions'));
+    assert.ok(ui.field.classList.contains('field--overview-actions'));
+    assert.equal(ui.el.querySelector('.section-toggle-head'), null);
+    assert.equal(ui.el.querySelector('.overview-title'), null);
+    assert.equal(ui.el.querySelector('.overview-hero'), null);
+    assert.ok(ui.el.querySelector('.overview-actions--footer'));
+    const chips = ui.el.querySelectorAll('.overview-action-chip');
+    assert.ok(chips.length >= 2);
+    chips[0].click();
+    assert.ok(actions.length >= 1);
+    assert.equal(ui.isExpanded(), true);
+  });
+
   it('buildOverviewEnrichment derives tasks, motifs, and summary', () => {
     assert.equal(typeof PriorityUI.buildOverviewEnrichment, 'function');
     const enrichment = PriorityUI.buildOverviewEnrichment(
