@@ -10297,30 +10297,23 @@
     body.className = 'info-section-body';
     body.id = bodyId;
 
-    // Secondary properties — placed by the popup after Priorité / Progrès / Échéance.
-    var moreSection = document.createElement('div');
-    moreSection.className = 'variant-more-details-section';
-    var moreField = document.createElement('div');
-    moreField.className = 'field field--more-details is-enabled';
+    // Secondary properties nest under the inline « Plus de détails » row.
     var moreBodyId =
       'more-details-body-' + Math.random().toString(36).slice(2, 9);
-    var moreChrome = createCollapsibleEnableChrome({
-      title: 'Plus de d\u00e9tails',
-      bodyId: moreBodyId,
-      hideEnable: true,
-      leadingIcon: 'ti-list-details',
-      iconClass: 'more-details-leading-icon',
-      titleClass: 'more-details-enable-title',
-      collapseLabel: 'Replier Plus de d\u00e9tails',
-      expandLabel: 'D\u00e9velopper Plus de d\u00e9tails'
-    });
-    moreField.appendChild(moreChrome.head);
     var moreBody = document.createElement('div');
-    moreBody.className =
-      'more-details-section-body section-toggle-body info-section-body';
+    moreBody.className = 'more-details-section-body info-section-body';
     moreBody.id = moreBodyId;
+    moreBody.hidden = true;
     var historiqueMount = document.createElement('div');
     historiqueMount.className = 'info-historique-mount';
+    var moreDetailsExpanded =
+      config.moreDetailsExpanded != null
+        ? !!config.moreDetailsExpanded
+        : false;
+    var onMoreDetailsExpandChange =
+      typeof config.onMoreDetailsExpandChange === 'function'
+        ? config.onMoreDetailsExpandChange
+        : function () {};
 
     function makeRow(key, labelText, options) {
       options = options || {};
@@ -10702,6 +10695,34 @@
     membersRow.value.appendChild(membersWrap);
     body.appendChild(membersRow.row);
 
+    // ── Inline feature mounts (Priorité / Progrès / Échéance) ───────────
+    function makeInlineMountRow(key, labelText, icon) {
+      var row = makeRow(key, labelText, { icon: icon });
+      row.row.classList.add('info-row--inline-feature');
+      row.row.hidden = true;
+      var mount = document.createElement('div');
+      mount.className = 'info-inline-mount info-inline-mount--' + key;
+      row.value.appendChild(mount);
+      body.appendChild(row.row);
+      return { row: row.row, mount: mount };
+    }
+
+    var priorityInline = makeInlineMountRow(
+      'priority',
+      'Priorit\u00e9',
+      'ti-flame'
+    );
+    var progressInline = makeInlineMountRow(
+      'progress',
+      'Progr\u00e8s',
+      'ti-progress'
+    );
+    var dueInline = makeInlineMountRow(
+      'due',
+      '\u00c9ch\u00e9ance',
+      'ti-calendar-event'
+    );
+
     // ── Labels (Trello étiquettes) ─────────────────────────────────────
     var labelsRow = makeRow('labels', '\u00c9tiquettes', { icon: 'ti-tag' });
     var labelsWrap = document.createElement('div');
@@ -11052,8 +11073,29 @@
     moreBody.appendChild(taskTypesRow.row);
     moreBody.appendChild(labelsRow.row);
     moreBody.appendChild(historiqueMount);
-    moreField.appendChild(moreBody);
-    moreSection.appendChild(moreField);
+
+    var moreRow = makeRow('more-details', 'Plus de d\u00e9tails', {
+      icon: 'ti-list-details',
+    });
+    moreRow.row.classList.add('info-row--more-details');
+    var moreWrap = document.createElement('div');
+    moreWrap.className = 'info-more-details-wrap';
+    var moreToggle = document.createElement('button');
+    moreToggle.type = 'button';
+    moreToggle.className = 'info-more-details-toggle';
+    moreToggle.setAttribute('aria-controls', moreBodyId);
+    moreToggle.setAttribute('aria-expanded', 'false');
+    var moreChevron = document.createElement('i');
+    moreChevron.className = 'ti ti-chevron-down info-more-details-chevron';
+    moreChevron.setAttribute('aria-hidden', 'true');
+    var moreSummaryEl = document.createElement('span');
+    moreSummaryEl.className = 'info-more-details-summary';
+    moreToggle.appendChild(moreChevron);
+    moreToggle.appendChild(moreSummaryEl);
+    moreWrap.appendChild(moreToggle);
+    moreWrap.appendChild(moreBody);
+    moreRow.value.appendChild(moreWrap);
+    body.appendChild(moreRow.row);
 
     field.appendChild(body);
     el.appendChild(field);
@@ -15314,53 +15356,75 @@
       }
     });
 
-    var moreCollapse = bindCollapsibleEnable({
-      field: moreField,
-      body: moreBody,
-      chrome: moreChrome,
-      alwaysEnabled: true,
-      enabled: true,
-      expanded:
-        config.moreDetailsExpanded != null
-          ? !!config.moreDetailsExpanded
-          : false,
-      getSummary: function () {
-        var bits = [];
-        if (taskTypes && taskTypes.length) {
-          bits.push(
-            taskTypes.length === 1
-              ? '1 type'
-              : taskTypes.length + ' types'
-          );
-        }
-        if (labels && labels.length) {
-          bits.push(
-            labels.length === 1
-              ? '1 \u00e9tiquette'
-              : labels.length + ' \u00e9tiquettes'
-          );
-        }
-        if (parentCards && parentCards.length) {
-          bits.push(
-            parentCards.length === 1
-              ? '1 parent'
-              : parentCards.length + ' parents'
-          );
-        }
-        return bits.join(' \u00b7 ');
-      },
-      onLayoutChange: onLayoutChange,
-      onExpandChange: config.onMoreDetailsExpandChange || function () {},
-      getContextMenuItems: function (api) {
-        if (
-          !global.ContextMenu ||
-          typeof global.ContextMenu.buildInfoItems !== 'function'
-        ) {
-          return [];
-        }
+    function moreDetailsSummaryText() {
+      var bits = [];
+      if (taskTypes && taskTypes.length) {
+        bits.push(
+          taskTypes.length === 1 ? '1 type' : taskTypes.length + ' types'
+        );
+      }
+      if (labels && labels.length) {
+        bits.push(
+          labels.length === 1
+            ? '1 \u00e9tiquette'
+            : labels.length + ' \u00e9tiquettes'
+        );
+      }
+      if (parentCards && parentCards.length) {
+        bits.push(
+          parentCards.length === 1
+            ? '1 parent'
+            : parentCards.length + ' parents'
+        );
+      }
+      return bits.join(' \u00b7 ');
+    }
+
+    function applyMoreDetailsExpanded(next, options) {
+      options = options || {};
+      var was = moreDetailsExpanded;
+      moreDetailsExpanded = !!next;
+      moreBody.hidden = !moreDetailsExpanded;
+      moreRow.row.classList.toggle('is-expanded', moreDetailsExpanded);
+      moreToggle.setAttribute(
+        'aria-expanded',
+        moreDetailsExpanded ? 'true' : 'false'
+      );
+      moreToggle.setAttribute(
+        'aria-label',
+        moreDetailsExpanded
+          ? 'Replier Plus de d\u00e9tails'
+          : 'D\u00e9velopper Plus de d\u00e9tails'
+      );
+      var summary = moreDetailsSummaryText();
+      moreSummaryEl.textContent = moreDetailsExpanded
+        ? ''
+        : summary || 'Objectif, parents, types, \u00e9tiquettes\u2026';
+      moreSummaryEl.hidden = moreDetailsExpanded || !moreSummaryEl.textContent;
+      if (was !== moreDetailsExpanded && !options.silent) {
+        onMoreDetailsExpandChange(moreDetailsExpanded, options);
+      }
+      if (!options.silent) onLayoutChange();
+    }
+
+    moreToggle.addEventListener('click', function (event) {
+      event.preventDefault();
+      applyMoreDetailsExpanded(!moreDetailsExpanded);
+    });
+
+    if (
+      global.ContextMenu &&
+      typeof global.ContextMenu.bind === 'function' &&
+      typeof global.ContextMenu.buildInfoItems === 'function'
+    ) {
+      ContextMenu.bind(moreRow.row, function () {
         return ContextMenu.buildInfoItems({
-          isExpanded: api.isExpanded,
-          setExpanded: api.setExpanded,
+          isExpanded: function () {
+            return moreDetailsExpanded;
+          },
+          setExpanded: function (on) {
+            applyMoreDetailsExpanded(!!on);
+          },
           openGoals:
             typeof config.onOpenGoals === 'function'
               ? function () {
@@ -15368,8 +15432,25 @@
                 }
               : null,
         });
+      });
+    }
+
+    var moreCollapse = {
+      refreshSummary: function () {
+        if (!moreDetailsExpanded) {
+          var summary = moreDetailsSummaryText();
+          moreSummaryEl.textContent =
+            summary || 'Objectif, parents, types, \u00e9tiquettes\u2026';
+          moreSummaryEl.hidden = !moreSummaryEl.textContent;
+        }
       },
-    });
+      setExpanded: function (on, opts) {
+        applyMoreDetailsExpanded(!!on, opts);
+      },
+      isExpanded: function () {
+        return moreDetailsExpanded;
+      },
+    };
 
     // Primary Détails is always open (no accordion); keep a stub for callers.
     var collapse = {
@@ -15393,18 +15474,40 @@
     setAuthHint(authReason);
     syncTitleInputSize();
     setDescMode('rich', { focus: false });
-    collapse.refreshSummary();
+    applyMoreDetailsExpanded(moreDetailsExpanded, { silent: true });
     scheduleLabelSuggestions(false);
     scheduleTaskTypeSuggestions(false);
 
     return {
       field: field,
-      moreDetailsEl: moreSection,
+      moreDetailsEl: moreRow.row,
       getMoreDetailsEl: function () {
-        return moreSection;
+        return moreRow.row;
       },
       getHistoriqueMount: function () {
         return historiqueMount;
+      },
+      getPriorityMount: function () {
+        return priorityInline.mount;
+      },
+      getProgressMount: function () {
+        return progressInline.mount;
+      },
+      getDueMount: function () {
+        return dueInline.mount;
+      },
+      setInlineFeatureVisible: function (key, visible) {
+        var row =
+          key === 'priority'
+            ? priorityInline.row
+            : key === 'progress'
+              ? progressInline.row
+              : key === 'due'
+                ? dueInline.row
+                : null;
+        if (!row) return;
+        row.hidden = !visible;
+        onLayoutChange();
       },
       setMoreDetailsExpanded: function (on, opts) {
         return moreCollapse.setExpanded(on, opts);

@@ -403,7 +403,6 @@ body {
 .field--historique .section-leading-icon,
 .field--statut .section-leading-icon,
 .field--info .section-leading-icon,
-.field--more-details .section-leading-icon,
 .field--overview .section-leading-icon,
 .field--priority .section-leading-icon,
 .field--progress .section-leading-icon,
@@ -1363,7 +1362,7 @@ html[data-color-mode='dark'] .overview-composer-input {
   }
 }
 
-/* ── Détails (unified top) + Plus de détails ── */
+/* ── Détails (unified top) + inline features + Plus de détails ── */
 .variant-info-section {
   margin: 8px 0 0;
   padding: 0 8px;
@@ -1390,21 +1389,101 @@ html[data-color-mode='dark'] .overview-composer-input {
   padding-top: 0;
 }
 
-.variant-more-details-section {
-  margin: 8px 0 0;
-  padding: 0 8px;
+.info-row--inline-feature {
+  align-items: start;
 }
 
-.field--more-details {
-  margin-bottom: 0;
-  padding: 10px 12px;
-  border-radius: var(--radius);
+.info-inline-mount {
+  min-width: 0;
+  width: 100%;
+}
+
+.info-inline-mount .variant-priority-section,
+.info-inline-mount .variant-progress-section,
+.info-inline-mount .variant-due-section {
+  margin: 0;
+  padding: 0;
+}
+
+.info-inline-mount .field.is-info-inline,
+.info-inline-mount .field--priority.is-info-inline,
+.info-inline-mount .field--progress.is-info-inline,
+.info-inline-mount .field--due-date.is-info-inline {
+  margin: 0;
+  padding: 0;
   background: transparent;
   border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
-.field--more-details.is-enabled {
-  background: color-mix(in srgb, var(--surface-1) 72%, var(--surface-2));
+.info-inline-mount .section-toggle-head[hidden] {
+  display: none !important;
+}
+
+.info-inline-mount .priority-section-body,
+.info-inline-mount .progress-section-body,
+.info-inline-mount .due-date-body {
+  padding: 0;
+}
+
+.info-inline-mount .due-date-master-clear {
+  float: right;
+  margin: 0 0 6px 8px;
+}
+
+.info-row--more-details .info-row-value {
+  min-width: 0;
+}
+
+.info-more-details-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.info-more-details-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  cursor: pointer;
+  text-align: left;
+}
+
+.info-more-details-toggle:hover {
+  color: var(--text-primary);
+}
+
+.info-more-details-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+  border-radius: 4px;
+}
+
+.info-more-details-chevron {
+  font-size: 14px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.info-row--more-details.is-expanded .info-more-details-chevron {
+  transform: rotate(-180deg);
+}
+
+.info-more-details-summary {
+  min-width: 0;
+  color: var(--text-secondary, var(--text-muted));
+  font-weight: 500;
 }
 
 .more-details-section-body {
@@ -1412,6 +1491,10 @@ html[data-color-mode='dark'] .overview-composer-input {
   flex-direction: column;
   gap: 8px;
   padding: 2px 0 0;
+}
+
+.more-details-section-body[hidden] {
+  display: none !important;
 }
 
 .info-historique-mount {
@@ -1487,7 +1570,11 @@ html[data-color-mode='dark'] .overview-composer-input {
 
 .info-row--title .info-row-label,
 .info-row--desc .info-row-label,
-.info-row--objectif .info-row-label {
+.info-row--objectif .info-row-label,
+.info-row--priority .info-row-label,
+.info-row--progress .info-row-label,
+.info-row--due .info-row-label,
+.info-row--more-details .info-row-label {
   padding-top: 6px;
 }
 

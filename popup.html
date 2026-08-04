@@ -2020,24 +2020,6 @@
       });
     }
 
-    function placeMoreDetailsSection(cardEl) {
-      if (!cardEl || !infoUi) return;
-      var moreEl =
-        (typeof infoUi.getMoreDetailsEl === 'function' && infoUi.getMoreDetailsEl()) ||
-        infoUi.moreDetailsEl ||
-        null;
-      if (!moreEl) return;
-      var actions = cardEl.querySelector('.variant-overview-section--actions');
-      var chat = cardEl.querySelector('.variant-chat-section');
-      if (actions && actions.parentNode === cardEl) {
-        cardEl.insertBefore(moreEl, actions);
-      } else if (chat && chat.parentNode === cardEl) {
-        cardEl.insertBefore(moreEl, chat);
-      } else {
-        cardEl.appendChild(moreEl);
-      }
-    }
-
     function placeOverviewActionsSection(cardEl, sectionEl) {
       if (!cardEl || !sectionEl) return;
       var chat = cardEl.querySelector('.variant-chat-section');
@@ -2045,6 +2027,65 @@
         cardEl.insertBefore(sectionEl, chat);
       } else {
         cardEl.appendChild(sectionEl);
+      }
+    }
+
+    /** Nest Priorité / Progrès / Échéance into the unified info property rows. */
+    function inlineFeatureSectionsIntoInfo(cardEl) {
+      if (!cardEl || !infoUi) return;
+
+      function adopt(mountFn, sectionSelector, featureKey) {
+        var mount =
+          typeof infoUi[mountFn] === 'function' ? infoUi[mountFn]() : null;
+        var section = cardEl.querySelector(sectionSelector);
+        if (!mount || !section) return false;
+
+        mount.appendChild(section);
+        section.classList.add('is-info-inline');
+
+        var heads = section.querySelectorAll('.section-toggle-head');
+        for (var i = 0; i < heads.length; i++) {
+          heads[i].hidden = true;
+          heads[i].setAttribute('aria-hidden', 'true');
+        }
+
+        var fields = section.querySelectorAll('.field');
+        for (var f = 0; f < fields.length; f++) {
+          fields[f].classList.add('is-info-inline');
+          fields[f].classList.remove('is-collapsed');
+          fields[f].classList.add('is-enabled');
+        }
+
+        var bodies = section.querySelectorAll(
+          '.section-toggle-body, .priority-section-body, .progress-section-body, .due-date-body'
+        );
+        for (var b = 0; b < bodies.length; b++) {
+          bodies[b].hidden = false;
+        }
+
+        // Échéance clear lived on the collapsed chrome — keep it reachable.
+        var clearBtn = section.querySelector('.due-date-master-clear');
+        var dueBody = section.querySelector('.due-date-body');
+        if (clearBtn && dueBody && clearBtn.parentNode !== dueBody) {
+          dueBody.insertBefore(clearBtn, dueBody.firstChild);
+        }
+
+        if (typeof infoUi.setInlineFeatureVisible === 'function') {
+          infoUi.setInlineFeatureVisible(featureKey, true);
+        }
+        return true;
+      }
+
+      adopt('getPriorityMount', '.variant-priority-section', 'priority');
+      adopt('getProgressMount', '.variant-progress-section', 'progress');
+      adopt('getDueMount', '.variant-due-section', 'due');
+
+      if (variant && typeof variant.openSection === 'function') {
+        variant.openSection('priority', { expand: true });
+        variant.openSection('due', { expand: true });
+      }
+      if (progressCollapse && typeof progressCollapse.setExpanded === 'function') {
+        progressCollapse.setExpanded(true);
       }
     }
 
@@ -2137,10 +2178,9 @@
         var actionsFooter = card.querySelector(
           '.variant-overview-section--actions'
         );
-        var moreDetails = card.querySelector('.variant-more-details-section');
         var hist = card.querySelector('.variant-historique-section');
         if (hist && hist.parentNode !== card) hist = null;
-        var anchor = actionsFooter || moreDetails || hist;
+        var anchor = actionsFooter || hist;
         if (anchor) {
           if (anchor.nextSibling) {
             card.insertBefore(chatSection, anchor.nextSibling);
@@ -2873,10 +2913,16 @@
     function jumpToSection(key) {
       if (!variant) return;
       var target = null;
+      function sectionIsInline(el) {
+        return !!(el && el.classList && el.classList.contains('is-info-inline'));
+      }
       if (key === 'progress') {
         // Overview Progrès / Sous-tâches: toggle the section (open first if collapsed).
+        // When inlined in Détails, never collapse — just ensure open and scroll.
         if (progressCollapse && typeof progressCollapse.setExpanded === 'function') {
-          if (typeof progressCollapse.isExpanded === 'function') {
+          if (sectionIsInline(progressPanel)) {
+            progressCollapse.setExpanded(true);
+          } else if (typeof progressCollapse.isExpanded === 'function') {
             progressCollapse.setExpanded(!progressCollapse.isExpanded());
           } else {
             progressCollapse.setExpanded(true);
@@ -2937,7 +2983,17 @@
           }
         }
       } else if (typeof variant.openSection === 'function') {
-        target = variant.openSection(key);
+        var inlineTarget =
+          key === 'priority'
+            ? variant.card &&
+              variant.card.querySelector('.variant-priority-section')
+            : key === 'due'
+              ? variant.card &&
+                variant.card.querySelector('.variant-due-section')
+              : null;
+        target = variant.openSection(key, {
+          expand: sectionIsInline(inlineTarget) ? true : undefined,
+        });
       } else if (variant.card) {
         if (key === 'priority') {
           target = variant.card.querySelector('.variant-priority-section');
@@ -6162,8 +6218,8 @@
       objectifUi = { body: mount };
 
       return refreshObjectifData().then(function () {
-        if (initiallyOpen && typeof infoUi.setExpanded === 'function') {
-          infoUi.setExpanded(true);
+        if (initiallyOpen && typeof infoUi.setMoreDetailsExpanded === 'function') {
+          infoUi.setMoreDetailsExpanded(true);
         }
         renderObjectifBody();
         resizePopup();
@@ -7056,7 +7112,7 @@
       syncBlockedSubtasks();
       syncInfoRecap();
 
-      placeMoreDetailsSection(variant.card);
+      inlineFeatureSectionsIntoInfo(variant.card);
       mountOverviewSection(variant.card);
       if (focusObjectif && infoUi && typeof infoUi.setMoreDetailsExpanded === 'function') {
         infoUi.setMoreDetailsExpanded(true);
