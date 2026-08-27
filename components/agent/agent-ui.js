@@ -690,6 +690,16 @@
       spellcheck: 'false',
       placeholder: 'https://api.openai.com/v1'
     });
+    // The page has no <form> elements anywhere else, so Chrome treats the
+    // whole document as one implicit form. That makes it pair this API key
+    // field with unrelated text inputs elsewhere (e.g. "Ajouter une
+    // sous-tâche") as a username/password pair and offer to save them.
+    // Give the key field its own form boundary so it stops being grouped
+    // with fields outside this settings panel.
+    var apiKeyForm = el('form', 'agent-field-form', { autocomplete: 'off' });
+    apiKeyForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+    });
     var modelSelect = el('select', 'agent-input agent-model-select', {
       'aria-label': 'Mod\u00e8le OpenAI'
     });
@@ -707,7 +717,8 @@
     var modelSelectField = labeledInput('Mod\u00e8le', modelSelect);
     var modelInputField = labeledInput('Mod\u00e8le', modelInput);
 
-    providerBody.appendChild(labeledInput('Cl\u00e9 API', apiKeyInput));
+    apiKeyForm.appendChild(labeledInput('Cl\u00e9 API', apiKeyInput));
+    providerBody.appendChild(apiKeyForm);
     providerBody.appendChild(labeledInput('URL de base', baseUrlInput));
     providerBody.appendChild(modelSelectField);
     providerBody.appendChild(modelInputField);

@@ -1389,10 +1389,6 @@ html[data-color-mode='dark'] .overview-composer-input {
   padding-top: 0;
 }
 
-.info-row--inline-feature {
-  align-items: start;
-}
-
 .info-inline-mount {
   min-width: 0;
   width: 100%;
@@ -1543,13 +1539,13 @@ html[data-color-mode='dark'] .overview-composer-input {
 }
 
 .info-row {
-  display: grid;
-  grid-template-columns: 132px minmax(0, 1fr);
-  gap: 10px 12px;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
 }
 
-/* Author display:grid beats UA [hidden] { display:none } without this. */
+/* Author display:flex beats UA [hidden] { display:none } without this. */
 .info-row[hidden] {
   display: none;
 }
@@ -1559,23 +1555,12 @@ html[data-color-mode='dark'] .overview-composer-input {
   align-items: center;
   gap: 6px;
   margin: 0;
-  /* Optical middle vs ~28px chips (true center read high; 2px read low). */
-  padding-top: 5px;
+  padding-top: 0;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--text-muted);
   line-height: 1.35;
-}
-
-.info-row--title .info-row-label,
-.info-row--desc .info-row-label,
-.info-row--objectif .info-row-label,
-.info-row--priority .info-row-label,
-.info-row--progress .info-row-label,
-.info-row--due .info-row-label,
-.info-row--more-details .info-row-label {
-  padding-top: 6px;
 }
 
 .info-row-icon {
@@ -1592,26 +1577,6 @@ html[data-color-mode='dark'] .overview-composer-input {
 
 .info-row-value {
   min-width: 0;
-}
-
-/* Cellphone-narrow popup: icon-only labels free space for values. */
-@container priority-popup (max-width: 400px) {
-  .info-row {
-    grid-template-columns: auto minmax(0, 1fr);
-    column-gap: 8px;
-  }
-
-  .info-row-label-text {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
 }
 
 .info-title-wrap {

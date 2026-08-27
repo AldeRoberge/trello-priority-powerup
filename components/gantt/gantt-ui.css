@@ -455,6 +455,15 @@
   overscroll-behavior: contain;
 }
 
+.gantt-timeline-scroll.is-panning {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.gantt-timeline-scroll.is-panning * {
+  pointer-events: none;
+}
+
 .gantt-timeline {
   position: relative;
   min-width: 100%;

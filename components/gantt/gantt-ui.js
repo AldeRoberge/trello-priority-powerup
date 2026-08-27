@@ -906,12 +906,48 @@
       });
       filters.appendChild(paBtn);
 
+      var sheetsBtn = el('button', 'gantt-btn', {
+        type: 'button',
+        text: 'Google Sheets',
+      });
+      sheetsBtn.title =
+        'Synchroniser ce tableau avec une feuille Google Sheets (deux sens, immédiat)';
+      sheetsBtn.addEventListener('click', function () {
+        openGoogleSheetsSync();
+      });
+      filters.appendChild(sheetsBtn);
+
       var refresh = el('button', 'gantt-btn', { type: 'button', text: 'Actualiser' });
       refresh.addEventListener('click', function () {
         reload();
       });
       filters.appendChild(refresh);
       toolbar.appendChild(filters);
+    }
+
+    function openGoogleSheetsSync() {
+      var url =
+        global.PriorityTrello && typeof PriorityTrello.pageUrl === 'function'
+          ? PriorityTrello.pageUrl('./google-sheets-sync.html')
+          : './google-sheets-sync.html';
+      if (t && typeof t.modal === 'function') {
+        try {
+          t.modal({
+            url: url,
+            title: 'Google Sheets ↔ Trello',
+            fullscreen: false,
+            height: 640,
+          });
+          return;
+        } catch (err) {
+          console.warn('GanttUI Google Sheets modal failed', err);
+        }
+      }
+      try {
+        global.open(url, '_blank', 'noopener');
+      } catch (e2) {
+        setStatus('Impossible d’ouvrir les réglages Google Sheets', true);
+      }
     }
 
     function openPowerAutomateGuide() {
@@ -3644,6 +3680,47 @@
       });
       scroll.addEventListener('scroll', function () {
         syncScroll(scroll, labelsCol);
+      });
+
+      // Middle-mouse-button drag to pan the timeline (past/future + rows),
+      // like a map. Left button is reserved for bar dragging / date paint.
+      var MIDDLE_BUTTON = 1;
+      scroll.addEventListener('pointerdown', function (ev) {
+        if (ev.button !== MIDDLE_BUTTON) return;
+        if (state.splitDrag || state.drag || state.paint) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        var pan = {
+          pointerId: ev.pointerId,
+          startX: ev.clientX,
+          startY: ev.clientY,
+          startScrollLeft: scroll.scrollLeft,
+          startScrollTop: scroll.scrollTop,
+        };
+        scroll.setPointerCapture(ev.pointerId);
+        scroll.classList.add('is-panning');
+
+        function onMove(e) {
+          scroll.scrollLeft = pan.startScrollLeft - (e.clientX - pan.startX);
+          scroll.scrollTop = pan.startScrollTop - (e.clientY - pan.startY);
+        }
+
+        function onUp() {
+          scroll.releasePointerCapture(pan.pointerId);
+          scroll.removeEventListener('pointermove', onMove);
+          scroll.removeEventListener('pointerup', onUp);
+          scroll.removeEventListener('pointercancel', onUp);
+          scroll.classList.remove('is-panning');
+        }
+
+        scroll.addEventListener('pointermove', onMove);
+        scroll.addEventListener('pointerup', onUp);
+        scroll.addEventListener('pointercancel', onUp);
+      });
+      // Prevent the browser's native middle-click autoscroll affordance
+      // from also kicking in over the timeline.
+      scroll.addEventListener('auxclick', function (ev) {
+        if (ev.button === MIDDLE_BUTTON) ev.preventDefault();
       });
 
       requestAnimationFrame(function () {
