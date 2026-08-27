@@ -1397,6 +1397,17 @@ html[data-color-mode]:has(body.tp-page--priority) {
   overflow: hidden;
 }
 
+/* Without the Assistant split, body scrolls itself (height:auto below) —
+   let the document scroll instead of clipping it at the html level.
+   (Excluded during boot: the loading skeleton still needs a locked,
+   full-height html to fill the modal correctly.) */
+html[data-color-mode]:has(
+    body.tp-page--priority.is-cerveau-fullscreen:not(.is-split-assistant):not(.is-booting):not(.is-boot-leaving)
+  ) {
+  height: auto;
+  overflow: visible;
+}
+
 body.tp-page--priority {
   background: var(--tp-bg);
   height: 100%;
