@@ -1136,7 +1136,7 @@
     var items = [
       {
         id: 'zoom-day',
-        label: 'Agenda',
+        label: 'Jour',
         disabled: viewMode === 'day',
         action: function () {
           if (typeof opts.onViewMode === 'function') opts.onViewMode('day');

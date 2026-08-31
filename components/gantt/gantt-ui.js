@@ -332,6 +332,8 @@
       miniPopover: null,
       miniPopoverKeyHandler: null,
       miniPopoverOutsideHandler: null,
+      filterMenuOpen: false,
+      filterMenuOutsideHandler: null,
       sectionDrag: null,
       suppressCardOpen: false,
       ganttSettings: {
@@ -355,12 +357,43 @@
     var bulkBar = el('div', 'gantt-bulk');
     var body = el('div', 'gantt-body');
     var statusBar = el('div', 'gantt-status');
+    var dragTip = el('div', 'gantt-drag-tip');
+    dragTip.hidden = true;
     root.appendChild(toolbar);
     root.appendChild(bulkBar);
     root.appendChild(statusBar);
     root.appendChild(body);
+    root.appendChild(dragTip);
     mount.innerHTML = '';
     mount.appendChild(root);
+
+    /** Small floating label following the cursor while dragging a bar. */
+    function showDragTip(clientX, clientY, text) {
+      if (!text) {
+        dragTip.hidden = true;
+        return;
+      }
+      dragTip.textContent = text;
+      dragTip.hidden = false;
+      var rootRect = root.getBoundingClientRect();
+      var margin = 6;
+      var left = clientX - rootRect.left + 14;
+      var top = clientY - rootRect.top + 18;
+      var tw = dragTip.offsetWidth || 80;
+      var th = dragTip.offsetHeight || 24;
+      if (left + tw > rootRect.width - margin) {
+        left = clientX - rootRect.left - tw - 14;
+      }
+      if (top + th > rootRect.height - margin) {
+        top = clientY - rootRect.top - th - 12;
+      }
+      dragTip.style.left = Math.max(margin, left) + 'px';
+      dragTip.style.top = Math.max(margin, top) + 'px';
+    }
+
+    function hideDragTip() {
+      dragTip.hidden = true;
+    }
 
     if (
       global.ContextMenu &&
@@ -648,10 +681,19 @@
 
     function renderToolbar() {
       toolbar.innerHTML = '';
+      if (state.filterMenuOutsideHandler) {
+        document.removeEventListener(
+          'pointerdown',
+          state.filterMenuOutsideHandler,
+          true
+        );
+        state.filterMenuOutsideHandler = null;
+      }
+      state.filterMenuOpen = false;
 
       var zoom = el('div', 'gantt-zoom');
       [
-        { mode: 'day', label: 'Agenda', icon: 'ti-calendar' },
+        { mode: 'day', label: 'Jour', icon: 'ti-calendar' },
         { mode: 'week', label: 'Semaine', icon: 'ti-calendar-week' },
         { mode: 'month', label: 'Mois', icon: 'ti-calendar-month' },
         { mode: 'year', label: 'Ann\u00e9e', icon: 'ti-calendar-stats' },
@@ -742,49 +784,95 @@
       toolbar.appendChild(sortWrap);
 
       var filters = el('div', 'gantt-filters');
-      var hideDone = el('label', 'gantt-check');
-      var doneCb = el('input', '', { type: 'checkbox' });
-      doneCb.checked = state.hideCompleted;
-      doneCb.addEventListener('change', function () {
-        state.hideCompleted = !!doneCb.checked;
+
+      var filterWrap = el('div', 'gantt-filter');
+      var filterBtn = el('button', 'gantt-btn', { type: 'button' });
+      var filterIcon = el('i', 'ti ti-filter');
+      filterIcon.setAttribute('aria-hidden', 'true');
+      var filterBadge = el('span', 'gantt-filter-badge');
+      filterBtn.appendChild(filterIcon);
+      filterBtn.appendChild(document.createTextNode('Filtres'));
+      filterBtn.appendChild(filterBadge);
+      filterBtn.title = 'Filtrer les t\u00e2ches affich\u00e9es';
+      var filterMenu = el('div', 'gantt-filter-menu');
+      filterMenu.hidden = true;
+
+      function updateFilterBadge() {
+        var n =
+          (state.hideCompleted ? 1 : 0) +
+          (state.hideBlocked ? 1 : 0) +
+          (state.hideUndated ? 1 : 0);
+        filterBadge.textContent = n ? String(n) : '';
+        filterBadge.hidden = !n;
+        filterBtn.classList.toggle('is-active', !!n);
+      }
+      updateFilterBadge();
+
+      function setFilterMenuOpen(open) {
+        state.filterMenuOpen = !!open;
+        filterMenu.hidden = !state.filterMenuOpen;
+        filterBtn.setAttribute('aria-expanded', String(state.filterMenuOpen));
+        if (state.filterMenuOutsideHandler) {
+          document.removeEventListener(
+            'pointerdown',
+            state.filterMenuOutsideHandler,
+            true
+          );
+          state.filterMenuOutsideHandler = null;
+        }
+        if (state.filterMenuOpen) {
+          var handler = function (e) {
+            if (filterWrap.contains(e.target)) return;
+            setFilterMenuOpen(false);
+          };
+          state.filterMenuOutsideHandler = handler;
+          setTimeout(function () {
+            if (state.filterMenuOutsideHandler === handler) {
+              document.addEventListener('pointerdown', handler, true);
+            }
+          }, 0);
+        }
+      }
+
+      filterBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setFilterMenuOpen(!state.filterMenuOpen);
+      });
+
+      function addFilterCheck(labelText, checked, onChange) {
+        var lab = el('label', 'gantt-check');
+        var cb = el('input', '', { type: 'checkbox' });
+        cb.checked = checked;
+        cb.addEventListener('change', function () {
+          onChange(!!cb.checked);
+          updateFilterBadge();
+        });
+        lab.appendChild(cb);
+        lab.appendChild(document.createTextNode(' ' + labelText));
+        filterMenu.appendChild(lab);
+      }
+
+      addFilterCheck('Masquer termin\u00e9s', state.hideCompleted, function (v) {
+        state.hideCompleted = v;
         persistFilters();
         renderChart();
       });
-      hideDone.appendChild(doneCb);
-      hideDone.appendChild(document.createTextNode(' Masquer termin\u00e9s'));
-      filters.appendChild(hideDone);
-
-      var hideBlocked = el('label', 'gantt-check');
-      var blockedCb = el('input', '', { type: 'checkbox' });
-      blockedCb.checked = state.hideBlocked;
-      blockedCb.addEventListener('change', function () {
-        state.hideBlocked = !!blockedCb.checked;
+      addFilterCheck('Masquer bloqu\u00e9es', state.hideBlocked, function (v) {
+        state.hideBlocked = v;
         persistFilters();
         renderChart();
       });
-      hideBlocked.appendChild(blockedCb);
-      hideBlocked.appendChild(document.createTextNode(' Masquer bloqu\u00e9es'));
-      filters.appendChild(hideBlocked);
-
-      var hideUndated = el('label', 'gantt-check');
-      var undatedCb = el('input', '', { type: 'checkbox' });
-      undatedCb.checked = state.hideUndated;
-      undatedCb.addEventListener('change', function () {
-        state.hideUndated = !!undatedCb.checked;
+      addFilterCheck('Masquer sans date', state.hideUndated, function (v) {
+        state.hideUndated = v;
         persistFilters();
         renderChart();
       });
-      hideUndated.appendChild(undatedCb);
-      hideUndated.appendChild(document.createTextNode(' Masquer sans date'));
-      filters.appendChild(hideUndated);
 
-      var authBtn = el('button', 'gantt-btn', {
-        type: 'button',
-        text: 'Autoriser Trello',
-      });
-      authBtn.title =
-        'Requis pour enregistrer les dates (glisser les barres)';
-      authBtn.addEventListener('click', function () {
+      filterWrap.appendChild(filterBtn);
+      filterWrap.appendChild(filterMenu);
+      filters.appendChild(filterWrap);
+
+      var authBtn = makeIconBtn('gantt-btn', 'ti-key', 'Autoriser Trello', function () {
         ganttTrello.ensureRestAuthorized(t).then(function (res) {
           if (res && res.ok) {
             state.authHint = '';
@@ -798,6 +886,8 @@
           }
         });
       });
+      authBtn.title =
+        'Requis pour enregistrer les dates (glisser les barres)';
       filters.appendChild(authBtn);
 
       var outlookAuth = OA();
@@ -807,118 +897,106 @@
           typeof outlookAuth.isConfigured === 'function' &&
           !outlookAuth.isConfigured()
         ) {
-          var outlookHint = el('button', 'gantt-btn', {
-            type: 'button',
-            text: 'Outlook (config)',
-          });
+          var outlookHint = makeIconBtn(
+            'gantt-btn',
+            'ti-alert-triangle',
+            'Outlook (config)',
+            function () {
+              setStatus(
+                'Outlook non configuré : déployez clientId dans outlook-config.js (Pages), puis rechargez le Gantt.',
+                true
+              );
+            }
+          );
           outlookHint.title =
-            'D\u00e9ployez OutlookConfig.clientId (Entra SPA) pour activer la sync';
-          outlookHint.addEventListener('click', function () {
-            setStatus(
-              'Outlook non configur\u00e9\u00a0: d\u00e9ployez clientId dans outlook-config.js (Pages), puis rechargez le Gantt.',
-              true
-            );
-          });
+            'Déployez OutlookConfig.clientId (Entra SPA) pour activer la sync';
           filters.appendChild(outlookHint);
         } else {
-          var outlookConnect = el('button', 'gantt-btn', {
-            type: 'button',
-            text: state.outlookConnected
-              ? 'D\u00e9connecter Outlook'
-              : 'Connecter Outlook',
-          });
-          outlookConnect.title = state.outlookConnected
-            ? 'D\u00e9connecter le compte Microsoft'
-            : 'Autoriser Outlook Calendar (Microsoft Graph)';
-          outlookConnect.addEventListener('click', function () {
-            if (state.outlookConnected) {
-              setStatus('D\u00e9connexion Outlook\u2026');
-              outlookAuth.disconnect().then(function (res) {
-                state.outlookConnected = false;
+          var outlookConnect = makeIconBtn(
+            'gantt-btn',
+            state.outlookConnected ? 'ti-plug-connected-x' : 'ti-plug-connected',
+            state.outlookConnected ? 'D\u00e9connecter Outlook' : 'Connecter Outlook',
+            function () {
+              if (state.outlookConnected) {
+                setStatus('D\u00e9connexion Outlook\u2026');
+                outlookAuth.disconnect().then(function (res) {
+                  state.outlookConnected = false;
+                  if (res && res.ok) {
+                    setStatus('Outlook d\u00e9connect\u00e9');
+                  } else {
+                    setStatus(
+                      'D\u00e9connexion Outlook \u00e9chou\u00e9e' +
+                        (res && res.reason ? ' (' + res.reason + ')' : ''),
+                      true
+                    );
+                  }
+                  renderToolbar();
+                });
+                return;
+              }
+              setStatus('Connexion Outlook\u2026');
+              outlookAuth.connect().then(function (res) {
                 if (res && res.ok) {
-                  setStatus('Outlook d\u00e9connect\u00e9');
+                  state.outlookConnected = true;
+                  setStatus('Outlook connect\u00e9');
+                  renderToolbar();
+                  runOutlookSync();
                 } else {
+                  state.outlookConnected = false;
                   setStatus(
-                    'D\u00e9connexion Outlook \u00e9chou\u00e9e' +
+                    'Connexion Outlook refus\u00e9e' +
                       (res && res.reason ? ' (' + res.reason + ')' : ''),
                     true
                   );
+                  renderToolbar();
                 }
-                renderToolbar();
               });
-              return;
             }
-            setStatus('Connexion Outlook\u2026');
-            outlookAuth.connect().then(function (res) {
-              if (res && res.ok) {
-                state.outlookConnected = true;
-                setStatus('Outlook connect\u00e9');
-                renderToolbar();
-                runOutlookSync();
-              } else {
-                state.outlookConnected = false;
-                setStatus(
-                  'Connexion Outlook refus\u00e9e' +
-                    (res && res.reason ? ' (' + res.reason + ')' : ''),
-                  true
-                );
-                renderToolbar();
-              }
-            });
-          });
+          );
+          outlookConnect.title = state.outlookConnected
+            ? 'D\u00e9connecter le compte Microsoft'
+            : 'Autoriser Outlook Calendar (Microsoft Graph)';
           filters.appendChild(outlookConnect);
 
           if (state.outlookConnected) {
-            var outlookSyncBtn = el('button', 'gantt-btn', {
-              type: 'button',
-              text: state.outlookSyncing ? 'Sync\u2026' : 'Sync Outlook',
-            });
+            var outlookSyncBtn = makeIconBtn(
+              'gantt-btn',
+              'ti-refresh',
+              state.outlookSyncing ? 'Sync\u2026' : 'Sync Outlook',
+              function () {
+                runOutlookSync();
+              }
+            );
             outlookSyncBtn.disabled = !!state.outlookSyncing;
             outlookSyncBtn.title =
               'Synchroniser titres, descriptions et dates avec Outlook';
-            outlookSyncBtn.addEventListener('click', function () {
-              runOutlookSync();
-            });
             filters.appendChild(outlookSyncBtn);
           }
         }
       }
 
-      var icsBtn = el('button', 'gantt-btn', {
-        type: 'button',
-        text: 'Exporter .ics',
+      var icsBtn = makeIconBtn('gantt-btn', 'ti-download', 'Exporter .ics', function () {
+        exportIcsCalendar();
       });
       icsBtn.title =
         'T\u00e9l\u00e9charger un calendrier (.ics) pour Outlook — sans compte Entra';
-      icsBtn.addEventListener('click', function () {
-        exportIcsCalendar();
-      });
       filters.appendChild(icsBtn);
 
-      var paBtn = el('button', 'gantt-btn', {
-        type: 'button',
-        text: 'Power Automate',
+      var paBtn = makeIconBtn('gantt-btn', 'ti-bolt', 'Power Automate', function () {
+        openPowerAutomateGuide();
       });
       paBtn.title =
         'Guide : synchroniser Trello \u2192 Outlook automatiquement (cloud Microsoft, sans h\u00e9bergement)';
-      paBtn.addEventListener('click', function () {
-        openPowerAutomateGuide();
-      });
       filters.appendChild(paBtn);
 
-      var sheetsBtn = el('button', 'gantt-btn', {
-        type: 'button',
-        text: 'Google Sheets',
+      var sheetsBtn = makeIconBtn('gantt-btn', 'ti-table', 'Google Sheets', function () {
+        openGoogleSheetsSync();
       });
       sheetsBtn.title =
         'Synchroniser ce tableau avec une feuille Google Sheets (deux sens, immédiat)';
-      sheetsBtn.addEventListener('click', function () {
-        openGoogleSheetsSync();
-      });
       filters.appendChild(sheetsBtn);
 
-      var refresh = el('button', 'gantt-btn', { type: 'button', text: 'Actualiser' });
-      refresh.addEventListener('click', function () {
+      var refresh = makeIconBtn('gantt-btn', 'ti-reload', 'Actualiser', function () {
         reload();
       });
       filters.appendChild(refresh);
@@ -2901,11 +2979,27 @@
               state.drag.mapOpts
             );
             if (!nextStart || !nextEnd) return;
-            next = {
-              start: model.snapDateTime(nextStart, state.viewMode),
-              end: model.snapDateTime(nextEnd, state.viewMode),
-              hasTime: true,
-            };
+            if (state.drag.mode === 'move') {
+              // Snap only the start, then re-apply the original duration —
+              // snapping start/end independently could round both into the
+              // same bucket for short tasks and collapse the bar to 0 min.
+              var snappedStart = model.snapDateTime(nextStart, state.viewMode);
+              if (!snappedStart) return;
+              var durMs =
+                state.drag.origin.end.getTime() -
+                state.drag.origin.start.getTime();
+              next = {
+                start: snappedStart,
+                end: new Date(snappedStart.getTime() + durMs),
+                hasTime: true,
+              };
+            } else {
+              next = {
+                start: model.snapDateTime(nextStart, state.viewMode),
+                end: model.snapDateTime(nextEnd, state.viewMode),
+                hasTime: true,
+              };
+            }
           } else {
             var dayDelta = Math.round(
               (dx / state.drag.width) * model.rangeDayCount(state.drag.range)
@@ -2926,12 +3020,16 @@
               hasTime: !!state.drag.origin.hasTime,
             };
           }
-          if (next.end.getTime() < next.start.getTime()) {
+          if (
+            state.drag.mode !== 'move' &&
+            next.end.getTime() < next.start.getTime()
+          ) {
             if (state.drag.mode === 'start') next.start = next.end;
             else next.end = next.start;
           }
           applyIntervalToRow(row, next);
           updateBarEl(barEl, row, next, state.drag.mode);
+          showDragTip(e.clientX, e.clientY, formatIntervalTitle(next));
         }
 
         function onUp() {
@@ -2940,6 +3038,7 @@
           barEl.removeEventListener('pointerup', onUp);
           barEl.removeEventListener('pointercancel', onUp);
           barEl.classList.remove('is-dragging');
+          hideDragTip();
           var startEdge = barEl.querySelector('.gantt-bar-edge--start');
           var endEdge = barEl.querySelector('.gantt-bar-edge--end');
           if (startEdge) startEdge.classList.remove('is-active');
