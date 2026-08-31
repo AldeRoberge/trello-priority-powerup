@@ -40,14 +40,16 @@ Trello, une nouvelle ligne dans le Sheet crée une carte, et Priorité/Progrès 
 1. Créez un **jeton d'API Trello personnel** :
    `https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=token&key=e449f4c01b03a2501072808abe5611ab`
    (c'est la clé d'app de Cerveau — publique, déjà utilisée par le Power-Up lui-même).
-2. Dans l'éditeur Apps Script, sélectionnez la fonction **`setTrelloCredentials`**, puis
-   dans le menu **Exécuter → Modifier les valeurs de la fonction actuelle** (ou appelez-la
-   une fois depuis l'éditeur avec vos valeurs en dur temporairement, puis retirez-les) :
+2. Dans l'éditeur, ouvrez `Code.gs` et **temporairement** ajoutez une fonction :
    ```js
-   setTrelloCredentials('e449f4c01b03a2501072808abe5611ab', 'VOTRE_JETON_ICI');
+   function storeMyTrelloToken() {
+     setTrelloCredentials('e449f4c01b03a2501072808abe5611ab', 'VOTRE_JETON_ICI');
+   }
    ```
-3. Exécutez-la une fois. Le jeton est stocké dans les *Script Properties* (jamais dans une
-   cellule).
+   Sélectionnez **`storeMyTrelloToken`** (pas `setTrelloCredentials` tout seul — sans
+   arguments elle écraserait les secrets avec des valeurs vides), **Exécuter**, puis
+   **supprimez** `storeMyTrelloToken` et le jeton du fichier.
+3. Le jeton est stocké dans les *Script Properties* (jamais dans une cellule).
 
 ## Étape 4 — Déployer comme Web App
 
@@ -84,8 +86,9 @@ choisis) dans l'onglet `_Config`.
   garanti instantané).
 - **Nouvelle carte** : ajoutez une carte sur le tableau — une ligne apparaît dans `Tasks`
   avec son ID (colonne A, masquée) rempli automatiquement.
-- **Nouvelle ligne** : tapez un titre dans une ligne vide de `Tasks` — une carte Trello est
-  créée au prochain passage du déclencheur `onEdit`, et l'ID revient dans la colonne A.
+- **Nouvelle ligne** : tapez le titre dans la colonne **Objet** (pas la première colonne
+  visible — celle-ci est *Catégorie* ; la colonne A `TrelloCardId` est masquée). Une carte
+  Trello est créée au prochain `onEdit`, et l'ID revient dans la colonne A.
 - **Conflit** : modifiez le même champ des deux côtés avant qu'une sync passe — Trello
   gagne, et la ligne écrasée est notée dans `_SyncLog`.
 

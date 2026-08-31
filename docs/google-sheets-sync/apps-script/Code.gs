@@ -135,7 +135,11 @@ function onEditInstallable(e) {
 /* ── Core sync ────────────────────────────────────────────────────────── */
 
 function findRowByCardId_(sheet, cardId) {
-  var ids = sheet.getRange(2, COL.ID, Math.max(sheet.getLastRow() - 1, 0), 1).getValues();
+  var last = sheet.getLastRow();
+  // getRange(..., numRows, ...) throws if numRows < 1 — empty Tasks/_SyncState
+  // (header only) is the first-sync case, not an error.
+  if (last < 2) return -1;
+  var ids = sheet.getRange(2, COL.ID, last - 1, 1).getValues();
   for (var i = 0; i < ids.length; i++) {
     if (String(ids[i][0]) === String(cardId)) return i + 2;
   }
@@ -320,7 +324,16 @@ function applyMerge_(cardId, card, knownRow) {
   if (fieldEnabled('progress')) newRowValues[COL.PROGRESS - 1] = computeProgressPercent(card);
   if (fieldEnabled('priority')) newRowValues[COL.PRIORITY - 1] = readPriorityDisplay(card);
 
-  sheet.getRange(row, 1, 1, HEADERS.length).setValues([newRowValues]);
+  var rowChanged = false;
+  for (var ci = 0; ci < HEADERS.length; ci++) {
+    if (String(newRowValues[ci] == null ? '' : newRowValues[ci]) !== String(rowValues[ci] == null ? '' : rowValues[ci])) {
+      rowChanged = true;
+      break;
+    }
+  }
+  if (rowChanged) {
+    sheet.getRange(row, 1, 1, HEADERS.length).setValues([newRowValues]);
+  }
 
   var trelloPatch = {};
   if (writes.name !== false) trelloPatch.name = writes.name;

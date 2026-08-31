@@ -114,14 +114,14 @@ function readCategoryValue(card, categoryFieldId) {
 }
 
 function writeCategoryValue(cardId, categoryFieldId, text) {
-  // NOTE: unverified against a live board (no Trello access from the
-  // environment that wrote this). Trello's own docs have used the singular
-  // "/1/card/{id}/..." form for this specific endpoint in the past, unlike
-  // every other endpoint in this file. If this 404s, try singular "card"
-  // instead of "cards" here — see
-  // https://developer.atlassian.com/cloud/trello/rest/api-group-custom-fields/
+  // REST reference: PUT /cards/{idCard}/customField/{idCustomField}/item
+  // (plural "cards"). The older "Getting started with custom fields" guide
+  // still shows singular /card/... ; Trello accepts both noun forms.
   var path = '/cards/' + encodeURIComponent(cardId) + '/customField/' + encodeURIComponent(categoryFieldId) + '/item';
-  return trelloFetch_(path, 'put', { value: { text: String(text || '') } });
+  var trimmed = String(text || '');
+  // Empty value must be cleared with value:"" — {text:""} 400s.
+  var body = trimmed ? { value: { text: trimmed } } : { value: '' };
+  return trelloFetch_(path, 'put', body);
 }
 
 /* ── Progrès (checklist completion %) ────────────────────────────────── */
@@ -142,19 +142,26 @@ function computeProgressPercent(card) {
 
 /* ── Priorité (read-only, best-effort — see file header) ────────────── */
 
+function parseJsonMaybe_(value) {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch (e) {
+    return null;
+  }
+}
+
 function readPriorityDisplay(card) {
   var pluginData = card.pluginData || [];
   for (var i = 0; i < pluginData.length; i++) {
-    if (pluginData[i].scope !== 'shared') continue;
-    var value = pluginData[i].value;
-    var parsed;
-    try {
-      parsed = typeof value === 'string' ? JSON.parse(value) : value;
-    } catch (e) {
-      continue;
-    }
-    if (parsed && typeof parsed === 'object' && parsed.cardPriority) {
-      parsed = parsed.cardPriority;
+    var entry = pluginData[i];
+    // REST pluginData: scope is the object type ("card"/"board"/...), access is
+    // "shared"|"private". Filtering on scope === "shared" skips every real
+    // cardPriority bag. GET pluginData already returns shared entries only.
+    if (entry.access === 'private') continue;
+    var parsed = parseJsonMaybe_(entry.value);
+    if (parsed && typeof parsed === 'object' && parsed.cardPriority != null) {
+      parsed = parseJsonMaybe_(parsed.cardPriority);
     }
     if (parsed && typeof parsed === 'object' && typeof parsed.impact === 'number') {
       return parsed.impact;
@@ -168,7 +175,17 @@ function readPriorityDisplay(card) {
 var DESC_META_MARK = /\n\n\[[a-zA-Z0-9_-]+\]:/;
 
 function splitDescMeta(desc) {
-  var text = String(desc || '');
+  var text = String(desc || '').replace(/\r\n/g, '\n');
+  // Current Cerveau format (components/shared/desc-meta.js). Must win over the
+  // legacy [key]: marker — otherwise the HTML comment is written into Tasks.
+  var html = /<!--\s*cerveau-meta\b[\s\S]*?-->/i;
+  var htmlMatch = html.exec(text);
+  if (htmlMatch) {
+    return {
+      visible: text.slice(0, htmlMatch.index).replace(/\s+$/, ''),
+      hiddenBlock: text.slice(htmlMatch.index),
+    };
+  }
   var match = text.match(DESC_META_MARK);
   if (!match) return { visible: text, hiddenBlock: '' };
   var idx = match.index;
@@ -176,7 +193,12 @@ function splitDescMeta(desc) {
 }
 
 function joinDescMeta(visible, hiddenBlock) {
-  return String(visible || '') + String(hiddenBlock || '');
+  var v = String(visible || '');
+  var h = String(hiddenBlock || '');
+  if (!h) return v;
+  if (!v) return h.replace(/^\s+/, '');
+  if (/^\s/.test(h)) return v + h;
+  return v + '\n\n' + h;
 }
 
 /* ── Statut ← list name (condensed port of components/statut/statut-match.js) ── */
@@ -238,10 +260,19 @@ function findListForStatutValue(boardId, statutValue) {
   if (!wanted) return null;
   var cat = null;
   for (var i = 0; i < STATUT_CATEGORIES.length; i++) {
-    if (STATUT_CATEGORIES[i].key === wanted || normalizeListName_(STATUT_CATEGORIES[i].label) === wanted) {
-      cat = STATUT_CATEGORIES[i];
+    var candidate = STATUT_CATEGORIES[i];
+    if (candidate.key === wanted || normalizeListName_(candidate.label) === wanted) {
+      cat = candidate;
       break;
     }
+    for (var a = 0; a < candidate.aliases.length; a++) {
+      var alias = candidate.aliases[a];
+      if (wanted === alias || wanted.indexOf(alias) !== -1 || alias.indexOf(wanted) !== -1) {
+        cat = candidate;
+        break;
+      }
+    }
+    if (cat) break;
   }
   if (!cat) return null;
   var lists = getBoardLists(boardId);
