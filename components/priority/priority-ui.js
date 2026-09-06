@@ -9130,8 +9130,10 @@
    * Overview / résumé strip (collapsible) or footer actions box.
    * Status-first hero + Motifs + open tasks + contextual actions.
    *
-   * config.compact — card-back / embedded strip: no accordion chrome, no action
-   * chips, tighter layout (used by the Trello Cerveau card-back section).
+   * config.compact — card-back / embedded strip: no accordion chrome, tighter
+   * layout, short action labels (used by the Trello Cerveau card-back section).
+   * When onAction is provided, compact still shows action chips + composers and
+   * interactive task checks; without onAction it stays read-only.
    * config.actionsOnly — popup footer: actions + composers only (no Résumé chrome).
    */
   function createOverviewField(config) {
@@ -9142,6 +9144,7 @@
     var onJump = typeof config.onJump === 'function' ? config.onJump : null;
     var onAction =
       typeof config.onAction === 'function' ? config.onAction : null;
+    var interactive = !!onAction;
     var onLayoutChange =
       typeof config.onLayoutChange === 'function' ? config.onLayoutChange : null;
     var onExpandChange =
@@ -9413,14 +9416,17 @@
     // ── Actions + composers ────────────────────────────────────────────
     var actionsEl = document.createElement('div');
     actionsEl.className =
-      'overview-actions' + (actionsOnly ? ' overview-actions--footer' : '');
+      'overview-actions' +
+      (actionsOnly ? ' overview-actions--footer' : '') +
+      (compact ? ' overview-actions--compact' : '');
     actionsEl.hidden = true;
-    if (!compact) body.appendChild(actionsEl);
+    if (!compact || interactive) body.appendChild(actionsEl);
 
     var composerEl = document.createElement('div');
-    composerEl.className = 'overview-composer';
+    composerEl.className =
+      'overview-composer' + (compact ? ' overview-composer--compact' : '');
     composerEl.hidden = true;
-    if (!compact) body.appendChild(composerEl);
+    if (!compact || interactive) body.appendChild(composerEl);
 
     function setFeatureVisible(cell, on) {
       if (on) {
@@ -9641,7 +9647,7 @@
     }
 
     function paintActions() {
-      if (compact || !actionsEl.parentNode) {
+      if (!actionsEl.parentNode || (compact && !interactive)) {
         actionsEl.hidden = true;
         closeComposer();
         return;
@@ -9658,7 +9664,7 @@
       if (state.isBlocked) {
         chips.push({
           id: 'unblock',
-          label: 'Marquer d\u00e9bloqu\u00e9',
+          label: compact ? 'D\u00e9bloquer' : 'Marquer d\u00e9bloqu\u00e9',
           icon: 'ti-player-play',
           variant: 'primary'
         });
@@ -9673,14 +9679,14 @@
       // Keep add-subtask immediately right of the primary status chip (✓ / play).
       chips.push({
         id: 'add-subtask',
-        label: 'Ajouter une sous-t\u00e2che',
+        label: compact ? 'Sous-t\u00e2che' : 'Ajouter une sous-t\u00e2che',
         icon: 'ti-plus',
         variant: 'neutral'
       });
       if (!state.isBlocked) {
         chips.push({
           id: 'block',
-          label: 'Mettre en attente\u2026',
+          label: compact ? 'En attente\u2026' : 'Mettre en attente\u2026',
           icon: 'ti-player-pause',
           variant: 'warn'
         });
@@ -9688,7 +9694,7 @@
       if (dueDays != null && isFinite(dueDays) && dueDays <= 0) {
         chips.push({
           id: 'postpone-tomorrow',
-          label: 'Reporter \u00e0 demain',
+          label: compact ? 'Demain' : 'Reporter \u00e0 demain',
           icon: 'ti-calendar-plus',
           variant: 'neutral'
         });
@@ -9810,7 +9816,7 @@
             check.innerHTML = task.blocked
               ? PROGRESS_PAUSE_SVG
               : PROGRESS_CHECK_SVG;
-            if (compact) {
+            if (compact && !interactive) {
               check.disabled = true;
               check.tabIndex = -1;
             } else {
@@ -12043,8 +12049,10 @@
         ui.slotEl.classList.toggle('is-picker-open', open);
       });
       if (placesPickerSlot) {
-        if (placesPickerHost.parentNode !== placesSlotUi[placesPickerSlot].slotEl) {
-          placesSlotUi[placesPickerSlot].slotEl.appendChild(placesPickerHost);
+        var hostUi = placesSlotUi[placesPickerSlot];
+        // Drop under the + button (same pattern as Assignés picker).
+        if (hostUi && placesPickerHost.parentNode !== hostUi.addWrap) {
+          hostUi.addWrap.appendChild(placesPickerHost);
         }
         renderPlacesPicker();
       }

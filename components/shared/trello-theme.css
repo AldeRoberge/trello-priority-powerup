@@ -25,22 +25,22 @@ html[data-color-mode="light"] {
 
 html[data-color-mode="dark"] {
   color-scheme: dark;
-  /* Elevation: dark canvas → lighter as layers rise toward the user */
-  --tp-elev-0: #0d1117;
-  --tp-elev-1: #161b22;
-  --tp-elev-2: #21262d;
-  --tp-elev-3: #2d333b;
-  --tp-elev-4: #3d444d;
+  /* Atlassian DN charcoal — neutral grey, no blue/purple cast */
+  --tp-elev-0: #1d2125;
+  --tp-elev-1: #22272b;
+  --tp-elev-2: #282e33;
+  --tp-elev-3: #2c333a;
+  --tp-elev-4: #38414a;
   --tp-bg: var(--tp-elev-0);
   --tp-surface-subtle: var(--tp-elev-1);
   --tp-surface: var(--tp-elev-2);
-  --tp-surface-hover: #a6c5e729;
-  --tp-surface-active: #a6c5e73d;
+  --tp-surface-hover: rgba(255, 255, 255, 0.08);
+  --tp-surface-active: rgba(255, 255, 255, 0.14);
   --tp-text: #f7f8f9;
-  --tp-text-subtle: #b6c2cf;
+  --tp-text-subtle: #9fadbc;
   --tp-text-muted: #8c9bab;
-  --tp-border: #a6c5e75c;
-  --tp-border-strong: #a6c5e799;
+  --tp-border: rgba(255, 255, 255, 0.12);
+  --tp-border-strong: rgba(255, 255, 255, 0.22);
   --tp-primary: #579dff;
   --tp-primary-hover: #85b8ff;
   --tp-primary-text: var(--tp-elev-0);
@@ -49,7 +49,7 @@ html[data-color-mode="dark"] {
   --tp-success-bg: #1c3329;
   --tp-danger-text: #fd9891;
   --tp-shadow: none;
-  --tp-input-bg: var(--tp-elev-3);
+  --tp-input-bg: var(--tp-elev-2);
 }
 
 /* Standalone pages (landing) — no data-color-mode from Trello */
@@ -1598,10 +1598,10 @@ body.tp-page--priority.is-split-assistant {
   padding: 0 8px;
 }
 
-.tp-page--priority .field--overview {
-  padding: 10px 12px;
-  border-radius: var(--radius, 12px);
-  background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
+.tp-page--priority .field--overview:not(.field--overview-compact) {
+  padding: 4px 0 8px;
+  border-radius: 0;
+  background: transparent;
 }
 
 .tp-page--priority .variant-info-section {
@@ -1610,39 +1610,48 @@ body.tp-page--priority.is-split-assistant {
 }
 
 .tp-page--priority .field--info {
-  padding: 10px 12px;
-  border-radius: var(--radius, 12px);
-  background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
+  padding: 4px 0 8px;
+  border-radius: 0;
+  background: transparent;
 }
 
-/* Dark mode elevation stacking: canvas → card → sections → controls/modals */
+/* Dark mode: one flat charcoal canvas (Trello card-back style) */
 html[data-color-mode='dark'] body.tp-page--priority {
-  background: var(--tp-elev-0, #0d1117);
+  background: var(--tp-elev-0, #1d2125);
 }
 
 html[data-color-mode='dark'] .tp-page--priority .variant-card {
-  background: color-mix(
-    in srgb,
-    var(--card-tier-tint, transparent) var(--card-tier-tint-mix, 6%),
-    var(--tp-elev-2, #21262d)
-  );
+  /* Kill JS tier-tint wash — fields sit on the same surface */
+  --card-tier-tint-mix: 0%;
+  --card-panel-tint-mix: 0%;
+  --card-tier-border-mix: 0%;
+  background: transparent;
 }
 
-/* Collapsible section shells stay on Historique’s darker mix
-   (surface-1 72% / surface-2) — do not lift them to elev-3. */
+html[data-color-mode='dark'] .tp-page--priority .heat-panel {
+  background: transparent;
+  border-radius: 8px;
+  padding: 8px 0 12px;
+}
+
+html[data-color-mode='dark'] .tp-page--priority .heat-panel.is-overdue {
+  background: color-mix(in srgb, var(--blocked-fill, #3d1f1f) 55%, transparent);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
 
 html[data-color-mode='dark'] .tp-page--priority.is-split-assistant .cerveau-assistant {
-  background: var(--tp-elev-1, #161b22);
+  background: var(--tp-elev-0, #1d2125);
 }
 
 html[data-color-mode='dark'] .tp-page--priority .info-desc-input,
 html[data-color-mode='dark'] .tp-page--priority .info-labels-picker {
-  background: var(--tp-elev-3, #2d333b);
+  background: transparent;
 }
 
 html[data-color-mode='dark'] .tp-page--priority .help-modal,
 html[data-color-mode='dark'] .tp-page--priority .heat-score-tooltip {
-  background: var(--tp-elev-4, #3d444d);
+  background: var(--tp-elev-3, #2c333a);
 }
 
 .tp-page--priority .variant-statut-section {
@@ -1651,8 +1660,8 @@ html[data-color-mode='dark'] .tp-page--priority .heat-score-tooltip {
 }
 
 .tp-page--priority .field--statut {
-  padding: 10px 12px;
-  border-radius: var(--radius, 12px);
+  padding: 4px 0 8px;
+  border-radius: 0;
 }
 
 .tp-page--priority .field--statut-embedded {
@@ -1668,9 +1677,40 @@ html[data-color-mode='dark'] .tp-page--priority .heat-score-tooltip {
 }
 
 .tp-page--priority .info-desc-input {
-  background: var(--tp-surface, var(--surface-2));
-  border-color: var(--tp-border, var(--border));
+  background: transparent;
+  border-color: transparent;
   color: var(--tp-text, var(--text-primary));
+}
+
+.tp-page--priority .info-desc-input:hover {
+  background: color-mix(in srgb, var(--tp-text, var(--text-primary)) 4%, transparent);
+}
+
+.tp-page--priority .info-desc-input:focus,
+.tp-page--priority .info-desc-input:focus-visible {
+  outline: none;
+  border-color: var(--tp-border-strong, var(--border));
+  background: var(--tp-elev-2, var(--surface-2, var(--tp-surface)));
+  box-shadow: 0 0 0 1px var(--tp-border-strong, rgba(255, 255, 255, 0.18));
+}
+
+.tp-page--priority .info-desc-toolbar {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--tp-text, var(--text-primary)) 5%, transparent);
+}
+
+.tp-page--priority .info-desc-preview {
+  border-color: transparent;
+  background: transparent;
+}
+
+.tp-page--priority .info-desc-preview:hover {
+  background: color-mix(in srgb, var(--tp-text, var(--text-primary)) 4%, transparent);
+}
+
+.tp-page--priority .info-desc-preview:focus-visible {
+  border-color: var(--tp-border-strong, var(--border));
+  background: var(--tp-elev-2, var(--surface-2, var(--tp-surface)));
 }
 
 .tp-page--priority .info-member {
@@ -1687,8 +1727,13 @@ html[data-color-mode='dark'] .tp-page--priority .heat-score-tooltip {
 }
 
 .tp-page--priority .info-labels-picker {
-  background: var(--tp-surface, var(--surface-1));
-  border-color: var(--tp-border, var(--border));
+  background: transparent;
+  border-color: transparent;
+}
+
+.tp-page--priority .info-labels-picker:focus-within {
+  border-color: var(--tp-border-strong, var(--border));
+  background: var(--tp-elev-2, var(--surface-2, var(--tp-surface)));
 }
 
 .tp-priority-card-name {
@@ -2288,29 +2333,25 @@ html[data-color-mode='dark'] .tp-page--priority .heat-score-tooltip {
 
 .tp-page--priority .field--due-date {
   margin-bottom: 0;
-  padding: 10px 12px;
+  padding: 4px 0 8px;
   border: none;
-  border-radius: var(--radius, 12px);
+  border-radius: 0;
 }
 
 .tp-page--priority .field--due-date.is-enabled,
 .tp-page--priority .field--due-date.has-due-date,
 .tp-page--priority .field--due-date.is-open {
   border: none;
-  background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
+  background: transparent;
 }
 
+/* Soft status wash only — no filled section card shell */
 .tp-page--priority .field.has-section-glow {
-  background-color: color-mix(
-    in srgb,
-    var(--surface-1, var(--tp-surface-subtle)) 72%,
-    var(--surface-2, var(--tp-surface))
-  );
+  background-color: transparent;
   background-image: radial-gradient(
-    ellipse 140% 95% at 50% -5%,
-    color-mix(in srgb, var(--section-glow, transparent) 46%, transparent) 0%,
-    color-mix(in srgb, var(--section-glow, transparent) 18%, transparent) 42%,
-    transparent 72%
+    ellipse 120% 80% at 50% -10%,
+    color-mix(in srgb, var(--section-glow, transparent) 22%, transparent) 0%,
+    transparent 70%
   );
   background-repeat: no-repeat;
 }
@@ -2532,9 +2573,9 @@ html[data-color-mode='dark'] .tp-page--priority .heat-score-tooltip {
 }
 
 .tp-page--priority .calc-graph-panel.is-enabled {
-  padding: 10px 12px;
+  padding: 10px 0;
   border: none;
-  background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
+  background: transparent;
 }
 
 .tp-page--priority .variant-priority-section {
@@ -2544,13 +2585,13 @@ html[data-color-mode='dark'] .tp-page--priority .heat-score-tooltip {
 
 .tp-page--priority .field--priority {
   border: none;
-  padding: 10px 12px;
-  border-radius: var(--radius, 12px);
+  padding: 4px 0 8px;
+  border-radius: 0;
 }
 
 .tp-page--priority .field--priority.is-enabled {
   border: none;
-  background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
+  background: transparent;
 }
 
 .tp-page--priority .section-toggle-summary {
@@ -2684,7 +2725,7 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
   --slider-thumb-bg: #f7f8f9;
   --slider-thumb-border: #8c9bab;
   --slider-thumb-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-  --slider-focus-ring: 0 0 0 3px rgba(166, 197, 231, 0.35);
+  --slider-focus-ring: 0 0 0 3px rgba(255, 255, 255, 0.22);
 }
 
 .tp-page--completion .tp-completion,
@@ -2711,29 +2752,24 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 /* Soft enable shell — tint only, stable box (heat-panel vibe) */
 .tp-page--priority .field--progress {
   margin-bottom: 0;
-  padding: 10px 12px;
+  padding: 4px 0 8px;
   border: none;
-  border-radius: var(--radius, 12px);
+  border-radius: 0;
   background: transparent;
   transition: background 0.2s ease;
 }
 
 .tp-page--priority .field--progress.is-enabled {
-  background: color-mix(in srgb, var(--surface-1, var(--tp-surface-subtle)) 72%, var(--surface-2, var(--tp-surface)));
+  background: transparent;
 }
 
 /* Keep progress glow while enabled (is-enabled's background shorthand would clear it). */
 .tp-page--priority .field--progress.has-section-glow.is-enabled {
-  background-color: color-mix(
-    in srgb,
-    var(--surface-1, var(--tp-surface-subtle)) 72%,
-    var(--surface-2, var(--tp-surface))
-  );
+  background-color: transparent;
   background-image: radial-gradient(
-    ellipse 140% 95% at 50% -5%,
-    color-mix(in srgb, var(--section-glow, transparent) 46%, transparent) 0%,
-    color-mix(in srgb, var(--section-glow, transparent) 18%, transparent) 42%,
-    transparent 72%
+    ellipse 120% 80% at 50% -10%,
+    color-mix(in srgb, var(--section-glow, transparent) 22%, transparent) 0%,
+    transparent 70%
   );
   background-repeat: no-repeat;
 }
@@ -2741,11 +2777,18 @@ html[data-color-mode="dark"] .tp-page--priority .tp-completion {
 /* Stronger wash when all tasks are complete. */
 .tp-page--priority .variant-progress-section.is-progress-complete > .field--progress.has-section-glow {
   background-image: radial-gradient(
-    ellipse 140% 95% at 50% -5%,
-    color-mix(in srgb, var(--section-glow, transparent) 58%, transparent) 0%,
-    color-mix(in srgb, var(--section-glow, transparent) 24%, transparent) 45%,
-    transparent 74%
+    ellipse 120% 80% at 50% -10%,
+    color-mix(in srgb, var(--section-glow, transparent) 32%, transparent) 0%,
+    transparent 72%
   );
+}
+
+.tp-page--priority .field--historique,
+.tp-page--priority .field--historique.is-enabled {
+  background: transparent;
+  border-radius: 0;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .tp-page--priority .progress-enable-title {
@@ -3428,7 +3471,7 @@ span.tp-estimate-chip {
 }
 
 html[data-color-mode='dark'] .tp-completion-encouragement-bubble {
-  background: var(--tp-surface, #21262d);
+  background: var(--tp-surface, #282e33);
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.25),
     0 10px 24px rgba(0, 0, 0, 0.35);
@@ -3651,7 +3694,7 @@ html[data-color-mode='dark'] .tp-completion-encouragement-bubble[data-tone='acti
 }
 
 html[data-color-mode="dark"] .tp-completion-item.is-selected {
-  background: color-mix(in srgb, var(--tp-primary, #579dff) 14%, var(--tp-elev-0, #0d1117));
+  background: color-mix(in srgb, var(--tp-primary, #579dff) 14%, var(--tp-elev-0, #1d2125));
 }
 
 .tp-completion-search {
@@ -3852,19 +3895,19 @@ html[data-color-mode="dark"] .tp-completion-item.is-selected {
 }
 
 html[data-color-mode="dark"] .tp-completion-item {
-  background: color-mix(in srgb, var(--tp-elev-0, #0d1117) 55%, var(--tp-surface-subtle));
+  background: color-mix(in srgb, var(--tp-elev-0, #1d2125) 55%, var(--tp-surface-subtle));
 }
 
 html[data-color-mode="dark"] .tp-completion-item:hover {
-  background: color-mix(in srgb, var(--tp-elev-0, #0d1117) 35%, var(--tp-surface-subtle));
+  background: color-mix(in srgb, var(--tp-elev-0, #1d2125) 35%, var(--tp-surface-subtle));
 }
 
 html[data-color-mode="dark"] .tp-completion-item.is-linked {
-  background: color-mix(in srgb, var(--tp-focus, #579dff) 14%, var(--tp-elev-0, #0d1117));
+  background: color-mix(in srgb, var(--tp-focus, #579dff) 14%, var(--tp-elev-0, #1d2125));
 }
 
 html[data-color-mode="dark"] .tp-completion-item--nested {
-  background: color-mix(in srgb, var(--tp-elev-0, #0d1117) 70%, var(--tp-surface-subtle));
+  background: color-mix(in srgb, var(--tp-elev-0, #1d2125) 70%, var(--tp-surface-subtle));
 }
 
 .tp-completion-item.is-flipping {
@@ -5021,7 +5064,7 @@ html[data-color-mode='dark'] .tp-completion-suggestion.is-link {
 }
 
 html[data-color-mode='dark'] .tp-completion-suggestion.is-link:hover {
-  background: color-mix(in srgb, var(--tp-focus, #579dff) 22%, var(--tp-elev-0, #0d1117));
+  background: color-mix(in srgb, var(--tp-focus, #579dff) 22%, var(--tp-elev-0, #1d2125));
 }
 
 .tp-completion-suggestion:focus-visible {

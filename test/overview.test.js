@@ -866,7 +866,7 @@ describe('PriorityUI createOverviewField', () => {
     );
   });
 
-  it('createOverviewField compact mode skips accordion chrome and actions', () => {
+  it('createOverviewField compact mode skips accordion chrome and stays read-only without onAction', () => {
     const jumps = [];
     const ui = PriorityUI.createOverviewField({
       title: 'Card back',
@@ -911,6 +911,44 @@ describe('PriorityUI createOverviewField', () => {
     ui.el.querySelector('.overview-title').click();
     assert.deepEqual(jumps, ['info']);
     assert.equal(ui.isExpanded(), true);
+  });
+
+  it('createOverviewField compact + onAction shows short action chips and interactive tasks', () => {
+    const actions = [];
+    const ui = PriorityUI.createOverviewField({
+      title: 'Interactive strip',
+      compact: true,
+      progressPercent: 20,
+      dueCountdown: '1 h restante',
+      dueDays: 0,
+      priorityLabel: 'Prioritaire',
+      statusCategory: 'unstarted',
+      tasks: [{ id: 't1', text: 'Acheter des chemises', done: false }],
+      tasksDone: 0,
+      tasksTotal: 1,
+      onAction(id, payload) {
+        actions.push({ id, payload });
+      },
+    });
+
+    assert.ok(ui.el.querySelector('.overview-actions--compact'));
+    const chips = Array.from(ui.el.querySelectorAll('.overview-action-chip'));
+    const labels = chips.map((c) => c.textContent.replace(/\s+/g, ' ').trim());
+    assert.ok(labels.some((l) => /Terminer/.test(l)));
+    assert.ok(labels.some((l) => /Sous-tâche|Sous-t\u00e2che/.test(l)));
+    assert.ok(labels.some((l) => /attente/i.test(l)));
+    assert.ok(labels.some((l) => /Demain/.test(l)));
+
+    const check = ui.el.querySelector('.overview-task-check');
+    assert.ok(check);
+    assert.equal(check.disabled, false);
+    check.click();
+    assert.deepEqual(actions, [{ id: 'toggle-task', payload: { id: 't1' } }]);
+
+    const completeBtn = chips.find((c) => c.dataset.overviewAction === 'complete');
+    assert.ok(completeBtn);
+    completeBtn.click();
+    assert.equal(actions[1].id, 'complete');
   });
 
   it('createOverviewField actionsOnly keeps footer chips without Résumé chrome', () => {

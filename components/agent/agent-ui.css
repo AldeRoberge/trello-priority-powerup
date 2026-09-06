@@ -8,38 +8,34 @@
 /* Soft enable shell — match Priorité / Progrès */
 .tp-page--priority .field--chat {
   margin-bottom: 0;
-  padding: 10px 12px;
+  padding: 4px 0 8px;
   border: none;
-  border-radius: var(--radius, 12px);
+  border-radius: 0;
   background: transparent;
   transition: background 0.2s ease;
 }
 
 .tp-page--priority .field--chat.is-enabled {
-  background: color-mix(
-    in srgb,
-    var(--surface-1, var(--tp-surface-subtle)) 72%,
-    var(--surface-2, var(--tp-surface))
-  );
+  background: transparent;
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-messages,
 html[data-color-mode='dark'] .tp-page--priority.is-split-assistant .cerveau-assistant .agent-messages {
-  background: var(--tp-elev-1, #161b22);
+  background: transparent;
 }
 
 html[data-color-mode='dark']
   .tp-page--priority
   .agent-msg--assistant
   .agent-msg-bubble:not(.agent-msg-bubble--pending) {
-  background: var(--tp-elev-3, #2d333b);
+  background: var(--tp-elev-3, #2c333a);
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-msg--user .agent-msg-bubble {
   background: color-mix(
     in srgb,
     var(--tp-primary) 16%,
-    var(--tp-elev-3, #2d333b)
+    var(--tp-elev-3, #2c333a)
   );
 }
 
@@ -2438,7 +2434,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-msg--user .agent-msg-bubb
   background: color-mix(
     in srgb,
     var(--tp-primary) 16%,
-    var(--tp-elev-3, #2d333b)
+    var(--tp-elev-3, #2c333a)
   );
   border-color: color-mix(in srgb, var(--tp-primary) 24%, var(--tp-border));
 }
@@ -3924,7 +3920,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-list-item.is-active
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
-  background: var(--tp-elev-0, #0d1117);
+  background: var(--tp-elev-0, #1d2125);
   color: color-mix(in srgb, #9fadbc 82%, #738496);
 }
 

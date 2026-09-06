@@ -24,7 +24,7 @@
   <style>
     body.tp-card-open {
       margin: 0;
-      padding: 4px 0 2px;
+      padding: 2px 0 4px;
     }
     /* Match Trello card chrome — theme --tp-bg (#0d1117) is too black */
     html[data-color-mode="dark"] body.tp-card-open {
@@ -33,7 +33,7 @@
     .tp-card-open-shell {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 0;
     }
     .tp-card-open-overview {
       min-width: 0;
@@ -41,21 +41,15 @@
     .tp-card-open-overview .variant-overview-section--compact {
       width: 100%;
     }
-    .tp-card-open-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .tp-card-open-row .tp-btn {
-      width: auto;
-      min-height: 32px;
-      padding: 6px 12px;
-      flex-shrink: 0;
-    }
     .tp-card-open-loading {
       margin: 0;
+      padding: 8px 2px;
       font-size: 12px;
       color: var(--ds-text-subtle, #626f86);
+    }
+    .tp-card-open-busy .overview-action-chip {
+      pointer-events: none;
+      opacity: 0.65;
     }
   </style>
 </head>
@@ -63,9 +57,6 @@
   <div class="tp-card-open-shell">
     <div class="tp-card-open-overview" id="overviewMount">
       <p class="tp-card-open-loading" id="overviewLoading">Chargement…</p>
-    </div>
-    <div class="tp-card-open-row">
-      <button class="tp-btn tp-btn--primary" type="button" id="openBtn">Ouvrir</button>
     </div>
   </div>
   <script>
@@ -83,7 +74,6 @@
         document.title = appName;
       }
 
-      var openBtn = document.getElementById('openBtn');
       var overviewMount = document.getElementById('overviewMount');
       var overviewLoading = document.getElementById('overviewLoading');
       var overviewUi = null;
@@ -91,10 +81,10 @@
       var overviewLiveSyncStarted = false;
       var overviewLiveSyncTimer = null;
       var appliedOverviewFp = '';
+      var actionBusy = false;
       // Safety-net only — t.render + visibilitychange already refresh on card changes.
       // A short interval re-ran getBadgeData/statut often and amplified API load.
       var LIVE_SYNC_POLL_MS = 30000;
-      if (openBtn) openBtn.textContent = 'Ouvrir ' + appName;
 
       function stableFp(value) {
         try {
@@ -116,6 +106,11 @@
             /* ignore */
           }
         }
+      }
+
+      function setBusy(on) {
+        actionBusy = !!on;
+        document.body.classList.toggle('tp-card-open-busy', actionBusy);
       }
 
       function loadAutoOpenPreference(t) {
@@ -193,6 +188,231 @@
             refreshOverview(t);
           }
         });
+      }
+
+      function tomorrowDueIso() {
+        if (
+          window.PriorityUI &&
+          typeof PriorityUI.resolveDueDateQuickSuggestion === 'function'
+        ) {
+          var resolved = PriorityUI.resolveDueDateQuickSuggestion('demain-matin');
+          if (resolved && resolved.iso) return resolved.iso;
+        }
+        var now = new Date();
+        var d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+        return (
+          d.getFullYear() +
+          '-' +
+          String(d.getMonth() + 1).padStart(2, '0') +
+          '-' +
+          String(d.getDate()).padStart(2, '0')
+        );
+      }
+
+      function withProgressEnabled(data) {
+        var next = Object.assign({}, data || { items: [] });
+        if (next.progressEnabled === false) delete next.progressEnabled;
+        return next;
+      }
+
+      function overviewCompleteCard(t) {
+        var CT = window.CompletionTrello;
+        if (!CT || typeof CT.getCardCompletion !== 'function') {
+          return Promise.reject(new Error('CompletionTrello unavailable'));
+        }
+        return CT.getCardCompletion(t).then(function (data) {
+          var next = withProgressEnabled(CT.markFullyComplete(data));
+          return CT.saveCardCompletion(t, next).then(function (saved) {
+            var chain = Promise.resolve(saved);
+            if (typeof CT.syncCardDueCompleteFromProgress === 'function') {
+              chain = chain.then(function () {
+                return CT.syncCardDueCompleteFromProgress(t, saved, {});
+              });
+            }
+            if (
+              window.StatutTrello &&
+              typeof StatutTrello.maybeAutoMoveForCompleted === 'function'
+            ) {
+              chain = chain.then(function () {
+                return StatutTrello.maybeAutoMoveForCompleted(t);
+              });
+            }
+            return chain;
+          });
+        });
+      }
+
+      function overviewUnblockCard(t) {
+        var CT = window.CompletionTrello;
+        var PT = window.PriorityTrello;
+        var completionStep = Promise.resolve();
+        if (CT && typeof CT.getCardCompletion === 'function') {
+          completionStep = CT.getCardCompletion(t).then(function (data) {
+            var next =
+              typeof CT.clearAllBlocked === 'function'
+                ? CT.clearAllBlocked(data)
+                : CT.setMasterBlocked(data, false);
+            return CT.saveCardCompletion(t, next);
+          });
+        }
+        return completionStep.then(function () {
+          if (!PT || typeof PT.getCardInputs !== 'function') return null;
+          return PT.getCardInputs(t).then(function (inputs) {
+            return PT.saveCardInputs(
+              t,
+              Object.assign({}, inputs || {}, {
+                enAttente: false,
+                blockedReasons: [],
+                blockedLinks: []
+              })
+            );
+          });
+        });
+      }
+
+      function overviewBlockWithReasons(t, reasons) {
+        var list =
+          window.PriorityUI && typeof PriorityUI.normalizeBlockedReasons === 'function'
+            ? PriorityUI.normalizeBlockedReasons(reasons)
+            : Array.isArray(reasons)
+              ? reasons.filter(Boolean)
+              : [];
+        if (!list.length) return Promise.resolve(false);
+
+        var CT = window.CompletionTrello;
+        var PT = window.PriorityTrello;
+        var completionStep = Promise.resolve();
+        if (CT && typeof CT.getCardCompletion === 'function') {
+          completionStep = CT.getCardCompletion(t).then(function (data) {
+            var next = withProgressEnabled(
+              CT.setMasterBlockedReasons(data, list, { origin: 'user' })
+            );
+            return CT.saveCardCompletion(t, next);
+          });
+        }
+        return completionStep.then(function () {
+          if (!PT || typeof PT.getCardInputs !== 'function') return null;
+          return PT.getCardInputs(t).then(function (inputs) {
+            return PT.saveCardInputs(
+              t,
+              Object.assign({}, inputs || {}, {
+                enAttente: true,
+                blockedReasons: list
+              })
+            );
+          });
+        });
+      }
+
+      function overviewPostponeDueTomorrow(t) {
+        var PT = window.PriorityTrello;
+        if (!PT || typeof PT.getCardInputs !== 'function') {
+          return Promise.reject(new Error('PriorityTrello unavailable'));
+        }
+        var iso = tomorrowDueIso();
+        return PT.getCardInputs(t).then(function (inputs) {
+          return PT.saveCardInputs(
+            t,
+            Object.assign({}, inputs || {}, {
+              dueDate: iso,
+              dueEnabled: true,
+              dueTime: (inputs && inputs.dueTime) || ''
+            })
+          );
+        });
+      }
+
+      function overviewAddSubtask(t, text) {
+        var label = typeof text === 'string' ? text.trim() : '';
+        if (!label) return Promise.resolve(false);
+        var CT = window.CompletionTrello;
+        if (!CT || typeof CT.getCardCompletion !== 'function') {
+          return Promise.reject(new Error('CompletionTrello unavailable'));
+        }
+        return CT.getCardCompletion(t).then(function (data) {
+          var item = CT.normalizeItem({
+            id: CT.generateId(),
+            text: label,
+            progress: 0
+          });
+          if (!item) return false;
+          var next = withProgressEnabled(
+            Object.assign({}, data || { items: [] }, {
+              items: ((data && data.items) || []).concat([item])
+            })
+          );
+          return CT.saveCardCompletion(t, next);
+        });
+      }
+
+      function overviewToggleTask(t, itemId) {
+        var id = itemId != null ? String(itemId) : '';
+        if (!id) return Promise.resolve(false);
+        var CT = window.CompletionTrello;
+        if (!CT || typeof CT.getCardCompletion !== 'function') {
+          return Promise.reject(new Error('CompletionTrello unavailable'));
+        }
+        return CT.getCardCompletion(t).then(function (data) {
+          var items = (data && data.items) || [];
+          var target = null;
+          for (var i = 0; i < items.length; i++) {
+            if (items[i] && String(items[i].id) === id) {
+              target = items[i];
+              break;
+            }
+          }
+          if (!target) return false;
+          var done =
+            !!target.done ||
+            (target.progress != null && Number(target.progress) >= 100);
+          var next = CT.applyItemProgress(data, id, done ? 0 : 100);
+          return CT.saveCardCompletion(t, next).then(function (saved) {
+            if (typeof CT.syncCardDueCompleteFromProgress === 'function') {
+              return CT.syncCardDueCompleteFromProgress(t, saved, {}).then(
+                function () {
+                  return saved;
+                }
+              );
+            }
+            return saved;
+          });
+        });
+      }
+
+      function handleOverviewAction(t, actionId, payload) {
+        if (actionBusy) return Promise.resolve(false);
+        var run = Promise.resolve(false);
+        if (actionId === 'complete') {
+          run = overviewCompleteCard(t);
+        } else if (actionId === 'unblock') {
+          run = overviewUnblockCard(t);
+        } else if (actionId === 'postpone-tomorrow') {
+          run = overviewPostponeDueTomorrow(t);
+        } else if (actionId === 'block') {
+          run = overviewBlockWithReasons(t, payload && payload.reasons);
+        } else if (actionId === 'add-subtask') {
+          run = overviewAddSubtask(t, payload && payload.text);
+        } else if (actionId === 'toggle-task') {
+          run = overviewToggleTask(t, payload && payload.id);
+        } else {
+          return Promise.resolve(false);
+        }
+
+        setBusy(true);
+        return run
+          .then(function () {
+            return refreshOverview(t, { force: true });
+          })
+          .catch(function (err) {
+            if (window.TpDebug) TpDebug.error('cardOpen', 'overview.action', err);
+            else console.error('Card-back overview action failed', err);
+            return false;
+          })
+          .then(function (result) {
+            setBusy(false);
+            resize(t);
+            return result;
+          });
       }
 
       function openCerveauModal(t, options) {
@@ -284,12 +504,16 @@
               else console.error('Cerveau modal open failed', err);
             });
           },
+          onAction: function (actionId, payload) {
+            handleOverviewAction(t, actionId, payload);
+          },
           onLayoutChange: function () {
             resize(t);
           }
         });
         if (overviewLoading) {
-          overviewLoading.textContent = 'R\u00e9cup\u00e9ration priorit\u00e9, progr\u00e8s et statut\u2026';
+          overviewLoading.textContent =
+            'R\u00e9cup\u00e9ration priorit\u00e9, progr\u00e8s et statut\u2026';
         }
 
         return PriorityTrello.getCardOverviewSnapshot(t)
@@ -316,15 +540,6 @@
         if (window.TpDebug && typeof TpDebug.configureFromProfile === 'function') {
           TpDebug.configureFromProfile(t).then(function (on) {
             if (on) TpDebug.log('cardOpen', 'page.init');
-          });
-        }
-
-        if (openBtn) {
-          openBtn.addEventListener('click', function () {
-            openCerveauModal(t, { force: true }).catch(function (err) {
-              if (window.TpDebug) TpDebug.error('cardOpen', 'modal.force', err);
-              else console.error('Cerveau modal open failed', err);
-            });
           });
         }
 
