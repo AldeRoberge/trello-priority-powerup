@@ -28,15 +28,13 @@ html[data-color-mode='dark']
   .tp-page--priority
   .agent-msg--assistant
   .agent-msg-bubble:not(.agent-msg-bubble--pending) {
-  background: var(--tp-elev-3, #2c333a);
+  background: color-mix(in srgb, #fff 6%, var(--tp-elev-1, #22272b));
+  border: none;
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-msg--user .agent-msg-bubble {
-  background: color-mix(
-    in srgb,
-    var(--tp-primary) 16%,
-    var(--tp-elev-3, #2c333a)
-  );
+  background: color-mix(in srgb, #fff 10%, var(--tp-elev-2, #282e33));
+  border: none;
 }
 
 .tp-page--priority .agent-settings-btn {
@@ -2409,7 +2407,7 @@ body.tp-page--priority.tp-page--assistant {
 
 .tp-page--priority .agent-msg-bubble {
   padding: 7px 10px;
-  border-radius: 8px;
+  border-radius: 6px;
   font-size: 13px;
   line-height: 1.4;
   white-space: pre-wrap;
@@ -2418,25 +2416,15 @@ body.tp-page--priority.tp-page--assistant {
 }
 
 .tp-page--priority .agent-msg--user .agent-msg-bubble {
-  /* Soft tint instead of solid primary — less glare in the Assistant rail */
-  background: color-mix(
-    in srgb,
-    var(--tp-primary) 18%,
-    var(--tp-elev-2, var(--tp-surface, var(--tp-bg)))
-  );
+  background: color-mix(in srgb, #fff 8%, var(--tp-elev-2, var(--tp-surface, var(--tp-bg))));
   color: var(--tp-text);
-  border: 1px solid
-    color-mix(in srgb, var(--tp-primary) 28%, var(--tp-border));
+  border: none;
   border-bottom-right-radius: 2px;
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-msg--user .agent-msg-bubble {
-  background: color-mix(
-    in srgb,
-    var(--tp-primary) 16%,
-    var(--tp-elev-3, #2c333a)
-  );
-  border-color: color-mix(in srgb, var(--tp-primary) 24%, var(--tp-border));
+  background: color-mix(in srgb, #fff 10%, var(--tp-elev-2, #282e33));
+  border: none;
 }
 
 .tp-page--priority .agent-msg--user.is-queued {
@@ -2448,13 +2436,12 @@ html[data-color-mode='dark'] .tp-page--priority .agent-msg--user .agent-msg-bubb
 }
 
 .tp-page--priority .agent-msg--assistant .agent-msg-bubble:not(.agent-msg-bubble--pending) {
-  /* Shrink beside the face instead of wrapping the whole bubble underneath. */
   flex: 0 1 auto;
   min-width: 0;
   max-width: calc(100% - 40px);
-  background: var(--tp-elev-3, var(--tp-surface-subtle));
+  background: color-mix(in srgb, #fff 6%, var(--tp-elev-1, var(--tp-surface-subtle)));
   color: var(--tp-text);
-  border: 1px solid var(--tp-border);
+  border: none;
   border-bottom-left-radius: 2px;
 }
 
@@ -4021,8 +4008,10 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
 }
 
 .tp-page--priority .agent-composer .tp-tab-complete-wrap:focus-within {
-  outline: 2px solid var(--tp-primary);
-  outline-offset: 1px;
+  outline: none;
+  outline-offset: 0;
+  box-shadow: 0 0 0 1px var(--tp-border-strong, rgba(255, 255, 255, 0.22));
+  border-radius: 6px;
 }
 
 .tp-page--priority .agent-composer .tp-tab-complete-ghost {
@@ -4037,9 +4026,9 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
   max-height: 96px;
   resize: vertical;
   padding: 7px 8px;
-  border: 1px solid var(--tp-border-strong);
-  border-radius: 3px;
-  background: var(--tp-elev-3, var(--tp-input-bg));
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: color-mix(in srgb, #fff 6%, transparent);
   color: var(--tp-text);
   font: inherit;
   font-size: 13px;
@@ -4050,12 +4039,14 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
   width: 100%;
   border: none;
   background: transparent;
-  border-radius: 3px;
+  border-radius: 6px;
 }
 
 .tp-page--priority .agent-composer-input:focus {
-  outline: 2px solid var(--tp-primary);
-  outline-offset: 1px;
+  outline: none;
+  border-color: var(--tp-border-strong, rgba(255, 255, 255, 0.22));
+  background: var(--tp-elev-2, var(--tp-input-bg));
+  box-shadow: 0 0 0 1px var(--tp-border-strong, rgba(255, 255, 255, 0.18));
 }
 
 .tp-page--priority .agent-composer .tp-tab-complete-wrap .agent-composer-input:focus {
@@ -4069,13 +4060,24 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
   gap: 6px;
   flex: 0 0 auto;
   align-self: stretch;
-  transition: background-color 0.18s ease, filter 0.18s ease;
+  border-radius: 6px;
+  background: color-mix(in srgb, #fff 12%, transparent) !important;
+  color: var(--tp-text) !important;
+  border: 1px solid var(--tp-border, rgba(255, 255, 255, 0.12));
+  transition: background-color 0.18s ease, filter 0.18s ease, border-color 0.12s ease;
+}
+
+.tp-page--priority .agent-send-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, #fff 16%, transparent) !important;
+  border-color: var(--tp-border-strong, rgba(255, 255, 255, 0.22));
+  filter: none;
 }
 
 /* Auto-send countdown (suggestion confirm) — distinct from idle Envoyer blue. */
 .tp-page--priority .agent-send-btn.is-confirming {
-  background: #22a06b;
-  color: #fff;
+  background: #22a06b !important;
+  color: #fff !important;
+  border-color: transparent;
 }
 
 .tp-page--priority .agent-send-btn.is-confirming:hover {

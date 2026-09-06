@@ -3078,13 +3078,16 @@
   function priorityTierDarkStyles(tierI) {
     var stopT = priorityStopTForTierIndex(tierI);
     var segRgb = priorityRgbAtStopT(stopT);
-    var seg = priorityRgbToHex(priorityLerpRgb(segRgb, { r: 255, g: 255, b: 255 }, 0.28));
-    var base = { r: 26, g: 37, b: 51 };
+    /* Desaturate toward DN charcoal so heat accents stay status-like, not chrome. */
+    var charcoal = { r: 143, g: 156, b: 171 };
+    var softSeg = priorityLerpRgb(segRgb, charcoal, 0.42);
+    var seg = priorityRgbToHex(priorityLerpRgb(softSeg, { r: 255, g: 255, b: 255 }, 0.18));
+    var base = { r: 40, g: 46, b: 51 };
     return {
       seg: seg,
-      fill: priorityRgbToHex(priorityLerpRgb(base, segRgb, 0.38)),
+      fill: priorityRgbToHex(priorityLerpRgb(base, softSeg, 0.2)),
       text: PRIORITY_TEXT_ON_DARK,
-      tint: priorityRgbToHex(priorityLerpRgb({ r: 20, g: 32, b: 48 }, segRgb, 0.42))
+      tint: priorityRgbToHex(base)
     };
   }
 
@@ -5828,16 +5831,17 @@
     blocked: { bg: 44, border: 52, panel: 46 } // Bloqué — deep crimson wash
   };
 
+  /* Dark: no card/panel wash — Trello flat charcoal (status color stays on badges/segs). */
   var TIER_SURFACE_MIX_DARK = {
-    0: { bg: 32, border: 42, panel: 24 },
-    1: { bg: 30, border: 40, panel: 22 },
-    2: { bg: 26, border: 36, panel: 18 },
-    3: { bg: 22, border: 32, panel: 14 },
-    4: { bg: 18, border: 28, panel: 12 },
-    5: { bg: 14, border: 24, panel: 10 },
-    6: { bg: 8, border: 18, panel: 8 },
-    inutile: { bg: 8, border: 20, panel: 12 },
-    blocked: { bg: 36, border: 46, panel: 32 }
+    0: { bg: 0, border: 0, panel: 0 },
+    1: { bg: 0, border: 0, panel: 0 },
+    2: { bg: 0, border: 0, panel: 0 },
+    3: { bg: 0, border: 0, panel: 0 },
+    4: { bg: 0, border: 0, panel: 0 },
+    5: { bg: 0, border: 0, panel: 0 },
+    6: { bg: 0, border: 0, panel: 0 },
+    inutile: { bg: 0, border: 0, panel: 0 },
+    blocked: { bg: 0, border: 0, panel: 0 }
   };
 
   function surfaceMixFor(tier) {

@@ -1585,12 +1585,12 @@ body.tp-page--priority.is-split-assistant {
 
 .tp-priority-card-header {
   flex-shrink: 0;
-  text-align: center;
+  text-align: left;
   padding: 0 0 12px;
 }
 
 .tp-page--priority .variant-card > .tp-priority-card-header {
-  padding: 0 0 8px;
+  padding: 0 8px 8px;
 }
 
 .tp-page--priority .variant-overview-section {
@@ -1721,9 +1721,9 @@ html[data-color-mode='dark'] .tp-page--priority .heat-score-tooltip {
 .tp-page--priority .info-labels-add-btn,
 .tp-page--priority .info-task-types-add-btn,
 .tp-page--priority .info-parent-pick-btn {
-  border-color: color-mix(in srgb, var(--tp-text, var(--text-primary)) 22%, transparent);
+  border-color: transparent;
   color: var(--tp-text-subtle, var(--text-secondary));
-  background: var(--tp-surface-subtle, var(--surface-1));
+  background: color-mix(in srgb, var(--tp-text, var(--text-primary)) 8%, transparent);
 }
 
 .tp-page--priority .info-labels-picker {
@@ -2213,26 +2213,29 @@ html[data-color-mode='dark'] .tp-page--priority .heat-score-tooltip {
 
 /* Soft surface language — heat, fields, blocked, due, graph share tint shells */
 .tp-page--priority .heat-panel {
-  padding: 12px;
-  border-radius: var(--radius, 12px);
+  padding: 8px 0 12px;
+  border-radius: 0;
+  background: transparent;
 }
 
 .tp-page--priority .heat-head {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   gap: 10px;
 }
 
 .tp-page--priority .heat-badge {
   margin: 0;
-  padding: 12px 16px;
-  border-radius: var(--radius, 12px);
-  grid-template-columns: auto minmax(min-content, 1fr);
+  padding: 5px 12px 5px 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  grid-template-columns: unset;
   box-shadow: none;
 }
 
 .tp-page--priority .heat-tier-desc {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 400;
 }
 
@@ -2242,13 +2245,13 @@ html[data-color-mode='dark'] .tp-page--priority .heat-score-tooltip {
 }
 
 .tp-page--priority .heat-badge-num {
-  font-size: 30px;
-  font-weight: 500;
+  font-size: 18px;
+  font-weight: 600;
 }
 
 .tp-page--priority .heat-badge-label {
-  font-size: 21px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   flex-wrap: wrap;
 }
 
