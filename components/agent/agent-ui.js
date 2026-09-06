@@ -1094,7 +1094,7 @@
 
     var composer = el('div', 'agent-composer');
     var input = el('textarea', 'agent-composer-input', {
-      rows: '2',
+      rows: standalone ? '4' : '2',
       placeholder: 'Demandez ce que vous voulez',
       'aria-label': 'Message \u00e0 l\'assistant'
     });
