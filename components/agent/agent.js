@@ -23,6 +23,7 @@
  *  5.  Provider CRUD (member-private), apiFetch, relative-due rewrites
  *  6.  Turn guards (due / why / progress-complete / Québec libre / highlights)
  *  7.  buildContext(bridge) — card snapshot for the system prompt
+ *      (+ humanProfileJobLines — character-sheet job in systemPrompt)
  *  8.  Heuristic + LLM suggest* helpers (subtasks, labels, goals, metrics…)
  *  9.  memoryTurn — board long-term / short-term memory chat
  * 10.  Card first-open interview (Akinator / Q20) + cardInterviewTurn
@@ -110,6 +111,8 @@
     set_agent_personality: true,
     upsert_person: true,
     remove_person: true,
+    upsert_place: true,
+    remove_place: true,
     trigger_effect: true
   };
   var DEFAULT_OPENAI_BASE = 'https://api.openai.com/v1';
@@ -394,7 +397,10 @@
     set_agent_color: 'Couleur de l\'assistant mise \u00e0 jour.',
     set_agent_personality: 'Personnalit\u00e9 de l\'assistant mise \u00e0 jour.',
     upsert_person: 'Personne mise \u00e0 jour.',
-    remove_person: 'Personne retir\u00e9e.'
+    remove_person: 'Personne retir\u00e9e.',
+    set_places: 'Lieux mis \u00e0 jour.',
+    upsert_place: 'Lieu mis \u00e0 jour.',
+    remove_place: 'Lieu retir\u00e9.'
   };
 
   var TASK_TYPE_IDS = [
@@ -862,12 +868,27 @@
       (Array.isArray(people) ? people.length : people.people && people.people.length)
     ) {
       try {
-        return global.People.resolveInText(normalized, people) || normalized;
-      } catch (e) {
-        return normalized;
-      }
+        normalized = global.People.resolveInText(normalized, people) || normalized;
+      } catch (e) { /* keep */ }
     }
     return normalized;
+  }
+
+  function resolveAliasesInText(text, people, places) {
+    var out = typeof text === 'string' ? text : '';
+    if (!out) return '';
+    if (
+      global.People &&
+      typeof global.People.resolveInText === 'function' &&
+      people &&
+      (Array.isArray(people) ? people.length : 0)
+    ) {
+      try {
+        out = global.People.resolveInText(out, people) || out;
+      } catch (e) { /* keep */ }
+    }
+    out = resolvePlacesInText(out, places);
+    return out;
   }
 
   function getPeopleFromBridge(bridge) {
@@ -881,6 +902,37 @@
       if (raw && Array.isArray(raw.people)) return raw.people;
     } catch (e) { /* ignore */ }
     return [];
+  }
+
+  function getPlacesFromBridge(bridge) {
+    if (!bridge || typeof bridge.getPlaces !== 'function') return [];
+    try {
+      var raw = bridge.getPlaces();
+      if (global.Places && typeof global.Places.normalizeDirectory === 'function') {
+        return global.Places.normalizeDirectory(raw).places;
+      }
+      if (Array.isArray(raw)) return raw;
+      if (raw && Array.isArray(raw.places)) return raw.places;
+    } catch (e) { /* ignore */ }
+    return [];
+  }
+
+  /** Resolve place aliases (chez moi → Maison) after People resolution. */
+  function resolvePlacesInText(text, places) {
+    if (typeof text !== 'string' || !text) return text || '';
+    if (
+      global.Places &&
+      typeof global.Places.resolveInText === 'function' &&
+      places &&
+      (Array.isArray(places) ? places.length : places.places && places.places.length)
+    ) {
+      try {
+        return global.Places.resolveInText(text, places) || text;
+      } catch (e) {
+        return text;
+      }
+    }
+    return text;
   }
 
   function ensureFollowUpActionVerb(label, actions) {
@@ -2783,7 +2835,9 @@
     'getFormulaKey',
     'getProfile',
     'getPeople',
+    'getPlaces',
     'getCustomAssigneeCatalog',
+    'getPlaceCatalog',
     'getMemory',
     'getCardMemory',
     'getBoardDigest',
@@ -2878,6 +2932,22 @@
         ctx.people = [];
       }
     }
+    if (typeof bridge.getPlaces === 'function') {
+      try {
+        var placesRaw = bridge.getPlaces();
+        if (global.Places && typeof global.Places.toAgentContext === 'function') {
+          ctx.placeDirectory = global.Places.toAgentContext(placesRaw);
+        } else if (Array.isArray(placesRaw)) {
+          ctx.placeDirectory = placesRaw;
+        } else if (placesRaw && Array.isArray(placesRaw.places)) {
+          ctx.placeDirectory = placesRaw.places;
+        } else {
+          ctx.placeDirectory = [];
+        }
+      } catch (e) {
+        ctx.placeDirectory = [];
+      }
+    }
     if (typeof bridge.getCustomAssigneeCatalog === 'function') {
       try {
         var horsCatalog = bridge.getCustomAssigneeCatalog();
@@ -2897,6 +2967,22 @@
             .slice(0, 40);
         }
       } catch (eCatCtx) { /* ignore */ }
+    }
+    if (typeof bridge.getPlaceCatalog === 'function') {
+      try {
+        var placeCat = bridge.getPlaceCatalog();
+        if (Array.isArray(placeCat) && placeCat.length) {
+          ctx.placeCatalog = placeCat
+            .map(function (p) {
+              if (!p || typeof p !== 'object') return null;
+              return { id: p.id || '', name: p.name || '' };
+            })
+            .filter(function (p) {
+              return p && p.name;
+            })
+            .slice(0, 40);
+        }
+      } catch (ePlaceCat) { /* ignore */ }
     }
     if (typeof bridge.getMemory === 'function') {
       try {
@@ -3138,6 +3224,15 @@
         }
         if (priForPeople.memberRoles && typeof priForPeople.memberRoles === 'object') {
           ctx.memberRoles = priForPeople.memberRoles;
+        }
+        if (priForPeople.places && typeof priForPeople.places === 'object') {
+          var placesNorm =
+            global.Places && typeof global.Places.normalizePlaces === 'function'
+              ? global.Places.normalizePlaces(priForPeople.places)
+              : priForPeople.places;
+          if (placesNorm && (placesNorm.from || placesNorm.to || placesNorm.at)) {
+            ctx.places = placesNorm;
+          }
         }
       } catch (ePe) { /* ignore */ }
     }
@@ -3626,6 +3721,91 @@
     );
   }
 
+  /**
+   * Job: build & maintain a real human "character sheet" (static + skills +
+   * dynamic state) and use it to evaluate / filter / recommend tasks.
+   * Persistence = board memory patches with stable prefixes (member pluginData
+   * is already crowded). Never invent values.
+   */
+  function humanProfileJobLines(isEn) {
+    if (isEn) {
+      return [
+        'Human profile (character sheet \u2014 core job, non-negotiable):',
+        '- Your job is to build and maintain a structured profile of the CURRENT USER: static identity, learned skills, biology, and real-time state. Use it to evaluate, filter, and recommend tasks intelligently WHEN they ask for help prioritizing or choosing what to do.',
+        '- Treat them like a character with stats, but every stat must map to something real and, ideally, self-reported or measurable. NEVER fabricate data. If you do not know a value: ask (conversationally) or mark it unknown. Do not invent numbers, ages, diagnoses, or money figures.',
+        '- Friend-first still applies: do NOT quiz them mid-task or dump a giant form. A few questions at a time. Skip or postpone sensitive topics if they decline. Never unsolicited productivity push.',
+        '- Persistence (important):',
+        '  \u00b7 Durable human facts \u2192 patches with op "remember" and prefix "Moi \u2014 \u2026" (board LTM). Examples: "Moi \u2014 Identit\u00e9: \u2026", "Moi \u2014 Biologie: \u2026", "Moi \u2014 Comp\u00e9tence: \u2026", "Moi \u2014 Famille: \u2026", "Moi \u2014 Finance: \u2026".',
+        '  \u00b7 Dynamic state (today) \u2192 patches with op "note" and prefix "\u00c9tat \u2014 \u2026" (short-term). Include the date when useful (context.today). Refresh when they update; do not treat stale \u00c9tat as truth forever.',
+        '  \u00b7 Prefer updating / replacing the same prefix over flooding memory with duplicates.',
+        '  \u00b7 context.profile.displayName / role / notes + Mon profil UI remain source of truth for name/role when set. Do not put general identity only in cardPatches.',
+        '  \u00b7 Family / people (parents, boss\u2026) can also use upsert_person when they are distinct contacts.',
+        '- Read context.memory (facts + short notes), context.profile, and context.people BEFORE re-asking something already answered.',
+        '1) Static profile (build once / fill gaps on first contact):',
+        '- If almost no "Moi \u2014" facts and no displayName: start gently, a few questions at a time (never a form dump).',
+        '- Identity: full name; date and time of birth (to the minute if known \u2014 enables exact age / circadian context); place of birth / current location.',
+        '- Parents: mother\'s current age (derive age at user birth when possible); father\'s current age, alive?, cause of death if relevant, alcoholism if self-reported. Sensitive: ask only with consent / when building the sheet; mark unknown if refused.',
+        '- Grandparents: living/deceased, ages if living, cause of death if known. Same sensitivity rules.',
+        '- Passive traits (genetic / slow-changing): family disease history / predispositions; metabolism type; blood type; pain tolerance (self-rated 1\u201310 or inferred over time, labeled inferred); allergies as specific trigger + severity + reaction ("elemental weaknesses" framing is OK in tone, keep facts precise).',
+        '- Physical descriptors (update periodically, not every session): height, weight, BMI / body-fat % if known; resting HR, blood pressure; bone density if known; flexibility/mobility; age as context (stats do NOT scale linearly with age \u2014 not a "level").',
+        '- Skill trees: languages, sports, instruments, trades, other learned abilities. Track proficiency, last practiced, practice frequency. Decay: unused for a long stretch \u2192 flag "rusty" and lower confidence until refreshed. Note plateau vs active improvement (diminishing returns).',
+        '2) Dynamic human state (user-configurable; ask with the suggested phrasing when a check-in fits):',
+        '- Energy (physical): glycogen/fatigue, desire to move \u2014 "How\'s your body feeling \u2014 energized, okay, drained?"',
+        '- Energy (mental/cognitive): working memory, processing speed, decision fatigue \u2014 "How\'s your head today \u2014 sharp, foggy, fried?"',
+        '- Mood: Great / Good / Okay / Bad.',
+        '- Sleep (last night): Great / Good / Okay / Bad.',
+        '- Hydration: Yes / Not really / No.',
+        '- Nutrition (ate well today?): Yes / No.',
+        '- Charisma / social battery: Low / Medium / High.',
+        '- Strength / grit (willingness for hard, tedious, unfun work right now): Low / Medium / High.',
+        '- Sickness / injury: free text + severity.',
+        '- Anxiety flags: optional free text about specific dread today.',
+        '- Money: cash/bank, savings, saving friction / issues if they share it. Never invent amounts.',
+        '3) Using the sheet for tasks:',
+        '- When they ask what to do / how to prioritize / whether something is realistic today: filter and recommend using known state + skills (e.g. low grit + fried head \u2192 avoid heavy cognitive slog; rusty skill \u2192 warn or suggest a warm-up).',
+        '- Cite only known facts. If a key stat is unknown and it would change the recommendation, ask one short question.',
+        '- Still no unsolicited "let\'s grind the board" pivots after small talk.'
+      ];
+    }
+    return [
+      'Profil humain (fiche personnage \u2014 job central, non n\u00e9gociable)\u00a0:',
+      '- Ton job est de construire et maintenir un profil structur\u00e9 de l\'utilisateur actuel\u00a0: identit\u00e9 statique, comp\u00e9tences apprises, biologie, et \u00e9tat en temps r\u00e9el. Tu t\'en sers pour \u00e9valuer, filtrer et recommander des t\u00e2ches intelligemment QUAND iel demande de l\'aide \u00e0 prioriser / choisir quoi faire.',
+      '- Traite-le comme un personnage avec des stats, mais chaque stat doit mapper \u00e0 quelque chose de r\u00e9el, id\u00e9alement auto-d\u00e9clar\u00e9 ou mesurable. N\'INVENTE JAMAIS de donn\u00e9es. Si tu ne connais pas une valeur\u00a0: demande (en conversation) ou marque unknown. Pas de chiffres, \u00e2ges, diagnostics ou montants invent\u00e9s.',
+      '- Ami d\'abord toujours\u00a0: pas de quiz au milieu d\'une t\u00e2che, jamais de formulaire g\u00e9ant. Quelques questions \u00e0 la fois. Sujets sensibles\u00a0: seulement avec consentement / si iel refuse, marque unknown. Z\u00e9ro push productivit\u00e9 non sollicit\u00e9.',
+      '- Persistance (important)\u00a0:',
+      '  \u00b7 Faits humains durables \u2192 patches op "remember" avec pr\u00e9fixe \u00ab\u00a0Moi \u2014 \u2026\u00a0\u00bb (m\u00e9moire long terme tableau). Ex.\u00a0: \u00ab\u00a0Moi \u2014 Identit\u00e9\u00a0: \u2026\u00a0\u00bb, \u00ab\u00a0Moi \u2014 Biologie\u00a0: \u2026\u00a0\u00bb, \u00ab\u00a0Moi \u2014 Comp\u00e9tence\u00a0: \u2026\u00a0\u00bb, \u00ab\u00a0Moi \u2014 Famille\u00a0: \u2026\u00a0\u00bb, \u00ab\u00a0Moi \u2014 Finance\u00a0: \u2026\u00a0\u00bb.',
+      '  \u00b7 \u00c9tat dynamique (aujourd\'hui) \u2192 patches op "note" avec pr\u00e9fixe \u00ab\u00a0\u00c9tat \u2014 \u2026\u00a0\u00bb (court terme). Inclure la date si utile (context.today). Rafra\u00eechir quand \u00e7a change\u00a0; un \u00c9tat p\u00e9rim\u00e9 n\'est pas la v\u00e9rit\u00e9 \u00e0 vie.',
+      '  \u00b7 Pr\u00e9f\u00e8re mettre \u00e0 jour / remplacer le m\u00eame pr\u00e9fixe plut\u00f4t que saturer la m\u00e9moire de doublons.',
+      '  \u00b7 context.profile.displayName / role / notes + UI Mon profil restent la source pour nom/r\u00f4le quand c\'est rempli. INTERDIT de mettre l\'identit\u00e9 g\u00e9n\u00e9rale seulement en cardPatches.',
+      '  \u00b7 Famille / contacts distincts\u00a0: upsert_person possible (parents, boss\u2026).',
+      '- Lis context.memory (faits + notes), context.profile et context.people AVANT de reposer une question d\u00e9j\u00e0 r\u00e9pondue.',
+      '1) Profil statique (construire une fois / combler les trous au premier contact)\u00a0:',
+      '- Si presque aucun fait \u00ab\u00a0Moi \u2014\u00a0\u00bb et pas de displayName\u00a0: commence doucement, quelques questions \u00e0 la fois (jamais un dump de formulaire).',
+      '- Identit\u00e9\u00a0: nom complet\u00a0; date et heure de naissance (\u00e0 la minute si connue \u2014 \u00e2ge exact / contexte circadien)\u00a0; lieu de naissance / localisation actuelle.',
+      '- Parents\u00a0: \u00e2ge actuel de la m\u00e8re (en d\u00e9duire l\'\u00e2ge \u00e0 la naissance de l\'utilisateur si possible)\u00a0; \u00e2ge du p\u00e8re, vivant?, cause de d\u00e9c\u00e8s si pertinente, alcoolisme si auto-d\u00e9clar\u00e9. Sensible\u00a0: seulement avec consentement / en construisant la fiche\u00a0; unknown si refus.',
+      '- Grands-parents\u00a0: vivants/d\u00e9c\u00e9d\u00e9s, \u00e2ges si vivants, cause de d\u00e9c\u00e8s si connue. M\u00eames r\u00e8gles de sensibilit\u00e9.',
+      '- Traits passifs (g\u00e9n\u00e9tiques / lents)\u00a0: ant\u00e9c\u00e9dents / pr\u00e9dispositions familiales\u00a0; m\u00e9tabolisme\u00a0; groupe sanguin\u00a0; tol\u00e9rance \u00e0 la douleur (auto 1\u201310 ou inf\u00e9r\u00e9e dans le temps, \u00e9tiquet\u00e9e inf\u00e9r\u00e9e)\u00a0; allergies = d\u00e9clencheur + s\u00e9v\u00e9rit\u00e9 + type de r\u00e9action (tu peux dire \u00ab\u00a0faiblesses \u00e9l\u00e9mentaires\u00a0\u00bb en ton, mais les faits restent pr\u00e9cis).',
+      '- Descripteurs physiques (mise \u00e0 jour p\u00e9riodique, pas chaque session)\u00a0: taille, poids, IMC / % graisse si connu\u00a0; FC repos, tension\u00a0; densit\u00e9 osseuse si connue\u00a0; flexibilit\u00e9/mobilit\u00e9\u00a0; \u00e2ge comme contexte (les stats ne scalent PAS lin\u00e9airement avec l\'\u00e2ge \u2014 ce n\'est pas un \u00ab\u00a0niveau\u00a0\u00bb).',
+      '- Arbres de comp\u00e9tences\u00a0: langues, sports, instruments, m\u00e9tiers, autres apprentissages. Suivre niveau, derni\u00e8re pratique, fr\u00e9quence. D\u00e9croissance\u00a0: longtemps inutilis\u00e9 \u2192 flag \u00ab\u00a0rouill\u00e9\u00a0\u00bb et baisse de confiance jusqu\'\u00e0 refresh. Noter plateau vs progression active (rendements d\u00e9croissants).',
+      '2) \u00c9tat humain dynamique (configurable\u00a0; demander avec les formulations ci-dessous quand un check-in colle)\u00a0:',
+      '- \u00c9nergie (physique)\u00a0: glycog\u00e8ne/fatigue, envie de bouger \u2014 \u00ab\u00a0Ton corps l\u00e0\u00a0: \u00e9nergis\u00e9, okay, \u00e0 plat?\u00a0\u00bb',
+      '- \u00c9nergie (mentale/cognitive)\u00a0: m\u00e9moire de travail, vitesse, fatigue d\u00e9cisionnelle \u2014 \u00ab\u00a0Ta t\u00eate aujourd\'hui\u00a0: sharp, brouillard, frite?\u00a0\u00bb',
+      '- Humeur\u00a0: Super / Bien / Okay / Mal.',
+      '- Sommeil (nuit derni\u00e8re)\u00a0: Super / Bien / Okay / Mal.',
+      '- Hydratation\u00a0: Oui / Pas vraiment / Non.',
+      '- Nutrition (bien mang\u00e9 aujourd\'hui?)\u00a0: Oui / Non.',
+      '- Charisme / batterie sociale\u00a0: Bas / Moyen / Haut.',
+      '- Force / grit (envie de faire du dur, ennuyeux, pas fun maintenant)\u00a0: Bas / Moyen / Haut.',
+      '- Maladie / blessure\u00a0: texte libre + s\u00e9v\u00e9rit\u00e9.',
+      '- Flags anxi\u00e9t\u00e9\u00a0: texte libre optionnel sur une crainte pr\u00e9cise aujourd\'hui.',
+      '- Argent\u00a0: liquidit\u00e9s/compte, \u00e9pargne, frictions / difficult\u00e9s \u00e0 \u00e9pargner s\'iel en parle. Jamais inventer de montants.',
+      '3) Utiliser la fiche pour les t\u00e2ches\u00a0:',
+      '- Quand iel demande quoi faire / comment prioriser / si c\'est r\u00e9aliste aujourd\'hui\u00a0: filtre et recommande avec l\'\u00e9tat + les comp\u00e9tences connus (ex. grit bas + t\u00eate frite \u2192 \u00e9viter le gros slog cognitif\u00a0; skill rouill\u00e9 \u2192 pr\u00e9venir ou proposer un \u00e9chauffement).',
+      '- Ne cite que des faits connus. Si une stat cl\u00e9 manque et changerait la reco, pose UNE question courte.',
+      '- Toujours interdit de pivoter en \u00ab\u00a0on s\'y met sur le board?\u00a0\u00bb apr\u00e8s du small talk.'
+    ];
+  }
+
   function systemPrompt(context, options) {
     options = options || {};
     var today = (context && context.today) || todayIsoLocal();
@@ -3659,6 +3839,16 @@
         ) || [];
       } catch (e) {
         peopleLines = [];
+      }
+    }
+    var placesLines = [];
+    if (global.Places && typeof global.Places.placesPromptLines === 'function') {
+      try {
+        placesLines = global.Places.placesPromptLines(
+          (context && context.placeDirectory) || []
+        ) || [];
+      } catch (ePl) {
+        placesLines = [];
       }
     }
     var profileIsEn = !!(context && context.profile && context.profile.language === 'en');
@@ -3753,7 +3943,7 @@
           '- INTERDIT de r\u00e9pondre \u00ab\u00a0rien dans le contexte\u00a0\u00bb si boardDigest liste d\u00e9j\u00e0 des cartes pertinentes.',
           '- INTERDIT cardPatches (pas de m\u00e9moire locale de carte). Utilise seulement patches (m\u00e9moire tableau / projet).',
           '- INTERDIT les outils carte\u00a0: set_priority, set_due, set_blocked, set_progress, set_task_types, add_subtask, rename_subtask, remove_subtask, toggle_subtask, set_subtask_progress, complete_all_subtasks, reset_progress, rename_card, set_description, set_statut, set_formula, set_project, point_at.',
-          '- Outils autoris\u00e9s\u00a0: set_agent_name, set_agent_color, set_agent_personality, upsert_person, remove_person, trigger_effect (+ patches m\u00e9moire).',
+          '- Outils autoris\u00e9s\u00a0: set_agent_name, set_agent_color, set_agent_personality, upsert_person, remove_person, upsert_place, remove_place, trigger_effect (+ patches m\u00e9moire).',
           '- Aide sur\u00a0: vue d\'ensemble du tableau, m\u00e9moire projet, qui fait quoi, normes d\'\u00e9quipe, prochaines priorit\u00e9s transversales, discussions hors d\'une carte pr\u00e9cise.',
           '- Si l\'utilisateur parle d\'une carte pr\u00e9cise\u00a0: conseille d\'ouvrir cette carte pour l\'\u00e9diter\u00a0; tu peux quand m\u00eame discuter / m\u00e9moriser des faits projet.',
           'Alignement souple\u00a0: tu es un ami avant d\'\u00eatre un outil. Tu aides sur le projet / tableau quand on te le demande, mais tu n\'es PAS limit\u00e9 \u00e0 Trello et tu ne pousses PAS le travail.'
@@ -3769,6 +3959,8 @@
       .concat(voiceLines)
       .concat(profileLines)
       .concat(peopleLines)
+      .concat(placesLines)
+      .concat(humanProfileJobLines(isEn))
       .concat(scopeLines)
       .concat([
       'Honn\u00eatet\u00e9 IA (non n\u00e9gociable)\u00a0:',
@@ -3952,8 +4144,10 @@
       '  Ex. {"op":"remember","text":"D\u00e9j\u00e0 fait\u00a0: \u2026"} / {"op":"remember","text":"Reste\u00a0: \u2026"}. 1\u20132 max par tour.',
       '- patches (projet / tableau)\u00a0: faits r\u00e9utilisables ailleurs (qui approuve, qui travaille sur quoi, normes \u00e9quipe, r\u00f4les, outils stables).',
       '  Ex. {"op":"remember","text":"Le service finances valide les achats logiciels"} ou {"op":"note","text":"\u2026"} si provisoire.',
+      '- Profil humain (fiche personnage)\u00a0: faits durables \u00ab\u00a0Moi \u2014 \u2026\u00a0\u00bb en patches remember\u00a0; \u00e9tat du jour \u00ab\u00a0\u00c9tat \u2014 \u2026\u00a0\u00bb en patches note. Voir section Profil humain ci-dessus.',
+      '  Ex. {"op":"remember","text":"Moi \u2014 Identit\u00e9: n\u00e9 1990-03-12 14:22, Montr\u00e9al"} / {"op":"note","text":"\u00c9tat \u2014 \u00e9nergie mentale: foggy (2026-09-06)"}',
       '- Si c\'est tr\u00e8s important et vrai au-del\u00e0 de cette carte \u2192 patches. Si \u00e7a ne sert qu\'\u00e0 CETTE carte \u2192 cardPatches.',
-      '- INTERDIT d\'y mettre l\'identit\u00e9 utilisateur g\u00e9n\u00e9rale (nom, r\u00f4le) en cardPatches \u2014 \u00e7a va en patches board.',
+      '- INTERDIT d\'y mettre l\'identit\u00e9 utilisateur g\u00e9n\u00e9rale (nom, r\u00f4le, biologie, comp\u00e9tences) en cardPatches \u2014 \u00e7a va en patches board (pr\u00e9fixe Moi \u2014).',
       '- Sers-toi de cardMemory et context.memory avant de reposer une question d\u00e9j\u00e0 r\u00e9pondue.',
       'Retours n\u00e9gatifs (pouce bas)\u00a0:',
       '- Si le message utilisateur commence par [Retour n\u00e9gatif \u2014 auto-correction]\u00a0: tu as fait une erreur.',
@@ -3993,6 +4187,7 @@
       '- Ex. assign\u00e9\u00a0: user \u00ab\u00a0assigne-moi\u00a0\u00bb \u2192 {"message":"Okay, tu es assign\u00e9.","suggestions":[],"followUps":[],"actions":[{"tool":"set_members","args":{"add":[{"id":"(context.ownership.you.id)"}]}}]} \u2014 remplace id par context.ownership.you.id r\u00e9el.',
       '- \u00c9tiquettes\u00a0: set_labels {add/remove/create}. create:{name,color?} si le label n\'existe pas encore sur le board.',
       '- Personnes hors Trello\u00a0: set_custom_assignees {add:["Sam"]}. Alias de context.people OK (ex. add:["ma boss"] \u2192 Jane Doe). R\u00f4les\u00a0: set_member_roles {matchText:"Alice", roles:["Montage","Sous-titres"]}.',
+      '- Lieux\u00a0: set_places {from?, to?, at?} (De / Vers / O\u00f9). Alias de context.placeDirectory OK (ex. at:"chez moi"). Annuaire\u00a0: upsert_place / remove_place.',
       '- Checklist (sous-sous-t\u00e2ches)\u00a0: add_checklist_item sous une sous-t\u00e2che locale (pas une carte li\u00e9e). Ex. {"tool":"add_checklist_item","args":{"parentMatchText":"Valider le devis","text":"Relire les chiffres"}}.',
       '- Historique\u00a0: history_undo / history_redo, ou history_revert {matchLabel:"Priorit\u00e9"} / {steps:1}.',
       '- Si l\'utilisateur donne un d\u00e9lai (\u00ab\u00a0dans N minutes/heures\u00a0\u00bb)\u00a0: APPLIQUE set_due avec relativeMinutes/relativeHours (+ dueEnabled:true) TOUT DE SUITE. Ne redemande pas date ni heure.',
@@ -4158,6 +4353,9 @@
       '- set_members: { add?: (string|{id?,matchText?,name?})[], remove?: (string|{id?,matchText?})[], clear?: boolean } (assigne / retire des membres du tableau\u00a0; match via context.boardMembers / ownership.members)',
       '- set_labels: { add?: (string|{id?,matchText?,name?,color?})[], remove?: (string|{id?,matchText?})[], create?: {name:string, color?:string}, clear?: boolean } (\u00e9tiquettes Trello\u00a0; match via context.boardLabels / labels)',
       '- set_custom_assignees: { add?: (string|{name})[], remove?: (string|{id?,matchText?})[], clear?: boolean } (personnes hors Trello sur la carte\u00a0; context.customAssignees + context.customAssigneeCatalog\u00a0; r\u00e9sout aussi context.people aliases)',
+      '- set_places: { from?: string|{name}|null, to?: string|{name}|null, at?: string|{name}|null, clear?: boolean } (lieux De/Vers/O\u00f9 sur la carte\u00a0; context.places + context.placeCatalog\u00a0; r\u00e9sout context.placeDirectory aliases)',
+      '- upsert_place: { name: string, kind?: string, aliases?: string[], notes?: string, matchText?: string, addAlias?: string } (annuaire Lieux membre\u00a0; context.placeDirectory)',
+      '- remove_place: { matchText|name|id: string } (retire un lieu de l\'annuaire)',
       '- set_member_roles: { matchText|memberId|name, roles: string[], clear?: boolean } (r\u00f4les\u00a0: subtitles|coloring|editing|music ou libell\u00e9s FR\u00a0; context.memberRoleCatalog)',
       '- add_checklist_item: { parentMatchText|parentId, text, done?, progress? } (sous-sous-t\u00e2che sous une sous-t\u00e2che locale)',
       '- remove_checklist_item / rename_checklist_item / set_checklist_progress: { parentMatchText|parentId, matchText|id, text?, progress? }',
@@ -4187,6 +4385,7 @@
       '- set_agent_personality: { personality: string } (trait de personnalit\u00e9 / character\u00a0; obligatoire, non vide, max ~400 car.\u00a0; persiste pour le membre)',
       '- upsert_person: { name: string, relation?: string, aliases?: string[], roles?: string[], email?: string, phone?: string, notes?: string, matchText?: string, addAlias?: string, addRole?: string } (annuaire Personnes membre\u00a0; context.people\u00a0; relation ex. \u00ab\u00a0ma boss\u00a0\u00bb\u00a0; cr\u00e9e ou met \u00e0 jour)',
       '- remove_person: { matchText|name|id: string } (retire une personne de l\'annuaire)',
+      '- upsert_place / remove_place / set_places\u00a0: voir lignes lieux ci-dessus',
       'Identit\u00e9 de l\'assistant (nom / couleur / personnalit\u00e9)\u00a0:',
       '- Tu PEUX changer ton nom, ta couleur d\'identit\u00e9 et ta personnalit\u00e9. INTERDIT de dire que tu ne peux pas / que tu gardes ton ancienne identit\u00e9.',
       '- Nom (set_agent_name)\u00a0: quand l\'utilisateur le demande (ou te laisse choisir), utilise set_agent_name.',
@@ -4242,8 +4441,8 @@
       '- Ex. population\u00a0: user \u00ab\u00a0Where does it say that this work impacts the whole population?\u00a0\u00bb \u2192 {"thinking":"Port\u00e9e impact=Population (3) dans Priorit\u00e9.","message":"Ici\u00a0: le curseur [[y:Impact]] / port\u00e9e, niveau [[y:Population]].","emotion":"lookUp","suggestions":["Et Global?","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"point_at","args":{"section":"priority","field":"impact","level":3}}]}',
       '- Ex. FR\u00a0: user \u00ab\u00a0O\u00f9 c\'est \u00e9crit que \u00e7a touche la population?\u00a0\u00bb \u2192 point_at section=priority field=impact level=3 + courte r\u00e9ponse.',
       '- Ex. \u00e9ch\u00e9ance\u00a0: user \u00ab\u00a0Montre-moi l\'\u00e9ch\u00e9ance\u00a0\u00bb \u2192 point_at section=due.',
-      'M\u00e9moire plateau\u00a0: utilise les faits/summary du contexte pour personnaliser (noms, projets, normes). Ne contredis pas la m\u00e9moire sans raison. Les notes de correction/pr\u00e9f\u00e9rence (ex. \u00ab\u00a0Pr\u00e9f\u00e9rence / correction\u00a0\u00bb) ont priorit\u00e9 sur une mauvaise r\u00e9ponse ant\u00e9rieure.',
-      'Profil utilisateur\u00a0: respecte context.profile (langue, ton, nom, r\u00f4le, notes, fonctionnalit\u00e9s actives).',
+      'M\u00e9moire plateau\u00a0: utilise les faits/summary du contexte pour personnaliser (noms, projets, normes, fiche Moi \u2014 / \u00c9tat \u2014). Ne contredis pas la m\u00e9moire sans raison. Les notes de correction/pr\u00e9f\u00e9rence (ex. \u00ab\u00a0Pr\u00e9f\u00e9rence / correction\u00a0\u00bb) ont priorit\u00e9 sur une mauvaise r\u00e9ponse ant\u00e9rieure.',
+      'Profil utilisateur\u00a0: respecte context.profile (langue, ton, nom, r\u00f4le, notes, fonctionnalit\u00e9s actives) ET la fiche humaine (Moi \u2014 / \u00c9tat \u2014 dans context.memory). N\'invente aucune stat manquante.',
       context && context.userName
         ? 'Pr\u00e9nom connu (context.userName)\u00a0: ' +
           context.userName +
@@ -7852,7 +8051,10 @@
       set_agent_color: true,
       set_agent_personality: true,
       upsert_person: true,
-      remove_person: true
+      remove_person: true,
+      upsert_place: true,
+      remove_place: true,
+      set_places: true
     };
     var droppedInterview = [];
     actions = actions.filter(function (a) {
@@ -8308,6 +8510,29 @@
         (typeof args.text === 'string' && !!args.text.trim())
       );
     }
+    if (action.tool === 'upsert_place') {
+      return (
+        (typeof args.name === 'string' && !!args.name.trim()) ||
+        (typeof args.matchText === 'string' && !!args.matchText.trim()) ||
+        (typeof args.id === 'string' && !!args.id.trim())
+      );
+    }
+    if (action.tool === 'remove_place') {
+      return (
+        (typeof args.matchText === 'string' && !!args.matchText.trim()) ||
+        (typeof args.name === 'string' && !!args.name.trim()) ||
+        (typeof args.id === 'string' && !!args.id.trim()) ||
+        (typeof args.text === 'string' && !!args.text.trim())
+      );
+    }
+    if (action.tool === 'set_places') {
+      return (
+        args.clear === true ||
+        Object.prototype.hasOwnProperty.call(args, 'from') ||
+        Object.prototype.hasOwnProperty.call(args, 'to') ||
+        Object.prototype.hasOwnProperty.call(args, 'at')
+      );
+    }
     if (action.tool === 'set_task_types') {
       var typeArgs =
         args.types != null
@@ -8377,6 +8602,15 @@
     }
     if (action.tool === 'remove_person') {
       return 'remove_person: matchText, name ou id requis';
+    }
+    if (action.tool === 'upsert_place') {
+      return 'upsert_place: name ou matchText requis';
+    }
+    if (action.tool === 'remove_place') {
+      return 'remove_place: matchText, name ou id requis';
+    }
+    if (action.tool === 'set_places') {
+      return 'set_places: from, to, at ou clear requis';
     }
     if (action.tool === 'set_task_types') {
       return (
@@ -15172,12 +15406,17 @@
         var blockedPartial = {};
         if (Array.isArray(args.blockedReasons)) {
           var peopleForReasons = getPeopleFromBridge(bridge);
+          var placesForReasons = getPlacesFromBridge(bridge);
           blockedPartial.blockedReasons = args.blockedReasons
             .filter(function (r) {
               return typeof r === 'string' && r.trim();
             })
             .map(function (r) {
-              return resolvePeopleInReason(r, peopleForReasons);
+              return resolveAliasesInText(
+                resolvePeopleInReason(r, peopleForReasons),
+                peopleForReasons,
+                placesForReasons
+              );
             })
             .filter(Boolean);
         }
@@ -15579,15 +15818,8 @@
           return { ok: false, tool: tool, error: 'Texte de sous-t\u00e2che requis' };
         }
         var peopleForSubtask = getPeopleFromBridge(bridge);
-        if (
-          peopleForSubtask.length &&
-          global.People &&
-          typeof global.People.resolveInText === 'function'
-        ) {
-          try {
-            text = global.People.resolveInText(text, peopleForSubtask) || text;
-          } catch (eResolveSub) { /* keep text */ }
-        }
+        var placesForSubtask = getPlacesFromBridge(bridge);
+        text = resolveAliasesInText(text, peopleForSubtask, placesForSubtask);
         var beforeAdd = snapshotCompletion(bridge);
         var data =
           typeof bridge.getCompletion === 'function'
@@ -15752,12 +15984,19 @@
           typeof CompletionTrello.setItemBlockedReasons === 'function'
         ) {
           var peopleForItemReasons = getPeopleFromBridge(bridge);
+          var placesForItemReasons = getPlacesFromBridge(bridge);
           var whyArg = args.blockedReasons
             .filter(function (r) {
               return typeof r === 'string' && r.trim();
             })
             .map(function (r) {
-              return resolvePeopleInReason(r, peopleForItemReasons) || String(r).trim();
+              return (
+                resolveAliasesInText(
+                  resolvePeopleInReason(r, peopleForItemReasons),
+                  peopleForItemReasons,
+                  placesForItemReasons
+                ) || String(r).trim()
+              );
             })
             .filter(Boolean);
           var itemHadMotifs =
@@ -16581,6 +16820,256 @@
             match: removeMatch,
             name:
               (personBeforeRemove && personBeforeRemove.name) || removeMatch
+          })
+        };
+      }
+      if (tool === 'upsert_place') {
+        if (typeof bridge.upsertPlace !== 'function') {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Annuaire Lieux indisponible'
+          };
+        }
+        var placePatch = {
+          name: typeof args.name === 'string' ? args.name.trim() : '',
+          matchText:
+            typeof args.matchText === 'string'
+              ? args.matchText.trim()
+              : typeof args.id === 'string'
+                ? args.id.trim()
+                : '',
+          kind: args.kind,
+          aliases: args.aliases,
+          notes: args.notes,
+          addAlias: args.addAlias
+        };
+        if (typeof args.id === 'string' && args.id.trim()) {
+          placePatch.id = args.id.trim();
+        }
+        if (!placePatch.name && !placePatch.matchText && !placePatch.id) {
+          return { ok: false, tool: tool, error: 'Nom ou matchText requis' };
+        }
+        var placesBeforeUpsert = getPlacesFromBridge(bridge);
+        var placeBeforeUpsert = null;
+        if (
+          global.Places &&
+          typeof global.Places.findByAliasOrName === 'function'
+        ) {
+          if (placePatch.id) {
+            for (var pli = 0; pli < placesBeforeUpsert.length; pli++) {
+              if (placesBeforeUpsert[pli].id === placePatch.id) {
+                placeBeforeUpsert = placesBeforeUpsert[pli];
+                break;
+              }
+            }
+          }
+          if (!placeBeforeUpsert && placePatch.matchText) {
+            placeBeforeUpsert = global.Places.findByAliasOrName(
+              placesBeforeUpsert,
+              placePatch.matchText
+            );
+          }
+          if (!placeBeforeUpsert && placePatch.name) {
+            placeBeforeUpsert = global.Places.findByAliasOrName(
+              placesBeforeUpsert,
+              placePatch.name
+            );
+          }
+        }
+        var upsertPlaceResult = await Promise.resolve(
+          bridge.upsertPlace(placePatch)
+        );
+        if (!upsertPlaceResult || !upsertPlaceResult.ok) {
+          return {
+            ok: false,
+            tool: tool,
+            error:
+              (upsertPlaceResult &&
+                (upsertPlaceResult.reason || upsertPlaceResult.error)) ||
+              'Mise \u00e0 jour lieu \u00e9chou\u00e9e'
+          };
+        }
+        if (
+          upsertPlaceResult.place &&
+          typeof bridge.upsertPlaceCatalog === 'function'
+        ) {
+          try {
+            var placeDraft =
+              global.Places && typeof global.Places.toCatalogEntry === 'function'
+                ? global.Places.toCatalogEntry(upsertPlaceResult.place)
+                : {
+                    id: upsertPlaceResult.place.id,
+                    name: upsertPlaceResult.place.name
+                  };
+            if (placeDraft && placeDraft.name) {
+              await Promise.resolve(bridge.upsertPlaceCatalog(placeDraft));
+            }
+          } catch (eSyncPlace) { /* non-fatal */ }
+        }
+        var placeAfterUpsert = upsertPlaceResult.place || null;
+        var placeCreated = !placeBeforeUpsert;
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: placeCreated
+            ? 'Lieu ajout\u00e9.'
+            : TOOL_LABELS.upsert_place,
+          detail: detailForTool(tool, null, null, null, null, args, {
+            name:
+              (placeAfterUpsert && placeAfterUpsert.name) || placePatch.name,
+            place: placeAfterUpsert,
+            before: placeBeforeUpsert,
+            created: placeCreated
+          })
+        };
+      }
+      if (tool === 'remove_place') {
+        if (typeof bridge.removePlace !== 'function') {
+          return {
+            ok: false,
+            tool: tool,
+            error: 'Annuaire Lieux indisponible'
+          };
+        }
+        var removePlaceMatch =
+          (typeof args.id === 'string' && args.id.trim()) ||
+          (typeof args.matchText === 'string' && args.matchText.trim()) ||
+          (typeof args.name === 'string' && args.name.trim()) ||
+          (typeof args.text === 'string' && args.text.trim()) ||
+          '';
+        if (!removePlaceMatch) {
+          return { ok: false, tool: tool, error: 'matchText / name / id requis' };
+        }
+        var placesBeforeRemove = getPlacesFromBridge(bridge);
+        var placeBeforeRemove = null;
+        if (
+          global.Places &&
+          typeof global.Places.findByAliasOrName === 'function'
+        ) {
+          if (typeof args.id === 'string' && args.id.trim()) {
+            for (var priP = 0; priP < placesBeforeRemove.length; priP++) {
+              if (placesBeforeRemove[priP].id === args.id.trim()) {
+                placeBeforeRemove = placesBeforeRemove[priP];
+                break;
+              }
+            }
+          }
+          if (!placeBeforeRemove) {
+            placeBeforeRemove = global.Places.findByAliasOrName(
+              placesBeforeRemove,
+              removePlaceMatch
+            );
+          }
+        }
+        var removePlaceResult = await Promise.resolve(
+          bridge.removePlace({
+            id: typeof args.id === 'string' ? args.id.trim() : '',
+            matchText: removePlaceMatch,
+            name: typeof args.name === 'string' ? args.name.trim() : ''
+          })
+        );
+        if (!removePlaceResult || !removePlaceResult.ok) {
+          return {
+            ok: false,
+            tool: tool,
+            error:
+              (removePlaceResult &&
+                (removePlaceResult.reason || removePlaceResult.error)) ||
+              'Suppression lieu \u00e9chou\u00e9e'
+          };
+        }
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.remove_place,
+          detail: detailForTool(tool, null, null, null, null, args, {
+            match: removePlaceMatch,
+            name:
+              (placeBeforeRemove && placeBeforeRemove.name) || removePlaceMatch
+          })
+        };
+      }
+      if (tool === 'set_places') {
+        if (typeof bridge.setPlaces !== 'function') {
+          return { ok: false, tool: tool, error: 'Lieux carte indisponibles' };
+        }
+        var placesDir = getPlacesFromBridge(bridge);
+        var stateForPlaces =
+          typeof bridge.getPriorityState === 'function'
+            ? bridge.getPriorityState() || {}
+            : {};
+        var currentPlaces =
+          global.Places && typeof global.Places.normalizePlaces === 'function'
+            ? global.Places.normalizePlaces(stateForPlaces.places)
+            : stateForPlaces.places && typeof stateForPlaces.places === 'object'
+              ? stateForPlaces.places
+              : {};
+        var nextPlaces = args.clear === true ? {} : Object.assign({}, currentPlaces);
+        function resolveSlot(spec) {
+          if (spec == null || spec === '' || spec === false) return null;
+          if (spec === true) return null;
+          var resolved =
+            global.Places && typeof global.Places.resolvePlaceSpec === 'function'
+              ? global.Places.resolvePlaceSpec(placesDir, spec)
+              : null;
+          if (resolved) return resolved;
+          var name =
+            typeof spec === 'string'
+              ? spec.trim()
+              : spec && typeof spec.name === 'string'
+                ? spec.name.trim()
+                : '';
+          if (!name) return null;
+          if (
+            typeof PriorityUI !== 'undefined' &&
+            typeof PriorityUI.createPlaceRef === 'function'
+          ) {
+            return PriorityUI.createPlaceRef(name);
+          }
+          return { id: 'place-temp-' + Math.random().toString(36).slice(2, 8), name: name };
+        }
+        if (Object.prototype.hasOwnProperty.call(args, 'from')) {
+          var fromRef = resolveSlot(args.from);
+          if (fromRef) nextPlaces.from = fromRef;
+          else delete nextPlaces.from;
+        }
+        if (Object.prototype.hasOwnProperty.call(args, 'to')) {
+          var toRef = resolveSlot(args.to);
+          if (toRef) nextPlaces.to = toRef;
+          else delete nextPlaces.to;
+        }
+        if (Object.prototype.hasOwnProperty.call(args, 'at')) {
+          var atRef = resolveSlot(args.at);
+          if (atRef) nextPlaces.at = atRef;
+          else delete nextPlaces.at;
+        }
+        if (
+          global.Places &&
+          typeof global.Places.normalizePlaces === 'function'
+        ) {
+          nextPlaces = global.Places.normalizePlaces(nextPlaces);
+        }
+        var setPlacesResult = await Promise.resolve(bridge.setPlaces(nextPlaces));
+        if (!setPlacesResult || setPlacesResult.ok === false) {
+          return {
+            ok: false,
+            tool: tool,
+            error:
+              (setPlacesResult &&
+                (setPlacesResult.reason || setPlacesResult.error)) ||
+              'Mise \u00e0 jour lieux \u00e9chou\u00e9e'
+          };
+        }
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          summary: TOOL_LABELS.set_places,
+          detail: detailForTool(tool, null, null, null, null, args, {
+            places: (setPlacesResult && setPlacesResult.places) || nextPlaces
           })
         };
       }
@@ -18096,6 +18585,7 @@
     normalizeProvider: normalizeProvider,
     detectMessageLanguage: detectMessageLanguage,
     systemPrompt: systemPrompt,
+    humanProfileJobLines: humanProfileJobLines,
     profileLanguageInstruction: profileLanguageInstruction,
     normalizeModelTier: normalizeModelTier,
     normalizeModelMode: normalizeModelMode,

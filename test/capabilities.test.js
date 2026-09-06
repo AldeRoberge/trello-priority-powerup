@@ -76,7 +76,7 @@ describe('PowerUpCapabilities', () => {
     });
     assert.equal(stub.status, 'stub-hit');
     assert.equal(stub.tone, 'error');
-    assert.match(stub.statusLabel, /décochez/i);
+    assert.match(stub.statusLabel, /pas nécessaire/i);
 
     const board = Caps.evaluate('board-buttons', probe, {
       nowMs: Date.parse('2026-07-20T15:05:00.000Z'),

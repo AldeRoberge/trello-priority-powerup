@@ -322,6 +322,7 @@
       getCardMemory: options.getCardMemory || function () { return null; },
       getProfile: options.getProfile || function () { return null; },
       getPeople: options.getPeople || function () { return null; },
+      getPlaces: options.getPlaces || function () { return null; },
       refreshPeople:
         typeof options.refreshPeople === 'function'
           ? options.refreshPeople
@@ -2369,6 +2370,55 @@
       return { ok: true, directory: next };
     };
 
+    bridge.upsertPlace = async function (patch) {
+      if (!global.Places || typeof global.Places.upsert !== 'function') {
+        return { ok: false, reason: 'places-unavailable' };
+      }
+      var current =
+        typeof bridge.getPlaces === 'function' ? bridge.getPlaces() : null;
+      var next = global.Places.upsert(current, patch || {});
+      if (typeof options.applyPlaces === 'function') {
+        await Promise.resolve(options.applyPlaces(next));
+      } else if (t && typeof global.Places.save === 'function') {
+        next = await global.Places.save(t, next);
+      }
+      var found = null;
+      if (patch && patch.name) {
+        found = global.Places.findByAliasOrName(next, patch.name);
+      } else if (patch && (patch.matchText || patch.id)) {
+        found = global.Places.findByAliasOrName(
+          next,
+          patch.matchText || patch.id
+        );
+      }
+      if (!found && next.places && next.places.length) {
+        found = next.places[next.places.length - 1];
+      }
+      return { ok: true, place: found, directory: next };
+    };
+
+    bridge.removePlace = async function (match) {
+      if (!global.Places || typeof global.Places.remove !== 'function') {
+        return { ok: false, reason: 'places-unavailable' };
+      }
+      var current =
+        typeof bridge.getPlaces === 'function' ? bridge.getPlaces() : null;
+      var beforeCount =
+        current && Array.isArray(current.places) ? current.places.length : 0;
+      var next = global.Places.remove(current, match || {});
+      var afterCount =
+        next && Array.isArray(next.places) ? next.places.length : 0;
+      if (afterCount === beforeCount) {
+        return { ok: false, reason: 'not-found' };
+      }
+      if (typeof options.applyPlaces === 'function') {
+        await Promise.resolve(options.applyPlaces(next));
+      } else if (t && typeof global.Places.save === 'function') {
+        next = await global.Places.save(t, next);
+      }
+      return { ok: true, directory: next };
+    };
+
     /**
      * Re-read member People from Trello so coworker phone/email/relation
      * edited in another window (profile) are visible on the next turn.
@@ -2396,6 +2446,29 @@
       }
     }
 
+    async function refreshPlacesDirectory() {
+      if (typeof bridge.refreshPlaces === 'function') {
+        try {
+          await bridge.refreshPlaces();
+          return;
+        } catch (e) { /* fall through */ }
+      }
+      if (!t || !global.Places || typeof global.Places.load !== 'function') {
+        return;
+      }
+      try {
+        var dir = await global.Places.load(t, {
+          maxAgeMs:
+            (global.Places && global.Places.AGENT_REFRESH_MAX_AGE_MS) || 5000
+        });
+        if (typeof options.applyPlaces === 'function') {
+          await Promise.resolve(options.applyPlaces(dir));
+        }
+      } catch (err) {
+        console.error('AgentUI refreshPlaces failed', err);
+      }
+    }
+
     /** Labels / members / board catalogs for buildContext — refresh before each turn. */
     async function hydrateCardContextCaches() {
       try {
@@ -2406,6 +2479,7 @@
     async function prepareTurnContext() {
       await Promise.all([
         refreshPeopleDirectory().catch(function () {}),
+        refreshPlacesDirectory().catch(function () {}),
         hydrateCardContextCaches()
       ]);
     }

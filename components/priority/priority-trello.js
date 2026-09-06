@@ -9,7 +9,7 @@
  * ──────────────
  * cardPriority (card/shared)     — axes + blocked + due meta
  * priorityFormula / colorScheme  — board/shared settings
- * customTaskTypes, memberRoleCatalog, customAssigneeCatalog — board catalogs
+ * customTaskTypes, memberRoleCatalog, customAssigneeCatalog, placeCatalog — board catalogs
  * cardDueSyncedIso / cardStartSyncedIso — conflict detection vs Trello dates
  *
  * Table of contents
@@ -32,6 +32,7 @@
   var CUSTOM_TASK_TYPES_KEY = 'customTaskTypes';
   var MEMBER_ROLE_CATALOG_KEY = 'memberRoleCatalog';
   var CUSTOM_ASSIGNEE_CATALOG_KEY = 'customAssigneeCatalog';
+  var PLACE_CATALOG_KEY = 'placeCatalog';
   // Last agreed Trello `due` ISO ('' = no due). Used for Échéance ↔ Dates conflict detection.
   var CARD_DUE_SYNCED_KEY = 'cardDueSyncedIso';
   // Last agreed Trello `start` ISO ('' = no start).
@@ -41,6 +42,7 @@
   var boardCustomTaskTypes = null;
   var boardMemberRoleCatalog = null;
   var boardCustomAssigneeCatalog = null;
+  var boardPlaceCatalog = null;
   var boardMatrixSettings = null;
   var boardContextAt = 0;
   var boardContextInflight = null;
@@ -493,6 +495,16 @@
       normalized.customAssignees = customAssignees;
     }
 
+    var places =
+      PUTypes && typeof PUTypes.normalizePlaces === 'function'
+        ? PUTypes.normalizePlaces(raw.places)
+        : raw.places && typeof raw.places === 'object' && !Array.isArray(raw.places)
+          ? raw.places
+          : {};
+    if (places && (places.from || places.to || places.at)) {
+      normalized.places = places;
+    }
+
     return normalized;
   }
 
@@ -564,6 +576,13 @@
     }
     if (Array.isArray(inputs.customAssignees) && inputs.customAssignees.length) {
       cleared.customAssignees = inputs.customAssignees.slice();
+    }
+    if (
+      inputs.places &&
+      typeof inputs.places === 'object' &&
+      (inputs.places.from || inputs.places.to || inputs.places.at)
+    ) {
+      cleared.places = inputs.places;
     }
     return cleared;
   }
@@ -821,6 +840,53 @@
       : [];
   }
 
+  async function getPlaceCatalog(t) {
+    var PU = priorityUI();
+    if (Array.isArray(boardPlaceCatalog)) {
+      return boardPlaceCatalog.slice();
+    }
+    try {
+      var stored = await t.get('board', 'shared', PLACE_CATALOG_KEY);
+      var list =
+        PU && typeof PU.normalizePlaceCatalog === 'function'
+          ? PU.normalizePlaceCatalog(stored)
+          : Array.isArray(stored)
+            ? stored
+            : [];
+      boardPlaceCatalog = list;
+      if (PU && typeof PU.setPlaceCatalog === 'function') {
+        PU.setPlaceCatalog(list);
+      }
+      return list.slice();
+    } catch (err) {
+      console.error('Priority place catalog load failed', err);
+      boardPlaceCatalog = boardPlaceCatalog || [];
+      return boardPlaceCatalog.slice();
+    }
+  }
+
+  async function savePlaceCatalog(t, raw) {
+    var PU = priorityUI();
+    var list =
+      PU && typeof PU.normalizePlaceCatalog === 'function'
+        ? PU.normalizePlaceCatalog(raw)
+        : Array.isArray(raw)
+          ? raw
+          : [];
+    boardPlaceCatalog = list;
+    if (PU && typeof PU.setPlaceCatalog === 'function') {
+      PU.setPlaceCatalog(list);
+    }
+    await t.set('board', 'shared', PLACE_CATALOG_KEY, list);
+    return list.slice();
+  }
+
+  function getCachedPlaceCatalog() {
+    return Array.isArray(boardPlaceCatalog)
+      ? boardPlaceCatalog.slice()
+      : [];
+  }
+
   async function preloadBoardPriorityContext(t) {
     return ensureBoardPriorityContext(t);
   }
@@ -849,6 +915,7 @@
       await getCustomTaskTypes(t);
       await getMemberRoleCatalog(t);
       await getCustomAssigneeCatalog(t);
+      await getPlaceCatalog(t);
       boardContextAt = Date.now();
       return settings;
     })().finally(function () {
@@ -4308,6 +4375,10 @@
     getCachedCustomAssigneeCatalog: getCachedCustomAssigneeCatalog,
     saveCustomAssigneeCatalog: saveCustomAssigneeCatalog,
     CUSTOM_ASSIGNEE_CATALOG_KEY: CUSTOM_ASSIGNEE_CATALOG_KEY,
+    getPlaceCatalog: getPlaceCatalog,
+    getCachedPlaceCatalog: getCachedPlaceCatalog,
+    savePlaceCatalog: savePlaceCatalog,
+    PLACE_CATALOG_KEY: PLACE_CATALOG_KEY,
     preloadBoardPriorityContext: preloadBoardPriorityContext,
     ensureBoardPriorityContext: ensureBoardPriorityContext,
     computeDisplay: computeDisplay,

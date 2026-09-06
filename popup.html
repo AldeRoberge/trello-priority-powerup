@@ -65,6 +65,7 @@
   <script src="./components/agent/agent-stats.js?v=stats-1"></script>
   <script src="./components/profile/user-profile.js?v=agent-identity-1"></script>
   <script src="./components/people/people.js?v=people-1"></script>
+  <script src="./components/places/places.js?v=places-1"></script>
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
   <script src="./components/shared/desc-meta.js?v=desc-meta-1"></script>
   <script src="./components/outlook/outlook-sync.js?v=desc-meta-1"></script>
@@ -226,6 +227,7 @@
       { id: 'memory', label: 'M\u00e9moire', detail: 'Chargement de la m\u00e9moire\u2026' },
       { id: 'profile', label: 'Profil', detail: 'Chargement du profil\u2026' },
       { id: 'people', label: 'Personnes', detail: 'Chargement des personnes\u2026' },
+      { id: 'places', label: 'Lieux', detail: 'Chargement des lieux\u2026' },
       { id: 'sync', label: '\u00c9ch\u00e9ances', detail: 'Synchronisation des \u00e9ch\u00e9ances\u2026' },
       { id: 'priority', label: 'Priorit\u00e9', detail: 'Chargement de la priorit\u00e9\u2026' },
       { id: 'info', label: 'Informations', detail: 'Chargement des informations\u2026' },
@@ -481,6 +483,7 @@
     let cachedCardMemory = null;
     let cachedProfile = null;
     let cachedPeople = null;
+    let cachedPlaces = null;
     let boardDigestCache = '';
     let latestMembersFp = '';
     let latestLabelsFp = '';
@@ -575,6 +578,9 @@
         },
         getPeople: function () {
           return cachedPeople;
+        },
+        getPlaces: function () {
+          return cachedPlaces;
         },
         getMemory: function () {
           return cachedMemory;
@@ -2665,6 +2671,15 @@
               : [];
         infoUi.setCustomAssignees(nextCustomAssignees);
       }
+      if (typeof infoUi.setPlaces === 'function') {
+        var nextPlaces =
+          PriorityUI && typeof PriorityUI.normalizePlaces === 'function'
+            ? PriorityUI.normalizePlaces(state.places)
+            : state.places && typeof state.places === 'object'
+              ? state.places
+              : {};
+        infoUi.setPlaces(nextPlaces);
+      }
       if (typeof infoUi.setDismissedTaskTypeSuggestions === 'function') {
         var nextDismissed =
           PriorityUI && typeof PriorityUI.normalizeTaskTypes === 'function'
@@ -3506,6 +3521,84 @@
             return { ok: true, changed: true, customAssigneeCatalog: saved };
           });
         },
+        onPlacesChange: function (nextPlaces) {
+          var map =
+            PriorityUI && typeof PriorityUI.normalizePlaces === 'function'
+              ? PriorityUI.normalizePlaces(nextPlaces)
+              : nextPlaces && typeof nextPlaces === 'object'
+                ? nextPlaces
+                : {};
+          var base =
+            (variant && typeof variant.getState === 'function'
+              ? variant.getState()
+              : null) ||
+            latestState ||
+            {};
+          var next = Object.assign({}, base, { places: map });
+          if (!(map.from || map.to || map.at)) delete next.places;
+          if (variant && typeof variant.setState === 'function') {
+            variant.setState(next, { preserveCollapse: true });
+          }
+          latestState = Object.assign({}, next);
+
+          var catalogPromise = Promise.resolve(null);
+          var refs = [];
+          if (map.from) refs.push(map.from);
+          if (map.to) refs.push(map.to);
+          if (map.at) refs.push(map.at);
+          if (
+            refs.length &&
+            PriorityUI &&
+            typeof PriorityUI.mergeIntoPlaceCatalog === 'function' &&
+            PriorityTrello &&
+            typeof PriorityTrello.savePlaceCatalog === 'function'
+          ) {
+            var mergedPlaces = PriorityUI.mergeIntoPlaceCatalog(refs);
+            if (mergedPlaces && mergedPlaces.changed) {
+              catalogPromise = Promise.resolve(
+                PriorityTrello.savePlaceCatalog(t, mergedPlaces.catalog)
+              ).then(function (saved) {
+                if (infoUi && typeof infoUi.setPlaceCatalog === 'function') {
+                  infoUi.setPlaceCatalog(saved);
+                }
+                return saved;
+              });
+            }
+          }
+
+          return catalogPromise.then(function () {
+            return Promise.resolve(saveState(next)).then(function () {
+              return commitHistoryNow('Lieux modifi\u00e9s').then(function () {
+                return {
+                  ok: true,
+                  changed: true,
+                  places: map,
+                };
+              });
+            });
+          });
+        },
+        onPlaceCatalogChange: function (nextCatalog) {
+          if (
+            !PriorityTrello ||
+            typeof PriorityTrello.savePlaceCatalog !== 'function'
+          ) {
+            return Promise.resolve({ ok: false });
+          }
+          return Promise.resolve(
+            PriorityTrello.savePlaceCatalog(t, nextCatalog)
+          ).then(function (saved) {
+            if (infoUi && typeof infoUi.setPlaceCatalog === 'function') {
+              infoUi.setPlaceCatalog(saved);
+            } else if (
+              PriorityUI &&
+              typeof PriorityUI.setPlaceCatalog === 'function'
+            ) {
+              PriorityUI.setPlaceCatalog(saved);
+            }
+            return { ok: true, changed: true, placeCatalog: saved };
+          });
+        },
         onLabelAdd: function (label) {
           if (!label || !label.id || !PriorityTrello.addCardLabel) {
             return Promise.resolve({ ok: false, reason: 'unavailable', changed: false });
@@ -4041,6 +4134,9 @@
         PriorityTrello.getCustomAssigneeCatalog
           ? PriorityTrello.getCustomAssigneeCatalog(t)
           : Promise.resolve([]),
+        PriorityTrello.getPlaceCatalog
+          ? PriorityTrello.getPlaceCatalog(t)
+          : Promise.resolve([]),
       ])
         .then(function (results) {
           var members = results[0] || [];
@@ -4053,6 +4149,7 @@
           var customTaskTypes = results[7] || [];
           var memberRoleCatalog = results[8] || [];
           var customAssigneeCatalog = results[9] || [];
+          var placeCatalog = results[10] || [];
           var childId = meCard && meCard.id ? String(meCard.id) : '';
           var hasRest =
             PriorityTrello.restClientOptions && !!PriorityTrello.restClientOptions();
@@ -4080,6 +4177,14 @@
           ) {
             PriorityUI.setCustomAssigneeCatalog(customAssigneeCatalog);
           }
+          if (infoUi && typeof infoUi.setPlaceCatalog === 'function') {
+            infoUi.setPlaceCatalog(placeCatalog);
+          } else if (
+            PriorityUI &&
+            typeof PriorityUI.setPlaceCatalog === 'function'
+          ) {
+            PriorityUI.setPlaceCatalog(placeCatalog);
+          }
           // Seed board catalog from people already on this card (migration).
           if (
             PriorityUI &&
@@ -4103,6 +4208,36 @@
                 })
                 .catch(function (err) {
                   console.error('Custom assignee catalog migration failed', err);
+                });
+            }
+          }
+          // Seed board place catalog from places already on this card.
+          if (
+            PriorityUI &&
+            typeof PriorityUI.mergeIntoPlaceCatalog === 'function' &&
+            PriorityTrello &&
+            typeof PriorityTrello.savePlaceCatalog === 'function'
+          ) {
+            var cardPlaceRefs = [];
+            var cardPlacesMap =
+              latestState && latestState.places && typeof latestState.places === 'object'
+                ? latestState.places
+                : {};
+            if (cardPlacesMap.from) cardPlaceRefs.push(cardPlacesMap.from);
+            if (cardPlacesMap.to) cardPlaceRefs.push(cardPlacesMap.to);
+            if (cardPlacesMap.at) cardPlaceRefs.push(cardPlacesMap.at);
+            var mergedPlacesBoot = PriorityUI.mergeIntoPlaceCatalog(cardPlaceRefs);
+            if (mergedPlacesBoot && mergedPlacesBoot.changed) {
+              Promise.resolve(
+                PriorityTrello.savePlaceCatalog(t, mergedPlacesBoot.catalog)
+              )
+                .then(function (saved) {
+                  if (infoUi && typeof infoUi.setPlaceCatalog === 'function') {
+                    infoUi.setPlaceCatalog(saved);
+                  }
+                })
+                .catch(function (err) {
+                  console.error('Place catalog migration failed', err);
                 });
             }
           }
@@ -6883,6 +7018,38 @@
         skipBootStep('people');
       }
 
+      beginBootStep('places');
+      if (window.Places) {
+        try {
+          cachedPlaces = await Places.load(t);
+        } catch (placesErr) {
+          console.error('Places.load failed', placesErr);
+          cachedPlaces =
+            window.Places && Places.emptyDirectory
+              ? Places.emptyDirectory()
+              : { version: 1, places: [], updatedAt: '' };
+        }
+        if (
+          cachedPlaces &&
+          PriorityUI &&
+          typeof PriorityUI.mergeIntoPlaceCatalog === 'function' &&
+          PriorityTrello &&
+          typeof PriorityTrello.savePlaceCatalog === 'function'
+        ) {
+          try {
+            var mergedDirPlaces = PriorityUI.mergeIntoPlaceCatalog(cachedPlaces);
+            if (mergedDirPlaces && mergedDirPlaces.changed) {
+              await PriorityTrello.savePlaceCatalog(t, mergedDirPlaces.catalog);
+            }
+          } catch (mergePlacesErr) {
+            console.error('Places catalog merge failed', mergePlacesErr);
+          }
+        }
+        completeBootStep('places');
+      } else {
+        skipBootStep('places');
+      }
+
       if (
         window.PriorityUI &&
         typeof PriorityUI.setTimeFormat === 'function' &&
@@ -7224,6 +7391,40 @@
               }
             }
             return cachedPeople;
+          },
+          getPlaces: function () {
+            return (
+              cachedPlaces || {
+                version: 1,
+                places: [],
+                updatedAt: ''
+              }
+            );
+          },
+          refreshPlaces: async function () {
+            if (!window.Places || typeof Places.load !== 'function') {
+              return cachedPlaces;
+            }
+            try {
+              cachedPlaces = await Places.load(t, {
+                maxAgeMs: Places.AGENT_REFRESH_MAX_AGE_MS || 5000
+              });
+            } catch (e) {
+              console.error('Places.refresh failed', e);
+            }
+            return cachedPlaces;
+          },
+          applyPlaces: async function (next) {
+            if (!next || typeof next !== 'object') return cachedPlaces;
+            cachedPlaces = next;
+            if (window.Places && typeof Places.save === 'function') {
+              try {
+                cachedPlaces = await Places.save(t, next);
+              } catch (savePlacesErr) {
+                console.error('Places.save failed', savePlacesErr);
+              }
+            }
+            return cachedPlaces;
           },
           getBoardDigest: function () {
             return boardDigestCache || '';
@@ -7650,6 +7851,109 @@
                   }
                 );
               });
+            });
+          },
+          setPlaces: function (nextPlaces) {
+            var map =
+              PriorityUI && typeof PriorityUI.normalizePlaces === 'function'
+                ? PriorityUI.normalizePlaces(nextPlaces)
+                : nextPlaces && typeof nextPlaces === 'object'
+                  ? nextPlaces
+                  : {};
+            var base =
+              (variant && typeof variant.getState === 'function'
+                ? variant.getState()
+                : null) ||
+              latestState ||
+              {};
+            var next = Object.assign({}, base, { places: map });
+            if (!(map.from || map.to || map.at)) delete next.places;
+            if (variant && typeof variant.setState === 'function') {
+              variant.setState(next, { preserveCollapse: true });
+            }
+            latestState = Object.assign({}, next);
+            if (infoUi && typeof infoUi.setPlaces === 'function') {
+              infoUi.setPlaces(map);
+            }
+            var catalogPromise = Promise.resolve(null);
+            var refs = [];
+            if (map.from) refs.push(map.from);
+            if (map.to) refs.push(map.to);
+            if (map.at) refs.push(map.at);
+            if (
+              refs.length &&
+              PriorityUI &&
+              typeof PriorityUI.mergeIntoPlaceCatalog === 'function' &&
+              PriorityTrello &&
+              typeof PriorityTrello.savePlaceCatalog === 'function'
+            ) {
+              var mergedAgentPlaces = PriorityUI.mergeIntoPlaceCatalog(refs);
+              if (mergedAgentPlaces && mergedAgentPlaces.changed) {
+                catalogPromise = Promise.resolve(
+                  PriorityTrello.savePlaceCatalog(t, mergedAgentPlaces.catalog)
+                ).then(function (saved) {
+                  if (infoUi && typeof infoUi.setPlaceCatalog === 'function') {
+                    infoUi.setPlaceCatalog(saved);
+                  } else if (
+                    PriorityUI &&
+                    typeof PriorityUI.setPlaceCatalog === 'function'
+                  ) {
+                    PriorityUI.setPlaceCatalog(saved);
+                  }
+                  return saved;
+                });
+              }
+            }
+            return catalogPromise.then(function () {
+              return Promise.resolve(saveState(next)).then(function () {
+                return commitHistoryNow('Lieux (assistant)').then(function () {
+                  return { ok: true, changed: true, places: map };
+                });
+              });
+            });
+          },
+          getPlaceCatalog: function () {
+            if (PriorityUI && typeof PriorityUI.getPlaceCatalog === 'function') {
+              return PriorityUI.getPlaceCatalog();
+            }
+            return [];
+          },
+          upsertPlaceCatalog: function (entry) {
+            if (
+              !PriorityUI ||
+              typeof PriorityUI.upsertPlaceCatalog !== 'function'
+            ) {
+              return Promise.resolve({ ok: false, reason: 'unavailable' });
+            }
+            var upserted = PriorityUI.upsertPlaceCatalog(entry);
+            if (!upserted) {
+              return Promise.resolve({ ok: false, reason: 'rejected' });
+            }
+            if (
+              !PriorityTrello ||
+              typeof PriorityTrello.savePlaceCatalog !== 'function'
+            ) {
+              return Promise.resolve({
+                ok: true,
+                changed: true,
+                entry: upserted,
+                persisted: false
+              });
+            }
+            return Promise.resolve(
+              PriorityTrello.savePlaceCatalog(t, PriorityUI.getPlaceCatalog())
+            ).then(function (saved) {
+              if (infoUi && typeof infoUi.setPlaceCatalog === 'function') {
+                infoUi.setPlaceCatalog(saved);
+              } else if (typeof PriorityUI.setPlaceCatalog === 'function') {
+                PriorityUI.setPlaceCatalog(saved);
+              }
+              return {
+                ok: true,
+                changed: true,
+                entry: upserted,
+                placeCatalog: saved
+              };
             });
           },
           getCustomAssigneeCatalog: function () {

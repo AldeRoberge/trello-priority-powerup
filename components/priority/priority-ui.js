@@ -1111,6 +1111,207 @@
   }
 
   /**
+   * Named places (De / Vers / Où).
+   * Board catalog: placeCatalog. Card: cardPriority.places { from?, to?, at? }.
+   */
+  var PLACE_ID_RE = /^place-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+  var MAX_PLACES_CATALOG = 40;
+  var MAX_PLACE_NAME_LEN = 80;
+  var PLACE_SLOTS = ['from', 'to', 'at'];
+  var placeCatalog = [];
+
+  function isPlaceId(id) {
+    return typeof id === 'string' && PLACE_ID_RE.test(id);
+  }
+
+  function slugifyPlaceName(name) {
+    return (
+      String(name || '')
+        .toLocaleLowerCase('fr-FR')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 28) || 'lieu'
+    );
+  }
+
+  function makePlaceId(name) {
+    return (
+      'place-' +
+      slugifyPlaceName(name) +
+      '-' +
+      Math.random().toString(36).slice(2, 6)
+    );
+  }
+
+  function normalizePlaceRef(raw) {
+    if (
+      global.Places &&
+      typeof global.Places.normalizePlaceRef === 'function'
+    ) {
+      return global.Places.normalizePlaceRef(raw);
+    }
+    if (!raw || typeof raw !== 'object') return null;
+    var name =
+      typeof raw.name === 'string'
+        ? raw.name.trim()
+        : typeof raw.label === 'string'
+          ? raw.label.trim()
+          : '';
+    if (!name) return null;
+    if (name.length > MAX_PLACE_NAME_LEN) {
+      name = name.slice(0, MAX_PLACE_NAME_LEN);
+    }
+    var id =
+      typeof raw.id === 'string' && isPlaceId(raw.id.trim())
+        ? raw.id.trim()
+        : makePlaceId(name);
+    return { id: id, name: name };
+  }
+
+  function normalizePlaces(raw) {
+    if (
+      global.Places &&
+      typeof global.Places.normalizePlaces === 'function'
+    ) {
+      return global.Places.normalizePlaces(raw);
+    }
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+    var out = {};
+    for (var i = 0; i < PLACE_SLOTS.length; i++) {
+      var slot = PLACE_SLOTS[i];
+      var ref = normalizePlaceRef(raw[slot]);
+      if (ref) out[slot] = ref;
+    }
+    return out;
+  }
+
+  function normalizePlaceCatalog(raw) {
+    var list = Array.isArray(raw) ? raw : [];
+    var out = [];
+    var seen = Object.create(null);
+    var seenName = Object.create(null);
+    for (var i = 0; i < list.length && out.length < MAX_PLACES_CATALOG; i++) {
+      var entry = normalizePlaceRef(list[i]);
+      if (!entry || seen[entry.id]) continue;
+      var nameKey = entry.name.toLocaleLowerCase('fr-FR');
+      if (seenName[nameKey]) continue;
+      seen[entry.id] = true;
+      seenName[nameKey] = true;
+      out.push({ id: entry.id, name: entry.name });
+    }
+    return out;
+  }
+
+  function createPlaceRef(input) {
+    var name =
+      typeof input === 'string'
+        ? input.trim()
+        : input && typeof input.name === 'string'
+          ? input.name.trim()
+          : '';
+    if (!name) return null;
+    return normalizePlaceRef({
+      name: name,
+      id:
+        input && typeof input === 'object' && typeof input.id === 'string'
+          ? input.id
+          : undefined
+    });
+  }
+
+  function getPlaceCatalog() {
+    return placeCatalog.slice();
+  }
+
+  function setPlaceCatalog(raw) {
+    placeCatalog = normalizePlaceCatalog(raw);
+    return placeCatalog.slice();
+  }
+
+  function findPlaceCatalogById(id) {
+    var key = id != null ? String(id) : '';
+    if (!key) return null;
+    for (var i = 0; i < placeCatalog.length; i++) {
+      if (String(placeCatalog[i].id) === key) return placeCatalog[i];
+    }
+    return null;
+  }
+
+  function findPlaceCatalogByName(name) {
+    var nameKey = String(name || '')
+      .trim()
+      .toLocaleLowerCase('fr-FR');
+    if (!nameKey) return null;
+    for (var i = 0; i < placeCatalog.length; i++) {
+      if (placeCatalog[i].name.toLocaleLowerCase('fr-FR') === nameKey) {
+        return placeCatalog[i];
+      }
+    }
+    return null;
+  }
+
+  function upsertPlaceCatalog(input) {
+    var draft =
+      input && typeof input === 'object' && isPlaceId(input.id)
+        ? normalizePlaceRef(input)
+        : createPlaceRef(input);
+    if (!draft) return null;
+
+    var byId = findPlaceCatalogById(draft.id);
+    var byName = findPlaceCatalogByName(draft.name);
+    var existing = byId || byName;
+    if (existing) {
+      var next = { id: existing.id, name: draft.name || existing.name };
+      var nextList = placeCatalog.map(function (item) {
+        return String(item.id) === String(existing.id) ? next : item;
+      });
+      placeCatalog = normalizePlaceCatalog(nextList);
+      return findPlaceCatalogById(existing.id) || next;
+    }
+
+    if (placeCatalog.length >= MAX_PLACES_CATALOG) return null;
+    placeCatalog = normalizePlaceCatalog(placeCatalog.concat([draft]));
+    return findPlaceCatalogById(draft.id) || draft;
+  }
+
+  function mergeIntoPlaceCatalog(entries) {
+    var before = JSON.stringify(placeCatalog);
+    var list = Array.isArray(entries) ? entries : [];
+    if (
+      global.Places &&
+      typeof global.Places.mergeIntoPlaceCatalog === 'function' &&
+      entries &&
+      !Array.isArray(entries) &&
+      Array.isArray(entries.places)
+    ) {
+      var merged = global.Places.mergeIntoPlaceCatalog(placeCatalog, entries);
+      placeCatalog = normalizePlaceCatalog(merged.catalog);
+      return {
+        changed: merged.changed,
+        catalog: getPlaceCatalog()
+      };
+    }
+    for (var i = 0; i < list.length; i++) {
+      var entry = normalizePlaceRef(list[i]);
+      if (!entry) continue;
+      if (findPlaceCatalogById(entry.id)) {
+        upsertPlaceCatalog(entry);
+        continue;
+      }
+      if (findPlaceCatalogByName(entry.name)) continue;
+      if (placeCatalog.length >= MAX_PLACES_CATALOG) break;
+      placeCatalog = normalizePlaceCatalog(placeCatalog.concat([entry]));
+    }
+    var catalog = getPlaceCatalog();
+    return {
+      changed: JSON.stringify(catalog) !== before,
+      catalog: catalog
+    };
+  }
+
+  /**
    * Display shape compatible with assignee chips (avatar / name / roles).
    */
   function customAssigneeToMember(entry, boardMembersList) {
@@ -10100,6 +10301,15 @@
     if (Array.isArray(config.customAssigneeCatalog)) {
       setCustomAssigneeCatalog(config.customAssigneeCatalog);
     }
+    var onPlacesChange =
+      typeof config.onPlacesChange === 'function' ? config.onPlacesChange : null;
+    var onPlaceCatalogChange =
+      typeof config.onPlaceCatalogChange === 'function'
+        ? config.onPlaceCatalogChange
+        : null;
+    if (Array.isArray(config.placeCatalog)) {
+      setPlaceCatalog(config.placeCatalog);
+    }
     var onLabelAdd =
       typeof config.onLabelAdd === 'function' ? config.onLabelAdd : null;
     var onLabelRemove =
@@ -10251,6 +10461,9 @@
     var memberRolesBusy = false;
     var memberRolesPickerMemberId = '';
     var customAssignees = normalizeCustomAssignees(config.customAssignees);
+    var cardPlaces = normalizePlaces(config.places);
+    var placesBusy = false;
+    var placesPickerSlot = '';
     if (Array.isArray(config.memberRoleCustoms)) {
       setMemberRoleCustoms(config.memberRoleCustoms);
     }
@@ -10694,6 +10907,79 @@
 
     membersRow.value.appendChild(membersWrap);
     body.appendChild(membersRow.row);
+
+    // ── Places (De / Vers / Où) ─────────────────────────────────────────
+    var PLACE_SLOT_LABELS = {
+      from: 'De',
+      to: 'Vers',
+      at: 'O\u00f9'
+    };
+    var placesRow = makeRow('places', 'Lieux', { icon: 'ti-map-pin' });
+    var placesWrap = document.createElement('div');
+    placesWrap.className = 'info-places-wrap';
+    placesWrap.setAttribute('aria-label', 'Lieux de la t\u00e2che');
+
+    var placesSlotsEl = document.createElement('div');
+    placesSlotsEl.className = 'info-places-slots';
+
+    var placesStatus = document.createElement('span');
+    placesStatus.className = 'info-desc-status';
+    placesStatus.setAttribute('aria-live', 'polite');
+
+    var placesPickerHost = document.createElement('div');
+    placesPickerHost.className = 'info-places-picker-host';
+    placesPickerHost.hidden = true;
+    var placesPicker = document.createElement('div');
+    placesPicker.className = 'info-places-picker';
+    placesPicker.setAttribute('role', 'listbox');
+    placesPicker.setAttribute('aria-label', 'Choisir un lieu');
+    placesPickerHost.appendChild(placesPicker);
+
+    placesWrap.appendChild(placesSlotsEl);
+    placesWrap.appendChild(placesStatus);
+    placesWrap.appendChild(placesPickerHost);
+    placesRow.value.appendChild(placesWrap);
+    body.appendChild(placesRow.row);
+
+    var placesSlotUi = {};
+    PLACE_SLOTS.forEach(function (slot) {
+      var slotEl = document.createElement('div');
+      slotEl.className = 'info-places-slot';
+      slotEl.setAttribute('data-slot', slot);
+
+      var labelEl = document.createElement('span');
+      labelEl.className = 'info-places-slot-label';
+      labelEl.textContent = PLACE_SLOT_LABELS[slot] || slot;
+
+      var chipHost = document.createElement('div');
+      chipHost.className = 'info-places-chip-host';
+
+      var addWrap = document.createElement('div');
+      addWrap.className = 'info-places-add-wrap';
+      var addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'info-places-add-btn';
+      addBtn.setAttribute(
+        'aria-label',
+        'Choisir ' + (PLACE_SLOT_LABELS[slot] || slot)
+      );
+      addBtn.title = PLACE_SLOT_LABELS[slot] || slot;
+      addBtn.setAttribute('aria-expanded', 'false');
+      addBtn.setAttribute('aria-haspopup', 'listbox');
+      addBtn.innerHTML = '<i class="ti ti-plus" aria-hidden="true"></i>';
+      addWrap.appendChild(addBtn);
+
+      slotEl.appendChild(labelEl);
+      slotEl.appendChild(chipHost);
+      slotEl.appendChild(addWrap);
+      placesSlotsEl.appendChild(slotEl);
+      placesSlotUi[slot] = {
+        slotEl: slotEl,
+        chipHost: chipHost,
+        addWrap: addWrap,
+        addBtn: addBtn
+      };
+    });
 
     // ── Inline feature mounts (Priorité / Progrès / Échéance) ───────────
     function makeInlineMountRow(key, labelText, icon) {
@@ -11739,6 +12025,290 @@
           onLayoutChange();
         });
     }
+
+    function setPlacesStatus(text, kind) {
+      applyInfoSaveStatus(placesStatus, text, kind);
+    }
+
+    function setPlacesPickerOpen(slot) {
+      var next = slot && PLACE_SLOTS.indexOf(slot) >= 0 ? slot : '';
+      placesPickerSlot = next;
+      placesPickerHost.hidden = !placesPickerSlot;
+      PLACE_SLOTS.forEach(function (s) {
+        var ui = placesSlotUi[s];
+        if (!ui) return;
+        var open = placesPickerSlot === s;
+        ui.addBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        ui.addWrap.classList.toggle('is-open', open);
+        ui.slotEl.classList.toggle('is-picker-open', open);
+      });
+      if (placesPickerSlot) {
+        if (placesPickerHost.parentNode !== placesSlotUi[placesPickerSlot].slotEl) {
+          placesSlotUi[placesPickerSlot].slotEl.appendChild(placesPickerHost);
+        }
+        renderPlacesPicker();
+      }
+      onLayoutChange();
+    }
+
+    function persistPlaceCatalog(nextList) {
+      var previous = getPlaceCatalog();
+      var list = normalizePlaceCatalog(nextList);
+      setPlaceCatalog(list);
+      if (!onPlaceCatalogChange) {
+        return Promise.resolve({
+          ok: true,
+          changed: false,
+          placeCatalog: list
+        });
+      }
+      return Promise.resolve(onPlaceCatalogChange(list))
+        .then(function (result) {
+          if (result && result.ok === false) {
+            setPlaceCatalog(previous);
+            return result;
+          }
+          if (result && Array.isArray(result.placeCatalog)) {
+            setPlaceCatalog(result.placeCatalog);
+          }
+          return (
+            result || {
+              ok: true,
+              changed: true,
+              placeCatalog: getPlaceCatalog()
+            }
+          );
+        })
+        .catch(function (err) {
+          console.error('Info place catalog save failed', err);
+          setPlaceCatalog(previous);
+          return { ok: false };
+        });
+    }
+
+    function persistPlaces(nextPlaces) {
+      var map = normalizePlaces(nextPlaces);
+      cardPlaces = map;
+      if (!onPlacesChange) {
+        renderPlaces();
+        onLayoutChange();
+        return Promise.resolve({ ok: true, changed: false, places: map });
+      }
+      placesBusy = true;
+      setPlacesStatus('', 'saving');
+      renderPlaces();
+      return Promise.resolve(onPlacesChange(map))
+        .then(function (result) {
+          placesBusy = false;
+          if (result && result.ok === false) {
+            setPlacesStatus('\u00c9chec de l\u2019enregistrement', 'error');
+            renderPlaces();
+            onLayoutChange();
+            return result;
+          }
+          if (result && result.places) {
+            cardPlaces = normalizePlaces(result.places);
+          }
+          setPlacesStatus('', 'ok');
+          setPlacesPickerOpen('');
+          renderPlaces();
+          setTimeout(function () {
+            if (placesStatus.classList.contains('is-ok')) {
+              setPlacesStatus('');
+            }
+          }, 1400);
+          onLayoutChange();
+          return result || { ok: true, changed: true, places: map };
+        })
+        .catch(function (err) {
+          placesBusy = false;
+          console.error('Info places save failed', err);
+          setPlacesStatus('\u00c9chec de l\u2019enregistrement', 'error');
+          renderPlaces();
+          onLayoutChange();
+        });
+    }
+
+    function clearPlaceSlot(slot) {
+      if (placesBusy || !onPlacesChange) return;
+      var next = normalizePlaces(cardPlaces);
+      delete next[slot];
+      persistPlaces(next);
+    }
+
+    function assignPlaceToSlot(slot, entry) {
+      if (placesBusy || !onPlacesChange || !entry || !entry.id && !entry.name) return;
+      var before = getPlaceCatalog();
+      var draft = upsertPlaceCatalog(entry) || normalizePlaceRef(entry);
+      if (!draft) return;
+      var catalogPromise = Promise.resolve(null);
+      var after = getPlaceCatalog();
+      if (JSON.stringify(before) !== JSON.stringify(after)) {
+        catalogPromise = persistPlaceCatalog(after);
+      }
+      catalogPromise.then(function () {
+        var next = normalizePlaces(cardPlaces);
+        next[slot] = { id: draft.id, name: draft.name };
+        return persistPlaces(next);
+      });
+    }
+
+    function addPlaceFromPicker(slot) {
+      if (placesBusy || !onPlacesChange) return;
+      var nameInput = placesPicker.querySelector('.info-places-create-input');
+      var name =
+        nameInput && typeof nameInput.value === 'string'
+          ? nameInput.value.trim()
+          : '';
+      if (!name) {
+        if (nameInput) nameInput.focus();
+        return;
+      }
+      assignPlaceToSlot(slot, { name: name });
+    }
+
+    function renderPlacesPicker() {
+      var slot = placesPickerSlot;
+      placesPicker.replaceChildren();
+      if (!slot) return;
+
+      var title = document.createElement('div');
+      title.className = 'info-places-picker-title';
+      title.textContent =
+        'Lieu \u00b7 ' + (PLACE_SLOT_LABELS[slot] || slot);
+      placesPicker.appendChild(title);
+
+      var catalog = getPlaceCatalog();
+      var list = document.createElement('div');
+      list.className = 'info-places-picker-list';
+      if (!catalog.length) {
+        var empty = document.createElement('p');
+        empty.className = 'info-places-picker-empty';
+        empty.textContent = 'Aucun lieu enregistr\u00e9.';
+        list.appendChild(empty);
+      } else {
+        catalog.forEach(function (entry) {
+          if (!entry || !entry.id) return;
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'info-places-picker-option';
+          btn.setAttribute('role', 'option');
+          btn.disabled = placesBusy;
+          var current = cardPlaces[slot];
+          if (current && String(current.id) === String(entry.id)) {
+            btn.classList.add('is-selected');
+            btn.setAttribute('aria-selected', 'true');
+          }
+          var icon = document.createElement('i');
+          icon.className = 'ti ti-map-pin';
+          icon.setAttribute('aria-hidden', 'true');
+          var text = document.createElement('span');
+          text.className = 'info-places-picker-option-text';
+          text.textContent = entry.name;
+          btn.appendChild(icon);
+          btn.appendChild(text);
+          btn.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            assignPlaceToSlot(slot, entry);
+          });
+          list.appendChild(btn);
+        });
+      }
+      placesPicker.appendChild(list);
+
+      var create = document.createElement('div');
+      create.className = 'info-places-create';
+      var createTitle = document.createElement('div');
+      createTitle.className = 'info-places-create-title';
+      createTitle.textContent = 'Nouveau lieu';
+      var nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.className = 'info-places-create-input';
+      nameInput.placeholder = 'Nom du lieu';
+      nameInput.maxLength = MAX_PLACE_NAME_LEN;
+      nameInput.autocomplete = 'off';
+      nameInput.addEventListener('click', function (event) {
+        event.stopPropagation();
+      });
+      nameInput.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          addPlaceFromPicker(slot);
+        }
+      });
+      var createBtn = document.createElement('button');
+      createBtn.type = 'button';
+      createBtn.className = 'info-places-create-btn';
+      createBtn.textContent = 'Ajouter';
+      createBtn.disabled = placesBusy;
+      createBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        addPlaceFromPicker(slot);
+      });
+      create.appendChild(createTitle);
+      create.appendChild(nameInput);
+      create.appendChild(createBtn);
+      placesPicker.appendChild(create);
+      setTimeout(function () {
+        try {
+          nameInput.focus();
+        } catch (e) {}
+      }, 0);
+    }
+
+    function renderPlaces() {
+      PLACE_SLOTS.forEach(function (slot) {
+        var ui = placesSlotUi[slot];
+        if (!ui) return;
+        ui.chipHost.replaceChildren();
+        ui.addBtn.disabled = placesBusy || !onPlacesChange;
+        var ref = cardPlaces[slot];
+        if (ref && ref.name) {
+          var chip = document.createElement('span');
+          chip.className = 'info-places-chip';
+          chip.title = ref.name;
+          var nameEl = document.createElement('span');
+          nameEl.className = 'info-places-chip-name';
+          nameEl.textContent = ref.name;
+          chip.appendChild(nameEl);
+          if (onPlacesChange) {
+            var clearBtn = document.createElement('button');
+            clearBtn.type = 'button';
+            clearBtn.className = 'info-places-chip-clear';
+            clearBtn.setAttribute('aria-label', 'Retirer ' + ref.name);
+            clearBtn.disabled = placesBusy;
+            clearBtn.innerHTML =
+              '<i class="ti ti-x" aria-hidden="true"></i>';
+            clearBtn.addEventListener('click', function (event) {
+              event.preventDefault();
+              event.stopPropagation();
+              clearPlaceSlot(slot);
+            });
+            chip.appendChild(clearBtn);
+          }
+          ui.chipHost.appendChild(chip);
+          ui.addWrap.hidden = true;
+        } else {
+          ui.addWrap.hidden = !onPlacesChange;
+        }
+      });
+      if (placesPickerSlot) renderPlacesPicker();
+    }
+
+    PLACE_SLOTS.forEach(function (slot) {
+      var ui = placesSlotUi[slot];
+      if (!ui) return;
+      ui.addBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (ui.addBtn.disabled) return;
+        setPlacesPickerOpen(placesPickerSlot === slot ? '' : slot);
+      });
+    });
+
+    renderPlaces();
 
     function addCustomAssigneeFromPicker() {
       if (membersBusy || !onCustomAssigneesChange) return;
@@ -15334,6 +15904,9 @@
       ) {
         setMemberRolesPickerOpen('');
       }
+      if (placesPickerSlot && !placesWrap.contains(event.target)) {
+        setPlacesPickerOpen('');
+      }
       if (labelsPickerOpen && !labelsAddWrap.contains(event.target)) {
         setLabelsPickerOpen(false);
       }
@@ -15609,6 +16182,22 @@
       },
       getCustomAssigneeCatalog: function () {
         return getCustomAssigneeCatalog();
+      },
+      setPlaces: function (next) {
+        cardPlaces = normalizePlaces(next);
+        renderPlaces();
+        onLayoutChange();
+      },
+      getPlaces: function () {
+        return normalizePlaces(cardPlaces);
+      },
+      setPlaceCatalog: function (list) {
+        setPlaceCatalog(list);
+        if (placesPickerSlot) renderPlacesPicker();
+        onLayoutChange();
+      },
+      getPlaceCatalog: function () {
+        return getPlaceCatalog();
       },
       setMemberRoles: function (map) {
         memberRoles = normalizeMemberRoles(map);
@@ -22655,6 +23244,18 @@
     mergeIntoCustomAssigneeCatalog: mergeIntoCustomAssigneeCatalog,
     customAssigneeToMember: customAssigneeToMember,
     mergeAssigneesForDisplay: mergeAssigneesForDisplay,
+    isPlaceId: isPlaceId,
+    normalizePlaceRef: normalizePlaceRef,
+    normalizePlaces: normalizePlaces,
+    normalizePlaceCatalog: normalizePlaceCatalog,
+    createPlaceRef: createPlaceRef,
+    getPlaceCatalog: getPlaceCatalog,
+    setPlaceCatalog: setPlaceCatalog,
+    findPlaceCatalogById: findPlaceCatalogById,
+    findPlaceCatalogByName: findPlaceCatalogByName,
+    upsertPlaceCatalog: upsertPlaceCatalog,
+    mergeIntoPlaceCatalog: mergeIntoPlaceCatalog,
+    PLACE_SLOTS: PLACE_SLOTS.slice(),
     MS_PER_DAY: MS_PER_DAY,
     MS_PER_HOUR: MS_PER_HOUR,
     MS_PER_MINUTE: MS_PER_MINUTE,

@@ -28,6 +28,7 @@
   <script src="./components/agent/agent-memory.js"></script>
   <script src="./components/profile/user-profile.js"></script>
   <script src="./components/people/people.js"></script>
+  <script src="./components/places/places.js"></script>
   <script src="./components/agent/memory-ui.js"></script>
   <script src="./components/agent/agent-stats.js?v=stats-1"></script>
   <script src="./components/agent/agent-ui.js"></script>
@@ -45,6 +46,7 @@
       var cachedMemory = null;
       var cachedProfile = null;
       var cachedPeople = null;
+      var cachedPlaces = null;
       var cachedDigest = '';
 
       function resize() {
@@ -77,6 +79,13 @@
           if (typeof People === 'undefined' || !People.load) return null;
           return People.load(t).then(function (directory) {
             cachedPeople = directory;
+            return directory;
+          });
+        })
+        .then(function () {
+          if (typeof Places === 'undefined' || !Places.load) return null;
+          return Places.load(t).then(function (directory) {
+            cachedPlaces = directory;
             return directory;
           });
         })
@@ -220,6 +229,40 @@
                 }
               }
               return cachedPeople;
+            },
+            getPlaces: function () {
+              return (
+                cachedPlaces || {
+                  version: 1,
+                  places: [],
+                  updatedAt: ''
+                }
+              );
+            },
+            refreshPlaces: async function () {
+              if (typeof Places === 'undefined' || !Places.load) {
+                return cachedPlaces;
+              }
+              try {
+                cachedPlaces = await Places.load(t, {
+                  maxAgeMs: Places.AGENT_REFRESH_MAX_AGE_MS || 5000
+                });
+              } catch (e) {
+                console.error('Places.refresh failed', e);
+              }
+              return cachedPlaces;
+            },
+            applyPlaces: async function (next) {
+              if (!next || typeof next !== 'object') return cachedPlaces;
+              cachedPlaces = next;
+              if (typeof Places !== 'undefined' && typeof Places.save === 'function') {
+                try {
+                  cachedPlaces = await Places.save(t, next);
+                } catch (e) {
+                  console.error('Places.save failed', e);
+                }
+              }
+              return cachedPlaces;
             },
             getBoardDigest: function () {
               return cachedDigest || '';

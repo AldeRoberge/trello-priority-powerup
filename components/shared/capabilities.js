@@ -231,7 +231,7 @@
       }
     } else if (seen) {
       status = 'stub-hit';
-      statusLabel = 'Appelée — décochez dans l’admin';
+      statusLabel = 'Activé mais pas nécessaire';
       tone = 'error';
     } else {
       status = 'idle-stub';
@@ -283,7 +283,7 @@
       requiredSeen + '/' + required.length + ' capacités requises observées',
     ];
     if (stubHits > 0) {
-      parts.push(stubHits + ' stub(s) à décocher');
+      parts.push(stubHits + ' activée(s) sans besoin');
     }
     return {
       ok: ok,

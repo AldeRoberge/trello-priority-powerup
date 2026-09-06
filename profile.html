@@ -12,6 +12,7 @@
   <script src="./components/priority/priority-trello.js"></script>
   <script src="./components/profile/user-profile.js"></script>
   <script src="./components/people/people.js"></script>
+  <script src="./components/places/places.js"></script>
   <link rel="stylesheet" href="./components/shared/trello-theme.css" />
 </head>
 <body class="tp-page tp-page--settings tp-page--profile">
@@ -101,6 +102,21 @@
     </div>
   </details>
 
+  <details class="tp-settings-section" id="placesSection" open>
+    <summary class="tp-settings-summary">
+      <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-map-pin"></i></span>
+      <span class="tp-settings-summary-title">Lieux</span>
+      <span class="tp-settings-summary-hint">Maison, bureau, chalet — pour l’assistant</span>
+    </summary>
+    <div class="tp-settings-body">
+      <div class="tp-people-toolbar">
+        <p class="tp-people-hint">L’assistant résout «&nbsp;chez moi&nbsp;» vers le vrai lieu sur De / Vers / Où.</p>
+        <button type="button" class="tp-button tp-button--secondary" id="placesAddBtn">Ajouter</button>
+      </div>
+      <div class="tp-people-list" id="placesList" role="list" aria-label="Annuaire de lieux"></div>
+    </div>
+  </details>
+
   <details class="tp-settings-section" id="featuresSection" open>
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-layout-navbar"></i></span>
@@ -128,6 +144,7 @@
       }
       var Profile = window.UserProfile;
       var PeopleApi = window.People;
+      var PlacesApi = window.Places;
       if (!Profile) {
         if (window.TpDebug) TpDebug.error('profile', 'missing', new Error('UserProfile missing'));
         else console.error('UserProfile missing');
@@ -146,6 +163,11 @@
         : { version: 1, people: [], updatedAt: '' };
       var peopleEditingId = null;
       var peopleSaveTimer = null;
+      var placesDirectory = PlacesApi
+        ? PlacesApi.emptyDirectory()
+        : { version: 1, places: [], updatedAt: '' };
+      var placesEditingId = null;
+      var placesSaveTimer = null;
 
       function resize() {
         if (typeof t.sizeTo === 'function') {
@@ -643,6 +665,288 @@
         });
       }
 
+      /* —— Places directory UI —— */
+      function schedulePlacesSave() {
+        if (!PlacesApi) return;
+        clearTimeout(placesSaveTimer);
+        placesSaveTimer = setTimeout(function () {
+          persistPlaces(true).catch(function () {});
+        }, 450);
+      }
+
+      async function persistPlaces(showOk) {
+        if (!PlacesApi) return placesDirectory;
+        try {
+          placesDirectory = await PlacesApi.save(t, placesDirectory);
+          if (
+            window.PriorityTrello &&
+            typeof PriorityTrello.getPlaceCatalog === 'function' &&
+            typeof PriorityTrello.savePlaceCatalog === 'function' &&
+            typeof PlacesApi.mergeIntoPlaceCatalog === 'function'
+          ) {
+            try {
+              var catalog = await PriorityTrello.getPlaceCatalog(t);
+              var merged = PlacesApi.mergeIntoPlaceCatalog(
+                catalog,
+                placesDirectory
+              );
+              if (merged && merged.changed) {
+                await PriorityTrello.savePlaceCatalog(t, merged.catalog);
+              }
+            } catch (syncErr) {
+              console.error('Places → catalog sync failed', syncErr);
+            }
+          }
+          renderPlacesList();
+          if (showOk) setStatus('Lieux enregistrés.');
+          return placesDirectory;
+        } catch (err) {
+          console.error('Places.save failed', err);
+          setStatus('Enregistrement des lieux impossible.', true);
+          throw err;
+        }
+      }
+
+      function renderPlacesList() {
+        var list = document.getElementById('placesList');
+        if (!list || !PlacesApi) return;
+        list.replaceChildren();
+        var places = (placesDirectory && placesDirectory.places) || [];
+
+        if (placesEditingId === '__new__') {
+          list.appendChild(buildPlacesEditor(null));
+        }
+
+        if (!places.length && placesEditingId !== '__new__') {
+          var empty = document.createElement('p');
+          empty.className = 'tp-people-empty';
+          empty.textContent =
+            'Aucun lieu pour l’instant. Ajoute ta maison, ton bureau, le chalet… ou laisse l’assistant te demander.';
+          list.appendChild(empty);
+          resize();
+          return;
+        }
+
+        places.forEach(function (place) {
+          if (placesEditingId === place.id) {
+            list.appendChild(buildPlacesEditor(place));
+          } else {
+            list.appendChild(buildPlacesCard(place));
+          }
+        });
+        resize();
+      }
+
+      function buildPlacesCard(place) {
+        var card = document.createElement('div');
+        card.className = 'tp-people-card';
+        card.setAttribute('role', 'listitem');
+
+        var avatar = document.createElement('span');
+        avatar.className = 'tp-people-avatar';
+        avatar.setAttribute('aria-hidden', 'true');
+        avatar.innerHTML = '<i class="ti ti-map-pin" aria-hidden="true"></i>';
+        card.appendChild(avatar);
+
+        var body = document.createElement('div');
+        body.className = 'tp-people-body';
+
+        var nameRow = document.createElement('div');
+        nameRow.className = 'tp-people-name-row';
+        var nameEl = document.createElement('span');
+        nameEl.className = 'tp-people-name';
+        nameEl.textContent = place.name;
+        nameRow.appendChild(nameEl);
+        if (place.kind) {
+          var kindChip = document.createElement('span');
+          kindChip.className = 'tp-people-role-chip';
+          kindChip.textContent = place.kind;
+          nameRow.appendChild(kindChip);
+        }
+        body.appendChild(nameRow);
+
+        if (place.notes) {
+          var metaEl = document.createElement('div');
+          metaEl.className = 'tp-people-meta';
+          metaEl.textContent = place.notes;
+          body.appendChild(metaEl);
+        }
+
+        if (place.aliases && place.aliases.length) {
+          var aliases = document.createElement('div');
+          aliases.className = 'tp-people-aliases';
+          place.aliases.slice(0, 8).forEach(function (a) {
+            var chip = document.createElement('span');
+            chip.className = 'tp-people-alias-chip';
+            chip.textContent = a;
+            aliases.appendChild(chip);
+          });
+          body.appendChild(aliases);
+        }
+
+        card.appendChild(body);
+
+        var actions = document.createElement('div');
+        actions.className = 'tp-people-actions';
+        var editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'tp-people-icon-btn';
+        editBtn.title = 'Modifier';
+        editBtn.setAttribute('aria-label', 'Modifier ' + place.name);
+        editBtn.innerHTML = '<i class="ti ti-pencil" aria-hidden="true"></i>';
+        editBtn.addEventListener('click', function () {
+          placesEditingId = place.id;
+          renderPlacesList();
+        });
+        actions.appendChild(editBtn);
+
+        var delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'tp-people-icon-btn is-danger';
+        delBtn.title = 'Supprimer';
+        delBtn.setAttribute('aria-label', 'Supprimer ' + place.name);
+        delBtn.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
+        delBtn.addEventListener('click', function () {
+          placesDirectory = PlacesApi.remove(placesDirectory, { id: place.id });
+          if (placesEditingId === place.id) placesEditingId = null;
+          renderPlacesList();
+          schedulePlacesSave();
+        });
+        actions.appendChild(delBtn);
+        card.appendChild(actions);
+        return card;
+      }
+
+      function buildPlacesEditor(place) {
+        var card = document.createElement('div');
+        card.className = 'tp-people-card is-editing';
+        card.setAttribute('role', 'listitem');
+
+        var editor = document.createElement('div');
+        editor.className = 'tp-people-editor';
+
+        function field(labelText, id, opts) {
+          opts = opts || {};
+          var label = document.createElement('label');
+          label.className = 'tp-profile-field';
+          var span = document.createElement('span');
+          span.className = 'tp-profile-field-label';
+          span.textContent = labelText;
+          label.appendChild(span);
+          var input = document.createElement(opts.textarea ? 'textarea' : 'input');
+          input.className = opts.textarea ? 'tp-input tp-textarea' : 'tp-input';
+          input.id = id;
+          if (!opts.textarea) {
+            input.type = opts.type || 'text';
+            input.autocomplete = opts.autocomplete || 'off';
+          } else {
+            input.rows = opts.rows || 2;
+          }
+          if (opts.maxlength) input.maxLength = opts.maxlength;
+          if (opts.placeholder) input.placeholder = opts.placeholder;
+          if (opts.value) input.value = opts.value;
+          label.appendChild(input);
+          if (opts.hint) {
+            var hint = document.createElement('p');
+            hint.className = 'tp-people-chip-input-hint';
+            hint.textContent = opts.hint;
+            label.appendChild(hint);
+          }
+          editor.appendChild(label);
+          return input;
+        }
+
+        var nameInput = field('Nom', 'placesEditName', {
+          value: (place && place.name) || '',
+          placeholder: 'ex. Maison Montréal',
+          maxlength: PlacesApi.MAX_NAME
+        });
+        var kindInput = field('Type', 'placesEditKind', {
+          value: (place && place.kind) || '',
+          placeholder: 'ex. maison, travail, chalet',
+          hint: 'L’assistant s’en sert pour « chez moi » / « au bureau ».',
+          maxlength: PlacesApi.MAX_KIND || 40
+        });
+        var aliasesInput = field('Alias (optionnel)', 'placesEditAliases', {
+          value: (function () {
+            if (!place || !place.aliases || !place.aliases.length) return '';
+            var seeded = {};
+            if (PlacesApi.aliasesFromKind && place.kind) {
+              PlacesApi.aliasesFromKind(place.kind).forEach(function (s) {
+                seeded[String(s).toLowerCase()] = true;
+              });
+            }
+            return place.aliases
+              .filter(function (a) {
+                return !seeded[String(a).toLowerCase()];
+              })
+              .join(', ');
+          })(),
+          placeholder: 'ex. chez nous, le chalet',
+          hint: 'Surnoms en plus du type.',
+          maxlength: 200
+        });
+        var notesInput = field('Notes', 'placesEditNotes', {
+          textarea: true,
+          value: (place && place.notes) || '',
+          placeholder: 'ex. Clé sous le paillasson…',
+          maxlength: PlacesApi.MAX_NOTES
+        });
+
+        var actions = document.createElement('div');
+        actions.className = 'tp-people-editor-actions';
+        var saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.className = 'tp-button';
+        saveBtn.textContent = 'Enregistrer';
+        saveBtn.addEventListener('click', function () {
+          var name = nameInput.value.trim();
+          if (!name) {
+            setStatus('Le nom est obligatoire.', true);
+            nameInput.focus();
+            return;
+          }
+          var patch = {
+            name: name,
+            kind: kindInput.value.trim(),
+            aliases: splitChipField(aliasesInput.value),
+            notes: notesInput.value.trim()
+          };
+          if (place && place.id) patch.id = place.id;
+          placesDirectory = PlacesApi.upsert(placesDirectory, patch);
+          placesEditingId = null;
+          renderPlacesList();
+          schedulePlacesSave();
+        });
+        actions.appendChild(saveBtn);
+
+        var cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'tp-button tp-button--secondary';
+        cancelBtn.textContent = 'Annuler';
+        cancelBtn.addEventListener('click', function () {
+          placesEditingId = null;
+          renderPlacesList();
+        });
+        actions.appendChild(cancelBtn);
+        editor.appendChild(actions);
+
+        card.appendChild(editor);
+        setTimeout(function () {
+          nameInput.focus();
+          resize();
+        }, 0);
+        return card;
+      }
+
+      var placesAddBtn = document.getElementById('placesAddBtn');
+      if (placesAddBtn) {
+        placesAddBtn.addEventListener('click', function () {
+          placesEditingId = '__new__';
+          renderPlacesList();
+        });
+      }
+
       document.getElementById('profileSave').addEventListener('click', function () {
         persist(true).catch(function () {});
       });
@@ -722,6 +1026,25 @@
         if (peopleList) {
           peopleList.innerHTML =
             '<p class="tp-people-empty">Module Personnes indisponible.</p>';
+        }
+      }
+
+      if (PlacesApi) {
+        PlacesApi.load(t)
+          .then(function (dir) {
+            placesDirectory = dir;
+            renderPlacesList();
+          })
+          .catch(function (err) {
+            console.error('Places.load failed', err);
+            placesDirectory = PlacesApi.emptyDirectory();
+            renderPlacesList();
+          });
+      } else {
+        var placesList = document.getElementById('placesList');
+        if (placesList) {
+          placesList.innerHTML =
+            '<p class="tp-people-empty">Module Lieux indisponible.</p>';
         }
       }
     }).catch(function (err) {

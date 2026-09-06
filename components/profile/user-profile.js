@@ -6,6 +6,7 @@
  * Includes: identity, face aura/shape, language/dialect/tone, clock 12/24,
  * section visibility in the card editor, beta flags, debug level, auto-open.
  * toLlmContext() is the slim object injected into agent system prompts.
+ * humanSheetFromMemory() extracts Moi — / État — lines for settings UI.
  */
 (function (global) {
   'use strict';
@@ -992,6 +993,10 @@
     lines.push('Profil utilisateur (préférences personnelles — respecter)\u00a0:');
     if (p.displayName) {
       lines.push('- Prénom / nom\u00a0: ' + p.displayName + '. Adresse-le ainsi quand c\'est naturel.');
+    } else {
+      lines.push(
+        '- Prénom / nom\u00a0: inconnu. Si le moment s\'y prête, demande-le doucement et mémorise (patches \u00ab\u00a0Moi \u2014 Identité\u00a0\u00bb / profil).'
+      );
     }
     if (p.role) {
       lines.push('- Rôle\u00a0: ' + p.role + '. Adapte le vocabulaire à ce contexte — sans pousser le travail.');
@@ -999,6 +1004,9 @@
     if (p.notes) {
       lines.push('- Notes / préférences\u00a0: ' + p.notes);
     }
+    lines.push(
+      '- Fiche humaine\u00a0: construis/maintiens identité, biologie, compétences et état du jour via mémoire \u00ab\u00a0Moi \u2014\u00a0\u00bb / \u00ab\u00a0État \u2014\u00a0\u00bb (voir section Profil humain du system prompt). N\'invente aucune stat.'
+    );
     lines.push('- ' + languageInstruction(p));
     if (p.language === 'fr' && p.dialect === 'qc') {
       lines.push(
@@ -1064,6 +1072,53 @@
       lines.push('- Fonctionnalités actives dans l\'éditeur\u00a0: ' + enabled.join(', ') + '.');
     }
     return lines;
+  }
+
+  /** Match durable / dynamic human-sheet prefixes stored in board memory. */
+  function isHumanSheetText(text) {
+    var s = String(text || '').trim();
+    if (!s) return false;
+    return /^(moi|état|etat)\s*[—–\-:]/i.test(s);
+  }
+
+  function factText(entry) {
+    if (typeof entry === 'string') return entry.trim();
+    if (entry && typeof entry.text === 'string') return entry.text.trim();
+    return '';
+  }
+
+  /**
+   * Pull "Moi — …" / "État — …" lines from AgentMemory for settings UI.
+   * @returns {{ durable: string[], state: string[] }}
+   */
+  function humanSheetFromMemory(memory) {
+    var durable = [];
+    var state = [];
+    var seen = Object.create(null);
+    function push(bucket, text) {
+      if (!text || !isHumanSheetText(text)) return;
+      var key = text.toLocaleLowerCase('fr-FR');
+      if (seen[key]) return;
+      seen[key] = true;
+      if (/^(état|etat)\b/i.test(text)) bucket.state.push(text);
+      else bucket.durable.push(text);
+    }
+    var view =
+      memory && typeof memory === 'object'
+        ? memory
+        : { longTerm: { facts: [] }, shortTerm: { notes: [] } };
+    var facts =
+      (view.longTerm && Array.isArray(view.longTerm.facts) && view.longTerm.facts) ||
+      (Array.isArray(view.facts) && view.facts) ||
+      [];
+    var notes =
+      (view.shortTerm && Array.isArray(view.shortTerm.notes) && view.shortTerm.notes) ||
+      (Array.isArray(view.shortNotes) && view.shortNotes) ||
+      [];
+    var i;
+    for (i = 0; i < facts.length; i++) push({ durable: durable, state: state }, factText(facts[i]));
+    for (i = 0; i < notes.length; i++) push({ durable: durable, state: state }, factText(notes[i]));
+    return { durable: durable, state: state };
   }
 
   async function load(t) {
@@ -1192,6 +1247,8 @@
     applyFeaturesToCard: applyFeaturesToCard,
     toAgentContext: toAgentContext,
     profilePromptLines: profilePromptLines,
+    isHumanSheetText: isHumanSheetText,
+    humanSheetFromMemory: humanSheetFromMemory,
     load: load,
     save: save,
     reset: reset

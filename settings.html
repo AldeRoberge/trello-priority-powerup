@@ -27,10 +27,24 @@
   <script src="./components/goals/goals-ui.js"></script>
   <script src="./components/shared/spellcheck.js"></script>
   <script src="./components/agent/agent.js"></script>
+  <script src="./components/agent/agent-memory.js"></script>
   <script src="./components/profile/user-profile.js"></script>
   <link rel="stylesheet" href="./components/shared/trello-theme.css" />
 </head>
 <body class="tp-page tp-page--settings">
+  <div class="tp-settings-search">
+    <input
+      type="search"
+      class="tp-input"
+      id="settingsSearch"
+      placeholder="Rechercher un paramètre…"
+      maxlength="120"
+      autocomplete="off"
+      aria-label="Rechercher un paramètre"
+    />
+    <p class="tp-settings-search-empty" id="settingsSearchEmpty" hidden>Aucun paramètre ne correspond.</p>
+  </div>
+
   <details class="tp-settings-section" id="goalsSettingsSection" hidden>
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-hierarchy-2"></i></span>
@@ -268,10 +282,9 @@
         <p class="tp-color-scheme-hint">Capacités Power-Up (admin Trello)</p>
         <p class="tp-capabilities-summary" id="capabilitiesSummary">Chargement…</p>
         <p class="tp-capabilities-note">
-          Trello n’expose pas l’état des interrupteurs admin. Cochez exactement la liste
-          <strong>À activer</strong> sur
-          <a class="tp-link" id="capabilitiesAdminLink" href="https://trello.com/power-ups/admin" target="_blank" rel="noopener noreferrer">trello.com/power-ups/admin</a>
-          → Capabilities, puis retirez et réajoutez le Power-Up sur le tableau. L’observation ci-dessous se met à jour quand le connecteur est réellement appelé.
+          Cochez uniquement <strong>À activer</strong> dans
+          <a class="tp-link" id="capabilitiesAdminLink" href="https://trello.com/power-ups/admin" target="_blank" rel="noopener noreferrer">l’admin Trello</a>
+          (Capabilities), puis retirez et réajoutez le Power-Up. La liste se met à jour quand le connecteur est appelé.
         </p>
         <ul class="tp-capabilities-list" id="capabilitiesList" aria-label="Liste des capacités"></ul>
         <div class="tp-capabilities-actions">
@@ -295,15 +308,50 @@
     </div>
   </details>
 
-  <details class="tp-settings-section" id="profileSettingsSection">
+  <details class="tp-settings-section" id="profileSettingsSection" open>
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-user"></i></span>
       <span class="tp-settings-summary-title">Mon profil</span>
-      <span class="tp-settings-summary-hint">Préférences personnelles et assistant</span>
+      <span class="tp-settings-summary-hint">Identité, assistant et fiche humaine</span>
     </summary>
     <div class="tp-settings-body">
-      <p class="tp-color-scheme-hint">Identité, langue et ton de l’assistant, sections visibles dans l’éditeur. Préférences personnelles (membre).</p>
-      <button type="button" class="tp-button tp-button--secondary" id="openProfile">Ouvrir mon profil</button>
+      <p class="tp-color-scheme-hint">Préférences personnelles (membre). La fiche humaine vient aussi de la mémoire tableau (faits «&nbsp;Moi —&nbsp;» / «&nbsp;État —&nbsp;»).</p>
+
+      <label class="tp-profile-field">
+        <span class="tp-profile-field-label">Prénom ou nom</span>
+        <input type="text" class="tp-input" id="settingsProfileDisplayName" maxlength="80" placeholder="ex. Alex" autocomplete="nickname" />
+      </label>
+      <label class="tp-profile-field">
+        <span class="tp-profile-field-label">Rôle</span>
+        <input type="text" class="tp-input" id="settingsProfileRole" maxlength="80" placeholder="ex. Chef de projet" autocomplete="organization-title" />
+      </label>
+      <label class="tp-profile-field">
+        <span class="tp-profile-field-label">Notes pour l’assistant</span>
+        <textarea class="tp-input tp-textarea" id="settingsProfileNotes" maxlength="400" rows="3" placeholder="ex. Préfère les échéances le vendredi…"></textarea>
+      </label>
+
+      <div class="tp-profile-assistant-preview" id="settingsAssistantPreview" hidden>
+        <p class="tp-profile-field-label">Assistant</p>
+        <div class="tp-profile-assistant-row">
+          <span class="tp-profile-assistant-swatch" id="settingsAssistantSwatch" aria-hidden="true"></span>
+          <div class="tp-profile-assistant-meta">
+            <strong id="settingsAssistantName">—</strong>
+            <span id="settingsAssistantPersonality" class="tp-profile-assistant-personality"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tp-human-sheet" id="settingsHumanSheet">
+        <p class="tp-profile-field-label">Fiche humaine</p>
+        <p class="tp-human-sheet-empty" id="settingsHumanSheetEmpty">Rien encore. L’assistant remplit ça en conversation (identité, biologie, compétences, état du jour).</p>
+        <ul class="tp-human-sheet-list" id="settingsHumanSheetDurable" hidden aria-label="Faits durables"></ul>
+        <ul class="tp-human-sheet-list tp-human-sheet-list--state" id="settingsHumanSheetState" hidden aria-label="État du jour"></ul>
+      </div>
+
+      <p class="tp-profile-status" id="settingsProfileStatus" aria-live="polite"></p>
+      <div class="tp-profile-actions">
+        <button type="button" class="tp-button tp-button--secondary" id="openProfile">Éditer le profil complet</button>
+      </div>
     </div>
   </details>
 
@@ -1016,7 +1064,7 @@
               var objectifOn = saved.experimental && saved.experimental.objectif === true;
               if (!objectifOn) {
                 if (goalsSection) goalsSection.hidden = true;
-                resizeSettingsPopup();
+                applySettingsSearch();
                 return;
               }
               return initGoalsSettings({ force: !goalsSettingsMounted }).then(function () {
@@ -1024,7 +1072,7 @@
                   goalsSection.hidden = false;
                   goalsSection.open = true;
                 }
-                resizeSettingsPopup();
+                applySettingsSearch();
               });
             })
             .catch(function (err) {
@@ -1612,6 +1660,162 @@
         });
     });
 
+    (function initProfileSettingsSection() {
+      var section = document.getElementById('profileSettingsSection');
+      var nameEl = document.getElementById('settingsProfileDisplayName');
+      var roleEl = document.getElementById('settingsProfileRole');
+      var notesEl = document.getElementById('settingsProfileNotes');
+      var statusEl = document.getElementById('settingsProfileStatus');
+      var assistantPreview = document.getElementById('settingsAssistantPreview');
+      var assistantSwatch = document.getElementById('settingsAssistantSwatch');
+      var assistantName = document.getElementById('settingsAssistantName');
+      var assistantPersonality = document.getElementById('settingsAssistantPersonality');
+      var sheetEmpty = document.getElementById('settingsHumanSheetEmpty');
+      var sheetDurable = document.getElementById('settingsHumanSheetDurable');
+      var sheetState = document.getElementById('settingsHumanSheetState');
+      var Profile = window.UserProfile;
+      if (!section || !nameEl || !roleEl || !notesEl || !Profile) return;
+
+      var profileState = null;
+      var saveTimer = null;
+      var saving = false;
+
+      function setStatus(msg, isError) {
+        if (!statusEl) return;
+        statusEl.textContent = msg || '';
+        statusEl.classList.toggle('is-error', !!isError);
+      }
+
+      function fillList(ul, lines) {
+        if (!ul) return;
+        ul.innerHTML = '';
+        if (!lines || !lines.length) {
+          ul.hidden = true;
+          return;
+        }
+        ul.hidden = false;
+        lines.forEach(function (text) {
+          var li = document.createElement('li');
+          li.textContent = text;
+          ul.appendChild(li);
+        });
+      }
+
+      function renderHumanSheet(memory) {
+        var sheet =
+          typeof Profile.humanSheetFromMemory === 'function'
+            ? Profile.humanSheetFromMemory(memory)
+            : { durable: [], state: [] };
+        fillList(sheetDurable, sheet.durable);
+        fillList(sheetState, sheet.state);
+        var hasAny = sheet.durable.length + sheet.state.length > 0;
+        if (sheetEmpty) sheetEmpty.hidden = hasAny;
+      }
+
+      function renderAssistant(profile) {
+        var p = Profile.normalizeProfile(profile || {});
+        if (!assistantPreview) return;
+        var has =
+          !!(p.agentName || p.agentPersonality || p.agentColor);
+        assistantPreview.hidden = !has;
+        if (!has) return;
+        if (assistantName) {
+          assistantName.textContent = p.agentName || 'Assistant';
+        }
+        if (assistantPersonality) {
+          var perso = String(p.agentPersonality || '').trim();
+          assistantPersonality.textContent = perso
+            ? perso.length > 140
+              ? perso.slice(0, 137) + '…'
+              : perso
+            : '';
+        }
+        if (assistantSwatch && Profile.agentColorPalette) {
+          var pal = Profile.agentColorPalette(p.agentColor || 'orange');
+          assistantSwatch.style.background =
+            'linear-gradient(135deg, ' +
+            pal.hi +
+            ', ' +
+            pal.mid +
+            ' 48%, ' +
+            pal.lo +
+            ')';
+        }
+      }
+
+      function applyForm(profile) {
+        var p = Profile.normalizeProfile(profile || {});
+        nameEl.value = p.displayName || '';
+        roleEl.value = p.role || '';
+        notesEl.value = p.notes || '';
+        renderAssistant(p);
+      }
+
+      function readPatch() {
+        return {
+          displayName: nameEl.value,
+          role: roleEl.value,
+          notes: notesEl.value
+        };
+      }
+
+      function scheduleSave() {
+        if (!profileState) return;
+        if (saveTimer) clearTimeout(saveTimer);
+        saveTimer = setTimeout(function () {
+          saveTimer = null;
+          persist();
+        }, 400);
+      }
+
+      function persist() {
+        if (!profileState || saving) return;
+        saving = true;
+        var next = Profile.normalizeProfile(
+          Object.assign({}, profileState, readPatch())
+        );
+        Profile.save(t, next)
+          .then(function (saved) {
+            profileState = saved;
+            setStatus('Profil enregistré.');
+            if (typeof resizeSettingsPopup === 'function') resizeSettingsPopup();
+          })
+          .catch(function (err) {
+            console.error('Settings profile save failed', err);
+            setStatus('Enregistrement impossible.', true);
+          })
+          .then(function () {
+            saving = false;
+          });
+      }
+
+      nameEl.addEventListener('input', scheduleSave);
+      roleEl.addEventListener('input', scheduleSave);
+      notesEl.addEventListener('input', scheduleSave);
+
+      (async function boot() {
+        try {
+          profileState = await Profile.load(t);
+          applyForm(profileState);
+        } catch (err) {
+          console.error('Settings profile load failed', err);
+          setStatus('Chargement du profil impossible.', true);
+        }
+        try {
+          if (window.AgentMemory && typeof AgentMemory.load === 'function') {
+            var mem = await AgentMemory.load(t);
+            renderHumanSheet(mem);
+          } else {
+            renderHumanSheet(null);
+          }
+        } catch (memErr) {
+          console.error('Settings human sheet load failed', memErr);
+          renderHumanSheet(null);
+        }
+        if (typeof resizeSettingsPopup === 'function') resizeSettingsPopup();
+      })();
+    })();
+
     document.getElementById('openProfile').addEventListener('click', function () {
       t.modal({
         title: 'Mon profil',
@@ -1640,6 +1844,47 @@
       section.addEventListener('toggle', resizeSettingsPopup);
     });
 
+    function settingsSectionSearchText(section) {
+      var parts = [];
+      var title = section.querySelector('.tp-settings-summary-title');
+      var hint = section.querySelector('.tp-settings-summary-hint');
+      var body = section.querySelector('.tp-settings-body');
+      if (title) parts.push(title.textContent || '');
+      if (hint) parts.push(hint.textContent || '');
+      if (body) parts.push(body.textContent || '');
+      return parts.join(' ').toLowerCase().replace(/\s+/g, ' ').trim();
+    }
+
+    function applySettingsSearch() {
+      var input = document.getElementById('settingsSearch');
+      var empty = document.getElementById('settingsSearchEmpty');
+      if (!input) return;
+      var q = String(input.value || '')
+        .trim()
+        .toLowerCase();
+      var matchCount = 0;
+      document.querySelectorAll('.tp-settings-section').forEach(function (section) {
+        if (section.hasAttribute('hidden')) {
+          section.classList.remove('tp-settings-section--filtered-out');
+          return;
+        }
+        var match = !q || settingsSectionSearchText(section).indexOf(q) !== -1;
+        section.classList.toggle('tp-settings-section--filtered-out', !match);
+        if (match) matchCount += 1;
+      });
+      if (empty) empty.hidden = !q || matchCount > 0;
+      resizeSettingsPopup();
+    }
+
+    function initSettingsSearch() {
+      var input = document.getElementById('settingsSearch');
+      if (!input) return;
+      input.addEventListener('input', applySettingsSearch);
+      input.addEventListener('search', applySettingsSearch);
+    }
+
+    initSettingsSearch();
+
     return Promise.allSettled([
       loadBuildInfo(),
       initGoalsSettings(),
@@ -1654,6 +1899,7 @@
       initDebugSettings(),
       initExperimentalSettings(),
     ]).then(function () {
+      applySettingsSearch();
       resizeSettingsPopup();
     });
     }).catch(function (err) {
