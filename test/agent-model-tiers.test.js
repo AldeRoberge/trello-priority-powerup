@@ -46,11 +46,29 @@ describe('PriorityAgent dynamic model tiers', () => {
 
     const or = Agent.normalizeProvider({
       preset: 'openrouter',
-      model: 'openai/gpt-4o-mini',
+      model: 'openai/gpt-4o',
       apiKey: 'sk-test'
     });
     assert.equal(Agent.modelForTier(or, 'capable'), 'openai/gpt-4o');
     assert.equal(Agent.modelForTier(or, 'efficient'), 'openai/gpt-4o-mini');
+    assert.equal(Agent.modelForTier(or, 'balanced'), 'openai/gpt-4o');
+  });
+
+  it('defaults and migrates legacy gpt-4o-mini to gpt-5.4-mini', () => {
+    assert.equal(Agent.normalizeProvider(null).model, 'gpt-5.4-mini');
+    assert.equal(Agent.PRESETS.openai.model, 'gpt-5.4-mini');
+    assert.equal(Agent.PRESETS.openrouter.model, 'openai/gpt-5.4-mini');
+    assert.equal(
+      Agent.normalizeProvider({ preset: 'openai', model: 'gpt-4o-mini' }).model,
+      'gpt-5.4-mini'
+    );
+    assert.equal(
+      Agent.normalizeProvider({
+        preset: 'openrouter',
+        model: 'openai/gpt-4o-mini'
+      }).model,
+      'openai/gpt-5.4-mini'
+    );
   });
 
   it('keeps custom unknown models unchanged for tiers', () => {

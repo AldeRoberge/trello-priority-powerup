@@ -120,13 +120,13 @@
       id: 'openai',
       label: 'OpenAI',
       baseUrl: DEFAULT_OPENAI_BASE,
-      model: 'gpt-4o-mini'
+      model: 'gpt-5.4-mini'
     },
     openrouter: {
       id: 'openrouter',
       label: 'OpenRouter',
       baseUrl: DEFAULT_OPENROUTER_BASE,
-      model: 'openai/gpt-4o-mini'
+      model: 'openai/gpt-5.4-mini'
     },
     custom: {
       id: 'custom',
@@ -200,7 +200,7 @@
     },
     'gpt-4o': {
       efficient: 'gpt-4o-mini',
-      balanced: 'gpt-4o-mini',
+      balanced: 'gpt-4o',
       capable: 'gpt-4o'
     },
     o4: {
@@ -1124,7 +1124,13 @@
     var model =
       typeof src.model === 'string' && src.model.trim()
         ? src.model.trim()
-        : preset.model || 'gpt-4o-mini';
+        : preset.model || 'gpt-5.4-mini';
+    // Soft-migrate legacy preset defaults to the current smarter default.
+    if (model === 'gpt-4o-mini') {
+      model = presetId === 'openrouter' ? 'openai/gpt-5.4-mini' : 'gpt-5.4-mini';
+    } else if (model === 'openai/gpt-4o-mini') {
+      model = 'openai/gpt-5.4-mini';
+    }
     var apiKey = typeof src.apiKey === 'string' ? src.apiKey.trim() : '';
     var verifiedFingerprint =
       typeof src.verifiedFingerprint === 'string' ? src.verifiedFingerprint : '';
@@ -3548,7 +3554,56 @@
     return '';
   }
 
-  function profileLanguageInstruction(profile) {
+  /**
+   * Lightweight FR/EN detector for the latest user message.
+   * Returns 'en' | 'fr' | null (ambiguous / empty).
+   */
+  function detectMessageLanguage(text) {
+    var t = String(text || '').trim();
+    if (!t) return null;
+    var fr = 0;
+    var en = 0;
+    if (/[àâäéèêëïîôùûüçœ]/i.test(t)) fr += 4;
+    var frRe =
+      /\b(le|la|les|un|une|des|du|de|je|tu|il|elle|on|nous|vous|ils|elles|est|sont|pas|pour|avec|dans|sur|que|qui|quoi|oui|non|merci|aussi|mais|donc|alors|aujourd'hui|j'ai|t'as|c'est|d'accord|okay|ok|ajoute|ajouter|t[aâ]che|sous-t[aâ]che|carte|priorit[eé]|[eé]ch[eé]ance|bloque|bloqu[eé]|progr[eè]s|fais|fait|peux|veux|s'il|svp)\b/gi;
+    var enRe =
+      /\b(the|a|an|is|are|was|were|i|you|we|they|this|that|with|for|from|have|has|had|don't|doesn't|can't|won't|what's|please|thanks|thank|also|but|so|then|today|okay|ok|add|adding|task|subtask|card|priority|due|blocked|progress|can|want|need|just|really|maybe|sure|yeah|yep|nope|hey|hi|hello)\b/gi;
+    var m;
+    while ((m = frRe.exec(t))) {
+      fr += 1;
+    }
+    while ((m = enRe.exec(t))) {
+      en += 1;
+    }
+    // Pure title lists / short English phrases without stopwords
+    if (!fr && !en) {
+      if (/^[A-Za-z0-9 ,./'\-+\n]+$/.test(t) && /[A-Za-z]{3,}/.test(t)) {
+        return 'en';
+      }
+      return null;
+    }
+    if (en >= fr + 1) return 'en';
+    if (fr >= en + 1) return 'fr';
+    return null;
+  }
+
+  function profileLanguageInstruction(profile, replyLanguage) {
+    var forced =
+      replyLanguage === 'en' || replyLanguage === 'fr' ? replyLanguage : null;
+    if (forced === 'en') {
+      return (
+        'Language (OBLIGATORY for this turn): The user wrote in English. ' +
+        'Reply entirely in English (message, suggestions, followUps, prompts, block captions). ' +
+        'Do NOT switch to French unless they clearly write in French.'
+      );
+    }
+    if (forced === 'fr') {
+      return (
+        'Langue (OBLIGATOIRE pour ce tour)\u00a0: l\'utilisateur a \u00e9crit en fran\u00e7ais. ' +
+        'R\u00e9ponds enti\u00e8rement en fran\u00e7ais (message, suggestions, followUps, prompts, l\u00e9gendes). ' +
+        'Ne passe en anglais que s\'il \u00e9crit clairement en anglais.'
+      );
+    }
     if (global.UserProfile && typeof global.UserProfile.languageInstruction === 'function') {
       try {
         return global.UserProfile.languageInstruction(profile || {});
@@ -3557,14 +3612,28 @@
       }
     }
     if (profile && profile.language === 'en') {
-      return 'Default language: English (switch to French only if the user clearly writes in French).';
+      return (
+        'Default language: English. Always match the user\'s latest message language ' +
+        '(if they write in French, reply in French; if English, reply in English).'
+      );
     }
-    return 'Langue\u00a0: toujours en fran\u00e7ais qu\u00e9b\u00e9cois (sauf si l\'utilisateur \u00e9crit clairement en anglais). Utilise le vocabulaire du Qu\u00e9bec (ex. \u00ab\u00a0sabler le pl\u00e2tre\u00a0\u00bb, pas \u00ab\u00a0poncer le pl\u00e2tre\u00a0\u00bb).';
+    return (
+      'Langue par d\u00e9faut\u00a0: fran\u00e7ais qu\u00e9b\u00e9cois. ' +
+      'OBLIGATOIRE\u00a0: suis la langue du dernier message utilisateur ' +
+      '(s\'il \u00e9crit en anglais, r\u00e9ponds enti\u00e8rement en anglais\u00a0; ' +
+      's\'il \u00e9crit en fran\u00e7ais, reste en fran\u00e7ais qu\u00e9b\u00e9cois). ' +
+      'Utilise le vocabulaire du Qu\u00e9bec (ex. \u00ab\u00a0sabler le pl\u00e2tre\u00a0\u00bb, pas \u00ab\u00a0poncer le pl\u00e2tre\u00a0\u00bb).'
+    );
   }
 
-  function systemPrompt(context) {
+  function systemPrompt(context, options) {
+    options = options || {};
     var today = (context && context.today) || todayIsoLocal();
     var nowTime = (context && context.nowTime) || nowTimeLocal();
+    var replyLanguage =
+      options.replyLanguage === 'en' || options.replyLanguage === 'fr'
+        ? options.replyLanguage
+        : detectMessageLanguage(options.userText || '');
     var profileLines = [];
     if (
       context &&
@@ -3579,7 +3648,7 @@
       }
     } else if (context && context.profile && context.profile.language === 'en') {
       profileLines = [
-        'Profil utilisateur\u00a0: r\u00e9ponds en anglais (English) sauf si l\'utilisateur \u00e9crit clairement en fran\u00e7ais.'
+        'User profile: reply in English unless the user clearly writes in French.'
       ];
     }
     var peopleLines = [];
@@ -3592,7 +3661,9 @@
         peopleLines = [];
       }
     }
-    var isEn = !!(context && context.profile && context.profile.language === 'en');
+    var profileIsEn = !!(context && context.profile && context.profile.language === 'en');
+    var isEn =
+      replyLanguage === 'en' ? true : replyLanguage === 'fr' ? false : profileIsEn;
     var agentName =
       context && context.profile && typeof context.profile.agentName === 'string'
         ? context.profile.agentName.trim()
@@ -3601,7 +3672,10 @@
       context && context.profile && typeof context.profile.agentColor === 'string'
         ? context.profile.agentColor.trim()
         : '';
-    var langLine = profileLanguageInstruction(context && context.profile);
+    var langLine = profileLanguageInstruction(
+      context && context.profile,
+      replyLanguage
+    );
     var voiceLines = isEn
       ? [
           'Voice (ALWAYS, non-negotiable):',
@@ -7239,7 +7313,10 @@
 
     var system = [
       'Tu es l\'assistant Cerveau en mode INTERVIEW premi\u00e8re ouverture.',
-      profileLanguageInstruction(context && context.profile),
+      profileLanguageInstruction(
+        context && context.profile,
+        detectMessageLanguage(userText)
+      ),
       'Tu tutoyes, comme un pote direct et bienveillant qui aide \u00e0 cadrer la carte sans pression ni th\u00e9\u00e2tre.',
       'Voix (TOUJOURS)\u00a0: naturel, clair, un peu snarky-doux si \u00e7a vient tout seul. Z\u00e9ro jargon technique, z\u00e9ro ton administratif, z\u00e9ro coach productivit\u00e9. Pas de performance cringe.',
       'Grammaire\u00a0: JAMAIS de virgule avant \u00ab\u00a0et\u00a0\u00bb (\u00ab\u00a0urgence, impact et facilit\u00e9\u00a0\u00bb, pas \u00ab\u00a0urgence, impact, et facilit\u00e9\u00a0\u00bb).',
@@ -7777,9 +7854,21 @@
       upsert_person: true,
       remove_person: true
     };
+    var droppedInterview = [];
     actions = actions.filter(function (a) {
-      return a && allowedTools[a.tool];
+      if (a && allowedTools[a.tool]) return true;
+      if (a && a.tool) {
+        droppedInterview.push({
+          tool: a.tool,
+          code: 'interview-disallowed',
+          reason: 'interview-disallowed',
+          error: a.tool + ': non autoris\u00e9 pendant l\'interview',
+          hint: 'Cet outil n\'est pas disponible pendant l\'interview de carte.'
+        });
+      }
+      return false;
     });
+    parsed.droppedActions = (parsed.droppedActions || []).concat(droppedInterview);
 
     var message = polishAssistantVisibleText(
       stripScaleLegendParenthetical(
@@ -8058,12 +8147,45 @@
   // ── 12. Action + suggestion normalizers (post-model) ─────────────────────
   // Models emit loose JSON; these coerce to executable action shapes.
 
+  /** Max tool calls applied in one assistant turn (prompt + runtime). */
+  var MAX_TURN_ACTIONS = 5;
+
   function hasSubtaskRef(args) {
     return (
       (typeof args.id === 'string' && !!args.id.trim()) ||
       (typeof args.matchText === 'string' && !!args.matchText.trim()) ||
       (typeof args.from === 'string' && !!args.from.trim())
     );
+  }
+
+  function firstNonEmptyString() {
+    for (var i = 0; i < arguments.length; i++) {
+      var v = arguments[i];
+      if (typeof v === 'string' && v.trim()) return v.trim();
+    }
+    return '';
+  }
+
+  /**
+   * Coerce common model aliases before completeness checks
+   * (e.g. add_subtask.title → text).
+   */
+  function coerceActionArgs(action) {
+    if (!action || typeof action.tool !== 'string' || !action.tool) return action;
+    var args = action.args && typeof action.args === 'object' ? action.args : {};
+    if (action.tool === 'add_subtask') {
+      var text = firstNonEmptyString(args.text, args.title, args.name, args.label);
+      if (text && text !== args.text) {
+        return {
+          tool: action.tool,
+          args: Object.assign({}, args, { text: text })
+        };
+      }
+    }
+    return {
+      tool: action.tool,
+      args: args
+    };
   }
 
   function isCompleteAction(action) {
@@ -8276,18 +8398,40 @@
       if (!action || typeof action !== 'object') return;
       var tool = typeof action.tool === 'string' ? action.tool.trim() : '';
       if (!tool) return;
-      var item = {
+      var item = coerceActionArgs({
         tool: tool,
         args: action.args && typeof action.args === 'object' ? action.args : {}
-      };
+      });
       if (!isCompleteAction(item)) {
-        dropped.push({ tool: item.tool, error: incompleteActionError(item) });
+        dropped.push({
+          tool: item.tool,
+          code: 'incomplete-args',
+          error: incompleteActionError(item),
+          hint: 'Args manquants ou invalides pour cet outil.'
+        });
         return;
       }
       out.push(item);
     });
+    var polished = polishFollowUpActions(out);
+    var kept = polished.slice(0, MAX_TURN_ACTIONS);
+    polished.slice(MAX_TURN_ACTIONS).forEach(function (item) {
+      if (!item || !item.tool) return;
+      dropped.push({
+        tool: item.tool,
+        code: 'action-limit',
+        reason: 'action-limit',
+        error:
+          item.tool +
+          ': limite de ' +
+          MAX_TURN_ACTIONS +
+          ' actions par tour',
+        hint:
+          'Renvoie les \u00e9l\u00e9ments restants dans un prochain message pour les appliquer.'
+      });
+    });
     return {
-      actions: polishFollowUpActions(out).slice(0, 5),
+      actions: kept,
       dropped: dropped
     };
   }
@@ -9740,7 +9884,10 @@
     }
     var context = buildContext(bridge);
     var messages = [
-      { role: 'system', content: systemPrompt(context) }
+      {
+        role: 'system',
+        content: systemPrompt(context, { userText: userText })
+      }
     ];
     (history || []).forEach(function (entry) {
       if (!entry || !entry.role || !entry.content) return;
@@ -9918,7 +10065,16 @@
       var droppedForScope = [];
       actions = (actions || []).filter(function (a) {
         if (a && PROJECT_SCOPE_TOOLS[a.tool]) return true;
-        if (a && a.tool) droppedForScope.push({ tool: a.tool, reason: 'project-scope' });
+        if (a && a.tool) {
+          droppedForScope.push({
+            tool: a.tool,
+            code: 'project-scope',
+            reason: 'project-scope',
+            error: a.tool + ': indisponible en mode projet',
+            hint:
+              'Ouvre la carte dans le popup Power-Up pour appliquer cet outil. L\'assistant projet ne modifie pas les cartes.'
+          });
+        }
         return false;
       });
       parsed.droppedActions = (parsed.droppedActions || []).concat(droppedForScope);
@@ -14388,6 +14544,44 @@
   }
 
   /**
+   * Reason text for a dropped (never executed) action — without the tool prefix.
+   * Prefer explicit error; fall back to known reason codes (never silent).
+   */
+  function describeDroppedAction(d) {
+    if (!d) return 'abandonn\u00e9e';
+    if (d.error) {
+      var err = String(d.error);
+      if (d.tool && err.indexOf(d.tool + ':') === 0) {
+        return err.slice(d.tool.length + 1).trim();
+      }
+      return err;
+    }
+    if (d.reason === 'project-scope' || d.code === 'project-scope') {
+      return 'indisponible en mode projet';
+    }
+    if (d.reason === 'action-limit' || d.code === 'action-limit') {
+      return 'limite de ' + MAX_TURN_ACTIONS + ' actions par tour';
+    }
+    if (d.reason === 'interview-disallowed' || d.code === 'interview-disallowed') {
+      return 'non autoris\u00e9 pendant l\'interview';
+    }
+    if (d.reason) return String(d.reason);
+    return 'args incomplets';
+  }
+
+  function droppedActionHint(d) {
+    if (!d) return '';
+    if (d.hint) return String(d.hint);
+    if (d.reason === 'project-scope' || d.code === 'project-scope') {
+      return 'Ouvre la carte dans le popup Power-Up pour appliquer cet outil. L\'assistant projet ne modifie pas les cartes.';
+    }
+    if (d.reason === 'action-limit' || d.code === 'action-limit') {
+      return 'Renvoie les \u00e9l\u00e9ments restants dans un prochain message pour les appliquer.';
+    }
+    return '';
+  }
+
+  /**
    * Technical recap from executeActions results (executor is source of truth).
    * Failures include code / cause / hint when present (rich errors).
    */
@@ -14411,7 +14605,11 @@
       if (!d) return;
       Array.prototype.push.apply(
         lines,
-        formatFailureLines(d.tool, d.error || 'args incomplets', d)
+        formatFailureLines(d.tool, describeDroppedAction(d), {
+          code: d.code || d.reason,
+          cause: d.cause,
+          hint: droppedActionHint(d)
+        })
       );
     });
     if (!lines.length) {
@@ -14440,9 +14638,9 @@
     });
     (options.droppedActions || []).forEach(function (d) {
       if (!d) return;
-      var block =
-        (d.tool || '?') + '\u00a0: ' + (d.error || 'args incomplets');
-      if (d.hint) block += '\n' + d.hint;
+      var block = (d.tool || '?') + '\u00a0: ' + describeDroppedAction(d);
+      var hint = droppedActionHint(d);
+      if (hint) block += '\n' + hint;
       parts.push(block);
     });
     if (!parts.length) return '';
@@ -15373,7 +15571,10 @@
         if (typeof bridge.applyCompletion !== 'function') {
           return { ok: false, tool: tool, error: 'Progr\u00e8s indisponible' };
         }
-        var text = typeof args.text === 'string' ? args.text.trim() : '';
+        var text =
+          typeof args.text === 'string'
+            ? args.text.trim()
+            : firstNonEmptyString(args.title, args.name, args.label);
         if (!text) {
           return { ok: false, tool: tool, error: 'Texte de sous-t\u00e2che requis' };
         }
@@ -17893,6 +18094,9 @@
     MODEL_MODES: MODEL_MODES,
     CHAT_WARMUP_USER_TURNS: CHAT_WARMUP_USER_TURNS,
     normalizeProvider: normalizeProvider,
+    detectMessageLanguage: detectMessageLanguage,
+    systemPrompt: systemPrompt,
+    profileLanguageInstruction: profileLanguageInstruction,
     normalizeModelTier: normalizeModelTier,
     normalizeModelMode: normalizeModelMode,
     classifyModelClass: classifyModelClass,
@@ -18029,6 +18233,7 @@
     formatChangeRecap: formatChangeRecap,
     formatActionErrors: formatActionErrors,
     actionFailure: actionFailure,
+    normalizeActionsWithMeta: normalizeActionsWithMeta,
     looksLikeAppliedClaim: looksLikeAppliedClaim,
     normalizePointSection: normalizePointSection,
     normalizePointField: normalizePointField,

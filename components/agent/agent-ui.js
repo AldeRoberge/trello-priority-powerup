@@ -711,7 +711,7 @@
       type: 'text',
       autocomplete: 'off',
       spellcheck: 'false',
-      placeholder: 'gpt-4o-mini'
+      placeholder: 'gpt-5.4-mini'
     });
 
     var modelSelectField = labeledInput('Mod\u00e8le', modelSelect);

@@ -362,13 +362,11 @@
       clearBootTimer();
       if (options.error) {
         bootSettled = true;
-        document.body.classList.remove('is-boot-leaving');
         document.body.classList.add('is-booting');
         document.body.classList.add('is-boot-error');
         var errBoot = document.getElementById('popupBoot');
         if (errBoot) {
           errBoot.hidden = false;
-          errBoot.classList.remove('is-leaving');
         }
         setBootMessage(options.error, true);
         resizePopup();
@@ -384,35 +382,13 @@
       renderBootSteps();
       bootSettled = true;
       document.body.classList.remove('is-boot-error');
-      var boot = document.getElementById('popupBoot');
-      if (!boot) {
-        document.body.classList.remove('is-booting');
-        resizePopup();
-        return;
-      }
-      boot.setAttribute('aria-busy', 'false');
-      // Reveal real UI under the skeleton, then fade the overlay out.
-      document.body.classList.add('is-boot-leaving');
       document.body.classList.remove('is-booting');
-      resizePopup();
-      var settled = false;
-      function settleLeave() {
-        if (settled) return;
-        settled = true;
-        document.body.classList.remove('is-boot-leaving');
+      var boot = document.getElementById('popupBoot');
+      if (boot) {
+        boot.setAttribute('aria-busy', 'false');
         boot.hidden = true;
-        boot.classList.remove('is-leaving');
-        resizePopup();
       }
-      requestAnimationFrame(function () {
-        boot.classList.add('is-leaving');
-      });
-      boot.addEventListener('transitionend', function onLeave(ev) {
-        if (ev.target !== boot) return;
-        boot.removeEventListener('transitionend', onLeave);
-        settleLeave();
-      });
-      setTimeout(settleLeave, 420);
+      resizePopup();
     }
 
     function startBootWatch() {
@@ -7945,14 +7921,12 @@
       else console.error('Priority popup init failed', err);
       // Fallback if boot helpers never ran (iframe client failed before callback body).
       if (!document.body.classList.contains('is-boot-error')) {
-        document.body.classList.remove('is-boot-leaving');
         document.body.classList.add('is-booting');
         document.body.classList.add('is-boot-error');
         var boot = document.getElementById('popupBoot');
         var msg = document.getElementById('popupBootMsg');
         if (boot) {
           boot.hidden = false;
-          boot.classList.remove('is-leaving');
           boot.classList.add('is-error');
           boot.setAttribute('aria-busy', 'false');
         }

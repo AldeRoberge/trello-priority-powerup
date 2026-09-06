@@ -1402,7 +1402,7 @@ html[data-color-mode]:has(body.tp-page--priority) {
    (Excluded during boot: the loading skeleton still needs a locked,
    full-height html to fill the modal correctly.) */
 html[data-color-mode]:has(
-    body.tp-page--priority.is-cerveau-fullscreen:not(.is-split-assistant):not(.is-booting):not(.is-boot-leaving)
+    body.tp-page--priority.is-cerveau-fullscreen:not(.is-split-assistant):not(.is-booting)
   ) {
   height: auto;
   overflow: visible;
@@ -1725,13 +1725,10 @@ html[data-color-mode='dark'] .tp-page--priority .heat-score-tooltip {
   min-height: 280px;
   padding: 12px;
   text-align: center;
-  opacity: 1;
   background: var(--tp-bg, #f4f5f7);
-  transition: opacity 0.34s ease;
 }
 
-.tp-page--priority.is-booting,
-.tp-page--priority.is-boot-leaving {
+.tp-page--priority.is-booting {
   position: relative;
   overflow: hidden;
   /* Match split layout width (form + assistant rail) while the skeleton is up */
@@ -1740,8 +1737,7 @@ html[data-color-mode='dark'] .tp-page--priority .heat-score-tooltip {
 }
 
 /* Collapsed Assistant: skeleton matches single-column form (no rail) */
-.tp-page--priority.is-booting.is-boot-assistant-collapsed,
-.tp-page--priority.is-boot-leaving.is-boot-assistant-collapsed {
+.tp-page--priority.is-booting.is-boot-assistant-collapsed {
   max-width: 880px;
 }
 
@@ -1761,8 +1757,7 @@ html[data-color-mode='dark'] .tp-page--priority .heat-score-tooltip {
   display: flex;
 }
 
-.tp-page--priority.is-booting .tp-popup-boot,
-.tp-page--priority.is-boot-leaving .tp-popup-boot {
+.tp-page--priority.is-booting .tp-popup-boot {
   display: grid;
   grid-template: 1fr / 1fr;
   align-items: stretch;
@@ -1773,22 +1768,8 @@ html[data-color-mode='dark'] .tp-page--priority .heat-score-tooltip {
   padding: 8px 12px 12px;
 }
 
-.tp-page--priority.is-boot-leaving .tp-popup-boot,
-.tp-popup-boot.is-leaving {
-  opacity: 0;
-  pointer-events: none;
-}
-
 .tp-page--priority.is-booting #popupMain,
 .tp-page--priority.is-booting .tp-popup-build-info {
-  visibility: hidden;
-}
-
-.tp-page--priority.is-boot-leaving #popupMain {
-  visibility: visible;
-}
-
-.tp-page--priority.is-boot-leaving .tp-popup-build-info {
   visibility: hidden;
 }
 
@@ -1984,8 +1965,7 @@ html[data-color-mode='dark'] .tp-page--priority .heat-score-tooltip {
     padding-right: 0;
   }
 
-  .tp-page--priority.is-booting,
-  .tp-page--priority.is-boot-leaving {
+  .tp-page--priority.is-booting {
     max-width: 880px;
   }
 }

@@ -743,54 +743,60 @@
     var p = normalizeProfile(profile || {});
     var dialect = p.dialect;
     var label = dialectLabel(p.language, dialect);
+    var mirror =
+      'Always match the language of the user\'s latest message ' +
+      '(English in \u2192 English out; French in \u2192 French out). ';
+    var mirrorFr =
+      'OBLIGATOIRE\u00a0: suis la langue du dernier message utilisateur ' +
+      '(anglais \u2192 r\u00e9ponds en anglais\u00a0; fran\u00e7ais \u2192 reste en fran\u00e7ais). ';
     if (p.language === 'en') {
       if (dialect === 'uk') {
         return (
-          'Language: British English (UK). Prefer UK spelling and wording ' +
-          '(colour, organise, flat, fortnight) over US variants, ' +
-          'unless the user clearly writes in French or another variety.'
+          mirror +
+          'Default dialect: British English (UK). Prefer UK spelling and wording ' +
+          '(colour, organise, flat, fortnight) over US variants when writing English.'
         );
       }
       if (dialect === 'ca') {
         return (
-          'Language: Canadian English. Prefer Canadian spelling and wording ' +
-          '(mix of UK/US norms common in Canada), ' +
-          'unless the user clearly writes in French or another variety.'
+          mirror +
+          'Default dialect: Canadian English. Prefer Canadian spelling and wording ' +
+          '(mix of UK/US norms common in Canada) when writing English.'
         );
       }
       return (
-        'Language: American English (US). Prefer US spelling and wording ' +
-        '(color, organize, apartment), ' +
-        'unless the user clearly writes in French or another variety.'
+        mirror +
+        'Default dialect: American English (US). Prefer US spelling and wording ' +
+        '(color, organize, apartment) when writing English.'
       );
     }
     if (dialect === 'qc') {
       return (
-        'Langue\u00a0: français québécois. Utilise le vocabulaire du Québec ' +
-        '(ex. «\u00a0sabler le plâtre\u00a0» et non «\u00a0poncer le plâtre\u00a0»). ' +
-        'Préfère les termes québécois aux équivalents de France quand les deux existent, ' +
-        'sauf si l\'utilisateur écrit clairement en anglais ou dans un autre français.'
+        mirrorFr +
+        'Langue par d\u00e9faut\u00a0: fran\u00e7ais qu\u00e9b\u00e9cois. Utilise le vocabulaire du Qu\u00e9bec ' +
+        '(ex. \u00ab\u00a0sabler le pl\u00e2tre\u00a0\u00bb et non \u00ab\u00a0poncer le pl\u00e2tre\u00a0\u00bb). ' +
+        'Pr\u00e9f\u00e8re les termes qu\u00e9b\u00e9cois aux \u00e9quivalents de France quand les deux existent.'
       );
     }
     if (dialect === 'be') {
       return (
-        'Langue\u00a0: français de Belgique (' +
+        mirrorFr +
+        'Langue par d\u00e9faut\u00a0: fran\u00e7ais de Belgique (' +
         label +
-        '). Adapte le vocabulaire belge courant quand pertinent, ' +
-        'sauf si l\'utilisateur écrit clairement en anglais ou autrement.'
+        '). Adapte le vocabulaire belge courant quand pertinent.'
       );
     }
     if (dialect === 'ch') {
       return (
-        'Langue\u00a0: français de Suisse (' +
+        mirrorFr +
+        'Langue par d\u00e9faut\u00a0: fran\u00e7ais de Suisse (' +
         label +
-        '). Adapte le vocabulaire suisse courant quand pertinent, ' +
-        'sauf si l\'utilisateur écrit clairement en anglais ou autrement.'
+        '). Adapte le vocabulaire suisse courant quand pertinent.'
       );
     }
     return (
-      'Langue\u00a0: français de France. Vocabulaire métropolitain standard, ' +
-      'sauf si l\'utilisateur écrit clairement en anglais ou autrement.'
+      mirrorFr +
+      'Langue par d\u00e9faut\u00a0: fran\u00e7ais de France. Vocabulaire m\u00e9tropolitain standard.'
     );
   }
 

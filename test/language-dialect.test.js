@@ -84,6 +84,10 @@ describe('UserProfile language & dialect', () => {
       /sabler/
     );
     assert.match(
+      UserProfile.languageInstruction({ language: 'fr', dialect: 'qc' }),
+      /dernier message|anglais/i
+    );
+    assert.match(
       UserProfile.languageInstruction({ language: 'fr', dialect: 'fr' }),
       /France/
     );
@@ -94,6 +98,10 @@ describe('UserProfile language & dialect', () => {
     assert.match(
       UserProfile.languageInstruction({ language: 'en', dialect: 'us' }),
       /American|US/
+    );
+    assert.match(
+      UserProfile.languageInstruction({ language: 'en', dialect: 'us' }),
+      /match the language/i
     );
   });
 });

@@ -68,6 +68,82 @@ describe('agent rich action errors', () => {
     assert.match(text, /popup Power-Up/);
   });
 
+  it('formatActionErrors surfaces project-scope drops with a clear hint', () => {
+    var text = Agent.formatActionErrors(
+      { results: [] },
+      {
+        droppedActions: [
+          {
+            tool: 'add_subtask',
+            reason: 'project-scope',
+            code: 'project-scope',
+            error: 'add_subtask: indisponible en mode projet',
+            hint:
+              'Ouvre la carte dans le popup Power-Up pour appliquer cet outil. L\'assistant projet ne modifie pas les cartes.'
+          }
+        ]
+      }
+    );
+    assert.match(text, /Une action a échoué/);
+    assert.match(text, /add_subtask/);
+    assert.match(text, /mode projet/);
+    assert.match(text, /Ouvre la carte/);
+    assert.doesNotMatch(text, /args incomplets/);
+  });
+
+  it('formatActionErrors falls back from reason when error is missing', () => {
+    var text = Agent.formatActionErrors(
+      { results: [] },
+      {
+        droppedActions: [{ tool: 'add_subtask', reason: 'project-scope' }]
+      }
+    );
+    assert.match(text, /add_subtask/);
+    assert.match(text, /mode projet/);
+    assert.doesNotMatch(text, /args incomplets/);
+  });
+
+  it('normalizeActionsWithMeta coerces title→text and reports action-limit drops', () => {
+    assert.equal(typeof Agent.normalizeActionsWithMeta, 'function');
+    var aliased = Agent.normalizeActionsWithMeta([
+      { tool: 'add_subtask', args: { title: 'Buddy poop' } }
+    ]);
+    assert.equal(aliased.actions.length, 1);
+    assert.equal(aliased.actions[0].args.text, 'Buddy poop');
+    assert.equal(aliased.dropped.length, 0);
+
+    var many = [];
+    for (var i = 0; i < 7; i++) {
+      many.push({ tool: 'add_subtask', args: { text: 'Task ' + i } });
+    }
+    var capped = Agent.normalizeActionsWithMeta(many);
+    assert.equal(capped.actions.length, 5);
+    assert.equal(capped.dropped.length, 2);
+    assert.equal(capped.dropped[0].code, 'action-limit');
+    var errText = Agent.formatActionErrors(
+      { results: [] },
+      { droppedActions: capped.dropped }
+    );
+    assert.match(errText, /2 actions ont échoué/);
+    assert.match(errText, /limite de 5/);
+    assert.match(errText, /prochain message/);
+  });
+
+  it('normalizeActionsWithMeta drops incomplete add_subtask with text requis', () => {
+    var meta = Agent.normalizeActionsWithMeta([
+      { tool: 'add_subtask', args: {} },
+      { tool: 'add_subtask', args: { text: '  ' } }
+    ]);
+    assert.equal(meta.actions.length, 0);
+    assert.equal(meta.dropped.length, 2);
+    var text = Agent.formatActionErrors(
+      { results: [] },
+      { droppedActions: meta.dropped }
+    );
+    assert.match(text, /text requis/);
+    assert.doesNotMatch(text, /args incomplets/);
+  });
+
   it('set_members without bridge helpers returns bridge-missing rich error', async () => {
     var result = await Agent.executeAction({}, {
       tool: 'set_members',
