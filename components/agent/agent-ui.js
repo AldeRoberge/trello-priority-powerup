@@ -512,7 +512,7 @@
     }
 
     var section = el('div', 'variant-chat-section' + (standalone ? ' variant-chat-section--standalone' : ''));
-    var field = el('div', 'field field--chat');
+    var field = el('div', 'field field--chat' + (standalone ? ' is-enabled' : ''));
 
     var agentIdentity = {
       agentName: '',
@@ -520,18 +520,6 @@
       agentColor: 'orange',
       agentFace: 'classic'
     };
-
-    var chrome = PriorityUI.createCollapsibleEnableChrome({
-      title: 'Assistant',
-      bodyId: 'agent-chat-body',
-      hideEnable: true,
-      leadingIcon: 'ti-message-chatbot',
-      iconClass: 'chat-leading-icon',
-      titleClass: 'chat-enable-title',
-      collapseLabel: 'Replier Assistant',
-      expandLabel: 'D\u00e9velopper Assistant'
-    });
-    field.appendChild(chrome.head);
 
     var settingsBtn = el('button', 'agent-settings-btn', {
       type: 'button',
@@ -541,16 +529,65 @@
     var settingsIcon = el('i', 'ti ti-settings');
     settingsIcon.setAttribute('aria-hidden', 'true');
     settingsBtn.appendChild(settingsIcon);
-    // Gear left of the enable checkbox (checkbox stays on the far right).
-    if (chrome.label) {
-      chrome.head.insertBefore(settingsBtn, chrome.label);
+
+    var chrome;
+    if (standalone) {
+      // Full-page / project Assistant: static header (no collapse chevron).
+      var head = el('div', 'section-toggle-head agent-standalone-head');
+      var heading = el('div', 'agent-standalone-heading');
+      var leadingIconEl = el('span', 'section-leading-icon chat-leading-icon');
+      leadingIconEl.setAttribute('aria-hidden', 'true');
+      var iconGlyph = el('i', 'ti ti-message-chatbot section-leading-icon-glyph');
+      iconGlyph.setAttribute('aria-hidden', 'true');
+      leadingIconEl.appendChild(iconGlyph);
+      heading.appendChild(leadingIconEl);
+      var textWrap = el('span', 'section-enable-text');
+      var titleEl = el('span', 'section-enable-title chat-enable-title', {
+        text: 'Assistant'
+      });
+      textWrap.appendChild(titleEl);
+      heading.appendChild(textWrap);
+      head.appendChild(heading);
+      head.appendChild(settingsBtn);
+      field.appendChild(head);
+      chrome = {
+        head: head,
+        label: null,
+        checkbox: null,
+        leadingIcon: leadingIconEl,
+        title: titleEl,
+        summary: null,
+        collapseBtn: null,
+        collapseLabel: '',
+        expandLabel: '',
+        enableLabel: ''
+      };
     } else {
-      chrome.head.appendChild(settingsBtn);
+      chrome = PriorityUI.createCollapsibleEnableChrome({
+        title: 'Assistant',
+        bodyId: 'agent-chat-body',
+        hideEnable: true,
+        leadingIcon: 'ti-message-chatbot',
+        iconClass: 'chat-leading-icon',
+        titleClass: 'chat-enable-title',
+        collapseLabel: 'Replier Assistant',
+        expandLabel: 'D\u00e9velopper Assistant'
+      });
+      field.appendChild(chrome.head);
+      // Gear left of the enable checkbox (checkbox stays on the far right).
+      if (chrome.label) {
+        chrome.head.insertBefore(settingsBtn, chrome.label);
+      } else {
+        chrome.head.appendChild(settingsBtn);
+      }
     }
 
-    var body = el('div', 'agent-chat-body section-toggle-body');
+    var body = el(
+      'div',
+      'agent-chat-body' + (standalone ? '' : ' section-toggle-body')
+    );
     body.id = 'agent-chat-body';
-    body.hidden = true;
+    body.hidden = !standalone;
 
     // ── Settings panel ──────────────────────────────────────────────────
     var settingsPanel = el('div', 'agent-settings');
@@ -1283,7 +1320,13 @@
     chatPanel.appendChild(debugPanel);
 
     body.appendChild(chatPanel);
-    field.appendChild(body);
+    if (standalone) {
+      var shell = el('div', 'section-toggle-shell');
+      field.appendChild(shell);
+      shell.appendChild(body);
+    } else {
+      field.appendChild(body);
+    }
     section.appendChild(field);
     cardEl.appendChild(section);
 
@@ -1301,7 +1344,21 @@
         ? PriorityUI.resolveSectionExpanded('chat', expandFallback)
         : expandFallback;
 
-    var collapse = PriorityUI.bindCollapsibleEnable({
+    var collapse;
+    if (standalone) {
+      collapse = {
+        isExpanded: function () {
+          return true;
+        },
+        setExpanded: function () {},
+        isEnabled: function () {
+          return true;
+        },
+        setEnabled: function () {},
+        refreshSummary: function () {}
+      };
+    } else {
+      collapse = PriorityUI.bindCollapsibleEnable({
       field: field,
       body: body,
       chrome: chrome,
@@ -1375,18 +1432,64 @@
         });
       },
     });
+    }
 
-    /** Pin chat to latest message; re-run after layout (dock / unhide / fonts). */
+    if (
+      standalone &&
+      global.ContextMenu &&
+      typeof global.ContextMenu.bind === 'function' &&
+      typeof global.ContextMenu.buildAgentItems === 'function'
+    ) {
+      ContextMenu.bind(chrome.head, function () {
+        return ContextMenu.buildAgentItems({
+          hideCollapse: true,
+          openSettings: function (opts) {
+            setSettingsOpen(true);
+            if (opts && opts.memory) {
+              memoryDetails.open = true;
+              if (typeof syncMemoryBadge === 'function') syncMemoryBadge();
+              if (opts.mountMemory && typeof mountMemoryUi === 'function') {
+                mountMemoryUi(
+                  opts.mountMemory === 'onboarding' ? 'onboarding' : 'ongoing'
+                );
+              }
+            }
+          },
+          focusComposer: openAndFocusComposer,
+        });
+      });
+    }
+
+    /** Pin chat to latest message; re-run after layout (dock / unhide / fonts / sizeTo). */
     function scrollMessagesToBottom() {
       if (!messagesEl) return;
       function pin() {
+        if (!messagesEl) return;
         messagesEl.scrollTop = messagesEl.scrollHeight;
       }
       pin();
-      requestAnimationFrame(function () {
-        pin();
-        requestAnimationFrame(pin);
-      });
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(function () {
+          pin();
+          requestAnimationFrame(pin);
+        });
+      }
+      // Suggestions, blocks, and t.sizeTo often grow the log after first paint.
+      setTimeout(pin, 0);
+      setTimeout(pin, 50);
+      setTimeout(pin, 120);
+    }
+
+    /** Keep pin during stream (answer in flight). */
+    function scrollMessagesIfPinned(force) {
+      if (!messagesEl) return;
+      if (!force) {
+        var slack = 96;
+        var dist =
+          messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight;
+        if (dist > slack) return;
+      }
+      messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
     function syncApplySummary() {
@@ -2213,20 +2316,19 @@
     function updateAgentSectionTitle() {
       var name = 'Assistant';
       if (chrome.title) chrome.title.textContent = name;
+      if (!chrome.collapseBtn) return;
       chrome.collapseLabel = 'Replier ' + name;
       chrome.expandLabel = 'D\u00e9velopper ' + name;
       chrome.enableLabel = 'Activer ' + name;
       if (chrome.checkbox) {
         chrome.checkbox.setAttribute('aria-label', chrome.enableLabel);
       }
-      if (chrome.collapseBtn) {
-        var expanded =
-          chrome.collapseBtn.getAttribute('aria-expanded') === 'true';
-        chrome.collapseBtn.setAttribute(
-          'aria-label',
-          expanded ? chrome.collapseLabel : chrome.expandLabel
-        );
-      }
+      var expanded =
+        chrome.collapseBtn.getAttribute('aria-expanded') === 'true';
+      chrome.collapseBtn.setAttribute(
+        'aria-label',
+        expanded ? chrome.collapseLabel : chrome.expandLabel
+      );
     }
 
     async function persistAgentIdentity(nextIdentity) {
@@ -2630,7 +2732,7 @@
           : msg;
         setQueuedRowText(lastVisible.row, lastVisible.text);
         dbgLog('agentUi', 'queue.combined', { queueLength: messageQueue.length });
-        messagesEl.scrollTop = messagesEl.scrollHeight;
+        scrollMessagesToBottom();
         notifyLayout();
         return true;
       }
@@ -2642,7 +2744,7 @@
         row: row
       });
       dbgLog('agentUi', 'queue.queued', { queueLength: messageQueue.length });
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+      scrollMessagesToBottom();
       notifyLayout();
       return true;
     }
@@ -5710,7 +5812,7 @@
       var offerEmotion = spiceEmotion('curious');
       attachAssistantFace(row, offerEmotion);
       messagesEl.appendChild(row);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+      scrollMessagesToBottom();
 
       activeOffer = { item: item, row: row };
       setListenBarState('offer');
@@ -6008,7 +6110,7 @@
         }
       }
       messagesEl.appendChild(row);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+      scrollMessagesToBottom();
       if (
         global.ContextMenu &&
         typeof global.ContextMenu.bind === 'function' &&
@@ -6081,7 +6183,7 @@
       messagesEl.appendChild(row);
       startThinkingMotions(row);
       freezeOlderAssistantFaces(row);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+      scrollMessagesToBottom();
       notifyLayout();
       return row;
     }
@@ -6289,7 +6391,7 @@
         );
         messagesEl.appendChild(row);
       }
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+      scrollMessagesToBottom();
       notifyLayout();
       if (hasFailures) {
         var errText = Agent.formatActionErrors
@@ -7455,6 +7557,7 @@
       }
       if (tabComplete) tabComplete.refresh();
       notifyLayout();
+      if (options.pinScroll) scrollMessagesToBottom();
     }
 
     function setSuggestionsBusy(isBusy) {
@@ -8448,7 +8551,8 @@
           suggestionsSeq += 1;
           renderSuggestions(openingSuggestions, {
             animate: true,
-            multi: openingMulti
+            multi: openingMulti,
+            pinScroll: true
           });
         }
         markSettleReady();
@@ -8458,6 +8562,7 @@
           setAssistantFaceEmotion(thinking, openingEmotion);
         }
         announceAssistantArrival({ emotion: openingEmotion });
+        scrollMessagesToBottom();
         dbgLog('agentUi', 'bootstrap.interview.end', { ok: true });
       } catch (err) {
         dbgError('agentUi', 'bootstrap.interview.end', err, { ok: false });
@@ -8755,7 +8860,7 @@
                 } else {
                   fillMessageContent(bubble, visible, [], { streaming: true });
                 }
-                messagesEl.scrollTop = messagesEl.scrollHeight;
+                scrollMessagesIfPinned(true);
                 notifyLayout();
               },
               asked: interviewState.asked || [],
@@ -8800,7 +8905,7 @@
                 } else {
                   fillMessageContent(bubble, visible, [], { streaming: true });
                 }
-                messagesEl.scrollTop = messagesEl.scrollHeight;
+                scrollMessagesIfPinned(true);
                 notifyLayout();
               }
             }
@@ -8971,7 +9076,8 @@
             suggestionsSeq += 1;
             renderSuggestions(turn.suggestions, {
               animate: true,
-              multi: turn.suggestionsMulti
+              multi: turn.suggestionsMulti,
+              pinScroll: true
             });
           } else {
             refreshSuggestions({ animate: true });
@@ -8980,11 +9086,15 @@
           suggestionsSeq += 1;
           renderSuggestions(turn.suggestions, {
             animate: true,
-            multi: turn.suggestionsMulti
+            multi: turn.suggestionsMulti,
+            pinScroll: true
           });
         } else if (!interviewActive) {
           refreshSuggestions({ animate: true });
         }
+        scrollMessagesToBottom();
+        notifyLayout();
+        scrollMessagesToBottom();
         dbgLog('agentUi', 'turn.end', {
           ok: true,
           kind: turnKind,
@@ -9002,12 +9112,14 @@
         appendChatError(errText);
         setError('');
         refreshSuggestions({ animate: true });
+        scrollMessagesToBottom();
       } finally {
         if (myGen === chatTurnGen) {
           if (queuedSelfPromptFocus != null) {
             queueSelfPromptReview(queuedSelfPromptFocus);
           }
           releasePendingAndDrain();
+          scrollMessagesToBottom();
         }
       }
     }

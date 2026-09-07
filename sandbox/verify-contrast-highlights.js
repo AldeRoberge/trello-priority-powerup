@@ -69,5 +69,43 @@ check(
     })
 );
 
+var ressenti =
+  "Okay, \u00e7a se comprend. T'as besoin de parler de rien de lourd ou juste de jaser un peu?";
+var ressentiPolished = Agent.ensureContrastHighlights(ressenti);
+check(
+  'ressenti keeps full right phrase (incl. peu)',
+  /\[\[g:jaser un peu\]\]/i.test(ressentiPolished) ||
+    /\[\[g:[^\]]*jaser[^\]]*peu\]\]/i.test(ressentiPolished)
+);
+check(
+  'ressenti does not truncate mid-phrase',
+  !/\[\[r:juste de jaser un\]\]/i.test(ressentiPolished)
+);
+check(
+  'ressenti heavy side is red',
+  /\[\[r:[^\]]*lourd\]\]/i.test(ressentiPolished)
+);
+check(
+  'ressenti light side is green',
+  /\[\[g:[^\]]*jaser/i.test(ressentiPolished)
+);
+var ressentiLinked = Agent.linkSuggestionColorsToHighlights(
+  [
+    { text: 'Juste jaser', heat: null },
+    { text: 'Un truc qui me p\u00e8se', heat: null },
+    { text: 'Rien', heat: null }
+  ],
+  ressentiPolished
+);
+check('Juste jaser chip is green', ressentiLinked[0].heat === 0);
+check(
+  'Un truc qui me p\u00e8se chip is red (or uncolored)',
+  ressentiLinked[1].heat === 4 || ressentiLinked[1].heat == null
+);
+check(
+  'Rien chip is not falsely green',
+  ressentiLinked[2].heat !== 0
+);
+
 console.log(bad ? '\n' + bad + ' failure(s)' : '\nAll contrast-highlight checks passed');
 process.exit(bad ? 1 : 0);

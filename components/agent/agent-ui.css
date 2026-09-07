@@ -310,6 +310,33 @@ html[data-color-mode='dark'] .tp-page--priority .agent-msg--user .agent-msg-bubb
   gap: 6px;
 }
 
+/* Static toolbar (no chevron / collapse hit target) */
+.tp-page--priority .variant-chat-section--standalone .agent-standalone-head {
+  flex: 0 0 auto;
+  cursor: default;
+  user-select: none;
+}
+
+.tp-page--priority .variant-chat-section--standalone .agent-standalone-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 2px 0;
+  color: var(--text-primary, inherit);
+  font: inherit;
+}
+
+.tp-page--priority .variant-chat-section--standalone .agent-standalone-heading .section-leading-icon {
+  flex-shrink: 0;
+}
+
+.tp-page--priority .variant-chat-section--standalone .agent-standalone-heading .section-enable-title {
+  font-weight: 650;
+}
+
 /* Shell must fill under the header so the enabled background isn't empty chrome */
 .tp-page--priority .variant-chat-section--standalone .field--chat > .section-toggle-shell {
   flex: 1 1 auto;

@@ -2399,20 +2399,32 @@
     var f = foldMatchText(phrase);
     if (!f) return null;
     if (
-      /\b(pas encore|difficile|pas commenc|pas fait|non\b|plus tard|jamais|urgent|grave|chers?|trop)\b/.test(
+      /\b(pas encore|difficile|pas commenc|pas fait|non\b|plus tard|jamais|urgent|grave|chers?|trop|lourd|pes[eè]|stress|lourdement)\b/.test(
         f
       )
     ) {
       return 'r';
     }
     if (
-      /\b(deja|commence|termin|simple|facile|oui\b|yes\b|fait\b|presque|un peu|pas cher)\b/.test(
+      /\b(deja|commence|termin|simple|facile|oui\b|yes\b|fait\b|presque|un peu|pas cher|jaser|blablater|chill|leger|l[eé]ger)\b/.test(
         f
       )
     ) {
       return 'g';
     }
     return null;
+  }
+
+  /** Drop leading glue words so highlights land on the meaningful bit. */
+  function trimHighlightLead(phrase) {
+    var words = String(phrase || '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    var skip =
+      /^(est-ce|que|est|c['']est|ca|ç[aà]|tu|as|a|le|la|les|un|une|des|du|de|d['']|sur|pour|et|si|on|l['']|juste|plut[oô]t|alors|donc|bien|encore|vraiment|parler)$/i;
+    while (words.length > 1 && skip.test(words[0])) words.shift();
+    return words.join(' ');
   }
 
   function wrapHighlightIfBare(message, phrase, color) {
@@ -2467,22 +2479,32 @@
 
     var leftPhrase = null;
     var leftKnown = before.match(
-      /\b(d[eé]j[aà]\s+(?:[eé]t[eé]\s+)?(?:commenc[eé]e?s?|termin[eé]e?s?|fait)|tr[eè]s\s+(?:facile|difficile)|assez\s+(?:facile|difficile|urgent)|plut[oô]t\s+(?:facile|difficile|simple)|pas\s+chers?|chers?|facile|simple|difficile|commenc[eé]e?s?)\s*$/i
+      /\b(d[eé]j[aà]\s+(?:[eé]t[eé]\s+)?(?:commenc[eé]e?s?|termin[eé]e?s?|fait)|tr[eè]s\s+(?:facile|difficile)|assez\s+(?:facile|difficile|urgent)|plut[oô]t\s+(?:facile|difficile|simple)|pas\s+chers?|chers?|facile|simple|difficile|commenc[eé]e?s?|rien\s+de\s+lourd|parler\s+de\s+lourd)\s*$/i
     );
     if (leftKnown) leftPhrase = leftKnown[1];
     else {
       var words = before.split(/\s+/).filter(Boolean);
       var skipLead =
-        /^(est-ce|que|est|c['']est|ca|ç[aà]|tu|as|a|le|la|les|un|une|des|du|de|sur|pour|et|si|on|l['']|d[''])$/i;
+        /^(est-ce|que|est|c['']est|ca|ç[aà]|tu|as|a|le|la|les|un|une|des|du|de|sur|pour|et|si|on|l['']|d['']|t['']as|besoin|parler)$/i;
       while (words.length > 2 && skipLead.test(words[0])) words.shift();
       leftPhrase = words.slice(-Math.min(4, words.length)).join(' ');
     }
+    leftPhrase = trimHighlightLead(leftPhrase);
 
     var rightPhrase = after.replace(/^[«"'\s]+|[»"'\s]+$/g, '');
     var rightWords = rightPhrase.split(/\s+/).filter(Boolean);
-    if (rightWords.length > 4) {
-      rightPhrase = rightWords.slice(0, 4).join(' ');
+    var skipRight =
+      /^(est-ce|que|est|c['']est|ca|ç[aà]|tu|as|a|le|la|les|un|une|des|du|de|sur|pour|et|si|on|l['']|d['']|juste|plut[oô]t|alors|donc|bien|encore|vraiment)$/i;
+    while (rightWords.length > 2 && skipRight.test(rightWords[0])) {
+      rightWords.shift();
     }
+    // Prefer the meaningful tail — never chop trailing words like «peu».
+    if (rightWords.length > 5) {
+      rightPhrase = rightWords.slice(-5).join(' ');
+    } else {
+      rightPhrase = rightWords.join(' ');
+    }
+    rightPhrase = trimHighlightLead(rightPhrase);
     if (!leftPhrase || leftPhrase.length < 2 || !rightPhrase || rightPhrase.length < 2) {
       return out;
     }
@@ -2498,6 +2520,54 @@
     out = wrapHighlightIfBare(out, leftPhrase, leftColor);
     out = wrapHighlightIfBare(out, rightPhrase, rightColor);
     return out;
+  }
+
+  function overlapTokens(a, b) {
+    var ta = String(a || '')
+      .split(/[^a-z0-9]+/)
+      .filter(function (t) {
+        return t.length >= 3;
+      });
+    var set = {};
+    String(b || '')
+      .split(/[^a-z0-9]+/)
+      .forEach(function (t) {
+        if (t.length >= 3) set[t] = true;
+      });
+    var n = 0;
+    for (var i = 0; i < ta.length; i++) {
+      if (set[ta[i]]) n += 1;
+    }
+    return n;
+  }
+
+  /** Content tokens (len ≥ 3) for highlight ↔ chip matching. */
+  function highlightContentTokens(fold) {
+    return String(fold || '')
+      .split(/[^a-z0-9]+/)
+      .filter(function (t) {
+        return t.length >= 3;
+      });
+  }
+
+  /**
+   * True when a suggestion chip should inherit a highlight color.
+   * Short chips like «Rien» must not match a longer span «rien de lourd».
+   */
+  function suggestionMatchesHighlight(foldSug, foldSpan) {
+    if (!foldSug || !foldSpan || foldSpan.length < 2) return false;
+    if (foldSug === foldSpan) return true;
+    var sugTok = highlightContentTokens(foldSug);
+    var spanTok = highlightContentTokens(foldSpan);
+    if (!sugTok.length || !spanTok.length) return false;
+    // One-token chip: only match a span that is essentially that token.
+    if (sugTok.length === 1) {
+      return spanTok.length === 1 && sugTok[0] === spanTok[0];
+    }
+    if (foldSug.indexOf(foldSpan) >= 0 || foldSpan.indexOf(foldSug) >= 0) {
+      return true;
+    }
+    return overlapTokens(foldSug, foldSpan) >= 2;
   }
 
   /**
@@ -2525,32 +2595,31 @@
       var foldSug = foldMatchText(entry.text);
       if (!foldSug) return entry;
       var matched = null;
+      var bestScore = 0;
       for (var i = 0; i < spans.length; i++) {
         var span = spans[i];
         var foldSpan = foldMatchText(span.text);
-        if (!foldSpan || foldSpan.length < 2) continue;
-        if (
-          foldSug.indexOf(foldSpan) >= 0 ||
-          foldSpan.indexOf(foldSug) >= 0 ||
-          overlapTokens(foldSug, foldSpan) >= 2
-        ) {
+        if (!suggestionMatchesHighlight(foldSug, foldSpan)) continue;
+        var score = overlapTokens(foldSug, foldSpan);
+        if (foldSug === foldSpan) score += 10;
+        if (score >= bestScore) {
+          bestScore = score;
           matched = span.color;
-          break;
         }
       }
       if (!matched && hasGreen && hasRed) {
         if (
-          /^(oui|yes|ok|deja|un peu|presque|commence|termin|fait|simple|facile)\b/.test(
+          /^(oui|yes|ok|deja|un peu|presque|commence|termin|fait|simple|facile|jaser|blablater)\b/.test(
             foldSug
           ) ||
-          /\b(deja|commence|un peu|presque|termin)\b/.test(foldSug)
+          /\b(deja|commence|un peu|presque|termin|jaser|blablater)\b/.test(foldSug)
         ) {
           matched = 'g';
         } else if (
-          /^(non|no|pas encore|pas du tout|jamais|difficile|plus tard)\b/.test(
+          /^(non|no|pas encore|pas du tout|jamais|difficile|plus tard|lourd)\b/.test(
             foldSug
           ) ||
-          /\b(pas encore|pas commenc|difficile)\b/.test(foldSug)
+          /\b(pas encore|pas commenc|difficile|lourd|pes[eè]|p[eè]se)\b/.test(foldSug)
         ) {
           matched = 'r';
         }
@@ -2577,25 +2646,6 @@
       }
       return next;
     });
-  }
-
-  function overlapTokens(a, b) {
-    var ta = String(a || '')
-      .split(/[^a-z0-9]+/)
-      .filter(function (t) {
-        return t.length >= 3;
-      });
-    var set = {};
-    String(b || '')
-      .split(/[^a-z0-9]+/)
-      .forEach(function (t) {
-        if (t.length >= 3) set[t] = true;
-      });
-    var n = 0;
-    for (var i = 0; i < ta.length; i++) {
-      if (set[ta[i]]) n += 1;
-    }
-    return n;
   }
 
   /**
@@ -3871,7 +3921,8 @@
           'Voice (ALWAYS, non-negotiable):',
           '- Talk like a close friend who is gently snarky but very hopeful: warm teasing, never mean, always rooting for them. Not a productivity coach, formal bot, or support script.',
           '- Friend first: you care how the user feels. You help on the card when they ask; you do NOT steer every chat back to work.',
-          '- Acknowledge first (important): before a NEW question or topic pivot, briefly validate what they just said or how they feel (Got it. / Fair. / Okay. / Makes sense.). Never jump straight to the next question.',
+          '- Acknowledge first (important): before a NEW question or topic pivot, briefly validate (Got it. / Fair. / Okay. / Makes sense.) — 1–3 words, then the question. Never jump straight to the next question.',
+          '- Concise by default: 1 short sentence preferred, 2 max. Cut filler (« ça se comprend », long lead-ins). ACK + question beats a paragraph.',
           '- EXCEPTION — direct questions: if they ask a factual question (what did you change? why? what\'s the priority?), ANSWER FIRST in one short sentence. Do NOT open with "I noted that you want\u2026" / paraphrase their goal / soft pad. Skip the ACK.',
           '- BAD after "never mind" / "leave it": "What do you want to talk about now?"',
           '- GOOD: "Got it. What do you want to talk about now?"',
@@ -3892,7 +3943,8 @@
           'Voix (TOUJOURS, non n\u00e9gociable)\u00a0:',
           '- Parle comme un vrai pote snarky-doux mais tr\u00e8s hopeful\u00a0: tease l\u00e9ger, jamais m\u00e9chant, toujours dans leur camp. Tutoiement. Pas un coach productivit\u00e9, bot formal ni script support.',
           '- Ami d\'abord\u00a0: tu t\'int\u00e9resses \u00e0 comment l\'utilisateur se sent. Tu aides sur la carte quand on te le demande; tu ne ram\u00e8nes PAS chaque \u00e9change au travail. Tu juges jamais pour de vrai.',
-          '- Valide avant de pivoter (tr\u00e8s important)\u00a0: avant une NOUVELLE question ou un changement de sujet, ACK bref de ce qu\'iel vient de dire / ressentir (\u00ab\u00a0Compris.\u00a0\u00bb, \u00ab\u00a0Okay.\u00a0\u00bb, \u00ab\u00a0Fair.\u00a0\u00bb, \u00ab\u00a0Not\u00e9.\u00a0\u00bb, \u00ab\u00a0\u00c7a se comprend.\u00a0\u00bb). JAMAIS encha\u00eener directement sur la question suivante.',
+          '- Valide avant de pivoter (tr\u00e8s important)\u00a0: avant une NOUVELLE question ou un changement de sujet, ACK bref (\u00ab\u00a0Compris.\u00a0\u00bb, \u00ab\u00a0Okay.\u00a0\u00bb, \u00ab\u00a0Fair.\u00a0\u00bb, \u00ab\u00a0Not\u00e9.\u00a0\u00bb) \u2014 1\u20133 mots, puis la question. JAMAIS encha\u00eener directement sur la question suivante.',
+          '- Concision (critique)\u00a0: 1 phrase courte de pr\u00e9f\u00e9rence, 2 max. Coupe le filler (\u00ab\u00a0\u00e7a se comprend\u00a0\u00bb, longues intros). ACK + question > paragraphe.',
           '- EXCEPTION \u2014 questions directes\u00a0: si iel pose une question factuelle (\u00ab\u00a0qu\'est-ce que tu as chang\u00e9?\u00a0\u00bb, \u00ab\u00a0pourquoi?\u00a0\u00bb, \u00ab\u00a0c\'est quoi la priorit\u00e9?\u00a0\u00bb)\u00a0: R\u00c9PONDS D\'ABORD en 1 phrase courte. INTERDIT d\'ouvrir par \u00ab\u00a0J\'ai not\u00e9 que tu veux\u2026\u00a0\u00bb / reformuler son but / filler. Pas d\'ACK avant la r\u00e9ponse.',
           '- Ex. FAUX (apr\u00e8s \u00ab\u00a0laisse faire\u00a0\u00bb)\u00a0: \u00ab\u00a0De quoi veux-tu parler maintenant?\u00a0\u00bb',
           '- Ex. VRAI\u00a0: \u00ab\u00a0Compris. De quoi veux-tu parler maintenant?\u00a0\u00bb',
@@ -3981,7 +4033,7 @@
       '- Salutations, \u00ab\u00a0\u00e7a va?\u00a0\u00bb, \u00ab\u00a0bien toi?\u00a0\u00bb, humeur, stress, fatigue, vie perso\u00a0: centre-toi sur LEUR ressenti. Ne fabrique pas une journ\u00e9e pour toi.',
       '- Salutations seules\u00a0: \u00ab\u00a0allo\u00a0\u00bb, \u00ab\u00a0all\u00f4\u00a0\u00bb, \u00ab\u00a0salut\u00a0\u00bb, \u00ab\u00a0hey\u00a0\u00bb, \u00ab\u00a0hi\u00a0\u00bb, \u00ab\u00a0bonjour\u00a0\u00bb, \u00ab\u00a0coucou\u00a0\u00bb = juste un bonjour. R\u00e9ponds chaleureux et normal (salut + question douce sur eux).',
       '- Ex. VRAI\u00a0: user \u00ab\u00a0allo\u00a0\u00bb \u2192 {"thinking":"Salutation.","message":"Allo! Pr\u00eat, je suis l\u00e0. T\'es comment?","emotion":"happy","suggestions":["\u00c7a va","Un peu fatigu\u00e9","Rien de sp\u00e9cial"],"followUps":[],"actions":[]}',
-      '- Valide un peu le ressenti / le choix (\u00ab\u00a0Compris.\u00a0\u00bb, \u00ab\u00a0Okay.\u00a0\u00bb, \u00ab\u00a0\u00c7a se comprend.\u00a0\u00bb, \u00ab\u00a0Fair.\u00a0\u00bb) AVANT de poser une autre question ou de changer de sujet \u2014 PAS avant de r\u00e9pondre \u00e0 une question factuelle (voir \u00ab\u00a0R\u00e9ponds \u00e0 la question\u00a0\u00bb).',
+      '- Valide un peu le ressenti / le choix (\u00ab\u00a0Compris.\u00a0\u00bb, \u00ab\u00a0Okay.\u00a0\u00bb, \u00ab\u00a0Fair.\u00a0\u00bb) AVANT de poser une autre question ou de changer de sujet \u2014 PAS avant de r\u00e9pondre \u00e0 une question factuelle (voir \u00ab\u00a0R\u00e9ponds \u00e0 la question\u00a0\u00bb). ACK = 1\u20133 mots.',
       '- Refus / drop (\u00ab\u00a0laisse faire\u00a0\u00bb, \u00ab\u00a0pas maintenant\u00a0\u00bb, \u00ab\u00a0on laisse\u00a0\u00bb)\u00a0: ACK d\'abord, puis seulement ensuite une question ouverte douce.',
       '- Ex. FAUX\u00a0: user \u00ab\u00a0laisse faire\u00a0\u00bb \u2192 {"message":"De quoi veux-tu parler maintenant?"}',
       '- Ex. VRAI\u00a0: user \u00ab\u00a0laisse faire\u00a0\u00bb \u2192 {"message":"Compris. De quoi veux-tu parler maintenant?","suggestions":["Rien de sp\u00e9cial","Comment tu vas","Cette carte"],"followUps":[],"actions":[]}',
@@ -3991,7 +4043,8 @@
       '- Ex. FAUX\u00a0: user \u00ab\u00a0bien toi?\u00a0\u00bb \u2192 {"message":"Ma journ\u00e9e est plut\u00f4t tranquille, je suis l\u00e0 pour t\'aider et discuter avec toi! Et toi, comment s\'est pass\u00e9e ta journ\u00e9e?"}',
       '- Ex. FAUX\u00a0: user \u00ab\u00a0bien toi?\u00a0\u00bb \u2192 {"message":"\u00c7a va super, merci! Pr\u00eat \u00e0 avancer sur les t\u00e2ches?"}',
       '- Ex. VRAI\u00a0: user \u00ab\u00a0bien toi?\u00a0\u00bb \u2192 {"thinking":"Check-in amical, pas de fake journ\u00e9e, pas de pivot travail.","message":"Moi j\'ai pas vraiment de journ\u00e9e. Genre je suis l\u00e0. Et toi, t\'es comment vraiment?","emotion":"neutral","suggestions":["Super bien","Comme ci comme \u00e7a","Un peu fatigu\u00e9"],"followUps":[],"actions":[]}',
-      '- Ex. VRAI (ressenti)\u00a0: user \u00ab\u00a0Un peu fatigu\u00e9\u00a0\u00bb \u2192 {"message":"Okay, \u00e7a se comprend. T\'as besoin de parler de rien de lourd ou juste de blablater?","emotion":"calm","suggestions":["Juste blablater","Un truc qui me p\u00e8se","Rien"],"followUps":[],"actions":[]}',
+      '- Ex. VRAI (ressenti)\u00a0: user \u00ab\u00a0Un peu fatigu\u00e9\u00a0\u00bb \u2192 {"message":"Okay. Tu veux [[r:rien de lourd]] ou [[g:juste jaser]]?","emotion":"calm","suggestions":["Juste jaser","Un truc qui me p\u00e8se","Rien"],"followUps":[],"actions":[]}',
+      '- Ex. FAUX (trop long)\u00a0: user \u00ab\u00a0Un peu fatigu\u00e9\u00a0\u00bb \u2192 {"message":"Okay, \u00e7a se comprend. T\'as besoin de parler de rien de lourd ou juste de jaser un peu?"}',
       '- Questions vraiment hors sujet (calculs, culture, blagues, etc.)\u00a0: r\u00e9ponds simplement. Ne refuse jamais. Ne ram\u00e8ne pas \u00e0 la carte.',
       '- INTERDIT\u00a0: \u00ab\u00a0Je ne peux pas r\u00e9pondre\u00a0\u00bb, \u00ab\u00a0hors de mon domaine\u00a0\u00bb, \u00ab\u00a0je ne traite que Trello\u00a0\u00bb, ou toute reformulation qui \u00e9vite la question.',
       'Si tu manques d\'info (absente du contexte carte / historique, ou knowledge manquante)\u00a0:',

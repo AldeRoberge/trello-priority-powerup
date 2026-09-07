@@ -312,6 +312,16 @@ describe('ContextMenu', () => {
     assert.deepEqual(opened, {});
   });
 
+  it('buildAgentItems hideCollapse skips expand toggle', () => {
+    const items = ContextMenu.buildAgentItems({
+      hideCollapse: true,
+      openSettings() {},
+    });
+    const ids = items.filter((i) => !i.sep).map((i) => i.id);
+    assert.equal(ids.includes('toggle-expand'), false);
+    assert.ok(ids.includes('edit-settings'));
+  });
+
   it('buildOverviewItems reflects blocked / overdue state', () => {
     const actions = [];
     const items = ContextMenu.buildOverviewItems({

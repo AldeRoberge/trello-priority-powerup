@@ -257,15 +257,17 @@
   function buildAgentItems(opts) {
     opts = opts || {};
     var items = [];
-    items.push(
-      buildExpandToggleItem({
-        isExpanded: opts.isExpanded,
-        setExpanded: opts.setExpanded,
-        collapseLabel: opts.collapseLabel || 'Replier Assistant',
-        expandLabel: opts.expandLabel || 'D\u00e9velopper Assistant',
-      })
-    );
-    items.push({ sep: true });
+    if (!opts.hideCollapse) {
+      items.push(
+        buildExpandToggleItem({
+          isExpanded: opts.isExpanded,
+          setExpanded: opts.setExpanded,
+          collapseLabel: opts.collapseLabel || 'Replier Assistant',
+          expandLabel: opts.expandLabel || 'D\u00e9velopper Assistant',
+        })
+      );
+      items.push({ sep: true });
+    }
     items.push({
       id: 'edit-settings',
       label: 'Modifier les param\u00e8tres',
