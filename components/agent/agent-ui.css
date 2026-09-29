@@ -4613,16 +4613,14 @@ html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-value.is-bad {
 .tp-page--priority .agent-suggestion-chip:not(.agent-suggestion-chip--scale) {
   width: 100%;
   border-style: solid;
-  border-color: var(--tp-border-strong);
   border-radius: 8px;
-  background: var(--tp-elev-2, transparent);
-  color: var(--tp-text);
   padding: 8px 12px;
   font-weight: 500;
 }
 
-.tp-page--priority .agent-suggestions .agent-suggestion-chip[class*='agent-suggestion-chip--color-']:not(.is-selected) {
+.tp-page--priority .agent-suggestion-chip:not(.agent-suggestion-chip--scale):not([class*='agent-suggestion-chip--color-']) {
   border-color: var(--tp-border-strong);
+  background: var(--tp-elev-2, transparent);
   color: var(--tp-text);
 }
 

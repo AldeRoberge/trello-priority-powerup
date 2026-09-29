@@ -7587,6 +7587,12 @@
     async function refreshSuggestions(options) {
       options = options || {};
       if (!Agent.isConfigured(provider) || pending) return;
+      // The assistant just asked something: next-step intents would not answer it.
+      if (lastAssistantAsksQuestion()) {
+        suggestionsSeq += 1;
+        clearSuggestions();
+        return;
+      }
       var seq = ++suggestionsSeq;
       setSuggestionsBusy(true);
       try {
