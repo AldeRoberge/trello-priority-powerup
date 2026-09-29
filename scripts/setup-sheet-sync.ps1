@@ -55,7 +55,7 @@ function Write-Info([string]$Text) { Write-Host "  $Text" -ForegroundColor DarkG
 function Invoke-Native([scriptblock]$Command) {
   $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
-  try { & $Command; return $LASTEXITCODE } finally { $ErrorActionPreference = $prev }
+  try { & $Command | Out-Host; return [int]$LASTEXITCODE } finally { $ErrorActionPreference = $prev }
 }
 
 function Invoke-Step([string]$Name, [string]$Title, [scriptblock]$Body) {
