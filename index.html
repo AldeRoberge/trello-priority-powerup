@@ -28,6 +28,7 @@
   <script src="./components/agent/agent-memory.js"></script>
   <script src="./components/profile/user-profile.js"></script>
   <link rel="stylesheet" href="./components/shared/trello-theme.css" />
+  <link rel="stylesheet" href="./components/shared/landing-guide.css" />
   <link rel="icon" type="image/png" href="./assets/icon.png" />
 </head>
 <body>
@@ -41,6 +42,116 @@
       <p class="tp-version-relative" id="versionRelative">Chargement…</p>
       <p class="tp-version-utc" id="versionUtc"></p>
     </div>
+
+    <main class="tp-guide" id="setupGuide">
+      <h2>Guide d’installation</h2>
+      <p class="tp-guide-intro">
+        Trello Cerveau n’est pas (encore) dans le répertoire officiel des Power-Ups : vous l’ajoutez
+        à votre compte en quelques minutes en créant un Power-Up « personnalisé » qui pointe vers ce site.
+      </p>
+
+      <ol class="tp-guide-steps">
+        <li class="tp-guide-step">
+          <h3>Créer le Power-Up dans Trello</h3>
+          <ol>
+            <li>Ouvrez <a href="https://trello.com/power-ups/admin" target="_blank" rel="noopener">trello.com/power-ups/admin</a> (connecté à votre compte Trello).</li>
+            <li>Cliquez sur <strong>Create new Power-Up</strong>.</li>
+            <li>Nom : <strong>Trello Cerveau</strong> (ou celui de votre choix). Choisissez votre espace de travail (workspace), renseignez un courriel de contact et un nom d’auteur.</li>
+            <li>Dans <strong>Iframe connector URL</strong>, collez l’adresse ci-dessous :</li>
+          </ol>
+          <div class="tp-guide-copy">
+            <code id="connectorUrl">https://alderoberge.github.io/trello-priority-powerup/index.html</code>
+            <button type="button" id="copyConnectorUrl">Copier</button>
+          </div>
+          <p>Créez ensuite le Power-Up.</p>
+        </li>
+
+        <li class="tp-guide-step">
+          <h3>Activer les six capacités</h3>
+          <p>Dans l’onglet <strong>Capabilities</strong>, cochez <strong>uniquement</strong> :</p>
+          <ul class="tp-guide-caps">
+            <li><code>card-badges</code></li>
+            <li><code>card-detail-badges</code></li>
+            <li><code>card-back-section</code></li>
+            <li><code>board-buttons</code></li>
+            <li><code>list-sorters</code></li>
+            <li><code>on-enable</code></li>
+          </ul>
+          <p>Ne cochez pas <code>card-buttons</code>, <code>list-actions</code> ni <code>on-disable</code>. Enregistrez.</p>
+        </li>
+
+        <li class="tp-guide-step">
+          <h3>Ajouter le Power-Up à un tableau</h3>
+          <ol>
+            <li>Ouvrez le tableau Trello où vous voulez l’utiliser.</li>
+            <li>Menu du tableau → <strong>Power-Ups</strong> → <strong>Ajouter des Power-Ups</strong> → onglet <strong>Custom</strong>.</li>
+            <li>Trouvez <strong>Trello Cerveau</strong> et cliquez sur <strong>Ajouter</strong>. Une fenêtre de bienvenue s’affiche.</li>
+          </ol>
+          <p class="tp-guide-note">
+            Si des fonctions manquent (badge, entrée « Priorité » dans <em>Trier par…</em>), retirez le Power-Up
+            du tableau, rechargez la page Trello puis ajoutez-le de nouveau.
+          </p>
+        </li>
+
+        <li class="tp-guide-step">
+          <h3>Définir une première priorité</h3>
+          <p>
+            Ouvrez une carte : la fenêtre <strong>Cerveau</strong> s’ouvre. Réglez l’<strong>urgence</strong>,
+            l’<strong>impact</strong> et la <strong>facilité</strong> avec les curseurs (ou touchez un palier sur la
+            barre de chaleur). Le score et le palier (ex. <code>7.9 · Urgent</code>) apparaissent en badge sur la carte.
+          </p>
+          <p>
+            Pour trier une colonne : menu <code>…</code> de la liste → <strong>Trier par…</strong> → <strong>Priorité</strong>.
+          </p>
+        </li>
+
+        <li class="tp-guide-step">
+          <h3>Personnaliser <span class="tp-guide-tag">optionnel</span></h3>
+          <p>Le bouton <strong>Paramètres du Cerveau</strong> (menu du tableau) donne accès à :</p>
+          <ul>
+            <li><strong>Mon profil</strong> : langue, ton de l’assistant, sections visibles dans l’éditeur.</li>
+            <li><strong>Assistant IA</strong> : compatible OpenAI et OpenRouter — vous fournissez votre propre clé, stockée en privé sur votre compte Trello.</li>
+            <li><strong>Statuts</strong> : associer vos listes à des catégories (à faire, en cours, terminé…).</li>
+            <li><strong>Gantt</strong> (bêta) : vue chronologique du tableau à partir des dates de début et d’échéance.</li>
+          </ul>
+        </li>
+
+        <li class="tp-guide-step">
+          <h3>Fonctions avancées <span class="tp-guide-tag">optionnel</span></h3>
+          <ul>
+            <li>
+              <strong>Tri automatique</strong> : réordonne la carte dès que sa priorité change. Nécessite votre propre copie
+              du dépôt avec <code>appKey</code> dans <code>rest-config.js</code>, l’onglet <strong>API Key</strong> du Power-Up
+              (avec votre domaine dans <em>Allowed origins</em>), puis <strong>Autoriser Trello</strong> dans les paramètres.
+            </li>
+            <li>
+              <strong>Synchronisation Outlook</strong> :
+              <a href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/outlook-entra-setup.md" target="_blank" rel="noopener">Entra</a>,
+              <a href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/outlook-power-automate.md" target="_blank" rel="noopener">Power Automate</a> ou
+              <a href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/outlook-ics-export.md" target="_blank" rel="noopener">export .ics</a>.
+            </li>
+            <li>
+              <strong>Google Sheets</strong> :
+              <a href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/google-sheets-sync.md" target="_blank" rel="noopener">guide de synchronisation</a>.
+            </li>
+          </ul>
+        </li>
+      </ol>
+
+      <details>
+        <summary>Dépannage</summary>
+        <ul>
+          <li>Le Power-Up n’apparaît pas dans <strong>Custom</strong> : vérifiez qu’il est créé dans le même espace de travail que le tableau.</li>
+          <li>Trello affiche une erreur au chargement : l’URL du connecteur doit se terminer par <code>/index.html</code> et s’ouvrir dans le navigateur.</li>
+          <li>Badge ou bouton absent : vérifiez les six capacités, puis retirez et réajoutez le Power-Up.</li>
+          <li>« Priorité » absent de <em>Trier par…</em> : ouvrez le menu <code>…</code> de la <strong>liste</strong> (pas du tableau) et confirmez que <code>list-sorters</code> est coché.</li>
+        </ul>
+      </details>
+
+      <p class="tp-guide-footer">
+        <a href="https://github.com/AldeRoberge/trello-priority-powerup" target="_blank" rel="noopener">Code source sur GitHub</a>
+      </p>
+    </main>
   </div>
 
 <script>
@@ -56,6 +167,22 @@
     document.getElementById('landing').hidden = false;
     initLanding();
   }
+
+  (function initCopyButton() {
+    var btn = document.getElementById('copyConnectorUrl');
+    var code = document.getElementById('connectorUrl');
+    if (!btn || !code) return;
+    btn.addEventListener('click', function () {
+      var text = code.textContent.trim();
+      var done = function () {
+        btn.textContent = 'Copié ✓';
+        setTimeout(function () { btn.textContent = 'Copier'; }, 1800);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () {});
+      }
+    });
+  })();
 
   function renderVersion(builtAt) {
     document.getElementById('versionRelative').textContent = BuildVersion.updatedLabel(builtAt);
