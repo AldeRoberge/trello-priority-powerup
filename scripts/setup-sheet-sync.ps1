@@ -170,6 +170,99 @@ function Invoke-Trello([string]$Path) {
   return Invoke-RestMethod -Uri ("https://api.trello.com/1$Path${sep}key=$($vars['TRELLO_KEY'])&token=$($vars['TRELLO_TOKEN'])")
 }
 
+# Interactive list picker: arrow keys / PageUp / PageDown / Home / End, type to filter, Enter to
+# pick, Esc to cancel. Falls back to a numbered prompt when the console can't do key input.
+# Each item needs .Label (main text), .Detail (dim right-hand text) and optionally .Group.
+function Select-FromList {
+  param([string]$Title, [object[]]$Items, [int]$PageSize = 12)
+  if (-not $Items -or -not $Items.Count) { throw "Nothing to choose from." }
+
+  $canKey = $true
+  try { if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) { $canKey = $false } } catch { $canKey = $false }
+  if (-not $canKey) {
+    for ($i = 0; $i -lt $Items.Count; $i++) { Write-Host ("  [{0}] {1}  {2}" -f ($i + 1), $Items[$i].Label, $Items[$i].Detail) }
+    $n = [int](Read-Host "  $Title (number)") - 1
+    if ($n -lt 0 -or $n -ge $Items.Count) { throw "Invalid choice." }
+    return $Items[$n]
+  }
+
+  $filter = ""
+  $index = 0
+  $offset = 0
+  $height = $PageSize + 4 # title, filter, rows, footer
+  Write-Host ""
+  for ($i = 0; $i -lt $height; $i++) { Write-Host "" }
+  $top = [Console]::CursorTop - $height
+  if ($top -lt 0) { $top = 0 }
+  $prevCursor = [Console]::CursorVisible
+  [Console]::CursorVisible = $false
+
+  function Write-Line([int]$row, [string]$text, $fg, $bg) {
+    $w = [Console]::WindowWidth - 1
+    if ($text.Length -gt $w) { $text = $text.Substring(0, $w) }
+    [Console]::SetCursorPosition(0, $row)
+    if ($bg) { Write-Host $text.PadRight($w) -ForegroundColor $fg -BackgroundColor $bg -NoNewline }
+    else { Write-Host $text.PadRight($w) -ForegroundColor $fg -NoNewline }
+  }
+
+  try {
+    while ($true) {
+      $shown = @($Items | Where-Object { -not $filter -or ("$($_.Label) $($_.Detail) $($_.Group)" -like "*$filter*") })
+      if ($index -ge $shown.Count) { $index = [Math]::Max(0, $shown.Count - 1) }
+      if ($index -lt $offset) { $offset = $index }
+      if ($index -ge $offset + $PageSize) { $offset = $index - $PageSize + 1 }
+
+      Write-Line $top "  $Title" Cyan $null
+      Write-Line ($top + 1) ("  Filter: " + $filter + "_") Yellow $null
+      $labelW = 0
+      foreach ($it in $shown) { if ($it.Label.Length -gt $labelW) { $labelW = $it.Label.Length } }
+      $labelW = [Math]::Min($labelW, 44)
+      for ($r = 0; $r -lt $PageSize; $r++) {
+        $i = $offset + $r
+        if ($i -lt $shown.Count) {
+          $it = $shown[$i]
+          $label = if ($it.Label.Length -gt $labelW) { $it.Label.Substring(0, $labelW - 1) + [char]0x2026 } else { $it.Label }
+          $text = ("{0} {1}  {2}" -f $(if ($i -eq $index) { ">" } else { " " }), $label.PadRight($labelW), $it.Detail)
+          if ($i -eq $index) { Write-Line ($top + 2 + $r) $text Black Cyan } else { Write-Line ($top + 2 + $r) $text Gray $null }
+        } else {
+          Write-Line ($top + 2 + $r) ($(if ($r -eq 0 -and -not $shown.Count) { "  No match" } else { "" })) DarkGray $null
+        }
+      }
+      $more = if ($shown.Count) { "{0}/{1}" -f ($index + 1), $shown.Count } else { "0/0" }
+      Write-Line ($top + 2 + $PageSize) ("  Up/Down move, type to filter, Enter select, Esc cancel   " + $more) DarkGray $null
+
+      $key = [Console]::ReadKey($true)
+      switch ($key.Key) {
+        "UpArrow" { if ($index -gt 0) { $index-- } }
+        "DownArrow" { if ($index -lt $shown.Count - 1) { $index++ } }
+        "PageUp" { $index = [Math]::Max(0, $index - $PageSize) }
+        "PageDown" { $index = [Math]::Min([Math]::Max(0, $shown.Count - 1), $index + $PageSize) }
+        "Home" { $index = 0 }
+        "End" { $index = [Math]::Max(0, $shown.Count - 1) }
+        "Backspace" { if ($filter.Length) { $filter = $filter.Substring(0, $filter.Length - 1); $index = 0; $offset = 0 } }
+        "Escape" { throw "Selection cancelled." }
+        "Enter" { if ($shown.Count) { return $shown[$index] } }
+        default {
+          if ($key.KeyChar -and -not [char]::IsControl($key.KeyChar)) { $filter += $key.KeyChar; $index = 0; $offset = 0 }
+        }
+      }
+    }
+  } finally {
+    for ($r = 0; $r -lt $height; $r++) { Write-Line ($top + $r) "" Gray $null }
+    [Console]::SetCursorPosition(0, $top)
+    [Console]::CursorVisible = $prevCursor
+  }
+}
+
+function Format-Ago([string]$iso) {
+  if (-not $iso) { return "" }
+  $span = (Get-Date).ToUniversalTime() - ([datetime]$iso).ToUniversalTime()
+  if ($span.TotalMinutes -lt 60) { return "active {0} min ago" -f [Math]::Max(1, [int]$span.TotalMinutes) }
+  if ($span.TotalHours -lt 48) { return "active {0} h ago" -f [int]$span.TotalHours }
+  if ($span.TotalDays -lt 60) { return "active {0} days ago" -f [int]$span.TotalDays }
+  return "active {0} months ago" -f [int]($span.TotalDays / 30)
+}
+
 function Invoke-Worker([string]$Method, [string]$Path) {
   $vars = Read-DevVars
   return Invoke-RestMethod -Method $Method -Uri ($State.workerUrl.TrimEnd('/') + $Path) -Headers @{ "x-sync-secret" = $vars['SYNC_SECRET'] } -TimeoutSec 120
@@ -211,13 +304,15 @@ Invoke-Step "trello" "3/7 Trello token + board" {
   Write-Info "Trello account: $($me.username)"
 
   if (-not $State.boardId) {
-    $boards = @(Invoke-Trello "/members/me/boards?filter=open&fields=name,url" | ForEach-Object { $_ })
+    $boards = @(Invoke-Trello "/members/me/boards?filter=open&fields=name,url,dateLastActivity&organization=true&organization_fields=displayName" | ForEach-Object { $_ })
     if (-not $boards.Count) { throw "No open Trello boards found." }
-    for ($i = 0; $i -lt $boards.Count; $i++) { Write-Host ("  [{0}] {1}" -f ($i + 1), $boards[$i].name) }
-    $pick = [int](Read-Host "  Which board to sync (number)") - 1
-    if ($pick -lt 0 -or $pick -ge $boards.Count) { throw "Invalid choice." }
-    $State.boardId = $boards[$pick].id
-    $State.boardName = $boards[$pick].name
+    $items = @($boards | Sort-Object { $_.dateLastActivity } -Descending | ForEach-Object {
+        $ws = if ($_.organization -and $_.organization.displayName) { $_.organization.displayName } else { "Personal" }
+        [pscustomobject]@{ Label = $_.name; Detail = ("{0}  |  {1}" -f $ws, (Format-Ago $_.dateLastActivity)); Group = $ws; Board = $_ }
+      })
+    $picked = Select-FromList -Title "Which Trello board should be synced?" -Items $items
+    $State.boardId = $picked.Board.id
+    $State.boardName = $picked.Board.name
   }
   $vars = Read-DevVars
   $vars['TRELLO_BOARD_ID'] = $State.boardId
