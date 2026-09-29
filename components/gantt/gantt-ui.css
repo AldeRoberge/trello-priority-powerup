@@ -1396,3 +1396,157 @@ html:has(body.tp-page--gantt) body {
   width: 100%;
   accent-color: var(--tp-primary, #0c66e4);
 }
+
+/* ---- Toolbar groups: Vue · Période · Affichage · Outils ---- */
+.gantt-toolbar {
+  gap: 8px 0;
+}
+
+.gantt-tb-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-left: 1px solid var(--tp-border, #091e4224);
+}
+
+.gantt-tb-group:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.gantt-tb-caption {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--tp-text-subtle, #44546f);
+  opacity: 0.8;
+}
+
+.gantt-title {
+  padding: 0 14px;
+  border-left: 1px solid var(--tp-border, #091e4224);
+  white-space: nowrap;
+}
+
+.gantt-tb-group--tools {
+  margin-left: auto;
+  padding-right: 0;
+}
+
+.gantt-tb-group--tools .gantt-btn,
+.gantt-btn--icon {
+  padding: 5px 8px;
+}
+
+/* Joined button strip (zoom, prev / today / next). */
+.gantt-segmented {
+  gap: 0;
+}
+
+.gantt-segmented .gantt-btn {
+  border-radius: 0;
+  margin-left: -1px;
+}
+
+.gantt-segmented .gantt-btn:first-child {
+  border-radius: 6px 0 0 6px;
+  margin-left: 0;
+}
+
+.gantt-segmented .gantt-btn:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.gantt-segmented .gantt-btn.is-active {
+  position: relative;
+  z-index: 1;
+}
+
+/* Bulk bar: clearly a contextual action strip. */
+.gantt-bulk.is-visible {
+  background: color-mix(in srgb, var(--tp-primary, #0c66e4) 12%, var(--tp-surface, #fff));
+  border-left: 3px solid var(--tp-primary, #0c66e4);
+}
+
+/* Hover hint on empty timeline rows. */
+.gantt-timeline-row.is-paintable:hover::after {
+  content: '+ Cliquer pour planifier';
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--tp-text-subtle, #44546f);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.gantt-bar.is-editable:hover {
+  filter: brightness(1.1);
+}
+
+/* ---- Schedule editor popover ---- */
+.gantt-sched {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gantt-sched-toggle {
+  color: var(--tp-text, #172b4d);
+  font-weight: 600;
+}
+
+.gantt-sched-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 8px;
+}
+
+.gantt-sched-caption {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--tp-text-subtle, #44546f);
+}
+
+.gantt-sched-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gantt-sched-label {
+  font-size: 11px;
+  color: var(--tp-text-subtle, #44546f);
+}
+
+.gantt-sched-input {
+  font: inherit;
+  font-size: 14px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--tp-border, #091e4224);
+  background: var(--tp-surface-subtle, #f1f2f4);
+  color: var(--tp-text, #172b4d);
+  color-scheme: light dark;
+  min-width: 0;
+}
+
+.gantt-sched-field.is-off {
+  opacity: 0.4;
+}
+
+.gantt-sched-error {
+  font-size: 13px;
+  color: var(--tp-danger-text, #ae2e24);
+}
+
+.gantt-sched-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}

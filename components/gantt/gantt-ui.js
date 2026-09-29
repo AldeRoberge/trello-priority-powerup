@@ -691,7 +691,14 @@
       }
       state.filterMenuOpen = false;
 
-      var zoom = el('div', 'gantt-zoom');
+      function tbGroup(caption, extraClass) {
+        var g = el('div', 'gantt-tb-group' + (extraClass ? ' ' + extraClass : ''));
+        if (caption) g.appendChild(el('span', 'gantt-tb-caption', { text: caption }));
+        return g;
+      }
+
+      var viewGroup = tbGroup('Vue');
+      var zoom = el('div', 'gantt-zoom gantt-segmented');
       [
         { mode: 'day', label: 'Jour', icon: 'ti-calendar' },
         { mode: 'week', label: 'Semaine', icon: 'ti-calendar-week' },
@@ -713,9 +720,11 @@
         });
         zoom.appendChild(btn);
       });
-      toolbar.appendChild(zoom);
+      viewGroup.appendChild(zoom);
+      toolbar.appendChild(viewGroup);
 
-      var nav = el('div', 'gantt-nav');
+      var navGroup = tbGroup('Période');
+      var nav = el('div', 'gantt-nav gantt-segmented');
       var prev = el('button', 'gantt-btn', { type: 'button', text: '\u2039' });
       prev.title = 'Pr\u00e9c\u00e9dent';
       prev.addEventListener('click', function () {
@@ -740,7 +749,8 @@
       nav.appendChild(prev);
       nav.appendChild(today);
       nav.appendChild(next);
-      toolbar.appendChild(nav);
+      navGroup.appendChild(nav);
+      toolbar.appendChild(navGroup);
 
       var title = el('div', 'gantt-title');
       var r = range();
@@ -762,6 +772,7 @@
       }
       toolbar.appendChild(title);
 
+      var displayGroup = tbGroup('Affichage');
       var sortWrap = el('label', 'gantt-sort');
       sortWrap.appendChild(document.createTextNode('Trier\u00a0: '));
       var sortSel = el('select', 'gantt-select');
@@ -781,7 +792,7 @@
         setSortBy(sortSel.value || 'date', { resetDir: true });
       });
       sortWrap.appendChild(sortSel);
-      toolbar.appendChild(sortWrap);
+      displayGroup.appendChild(sortWrap);
 
       var filters = el('div', 'gantt-filters');
 
@@ -870,9 +881,12 @@
 
       filterWrap.appendChild(filterBtn);
       filterWrap.appendChild(filterMenu);
-      filters.appendChild(filterWrap);
+      displayGroup.appendChild(filterWrap);
+      toolbar.appendChild(displayGroup);
 
-      var authBtn = makeIconBtn('gantt-btn', 'ti-key', 'Autoriser Trello', function () {
+      filters = tbGroup('Outils');
+      filters.classList.add('gantt-tb-group--tools');
+      var authBtn = makeIconBtn('gantt-btn gantt-btn--icon', 'ti-key', 'Autoriser Trello', function () {
         ganttTrello.ensureRestAuthorized(t).then(function (res) {
           if (res && res.ok) {
             state.authHint = '';
@@ -898,7 +912,7 @@
           !outlookAuth.isConfigured()
         ) {
           var outlookHint = makeIconBtn(
-            'gantt-btn',
+            'gantt-btn gantt-btn--icon',
             'ti-alert-triangle',
             'Outlook (config)',
             function () {
@@ -913,7 +927,7 @@
           filters.appendChild(outlookHint);
         } else {
           var outlookConnect = makeIconBtn(
-            'gantt-btn',
+            'gantt-btn gantt-btn--icon',
             state.outlookConnected ? 'ti-plug-connected-x' : 'ti-plug-connected',
             state.outlookConnected ? 'D\u00e9connecter Outlook' : 'Connecter Outlook',
             function () {
@@ -960,7 +974,7 @@
 
           if (state.outlookConnected) {
             var outlookSyncBtn = makeIconBtn(
-              'gantt-btn',
+              'gantt-btn gantt-btn--icon',
               'ti-refresh',
               state.outlookSyncing ? 'Sync\u2026' : 'Sync Outlook',
               function () {
@@ -975,28 +989,28 @@
         }
       }
 
-      var icsBtn = makeIconBtn('gantt-btn', 'ti-download', 'Exporter .ics', function () {
+      var icsBtn = makeIconBtn('gantt-btn gantt-btn--icon', 'ti-download', 'Exporter .ics', function () {
         exportIcsCalendar();
       });
       icsBtn.title =
         'T\u00e9l\u00e9charger un calendrier (.ics) pour Outlook — sans compte Entra';
       filters.appendChild(icsBtn);
 
-      var paBtn = makeIconBtn('gantt-btn', 'ti-bolt', 'Power Automate', function () {
+      var paBtn = makeIconBtn('gantt-btn gantt-btn--icon', 'ti-bolt', 'Power Automate', function () {
         openPowerAutomateGuide();
       });
       paBtn.title =
         'Guide : synchroniser Trello \u2192 Outlook automatiquement (cloud Microsoft, sans h\u00e9bergement)';
       filters.appendChild(paBtn);
 
-      var sheetsBtn = makeIconBtn('gantt-btn', 'ti-table', 'Google Sheets', function () {
+      var sheetsBtn = makeIconBtn('gantt-btn gantt-btn--icon', 'ti-table', 'Google Sheets', function () {
         openGoogleSheetsSync();
       });
       sheetsBtn.title =
         'Synchroniser ce tableau avec une feuille Google Sheets (deux sens, immédiat)';
       filters.appendChild(sheetsBtn);
 
-      var refresh = makeIconBtn('gantt-btn', 'ti-reload', 'Actualiser', function () {
+      var refresh = makeIconBtn('gantt-btn gantt-btn--icon', 'ti-reload', 'Actualiser', function () {
         reload();
       });
       filters.appendChild(refresh);
@@ -1682,7 +1696,7 @@
 
       popover.appendChild(head);
       popover.appendChild(bodyEl);
-      popover.appendChild(foot);
+      if (!opts.hideFull) popover.appendChild(foot);
       root.appendChild(popover);
 
       var mountApi = null;
@@ -2378,7 +2392,11 @@
       var icon = el('i', 'ti ' + iconClass);
       icon.setAttribute('aria-hidden', 'true');
       btn.appendChild(icon);
-      btn.appendChild(document.createTextNode(label));
+      if (/gantt-btn--icon/.test(className)) {
+        btn.setAttribute('aria-label', label);
+      } else {
+        btn.appendChild(document.createTextNode(label));
+      }
       btn.addEventListener('click', onClick);
       return btn;
     }
@@ -2764,6 +2782,143 @@
       persistRow(row);
     }
 
+    /**
+     * Popover to set/edit a card's start + end, optionally with times.
+     * Works in every view (unlike dragging, which only sets times in Jour/Semaine).
+     */
+    function openScheduleEditor(row, anchor) {
+      if (!row || row.kind !== 'card' || !row.cardId || !anchor) return;
+      var iv = model.resolveBarInterval(row, intervalOptions());
+      var today = model.toIsoDate(new Date());
+      var startD = row.startDate || (iv ? model.toIsoDate(iv.start) : '') || today;
+      var dueD = row.dueDate || (iv ? model.toIsoDate(iv.end) : '') || startD;
+      var hadTime = !!(row.startTime || row.dueTime);
+      var defStart = state.ganttSettings.dayStart || '09:00';
+      var defEnd = state.ganttSettings.dayEnd || '17:00';
+
+      openMiniEditor({
+        anchor: anchor,
+        title: 'Dates et horaires',
+        cardId: row.cardId,
+        cardName: row.name,
+        hideFull: true,
+        mount: function (bodyEl) {
+          var form = el('form', 'gantt-sched');
+          function field(labelText, type, value) {
+            var wrap = el('label', 'gantt-sched-field');
+            wrap.appendChild(el('span', 'gantt-sched-label', { text: labelText }));
+            var input = el('input', 'gantt-sched-input', { type: type });
+            input.value = value || '';
+            wrap.appendChild(input);
+            return { wrap: wrap, input: input };
+          }
+          function pair(caption, dateVal, timeVal) {
+            var line = el('div', 'gantt-sched-row');
+            line.appendChild(el('div', 'gantt-sched-caption', { text: caption }));
+            var d = field('Date', 'date', dateVal);
+            var tm = field('Heure', 'time', timeVal);
+            line.appendChild(d.wrap);
+            line.appendChild(tm.wrap);
+            form.appendChild(line);
+            return { date: d.input, time: tm.input, timeWrap: tm.wrap };
+          }
+          var s = pair('Début', startD, row.startTime || (hadTime ? defStart : ''));
+          var e = pair('Fin', dueD, row.dueTime || (hadTime ? defEnd : ''));
+
+          var useTimeLab = el('label', 'gantt-check gantt-sched-toggle');
+          var useTime = el('input', '', { type: 'checkbox' });
+          useTime.checked = hadTime;
+          useTimeLab.appendChild(useTime);
+          useTimeLab.appendChild(document.createTextNode(' Ajouter des heures'));
+          form.insertBefore(useTimeLab, form.firstChild);
+
+          function syncTimeUi() {
+            [s, e].forEach(function (p) {
+              p.timeWrap.classList.toggle('is-off', !useTime.checked);
+              p.time.disabled = !useTime.checked;
+            });
+          }
+          useTime.addEventListener('change', function () {
+            if (useTime.checked) {
+              if (!s.time.value) s.time.value = defStart;
+              if (!e.time.value) e.time.value = defEnd;
+            }
+            syncTimeUi();
+          });
+          // Moving the start drags the end along until the user edits the end.
+          s.date.addEventListener('change', function () {
+            if (!e.date.value || e.date.value < s.date.value) {
+              e.date.value = s.date.value;
+            }
+          });
+          syncTimeUi();
+
+          var err = el('div', 'gantt-sched-error');
+          err.hidden = true;
+          form.appendChild(err);
+
+          var actions = el('div', 'gantt-sched-actions');
+          var clearBtn = el('button', 'gantt-btn gantt-btn--danger', {
+            type: 'button',
+            text: 'Effacer',
+          });
+          var saveBtn = el('button', 'gantt-btn is-active', {
+            type: 'submit',
+            text: 'Enregistrer',
+          });
+          actions.appendChild(clearBtn);
+          actions.appendChild(saveBtn);
+          form.appendChild(actions);
+
+          clearBtn.addEventListener('click', function () {
+            closeMiniPopover();
+            clearRowDates(row);
+          });
+          form.addEventListener('submit', function (ev) {
+            ev.preventDefault();
+            var sd = s.date.value;
+            var ed = e.date.value || sd;
+            if (!sd) {
+              err.textContent = 'Choisissez une date de début.';
+              err.hidden = false;
+              return;
+            }
+            var withTime = useTime.checked;
+            var st = withTime ? s.time.value || defStart : '';
+            var et = withTime ? e.time.value || st : '';
+            var a = sd + (withTime ? 'T' + st : '');
+            var b = ed + (withTime ? 'T' + et : '');
+            if (b < a) {
+              err.textContent = 'La fin doit être après le début.';
+              err.hidden = false;
+              return;
+            }
+            row.startDate = sd;
+            row.dueDate = ed;
+            row.startTime = st;
+            row.dueTime = et;
+            var card = state.cardsById[row.cardId];
+            if (card) {
+              card.startDate = sd;
+              card.dueDate = ed;
+              card.startTime = st;
+              card.dueTime = et;
+            }
+            closeMiniPopover();
+            applySort();
+            renderChart();
+            persistRow(row);
+          });
+
+          bodyEl.appendChild(form);
+          setTimeout(function () {
+            s.date.focus();
+          }, 0);
+          return { destroy: function () {} };
+        },
+      });
+    }
+
     function dateAtTimelineX(timeRow, clientX) {
       var rect = timeRow.getBoundingClientRect();
       // Use the laid-out row width when it differs slightly from state.timelineWidth
@@ -2805,7 +2960,8 @@
     function bindTimelinePaint(timeRow, row) {
       if (row.kind !== 'card' || !row.cardId) return;
       timeRow.classList.add('is-paintable');
-      timeRow.title = 'Cliquer ou glisser pour d\u00e9finir une dur\u00e9e';
+      timeRow.title =
+        'Cliquer pour planifier (date et heure) \u00b7 glisser pour d\u00e9finir une dur\u00e9e';
 
       var ghost = el('div', 'gantt-paint-ghost');
       ghost.hidden = true;
@@ -2880,7 +3036,22 @@
             keepTime: usesTimedTimeline(),
           });
           if (!iv) return;
+          if (
+            paint.origin.getTime() === paint.current.getTime() &&
+            usesTimedTimeline()
+          ) {
+            // A click in Jour/Semaine would otherwise create a 0-minute bar.
+            iv = {
+              start: iv.start,
+              end: new Date(iv.start.getTime() + 60 * (model.MS_MINUTE || 60000)),
+              hasTime: true,
+            };
+          }
           applyIntervalToRow(row, iv);
+          // A simple click adds a one-slot bar; offer the editor right away.
+          if (paint.origin.getTime() === paint.current.getTime()) {
+            state.editAfterRender = row.id;
+          }
           applySort();
           renderChart();
           persistRow(row);
@@ -2916,6 +3087,7 @@
         var r = range();
         var mapOpts = timelineMapOptions();
         var startX = ev.clientX;
+        var moved = false;
         var origin = {
           start: interval.start,
           end: interval.end,
@@ -2954,6 +3126,7 @@
         function onMove(e) {
           if (!state.drag) return;
           var dx = e.clientX - state.drag.startX;
+          if (Math.abs(dx) > 3) moved = true;
           var next;
           if (state.drag.agenda) {
             // Map through warped X space so dx in morning ≠ dx in work hours.
@@ -3046,6 +3219,11 @@
           var drag = state.drag;
           state.drag = null;
           if (!drag) return;
+          if (!moved && drag.mode === 'move') {
+            // A plain click (no drag) opens the date/time editor.
+            openScheduleEditor(row, barEl);
+            return;
+          }
           var finalInterval = model.resolveBarInterval(row, intervalOptions());
           if (finalInterval) updateBarEl(barEl, row, finalInterval, null);
           if (
@@ -3685,7 +3863,12 @@
             bar.style.backgroundColor = row.color || 'var(--tp-primary, #0c66e4)';
             if (row.category) bar.setAttribute('data-category', row.category);
             bar.title =
-              (row.name || '') + ' \u00b7 ' + formatIntervalTitle(interval);
+              (row.name || '') +
+              ' \u00b7 ' +
+              formatIntervalTitle(interval) +
+              (row.kind === 'card'
+                ? '\nCliquer pour modifier \u00b7 glisser pour d\u00e9placer'
+                : '');
 
             var fill = el('div', 'gantt-bar-fill');
             fill.style.width = Math.max(0, Math.min(100, row.progress || 0)) + '%';
@@ -3738,6 +3921,12 @@
             }
 
             timeRow.appendChild(bar);
+            if (state.editAfterRender === row.id && row.kind === 'card') {
+              state.editAfterRender = null;
+              setTimeout(function () {
+                openScheduleEditor(row, bar);
+              }, 0);
+            }
           }
         }
 
