@@ -4,14 +4,14 @@
  * No decorative gradients; status is conveyed by flat tints, icons and text.
  *
  * Radii:  controls 8px · panels 12px · pills 999px
- * Rhythm: 24px between sections, 8px between a section title and its content.
+ * Rhythm: 14px between sections, 8px between a section title and its content.
  */
 
 html[data-color-mode] {
   --tp-r-ctl: 8px;
   --tp-r-panel: 12px;
-  --tp-panel-pad: 24px;
-  --tp-section-gap: 24px;
+  --tp-panel-pad: 16px;
+  --tp-section-gap: 14px;
 }
 
 html[data-color-mode='dark'] {
@@ -502,4 +502,80 @@ body.tp-page--priority {
 .tp-page--priority .info-desc-input {
   font-size: var(--t-body);
   font-weight: var(--w-body);
+}
+
+/* ── Compact card back ───────────────────────────────────────────── */
+
+/* Description: no formatting toolbar until the user starts writing */
+.tp-page--priority .info-desc-wrap:not(:focus-within):has(.info-desc-preview.is-empty) .info-desc-toolbar {
+  display: none;
+}
+
+/* Impact / Facilité / Empressement: title, then slider below */
+.tp-page--priority .variant-fields .field-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+}
+
+.tp-page--priority .variant-fields .field {
+  gap: 0;
+  margin-bottom: 8px;
+}
+
+.tp-page--priority .variant-fields .field-lbl {
+  font-size: 14px;
+  gap: 6px;
+}
+
+.tp-page--priority .variant-fields .field-lbl .ti {
+  font-size: 16px;
+}
+
+.tp-page--priority .axis-factors {
+  margin: -2px 0 4px;
+}
+
+.tp-page--priority .axis-factors-toggle {
+  padding: 2px 4px;
+}
+
+/* Priority summary: pill and tier text tight together, no reserved blank lines */
+.tp-page--priority .heat-panel,
+html[data-color-mode='dark'] .tp-page--priority .heat-panel {
+  padding: 0 0 8px;
+}
+
+.tp-page--priority .heat-head {
+  margin: 0 0 10px;
+  gap: 4px 12px;
+}
+
+.tp-page--priority .heat-tier-desc,
+.tp-page--priority .heat-tier-desc-body {
+  min-height: 0;
+  line-height: 1.4;
+}
+
+.tp-page--priority .heat-tier-desc-subtitle {
+  margin-bottom: 1px;
+}
+
+.tp-page--priority .heat-tier-desc-body {
+  font-size: 13px;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.tp-page--priority .heat-seg-labels {
+  margin-top: 4px;
+}
+
+/* Progress: the selected chip already states the status; drop the big hero */
+.tp-page--priority .statut-hero {
+  display: none;
+}
+
+.tp-page--priority .statut-embedded-head {
+  margin-bottom: 4px;
 }
