@@ -332,6 +332,15 @@
       onLayoutChange();
     }
 
+    function setBubbleText(bubble, text, markdown) {
+      bubble.replaceChildren();
+      if (markdown && typeof MarkdownDom !== 'undefined') {
+        MarkdownDom.append(bubble, text);
+      } else {
+        bubble.textContent = text;
+      }
+    }
+
     function appendMessage(role, text) {
       var row = el('div', 'memory-ui-msg memory-ui-msg--' + role);
       var bubble = el('div', 'memory-ui-bubble', { text: text || '' });

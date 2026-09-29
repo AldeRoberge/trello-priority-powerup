@@ -1,0 +1,66 @@
+/* Markdown in chat bubbles (assistant + memory chat) */
+:is(.agent-msg-bubble, .memory-ui-bubble) .agent-md-p {
+  white-space: pre-wrap;
+}
+:is(.agent-msg-bubble, .memory-ui-bubble) .agent-md-p + .agent-md-p,
+:is(.agent-msg-bubble, .memory-ui-bubble) .agent-md-p + .agent-md-list,
+:is(.agent-msg-bubble, .memory-ui-bubble) .agent-md-list + .agent-md-p {
+  margin-top: 6px;
+}
+:is(.agent-msg-bubble, .memory-ui-bubble) .agent-md-h {
+  font-weight: 700;
+  margin: 8px 0 3px;
+}
+:is(.agent-msg-bubble, .memory-ui-bubble) .agent-md-h:first-child {
+  margin-top: 0;
+}
+:is(.agent-msg-bubble, .memory-ui-bubble) .agent-md-h1 {
+  font-size: 1.25em;
+}
+:is(.agent-msg-bubble, .memory-ui-bubble) .agent-md-h2 {
+  font-size: 1.12em;
+}
+:is(.agent-msg-bubble, .memory-ui-bubble) .agent-md-h3 {
+  font-size: 1.02em;
+}
+:is(.agent-msg-bubble, .memory-ui-bubble) .agent-md-list {
+  white-space: normal;
+  margin: 4px 0;
+  padding-left: 20px;
+}
+:is(.agent-msg-bubble, .memory-ui-bubble) .agent-md-quote {
+  white-space: pre-wrap;
+  margin: 6px 0;
+  padding: 2px 0 2px 10px;
+  border-left: 3px solid color-mix(in srgb, currentColor 35%, transparent);
+  opacity: 0.85;
+}
+:is(.agent-msg-bubble, .memory-ui-bubble) .agent-md-pre {
+  white-space: pre-wrap;
+  margin: 6px 0;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, #000 30%, transparent);
+  font-size: 12px;
+}
+:is(.agent-msg-bubble, .memory-ui-bubble) code {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, #000 25%, transparent);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.92em;
+}
+:is(.agent-msg-bubble, .memory-ui-bubble) .agent-md-pre code {
+  padding: 0;
+  background: none;
+}
+:is(.agent-msg-bubble, .memory-ui-bubble) hr {
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  margin: 8px 0;
+}
+:is(.agent-msg-bubble, .memory-ui-bubble) a {
+  color: var(--tp-link, #4c9aff);
+  text-decoration: underline;
+}
+
