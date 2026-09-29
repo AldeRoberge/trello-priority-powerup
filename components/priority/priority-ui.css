@@ -3307,6 +3307,7 @@ html[data-color-mode='dark'] .overview-composer-input {
 
 .info-route-pick,
 .info-route-insert {
+  align-self: flex-start;
   height: 26px;
   padding: 0 10px 0 8px;
   border: 1px dashed color-mix(in srgb, var(--text-primary, #172b4d) 30%, transparent);
