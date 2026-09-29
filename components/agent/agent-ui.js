@@ -1186,6 +1186,9 @@
     sendBtnLabel.textContent = 'Envoyer';
     var sendConfirmCount = el('span', 'agent-send-btn-count');
     sendConfirmCount.hidden = true;
+    var sendBtnIcon = el('i', 'ti ti-send agent-send-btn-icon');
+    sendBtnIcon.setAttribute('aria-hidden', 'true');
+    sendBtn.appendChild(sendBtnIcon);
     sendBtn.appendChild(sendBtnLabel);
     sendBtn.appendChild(sendConfirmCount);
     var composerSuggestions = [];
@@ -1212,7 +1215,12 @@
     } else {
       composer.appendChild(input);
     }
-    composer.appendChild(modelModeSelect);
+    var modelModeWrap = el('span', 'agent-model-mode-wrap');
+    var modelModeIcon = el('i', 'ti ti-bolt agent-model-mode-icon');
+    modelModeIcon.setAttribute('aria-hidden', 'true');
+    modelModeWrap.appendChild(modelModeIcon);
+    modelModeWrap.appendChild(modelModeSelect);
+    composer.appendChild(modelModeWrap);
     composer.appendChild(sendBtn);
     if (
       global.ContextMenu &&

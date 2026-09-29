@@ -4646,3 +4646,164 @@ html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-value.is-bad {
   min-width: 6.5rem;
   height: 32px;
 }
+
+/* ── Assistant chat: one rounded surface language ─────────────────────────
+   Bubbles, composer, mode picker and send button share radius, fill and
+   border; stats/debug sit in a quiet footer under the composer. */
+.tp-page--priority {
+  --agent-radius: 14px;
+  --agent-radius-sm: 10px;
+  --agent-surface: color-mix(in srgb, #fff 6%, var(--tp-elev-1, var(--tp-surface-subtle)));
+  --agent-surface-hover: color-mix(in srgb, #fff 10%, var(--tp-elev-1, var(--tp-surface-subtle)));
+  --agent-edge: color-mix(in srgb, var(--tp-border) 80%, transparent);
+}
+
+.tp-page--priority .agent-msg-bubble {
+  border-radius: var(--agent-radius);
+  padding: 9px 13px;
+}
+
+.tp-page--priority .agent-msg--user .agent-msg-bubble {
+  border-bottom-right-radius: 4px;
+}
+
+.tp-page--priority .agent-msg--assistant .agent-msg-bubble:not(.agent-msg-bubble--pending) {
+  border-bottom-left-radius: 4px;
+}
+
+.tp-page--priority .agent-composer {
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tp-page--priority .agent-composer .tp-tab-complete-wrap,
+.tp-page--priority .agent-composer > .agent-composer-input {
+  border: 1px solid var(--agent-edge);
+  border-radius: var(--agent-radius);
+  background: var(--agent-surface);
+  overflow: hidden;
+}
+
+.tp-page--priority .agent-composer .tp-tab-complete-wrap:focus-within {
+  border-radius: var(--agent-radius);
+  border-color: var(--tp-border-strong);
+  box-shadow: 0 0 0 1px var(--tp-border-strong);
+}
+
+.tp-page--priority .agent-composer .tp-tab-complete-wrap .agent-composer-input {
+  border-radius: var(--agent-radius);
+  padding: 10px 12px;
+}
+
+.tp-page--priority .agent-composer .tp-tab-complete-ghost {
+  padding: 10px 12px;
+}
+
+.tp-page--priority .agent-model-mode-wrap {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  border: 1px solid var(--agent-edge);
+  border-radius: var(--agent-radius);
+  background: var(--agent-surface);
+  color: var(--tp-text-muted);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.tp-page--priority .agent-model-mode-wrap:hover {
+  background: var(--agent-surface-hover);
+}
+
+.tp-page--priority .agent-model-mode-wrap:focus-within {
+  border-color: var(--tp-border-strong);
+}
+
+.tp-page--priority .agent-model-mode-icon {
+  position: absolute;
+  left: 12px;
+  font-size: 16px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.tp-page--priority .agent-model-mode-wrap .agent-model-mode-select {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0 12px 0 36px;
+  border: none;
+  border-radius: var(--agent-radius);
+  background: transparent;
+  color: var(--tp-text);
+  font-size: 13px;
+  outline: none;
+}
+
+.tp-page--priority .agent-model-mode-wrap .agent-model-mode-select option {
+  background: var(--tp-elev-2, #282e33);
+  color: var(--tp-text);
+}
+
+.tp-page--priority .agent-send-btn {
+  height: 36px;
+  min-width: 7.5rem;
+  padding: 0 16px;
+  border-radius: var(--agent-radius);
+  border: 1px solid var(--agent-edge);
+  background: var(--agent-surface-hover) !important;
+  font-weight: 600;
+}
+
+.tp-page--priority .agent-send-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, #fff 16%, var(--tp-elev-1, var(--tp-surface-subtle))) !important;
+}
+
+.tp-page--priority .agent-send-btn-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.tp-page--priority .agent-send-btn.is-confirming {
+  border-color: transparent;
+}
+
+/* Interview skip: small round icon button, tucked under the composer */
+.tp-page--priority .agent-interview-skip {
+  border-radius: 999px;
+}
+
+/* Stats + debug: quiet footer, below composer and skip bar, no box */
+.tp-page--priority .agent-chat-info {
+  margin: 8px 0 0;
+  padding: 0 4px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.tp-page--priority .agent-chat-info-head {
+  align-items: center;
+}
+
+.tp-page--priority .agent-chat-stats {
+  font-size: 10.5px;
+  opacity: 0.75;
+}
+
+.tp-page--priority .agent-debug-btn {
+  border-radius: 999px;
+}
+
+.tp-page--priority .agent-debug-panel {
+  border-radius: var(--agent-radius-sm);
+  border-color: var(--agent-edge);
+  background: var(--agent-surface);
+}
+
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-chat-info {
+  order: 95;
+}
