@@ -282,6 +282,32 @@
   color: var(--tp-text, #172b4d);
 }
 
+.tp-page--priority .agent-block-project-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tp-primary, #0c66e4);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tp-page--priority .agent-block-project-link::after {
+  content: '\2192';
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.tp-page--priority .agent-block-project-link:hover {
+  text-decoration: underline;
+}
+
 .tp-page--priority .agent-block--project.is-cleared .agent-block-project-name {
   font-weight: 500;
   color: var(--tp-text-subtle, #626f86);

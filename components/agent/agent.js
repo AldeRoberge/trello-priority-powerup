@@ -15289,7 +15289,8 @@
             : {
                 type: 'project',
                 projectId: projectId,
-                name: projectName
+                name: projectName,
+                linked: true
               }
         };
       }

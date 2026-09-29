@@ -5790,14 +5790,57 @@
       return 'Veux-tu que je m\u2019occupe de ' + L + '?';
     }
 
-    function clearActiveOffer(row) {
-      if (row && row.parentNode) {
-        row.classList.add('is-resolved');
-        row.remove();
+    // Result blocks (e.g. linked project) can ask to jump to a card section.
+    messagesEl.addEventListener('click', function (ev) {
+      var link = ev.target && ev.target.closest && ev.target.closest('[data-open-section]');
+      if (!link || !messagesEl.contains(link)) return;
+      ev.preventDefault();
+      if (typeof bridge.openSection === 'function') {
+        bridge.openSection(link.getAttribute('data-open-section'), { expand: true });
       }
+    });
+
+    /** Keep the question in the transcript; swap Oui/Non for the given answer. */
+    function markOfferAnswered(row, answer) {
+      if (!row || !row.parentNode) return;
+      row.classList.add('is-resolved');
+      var actions = row.querySelector('.agent-offer-actions');
+      if (actions) {
+        actions.replaceChildren(
+          el('span', 'agent-offer-answer', {
+            text: (answer === 'no' ? '✗ Non' : '✓ Oui')
+          })
+        );
+      }
+    }
+
+    function clearActiveOffer(row, answer) {
+      markOfferAnswered(row, answer);
       activeOffer = null;
       setListenBarState('idle');
       syncApplySummary();
+    }
+
+    /** Trace of a question the assistant asked, already answered (chip path). */
+    function appendAnsweredOffer(label, answer) {
+      if (!label) return null;
+      emptyState.classList.add('is-hidden');
+      var row = el('div', 'agent-msg agent-msg--assistant agent-msg--offer is-resolved');
+      var bubble = el('div', 'agent-msg-bubble agent-msg-bubble--offer');
+      bubble.appendChild(
+        el('div', 'agent-offer-text', { text: phraseOfferQuestion(label) })
+      );
+      var answerWrap = el('div', 'agent-offer-actions');
+      answerWrap.appendChild(
+        el('span', 'agent-offer-answer', {
+          text: answer === 'no' ? '✗ Non' : '✓ Oui'
+        })
+      );
+      bubble.appendChild(answerWrap);
+      row.appendChild(bubble);
+      attachAssistantFace(row, spiceEmotion('curious'));
+      messagesEl.appendChild(row);
+      return row;
     }
 
     function appendOfferMessage(item) {
@@ -5853,12 +5896,10 @@
     }
 
     async function onOfferAccept(item, row) {
-      clearActiveOffer(row);
+      clearActiveOffer(row, 'yes');
       muteListening();
       var result = await Agent.executeActions(bridge, item.actions || []);
-      appendMessage('assistant', result.summary || 'Okay, c\'est fait.', {
-        note: item.label
-      });
+      appendMessage('assistant', result.summary || 'Okay, c\'est fait.');
       appendChangeRecap(result, { ok: result.ok });
       appendActionResultBlocks(result);
       history.push({
@@ -5872,7 +5913,7 @@
 
     function onOfferDecline(item, row) {
       dismissedOffers[String(item.label || '').trim()] = Date.now();
-      clearActiveOffer(row);
+      clearActiveOffer(row, 'no');
 
       var softReplies = [
         'Pas de souci\u00a0!',
@@ -6877,10 +6918,9 @@
     async function onApplySuggestion(item, index) {
       if (pending || !item || !item.actions || !item.actions.length) return;
       muteListening();
+      appendAnsweredOffer(item.label, 'yes');
       var result = await Agent.executeActions(bridge, item.actions);
-      appendMessage('assistant', result.summary || 'Okay, c\'est appliqu\u00e9.', {
-        note: item.label
-      });
+      appendMessage('assistant', result.summary || 'Okay, c\'est appliqu\u00e9.');
       appendChangeRecap(result, { ok: result.ok });
       appendActionResultBlocks(result);
       history.push({
@@ -9154,10 +9194,9 @@
       var actions = (fu && fu.actions) || [];
       if (actions.length) {
         muteListening();
+        appendAnsweredOffer(fu.label, 'yes');
         var result = await Agent.executeActions(bridge, actions);
-        appendMessage('assistant', result.summary || 'Okay, c\'est fait.', {
-          note: fu.label
-        });
+        appendMessage('assistant', result.summary || 'Okay, c\'est fait.');
         appendChangeRecap(result, { ok: result.ok });
         appendActionResultBlocks(result);
         history.push({

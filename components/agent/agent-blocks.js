@@ -352,6 +352,7 @@
     var out = { type: 'project' };
     if (name) out.name = name;
     if (raw.projectId != null) out.projectId = String(raw.projectId);
+    if (raw.linked === true) out.linked = true;
     return out;
   }
 
@@ -897,13 +898,24 @@
 
   function renderProjectBlock(block) {
     var card = el('div', 'agent-block agent-block--project');
-    card.appendChild(el('div', 'agent-block-label', { text: 'Projet' }));
-    card.appendChild(
-      el('div', 'agent-block-project-name', {
-        text: block.cleared ? 'Aucun' : block.name || 'Projet'
-      })
-    );
-    if (block.cleared) card.classList.add('is-cleared');
+    var label = block.cleared
+      ? 'Projet délié'
+      : block.linked
+        ? 'Projet lié'
+        : 'Projet';
+    card.appendChild(el('div', 'agent-block-label', { text: label }));
+    if (block.cleared) {
+      card.classList.add('is-cleared');
+      return card;
+    }
+    var name = block.name || 'Projet';
+    var link = el('button', 'agent-block-project-name agent-block-project-link', {
+      type: 'button',
+      'data-open-section': 'objectif',
+      title: 'Ouvrir le projet',
+      text: name
+    });
+    card.appendChild(link);
     return card;
   }
 

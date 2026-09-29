@@ -3852,8 +3852,25 @@ html[data-color-mode='dark']
   color: var(--tp-text);
 }
 
+/* Answered offers stay in the transcript as a quiet trace of the question. */
 .tp-page--priority .agent-msg--offer.is-resolved {
-  display: none;
+  animation: none;
+}
+
+.tp-page--priority .agent-msg--offer.is-resolved .agent-msg-bubble--offer {
+  background: var(--tp-surface-subtle);
+  box-shadow: none;
+  border-color: var(--tp-border);
+}
+
+.tp-page--priority .agent-msg--offer.is-resolved .agent-offer-eyebrow {
+  color: var(--tp-text-muted);
+}
+
+.tp-page--priority .agent-offer-answer {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tp-text-muted);
 }
 
 html[data-color-mode='dark'] .tp-page--priority .agent-apply-suggestion-chip {
