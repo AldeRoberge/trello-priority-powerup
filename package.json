@@ -8,6 +8,7 @@
   "scripts": {
     "test": "node scripts/run-tests.js",
     "test:unit": "node scripts/run-tests.js --unit",
+    "test:e2e": "node scripts/run-e2e.js",
     "test:coverage": "node scripts/run-tests.js --coverage",
     "verify:badges": "node sandbox/verify-badges.js",
     "verify:completion": "node sandbox/verify-completion.js",

@@ -4668,8 +4668,8 @@ html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-value.is-bad {
    Bubbles, composer, mode picker and send button share radius, fill and
    border; stats/debug sit in a quiet footer under the composer. */
 .tp-page--priority {
-  --agent-radius: 14px;
-  --agent-radius-sm: 10px;
+  --agent-radius: var(--tp-r-panel, 12px);
+  --agent-radius-sm: var(--tp-r-ctl, 8px);
   --agent-surface: color-mix(in srgb, #fff 6%, var(--tp-elev-1, var(--tp-surface-subtle)));
   --agent-surface-hover: color-mix(in srgb, #fff 10%, var(--tp-elev-1, var(--tp-surface-subtle)));
   --agent-edge: color-mix(in srgb, var(--tp-border) 80%, transparent);
@@ -4765,8 +4765,8 @@ html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-value.is-bad {
   color: var(--tp-text);
 }
 
-.tp-page--priority .agent-send-btn {
-  height: 36px;
+.tp-page--priority .tp-button.agent-send-btn {
+  height: 40px;
   min-width: 7.5rem;
   padding: 0 16px;
   border-radius: var(--agent-radius);
@@ -4916,12 +4916,13 @@ html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-value.is-bad {
 /* Parallel lane tag */
 .tp-page--priority .agent-msg--lane {
   position: relative;
+  margin-top: 18px;
 }
 
 .tp-page--priority .agent-msg--lane[data-lane]::after {
   content: attr(data-lane);
   position: absolute;
-  top: -8px;
+  top: -16px;
   left: 44px;
   padding: 1px 8px;
   border-radius: 999px;
