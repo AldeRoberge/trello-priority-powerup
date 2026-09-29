@@ -1,5 +1,6 @@
 /* Shared right-click context menu (popup sections + Gantt). */
 .tp-context-menu {
+  --text-primary: #172b4d;
   position: fixed;
   z-index: 10000;
   display: flex;

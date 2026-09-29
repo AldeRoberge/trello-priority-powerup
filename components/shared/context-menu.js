@@ -1275,11 +1275,263 @@
     ];
   }
 
+  /* ── Global fallback: replaces the browser's native menu everywhere ─────── */
+
+  function selectionText(d) {
+    try {
+      var sel = global.getSelection && global.getSelection();
+      return sel ? String(sel.toString()) : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function fieldSelection(el) {
+    try {
+      if (typeof el.selectionStart === 'number' && el.selectionEnd > el.selectionStart) {
+        return String(el.value || '').slice(el.selectionStart, el.selectionEnd);
+      }
+    } catch (e) {
+      /* some input types (email, number) throw */
+    }
+    return '';
+  }
+
+  function copyText(d, text) {
+    if (!text) return;
+    var nav = global.navigator;
+    if (nav && nav.clipboard && typeof nav.clipboard.writeText === 'function') {
+      nav.clipboard.writeText(text).catch(function () {
+        legacyCopy(d);
+      });
+      return;
+    }
+    legacyCopy(d);
+  }
+
+  function legacyCopy(d) {
+    try {
+      d.execCommand('copy');
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function insertText(d, field, text) {
+    if (!text) return;
+    field.focus();
+    var ok = false;
+    try {
+      ok = d.execCommand('insertText', false, text);
+    } catch (e) {
+      ok = false;
+    }
+    if (!ok && typeof field.setRangeText === 'function') {
+      field.setRangeText(text, field.selectionStart, field.selectionEnd, 'end');
+      field.dispatchEvent(new global.Event('input', { bubbles: true }));
+    }
+  }
+
+  /** Items for a right-click anywhere no specific menu claimed. */
+  function buildGenericItems(target, d) {
+    d = d || doc();
+    var items = [];
+    var el = target && target.nodeType === 3 ? target.parentNode : target;
+    var closest = function (sel) {
+      return el && typeof el.closest === 'function' ? el.closest(sel) : null;
+    };
+
+    var link = closest('a[href]');
+    if (link) {
+      var href = link.href || link.getAttribute('href');
+      items.push({
+        id: 'open-link',
+        label: 'Ouvrir le lien',
+        action: function () {
+          global.open(href, '_blank', 'noopener');
+        },
+      });
+      items.push({
+        id: 'copy-link',
+        label: 'Copier l’adresse du lien',
+        action: function () {
+          copyText(d, href);
+        },
+      });
+    }
+
+    var img = closest('img[src]');
+    if (img) {
+      if (items.length) items.push({ sep: true });
+      items.push({
+        id: 'copy-image-url',
+        label: 'Copier l’adresse de l’image',
+        action: function () {
+          copyText(d, img.currentSrc || img.src);
+        },
+      });
+    }
+
+    var field = isNativeEditableTarget(el) ? (closest('input, textarea, [contenteditable]') || el) : null;
+    if (field) {
+      var tag = String(field.tagName || '').toUpperCase();
+      var isSelect = tag === 'SELECT';
+      var readOnly = !!(field.readOnly || field.disabled) || isSelect;
+      var selected = isSelect ? '' : fieldSelection(field) || selectionText(d);
+      if (items.length) items.push({ sep: true });
+      if (!isSelect) {
+        items.push({
+          id: 'undo',
+          label: 'Annuler',
+          disabled: readOnly,
+          action: function () {
+            field.focus();
+            d.execCommand('undo');
+          },
+        });
+        items.push({
+          id: 'redo',
+          label: 'Rétablir',
+          disabled: readOnly,
+          action: function () {
+            field.focus();
+            d.execCommand('redo');
+          },
+        });
+        items.push({ sep: true });
+        items.push({
+          id: 'cut',
+          label: 'Couper',
+          disabled: readOnly || !selected,
+          action: function () {
+            field.focus();
+            copyText(d, selected);
+            d.execCommand('delete');
+          },
+        });
+        items.push({
+          id: 'copy',
+          label: 'Copier',
+          disabled: !selected,
+          action: function () {
+            copyText(d, selected);
+          },
+        });
+        items.push({
+          id: 'paste',
+          label: 'Coller',
+          disabled: readOnly,
+          action: function () {
+            var nav = global.navigator;
+            if (nav && nav.clipboard && typeof nav.clipboard.readText === 'function') {
+              nav.clipboard.readText().then(
+                function (t) {
+                  insertText(d, field, t);
+                },
+                function () {
+                  field.focus();
+                  try {
+                    d.execCommand('paste');
+                  } catch (e) {
+                    /* clipboard blocked in this frame */
+                  }
+                }
+              );
+            } else {
+              field.focus();
+              try {
+                d.execCommand('paste');
+              } catch (e2) {
+                /* ignore */
+              }
+            }
+          },
+        });
+        items.push({
+          id: 'select-all',
+          label: 'Tout sélectionner',
+          action: function () {
+            field.focus();
+            if (typeof field.select === 'function') field.select();
+            else d.execCommand('selectAll');
+          },
+        });
+      }
+      return items;
+    }
+
+    var text = selectionText(d);
+    if (text) {
+      if (items.length) items.push({ sep: true });
+      items.push({
+        id: 'copy',
+        label: 'Copier',
+        action: function () {
+          copyText(d, text);
+        },
+      });
+    }
+    if (items.length) items.push({ sep: true });
+    items.push({
+      id: 'select-all',
+      label: 'Tout sélectionner',
+      action: function () {
+        var body = d.body;
+        if (!body) return;
+        var range = d.createRange();
+        range.selectNodeContents(body);
+        var sel = global.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      },
+    });
+    items.push({
+      id: 'reload',
+      label: 'Recharger',
+      action: function () {
+        global.location.reload();
+      },
+    });
+    return items;
+  }
+
+  var globalInstalled = null;
+
+  /**
+   * Suppress the native context menu document-wide. Specific menus (bind /
+   * table menu) run first and call preventDefault; anything left over falls
+   * through here and gets the generic menu.
+   */
+  function installGlobal(d) {
+    d = d || doc();
+    if (!d || typeof d.addEventListener !== 'function') return function () {};
+    if (globalInstalled && globalInstalled.doc === d) return globalInstalled.off;
+    function onContextMenu(e) {
+      if (!e || e.defaultPrevented) return;
+      if (e.target && typeof e.target.closest === 'function' && e.target.closest('.' + MENU_CLASS)) {
+        e.preventDefault();
+        return;
+      }
+      var items = buildGenericItems(e.target, d);
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      show(e, items);
+    }
+    d.addEventListener('contextmenu', onContextMenu, false);
+    var off = function () {
+      d.removeEventListener('contextmenu', onContextMenu, false);
+      globalInstalled = null;
+    };
+    globalInstalled = { doc: d, off: off };
+    return off;
+  }
+
   global.ContextMenu = {
     show: show,
     hide: hide,
     bind: bind,
     isNativeEditableTarget: isNativeEditableTarget,
+    buildGenericItems: buildGenericItems,
+    installGlobal: installGlobal,
     normalizeItems: normalizeItems,
     buildExpandToggleItem: buildExpandToggleItem,
     buildAgentItems: buildAgentItems,
@@ -1306,4 +1558,7 @@
     buildAgentComposerItems: buildAgentComposerItems,
     buildPriorityFieldItems: buildPriorityFieldItems,
   };
+  if (global.document && typeof global.document.addEventListener === 'function') {
+    installGlobal(global.document);
+  }
 })(typeof window !== 'undefined' ? window : this);

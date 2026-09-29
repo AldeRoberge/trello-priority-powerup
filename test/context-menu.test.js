@@ -604,4 +604,52 @@ describe('ContextMenu', () => {
     composer.find((i) => i.id === 'send').action();
     assert.equal(sent, true);
   });
+
+  it('global fallback replaces the native menu on plain areas', () => {
+    const div = global.document.createElement('div');
+    global.document.body.appendChild(div);
+    let prevented = false;
+    const evt = {
+      type: 'contextmenu',
+      target: div,
+      clientX: 5,
+      clientY: 5,
+      defaultPrevented: false,
+      preventDefault() {
+        prevented = true;
+      },
+    };
+    for (const fn of global._docListeners.contextmenu.slice()) fn(evt);
+    assert.equal(prevented, true);
+    const labels = global.document.body
+      .querySelectorAll('button')
+      .map((b) => b.dataset.contextAction);
+    assert.deepEqual(labels, ['select-all', 'reload']);
+  });
+
+  it('global fallback leaves events already handled by a specific menu', () => {
+    const div = global.document.createElement('div');
+    let prevented = false;
+    for (const fn of global._docListeners.contextmenu.slice()) {
+      fn({
+        type: 'contextmenu',
+        target: div,
+        defaultPrevented: true,
+        preventDefault() {
+          prevented = true;
+        },
+      });
+    }
+    assert.equal(prevented, false);
+    assert.equal(global.document.body.querySelectorAll('button').length, 0);
+  });
+
+  it('buildGenericItems offers clipboard actions on inputs', () => {
+    const input = global.document.createElement('input');
+    input.tagName = 'INPUT';
+    const ids = ContextMenu.buildGenericItems(input, global.document)
+      .filter((i) => !i.sep)
+      .map((i) => i.id);
+    assert.deepEqual(ids, ['undo', 'redo', 'cut', 'copy', 'paste', 'select-all']);
+  });
 });
