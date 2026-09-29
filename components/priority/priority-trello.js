@@ -495,6 +495,12 @@
       normalized.customAssignees = customAssignees;
     }
 
+    var teamLinks =
+      PUTypes && typeof PUTypes.normalizeTeamLinks === 'function'
+        ? PUTypes.normalizeTeamLinks(raw.teamLinks)
+        : [];
+    if (teamLinks.length) normalized.teamLinks = teamLinks;
+
     var places =
       PUTypes && typeof PUTypes.normalizePlaces === 'function'
         ? PUTypes.normalizePlaces(raw.places)
@@ -576,6 +582,9 @@
     }
     if (Array.isArray(inputs.customAssignees) && inputs.customAssignees.length) {
       cleared.customAssignees = inputs.customAssignees.slice();
+    }
+    if (Array.isArray(inputs.teamLinks) && inputs.teamLinks.length) {
+      cleared.teamLinks = inputs.teamLinks.slice();
     }
     if (
       inputs.places &&

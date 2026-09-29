@@ -1360,6 +1360,346 @@
     return out;
   }
 
+  // ── 1e. Team graph (who asks whom, who hands off to whom) ───────────────
+  // cardPriority.teamLinks: [{ from, to, kind, label? }] between assignee ids.
+  //   asks — `from` asked `to` for the work (from sits above, arrow points down)
+  //   flow — work goes from `from` to `to` on the same level (horizontal arrow)
+  //   both — back and forth between the two (double-headed horizontal arrow)
+  // One link per pair of people; the pair key is order-independent.
+  var TEAM_LINK_KINDS = ['asks', 'flow', 'both'];
+  var MAX_TEAM_LINKS = 60;
+  var teamGraphInstances = 0;
+  var MAX_TEAM_LINK_LABEL = 32;
+
+  function teamLinkPairKey(a, b) {
+    var x = String(a);
+    var y = String(b);
+    return x < y ? x + '|' + y : y + '|' + x;
+  }
+
+  function normalizeTeamLinks(raw, validIds) {
+    if (!Array.isArray(raw)) return [];
+    var allowed = null;
+    if (validIds) {
+      allowed = Object.create(null);
+      var ids = Array.isArray(validIds) ? validIds : Object.keys(validIds);
+      for (var v = 0; v < ids.length; v++) allowed[String(ids[v])] = true;
+    }
+    var out = [];
+    var seen = Object.create(null);
+    for (var i = 0; i < raw.length && out.length < MAX_TEAM_LINKS; i++) {
+      var item = raw[i];
+      if (!item || typeof item !== 'object') continue;
+      var from = item.from != null ? String(item.from).trim() : '';
+      var to = item.to != null ? String(item.to).trim() : '';
+      if (!from || !to || from === to) continue;
+      if (allowed && (!allowed[from] || !allowed[to])) continue;
+      var kind = TEAM_LINK_KINDS.indexOf(item.kind) >= 0 ? item.kind : 'flow';
+      var key = teamLinkPairKey(from, to);
+      if (seen[key]) continue;
+      seen[key] = true;
+      var link = { from: from, to: to, kind: kind };
+      var label = typeof item.label === 'string' ? item.label.trim() : '';
+      if (label.length > MAX_TEAM_LINK_LABEL) {
+        label = label.slice(0, MAX_TEAM_LINK_LABEL).trim();
+      }
+      if (label) link.label = label;
+      out.push(link);
+    }
+    return out;
+  }
+
+  /** Add or replace the link between two people (drag / popover edits). */
+  function upsertTeamLink(links, input) {
+    var list = normalizeTeamLinks(links);
+    var next = normalizeTeamLinks([input]);
+    if (!next.length) return list;
+    var link = next[0];
+    var key = teamLinkPairKey(link.from, link.to);
+    var out = [];
+    var replaced = false;
+    for (var i = 0; i < list.length; i++) {
+      if (teamLinkPairKey(list[i].from, list[i].to) === key) {
+        out.push(link);
+        replaced = true;
+      } else {
+        out.push(list[i]);
+      }
+    }
+    if (!replaced) out.push(link);
+    return normalizeTeamLinks(out);
+  }
+
+  /**
+   * Link created by dragging between two people. Handing work in the opposite
+   * direction of an existing hand-off turns it into a back-and-forth.
+   */
+  function connectTeamPeople(links, from, to, kind) {
+    var list = normalizeTeamLinks(links);
+    var existing = null;
+    var key = teamLinkPairKey(from, to);
+    for (var i = 0; i < list.length; i++) {
+      if (teamLinkPairKey(list[i].from, list[i].to) === key) existing = list[i];
+    }
+    var label = existing && existing.label;
+    if (
+      existing &&
+      kind === 'flow' &&
+      (existing.kind === 'both' ||
+        (existing.kind === 'flow' && existing.from === String(to)))
+    ) {
+      kind = 'both';
+    }
+    var input = { from: from, to: to, kind: kind };
+    if (label) input.label = label;
+    return upsertTeamLink(list, input);
+  }
+
+  function removeTeamLink(links, from, to) {
+    var key = teamLinkPairKey(from, to);
+    return normalizeTeamLinks(links).filter(function (l) {
+      return teamLinkPairKey(l.from, l.to) !== key;
+    });
+  }
+
+  function removePersonFromTeamLinks(links, personId) {
+    var id = String(personId);
+    return normalizeTeamLinks(links).filter(function (l) {
+      return l.from !== id && l.to !== id;
+    });
+  }
+
+  /**
+   * Auto layout: requesters sit on rows above the people they ask; hand-offs
+   * run left to right inside a row. opts.heights maps id → measured node height.
+   * Returns { nodes: { id: { x, y, w, h, row, col } }, rows, width, height }.
+   */
+  function layoutTeamGraph(ids, links, opts) {
+    opts = opts || {};
+    var w = opts.nodeW || 172;
+    var hgap = opts.hgap != null ? opts.hgap : 72;
+    var vgap = opts.vgap != null ? opts.vgap : 64;
+    var heights = opts.heights || {};
+    var defaultH = opts.defaultH || 72;
+    var list = [];
+    var index = Object.create(null);
+    (Array.isArray(ids) ? ids : []).forEach(function (raw) {
+      var id = String(raw);
+      if (index[id] != null) return;
+      index[id] = list.length;
+      list.push(id);
+    });
+    var n = list.length;
+    var ls = normalizeTeamLinks(links, list);
+    var rank = Object.create(null);
+    list.forEach(function (id) {
+      rank[id] = 0;
+    });
+    // People joined by a hand-off share a row, so peers stay side by side.
+    for (var pass = 0; pass < n * 2; pass++) {
+      var changed = false;
+      for (var i = 0; i < ls.length; i++) {
+        var l = ls[i];
+        if (l.kind === 'asks') {
+          if (rank[l.to] < rank[l.from] + 1 && rank[l.from] + 1 < n) {
+            rank[l.to] = rank[l.from] + 1;
+            changed = true;
+          }
+        } else if (rank[l.from] !== rank[l.to]) {
+          rank[l.from] = rank[l.to] = Math.max(rank[l.from], rank[l.to]);
+          changed = true;
+        }
+      }
+      if (!changed) break;
+    }
+    var rows = [];
+    list.forEach(function (id) {
+      (rows[rank[id]] = rows[rank[id]] || []).push(id);
+    });
+    rows = rows.filter(Boolean);
+
+    var pos = Object.create(null);
+    var rowOf = Object.create(null);
+    var y = 0;
+    var minX = Infinity;
+    var maxX = -Infinity;
+    var placed = [];
+
+    rows.forEach(function (rowIds, r) {
+      rowIds.forEach(function (id) {
+        rowOf[id] = r;
+      });
+      // Components joined by hand-offs stay side by side.
+      var parent = Object.create(null);
+      rowIds.forEach(function (id) {
+        parent[id] = id;
+      });
+      var find = function (x) {
+        while (parent[x] !== x) {
+          parent[x] = parent[parent[x]];
+          x = parent[x];
+        }
+        return x;
+      };
+      var inRow = Object.create(null);
+      rowIds.forEach(function (id) {
+        inRow[id] = true;
+      });
+      ls.forEach(function (l) {
+        if (l.kind === 'asks' || !inRow[l.from] || !inRow[l.to]) return;
+        parent[find(l.from)] = find(l.to);
+      });
+      var comps = Object.create(null);
+      var compOrder = [];
+      rowIds.forEach(function (id) {
+        var root = find(id);
+        if (!comps[root]) {
+          comps[root] = [];
+          compOrder.push(root);
+        }
+        comps[root].push(id);
+      });
+      var groups = compOrder.map(function (root) {
+        var members = comps[root];
+        // Kahn topo sort over `flow` edges so hand-offs read left to right.
+        var indeg = Object.create(null);
+        members.forEach(function (id) {
+          indeg[id] = 0;
+        });
+        var flows = ls.filter(function (l) {
+          return l.kind === 'flow' && indeg[l.from] != null && indeg[l.to] != null;
+        });
+        flows.forEach(function (l) {
+          indeg[l.to]++;
+        });
+        var ordered = [];
+        var left = members.slice();
+        while (left.length) {
+          var pick = null;
+          for (var k = 0; k < left.length; k++) {
+            if (indeg[left[k]] === 0) {
+              pick = left[k];
+              break;
+            }
+          }
+          if (pick == null) pick = left[0];
+          left.splice(left.indexOf(pick), 1);
+          ordered.push(pick);
+          flows.forEach(function (l) {
+            if (l.from === pick && indeg[l.to] > 0) indeg[l.to]--;
+          });
+        }
+        // Barycenter of the people who asked them, to limit wire crossings.
+        var sum = 0;
+        var cnt = 0;
+        ls.forEach(function (l) {
+          if (l.kind === 'asks' && members.indexOf(l.to) >= 0 && pos[l.from]) {
+            sum += pos[l.from].x + w / 2;
+            cnt++;
+          }
+        });
+        return {
+          ids: ordered,
+          key: cnt ? sum / cnt : null,
+          first: Math.min.apply(
+            null,
+            members.map(function (id) {
+              return index[id];
+            })
+          )
+        };
+      });
+      groups.sort(function (a, b) {
+        if (a.key != null && b.key != null && a.key !== b.key) return a.key - b.key;
+        return a.first - b.first;
+      });
+      var order = [];
+      groups.forEach(function (g) {
+        order = order.concat(g.ids);
+      });
+      var rowW = order.length * w + (order.length - 1) * hgap;
+      var rowH = 0;
+      order.forEach(function (id, c) {
+        var h = heights[id] > 0 ? heights[id] : defaultH;
+        if (h > rowH) rowH = h;
+        var x = -rowW / 2 + c * (w + hgap);
+        pos[id] = { x: x, y: y, w: w, h: h, row: r, col: c };
+        if (x < minX) minX = x;
+        if (x + w > maxX) maxX = x + w;
+      });
+      placed.push(order);
+      y += rowH + vgap;
+    });
+
+    var shift = isFinite(minX) ? -minX : 0;
+    var nodes = Object.create(null);
+    Object.keys(pos).forEach(function (id) {
+      var p = pos[id];
+      nodes[id] = { x: p.x + shift, y: p.y, w: p.w, h: p.h, row: p.row, col: p.col };
+    });
+    return {
+      nodes: nodes,
+      rows: placed,
+      width: isFinite(maxX) ? maxX + shift : 0,
+      height: rows.length ? y - vgap : 0
+    };
+  }
+
+  /**
+   * Wire between two laid-out boxes: vertical between rows, horizontal inside
+   * a row, arcing over the row when the two are not neighbours.
+   */
+  function routeTeamLink(a, b) {
+    var x1, y1, x2, y2, c1x, c1y, c2x, c2y;
+    var arc = false;
+    if (a.row !== b.row) {
+      var down = a.row < b.row;
+      x1 = a.x + a.w / 2;
+      y1 = down ? a.y + a.h : a.y;
+      x2 = b.x + b.w / 2;
+      y2 = down ? b.y : b.y + b.h;
+      var dy = Math.max(28, Math.abs(y2 - y1) * 0.5) * (down ? 1 : -1);
+      c1x = x1;
+      c1y = y1 + dy;
+      c2x = x2;
+      c2y = y2 - dy;
+    } else if (Math.abs(a.col - b.col) > 1) {
+      arc = true;
+      var lift = Math.min(64, 30 + 12 * (Math.abs(a.col - b.col) - 1));
+      x1 = a.x + a.w / 2;
+      y1 = a.y;
+      x2 = b.x + b.w / 2;
+      y2 = b.y;
+      c1x = x1;
+      c1y = y1 - lift;
+      c2x = x2;
+      c2y = y2 - lift;
+    } else {
+      var right = a.col < b.col;
+      x1 = right ? a.x + a.w : a.x;
+      y1 = a.y + a.h / 2;
+      x2 = right ? b.x : b.x + b.w;
+      y2 = b.y + b.h / 2;
+      var dx = Math.max(24, Math.abs(x2 - x1) * 0.5) * (right ? 1 : -1);
+      c1x = x1 + dx;
+      c1y = y1;
+      c2x = x2 - dx;
+      c2y = y2;
+    }
+    return {
+      d:
+        'M' + x1 + ' ' + y1 +
+        ' C' + c1x + ' ' + c1y + ' ' + c2x + ' ' + c2y + ' ' + x2 + ' ' + y2,
+      x1: x1,
+      y1: y1,
+      x2: x2,
+      y2: y2,
+      mx: (x1 + 3 * c1x + 3 * c2x + x2) / 8,
+      my: (y1 + 3 * c1y + 3 * c2y + y2) / 8,
+      arc: arc
+    };
+  }
+
   // Urgency / impact axis max (ease uses 1..5).
   /** Derived legacy urgency axis (0–4) for matrix / Eisenhower / calc graph. */
   var AXIS_UI_MAX = 4;
@@ -10471,6 +10811,11 @@
     var memberRolesBusy = false;
     var memberRolesPickerMemberId = '';
     var customAssignees = normalizeCustomAssignees(config.customAssignees);
+    var teamLinks = normalizeTeamLinks(config.teamLinks);
+    var onTeamLinksChange =
+      typeof config.onTeamLinksChange === 'function'
+        ? config.onTeamLinksChange
+        : null;
     var cardPlaces = normalizePlaces(config.places);
     var placesBusy = false;
     var placesPickerSlot = '';
@@ -10902,6 +11247,37 @@
     membersInline.className = 'info-members-inline';
     membersInline.appendChild(membersEl);
     membersInline.appendChild(membersAddWrap);
+    // Node view: assignees as cards, wires for who asks whom / hands off to whom.
+    membersEl.hidden = true;
+    var tgHost = document.createElement('div');
+    tgHost.className = 'tg';
+    tgHost.hidden = true;
+    var tgFrame = document.createElement('div');
+    tgFrame.className = 'tg-frame';
+    var tgStage = document.createElement('div');
+    tgStage.className = 'tg-stage';
+    var tgWires = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    tgWires.setAttribute('class', 'tg-wires');
+    tgWires.setAttribute('aria-hidden', 'true');
+    var tgNodes = document.createElement('div');
+    tgNodes.className = 'tg-nodes';
+    var tgPills = document.createElement('div');
+    tgPills.className = 'tg-pills';
+    tgStage.appendChild(tgWires);
+    tgStage.appendChild(tgNodes);
+    tgStage.appendChild(tgPills);
+    var tgEditor = document.createElement('div');
+    tgEditor.className = 'tg-editor';
+    tgEditor.hidden = true;
+    tgEditor.setAttribute('role', 'dialog');
+    tgEditor.setAttribute('aria-label', 'Modifier la relation');
+    tgFrame.appendChild(tgStage);
+    tgFrame.appendChild(tgEditor);
+    var tgHint = document.createElement('div');
+    tgHint.className = 'tg-hint';
+    tgHost.appendChild(tgFrame);
+    tgHost.appendChild(tgHint);
+    membersWrap.appendChild(tgHost);
     membersWrap.appendChild(membersInline);
     membersWrap.appendChild(membersStatus);
 
@@ -12785,6 +13161,619 @@
       persistMemberRoles(map);
     }
 
+    // ── Team graph (node view of the assignees) ────────────────────────
+    var TG_NODE_W = 152;
+    var TG_PAD = 20;
+    var TG_KIND_META = {
+      asks: { icon: 'ti-arrow-down', label: 'Demande', verb: 'demande à' },
+      flow: { icon: 'ti-arrow-right', label: 'Enchaîne', verb: 'passe le relais à' },
+      both: { icon: 'ti-arrows-exchange', label: 'Va-et-vient', verb: 'travaille en va-et-vient avec' }
+    };
+    var tgUid = ++teamGraphInstances;
+    var tgSelectedKey = '';
+    var tgPending = null; // { from, kind } armed by clicking a pin
+    var tgScale = 1;
+    var tgLayout = null;
+    var tgDrag = null;
+
+    function tgSvg(tag, attrs) {
+      var node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      Object.keys(attrs || {}).forEach(function (k) {
+        node.setAttribute(k, attrs[k]);
+      });
+      return node;
+    }
+
+    function tgHue(id) {
+      var h = 0;
+      for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
+      return h;
+    }
+
+    function tgPersonName(id) {
+      var all = displayAssignees();
+      for (var i = 0; i < all.length; i++) {
+        if (String(all[i].id) === id) return memberDisplayName(all[i]) || 'Membre';
+      }
+      return 'Membre';
+    }
+
+    function tgVisibleLinks(ids) {
+      return normalizeTeamLinks(teamLinks, ids);
+    }
+
+    function persistTeamLinks(next, silent) {
+      teamLinks = normalizeTeamLinks(next);
+      if (!silent) {
+        renderTeamGraph();
+        onLayoutChange();
+      }
+      if (!onTeamLinksChange) return Promise.resolve({ ok: true, changed: false });
+      return Promise.resolve(onTeamLinksChange(teamLinks)).catch(function (err) {
+        console.error('Info team links save failed', err);
+        setMembersStatus('Échec de l’enregistrement', 'error');
+      });
+    }
+
+    function tgCloseEditor() {
+      if (!tgSelectedKey && tgEditor.hidden) return;
+      tgSelectedKey = '';
+      tgEditor.hidden = true;
+      tgEditor.replaceChildren();
+      tgFrame.style.minHeight = '';
+      onLayoutChange();
+      tgStage.querySelectorAll('.tg-wire-group.is-selected').forEach(function (g) {
+        g.classList.remove('is-selected');
+      });
+    }
+
+    function tgSetPending(next) {
+      tgPending = next;
+      tgHost.classList.toggle('is-linking', !!next);
+      tgHint.textContent = next
+        ? 'Clique sur la personne à relier (Échap pour annuler)'
+        : tgDefaultHint();
+      tgStage.querySelectorAll('.tg-node').forEach(function (n) {
+        n.classList.toggle(
+          'is-link-source',
+          !!next && n.getAttribute('data-id') === next.from
+        );
+      });
+    }
+
+    function tgDefaultHint() {
+      var count = displayAssignees().length;
+      if (count < 2) return 'Ajoute une autre personne pour les relier.';
+      if (!onTeamLinksChange) return '';
+      return 'Glisse depuis ● du bas pour « demande », depuis ● de droite pour « enchaîne ».';
+    }
+
+    function tgCommitLink(from, to, kind) {
+      if (!onTeamLinksChange || !from || !to || from === to) return;
+      var next = connectTeamPeople(teamLinks, from, to, kind);
+      tgSelectedKey = teamLinkPairKey(from, to);
+      persistTeamLinks(next);
+    }
+
+    function tgOpenEditor(link, mx, my) {
+      tgSelectedKey = teamLinkPairKey(link.from, link.to);
+      tgEditor.replaceChildren();
+      tgEditor.hidden = false;
+
+      var title = document.createElement('div');
+      title.className = 'tg-editor-title';
+      var sentence = document.createElement('span');
+      var meta = TG_KIND_META[link.kind];
+      var who = document.createElement('strong');
+      who.textContent = tgPersonName(link.from);
+      var whom = document.createElement('strong');
+      whom.textContent = tgPersonName(link.to);
+      sentence.appendChild(who);
+      sentence.appendChild(document.createTextNode(' ' + meta.verb + ' '));
+      sentence.appendChild(whom);
+      title.appendChild(sentence);
+      tgEditor.appendChild(title);
+
+      var seg = document.createElement('div');
+      seg.className = 'tg-editor-seg';
+      seg.setAttribute('role', 'radiogroup');
+      seg.setAttribute('aria-label', 'Type de relation');
+      ['asks', 'flow', 'both'].forEach(function (kind) {
+        var m = TG_KIND_META[kind];
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tg-editor-seg-btn tg-kind-' + kind + (link.kind === kind ? ' is-on' : '');
+        btn.setAttribute('role', 'radio');
+        btn.setAttribute('aria-checked', link.kind === kind ? 'true' : 'false');
+        btn.innerHTML = '<i class="ti ' + m.icon + '" aria-hidden="true"></i>';
+        var span = document.createElement('span');
+        span.textContent = m.label;
+        btn.appendChild(span);
+        btn.addEventListener('click', function () {
+          if (!onTeamLinksChange || link.kind === kind) return;
+          var updated = { from: link.from, to: link.to, kind: kind };
+          if (link.label) updated.label = link.label;
+          persistTeamLinks(upsertTeamLink(teamLinks, updated));
+        });
+        seg.appendChild(btn);
+      });
+      tgEditor.appendChild(seg);
+
+      var labelInput = document.createElement('input');
+      labelInput.type = 'text';
+      labelInput.className = 'tg-editor-label';
+      labelInput.maxLength = MAX_TEAM_LINK_LABEL;
+      labelInput.placeholder = 'Précision (ex. montage, sous-titres…)';
+      labelInput.value = link.label || '';
+      labelInput.setAttribute('aria-label', 'Précision sur la relation');
+      labelInput.disabled = !onTeamLinksChange;
+      var commitLabel = function (silent) {
+        var value = labelInput.value.trim();
+        if (value === (link.label || '')) return;
+        var updated = { from: link.from, to: link.to, kind: link.kind };
+        if (value) updated.label = value;
+        link.label = value;
+        persistTeamLinks(upsertTeamLink(teamLinks, updated), silent);
+      };
+      labelInput.addEventListener('keydown', function (event) {
+        event.stopPropagation();
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          commitLabel(false);
+          tgCloseEditor();
+        } else if (event.key === 'Escape') {
+          tgCloseEditor();
+        }
+      });
+      labelInput.addEventListener('blur', function () {
+        // Silent: re-rendering here would swallow the click that caused the blur.
+        commitLabel(true);
+      });
+      tgEditor.appendChild(labelInput);
+
+      var actions = document.createElement('div');
+      actions.className = 'tg-editor-actions';
+      var swap = document.createElement('button');
+      swap.type = 'button';
+      swap.className = 'tg-editor-action';
+      swap.innerHTML = '<i class="ti ti-switch-horizontal" aria-hidden="true"></i>';
+      swap.appendChild(document.createTextNode(' Inverser'));
+      swap.title = 'Inverser le sens';
+      swap.disabled = !onTeamLinksChange || link.kind === 'both';
+      swap.addEventListener('click', function () {
+        var updated = { from: link.to, to: link.from, kind: link.kind };
+        if (link.label) updated.label = link.label;
+        persistTeamLinks(upsertTeamLink(teamLinks, updated));
+      });
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'tg-editor-action is-danger';
+      del.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
+      del.appendChild(document.createTextNode(' Supprimer'));
+      del.disabled = !onTeamLinksChange;
+      del.addEventListener('click', function () {
+        tgSelectedKey = '';
+        persistTeamLinks(removeTeamLink(teamLinks, link.from, link.to));
+      });
+      actions.appendChild(swap);
+      actions.appendChild(del);
+      tgEditor.appendChild(actions);
+
+      var hostW = tgHost.clientWidth || 320;
+      var edW = 256;
+      var left = tgStage.offsetLeft + mx * tgScale - edW / 2;
+      left = Math.max(0, Math.min(left, hostW - edW));
+      tgEditor.style.left = left + 'px';
+      var edTop = Math.round(my * tgScale + 16);
+      tgEditor.style.top = edTop + 'px';
+      // Reserve room so the iframe grows instead of clipping the editor.
+      tgFrame.style.minHeight = edTop + tgEditor.offsetHeight + 8 + 'px';
+      onLayoutChange();
+      tgStage.querySelectorAll('.tg-wire-group').forEach(function (g) {
+        g.classList.toggle(
+          'is-selected',
+          g.getAttribute('data-key') === tgSelectedKey
+        );
+      });
+    }
+
+    function tgBuildNode(member) {
+      var mid = String(member.id);
+      var name = memberDisplayName(member) || 'Membre';
+      var isCustom = !!member.custom || isCustomAssigneeId(mid);
+      var node = document.createElement('div');
+      node.className = 'tg-node' + (isCustom ? ' is-custom' : '');
+      node.setAttribute('data-id', mid);
+      node.style.width = TG_NODE_W + 'px';
+      if (tgPending && tgPending.from === mid) node.classList.add('is-link-source');
+      node.style.setProperty('--tg-hue', String(tgHue(mid)));
+      node.setAttribute('aria-label', name);
+
+      var head = document.createElement('div');
+      head.className = 'tg-node-head';
+      appendMemberAvatar(head, member);
+      var nameEl = document.createElement('span');
+      nameEl.className = 'tg-node-name';
+      nameEl.textContent = name;
+      nameEl.title = name + (isCustom ? ' (hors Trello)' : '');
+      head.appendChild(nameEl);
+
+      var canRemove =
+        (isCustom && !!onCustomAssigneesChange) || (!isCustom && !!onMemberRemove);
+      if (canRemove) {
+        var clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'tg-node-clear';
+        clearBtn.setAttribute('aria-label', 'Retirer : ' + name);
+        clearBtn.textContent = '×';
+        clearBtn.disabled = membersBusy || memberRolesBusy;
+        clearBtn.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          removeMemberFromCard(member);
+        });
+        head.appendChild(clearBtn);
+      }
+      node.appendChild(head);
+
+      var body = document.createElement('div');
+      body.className = 'tg-node-roles';
+      rolesForMember(mid).forEach(function (roleId) {
+        var entry = getMemberRoleEntry(roleId);
+        var label = (entry && entry.label) || roleId;
+        var chip = document.createElement('span');
+        chip.className = 'tg-role';
+        chip.title = label;
+        var icon = document.createElement('i');
+        icon.className = 'ti ti-' + ((entry && entry.icon) || 'tag');
+        icon.setAttribute('aria-hidden', 'true');
+        var text = document.createElement('span');
+        text.textContent = label;
+        chip.appendChild(icon);
+        chip.appendChild(text);
+        if (onMemberRolesChange) {
+          var x = document.createElement('button');
+          x.type = 'button';
+          x.className = 'tg-role-clear';
+          x.setAttribute('aria-label', 'Retirer le rôle ' + label);
+          x.textContent = '×';
+          x.disabled = memberRolesBusy;
+          x.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            removeRoleFromMember(mid, roleId);
+          });
+          chip.appendChild(x);
+        }
+        body.appendChild(chip);
+      });
+      if (onMemberRolesChange) {
+        var add = document.createElement('button');
+        add.type = 'button';
+        add.className = 'tg-role-add' + (memberRolesPickerMemberId === mid ? ' is-open' : '');
+        add.title = 'Définir les rôles';
+        add.setAttribute('aria-label', 'Définir les rôles de ' + name);
+        add.setAttribute('aria-expanded', memberRolesPickerMemberId === mid ? 'true' : 'false');
+        add.innerHTML = '<i class="ti ti-plus" aria-hidden="true"></i>';
+        if (!rolesForMember(mid).length) {
+          var addText = document.createElement('span');
+          addText.textContent = 'Rôle';
+          add.appendChild(addText);
+        }
+        add.disabled = memberRolesBusy;
+        add.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleMemberRolesPicker(mid);
+        });
+        body.appendChild(add);
+      }
+      if (body.childNodes.length) node.appendChild(body);
+
+      // Pins: left/top receive, right/bottom start a link.
+      ['in-left', 'in-top'].forEach(function (cls) {
+        var pin = document.createElement('span');
+        pin.className = 'tg-pin tg-pin-' + cls;
+        pin.setAttribute('aria-hidden', 'true');
+        node.appendChild(pin);
+      });
+      if (onTeamLinksChange) {
+        [
+          { cls: 'out-right', kind: 'flow', label: 'Enchaîner vers quelqu’un' },
+          { cls: 'out-bottom', kind: 'asks', label: 'Demander à quelqu’un' }
+        ].forEach(function (def) {
+          var pin = document.createElement('button');
+          pin.type = 'button';
+          pin.className = 'tg-pin tg-pin-' + def.cls;
+          pin.setAttribute('data-kind', def.kind);
+          pin.setAttribute('aria-label', name + ' : ' + def.label);
+          pin.title = def.label;
+          pin.addEventListener('pointerdown', function (event) {
+            tgStartDrag(event, pin, mid, def.kind);
+          });
+          pin.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              tgSetPending({ from: mid, kind: def.kind });
+            }
+          });
+          node.appendChild(pin);
+        });
+      }
+
+      node.addEventListener('click', function (event) {
+        if (!tgPending) return;
+        if (event.target.closest('.tg-node-clear, .tg-role-clear, .tg-role-add, .tg-pin')) return;
+        event.preventDefault();
+        var pending = tgPending;
+        tgSetPending(null);
+        if (pending.from !== mid) tgCommitLink(pending.from, mid, pending.kind);
+      });
+      return node;
+    }
+
+    function tgStagePoint(event) {
+      var rect = tgStage.getBoundingClientRect();
+      return {
+        x: (event.clientX - rect.left) / tgScale,
+        y: (event.clientY - rect.top) / tgScale
+      };
+    }
+
+    function tgStartDrag(event, pin, fromId, kind) {
+      if (event.button != null && event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      tgCloseEditor();
+      var box = tgLayout && tgLayout.nodes[fromId];
+      if (!box) return;
+      var start =
+        kind === 'flow'
+          ? { x: box.x + box.w, y: box.y + box.h / 2 }
+          : { x: box.x + box.w / 2, y: box.y + box.h };
+      var temp = tgSvg('path', { class: 'tg-wire-temp tg-kind-' + kind });
+      tgWires.appendChild(temp);
+      tgDrag = { from: fromId, kind: kind, moved: false, sx: event.clientX, sy: event.clientY, target: '' };
+      tgHost.classList.add('is-dragging');
+      try {
+        pin.setPointerCapture(event.pointerId);
+      } catch (err) {
+        /* capture is optional */
+      }
+      var move = function (e) {
+        if (!tgDrag) return;
+        if (Math.abs(e.clientX - tgDrag.sx) + Math.abs(e.clientY - tgDrag.sy) > 5) {
+          tgDrag.moved = true;
+        }
+        var p = tgStagePoint(e);
+        var horizontal = kind === 'flow';
+        var d = horizontal
+          ? Math.max(24, Math.abs(p.x - start.x) / 2)
+          : Math.max(24, Math.abs(p.y - start.y) / 2);
+        temp.setAttribute(
+          'd',
+          horizontal
+            ? 'M' + start.x + ' ' + start.y + ' C' + (start.x + d) + ' ' + start.y + ' ' + (p.x - d) + ' ' + p.y + ' ' + p.x + ' ' + p.y
+            : 'M' + start.x + ' ' + start.y + ' C' + start.x + ' ' + (start.y + d) + ' ' + p.x + ' ' + (p.y - d) + ' ' + p.x + ' ' + p.y
+        );
+        var under = document.elementFromPoint(e.clientX, e.clientY);
+        var nodeEl = under && under.closest ? under.closest('.tg-node') : null;
+        var targetId = nodeEl ? nodeEl.getAttribute('data-id') : '';
+        if (targetId === fromId) targetId = '';
+        tgDrag.target = targetId;
+        tgStage.querySelectorAll('.tg-node').forEach(function (n) {
+          n.classList.toggle('is-drop-target', !!targetId && n.getAttribute('data-id') === targetId);
+        });
+      };
+      var done = function (e) {
+        pin.removeEventListener('pointermove', move);
+        pin.removeEventListener('pointerup', done);
+        pin.removeEventListener('pointercancel', cancel);
+        var drag = tgDrag;
+        tgDrag = null;
+        tgHost.classList.remove('is-dragging');
+        temp.remove();
+        tgStage.querySelectorAll('.tg-node.is-drop-target').forEach(function (n) {
+          n.classList.remove('is-drop-target');
+        });
+        if (!drag) return;
+        if (!drag.moved) {
+          tgSetPending(tgPending && tgPending.from === fromId && tgPending.kind === kind ? null : { from: fromId, kind: kind });
+          return;
+        }
+        if (drag.target) tgCommitLink(fromId, drag.target, kind);
+      };
+      var cancel = function () {
+        tgDrag = null;
+        pin.removeEventListener('pointermove', move);
+        pin.removeEventListener('pointerup', done);
+        pin.removeEventListener('pointercancel', cancel);
+        tgHost.classList.remove('is-dragging');
+        temp.remove();
+      };
+      pin.addEventListener('pointermove', move);
+      pin.addEventListener('pointerup', done);
+      pin.addEventListener('pointercancel', cancel);
+    }
+
+    function renderTeamGraph() {
+      if (tgDrag) return;
+      var display = displayAssignees();
+      var ids = display.map(function (m) {
+        return String(m.id);
+      });
+      tgHost.hidden = !display.length;
+      tgNodes.replaceChildren();
+      tgWires.replaceChildren();
+      tgPills.replaceChildren();
+      if (!display.length) {
+        tgCloseEditor();
+        return;
+      }
+
+      // Measure nodes at their natural height, then lay them out.
+      display.forEach(function (member) {
+        tgNodes.appendChild(tgBuildNode(member));
+      });
+      var heights = Object.create(null);
+      tgNodes.querySelectorAll('.tg-node').forEach(function (n) {
+        heights[n.getAttribute('data-id')] = n.offsetHeight;
+      });
+      var links = tgVisibleLinks(ids);
+      var layout = layoutTeamGraph(ids, links, {
+        nodeW: TG_NODE_W,
+        hgap: 84,
+        vgap: 60,
+        heights: heights,
+        defaultH: 72
+      });
+      var hasArc = links.some(function (l) {
+        var a = layout.nodes[l.from];
+        var b = layout.nodes[l.to];
+        return a && b && a.row === b.row && Math.abs(a.col - b.col) > 1;
+      });
+      var padTop = hasArc ? 72 : TG_PAD;
+      var stageW = layout.width + TG_PAD * 2;
+      var stageH = layout.height + padTop + TG_PAD;
+      tgNodes.querySelectorAll('.tg-node').forEach(function (n) {
+        var box = layout.nodes[n.getAttribute('data-id')];
+        if (!box) return;
+        n.style.left = box.x + TG_PAD + 'px';
+        n.style.top = box.y + padTop + 'px';
+      });
+      // Shift boxes into stage space for wires / pins.
+      var shifted = Object.create(null);
+      Object.keys(layout.nodes).forEach(function (id) {
+        var b = layout.nodes[id];
+        shifted[id] = { x: b.x + TG_PAD, y: b.y + padTop, w: b.w, h: b.h, row: b.row, col: b.col };
+      });
+      tgLayout = { nodes: shifted, width: stageW, height: stageH };
+
+      tgStage.style.width = stageW + 'px';
+      tgStage.style.height = stageH + 'px';
+      tgWires.setAttribute('width', String(stageW));
+      tgWires.setAttribute('height', String(stageH));
+      tgWires.setAttribute('viewBox', '0 0 ' + stageW + ' ' + stageH);
+
+      var available = tgHost.clientWidth;
+      tgScale = available > 0 && stageW > available ? Math.max(0.55, available / stageW) : 1;
+      tgStage.style.transform = tgScale === 1 ? '' : 'scale(' + tgScale + ')';
+      tgFrame.style.height = Math.ceil(stageH * tgScale) + 'px';
+
+      var defs = tgSvg('defs');
+      ['asks', 'flow', 'both'].forEach(function (kind) {
+        var marker = tgSvg('marker', {
+          id: 'tg-arrow-' + kind + '-' + tgUid,
+          viewBox: '0 0 10 10',
+          refX: '9',
+          refY: '5',
+          markerWidth: '9',
+          markerHeight: '9',
+          markerUnits: 'userSpaceOnUse',
+          orient: 'auto-start-reverse'
+        });
+        marker.appendChild(
+          tgSvg('path', { d: 'M0 1 L10 5 L0 9 z', class: 'tg-arrowhead tg-kind-' + kind })
+        );
+        defs.appendChild(marker);
+      });
+      tgWires.appendChild(defs);
+
+      links.forEach(function (link) {
+        var a = shifted[link.from];
+        var b = shifted[link.to];
+        if (!a || !b) return;
+        var route = routeTeamLink(a, b);
+        var key = teamLinkPairKey(link.from, link.to);
+        var group = tgSvg('g', {
+          class:
+            'tg-wire-group tg-kind-' + link.kind + (key === tgSelectedKey ? ' is-selected' : ''),
+          'data-key': key
+        });
+        var arrow = 'url(#tg-arrow-' + link.kind + '-' + tgUid + ')';
+        var wire = tgSvg('path', { d: route.d, class: 'tg-wire', 'marker-end': arrow });
+        if (link.kind === 'both') wire.setAttribute('marker-start', arrow);
+        var glow = tgSvg('path', { d: route.d, class: 'tg-wire-glow' });
+        var hit = tgSvg('path', { d: route.d, class: 'tg-wire-hit' });
+        group.appendChild(glow);
+        group.appendChild(wire);
+        group.appendChild(hit);
+        tgWires.appendChild(group);
+
+        var pill = document.createElement('button');
+        pill.type = 'button';
+        pill.className = 'tg-pill tg-kind-' + link.kind + (link.label ? ' has-label' : '');
+        pill.style.left = route.mx + 'px';
+        pill.style.top = route.my + 'px';
+        var meta = TG_KIND_META[link.kind];
+        pill.innerHTML = '<i class="ti ' + meta.icon + '" aria-hidden="true"></i>';
+        if (link.label) {
+          var lab = document.createElement('span');
+          lab.textContent = link.label;
+          pill.appendChild(lab);
+        }
+        pill.setAttribute(
+          'aria-label',
+          tgPersonName(link.from) + ' ' + meta.verb + ' ' + tgPersonName(link.to)
+        );
+        pill.title = 'Modifier la relation';
+        var open = function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (tgSelectedKey === key && !tgEditor.hidden) {
+            tgCloseEditor();
+            return;
+          }
+          tgOpenEditor(link, route.mx + 0, route.my);
+        };
+        pill.addEventListener('click', open);
+        hit.addEventListener('click', open);
+        tgPills.appendChild(pill);
+      });
+
+      if (tgSelectedKey) {
+        var selected = links.filter(function (l) {
+          return teamLinkPairKey(l.from, l.to) === tgSelectedKey;
+        })[0];
+        if (selected) {
+          var r = routeTeamLink(shifted[selected.from], shifted[selected.to]);
+          tgOpenEditor(selected, r.mx, r.my);
+        } else {
+          tgCloseEditor();
+        }
+      }
+      tgHint.textContent = tgPending
+        ? 'Clique sur la personne à relier (Échap pour annuler)'
+        : tgDefaultHint();
+      tgHint.hidden = !tgHint.textContent;
+    }
+
+    tgHost.addEventListener('click', function (event) {
+      if (
+        !event.target.closest('.tg-editor') &&
+        !event.target.closest('.tg-pill') &&
+        !event.target.closest('.tg-wire-hit')
+      ) {
+        tgCloseEditor();
+      }
+    });
+    tgHost.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        if (tgPending) tgSetPending(null);
+        tgCloseEditor();
+      }
+    });
+    if (typeof global.ResizeObserver === 'function') {
+      var tgLastWidth = 0;
+      new global.ResizeObserver(function () {
+        var w = tgHost.clientWidth;
+        if (Math.abs(w - tgLastWidth) < 2) return;
+        tgLastWidth = w;
+        renderTeamGraph();
+        onLayoutChange();
+      }).observe(tgHost);
+    }
+
     function renderMembers() {
       membersEl.replaceChildren();
       var display = displayAssignees();
@@ -12964,6 +13953,7 @@
         });
       }
 
+      renderTeamGraph();
       var canAdd = !!onMemberAdd || !!onCustomAssigneesChange;
       membersAddBtn.hidden = !canAdd;
       membersAddBtn.disabled = membersBusy || !canAdd || memberRolesBusy;
@@ -15905,6 +16895,7 @@
       if (membersPickerOpen && !membersAddWrap.contains(event.target)) {
         setMembersPickerOpen(false);
       }
+      if (!tgHost.contains(event.target)) tgCloseEditor();
       if (
         memberRolesPickerMemberId &&
         !membersWrap.contains(event.target)
@@ -16178,6 +17169,14 @@
         customAssignees = normalizeCustomAssignees(list);
         renderMembers();
         onLayoutChange();
+      },
+      setTeamLinks: function (list) {
+        teamLinks = normalizeTeamLinks(list);
+        renderTeamGraph();
+        onLayoutChange();
+      },
+      getTeamLinks: function () {
+        return normalizeTeamLinks(teamLinks);
       },
       getCustomAssignees: function () {
         return normalizeCustomAssignees(customAssignees);
@@ -23251,6 +24250,13 @@
     mergeIntoCustomAssigneeCatalog: mergeIntoCustomAssigneeCatalog,
     customAssigneeToMember: customAssigneeToMember,
     mergeAssigneesForDisplay: mergeAssigneesForDisplay,
+    normalizeTeamLinks: normalizeTeamLinks,
+    upsertTeamLink: upsertTeamLink,
+    connectTeamPeople: connectTeamPeople,
+    removeTeamLink: removeTeamLink,
+    removePersonFromTeamLinks: removePersonFromTeamLinks,
+    layoutTeamGraph: layoutTeamGraph,
+    routeTeamLink: routeTeamLink,
     isPlaceId: isPlaceId,
     normalizePlaceRef: normalizePlaceRef,
     normalizePlaces: normalizePlaces,

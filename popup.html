@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="./components/shared/trello-theme.css?v=polish-1" />
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-7" />
   <link rel="stylesheet" href="./components/shared/context-menu.css?v=ctx-menu-1" />
-  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=trello-flat-2" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css?v=team-graph-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=elev-dark-1" />
   <link rel="stylesheet" href="./components/shared/markdown-dom.css?v=md-1" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=md-1" />
@@ -32,7 +32,7 @@
   </script>
   <script src="./components/shared/effects.js?v=fx-7"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=places-inline-1"></script>
+  <script src="./components/priority/priority-ui.js?v=team-graph-1"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
@@ -2665,6 +2665,13 @@
               : [];
         infoUi.setMemberRoleCustoms(nextRoleCustoms);
       }
+      if (typeof infoUi.setTeamLinks === 'function') {
+        infoUi.setTeamLinks(
+          PriorityUI && typeof PriorityUI.normalizeTeamLinks === 'function'
+            ? PriorityUI.normalizeTeamLinks(state.teamLinks)
+            : []
+        );
+      }
       if (typeof infoUi.setCustomAssignees === 'function') {
         var nextCustomAssignees =
           PriorityUI && typeof PriorityUI.normalizeCustomAssignees === 'function'
@@ -3445,6 +3452,29 @@
                 memberRoles: map,
                 memberRoleCustoms: customs,
               };
+            });
+          });
+        },
+        onTeamLinksChange: function (nextLinks) {
+          var links =
+            PriorityUI && typeof PriorityUI.normalizeTeamLinks === 'function'
+              ? PriorityUI.normalizeTeamLinks(nextLinks)
+              : [];
+          var base =
+            (variant && typeof variant.getState === 'function'
+              ? variant.getState()
+              : null) ||
+            latestState ||
+            {};
+          var next = Object.assign({}, base, { teamLinks: links });
+          if (!links.length) delete next.teamLinks;
+          if (variant && typeof variant.setState === 'function') {
+            variant.setState(next, { preserveCollapse: true });
+          }
+          latestState = Object.assign({}, next);
+          return Promise.resolve(saveState(next)).then(function () {
+            return commitHistoryNow('Relations entre assignés modifiées').then(function () {
+              return { ok: true, changed: true, teamLinks: links };
             });
           });
         },

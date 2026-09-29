@@ -8918,3 +8918,522 @@ html[data-color-mode="dark"] .calc-rsm-marker-core {
   border-radius: 2px;
   flex-shrink: 0;
 }
+
+.info-members[hidden] {
+  display: none !important;
+}
+
+/* ── Team graph: assignees as a node view ─────────────────────────────── */
+.tg {
+  --tg-asks: #e9a23b;
+  --tg-flow: #579dff;
+  --tg-both: #4bce97;
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 9%, transparent);
+  background-color: color-mix(in srgb, var(--surface-0, #1d2125) 88%, #000);
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--text-primary) 11%, transparent) 1px,
+    transparent 1.2px
+  );
+  background-size: 18px 18px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.tg[hidden] {
+  display: none !important;
+}
+
+.tg-frame {
+  position: relative;
+  width: 100%;
+}
+
+.tg-stage {
+  position: relative;
+  margin: 0 auto;
+  transform-origin: 0 0;
+}
+
+.tg-wires {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.tg-nodes,
+.tg-pills {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Wires ------------------------------------------------------------- */
+.tg-kind-asks {
+  --tg-c: var(--tg-asks);
+}
+
+.tg-kind-flow {
+  --tg-c: var(--tg-flow);
+}
+
+.tg-kind-both {
+  --tg-c: var(--tg-both);
+}
+
+.tg-wire {
+  fill: none;
+  stroke: var(--tg-c);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.tg-wire-glow {
+  fill: none;
+  stroke: var(--tg-c);
+  stroke-width: 7;
+  stroke-linecap: round;
+  opacity: 0.16;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.tg-wire-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 16;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.tg-wire-group:hover .tg-wire-glow,
+.tg-wire-group.is-selected .tg-wire-glow {
+  opacity: 0.38;
+}
+
+.tg-wire-group.is-selected .tg-wire {
+  stroke-width: 3;
+}
+
+.tg-arrowhead {
+  fill: var(--tg-c);
+}
+
+.tg-wire-temp {
+  fill: none;
+  stroke: var(--tg-c);
+  stroke-width: 2.25;
+  stroke-dasharray: 6 5;
+  stroke-linecap: round;
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+/* Nodes ------------------------------------------------------------- */
+.tg-node {
+  --tg-accent: hsl(var(--tg-hue, 210) 62% 58%);
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 0 8px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 14%, transparent);
+  background: var(--surface-2, #282e33);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.32), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  pointer-events: auto;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.tg-node:hover {
+  border-color: color-mix(in srgb, var(--tg-accent) 55%, transparent);
+}
+
+.tg-node.is-drop-target,
+.tg-node.is-link-source {
+  border-color: var(--tg-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tg-accent) 45%, transparent),
+    0 8px 22px rgba(0, 0, 0, 0.4);
+}
+
+.tg.is-linking .tg-node:not(.is-link-source) {
+  cursor: crosshair;
+}
+
+.tg-node-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 8px 7px 8px;
+  border-radius: 8px 8px 0 0;
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--tg-accent) 42%, var(--surface-2, #282e33)),
+    color-mix(in srgb, var(--tg-accent) 8%, var(--surface-2, #282e33)) 85%
+  );
+  border-bottom: 1px solid color-mix(in srgb, var(--tg-accent) 40%, transparent);
+}
+
+.tg-node-head .info-member-avatar,
+.tg-node-head .info-member-initials {
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tg-accent) 70%, transparent);
+}
+
+.tg-node-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tg-node-clear {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.tg-node:hover .tg-node-clear,
+.tg-node-clear:focus-visible {
+  opacity: 1;
+}
+
+.tg-node-clear:hover:not(:disabled) {
+  background: color-mix(in srgb, #ef5c48 28%, transparent);
+  color: var(--text-primary);
+}
+
+.tg-node-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 8px;
+}
+
+.tg-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  padding: 1px 4px 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--tg-accent) 22%, transparent);
+}
+
+.tg-role .ti {
+  font-size: 12px;
+  color: var(--tg-accent);
+}
+
+.tg-role > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tg-role-clear {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tg-role-clear:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  color: var(--text-primary);
+}
+
+.tg-role-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px dashed color-mix(in srgb, var(--text-secondary) 55%, transparent);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.tg-role-add:hover:not(:disabled),
+.tg-role-add.is-open {
+  color: var(--text-primary);
+  border-color: var(--tg-accent);
+}
+
+/* Pins: the round handles of a Blueprint node --------------------------- */
+.tg-pin {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid var(--tg-pin, var(--text-secondary));
+  background: var(--surface-1, #22272b);
+  transform: translate(-50%, -50%);
+}
+
+.tg-pin-in-left {
+  left: 0;
+  top: 50%;
+  --tg-pin: var(--tg-flow);
+  opacity: 0.55;
+}
+
+.tg-pin-in-top {
+  left: 50%;
+  top: 0;
+  --tg-pin: var(--tg-asks);
+  opacity: 0.55;
+}
+
+.tg-pin-out-right {
+  left: 100%;
+  top: 50%;
+  --tg-pin: var(--tg-flow);
+}
+
+.tg-pin-out-bottom {
+  left: 50%;
+  top: 100%;
+  --tg-pin: var(--tg-asks);
+}
+
+button.tg-pin {
+  cursor: crosshair;
+  touch-action: none;
+  transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
+
+button.tg-pin::after {
+  /* Larger hit area than the visible dot. */
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+
+button.tg-pin:hover,
+button.tg-pin:focus-visible {
+  background: var(--tg-pin);
+  transform: translate(-50%, -50%) scale(1.35);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--tg-pin) 28%, transparent);
+  outline: none;
+}
+
+.tg.is-dragging .tg-node:not(.is-drop-target) .tg-pin-in-left,
+.tg.is-dragging .tg-node:not(.is-drop-target) .tg-pin-in-top,
+.tg.is-linking .tg-node:not(.is-link-source) .tg-pin-in-left,
+.tg.is-linking .tg-node:not(.is-link-source) .tg-pin-in-top {
+  opacity: 1;
+}
+
+/* Wire label / kind pill ------------------------------------------------ */
+.tg-pill {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 150px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1.5px solid var(--tg-c);
+  background: var(--surface-1, #22272b);
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+
+.tg-pill .ti {
+  font-size: 13px;
+  color: var(--tg-c);
+}
+
+.tg-pill > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tg-pill:not(.has-label) {
+  width: 22px;
+  padding: 0;
+  justify-content: center;
+}
+
+.tg-pill:hover,
+.tg-pill:focus-visible {
+  background: color-mix(in srgb, var(--tg-c) 22%, var(--surface-1, #22272b));
+  outline: none;
+  transform: translate(-50%, -50%) scale(1.08);
+}
+
+/* Relation editor -------------------------------------------------------- */
+.tg-editor {
+  position: absolute;
+  z-index: 5;
+  width: 256px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 16%, transparent);
+  background: var(--surface-0, #1d2125);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+}
+
+.tg-editor[hidden] {
+  display: none !important;
+}
+
+.tg-editor-title {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.tg-editor-title strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.tg-editor-seg {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.tg-editor-seg-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tg-editor-seg-btn .ti {
+  font-size: 17px;
+  color: var(--tg-c);
+}
+
+.tg-editor-seg-btn:hover {
+  background: color-mix(in srgb, var(--tg-c) 12%, transparent);
+}
+
+.tg-editor-seg-btn.is-on {
+  color: var(--text-primary);
+  border-color: var(--tg-c);
+  background: color-mix(in srgb, var(--tg-c) 20%, transparent);
+}
+
+.tg-editor-label {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 16%, transparent);
+  background: var(--surface-1, #22272b);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+}
+
+.tg-editor-label:focus {
+  outline: 2px solid var(--tp-primary, #0c66e4);
+  outline-offset: 0;
+}
+
+.tg-editor-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.tg-editor-action {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tg-editor-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+.tg-editor-action.is-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, #ef5c48 24%, transparent);
+  border-color: #ef5c48;
+}
+
+.tg-editor-action:disabled,
+.tg-editor-seg-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.tg-hint {
+  padding: 0 12px 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.tg-hint:empty {
+  display: none;
+}
+
