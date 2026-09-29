@@ -211,7 +211,7 @@ Invoke-Step "trello" "3/7 Trello token + board" {
   Write-Info "Trello account: $($me.username)"
 
   if (-not $State.boardId) {
-    $boards = @(Invoke-Trello "/members/me/boards?filter=open&fields=name,url")
+    $boards = @(Invoke-Trello "/members/me/boards?filter=open&fields=name,url" | ForEach-Object { $_ })
     if (-not $boards.Count) { throw "No open Trello boards found." }
     for ($i = 0; $i -lt $boards.Count; $i++) { Write-Host ("  [{0}] {1}" -f ($i + 1), $boards[$i].name) }
     $pick = [int](Read-Host "  Which board to sync (number)") - 1
