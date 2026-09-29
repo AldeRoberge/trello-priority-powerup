@@ -83,6 +83,8 @@ export function planSync({ keys, cards, lists, rows, state, timeZone, sheetUser 
   const cardById = new Map(cards.map((c) => [c.id, c]));
   const listById = new Map(lists.map((l) => [l.id, l]));
   const seen = new Set();
+  // A cleared cell is never a deliberate edit (blank rows, a wiped range): restore it quietly.
+  const blank = (v) => (str(v).trim() ? 'WARNING' : 'DEBUG');
   const log = (level, code, message, extra = {}) => out.logs.push({ level, code, message, user: sheetUser, ...extra });
 
   rows.forEach((row, i) => {
@@ -153,7 +155,7 @@ export function planSync({ keys, cards, lists, rows, state, timeZone, sheetUser 
           else {
             next = tv.name;
             rejected = true;
-            log('WARNING', 'NAME_EMPTY', `Le titre ne peut pas être vide : valeur restaurée`, { card: tv.name, field: label(key), before: sheetVal, after: tv.name });
+            log(blank(sheetVal), 'NAME_EMPTY', `Le titre ne peut pas être vide : valeur restaurée`, { card: tv.name, field: label(key), before: sheetVal, after: tv.name });
           }
         } else if (key === 'desc') {
           fields.desc = joinDesc(next, splitDesc(card.desc).hidden);
@@ -164,7 +166,7 @@ export function planSync({ keys, cards, lists, rows, state, timeZone, sheetUser 
             next = statutLabelForList(list.name);
           } else {
             rejected = true;
-            log('WARNING', 'STATUT_REVERTED', `Statut « ${sheetVal} » non valide : valeur restaurée`, { card: tv.name, field: label(key), before: sheetVal, after: tv.statut });
+            log(blank(sheetVal), 'STATUT_REVERTED', `Statut « ${sheetVal} » non valide : valeur restaurée`, { card: tv.name, field: label(key), before: sheetVal, after: tv.statut });
             next = tv.statut;
           }
         } else if (key === 'category') {
