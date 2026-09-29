@@ -9628,6 +9628,8 @@
       titleBtn.appendChild(titleChevron);
     }
 
+    // Trello already shows the card title above this section.
+    if (compact) titleBtn.hidden = true;
     if (!actionsOnly) body.appendChild(titleBtn);
 
     // ── Status hero ────────────────────────────────────────────────────
@@ -10109,10 +10111,12 @@
         return;
       }
       motifsEl.hidden = false;
-      var label = document.createElement('span');
-      label.className = 'overview-motifs-label';
-      label.textContent = 'Motifs';
-      motifsEl.appendChild(label);
+      if (!compact) {
+        var label = document.createElement('span');
+        label.className = 'overview-motifs-label';
+        label.textContent = 'Motifs';
+        motifsEl.appendChild(label);
+      }
       for (var i = 0; i < blockedReasonsList.length; i++) {
         var chip = document.createElement('span');
         chip.className = 'overview-motif-chip';
@@ -10342,7 +10346,13 @@
           })
         });
       heroSentence.textContent = sentence;
-      heroSentence.hidden = !sentence;
+      // Compact: the sentence only repeats the phase / motifs, so drop it.
+      heroSentence.hidden =
+        !sentence ||
+        (compact &&
+          (isBlocked ||
+            sentence.trim().toLowerCase() ===
+              heroPhase.textContent.trim().toLowerCase()));
       // Hide the bar when blocked — Motifs / phase carry the status.
       heroTrack.hidden = isBlocked || (showPct == null && !isDone);
       heroFill.style.width =
