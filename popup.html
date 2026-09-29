@@ -6929,6 +6929,32 @@
         Spellcheck.configure({ t: t });
       }
 
+      // Fire every independent Trello storage read now so the round trips overlap
+      // instead of running one after another (was ~12 sequential awaits).
+      var swallow = function (p) { if (p && p.catch) p.catch(function () {}); return p; };
+      var pMemory = window.AgentMemory ? swallow(Promise.resolve().then(function () { return AgentMemory.load(t); })) : null;
+      var pCardMemory = window.AgentMemory ? swallow(Promise.resolve().then(function () { return AgentMemory.loadCardMemory(t); })) : null;
+      var pProfile = window.UserProfile ? swallow(Promise.resolve().then(function () { return UserProfile.load(t); })) : null;
+      var pPeople = window.People ? swallow(Promise.resolve().then(function () { return People.load(t); })) : null;
+      var pPlaces = window.Places ? swallow(Promise.resolve().then(function () { return Places.load(t); })) : null;
+      var pBoardCtx = swallow(Promise.resolve().then(function () { return PriorityTrello.ensureBoardPriorityContext(t); }));
+      var pSyncInputs = swallow(
+        (async function () {
+          try {
+            await PriorityTrello.syncCardDueWithTrello(t, { prefer: 'trello' });
+          } catch (syncErr) {
+            console.error('Priority due sync (popup open) failed', syncErr);
+          }
+          try {
+            if (typeof PriorityTrello.syncCardStartWithTrello === 'function') {
+              await PriorityTrello.syncCardStartWithTrello(t, { prefer: 'trello' });
+            }
+          } catch (startSyncErr) {
+            console.error('Priority start sync (popup open) failed', startSyncErr);
+          }
+          return PriorityTrello.clearBlockedIfComplete(t);
+        })()
+      );
       beginBootStep('card');
       try {
         // Prefer helpers: Gantt overlay passes cardId/cardName args (no t.card context).
@@ -6981,14 +7007,14 @@
       beginBootStep('memory');
       if (window.AgentMemory) {
         try {
-          cachedMemory = await AgentMemory.load(t);
+          cachedMemory = await pMemory;
         } catch (memErr) {
           console.error('AgentMemory.load failed', memErr);
           cachedMemory = null;
         }
         beginBootStep('memory', 'Chargement de la m\u00e9moire de la carte\u2026');
         try {
-          cachedCardMemory = await AgentMemory.loadCardMemory(t);
+          cachedCardMemory = await pCardMemory;
         } catch (cardMemErr) {
           console.error('AgentMemory.loadCardMemory failed', cardMemErr);
           cachedCardMemory = null;
@@ -7001,7 +7027,7 @@
       beginBootStep('profile');
       if (window.UserProfile) {
         try {
-          cachedProfile = await UserProfile.load(t);
+          cachedProfile = await pProfile;
           try {
             if (typeof localStorage !== 'undefined' && cachedProfile) {
               localStorage.setItem(
@@ -7029,7 +7055,7 @@
       beginBootStep('people');
       if (window.People) {
         try {
-          cachedPeople = await People.load(t);
+          cachedPeople = await pPeople;
         } catch (peopleErr) {
           console.error('People.load failed', peopleErr);
           cachedPeople =
@@ -7045,7 +7071,7 @@
       beginBootStep('places');
       if (window.Places) {
         try {
-          cachedPlaces = await Places.load(t);
+          cachedPlaces = await pPlaces;
         } catch (placesErr) {
           console.error('Places.load failed', placesErr);
           cachedPlaces =
@@ -7083,25 +7109,11 @@
       }
 
       beginBootStep('sync');
-      try {
-        await PriorityTrello.syncCardDueWithTrello(t, { prefer: 'trello' });
-      } catch (syncErr) {
-        console.error('Priority due sync (popup open) failed', syncErr);
-      }
-      beginBootStep('sync', 'Synchronisation de la date de d\u00e9but\u2026');
-      try {
-        if (typeof PriorityTrello.syncCardStartWithTrello === 'function') {
-          await PriorityTrello.syncCardStartWithTrello(t, { prefer: 'trello' });
-        }
-      } catch (startSyncErr) {
-        console.error('Priority start sync (popup open) failed', startSyncErr);
-      }
+      const inputs = await pSyncInputs;
       completeBootStep('sync');
 
-      beginBootStep('priority');
-      const inputs = await PriorityTrello.clearBlockedIfComplete(t);
-      beginBootStep('priority', 'Chargement du contexte du tableau\u2026');
-      await PriorityTrello.ensureBoardPriorityContext(t);
+      beginBootStep('priority', 'Chargement du contexte du tableau…');
+      await pBoardCtx;
       const boardFormula = PriorityTrello.getCachedBoardFormulaKey
         ? PriorityTrello.getCachedBoardFormulaKey()
         : await PriorityTrello.getBoardFormula(t);
