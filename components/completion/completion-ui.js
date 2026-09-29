@@ -1057,6 +1057,25 @@
     } catch (e) { /* ignore quota / private mode */ }
   }
 
+  var VIEW_MODE_STORAGE_KEY = 'trello-priority-powerup/completion-view';
+
+  /** 'nodes' (default) or 'list'. */
+  function loadViewModePreference() {
+    try {
+      if (typeof localStorage === 'undefined') return 'nodes';
+      return localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'list' ? 'list' : 'nodes';
+    } catch (e) {
+      return 'nodes';
+    }
+  }
+
+  function saveViewModePreference(mode) {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode === 'list' ? 'list' : 'nodes');
+    } catch (e) { /* ignore quota / private mode */ }
+  }
+
   function durationTicks() {
     var CT = getCompletionTrello();
     if (CT && typeof CT.getEstimateScaleTicks === 'function') {
@@ -2272,6 +2291,215 @@
       '</div>';
     containerEl.appendChild(bulkBarMount.firstChild);
     containerEl.appendChild(progressSection);
+
+    // Node view (CompletionTree) replaces the classic list by default; the
+    // list stays one click away for bulk select, search and fine sliders.
+    var treeApi = global.CompletionTree || null;
+    var viewMode = treeApi ? loadViewModePreference() : 'list';
+    var nodeView = null;
+    var viewSection = document.createElement('section');
+    viewSection.className = 'tp-completion-view-section';
+    var nodeHostEl = document.createElement('div');
+    nodeHostEl.className = 'ct-view-host';
+    if (treeApi) {
+      var viewSwitchRow = document.createElement('div');
+      viewSwitchRow.className = 'ct-viewswitch-row';
+      var viewSwitch = document.createElement('div');
+      viewSwitch.className = 'ct-viewswitch';
+      viewSwitch.setAttribute('role', 'group');
+      viewSwitch.setAttribute('aria-label', 'Affichage des sous-tâches');
+      [
+        { mode: 'nodes', label: 'Nœuds', icon: 'hierarchy-2' },
+        { mode: 'list', label: 'Liste', icon: 'list' },
+      ].forEach(function (spec) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ct-viewswitch-btn';
+        btn.dataset.mode = spec.mode;
+        btn.innerHTML =
+          '<i class="ti ti-' + spec.icon + '" aria-hidden="true"></i>' +
+          '<span>' + spec.label + '</span>';
+        btn.addEventListener('click', function () {
+          setViewMode(spec.mode);
+        });
+        viewSwitch.appendChild(btn);
+      });
+      viewSwitchRow.appendChild(viewSwitch);
+      viewSection.appendChild(viewSwitchRow);
+    }
+    viewSection.appendChild(nodeHostEl);
+    containerEl.appendChild(viewSection);
+    containerEl.classList.toggle('is-node-view', viewMode === 'nodes');
+
+    function syncViewSwitchUi() {
+      viewSection.querySelectorAll('.ct-viewswitch-btn').forEach(function (btn) {
+        btn.setAttribute('aria-pressed', btn.dataset.mode === viewMode ? 'true' : 'false');
+      });
+    }
+
+    function setViewMode(mode) {
+      var next = mode === 'nodes' && treeApi ? 'nodes' : 'list';
+      if (next === viewMode) return;
+      viewMode = next;
+      saveViewModePreference(next);
+      containerEl.classList.toggle('is-node-view', next === 'nodes');
+      syncViewSwitchUi();
+      renderList();
+      onResize();
+    }
+
+    function nodeViewApi() {
+      function nestedLive(parentId, nestedId) {
+        var parent = findLiveItem(parentId);
+        if (!parent || !Array.isArray(parent.items)) return null;
+        for (var i = 0; i < parent.items.length; i++) {
+          if (parent.items[i].id === nestedId) return parent.items[i];
+        }
+        return null;
+      }
+      return {
+        CT: CT,
+        getData: function () {
+          return data;
+        },
+        getCardName: function () {
+          return masterTitle;
+        },
+        getLinkedSnapshots: function () {
+          return linkedSnapshots;
+        },
+        onResize: onResize,
+        createEstimateChip: function (cfg) {
+          return createEstimateChip(
+            CT,
+            Object.assign(
+              { t: trelloT, scales: currentEstimateScales(), compact: true },
+              cfg
+            )
+          );
+        },
+        createBlockedMotif: createBlockedMotifField,
+        openLinked: openLinkedCard,
+        toggleDone: function (node, origin) {
+          if (node.linked) {
+            openLinkedCard(node.linkedCardId);
+            return;
+          }
+          if (node.depth === 1) {
+            var live = findLiveItem(node.id);
+            if (!live) return;
+            if (CT.isItemBlocked(live)) {
+              data = CT.setItemBlocked(data, live.id, false);
+              playCompletionUiSound('unblock');
+              emitChange();
+              notifyBlockedChange('item-check');
+              onResize();
+              return;
+            }
+            var wasDone = !!live.done;
+            data = CT.applyItemProgress(data, live.id, wasDone ? 0 : 100);
+            emitChange();
+            if (wasDone) playCompletionUiSound('uncomplete');
+            else playSubtaskCompletePop(origin, { sound: true });
+            onResize();
+            return;
+          }
+          var nested = nestedLive(node.parentId, node.id);
+          if (!nested) return;
+          var nestedWasDone = !!nested.done;
+          data = CT.applyChecklistItemProgress(
+            data,
+            node.parentId,
+            node.id,
+            nestedWasDone ? 0 : 100
+          );
+          emitChange();
+          if (nestedWasDone) playCompletionUiSound('uncomplete');
+          else playSubtaskCompletePop(origin, { sound: true });
+          onResize();
+        },
+        toggleBlocked: function (node) {
+          toggleItemBlocked(node.id);
+        },
+        remove: function (node) {
+          if (node.depth === 1) {
+            removeItem(node.id);
+            return;
+          }
+          data = CT.removeChecklistItem(data, node.parentId, node.id);
+          playCompletionUiSound('trash');
+          emitChange();
+          onResize();
+        },
+        add: function (parentId, text) {
+          var trimmed = (text || '').trim();
+          if (!trimmed) return;
+          if (parentId) {
+            var result = CT.addChecklistItem(data, parentId, trimmed);
+            if (!result || !result.item) return;
+            data = result.data;
+            playCompletionUiSound('add');
+            emitChange();
+            onResize();
+            return;
+          }
+          var item = addItem(trimmed);
+          if (item) refineItemAfterCommit(item.id, trimmed);
+        },
+        move: function (node, dir) {
+          var list =
+            node.depth === 1
+              ? data.items
+              : (findLiveItem(node.parentId) || {}).items;
+          if (!Array.isArray(list)) return;
+          var from = -1;
+          for (var i = 0; i < list.length; i++) {
+            if (list[i].id === node.id) {
+              from = i;
+              break;
+            }
+          }
+          var to = from + (dir < 0 ? -1 : 1);
+          if (from < 0 || to < 0 || to >= list.length) return;
+          var moved = list.splice(from, 1)[0];
+          list.splice(to, 0, moved);
+          emitChange();
+          onResize();
+        },
+        rename: function (node, text) {
+          data =
+            node.depth === 1
+              ? CT.applyItemText(data, node.id, text)
+              : CT.applyChecklistItemText(data, node.parentId, node.id, text);
+          emitChange();
+        },
+        setEstimate: function (node, minutes) {
+          if (node.depth === 1) {
+            delete estimatingItemIds[node.id];
+            data = CT.applyItemEstimate(data, node.id, minutes, { lock: true });
+          } else {
+            data = CT.applyChecklistItemEstimate(data, node.parentId, node.id, minutes, {
+              lock: true,
+            });
+          }
+          emitChange();
+          onResize();
+        },
+        setReasons: function (node, reasons) {
+          data = CT.setItemBlockedReasons(data, node.id, reasons);
+          emitChange();
+          notifyBlockedChange('item-reason');
+          onResize();
+        },
+      };
+    }
+
+    function renderNodeView() {
+      if (viewMode !== 'nodes' || !treeApi) return;
+      if (!nodeView) nodeView = treeApi.mountNodeView(nodeHostEl, nodeViewApi());
+      else nodeView.render();
+    }
+    syncViewSwitchUi();
 
     var listSection = document.createElement('section');
     listSection.className = 'tp-completion-list-section';
@@ -5556,6 +5784,7 @@
         );
       } finally {
         endSuppressEmptyDraftDiscard();
+        renderNodeView();
       }
     }
 
@@ -6222,8 +6451,13 @@
       },
       refreshSuggestions: refreshSuggestions,
       focusAddInput: function () {
-        addInput.focus();
+        if (viewMode === 'nodes' && nodeView) nodeView.focusAdd();
+        else addInput.focus();
       },
+      getViewMode: function () {
+        return viewMode;
+      },
+      setViewMode: setViewMode,
       completeAllTasks: completeAllTasks,
       resetAllTasks: resetAllTasks,
       el: containerEl,

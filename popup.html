@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="./components/shared/effects.css?v=fx-7" />
   <link rel="stylesheet" href="./components/shared/context-menu.css?v=ctx-menu-1" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css?v=places-route-1" />
+  <link rel="stylesheet" href="./components/completion/completion-tree.css?v=tree-1" />
   <link rel="stylesheet" href="./components/goals/goals-ui.css?v=elev-dark-1" />
   <link rel="stylesheet" href="./components/shared/markdown-dom.css?v=md-1" />
   <link rel="stylesheet" href="./components/agent/agent-ui.css?v=md-1" />
@@ -45,8 +46,9 @@
   <script src="./components/statut/statut-match.js?v=attente-hourglass-1"></script>
   <script src="./components/statut/statut-trello.js?v=encours-progress-1"></script>
   <script src="./components/shared/tab-autocomplete.js?v=tab-complete-1"></script>
+  <script src="./components/completion/completion-tree.js?v=tree-1"></script>
   <script
-    src="./components/completion/completion-ui.js?v=complete-all-100-1"
+    src="./components/completion/completion-ui.js?v=tree-1"
     onerror="console.error('Priority popup: failed to load completion-ui.js', this.src)"
   ></script>
   <script
@@ -470,6 +472,7 @@
     let progressField = null;
     let progressBody = null;
     let progressCollapse = null;
+    let progressTreeEl = null;
     let progressSummaryEl = null;
     let dueCompleteSyncChain = Promise.resolve();
     let statutUi = null;
@@ -759,7 +762,48 @@
       };
     }
 
+    /** Collapsed Progrès: outline of the subtasks under the header. */
+    function paintProgressTree() {
+      if (!progressTreeEl) return;
+      var expanded = !!(
+        progressCollapse &&
+        typeof progressCollapse.isExpanded === 'function' &&
+        progressCollapse.isExpanded()
+      );
+      var content = null;
+      if (!expanded && window.CompletionTree && window.CompletionTrello) {
+        var snap =
+          (completionUi && typeof completionUi.getData === 'function'
+            ? completionUi.getData()
+            : null) || latestCompletion;
+        if (snap && Array.isArray(snap.items) && snap.items.length) {
+          var model = CompletionTree.buildTreeModel(snap, {
+            cardName: '',
+            linkedSnapshots:
+              completionUi && typeof completionUi.getLinkedSnapshots === 'function'
+                ? completionUi.getLinkedSnapshots()
+                : null
+          });
+          content = CompletionTree.renderSummaryTree(model, {
+            onOpen: function () {
+              if (progressCollapse && typeof progressCollapse.setExpanded === 'function') {
+                progressCollapse.setExpanded(true);
+              }
+            }
+          });
+        }
+      }
+      if (content) {
+        progressTreeEl.replaceChildren(content);
+        progressTreeEl.hidden = false;
+      } else {
+        progressTreeEl.replaceChildren();
+        progressTreeEl.hidden = true;
+      }
+    }
+
     function buildProgressHeaderSummary() {
+      paintProgressTree();
       var metrics = readProgressSummaryMetrics();
       if (
         window.PriorityUI &&
@@ -6427,6 +6471,11 @@
       });
       progressField.appendChild(chrome.head);
       progressSummaryEl = chrome.summary;
+
+      progressTreeEl = document.createElement('div');
+      progressTreeEl.className = 'progress-tree-summary';
+      progressTreeEl.hidden = true;
+      progressField.appendChild(progressTreeEl);
 
       progressBody = document.createElement('div');
       progressBody.className = 'progress-section-body section-toggle-body';

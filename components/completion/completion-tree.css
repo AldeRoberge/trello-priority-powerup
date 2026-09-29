@@ -1,0 +1,636 @@
+/* Completion tree — summary outline + node flow for Progrès. */
+
+.ct-view,
+.ct-sum {
+  --ct-wire: var(--tp-border-strong, rgba(9, 30, 66, 0.31));
+  --ct-todo: var(--tp-text-muted, #626f86);
+  --ct-active: var(--tp-primary, #0c66e4);
+  --ct-done: var(--tp-success, #216e4e);
+  --ct-blocked: var(--blocked-accent, var(--tp-danger-text, #ae2e24));
+  --ct-node-bg: var(--tp-surface-subtle, #f1f2f4);
+  --ct-node-border: var(--tp-border, rgba(9, 30, 66, 0.14));
+  --ct-text: var(--tp-text, #172b4d);
+  --ct-text-subtle: var(--tp-text-subtle, #44546f);
+}
+
+/* ── Status dot (summary + numbers) ─────────────────────────────────── */
+
+.ct-dot {
+  --ct-accent: var(--ct-todo);
+  position: relative;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 2px solid var(--ct-accent);
+  color: #fff;
+  font-size: 9px;
+}
+.ct-dot.is-active {
+  --ct-accent: var(--ct-active);
+  border-color: transparent;
+  background: conic-gradient(var(--ct-accent) calc(var(--p, 0) * 1%), var(--ct-wire) 0);
+}
+.ct-dot.is-active::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: var(--ct-node-bg);
+}
+.ct-dot.is-done {
+  --ct-accent: var(--ct-done);
+  background: var(--ct-accent);
+}
+.ct-dot.is-blocked {
+  --ct-accent: var(--ct-blocked);
+  background: var(--ct-accent);
+}
+.ct-dot .ti {
+  font-size: 9px;
+  line-height: 1;
+}
+
+/* ── Summary tree (collapsed header) ────────────────────────────────── */
+
+.ct-sum {
+  margin: 2px 0 6px;
+  padding: 8px 10px 8px 12px;
+  border-radius: 8px;
+  background: var(--ct-node-bg);
+  border: 1px solid var(--ct-node-border);
+  font-size: 12.5px;
+  color: var(--ct-text);
+}
+.ct-sum.is-clickable {
+  cursor: pointer;
+}
+.ct-sum.is-clickable:hover {
+  border-color: var(--tp-border-strong, var(--ct-wire));
+}
+.ct-sum-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ct-text-subtle);
+}
+.ct-sum-flag.is-blocked {
+  color: var(--ct-blocked);
+}
+.ct-sum-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ct-sum-list--nested {
+  margin: 2px 0 0 7px;
+  padding-left: 14px;
+  border-left: 2px solid var(--ct-wire);
+}
+.ct-sum-row {
+  position: relative;
+  padding: 2px 0;
+  min-width: 0;
+}
+.ct-sum-list--nested > .ct-sum-row::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 11px;
+  width: 10px;
+  height: 2px;
+  background: var(--ct-wire);
+}
+.ct-sum-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.ct-sum-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ct-sum-row.is-done > .ct-sum-line .ct-sum-text {
+  color: var(--ct-text-subtle);
+  text-decoration: line-through;
+  text-decoration-color: var(--ct-wire);
+}
+.ct-sum-row.is-blocked > .ct-sum-line .ct-sum-text {
+  color: var(--ct-blocked);
+}
+.ct-sum-row.is-next > .ct-sum-line .ct-sum-text {
+  font-weight: 650;
+}
+.ct-sum-meta {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--ct-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+.ct-sum-why {
+  margin: 1px 0 2px 22px;
+  font-size: 11px;
+  color: var(--ct-blocked);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ct-sum-more .ct-sum-text {
+  padding-left: 22px;
+  color: var(--ct-text-subtle);
+  font-size: 11.5px;
+}
+
+/* ── Node view ──────────────────────────────────────────────────────── */
+
+.ct-view {
+  position: relative;
+  padding: 4px 0 6px;
+  color: var(--ct-text);
+}
+
+.ct-node {
+  --ct-accent: var(--ct-todo);
+  position: relative;
+  box-sizing: border-box;
+  padding: 8px 10px 8px 12px;
+  border-radius: 10px;
+  background: var(--ct-node-bg);
+  border: 1px solid var(--ct-node-border);
+  box-shadow: inset 3px 0 0 var(--ct-accent);
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+.ct-node.is-active { --ct-accent: var(--ct-active); }
+.ct-node.is-done { --ct-accent: var(--ct-done); }
+.ct-node.is-blocked { --ct-accent: var(--ct-blocked); }
+.ct-node:hover,
+.ct-node.is-selected,
+.ct-node:focus-within {
+  border-color: var(--tp-border-strong, var(--ct-wire));
+}
+.ct-node.is-done .ct-title {
+  color: var(--ct-text-subtle);
+  text-decoration: line-through;
+  text-decoration-color: var(--ct-wire);
+}
+.ct-node.is-next {
+  border-color: color-mix(in srgb, var(--ct-active) 55%, transparent);
+  background: color-mix(in srgb, var(--ct-active) 8%, var(--ct-node-bg));
+}
+.ct-node--d2 {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.ct-node-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Ring: click to complete. Partial fill shows progress. */
+.ct-ring {
+  --ct-ring-bg: var(--ct-node-bg);
+  position: relative;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--ct-accent);
+  background: transparent;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.ct-node--d2 .ct-ring {
+  width: 18px;
+  height: 18px;
+}
+.ct-ring .ti {
+  font-size: 13px;
+  line-height: 1;
+  position: relative;
+  z-index: 1;
+}
+.ct-ring.is-active,
+.ct-ring.is-static {
+  border-color: transparent;
+  background: conic-gradient(var(--ct-accent) calc(var(--p, 0) * 1%), var(--ct-wire) 0);
+}
+.ct-ring.is-active::after,
+.ct-ring.is-static::after {
+  content: '';
+  position: absolute;
+  inset: 2.5px;
+  border-radius: 50%;
+  background: var(--ct-ring-bg);
+}
+.ct-ring.is-done,
+.ct-ring.is-blocked {
+  background: var(--ct-accent);
+}
+.ct-ring:hover:not(.is-static):not(.ct-ring--ghost) {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ct-accent) 25%, transparent);
+}
+.ct-ring.is-static {
+  cursor: default;
+  width: 24px;
+  height: 24px;
+}
+.ct-ring--ghost {
+  border: 2px dashed var(--ct-wire);
+  color: var(--ct-text-subtle);
+  cursor: default;
+}
+
+.ct-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ct-text);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ct-node--d2 .ct-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+input.ct-title:hover {
+  border-color: var(--ct-node-border);
+}
+input.ct-title:focus {
+  outline: none;
+  border-color: var(--ct-active);
+  background: var(--tp-input-bg, var(--tp-surface, #fff));
+}
+.ct-title--link {
+  cursor: pointer;
+  color: var(--tp-link, var(--ct-active));
+}
+.ct-title--link:hover {
+  text-decoration: underline;
+}
+
+.ct-next-pill {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ct-active);
+  background: color-mix(in srgb, var(--ct-active) 16%, transparent);
+}
+
+/* Actions: quiet until the node is hovered / focused / selected. */
+.ct-actions {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  opacity: 0.35;
+  transition: opacity 0.12s ease;
+}
+.ct-node:hover .ct-actions,
+.ct-node:focus-within .ct-actions,
+.ct-node.is-selected .ct-actions {
+  opacity: 1;
+}
+.ct-act {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ct-text-subtle);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+}
+.ct-act:hover {
+  background: var(--tp-surface-hover, rgba(9, 30, 66, 0.08));
+  color: var(--ct-text);
+}
+.ct-act.is-disabled {
+  opacity: 0.25;
+  pointer-events: none;
+}
+.ct-act--block.is-on {
+  color: var(--ct-blocked);
+  background: color-mix(in srgb, var(--ct-blocked) 16%, transparent);
+}
+.ct-act--danger:hover {
+  color: var(--ct-blocked);
+}
+
+.ct-node-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 3px 0 0 30px;
+  font-size: 11.5px;
+  color: var(--ct-text-subtle);
+}
+.ct-node--d2 .ct-node-meta {
+  margin-left: 26px;
+}
+.ct-status {
+  font-weight: 600;
+}
+.ct-status.is-active { color: var(--ct-active); }
+.ct-status.is-done { color: var(--ct-done); }
+.ct-status.is-blocked { color: var(--ct-blocked); }
+.ct-pct {
+  font-variant-numeric: tabular-nums;
+}
+.ct-linked-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.ct-motif {
+  margin: 6px 0 0 30px;
+}
+
+/* Ports (the little sockets wires attach to). */
+.ct-port {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ct-node-bg);
+  border: 2px solid var(--ct-wire);
+  box-sizing: border-box;
+  z-index: 1;
+}
+.ct-port--in {
+  left: -5px;
+  top: calc(50% - 4px);
+}
+.ct-node.is-done .ct-port,
+.ct-node.is-active .ct-port { border-color: var(--ct-accent); }
+.ct-node.is-blocked .ct-port { border-color: var(--ct-blocked); }
+
+/* Ordered steps on a vertical spine with arrows. */
+.ct-steps {
+  list-style: none;
+  margin: 0;
+  padding: 12px 0 0;
+}
+.ct-step {
+  position: relative;
+  margin: 0;
+  padding: 0 0 22px 46px;
+}
+.ct-step::before {
+  content: '';
+  position: absolute;
+  left: 15px;
+  top: -12px;
+  bottom: 0;
+  width: 2px;
+  background: var(--ct-wire);
+}
+.ct-step.is-done::before {
+  background: var(--ct-done);
+}
+.ct-step--add {
+  padding-bottom: 0;
+}
+.ct-step--add::before {
+  bottom: auto;
+  height: 30px;
+}
+.ct-num {
+  position: absolute;
+  left: 3px;
+  top: 8px;
+  z-index: 1;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ct-text);
+  background: var(--ct-node-bg);
+  border: 2px solid var(--ct-wire);
+}
+.ct-num::after {
+  content: '';
+  position: absolute;
+  left: 100%;
+  top: calc(50% - 1px);
+  width: 14px;
+  height: 2px;
+  background: var(--ct-wire);
+}
+.ct-num.is-active { border-color: var(--ct-active); color: var(--ct-active); }
+.ct-num.is-done { border-color: var(--ct-done); background: var(--ct-done); color: #fff; }
+.ct-num.is-done::after { background: var(--ct-done); }
+.ct-num.is-blocked { border-color: var(--ct-blocked); color: var(--ct-blocked); }
+.ct-num--add { border-style: dashed; color: var(--ct-text-subtle); }
+.ct-arrow {
+  position: absolute;
+  left: 8px;
+  bottom: 2px;
+  z-index: 1;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  color: var(--ct-wire);
+  background: transparent;
+}
+.ct-step.is-done > .ct-arrow { color: var(--ct-done); }
+
+/* Branches: sub-subtasks hang off their parent with elbow wires. */
+.ct-branch {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0 0 26px;
+}
+.ct-sub {
+  position: relative;
+  padding: 3px 0;
+}
+.ct-sub::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--ct-wire);
+}
+.ct-sub:first-child::before {
+  top: -8px;
+}
+.ct-sub:last-child::before {
+  bottom: 50%;
+}
+.ct-sub::after {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  width: 14px;
+  height: 2px;
+  background: var(--ct-wire);
+}
+.ct-sub.is-done::before,
+.ct-sub.is-done::after {
+  background: var(--ct-done);
+}
+
+/* Ghost add node */
+.ct-node--ghost {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 10px;
+  background: transparent;
+  border-style: dashed;
+  box-shadow: none;
+}
+.ct-node--ghost:focus-within {
+  border-style: solid;
+  border-color: var(--ct-active);
+  background: var(--ct-node-bg);
+}
+.ct-node--ghost .ct-title {
+  font-weight: 500;
+}
+.ct-add-btn {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ct-text-subtle);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.ct-add-btn:hover,
+.ct-node--ghost:focus-within .ct-add-btn {
+  background: var(--ct-active);
+  color: var(--tp-primary-text, #fff);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ct-node,
+  .ct-actions {
+    transition: none;
+  }
+}
+
+/* View switch (Nœuds / Liste) */
+.ct-viewswitch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  margin: 0 0 8px auto;
+  border-radius: 8px;
+  background: var(--tp-surface-subtle, #f1f2f4);
+  border: 1px solid var(--tp-border, rgba(9, 30, 66, 0.14));
+}
+.ct-viewswitch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-text-subtle, #44546f);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ct-viewswitch-btn[aria-pressed='true'] {
+  background: var(--tp-surface, #fff);
+  color: var(--tp-text, #172b4d);
+  box-shadow: 0 1px 2px rgba(9, 30, 66, 0.2);
+}
+.ct-viewswitch-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Hide the classic list chrome while the node view is active. */
+.tp-completion.is-node-view .tp-completion-list-section,
+.tp-completion.is-node-view .tp-completion-done-section,
+.tp-completion.is-node-view .tp-completion-bulk,
+.tp-completion.is-node-view .tp-completion-add {
+  display: none !important;
+}
+.tp-completion:not(.is-node-view) .ct-view-host {
+  display: none;
+}
+
+/* Collapsed Progrès: outline sits under the header, aligned with the title. */
+.progress-tree-summary {
+  padding: 0 0 2px 30px;
+}
+.progress-tree-summary[hidden] {
+  display: none;
+}
+
+.ct-overview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  padding: 0 2px 2px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ct-text-subtle);
+}
+.ct-overview-flag {
+  color: var(--ct-blocked);
+}
+.ct-view.is-empty .ct-steps {
+  padding-top: 0;
+}
+.ct-view.is-empty .ct-step::before {
+  top: 0;
+}
