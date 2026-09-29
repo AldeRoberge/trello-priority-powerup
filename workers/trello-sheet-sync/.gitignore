@@ -1,0 +1,8 @@
+node_modules/
+.dev.vars
+.sa-key.json
+.setup-state.json
+.wrangler/
+
+.setup-state.json
+.connection-code.txt

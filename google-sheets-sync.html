@@ -8,209 +8,192 @@
   <link rel="stylesheet" href="./components/shared/trello-theme.css" />
   <script src="./components/shared/brand.js"></script>
   <script src="./components/shared/rest-config.js"></script>
+  <script src="./components/table/table-model.js"></script>
   <script src="./components/priority/priority-trello.js"></script>
   <script src="./components/sheets/sheets-trello.js"></script>
   <style>
     .gs-guide { max-width: 34rem; margin: 0 auto; padding: 1rem 1.25rem 2rem; line-height: 1.45; }
     .gs-guide h1 { font-size: 1.25rem; margin: 0 0 0.35rem; }
     .gs-guide h2 { font-size: 0.98rem; margin: 1.1rem 0 0.4rem; }
-    .gs-guide .tp-muted { color: var(--ds-text-subtle, #626f86); font-size: 0.88rem; }
+    .gs-guide .tp-muted { color: var(--tp-text-muted); font-size: 0.88rem; }
+    .gs-guide code, .gs-guide pre { font-size: 0.82rem; background: var(--tp-surface-subtle); border-radius: 3px; padding: 1px 5px; }
+    .gs-guide pre { padding: 8px 10px; overflow-x: auto; margin: 0.4rem 0; }
     .gs-field { margin: 0.6rem 0; }
     .gs-field label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem; }
-    .gs-field input[type="text"], .gs-field input[type="url"] {
-      width: 100%; box-sizing: border-box; padding: 0.4rem 0.55rem; border-radius: 3px;
-      border: 2px solid var(--ds-border, #091e4224); font: inherit; background: var(--ds-background-input, #fff);
-      color: var(--ds-text, #172b4d);
+    .gs-field textarea {
+      width: 100%; box-sizing: border-box; padding: 0.4rem 0.55rem; border-radius: 3px; min-height: 4.5rem;
+      border: 2px solid var(--tp-border); font: inherit; background: var(--tp-input-bg, var(--tp-surface));
+      color: var(--tp-text); word-break: break-all; resize: vertical;
     }
-    .gs-checks { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.5rem 0 0.75rem; }
-    .gs-checks label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.88rem; font-weight: 400; }
     .gs-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
-    .gs-actions a, .gs-actions button {
-      display: inline-block; padding: 0.45rem 0.75rem; border-radius: 3px; border: none;
-      background: var(--ds-background-brand-bold, #0c66e4); color: #fff; font: inherit; font-weight: 600;
-      text-decoration: none; cursor: pointer;
+    .gs-actions button {
+      padding: 0.45rem 0.75rem; border-radius: 3px; border: none; font: inherit; font-weight: 600; cursor: pointer;
+      background: var(--tp-primary); color: var(--tp-primary-text);
     }
-    .gs-actions a.secondary, .gs-actions button.secondary {
-      background: var(--ds-background-neutral, #091e420f); color: var(--ds-text, #172b4d);
-    }
-    .gs-status { margin: 0.75rem 0; padding: 0.5rem 0.65rem; border-radius: 3px; font-size: 0.85rem;
-      background: var(--ds-background-neutral, #091e420f); }
+    .gs-actions button.secondary { background: var(--tp-surface-subtle); color: var(--tp-text); }
+    .gs-status { margin: 0.75rem 0; padding: 0.5rem 0.65rem; border-radius: 3px; font-size: 0.85rem; background: var(--tp-surface-subtle); }
     .gs-status.is-error { background: #ffebe6; color: #ae2e24; }
-    .gs-status.is-ok { background: #dffcf0; color: #216e4e; }
+    .gs-status.is-ok { background: var(--tp-success-bg); color: var(--tp-success); }
     .gs-status:empty { display: none; }
-    .gs-callout {
-      border-left: 3px solid var(--ds-border-brand, #0c66e4);
-      padding: 0.55rem 0.75rem; margin: 0.75rem 0;
-      background: var(--ds-background-neutral, #091e420f); border-radius: 0 3px 3px 0;
-      font-size: 0.85rem;
+    .gs-card {
+      border: 1px solid var(--tp-border); border-radius: 6px; padding: 0.6rem 0.8rem; margin: 0.75rem 0;
+      font-size: 0.88rem; background: var(--tp-surface);
     }
+    .gs-card dt { color: var(--tp-text-muted); font-size: 0.78rem; margin-top: 0.4rem; }
+    .gs-card dd { margin: 0; word-break: break-all; }
   </style>
 </head>
 <body class="tp-page">
   <div class="gs-guide">
     <h1>Google Sheets ↔ Trello</h1>
     <p class="tp-muted">
-      Synchronisation à deux sens, gérée par un script Google Apps Script (gratuit, hébergé chez vous — pas de serveur Cerveau).
-      Guide complet et modèle de script :
-      <a href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/google-sheets-sync.md" target="_blank" rel="noopener">docs/google-sheets-sync.md</a>.
+      Modifiez Trello : le Sheet suit en quelques secondes. Modifiez le Sheet : Trello suit en environ une minute.
+      Une seule commande installe tout (Google Sheet, Worker Cloudflare, webhook Trello).
     </p>
 
-    <div class="gs-callout" id="setupHint">
-      Pas encore configuré ? Suivez le guide pour créer la feuille + le script (5–10 min), puis revenez coller l’URL et le jeton ici.
-    </div>
+    <section id="connected" hidden>
+      <div class="gs-card">
+        <dl>
+          <dt>Google Sheet</dt><dd><a id="sheetLink" href="#" target="_blank" rel="noopener"></a></dd>
+          <dt>Worker</dt><dd id="workerUrl"></dd>
+          <dt>Dernière synchronisation</dt><dd id="lastSync">—</dd>
+          <dt>Colonnes</dt><dd id="columns">—</dd>
+        </dl>
+      </div>
+      <p class="tp-muted">Les colonnes se choisissent et se réordonnent dans la vue <strong>Table</strong> (bouton « Colonnes »).</p>
+      <div class="gs-actions">
+        <button type="button" id="openBtn">Afficher dans Google Sheet</button>
+        <button type="button" id="syncBtn" class="secondary">Synchroniser maintenant</button>
+        <button type="button" id="authBtn" class="secondary">Autoriser Trello</button>
+        <button type="button" id="disconnectBtn" class="secondary">Déconnecter</button>
+      </div>
+    </section>
 
-    <div class="gs-field">
-      <label for="webAppUrl">URL du Web App Apps Script (…/exec)</label>
-      <input type="url" id="webAppUrl" placeholder="https://script.google.com/macros/s/…/exec" />
-    </div>
-    <div class="gs-field">
-      <label for="setupToken">Jeton de configuration (affiché par setupTemplate())</label>
-      <input type="text" id="setupToken" placeholder="ex. 3f9a1c2e-…" />
-    </div>
-
-    <h2>Champs à synchroniser</h2>
-    <div class="gs-checks" id="fieldChecks"></div>
-
-    <div class="gs-actions">
-      <button type="button" id="authBtn" class="secondary">Autoriser Trello</button>
-      <button type="button" id="testBtn" class="secondary">Tester la connexion</button>
-      <button type="button" id="saveBtn">Enregistrer et activer</button>
-      <button type="button" id="closeBtn" class="secondary">Fermer</button>
-    </div>
+    <section id="setup" hidden>
+      <h2>1. Lancer le script d’installation</h2>
+      <p class="tp-muted">Sur votre ordinateur, à la racine du dépôt :</p>
+      <pre>powershell -ExecutionPolicy Bypass -File .\scripts\setup-sheet-sync.ps1</pre>
+      <p class="tp-muted">
+        Il crée la feuille Google, déploie le Worker et affiche (et copie) un <strong>code de connexion</strong>.
+        Détails : <a href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/sheet-sync.md" target="_blank" rel="noopener">docs/sheet-sync.md</a>.
+      </p>
+      <h2>2. Coller le code de connexion</h2>
+      <div class="gs-field">
+        <label for="code">Code de connexion</label>
+        <textarea id="code" placeholder="eyJ2IjoxLC…"></textarea>
+      </div>
+      <div class="gs-actions">
+        <button type="button" id="connectBtn">Connecter</button>
+        <button type="button" id="closeBtn" class="secondary">Fermer</button>
+      </div>
+    </section>
 
     <div class="gs-status" id="status"></div>
-
-    <p class="tp-muted" id="lastConnected" hidden></p>
   </div>
 
   <script>
     PriorityTrello.initIframePage(function (t) {
-      var els = {
-        url: document.getElementById('webAppUrl'),
-        token: document.getElementById('setupToken'),
-        checks: document.getElementById('fieldChecks'),
-        auth: document.getElementById('authBtn'),
-        test: document.getElementById('testBtn'),
-        save: document.getElementById('saveBtn'),
-        close: document.getElementById('closeBtn'),
-        status: document.getElementById('status'),
-        lastConnected: document.getElementById('lastConnected'),
-      };
+      var $ = function (id) { return document.getElementById(id); };
+      var settings = null;
 
+      function size() { if (t && t.sizeTo) try { t.sizeTo(document.body); } catch (e) {} }
       function setStatus(msg, kind) {
-        els.status.textContent = msg || '';
-        els.status.className = 'gs-status' + (kind ? ' is-' + kind : '');
-        if (t && t.sizeTo) try { t.sizeTo(document.body); } catch (e) {}
+        $('status').textContent = msg || '';
+        $('status').className = 'gs-status' + (kind ? ' is-' + kind : '');
+        size();
       }
 
-      function buildChecks(selected) {
-        els.checks.innerHTML = '';
-        SheetsTrello.DEFAULT_FIELDS.forEach(function (key) {
-          var label = document.createElement('label');
-          var cb = document.createElement('input');
-          cb.type = 'checkbox';
-          cb.value = key;
-          cb.checked = selected.indexOf(key) !== -1;
-          label.appendChild(cb);
-          label.appendChild(document.createTextNode(SheetsTrello.FIELD_LABELS[key] || key));
-          els.checks.appendChild(label);
+      function render() {
+        var connected = SheetsTrello.isConnected(settings);
+        $('connected').hidden = !connected;
+        $('setup').hidden = connected;
+        if (connected) {
+          $('workerUrl').textContent = settings.workerUrl;
+          var link = $('sheetLink');
+          link.href = settings.sheetUrl || '#';
+          link.textContent = settings.sheetUrl || '(inconnu)';
+          refreshInfo();
+        }
+        size();
+      }
+
+      function refreshInfo() {
+        SheetsTrello.info(settings).then(function (res) {
+          if (!res.ok) {
+            setStatus('Le Worker ne répond pas (' + (res.detail || res.reason) + ').', 'error');
+            return;
+          }
+          var d = res.data || {};
+          if (d.sheetUrl && d.sheetUrl !== settings.sheetUrl) {
+            settings.sheetUrl = d.sheetUrl;
+            SheetsTrello.saveSettings(t, settings);
+            $('sheetLink').href = d.sheetUrl;
+            $('sheetLink').textContent = d.sheetUrl;
+          }
+          $('lastSync').textContent = d.lastSync
+            ? new Date(d.lastSync.at).toLocaleString('fr-CA') + ' — ' + d.lastSync.cards + ' cartes'
+            : 'Pas encore depuis le dernier démarrage du Worker';
+          var labels = {};
+          (d.available || []).forEach(function (c) { labels[c.key] = c.header; });
+          $('columns').textContent = (d.columns || []).map(function (k) { return labels[k] || k; }).join(', ');
+          size();
         });
       }
 
-      function selectedFields() {
-        return Array.prototype.slice
-          .call(els.checks.querySelectorAll('input[type="checkbox"]'))
-          .filter(function (cb) { return cb.checked; })
-          .map(function (cb) { return cb.value; });
-      }
+      SheetsTrello.getSettings(t).then(function (s) { settings = s; render(); });
 
-      SheetsTrello.getSettings(t).then(function (settings) {
-        els.url.value = settings.webAppUrl || '';
-        els.token.value = settings.setupToken || '';
-        buildChecks(settings.fields);
-        if (settings.connectedAt) {
-          els.lastConnected.hidden = false;
-          els.lastConnected.textContent =
-            'Dernière activation : ' + new Date(settings.connectedAt).toLocaleString('fr-CA');
-        }
-        if (t && t.sizeTo) try { t.sizeTo(document.body); } catch (e) {}
+      $('connectBtn').addEventListener('click', function () {
+        setStatus('Connexion…');
+        SheetsTrello.connectWithCode(t, $('code').value).then(function (res) {
+          if (!res.ok) return setStatus('Code de connexion invalide. Recopiez-le en entier depuis le script.', 'error');
+          settings = res.settings;
+          return SheetsTrello.info(settings).then(function (info) {
+            if (!info.ok) {
+              setStatus('Enregistré, mais le Worker ne répond pas (' + (info.detail || info.reason) + ').', 'error');
+            } else {
+              return SheetsTrello.pushColumns(settings, settings.columns).then(function () {
+                setStatus('Connecté. Ouvrez la vue Table pour voir les colonnes synchronisées.', 'ok');
+              });
+            }
+          }).then(render);
+        });
       });
 
-      els.auth.addEventListener('click', function () {
+      $('syncBtn').addEventListener('click', function () {
+        setStatus('Synchronisation…');
+        SheetsTrello.syncNow(settings).then(function (res) {
+          if (res.ok) { setStatus('Synchronisé.', 'ok'); refreshInfo(); }
+          else setStatus('Échec : ' + (res.detail || res.reason), 'error');
+        });
+      });
+
+      $('openBtn').addEventListener('click', function () {
+        if (settings.sheetUrl) window.open(settings.sheetUrl, '_blank', 'noopener');
+      });
+
+      $('authBtn').addEventListener('click', function () {
         setStatus('Autorisation Trello…');
         PriorityTrello.authorizeRestForAutoSort(t).then(
           function () { setStatus('Trello autorisé.', 'ok'); },
-          function (err) {
-            setStatus('Autorisation refusée' + (err && err.message ? ' (' + err.message + ')' : ''), 'error');
-          }
+          function (err) { setStatus('Autorisation refusée' + (err && err.message ? ' (' + err.message + ')' : ''), 'error'); }
         );
       });
 
-      els.test.addEventListener('click', function () {
-        setStatus('Test de connexion…');
-        SheetsTrello.testConnection(els.url.value.trim()).then(function (res) {
-          if (res.ok) setStatus('Le Web App répond.', 'ok');
-          else setStatus('Pas de réponse valide (' + (res.reason || res.status || '?') + ')', 'error');
+      $('disconnectBtn').addEventListener('click', function () {
+        settings.workerUrl = '';
+        settings.secret = '';
+        settings.sheetUrl = '';
+        settings.connectedAt = null;
+        SheetsTrello.saveSettings(t, settings).then(function () {
+          setStatus('Déconnecté (le Worker et la feuille restent en place).');
+          render();
         });
       });
 
-      els.save.addEventListener('click', function () {
-        var webAppUrl = els.url.value.trim();
-        var setupToken = els.token.value.trim();
-        var fields = selectedFields();
-
-        if (!webAppUrl || !setupToken) {
-          setStatus('URL du Web App et jeton requis.', 'error');
-          return;
-        }
-
-        setStatus('Enregistrement…');
-        var boardId = null;
-
-        t.board('id')
-          .then(function (b) {
-            boardId = b.id;
-            return fields.indexOf('category') !== -1
-              ? SheetsTrello.ensureCategoryCustomField(t)
-              : { ok: true };
-          })
-          .then(function (fieldRes) {
-            if (!fieldRes.ok) throw new Error('champ Catégorie: ' + fieldRes.reason);
-            return SheetsTrello.registerWebhook(t, webAppUrl);
-          })
-          .then(function (webhookRes) {
-            if (!webhookRes.ok) {
-              // Non-fatal: webhook may already exist, or the board has too many.
-              setStatus('Avertissement webhook (' + webhookRes.reason + ') — poursuite…');
-            }
-            return SheetsTrello.pushConfig(webAppUrl, setupToken, {
-              boardId: boardId,
-              syncFields: fields,
-            });
-          })
-          .then(function (pushRes) {
-            if (!pushRes.ok) throw new Error('config refusée par le script (' + pushRes.reason + ')');
-            return SheetsTrello.saveSettings(t, {
-              webAppUrl: webAppUrl,
-              setupToken: setupToken,
-              fields: fields,
-              connectedAt: new Date().toISOString(),
-            });
-          })
-          .then(function () {
-            setStatus('Synchronisation activée. Éditez le Sheet ou une carte pour tester.', 'ok');
-          })
-          .catch(function (err) {
-            setStatus('Échec : ' + (err && err.message ? err.message : String(err)), 'error');
-          });
-      });
-
-      els.close.addEventListener('click', function () {
+      $('closeBtn').addEventListener('click', function () {
         if (t && t.closeModal) t.closeModal();
         else if (t && t.closePopup) t.closePopup();
       });
-
-      if (t && t.sizeTo) try { t.sizeTo(document.body); } catch (e) {}
     });
   </script>
 </body>

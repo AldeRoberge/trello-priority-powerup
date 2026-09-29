@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "trello-sheet-sync",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-18",
+  "observability": { "enabled": true },
+  // Sheet -> Trello direction: Google Sheets has no push, so the Worker polls once a minute.
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": {
+    "TIMEZONE": "America/Toronto"
+  }
+  // Secrets (set by scripts/setup-sheet-sync.ps1 via `wrangler secret bulk`):
+  // GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_SERVICE_ACCOUNT_KEY, GOOGLE_SHEET_ID,
+  // TRELLO_KEY, TRELLO_TOKEN, TRELLO_BOARD_ID, SYNC_SECRET, ALLOWED_ORIGINS
+}

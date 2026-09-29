@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Table</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <link rel="stylesheet" href="./components/shared/trello-theme.css" />
+  <link rel="stylesheet" href="./components/table/table-ui.css" />
+  <script src="./components/shared/brand.js"></script>
+  <script src="./components/shared/rest-config.js"></script>
+  <script src="./components/shared/debug-log.js"></script>
+  <script src="./components/shared/desc-meta.js"></script>
+  <script src="./components/priority/priority-matrix.js"></script>
+  <script src="./components/priority/priority-ui.js"></script>
+  <script src="./components/priority/priority-trello.js"></script>
+  <script src="./components/statut/statut-match.js"></script>
+  <script src="./components/statut/statut-trello.js"></script>
+  <script src="./components/completion/completion-trello.js"></script>
+  <script src="./components/completion/completion-ui.js"></script>
+  <script src="./components/gantt/gantt-model.js"></script>
+  <script src="./components/gantt/gantt-trello.js"></script>
+  <script src="./components/table/table-model.js"></script>
+  <script src="./components/sheets/sheets-trello.js"></script>
+  <script src="./components/table/table-trello.js"></script>
+  <script src="./components/table/table-ui.js"></script>
+</head>
+<body class="tp-page tp-page--table">
+  <div id="tableMount"></div>
+  <script>
+    PriorityTrello.initIframePage(function (t) {
+      TableUI.mount(document.getElementById('tableMount'), t);
+    });
+  </script>
+</body>
+</html>

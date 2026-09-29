@@ -187,7 +187,7 @@
             </li>
             <li>
               <strong>Google Sheets</strong> :
-              <a data-href-path="docs/google-sheets-sync.md" href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/google-sheets-sync.md" target="_blank" rel="noopener">guide de synchronisation</a>.
+              <a data-href-path="docs/sheet-sync.md" href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/sheet-sync.md" target="_blank" rel="noopener">guide de synchronisation</a>.
             </li>
           </ul>
         </li>
@@ -542,6 +542,18 @@
               return t.modal({
                 title: 'Gantt',
                 url: PriorityTrello.pageUrl('./gantt.html'),
+                fullscreen: true,
+                accentColor: '#22272B',
+              });
+            },
+          },
+          {
+            icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/table.svg',
+            text: 'Table',
+            callback: function(t) {
+              return t.modal({
+                title: 'Table',
+                url: PriorityTrello.pageUrl('./table.html'),
                 fullscreen: true,
                 accentColor: '#22272B',
               });

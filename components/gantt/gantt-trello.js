@@ -209,7 +209,8 @@
           'due',
           'start',
           'dueComplete',
-          'pos'
+          'pos',
+          'url'
         )) || [];
     } catch (err) {
       console.error('GanttTrello.loadBoard cards failed', err);
@@ -319,6 +320,7 @@
         due: card.due || null,
         start: card.start || null,
         dueComplete: !!card.dueComplete,
+        url: card.url || '',
         startDate: dates.startDate,
         dueDate: dates.dueDate,
         startTime: dates.startTime,
