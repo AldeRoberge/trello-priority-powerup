@@ -193,3 +193,15 @@
   opacity: 0.6;
   cursor: default;
 }
+
+/* Markdown preview (MarkdownDom output) */
+.cf-preview ul.agent-md-list,
+.cf-preview ol.agent-md-list {
+  margin: 4px 0;
+  padding-left: 22px;
+}
+.cf-preview ul.agent-md-list { list-style: disc; }
+.cf-preview ol.agent-md-list { list-style: decimal; }
+.cf-preview .agent-md-h { font-weight: 600; margin: 8px 0 4px; }
+.cf-preview .agent-md-quote { margin: 4px 0; padding-left: 10px; border-left: 3px solid var(--tp-border-strong, var(--tp-border)); color: var(--tp-text-subtle); }
+.cf-preview .agent-md-pre { margin: 4px 0; padding: 6px 8px; border-radius: 4px; background: var(--tp-surface-subtle); overflow: auto; }

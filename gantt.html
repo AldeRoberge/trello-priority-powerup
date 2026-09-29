@@ -10,6 +10,9 @@
   <link rel="stylesheet" href="./components/shared/context-menu.css?v=ctx-menu-1" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css" />
   <link rel="stylesheet" href="./components/gantt/gantt-ui.css?v=gantt-ux-2" />
+  <link rel="stylesheet" href="./components/shared/view-tabs.css" />
+  <link rel="stylesheet" href="./components/shared/card-fields.css" />
+  <link rel="stylesheet" href="./components/gantt/gantt-table-look.css" />
   <script src="./components/shared/brand.js"></script>
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/debug-log.js"></script>
@@ -31,11 +34,15 @@
   <script src="./components/outlook/outlook-graph.js"></script>
   <script src="./components/outlook/outlook-sync.js"></script>
   <script src="./components/outlook/outlook-ics.js"></script>
-  <script src="./components/gantt/gantt-ui.js?v=gantt-ux-2"></script>
+  <script src="./components/shared/view-tabs.js"></script>
+  <script src="./components/shared/card-fields.js"></script>
+  <script src="./components/gantt/gantt-ui.js?v=gantt-ux-3"></script>
 </head>
 <body class="tp-page tp-page--gantt">
+  <div id="viewTabs"></div>
   <div id="ganttMount"></div>
   <script>
+    ViewTabs.mount(document.getElementById('viewTabs'), { active: 'gantt' });
     PriorityTrello.initIframePage(function (t) {
       if (window.TpDebug && typeof TpDebug.configureFromProfile === 'function') {
         TpDebug.configureFromProfile(t).then(function (on) {

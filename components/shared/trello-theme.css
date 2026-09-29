@@ -1,4 +1,5 @@
 /* Trello Power-Up theme — light/dark via html[data-color-mode] */
+@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&display=swap');
 
 html[data-color-mode="light"] {
   color-scheme: light;
@@ -84,6 +85,8 @@ body {
   background: var(--tp-bg);
   color: var(--tp-text);
 }
+
+button, input, select, textarea { font-family: inherit; }
 
 .tp-page { padding: 12px; }
 .tp-page--roomy { padding: 16px; }

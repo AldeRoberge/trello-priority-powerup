@@ -1,0 +1,153 @@
+/*
+ * Gantt — aligned with the Table look (table-ui.css): 13px Lexend, subtle header bands,
+ * hairline cell borders, quiet ringed buttons, no zebra banding. Loaded after gantt-ui.css;
+ * only restyles, never changes geometry (row heights / bar positions are set in gantt-ui.js).
+ */
+body.tp-page--gantt,
+html[data-color-mode] body.tp-page--gantt {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+body.tp-page--gantt #ganttMount {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+
+.gantt-root {
+  font-family: 'Lexend', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  background: var(--tp-surface);
+}
+
+/* Toolbar = table bar */
+.gantt-toolbar {
+  gap: 8px 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--tp-border);
+  background: var(--tp-surface);
+}
+.gantt-tb-group {
+  padding: 0 12px;
+  border-left: 1px solid var(--tp-border);
+}
+.gantt-tb-caption {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--tp-text-muted);
+  opacity: 1;
+}
+.gantt-title {
+  font-size: 15px;
+}
+
+/* Buttons = table buttons (ring instead of border, 4px radius) */
+.gantt-btn {
+  border: 0;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  background: var(--tp-surface-subtle);
+  box-shadow: inset 0 0 0 1px var(--tp-border);
+}
+.gantt-btn .ti {
+  font-size: 16px;
+}
+.gantt-btn:hover {
+  background: var(--tp-surface-hover);
+}
+.gantt-btn.is-active {
+  background: var(--tp-primary);
+  color: var(--tp-primary-text);
+  box-shadow: none;
+}
+.gantt-segmented .gantt-btn:first-child {
+  border-radius: 4px 0 0 4px;
+}
+.gantt-segmented .gantt-btn:last-child {
+  border-radius: 0 4px 4px 0;
+}
+.gantt-tb-group--tools .gantt-btn,
+.gantt-btn--icon {
+  padding: 6px 8px;
+}
+.gantt-status {
+  font-size: 12px;
+}
+
+/* Grid: no zebra, hairline borders, subtle header band */
+.gantt-chart {
+  border-top: 0;
+  --gantt-row-odd: var(--tp-surface);
+  --gantt-grid-line: var(--tp-border);
+}
+.gantt-row {
+  border-bottom: 1px solid var(--tp-border);
+}
+.gantt-row.is-selected {
+  background-color: var(--tp-surface-hover);
+}
+.gantt-row--section {
+  background: var(--tp-surface-subtle);
+}
+.gantt-row--header,
+.gantt-timeline-header {
+  background-color: var(--tp-surface-subtle);
+}
+.gantt-label-cell--header,
+.gantt-header-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tp-text);
+}
+.gantt-col-head {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tp-text-muted);
+}
+.gantt-col-head.is-today {
+  color: var(--tp-primary);
+  font-weight: 600;
+}
+.gantt-timeline-scroll {
+  background: var(--tp-surface);
+}
+.gantt-splitter {
+  width: 1px;
+  background: var(--tp-border);
+  box-shadow: 0 0 0 2px transparent;
+}
+.gantt-splitter:hover {
+  background: var(--tp-primary);
+  box-shadow: 0 0 0 2px var(--tp-primary);
+}
+.gantt-task-name {
+  font-size: 13px;
+}
+.gantt-section-title {
+  font-weight: 600;
+}
+
+/* Bars: flat and quiet, like table pills */
+.gantt-bar {
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: none;
+}
+.gantt-bar-label {
+  text-shadow: none;
+}
+.gantt-today-line {
+  opacity: 0.7;
+}
+
+/* Popovers share the table menu chrome */
+.gantt-mini-popover,
+.gantt-filter-menu {
+  border: 1px solid var(--tp-border-strong, var(--tp-border));
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(9, 30, 66, 0.35);
+}

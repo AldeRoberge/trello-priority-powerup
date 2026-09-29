@@ -1747,293 +1747,55 @@
       closeBtn.focus();
     }
 
-    function openMiniPriority(row, anchor) {
+    /**
+     * Card field editors (priority / due / blocked / progress) come from the shared CardFields
+     * module — the same popovers the Table uses — so every view edits a card identically.
+     */
+    var FIELD_LABELS = {
+      priority: ['Priorit\u00e9 enregistr\u00e9e', 'priorit\u00e9'],
+      due: ['\u00c9ch\u00e9ance enregistr\u00e9e', '\u00e9ch\u00e9ance'],
+      blocked: ['Blocage enregistr\u00e9', 'blocage'],
+      progress: ['Progr\u00e8s enregistr\u00e9', 'progr\u00e8s'],
+    };
+
+    function openCardField(kind, row, anchor) {
       if (!row || !row.cardId || !anchor) return;
-      var PT = global.PriorityTrello;
-      var ui = PU();
-      if (!PT || !ui || typeof ui.mountMiniPriority !== 'function') {
-        setStatus('\u00c9diteur de priorit\u00e9 indisponible', true);
+      if (!global.CardFields) {
+        setStatus('\u00c9diteur indisponible', true);
         return;
       }
-      openMiniEditor({
-        anchor: anchor,
-        title: 'Priorit\u00e9',
-        sectionKey: 'priority',
+      closeMiniPopover();
+      global.CardFields.open(kind, {
+        t: t,
         cardId: row.cardId,
         cardName: row.name,
-        mount: function (bodyEl) {
-          var loading = el('div', 'gantt-mini-popover-loading', {
-            text: 'Chargement\u2026',
-          });
-          bodyEl.appendChild(loading);
-          var apiHolder = { destroy: function () {} };
-
-          Promise.all([
-            PT.getCardInputsById(t, row.cardId),
-            typeof PT.getBoardFormula === 'function'
-              ? PT.getBoardFormula(t)
-              : Promise.resolve('baseline'),
-          ])
-            .then(function (pair) {
-              if (!state.miniPopover || state.miniPopover.cardId !== row.cardId) {
-                return;
-              }
-              bodyEl.removeChild(loading);
-              var inputs = pair[0] || {};
-              var formula = pair[1] || 'baseline';
-              var mounted = ui.mountMiniPriority(bodyEl, {
-                id: 'gantt-' + row.cardId,
-                formula: formula,
-                defaults: inputs,
-                dimensions: PT.PRIORITY_DIMENSIONS,
-                onStateChange: function (next) {
-                  PT.saveCardInputsById(t, row.cardId, {
-                    urgency: next.urgency,
-                    impact: next.impact,
-                    ease: next.ease,
-                  })
-                    .then(function () {
-                      setStatus('Priorit\u00e9 enregistr\u00e9e');
-                    })
-                    .catch(function (err) {
-                      setStatus(
-                        'Erreur priorit\u00e9\u00a0: ' +
-                          (err && err.message ? err.message : String(err)),
-                        true
-                      );
-                    });
-                },
-              });
-              apiHolder.destroy = function () {
-                if (mounted && mounted.destroy) mounted.destroy();
-              };
-              if (state.miniPopover) state.miniPopover.mountApi = apiHolder;
-              positionMiniPopover(state.miniPopover.el, anchor);
-            })
-            .catch(function (err) {
-              loading.textContent =
-                'Erreur\u00a0: ' +
-                (err && err.message ? err.message : String(err));
-            });
-
-          return apiHolder;
+        anchor: anchor,
+        onSaved: function () {
+          setStatus(FIELD_LABELS[kind][0]);
+        },
+        onError: function (m) {
+          setStatus('Erreur ' + FIELD_LABELS[kind][1] + '\u00a0: ' + m, true);
+        },
+        onClose: function (changed) {
+          if (changed) refreshBoardQuiet();
         },
       });
+    }
+
+    function openMiniPriority(row, anchor) {
+      openCardField('priority', row, anchor);
     }
 
     function openMiniDue(row, anchor) {
-      if (!row || !row.cardId || !anchor) return;
-      var PT = global.PriorityTrello;
-      var ui = PU();
-      if (!PT || !ui || typeof ui.mountMiniDue !== 'function') {
-        setStatus('\u00c9diteur d\u2019\u00e9ch\u00e9ance indisponible', true);
-        return;
-      }
-      openMiniEditor({
-        anchor: anchor,
-        title: '\u00c9ch\u00e9ance',
-        sectionKey: 'due',
-        cardId: row.cardId,
-        cardName: row.name,
-        mount: function (bodyEl) {
-          var loading = el('div', 'gantt-mini-popover-loading', {
-            text: 'Chargement\u2026',
-          });
-          bodyEl.appendChild(loading);
-          var apiHolder = { destroy: function () {} };
-
-          PT.getCardInputsById(t, row.cardId)
-            .then(function (inputs) {
-              if (!state.miniPopover || state.miniPopover.cardId !== row.cardId) {
-                return;
-              }
-              bodyEl.removeChild(loading);
-              var mounted = ui.mountMiniDue(bodyEl, {
-                value: inputs || {},
-                onChange: function (values) {
-                  var patch = {
-                    dueDate: values.dueDate || '',
-                    dueTime: values.dueTime || '',
-                    dueEnabled: !!values.dueEnabled,
-                    dueMode: values.dueMode,
-                    dueVague: values.dueVague || '',
-                    startDate: values.startDate || '',
-                    recurrence: values.recurrence || null,
-                  };
-                  var chain = PT.saveCardInputsById(t, row.cardId, patch);
-                  if (typeof ganttTrello.saveCardDates === 'function') {
-                    chain = chain.then(function () {
-                      return ganttTrello.saveCardDates(t, row.cardId, {
-                        startDate: values.startDate || '',
-                        dueDate: values.dueDate || '',
-                        dueTime: values.dueTime || '',
-                      });
-                    });
-                  }
-                  chain
-                    .then(function () {
-                      setStatus('\u00c9ch\u00e9ance enregistr\u00e9e');
-                    })
-                    .catch(function (err) {
-                      setStatus(
-                        'Erreur \u00e9ch\u00e9ance\u00a0: ' +
-                          (err && err.message ? err.message : String(err)),
-                        true
-                      );
-                    });
-                },
-              });
-              apiHolder.destroy = function () {
-                if (mounted && mounted.destroy) mounted.destroy();
-              };
-              if (state.miniPopover) state.miniPopover.mountApi = apiHolder;
-              positionMiniPopover(state.miniPopover.el, anchor);
-            })
-            .catch(function (err) {
-              loading.textContent =
-                'Erreur\u00a0: ' +
-                (err && err.message ? err.message : String(err));
-            });
-
-          return apiHolder;
-        },
-      });
+      openCardField('due', row, anchor);
     }
 
     function openMiniBlocked(row, anchor) {
-      if (!row || !row.cardId || !anchor) return;
-      var PT = global.PriorityTrello;
-      var ui = PU();
-      if (!PT || !ui || typeof ui.mountMiniBlocked !== 'function') {
-        setStatus('\u00c9diteur Bloqu\u00e9 indisponible', true);
-        return;
-      }
-      openMiniEditor({
-        anchor: anchor,
-        title: 'Bloqu\u00e9',
-        sectionKey: 'blocked',
-        cardId: row.cardId,
-        cardName: row.name,
-        mount: function (bodyEl) {
-          var loading = el('div', 'gantt-mini-popover-loading', {
-            text: 'Chargement\u2026',
-          });
-          bodyEl.appendChild(loading);
-          var apiHolder = { destroy: function () {} };
-
-          PT.getCardInputsById(t, row.cardId)
-            .then(function (inputs) {
-              if (!state.miniPopover || state.miniPopover.cardId !== row.cardId) {
-                return;
-              }
-              bodyEl.removeChild(loading);
-              var mounted = ui.mountMiniBlocked(bodyEl, {
-                value: !!(inputs && inputs.enAttente),
-                blockedReasons: (inputs && inputs.blockedReasons) || [],
-                blockedLinks: (inputs && inputs.blockedLinks) || [],
-                hideSubtaskPicker: true,
-                onChange: function (next) {
-                  PT.saveCardInputsById(t, row.cardId, {
-                    enAttente: !!next.enAttente,
-                    blockedReasons: next.blockedReasons || [],
-                    blockedLinks: next.blockedLinks || [],
-                  })
-                    .then(function () {
-                      setStatus(
-                        next.enAttente
-                          ? 'Carte bloqu\u00e9e'
-                          : 'Carte d\u00e9bloqu\u00e9e'
-                      );
-                    })
-                    .catch(function (err) {
-                      setStatus(
-                        'Erreur blocage\u00a0: ' +
-                          (err && err.message ? err.message : String(err)),
-                        true
-                      );
-                    });
-                },
-              });
-              apiHolder.destroy = function () {
-                if (mounted && mounted.destroy) mounted.destroy();
-              };
-              if (state.miniPopover) state.miniPopover.mountApi = apiHolder;
-              positionMiniPopover(state.miniPopover.el, anchor);
-            })
-            .catch(function (err) {
-              loading.textContent =
-                'Erreur\u00a0: ' +
-                (err && err.message ? err.message : String(err));
-            });
-
-          return apiHolder;
-        },
-      });
+      openCardField('blocked', row, anchor);
     }
 
     function openMiniProgress(row, anchor) {
-      if (!row || !row.cardId || !anchor) return;
-      var CT = global.CompletionTrello;
-      var CU = global.CompletionUI;
-      if (
-        !CT ||
-        !CU ||
-        typeof CU.mountMiniProgress !== 'function' ||
-        typeof CT.getCardCompletionById !== 'function'
-      ) {
-        setStatus('\u00c9diteur de progr\u00e8s indisponible', true);
-        return;
-      }
-      openMiniEditor({
-        anchor: anchor,
-        title: 'Progr\u00e8s',
-        sectionKey: 'progress',
-        cardId: row.cardId,
-        cardName: row.name,
-        mount: function (bodyEl) {
-          var loading = el('div', 'gantt-mini-popover-loading', {
-            text: 'Chargement\u2026',
-          });
-          bodyEl.appendChild(loading);
-          var apiHolder = { destroy: function () {} };
-
-          CT.getCardCompletionById(t, row.cardId)
-            .then(function (data) {
-              if (!state.miniPopover || state.miniPopover.cardId !== row.cardId) {
-                return;
-              }
-              bodyEl.removeChild(loading);
-              var mounted = CU.mountMiniProgress(bodyEl, {
-                data: data || { items: [] },
-                onChange: function (nextData) {
-                  CT.saveCardCompletionById(t, row.cardId, nextData)
-                    .then(function () {
-                      setStatus('Progr\u00e8s enregistr\u00e9');
-                    })
-                    .catch(function (err) {
-                      setStatus(
-                        'Erreur progr\u00e8s\u00a0: ' +
-                          (err && err.message ? err.message : String(err)),
-                        true
-                      );
-                    });
-                },
-              });
-              apiHolder.destroy = function () {
-                if (mounted && mounted.destroy) mounted.destroy();
-              };
-              if (state.miniPopover) state.miniPopover.mountApi = apiHolder;
-              positionMiniPopover(state.miniPopover.el, anchor);
-            })
-            .catch(function (err) {
-              loading.textContent =
-                'Erreur\u00a0: ' +
-                (err && err.message ? err.message : String(err));
-            });
-
-          return apiHolder;
-        },
-      });
+      openCardField('progress', row, anchor);
     }
 
     function buildDetailIcons(row) {
