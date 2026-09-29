@@ -10265,13 +10265,15 @@
       // Mirror cell stays hidden; hero carries progress UX.
       setFeatureVisible(progressCell.cell, false);
       setFeatureVisible(dueCell.cell, features.due !== false && !!due);
-      setFeatureVisible(priorityCell.cell, features.priority !== false);
+      // Compact: Trello's badges just above already show the priority.
+      setFeatureVisible(priorityCell.cell, features.priority !== false && !compact);
       metrics.hidden =
         (dueCell.cell.getAttribute('hidden') != null ||
           features.due === false ||
           !due) &&
         (priorityCell.cell.getAttribute('hidden') != null ||
-          features.priority === false);
+          features.priority === false ||
+          compact);
 
       var state = resolveDoneBlocked();
       var isBlocked = state.isBlocked;
@@ -10286,6 +10288,14 @@
           ? statusAccent || progressColor || '#22a06b'
           : progressColor || statusAccent || '';
 
+      // Compact: an untouched card has nothing to report — skip "À faire".
+      hero.hidden =
+        compact &&
+        !isBlocked &&
+        !isDone &&
+        !(progressPercent > 0) &&
+        !(tasksTotal > 0 && tasksDone > 0) &&
+        statusCategory !== 'started';
       hero.classList.toggle('is-blocked', isBlocked);
       hero.classList.toggle('is-done', isDone);
       hero.classList.toggle('has-progress-accent', !!accent);

@@ -456,6 +456,10 @@ body {
   background: none;
 }
 
+.field--overview-compact .overview-hero[hidden] {
+  display: none;
+}
+
 .field--overview-compact .overview-hero:hover {
   background: none;
 }
