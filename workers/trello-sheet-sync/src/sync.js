@@ -447,7 +447,7 @@ async function syncOnce(env, cfg, opts, journal, boot) {
     env,
     [...deleteRows].sort((a, b) => b - a).map((r) => ({ deleteDimension: { range: { sheetId: tasksId, dimension: 'ROWS', startIndex: r - 1, endIndex: r } } })),
   );
-  await sheets.appendRows(env, `${TASKS}!A1`, plan.appendRows);
+  await sheets.appendRowsToSheet(env, tasksId, plan.appendRows); // always below the last card, never above the header
 
   const live = new Set([...cards.map((c) => c.id), ...Object.keys(plan.newState)]);
   const nextState = {};

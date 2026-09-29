@@ -87,6 +87,22 @@ export async function appendRows(env, range, rows) {
   });
 }
 
+/**
+ * Adds rows right after the last row that holds data, on the sheet with this id. Unlike
+ * values.append (which guesses a "table" from a range), this can never land above the header.
+ */
+export async function appendRowsToSheet(env, sheetId, rows) {
+  if (!rows.length) return;
+  const cell = (v) => {
+    if (typeof v === 'number') return { userEnteredValue: { numberValue: v } };
+    if (typeof v === 'boolean') return { userEnteredValue: { boolValue: v } };
+    return { userEnteredValue: { stringValue: v == null ? '' : String(v) } };
+  };
+  await batchUpdate(env, [
+    { appendCells: { sheetId, rows: rows.map((r) => ({ values: r.map(cell) })), fields: 'userEnteredValue' } },
+  ]);
+}
+
 export async function clearRange(env, range) {
   await call(env, `/values/${encodeURIComponent(range)}:clear`, { method: 'POST', body: '{}' });
 }

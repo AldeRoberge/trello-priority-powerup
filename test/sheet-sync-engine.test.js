@@ -97,6 +97,12 @@ class FakeGoogle {
           const { startIndex, endIndex } = r.insertDimension.range;
           t.rows.splice(startIndex, 0, ...Array.from({ length: endIndex - startIndex }, () => []));
         }
+        if (r.appendCells) {
+          const t = [...this.tabs.values()].find((x) => x.id === r.appendCells.sheetId);
+          for (const row of r.appendCells.rows) {
+            t.rows.push(row.values.map((v) => (v.userEnteredValue.numberValue !== undefined ? v.userEnteredValue.numberValue : v.userEnteredValue.stringValue)));
+          }
+        }
         if (r.deleteDimension) {
           const t = [...this.tabs.values()].find((x) => x.id === r.deleteDimension.range.sheetId);
           const { startIndex, endIndex } = r.deleteDimension.range;
@@ -256,6 +262,18 @@ describe('trello-sheet-sync engine (fakes)', () => {
     assert.equal(a[0][6], 'Première');
     assert.equal(a[0][7], 'Première v2');
     assert.ok(logs().some((r) => r[1] === 'INFO' && r[2] === 'SHEET_EDIT'));
+    restore();
+  });
+
+  it('a card created in Trello is added below the last row, never above the header', async () => {
+    await sync.runSync(env);
+    trello.cards.push({ id: 'c3', name: 'Nouvelle carte Trello', desc: '', idList: 'l1', due: null, shortUrl: 'https://trello.com/c/3', pos: 3, customFieldItems: [] });
+    await sync.runSync(env);
+    assert.deepEqual(tasks()[0], columns.headerRow(columns.DEFAULT_COLUMNS));
+    assert.equal(tasks().length, 4);
+    assert.equal(tasks()[3][0], 'c3');
+    assert.equal(tasks()[3][col('name')], 'Nouvelle carte Trello');
+    assert.equal(logs().some((r) => r[1] === 'CRITICAL'), false);
     restore();
   });
 
