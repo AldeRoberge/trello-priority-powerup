@@ -4573,3 +4573,78 @@ html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-value.is-bad {
     transition: opacity 0.15s ease;
   }
 }
+
+/* ── Assistant chat declutter ─────────────────────────────────────────
+   One calm style: quiet stats, uniform answer chips (no rainbow, no bubble
+   tails), and a composer where the input gets the full width and the mode
+   picker + send button share one row underneath. */
+.tp-page--priority .agent-chat-stats-value.is-ok,
+.tp-page--priority .agent-chat-stats-value {
+  color: var(--tp-text-muted);
+  opacity: 0.9;
+}
+
+.tp-page--priority .agent-chat-stats-value.is-warn,
+.tp-page--priority .agent-chat-stats-value.is-caution,
+.tp-page--priority .agent-chat-stats-value.is-bad {
+  opacity: 1;
+}
+
+.tp-page--priority .agent-chat-stats-label {
+  opacity: 0.6;
+}
+
+.tp-page--priority .agent-suggestions {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding-left: 0;
+}
+
+.tp-page--priority .agent-suggestions.is-below-composer {
+  margin-top: 8px;
+}
+
+.tp-page--priority .agent-suggestion-chip::after {
+  display: none;
+}
+
+.tp-page--priority .agent-suggestion-chip:not(.agent-suggestion-chip--scale) {
+  width: 100%;
+  border-style: solid;
+  border-color: var(--tp-border-strong);
+  border-radius: 8px;
+  background: var(--tp-elev-2, transparent);
+  color: var(--tp-text);
+  padding: 8px 12px;
+  font-weight: 500;
+}
+
+.tp-page--priority .agent-suggestions .agent-suggestion-chip[class*='agent-suggestion-chip--color-']:not(.is-selected) {
+  border-color: var(--tp-border-strong);
+  color: var(--tp-text);
+}
+
+.tp-page--priority .agent-composer {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.tp-page--priority .agent-composer .tp-tab-complete-wrap,
+.tp-page--priority .agent-composer > .agent-composer-input {
+  flex: 1 1 100%;
+}
+
+.tp-page--priority .agent-model-mode-select {
+  flex: 1 1 0;
+  max-width: none;
+  align-self: auto;
+}
+
+.tp-page--priority .agent-send-btn {
+  flex: 0 0 auto;
+  align-self: auto;
+  min-width: 6.5rem;
+  height: 32px;
+}
