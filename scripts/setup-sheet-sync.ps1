@@ -28,6 +28,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $WorkerDir = Join-Path $RepoRoot "workers\trello-sheet-sync"
@@ -389,12 +390,17 @@ Invoke-Step "google" "4/7 Google Cloud project, service account and Sheet" {
 Invoke-Step "deploy" "5/7 Deploying the Worker and pushing secrets" {
   $vars = Read-DevVars
   if (-not $vars['SYNC_SECRET']) { $vars['SYNC_SECRET'] = -join ((1..32) | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) }) }
+  if ($vars['ALLOWED_ORIGINS'] -and $vars['ALLOWED_ORIGINS'] -notmatch '^https?://[A-Za-z0-9.-]+(:\d+)?(,https?://[A-Za-z0-9.-]+(:\d+)?)*$') { $vars.Remove('ALLOWED_ORIGINS') }
   if (-not $vars['ALLOWED_ORIGINS']) {
     $origin = "https://YOUR-USER.github.io"
     $remote = (git -C $RepoRoot remote get-url origin 2>$null)
     if ($remote -match 'github\.com[:/]([^/]+)/') { $origin = "https://$($Matches[1].ToLower()).github.io" }
-    $typed = Read-Host "  Origin of your hosted Power-Up [$origin]"
-    $vars['ALLOWED_ORIGINS'] = if ($typed) { $typed.Trim() } else { $origin }
+    while ($true) {
+      $typed = Read-Host "  Origin of your hosted Power-Up, e.g. https://you.github.io [$origin]"
+      $candidate = if ($typed) { $typed.Trim().TrimEnd('/') } else { $origin }
+      if ($candidate -match '^https?://[A-Za-z0-9.-]+(:\d+)?$') { $vars['ALLOWED_ORIGINS'] = $candidate; break }
+      Write-Host "  That is not an origin (expected scheme + host, no path). Press Enter to accept the default." -ForegroundColor Yellow
+    }
   }
   Write-DevVars $vars
 
