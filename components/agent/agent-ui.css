@@ -4824,3 +4824,110 @@ html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-value.is-bad {
 .tp-page--priority.is-split-assistant .cerveau-assistant .agent-chat-info {
   order: 95;
 }
+
+/* ── Composer: input + send on one row; mode picker is a small footer pill ── */
+.tp-page--priority .agent-composer {
+  flex-wrap: nowrap;
+  align-items: flex-end;
+}
+
+.tp-page--priority .agent-composer .tp-tab-complete-wrap,
+.tp-page--priority .agent-composer > .agent-composer-input {
+  flex: 1 1 auto;
+}
+
+.tp-page--priority .agent-send-btn {
+  min-width: 0;
+  align-self: flex-end;
+  height: 40px;
+  padding: 0 14px;
+}
+
+.tp-page--priority .agent-composer-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 0;
+  padding: 0 2px;
+}
+
+.tp-page--priority .agent-composer-foot[hidden] {
+  display: none;
+}
+
+.tp-page--priority .agent-composer-foot .agent-model-mode-wrap {
+  flex: 0 0 auto;
+  height: 26px;
+  border-radius: 999px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.tp-page--priority .agent-composer-foot .agent-model-mode-wrap:hover,
+.tp-page--priority .agent-composer-foot .agent-model-mode-wrap:focus-within {
+  background: var(--agent-surface);
+  border-color: var(--agent-edge);
+}
+
+.tp-page--priority .agent-composer-foot .agent-model-mode-icon {
+  left: 8px;
+  font-size: 14px;
+}
+
+.tp-page--priority .agent-composer-foot .agent-model-mode-select {
+  width: auto;
+  padding: 0 8px 0 27px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--tp-text-muted);
+}
+
+.tp-page--priority.is-split-assistant .cerveau-assistant .agent-composer-foot {
+  order: 92;
+  flex-shrink: 0;
+}
+
+/* Number shortcut badge on answer chips */
+.tp-page--priority .agent-suggestion-num {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-right: 8px;
+  padding: 0 4px;
+  border-radius: 6px;
+  border: 1px solid var(--agent-edge);
+  background: color-mix(in srgb, #fff 8%, transparent);
+  color: var(--tp-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  font-family: inherit;
+}
+
+.tp-page--priority .agent-suggestion-chip.is-selected .agent-suggestion-num {
+  background: var(--tp-text);
+  color: var(--tp-elev-1, #22272b);
+  border-color: transparent;
+}
+
+/* Parallel lane tag */
+.tp-page--priority .agent-msg--lane {
+  position: relative;
+}
+
+.tp-page--priority .agent-msg--lane[data-lane]::after {
+  content: attr(data-lane);
+  position: absolute;
+  top: -8px;
+  left: 44px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--agent-edge);
+  background: var(--agent-surface-hover);
+  color: var(--tp-text-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}

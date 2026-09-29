@@ -10215,6 +10215,36 @@
   // ── 14. chatTurn — primary conversational entry (task or project scope) ──
   // Builds messages, calls model, runs guards, returns { message, actions… }.
 
+  /** Max concurrent side lanes next to the main turn. */
+  var PARALLEL_LANE_MAX = 3;
+  var LANE_PREFIX_RE = /^\s*(?:&&?|\/\/+|(?:en\s+)?parall[eè]le\s*:)\s*/i;
+  var LANE_CONTINUATION_RE =
+    /^(?:et|aussi|plus|puis|non|oui|ok|attends?|finalement|en fait|sinon|c'est|merci)\b/i;
+
+  /**
+   * Router for messages sent while a turn is already in flight.
+   * 'main' — nothing in flight (normal turn); 'queue' — fold into the pending turn
+   * (short follow-ups / corrections); 'lane' — independent request, runs in parallel.
+   * Returns { route, text, tier } (tier = model hint for a lane).
+   */
+  function routeMessage(text, ctx) {
+    ctx = ctx || {};
+    var raw = String(text || '').trim();
+    if (!ctx.busy) return { route: 'main', text: raw, tier: null };
+    var explicit = LANE_PREFIX_RE.test(raw);
+    var body = explicit ? raw.replace(LANE_PREFIX_RE, '').trim() : raw;
+    if (!body) return { route: 'queue', text: raw, tier: null };
+    var lanes = ctx.activeLanes || 0;
+    var max = ctx.maxLanes || PARALLEL_LANE_MAX;
+    if (lanes >= max) return { route: 'queue', text: body, tier: null };
+    var words = body.split(/\s+/).length;
+    if (!explicit && (words <= 3 || LANE_CONTINUATION_RE.test(body))) {
+      return { route: 'queue', text: body, tier: null };
+    }
+    var quick = /\?\s*$/.test(body) && words <= 14;
+    return { route: 'lane', text: body, tier: quick ? 'efficient' : 'balanced' };
+  }
+
   async function chatTurn(provider, history, bridge, userText, options) {
     options = options || {};
     dbgLog('agent', 'chatTurn.start', {});
@@ -18834,6 +18864,8 @@
     actionFailure: actionFailure,
     normalizeActionsWithMeta: normalizeActionsWithMeta,
     looksLikeAppliedClaim: looksLikeAppliedClaim,
+    routeMessage: routeMessage,
+    PARALLEL_LANE_MAX: PARALLEL_LANE_MAX,
     normalizePointSection: normalizePointSection,
     normalizePointField: normalizePointField,
     normalizePointLevel: normalizePointLevel,

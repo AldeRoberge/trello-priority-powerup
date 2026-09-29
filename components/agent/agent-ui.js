@@ -1220,8 +1220,10 @@
     modelModeIcon.setAttribute('aria-hidden', 'true');
     modelModeWrap.appendChild(modelModeIcon);
     modelModeWrap.appendChild(modelModeSelect);
-    composer.appendChild(modelModeWrap);
     composer.appendChild(sendBtn);
+    // Rarely changed: lives in a small footer row under the composer.
+    var composerFoot = el('div', 'agent-composer-foot');
+    composerFoot.appendChild(modelModeWrap);
     if (
       global.ContextMenu &&
       typeof global.ContextMenu.bind === 'function' &&
@@ -1259,6 +1261,7 @@
     }
     chatPanel.appendChild(suggestionsEl);
     chatPanel.appendChild(composer);
+    chatPanel.appendChild(composerFoot);
 
     var interviewBar = el('div', 'agent-interview-bar');
     interviewBar.hidden = true;
@@ -2686,6 +2689,7 @@
       var configured = Agent.isConfigured(provider);
       // Keep composer typable during in-flight turns; extra sends go to messageQueue.
       composer.hidden = !configured;
+      composerFoot.hidden = !configured;
       sendBtn.disabled = !configured;
       modelModeSelect.disabled = !configured;
       input.disabled = !configured;
@@ -2800,6 +2804,7 @@
 
     function releasePendingAndDrain() {
       pending = false;
+      flushLaneHistory();
       updateComposerEnabled();
       setSuggestionsBusy(false);
       notifyLayout();
@@ -2885,7 +2890,7 @@
 
     async function tryRunCardDream() {
       if (isProjectScope || dreamInFlight) return;
-      if (interviewActive || pending || messageQueue.length) {
+      if (interviewActive || pending || messageQueue.length || activeLaneCount) {
         scheduleCardDream({ delay: 3500 });
         return;
       }
@@ -7517,8 +7522,14 @@
       return null;
     }
 
-    function fillSuggestionChip(chip, item) {
+    function fillSuggestionChip(chip, item, index) {
       chip.replaceChildren();
+      if (index < 9) {
+        var num = el('kbd', 'agent-suggestion-num', { text: String(index + 1) });
+        num.setAttribute('aria-hidden', 'true');
+        chip.appendChild(num);
+        chip.setAttribute('aria-keyshortcuts', String(index + 1));
+      }
       var iconHtml = item.icon ? suggestionIconMarkup(item.icon) : '';
       if (iconHtml) {
         var iconWrap = el('span', 'agent-suggestion-chip-icon');
@@ -7565,7 +7576,7 @@
       items.forEach(function (item, index) {
         var text = item.text;
         var chip = el('button', 'agent-suggestion-chip', { type: 'button' });
-        fillSuggestionChip(chip, item);
+        fillSuggestionChip(chip, item, index);
         chip.setAttribute('data-suggestion', text);
         chip.disabled = pending;
         if (suggestionsMultiSelect) {
@@ -8001,6 +8012,8 @@
 
       // Invalidate any in-flight turn so its completion is ignored.
       chatTurnGen += 1;
+      laneEpoch += 1;
+      laneDeferred = [];
       stopThinkingMotions();
       clearSuggestions();
       clearFollowUps();
@@ -8836,6 +8849,110 @@
 
     // ── sendUserMessage — enqueue or start a chatTurn, then executeActions ───
 
+    /**
+     * Parallel lanes: while the main turn is in flight, an independent request is
+     * routed (Agent.routeMessage) to its own concurrent chatTurn with a snapshot of
+     * the history. Card actions run through actionChain so writes never overlap;
+     * history entries are held until the main turn settles to keep ordering sane.
+     */
+    var activeLaneCount = 0;
+    var laneSeq = 0;
+    var laneEpoch = 0;
+    var laneDeferred = [];
+    var actionChain = Promise.resolve();
+
+    function flushLaneHistory() {
+      if (pending || !laneDeferred.length) return;
+      laneDeferred.forEach(function (pair) {
+        history.push({ role: 'user', content: pair.user });
+        history.push({
+          role: 'assistant',
+          content: pair.message,
+          rawJson: pair.rawJson
+        });
+      });
+      laneDeferred = [];
+      schedulePersistChatHistory();
+    }
+
+    async function runParallelLane(text, tier) {
+      var epoch = laneEpoch;
+      var laneNo = ++laneSeq;
+      activeLaneCount += 1;
+      var tag = 'Parallèle ' + laneNo;
+      var userRow = appendMessage('user', text, { note: tag });
+      var row = appendPendingMessage();
+      row.classList.add('agent-msg--lane');
+      row.setAttribute('data-lane', tag);
+      var bubble = row.querySelector('.agent-msg-bubble');
+      var streamed = false;
+      var snapshot = history.slice();
+      dbgLog('agentUi', 'lane.start', { lane: laneNo, tier: tier });
+      try {
+        try {
+          await prepareTurnContext();
+        } catch (prepErr) { /* keep cached context */ }
+        var turn = await Agent.chatTurn(provider, snapshot, bridge, text, {
+          modelTier: tier || sessionModelTier,
+          onDelta: function (visible) {
+            if (epoch !== laneEpoch || !bubble || !visible) return;
+            if (!streamed) {
+              streamed = true;
+              row.classList.remove('is-pending');
+              row.removeAttribute('aria-busy');
+              row.removeAttribute('aria-label');
+              revealPendingBubble(bubble, visible, []);
+            } else {
+              fillMessageContent(bubble, visible, [], { streaming: true });
+            }
+            scrollMessagesIfPinned(true);
+            notifyLayout();
+          }
+        });
+        if (turn && turn.debug) pushDebugEntry(turn.debug);
+        if (epoch !== laneEpoch) return;
+        if (!streamed) revealPendingBubble(bubble, turn.message, turn.blocks || []);
+        else fillMessageContent(bubble, turn.message, turn.blocks || [], { streaming: false });
+        row.classList.remove('is-pending', 'is-streaming');
+        row.removeAttribute('aria-busy');
+        row.removeAttribute('aria-label');
+        finalizeAssistantRow(row, turn.message, { emotion: turn.emotion, color: turn.color });
+        attachFeedbackControls(row);
+        attachMessageCopyControl(row);
+        laneDeferred.push({ user: text, message: turn.message, rawJson: turn.rawJson });
+        flushLaneHistory();
+        if (turn.usage) updateSessionStats(turn.usage);
+        var acts = (turn.actions || []).filter(Boolean);
+        if (acts.length) {
+          var applied = await (actionChain = actionChain.then(
+            function () {
+              return Agent.executeActions(bridge, acts);
+            },
+            function () {
+              return Agent.executeActions(bridge, acts);
+            }
+          ));
+          if (epoch !== laneEpoch) return;
+          appendChangeRecap(applied || { results: [] }, {
+            droppedActions: turn.droppedActions,
+            ok: applied ? applied.ok : false
+          });
+        }
+        scrollMessagesToBottom();
+        notifyLayout();
+      } catch (err) {
+        if (err && err.debug) pushDebugEntry(err.debug);
+        if (epoch !== laneEpoch) return;
+        dbgError('agentUi', 'lane.end', err, { lane: laneNo });
+        if (row.parentNode) row.remove();
+        appendChatError((err && err.message) || 'Erreur de l\'assistant');
+      } finally {
+        activeLaneCount = Math.max(0, activeLaneCount - 1);
+        if (userRow) userRow.classList.remove('is-queued');
+        notifyLayout();
+      }
+    }
+
     async function sendUserMessage(text, options) {
       var opts = options || {};
       var msg = (text || '').trim();
@@ -8849,7 +8966,19 @@
       // same as tapping a suggestion. New ones arrive with the next turn.
       clearSuggestions();
       if (pending) {
-        enqueueUserMessage(msg, opts);
+        var routed =
+          opts.isSelfPrompt || opts.silentUser || typeof Agent.routeMessage !== 'function'
+            ? { route: 'queue', text: msg }
+            : Agent.routeMessage(msg, { busy: true, activeLanes: activeLaneCount });
+        if (routed.route === 'lane') {
+          if (opts.fromComposer) {
+            input.value = '';
+            refreshComposerTypingGaze();
+          }
+          runParallelLane(routed.text, routed.tier);
+          return;
+        }
+        enqueueUserMessage(routed.text || msg, opts);
         return;
       }
       // Ingest immediately so Enter never freezes on the composer.
@@ -9213,6 +9342,34 @@
       }
       sendUserMessage(fu.label);
     }
+
+    /**
+     * Number keys pick answer chips: 1 → first chip, 2 → second… Multi-select
+     * chips toggle (the 5 s countdown restarts, so more can be added); single
+     * chips send. Bare digits only fire when the composer is empty (or focus is
+     * outside any field); Alt+digit always fires.
+     */
+    document.addEventListener('keydown', function (e) {
+      if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+      if (!/^[1-9]$/.test(e.key) && !/^Digit[1-9]$/.test(e.code || '')) return;
+      if (!section.isConnected || suggestionsEl.hidden || pending) return;
+      var digit = /^[1-9]$/.test(e.key) ? e.key : String(e.code).slice(5);
+      var tgt = e.target;
+      var inField =
+        tgt &&
+        (/^(INPUT|TEXTAREA|SELECT)$/.test(tgt.tagName) || tgt.isContentEditable);
+      if (inField && !e.altKey) {
+        if (tgt !== input || (input.value || '').length) return;
+      }
+      var chips = suggestionsEl.querySelectorAll('.agent-suggestion-chip');
+      var chip = chips[Number(digit) - 1];
+      if (!chip || chip.disabled) return;
+      e.preventDefault();
+      onSuggestionChip(
+        String(chip.getAttribute('data-suggestion') || chip.textContent || '').trim(),
+        chip
+      );
+    });
 
     function onSend() {
       var typed = (input.value || '').trim();
