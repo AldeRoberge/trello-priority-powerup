@@ -32,3 +32,13 @@ The user runs Windows PowerShell 5.1, usually from the repo root. Every command 
 - If the command has to run inside a folder that has no `--prefix`/`-C` equivalent, give two separate blocks (`Set-Location ...`, then the command).
 - Before sending a command, check that it is the exact one needed (right script name, right folder) instead of a guess; if I add an npm script for it, give `npm run <script>`.
 - Deploying the Worker is `npm --prefix workers/trello-sheet-sync run deploy`.
+
+## Notify the user when a push is live
+
+Every push to `main` deploys to GitHub Pages through `.github/workflows/static.yml` (about 20-30 s). The changes are only live once that run succeeds, so after **every** `git push` to `main`, without being asked:
+
+1. Find the run for the pushed commit: `gh run list --branch main --limit 5 --json databaseId,headSha,status` and pick the one whose `headSha` equals `git rev-parse HEAD` (retry after a few seconds if it has not appeared yet).
+2. Wait for it: `gh run watch <databaseId> --exit-status` (run it in the background if there is other work to do).
+3. Send a `PushNotification` (load it with ToolSearch `select:PushNotification` if its schema is not loaded): "Live: <commit subject>" on success, or "Deploy failed: <commit subject>" with the failing step (`gh run view <id> --log-failed`) on failure. Also say it in the final reply.
+
+This is a rule for me, not a settings hook: hooks only run shell commands and cannot send the notification. Skip it only if `gh` is unavailable, and say so.
