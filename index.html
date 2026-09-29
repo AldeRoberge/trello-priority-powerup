@@ -6,6 +6,7 @@
   <title>Trello Cerveau</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./components/shared/brand.js"></script>
+  <script src="./components/shared/setup-guide.js"></script>
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/version.js"></script>
   <script src="./components/shared/debug-log.js"></script>
@@ -46,22 +47,76 @@
     <main class="tp-guide" id="setupGuide">
       <h2>Guide d’installation</h2>
       <p class="tp-guide-intro">
-        Trello Cerveau n’est pas (encore) dans le répertoire officiel des Power-Ups : vous l’ajoutez
-        à votre compte en quelques minutes en créant un Power-Up « personnalisé » qui pointe vers ce site.
+        <strong data-bind="appName">Trello Cerveau</strong> n’est pas (encore) dans le répertoire officiel des Power-Ups : vous l’ajoutez
+        à votre compte en quelques minutes en créant un Power-Up « personnalisé » qui pointe vers un site
+        GitHub Pages. Personnalisez les noms ci-dessous : les étapes, les liens et le script s’adaptent.
       </p>
 
+      <section class="tp-guide-config" aria-labelledby="setupConfigTitle">
+        <h3 id="setupConfigTitle">Votre installation</h3>
+        <div class="tp-guide-fields">
+          <label>Nom de l’application
+            <input type="text" id="setup_appName" autocomplete="off" spellcheck="false" />
+          </label>
+          <label>Compte GitHub
+            <input type="text" id="setup_owner" autocomplete="off" spellcheck="false" />
+          </label>
+          <label>Nom du dépôt
+            <input type="text" id="setup_repo" autocomplete="off" spellcheck="false" />
+          </label>
+          <label>Nom d’auteur
+            <input type="text" id="setup_author" autocomplete="off" spellcheck="false" />
+          </label>
+          <label class="tp-guide-field-wide">Clé d’API Trello <span class="tp-guide-tag">optionnel</span>
+            <input type="text" id="setup_appKey" autocomplete="off" spellcheck="false" />
+          </label>
+        </div>
+        <p class="tp-guide-derived">
+          Dépôt : <a data-href-path="" target="_blank" rel="noopener"><code data-bind="repoUrl"></code></a><br />
+          Site : <code data-bind="pagesUrl"></code>
+        </p>
+        <button type="button" id="setupReset" class="tp-guide-link-btn">Réinitialiser</button>
+      </section>
+
       <ol class="tp-guide-steps">
+        <li class="tp-guide-step">
+          <h3>Créer votre copie du code <span class="tp-guide-tag">automatisable</span></h3>
+          <p>
+            Ce script crée le dépôt <code data-bind="repo"></code> sur votre compte GitHub, y met le nom
+            <strong data-bind="appName"></strong>, active GitHub Pages, attend la mise en ligne, puis vous guide
+            dans Trello (créer le Power-Up lui-même ne peut pas être scripté). Il nécessite
+            <a href="https://cli.github.com/" target="_blank" rel="noopener">GitHub CLI</a> et Git.
+          </p>
+          <div class="tp-guide-tabs" role="tablist">
+            <button type="button" role="tab" data-setup-tab="setupPanelPs" aria-selected="true">PowerShell (Windows)</button>
+            <button type="button" role="tab" data-setup-tab="setupPanelSh" aria-selected="false">Bash (macOS / Linux)</button>
+          </div>
+          <div class="tp-guide-copy tp-guide-copy-block" id="setupPanelPs">
+            <pre><code id="setupCmdPs"></code></pre>
+            <button type="button" data-copy="setupCmdPs">Copier</button>
+          </div>
+          <div class="tp-guide-copy tp-guide-copy-block" id="setupPanelSh" hidden>
+            <pre><code id="setupCmdSh"></code></pre>
+            <button type="button" data-copy="setupCmdSh">Copier</button>
+          </div>
+          <p class="tp-guide-note">
+            Vous préférez tout faire à la main ? Sautez cette étape : forkez
+            <a href="https://github.com/AldeRoberge/trello-priority-powerup" target="_blank" rel="noopener">le dépôt d’origine</a>,
+            activez Pages (source : GitHub Actions), puis suivez les étapes suivantes.
+          </p>
+        </li>
+
         <li class="tp-guide-step">
           <h3>Créer le Power-Up dans Trello</h3>
           <ol>
             <li>Ouvrez <a href="https://trello.com/power-ups/admin" target="_blank" rel="noopener">trello.com/power-ups/admin</a> (connecté à votre compte Trello).</li>
             <li>Cliquez sur <strong>Create new Power-Up</strong>.</li>
-            <li>Nom : <strong>Trello Cerveau</strong> (ou celui de votre choix). Choisissez votre espace de travail (workspace), renseignez un courriel de contact et un nom d’auteur.</li>
+            <li>Nom : <strong data-bind="appName">Trello Cerveau</strong>. Choisissez votre espace de travail (workspace), renseignez un courriel de contact et un nom d’auteur.</li>
             <li>Dans <strong>Iframe connector URL</strong>, collez l’adresse ci-dessous :</li>
           </ol>
           <div class="tp-guide-copy">
-            <code id="connectorUrl">https://alderoberge.github.io/trello-priority-powerup/index.html</code>
-            <button type="button" id="copyConnectorUrl">Copier</button>
+            <code id="connectorUrl" data-bind="connectorUrl">https://alderoberge.github.io/trello-priority-powerup/index.html</code>
+            <button type="button" data-copy="connectorUrl">Copier</button>
           </div>
           <p>Créez ensuite le Power-Up.</p>
         </li>
@@ -85,7 +140,7 @@
           <ol>
             <li>Ouvrez le tableau Trello où vous voulez l’utiliser.</li>
             <li>Menu du tableau → <strong>Power-Ups</strong> → <strong>Ajouter des Power-Ups</strong> → onglet <strong>Custom</strong>.</li>
-            <li>Trouvez <strong>Trello Cerveau</strong> et cliquez sur <strong>Ajouter</strong>. Une fenêtre de bienvenue s’affiche.</li>
+            <li>Trouvez <strong data-bind="appName">Trello Cerveau</strong> et cliquez sur <strong>Ajouter</strong>. Une fenêtre de bienvenue s’affiche.</li>
           </ol>
           <p class="tp-guide-note">
             Si des fonctions manquent (badge, entrée « Priorité » dans <em>Trier par…</em>), retirez le Power-Up
@@ -121,18 +176,18 @@
           <ul>
             <li>
               <strong>Tri automatique</strong> : réordonne la carte dès que sa priorité change. Nécessite votre propre copie
-              du dépôt avec <code>appKey</code> dans <code>rest-config.js</code>, l’onglet <strong>API Key</strong> du Power-Up
+              du dépôt avec votre <code>appKey</code> dans <code>rest-config.js</code>, l’onglet <strong>API Key</strong> du Power-Up
               (avec votre domaine dans <em>Allowed origins</em>), puis <strong>Autoriser Trello</strong> dans les paramètres.
             </li>
             <li>
               <strong>Synchronisation Outlook</strong> :
-              <a href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/outlook-entra-setup.md" target="_blank" rel="noopener">Entra</a>,
-              <a href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/outlook-power-automate.md" target="_blank" rel="noopener">Power Automate</a> ou
-              <a href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/outlook-ics-export.md" target="_blank" rel="noopener">export .ics</a>.
+              <a data-href-path="docs/outlook-entra-setup.md" href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/outlook-entra-setup.md" target="_blank" rel="noopener">Entra</a>,
+              <a data-href-path="docs/outlook-power-automate.md" href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/outlook-power-automate.md" target="_blank" rel="noopener">Power Automate</a> ou
+              <a data-href-path="docs/outlook-ics-export.md" href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/outlook-ics-export.md" target="_blank" rel="noopener">export .ics</a>.
             </li>
             <li>
               <strong>Google Sheets</strong> :
-              <a href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/google-sheets-sync.md" target="_blank" rel="noopener">guide de synchronisation</a>.
+              <a data-href-path="docs/google-sheets-sync.md" href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/google-sheets-sync.md" target="_blank" rel="noopener">guide de synchronisation</a>.
             </li>
           </ul>
         </li>
@@ -149,7 +204,7 @@
       </details>
 
       <p class="tp-guide-footer">
-        <a href="https://github.com/AldeRoberge/trello-priority-powerup" target="_blank" rel="noopener">Code source sur GitHub</a>
+        <a data-href-path="" href="https://github.com/AldeRoberge/trello-priority-powerup" target="_blank" rel="noopener">Code source sur GitHub</a>
       </p>
     </main>
   </div>
@@ -168,21 +223,9 @@
     initLanding();
   }
 
-  (function initCopyButton() {
-    var btn = document.getElementById('copyConnectorUrl');
-    var code = document.getElementById('connectorUrl');
-    if (!btn || !code) return;
-    btn.addEventListener('click', function () {
-      var text = code.textContent.trim();
-      var done = function () {
-        btn.textContent = 'Copié ✓';
-        setTimeout(function () { btn.textContent = 'Copier'; }, 1800);
-      };
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(done, function () {});
-      }
-    });
-  })();
+  if (!IN_TRELLO && window.SetupGuide) {
+    SetupGuide.init(document, window, window.PriorityBrand && PriorityBrand.getAppName());
+  }
 
   function renderVersion(builtAt) {
     document.getElementById('versionRelative').textContent = BuildVersion.updatedLabel(builtAt);

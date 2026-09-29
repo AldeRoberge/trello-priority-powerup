@@ -193,3 +193,125 @@
   color: var(--tp-text-muted);
   text-align: center;
 }
+
+/* Personnalisation (nom, dépôt) + commandes du script d'installation. */
+.tp-guide-config {
+  background: var(--tp-surface);
+  border: 1px solid var(--tp-border);
+  border-left: 3px solid var(--tp-primary);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: var(--tp-shadow);
+}
+
+.tp-guide-config h3 {
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+
+.tp-guide-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px 12px;
+}
+
+.tp-guide-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--tp-text-subtle);
+}
+
+.tp-guide-field-wide {
+  grid-column: 1 / -1;
+}
+
+.tp-guide-fields input {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--tp-surface-subtle);
+  color: var(--tp-text);
+  box-shadow: inset 0 0 0 1px var(--tp-border);
+}
+
+.tp-guide-fields input:focus {
+  outline: 2px solid var(--tp-primary);
+  outline-offset: 0;
+}
+
+.tp-guide-derived {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--tp-text-subtle);
+}
+
+.tp-guide-link-btn {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--tp-link);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.tp-guide-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 10px 0 6px;
+}
+
+.tp-guide-tabs button {
+  cursor: pointer;
+  border: 0;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  background: transparent;
+  color: var(--tp-text-subtle);
+}
+
+.tp-guide-tabs button[aria-selected="true"] {
+  background: var(--tp-surface-subtle);
+  color: var(--tp-text);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--tp-border);
+}
+
+.tp-guide-copy-block {
+  align-items: flex-start;
+}
+
+.tp-guide-copy-block[hidden] {
+  display: none;
+}
+
+.tp-guide-copy-block pre {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-x: auto;
+}
+
+.tp-guide-copy-block pre code {
+  display: block;
+  white-space: pre;
+  word-break: normal;
+  padding: 8px 10px;
+}
+
+.tp-guide-fields label .tp-guide-tag {
+  align-self: flex-start;
+  margin: 0;
+}
