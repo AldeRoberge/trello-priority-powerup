@@ -688,3 +688,119 @@ body.tb-resizing {
 .tb-cell:not(.is-ro):not(.tb-cell--pill):not(.tb-cell--pop) {
   cursor: text;
 }
+
+/* ── Assistant dock: compact chat (transcript scrolls, composer pinned at the bottom) ── */
+.tb-dock .tb-dock-body .variant-chat-section--standalone .field--chat {
+  max-width: none;
+  padding: 6px 12px 8px;
+  gap: 4px;
+}
+.tb-dock .tb-dock-body .agent-standalone-head {
+  min-height: 0;
+}
+.tb-dock .tb-dock-body .agent-standalone-heading {
+  padding: 0;
+  font-size: 12px;
+}
+/* Order: transcript · quick replies · composer — nothing else competes for the height. */
+.tb-dock .tb-dock-body .agent-chat-panel {
+  gap: 6px;
+}
+.tb-dock .tb-dock-body .agent-messages {
+  order: 1;
+  padding: 4px 4px 4px 6px;
+}
+.tb-dock .tb-dock-body .agent-empty,
+.tb-dock .tb-dock-body .agent-followups,
+.tb-dock .tb-dock-body .agent-prompts,
+.tb-dock .tb-dock-body .agent-apply-suggestions,
+.tb-dock .tb-dock-body .agent-error {
+  order: 2;
+  flex-shrink: 0;
+}
+.tb-dock .tb-dock-body .agent-suggestions {
+  order: 90;
+}
+.tb-dock .tb-dock-body .agent-composer {
+  order: 91;
+}
+.tb-dock .tb-dock-body .agent-interview-bar {
+  order: 92;
+}
+/* Hidden to save space: power picker (still in the composer's right-click menu), stats, debug. */
+.tb-dock .tb-dock-body .agent-composer-foot,
+.tb-dock .tb-dock-body .agent-chat-info,
+.tb-dock .tb-dock-body .agent-debug-panel {
+  display: none !important;
+}
+/* Quick suggestions: one slim scrollable row of small pills */
+.tb-dock .tb-dock-body .agent-suggestions {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  margin: 0;
+  padding: 0 0 2px;
+  gap: 6px;
+  scrollbar-width: thin;
+}
+.tb-dock .tb-dock-body .agent-suggestion-chip {
+  flex: 0 0 auto;
+  width: auto;
+  padding: 3px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+  border-radius: 999px;
+}
+.tb-dock .tb-dock-body .agent-suggestion-chip::before,
+.tb-dock .tb-dock-body .agent-suggestion-chip::after,
+.tb-dock .tb-dock-body .agent-suggestion-num {
+  display: none;
+}
+/* Composer: one compact row, icon-only send */
+.tb-dock .tb-dock-body .agent-composer {
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 6px;
+}
+.tb-dock .tb-dock-body .agent-composer .tp-tab-complete-wrap,
+.tb-dock .tb-dock-body .agent-composer > .agent-composer-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tb-dock .tb-dock-body .agent-composer-input {
+  min-height: 40px;
+  max-height: 120px;
+  padding: 8px 10px;
+}
+.tb-dock .tb-dock-body .agent-composer .tp-tab-complete-ghost {
+  padding: 8px 10px;
+}
+.tb-dock .tb-dock-body .agent-send-btn {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  justify-content: center;
+}
+.tb-dock .tb-dock-body .agent-send-btn-label {
+  display: none;
+}
+.tb-dock .tb-dock-body .agent-composer-input {
+  height: 40px;
+  resize: none;
+  field-sizing: content;
+}
+/* The dock bar already says "Assistant": keep only the settings gear, floated top-right. */
+.tb-dock .tb-dock-body {
+  position: relative;
+}
+.tb-dock .tb-dock-body .agent-standalone-head {
+  position: absolute;
+  top: 4px;
+  right: 10px;
+  z-index: 3;
+  width: auto;
+  padding: 0;
+}
+.tb-dock .tb-dock-body .agent-standalone-heading {
+  display: none;
+}
