@@ -6,6 +6,7 @@
   <title>Trello Cerveau</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./components/shared/brand.js"></script>
+  <script src="./components/shared/setup-i18n.js"></script>
   <script src="./components/shared/setup-guide.js"></script>
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/version.js"></script>
@@ -28,6 +29,9 @@
   <script src="./components/agent/agent.js"></script>
   <script src="./components/agent/agent-memory.js"></script>
   <script src="./components/profile/user-profile.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&display=swap" />
   <link rel="stylesheet" href="./components/shared/trello-theme.css" />
   <link rel="stylesheet" href="./components/shared/landing-guide.css" />
   <link rel="icon" type="image/png" href="./assets/icon.png" />
@@ -38,92 +42,107 @@
       <img id="brandLogo" class="tp-landing-logo" src="./assets/icon.png" alt="Trello Cerveau" width="72" height="72" />
       <h1 class="tp-title" id="brandTitle">Trello Cerveau</h1>
       <p class="tp-subtitle" id="brandTagline">Power-Up Trello</p>
-      <p class="tp-version-label">Version déployée</p>
+      <p class="tp-version-label" data-i18n="versionLabel">Version déployée</p>
 
       <p class="tp-version-relative" id="versionRelative">Chargement…</p>
       <p class="tp-version-utc" id="versionUtc"></p>
     </div>
 
     <main class="tp-guide" id="setupGuide">
-      <h2>Guide d’installation</h2>
-      <p class="tp-guide-intro">
-        <strong data-bind="appName">Trello Cerveau</strong> n’est pas (encore) dans le répertoire officiel des Power-Ups : vous l’ajoutez
-        à votre compte en quelques minutes en créant un Power-Up « personnalisé » qui pointe vers un site
-        GitHub Pages. Personnalisez les noms ci-dessous : les étapes, les liens et le script s’adaptent.
-      </p>
+      <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <defs>
+          <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+          <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+          <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+          <symbol id="i-tag" viewBox="0 0 24 24"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
+          <symbol id="i-github" viewBox="0 0 24 24"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></symbol>
+          <symbol id="i-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+          <symbol id="i-key" viewBox="0 0 24 24"><path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/></symbol>
+          <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+        </defs>
+      </svg>
 
-      <section class="tp-guide-config" aria-labelledby="setupConfigTitle">
-        <h3 id="setupConfigTitle">Votre installation</h3>
-        <div class="tp-guide-fields">
-          <label>Nom de l’application
-            <input type="text" id="setup_appName" autocomplete="off" spellcheck="false" />
+      <header class="tp-guide-head">
+        <h2 data-i18n="title">Guide d’installation</h2>
+        <div class="tp-lang" role="group" aria-label="Language">
+          <svg class="ic" aria-hidden="true"><use href="#i-globe"/></svg>
+          <button type="button" class="tp-lang-btn" data-lang="fr" aria-pressed="false">FR</button>
+          <button type="button" class="tp-lang-btn" data-lang="en" aria-pressed="false">EN</button>
+        </div>
+      </header>
+      <p class="tp-guide-intro" data-i18n="intro"></p>
+
+      <section class="tp-cfg" aria-labelledby="setupConfigTitle">
+        <div class="tp-cfg-head">
+          <h3 id="setupConfigTitle" data-i18n="cfgTitle">Votre installation</h3>
+          <button type="button" id="setupReset" class="tp-btn tp-btn-ghost" data-i18n-title="reset" title="Réinitialiser" aria-label="Réinitialiser">
+            <svg class="ic" aria-hidden="true"><use href="#i-reset"/></svg>
+          </button>
+        </div>
+        <div class="tp-cfg-chips">
+          <label class="tp-chip tp-chip-name" data-i18n-title="cfgAppName">
+            <svg class="ic" aria-hidden="true"><use href="#i-tag"/></svg>
+            <input type="text" id="setup_appName" autocomplete="off" spellcheck="false" data-i18n-aria="cfgAppName" />
           </label>
-          <label>Compte GitHub
-            <input type="text" id="setup_owner" autocomplete="off" spellcheck="false" />
+          <label class="tp-chip" data-i18n-title="cfgOwner">
+            <svg class="ic" aria-hidden="true"><use href="#i-github"/></svg>
+            <input type="text" id="setup_owner" autocomplete="off" spellcheck="false" data-i18n-aria="cfgOwner" />
+            <span class="tp-chip-sep" aria-hidden="true">/</span>
+            <input type="text" id="setup_repo" autocomplete="off" spellcheck="false" data-i18n-aria="cfgRepo" title="" />
           </label>
-          <label>Nom du dépôt
-            <input type="text" id="setup_repo" autocomplete="off" spellcheck="false" />
+          <label class="tp-chip" data-i18n-title="cfgAuthor">
+            <svg class="ic" aria-hidden="true"><use href="#i-user"/></svg>
+            <input type="text" id="setup_author" autocomplete="off" spellcheck="false" data-i18n-aria="cfgAuthor" />
           </label>
-          <label>Nom d’auteur
-            <input type="text" id="setup_author" autocomplete="off" spellcheck="false" />
-          </label>
-          <label class="tp-guide-field-wide">Clé d’API Trello <span class="tp-guide-tag">optionnel</span>
-            <input type="text" id="setup_appKey" autocomplete="off" spellcheck="false" />
+          <label class="tp-chip" data-i18n-title="cfgAppKey">
+            <svg class="ic" aria-hidden="true"><use href="#i-key"/></svg>
+            <input type="text" id="setup_appKey" autocomplete="off" spellcheck="false" data-i18n-aria="cfgAppKey" />
           </label>
         </div>
-        <p class="tp-guide-derived">
-          Dépôt : <a data-href-path="" target="_blank" rel="noopener"><code data-bind="repoUrl"></code></a><br />
-          Site : <code data-bind="pagesUrl"></code>
+        <p class="tp-cfg-site">
+          <svg class="ic" aria-hidden="true"><use href="#i-globe"/></svg>
+          <a data-href-bind="pagesUrl" target="_blank" rel="noopener" data-bind="pagesUrl"></a>
         </p>
-        <button type="button" id="setupReset" class="tp-guide-link-btn">Réinitialiser</button>
+        <p class="tp-cfg-hint" data-i18n="cfgHint"></p>
       </section>
 
       <ol class="tp-guide-steps">
         <li class="tp-guide-step">
-          <h3>Créer votre copie du code <span class="tp-guide-tag">automatisable</span></h3>
-          <p>
-            Ce script crée le dépôt <code data-bind="repo"></code> sur votre compte GitHub, y met le nom
-            <strong data-bind="appName"></strong>, active GitHub Pages, attend la mise en ligne, puis vous guide
-            dans Trello (créer le Power-Up lui-même ne peut pas être scripté). Il nécessite
-            <a href="https://cli.github.com/" target="_blank" rel="noopener">GitHub CLI</a> et Git.
-          </p>
-          <div class="tp-guide-tabs" role="tablist">
-            <button type="button" role="tab" data-setup-tab="setupPanelPs" aria-selected="true">PowerShell (Windows)</button>
-            <button type="button" role="tab" data-setup-tab="setupPanelSh" aria-selected="false">Bash (macOS / Linux)</button>
+          <h3><span data-i18n="s1Title"></span> <span class="tp-guide-tag" data-i18n="automatable"></span></h3>
+          <p data-i18n="s1Body"></p>
+          <div class="tp-tabs" role="tablist">
+            <button type="button" role="tab" data-setup-tab="setupPanelPs" aria-selected="true" data-i18n="tabPs"></button>
+            <button type="button" role="tab" data-setup-tab="setupPanelSh" aria-selected="false" data-i18n="tabSh"></button>
           </div>
-          <div class="tp-guide-copy tp-guide-copy-block" id="setupPanelPs">
+          <div class="tp-codebox" id="setupPanelPs">
             <pre><code id="setupCmdPs"></code></pre>
-            <button type="button" data-copy="setupCmdPs">Copier</button>
+            <button type="button" class="tp-btn" data-copy="setupCmdPs"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg><span data-i18n="copy"></span></button>
           </div>
-          <div class="tp-guide-copy tp-guide-copy-block" id="setupPanelSh" hidden>
+          <div class="tp-codebox" id="setupPanelSh" hidden>
             <pre><code id="setupCmdSh"></code></pre>
-            <button type="button" data-copy="setupCmdSh">Copier</button>
+            <button type="button" class="tp-btn" data-copy="setupCmdSh"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg><span data-i18n="copy"></span></button>
           </div>
-          <p class="tp-guide-note">
-            Vous préférez tout faire à la main ? Sautez cette étape : forkez
-            <a href="https://github.com/AldeRoberge/trello-priority-powerup" target="_blank" rel="noopener">le dépôt d’origine</a>,
-            activez Pages (source : GitHub Actions), puis suivez les étapes suivantes.
-          </p>
+          <p class="tp-guide-note" data-i18n="s1Note"></p>
         </li>
 
         <li class="tp-guide-step">
-          <h3>Créer le Power-Up dans Trello</h3>
+          <h3 data-i18n="s2Title"></h3>
           <ol>
-            <li>Ouvrez <a href="https://trello.com/power-ups/admin" target="_blank" rel="noopener">trello.com/power-ups/admin</a> (connecté à votre compte Trello).</li>
-            <li>Cliquez sur <strong>Create new Power-Up</strong>.</li>
-            <li>Nom : <strong data-bind="appName">Trello Cerveau</strong>. Choisissez votre espace de travail (workspace), renseignez un courriel de contact et un nom d’auteur.</li>
-            <li>Dans <strong>Iframe connector URL</strong>, collez l’adresse ci-dessous :</li>
+            <li data-i18n="s2a"></li>
+            <li data-i18n="s2b"></li>
+            <li data-i18n="s2c"></li>
+            <li data-i18n="s2d"></li>
           </ol>
-          <div class="tp-guide-copy">
-            <code id="connectorUrl" data-bind="connectorUrl">https://alderoberge.github.io/trello-priority-powerup/index.html</code>
-            <button type="button" data-copy="connectorUrl">Copier</button>
+          <div class="tp-codebox">
+            <pre><code id="connectorUrl" data-bind="connectorUrl"></code></pre>
+            <button type="button" class="tp-btn" data-copy="connectorUrl"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg><span data-i18n="copy"></span></button>
           </div>
-          <p>Créez ensuite le Power-Up.</p>
+          <p data-i18n="s2e"></p>
         </li>
 
         <li class="tp-guide-step">
-          <h3>Activer les six capacités</h3>
-          <p>Dans l’onglet <strong>Capabilities</strong>, cochez <strong>uniquement</strong> :</p>
+          <h3 data-i18n="s3Title"></h3>
+          <p data-i18n="s3a"></p>
           <ul class="tp-guide-caps">
             <li><code>card-badges</code></li>
             <li><code>card-detail-badges</code></li>
@@ -132,80 +151,57 @@
             <li><code>list-sorters</code></li>
             <li><code>on-enable</code></li>
           </ul>
-          <p>Ne cochez pas <code>card-buttons</code>, <code>list-actions</code> ni <code>on-disable</code>. Enregistrez.</p>
+          <p data-i18n="s3b"></p>
         </li>
 
         <li class="tp-guide-step">
-          <h3>Ajouter le Power-Up à un tableau</h3>
+          <h3 data-i18n="s4Title"></h3>
           <ol>
-            <li>Ouvrez le tableau Trello où vous voulez l’utiliser.</li>
-            <li>Menu du tableau → <strong>Power-Ups</strong> → <strong>Ajouter des Power-Ups</strong> → onglet <strong>Custom</strong>.</li>
-            <li>Trouvez <strong data-bind="appName">Trello Cerveau</strong> et cliquez sur <strong>Ajouter</strong>. Une fenêtre de bienvenue s’affiche.</li>
+            <li data-i18n="s4a"></li>
+            <li data-i18n="s4b"></li>
+            <li data-i18n="s4c"></li>
           </ol>
-          <p class="tp-guide-note">
-            Si des fonctions manquent (badge, entrée « Priorité » dans <em>Trier par…</em>), retirez le Power-Up
-            du tableau, rechargez la page Trello puis ajoutez-le de nouveau.
-          </p>
+          <p class="tp-guide-note" data-i18n="s4note"></p>
         </li>
 
         <li class="tp-guide-step">
-          <h3>Définir une première priorité</h3>
-          <p>
-            Ouvrez une carte : la fenêtre <strong>Cerveau</strong> s’ouvre. Réglez l’<strong>urgence</strong>,
-            l’<strong>impact</strong> et la <strong>facilité</strong> avec les curseurs (ou touchez un palier sur la
-            barre de chaleur). Le score et le palier (ex. <code>7.9 · Urgent</code>) apparaissent en badge sur la carte.
-          </p>
-          <p>
-            Pour trier une colonne : menu <code>…</code> de la liste → <strong>Trier par…</strong> → <strong>Priorité</strong>.
-          </p>
+          <h3 data-i18n="s5Title"></h3>
+          <p data-i18n="s5a"></p>
+          <p data-i18n="s5b"></p>
         </li>
 
         <li class="tp-guide-step">
-          <h3>Personnaliser <span class="tp-guide-tag">optionnel</span></h3>
-          <p>Le bouton <strong>Paramètres du Cerveau</strong> (menu du tableau) donne accès à :</p>
+          <h3><span data-i18n="s6Title"></span> <span class="tp-guide-tag" data-i18n="optional"></span></h3>
+          <p data-i18n="s6a"></p>
           <ul>
-            <li><strong>Mon profil</strong> : langue, ton de l’assistant, sections visibles dans l’éditeur.</li>
-            <li><strong>Assistant IA</strong> : compatible OpenAI et OpenRouter — vous fournissez votre propre clé, stockée en privé sur votre compte Trello.</li>
-            <li><strong>Statuts</strong> : associer vos listes à des catégories (à faire, en cours, terminé…).</li>
-            <li><strong>Gantt</strong> (bêta) : vue chronologique du tableau à partir des dates de début et d’échéance.</li>
+            <li data-i18n="s6b"></li>
+            <li data-i18n="s6c"></li>
+            <li data-i18n="s6d"></li>
+            <li data-i18n="s6e"></li>
           </ul>
         </li>
 
         <li class="tp-guide-step">
-          <h3>Fonctions avancées <span class="tp-guide-tag">optionnel</span></h3>
+          <h3><span data-i18n="s7Title"></span> <span class="tp-guide-tag" data-i18n="optional"></span></h3>
           <ul>
-            <li>
-              <strong>Tri automatique</strong> : réordonne la carte dès que sa priorité change. Nécessite votre propre copie
-              du dépôt avec votre <code>appKey</code> dans <code>rest-config.js</code>, l’onglet <strong>API Key</strong> du Power-Up
-              (avec votre domaine dans <em>Allowed origins</em>), puis <strong>Autoriser Trello</strong> dans les paramètres.
-            </li>
-            <li>
-              <strong>Synchronisation Outlook</strong> :
-              <a data-href-path="docs/outlook-entra-setup.md" href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/outlook-entra-setup.md" target="_blank" rel="noopener">Entra</a>,
-              <a data-href-path="docs/outlook-power-automate.md" href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/outlook-power-automate.md" target="_blank" rel="noopener">Power Automate</a> ou
-              <a data-href-path="docs/outlook-ics-export.md" href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/outlook-ics-export.md" target="_blank" rel="noopener">export .ics</a>.
-            </li>
-            <li>
-              <strong>Google Sheets</strong> :
-              <a data-href-path="docs/sheet-sync.md" href="https://github.com/AldeRoberge/trello-priority-powerup/blob/main/docs/sheet-sync.md" target="_blank" rel="noopener">guide de synchronisation</a>.
-            </li>
+            <li data-i18n="s7a"></li>
+            <li data-i18n="s7b"></li>
+            <li data-i18n="s7c"></li>
           </ul>
         </li>
       </ol>
 
       <details>
-        <summary>Dépannage</summary>
+        <summary data-i18n="tsTitle">Dépannage</summary>
         <ul>
-          <li>Le Power-Up n’apparaît pas dans <strong>Custom</strong> : vérifiez qu’il est créé dans le même espace de travail que le tableau.</li>
-          <li>Trello affiche une erreur au chargement : l’URL du connecteur doit se terminer par <code>/index.html</code> et s’ouvrir dans le navigateur.</li>
-          <li>Badge ou bouton absent : vérifiez les six capacités, puis retirez et réajoutez le Power-Up.</li>
-          <li>« Priorité » absent de <em>Trier par…</em> : ouvrez le menu <code>…</code> de la <strong>liste</strong> (pas du tableau) et confirmez que <code>list-sorters</code> est coché.</li>
+          <li data-i18n="ts1"></li>
+          <li data-i18n="ts2"></li>
+          <li data-i18n="ts3"></li>
+          <li data-i18n="ts4"></li>
         </ul>
       </details>
 
-      <p class="tp-guide-footer">
-        <a data-href-path="" href="https://github.com/AldeRoberge/trello-priority-powerup" target="_blank" rel="noopener">Code source sur GitHub</a>
-      </p>
+      <p class="tp-guide-footer" data-i18n="footer"></p>
     </main>
   </div>
 

@@ -6,6 +6,7 @@
 
   var UPSTREAM = { owner: 'AldeRoberge', repo: 'trello-priority-powerup', branch: 'main' };
   var STORAGE_KEY = 'tp.setupGuide.v1';
+  var LANG_KEY = 'tp.setupGuide.lang';
   var FIELDS = ['appName', 'owner', 'repo', 'author', 'appKey'];
 
   function str(v) {
@@ -113,6 +114,10 @@
       var key = el.getAttribute('data-bind');
       if (key in values) el.textContent = values[key];
     });
+    Array.prototype.forEach.call(doc.querySelectorAll('[data-href-bind]'), function (el) {
+      var k = el.getAttribute('data-href-bind');
+      if (k in values) el.href = values[k];
+    });
     Array.prototype.forEach.call(doc.querySelectorAll('[data-href-path]'), function (el) {
       var p = el.getAttribute('data-href-path');
       el.href = p ? u.repoUrl + '/blob/' + UPSTREAM.branch + '/' + p : u.repoUrl;
@@ -140,20 +145,59 @@
     }
   }
 
-  function copyText(win, text, btn) {
-    var label = btn.getAttribute('data-label') || btn.textContent;
-    btn.setAttribute('data-label', label);
+  function copyText(win, doc, text, btn, t) {
+    var use = btn.querySelector('use');
+    var label = btn.querySelector('span');
     var done = function () {
-      btn.textContent = 'Copié ✓';
-      setTimeout(function () { btn.textContent = label; }, 1800);
+      if (use) use.setAttribute('href', '#i-check');
+      if (label) label.textContent = t('copied');
+      btn.classList.add('is-done');
+      setTimeout(function () {
+        if (use) use.setAttribute('href', '#i-copy');
+        if (label) label.textContent = t('copy');
+        btn.classList.remove('is-done');
+      }, 1600);
     };
     if (win.navigator && win.navigator.clipboard && win.navigator.clipboard.writeText) {
       win.navigator.clipboard.writeText(text).then(done, function () {});
     }
   }
 
+  /** Static-HTML translations: data-i18n (innerHTML), data-i18n-title, data-i18n-aria. */
+  function applyLang(doc, strings) {
+    Array.prototype.forEach.call(doc.querySelectorAll('[data-i18n]'), function (el) {
+      var v = strings[el.getAttribute('data-i18n')];
+      if (typeof v === 'string') el.innerHTML = v;
+    });
+    Array.prototype.forEach.call(doc.querySelectorAll('[data-i18n-title]'), function (el) {
+      var v = strings[el.getAttribute('data-i18n-title')];
+      if (typeof v === 'string') {
+        el.title = v;
+        if (el.tagName === 'BUTTON') el.setAttribute('aria-label', v);
+      }
+    });
+    Array.prototype.forEach.call(doc.querySelectorAll('[data-i18n-aria]'), function (el) {
+      var v = strings[el.getAttribute('data-i18n-aria')];
+      if (typeof v === 'string') el.setAttribute('aria-label', v);
+    });
+  }
+
+  /** Inputs read like inline text: they hug their content. */
+  function autosize(el) {
+    var n = (el.value || el.placeholder || '').length;
+    el.size = Math.max(3, n + 1);
+  }
+
   function init(doc, win, brandName) {
     var defaults = defaultsFromLocation(win.location, brandName);
+    var i18n = global.SetupI18n;
+    var lang = 'fr';
+    try { lang = win.localStorage.getItem(LANG_KEY) || ''; } catch (e) {}
+    if (lang !== 'fr' && lang !== 'en') lang = i18n ? i18n.detect(win.navigator) : 'fr';
+    var t = function (key) {
+      var d = (i18n && i18n.strings[lang]) || {};
+      return d[key] || key;
+    };
     var inputs = {};
     FIELDS.forEach(function (f) {
       inputs[f] = doc.getElementById('setup_' + f);
@@ -171,8 +215,7 @@
     FIELDS.forEach(function (f) {
       if (!inputs[f]) return;
       inputs[f].value = raw[f] || '';
-      inputs[f].placeholder =
-        f === 'author' ? defaults.owner : f === 'appKey' ? '(optionnel) 32 caractères hexadécimaux' : defaults[f] || '';
+      inputs[f].placeholder = f === 'author' ? defaults.owner : f === 'appKey' ? '••••••••' : defaults[f] || '';
     });
 
     function current() {
@@ -189,7 +232,22 @@
       var cfg = clean(r, defaults);
       if (inputs.author) inputs.author.placeholder = cfg.owner;
       applyBindings(doc, cfg);
+      FIELDS.forEach(function (f) { if (inputs[f]) autosize(inputs[f]); });
     }
+
+    function setLang(next) {
+      lang = next;
+      try { win.localStorage.setItem(LANG_KEY, lang); } catch (e) {}
+      doc.documentElement.lang = lang;
+      if (i18n) applyLang(doc, i18n.strings[lang]);
+      Array.prototype.forEach.call(doc.querySelectorAll('[data-lang]'), function (b) {
+        b.setAttribute('aria-pressed', b.getAttribute('data-lang') === lang ? 'true' : 'false');
+      });
+      refresh();
+    }
+    Array.prototype.forEach.call(doc.querySelectorAll('[data-lang]'), function (b) {
+      b.addEventListener('click', function () { setLang(b.getAttribute('data-lang')); });
+    });
 
     FIELDS.forEach(function (f) {
       if (inputs[f]) inputs[f].addEventListener('input', refresh);
@@ -208,7 +266,7 @@
     Array.prototype.forEach.call(doc.querySelectorAll('[data-copy]'), function (btn) {
       btn.addEventListener('click', function () {
         var target = doc.getElementById(btn.getAttribute('data-copy'));
-        if (target) copyText(win, target.textContent.trim(), btn);
+        if (target) copyText(win, doc, target.textContent.trim(), btn, t);
       });
     });
 
@@ -228,7 +286,7 @@
     var pick = doc.querySelector('[data-setup-tab="' + (isWin ? 'setupPanelPs' : 'setupPanelSh') + '"]');
     if (pick) pick.click();
 
-    refresh();
+    setLang(lang);
   }
 
   global.SetupGuide = {
