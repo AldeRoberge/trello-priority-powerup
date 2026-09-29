@@ -12184,23 +12184,53 @@
       placesPicker.replaceChildren();
       if (!slot) return;
 
-      var title = document.createElement('div');
-      title.className = 'info-places-picker-title';
-      title.textContent =
-        'Lieu \u00b7 ' + (PLACE_SLOT_LABELS[slot] || slot);
-      placesPicker.appendChild(title);
+      // Input + add button first (right where the user clicked), saved places below.
+      var create = document.createElement('div');
+      create.className = 'info-places-create';
+      var nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.className = 'info-places-create-input';
+      nameInput.placeholder = 'Nom du lieu';
+      nameInput.setAttribute('aria-label', 'Nom du nouveau lieu');
+      nameInput.maxLength = MAX_PLACE_NAME_LEN;
+      nameInput.autocomplete = 'off';
+      nameInput.addEventListener('click', function (event) {
+        event.stopPropagation();
+      });
+      nameInput.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          addPlaceFromPicker(slot);
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          setPlacesPickerOpen('');
+        }
+      });
+      var createBtn = document.createElement('button');
+      createBtn.type = 'button';
+      createBtn.className = 'info-places-create-btn';
+      createBtn.textContent = 'Ajouter';
+      createBtn.disabled = placesBusy;
+      createBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        addPlaceFromPicker(slot);
+      });
+      create.appendChild(nameInput);
+      create.appendChild(createBtn);
+      placesPicker.appendChild(create);
 
-      var catalog = getPlaceCatalog();
-      var list = document.createElement('div');
-      list.className = 'info-places-picker-list';
-      if (!catalog.length) {
-        var empty = document.createElement('p');
-        empty.className = 'info-places-picker-empty';
-        empty.textContent = 'Aucun lieu enregistr\u00e9.';
-        list.appendChild(empty);
-      } else {
+      var catalog = getPlaceCatalog().filter(function (entry) {
+        return entry && entry.id;
+      });
+      if (catalog.length) {
+        var title = document.createElement('div');
+        title.className = 'info-places-picker-title';
+        title.textContent = 'Lieux enregistrés';
+        placesPicker.appendChild(title);
+        var list = document.createElement('div');
+        list.className = 'info-places-picker-list';
         catalog.forEach(function (entry) {
-          if (!entry || !entry.id) return;
           var btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'info-places-picker-option';
@@ -12226,43 +12256,8 @@
           });
           list.appendChild(btn);
         });
+        placesPicker.appendChild(list);
       }
-      placesPicker.appendChild(list);
-
-      var create = document.createElement('div');
-      create.className = 'info-places-create';
-      var createTitle = document.createElement('div');
-      createTitle.className = 'info-places-create-title';
-      createTitle.textContent = 'Nouveau lieu';
-      var nameInput = document.createElement('input');
-      nameInput.type = 'text';
-      nameInput.className = 'info-places-create-input';
-      nameInput.placeholder = 'Nom du lieu';
-      nameInput.maxLength = MAX_PLACE_NAME_LEN;
-      nameInput.autocomplete = 'off';
-      nameInput.addEventListener('click', function (event) {
-        event.stopPropagation();
-      });
-      nameInput.addEventListener('keydown', function (event) {
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          addPlaceFromPicker(slot);
-        }
-      });
-      var createBtn = document.createElement('button');
-      createBtn.type = 'button';
-      createBtn.className = 'info-places-create-btn';
-      createBtn.textContent = 'Ajouter';
-      createBtn.disabled = placesBusy;
-      createBtn.addEventListener('click', function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        addPlaceFromPicker(slot);
-      });
-      create.appendChild(createTitle);
-      create.appendChild(nameInput);
-      create.appendChild(createBtn);
-      placesPicker.appendChild(create);
       setTimeout(function () {
         try {
           nameInput.focus();

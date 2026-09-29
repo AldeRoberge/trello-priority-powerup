@@ -200,3 +200,172 @@ html[data-color-mode='dark'] .tp-page--priority .agent-msg-bubble--offer {
   background: color-mix(in srgb, #1f7a68 10%, var(--tp-surface));
   box-shadow: none;
 }
+
+/* ── Input affordance: editable things look editable ──────────────── */
+
+html[data-color-mode='dark'] {
+  --tp-field-bg: #1d2125;
+  --tp-field-bg-hover: #161a1d;
+  --tp-field-border: rgba(255, 255, 255, 0.18);
+  --tp-field-border-hover: rgba(255, 255, 255, 0.32);
+}
+
+html[data-color-mode='light'] {
+  --tp-field-bg: #f7f8f9;
+  --tp-field-bg-hover: #f1f2f4;
+  --tp-field-border: #091e4224;
+  --tp-field-border-hover: #091e4250;
+}
+
+.tp-page--priority .info-desc-preview,
+.tp-page--priority .info-desc-input,
+.tp-page--priority .info-places-create-input,
+.tp-page--priority .tp-tab-complete-wrap,
+.tp-page--priority .tp-tab-complete-wrap textarea,
+.tp-page--priority select,
+.tp-page--priority textarea.agent-input,
+.tp-page--priority input[type='text'],
+.tp-page--priority input[type='search'],
+.tp-page--priority input[type='number'] {
+  background: var(--tp-field-bg);
+  border: 1px solid var(--tp-field-border);
+  color: var(--tp-text);
+}
+
+/* the wrapper owns the border; do not double it on the inner textarea */
+.tp-page--priority .tp-tab-complete-wrap textarea {
+  border: none;
+  background: transparent;
+}
+
+.tp-page--priority .info-desc-preview:hover,
+.tp-page--priority .info-desc-input:hover,
+.tp-page--priority .info-places-create-input:hover,
+.tp-page--priority .tp-tab-complete-wrap:hover,
+.tp-page--priority select:hover,
+.tp-page--priority input[type='text']:hover {
+  background: var(--tp-field-bg-hover);
+  border-color: var(--tp-field-border-hover);
+}
+
+.tp-page--priority .info-desc-preview:focus-visible,
+.tp-page--priority .info-desc-input:focus,
+.tp-page--priority .info-places-create-input:focus,
+.tp-page--priority .tp-tab-complete-wrap:focus-within,
+.tp-page--priority select:focus,
+.tp-page--priority input[type='text']:focus {
+  background: var(--tp-field-bg);
+  border-color: var(--tp-primary);
+  box-shadow: 0 0 0 1px var(--tp-primary);
+  outline: none;
+}
+
+.tp-page--priority .info-desc-preview,
+.tp-page--priority .info-desc-input {
+  padding: 10px 12px;
+}
+
+/* Title: borderless until hovered (Trello card-back behaviour) */
+.tp-page--priority .info-title-input {
+  border: 1px solid transparent;
+  background: transparent;
+}
+
+.tp-page--priority .info-title-input:hover {
+  background: var(--tp-field-bg-hover);
+}
+
+.tp-page--priority .info-title-input:focus {
+  background: var(--tp-field-bg);
+  border-color: var(--tp-primary);
+  box-shadow: 0 0 0 1px var(--tp-primary);
+}
+
+/* Description toolbar joins the field visually */
+.tp-page--priority .info-desc-toolbar {
+  background: var(--tp-surface);
+  border: 1px solid var(--tp-field-border);
+}
+
+/* Assignee cards must read against the panel */
+.tp-page--priority .info-member {
+  background: var(--tp-field-bg);
+  border: 1px solid var(--tp-field-border);
+}
+
+/* ── Lieux: popover anchored to the + button, no layout shift ─────── */
+
+.tp-page--priority .info-places-picker-host {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  width: 300px;
+  max-width: calc(100vw - 64px);
+}
+
+.tp-page--priority .info-places-slot:last-child .info-places-picker-host {
+  left: auto;
+  right: 0;
+}
+
+.tp-page--priority .info-places-picker {
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--tp-r-panel);
+  border: 1px solid var(--tp-field-border-hover);
+  background: var(--tp-elev-3, var(--tp-surface));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+}
+
+/* input + add button on one line */
+.tp-page--priority .info-places-create {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.tp-page--priority .info-places-create-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  height: 32px;
+  border-radius: var(--tp-r-ctl);
+  font-size: 13px;
+}
+
+.tp-page--priority .info-places-create-btn {
+  flex: 0 0 auto;
+  align-self: auto;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--tp-r-ctl);
+  font-size: 13px;
+  background: var(--tp-primary);
+  color: var(--tp-primary-text);
+}
+
+.tp-page--priority .info-places-picker-title {
+  padding: 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--tp-text-muted);
+}
+
+.tp-page--priority .info-places-picker-list {
+  max-height: 176px;
+}
+
+.tp-page--priority .info-places-picker-option {
+  padding: 7px 8px;
+  border-radius: 6px;
+}
+
+.tp-page--priority .info-places-add-btn {
+  border-color: var(--tp-field-border-hover);
+}
