@@ -63,7 +63,7 @@
   </script>
   <script src="./components/goals/goals-trello.js?v=goals-1"></script>
   <script src="./components/goals/goals-ui.js?v=goals-1"></script>
-  <script src="./components/agent/agent.js?v=agent-parity-2"></script>
+  <script src="./components/agent/agent.js?v=completion-tokens-1"></script>
   <script src="./components/shared/markdown-dom.js?v=md-1"></script>
   <script src="./components/agent/agent-blocks.js?v=blocks-flush-1"></script>
   <script src="./components/agent/agent-memory.js?v=agent-dream-1"></script>
@@ -75,7 +75,7 @@
   <script src="./components/shared/spellcheck.js?v=spellcheck-4"></script>
   <script src="./components/shared/desc-meta.js?v=desc-meta-1"></script>
   <script src="./components/outlook/outlook-sync.js?v=desc-meta-1"></script>
-  <script src="./components/agent/agent-ui.js?v=md-1"></script>
+  <script src="./components/agent/agent-ui.js?v=ask-buttons-1"></script>
   <script src="./components/history/card-history.js?v=echeance-recurring-1"></script>
   <script src="./components/history/history-ui.js?v=history-5"></script>
 </head>
@@ -2301,22 +2301,10 @@
     }
 
     function resizePopup() {
-      if (
-        window.PriorityTrello &&
-        typeof PriorityTrello.sizeToContent === 'function'
-      ) {
-        PriorityTrello.sizeToContent(t);
-        return;
-      }
-      if (typeof t.sizeTo === 'function') {
-        try {
-          var ctx = typeof t.getContext === 'function' ? t.getContext() : null;
-          if (ctx && ctx.fullscreen) return;
-          t.sizeTo(document.body);
-        } catch (e) {
-          /* ignore */
-        }
-      }
+      // popup.html is only ever opened as a fullscreen modal (index.html,
+      // card-open.html, table-ui.js). Trello does not always report that in
+      // getContext(), so sizeTo would warn "Fullscreen modals cannot be
+      // resized with t.sizeTo" on every layout change. Nothing to resize.
     }
 
     function setCardNameLabel(name) {

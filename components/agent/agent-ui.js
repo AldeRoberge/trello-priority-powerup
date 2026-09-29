@@ -8477,7 +8477,7 @@
         var startPrompt = cardTitle
           ? 'Commence l\'interview. Titre de la carte\u00a0: «\u00a0' +
             cardTitle +
-            '\u00a0». Interview MINIMALE\u00a0: PAS de question POURQUOI / motivation. Inf\u00e8re set_task_types + axes \u00e9vidents en silence. Premi\u00e8re r\u00e9ponse = UNE seule question utile pour le scoring (souvent urgence) SI n\u00e9cessaire\u00a0; sinon completeInterview:true apr\u00e8s avoir appliqu\u00e9 ce que tu peux. Court, naturel, ancr\u00e9 au titre.'
+            '\u00a0». Interview MINIMALE\u00a0: PAS de question POURQUOI / motivation, PAS d\'intro, PAS de gabarit \u00ab\u00a0si on ne le fait pas, c\'est grave?\u00a0\u00bb. Inf\u00e8re set_task_types + axes \u00e9vidents en silence. Puis demande-toi ce qui manque le plus pour d\u00e9finir cette carte et la faire avancer (r\u00e9sultat attendu, premi\u00e8re \u00e9tape, port\u00e9e, qui, \u00e9ch\u00e9ance, choix \u00e0 trancher). Premi\u00e8re r\u00e9ponse = UNE seule question propre \u00e0 CE titre, avec 2 \u00e0 5 boutons de r\u00e9ponse concrets d\u00e9duits du titre (suggestions), SI n\u00e9cessaire\u00a0; sinon completeInterview:true apr\u00e8s avoir appliqu\u00e9 ce que tu peux. Court, naturel, ancr\u00e9 au titre.'
           : 'Commence l\'interview de cette carte. Interview MINIMALE\u00a0: PAS de POURQUOI. Une question utile pour le scoring seulement si n\u00e9cessaire.';
         var fallbackOpening =
           Agent.urgencyAskForTaskTypes

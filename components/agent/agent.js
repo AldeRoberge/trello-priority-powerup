@@ -4067,6 +4067,7 @@
       '- Ex. FAUX\u00a0: user \u00ab\u00a0quas tu chang\u00e9\u00a0\u00bb \u2192 {"message":"J\'ai not\u00e9 que tu veux mettre \u00e0 jour le logo et uniformiser les couleurs\u2026 J\'ai aussi ajust\u00e9 la priorit\u00e9. \u00c7a te va?"}',
       '- Ex. VRAI\u00a0: user \u00ab\u00a0quas tu chang\u00e9\u00a0\u00bb \u2192 {"thinking":"Demande un diff concret \u2014 priorit\u00e9 ajust\u00e9e.","message":"J\'ai mont\u00e9 la priorit\u00e9.","suggestions":["Remettre comme avant","Affiner"],"followUps":[],"actions":[]}',
       '- Ex. VRAI (rien chang\u00e9)\u00a0: {"message":"Rien sur la carte \u2014 j\'ai juste not\u00e9 le contexte.","suggestions":[],"followUps":[],"actions":[]}',
+      'Questions utiles avec boutons (critique)\u00a0: quand tu dois demander quelque chose, la question est propre au sujet du moment, aide \u00e0 d\u00e9finir ou \u00e0 faire avancer la t\u00e2che, et vient TOUJOURS avec 2 \u00e0 5 suggestions concr\u00e8tes cliquables (vraies r\u00e9ponses d\u00e9duites du contexte, pas des g\u00e9n\u00e9riques). Pas d\'intro, pas de \u00ab\u00a0est-ce grave si on ne le fait pas?\u00a0\u00bb, pas de question dont la r\u00e9ponse est \u00e9vidente. Si tu peux agir avec ce que tu sais, agis au lieu de demander.',
       'INTERDIT dans message\u00a0: questions vagues du type \u00ab\u00a0Que souhaitez-vous faire maintenant?\u00a0\u00bb, \u00ab\u00a0Comment puis-je vous aider?\u00a0\u00bb, \u00ab\u00a0Autre chose?\u00a0\u00bb, \u00ab\u00a0Pr\u00eat \u00e0 avancer sur les t\u00e2ches?\u00a0\u00bb, \u00ab\u00a0On s\'y met?\u00a0\u00bb, ou tout pivot non sollicit\u00e9 vers le travail / la productivit\u00e9. Confirme bri\u00e8vement et arr\u00eate-toi\u00a0; les suggestions suffisent pour la suite.',
       'Sanit\u00e9 / incoh\u00e9rences carte (important)\u00a0:',
       '- Rep\u00e8re les contradictions entre statut, progr\u00e8s, blocage et \u00e9ch\u00e9ance.',
@@ -7577,12 +7578,22 @@
       'Personnes / pr\u00e9noms (critique)\u00a0: n\'invente JAMAIS un pr\u00e9nom ou un nom propre absent du message utilisateur, de l\'historique, de cardMemory, de memory ou de progress.items. Les exemples du prompt ne sont PAS des gens de la carte. Pour un blocage sans cause\u00a0: confirmation neutre seulement (\u00ab\u00a0Okay, bloqu\u00e9. Quelle est la cause?\u00a0\u00bb) \u2014 INTERDIT \u00ab\u00a0en attendant [pr\u00e9nom]\u00a0\u00bb.',
       '',
       'Interview courte (critique \u2014 moins = mieux)\u00a0:',
-      '- Pose une question SEULEMENT si la r\u00e9ponse change vraiment le scoring (urgence / impact / facilit\u00e9) ou un champ carte (blocage, \u00e9tapes, \u00e9ch\u00e9ance) ET que tu ne peux PAS l\'inf\u00e9rer du titre / du contexte.',
+      '- Pose une question SEULEMENT si la r\u00e9ponse change vraiment le scoring (urgence / impact / facilit\u00e9), aide \u00e0 d\u00e9finir la carte (r\u00e9sultat attendu, premi\u00e8re \u00e9tape, port\u00e9e) ou remplit un champ carte (blocage, \u00e9tapes, \u00e9ch\u00e9ance) ET que tu ne peux PAS l\'inf\u00e9rer du titre / du contexte.',
       '- Sinon\u00a0: applique set_priority / set_task_types / set_progress_estimate en silence et completeInterview:true (ou une seule question d\'axe manquant).',
       '- INTERDIT les questions de motivation / POURQUOI\u00a0: jamais \u00ab\u00a0Pourquoi tu veux\u2026?\u00a0\u00bb, \u00ab\u00a0\u00c7a sert \u00e0 quoi?\u00a0\u00bb, \u00ab\u00a0C\'est pour quoi?\u00a0\u00bb. Le titre suffit\u00a0; on ne creuse pas le sens de la vie.',
       '- Si l\'utilisateur DONNE spontan\u00e9ment une raison\u00a0: cardPatches remember \u00ab\u00a0Pourquoi\u00a0: \u2026\u00a0\u00bb OK \u2014 mais ne demande pas.',
       '- Ex. FAUX (ouverture)\u00a0: \u00ab\u00a0Pourquoi tu veux mettre tes dipl\u00f4mes sur le mur?\u00a0\u00bb / \u00ab\u00a0Pourquoi tu veux ce plan?\u00a0\u00bb',
-      '- Ex. VRAI (ouverture, axe utile)\u00a0: set_task_types + set_priority ease si trivial + \u00ab\u00a0Si on ne le fait pas, c\'est [[a:grave]]?\u00a0\u00bb (ou impact confirm) \u2014 OU completeInterview si tout est d\u00e9j\u00e0 clair.',
+      '- Ex. VRAI (ouverture, axe utile)\u00a0: set_task_types + set_priority ease si trivial + UNE question propre \u00e0 la carte avec des boutons (voir \u00ab\u00a0Ouverture\u00a0\u00bb ci-dessous) \u2014 OU completeInterview si tout est d\u00e9j\u00e0 clair.',
+      '',
+      'Ouverture et questions utiles (critique, PRIME sur tous les exemples plus bas)\u00a0:',
+      '- La 1re r\u00e9ponse n\'est PAS un gabarit. Pas de salutation, pas d\'intro, pas de m\u00e9ta (\u00ab\u00a0Commen\u00e7ons\u00a0\u00bb, \u00ab\u00a0Voyons\u00a0\u00bb). Va droit \u00e0 la question.',
+      '- INTERDIT d\'ouvrir avec \u00ab\u00a0Si on ne le fait pas, c\'est grave?\u00a0\u00bb ou toute variante \u00ab\u00a0c\'est important? / \u00e7a presse? / \u00e7a change quoi?\u00a0\u00bb. \u00c7a ne d\u00e9finit rien et sonne b\u00eate. Les exemples \u00ab\u00a0c\'est grave?\u00a0\u00bb plus bas sont des formulations d\'urgence pour le milieu de l\'interview, jamais une ouverture par d\u00e9faut.',
+      '- Avant d\'\u00e9crire, dans thinking\u00a0: qu\'est-ce qui manque pour que cette carte soit pr\u00eate \u00e0 avancer\u00a0? (r\u00e9sultat attendu flou, premi\u00e8re \u00e9tape, port\u00e9e / taille, qui, \u00e9ch\u00e9ance, blocage, contrainte, options \u00e0 trancher). Choisis LA chose dont la r\u00e9ponse fait le plus progresser la carte. L\'urgence n\'est qu\'une option parmi d\'autres, et seulement si rien de plus utile ne manque.',
+      '- La question est propre \u00e0 CETTE carte\u00a0: elle nomme son sujet concret et propose des pistes r\u00e9elles d\u00e9duites du titre (options, formats, \u00e9tapes, approches). INTERDIT une question qui marcherait telle quelle sur n\'importe quelle carte.',
+      '- Toute question vient avec des BOUTONS\u00a0: 2 \u00e0 5 suggestions concr\u00e8tes, chacune une vraie r\u00e9ponse compl\u00e8te qu\'on choisit d\'un clic (pas de \u00ab\u00a0Autre\u00a0\u00bb g\u00e9n\u00e9rique en premier). suggestionsMulti:true quand plusieurs r\u00e9ponses peuvent valoir. Jamais de question \u00e0 r\u00e9ponse libre seule.',
+      '- Quand un visuel aide \u00e0 choisir (priorit\u00e9, progr\u00e8s, \u00e9ch\u00e9ance, \u00e9tapes), montre un bloc {{n}} au lieu de l\'expliquer en prose.',
+      '- Ex. FAUX (ouverture)\u00a0: carte \u00ab\u00a0Refaire le site du club\u00a0\u00bb \u2192 \u00ab\u00a0Si on ne le fait pas, c\'est [[a:grave]]?\u00a0\u00bb + [\u00ab\u00a0Pas grand-chose\u00a0\u00bb, \u00ab\u00a0Un peu emb\u00eatant\u00a0\u00bb, \u00ab\u00a0Oui, c\'est urgent\u00a0\u00bb].',
+      '- Ex. VRAI (m\u00eame carte, illustration, pas un gabarit)\u00a0: {"thinking":"Refonte du site\u00a0: le p\u00e9rim\u00e8tre est flou, c\'est ce qui manque le plus.","message":"Le site, tu veux [[a:changer quoi]] en premier?","suggestions":["Le design au complet","Le contenu seulement","Passer \u00e0 une autre plateforme","Corriger ce qui est cass\u00e9"],"suggestionsMulti":false,"followUps":[],"actions":[{"tool":"set_task_types","args":{"types":["project","deliverable"]}}]}',
       '- Ex. VRAI (titre \u00e9vident)\u00a0: accrocher des dipl\u00f4mes / liker un post \u2192 ease + dur\u00e9e en silence, 0\u20131 question max (urgence ou impact), puis close.',
       '',
       'Type de t\u00e2che (critique \u2014 dynamique, multi-labels)\u00a0:',
@@ -10016,7 +10027,7 @@
       stream: !!(body && body.stream),
       jsonMode: !!(body && body.response_format),
       temperature: body && body.temperature,
-      max_tokens: body && body.max_tokens,
+      max_tokens: body && (body.max_tokens != null ? body.max_tokens : body.max_completion_tokens),
       messageCount: body && body.messages ? body.messages.length : 0,
       body: cloneJsonSafe(body),
       status: extra.status != null ? extra.status : null,
@@ -10024,6 +10035,34 @@
       error: extra.error || null,
       note: extra.note || null
     };
+  }
+
+  /** GPT-5 / o-series on OpenAI take max_completion_tokens, not max_tokens. */
+  function usesCompletionTokens(p) {
+    var model = String((p && p.model) || '').toLowerCase().replace(/^openai\//, '');
+    var isOpenAiHost = /(^|\/\/)api\.openai\.com/i.test(String((p && p.baseUrl) || ''));
+    return isOpenAiHost && /^(gpt-5|o\d)/.test(model);
+  }
+
+  /**
+   * When the API rejects a parameter for this model, return options for one
+   * retry that avoid it (or null when the error is unrelated / already handled).
+   */
+  function adaptOptionsToParamError(opts, errorText) {
+    var text = String(errorText || '');
+    if (!/unsupported|not supported/i.test(text)) return null;
+    if (/max_tokens/.test(text) && /max_completion_tokens/.test(text) && !opts._completionTokens) {
+      return Object.assign({}, opts, { _completionTokens: true });
+    }
+    var match = /unsupported (?:parameter|value):?\s*'(temperature|top_p|stream_options)'/i.exec(text);
+    if (match) {
+      var key = match[1].toLowerCase();
+      var dropped = opts._drop || [];
+      if (dropped.indexOf(key) === -1) {
+        return Object.assign({}, opts, { _drop: dropped.concat(key) });
+      }
+    }
+    return null;
   }
 
   async function chatCompletions(provider, messages, options) {
@@ -10040,8 +10079,17 @@
       body.response_format = { type: 'json_object' };
     }
     if (opts.max_tokens != null) {
-      body.max_tokens = opts.max_tokens;
+      if (opts._completionTokens || usesCompletionTokens(p)) {
+        // GPT-5 / o-series reject max_tokens; reasoning also spends this budget,
+        // so keep a floor or tiny limits come back empty.
+        body.max_completion_tokens = Math.max(opts.max_tokens, 256);
+      } else {
+        body.max_tokens = opts.max_tokens;
+      }
     }
+    (opts._drop || []).forEach(function (key) {
+      delete body[key];
+    });
     if (stream) {
       body.stream = true;
       if (opts.includeUsage !== false) {
@@ -10055,6 +10103,11 @@
         body: body
       });
       if (!result.ok) {
+        var adaptedOpts = adaptOptionsToParamError(
+          opts,
+          (result.text || '') + ' ' + (result.data ? JSON.stringify(result.data) : '')
+        );
+        if (adaptedOpts) return chatCompletions(p, messages, adaptedOpts);
         var httpErr = null;
         try {
           throwHttpError(result);
@@ -10123,6 +10176,8 @@
           data = { raw: text };
         }
       }
+      var adaptedStreamOpts = adaptOptionsToParamError(opts, text || '');
+      if (adaptedStreamOpts) return chatCompletions(p, messages, adaptedStreamOpts);
       // Some gateways reject stream_options — retry once without it.
       if (
         body.stream_options &&
