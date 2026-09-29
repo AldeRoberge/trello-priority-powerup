@@ -65,6 +65,8 @@ Bouton **Colonnes** de la vue Table : cocher/décocher et réordonner. Le même 
 
 La colonne A (`TrelloCardId`) est cachée : c’est la clé de jointure, ne la supprimez pas.
 
+Toutes les cellules des cartes (y compris les colonnes modifiables ⇄) sont des plages protégées en mode « avertissement » : Google Sheets demande une confirmation avant toute modification, pour éviter d’éditer une carte Trello par accident. Une fois confirmée, la modification est appliquée normalement.
+
 ## Logs, activités et protection du Sheet
 
 Le Sheet contient maintenant deux onglets visibles, alimentés automatiquement (les plus récents en haut, 3 000 lignes conservées) :

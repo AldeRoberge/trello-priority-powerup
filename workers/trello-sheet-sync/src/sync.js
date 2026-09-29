@@ -199,7 +199,15 @@ async function applyFormatting(env, columns, lists, meta) {
     req.push({ addProtectedRange: { protectedRange: { range: { sheetId, startRowIndex: 0, endRowIndex: 1 }, warningOnly: true, description: 'En-têtes gérés par la synchronisation : ne pas modifier.' } } });
     req.push({ addProtectedRange: { protectedRange: { range: { sheetId, startColumnIndex: 0, endColumnIndex: 1 }, warningOnly: true, description: 'Identifiant de carte : ne pas modifier.' } } });
     columns.forEach((key, i) => {
-      if (COLUMNS[key].dir === 'both') return;
+      if (COLUMNS[key].dir === 'both') {
+        // Editable, but a stray keystroke changes the real Trello card: ask first.
+        req.push({
+          addProtectedRange: {
+            protectedRange: { range: { sheetId, startRowIndex: 1, startColumnIndex: i + 1, endColumnIndex: i + 2 }, warningOnly: true, description: `Modifier « ${COLUMNS[key].header} » modifie aussi la carte Trello. Continuer seulement si c’est voulu.` },
+          },
+        });
+        return;
+      }
       req.push({
         addProtectedRange: {
           protectedRange: { range: { sheetId, startRowIndex: 1, startColumnIndex: i + 1, endColumnIndex: i + 2 }, warningOnly: true, description: `« ${COLUMNS[key].header} » est en lecture seule.` },
