@@ -20,3 +20,15 @@ Setup scripts have failed three times in a row from avoidable mistakes. Before h
 - When a setup step fails, re-read the output the user pasted and fix the root cause in the script; do not just tell them to retry.
 - In JS patch scripts, never pass replacement text containing `$'`, `$&` or `` $` `` to `String.replace`; use a function replacer.
 - Use the Write tool, not shell heredocs, for files containing quotes or `$` (a heredoc silently truncated a file once).
+
+## Commands I give the user to run
+
+The user runs Windows PowerShell 5.1, usually from the repo root. Every command I hand over must work there as typed:
+
+- **Never use `&&` or `||`** (parser error in 5.1). Use `;` to chain, or better, give one command per code block.
+- **Avoid `cd`**. Prefer a command that takes a directory: `npm --prefix workers/trello-sheet-sync run deploy`, `npx --prefix ...`, `git -C <dir> ...`. If a `cd` is unavoidable use `Set-Location workers\trello-sheet-sync` on its own line, and say to come back.
+- Use Windows paths (`.\scripts\x.ps1`) for PowerShell scripts, forward slashes are fine for npm/git arguments.
+- No bash-only syntax: no `export VAR=x` (use `$env:VAR = 'x'`), no `$(...)` substitution, no heredocs, no `&` backgrounding, no `~`.
+- If the command has to run inside a folder that has no `--prefix`/`-C` equivalent, give two separate blocks (`Set-Location ...`, then the command).
+- Before sending a command, check that it is the exact one needed (right script name, right folder) instead of a guess; if I add an npm script for it, give `npm run <script>`.
+- Deploying the Worker is `npm --prefix workers/trello-sheet-sync run deploy`.
