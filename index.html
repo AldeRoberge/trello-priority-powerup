@@ -505,12 +505,13 @@
 
       // Settings popup loads board context itself — do not gate the menu item on preload.
       'board-buttons': trackCapability('board-buttons', function(t) {
+        function buttonsFor(label) {
         return [
           {
             // Monochrome SVG — Trello recolors board-button icons; multi-color brand art
             // becomes an opaque white square.
             icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/settings.svg',
-            text: 'Paramètres du Cerveau',
+            text: label,
             callback: function(t) {
               // Popup width is fixed (narrow) by Trello; modal fits statut mapping + color schemes.
               return t.modal({
@@ -560,6 +561,23 @@
             },
           },
         ];
+        }
+        // Button label shows when the deployed build was last updated, so it is
+        // obvious whether Trello is running the latest version.
+        var baseName = 'Cerveau';
+        if (!window.BuildVersion || typeof BuildVersion.fetchBuiltAt !== 'function') {
+          return buttonsFor(baseName);
+        }
+        return BuildVersion.fetchBuiltAt(
+          typeof t.signUrl === 'function' ? t.signUrl('./build-info.json') : './build-info.json',
+          typeof t.signUrl === 'function' ? t.signUrl('./index.html') : './index.html'
+        )
+          .then(function (builtAt) {
+            return buttonsFor(baseName + ' · mis à jour ' + BuildVersion.relativeAgo(builtAt));
+          })
+          .catch(function () {
+            return buttonsFor(baseName);
+          });
       }),
 
       'list-sorters': withBoardContext(function (t) {
