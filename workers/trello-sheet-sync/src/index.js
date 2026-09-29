@@ -3,7 +3,7 @@
 //   scheduled (every minute)     catches up, then watches the Sheet for ~50 s so an edit in the
 //                                Sheet reaches Trello within seconds
 //   GET  /info                   sheet URL, columns, log level, last sync, unacknowledged alerts
-//   PUT  /config                 {columns?, logLevel?}
+//   PUT  /config                 {columns?, logLevel?, sheetTheme?: 'light'|'dark'}
 //   POST /sync                   manual full sync
 //   POST /push                   {cards:[...]} computed columns from the Power-Up
 //   GET  /logs?limit=&level=     Logs tab            GET /activities?limit=   Activities tab
@@ -25,6 +25,7 @@ import {
   readAlerts,
   ackAlerts,
   readColumns,
+  parseTheme,
   lastSync,
 } from './sync.js';
 import { describeAction } from './webhook.js';
@@ -93,6 +94,7 @@ export default {
           boardId: env.TRELLO_BOARD_ID,
           columns: await readColumns(env),
           logLevel: cfg.logLevel || 'INFO',
+          sheetTheme: parseTheme(cfg.sheetTheme),
           levels: LEVEL_NAMES,
           available: Object.entries(COLUMNS).map(([key, c]) => ({ key, header: c.header, dir: c.dir })),
           defaults: DEFAULT_COLUMNS,
@@ -102,7 +104,7 @@ export default {
       }
       if (url.pathname === '/config' && request.method === 'PUT') {
         const body = await request.json();
-        const saved = await saveSettings(env, { columns: body.columns, logLevel: body.logLevel });
+        const saved = await saveSettings(env, { columns: body.columns, logLevel: body.logLevel, sheetTheme: body.sheetTheme });
         return json(request, env, { ...saved, sync: await runSync(env, { forceFormat: true }) });
       }
       if (url.pathname === '/sync' && request.method === 'POST') return json(request, env, await runSync(env));

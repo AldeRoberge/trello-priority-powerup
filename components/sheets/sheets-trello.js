@@ -171,6 +171,11 @@
     return workerCall(settings, 'PUT', '/config', { logLevel: level });
   }
 
+  /** Sheet look: 'light' or 'dark' (Trello dark palette + Lexend). The Worker reformats the tabs. */
+  function setSheetTheme(settings, theme) {
+    return workerCall(settings, 'PUT', '/config', { sheetTheme: theme });
+  }
+
   /** Mirrors the browser-computed columns (score, progress...) into the Sheet. */
   function pushComputed(settings, payload) {
     return workerCall(settings, 'POST', '/push', payload);
@@ -213,6 +218,7 @@
     activities: activities,
     ackAlerts: ackAlerts,
     setLogLevel: setLogLevel,
+    setSheetTheme: setSheetTheme,
     ensureCategoryCustomField: ensureCategoryCustomField,
   };
 })(typeof window !== 'undefined' ? window : this);

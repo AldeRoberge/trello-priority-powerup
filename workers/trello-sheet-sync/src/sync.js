@@ -30,7 +30,7 @@ const CONFIG = '_Config';
 const QUEUE = '_Queue';
 const ALL_TABS = [TASKS, LOGS, ACTIVITIES, STATE, CONFIG, QUEUE];
 const HIDDEN_TABS = [STATE, CONFIG, QUEUE];
-const CFG_KEYS = ['columns', 'logLevel', 'layout', 'lock', 'dirty', 'driveVersion', 'recentWrites', 'alertsAckAt'];
+const CFG_KEYS = ['columns', 'logLevel', 'layout', 'lock', 'dirty', 'driveVersion', 'recentWrites', 'alertsAckAt', 'sheetTheme'];
 const MAX_JOURNAL_ROWS = 3000;
 const LEASE_MS = 90_000;
 const MAX_PASSES = 3;
@@ -64,7 +64,7 @@ export async function readColumns(env) {
   return normalizeColumns((await loadConfig(env)).columns || DEFAULT_COLUMNS);
 }
 
-export async function saveSettings(env, { columns, logLevel }) {
+export async function saveSettings(env, { columns, logLevel, sheetTheme }) {
   await ensureTabs(env);
   const out = {};
   if (columns) {
@@ -74,6 +74,10 @@ export async function saveSettings(env, { columns, logLevel }) {
   if (logLevel) {
     out.logLevel = parseLevel(logLevel);
     await setConfig(env, 'logLevel', out.logLevel);
+  }
+  if (sheetTheme) {
+    out.sheetTheme = parseTheme(sheetTheme);
+    await setConfig(env, 'sheetTheme', out.sheetTheme);
   }
   return out;
 }
@@ -140,19 +144,85 @@ async function relayout(env, columns, oldKeys, oldRows) {
 }
 
 const rgb = (r, g, b) => ({ red: r, green: g, blue: b });
+const hex = (h) => rgb(parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255);
 
-async function applyFormatting(env, columns, lists, meta) {
+export const parseTheme = (v) => (str(v).toLowerCase() === 'dark' ? 'dark' : 'light');
+
+// The dark palette is the Power-Up's own (components/shared/trello-theme.css, Trello dark mode).
+const PALETTES = {
+  light: {
+    font: 'Arial',
+    bg: hex('#ffffff'),
+    text: hex('#000000'),
+    headers: { tasks: rgb(0.95, 0.95, 0.96), logs: rgb(0.9, 0.93, 0.98), acts: rgb(0.9, 0.96, 0.92) },
+    gradient: [rgb(1, 1, 1), rgb(0.34, 0.73, 0.55)],
+    levels: {
+      CRITICAL: [rgb(0.75, 0.12, 0.1), rgb(1, 1, 1)],
+      ERROR: [rgb(0.96, 0.8, 0.78), rgb(0.55, 0.08, 0.05)],
+      WARNING: [rgb(1, 0.93, 0.7), rgb(0.5, 0.33, 0)],
+      INFO: [rgb(0.85, 0.92, 1), rgb(0.05, 0.3, 0.7)],
+      DEBUG: [rgb(0.95, 0.95, 0.95), rgb(0.4, 0.4, 0.4)],
+      VERBOSE: [rgb(1, 1, 1), rgb(0.6, 0.6, 0.6)],
+    },
+  },
+  dark: {
+    font: 'Lexend',
+    bg: hex('#1d2125'),
+    text: hex('#f7f8f9'),
+    line: hex('#38414a'),
+    tab: hex('#579dff'),
+    headers: { tasks: hex('#2c333a'), logs: hex('#2c333a'), acts: hex('#2c333a') },
+    gradient: [hex('#22272b'), hex('#1f7a68')],
+    levels: {
+      CRITICAL: [hex('#c9372c'), hex('#ffffff')],
+      ERROR: [hex('#5d1f1a'), hex('#fd9891')],
+      WARNING: [hex('#533f04'), hex('#f5cd47')],
+      INFO: [hex('#09326c'), hex('#85b8ff')],
+      DEBUG: [hex('#2c333a'), hex('#9fadbc')],
+      VERBOSE: [hex('#1d2125'), hex('#8c9bab')],
+    },
+  },
+};
+
+async function applyFormatting(env, columns, lists, meta, themeName) {
+  const pal = PALETTES[parseTheme(themeName)];
+  const dark = pal === PALETTES.dark;
   const req = [];
   const tasks = sheetOf(meta, TASKS);
   const logs = sheetOf(meta, LOGS);
   const acts = sheetOf(meta, ACTIVITIES);
+  const baseText = { foregroundColor: pal.text, fontFamily: pal.font, fontSize: 10 };
   const headerFmt = (sheetId, color) => ({
     repeatCell: {
       range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
-      cell: { userEnteredFormat: { textFormat: { bold: true }, backgroundColor: color, verticalAlignment: 'MIDDLE' } },
+      cell: { userEnteredFormat: { textFormat: { ...baseText, bold: true }, backgroundColor: color, verticalAlignment: 'MIDDLE' } },
       fields: 'userEnteredFormat(textFormat,backgroundColor,verticalAlignment)',
     },
   });
+  // Whole tab (rows and columns beyond the data too): background, text color, font, row lines.
+  const baseFmt = (sheetId) => [
+    {
+      repeatCell: {
+        range: { sheetId },
+        cell: { userEnteredFormat: { backgroundColor: pal.bg, textFormat: baseText, verticalAlignment: 'MIDDLE' } },
+        fields: 'userEnteredFormat(backgroundColor,textFormat.foregroundColor,textFormat.fontFamily,textFormat.fontSize,verticalAlignment)',
+      },
+    },
+    {
+      updateSheetProperties: {
+        properties: { sheetId, gridProperties: { hideGridlines: dark }, ...(dark ? { tabColorStyle: { rgbColor: pal.tab } } : {}) },
+        fields: 'gridProperties.hideGridlines,tabColorStyle', // light: tabColorStyle omitted = cleared
+      },
+    },
+    {
+      updateBorders: {
+        range: { sheetId, startRowIndex: 0, endRowIndex: 6000, startColumnIndex: 0, endColumnIndex: 26 },
+        ...(dark
+          ? { innerHorizontal: { style: 'SOLID', colorStyle: { rgbColor: pal.line } }, bottom: { style: 'SOLID', colorStyle: { rgbColor: pal.line } } }
+          : { innerHorizontal: { style: 'NONE' }, bottom: { style: 'NONE' } }),
+      },
+    },
+  ];
   const freeze = (sheetId) => ({ updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 1 } }, fields: 'gridProperties.frozenRowCount' } });
   const width = (sheetId, col, px) => ({
     updateDimensionProperties: { range: { sheetId, dimension: 'COLUMNS', startIndex: col, endIndex: col + 1 }, properties: { pixelSize: px }, fields: 'pixelSize' },
@@ -167,7 +237,7 @@ async function applyFormatting(env, columns, lists, meta) {
     const sheetId = tasks.properties.sheetId;
     const at = (key) => columns.indexOf(key) + 1; // 0-based sheet column index
     const range = (key) => ({ sheetId, startRowIndex: 1, endRowIndex: 5000, startColumnIndex: at(key), endColumnIndex: at(key) + 1 });
-    req.push(freeze(sheetId), headerFmt(sheetId, rgb(0.95, 0.95, 0.96)));
+    req.push(...baseFmt(sheetId), freeze(sheetId), headerFmt(sheetId, pal.headers.tasks));
     req.push({ updateDimensionProperties: { range: { sheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: 1 }, properties: { hiddenByUser: true }, fields: 'hiddenByUser' } });
     for (const [key, px] of [['name', 420], ['desc', 420], ['category', 220], ['statut', 130]]) if (at(key) > 0) req.push(width(sheetId, at(key), px));
     for (const [key, max] of [['priority', 10], ['progress', 100]]) {
@@ -178,8 +248,8 @@ async function applyFormatting(env, columns, lists, meta) {
             rule: {
               ranges: [range(key)],
               gradientRule: {
-                minpoint: { color: rgb(1, 1, 1), type: 'NUMBER', value: '0' },
-                maxpoint: { color: rgb(0.34, 0.73, 0.55), type: 'NUMBER', value: String(max) },
+                minpoint: { color: pal.gradient[0], type: 'NUMBER', value: '0' },
+                maxpoint: { color: pal.gradient[1], type: 'NUMBER', value: String(max) },
               },
             },
           },
@@ -216,35 +286,35 @@ async function applyFormatting(env, columns, lists, meta) {
     });
   }
 
-  const levelRule = (sheetId, text, bg, fg, bold, italic) => ({
+  const levelRule = (sheetId, text, bold, italic) => ({
     addConditionalFormatRule: {
       index: 0,
       rule: {
         ranges: [{ sheetId, startRowIndex: 1, endRowIndex: 6000, startColumnIndex: 1, endColumnIndex: 2 }],
         booleanRule: {
           condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: text }] },
-          format: { backgroundColor: bg, textFormat: { foregroundColor: fg, bold, italic } },
+          format: { backgroundColor: pal.levels[text][0], textFormat: { foregroundColor: pal.levels[text][1], bold, italic } },
         },
       },
     },
   });
   if (logs) {
     const id = logs.properties.sheetId;
-    req.push(freeze(id), headerFmt(id, rgb(0.9, 0.93, 0.98)));
+    req.push(...baseFmt(id), freeze(id), headerFmt(id, pal.headers.logs));
     [[0, 130], [1, 90], [2, 160], [3, 520], [4, 220], [5, 110], [6, 220], [7, 220], [8, 150]].forEach(([c, px]) => req.push(width(id, c, px)));
     req.push(
-      levelRule(id, 'CRITICAL', rgb(0.75, 0.12, 0.1), rgb(1, 1, 1), true, false),
-      levelRule(id, 'ERROR', rgb(0.96, 0.8, 0.78), rgb(0.55, 0.08, 0.05), true, false),
-      levelRule(id, 'WARNING', rgb(1, 0.93, 0.7), rgb(0.5, 0.33, 0), true, false),
-      levelRule(id, 'INFO', rgb(0.85, 0.92, 1), rgb(0.05, 0.3, 0.7), false, false),
-      levelRule(id, 'DEBUG', rgb(0.95, 0.95, 0.95), rgb(0.4, 0.4, 0.4), false, false),
-      levelRule(id, 'VERBOSE', rgb(1, 1, 1), rgb(0.6, 0.6, 0.6), false, true),
+      levelRule(id, 'CRITICAL', true, false),
+      levelRule(id, 'ERROR', true, false),
+      levelRule(id, 'WARNING', true, false),
+      levelRule(id, 'INFO', false, false),
+      levelRule(id, 'DEBUG', false, false),
+      levelRule(id, 'VERBOSE', false, true),
     );
     req.push({ addProtectedRange: { protectedRange: { range: { sheetId: id }, warningOnly: true, description: 'Journal généré automatiquement.' } } });
   }
   if (acts) {
     const id = acts.properties.sheetId;
-    req.push(freeze(id), headerFmt(id, rgb(0.9, 0.96, 0.92)));
+    req.push(...baseFmt(id), freeze(id), headerFmt(id, pal.headers.acts));
     [[0, 130], [1, 170], [2, 110], [3, 130], [4, 260], [5, 110], [6, 240], [7, 240], [8, 90]].forEach(([c, px]) => req.push(width(id, c, px)));
     req.push({ addProtectedRange: { protectedRange: { range: { sheetId: id }, warningOnly: true, description: "Historique généré automatiquement." } } });
   }
@@ -396,7 +466,7 @@ async function syncOnce(env, cfg, opts, journal, boot) {
     columns.includes('category') ? trello.getCategoryField(env, true) : Promise.resolve(null),
   ]);
   const cards = await trello.getCards(env, categoryField && categoryField.id);
-  if (needFormat) await applyFormatting(env, columns, lists, meta);
+  if (needFormat) await applyFormatting(env, columns, lists, meta, cfg.sheetTheme);
 
   const state = await readState(env);
   const plan = planSync({ keys: columns, cards, lists, rows, state, timeZone: tz, sheetUser });

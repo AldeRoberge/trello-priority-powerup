@@ -436,4 +436,22 @@ describe('trello-sheet-sync engine (fakes)', () => {
     assert.equal(logs().some((r) => r[1] === 'CRITICAL'), false);
     restore();
   });
+
+  it('sheetTheme dark repaints the tabs with the Trello palette and Lexend, light restores white', async () => {
+    await sync.runSync(env);
+    google.requests.length = 0;
+    await sync.saveSettings(env, { sheetTheme: 'dark' });
+    await sync.runSync(env, { forceFormat: true });
+    const bases = google.requests.filter((r) => r.repeatCell && !r.repeatCell.range.startRowIndex && r.repeatCell.range.startRowIndex !== 0 && r.repeatCell.range.endRowIndex === undefined);
+    assert.equal(bases.length, 3); // Tasks, Logs, Activities
+    const f = bases[0].repeatCell.cell.userEnteredFormat;
+    assert.equal(f.textFormat.fontFamily, 'Lexend');
+    assert.ok(Math.abs(f.backgroundColor.red - 0x1d / 255) < 1e-9);
+    google.requests.length = 0;
+    await sync.saveSettings(env, { sheetTheme: 'light' });
+    await sync.runSync(env, { forceFormat: true });
+    const light = google.requests.filter((r) => r.repeatCell && r.repeatCell.range.endRowIndex === undefined);
+    assert.equal(light[0].repeatCell.cell.userEnteredFormat.backgroundColor.red, 1);
+    restore();
+  });
 });

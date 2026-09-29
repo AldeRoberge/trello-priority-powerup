@@ -75,6 +75,7 @@
       lists: [],
       rows: [],
       columns: TM().DEFAULT_COLUMNS.slice(),
+      sheetTheme: 'light',
       sort: null, // {key, dir}
       filter: '',
       categoryFieldId: null,
@@ -101,8 +102,9 @@
       alert: h('div', { class: 'tb-alert', hidden: true }),
       wrap: h('div', { class: 'tb-wrap' }),
       drawer: h('div', { class: 'tb-drawer', hidden: true }),
+      dock: h('div', { class: 'tb-dock' }),
     };
-    var shell = h('div', { class: 'tb-root', tabindex: '-1' }, [els.bar, els.banner, els.alert, els.wrap, els.drawer]);
+    var shell = h('div', { class: 'tb-root', tabindex: '-1' }, [els.bar, els.banner, els.alert, els.wrap, els.drawer, els.dock]);
     root.appendChild(shell);
 
     /* ── Status line (with optional action, e.g. Annuler) ─────────── */
@@ -327,6 +329,26 @@
           ])
         );
       });
+      if (SH().isConnected(state.sheet)) {
+        menu.appendChild(h('div', { class: 'tbm-sep' }));
+        menu.appendChild(h('div', { class: 'tbm-title', text: 'Thème du Google Sheet' }));
+        var themeSel = h('select', {
+          class: 'tb-select',
+          title: 'Apparence du Google Sheet',
+          onchange: function (e) {
+            var theme = e.target.value;
+            setStatus('Thème du Sheet…');
+            SH().setSheetTheme(state.sheet, theme).then(function (res) {
+              if (res.ok) { state.sheetTheme = theme; setStatus(theme === 'dark' ? 'Sheet en mode sombre' : 'Sheet en mode clair', 'ok'); }
+              else setStatus('Sheet : ' + (res.detail || res.reason), 'error');
+            });
+          },
+        });
+        [['light', 'Clair'], ['dark', 'Sombre (style Trello, Lexend)']].forEach(function (o) {
+          themeSel.appendChild(h('option', { value: o[0], text: o[1], selected: o[0] === state.sheetTheme }));
+        });
+        menu.appendChild(h('div', { class: 'tb-menu-row' }, [themeSel]));
+      }
     }
 
     function moveColumn(idx, delta) {
@@ -530,6 +552,78 @@
       return pill;
     }
 
+    /* ── Rich cell values ─────────────────────────────────────────── */
+    // Columns edited through the shared CardFields popovers (same editors as the card page / Gantt).
+    var POP_KIND = { progress: 'progress', urgency: 'priority', impact: 'priority', priority: 'priority', tier: 'priority', due: 'due', desc: 'desc' };
+    var URGENCY_TONE = { Aucun: 0, 'Bientôt': 1, 'Assez vite': 2, Vite: 3, 'Au plus vite': 4 };
+
+    function todayIso() {
+      var d = new Date();
+      return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+    }
+
+    function richValue(row, key) {
+      if (key === 'progress' && typeof row.progress === 'number') {
+        var p = Math.max(0, Math.min(100, row.progress));
+        return h('span', { class: 'tb-prog' + (p >= 100 ? ' is-done' : '') }, [
+          h('span', { class: 'tb-prog-bar' }, [h('i', { style: 'width:' + p + '%' })]),
+          h('span', { class: 'tb-prog-num', text: p + '%' }),
+        ]);
+      }
+      if (key === 'urgency' && row.urgency) {
+        var tone = URGENCY_TONE[row.urgency];
+        return h('span', { class: 'tb-chip tb-chip--u' + (tone == null ? 0 : tone) }, [icon('flame'), h('span', { text: row.urgency })]);
+      }
+      if (key === 'impact' && typeof row.impact === 'number') {
+        return h('span', { class: 'tb-chip tb-chip--impact' }, [icon('target-arrow'), h('span', { text: String(row.impact) })]);
+      }
+      if (key === 'priority' && typeof row.priority === 'number') {
+        return h('span', { class: 'tb-num-strong', text: String(row.priority) });
+      }
+      if (key === 'due' && row.due) {
+        var overdue = /^\d{4}-\d{2}-\d{2}/.test(row.due) && row.due.slice(0, 10) < todayIso() && row.statutKey !== 'completed' && row.statutKey !== 'canceled';
+        return h('span', { class: 'tb-chip tb-chip--due' + (overdue ? ' is-overdue' : '') }, [icon(overdue ? 'calendar-exclamation' : 'calendar-event'), h('span', { text: row.due })]);
+      }
+      return null;
+    }
+
+    /** Opens the shared CardFields editor of `kind` for a row, hanging from `anchor`. */
+    function openEditor(row, kind, anchor) {
+      if (!global.CardFields || !anchor) return false;
+      return global.CardFields.open(kind, {
+        t: t,
+        cardId: row.id,
+        cardName: row.name,
+        anchor: anchor,
+        value: kind === 'desc' ? row.desc : undefined,
+        save: kind === 'desc'
+          ? function (text) {
+              var prev = row.desc;
+              row.desc = text;
+              return TT().saveDesc(t, row, text).then(function (full) { row.fullDesc = full; }, function (err) { row.desc = prev; throw err; });
+            }
+          : undefined,
+        onSaved: function () { setStatus('Enregistré', 'ok'); schedulePush(); },
+        onError: function (m) { setStatus(m, 'error'); },
+        onClose: function (changed) { if (changed) reload({ quiet: true }); else renderGrid(); },
+      });
+    }
+
+    function openField(row, key, td) {
+      var kind = POP_KIND[key];
+      if (!kind) return false;
+      var anchor = td || els.wrap.querySelector('td[data-row="' + row.id + '"][data-key="' + key + '"]');
+      state.selected = { rowId: row.id, key: key };
+      markSelected();
+      return openEditor(row, kind, anchor);
+    }
+
+    /** Row-menu entry: works even when the column is hidden (hangs from the row number cell). */
+    function openFieldFor(row, kind) {
+      var td = els.wrap.querySelector('td[data-row="' + row.id + '"].tb-cell--' + kind) || els.wrap.querySelector('td.tb-num[data-row="' + row.id + '"]');
+      openEditor(row, kind, td);
+    }
+
     function renderCell(row, key) {
       var spec = TM().COLUMNS[key];
       var isEditing = state.editing && state.editing.rowId === row.id && state.editing.key === key;
@@ -588,16 +682,22 @@
         return td;
       }
 
+      var rich = richValue(row, key);
+      if (POP_KIND[key]) {
+        td.classList.add('tb-cell--pop', 'tb-cell--' + POP_KIND[key]);
+        td.classList.remove('is-ro');
+      }
       if (key === 'tier' && row.tier) {
         td.appendChild(h('span', { class: 'tb-tier', text: row.tier }));
-      } else if (key === 'due' && row.due) {
-        td.appendChild(icon('calendar-event', 'tb-inline-icon'));
-        td.appendChild(document.createTextNode(row.due));
+      } else if (rich) {
+        td.appendChild(rich);
       } else {
         td.textContent = TM().cellText(row, key);
+        if (POP_KIND[key] && !td.textContent) td.appendChild(h('span', { class: 'tb-empty-hint', text: 'Définir' }));
       }
       td.addEventListener('click', function () {
         state.selected = { rowId: row.id, key: key };
+        if (POP_KIND[key] && openField(row, key, td)) return;
         if (editable) beginEdit(row.id, key);
         else renderGrid();
       });
@@ -624,6 +724,10 @@
 
     /* ── Editing ───────────────────────────────────────────────────── */
     function beginEdit(rowId, key) {
+      if (POP_KIND[key]) {
+        var pr = findRow(rowId);
+        if (pr && openField(pr, key)) return;
+      }
       state.editing = { rowId: rowId, key: key };
       renderGrid();
       var input = els.wrap.querySelector('.is-editing input, .is-editing textarea');
@@ -813,6 +917,16 @@
         { icon: 'brand-trello', label: 'Ouvrir dans Trello', disabled: !row.link, action: function () { window.open(row.link, '_blank', 'noopener'); } },
         { icon: 'link', label: 'Copier le lien de la carte', disabled: !row.link, action: function () { copyText(row.link); } },
       ];
+      items.push({ sep: true });
+      items.push({ title: 'Modifier' });
+      [
+        ['progress', 'chart-donut', 'Progrès…'],
+        ['priority', 'flag', 'Priorité…'],
+        ['due', 'calendar-event', 'Échéance…'],
+        ['desc', 'align-left', 'Description…'],
+      ].forEach(function (f) {
+        items.push({ icon: f[1], label: f[2], action: function () { openFieldFor(row, f[0]); } });
+      });
       if (key && spec.kind !== 'link') {
         items.push({ sep: true });
         if (editable && key !== 'statut') {
@@ -901,7 +1015,7 @@
         if (key === 'statut') {
           var td = els.wrap.querySelector('td[data-row="' + row.id + '"][data-key="statut"]');
           if (td) openStatutMenu(row, td);
-        } else if (isEditable(key)) beginEdit(row.id, key);
+        } else if (POP_KIND[key] || isEditable(key)) beginEdit(row.id, key);
         else openCard(row);
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && isEditable(key) && key !== 'name' && key !== 'statut') {
         e.preventDefault();
@@ -921,6 +1035,7 @@
         if (!res.ok) return;
         state.alerts = (res.data && res.data.alerts) || [];
         journal.level = (res.data && res.data.logLevel) || 'INFO';
+        state.sheetTheme = (res.data && res.data.sheetTheme) || 'light';
         renderAlerts();
         var b = els.bar.querySelector('.tb-badge');
         if (b) b.hidden = !state.alerts.length;
@@ -1077,6 +1192,99 @@
       d.appendChild(body);
     }
 
+    /* ── Assistant dock (project-scope chat under the table) ──────── */
+    var DOCK_KEY = 'tb.dockHeight';
+    var dock = { open: false, mounted: false, height: 340, poll: null, body: null };
+    try {
+      var savedH = parseInt(global.localStorage.getItem(DOCK_KEY), 10);
+      if (savedH >= 160) dock.height = savedH;
+    } catch (e) { /* storage unavailable */ }
+
+    function maxDockHeight() {
+      return Math.max(180, Math.round(shell.clientHeight * 0.75));
+    }
+
+    function setDockHeight(px, persist) {
+      dock.height = Math.max(160, Math.min(maxDockHeight(), Math.round(px)));
+      if (dock.body) dock.body.style.height = dock.height + 'px';
+      if (persist) {
+        try { global.localStorage.setItem(DOCK_KEY, String(dock.height)); } catch (e) { /* ignore */ }
+      }
+    }
+
+    function toggleDock(force) {
+      dock.open = typeof force === 'boolean' ? force : !dock.open;
+      renderDock();
+      if (dock.open && !dock.mounted && global.AssistantMount) {
+        dock.mounted = true;
+        var mountEl = dock.body.querySelector('#assistantMount');
+        global.AssistantMount.mount(mountEl, t, { resizeBody: false, focusComposer: true }).catch(function (err) {
+          dock.mounted = false;
+          mountEl.textContent = '';
+          mountEl.appendChild(h('div', { class: 'tb-loading', text: 'Assistant indisponible : ' + (err && err.message) }));
+        });
+      }
+      clearInterval(dock.poll);
+      dock.poll = null;
+      if (dock.open) {
+        // The assistant can edit cards; keep the grid current while it is open.
+        dock.poll = setInterval(function () {
+          if (state.editing || (global.CardFields && global.CardFields.isOpen())) return;
+          reload({ quiet: true });
+        }, 20000);
+      } else if (dock.mounted) reload({ quiet: true });
+    }
+
+    function renderDock() {
+      var keep = dock.body;
+      els.dock.innerHTML = '';
+      els.dock.classList.toggle('is-open', dock.open);
+      var grip = h('div', {
+        class: 'tb-dock-grip',
+        title: 'Glisser pour redimensionner',
+        onpointerdown: function (e) {
+          if (!dock.open) return;
+          e.preventDefault();
+          var startY = e.clientY;
+          var startH = dock.height;
+          function move(ev) { setDockHeight(startH + (startY - ev.clientY), false); }
+          function up() {
+            document.removeEventListener('pointermove', move);
+            document.removeEventListener('pointerup', up);
+            setDockHeight(dock.height, true);
+          }
+          document.addEventListener('pointermove', move);
+          document.addEventListener('pointerup', up);
+        },
+      });
+      var bar = h('div', {
+        class: 'tb-dock-bar',
+        role: 'button',
+        tabindex: '0',
+        'aria-expanded': dock.open ? 'true' : 'false',
+        onclick: function () { toggleDock(); },
+        onkeydown: function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleDock(); }
+        },
+      }, [
+        icon('sparkles'),
+        h('strong', { text: 'Assistant' }),
+        h('span', { class: 'tb-dock-hint', text: 'Posez une question ou demandez une modification sur tout le projet…' }),
+        h('span', { class: 'tb-spacer' }),
+        icon(dock.open ? 'chevron-down' : 'chevron-up'),
+      ]);
+      els.dock.appendChild(grip);
+      els.dock.appendChild(bar);
+      if (dock.open) {
+        if (!keep) {
+          keep = h('div', { class: 'tb-dock-body tp-page--priority tp-page--assistant' }, [h('div', { id: 'assistantMount' })]);
+        }
+        dock.body = keep;
+        keep.style.height = dock.height + 'px';
+        els.dock.appendChild(keep);
+      }
+    }
+
     /* ── Loading ───────────────────────────────────────────────────── */
     function reload(opts) {
       if (!opts || !opts.quiet) els.wrap.innerHTML = skeletonRows();
@@ -1116,6 +1324,7 @@
     });
 
     renderBar();
+    renderDock();
     setInterval(loadAlerts, 30000);
     return reload();
   }
