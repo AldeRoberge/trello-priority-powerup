@@ -35,8 +35,8 @@
   <link rel="stylesheet" href="./components/shared/trello-theme.css" />
   <link rel="stylesheet" href="./components/shared/landing-guide.css" />
   <link rel="icon" type="image/png" href="./assets/icon.png" />
-  <link rel="stylesheet" href="./components/shared/context-menu.css?v=ctx-menu-3" />
-  <script src="./components/shared/context-menu.js?v=ctx-menu-3"></script>
+  <link rel="stylesheet" href="./components/shared/context-menu.css?v=ctx-menu-4" />
+  <script src="./components/shared/context-menu.js?v=ctx-menu-4"></script>
 </head>
 <body>
   <div id="landing" class="tp-landing" hidden>
@@ -66,7 +66,7 @@
 
       <header class="tp-guide-head">
         <h2 data-i18n="title">Guide d’installation</h2>
-        <div class="tp-lang" role="group" aria-label="Language">
+        <div class="tp-lang" role="group" aria-label="Language" data-i18n-tip="tipLang" data-tip="">
           <svg class="ic" aria-hidden="true"><use href="#i-globe"/></svg>
           <button type="button" class="tp-lang-btn" data-lang="fr" aria-pressed="false">FR</button>
           <button type="button" class="tp-lang-btn" data-lang="en" aria-pressed="false">EN</button>
@@ -77,52 +77,51 @@
       <section class="tp-cfg" aria-labelledby="setupConfigTitle">
         <div class="tp-cfg-head">
           <h3 id="setupConfigTitle" data-i18n="cfgTitle">Votre installation</h3>
-          <button type="button" id="setupReset" class="tp-btn tp-btn-ghost" data-i18n-title="reset" title="Réinitialiser" aria-label="Réinitialiser">
+          <button type="button" id="setupReset" class="tp-btn tp-btn-ghost" data-i18n-tip="tipReset" data-i18n-aria="reset" data-tip="" aria-label="Réinitialiser">
             <svg class="ic" aria-hidden="true"><use href="#i-reset"/></svg>
           </button>
         </div>
         <div class="tp-cfg-chips">
-          <label class="tp-chip tp-chip-name" data-i18n-title="cfgAppName">
+          <label class="tp-chip tp-chip-name" data-i18n-tip="tipAppName" data-tip="">
             <svg class="ic" aria-hidden="true"><use href="#i-tag"/></svg>
             <input type="text" id="setup_appName" autocomplete="off" spellcheck="false" data-i18n-aria="cfgAppName" />
           </label>
-          <label class="tp-chip" data-i18n-title="cfgOwner">
+          <label class="tp-chip" data-i18n-tip="tipOwner" data-tip="">
             <svg class="ic" aria-hidden="true"><use href="#i-github"/></svg>
             <input type="text" id="setup_owner" autocomplete="off" spellcheck="false" data-i18n-aria="cfgOwner" />
             <span class="tp-chip-sep" aria-hidden="true">/</span>
-            <input type="text" id="setup_repo" autocomplete="off" spellcheck="false" data-i18n-aria="cfgRepo" title="" />
+            <input type="text" id="setup_repo" autocomplete="off" spellcheck="false" data-i18n-aria="cfgRepo" />
           </label>
-          <label class="tp-chip" data-i18n-title="cfgAuthor">
+          <label class="tp-chip" data-i18n-tip="tipAuthor" data-tip="">
             <svg class="ic" aria-hidden="true"><use href="#i-user"/></svg>
             <input type="text" id="setup_author" autocomplete="off" spellcheck="false" data-i18n-aria="cfgAuthor" />
           </label>
-          <label class="tp-chip" data-i18n-title="cfgAppKey">
+          <label class="tp-chip" data-i18n-tip="tipAppKey" data-tip="">
             <svg class="ic" aria-hidden="true"><use href="#i-key"/></svg>
             <input type="text" id="setup_appKey" autocomplete="off" spellcheck="false" data-i18n-aria="cfgAppKey" />
           </label>
         </div>
-        <p class="tp-cfg-site">
+        <p class="tp-cfg-site" data-i18n-tip="tipSite" data-tip="">
           <svg class="ic" aria-hidden="true"><use href="#i-globe"/></svg>
           <a data-href-bind="pagesUrl" target="_blank" rel="noopener" data-bind="pagesUrl"></a>
         </p>
-        <p class="tp-cfg-hint" data-i18n="cfgHint"></p>
       </section>
 
       <ol class="tp-guide-steps">
         <li class="tp-guide-step">
-          <h3><span data-i18n="s1Title"></span> <span class="tp-guide-tag" data-i18n="automatable"></span></h3>
+          <h3><span data-i18n="s1Title"></span> <span class="tp-guide-tag" data-i18n="automatable" data-i18n-tip="tipAuto" data-tip=""></span></h3>
           <p data-i18n="s1Body"></p>
           <div class="tp-tabs" role="tablist">
-            <button type="button" role="tab" data-setup-tab="setupPanelPs" aria-selected="true" data-i18n="tabPs"></button>
-            <button type="button" role="tab" data-setup-tab="setupPanelSh" aria-selected="false" data-i18n="tabSh"></button>
+            <button type="button" role="tab" data-setup-tab="setupPanelPs" aria-selected="true" data-i18n="tabPs" data-i18n-tip="tipTabPs" data-tip=""></button>
+            <button type="button" role="tab" data-setup-tab="setupPanelSh" aria-selected="false" data-i18n="tabSh" data-i18n-tip="tipTabSh" data-tip=""></button>
           </div>
           <div class="tp-codebox" id="setupPanelPs">
             <pre><code id="setupCmdPs"></code></pre>
-            <button type="button" class="tp-btn" data-copy="setupCmdPs"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg><span data-i18n="copy"></span></button>
+            <button type="button" class="tp-btn" data-copy="setupCmdPs" data-i18n-tip="tipCopy" data-tip=""><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg><span data-i18n="copy"></span></button>
           </div>
           <div class="tp-codebox" id="setupPanelSh" hidden>
             <pre><code id="setupCmdSh"></code></pre>
-            <button type="button" class="tp-btn" data-copy="setupCmdSh"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg><span data-i18n="copy"></span></button>
+            <button type="button" class="tp-btn" data-copy="setupCmdSh" data-i18n-tip="tipCopy" data-tip=""><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg><span data-i18n="copy"></span></button>
           </div>
           <p class="tp-guide-note" data-i18n="s1Note"></p>
         </li>
@@ -133,25 +132,23 @@
             <li data-i18n="s2a"></li>
             <li data-i18n="s2b"></li>
             <li data-i18n="s2c"></li>
-            <li data-i18n="s2d"></li>
           </ol>
           <div class="tp-codebox">
             <pre><code id="connectorUrl" data-bind="connectorUrl"></code></pre>
-            <button type="button" class="tp-btn" data-copy="connectorUrl"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg><span data-i18n="copy"></span></button>
+            <button type="button" class="tp-btn" data-copy="connectorUrl" data-i18n-tip="tipCopy" data-tip=""><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg><span data-i18n="copy"></span></button>
           </div>
-          <p data-i18n="s2e"></p>
         </li>
 
         <li class="tp-guide-step">
           <h3 data-i18n="s3Title"></h3>
           <p data-i18n="s3a"></p>
           <ul class="tp-guide-caps">
-            <li><code>card-badges</code></li>
-            <li><code>card-detail-badges</code></li>
-            <li><code>card-back-section</code></li>
-            <li><code>board-buttons</code></li>
-            <li><code>list-sorters</code></li>
-            <li><code>on-enable</code></li>
+            <li><code data-i18n-tip="capBadges" data-tip="">card-badges</code></li>
+            <li><code data-i18n-tip="capDetail" data-tip="">card-detail-badges</code></li>
+            <li><code data-i18n-tip="capBack" data-tip="">card-back-section</code></li>
+            <li><code data-i18n-tip="capButtons" data-tip="">board-buttons</code></li>
+            <li><code data-i18n-tip="capSorters" data-tip="">list-sorters</code></li>
+            <li><code data-i18n-tip="capEnable" data-tip="">on-enable</code></li>
           </ul>
           <p data-i18n="s3b"></p>
         </li>
@@ -161,7 +158,6 @@
           <ol>
             <li data-i18n="s4a"></li>
             <li data-i18n="s4b"></li>
-            <li data-i18n="s4c"></li>
           </ol>
           <p class="tp-guide-note" data-i18n="s4note"></p>
         </li>
@@ -173,22 +169,11 @@
         </li>
 
         <li class="tp-guide-step">
-          <h3><span data-i18n="s6Title"></span> <span class="tp-guide-tag" data-i18n="optional"></span></h3>
-          <p data-i18n="s6a"></p>
+          <h3><span data-i18n="s6Title"></span> <span class="tp-guide-tag" data-i18n="optional" data-i18n-tip="tipOptional" data-tip=""></span></h3>
           <ul>
+            <li data-i18n="s6a"></li>
             <li data-i18n="s6b"></li>
             <li data-i18n="s6c"></li>
-            <li data-i18n="s6d"></li>
-            <li data-i18n="s6e"></li>
-          </ul>
-        </li>
-
-        <li class="tp-guide-step">
-          <h3><span data-i18n="s7Title"></span> <span class="tp-guide-tag" data-i18n="optional"></span></h3>
-          <ul>
-            <li data-i18n="s7a"></li>
-            <li data-i18n="s7b"></li>
-            <li data-i18n="s7c"></li>
           </ul>
         </li>
       </ol>
