@@ -631,3 +631,60 @@ tr:hover .tb-edit, .tb-cell.is-selected .tb-edit { visibility: visible; }
 .tb-dock-body #assistantMount {
   height: 100%;
 }
+
+/* ── Status spinner, column resize, progress proportions ───────────── */
+.tb-spin {
+  animation: tb-spin 0.9s linear infinite;
+}
+@keyframes tb-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tb-spin { animation-duration: 2.4s; }
+}
+.tb-status .ti {
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+.tb-grid th {
+  position: sticky;
+}
+.tb-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 2;
+}
+.tb-resizer:hover,
+body.tb-resizing .tb-resizer:active {
+  background: var(--tp-primary);
+  opacity: 0.55;
+}
+body.tb-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+.tb-grid tbody tr:hover td:not(.tb-num) {
+  background-color: var(--tp-surface-hover);
+}
+.tb-prog {
+  gap: 6px;
+}
+.tb-prog-bar {
+  height: 10px;
+  border-radius: 5px;
+}
+.tb-prog-bar i {
+  border-radius: 5px;
+}
+.tb-prog-num {
+  min-width: 26px;
+  font-size: 11px;
+  color: var(--tp-text-muted);
+}
+.tb-cell:not(.is-ro):not(.tb-cell--pill):not(.tb-cell--pop) {
+  cursor: text;
+}

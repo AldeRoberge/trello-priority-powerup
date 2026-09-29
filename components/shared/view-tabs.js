@@ -9,7 +9,7 @@
   'use strict';
 
   var VIEWS = [
-    { key: 'gantt', label: 'Gantt', icon: 'chart-gantt', page: './gantt.html' },
+    { key: 'gantt', label: 'Gantt', icon: 'timeline', page: './gantt.html' },
     { key: 'table', label: 'Tableau', icon: 'table', page: './table.html' },
   ];
 

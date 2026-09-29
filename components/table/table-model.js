@@ -13,7 +13,6 @@
     name: { header: 'Objet', icon: 'file-text', kind: 'text', editable: true, width: 380 },
     statut: { header: 'Statut', icon: 'progress-check', kind: 'list', editable: true, width: 140 },
     urgency: { header: 'Urgence', icon: 'flame', kind: 'text', editable: false, width: 110 },
-    impact: { header: 'Impact et besoin', icon: 'target-arrow', kind: 'number', editable: false, width: 120 },
     priority: { header: 'Priorité', icon: 'flag', kind: 'number', editable: false, width: 90, heat: 10 },
     tier: { header: 'Palier', icon: 'stack-2', kind: 'text', editable: false, width: 110 },
     progress: { header: 'Progrès', icon: 'chart-donut', kind: 'number', editable: false, width: 90, heat: 100 },
@@ -39,7 +38,7 @@
   }
 
   var DEFAULT_COLUMNS = [
-    'category', 'name', 'statut', 'urgency', 'impact', 'priority', 'progress', 'desc', 'due', 'link',
+    'category', 'name', 'statut', 'urgency', 'priority', 'progress', 'desc', 'due', 'link',
   ];
 
   var URGENCY_LABELS = {

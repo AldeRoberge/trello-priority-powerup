@@ -75,6 +75,7 @@
       lists: [],
       rows: [],
       columns: TM().DEFAULT_COLUMNS.slice(),
+      widths: {},
       sheetTheme: 'light',
       sort: null, // {key, dir}
       filter: '',
@@ -112,9 +113,10 @@
       state.status = msg || '';
       state.statusKind = kind || '';
       state.statusAction = action || null;
+      state.statusIcon = kind === 'busy' && /^Enregistrement/.test(msg || '') ? 'device-floppy' : 'refresh';
       paintStatus();
       clearTimeout(statusTimer);
-      if (msg && kind !== 'error') {
+      if (msg && kind !== 'error' && kind !== 'busy') {
         statusTimer = setTimeout(function () {
           setStatus('', '');
         }, keepMs || (action ? 8000 : 2500));
@@ -127,6 +129,7 @@
       s.className = 'tb-status' + (state.statusKind ? ' is-' + state.statusKind : '');
       s.innerHTML = '';
       if (state.statusKind === 'ok') s.appendChild(icon('check'));
+      if (state.statusKind === 'busy') s.appendChild(icon(state.statusIcon || 'loader-2', 'tb-spin'));
       if (state.statusKind === 'error') s.appendChild(icon('alert-triangle'));
       s.appendChild(document.createTextNode(state.status));
       if (state.statusAction) {
@@ -162,6 +165,7 @@
       if (!SH().isConnected(state.sheet)) return;
       clearTimeout(pushTimer);
       pushTimer = setTimeout(function () {
+        setStatus('Synchronisation avec le Sheet…', 'busy');
         TT().pushToSheet(t, state.rows).then(function (res) {
           if (res && res.ok) setStatus('Google Sheet à jour', 'ok');
           else if (res && res.reason !== 'not-connected') setStatus('Sheet : ' + (res.detail || res.reason), 'error');
@@ -231,7 +235,7 @@
     }
 
     function syncNow() {
-      setStatus('Synchronisation…');
+      setStatus('Synchronisation avec le Sheet…', 'busy');
       TT()
         .pushToSheet(t, state.rows)
         .then(function () { return SH().syncNow(state.sheet); })
@@ -257,7 +261,6 @@
         },
       });
       var kids = [
-        h('span', { class: 'tb-title' }, [icon('table'), h('strong', { text: 'Table' })]),
         h('label', { class: 'tb-search' }, [icon('search'), filter]),
         btn('refresh', null, { title: 'Actualiser', onclick: function () { reload(); } }),
         btn('columns-3', 'Colonnes', {
@@ -426,6 +429,53 @@
       return 'background:rgba(52,187,140,' + (0.08 + frac * 0.5).toFixed(2) + ')';
     }
 
+    /* ── Column widths (drag the right edge of a header; double-click resets) ── */
+    var MIN_COL = 60;
+    function colWidth(key) {
+      var w = state.widths[key];
+      return typeof w === 'number' && w >= MIN_COL ? w : TM().COLUMNS[key].width;
+    }
+    function saveWidths() {
+      TT().saveWidths(t, state.widths).catch(fail);
+    }
+    function resizer(key) {
+      return h('span', {
+        class: 'tb-resizer',
+        title: 'Glisser pour redimensionner · double-clic pour réinitialiser',
+        onclick: function (e) { e.stopPropagation(); },
+        ondblclick: function (e) {
+          e.stopPropagation();
+          delete state.widths[key];
+          renderGrid();
+          saveWidths();
+        },
+        onpointerdown: function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var th = e.currentTarget.parentNode;
+          var table = th.closest('table');
+          var startX = e.clientX;
+          var startW = th.offsetWidth;
+          var startTable = table.offsetWidth;
+          document.body.classList.add('tb-resizing');
+          function move(ev) {
+            var w = Math.max(MIN_COL, Math.round(startW + ev.clientX - startX));
+            th.style.width = th.style.minWidth = w + 'px';
+            table.style.width = startTable + (w - startW) + 'px';
+            state.widths[key] = w;
+          }
+          function up() {
+            document.removeEventListener('pointermove', move);
+            document.removeEventListener('pointerup', up);
+            document.body.classList.remove('tb-resizing');
+            saveWidths();
+          }
+          document.addEventListener('pointermove', move);
+          document.addEventListener('pointerup', up);
+        },
+      });
+    }
+
     function renderGrid(opts) {
       opts = opts || {};
       var scrollTop = els.wrap.scrollTop;
@@ -434,23 +484,27 @@
       var rows = visibleRows();
       var table = h('table', { class: 'tb-grid' });
       var head = h('tr', {}, [h('th', { class: 'tb-corner' })]);
+      var tableWidth = 96;
       state.columns.forEach(function (key) {
         var spec = TM().COLUMNS[key];
+        var width = colWidth(key);
+        tableWidth += width;
         var active = state.sort && state.sort.key === key;
         var sortIcon = active ? (state.sort.dir === 'asc' ? 'arrow-up' : 'arrow-down') : 'arrows-sort';
         head.appendChild(
           h('th', {
             class: 'tb-th' + (active ? ' is-sorted' : ''),
             'data-key': key,
-            style: 'min-width:' + spec.width + 'px;width:' + spec.width + 'px',
+            style: 'min-width:' + width + 'px;width:' + width + 'px',
             title: 'Cliquer pour trier',
             onclick: function () {
               if (active) setSort(state.sort.dir === 'asc' ? key : null, 'desc');
               else setSort(key, 'asc');
             },
-          }, [icon(spec.icon, 'tb-th-icon'), h('span', { class: 'tb-th-text', text: spec.header }), icon(sortIcon, 'tb-sort')])
+          }, [icon(spec.icon, 'tb-th-icon'), h('span', { class: 'tb-th-text', text: spec.header }), icon(sortIcon, 'tb-sort'), resizer(key)])
         );
       });
+      table.style.width = tableWidth + 'px';
       table.appendChild(h('thead', {}, [head]));
 
       var body = h('tbody');
@@ -470,10 +524,6 @@
           e.preventDefault();
           dropRow(state.dragId, row, e.offsetY >= tr.offsetHeight / 2);
         });
-        tr.addEventListener('dblclick', function (e) {
-          if (e.target.closest('input,textarea,button,a')) return;
-          openCard(row);
-        });
 
         tr.appendChild(
           h('td', { class: 'tb-num', 'data-row': row.id }, [
@@ -492,6 +542,11 @@
               },
             }, [icon('grip-vertical')]),
             h('span', { class: 'tb-rownum', text: String(i + 1) }),
+            h('button', {
+              class: 'tb-rowbtn',
+              title: 'Ouvrir la carte',
+              onclick: function () { openCard(row); },
+            }, [icon('arrow-up-right')]),
             h('button', {
               class: 'tb-rowbtn tb-rowbtn--danger',
               title: 'Archiver la carte',
@@ -554,7 +609,7 @@
 
     /* ── Rich cell values ─────────────────────────────────────────── */
     // Columns edited through the shared CardFields popovers (same editors as the card page / Gantt).
-    var POP_KIND = { progress: 'progress', urgency: 'priority', impact: 'priority', priority: 'priority', tier: 'priority', due: 'due', desc: 'desc' };
+    var POP_KIND = { progress: 'progress', urgency: 'priority', priority: 'priority', tier: 'priority', due: 'due', desc: 'desc' };
     var URGENCY_TONE = { Aucun: 0, 'Bientôt': 1, 'Assez vite': 2, Vite: 3, 'Au plus vite': 4 };
 
     function todayIso() {
@@ -573,9 +628,6 @@
       if (key === 'urgency' && row.urgency) {
         var tone = URGENCY_TONE[row.urgency];
         return h('span', { class: 'tb-chip tb-chip--u' + (tone == null ? 0 : tone) }, [icon('flame'), h('span', { text: row.urgency })]);
-      }
-      if (key === 'impact' && typeof row.impact === 'number') {
-        return h('span', { class: 'tb-chip tb-chip--impact' }, [icon('target-arrow'), h('span', { text: String(row.impact) })]);
       }
       if (key === 'priority' && typeof row.priority === 'number') {
         return h('span', { class: 'tb-num-strong', text: String(row.priority) });
@@ -643,23 +695,11 @@
       }
 
       if (key === 'name') {
-        td.classList.add('tb-cell--open');
-        td.title = 'Ouvrir la carte';
+        td.title = row.name;
         td.appendChild(h('span', { class: 'tb-name', text: row.name }));
-        td.appendChild(
-          h('button', {
-            class: 'tb-edit',
-            title: 'Renommer (F2)',
-            onclick: function (e) {
-              e.stopPropagation();
-              state.selected = { rowId: row.id, key: key };
-              beginEdit(row.id, key);
-            },
-          }, [icon('pencil')])
-        );
         td.addEventListener('click', function () {
           state.selected = { rowId: row.id, key: key };
-          openCard(row);
+          beginEdit(row.id, key);
         });
         return td;
       }
@@ -698,6 +738,7 @@
       td.addEventListener('click', function () {
         state.selected = { rowId: row.id, key: key };
         if (POP_KIND[key] && openField(row, key, td)) return;
+        if (key === 'category' && !state.categoryAvailable) setStatus('Champ personnalisé « Catégorie » absent de ce tableau Trello', 'error', 4000);
         if (editable) beginEdit(row.id, key);
         else renderGrid();
       });
@@ -810,7 +851,7 @@
       }
       renderGrid();
       if (!write) return;
-      setStatus('Enregistrement…');
+      setStatus('Enregistrement…', 'busy');
       write.then(
         function () {
           setStatus('Enregistré', 'ok');
@@ -860,7 +901,7 @@
       }
       state.rows = TM().orderByLists(state.rows, state.lists);
       renderGrid();
-      setStatus('Enregistrement…');
+      setStatus('Enregistrement…', 'busy');
       var op = listChanged ? TT().moveCard(t, moved.id, targetRow.listId, pos) : TT().reorderCard(t, moved.id, pos);
       op.then(function () { setStatus('Ordre enregistré', 'ok'); schedulePush(); }, function (err) {
         fail(err);
@@ -1303,6 +1344,7 @@
           state.categoryFieldId = data.categoryFieldId;
           state.categoryAvailable = data.categoryAvailable;
           state.columns = res[1].columns;
+          state.widths = res[1].widths || {};
           state.sheet = res[2];
           state.authOk = !!res[3];
           renderBanner();

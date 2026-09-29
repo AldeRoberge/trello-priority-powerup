@@ -30,16 +30,24 @@
     var sheet = ST() ? await ST().getSettings(t) : null;
     return {
       columns: TM().normalizeColumns(cols && cols.length ? cols : sheet && sheet.columns),
+      widths: raw && raw.widths && typeof raw.widths === 'object' ? raw.widths : {},
     };
   }
 
   async function saveColumns(t, columns) {
     var cols = TM().normalizeColumns(columns);
-    await t.set('board', 'shared', TABLE_KEY, { columns: cols });
+    var prev = await t.get('board', 'shared', TABLE_KEY);
+    await t.set('board', 'shared', TABLE_KEY, { columns: cols, widths: (prev && prev.widths) || {} });
     var sheet = await ST().getSettings(t);
     sheet.columns = cols;
     await ST().saveSettings(t, sheet);
     return cols;
+  }
+
+  async function saveWidths(t, widths) {
+    var prev = await t.get('board', 'shared', TABLE_KEY);
+    var cols = prev && prev.columns;
+    await t.set('board', 'shared', TABLE_KEY, { columns: cols, widths: widths });
   }
 
   /** Catégorie custom field values by card id (empty map when Custom Fields is unavailable). */
@@ -167,6 +175,7 @@
     getTableSettings: getTableSettings,
     saveColumns: saveColumns,
     load: load,
+    saveWidths: saveWidths,
     saveName: saveName,
     saveDesc: saveDesc,
     moveCard: moveCard,
