@@ -11340,11 +11340,20 @@
     var tgZoomInBtn = document.createElement('button');
     tgZoomInBtn.type = 'button';
     tgZoomInBtn.className = 'tg-collapse tg-zoom-btn tg-zoom-in';
-    tgZoomInBtn.title = 'Revenir \u00e0 la taille ajust\u00e9e';
-    tgZoomInBtn.setAttribute('aria-label', 'Agrandir');
+    tgZoomInBtn.title = 'Zoomer';
+    tgZoomInBtn.setAttribute('aria-label', 'Zoomer');
     tgZoomInBtn.innerHTML = '<i class="ti ti-zoom-in" aria-hidden="true"></i>';
     tgFrame.appendChild(tgZoomOutBtn);
     tgFrame.appendChild(tgZoomInBtn);
+    var tgExpandBtn = document.createElement('button');
+    tgExpandBtn.type = 'button';
+    tgExpandBtn.className = 'tg-collapse tg-zoom-btn tg-zoom-expand';
+    tgExpandBtn.setAttribute('aria-label', 'Hauteur de la vue');
+    var tgResizeHandle = document.createElement('div');
+    tgResizeHandle.className = 'tg-resize';
+    tgResizeHandle.title = 'Glisser pour changer la hauteur';
+    tgFrame.appendChild(tgExpandBtn);
+    tgFrame.appendChild(tgResizeHandle);
     var tgHint = document.createElement('div');
     tgHint.className = 'tg-hint';
     tgHost.appendChild(tgFrame);
@@ -11381,10 +11390,86 @@
     var placesRouteEl = document.createElement('div');
     placesRouteEl.className = 'info-route';
 
+    var pgHost = document.createElement('div');
+    pgHost.className = 'tg pg';
+    pgHost.hidden = true;
+    var pgFrame = document.createElement('div');
+    pgFrame.className = 'tg-frame';
+    var pgStage = document.createElement('div');
+    pgStage.className = 'tg-stage';
+    var pgWires = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    pgWires.setAttribute('class', 'tg-wires');
+    pgWires.setAttribute('aria-hidden', 'true');
+    var pgNodes = document.createElement('div');
+    pgNodes.className = 'tg-nodes';
+    var pgPills = document.createElement('div');
+    pgPills.className = 'tg-pills';
+    pgStage.appendChild(pgWires);
+    pgStage.appendChild(pgNodes);
+    pgStage.appendChild(pgPills);
+    var pgEditor = document.createElement('div');
+    pgEditor.className = 'tg-editor pg-pop pg-place-editor';
+    pgEditor.hidden = true;
+    pgEditor.setAttribute('role', 'dialog');
+    pgEditor.setAttribute('aria-label', 'Modifier le lieu');
+    var pgPop = document.createElement('div');
+    pgPop.className = 'tg-editor tg-create pg-pop';
+    pgPop.hidden = true;
+    pgPop.setAttribute('role', 'dialog');
+    pgPop.setAttribute('aria-label', 'Ajouter un lieu');
+
+    var pgToolbar = document.createElement('div');
+    pgToolbar.className = 'pg-toolbar';
+    var pgReverseBtn = document.createElement('button');
+    pgReverseBtn.type = 'button';
+    pgReverseBtn.className = 'tg-collapse pg-tool';
+    pgReverseBtn.title = 'Inverser le trajet';
+    pgReverseBtn.innerHTML =
+      '<i class="ti ti-arrows-exchange-2" aria-hidden="true"></i><span>Inverser</span>';
+    var pgItinBtn = document.createElement('a');
+    pgItinBtn.className = 'tg-collapse pg-tool';
+    pgItinBtn.target = '_blank';
+    pgItinBtn.rel = 'noopener noreferrer';
+    pgItinBtn.title = 'Itinéraire dans Google Maps';
+    pgItinBtn.hidden = true;
+    pgItinBtn.innerHTML =
+      '<i class="ti ti-map-route" aria-hidden="true"></i><span>Itinéraire</span>';
+    var pgCollapseBtn = document.createElement('button');
+    pgCollapseBtn.type = 'button';
+    pgCollapseBtn.className = 'tg-collapse pg-tool';
+    pgCollapseBtn.title = 'Revenir à la vue simple';
+    pgCollapseBtn.innerHTML =
+      '<i class="ti ti-chevron-up" aria-hidden="true"></i><span>Réduire</span>';
+    pgToolbar.appendChild(pgReverseBtn);
+    pgToolbar.appendChild(pgItinBtn);
+    pgToolbar.appendChild(pgCollapseBtn);
+
+    var pgZoomOutBtn = document.createElement('button');
+    pgZoomOutBtn.type = 'button';
+    pgZoomOutBtn.className = 'tg-collapse tg-zoom-btn tg-zoom-out';
+    pgZoomOutBtn.title = 'Dézoomer (ou Ctrl + molette)';
+    pgZoomOutBtn.setAttribute('aria-label', 'Dézoomer');
+    pgZoomOutBtn.innerHTML = '<i class="ti ti-zoom-out" aria-hidden="true"></i>';
+    var pgZoomInBtn = document.createElement('button');
+    pgZoomInBtn.type = 'button';
+    pgZoomInBtn.className = 'tg-collapse tg-zoom-btn tg-zoom-in';
+    pgZoomInBtn.title = 'Revenir à la taille ajustée';
+    pgZoomInBtn.setAttribute('aria-label', 'Agrandir');
+    pgZoomInBtn.innerHTML = '<i class="ti ti-zoom-in" aria-hidden="true"></i>';
+
+    pgFrame.appendChild(pgStage);
+    pgFrame.appendChild(pgEditor);
+    pgFrame.appendChild(pgPop);
+    pgFrame.appendChild(pgToolbar);
+    pgFrame.appendChild(pgZoomOutBtn);
+    pgFrame.appendChild(pgZoomInBtn);
+    pgHost.appendChild(pgFrame);
+
     var placesStatus = document.createElement('span');
     placesStatus.className = 'info-desc-status';
     placesStatus.setAttribute('aria-live', 'polite');
 
+    placesWrap.appendChild(pgHost);
     placesWrap.appendChild(placesRouteEl);
     placesWrap.appendChild(placesStatus);
     placesRow.value.appendChild(placesWrap);
@@ -13999,6 +14084,30 @@
     var tgPending = null; // { from, kind } armed by clicking a pin
     var tgScale = 1;
     var tgFit = 1;
+    var tgAutoH = 0;
+    var TG_GRID = 18; // same as the dot spacing of the canvas
+    var TG_POS_KEY = 'tp-tg-node-pos';
+    var tgMoving = null;
+    var tgPositions = (function () {
+      try {
+        var raw = typeof localStorage !== 'undefined' && localStorage.getItem(TG_POS_KEY);
+        var parsed = raw ? JSON.parse(raw) : null;
+        return parsed && typeof parsed === 'object' ? parsed : {};
+      } catch (err) {
+        return {};
+      }
+    })();
+    function tgSavePositions() {
+      try {
+        localStorage.setItem(TG_POS_KEY, JSON.stringify(tgPositions));
+      } catch (err) {
+        /* optional */
+      }
+    }
+    function tgSnap(v) {
+      return Math.round(v / TG_GRID) * TG_GRID;
+    }
+    var tgCanvasH = 0; // user-chosen canvas height (0 = fit the content)
     var tgZoomMul = 1;
     var tgLayout = null;
     var tgDrag = null;
@@ -14013,11 +14122,17 @@
           ? ''
           : 'translate(' + tgPan.x + 'px,' + tgPan.y + 'px) scale(' + tgScale + ')';
       tgPlaceRolesPicker();
+      // Miro-like canvas: the dot grid scales and pans with the content.
+      var step = 18 * tgScale;
+      while (step < 9) step *= 2;
+      tgHost.style.backgroundSize = step + 'px ' + step + 'px';
+      tgHost.style.backgroundPosition =
+        Math.round(tgStage.offsetLeft + tgPan.x - step / 2) + 'px ' + Math.round(tgPan.y - step / 2) + 'px';
     }
 
     // Zoom out (down to 25%) and back to the fitted size, around a point of the frame.
     function tgZoomBy(factor, px, py) {
-      var nextMul = Math.max(0.2, Math.min(1, tgZoomMul * factor));
+      var nextMul = Math.max(0.2, Math.min(3, tgZoomMul * factor));
       var nextScale = Math.max(0.25, tgFit * nextMul);
       if (Math.abs(nextScale - tgScale) < 0.001) return;
       var ox = tgStage.offsetLeft;
@@ -14027,10 +14142,6 @@
       tgScale = nextScale;
       tgPan.x = Math.round(px - ox - sx * tgScale);
       tgPan.y = Math.round(py - sy * tgScale);
-      if (tgZoomMul === 1) {
-        tgPan.x = 0;
-        tgPan.y = 0;
-      }
       tgApplyTransform();
     }
 
@@ -14052,6 +14163,77 @@
     tgZoomInBtn.addEventListener('click', function (event) {
       event.preventDefault();
       tgZoomBy(1.25, tgHost.clientWidth / 2, tgFrame.clientHeight / 2);
+    });
+
+    tgFrame.addEventListener('pointermove', function (e) {
+      var m = tgMoving;
+      if (!m || e.pointerId !== m.pid) return;
+      var dx = e.clientX - m.sx;
+      var dy = e.clientY - m.sy;
+      if (!m.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+      if (!m.moved) {
+        m.moved = true;
+        tgHost.classList.add('is-moving');
+        tgCloseEditor();
+      }
+      tgPositions[m.id] = { x: tgSnap(m.x0 + dx / tgScale), y: tgSnap(m.y0 + dy / tgScale) };
+      if (!m.raf) {
+        m.raf = requestAnimationFrame(function () {
+          m.raf = 0;
+          renderTeamGraph();
+        });
+      }
+    });
+    function tgEndMove(e) {
+      var m = tgMoving;
+      if (!m || (e && e.pointerId !== m.pid)) return;
+      tgMoving = null;
+      tgHost.classList.remove('is-moving');
+      if (m.moved) {
+        tgSavePositions();
+        tgIgnoreClickUntil = Date.now() + 400;
+        renderTeamGraph();
+      }
+    }
+    tgFrame.addEventListener('pointerup', tgEndMove);
+    tgFrame.addEventListener('pointercancel', tgEndMove);
+
+    function tgApplyFrameHeight() {
+      tgFrame.style.height = Math.max(tgAutoH, tgCanvasH) + 'px';
+      tgExpandBtn.innerHTML =
+        '<i class="ti ' + (tgCanvasH ? 'ti-arrows-minimize' : 'ti-arrows-maximize') + '" aria-hidden="true"></i>';
+      tgExpandBtn.title = tgCanvasH ? 'R\u00e9duire la hauteur' : 'Agrandir la hauteur';
+    }
+    tgExpandBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      tgCanvasH = tgCanvasH ? 0 : Math.max(360, Math.round(window.innerHeight * 0.75));
+      tgApplyFrameHeight();
+      onLayoutChange();
+    });
+    tgResizeHandle.addEventListener('pointerdown', function (event) {
+      if (event.button != null && event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      var startY = event.clientY;
+      var startH = tgFrame.clientHeight;
+      try {
+        tgResizeHandle.setPointerCapture(event.pointerId);
+      } catch (err) {
+        /* optional */
+      }
+      var move = function (e) {
+        tgCanvasH = Math.round(Math.max(160, Math.min(1400, startH + e.clientY - startY)));
+        tgApplyFrameHeight();
+        onLayoutChange();
+      };
+      var end = function () {
+        tgResizeHandle.removeEventListener('pointermove', move);
+        tgResizeHandle.removeEventListener('pointerup', end);
+        tgResizeHandle.removeEventListener('pointercancel', end);
+      };
+      tgResizeHandle.addEventListener('pointermove', move);
+      tgResizeHandle.addEventListener('pointerup', end);
+      tgResizeHandle.addEventListener('pointercancel', end);
     });
 
     // The role picker opens right under the person's node (inside the graph frame),
@@ -14083,7 +14265,7 @@
     // Drag the background to move around the map; double-click recentres it.
     tgFrame.addEventListener('pointerdown', function (event) {
       if (event.button != null && event.button !== 0) return;
-      if (event.target.closest('.tg-node, .tg-edge, .tg-pill, .tg-editor, .tg-collapse, .tg-zoom-btn, .tg-wire-hit, .info-member-roles-picker-host')) return;
+      if (event.target.closest('.tg-node, .tg-edge, .tg-pill, .tg-editor, .tg-collapse, .tg-zoom-btn, .tg-resize, .tg-wire-hit, .info-member-roles-picker-host')) return;
       var startX = event.clientX;
       var startY = event.clientY;
       var baseX = tgPan.x;
@@ -14128,6 +14310,11 @@
       tgZoomMul = 1;
       tgScale = Math.max(0.25, tgFit);
       tgApplyTransform();
+      if (Object.keys(tgPositions).length) {
+        tgPositions = {};
+        tgSavePositions();
+        renderTeamGraph();
+      }
     });
 
     function setTgExpanded(next) {
@@ -14477,6 +14664,19 @@
         });
       }
 
+      node.addEventListener('pointerdown', function (event) {
+        if (event.button != null && event.button !== 0) return;
+        if (tgPending || tgMoving) return;
+        if (event.target.closest('.tg-node-clear, .tg-role-clear, .tg-role-add, .tg-edge, .tg-role')) return;
+        var box = tgLayout && tgLayout.nodes[mid];
+        if (!box) return;
+        tgMoving = { id: mid, sx: event.clientX, sy: event.clientY, x0: box.x, y0: box.y, moved: false, raf: 0, pid: event.pointerId };
+        try {
+          tgFrame.setPointerCapture(event.pointerId);
+        } catch (err) {
+          /* optional */
+        }
+      });
       node.addEventListener('click', function (event) {
         if (!tgPending) return;
         if (event.target.closest('.tg-node-clear, .tg-role-clear, .tg-role-add, .tg-edge')) return;
@@ -14855,6 +15055,13 @@
         return a && b && a.row === b.row && Math.abs(a.col - b.col) > 1;
       });
       var padTop = hasArc ? 72 : TG_PAD;
+      Object.keys(layout.nodes).forEach(function (id) {
+        var p = tgPositions[id];
+        if (p && isFinite(p.x) && isFinite(p.y)) {
+          layout.nodes[id].x = p.x - TG_PAD;
+          layout.nodes[id].y = p.y - padTop;
+        }
+      });
       var stageW = layout.width + TG_PAD * 2;
       var stageH = layout.height + padTop + TG_PAD;
       tgNodes.querySelectorAll('.tg-node').forEach(function (n) {
@@ -14881,7 +15088,8 @@
       tgFit = available > 0 && stageW > available ? Math.max(0.55, available / stageW) : 1;
       tgScale = Math.max(0.25, tgFit * tgZoomMul);
       tgApplyTransform();
-      tgFrame.style.height = Math.ceil(stageH * tgFit) + 'px';
+      tgAutoH = Math.ceil(stageH * tgFit);
+      tgApplyFrameHeight();
 
       var defs = tgSvg('defs');
       ['asks', 'flow', 'both'].forEach(function (kind) {
