@@ -1,13 +1,33 @@
 // Trello <-> Google Sheet sync Worker.
-//   POST /webhook/<SYNC_SECRET>  Trello webhook: something changed on the board -> sync now
-//   scheduled (every minute)     picks up Sheet edits (Sheets has no push notifications)
-//   GET  /info                   sheet URL, columns, last sync    (header x-sync-secret)
-//   PUT  /config {columns}       choose / reorder Sheet columns   (header x-sync-secret)
-//   POST /sync                   manual full sync                 (header x-sync-secret)
-//   POST /push {cards:[...]}     computed columns from the Power-Up (priority, progress...)
+//   POST /webhook/<SYNC_SECRET>  Trello webhook: record who did what, then sync right away
+//   scheduled (every minute)     catches up, then watches the Sheet for ~50 s so an edit in the
+//                                Sheet reaches Trello within seconds
+//   GET  /info                   sheet URL, columns, log level, last sync, unacknowledged alerts
+//   PUT  /config                 {columns?, logLevel?}
+//   POST /sync                   manual full sync
+//   POST /push                   {cards:[...]} computed columns from the Power-Up
+//   GET  /logs?limit=&level=     Logs tab            GET /activities?limit=   Activities tab
+//   POST /alerts/ack             acknowledge CRITICAL alerts
+//   POST /webhook/register       (re)register the Trello webhook
+// Everything except the webhook and /health needs the header x-sync-secret.
 
 import { COLUMNS, DEFAULT_COLUMNS } from './columns.js';
-import { runSync, readColumns, saveColumns, pushComputed, lastSync } from './sync.js';
+import { LEVEL_NAMES } from './journal.js';
+import {
+  runSync,
+  loadConfig,
+  saveSettings,
+  pushComputed,
+  watchSheet,
+  enqueueActivities,
+  readLogs,
+  readActivities,
+  readAlerts,
+  ackAlerts,
+  readColumns,
+  lastSync,
+} from './sync.js';
+import { describeAction } from './webhook.js';
 import { ensureWebhook } from './trello.js';
 
 function corsHeaders(request, env) {
@@ -33,43 +53,74 @@ function json(request, env, body, status = 200) {
   });
 }
 
+async function handleWebhook(request, env, ctx) {
+  if (request.method !== 'POST') return new Response('ok'); // Trello verifies the URL with HEAD
+  let payload = null;
+  try {
+    payload = await request.json();
+  } catch {
+    /* not JSON */
+  }
+  ctx.waitUntil(
+    (async () => {
+      try {
+        const { activities } = describeAction(payload);
+        await enqueueActivities(env, activities); // atomic append; flushed by the next pass
+        await runSync(env);
+      } catch (e) {
+        console.error('webhook handling failed', e);
+      }
+    })(),
+  );
+  return new Response('ok');
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(request, env) });
 
     if (url.pathname === '/health') return json(request, env, { ok: true });
-
-    if (url.pathname === `/webhook/${env.SYNC_SECRET}`) {
-      // Trello verifies the callback URL with HEAD when the webhook is created.
-      if (request.method === 'POST') ctx.waitUntil(runSync(env).catch((e) => console.error('webhook sync failed', e)));
-      return new Response('ok');
-    }
+    if (url.pathname === `/webhook/${env.SYNC_SECRET}`) return handleWebhook(request, env, ctx);
 
     if (request.headers.get('x-sync-secret') !== env.SYNC_SECRET) return json(request, env, { error: 'unauthorized' }, 401);
 
     try {
       if (url.pathname === '/info' && request.method === 'GET') {
+        const cfg = await loadConfig(env);
         return json(request, env, {
           sheetUrl: `https://docs.google.com/spreadsheets/d/${env.GOOGLE_SHEET_ID}/edit`,
           boardId: env.TRELLO_BOARD_ID,
           columns: await readColumns(env),
+          logLevel: cfg.logLevel || 'INFO',
+          levels: LEVEL_NAMES,
           available: Object.entries(COLUMNS).map(([key, c]) => ({ key, header: c.header, dir: c.dir })),
           defaults: DEFAULT_COLUMNS,
           lastSync,
+          alerts: await readAlerts(env),
         });
       }
       if (url.pathname === '/config' && request.method === 'PUT') {
         const body = await request.json();
-        const columns = await saveColumns(env, body.columns);
-        return json(request, env, { columns, sync: await runSync(env, { forceFormat: true }) });
+        const saved = await saveSettings(env, { columns: body.columns, logLevel: body.logLevel });
+        return json(request, env, { ...saved, sync: await runSync(env, { forceFormat: true }) });
       }
-      if (url.pathname === '/sync' && request.method === 'POST') {
-        return json(request, env, { sync: await runSync(env) });
-      }
+      if (url.pathname === '/sync' && request.method === 'POST') return json(request, env, await runSync(env));
       if (url.pathname === '/push' && request.method === 'POST') {
         const body = await request.json();
         return json(request, env, await pushComputed(env, Array.isArray(body.cards) ? body.cards : []));
+      }
+      if (url.pathname === '/logs' && request.method === 'GET') {
+        const limit = Math.min(500, Number(url.searchParams.get('limit')) || 200);
+        return json(request, env, { logs: await readLogs(env, { limit, level: url.searchParams.get('level') || 'VERBOSE' }) });
+      }
+      if (url.pathname === '/activities' && request.method === 'GET') {
+        const limit = Math.min(500, Number(url.searchParams.get('limit')) || 200);
+        return json(request, env, { activities: await readActivities(env, { limit }) });
+      }
+      if (url.pathname === '/alerts/ack' && request.method === 'POST') {
+        await ackAlerts(env);
+        return json(request, env, { ok: true });
       }
       if (url.pathname === '/webhook/register' && request.method === 'POST') {
         const callback = `${url.origin}/webhook/${env.SYNC_SECRET}`;
@@ -82,6 +133,6 @@ export default {
   },
 
   async scheduled(_event, env, ctx) {
-    ctx.waitUntil(runSync(env).catch((e) => console.error('scheduled sync failed', e)));
+    ctx.waitUntil(watchSheet(env).catch((e) => console.error('scheduled sync failed', e)));
   },
 };

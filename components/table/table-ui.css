@@ -371,3 +371,71 @@ tr:hover .tb-edit, .tb-cell.is-selected .tb-edit { visibility: visible; }
 .tbm-check { color: var(--tp-primary); font-size: 16px; margin-left: 16px; }
 
 .tb-grid td, .tb-grid th { vertical-align: middle; }
+
+/* ── CRITICAL alert banner ──────────────────────────────────────── */
+.tb-alert {
+  display: flex; align-items: center; gap: 12px; padding: 10px 14px; flex: none;
+  background: #c9372c; color: #fff; border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+}
+.tb-alert[hidden] { display: none; }
+.tb-alert-icon { font-size: 26px; flex: none; }
+.tb-alert-text { flex: 1; min-width: 0; line-height: 1.35; }
+.tb-alert-text div { opacity: 0.92; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; }
+.tb-alert .tb-btn { background: rgba(255, 255, 255, 0.16); color: #fff; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35); }
+.tb-alert .tb-btn:hover { background: rgba(255, 255, 255, 0.28); }
+.tb-badge {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 8px; background: #c9372c; color: #fff; font-size: 11px; font-weight: 700; margin-left: 2px;
+}
+.tb-badge[hidden] { display: none; }
+
+/* ── Logs / Activities drawer ───────────────────────────────────── */
+.tb-drawer {
+  flex: none; height: 40%; min-height: 160px; display: flex; flex-direction: column;
+  border-top: 2px solid var(--tp-border-strong); background: var(--tp-surface);
+}
+.tb-drawer[hidden] { display: none; }
+.tb-drawer-head { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--tp-border); }
+.tb-tabs { display: flex; gap: 4px; margin-right: 8px; }
+.tb-tab {
+  display: inline-flex; align-items: center; gap: 6px; font: inherit; cursor: pointer; border: 0; border-radius: 4px;
+  padding: 5px 10px; background: transparent; color: var(--tp-text-subtle);
+}
+.tb-tab.is-on { background: var(--tp-surface-subtle); color: var(--tp-text); font-weight: 600; box-shadow: inset 0 0 0 1px var(--tp-border); }
+.tb-select {
+  font: inherit; padding: 4px 8px; border: 0; border-radius: 4px; background: var(--tp-surface-subtle);
+  color: var(--tp-text); box-shadow: inset 0 0 0 1px var(--tp-border);
+}
+.tb-drawer-body { flex: 1; overflow: auto; }
+.tb-jgrid { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.tb-jgrid th {
+  position: sticky; top: 0; z-index: 2; text-align: left; padding: 5px 10px; background: var(--tp-surface-subtle);
+  border-bottom: 1px solid var(--tp-border); font-weight: 600;
+}
+.tb-jgrid td { padding: 5px 10px; border-bottom: 1px solid var(--tp-border); vertical-align: top; }
+.tb-jgrid .tb-msg { min-width: 260px; max-width: 520px; white-space: normal; }
+.tb-nowrap { white-space: nowrap; color: var(--tp-text-muted); }
+.tb-lv {
+  display: inline-flex; align-items: center; gap: 4px; padding: 0 7px; border-radius: 999px; font-weight: 700;
+  font-size: 11px; line-height: 20px; --lv: #626f86; color: var(--lv);
+  background: color-mix(in srgb, var(--lv) 15%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lv) 35%, transparent);
+}
+.tb-lv .ti { font-size: 13px; }
+.lv-CRITICAL { --lv: #c9372c; }
+.lv-ERROR { --lv: #d9534f; }
+.lv-WARNING { --lv: #b38600; }
+.lv-INFO { --lv: #0c66e4; }
+.lv-DEBUG { --lv: #6b778c; }
+.lv-VERBOSE { --lv: #8590a2; }
+.lv-row-CRITICAL td { background: color-mix(in srgb, #c9372c 10%, transparent); }
+.lv-row-WARNING td { background: color-mix(in srgb, #b38600 7%, transparent); }
+.tb-diff { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tb-diff-old { color: var(--tp-danger-text); text-decoration: line-through; opacity: 0.85; }
+.tb-diff-new { color: var(--tp-success); font-weight: 600; }
+.tb-diff-arrow { color: var(--tp-text-muted); }
+.tb-user { display: inline-flex; align-items: center; gap: 7px; }
+.tb-avatar {
+  display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--tp-primary); color: var(--tp-primary-text); font-size: 10px; font-weight: 700;
+}
+.tb-origin { display: inline-flex; align-items: center; gap: 5px; color: var(--tp-text-subtle); }

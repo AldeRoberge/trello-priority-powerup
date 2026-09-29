@@ -153,6 +153,24 @@
     return workerCall(settings, 'PUT', '/config', { columns: columns });
   }
 
+  function logs(settings, opts) {
+    opts = opts || {};
+    return workerCall(settings, 'GET', '/logs?limit=' + (opts.limit || 200) + '&level=' + encodeURIComponent(opts.level || 'VERBOSE'));
+  }
+
+  function activities(settings, opts) {
+    opts = opts || {};
+    return workerCall(settings, 'GET', '/activities?limit=' + (opts.limit || 200));
+  }
+
+  function ackAlerts(settings) {
+    return workerCall(settings, 'POST', '/alerts/ack');
+  }
+
+  function setLogLevel(settings, level) {
+    return workerCall(settings, 'PUT', '/config', { logLevel: level });
+  }
+
   /** Mirrors the browser-computed columns (score, progress...) into the Sheet. */
   function pushComputed(settings, payload) {
     return workerCall(settings, 'POST', '/push', payload);
@@ -191,6 +209,10 @@
     syncNow: syncNow,
     pushColumns: pushColumns,
     pushComputed: pushComputed,
+    logs: logs,
+    activities: activities,
+    ackAlerts: ackAlerts,
+    setLogLevel: setLogLevel,
     ensureCategoryCustomField: ensureCategoryCustomField,
   };
 })(typeof window !== 'undefined' ? window : this);

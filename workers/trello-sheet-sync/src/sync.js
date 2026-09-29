@@ -1,124 +1,249 @@
 // Sync engine: reads Trello + the Sheet, runs planSync(), applies the result to both sides.
-// State lives in hidden tabs of the Sheet itself, so the Worker needs no KV/D1 binding:
-//   Tasks (visible) · _SyncState (baseline per card) · _Config (column set) · _SyncLog (conflicts)
+//
+// Tabs (all state lives in the Sheet, so the Worker needs no KV/D1):
+//   Tasks       visible   the cards
+//   Logs        visible   what the engine did / refused to do, by severity (newest first)
+//   Activities  visible   who changed what, in Trello or in the Sheet (newest first)
+//   _SyncState  hidden    baseline per card (3-way merge reference)
+//   _Config     hidden    settings, layout, lease lock, drive version, recent writes
+//   _Queue      hidden    Trello webhook activities waiting to be flushed
+//
+// No collisions: one lease (a lock cell verified after writing) serializes passes across
+// Worker instances; every pass re-reads the Sheet right before writing and skips any cell a person
+// changed in the meantime (the next pass merges it properly); a pass that saw a collision or a
+// request that arrived while it ran simply runs again.
 
-import { COLUMNS, DEFAULT_COLUMNS, normalizeColumns, headerRow, keysFromHeader } from './columns.js';
+import { COLUMNS, DEFAULT_COLUMNS, normalizeColumns, headerRow } from './columns.js';
 import { planSync } from './plan.js';
 import { statutLabelForList } from './statut.js';
+import { checkHeader, describeChange } from './integrity.js';
+import { LOG_HEADERS, ACTIVITY_HEADERS, LEVELS, createJournal, parseLevel, logRow, activityRow, stamp } from './journal.js';
+import { isEcho } from './webhook.js';
 import * as sheets from './googleSheets.js';
 import * as trello from './trello.js';
 
-const TASKS = 'Tasks';
+export const TASKS = 'Tasks';
+export const LOGS = 'Logs';
+export const ACTIVITIES = 'Activities';
 const STATE = '_SyncState';
 const CONFIG = '_Config';
-const LOG = '_SyncLog';
-const HIDDEN_TABS = [STATE, CONFIG, LOG];
+const QUEUE = '_Queue';
+const ALL_TABS = [TASKS, LOGS, ACTIVITIES, STATE, CONFIG, QUEUE];
+const HIDDEN_TABS = [STATE, CONFIG, QUEUE];
+const CFG_KEYS = ['columns', 'logLevel', 'layout', 'lock', 'dirty', 'driveVersion', 'recentWrites', 'alertsAckAt'];
+const MAX_JOURNAL_ROWS = 3000;
+const LEASE_MS = 90_000;
+const MAX_PASSES = 3;
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const str = (v) => (v == null ? '' : String(v));
 
 let running = false;
 export let lastSync = null;
 
-export async function readColumns(env) {
+/* ── _Config ─────────────────────────────────────────────────────── */
+
+export async function loadConfig(env) {
+  let rows = [];
   try {
-    const rows = await sheets.readRange(env, `${CONFIG}!A:B`);
-    const row = rows.find((r) => r[0] === 'columns');
-    return row ? normalizeColumns(row[1]) : DEFAULT_COLUMNS.slice();
+    rows = await sheets.readRange(env, `${CONFIG}!A:B`);
   } catch {
-    return DEFAULT_COLUMNS.slice();
+    /* tab missing yet: ensureTabs creates it */
+  }
+  const data = {};
+  for (const r of rows) if (CFG_KEYS.includes(r[0])) data[r[0]] = r[1] == null ? '' : String(r[1]);
+  return data;
+}
+
+export async function setConfig(env, key, value) {
+  const row = CFG_KEYS.indexOf(key) + 1;
+  await sheets.writeRange(env, `${CONFIG}!A${row}:B${row}`, [[key, value]]);
+}
+
+export async function readColumns(env) {
+  return normalizeColumns((await loadConfig(env)).columns || DEFAULT_COLUMNS);
+}
+
+export async function saveSettings(env, { columns, logLevel }) {
+  await ensureTabs(env);
+  const out = {};
+  if (columns) {
+    out.columns = normalizeColumns(columns);
+    await setConfig(env, 'columns', out.columns.join(','));
+  }
+  if (logLevel) {
+    out.logLevel = parseLevel(logLevel);
+    await setConfig(env, 'logLevel', out.logLevel);
+  }
+  return out;
+}
+
+/* ── Lease (cross-instance lock) ─────────────────────────────────── */
+
+async function acquireLease(env) {
+  const boot = await ensureTabs(env); // every tab (incl. _Config) must exist before we can lock
+  const token = crypto.randomUUID();
+  const before = await loadConfig(env);
+  const [holder, expires] = str(before.lock).split('|');
+  if (holder && Number(expires) > Date.now()) return null;
+  await setConfig(env, 'lock', `${token}|${Date.now() + LEASE_MS}`);
+  await sleep(250);
+  const after = await loadConfig(env); // verify we really own it (another instance may have raced us)
+  return str(after.lock).startsWith(token) ? { token, cfg: after, boot } : null;
+}
+
+async function releaseLease(env) {
+  try {
+    await setConfig(env, 'lock', '');
+  } catch {
+    /* the lease expires on its own */
   }
 }
 
-export async function saveColumns(env, columns) {
-  const cols = normalizeColumns(columns);
-  await ensureTabs(env);
-  await sheets.writeRange(env, `${CONFIG}!A1:B1`, [['columns', cols.join(',')]]);
-  return cols;
+async function markDirty(env) {
+  try {
+    await setConfig(env, 'dirty', String(Date.now()));
+  } catch {
+    /* best effort */
+  }
 }
+
+/* ── Tabs, layout, formatting ────────────────────────────────────── */
 
 async function ensureTabs(env) {
-  const meta = await sheets.getMeta(env);
+  let meta = await sheets.getMeta(env);
   const have = new Set(meta.sheets.map((s) => s.properties.title));
-  const requests = [TASKS, ...HIDDEN_TABS]
-    .filter((t) => !have.has(t))
-    .map((title) => ({ addSheet: { properties: { title, hidden: title !== TASKS } } }));
-  await sheets.batchUpdate(env, requests);
-  return requests.length ? sheets.getMeta(env) : meta;
+  const missing = ALL_TABS.filter((t) => !have.has(t));
+  if (missing.length) {
+    await sheets.batchUpdate(
+      env,
+      missing.map((title) => ({ addSheet: { properties: { title, hidden: HIDDEN_TABS.includes(title) } } })),
+    );
+    meta = await sheets.getMeta(env);
+    if (missing.includes(LOGS)) await sheets.writeRange(env, `${LOGS}!A1`, [LOG_HEADERS]);
+    if (missing.includes(ACTIVITIES)) await sheets.writeRange(env, `${ACTIVITIES}!A1`, [ACTIVITY_HEADERS]);
+  }
+  return { meta, missing };
 }
 
-/** Rewrites the Tasks grid to the wanted column set, keeping every value that has a column. */
-async function relayout(env, columns, oldHeader, oldRows) {
-  const oldKeys = keysFromHeader(oldHeader);
+const sheetOf = (meta, title) => meta.sheets.find((s) => s.properties.title === title);
+const idOf = (meta, title) => (sheetOf(meta, title) ? sheetOf(meta, title).properties.sheetId : null);
+
+/** Rewrites the Tasks grid to the configured columns, carrying each value to its new column. */
+async function relayout(env, columns, oldKeys, oldRows) {
   const rows = oldRows
-    .filter((r) => String(r[0] ?? '').trim())
+    .filter((r) => str(r[0]).trim())
     .map((r) => [r[0], ...columns.map((k) => (oldKeys.indexOf(k) >= 0 ? r[oldKeys.indexOf(k) + 1] ?? '' : ''))]);
   await sheets.clearRange(env, `${TASKS}!A:ZZ`);
   await sheets.writeRange(env, `${TASKS}!A1`, [headerRow(columns), ...rows]);
   return rows;
 }
 
-async function applyFormatting(env, columns, lists, meta) {
-  const tasks = meta.sheets.find((s) => s.properties.title === TASKS);
-  if (!tasks) return;
-  const sheetId = tasks.properties.sheetId;
-  const at = (key) => columns.indexOf(key) + 1; // 0-based sheet column index
-  const range = (key) => ({ sheetId, startRowIndex: 1, endRowIndex: 5000, startColumnIndex: at(key), endColumnIndex: at(key) + 1 });
-  const req = [];
+const rgb = (r, g, b) => ({ red: r, green: g, blue: b });
 
-  for (let i = (tasks.conditionalFormats || []).length - 1; i >= 0; i--) {
-    req.push({ deleteConditionalFormatRule: { sheetId, index: i } });
-  }
-  req.push({ updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 1 } }, fields: 'gridProperties.frozenRowCount' } });
-  req.push({
+async function applyFormatting(env, columns, lists, meta) {
+  const req = [];
+  const tasks = sheetOf(meta, TASKS);
+  const logs = sheetOf(meta, LOGS);
+  const acts = sheetOf(meta, ACTIVITIES);
+  const headerFmt = (sheetId, color) => ({
     repeatCell: {
       range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
-      cell: { userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.96 } } },
-      fields: 'userEnteredFormat(textFormat,backgroundColor)',
+      cell: { userEnteredFormat: { textFormat: { bold: true }, backgroundColor: color, verticalAlignment: 'MIDDLE' } },
+      fields: 'userEnteredFormat(textFormat,backgroundColor,verticalAlignment)',
     },
   });
-  req.push({
-    updateDimensionProperties: {
-      range: { sheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: 1 },
-      properties: { hiddenByUser: true },
-      fields: 'hiddenByUser',
-    },
+  const freeze = (sheetId) => ({ updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 1 } }, fields: 'gridProperties.frozenRowCount' } });
+  const width = (sheetId, col, px) => ({
+    updateDimensionProperties: { range: { sheetId, dimension: 'COLUMNS', startIndex: col, endIndex: col + 1 }, properties: { pixelSize: px }, fields: 'pixelSize' },
   });
-  for (const [key, px] of [['name', 420], ['desc', 420], ['category', 220], ['statut', 130]]) {
-    if (at(key) > 0) {
-      req.push({
-        updateDimensionProperties: {
-          range: { sheetId, dimension: 'COLUMNS', startIndex: at(key), endIndex: at(key) + 1 },
-          properties: { pixelSize: px },
-          fields: 'pixelSize',
-        },
-      });
-    }
+  // Old conditional formats / protections are rebuilt from scratch.
+  for (const s of meta.sheets) {
+    for (let i = (s.conditionalFormats || []).length - 1; i >= 0; i--) req.push({ deleteConditionalFormatRule: { sheetId: s.properties.sheetId, index: i } });
+    for (const p of s.protectedRanges || []) req.push({ deleteProtectedRange: { protectedRangeId: p.protectedRangeId } });
   }
-  for (const [key, max] of [['priority', 10], ['progress', 100]]) {
-    if (at(key) > 0) {
-      req.push({
-        addConditionalFormatRule: {
-          index: 0,
-          rule: {
-            ranges: [range(key)],
-            gradientRule: {
-              minpoint: { color: { red: 1, green: 1, blue: 1 }, type: 'NUMBER', value: '0' },
-              maxpoint: { color: { red: 0.34, green: 0.73, blue: 0.55 }, type: 'NUMBER', value: String(max) },
+
+  if (tasks) {
+    const sheetId = tasks.properties.sheetId;
+    const at = (key) => columns.indexOf(key) + 1; // 0-based sheet column index
+    const range = (key) => ({ sheetId, startRowIndex: 1, endRowIndex: 5000, startColumnIndex: at(key), endColumnIndex: at(key) + 1 });
+    req.push(freeze(sheetId), headerFmt(sheetId, rgb(0.95, 0.95, 0.96)));
+    req.push({ updateDimensionProperties: { range: { sheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: 1 }, properties: { hiddenByUser: true }, fields: 'hiddenByUser' } });
+    for (const [key, px] of [['name', 420], ['desc', 420], ['category', 220], ['statut', 130]]) if (at(key) > 0) req.push(width(sheetId, at(key), px));
+    for (const [key, max] of [['priority', 10], ['progress', 100]]) {
+      if (at(key) > 0) {
+        req.push({
+          addConditionalFormatRule: {
+            index: 0,
+            rule: {
+              ranges: [range(key)],
+              gradientRule: {
+                minpoint: { color: rgb(1, 1, 1), type: 'NUMBER', value: '0' },
+                maxpoint: { color: rgb(0.34, 0.73, 0.55), type: 'NUMBER', value: String(max) },
+              },
             },
           },
+        });
+      }
+    }
+    if (at('statut') > 0) {
+      const labels = [...new Set(lists.map((l) => statutLabelForList(l.name)))];
+      req.push({
+        setDataValidation: {
+          range: range('statut'),
+          rule: { condition: { type: 'ONE_OF_LIST', values: labels.map((v) => ({ userEnteredValue: v })) }, showCustomUi: true, strict: false },
         },
       });
     }
-  }
-  if (at('statut') > 0) {
-    const labels = [...new Set(lists.map((l) => statutLabelForList(l.name)))];
-    req.push({
-      setDataValidation: {
-        range: range('statut'),
-        rule: { condition: { type: 'ONE_OF_LIST', values: labels.map((v) => ({ userEnteredValue: v })) }, showCustomUi: true, strict: false },
-      },
+    // Native "you are about to edit a protected range" warning on everything people must not touch.
+    req.push({ addProtectedRange: { protectedRange: { range: { sheetId, startRowIndex: 0, endRowIndex: 1 }, warningOnly: true, description: 'En-têtes gérés par la synchronisation : ne pas modifier.' } } });
+    req.push({ addProtectedRange: { protectedRange: { range: { sheetId, startColumnIndex: 0, endColumnIndex: 1 }, warningOnly: true, description: 'Identifiant de carte : ne pas modifier.' } } });
+    columns.forEach((key, i) => {
+      if (COLUMNS[key].dir === 'both') return;
+      req.push({
+        addProtectedRange: {
+          protectedRange: { range: { sheetId, startRowIndex: 1, startColumnIndex: i + 1, endColumnIndex: i + 2 }, warningOnly: true, description: `« ${COLUMNS[key].header} » est en lecture seule.` },
+        },
+      });
     });
+  }
+
+  const levelRule = (sheetId, text, bg, fg, bold, italic) => ({
+    addConditionalFormatRule: {
+      index: 0,
+      rule: {
+        ranges: [{ sheetId, startRowIndex: 1, endRowIndex: 6000, startColumnIndex: 1, endColumnIndex: 2 }],
+        booleanRule: {
+          condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: text }] },
+          format: { backgroundColor: bg, textFormat: { foregroundColor: fg, bold, italic } },
+        },
+      },
+    },
+  });
+  if (logs) {
+    const id = logs.properties.sheetId;
+    req.push(freeze(id), headerFmt(id, rgb(0.9, 0.93, 0.98)));
+    [[0, 130], [1, 90], [2, 160], [3, 520], [4, 220], [5, 110], [6, 220], [7, 220], [8, 150]].forEach(([c, px]) => req.push(width(id, c, px)));
+    req.push(
+      levelRule(id, 'CRITICAL', rgb(0.75, 0.12, 0.1), rgb(1, 1, 1), true, false),
+      levelRule(id, 'ERROR', rgb(0.96, 0.8, 0.78), rgb(0.55, 0.08, 0.05), true, false),
+      levelRule(id, 'WARNING', rgb(1, 0.93, 0.7), rgb(0.5, 0.33, 0), true, false),
+      levelRule(id, 'INFO', rgb(0.85, 0.92, 1), rgb(0.05, 0.3, 0.7), false, false),
+      levelRule(id, 'DEBUG', rgb(0.95, 0.95, 0.95), rgb(0.4, 0.4, 0.4), false, false),
+      levelRule(id, 'VERBOSE', rgb(1, 1, 1), rgb(0.6, 0.6, 0.6), false, true),
+    );
+    req.push({ addProtectedRange: { protectedRange: { range: { sheetId: id }, warningOnly: true, description: 'Journal généré automatiquement.' } } });
+  }
+  if (acts) {
+    const id = acts.properties.sheetId;
+    req.push(freeze(id), headerFmt(id, rgb(0.9, 0.96, 0.92)));
+    [[0, 130], [1, 170], [2, 110], [3, 130], [4, 260], [5, 110], [6, 240], [7, 240], [8, 90]].forEach(([c, px]) => req.push(width(id, c, px)));
+    req.push({ addProtectedRange: { protectedRange: { range: { sheetId: id }, warningOnly: true, description: "Historique généré automatiquement." } } });
   }
   await sheets.batchUpdate(env, req);
 }
+
+/* ── State + queue ───────────────────────────────────────────────── */
 
 async function readState(env) {
   const rows = await sheets.readRange(env, `${STATE}!A:B`);
@@ -140,110 +265,348 @@ async function writeState(env, state) {
   if (rows.length) await sheets.writeRange(env, `${STATE}!A1`, rows);
 }
 
-export async function runSync(env, { forceFormat = false } = {}) {
-  if (running) return { skipped: true };
-  running = true;
+/** Trello webhook activities waiting to be written (appended atomically by the webhook handler). */
+export async function enqueueActivities(env, activities) {
+  if (!activities.length) return;
+  await sheets.appendRows(env, `${QUEUE}!A1`, activities.map((a) => [JSON.stringify({ ...a, at: a.at instanceof Date ? a.at.toISOString() : a.at })]));
+}
+
+async function drainQueue(env, journal, recentWrites) {
+  const rows = await sheets.readRange(env, `${QUEUE}!A:A`);
+  if (!rows.length) return 0;
+  const recent = await sheets.readRange(env, `${ACTIVITIES}!I2:I200`).catch(() => []);
+  const seen = new Set(recent.map((r) => str(r[0])).filter(Boolean));
+  for (const [json] of rows) {
+    let a;
+    try {
+      a = JSON.parse(json);
+    } catch {
+      continue;
+    }
+    if (a.ref && seen.has(a.ref)) continue; // Trello retried the webhook
+    seen.add(a.ref);
+    if (isEcho(a, recentWrites, Date.parse(a.at) || Date.now())) {
+      journal.log('VERBOSE', 'ECHO_IGNORED', 'Activité Trello ignorée : écho d’une modification du Sheet', { card: a.card, field: a.field });
+      continue;
+    }
+    journal.activities.push({ ...a, at: new Date(a.at) });
+  }
+  return rows.length;
+}
+
+async function dropQueueRows(env, meta, count) {
+  const id = idOf(meta, QUEUE);
+  if (!count || id == null) return;
+  await sheets.batchUpdate(env, [{ deleteDimension: { range: { sheetId: id, dimension: 'ROWS', startIndex: 0, endIndex: count } } }]);
+}
+
+function parseRecent(value, nowMs) {
   try {
-    const columns = await readColumns(env);
-    let meta = await ensureTabs(env);
-    let grid = await sheets.readRange(env, TASKS);
-    let header = (grid[0] || []).map(String);
-    let rows = grid.slice(1);
-    let formatted = false;
+    return (JSON.parse(value || '[]') || []).filter((w) => nowMs - w.at < 120_000);
+  } catch {
+    return [];
+  }
+}
 
-    const wanted = headerRow(columns);
-    if (JSON.stringify(header) !== JSON.stringify(wanted)) {
-      rows = await relayout(env, columns, header, rows);
-      header = wanted;
-      formatted = true;
+/* ── One pass ────────────────────────────────────────────────────── */
+
+function sheetUserFrom(env, driveMeta) {
+  const u = driveMeta && driveMeta.lastModifyingUser;
+  if (!u) return 'Google Sheets';
+  if (u.emailAddress && u.emailAddress === env.GOOGLE_SERVICE_ACCOUNT_EMAIL) return 'Google Sheets (synchronisation)';
+  return u.displayName ? (u.emailAddress ? `${u.displayName} (${u.emailAddress})` : u.displayName) : u.emailAddress || 'Google Sheets';
+}
+
+async function flushJournal(env, meta, journal, tz) {
+  const logsId = idOf(meta, LOGS);
+  const actsId = idOf(meta, ACTIVITIES);
+  // Newest first: reverse so the latest entry ends up on row 2.
+  if (journal.logs.length && logsId != null) {
+    await sheets.prependRows(env, logsId, LOGS, journal.logs.slice().reverse().map((e) => logRow(e, tz)));
+  }
+  if (journal.activities.length && actsId != null) {
+    const sorted = journal.activities.slice().sort((a, b) => a.at - b.at);
+    await sheets.prependRows(env, actsId, ACTIVITIES, sorted.map((a) => activityRow(a, tz)));
+  }
+  // Keep the journals bounded.
+  const trims = [];
+  for (const [title, added] of [[LOGS, journal.logs.length], [ACTIVITIES, journal.activities.length]]) {
+    const s = sheetOf(meta, title);
+    if (!s || !added) continue;
+    const rowCount = (s.properties.gridProperties && s.properties.gridProperties.rowCount) || 0;
+    if (rowCount + added > MAX_JOURNAL_ROWS + 500) {
+      trims.push({ deleteDimension: { range: { sheetId: s.properties.sheetId, dimension: 'ROWS', startIndex: MAX_JOURNAL_ROWS, endIndex: rowCount + added } } });
     }
-    const keys = keysFromHeader(header);
+  }
+  await sheets.batchUpdate(env, trims);
+}
 
-    const [lists, categoryField] = await Promise.all([
-      trello.getLists(env),
-      columns.includes('category') ? trello.getCategoryField(env, true) : Promise.resolve(null),
-    ]);
-    const cards = await trello.getCards(env, categoryField && categoryField.id);
-    if (formatted || forceFormat) await applyFormatting(env, columns, lists, meta);
+async function syncOnce(env, cfg, opts, journal, boot) {
+  const t0 = Date.now();
+  const tz = env.TIMEZONE;
+  const columns = normalizeColumns(cfg.columns || DEFAULT_COLUMNS);
+  const layout = cfg.layout ? JSON.parse(cfg.layout) : null;
+  const wanted = headerRow(columns);
 
-    const state = await readState(env);
-    const plan = planSync({ keys, cards, lists, rows, state, timeZone: env.TIMEZONE });
-
-    // Sheet rows without an id become new cards.
-    for (const c of plan.trelloCreates) {
-      const card = await trello.createCard(env, { idList: c.listId, name: c.name, desc: c.desc, pos: 'bottom' });
-      if (c.category && categoryField) await trello.setCategory(env, card.id, categoryField.id, c.category);
-      plan.cellWrites.push({ row: c.rowNum, col: 1, value: card.id });
-      plan.newState[card.id] = c.baseline;
+  const { meta, missing } = boot || (await ensureTabs(env));
+  let needFormat = !!opts.forceFormat || missing.length > 0;
+  if (missing.length) {
+    if (!layout) journal.log('INFO', 'SETUP', `Onglets créés : ${missing.join(', ')}`);
+    else {
+      for (const tab of missing) {
+        journal.log(tab === TASKS ? 'CRITICAL' : 'WARNING', 'TAB_MISSING', `L'onglet « ${tab} » avait disparu (supprimé ou renommé) : il a été recréé`);
+      }
     }
-    for (const u of plan.trelloUpdates) {
-      if (Object.keys(u.fields).length) await trello.updateCard(env, u.cardId, u.fields);
-      if (u.category !== undefined && categoryField) await trello.setCategory(env, u.cardId, categoryField.id, u.category);
-    }
+  }
 
-    await sheets.writeCells(
-      env,
-      plan.cellWrites.map((w) => ({ range: `${TASKS}!${sheets.colLetter(w.col)}${w.row}`, value: w.value })),
-    );
-    const tasksId = meta.sheets.find((s) => s.properties.title === TASKS).properties.sheetId;
-    await sheets.batchUpdate(
-      env,
-      [...plan.deleteRows]
-        .sort((a, b) => b - a)
-        .map((r) => ({ deleteDimension: { range: { sheetId: tasksId, dimension: 'ROWS', startIndex: r - 1, endIndex: r } } })),
-    );
-    await sheets.appendRows(env, `${TASKS}!A1`, plan.appendRows);
+  const driveMeta = opts.driveMeta || (await sheets.getFileMeta(env).catch(() => null));
+  const sheetUser = sheetUserFrom(env, driveMeta);
 
-    const live = new Set([...cards.map((c) => c.id), ...Object.keys(plan.newState)]);
-    const nextState = {};
-    for (const [id, b] of Object.entries({ ...state, ...plan.newState })) {
-      if (live.has(id)) nextState[id] = b;
-    }
-    if (Object.keys(plan.newState).length || Object.keys(nextState).length !== Object.keys(state).length) {
-      await writeState(env, nextState);
-    }
-    if (plan.log.length) {
-      const ts = new Date().toISOString();
-      await sheets.appendRows(env, `${LOG}!A1`, plan.log.map((l) => [ts, l.cardId, l.field, l.trello, l.sheet, l.note]));
-    }
+  let grid = await sheets.readRange(env, TASKS);
+  let header = (grid[0] || []).map(String);
+  let rows = grid.slice(1);
 
-    lastSync = {
-      at: new Date().toISOString(),
-      cards: cards.length,
-      created: plan.trelloCreates.length,
-      updated: plan.trelloUpdates.length,
-      cells: plan.cellWrites.length,
-      appended: plan.appendRows.length,
-      deleted: plan.deleteRows.length,
-    };
-    return lastSync;
+  const check = checkHeader(header, layout, wanted);
+  if (check.tampered) {
+    for (const c of check.changes) {
+      journal.log('CRITICAL', 'HEADER_TAMPERED', `Modification non permise : ${describeChange(c)}. Les colonnes ont été restaurées.`, {
+        field: c.from || c.to,
+        before: c.to,
+        after: c.from,
+        user: sheetUser,
+      });
+    }
+  }
+  if (check.relayout || !layout) {
+    rows = await relayout(env, columns, check.keys, rows);
+    await setConfig(env, 'layout', JSON.stringify(wanted));
+    needFormat = true;
+  }
+
+  const [lists, categoryField] = await Promise.all([
+    trello.getLists(env),
+    columns.includes('category') ? trello.getCategoryField(env, true) : Promise.resolve(null),
+  ]);
+  const cards = await trello.getCards(env, categoryField && categoryField.id);
+  if (needFormat) await applyFormatting(env, columns, lists, meta);
+
+  const state = await readState(env);
+  const plan = planSync({ keys: columns, cards, lists, rows, state, timeZone: tz, sheetUser });
+  for (const l of plan.logs) journal.log(l.level, l.code, l.message, l);
+  plan.activities.forEach((a) => journal.activity(a));
+
+  // Collision guard: only write cells that are still exactly as we read them.
+  let collisions = 0;
+  const fresh = await sheets.readRange(env, TASKS);
+  const relayouted = check.relayout || !layout; // grid rebuilt in this pass: `rows` is the snapshot
+  const snapshot = relayouted ? [wanted, ...rows] : grid;
+  const cellNow = (r, c) => str((fresh[r - 1] || [])[c - 1]);
+  const cellSnap = (r, c) => str((snapshot[r - 1] || [])[c - 1]);
+  const cellWrites = plan.cellWrites.filter((w) => {
+    const ok = w.col === 1 || cellNow(w.row, w.col) === cellSnap(w.row, w.col);
+    if (!ok) collisions++;
+    return ok;
+  });
+  const deleteRows = plan.deleteRows.filter((r) => {
+    const ok = str((fresh[r - 1] || [])[0]) === str((snapshot[r - 1] || [])[0]);
+    if (!ok) collisions++;
+    return ok;
+  });
+  const creates = plan.trelloCreates.filter((c) => {
+    const ok = str((fresh[c.rowNum - 1] || [])[0]).trim() === '' && str((fresh[c.rowNum - 1] || [])[columns.indexOf('name') + 1]).trim() === c.name;
+    if (!ok) collisions++;
+    return ok;
+  });
+  if (collisions) journal.log('DEBUG', 'COLLISION_AVOIDED', `${collisions} écriture(s) reportée(s) : le Sheet a changé pendant la synchronisation`);
+
+  const nowMs = Date.now();
+  const recent = parseRecent(cfg.recentWrites, nowMs);
+  const writes = [];
+
+  // Sheet rows without an id become new cards; the id goes back to the row right away.
+  for (const c of creates) {
+    const card = await trello.createCard(env, { idList: c.listId, name: c.name, desc: c.desc, pos: 'bottom' });
+    await sheets.writeCells(env, [{ range: `${TASKS}!A${c.rowNum}`, value: card.id }]);
+    if (c.category && categoryField) await trello.setCategory(env, card.id, categoryField.id, c.category);
+    plan.newState[card.id] = c.baseline;
+    recent.push({ cardId: card.id, field: '*', at: nowMs });
+  }
+  for (const u of plan.trelloUpdates) {
+    if (Object.keys(u.fields).length) await trello.updateCard(env, u.cardId, u.fields);
+    if (u.category !== undefined && categoryField) await trello.setCategory(env, u.cardId, categoryField.id, u.category);
+    if ('name' in u.fields) recent.push({ cardId: u.cardId, field: 'name', at: nowMs });
+    if ('desc' in u.fields) recent.push({ cardId: u.cardId, field: 'desc', at: nowMs });
+    if ('idList' in u.fields) recent.push({ cardId: u.cardId, field: 'statut', at: nowMs });
+    if (u.category !== undefined) recent.push({ cardId: u.cardId, field: 'category', at: nowMs });
+  }
+  if (recent.length) await setConfig(env, 'recentWrites', JSON.stringify(recent));
+
+  await sheets.writeCells(env, cellWrites.filter((w) => w.col !== 1).map((w) => ({ range: `${TASKS}!${sheets.colLetter(w.col)}${w.row}`, value: w.value })));
+  const tasksId = idOf(meta, TASKS);
+  await sheets.batchUpdate(
+    env,
+    [...deleteRows].sort((a, b) => b - a).map((r) => ({ deleteDimension: { range: { sheetId: tasksId, dimension: 'ROWS', startIndex: r - 1, endIndex: r } } })),
+  );
+  await sheets.appendRows(env, `${TASKS}!A1`, plan.appendRows);
+
+  const live = new Set([...cards.map((c) => c.id), ...Object.keys(plan.newState)]);
+  const nextState = {};
+  for (const [id, b] of Object.entries({ ...state, ...plan.newState })) if (live.has(id)) nextState[id] = b;
+  if (Object.keys(plan.newState).length || Object.keys(nextState).length !== Object.keys(state).length) await writeState(env, nextState);
+
+  const drained = await drainQueue(env, journal, recent);
+
+  const summary = {
+    at: new Date().toISOString(),
+    ms: Date.now() - t0,
+    cards: cards.length,
+    created: creates.length,
+    updated: plan.trelloUpdates.length,
+    cells: cellWrites.length,
+    appended: plan.appendRows.length,
+    deleted: deleteRows.length,
+    collisions,
+  };
+  journal.log('DEBUG', 'SYNC_DONE', `Synchronisation : ${summary.cards} cartes, ${summary.updated} mises à jour Trello, ${summary.cells} cellules, ${summary.ms} ms`);
+  if (journal.wants('VERBOSE')) journal.log('VERBOSE', 'SYNC_PLAN', JSON.stringify({ ...summary, at: undefined }));
+
+  await flushJournal(env, meta, journal, tz);
+  await dropQueueRows(env, meta, drained);
+  if (driveMeta && driveMeta.version != null) await setConfig(env, 'driveVersion', String(driveMeta.version));
+  return { summary, retry: collisions > 0 };
+}
+
+/* ── Public entry points ─────────────────────────────────────────── */
+
+export async function runSync(env, opts = {}) {
+  if (running) {
+    await markDirty(env);
+    return { skipped: true, reason: 'busy' };
+  }
+  running = true;
+  let lease = null;
+  try {
+    lease = await acquireLease(env);
+    if (!lease) {
+      await markDirty(env);
+      return { skipped: true, reason: 'lease' };
+    }
+    let cfg = lease.cfg;
+    let result = null;
+    for (let pass = 0; pass < MAX_PASSES; pass++) {
+      const startedAt = Date.now();
+      const journal = createJournal({ level: parseLevel(cfg.logLevel) });
+      try {
+        result = await syncOnce(env, cfg, pass === 0 ? opts : {}, journal, pass === 0 ? lease.boot : null);
+      } catch (err) {
+        journal.log('ERROR', 'SYNC_FAILED', String(err && err.message ? err.message : err));
+        try {
+          const { meta } = await ensureTabs(env);
+          await flushJournal(env, meta, journal, env.TIMEZONE);
+        } catch {
+          /* nothing more we can do */
+        }
+        throw err;
+      }
+      cfg = await loadConfig(env);
+      const dirtyAt = Number(cfg.dirty || 0);
+      if (!result.retry && !(dirtyAt > startedAt)) break;
+    }
+    lastSync = result.summary;
+    return { sync: result.summary };
   } finally {
+    if (lease) await releaseLease(env);
     running = false;
   }
 }
 
 /** Power-Up -> Sheet: writes the columns only the browser can compute (score, progress...). */
-export async function pushComputed(env, cards) {
-  const columns = await readColumns(env);
-  const grid = await sheets.readRange(env, TASKS);
-  const keys = keysFromHeader((grid[0] || []).map(String));
-  const rowById = new Map();
-  grid.slice(1).forEach((r, i) => {
-    const id = String(r[0] ?? '').trim();
-    if (id && !rowById.has(id)) rowById.set(id, { n: i + 2, r });
-  });
-  const writes = [];
-  for (const card of cards) {
-    const hit = rowById.get(card.id);
-    if (!hit) continue;
-    keys.forEach((key, i) => {
-      if (!key || COLUMNS[key].dir !== 'push' || !(key in card)) return;
-      const next = card[key] == null ? '' : card[key];
-      if (String(hit.r[i + 1] ?? '') !== String(next)) {
-        writes.push({ range: `${TASKS}!${sheets.colLetter(i + 2)}${hit.n}`, value: next });
-      }
-    });
+export async function pushComputed(env, pushedCards) {
+  const lease = await acquireLease(env);
+  if (!lease) {
+    await markDirty(env);
+    return { written: 0, busy: true };
   }
-  await sheets.writeCells(env, writes);
-  return { written: writes.length, columns };
+  try {
+    const columns = normalizeColumns(lease.cfg.columns || DEFAULT_COLUMNS);
+    const grid = await sheets.readRange(env, TASKS);
+    const header = (grid[0] || []).map(String);
+    if (JSON.stringify(header) !== JSON.stringify(headerRow(columns))) return { written: 0, busy: true }; // layout is being repaired
+    const rowById = new Map();
+    grid.slice(1).forEach((r, i) => {
+      const id = str(r[0]).trim();
+      if (id && !rowById.has(id)) rowById.set(id, { n: i + 2, r });
+    });
+    const state = await readState(env);
+    const writes = [];
+    for (const card of pushedCards) {
+      const hit = rowById.get(card.id);
+      if (!hit) continue;
+      const entry = state[card.id] || (state[card.id] = {});
+      entry.pushed = entry.pushed || {};
+      columns.forEach((key, i) => {
+        if (COLUMNS[key].dir !== 'push' || !(key in card)) return;
+        const next = card[key] == null ? '' : card[key];
+        entry.pushed[key] = next;
+        if (str(hit.r[i + 1]) !== str(next)) writes.push({ range: `${TASKS}!${sheets.colLetter(i + 2)}${hit.n}`, value: next });
+      });
+    }
+    await sheets.writeCells(env, writes);
+    await writeState(env, state);
+    return { written: writes.length, columns };
+  } finally {
+    await releaseLease(env);
+  }
+}
+
+/**
+ * Cron body: catches up once, then watches the file's Drive version for about a minute so a Sheet
+ * edit reaches Trello within seconds instead of waiting for the next cron tick.
+ */
+export async function watchSheet(env, { seconds = 50, intervalMs = 6000 } = {}) {
+  const end = Date.now() + seconds * 1000;
+  await runSync(env);
+  let known = (await loadConfig(env)).driveVersion;
+  while (Date.now() + intervalMs < end) {
+    await sleep(intervalMs);
+    let meta;
+    try {
+      meta = await sheets.getFileMeta(env);
+    } catch {
+      continue;
+    }
+    if (String(meta.version) !== String(known)) {
+      await runSync(env, { driveMeta: meta });
+      known = meta.version;
+    }
+  }
+}
+
+/* ── Reading logs / activities for the Power-Up ─────────────────── */
+
+function toObjects(rows, headers) {
+  return rows.map((r) => Object.fromEntries(headers.map((h, i) => [h, str(r[i])])));
+}
+
+export async function readLogs(env, { limit = 200, level = 'VERBOSE' } = {}) {
+  const min = LEVELS[parseLevel(level, 'VERBOSE')];
+  const rows = await sheets.readRange(env, `${LOGS}!A2:I${Math.max(2, limit + 1)}`).catch(() => []);
+  return toObjects(rows, LOG_HEADERS).filter((r) => LEVELS[r['Niveau']] >= min);
+}
+
+export async function readActivities(env, { limit = 200 } = {}) {
+  const rows = await sheets.readRange(env, `${ACTIVITIES}!A2:I${Math.max(2, limit + 1)}`).catch(() => []);
+  return toObjects(rows, ACTIVITY_HEADERS);
+}
+
+/** CRITICAL log entries nobody has acknowledged yet. */
+export async function readAlerts(env) {
+  const cfg = await loadConfig(env);
+  const since = str(cfg.alertsAckAt);
+  const logs = await readLogs(env, { limit: 100, level: 'CRITICAL' });
+  return logs.filter((l) => l['Niveau'] === 'CRITICAL' && l['Horodatage'] > since);
+}
+
+export async function ackAlerts(env) {
+  await setConfig(env, 'alertsAckAt', stamp(new Date(), env.TIMEZONE));
 }

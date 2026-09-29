@@ -73,6 +73,8 @@
       statusKind: '',
       statusAction: null,
       menuOpen: false,
+      drawer: null, // 'logs' | 'activities'
+      alerts: [],
     };
     var pushTimer = null;
     var statusTimer = null;
@@ -81,9 +83,11 @@
     var els = {
       bar: h('div', { class: 'tb-bar' }),
       banner: h('div', { class: 'tb-banner', hidden: true }),
+      alert: h('div', { class: 'tb-alert', hidden: true }),
       wrap: h('div', { class: 'tb-wrap' }),
+      drawer: h('div', { class: 'tb-drawer', hidden: true }),
     };
-    var shell = h('div', { class: 'tb-root', tabindex: '-1' }, [els.bar, els.banner, els.wrap]);
+    var shell = h('div', { class: 'tb-root', tabindex: '-1' }, [els.bar, els.banner, els.alert, els.wrap, els.drawer]);
     root.appendChild(shell);
 
     /* ── Status line (with optional action, e.g. Annuler) ─────────── */
@@ -250,6 +254,12 @@
       if (state.sort) kids.push(btn('arrows-sort', 'Ordre du tableau', { title: 'Retirer le tri', onclick: function () { setSort(null); } }));
       kids.push(h('span', { class: 'tb-status' }));
       kids.push(h('span', { class: 'tb-spacer' }));
+      if (connected) {
+        var logBtn = btn('list-details', 'Logs', { title: 'Journal de la synchronisation', onclick: function () { openDrawer('logs'); } });
+        logBtn.appendChild(h('span', { class: 'tb-badge', hidden: !state.alerts.length, text: '!' }));
+        kids.push(logBtn);
+        kids.push(btn('activity', 'Activités', { title: 'Qui a fait quoi, dans Trello et dans le Sheet', onclick: function () { openDrawer('activities'); } }));
+      }
       if (connected) kids.push(btn('refresh-dot', 'Synchroniser', { title: 'Forcer une synchronisation Trello ⇄ Sheet', onclick: syncNow }));
       kids.push(
         btn(connected ? 'brand-google-drive' : 'plug-connected', connected ? 'Afficher dans Google Sheet' : 'Connecter Google Sheets', {
@@ -752,7 +762,11 @@
       ];
       if (state.sort) items.push({ icon: 'arrows-sort', label: 'Retirer le tri (ordre du tableau)', action: function () { setSort(null); } });
       items.push({ sep: true });
-      if (connected) items.push({ icon: 'refresh-dot', label: 'Synchroniser avec le Sheet', action: syncNow });
+      if (connected) {
+        items.push({ icon: 'refresh-dot', label: 'Synchroniser avec le Sheet', action: syncNow });
+        items.push({ icon: 'list-details', label: 'Voir les logs', action: function () { openDrawer('logs'); } });
+        items.push({ icon: 'activity', label: 'Voir les activités', action: function () { openDrawer('activities'); } });
+      }
       items.push({ icon: connected ? 'brand-google-drive' : 'plug-connected', label: connected ? 'Afficher dans Google Sheet' : 'Connecter Google Sheets', action: openSheet });
       return items;
     }
@@ -880,6 +894,174 @@
       }
     });
 
+    /* ── Alerts (CRITICAL) + Logs / Activities drawer ─────────────── */
+    var LEVEL_ICONS = { CRITICAL: 'alert-octagon', ERROR: 'circle-x', WARNING: 'alert-triangle', INFO: 'info-circle', DEBUG: 'bug', VERBOSE: 'message-2' };
+    var LEVELS_UI = ['VERBOSE', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'];
+    var journal = { logs: [], activities: [], level: 'INFO', minLevel: 'INFO', error: '', loading: false };
+    var drawerTimer = null;
+
+    function loadAlerts() {
+      if (!SH().isConnected(state.sheet)) return Promise.resolve();
+      return SH().info(state.sheet).then(function (res) {
+        if (!res.ok) return;
+        state.alerts = (res.data && res.data.alerts) || [];
+        journal.level = (res.data && res.data.logLevel) || 'INFO';
+        renderAlerts();
+        var b = els.bar.querySelector('.tb-badge');
+        if (b) b.hidden = !state.alerts.length;
+      });
+    }
+
+    function renderAlerts() {
+      els.alert.innerHTML = '';
+      if (!state.alerts.length) {
+        els.alert.hidden = true;
+        return;
+      }
+      els.alert.hidden = false;
+      var a = state.alerts[0];
+      var more = state.alerts.length > 1 ? ' (+' + (state.alerts.length - 1) + ' autre' + (state.alerts.length > 2 ? 's' : '') + ')' : '';
+      els.alert.appendChild(icon('alert-octagon', 'tb-alert-icon'));
+      els.alert.appendChild(
+        h('div', { class: 'tb-alert-text' }, [
+          h('strong', { text: 'Quelque chose s’est produit dans le Google Sheet — j’ai dû restaurer.' + more }),
+          h('div', { text: (a['Message'] || '') + (a['Utilisateur'] ? '  —  ' + a['Utilisateur'] : '') + '  ·  ' + (a['Horodatage'] || '') }),
+        ])
+      );
+      els.alert.appendChild(btn('list-details', 'Voir les logs', { onclick: function () { openDrawer('logs', 'CRITICAL'); } }));
+      els.alert.appendChild(
+        btn('check', 'Compris', {
+          onclick: function () {
+            state.alerts = [];
+            renderAlerts();
+            SH().ackAlerts(state.sheet).then(function () { renderBar(); });
+          },
+        })
+      );
+    }
+
+    function openDrawer(kind, minLevel, force) {
+      state.drawer = state.drawer === kind && !minLevel && !force ? null : kind;
+      if (minLevel) journal.minLevel = minLevel;
+      renderDrawer();
+      clearInterval(drawerTimer);
+      if (state.drawer) {
+        refreshDrawer();
+        drawerTimer = setInterval(refreshDrawer, 15000);
+      }
+    }
+
+    function refreshDrawer() {
+      if (!state.drawer || !SH().isConnected(state.sheet)) return Promise.resolve();
+      journal.loading = true;
+      var call = state.drawer === 'logs' ? SH().logs(state.sheet, { limit: 300, level: journal.minLevel }) : SH().activities(state.sheet, { limit: 300 });
+      return call.then(function (res) {
+        journal.loading = false;
+        if (!res.ok) journal.error = res.detail || res.reason;
+        else {
+          journal.error = '';
+          if (state.drawer === 'logs') journal.logs = res.data.logs || [];
+          else journal.activities = res.data.activities || [];
+        }
+        renderDrawer();
+      });
+    }
+
+    function shorten(v) {
+      v = String(v == null ? '' : v).replace(/\s+/g, ' ');
+      return v.length > 90 ? v.slice(0, 89) + '…' : v;
+    }
+
+    function beforeAfter(r) {
+      var b = r['Avant'];
+      var a = r['Après'];
+      if (!b && !a) return '';
+      var box = h('span', { class: 'tb-diff' });
+      if (b) box.appendChild(h('span', { class: 'tb-diff-old', title: b, text: shorten(b) }));
+      if (b && a) box.appendChild(icon('arrow-right', 'tb-diff-arrow'));
+      if (a) box.appendChild(h('span', { class: 'tb-diff-new', title: a, text: shorten(a) }));
+      return box;
+    }
+
+    function initials(name) {
+      return String(name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(function (p) { return p[0].toUpperCase(); }).join('') || '?';
+    }
+
+    function renderDrawer() {
+      var d = els.drawer;
+      d.innerHTML = '';
+      d.hidden = !state.drawer;
+      if (!state.drawer) return;
+      var isLogs = state.drawer === 'logs';
+      var head = h('div', { class: 'tb-drawer-head' }, [
+        h('div', { class: 'tb-tabs' }, [
+          h('button', { class: 'tb-tab' + (isLogs ? ' is-on' : ''), onclick: function () { openDrawer('logs', journal.minLevel, true); } }, [icon('list-details'), h('span', { text: 'Logs' })]),
+          h('button', { class: 'tb-tab' + (!isLogs ? ' is-on' : ''), onclick: function () { openDrawer('activities', null, true); } }, [icon('activity'), h('span', { text: 'Activités' })]),
+        ]),
+      ]);
+      if (isLogs) {
+        var minSel = h('select', { class: 'tb-select', title: 'Niveau minimum affiché', onchange: function (e) { journal.minLevel = e.target.value; refreshDrawer(); } });
+        LEVELS_UI.forEach(function (l) { minSel.appendChild(h('option', { value: l, text: 'Afficher ≥ ' + l, selected: l === journal.minLevel })); });
+        var recSel = h('select', {
+          class: 'tb-select',
+          title: 'Niveau enregistré dans le Sheet (Logs)',
+          onchange: function (e) {
+            SH().setLogLevel(state.sheet, e.target.value).then(function (r) {
+              if (r.ok) { journal.level = e.target.value; setStatus('Niveau enregistré : ' + e.target.value, 'ok'); }
+              else setStatus('Sheet : ' + (r.detail || r.reason), 'error');
+            });
+          },
+        });
+        LEVELS_UI.forEach(function (l) { recSel.appendChild(h('option', { value: l, text: 'Enregistrer ≥ ' + l, selected: l === journal.level })); });
+        head.appendChild(minSel);
+        head.appendChild(recSel);
+      }
+      head.appendChild(h('span', { class: 'tb-spacer' }));
+      head.appendChild(btn('refresh', null, { title: 'Actualiser', onclick: refreshDrawer }));
+      head.appendChild(btn('brand-google-drive', null, { title: 'Ouvrir l’onglet dans Google Sheet', onclick: openSheet }));
+      head.appendChild(btn('chevron-down', null, { title: 'Fermer', onclick: function () { state.drawer = null; clearInterval(drawerTimer); renderDrawer(); } }));
+      d.appendChild(head);
+
+      var body = h('div', { class: 'tb-drawer-body' });
+      if (journal.error) body.appendChild(h('div', { class: 'tb-loading', text: 'Impossible de charger : ' + journal.error }));
+      var rows = isLogs ? journal.logs : journal.activities;
+      if (!rows.length && !journal.error) body.appendChild(h('div', { class: 'tb-loading', text: journal.loading ? 'Chargement…' : isLogs ? 'Aucune entrée à ce niveau.' : 'Aucune activité pour le moment.' }));
+      var table = h('table', { class: 'tb-jgrid' });
+      if (rows.length) {
+        table.appendChild(
+          h('thead', {}, [h('tr', {}, (isLogs ? ['Heure', 'Niveau', 'Message', 'Carte', 'Champ', 'Changement', 'Utilisateur'] : ['Heure', 'Utilisateur', 'Origine', 'Action', 'Carte', 'Champ', 'Changement']).map(function (t2) { return h('th', { text: t2 }); }))])
+        );
+        var tb = h('tbody');
+        rows.forEach(function (r) {
+          var tr = h('tr');
+          if (isLogs) {
+            var lv = r['Niveau'];
+            tr.className = 'lv-row lv-row-' + lv;
+            tr.appendChild(h('td', { class: 'tb-nowrap', text: r['Horodatage'] }));
+            tr.appendChild(h('td', {}, [h('span', { class: 'tb-lv lv-' + lv }, [icon(LEVEL_ICONS[lv] || 'point'), h('span', { text: lv })])]));
+            tr.appendChild(h('td', { class: 'tb-msg', title: r['Code'], text: r['Message'] }));
+            tr.appendChild(h('td', { text: r['Carte'] }));
+            tr.appendChild(h('td', { text: r['Champ'] }));
+            tr.appendChild(h('td', {}, [beforeAfter(r)]));
+            tr.appendChild(h('td', { text: r['Utilisateur'] }));
+          } else {
+            var fromTrello = r['Origine'] === 'Trello';
+            tr.appendChild(h('td', { class: 'tb-nowrap', text: r['Horodatage'] }));
+            tr.appendChild(h('td', {}, [h('span', { class: 'tb-user' }, [h('span', { class: 'tb-avatar', text: initials(r['Utilisateur']) }), h('span', { text: r['Utilisateur'] })])]));
+            tr.appendChild(h('td', {}, [h('span', { class: 'tb-origin' }, [icon(fromTrello ? 'brand-trello' : 'table'), h('span', { text: r['Origine'] })])]));
+            tr.appendChild(h('td', { text: r['Action'] }));
+            tr.appendChild(h('td', { text: r['Carte'] }));
+            tr.appendChild(h('td', { text: r['Champ'] }));
+            tr.appendChild(h('td', {}, [beforeAfter(r)]));
+          }
+          tb.appendChild(tr);
+        });
+        table.appendChild(tb);
+        body.appendChild(table);
+      }
+      d.appendChild(body);
+    }
+
     /* ── Loading ───────────────────────────────────────────────────── */
     function reload(opts) {
       if (!opts || !opts.quiet) els.wrap.innerHTML = '<div class="tb-loading">Chargement…</div>';
@@ -903,6 +1085,7 @@
           renderBanner();
           renderGrid();
           schedulePush();
+          loadAlerts();
         })
         .catch(function (err) {
           els.wrap.innerHTML = '';
@@ -918,6 +1101,7 @@
     });
 
     renderBar();
+    setInterval(loadAlerts, 30000);
     return reload();
   }
 

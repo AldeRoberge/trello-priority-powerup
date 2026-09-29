@@ -5,7 +5,7 @@ Un Google Sheet lié dans les deux sens à un tableau Trello, plus une vue **Tab
 bouton **Afficher dans Google Sheet**.
 
 - Vous modifiez une carte dans Trello → la ligne du Sheet est mise à jour en quelques secondes (webhook Trello).
-- Vous modifiez une cellule du Sheet → la carte est mise à jour en environ une minute (le Worker relit le Sheet chaque minute).
+- Vous modifiez une cellule du Sheet → la carte est mise à jour en quelques secondes (le Worker surveille le fichier en continu).
 - Une ligne ajoutée au Sheet (avec un « Objet ») crée une carte ; une carte archivée dans Trello retire sa ligne.
 - En cas de modification simultanée du même champ des deux côtés, **Trello gagne** (le conflit est noté dans l’onglet caché `_SyncLog`).
 
@@ -65,9 +65,55 @@ Bouton **Colonnes** de la vue Table : cocher/décocher et réordonner. Le même 
 
 La colonne A (`TrelloCardId`) est cachée : c’est la clé de jointure, ne la supprimez pas.
 
+## Logs, activités et protection du Sheet
+
+Le Sheet contient maintenant deux onglets visibles, alimentés automatiquement (les plus récents en haut, 3 000 lignes conservées) :
+
+- **Logs** : ce que la synchronisation a fait ou refusé de faire, avec un niveau de gravité.
+- **Activities** : qui a fait quoi, dans Trello **et** dans le Sheet (utilisateur, origine, action, carte, champ, avant → après).
+
+Les deux sont aussi visibles dans la vue **Table** (boutons *Logs* et *Activités*).
+
+### Niveaux de log
+
+| Niveau | Exemples |
+|--------|----------|
+| `CRITICAL` | colonne renommée / déplacée / supprimée / insérée dans le Sheet, colonne clé modifiée, onglet `Tasks` supprimé : **tout est restauré** et une alerte rouge s’affiche dans la Table |
+| `ERROR` | la synchronisation a échoué (API Google ou Trello) |
+| `WARNING` | modification écrasée (Trello gagne), statut invalide restauré, titre vidé restauré, colonne en lecture seule modifiée puis restaurée, ligne à identifiant inconnu retirée, onglet du journal recréé |
+| `INFO` | carte créée depuis le Sheet, modification du Sheet appliquée à Trello |
+| `DEBUG` | résumé de chaque synchronisation, écritures reportées pour éviter une collision |
+| `VERBOSE` | détails du plan de synchronisation |
+
+Le niveau enregistré (défaut `INFO`) se règle dans la vue Table → *Logs* → « Enregistrer ≥ … ».
+
+### Alerte critique
+
+Quand un changement non permis est détecté (par exemple quelqu’un renomme « Objet » en « Titre ! »), le Worker
+restaure l’en-tête et les données, écrit une entrée `CRITICAL` (avec l’auteur) et la vue Table affiche une bannière rouge :
+« Quelque chose s’est produit dans le Google Sheet — j’ai dû restaurer. » Le bouton *Compris* l’acquitte.
+
+Le Sheet lui-même avertit aussi avant la modification : les en-têtes, la colonne A et les colonnes en lecture seule sont des
+plages protégées en mode avertissement (« vous êtes sur le point de modifier une partie de la feuille qui ne devrait pas l’être »).
+
+### Qui a modifié quoi
+
+- **Trello** : chaque action du webhook (titre, description, liste, archivage, échéance, commentaire, membres, étiquettes, listes de tâches…) devient une ligne avec son auteur et les valeurs avant/après. Les changements que le Worker fait lui-même dans Trello (venant du Sheet) sont reconnus et ne sont pas attribués à tort à un utilisateur Trello.
+- **Google Sheets** : l’auteur est le dernier utilisateur ayant modifié le fichier (métadonnées Drive) au moment de la synchronisation. Si deux personnes modifient dans la même seconde, l’attribution va à la dernière.
+
+### Temps réel et pas de collision
+
+- Trello → Sheet : quelques secondes (webhook).
+- Sheet → Trello : le Worker surveille la version du fichier toutes les ~6 secondes pendant chaque minute de cron ; une modification arrive donc en général en moins de 10 secondes.
+- Un **verrou** (cellule de bail dans `_Config`, vérifiée après écriture) empêche deux synchronisations de s’exécuter en même temps.
+- Avant d’écrire, le Worker relit le Sheet et **saute toute cellule modifiée entre-temps** ; une nouvelle passe fusionne alors correctement. Une demande arrivée pendant une synchronisation en déclenche une autre juste après.
+- Les activités Trello passent par une file (`_Queue`) écrite de façon atomique, puis sont vidées par la synchronisation : aucune n’est perdue si une synchronisation est déjà en cours.
+
+Après une mise à jour du Worker, redéployez : `cd workers/trello-sheet-sync && npx wrangler deploy`. Les nouveaux onglets sont créés au premier passage.
+
 ## Limites
 
-- Sheet → Trello : délai d’environ une minute (Google Sheets n’offre pas de notification sans Apps Script).
+- Sheet → Trello : quelques secondes (surveillance de la version du fichier pendant chaque minute de cron ; Google Sheets n’offre pas de notification instantanée sans Apps Script). Sur le forfait gratuit de Cloudflare (50 sous-requêtes par exécution), préférez le forfait Workers Payant si vous avez beaucoup de cartes.
 - Priorité, Progrès, Urgence… ne se rafraîchissent dans le Sheet que lorsque la vue Table (ou le bouton *Synchroniser*) est utilisée : seul le navigateur sait calculer ces valeurs.
 - Un tableau par Sheet. Supprimer une ligne du Sheet ne supprime pas la carte : la ligne réapparaît. Archivez dans Trello (ou avec ✕ dans la Table).
 - Une ligne dont l’« Objet » est rempli devient une carte à la prochaine minute : terminez votre saisie avant.

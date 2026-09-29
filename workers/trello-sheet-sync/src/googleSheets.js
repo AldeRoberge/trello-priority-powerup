@@ -2,7 +2,9 @@
 // Crypto, no google-auth-library). Same approach as vvd-smart-dashboard's url-shortener worker.
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
-const SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
+// Sheets to read/write cells; Drive metadata (read-only) to learn who last edited the file.
+const SCOPE = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.metadata.readonly';
+const DRIVE_API = 'https://www.googleapis.com/drive/v3/files';
 const API = 'https://sheets.googleapis.com/v4/spreadsheets';
 
 function b64url(bytes) {
@@ -91,7 +93,7 @@ export async function clearRange(env, range) {
 
 /** Sheet (tab) metadata: ids, conditional formats. */
 export async function getMeta(env) {
-  return call(env, '?fields=sheets(properties(sheetId,title,gridProperties),conditionalFormats)');
+  return call(env, '?fields=sheets(properties(sheetId,title,gridProperties),conditionalFormats,protectedRanges(protectedRangeId))');
 }
 
 export async function batchUpdate(env, requests) {
@@ -108,4 +110,32 @@ export function colLetter(n) {
     n = Math.floor((n - 1) / 26);
   }
   return s;
+}
+
+/** Several ranges in one call; returns one 2D array per range (same order). */
+export async function batchGet(env, ranges) {
+  if (!ranges.length) return [];
+  const q = ranges.map((r) => 'ranges=' + encodeURIComponent(r)).join('&');
+  const data = await call(env, `/values:batchGet?${q}&valueRenderOption=UNFORMATTED_VALUE`);
+  return (data.valueRanges || []).map((v) => v.values || []);
+}
+
+/** Inserts rows right under the header (newest first) and writes them. */
+export async function prependRows(env, sheetId, tab, rows) {
+  if (!rows.length) return;
+  await batchUpdate(env, [
+    { insertDimension: { range: { sheetId, dimension: 'ROWS', startIndex: 1, endIndex: 1 + rows.length }, inheritFromBefore: false } },
+  ]);
+  await writeRange(env, `${tab}!A2`, rows);
+}
+
+/** Drive metadata of the spreadsheet: version counter, modifiedTime, last editor. */
+export async function getFileMeta(env) {
+  const token = await accessToken(env);
+  const res = await fetch(
+    `${DRIVE_API}/${env.GOOGLE_SHEET_ID}?fields=version,modifiedTime,lastModifyingUser(displayName,emailAddress)&supportsAllDrives=true`,
+    { headers: { authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) throw new Error(`Drive metadata failed: ${res.status} ${await res.text()}`);
+  return res.json();
 }

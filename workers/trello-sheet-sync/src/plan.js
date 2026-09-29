@@ -1,14 +1,19 @@
 // Pure sync planner: given the current Trello board and the Sheet rows, decides which cells /
-// cards to write. No I/O here so the merge rules can be unit-tested (test/sheet-sync-plan.test.js).
+// cards to write and what to log. No I/O here so the merge rules can be unit-tested
+// (test/sheet-sync-plan.test.js).
 //
 // Merge rule (same as the Outlook sync): 3-way merge against the baseline saved after the last
 // sync; when both sides changed a field to different values, Trello wins and the loss is logged.
+// Read-only columns (Échéance, Carte, and the computed Priorité/Progrès/...) are restored when a
+// person edits them in the Sheet.
 
 import { COLUMNS } from './columns.js';
 import { splitDesc, joinDesc } from './descMeta.js';
 import { statutLabelForList, findListForStatut } from './statut.js';
 
 const BOTH_KEYS = Object.keys(COLUMNS).filter((k) => COLUMNS[k].dir === 'both');
+const PUSH_KEYS = Object.keys(COLUMNS).filter((k) => COLUMNS[k].dir === 'push');
+const TRELLO_KEYS = Object.keys(COLUMNS).filter((k) => COLUMNS[k].dir === 'trello');
 
 const str = (v) => (v == null ? '' : String(v).replace(/\r\n/g, '\n'));
 
@@ -52,21 +57,33 @@ export function trelloValues(card, listById, timeZone) {
 
 /**
  * @param {object} p
- * @param {(string|null)[]} p.keys   column keys of the actual sheet header (without column A)
+ * @param {(string|null)[]} p.keys   column keys of the Sheet's data columns (without column A)
  * @param {object[]} p.cards         open Trello cards {id,name,desc,idList,due,shortUrl,pos,category}
  * @param {object[]} p.lists         [{id,name}]
  * @param {any[][]}  p.rows          sheet data rows (row 2 onward); column 0 is the card id
  * @param {Record<string,object>} p.state  baseline per card id
+ * @param {string} [p.sheetUser]     who last edited the Sheet (for Activities)
  */
-export function planSync({ keys, cards, lists, rows, state, timeZone }) {
-  const out = { cellWrites: [], appendRows: [], deleteRows: [], trelloUpdates: [], trelloCreates: [], newState: {}, log: [] };
+export function planSync({ keys, cards, lists, rows, state, timeZone, sheetUser = 'Google Sheets' }) {
+  const out = {
+    cellWrites: [],
+    appendRows: [],
+    deleteRows: [],
+    trelloUpdates: [],
+    trelloCreates: [],
+    newState: {},
+    logs: [],
+    activities: [],
+  };
   const col = (key) => {
     const i = keys.indexOf(key);
     return i < 0 ? -1 : i + 1; // index into a row array (0 is the id)
   };
+  const label = (key) => COLUMNS[key].header;
   const cardById = new Map(cards.map((c) => [c.id, c]));
   const listById = new Map(lists.map((l) => [l.id, l]));
   const seen = new Set();
+  const log = (level, code, message, extra = {}) => out.logs.push({ level, code, message, user: sheetUser, ...extra });
 
   rows.forEach((row, i) => {
     const rowNum = i + 2;
@@ -89,14 +106,21 @@ export function planSync({ keys, cards, lists, rows, state, timeZone }) {
       if (col('statut') >= 0 && statut !== cell('statut')) {
         out.cellWrites.push({ row: rowNum, col: col('statut') + 1, value: statut });
       }
+      log('INFO', 'CARD_CREATED', `Carte créée depuis le Sheet dans « ${list ? list.name : '?'} »`, { card: name });
+      out.activities.push({ user: sheetUser, origin: 'Google Sheets', action: 'créée', card: name, field: label('statut'), after: list ? list.name : '' });
       return;
     }
 
-    if (seen.has(id)) return; // duplicated row: first one wins
+    if (seen.has(id)) {
+      log('WARNING', 'DUPLICATE_ROW', `Ligne ${rowNum} ignorée : l'identifiant de carte apparaît déjà plus haut`, { card: cell('name') });
+      return; // duplicated row: first one wins
+    }
     seen.add(id);
     const card = cardById.get(id);
     if (!card) {
-      out.deleteRows.push(rowNum); // archived / deleted in Trello
+      out.deleteRows.push(rowNum); // archived / deleted in Trello, or an id typed by hand
+      if (state[id]) log('DEBUG', 'ROW_REMOVED', `Ligne retirée : la carte n'est plus ouverte dans Trello`, { card: cell('name') });
+      else log('WARNING', 'UNKNOWN_ID', `Ligne ${rowNum} retirée : identifiant de carte inconnu`, { card: cell('name') });
       return;
     }
 
@@ -112,12 +136,25 @@ export function planSync({ keys, cards, lists, rows, state, timeZone }) {
       const sheetVal = cell(key);
       const m = mergeField(base, tv[key], sheetVal);
       let next = m.next;
-      if (m.conflict) out.log.push({ cardId: id, field: key, trello: tv[key], sheet: sheetVal, note: 'conflit — valeur Trello conservée' });
+      let rejected = false;
+
+      if (m.conflict) {
+        log('WARNING', 'CONFLICT', `Modification écrasée : le Sheet avait « ${sheetVal} », Trello a « ${tv[key]} » (Trello gagne)`, {
+          card: tv.name,
+          field: label(key),
+          before: sheetVal,
+          after: tv[key],
+        });
+      }
 
       if (m.writeTrello) {
         if (key === 'name') {
           if (next.trim()) fields.name = next;
-          else next = tv.name;
+          else {
+            next = tv.name;
+            rejected = true;
+            log('WARNING', 'NAME_EMPTY', `Le titre ne peut pas être vide : valeur restaurée`, { card: tv.name, field: label(key), before: sheetVal, after: tv.name });
+          }
         } else if (key === 'desc') {
           fields.desc = joinDesc(next, splitDesc(card.desc).hidden);
         } else if (key === 'statut') {
@@ -126,21 +163,44 @@ export function planSync({ keys, cards, lists, rows, state, timeZone }) {
             if (list.id !== card.idList) fields.idList = list.id;
             next = statutLabelForList(list.name);
           } else {
-            out.log.push({ cardId: id, field: 'statut', trello: tv.statut, sheet: sheetVal, note: 'statut inconnu — restauré' });
+            rejected = true;
+            log('WARNING', 'STATUT_REVERTED', `Statut « ${sheetVal} » non valide : valeur restaurée`, { card: tv.name, field: label(key), before: sheetVal, after: tv.statut });
             next = tv.statut;
           }
         } else if (key === 'category') {
           categoryWrite = next;
         }
+        if (!rejected) {
+          log('INFO', 'SHEET_EDIT', `Modification du Sheet appliquée à Trello`, { card: tv.name, field: label(key), before: tv[key], after: next });
+          out.activities.push({ user: sheetUser, origin: 'Google Sheets', action: 'modifiée', card: tv.name, field: label(key), before: tv[key], after: next });
+        }
       }
-      if (m.writeSheet || next !== sheetVal) {
-        if (next !== sheetVal) out.cellWrites.push({ row: rowNum, col: col(key) + 1, value: next });
-      }
+      if (next !== sheetVal) out.cellWrites.push({ row: rowNum, col: col(key) + 1, value: next });
       baseline[key] = next;
     }
 
-    for (const key of ['due', 'link']) {
-      if (col(key) >= 0 && tv[key] !== cell(key)) out.cellWrites.push({ row: rowNum, col: col(key) + 1, value: tv[key] });
+    // Read-only columns fed by Trello: put the value back if someone typed over it.
+    for (const key of TRELLO_KEYS) {
+      if (col(key) < 0) continue;
+      const sheetVal = cell(key);
+      if (sheetVal !== tv[key]) {
+        const known = prev && key in prev ? prev[key] : undefined;
+        if (known !== undefined && sheetVal !== known) {
+          log('WARNING', 'READONLY_REVERTED', `Colonne en lecture seule modifiée dans le Sheet : valeur restaurée`, { card: tv.name, field: label(key), before: sheetVal, after: tv[key] });
+        }
+        out.cellWrites.push({ row: rowNum, col: col(key) + 1, value: tv[key] });
+      }
+      baseline[key] = tv[key];
+    }
+
+    // Read-only columns computed by the Power-Up (pushed): restore the last pushed value.
+    const pushed = (prev && prev.pushed) || {};
+    for (const key of PUSH_KEYS) {
+      if (col(key) < 0 || !(key in pushed)) continue;
+      if (cell(key) !== str(pushed[key])) {
+        log('WARNING', 'READONLY_REVERTED', `Colonne calculée modifiée dans le Sheet : valeur restaurée`, { card: tv.name, field: label(key), before: cell(key), after: str(pushed[key]) });
+        out.cellWrites.push({ row: rowNum, col: col(key) + 1, value: pushed[key] });
+      }
     }
 
     if (Object.keys(fields).length || categoryWrite !== undefined) {
@@ -153,7 +213,8 @@ export function planSync({ keys, cards, lists, rows, state, timeZone }) {
   for (const card of missing) {
     const tv = trelloValues(card, listById, timeZone);
     out.appendRows.push([card.id, ...keys.map((k) => (k && k in tv ? tv[k] : ''))]);
-    out.newState[card.id] = { name: tv.name, desc: tv.desc, statut: tv.statut, category: tv.category };
+    out.newState[card.id] = { name: tv.name, desc: tv.desc, statut: tv.statut, category: tv.category, due: tv.due, link: tv.link };
   }
+  if (missing.length) log('DEBUG', 'ROWS_APPENDED', `${missing.length} carte(s) ajoutée(s) au Sheet`);
   return out;
 }
