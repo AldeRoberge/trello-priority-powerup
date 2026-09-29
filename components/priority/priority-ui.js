@@ -13992,7 +13992,7 @@
     var TG_KIND_META = {
       asks: { icon: 'ti-arrow-down', label: 'Demande', verb: 'demande à' },
       flow: { icon: 'ti-arrow-right', label: 'Enchaîne', verb: 'passe le relais à' },
-      both: { icon: 'ti-arrows-exchange', label: 'Va-et-vient', verb: 'travaille en va-et-vient avec' }
+      both: { icon: 'ti-arrows-exchange', label: 'Collaboration', verb: 'collabore avec' }
     };
     var tgUid = ++teamGraphInstances;
     var tgSelectedKey = '';
