@@ -10,6 +10,7 @@
   'use strict';
 
   var SETTINGS_KEY = 'googleSheetsSettings';
+  var SECRET_KEY = 'googleSheetsSecret';
 
   function TM() {
     return global.TableModel || null;
@@ -61,9 +62,10 @@
     return { ok: true, data: json };
   }
 
-  /* ── Settings (board/shared) ─────────────────────────────────────────
-   * The Worker secret is stored here, so any board member who can open the
-   * Table can sync. Trello shares this key with every board member only. */
+  /* ── Settings ────────────────────────────────────────────────────────
+   * Worker URL, Sheet URL and columns live in board/shared. The Worker secret
+   * lives in board/private: Trello refuses secrets in shared pluginData ("Detected
+   * potential secret"), so each member pastes the connection code once. */
 
   function normalizeSettings(raw) {
     var s = raw && typeof raw === 'object' ? raw : {};
@@ -82,12 +84,17 @@
   }
 
   async function getSettings(t) {
-    return normalizeSettings(await t.get('board', 'shared', SETTINGS_KEY));
+    var shared = (await t.get('board', 'shared', SETTINGS_KEY)) || {};
+    var secret = await t.get('board', 'private', SECRET_KEY);
+    return normalizeSettings(Object.assign({}, shared, { secret: secret }));
   }
 
   async function saveSettings(t, settings) {
     var normalized = normalizeSettings(settings);
-    await t.set('board', 'shared', SETTINGS_KEY, normalized);
+    var shared = Object.assign({}, normalized);
+    delete shared.secret;
+    await t.set('board', 'private', SECRET_KEY, normalized.secret);
+    await t.set('board', 'shared', SETTINGS_KEY, shared);
     return normalized;
   }
 

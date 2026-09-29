@@ -142,6 +142,10 @@
 
       SheetsTrello.getSettings(t).then(function (s) { settings = s; render(); });
 
+      function fail(err) {
+        setStatus('Échec : ' + ((err && err.message) || err || 'erreur inconnue'), 'error');
+      }
+
       $('connectBtn').addEventListener('click', function () {
         setStatus('Connexion…');
         SheetsTrello.connectWithCode(t, $('code').value).then(function (res) {
@@ -156,7 +160,7 @@
               });
             }
           }).then(render);
-        });
+        }).catch(fail);
       });
 
       $('syncBtn').addEventListener('click', function () {
@@ -187,7 +191,7 @@
         SheetsTrello.saveSettings(t, settings).then(function () {
           setStatus('Déconnecté (le Worker et la feuille restent en place).');
           render();
-        });
+        }).catch(fail);
       });
 
       $('closeBtn').addEventListener('click', function () {
