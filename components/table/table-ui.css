@@ -197,25 +197,6 @@
   opacity: 1;
 }
 
-.tb-rowbtn {
-  border: 0;
-  background: transparent;
-  color: var(--tp-text-muted);
-  cursor: pointer;
-  padding: 0 3px;
-  visibility: hidden;
-  font: inherit;
-}
-tr:hover .tb-rowbtn,
-.tb-rowbtn[data-armed='1'] {
-  visibility: visible;
-}
-.tb-rowbtn:hover {
-  color: var(--tp-text);
-}
-.tb-rowbtn--danger:hover {
-  color: var(--tp-danger-text);
-}
 
 .tb-cell {
   cursor: cell;
@@ -286,3 +267,107 @@ textarea.tb-input {
 .tb-add::placeholder {
   color: var(--tp-text-muted);
 }
+
+/* ── Icons, toolbar ─────────────────────────────────────────────── */
+.tb-title { display: inline-flex; align-items: center; gap: 6px; }
+.tb-title .ti { font-size: 18px; color: var(--tp-text-subtle); }
+.tb-btn { display: inline-flex; align-items: center; gap: 6px; }
+.tb-btn .ti { font-size: 16px; }
+.tb-btn--icon { padding: 6px 8px; }
+.tb-search { position: relative; display: inline-flex; align-items: center; }
+.tb-search .ti { position: absolute; left: 8px; font-size: 15px; color: var(--tp-text-muted); pointer-events: none; }
+.tb-search .tb-filter { padding-left: 28px; }
+.tb-status { display: inline-flex; align-items: center; gap: 5px; }
+.tb-link {
+  display: inline-flex; align-items: center; gap: 3px; border: 0; background: none; font: inherit;
+  color: var(--tp-link); cursor: pointer; text-decoration: underline; padding: 0 0 0 6px;
+}
+.tb-banner .ti { font-size: 18px; }
+
+/* ── Header: faint sort arrows on hover ─────────────────────────── */
+.tb-th { display: table-cell; }
+.tb-th-icon { font-size: 14px; color: var(--tp-text-muted); margin-right: 6px; vertical-align: -2px; }
+.tb-sort {
+  margin-left: 6px; font-size: 13px; vertical-align: -2px; opacity: 0; transition: opacity 0.12s;
+  color: var(--tp-text-muted);
+}
+.tb-th:hover { background: var(--tp-surface-hover); }
+.tb-th:hover .tb-sort { opacity: 0.55; }
+.tb-th.is-sorted .tb-sort { opacity: 1; color: var(--tp-primary); }
+.tb-th.is-sorted .tb-th-icon { color: var(--tp-primary); }
+
+/* ── Row number cell ────────────────────────────────────────────── */
+.tb-num { white-space: nowrap; }
+.tb-handle { display: inline-block; margin-right: 2px; opacity: 0.35; vertical-align: -2px; }
+.tb-handle.is-off { cursor: not-allowed; opacity: 0.15; }
+.tb-rownum { display: inline-block; min-width: 20px; text-align: right; }
+.tb-rowbtn {
+  border: 0; background: transparent; color: var(--tp-text-muted); cursor: pointer; padding: 2px 3px;
+  margin-left: 4px; border-radius: 4px; font-size: 15px; line-height: 1; visibility: hidden; vertical-align: -2px;
+}
+tr:hover .tb-rowbtn { visibility: visible; }
+.tb-rowbtn:hover { background: var(--tp-surface-active); color: var(--tp-text); }
+.tb-rowbtn--danger:hover { color: var(--tp-danger-text); }
+.tb-num .ti-plus { font-size: 14px; }
+
+/* ── Objet: click opens the card, pencil renames ────────────────── */
+.tb-cell--open { cursor: pointer; }
+.tb-cell--open .tb-name { display: inline; }
+.tb-cell--open:hover .tb-name { color: var(--tp-link); text-decoration: underline; text-underline-offset: 2px; }
+.tb-edit {
+  float: right; margin-top: 4px; border: 0; background: transparent; color: var(--tp-text-muted);
+  cursor: pointer; padding: 2px 4px; border-radius: 4px; font-size: 14px; visibility: hidden;
+}
+tr:hover .tb-edit, .tb-cell.is-selected .tb-edit { visibility: visible; }
+.tb-edit:hover { background: var(--tp-surface-active); color: var(--tp-text); }
+
+/* ── Statut pill ────────────────────────────────────────────────── */
+.tb-cell--pill { cursor: pointer; }
+.tb-pill {
+  --pill: #626f86;
+  display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px 1px 6px; border-radius: 999px;
+  color: var(--pill); font-weight: 600; font-size: 12px; line-height: 20px;
+  background: color-mix(in srgb, var(--pill) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pill) 35%, transparent);
+}
+.tb-pill .ti { font-size: 14px; }
+.tb-caret { float: right; margin-top: 7px; font-size: 13px; color: var(--tp-text-muted); opacity: 0; }
+.tb-cell--pill:hover .tb-caret { opacity: 1; }
+.tb-tier {
+  display: inline-block; padding: 0 7px; border-radius: 4px; line-height: 20px; font-size: 12px; font-weight: 600;
+  background: var(--tp-surface-subtle); box-shadow: inset 0 0 0 1px var(--tp-border);
+}
+.tb-inline-icon { font-size: 14px; margin-right: 5px; color: var(--tp-text-muted); vertical-align: -2px; }
+.tb-linkcell { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+.tb-linkcell:hover { text-decoration: underline; }
+
+/* ── Column picker rows ─────────────────────────────────────────── */
+.tb-menu-row label { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+.tb-col-icon { font-size: 15px; color: var(--tp-text-muted); }
+.tb-menu-move button .ti { font-size: 14px; }
+
+/* ── Rich popup menu (context menu + Statut dropdown) ───────────── */
+.tbm {
+  position: fixed; z-index: 1000; min-width: 200px; overflow-y: auto; padding: 6px;
+  background: var(--tp-surface); color: var(--tp-text); border: 1px solid var(--tp-border-strong);
+  border-radius: 8px; box-shadow: 0 10px 30px rgba(9, 30, 66, 0.35); font-size: 13px;
+}
+.tbm-title {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--tp-text-muted);
+  padding: 5px 8px 3px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tbm-sep { height: 1px; margin: 5px 2px; background: var(--tp-border); }
+.tbm-item {
+  display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 5px; cursor: pointer;
+  white-space: nowrap; user-select: none;
+}
+.tbm-item.is-active, .tbm-item:hover { background: var(--tp-surface-hover); }
+.tbm-item.is-disabled { opacity: 0.4; cursor: default; }
+.tbm-item.is-danger { color: var(--tp-danger-text); }
+.tbm-icon { font-size: 17px; width: 18px; text-align: center; color: var(--tp-text-subtle); }
+.tbm-item.is-danger .tbm-icon { color: var(--tp-danger-text); }
+.tbm-label { flex: 1; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+.tbm-hint { color: var(--tp-text-muted); font-size: 12px; margin-left: 16px; }
+.tbm-check { color: var(--tp-primary); font-size: 16px; margin-left: 16px; }
+
+.tb-grid td, .tb-grid th { vertical-align: middle; }

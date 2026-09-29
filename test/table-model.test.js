@@ -95,6 +95,25 @@ describe('TableModel', () => {
     assert.equal(TM.dropPos([], 0), 65536);
   });
 
+  it('maps Statut categories to icons and enriches lists with colors', () => {
+    assert.equal(TM.statutIcon('completed'), 'circle-check');
+    assert.equal(TM.statutIcon('nope'), 'point');
+    const sm = { categoryStyle: (c) => ({ color: c === 'started' ? '#0c66e4' : '#626f86' }), applyStateColors() {} };
+    const lists = TM.enrichLists([{ id: 'l1', name: 'Doing' }, { id: 'l2', name: 'Autre' }], { listCategories: { l1: 'started' } }, sm);
+    assert.deepEqual(lists[0], { id: 'l1', name: 'Doing', category: 'started', color: '#0c66e4', icon: 'player-play-filled' });
+    assert.equal(lists[1].icon, 'point');
+  });
+
+  it('carries the Statut category and color on rows', () => {
+    const row = TM.rowFromRecord(rec({ category: 'started', color: '#0c66e4' }));
+    assert.equal(row.statutKey, 'started');
+    assert.equal(row.statutColor, '#0c66e4');
+  });
+
+  it('every column has a Tabler icon', () => {
+    Object.keys(TM.COLUMNS).forEach((k) => assert.ok(TM.COLUMNS[k].icon, k));
+  });
+
   it('builds the /push payload with blanks instead of nulls', () => {
     const payload = TM.pushPayload([{ id: 'x', priority: null, progress: 10, impact: 3, urgency: 'Vite', tier: '' }]);
     assert.deepEqual(payload.cards[0], { id: 'x', urgency: 'Vite', impact: 3, priority: '', tier: '', progress: 10 });

@@ -1,8 +1,10 @@
 /*
  * Role: UI of the Table view — a spreadsheet-like grid of the board's cards.
- * Inline cell editing (Objet, Statut, Catégorie, Description), sortable headers, filter,
- * drag-to-reorder rows (dropping into another list changes the Statut), column picker shared
- * with the Google Sheet, "Show in Google Sheet". Data + writes: TableTrello; pure helpers: TableModel.
+ *  - click an Objet to open the card (pencil / F2 / Enter to rename), double-click any row to open
+ *  - Statut cells are colored pills; clicking one opens a menu of the board's lists with icons
+ *  - sortable headers (faint arrows on hover), filter, drag-to-reorder, column picker
+ *  - right-click anywhere: context menu adapted to what is under the mouse
+ * Data + writes: TableTrello; pure helpers: TableModel; menus: TableMenu. Icons: Tabler webfont.
  */
 (function (global) {
   'use strict';
@@ -15,6 +17,9 @@
   };
   var SH = function () {
     return global.SheetsTrello;
+  };
+  var MENU = function () {
+    return global.TableMenu;
   };
 
   function h(tag, attrs, children) {
@@ -33,6 +38,23 @@
     return el;
   }
 
+  function icon(name, cls) {
+    return h('i', { class: 'ti ti-' + name + (cls ? ' ' + cls : '') });
+  }
+
+  function btn(iconName, label, opts) {
+    opts = opts || {};
+    return h(
+      'button',
+      {
+        class: 'tb-btn' + (opts.primary ? ' tb-btn--primary' : '') + (label ? '' : ' tb-btn--icon'),
+        title: opts.title || label || null,
+        onclick: opts.onclick,
+      },
+      [icon(iconName), label ? h('span', { text: label }) : null]
+    );
+  }
+
   function mount(root, t) {
     var state = {
       lists: [],
@@ -42,13 +64,14 @@
       filter: '',
       categoryFieldId: null,
       categoryAvailable: false,
-      sheet: null, // SheetsTrello settings
+      sheet: null,
       authOk: true,
       editing: null, // {rowId, key}
       selected: null, // {rowId, key}
       dragId: null,
       status: '',
       statusKind: '',
+      statusAction: null,
       menuOpen: false,
     };
     var pushTimer = null;
@@ -60,22 +83,46 @@
       banner: h('div', { class: 'tb-banner', hidden: true }),
       wrap: h('div', { class: 'tb-wrap' }),
     };
-    root.appendChild(h('div', { class: 'tb-root' }, [els.bar, els.banner, els.wrap]));
+    var shell = h('div', { class: 'tb-root', tabindex: '-1' }, [els.bar, els.banner, els.wrap]);
+    root.appendChild(shell);
 
-    function setStatus(msg, kind, keepMs) {
+    /* ── Status line (with optional action, e.g. Annuler) ─────────── */
+    function setStatus(msg, kind, keepMs, action) {
       state.status = msg || '';
       state.statusKind = kind || '';
-      var s = els.bar.querySelector('.tb-status');
-      if (s) {
-        s.textContent = state.status;
-        s.className = 'tb-status' + (kind ? ' is-' + kind : '');
-      }
+      state.statusAction = action || null;
+      paintStatus();
       clearTimeout(statusTimer);
       if (msg && kind !== 'error') {
         statusTimer = setTimeout(function () {
           setStatus('', '');
-        }, keepMs || 2500);
+        }, keepMs || (action ? 8000 : 2500));
       }
+    }
+
+    function paintStatus() {
+      var s = els.bar.querySelector('.tb-status');
+      if (!s) return;
+      s.className = 'tb-status' + (state.statusKind ? ' is-' + state.statusKind : '');
+      s.innerHTML = '';
+      if (state.statusKind === 'ok') s.appendChild(icon('check'));
+      if (state.statusKind === 'error') s.appendChild(icon('alert-triangle'));
+      s.appendChild(document.createTextNode(state.status));
+      if (state.statusAction) {
+        s.appendChild(
+          h('button', {
+            class: 'tb-link',
+            onclick: function () {
+              var a = state.statusAction;
+              setStatus('', '');
+              a.run();
+            },
+          }, [icon('arrow-back-up'), a_label(state.statusAction)])
+        );
+      }
+    }
+    function a_label(a) {
+      return document.createTextNode(' ' + a.label);
     }
 
     function fail(err) {
@@ -101,26 +148,49 @@
       }, 800);
     }
 
-    /* ── Rendering ─────────────────────────────────────────────────── */
+    /* ── Helpers ───────────────────────────────────────────────────── */
     function visibleRows() {
       var rows = TM().filterRows(state.rows, state.filter);
       if (state.sort) rows = TM().sortRows(rows, state.sort.key, state.sort.dir);
       return rows;
     }
-
     function canReorder() {
       return !state.sort && !state.filter;
     }
+    function findRow(id) {
+      return state.rows.filter(function (r) { return r.id === id; })[0] || null;
+    }
+    function isEditable(key) {
+      return TM().COLUMNS[key].editable && !(key === 'category' && !state.categoryAvailable);
+    }
+    function listById(id) {
+      return state.lists.filter(function (l) { return l.id === id; })[0] || null;
+    }
+    function copyText(text) {
+      var done = function () { setStatus('Copié', 'ok'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () {});
+    }
 
+    function setSort(key, dir) {
+      state.sort = key ? { key: key, dir: dir } : null;
+      renderGrid();
+    }
+
+    function hideColumn(key) {
+      if (state.columns.length <= 1) return;
+      applyColumns(state.columns.filter(function (k) { return k !== key; }));
+    }
+
+    /* ── Banner / toolbar ──────────────────────────────────────────── */
     function renderBanner() {
       els.banner.innerHTML = '';
       if (!state.authOk) {
         els.banner.hidden = false;
-        els.banner.appendChild(h('span', { text: 'Trello doit être autorisé pour modifier les cartes depuis la table. ' }));
+        els.banner.appendChild(icon('lock'));
+        els.banner.appendChild(h('span', { text: 'Trello doit être autorisé pour modifier les cartes depuis la table.' }));
         els.banner.appendChild(
-          h('button', {
-            class: 'tb-btn tb-btn--primary',
-            text: 'Autoriser Trello',
+          btn('key', 'Autoriser Trello', {
+            primary: true,
             onclick: function () {
               global.GanttTrello.ensureRestAuthorized(t).then(function (r) {
                 state.authOk = !!r.ok;
@@ -134,6 +204,24 @@
       }
     }
 
+    function openSheet() {
+      if (SH().isConnected(state.sheet) && state.sheet.sheetUrl) window.open(state.sheet.sheetUrl, '_blank', 'noopener');
+      else openSheetSettings();
+    }
+
+    function syncNow() {
+      setStatus('Synchronisation…');
+      TT()
+        .pushToSheet(t, state.rows)
+        .then(function () { return SH().syncNow(state.sheet); })
+        .then(function (res) {
+          if (res.ok) {
+            setStatus('Synchronisé', 'ok');
+            reload({ quiet: true });
+          } else setStatus('Sheet : ' + (res.detail || res.reason), 'error');
+        });
+    }
+
     function renderBar() {
       els.bar.innerHTML = '';
       var connected = SH().isConnected(state.sheet);
@@ -144,75 +232,34 @@
         value: state.filter,
         oninput: function (e) {
           state.filter = e.target.value;
-          renderGrid();
+          renderGrid({ keepFocus: 'filter' });
         },
       });
-      var colsBtn = h('button', {
-        class: 'tb-btn',
-        text: 'Colonnes',
-        onclick: function (e) {
-          e.stopPropagation();
-          state.menuOpen = !state.menuOpen;
-          renderMenu();
-        },
-      });
-      var sheetBtn = h('button', {
-        class: 'tb-btn tb-btn--primary',
-        text: connected ? 'Afficher dans Google Sheet' : 'Connecter Google Sheets',
-        onclick: function () {
-          if (connected && state.sheet.sheetUrl) window.open(state.sheet.sheetUrl, '_blank', 'noopener');
-          else openSheetSettings();
-        },
-      });
-      var children = [
-        h('strong', { class: 'tb-title', text: 'Table' }),
-        filter,
-        h('button', { class: 'tb-btn', text: 'Actualiser', onclick: function () { reload(); } }),
-        colsBtn,
+      var kids = [
+        h('span', { class: 'tb-title' }, [icon('table'), h('strong', { text: 'Table' })]),
+        h('label', { class: 'tb-search' }, [icon('search'), filter]),
+        btn('refresh', null, { title: 'Actualiser', onclick: function () { reload(); } }),
+        btn('columns-3', 'Colonnes', {
+          onclick: function (e) {
+            e.stopPropagation();
+            state.menuOpen = !state.menuOpen;
+            renderMenu();
+          },
+        }),
       ];
-      if (state.sort) {
-        children.push(
-          h('button', {
-            class: 'tb-btn',
-            text: 'Ordre du tableau',
-            title: 'Retirer le tri',
-            onclick: function () {
-              state.sort = null;
-              renderGrid();
-            },
-          })
-        );
-      }
-      children.push(h('span', { class: 'tb-status' + (state.statusKind ? ' is-' + state.statusKind : ''), text: state.status }));
-      children.push(h('span', { class: 'tb-spacer' }));
-      if (connected) {
-        children.push(
-          h('button', {
-            class: 'tb-btn',
-            text: 'Synchroniser',
-            title: 'Forcer une synchronisation Trello ⇄ Sheet',
-            onclick: function () {
-              setStatus('Synchronisation…');
-              TT()
-                .pushToSheet(t, state.rows)
-                .then(function () {
-                  return SH().syncNow(state.sheet);
-                })
-                .then(function (res) {
-                  if (res.ok) {
-                    setStatus('Synchronisé', 'ok');
-                    reload({ quiet: true });
-                  } else setStatus('Sheet : ' + (res.detail || res.reason), 'error');
-                });
-            },
-          })
-        );
-      }
-      children.push(sheetBtn);
-      children.forEach(function (c) {
-        els.bar.appendChild(c);
-      });
+      if (state.sort) kids.push(btn('arrows-sort', 'Ordre du tableau', { title: 'Retirer le tri', onclick: function () { setSort(null); } }));
+      kids.push(h('span', { class: 'tb-status' }));
+      kids.push(h('span', { class: 'tb-spacer' }));
+      if (connected) kids.push(btn('refresh-dot', 'Synchroniser', { title: 'Forcer une synchronisation Trello ⇄ Sheet', onclick: syncNow }));
+      kids.push(
+        btn(connected ? 'brand-google-drive' : 'plug-connected', connected ? 'Afficher dans Google Sheet' : 'Connecter Google Sheets', {
+          primary: true,
+          onclick: openSheet,
+        })
+      );
+      kids.forEach(function (c) { els.bar.appendChild(c); });
       els.bar.appendChild(h('div', { class: 'tb-menu', hidden: !state.menuOpen, id: 'tbMenu' }));
+      paintStatus();
       renderMenu();
     }
 
@@ -222,16 +269,10 @@
       menu.hidden = !state.menuOpen;
       if (!state.menuOpen) return;
       menu.innerHTML = '';
-      menu.addEventListener('click', function (e) {
-        e.stopPropagation();
-      });
-      menu.appendChild(h('div', { class: 'tb-menu-title', text: 'Colonnes (aussi celles du Google Sheet)' }));
+      menu.onclick = function (e) { e.stopPropagation(); };
+      menu.appendChild(h('div', { class: 'tbm-title', text: 'Colonnes (aussi celles du Google Sheet)' }));
       var all = Object.keys(TM().COLUMNS);
-      var ordered = state.columns.concat(
-        all.filter(function (k) {
-          return state.columns.indexOf(k) === -1;
-        })
-      );
+      var ordered = state.columns.concat(all.filter(function (k) { return state.columns.indexOf(k) === -1; }));
       ordered.forEach(function (key) {
         var on = state.columns.indexOf(key) !== -1;
         var idx = state.columns.indexOf(key);
@@ -249,12 +290,13 @@
                   applyColumns(next);
                 },
               }),
-              ' ' + TM().COLUMNS[key].header,
+              icon(TM().COLUMNS[key].icon, 'tb-col-icon'),
+              h('span', { text: TM().COLUMNS[key].header }),
             ]),
             on
               ? h('span', { class: 'tb-menu-move' }, [
-                  h('button', { text: '↑', disabled: idx === 0, onclick: function () { moveColumn(idx, -1); } }),
-                  h('button', { text: '↓', disabled: idx === state.columns.length - 1, onclick: function () { moveColumn(idx, 1); } }),
+                  h('button', { title: 'Monter', disabled: idx === 0, onclick: function () { moveColumn(idx, -1); } }, [icon('arrow-up')]),
+                  h('button', { title: 'Descendre', disabled: idx === state.columns.length - 1, onclick: function () { moveColumn(idx, 1); } }, [icon('arrow-down')]),
                 ])
               : null,
           ])
@@ -310,6 +352,7 @@
     }
 
     function openCard(row) {
+      if (!row) return;
       t.modal({
         title: row.name || 'Carte',
         url: global.PriorityTrello.pageUrl('./popup.html'),
@@ -327,34 +370,38 @@
       });
     }
 
+    /* ── Grid ──────────────────────────────────────────────────────── */
     function heatStyle(key, row) {
       var spec = TM().COLUMNS[key];
       var v = row[key];
-      if (!spec.heat || typeof v !== 'number') return '';
+      if (!spec.heat || typeof v !== 'number') return null;
       var frac = Math.max(0, Math.min(1, v / spec.heat));
       return 'background:rgba(52,187,140,' + (0.08 + frac * 0.5).toFixed(2) + ')';
     }
 
-    function renderGrid() {
-      renderBar();
+    function renderGrid(opts) {
+      opts = opts || {};
+      var scrollTop = els.wrap.scrollTop;
+      var scrollLeft = els.wrap.scrollLeft;
+      if (opts.keepFocus !== 'filter') renderBar();
       var rows = visibleRows();
       var table = h('table', { class: 'tb-grid' });
       var head = h('tr', {}, [h('th', { class: 'tb-corner' })]);
       state.columns.forEach(function (key) {
         var spec = TM().COLUMNS[key];
-        var arrow = state.sort && state.sort.key === key ? (state.sort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+        var active = state.sort && state.sort.key === key;
+        var sortIcon = active ? (state.sort.dir === 'asc' ? 'arrow-up' : 'arrow-down') : 'arrows-sort';
         head.appendChild(
           h('th', {
+            class: 'tb-th' + (active ? ' is-sorted' : ''),
+            'data-key': key,
             style: 'min-width:' + spec.width + 'px;width:' + spec.width + 'px',
-            title: 'Trier',
+            title: 'Cliquer pour trier',
             onclick: function () {
-              if (state.sort && state.sort.key === key) {
-                state.sort = state.sort.dir === 'asc' ? { key: key, dir: 'desc' } : null;
-              } else state.sort = { key: key, dir: 'asc' };
-              renderGrid();
+              if (active) setSort(state.sort.dir === 'asc' ? key : null, 'desc');
+              else setSort(key, 'asc');
             },
-            text: spec.header + arrow,
-          })
+          }, [icon(spec.icon, 'tb-th-icon'), h('span', { class: 'tb-th-text', text: spec.header }), icon(sortIcon, 'tb-sort')])
         );
       });
       table.appendChild(h('thead', {}, [head]));
@@ -374,102 +421,100 @@
         tr.addEventListener('drop', function (e) {
           if (!state.dragId || !canReorder()) return;
           e.preventDefault();
-          var after = e.offsetY >= tr.offsetHeight / 2;
-          dropRow(state.dragId, row, after);
+          dropRow(state.dragId, row, e.offsetY >= tr.offsetHeight / 2);
+        });
+        tr.addEventListener('dblclick', function (e) {
+          if (e.target.closest('input,textarea,button,a')) return;
+          openCard(row);
         });
 
-        var num = h('td', { class: 'tb-num' }, [
-          h('span', {
-            class: 'tb-handle',
-            text: '⋮⋮',
-            draggable: canReorder() ? 'true' : null,
-            title: canReorder() ? 'Glisser pour réordonner' : 'Retirez le tri/filtre pour réordonner',
-            ondragstart: function (e) {
-              state.dragId = row.id;
-              e.dataTransfer.effectAllowed = 'move';
-              try { e.dataTransfer.setData('text/plain', row.id); } catch (err) { /* ignore */ }
-            },
-            ondragend: function () {
-              state.dragId = null;
-              renderGrid();
-            },
-          }),
-          h('span', { text: String(i + 1) }),
-          h('button', {
-            class: 'tb-rowbtn',
-            text: '↗',
-            title: 'Ouvrir la carte',
-            onclick: function () { openCard(row); },
-          }),
-          h('button', {
-            class: 'tb-rowbtn tb-rowbtn--danger',
-            text: '✕',
-            title: 'Archiver la carte',
-            onclick: function (e) {
-              var btn = e.currentTarget;
-              if (btn.getAttribute('data-armed') !== '1') {
-                btn.setAttribute('data-armed', '1');
-                btn.textContent = 'Archiver ?';
-                setTimeout(function () {
-                  btn.setAttribute('data-armed', '0');
-                  btn.textContent = '✕';
-                }, 2500);
-                return;
-              }
-              TT().archiveCard(t, row.id).then(function () {
-                state.rows = state.rows.filter(function (r) { return r.id !== row.id; });
+        tr.appendChild(
+          h('td', { class: 'tb-num', 'data-row': row.id }, [
+            h('span', {
+              class: 'tb-handle' + (canReorder() ? '' : ' is-off'),
+              draggable: canReorder() ? 'true' : null,
+              title: canReorder() ? 'Glisser pour réordonner' : 'Retirez le tri/filtre pour réordonner',
+              ondragstart: function (e) {
+                state.dragId = row.id;
+                e.dataTransfer.effectAllowed = 'move';
+                try { e.dataTransfer.setData('text/plain', row.id); } catch (err) { /* ignore */ }
+              },
+              ondragend: function () {
+                state.dragId = null;
                 renderGrid();
-                setStatus('Carte archivée', 'ok');
-              }, fail);
-            },
-          }),
-        ]);
-        tr.appendChild(num);
-
-        state.columns.forEach(function (key) {
-          tr.appendChild(renderCell(row, key));
-        });
+              },
+            }, [icon('grip-vertical')]),
+            h('span', { class: 'tb-rownum', text: String(i + 1) }),
+            h('button', {
+              class: 'tb-rowbtn tb-rowbtn--danger',
+              title: 'Archiver la carte',
+              onclick: function () { archiveRow(row); },
+            }, [icon('archive')]),
+          ])
+        );
+        state.columns.forEach(function (key) { tr.appendChild(renderCell(row, key)); });
         body.appendChild(tr);
       });
 
       var addInput = h('input', {
         class: 'tb-add',
-        placeholder: '＋ Nouvelle carte (Entrée)',
+        id: 'tbAdd',
+        placeholder: 'Nouvelle carte — écrire un titre puis Entrée',
         onkeydown: function (e) {
           if (e.key !== 'Enter') return;
           var name = e.target.value.trim();
           if (!name || !state.lists.length) return;
-          e.target.disabled = true;
-          TT()
-            .createRow(t, name, state.lists[0].id)
-            .then(function () {
-              reload({ quiet: true });
-              setStatus('Carte créée dans « ' + state.lists[0].name + ' »', 'ok');
-            }, function (err) {
-              e.target.disabled = false;
-              fail(err);
-            });
+          createIn(state.lists[0], name, e.target);
         },
       });
       body.appendChild(
         h('tr', { class: 'tb-add-row' }, [
-          h('td', { class: 'tb-num' }),
+          h('td', { class: 'tb-num' }, [icon('plus')]),
           h('td', { colspan: String(state.columns.length) }, [addInput]),
         ])
       );
       table.appendChild(body);
       els.wrap.innerHTML = '';
       els.wrap.appendChild(table);
+      els.wrap.scrollTop = scrollTop;
+      els.wrap.scrollLeft = scrollLeft;
+      var ae = document.activeElement;
+      if (!state.editing && (!ae || ae === document.body)) shell.focus({ preventScroll: true });
+    }
+
+    function createIn(list, name, input) {
+      if (input) input.disabled = true;
+      TT()
+        .createRow(t, name, list.id)
+        .then(function () {
+          reload({ quiet: true });
+          setStatus('Carte créée dans « ' + list.name + ' »', 'ok');
+        }, function (err) {
+          if (input) input.disabled = false;
+          fail(err);
+        });
+    }
+
+    function statutPill(row) {
+      var list = listById(row.listId);
+      var color = row.statutColor || (list && list.color) || '#626f86';
+      var pill = h('span', { class: 'tb-pill', style: '--pill:' + color }, [
+        icon(TM().statutIcon(row.statutKey || (list && list.category) || '_none')),
+        h('span', { text: row.statut || '—' }),
+      ]);
+      return pill;
     }
 
     function renderCell(row, key) {
       var spec = TM().COLUMNS[key];
       var isEditing = state.editing && state.editing.rowId === row.id && state.editing.key === key;
-      var editable = spec.editable && !(key === 'category' && !state.categoryAvailable);
+      var editable = isEditable(key);
       var selected = state.selected && state.selected.rowId === row.id && state.selected.key === key;
       var td = h('td', {
         class: 'tb-cell tb-cell--' + spec.kind + (editable ? '' : ' is-ro') + (selected ? ' is-selected' : ''),
-        style: heatStyle(key, row) || null,
+        'data-row': row.id,
+        'data-key': key,
+        style: heatStyle(key, row),
       });
 
       if (isEditing) {
@@ -477,11 +522,55 @@
         td.appendChild(editor(row, key, spec));
         return td;
       }
-      if (spec.kind === 'link') {
-        if (row.link) td.appendChild(h('a', { href: row.link, target: '_blank', rel: 'noopener', text: 'Ouvrir' }));
+
+      if (key === 'name') {
+        td.classList.add('tb-cell--open');
+        td.title = 'Ouvrir la carte';
+        td.appendChild(h('span', { class: 'tb-name', text: row.name }));
+        td.appendChild(
+          h('button', {
+            class: 'tb-edit',
+            title: 'Renommer (F2)',
+            onclick: function (e) {
+              e.stopPropagation();
+              state.selected = { rowId: row.id, key: key };
+              beginEdit(row.id, key);
+            },
+          }, [icon('pencil')])
+        );
+        td.addEventListener('click', function () {
+          state.selected = { rowId: row.id, key: key };
+          openCard(row);
+        });
         return td;
       }
-      td.textContent = TM().cellText(row, key);
+
+      if (spec.kind === 'link') {
+        if (row.link) {
+          td.appendChild(h('a', { class: 'tb-linkcell', href: row.link, target: '_blank', rel: 'noopener' }, [icon('external-link'), h('span', { text: 'Trello' })]));
+        }
+        return td;
+      }
+
+      if (spec.kind === 'list') {
+        td.classList.add('tb-cell--pill');
+        td.appendChild(statutPill(row));
+        td.appendChild(icon('chevron-down', 'tb-caret'));
+        td.addEventListener('click', function () {
+          state.selected = { rowId: row.id, key: key };
+          openStatutMenu(row, td);
+        });
+        return td;
+      }
+
+      if (key === 'tier' && row.tier) {
+        td.appendChild(h('span', { class: 'tb-tier', text: row.tier }));
+      } else if (key === 'due' && row.due) {
+        td.appendChild(icon('calendar-event', 'tb-inline-icon'));
+        td.appendChild(document.createTextNode(row.due));
+      } else {
+        td.textContent = TM().cellText(row, key);
+      }
       td.addEventListener('click', function () {
         state.selected = { rowId: row.id, key: key };
         if (editable) beginEdit(row.id, key);
@@ -490,13 +579,32 @@
       return td;
     }
 
+    /* ── Statut dropdown (colored, with icons) ─────────────────────── */
+    function statutItems(row) {
+      return state.lists.map(function (l) {
+        return {
+          icon: l.icon,
+          color: l.color,
+          label: l.name,
+          checked: l.id === row.listId,
+          action: function () { commitEdit(row, 'statut', l.id); },
+        };
+      });
+    }
+
+    function openStatutMenu(row, td) {
+      var r = td.getBoundingClientRect();
+      MENU().show({ x: r.left, y: r.bottom + 2, above: r.top - 2 }, [{ title: 'Statut' }].concat(statutItems(row)), { minWidth: Math.max(190, r.width) });
+    }
+
+    /* ── Editing ───────────────────────────────────────────────────── */
     function beginEdit(rowId, key) {
       state.editing = { rowId: rowId, key: key };
       renderGrid();
-      var input = els.wrap.querySelector('.is-editing input, .is-editing textarea, .is-editing select');
+      var input = els.wrap.querySelector('.is-editing input, .is-editing textarea');
       if (input) {
         input.focus();
-        if (input.select && input.tagName !== 'SELECT') input.select();
+        if (input.select) input.select();
       }
     }
 
@@ -509,18 +617,6 @@
         if (commit) commitEdit(row, key, value);
         else renderGrid();
         if (move) moveSelection(row.id, key, move);
-      }
-      if (spec.kind === 'list') {
-        var sel = h('select', {
-          class: 'tb-input',
-          onchange: function (e) { finish(true, e.target.value); },
-          onblur: function () { finish(false); },
-          onkeydown: function (e) { if (e.key === 'Escape') finish(false); },
-        });
-        state.lists.forEach(function (l) {
-          sel.appendChild(h('option', { value: l.id, text: l.name, selected: l.id === row.listId }));
-        });
-        return sel;
       }
       var tag = spec.kind === 'longtext' ? 'textarea' : 'input';
       var el = h(tag, { class: 'tb-input', rows: tag === 'textarea' ? '3' : null });
@@ -544,14 +640,16 @@
       var ri = rows.findIndex(function (r) { return r.id === rowId; });
       var ci = state.columns.indexOf(key);
       if (dir === 'down') ri += 1;
+      if (dir === 'up') ri -= 1;
       if (dir === 'right') ci += 1;
       if (dir === 'left') ci -= 1;
       if (ri < 0 || ri >= rows.length || ci < 0 || ci >= state.columns.length) return;
       var nextKey = state.columns[ci];
-      var spec = TM().COLUMNS[nextKey];
       state.selected = { rowId: rows[ri].id, key: nextKey };
-      if (spec.editable && !(nextKey === 'category' && !state.categoryAvailable)) beginEdit(rows[ri].id, nextKey);
-      else renderGrid();
+      if (state.editing) {
+        if (isEditable(nextKey) && nextKey !== 'statut') return beginEdit(rows[ri].id, nextKey);
+      }
+      renderGrid();
     }
 
     function commitEdit(row, key, value) {
@@ -573,10 +671,12 @@
         write = TT().saveCategory(t, row.id, state.categoryFieldId, value);
       } else if (key === 'statut') {
         if (value === row.listId) return renderGrid();
-        var list = state.lists.filter(function (l) { return l.id === value; })[0];
+        var list = listById(value);
         if (!list) return renderGrid();
         row.listId = list.id;
         row.statut = list.name;
+        row.statutKey = list.category;
+        row.statutColor = list.color;
         write = TT().moveCard(t, row.id, list.id, 'bottom').then(function () { return reload({ quiet: true }); });
       }
       renderGrid();
@@ -595,9 +695,25 @@
       );
     }
 
+    function archiveRow(row) {
+      TT().archiveCard(t, row.id).then(function () {
+        state.rows = state.rows.filter(function (r) { return r.id !== row.id; });
+        renderGrid();
+        setStatus('« ' + (row.name || 'Carte') + ' » archivée', 'ok', 8000, {
+          label: 'Annuler',
+          run: function () {
+            TT().unarchiveCard(t, row.id).then(function () {
+              reload({ quiet: true });
+              setStatus('Carte restaurée', 'ok');
+            }, fail);
+          },
+        });
+      }, fail);
+    }
+
     function dropRow(dragId, targetRow, after) {
       state.dragId = null;
-      var moved = state.rows.filter(function (r) { return r.id === dragId; })[0];
+      var moved = findRow(dragId);
       if (!moved || moved.id === targetRow.id) return renderGrid();
       var siblings = state.rows
         .filter(function (r) { return r.listId === targetRow.listId && r.id !== moved.id; })
@@ -605,10 +721,14 @@
       var idx = siblings.findIndex(function (r) { return r.id === targetRow.id; }) + (after ? 1 : 0);
       var pos = TM().dropPos(siblings, idx);
       var listChanged = moved.listId !== targetRow.listId;
-      var list = state.lists.filter(function (l) { return l.id === targetRow.listId; })[0];
+      var list = listById(targetRow.listId);
       moved.pos = pos;
       moved.listId = targetRow.listId;
-      if (list) moved.statut = list.name;
+      if (list) {
+        moved.statut = list.name;
+        moved.statutKey = list.category;
+        moved.statutColor = list.color;
+      }
       state.rows = TM().orderByLists(state.rows, state.lists);
       renderGrid();
       setStatus('Enregistrement…');
@@ -618,6 +738,147 @@
         reload({ quiet: true });
       });
     }
+
+    /* ── Right-click context menu ──────────────────────────────────── */
+    function generalItems() {
+      var connected = SH().isConnected(state.sheet);
+      var items = [
+        { icon: 'plus', label: 'Nouvelle carte', hint: state.lists[0] ? state.lists[0].name : '', action: function () {
+          var a = document.getElementById('tbAdd');
+          if (a) { a.scrollIntoView({ block: 'nearest' }); a.focus(); }
+        } },
+        { icon: 'refresh', label: 'Actualiser', action: function () { reload(); } },
+        { icon: 'columns-3', label: 'Colonnes…', action: function () { state.menuOpen = true; renderMenu(); } },
+      ];
+      if (state.sort) items.push({ icon: 'arrows-sort', label: 'Retirer le tri (ordre du tableau)', action: function () { setSort(null); } });
+      items.push({ sep: true });
+      if (connected) items.push({ icon: 'refresh-dot', label: 'Synchroniser avec le Sheet', action: syncNow });
+      items.push({ icon: connected ? 'brand-google-drive' : 'plug-connected', label: connected ? 'Afficher dans Google Sheet' : 'Connecter Google Sheets', action: openSheet });
+      return items;
+    }
+
+    function headerItems(key) {
+      var spec = TM().COLUMNS[key];
+      var idx = state.columns.indexOf(key);
+      var sorted = state.sort && state.sort.key === key ? state.sort.dir : null;
+      return [
+        { title: spec.header },
+        { icon: 'sort-ascending', label: 'Trier de A à Z', checked: sorted === 'asc', action: function () { setSort(key, 'asc'); } },
+        { icon: 'sort-descending', label: 'Trier de Z à A', checked: sorted === 'desc', action: function () { setSort(key, 'desc'); } },
+        { icon: 'arrows-sort', label: 'Retirer le tri', disabled: !sorted, action: function () { setSort(null); } },
+        { sep: true },
+        { icon: 'arrow-left', label: 'Déplacer à gauche', disabled: idx <= 0, action: function () { moveColumn(idx, -1); } },
+        { icon: 'arrow-right', label: 'Déplacer à droite', disabled: idx >= state.columns.length - 1, action: function () { moveColumn(idx, 1); } },
+        { icon: 'eye-off', label: 'Masquer la colonne', disabled: state.columns.length <= 1, action: function () { hideColumn(key); } },
+        { icon: 'columns-3', label: 'Colonnes…', action: function () { state.menuOpen = true; renderMenu(); } },
+      ];
+    }
+
+    function rowItems(row, key) {
+      var spec = key ? TM().COLUMNS[key] : null;
+      var editable = key && isEditable(key);
+      var list = listById(row.listId);
+      var items = [
+        { title: row.name || 'Carte' },
+        { icon: 'arrow-up-right', label: 'Ouvrir la carte', hint: 'double-clic', action: function () { openCard(row); } },
+        { icon: 'brand-trello', label: 'Ouvrir dans Trello', disabled: !row.link, action: function () { window.open(row.link, '_blank', 'noopener'); } },
+        { icon: 'link', label: 'Copier le lien de la carte', disabled: !row.link, action: function () { copyText(row.link); } },
+      ];
+      if (key && spec.kind !== 'link') {
+        items.push({ sep: true });
+        if (editable && key !== 'statut') {
+          items.push({ icon: 'pencil', label: 'Modifier « ' + spec.header + ' »', hint: 'F2', action: function () { beginEdit(row.id, key); } });
+        }
+        items.push({ icon: 'copy', label: 'Copier la valeur', action: function () { copyText(TM().cellText(row, key)); } });
+        if (editable && key !== 'statut' && key !== 'name') {
+          items.push({
+            icon: 'clipboard',
+            label: 'Coller',
+            action: function () {
+              if (!navigator.clipboard || !navigator.clipboard.readText) return setStatus('Collage non autorisé par le navigateur', 'error');
+              navigator.clipboard.readText().then(function (txt) { commitEdit(row, key, txt); }, function () { setStatus('Collage refusé', 'error'); });
+            },
+          });
+          items.push({ icon: 'eraser', label: 'Effacer la cellule', hint: 'Suppr', disabled: !row[key], action: function () { commitEdit(row, key, ''); } });
+        }
+      }
+      if (!key || key === 'statut') {
+        items.push({ sep: true });
+        items.push({ title: 'Statut' });
+        statutItems(row).forEach(function (i) { items.push(i); });
+      }
+      if (key) {
+        var sorted = state.sort && state.sort.key === key ? state.sort.dir : null;
+        items.push({ sep: true });
+        items.push({ icon: 'sort-ascending', label: 'Trier « ' + spec.header + ' » de A à Z', checked: sorted === 'asc', action: function () { setSort(key, 'asc'); } });
+        items.push({ icon: 'sort-descending', label: 'Trier « ' + spec.header + ' » de Z à A', checked: sorted === 'desc', action: function () { setSort(key, 'desc'); } });
+        items.push({ icon: 'eye-off', label: 'Masquer la colonne', disabled: state.columns.length <= 1, action: function () { hideColumn(key); } });
+      }
+      items.push({ sep: true });
+      items.push({
+        icon: 'plus',
+        label: 'Nouvelle carte dans « ' + (list ? list.name : 'la liste') + ' »',
+        disabled: !list,
+        action: function () {
+          var name = 'Nouvelle carte';
+          createIn(list, name, null);
+        },
+      });
+      items.push({ icon: 'archive', label: 'Archiver la carte', danger: true, action: function () { archiveRow(row); } });
+      return items;
+    }
+
+    shell.addEventListener('contextmenu', function (e) {
+      if (e.target.closest('input,textarea')) return; // keep the native menu while typing
+      e.preventDefault();
+      var pt = { x: e.clientX, y: e.clientY };
+      var th = e.target.closest('th[data-key]');
+      var cell = e.target.closest('td[data-key]');
+      var num = e.target.closest('td.tb-num[data-row]');
+      var items;
+      if (th) items = headerItems(th.getAttribute('data-key'));
+      else if (cell) {
+        var row = findRow(cell.getAttribute('data-row'));
+        var key = cell.getAttribute('data-key');
+        if (row) state.selected = { rowId: row.id, key: key };
+        items = row ? rowItems(row, key) : generalItems();
+        if (row) markSelected();
+      } else if (num && findRow(num.getAttribute('data-row'))) {
+        items = rowItems(findRow(num.getAttribute('data-row')), null);
+      } else items = generalItems();
+      MENU().show(pt, items, { minWidth: 230 });
+    });
+
+    function markSelected() {
+      els.wrap.querySelectorAll('.is-selected').forEach(function (n) { n.classList.remove('is-selected'); });
+      if (!state.selected) return;
+      var sel = 'td[data-row="' + state.selected.rowId + '"][data-key="' + state.selected.key + '"]';
+      var n = els.wrap.querySelector(sel);
+      if (n) n.classList.add('is-selected');
+    }
+
+    /* ── Keyboard on the selected cell ─────────────────────────────── */
+    shell.addEventListener('keydown', function (e) {
+      if (state.editing || e.target.closest('input,textarea') || !state.selected) return;
+      var row = findRow(state.selected.rowId);
+      var key = state.selected.key;
+      if (!row) return;
+      var dirs = { ArrowDown: 'down', ArrowUp: 'up', ArrowLeft: 'left', ArrowRight: 'right' };
+      if (dirs[e.key]) {
+        e.preventDefault();
+        moveSelection(row.id, key, dirs[e.key]);
+      } else if (e.key === 'F2' || e.key === 'Enter') {
+        e.preventDefault();
+        if (key === 'statut') {
+          var td = els.wrap.querySelector('td[data-row="' + row.id + '"][data-key="statut"]');
+          if (td) openStatutMenu(row, td);
+        } else if (isEditable(key)) beginEdit(row.id, key);
+        else openCard(row);
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && isEditable(key) && key !== 'name' && key !== 'statut') {
+        e.preventDefault();
+        commitEdit(row, key, '');
+      }
+    });
 
     /* ── Loading ───────────────────────────────────────────────────── */
     function reload(opts) {

@@ -9,18 +9,34 @@
 
   // kind: text | longtext | list | number | date | link ; editable: written back to Trello.
   var COLUMNS = {
-    category: { header: 'Catégorie', kind: 'text', editable: true, width: 200 },
-    name: { header: 'Objet', kind: 'text', editable: true, width: 380 },
-    statut: { header: 'Statut', kind: 'list', editable: true, width: 140 },
-    urgency: { header: 'Urgence', kind: 'text', editable: false, width: 110 },
-    impact: { header: 'Impact et besoin', kind: 'number', editable: false, width: 120 },
-    priority: { header: 'Priorité', kind: 'number', editable: false, width: 90, heat: 10 },
-    tier: { header: 'Palier', kind: 'text', editable: false, width: 110 },
-    progress: { header: 'Progrès', kind: 'number', editable: false, width: 90, heat: 100 },
-    desc: { header: 'Description', kind: 'longtext', editable: true, width: 380 },
-    due: { header: 'Échéance', kind: 'date', editable: false, width: 110 },
-    link: { header: 'Carte', kind: 'link', editable: false, width: 90 },
+    category: { header: 'Catégorie', icon: 'tag', kind: 'text', editable: true, width: 200 },
+    name: { header: 'Objet', icon: 'file-text', kind: 'text', editable: true, width: 380 },
+    statut: { header: 'Statut', icon: 'progress-check', kind: 'list', editable: true, width: 140 },
+    urgency: { header: 'Urgence', icon: 'flame', kind: 'text', editable: false, width: 110 },
+    impact: { header: 'Impact et besoin', icon: 'target-arrow', kind: 'number', editable: false, width: 120 },
+    priority: { header: 'Priorité', icon: 'flag', kind: 'number', editable: false, width: 90, heat: 10 },
+    tier: { header: 'Palier', icon: 'stack-2', kind: 'text', editable: false, width: 110 },
+    progress: { header: 'Progrès', icon: 'chart-donut', kind: 'number', editable: false, width: 90, heat: 100 },
+    desc: { header: 'Description', icon: 'align-left', kind: 'longtext', editable: true, width: 380 },
+    due: { header: 'Échéance', icon: 'calendar-event', kind: 'date', editable: false, width: 110 },
+    link: { header: 'Carte', icon: 'external-link', kind: 'link', editable: false, width: 90 },
   };
+
+  // Tabler icons (webfont, "ti-" prefix) per Statut category; colors come from StatutMatch.
+  var STATUT_ICONS = {
+    triage: 'inbox',
+    backlog: 'hourglass',
+    unstarted: 'circle',
+    started: 'player-play-filled',
+    blocked: 'ban',
+    completed: 'circle-check',
+    canceled: 'circle-x',
+    _none: 'point',
+  };
+
+  function statutIcon(key) {
+    return STATUT_ICONS[key] || STATUT_ICONS._none;
+  }
 
   var DEFAULT_COLUMNS = [
     'category', 'name', 'statut', 'urgency', 'impact', 'priority', 'progress', 'desc', 'due', 'link',
@@ -70,6 +86,8 @@
       category: category || '',
       name: rec.name || '',
       statut: rec.listName || '',
+      statutKey: rec.category || '',
+      statutColor: rec.color || '',
       urgency: enabled && inputs.empressement ? URGENCY_LABELS[inputs.empressement] || '' : '',
       impact: enabled && typeof inputs.impact === 'number' ? inputs.impact : null,
       priority: enabled && typeof rec.priorityScore === 'number' ? round1(rec.priorityScore) : null,
@@ -79,6 +97,28 @@
       due: rec.dueDate || '',
       link: rec.url || '',
     };
+  }
+
+  /** Adds { category, color, icon } to each board list from the board's Statut settings. */
+  function enrichLists(lists, settings, statutMatch) {
+    var cats = (settings && settings.listCategories) || {};
+    if (statutMatch && settings && settings.stateColors && typeof statutMatch.applyStateColors === 'function') {
+      statutMatch.applyStateColors(settings.stateColors);
+    }
+    return (lists || []).map(function (l) {
+      var category = cats[String(l.id)] || '';
+      var style =
+        statutMatch && typeof statutMatch.categoryStyle === 'function'
+          ? statutMatch.categoryStyle(category || '_none')
+          : null;
+      return {
+        id: l.id,
+        name: l.name,
+        category: category,
+        color: style && style.color ? style.color : '#626f86',
+        icon: statutIcon(category),
+      };
+    });
   }
 
   function cellText(row, key) {
@@ -201,6 +241,9 @@
   global.TableModel = {
     COLUMNS: COLUMNS,
     DEFAULT_COLUMNS: DEFAULT_COLUMNS,
+    STATUT_ICONS: STATUT_ICONS,
+    statutIcon: statutIcon,
+    enrichLists: enrichLists,
     normalizeColumns: normalizeColumns,
     rowFromRecord: rowFromRecord,
     cellText: cellText,

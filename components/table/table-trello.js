@@ -78,7 +78,7 @@
       return TM().rowFromRecord(rec, cats.map[rec.id]);
     });
     return {
-      lists: board.lists || [],
+      lists: TM().enrichLists(board.lists, board.settings, global.StatutMatch),
       rows: TM().orderByLists(rows, board.lists),
       categoryFieldId: cats.fieldId,
       categoryAvailable: cats.available,
@@ -152,6 +152,11 @@
     need(await PT().restPutCard(t, id, { closed: true }));
   }
 
+  async function unarchiveCard(t, id) {
+    await ensureAuth(t);
+    need(await PT().restPutCard(t, id, { closed: false }));
+  }
+
   async function pushToSheet(t, rows) {
     var settings = await ST().getSettings(t);
     if (!ST().isConnected(settings)) return { ok: false, reason: 'not-connected' };
@@ -169,6 +174,7 @@
     saveCategory: saveCategory,
     createRow: createRow,
     archiveCard: archiveCard,
+    unarchiveCard: unarchiveCard,
     pushToSheet: pushToSheet,
   };
 })(typeof window !== 'undefined' ? window : this);
