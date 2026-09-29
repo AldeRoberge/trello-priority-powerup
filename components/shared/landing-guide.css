@@ -70,7 +70,7 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   background: transparent;
-  color: var(--tp-text-subtle);
+  color: var(--tp-text);
 }
 
 .tp-lang-btn:hover { background: var(--tp-surface-hover); }
@@ -81,7 +81,7 @@
 }
 
 .tp-guide-intro {
-  color: var(--tp-text-subtle);
+  color: var(--tp-text);
   margin-bottom: 20px;
   line-height: 1.65;
 }
@@ -149,7 +149,6 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--tp-text-muted);
 }
 
 .tp-cfg-chips {
@@ -167,7 +166,7 @@
   border-radius: 8px;
   border: 1px solid transparent;
   background: var(--tp-surface-subtle);
-  color: var(--tp-text-muted);
+  color: var(--tp-text);
   cursor: text;
   transition: border-color 0.12s, background 0.12s;
 }
@@ -203,17 +202,7 @@
   gap: 8px;
   margin-top: 10px;
   font-size: 13px;
-  color: var(--tp-text-muted);
   word-break: break-all;
-}
-
-.tp-cfg-site a { color: var(--tp-text-subtle); text-decoration: none; border-bottom: 1px dotted var(--tp-border-strong); }
-.tp-cfg-site a:hover { color: var(--tp-link); }
-
-.tp-cfg-hint {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--tp-text-muted);
 }
 
 /* ---- steps ---- */
@@ -246,7 +235,7 @@
   border-radius: 8px;
   background: var(--tp-surface-subtle);
   border: 1px solid var(--tp-border);
-  color: var(--tp-text-subtle);
+  color: var(--tp-text);
   font-size: 14px;
   font-weight: 600;
   display: flex;
@@ -266,7 +255,7 @@
 .tp-guide-step p,
 .tp-guide-step ul,
 .tp-guide-step ol {
-  color: var(--tp-text-subtle);
+  color: var(--tp-text);
   font-size: 14.5px;
 }
 
@@ -275,12 +264,33 @@
 .tp-guide-step p + ol,
 .tp-guide-step ul + p { margin-top: 10px; }
 
-.tp-guide-step ul,
-.tp-guide-step ol { padding-left: 20px; }
-.tp-guide-step li + li { margin-top: 4px; }
-.tp-guide strong { color: var(--tp-text); font-weight: 600; }
+/* Lists inside a step: same indent, same marker color, text aligned on one edge. */
+.tp-guide-step > ul:not(.tp-guide-caps),
+.tp-guide-step > ol,
+.tp-guide details ul { margin: 0; padding-left: 1.3em; }
+.tp-guide-step > ul:not(.tp-guide-caps),
+.tp-guide details ul { list-style: disc; }
+.tp-guide-step > ol { list-style: decimal; }
+.tp-guide-step > ul:not(.tp-guide-caps) > li,
+.tp-guide-step > ol > li,
+.tp-guide details li { padding-left: 0.25em; }
+.tp-guide-step > ul:not(.tp-guide-caps) > li::marker,
+.tp-guide-step > ol > li::marker,
+.tp-guide details li::marker { color: var(--tp-text); font-weight: 500; }
+.tp-guide-step > ul:not(.tp-guide-caps) > li + li,
+.tp-guide-step > ol > li + li,
+.tp-guide details li + li { margin-top: 6px; }
+.tp-guide strong { font-weight: 600; }
 
-.tp-guide a { color: var(--tp-link); text-underline-offset: 2px; }
+/* One text color everywhere; links are told apart by their underline only. */
+.tp-guide a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--tp-border-strong);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+.tp-guide a:hover { text-decoration-color: currentColor; }
 
 .tp-guide code {
   font-family: ui-monospace, "Cascadia Code", SFMono-Regular, Menlo, Consolas, monospace;
@@ -345,11 +355,13 @@
   font-size: 13px;
   font-weight: 500;
   background: transparent;
-  color: var(--tp-text-subtle);
+  color: var(--tp-text);
+  opacity: 0.7;
 }
 
-.tp-tabs button:hover { color: var(--tp-text); }
+.tp-tabs button:hover { opacity: 1; }
 .tp-tabs button[aria-selected="true"] {
+  opacity: 1;
   background: var(--tp-surface);
   color: var(--tp-text);
   box-shadow: 0 1px 2px rgba(9, 30, 66, 0.18), inset 0 0 0 1px var(--tp-border);
@@ -364,8 +376,8 @@
   padding-left: 0 !important;
   margin: 10px 0;
 }
+.tp-guide-caps li { padding-left: 0; }
 
-.tp-guide-caps li + li { margin-top: 0; }
 .tp-guide-caps li code { display: inline-block; font-size: 13px; padding: 3px 9px; border-radius: 6px; }
 
 .tp-guide-note {
@@ -375,7 +387,6 @@
   background: var(--tp-surface-subtle);
   border: 1px solid var(--tp-border);
   font-size: 13.5px !important;
-  color: var(--tp-text-subtle);
 }
 
 .tp-guide-tag {
@@ -389,7 +400,7 @@
   margin-left: 6px;
   vertical-align: middle;
   background: var(--tp-surface-subtle);
-  color: var(--tp-text-muted);
+  color: var(--tp-text);
   border: 1px solid var(--tp-border);
 }
 
@@ -400,17 +411,14 @@
   padding: 14px 20px;
   margin-top: 14px;
   font-size: 14.5px;
-  color: var(--tp-text-subtle);
 }
 
-.tp-guide summary { cursor: pointer; font-weight: 600; color: var(--tp-text); }
-.tp-guide details ul { margin-top: 10px; padding-left: 20px; line-height: 1.65; }
-.tp-guide details li + li { margin-top: 4px; }
+.tp-guide summary { cursor: pointer; font-weight: 600; }
+.tp-guide details ul { margin-top: 10px; line-height: 1.65; }
 
 .tp-guide-footer {
   margin-top: 28px;
   font-size: 13px;
-  color: var(--tp-text-muted);
   text-align: center;
 }
 
@@ -435,3 +443,49 @@
   width: auto;
   field-sizing: content;
 }
+
+/* ---- hover tooltips: any element with a non-empty data-tip ---- */
+[data-tip]:not([data-tip=""]) { position: relative; }
+
+[data-tip]:not([data-tip=""])::after {
+  content: attr(data-tip);
+  position: absolute;
+  z-index: 20;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translate(-50%, 4px);
+  width: max-content;
+  max-width: 260px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: #1d2125;
+  color: #f7f8f9;
+  font-family: "Lexend", sans-serif;
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+  box-shadow: 0 4px 14px rgba(9, 30, 66, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s, transform 0.12s;
+}
+
+[data-tip]:not([data-tip=""]):hover::after,
+[data-tip]:not([data-tip=""]):focus-within::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition-delay: 0.25s;
+}
+
+/* Keep tooltips at the edges inside the viewport. */
+.tp-lang[data-tip]::after,
+.tp-cfg-head [data-tip]::after { left: auto; right: 0; transform: translate(0, 4px); }
+.tp-lang[data-tip]:hover::after,
+.tp-cfg-head [data-tip]:hover::after { transform: translate(0, 0); }
+.tp-chip-name[data-tip]::after { left: 0; transform: translate(0, 4px); }
+.tp-chip-name[data-tip]:hover::after,
+.tp-chip-name[data-tip]:focus-within::after { transform: translate(0, 0); }

@@ -176,6 +176,10 @@
         if (el.tagName === 'BUTTON') el.setAttribute('aria-label', v);
       }
     });
+    Array.prototype.forEach.call(doc.querySelectorAll('[data-i18n-tip]'), function (el) {
+      var v = strings[el.getAttribute('data-i18n-tip')];
+      if (typeof v === 'string') el.setAttribute('data-tip', v);
+    });
     Array.prototype.forEach.call(doc.querySelectorAll('[data-i18n-aria]'), function (el) {
       var v = strings[el.getAttribute('data-i18n-aria')];
       if (typeof v === 'string') el.setAttribute('aria-label', v);

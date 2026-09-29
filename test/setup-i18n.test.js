@@ -26,7 +26,7 @@ describe('SetupI18n', () => {
 
   it('every data-i18n key used in index.html exists', () => {
     const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-    const keys = [...html.matchAll(/data-i18n(?:-title|-aria)?="([^"]+)"/g)].map((m) => m[1]);
+    const keys = [...html.matchAll(/data-i18n(?:-title|-aria|-tip)?="([^"]+)"/g)].map((m) => m[1]);
     assert.ok(keys.length > 20);
     for (const k of new Set(keys)) assert.ok(k in I.fr, `missing key ${k}`);
   });
