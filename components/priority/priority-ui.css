@@ -9073,11 +9073,7 @@ html[data-color-mode="dark"] .calc-rsm-marker-core {
   min-width: 0;
   padding: 7px 8px 7px 8px;
   border-radius: 8px 8px 0 0;
-  background: linear-gradient(
-    100deg,
-    color-mix(in srgb, var(--tg-accent) 42%, var(--surface-2, #282e33)),
-    color-mix(in srgb, var(--tg-accent) 8%, var(--surface-2, #282e33)) 85%
-  );
+  background: color-mix(in srgb, var(--tg-accent) 22%, var(--surface-2, #282e33));
   border-bottom: 1px solid color-mix(in srgb, var(--tg-accent) 40%, transparent);
 }
 
@@ -9196,71 +9192,166 @@ html[data-color-mode="dark"] .calc-rsm-marker-core {
   border-color: var(--tg-accent);
 }
 
-/* Pins: the round handles of a Blueprint node --------------------------- */
+/* Edges: invisible strips on each side; the handle shows only on hover ---- */
+.tg-edge {
+  position: absolute;
+  z-index: 2;
+  cursor: crosshair;
+  touch-action: none;
+  outline: none;
+}
+
+.tg-edge-top,
+.tg-edge-bottom {
+  left: 12px;
+  right: 12px;
+  height: 16px;
+}
+
+.tg-edge-top {
+  top: -12px;
+}
+
+.tg-edge-bottom {
+  bottom: -12px;
+}
+
+.tg-edge-left,
+.tg-edge-right {
+  top: 12px;
+  bottom: 12px;
+  width: 16px;
+}
+
+.tg-edge-left {
+  left: -12px;
+}
+
+.tg-edge-right {
+  right: -12px;
+}
+
+/* the line itself, drawn on the node border */
+.tg-edge::before {
+  content: '';
+  position: absolute;
+  border-radius: 2px;
+  background: var(--tg-c);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.tg-edge-top::before,
+.tg-edge-bottom::before {
+  left: 0;
+  right: 0;
+  height: 3px;
+  top: 50%;
+  margin-top: -1.5px;
+}
+
+.tg-edge-top::before {
+  top: calc(50% + 4px);
+}
+
+.tg-edge-bottom::before {
+  top: calc(50% - 4px);
+}
+
+.tg-edge-left::before,
+.tg-edge-right::before {
+  top: 0;
+  bottom: 0;
+  width: 3px;
+}
+
+.tg-edge-left::before {
+  left: calc(50% + 2px);
+}
+
+.tg-edge-right::before {
+  left: calc(50% - 5px);
+}
+
 .tg-pin {
   position: absolute;
   width: 12px;
   height: 12px;
-  padding: 0;
   box-sizing: border-box;
   border-radius: 50%;
-  border: 2px solid var(--tg-pin, var(--text-secondary));
+  border: 2px solid var(--tg-c);
   background: var(--surface-1, #22272b);
-  transform: translate(-50%, -50%);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.6);
+  transition: opacity 0.12s ease, transform 0.12s ease, background 0.12s ease;
+  pointer-events: none;
 }
 
-.tg-pin-in-left {
-  left: 0;
-  top: 50%;
-  --tg-pin: var(--tg-flow);
+.tg-edge-top .tg-pin { left: 50%; top: calc(50% + 4px); }
+.tg-edge-bottom .tg-pin { left: 50%; top: calc(50% - 4px); }
+.tg-edge-left .tg-pin { left: calc(50% + 4px); top: 50%; }
+.tg-edge-right .tg-pin { left: calc(50% - 4px); top: 50%; }
+
+.tg-edge:hover::before,
+.tg-edge:focus-visible::before {
   opacity: 0.55;
 }
 
-.tg-pin-in-top {
-  left: 50%;
-  top: 0;
-  --tg-pin: var(--tg-asks);
-  opacity: 0.55;
-}
-
-.tg-pin-out-right {
-  left: 100%;
-  top: 50%;
-  --tg-pin: var(--tg-flow);
-}
-
-.tg-pin-out-bottom {
-  left: 50%;
-  top: 100%;
-  --tg-pin: var(--tg-asks);
-}
-
-button.tg-pin {
-  cursor: crosshair;
-  touch-action: none;
-  transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
-}
-
-button.tg-pin::after {
-  /* Larger hit area than the visible dot. */
-  content: '';
-  position: absolute;
-  inset: -8px;
-}
-
-button.tg-pin:hover,
-button.tg-pin:focus-visible {
-  background: var(--tg-pin);
-  transform: translate(-50%, -50%) scale(1.35);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--tg-pin) 28%, transparent);
-  outline: none;
-}
-
-.tg.is-dragging .tg-node:not(.is-drop-target) .tg-pin-in-left,
-.tg.is-dragging .tg-node:not(.is-drop-target) .tg-pin-in-top,
-.tg.is-linking .tg-node:not(.is-link-source) .tg-pin-in-left,
-.tg.is-linking .tg-node:not(.is-link-source) .tg-pin-in-top {
+.tg-edge:hover .tg-pin,
+.tg-edge:focus-visible .tg-pin {
   opacity: 1;
+  background: var(--tg-c);
+  transform: translate(-50%, -50%) scale(1.15);
+}
+
+/* while linking, show every possible landing side so the drop target is obvious */
+.tg.is-dragging .tg-node.is-drop-target {
+  border-color: var(--tg-accent);
+}
+
+/* Back to the simple view */
+.tg-collapse {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 16%, transparent);
+  background: var(--surface-1, #22272b);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tg-collapse:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 8%, var(--surface-1, #22272b));
+}
+
+.tg-editor-action.is-primary {
+  background: var(--tp-primary, #0c66e4);
+  border-color: var(--tp-primary, #0c66e4);
+  color: var(--tp-primary-text, #fff);
+  font-weight: 600;
+}
+
+.tg-editor-action.is-primary:hover:not(:disabled) {
+  background: var(--tp-primary-hover, #0055cc);
+}
+
+/* Simple view: chips are read-only summaries; roles are edited in the node view */
+.info-members .info-member-role-add,
+.info-members .info-member-role-clear {
+  display: none;
+}
+
+.info-members .info-member-main.is-clickable {
+  cursor: pointer;
 }
 
 /* Wire label / kind pill ------------------------------------------------ */
