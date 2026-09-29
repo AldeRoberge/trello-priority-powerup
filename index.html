@@ -442,19 +442,36 @@
           typeof t.signUrl === 'function'
             ? t.signUrl('./card-open.html')
             : PriorityTrello.pageUrl('./card-open.html');
-        return {
-          title: appName,
-          icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/brain.svg',
-          content: {
-            type: 'iframe',
-            url: sectionUrl,
-            height: 280,
-          },
-          action: {
-            text: 'Ouvrir',
-            callback: openPriorityPopup,
-          },
-        };
+        function sectionFor(title) {
+          return {
+            title: title,
+            icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/brain.svg',
+            content: {
+              type: 'iframe',
+              url: sectionUrl,
+              height: 280,
+            },
+            action: {
+              text: 'Ouvrir',
+              callback: openPriorityPopup,
+            },
+          };
+        }
+        // Header shows how long ago the app was updated (falls back to the plain name).
+        if (!window.BuildVersion || typeof BuildVersion.fetchBuiltAt !== 'function') {
+          return sectionFor(appName);
+        }
+        return BuildVersion.fetchBuiltAt(
+          typeof t.signUrl === 'function' ? t.signUrl('./build-info.json') : './build-info.json',
+          typeof t.signUrl === 'function' ? t.signUrl('./index.html') : './index.html'
+        )
+          .then(function (builtAt) {
+            var ago = BuildVersion.relativeAgo(builtAt);
+            return sectionFor(appName + ' · mis à jour ' + ago);
+          })
+          .catch(function () {
+            return sectionFor(appName);
+          });
       }),
 
       'on-enable': trackCapability('on-enable', function(t) {
