@@ -299,8 +299,12 @@
   border: 1px solid var(--tp-border);
   border-radius: 5px;
   padding: 1px 6px;
-  word-break: break-all;
+  white-space: nowrap;
 }
+
+/* Long values (URLs) may wrap. */
+.tp-cfg-site,
+.tp-guide-step li code { white-space: normal; overflow-wrap: anywhere; }
 
 /* ---- code boxes (copyable) ---- */
 .tp-codebox {
