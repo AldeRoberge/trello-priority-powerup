@@ -1,0 +1,202 @@
+/*
+ * Trello polish — loaded LAST on the card popup. One consistent system:
+ *   page canvas  →  rounded panels (card form, assistant)  →  sections  →  controls
+ * No decorative gradients; status is conveyed by flat tints, icons and text.
+ *
+ * Radii:  controls 8px · panels 12px · pills 999px
+ * Rhythm: 24px between sections, 8px between a section title and its content.
+ */
+
+html[data-color-mode] {
+  --tp-r-ctl: 8px;
+  --tp-r-panel: 12px;
+  --tp-panel-pad: 24px;
+  --tp-section-gap: 24px;
+}
+
+html[data-color-mode='dark'] {
+  --tp-canvas: var(--tp-elev-0, #1d2125);
+  --tp-panel: var(--tp-elev-1, #22272b);
+  --tp-panel-border: rgba(255, 255, 255, 0.08);
+}
+
+html[data-color-mode='light'] {
+  --tp-canvas: #f1f2f4;
+  --tp-panel: #ffffff;
+  --tp-panel-border: #091e4224;
+}
+
+/* ── Canvas + panels ─────────────────────────────────────────────── */
+
+html[data-color-mode] body.tp-page--priority {
+  background: var(--tp-canvas);
+}
+
+.tp-page--priority .compare-page,
+.tp-page--priority.is-split-assistant .compare-page {
+  padding: 16px;
+}
+
+.tp-page--priority.is-split-assistant .cerveau-shell {
+  gap: 4px;
+}
+
+/* Form panel (also the scroll container when the assistant rail is open) */
+.tp-page--priority .cerveau-main {
+  background: var(--tp-panel);
+  border: 1px solid var(--tp-panel-border);
+  border-radius: var(--tp-r-panel);
+}
+
+/* Assistant rail: same panel language as the form */
+html[data-color-mode] .tp-page--priority.is-split-assistant .cerveau-assistant {
+  background: var(--tp-panel);
+  border: 1px solid var(--tp-panel-border);
+  border-radius: var(--tp-r-panel);
+}
+
+/* Inner padding lives on the card so scrollbars sit against the panel edge */
+.tp-page--priority .variant-card {
+  padding: var(--tp-panel-pad);
+}
+
+.tp-page--priority .variant-info-section,
+.tp-page--priority .variant-overview-section,
+.tp-page--priority .variant-due-section,
+.tp-page--priority .variant-progress-section,
+.tp-page--priority .variant-statut-section,
+.tp-page--priority .variant-fields {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* ── Section rhythm + hierarchy ──────────────────────────────────── */
+
+.tp-page--priority .info-section-body {
+  gap: var(--tp-section-gap);
+}
+
+.tp-page--priority .field--info {
+  padding: 0;
+  background: transparent;
+}
+
+.tp-page--priority .info-row {
+  gap: 8px;
+}
+
+/* Section titles read as titles, not captions */
+.tp-page--priority .field--info .info-row-label {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--tp-text);
+}
+
+.tp-page--priority .info-row-icon {
+  color: var(--tp-text-subtle);
+}
+
+/* Feature blocks (priority / progress / due) sit under a hairline */
+.tp-page--priority .info-row--inline-feature {
+  padding-top: var(--tp-section-gap);
+  border-top: 1px solid var(--tp-border);
+}
+
+/* Slider label column must fit the longest label ("Empressement") */
+.tp-page--priority .variant-fields .field-head {
+  grid-template-columns: 9.5rem minmax(0, 1fr);
+  gap: 8px 16px;
+}
+
+.tp-page--priority .variant-fields .field {
+  margin-bottom: 4px;
+}
+
+.tp-page--priority .heat-panel,
+html[data-color-mode='dark'] .tp-page--priority .heat-panel {
+  padding: 4px 0 16px;
+}
+
+/* ── Flat surfaces: replace glows/washes with solid tints ─────────── */
+
+.tp-page--priority .field.has-section-glow,
+.tp-page--priority .field--progress.has-section-glow.is-enabled,
+.tp-page--priority .field--due-date.has-section-glow.has-due-date,
+.tp-page--priority .field--due-date.has-section-glow.is-open,
+.tp-page--priority .variant-progress-section.is-progress-complete > .field--progress.has-section-glow,
+.field.has-section-glow {
+  background-image: none;
+  background-color: transparent;
+}
+
+.overview-hero.is-blocked,
+.overview-hero.is-done,
+.overview-cell--progress.is-blocked,
+.overview-cell--progress.is-done,
+.overview-cell--progress.is-blocked:hover,
+.overview-cell--progress.is-done:hover,
+.overview-cell--progress.is-status-mode {
+  background-image: none;
+}
+
+.field--overview-compact {
+  background: var(--tp-panel);
+  box-shadow: none;
+  border-color: var(--tp-panel-border);
+}
+
+.overview-progress-fill {
+  background: var(--tp-primary, #0c66e4);
+}
+
+.tp-people-avatar,
+html[data-color-mode='dark'] .tp-people-avatar {
+  background: var(--tp-surface-active, rgba(255, 255, 255, 0.14));
+}
+
+/* ── Controls share one radius ───────────────────────────────────── */
+
+.tp-page--priority .tp-btn,
+.tp-page--priority .tp-button,
+.tp-page--priority .overview-action-chip,
+.tp-page--priority select,
+.tp-page--priority textarea,
+.tp-page--priority input[type='text'],
+.tp-page--priority .info-desc-toolbar,
+.tp-page--priority .tp-tab-complete-wrap,
+.tp-page--priority .agent-chat-info {
+  border-radius: var(--tp-r-ctl);
+}
+
+.tp-page--priority .info-desc-mode-switch {
+  border-radius: var(--tp-r-ctl);
+}
+
+.tp-page--priority .info-desc-mode-btn {
+  border-radius: 6px;
+}
+
+.tp-page--priority .info-member,
+.tp-page--priority .tp-completion-bulk,
+.tp-page--priority .tp-completion-progress-panel {
+  border-radius: var(--tp-r-panel);
+}
+
+/* Progress panel: solid surface, no translucency */
+.tp-page--priority .tp-completion-progress-panel {
+  background: var(--tp-surface-subtle);
+}
+
+/* Trello-style keyboard focus */
+.tp-page--priority :focus-visible {
+  outline: 2px solid var(--tp-primary);
+  outline-offset: 2px;
+}
+
+/* Assistant offer bubble: flat tint instead of a diagonal gradient */
+.tp-page--priority .agent-msg-bubble--offer,
+html[data-color-mode='dark'] .tp-page--priority .agent-msg-bubble--offer {
+  background: color-mix(in srgb, #1f7a68 10%, var(--tp-surface));
+  box-shadow: none;
+}

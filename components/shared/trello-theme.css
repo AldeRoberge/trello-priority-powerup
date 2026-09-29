@@ -6261,3 +6261,24 @@ html[data-color-mode="dark"] .tp-people-role-chip {
   }
 }
 
+
+/* ── Scrollbars: slim, rounded, same tone as the surface (all pages) ── */
+html[data-color-mode='dark'] { --tp-scroll-thumb: rgba(255, 255, 255, 0.2); --tp-scroll-thumb-hover: rgba(255, 255, 255, 0.34); }
+html[data-color-mode='light'], html:not([data-color-mode]) { --tp-scroll-thumb: rgba(9, 30, 66, 0.22); --tp-scroll-thumb-hover: rgba(9, 30, 66, 0.4); }
+
+@supports selector(::-webkit-scrollbar) {
+  ::-webkit-scrollbar { width: 12px; height: 12px; background: transparent; }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--tp-scroll-thumb);
+    background-clip: content-box;
+    border: 3px solid transparent;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--tp-scroll-thumb-hover); background-clip: content-box; }
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: var(--tp-scroll-thumb) transparent; }
+}
