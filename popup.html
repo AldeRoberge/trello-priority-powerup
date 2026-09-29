@@ -7209,9 +7209,10 @@
       });
       completeBootStep('priority');
 
+      // Build the sections' DOM synchronously in order, but let their Trello data
+      // loads overlap (each mount* creates its DOM before its first await).
       beginBootStep('info', 'Chargement des membres, \u00e9tiquettes et infos\u2026');
-      await mountInfoSection(variant.card);
-      completeBootStep('info');
+      var pInfo = mountInfoSection(variant.card);
 
       if (argName) setCardNameLabel(argName);
       else if (cardNameCache) setCardNameLabel(cardNameCache);
@@ -7227,9 +7228,10 @@
       });
 
       // Don't auto-seed cardPriority when opened only for progress on an unset card.
-      if (!hasSavedPriority && !focusProgress) {
-        await saveState(variant.getState());
-      }
+      var pSeedState =
+        !hasSavedPriority && !focusProgress
+          ? Promise.resolve(saveState(variant.getState()))
+          : null;
 
       var profileFeatures =
         cachedProfile && cachedProfile.features
@@ -7253,6 +7255,8 @@
         return !!(experimentalFlags && experimentalFlags[key] === true);
       };
 
+      var pParts = [pInfo];
+      if (pSeedState) pParts.push(pSeedState);
       if (featureOn('progress') || focusProgress || featureOn('statut')) {
         beginBootStep('progress');
         var openAssistantChat =
@@ -7260,12 +7264,13 @@
           featureOn('assistant') &&
           window.AgentUI &&
           window.PriorityAgent;
-        await mountProgressSection(variant.card, focusProgress, {
-          // When opening « Définir le progrès », prefer Assistant chat focus/scroll.
-          focusAdd: !openAssistantChat,
-          scrollIntoView: !openAssistantChat
-        });
-        completeBootStep('progress');
+        pParts.push(
+          mountProgressSection(variant.card, focusProgress, {
+            // When opening « Définir le progrès », prefer Assistant chat focus/scroll.
+            focusAdd: !openAssistantChat,
+            scrollIntoView: !openAssistantChat
+          })
+        );
       } else {
         skipBootStep('progress');
       }
@@ -7275,19 +7280,24 @@
           (progressBody &&
             progressBody.querySelector('.statut-in-progress-mount')) ||
           null;
-        await mountStatutSection(statutMount);
-        attachBlockedIntoStatut();
-        completeBootStep('statut');
+        pParts.push(
+          Promise.resolve(mountStatutSection(statutMount)).then(function () {
+            attachBlockedIntoStatut();
+          })
+        );
       } else {
         skipBootStep('statut');
       }
       if (experimentalOn('objectif') || focusObjectif) {
         beginBootStep('objectif');
-        await mountObjectifSection(variant.card, focusObjectif);
-        completeBootStep('objectif');
+        pParts.push(mountObjectifSection(variant.card, focusObjectif));
       } else {
         skipBootStep('objectif');
       }
+      await Promise.all(pParts);
+      ['info', 'progress', 'statut', 'objectif'].forEach(function (id) {
+        if (bootStepState[id] !== 'skipped') completeBootStep(id);
+      });
       syncBlockedSubtasks();
       syncInfoRecap();
 
