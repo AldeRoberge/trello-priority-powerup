@@ -9227,59 +9227,19 @@ html[data-color-mode="dark"] .calc-rsm-marker-core {
   right: -12px;
 }
 
-/* the line itself, drawn on the node border */
-.tg-edge::before {
-  content: '';
-  position: absolute;
-  border-radius: 2px;
-  background: var(--tg-c);
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-
-.tg-edge-top::before,
-.tg-edge-bottom::before {
-  left: 0;
-  right: 0;
-  height: 3px;
-  top: 50%;
-  margin-top: -1.5px;
-}
-
-.tg-edge-top::before {
-  top: calc(50% + 4px);
-}
-
-.tg-edge-bottom::before {
-  top: calc(50% - 4px);
-}
-
-.tg-edge-left::before,
-.tg-edge-right::before {
-  top: 0;
-  bottom: 0;
-  width: 3px;
-}
-
-.tg-edge-left::before {
-  left: calc(50% + 2px);
-}
-
-.tg-edge-right::before {
-  left: calc(50% - 5px);
-}
-
+/* Pins (Unreal / Unity node style): faint dot that swells and glows on hover */
 .tg-pin {
   position: absolute;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   box-sizing: border-box;
   border-radius: 50%;
   border: 2px solid var(--tg-c);
   background: var(--surface-1, #22272b);
-  opacity: 0;
-  transform: translate(-50%, -50%) scale(0.6);
-  transition: opacity 0.12s ease, transform 0.12s ease, background 0.12s ease;
+  opacity: 0.32;
+  transform: translate(-50%, -50%) scale(1);
+  transition: opacity 0.16s ease, transform 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.3),
+    background 0.16s ease, box-shadow 0.16s ease;
   pointer-events: none;
 }
 
@@ -9288,16 +9248,21 @@ html[data-color-mode="dark"] .calc-rsm-marker-core {
 .tg-edge-left .tg-pin { left: calc(50% + 4px); top: 50%; }
 .tg-edge-right .tg-pin { left: calc(50% - 4px); top: 50%; }
 
-.tg-edge:hover::before,
-.tg-edge:focus-visible::before {
-  opacity: 0.55;
+.tg-node:hover .tg-pin {
+  opacity: 0.6;
 }
 
 .tg-edge:hover .tg-pin,
 .tg-edge:focus-visible .tg-pin {
   opacity: 1;
   background: var(--tg-c);
-  transform: translate(-50%, -50%) scale(1.15);
+  transform: translate(-50%, -50%) scale(1.7);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--tg-c) 26%, transparent),
+    0 0 12px color-mix(in srgb, var(--tg-c) 55%, transparent);
+}
+
+.tg.is-dragging .tg-node.is-drop-target .tg-pin {
+  opacity: 0.85;
 }
 
 /* while linking, show every possible landing side so the drop target is obvious */

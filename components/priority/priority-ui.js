@@ -13210,6 +13210,7 @@
     var tgLayout = null;
     var tgDrag = null;
     var tgExpanded = false;
+    var tgIgnoreClickUntil = 0;
     var tgPan = { x: 0, y: 0 };
 
     function tgApplyTransform() {
@@ -13956,6 +13957,7 @@
           if (reverse) tgCommitLink(drag.target, fromId, kind);
           else tgCommitLink(fromId, drag.target, kind);
         } else {
+          tgIgnoreClickUntil = Date.now() + 400;
           tgOpenPicker(drag.last, fromId, kind, !!reverse);
         }
       };
@@ -14126,6 +14128,8 @@
     }
 
     tgHost.addEventListener('click', function (event) {
+      // The click that follows releasing a handle must not dismiss the picker it just opened.
+      if (Date.now() < tgIgnoreClickUntil || event.target.closest('.tg-edge')) return;
       if (
         !event.target.closest('.tg-editor') &&
         !event.target.closest('.tg-pill') &&
