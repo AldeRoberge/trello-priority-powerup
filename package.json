@@ -18,6 +18,7 @@
     "verify:presets": "cscript //nologo sandbox/verify-presets.js",
     "verify:version": "node sandbox/verify-version.js",
     "verify": "npm run verify:presets && npm run verify:matrix && npm run verify:version && npm run verify:badges && npm run verify:completion && npm run verify:effects && npm run verify:statut",
+    "dev": "node scripts/dev-server.js",
     "stamp:build": "node scripts/stamp-build.js",
     "render:icon": "node scripts/render-icon.js",
     "setup:sheet-sync": "powershell -ExecutionPolicy Bypass -File scripts/setup-sheet-sync.ps1"

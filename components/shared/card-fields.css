@@ -1,0 +1,195 @@
+/* Shared card field editors (CardFields) — anchored popovers used by Table, Gantt and card page. */
+.cf-pop {
+  position: fixed;
+  z-index: 200;
+  width: min(360px, calc(100vw - 16px));
+  max-height: min(72vh, 560px);
+  display: flex;
+  flex-direction: column;
+  background: var(--tp-surface);
+  color: var(--tp-text);
+  border: 1px solid var(--tp-border-strong, var(--tp-border));
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(9, 30, 66, 0.35);
+  overflow: hidden;
+  font-size: 13px;
+}
+.cf-pop--wide {
+  width: min(560px, calc(100vw - 16px));
+}
+.cf-pop-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid var(--tp-border);
+  background: var(--tp-surface-subtle);
+}
+.cf-pop-title {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cf-pop-card {
+  flex: 1;
+  min-width: 0;
+  color: var(--tp-text-muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cf-pop-close {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--tp-text-muted);
+  font-size: 18px;
+  line-height: 1;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.cf-pop-close:hover {
+  background: var(--tp-surface-hover);
+  color: var(--tp-text);
+}
+.cf-pop-body {
+  padding: 10px 12px 12px;
+  overflow: auto;
+  min-height: 0;
+}
+.cf-loading,
+.cf-empty {
+  color: var(--tp-text-muted);
+  padding: 6px 0;
+}
+
+/* Rich-text description editor */
+.cf-editor-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.cf-tabs {
+  display: inline-flex;
+  gap: 2px;
+}
+.cf-tab {
+  font: inherit;
+  border: 0;
+  border-radius: 4px;
+  padding: 3px 9px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  cursor: pointer;
+}
+.cf-tab.is-on {
+  background: var(--tp-surface-subtle);
+  color: var(--tp-text);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--tp-border);
+}
+.cf-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: auto;
+}
+.cf-toolbar.is-disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+.cf-tool {
+  border: 0;
+  background: transparent;
+  color: var(--tp-text-subtle);
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.cf-tool:hover {
+  background: var(--tp-surface-hover);
+  color: var(--tp-text);
+}
+.cf-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--tp-border);
+}
+.cf-textarea {
+  display: block;
+  width: 100%;
+  font: inherit;
+  line-height: 1.5;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--tp-surface-subtle);
+  color: var(--tp-text);
+  box-shadow: inset 0 0 0 1px var(--tp-border);
+  resize: vertical;
+  min-height: 160px;
+  outline: none;
+}
+.cf-textarea:focus {
+  box-shadow: inset 0 0 0 2px var(--tp-primary);
+}
+.cf-textarea[hidden],
+.cf-preview[hidden] {
+  display: none;
+}
+.cf-preview {
+  min-height: 160px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px var(--tp-border);
+  line-height: 1.5;
+}
+.cf-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.cf-hint {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--tp-text-muted);
+}
+.cf-btn {
+  font: inherit;
+  cursor: pointer;
+  border: 0;
+  border-radius: 4px;
+  padding: 5px 12px;
+  background: var(--tp-surface-subtle);
+  color: var(--tp-text);
+  box-shadow: inset 0 0 0 1px var(--tp-border);
+}
+.cf-btn:hover {
+  background: var(--tp-surface-hover);
+}
+.cf-btn--primary {
+  background: var(--tp-primary);
+  color: var(--tp-primary-text);
+  box-shadow: none;
+}
+.cf-btn--primary:hover {
+  background: var(--tp-primary-hover);
+}
+.cf-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

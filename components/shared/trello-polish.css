@@ -293,81 +293,61 @@ html[data-color-mode='light'] {
   border: 1px solid var(--tp-field-border);
 }
 
-/* ── Lieux: popover anchored to the + button, no layout shift ─────── */
+/* ── Lieux: route editor field + picker skin ──────────────────────── */
 
-.tp-page--priority .info-places-picker-host {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 30;
-  width: 300px;
-  max-width: calc(100vw - 64px);
-}
-
-.tp-page--priority .info-places-slot:last-child .info-places-picker-host {
-  left: auto;
-  right: 0;
+.tp-page--priority .info-places-picker,
+.tp-page--priority .info-place-editor {
+  border: 1px solid var(--tp-field-border-hover);
+  border-radius: var(--tp-r-panel);
 }
 
 .tp-page--priority .info-places-picker {
   gap: 8px;
   padding: 10px;
-  border-radius: var(--tp-r-panel);
-  border: 1px solid var(--tp-field-border-hover);
   background: var(--tp-elev-3, var(--tp-surface));
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
 }
 
-/* input + add button on one line */
-.tp-page--priority .info-places-create {
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  border: none;
-}
-
-.tp-page--priority .info-places-create-input {
-  flex: 1 1 auto;
-  min-width: 0;
-  width: auto;
-  height: 32px;
+.tp-page--priority .info-place-editor .info-places-create-input,
+.tp-page--priority .info-places-search {
   border-radius: var(--tp-r-ctl);
-  font-size: 13px;
 }
 
 .tp-page--priority .info-places-create-btn {
-  flex: 0 0 auto;
-  align-self: auto;
-  height: 32px;
-  padding: 0 14px;
   border-radius: var(--tp-r-ctl);
-  font-size: 13px;
   background: var(--tp-primary);
   color: var(--tp-primary-text);
 }
 
-.tp-page--priority .info-places-picker-title {
-  padding: 0 2px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--tp-text-muted);
+/* the "what we do here" line reads as text until hovered / focused */
+.tp-page--priority .info-route input.info-route-do {
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
 }
 
-.tp-page--priority .info-places-picker-list {
-  max-height: 176px;
+.tp-page--priority .info-route input.info-route-do:hover {
+  background: var(--tp-field-bg-hover);
+  border-color: var(--tp-field-border);
 }
 
-.tp-page--priority .info-places-picker-option {
-  padding: 7px 8px;
-  border-radius: 6px;
+.tp-page--priority .info-route input.info-route-do:focus {
+  background: var(--tp-field-bg);
+  border-color: var(--tp-primary);
+  box-shadow: 0 0 0 1px var(--tp-primary);
 }
 
-.tp-page--priority .info-places-add-btn {
-  border-color: var(--tp-field-border-hover);
+.tp-page--priority .info-route-dot {
+  background: var(--tp-surface, #fff);
+}
+
+.tp-page--priority .info-route-stop.is-via .info-route-dot {
+  background: var(--tp-text-muted, #626f86);
+}
+
+.tp-page--priority .info-route-stop.is-to .info-route-dot,
+.tp-page--priority .info-route-stop.is-at .info-route-dot {
+  background: var(--tp-primary);
 }
 
 /* ── Typography: Lexend + one hierarchical scale ─────────────────────

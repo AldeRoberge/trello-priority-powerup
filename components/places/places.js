@@ -31,6 +31,11 @@
   var MAX_ALIASES = 12;
   var MAX_KIND = 40;
   var MAX_NOTES = 400;
+  var MAX_ADDRESS = 200;
+  /** Per-stop "what we do here" text on a card. */
+  var MAX_DO = 120;
+  /** Intermediate stops between De and Vers. */
+  var MAX_VIA = 6;
   var LOAD_TTL_MS = 30000;
   /** Soft refresh window for agent turns (cross-window profile edits). */
   var AGENT_REFRESH_MAX_AGE_MS = 5000;
@@ -271,6 +276,8 @@
         : placeId();
     var kind = clampStr(raw.kind, MAX_KIND);
     var notes = clampStr(raw.notes, MAX_NOTES);
+    var address = clampStr(raw.address, MAX_ADDRESS);
+    var gps = normalizeGps(raw.lat, raw.lng);
     var aliases = normalizeStringList(raw.aliases, MAX_ALIAS, MAX_ALIASES);
     aliases = normalizeStringList(
       aliases.concat(aliasesFromKind(kind)),
@@ -280,17 +287,111 @@
     aliases = aliases.filter(function (a) {
       return normKey(a) !== normKey(name);
     });
-    return {
+    var out = {
       id: id,
       name: name,
       kind: kind,
       aliases: aliases,
       notes: notes,
+      address: address,
       updatedAt:
         typeof raw.updatedAt === 'string' && raw.updatedAt
           ? raw.updatedAt
           : ''
     };
+    if (gps) {
+      out.lat = gps.lat;
+      out.lng = gps.lng;
+    }
+    return out;
+  }
+
+  /** Valid WGS84 pair (6 decimals, about 10 cm) or null. */
+  function normalizeGps(lat, lng) {
+    if (lat == null || lng == null || lat === '' || lng === '') return null;
+    var a =
+      typeof lat === 'number' ? lat : parseFloat(String(lat).replace(',', '.'));
+    var b =
+      typeof lng === 'number' ? lng : parseFloat(String(lng).replace(',', '.'));
+    if (!isFinite(a) || !isFinite(b)) return null;
+    if (a < -90 || a > 90 || b < -180 || b > 180) return null;
+    return {
+      lat: Math.round(a * 1e6) / 1e6,
+      lng: Math.round(b * 1e6) / 1e6
+    };
+  }
+
+  /**
+   * Coordinates from free text: "48.1189, -77.7828", "48.1189 -77.7828", or a
+   * Google Maps / OpenStreetMap link (@lat,lng, !3d..!4d.., q=lat,lng,
+   * mlat=..&mlon=..). Returns { lat, lng } or null.
+   */
+  function parseCoordinates(text) {
+    var t = String(text == null ? '' : text).trim();
+    if (!t) return null;
+    var m;
+    try {
+      t = decodeURIComponent(t);
+    } catch (e) {}
+    m = /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/.exec(t);
+    if (m) return normalizeGps(m[1], m[2]);
+    m = /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/.exec(t);
+    if (m) return normalizeGps(m[1], m[2]);
+    m = /[?&#](?:q|ll|query|destination)=(-?\d+(?:\.\d+)?)[, +](-?\d+(?:\.\d+)?)/.exec(t);
+    if (m) return normalizeGps(m[1], m[2]);
+    m = /mlat=(-?\d+(?:\.\d+)?)&mlon=(-?\d+(?:\.\d+)?)/.exec(t);
+    if (m) return normalizeGps(m[1], m[2]);
+    m = /^(-?\d{1,2}(?:[.,]\d+)?)\s*[,;\s]\s*(-?\d{1,3}(?:[.,]\d+)?)$/.exec(t);
+    if (m) return normalizeGps(m[1], m[2]);
+    return null;
+  }
+
+  /** Map link for a directory place: GPS first, then address, then name. */
+  function mapsUrl(place) {
+    if (!place) return '';
+    var q = '';
+    if (typeof place.lat === 'number' && typeof place.lng === 'number') {
+      q = place.lat + ',' + place.lng;
+    } else if (place.address) {
+      q = place.address;
+    } else if (place.name) {
+      q = place.name;
+    }
+    if (!q) return '';
+    return (
+      'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q)
+    );
+  }
+
+  function geoQuery(place) {
+    if (!place) return '';
+    if (typeof place.lat === 'number' && typeof place.lng === 'number') {
+      return place.lat + ',' + place.lng;
+    }
+    return place.address || '';
+  }
+
+  /**
+   * Multi-stop Google Maps directions for directory places in route order.
+   * Only stops with GPS or an address count (a bare name is too ambiguous);
+   * returns '' unless every stop is locatable and there are at least two.
+   */
+  function directionsUrl(list) {
+    var queries = (Array.isArray(list) ? list : []).map(geoQuery);
+    if (queries.length < 2 || queries.some(function (q) { return !q; })) {
+      return '';
+    }
+    var url =
+      'https://www.google.com/maps/dir/?api=1&origin=' +
+      encodeURIComponent(queries[0]) +
+      '&destination=' +
+      encodeURIComponent(queries[queries.length - 1]);
+    if (queries.length > 2) {
+      url +=
+        '&waypoints=' +
+        encodeURIComponent(queries.slice(1, -1).join('|'));
+    }
+    return url;
   }
 
   function normalizeDirectory(raw) {
@@ -329,11 +430,17 @@
       typeof raw.id === 'string' && /^place-[a-z0-9-]+$/i.test(raw.id.trim())
         ? raw.id.trim()
         : placeId();
-    return { id: id, name: name };
+    var out = { id: id, name: name };
+    var doText = clampStr(raw.do, MAX_DO);
+    if (doText) out.do = doText;
+    return out;
   }
 
   /**
-   * Card places map: { from?, to?, at? }. Empty slots omitted.
+   * Card places map: { from?, via?: [ref...], to?, at? }. Empty slots omitted.
+   *  - at         : the task happens in one place.
+   *  - from / to  : a trip; via = intermediate stops, in order.
+   * A ref is { id, name, do? } where `do` is what is done there.
    */
   function normalizePlaces(raw) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
@@ -343,7 +450,38 @@
       var ref = normalizePlaceRef(raw[slot]);
       if (ref) out[slot] = ref;
     }
+    if (Array.isArray(raw.via)) {
+      var via = [];
+      for (var v = 0; v < raw.via.length && via.length < MAX_VIA; v++) {
+        var vref = normalizePlaceRef(raw.via[v]);
+        if (vref) via.push(vref);
+      }
+      if (via.length) out.via = via;
+    }
     return out;
+  }
+
+  /**
+   * Ordered stops for display / routing:
+   * [{ key: 'from'|'via'|'to'|'at', index?, ref }].
+   */
+  function routeStops(places) {
+    var n = normalizePlaces(places);
+    var out = [];
+    if (n.from) out.push({ key: 'from', ref: n.from });
+    (n.via || []).forEach(function (ref, index) {
+      out.push({ key: 'via', index: index, ref: ref });
+    });
+    if (n.to) out.push({ key: 'to', ref: n.to });
+    if (n.at) out.push({ key: 'at', ref: n.at });
+    return out;
+  }
+
+  /** Every ref on a card, in route order (for catalog seeding). */
+  function refsOf(places) {
+    return routeStops(places).map(function (s) {
+      return s.ref;
+    });
   }
 
   function placesEqual(a, b) {
@@ -352,7 +490,7 @@
 
   function hasAnyPlace(places) {
     var n = normalizePlaces(places);
-    return !!(n.from || n.to || n.at);
+    return !!(n.from || n.to || n.at || (n.via && n.via.length));
   }
 
   function expandedAliasKeys(place) {
@@ -540,11 +678,17 @@
     var base = existing
       ? Object.assign({}, existing)
       : {
-          id: placeId(),
+          // Keep a caller-supplied id so card refs to a catalog-only place
+          // still resolve once it is promoted into the directory.
+          id:
+            typeof patch.id === 'string' && /^place-[a-z0-9-]+$/i.test(patch.id.trim())
+              ? patch.id.trim()
+              : placeId(),
           name: '',
           kind: '',
           aliases: [],
           notes: '',
+          address: '',
           updatedAt: ''
         };
 
@@ -568,6 +712,22 @@
     }
     if (Object.prototype.hasOwnProperty.call(patch, 'notes')) {
       base.notes = clampStr(patch.notes, MAX_NOTES);
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'address')) {
+      base.address = clampStr(patch.address, MAX_ADDRESS);
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(patch, 'lat') ||
+      Object.prototype.hasOwnProperty.call(patch, 'lng')
+    ) {
+      var gps = normalizeGps(patch.lat, patch.lng);
+      if (gps) {
+        base.lat = gps.lat;
+        base.lng = gps.lng;
+      } else {
+        delete base.lat;
+        delete base.lng;
+      }
     }
     base.updatedAt = new Date().toISOString();
 
@@ -624,7 +784,9 @@
         name: p.name,
         kind: p.kind || null,
         aliases: (p.aliases || []).slice(),
-        notes: p.notes || null
+        notes: p.notes || null,
+        address: p.address || null,
+        gps: typeof p.lat === 'number' && typeof p.lng === 'number'
       };
     });
   }
@@ -652,6 +814,7 @@
         });
         if (aliasShow.length) bits.push('alias\u00a0: ' + aliasShow.slice(0, 4).join(', '));
       }
+      if (p.address) bits.push('adresse\u00a0: ' + p.address);
       if (p.notes) bits.push('notes\u00a0: ' + p.notes);
       lines.push('- ' + bits.join(' \u00b7 '));
     });
@@ -822,6 +985,9 @@
     MAX_NOTES: MAX_NOTES,
     MAX_KIND: MAX_KIND,
     MAX_ALIASES: MAX_ALIASES,
+    MAX_ADDRESS: MAX_ADDRESS,
+    MAX_DO: MAX_DO,
+    MAX_VIA: MAX_VIA,
     PLACE_SLOTS: PLACE_SLOTS.slice(),
     AGENT_REFRESH_MAX_AGE_MS: AGENT_REFRESH_MAX_AGE_MS,
     emptyDirectory: emptyDirectory,
@@ -831,6 +997,12 @@
     normalizePlaces: normalizePlaces,
     placesEqual: placesEqual,
     hasAnyPlace: hasAnyPlace,
+    routeStops: routeStops,
+    refsOf: refsOf,
+    normalizeGps: normalizeGps,
+    parseCoordinates: parseCoordinates,
+    mapsUrl: mapsUrl,
+    directionsUrl: directionsUrl,
     aliasesFromKind: aliasesFromKind,
     findByAliasOrName: findByAliasOrName,
     resolveInText: resolveInText,

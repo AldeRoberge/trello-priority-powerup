@@ -507,7 +507,10 @@
         : raw.places && typeof raw.places === 'object' && !Array.isArray(raw.places)
           ? raw.places
           : {};
-    if (places && (places.from || places.to || places.at)) {
+    if (
+      places &&
+      (places.from || places.to || places.at || (places.via && places.via.length))
+    ) {
       normalized.places = places;
     }
 
@@ -589,7 +592,10 @@
     if (
       inputs.places &&
       typeof inputs.places === 'object' &&
-      (inputs.places.from || inputs.places.to || inputs.places.at)
+      (inputs.places.from ||
+        inputs.places.to ||
+        inputs.places.at ||
+        (inputs.places.via && inputs.places.via.length))
     ) {
       cleared.places = inputs.places;
     }

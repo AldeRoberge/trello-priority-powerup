@@ -1117,6 +1117,8 @@
   var PLACE_ID_RE = /^place-[a-z0-9]+(?:-[a-z0-9]+)*$/;
   var MAX_PLACES_CATALOG = 40;
   var MAX_PLACE_NAME_LEN = 80;
+  var MAX_PLACE_DO_LEN = 120;
+  var MAX_PLACE_VIA = 6;
   var PLACE_SLOTS = ['from', 'to', 'at'];
   var placeCatalog = [];
 
@@ -1185,6 +1187,19 @@
       if (ref) out[slot] = ref;
     }
     return out;
+  }
+
+  /** Every ref on a card's places map, in route order. */
+  function placeRefsOf(map) {
+    var n = normalizePlaces(map);
+    var refs = [];
+    if (n.from) refs.push(n.from);
+    (n.via || []).forEach(function (r) {
+      refs.push(r);
+    });
+    if (n.to) refs.push(n.to);
+    if (n.at) refs.push(n.at);
+    return refs;
   }
 
   function normalizePlaceCatalog(raw) {
@@ -10673,6 +10688,14 @@
     }
     var onPlacesChange =
       typeof config.onPlacesChange === 'function' ? config.onPlacesChange : null;
+    var getPlaceDirectory =
+      typeof config.getPlaceDirectory === 'function'
+        ? config.getPlaceDirectory
+        : null;
+    var onPlaceDirectorySave =
+      typeof config.onPlaceDirectorySave === 'function'
+        ? config.onPlaceDirectorySave
+        : null;
     var onPlaceCatalogChange =
       typeof config.onPlaceCatalogChange === 'function'
         ? config.onPlaceCatalogChange
@@ -10839,6 +10862,7 @@
     var cardPlaces = normalizePlaces(config.places);
     var placesBusy = false;
     var placesPickerSlot = '';
+    var placeEditKey = '';
     if (Array.isArray(config.memberRoleCustoms)) {
       setMemberRoleCustoms(config.memberRoleCustoms);
     }
@@ -11328,78 +11352,29 @@
     membersRow.value.appendChild(membersWrap);
     body.appendChild(membersRow.row);
 
-    // ── Places (De / Vers / Où) ─────────────────────────────────────────
-    var PLACE_SLOT_LABELS = {
+    // ── Places: a route of ordered stops (De → étapes → Vers, or Sur place) ──
+    var PLACE_STOP_LABELS = {
       from: 'De',
+      via: 'Étape',
       to: 'Vers',
-      at: 'O\u00f9'
+      at: 'Sur place'
     };
     var placesRow = makeRow('places', 'Lieux', { icon: 'ti-map-pin' });
     var placesWrap = document.createElement('div');
     placesWrap.className = 'info-places-wrap';
-    placesWrap.setAttribute('aria-label', 'Lieux de la t\u00e2che');
+    placesWrap.setAttribute('aria-label', 'Lieux de la tâche');
 
-    var placesSlotsEl = document.createElement('div');
-    placesSlotsEl.className = 'info-places-slots';
+    var placesRouteEl = document.createElement('div');
+    placesRouteEl.className = 'info-route';
 
     var placesStatus = document.createElement('span');
     placesStatus.className = 'info-desc-status';
     placesStatus.setAttribute('aria-live', 'polite');
 
-    var placesPickerHost = document.createElement('div');
-    placesPickerHost.className = 'info-places-picker-host';
-    placesPickerHost.hidden = true;
-    var placesPicker = document.createElement('div');
-    placesPicker.className = 'info-places-picker';
-    placesPicker.setAttribute('role', 'listbox');
-    placesPicker.setAttribute('aria-label', 'Choisir un lieu');
-    placesPickerHost.appendChild(placesPicker);
-
-    placesWrap.appendChild(placesSlotsEl);
+    placesWrap.appendChild(placesRouteEl);
     placesWrap.appendChild(placesStatus);
-    placesWrap.appendChild(placesPickerHost);
     placesRow.value.appendChild(placesWrap);
     body.appendChild(placesRow.row);
-
-    var placesSlotUi = {};
-    PLACE_SLOTS.forEach(function (slot) {
-      var slotEl = document.createElement('div');
-      slotEl.className = 'info-places-slot';
-      slotEl.setAttribute('data-slot', slot);
-
-      var labelEl = document.createElement('span');
-      labelEl.className = 'info-places-slot-label';
-      labelEl.textContent = PLACE_SLOT_LABELS[slot] || slot;
-
-      var chipHost = document.createElement('div');
-      chipHost.className = 'info-places-chip-host';
-
-      var addWrap = document.createElement('div');
-      addWrap.className = 'info-places-add-wrap';
-      var addBtn = document.createElement('button');
-      addBtn.type = 'button';
-      addBtn.className = 'info-places-add-btn';
-      addBtn.setAttribute(
-        'aria-label',
-        'Choisir ' + (PLACE_SLOT_LABELS[slot] || slot)
-      );
-      addBtn.title = PLACE_SLOT_LABELS[slot] || slot;
-      addBtn.setAttribute('aria-expanded', 'false');
-      addBtn.setAttribute('aria-haspopup', 'listbox');
-      addBtn.innerHTML = '<i class="ti ti-plus" aria-hidden="true"></i>';
-      addWrap.appendChild(addBtn);
-
-      slotEl.appendChild(labelEl);
-      slotEl.appendChild(chipHost);
-      slotEl.appendChild(addWrap);
-      placesSlotsEl.appendChild(slotEl);
-      placesSlotUi[slot] = {
-        slotEl: slotEl,
-        chipHost: chipHost,
-        addWrap: addWrap,
-        addBtn: addBtn
-      };
-    });
 
     // ── Inline feature mounts (Priorité / Progrès / Échéance) ───────────
     function makeInlineMountRow(key, labelText, icon) {
@@ -12450,26 +12425,16 @@
       applyInfoSaveStatus(placesStatus, text, kind);
     }
 
-    function setPlacesPickerOpen(slot) {
-      var next = slot && PLACE_SLOTS.indexOf(slot) >= 0 ? slot : '';
+    /**
+     * Picker target: 'at' | 'from' | 'to' | 'via:N' (insert as stop N of the
+     * intermediate stops). The picker renders inline under its target row.
+     */
+    function setPlacesPickerOpen(target) {
+      var next = String(target || '');
+      if (next && !/^(at|from|to|via:\d+)$/.test(next)) next = '';
       placesPickerSlot = next;
-      placesPickerHost.hidden = !placesPickerSlot;
-      PLACE_SLOTS.forEach(function (s) {
-        var ui = placesSlotUi[s];
-        if (!ui) return;
-        var open = placesPickerSlot === s;
-        ui.addBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-        ui.addWrap.classList.toggle('is-open', open);
-        ui.slotEl.classList.toggle('is-picker-open', open);
-      });
-      if (placesPickerSlot) {
-        var hostUi = placesSlotUi[placesPickerSlot];
-        // Drop under the + button (same pattern as Assignés picker).
-        if (hostUi && placesPickerHost.parentNode !== hostUi.addWrap) {
-          hostUi.addWrap.appendChild(placesPickerHost);
-        }
-        renderPlacesPicker();
-      }
+      if (next) placeEditKey = '';
+      renderPlaces();
       onLayoutChange();
     }
 
@@ -12523,7 +12488,7 @@
         .then(function (result) {
           placesBusy = false;
           if (result && result.ok === false) {
-            setPlacesStatus('\u00c9chec de l\u2019enregistrement', 'error');
+            setPlacesStatus('Échec de l’enregistrement', 'error');
             renderPlaces();
             onLayoutChange();
             return result;
@@ -12532,7 +12497,7 @@
             cardPlaces = normalizePlaces(result.places);
           }
           setPlacesStatus('', 'ok');
-          setPlacesPickerOpen('');
+          placesPickerSlot = '';
           renderPlaces();
           setTimeout(function () {
             if (placesStatus.classList.contains('is-ok')) {
@@ -12545,185 +12510,996 @@
         .catch(function (err) {
           placesBusy = false;
           console.error('Info places save failed', err);
-          setPlacesStatus('\u00c9chec de l\u2019enregistrement', 'error');
+          setPlacesStatus('Échec de l’enregistrement', 'error');
           renderPlaces();
           onLayoutChange();
         });
     }
 
-    function clearPlaceSlot(slot) {
-      if (placesBusy || !onPlacesChange) return;
-      var next = normalizePlaces(cardPlaces);
-      delete next[slot];
-      persistPlaces(next);
+    // ── directory lookups (address / GPS live in the private directory) ──
+    function placeDirectoryList() {
+      if (!getPlaceDirectory) return [];
+      try {
+        var list = getPlaceDirectory();
+        return Array.isArray(list) ? list : [];
+      } catch (e) {
+        return [];
+      }
     }
 
-    function assignPlaceToSlot(slot, entry) {
-      if (placesBusy || !onPlacesChange || !entry || !entry.id && !entry.name) return;
+    function foldPlaceText(s) {
+      return String(s || '')
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLocaleLowerCase('fr-FR')
+        .trim();
+    }
+
+    function findDirectoryPlace(ref) {
+      if (!ref) return null;
+      var list = placeDirectoryList();
+      var i;
+      for (i = 0; i < list.length; i++) {
+        if (ref.id && list[i].id === ref.id) return list[i];
+      }
+      var key = foldPlaceText(ref.name);
+      for (i = 0; i < list.length; i++) {
+        if (key && foldPlaceText(list[i].name) === key) return list[i];
+      }
+      return null;
+    }
+
+    /** Name as it is now (a rename in the directory wins over the card copy). */
+    function placeDisplayName(ref) {
+      var dir = findDirectoryPlace(ref);
+      if (dir && dir.name) return dir.name;
+      var cat = ref && ref.id ? findPlaceCatalogById(ref.id) : null;
+      return (cat && cat.name) || (ref && ref.name) || '';
+    }
+
+    function placeHasGeo(dir) {
+      return !!(
+        dir &&
+        ((typeof dir.lat === 'number' && typeof dir.lng === 'number') ||
+          dir.address)
+      );
+    }
+
+    function placeMapsHref(ref, dir) {
+      if (global.Places && typeof global.Places.mapsUrl === 'function') {
+        return global.Places.mapsUrl(
+          dir || { name: placeDisplayName(ref) }
+        );
+      }
+      return '';
+    }
+
+    function placeTripStops(map) {
+      var out = [];
+      if (map.from) out.push(map.from);
+      (map.via || []).forEach(function (r) {
+        out.push(r);
+      });
+      if (map.to) out.push(map.to);
+      return out;
+    }
+
+    // ── edits on the card's route ───────────────────────────────────────
+    function placesMutate(mutator) {
+      if (placesBusy || !onPlacesChange) return Promise.resolve(null);
+      var next = normalizePlaces(cardPlaces);
+      var res = mutator(next);
+      if (res === false) return Promise.resolve(null);
+      return persistPlaces(next);
+    }
+
+    function clearPlaceStop(key, index) {
+      placeEditKey = '';
+      placesMutate(function (next) {
+        if (key === 'via') {
+          var via = (next.via || []).slice();
+          via.splice(index, 1);
+          if (via.length) next.via = via;
+          else delete next.via;
+        } else {
+          delete next[key];
+        }
+      });
+    }
+
+    function movePlaceVia(index, delta) {
+      placesMutate(function (next) {
+        var via = (next.via || []).slice();
+        var to = index + delta;
+        if (to < 0 || to >= via.length) return false;
+        var tmp = via[index];
+        via[index] = via[to];
+        via[to] = tmp;
+        next.via = via;
+      });
+    }
+
+    function reversePlaceRoute() {
+      placeEditKey = '';
+      placesMutate(function (next) {
+        var from = next.from;
+        var to = next.to;
+        delete next.from;
+        delete next.to;
+        if (to) next.from = to;
+        if (from) next.to = from;
+        if (next.via) next.via = next.via.slice().reverse();
+      });
+    }
+
+    function convertPlaceToTrip() {
+      placesMutate(function (next) {
+        if (!next.at) return false;
+        next.from = next.at;
+        delete next.at;
+      });
+    }
+
+    function setPlaceStopAction(key, index, text) {
+      var value = String(text || '')
+        .trim()
+        .slice(0, MAX_PLACE_DO_LEN);
+      placesMutate(function (next) {
+        var ref = key === 'via' ? (next.via || [])[index] : next[key];
+        if (!ref) return false;
+        if ((ref.do || '') === value) return false;
+        if (value) ref.do = value;
+        else delete ref.do;
+      });
+    }
+
+    function assignPlace(target, entry) {
+      if (placesBusy || !onPlacesChange || !entry || (!entry.id && !entry.name)) {
+        return;
+      }
       var before = getPlaceCatalog();
       var draft = upsertPlaceCatalog(entry) || normalizePlaceRef(entry);
       if (!draft) return;
-      var catalogPromise = Promise.resolve(null);
       var after = getPlaceCatalog();
-      if (JSON.stringify(before) !== JSON.stringify(after)) {
-        catalogPromise = persistPlaceCatalog(after);
-      }
+      var catalogPromise =
+        JSON.stringify(before) !== JSON.stringify(after)
+          ? persistPlaceCatalog(after)
+          : Promise.resolve(null);
       catalogPromise.then(function () {
-        var next = normalizePlaces(cardPlaces);
-        next[slot] = { id: draft.id, name: draft.name };
-        return persistPlaces(next);
+        placesMutate(function (next) {
+          var ref = { id: draft.id, name: draft.name };
+          var viaMatch = /^via:(\d+)$/.exec(target);
+          if (viaMatch) {
+            var via = (next.via || []).slice();
+            if (via.length >= MAX_PLACE_VIA) {
+              setPlacesStatus('Maximum ' + MAX_PLACE_VIA + ' étapes', 'error');
+              return false;
+            }
+            via.splice(Math.min(Number(viaMatch[1]), via.length), 0, ref);
+            next.via = via;
+            delete next.at;
+          } else {
+            var prev = next[target];
+            if (prev && prev.id === ref.id && prev.do) ref.do = prev.do;
+            next[target] = ref;
+            if (target === 'at') {
+              delete next.from;
+              delete next.to;
+              delete next.via;
+            } else {
+              delete next.at;
+            }
+          }
+        });
       });
     }
 
-    function addPlaceFromPicker(slot) {
-      if (placesBusy || !onPlacesChange) return;
-      var nameInput = placesPicker.querySelector('.info-places-create-input');
-      var name =
-        nameInput && typeof nameInput.value === 'string'
-          ? nameInput.value.trim()
-          : '';
-      if (!name) {
-        if (nameInput) nameInput.focus();
-        return;
+    function pickerCreateOrPick(target, name) {
+      var found = findPlaceCatalogByName(name);
+      assignPlace(target, found || { name: name });
+    }
+
+    // ── place picker (search or create, inline under its row) ───────────
+    function buildPlacesPicker(target) {
+      var panel = document.createElement('div');
+      panel.className = 'info-places-picker';
+      panel.setAttribute('role', 'listbox');
+      panel.setAttribute('aria-label', 'Choisir un lieu');
+      panel.addEventListener('click', function (event) {
+        event.stopPropagation();
+      });
+
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'info-places-create-input info-places-search';
+      input.placeholder = 'Chercher ou créer un lieu…';
+      input.setAttribute('aria-label', 'Chercher ou créer un lieu');
+      input.maxLength = MAX_PLACE_NAME_LEN;
+      input.autocomplete = 'off';
+      panel.appendChild(input);
+
+      var list = document.createElement('div');
+      list.className = 'info-places-picker-list';
+      panel.appendChild(list);
+
+      var options = [];
+      var active = 0;
+
+      function currentIds() {
+        var ids = {};
+        placeTripStops(cardPlaces).forEach(function (r) {
+          ids[r.id] = true;
+        });
+        if (cardPlaces.at) ids[cardPlaces.at.id] = true;
+        return ids;
       }
-      assignPlaceToSlot(slot, { name: name });
-    }
 
-    function renderPlacesPicker() {
-      var slot = placesPickerSlot;
-      placesPicker.replaceChildren();
-      if (!slot) return;
-
-      // Input + add button first (right where the user clicked), saved places below.
-      var create = document.createElement('div');
-      create.className = 'info-places-create';
-      var nameInput = document.createElement('input');
-      nameInput.type = 'text';
-      nameInput.className = 'info-places-create-input';
-      nameInput.placeholder = 'Nom du lieu';
-      nameInput.setAttribute('aria-label', 'Nom du nouveau lieu');
-      nameInput.maxLength = MAX_PLACE_NAME_LEN;
-      nameInput.autocomplete = 'off';
-      nameInput.addEventListener('click', function (event) {
-        event.stopPropagation();
-      });
-      nameInput.addEventListener('keydown', function (event) {
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          addPlaceFromPicker(slot);
-        } else if (event.key === 'Escape') {
-          event.preventDefault();
-          setPlacesPickerOpen('');
+      function paintActive() {
+        options.forEach(function (o, i) {
+          o.el.classList.toggle('is-active', i === active);
+        });
+        if (options[active] && options[active].el.scrollIntoView) {
+          options[active].el.scrollIntoView({ block: 'nearest' });
         }
-      });
-      var createBtn = document.createElement('button');
-      createBtn.type = 'button';
-      createBtn.className = 'info-places-create-btn';
-      createBtn.textContent = 'Ajouter';
-      createBtn.disabled = placesBusy;
-      createBtn.addEventListener('click', function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        addPlaceFromPicker(slot);
-      });
-      create.appendChild(nameInput);
-      create.appendChild(createBtn);
-      placesPicker.appendChild(create);
+      }
 
-      var catalog = getPlaceCatalog().filter(function (entry) {
-        return entry && entry.id;
-      });
-      if (catalog.length) {
-        var title = document.createElement('div');
-        title.className = 'info-places-picker-title';
-        title.textContent = 'Lieux enregistrés';
-        placesPicker.appendChild(title);
-        var list = document.createElement('div');
-        list.className = 'info-places-picker-list';
-        catalog.forEach(function (entry) {
+      function refill() {
+        list.replaceChildren();
+        options = [];
+        var q = foldPlaceText(input.value);
+        var used = currentIds();
+        var exact = false;
+        getPlaceCatalog().forEach(function (entry) {
+          var dir = findDirectoryPlace(entry);
+          var name = (dir && dir.name) || entry.name;
+          var hay = foldPlaceText(
+            name +
+              ' ' +
+              (dir ? (dir.address || '') + ' ' + (dir.kind || '') + ' ' + (dir.aliases || []).join(' ') : '')
+          );
+          if (q && hay.indexOf(q) < 0) return;
+          if (q && foldPlaceText(name) === q) exact = true;
           var btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'info-places-picker-option';
           btn.setAttribute('role', 'option');
           btn.disabled = placesBusy;
-          var current = cardPlaces[slot];
-          if (current && String(current.id) === String(entry.id)) {
-            btn.classList.add('is-selected');
-            btn.setAttribute('aria-selected', 'true');
-          }
           var icon = document.createElement('i');
           icon.className = 'ti ti-map-pin';
           icon.setAttribute('aria-hidden', 'true');
           var text = document.createElement('span');
           text.className = 'info-places-picker-option-text';
-          text.textContent = entry.name;
+          text.textContent = name;
           btn.appendChild(icon);
           btn.appendChild(text);
+          var sub = dir && (dir.address || dir.kind);
+          if (sub) {
+            var subEl = document.createElement('span');
+            subEl.className = 'info-places-picker-option-sub';
+            subEl.textContent = sub;
+            btn.appendChild(subEl);
+          }
+          if (placeHasGeo(dir) && dir.lat != null) {
+            var gpsEl = document.createElement('i');
+            gpsEl.className = 'ti ti-current-location info-places-picker-gps';
+            gpsEl.title = 'Position GPS enregistrée';
+            btn.appendChild(gpsEl);
+          }
+          if (used[entry.id]) btn.classList.add('is-selected');
           btn.addEventListener('click', function (event) {
             event.preventDefault();
-            event.stopPropagation();
-            assignPlaceToSlot(slot, entry);
+            assignPlace(target, entry);
           });
           list.appendChild(btn);
+          options.push({ el: btn, run: function () { assignPlace(target, entry); } });
         });
-        placesPicker.appendChild(list);
+        var typed = input.value.trim();
+        if (typed && !exact) {
+          var create = document.createElement('button');
+          create.type = 'button';
+          create.className = 'info-places-picker-option info-places-picker-create';
+          create.disabled = placesBusy;
+          create.innerHTML =
+            '<i class="ti ti-plus" aria-hidden="true"></i>';
+          var label = document.createElement('span');
+          label.className = 'info-places-picker-option-text';
+          label.textContent = 'Créer « ' + typed + ' »';
+          create.appendChild(label);
+          create.addEventListener('click', function (event) {
+            event.preventDefault();
+            pickerCreateOrPick(target, typed);
+          });
+          list.appendChild(create);
+          options.push({ el: create, run: function () { pickerCreateOrPick(target, typed); } });
+        }
+        if (!options.length) {
+          var empty = document.createElement('p');
+          empty.className = 'info-places-picker-empty';
+          empty.textContent =
+            'Aucun lieu enregistré. Tape un nom pour en créer un.';
+          list.appendChild(empty);
+        }
+        active = Math.min(active, Math.max(0, options.length - 1));
+        paintActive();
       }
+
+      input.addEventListener('input', function () {
+        active = 0;
+        refill();
+      });
+      input.addEventListener('keydown', function (event) {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          if (!options.length) return;
+          active =
+            (active + (event.key === 'ArrowDown' ? 1 : -1) + options.length) %
+            options.length;
+          paintActive();
+        } else if (event.key === 'Enter') {
+          event.preventDefault();
+          if (options[active]) options[active].run();
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          setPlacesPickerOpen('');
+        }
+      });
+      refill();
       setTimeout(function () {
         try {
-          nameInput.focus();
+          input.focus();
         } catch (e) {}
       }, 0);
+      return panel;
+    }
+
+    // ── place editor (name, type, address, GPS: private directory) ──────
+    function buildPlaceEditor(ref) {
+      var dir = findDirectoryPlace(ref) || {};
+      var panel = document.createElement('div');
+      panel.className = 'info-place-editor';
+      panel.addEventListener('click', function (event) {
+        event.stopPropagation();
+      });
+
+      function field(label, value, attrs) {
+        var wrap = document.createElement('label');
+        wrap.className = 'info-place-editor-field';
+        var cap = document.createElement('span');
+        cap.className = 'info-place-editor-label';
+        cap.textContent = label;
+        var inp = document.createElement('input');
+        inp.type = 'text';
+        inp.className = 'info-places-create-input';
+        inp.value = value || '';
+        inp.autocomplete = 'off';
+        if (attrs && attrs.placeholder) inp.placeholder = attrs.placeholder;
+        if (attrs && attrs.maxLength) inp.maxLength = attrs.maxLength;
+        wrap.appendChild(cap);
+        wrap.appendChild(inp);
+        return { wrap: wrap, input: inp };
+      }
+
+      function iconButton(icon, title, label) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'info-place-editor-btn';
+        b.title = title;
+        b.innerHTML = '<i class="ti ' + icon + '" aria-hidden="true"></i>';
+        if (label) {
+          var t = document.createElement('span');
+          t.textContent = label;
+          b.appendChild(t);
+        }
+        return b;
+      }
+
+      var startCoords =
+        typeof dir.lat === 'number' && typeof dir.lng === 'number'
+          ? dir.lat + ', ' + dir.lng
+          : '';
+
+      var nameF = field('Nom', placeDisplayName(ref), {
+        maxLength: MAX_PLACE_NAME_LEN
+      });
+      var kindF = field('Type', dir.kind || '', {
+        placeholder: 'maison, travail, chalet…',
+        maxLength: 40
+      });
+      var addrF = field('Adresse', dir.address || '', {
+        placeholder: '12 chemin du Lac, Val-d’Or',
+        maxLength: 200
+      });
+      var gpsF = field('Coordonnées GPS', startCoords, {
+        placeholder: '48.1189, -77.7828 ou lien Google Maps'
+      });
+      var notesF = field('Notes', dir.notes || '', {
+        placeholder: 'Code de porte, clé, accès…',
+        maxLength: 400
+      });
+
+      var geoStatus = document.createElement('div');
+      geoStatus.className = 'info-place-editor-hint';
+      geoStatus.setAttribute('aria-live', 'polite');
+
+      function readGps() {
+        var raw = gpsF.input.value.trim();
+        if (!raw) return { empty: true };
+        var parsed =
+          global.Places && global.Places.parseCoordinates
+            ? global.Places.parseCoordinates(raw)
+            : null;
+        return parsed ? { gps: parsed } : { invalid: true };
+      }
+
+      function paintGps() {
+        var g = readGps();
+        geoStatus.classList.remove('is-error', 'is-ok');
+        if (g.gps) {
+          geoStatus.textContent =
+            'Position : ' + g.gps.lat.toFixed(6) + ', ' + g.gps.lng.toFixed(6);
+          geoStatus.classList.add('is-ok');
+        } else if (g.invalid) {
+          geoStatus.textContent =
+            'Format non reconnu (ex. : 48.1189, -77.7828)';
+          geoStatus.classList.add('is-error');
+        } else {
+          geoStatus.textContent =
+            'L’adresse et le GPS restent privés : ils ne sont pas partagés avec le tableau.';
+        }
+      }
+      gpsF.input.addEventListener('input', paintGps);
+      paintGps();
+
+      // GPS helpers
+      var gpsTools = document.createElement('div');
+      gpsTools.className = 'info-place-editor-tools';
+      var locateBtn = iconButton('ti-map-search', 'Trouver les coordonnées de cette adresse (OpenStreetMap)', 'Localiser l’adresse');
+      var hereBtn = iconButton('ti-current-location', 'Utiliser ma position actuelle', 'Ma position');
+      var openBtn = iconButton('ti-external-link', 'Ouvrir dans Google Maps', 'Voir sur la carte');
+      gpsTools.appendChild(locateBtn);
+      gpsTools.appendChild(hereBtn);
+      gpsTools.appendChild(openBtn);
+
+      function setGpsInput(lat, lng) {
+        gpsF.input.value = lat.toFixed(6) + ', ' + lng.toFixed(6);
+        paintGps();
+      }
+
+      locateBtn.addEventListener('click', function () {
+        var q = addrF.input.value.trim() || nameF.input.value.trim();
+        if (!q) {
+          addrF.input.focus();
+          return;
+        }
+        locateBtn.disabled = true;
+        geoStatus.classList.remove('is-error', 'is-ok');
+        geoStatus.textContent = 'Recherche…';
+        fetch(
+          'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=' +
+            encodeURIComponent(q),
+          { headers: { Accept: 'application/json' } }
+        )
+          .then(function (res) {
+            if (!res.ok) throw new Error('http ' + res.status);
+            return res.json();
+          })
+          .then(function (rows) {
+            var hit = Array.isArray(rows) ? rows[0] : null;
+            var lat = hit ? parseFloat(hit.lat) : NaN;
+            var lng = hit ? parseFloat(hit.lon) : NaN;
+            if (!isFinite(lat) || !isFinite(lng)) {
+              geoStatus.textContent = 'Adresse introuvable';
+              geoStatus.classList.add('is-error');
+              return;
+            }
+            setGpsInput(lat, lng);
+          })
+          .catch(function () {
+            geoStatus.textContent =
+              'Recherche indisponible : colle des coordonnées ou un lien Google Maps.';
+            geoStatus.classList.add('is-error');
+          })
+          .then(function () {
+            locateBtn.disabled = false;
+          });
+      });
+
+      hereBtn.addEventListener('click', function () {
+        if (!navigator.geolocation) {
+          geoStatus.textContent = 'Géolocalisation indisponible ici';
+          geoStatus.classList.add('is-error');
+          return;
+        }
+        hereBtn.disabled = true;
+        geoStatus.classList.remove('is-error', 'is-ok');
+        geoStatus.textContent = 'Localisation…';
+        try {
+          navigator.geolocation.getCurrentPosition(
+            function (pos) {
+              hereBtn.disabled = false;
+              setGpsInput(pos.coords.latitude, pos.coords.longitude);
+            },
+            function () {
+              hereBtn.disabled = false;
+              geoStatus.textContent =
+                'Position refusée ou indisponible : colle des coordonnées ou un lien Google Maps.';
+              geoStatus.classList.add('is-error');
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+          );
+        } catch (e) {
+          hereBtn.disabled = false;
+          geoStatus.textContent = 'Géolocalisation indisponible ici';
+          geoStatus.classList.add('is-error');
+        }
+      });
+
+      openBtn.addEventListener('click', function () {
+        var g = readGps();
+        var url = '';
+        if (global.Places && global.Places.mapsUrl) {
+          url = global.Places.mapsUrl({
+            name: nameF.input.value.trim(),
+            address: addrF.input.value.trim(),
+            lat: g.gps ? g.gps.lat : undefined,
+            lng: g.gps ? g.gps.lng : undefined
+          });
+        }
+        if (url) window.open(url, '_blank', 'noopener');
+      });
+
+      var actions = document.createElement('div');
+      actions.className = 'info-place-editor-actions';
+      var saveBtn = document.createElement('button');
+      saveBtn.type = 'button';
+      saveBtn.className = 'info-places-create-btn';
+      saveBtn.textContent = 'Enregistrer';
+      var cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'info-place-editor-cancel';
+      cancelBtn.textContent = 'Annuler';
+      actions.appendChild(saveBtn);
+      actions.appendChild(cancelBtn);
+
+      cancelBtn.addEventListener('click', function () {
+        placeEditKey = '';
+        renderPlaces();
+        onLayoutChange();
+      });
+
+      function save() {
+        var name = nameF.input.value.trim();
+        if (!name) {
+          nameF.input.focus();
+          return;
+        }
+        var g = readGps();
+        if (g.invalid) {
+          gpsF.input.focus();
+          return;
+        }
+        saveBtn.disabled = true;
+        var patch = {
+          id: ref.id,
+          name: name,
+          kind: kindF.input.value.trim(),
+          address: addrF.input.value.trim(),
+          notes: notesF.input.value.trim(),
+          lat: g.gps ? g.gps.lat : null,
+          lng: g.gps ? g.gps.lng : null
+        };
+        Promise.resolve(onPlaceDirectorySave(patch)).then(function (result) {
+          saveBtn.disabled = false;
+          if (!result || result.ok === false || !result.place) {
+            geoStatus.textContent = 'Échec de l’enregistrement';
+            geoStatus.classList.remove('is-ok');
+            geoStatus.classList.add('is-error');
+            return;
+          }
+          var saved = result.place;
+          placeEditKey = '';
+          // Refresh the card's copies of this place (name) and the board catalog.
+          var renamed = false;
+          var next = normalizePlaces(cardPlaces);
+          function touch(r) {
+            if (r && r.id === ref.id && r.name !== saved.name) {
+              r.name = saved.name;
+              renamed = true;
+            }
+          }
+          touch(next.from);
+          touch(next.to);
+          touch(next.at);
+          (next.via || []).forEach(touch);
+          if (renamed) persistPlaces(next);
+          else renderPlaces();
+          onLayoutChange();
+        });
+      }
+      saveBtn.addEventListener('click', save);
+      panel.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' && event.target.tagName === 'INPUT') {
+          event.preventDefault();
+          save();
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          cancelBtn.click();
+        }
+      });
+
+      panel.appendChild(nameF.wrap);
+      panel.appendChild(kindF.wrap);
+      panel.appendChild(addrF.wrap);
+      panel.appendChild(gpsF.wrap);
+      panel.appendChild(gpsTools);
+      panel.appendChild(geoStatus);
+      panel.appendChild(notesF.wrap);
+      panel.appendChild(actions);
+      setTimeout(function () {
+        try {
+          nameF.input.focus();
+          nameF.input.select();
+        } catch (e) {}
+      }, 0);
+      return panel;
+    }
+
+    // ── rendering ───────────────────────────────────────────────────────
+    function toolButton(icon, title, onClick, extraClass) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'info-route-tool' + (extraClass ? ' ' + extraClass : '');
+      b.title = title;
+      b.setAttribute('aria-label', title);
+      b.disabled = placesBusy;
+      b.innerHTML = '<i class="ti ' + icon + '" aria-hidden="true"></i>';
+      b.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        onClick();
+      });
+      return b;
+    }
+
+    function buildStopRow(key, index, ref, isLast, viaCount) {
+      var editable = !!onPlacesChange;
+      var stopKey = key === 'via' ? 'via:' + index : key;
+      var dir = findDirectoryPlace(ref);
+      var row = document.createElement('div');
+      row.className = 'info-route-stop is-' + key + (isLast ? ' is-last' : '');
+      row.setAttribute('data-stop', stopKey);
+
+      var rail = document.createElement('span');
+      rail.className = 'info-route-rail';
+      var dot = document.createElement('span');
+      dot.className = 'info-route-dot';
+      rail.appendChild(dot);
+      row.appendChild(rail);
+
+      var main = document.createElement('div');
+      main.className = 'info-route-main';
+
+      var head = document.createElement('div');
+      head.className = 'info-route-head';
+      var kindEl = document.createElement('span');
+      kindEl.className = 'info-route-kind';
+      kindEl.textContent = PLACE_STOP_LABELS[key];
+      head.appendChild(kindEl);
+
+      var nameBtn = document.createElement('button');
+      nameBtn.type = 'button';
+      nameBtn.className = 'info-route-name';
+      nameBtn.textContent = placeDisplayName(ref);
+      nameBtn.title = onPlaceDirectorySave
+        ? 'Modifier ce lieu (adresse, GPS…)'
+        : placeDisplayName(ref);
+      nameBtn.disabled = !onPlaceDirectorySave;
+      nameBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        placesPickerSlot = '';
+        placeEditKey = placeEditKey === stopKey ? '' : stopKey;
+        renderPlaces();
+        onLayoutChange();
+      });
+      head.appendChild(nameBtn);
+
+      var meta = dir && (dir.address || dir.kind);
+      if (meta) {
+        var metaEl = document.createElement('span');
+        metaEl.className = 'info-route-meta';
+        metaEl.textContent = meta;
+        head.appendChild(metaEl);
+      }
+      if (dir && typeof dir.lat === 'number' && typeof dir.lng === 'number') {
+        var gpsIcon = document.createElement('i');
+        gpsIcon.className = 'ti ti-current-location info-route-gps';
+        gpsIcon.title = 'Position GPS enregistrée';
+        head.appendChild(gpsIcon);
+      }
+
+      var tools = document.createElement('span');
+      tools.className = 'info-route-tools';
+      if (placeHasGeo(dir)) {
+        var link = document.createElement('a');
+        link.className = 'info-route-tool';
+        link.href = placeMapsHref(ref, dir);
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.title = 'Ouvrir dans Google Maps';
+        link.setAttribute('aria-label', 'Ouvrir dans Google Maps');
+        link.innerHTML = '<i class="ti ti-map-2" aria-hidden="true"></i>';
+        tools.appendChild(link);
+      }
+      if (editable) {
+        if (key === 'via') {
+          if (index > 0) {
+            tools.appendChild(
+              toolButton('ti-chevron-up', 'Monter cette étape', function () {
+                movePlaceVia(index, -1);
+              })
+            );
+          }
+          if (index < viaCount - 1) {
+            tools.appendChild(
+              toolButton('ti-chevron-down', 'Descendre cette étape', function () {
+                movePlaceVia(index, 1);
+              })
+            );
+          }
+        }
+        tools.appendChild(
+          toolButton(
+            'ti-x',
+            'Retirer ' + placeDisplayName(ref),
+            function () {
+              clearPlaceStop(key, index);
+            },
+            'is-danger'
+          )
+        );
+      }
+      head.appendChild(tools);
+      main.appendChild(head);
+
+      if (editable) {
+        var doInput = document.createElement('input');
+        doInput.type = 'text';
+        doInput.className = 'info-route-do';
+        doInput.placeholder =
+          key === 'from'
+            ? 'Ce qu’on y prend / fait au départ…'
+            : key === 'to'
+              ? 'Ce qu’on y fait à l’arrivée…'
+              : 'Ce qu’on y fait…';
+        doInput.setAttribute('aria-label', 'Ce qu’on fait à ' + placeDisplayName(ref));
+        doInput.maxLength = MAX_PLACE_DO_LEN;
+        doInput.autocomplete = 'off';
+        doInput.value = ref.do || '';
+        doInput.disabled = placesBusy;
+        doInput.addEventListener('keydown', function (event) {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            doInput.blur();
+          }
+        });
+        doInput.addEventListener('change', function () {
+          setPlaceStopAction(key, index, doInput.value);
+        });
+        main.appendChild(doInput);
+      } else if (ref.do) {
+        var doText = document.createElement('div');
+        doText.className = 'info-route-do-text';
+        doText.textContent = ref.do;
+        main.appendChild(doText);
+      }
+
+      if (placeEditKey === stopKey && onPlaceDirectorySave) {
+        main.appendChild(buildPlaceEditor(ref));
+      }
+      row.appendChild(main);
+      return row;
+    }
+
+    function buildGhostRow(key, isLast) {
+      var row = document.createElement('div');
+      row.className = 'info-route-stop is-ghost is-' + key + (isLast ? ' is-last' : '');
+      var rail = document.createElement('span');
+      rail.className = 'info-route-rail';
+      var dot = document.createElement('span');
+      dot.className = 'info-route-dot';
+      rail.appendChild(dot);
+      row.appendChild(rail);
+      var main = document.createElement('div');
+      main.className = 'info-route-main';
+      var head = document.createElement('div');
+      head.className = 'info-route-head';
+      var kindEl = document.createElement('span');
+      kindEl.className = 'info-route-kind';
+      kindEl.textContent = PLACE_STOP_LABELS[key];
+      head.appendChild(kindEl);
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'info-route-pick';
+      btn.disabled = placesBusy || !onPlacesChange;
+      btn.innerHTML = '<i class="ti ti-plus" aria-hidden="true"></i>';
+      var t = document.createElement('span');
+      t.textContent =
+        key === 'from'
+          ? 'Choisir le départ'
+          : key === 'to'
+            ? 'Choisir l’arrivée'
+            : 'Choisir un lieu';
+      btn.appendChild(t);
+      btn.setAttribute('aria-expanded', placesPickerSlot === key ? 'true' : 'false');
+      btn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        setPlacesPickerOpen(placesPickerSlot === key ? '' : key);
+      });
+      head.appendChild(btn);
+      main.appendChild(head);
+      if (placesPickerSlot === key) main.appendChild(buildPlacesPicker(key));
+      row.appendChild(main);
+      return row;
+    }
+
+    function buildGapRow(insertIndex) {
+      var row = document.createElement('div');
+      row.className = 'info-route-gap';
+      var rail = document.createElement('span');
+      rail.className = 'info-route-rail';
+      row.appendChild(rail);
+      var main = document.createElement('div');
+      main.className = 'info-route-main';
+      var target = 'via:' + insertIndex;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'info-route-insert';
+      btn.disabled = placesBusy;
+      btn.title = 'Ajouter une étape ici';
+      btn.setAttribute('aria-label', 'Ajouter une étape ici');
+      btn.setAttribute('aria-expanded', placesPickerSlot === target ? 'true' : 'false');
+      btn.innerHTML =
+        '<i class="ti ti-plus" aria-hidden="true"></i><span>Étape</span>';
+      btn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        setPlacesPickerOpen(placesPickerSlot === target ? '' : target);
+      });
+      main.appendChild(btn);
+      if (placesPickerSlot === target) main.appendChild(buildPlacesPicker(target));
+      row.appendChild(main);
+      return row;
+    }
+
+    function buildRouteFooter(map) {
+      var footer = document.createElement('div');
+      footer.className = 'info-route-footer';
+      var editable = !!onPlacesChange;
+      if (map.at) {
+        if (editable) {
+          var toTrip = document.createElement('button');
+          toTrip.type = 'button';
+          toTrip.className = 'info-route-link';
+          toTrip.disabled = placesBusy;
+          toTrip.innerHTML =
+            '<i class="ti ti-route" aria-hidden="true"></i><span>Passer en trajet</span>';
+          toTrip.addEventListener('click', convertPlaceToTrip);
+          footer.appendChild(toTrip);
+        }
+      } else {
+        if (editable && map.from && map.to) {
+          var rev = document.createElement('button');
+          rev.type = 'button';
+          rev.className = 'info-route-link';
+          rev.disabled = placesBusy;
+          rev.innerHTML =
+            '<i class="ti ti-arrows-exchange-2" aria-hidden="true"></i><span>Inverser</span>';
+          rev.addEventListener('click', reversePlaceRoute);
+          footer.appendChild(rev);
+        }
+        var stops = placeTripStops(map);
+        var dirs = stops.map(findDirectoryPlace);
+        var url =
+          stops.length >= 2 &&
+          dirs.every(Boolean) &&
+          global.Places &&
+          typeof global.Places.directionsUrl === 'function'
+            ? global.Places.directionsUrl(dirs)
+            : '';
+        if (url) {
+          var itin = document.createElement('a');
+          itin.className = 'info-route-link';
+          itin.href = url;
+          itin.target = '_blank';
+          itin.rel = 'noopener noreferrer';
+          itin.innerHTML =
+            '<i class="ti ti-map-route" aria-hidden="true"></i><span>Itinéraire</span>';
+          footer.appendChild(itin);
+        }
+      }
+      return footer.childNodes.length ? footer : null;
     }
 
     function renderPlaces() {
-      PLACE_SLOTS.forEach(function (slot) {
-        var ui = placesSlotUi[slot];
-        if (!ui) return;
-        ui.chipHost.replaceChildren();
-        ui.addBtn.disabled = placesBusy || !onPlacesChange;
-        var ref = cardPlaces[slot];
-        if (ref && ref.name) {
-          var chip = document.createElement('span');
-          chip.className = 'info-places-chip';
-          chip.title = ref.name;
-          var nameEl = document.createElement('span');
-          nameEl.className = 'info-places-chip-name';
-          nameEl.textContent = ref.name;
-          chip.appendChild(nameEl);
-          if (onPlacesChange) {
-            var clearBtn = document.createElement('button');
-            clearBtn.type = 'button';
-            clearBtn.className = 'info-places-chip-clear';
-            clearBtn.setAttribute('aria-label', 'Retirer ' + ref.name);
-            clearBtn.disabled = placesBusy;
-            clearBtn.innerHTML =
-              '<i class="ti ti-x" aria-hidden="true"></i>';
-            clearBtn.addEventListener('click', function (event) {
-              event.preventDefault();
-              event.stopPropagation();
-              clearPlaceSlot(slot);
-            });
-            chip.appendChild(clearBtn);
-          }
-          ui.chipHost.appendChild(chip);
-          ui.addWrap.hidden = true;
-        } else {
-          ui.addWrap.hidden = !onPlacesChange;
+      placesRouteEl.replaceChildren();
+      var map = normalizePlaces(cardPlaces);
+      var editable = !!onPlacesChange;
+      var via = map.via || [];
+      var tripMode = !!(map.from || map.to || via.length);
+
+      if (!map.at && !tripMode) {
+        // Empty: choose the shape of the task first.
+        if (!editable) {
+          var none = document.createElement('span');
+          none.className = 'info-route-empty-text';
+          none.textContent = 'Aucun lieu';
+          placesRouteEl.appendChild(none);
+          return;
         }
-      });
-      if (placesPickerSlot) renderPlacesPicker();
+        var choose = document.createElement('div');
+        choose.className = 'info-route-choose';
+        [
+          ['at', 'ti-map-pin', 'Un lieu', 'La tâche se fait à un endroit'],
+          ['from', 'ti-route', 'Un trajet', 'Départ, étapes, arrivée']
+        ].forEach(function (spec) {
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'info-route-choose-btn';
+          b.disabled = placesBusy;
+          b.title = spec[3];
+          b.setAttribute(
+            'aria-expanded',
+            placesPickerSlot === spec[0] ? 'true' : 'false'
+          );
+          b.innerHTML =
+            '<i class="ti ' + spec[1] + '" aria-hidden="true"></i>';
+          var t = document.createElement('span');
+          t.textContent = spec[2];
+          b.appendChild(t);
+          if (placesPickerSlot === spec[0]) b.classList.add('is-open');
+          b.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            setPlacesPickerOpen(placesPickerSlot === spec[0] ? '' : spec[0]);
+          });
+          choose.appendChild(b);
+        });
+        placesRouteEl.appendChild(choose);
+        if (placesPickerSlot === 'at' || placesPickerSlot === 'from') {
+          placesRouteEl.appendChild(buildPlacesPicker(placesPickerSlot));
+        }
+        return;
+      }
+
+      var list = document.createElement('div');
+      list.className = 'info-route-list';
+      if (map.at) {
+        list.appendChild(buildStopRow('at', 0, map.at, true, 0));
+      } else {
+        if (map.from) list.appendChild(buildStopRow('from', 0, map.from, false, via.length));
+        else list.appendChild(buildGhostRow('from', false));
+        via.forEach(function (ref, i) {
+          if (editable && (i > 0 || map.from)) list.appendChild(buildGapRow(i));
+          list.appendChild(buildStopRow('via', i, ref, false, via.length));
+        });
+        if (editable && map.to && (via.length || map.from)) {
+          list.appendChild(buildGapRow(via.length));
+        }
+        if (map.to) list.appendChild(buildStopRow('to', 0, map.to, true, via.length));
+        else list.appendChild(buildGhostRow('to', true));
+      }
+      placesRouteEl.appendChild(list);
+      var footer = buildRouteFooter(map);
+      if (footer) placesRouteEl.appendChild(footer);
     }
 
-    PLACE_SLOTS.forEach(function (slot) {
-      var ui = placesSlotUi[slot];
-      if (!ui) return;
-      ui.addBtn.addEventListener('click', function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        if (ui.addBtn.disabled) return;
-        setPlacesPickerOpen(placesPickerSlot === slot ? '' : slot);
-      });
-    });
+    function renderPlacesPicker() {
+      renderPlaces();
+    }
 
     renderPlaces();
 
@@ -13710,144 +14486,128 @@
         });
       };
 
-      var title = document.createElement('div');
-      title.className = 'tg-editor-title';
-      var strong = document.createElement('strong');
-      strong.textContent = tgPersonName(fromId);
-      title.appendChild(document.createTextNode('Relier à qui ? — '));
-      title.appendChild(strong);
-      tgCreate.appendChild(title);
-
-      var groups = [];
-      var onCard = displayAssignees().filter(function (m) {
-        return String(m.id) !== fromId;
+      // One flat, ranked list: people already on the card, then saved people,
+      // then board members. Only a few show up front; typing searches them all.
+      var candidates = [];
+      displayAssignees().forEach(function (m) {
+        if (String(m.id) === fromId) return;
+        candidates.push({
+          member: m,
+          name: memberDisplayName(m) || 'Membre',
+          pick: function () {
+            return Promise.resolve(String(m.id));
+          }
+        });
       });
-      if (onCard.length) {
-        groups.push({
-          label: 'Sur la carte',
-          items: onCard.map(function (m) {
-            return {
-              member: m,
-              name: memberDisplayName(m) || 'Membre',
-              pick: function () {
-                return Promise.resolve(String(m.id));
-              }
-            };
-          })
+      if (onCustomAssigneesChange) {
+        availableCatalogAssignees().forEach(function (entry) {
+          var display = customAssigneeToMember(entry, boardMembers);
+          candidates.push({
+            member: display,
+            name: (display && memberDisplayName(display)) || entry.name || 'Personne',
+            pick: function () {
+              return Promise.resolve(addCatalogAssigneeFromPicker(entry)).then(function () {
+                return selectedMemberIds()[String(entry.id)] ? String(entry.id) : '';
+              });
+            }
+          });
         });
       }
       if (onMemberAdd) {
-        var boardOthers = availableBoardMembers();
-        if (boardOthers.length) {
-          groups.push({
-            label: 'Membres du tableau',
-            items: boardOthers.map(function (m) {
-              return {
-                member: m,
-                name: memberDisplayName(m) || 'Membre',
-                pick: function () {
-                  return Promise.resolve(addMemberFromPicker(m)).then(function () {
-                    return selectedMemberIds()[String(m.id)] ? String(m.id) : '';
-                  });
-                }
-              };
-            })
-          });
-        }
-      }
-      if (onCustomAssigneesChange) {
-        var saved = availableCatalogAssignees();
-        if (saved.length) {
-          groups.push({
-            label: 'Personnes enregistrées',
-            items: saved.map(function (entry) {
-              var display = customAssigneeToMember(entry, boardMembers);
-              return {
-                member: display,
-                name: (display && memberDisplayName(display)) || entry.name || 'Personne',
-                pick: function () {
-                  return Promise.resolve(addCatalogAssigneeFromPicker(entry)).then(function () {
-                    return selectedMemberIds()[String(entry.id)] ? String(entry.id) : '';
-                  });
-                }
-              };
-            })
-          });
-        }
-      }
-
-      if (groups.length) {
-        var list = document.createElement('div');
-        list.className = 'tg-pick-list';
-        groups.forEach(function (group) {
-          var gl = document.createElement('div');
-          gl.className = 'tg-pick-group';
-          gl.textContent = group.label;
-          list.appendChild(gl);
-          group.items.forEach(function (item) {
-            var btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'tg-pick-option';
-            if (item.member) appendMemberAvatar(btn, item.member);
-            var text = document.createElement('span');
-            text.textContent = item.name;
-            btn.appendChild(text);
-            btn.addEventListener('click', function () {
-              list.querySelectorAll('button').forEach(function (b) {
-                b.disabled = true;
+        availableBoardMembers().forEach(function (m) {
+          candidates.push({
+            member: m,
+            name: memberDisplayName(m) || 'Membre',
+            pick: function () {
+              return Promise.resolve(addMemberFromPicker(m)).then(function () {
+                return selectedMemberIds()[String(m.id)] ? String(m.id) : '';
               });
-              finish(item.pick());
-            });
-            list.appendChild(btn);
+            }
           });
         });
-        tgCreate.appendChild(list);
       }
 
-      var input = null;
-      if (onCustomAssigneesChange) {
-        var row = document.createElement('div');
-        row.className = 'tg-pick-new';
-        input = document.createElement('input');
-        input.type = 'text';
-        input.className = 'tg-editor-label';
-        input.maxLength = MAX_CUSTOM_ASSIGNEE_NAME_LEN;
-        input.placeholder = 'Nouvelle personne…';
-        input.setAttribute('aria-label', 'Nom de la nouvelle personne');
-        var ok = document.createElement('button');
-        ok.type = 'button';
-        ok.className = 'tg-editor-action is-primary';
-        ok.textContent = 'Créer';
-        var submit = function () {
-          var name = input.value.trim();
-          if (!name) {
-            input.focus();
-            return;
-          }
-          ok.disabled = true;
-          finish(tgCreatePerson(name));
-        };
-        ok.addEventListener('click', submit);
-        input.addEventListener('keydown', function (event) {
-          event.stopPropagation();
-          if (event.key === 'Enter') {
-            event.preventDefault();
-            submit();
-          } else if (event.key === 'Escape') {
-            tgCloseCreate();
-          }
+      var TG_PICK_SHOWN = 4;
+      var tgFold = function (s) {
+        return String(s || '')
+          .normalize('NFD')
+          .replace(/[̀-ͯ]/g, '')
+          .toLowerCase();
+      };
+
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'tg-editor-label';
+      input.maxLength = MAX_CUSTOM_ASSIGNEE_NAME_LEN;
+      input.placeholder = onCustomAssigneesChange
+        ? 'Relier à… (chercher ou créer)'
+        : 'Relier à… (chercher)';
+      input.setAttribute('aria-label', 'Relier ' + tgPersonName(fromId) + ' à');
+      tgCreate.appendChild(input);
+
+      var list = document.createElement('div');
+      list.className = 'tg-pick-list';
+      tgCreate.appendChild(list);
+
+      var visible = [];
+      var render = function () {
+        var raw = input.value.trim();
+        var q = tgFold(raw);
+        visible = q
+          ? candidates.filter(function (c) {
+              return tgFold(c.name).indexOf(q) !== -1;
+            })
+          : candidates.slice();
+        visible = visible.slice(0, q ? 6 : TG_PICK_SHOWN);
+        if (
+          raw &&
+          onCustomAssigneesChange &&
+          !candidates.some(function (c) {
+            return tgFold(c.name) === q;
+          })
+        ) {
+          visible.push({
+            create: true,
+            name: 'Créer « ' + raw + ' »',
+            pick: function () {
+              return tgCreatePerson(raw);
+            }
+          });
+        }
+        list.replaceChildren();
+        visible.forEach(function (item, i) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'tg-pick-option' + (i === 0 ? ' is-active' : '');
+          if (item.member) appendMemberAvatar(btn, item.member);
+          var text = document.createElement('span');
+          text.textContent = item.name;
+          btn.appendChild(text);
+          btn.addEventListener('click', function () {
+            list.querySelectorAll('button').forEach(function (b) {
+              b.disabled = true;
+            });
+            finish(item.pick());
+          });
+          list.appendChild(btn);
         });
-        row.appendChild(input);
-        row.appendChild(ok);
-        tgCreate.appendChild(row);
-      }
-
-      var cancel = document.createElement('button');
-      cancel.type = 'button';
-      cancel.className = 'tg-editor-action';
-      cancel.textContent = 'Annuler';
-      cancel.addEventListener('click', tgCloseCreate);
-      tgCreate.appendChild(cancel);
+        list.hidden = !visible.length;
+      };
+      var choose = function () {
+        var first = list.querySelector('.tg-pick-option');
+        if (first) first.click();
+      };
+      input.addEventListener('input', render);
+      input.addEventListener('keydown', function (event) {
+        event.stopPropagation();
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          choose();
+        } else if (event.key === 'Escape') {
+          tgCloseCreate();
+        }
+      });
+      render();
 
       var hostW = tgHost.clientWidth || 320;
       var w = 256;
@@ -24632,6 +25392,7 @@
     isPlaceId: isPlaceId,
     normalizePlaceRef: normalizePlaceRef,
     normalizePlaces: normalizePlaces,
+    placeRefsOf: placeRefsOf,
     normalizePlaceCatalog: normalizePlaceCatalog,
     createPlaceRef: createPlaceRef,
     getPlaceCatalog: getPlaceCatalog,

@@ -3009,6 +3009,8 @@ html[data-color-mode='dark'] .overview-composer-input {
   white-space: nowrap;
 }
 
+/* ── Lieux: a route of stops joined by a rail (De → étapes → Vers) ───── */
+
 .info-places-wrap {
   display: flex;
   flex-direction: column;
@@ -3016,156 +3018,402 @@ html[data-color-mode='dark'] .overview-composer-input {
   min-width: 0;
 }
 
-.info-places-slots {
+.info-route {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px 14px;
-  align-items: flex-start;
-  min-width: 0;
-}
-
-.info-places-slot {
-  display: inline-flex;
-  align-items: flex-start;
+  flex-direction: column;
   gap: 6px;
   min-width: 0;
-  max-width: 100%;
 }
 
-.info-places-slot-label {
-  display: inline-flex;
+.info-route-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.info-route-stop,
+.info-route-gap {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  column-gap: 10px;
+  min-width: 0;
+}
+
+.info-route-rail {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+/* rail segments: above the dot (not on the first row) and below it (not on the last) */
+.info-route-rail::before,
+.info-route-rail::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--text-primary, #172b4d) 20%, transparent);
+  border-radius: 1px;
+}
+
+.info-route-rail::before {
+  top: 0;
+  height: 9px;
+  display: none;
+}
+
+.info-route-rail::after {
+  top: 21px;
+  bottom: 0;
+  display: none;
+}
+
+.info-route-list > :not(:first-child) .info-route-rail::before {
+  display: block;
+}
+
+.info-route-list > .info-route-stop:not(.is-last) .info-route-rail::after {
+  display: block;
+}
+
+.info-route-list > .info-route-gap .info-route-rail::before {
+  display: block;
+  height: 100%;
+}
+
+.info-route-list > .info-route-gap .info-route-rail::after {
+  display: none;
+}
+
+.info-route-dot {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin-top: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--tp-primary, #0c66e4);
+  background: var(--surface-1, #fff);
+}
+
+.info-route-stop.is-via .info-route-dot {
+  width: 9px;
+  height: 9px;
+  margin-top: 10px;
+  border-radius: 2px;
+  border: none;
+  background: var(--text-secondary, #5e6c84);
+  transform: rotate(45deg);
+}
+
+.info-route-stop.is-to .info-route-dot,
+.info-route-stop.is-at .info-route-dot {
+  background: var(--tp-primary, #0c66e4);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tp-primary, #0c66e4) 22%, transparent);
+}
+
+.info-route-stop.is-ghost .info-route-dot {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--text-primary, #172b4d) 35%, transparent);
+  background: transparent;
+  box-shadow: none;
+}
+
+.info-route-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding-bottom: 8px;
+}
+
+.info-route-head {
+  display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   min-height: 28px;
+  min-width: 0;
+}
+
+.info-route-kind {
+  flex: 0 0 auto;
+  min-width: 52px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--text-secondary, #5e6c84);
-  flex: 0 0 auto;
 }
 
-.info-places-chip-host {
-  display: inline-flex;
-  align-items: center;
+.info-route-name {
+  flex: 0 1 auto;
   min-width: 0;
-  min-height: 28px;
-}
-
-.info-places-chip-host:empty {
-  display: none;
-}
-
-.info-places-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 220px;
-  min-height: 28px;
-  padding: 2px 2px 2px 10px;
-  border-radius: 999px;
-  background: var(--surface-1, #ebecf0);
+  max-width: 100%;
+  margin: 0;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
   color: var(--text-primary, #172b4d);
-  font-size: 13px;
+  font: inherit;
+  font-size: 14px;
   font-weight: 500;
-  box-sizing: border-box;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
-html[data-color-mode='dark'] .info-places-chip {
-  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+.info-route-name:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary, #172b4d) 8%, transparent);
 }
 
-.info-places-chip-name {
+.info-route-name:disabled {
+  cursor: default;
+}
+
+.info-route-meta {
+  flex: 1 1 60px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-secondary, #5e6c84);
 }
 
-.info-places-chip-clear {
+.info-route-gps {
+  flex: 0 0 auto;
+  font-size: 13px;
+  color: var(--tp-primary, #0c66e4);
+}
+
+.info-route-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.info-route-stop:hover .info-route-tools,
+.info-route-stop:focus-within .info-route-tools {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .info-route-tools {
+    opacity: 1;
+  }
+}
+
+.info-route-tool {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   margin: 0;
   padding: 0;
   border: none;
-  border-radius: 999px;
+  border-radius: 6px;
   background: transparent;
-  color: inherit;
+  color: var(--text-secondary, #5e6c84);
+  text-decoration: none;
   cursor: pointer;
-  opacity: 0.7;
 }
 
-.info-places-chip-clear:hover:not(:disabled) {
-  opacity: 1;
-  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+.info-route-tool .ti {
+  font-size: 15px;
+  line-height: 1;
 }
 
-.info-places-chip-clear:disabled {
+.info-route-tool:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary, #172b4d) 10%, transparent);
+  color: var(--text-primary, #172b4d);
+}
+
+.info-route-tool.is-danger:hover:not(:disabled) {
+  color: var(--tp-danger, #c9372c);
+}
+
+.info-route-tool:disabled {
   opacity: 0.4;
   cursor: default;
 }
 
-.info-places-add-wrap {
-  position: relative;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  flex: 0 0 auto;
-  gap: 6px;
+.info-route-do,
+.info-route-do-text {
+  margin: 0 0 0 58px;
+  font-size: 12px;
 }
 
-.info-places-add-btn {
+.info-route-do-text {
+  color: var(--text-secondary, #5e6c84);
+}
+
+.info-route-do {
+  display: block;
+  width: calc(100% - 58px);
+  min-width: 0;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary, #172b4d);
+  font: inherit;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.info-route-do::placeholder {
+  color: var(--text-secondary, #5e6c84);
+  opacity: 0.6;
+}
+
+@media (max-width: 480px) {
+  .info-route-do,
+  .info-route-do-text {
+    margin-left: 0;
+  }
+  .info-route-do {
+    width: 100%;
+  }
+}
+
+.info-route-pick,
+.info-route-insert,
+.info-route-link,
+.info-route-choose-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
+  gap: 6px;
   margin: 0;
-  padding: 0;
-  border: 1px dashed color-mix(in srgb, var(--text-primary) 28%, transparent);
   border-radius: 999px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.info-route-pick,
+.info-route-insert {
+  height: 26px;
+  padding: 0 10px 0 8px;
+  border: 1px dashed color-mix(in srgb, var(--text-primary, #172b4d) 30%, transparent);
   background: transparent;
   color: var(--text-secondary, #5e6c84);
-  cursor: pointer;
 }
 
-.info-places-add-btn .ti {
-  font-size: 14px;
-  line-height: 1;
+.info-route-insert {
+  height: 22px;
+  margin: 2px 0;
+  font-size: 11px;
+  opacity: 0.55;
 }
 
-.info-places-add-btn:hover:not(:disabled),
-.info-places-add-wrap.is-open .info-places-add-btn {
+.info-route-gap:hover .info-route-insert,
+.info-route-insert:focus-visible,
+.info-route-insert[aria-expanded='true'],
+.info-route-insert:hover {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .info-route-insert {
+    opacity: 1;
+  }
+}
+
+.info-route-pick:hover:not(:disabled),
+.info-route-insert:hover:not(:disabled),
+.info-route-pick[aria-expanded='true'],
+.info-route-insert[aria-expanded='true'] {
   border-style: solid;
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-1));
+  color: var(--text-primary, #172b4d);
+  background: color-mix(in srgb, var(--text-primary, #172b4d) 6%, transparent);
 }
 
-.info-places-add-btn:disabled {
+.info-route-pick:disabled,
+.info-route-insert:disabled {
   opacity: 0.45;
   cursor: default;
 }
 
-.info-places-picker-host {
-  display: block;
-  width: min(100vw - 48px, 280px);
-  max-width: 280px;
+.info-route-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-left: 28px;
 }
 
-.info-places-picker-host[hidden] {
-  display: none !important;
+.info-route-link {
+  height: 26px;
+  padding: 0 10px;
+  border: none;
+  background: color-mix(in srgb, var(--text-primary, #172b4d) 7%, transparent);
+  color: var(--text-primary, #172b4d);
 }
+
+.info-route-link:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary, #172b4d) 13%, transparent);
+}
+
+.info-route-link:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.info-route-empty-text {
+  font-size: 13px;
+  color: var(--text-secondary, #5e6c84);
+}
+
+.info-route-choose {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.info-route-choose-btn {
+  height: 32px;
+  padding: 0 14px 0 12px;
+  border: 1px dashed color-mix(in srgb, var(--text-primary, #172b4d) 30%, transparent);
+  background: transparent;
+  color: var(--text-primary, #172b4d);
+  font-size: 13px;
+}
+
+.info-route-choose-btn:hover:not(:disabled),
+.info-route-choose-btn.is-open {
+  border-style: solid;
+  background: color-mix(in srgb, var(--text-primary, #172b4d) 7%, transparent);
+}
+
+.info-route-choose-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ── picker: search or create, inline under its row ───────────────── */
 
 .info-places-picker {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   width: 100%;
-  max-height: 320px;
-  overflow: auto;
-  padding: 6px;
+  max-width: 360px;
+  margin: 4px 0 2px;
+  padding: 8px;
   border: 1px solid var(--border, color-mix(in srgb, var(--text-primary) 14%, transparent));
   border-radius: 10px;
   background: var(--surface-1, var(--surface-2));
@@ -3173,18 +3421,23 @@ html[data-color-mode='dark'] .info-places-chip {
   box-sizing: border-box;
 }
 
-.info-places-picker-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  padding: 2px 4px 4px;
+.info-places-search {
+  display: block;
+  width: 100%;
+  height: 32px;
+  margin: 0;
+  padding: 0 10px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  box-sizing: border-box;
 }
 
 .info-places-picker-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 160px;
+  max-height: 200px;
   overflow: auto;
 }
 
@@ -3202,7 +3455,7 @@ html[data-color-mode='dark'] .info-places-chip {
   gap: 8px;
   width: 100%;
   margin: 0;
-  padding: 6px 8px;
+  padding: 7px 8px;
   border: none;
   border-radius: 6px;
   background: transparent;
@@ -3215,8 +3468,12 @@ html[data-color-mode='dark'] .info-places-chip {
 }
 
 .info-places-picker-option:hover:not(:disabled),
-.info-places-picker-option.is-selected {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+.info-places-picker-option.is-active {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+.info-places-picker-option.is-selected .info-places-picker-option-text {
+  font-weight: 600;
 }
 
 .info-places-picker-option:disabled {
@@ -3229,53 +3486,153 @@ html[data-color-mode='dark'] .info-places-chip {
   opacity: 0.7;
 }
 
+.info-places-picker-create {
+  color: var(--tp-primary, #0c66e4);
+}
+
+.info-places-picker-create .ti {
+  opacity: 1;
+}
+
 .info-places-picker-option-text {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.info-places-create {
+.info-places-picker-option-sub {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.info-places-picker-gps {
+  color: var(--tp-primary, #0c66e4);
+}
+
+/* ── place editor: name, type, address, GPS (private directory) ───── */
+
+.info-place-editor {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 6px;
-  padding-top: 8px;
-  border-top: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+  gap: 8px;
+  max-width: 380px;
+  margin: 6px 0 2px;
+  padding: 10px;
+  border: 1px solid var(--border, color-mix(in srgb, var(--text-primary) 14%, transparent));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  box-sizing: border-box;
 }
 
-.info-places-create-title {
+.info-place-editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.info-place-editor-label {
   font-size: 11px;
   font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
   color: var(--text-secondary);
-  padding: 0 2px;
 }
 
-.info-places-create-input {
+.info-place-editor .info-places-create-input {
   display: block;
   width: 100%;
-  height: 28px;
+  height: 30px;
   margin: 0;
   padding: 0 8px;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 18%, transparent);
   border-radius: 6px;
-  background: var(--surface-0, var(--surface-1));
+  font: inherit;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.info-place-editor-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.info-place-editor-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  margin: 0;
+  padding: 0 10px 0 8px;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
   color: var(--text-primary);
   font: inherit;
   font-size: 12px;
-  box-sizing: border-box;
+  cursor: pointer;
+}
+
+.info-place-editor-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 14%, transparent);
+}
+
+.info-place-editor-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.info-place-editor-hint {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.info-place-editor-hint.is-ok {
+  color: var(--tp-success, #1f845a);
+}
+
+.info-place-editor-hint.is-error {
+  color: var(--tp-danger, #c9372c);
+}
+
+.info-place-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-place-editor-cancel {
+  height: 28px;
+  margin: 0;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.info-place-editor-cancel:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
 .info-places-create-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  align-self: flex-start;
   height: 28px;
   margin: 0;
-  padding: 0 10px;
+  padding: 0 12px;
   border: none;
   border-radius: 6px;
   background: var(--tp-primary, #0c66e4);
@@ -9511,8 +9868,14 @@ html[data-color-mode="dark"] .calc-rsm-marker-core {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 176px;
-  overflow: auto;
+}
+
+.tg-pick-list[hidden] {
+  display: none;
+}
+
+.tg-pick-option.is-active:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
 .tg-pick-group {

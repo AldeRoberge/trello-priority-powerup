@@ -767,6 +767,30 @@
         }
         body.appendChild(nameRow);
 
+        var geoBits = [];
+        if (place.address) geoBits.push(place.address);
+        if (typeof place.lat === 'number' && typeof place.lng === 'number') {
+          geoBits.push(place.lat.toFixed(5) + ', ' + place.lng.toFixed(5));
+        }
+        if (geoBits.length) {
+          var geoEl = document.createElement('div');
+          geoEl.className = 'tp-people-meta';
+          var geoIcon = document.createElement('i');
+          geoIcon.className = 'ti ti-current-location';
+          geoIcon.setAttribute('aria-hidden', 'true');
+          geoEl.appendChild(geoIcon);
+          var mapsHref = PlacesApi.mapsUrl ? PlacesApi.mapsUrl(place) : '';
+          var geoText = document.createElement(mapsHref ? 'a' : 'span');
+          geoText.textContent = ' ' + geoBits.join(' · ');
+          if (mapsHref) {
+            geoText.href = mapsHref;
+            geoText.target = '_blank';
+            geoText.rel = 'noopener noreferrer';
+          }
+          geoEl.appendChild(geoText);
+          body.appendChild(geoEl);
+        }
+
         if (place.notes) {
           var metaEl = document.createElement('div');
           metaEl.className = 'tp-people-meta';
@@ -869,6 +893,20 @@
           hint: 'L’assistant s’en sert pour « chez moi » / « au bureau ».',
           maxlength: PlacesApi.MAX_KIND || 40
         });
+        var addressInput = field('Adresse', 'placesEditAddress', {
+          value: (place && place.address) || '',
+          placeholder: 'ex. 12 chemin du Lac, Val-d’Or',
+          hint: 'Reste privée : jamais partagée avec le tableau.',
+          maxlength: PlacesApi.MAX_ADDRESS || 200
+        });
+        var gpsInput = field('Coordonnées GPS', 'placesEditGps', {
+          value:
+            place && typeof place.lat === 'number' && typeof place.lng === 'number'
+              ? place.lat + ', ' + place.lng
+              : '',
+          placeholder: '48.1189, -77.7828 ou lien Google Maps',
+          hint: 'Colle des coordonnées ou un lien Google Maps / OpenStreetMap.'
+        });
         var aliasesInput = field('Alias (optionnel)', 'placesEditAliases', {
           value: (function () {
             if (!place || !place.aliases || !place.aliases.length) return '';
@@ -908,11 +946,21 @@
             nameInput.focus();
             return;
           }
+          var gpsRaw = gpsInput.value.trim();
+          var gps = gpsRaw ? PlacesApi.parseCoordinates(gpsRaw) : null;
+          if (gpsRaw && !gps) {
+            setStatus('Coordonnées non reconnues (ex. 48.1189, -77.7828).', true);
+            gpsInput.focus();
+            return;
+          }
           var patch = {
             name: name,
             kind: kindInput.value.trim(),
             aliases: splitChipField(aliasesInput.value),
-            notes: notesInput.value.trim()
+            notes: notesInput.value.trim(),
+            address: addressInput.value.trim(),
+            lat: gps ? gps.lat : null,
+            lng: gps ? gps.lng : null
           };
           if (place && place.id) patch.id = place.id;
           placesDirectory = PlacesApi.upsert(placesDirectory, patch);

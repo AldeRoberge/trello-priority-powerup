@@ -131,6 +131,85 @@ describe('Places directory', () => {
     assert.equal(Places.hasAnyPlace({}), false);
   });
 
+  it('keeps address and GPS on directory places, and clears GPS on request', () => {
+    let dir = Places.upsert(Places.emptyDirectory(), {
+      name: 'Chalet',
+      address: '12 chemin du Lac',
+      lat: '48.1189',
+      lng: -77.7828,
+    });
+    assert.equal(dir.places[0].address, '12 chemin du Lac');
+    assert.equal(dir.places[0].lat, 48.1189);
+    assert.equal(dir.places[0].lng, -77.7828);
+    dir = Places.upsert(dir, { matchText: 'Chalet', notes: 'x' });
+    assert.equal(dir.places[0].lat, 48.1189, 'untouched by unrelated patch');
+    dir = Places.upsert(dir, { matchText: 'Chalet', lat: null, lng: null });
+    assert.equal(dir.places[0].lat, undefined);
+    const bad = Places.upsert(Places.emptyDirectory(), { name: 'X', lat: 200, lng: 0 });
+    assert.equal(bad.places[0].lat, undefined);
+  });
+
+  it('keeps GPS out of the shared board catalog', () => {
+    const dir = Places.upsert(Places.emptyDirectory(), {
+      name: 'Maison',
+      lat: 45.5,
+      lng: -73.5,
+    });
+    const merged = Places.mergeIntoPlaceCatalog([], dir);
+    assert.deepEqual(Object.keys(merged.catalog[0]).sort(), ['id', 'name']);
+  });
+
+  it('parseCoordinates reads decimals and map links', () => {
+    assert.deepEqual(Places.parseCoordinates('48.1189, -77.7828'), { lat: 48.1189, lng: -77.7828 });
+    assert.deepEqual(Places.parseCoordinates('48,1189 ; -77,7828'), { lat: 48.1189, lng: -77.7828 });
+    assert.deepEqual(
+      Places.parseCoordinates('https://www.google.com/maps/place/X/@48.1189,-77.7828,15z/data=!3d48.12!4d-77.78'),
+      { lat: 48.12, lng: -77.78 }
+    );
+    assert.deepEqual(
+      Places.parseCoordinates('https://www.google.com/maps/@48.1189,-77.7828,15z'),
+      { lat: 48.1189, lng: -77.7828 }
+    );
+    assert.deepEqual(
+      Places.parseCoordinates('https://maps.google.com/?q=48.1,-77.7'),
+      { lat: 48.1, lng: -77.7 }
+    );
+    assert.equal(Places.parseCoordinates('pas des coordonnées'), null);
+    assert.equal(Places.parseCoordinates('99, 200'), null);
+  });
+
+  it('directionsUrl needs every stop locatable', () => {
+    const a = { name: 'A', lat: 1, lng: 2 };
+    const b = { name: 'B', address: '3 rue X' };
+    const c = { name: 'C', lat: 5, lng: 6 };
+    const url = Places.directionsUrl([a, b, c]);
+    assert.match(url, /origin=1%2C2/);
+    assert.match(url, /waypoints=3%20rue%20X/);
+    assert.match(url, /destination=5%2C6/);
+    assert.equal(Places.directionsUrl([a, { name: 'nu' }]), '');
+    assert.equal(Places.directionsUrl([a]), '');
+  });
+
+  it('card route: via stops, per-stop action, ordering', () => {
+    const map = Places.normalizePlaces({
+      from: { name: 'Val-d’Or', do: 'Charger le camion' },
+      via: [{ name: 'Quincaillerie', do: 'Acheter les vis' }, { name: '' }, null],
+      to: { name: 'Chalet' },
+    });
+    assert.equal(map.from.do, 'Charger le camion');
+    assert.equal(map.via.length, 1);
+    assert.deepEqual(
+      Places.routeStops(map).map((s) => s.key + ':' + s.ref.name),
+      ['from:Val-d’Or', 'via:Quincaillerie', 'to:Chalet']
+    );
+    assert.equal(Places.refsOf(map).length, 3);
+    assert.ok(Places.hasAnyPlace({ via: [{ name: 'A' }] }));
+    const many = Places.normalizePlaces({
+      via: Array.from({ length: 20 }, (_, i) => ({ name: 'P' + i })),
+    });
+    assert.equal(many.via.length, Places.MAX_VIA);
+  });
+
   it('mergeIntoPlaceCatalog merges directory into slim catalog', () => {
     const dir = Places.upsert(Places.emptyDirectory(), {
       name: 'Maison Montréal',
