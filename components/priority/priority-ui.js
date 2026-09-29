@@ -11331,6 +11331,20 @@
     tgFrame.appendChild(tgEditor);
     tgFrame.appendChild(tgCreate);
     tgFrame.appendChild(tgCollapseBtn);
+    var tgZoomOutBtn = document.createElement('button');
+    tgZoomOutBtn.type = 'button';
+    tgZoomOutBtn.className = 'tg-collapse tg-zoom-btn tg-zoom-out';
+    tgZoomOutBtn.title = 'D\u00e9zoomer (ou Ctrl + molette)';
+    tgZoomOutBtn.setAttribute('aria-label', 'D\u00e9zoomer');
+    tgZoomOutBtn.innerHTML = '<i class="ti ti-zoom-out" aria-hidden="true"></i>';
+    var tgZoomInBtn = document.createElement('button');
+    tgZoomInBtn.type = 'button';
+    tgZoomInBtn.className = 'tg-collapse tg-zoom-btn tg-zoom-in';
+    tgZoomInBtn.title = 'Revenir \u00e0 la taille ajust\u00e9e';
+    tgZoomInBtn.setAttribute('aria-label', 'Agrandir');
+    tgZoomInBtn.innerHTML = '<i class="ti ti-zoom-in" aria-hidden="true"></i>';
+    tgFrame.appendChild(tgZoomOutBtn);
+    tgFrame.appendChild(tgZoomInBtn);
     var tgHint = document.createElement('div');
     tgHint.className = 'tg-hint';
     tgHost.appendChild(tgFrame);
@@ -13796,6 +13810,7 @@
       memberRolesPickerMemberId = id;
       memberRolesPickerHost.hidden = !id;
       if (id) renderMemberRolesPicker(id);
+      tgPlaceRolesPicker();
       onLayoutChange();
     }
 
@@ -13972,7 +13987,7 @@
     }
 
     // ── Team graph (node view of the assignees) ────────────────────────
-    var TG_NODE_W = 152;
+    var TG_NODE_W = 210;
     var TG_PAD = 20;
     var TG_KIND_META = {
       asks: { icon: 'ti-arrow-down', label: 'Demande', verb: 'demande à' },
@@ -13983,6 +13998,8 @@
     var tgSelectedKey = '';
     var tgPending = null; // { from, kind } armed by clicking a pin
     var tgScale = 1;
+    var tgFit = 1;
+    var tgZoomMul = 1;
     var tgLayout = null;
     var tgDrag = null;
     var tgExpanded = false;
@@ -13995,12 +14012,78 @@
         tgScale === 1 && !moved
           ? ''
           : 'translate(' + tgPan.x + 'px,' + tgPan.y + 'px) scale(' + tgScale + ')';
+      tgPlaceRolesPicker();
+    }
+
+    // Zoom out (down to 25%) and back to the fitted size, around a point of the frame.
+    function tgZoomBy(factor, px, py) {
+      var nextMul = Math.max(0.2, Math.min(1, tgZoomMul * factor));
+      var nextScale = Math.max(0.25, tgFit * nextMul);
+      if (Math.abs(nextScale - tgScale) < 0.001) return;
+      var ox = tgStage.offsetLeft;
+      var sx = (px - ox - tgPan.x) / tgScale;
+      var sy = (py - tgPan.y) / tgScale;
+      tgZoomMul = nextMul;
+      tgScale = nextScale;
+      tgPan.x = Math.round(px - ox - sx * tgScale);
+      tgPan.y = Math.round(py - sy * tgScale);
+      if (tgZoomMul === 1) {
+        tgPan.x = 0;
+        tgPan.y = 0;
+      }
+      tgApplyTransform();
+    }
+
+    tgFrame.addEventListener(
+      'wheel',
+      function (event) {
+        if (event.target.closest('.tg-editor, .tg-create, .info-member-roles-picker-host')) return;
+        if (!(event.ctrlKey || event.metaKey || tgExpanded)) return;
+        event.preventDefault();
+        var rect = tgFrame.getBoundingClientRect();
+        tgZoomBy(Math.exp(-event.deltaY * 0.0015), event.clientX - rect.left, event.clientY - rect.top);
+      },
+      { passive: false }
+    );
+    tgZoomOutBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      tgZoomBy(0.8, tgHost.clientWidth / 2, tgFrame.clientHeight / 2);
+    });
+    tgZoomInBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      tgZoomBy(1.25, tgHost.clientWidth / 2, tgFrame.clientHeight / 2);
+    });
+
+    // The role picker opens right under the person's node (inside the graph frame),
+    // not at the bottom of the section where it can fall outside the view.
+    function tgPlaceRolesPicker() {
+      var mid = memberRolesPickerMemberId;
+      var box = mid && !memberRolesPickerHost.hidden && !tgHost.hidden && tgLayout && tgLayout.nodes[mid];
+      if (!box) {
+        if (memberRolesPickerHost.parentNode !== membersWrap) membersWrap.appendChild(memberRolesPickerHost);
+        memberRolesPickerHost.classList.remove('is-in-graph');
+        memberRolesPickerHost.style.left = '';
+        memberRolesPickerHost.style.top = '';
+        memberRolesPickerHost.style.width = '';
+        if (tgEditor.hidden) tgFrame.style.minHeight = '';
+        return;
+      }
+      if (memberRolesPickerHost.parentNode !== tgFrame) tgFrame.appendChild(memberRolesPickerHost);
+      memberRolesPickerHost.classList.add('is-in-graph');
+      var hostW = tgHost.clientWidth || 320;
+      var w = Math.min(280, hostW);
+      memberRolesPickerHost.style.width = w + 'px';
+      var left = tgStage.offsetLeft + tgPan.x + box.x * tgScale;
+      memberRolesPickerHost.style.left = Math.max(0, Math.min(left, hostW - w)) + 'px';
+      var top = Math.max(0, Math.round(tgPan.y + (box.y + box.h) * tgScale + 6));
+      memberRolesPickerHost.style.top = top + 'px';
+      tgFrame.style.minHeight = top + memberRolesPickerHost.offsetHeight + 8 + 'px';
     }
 
     // Drag the background to move around the map; double-click recentres it.
     tgFrame.addEventListener('pointerdown', function (event) {
       if (event.button != null && event.button !== 0) return;
-      if (event.target.closest('.tg-node, .tg-edge, .tg-pill, .tg-editor, .tg-collapse, .tg-wire-hit')) return;
+      if (event.target.closest('.tg-node, .tg-edge, .tg-pill, .tg-editor, .tg-collapse, .tg-zoom-btn, .tg-wire-hit, .info-member-roles-picker-host')) return;
       var startX = event.clientX;
       var startY = event.clientY;
       var baseX = tgPan.x;
@@ -14039,9 +14122,11 @@
       tgFrame.addEventListener('pointercancel', end);
     });
     tgFrame.addEventListener('dblclick', function (event) {
-      if (event.target.closest('.tg-node, .tg-edge, .tg-pill, .tg-editor, .tg-collapse')) return;
+      if (event.target.closest('.tg-node, .tg-edge, .tg-pill, .tg-editor, .tg-collapse, .tg-zoom-btn, .info-member-roles-picker-host')) return;
       tgPan.x = 0;
       tgPan.y = 0;
+      tgZoomMul = 1;
+      tgScale = Math.max(0.25, tgFit);
       tgApplyTransform();
     });
 
@@ -14053,6 +14138,7 @@
       if (!tgExpanded) {
         tgPan.x = 0;
         tgPan.y = 0;
+        tgZoomMul = 1;
         tgSetPending(null);
         tgCloseEditor();
         tgCloseCreate();
@@ -14131,10 +14217,7 @@
     }
 
     function tgDefaultHint() {
-      var count = displayAssignees().length;
-      if (count < 2) return '';
-      if (!onTeamLinksChange) return '';
-      return 'Survole un bord d’une carte et glisse : bas = demande, droite = enchaîne, haut/gauche = reçoit de. Lâche dans le vide pour choisir qui relier. Glisse le fond pour te déplacer.';
+      return '';
     }
 
     function tgCommitLink(from, to, kind) {
@@ -14795,9 +14878,10 @@
       tgWires.setAttribute('viewBox', '0 0 ' + stageW + ' ' + stageH);
 
       var available = tgHost.clientWidth;
-      tgScale = available > 0 && stageW > available ? Math.max(0.55, available / stageW) : 1;
+      tgFit = available > 0 && stageW > available ? Math.max(0.55, available / stageW) : 1;
+      tgScale = Math.max(0.25, tgFit * tgZoomMul);
       tgApplyTransform();
-      tgFrame.style.height = Math.ceil(stageH * tgScale) + 'px';
+      tgFrame.style.height = Math.ceil(stageH * tgFit) + 'px';
 
       var defs = tgSvg('defs');
       ['asks', 'flow', 'both'].forEach(function (kind) {

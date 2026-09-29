@@ -9442,13 +9442,12 @@ html[data-color-mode="dark"] .calc-rsm-marker-core {
 .tg-node-name {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.25;
   color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .tg-node-clear {
@@ -9942,4 +9941,27 @@ html[data-color-mode="dark"] .calc-rsm-marker-core {
 .tg-pick-new .tg-editor-action {
   flex: 0 0 auto;
   padding: 6px 12px;
+}
+
+/* Assignés graph: zoom buttons + role picker docked under its node */
+.tg-zoom-btn {
+  right: auto;
+  left: 8px;
+  padding: 4px 8px;
+}
+
+.tg-zoom-btn.tg-zoom-in {
+  left: 46px;
+}
+
+.info-member-roles-picker-host.is-in-graph {
+  position: absolute;
+  z-index: 7;
+  cursor: default;
+}
+
+.info-member-roles-picker-host.is-in-graph .info-member-roles-picker {
+  margin-top: 0;
+  max-width: none;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
 }
