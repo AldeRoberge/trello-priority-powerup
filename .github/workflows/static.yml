@@ -30,12 +30,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v5
-        with:
-          node-version: '22'
-
       - name: Write build timestamp
         run: node scripts/stamp-build.js
+
+      # Pages serves Cache-Control: max-age=600; a per-commit ?v= makes every
+      # deploy load fresh JS/CSS instead of waiting up to 10 minutes.
+      - name: Version asset URLs (cache-bust)
+        run: node scripts/version-assets.js "$GITHUB_SHA"
 
       - uses: actions/configure-pages@v6
 
