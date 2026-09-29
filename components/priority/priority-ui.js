@@ -11375,7 +11375,8 @@
     membersRow.value.appendChild(membersWrap);
     body.appendChild(membersRow.row);
 
-    // ── Places: a route of ordered stops (De → étapes → Vers, or Sur place) ──
+    // ── Places: a route of ordered stops (De, étapes, Vers, or Sur place) ──
+    // Simple view = chips; clicking opens the node view (same look as Assignés).
     var PLACE_STOP_LABELS = {
       from: 'De',
       via: 'Étape',
@@ -12524,13 +12525,19 @@
       applyInfoSaveStatus(placesStatus, text, kind);
     }
 
+    var pgIgnoreUntil = 0;
+    var pgExpanded = false;
+    var pgPickPoint = null; // stage point where the "add a stop" popover opens
+
     /**
-     * Picker target: 'at' | 'from' | 'to' | 'via:N' (insert as stop N of the
-     * intermediate stops). The picker renders inline under its target row.
+     * Picker target: 'at' | 'from' (empty state, inline) or 'ins:N' (insert as
+     * stop N of the route: opens as a popover inside the node graph).
      */
     function setPlacesPickerOpen(target) {
       var next = String(target || '');
-      if (next && !/^(at|from|to|via:\d+)$/.test(next)) next = '';
+      if (next && !/^(at|from|ins:\d+)$/.test(next)) next = '';
+      // The click that follows releasing a pin must not dismiss what it opened.
+      if (!next && Date.now() < pgIgnoreUntil) return;
       placesPickerSlot = next;
       if (next) placeEditKey = '';
       renderPlaces();
@@ -12683,70 +12690,83 @@
       return out;
     }
 
-    // ── edits on the card's route ───────────────────────────────────────
+    // ── edits on the card's route (a route is an ordered list of stops) ──
+    function placeSeq(map) {
+      var n = normalizePlaces(map);
+      var out = [];
+      if (n.from) out.push(n.from);
+      (n.via || []).forEach(function (r) {
+        out.push(r);
+      });
+      if (n.to) out.push(n.to);
+      if (n.at) out.push(n.at);
+      return out;
+    }
+
+    /** One stop is a place ("at"); two or more are a trip (from, via..., to). */
+    function placeMapFromSeq(refs) {
+      var out = {};
+      if (!refs.length) return out;
+      if (refs.length === 1) {
+        out.at = refs[0];
+        return out;
+      }
+      out.from = refs[0];
+      out.to = refs[refs.length - 1];
+      if (refs.length > 2) out.via = refs.slice(1, -1);
+      return out;
+    }
+
     function placesMutate(mutator) {
       if (placesBusy || !onPlacesChange) return Promise.resolve(null);
       var next = normalizePlaces(cardPlaces);
-      var res = mutator(next);
-      if (res === false) return Promise.resolve(null);
+      if (mutator(next) === false) return Promise.resolve(null);
       return persistPlaces(next);
     }
 
-    function clearPlaceStop(key, index) {
+    function placesMutateSeq(mutator) {
+      if (placesBusy || !onPlacesChange) return Promise.resolve(null);
+      var refs = placeSeq(cardPlaces).map(function (r) {
+        return Object.assign({}, r);
+      });
+      if (mutator(refs) === false) return Promise.resolve(null);
+      return persistPlaces(placeMapFromSeq(refs));
+    }
+
+    function removePlaceStop(i) {
       placeEditKey = '';
-      placesMutate(function (next) {
-        if (key === 'via') {
-          var via = (next.via || []).slice();
-          via.splice(index, 1);
-          if (via.length) next.via = via;
-          else delete next.via;
-        } else {
-          delete next[key];
-        }
+      placesMutateSeq(function (refs) {
+        if (i < 0 || i >= refs.length) return false;
+        refs.splice(i, 1);
       });
     }
 
-    function movePlaceVia(index, delta) {
-      placesMutate(function (next) {
-        var via = (next.via || []).slice();
-        var to = index + delta;
-        if (to < 0 || to >= via.length) return false;
-        var tmp = via[index];
-        via[index] = via[to];
-        via[to] = tmp;
-        next.via = via;
+    function movePlaceStop(i, delta) {
+      placeEditKey = '';
+      placesMutateSeq(function (refs) {
+        var j = i + delta;
+        if (i < 0 || j < 0 || j >= refs.length) return false;
+        var tmp = refs[i];
+        refs[i] = refs[j];
+        refs[j] = tmp;
       });
     }
 
     function reversePlaceRoute() {
       placeEditKey = '';
-      placesMutate(function (next) {
-        var from = next.from;
-        var to = next.to;
-        delete next.from;
-        delete next.to;
-        if (to) next.from = to;
-        if (from) next.to = from;
-        if (next.via) next.via = next.via.slice().reverse();
+      placesMutateSeq(function (refs) {
+        if (refs.length < 2) return false;
+        refs.reverse();
       });
     }
 
-    function convertPlaceToTrip() {
-      placesMutate(function (next) {
-        if (!next.at) return false;
-        next.from = next.at;
-        delete next.at;
-      });
-    }
-
-    function setPlaceStopAction(key, index, text) {
+    function setPlaceStopAction(i, text) {
       var value = String(text || '')
         .trim()
         .slice(0, MAX_PLACE_DO_LEN);
-      placesMutate(function (next) {
-        var ref = key === 'via' ? (next.via || [])[index] : next[key];
-        if (!ref) return false;
-        if ((ref.do || '') === value) return false;
+      placesMutateSeq(function (refs) {
+        var ref = refs[i];
+        if (!ref || (ref.do || '') === value) return false;
         if (value) ref.do = value;
         else delete ref.do;
       });
@@ -12765,30 +12785,30 @@
           ? persistPlaceCatalog(after)
           : Promise.resolve(null);
       catalogPromise.then(function () {
-        placesMutate(function (next) {
-          var ref = { id: draft.id, name: draft.name };
-          var viaMatch = /^via:(\d+)$/.exec(target);
-          if (viaMatch) {
-            var via = (next.via || []).slice();
-            if (via.length >= MAX_PLACE_VIA) {
-              setPlacesStatus('Maximum ' + MAX_PLACE_VIA + ' étapes', 'error');
+        var ref = { id: draft.id, name: draft.name };
+        var ins = /^ins:(\d+)$/.exec(target);
+        if (ins) {
+          placesMutateSeq(function (refs) {
+            if (refs.length >= 2 + MAX_PLACE_VIA) {
+              setPlacesStatus(
+                'Maximum ' + (2 + MAX_PLACE_VIA) + ' lieux',
+                'error'
+              );
               return false;
             }
-            via.splice(Math.min(Number(viaMatch[1]), via.length), 0, ref);
-            next.via = via;
-            delete next.at;
-          } else {
-            var prev = next[target];
-            if (prev && prev.id === ref.id && prev.do) ref.do = prev.do;
-            next[target] = ref;
-            if (target === 'at') {
-              delete next.from;
-              delete next.to;
-              delete next.via;
-            } else {
-              delete next.at;
-            }
-          }
+            refs.splice(Math.min(Number(ins[1]), refs.length), 0, ref);
+          });
+          return;
+        }
+        placesMutate(function (next) {
+          var prev = next[target];
+          if (prev && prev.id === ref.id && prev.do) ref.do = prev.do;
+          // Empty state: "Un lieu" (at) or the first stop of a trip (from).
+          delete next.at;
+          delete next.from;
+          delete next.to;
+          delete next.via;
+          next[target] = ref;
         });
       });
     }
@@ -13245,11 +13265,291 @@
       return panel;
     }
 
-    // ── rendering ───────────────────────────────────────────────────────
-    function toolButton(icon, title, onClick, extraClass) {
+    // ── Place graph (node view of the route, same look as the Assignés graph) ──
+    var PG_NODE_W = 220;
+    var PG_PAD = 20;
+    var PG_HGAP = 56;
+    var PG_TOP = 44; // room above the first stop for the toolbar and its add pin
+    var PG_VGAP = 64;
+    var PG_STOP_ICONS = {
+      from: 'ti-circle-dot',
+      via: 'ti-map-pin',
+      to: 'ti-flag-3',
+      at: 'ti-map-pin'
+    };
+    var pgUid = ++teamGraphInstances;
+    var pgScale = 1;
+    var pgFit = 1;
+    var pgZoomMul = 1;
+    var pgPan = { x: 0, y: 0 };
+    var pgState = null; // { nodes: { i: box }, width, height }
+    var pgDrag = null;
+
+    /** Stops in route order, tagged with their role (from / via / to / at). */
+    function pgStops(map) {
+      var n = normalizePlaces(map);
+      var out = [];
+      if (n.from) out.push({ key: 'from', ref: n.from });
+      (n.via || []).forEach(function (ref) {
+        out.push({ key: 'via', ref: ref });
+      });
+      if (n.to) out.push({ key: 'to', ref: n.to });
+      if (n.at) out.push({ key: 'at', ref: n.at });
+      return out;
+    }
+
+    function pgApplyTransform() {
+      var moved = pgPan.x || pgPan.y;
+      pgStage.style.transform =
+        pgScale === 1 && !moved
+          ? ''
+          : 'translate(' + pgPan.x + 'px,' + pgPan.y + 'px) scale(' + pgScale + ')';
+    }
+
+    function pgZoomBy(factor, px, py) {
+      var nextMul = Math.max(0.2, Math.min(1, pgZoomMul * factor));
+      var nextScale = Math.max(0.25, pgFit * nextMul);
+      if (Math.abs(nextScale - pgScale) < 0.001) return;
+      var ox = pgStage.offsetLeft;
+      var sx = (px - ox - pgPan.x) / pgScale;
+      var sy = (py - pgPan.y) / pgScale;
+      pgZoomMul = nextMul;
+      pgScale = nextScale;
+      pgPan.x = Math.round(px - ox - sx * pgScale);
+      pgPan.y = Math.round(py - sy * pgScale);
+      if (pgZoomMul === 1) {
+        pgPan.x = 0;
+        pgPan.y = 0;
+      }
+      pgApplyTransform();
+    }
+
+    pgFrame.addEventListener(
+      'wheel',
+      function (event) {
+        if (event.target.closest('.tg-editor')) return;
+        if (!(event.ctrlKey || event.metaKey)) return;
+        event.preventDefault();
+        var rect = pgFrame.getBoundingClientRect();
+        pgZoomBy(
+          Math.exp(-event.deltaY * 0.0015),
+          event.clientX - rect.left,
+          event.clientY - rect.top
+        );
+      },
+      { passive: false }
+    );
+    pgZoomOutBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      pgZoomBy(0.8, pgHost.clientWidth / 2, pgFrame.clientHeight / 2);
+    });
+    pgZoomInBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      pgZoomBy(1.25, pgHost.clientWidth / 2, pgFrame.clientHeight / 2);
+    });
+
+    // Drag the background to move around; double-click recentres.
+    pgFrame.addEventListener('pointerdown', function (event) {
+      if (event.button != null && event.button !== 0) return;
+      if (event.target.closest('.tg-node, .tg-edge, .tg-pill, .tg-editor, .tg-collapse, .tg-wire-hit')) return;
+      var startX = event.clientX;
+      var startY = event.clientY;
+      var baseX = pgPan.x;
+      var baseY = pgPan.y;
+      var moved = false;
+      try {
+        pgFrame.setPointerCapture(event.pointerId);
+      } catch (err) {
+        /* optional */
+      }
+      var move = function (e) {
+        var dx = e.clientX - startX;
+        var dy = e.clientY - startY;
+        if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+        moved = true;
+        pgHost.classList.add('is-panning');
+        var hostW = pgHost.clientWidth || 320;
+        var frameH = pgFrame.clientHeight || 200;
+        var sw = (pgState ? pgState.width : 0) * pgScale;
+        var sh = (pgState ? pgState.height : 0) * pgScale;
+        var margin = 48;
+        pgPan.x = Math.round(Math.max(margin - sw, Math.min(hostW - margin, baseX + dx)));
+        pgPan.y = Math.round(Math.max(margin - sh, Math.min(frameH - margin, baseY + dy)));
+        pgApplyTransform();
+      };
+      var end = function () {
+        pgFrame.removeEventListener('pointermove', move);
+        pgFrame.removeEventListener('pointerup', end);
+        pgFrame.removeEventListener('pointercancel', end);
+        pgHost.classList.remove('is-panning');
+      };
+      pgFrame.addEventListener('pointermove', move);
+      pgFrame.addEventListener('pointerup', end);
+      pgFrame.addEventListener('pointercancel', end);
+    });
+    pgFrame.addEventListener('dblclick', function (event) {
+      if (event.target.closest('.tg-node, .tg-edge, .tg-pill, .tg-editor, .tg-collapse')) return;
+      pgPan.x = 0;
+      pgPan.y = 0;
+      pgZoomMul = 1;
+      pgScale = Math.max(0.25, pgFit);
+      pgApplyTransform();
+    });
+
+    function pgSetExpanded(next) {
+      next = !!next;
+      if (pgExpanded === next) return;
+      pgExpanded = next;
+      if (!next) {
+        pgPan.x = 0;
+        pgPan.y = 0;
+        pgZoomMul = 1;
+        placeEditKey = '';
+        if (/^ins:/.test(placesPickerSlot)) placesPickerSlot = '';
+      }
+      renderPlaces();
+      onLayoutChange();
+    }
+    pgCollapseBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      pgSetExpanded(false);
+    });
+    pgReverseBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      reversePlaceRoute();
+    });
+
+    function pgSvg(tag, attrs) {
+      var node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      Object.keys(attrs || {}).forEach(function (k) {
+        node.setAttribute(k, attrs[k]);
+      });
+      return node;
+    }
+
+    function pgStagePoint(event) {
+      var rect = pgStage.getBoundingClientRect();
+      return {
+        x: (event.clientX - rect.left) / pgScale,
+        y: (event.clientY - rect.top) / pgScale
+      };
+    }
+
+    /**
+     * Snake layout: stops fill rows left to right, then the next row runs back
+     * right to left, so consecutive stops always touch (short, clean wires).
+     */
+    function pgLayout(count, heights, hostW) {
+      // Allow the stage to shrink to 80% so two columns fit a narrow popup.
+      var cols = Math.floor((Math.max(hostW, 0) / 0.8 - PG_PAD * 2 + PG_HGAP) / (PG_NODE_W + PG_HGAP));
+      if (!isFinite(cols) || cols < 1) cols = hostW > 0 ? 1 : 2;
+      cols = Math.max(1, Math.min(3, cols, count));
+      var nodes = [];
+      var y = 0;
+      for (var start = 0, row = 0; start < count; start += cols, row++) {
+        var rowIdx = [];
+        var rowH = 0;
+        for (var k = start; k < Math.min(count, start + cols); k++) {
+          rowIdx.push(k);
+          var h = heights[k] > 0 ? heights[k] : 96;
+          if (h > rowH) rowH = h;
+        }
+        rowIdx.forEach(function (idx, j) {
+          var col = row % 2 === 0 ? j : cols - 1 - j;
+          nodes[idx] = {
+            x: col * (PG_NODE_W + PG_HGAP),
+            y: y,
+            w: PG_NODE_W,
+            h: heights[idx] > 0 ? heights[idx] : 96,
+            row: row,
+            col: col
+          };
+        });
+        y += rowH + PG_VGAP;
+      }
+      return {
+        nodes: nodes,
+        width: cols * PG_NODE_W + (cols - 1) * PG_HGAP,
+        height: Math.max(0, y - PG_VGAP)
+      };
+    }
+
+    function pgOpenInsert(index, pt) {
+      if (!onPlacesChange || placesBusy) return;
+      pgIgnoreUntil = Date.now() + 400;
+      placesPickerSlot = 'ins:' + index;
+      placeEditKey = '';
+      pgPickPoint = pt || null;
+      renderPlaces();
+      onLayoutChange();
+    }
+
+    function pgStartPinDrag(event, edge, insertIndex, side, box) {
+      if (event.button != null && event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      var dir = side === 'top' ? [0, -1] : [0, 1];
+      var start =
+        side === 'top'
+          ? { x: box.x + box.w / 2, y: box.y }
+          : { x: box.x + box.w / 2, y: box.y + box.h };
+      var temp = pgSvg('path', { class: 'tg-wire-temp tg-kind-flow' });
+      pgWires.appendChild(temp);
+      pgDrag = { moved: false, sx: event.clientX, sy: event.clientY, last: start };
+      pgHost.classList.add('is-dragging');
+      try {
+        edge.setPointerCapture(event.pointerId);
+      } catch (err) {
+        /* capture is optional */
+      }
+      var move = function (e) {
+        if (!pgDrag) return;
+        if (Math.abs(e.clientX - pgDrag.sx) + Math.abs(e.clientY - pgDrag.sy) > 5) {
+          pgDrag.moved = true;
+        }
+        var p = pgStagePoint(e);
+        pgDrag.last = p;
+        var d = Math.max(24, Math.abs(p.y - start.y) / 2);
+        temp.setAttribute(
+          'd',
+          'M' + start.x + ' ' + start.y +
+            ' C' + start.x + ' ' + (start.y + dir[1] * d) +
+            ' ' + p.x + ' ' + (p.y - dir[1] * d) +
+            ' ' + p.x + ' ' + p.y
+        );
+      };
+      var cleanup = function () {
+        edge.removeEventListener('pointermove', move);
+        edge.removeEventListener('pointerup', done);
+        edge.removeEventListener('pointercancel', cancel);
+        pgHost.classList.remove('is-dragging');
+        temp.remove();
+      };
+      var done = function () {
+        var drag = pgDrag;
+        pgDrag = null;
+        cleanup();
+        if (!drag) return;
+        var pt = drag.moved
+          ? drag.last
+          : { x: start.x, y: start.y + dir[1] * 40 };
+        pgOpenInsert(insertIndex, pt);
+      };
+      var cancel = function () {
+        pgDrag = null;
+        cleanup();
+      };
+      edge.addEventListener('pointermove', move);
+      edge.addEventListener('pointerup', done);
+      edge.addEventListener('pointercancel', cancel);
+    }
+
+    function pgToolButton(icon, title, onClick, extraClass) {
       var b = document.createElement('button');
       b.type = 'button';
-      b.className = 'info-route-tool' + (extraClass ? ' ' + extraClass : '');
+      b.className = 'pg-node-tool' + (extraClass ? ' ' + extraClass : '');
       b.title = title;
       b.setAttribute('aria-label', title);
       b.disabled = placesBusy;
@@ -13262,275 +13562,441 @@
       return b;
     }
 
-    function buildStopRow(key, index, ref, isLast, viaCount) {
+    function pgBuildNode(stop, i, total) {
       var editable = !!onPlacesChange;
-      var stopKey = key === 'via' ? 'via:' + index : key;
+      var ref = stop.ref;
       var dir = findDirectoryPlace(ref);
-      var row = document.createElement('div');
-      row.className = 'info-route-stop is-' + key + (isLast ? ' is-last' : '');
-      row.setAttribute('data-stop', stopKey);
+      var name = placeDisplayName(ref);
+      var stopKey = 'stop:' + i;
 
-      var rail = document.createElement('span');
-      rail.className = 'info-route-rail';
-      var dot = document.createElement('span');
-      dot.className = 'info-route-dot';
-      rail.appendChild(dot);
-      row.appendChild(rail);
-
-      var main = document.createElement('div');
-      main.className = 'info-route-main';
+      var node = document.createElement('div');
+      node.className = 'tg-node pg-node is-' + stop.key;
+      node.setAttribute('data-idx', String(i));
+      node.style.width = PG_NODE_W + 'px';
+      node.style.setProperty('--tg-hue', String(tgHue(String(ref.id || name))));
+      node.setAttribute('aria-label', PLACE_STOP_LABELS[stop.key] + ' : ' + name);
 
       var head = document.createElement('div');
-      head.className = 'info-route-head';
+      head.className = 'tg-node-head';
+      var badge = document.createElement('span');
+      badge.className = 'pg-node-icon';
+      badge.innerHTML =
+        '<i class="ti ' + PG_STOP_ICONS[stop.key] + '" aria-hidden="true"></i>';
+      head.appendChild(badge);
+      var titles = document.createElement('div');
+      titles.className = 'pg-node-titles';
       var kindEl = document.createElement('span');
-      kindEl.className = 'info-route-kind';
-      kindEl.textContent = PLACE_STOP_LABELS[key];
-      head.appendChild(kindEl);
-
-      var nameBtn = document.createElement('button');
-      nameBtn.type = 'button';
-      nameBtn.className = 'info-route-name';
-      nameBtn.textContent = placeDisplayName(ref);
-      nameBtn.title = onPlaceDirectorySave
-        ? 'Modifier ce lieu (adresse, GPS…)'
-        : placeDisplayName(ref);
-      nameBtn.disabled = !onPlaceDirectorySave;
-      nameBtn.addEventListener('click', function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        placesPickerSlot = '';
-        placeEditKey = placeEditKey === stopKey ? '' : stopKey;
-        renderPlaces();
-        onLayoutChange();
-      });
-      head.appendChild(nameBtn);
-
-      var meta = dir && (dir.address || dir.kind);
-      if (meta) {
-        var metaEl = document.createElement('span');
-        metaEl.className = 'info-route-meta';
-        metaEl.textContent = meta;
-        head.appendChild(metaEl);
+      kindEl.className = 'pg-node-kind';
+      kindEl.textContent = PLACE_STOP_LABELS[stop.key];
+      titles.appendChild(kindEl);
+      var nameEl = document.createElement(onPlaceDirectorySave ? 'button' : 'span');
+      nameEl.className = 'tg-node-name pg-node-name';
+      nameEl.textContent = name;
+      nameEl.title = name;
+      if (onPlaceDirectorySave) {
+        nameEl.type = 'button';
+        nameEl.title = 'Modifier ce lieu (adresse, GPS…)';
+        nameEl.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          placesPickerSlot = '';
+          placeEditKey = placeEditKey === stopKey ? '' : stopKey;
+          renderPlaces();
+          onLayoutChange();
+        });
       }
-      if (dir && typeof dir.lat === 'number' && typeof dir.lng === 'number') {
-        var gpsIcon = document.createElement('i');
-        gpsIcon.className = 'ti ti-current-location info-route-gps';
-        gpsIcon.title = 'Position GPS enregistrée';
-        head.appendChild(gpsIcon);
-      }
-
-      var tools = document.createElement('span');
-      tools.className = 'info-route-tools';
-      if (placeHasGeo(dir)) {
-        var link = document.createElement('a');
-        link.className = 'info-route-tool';
-        link.href = placeMapsHref(ref, dir);
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.title = 'Ouvrir dans Google Maps';
-        link.setAttribute('aria-label', 'Ouvrir dans Google Maps');
-        link.innerHTML = '<i class="ti ti-map-2" aria-hidden="true"></i>';
-        tools.appendChild(link);
-      }
+      titles.appendChild(nameEl);
+      head.appendChild(titles);
       if (editable) {
-        if (key === 'via') {
-          if (index > 0) {
-            tools.appendChild(
-              toolButton('ti-chevron-up', 'Monter cette étape', function () {
-                movePlaceVia(index, -1);
-              })
-            );
-          }
-          if (index < viaCount - 1) {
-            tools.appendChild(
-              toolButton('ti-chevron-down', 'Descendre cette étape', function () {
-                movePlaceVia(index, 1);
-              })
-            );
-          }
-        }
-        tools.appendChild(
-          toolButton(
-            'ti-x',
-            'Retirer ' + placeDisplayName(ref),
-            function () {
-              clearPlaceStop(key, index);
-            },
-            'is-danger'
-          )
-        );
+        var clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'tg-node-clear';
+        clearBtn.setAttribute('aria-label', 'Retirer : ' + name);
+        clearBtn.textContent = '×';
+        clearBtn.disabled = placesBusy;
+        clearBtn.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          removePlaceStop(i);
+        });
+        head.appendChild(clearBtn);
       }
-      head.appendChild(tools);
-      main.appendChild(head);
+      node.appendChild(head);
 
+      var body = document.createElement('div');
+      body.className = 'pg-node-body';
       if (editable) {
         var doInput = document.createElement('input');
         doInput.type = 'text';
-        doInput.className = 'info-route-do';
+        doInput.className = 'pg-node-do';
         doInput.placeholder =
-          key === 'from'
-            ? 'Ce qu’on y prend / fait au départ…'
-            : key === 'to'
+          stop.key === 'from'
+            ? 'Ce qu’on y prend / fait…'
+            : stop.key === 'to'
               ? 'Ce qu’on y fait à l’arrivée…'
               : 'Ce qu’on y fait…';
-        doInput.setAttribute('aria-label', 'Ce qu’on fait à ' + placeDisplayName(ref));
+        doInput.setAttribute('aria-label', 'Ce qu’on fait à ' + name);
         doInput.maxLength = MAX_PLACE_DO_LEN;
         doInput.autocomplete = 'off';
         doInput.value = ref.do || '';
         doInput.disabled = placesBusy;
         doInput.addEventListener('keydown', function (event) {
+          event.stopPropagation();
           if (event.key === 'Enter') {
             event.preventDefault();
             doInput.blur();
           }
         });
         doInput.addEventListener('change', function () {
-          setPlaceStopAction(key, index, doInput.value);
+          setPlaceStopAction(i, doInput.value);
         });
-        main.appendChild(doInput);
+        body.appendChild(doInput);
       } else if (ref.do) {
         var doText = document.createElement('div');
-        doText.className = 'info-route-do-text';
+        doText.className = 'pg-node-do-text';
         doText.textContent = ref.do;
-        main.appendChild(doText);
+        body.appendChild(doText);
       }
 
-      if (placeEditKey === stopKey && onPlaceDirectorySave) {
-        main.appendChild(buildPlaceEditor(ref));
+      var metaBits = [];
+      if (dir && dir.address) metaBits.push(dir.address);
+      var hasGps = !!(dir && typeof dir.lat === 'number' && typeof dir.lng === 'number');
+      if (metaBits.length || hasGps || dir) {
+        var meta = document.createElement('div');
+        meta.className = 'pg-node-meta';
+        if (metaBits.length) {
+          var addr = document.createElement('span');
+          addr.className = 'pg-node-addr';
+          addr.textContent = metaBits.join(' · ');
+          addr.title = metaBits.join(' · ');
+          meta.appendChild(addr);
+        }
+        if (hasGps) {
+          var gps = document.createElement('i');
+          gps.className = 'ti ti-current-location pg-node-gps';
+          gps.title = 'Position GPS enregistrée';
+          meta.appendChild(gps);
+        }
+        if (placeHasGeo(dir)) {
+          var link = document.createElement('a');
+          link.className = 'pg-node-tool';
+          link.href = placeMapsHref(ref, dir);
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.title = 'Ouvrir dans Google Maps';
+          link.setAttribute('aria-label', 'Ouvrir dans Google Maps');
+          link.innerHTML = '<i class="ti ti-map-2" aria-hidden="true"></i>';
+          link.addEventListener('click', function (event) {
+            event.stopPropagation();
+          });
+          meta.appendChild(link);
+        }
+        if (meta.childNodes.length) body.appendChild(meta);
       }
-      row.appendChild(main);
-      return row;
+      if (editable && total > 1) {
+        var tools = document.createElement('div');
+        tools.className = 'pg-node-tools';
+        if (i > 0) {
+          tools.appendChild(
+            pgToolButton('ti-chevron-up', 'Monter ce lieu', function () {
+              movePlaceStop(i, -1);
+            })
+          );
+        }
+        if (i < total - 1) {
+          tools.appendChild(
+            pgToolButton('ti-chevron-down', 'Descendre ce lieu', function () {
+              movePlaceStop(i, 1);
+            })
+          );
+        }
+        body.appendChild(tools);
+      }
+      if (body.childNodes.length) node.appendChild(body);
+
+      // Pins (like the Assignés nodes): hover the top of the first stop or the
+      // bottom of the last one, then drag or click to add a stop there.
+      if (editable) {
+        var pins = [];
+        if (i === 0) pins.push({ side: 'top', at: 0, label: 'Ajouter un lieu avant' });
+        if (i === total - 1) {
+          pins.push({ side: 'bottom', at: total, label: 'Ajouter un lieu après' });
+        }
+        pins.forEach(function (def) {
+          var edge = document.createElement('div');
+          edge.className = 'tg-edge tg-edge-' + def.side + ' tg-kind-flow';
+          edge.setAttribute('role', 'button');
+          edge.tabIndex = 0;
+          edge.setAttribute('aria-label', name + ' : ' + def.label);
+          edge.title = def.label;
+          var dot = document.createElement('span');
+          dot.className = 'tg-pin';
+          dot.setAttribute('aria-hidden', 'true');
+          edge.appendChild(dot);
+          edge.addEventListener('pointerdown', function (event) {
+            var box = pgState && pgState.nodes[i];
+            if (box) pgStartPinDrag(event, edge, def.at, def.side, box);
+          });
+          edge.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              var box = pgState && pgState.nodes[i];
+              if (box) {
+                pgOpenInsert(def.at, {
+                  x: box.x + box.w / 2,
+                  y: def.side === 'top' ? box.y - 40 : box.y + box.h + 40
+                });
+              }
+            }
+          });
+          node.appendChild(edge);
+        });
+      }
+      return node;
     }
 
-    function buildGhostRow(key, isLast) {
-      var row = document.createElement('div');
-      row.className = 'info-route-stop is-ghost is-' + key + (isLast ? ' is-last' : '');
-      var rail = document.createElement('span');
-      rail.className = 'info-route-rail';
-      var dot = document.createElement('span');
-      dot.className = 'info-route-dot';
-      rail.appendChild(dot);
-      row.appendChild(rail);
-      var main = document.createElement('div');
-      main.className = 'info-route-main';
-      var head = document.createElement('div');
-      head.className = 'info-route-head';
-      var kindEl = document.createElement('span');
-      kindEl.className = 'info-route-kind';
-      kindEl.textContent = PLACE_STOP_LABELS[key];
-      head.appendChild(kindEl);
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'info-route-pick';
-      btn.disabled = placesBusy || !onPlacesChange;
-      btn.innerHTML = '<i class="ti ti-plus" aria-hidden="true"></i>';
-      var t = document.createElement('span');
-      t.textContent =
-        key === 'from'
-          ? 'Choisir le départ'
-          : key === 'to'
-            ? 'Choisir l’arrivée'
-            : 'Choisir un lieu';
-      btn.appendChild(t);
-      btn.setAttribute('aria-expanded', placesPickerSlot === key ? 'true' : 'false');
-      btn.addEventListener('click', function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        setPlacesPickerOpen(placesPickerSlot === key ? '' : key);
+    function pgPlacePopover(el, x, y, width) {
+      var hostW = pgHost.clientWidth || 320;
+      var w = Math.min(width, hostW);
+      el.style.width = w + 'px';
+      var left = pgStage.offsetLeft + pgPan.x + x * pgScale - w / 2;
+      el.style.left = Math.max(0, Math.min(left, hostW - w)) + 'px';
+      var top = Math.max(0, Math.round(pgPan.y + y * pgScale));
+      el.style.top = top + 'px';
+      pgFrame.style.minHeight = Math.max(
+        parseInt(pgFrame.style.minHeight, 10) || 0,
+        top + el.offsetHeight + 8
+      ) + 'px';
+    }
+
+    function renderPlaceGraph(stops) {
+      if (pgDrag) return;
+      pgNodes.replaceChildren();
+      pgWires.replaceChildren();
+      pgPills.replaceChildren();
+      pgFrame.style.minHeight = '';
+
+      stops.forEach(function (stop, i) {
+        pgNodes.appendChild(pgBuildNode(stop, i, stops.length));
       });
-      head.appendChild(btn);
-      main.appendChild(head);
-      if (placesPickerSlot === key) main.appendChild(buildPlacesPicker(key));
-      row.appendChild(main);
-      return row;
-    }
-
-    function buildGapRow(insertIndex) {
-      var row = document.createElement('div');
-      row.className = 'info-route-gap';
-      var rail = document.createElement('span');
-      rail.className = 'info-route-rail';
-      row.appendChild(rail);
-      var main = document.createElement('div');
-      main.className = 'info-route-main';
-      var target = 'via:' + insertIndex;
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'info-route-insert';
-      btn.disabled = placesBusy;
-      btn.title = 'Ajouter une étape ici';
-      btn.setAttribute('aria-label', 'Ajouter une étape ici');
-      btn.setAttribute('aria-expanded', placesPickerSlot === target ? 'true' : 'false');
-      btn.innerHTML =
-        '<i class="ti ti-plus" aria-hidden="true"></i><span>Étape</span>';
-      btn.addEventListener('click', function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        setPlacesPickerOpen(placesPickerSlot === target ? '' : target);
+      var heights = [];
+      pgNodes.querySelectorAll('.pg-node').forEach(function (n) {
+        heights[Number(n.getAttribute('data-idx'))] = n.offsetHeight;
       });
-      main.appendChild(btn);
-      if (placesPickerSlot === target) main.appendChild(buildPlacesPicker(target));
-      row.appendChild(main);
-      return row;
-    }
+      var layout = pgLayout(stops.length, heights, pgHost.clientWidth);
+      var stageW = layout.width + PG_PAD * 2;
+      var stageH = layout.height + PG_TOP + PG_PAD;
+      var shifted = [];
+      pgNodes.querySelectorAll('.pg-node').forEach(function (n) {
+        var idx = Number(n.getAttribute('data-idx'));
+        var b = layout.nodes[idx];
+        if (!b) return;
+        shifted[idx] = { x: b.x + PG_PAD, y: b.y + PG_TOP, w: b.w, h: b.h, row: b.row, col: b.col };
+        n.style.left = shifted[idx].x + 'px';
+        n.style.top = shifted[idx].y + 'px';
+      });
+      pgState = { nodes: shifted, width: stageW, height: stageH };
 
-    function buildRouteFooter(map) {
-      var footer = document.createElement('div');
-      footer.className = 'info-route-footer';
+      pgStage.style.width = stageW + 'px';
+      pgStage.style.height = stageH + 'px';
+      pgWires.setAttribute('width', String(stageW));
+      pgWires.setAttribute('height', String(stageH));
+      pgWires.setAttribute('viewBox', '0 0 ' + stageW + ' ' + stageH);
+
+      var available = pgHost.clientWidth;
+      pgFit = available > 0 && stageW > available ? Math.max(0.55, available / stageW) : 1;
+      pgScale = Math.max(0.25, pgFit * pgZoomMul);
+      pgApplyTransform();
+      pgFrame.style.height = Math.ceil(stageH * pgFit) + 'px';
+
+      var defs = pgSvg('defs');
+      var marker = pgSvg('marker', {
+        id: 'pg-arrow-' + pgUid,
+        viewBox: '0 0 10 10',
+        refX: '9',
+        refY: '5',
+        markerWidth: '9',
+        markerHeight: '9',
+        markerUnits: 'userSpaceOnUse',
+        orient: 'auto-start-reverse'
+      });
+      marker.appendChild(pgSvg('path', { d: 'M0 1 L10 5 L0 9 z', class: 'tg-arrowhead tg-kind-flow' }));
+      defs.appendChild(marker);
+      pgWires.appendChild(defs);
+
       var editable = !!onPlacesChange;
-      if (map.at) {
-        if (editable) {
-          var toTrip = document.createElement('button');
-          toTrip.type = 'button';
-          toTrip.className = 'info-route-link';
-          toTrip.disabled = placesBusy;
-          toTrip.innerHTML =
-            '<i class="ti ti-route" aria-hidden="true"></i><span>Passer en trajet</span>';
-          toTrip.addEventListener('click', convertPlaceToTrip);
-          footer.appendChild(toTrip);
+      for (var i = 0; i < stops.length - 1; i++) {
+        (function (idx) {
+          var a = shifted[idx];
+          var b = shifted[idx + 1];
+          if (!a || !b) return;
+          var route = routeTeamLink(a, b);
+          var group = pgSvg('g', { class: 'tg-wire-group tg-kind-flow' });
+          group.appendChild(pgSvg('path', { d: route.d, class: 'tg-wire-glow' }));
+          group.appendChild(
+            pgSvg('path', {
+              d: route.d,
+              class: 'tg-wire',
+              'marker-end': 'url(#pg-arrow-' + pgUid + ')'
+            })
+          );
+          var hit = pgSvg('path', { d: route.d, class: 'tg-wire-hit' });
+          group.appendChild(hit);
+          pgWires.appendChild(group);
+          if (!editable) return;
+          var pill = document.createElement('button');
+          pill.type = 'button';
+          pill.className = 'tg-pill tg-kind-flow pg-pill';
+          pill.style.left = route.mx + 'px';
+          pill.style.top = route.my + 'px';
+          pill.innerHTML = '<i class="ti ti-plus" aria-hidden="true"></i>';
+          pill.title = 'Ajouter un lieu ici';
+          pill.setAttribute('aria-label', 'Ajouter un lieu entre ces deux lieux');
+          var open = function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            pgOpenInsert(idx + 1, { x: route.mx, y: route.my + 16 });
+          };
+          pill.addEventListener('click', open);
+          hit.addEventListener('click', open);
+          pgPills.appendChild(pill);
+        })(i);
+      }
+
+      // Toolbar
+      pgReverseBtn.hidden = !editable || stops.length < 2;
+      var dirs = stops.map(function (s) {
+        return findDirectoryPlace(s.ref);
+      });
+      var itin =
+        stops.length >= 2 &&
+        dirs.every(Boolean) &&
+        global.Places &&
+        typeof global.Places.directionsUrl === 'function'
+          ? global.Places.directionsUrl(dirs)
+          : '';
+      pgItinBtn.hidden = !itin;
+      if (itin) pgItinBtn.href = itin;
+
+      // Popovers: place editor under its node, or the "add a stop" picker.
+      pgEditor.hidden = true;
+      pgEditor.replaceChildren();
+      pgPop.hidden = true;
+      pgPop.replaceChildren();
+      var editMatch = /^stop:(\d+)$/.exec(placeEditKey);
+      var insMatch = /^ins:(\d+)$/.exec(placesPickerSlot);
+      if (editMatch && onPlaceDirectorySave && stops[Number(editMatch[1])]) {
+        var ei = Number(editMatch[1]);
+        var eb = shifted[ei];
+        pgEditor.hidden = false;
+        pgEditor.appendChild(buildPlaceEditor(stops[ei].ref));
+        if (eb) pgPlacePopover(pgEditor, eb.x + eb.w / 2, eb.y + eb.h + 8, 300);
+      } else if (insMatch && editable) {
+        pgPop.hidden = false;
+        pgPop.appendChild(buildPlacesPicker(placesPickerSlot));
+        var pt = pgPickPoint;
+        if (!pt) {
+          var lastBox = shifted[shifted.length - 1];
+          pt = lastBox
+            ? { x: lastBox.x + lastBox.w / 2, y: lastBox.y + lastBox.h + 24 }
+            : { x: stageW / 2, y: 24 };
         }
-      } else {
-        if (editable && map.from && map.to) {
-          var rev = document.createElement('button');
-          rev.type = 'button';
-          rev.className = 'info-route-link';
-          rev.disabled = placesBusy;
-          rev.innerHTML =
-            '<i class="ti ti-arrows-exchange-2" aria-hidden="true"></i><span>Inverser</span>';
-          rev.addEventListener('click', reversePlaceRoute);
-          footer.appendChild(rev);
-        }
-        var stops = placeTripStops(map);
-        var dirs = stops.map(findDirectoryPlace);
-        var url =
-          stops.length >= 2 &&
-          dirs.every(Boolean) &&
-          global.Places &&
-          typeof global.Places.directionsUrl === 'function'
-            ? global.Places.directionsUrl(dirs)
-            : '';
-        if (url) {
-          var itin = document.createElement('a');
-          itin.className = 'info-route-link';
-          itin.href = url;
-          itin.target = '_blank';
-          itin.rel = 'noopener noreferrer';
-          itin.innerHTML =
-            '<i class="ti ti-map-route" aria-hidden="true"></i><span>Itinéraire</span>';
-          footer.appendChild(itin);
+        pgPlacePopover(pgPop, pt.x, pt.y, 272);
+      }
+    }
+
+    pgHost.addEventListener('click', function (event) {
+      if (Date.now() < pgIgnoreUntil || event.target.closest('.tg-edge')) return;
+      if (
+        !event.target.closest('.tg-editor') &&
+        !event.target.closest('.tg-pill') &&
+        !event.target.closest('.tg-wire-hit') &&
+        !event.target.closest('.pg-node-name')
+      ) {
+        if (placeEditKey || /^ins:/.test(placesPickerSlot)) {
+          placeEditKey = '';
+          if (/^ins:/.test(placesPickerSlot)) placesPickerSlot = '';
+          renderPlaces();
+          onLayoutChange();
         }
       }
-      return footer.childNodes.length ? footer : null;
+    });
+    pgHost.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && (placeEditKey || /^ins:/.test(placesPickerSlot))) {
+        placeEditKey = '';
+        if (/^ins:/.test(placesPickerSlot)) placesPickerSlot = '';
+        renderPlaces();
+        onLayoutChange();
+      }
+    });
+    if (typeof global.ResizeObserver === 'function') {
+      var pgLastWidth = 0;
+      new global.ResizeObserver(function () {
+        var w = pgHost.clientWidth;
+        if (Math.abs(w - pgLastWidth) < 2) return;
+        pgLastWidth = w;
+        if (pgExpanded && !pgHost.hidden) {
+          renderPlaces();
+          onLayoutChange();
+        }
+      }).observe(pgHost);
+    }
+
+    // ── simple view: chips in route order; click to open the node view ──
+    function renderPlaceChips(stops) {
+      var wrap = document.createElement('div');
+      wrap.className = 'info-route-chips';
+      stops.forEach(function (stop, i) {
+        if (i > 0) {
+          var sep = document.createElement('i');
+          sep.className = 'ti ti-arrow-narrow-right info-route-sep';
+          sep.setAttribute('aria-hidden', 'true');
+          wrap.appendChild(sep);
+        }
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'info-route-chip is-' + stop.key;
+        var name = placeDisplayName(stop.ref);
+        chip.title =
+          PLACE_STOP_LABELS[stop.key] +
+          ' : ' +
+          name +
+          (stop.ref.do ? ' — ' + stop.ref.do : '') +
+          ' (voir le détail)';
+        chip.style.setProperty('--tg-hue', String(tgHue(String(stop.ref.id || name))));
+        var dot = document.createElement('span');
+        dot.className = 'info-route-chip-dot';
+        chip.appendChild(dot);
+        var text = document.createElement('span');
+        text.className = 'info-route-chip-name';
+        text.textContent = name;
+        chip.appendChild(text);
+        if (stops.length > 1) {
+          var kind = document.createElement('span');
+          kind.className = 'info-route-chip-kind';
+          kind.textContent = PLACE_STOP_LABELS[stop.key];
+          chip.appendChild(kind);
+        }
+        chip.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          pgSetExpanded(true);
+        });
+        wrap.appendChild(chip);
+      });
+      return wrap;
     }
 
     function renderPlaces() {
       placesRouteEl.replaceChildren();
       var map = normalizePlaces(cardPlaces);
+      var stops = pgStops(map);
       var editable = !!onPlacesChange;
-      var via = map.via || [];
-      var tripMode = !!(map.from || map.to || via.length);
 
-      if (!map.at && !tripMode) {
+      if (!stops.length) {
+        pgHost.hidden = true;
+        pgExpanded = false;
+        placesRouteEl.hidden = false;
         // Empty: choose the shape of the task first.
         if (!editable) {
           var none = document.createElement('span');
@@ -13554,8 +14020,7 @@
             'aria-expanded',
             placesPickerSlot === spec[0] ? 'true' : 'false'
           );
-          b.innerHTML =
-            '<i class="ti ' + spec[1] + '" aria-hidden="true"></i>';
+          b.innerHTML = '<i class="ti ' + spec[1] + '" aria-hidden="true"></i>';
           var t = document.createElement('span');
           t.textContent = spec[2];
           b.appendChild(t);
@@ -13574,26 +14039,15 @@
         return;
       }
 
-      var list = document.createElement('div');
-      list.className = 'info-route-list';
-      if (map.at) {
-        list.appendChild(buildStopRow('at', 0, map.at, true, 0));
+      if (pgExpanded) {
+        placesRouteEl.hidden = true;
+        pgHost.hidden = false;
+        renderPlaceGraph(stops);
       } else {
-        if (map.from) list.appendChild(buildStopRow('from', 0, map.from, false, via.length));
-        else list.appendChild(buildGhostRow('from', false));
-        via.forEach(function (ref, i) {
-          if (editable && (i > 0 || map.from)) list.appendChild(buildGapRow(i));
-          list.appendChild(buildStopRow('via', i, ref, false, via.length));
-        });
-        if (editable && map.to && (via.length || map.from)) {
-          list.appendChild(buildGapRow(via.length));
-        }
-        if (map.to) list.appendChild(buildStopRow('to', 0, map.to, true, via.length));
-        else list.appendChild(buildGhostRow('to', true));
+        pgHost.hidden = true;
+        placesRouteEl.hidden = false;
+        placesRouteEl.appendChild(renderPlaceChips(stops));
       }
-      placesRouteEl.appendChild(list);
-      var footer = buildRouteFooter(map);
-      if (footer) placesRouteEl.appendChild(footer);
     }
 
     function renderPlacesPicker() {

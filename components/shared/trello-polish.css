@@ -319,35 +319,13 @@ html[data-color-mode='light'] {
   color: var(--tp-primary-text);
 }
 
-/* the "what we do here" line reads as text until hovered / focused */
-.tp-page--priority .info-route input.info-route-do {
+/* inside the node graph the popover already provides the panel chrome */
+.tp-page--priority .pg-pop .info-places-picker,
+.tp-page--priority .pg-place-editor .info-place-editor {
+  padding: 0;
+  border: 0;
   background: transparent;
-  border: 1px solid transparent;
   box-shadow: none;
-}
-
-.tp-page--priority .info-route input.info-route-do:hover {
-  background: var(--tp-field-bg-hover);
-  border-color: var(--tp-field-border);
-}
-
-.tp-page--priority .info-route input.info-route-do:focus {
-  background: var(--tp-field-bg);
-  border-color: var(--tp-primary);
-  box-shadow: 0 0 0 1px var(--tp-primary);
-}
-
-.tp-page--priority .info-route-dot {
-  background: var(--tp-surface, #fff);
-}
-
-.tp-page--priority .info-route-stop.is-via .info-route-dot {
-  background: var(--tp-text-muted, #626f86);
-}
-
-.tp-page--priority .info-route-stop.is-to .info-route-dot,
-.tp-page--priority .info-route-stop.is-at .info-route-dot {
-  background: var(--tp-primary);
 }
 
 /* ── Typography: Lexend + one hierarchical scale ─────────────────────
