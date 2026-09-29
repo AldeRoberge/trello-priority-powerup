@@ -453,6 +453,16 @@ Invoke-Step "connect" "7/7 Connection code for the Power-Up" {
   Write-Host "  Connection code copied to the clipboard (also saved in $CodePath)." -ForegroundColor Green
 }
 
+# Always show the code: step 7 is skipped on re-runs, and the clipboard is long gone by then.
+if (Test-Path $CodePath) {
+  $savedCode = (Get-Content -Raw $CodePath).Trim()
+  if ($savedCode) {
+    Write-Host "`nConnection code (paste it in the Power-Up):" -ForegroundColor Cyan
+    Write-Host $savedCode -ForegroundColor White
+    try { Set-Clipboard -Value $savedCode; Write-Host "(copied to the clipboard again; also saved in $CodePath)" -ForegroundColor DarkGray } catch {}
+  }
+}
+
 Write-Host "`nDone." -ForegroundColor Green
 Write-Host "  Sheet:  https://docs.google.com/spreadsheets/d/$($State.sheetId)/edit" -ForegroundColor Green
 Write-Host "  Worker: $($State.workerUrl)" -ForegroundColor Green
