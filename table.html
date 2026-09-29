@@ -30,7 +30,12 @@
   <script src="./components/shared/context-menu.js?v=ctx-menu-4"></script>
 </head>
 <body class="tp-page tp-page--table">
-  <div id="tableMount"></div>
+  <div id="tableMount">
+    <div class="tb-root" aria-busy="true">
+      <div class="tb-skel-bar"><span class="tb-skel-block" style="--w:90px"></span><span class="tb-skel-block" style="--w:180px"></span></div>
+      <div class="tb-wrap"><script>document.currentScript.parentNode.innerHTML = TableUI.skeletonRows();</script></div>
+    </div>
+  </div>
   <script>
     PriorityTrello.initIframePage(function (t) {
       TableUI.mount(document.getElementById('tableMount'), t);

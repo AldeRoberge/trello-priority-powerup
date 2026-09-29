@@ -12,6 +12,11 @@
   background: var(--tp-surface);
   color: var(--tp-text);
   font-size: 13px;
+  outline: none;
+}
+.tb-root:focus,
+.tb-root:focus-visible {
+  outline: none;
 }
 
 .tb-bar {
@@ -142,6 +147,49 @@
 .tb-loading {
   padding: 24px;
   color: var(--tp-text-muted);
+}
+
+/* Skeleton shown while the Trello handshake / card load is in flight */
+.tb-skel-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--tp-border);
+}
+.tb-skel-row {
+  display: flex;
+  height: 28px;
+  border-bottom: 1px solid var(--tp-border);
+}
+.tb-skel-row:first-child {
+  background: var(--tp-surface-subtle);
+}
+.tb-skel-cell {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border-right: 1px solid var(--tp-border);
+}
+.tb-skel-cell:first-child {
+  flex: 0 0 96px;
+}
+.tb-skel-block {
+  display: block;
+  height: 10px;
+  width: var(--w, 60%);
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--tp-surface-subtle) 25%, var(--tp-surface-hover, rgba(9, 30, 66, 0.08)) 50%, var(--tp-surface-subtle) 75%);
+  background-size: 200% 100%;
+  animation: tb-shimmer 1.2s ease-in-out infinite;
+}
+@keyframes tb-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tb-skel-block { animation: none; }
 }
 
 .tb-grid {

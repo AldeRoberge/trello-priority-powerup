@@ -55,6 +55,21 @@
     );
   }
 
+  /* Placeholder grid (header + rows) shown while data loads. */
+  function skeletonRows() {
+    var widths = [40, 75, 55, 65, 45, 70, 50];
+    var out = '';
+    for (var r = 0; r < 14; r++) {
+      out += '<div class="tb-skel-row">';
+      for (var c = 0; c < 6; c++) {
+        var w = r === 0 ? 45 : widths[(r * 3 + c * 2) % widths.length];
+        out += '<div class="tb-skel-cell"><span class="tb-skel-block" style="--w:' + w + '%"></span></div>';
+      }
+      out += '</div>';
+    }
+    return out;
+  }
+
   function mount(root, t) {
     var state = {
       lists: [],
@@ -1064,7 +1079,7 @@
 
     /* ── Loading ───────────────────────────────────────────────────── */
     function reload(opts) {
-      if (!opts || !opts.quiet) els.wrap.innerHTML = '<div class="tb-loading">Chargement…</div>';
+      if (!opts || !opts.quiet) els.wrap.innerHTML = skeletonRows();
       return Promise.all([
         TT().load(t),
         TT().getTableSettings(t),
@@ -1105,5 +1120,5 @@
     return reload();
   }
 
-  global.TableUI = { mount: mount };
+  global.TableUI = { mount: mount, skeletonRows: skeletonRows };
 })(typeof window !== 'undefined' ? window : this);
