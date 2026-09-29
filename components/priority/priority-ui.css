@@ -9528,3 +9528,93 @@ html[data-color-mode="dark"] .calc-rsm-marker-core {
   display: none;
 }
 
+
+
+/* Pan the map by dragging its background */
+.tg-frame {
+  cursor: grab;
+}
+
+.tg.is-panning .tg-frame,
+.tg.is-panning .tg-frame * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+/* "Relier à qui ?" picker */
+.tg-create {
+  width: 272px;
+}
+
+.tg-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 176px;
+  overflow: auto;
+}
+
+.tg-pick-group {
+  margin-top: 4px;
+  padding: 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted, var(--text-secondary));
+}
+
+.tg-pick-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 6px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tg-pick-option:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+.tg-pick-option:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.tg-pick-option .info-member-avatar,
+.tg-pick-option .info-member-initials {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+}
+
+.tg-pick-option > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tg-pick-new {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.tg-pick-new .tg-editor-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tg-pick-new .tg-editor-action {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+}

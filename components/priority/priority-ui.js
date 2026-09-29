@@ -12785,7 +12785,7 @@
       }
       var draft = normalizeCustomAssigneeEntry(entry);
       if (!draft) return;
-      persistCustomAssignees(customAssignees.concat([draft]));
+      return persistCustomAssignees(customAssignees.concat([draft]));
     }
 
     function renderMembersPicker() {
@@ -13190,6 +13190,63 @@
     var tgLayout = null;
     var tgDrag = null;
     var tgExpanded = false;
+    var tgPan = { x: 0, y: 0 };
+
+    function tgApplyTransform() {
+      var moved = tgPan.x || tgPan.y;
+      tgStage.style.transform =
+        tgScale === 1 && !moved
+          ? ''
+          : 'translate(' + tgPan.x + 'px,' + tgPan.y + 'px) scale(' + tgScale + ')';
+    }
+
+    // Drag the background to move around the map; double-click recentres it.
+    tgFrame.addEventListener('pointerdown', function (event) {
+      if (event.button != null && event.button !== 0) return;
+      if (event.target.closest('.tg-node, .tg-edge, .tg-pill, .tg-editor, .tg-collapse, .tg-wire-hit')) return;
+      var startX = event.clientX;
+      var startY = event.clientY;
+      var baseX = tgPan.x;
+      var baseY = tgPan.y;
+      var moved = false;
+      try {
+        tgFrame.setPointerCapture(event.pointerId);
+      } catch (err) {
+        /* optional */
+      }
+      var move = function (e) {
+        var dx = e.clientX - startX;
+        var dy = e.clientY - startY;
+        if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+        moved = true;
+        tgHost.classList.add('is-panning');
+        var hostW = tgHost.clientWidth || 320;
+        var frameH = tgFrame.clientHeight || 200;
+        var sw = (tgLayout ? tgLayout.width : 0) * tgScale;
+        var sh = (tgLayout ? tgLayout.height : 0) * tgScale;
+        var margin = 48;
+        var minX = margin - sw;
+        var maxX = hostW - margin;
+        tgPan.x = Math.round(Math.max(minX, Math.min(maxX, baseX + dx)));
+        tgPan.y = Math.round(Math.max(margin - sh, Math.min(frameH - margin, baseY + dy)));
+        tgApplyTransform();
+      };
+      var end = function () {
+        tgFrame.removeEventListener('pointermove', move);
+        tgFrame.removeEventListener('pointerup', end);
+        tgFrame.removeEventListener('pointercancel', end);
+        tgHost.classList.remove('is-panning');
+      };
+      tgFrame.addEventListener('pointermove', move);
+      tgFrame.addEventListener('pointerup', end);
+      tgFrame.addEventListener('pointercancel', end);
+    });
+    tgFrame.addEventListener('dblclick', function (event) {
+      if (event.target.closest('.tg-node, .tg-edge, .tg-pill, .tg-editor, .tg-collapse')) return;
+      tgPan.x = 0;
+      tgPan.y = 0;
+      tgApplyTransform();
+    });
 
     function setTgExpanded(next) {
       next = !!next;
@@ -13197,6 +13254,8 @@
       tgExpanded = next;
       membersEl.hidden = tgExpanded;
       if (!tgExpanded) {
+        tgPan.x = 0;
+        tgPan.y = 0;
         tgSetPending(null);
         tgCloseEditor();
         tgCloseCreate();
@@ -13276,9 +13335,9 @@
 
     function tgDefaultHint() {
       var count = displayAssignees().length;
-      if (count < 2) return 'Ajoute une autre personne pour les relier.';
+      if (count < 2) return '';
       if (!onTeamLinksChange) return '';
-      return 'Survole un bord d’une carte et glisse : bas = demande, droite = enchaîne, haut/gauche = reçoit de. Lâche dans le vide pour créer la personne.';
+      return 'Survole un bord d’une carte et glisse : bas = demande, droite = enchaîne, haut/gauche = reçoit de. Lâche dans le vide pour choisir qui relier. Glisse le fond pour te déplacer.';
     }
 
     function tgCommitLink(from, to, kind) {
@@ -13395,10 +13454,10 @@
 
       var hostW = tgHost.clientWidth || 320;
       var edW = 256;
-      var left = tgStage.offsetLeft + mx * tgScale - edW / 2;
+      var left = tgStage.offsetLeft + tgPan.x + mx * tgScale - edW / 2;
       left = Math.max(0, Math.min(left, hostW - edW));
       tgEditor.style.left = left + 'px';
-      var edTop = Math.round(my * tgScale + 16);
+      var edTop = Math.max(0, Math.round(tgPan.y + my * tgScale + 16));
       tgEditor.style.top = edTop + 'px';
       // Reserve room so the iframe grows instead of clipping the editor.
       tgFrame.style.minHeight = edTop + tgEditor.offsetHeight + 8 + 'px';
@@ -13614,79 +13673,173 @@
       });
     }
 
-    // Dropped on empty space: ask for the person to create and link.
-    function tgOpenCreate(pt, fromId, kind, reverse) {
+    // Released a handle off any card: ask who to link (card people, board
+    // members, saved off-Trello people, or a brand-new name).
+    function tgOpenPicker(pt, fromId, kind, reverse) {
       tgCloseEditor();
       tgCreate.replaceChildren();
       tgCreate.hidden = false;
 
-      var title = document.createElement('div');
-      title.className = 'tg-editor-title';
-      var strong = document.createElement('strong');
-      strong.textContent = tgPersonName(fromId);
-      title.appendChild(document.createTextNode('Nouvelle personne à relier à '));
-      title.appendChild(strong);
-      tgCreate.appendChild(title);
-
-      var input = document.createElement('input');
-      input.type = 'text';
-      input.className = 'tg-editor-label';
-      input.maxLength = MAX_CUSTOM_ASSIGNEE_NAME_LEN;
-      input.placeholder = 'Nom (ex. client, freelance…)';
-      input.setAttribute('aria-label', 'Nom de la personne');
-      tgCreate.appendChild(input);
-
-      var actions = document.createElement('div');
-      actions.className = 'tg-editor-actions';
-      var cancel = document.createElement('button');
-      cancel.type = 'button';
-      cancel.className = 'tg-editor-action';
-      cancel.textContent = 'Annuler';
-      cancel.addEventListener('click', tgCloseCreate);
-      var ok = document.createElement('button');
-      ok.type = 'button';
-      ok.className = 'tg-editor-action is-primary';
-      ok.textContent = 'Créer et relier';
-      var submit = function () {
-        var name = input.value.trim();
-        if (!name) {
-          input.focus();
-          return;
-        }
-        ok.disabled = true;
-        tgCreatePerson(name).then(function (id) {
+      var finish = function (idPromise) {
+        Promise.resolve(idPromise).then(function (id) {
           tgCloseCreate();
           if (!id || id === fromId) return;
           if (reverse) tgCommitLink(id, fromId, kind);
           else tgCommitLink(fromId, id, kind);
         });
       };
-      ok.addEventListener('click', submit);
-      input.addEventListener('keydown', function (event) {
-        event.stopPropagation();
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          submit();
-        } else if (event.key === 'Escape') {
-          tgCloseCreate();
-        }
+
+      var title = document.createElement('div');
+      title.className = 'tg-editor-title';
+      var strong = document.createElement('strong');
+      strong.textContent = tgPersonName(fromId);
+      title.appendChild(document.createTextNode('Relier à qui ? — '));
+      title.appendChild(strong);
+      tgCreate.appendChild(title);
+
+      var groups = [];
+      var onCard = displayAssignees().filter(function (m) {
+        return String(m.id) !== fromId;
       });
-      actions.appendChild(cancel);
-      actions.appendChild(ok);
-      tgCreate.appendChild(actions);
+      if (onCard.length) {
+        groups.push({
+          label: 'Sur la carte',
+          items: onCard.map(function (m) {
+            return {
+              member: m,
+              name: memberDisplayName(m) || 'Membre',
+              pick: function () {
+                return Promise.resolve(String(m.id));
+              }
+            };
+          })
+        });
+      }
+      if (onMemberAdd) {
+        var boardOthers = availableBoardMembers();
+        if (boardOthers.length) {
+          groups.push({
+            label: 'Membres du tableau',
+            items: boardOthers.map(function (m) {
+              return {
+                member: m,
+                name: memberDisplayName(m) || 'Membre',
+                pick: function () {
+                  return Promise.resolve(addMemberFromPicker(m)).then(function () {
+                    return selectedMemberIds()[String(m.id)] ? String(m.id) : '';
+                  });
+                }
+              };
+            })
+          });
+        }
+      }
+      if (onCustomAssigneesChange) {
+        var saved = availableCatalogAssignees();
+        if (saved.length) {
+          groups.push({
+            label: 'Personnes enregistrées',
+            items: saved.map(function (entry) {
+              var display = customAssigneeToMember(entry, boardMembers);
+              return {
+                member: display,
+                name: (display && memberDisplayName(display)) || entry.name || 'Personne',
+                pick: function () {
+                  return Promise.resolve(addCatalogAssigneeFromPicker(entry)).then(function () {
+                    return selectedMemberIds()[String(entry.id)] ? String(entry.id) : '';
+                  });
+                }
+              };
+            })
+          });
+        }
+      }
+
+      if (groups.length) {
+        var list = document.createElement('div');
+        list.className = 'tg-pick-list';
+        groups.forEach(function (group) {
+          var gl = document.createElement('div');
+          gl.className = 'tg-pick-group';
+          gl.textContent = group.label;
+          list.appendChild(gl);
+          group.items.forEach(function (item) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'tg-pick-option';
+            if (item.member) appendMemberAvatar(btn, item.member);
+            var text = document.createElement('span');
+            text.textContent = item.name;
+            btn.appendChild(text);
+            btn.addEventListener('click', function () {
+              list.querySelectorAll('button').forEach(function (b) {
+                b.disabled = true;
+              });
+              finish(item.pick());
+            });
+            list.appendChild(btn);
+          });
+        });
+        tgCreate.appendChild(list);
+      }
+
+      var input = null;
+      if (onCustomAssigneesChange) {
+        var row = document.createElement('div');
+        row.className = 'tg-pick-new';
+        input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'tg-editor-label';
+        input.maxLength = MAX_CUSTOM_ASSIGNEE_NAME_LEN;
+        input.placeholder = 'Nouvelle personne…';
+        input.setAttribute('aria-label', 'Nom de la nouvelle personne');
+        var ok = document.createElement('button');
+        ok.type = 'button';
+        ok.className = 'tg-editor-action is-primary';
+        ok.textContent = 'Créer';
+        var submit = function () {
+          var name = input.value.trim();
+          if (!name) {
+            input.focus();
+            return;
+          }
+          ok.disabled = true;
+          finish(tgCreatePerson(name));
+        };
+        ok.addEventListener('click', submit);
+        input.addEventListener('keydown', function (event) {
+          event.stopPropagation();
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            submit();
+          } else if (event.key === 'Escape') {
+            tgCloseCreate();
+          }
+        });
+        row.appendChild(input);
+        row.appendChild(ok);
+        tgCreate.appendChild(row);
+      }
+
+      var cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'tg-editor-action';
+      cancel.textContent = 'Annuler';
+      cancel.addEventListener('click', tgCloseCreate);
+      tgCreate.appendChild(cancel);
 
       var hostW = tgHost.clientWidth || 320;
       var w = 256;
-      var left = tgStage.offsetLeft + pt.x * tgScale - w / 2;
+      var left = tgStage.offsetLeft + tgPan.x + pt.x * tgScale - w / 2;
       left = Math.max(0, Math.min(left, hostW - w));
-      var top = Math.round(pt.y * tgScale + 12);
+      var top = Math.max(0, Math.round(tgPan.y + pt.y * tgScale + 12));
       tgCreate.style.left = left + 'px';
       tgCreate.style.top = top + 'px';
       tgFrame.style.minHeight = top + tgCreate.offsetHeight + 8 + 'px';
       onLayoutChange();
       setTimeout(function () {
         try {
-          input.focus();
+          if (input) input.focus();
         } catch (err) {
           /* ignore */
         }
@@ -13782,8 +13935,8 @@
         if (drag.target) {
           if (reverse) tgCommitLink(drag.target, fromId, kind);
           else tgCommitLink(fromId, drag.target, kind);
-        } else if (onCustomAssigneesChange) {
-          tgOpenCreate(drag.last, fromId, kind, !!reverse);
+        } else {
+          tgOpenPicker(drag.last, fromId, kind, !!reverse);
         }
       };
       var cancel = function () {
@@ -13861,7 +14014,7 @@
 
       var available = tgHost.clientWidth;
       tgScale = available > 0 && stageW > available ? Math.max(0.55, available / stageW) : 1;
-      tgStage.style.transform = tgScale === 1 ? '' : 'scale(' + tgScale + ')';
+      tgApplyTransform();
       tgFrame.style.height = Math.ceil(stageH * tgScale) + 'px';
 
       var defs = tgSvg('defs');
@@ -14170,7 +14323,7 @@
       membersBusy = true;
       setMembersStatus('', 'saving');
       renderMembers();
-      Promise.resolve(onMemberAdd(member))
+      return Promise.resolve(onMemberAdd(member))
         .then(function (result) {
           membersBusy = false;
           if (result && result.ok === false) {
