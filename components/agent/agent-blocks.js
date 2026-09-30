@@ -1099,14 +1099,10 @@
           bubble.appendChild(node);
           used[idx] = true;
           pendingAfterBlock = true;
-        } else {
-          appendTextChunk(m[0]);
         }
-      } else if (streaming) {
-        /* skip unresolved placeholder while streaming */
-      } else {
-        appendTextChunk(m[0]);
+        /* block rendered nothing: drop the marker */
       }
+      /* unresolved placeholder (streaming or no matching block): never show "{{n}}" */
       last = m.index + m[0].length;
     }
 
