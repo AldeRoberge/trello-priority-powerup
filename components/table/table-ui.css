@@ -804,3 +804,16 @@ body.tb-resizing {
 .tb-dock .tb-dock-body .agent-standalone-heading {
   display: none;
 }
+
+/* Search field of the rich popup menu */
+.tbm-search {
+  position: sticky; top: -6px; z-index: 1; display: flex; align-items: center; gap: 6px;
+  margin: -6px -6px 4px; padding: 8px 10px; background: var(--tp-surface);
+  border-bottom: 1px solid var(--tp-border);
+}
+.tbm-search-icon { color: var(--tp-text-muted); font-size: 15px; }
+.tbm-search-input {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: inherit;
+  font: inherit; font-size: 13px;
+}
+.tbm-empty { padding: 10px 8px; color: var(--tp-text-muted); font-size: 12px; text-align: center; }

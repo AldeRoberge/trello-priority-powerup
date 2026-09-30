@@ -605,6 +605,61 @@ describe('ContextMenu', () => {
     assert.equal(sent, true);
   });
 
+
+  it('rank sorts by Levenshtein distance and tolerates typos', () => {
+    const list = ['Terminer la carte', 'Créer une personne', 'Recentrer la vue', 'Supprimer'];
+    const top = (q) => ContextMenu.rank(q, list, (x) => x)[0];
+    assert.equal(top('creer'), 'Créer une personne');
+    assert.equal(top('persone'), 'Créer une personne');
+    assert.equal(top('recentre'), 'Recentrer la vue');
+    assert.equal(ContextMenu.rank('zzzzzz', list, (x) => x).length, 0);
+    assert.equal(ContextMenu.levenshtein('kitten', 'sitting'), 3);
+  });
+
+  it('search box filters and ranks the items', () => {
+    const ran = [];
+    const mk = (id, label) => ({ id, label, action() { ran.push(id); } });
+    const menu = ContextMenu.show({ clientX: 1, clientY: 1 }, [
+      mk('add-subtask', 'Ajouter une sous-tâche'),
+      mk('complete', 'Terminer la carte'),
+      mk('copy', 'Copier'),
+      mk('delete', 'Supprimer'),
+      mk('undo', 'Annuler'),
+    ]);
+    const input = menu.querySelector('.tp-context-menu-search-input');
+    assert.ok(input);
+    // grouped into sections when the menu is big enough
+    assert.ok(menu.querySelectorAll('.tp-context-menu-group').length >= 2);
+    input.value = 'termnier';
+    input.dispatchEvent({ type: 'input' });
+    const buttons = menu.querySelectorAll('.tp-context-menu-item');
+    assert.equal(buttons[0].dataset.contextAction, 'complete');
+    buttons[0].click();
+    assert.deepEqual(ran, ['complete']);
+  });
+
+  it('submenu children are searchable and item icons are derived', () => {
+    const ran = [];
+    const menu = ContextMenu.show({ clientX: 1, clientY: 1 }, [
+      { id: 'create-person', label: 'Créer une personne', action() {} },
+      { id: 'fit-view', label: 'Recentrer', action() {} },
+      { id: 'a', label: 'A', action() {} },
+      {
+        id: 'add-existing',
+        label: 'Ajouter existante',
+        children: [{ id: 'add-person:1', label: 'Camille', action() { ran.push('camille'); } }],
+      },
+    ]);
+    assert.ok(menu.querySelector('.ti-user-plus'));
+    const input = menu.querySelector('.tp-context-menu-search-input');
+    input.value = 'camile';
+    input.dispatchEvent({ type: 'input' });
+    const hit = menu.querySelectorAll('.tp-context-menu-item')[0];
+    assert.equal(hit.dataset.contextAction, 'add-person:1');
+    hit.click();
+    assert.deepEqual(ran, ['camille']);
+  });
+
   it('global fallback replaces the native menu on plain areas', () => {
     const div = global.document.createElement('div');
     global.document.body.appendChild(div);

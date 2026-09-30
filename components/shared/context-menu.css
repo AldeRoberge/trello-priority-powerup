@@ -70,3 +70,93 @@
   border: 0;
   background: color-mix(in srgb, var(--text-primary, #172b4d) 12%, transparent);
 }
+
+.tp-context-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.tp-context-menu-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--text-primary, #172b4d) 12%, transparent);
+}
+
+.tp-context-menu-search-icon {
+  font-size: 15px;
+  opacity: 0.6;
+}
+
+.tp-context-menu-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+}
+
+.tp-context-menu-group {
+  padding: 8px 10px 3px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.tp-context-menu-group:first-child {
+  padding-top: 4px;
+}
+
+.tp-context-menu-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  font-size: 16px;
+  text-align: center;
+  opacity: 0.7;
+}
+
+.tp-context-menu-item.is-danger .tp-context-menu-icon {
+  opacity: 1;
+}
+
+.tp-context-menu-item.is-active,
+.tp-context-menu-item.is-open {
+  background: color-mix(in srgb, var(--text-primary, #172b4d) 8%, transparent);
+}
+
+.tp-context-menu-hint {
+  flex: 0 0 auto;
+  margin-left: 12px;
+  font-size: 11px;
+  opacity: 0.55;
+}
+
+.tp-context-menu-check,
+.tp-context-menu-chevron {
+  flex: 0 0 auto;
+  font-size: 15px;
+  opacity: 0.7;
+}
+
+.tp-context-menu-empty {
+  padding: 10px 8px;
+  font-size: 12px;
+  text-align: center;
+  opacity: 0.6;
+}
+
+.tp-context-submenu {
+  z-index: 10001;
+}

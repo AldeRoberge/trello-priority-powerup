@@ -14858,6 +14858,211 @@
       }
     });
 
+    // Right-click on the map: create a person right where the click happened,
+    // add someone who already exists, recentre. On a node: roles / remove.
+    function tgOpenCreatePerson(pt) {
+      if (!onCustomAssigneesChange) return;
+      tgCloseEditor();
+      tgCreate.replaceChildren();
+      tgCreate.hidden = false;
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'tg-editor-label';
+      input.maxLength = MAX_CUSTOM_ASSIGNEE_NAME_LEN;
+      input.placeholder = 'Nom de la nouvelle personne';
+      input.setAttribute('aria-label', 'Nom de la nouvelle personne');
+      tgCreate.appendChild(input);
+      var busy = false;
+      var submit = function () {
+        var name = input.value.trim();
+        if (!name || busy) return;
+        busy = true;
+        input.disabled = true;
+        Promise.resolve(tgCreatePerson(name)).then(function (id) {
+          tgCloseCreate();
+          if (!id) return;
+          tgPositions[id] = { x: tgSnap(pt.x), y: tgSnap(pt.y) };
+          tgSavePositions();
+          renderTeamGraph();
+        });
+      };
+      input.addEventListener('keydown', function (event) {
+        event.stopPropagation();
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          submit();
+        } else if (event.key === 'Escape') {
+          tgCloseCreate();
+        }
+      });
+      var hostW = tgHost.clientWidth || 320;
+      var w = 256;
+      var left = Math.max(0, Math.min(tgStage.offsetLeft + tgPan.x + pt.x * tgScale, hostW - w));
+      var top = Math.max(0, Math.round(tgPan.y + pt.y * tgScale));
+      tgCreate.style.left = left + 'px';
+      tgCreate.style.top = top + 'px';
+      tgFrame.style.minHeight = top + tgCreate.offsetHeight + 8 + 'px';
+      onLayoutChange();
+      setTimeout(function () {
+        try {
+          input.focus();
+        } catch (err) {
+          /* ignore */
+        }
+      }, 0);
+    }
+
+    function tgResetView() {
+      tgPan.x = 0;
+      tgPan.y = 0;
+      tgZoomMul = 1;
+      tgScale = Math.max(0.25, tgFit);
+      tgApplyTransform();
+    }
+
+    function tgMenuItems(event) {
+      var target = event && event.target;
+      var closest = function (sel) {
+        return target && target.closest ? target.closest(sel) : null;
+      };
+      if (closest('.tg-editor, .tg-create, .info-member-roles-picker-host, .tg-zoom-btn, .tg-resize, .tg-collapse')) {
+        return [];
+      }
+      var pt = tgStagePoint(event);
+      var items = [];
+
+      var nodeEl = closest('.tg-node');
+      var nodeId = nodeEl ? nodeEl.getAttribute('data-id') : '';
+      var member = null;
+      if (nodeId) {
+        var all = displayAssignees();
+        for (var i = 0; i < all.length; i++) {
+          if (String(all[i].id) === nodeId) member = all[i];
+        }
+      }
+      if (member) {
+        var name = memberDisplayName(member) || 'Membre';
+        var isCustom = !!member.custom || isCustomAssigneeId(nodeId);
+        if (onMemberRolesChange) {
+          items.push({
+            id: 'edit-roles',
+            label: 'Définir les rôles de ' + name + '…',
+            disabled: memberRolesBusy,
+            action: function () {
+              toggleMemberRolesPicker(nodeId);
+            }
+          });
+        }
+        if ((isCustom && onCustomAssigneesChange) || (!isCustom && onMemberRemove)) {
+          items.push({
+            id: 'remove-person',
+            label: 'Retirer ' + name + ' de la carte',
+            danger: true,
+            disabled: membersBusy || memberRolesBusy,
+            action: function () {
+              removeMemberFromCard(member);
+            }
+          });
+        }
+        if (tgPositions[nodeId]) {
+          items.push({
+            id: 'reset-node',
+            icon: 'arrow-back-up',
+            group: 'Affichage',
+            label: 'Replacer ' + name + ' automatiquement',
+            action: function () {
+              delete tgPositions[nodeId];
+              tgSavePositions();
+              renderTeamGraph();
+            }
+          });
+        }
+      }
+
+      if (onCustomAssigneesChange) {
+        items.push({
+          id: 'create-person',
+          label: 'Créer une personne…',
+          keywords: 'nouvelle personne assigné ajouter nom',
+          action: function () {
+            tgOpenCreatePerson(pt);
+          }
+        });
+      }
+
+      var existing = [];
+      if (onCustomAssigneesChange) {
+        availableCatalogAssignees().forEach(function (entry) {
+          var display = customAssigneeToMember(entry, boardMembers);
+          existing.push({
+            id: 'add-person:' + entry.id,
+            icon: 'user',
+            label: (display && memberDisplayName(display)) || entry.name || 'Personne',
+            action: function () {
+              Promise.resolve(addCatalogAssigneeFromPicker(entry)).then(function () {
+                if (selectedMemberIds()[String(entry.id)]) {
+                  tgPositions[String(entry.id)] = { x: tgSnap(pt.x), y: tgSnap(pt.y) };
+                  tgSavePositions();
+                  renderTeamGraph();
+                }
+              });
+            }
+          });
+        });
+      }
+      if (onMemberAdd) {
+        availableBoardMembers().forEach(function (m) {
+          existing.push({
+            id: 'add-person:' + m.id,
+            icon: 'brand-trello',
+            label: memberDisplayName(m) || 'Membre',
+            action: function () {
+              Promise.resolve(addMemberFromPicker(m)).then(function () {
+                if (selectedMemberIds()[String(m.id)]) {
+                  tgPositions[String(m.id)] = { x: tgSnap(pt.x), y: tgSnap(pt.y) };
+                  tgSavePositions();
+                  renderTeamGraph();
+                }
+              });
+            }
+          });
+        });
+      }
+      if (existing.length) {
+        items.push({
+          id: 'add-existing',
+          icon: 'users-plus',
+          group: 'Créer',
+          label: 'Ajouter une personne existante',
+          keywords: 'membre tableau catalogue',
+          children: existing
+        });
+      }
+
+      items.push({
+        id: 'fit-view',
+        label: 'Recentrer la vue',
+        action: tgResetView
+      });
+      if (Object.keys(tgPositions).length) {
+        items.push({
+          id: 'reset-layout',
+          label: 'Réorganiser automatiquement',
+          action: function () {
+            tgPositions = {};
+            tgSavePositions();
+            tgResetView();
+            renderTeamGraph();
+          }
+        });
+      }
+      return items;
+    }
+
+    if (global.ContextMenu && typeof global.ContextMenu.bind === 'function') {
+      global.ContextMenu.bind(tgFrame, tgMenuItems);
+    }
+
     function setTgExpanded(next) {
       next = !!next;
       if (tgExpanded === next) return;

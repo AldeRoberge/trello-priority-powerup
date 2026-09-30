@@ -15,6 +15,196 @@
     return !!(item && item.sep);
   }
 
+  /* Tabler icon per item id ("prefix:*" covers ids like "due-quick:demain"). */
+  var ICONS = {
+    'toggle-expand': 'layout-list',
+    'collapse-all': 'fold-up',
+    'expand-all': 'fold-down',
+    'edit-settings': 'settings',
+    'open-memory': 'brain',
+    'focus-composer': 'cursor-text',
+    complete: 'circle-check',
+    unblock: 'player-play',
+    block: 'player-pause',
+    'add-subtask': 'list-check',
+    'postpone-tomorrow': 'calendar-plus',
+    'due-quick:*': 'calendar-event',
+    'clear-due': 'calendar-off',
+    'complete-all': 'checks',
+    'reset-all': 'rotate',
+    'open-goals': 'target',
+    undo: 'arrow-back-up',
+    redo: 'arrow-forward-up',
+    'toggle-graph': 'chart-dots',
+    'move-selection': 'arrows-move',
+    'select-cards': 'checkbox',
+    'toggle-hide-blocked': 'eye-off',
+    'toggle-task': 'circle-check',
+    'jump-progress': 'progress',
+    'show-progress': 'progress',
+    'toggle-done': 'circle-check',
+    'toggle-master': 'circle-check',
+    'toggle-blocked': 'player-pause',
+    'add-checklist': 'list-details',
+    promote: 'arrow-up-right',
+    'open-linked': 'external-link',
+    delete: 'trash',
+    'select-list': 'list-check',
+    'open-settings': 'settings',
+    'heat:*': 'flame',
+    'explain-score': 'help-circle',
+    'edit-resume': 'edit',
+    copy: 'copy',
+    cut: 'cut',
+    paste: 'clipboard',
+    'feedback-up': 'thumb-up',
+    'feedback-down': 'thumb-down',
+    'open-card': 'external-link',
+    'toggle-select': 'checkbox',
+    'mini-blocked': 'player-pause',
+    'mini-priority': 'flame',
+    'mini-progress': 'progress',
+    'mini-due': 'calendar-event',
+    'clear-dates': 'calendar-off',
+    'toggle-details': 'list-details',
+    revert: 'history',
+    restore: 'arrow-forward-up',
+    'edit-roles': 'user-cog',
+    edit: 'edit',
+    remove: 'x',
+    'bulk-count': 'checkbox',
+    'bulk-done': 'circle-check',
+    'bulk-reopen': 'rotate',
+    'bulk-delete': 'trash',
+    'bulk-clear': 'square-off',
+    'bulk-select-all': 'select-all',
+    'focus-add': 'list-check',
+    'zoom-day': 'calendar-event',
+    'zoom-week': 'calendar-week',
+    'zoom-month': 'calendar-month',
+    'zoom-year': 'calendar-stats',
+    zoom: 'zoom-in',
+    'nav-prev': 'chevron-left',
+    'nav-today': 'calendar-check',
+    'nav-next': 'chevron-right',
+    'filter-completed': 'eye-off',
+    'filter-blocked': 'eye-off',
+    'filter-undated': 'eye-off',
+    send: 'send',
+    'mode:*': 'sparkles',
+    'open-help': 'help-circle',
+    'open-link': 'external-link',
+    'copy-link': 'link',
+    'copy-image-url': 'photo',
+    'select-all': 'select-all',
+    reload: 'refresh',
+    'create-person': 'user-plus',
+    'remove-person': 'user-minus',
+    'fit-view': 'focus-2',
+    'reset-layout': 'layout-grid'
+  };
+
+  /* Section (subsection header) per item id; menus with one section show no headers. */
+  var GROUPS = {
+    'toggle-expand': 'Affichage',
+    'collapse-all': 'Affichage',
+    'expand-all': 'Affichage',
+    'toggle-graph': 'Affichage',
+    'toggle-details': 'Affichage',
+    'toggle-hide-blocked': 'Affichage',
+    'filter-completed': 'Filtres',
+    'filter-blocked': 'Filtres',
+    'filter-undated': 'Filtres',
+    'zoom-day': 'Zoom',
+    'zoom-week': 'Zoom',
+    'zoom-month': 'Zoom',
+    'zoom-year': 'Zoom',
+    'nav-prev': 'Navigation',
+    'nav-today': 'Navigation',
+    'nav-next': 'Navigation',
+    'fit-view': 'Affichage',
+    'reset-layout': 'Affichage',
+    complete: 'Statut',
+    unblock: 'Statut',
+    block: 'Statut',
+    'toggle-task': 'Statut',
+    'toggle-done': 'Statut',
+    'toggle-master': 'Statut',
+    'toggle-blocked': 'Statut',
+    'mini-blocked': 'Statut',
+    'complete-all': 'Statut',
+    'reset-all': 'Statut',
+    'bulk-done': 'Statut',
+    'bulk-reopen': 'Statut',
+    'add-subtask': 'Créer',
+    'add-checklist': 'Créer',
+    'focus-add': 'Créer',
+    'create-person': 'Créer',
+    promote: 'Créer',
+    'postpone-tomorrow': 'Échéance',
+    'mini-due': 'Échéance',
+    'clear-due': 'Échéance',
+    'clear-dates': 'Échéance',
+    'due-quick:*': 'Échéance',
+    'mini-priority': 'Priorité',
+    'heat:*': 'Priorité',
+    'explain-score': 'Priorité',
+    'edit-settings': 'Paramètres',
+    'open-memory': 'Paramètres',
+    'open-settings': 'Paramètres',
+    'edit-roles': 'Modifier',
+    edit: 'Modifier',
+    'edit-resume': 'Modifier',
+    undo: 'Modifier',
+    redo: 'Modifier',
+    revert: 'Modifier',
+    restore: 'Modifier',
+    'open-card': 'Ouvrir',
+    'open-goals': 'Ouvrir',
+    'open-linked': 'Ouvrir',
+    'open-link': 'Ouvrir',
+    'jump-progress': 'Ouvrir',
+    'show-progress': 'Ouvrir',
+    'mini-progress': 'Ouvrir',
+    'select-cards': 'Sélection',
+    'toggle-select': 'Sélection',
+    'move-selection': 'Sélection',
+    'select-list': 'Sélection',
+    'bulk-count': 'Sélection',
+    'bulk-clear': 'Sélection',
+    'bulk-select-all': 'Sélection',
+    'select-all': 'Sélection',
+    copy: 'Presse-papiers',
+    cut: 'Presse-papiers',
+    paste: 'Presse-papiers',
+    'copy-link': 'Presse-papiers',
+    'copy-image-url': 'Presse-papiers',
+    'feedback-up': 'Avis',
+    'feedback-down': 'Avis',
+    'mode:*': 'Modèle',
+    send: 'Envoi',
+    delete: 'Suppression',
+    remove: 'Suppression',
+    'remove-person': 'Suppression',
+    'bulk-delete': 'Suppression'
+  };
+
+  function lookup(table, id) {
+    if (!id) return '';
+    if (table[id]) return table[id];
+    var c = id.indexOf(':');
+    if (c > 0 && table[id.slice(0, c) + ':*']) return table[id.slice(0, c) + ':*'];
+    return '';
+  }
+
+  function iconFor(item) {
+    return item.icon || lookup(ICONS, item.id) || (item.danger ? 'trash' : 'point');
+  }
+
+  function groupFor(item) {
+    return item.group || lookup(GROUPS, item.id) || 'Actions';
+  }
+
   function normalizeItems(items) {
     if (!Array.isArray(items)) return [];
     var out = [];
@@ -25,17 +215,160 @@
         out.push({ sep: true });
         continue;
       }
-      if (typeof it.action !== 'function' && !it.disabled) continue;
+      var children = Array.isArray(it.children) ? normalizeItems(it.children) : null;
+      if (children && !children.some(function (c) { return !c.sep; })) children = null;
+      if (typeof it.action !== 'function' && !it.disabled && !children) continue;
       out.push({
         id: it.id != null ? String(it.id) : 'item-' + i,
         label: it.label != null ? String(it.label) : '',
+        icon: it.icon ? String(it.icon) : '',
+        group: it.group ? String(it.group) : '',
+        hint: it.hint ? String(it.hint) : '',
+        keywords: it.keywords ? String(it.keywords) : '',
+        checked: !!it.checked,
         disabled: !!it.disabled,
         danger: !!it.danger,
+        children: children,
         action: typeof it.action === 'function' ? it.action : null,
       });
     }
     return out;
   }
+
+  /* ── Fuzzy search (Levenshtein) ─────────────────────────────────────── */
+
+  function fold(s) {
+    s = String(s == null ? '' : s).toLowerCase();
+    try {
+      s = s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    } catch (e) {
+      /* no String.prototype.normalize */
+    }
+    return s;
+  }
+
+  function levenshtein(a, b) {
+    if (a === b) return 0;
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+    var prev = [];
+    var j;
+    for (j = 0; j <= b.length; j++) prev[j] = j;
+    for (var i = 1; i <= a.length; i++) {
+      var cur = [i];
+      for (j = 1; j <= b.length; j++) {
+        cur[j] = Math.min(
+          prev[j] + 1,
+          cur[j - 1] + 1,
+          prev[j - 1] + (a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1)
+        );
+      }
+      prev = cur;
+    }
+    return prev[b.length];
+  }
+
+  /** Cost of one query token against folded text; null when it does not match. */
+  function tokenCost(tok, text, words) {
+    if (text.indexOf(tok) !== -1) {
+      for (var i = 0; i < words.length; i++) {
+        if (words[i].indexOf(tok) === 0) return 0;
+      }
+      return 0.4;
+    }
+    var limit = tok.length < 3 ? 0 : tok.length < 6 ? 1 : 2;
+    if (!limit) return null;
+    var best = Infinity;
+    for (var k = 0; k < words.length; k++) {
+      var d = Math.min(
+        levenshtein(tok, words[k]),
+        levenshtein(tok, words[k].slice(0, tok.length))
+      );
+      if (d < best) best = d;
+    }
+    return best <= limit ? best + 0.6 : null;
+  }
+
+  /**
+   * Sort `list` by how well `getText(entry)` matches `query`, dropping non
+   * matches. Every whitespace-separated token must match (substring, prefix
+   * or within a small Levenshtein distance). Stable for equal scores.
+   */
+  function rank(query, list, getText) {
+    var tokens = fold(query).split(/\s+/).filter(Boolean);
+    if (!tokens.length) return list.slice();
+    var scored = [];
+    for (var i = 0; i < list.length; i++) {
+      var text = fold(getText(list[i]));
+      var words = text.split(/[^a-z0-9]+/).filter(Boolean);
+      var total = 0;
+      var ok = true;
+      for (var t = 0; t < tokens.length; t++) {
+        var c = tokenCost(tokens[t], text, words);
+        if (c === null) {
+          ok = false;
+          break;
+        }
+        total += c;
+      }
+      if (ok) scored.push({ entry: list[i], score: total, index: i });
+    }
+    scored.sort(function (a, b) {
+      return a.score - b.score || a.index - b.index;
+    });
+    return scored.map(function (s) {
+      return s.entry;
+    });
+  }
+
+  /** Leaf (runnable) entries of a menu, submenu children included with their parent's label. */
+  function flatten(items, parent) {
+    var out = [];
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (!it || it.sep) continue;
+      if (it.children) {
+        out = out.concat(flatten(it.children, it));
+      } else {
+        out.push({ item: it, parent: parent || null });
+      }
+    }
+    return out;
+  }
+
+  function entryText(entry) {
+    var it = entry.item;
+    return [
+      it.label,
+      it.keywords,
+      entry.parent ? entry.parent.label : '',
+      groupFor(entry.parent || it),
+    ].join(' ');
+  }
+
+  /**
+   * Group items under section headers. Returns null when a flat list reads
+   * better (few items or a single section).
+   */
+  function arrangeSections(items) {
+    var real = items.filter(function (i) { return !i.sep; });
+    if (real.length < 5) return null;
+    var order = [];
+    var byName = Object.create(null);
+    real.forEach(function (it) {
+      var name = groupFor(it);
+      if (!byName[name]) {
+        byName[name] = [];
+        order.push(name);
+      }
+      byName[name].push(it);
+    });
+    if (order.length < 2) return null;
+    return order.map(function (name) {
+      return { name: name, items: byName[name] };
+    });
+  }
+
 
   function hide() {
     if (activeCleanup) {
@@ -86,7 +419,12 @@
     }
   }
 
+  var SEARCH_MIN_ITEMS = 4;
+
   /**
+   * Item: { id, label, icon?, group?, hint?, keywords?, checked?, danger?, disabled?,
+   * action?, children? } or { sep: true }. `children` opens a submenu (flyout).
+   * Icons are Tabler webfont names; missing ones are derived from the id.
    * @param {{ clientX: number, clientY: number }|Event} point
    * @param {Array} items
    */
@@ -111,64 +449,340 @@
           ? point.touches[0].clientY
           : 0;
 
+    var leaves = flatten(normalized);
+    var sections = arrangeSections(normalized);
+    var searchable = leaves.length >= SEARCH_MIN_ITEMS;
+
     var menu = d.createElement('div');
     menu.className = MENU_CLASS;
     menu.setAttribute('role', 'menu');
     menu.setAttribute('tabindex', '-1');
 
-    for (var i = 0; i < normalized.length; i++) {
-      (function (item) {
-        if (item.sep) {
+    var input = null;
+    if (searchable) {
+      var searchWrap = d.createElement('div');
+      searchWrap.className = 'tp-context-menu-search';
+      var searchIcon = d.createElement('i');
+      searchIcon.className = 'ti ti-search tp-context-menu-search-icon';
+      searchIcon.setAttribute('aria-hidden', 'true');
+      searchWrap.appendChild(searchIcon);
+      input = d.createElement('input');
+      input.type = 'text';
+      input.className = 'tp-context-menu-search-input';
+      input.placeholder = 'Rechercher une action…';
+      input.setAttribute('aria-label', 'Rechercher une action');
+      input.setAttribute('autocomplete', 'off');
+      input.setAttribute('spellcheck', 'false');
+      searchWrap.appendChild(input);
+      menu.appendChild(searchWrap);
+    }
+
+    var list = d.createElement('div');
+    list.className = 'tp-context-menu-list';
+    menu.appendChild(list);
+
+    var nav = { rows: [], cursor: -1, sub: null, subRows: [], subCursor: -1, subOwner: null };
+
+    function closeSub() {
+      if (nav.sub && nav.sub.parentNode) nav.sub.parentNode.removeChild(nav.sub);
+      if (nav.subOwner) nav.subOwner.classList.remove('is-open');
+      nav.sub = null;
+      nav.subRows = [];
+      nav.subCursor = -1;
+      nav.subOwner = null;
+      subEl = null;
+    }
+    var subEl = null;
+
+    function setActive(rows, i, isSub) {
+      var prev = isSub ? nav.subCursor : nav.cursor;
+      if (rows[prev]) rows[prev].el.classList.remove('is-active');
+      if (isSub) nav.subCursor = i;
+      else nav.cursor = i;
+      if (rows[i]) {
+        rows[i].el.classList.add('is-active');
+        if (typeof rows[i].el.scrollIntoView === 'function') {
+          rows[i].el.scrollIntoView({ block: 'nearest' });
+        }
+      }
+    }
+
+    function makeRow(item, opts) {
+      opts = opts || {};
+      var btn = d.createElement('button');
+      btn.type = 'button';
+      btn.className =
+        ITEM_CLASS + (item.danger ? ' is-danger' : '') + (item.checked ? ' is-checked' : '');
+      btn.setAttribute('role', 'menuitem');
+      btn.dataset.contextAction = item.id;
+      if (item.disabled) {
+        btn.disabled = true;
+        btn.setAttribute('aria-disabled', 'true');
+      }
+      var ic = d.createElement('i');
+      ic.className = 'ti ti-' + iconFor(item) + ' tp-context-menu-icon';
+      ic.setAttribute('aria-hidden', 'true');
+      btn.appendChild(ic);
+      var lab = d.createElement('span');
+      lab.className = 'tp-context-menu-item-label';
+      lab.textContent = item.label;
+      btn.appendChild(lab);
+      var hint = opts.hint || item.hint;
+      if (hint) {
+        var h = d.createElement('span');
+        h.className = 'tp-context-menu-hint';
+        h.textContent = hint;
+        btn.appendChild(h);
+      }
+      if (item.checked) {
+        var ck = d.createElement('i');
+        ck.className = 'ti ti-check tp-context-menu-check';
+        ck.setAttribute('aria-hidden', 'true');
+        btn.appendChild(ck);
+      }
+      if (item.children) {
+        var ch = d.createElement('i');
+        ch.className = 'ti ti-chevron-right tp-context-menu-chevron';
+        ch.setAttribute('aria-hidden', 'true');
+        btn.appendChild(ch);
+      }
+      return btn;
+    }
+
+    function openSub(rowEntry) {
+      var item = rowEntry.item;
+      if (!item.children || item.disabled) return;
+      if (nav.subOwner === rowEntry.el) return;
+      closeSub();
+      var fly = d.createElement('div');
+      fly.className = MENU_CLASS + ' tp-context-submenu';
+      fly.setAttribute('role', 'menu');
+      var flyList = d.createElement('div');
+      flyList.className = 'tp-context-menu-list';
+      fly.appendChild(flyList);
+      var subRows = [];
+      item.children.forEach(function (child) {
+        if (child.sep) {
           var sep = d.createElement('hr');
           sep.className = 'tp-context-menu-sep';
           sep.setAttribute('role', 'separator');
-          menu.appendChild(sep);
+          flyList.appendChild(sep);
           return;
         }
-        var btn = d.createElement('button');
-        btn.type = 'button';
-        btn.className = ITEM_CLASS + (item.danger ? ' is-danger' : '');
-        btn.setAttribute('role', 'menuitem');
-        btn.dataset.contextAction = item.id;
-        if (item.disabled) {
-          btn.disabled = true;
-          btn.setAttribute('aria-disabled', 'true');
-        }
-        var lab = d.createElement('span');
-        lab.className = 'tp-context-menu-item-label';
-        lab.textContent = item.label;
-        btn.appendChild(lab);
+        var btn = makeRow(child);
+        var idx = subRows.length;
         btn.addEventListener('click', function (e) {
           if (e) {
-            e.preventDefault();
-            e.stopPropagation();
+            if (e.preventDefault) e.preventDefault();
+            if (e.stopPropagation) e.stopPropagation();
           }
-          runItem(item);
+          runItem(child);
         });
-        menu.appendChild(btn);
-      })(normalized[i]);
+        btn.addEventListener('mousemove', function () {
+          if (nav.subCursor !== idx && !child.disabled) setActive(subRows, idx, true);
+        });
+        subRows.push({ el: btn, item: child });
+        flyList.appendChild(btn);
+      });
+      (d.body || d.documentElement).appendChild(fly);
+      var rect =
+        typeof rowEntry.el.getBoundingClientRect === 'function'
+          ? rowEntry.el.getBoundingClientRect()
+          : { left: clientX, right: clientX + 200, top: clientY };
+      var vw = global.innerWidth || 800;
+      var vh = global.innerHeight || 600;
+      fly.style.visibility = 'hidden';
+      fly.style.left = '0px';
+      fly.style.top = '0px';
+      var fw = fly.offsetWidth || 200;
+      var fh = fly.offsetHeight || 120;
+      var left = rect.right + 2;
+      if (left + fw > vw - 8) left = Math.max(8, rect.left - fw - 2);
+      var top = clamp(rect.top - 6, 8, Math.max(8, vh - fh - 8));
+      fly.style.left = Math.round(left) + 'px';
+      fly.style.top = Math.round(top) + 'px';
+      fly.style.visibility = '';
+      rowEntry.el.classList.add('is-open');
+      nav.sub = fly;
+      nav.subRows = subRows;
+      nav.subOwner = rowEntry.el;
+      subEl = fly;
+    }
+
+    function appendSeparator() {
+      var sep = d.createElement('hr');
+      sep.className = 'tp-context-menu-sep';
+      sep.setAttribute('role', 'separator');
+      list.appendChild(sep);
+    }
+
+    function addRow(item, opts) {
+      var btn = makeRow(item, opts);
+      var entry = { el: btn, item: item };
+      var idx = nav.rows.length;
+      btn.addEventListener('click', function (e) {
+        if (e) {
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopPropagation) e.stopPropagation();
+        }
+        if (item.children) {
+          openSub(entry);
+          return;
+        }
+        runItem(item);
+      });
+      btn.addEventListener('mousemove', function () {
+        if (item.disabled) return;
+        if (nav.cursor !== idx) setActive(nav.rows, idx, false);
+        if (item.children) openSub(entry);
+        else if (nav.sub && !nav.sub.contains(btn)) closeSub();
+      });
+      nav.rows.push(entry);
+      list.appendChild(btn);
+    }
+
+    function firstEnabled(rows) {
+      for (var i = 0; i < rows.length; i++) if (!rows[i].item.disabled) return i;
+      return -1;
+    }
+
+    function render(query) {
+      closeSub();
+      list.textContent = '';
+      nav.rows = [];
+      nav.cursor = -1;
+      query = String(query || '').trim();
+      if (query) {
+        var hits = rank(query, leaves, entryText);
+        if (!hits.length) {
+          var empty = d.createElement('div');
+          empty.className = 'tp-context-menu-empty';
+          empty.textContent = 'Aucun résultat';
+          list.appendChild(empty);
+          return;
+        }
+        hits.forEach(function (hit) {
+          addRow(hit.item, { hint: hit.parent ? hit.parent.label : groupFor(hit.item) });
+        });
+        setActive(nav.rows, firstEnabled(nav.rows), false);
+        return;
+      }
+      if (sections) {
+        sections.forEach(function (section) {
+          var head = d.createElement('div');
+          head.className = 'tp-context-menu-group';
+          head.setAttribute('role', 'presentation');
+          head.textContent = section.name;
+          list.appendChild(head);
+          section.items.forEach(function (item) {
+            addRow(item);
+          });
+        });
+        return;
+      }
+      normalized.forEach(function (item) {
+        if (item.sep) appendSeparator();
+        else addRow(item);
+      });
+    }
+
+    render('');
+    if (input) {
+      input.addEventListener('input', function () {
+        render(input.value);
+      });
     }
 
     (d.body || d.documentElement).appendChild(menu);
     activeMenu = menu;
     positionMenu(menu, clientX, clientY);
+    if (input && typeof input.focus === 'function') {
+      try {
+        input.focus();
+      } catch (e0) {
+        /* ignore */
+      }
+    }
+
+    function move(step) {
+      var useSub = !!(nav.sub && nav.subCursor >= 0);
+      var rows = useSub ? nav.subRows : nav.rows;
+      var cur = useSub ? nav.subCursor : nav.cursor;
+      var enabled = [];
+      rows.forEach(function (r, i) {
+        if (!r.item.disabled) enabled.push(i);
+      });
+      if (!enabled.length) return;
+      var pos = enabled.indexOf(cur);
+      var next =
+        pos < 0
+          ? step > 0
+            ? enabled[0]
+            : enabled[enabled.length - 1]
+          : enabled[(pos + step + enabled.length) % enabled.length];
+      setActive(rows, next, useSub);
+    }
+
+    function inMenus(target) {
+      if (!target) return false;
+      if (activeMenu && activeMenu.contains && activeMenu.contains(target)) return true;
+      return !!(subEl && subEl.contains && subEl.contains(target));
+    }
 
     function onKey(e) {
       if (!activeMenu) return;
-      if ((e.key || '') === 'Escape') {
+      var k = e.key || '';
+      if (k === 'Escape') {
         e.preventDefault();
+        if (nav.sub) {
+          closeSub();
+          return;
+        }
         hide();
+      } else if (k === 'ArrowDown' || k === 'ArrowUp') {
+        e.preventDefault();
+        move(k === 'ArrowDown' ? 1 : -1);
+      } else if (k === 'ArrowRight') {
+        var cur = nav.rows[nav.cursor];
+        if (cur && cur.item.children) {
+          e.preventDefault();
+          openSub(cur);
+          if (nav.subRows.length) setActive(nav.subRows, firstEnabled(nav.subRows), true);
+        }
+      } else if (k === 'ArrowLeft') {
+        if (nav.sub) {
+          e.preventDefault();
+          closeSub();
+        }
+      } else if (k === 'Enter') {
+        var target =
+          nav.sub && nav.subCursor >= 0 ? nav.subRows[nav.subCursor] : nav.rows[nav.cursor];
+        if (target) {
+          e.preventDefault();
+          if (target.item.children) openSub(target);
+          else runItem(target.item);
+        }
+      } else if (
+        input &&
+        k.length === 1 &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        d.activeElement !== input &&
+        typeof input.focus === 'function'
+      ) {
+        input.focus();
       }
     }
 
     function onPointerDown(e) {
       if (!activeMenu) return;
-      var target = e && e.target;
-      if (target && activeMenu.contains && activeMenu.contains(target)) return;
+      if (inMenus(e && e.target)) return;
       hide();
     }
 
-    function onScroll() {
+    function onScroll(e) {
+      if (e && inMenus(e.target)) return;
       hide();
     }
 
@@ -183,6 +797,7 @@
 
     activeCleanup = function () {
       global.clearTimeout(bindTimer);
+      closeSub();
       d.removeEventListener('mousedown', onPointerDown, true);
       d.removeEventListener('contextmenu', onPointerDown, true);
       d.removeEventListener('keydown', onKey, true);
@@ -1533,6 +2148,11 @@
     buildGenericItems: buildGenericItems,
     installGlobal: installGlobal,
     normalizeItems: normalizeItems,
+    flatten: flatten,
+    rank: rank,
+    fold: fold,
+    levenshtein: levenshtein,
+    iconFor: iconFor,
     buildExpandToggleItem: buildExpandToggleItem,
     buildAgentItems: buildAgentItems,
     buildOverviewItems: buildOverviewItems,
