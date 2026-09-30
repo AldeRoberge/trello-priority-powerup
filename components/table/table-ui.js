@@ -1,6 +1,6 @@
 /*
  * Role: UI of the Table view — a spreadsheet-like grid of the board's cards.
- *  - click an Objet to open the card (pencil / F2 / Enter to rename), double-click any row to open
+ *  - click an Objet to rename it in place (F2 / Enter too); the card opens from the ↗ button in the row gutter
  *  - Statut cells are colored pills; clicking one opens a menu of the board's lists with icons
  *  - sortable headers (faint arrows on hover), filter, drag-to-reorder, column picker
  *  - right-click anywhere: context menu adapted to what is under the mouse
@@ -176,7 +176,7 @@
     /* ── Helpers ───────────────────────────────────────────────────── */
     function visibleRows() {
       var rows = TM().filterRows(state.rows, state.filter);
-      if (state.sort) rows = TM().sortRows(rows, state.sort.key, state.sort.dir);
+      if (state.sort) rows = TM().sortRows(rows, state.sort.key, state.sort.dir, { lists: state.lists });
       return rows;
     }
     function canReorder() {
@@ -271,9 +271,16 @@
           },
         }),
       ];
-      if (state.sort) kids.push(btn('arrows-sort', 'Ordre du tableau', { title: 'Retirer le tri', onclick: function () { setSort(null); } }));
+      if (state.sort) {
+        var sortSpec = TM().COLUMNS[state.sort.key];
+        kids.push(btn(state.sort.dir === 'asc' ? 'sort-ascending' : 'sort-descending', 'Tri : ' + sortSpec.header, {
+          title: 'Trié ' + TM().sortLabels(state.sort.key)[state.sort.dir] + ' · cliquer pour revenir à l’ordre du tableau',
+          onclick: function () { setSort(null); },
+        }));
+      }
       kids.push(h('span', { class: 'tb-status' }));
       kids.push(h('span', { class: 'tb-spacer' }));
+      kids.push(h('span', { class: 'tb-count', 'aria-live': 'polite' }));
       if (connected) {
         var logBtn = btn('list-details', 'Logs', { title: 'Journal de la synchronisation', onclick: function () { openDrawer('logs'); } });
         logBtn.appendChild(h('span', { class: 'tb-badge', hidden: !state.alerts.length, text: '!' }));
@@ -290,7 +297,17 @@
       kids.forEach(function (c) { els.bar.appendChild(c); });
       els.bar.appendChild(h('div', { class: 'tb-menu', hidden: !state.menuOpen, id: 'tbMenu' }));
       paintStatus();
+      paintCount();
       renderMenu();
+    }
+
+    /** "4 cartes", or "2 / 4 cartes" while a filter hides some (the filter input is not re-rendered while typing). */
+    function paintCount() {
+      var c = els.bar.querySelector('.tb-count');
+      if (!c) return;
+      var total = state.rows.length;
+      var shown = visibleRows().length;
+      c.textContent = !total ? '' : (shown === total ? total : shown + ' / ' + total) + (total > 1 ? ' cartes' : ' carte');
     }
 
     function renderMenu() {
@@ -481,6 +498,7 @@
       var scrollTop = els.wrap.scrollTop;
       var scrollLeft = els.wrap.scrollLeft;
       if (opts.keepFocus !== 'filter') renderBar();
+      else paintCount();
       var rows = visibleRows();
       var table = h('table', { class: 'tb-grid' });
       var head = h('tr', {}, [h('th', { class: 'tb-corner' })]);
@@ -491,15 +509,24 @@
         tableWidth += width;
         var active = state.sort && state.sort.key === key;
         var sortIcon = active ? (state.sort.dir === 'asc' ? 'arrow-up' : 'arrow-down') : 'arrows-sort';
+        var toggleSort = function () {
+          if (active) setSort(state.sort.dir === 'asc' ? key : null, 'desc');
+          else setSort(key, 'asc');
+        };
         head.appendChild(
           h('th', {
             class: 'tb-th' + (active ? ' is-sorted' : ''),
             'data-key': key,
             style: 'min-width:' + width + 'px;width:' + width + 'px',
             title: 'Cliquer pour trier',
-            onclick: function () {
-              if (active) setSort(state.sort.dir === 'asc' ? key : null, 'desc');
-              else setSort(key, 'asc');
+            tabindex: '0',
+            'aria-sort': active ? (state.sort.dir === 'asc' ? 'ascending' : 'descending') : null,
+            onclick: toggleSort,
+            onkeydown: function (e) {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault();
+              e.stopPropagation(); // the grid's own Enter handler is for the selected cell
+              toggleSort();
             },
           }, [icon(spec.icon, 'tb-th-icon'), h('span', { class: 'tb-th-text', text: spec.header }), icon(sortIcon, 'tb-sort'), resizer(key)])
         );
@@ -598,13 +625,25 @@
       if (!state.editing && (!ae || ae === document.body)) shell.focus({ preventScroll: true });
     }
 
-    function createIn(list, name, input) {
+    /**
+     * Creates a card. From the add row (`input`) focus returns there for the next title; from a menu
+     * (`opts.rename`) the new title opens for editing, since "Nouvelle carte" is only a placeholder.
+     */
+    function createIn(list, name, input, opts) {
       if (input) input.disabled = true;
       TT()
         .createRow(t, name, list.id)
-        .then(function () {
-          reload({ quiet: true });
-          setStatus('Carte créée dans « ' + list.name + ' »', 'ok');
+        .then(function (res) {
+          var cardId = res && res.cardId;
+          return reload({ quiet: true }).then(function () {
+            var hidden = cardId && !visibleRows().some(function (r) { return r.id === cardId; });
+            setStatus('Carte créée dans « ' + list.name + ' »' + (hidden ? ' (masquée par le filtre)' : ''), 'ok', hidden ? 5000 : 0);
+            if (opts && opts.rename && cardId && !hidden) beginEdit(cardId, 'name');
+            else if (input) {
+              var next = document.getElementById('tbAdd');
+              if (next) next.focus({ preventScroll: true });
+            }
+          });
         }, function (err) {
           if (input) input.disabled = false;
           fail(err);
@@ -648,7 +687,7 @@
       }
       if (key === 'due' && row.due) {
         var overdue = /^\d{4}-\d{2}-\d{2}/.test(row.due) && row.due.slice(0, 10) < todayIso() && row.statutKey !== 'completed' && row.statutKey !== 'canceled';
-        return h('span', { class: 'tb-chip tb-chip--due' + (overdue ? ' is-overdue' : '') }, [icon(overdue ? 'calendar-exclamation' : 'calendar-event'), h('span', { text: row.due })]);
+        return h('span', { class: 'tb-chip tb-chip--due' + (overdue ? ' is-overdue' : ''), title: overdue ? 'En retard · ' + row.due : row.due }, [icon(overdue ? 'calendar-exclamation' : 'calendar-event'), h('span', { text: TM().formatDay(row.due) })]);
       }
       return null;
     }
@@ -951,8 +990,8 @@
       var sorted = state.sort && state.sort.key === key ? state.sort.dir : null;
       return [
         { title: spec.header },
-        { icon: 'sort-ascending', label: 'Trier de A à Z', checked: sorted === 'asc', action: function () { setSort(key, 'asc'); } },
-        { icon: 'sort-descending', label: 'Trier de Z à A', checked: sorted === 'desc', action: function () { setSort(key, 'desc'); } },
+        { icon: 'sort-ascending', label: 'Trier ' + TM().sortLabels(key).asc, checked: sorted === 'asc', action: function () { setSort(key, 'asc'); } },
+        { icon: 'sort-descending', label: 'Trier ' + TM().sortLabels(key).desc, checked: sorted === 'desc', action: function () { setSort(key, 'desc'); } },
         { icon: 'arrows-sort', label: 'Retirer le tri', disabled: !sorted, action: function () { setSort(null); } },
         { sep: true },
         { icon: 'arrow-left', label: 'Déplacer à gauche', disabled: idx <= 0, action: function () { moveColumn(idx, -1); } },
@@ -968,7 +1007,7 @@
       var list = listById(row.listId);
       var items = [
         { title: row.name || 'Carte' },
-        { icon: 'arrow-up-right', label: 'Ouvrir la carte', hint: 'double-clic', action: function () { openCard(row); } },
+        { icon: 'arrow-up-right', label: 'Ouvrir la carte', action: function () { openCard(row); } },
         { icon: 'brand-trello', label: 'Ouvrir dans Trello', disabled: !row.link, action: function () { window.open(row.link, '_blank', 'noopener'); } },
         { icon: 'link', label: 'Copier le lien de la carte', disabled: !row.link, action: function () { copyText(row.link); } },
       ];
@@ -1008,8 +1047,8 @@
       if (key) {
         var sorted = state.sort && state.sort.key === key ? state.sort.dir : null;
         items.push({ sep: true });
-        items.push({ icon: 'sort-ascending', label: 'Trier « ' + spec.header + ' » de A à Z', checked: sorted === 'asc', action: function () { setSort(key, 'asc'); } });
-        items.push({ icon: 'sort-descending', label: 'Trier « ' + spec.header + ' » de Z à A', checked: sorted === 'desc', action: function () { setSort(key, 'desc'); } });
+        items.push({ icon: 'sort-ascending', label: 'Trier « ' + spec.header + ' » ' + TM().sortLabels(key).asc, checked: sorted === 'asc', action: function () { setSort(key, 'asc'); } });
+        items.push({ icon: 'sort-descending', label: 'Trier « ' + spec.header + ' » ' + TM().sortLabels(key).desc, checked: sorted === 'desc', action: function () { setSort(key, 'desc'); } });
         items.push({ icon: 'eye-off', label: 'Masquer la colonne', disabled: state.columns.length <= 1, action: function () { hideColumn(key); } });
       }
       items.push({ sep: true });
@@ -1018,8 +1057,7 @@
         label: 'Nouvelle carte dans « ' + (list ? list.name : 'la liste') + ' »',
         disabled: !list,
         action: function () {
-          var name = 'Nouvelle carte';
-          createIn(list, name, null);
+          createIn(list, 'Nouvelle carte', null, { rename: true });
         },
       });
       items.push({ icon: 'archive', label: 'Archiver la carte', danger: true, action: function () { archiveRow(row); } });

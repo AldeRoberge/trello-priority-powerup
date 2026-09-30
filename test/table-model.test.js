@@ -70,6 +70,61 @@ describe('TableModel', () => {
     assert.deepEqual(TM.sortRows(rows, 'name', 'asc').map((r) => r.id), ['b', 'a', 'c']);
   });
 
+  it('sorts Urgence by its scale, not alphabetically', () => {
+    const rows = ['Vite', 'Aucun', 'Au plus vite', 'Assez vite', '', 'Bientôt'].map((urgency, i) => ({ id: String(i), urgency }));
+    const asc = TM.sortRows(rows, 'urgency', 'asc').map((r) => r.urgency);
+    assert.deepEqual(asc, ['Aucun', 'Bientôt', 'Assez vite', 'Vite', 'Au plus vite', '']);
+    const desc = TM.sortRows(rows, 'urgency', 'desc').map((r) => r.urgency);
+    assert.deepEqual(desc, ['Au plus vite', 'Vite', 'Assez vite', 'Bientôt', 'Aucun', '']);
+  });
+
+  it('sorts Palier by tier rank (custom labels do not matter)', () => {
+    const rows = [
+      { id: 'a', tier: 'Zen', tierI: 4 },
+      { id: 'b', tier: 'Alpha', tierI: 1 },
+      { id: 'c', tier: '', tierI: null },
+      { id: 'd', tier: 'Beta', tierI: 2 },
+    ];
+    assert.deepEqual(TM.sortRows(rows, 'tier', 'asc').map((r) => r.id), ['b', 'd', 'a', 'c']);
+    assert.equal(TM.rowFromRecord(rec({ priorityTierI: 3 })).tierI, 3);
+    assert.equal(TM.rowFromRecord(rec({ priorityTierI: 3, priorityEnabled: false })).tierI, null);
+  });
+
+  it('sorts Statut in board list order when the lists are given', () => {
+    const lists = [{ id: 'todo' }, { id: 'doing' }, { id: 'done' }];
+    const rows = [
+      { id: 'a', listId: 'done', statut: 'Terminé' },
+      { id: 'b', listId: 'todo', statut: 'Zéro' },
+      { id: 'c', listId: 'doing', statut: 'Alpha' },
+    ];
+    assert.deepEqual(TM.sortRows(rows, 'statut', 'asc', { lists }).map((r) => r.id), ['b', 'c', 'a']);
+    assert.deepEqual(TM.sortRows(rows, 'statut', 'desc', { lists }).map((r) => r.id), ['a', 'c', 'b']);
+    // Without lists it falls back to the displayed name.
+    assert.deepEqual(TM.sortRows(rows, 'statut', 'asc').map((r) => r.id), ['c', 'a', 'b']);
+  });
+
+  it('words the sort directions to match the column (no "A à Z" on numbers or dates)', () => {
+    assert.deepEqual(TM.sortLabels('name'), { asc: 'de A à Z', desc: 'de Z à A' });
+    assert.match(TM.sortLabels('priority').asc, /petit/);
+    assert.match(TM.sortLabels('due').asc, /ancien/);
+    assert.match(TM.sortLabels('urgency').asc, /moins au plus urgent/);
+    assert.match(TM.sortLabels('statut').asc, /ordre du tableau/);
+    Object.keys(TM.COLUMNS).forEach((key) => {
+      const l = TM.sortLabels(key);
+      assert.ok(l.asc && l.desc && l.asc !== l.desc, key);
+    });
+  });
+
+  it('formats due dates in French, dropping the current year', () => {
+    const now = new Date(2026, 8, 30);
+    assert.equal(TM.formatDay('2026-10-03', now), '3 oct.');
+    assert.equal(TM.formatDay('2026-01-15', now), '15 janv.');
+    assert.equal(TM.formatDay('2027-03-01', now), '1 mars 2027');
+    assert.equal(TM.formatDay('', now), '');
+    assert.equal(TM.formatDay('demain', now), 'demain');
+    assert.equal(TM.formatDay('2026-13-01', now), '2026-13-01');
+  });
+
   it('filters on text columns', () => {
     const rows = [{ name: 'Facture', desc: '', statut: 'À faire' }, { name: 'Logo', desc: 'facture jointe', statut: 'En cours' }];
     assert.equal(TM.filterRows(rows, 'facture').length, 2);
