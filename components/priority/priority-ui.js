@@ -11421,12 +11421,6 @@
 
     var pgToolbar = document.createElement('div');
     pgToolbar.className = 'pg-toolbar';
-    var pgReverseBtn = document.createElement('button');
-    pgReverseBtn.type = 'button';
-    pgReverseBtn.className = 'tg-collapse pg-tool';
-    pgReverseBtn.title = 'Inverser le trajet';
-    pgReverseBtn.innerHTML =
-      '<i class="ti ti-arrows-exchange-2" aria-hidden="true"></i><span>Inverser</span>';
     var pgItinBtn = document.createElement('a');
     pgItinBtn.className = 'tg-collapse pg-tool';
     pgItinBtn.target = '_blank';
@@ -11441,7 +11435,6 @@
     pgCollapseBtn.title = 'Revenir à la vue simple';
     pgCollapseBtn.innerHTML =
       '<i class="ti ti-chevron-up" aria-hidden="true"></i><span>Réduire</span>';
-    pgToolbar.appendChild(pgReverseBtn);
     pgToolbar.appendChild(pgItinBtn);
     pgToolbar.appendChild(pgCollapseBtn);
 
@@ -12752,11 +12745,14 @@
       });
     }
 
-    function reversePlaceRoute() {
+    /** Drag and drop: take the stop at `from` and drop it at position `to`. */
+    function reorderPlaceStop(from, to) {
       placeEditKey = '';
       placesMutateSeq(function (refs) {
-        if (refs.length < 2) return false;
-        refs.reverse();
+        if (from === to || from < 0 || to < 0 || from >= refs.length || to >= refs.length) {
+          return false;
+        }
+        refs.splice(to, 0, refs.splice(from, 1)[0]);
       });
     }
 
@@ -13415,11 +13411,6 @@
       event.stopPropagation();
       pgSetExpanded(false);
     });
-    pgReverseBtn.addEventListener('click', function (event) {
-      event.preventDefault();
-      event.stopPropagation();
-      reversePlaceRoute();
-    });
 
     function pgSvg(tag, attrs) {
       var node = document.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -13546,6 +13537,95 @@
       edge.addEventListener('pointercancel', cancel);
     }
 
+    var pgNoClickUntil = 0;
+
+    // Grab a node by its header and drop it on another to change the order.
+    function pgStartNodeDrag(event, node, index) {
+      if (!onPlacesChange || placesBusy) return;
+      if (event.button != null && event.button !== 0) return;
+      if (event.target.closest('.tg-node-clear')) return;
+      var boxes = pgState && pgState.nodes;
+      if (!boxes || boxes.length < 2) return;
+      var sx = event.clientX;
+      var sy = event.clientY;
+      var moved = false;
+      var target = index;
+      try {
+        node.setPointerCapture(event.pointerId);
+      } catch (err) {
+        /* capture is optional */
+      }
+      var mark = function () {
+        pgNodes.querySelectorAll('.pg-node').forEach(function (n) {
+          var k = Number(n.getAttribute('data-idx'));
+          n.classList.toggle('is-drop-target', moved && k === target && k !== index);
+        });
+      };
+      var move = function (e) {
+        var dx = e.clientX - sx;
+        var dy = e.clientY - sy;
+        if (!moved && Math.abs(dx) + Math.abs(dy) < 5) return;
+        if (!moved) {
+          moved = true;
+          pgHost.classList.add('pg-moving');
+          node.classList.add('is-dragging-node');
+          if (placeEditKey || /^ins:/.test(placesPickerSlot)) {
+            pgEditor.hidden = true;
+            pgPop.hidden = true;
+          }
+        }
+        node.style.transform = 'translate(' + dx / pgScale + 'px,' + dy / pgScale + 'px)';
+        var p = pgStagePoint(e);
+        var best = index;
+        var bestD = Infinity;
+        boxes.forEach(function (b, k) {
+          if (!b) return;
+          var ddx = p.x - (b.x + b.w / 2);
+          var ddy = p.y - (b.y + b.h / 2);
+          var d = ddx * ddx + ddy * ddy;
+          if (d < bestD) {
+            bestD = d;
+            best = k;
+          }
+        });
+        target = best;
+        mark();
+      };
+      var finish = function (apply) {
+        node.removeEventListener('pointermove', move);
+        node.removeEventListener('pointerup', up);
+        node.removeEventListener('pointercancel', cancel);
+        pgHost.classList.remove('pg-moving');
+        node.classList.remove('is-dragging-node');
+        node.style.transform = '';
+        moved = moved && apply;
+        target = moved ? target : index;
+        mark();
+        if (!apply) return;
+      };
+      var up = function () {
+        var wasMoved = moved;
+        var to = target;
+        finish(true);
+        if (!wasMoved) return;
+        pgNoClickUntil = Date.now() + 300;
+        pgIgnoreUntil = Date.now() + 400;
+        if (to !== index) reorderPlaceStop(index, to);
+        else {
+          pgNodes.querySelectorAll('.pg-node.is-drop-target').forEach(function (n) {
+            n.classList.remove('is-drop-target');
+          });
+          renderPlaces();
+        }
+      };
+      var cancel = function () {
+        finish(false);
+      };
+      node.addEventListener('pointermove', move);
+      node.addEventListener('pointerup', up);
+      node.addEventListener('pointercancel', cancel);
+    }
+
     function pgToolButton(icon, title, onClick, extraClass) {
       var b = document.createElement('button');
       b.type = 'button';
@@ -13578,6 +13658,13 @@
 
       var head = document.createElement('div');
       head.className = 'tg-node-head';
+      if (editable && total > 1) {
+        node.classList.add('is-draggable');
+        head.title = 'Glisser pour changer l’ordre';
+        head.addEventListener('pointerdown', function (event) {
+          pgStartNodeDrag(event, node, i);
+        });
+      }
       var badge = document.createElement('span');
       badge.className = 'pg-node-icon';
       badge.innerHTML =
@@ -13599,6 +13686,7 @@
         nameEl.addEventListener('click', function (event) {
           event.preventDefault();
           event.stopPropagation();
+          if (Date.now() < pgNoClickUntil) return;
           placesPickerSlot = '';
           placeEditKey = placeEditKey === stopKey ? '' : stopKey;
           renderPlaces();
@@ -13864,7 +13952,6 @@
       }
 
       // Toolbar
-      pgReverseBtn.hidden = !editable || stops.length < 2;
       var dirs = stops.map(function (s) {
         return findDirectoryPlace(s.ref);
       });

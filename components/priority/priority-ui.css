@@ -3172,6 +3172,54 @@ html[data-color-mode='dark'] .overview-composer-input {
   gap: 8px;
 }
 
+/* drag a node by its header to reorder the route */
+.pg-node.is-draggable .tg-node-head {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.pg-moving,
+.pg-moving * {
+  cursor: grabbing !important;
+}
+
+.pg-node.is-dragging-node {
+  z-index: 8;
+  transition: none;
+  opacity: 0.94;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.55);
+}
+
+.pg-node.is-drop-target {
+  outline: 2px dashed var(--tg-accent);
+  outline-offset: 4px;
+}
+
+/* "add a stop here": a faint blue circle sitting on the wire */
+.tg-pill.pg-pill {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  justify-content: center;
+  border: 1.5px solid color-mix(in srgb, var(--tg-c) 55%, transparent);
+  background: color-mix(in srgb, var(--tg-c) 16%, var(--surface-1, #22272b));
+  box-shadow: none;
+  opacity: 0.6;
+}
+
+.tg-pill.pg-pill .ti {
+  font-size: 12px;
+}
+
+.tg-pill.pg-pill:hover,
+.tg-pill.pg-pill:focus-visible {
+  opacity: 1;
+  background: color-mix(in srgb, var(--tg-c) 34%, var(--surface-1, #22272b));
+  transform: translate(-50%, -50%) scale(1.3);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--tg-c) 22%, transparent);
+}
+
 .pg-node-icon {
   display: grid;
   place-items: center;
