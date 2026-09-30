@@ -111,6 +111,24 @@ body.tp-page--gantt #ganttMount {
   color: var(--tp-primary);
   font-weight: 600;
 }
+.gantt-col-date {
+  margin-left: 4px;
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+/* Empty state (nothing matches the filters) */
+.gantt-empty-title {
+  margin-bottom: 12px;
+  font-weight: 600;
+  color: var(--tp-text);
+}
+.gantt-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
 .gantt-timeline-scroll {
   background: var(--tp-surface);
 }
@@ -150,4 +168,53 @@ body.tp-page--gantt #ganttMount {
   border: 1px solid var(--tp-border-strong, var(--tp-border));
   border-radius: 8px;
   box-shadow: 0 10px 30px rgba(9, 30, 66, 0.35);
+}
+
+/*
+ * Feedback floats over the grid instead of pushing it: the status line is a toast (bottom left) and
+ * the selection actions a bar (bottom centre), so ticking several rows or saving never shifts the
+ * rows under the pointer. The body keeps room under the bar so the last rows stay reachable.
+ */
+.gantt-status {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 45;
+  max-width: min(420px, calc(100% - 24px));
+  min-height: 0;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: var(--tp-surface);
+  box-shadow: inset 0 0 0 1px var(--tp-border), 0 4px 14px rgba(9, 30, 66, 0.25);
+  color: var(--tp-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gantt-status:empty {
+  display: none;
+}
+.gantt-status.is-error {
+  color: var(--tp-danger-text);
+  box-shadow: inset 0 0 0 1px var(--tp-danger-text), 0 4px 14px rgba(9, 30, 66, 0.25);
+}
+.gantt-bulk.is-visible {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 46;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--tp-surface);
+  box-shadow: inset 0 0 0 1px var(--tp-primary), 0 6px 20px rgba(9, 30, 66, 0.3);
+}
+.gantt-bulk.is-visible + .gantt-status {
+  bottom: 64px;
+}
+.gantt-bulk.is-visible ~ .gantt-body {
+  padding-bottom: 56px;
 }

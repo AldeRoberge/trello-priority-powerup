@@ -388,10 +388,12 @@
       loading: true,
       error: '',
       authHint: '',
+      restAuthorized: null, // null = not checked yet
       timelineWidth: MIN_TIMELINE_W,
       labelsWidth: readStoredLabelsWidth(),
       widthMeasured: false,
       pendingScrollLeft: null,
+      scrollToToday: true, // bring "now" into view after the next draw (load, view or period change)
       drag: null,
       paint: null,
       splitDrag: null,
@@ -496,10 +498,7 @@
           onOpenFilter: function () {
             openPanelButton(filterPanel);
           },
-          onCriteria: function (next) {
-            state.criteria = next;
-            onFiltersChanged();
-          },
+          onCriteria: applyCriteria,
           onOption: function (name, on) {
             state[name] = !!on;
             onFiltersChanged();
@@ -766,9 +765,17 @@
       });
     }
 
+    var statusTimer = null;
+    /** Status messages float over the grid as a toast: errors stay (click to retry), the rest fades. */
     function setStatus(msg, isError) {
+      clearTimeout(statusTimer);
       statusBar.textContent = msg || '';
       statusBar.classList.toggle('is-error', !!isError);
+      if (msg && !isError) {
+        statusTimer = setTimeout(function () {
+          statusBar.textContent = '';
+        }, 4000);
+      }
     }
 
     function range() {
@@ -858,19 +865,50 @@
       return edge;
     }
 
-    function visibleRows() {
-      var flat = model.flattenVisible(state.tree, state.expanded);
-      var filtered = model.filterRows(flat, {
+    function rowFilterOptions() {
+      return {
         hideCompleted: state.hideCompleted,
         hideUndated: state.hideUndated,
         hideBlocked: state.hideBlocked,
         criteria: state.criteria,
         meIds: meIds(),
-      });
+      };
+    }
+
+    function visibleRows() {
+      var flat = model.flattenVisible(state.tree, state.expanded);
+      var filtered = model.filterRows(flat, rowFilterOptions());
       if (typeof model.pruneEmptyStateSections === 'function') {
         return model.pruneEmptyStateSections(filtered, state.expanded);
       }
       return filtered;
+    }
+
+    /** Tasks a section shows once the filters apply (its header count follows them, like "7 / 8 tâches"). */
+    function sectionShownCount(section) {
+      return model.filterRows(section.children || [], rowFilterOptions()).length;
+    }
+
+    /** True when any filter or "Masqué …" option narrows the list. */
+    function filtersActive() {
+      return !!(
+        state.hideCompleted ||
+        state.hideBlocked ||
+        state.hideUndated ||
+        (typeof model.criteriaCount === 'function' && model.criteriaCount(state.criteria) > 0)
+      );
+    }
+
+    /**
+     * Criteria picked in the panel or the summary chips. Asking for a status that a "Masqué …" option
+     * hides would show nothing, so that option is lifted instead.
+     */
+    function applyCriteria(next) {
+      state.criteria = next;
+      var st = (next && next.statuses) || [];
+      if (st.indexOf('completed') !== -1) state.hideCompleted = false;
+      if (st.indexOf('blocked') !== -1) state.hideBlocked = false;
+      onFiltersChanged();
     }
 
     function renderToolbar() {
@@ -910,6 +948,7 @@
         btn.appendChild(document.createTextNode(spec.label));
         btn.addEventListener('click', function () {
           state.viewMode = spec.mode;
+          state.scrollToToday = true;
           render();
         });
         zoom.appendChild(btn);
@@ -925,11 +964,13 @@
         state.anchor = model.toIsoDate(
           model.shiftAnchor(state.viewMode, state.anchor, -1)
         );
+        state.scrollToToday = true;
         render();
       });
       var today = el('button', 'gantt-btn', { type: 'button', text: "Aujourd'hui" });
       today.addEventListener('click', function () {
         state.anchor = model.toIsoDate(new Date());
+        state.scrollToToday = true;
         render();
       });
       var next = el('button', 'gantt-btn', { type: 'button', text: '\u203a' });
@@ -938,6 +979,7 @@
         state.anchor = model.toIsoDate(
           model.shiftAnchor(state.viewMode, state.anchor, 1)
         );
+        state.scrollToToday = true;
         render();
       });
       nav.appendChild(prev);
@@ -961,8 +1003,17 @@
           year: 'numeric',
         });
       } else {
+        // "28 sept. \u2013 4 oct. 2026", like the French day / month titles (not raw ISO dates).
+        var sameYear = r.start.getFullYear() === r.end.getFullYear();
         title.textContent =
-          model.toIsoDate(r.start) + ' \u2192 ' + model.toIsoDate(r.end);
+          r.start.toLocaleDateString(
+            'fr-FR',
+            sameYear
+              ? { day: 'numeric', month: 'short' }
+              : { day: 'numeric', month: 'short', year: 'numeric' }
+          ) +
+          ' \u2013 ' +
+          r.end.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
       }
       toolbar.appendChild(title);
 
@@ -1010,10 +1061,7 @@
           getCriteria: function () {
             return state.criteria;
           },
-          setCriteria: function (c) {
-            state.criteria = c;
-            onFiltersChanged();
-          },
+          setCriteria: applyCriteria,
           getFacets: function () {
             return currentFacets();
           },
@@ -1035,11 +1083,14 @@
 
       filters = tbGroup('Outils');
       filters.classList.add('gantt-tb-group--tools');
-      var authBtn = makeIconBtn('gantt-btn gantt-btn--icon', 'ti-key', 'Autoriser Trello', function () {
+      // Only offered while Trello is not authorized (saving dates needs it); otherwise it is just clutter.
+      var authBtn = makeIconBtn('gantt-btn is-active', 'ti-key', 'Autoriser Trello', function () {
         ganttTrello.ensureRestAuthorized(t).then(function (res) {
           if (res && res.ok) {
             state.authHint = '';
+            state.restAuthorized = true;
             setStatus('');
+            renderToolbar();
           } else {
             setStatus(
               'Autorisation refus\u00e9e' +
@@ -1051,7 +1102,7 @@
       });
       authBtn.title =
         'Requis pour enregistrer les dates (glisser les barres)';
-      filters.appendChild(authBtn);
+      if (state.restAuthorized === false || state.authHint) filters.appendChild(authBtn);
 
       var outlookAuth = OA();
       var outlookSync = OS();
@@ -1323,6 +1374,21 @@
           );
           renderToolbar();
         });
+    }
+
+    /** Whether Trello REST is authorized (decides if the "Autoriser Trello" button is worth showing). */
+    function refreshRestAuthorized() {
+      var api = global.PriorityTrello;
+      if (!api || typeof api.isRestAuthorized !== 'function') return Promise.resolve(null);
+      return Promise.resolve(api.isRestAuthorized(t)).then(
+        function (ok) {
+          state.restAuthorized = !!ok;
+          return state.restAuthorized;
+        },
+        function () {
+          return null;
+        }
+      );
     }
 
     function refreshOutlookConnected() {
@@ -2169,15 +2235,17 @@
       renderChart();
     }
 
-    function confirmTrash(message, mouseEvent) {
+    /** `verb` names the destructive choice so the button matches the question (Archiver / Retirer le lien / Supprimer). */
+    function confirmTrash(message, mouseEvent, verb) {
       var confirmApi = TC();
+      verb = verb || 'Supprimer';
       if (confirmApi && typeof confirmApi.askActions === 'function') {
         return confirmApi.askActions(t, {
           title: message,
           mouseEvent: mouseEvent || null,
           actions: [
             { id: 'done', text: 'Marquer comme termin\u00e9' },
-            { id: 'delete', text: 'Supprimer' },
+            { id: 'delete', text: verb },
             { id: 'cancel', text: 'Annuler' },
           ],
         });
@@ -2185,9 +2253,9 @@
       if (confirmApi && typeof confirmApi.ask === 'function') {
         return confirmApi
           .ask(t, {
-            title: 'Supprimer',
+            title: verb,
             message: message,
-            confirmText: 'Supprimer',
+            confirmText: verb,
             cancelText: 'Annuler',
             confirmStyle: 'danger',
             mouseEvent: mouseEvent || null,
@@ -2235,19 +2303,48 @@
         });
     }
 
+    /** Wording for a bulk removal: board cards are archived, subtasks deleted, a mix is just "t\u00e2ches". */
+    function bulkRemoval(rows) {
+      var n = rows.length;
+      var roots = rows.filter(isBoardRootCard).length;
+      var plural = n > 1;
+      if (n && roots === n) {
+        return {
+          verb: 'Archiver',
+          icon: 'ti-archive',
+          doing: 'Archivage\u2026',
+          done: plural ? 'Cartes archiv\u00e9es' : 'Carte archiv\u00e9e',
+          question: 'Archiver ' + n + (plural ? ' cartes' : ' carte') + '\u00a0?',
+        };
+      }
+      var onlySubtasks = !roots && !rows.some(isLinkedCardRow);
+      return {
+        verb: 'Supprimer',
+        icon: 'ti-trash',
+        doing: 'Suppression\u2026',
+        done: onlySubtasks ? (plural ? 'Sous-t\u00e2ches supprim\u00e9es' : 'Sous-t\u00e2che supprim\u00e9e') : 'T\u00e2ches retir\u00e9es',
+        question:
+          (onlySubtasks ? 'Supprimer ' : 'Supprimer ou archiver ') +
+          n +
+          (onlySubtasks ? (plural ? ' sous-t\u00e2ches' : ' sous-t\u00e2che') : plural ? ' t\u00e2ches' : ' t\u00e2che') +
+          '\u00a0?',
+      };
+    }
+
     function runBulk(op, mouseEvent) {
       var rows = selectedRows().filter(canEditSubtask);
       if (!rows.length) {
-        setStatus('Aucune sous-t\u00e2che s\u00e9lectionn\u00e9e pour cette action', true);
+        setStatus('Aucune t\u00e2che modifiable dans la s\u00e9lection', true);
         return;
       }
       if (state.saving) return;
+      var removal = bulkRemoval(rows);
 
       var start = function () {
         state.saving = true;
         setStatus(
           op === 'delete'
-            ? 'Suppression\u2026'
+            ? removal.doing
             : op === 'done'
               ? 'Marquage termin\u00e9\u2026'
               : 'R\u00e9ouverture\u2026'
@@ -2282,10 +2379,10 @@
               else playGanttUiSound('uncomplete');
               setStatus(
                 op === 'delete'
-                  ? 'Sous-t\u00e2ches supprim\u00e9es'
+                  ? removal.done
                   : op === 'done'
-                    ? 'Sous-t\u00e2ches termin\u00e9es'
-                    : 'Sous-t\u00e2ches rouvertes'
+                    ? 'T\u00e2ches termin\u00e9es'
+                    : 'T\u00e2ches rouvertes'
               );
             }
             return reload();
@@ -2301,10 +2398,7 @@
       };
 
       if (op === 'delete') {
-        confirmTrash(
-          'Supprimer ' + rows.length + ' sous-t\u00e2che(s)\u00a0?',
-          mouseEvent
-        ).then(function (choice) {
+        confirmTrash(removal.question, mouseEvent, removal.verb).then(function (choice) {
           if (choice === 'done') {
             runBulk('done', mouseEvent);
             return;
@@ -2340,9 +2434,10 @@
       bulkBar.classList.add('is-visible');
       bulkBar.appendChild(
         el('span', 'gantt-bulk-count', {
-          text: n + ' s\u00e9lectionn\u00e9e(s)',
+          text: n + (n > 1 ? ' s\u00e9lectionn\u00e9es' : ' s\u00e9lectionn\u00e9e'),
         })
       );
+      var removal = bulkRemoval(selectedRows().filter(canEditSubtask));
 
       bulkBar.appendChild(
         makeIconBtn('gantt-btn', 'ti-circle-check', 'Terminer', function () {
@@ -2357,8 +2452,8 @@
       bulkBar.appendChild(
         makeIconBtn(
           'gantt-btn gantt-btn--danger',
-          'ti-trash',
-          'Supprimer',
+          removal.icon,
+          removal.verb,
           function (e) {
             runBulk('delete', e);
           }
@@ -2450,7 +2545,8 @@
         : isLinkedCardRow(row)
           ? 'Retirer le lien vers \u00ab\u00a0' + label + '\u00a0\u00bb\u00a0?'
           : 'Supprimer \u00ab\u00a0' + label + '\u00a0\u00bb\u00a0?';
-      confirmTrash(prompt, mouseEvent).then(function (choice) {
+      var verb = isBoardRootCard(row) ? 'Archiver' : isLinkedCardRow(row) ? 'Retirer le lien' : 'Supprimer';
+      confirmTrash(prompt, mouseEvent, verb).then(function (choice) {
         if (!choice || choice === 'cancel') return;
         if (choice === 'done') {
           markSubtaskDone(row);
@@ -2602,7 +2698,9 @@
             ? 'Retirer le lien'
             : 'Supprimer la sous-t\u00e2che',
       });
-      delBtn.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
+      // Same glyph as the Table: a board card is archived (recoverable), not trashed.
+      delBtn.innerHTML =
+        '<i class="ti ' + (isBoardRootCard(row) ? 'ti-archive' : 'ti-trash') + '" aria-hidden="true"></i>';
       if (!editable) {
         delBtn.disabled = true;
         delBtn.classList.add('is-disabled');
@@ -3213,6 +3311,35 @@
       }
     }
 
+    /** Nothing to draw: say why, and offer the way back (reveal what is hidden / reset the filters). */
+    function buildEmptyState() {
+      var box = el('div', 'gantt-empty');
+      if (!filtersActive()) {
+        box.textContent = 'Aucune tâche sur ce tableau.';
+        return box;
+      }
+      box.appendChild(el('div', 'gantt-empty-title', { text: 'Aucune tâche ne correspond aux filtres.' }));
+      var actions = el('div', 'gantt-empty-actions');
+      [
+        { flag: 'hideCompleted', label: 'Afficher les tâches terminées' },
+        { flag: 'hideBlocked', label: 'Afficher les tâches bloquées' },
+        { flag: 'hideUndated', label: 'Afficher les tâches sans date' },
+      ].forEach(function (spec) {
+        if (!state[spec.flag]) return;
+        var b = el('button', 'gantt-btn', { type: 'button', text: spec.label });
+        b.addEventListener('click', function () {
+          state[spec.flag] = false;
+          onFiltersChanged();
+        });
+        actions.appendChild(b);
+      });
+      var reset = el('button', 'gantt-btn is-active', { type: 'button', text: 'Tout réinitialiser' });
+      reset.addEventListener('click', resetAllFilters);
+      actions.appendChild(reset);
+      box.appendChild(actions);
+      return box;
+    }
+
     function renderChart() {
       var restoreLeft = state.pendingScrollLeft;
       state.pendingScrollLeft = null;
@@ -3380,7 +3507,26 @@
         if (col.relative === 'today') headClass += ' is-today';
         else if (col.relative === 'tomorrow') headClass += ' is-tomorrow';
         else if (col.relative === 'yesterday') headClass += ' is-yesterday';
-        var cell = el('div', headClass, { text: col.label });
+        // Month columns are ~30px wide: "Aujourd'hui" would be cut to "Au…", so they keep the day
+        // number (the tooltip and the highlight still say which one is today).
+        var cell = el('div', headClass, {
+          text:
+            state.viewMode === 'month' && col.start instanceof Date
+              ? String(col.start.getDate())
+              : col.label,
+        });
+        if (state.viewMode === 'week' && col.start instanceof Date) {
+          // "Lundi 28": the weekday alone does not say which date it is ("1 oct." on a month's first day).
+          var dom = col.start.getDate();
+          cell.appendChild(
+            el('span', 'gantt-col-date', {
+              text:
+                dom === 1 || col === r.columns[0]
+                  ? dom + ' ' + col.start.toLocaleDateString('fr-FR', { month: 'short' })
+                  : String(dom),
+            })
+          );
+        }
         if (
           state.viewMode === 'day' &&
           timeWarp &&
@@ -3412,6 +3558,7 @@
       // Today marker — placed at the current time within today's column.
       var now = new Date();
       var todayDate = model.startOfDay(now);
+      var todayLineX = null;
       if (
         todayDate.getTime() >= r.start.getTime() &&
         todayDate.getTime() <= r.end.getTime()
@@ -3420,6 +3567,7 @@
           typeof model.dateTimeToX === 'function'
             ? model.dateTimeToX(now, r, state.timelineWidth, mapOpts)
             : model.dateToX(todayDate, r, state.timelineWidth);
+        todayLineX = todayX;
         var marker = el('div', 'gantt-today-line');
         marker.style.left = todayX + 'px';
         marker.title =
@@ -3431,11 +3579,12 @@
         timelineCol.appendChild(marker);
       }
 
-      if (!rows.length) {
-        var empty = el('div', 'gantt-empty', {
-          text: 'Aucune t\u00e2che \u00e0 afficher.',
-        });
-        body.appendChild(empty);
+      // The three state sections always stay, so "no rows" means "no section header with a task".
+      var hasTaskRows = rows.some(function (r) {
+        return r && r.kind !== 'section';
+      });
+      if (!hasTaskRows) {
+        body.appendChild(buildEmptyState());
         return;
       }
 
@@ -3490,11 +3639,15 @@
           sectionCell.appendChild(sectionTwist);
           sectionCell.appendChild(sectionTitle);
           if (row.children && row.children.length) {
-            sectionCell.appendChild(
-              el('span', 'gantt-section-count', {
-                text: String(row.children.length),
-              })
-            );
+            var shownInSection = sectionShownCount(row);
+            var sectionCount = el('span', 'gantt-section-count', {
+              text: String(shownInSection),
+            });
+            if (shownInSection !== row.children.length) {
+              sectionCount.title =
+                shownInSection + ' affichée(s) sur ' + row.children.length + ' (filtres actifs)';
+            }
+            sectionCell.appendChild(sectionCount);
           }
           sectionLabelRow.appendChild(sectionCell);
           if (
@@ -3941,6 +4094,7 @@
       });
 
       requestAnimationFrame(function () {
+        if (!scroll.isConnected) return; // superseded by a newer render, which has its own frame
         if (restoreLeft != null && isFinite(restoreLeft)) {
           scroll.scrollLeft = restoreLeft;
         }
@@ -3948,8 +4102,19 @@
         var nextW = computeTimelineWidth(avail, state.viewMode, colCount);
         if (!state.widthMeasured || Math.abs(nextW - state.timelineWidth) > 2) {
           if (applyTimelineWidth(nextW, scroll.scrollLeft)) {
-            renderChart();
+            renderChart(); // width changed: the next pass (stable width) does the centering
+            return;
           }
+        }
+        if (state.scrollToToday) {
+          state.scrollToToday = false;
+          // Month / year views are wider than the pane: open on "now" (a bit left of centre so what
+          // comes next stays visible), or at the start of a period that does not contain today.
+          var overflows = state.timelineWidth > scroll.clientWidth + 8;
+          scroll.scrollLeft =
+            todayLineX == null || !overflows
+              ? 0
+              : Math.max(0, todayLineX - scroll.clientWidth * 0.3);
         }
       });
     }
@@ -3998,12 +4163,16 @@
             }
           }
           state.selected = still;
-          if (!quiet) setStatus(cards.length + (cards.length > 1 ? ' tâches' : ' tâche'));
+          // The summary bar already counts tasks ("7 / 8 tâches"); only clear "Chargement…".
+          if (!quiet) {
+            setStatus(global.GanttFilters ? '' : cards.length + (cards.length > 1 ? ' tâches' : ' tâche'));
+          }
           renderBulkBar();
           if (quiet) renderChart();
           else render();
           refreshFilterUi();
-          return refreshOutlookConnected().then(function (connected) {
+          return Promise.all([refreshOutlookConnected(), refreshRestAuthorized()]).then(function (res) {
+            var connected = res[0];
             renderToolbar();
             if (
               options.syncOutlook &&
@@ -4030,7 +4199,9 @@
       ganttTrello.ensureRestAuthorized(t).then(function (res) {
         if (res && res.ok) {
           state.authHint = '';
+          state.restAuthorized = true;
           setStatus('');
+          renderToolbar();
         }
       });
     });
