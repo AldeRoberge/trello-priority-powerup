@@ -837,3 +837,25 @@ body.tb-resizing {
   cursor: pointer;
   text-decoration: underline;
 }
+
+/* Frozen title column: with many columns the Objet stays next to the row gutter while the rest
+   scrolls, so a row never loses its name. The hover tint is translucent, so it is layered over an
+   opaque surface instead of replacing it (otherwise scrolled content shows through). Only when
+   there is room: on a narrow modal a 380px frozen column would leave no space for the rest. */
+@media (min-width: 900px) {
+  .tb-grid td.tb-cell--name {
+    position: sticky;
+    left: 96px;
+    z-index: 3;
+    background: var(--tp-surface);
+    box-shadow: 1px 0 0 var(--tp-border);
+  }
+  .tb-grid th[data-key='name'] {
+    left: 96px;
+    z-index: 6; /* above the other headers, which would otherwise paint over its right half */
+    box-shadow: 1px 0 0 var(--tp-border);
+  }
+  .tb-grid tbody tr:hover td.tb-cell--name {
+    background: linear-gradient(var(--tp-surface-hover), var(--tp-surface-hover)), var(--tp-surface);
+  }
+}

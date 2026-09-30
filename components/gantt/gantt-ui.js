@@ -4111,8 +4111,9 @@
           // Month / year views are wider than the pane: open on "now" (a bit left of centre so what
           // comes next stays visible), or at the start of a period that does not contain today.
           var overflows = state.timelineWidth > scroll.clientWidth + 8;
+          var inViewAtStart = todayLineX != null && todayLineX < scroll.clientWidth - 24;
           scroll.scrollLeft =
-            todayLineX == null || !overflows
+            todayLineX == null || !overflows || inViewAtStart
               ? 0
               : Math.max(0, todayLineX - scroll.clientWidth * 0.3);
         }

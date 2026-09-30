@@ -748,6 +748,7 @@
       }
 
       if (key === 'name') {
+        td.classList.add('tb-cell--name'); // frozen next to the row gutter (see table-ui.css)
         td.title = row.name;
         td.appendChild(h('span', { class: 'tb-name', text: row.name }));
         td.addEventListener('click', function () {
