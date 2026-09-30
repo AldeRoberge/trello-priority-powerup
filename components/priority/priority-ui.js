@@ -1667,6 +1667,14 @@
   function routeTeamLink(a, b) {
     var x1, y1, x2, y2, c1x, c1y, c2x, c2y;
     var arc = false;
+    if (a.manual || b.manual) {
+      // Hand-placed nodes: pick the side from where the other node actually is.
+      var gx = b.x + b.w / 2 - (a.x + a.w / 2);
+      var gy = b.y + b.h / 2 - (a.y + a.h / 2);
+      var vertical = Math.abs(gy) > Math.abs(gx) * 0.8;
+      a = Object.assign({}, a, { row: 0, col: vertical ? 0 : gx >= 0 ? 0 : 1 });
+      b = Object.assign({}, b, { row: vertical ? (gy >= 0 ? 1 : -1) : 0, col: vertical ? 0 : gx >= 0 ? 1 : 0 });
+    }
     if (a.row !== b.row) {
       var down = a.row < b.row;
       x1 = a.x + a.w / 2;
@@ -15820,7 +15828,7 @@
       var shifted = Object.create(null);
       Object.keys(layout.nodes).forEach(function (id) {
         var b = layout.nodes[id];
-        shifted[id] = { x: b.x + TG_PAD, y: b.y + padTop, w: b.w, h: b.h, row: b.row, col: b.col };
+        shifted[id] = { x: b.x + TG_PAD, y: b.y + padTop, w: b.w, h: b.h, row: b.row, col: b.col, manual: !!tgPositions[id] };
       });
       tgLayout = { nodes: shifted, width: stageW, height: stageH };
 
