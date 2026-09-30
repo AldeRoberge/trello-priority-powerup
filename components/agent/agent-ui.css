@@ -4932,3 +4932,142 @@ html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-value.is-bad {
   font-size: 10px;
   line-height: 1.5;
 }
+
+/* ── Answer chips: one neutral, left-aligned style (no per-choice colours) ── */
+.tp-page--priority .agent-suggestions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+html .tp-page--priority .agent-suggestion-chip {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--agent-edge) !important;
+  border-style: solid !important;
+  border-radius: var(--agent-radius);
+  background: var(--agent-surface) !important;
+  color: var(--tp-text) !important;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+html .tp-page--priority .agent-suggestion-chip:hover:not(:disabled) {
+  background: var(--agent-surface-hover) !important;
+  border-color: var(--tp-border-strong) !important;
+}
+
+html .tp-page--priority .agent-suggestion-chip.is-selected {
+  border-color: var(--tp-text) !important;
+  background: var(--agent-surface-hover) !important;
+}
+
+.tp-page--priority .agent-suggestion-chip-icon {
+  color: var(--tp-text-muted);
+}
+
+.tp-page--priority .agent-suggestion-chip-label {
+  flex: 1 1 auto;
+  text-align: left;
+}
+
+/* Shortcut badge sits at the far left, fixed width so labels line up */
+.tp-page--priority .agent-suggestion-num {
+  min-width: 26px;
+  margin-right: 0;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+
+/* ── Send: icon-only square, same height as a single-line input ── */
+.tp-page--priority .tp-button.agent-send-btn {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  gap: 4px;
+}
+
+.tp-page--priority .tp-button.agent-send-btn.is-confirming {
+  width: auto;
+  padding: 0 12px;
+}
+
+.tp-page--priority .agent-send-btn-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.tp-page--priority .agent-send-btn-icon {
+  font-size: 18px;
+}
+
+/* ── Footer: mode pill left, setup-skip link right ── */
+.tp-page--priority .agent-composer-foot .agent-interview-bar {
+  margin: 0 0 0 auto;
+}
+
+.tp-page--priority .agent-interview-skip {
+  width: auto;
+  height: 26px;
+  padding: 0 10px;
+  gap: 6px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.tp-page--priority .agent-interview-skip .ti {
+  font-size: 14px;
+}
+
+/* ── Stats: one quiet summary line; details on demand ── */
+.tp-page--priority .agent-chat-info {
+  padding: 2px 2px 0;
+}
+
+.tp-page--priority .agent-chat-stats {
+  opacity: 1;
+  color: var(--tp-text-muted);
+}
+
+.tp-page--priority .agent-chat-stats .is-summary .agent-chat-stats-value {
+  color: var(--tp-text-muted);
+  font-weight: 500;
+}
+
+.tp-page--priority .agent-info-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  cursor: pointer;
+}
+
+.tp-page--priority .agent-info-toggle:hover,
+.tp-page--priority .agent-info-toggle.is-open {
+  background: var(--agent-surface);
+  color: var(--tp-text);
+}
+
+.tp-page--priority .agent-info-toggle .ti {
+  font-size: 15px;
+  line-height: 1;
+}

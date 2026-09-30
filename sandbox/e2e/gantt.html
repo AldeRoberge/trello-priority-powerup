@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr" data-color-mode="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gantt visual harness (mock Trello)</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="/components/shared/trello-theme.css" />
+  <link rel="stylesheet" href="/components/shared/context-menu.css" />
+  <link rel="stylesheet" href="/components/priority/priority-ui.css" />
+  <link rel="stylesheet" href="/components/gantt/gantt-ui.css" />
+  <link rel="stylesheet" href="/components/gantt/gantt-filters.css" />
+  <link rel="stylesheet" href="/components/shared/view-tabs.css" />
+  <link rel="stylesheet" href="/components/shared/card-fields.css" />
+  <link rel="stylesheet" href="/components/gantt/gantt-table-look.css" />
+</head>
+<body class="tp-page tp-page--gantt">
+  <div id="viewTabs"></div>
+  <div id="ganttMount"></div>
+  <script src="/components/shared/brand.js"></script>
+  <script src="/components/shared/rest-config.js"></script>
+  <script src="/components/shared/debug-log.js"></script>
+  <script src="/components/shared/context-menu.js"></script>
+  <script src="/components/shared/desc-meta.js"></script>
+  <script src="/components/priority/priority-matrix.js"></script>
+  <script src="/components/priority/priority-ui.js"></script>
+  <script src="/components/priority/priority-trello.js"></script>
+  <script src="/components/statut/statut-match.js"></script>
+  <script src="/components/completion/completion-trello.js"></script>
+  <script src="/components/completion/completion-ui.js"></script>
+  <script src="/components/gantt/gantt-model.js"></script>
+  <script src="/components/gantt/gantt-trello.js"></script>
+  <script src="/components/shared/view-tabs.js"></script>
+  <script src="/components/shared/card-fields.js"></script>
+  <script src="/components/gantt/gantt-filters.js"></script>
+  <script src="/components/gantt/gantt-ui.js"></script>
+  <script>
+    // ---- mock Trello data (no network) ----
+    var ME = { id: 'm-me', fullName: 'Alexandre Roberge', initials: 'AR' };
+    var ANA = { id: 'm-ana', fullName: 'Ana Lopez', initials: 'AL' };
+    var CY = { id: 'm-cy', fullName: 'Cyril Dupont', initials: 'CD' };
+    function rec(o) {
+      return Object.assign({ dueComplete: false, subtaskCount: 0, items: [], progress: 0,
+        priorityEnabled: true, blocked: false, assignees: [], labels: [], listId: 'l1', listName: 'À faire' }, o);
+    }
+    function ppl(list) {
+      return GanttTrello.buildAssignees(list, []);
+    }
+    var records = [
+      rec({ id: 'c1', name: 'Préparer la réunion de lancement', category: 'unstarted', color: '#626f86', startDate: '2026-09-28', dueDate: '2026-09-30', priorityTierI: 1, priorityLabel: 'Critique', priorityFill: '#f87168', priorityRankTier: 1, priorityRankScore: 9, assignees: ppl([ME, ANA]), labels: [{ id: 'lb1', name: 'Urgent', color: 'red' }] }),
+      rec({ id: 'c2', name: 'Refonte du tableau de bord', category: 'started', color: '#1d7afc', listId: 'l2', listName: 'En cours', startDate: '2026-09-29', dueDate: '2026-10-03', progress: 45, priorityTierI: 3, priorityLabel: 'Importante', priorityFill: '#f5cd47', priorityRankTier: 3, priorityRankScore: 5, assignees: ppl([ME]), labels: [{ id: 'lb2', name: 'Design', color: 'purple' }] }),
+      rec({ id: 'c3', name: 'Publier la version 2', category: 'started', color: '#1d7afc', listId: 'l2', listName: 'En cours', startDate: '2026-09-30', dueDate: '2026-10-02', progress: 70, priorityTierI: 1, priorityLabel: 'Critique', priorityFill: '#f87168', priorityRankTier: 1, priorityRankScore: 8, assignees: ppl([ANA]) }),
+      rec({ id: 'c4', name: 'Archiver les anciennes cartes', category: 'unstarted', color: '#626f86', priorityRankTier: 100, priorityEnabled: false }),
+      rec({ id: 'c5', name: 'Rédiger la documentation', category: 'unstarted', color: '#626f86', startDate: '2026-10-01', dueDate: '2026-10-06', priorityTierI: 4, priorityLabel: 'Flexible', priorityFill: '#4bce97', priorityRankTier: 4, priorityRankScore: 3, assignees: ppl([CY]), labels: [{ id: 'lb2', name: 'Design', color: 'purple' }] }),
+      rec({ id: 'c6', name: 'Valider le budget', category: 'blocked', blocked: true, color: '#c9372c', startDate: '2026-09-26', dueDate: '2026-09-27', duePast: true, priorityTierI: 2, priorityLabel: 'Prioritaire', priorityFill: '#f38a3f', priorityRankTier: 2, priorityRankScore: 6, assignees: ppl([ME, CY]) }),
+      rec({ id: 'c7', name: 'Ancien chantier terminé', category: 'completed', dueComplete: true, color: '#22a06b', progress: 100, startDate: '2026-09-20', dueDate: '2026-09-22', assignees: ppl([ME]) }),
+      rec({ id: 'c8', name: 'Former les nouveaux venus', category: 'started', color: '#1d7afc', listId: 'l2', listName: 'En cours', startDate: '2026-10-02', dueDate: '2026-10-05', progress: 20, priorityTierI: 3, priorityLabel: 'Importante', priorityFill: '#f5cd47', priorityRankTier: 3, priorityRankScore: 4, assignees: ppl([ANA, CY]) }),
+    ];
+    GanttTrello.loadBoard = function () {
+      return Promise.resolve({
+        lists: [], cards: records, tree: GanttModel.buildNestTree(records), me: ME,
+        settings: null, ganttSettings: { dayStart: '08:15', dayEnd: '16:45' },
+      });
+    };
+    GanttTrello.ensureRestAuthorized = function () { return Promise.resolve({ ok: true }); };
+    var t = {
+      get: function () { return Promise.resolve(null); },
+      set: function () { return Promise.resolve(); },
+      board: function () { return Promise.resolve({ id: 'b1' }); },
+      render: function (fn) { fn(); },
+      sizeTo: function () {},
+    };
+    ViewTabs.mount(document.getElementById('viewTabs'), { active: 'gantt' });
+    window.__gantt = GanttUI.mountGantt(document.getElementById('ganttMount'), t);
+  </script>
+</body>
+</html>

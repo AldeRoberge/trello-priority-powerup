@@ -30,7 +30,7 @@
   function $$(sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
   function key(k, opts) {
     document.body.dispatchEvent(
-      new KeyboardEvent('keydown', Object.assign({ key: k, code: 'Digit' + k, bubbles: true, cancelable: true }, opts || {}))
+      new KeyboardEvent('keydown', Object.assign({ key: k, code: 'Digit' + k, shiftKey: true, bubbles: true, cancelable: true }, opts || {}))
     );
   }
   function userTexts() {
@@ -95,6 +95,21 @@
     assert(r1 === r2, 'input and send radius match (' + r1 + ' vs ' + r2 + ')');
   });
 
+  test('layout: send is an icon-only square', async function () {
+    var b = $('.agent-send-btn').getBoundingClientRect();
+    assert(Math.abs(b.width - b.height) <= 1, 'square (' + b.width + 'x' + b.height + ')');
+    var label = $('.agent-send-btn-label').getBoundingClientRect();
+    assert(label.width <= 1, 'label visually hidden');
+    assert($('.agent-send-btn').getAttribute('aria-label') === 'Envoyer', 'still labelled for screen readers');
+  });
+
+  test('layout: stats are collapsed by default with a toggle', async function () {
+    var toggle = $('.agent-info-toggle');
+    assert(toggle, 'info toggle exists');
+    assert(toggle.getAttribute('aria-expanded') === 'false', 'collapsed by default');
+    assert(!$('.agent-chat-stats .agent-chat-stats-label'), 'no detail labels while collapsed');
+  });
+
   test('a message gets a reply', async function () {
     typeAndSend('Bonjour assistant');
     await settle();
@@ -110,30 +125,32 @@
       return c.length === 3 && c;
     }, '3 chips');
     var nums = chips.map(function (c) { return (c.querySelector('.agent-suggestion-num') || {}).textContent; });
-    assert(nums.join(',') === '1,2,3', 'badges ' + nums.join(','));
+    assert(nums.join(',') === '\u21e71,\u21e72,\u21e73', 'badges ' + nums.join(','));
     key('2');
     await waitFor(function () { return userTexts().indexOf('Bravo') !== -1; }, 'Bravo sent');
     await settle();
   });
 
-  test('digit is ignored while typing a message in the composer', async function () {
+  test('shortcuts need Shift: a bare digit never picks a chip, and Shift+digit is ignored while typing', async function () {
     typeAndSend('[chips] encore');
     await settle();
     await waitFor(function () { return $$('.agent-suggestion-chip').length === 3; }, 'chips');
+    key('1', { shiftKey: false });
+    await sleep(200);
+    assert(userTexts().indexOf('Alpha') === -1, 'bare 1 must not send Alpha');
     var input = $('.agent-composer-input');
     input.value = 'du texte';
     input.focus();
     input.dispatchEvent(
-      new KeyboardEvent('keydown', { key: '1', code: 'Digit1', bubbles: true, cancelable: true })
+      new KeyboardEvent('keydown', { key: '!', code: 'Digit1', shiftKey: true, bubbles: true, cancelable: true })
     );
     await sleep(200);
-    assert(userTexts().indexOf('Alpha') === -1, 'Alpha must not be sent');
+    assert(userTexts().indexOf('Alpha') === -1, 'Shift+1 while typing must not send Alpha');
     input.value = '';
-    // Alt+digit always works, even from the composer
     input.dispatchEvent(
-      new KeyboardEvent('keydown', { key: '3', code: 'Digit3', altKey: true, bubbles: true, cancelable: true })
+      new KeyboardEvent('keydown', { key: '#', code: 'Digit3', shiftKey: true, bubbles: true, cancelable: true })
     );
-    await waitFor(function () { return userTexts().indexOf('Charlie') !== -1; }, 'Charlie via Alt+3');
+    await waitFor(function () { return userTexts().indexOf('Charlie') !== -1; }, 'Charlie via Shift+3 from empty composer');
     await settle();
   });
 
@@ -218,6 +235,24 @@
     await settle();
   });
 
+  test('chips are neutral (same colour whatever the AI asked) and left-aligned', async function () {
+    typeAndSend('[chips] neutre');
+    await settle();
+    var chips = await waitFor(function () {
+      var c = $$('.agent-suggestion-chip');
+      return c.length === 3 && c;
+    }, 'chips');
+    var cs = chips.map(function (c) { return getComputedStyle(c); });
+    assert(cs.every(function (c) { return c.backgroundColor === cs[0].backgroundColor; }), 'same background');
+    assert(cs.every(function (c) { return c.borderTopColor === cs[0].borderTopColor; }), 'same border colour');
+    assert(cs.every(function (c) { return c.justifyContent === 'flex-start'; }), 'left aligned');
+    var xs = chips.map(function (c) { return c.querySelector('.agent-suggestion-num').getBoundingClientRect().left; });
+    assert(xs.every(function (x) { return Math.abs(x - xs[0]) < 1; }), 'badges line up');
+    key('1');
+    await waitFor(function () { return userTexts().indexOf('Alpha') !== -1; }, 'Alpha sent');
+    await settle();
+  });
+
   test('no console errors were raised', async function () {
     assert(!window.__errors.length, 'errors: ' + window.__errors.join(' | '));
   });
@@ -239,6 +274,11 @@
     } catch (err) {
       log('FAIL mount: ' + err.message);
       log('E2E DONE pass=0 fail=1');
+      return;
+    }
+    // ?manual → just mount the panel (for looking at it / poking by hand)
+    if (/[?&]manual\b/.test(location.search)) {
+      report.textContent = 'manual mode';
       return;
     }
     for (var i = 0; i < tests.length; i++) {

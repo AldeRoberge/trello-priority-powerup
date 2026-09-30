@@ -24,7 +24,14 @@
       suggestions: [],
       followUps: []
     };
-    if (/\[chips\]/.test(text)) out.suggestions = ['Alpha', 'Bravo', 'Charlie'];
+    if (/\[chips\]/.test(text)) {
+      // Coloured on purpose: the UI must render them neutrally anyway.
+      out.suggestions = [
+        { text: 'Alpha', color: 'teal', icon: 'plus' },
+        { text: 'Bravo', color: 'blue' },
+        { text: 'Charlie', color: 'red' }
+      ];
+    }
     if (/\[multi\]/.test(text)) {
       out.suggestions = ['Alpha', 'Bravo', 'Charlie'];
       out.suggestionsMulti = true;

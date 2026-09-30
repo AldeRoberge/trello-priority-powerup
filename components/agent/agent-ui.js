@@ -1273,8 +1273,11 @@
     var interviewSkipIcon = el('i', 'ti ti-x');
     interviewSkipIcon.setAttribute('aria-hidden', 'true');
     interviewSkipBtn.appendChild(interviewSkipIcon);
+    interviewSkipBtn.appendChild(
+      el('span', 'agent-interview-skip-label', { text: 'Passer la configuration' })
+    );
     interviewBar.appendChild(interviewSkipBtn);
-    chatPanel.appendChild(interviewBar);
+    composerFoot.appendChild(interviewBar);
 
     var applySection = el('div', 'agent-apply-suggestions');
     applySection.hidden = true;
@@ -1311,6 +1314,27 @@
       'aria-label': 'Statistiques de la conversation'
     });
     infoHead.appendChild(statsEl);
+
+    var infoExpanded = false;
+    var infoToggleBtn = el('button', 'agent-info-toggle', {
+      type: 'button',
+      'aria-label': 'Afficher les détails',
+      title: 'Détails',
+      'aria-expanded': 'false'
+    });
+    var infoToggleIcon = el('i', 'ti ti-chevron-down');
+    infoToggleIcon.setAttribute('aria-hidden', 'true');
+    infoToggleBtn.appendChild(infoToggleIcon);
+    infoToggleBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      infoExpanded = !infoExpanded;
+      infoToggleBtn.setAttribute('aria-expanded', infoExpanded ? 'true' : 'false');
+      infoToggleBtn.classList.toggle('is-open', infoExpanded);
+      infoToggleIcon.className = 'ti ' + (infoExpanded ? 'ti-chevron-up' : 'ti-chevron-down');
+      statsEl.classList.toggle('is-expanded', infoExpanded);
+      renderChatStats();
+    });
+    infoHead.appendChild(infoToggleBtn);
 
     var debugBtn = el('button', 'agent-debug-btn', {
       type: 'button',
@@ -1913,6 +1937,22 @@
           row.appendChild(cell);
         });
         statsEl.appendChild(row);
+      }
+
+      if (!infoExpanded) {
+        if (usage && sessionStats.turns >= 1) {
+          addRow('is-summary', [
+            { value: formatTokenCount(sessionStats.totalTokens) + ' tokens' },
+            { value: '≈' + formatCostUsd(sessionStats.costUsd) },
+            {
+              value:
+                sessionStats.turns + ' tour' + (sessionStats.turns > 1 ? 's' : ''),
+              title: 'Totaux de cette conversation'
+            }
+          ]);
+        }
+        notifyLayout();
+        return;
       }
 
       if (!usage || sessionStats.turns < 1) {
@@ -7525,10 +7565,12 @@
     function fillSuggestionChip(chip, item, index) {
       chip.replaceChildren();
       if (index < 9) {
-        var num = el('kbd', 'agent-suggestion-num', { text: String(index + 1) });
+        var num = el('kbd', 'agent-suggestion-num', {
+          text: '⇧' + String(index + 1)
+        });
         num.setAttribute('aria-hidden', 'true');
         chip.appendChild(num);
-        chip.setAttribute('aria-keyshortcuts', String(index + 1));
+        chip.setAttribute('aria-keyshortcuts', 'Shift+' + String(index + 1));
       }
       var iconHtml = item.icon ? suggestionIconMarkup(item.icon) : '';
       if (iconHtml) {
@@ -9344,23 +9386,23 @@
     }
 
     /**
-     * Number keys pick answer chips: 1 → first chip, 2 → second… Multi-select
-     * chips toggle (the 5 s countdown restarts, so more can be added); single
-     * chips send. Bare digits only fire when the composer is empty (or focus is
-     * outside any field); Alt+digit always fires.
+     * Shift+number picks answer chips: Shift+1 → first chip, Shift+2 → second…
+     * (a modifier, so stray digit presses never fire). Multi-select chips toggle
+     * (the 5 s countdown restarts, so more can be added); single chips send.
+     * Fires from an empty composer or when focus is outside any field.
      */
     document.addEventListener('keydown', function (e) {
-      if (e.ctrlKey || e.metaKey || e.shiftKey) return;
-      if (!/^[1-9]$/.test(e.key) && !/^Digit[1-9]$/.test(e.code || '')) return;
+      if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+      var codeMatch = /^Digit([1-9])$/.exec(e.code || '');
+      if (!codeMatch) return;
       if (!section.isConnected || suggestionsEl.hidden || pending) return;
-      var digit = /^[1-9]$/.test(e.key) ? e.key : String(e.code).slice(5);
+      var digit = codeMatch[1];
       var tgt = e.target;
       var inField =
         tgt &&
         (/^(INPUT|TEXTAREA|SELECT)$/.test(tgt.tagName) || tgt.isContentEditable);
-      if (inField && !e.altKey) {
-        if (tgt !== input || (input.value || '').length) return;
-      }
+      // Shift+digit types ! @ # … — only intercept from an empty composer.
+      if (inField && (tgt !== input || (input.value || '').length)) return;
       var chips = suggestionsEl.querySelectorAll('.agent-suggestion-chip');
       var chip = chips[Number(digit) - 1];
       if (!chip || chip.disabled) return;
