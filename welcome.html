@@ -24,7 +24,7 @@
     <div class="tp-step">
       <div class="tp-step-num">1</div>
       <div class="tp-step-body">
-        <strong id="welcomeStep1Title">Trello Cerveau</strong>
+        <strong>Noter une carte</strong>
         <p id="welcomeStep1Body">Ouvrez une carte — <strong>Trello Cerveau</strong> s’ouvre automatiquement. Ajustez les trois curseurs ou touchez un palier sur la barre de chaleur.</p>
       </div>
     </div>
@@ -72,8 +72,6 @@
       }
       var subtitleEl = document.getElementById('brandSubtitle');
       if (subtitleEl && brand && brand.subtitle) subtitleEl.textContent = brand.subtitle;
-      var stepTitle = document.getElementById('welcomeStep1Title');
-      if (stepTitle) stepTitle.textContent = name;
       var stepBody = document.getElementById('welcomeStep1Body');
       if (stepBody) {
         stepBody.innerHTML =

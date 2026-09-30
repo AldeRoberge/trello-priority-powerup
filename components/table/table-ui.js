@@ -558,6 +558,20 @@
         body.appendChild(tr);
       });
 
+      if (!rows.length && state.filter) {
+        body.appendChild(
+          h('tr', { class: 'tb-empty-row' }, [
+            h('td', { colspan: String(state.columns.length + 1) }, [
+              'Aucune carte ne correspond à « ' + state.filter + ' ». ',
+              h('button', {
+                class: 'tb-empty-clear',
+                type: 'button',
+                onclick: function () { state.filter = ''; renderBar(); renderGrid(); },
+              }, ['Effacer le filtre']),
+            ]),
+          ])
+        );
+      }
       var addInput = h('input', {
         class: 'tb-add',
         id: 'tbAdd',

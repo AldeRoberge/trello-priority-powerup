@@ -10723,7 +10723,7 @@
       gaps.push(
         'statut Terminé alors que ' +
           pendingItems.length +
-          ' sous-tâche(s) restent ouvertes'
+          (pendingItems.length > 1 ? ' sous-tâches restent ouvertes' : ' sous-tâche reste ouverte')
       );
     }
     if (!due || !due.enabled || !due.dueDate) {

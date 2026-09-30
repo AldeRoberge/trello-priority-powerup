@@ -1343,6 +1343,13 @@ html[data-color-mode="dark"] .tp-color-scheme-option.is-active {
   color: var(--tp-text-subtle);
 }
 
+.tp-step-body p strong {
+  display: inline;
+  font-size: inherit;
+  margin-bottom: 0;
+  color: var(--tp-text);
+}
+
 .tp-muted { color: var(--tp-text-muted); font-size: 14px; }
 
 /* Landing page (standalone) */

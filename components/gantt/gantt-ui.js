@@ -3998,7 +3998,7 @@
             }
           }
           state.selected = still;
-          if (!quiet) setStatus(cards.length + ' carte(s)');
+          if (!quiet) setStatus(cards.length + (cards.length > 1 ? ' tâches' : ' tâche'));
           renderBulkBar();
           if (quiet) renderChart();
           else render();

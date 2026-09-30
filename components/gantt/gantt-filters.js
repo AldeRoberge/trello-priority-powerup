@@ -1123,7 +1123,9 @@
       count.appendChild(icon('ti-list-details'));
       count.appendChild(
         document.createTextNode(
-          filtered ? counts.shown + ' / ' + counts.total + ' tâches' : counts.total + ' tâche(s)'
+          filtered
+            ? counts.shown + ' / ' + counts.total + ' tâches'
+            : counts.total + (counts.total > 1 ? ' tâches' : ' tâche')
         )
       );
       count.addEventListener('click', opts.onOpenFilter);
