@@ -24,6 +24,17 @@
     hideBlocked: false,
     sortBy: 'date',
     sortDir: 'asc',
+    sortKeys: [{ by: 'date', dir: 'asc' }],
+    groupByStatus: true,
+    criteria: {
+      query: '',
+      statuses: [],
+      assignees: [],
+      priorities: [],
+      lists: [],
+      labels: [],
+      due: [],
+    },
   };
   // Minimum header-column width per zoom mode. When the viewport is narrower,
   // the timeline grows past the scrollport so columns stay readable.
@@ -122,14 +133,50 @@
     return sortBy === 'progress' || sortBy === 'subtasks' ? 'desc' : 'asc';
   }
 
-  function readStoredFilters() {
-    var out = {
+  function normalizeSortKeysUi(raw) {
+    var model = GM();
+    if (model && typeof model.normalizeSortKeys === 'function') {
+      return model.normalizeSortKeys(raw);
+    }
+    return [{ by: 'date', dir: 'asc' }];
+  }
+
+  function normalizeCriteriaUi(raw) {
+    var model = GM();
+    if (model && typeof model.normalizeCriteria === 'function') {
+      return model.normalizeCriteria(raw);
+    }
+    return {
+      query: '',
+      statuses: [],
+      assignees: [],
+      priorities: [],
+      lists: [],
+      labels: [],
+      due: [],
+    };
+  }
+
+  function defaultFilters() {
+    return {
       hideCompleted: DEFAULT_FILTERS.hideCompleted,
       hideUndated: DEFAULT_FILTERS.hideUndated,
       hideBlocked: DEFAULT_FILTERS.hideBlocked,
       sortBy: DEFAULT_FILTERS.sortBy,
       sortDir: DEFAULT_FILTERS.sortDir,
+      sortKeys: normalizeSortKeysUi(DEFAULT_FILTERS.sortKeys),
+      groupByStatus: DEFAULT_FILTERS.groupByStatus,
+      criteria: normalizeCriteriaUi(DEFAULT_FILTERS.criteria),
     };
+  }
+
+  /**
+   * Stored preferences. `sortBy` / `sortDir` mirror the first sort level (older
+   * saves only had those); `sortKeys` is the full multi-level sort. The search
+   * text is never restored so the chart does not open mysteriously filtered.
+   */
+  function readStoredFilters() {
+    var out = defaultFilters();
     try {
       var raw =
         global.localStorage && global.localStorage.getItem(FILTERS_STORAGE_KEY);
@@ -145,23 +192,38 @@
       if (typeof parsed.hideBlocked === 'boolean') {
         out.hideBlocked = parsed.hideBlocked;
       }
-      if (typeof parsed.sortBy === 'string') {
-        out.sortBy = normalizeSortBy(parsed.sortBy);
+      if (typeof parsed.groupByStatus === 'boolean') {
+        out.groupByStatus = parsed.groupByStatus;
       }
-      if (typeof parsed.sortDir === 'string') {
-        out.sortDir = normalizeSortDir(parsed.sortDir, out.sortBy);
-      } else {
-        out.sortDir = normalizeSortDir(null, out.sortBy);
+      if (Array.isArray(parsed.sortKeys) && parsed.sortKeys.length) {
+        out.sortKeys = normalizeSortKeysUi(parsed.sortKeys);
+      } else if (typeof parsed.sortBy === 'string') {
+        var by = normalizeSortBy(parsed.sortBy);
+        out.sortKeys = [{ by: by, dir: normalizeSortDir(parsed.sortDir, by) }];
+      }
+      out.sortBy = out.sortKeys[0].by;
+      out.sortDir = out.sortKeys[0].dir;
+      if (parsed.criteria && typeof parsed.criteria === 'object') {
+        out.criteria = normalizeCriteriaUi(parsed.criteria);
+        out.criteria.query = '';
       }
     } catch (e) {
-      /* ignore */
+      return defaultFilters();
     }
     return out;
   }
 
   function storeFilters(filters) {
     filters = filters || {};
-    var sortBy = normalizeSortBy(filters.sortBy);
+    var sortKeys;
+    if (Array.isArray(filters.sortKeys) && filters.sortKeys.length) {
+      sortKeys = normalizeSortKeysUi(filters.sortKeys);
+    } else {
+      var by = normalizeSortBy(filters.sortBy);
+      sortKeys = [{ by: by, dir: normalizeSortDir(filters.sortDir, by) }];
+    }
+    var criteria = normalizeCriteriaUi(filters.criteria);
+    criteria.query = '';
     var payload = {
       hideCompleted:
         typeof filters.hideCompleted === 'boolean'
@@ -175,8 +237,14 @@
         typeof filters.hideBlocked === 'boolean'
           ? filters.hideBlocked
           : DEFAULT_FILTERS.hideBlocked,
-      sortBy: sortBy,
-      sortDir: normalizeSortDir(filters.sortDir, sortBy),
+      sortBy: sortKeys[0].by,
+      sortDir: sortKeys[0].dir,
+      sortKeys: sortKeys,
+      groupByStatus:
+        typeof filters.groupByStatus === 'boolean'
+          ? filters.groupByStatus
+          : DEFAULT_FILTERS.groupByStatus,
+      criteria: criteria,
     };
     try {
       if (global.localStorage) {
@@ -312,8 +380,11 @@
       hideCompleted: storedFilters.hideCompleted,
       hideUndated: storedFilters.hideUndated,
       hideBlocked: storedFilters.hideBlocked,
-      sortBy: storedFilters.sortBy,
-      sortDir: storedFilters.sortDir,
+      sortKeys: storedFilters.sortKeys,
+      groupByStatus: storedFilters.groupByStatus,
+      criteria: storedFilters.criteria,
+      me: null,
+      facets: null,
       loading: true,
       error: '',
       authHint: '',
@@ -347,9 +418,133 @@
         hideCompleted: state.hideCompleted,
         hideUndated: state.hideUndated,
         hideBlocked: state.hideBlocked,
-        sortBy: state.sortBy,
-        sortDir: state.sortDir,
+        sortKeys: state.sortKeys,
+        groupByStatus: state.groupByStatus,
+        criteria: state.criteria,
       });
+    }
+
+    function meIds() {
+      return state.me && state.me.id ? [String(state.me.id)] : [];
+    }
+
+    function filterOptions() {
+      return {
+        hideCompleted: !!state.hideCompleted,
+        hideBlocked: !!state.hideBlocked,
+        hideUndated: !!state.hideUndated,
+      };
+    }
+
+    /** Root task cards (all vs. currently shown) for the "12 / 47" counter. */
+    function taskCounts() {
+      var total = 0;
+      (state.tree || []).forEach(function (n) {
+        if (!n) return;
+        if (n.kind === 'section') {
+          (n.children || []).forEach(function (c) {
+            if (c && c.kind === 'card') total++;
+          });
+        } else if (n.kind === 'card') {
+          total++;
+        }
+      });
+      var shown = 0;
+      visibleRows().forEach(function (r) {
+        if (r && r.kind === 'card' && r.depth === 0) shown++;
+      });
+      return { shown: shown, total: total };
+    }
+
+    var sortPanel = null;
+    var filterPanel = null;
+    var summaryBar = null;
+
+    /** Chip facets (people, lists, tiers…) of the loaded tree, cached per reload. */
+    function currentFacets() {
+      if (!state.facets) {
+        state.facets = model.collectFacets(state.tree, { meIds: meIds() });
+      }
+      return state.facets;
+    }
+
+    function openPanelButton(panel) {
+      var btn = panel && panel.wrap && panel.wrap.querySelector('button');
+      if (btn && btn.getAttribute('aria-expanded') !== 'true') btn.click();
+    }
+
+    function renderSummaryBar() {
+      var GF = global.GanttFilters;
+      if (!GF) return;
+      if (!summaryBar) {
+        summaryBar = GF.createSummaryBar({
+          getKeys: function () {
+            return state.sortKeys;
+          },
+          getGroup: function () {
+            return state.groupByStatus;
+          },
+          getCriteria: function () {
+            return state.criteria;
+          },
+          getFacets: currentFacets,
+          getOptions: filterOptions,
+          getCounts: taskCounts,
+          onOpenSort: function () {
+            openPanelButton(sortPanel);
+          },
+          onOpenFilter: function () {
+            openPanelButton(filterPanel);
+          },
+          onCriteria: function (next) {
+            state.criteria = next;
+            onFiltersChanged();
+          },
+          onOption: function (name, on) {
+            state[name] = !!on;
+            onFiltersChanged();
+          },
+          onReset: resetAllFilters,
+        });
+        root.insertBefore(summaryBar.root, bulkBar);
+      } else {
+        summaryBar.refresh();
+      }
+    }
+
+    function refreshFilterUi() {
+      if (filterPanel) filterPanel.refresh();
+      if (sortPanel) sortPanel.refresh();
+      if (summaryBar) summaryBar.refresh();
+      var mine = root.querySelector('[data-gantt-mine]');
+      if (mine) {
+        var on = state.criteria.assignees.indexOf('me') !== -1;
+        mine.classList.toggle('is-active', on);
+        mine.setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+    }
+
+    /** Filters changed: save, redraw the rows, keep every control in sync. */
+    function onFiltersChanged() {
+      persistFilters();
+      renderChart();
+      refreshFilterUi();
+    }
+
+    /** Sort changed: re-sort the tree, then same as above. */
+    function onSortChanged() {
+      persistFilters();
+      applySort();
+      renderChart();
+      refreshFilterUi();
+    }
+
+    function resetAllFilters() {
+      state.criteria = normalizeCriteriaUi(null);
+      state.hideCompleted = false;
+      state.hideBlocked = false;
+      state.hideUndated = false;
+      onFiltersChanged();
     }
 
     var root = el('div', 'gantt-root');
@@ -428,18 +623,15 @@
             },
             onToggleHideCompleted: function (nextVal) {
               state.hideCompleted = !!nextVal;
-              persistFilters();
-              renderChart();
+              onFiltersChanged();
             },
             onToggleHideBlocked: function (nextVal) {
               state.hideBlocked = !!nextVal;
-              persistFilters();
-              renderChart();
+              onFiltersChanged();
             },
             onToggleHideUndated: function (nextVal) {
               state.hideUndated = !!nextVal;
-              persistFilters();
-              renderChart();
+              onFiltersChanged();
             },
           });
         });
@@ -672,6 +864,8 @@
         hideCompleted: state.hideCompleted,
         hideUndated: state.hideUndated,
         hideBlocked: state.hideBlocked,
+        criteria: state.criteria,
+        meIds: meIds(),
       });
       if (typeof model.pruneEmptyStateSections === 'function') {
         return model.pruneEmptyStateSections(filtered, state.expanded);
@@ -773,116 +967,71 @@
       toolbar.appendChild(title);
 
       var displayGroup = tbGroup('Affichage');
-      var sortWrap = el('label', 'gantt-sort');
-      sortWrap.appendChild(document.createTextNode('Trier\u00a0: '));
-      var sortSel = el('select', 'gantt-select');
-      sortSel.setAttribute('data-gantt-sort', '1');
-      [
-        ['date', 'Date'],
-        ['priority', 'Priorit\u00e9'],
-        ['name', 'Nom'],
-        ['progress', 'Progr\u00e8s'],
-        ['subtasks', 'Sous-t\u00e2ches'],
-      ].forEach(function (opt) {
-        var o = el('option', '', { value: opt[0], text: opt[1] });
-        if (state.sortBy === opt[0]) o.selected = true;
-        sortSel.appendChild(o);
-      });
-      sortSel.addEventListener('change', function () {
-        setSortBy(sortSel.value || 'date', { resetDir: true });
-      });
-      sortWrap.appendChild(sortSel);
-      displayGroup.appendChild(sortWrap);
-
+      var GF = global.GanttFilters;
       var filters = el('div', 'gantt-filters');
-
-      var filterWrap = el('div', 'gantt-filter');
-      var filterBtn = el('button', 'gantt-btn', { type: 'button' });
-      var filterIcon = el('i', 'ti ti-filter');
-      filterIcon.setAttribute('aria-hidden', 'true');
-      var filterBadge = el('span', 'gantt-filter-badge');
-      filterBtn.appendChild(filterIcon);
-      filterBtn.appendChild(document.createTextNode('Filtres'));
-      filterBtn.appendChild(filterBadge);
-      filterBtn.title = 'Filtrer les t\u00e2ches affich\u00e9es';
-      var filterMenu = el('div', 'gantt-filter-menu');
-      filterMenu.hidden = true;
-
-      function updateFilterBadge() {
-        var n =
-          (state.hideCompleted ? 1 : 0) +
-          (state.hideBlocked ? 1 : 0) +
-          (state.hideUndated ? 1 : 0);
-        filterBadge.textContent = n ? String(n) : '';
-        filterBadge.hidden = !n;
-        filterBtn.classList.toggle('is-active', !!n);
-      }
-      updateFilterBadge();
-
-      function setFilterMenuOpen(open) {
-        state.filterMenuOpen = !!open;
-        filterMenu.hidden = !state.filterMenuOpen;
-        filterBtn.setAttribute('aria-expanded', String(state.filterMenuOpen));
-        if (state.filterMenuOutsideHandler) {
-          document.removeEventListener(
-            'pointerdown',
-            state.filterMenuOutsideHandler,
-            true
-          );
-          state.filterMenuOutsideHandler = null;
-        }
-        if (state.filterMenuOpen) {
-          var handler = function (e) {
-            if (filterWrap.contains(e.target)) return;
-            setFilterMenuOpen(false);
-          };
-          state.filterMenuOutsideHandler = handler;
-          setTimeout(function () {
-            if (state.filterMenuOutsideHandler === handler) {
-              document.addEventListener('pointerdown', handler, true);
-            }
-          }, 0);
-        }
-      }
-
-      filterBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        setFilterMenuOpen(!state.filterMenuOpen);
+      var mineBtn = el('button', 'gantt-btn gantt-mine', { type: 'button' });
+      mineBtn.setAttribute('data-gantt-mine', '1');
+      mineBtn.appendChild(el('i', 'ti ti-user-check'));
+      mineBtn.appendChild(document.createTextNode('Mes tâches'));
+      mineBtn.title = 'Afficher seulement les tâches qui me sont assignées';
+      var mineOn = state.criteria.assignees.indexOf('me') !== -1;
+      mineBtn.classList.toggle('is-active', mineOn);
+      mineBtn.setAttribute('aria-pressed', mineOn ? 'true' : 'false');
+      mineBtn.addEventListener('click', function () {
+        var next = normalizeCriteriaUi(state.criteria);
+        var at = next.assignees.indexOf('me');
+        if (at === -1) next.assignees.push('me');
+        else next.assignees.splice(at, 1);
+        state.criteria = next;
+        onFiltersChanged();
       });
+      displayGroup.appendChild(mineBtn);
 
-      function addFilterCheck(labelText, checked, onChange) {
-        var lab = el('label', 'gantt-check');
-        var cb = el('input', '', { type: 'checkbox' });
-        cb.checked = checked;
-        cb.addEventListener('change', function () {
-          onChange(!!cb.checked);
-          updateFilterBadge();
+      if (GF) {
+        sortPanel = GF.createSortPanel({
+          getKeys: function () {
+            return state.sortKeys;
+          },
+          setKeys: function (keys) {
+            state.sortKeys = keys;
+            onSortChanged();
+          },
+          getGroup: function () {
+            return state.groupByStatus;
+          },
+          setGroup: function (on) {
+            state.groupByStatus = !!on;
+            onSortChanged();
+          },
         });
-        lab.appendChild(cb);
-        lab.appendChild(document.createTextNode(' ' + labelText));
-        filterMenu.appendChild(lab);
+        displayGroup.appendChild(sortPanel.wrap);
+
+        filterPanel = GF.createFilterPanel({
+          getCriteria: function () {
+            return state.criteria;
+          },
+          setCriteria: function (c) {
+            state.criteria = c;
+            onFiltersChanged();
+          },
+          getFacets: function () {
+            return currentFacets();
+          },
+          hasMe: function () {
+            return meIds().length > 0;
+          },
+          getOptions: filterOptions,
+          setOption: function (name, on) {
+            state[name] = !!on;
+            onFiltersChanged();
+          },
+          getCounts: taskCounts,
+          onReset: resetAllFilters,
+        });
+        displayGroup.appendChild(filterPanel.wrap);
       }
-
-      addFilterCheck('Masquer termin\u00e9s', state.hideCompleted, function (v) {
-        state.hideCompleted = v;
-        persistFilters();
-        renderChart();
-      });
-      addFilterCheck('Masquer bloqu\u00e9es', state.hideBlocked, function (v) {
-        state.hideBlocked = v;
-        persistFilters();
-        renderChart();
-      });
-      addFilterCheck('Masquer sans date', state.hideUndated, function (v) {
-        state.hideUndated = v;
-        persistFilters();
-        renderChart();
-      });
-
-      filterWrap.appendChild(filterBtn);
-      filterWrap.appendChild(filterMenu);
-      displayGroup.appendChild(filterWrap);
       toolbar.appendChild(displayGroup);
+      renderSummaryBar();
 
       filters = tbGroup('Outils');
       filters.classList.add('gantt-tb-group--tools');
@@ -1188,15 +1337,18 @@
       });
     }
 
+    /** Sort the roots by every level in state.sortKeys (grouped by status or flat). */
     function applySort() {
+      var opts = { group: state.groupByStatus !== false };
       if (typeof model.sortTreeRootsGroupedByState === 'function') {
         state.tree = model.sortTreeRootsGroupedByState(
           state.tree,
-          state.sortBy,
-          state.sortDir
+          state.sortKeys,
+          null,
+          opts
         );
-      } else if (typeof model.sortTreeRoots === 'function') {
-        state.tree = model.sortTreeRoots(state.tree, state.sortBy, state.sortDir);
+      } else if (typeof model.sortTreeRootsMulti === 'function') {
+        state.tree = model.sortTreeRootsMulti(state.tree, state.sortKeys);
       }
     }
 
@@ -1204,72 +1356,87 @@
       return !!(row && row.kind !== 'section' && row.id);
     }
 
-    function defaultSortDir(mode) {
-      if (typeof model.defaultSortDir === 'function') {
-        return model.defaultSortDir(mode);
+    function sortKeyIndex(mode) {
+      for (var i = 0; i < state.sortKeys.length; i++) {
+        if (state.sortKeys[i].by === mode) return i;
       }
-      if (mode === 'progress' || mode === 'subtasks') return 'desc';
-      return 'asc';
+      return -1;
     }
 
     /**
-     * @param {string} mode
-     * @param {{ resetDir?: boolean, dir?: 'asc'|'desc' }} [opts]
-     * Clicking the same column toggles asc/desc; a new column uses its default dir.
+     * Column-header click.
+     *  - plain click on a column already in the sort: flip its direction;
+     *  - plain click on another column: make it the only sort level;
+     *  - Shift+click: add it as a further level (or flip it if already there).
+     * The sort panel offers the full editor (reorder, remove, presets).
      */
     function setSortBy(mode, opts) {
       opts = opts || {};
       var next = normalizeSortBy(mode);
+      var at = sortKeyIndex(next);
+      var keys = state.sortKeys.slice();
+      var dir = model.sortFieldDefaultDir
+        ? model.sortFieldDefaultDir(next)
+        : normalizeSortDir(null, next);
       if (opts.dir === 'asc' || opts.dir === 'desc') {
-        state.sortBy = next;
-        state.sortDir = opts.dir;
-      } else if (opts.resetDir || state.sortBy !== next) {
-        state.sortBy = next;
-        state.sortDir = defaultSortDir(next);
+        keys = [{ by: next, dir: opts.dir }];
+      } else if (at !== -1) {
+        keys[at] = { by: next, dir: keys[at].dir === 'asc' ? 'desc' : 'asc' };
+      } else if (opts.additive) {
+        keys.push({ by: next, dir: dir });
       } else {
-        state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+        keys = [{ by: next, dir: dir }];
       }
-      var sel = root.querySelector('select[data-gantt-sort]');
-      if (sel) sel.value = state.sortBy;
-      persistFilters();
-      applySort();
-      renderChart();
+      state.sortKeys = normalizeSortKeysUi(keys);
+      onSortChanged();
     }
 
-    function sortIndicator(active) {
-      if (!active) return null;
-      return el('span', 'gantt-sort-indicator', {
-        text: state.sortDir === 'asc' ? '\u25B2' : '\u25BC',
+    function sortIndicator(mode) {
+      var at = sortKeyIndex(mode);
+      if (at === -1) return null;
+      var dir = state.sortKeys[at].dir;
+      var ind = el('span', 'gantt-sort-indicator', {
+        text: dir === 'asc' ? '▲' : '▼',
         'aria-hidden': 'true',
       });
+      if (state.sortKeys.length > 1) {
+        ind.appendChild(
+          el('sup', 'gantt-sort-level', { text: String(at + 1) })
+        );
+      }
+      return ind;
     }
 
     function bindSortableHeader(slot, mode, label) {
       slot.classList.add('is-sortable');
-      var active = state.sortBy === mode;
+      var at = sortKeyIndex(mode);
+      var active = at !== -1;
       if (active) slot.classList.add('is-active');
-      var dirHint =
-        active
-          ? state.sortDir === 'asc'
-            ? ' croissant'
-            : ' d\u00e9croissant'
-          : '';
-      slot.title = 'Trier par ' + label + dirHint;
+      var dirHint = active
+        ? state.sortKeys[at].dir === 'asc'
+          ? ' croissant'
+          : ' décroissant'
+        : '';
+      slot.title =
+        'Trier par ' +
+        label +
+        dirHint +
+        ' · Maj+clic : ajouter comme niveau de tri';
       slot.setAttribute('role', 'button');
       slot.setAttribute('tabindex', '0');
       slot.setAttribute('aria-pressed', active ? 'true' : 'false');
-      function onSort() {
-        setSortBy(mode);
+      function onSort(additive) {
+        setSortBy(mode, { additive: !!additive });
       }
       slot.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        onSort();
+        onSort(e.shiftKey);
       });
       slot.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          onSort();
+          onSort(e.shiftKey);
         }
       });
     }
@@ -3148,14 +3315,14 @@
       var titleWrap = el('div', 'gantt-header-title-wrap');
       var titleSort = el('span', 'gantt-header-title');
       titleSort.appendChild(document.createTextNode('T\u00e2ches'));
-      var nameInd = sortIndicator(state.sortBy === 'name');
+      var nameInd = sortIndicator('name');
       if (nameInd) titleSort.appendChild(nameInd);
       bindSortableHeader(titleSort, 'name', 'nom');
       titleWrap.appendChild(titleSort);
 
       var subSort = el('span', 'gantt-header-subtasks-sort');
       subSort.appendChild(iconEl('ti-list-check', '', 'is-subtasks'));
-      var subInd = sortIndicator(state.sortBy === 'subtasks');
+      var subInd = sortIndicator('subtasks');
       if (subInd) subSort.appendChild(subInd);
       bindSortableHeader(subSort, 'subtasks', 'sous-t\u00e2ches');
       titleWrap.appendChild(subSort);
@@ -3172,7 +3339,7 @@
           label: 'priorit\u00e9',
           content: function (slot) {
             slot.appendChild(priorityDotEl('', null));
-            var ind = sortIndicator(state.sortBy === 'priority');
+            var ind = sortIndicator('priority');
             if (ind) slot.appendChild(ind);
           },
         },
@@ -3185,7 +3352,7 @@
             slot.appendChild(
               el('span', 'gantt-progress-text', { text: '%' })
             );
-            var ind = sortIndicator(state.sortBy === 'progress');
+            var ind = sortIndicator('progress');
             if (ind) slot.appendChild(ind);
           },
         },
@@ -3812,6 +3979,8 @@
           if (data && data.ganttSettings) {
             state.ganttSettings = data.ganttSettings;
           }
+          state.facets = null;
+          state.me = (data && data.me) || null;
           applySort();
           state.cardsById = Object.create(null);
           var cards = (data && data.cards) || [];
@@ -3833,6 +4002,7 @@
           renderBulkBar();
           if (quiet) renderChart();
           else render();
+          refreshFilterUi();
           return refreshOutlookConnected().then(function (connected) {
             renderToolbar();
             if (

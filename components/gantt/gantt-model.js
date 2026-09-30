@@ -976,6 +976,8 @@
         priorityFill: rec.priorityFill || null,
         priorityEnabled: rec.priorityEnabled !== false,
         blocked: !!rec.blocked,
+        assignees: Array.isArray(rec.assignees) ? rec.assignees : [],
+        labels: Array.isArray(rec.labels) ? rec.labels : [],
         duePast: !!rec.duePast,
         dueCountdown: rec.dueCountdown || '',
         priorityRankTier:
@@ -1040,6 +1042,8 @@
               priorityFill: null,
               priorityEnabled: false,
               blocked: false,
+              assignees: [],
+              labels: [],
               duePast: false,
               dueCountdown: '',
               priorityRankTier: 100,
@@ -1183,6 +1187,456 @@
     return list;
   }
 
+  // ── Multi-level sorting ──────────────────────────────────────────────
+  var STATUS_RANK = { started: 0, pending: 1, blocked: 2, completed: 3 };
+  var MAX_SORT_KEYS = 5;
+  var SORT_FIELDS = [
+    { key: 'status', label: 'Statut', icon: 'ti-circle-dot', dir: 'asc' },
+    { key: 'priority', label: 'Priorité', icon: 'ti-flame', dir: 'asc' },
+    { key: 'date', label: 'Date', icon: 'ti-calendar', dir: 'asc' },
+    { key: 'name', label: 'Nom', icon: 'ti-abc', dir: 'asc' },
+    { key: 'progress', label: 'Progrès', icon: 'ti-percentage', dir: 'desc' },
+    { key: 'subtasks', label: 'Sous-tâches', icon: 'ti-list-check', dir: 'desc' },
+    { key: 'list', label: 'Liste', icon: 'ti-layout-columns', dir: 'asc' },
+    { key: 'assignee', label: 'Assigné', icon: 'ti-user', dir: 'asc' },
+  ];
+
+  function isSortField(key) {
+    for (var i = 0; i < SORT_FIELDS.length; i++) {
+      if (SORT_FIELDS[i].key === key) return true;
+    }
+    return false;
+  }
+
+  function sortFieldDefaultDir(key) {
+    for (var i = 0; i < SORT_FIELDS.length; i++) {
+      if (SORT_FIELDS[i].key === key) return SORT_FIELDS[i].dir;
+    }
+    return 'asc';
+  }
+
+  /** completed | blocked | started | pending. */
+  function nodeStatusKey(node) {
+    if (!node) return 'pending';
+    if (node.done || node.category === 'completed') return 'completed';
+    return stateSectionKey(node);
+  }
+
+  function firstAssigneeName(node) {
+    var list = node && Array.isArray(node.assignees) ? node.assignees : [];
+    var names = list
+      .map(function (a) {
+        return String((a && a.name) || '');
+      })
+      .filter(Boolean)
+      .sort(function (x, y) {
+        return x.localeCompare(y, 'fr');
+      });
+    return names.length ? names[0] : null;
+  }
+
+  /**
+   * Ascending comparison for one sort field. Returns a number, or
+   * { missing: -1 | 0 | 1 } when a value is absent on either side (no date, no
+   * list, no assignee): those rows always go last, whatever the direction.
+   */
+  function fieldCompare(key, a, b) {
+    var x;
+    var y;
+    if (key === 'status') {
+      return STATUS_RANK[nodeStatusKey(a)] - STATUS_RANK[nodeStatusKey(b)];
+    }
+    if (key === 'priority') {
+      var ta = a && a.priorityRankTier != null ? a.priorityRankTier : 100;
+      var tb = b && b.priorityRankTier != null ? b.priorityRankTier : 100;
+      if (ta !== tb) return ta - tb;
+      var sa = a && a.priorityRankScore != null ? a.priorityRankScore : -1;
+      var sb = b && b.priorityRankScore != null ? b.priorityRankScore : -1;
+      return sb - sa;
+    }
+    if (key === 'name') {
+      return String((a && a.name) || '').localeCompare(String((b && b.name) || ''), 'fr');
+    }
+    if (key === 'progress') return progressValue(a) - progressValue(b);
+    if (key === 'subtasks') return subtaskCountValue(a) - subtaskCountValue(b);
+    if (key === 'date') {
+      x = (a && (a.dueDate || a.startDate)) || '';
+      y = (b && (b.dueDate || b.startDate)) || '';
+    } else if (key === 'list') {
+      x = (a && a.listName) || '';
+      y = (b && b.listName) || '';
+    } else if (key === 'assignee') {
+      x = firstAssigneeName(a) || '';
+      y = firstAssigneeName(b) || '';
+    } else {
+      return 0;
+    }
+    if (!x || !y) return { missing: !x && !y ? 0 : !x ? 1 : -1 };
+    if (key === 'date') return x === y ? 0 : x < y ? -1 : 1;
+    return x.localeCompare(y, 'fr');
+  }
+
+  function compareByKey(spec, a, b) {
+    var r = fieldCompare(spec.by, a, b);
+    if (r && typeof r === 'object') return r.missing;
+    return spec.dir === 'desc' ? -r : r;
+  }
+
+  /**
+   * Clean a list of sort levels: [{ by, dir }]. Unknown fields are dropped, a
+   * field may appear once (first wins), at most MAX_SORT_KEYS levels.
+   * Empty → date ascending.
+   */
+  function normalizeSortKeys(raw) {
+    var out = [];
+    var seen = Object.create(null);
+    var list = Array.isArray(raw) ? raw : [];
+    for (var i = 0; i < list.length && out.length < MAX_SORT_KEYS; i++) {
+      var it = list[i];
+      var by = it && typeof it === 'object' ? it.by : it;
+      if (typeof by !== 'string' || !isSortField(by) || seen[by]) continue;
+      seen[by] = true;
+      out.push({
+        by: by,
+        dir:
+          it && (it.dir === 'asc' || it.dir === 'desc')
+            ? it.dir
+            : sortFieldDefaultDir(by),
+      });
+    }
+    if (!out.length) out.push({ by: 'date', dir: 'asc' });
+    return out;
+  }
+
+  /**
+   * Sort top-level rows by several levels at once (priority → date → name…).
+   * A later level only breaks ties of the earlier ones; original order is the
+   * final tiebreaker so equal rows never shuffle.
+   */
+  function sortTreeRootsMulti(nodes, keys) {
+    var specs = normalizeSortKeys(keys);
+    var list = (nodes || [])
+      .filter(function (n) {
+        return n && n.kind !== 'section';
+      })
+      .map(function (n, i) {
+        return { n: n, i: i };
+      });
+    list.sort(function (x, y) {
+      for (var k = 0; k < specs.length; k++) {
+        var r = compareByKey(specs[k], x.n, y.n);
+        if (r) return r;
+      }
+      return x.i - y.i;
+    });
+    return list.map(function (w) {
+      return w.n;
+    });
+  }
+
+  // ── Filter criteria ──────────────────────────────────────────────────
+  // criteria = {
+  //   query: string,          text in name / list / assignee / label
+  //   statuses: string[],     started | pending | blocked | completed (any of)
+  //   assignees: string[],    'me' | 'none' | <person id> (any of)
+  //   priorities: string[],   tier keys from priorityKey(), 'none' = no priority
+  //   lists: string[],        Trello list ids
+  //   labels: string[],       label ids
+  //   due: string[],          overdue | today | week | none (any of)
+  // }
+  var STATUS_KEYS = ['started', 'pending', 'blocked', 'completed'];
+  var STATUS_LABELS = {
+    started: 'En cours',
+    pending: 'À faire',
+    blocked: 'Bloqué',
+    completed: 'Terminé',
+  };
+  var DUE_KEYS = ['overdue', 'today', 'week', 'none'];
+  var DUE_LABELS = {
+    overdue: 'En retard',
+    today: "Aujourd'hui",
+    week: 'Cette semaine',
+    none: 'Sans échéance',
+  };
+
+  function emptyCriteria() {
+    return {
+      query: '',
+      statuses: [],
+      assignees: [],
+      priorities: [],
+      lists: [],
+      labels: [],
+      due: [],
+    };
+  }
+
+  function stringList(raw, allowed) {
+    var out = [];
+    var list = Array.isArray(raw) ? raw : [];
+    for (var i = 0; i < list.length; i++) {
+      var v = list[i] == null ? '' : String(list[i]);
+      if (!v || out.indexOf(v) !== -1) continue;
+      if (allowed && allowed.indexOf(v) === -1) continue;
+      out.push(v);
+    }
+    return out;
+  }
+
+  function normalizeCriteria(raw) {
+    var c = emptyCriteria();
+    if (!raw || typeof raw !== 'object') return c;
+    c.query = typeof raw.query === 'string' ? raw.query.trim().slice(0, 80) : '';
+    c.statuses = stringList(raw.statuses, STATUS_KEYS);
+    c.assignees = stringList(raw.assignees);
+    c.priorities = stringList(raw.priorities);
+    c.lists = stringList(raw.lists);
+    c.labels = stringList(raw.labels);
+    c.due = stringList(raw.due, DUE_KEYS);
+    return c;
+  }
+
+  /** Number of active criteria groups (a group with any choice counts once). */
+  function criteriaCount(criteria) {
+    var c = normalizeCriteria(criteria);
+    return (
+      (c.query ? 1 : 0) +
+      (c.statuses.length ? 1 : 0) +
+      (c.assignees.length ? 1 : 0) +
+      (c.priorities.length ? 1 : 0) +
+      (c.lists.length ? 1 : 0) +
+      (c.labels.length ? 1 : 0) +
+      (c.due.length ? 1 : 0)
+    );
+  }
+
+  function foldText(s) {
+    var t = String(s == null ? '' : s).toLowerCase();
+    if (typeof t.normalize === 'function') {
+      t = t.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    }
+    return t;
+  }
+
+  /** Stable key for the priority facet: tier index, or 'none' when unset. */
+  function priorityKey(node) {
+    if (!node || node.priorityEnabled === false) return 'none';
+    if (node.priorityTierI == null || !isFinite(Number(node.priorityTierI))) {
+      return 'none';
+    }
+    return 'tier:' + Number(node.priorityTierI);
+  }
+
+  function isMeAssignee(assignee, meIds) {
+    if (!assignee || !meIds || !meIds.length) return false;
+    if (meIds.indexOf(String(assignee.id)) !== -1) return true;
+    return !!(
+      assignee.trelloId && meIds.indexOf(String(assignee.trelloId)) !== -1
+    );
+  }
+
+  function dueBucketMatches(node, key, today) {
+    var due = (node && node.dueDate) || '';
+    if (key === 'none') return !due;
+    if (!due) return false;
+    if (key === 'overdue') {
+      return !!(node.duePast) || (due < today && !(node.done || node.category === 'completed'));
+    }
+    if (key === 'today') return due === today;
+    if (key === 'week') {
+      var t0 = parseIsoDate(today);
+      if (!t0) return false;
+      var end = new Date(t0.getTime());
+      end.setDate(end.getDate() + 6);
+      var endIso = toIsoDate(end);
+      return due >= today && due <= endIso;
+    }
+    return false;
+  }
+
+  /**
+   * Does one card row pass the criteria? Groups are ANDed, choices inside a
+   * group are ORed. ctx = { meIds: string[], today: 'YYYY-MM-DD' }.
+   */
+  function matchesCriteria(node, criteria, ctx) {
+    var c = normalizeCriteria(criteria);
+    ctx = ctx || {};
+    var list;
+    var i;
+    var ok;
+    if (c.query) {
+      var hay = foldText(
+        [
+          node.name,
+          node.listName,
+          (node.assignees || [])
+            .map(function (a) {
+              return a && a.name;
+            })
+            .join(' '),
+          (node.labels || [])
+            .map(function (l) {
+              return l && l.name;
+            })
+            .join(' '),
+        ].join(' ')
+      );
+      var words = foldText(c.query).split(/\s+/).filter(Boolean);
+      for (i = 0; i < words.length; i++) {
+        if (hay.indexOf(words[i]) === -1) return false;
+      }
+    }
+    if (c.statuses.length && c.statuses.indexOf(nodeStatusKey(node)) === -1) {
+      return false;
+    }
+    if (c.assignees.length) {
+      list = node.assignees || [];
+      ok = false;
+      for (i = 0; i < c.assignees.length && !ok; i++) {
+        var tok = c.assignees[i];
+        if (tok === 'none') {
+          ok = !list.length;
+        } else if (tok === 'me') {
+          for (var m = 0; m < list.length && !ok; m++) {
+            ok = isMeAssignee(list[m], ctx.meIds);
+          }
+        } else {
+          for (var q = 0; q < list.length && !ok; q++) {
+            ok = String(list[q].id) === tok || String(list[q].trelloId || '') === tok;
+          }
+        }
+      }
+      if (!ok) return false;
+    }
+    if (c.priorities.length && c.priorities.indexOf(priorityKey(node)) === -1) {
+      return false;
+    }
+    if (c.lists.length && c.lists.indexOf(String(node.listId || '')) === -1) {
+      return false;
+    }
+    if (c.labels.length) {
+      list = node.labels || [];
+      ok = false;
+      for (i = 0; i < list.length && !ok; i++) {
+        ok = c.labels.indexOf(String(list[i].id)) !== -1;
+      }
+      if (!ok) return false;
+    }
+    if (c.due.length) {
+      var today = ctx.today || toIsoDate(new Date());
+      ok = false;
+      for (i = 0; i < c.due.length && !ok; i++) {
+        ok = dueBucketMatches(node, c.due[i], today);
+      }
+      if (!ok) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Facets present in the tree (for building filter chips), each with a count
+   * of root + linked cards. Only real cards are counted.
+   */
+  function collectFacets(tree, ctx) {
+    ctx = ctx || {};
+    var facets = {
+      total: 0,
+      statuses: { started: 0, pending: 0, blocked: 0, completed: 0 },
+      assignees: [],
+      unassigned: 0,
+      mine: 0,
+      lists: [],
+      labels: [],
+      priorities: [],
+      noPriority: 0,
+    };
+    var byPerson = Object.create(null);
+    var byList = Object.create(null);
+    var byLabel = Object.create(null);
+    var byTier = Object.create(null);
+
+    function walk(nodes) {
+      for (var i = 0; i < (nodes || []).length; i++) {
+        var n = nodes[i];
+        if (!n) continue;
+        if (n.kind === 'section') {
+          walk(n.children);
+          continue;
+        }
+        if (n.kind === 'card' && !n.missing) {
+          facets.total++;
+          facets.statuses[nodeStatusKey(n)]++;
+          var people = n.assignees || [];
+          if (!people.length) facets.unassigned++;
+          var mine = false;
+          for (var p = 0; p < people.length; p++) {
+            var a = people[p];
+            if (isMeAssignee(a, ctx.meIds)) mine = true;
+            var rec =
+              byPerson[a.id] ||
+              (byPerson[a.id] = { id: a.id, name: a.name, initials: a.initials, count: 0 });
+            rec.count++;
+          }
+          if (mine) facets.mine++;
+          if (n.listId) {
+            var lr =
+              byList[n.listId] ||
+              (byList[n.listId] = { id: n.listId, name: n.listName || '—', count: 0 });
+            lr.count++;
+          }
+          var labs = n.labels || [];
+          for (var l = 0; l < labs.length; l++) {
+            var lb =
+              byLabel[labs[l].id] ||
+              (byLabel[labs[l].id] = {
+                id: labs[l].id,
+                name: labs[l].name || '',
+                color: labs[l].color || '',
+                count: 0,
+              });
+            lb.count++;
+          }
+          var pk = priorityKey(n);
+          if (pk === 'none') {
+            facets.noPriority++;
+          } else {
+            var pr =
+              byTier[pk] ||
+              (byTier[pk] = {
+                key: pk,
+                tier: Number(n.priorityTierI),
+                label: n.priorityLabel || pk,
+                fill: n.priorityFill || null,
+                count: 0,
+              });
+            pr.count++;
+          }
+        }
+        walk(n.children);
+      }
+    }
+    walk(tree);
+
+    function values(map) {
+      return Object.keys(map).map(function (k) {
+        return map[k];
+      });
+    }
+    facets.assignees = values(byPerson).sort(function (x, y) {
+      return String(x.name).localeCompare(String(y.name), 'fr');
+    });
+    facets.lists = values(byList).sort(function (x, y) {
+      return String(x.name).localeCompare(String(y.name), 'fr');
+    });
+    facets.labels = values(byLabel).sort(function (x, y) {
+      return String(x.name).localeCompare(String(y.name), 'fr');
+    });
+    facets.priorities = values(byTier).sort(function (x, y) {
+      return x.tier - y.tier;
+    });
+    return facets;
+  }
+
   /**
    * State section for a root card: En cours → À faire → Bloqué.
    * Blocked wins over list category when enAttente is set.
@@ -1245,7 +1699,24 @@
    * All three section headers are always shown (even when empty) so status
    * is visible and section drag-drop always has a target.
    */
-  function sortTreeRootsGroupedByState(nodes, sortBy, sortDir) {
+  function sortTreeRootsGroupedByState(nodes, sortBy, sortDir, opts) {
+    var multi = Array.isArray(sortBy);
+    if (opts && opts.group === false) {
+      var all = [];
+      (nodes || []).forEach(function (n) {
+        if (!n) return;
+        if (n.kind === 'section') {
+          (n.children || []).forEach(function (c) {
+            if (c) all.push(c);
+          });
+        } else {
+          all.push(n);
+        }
+      });
+      return multi
+        ? sortTreeRootsMulti(all, sortBy)
+        : sortTreeRoots(all, sortBy, sortDir);
+    }
     var buckets = {
       started: [],
       pending: [],
@@ -1266,7 +1737,9 @@
     var out = [];
     for (var i = 0; i < STATE_SECTION_ORDER.length; i++) {
       var key = STATE_SECTION_ORDER[i];
-      var sorted = sortTreeRoots(buckets[key], sortBy, sortDir);
+      var sorted = multi
+        ? sortTreeRootsMulti(buckets[key], sortBy)
+        : sortTreeRoots(buckets[key], sortBy, sortDir);
       var header = makeStateSectionHeader(key);
       header.children = sorted;
       header.expandable = sorted.length > 0;
@@ -1348,10 +1821,28 @@
 
   function filterRows(rows, options) {
     options = options || {};
+    var hasCriteria = criteriaCount(options.criteria) > 0;
+    var ctx = { meIds: options.meIds || [], today: options.today };
+    // Rows of a card that fails the criteria (its subtasks, linked cards) go too.
+    var skipBelow = -1;
     return (rows || []).filter(function (row) {
       if (!row) return false;
       // Section headers stay until pruneEmptyStateSections runs.
-      if (row.kind === 'section') return true;
+      if (row.kind === 'section') {
+        skipBelow = -1;
+        return true;
+      }
+      var depth = typeof row.depth === 'number' ? row.depth : 0;
+      if (skipBelow >= 0) {
+        if (depth > skipBelow) return false;
+        skipBelow = -1;
+      }
+      if (hasCriteria && row.kind === 'card' && !row.missing) {
+        if (!matchesCriteria(row, options.criteria, ctx)) {
+          skipBelow = depth;
+          return false;
+        }
+      }
       if (options.hideCompleted && (row.done || row.category === 'completed')) {
         return false;
       }
@@ -1519,6 +2010,22 @@
     defaultSortDir: defaultSortDir,
     normalizeSortDir: normalizeSortDir,
     sortTreeRoots: sortTreeRoots,
+    SORT_FIELDS: SORT_FIELDS,
+    MAX_SORT_KEYS: MAX_SORT_KEYS,
+    normalizeSortKeys: normalizeSortKeys,
+    sortFieldDefaultDir: sortFieldDefaultDir,
+    sortTreeRootsMulti: sortTreeRootsMulti,
+    nodeStatusKey: nodeStatusKey,
+    STATUS_KEYS: STATUS_KEYS,
+    STATUS_LABELS: STATUS_LABELS,
+    DUE_KEYS: DUE_KEYS,
+    DUE_LABELS: DUE_LABELS,
+    emptyCriteria: emptyCriteria,
+    normalizeCriteria: normalizeCriteria,
+    criteriaCount: criteriaCount,
+    priorityKey: priorityKey,
+    matchesCriteria: matchesCriteria,
+    collectFacets: collectFacets,
     STATE_SECTION_ORDER: STATE_SECTION_ORDER,
     STATE_SECTION_LABELS: STATE_SECTION_LABELS,
     stateSectionKey: stateSectionKey,

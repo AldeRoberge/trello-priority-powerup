@@ -187,6 +187,69 @@
     return null;
   }
 
+  function memberInitials(name) {
+    var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '?';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  }
+
+  /**
+   * People on a card: Trello members plus "Hors Trello" custom assignees
+   * (cardPriority.customAssignees). A custom assignee linked to a Trello member
+   * already on the card is not listed twice.
+   * @returns {{id:string,name:string,initials:string,custom:boolean,trelloId:string}[]}
+   */
+  function buildAssignees(members, customAssignees) {
+    var out = [];
+    var seen = Object.create(null);
+    (Array.isArray(members) ? members : []).forEach(function (m) {
+      if (!m || m.id == null || typeof m !== 'object') return;
+      var id = String(m.id);
+      if (seen[id]) return;
+      seen[id] = true;
+      var name = String(m.fullName || m.username || '').trim() || id;
+      out.push({
+        id: id,
+        name: name,
+        initials: String(m.initials || '').trim() || memberInitials(name),
+        custom: false,
+        trelloId: id,
+      });
+    });
+    (Array.isArray(customAssignees) ? customAssignees : []).forEach(function (c) {
+      if (!c || c.id == null) return;
+      var linked = c.trelloMemberId ? String(c.trelloMemberId) : '';
+      if (linked && seen[linked]) return;
+      var id = String(c.id);
+      if (seen[id]) return;
+      seen[id] = true;
+      var name = String(c.name || c.fullName || '').trim() || id;
+      out.push({
+        id: id,
+        name: name,
+        initials: memberInitials(name),
+        custom: true,
+        trelloId: linked,
+      });
+    });
+    return out;
+  }
+
+  function buildLabels(labels) {
+    return (Array.isArray(labels) ? labels : [])
+      .filter(function (l) {
+        return l && l.id != null;
+      })
+      .map(function (l) {
+        return {
+          id: String(l.id),
+          name: String(l.name || '').trim(),
+          color: String(l.color || ''),
+        };
+      });
+  }
+
   /**
    * Load all open board cards with dates, progress, statut, and nest tree.
    */
@@ -199,22 +262,38 @@
       console.error('GanttTrello.loadBoard lists failed', err);
       lists = [];
     }
+    var baseFields = [
+      'id',
+      'name',
+      'desc',
+      'idList',
+      'due',
+      'start',
+      'dueComplete',
+      'pos',
+      'url',
+    ];
     try {
-      cards =
-        (await t.cards(
-          'id',
-          'name',
-          'desc',
-          'idList',
-          'due',
-          'start',
-          'dueComplete',
-          'pos',
-          'url'
-        )) || [];
+      // members + labels feed the assignee / label filters. If Trello rejects
+      // them, fall back to the base fields so the chart still loads.
+      try {
+        cards = (await t.cards.apply(t, baseFields.concat(['members', 'labels']))) || [];
+      } catch (richErr) {
+        console.warn('GanttTrello.loadBoard members/labels unavailable', richErr);
+        cards = (await t.cards.apply(t, baseFields)) || [];
+      }
     } catch (err) {
       console.error('GanttTrello.loadBoard cards failed', err);
       cards = [];
+    }
+    var me = null;
+    var ptMe = PT();
+    if (ptMe && typeof ptMe.getCurrentMember === 'function') {
+      try {
+        me = await ptMe.getCurrentMember(t);
+      } catch (e) {
+        me = null;
+      }
     }
 
     var listNameById = Object.create(null);
@@ -348,6 +427,11 @@
         priorityFill: (display && display.fill) || null,
         priorityEnabled: !(display && display.priorityEnabled === false),
         blocked: !!(display && display.blocked),
+        assignees: buildAssignees(
+          card.members,
+          inputs && inputs.customAssignees
+        ),
+        labels: buildLabels(card.labels),
         duePast: !!(display && display.duePast),
         dueCountdown: (display && display.dueCountdown) || '',
         priorityRankTier: rank.tier,
@@ -369,6 +453,7 @@
       lists: lists,
       cards: records,
       tree: tree,
+      me: me,
       settings: settings,
       ganttSettings: await getGanttSettings(t),
     };
@@ -1075,6 +1160,8 @@
     getGanttSettings: getGanttSettings,
     saveGanttSettings: saveGanttSettings,
     loadBoard: loadBoard,
+    buildAssignees: buildAssignees,
+    buildLabels: buildLabels,
     ensureRestAuthorized: ensureRestAuthorized,
     saveCardDates: saveCardDates,
     resolveCardDates: resolveCardDates,

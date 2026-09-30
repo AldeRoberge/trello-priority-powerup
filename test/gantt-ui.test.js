@@ -70,13 +70,13 @@ describe('GanttUI helpers', () => {
       sortDir: 'asc',
     });
     const stored = GanttUI.readStoredFilters();
-    assert.deepEqual(stored, {
-      hideCompleted: false,
-      hideUndated: true,
-      hideBlocked: true,
-      sortBy: 'progress',
-      sortDir: 'asc',
-    });
+    assert.equal(stored.hideCompleted, false);
+    assert.equal(stored.hideUndated, true);
+    assert.equal(stored.hideBlocked, true);
+    assert.equal(stored.sortBy, 'progress');
+    assert.equal(stored.sortDir, 'asc');
+    assert.deepEqual(stored.sortKeys, [{ by: 'progress', dir: 'asc' }]);
+    assert.equal(stored.groupByStatus, true);
 
     GanttUI.storeFilters({ sortBy: 'subtasks' });
     assert.equal(GanttUI.readStoredFilters().sortBy, 'subtasks');
@@ -85,6 +85,40 @@ describe('GanttUI helpers', () => {
 
     global.localStorage.setItem(GanttUI.FILTERS_STORAGE_KEY, '{bad');
     assert.deepEqual(GanttUI.readStoredFilters(), GanttUI.DEFAULT_FILTERS);
+  });
+
+  it('persists multi-level sort, grouping and criteria (never the search text)', () => {
+    GanttUI.storeFilters({
+      sortKeys: [
+        { by: 'priority', dir: 'asc' },
+        { by: 'date', dir: 'desc' },
+        { by: 'priority', dir: 'desc' }, // duplicate field is dropped
+        { by: 'bogus', dir: 'asc' }, // unknown field is dropped
+      ],
+      groupByStatus: false,
+      criteria: { assignees: ['me'], statuses: ['started', 'nope'], query: 'abc' },
+    });
+    const stored = GanttUI.readStoredFilters();
+    assert.deepEqual(stored.sortKeys, [
+      { by: 'priority', dir: 'asc' },
+      { by: 'date', dir: 'desc' },
+    ]);
+    assert.equal(stored.sortBy, 'priority');
+    assert.equal(stored.groupByStatus, false);
+    assert.deepEqual(stored.criteria.assignees, ['me']);
+    assert.deepEqual(stored.criteria.statuses, ['started']);
+    assert.equal(stored.criteria.query, '');
+  });
+
+  it('reads older saves that only had sortBy / sortDir', () => {
+    global.localStorage.setItem(
+      GanttUI.FILTERS_STORAGE_KEY,
+      JSON.stringify({ hideCompleted: false, sortBy: 'name', sortDir: 'desc' })
+    );
+    const stored = GanttUI.readStoredFilters();
+    assert.deepEqual(stored.sortKeys, [{ by: 'name', dir: 'desc' }]);
+    assert.equal(stored.groupByStatus, true);
+    assert.deepEqual(stored.criteria.assignees, []);
   });
 
   it('shouldShowPriorityFire only above Importante', () => {
