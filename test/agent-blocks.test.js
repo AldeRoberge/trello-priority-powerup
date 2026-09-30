@@ -335,6 +335,32 @@ describe('AgentBlocks', () => {
     }
   });
 
+  it('fillMessageContent drops a {{n}} placeholder with no matching block', () => {
+    const bubble = {
+      children: [],
+      replaceChildren() {
+        this.children = [];
+      },
+      appendChild(node) {
+        this.children.push(node);
+      }
+    };
+    const realText = global.document.createTextNode;
+    global.document.createTextNode = function (t) {
+      return { nodeType: 3, textContent: t };
+    };
+    try {
+      AgentBlocks.fillMessageContent(bubble, 'En cours, y a surtout ça:\n{{0}}', [], {
+        streaming: false
+      });
+      const all = bubble.children.map((n) => n.textContent).join('');
+      assert.ok(all.indexOf('En cours') >= 0);
+      assert.ok(all.indexOf('{{') < 0, 'raw placeholder leaked: ' + all);
+    } finally {
+      global.document.createTextNode = realText;
+    }
+  });
+
   it('PriorityAgent.normalizeBlocks delegates to AgentBlocks', () => {
     const blocks = PriorityAgent.normalizeBlocks(
       [{ type: 'due', dueVague: 'cette semaine' }],
