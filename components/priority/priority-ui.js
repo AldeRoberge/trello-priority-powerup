@@ -11429,6 +11429,13 @@
 
     var pgToolbar = document.createElement('div');
     pgToolbar.className = 'pg-toolbar';
+    var pgAutoBtn = document.createElement('button');
+    pgAutoBtn.type = 'button';
+    pgAutoBtn.className = 'tg-collapse pg-tool';
+    pgAutoBtn.title = 'Remettre les lieux en ordre (annule les d\u00e9placements)';
+    pgAutoBtn.hidden = true;
+    pgAutoBtn.innerHTML =
+      '<i class="ti ti-layout-grid" aria-hidden="true"></i><span>Ranger</span>';
     var pgItinBtn = document.createElement('a');
     pgItinBtn.className = 'tg-collapse pg-tool';
     pgItinBtn.target = '_blank';
@@ -11443,6 +11450,7 @@
     pgCollapseBtn.title = 'Revenir à la vue simple';
     pgCollapseBtn.innerHTML =
       '<i class="ti ti-chevron-up" aria-hidden="true"></i><span>Réduire</span>';
+    pgToolbar.appendChild(pgAutoBtn);
     pgToolbar.appendChild(pgItinBtn);
     pgToolbar.appendChild(pgCollapseBtn);
 
@@ -12753,6 +12761,28 @@
       });
     }
 
+    function setPlaceStopPos(i, x, y) {
+      placesMutateSeq(function (refs) {
+        var ref = refs[i];
+        if (!ref || (ref.x === x && ref.y === y)) return false;
+        ref.x = x;
+        ref.y = y;
+      });
+    }
+
+    /** Forget every hand-placed position: back to the automatic layout. */
+    function clearPlacePositions() {
+      placesMutateSeq(function (refs) {
+        var any = false;
+        refs.forEach(function (r) {
+          if (r.x != null || r.y != null) any = true;
+          delete r.x;
+          delete r.y;
+        });
+        return any;
+      });
+    }
+
     /** Drag and drop: take the stop at `from` and drop it at position `to`. */
     function reorderPlaceStop(from, to) {
       placeEditKey = '';
@@ -13288,6 +13318,9 @@
     var pgPan = { x: 0, y: 0 };
     var pgState = null; // { nodes: { i: box }, width, height }
     var pgDrag = null;
+    var pgMoving = null; // node being moved by hand
+    var pgLive = {}; // idx -> { x, y } while a node is being moved
+    var PG_GRID = 18; // same as the dot spacing of the canvas
 
     /** Stops in route order, tagged with their role (from / via / to / at). */
     function pgStops(map) {
@@ -13308,6 +13341,11 @@
         pgScale === 1 && !moved
           ? ''
           : 'translate(' + pgPan.x + 'px,' + pgPan.y + 'px) scale(' + pgScale + ')';
+      var step = PG_GRID * pgScale;
+      while (step < 9) step *= 2;
+      pgHost.style.backgroundSize = step + 'px ' + step + 'px';
+      pgHost.style.backgroundPosition =
+        Math.round(pgStage.offsetLeft + pgPan.x - step / 2) + 'px ' + Math.round(pgPan.y - step / 2) + 'px';
     }
 
     function pgZoomBy(factor, px, py) {
@@ -13398,6 +13436,12 @@
       pgZoomMul = 1;
       pgScale = Math.max(0.25, pgFit);
       pgApplyTransform();
+      clearPlacePositions();
+    });
+    pgAutoBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      clearPlacePositions();
     });
 
     function pgSetExpanded(next) {
@@ -13547,91 +13591,129 @@
 
     var pgNoClickUntil = 0;
 
-    // Grab a node by its header and drop it on another to change the order.
-    function pgStartNodeDrag(event, node, index) {
-      if (!onPlacesChange || placesBusy) return;
+    function pgSnap(v) {
+      return Math.round(v / PG_GRID) * PG_GRID;
+    }
+
+    /**
+     * Grab a node by its header: it follows the pointer (snapped to the grid)
+     * and stays where it is dropped. Dropping it onto another node swaps their
+     * place in the route instead.
+     */
+    function pgBeginMove(event, index) {
+      if (!onPlacesChange || placesBusy || pgMoving) return;
       if (event.button != null && event.button !== 0) return;
       if (event.target.closest('.tg-node-clear')) return;
-      var boxes = pgState && pgState.nodes;
-      if (!boxes || boxes.length < 2) return;
-      var sx = event.clientX;
-      var sy = event.clientY;
-      var moved = false;
-      var target = index;
+      var box = pgState && pgState.nodes[index];
+      if (!box) return;
+      pgMoving = {
+        idx: index,
+        sx: event.clientX,
+        sy: event.clientY,
+        x0: box.x - pgState.off.x,
+        y0: box.y - pgState.off.y,
+        moved: false,
+        over: -1,
+        raf: 0,
+        pid: event.pointerId
+      };
       try {
-        node.setPointerCapture(event.pointerId);
+        pgFrame.setPointerCapture(event.pointerId);
       } catch (err) {
-        /* capture is optional */
+        /* optional */
       }
-      var mark = function () {
-        pgNodes.querySelectorAll('.pg-node').forEach(function (n) {
-          var k = Number(n.getAttribute('data-idx'));
-          n.classList.toggle('is-drop-target', moved && k === target && k !== index);
-        });
-      };
-      var move = function (e) {
-        var dx = e.clientX - sx;
-        var dy = e.clientY - sy;
-        if (!moved && Math.abs(dx) + Math.abs(dy) < 5) return;
-        if (!moved) {
-          moved = true;
-          pgHost.classList.add('pg-moving');
-          node.classList.add('is-dragging-node');
-          if (placeEditKey || /^ins:/.test(placesPickerSlot)) {
-            pgEditor.hidden = true;
-            pgPop.hidden = true;
-          }
-        }
-        node.style.transform = 'translate(' + dx / pgScale + 'px,' + dy / pgScale + 'px)';
-        var p = pgStagePoint(e);
-        var best = index;
-        var bestD = Infinity;
-        boxes.forEach(function (b, k) {
-          if (!b) return;
-          var ddx = p.x - (b.x + b.w / 2);
-          var ddy = p.y - (b.y + b.h / 2);
-          var d = ddx * ddx + ddy * ddy;
-          if (d < bestD) {
-            bestD = d;
-            best = k;
-          }
-        });
-        target = best;
-        mark();
-      };
-      var finish = function (apply) {
-        node.removeEventListener('pointermove', move);
-        node.removeEventListener('pointerup', up);
-        node.removeEventListener('pointercancel', cancel);
-        pgHost.classList.remove('pg-moving');
-        node.classList.remove('is-dragging-node');
-        node.style.transform = '';
-        moved = moved && apply;
-        target = moved ? target : index;
-        mark();
-        if (!apply) return;
-      };
-      var up = function () {
-        var wasMoved = moved;
-        var to = target;
-        finish(true);
-        if (!wasMoved) return;
-        pgNoClickUntil = Date.now() + 300;
-        pgIgnoreUntil = Date.now() + 400;
-        if (to !== index) reorderPlaceStop(index, to);
-        else {
-          pgNodes.querySelectorAll('.pg-node.is-drop-target').forEach(function (n) {
-            n.classList.remove('is-drop-target');
-          });
+    }
+
+    pgFrame.addEventListener('pointermove', function (e) {
+      var m = pgMoving;
+      if (!m || e.pointerId !== m.pid) return;
+      var dx = e.clientX - m.sx;
+      var dy = e.clientY - m.sy;
+      if (!m.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+      if (!m.moved) {
+        m.moved = true;
+        pgHost.classList.add('pg-moving');
+        placeEditKey = '';
+        if (/^ins:/.test(placesPickerSlot)) placesPickerSlot = '';
+      }
+      pgLive[m.idx] = { x: pgSnap(m.x0 + dx / pgScale), y: pgSnap(m.y0 + dy / pgScale) };
+      var p = pgStagePoint(e);
+      m.over = -1;
+      (pgState ? pgState.nodes : []).forEach(function (b, k) {
+        if (!b || k === m.idx) return;
+        if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) m.over = k;
+      });
+      if (!m.raf) {
+        m.raf = requestAnimationFrame(function () {
+          m.raf = 0;
           renderPlaces();
-        }
+        });
+      }
+    });
+
+    function pgEndMove(e) {
+      var m = pgMoving;
+      if (!m || (e && e.pointerId !== m.pid)) return;
+      pgMoving = null;
+      pgHost.classList.remove('pg-moving');
+      var live = pgLive[m.idx];
+      pgLive = {};
+      if (!m.moved) return;
+      pgNoClickUntil = Date.now() + 300;
+      pgIgnoreUntil = Date.now() + 400;
+      var cancelled = !!e && e.type === 'pointercancel';
+      if (!cancelled && m.over >= 0) reorderPlaceStop(m.idx, m.over);
+      else if (!cancelled && live) setPlaceStopPos(m.idx, live.x, live.y);
+      else renderPlaces();
+    }
+    pgFrame.addEventListener('pointerup', pgEndMove);
+    pgFrame.addEventListener('pointercancel', pgEndMove);
+
+    /**
+     * Wire between two boxes wherever they sit: bottom to top when one is
+     * clearly above the other, side to side otherwise.
+     */
+    function pgRouteLink(a, b) {
+      var acx = a.x + a.w / 2;
+      var acy = a.y + a.h / 2;
+      var bcx = b.x + b.w / 2;
+      var bcy = b.y + b.h / 2;
+      var vGap = b.y >= a.y + a.h ? b.y - (a.y + a.h) : a.y >= b.y + b.h ? a.y - (b.y + b.h) : -1;
+      var hGap = b.x >= a.x + a.w ? b.x - (a.x + a.w) : a.x >= b.x + b.w ? a.x - (b.x + b.w) : -1;
+      var vertical;
+      if (vGap >= 0 && hGap >= 0) vertical = Math.abs(bcy - acy) >= Math.abs(bcx - acx);
+      else if (vGap >= 0) vertical = true;
+      else if (hGap >= 0) vertical = false;
+      else vertical = Math.abs(bcy - acy) >= Math.abs(bcx - acx);
+      var x1, y1, x2, y2, c1x, c1y, c2x, c2y;
+      if (vertical) {
+        var down = bcy >= acy;
+        x1 = acx;
+        y1 = down ? a.y + a.h : a.y;
+        x2 = bcx;
+        y2 = down ? b.y : b.y + b.h;
+        var dy = Math.max(28, Math.abs(y2 - y1) * 0.5) * (down ? 1 : -1);
+        c1x = x1;
+        c1y = y1 + dy;
+        c2x = x2;
+        c2y = y2 - dy;
+      } else {
+        var right = bcx >= acx;
+        x1 = right ? a.x + a.w : a.x;
+        y1 = acy;
+        x2 = right ? b.x : b.x + b.w;
+        y2 = bcy;
+        var dx = Math.max(24, Math.abs(x2 - x1) * 0.5) * (right ? 1 : -1);
+        c1x = x1 + dx;
+        c1y = y1;
+        c2x = x2 - dx;
+        c2y = y2;
+      }
+      return {
+        d: 'M' + x1 + ' ' + y1 + ' C' + c1x + ' ' + c1y + ' ' + c2x + ' ' + c2y + ' ' + x2 + ' ' + y2,
+        mx: (x1 + 3 * c1x + 3 * c2x + x2) / 8,
+        my: (y1 + 3 * c1y + 3 * c2y + y2) / 8
       };
-      var cancel = function () {
-        finish(false);
-      };
-      node.addEventListener('pointermove', move);
-      node.addEventListener('pointerup', up);
-      node.addEventListener('pointercancel', cancel);
     }
 
     function pgToolButton(icon, title, onClick, extraClass) {
@@ -13666,12 +13748,19 @@
 
       var head = document.createElement('div');
       head.className = 'tg-node-head';
-      if (editable && total > 1) {
+      if (editable) {
         node.classList.add('is-draggable');
-        head.title = 'Glisser pour changer l’ordre';
+        head.title =
+          total > 1
+            ? 'Glisser pour d\u00e9placer \u2014 d\u00e9poser sur un autre lieu pour \u00e9changer l\u2019ordre'
+            : 'Glisser pour d\u00e9placer';
         head.addEventListener('pointerdown', function (event) {
-          pgStartNodeDrag(event, node, i);
+          pgBeginMove(event, i);
         });
+      }
+      if (pgMoving && pgMoving.moved) {
+        if (pgMoving.idx === i) node.classList.add('is-dragging-node');
+        else if (pgMoving.over === i) node.classList.add('is-drop-target');
       }
       var badge = document.createElement('span');
       badge.className = 'pg-node-icon';
@@ -13880,18 +13969,52 @@
         heights[Number(n.getAttribute('data-idx'))] = n.offsetHeight;
       });
       var layout = pgLayout(stops.length, heights, pgHost.clientWidth);
-      var stageW = layout.width + PG_PAD * 2;
-      var stageH = layout.height + PG_TOP + PG_PAD;
+      // Hand-placed stops (x / y saved on the stop, or live while dragging)
+      // override the automatic snake layout.
+      var hasFree = false;
+      stops.forEach(function (stop, idx) {
+        var b = layout.nodes[idx];
+        if (!b) return;
+        var live = pgLive[idx];
+        var fx = live ? live.x : stop.ref.x;
+        var fy = live ? live.y : stop.ref.y;
+        if (typeof fx === 'number' && typeof fy === 'number') {
+          b.x = fx;
+          b.y = fy;
+          hasFree = true;
+        }
+      });
+      var minX = Infinity;
+      var minY = Infinity;
+      var maxX = 0;
+      var maxY = 0;
+      layout.nodes.forEach(function (b) {
+        if (!b) return;
+        minX = Math.min(minX, b.x);
+        minY = Math.min(minY, b.y);
+        maxX = Math.max(maxX, b.x + b.w);
+        maxY = Math.max(maxY, b.y + b.h);
+      });
+      if (!isFinite(minX)) {
+        minX = 0;
+        minY = 0;
+      }
+      // Never shrink toward the top-left, so nodes do not jump when one is moved.
+      var offX = PG_PAD + Math.max(0, -minX);
+      var offY = PG_TOP + Math.max(0, -minY);
+      var stageW = maxX + offX + PG_PAD;
+      var stageH = maxY + offY + PG_PAD;
       var shifted = [];
       pgNodes.querySelectorAll('.pg-node').forEach(function (n) {
         var idx = Number(n.getAttribute('data-idx'));
         var b = layout.nodes[idx];
         if (!b) return;
-        shifted[idx] = { x: b.x + PG_PAD, y: b.y + PG_TOP, w: b.w, h: b.h, row: b.row, col: b.col };
+        shifted[idx] = { x: b.x + offX, y: b.y + offY, w: b.w, h: b.h };
         n.style.left = shifted[idx].x + 'px';
         n.style.top = shifted[idx].y + 'px';
       });
-      pgState = { nodes: shifted, width: stageW, height: stageH };
+      pgState = { nodes: shifted, width: stageW, height: stageH, off: { x: offX, y: offY } };
+      pgAutoBtn.hidden = !hasFree || !onPlacesChange;
 
       pgStage.style.width = stageW + 'px';
       pgStage.style.height = stageH + 'px';
@@ -13926,7 +14049,7 @@
           var a = shifted[idx];
           var b = shifted[idx + 1];
           if (!a || !b) return;
-          var route = routeTeamLink(a, b);
+          var route = pgRouteLink(a, b);
           var group = pgSvg('g', { class: 'tg-wire-group tg-kind-flow' });
           group.appendChild(pgSvg('path', { d: route.d, class: 'tg-wire-glow' }));
           group.appendChild(

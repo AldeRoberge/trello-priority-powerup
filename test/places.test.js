@@ -178,6 +178,22 @@ describe('Places directory', () => {
     assert.equal(Places.parseCoordinates('99, 200'), null);
   });
 
+  it('keeps a hand-placed node position on a stop, only when valid', () => {
+    const map = Places.normalizePlaces({
+      from: { name: 'A', x: 36.4, y: -18 },
+      via: [{ name: 'B', x: 'nope', y: 5 }, { name: 'C', x: 99999, y: 0 }],
+      to: { name: 'D', x: null, y: null },
+    });
+    assert.equal(map.from.x, 36);
+    assert.equal(map.from.y, -18);
+    assert.equal(map.via[0].x, undefined);
+    assert.equal(map.via[1].x, undefined);
+    assert.equal(map.to.x, undefined);
+    // and it never reaches the shared board catalog
+    const dir = Places.upsert(Places.emptyDirectory(), { name: 'A' });
+    assert.deepEqual(Object.keys(Places.toCatalogEntry(dir.places[0])).sort(), ['id', 'name']);
+  });
+
   it('directionsUrl needs every stop locatable', () => {
     const a = { name: 'A', lat: 1, lng: 2 };
     const b = { name: 'B', address: '3 rue X' };

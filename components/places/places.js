@@ -36,6 +36,7 @@
   var MAX_DO = 120;
   /** Intermediate stops between De and Vers. */
   var MAX_VIA = 6;
+  var MAX_NODE_COORD = 5000;
   var LOAD_TTL_MS = 30000;
   /** Soft refresh window for agent turns (cross-window profile edits). */
   var AGENT_REFRESH_MAX_AGE_MS = 5000;
@@ -433,6 +434,18 @@
     var out = { id: id, name: name };
     var doText = clampStr(raw.do, MAX_DO);
     if (doText) out.do = doText;
+    // Hand-placed position of the stop in the node view (layout space, px).
+    if (
+      typeof raw.x === 'number' &&
+      typeof raw.y === 'number' &&
+      isFinite(raw.x) &&
+      isFinite(raw.y) &&
+      Math.abs(raw.x) <= MAX_NODE_COORD &&
+      Math.abs(raw.y) <= MAX_NODE_COORD
+    ) {
+      out.x = Math.round(raw.x);
+      out.y = Math.round(raw.y);
+    }
     return out;
   }
 
