@@ -4967,6 +4967,20 @@ html .tp-page--priority .agent-suggestion-chip.is-selected {
   background: var(--agent-surface-hover) !important;
 }
 
+/* Starter questions under the composer: 2 × 2 grid instead of a tall list.
+   Rows share the height of their tallest chip; narrow panes fall back to one column. */
+.tp-page--priority .agent-suggestions.is-below-composer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+@media (max-width: 520px) {
+  .tp-page--priority .agent-suggestions.is-below-composer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .tp-page--priority .agent-suggestion-chip-icon {
   color: var(--tp-text-muted);
 }
